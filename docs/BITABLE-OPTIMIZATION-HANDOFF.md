@@ -701,7 +701,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | V03 画册视图 | 待验收 | 260928-V03 | 封面 / 裁剪·适应 / 常规·紧凑 / 卡片字段全部落地（见 §13） |
 | V04 日历视图 | 待验收 | 260928-V04 | 月网格 + 跨天 + 颜色 + 拖拽平移，全程本地日期语义（见 §13） |
 | T01 列级统计 | 待验收 | 260929 | 260929 先整体删除、**同日恢复**；随后用户定稿改为**常驻**（不按有无配置条件渲染）：底部汇总栏 24px 薄条贴视图最底、首格缺省 `N 条记录`、状态栏上移让位；分组头内**每列**都有汇总位（见 §13） |
-| V05 续 四条修复 | 待验收 | 260929 | ① 列选中点列外即清；② 分组汇总行固定 36px（低档，不随行高）；③ 分组头**每列**都有汇总位（未配置给「统计」占位入口）；④ 底部汇总栏常驻（24px 贴视图底）+ 状态栏上移（`[data-doc-kind="bitable"]` bottom:34px）（见 §13） |
+| V05 续 四条修复 + 悬浮 + | 待验收 | 260929 | ① 列选中点列外即清；② 分组汇总行固定 36px（低档，不随行高）；③ 分组头**每列**都有汇总位（未配置给「统计」占位入口）；④ 底部汇总栏常驻（24px 贴视图底）+ 状态栏上移（`[data-doc-kind="bitable"]` bottom:34px）；⑤ 分组「加进本组」的 **+ 不占行**，改成**悬浮在分组边界线上**（见 §13） |
 | V05 分组样式（复刻云端） | 待验收 | 260929 | 分组头改**整行 56px**：折叠钮 + 分组值 + 每列统计格（右对齐，首列缺省 `N 条记录`）；每组记录后 40px 圆形「加进本组」，顶级分组间 20px 间隔。规格来自 Edge 实测云端 `lakex-viewer-grid-group-*`（见 §13） |
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
@@ -747,6 +747,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | V05 续：分组 + 改悬浮 | `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：加行高 **1px**（原 40px）、按钮 24×24 **居中于边界线**、命中测试仍是按钮 | 无 |
 | 2026-09-29 | 260929 | V05 续：四条修复 | `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/chrome.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 四条全过：列选中 4→0（同列内保持 4）、分组行恒 **36px**（行高=高时记录行 64）、每列汇总位（2 个「统计」占位）、底栏 **24px** 且与 `.bt-grid-wrap` 底边对齐（819=819）、状态栏 bottom **34px** | `bitableViews.css` 88 → 110、`chrome.css` 506 → 507 |
 | 2026-09-29 | 260929 | 分组头「分组值优先 + 首列统计下限 80px」 | `bitableViews.css`(`.bt-group-inner` 不进流) · `BitableEditor.tsx` · `cssLayers.test.ts` · `AGENTS.md`(样式统一规则) | 修掉真错位：表头首列 482px vs 记录行 80px（长文本被算进 auto 列宽）⇒ 改后**完全对齐（415–495）**；长分组值省略号、统计下限 **80px**（云端 Edge 实测值） | `bitableViews.css` 83 → 88 |
 | 2026-09-29 | 260929 | 「添加」统一为云端圆形 + 钮 | `bitableViews.css`(`.bt-add-round`) · `BitableEditor.tsx` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：4 颗钮（新增字段/加进本组×2/添加记录）均 **24×24、radius 999px**，无旧类残留 | `bitableEditor.css` 1075 → **1051**（旧样式删除，围栏同时抓到并清掉一处真重复） |
@@ -1467,6 +1468,9 @@ UI 与交互变化：
    同时 `.document-statusbar[data-doc-kind="bitable"] { bottom: 34px }` 把**状态栏整体上移**给底栏让位（sheet 是先例，但多维表底栏是整行、没法左右分栏，只能抬高状态栏）。
    - ⚠️ 实测发现「贴底常驻」还有一层：`position: sticky; bottom: 0` 只把它钉在**表格**底部 —— 内容不足一屏时它就悬在半空（截图核对）。补 `.bt-grid { min-height: 100% }` + 一条 `tbody` 末尾**撑满占位行** `.bt-grid-filler`，表格才撑满一屏、底栏落到**视图**最底。
 
+5. **分组「加进本组」的 + 不占行，改悬浮**（用户追加）：「+ 号不用占一行，隐藏掉做成图 2 的悬浮样式」。
+   → `.bt-group-add-row td { position: relative; height: 0; padding: 0; border: 0; background: transparent }` + 圆钮 `position: absolute; left: 16px; top: 0; transform: translateY(-50%)` ⇒ 行高实测 **1px**（原 40px），圆钮**骑在分组边界线**上（对齐云端图 2）。后面的 `.bt-group-gap`（20px）正好给悬浮钮留出空间。
+
 验证（CDP 真实端点，隔离 userData + 9243；行高设为「高」以证第 2 条）：
 
 | 项 | 实测 |
@@ -1475,6 +1479,7 @@ UI 与交互变化：
 | ② 分组汇总行 | 分组行高 **36**，同一份数据里记录行 **64**（行高=高）⇒ 不随行高变 |
 | ③ 每列汇总 | 分组头每列都有内容：`文本=N 条记录` + `单选=统计` + `日期=统计` + `进度=求和 30`（2 个占位按钮） |
 | ④ 底栏常驻 | `.bt-stat-row` 存在、高 **24**、首格 `3 条记录`、`position: sticky`；`wrap.bottom == footer.bottom == 819`（钉在视图最底）；状态栏 `bottom: 34px` |
+| ⑤ 悬浮 + | 加行高 **1px**（原 40）；按钮 24×24，中心与边界线偏差 ≤2px；`elementFromPoint` 命中的是按钮本身（没被后续行盖住） |
 
 门禁全绿：tsc / vitest **1383 passed / 16 skipped**（+1 条新护栏）/ check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
 
