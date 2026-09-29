@@ -747,6 +747,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | V05 续：补做第 2/3 条（表底 + 按分组隐藏 / 分组 + 独立空间无线） | `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 对拍：取消分组 → 表底 + **1**；恢复分组 → 分组 + **2** / 表底 + **0**；分组 + 行高 **32** 且按钮**在行内**、td 边框 0 | 无 |
 | 2026-09-29 | 260929 | T01 与云端对齐（汇总方式/默认口径/chip） | `src/core/bitableDoc.ts`(+test) · `bitableCells.tsx`(StatCell) · `BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：默认只显示 2 个「记录总数 N」（每分组首列），其余 10 个 opacity:0；chip 白底 + 1px；点开选项 = 云端 8 项（文本）；进度列 = 10 项（多最大/最小值、**无求和**） | 复选框/数字/创建·修改时间等未逐一点验（按 bundle 的 types 直接实现） |
 | 2026-09-29 | 260929 | V05 续：分组 + 改悬浮 | `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：加行高 **1px**（原 40px）、按钮 24×24 **居中于边界线**、命中测试仍是按钮 | 无 |
 | 2026-09-29 | 260929 | V05 续：四条修复 | `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/chrome.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 四条全过：列选中 4→0（同列内保持 4）、分组行恒 **36px**（行高=高时记录行 64）、每列汇总位（2 个「统计」占位）、底栏 **24px** 且与 `.bt-grid-wrap` 底边对齐（819=819）、状态栏 bottom **34px** | `bitableViews.css` 88 → 110、`chrome.css` 506 → 507 |
@@ -1525,6 +1526,28 @@ earliestDate "最早时间 $1" | latestDate "最晚时间 $1" | dateRange "时�
 遗留：
 - 复选框 / 数字 / 创建·修改时间 的选项**按 bundle 的 types 直接实现**，未在真机逐项点验（若要逐项验收可补）。
 - 第一列默认「记录总数」目前**无法关掉**（「不展示」= 删除配置 ⇒ 回落默认）。云端可显式选「不展示」，如需支持要在 `columnStats` 里存 `"none"` 哨兵。
+
+### 2026-09-29 · V05 续（补做）：第 2/3 条我上一轮漏做/做反，按用户指正修正
+
+用户指出「第 2、3 条你还没做」——核对属实，两条都不是表述问题，是我的实现问题：
+
+- **第 2 条（分组后不要表底 +）**：上一轮**根本没做**——`.bt-add-row` 是无条件渲染的。
+  → 改为**按「是否真的渲染出分组」条件渲染**：`{!rowItems.some((item) => item.kind === "group") && (<tr className="bt-add-row">…)} `。
+  用「实际渲染出的分组」而不是 `groups.length`，是为了避开「配了分组但分组字段已删 → 回落成未分组」时两边都没有 + 的空档。
+- **第 3 条（+ 要有独立空间、只是不要行线）**：上一轮我理解反了，做成了 `height: 0` + `position: absolute; transform: translateY(-50%)` **骑在分组边线上** —— 正是用户说的「内嵌到边线有点丑且不好点」。
+  → 改为**独立行高 32px + 无边框/无底色**（`.bt-group-add-row td { height: 32px; border: 0; background: transparent; vertical-align: middle }`），圆钮回到**正常流**里居中（`margin-left: 16px`），不再贴/骑边线。
+
+验证（CDP，隔离 userData + 9243；用我自己那条分组笔记**临时取消分组再原样恢复**，数据已还原）：
+
+| 状态 | `.bt-group-row` | `.bt-group-add-row` | `.bt-add-row`（表底） |
+| --- | --- | --- | --- |
+| 取消分组 | 0 | 0 | **1**（保留） |
+| 恢复分组 | 2 | 2 | **0**（隐藏） |
+
+分组 + 行高实测 **32**、按钮上下沿完全落在行内（235–259 ∈ 232–264）、`td` 边框 **0px**。
+
+门禁全绿：tsc / vitest 1383-16 / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
+护栏补充：`!rowItems.some((item) => item.kind === "group")`、`.bt-group-add-row td` 必须是 32px 且**不得**出现 `translateY(-50%)` / `position: absolute`。
 
 ## 14. 会话执行模板
 
