@@ -705,6 +705,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
 | T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间；**系统时间可筛选/排序/分组/统计**（记录级取值口径，见 §13） |
 | T02A 续 评分/进度交互 | 待验收 | 260929 | 评分空星改**实心** + 选中星对齐云端金（`--lake-rating-star` #ecaa06）+ 进度**只留「条 + 百分比」**（数值框整体删除；仍可拖动、键盘可达、Delete 清空；只读不接指针）（见 §13） |
+| 浮层定位统一（基础设施） | 待验收 | 260929 | **贴底翻上方**：垂直口径收敛到 `placeVertical`/`usePopoverPosition`；多维表日期/单选/展开面板/行右键菜单 + 标签页右键 + 卡片右键全部改走**实测**定位（见 §13） |
 | T02B.1 关联基础模型 | 未开始 | - | 同一文档内多表 |
 | T02B.2 单向关联 | 未开始 | - | 多选默认开启 |
 | T02B.3 双向关联 | 未开始 | - | 反向字段与配对一致性 |
@@ -744,6 +745,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | 浮层定位统一（贴底翻上方） | `src/hooks/topMenuPosition.ts`(+test) · `usePopoverPosition.ts`(新) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `src/features/editor/MultiTabEditor.tsx` · `CardContextMenu.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：末行日期**翻到锚点上方且完整可见**、首行仍在下方、行右键菜单完整可见 | 浮层不跟随滚动（与改前一致） |
 | 2026-09-29 | 260929 | **T01 整体回退** | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：底栏与列菜单「统计」均不存在；旧正文残留 `columnStats` 保存后消失 | 功能整体删除（含持久化字段）；`bitableViews.css` 基线 20 → 16 |
 | 2026-09-29 | 260929 | T01 续 空统计行不渲染（随后被整体回退） | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：未配统计时 `tfoot/.bt-stat-row` 均不存在（截图无灰条）；配一列统计后出现 `记录总数 3` | 统计行样式与功能保留；若用户要整个列统计功能回退需另议 |
 
@@ -1331,6 +1333,44 @@ UI 与交互变化：
   - 旧数据：故意在正文里塞 `views[0].columnStats = { 文本: "count" }`，打开不炸；触发一次保存后落盘视图键 = `id/name/type/rowHeight`，`columnStats` **已消失**。
 
 遗留：无。T01 相关的旧会话记录（§13 的 2026-09-28 T01、2026-09-29 T01 续）保留作历史，不再代表当前能力。
+
+### 2026-09-29 · 浮层定位统一：贴底翻上方（修多维表日期选择器被裁）
+
+用户 260929 报：多维表的**日期选择框贴到视口底部时不翻转**，日历被切掉；要求「和目录栏右键一样的逻辑」，并**排查同类弹窗**（「这个问题出过很多次了」）。
+
+**根因（先证后改）**：`Overlay` 原语只按调用方传的 `style` 定位，定位责任散在各调用点；而多维表共用 `Popover` 用**估算高度 48px** 去夹视口（`window.innerHeight - 48`）——日历真实高度 ≈ 300px ⇒ 夹取形同虚设、日历直接溢出窗口，且**从不翻转**。同类估算还有：行右键菜单 `innerHeight - 90`（菜单实测 118px）、列菜单 `- 300`、卡片/标签右键 `- 260 / - 280 / - 200`。
+
+**修法（收敛到单一来源）**：
+
+- `src/hooks/topMenuPosition.ts` 增**垂直方向唯一口径** `placeVertical`（下方优先 → 放不下翻上方 → 两边都放不下才夹进视口）+ 两个入口 `placePopoverPosition`（锚定）/ `placePopoverAtPoint`（坐标/右键）；原 `clampPopoverPosition` 改为薄封装 ⇒ 5 处旧调用（同步状态、桌面浮层、大纲层级菜单、小记排序/行菜单）**一并获得翻转**。
+- 新增 `src/hooks/usePopoverPosition.ts`：**先把表面挂到屏外（`visibility:hidden`，仍参与布局）量真实尺寸**，再定位；`ResizeObserver` + window resize 触发重算（内容变高也会重定位）。与目录栏右键同一条逻辑。
+- 多维表共用 `Popover`（15 处调用：日期 / 单选 / 附件展开 / 文本展开 / 字段 / 筛选 / 排序 / 分组 / 行高 / 视图配置 / 列菜单 / 视图菜单 / 数据表切换 / 新建字段 / 视图栏新建）改走该 hook。
+- 行右键菜单、`TabContextMenu`、`CardContextMenu` / `TextContextMenu` 同样改走 hook；`openColumnMenu` 去掉按 300 的预夹取（坐标原样交给浮层）。
+- 附件展开 / 文本展开两个面板的初始定位改走 `placePopoverPosition`（保留原有拖动/缩放）。
+
+**同类清查结论（用户要求的排查）**：
+
+| 位置 | 结论 |
+| --- | --- |
+| 多维表 `Popover`（日期 / 单选 / 各配置面板） | **有 bug（已修）**：估算 48 / 300 |
+| 多维表行右键菜单 | **有 bug（已修）**：估算 90，实测 118 ⇒ 贴底必裁 |
+| 卡片右键 / 文本右键 / 标签页右键 | 估算 200 / 260 / 280，实测**小于**估算 ⇒ 侥幸没被裁；本轮统一改走实测，去掉隐患 |
+| 目录栏右键菜单 | 本来就对（先量 `offsetHeight` 再决定上下）—— 本轮把它作为口径来源 |
+| 标签页切换菜单 | 安全：自身 `maxHeight: min(470px, calc(100vh - top - 16px))` 自限高 |
+| 同步状态 / 桌面浮层 / 大纲层级菜单 / 小记菜单 | 走 `clampPopoverPosition` ⇒ 本轮获得翻转 |
+| 大纲层级 / 选区工具条 / 内核小浮层 | 已有上下翻转判断，未动 |
+| 悬浮窗（`useFloatingDialog`）/ 侧栏新建菜单 | 自身夹取或锚点在顶部，无贴底问题 |
+
+验证结果：
+
+- 门禁全绿：tsc / vitest **1381 passed / 16 skipped**（+4 = 3 条定位用例 + 1 条多维表护栏）/ check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
+- CDP 真实端点（隔离 userData + 9239，重建后的 dist；18 条记录、网格滚到底）：
+  - 首行日期（顶部）：popover 195–445，位于锚点**下方**、完整可见（无回归）。
+  - 末行日期（锚点 717–743）：popover **463–713，翻到锚点上方**、完整可见（截图核对：日历完整、今天/清除都在）。
+  - 末行单选项：568–708 完整可见；末行右键菜单（光标 y≈743）：625–743 完整可见（旧的 90 估算会裁）。
+- 新增源码级护栏：多维表两文件禁用 `window.innerHeight - <估算>` 旧写法，必须走共用 hook/纯函数；`topMenuPosition.test.ts` 覆盖翻转与夹取三分支。
+
+遗留：浮层**不跟随滚动**（与改动前一致：定位完成后滚动表格不会重定位）；若要跟随，可在 hook 里加 scroll 重算。
 
 ## 14. 会话执行模板
 

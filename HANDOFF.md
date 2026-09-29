@@ -33,16 +33,17 @@
 | T02A-fix | **系统时间字段打通筛选/排序/分组**（记录级取值口径 `bitableFieldValue`）；其中「统计」部分随 T01 于 260929 回退 | `ef75e96` |
 | style | 字段类型选择改 2 列网格；顺带修 T02A 漏 import CSS 的 bug | `3a39030` |
 | T01 回退 | **列统计整体删除**（底栏 / 列菜单「统计」/ core 纯函数 / `view.columnStats` 字段）；旧正文残留字段下次保存即丢弃 | **未提交（待验收）** |
+| 浮层定位 | **贴底翻上方**统一：垂直口径收敛到 `placeVertical`/`usePopoverPosition`；多维表日期/单选/展开面板/行菜单 + 标签/卡片右键改走实测定位 | **未提交（待验收）** |
 | T02A 续 | 评分：空星**实心** + 选中星对齐云端金（`--lake-rating-star`）；进度：**只留条 + 百分比**（数值框删除），可拖动/键盘可达/Delete 清空、只读不接指针 | `4e19df0` |
 
 ### 三、当前状态与门禁
 - 分支 `master`；HEAD = `1494331`（交接文档提交）。**状态更正（260929 核对）**：`git rev-parse HEAD origin/master` 两者相同、`git ls-remote origin master` 一致、`origin/master` reflog 有 `update by push` ⇒ 本文件旧版写的「未 push / `git log -1` = `3a39030`」**已过期**，上述代码批次实际已随该文档提交推到 Gitee。别再按「未 push」理解。
 - 当前工作区**有未提交改动** = 260929 的 T01 整体回退（待用户验收）；此前的评分/进度修复已提交（`4e19df0` + docs `530ee5f`）。
-- 门禁全绿：`tsc --noEmit`✓ · `vitest run` **1377 passed / 16 skipped**✓ · `check:core` 0 违规✓ · 桌面 + 移动构建✓ · `ui-metrics`（hex=0 / `!important`=9 / 未定义令牌=0）✓ · `cssLayers`+`uiPrimitives`✓ · `git diff --check`✓。
+- 门禁全绿：`tsc --noEmit`✓ · `vitest run` **1381 passed / 16 skipped**✓ · `check:core` 0 违规✓ · 桌面 + 移动构建✓ · `ui-metrics`（hex=0 / `!important`=9 / 未定义令牌=0）✓ · `cssLayers`+`uiPrimitives`✓ · `git diff --check`✓。
 - 每个编号都做了 **CDP 真实端点验收**：`env -u ELECTRON_RUN_AS_NODE LAKE_RENDERER=scheme LAKE_USER_DATA=<临时目录> LAKE_ASSET_PORT=<独立端口> electron --disable-gpu --remote-debugging-port=<独立端口> .`，用 Node 24 内置 WebSocket 直驱 `Runtime.evaluate`。
 
 ### 四、当前问题 / 遗留（都不阻塞继续）
-1. **待用户验收**：V02–V04 + 三批追加需求 + T03 + T04 + T02A + **260929 T02A 续（评分星/进度条）+ T01 回退**（专项文档 §11 看板里均为「待验收」）。V01 已验收通过。**T01 列级统计已整体废弃**（260929 用户决定，专项 §11）。
+1. **待用户验收**：V02–V04 + 三批追加需求 + T03 + T04 + T02A + **260929 T02A 续（评分星/进度条）+ T01 回退 + 浮层定位统一（贴底翻上方）**（专项文档 §11 看板里均为「待验收」）。V01 已验收通过。**T01 列级统计已整体废弃**（260929 用户决定，专项 §11）。
 2. 已知口径/边界（用户知情、可接受）：
    - **移动端**：看板 / 画册 / 日历 / 分组一律**不展示**，回退为只读表格 + 明确提示（安全回退，专项文档 §13 有记录）。本轮**只过了移动端构建，未跑 Android 模拟器**（按边界约定 §8 由移动端会话维护）——移动端会话补验时请覆盖：image/布尔/链接/评分/进度/创建·修改时间的只读展示、画册/看板/日历的只读回退提示。（列统计已整体废弃，无需再验。）
    - 多级分组的折叠 key 基于「组键 = 选项名」，**重命名选项会重置该组折叠态**（本机展示态，不写正文）。
@@ -103,6 +104,7 @@
 
 ### 渲染 / UI
 - 浮层列布局的固定区用 `flex: 0 0 auto`，否则内容会被列表盖住。
+- **浮层定位禁止用估算高度**（260929）：统一走 `src/hooks/usePopoverPosition.ts`（量真实尺寸 → 下方优先、贴底翻上方 → 夹进视口），垂直口径是 `topMenuPosition.ts` 的 `placeVertical`。历史多处按猜测高度夹 `innerHeight - N`（48/90/300…），贴底就被裁且不翻转；`Overlay` 原语只吃调用方给的 `style`，定位责任在调用点，**新增浮层必须走该 hook**。
 - 预览切换先 `img.decode()` 再替换，别 `setState(null)` 造成塌陷闪动。
 - 改 CSS 先找单一来源和层序；不要靠继续加覆盖层解决。改后跑 `cssLayers` + `ui-metrics`。
 - **`src/styles/cssLayers.test.ts` 的基线是硬上限（只许变小）**：`features/bitable/bitableEditor.css` 已顶满 **1081/1081**。新样式一律**新建文件**并登记 `FILES`+`BASELINE`，且**必须由使用它的组件 import**（漏 import 时元素在、样式空，很难发现）。
