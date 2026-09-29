@@ -12,13 +12,20 @@
    「N 条记录」）；组内记录之后有一条 40px 的「加进本组」圆钮行；顶级分组之间 20px 间隔。
    本文件的 .bt-group-* 是该分组的**单一来源**（原 bitableEditor.css 里的旧规则已移出）。 */
 .bt-group-row td { background: var(--lake-bg-block); }
-.bt-group-cell { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 8px 0 14px; font-size: 12px; color: var(--lake-text-1); cursor: pointer; }
+/* 分组头是**表格行**：内容必须**不进流**（绝对定位内层），否则它的长文本会参与 table-layout:auto 的
+   列宽计算，把首列撑开、与记录行错位（260929 实测：表头首列 482px vs 记录行 80px）。 */
+.bt-group-cell { position: relative; height: 56px; padding: 0; font-size: 12px; color: var(--lake-text-1); cursor: pointer; }
+.bt-group-inner { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; overflow: hidden; }
 /* 折叠钮：云端是**无边框**的裸三角（24×24 命中区 + 4px 圆角，仅 hover 有底色） */
 .bt-group-fold { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); background: transparent; }
 .bt-group-fold:hover { background: var(--lake-bg-hover); }
 .bt-group-caret { color: var(--lake-text-2); transition: transform .12s ease; }
 .bt-group-caret.is-open { transform: rotate(90deg); }
-.bt-group-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--lake-font-weight-medium); }
+/* 分组值优先占位：吃掉剩余宽度，真的放不下才省略（不再挤到列边界外） */
+.bt-group-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--lake-font-weight-medium); }
+/* 首列统计：可被分组值压缩，**下限固定 80px**（260929 云端实测：分组值变长时该格 109 → 80，其余统计格不动）；
+   压到底之后由分组值省略号兜底；tooltip 给全文。 */
+.bt-group-head-stat { flex: 0 1 auto; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--lake-text-3); }
 /* 层级缩进（T03 多级）：只动分组值，不缩统计格 */
 .bt-group-row.level-1 .bt-group-label { padding-left: 18px; }
 .bt-group-row.level-2 .bt-group-label { padding-left: 36px; }

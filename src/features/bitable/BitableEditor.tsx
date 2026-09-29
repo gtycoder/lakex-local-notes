@@ -1056,21 +1056,30 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               <tbody>
                 {rowItems.map((item) => {
                   if (item.kind === "group") {
+                    /** 首列统计的文案（未配统计 → 本组记录数，对齐云端）。 */
+                    const headField = visibleFields[0];
+                    const headStat = headField ? statForField(activeView, headField.id) : undefined;
+                    const headText = !headField ? ""
+                      : headStat ? BITABLE_STAT_LABEL[headStat] + " " + computeColumnStat(headField, item.records, headStat)
+                        : item.records.length + " 条记录";
                     return (
                       <tr key={"g:" + item.key} className={"bt-group-row" + (item.level > 0 ? " level-" + item.level : "")} onClick={() => toggleGroup(item.key)}>
-                        <td className="bt-group-cell">
-                          <span className="bt-group-fold">
-                            <ChevronRight size={13} className={"bt-group-caret" + (collapsedGroups.has(item.key) ? "" : " is-open")} />
-                          </span>
-                          <span className="bt-group-label">{item.label}</span>
+                        {/* 复刻云端：分组值与其**右侧首列统计**同处一格（index + 首列）——
+                            分组值优先占位（过长省略）；统计压成**固定长度**，于是两者都不会再挤到列边界外（图 1 的错位根因）。 */}
+                        <td className="bt-group-cell" colSpan={headField ? 2 : 1}>
+                          {/* 内层绝对定位：分组值/统计不参与列宽计算，列宽只由表头与记录行决定 */}
+                          <div className="bt-group-inner">
+                            <span className="bt-group-fold">
+                              <ChevronRight size={13} className={"bt-group-caret" + (collapsedGroups.has(item.key) ? "" : " is-open")} />
+                            </span>
+                            <span className="bt-group-label" title={item.label}>{item.label}</span>
+                            {headField && <span className="bt-group-head-stat" title={headText}>{headText}</span>}
+                          </div>
                         </td>
-                        {/* 复刻云端：分组头右侧按列显示**本组**的统计（首列缺省显示本组记录数） */}
-                        {visibleFields.map((field, index) => {
+                        {/* 其余列仍按列显示**本组**的统计 */}
+                        {visibleFields.slice(1).map((field) => {
                           const stat = statForField(activeView, field.id);
-                          const text = stat
-                            ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, item.records, stat)
-                            : index === 0 ? item.records.length + " 条记录" : "";
-                          return <td key={field.id} className="bt-group-stat">{text}</td>;
+                          return <td key={field.id} className="bt-group-stat">{stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, item.records, stat) : ""}</td>;
                         })}
                         <td className="bt-group-stat" />
                       </tr>
