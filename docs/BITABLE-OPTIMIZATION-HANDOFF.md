@@ -419,8 +419,8 @@ string[]
 
 #### T01 列级统计
 
-> **⚠️ 260929 已整体废弃（用户决定）**：本编号已从实现、展示与持久化字段中**全部删除**。
-> 原因：用户认为列统计意义不大（「我的问题，没有问清楚如何统计就做功能」）。以下为历史方案，**勿再实施**。
+> **260929 变更记录**：当天先整体废弃（用户认为意义不大）→ 同日用户确认**分组后需要按组统计**，
+> 故**已恢复**（保留「没有可见列配置统计时整行不渲染」的按需渲染）。当前状态：**已恢复、待验收**。
 
 目标：
 
@@ -700,7 +700,8 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | V02 看板视图 | 待验收 | 260928-V02 | 代码 + 全部门禁 + CDP 真实端点验收完成；含只读写入口泄漏修复（见 §13） |
 | V03 画册视图 | 待验收 | 260928-V03 | 封面 / 裁剪·适应 / 常规·紧凑 / 卡片字段全部落地（见 §13） |
 | V04 日历视图 | 待验收 | 260928-V04 | 月网格 + 跨天 + 颜色 + 拖拽平移，全程本地日期语义（见 §13） |
-| T01 列级统计 | **已废弃** | 260929 | **260929 用户决定整体回退**（觉得意义不大）：底栏 `tfoot`、列菜单「统计」、core 纯函数（`BitableStatType`/`computeColumnStat` 等）与 `view.columnStats` 持久化字段全部删除；旧正文残留字段在下次保存时被丢弃（见 §13） |
+| T01 列级统计 | 待验收 | 260929 | 260929 先整体删除、**同日恢复**（用户确认分组后需要按组统计）；保留「无可见列配置统计时整行不渲染」。底栏总计 + 分组头内**按组统计**（见 §13） |
+| V05 分组样式（复刻云端） | 待验收 | 260929 | 分组头改**整行 56px**：折叠钮 + 分组值 + 每列统计格（右对齐，首列缺省 `N 条记录`）；每组记录后 40px 圆形「加进本组」，顶级分组间 20px 间隔。规格来自 Edge 实测云端 `lakex-viewer-grid-group-*`（见 §13） |
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
 | T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间；**系统时间可筛选/排序/分组/统计**（记录级取值口径，见 §13） |
@@ -745,6 +746,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | V05 分组样式复刻云端 + T01 恢复 | `src/core/bitableDoc.ts`(+节点 `fieldId`) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：分组行 56px / 6 格、首列 `1 条记录`、每组 1 个圆钮、组间 1 条间隔、底栏总计；截图与云端结构一致 | `bitableViews.css` 20 → 74、`bitableEditor.css` 1081 → 1075（按职责归并） |
 | 2026-09-29 | 260929 | 浮层定位统一（贴底翻上方） | `src/hooks/topMenuPosition.ts`(+test) · `usePopoverPosition.ts`(新) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `src/features/editor/MultiTabEditor.tsx` · `CardContextMenu.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：末行日期**翻到锚点上方且完整可见**、首行仍在下方、行右键菜单完整可见 | 浮层不跟随滚动（与改前一致） |
 | 2026-09-29 | 260929 | **T01 整体回退** | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：底栏与列菜单「统计」均不存在；旧正文残留 `columnStats` 保存后消失 | 功能整体删除（含持久化字段）；`bitableViews.css` 基线 20 → 16 |
 | 2026-09-29 | 260929 | T01 续 空统计行不渲染（随后被整体回退） | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：未配统计时 `tfoot/.bt-stat-row` 均不存在（截图无灰条）；配一列统计后出现 `记录总数 3` | 统计行样式与功能保留；若用户要整个列统计功能回退需另议 |
@@ -1371,6 +1373,59 @@ UI 与交互变化：
 - 新增源码级护栏：多维表两文件禁用 `window.innerHeight - <估算>` 旧写法，必须走共用 hook/纯函数；`topMenuPosition.test.ts` 覆盖翻转与夹取三分支。
 
 遗留：浮层**不跟随滚动**（与改动前一致：定位完成后滚动表格不会重定位）；若要跟随，可在 hook 里加 scroll 重算。
+
+### 2026-09-29 · V05 分组样式复刻云端 + T01 列统计恢复
+
+用户反馈：**分组之后样式不对**（给图：云端 vs 我方「差距巨大」），要求用 BrowserSkill 精细探查、逐步复刻；同时纠正——
+**统计功能还需要**（「我忘了分组之后就有统计需求了」）。
+
+#### ① 云端精细探查（browser-skill + Edge，遵守 §1.8 必须用 Edge）
+
+会话：`bsk session start --browser <edge>`（本机 chrome/edge 同时在线，**按 §1.8 选 Edge**）→ `navigate` 到用户给的语雀数据表（已分组）→ `bsk evaluate` 取真实 DOM/计算样式（`get-html` 只给结构，几何必须靠 evaluate 量）。
+
+云端分组规格（实测类名与数值）：
+
+| 云端 | 实测 |
+| --- | --- |
+| `.lakex-viewer-grid-group-header` | **flex，高 56px，整行铺满表宽** |
+| `.lakex-viewer-grid-group-header-index` | 36px 白底 chip，1px `rgb(244,245,245)` 边框，圆角 `6px 0 0 0`，padding `0 8px`，flex 居中 |
+| `.lakex-viewer-grid-group-fold` | 24×24，圆角 4px，**无边框/透明底**（只是三角的命中区） |
+| `.lakex-viewer-grid-group-field` | 高 34，font 12px，色 `rgb(38,38,38)`（分组值） |
+| `.lakex-viewer-grid-group-header-column` | 36px 白底 chip，1px `rgb(244,245,245)`，padding `0 8px`，**justify: right**（统计值右对齐） |
+| 分组头的统计内容 | 首个是**索引列**的统计：`N 条记录` + 下拉箭头（`lt-icon-ReviewArrowDown`，切换统计口径）；其余每列默认占位「统计」。DOM：`.lakex-table-stats` + `-text/-filled/-select/-date/-image/-file/-progress/-rate/-checkbox/-link` |
+| 每组顺序 | header(56) → records(36/条) → `.lakex-viewer-grid-add-record`(**40px**，内含 sticky **24×24 圆形白钮**：圆角 50%、1px `rgb(231,233,232)`、margin-left 16、`+ 图标 14×14`) → 顶级分组之间 `.lakex-viewer-grid-group-gap-line`(**20px**) |
+| 表尾 | 另有一条**总计**统计行（同 chip 结构，显示总记录数 + 各列统计） |
+| 记录行 | `.lakex-viewer-grid-row` 高 36；组内最后一行 `.group-last`（容器底色 `rgb(250,250,250)`） |
+
+结论：**云端把「分组头」和「该组统计」合成同一条 56px 整行** —— 因此用户说「分组后就有统计需求」是同一条需求。
+
+#### ② 我方实现（`bitableViews.css` 为分组的单一来源）
+
+- 分组行由「一个 colSpan 的格子」改为**与表头同列数的多格**：`.bt-group-cell`（折叠钮 + 分组值）+ 每个可见字段一个 `.bt-group-stat`（**右对齐**，取该列在**本组记录**上的统计）+ 尾部一格。
+- 首列缺省显示 `N 条记录`（对齐云端）；配了统计的列显示「口径 + 值」。
+- 每组记录之后插一行 `.bt-group-add-row`（40px）放**圆形白钮 `.bt-group-add`（24×24，border-radius pill）**，点击=**加进本组**（新记录预置该分组字段的值；空值组不写值）。
+- 顶级分组之间插一行 `.bt-group-gap`（20px）。
+- 分组样式（含 T03 层级缩进）**按职责从 `bitableEditor.css` 移入 `bitableViews.css`**：`bitableViews.css` 20 → 74，`bitableEditor.css` 1081 → **1075**（首次腾出余量）。
+- core：`BitableGroupNode` 增 `fieldId`（「加进本组」要用）；`node.records` 本就含整组记录，**按组统计无需改求值口径**。
+
+#### ③ T01 列统计恢复
+
+`git revert` 掉当天的整体回退（`d2eeb79`），保留同日早些时候的**按需渲染**（没有可见列配置统计时整行不渲染 → 不会再有「添加记录下面的空灰条」）。
+底栏总计行为「当前视图筛选后的记录」口径不变；分组头里的统计是**该组记录**口径（同样只看筛选后集合）。
+
+验证结果：
+
+- 门禁全绿：tsc / vitest **1382 passed / 16 skipped** / check:core / 双端构建 / ui-metrics（hex=0、!important=9、未定义令牌=0）/ cssLayers+uiPrimitives / git diff --check。
+- CDP 真实端点（隔离 userData + 9240，重建后的 dist；日期分组 + 进度列配「求和」）：
+  - 结构：`bt-group-row` 2 条、每条 **6 格**（1 索引 + 4 字段 + 1 尾）、`.bt-group-stat` 共 10、`fold` 存在、`.bt-group-add` **2 个**、`.bt-group-gap` **1 条**。
+  - 几何：分组行高 **56**、加行进 **40**、统计格 `text-align: right`。
+  - 内容：首组首列 `1 条记录`、次组 `3 条记录`；进度列按组 `求和 0` / `求和 84`；底栏总计 `求和 84`。
+  - 截图与云端结构一致（折叠钮已改为**无边框裸三角**）。
+
+遗留：
+- 云端统计格有「切换统计口径」的下拉箭头（`N 条记录 ▾`）与 hover 态的「统计」占位；我方沿用列菜单「统计」入口，未在分组头内嵌下拉。
+- 云端统计格白底 chip + 1px `#f4f5f5` 边框，我方用主题令牌的灰带（`--lake-bg-block`）；如需逐像素一致要新增令牌，待用户确认。
+- 多级分组（T03）里「加进本组」按**每个分组节点**出现（与云端一致），顶级之间才有 20px 间隔。
 
 ## 14. 会话执行模板
 
