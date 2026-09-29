@@ -10,6 +10,7 @@
  * 评分星级、进度条、关联 chip、选项色块、图片缩略图；其余走记录级展示文本。
  */
 import { useMemo, useState, type ReactNode } from "react";
+import { FileKindIcon } from "../../features/bitable/FileKindIcon.js";
 import {
   applyViewToRecords,
   BITABLE_PROGRESS_MAX,
@@ -46,10 +47,16 @@ function EmptyCell() {
   return <span className="mbt-cell-empty">—</span>;
 }
 
-/** 附件/图片字段值（`{ file, name }[]`）→ 图片走缩略图（本机 AssetServer，与文档图片同一条路）、
- *  其余按展示名出文件名标签、点击**直接用系统应用打开**（与移动端文档的附件处理一致，
- *  不做应用内预览/播放；同时也避免把音视频/PDF/PPT 一律当 `<img>` 渲染成破图）。 */
-function AttachmentCell({ noteId, value }: { noteId: string; value: unknown }) {
+/**
+ * 附件/图片字段值（`{ file, name }[]`）。点击一律**直接用系统应用打开**（与移动端文档的附件处理一致，
+ * 不做应用内预览/播放；也避免把音视频/PDF/PPT 当 `<img>` 渲染成破图）。
+ *
+ * 两种字段分叉（用户 260930：「图片不动，图片是用来看的，移动端可以换」）：
+ * - **图片字段**：缩略图（本机 AssetServer，与文档图片同一条路）——这个字段的语义就是看图。
+ * - **附件字段**：**文档类型图标**（与桌面同一套 `FileKindIcon` 与类型判定），后面跟名称。
+ *   触屏**没有 hover**，名称不能像桌面那样收进气泡，所以图标后面仍带文件名（图标给类型、名字给内容）。
+ */
+function AttachmentCell({ noteId, value, imageOnly }: { noteId: string; value: unknown; imageOnly: boolean }) {
   const attachments = bitableAttachments(value);
   if (attachments.length === 0) return <EmptyCell />;
   const openWithSystem = (file: string) => {
@@ -60,7 +67,7 @@ function AttachmentCell({ noteId, value }: { noteId: string; value: unknown }) {
   return (
     <span className="mbt-attachments">
       {attachments.map(({ file, name }) => (
-        isImageExtension(extOf(file))
+        imageOnly && isImageExtension(extOf(file))
           ? <img
               key={file}
               className="mbt-attachment"
@@ -69,7 +76,12 @@ function AttachmentCell({ noteId, value }: { noteId: string; value: unknown }) {
               title={name}
               loading="lazy"
             />
-          : <button key={file} type="button" className="mbt-attachment-file" title={name} onClick={() => openWithSystem(file)}>{name}</button>
+          : (
+            <button key={file} type="button" className={"mbt-attachment-file" + (imageOnly ? "" : " is-kind")}
+              title={name} aria-label={name} onClick={() => openWithSystem(file)}>
+              {imageOnly ? name : <><FileKindIcon name={name} size={15} /><span className="mbt-attachment-name">{name}</span></>}
+            </button>
+          )
       ))}
     </span>
   );
@@ -144,7 +156,7 @@ function RelationCell({ ctx, field, value }: { ctx: BitableDisplayContext; field
 /** 按字段类型分派只读单元格（未知类型只读展示）。 */
 function FieldValue({ noteId, ctx, field, record }: { noteId: string; ctx: BitableDisplayContext; field: BitableField; record: BitableRecord }): ReactNode {
   const value = record.values[field.id];
-  if (isAttachmentLikeField(field.type)) return <AttachmentCell noteId={noteId} value={value} />;
+  if (isAttachmentLikeField(field.type)) return <AttachmentCell noteId={noteId} value={value} imageOnly={field.type === "image"} />;
   if (field.type === "select" || field.type === "multiSelect") return <OptionChips field={field} value={value} />;
   if (field.type === "boolean") return typeof value === "boolean" ? <input className="mbt-bool" type="checkbox" checked={value} disabled aria-label="布尔值" /> : <EmptyCell />;
   if (field.type === "link") return <LinkCell value={value} />;

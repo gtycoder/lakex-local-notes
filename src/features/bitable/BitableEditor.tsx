@@ -33,7 +33,6 @@ import { StatCell } from "./bitableCells";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
-import { openAssetEntry } from "../attachment/openAssetEntry.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview.js";
 import { openImagePreview } from "../editor/imagePreview.js";
 import { ImageLightbox } from "../editor/ImageLightbox.js";
@@ -43,7 +42,7 @@ import { BitableGalleryView } from "./BitableGalleryView.js";
 import { BitableKanbanView } from "./BitableKanbanView.js";
 import { BitableRecordDrawer } from "./BitableRecordDrawer.js";
 import { BitableViewBar } from "./BitableViewBar.js";
-import { bitableAssetUrl } from "./bitableAssetUrl.js";
+import { bitableAssetUrl, openBitableAttachment } from "./bitableAssetUrl.js";
 import { CalendarConfigPanel, GalleryConfigPanel, KanbanConfigPanel } from "./BitableViewConfigPanels.js";
 import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeGrid, FieldTypeSelect, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
 import { createSnapshotHistory, type SnapshotHistory } from "../../core/bitableHistory.js";
@@ -52,6 +51,13 @@ import "./bitableEditor.css";
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const DEFAULT_COL_WIDTH = 180;
+/**
+ * 列的**硬宽度**（用户 260930：「所有的列都是根据内容长度算的左右宽度，我需要能自由设置」）。
+ * `table-layout: auto` 下 `<col style="width">` 只是「**至少**这么宽」——内容更宽就把列撑开（附件 chip 实测 180 → 413）。
+ * 所以真正卡住列的是**每个格子的 `max-width`**；它按列写行内，因为宽度来自正文数据（字段 width），CSS 没法按列取值。
+ * 配合 `.bt-grid` 的 `white-space: nowrap`：装不下就截断/省略，绝不换行撑高行高。
+ */
+const columnWidth = (field: BitableField) => (field.width ?? DEFAULT_COL_WIDTH) + "px";
 
 const ROW_HEIGHT_OPTIONS: Array<{ value: BitableRowHeight; label: string }> = [
   { value: "low", label: "低" },
@@ -317,8 +323,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
   /** 打开附件：走公共入口 openAssetEntry（与文档/小记同一套分流）。磁盘名定位文件、展示名作预览标题。 */
   const openAsset = useCallback((attachment: BitableAttachment) => {
-    // kindFrom = 磁盘名：展示名被改成没有扩展名时，类型判定照样正确（音视频仍走应用内播放）
-    openAssetEntry(bitableAssetUrl(noteId, attachment.file), attachment.name, attachment.size, { kindFrom: attachment.file });
+    openBitableAttachment(noteId, attachment);   // 单一来源（表格 / 选择器 / 看板卡片同一句）
   }, [noteId]);
 
   /** 图片预览：入参永远是**同一个单元格内**的图片（用户 260928：两列图片就是两类，绝不跨列合并）。 */
@@ -609,7 +614,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
-    const onMove = (ev: PointerEvent) => updateField(fieldId, { width: Math.max(80, Math.min(640, startW + (ev.clientX - startX))) });
+    // 下限 80 → **40**（用户 260930：「可以设定一个比较小的下限值」）；上限仍是 640
+    const onMove = (ev: PointerEvent) => updateField(fieldId, { width: Math.max(40, Math.min(640, startW + (ev.clientX - startX))) });
     const onUp = () => { document.removeEventListener("pointermove", onMove); document.removeEventListener("pointerup", onUp); };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
@@ -890,7 +896,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       {visibleFields.map((field) => (
         <td key={field.id} data-record-id={record.id} data-field-id={field.id}
           className={"bt-td" + (selectedColumnId === field.id ? " col-selected" : "") + (cellInSelection(record.id, field.id) ? " cell-selected" + selectionEdgeClass(record.id, field.id) : "") + (isDuplicateCell(field, record) ? " in-highlight" : "")}
-          style={columnTextColor(field.id) ? { color: columnTextColor(field.id) } : undefined}
+          style={{ maxWidth: columnWidth(field), ...(columnTextColor(field.id) ? { color: columnTextColor(field.id) } : {}) }}
           onMouseDown={(event) => {
             if (readOnly || event.button !== 0) return;
             if (event.shiftKey && cellSel) setCellSel({ anchor: cellSel.anchor, focus: { recordId: record.id, fieldId: field.id } });
@@ -1109,6 +1115,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                     <th key={field.id}
                       data-field-id={field.id}
                       className={"bt-th" + (dragging?.kind === "field" && dragging.id === field.id ? " dragging" : "") + (selectedColumnId === field.id ? " col-selected" : "")}
+                      style={{ maxWidth: columnWidth(field) }}
                       draggable={!readOnly}
                       onDragStart={() => setDragging({ kind: "field", id: field.id })}
                       onDragOver={(event: DragEvent) => { event.preventDefault(); reorderByDrag("field", field.id); }}
@@ -1176,7 +1183,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                         </td>
                         {/* 其余列仍按列显示**本组**的统计 */}
                         {visibleFields.slice(1).map((field) => (
-                          <td key={field.id} className="bt-group-stat">
+                          <td key={field.id} className="bt-group-stat" style={{ maxWidth: columnWidth(field) }}>
                             <StatCell field={field} records={item.records} stat={statForField(activeView, field.id)} readOnly={readOnly}
                               onPick={(anchor) => setStatFor({ fieldId: field.id, anchor })} />
                           </td>
@@ -1230,7 +1237,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                     {selectionSummary ?? statDisplayText("count", String(shownRecords.length))}
                   </td>
                   {visibleFields.map((field) => (
-                    <td key={field.id} className="bt-stat-cell">
+                    <td key={field.id} className="bt-stat-cell" style={{ maxWidth: columnWidth(field) }}>
                       <StatCell field={field} records={shownRecords} stat={statForField(activeView, field.id)} readOnly={readOnly}
                         onPick={(anchor) => setStatFor({ fieldId: field.id, anchor })} />
                     </td>
@@ -1595,7 +1602,9 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
   const pendingFocusOptionRef = useRef<string | null>(null);
   const focusOptionInput = (id: string) => {
     const el = optionInputsRef.current.get(id);
-    if (el) { el.focus(); el.select(); }
+    /** 只聚焦、**不 `select()`**（用户 260930 报的「添加时那块蓝色底色」就是自动全选画出来的系统选区；
+        选项名不是「待覆盖的临时值」，没有全选的必要）。光标落末尾 = 与「鼠标点进这个输入框」完全一致。 */
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   };
   useEffect(() => {
     const id = pendingFocusOptionRef.current;
@@ -1606,7 +1615,9 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
   const addOptionRow = () => {
     const id = newBitableId("opt");
     pendingFocusOptionRef.current = id;
-    setOptions((prev) => [...prev, { id, name: "选项 " + (prev.length + 1), color: BITABLE_OPTION_COLORS[prev.length % BITABLE_OPTION_COLORS.length] }]);
+    /** 新选项**留空**：默认名只作 `placeholder`（保存时空名按位置兜底成「选项 N」）。
+        原先预填「选项 N」再全选，屏幕上就是一块蓝底；留空后直接键入即选项名。 */
+    setOptions((prev) => [...prev, { id, name: "", color: BITABLE_OPTION_COLORS[prev.length % BITABLE_OPTION_COLORS.length] }]);
   };
   const handleOptionKeyDown = (index: number, event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || readOnly) return;
@@ -1638,8 +1649,13 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
       ...(relationTableId && relationViewId ? { viewId: relationViewId } : {}),
       ...(relationMode === "twoWay" && typeof field?.relation?.pairedFieldId === "string" ? { pairedFieldId: field.relation.pairedFieldId } : {}),
     } : undefined;
-    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: supportsOptions ? options : undefined, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation }); return; }
-    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, ...(relation ? { relation } : {}) }, supportsOptions ? options : undefined);
+    // 选项名兜底：新加的行留空（placeholder 才是默认名），保存时空名按位置落成「选项 N」——
+    // 不加行时 `options` 原样返回，不产生任何差异。
+    const nextOptions = supportsOptions
+      ? options.map((option, index) => ({ ...option, name: option.name.trim() || "选项 " + (index + 1) }))
+      : undefined;
+    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: nextOptions, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation }); return; }
+    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, ...(relation ? { relation } : {}) }, nextOptions);
   };
   return (
     <Dialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
@@ -1729,6 +1745,7 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
                   onMouseEnter={(event) => { if (!readOnly) setColorFor({ optionId: option.id, anchor: event.currentTarget }); }}
                   onClick={(event) => setColorFor({ optionId: option.id, anchor: event.currentTarget })} />
                 <input className="bt-input" value={option.name} readOnly={readOnly}
+                  placeholder={"选项 " + (index + 1)}
                   ref={(el) => { if (el) optionInputsRef.current.set(option.id, el); else optionInputsRef.current.delete(option.id); }}
                   onKeyDown={(event) => handleOptionKeyDown(index, event)}
                   onChange={(event) => setOptions(options.map((o, i) => (i === index ? { ...o, name: event.target.value } : o)))} />

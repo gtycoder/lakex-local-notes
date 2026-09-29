@@ -9,6 +9,7 @@ import {
   isImageExtension,
   isMediaFilename,
   mediaKindOfFilename,
+  fileKindOf,
   mimeTypeForFilename,
 } from "./assetNaming.js";
 
@@ -141,5 +142,28 @@ describe("assetNaming", () => {
     for (const ext of ["mp3", "wav", "m4a", "flac", "mp4", "mov", "mkv", "avi", "webm", "m4v", "wmv", "flv", "mpeg", "mpg", "3gp", "ts"]) {
       expect(mediaKindOfFilename(`x.${ext}`)).not.toBeNull();
     }
+  });
+
+  it("fileKindOf：附件文档类型（文件类型图标的分流口径，用户 260930）", () => {
+    // 图片走 isImageExtension 的既有清单（不在这里重复维护）
+    expect(fileKindOf("a.PNG")).toBe("image");
+    expect(fileKindOf("a.webp")).toBe("image");
+    // 文件名与裸扩展名都能吃；大写归一
+    expect(fileKindOf("【期神笔记】2024.pdf")).toBe("pdf");
+    expect(fileKindOf(".PDF")).toBe("pdf");
+    expect(fileKindOf("2月18日三合一.doc")).toBe("doc");
+    expect(fileKindOf("x.docx")).toBe("doc");
+    expect(fileKindOf("表.xlsx")).toBe("sheet");
+    expect(fileKindOf("x.csv")).toBe("sheet");
+    expect(fileKindOf("趋势线战法.pptx")).toBe("slide");
+    expect(fileKindOf("x.zip")).toBe("archive");
+    expect(fileKindOf("歌.mp3")).toBe("audio");
+    expect(fileKindOf("片.mp4")).toBe("video");
+    expect(fileKindOf("main.ts")).toBe("code");
+    expect(fileKindOf("notes.md")).toBe("text");
+    // 无扩展名 / 不认识的一律回落通用类型，不瞎猜
+    expect(fileKindOf("README")).toBe("file");
+    expect(fileKindOf("x.qqq")).toBe("file");
+    expect(fileKindOf("")).toBe("file");
   });
 });

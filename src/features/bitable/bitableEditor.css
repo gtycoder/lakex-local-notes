@@ -144,7 +144,10 @@
 /* 表格线走**更浅一档**的 --lake-border-2（260929 用户：「和远端一样，线的颜色变浅一点」）：
    云端实测格线 = rgb(244,245,245)，比通用分隔线 --lake-border-1 浅一档。这里只换线色，
    不改线宽/线位（去边框会动列宽，色值不会）。 */
-.bt-grid th, .bt-grid td { border-right: 1px solid var(--lake-border-2); border-bottom: 1px solid var(--lake-border-2); padding: 0; vertical-align: middle; }
+/* `white-space: nowrap`（用户 260930）：单元格内容**永不换行**——换行会把行高撑起来
+   （实测：日期列缩到 80px 时 `2026-09-07` 折行 ⇒ 行高 36 → 48）。装不下由各自的省略/裁切处理。
+   列宽的**硬上限**在格子的行内 max-width（见 BitableEditor 的 columnWidth()），不在这里。 */
+.bt-grid th, .bt-grid td { border-right: 1px solid var(--lake-border-2); border-bottom: 1px solid var(--lake-border-2); padding: 0; vertical-align: middle; white-space: nowrap; }
 .bt-grid .col-selected { background: var(--lake-accent-tint); }
 .bt-viewbar-leading { display: flex; align-items: center; gap: 4px; margin-right: 6px; }
 .bt-tables-switch { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 13px; cursor: pointer; color: inherit; max-width: 200px; }
@@ -202,7 +205,8 @@
 .bt-td-empty { min-width: 40px; }
 .bt-add-row td { padding: 4px; }
 
-.bt-cell-input { width: 100%; height: 100%; min-height: 26px; border: 0; background: transparent; padding: 4px 8px; font: inherit; font-size: 13px; color: inherit; box-sizing: border-box; }
+/* `text-overflow: ellipsis`：列窄了文本格出省略号（input 默认是硬裁；用户 260930「展示不下就截断省略」）。 */
+.bt-cell-input { width: 100%; height: 100%; min-height: 26px; border: 0; background: transparent; padding: 4px 8px; font: inherit; font-size: 13px; color: inherit; box-sizing: border-box; text-overflow: ellipsis; }
 .bt-cell-input:focus { outline: 2px solid var(--lake-accent); outline-offset: -2px; }
 /* 单元格自己已经有 2px 选中环时（单格选区的四条边都在），格内输入框不再叠一层焦点环 ——
    否则就是「两层边框」（用户 260929 报的链接格 2 层边框；文本框同理）。多格选区只有外缘画环，
@@ -299,6 +303,9 @@
 
 .bt-dialog { width: 420px; max-width: 90%; max-height: 86vh; }
 .bt-input { width: 100%; height: 30px; border: 1px solid var(--lake-border-1); border-radius: 6px; background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: 13px; padding: 0 8px; box-sizing: border-box; }
+/* 占位文案统一走 --lake-text-4（与 kit.css/overlay.css 的 placeholder 同一口径；浏览器默认灰不是令牌）。
+   选项编辑的新行用它显示默认名「选项 N」（用户 260930：不要在输入框里预填再全选 ⇒ 那块蓝色底色）。 */
+.bt-input::placeholder { color: var(--lake-text-4); }
 .bt-field-label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 12px; color: var(--lake-text-2); }
 /* 日期字段的默认值三态：形态下拉 +（选「指定时间」时）日期选择器 */
 .bt-date-default { display: flex; flex-direction: column; gap: 4px; }
@@ -322,6 +329,8 @@
 .bt-date-cell { display: flex; align-items: center; height: 100%; }
 .bt-date-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; font-size: 13px; color: inherit; }
 .bt-date-trigger.is-empty { color: var(--lake-text-3); }
+/* 日期/时间文案是**单行可省略**的（放在 flex 按钮里，默认会被折行）：列窄了省略号，行高不变（用户 260930）。 */
+.bt-date-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-date-panel { padding: 8px; }
 .bt-date-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
 .bt-date-week { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 11px; color: var(--lake-text-3); text-align: center; margin-bottom: 2px; }

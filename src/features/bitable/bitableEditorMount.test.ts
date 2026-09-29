@@ -16,7 +16,10 @@ const EDITOR_TAB = readFileSync(new URL("../editor/LakeEditor.tsx", import.meta.
 const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
 const PICKER = readFileSync(new URL("./BitableRelationPicker.tsx", import.meta.url), "utf8");
+const PICKER_CSS = readFileSync(new URL("./bitableRelationPicker.css", import.meta.url), "utf8");
 const ASSET_URL = readFileSync(new URL("./bitableAssetUrl.ts", import.meta.url), "utf8");
+const FILE_ICON = readFileSync(new URL("./FileKindIcon.tsx", import.meta.url), "utf8");
+const FILE_ICON_CSS = readFileSync(new URL("./bitableFileIcon.css", import.meta.url), "utf8");
 const DRAWER = readFileSync(new URL("./BitableRecordDrawer.tsx", import.meta.url), "utf8");
 const BAR = readFileSync(new URL("./BitableViewBar.tsx", import.meta.url), "utf8");
 const VIEWS = readFileSync(new URL("./bitableViews.tsx", import.meta.url), "utf8");
@@ -53,8 +56,10 @@ describe("多维表编辑器护栏", () => {
 
   it("附件预览使用 Lake 卡片同口径的 size，不回退 0 B", () => {
     expect(DOC).toContain("size: number");
-    expect(EDITOR).toMatch(/openAssetEntry\([\s\S]{0,240}?attachment\.size/);
-    expect(EDITOR).not.toMatch(/openAssetEntry\([\s\S]{0,240}?,\s*0,\s*\{\s*kindFrom/);
+    // 260930：打开附件收敛到 openBitableAttachment（表格/选择器/看板共用那句），size 在那一处传
+    expect(EDITOR).toMatch(/openBitableAttachment\(noteId, attachment\)/);
+    expect(ASSET_URL).toMatch(/openAssetEntry\(bitableAssetUrl\(noteId, attachment\.file\), attachment\.name, attachment\.size, \{ kindFrom: attachment\.file \}\)/);
+    expect(ASSET_URL).not.toMatch(/,\s*0,\s*\{\s*kindFrom/);
   });
 
   it("行单元格：行高绝对控制（不许换行）、行内无删除叉号、点一下即选中出加号", () => {
@@ -356,6 +361,114 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/className="bt-panel-add" disabled=\{readOnly\} onClick=\{addOptionRow\}/);
   });
 
+  it("选项编辑：新加的行不再自动全选（用户 260930 报的「添加时那块蓝色底色」）", () => {
+    // 根因：聚焦新行时 `el.select()` 把选项名整块选中，屏幕上就是一块系统蓝（实测 selectionStart=0/End=4）。
+    // 改为只聚焦 + 光标落末尾 —— 与「用鼠标点进这个输入框」完全一致，可预期且不抢输入。
+    expect(EDITOR).toMatch(/if \(el\) \{ el\.focus\(\); el\.setSelectionRange\(el\.value\.length, el\.value\.length\); \}/);
+    expect(EDITOR).not.toMatch(/el\.focus\(\); el\.select\(\)/);
+    // 新选项留空（默认名交给 placeholder）⇒ 没有任何「被全选的既存文本」可涂蓝
+    expect(EDITOR).toMatch(/\{ id, name: "", color: BITABLE_OPTION_COLORS\[prev\.length % BITABLE_OPTION_COLORS\.length\] \}/);
+    expect(EDITOR).toMatch(/placeholder=\{"选项 " \+ \(index \+ 1\)\}/);
+    // 保存时空名按位置兜底成「选项 N」，不会把空名写进字段（其余行原样返回）
+    expect(EDITOR).toMatch(/name: option\.name\.trim\(\) \|\| "选项 " \+ \(index \+ 1\)/);
+    // 占位色走令牌（浏览器默认灰不是令牌；与 kit/overlay 的 placeholder 同一口径）
+    expect(CSS).toMatch(/\.bt-input::placeholder \{ color: var\(--lake-text-4\); \}/);
+  });
+
+  it("列宽可自由设置（宽度看字段数据、不看内容）+ 行高不被内容撑高（用户 260930）", () => {
+    // 根因：`table-layout: auto` 下 `<col style="width">` 只是「至少这么宽」——附件 chip 实测把 180 撑到 413。
+    // 真正卡住列的是每个格子的 max-width（按列写行内：宽度来自正文数据，CSS 没法按列取值）。
+    expect(EDITOR).toMatch(/const columnWidth = \(field: BitableField\) => \(field\.width \?\? DEFAULT_COL_WIDTH\) \+ "px";/);
+    expect(EDITOR).toMatch(/<th key=\{field\.id\}[\s\S]{0,400}?style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
+    expect(EDITOR).toMatch(/style=\{\{ maxWidth: columnWidth\(field\), \.\.\.\(columnTextColor\(field\.id\)/);
+    expect(EDITOR).toMatch(/className="bt-group-stat" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
+    expect(EDITOR).toMatch(/className="bt-stat-cell" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
+    // 行高**绝对**不被内容撑高：单元格永不换行（实测日期列 80px 时折行 ⇒ 行高 36 → 48），日期/时间单行省略
+    expect(CSS).toMatch(/\.bt-grid th, \.bt-grid td \{[^}]*white-space: nowrap/);
+    expect(CSS).toMatch(/\.bt-date-trigger > span \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
+    // 文本格同样「截断省略」而不是硬裁（input 支持 text-overflow: ellipsis）
+    expect(CSS).toMatch(/\.bt-cell-input \{[^}]*text-overflow: ellipsis/);
+    // 下限 80 → 40（用户：「可以设定一个比较小的下限值」），上限仍是 640
+    expect(EDITOR).toMatch(/Math\.max\(40, Math\.min\(640, startW \+ \(ev\.clientX - startX\)\)\)/);
+    expect(EDITOR).not.toMatch(/Math\.max\(80, Math\.min\(640,/);
+  });
+
+  it("附件展示文档类型图标（用户 260930）：单元格小图标 + hover 名称气泡、展开面板大图标", () => {
+    // 单元格：附件字段 → 类型图标（不再是文件名 chip / 缩略图）；图片字段（imageOnly）保持缩略图
+    expect(CARDS).toMatch(/className=\{"bt-attachment-chip" \+ \(imageOnly \? "" : " is-icon"\)\}/);
+    expect(CARDS).toMatch(/<FileKindIcon name=\{name\} \/>/);
+    expect(CARDS).toMatch(/imageOnly\s*\n?\s*\? <img src=\{chipUrlOf\(file\)\} alt=\{name\} loading="lazy"/);
+    // 缩略图**不再带原生 title**（否则和下面的自定义气泡同时冒出来）
+    expect(CARDS).not.toMatch(/<img src=\{chipUrlOf\(file\)\} alt=\{name\} loading="lazy" title=\{name\}/);
+    // hover 名称气泡：**一处实现**（useNameTip），单元格 chip 与展开面板文件名共用
+    expect(CARDS).toMatch(/function useNameTip\(\) \{/);
+    expect(CARDS).toMatch(/<span ref=\{surfaceRef\} className="ln-tip bt-file-tip" style=\{style \?\? undefined\} role="tooltip">\{tip\.name\}<\/span>/);
+    expect(CARDS).toMatch(/const tip = useNameTip\(\);/);
+    // 单元格：两种字段共用（用户 260930：图片也要 hover 出名称），无条件挂 mouseenter
+    expect(CARDS).toMatch(/onMouseEnter=\{\(event\) => tip\.show\(name, event\.currentTarget\)\}/);
+    expect(CARDS).not.toMatch(/onMouseEnter=\{imageOnly \? undefined/);
+    // 展开面板的文件名：有文字 ⇒ 只在**真被省略**时才弹（用户 260930 追加），且不再用原生 title
+    expect(CARDS).toMatch(/tip\.show\(name, event\.currentTarget, true\)/);
+    expect(CARDS).toMatch(/whenTruncated && anchor\.scrollWidth <= anchor\.clientWidth/);
+    expect(CARDS).not.toMatch(/className="bt-attach-card-name" title=\{name\}/);
+    // 表面用 kit 的 .ln-tip、定位用 usePopoverPosition（fixed ⇒ 不被滚动容器裁切）
+    expect(CARDS).toMatch(/usePopoverPosition\(\{ open: Boolean\(tip\), anchor: tip\?\.anchor \?\? null, gap: 6 \}\)/);
+    expect(CARDS).toMatch(/className="ln-tip bt-file-tip"/);
+    expect(FILE_ICON_CSS).toMatch(/\.bt-file-tip \{ position: fixed; pointer-events: none; \}/);
+    // 展开面板：附件字段出**大类型图标**（原来非图片是「扩展名文字」）；图片字段仍是缩略图
+    expect(CARDS).toMatch(/<span className="bt-attach-card-kind"><FileKindIcon name=\{name\} size=\{46\} \/><\/span>/);
+    // 类型判定收敛到 core 的单一事实源（图标组件不自己养一份扩展名表）
+    expect(FILE_ICON).toMatch(/import \{ fileKindOf, type AssetFileKind \} from "\.\.\/\.\.\/core\/assetNaming\.js"/);
+    expect(FILE_ICON).toMatch(/const kind = fileKindOf\(name\)/);
+    expect(DOC).not.toMatch(/fileKindOf|ASSET_FILE_KIND_EXTS/);
+    // 颜色只允许出现在主题文件里（ui-metrics 的硬指标），图标色一律 --lake-file-*
+    expect(FILE_ICON_CSS).toMatch(/\.bt-file-icon--pdf \{ color: var\(--lake-file-pdf\); \}/);
+    expect(FILE_ICON_CSS).not.toMatch(/#[0-9a-f]{3,6}/i);
+  });
+
+  it("关联选择器整表复用同一套附件渲染（用户 260930：「这两处不是同一套代码吗？能做成一套吗？」）", () => {
+    // 选择器不再自养「📎 文件名」chip / 自己的缩略图，改用表格那套 AttachmentChipList
+    expect(PICKER).toMatch(/import \{ AttachmentChipList, SelectMenu \} from "\.\/bitableCells\.js"/);
+    expect(PICKER).toMatch(/<AttachmentChipList noteId=\{noteId\} attachments=\{files\} imageOnly=\{field\.type === "image"\}/);
+    expect(PICKER).not.toMatch(/bt-rel-thumb/);
+    expect(PICKER).not.toMatch(/Paperclip/);
+    expect(PICKER_CSS).not.toMatch(/\.bt-rel-thumb/);
+    // 点图标 = 打开/预览（与表格同一交互）⇒ 截断冒泡，别顺带勾选整行；`.bt-rel-files` 只包住图标本身
+    expect(PICKER).toMatch(/<span className="bt-rel-files" onClick=\{\(event\) => event\.stopPropagation\(\)\}>/);
+    expect(PICKER_CSS).toMatch(/\.bt-rel-files \{ display: inline-flex; align-items: center; gap: var\(--lake-space-xs\); max-width: 100%; overflow: hidden; \}/);
+    // 极端入口没有 noteId 时不拼资产 URL
+    expect(PICKER).toMatch(/if \(!noteId\) \{/);
+  });
+
+  it("看板/画册卡片复用同一套附件渲染（用户 260930 选 A；后又要求卡片不显示名称）", () => {
+    // 卡片不再自己养缩略图：附件字段出类型图标（PDF/Word 也看得见，之前整块不上卡）、图片字段出缩略图
+    expect(KANBAN).toMatch(/<AttachmentChipList noteId=\{noteId\} attachments=\{files\} imageOnly=\{field\.type === "image"\}/);
+    // 卡片**不显示文件名**（用户：「看板视图不展示名称了，直接图标或者缩略图吧」）⇒ 没有 showNames 变体
+    expect(KANBAN).not.toMatch(/<AttachmentChipList[^>]*showNames/);   // 注意别误伤看板自己的 kanbanShowFieldNames
+    expect(CARDS).not.toMatch(/showNames|bt-attachment-chip-name/);
+    expect(KANBAN).toMatch(/if \(isAttachmentLikeField\(field\.type\)\) \{[\s\S]{0,200}?const files = bitableAttachments/);
+    expect(KANBAN).not.toMatch(/bt-kanban-thumb/);
+    expect(KANBAN).not.toMatch(/KANBAN_THUMB_PX/);
+    expect(KANBAN_CSS).not.toMatch(/\.bt-kanban-thumb/);
+    // 卡片附件行容器是**共用**的 .bt-card-files（定义在 bitableFileIcon.css，看板/画册同一份）
+    expect(FILE_ICON_CSS).toMatch(/\.bt-card-files \{ display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; \}/);
+    expect(KANBAN_CSS).not.toMatch(/\.bt-card-files|\.bt-kanban-files/);
+    // 卡片能换行（不像表格格子必须一行裁切）、点图标不冒泡（卡片空白处仍开记录详情）
+    expect(KANBAN).toMatch(/<span className="bt-card-files" onClick=\{\(event\) => event\.stopPropagation\(\)\}>/);
+    // 画册卡片同样走同一套（用户：「画册视图的附件也要改」；之前是 bitableFieldText 出的一串文件名）
+    expect(GALLERY).toMatch(/<AttachmentChipList noteId=\{noteId\} attachments=\{files\} imageOnly=\{field\.type === "image"\}/);
+    expect(GALLERY).toMatch(/isAttachmentLikeField\(field\.type\)/);
+    expect(GALLERY).toMatch(/<span className="bt-card-files" onClick=\{\(event\) => event\.stopPropagation\(\)\}>/);
+  });
+
+  it("打开附件只有一处实现（openBitableAttachment），表格/选择器/看板都走它", () => {
+    expect(ASSET_URL).toMatch(/export function openBitableAttachment\(noteId: string, attachment: BitableAttachment\): void \{/);
+    expect(ASSET_URL).toMatch(/openAssetEntry\(bitableAssetUrl\(noteId, attachment\.file\), attachment\.name, attachment\.size, \{ kindFrom: attachment\.file \}\)/);
+    for (const src of [EDITOR, PICKER, KANBAN]) expect(src).toMatch(/openBitableAttachment\(noteId, attachment\)/);
+    // 三处都不再各自拼一遍
+    for (const src of [EDITOR, PICKER, KANBAN]) expect(src).not.toMatch(/openAssetEntry\(bitableAssetUrl/);
+  });
+
   it("附件打开走公共入口（图片 Lightbox / 音视频内嵌 / 其它系统）", () => {
     expect(EDITOR).toMatch(/openAssetEntry/);
     expect(EDITOR).toMatch(/AttachmentPreview/);
@@ -603,13 +716,14 @@ describe("多维表编辑器护栏", () => {
     expect(PREVIEW).toMatch(/previewImageKey/);
     expect(EDITOR_TAB).toMatch(/extractImagesFromContent/);
     expect(PREVIEW).toMatch(/attachImagePreviewClick\(host: HTMLElement, resolveImages\?/);
-    // ② 看板：附件类字段上卡走缩略图，不再拿文件名占位
-    expect(KANBAN).toMatch(/bt-kanban-thumb/);
+    // ② 看板：附件类字段上卡**复用同一套 AttachmentChipList**（260930 收敛，见「看板卡片复用同一套」那条护栏），
+    //    图片字段仍是缩略图（imageOnly），不再拿文件名占位
+    expect(KANBAN).toMatch(/<AttachmentChipList noteId=\{noteId\} attachments=\{files\} imageOnly=\{field\.type === "image"\}/);
     expect(KANBAN).toMatch(/isAttachmentLikeField\(field\.type\)/);
-    // 点缩略图 = 预览该单元格内的图片（不跨字段）；卡片点击仍开记录详情
-    expect(KANBAN).toMatch(/onOpenImages\(images, index\)/);
-    expect(KANBAN).toMatch(/event\.stopPropagation\(\); onOpenImages/);
-    expect(KANBAN_CSS).toMatch(/\.bt-kanban-thumb \{/);
+    // 点缩略图 = 预览该单元格内的图片（不跨字段，onOpenImages 由 AttachmentChipList 透传）；卡片点击仍开记录详情
+    expect(KANBAN).toMatch(/onOpenImages=\{onOpenImages\}/);
+    expect(KANBAN).toMatch(/className="bt-card-files" onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
+    expect(FILE_ICON_CSS).toMatch(/\.bt-card-files \{/);
   });
 
   it("浮层定位：统一「先量真实尺寸 → 贴底翻上方」，禁止再用估算高度夹视口", () => {
@@ -672,20 +786,32 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/const table = createDefaultBitableTable\(\);/);
   });
 
-  it("关联选择器：图片/附件格真渲染（缩略图 + 附件 chip），不是只给名称", () => {
-    // 用户 260929：选择器里的附件和图片要加载出来
-    expect(PICKER).toMatch(/<img key=\{image\.file\} className="bt-rel-thumb" src=\{bitableAssetUrl\(noteId, image\.file, PICKER_THUMB_PX\)\}/);
-    expect(PICKER).toMatch(/onClick=\{\(event\) => \{ event\.stopPropagation\(\); onOpenImages\?\.\(images, index\); \}\}/);
-    expect(PICKER).toMatch(/className="bt-rel-file"/);
+  it("关联选择器：图片/附件格真渲染（用户 260929 要求「不能只给一个名称」）", () => {
+    // 260930 起渲染**统一到表格那套** AttachmentChipList（见下一条护栏），这里只锁「真的渲染出来」+ 资产 URL 来源
+    expect(PICKER).toMatch(/<AttachmentChipList noteId=\{noteId\} attachments=\{files\}/);
+    expect(CARDS).toMatch(/<FileKindIcon name=\{name\} \/>/);
+    expect(CARDS).toMatch(/imageOnly\s*\n?\s*\? <img src=\{chipUrlOf\(file\)\} alt=\{name\}/);
     // 资产 URL 单一来源：单元格 / 看板 / 画册 / 选择器都走 bitableAssetUrl
     expect(ASSET_URL).toMatch(/export function bitableAssetUrl/);
     expect(CARDS).toMatch(/bitableAssetUrl\(noteId, file, ATTACHMENT_CHIP_PX\)/);
     expect(CARDS).toMatch(/bitableAssetUrl\(noteId, file, ATTACHMENT_CARD_PX\)/);
-    expect(KANBAN).toMatch(/bitableAssetUrl\(noteId, file, KANBAN_THUMB_PX\)/);
+    // 260930：看板卡片也改用 AttachmentChipList（内部走 bitableAssetUrl），不再自拼缩略图 URL
+    expect(KANBAN).not.toMatch(/bitableAssetUrl\(/);
+    expect(KANBAN).toMatch(/<AttachmentChipList noteId=\{noteId\}/);
     expect(GALLERY).toMatch(/bitableAssetUrl\(noteId, file, GALLERY_COVER_PX\)/);
     // noteId / onOpenImages 从三个入口（表格、记录详情、表单）透传到选择器
     expect(EDITOR).toMatch(/noteId=\{noteId\}\n\s*onOpenImages=\{openImages\}/);
     expect(DRAWER).toMatch(/noteId=\{props\.noteId\}\n\s*onOpenImages=\{props\.onOpenImages\}/);
     expect(FORM).toMatch(/noteId=\{props\.noteId\}\n\s*onOpenImages=\{props\.onOpenImages\}/);
+  });
+
+  it("表头「新增字段」的 + 贴着左侧最后一列（不是被 th 默认居中甩到空白区中央）", () => {
+    // 用户 260930（附图）：那一格是表尾自动宽度的单元格（吸收剩余宽度），th 浏览器默认 text-align:center
+    // ⇒ 加号落在空白区正中、离最后一列很远。只把内容左对齐，列宽语义不变。
+    expect(EDITOR).toMatch(/<th className="bt-th-add">[\s\S]{0,220}?className="bt-add-round" title="新增字段"/);
+    // 必须带 `.bt-grid th.` 前缀：`.bt-grid th { padding: 0 }` 是 (0,1,1)，裸 `.bt-th-add` 是 (0,1,0) 压不过
+    expect(VIEWCSS).toMatch(/\.bt-grid th\.bt-th-add \{ text-align: left; padding-left: 8px; \}/);
+    // 不能把这一格变成固定宽度（那会把剩余宽度摊给数据列 ⇒ 列宽被撑开）；也不许居中
+    expect(VIEWCSS).not.toMatch(/\.bt-th-add \{[^}]*text-align: center/);
   });
 });

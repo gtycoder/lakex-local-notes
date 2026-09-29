@@ -34,6 +34,7 @@ const FILES = [
   "features/bitable/bitableCalendarView.css",   // V04：日历视图样式
   "features/bitable/bitableFormView.css",   // 表单双模（编辑/预览）样式
   "features/bitable/bitableRelationPicker.css",   // 关联记录选择器（260929：全局大弹窗）
+  "features/bitable/bitableFileIcon.css",   // 260930：附件「文档类型」图标 + hover 名称气泡
   "features/board/boardEditor.css",
   "styles/dialog.css", "styles/document-status.css",   "styles/components.css",   "styles/tokens.css",   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   "styles/kit.css",       // P4 起：自有组件库（14 件）
@@ -73,7 +74,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/sheet/sheetEditor.css": { decls: 64, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   // 260929：-30 = 分组样式按职责移出（→ bitableViews.css）+ 表底「添加记录」旧样式删除（改用共用 .bt-add-round）+ 删掉已冗余的 .bt-panel-add 组合规则；实测 1051（重复组 0）
-  "features/bitable/bitableEditor.css": { decls: 1055, dupGroups: 0 },   // +1 = .bt-select-trigger 显式 text-align:left（修「编辑字段」类型名被 button 默认居中）；数据表行「⋯/删除表」改**绝对定位浮层 + 悬停浮现**（+8：position:relative×1 + 两钮 absolute/居中/隐藏 ×6 + hover 显形 ×2；原 2 条 opacity 规则被替换）；260929 续 2：+1 = 单元格有自身选中环时不再叠输入框焦点环
+  "features/bitable/bitableEditor.css": { decls: 1062, dupGroups: 0 },   // 260930：+6 = 列宽自由设置/行高不被内容撑高（`.bt-grid th/td` 补 `white-space: nowrap` = 永不换行；新增 `.bt-date-trigger > span` 的 min-width/overflow/text-overflow/white-space = 日期时间列窄了出省略号；`.bt-cell-input` 补 `text-overflow: ellipsis` = 文本格窄了出省略号而不是硬裁；合法新增非覆盖回涨）。再+1 = `.bt-input::placeholder`（选项编辑的新行用 placeholder 显示默认名「选项 N」；顺带把 .bt-input 的占位色收敛到 --lake-text-4，浏览器默认灰不是令牌）。此前：+1 = .bt-select-trigger 显式 text-align:left（修「编辑字段」类型名被 button 默认居中）；数据表行「⋯/删除表」改**绝对定位浮层 + 悬停浮现**（+8：position:relative×1 + 两钮 absolute/居中/隐藏 ×6 + hover 显形 ×2；原 2 条 opacity 规则被替换）；260929 续 2：+1 = 单元格有自身选中环时不再叠输入框焦点环
   // 260928 V01 多视图工作台：视图相关新规则一律进本文件（bitableEditor.css 已顶到基线，只允许变小）
   // 260928 V02：净 +4 = 看板配置面板的说明文案 .bt-panel-note（合法新增，非覆盖回涨）
   // 260928 T01：+4 = 表格底部列统计行贴底常驻（合法新增，非覆盖回涨）
@@ -86,20 +87,22 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260929 续 5：+5 = 表格撑满一屏（.bt-grid min-height + .bt-grid-filler 占位行），底部汇总栏才贴视图底
   // 260929 续 6：+5 = 「加进本组」不占行（行高 0 + 圆钮绝对定位悬浮在分组边界上）
   // 260929 续 7：+13 = 统计格改白底 chip + 共用 StatCell 内容样式（右对齐/▾/未配置 hover 显形），并删掉旧的「统计」占位钮规则
-  "features/bitable/bitableViews.css": { decls: 146, dupGroups: 0 },  // 260929 续：+5 = 分组底衬（表头下 20px 间隙 .bt-group-head-gap、加进本组通道、组间、末尾占位行统一走 --lake-bg-subtle）；此前：单级分组卡片 + + 行下线
+  "features/bitable/bitableViews.css": { decls: 148, dupGroups: 0 },  // 260930：+2 = 表头「新增字段」的 + 贴着左侧最后一列（`.bt-grid th.bt-th-add { text-align:left; padding-left:8px }`——th 默认居中把它甩到空白区中央；合法新增非覆盖回涨）。260929 续：+5 = 分组底衬（表头下 20px 间隙 .bt-group-head-gap、加进本组通道、组间、末尾占位行统一走 --lake-bg-subtle）；此前：单级分组卡片 + + 行下线
   // 260928 T02A：布尔 / 链接 / 评分 / 进度 单元格 + 字段类型 2 列网格（全新文件，合法新增）
   // 260928 续：+15 = 评分空星改实心（颜色换 --lake-border-strong）+ 进度条可拖动（轨道 position/cursor/touch-action、圆形把手 .bt-progress-thumb、只读隐藏把手）；合法新增非覆盖回涨
   // 260929：净 -3 = 进度数值框整体删除（随之删掉 appearance: textfield 与 ::-webkit-{inner,outer}-spin-button 两条声明）⇒ 回落 84 → 81
   "features/bitable/bitableFieldCells.css": { decls: 99, dupGroups: 0 },   // T02B.2：+17 = 关联选择器行/页脚（.bt-relation-row / -row-title / -foot / -count）−15 = T02B.1 的 .bt-relation-chips/-chip（已改为复用 .bt-option-* 原语）⇒ 净 +2；此前：+1 = 链接格的展示文本 .bt-link-text
   // 260928 V02 看板视图：分栏 / 卡片 / 折叠 / 新建分组（全部合法新增；空栏目必须能当投放区）
   // 260928 追加需求：卡片上的图片字段改为缩略图（.bt-kanban-thumbs/.bt-kanban-thumb，+9 合法新增）
-  "features/bitable/bitableKanbanView.css": { decls: 109, dupGroups: 0 },
+  "features/bitable/bitableKanbanView.css": { decls: 100, dupGroups: 0 },   // 260930：-9 = 卡片附件**复用**表格那套 AttachmentChipList（删自养的 `.bt-kanban-thumb` 五条 + `.bt-kanban-files` 四条——行容器改挂共用的 `.bt-card-files`）
   // 260928 V03 画册视图：卡片网格 / 封面（裁剪·适应）/ 常规·紧凑（全部合法新增）
   // 260928 追加需求：封面改成可点按钮（就地重置原生按钮样式 + button 选择器），净 +4
   "features/bitable/bitableGalleryView.css": { decls: 69, dupGroups: 0 },
   // 260928 追加需求：表单「编辑表单 / 预览表单」双模的壳、题目顺序与直填直提布局（全部合法新增）
   "features/bitable/bitableFormView.css": { decls: 27, dupGroups: 0 },   // 260929：表单双模页签改 kit 原语后 -3（原 .seg 容器改由原语给几何，只留居中一条）
-  "features/bitable/bitableRelationPicker.css": { decls: 120, dupGroups: 0 },   // 260929：关联记录选择器（全局大弹窗）——大弹窗尺寸/两个 tab/搜索框+筛选排序（内联条）/整表（吸顶表头、超长省略）/页脚；+24 = 图片缩略图与附件 chip（`.bt-rel-files/-thumb/-file`，用户要求图片附件要真渲染）；实测 120
+  "features/bitable/bitableRelationPicker.css": { decls: 113, dupGroups: 0 },   // 260930：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）——删掉自养的 `.bt-rel-thumb`（含 hover）共 9 条，`.bt-rel-files` 由 3 → 5（inline-flex + max-width/overflow）。此前 120 —— 260929：关联记录选择器（全局大弹窗）——大弹窗尺寸/两个 tab/搜索框+筛选排序（内联条）/整表（吸顶表头、超长省略）/页脚；+24 = 图片缩略图与附件 chip
+  // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
+  "features/bitable/bitableFileIcon.css": { decls: 37, dupGroups: 0 },
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）
   "features/bitable/bitableCalendarView.css": { decls: 75, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）

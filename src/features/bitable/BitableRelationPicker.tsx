@@ -12,7 +12,7 @@
  * 单元格里的 chip 展示仍走 `relationTargetRecords`（已选记录即使被数据范围过滤掉也照常显示）。
  */
 import { useMemo, useState } from "react";
-import { ArrowDownUp, Filter, Paperclip, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowDownUp, Filter, Plus, Search, Trash2 } from "lucide-react";
 import {
   BITABLE_FILTER_OPERATOR_LABEL, applySortMode, applyViewToRecords, bitableAttachments, bitableFieldText, bitableRecordTitle,
   changeSortField, filterOperatorsFor, relationCandidateRecords, relationRecordIds, relationTargetTable,
@@ -20,10 +20,9 @@ import {
   type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFilterRule, type BitableRecord,
   type BitableSortMode, type BitableSortRule, type BitableView,
 } from "../../core/bitableDoc.js";
-import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import { Dialog } from "../../components/ui/Overlay.js";
-import { SelectMenu } from "./bitableCells.js";
-import { bitableAssetUrl } from "./bitableAssetUrl.js";
+import { AttachmentChipList, SelectMenu } from "./bitableCells.js";
+import { openBitableAttachment } from "./bitableAssetUrl.js";
 import "./bitableRelationPicker.css";
 
 export interface BitableRelationPickerProps {
@@ -41,15 +40,10 @@ export interface BitableRelationPickerProps {
 
 type PickerTab = "all" | "selected";
 
-/** 缩略图边长（CSS 像素）：决定 `?w=` 档位。 */
-const PICKER_THUMB_PX = 32;
-/** 非图片附件最多列几个（其余折成 `+N`，避免一行被文件名刷满）。 */
-const PICKER_FILE_MAX = 2;
-
 /**
- * 一格的值渲染：**图片/附件要真的渲染出来**（用户 260929：不能只给一个名称）——
- * 图片出缩略图（点开预览本单元格）、其余附件出「图标 + 文件名」chip。
- * 没有 noteId（极少数入口）时才退化成图片张数。
+ * 一格的值渲染：文本类走展示文本；**图片/附件列复用表格那套 `AttachmentChipList`**
+ * （用户 260930：「这两处不是同一套代码吗？能做成一套吗？」⇒ 选择器不再自己养一套「📎 文件名」chip）。
+ * 没有 noteId（极少数入口）时才退化成纯文本名（不拼资产 URL、不渲染破图）。
  */
 function PickerCellValue({ record, field, ctx, noteId, onOpenImages }: {
   record: BitableRecord;
@@ -61,21 +55,17 @@ function PickerCellValue({ record, field, ctx, noteId, onOpenImages }: {
   if (field.type === "image" || field.type === "attachment") {
     const files = bitableAttachments(record.values[field.id]);
     if (files.length === 0) return <span className="bt-rel-blank">—</span>;
-    const images = files.filter((item) => isImageExtension(extOf(item.file)));
-    const others = files.filter((item) => !isImageExtension(extOf(item.file)));
+    /** 没有 noteId（极端入口）时不拼资产 URL —— 退化成纯文本名，绝不渲染破图。 */
+    if (!noteId) {
+      return <span className="bt-rel-files">{files.map((file) => <span key={file.file} className="bt-rel-file" title={file.name}>{file.name}</span>)}</span>;
+    }
+    /** 与表格单元格**同一套**附件渲染（用户 260930）：类型图标 / 缩略图 + hover 名称气泡都走 AttachmentChipList。
+        点图标 = 预览本格图片 / 用系统应用打开（与表格同一交互）⇒ 这里截断冒泡，别顺带把整行勾选上。 */
     return (
-      <span className="bt-rel-files">
-        {noteId
-          ? images.map((image, index) => (
-            <img key={image.file} className="bt-rel-thumb" src={bitableAssetUrl(noteId, image.file, PICKER_THUMB_PX)}
-              alt={image.name} title={image.name} loading="lazy"
-              onClick={(event) => { event.stopPropagation(); onOpenImages?.(images, index); }} />
-          ))
-          : images.length > 0 && <span className="bt-rel-file" title={images.map((image) => image.name).join("、")}>{images.length} 张图片</span>}
-        {others.slice(0, PICKER_FILE_MAX).map((file) => (
-          <span key={file.file} className="bt-rel-file" title={file.name}><Paperclip size={12} />{file.name}</span>
-        ))}
-        {others.length > PICKER_FILE_MAX && <span className="bt-rel-file">+{others.length - PICKER_FILE_MAX}</span>}
+      <span className="bt-rel-files" onClick={(event) => event.stopPropagation()}>
+        <AttachmentChipList noteId={noteId} attachments={files} imageOnly={field.type === "image"}
+          onOpen={(attachment) => openBitableAttachment(noteId, attachment)}
+          onOpenImages={onOpenImages} />
       </span>
     );
   }

@@ -9,8 +9,8 @@
  */
 import { useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
-import { extOf, isImageExtension } from "../../core/assetNaming.js";
-import { bitableAssetUrl } from "./bitableAssetUrl.js";
+import { openBitableAttachment } from "./bitableAssetUrl.js";
+import { AttachmentChipList } from "./bitableCells.js";
 import {
   bitableAttachments, bitableFieldText, bitableRecordTitle, bitableSelectFields, isAttachmentLikeField,
   kanbanCardFields, kanbanColumns, kanbanGroupField, optionChipStyle,
@@ -18,9 +18,6 @@ import {
 } from "../../core/bitableDoc.js";
 import { ViewTypeIcon } from "./bitableViews.js";
 import "./bitableKanbanView.css";
-
-/** 卡片上缩略图的边长（取 ?w= 档位；用户 260928：图片字段上卡只显示缩略图，不显示文件名）。 */
-const KANBAN_THUMB_PX = 36;
 
 export interface BitableKanbanViewProps {
   noteId: string;
@@ -41,9 +38,6 @@ export interface BitableKanbanViewProps {
 }
 
 export function BitableKanbanView({ noteId, table, view, records, readOnly, onSetValue, onOpenRecord, onAddGroupOption, onOpenImages, ctx }: BitableKanbanViewProps) {
-  const thumbUrl = (file: string) => bitableAssetUrl(noteId, file, KANBAN_THUMB_PX);
-  /** 附件/图片字段上卡：只出**图片缩略图**（非图片附件不出名称，避免卡片被文件名刷屏）。 */
-  const imageAttachmentsOf = (value: unknown): BitableAttachment[] => bitableAttachments(value).filter((item) => isImageExtension(extOf(item.file)));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   /** 折叠是**本机展示态**，不写正文（与表格分组同一口径）。 */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -112,16 +106,18 @@ export function BitableKanbanView({ noteId, table, view, records, readOnly, onSe
                     <div className="bt-kanban-card-title">{bitableRecordTitle(table, record, ctx)}</div>
                     {cardFields.map((field) => {
                       if (isAttachmentLikeField(field.type)) {
-                        const images = imageAttachmentsOf(record.values[field.id]);
-                        if (images.length === 0) return null;   // 没有图片就不上卡（不拿文件名占位）
+                        const files = bitableAttachments(record.values[field.id]);
+                        if (files.length === 0) return null;   // 空字段不上卡（卡片才紧凑）
                         return (
                           <div key={field.id} className="bt-kanban-field">
                             {showNames && <span className="bt-kanban-field-name">{field.name}</span>}
-                            <span className="bt-kanban-thumbs">
-                              {images.map((image, index) => (
-                                <img key={image.file} className="bt-kanban-thumb" src={thumbUrl(image.file)} alt={image.name} title={image.name} loading="lazy"
-                                  onClick={(event) => { event.stopPropagation(); onOpenImages(images, index); }} />
-                              ))}
+                            {/* 与表格/详情/表单/选择器/画册**同一套**附件渲染（用户 260930）：
+                                附件字段 = 类型图标（PDF/Word 也看得见，之前整块不上卡）、图片字段 = 缩略图；
+                                **卡片上也不显示名称**（用户：「看板视图不展示名称了，直接图标或者缩略图吧」），名字靠 hover 气泡。
+                                点图标 = 打开/预览 ⇒ 截断冒泡，别顺带打开记录详情；卡片空白处仍开详情。 */}
+                            <span className="bt-card-files" onClick={(event) => event.stopPropagation()}>
+                              <AttachmentChipList noteId={noteId} attachments={files} imageOnly={field.type === "image"}
+                                onOpen={(attachment) => openBitableAttachment(noteId, attachment)} onOpenImages={onOpenImages} />
                             </span>
                           </div>
                         );

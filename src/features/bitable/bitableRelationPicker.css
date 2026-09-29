@@ -74,10 +74,10 @@
 .bt-rel-grid .bt-rel-check { width: 40px; padding-left: 0; padding-right: 0; text-align: center; }
 .bt-rel-blank { color: var(--lake-text-4); }
 
-/* 图片/附件格：图片出缩略图（真的加载），其余附件出「图标 + 文件名」chip */
-.bt-rel-files { display: flex; align-items: center; gap: var(--lake-space-xs); }
-.bt-rel-thumb { width: 32px; height: 32px; flex: 0 0 auto; object-fit: cover; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-subtle); cursor: pointer; }
-.bt-rel-thumb:hover { border-color: var(--lake-border-strong); }
+/* 图片/附件格：内容就是表格那套 .bt-attachment-chip / .bt-file-chip（单一来源，见 bitableCells 的 AttachmentChipList）。
+   `inline-flex` = 只包住图标本身，于是**行的空白处仍可点选**（图标上单独截断冒泡，不误触勾选）；
+   `max-width/overflow` 把超出的图标裁在格内，不让它溢到下一列。 */
+.bt-rel-files { display: inline-flex; align-items: center; gap: var(--lake-space-xs); max-width: 100%; overflow: hidden; }
 .bt-rel-file {
   display: inline-flex;
   align-items: center;

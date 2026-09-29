@@ -14,6 +14,7 @@ import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { placePopoverPosition } from "../../hooks/topMenuPosition";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import { bitableAssetUrl } from "./bitableAssetUrl.js";
+import { FileKindIcon } from "./FileKindIcon.js";
 import "./bitableFieldCells.css";
 import { native } from "../../lib/native.js";
 import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
@@ -261,15 +262,49 @@ function attachmentPanelSize(count: number, measuredCardHeight?: number): { w: n
   return { w: clamp(w, 280, viewportW - 24), h: clamp(h, 200, viewportH - 24) };
 }
 
-/** 行单元格里的附件 chip 列表。**没有删除按钮**：行内格子太窄，删除只在展开面板的卡片上做
- *  （点单元格 = 选中并出现「+」，点 chip = 预览，两者都不需要在行内放 ×）。 */
-function AttachmentChipList({ noteId, attachments, onOpen, onOpenImages }: {
+/**
+ * hover 名称气泡（用户 260930）——**一个来源**：单元格 chip 与展开面板的文件名共用。
+ * 表面用 kit 的 `.ln-tip`、定位用 `usePopoverPosition`（`position: fixed` ⇒ 不被 `.bt-grid-wrap` 的滚动容器裁切）。
+ *
+ * `whenTruncated`：**有文字**的地方（面板里的文件名）只在**真的被省略**时才弹（用户：「有可能看不全，
+ * 也加一个弹窗展示完整名称」）；图标上没有文字、名称只能靠气泡读，所以永远弹。
+ */
+function useNameTip() {
+  const [tip, setTip] = useState<{ name: string; anchor: HTMLElement } | null>(null);
+  const { surfaceRef, style } = usePopoverPosition({ open: Boolean(tip), anchor: tip?.anchor ?? null, gap: 6 });
+  const show = (name: string, anchor: HTMLElement, whenTruncated = false) => {
+    if (whenTruncated && anchor.scrollWidth <= anchor.clientWidth) { setTip(null); return; }
+    setTip({ name, anchor });
+  };
+  const hide = () => setTip(null);
+  const surface = tip
+    ? <span ref={surfaceRef} className="ln-tip bt-file-tip" style={style ?? undefined} role="tooltip">{tip.name}</span>
+    : null;
+  return { surface, show, hide };
+}
+
+/**
+ * 附件值展示（**唯一一套**）：附件字段 = 类型图标、图片字段 = 缩略图，两者都带 hover 名称气泡；
+ * 点一下 = 预览本格图片 / 用系统应用打开该文件。
+ *
+ * 调用方：表格单元格与记录详情/表单的 `AttachmentCell`、**关联字段选择器整表**（用户 260930：
+ * 「这两处不是同一套代码吗？能做成一套吗？」⇒ 选择器不再自己养一套「📎 文件名」chip）。
+ * **没有删除按钮**：行内格子太窄，删除只在展开面板的卡片上做（点单元格 = 选中并出现「+」）。
+ */
+export function AttachmentChipList({ noteId, attachments, onOpen, onOpenImages, imageOnly = false }: {
   noteId: string;
   attachments: BitableAttachment[];
   onOpen: (attachment: BitableAttachment) => void;
   /** 点图片：预览**该单元格内**的全部图片（用户 260928：两列图片就是两类，绝不跨列合并）。 */
   onOpenImages?: (images: BitableAttachment[], index: number) => void;
+  /**
+   * 图片字段 = 缩略图（这个字段的语义就是看图）；**附件字段 = 文档类型图标**（用户 260930：
+   * 「附件不展示名称和预览了，直接展示文档类型」）。两种字段共用本组件，靠这个开关分叉。
+   */
+  imageOnly?: boolean;
 }) {
+  /** hover 名称气泡：图标上没有文字，名称只能这样看（图 2）。一个 chip 列表共用一个表面。 */
+  const tip = useNameTip();
   const chipUrlOf = (file: string) => bitableAssetUrl(noteId, file, ATTACHMENT_CHIP_PX);
   /** 预览范围 = 本单元格内的图片（顺序 = 单元格内顺序）；非图片仍走系统打开。 */
   const openByFile = (file: string) => {
@@ -282,13 +317,24 @@ function AttachmentChipList({ noteId, attachments, onOpen, onOpenImages }: {
   };
   return (
     <>
+      {/* hover 名称气泡两种字段**共用**（用户 260930：「图片有一个改动，鼠标放上去展示名称可以和附件一样」）：
+          图片格是缩略图、附件格是类型图标，但「鼠标停上去看名称」是同一个交互 ⇒ 同一套实现。 */}
       {attachments.map(({ file, name }) => (
-        <div key={file} className="bt-attachment-chip" title={name}>
-          {isImageExtension(extOf(file))
+        <div key={file} className={"bt-attachment-chip" + (imageOnly ? "" : " is-icon")}
+          /* 名字不常驻（用户 260930：卡片也只出图标/缩略图）⇒ 气泡是唯一能看到名字的地方，永远弹 */
+          onMouseEnter={(event) => tip.show(name, event.currentTarget)}
+          onMouseLeave={tip.hide}>
+          {imageOnly
             ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => openByFile(file)} />
-            : <button type="button" className="bt-attachment-name" onClick={() => openByFile(file)}>{name}</button>}
+            : (
+              /* 名称不是丢了、而是挪到 hover 气泡里（`aria-label` 保可读；不再是常驻文字） */
+              <button type="button" className="bt-file-chip" aria-label={name} onClick={() => openByFile(file)}>
+                <FileKindIcon name={name} />
+              </button>
+            )}
         </div>
       ))}
+      {tip.surface}
     </>
   );
 }
@@ -335,7 +381,7 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
     setRejectNote(rejected > 0 ? IMAGE_ONLY_HINT + "，已忽略 " + rejected + " 个" : null);
     if (accepted.length > 0) onUpload(accepted);
   };
-  const chips = <AttachmentChipList noteId={noteId} attachments={attachments} onOpen={onOpen} onOpenImages={onOpenImages} />;
+  const chips = <AttachmentChipList noteId={noteId} attachments={attachments} onOpen={onOpen} onOpenImages={onOpenImages} imageOnly={imageOnly} />;
   // 表格里点外部收起编辑态；抽屉常驻态不收起
   useEffect(() => {
     if (!active || alwaysActive) return;
@@ -453,6 +499,8 @@ interface AttachmentExpandPopoverProps {
 function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageOnly = false, onOpenImages, onUpload, onRemove, onOpen, onReorder, onRename, onClose }: AttachmentExpandPopoverProps) {
   /** 图片字段收到非图片时的可见提示（与单元格同一口径）。 */
   const [rejectNote, setRejectNote] = useState<string | null>(null);
+  /** 文件名的 hover 全名气泡（与单元格 chip 同一套实现；名字被省略号截掉时才有意义）。 */
+  const tip = useNameTip();
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -625,9 +673,12 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
                   >
                     {/* 上：附件区 —— 点击预览，按住拖动排序（原生 draggable，不移动就仍是点击） */}
                     <div className="bt-attach-card-file" title="点击预览 · 按住拖动排序" onClick={() => openByFile(file)}>
-                      {isImageExtension(extOf(file))
-                        ? <img src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
-                        : <span className="bt-attach-card-ext">{(extOf(file) || "file").toUpperCase()}</span>}
+                      {/* 附件字段 = 大号**类型图标**（用户 260930）；图片字段仍是缩略图（那个字段就是看图）。 */}
+                      {imageOnly
+                        ? (isImageExtension(extOf(file))
+                          ? <img src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
+                          : <span className="bt-attach-card-ext">{(extOf(file) || "file").toUpperCase()}</span>)
+                        : <span className="bt-attach-card-kind"><FileKindIcon name={name} size={46} /></span>}
                       {!readOnly && (
                         <button type="button" className="bt-attach-card-remove" aria-label={"移除 " + name} title="删除"
                           onClick={(event) => { event.stopPropagation(); onRemove(file); }}><X size={13} /></button>
@@ -654,7 +705,11 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
                           </span>
                         )
                         : (
-                          <span className="bt-attach-card-name" title={name} onClick={() => openByFile(file)}>{name}</span>
+                          // 名称可能被省略号截掉（用户 260930）：hover 出**同一个**名称气泡显示全名。
+                          // 这里有文字 ⇒ 只在真被截断时才弹（没截断弹出来是同义重复）。
+                          <span className="bt-attach-card-name" onClick={() => openByFile(file)}
+                            onMouseEnter={(event) => tip.show(name, event.currentTarget, true)}
+                            onMouseLeave={tip.hide}>{name}</span>
                         )}
                       {!readOnly && renameFile !== file && (
                         <button type="button" className="bt-attach-card-icon" title="编辑名称" aria-label={"编辑名称 " + name}
@@ -677,6 +732,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
           onChange={(event) => { takeFiles(event.target.files); event.target.value = ""; }} />
       )}
       <div className="bt-attach-expand-resize" onPointerDown={startResize} title="拖动调整大小" />
+      {tip.surface}
     </OverlayPopover>
   );
 }

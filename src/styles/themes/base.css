@@ -114,6 +114,20 @@
   --lake-kernel-brand-green: #00b96b;
   --lake-tooltip-bg: #3f4868;
   --lake-tooltip-fg: #f8f9ff;
+  /* 附件「文档类型」图标配色（260930 用户：附件直接展示类型图标）。
+   * 内容/品牌色（不随主题语义变），与 --lake-board-canvas-* 同处「主题无关令牌」区；
+   * 深浅底都可辨，故不按主题分叉。用法见 features/bitable/bitableFileIcon.css。 */
+  --lake-file-image: #d98a00;
+  --lake-file-pdf: #d94a3d;
+  --lake-file-doc: #2f6fd0;
+  --lake-file-sheet: #2f9e5f;
+  --lake-file-slide: #e07b28;
+  --lake-file-archive: #b58a2b;
+  --lake-file-audio: #8b5cd6;
+  --lake-file-video: #c9539a;
+  --lake-file-code: #5b6f96;
+  --lake-file-text: #6d757e;
+  --lake-file-other: #8a9099;
   --lake-conflict-border: rgba(211, 160, 68, .38);
   /* 画板（drawnix）各 vendor 主题的画布底色 + 错误横幅阴影（P7-d 收尾）：vendor 自带调色板，
    * 主题无关，按硬指标把字面量收在主题文件里。 */

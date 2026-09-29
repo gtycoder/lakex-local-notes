@@ -52,6 +52,41 @@ export function isAssetExtension(ext: string): boolean {
   return (ALL_ASSET_EXTS as readonly string[]).includes(e);
 }
 
+/**
+ * 附件「文档类型」（260930）：**文件类型图标**的分流口径 —— 单一事实源，桌面/移动端共用。
+ * 只做展示分流，不参与任何读写判定（图片仍以 `isImageExtension` 为准）。
+ */
+export type AssetFileKind =
+  | "image" | "pdf" | "doc" | "sheet" | "slide"
+  | "archive" | "audio" | "video" | "code" | "text" | "file";
+
+/** 扩展名 → 类型（顺序即匹配顺序；集合互斥）。image 由 ASSET_IMAGE_EXTS 判定、不在这里重复。 */
+const ASSET_FILE_KIND_EXTS: Array<[AssetFileKind, readonly string[]]> = [
+  ["pdf", ["pdf"]],
+  ["doc", ["doc", "docx", "rtf", "odt", "pages", "wps", "epub", "mobi", "azw3"]],
+  ["sheet", ["xls", "xlsx", "csv", "ods", "numbers", "et", "tsv"]],
+  ["slide", ["ppt", "pptx", "key", "dps", "odp"]],
+  ["archive", ["zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "dmg", "iso"]],
+  ["audio", ["mp3", "wav", "m4a", "aac", "flac", "ogg", "wma", "aiff", "opus"]],
+  ["video", ["mp4", "mov", "mkv", "avi", "webm", "m4v", "wmv", "flv", "mpeg", "mpg"]],
+  ["code", [
+    "js", "mjs", "cjs", "ts", "tsx", "jsx", "json", "jsonc", "html", "htm", "css", "scss", "less",
+    "py", "java", "kt", "go", "rs", "c", "h", "hpp", "cpp", "cc", "cs", "rb", "php", "swift",
+    "sh", "bash", "zsh", "bat", "ps1", "yml", "yaml", "toml", "ini", "conf", "xml", "sql", "apk", "bin",
+  ]],
+  ["text", ["txt", "md", "markdown", "log", "text"]],
+];
+
+/** 文件名**或**扩展名 → 文档类型（未知回落 `file`）。 */
+export function fileKindOf(nameOrExt: string): AssetFileKind {
+  const raw = nameOrExt.includes(".") ? extOf(nameOrExt) : nameOrExt;
+  const ext = raw.replace(/^\./, "").toLowerCase();
+  if (ext === "") return "file";
+  if (isImageExtension(ext)) return "image";
+  for (const [kind, exts] of ASSET_FILE_KIND_EXTS) if (exts.includes(ext)) return kind;
+  return "file";
+}
+
 /** 文件名是否符合 Lake 资产命名约定（{13ts}_{8hex}.{ext}）。 */
 export function isAssetFilename(name: string): boolean {
   return ASSET_NAME_RE_SINGLE.test(name);

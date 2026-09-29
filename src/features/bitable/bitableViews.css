@@ -59,6 +59,11 @@
 /* ＋号与**编号列**同一格、居中 ⇒ 正好落在行号正下方（用户 260929）。
    表底「添加记录」那一行同用这个类，两处几何一致（同一交互只有一套坐标）。 */
 .bt-add-index { text-align: center; }
+/* 表头「新增字段」的 + **贴着左侧最后一列**（用户 260930：「不要总是居中」）。
+   这一格是表尾**自动宽度**的单元格（吸收表格剩余宽度），而 `th` 浏览器默认 `text-align:center`
+   ⇒ 加号被甩到空白区正中、离最后一列很远。只把**内容**左对齐（列宽仍由它吸收剩余宽度，不动列宽），
+   8px 内距与字段头 `.bt-th-inner` 的内容起点一致。需要 `.bt-grid th.` 前缀才压得过 `.bt-grid th { padding:0 }`。 */
+.bt-grid th.bt-th-add { text-align: left; padding-left: 8px; }
 /* 组间间隔（云端 .lakex-viewer-grid-group-gap-line = 20px）：属于分组底衬 ⇒ 浅灰 */
 .bt-grid .bt-group-gap > td { height: 20px; padding: 0; border: 0; background: var(--lake-bg-subtle); }
 

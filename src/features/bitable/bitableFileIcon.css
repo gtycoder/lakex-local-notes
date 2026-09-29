@@ -1,0 +1,34 @@
+/* 附件「文档类型」图标（用户 260930）＋ hover 名称气泡。
+   颜色全部走 --lake-file-* 令牌（定义在 styles/themes/base.css）；本文件由 FileKindIcon.tsx import。 */
+
+.bt-file-icon { flex: 0 0 auto; }
+.bt-file-icon--image { color: var(--lake-file-image); }
+.bt-file-icon--pdf { color: var(--lake-file-pdf); }
+.bt-file-icon--doc { color: var(--lake-file-doc); }
+.bt-file-icon--sheet { color: var(--lake-file-sheet); }
+.bt-file-icon--slide { color: var(--lake-file-slide); }
+.bt-file-icon--archive { color: var(--lake-file-archive); }
+.bt-file-icon--audio { color: var(--lake-file-audio); }
+.bt-file-icon--video { color: var(--lake-file-video); }
+.bt-file-icon--code { color: var(--lake-file-code); }
+.bt-file-icon--text { color: var(--lake-file-text); }
+.bt-file-icon--file { color: var(--lake-file-other); }
+
+/* 单元格里的小图标：方形命中区（点它 = 打开/预览，与原来的 chip 同一动作）。 */
+.bt-attachment-chip.is-icon { display: inline-flex; }
+.bt-file-chip { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--lake-radius-xs); background: transparent; cursor: pointer; }
+.bt-file-chip:hover { background: var(--lake-bg-hover); }
+.bt-file-chip:disabled { cursor: default; }
+.bt-file-chip:disabled:hover { background: transparent; }
+
+/* hover 名称气泡：表面用 kit 的 .ln-tip，定位由 usePopoverPosition 实测（fixed ⇒ 不被表格滚动容器裁切）。 */
+.bt-file-tip { position: fixed; pointer-events: none; }
+
+/* 展开面板里的大图标（替换原来的「扩展名文字」）。 */
+.bt-attach-card-kind { display: flex; align-items: center; justify-content: center; }
+.bt-attach-card-kind .bt-file-icon { width: 46px; height: 46px; }
+
+/* 卡片（看板 / 画册）里附件值的行容器：内容就是表格那套 .bt-attachment-chip（单一来源）。
+   卡片能换行 ⇒ 允许 wrap（不像表格格子里必须一行裁切）；名字统一靠 hover 气泡看（用户 260930：
+   「看板视图不展示名称了，直接图标或者缩略图吧」）。 */
+.bt-card-files { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }

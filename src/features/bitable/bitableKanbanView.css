@@ -79,9 +79,6 @@
 .bt-kanban-field-name { flex: 0 0 auto; color: var(--lake-text-3); }
 .bt-kanban-field-value { min-width: 0; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.bt-kanban-thumbs { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.bt-kanban-thumb { display: block; width: 36px; height: 36px; border-radius: var(--lake-radius-xs); object-fit: cover; }
-
 .bt-kanban-add { flex: 0 0 auto; width: 180px; }
 
 .bt-kanban-add-btn {

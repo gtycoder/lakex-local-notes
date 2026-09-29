@@ -7,10 +7,11 @@
  * 封面与卡片字段的投影全在 src/core/bitableDoc.ts 的纯函数里，这里只渲染。
  */
 import { ImageOff } from "lucide-react";
-import { bitableAssetUrl } from "./bitableAssetUrl.js";
+import { bitableAssetUrl, openBitableAttachment } from "./bitableAssetUrl.js";
+import { AttachmentChipList } from "./bitableCells.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import {
-  bitableAttachments, bitableFieldText, bitableRecordTitle, galleryCardFields, galleryCoverField, galleryCoverImage,
+  bitableAttachments, bitableFieldText, bitableRecordTitle, galleryCardFields, galleryCoverField, galleryCoverImage, isAttachmentLikeField,
   type BitableAttachment, type BitableDisplayContext, type BitableRecord, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import "./bitableGalleryView.css";
@@ -68,6 +69,22 @@ export function BitableGalleryView({ noteId, table, view, records, onOpenRecord,
             <div className="bt-gallery-body">
               <div className="bt-gallery-title">{bitableRecordTitle(table, record, ctx)}</div>
               {cardFields.map((field) => {
+                /* 附件/图片字段与表格/看板/选择器**同一套**渲染（用户 260930：「画册视图的附件也要改」）：
+                   附件字段 = 类型图标、图片字段 = 缩略图，都不显示名称（名字靠 hover 气泡）。
+                   以前这里走 `bitableFieldText` ⇒ 卡片上是一串文件名。 */
+                if (isAttachmentLikeField(field.type)) {
+                  const files = bitableAttachments(record.values[field.id]);
+                  if (files.length === 0) return null;   // 空字段不上卡
+                  return (
+                    <div key={field.id} className="bt-gallery-field">
+                      {showNames && <span className="bt-gallery-field-name">{field.name}</span>}
+                      <span className="bt-card-files" onClick={(event) => event.stopPropagation()}>
+                        <AttachmentChipList noteId={noteId} attachments={files} imageOnly={field.type === "image"}
+                          onOpen={(attachment) => openBitableAttachment(noteId, attachment)} onOpenImages={onOpenImages} />
+                      </span>
+                    </div>
+                  );
+                }
                 const text = bitableFieldText(record, field, ctx);
                 if (!text) return null;   // 空字段不上卡
                 return (
