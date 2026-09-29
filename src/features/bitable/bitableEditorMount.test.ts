@@ -31,6 +31,7 @@ const CSS = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8"
 const FIELD_CSS = readFileSync(new URL("./bitableFieldCells.css", import.meta.url), "utf8");
 const POS = readFileSync(new URL("../../hooks/topMenuPosition.ts", import.meta.url), "utf8");
 const HOOK = readFileSync(new URL("../../hooks/usePopoverPosition.ts", import.meta.url), "utf8");
+const CHROME = readFileSync(new URL("../../../src/styles/chrome.css", import.meta.url), "utf8");
 
 describe("多维表编辑器护栏", () => {
   it("附件格的缩略图：格子取 ?w= 档位，放大预览仍走原图", () => {
@@ -306,8 +307,26 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/const setColumnStat = /);
     expect(EDITOR).toMatch(/setStatFor\(\{ fieldId, anchor \}\)/);
     expect(VIEWCSS).toMatch(/\.bt-stat-row td \{/);
-    // 没有可见列配置统计时**整行不渲染**（否则是底栏一条全 — 的灰条，用户 260929 报为「奇怪的条」）
-    expect(EDITOR).toMatch(/visibleFields\.some\(\(field\) => statForField\(activeView, field\.id\)\)/);
+    // 260929 用户定稿：底部汇总栏**常驻**（不再按有无配置条件渲染），首格缺省给总记录数
+    expect(EDITOR).toMatch(/<tfoot>/);
+    expect(EDITOR).not.toMatch(/visibleFields\.some\(\(field\) => statForField\(activeView, field\.id\)\)/);
+    expect(EDITOR).toMatch(/bt-stat-index/);
+    // 底部那条要**薄**（固定 24px，不随行高变）
+    expect(VIEWCSS).toMatch(/\.bt-stat-row td \{[^}]*height: 24px/);
+  });
+
+  it("260929 定稿：分组汇总行固定 36px（不随行高变）+ 每列都有汇总位 + 状态栏上移让位", () => {
+    // 分组汇总行固定「低」档 36px，不看 --bt-row-h
+    expect(VIEWCSS).toMatch(/\.bt-group-cell \{[^}]*height: 36px/);
+    expect(VIEWCSS).toMatch(/\.bt-group-stat \{[^}]*height: 36px/);
+    // 每一列都要有汇总位：未配置统计的列给「统计」占位入口
+    expect(EDITOR).toMatch(/bt-group-stat-add/);
+    expect(VIEWCSS).toMatch(/\.bt-group-stat-add \{/);
+    // 状态栏上移让位（多维表文档专属变体）
+    expect(CHROME).toMatch(/\.document-statusbar\[data-doc-kind="bitable"\] \{/);
+    // 列选中：点列外任意处即清（否则高亮残留）
+    expect(EDITOR).toMatch(/onMouseDownCapture/);
+    expect(EDITOR).toMatch(/dataset\.fieldId !== selectedColumnId/);
   });
 
   it("追加修复：文档图片预览取正文全量、看板图片字段出缩略图", () => {

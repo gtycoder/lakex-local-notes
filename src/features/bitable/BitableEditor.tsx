@@ -1002,7 +1002,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           <BitableCalendarView table={activeTable} view={activeView} records={shownRecords} readOnly={readOnly}
             onOpenRecord={openDrawer} onSetValues={setRecordValues} />
         ) : (
-          <div className="bt-grid-wrap" style={gridStyle} onKeyDown={onGridKeyDown}>
+          <div className="bt-grid-wrap" style={gridStyle} onKeyDown={onGridKeyDown}
+            /* 列选中：只要按下的地方不在「被选中列」的格/表头里，就清掉（否则高亮会残留） */
+            onMouseDownCapture={(event) => {
+              if (!selectedColumnId) return;
+              const hit = (event.target as HTMLElement).closest<HTMLElement>("[data-field-id]");
+              if (hit?.dataset.fieldId !== selectedColumnId) setSelectedColumnId(null);
+            }}>
             <table className="bt-grid">
               <colgroup>
                 <col className="bt-col-index" />
@@ -1017,6 +1023,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                   </th>
                   {visibleFields.map((field) => (
                     <th key={field.id}
+                      data-field-id={field.id}
                       className={"bt-th" + (dragging?.kind === "field" && dragging.id === field.id ? " dragging" : "") + (selectedColumnId === field.id ? " col-selected" : "")}
                       draggable={!readOnly}
                       onDragStart={() => setDragging({ kind: "field", id: field.id })}
@@ -1079,7 +1086,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                         {/* 其余列仍按列显示**本组**的统计 */}
                         {visibleFields.slice(1).map((field) => {
                           const stat = statForField(activeView, field.id);
-                          return <td key={field.id} className="bt-group-stat">{stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, item.records, stat) : ""}</td>;
+                          return (
+                            <td key={field.id} className="bt-group-stat">
+                              {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, item.records, stat) : (
+                                /* 未配置统计的列也要有「汇总位」：占位按钮直接开该列统计口径（对齐云端每列一个「统计」） */
+                                <button type="button" className="bt-group-stat-add" title={"为「" + field.name + "」配置统计"} disabled={readOnly}
+                                  onClick={(event) => { event.stopPropagation(); setStatFor({ fieldId: field.id, anchor: event.currentTarget }); }}>统计</button>
+                              )}
+                            </td>
+                          );
                         })}
                         <td className="bt-group-stat" />
                       </tr>
@@ -1105,26 +1120,27 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                   </td>
                   <td />
                 </tr>
+                {/* 撑满一屏的占位行：内容不够高时把 tfoot 顶到视图最底部，底部汇总栏才是「常驻」的 */
+                }
+                <tr className="bt-grid-filler" aria-hidden="true"><td colSpan={visibleFields.length + 2} /></tr>
               </tbody>
               {/* T01 列级统计：口径 = 当前视图筛选后的记录（排序不影响），配置存视图、值现算。
-                  **没有任何可见列配置统计时整行不渲染**（260929：否则底栏是一条全 `—` 的灰条，
-                  会被当成「添加记录下面多出来的奇怪的条」；配置了统计才出现，见专项 §13）。 */}
-              {visibleFields.some((field) => statForField(activeView, field.id)) && (
-                <tfoot>
-                  <tr className="bt-stat-row">
-                    <td className="bt-td bt-cell-muted" />
-                    {visibleFields.map((field) => {
-                      const stat = statForField(activeView, field.id);
-                      return (
-                        <td key={field.id} className="bt-td bt-cell-muted" title={stat ? BITABLE_STAT_LABEL[stat] : undefined}>
-                          {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, shownRecords, stat) : "—"}
-                        </td>
-                      );
-                    })}
-                    <td className="bt-td bt-cell-muted" />
-                  </tr>
-                </tfoot>
-              )}
+                  260929 用户定稿：**常驻**（不按有无配置条件渲染），贴底那条做薄，首格缺省显示总记录数，
+                  未配置的列显示 `—` ⇒ 既常驻又不会是一条无信息量的空灰条。 */}
+              <tfoot>
+                <tr className="bt-stat-row">
+                  <td className="bt-stat-index">{activeTable.records.length} 条记录</td>
+                  {visibleFields.map((field) => {
+                    const stat = statForField(activeView, field.id);
+                    return (
+                      <td key={field.id} className="bt-stat-cell" title={stat ? BITABLE_STAT_LABEL[stat] : undefined}>
+                        {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, shownRecords, stat) : "—"}
+                      </td>
+                    );
+                  })}
+                  <td className="bt-stat-cell" />
+                </tr>
+              </tfoot>
             </table>
             <div className="bt-grid-foot">{selectedRecordIds.size > 0 ? "已选择 " + selectedRecordIds.size + " 条记录" : cellRange ? "已选择 " + ((cellRange.r1 - cellRange.r0 + 1) * (cellRange.c1 - cellRange.c0 + 1)) + " 个单元格" : "共 " + activeTable.records.length + " 条记录"}{findQuery ? "，匹配 " + shownRecords.length + " 条" : ""}</div>
           </div>

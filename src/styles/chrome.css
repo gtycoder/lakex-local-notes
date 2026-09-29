@@ -79,6 +79,11 @@
   height: 22px;
   min-height: 22px;
 }
+/* 多维表文档：底部常驻汇总栏（24px）占住最底一条 ⇒ 状态栏整体上移让位（用户 260929）。
+ * 与 sheet 的「同处一条」不同：多维表汇总栏是**整行**，没法左右分栏，只能把状态栏抬到它上方。 */
+.document-statusbar[data-doc-kind="bitable"] {
+  bottom: 34px;
+}
 .document-statusbar-stats { gap: var(--lake-space-lg); color: var(--lake-text-3); }
 .document-statusbar-state {
   gap: 5px;

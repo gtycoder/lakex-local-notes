@@ -14,7 +14,7 @@
 .bt-group-row td { background: var(--lake-bg-block); }
 /* 分组头是**表格行**：内容必须**不进流**（绝对定位内层），否则它的长文本会参与 table-layout:auto 的
    列宽计算，把首列撑开、与记录行错位（260929 实测：表头首列 482px vs 记录行 80px）。 */
-.bt-group-cell { position: relative; height: 56px; padding: 0; font-size: 12px; color: var(--lake-text-1); cursor: pointer; }
+.bt-group-cell { position: relative; height: 36px; padding: 0; font-size: 12px; color: var(--lake-text-1); cursor: pointer; }
 .bt-group-inner { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; overflow: hidden; }
 /* 折叠钮：云端是**无边框**的裸三角（24×24 命中区 + 4px 圆角，仅 hover 有底色） */
 .bt-group-fold { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); background: transparent; }
@@ -29,7 +29,12 @@
 /* 层级缩进（T03 多级）：只动分组值，不缩统计格 */
 .bt-group-row.level-1 .bt-group-label { padding-left: 18px; }
 .bt-group-row.level-2 .bt-group-label { padding-left: 36px; }
-.bt-group-stat { height: 56px; padding: 0 8px; text-align: right; vertical-align: middle; font-size: 12px; color: var(--lake-text-3); white-space: nowrap; }
+/* 分组汇总行固定用「低」档 36px，**不随 行高 设置变化**（用户 260929 定稿） */
+.bt-group-stat { height: 36px; padding: 0 8px; text-align: right; vertical-align: middle; font-size: 12px; color: var(--lake-text-3); white-space: nowrap; }
+/* 未配置统计的列也给一个「统计」占位入口（点它直接开该列口径），对齐云端每列一个汇总位 */
+.bt-group-stat-add { border: 0; background: transparent; padding: 0; font: inherit; color: var(--lake-text-4); cursor: pointer; }
+.bt-group-stat-add:hover { color: var(--lake-accent); }
+.bt-group-stat-add:disabled { cursor: default; }
 /* 「添加」统一为云端那颗圆形 + 钮（分组「加进本组」/ 表底「添加记录」/ 表头「新增字段」共用） */
 .bt-add-round { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-text-2); cursor: pointer; }
 .bt-add-round:hover { color: var(--lake-accent); border-color: var(--lake-accent); }
@@ -40,13 +45,26 @@
 /* 组间间隔（云端 .lakex-viewer-grid-group-gap-line = 20px） */
 .bt-group-gap td { height: 20px; padding: 0; background: var(--lake-bg-canvas); }
 
-/* 表格底部的列统计行（T01）：贴底常驻，长表格里不用滚到底才看得到 */
+/* 表格底部的列统计行（T01）：**常驻**贴底 + **薄**（24px，不随 行高 变）；
+   首格缺省给总记录数，未配置的列显示 `—`。状态栏已由 chrome.css 上移让位。 */
 .bt-stat-row td {
   position: sticky;
   bottom: 0;
   z-index: 1;
+  height: 24px;
+  padding: 0 8px;
   background: var(--lake-bg-block);
+  font-size: 11px;
+  color: var(--lake-text-3);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.bt-stat-index { text-align: left; }
+/* 内容不足一屏时把表格撑满（占位行吃掉剩余高度），底部汇总栏才会贴**视图**底部而不是跟在内容后面 */
+.bt-grid { min-height: 100%; }
+.bt-grid-filler td { height: 100%; padding: 0; border: 0; background: transparent; }
 
 .bt-panel-note {
   margin: 4px 0;
