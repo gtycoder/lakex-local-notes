@@ -746,6 +746,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | 「添加」统一为云端圆形 + 钮 | `bitableViews.css`(`.bt-add-round`) · `BitableEditor.tsx` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：4 颗钮（新增字段/加进本组×2/添加记录）均 **24×24、radius 999px**，无旧类残留 | `bitableEditor.css` 1075 → **1051**（旧样式删除，围栏同时抓到并清掉一处真重复） |
 | 2026-09-29 | 260929 | V05 分组样式复刻云端 + T01 恢复 | `src/core/bitableDoc.ts`(+节点 `fieldId`) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：分组行 56px / 6 格、首列 `1 条记录`、每组 1 个圆钮、组间 1 条间隔、底栏总计；截图与云端结构一致 | `bitableViews.css` 20 → 74、`bitableEditor.css` 1081 → 1075（按职责归并） |
 | 2026-09-29 | 260929 | 浮层定位统一（贴底翻上方） | `src/hooks/topMenuPosition.ts`(+test) · `usePopoverPosition.ts`(新) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `src/features/editor/MultiTabEditor.tsx` · `CardContextMenu.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：末行日期**翻到锚点上方且完整可见**、首行仍在下方、行右键菜单完整可见 | 浮层不跟随滚动（与改前一致） |
 | 2026-09-29 | 260929 | **T01 整体回退** | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：底栏与列菜单「统计」均不存在；旧正文残留 `columnStats` 保存后消失 | 功能整体删除（含持久化字段）；`bitableViews.css` 基线 20 → 16 |
@@ -1421,6 +1422,19 @@ UI 与交互变化：
   - 几何：分组行高 **56**、加行进 **40**、统计格 `text-align: right`。
   - 内容：首组首列 `1 条记录`、次组 `3 条记录`；进度列按组 `求和 0` / `求和 84`；底栏总计 `求和 84`。
   - 截图与云端结构一致（折叠钮已改为**无边框裸三角**）。
+
+#### ④ 「添加」统一为同一颗圆形 + 钮（用户追加）
+
+用户看到分组那颗圆钮后要求：「分组的新建你都换成这个图标了，那就把这个应用到**所有的添加**吧」。
+
+- 把云端那颗钮抽成**共用类 `.bt-add-round`**（24×24、`border-radius: pill`、1px 边框、白底、hover 变强调色；「加进本组」那行用 `.bt-group-add-row .bt-add-round` 加 16px 左边距）。
+- 三处添加入口改用它：**表头「新增字段」**（原 `.bt-add-col`）、**表底「添加记录」**（原 `.bt-add-record-row`，去掉文字只留圆钮，与分组那颗一致）、**分组「加进本组」**（原 `.bt-group-add`）。
+- 删除被取代的旧样式（`.bt-add-record-row` 整条 + `.bt-add-col/.bt-add-record-row` 从组合规则摘除）。
+- ⚠️ 过程中 CSS 围栏抓到一处**真重复**：组合规则只剩 `.bt-panel-add` 后，与它自己那条规则重复声明了 `border/background`（dupGroups 0 → 2）—— 该组合规则已冗余，直接删除。**围栏在这里起到了它该起的作用**。
+
+未动（本项目判断）：工具栏「＋ 添加记录」、字段面板 / 记录抽屉的「＋ 新增字段」、看板「新建分组」都是**带文字的按钮**，且云端工具栏同样是「＋ 添加记录」文案 ⇒ 保留文字（只统一了表格内的添加入口）。如需连这些也变成纯圆钮，说一声即可。
+
+验证：门禁全绿；CDP 实测 `.bt-add-round` **4 颗**（标题：新增字段 / 加进本组 ×2 / 添加记录），尺寸全 **24×24**、`border-radius: 999px`，旧类残留 **0**。
 
 遗留：
 - 云端统计格有「切换统计口径」的下拉箭头（`N 条记录 ▾`）与 hover 态的「统计」占位；我方沿用列菜单「统计」入口，未在分组头内嵌下拉。
