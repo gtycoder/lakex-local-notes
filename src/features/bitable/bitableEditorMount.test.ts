@@ -297,6 +297,19 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).not.toMatch(/if \(type === "form"\) view\.formFieldIds/);
   });
 
+  it("T01 列级统计：底部统计行 + 列菜单选口径（筛选后现算、不写记录）", () => {
+    expect(DOC).toMatch(/export function computeColumnStat/);
+    expect(DOC).toMatch(/export function statsForField/);
+    expect(DOC).toMatch(/export function statForField/);
+    expect(EDITOR).toMatch(/bt-stat-row/);
+    expect(EDITOR).toMatch(/computeColumnStat\(field, shownRecords, stat\)/);
+    expect(EDITOR).toMatch(/const setColumnStat = /);
+    expect(EDITOR).toMatch(/setStatFor\(\{ fieldId, anchor \}\)/);
+    expect(VIEWCSS).toMatch(/\.bt-stat-row td \{/);
+    // 没有可见列配置统计时**整行不渲染**（否则是底栏一条全 — 的灰条，用户 260929 报为「奇怪的条」）
+    expect(EDITOR).toMatch(/visibleFields\.some\(\(field\) => statForField\(activeView, field\.id\)\)/);
+  });
+
   it("追加修复：文档图片预览取正文全量、看板图片字段出缩略图", () => {
     // ① 文档：虚拟渲染下 DOM 只有视口内的图 ⇒ 列表必须来自正文（内核 image 卡片 + 裸 img）
     expect(PREVIEW).toMatch(/export function extractImagesFromContent/);

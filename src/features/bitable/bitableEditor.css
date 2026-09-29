@@ -390,12 +390,6 @@
 .bt-attach-expand-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--lake-text-3) 50%); }
 
 
-.bt-group-row td { background: var(--lake-bg-block); }
-.bt-group-cell { display: flex; align-items: center; gap: 6px; height: var(--bt-row-h, 36px); padding: 0 8px; font-size: 13px; color: var(--lake-text-2); cursor: pointer; }
-.bt-group-caret { color: var(--lake-text-3); transition: transform .12s ease; }
-.bt-group-caret.is-open { transform: rotate(90deg); }
-.bt-group-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bt-group-count { color: var(--lake-text-3); font-size: 12px; }
 .bt-select-placeholder { color: var(--lake-text-3); }
 .bt-panel-add.danger { color: var(--lake-status-error); }
 

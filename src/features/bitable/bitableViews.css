@@ -6,9 +6,38 @@
  * src/styles/cssLayers.test.ts 围栏；只走 --lake-* 令牌，无颜色字面量、无 !important。
  */
 /* 浮层面板里的说明/提示文案（看板配置的「没有单选字段」等） */
-/* 多级分组（T03）的层级缩进：只加变体选择器，不改 bitableEditor.css 里的既有规则 */
+/* ── 分组（T03 多级 + 复刻云端语雀 260929）────────────────────────────────
+   云端口径（Edge 实测 .lakex-viewer-grid-group-*）：分组头是**整行**（56px）——
+   左侧「折叠钮 24×24 + 分组值」，右侧**按列分格**显示本组统计（右对齐，首列缺省显示
+   「N 条记录」）；组内记录之后有一条 40px 的「加进本组」圆钮行；顶级分组之间 20px 间隔。
+   本文件的 .bt-group-* 是该分组的**单一来源**（原 bitableEditor.css 里的旧规则已移出）。 */
+.bt-group-row td { background: var(--lake-bg-block); }
+.bt-group-cell { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 8px 0 14px; font-size: 12px; color: var(--lake-text-1); cursor: pointer; }
+/* 折叠钮：云端是**无边框**的裸三角（24×24 命中区 + 4px 圆角，仅 hover 有底色） */
+.bt-group-fold { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); background: transparent; }
+.bt-group-fold:hover { background: var(--lake-bg-hover); }
+.bt-group-caret { color: var(--lake-text-2); transition: transform .12s ease; }
+.bt-group-caret.is-open { transform: rotate(90deg); }
+.bt-group-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--lake-font-weight-medium); }
+/* 层级缩进（T03 多级）：只动分组值，不缩统计格 */
 .bt-group-row.level-1 .bt-group-label { padding-left: 18px; }
 .bt-group-row.level-2 .bt-group-label { padding-left: 36px; }
+.bt-group-stat { height: 56px; padding: 0 8px; text-align: right; vertical-align: middle; font-size: 12px; color: var(--lake-text-3); white-space: nowrap; }
+/* 「加进本组」：40px 行 + 24×24 圆形白钮（云端 .lakex-viewer-grid-add-record） */
+.bt-group-add-row td { height: 40px; padding: 0; background: var(--lake-bg-canvas); }
+.bt-group-add { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: 16px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-text-2); cursor: pointer; }
+.bt-group-add:hover { color: var(--lake-accent); }
+.bt-group-add:disabled { cursor: default; color: var(--lake-text-4); }
+/* 组间间隔（云端 .lakex-viewer-grid-group-gap-line = 20px） */
+.bt-group-gap td { height: 20px; padding: 0; background: var(--lake-bg-canvas); }
+
+/* 表格底部的列统计行（T01）：贴底常驻，长表格里不用滚到底才看得到 */
+.bt-stat-row td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--lake-bg-block);
+}
 
 .bt-panel-note {
   margin: 4px 0;

@@ -206,6 +206,8 @@ export interface BitableView {
   sorts?: BitableSortRule[];
   /** 分组（云端单级；UI 只用第 0 条）。 */
   groups?: BitableGroupRule[];
+  /** 列级统计（视图级：fieldId → 统计类型；缺省 = 该列不统计）。 */
+  columnStats?: Record<string, string>;
   /** 高亮重复值的列（视图级；列菜单「高亮重复值」）。 */
   highlightDuplicateFieldIds?: string[];
   /** 列文字颜色（视图级：fieldId → 颜色值）。 */
@@ -456,10 +458,8 @@ function normalizeView(raw: unknown): BitableView | null {
   if (!Array.isArray(view.sorts)) delete next.sorts;
   if (!Array.isArray(view.groups)) delete next.groups;
   if (!Array.isArray(view.highlightDuplicateFieldIds)) delete next.highlightDuplicateFieldIds;
+  if (!view.columnStats || typeof view.columnStats !== "object") delete next.columnStats;
   if (!view.columnTextColors || typeof view.columnTextColors !== "object") delete next.columnTextColors;
-  // 260929：列统计（T01）整体回退。normalizeView 是「原样保留未知键」，所以必须显式删，
-  // 否则旧正文里遗留的 columnStats 会被一路带到每次保存（读取方已全部删除，值没有意义）。
-  delete next.columnStats;
   return next;
 }
 
@@ -500,6 +500,93 @@ export function parseBitableBody(content: string | null | undefined): BitableDoc
   if (tables.length === 0) return null;
   const activeTableId = typeof doc.activeTableId === "string" && tables.some((t) => t.id === doc.activeTableId) ? doc.activeTableId : tables[0].id;
   return { kind: BITABLE_DOC_KIND, version: BITABLE_DOC_VERSION, tables, activeTableId };
+}
+
+// ---- 列级统计（T01；纯函数，表格底部一行用） ----
+
+/**
+ * 列统计类型：通用（所有字段）+ 数字/日期专属。count = 记录总数（只看当前视图筛选后的集合）。
+ * 视图只存**配置**（view.columnStats），值每次现算，绝不写回记录。
+ */
+export type BitableStatType =
+  | "count" | "filled" | "empty" | "unique" | "filledPct" | "emptyPct"
+  | "sum" | "avg" | "min" | "max"
+  | "earliest" | "latest" | "range";
+
+export const BITABLE_STAT_LABEL: Record<BitableStatType, string> = {
+  count: "记录总数", filled: "已填写", empty: "未填写", unique: "唯一数",
+  filledPct: "已填写占比", emptyPct: "未填写占比",
+  sum: "求和", avg: "平均", min: "最小", max: "最大",
+  earliest: "最早", latest: "最晚", range: "时间范围",
+};
+
+const GENERIC_STATS: readonly BitableStatType[] = ["count", "filled", "empty", "unique", "filledPct", "emptyPct"];
+
+/** 某字段可选的统计类型（列菜单用）：通用 + 数字/日期专属。 */
+export function statsForField(field: BitableField): BitableStatType[] {
+  const out = [...GENERIC_STATS];
+  if (isNumericFieldType(field.type)) out.push("sum", "avg", "min", "max");
+  if (field.type === "date" || isSystemTimeField(field.type)) out.push("earliest", "latest", "range");
+  return out;
+}
+
+/** 视图中配置的统计类型（未配置 / 不认识 → undefined = 不统计）。 */
+export function statForField(view: BitableView | undefined, fieldId: string): BitableStatType | undefined {
+  const stat = view?.columnStats?.[fieldId];
+  return typeof stat === "string" && stat in BITABLE_STAT_LABEL ? (stat as BitableStatType) : undefined;
+}
+
+function formatStatNumber(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
+}
+
+function statPct(part: number, total: number): string {
+  if (total <= 0) return "0%";
+  return String(Math.round((part / total) * 1000) / 10) + "%";
+}
+
+/**
+ * 计算一列的统计值。**入参必须是当前视图筛选后的记录**（排序不影响集合，故统计天然与排序无关）。
+ * 空值 / 非法值一律跳过；附件、关联等非数值类型不会崩（只走通用口径）。
+ */
+export function computeColumnStat(field: BitableField, records: BitableRecord[], stat: BitableStatType): string {
+  const total = records.length;
+  if (stat === "count") return String(total);
+  const texts = records.map((record) => bitableDisplayValue(field, bitableFieldValue(record, field)).trim());
+  const filledCount = texts.filter((text) => text !== "").length;
+  if (stat === "filled") return String(filledCount);
+  if (stat === "empty") return String(total - filledCount);
+  if (stat === "unique") return String(new Set(texts.filter((text) => text !== "")).size);
+  if (stat === "filledPct") return statPct(filledCount, total);
+  if (stat === "emptyPct") return statPct(total - filledCount, total);
+  if (isNumericFieldType(field.type)) {
+    const nums = records
+      .map((record) => {
+        const text = bitableDisplayValue(field, bitableFieldValue(record, field)).trim();
+        if (text === "") return Number.NaN;   // 空格子不能当 0 参与求和/平均
+        const raw = bitableFieldValue(record, field);
+        return typeof raw === "number" ? raw : Number(text);
+      })
+      .filter((n) => Number.isFinite(n));
+    if (nums.length === 0) return "—";
+    if (stat === "sum") return formatStatNumber(nums.reduce((a, b) => a + b, 0));
+    if (stat === "avg") return formatStatNumber(nums.reduce((a, b) => a + b, 0) / nums.length);
+    if (stat === "min") return formatStatNumber(Math.min(...nums));
+    if (stat === "max") return formatStatNumber(Math.max(...nums));
+    return "—";
+  }
+  if (field.type === "date" || isSystemTimeField(field.type)) {
+    const days = records
+      .map((record) => dateValueOf(bitableFieldValue(record, field)))
+      .filter((day) => day !== "")
+      .sort();
+    if (days.length === 0) return "—";
+    if (stat === "earliest") return days[0];
+    if (stat === "latest") return days[days.length - 1];
+    if (stat === "range") return String(localDateDiff(days[days.length - 1], days[0]) + 1) + " 天";
+  }
+  return "—";
 }
 
 // ---- 值展示 / 搜索 ----
@@ -1145,6 +1232,8 @@ export interface BitableGroupNode {
   label: string;
   /** 0 起：第几级分组。 */
   level: number;
+  /** 本级的分组字段（UI 用它给「加进本组」的新记录写值）。 */
+  fieldId: string;
   /** 该节点（含子级）的记录条数。 */
   count: number;
   /** 归属本组的记录（含被下级再细分的那些；叶子节点直接渲染它们）。 */
@@ -1182,6 +1271,7 @@ export function groupRecordsTree(table: BitableTable, records: BitableRecord[], 
         key: nodeKey,
         label: key || "(空)",
         level,
+        fieldId: rule.fieldId,
         count: groupRecordsList.length,
         records: groupRecordsList,
         children: level + 1 < active.length ? build(groupRecordsList, level + 1, nodeKey) : [],

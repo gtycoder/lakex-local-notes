@@ -36,6 +36,9 @@ import {
   calendarMovePatch,
   calendarStartField,
   calendarTitleField,
+  computeColumnStat,
+  statForField,
+  statsForField,
   galleryCardFieldCandidates,
   galleryCardFields,
   galleryCoverField,
@@ -531,12 +534,14 @@ describe("bitableDoc 数据模型", () => {
     expect(bitableFieldValue(record, created)).toBe(localDateString(record.createdAt));
     expect(bitableFieldText(record, created)).toBe(localDateTimeString(record.createdAt));
     expect(bitableFieldText(record, updated)).toBe(localDateTimeString(record.updatedAt));
-    // 数值口径：评分/进度参与排序与筛选操作符
+    // 数值口径：评分/进度参与排序、统计、筛选操作符
     const mk = (id: string, r: number, p: number) => { const x = createBitableRecord(id); x.values[rating.id] = r; x.values[progress.id] = p; return x; };
     table.records = [mk("r1", 3, 10), mk("r2", 5, 90), mk("r3", 1, 50)];
     const view = createBitableView("grid", "g", "vew-t02a");
     view.sorts = [{ fieldId: rating.id }];
     expect(applyViewToRecords(table, view).map((x) => x.id)).toEqual(["r3", "r1", "r2"]);
+    expect(computeColumnStat(rating, table.records, "sum")).toBe("9");
+    expect(computeColumnStat(progress, table.records, "max")).toBe("90");
     expect(filterOperatorsFor(rating)).toContain("gte");
     expect(filterOperatorsFor(bool)).toEqual(["equals", "notEquals", "isEmpty", "isNotEmpty"]);
     // 默认值预填（false / 0 不能被当成空值丢掉）
@@ -580,9 +585,12 @@ describe("bitableDoc 数据模型", () => {
     view.filters = [{ fieldId: created.id, operator: "gte", value: localDateString("2026-09-03T10:00:00.000Z") }];
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r3"]);
     view.filters = [];
-    // 分组：走同一取值口径
+    // 分组 + 列统计：走同一取值口径
     const tree = groupRecordsTree(table, table.records, [{ fieldId: created.id }]);
     expect(tree.map((n) => n.label)).toEqual([localDateString(table.records[1].createdAt), localDateString(table.records[0].createdAt), localDateString(table.records[2].createdAt)]);
+    expect(statsForField(created)).toContain("range");
+    expect(computeColumnStat(created, table.records, "earliest")).toBe(localDateString(table.records[1].createdAt));
+    expect(computeColumnStat(created, table.records, "range")).toBe("5 天");
   });
 
   it("语义排序（T04）：单选/多选按选项顺序（空值恒最后），多条件稳定，字典序不受影响", () => {
@@ -610,14 +618,58 @@ describe("bitableDoc 数据模型", () => {
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r2", "r3", "r4", "r5"]);
   });
 
-  it("T01 回退：旧正文里遗留的 columnStats 不再被保留（读取方已删除）", () => {
-    const table = createDefaultBitableTable("t", "tbl-nostat");
-    const view = createBitableView("grid", "g", "vew-nostat");
-    (view as unknown as Record<string, unknown>).columnStats = { "fld-x": "sum" };
+  it("列统计：通用/数字/日期口径，空值与非法值不参与，附件关联不崩", () => {
+    const table = createDefaultBitableTable("t", "tbl-stat");
+    const primary = table.fields[0];
+    const status = table.fields[1];
+    const date = table.fields[2];
+    const num = createBitableField("number", "数量", "fld-num");
+    const att = createBitableField("attachment", "附件", "fld-att");
+    const rel = createBitableField("relation", "关联", "fld-rel");
+    table.fields.push(num, att, rel);
+    const optionIds = status.options!.map((o) => o.id);
+    const mk = (id: string, title: string, n: number | "", day: string, opt: string) => {
+      const record = createBitableRecord(id);
+      record.values[primary.id] = title;
+      record.values[num.id] = n;
+      record.values[date.id] = day;
+      record.values[status.id] = opt;
+      return record;
+    };
+    const records = [mk("r1", "A", 1, "2026-09-01", optionIds[0]), mk("r2", "B", 2, "2026-09-03", optionIds[1]), mk("r3", "C", "", "2026-09-05", optionIds[0]), mk("r4", "D", 4, "2026-09-09", optionIds[0])];
+    expect(computeColumnStat(primary, records, "count")).toBe("4");
+    expect(computeColumnStat(num, records, "filled")).toBe("3");
+    expect(computeColumnStat(num, records, "empty")).toBe("1");
+    expect(computeColumnStat(primary, records, "unique")).toBe("4");
+    expect(computeColumnStat(status, records, "unique")).toBe("2");
+    expect(computeColumnStat(num, records, "filledPct")).toBe("75%");
+    expect(computeColumnStat(num, records, "emptyPct")).toBe("25%");
+    expect(computeColumnStat(num, records, "sum")).toBe("7");   // 空格子不能当 0
+    expect(computeColumnStat(num, records, "avg")).toBe("2.333");
+    expect(computeColumnStat(num, records, "min")).toBe("1");
+    expect(computeColumnStat(num, records, "max")).toBe("4");
+    expect(computeColumnStat(date, records, "earliest")).toBe("2026-09-01");
+    expect(computeColumnStat(date, records, "latest")).toBe("2026-09-09");
+    expect(computeColumnStat(date, records, "range")).toBe("9 天");
+    // 附件 / 关联走通用口径不崩；无值 → "—"
+    expect(computeColumnStat(att, records, "filled")).toBe("0");
+    expect(computeColumnStat(rel, records, "unique")).toBe("0");
+    expect(computeColumnStat(num, [], "sum")).toBe("—");
+    expect(computeColumnStat(num, [], "count")).toBe("0");
+    expect(statsForField(num)).toContain("sum");
+    expect(statsForField(primary)).not.toContain("sum");
+    expect(statsForField(date)).toContain("range");
+    // 视图配置：未配置/不认识 → 不统计
+    const view = createBitableView("grid", "g", "vew-stat");
+    expect(statForField(view, num.id)).toBeUndefined();
+    view.columnStats = { [num.id]: "sum" };
+    expect(statForField(view, num.id)).toBe("sum");
+    expect(statForField(view, primary.id)).toBeUndefined();
+    // 序列化往返保留统计配置
     table.views = [view];
     table.activeViewId = view.id;
     const parsed = parseBitableBody(bitablesToBody([table], table.id))!;
-    expect("columnStats" in parsed.tables[0].views[0]).toBe(false);
+    expect(parsed.tables[0].views[0].columnStats).toEqual({ [num.id]: "sum" });
   });
 
   it("日历字段解析：类型不符即无效；标题回落主字段；颜色只认单选", () => {
