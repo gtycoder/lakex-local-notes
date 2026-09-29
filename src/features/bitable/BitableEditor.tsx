@@ -1111,12 +1111,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                   return renderRecordRow(item.record, rowIndexById.get(item.record.id) ?? 0);
                 })}
 
-                <tr className="bt-add-row">
-                  <td colSpan={visibleFields.length + 1}>
-                    <button type="button" className="bt-add-round" title="添加记录" aria-label="添加记录" disabled={readOnly} onClick={() => addRecord()}><Plus size={14} /></button>
-                  </td>
-                  <td />
-                </tr>
+                {/* 已分组时**不再出表底这个 +**（每个分组各有自己的 + 就够了）；未分组/分组字段失效时保留 */}
+                {!rowItems.some((item) => item.kind === "group") && (
+                  <tr className="bt-add-row">
+                    <td colSpan={visibleFields.length + 1}>
+                      <button type="button" className="bt-add-round" title="添加记录" aria-label="添加记录" disabled={readOnly} onClick={() => addRecord()}><Plus size={14} /></button>
+                    </td>
+                    <td />
+                  </tr>
+                )}
                 {/* 撑满一屏的占位行：内容不够高时把 tfoot 顶到视图最底部，底部汇总栏才是「常驻」的 */
                 }
                 <tr className="bt-grid-filler" aria-hidden="true"><td colSpan={visibleFields.length + 2} /></tr>

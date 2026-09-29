@@ -335,6 +335,12 @@ describe("多维表编辑器护栏", () => {
     // 列选中：点列外任意处即清（否则高亮残留）
     expect(EDITOR).toMatch(/onMouseDownCapture/);
     expect(EDITOR).toMatch(/dataset\.fieldId !== selectedColumnId/);
+    // 已分组时**不再出表底那个 +**（每个分组各有自己的 +）
+    expect(EDITOR).toMatch(/!rowItems\.some\(\(item\) => item\.kind === "group"\)/);
+    // 分组 + 自己有空间（独立行高）但**不画行线**，也不骑在分组边线上
+    expect(VIEWCSS).toMatch(/\.bt-group-add-row td \{[^}]*height: 32px/);
+    expect(VIEWCSS).not.toMatch(/translateY\(-50%\)/);
+    expect(VIEWCSS).not.toMatch(/\.bt-group-add-row td \{[^}]*position: absolute/);
   });
 
   it("追加修复：文档图片预览取正文全量、看板图片字段出缩略图", () => {

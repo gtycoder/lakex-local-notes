@@ -46,8 +46,9 @@
 .bt-add-round:hover { color: var(--lake-accent); border-color: var(--lake-accent); }
 .bt-add-round:disabled { cursor: default; color: var(--lake-text-4); }
 /* 「加进本组」：**不占行**（行高 0），圆钮绝对定位**悬浮在分组边界线上**（对齐云端图 2 的悬浮样式） */
-.bt-group-add-row td { position: relative; height: 0; padding: 0; border: 0; background: transparent; }
-.bt-group-add-row .bt-add-round { position: absolute; left: 16px; top: 0; transform: translateY(-50%); }
+/* 「加进本组」：**有自己的一行空间**，但**不画行线**（不要把它嵌到分组边线上：那样又丑又不好点） */
+.bt-group-add-row td { height: 32px; padding: 0; border: 0; background: transparent; vertical-align: middle; }
+.bt-group-add-row .bt-add-round { margin-left: 16px; }
 /* 组间间隔（云端 .lakex-viewer-grid-group-gap-line = 20px） */
 .bt-group-gap td { height: 20px; padding: 0; background: var(--lake-bg-canvas); }
 
