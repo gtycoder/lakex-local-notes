@@ -741,6 +741,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | T01 续 空统计行不渲染 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：未配统计时 `tfoot/.bt-stat-row` 均不存在（截图无灰条）；配一列统计后出现 `记录总数 3` | 统计行样式与功能保留；若用户要整个列统计功能回退需另议 |
 
 ## 13. 会话记录（只追加）
 
@@ -1281,6 +1282,28 @@ UI 与交互变化：
 - 键盘：50 → →51 → ↑52 → ←51 → ↓50 → PageDown 40 → PageUp 50（**精确**）；Home 0 / End 100；Delete 后文案 `0%` 且 **1 次轮询即落盘（值清空为 ""）**。
 
 遗留（口径变化，用户知情）：进度单元格**不能再直接输入数字**；清空只能靠键盘 Delete/Backspace（或整体清空该行/该字段值）。
+
+### 2026-09-29 · T01 续：空统计行不再渲染（用户反馈「添加记录下面一条奇怪的条」）
+
+用户 260929 发截图（红框圈出「添加记录」下方的一条灰条）要求「完全去掉」。
+
+**定位（先证后改，不靠猜）**：用户截图逐像素采样 + 隔离实例复现同一形态（多列、未配统计）后确认：
+
+- 那条「灰条」= **T01 的列统计行** `tfoot > tr.bt-stat-row`（`.bt-stat-row td { background: var(--lake-bg-block) }`）⇒ 用户图里是 `rgb(241,242,245)`、整行 36px、每列一个 `—`，因为**没有任何列配置过统计**。
+- 排除法：`.bt-grid-wrap` 确有横向溢出（scrollWidth 2100 / clientWidth 864），但它的滚动条在容器底边（窗口最底部），与用户圈的位置（表格下方、状态栏上方）不符；该处 `elementsFromPoint` 只返回 `.bt-grid-wrap` 空区、DOM 里没有细长元素 ⇒ **不是滚动条、也没有多余元素**。
+
+**修法（最小、不删功能）**：底栏改为**按需渲染** —— `visibleFields.some((field) => statForField(activeView, field.id))` 为真才输出 `<tfoot>`；没有可见列配置统计时整行不存在。与 §7 T01「不展示统计时保留默认『记录总数』**或无统计**」一致。
+
+改动文件：`src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts`
+
+验证结果：
+
+- 门禁全绿（tsc / vitest 1378 passed / 16 skipped / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check）。
+- CDP 真实端点（隔离 userData + 9236，重建后的 dist）：
+  - **未配置统计**：`tfoot` 与 `.bt-stat-row` 都不存在；「添加记录」行下面直接是「共 3 条记录」（截图核对无灰条）。
+  - **配置一列统计**（`columnStats = { 文本: "count" }` + 重载）：`tfoot` 出现，单元格 = `["", "记录总数 3", "—", "—", ""]`。
+
+遗留：统计行样式与 `.bt-stat-row` 规则**保留**（配置统计时仍用）。若用户要的不是「空行不渲染」而是**整个列统计功能都不要**，属产品级回退，需用户明确后再做。
 
 ## 14. 会话执行模板
 
