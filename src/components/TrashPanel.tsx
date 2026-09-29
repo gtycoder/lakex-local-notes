@@ -284,10 +284,15 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
           )}
         </div>
       </header>
+      {/* 页签走 kit 层原语（.ln-tabs：墨线 + 计数徽标） */}
       <div className="ln-tabs">
         <div className="ln-tabs__track" role="tablist" aria-label="回收站">
-          <button role="tab" aria-selected={tab === "docs"} className={`ln-tabs__item${tab === "docs" ? " is-active" : ""}`} onClick={() => setTab("docs")}>文档</button>
-          <button role="tab" aria-selected={tab === "quick"} className={`ln-tabs__item${tab === "quick" ? " is-active" : ""}`} onClick={() => setTab("quick")}>小记</button>
+          <button type="button" role="tab" aria-selected={tab === "docs"} className={`ln-tabs__item${tab === "docs" ? " is-active" : ""}`} onClick={() => setTab("docs")}>
+            文档<span className="ln-tabs__count">{items.length}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "quick"} className={`ln-tabs__item${tab === "quick" ? " is-active" : ""}`} onClick={() => setTab("quick")}>
+            小记<span className="ln-tabs__count">{quickItems.length}</span>
+          </button>
         </div>
       </div>
       <p className="trash-panel-hint">回收站随云同步到所有设备。被删文档下的分组/文档随父级联（可展开查看），恢复仅对顶层生效（整棵恢复），子项可单独彻底删除。</p>

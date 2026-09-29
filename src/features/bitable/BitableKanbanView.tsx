@@ -9,13 +9,12 @@
  */
 import { useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
-import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
-import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
+import { bitableAssetUrl } from "./bitableAssetUrl.js";
 import {
   bitableAttachments, bitableFieldText, bitableRecordTitle, bitableSelectFields, isAttachmentLikeField,
   kanbanCardFields, kanbanColumns, kanbanGroupField, optionChipStyle,
-  type BitableAttachment, type BitableRecord, type BitableTable, type BitableView,
+  type BitableAttachment, type BitableDisplayContext, type BitableRecord, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import { ViewTypeIcon } from "./bitableViews.js";
 import "./bitableKanbanView.css";
@@ -37,10 +36,12 @@ export interface BitableKanbanViewProps {
   onAddGroupOption: (name: string) => void;
   /** 点缩略图：只预览**该单元格内**的图片（不跨字段合并）。 */
   onOpenImages: (images: BitableAttachment[], index: number) => void;
+  /** 关联解析上下文（同一文档的 tables）。 */
+  ctx?: BitableDisplayContext;
 }
 
-export function BitableKanbanView({ noteId, table, view, records, readOnly, onSetValue, onOpenRecord, onAddGroupOption, onOpenImages }: BitableKanbanViewProps) {
-  const thumbUrl = (file: string) => withAssetAccessToken(withAssetWidth(ASSET_ORIGIN + "/" + noteId + "/" + file, assetThumbWidthForCss(KANBAN_THUMB_PX)));
+export function BitableKanbanView({ noteId, table, view, records, readOnly, onSetValue, onOpenRecord, onAddGroupOption, onOpenImages, ctx }: BitableKanbanViewProps) {
+  const thumbUrl = (file: string) => bitableAssetUrl(noteId, file, KANBAN_THUMB_PX);
   /** 附件/图片字段上卡：只出**图片缩略图**（非图片附件不出名称，避免卡片被文件名刷屏）。 */
   const imageAttachmentsOf = (value: unknown): BitableAttachment[] => bitableAttachments(value).filter((item) => isImageExtension(extOf(item.file)));
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -108,7 +109,7 @@ export function BitableKanbanView({ noteId, table, view, records, readOnly, onSe
                     onDragStart={() => setDraggingId(record.id)}
                     onDragEnd={() => setDraggingId(null)}
                     onClick={() => onOpenRecord(record.id)}>
-                    <div className="bt-kanban-card-title">{bitableRecordTitle(table, record)}</div>
+                    <div className="bt-kanban-card-title">{bitableRecordTitle(table, record, ctx)}</div>
                     {cardFields.map((field) => {
                       if (isAttachmentLikeField(field.type)) {
                         const images = imageAttachmentsOf(record.values[field.id]);
@@ -125,7 +126,7 @@ export function BitableKanbanView({ noteId, table, view, records, readOnly, onSe
                           </div>
                         );
                       }
-                      const text = bitableFieldText(record, field);
+                      const text = bitableFieldText(record, field, ctx);
                       if (!text) return null;   // 空字段不上卡，卡片才紧凑
                       return (
                         <div key={field.id} className="bt-kanban-field">

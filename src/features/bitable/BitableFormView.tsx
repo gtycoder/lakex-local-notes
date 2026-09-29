@@ -10,7 +10,7 @@ import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import {
   bitableAttachments, bitableDisplayValue, isSystemTimeField, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
-  type BitableAttachment, type BitableField, type BitableTable, type BitableView,
+  type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
 import "./bitableFormView.css";
@@ -29,6 +29,8 @@ export interface BitableFormViewProps {
   onOpenAsset: (attachment: BitableAttachment) => void;
   /** 点图片预览：只传**本单元格内**的图片 + 下标。 */
   onOpenImages: (images: BitableAttachment[], index: number) => void;
+  /** 关联解析上下文（同一文档的 tables）。 */
+  ctx?: BitableDisplayContext;
 }
 
 export function BitableFormView(props: BitableFormViewProps) {
@@ -45,7 +47,10 @@ export function BitableFormView(props: BitableFormViewProps) {
   /** 表单可用字段：排除系统时间字段（值来自记录时间戳，表单无法录入）。 */
   const formableFields = table.fields.filter((f) => !isSystemTimeField(f.type));
   const includedIds = view.formFieldIds ?? formableFields.map((f) => f.id);
-  const includedFields = formableFields.filter((f) => includedIds.includes(f.id));
+  /** 题目顺序 = formFieldIds 顺序（契约见 BitableView.formFieldIds），不是表字段顺序。 */
+  const includedFields = includedIds
+    .map((id) => formableFields.find((f) => f.id === id))
+    .filter((f): f is BitableField => !!f);
   const availableFields = formableFields.filter((f) => !includedIds.includes(f.id));
   const title = view.formTitle?.trim() || view.name || "表单";
   const description = view.formDescription?.trim() || "填写后将在当前数据表新增一条记录";
@@ -57,7 +62,7 @@ export function BitableFormView(props: BitableFormViewProps) {
   };
   const setDraftValue = (fieldId: string, value: unknown) => setDraft((prev) => ({ ...prev, [fieldId]: value }));
   const submit = () => {
-    const missing = includedFields.filter((f) => f.required && bitableDisplayValue(f, draft[f.id]).trim() === "");
+    const missing = includedFields.filter((f) => f.required && bitableDisplayValue(f, draft[f.id], props.ctx).trim() === "");
     if (missing.length > 0) {
       setError("必填项未填写：" + missing.map((f) => f.name).join("、"));
       setSubmitted(false);
@@ -73,8 +78,11 @@ export function BitableFormView(props: BitableFormViewProps) {
     <CellEditor
       field={field}
       value={draft[field.id]}
+      ctx={props.ctx}
       readOnly={readOnly}
       onChange={(value) => setDraftValue(field.id, value)}
+      noteId={props.noteId}
+      onOpenImages={props.onOpenImages}
       onAddOption={(name) => {
         const existing = (field.options ?? []).find((o) => o.name === name);
         const current = Array.isArray(draft[field.id]) ? (draft[field.id] as string[]) : [];
@@ -106,13 +114,16 @@ export function BitableFormView(props: BitableFormViewProps) {
   return (
     <div className="bt-form-shell">
       <div className="bt-form-tabs">
-        <div className="seg" role="tablist" aria-label="表单模式">
-          <button type="button" role="tab" aria-selected={mode === "edit"}
-            className={"b3-button b3-button--outline seg__item" + (mode === "edit" ? " is-active" : "")}
-            onClick={() => setMode("edit")}>编辑表单</button>
-          <button type="button" role="tab" aria-selected={mode === "preview"}
-            className={"b3-button b3-button--outline seg__item" + (mode === "preview" ? " is-active" : "")}
-            onClick={() => { setDraft({ ...props.defaults }); setSubmitted(false); setError(null); setMode("preview"); }}>预览表单</button>
+        {/* 页签走 kit 层原语（.ln-tabs：墨线 + 可选计数徽标） */}
+        <div className="ln-tabs">
+          <div className="ln-tabs__track" role="tablist" aria-label="表单模式">
+            <button type="button" role="tab" aria-selected={mode === "edit"}
+              className={"ln-tabs__item" + (mode === "edit" ? " is-active" : "")}
+              onClick={() => setMode("edit")}>编辑表单</button>
+            <button type="button" role="tab" aria-selected={mode === "preview"}
+              className={"ln-tabs__item" + (mode === "preview" ? " is-active" : "")}
+              onClick={() => { setDraft({ ...props.defaults }); setSubmitted(false); setError(null); setMode("preview"); }}>预览表单</button>
+          </div>
         </div>
       </div>
       <div className="bt-form-view">

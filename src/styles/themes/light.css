@@ -10,6 +10,9 @@
   --lake-bg-block: #f0f2f5;
   --lake-bg-raised: #ffffff;
   --lake-bg-sunken: #eef0f3;
+  /* 分组底衬 / 极浅灰通道（260929 多维表复刻云端）：比 panel 深一档、比 block 浅一档，
+   * 用来把「分组之间的通道」和白底卡片分开，不用于常规块面。 */
+  --lake-bg-subtle: #fafafa;
   --lake-bg-hover: #e9ebee;
   --lake-bg-press: #e4e7eb;
   /* 文字 */

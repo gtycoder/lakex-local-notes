@@ -8,6 +8,8 @@
   --lake-bg-block: #f0f2f4;
   --lake-bg-raised: #ffffff;
   --lake-bg-sunken: #eef0f3;
+  /* 分组底衬 / 极浅灰通道（同 A 槽位；见 light.css 说明） */
+  --lake-bg-subtle: #fafafa;
   --lake-bg-hover: #e9ebee;
   --lake-bg-press: #e4e7eb;
   /* 文字 */

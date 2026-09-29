@@ -375,30 +375,65 @@
 .ln-row2__title { color: inherit; font-size: var(--lake-font-size-small); }
 .ln-row2__meta { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 
-/* 横向页签 = 分段控件（设计 13：只给选中项灰底会被读成 hover，是已实测的判读问题） */
+/* ── 横向页签原语（260929 用户在多方案对比里选定「B 墨线 + 计数徽标」）──────────────
+ * 形态：文字 + 选中项变强调色 + **与文字等宽**的 2px 下划线（压在容器的 1px 分隔线上）；
+ *      数量从文案里拆出来放 `.ln-tabs__count` 徽标，选中时跟着变强调色（避免「已选 N 条记录」这种文案随数字跳动而重排）。
+ * 来历：这张脸 260926 曾被改成分段控件（选中项浮起白块）；260929 用户在多方案对比后重新选定墨线。
+ *      260929 当天回收站 / 历史 / 表单也全部迁入，过渡用的 `.ln-tabs--seg` 变体已删除。
+ * 结构：.ln-tabs > .ln-tabs__track[role=tablist] > .ln-tabs__item[role=tab][aria-selected]（+ 可选 .ln-tabs__count / .ln-tabs__action）。 */
 .ln-tabs {
-  gap: 2px;
-  padding: 2px;
-  border-bottom: 0;
-  border-radius: var(--lake-radius-sm);
-  background: var(--lake-bg-block);
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  padding: 0 var(--lake-space-xl);
+  border-bottom: 1px solid var(--lake-border-2);
 }
-.ln-tabs__track { gap: 2px; }
+.ln-tabs__track { display: flex; flex: 1 1 auto; min-width: 0; gap: 18px; }
 .ln-tabs__item {
-  height: 22px;
-  padding: 0 var(--lake-space-lg);
-  border-radius: var(--lake-radius-xs);
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 0;
+  gap: var(--lake-space-sm);
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--lake-text-2);
+  font-family: inherit;
   font-size: var(--lake-font-size-small);
+  cursor: pointer;
 }
-.ln-tabs__item:hover { color: var(--lake-text-1); background: transparent; }
+.ln-tabs__item:hover { color: var(--lake-text-1); }
 .ln-tabs__item.is-active {
-  color: var(--lake-text-1);
-  background: var(--lake-bg-raised);
-  box-shadow: var(--lake-shadow-card);
+  color: var(--lake-accent-text);
   font-weight: var(--lake-font-weight-semibold);
 }
-.ln-tabs__item.is-active::after { display: none; }
+.ln-tabs__item.is-active::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-accent);
+  transform-origin: 50% 50%;
+  animation: ln-indicator-in var(--lake-motion-fast) var(--lake-ease-standard) both;
+}
+/* 计数位：默认中性底，选中时跟强调色（数字用等宽数字，切换时不抖） */
+.ln-tabs__count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-block);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-micro);
+  font-weight: var(--lake-font-weight-medium);
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ln-tabs__item.is-active .ln-tabs__count { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 .ln-tabs__action { height: 22px; }
 
 .ln-toolbar { gap: var(--lake-space-md); padding: var(--lake-space-sm) var(--lake-space-xl) 0; }

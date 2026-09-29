@@ -780,6 +780,69 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   border-radius: 6px;
   font-size: 12px;
 }
+.mbt-bool {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--lake-accent, #3b5bdb);
+}
+.mbt-link {
+  color: var(--lake-accent, #3b5bdb);
+  text-decoration: underline;
+  word-break: break-all;
+}
+.mbt-rating {
+  display: inline-flex;
+  gap: 1px;
+}
+.mbt-star {
+  color: var(--lake-border-strong, #d5d9de);
+  font-size: 14px;
+  line-height: 1;
+}
+.mbt-star.is-on {
+  color: var(--lake-rating-star, #ecaa06);
+}
+.mbt-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 90px;
+}
+.mbt-progress-track {
+  flex: 1;
+  min-width: 40px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lake-bg-hover, #f6f7f9);
+  overflow: hidden;
+}
+.mbt-progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--lake-accent, #3b5bdb);
+}
+.mbt-progress-value {
+  font-size: 11px;
+  color: var(--lake-text-3, #7d8590);
+}
+.mbt-relation {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mbt-relation-chip {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--lake-bg-hover, #f6f7f9);
+  color: var(--lake-text-2, #333);
+}
 .mbt-attachments {
   display: inline-flex;
   flex-wrap: wrap;

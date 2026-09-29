@@ -11,7 +11,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   bitableDateFields, calendarEvents, calendarEventsByDay, calendarMonthDays, calendarMovePatch, calendarStartField,
   localDateString, optionChipStyle,
-  type BitableRecord, type BitableTable, type BitableView,
+  type BitableDisplayContext, type BitableRecord, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import "./bitableCalendarView.css";
 
@@ -28,16 +28,18 @@ export interface BitableCalendarViewProps {
   onOpenRecord: (recordId: string) => void;
   /** 拖拽后的值补丁（开始 + 结束一起平移）由上层统一写记录。 */
   onSetValues: (recordId: string, patch: Record<string, unknown>) => void;
+  /** 关联解析上下文（同一文档的 tables；标题字段可能是关联）。 */
+  ctx?: BitableDisplayContext;
 }
 
-export function BitableCalendarView({ table, view, records, readOnly, onOpenRecord, onSetValues }: BitableCalendarViewProps) {
+export function BitableCalendarView({ table, view, records, readOnly, onOpenRecord, onSetValues, ctx }: BitableCalendarViewProps) {
   const today = localDateString(new Date());
   /** 当前展示的月份是**本机展示态**，不写正文。 */
   const [cursor, setCursor] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }));
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const startField = calendarStartField(table, view);
-  const byDay = useMemo(() => calendarEventsByDay(calendarEvents(table, view, records)), [table, view, records]);
+  const byDay = useMemo(() => calendarEventsByDay(calendarEvents(table, view, records, ctx)), [table, view, records, ctx]);
   const days = useMemo(() => calendarMonthDays(cursor.year, cursor.month), [cursor]);
 
   if (!startField) {

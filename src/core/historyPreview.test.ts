@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { boardToBody, createBoardDoc, emptyBoardBody } from "./boardDoc.js";
-import { bitablesToBody, createBitableRecord, createDefaultBitableTable, emptyBitableBody } from "./bitableDoc.js";
+import { bitablesToBody, createBitableRecord, createDefaultBitableTable } from "./bitableDoc.js";
 import { sheetsToBody } from "./sheetDoc.js";
 import { snapshotPreview } from "./historyPreview.js";
 
@@ -52,7 +52,9 @@ describe("历史快照结构化预览", () => {
       expect(preview.rows[0]).toContain("写文档");
       expect(preview.more).toContain("2 条记录");
     }
-    const emptyText = snapshotPreview("bitable", emptyBitableBody()).map((b) => (b.type === "empty" ? b.text : "")).join(" ");
+    // 产品默认表现在自带 3 行空白，所以「空表」文案要显式清空记录来验
+    const blank = { ...createDefaultBitableTable("空表"), records: [] };
+    const emptyText = snapshotPreview("bitable", bitablesToBody([blank], blank.id)).map((b) => (b.type === "empty" ? b.text : "")).join(" ");
     expect(emptyText).toContain("还没有记录");
   });
 

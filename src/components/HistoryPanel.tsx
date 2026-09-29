@@ -272,14 +272,15 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
           </div>
           <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
+        {/* 页签走 kit 层原语（.ln-tabs：墨线 + 计数徽标）；右侧动作走原语的 .ln-tabs__action */}
         <div className="ln-tabs">
           <div className="ln-tabs__track" role="tablist" aria-label="历史版本">
-          <button role="tab" aria-selected={tab === "history"} className={`ln-tabs__item${tab === "history" ? " is-active" : ""}`} onClick={() => switchTab("history")}>
-            <Clock size={14} /> 文档历史
-          </button>
-          <button role="tab" aria-selected={tab === "orphans"} className={`ln-tabs__item${tab === "orphans" ? " is-active" : ""}`} onClick={() => switchTab("orphans")}>
-            <Trash size={14} /> 文档孤儿文件
-          </button>
+            <button type="button" role="tab" aria-selected={tab === "history"} className={`ln-tabs__item${tab === "history" ? " is-active" : ""}`} onClick={() => switchTab("history")}>
+              <Clock size={14} /> 文档历史<span className="ln-tabs__count">{history.length}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "orphans"} className={`ln-tabs__item${tab === "orphans" ? " is-active" : ""}`} onClick={() => switchTab("orphans")}>
+              <Trash size={14} /> 文档孤儿文件<span className="ln-tabs__count">{orphans.length}</span>
+            </button>
           </div>
           {tab === "history" && (
             <button className="b3-button b3-button--outline ln-tabs__action" onClick={() => void createSnapshot()} title="手动创建快照">

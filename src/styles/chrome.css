@@ -79,10 +79,16 @@
   height: 22px;
   min-height: 22px;
 }
-/* 多维表文档：底部常驻汇总栏（24px）占住最底一条 ⇒ 状态栏整体上移让位（用户 260929）。
- * 与 sheet 的「同处一条」不同：多维表汇总栏是**整行**，没法左右分栏，只能把状态栏抬到它上方。 */
+/* 多维表文档：底部常驻汇总栏（24px + 1px 容器边）占住最底一条 ⇒ 状态栏**贴着它正上方**停靠
+ * （用户 260929：底栏必须是最底下那条，且不能被状态栏压住；26px = 24px 底栏 + 2px 缝）。
+ * 与 sheet 的「同处一条」不同：多维表汇总栏是**贯穿表宽的整行**，右端还有可能横向滚动的列，
+ * 状态栏并进同一行会压住最后一列的汇总格 ⇒ 只能上下成栈，但两段右缘对齐、紧邻，读起来是一条复合底栏。 */
 .document-statusbar[data-doc-kind="bitable"] {
-  bottom: 34px;
+  /* 底栏上沿由 BitableEditor 实测写进 --lake-bitable-status-bottom（会随横向滚动条浮动）；
+   * 变量未就绪时给 34px 兜底（= 24px 底栏 + 10px 细滚动条 + 2px 缝）。 */
+  bottom: var(--lake-bitable-status-bottom, 34px);
+  height: 22px;
+  min-height: 22px;
 }
 .document-statusbar-stats { gap: var(--lake-space-lg); color: var(--lake-text-3); }
 .document-statusbar-state {

@@ -8,15 +8,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
-import { Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, ExternalLink, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
+import { BitableRelationPicker } from "./BitableRelationPicker.js";
+import { Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { placePopoverPosition } from "../../hooks/topMenuPosition";
-import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
-import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
+import { bitableAssetUrl } from "./bitableAssetUrl.js";
 import "./bitableFieldCells.css";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import type { CSSProperties } from "react";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
@@ -70,6 +70,29 @@ export function FieldTypeGrid({ value, disabled, onPick }: { value?: string; dis
           {type === value && <Check size={14} />}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 字段类型**弹出选择器**（编辑字段弹窗用）：触发器只占一行（当前类型图标 + 名称 + ▾），点开才出 2 列网格。
+ * 与「新增字段」快捷面板共用同一个 {@link FieldTypeGrid}（单一来源），只是收进浮层、不再在弹窗里撑开一大块版面。
+ */
+export function FieldTypeSelect({ value, disabled, onPick }: { value: string; disabled?: boolean; onPick: (type: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const label = isKnownFieldType(value) ? BITABLE_FIELD_TYPE_LABEL[value] : value + "（未知）";
+  return (
+    <div className="bt-select">
+      <button ref={anchorRef} type="button" className="bt-select-trigger" aria-expanded={open} aria-haspopup="listbox" disabled={disabled}
+        onClick={() => setOpen((v) => !v)}>
+        <FieldTypeIcon type={value} />
+        <span className="bt-field-name">{label}</span>
+        <ChevronDown size={14} />
+      </button>
+      <Popover open={open} anchor={anchorRef.current} onClose={() => setOpen(false)} width={300} align="start">
+        <FieldTypeGrid value={value} disabled={disabled} onPick={(picked) => { onPick(picked); setOpen(false); }} />
+      </Popover>
     </div>
   );
 }
@@ -247,8 +270,7 @@ function AttachmentChipList({ noteId, attachments, onOpen, onOpenImages }: {
   /** 点图片：预览**该单元格内**的全部图片（用户 260928：两列图片就是两类，绝不跨列合并）。 */
   onOpenImages?: (images: BitableAttachment[], index: number) => void;
 }) {
-  const urlOf = (file: string) => withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file);
-  const chipUrlOf = (file: string) => withAssetWidth(urlOf(file), assetThumbWidthForCss(ATTACHMENT_CHIP_PX));
+  const chipUrlOf = (file: string) => bitableAssetUrl(noteId, file, ATTACHMENT_CHIP_PX);
   /** 预览范围 = 本单元格内的图片（顺序 = 单元格内顺序）；非图片仍走系统打开。 */
   const openByFile = (file: string) => {
     const item = attachments.find((a) => a.file === file);
@@ -497,7 +519,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
     setRejectNote(rejected > 0 ? IMAGE_ONLY_HINT + "，已忽略 " + rejected + " 个" : null);
     if (accepted.length > 0) onUpload(accepted);
   };
-  const thumbOf = (file: string) => withAssetWidth(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file), assetThumbWidthForCss(ATTACHMENT_CARD_PX));
+  const thumbOf = (file: string) => bitableAssetUrl(noteId, file, ATTACHMENT_CARD_PX);
   /** 展开面板里点图片：预览范围同样限定在本单元格的图片（不跨列）。 */
   const openByFile = (file: string) => {
     const item = attachments.find((a) => a.file === file);
@@ -855,17 +877,40 @@ function BooleanCell({ value, readOnly, onChange }: { value: unknown; readOnly: 
 }
 
 /** 链接格：URL 文本可编辑 + ↗ 用**系统浏览器**打开（桌面 window.open → 主进程 shell.openExternal）。 */
+/**
+ * 链接格（260929 对齐云端）：格子**展示文本**、右端一枚 🔗 图标；点图标用**本地浏览器**打开；
+ * 双击格子进入编辑（输入 URL，Enter/失焦提交、Esc 取消）。
+ *
+ * 刻意**不做常驻输入框**：常驻输入框在选中时 `:focus` 的 2px 焦点环会和单元格自己的 2px 选中环
+ * 叠成「两层边框」（用户 260929 报的就是这个）；另外空值时会一直显示 `https://` 占位，看着像输入框而不像值。
+ */
 function LinkCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
   const text = typeof value === "string" ? value : "";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
   const openable = /^https?:\/\//i.test(text.trim());
+  const commit = () => { onChange(draft.trim()); setEditing(false); };
+  if (editing && !readOnly) {
+    return (
+      <span className="bt-link-cell">
+        <input className="bt-cell-input" autoFocus value={draft} placeholder="https://" aria-label="链接"
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") { event.preventDefault(); commit(); }
+            if (event.key === "Escape") { event.stopPropagation(); setDraft(text); setEditing(false); }
+          }} />
+      </span>
+    );
+  }
   return (
-    <span className="bt-link-cell">
-      <input className="bt-cell-input" value={text} readOnly={readOnly} placeholder="https://" aria-label="链接"
-        onChange={(event) => onChange(event.target.value)} />
+    <span className="bt-link-cell"
+      onDoubleClick={() => { if (!readOnly) { setDraft(text); setEditing(true); } }}>
+      <span className="bt-link-text" title={text || undefined}>{text}</span>
       {openable && (
         <button type="button" className="bt-link-open" title="用系统浏览器打开" aria-label="打开链接"
           onClick={(event) => { event.stopPropagation(); window.open(text.trim(), "_blank", "noopener"); }}>
-          <ExternalLink size={13} />
+          <Link2 size={13} />
         </button>
       )}
     </span>
@@ -888,7 +933,7 @@ export function StatCell({ field, records, stat, readOnly, onPick }: {
     <button type="button" className={"bt-stat" + (stat ? " has-stat" : "")} disabled={readOnly}
       title={stat ? BITABLE_STAT_LABEL[stat] : "选择汇总方式"}
       onClick={(event) => { event.stopPropagation(); onPick(event.currentTarget); }}>
-      <span className="bt-stat-text">{stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, records, stat) : "统计"}</span>
+      <span className="bt-stat-text">{stat ? statDisplayText(stat, computeColumnStat(field, records, stat)) : "统计"}</span>
       <ChevronDown size={12} className="bt-stat-caret" />
     </button>
   );
@@ -979,10 +1024,60 @@ export interface CellEditorProps {
   renderAttachment?: (imageOnly: boolean) => ReactNode;
   /** 记录（系统时间字段取值用；表单草稿没有记录时为 undefined）。 */
   record?: BitableRecord;
+  /** 关联解析上下文（同一文档的 tables）；关联字段展示必需，其余字段忽略。 */
+  ctx?: BitableDisplayContext;
+  /** 关联字段：所在文档 id（选择器里渲染图片缩略图要拼资源 URL；缺省时选择器退化为纯文本）。 */
+  noteId?: string;
+  /** 关联字段：点选择器里的缩略图 → 预览**该单元格**的图片（与表格/画册同一条 Lightbox）。 */
+  onOpenImages?: (images: BitableAttachment[], index: number) => void;
+}
+
+/**
+ * 关联单元格：展示目标记录**主字段**的紧凑 chip；点开是**全局大弹窗**（BitableRelationPicker）：
+ * 两个 tab（所有可关联记录 / 已选 N 条）+ 搜索 + 筛选/排序 + 目标表整表；**没有「添加记录」**（用户 260929）。
+ * 值只存目标记录 id，**选择器只改本机草稿、点「确认」才写正文**（取消 / 搜索 / 重复选择都不落盘）。
+ * 目标记录 / 目标表已删 → 失效占位，内部 id 原样保留（恢复后自动重现，不级联删字段）。
+ */
+export function RelationCell({ field, value, readOnly, ctx, onChange, noteId, onOpenImages }: {
+  field: BitableField;
+  value: unknown;
+  readOnly: boolean;
+  ctx?: BitableDisplayContext;
+  onChange: (value: unknown) => void;
+  noteId?: string;
+  onOpenImages?: (images: BitableAttachment[], index: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const target = relationTargetTable(ctx, field);
+  const committed = relationRecordIds(value);
+  /** 目标表被删 / 未配置：没有任何可编辑入口，只留失效或空占位。 */
+  if (!target) {
+    return <span className="bt-cell-relation" title="关联的目标数据表不存在（关联 id 仍保留）">{committed.length > 0 ? "关联已失效" : "—"}</span>;
+  }
+  const titleOf = (record: BitableRecord) => bitableRecordTitle(target, record, ctx);
+  return (
+    <div className="bt-option-cell">
+      <button type="button" className={"bt-option-trigger" + (committed.length ? "" : " is-empty")}
+        disabled={readOnly} aria-haspopup="dialog" aria-expanded={open}
+        title={readOnly ? "关联记录（只读）" : "点击选择关联记录"}
+        onClick={() => setOpen(true)}>
+        <span className="bt-option-label">
+          {relationTargetRecords(ctx, field, value).map((record) => <span key={record.id} className="bt-option-chip" title={titleOf(record)}>{titleOf(record)}</span>)}
+          {committed.length === 0 && <span className="bt-option-placeholder">请选择</span>}
+        </span>
+        <ChevronDown size={12} className="bt-option-caret" />
+      </button>
+      {open && (
+        <BitableRelationPicker field={field} value={value} ctx={ctx} noteId={noteId} onOpenImages={onOpenImages}
+          onCancel={() => setOpen(false)}
+          onConfirm={(ids) => { onChange(ids); setOpen(false); }} />
+      )}
+    </div>
+  );
 }
 
 /** 按字段类型分派单元格编辑器（未知类型只读展示、不清空）。 */
-export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record }: CellEditorProps) {
+export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages }: CellEditorProps) {
   if (!isKnownFieldType(field.type)) {
     return <span className="bt-cell-unknown" title="未知字段类型（只读展示）">{bitableDisplayValue(field, value) || "—"}</span>;
   }
@@ -1028,9 +1123,10 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
       return <ProgressCell field={field} value={value} readOnly={readOnly} onChange={onChange} />;
     case "createdTime":
     case "updatedTime":
-      return <span className="bt-cell-muted">{record ? (bitableFieldText(record, field) || "—") : "—"}</span>;
+      return <span className="bt-cell-muted">{record ? (bitableFieldText(record, field, ctx) || "—") : "—"}</span>;
     case "relation":
-      return <span className="bt-cell-relation" title="关联字段 v1 只占位、单元格不可填值">关联（暂不可填）</span>;
+      return <RelationCell field={field} value={value} readOnly={readOnly} ctx={ctx} onChange={onChange}
+        noteId={noteId} onOpenImages={onOpenImages} />;
     default:
       return <span className="bt-cell-unknown">{bitableDisplayValue(field, value) || "—"}</span>;
   }

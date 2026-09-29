@@ -10,7 +10,7 @@
  * 渲染由 `src/components/HistorySnapshotPreview.tsx` 负责（桌面历史面板与单据属性弹窗共用）。
  */
 import { boardToSearchText, parseBoardBody } from "./boardDoc.js";
-import { bitableDisplayValue, parseBitableBody } from "./bitableDoc.js";
+import { bitableFieldText, parseBitableBody } from "./bitableDoc.js";
 import type { NoteKind } from "./noteKind.js";
 import { parseSheetBody } from "./sheetDoc.js";
 
@@ -120,7 +120,7 @@ function bitablePreview(body: string): SnapshotPreviewBlock[] {
       type: "table",
       title: table.name,
       head: fields.map((f) => f.name),
-      rows: records.map((record) => fields.map((f) => clip(bitableDisplayValue(f, record.values[f.id])))),
+      rows: records.map((record) => fields.map((f) => clip(bitableFieldText(record, f, { tables: doc.tables })))),
       more: `共 ${table.records.length} 条记录 × ${table.fields.length} 个字段${table.records.length > MAX_ROWS || table.fields.length > MAX_COLS ? `（预览前 ${records.length} × ${fields.length}）` : ""}`,
     });
   }

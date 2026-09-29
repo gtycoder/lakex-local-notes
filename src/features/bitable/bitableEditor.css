@@ -26,7 +26,10 @@
   flex-direction: column;
   min-height: 0;
   border-right: 1px solid var(--lake-border-1);
-  background: var(--lake-bg-block);
+  /* 260929 用户：数据表选择区与表格区的底衬**同一个灰**（--lake-bg-subtle）——
+     之前这里是更深的 --lake-bg-block，左侧一条深灰和右边的浅灰画布拼在一起像两套风格。
+     选中/悬停仍是「在浅灰面上浮起一档」的状态色（accent-tint / bg-hover），不受影响。 */
+  background: var(--lake-bg-subtle);
 }
 
 .bt-tables-head {
@@ -49,6 +52,7 @@
 }
 
 .bt-table-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -65,8 +69,11 @@
 .bt-grip { color: var(--lake-text-3); flex: 0 0 auto; }
 .bt-table-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-table-count { font-size: 11px; color: var(--lake-text-3); }
-.bt-table-more, .bt-table-del { opacity: 0; }
-.bt-table-item:hover .bt-table-more, .bt-table-item:hover .bt-table-del { opacity: 1; }
+/* 「⋯ / 删除表」**浮在行上、悬停才浮现**：绝对定位（不占流内位置，不再挤压名称/计数）；
+   default 不可见且不接收点击，悬停整行时才淡入。 */
+.bt-table-more, .bt-table-del { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); opacity: 0; visibility: hidden; }
+.bt-table-more { right: 30px; }
+.bt-table-item:hover .bt-table-more, .bt-table-item:hover .bt-table-del { opacity: 1; visibility: visible; }
 
 .bt-main {
   flex: 1;
@@ -122,7 +129,7 @@
 .bt-tool-btn:hover { background: var(--lake-bg-hover); }
 .bt-tool-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
 .bt-toolbar-spacer { flex: 1; }
-.bt-badge { background: var(--lake-accent); color: #fff; border-radius: 8px; font-size: 10px; padding: 0 5px; }
+.bt-badge { background: var(--lake-accent); color: var(--lake-text-on-accent); border-radius: 8px; font-size: 10px; padding: 0 5px; }
 
 .bt-find { display: inline-flex; align-items: center; gap: 6px; }
 .bt-find input { height: 26px; padding: 0 8px; border: 1px solid var(--lake-border-1); border-radius: 6px; background: var(--lake-bg-panel); color: inherit; }
@@ -134,13 +141,16 @@
 
 .bt-grid { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
 
-.bt-grid th, .bt-grid td { border-right: 1px solid var(--lake-border-1); border-bottom: 1px solid var(--lake-border-1); padding: 0; vertical-align: middle; }
+/* 表格线走**更浅一档**的 --lake-border-2（260929 用户：「和远端一样，线的颜色变浅一点」）：
+   云端实测格线 = rgb(244,245,245)，比通用分隔线 --lake-border-1 浅一档。这里只换线色，
+   不改线宽/线位（去边框会动列宽，色值不会）。 */
+.bt-grid th, .bt-grid td { border-right: 1px solid var(--lake-border-2); border-bottom: 1px solid var(--lake-border-2); padding: 0; vertical-align: middle; }
 .bt-grid .col-selected { background: var(--lake-accent-tint); }
 .bt-viewbar-leading { display: flex; align-items: center; gap: 4px; margin-right: 6px; }
 .bt-tables-switch { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 13px; cursor: pointer; color: inherit; max-width: 200px; }
 .bt-tables-switch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.bt-grid thead th { position: sticky; top: 0; z-index: 2; height: 36px; background: var(--lake-bg-panel); font-weight: 500; border-bottom: 1px solid var(--lake-border-1); }
+.bt-grid thead th { position: sticky; top: 0; z-index: 2; height: 36px; background: var(--lake-bg-panel); font-weight: 500; border-bottom: 1px solid var(--lake-border-2); }
 
 .bt-th-inner { position: relative; display: flex; align-items: center; justify-content: flex-start; padding: 0 8px; font-size: 14px; }
 .bt-th-inner > svg { flex: 0 0 auto; margin-right: 6px; color: var(--lake-text-3); }
@@ -191,10 +201,13 @@
 .bt-td .bt-attachment-editor { height: 100%; min-height: 0; padding: 0 8px; }
 .bt-td-empty { min-width: 40px; }
 .bt-add-row td { padding: 4px; }
-.bt-grid-foot { position: sticky; left: 0; padding: 8px 12px; text-align: center; font-size: 12px; color: var(--lake-text-3); }
 
 .bt-cell-input { width: 100%; height: 100%; min-height: 26px; border: 0; background: transparent; padding: 4px 8px; font: inherit; font-size: 13px; color: inherit; box-sizing: border-box; }
 .bt-cell-input:focus { outline: 2px solid var(--lake-accent); outline-offset: -2px; }
+/* 单元格自己已经有 2px 选中环时（单格选区的四条边都在），格内输入框不再叠一层焦点环 ——
+   否则就是「两层边框」（用户 260929 报的链接格 2 层边框；文本框同理）。多格选区只有外缘画环，
+   内层格里仍保留输入框自己的焦点环，不丢可访问性。 */
+.bt-td.cell-selected.sel-top.sel-bottom.sel-left.sel-right .bt-cell-input:focus { outline: 0; }
 .bt-cell-unknown, .bt-cell-relation, .bt-cell-muted { padding: 4px 8px; font-size: 12px; color: var(--lake-text-3); }
 
 .bt-option-cell { position: relative; }
@@ -245,7 +258,7 @@
 .bt-inline-input { flex: 1; min-width: 0; border: 1px solid var(--lake-accent); border-radius: 4px; background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: 13px; padding: 2px 4px; }
 
 .bt-primary, .bt-secondary, .bt-danger { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
-.bt-primary { background: var(--lake-accent); color: #fff; }
+.bt-primary { background: var(--lake-accent); color: var(--lake-text-on-accent); }
 .bt-secondary { background: transparent; border-color: var(--lake-border-1); color: inherit; }
 .bt-danger { background: transparent; border-color: var(--lake-status-error); color: var(--lake-status-error); }
 .bt-primary:disabled, .bt-secondary:disabled, .bt-danger:disabled { opacity: .5; cursor: default; }
@@ -315,7 +328,7 @@
 .bt-date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
 .bt-date-day { border: 0; background: transparent; border-radius: 5px; padding: 5px 0; cursor: pointer; font: inherit; font-size: 12px; color: inherit; }
 .bt-date-day:hover { background: var(--lake-bg-hover); }
-.bt-date-day.is-selected { background: var(--lake-accent); color: #fff; }
+.bt-date-day.is-selected { background: var(--lake-accent); color: var(--lake-text-on-accent); }
 .bt-date-empty { display: block; }
 .bt-date-foot { display: flex; justify-content: space-between; margin-top: 6px; border-top: 1px solid var(--lake-border-1); padding-top: 6px; }
 .bt-date-foot button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12px; color: var(--lake-accent); }
@@ -326,10 +339,10 @@
 .bt-menu-label { flex: 1; text-align: left; }
 .bt-view-icon { display: inline-flex; align-items: center; margin-right: 5px; }
 .bt-select { width: 100%; }
-.bt-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; height: 32px; border: 1px solid var(--lake-border-1); border-radius: 7px; background: var(--lake-bg-panel); padding: 0 10px; font: inherit; font-size: 13px; color: inherit; cursor: pointer; }
+.bt-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; height: 32px; border: 1px solid var(--lake-border-1); border-radius: 7px; background: var(--lake-bg-panel); padding: 0 10px; font: inherit; font-size: 13px; color: inherit; cursor: pointer; text-align: left; }
 .bt-color-square { width: 18px; height: 18px; flex: 0 0 auto; border: 1px solid var(--lake-border-1); border-radius: 4px; cursor: pointer; padding: 0; }
 .bt-color-palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 10px; }
-.bt-color-swatch { width: 26px; height: 26px; border: 1px solid rgba(0, 0, 0, .08); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #1f1f1f; }
+.bt-color-swatch { width: 26px; height: 26px; border: 1px solid var(--lake-border-1); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--lake-text-1); }
 .bt-color-swatch--clear { background: transparent; border-color: var(--lake-border-1); }
 .bt-rule-row .bt-select { flex: 1; min-width: 0; }
 .bt-rule-row .bt-select-trigger { height: 26px; font-size: 12px; padding: 0 6px; }

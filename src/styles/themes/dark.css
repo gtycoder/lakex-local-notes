@@ -9,6 +9,8 @@
   --lake-bg-block: #2a2b30;
   --lake-bg-raised: #2a2b30;
   --lake-bg-sunken: #141517;
+  /* 分组底衬 / 极浅灰通道（260929）：深色里「比 panel 亮一档」才是同一个语义（浅色是深一档）。 */
+  --lake-bg-subtle: #242528;
   --lake-bg-hover: rgba(255,255,255,.06);
   --lake-bg-press: rgba(255,255,255,.10);
   /* 内核品牌绿在深色下使用 Lake dark schema，提升暗底对比度。 */

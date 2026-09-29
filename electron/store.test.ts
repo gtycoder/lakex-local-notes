@@ -364,14 +364,15 @@ describe("目录树操作", () => {
     fs.rmSync(base, { recursive: true, force: true });
   });
 
-  it("新建多维表：kind=bitable、正文落 bitables/{id}.bitable.json、默认 1 张数据表 3 字段", () => {
+  it("新建多维表：kind=bitable、正文落 bitables/{id}.bitable.json、默认 1 张数据表（1 列文本 + 3 行空白）", () => {
     const bitable = store.createBitableIn(null, "无标题数据表");
     const bodyPath = (store as any).notePath(bitable.id);
     expect(bodyPath).toContain(path.join("bitables", bitable.id + ".bitable.json"));
     const doc = JSON.parse(fs.readFileSync(bodyPath, "utf8"));
     expect(doc.kind).toBe("bitable");
     expect(doc.tables).toHaveLength(1);
-    expect(doc.tables[0].fields.map((f: { type: string }) => f.type)).toEqual(["text", "select", "date"]);
+    expect(doc.tables[0].fields.map((f: { type: string }) => f.type)).toEqual(["text"]);
+    expect(doc.tables[0].records).toHaveLength(3);
     // 搜索文本按 kind 分派到 bitableToSearchText（不是 JSON 碎片）
     expect((store as any).searchTextFor(bitable.id, bitable.content).plain).toContain("数据表");
   });

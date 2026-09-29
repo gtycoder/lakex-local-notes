@@ -350,6 +350,26 @@ export function App() {
     };
   }, [hideEdgeHandle]);
 
+  // 把手是 10px 边缘热区的「召唤物」，不是持久 UI。窗口失焦/页面隐藏之外，快速划出左缘、
+  // 首次进入资料库时指针已经停在热区里、或热区因布局重建吞掉 pointerleave，都可能留下
+  // `.is-active`。这里用全局 pointermove 做真实位置兜底：指针一旦明确离开热区/目录栏就收把手。
+  useEffect(() => {
+    if (sidebarRenderMode !== "collapsed") hideEdgeHandle();
+  }, [hideEdgeHandle, sidebarRenderMode]);
+
+  useEffect(() => {
+    const clearWhenOutside = (event: PointerEvent) => {
+      const hotzone = edgeHotzoneRef.current;
+      if (!hotzone?.classList.contains("is-active")) return;
+      const path = event.composedPath();
+      if (path.includes(hotzone)) return;
+      if (path.some((node) => node instanceof Element && (node.classList.contains("sidebar") || node.classList.contains("edge-hotzone-handle")))) return;
+      hideEdgeHandle();
+    };
+    window.addEventListener("pointermove", clearWhenOutside, true);
+    return () => window.removeEventListener("pointermove", clearWhenOutside, true);
+  }, [hideEdgeHandle]);
+
   // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
 

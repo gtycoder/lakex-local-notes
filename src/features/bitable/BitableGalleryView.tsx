@@ -7,12 +7,11 @@
  * 封面与卡片字段的投影全在 src/core/bitableDoc.ts 的纯函数里，这里只渲染。
  */
 import { ImageOff } from "lucide-react";
-import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
-import { withAssetWidth } from "../../core/assetUrl.js";
+import { bitableAssetUrl } from "./bitableAssetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import {
   bitableAttachments, bitableFieldText, bitableRecordTitle, galleryCardFields, galleryCoverField, galleryCoverImage,
-  type BitableAttachment, type BitableRecord, type BitableTable, type BitableView,
+  type BitableAttachment, type BitableDisplayContext, type BitableRecord, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import "./bitableGalleryView.css";
 
@@ -29,9 +28,11 @@ export interface BitableGalleryViewProps {
   /** 点封面直接预览：只传**封面字段这一格**里的图片（用户 260928：两列图片就是两类，
    *  绝不跨列/跨行合并）。没有封面时封面不是按钮，点卡片仍然开记录详情。 */
   onOpenImages: (images: BitableAttachment[], index: number) => void;
+  /** 关联解析上下文（同一文档的 tables）。 */
+  ctx?: BitableDisplayContext;
 }
 
-export function BitableGalleryView({ noteId, table, view, records, onOpenRecord, onOpenImages }: BitableGalleryViewProps) {
+export function BitableGalleryView({ noteId, table, view, records, onOpenRecord, onOpenImages, ctx }: BitableGalleryViewProps) {
   const cardFields = galleryCardFields(table, view);
   const coverField = galleryCoverField(table, view);
   /** 封面所在**单元格**里的全部图片（顺序 = 单元格内顺序）：预览范围就限定在这里。 */
@@ -40,7 +41,7 @@ export function BitableGalleryView({ noteId, table, view, records, onOpenRecord,
   const showNames = view.galleryShowFieldNames !== false;
   const compact = view.gallerySize === "compact";
   const fit = view.galleryFit === "contain" ? "contain" : "cover";
-  const coverSrc = (file: string) => withAssetAccessToken(withAssetWidth(ASSET_ORIGIN + "/" + noteId + "/" + file, assetThumbWidthForCss(GALLERY_COVER_PX)));
+  const coverSrc = (file: string) => bitableAssetUrl(noteId, file, GALLERY_COVER_PX);
 
   if (records.length === 0) {
     return <div className="bt-gallery-empty">当前视图没有记录。</div>;
@@ -65,9 +66,9 @@ export function BitableGalleryView({ noteId, table, view, records, onOpenRecord,
               </div>
             )}
             <div className="bt-gallery-body">
-              <div className="bt-gallery-title">{bitableRecordTitle(table, record)}</div>
+              <div className="bt-gallery-title">{bitableRecordTitle(table, record, ctx)}</div>
               {cardFields.map((field) => {
-                const text = bitableFieldText(record, field);
+                const text = bitableFieldText(record, field, ctx);
                 if (!text) return null;   // 空字段不上卡
                 return (
                   <div key={field.id} className="bt-gallery-field">

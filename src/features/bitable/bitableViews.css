@@ -6,12 +6,20 @@
  * src/styles/cssLayers.test.ts 围栏；只走 --lake-* 令牌，无颜色字面量、无 !important。
  */
 /* 浮层面板里的说明/提示文案（看板配置的「没有单选字段」等） */
-/* ── 分组（T03 多级 + 复刻云端语雀 260929）────────────────────────────────
-   云端口径（Edge 实测 .lakex-viewer-grid-group-*）：分组头是**整行**（56px）——
-   左侧「折叠钮 24×24 + 分组值」，右侧**按列分格**显示本组统计（右对齐，首列缺省显示
-   「N 条记录」）；组内记录之后有一条 40px 的「加进本组」圆钮行；顶级分组之间 20px 间隔。
-   本文件的 .bt-group-* 是该分组的**单一来源**（原 bitableEditor.css 里的旧规则已移出）。 */
-.bt-group-row td { background: var(--lake-bg-block); }
+/* ── 分组（单级；复刻云端语雀 260929）──────────────────────────────────────
+   `view.groups` 当前产品只消费第 0 条。分组头是整行：折叠钮 + 分组值 + 本组统计；
+   记录后有一条「加进本组」；组间留 20px。组本身只是一张白底 + 边框 + 圆角卡片，
+   不再有多级嵌套和灰色容器。本文件的 .bt-group-* 是该分组的**单一来源**。 */
+.bt-group-start > td, .bt-group-body > td, .bt-group-end > td { background: var(--lake-bg-panel); }
+/* 卡片边线同样用更浅一档的 --lake-border-2（与表格线一致；云端实测卡片边 = rgb(244,245,245)） */
+.bt-group-start > td:first-child, .bt-group-body > td:first-child, .bt-group-end > td:first-child { border-left: 1px solid var(--lake-border-2); }
+.bt-group-start > td:last-child, .bt-group-body > td:last-child, .bt-group-end > td:last-child { border-right: 1px solid var(--lake-border-2); }
+.bt-group-start > td { border-top: 1px solid var(--lake-border-2); }
+.bt-group-end > td { border-bottom: 1px solid var(--lake-border-2); }
+.bt-group-start > td:first-child { border-top-left-radius: var(--lake-radius-sm); }
+.bt-group-start > td:last-child { border-top-right-radius: var(--lake-radius-sm); }
+.bt-group-end > td:first-child { border-bottom-left-radius: var(--lake-radius-sm); }
+.bt-group-end > td:last-child { border-bottom-right-radius: var(--lake-radius-sm); }
 /* 分组头是**表格行**：内容必须**不进流**（绝对定位内层），否则它的长文本会参与 table-layout:auto 的
    列宽计算，把首列撑开、与记录行错位（260929 实测：表头首列 482px vs 记录行 80px）。 */
 .bt-group-cell { position: relative; height: 36px; padding: 0; font-size: 12px; color: var(--lake-text-1); cursor: pointer; }
@@ -25,15 +33,13 @@
 .bt-group-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--lake-font-weight-medium); }
 /* 首列统计：可被分组值压缩，**下限固定 80px**（260929 云端实测：分组值变长时该格 109 → 80，其余统计格不动）；
    压到底之后由分组值省略号兜底；tooltip 给全文。 */
-.bt-group-head-stat { flex: 0 1 auto; align-self: stretch; min-width: 80px; display: flex; align-items: center; justify-content: flex-end; padding: 0 8px; background: var(--lake-bg-panel); border-left: 1px solid var(--lake-border-2); color: var(--lake-text-3); }
-/* 层级缩进（T03 多级）：只动分组值，不缩统计格 */
-.bt-group-row.level-1 .bt-group-label { padding-left: 18px; }
-.bt-group-row.level-2 .bt-group-label { padding-left: 36px; }
+.bt-group-head-stat { flex: 0 1 auto; align-self: stretch; min-width: 80px; display: flex; align-items: center; justify-content: flex-end; padding: 0 8px; color: var(--lake-text-3); }
 /* 分组汇总行固定用「低」档 36px，**不随 行高 设置变化**（用户 260929 定稿） */
 .bt-group-stat { height: 36px; padding: 0 8px; vertical-align: middle; }
-/* 统计格（分组头 / 底部汇总行**共用**）：白底 chip + 极浅竖分隔线，对齐云端 .lakex-viewer-grid-group-header-column。
-   限定「行 + 格」是因为分组行/汇总行本身带灰底（.bt-group-row td），白色必须落在「格」这一层（归属问题，不是覆盖）。 */
-.bt-group-row .bt-group-stat, .bt-stat-row .bt-stat-cell { background: var(--lake-bg-panel); border-left: 1px solid var(--lake-border-2); }
+/* 统计格（分组头 / 底部汇总行**共用**）：分组头随卡片白底（见下 .bt-group-row .bt-group-stat）。
+   **行内不画单元格竖线**（用户 260929，云端实测：汇总行整行无竖线）——汇总行按「一整条」读，
+   光标落在哪一格就把那一格加重一档（云端口径：未加重时统计格与所在行同色）。 */
+.bt-group-row .bt-group-stat { background: var(--lake-bg-panel); }
 /* StatCell 内容：右对齐 + ▾；**未配置时整块 opacity:0，仅 hover 显形**（云端口径：默认空白、不出现「统计」字样） */
 .bt-stat { display: flex; align-items: center; justify-content: flex-end; gap: 2px; width: 100%; height: 100%; border: 0; background: transparent; padding: 0; font: inherit; font-size: 12px; color: var(--lake-text-3); cursor: pointer; }
 .bt-stat-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -45,22 +51,36 @@
 .bt-add-round { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-text-2); cursor: pointer; }
 .bt-add-round:hover { color: var(--lake-accent); border-color: var(--lake-accent); }
 .bt-add-round:disabled { cursor: default; color: var(--lake-text-4); }
-/* 「加进本组」：**不占行**（行高 0），圆钮绝对定位**悬浮在分组边界线上**（对齐云端图 2 的悬浮样式） */
-/* 「加进本组」：**有自己的一行空间**，但**不画行线**（不要把它嵌到分组边线上：那样又丑又不好点） */
-.bt-group-add-row td { height: 32px; padding: 0; border: 0; background: transparent; vertical-align: middle; }
-.bt-group-add-row .bt-add-round { margin-left: 16px; }
-/* 组间间隔（云端 .lakex-viewer-grid-group-gap-line = 20px） */
-.bt-group-gap td { height: 20px; padding: 0; background: var(--lake-bg-canvas); }
+/* 「加进本组」：**有自己的一行空间**，但**不画行线**（不要把它嵌到分组边线上：那样又丑又不好点）。
+   底色 = 分组底衬（260929 用户：复刻云端——加号区在卡片**之外**的浅灰通道上，卡片只含分组头 + 记录）。 */
+.bt-group-add-row td { height: 32px; padding: 0; border: 0; background: var(--lake-bg-subtle); vertical-align: middle; }
+/* 明确的 260929 用户口径：+ 行**下方不再画线**；左右/上边仍由所属区域卡片负责。 */
+.bt-grid .bt-group-add-row > td { border-bottom: 0; }
+/* ＋号与**编号列**同一格、居中 ⇒ 正好落在行号正下方（用户 260929）。
+   表底「添加记录」那一行同用这个类，两处几何一致（同一交互只有一套坐标）。 */
+.bt-add-index { text-align: center; }
+/* 组间间隔（云端 .lakex-viewer-grid-group-gap-line = 20px）：属于分组底衬 ⇒ 浅灰 */
+.bt-grid .bt-group-gap > td { height: 20px; padding: 0; border: 0; background: var(--lake-bg-subtle); }
+
+/* ── 分组底衬（260929 用户：用浅灰背景把分组通道与白卡分开）────────────────────
+   云端的做法是「分组容器浅灰、卡片（分组头 + 记录行）纯白」，于是灰只在**卡片之外**露出来：
+   ① 表头与第一个分组之间的 20px 间隙；② 每组记录之后的「加进本组」通道；③ 组间 20px；
+   ④ 最后一组之后的空白（撑满一屏的占位行）。四处用同一个面，才是「一条通道」而不是几段灰条。
+   **不分组时表格下方的空白同样走这个面**（用户 260929：表格区就是一块浅灰画布，白底只留给数据行），
+   所以占位行不按分组条件区分，规则写在下面 .bt-grid-filler td 那条里。 */
+.bt-group-head-gap > td { height: 20px; padding: 0; border: 0; background: var(--lake-bg-subtle); }
 
 /* 表格底部的列统计行（T01）：**常驻**贴底 + **薄**（24px，不随 行高 变）；
-   首格缺省给总记录数，未配置的列显示 `—`。状态栏已由 chrome.css 上移让位。 */
+   首格缺省给总记录数（多选时改显示选择量，见 .bt-stat-index.is-selection）。状态栏已由 chrome.css 让位。
+   260929 用户定稿：**底栏与表格区用同一个底衬灰**（融合进灰色画布、不再是一条白条），
+   光标落在哪一格就把那一格加重一档；行内不画单元格竖线。 */
 .bt-stat-row td {
   position: sticky;
   bottom: 0;
   z-index: 1;
   height: 24px;
   padding: 0 8px;
-  background: var(--lake-bg-block);
+  background: var(--lake-bg-subtle);
   font-size: 11px;
   color: var(--lake-text-3);
   text-align: right;
@@ -69,9 +89,18 @@
   text-overflow: ellipsis;
 }
 .bt-stat-index { text-align: left; }
+/* 多选时底栏最左格改显示这一批的选择量（用户 260929）：用强调色标出「这是选择态、不是总条数」 */
+.bt-stat-index.is-selection { color: var(--lake-accent-text); font-weight: var(--lake-font-weight-medium); }
+/* 汇总行整行处理：**单元格之间不画竖线**（分组头 / 底部汇总栏同一条规则），末格的右边线留给卡片/表格外缘 */
+.bt-group-row > td:not(:last-child), .bt-stat-row > td:not(:last-child) { border-right-width: 0; }
+/* 「光标加重一档」：加重的范围 = 光标所在的那一格（空尾格不参与，它没有汇总内容） */
+.bt-stat-row > td:not(:empty):hover { background: var(--lake-bg-block); }
+.bt-group-row .bt-group-head-stat:hover, .bt-group-row .bt-group-stat:not(:empty):hover { background: var(--lake-bg-block); }
 /* 内容不足一屏时把表格撑满（占位行吃掉剩余高度），底部汇总栏才会贴**视图**底部而不是跟在内容后面 */
 .bt-grid { min-height: 100%; }
-.bt-grid-filler td { height: 100%; padding: 0; border: 0; background: transparent; }
+/* 表格下方的空白（撑满一屏的占位行）= 同一块浅灰画布：分组时它是分组通道的延续，
+   不分组时它就是表格区的底色 —— 两种形态同一来源，不按分组条件分叉。 */
+.bt-grid-filler td { height: 100%; padding: 0; border: 0; background: var(--lake-bg-subtle); }
 
 .bt-panel-note {
   margin: 4px 0;

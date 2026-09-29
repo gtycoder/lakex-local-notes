@@ -7,7 +7,7 @@ import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "rea
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { Drawer } from "../../components/ui/Overlay";
-import { bitableRecordTitle, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments, type BitableAttachment, type BitableRecord, type BitableTable } from "../../core/bitableDoc.js";
+import { bitableRecordTitle, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments, type BitableAttachment, type BitableDisplayContext, type BitableRecord, type BitableTable } from "../../core/bitableDoc.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
 
 export interface BitableRecordDrawerProps {
@@ -25,6 +25,8 @@ export interface BitableRecordDrawerProps {
   onOpenAsset: (attachment: BitableAttachment) => void;
   /** 点图片预览：只传**本单元格内**的图片 + 下标。 */
   onOpenImages: (images: BitableAttachment[], index: number) => void;
+  /** 关联解析上下文（同一文档的 tables）。 */
+  ctx?: BitableDisplayContext;
 }
 
 const DRAWER_WIDTH_KEY = "lake-notes-v3.bitable-drawer-width";
@@ -56,7 +58,7 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
           <button type="button" className="bt-icon-btn" onClick={props.onPrev} title="上一条" aria-label="上一条"><ChevronUp size={15} /></button>
           <button type="button" className="bt-icon-btn" onClick={props.onNext} title="下一条" aria-label="下一条"><ChevronDown size={15} /></button>
         </div>
-        <h3 className="bt-drawer-title">{bitableRecordTitle(table, record)}</h3>
+        <h3 className="bt-drawer-title">{bitableRecordTitle(table, record, props.ctx)}</h3>
         <button type="button" className="bt-icon-btn" onClick={props.onClose} title="关闭" aria-label="关闭"><X size={16} /></button>
       </header>
       <div className="bt-drawer-body">
@@ -71,10 +73,13 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
               <CellEditor
                 field={field}
                 record={record}
+                ctx={props.ctx}
                 value={record.values[field.id]}
                 readOnly={props.readOnly}
                 onChange={(value) => props.onSetValue(record.id, field.id, value)}
                 onAddOption={(name) => props.onAddOption(field.id, name, record.id)}
+                noteId={props.noteId}
+                onOpenImages={props.onOpenImages}
                 renderAttachment={(imageOnly) => (
                   <AttachmentCell
                     noteId={props.noteId}

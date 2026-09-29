@@ -63,9 +63,9 @@ results.afterDwell = { mode: await mode(), left: await evaluate("Math.round(docu
 // ⑤ 移入面板 ⇒ 保持悬浮
 await move(60, 200); await wait(320);
 results.insidePanel = await mode();
-// ⑥ 移到正文 ⇒ 220ms 后收起
-await move(700, 320); await wait(500);
-results.afterLeave = await mode();
+// ⑥ 移到正文 ⇒ 过 220ms 收起；给真实窗口留出指针事件派发的余量。
+await move(700, 320); await waitFor(isMode("collapsed"), 1500);
+results.afterLeave = { mode: await mode(), handle: await handleOn() };
 // ⑦ 收起态进热区后**立刻**点把手 ⇒ 固定（面板浮出后会盖住把手，故必须在 240ms 窗口内点）
 await move(5, 140); await click(5, 140); await wait(340);
 results.afterHandleClick = await mode();
@@ -84,7 +84,8 @@ if (results.entered.modeEarly === "floating") fail.push("③ 未到 240ms 就浮
 if (!String(results.afterDwell.mode).includes("floating")) fail.push("④ 驻留后未浮出");
 if (results.afterDwell.left !== 0) fail.push("④ 悬浮面板未贴左缘");
 if (results.insidePanel !== "floating") fail.push("⑤ 面板内却收起（走廊并集失效）");
-if (results.afterLeave !== "collapsed") fail.push("⑥ 移到正文后未收起");
+if (results.afterLeave.mode !== "collapsed") fail.push("⑥ 移到正文后未收起");
+if (results.afterLeave.handle) fail.push("⑥ 移到正文后把手仍残留");
 if (results.afterHandleClick !== "docked") fail.push("⑦ 点把手未固定");
 if (results.cmdBracket1 !== "collapsed") fail.push("⑧ ⌘] 未收起");
 if (results.cmdBracket2 !== "docked") fail.push("⑧ 再 ⌘] 未复原固定");

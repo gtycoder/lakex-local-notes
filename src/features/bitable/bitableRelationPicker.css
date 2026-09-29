@@ -1,0 +1,99 @@
+/* 关联记录选择器（260929）：全局大弹窗 —— 两个 tab + 搜索/筛选/排序 + 目标表整表。
+ * 表面与层序仍由 Overlay 原语的 .ln-dialog / .ln-popover 提供，这里只写**内容级**布局与几何。 */
+
+/* 大弹窗：宽度吃满可用区、高度固定，主区域自己滚动（不把按钮挤出视口）。 */
+.bt-rel-picker { width: min(1080px, 92vw); height: min(720px, 82vh); }
+.bt-rel-scope { flex: 0 0 auto; font-size: 12px; color: var(--lake-text-3); }
+
+/* 页签行：原语自带左右内边距与底部 1px 分隔线，这里只给上下留白 */
+.bt-rel-tabs { flex: 0 0 auto; padding: var(--lake-space-lg) 0 0; }
+.bt-rel-toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: var(--lake-space-md); padding: 0 var(--lake-space-xl) var(--lake-space-lg); }
+.bt-rel-toolbar .bt-icon-btn.is-on { background: var(--lake-accent-tint); color: var(--lake-accent); }
+
+.bt-rel-search {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  height: 32px;
+  padding: 0 var(--lake-space-lg);
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-3);
+  background: var(--lake-bg-panel);
+}
+
+.bt-rel-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: 13px;
+}
+
+/* 筛选 / 排序：弹窗内的**内联条**（不嵌气泡——嵌套气泡会被外层面板压住且被外点关闭误伤）。 */
+.bt-rel-config { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl); background: var(--lake-bg-subtle); border-top: 1px solid var(--lake-border-2); }
+.bt-rel-config-title { flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--lake-text-2); }
+.bt-rel-config .bt-rule-row { flex: 1 1 auto; min-width: 0; }
+
+/* 主区域：整表；表头吸顶，列宽由内容决定但不超长（超长省略 + title 全文）。 */
+.bt-rel-body { flex: 1 1 auto; min-height: 0; overflow: auto; border-top: 1px solid var(--lake-border-2); }
+.bt-rel-grid { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.bt-rel-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--lake-space-md) var(--lake-space-lg);
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--lake-text-2);
+  background: var(--lake-bg-subtle);
+  border-right: 1px solid var(--lake-border-2);
+  border-bottom: 1px solid var(--lake-border-2);
+}
+
+.bt-rel-grid td {
+  height: 36px;
+  max-width: 320px;
+  padding: 0 var(--lake-space-lg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lake-text-1);
+  border-right: 1px solid var(--lake-border-2);
+  border-bottom: 1px solid var(--lake-border-2);
+}
+
+.bt-rel-grid tbody tr { cursor: pointer; }
+.bt-rel-grid tbody tr:hover td { background: var(--lake-bg-hover); }
+.bt-rel-grid tbody tr.is-selected td { background: var(--lake-accent-tint); }
+/* 复选框列：只有这一列不需要左右内边距（提高一级特异性即可，不用 !important）。 */
+.bt-rel-grid .bt-rel-check { width: 40px; padding-left: 0; padding-right: 0; text-align: center; }
+.bt-rel-blank { color: var(--lake-text-4); }
+
+/* 图片/附件格：图片出缩略图（真的加载），其余附件出「图标 + 文件名」chip */
+.bt-rel-files { display: flex; align-items: center; gap: var(--lake-space-xs); }
+.bt-rel-thumb { width: 32px; height: 32px; flex: 0 0 auto; object-fit: cover; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-subtle); cursor: pointer; }
+.bt-rel-thumb:hover { border-color: var(--lake-border-strong); }
+.bt-rel-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lake-space-xxs);
+  max-width: 160px;
+  padding: 2px var(--lake-space-sm);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--lake-text-2);
+  background: var(--lake-bg-block);
+  border-radius: var(--lake-radius-xs);
+}
+
+.bt-rel-empty { margin: 0; padding: var(--lake-space-huge); text-align: center; font-size: 13px; color: var(--lake-text-3); }
+
+.bt-rel-foot { flex: 0 0 auto; display: flex; align-items: center; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl); border-top: 1px solid var(--lake-border-2); }
+.bt-rel-count { flex: 1 1 auto; font-size: 12px; color: var(--lake-text-2); }

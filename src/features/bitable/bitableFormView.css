@@ -15,10 +15,11 @@
 
 .bt-form-tabs {
   flex: 0 0 auto;
-  display: flex;
-  justify-content: center;
-  padding: 10px 12px 0;
+  padding: 10px 0 0;
 }
+
+/* 表单是居中版面：页签项在原语里居中，分隔线仍横贯整壳（几何由原语给，这里只调对齐） */
+.bt-form-tabs .ln-tabs__track { justify-content: center; }
 
 .bt-form-canvas.is-preview {
   max-width: 760px;

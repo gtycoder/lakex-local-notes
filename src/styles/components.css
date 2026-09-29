@@ -174,41 +174,7 @@
 }
 .ln-close:hover { opacity: 1; background: var(--lake-bg-hover); }
 
-/* 页签：等分整行，选中灰底（思源设置面板顶部 tab 语言） */
-/* 页签 = 底部指示线（本应用不做阴影/浮起强调）：轨道只留一条 hairline，
- * 选中项靠「主色字 + 2px 主色下划线」区分；未选中项同宽可点，hover 轻底。 */
-.ln-tabs { display: flex; align-items: stretch; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--lake-border-1); }
-.ln-tabs__track { display: flex; flex: 1 1 auto; min-width: 0; gap: 2px; }
-.ln-tabs__item {
-  position: relative;
-  flex: 1 1 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--lake-radius-sm) var(--lake-radius-sm) 0 0;
-  color: var(--lake-text-2);
-  background: transparent;
-  font-size: 13px;
-  cursor: pointer;
-}
-.ln-tabs__item.is-active::after {
-  content: "";
-  position: absolute;
-  right: 10px;
-  bottom: -1px;
-  left: 10px;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--lake-accent);
-  transform-origin: 50% 50%;
-  animation: ln-indicator-in var(--lake-motion-fast) var(--lake-ease-standard) both;
-}
-.ln-tabs__action { flex: 0 0 auto; align-self: center; height: 28px; font-size: 12px; }
+/* 页签（.ln-tabs）已收编到 kit 层单一来源（260929：墨线 + 计数徽标原语，见 kit.css）。 */
 
 .ln-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px 0; }
 .ln-toolbar__info {

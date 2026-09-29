@@ -66,11 +66,28 @@ export interface BitableFieldOption {
   color?: string;
 }
 
-/** 关联占位：v1 只记录目标表，不联动、单元格不可填值。 */
+/**
+ * 关联字段配置：**同一文档内**不同数据表之间的记录关系。
+ * 只保存目标记录 id（不复制目标数据），因此所有解释都必须有目标表上下文（见 BitableDisplayContext）。
+ */
 export interface BitableRelation {
+  /** 目标数据表 id（同一文档内；缺省 = 未配置，界面显示为空）。 */
   tableId?: string;
-  multiple?: boolean;
+  /** oneWay 单向 / twoWay 双向（双向的反向字段由 T02B.3 维护；本批默认单向）。 */
+  mode?: "oneWay" | "twoWay";
+  /** 是否允许添加多个记录（默认 true；关闭后单元格最多保留一条）。 */
+  allowMultiple?: boolean;
+  /**
+   * **数据范围（260929 用户追加）**：绑定目标表的一个**视图**；缺省 = 从目标表全部记录里选。
+   * 只约束「选择器能选到什么」，不改变已有值的展示（已选中的记录即使被视图过滤掉也照常显示）。
+   */
+  viewId?: string;
+  /** 双向关联的对侧字段 id（T02B.3）。 */
+  pairedFieldId?: string;
 }
+
+/** 新建关联字段的默认配置：单向 + 允许多个记录（对齐飞书「默认勾选」）。 */
+export const BITABLE_RELATION_DEFAULT: Readonly<BitableRelation> = { mode: "oneWay", allowMultiple: true };
 
 export interface BitableField {
   id: string;
@@ -188,7 +205,27 @@ export function sortModeLabel(field: BitableField, mode: BitableSortMode): strin
   return BITABLE_SORT_MODE_LABEL[mode];
 }
 
-/** 分组规则（云端为单级；模型留数组以便后续多级）。 */
+/** 排序方式 ↔ (mode, desc) 的**单一映射**（UI 只认「排序方式」一个下拉；T04 语义排序）。 */
+export function sortModeOf(rule: BitableSortRule): BitableSortMode {
+  if (rule.mode === "optionOrder") return rule.desc ? "optionReverse" : "optionOrder";
+  return rule.desc ? "desc" : "asc";
+}
+
+/** 把「排序方式」写回规则（选项序 = optionOrder + desc 的正逆）。 */
+export function applySortMode(rule: BitableSortRule, mode: BitableSortMode): BitableSortRule {
+  if (mode === "optionOrder") return { ...rule, mode: "optionOrder", desc: false };
+  if (mode === "optionReverse") return { ...rule, mode: "optionOrder", desc: true };
+  return { fieldId: rule.fieldId, desc: mode === "desc" };
+}
+
+/** 换字段时丢掉该字段不支持的语义排序（只有单选/多选有「选项顺序」）。 */
+export function changeSortField(fields: readonly BitableField[], rule: BitableSortRule, fieldId: string): BitableSortRule {
+  const field = fields.find((item) => item.id === fieldId);
+  const keep = rule.mode === "optionOrder" && (field?.type === "select" || field?.type === "multiSelect");
+  return { fieldId, desc: rule.desc, ...(keep ? { mode: "optionOrder" as const } : {}) };
+}
+
+/** 分组规则（当前产品只支持一级；持久化仍保留数组形态以避免正文结构 churn）。 */
 export interface BitableGroupRule {
   fieldId: string;
   desc?: boolean;
@@ -357,7 +394,7 @@ export function createBitableFieldOptions(names: string[], colors?: Array<string
 export function createBitableField(type: BitableFieldType, name?: string, id = newBitableId("fld")): BitableField {
   const field: BitableField = { id, name: name ?? BITABLE_FIELD_TYPE_LABEL[type], type };
   if (type === "select" || type === "multiSelect") field.options = [];
-  if (type === "relation") field.relation = {};
+  if (type === "relation") field.relation = { ...BITABLE_RELATION_DEFAULT };
   return field;
 }
 
@@ -372,13 +409,16 @@ export function createBitableRecord(id = newBitableId("rec")): BitableRecord {
   return { id, values: {}, createdAt: ts, updatedAt: ts };
 }
 
+/**
+ * 新建数据表的**产品默认**（260929 用户口径）：**只有 1 列文本 + 3 行空白记录**。
+ * 原先预置的「单选 / 日期」两列已取消——用户不需要猜我们要什么样的表结构，加列由用户自己加。
+ * （新建多维表文档时的首张表走同一函数，口径一致。）
+ */
 export function createDefaultBitableTable(name = "数据表 1", id = newBitableId("tbl")): BitableTable {
   const primary = createBitableField("text", "文本");
-  const status = createBitableField("select", "单选");
-  status.options = createBitableFieldOptions(["待开始", "进行中", "已完成"], ["#d3f0df", "#fdf3c7", "#d6e6fb"]);
-  const date = createBitableField("date", "日期");
   const grid = createBitableView("grid", "表格视图");
-  return { id, name, fields: [primary, status, date], records: [], views: [grid], activeViewId: grid.id };
+  const records = [createBitableRecord(), createBitableRecord(), createBitableRecord()];
+  return { id, name, fields: [primary], records, views: [grid], activeViewId: grid.id };
 }
 
 /** 新建多维表文档的正文（1 张默认数据表；随后由编辑器保存覆盖）。 */
@@ -414,6 +454,15 @@ function normalizeField(raw: unknown): BitableField | null {
     next.options = (field.options as unknown[])
       .filter((o): o is BitableFieldOption => !!o && typeof o === "object" && typeof (o as BitableFieldOption).id === "string" && typeof (o as BitableFieldOption).name === "string")
       .map((o) => ({ ...o }));
+  }
+  // 关联配置归一：只保留认识的键，方向/多选补默认（缺省 = 单向 + 允许多个）。
+  if (field.type === "relation") {
+    const rel = field.relation && typeof field.relation === "object" ? field.relation : {};
+    const relation: BitableRelation = { mode: rel.mode === "twoWay" ? "twoWay" : "oneWay", allowMultiple: rel.allowMultiple !== false };
+    if (typeof rel.tableId === "string" && rel.tableId) relation.tableId = rel.tableId;
+    if (typeof rel.viewId === "string" && rel.viewId) relation.viewId = rel.viewId;
+    if (typeof rel.pairedFieldId === "string" && rel.pairedFieldId) relation.pairedFieldId = rel.pairedFieldId;
+    next.relation = relation;
   }
   return next;
 }
@@ -456,7 +505,8 @@ function normalizeView(raw: unknown): BitableView | null {
   if (view.galleryFit !== "cover" && view.galleryFit !== "contain") delete next.galleryFit;
   if (!Array.isArray(view.filters)) delete next.filters;
   if (!Array.isArray(view.sorts)) delete next.sorts;
-  if (!Array.isArray(view.groups)) delete next.groups;
+  if (Array.isArray(view.groups)) next.groups = view.groups.slice(0, 1);
+  else delete next.groups;
   if (!Array.isArray(view.highlightDuplicateFieldIds)) delete next.highlightDuplicateFieldIds;
   if (!view.columnStats || typeof view.columnStats !== "object") delete next.columnStats;
   if (!view.columnTextColors || typeof view.columnTextColors !== "object") delete next.columnTextColors;
@@ -531,6 +581,18 @@ export const BITABLE_STAT_LABEL: Record<BitableStatType, string> = {
   earliestDate: "最早时间", latestDate: "最晚时间", dateRange: "时间范围（日）", monthRange: "时间范围（月）",
 };
 
+/**
+ * 汇总格里的**展示文案**（与选择器里的选项文案分开）。
+ *
+ * 260929 用户定稿：选了「记录总数」时格子里显示 `共 N 条`（云端原文是 `N 条记录`）。
+ * 其余口径沿用「口径名 值」。选项列表仍走 `BITABLE_STAT_LABEL`（云端逐字原文）——
+ * 两者语义不同，所以不能共用一个串。
+ */
+export function statDisplayText(stat: BitableStatType, value: string): string {
+  if (stat === "count") return "共 " + value + " 条";
+  return BITABLE_STAT_LABEL[stat] + " " + value;
+}
+
 /** 云端的「通用类」字段（bundle 里的 e0e）：文本/单选/多选/数字/评分/进度/日期/图片/附件/链接/创建·修改时间…，**复选框不在内**。 */
 const GENERIC_STATS: readonly BitableStatType[] = ["filled", "empty", "unique", "percentFilled", "percentEmpty", "percentUnique"];
 const CHECKBOX_STATS: readonly BitableStatType[] = ["checked", "unchecked", "percentChecked", "percentUnchecked"];
@@ -548,7 +610,8 @@ export function statsForField(field: BitableField): BitableStatType[] {
 /** 视图中配置的统计类型（未配置 / 不认识 → undefined = 不统计）。 */
 export function statForField(view: BitableView | undefined, fieldId: string): BitableStatType | undefined {
   const stat = view?.columnStats?.[fieldId];
-  return typeof stat === "string" && stat in BITABLE_STAT_LABEL ? (stat as BitableStatType) : undefined;
+  // hasOwnProperty：`stat in LABEL` 会命中 Object.prototype（脏正文里的 "toString" 之类会穿透）
+  return typeof stat === "string" && Object.prototype.hasOwnProperty.call(BITABLE_STAT_LABEL, stat) ? (stat as BitableStatType) : undefined;
 }
 
 function formatStatNumber(value: number): string {
@@ -719,6 +782,187 @@ export function attachmentGridColumns(count: number): number {
   return Math.min(ATTACHMENT_GRID.maxCols, Math.max(Math.min(count, 3), rows3));
 }
 
+/**
+ * **关联解析上下文**：把「同一文档的 tables」带进展示层。
+ * 关联字段只存目标记录 id ⇒ 任何解释都必须有目标表；不传上下文时关联一律展示为空。
+ * 表格 / 记录详情 / 看板 / 画册 / 日历 / 表单 / 移动端 / 搜索共用这一套口径，
+ * 任何 UI 都不得自己解析目标记录（专项 §6.4）。
+ */
+export interface BitableDisplayContext {
+  tables: readonly BitableTable[];
+}
+
+/** 关联单元格值 → 目标记录 id 数组（去重、保序；非法条目丢弃）。单条模式也存单元素数组。 */
+export function relationRecordIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || item === "" || seen.has(item)) continue;
+    seen.add(item);
+    out.push(item);
+  }
+  return out;
+}
+
+/**
+ * 关联选择器的**草稿**切换（纯函数；UI 只改本机草稿，点「确认」才写正文）：
+ * - `allowMultiple`：该目标记录来回切换（增删）；
+ * - 单条模式：选中即替换，再点当前同一条即取消。
+ */
+export function toggleRelationDraft(draft: readonly string[], recordId: string, allowMultiple: boolean): string[] {
+  const next = [...draft];
+  if (!allowMultiple) return next.length === 1 && next[0] === recordId ? [] : [recordId];
+  const index = next.indexOf(recordId);
+  if (index >= 0) next.splice(index, 1);
+  else next.push(recordId);
+  return next;
+}
+
+/** 关联字段的目标数据表（同一文档内；未配置 / 目标表已删 → undefined，界面显示为空、**不级联清理来源字段**）。 */
+export function relationTargetTable(ctx: BitableDisplayContext | undefined, field: BitableField): BitableTable | undefined {
+  const tableId = field.relation?.tableId;
+  if (!tableId || !ctx) return undefined;
+  return ctx.tables.find((table) => table.id === tableId);
+}
+
+/** 关联单元格 → 现存目标记录（按存值顺序；已删 / 失效目标跳过，内部 id 原样保留、恢复后自动重现）。 */
+export function relationTargetRecords(ctx: BitableDisplayContext | undefined, field: BitableField, value: unknown): BitableRecord[] {
+  const target = relationTargetTable(ctx, field);
+  if (!target) return [];
+  const byId = new Map(target.records.map((record) => [record.id, record] as const));
+  return relationRecordIds(value)
+    .map((id) => byId.get(id))
+    .filter((record): record is BitableRecord => !!record);
+}
+
+/**
+ * 关联字段绑定的**数据范围视图**（`relation.viewId` 指向目标表的某个视图）。
+ * 未配置 / 目标表缺失 / 视图已被删 → undefined（回落「目标表全部记录」，不级联、不报错）。
+ */
+export function relationTargetView(ctx: BitableDisplayContext | undefined, field: BitableField): BitableView | undefined {
+  const table = relationTargetTable(ctx, field);
+  const viewId = field.relation?.viewId;
+  if (!table || typeof viewId !== "string" || !viewId) return undefined;
+  return table.views.find((view) => view.id === viewId);
+}
+
+/**
+ * **关联选择器能选的记录**：绑定了数据范围视图就走该视图的筛选 + 排序（`applyViewToRecords`），
+ * 否则就是目标表全部记录。只影响「能选什么」，不影响已有值的展示解析。
+ */
+export function relationCandidateRecords(ctx: BitableDisplayContext | undefined, field: BitableField): BitableRecord[] {
+  const target = relationTargetTable(ctx, field);
+  if (!target) return [];
+  const view = relationTargetView(ctx, field);
+  return view ? applyViewToRecords(target, view) : [...target.records];
+}
+
+// ---- 双向关联（T02B.3；全部纯函数，操作 tables 数组并返回新数组） ----
+
+/** 反向字段默认名：**来源表名 + 来源字段名**（专项 §2.4；创建后允许像普通字段一样重命名）。 */
+export function relationReverseFieldName(sourceTable: BitableTable, field: BitableField): string {
+  return sourceTable.name + field.name;
+}
+
+/** 把字段降级为单向：保留 tableId / allowMultiple，清掉 mode=twoWay 与 pairedFieldId。 */
+function asOneWay(field: BitableField): BitableField {
+  if (!field.relation) return field;
+  const relation: BitableRelation = { ...field.relation, mode: "oneWay" };
+  delete relation.pairedFieldId;
+  return { ...field, relation };
+}
+
+/**
+ * **建立双向关联**（T02B.3）：在目标表创建反向字段、两侧写 `pairedFieldId`、`mode="twoWay"`，
+ * 并把来源表**已有值**镜像到反向侧（所以「A 关联 B 后，B 反向出现 A」对历史数据也成立）。
+ * 返回新的 tables；来源字段非关联 / 目标表缺失 / 已配对时原样返回（幂等）。
+ */
+export function createRelationPair(tables: readonly BitableTable[], sourceTableId: string, fieldId: string): BitableTable[] {
+  const source = tables.find((table) => table.id === sourceTableId);
+  const field = source?.fields.find((f) => f.id === fieldId);
+  if (!source || !field || field.type !== "relation") return [...tables];
+  const target = relationTargetTable({ tables }, field);
+  if (!target) return [...tables];
+  const pairedId = field.relation?.pairedFieldId;
+  if (typeof pairedId === "string" && target.fields.some((f) => f.id === pairedId)) return [...tables];
+  const reverse: BitableField = {
+    id: newBitableId("fld"),
+    name: relationReverseFieldName(source, field),
+    type: "relation",
+    relation: { tableId: sourceTableId, mode: "twoWay", allowMultiple: field.relation?.allowMultiple !== false, pairedFieldId: field.id },
+  };
+  return tables.map((table) => {
+    if (table.id === sourceTableId) {
+      return { ...table, fields: table.fields.map((f) => (f.id === fieldId ? { ...f, relation: { ...f.relation, mode: "twoWay", pairedFieldId: reverse.id } } : f)) };
+    }
+    if (table.id !== target.id) return table;
+    // 反向侧：凡被来源记录引用过的目标记录，都补上来源记录 id（历史值一次性对齐）
+    const records = table.records.map((record) => {
+      const refs = source.records.filter((r) => relationRecordIds(r.values[fieldId]).includes(record.id)).map((r) => r.id);
+      if (refs.length === 0) return record;
+      const current = relationRecordIds(record.values[reverse.id]);
+      const merged = [...current];
+      for (const id of refs) if (!merged.includes(id)) merged.push(id);
+      if (merged.length === current.length) return record;
+      return { ...record, values: { ...record.values, [reverse.id]: merged } };
+    });
+    return { ...table, fields: [...table.fields, reverse], records };
+  });
+}
+
+/**
+ * **解除双向配对**（删除一侧字段前 / 把「双向」改回「单向」）：清掉对侧的 `pairedFieldId` 并降级为单向，
+ * **两侧数据都原样保留**（专项 §2.4：删一侧保留另一侧字段和数据）。
+ */
+export function unpairRelationFields(tables: readonly BitableTable[], tableId: string, fieldId: string): BitableTable[] {
+  const table = tables.find((t) => t.id === tableId);
+  const field = table?.fields.find((f) => f.id === fieldId);
+  if (!field) return [...tables];
+  const pairedId = field.relation?.pairedFieldId;
+  return tables.map((t) => {
+    let next = t;
+    if (t.id === tableId) next = { ...next, fields: next.fields.map((f) => (f.id === fieldId ? asOneWay(f) : f)) };
+    if (typeof pairedId === "string") next = { ...next, fields: next.fields.map((f) => (f.id === pairedId ? asOneWay(f) : f)) };
+    return next;
+  });
+}
+
+/**
+ * **双向关联的唯一写入口**：把 `recordId` 的关联值设为 `nextIds`，并把增删差集镜像到对侧反向字段
+ * （新增目标 → 对侧记录加上来源 id；移除目标 → 对侧记录去掉来源 id）。只改 id 集合、不复制数据。
+ * 非双向（无 pairedFieldId）时等价于普通写值。
+ */
+export function applyRelationMirror(tables: readonly BitableTable[], tableId: string, fieldId: string, recordId: string, nextIds: readonly string[]): BitableTable[] {
+  const source = tables.find((t) => t.id === tableId);
+  const field = source?.fields.find((f) => f.id === fieldId);
+  if (!source || !field) return [...tables];
+  const prev = relationRecordIds(source.records.find((r) => r.id === recordId)?.values[fieldId]);
+  const next = relationRecordIds(nextIds);
+  const pairedId = field.relation?.pairedFieldId;
+  const pairedTable = typeof pairedId === "string" ? tables.find((t) => t.fields.some((f) => f.id === pairedId)) : undefined;
+  const added = next.filter((id) => !prev.includes(id));
+  const removed = prev.filter((id) => !next.includes(id));
+  return tables.map((t) => {
+    if (t.id === tableId) {
+      return { ...t, records: t.records.map((r) => (r.id === recordId ? { ...r, values: { ...r.values, [fieldId]: next }, updatedAt: nowIso() } : r)) };
+    }
+    if (!pairedTable || t.id !== pairedTable.id || typeof pairedId !== "string") return t;
+    return {
+      ...t,
+      records: t.records.map((record) => {
+        const shouldAdd = added.includes(record.id);
+        const shouldRemove = removed.includes(record.id);
+        if (!shouldAdd && !shouldRemove) return record;
+        const current = relationRecordIds(record.values[pairedId]);
+        const merged = shouldAdd ? (current.includes(recordId) ? current : [...current, recordId]) : current.filter((id) => id !== recordId);
+        if (merged.length === current.length && merged.every((id, index) => id === current[index])) return record;
+        return { ...record, values: { ...record.values, [pairedId]: merged }, updatedAt: nowIso() };
+      }),
+    };
+  });
+}
+
 function optionName(field: BitableField, value: unknown): string {
   const options = field.options ?? [];
   const byId = options.find((o) => o.id === value);
@@ -728,8 +972,11 @@ function optionName(field: BitableField, value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-/** 字段值 → 人类可读文本（列表/搜索/记录标题统一口径）。 */
-export function bitableDisplayValue(field: BitableField, value: unknown): string {
+/**
+ * 字段值 → 人类可读文本（列表/搜索/记录标题统一口径）。
+ * `ctx` 只在**关联字段**需要：它提供同一文档的 tables 以解析目标记录主字段；不传则关联展示为空。
+ */
+export function bitableDisplayValue(field: BitableField, value: unknown, ctx?: BitableDisplayContext): string {
   if (value == null) return "";
   switch (field.type) {
     case "select":
@@ -739,8 +986,16 @@ export function bitableDisplayValue(field: BitableField, value: unknown): string
     case "attachment":
     case "image":
       return bitableAttachments(value).map((a) => a.name).join(", ");
-    case "relation":
-      return "";
+    case "relation": {
+      const target = relationTargetTable(ctx, field);
+      const primary = target?.fields[0];
+      if (!target || !primary) return "";
+      // 只解析**一层**：目标表主字段若也是关联则展示为空 —— 避免两张表互相引用时无限递归。
+      return relationTargetRecords(ctx, field, value)
+        .map((record) => bitableFieldText(record, primary))
+        .filter(Boolean)
+        .join(", ");
+    }
     case "number":
     case "rating":
     case "progress":
@@ -805,18 +1060,18 @@ export function bitableFieldValue(record: BitableRecord, field: BitableField): u
   return record.values[field.id];
 }
 
-/** 字段**展示文本**（记录级，含系统时间）：系统时间展示到分钟；其余走展示值口径。 */
-export function bitableFieldText(record: BitableRecord, field: BitableField): string {
+/** 字段**展示文本**（记录级，含系统时间）：系统时间展示到分钟；其余走展示值口径（关联字段需 ctx）。 */
+export function bitableFieldText(record: BitableRecord, field: BitableField, ctx?: BitableDisplayContext): string {
   if (field.type === "createdTime") return localDateTimeString(record.createdAt);
   if (field.type === "updatedTime") return localDateTimeString(record.updatedAt);
-  return bitableDisplayValue(field, record.values[field.id]);
+  return bitableDisplayValue(field, record.values[field.id], ctx);
 }
 
-/** 记录标题 = 主字段（fields[0]）的展示值；未填 → 「未命名记录」（对齐云端）。 */
-export function bitableRecordTitle(table: BitableTable, record: BitableRecord): string {
+/** 记录标题 = 主字段（fields[0]）的展示值；未填 → 「未命名记录」（对齐云端，关联字段需 ctx）。 */
+export function bitableRecordTitle(table: BitableTable, record: BitableRecord, ctx?: BitableDisplayContext): string {
   const primary = table.fields[0];
   if (!primary) return "未命名记录";
-  return bitableFieldText(record, primary) || "未命名记录";
+  return bitableFieldText(record, primary, ctx) || "未命名记录";
 }
 
 /**
@@ -826,6 +1081,7 @@ export function bitableRecordTitle(table: BitableTable, record: BitableRecord): 
 export function bitableToSearchText(content: string | null | undefined, maxChars = 20000): string {
   const doc = parseBitableBody(content);
   if (!doc) return "";
+  const ctx: BitableDisplayContext = { tables: doc.tables };
   const parts: string[] = [];
   const size = () => parts.join("\n").length;
   for (const table of doc.tables) {
@@ -833,7 +1089,7 @@ export function bitableToSearchText(content: string | null | undefined, maxChars
     for (const record of table.records) {
       const cells: string[] = [];
       for (const field of table.fields) {
-        const text = bitableFieldText(record, field);
+        const text = bitableFieldText(record, field, ctx);
         if (text) cells.push(text);
       }
       if (cells.length > 0) parts.push(cells.join("\t"));
@@ -1020,7 +1276,7 @@ export interface BitableCalendarEvent {
 }
 
 /** 记录 → 日程投影：没有开始日期 / 日期非法的记录不上日历（不猜、不报错）。 */
-export function calendarEvents(table: BitableTable, view: BitableView | undefined, records: BitableRecord[]): BitableCalendarEvent[] {
+export function calendarEvents(table: BitableTable, view: BitableView | undefined, records: BitableRecord[], ctx?: BitableDisplayContext): BitableCalendarEvent[] {
   const startField = calendarStartField(table, view);
   if (!startField) return [];
   const endField = calendarEndField(table, view);
@@ -1042,7 +1298,7 @@ export function calendarEvents(table: BitableTable, view: BitableView | undefine
     }
     events.push({
       recordId: record.id,
-      title: (titleField ? bitableDisplayValue(titleField, record.values[titleField.id]) : "") || "未命名记录",
+      title: (titleField ? bitableDisplayValue(titleField, record.values[titleField.id], ctx) : "") || "未命名记录",
       start, end, color, optionId,
     });
   }
@@ -1260,64 +1516,6 @@ function groupKeyOf(field: BitableField, value: unknown): string {
   return bitableDisplayValue(field, value).trim();
 }
 
-/** 分组最多允许的级数（T03；对齐云端三级）。 */
-export const BITABLE_MAX_GROUPS = 3;
-
-export interface BitableGroupNode {
-  /** 折叠态用的稳定 key（含层级前缀 fieldId:值 逐级拼接）。 */
-  key: string;
-  label: string;
-  /** 0 起：第几级分组。 */
-  level: number;
-  /** 本级的分组字段（UI 用它给「加进本组」的新记录写值）。 */
-  fieldId: string;
-  /** 该节点（含子级）的记录条数。 */
-  count: number;
-  /** 归属本组的记录（含被下级再细分的那些；叶子节点直接渲染它们）。 */
-  records: BitableRecord[];
-  children: BitableGroupNode[];
-}
-
-/**
- * **多级分组**（T03）：按 rules 逐级细分返回树。
- * - 组键/标签口径与单级分组完全一致（单选取选项名、多选取选项名拼接、其余取展示值；空 = "(空)"）。
- * - 组内保持传入顺序（= 筛选 + 排序后的顺序）；每级都按该级字段排序，空值组恒最后。
- * - 无有效规则（字段被删/为空）→ 返回空数组（调用方按"未分组"拍平，区别于 groupRecords 的单组语义）。
- */
-export function groupRecordsTree(table: BitableTable, records: BitableRecord[], rules: BitableGroupRule[] | undefined): BitableGroupNode[] {
-  const active = (rules ?? []).filter((rule) => table.fields.some((field) => field.id === rule.fieldId));
-  if (active.length === 0) return [];
-  const build = (list: BitableRecord[], level: number, prefix: string): BitableGroupNode[] => {
-    const rule = active[level];
-    const field = table.fields.find((item) => item.id === rule.fieldId)!;
-    const buckets = new Map<string, BitableRecord[]>();
-    for (const record of list) {
-      const key = groupKeyOf(field, bitableFieldValue(record, field));
-      const bucket = buckets.get(key);
-      if (bucket) bucket.push(record); else buckets.set(key, [record]);
-    }
-    const keys = [...buckets.keys()].sort((a, b) => {
-      if ((a === "") !== (b === "")) return a === "" ? 1 : -1;   // 空值组恒最后
-      const cmp = compareValues(field, bitableFieldValue(buckets.get(a)![0], field), bitableFieldValue(buckets.get(b)![0], field));
-      return rule.desc ? -cmp : cmp;
-    });
-    return keys.map((key) => {
-      const groupRecordsList = buckets.get(key)!;
-      const nodeKey = (prefix ? prefix + "/" : "") + rule.fieldId + ":" + key;
-      return {
-        key: nodeKey,
-        label: key || "(空)",
-        level,
-        fieldId: rule.fieldId,
-        count: groupRecordsList.length,
-        records: groupRecordsList,
-        children: level + 1 < active.length ? build(groupRecordsList, level + 1, nodeKey) : [],
-      };
-    });
-  };
-  return build(records, 0, "");
-}
-
 /**
  * 按分组规则把记录分组（组内保持传入顺序，组间按组值排序；空值组排最后）。
  * 无规则/字段不存在时返回单个"未分组"组（key/label 为空），调用方可直接拍平。
@@ -1332,7 +1530,7 @@ export function groupRecords(
   if (!field) return [{ key: "", label: "", records }];
   const groups = new Map<string, BitableRecord[]>();
   for (const record of records) {
-    const key = groupKeyOf(field, record.values[field.id]);
+    const key = groupKeyOf(field, bitableFieldValue(record, field));
     const list = groups.get(key);
     if (list) list.push(record);
     else groups.set(key, [record]);
