@@ -40,6 +40,8 @@
   --lake-status-pending-soft: #f7f0e3;
   --lake-status-ok-soft: #e9f2ec;
   --lake-status-error-soft: #f8eae9;
+  /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；未选中星走 --lake-border-strong。 */
+  --lake-rating-star: #ecaa06;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
   --lake-select-bg: rgba(91,111,150,.16);   /* 规格值，与 accent 同源 */
   --lake-scrim: rgba(24,27,32,.28);

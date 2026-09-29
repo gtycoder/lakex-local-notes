@@ -28,6 +28,7 @@ const KANBAN_CSS = readFileSync(new URL("./bitableKanbanView.css", import.meta.u
 const ATTACH_CTRL = readFileSync(new URL("../attachment/attachmentPreviewController.ts", import.meta.url), "utf8");
 const ATTACH = readFileSync(new URL("../attachment/openAssetEntry.ts", import.meta.url), "utf8");
 const CSS = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8");
+const FIELD_CSS = readFileSync(new URL("./bitableFieldCells.css", import.meta.url), "utf8");
 
 describe("多维表编辑器护栏", () => {
   it("附件格的缩略图：格子取 ?w= 档位，放大预览仍走原图", () => {
@@ -325,5 +326,31 @@ describe("多维表编辑器护栏", () => {
     expect(KANBAN).toMatch(/onOpenImages\(images, index\)/);
     expect(KANBAN).toMatch(/event\.stopPropagation\(\); onOpenImages/);
     expect(KANBAN_CSS).toMatch(/\.bt-kanban-thumb \{/);
+  });
+
+  it("评分/进度对齐云端：空星实心可辨、进度条可按压拖动", () => {
+    // ① 评分：未选中星不能是「浅色空心」（用户 260928 报「看不见」）——一律实心，颜色交给 CSS 令牌
+    expect(CARDS).toMatch(/<Star size=\{14\} fill="currentColor" \/>/);
+    expect(CARDS).not.toContain('fill={index < current ? "currentColor" : "none"}');
+    expect(FIELD_CSS).not.toContain("--lake-border-2");
+    expect(FIELD_CSS).toMatch(/\.bt-star \{[^}]*color: var\(--lake-border-strong\)/);
+    expect(FIELD_CSS).toMatch(/\.bt-star\.is-on \{[^}]*color: var\(--lake-rating-star\)/);
+    // ② 进度：轨道按压即跟手（pointerdown 起、document 上 pointermove/up 收），只读态不接指针
+    expect(CARDS).toMatch(/startDrag = \(event: ReactPointerEvent<HTMLSpanElement>\) => \{[\s\S]{0,80}?if \(readOnly\) return;/);
+    expect(CARDS).toMatch(/className=\{"bt-progress" \+ \(readOnly \? " is-readonly" : ""\)\}/);
+    expect(CARDS).toMatch(/onPointerDown=\{startDrag\}/);
+    expect(CARDS).toMatch(/document\.addEventListener\("pointermove", onMove\)/);
+    // 圆形把手是「可拖动」的可见证据；轨道不能 overflow:hidden（会裁掉把手）
+    expect(CARDS).toMatch(/bt-progress-thumb/);
+    expect(FIELD_CSS).toMatch(/\.bt-progress-thumb \{/);
+    expect(FIELD_CSS).toMatch(/\.bt-progress \{ position: relative/);
+    // 数值输入框已整体删除：进度只由「条 + 百分比」表达（用户 260929）
+    expect(CARDS).not.toMatch(/bt-progress-input/);
+    expect(FIELD_CSS).not.toMatch(/bt-progress-input/);
+    // 但键盘可达不能丢：轨道即 role=slider（方向键步进 / PageUpDown ±10 / Delete 清空）
+    expect(CARDS).toMatch(/role="slider"/);
+    expect(CARDS).toMatch(/onKeyDown=\{onKeyDown\}/);
+    expect(CARDS).toMatch(/event\.key === "PageUp" \? 10/);
+    expect(FIELD_CSS).not.toMatch(/\.bt-progress \{[^}]*overflow: hidden/);
   });
 });

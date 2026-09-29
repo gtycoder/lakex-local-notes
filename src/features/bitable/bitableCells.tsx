@@ -5,7 +5,7 @@
  * 组件里**不写静态内联样式**；仅浮层定位这类动态坐标用 inline style（与 Sidebar 右键菜单同做法）。
  * 单元格值按 fieldId 存，编辑通过 onChange(value) 回传，由 BitableEditor 统一写 doc。
  */
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, ExternalLink, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
@@ -898,30 +898,67 @@ function RatingCell({ value, readOnly, onChange }: { value: unknown; readOnly: b
         <button key={index} type="button" role="radio" aria-checked={index + 1 === current} aria-label={(index + 1) + " 星"}
           className={"bt-star" + (index < current ? " is-on" : "")} disabled={readOnly}
           onClick={(event) => { event.stopPropagation(); onChange(current === index + 1 ? 0 : index + 1); }}>
-          <Star size={14} fill={index < current ? "currentColor" : "none"} />
+          <Star size={14} fill="currentColor" />
         </button>
       ))}
     </span>
   );
 }
 
-/** 进度：0–100 进度条 + 数值（越界自动夹取；颜色取字段配置，缺省主题强调色）。 */
+/** 进度：0–100 进度条（**可按压拖动**，对齐云端）；只由「条 + 百分比」表达，不再有数值输入框。
+ *  鼠标/触摸 = 拖动跟手；键盘 = ←/↓ −1、→/↑ +1、PageUp/Down ±10、Home/End 两端、Delete/Backspace 清空。
+ *  颜色取字段配置，缺省主题强调色。 */
 function ProgressCell({ field, value, readOnly, onChange }: { field: BitableField; value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
   const raw = typeof value === "number" ? value : Number(value);
   const pct = Number.isFinite(raw) ? Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(raw))) : 0;
   const color = typeof field.progressColor === "string" ? field.progressColor : undefined;
+  const trackRef = useRef<HTMLSpanElement | null>(null);
   const style = { "--bt-progress": pct + "%", ...(color ? { "--bt-progress-color": color } : {}) } as CSSProperties;
+  /** 进度条拖动：按下即跟手（点轨道任意处直接跳值），松手结束；只读态不接指针。 */
+  const startDrag = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (readOnly) return;
+    const track = trackRef.current;
+    if (!track) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const apply = (clientX: number) => {
+      const rect = track.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      onChange(Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(((clientX - rect.left) / rect.width) * BITABLE_PROGRESS_MAX))));
+    };
+    apply(event.clientX);
+    const onMove = (ev: PointerEvent) => apply(ev.clientX);
+    const onUp = () => { document.removeEventListener("pointermove", onMove); document.removeEventListener("pointerup", onUp); };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
+  /** 键盘可达（拖动是鼠标/触摸路径）：按语义键步进；Delete/Backspace 清空（有值 → 空值）。 */
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLSpanElement>) => {
+    if (readOnly) return;
+    const step = event.key === "ArrowLeft" || event.key === "ArrowDown" ? -1
+      : event.key === "ArrowRight" || event.key === "ArrowUp" ? 1
+        : event.key === "PageDown" ? -10
+          : event.key === "PageUp" ? 10
+            : null;
+    let next: number | null = null;
+    if (step !== null) next = pct + step;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = BITABLE_PROGRESS_MAX;
+    else if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); event.stopPropagation(); onChange(""); return; }
+    if (next === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onChange(Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(next))));
+  };
   return (
     <span className="bt-progress-cell">
-      <span className="bt-progress" style={style} aria-hidden="true"><span className="bt-progress-bar" /></span>
-      <input className="bt-progress-input" type="number" min={0} max={BITABLE_PROGRESS_MAX} value={value == null || value === "" ? "" : String(pct)}
-        readOnly={readOnly} aria-label="进度"
-        onChange={(event) => {
-          const text = event.target.value;
-          if (text === "") { onChange(""); return; }
-          const next = Number(text);
-          onChange(Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Number.isFinite(next) ? Math.round(next) : 0)));
-        }} />
+      <span ref={trackRef} className={"bt-progress" + (readOnly ? " is-readonly" : "")} style={style}
+        onPointerDown={startDrag} onKeyDown={onKeyDown} role="slider" tabIndex={readOnly ? -1 : 0}
+        aria-label="进度" aria-valuemin={0} aria-valuemax={BITABLE_PROGRESS_MAX} aria-valuenow={pct} aria-valuetext={pct + "%"}
+        aria-readonly={readOnly || undefined} title={readOnly ? undefined : "拖动调整进度（←/→ 微调，Delete 清空）"}>
+        <span className="bt-progress-bar" />
+        <span className="bt-progress-thumb" />
+      </span>
       <span className="bt-progress-value">{pct}%</span>
     </span>
   );
