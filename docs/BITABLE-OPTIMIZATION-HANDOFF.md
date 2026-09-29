@@ -700,7 +700,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | V02 看板视图 | 待验收 | 260928-V02 | 代码 + 全部门禁 + CDP 真实端点验收完成；含只读写入口泄漏修复（见 §13） |
 | V03 画册视图 | 待验收 | 260928-V03 | 封面 / 裁剪·适应 / 常规·紧凑 / 卡片字段全部落地（见 §13） |
 | V04 日历视图 | 待验收 | 260928-V04 | 月网格 + 跨天 + 颜色 + 拖拽平移，全程本地日期语义（见 §13） |
-| T01 列级统计 | 待验收 | 260929 | 260929 先整体删除、**同日恢复**；随后用户定稿改为**常驻**（不按有无配置条件渲染）：底部汇总栏 24px 薄条贴视图最底、首格缺省 `N 条记录`、状态栏上移让位；分组头内**每列**都有汇总位（见 §13） |
+| T01 列级统计 | 待验收 | 260929 | 先删→同日恢复→定稿为**常驻**（24px 薄条贴视图最底 + 状态栏上移）；汇总方式**逐字对齐云端 config**（见 §13「T01 与云端对齐」），**只有第一列默认「记录总数」**，其余默认空白（占位「统计」仅 hover 显形）；统计格 = 白底 chip + ▾，点开按字段类型给选项 |
 | V05 续 四条修复 + 悬浮 + | 待验收 | 260929 | ① 列选中点列外即清；② 分组汇总行固定 36px（低档，不随行高）；③ 分组头**每列**都有汇总位（未配置给「统计」占位入口）；④ 底部汇总栏常驻（24px 贴视图底）+ 状态栏上移（`[data-doc-kind="bitable"]` bottom:34px）；⑤ 分组「加进本组」的 **+ 不占行**，改成**悬浮在分组边界线上**（见 §13） |
 | V05 分组样式（复刻云端） | 待验收 | 260929 | 分组头改**整行 56px**：折叠钮 + 分组值 + 每列统计格（右对齐，首列缺省 `N 条记录`）；每组记录后 40px 圆形「加进本组」，顶级分组间 20px 间隔。规格来自 Edge 实测云端 `lakex-viewer-grid-group-*`（见 §13） |
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
@@ -747,6 +747,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | T01 与云端对齐（汇总方式/默认口径/chip） | `src/core/bitableDoc.ts`(+test) · `bitableCells.tsx`(StatCell) · `BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：默认只显示 2 个「记录总数 N」（每分组首列），其余 10 个 opacity:0；chip 白底 + 1px；点开选项 = 云端 8 项（文本）；进度列 = 10 项（多最大/最小值、**无求和**） | 复选框/数字/创建·修改时间等未逐一点验（按 bundle 的 types 直接实现） |
 | 2026-09-29 | 260929 | V05 续：分组 + 改悬浮 | `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：加行高 **1px**（原 40px）、按钮 24×24 **居中于边界线**、命中测试仍是按钮 | 无 |
 | 2026-09-29 | 260929 | V05 续：四条修复 | `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/chrome.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 四条全过：列选中 4→0（同列内保持 4）、分组行恒 **36px**（行高=高时记录行 64）、每列汇总位（2 个「统计」占位）、底栏 **24px** 且与 `.bt-grid-wrap` 底边对齐（819=819）、状态栏 bottom **34px** | `bitableViews.css` 88 → 110、`chrome.css` 506 → 507 |
 | 2026-09-29 | 260929 | 分组头「分组值优先 + 首列统计下限 80px」 | `bitableViews.css`(`.bt-group-inner` 不进流) · `BitableEditor.tsx` · `cssLayers.test.ts` · `AGENTS.md`(样式统一规则) | 修掉真错位：表头首列 482px vs 记录行 80px（长文本被算进 auto 列宽）⇒ 改后**完全对齐（415–495）**；长分组值省略号、统计下限 **80px**（云端 Edge 实测值） | `bitableViews.css` 83 → 88 |
@@ -1486,6 +1487,44 @@ UI 与交互变化：
 遗留：
 - 云端统计格有「切换统计口径」的下拉箭头（`N 条记录 ▾`）与 hover 的「统计」占位；我方用「统计」占位按钮开既有口径选择器（等价能力，位置在格内而非独立 chip）。
 - 分组汇总行取 36px 是**按用户要求**（云端实测是 56px）；如需回到云端的 56px 说一声。
+
+### 2026-09-29 · T01 与云端对齐：汇总方式 / 默认口径 / 统计格外观（一次做到位）
+
+用户 6 条要求，核心是「仿照云端 lake，别再反复来回对照」。按用户提示**直接读云端前端资源**（比点 UI 快且权威）：
+
+**取证方式（可复用）**：`bsk session start --browser <edge>` → navigate → `bsk evaluate` 里 `fetch(performance.getEntriesByType('resource'))` 找到
+`gw.alipayobjects.com/**/lakex_table_yq.*.chunk.css` 与 `*.async.js`（CORS 允许读），直接 grep 出**统计配置表**与**样式规则**；UI 点击只用于交叉验证。
+
+**云端权威配置表（逐字抄自 bundle，`kg.` 为字段类型枚举）**：
+
+```
+e0e（通用类）= TEXT, SELECT, MULTI_SELECT, NUMBER, RATE, PROGRESS, DATE, IMAGE, FILE, PHONE, MENTION, LINK, EMAIL, USER_ID, CREATED_AT, MODIFIER_ID, UPDATED_AT   ← 不含 CHECKBOX
+e0t（日期类）= DATE, CREATED_AT, UPDATED_AT
+none   "不展示" | count "$1 条记录"
+filled "已填写 $1" | empty "未填写 $1" | unique "唯一数 $1" | percentFilled/percentEmpty/percentUnique "…占比 $1"  → types: e0e
+checked "已勾选 $1" | unchecked "未勾选 $1" | percentChecked/percentUnchecked → types: [CHECKBOX]
+sum "求和 $1" | average "平均值 $1" | median "中位数 $1"                        → types: [NUMBER]
+max "最大值 $1" | min "最小值 $1"                                              → types: [NUMBER, RATE, PROGRESS]
+earliestDate "最早时间 $1" | latestDate "最晚时间 $1" | dateRange "时间范围 $1 天" | monthRange "时间范围 $1 月" → types: e0t
+```
+
+**样式（同源 CSS）**：统计格 = `.lakex-viewer-grid-group-header-column`（白底 + 1px `rgb(244,245,245)` + `padding:0 8px` + 高 36 + `justify:right`）；内容 `.lakex-table-stats`（12px、右对齐、`.lt-icon` ▾ 带 `margin-left:2px; transform:scale(.8)`）；
+**关键**：`.lakex-table-stats-unfilled{opacity:0}` + `:hover .lakex-table-stats-unfilled{opacity:1}` —— 占位「统计」**默认不可见，仅 hover 显形**（这正是用户要的「默认空白、不出现统计字样」）。
+
+**本次实现**：
+
+- **core**（`bitableDoc.ts`）：`BitableStatType` 与 `BITABLE_STAT_LABEL` 按上表重建（新增 `checked/unchecked/percentChecked/percentUnchecked/percentUnique/median/dateRange/monthRange`，旧 `avg/earliest/latest/range` 等改名）；`statsForField` 严格按 `types` 限制（复选框只给勾选类；进度/评分只给最大最小**无求和**；日期类给最早/最晚/日/月范围）；`computeColumnStat` 新增勾选类、中位数、月范围；新增纯函数 `localMonthDiff`。
+- **UI**：新增**共用组件 `StatCell`**（`bitableCells.tsx`）—— 分组头与底部汇总行**同一实现**（样式统一红线）：白底 chip + ▾ + 未配置时整块 `opacity:0`、hover 显形、点击开该列口径选择器。
+- **默认口径**：**只有第一列**默认「记录总数」（分组头 = 该组条数、底栏首格 = 总条数），其余列默认空白；不再有 `—`、不再有常显的「统计」字样。
+- 顺手：把统计格的白色放到「行 + 格」选择器上，修掉被 `.bt-group-row td` 灰底按特异性压掉的问题（归属修正，不是加覆盖）。
+
+**验证（CDP，隔离 userData + 9243）**：新建一条**完全不配置统计**的笔记 → `.bt-stat` 共 12 个，其中**可见的只有 2 个**（两个分组各自首列的 `记录总数 1 / 记录总数 2`），其余 10 个 `opacity:0`（文本为「统计」但不显形）；chip `background: rgb(255,255,255)` + `border-left: 1px`；点开文本列 → 选项 = 无统计/记录总数/已填写数/未填写数/唯一数/已填写、未填写、唯一数占比（**与云端 8 项逐字一致**）；进度列实测为 10 项（多「最大值/最小值」、**没有求和**）。
+
+门禁全绿：tsc / vitest **1383 passed / 16 skipped** / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
+
+遗留：
+- 复选框 / 数字 / 创建·修改时间 的选项**按 bundle 的 types 直接实现**，未在真机逐项点验（若要逐项验收可补）。
+- 第一列默认「记录总数」目前**无法关掉**（「不展示」= 删除配置 ⇒ 回落默认）。云端可显式选「不展示」，如需支持要在 `columnStats` 里存 `"none"` 哨兵。
 
 ## 14. 会话执行模板
 
