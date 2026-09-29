@@ -52,7 +52,7 @@ export function BitableViewBar({ views, activeViewId, readOnly, leading, onSelec
       <Popover open={Boolean(addAnchor)} anchor={addAnchor} onClose={() => setAddAnchor(null)} width={200}>
         <div className="bt-panel">
           {BITABLE_VIEW_TYPES.map((type) => (
-            <button key={type} type="button" className="bt-menu-item"
+            <button key={type} type="button" className="bt-menu-item ln-menu__item"
               onClick={() => { onAddView(type); setAddAnchor(null); }}>
               <ViewTypeIcon type={type} />{BITABLE_VIEW_TYPE_LABEL[type]}
             </button>

@@ -238,7 +238,7 @@ export function OutlineSidebar({
           <span className="sidebar-toolbar-title">大纲</span>
           <div className="list-heading">
           <button
-            className={`dock-icon-btn pin-btn${mode === "docked" ? " is-active" : ""}`}
+            className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent pin-btn${mode === "docked" ? " is-active" : ""}`}
             title={mode === "collapsed" ? "固定大纲" : "取消固定大纲"}
             aria-label={mode === "collapsed" ? "固定大纲" : "取消固定大纲，改为悬停"}
             aria-pressed={mode === "docked"}
@@ -247,7 +247,7 @@ export function OutlineSidebar({
             <Pin size={14} />
           </button>
           <button
-            className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`}
+            className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent filter-btn${filter.active ? " is-active" : ""}`}
             title="筛选大纲"
             aria-label="筛选大纲"
             aria-pressed={filter.open}
@@ -256,21 +256,21 @@ export function OutlineSidebar({
             <Filter size={14} />
           </button>
           <button
-            className={`dock-icon-btn keep-current-btn${controller?.isKeepCurrentExpand() ? " is-active" : ""}`}
+            className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent keep-current-btn${controller?.isKeepCurrentExpand() ? " is-active" : ""}`}
             title="保持当前展开（选中项自动展开祖先）"
             onClick={() => controller?.setKeepCurrentExpand(!controller.isKeepCurrentExpand())}
           >
             <Focus size={14} />
           </button>
           <button
-            className="dock-icon-btn"
+            className="dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent"
             title="展开全部"
             onClick={() => controller?.expandAll()}
           >
             <ChevronsUpDown size={14} />
           </button>
           <button
-            className="dock-icon-btn"
+            className="dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent"
             title="折叠全部"
             onClick={() => controller?.collapseAll()}
           >
@@ -278,7 +278,7 @@ export function OutlineSidebar({
           </button>
           <div className="outline-sidebar__level">
             <button
-              className={`dock-icon-btn level-btn${levelMenuOpen ? " is-active" : ""}`}
+              className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent level-btn${levelMenuOpen ? " is-active" : ""}`}
               title="展开到级别"
               onClick={(event) => {
                 if (levelMenuOpen) { setLevelMenuOpen(false); return; }

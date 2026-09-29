@@ -7,7 +7,6 @@
 
 .trash-panel { display: flex; flex-direction: column; background: var(--lake-bg-block); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); box-shadow: var(--lake-shadow-popover); overflow: hidden; }
 
-.trash-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; }
 
 .trash-panel-hint { margin: 0; padding: 10px 16px; font-size: 12px; color: var(--lake-text-4); border-bottom: 1px solid var(--lake-border-2); background: color-mix(in srgb, var(--lake-bg-block) 96%, transparent); }
 
@@ -43,6 +42,8 @@
 
 .history-panel { display: flex; flex-direction: column; background: var(--lake-bg-block); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); box-shadow: var(--lake-shadow-popover); overflow: hidden; }
 
+/* 260930 大统一：回收站 / 历史面板头是同一套几何，合并成一条。 */
+.trash-panel header,
 .history-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; }
 
 .history-hint { margin: 0; padding: 8px 16px 10px; font-size: 12px; color: var(--lake-text-4); border-bottom: 1px solid var(--lake-border-2); background: color-mix(in srgb, var(--lake-bg-block) 96%, transparent); }

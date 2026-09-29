@@ -66,7 +66,7 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
           <div key={field.id} className="bt-drawer-row">
             <span className="bt-drawer-label">
               <FieldTypeIcon type={field.type} />
-              <span className="bt-drawer-label-text">{field.name}</span>
+              <span className="bt-drawer-label-text ln-ellipsis">{field.name}</span>
               {field.required && <em className="bt-required">*</em>}
             </span>
             <span className="bt-drawer-control">

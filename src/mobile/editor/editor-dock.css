@@ -168,7 +168,7 @@
 .med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: 40px; font-size: 16px; cursor: pointer; color: var(--lake-text-1); -webkit-tap-highlight-color: transparent; }
 .med-doc-item:active { background: var(--lake-bg-hover); }
 .med-doc-item.med-active { color: var(--lake-accent); font-weight: 600; }
-.med-doc-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .med-doc-item-title：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 
 /* 降低动效偏好：dock 全部关动画（与 mobile.css 的 reduced-motion 兜底同口径） */
 @media (prefers-reduced-motion: reduce) {

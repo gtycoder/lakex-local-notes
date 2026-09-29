@@ -79,7 +79,7 @@ function AttachmentCell({ noteId, value, imageOnly }: { noteId: string; value: u
           : (
             <button key={file} type="button" className={"mbt-attachment-file" + (imageOnly ? "" : " is-kind")}
               title={name} aria-label={name} onClick={() => openWithSystem(file)}>
-              {imageOnly ? name : <><FileKindIcon name={name} size={15} /><span className="mbt-attachment-name">{name}</span></>}
+              {imageOnly ? name : <><FileKindIcon name={name} size={15} /><span className="mbt-attachment-name ln-ellipsis">{name}</span></>}
             </button>
           )
       ))}

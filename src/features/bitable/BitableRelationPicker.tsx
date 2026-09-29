@@ -134,7 +134,7 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
       <div className="bt-rel-toolbar">
         <span className="bt-rel-search">
           <Search size={14} />
-          <input autoFocus value={query} placeholder="搜索相关记录" aria-label="搜索相关记录"
+          <input className="ln-input__field" autoFocus value={query} placeholder="搜索相关记录" aria-label="搜索相关记录"
             onChange={(event) => setQuery(event.target.value)} />
         </span>
         <button type="button" className={"bt-icon-btn" + (filters.length > 0 ? " is-on" : "")}

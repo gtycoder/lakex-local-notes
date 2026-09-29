@@ -70,11 +70,8 @@ pre {
   font-size: var(--lake-font-size-small);
 }
 .settings-panel .settings-nav-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.settings-panel .settings-nav-item.active {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
-  font-weight: var(--lake-font-weight-semibold);
-}
+/* .settings-panel .settings-nav-item.active 已收编到 kit 的 .ln-row.is-selected（260930）：
+   原先这里要在 feature 层再压一遍 legacy 的灰底选中态，现在 kit 层就赢了（legacy < kit < feature）。 */
 
 /* ── 大纲侧栏（P5-f）────────────────────────────────────────────────────
  * 260923 收敛：原先此处有一整套 .outline-* 的 feature 层覆盖，与 src/features/outline/outline.css

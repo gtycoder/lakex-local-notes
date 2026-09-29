@@ -385,7 +385,10 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/className="bt-stat-cell" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
     // 行高**绝对**不被内容撑高：单元格永不换行（实测日期列 80px 时折行 ⇒ 行高 36 → 48），日期/时间单行省略
     expect(CSS).toMatch(/\.bt-grid th, \.bt-grid td \{[^}]*white-space: nowrap/);
-    expect(CSS).toMatch(/\.bt-date-trigger > span \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
+    // 260930 大统一：日期/时间文案的截断走 kit 的 .ln-ellipsis（JSX 挂在那个 <span> 上），
+    // 原 `> span` 子选择器规则已删 —— 截断只有一处实现。
+    expect(CARDS).toMatch(/<span className="ln-ellipsis">\{text \|\| "请选择日期"\}<\/span>/);
+    expect(CSS).not.toMatch(/\.bt-date-trigger > span \{/);
     // 文本格同样「截断省略」而不是硬裁（input 支持 text-overflow: ellipsis）
     expect(CSS).toMatch(/\.bt-cell-input \{[^}]*text-overflow: ellipsis/);
     // 下限 80 → 40（用户：「可以设定一个比较小的下限值」），上限仍是 640
@@ -690,11 +693,11 @@ describe("多维表编辑器护栏", () => {
     // ⑩ 链接格（260929 对齐云端）：**展示文本 + 右端 🔗 图标**（点它用本地浏览器打开），**不再常驻输入框**
     //    —— 常驻输入框会在选中时和单元格自己的 2px 选中环叠成「两层边框」（用户报的就是这个）；
     //    编辑改为双击进入（Enter/失焦提交、Esc 取消）。
-    expect(CARDS).toMatch(/className="bt-link-text"/);
+    expect(CARDS).toMatch(/className="bt-link-text ln-ellipsis"/);
     expect(CARDS).toMatch(/className="bt-link-open"/);
     expect(CARDS).toMatch(/window\.open\(text\.trim\(\), "_blank", "noopener"\)/);
     expect(CARDS).toMatch(/onDoubleClick=\{\(\) => \{ if \(!readOnly\)/);
-    expect(FIELD_CSS).toMatch(/\.bt-link-text \{[^}]*text-overflow: ellipsis/);
+    expect(FIELD_CSS).toMatch(/\.bt-link-text \{[^}]*flex: 1 1 auto/);   // 布局留在业务规则；截断走 kit 的 .ln-ellipsis
     //    展示态**没有常驻输入框**（编辑态才有；旧实现是常驻 input + readOnly）
     const linkCellSource = CARDS.slice(CARDS.indexOf("function LinkCell"), CARDS.indexOf("function StatCell"));
     expect(linkCellSource).toContain("bt-link-text");

@@ -885,11 +885,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         <button type="button" className="bt-row-num" title="选择记录" disabled={readOnly}
           onClick={() => setSelectedRecordIds((prev) => { const next = new Set(prev); if (next.has(record.id)) next.delete(record.id); else next.add(record.id); return next; })}>{index + 1}</button>
         <div className="bt-row-handle">
-          <button type="button" className="bt-row-grip" aria-label="拖动排序" title="拖动排序" disabled={readOnly}
+          <button type="button" className="bt-row-grip ln-iconbtn ln-iconbtn--compact" aria-label="拖动排序" title="拖动排序" disabled={readOnly}
             onPointerDown={(event) => startRowDrag(event, record.id)}><GripVertical size={13} /></button>
           <input type="checkbox" className="bt-row-check" aria-label="选择记录" checked={selectedRecordIds.has(record.id)}
             onChange={(event) => setSelectedRecordIds((prev) => { const next = new Set(prev); if (event.target.checked) next.add(record.id); else next.delete(record.id); return next; })} />
-          <button type="button" className="bt-row-expander" aria-label="展开行" title="展开行（Space）"
+          <button type="button" className="bt-row-expander ln-iconbtn ln-iconbtn--compact" aria-label="展开行" title="展开行（Space）"
             onClick={() => openDrawer(record.id)}><RowExpandIcon /></button>
         </div>
       </td>
@@ -964,7 +964,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                     onClick={(event) => event.stopPropagation()}
                     onBlur={() => { renameTable(table.id, tableEditor.draft); setTableEditor(null); }}
                     onKeyDown={(event) => { if (event.key === "Enter") { renameTable(table.id, tableEditor.draft); setTableEditor(null); } if (event.key === "Escape") setTableEditor(null); }} />
-                : <span className="bt-table-name">{table.name}</span>}
+                : <span className="bt-table-name ln-ellipsis">{table.name}</span>}
               <span className="bt-table-count">{table.records.length}</span>
               <button type="button" className="bt-icon-btn bt-table-more" title="重命名/删除" aria-label="数据表操作" disabled={readOnly}
                 onClick={(event) => { event.stopPropagation(); setTableEditor({ id: table.id, draft: table.name }); }}><MoreHorizontal size={13} /></button>
@@ -989,7 +989,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               <div className="bt-viewbar-leading">
                 <button type="button" className="bt-icon-btn" title="展开数据表列表" aria-label="展开数据表列表" onClick={() => setTablesCollapsed(false)}><ChevronsRight size={15} /></button>
                 <button type="button" className="bt-tables-switch" title="切换数据表" onClick={(event) => setTableSwitchAnchor(event.currentTarget)}>
-                  <span className="bt-tables-switch-name">{activeTable.name}</span><ChevronDown size={13} />
+                  <span className="bt-tables-switch-name ln-ellipsis">{activeTable.name}</span><ChevronDown size={13} />
                 </button>
               </div>
             ) : undefined}
@@ -1135,7 +1135,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                         <FieldTypeIcon type={field.type} />
                         <span className="bt-th-name" title={field.name}>{field.name}</span>
                         {field.required && <em className="bt-required">*</em>}
-                        <button type="button" className="bt-th-more" title="列操作" aria-label="列操作" disabled={readOnly}
+                        <button type="button" className="bt-th-more ln-iconbtn ln-iconbtn--compact" title="列操作" aria-label="列操作" disabled={readOnly}
                           onClick={(event) => {
                             event.stopPropagation();
                             const r = event.currentTarget.getBoundingClientRect();
@@ -1262,7 +1262,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                 onDragEnd={() => setConfigDragId(null)}>
                 <GripVertical size={13} className="bt-grip" />
                 <FieldTypeIcon type={field.type} />
-                <span className="bt-field-name">{field.name}</span>
+                <span className="bt-field-name ln-ellipsis">{field.name}</span>
                 <button type="button" className="bt-icon-btn" title={hidden ? "显示字段" : "隐藏字段"} aria-label={hidden ? "显示字段" : "隐藏字段"} onClick={() => toggleFieldHidden(field.id)}>{hidden ? <EyeOff size={13} /> : <Eye size={13} />}</button>
                 <button type="button" className="bt-icon-btn" title="编辑字段" aria-label="编辑字段" disabled={readOnly} onClick={() => setFieldEditor({ fieldId: field.id })}><Pencil size={13} /></button>
               </div>
@@ -1345,10 +1345,10 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         <div className="bt-panel">
           <h4>行高</h4>
           {ROW_HEIGHT_OPTIONS.map((option) => (
-            <button key={String(option.value)} type="button" className={"bt-menu-item" + (activeView.rowHeight === option.value ? " is-selected" : "")}
+            <button key={String(option.value)} type="button" className={"bt-menu-item ln-menu__item" + (activeView.rowHeight === option.value ? " is-selected" : "")}
               onClick={() => { patchView(activeView.id, { rowHeight: option.value }); setPanel(null); }}>
               {option.value === "low" ? <Rows2 size={14} /> : option.value === "medium" ? <Rows3 size={14} /> : <Rows4 size={14} />}
-              <span className="bt-menu-label">{option.label}</span>
+              <span className="bt-menu-label ln-ellipsis">{option.label}</span>
               {activeView.rowHeight === option.value && <Check size={14} />}
             </button>
           ))}
@@ -1374,17 +1374,17 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       <Popover open={Boolean(columnMenu)} anchor={null} at={columnMenu ? { x: columnMenu.x, y: columnMenu.y } : null}
         onClose={() => setColumnMenu(null)} width={200}>
         <div className="bt-panel">
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) setFieldEditor({ fieldId: columnMenu.fieldId }); setColumnMenu(null); }}><Pencil size={13} />编辑列</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) duplicateField(columnMenu.fieldId); }}><Copy size={13} />复制列</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "before"); }}><ChevronRight size={13} />向左插入列</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "after"); }}><ChevronRight size={13} />向右插入列</button>
+          <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) setFieldEditor({ fieldId: columnMenu.fieldId }); setColumnMenu(null); }}><Pencil size={13} />编辑列</button>
+          <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) duplicateField(columnMenu.fieldId); }}><Copy size={13} />复制列</button>
+          <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "before"); }}><ChevronRight size={13} />向左插入列</button>
+          <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "after"); }}><ChevronRight size={13} />向右插入列</button>
           {/* 260928 用户：「本列分组 / 本列筛选 / 升序 / 降序」四条快捷项**彻底删除**
               （顶部工具栏已经有分组、筛选、排序，不必在列菜单里再来一套） */}
           {columnMenu && (() => {
             const fieldId = columnMenu.fieldId;
             const on = (activeView.highlightDuplicateFieldIds ?? []).includes(fieldId);
             return (
-              <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => {
+              <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => {
                 const current = activeView.highlightDuplicateFieldIds ?? [];
                 patchView(activeView.id, { highlightDuplicateFieldIds: on ? current.filter((id) => id !== fieldId) : [...current, fieldId] });
                 setColumnMenu(null);
@@ -1395,7 +1395,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             const fieldId = columnMenu.fieldId;
             const anchor = columnMenu.header;
             return (
-              <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (anchor) setStatFor({ fieldId, anchor }); setColumnMenu(null); }}>统计</button>
+              <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (anchor) setStatFor({ fieldId, anchor }); setColumnMenu(null); }}>统计</button>
             );
           })()}
           {columnMenu && (() => {
@@ -1404,10 +1404,10 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             // 浮层会跑到左上角（260928 用户报「颜色框错位」）
             const anchor = columnMenu.header;
             return (
-              <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (anchor) setTextColorFor({ fieldId, anchor }); setColumnMenu(null); }}>文本颜色</button>
+              <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (anchor) setTextColorFor({ fieldId, anchor }); setColumnMenu(null); }}>文本颜色</button>
             );
           })()}
-          <button type="button" className="bt-menu-item danger" disabled={readOnly || activeTable.fields.length <= 1} onClick={() => { if (columnMenu) deleteField(columnMenu.fieldId); }}><Trash2 size={13} />删除列</button>
+          <button type="button" className="bt-menu-item ln-menu__item ln-menu__item--danger" disabled={readOnly || activeTable.fields.length <= 1} onClick={() => { if (columnMenu) deleteField(columnMenu.fieldId); }}><Trash2 size={13} />删除列</button>
         </div>
       </Popover>
 
@@ -1426,12 +1426,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           <Popover open anchor={statFor.anchor} onClose={() => setStatFor(null)} width={200}>
             <div className="bt-panel">
               <h4>列统计 · {field.name}</h4>
-              <button type="button" className={"bt-menu-item" + (current ? "" : " is-selected")} disabled={readOnly}
-                onClick={() => { setColumnStat(field.id, null); setStatFor(null); }}><span className="bt-menu-label">无统计</span>{!current && <Check size={14} />}</button>
+              <button type="button" className={"bt-menu-item ln-menu__item" + (current ? "" : " is-selected")} disabled={readOnly}
+                onClick={() => { setColumnStat(field.id, null); setStatFor(null); }}><span className="bt-menu-label ln-ellipsis">无统计</span>{!current && <Check size={14} />}</button>
               {statsForField(field).map((stat) => (
-                <button key={stat} type="button" className={"bt-menu-item" + (current === stat ? " is-selected" : "")} disabled={readOnly}
+                <button key={stat} type="button" className={"bt-menu-item ln-menu__item" + (current === stat ? " is-selected" : "")} disabled={readOnly}
                   onClick={() => { setColumnStat(field.id, stat); setStatFor(null); }}>
-                  <span className="bt-menu-label">{BITABLE_STAT_LABEL[stat]}</span>{current === stat && <Check size={14} />}
+                  <span className="bt-menu-label ln-ellipsis">{BITABLE_STAT_LABEL[stat]}</span>{current === stat && <Check size={14} />}
                 </button>
               ))}
             </div>
@@ -1441,16 +1441,16 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
       <Popover open={Boolean(viewMenu)} anchor={viewMenu?.anchor ?? null} onClose={() => setViewMenu(null)} width={180}>
         <div className="bt-panel">
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (viewMenu) setViewEditor(viewMenu.viewId); setViewMenu(null); }}><Pencil size={13} />重命名视图</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (viewMenu) copyView(viewMenu.viewId); }}><Copy size={13} />复制视图</button>
-          <button type="button" className="bt-menu-item danger" disabled={readOnly || activeTable.views.length <= 1} onClick={() => { if (viewMenu) deleteView(viewMenu.viewId); }}><Trash2 size={13} />删除视图</button>
+          <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (viewMenu) setViewEditor(viewMenu.viewId); setViewMenu(null); }}><Pencil size={13} />重命名视图</button>
+          <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (viewMenu) copyView(viewMenu.viewId); }}><Copy size={13} />复制视图</button>
+          <button type="button" className="bt-menu-item ln-menu__item ln-menu__item--danger" disabled={readOnly || activeTable.views.length <= 1} onClick={() => { if (viewMenu) deleteView(viewMenu.viewId); }}><Trash2 size={13} />删除视图</button>
         </div>
       </Popover>
 
       <Popover open={Boolean(tableSwitchAnchor)} anchor={tableSwitchAnchor} onClose={() => setTableSwitchAnchor(null)} width={200}>
         <div className="bt-panel">
           {doc.tables.map((table) => (
-            <button key={table.id} type="button" className={"bt-menu-item" + (table.id === activeTable.id ? " is-selected" : "")}
+            <button key={table.id} type="button" className={"bt-menu-item ln-menu__item" + (table.id === activeTable.id ? " is-selected" : "")}
               onClick={() => { setDoc((prev) => ({ ...prev, activeTableId: table.id })); setTableSwitchAnchor(null); }}>
               {table.name}
             </button>
@@ -1516,12 +1516,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
       {rowCtx && (
         <Menu className="bt-row-menu" surfaceRef={rowMenuPos.surfaceRef} onDismiss={() => setRowCtx(null)} style={rowMenuPos.style ?? undefined}>
-            <button type="button" role="menuitem" className="bt-menu-item" disabled={!cellRange}
+            <button type="button" role="menuitem" className="bt-menu-item ln-menu__item" disabled={!cellRange}
               onClick={() => { void copySelection(); setRowCtx(null); }}><Copy size={13} />复制</button>
-            <button type="button" role="menuitem" className="bt-menu-item" disabled={readOnly || !cellRange}
+            <button type="button" role="menuitem" className="bt-menu-item ln-menu__item" disabled={readOnly || !cellRange}
               onClick={() => { void pasteSelection(); setRowCtx(null); }}><Copy size={13} />粘贴</button>
             <div className="context-menu-sep" />
-            <button type="button" role="menuitem" className="bt-menu-item danger" disabled={readOnly}
+            <button type="button" role="menuitem" className="bt-menu-item ln-menu__item ln-menu__item--danger" disabled={readOnly}
               onClick={() => { deleteRecords(selectedRecordIds.has(rowCtx.recordId) ? [...selectedRecordIds] : [rowCtx.recordId]); setRowCtx(null); }}>
               <Trash2 size={13} />删除记录
             </button>

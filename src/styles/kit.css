@@ -67,6 +67,17 @@
 .ln-iconbtn:disabled:hover { background: transparent; }
 .ln-iconbtn.is-selected { color: var(--lake-accent); background: var(--lake-accent-tint); }
 .ln-iconbtn--compact { width: 22px; height: 22px; border-radius: var(--lake-radius-xs); }
+/* 悬停用**主色淡底**（目录栏那一排按钮的既有观感：中性底「显得没反应」，用户 260914 定过）。
+   这是「图标按钮」的第二个正式变体 —— 不要再另起一套类名。 */
+.ln-iconbtn--accent:hover:not(:disabled) { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.ln-iconbtn--accent.is-selected { color: var(--lake-accent); background: var(--lake-accent-tint); }
+
+/* ── 00 单行省略（工具类）─────────────────────────────────────
+   260930 审计：同一套「装不下就省略号」在 14 处各写了一遍（多维表标题/单元格、移动端、状态栏、页签…）。
+   宽度/弹性（flex）属于各处的**布局**，仍留在各自的业务规则里。 */
+.ln-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 图片「填满容器并裁切」（260930 审计：4 处各写一遍；尺寸/圆角等各自的约束仍留在业务规则里）。 */
+.ln-imgfill { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* ── 03 列表与列表项 ───────────────────────────────────────── */
 .ln-list { display: flex; flex-direction: column; overflow: auto; }
@@ -92,7 +103,18 @@
 .ln-row:hover { background: var(--lake-bg-hover); }
 .ln-row:hover .ln-row__actions, .ln-row:focus-within .ln-row__actions, .ln-row.is-selected .ln-row__actions { opacity: 1; }
 .ln-row:active { background: var(--lake-bg-press); }
-.ln-row.is-selected { color: var(--lake-accent-text); background: var(--lake-accent-tint); font-weight: var(--lake-font-weight-semibold); }
+/* 260930 大统一：「选中行/l类目」在 4 处各写了一遍这套三元组（accent-text + accent-tint + 600）。
+   这里连同 legacy 选择器收成一处；legacy 仍作 JSX 钩子（chrome 的页签溢出菜单行 / 设置面板左侧导航）。 */
+.ln-row.is-selected,
+.tab-switcher-item.active,
+.settings-panel .settings-nav-item.active,
+.ln-menu__item:hover,
+.ln-menu__item.is-selected,
+.top-menu > button:hover,
+.context-menu > button:hover,
+.context-menu-item:hover,
+.context-menu-submenu > button:hover:not(:disabled),
+.create-menu > button:hover:not(:disabled) { color: var(--lake-accent-text); background: var(--lake-accent-tint); font-weight: var(--lake-font-weight-semibold); }
 .ln-row.is-disabled { color: var(--lake-text-4); cursor: default; }
 .ln-row.is-disabled .ln-row__icon { color: var(--lake-text-4); }
 .ln-row--notebook { min-height: 29px; }
@@ -100,11 +122,19 @@
 
 /* ── 04 菜单 / 右键菜单 ────────────────────────────────────── */
 /* .ln-menu 容器（表面/定位）已并入 src/styles/overlay.css 单一来源（260926）。 */
-.ln-menu__item {
+/* 260930 审计：菜单项在 overlay.css 里另有一整套 legacy 选择器（顶栏下拉 / 右键菜单 / ＋菜单），
+   与这里的规格几乎逐条相同 ⇒ **收编成这一处**（JSX 仍用 legacy 类名，几何/配色只有这一份）。
+   历史口径：`.ln-menu__item` 是「自有组件库」的正式件，legacy 那几个是历史 JSX 契约。 */
+.ln-menu__item,
+.top-menu > button,
+.context-menu > button,
+.context-menu-item,
+.context-menu-submenu > button,
+.create-menu > button {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 27px;
+  min-height: 27px;
   padding: 0 8px;
   border: 0;
   border-radius: var(--lake-radius-xs);
@@ -114,14 +144,37 @@
   font-size: var(--lake-font-size-small);
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
+    color var(--lake-motion-fast) var(--lake-ease-standard);
 }
-.ln-menu__item:hover { color: var(--lake-accent-text); background: var(--lake-accent-tint); font-weight: var(--lake-font-weight-semibold); }
-.ln-menu__item:active { background: var(--lake-bg-press); }
-.ln-menu__item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
-.ln-menu__item.is-disabled { color: var(--lake-text-4); cursor: default; }
-.ln-menu__item.is-disabled:hover { color: var(--lake-text-4); background: transparent; font-weight: inherit; }
-.ln-menu__item--danger { color: var(--lake-status-error); }
-.ln-menu__item--danger:hover { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
+.ln-menu__item:active,
+.top-menu > button:active,
+.context-menu > button:active,
+.context-menu-item:active,
+.create-menu > button:active { background: var(--lake-bg-press); }
+.ln-menu__item:focus-visible,
+.top-menu > button:focus-visible,
+.context-menu > button:focus-visible,
+.context-menu-item:focus-visible,
+.create-menu > button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
+.ln-menu__item.is-disabled,
+.top-menu > button:disabled,
+.context-menu > button:disabled,
+.context-menu-item.is-disabled,
+.context-menu-submenu > button:disabled,
+.create-menu > button:disabled { color: var(--lake-text-4); cursor: default; opacity: 1; }
+.ln-menu__item.is-disabled:hover,
+.top-menu > button:disabled,
+.context-menu > button:disabled,
+.context-menu-item.is-disabled:hover,
+.context-menu-submenu > button:disabled,
+.create-menu > button:disabled { color: var(--lake-text-4); background: transparent; font-weight: inherit; }
+.ln-menu__item--danger,
+.context-menu > button.danger,
+.context-menu-item.danger { color: var(--lake-status-error); }
+.ln-menu__item--danger:hover,
+.context-menu > button.danger:hover,
+.context-menu-item.danger:hover { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 .ln-menu__check { flex: 0 0 auto; width: 16px; color: var(--lake-accent); }
 .ln-menu__label { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
 .ln-menu__hint { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-regular); }

@@ -529,7 +529,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <span className="settings-nav-hits__label">条目 · {itemHits.length} 项</span>
                 {itemHits.map((hit) => (
                   <button key={hit.id} className="b3-list-item settings-nav-hit" onClick={() => jumpToItem(hit)} title={hit.label}>
-                    <span className="b3-list-item__text">{hit.label}</span>
+                    <span className="b3-list-item__text ln-ellipsis">{hit.label}</span>
                     <span className="b3-list-item__meta">{nav.find((item) => item.id === hit.category)?.label}</span>
                   </button>
                 ))}
@@ -811,7 +811,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                                 title="点击预览"
                               >
                                 <File size={14} className="b3-list-item__graphic" />
-                                <span className="b3-list-item__text">{o.filename}</span>
+                                <span className="b3-list-item__text ln-ellipsis">{o.filename}</span>
                                 <span className={`badge ${o.status === "history" ? "badge--warn" : "badge--muted"}`}>{o.status === "history" ? "历史保护" : "未引用"}</span>
                                 <span className="b3-list-item__meta">{formatBytes(o.size)}</span>
                                 <span className="fn__space" />

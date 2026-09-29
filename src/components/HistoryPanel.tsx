@@ -341,7 +341,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             {!loading && tab === "orphans" && orphans.map((o) => (
               <div key={o.filename} className={`b3-list-item b3-list-item--hide-action${orphanSel === o.filename ? " b3-list-item--focus" : ""}`}>
                 <span className="b3-list-item__graphic"><File size={14} /></span>
-                <span className="b3-list-item__text" onClick={() => void previewOrphanFile(o)} title="点击预览文件">{o.filename}</span>
+                <span className="b3-list-item__text ln-ellipsis" onClick={() => void previewOrphanFile(o)} title="点击预览文件">{o.filename}</span>
                 {o.protectedByHistory && <span className="badge badge--warn">历史保护</span>}
                 <span className="b3-list-item__meta">{(o.size / 1024).toFixed(1)} KB</span>
                 <span className="fn__space" />

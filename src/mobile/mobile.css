@@ -93,9 +93,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-qn-textarea { display: block; width: 100%; min-height: 120px; border: 0; outline: 0; resize: vertical; font-size: 15px; line-height: 1.6; font-family: inherit; color: var(--lake-text-1); background: transparent; }
 .mobile-qn-textarea::placeholder { color: var(--lake-text-3); }
 .mobile-qn-images { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
-.mobile-qn-img { position: relative; margin: 0; border-radius: var(--lake-radius-sm); overflow: hidden; background: var(--lake-bg-block); aspect-ratio: 1; }
-.mobile-qn-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.mobile-qn-img button { position: absolute; top: 4px; right: 4px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--lake-scrim, rgba(0,0,0,.5)); color: var(--lake-text-on-accent); display: grid; place-items: center; cursor: pointer; }
 .mobile-qn-error { color: var(--lake-status-error); font-size: 13px; margin-top: 8px; }
 .mobile-qn-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .mobile-qn-add { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-accent-tint); cursor: pointer; }
@@ -300,7 +297,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-search-input { flex: 1; border: none; outline: none; background: transparent; font-size: 15px; }
 .mobile-search-results { overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
 .mobile-search-main { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; padding: 6px 0; }
-.mobile-search-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .mobile-search-title：截断走 kit 的 .ln-ellipsis（JSX 已挂；移动端同样加载 themes/kit） */
 .mobile-search-snippet { font-size: 12px; color: var(--lake-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-search-snippet mark { background: transparent; color: var(--lake-accent); }
 .mobile-search-parent { color: var(--lake-text-3); font-size: 12px; }
@@ -317,7 +314,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .mobile-drawer-trash-entry:active { background: var(--lake-bg-window); }
 .mobile-status-msg { padding: 6px 12px; font-size: 12px; color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: 1px solid var(--lake-border-1); }
-.mobile-trash-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-trash-title { flex: 1; }   /* 截断走 .ln-ellipsis */
 .mobile-trash-date { color: var(--lake-text-3); font-size: 12px; }
 .mobile-trash-action { border: none; background: transparent; color: var(--lake-accent); cursor: pointer; display: flex; padding: 6px; }
 .mobile-trash-danger { color: var(--lake-status-error); }
@@ -873,7 +870,7 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 /* 附件字段（260930 用户：移动端也换成文档类型图标）：图标 + 名称同排——触屏没有 hover，
    名称不能像桌面那样收进气泡，所以图标给类型、名字给内容（图标配色走 --lake-file-*，见 bitableFileIcon.css）。 */
 .mbt-attachment-file.is-kind { display: inline-flex; align-items: center; gap: 4px; max-width: 170px; }
-.mbt-attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .mbt-attachment-name：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 .mbt-empty {
   color: var(--lake-text-3, #adb5bd);
   text-align: center;

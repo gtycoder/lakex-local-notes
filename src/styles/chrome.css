@@ -34,29 +34,10 @@
 .activity-button:disabled { opacity: .35; cursor: default; }
 .activity-button.active { color: var(--lake-accent); background: var(--lake-accent-tint); }
 
-/* ── 目录栏头部（5 个紧凑图标按钮；沿用产品既有"悬停才显形"） ─────────── */
-.dock-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--lake-radius-xs);
-  color: var(--lake-text-3);
-  background: transparent;
-  cursor: pointer;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
-    background-color var(--lake-motion-fast) var(--lake-ease-standard);
-}
-/* 目录栏图标钮 hover 用主色淡底（= 改造前观感；中性底显得没反应） */
-.dock-icon-btn:hover:not(:disabled) { color: var(--lake-accent); background: var(--lake-accent-tint); }
-.dock-icon-btn:active:not(:disabled) { background: var(--lake-bg-press); transform: scale(.96); }
-.dock-icon-btn:disabled { opacity: .35; cursor: default; }
-.dock-icon-btn.is-active { color: var(--lake-accent); background: var(--lake-accent-tint); }
-.dock-icon-btn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+/* ── 目录栏头部（5 个紧凑图标按钮；沿用产品既有"悬停才显形"） ───────────
+ * 260930 大统一：盒子/圆角/配色/hover 全部来自 kit 的 `.ln-iconbtn--compact`（+ `--accent` 变体：
+ * 目录栏这一排刻意用主色淡底、中性底「显得没反应」，用户 260914 定过 —— 那个变体现在是正式件）。
+ * 这里不再留任何视觉声明；JSX 上同时挂 `dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent`。 */
 
 /* ── 状态栏（保留产品既有形态：右下浮动胶囊；设计稿的"全宽底栏"属结构改动，按"以产品为准"不采纳） ── */
 .document-statusbar {
@@ -535,23 +516,8 @@
  * 后者会被鼠标点击后的残余 focus 钉住，导致选中行标题被 ⋯ 挤窄，用户 260914）。 */
 .note-row:hover .tree-row-actions,
 .tree-row-actions:has(:focus-visible) { display: flex; }
-.tree-row-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--lake-radius-xs);
-  color: var(--lake-text-3);
-  background: transparent;
-  cursor: pointer;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
-    background-color var(--lake-motion-fast) var(--lake-ease-standard);
-}
-.tree-row-action:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.tree-row-action:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
+/* 260930 大统一：目录行动作钮（重命名/删除…）也是图标按钮 ⇒ 走 kit 的 `.ln-iconbtn--compact`，
+   本处只保留"行 hover / 键盘聚焦才显形"这条容器语义（见上一条 .tree-row-actions）。 */
 
 /* ── 页签溢出菜单项（P5-i；设计 04 菜单项规格）────────────────────────── */
 .tab-switcher-item {
@@ -560,11 +526,7 @@
   color: var(--lake-text-2);
 }
 .tab-switcher-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.tab-switcher-item.active {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
-  font-weight: var(--lake-font-weight-semibold);
-}
+/* .tab-switcher-item.active 的选中三元组已收编到 kit 的 .ln-row.is-selected（260930）。 */
 
 /* ══ P7-b 漏搬补回（用户截图发现：菜单项图标与文字贴在一起 ⇒ 顺藤查出这一类）══════
  * 起因：P7-b 把 src/b3/* 移出桌面入口时，只搬了「承重的壳层几何」的一部分；

@@ -206,7 +206,7 @@ export function SyncStatusPopover({
                 <div className="sync-status-history-list b3-list b3-list--background" role="list">
                   {conflictSnapshots.map((item) => (
                     <button key={item.noteId} type="button" className="b3-list-item" onClick={() => onOpenHistory?.(item.noteId)}>
-                      <span className="b3-list-item__text">{item.title || "无标题"}</span>
+                      <span className="b3-list-item__text ln-ellipsis">{item.title || "无标题"}</span>
                       <span className="b3-list-item__meta">查看历史</span>
                     </button>
                   ))}

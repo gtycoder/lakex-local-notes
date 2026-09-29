@@ -60,14 +60,14 @@ export function FieldTypeGrid({ value, disabled, onPick }: { value?: string; dis
   return (
     <div className="bt-type-grid" role="listbox" aria-label="字段类型">
       {unknown && (
-        <button type="button" className={"bt-menu-item" + (unknown === value ? " is-selected" : "")} disabled={disabled} onClick={() => onPick(unknown)}>
-          <FieldTypeIcon type={unknown} /><span className="bt-menu-label">{unknown}（未知）</span><Check size={14} />
+        <button type="button" className={"bt-menu-item ln-menu__item" + (unknown === value ? " is-selected" : "")} disabled={disabled} onClick={() => onPick(unknown)}>
+          <FieldTypeIcon type={unknown} /><span className="bt-menu-label ln-ellipsis">{unknown}（未知）</span><Check size={14} />
         </button>
       )}
       {BITABLE_FIELD_TYPES.map((type) => (
         <button key={type} type="button" role="option" aria-selected={type === value}
-          className={"bt-menu-item" + (type === value ? " is-selected" : "")} disabled={disabled} onClick={() => onPick(type)}>
-          <FieldTypeIcon type={type} /><span className="bt-menu-label">{BITABLE_FIELD_TYPE_LABEL[type]}</span>
+          className={"bt-menu-item ln-menu__item" + (type === value ? " is-selected" : "")} disabled={disabled} onClick={() => onPick(type)}>
+          <FieldTypeIcon type={type} /><span className="bt-menu-label ln-ellipsis">{BITABLE_FIELD_TYPE_LABEL[type]}</span>
           {type === value && <Check size={14} />}
         </button>
       ))}
@@ -88,7 +88,7 @@ export function FieldTypeSelect({ value, disabled, onPick }: { value: string; di
       <button ref={anchorRef} type="button" className="bt-select-trigger" aria-expanded={open} aria-haspopup="listbox" disabled={disabled}
         onClick={() => setOpen((v) => !v)}>
         <FieldTypeIcon type={value} />
-        <span className="bt-field-name">{label}</span>
+        <span className="bt-field-name ln-ellipsis">{label}</span>
         <ChevronDown size={14} />
       </button>
       <Popover open={open} anchor={anchorRef.current} onClose={() => setOpen(false)} width={300} align="start">
@@ -328,7 +328,7 @@ export function AttachmentChipList({ noteId, attachments, onOpen, onOpenImages, 
             ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => openByFile(file)} />
             : (
               /* 名称不是丢了、而是挪到 hover 气泡里（`aria-label` 保可读；不再是常驻文字） */
-              <button type="button" className="bt-file-chip" aria-label={name} onClick={() => openByFile(file)}>
+              <button type="button" className="bt-file-chip ln-iconbtn ln-iconbtn--compact" aria-label={name} onClick={() => openByFile(file)}>
                 <FileKindIcon name={name} />
               </button>
             )}
@@ -447,8 +447,8 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
         <input ref={inputRef} type="file" multiple accept={imageOnly ? "image/*" : undefined} className="bt-hidden-input"
           onChange={(event) => { takeFiles(event.target.files); event.target.value = ""; }} />
       )}
-      {rejectNote && <span className="bt-cell-muted" role="status">{rejectNote}</span>}
-      {attachments.length === 0 && readOnly && <span className="bt-cell-muted">—</span>}
+      {rejectNote && <span className="bt-cell-muted ln-ellipsis" role="status">{rejectNote}</span>}
+      {attachments.length === 0 && readOnly && <span className="bt-cell-muted ln-ellipsis">—</span>}
       {expandAnchor && (
         <AttachmentExpandPopover
           anchor={expandAnchor}
@@ -604,7 +604,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
         <button type="button" className="bt-icon-btn" aria-label="关闭" title="关闭" onPointerDown={(event) => event.stopPropagation()} onClick={onClose}><X size={14} /></button>
       </header>
       <div className="bt-attach-expand-body">
-        {rejectNote && <div className="bt-cell-muted" role="status">{rejectNote}</div>}
+        {rejectNote && <div className="bt-cell-muted ln-ellipsis" role="status">{rejectNote}</div>}
         <div
           ref={dropRef}
           className={"bt-attach-dropzone" + (attachments.length > 0 ? " has-items" : "") + (dropActive ? " is-drop-active" : "")}
@@ -676,11 +676,11 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
                       {/* 附件字段 = 大号**类型图标**（用户 260930）；图片字段仍是缩略图（那个字段就是看图）。 */}
                       {imageOnly
                         ? (isImageExtension(extOf(file))
-                          ? <img src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
+                          ? <img className="ln-imgfill" src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
                           : <span className="bt-attach-card-ext">{(extOf(file) || "file").toUpperCase()}</span>)
                         : <span className="bt-attach-card-kind"><FileKindIcon name={name} size={46} /></span>}
                       {!readOnly && (
-                        <button type="button" className="bt-attach-card-remove" aria-label={"移除 " + name} title="删除"
+                        <button type="button" className="bt-attach-card-remove ln-iconbtn ln-iconbtn--compact" aria-label={"移除 " + name} title="删除"
                           onClick={(event) => { event.stopPropagation(); onRemove(file); }}><X size={13} /></button>
                       )}
                     </div>
@@ -712,10 +712,10 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
                             onMouseLeave={tip.hide}>{name}</span>
                         )}
                       {!readOnly && renameFile !== file && (
-                        <button type="button" className="bt-attach-card-icon" title="编辑名称" aria-label={"编辑名称 " + name}
+                        <button type="button" className="bt-attach-card-icon ln-iconbtn ln-iconbtn--compact" title="编辑名称" aria-label={"编辑名称 " + name}
                           onClick={() => setRenameFile(file)}><Pencil size={14} /></button>
                       )}
-                      <button type="button" className="bt-attach-card-icon" title="下载" aria-label={"下载 " + name}
+                      <button type="button" className="bt-attach-card-icon ln-iconbtn ln-iconbtn--compact" title="下载" aria-label={"下载 " + name}
                         onClick={() => { void native.saveAssetAs(noteId, file, name).catch((error) => reportNativeActionError("下载附件", error)); }}><Download size={14} /></button>
                     </div>
                   </div>
@@ -859,9 +859,9 @@ export function SelectMenu({ value, options, disabled, onChange, placeholder }: 
       <Popover open={open} anchor={anchorRef.current} onClose={() => setOpen(false)} width={260} align="start">
         <div className="bt-panel">
           {options.map((option) => (
-            <button key={option.value} type="button" className={"bt-menu-item" + (option.value === value ? " is-selected" : "")}
+            <button key={option.value} type="button" className={"bt-menu-item ln-menu__item" + (option.value === value ? " is-selected" : "")}
               onClick={() => { onChange(option.value); setOpen(false); }}>
-              <span className="bt-menu-label">{option.label}</span>
+              <span className="bt-menu-label ln-ellipsis">{option.label}</span>
               {option.value === value && <Check size={14} />}
             </button>
           ))}
@@ -897,7 +897,7 @@ export function DatePicker({ value, readOnly, onChange }: { value: unknown; read
   return (
     <div className="bt-date-cell">
       <button ref={anchorRef} type="button" className={"bt-date-trigger" + (text ? "" : " is-empty")} disabled={readOnly} onClick={() => setOpen((v) => !v)}>
-        <span>{text || "请选择日期"}</span><Calendar size={13} />
+        <span className="ln-ellipsis">{text || "请选择日期"}</span><Calendar size={13} />
       </button>
       <Popover open={open} anchor={anchorRef.current} onClose={() => setOpen(false)} width={264}>
         <div className="bt-date-panel">
@@ -962,7 +962,7 @@ function LinkCell({ value, readOnly, onChange }: { value: unknown; readOnly: boo
   return (
     <span className="bt-link-cell"
       onDoubleClick={() => { if (!readOnly) { setDraft(text); setEditing(true); } }}>
-      <span className="bt-link-text" title={text || undefined}>{text}</span>
+      <span className="bt-link-text ln-ellipsis" title={text || undefined}>{text}</span>
       {openable && (
         <button type="button" className="bt-link-open" title="用系统浏览器打开" aria-label="打开链接"
           onClick={(event) => { event.stopPropagation(); window.open(text.trim(), "_blank", "noopener"); }}>
@@ -989,7 +989,7 @@ export function StatCell({ field, records, stat, readOnly, onPick }: {
     <button type="button" className={"bt-stat" + (stat ? " has-stat" : "")} disabled={readOnly}
       title={stat ? BITABLE_STAT_LABEL[stat] : "选择汇总方式"}
       onClick={(event) => { event.stopPropagation(); onPick(event.currentTarget); }}>
-      <span className="bt-stat-text">{stat ? statDisplayText(stat, computeColumnStat(field, records, stat)) : "统计"}</span>
+      <span className="bt-stat-text ln-ellipsis">{stat ? statDisplayText(stat, computeColumnStat(field, records, stat)) : "统计"}</span>
       <ChevronDown size={12} className="bt-stat-caret" />
     </button>
   );
@@ -1108,7 +1108,7 @@ export function RelationCell({ field, value, readOnly, ctx, onChange, noteId, on
   const committed = relationRecordIds(value);
   /** 目标表被删 / 未配置：没有任何可编辑入口，只留失效或空占位。 */
   if (!target) {
-    return <span className="bt-cell-relation" title="关联的目标数据表不存在（关联 id 仍保留）">{committed.length > 0 ? "关联已失效" : "—"}</span>;
+    return <span className="bt-cell-relation ln-ellipsis" title="关联的目标数据表不存在（关联 id 仍保留）">{committed.length > 0 ? "关联已失效" : "—"}</span>;
   }
   const titleOf = (record: BitableRecord) => bitableRecordTitle(target, record, ctx);
   return (
@@ -1135,7 +1135,7 @@ export function RelationCell({ field, value, readOnly, ctx, onChange, noteId, on
 /** 按字段类型分派单元格编辑器（未知类型只读展示、不清空）。 */
 export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages }: CellEditorProps) {
   if (!isKnownFieldType(field.type)) {
-    return <span className="bt-cell-unknown" title="未知字段类型（只读展示）">{bitableDisplayValue(field, value) || "—"}</span>;
+    return <span className="bt-cell-unknown ln-ellipsis" title="未知字段类型（只读展示）">{bitableDisplayValue(field, value) || "—"}</span>;
   }
   switch (field.type) {
     case "text":
@@ -1168,7 +1168,7 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
       );
     case "attachment":
     case "image":
-      return renderAttachment ? <>{renderAttachment(field.type === "image")}</> : <span className="bt-cell-muted">—</span>;
+      return renderAttachment ? <>{renderAttachment(field.type === "image")}</> : <span className="bt-cell-muted ln-ellipsis">—</span>;
     case "boolean":
       return <BooleanCell value={value} readOnly={readOnly} onChange={onChange} />;
     case "link":
@@ -1179,11 +1179,11 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
       return <ProgressCell field={field} value={value} readOnly={readOnly} onChange={onChange} />;
     case "createdTime":
     case "updatedTime":
-      return <span className="bt-cell-muted">{record ? (bitableFieldText(record, field, ctx) || "—") : "—"}</span>;
+      return <span className="bt-cell-muted ln-ellipsis">{record ? (bitableFieldText(record, field, ctx) || "—") : "—"}</span>;
     case "relation":
       return <RelationCell field={field} value={value} readOnly={readOnly} ctx={ctx} onChange={onChange}
         noteId={noteId} onOpenImages={onOpenImages} />;
     default:
-      return <span className="bt-cell-unknown">{bitableDisplayValue(field, value) || "—"}</span>;
+      return <span className="bt-cell-unknown ln-ellipsis">{bitableDisplayValue(field, value) || "—"}</span>;
   }
 }

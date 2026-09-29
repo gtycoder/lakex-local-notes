@@ -67,7 +67,7 @@ function Media({ filename, cardName, label, assets, onImageClick }: MediaProps) 
   }
   return <span className="quick-note-file-chip" title={displayName}>
     <Paperclip size={14} />
-    <span className="quick-note-file-chip__name">{displayName}</span>
+    <span className="quick-note-file-chip__name ln-ellipsis">{displayName}</span>
   </span>;
 }
 

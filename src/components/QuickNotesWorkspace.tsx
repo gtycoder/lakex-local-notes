@@ -737,7 +737,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                     onClick={(event) => { event.stopPropagation(); toggleSelected(item.id); }}
                   >{selected.has(item.id) && <Check size={13} />}</button>
                   <button className="quick-note-index-main" onClick={() => (selecting ? toggleSelected(item.id) : void startEditing(item))} title={item.content.text?.trim() || "空小记"}>
-                    <span className="b3-list-item__text">{indexLabel(item)}</span>
+                    <span className="b3-list-item__text ln-ellipsis">{indexLabel(item)}</span>
                     <span className="b3-list-item__meta">{indexStamp(item.updatedAt || item.createdAt)}</span>
                   </button>
                   <span className="quick-note-index-actions">
@@ -818,7 +818,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <h3>{convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"}</h3>
           <p>选择一个笔记本。{convertItems.length > 1 ? `${convertItems.length} 篇小记将依次插入该笔记本的最顶部；` : "新文档将插入其中的最顶部；"}转化完成后，小记将从时间线移除。</p>
           <div className="quick-note-notebook-list b3-list b3-list--background">
-            {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus size={14} /></span><span className="b3-list-item__text">{notebook.title}</span></button>)}
+            {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus size={14} /></span><span className="b3-list-item__text ln-ellipsis">{notebook.title}</span></button>)}
             {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
           </div>
           <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>

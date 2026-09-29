@@ -103,7 +103,7 @@ export function BitableKanbanView({ noteId, table, view, records, readOnly, onSe
                     onDragStart={() => setDraggingId(record.id)}
                     onDragEnd={() => setDraggingId(null)}
                     onClick={() => onOpenRecord(record.id)}>
-                    <div className="bt-kanban-card-title">{bitableRecordTitle(table, record, ctx)}</div>
+                    <div className="bt-kanban-card-title ln-ellipsis">{bitableRecordTitle(table, record, ctx)}</div>
                     {cardFields.map((field) => {
                       if (isAttachmentLikeField(field.type)) {
                         const files = bitableAttachments(record.values[field.id]);

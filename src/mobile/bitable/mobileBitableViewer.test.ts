@@ -126,7 +126,8 @@ describe("MobileBitableViewer 只读单元", () => {
     expect(html).toContain("bt-file-icon--pdf");
     expect(html).toContain("bt-file-icon--image");
     expect(html).toContain("mbt-attachment-file is-kind");
-    expect(html).toContain('class="mbt-attachment-name"');
+    // 260930 大统一：截断走 kit 的 .ln-ellipsis（移动端也加载 themes/kit）
+    expect(html).toContain('class="mbt-attachment-name ln-ellipsis"');
     // 计数口径：2 个类型图标（附件格里的 pdf + jpg），1 张缩略图（图片格，**不**变图标）
     // 每个图标类名形如 `lucide ... bt-file-icon bt-file-icon--pdf` ⇒ 用 `--` 形态计数（每个图标一次）
     expect((html.match(/bt-file-icon--/g) ?? []).length).toBe(2);

@@ -49,7 +49,6 @@
 button.bt-gallery-cover { cursor: pointer; }
 
 .bt-gallery.is-compact .bt-gallery-cover { aspect-ratio: 1 / 1; }
-.bt-gallery-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .bt-gallery-cover.is-contain img { object-fit: contain; }
 .bt-gallery-cover-empty { color: var(--lake-text-3); }
 
@@ -62,7 +61,7 @@ button.bt-gallery-cover { cursor: pointer; }
 }
 
 .bt-gallery.is-compact .bt-gallery-body { padding: 6px 8px; }
-.bt-gallery-title { font-size: 13px; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-gallery-title { font-size: 13px; color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
 .bt-gallery-field { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
 .bt-gallery-field-name { flex: 0 0 auto; color: var(--lake-text-3); }
 .bt-gallery-field-value { min-width: 0; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

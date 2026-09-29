@@ -48,7 +48,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           {children.length > 0 ? <ChevronRight size={13} className={open ? "trash-caret-open" : ""} /> : null}
         </span>
         <span className="b3-list-item__graphic">{item.nodeType === "note" ? <File size={14} /> : <Folder size={14} />}</span>
-        <div className="b3-list-item__text ln-row2__main" onClick={() => onSelect(item)} title={item.nodeType === "note" ? "点击预览内容" : ""}>
+        <div className="b3-list-item__text ln-row2__main ln-ellipsis" onClick={() => onSelect(item)} title={item.nodeType === "note" ? "点击预览内容" : ""}>
           <span className="ln-row2__title">{item.title || "无标题"}</span>
           <span className="ln-row2__meta">
             {item.nodeType === "note" ? "文档" : "目录"}
@@ -338,7 +338,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
           {quickItems.map((item) => (
             <div className="b3-list-item b3-list-item--hide-action ln-row2" key={item.id}>
               <span className="b3-list-item__graphic"><File size={14} /></span>
-              <div className="b3-list-item__text ln-row2__main">
+              <div className="b3-list-item__text ln-row2__main ln-ellipsis">
                 <span className="ln-row2__title">小记</span>
                 <span className="ln-row2__meta">{new Date(item.deletedAt).toLocaleString()}</span>
               </div>

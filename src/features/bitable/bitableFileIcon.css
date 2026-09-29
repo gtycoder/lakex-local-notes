@@ -16,10 +16,9 @@
 
 /* 单元格里的小图标：方形命中区（点它 = 打开/预览，与原来的 chip 同一动作）。 */
 .bt-attachment-chip.is-icon { display: inline-flex; }
-.bt-file-chip { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--lake-radius-xs); background: transparent; cursor: pointer; }
-.bt-file-chip:hover { background: var(--lake-bg-hover); }
-.bt-file-chip:disabled { cursor: default; }
-.bt-file-chip:disabled:hover { background: transparent; }
+/* 260930 审计：这就是 kit 的图标按钮（.ln-iconbtn--compact），这里只保留「附件格特有」的一条：
+   宽度改为随名字拉伸（卡片上有名字时）。JSX 上同时挂 ln-iconbtn ln-iconbtn--compact。 */
+.bt-file-chip { width: auto; }
 
 /* hover 名称气泡：表面用 kit 的 .ln-tip，定位由 usePopoverPosition 实测（fixed ⇒ 不被表格滚动容器裁切）。 */
 .bt-file-tip { position: fixed; pointer-events: none; }

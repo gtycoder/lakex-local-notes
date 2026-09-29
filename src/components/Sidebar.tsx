@@ -640,7 +640,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         <div className="list-heading">
         {props.onToggleDock && (
           <button
-            className={`dock-icon-btn pin-btn${props.docked ? " is-active" : ""}`}
+            className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent pin-btn${props.docked ? " is-active" : ""}`}
             onClick={props.onToggleDock}
             title={props.docked ? "取消固定目录（⌘]）" : "固定目录（⌘]）"}
             aria-label={props.docked ? "取消固定目录" : "固定目录"}
@@ -648,13 +648,13 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             aria-pressed={!!props.docked}
           ><Pin size={14} /></button>
         )}
-        <button className="dock-icon-btn refresh-btn" onClick={() => void refreshTree()} title="刷新目录" aria-label="刷新目录" disabled={refreshing}><RefreshCw size={14} className={refreshing ? "spin" : undefined} /></button>
-        <button className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`} onClick={filter.toggle}
+        <button className="dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent refresh-btn" onClick={() => void refreshTree()} title="刷新目录" aria-label="刷新目录" disabled={refreshing}><RefreshCw size={14} className={refreshing ? "spin" : undefined} /></button>
+        <button className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent filter-btn${filter.active ? " is-active" : ""}`} onClick={filter.toggle}
           title="筛选目录" aria-label="筛选目录" aria-pressed={filter.open}><Filter size={14} /></button>
-        <button className="dock-icon-btn collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><ChevronsDownUp size={14} /></button>
-        <button className="dock-icon-btn locate-btn" onClick={locateActive} title="定位到当前文档" disabled={!props.activeId} aria-label="定位到当前文档"><Focus size={14} /></button>
+        <button className="dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><ChevronsDownUp size={14} /></button>
+        <button className="dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent locate-btn" onClick={locateActive} title="定位到当前文档" disabled={!props.activeId} aria-label="定位到当前文档"><Focus size={14} /></button>
         <div className="create-menu-wrap" ref={menuRef}>
-          <button ref={createButtonRef} className={`dock-icon-btn create-btn${menuOpen ? " is-active" : ""}`} onClick={() => {
+          <button ref={createButtonRef} className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent create-btn${menuOpen ? " is-active" : ""}`} onClick={() => {
             if (menuOpen) setMenuOpen(false);
             else { updateCreateMenuPosition(); setMenuOpen(true); }
           }} title="新建" aria-label="新建" aria-pressed={menuOpen}><Plus size={14} /></button>
@@ -756,7 +756,7 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
       <span className="tree-row-actions">
         <button
           type="button"
-          className="tree-row-action"
+          className="tree-row-action ln-iconbtn ln-iconbtn--compact"
           aria-label="更多操作"
           title="更多"
           onPointerDown={(event) => event.stopPropagation()}

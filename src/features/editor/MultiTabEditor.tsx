@@ -401,7 +401,7 @@ export function MultiTabEditor({
                       >
                         <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ?? <File size={15} />}</span>
                         <span className="tab-switcher-status" aria-hidden="true">{tab.dirty ? "●" : ""}</span>
-                        <span className="tab-switcher-title">{tab.title || "无标题"}</span>
+                        <span className="tab-switcher-title ln-ellipsis">{tab.title || "无标题"}</span>
                         {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
                       </button>
                       <button

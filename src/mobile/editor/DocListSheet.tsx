@@ -45,7 +45,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
                 className={"med-doc-item" + (d.id === activeId ? " med-active" : "")}
                 onClick={() => { onPick(d.id); onClose(); }}
               >
-                <span className="med-doc-item-title">{d.title || "无标题"}</span>
+                <span className="med-doc-item-title ln-ellipsis">{d.title || "无标题"}</span>
               </button>
             ))
           )}

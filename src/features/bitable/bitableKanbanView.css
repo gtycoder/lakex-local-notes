@@ -74,7 +74,7 @@
 
 .bt-kanban-card:hover { border-color: var(--lake-accent); }
 .bt-kanban-card.is-dragging { opacity: 0.5; }
-.bt-kanban-card-title { font-size: 13px; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-kanban-card-title { font-size: 13px; color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
 .bt-kanban-field { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
 .bt-kanban-field-name { flex: 0 0 auto; color: var(--lake-text-3); }
 .bt-kanban-field-value { min-width: 0; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

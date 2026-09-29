@@ -23,15 +23,8 @@
   background: var(--lake-bg-panel);
 }
 
-.bt-rel-search input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--lake-text-1);
-  font-size: 13px;
-}
+/* 搜索框本体走 kit 的 .ln-input__field（260930 收编）；这里只留配色/字号这种本处约束。 */
+.bt-rel-search input { color: var(--lake-text-1); font-size: 13px; }
 
 /* 筛选 / 排序：弹窗内的**内联条**（不嵌气泡——嵌套气泡会被外层面板压住且被外点关闭误伤）。 */
 .bt-rel-config { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl); background: var(--lake-bg-subtle); border-top: 1px solid var(--lake-border-2); }

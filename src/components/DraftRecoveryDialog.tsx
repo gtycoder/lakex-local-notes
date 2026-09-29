@@ -22,7 +22,7 @@ export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: 
         <div className="draft-recovery-list b3-list b3-list--background">
           {entries.slice(0, 5).map((entry) => (
             <div className="b3-list-item draft-recovery-row" key={entry.noteId}>
-              <div className="b3-list-item__text ln-row2__main">
+              <div className="b3-list-item__text ln-row2__main ln-ellipsis">
                 <span className="ln-row2__title">{entry.title || "无标题"}</span>
                 <span className="ln-row2__meta">{new Date(entry.updatedAt).toLocaleString("zh-CN", { hour12: false })}</span>
               </div>

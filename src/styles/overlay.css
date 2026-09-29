@@ -170,54 +170,9 @@
   font-size: var(--lake-font-size-small);
 }
 
-/* ── 菜单项统一规格 ───────────────────────────────────────────────── */
-.top-menu > button,
-.context-menu > button,
-.context-menu-item,
-.context-menu-submenu > button,
-.create-menu > button {
-  display: flex;
-  align-items: center;
-  gap: var(--lake-space-md);   /* 图标与文字的间距（P7-b 从 b3/layout.css 漏搬，导致两者贴在一起） */
-  min-height: 27px;
-  padding: 0 var(--lake-space-md);
-  border: 0;
-  border-radius: var(--lake-radius-xs);
-  color: var(--lake-text-1);
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--lake-font-size-small);
-  cursor: pointer;
-  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
-    color var(--lake-motion-fast) var(--lake-ease-standard);
-}
-.top-menu > button:hover,
-.context-menu > button:hover,
-.context-menu-item:hover,
-.context-menu-submenu > button:hover:not(:disabled),
-.create-menu > button:hover:not(:disabled) {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
-  font-weight: var(--lake-font-weight-semibold);
-}
-.top-menu > button:focus-visible,
-.context-menu > button:focus-visible,
-.context-menu-item:focus-visible,
-.create-menu > button:focus-visible {
-  outline: var(--lake-focus-ring-width) solid var(--lake-accent);
-  outline-offset: -2px;
-}
-.top-menu > button:disabled,
-.context-menu > button:disabled,
-.context-menu-item.is-disabled,
-.context-menu-submenu > button:disabled,
-.create-menu > button:disabled { color: var(--lake-text-4); cursor: default; opacity: 1; }
-.context-menu > button.danger,
-.context-menu-item.danger { color: var(--lake-status-error); }
-.context-menu > button.danger:hover,
-.context-menu-item.danger:hover { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
-.context-menu-sep { height: 1px; margin: 5px 0; background: var(--lake-border-2); }
-.top-menu > button span small { color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+/* 260930 审计：菜单项规格已**收编到 kit.css 的 .ln-menu__item**（连同 `.top-menu > button` 等 legacy 选择器），
+   本文件不再重复声明 —— 单一来源见 `src/styles/kit.css`「菜单项统一规格」。*/
+
 
 /* ── 全文搜索面板内层（P5-j；设计 05/07）───────────────────────────────
  * 面板表面已由本文件的 .search-panel 规则统一（并**覆盖掉 app/dialogs.css 里那条残留毛玻璃**）。 */

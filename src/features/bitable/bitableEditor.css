@@ -67,7 +67,7 @@
 .bt-table-item.dragging { opacity: .5; }
 
 .bt-grip { color: var(--lake-text-3); flex: 0 0 auto; }
-.bt-table-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-table-name { flex: 1; }   /* 截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 .bt-table-count { font-size: 11px; color: var(--lake-text-3); }
 /* 「⋯ / 删除表」**浮在行上、悬停才浮现**：绝对定位（不占流内位置，不再挤压名称/计数）；
    default 不可见且不接收点击，悬停整行时才淡入。 */
@@ -151,7 +151,7 @@
 .bt-grid .col-selected { background: var(--lake-accent-tint); }
 .bt-viewbar-leading { display: flex; align-items: center; gap: 4px; margin-right: 6px; }
 .bt-tables-switch { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 13px; cursor: pointer; color: inherit; max-width: 200px; }
-.bt-tables-switch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .bt-tables-switch-name：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 
 .bt-grid thead th { position: sticky; top: 0; z-index: 2; height: 36px; background: var(--lake-bg-panel); font-weight: 500; border-bottom: 1px solid var(--lake-border-2); }
 
@@ -160,9 +160,10 @@
 .bt-th-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 显形用 visibility 而不是 display：它是绝对定位（不占标题宽度），但 display:none 时量出来的 rect 恒为
    0×0 —— 拿它当浮层锚点就会开到左上角（260928 列菜单/文本颜色调色板都踩过）。 */
-.bt-th-more { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: inline-flex; visibility: hidden; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: var(--lake-text-3); }
+/* 260930 审计：图标按钮收编到 kit 的 .ln-iconbtn（--compact）——这里只留**本处特有的布局**
+   （绝对定位 + 悬停才显形）。盒子/圆角/配色/hover 全部来自原语，别再写第二份。 */
+.bt-th-more { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); visibility: hidden; }
 .bt-th:hover .bt-th-more { visibility: visible; }
-.bt-th-more:hover { background: var(--lake-bg-hover); }
 .bt-th.dragging { opacity: .5; }
 .bt-required { color: var(--lake-status-error); font-style: normal; }
 
@@ -173,9 +174,8 @@
 .bt-td-index { position: relative; display: flex; align-items: center; justify-content: center; padding: 0; height: var(--bt-row-h, 36px); }
 .bt-row-num { flex: 0 0 auto; text-align: center; border: 0; background: transparent; cursor: pointer; color: var(--lake-text-3); font: inherit; font-size: 13px; }
 .bt-row-handle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 2px 0 4px; opacity: 0; pointer-events: none; }
-.bt-row-grip, .bt-row-expander { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: var(--lake-text-3); }
+.bt-row-grip, .bt-row-expander { flex: 0 0 auto; }   /* 盒子/配色走 kit 的 .ln-iconbtn */
 .bt-row-grip { cursor: grab; }
-.bt-row-grip:hover, .bt-row-expander:hover { background: var(--lake-bg-hover); }
 .bt-row-check { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; }
 .bt-row:hover .bt-row-num, .bt-row.selected .bt-row-num { opacity: 0; }
 .bt-row:hover .bt-row-handle, .bt-row.selected .bt-row-handle { opacity: 1; pointer-events: auto; }
@@ -193,9 +193,7 @@
 .bt-td .bt-attachment-editor { flex-wrap: nowrap; overflow: hidden; }
 .bt-td .bt-option-chip,
 .bt-td .bt-attachment-chip { flex: 0 0 auto; }
-.bt-td .bt-cell-unknown,
-.bt-td .bt-cell-relation,
-.bt-td .bt-cell-muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* .bt-cell-unknown / .bt-cell-relation / .bt-cell-muted：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 /* 附件格**铺满整个单元格**（260928 用户报「格子有大灰边框、只有中间白区生效」）：
    行高只由 --bt-row-h 决定，格子高度取 100% ⇒ 永远撑不开行；点击/粘贴/拖拽的**有效区域
    = 整个格子**（内距只是视觉留白，空白处照样命中 .bt-attachment-cell），不再只是中间那条白框。
@@ -243,16 +241,14 @@
 .bt-panel h4 { margin: 4px 6px; font-size: 12px; color: var(--lake-text-2); }
 .bt-panel-add { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: 5px; font: inherit; font-size: 12px; color: var(--lake-accent); }
 .bt-panel-add:hover { background: var(--lake-bg-hover); }
-.bt-menu-item { display: flex; align-items: center; gap: 6px; border: 0; background: transparent; cursor: pointer; padding: 6px 8px; border-radius: 5px; font: inherit; font-size: 13px; text-align: left; color: inherit; }
-.bt-menu-item:hover { background: var(--lake-bg-hover); }
-.bt-menu-item.is-selected { background: var(--lake-accent-tint); }
-.bt-menu-item.danger { color: var(--lake-status-error); }
+/* 260930 审计：菜单项规格收编到 kit 的 .ln-menu__item（含 hover/选中/危险态与几何），
+   JSX 上已同时挂 `bt-menu-item ln-menu__item`（前者仅作历史钩子，见 cssLayers 基线）。 */
 .bt-menu-custom { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 12px; }
 .bt-menu-custom input { width: 64px; }
 
 .bt-field-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 5px; font-size: 13px; }
 .bt-field-row:hover { background: var(--lake-bg-hover); }
-.bt-field-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-field-name { flex: 1; }   /* 截断走 kit 的 .ln-ellipsis */
 
 .bt-rule-row { display: flex; align-items: center; gap: 4px; padding: 3px 2px; }
 .bt-rule-row select, .bt-rule-row input { min-width: 0; height: 26px; border: 1px solid var(--lake-border-1); border-radius: 5px; background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: 12px; padding: 0 4px; }
@@ -274,7 +270,7 @@
 .bt-drawer-body { flex: 1; overflow: auto; padding: 10px; }
 .bt-drawer-row { display: flex; flex-direction: column; gap: 3px; padding: 5px 0; }
 .bt-drawer-label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--lake-text-2); }
-.bt-drawer-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .bt-drawer-label-text：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 .bt-drawer-control { display: block; border: 1px solid var(--lake-border-1); border-radius: 6px; background: var(--lake-bg-panel); overflow: hidden; }
 .bt-drawer .bt-drawer-row { flex-direction: row; align-items: center; gap: 8px; padding: 4px 0; }
 .bt-drawer .bt-drawer-label { flex: 0 0 168px; width: 168px; }
@@ -329,8 +325,7 @@
 .bt-date-cell { display: flex; align-items: center; height: 100%; }
 .bt-date-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; font-size: 13px; color: inherit; }
 .bt-date-trigger.is-empty { color: var(--lake-text-3); }
-/* 日期/时间文案是**单行可省略**的（放在 flex 按钮里，默认会被折行）：列窄了省略号，行高不变（用户 260930）。 */
-.bt-date-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 日期/时间文案是**单行可省略**的：走 kit 的 .ln-ellipsis（挂在那个 <span> 上），列窄了省略号、行高不变。 */
 .bt-date-panel { padding: 8px; }
 .bt-date-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
 .bt-date-week { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 11px; color: var(--lake-text-3); text-align: center; margin-bottom: 2px; }
@@ -391,10 +386,10 @@
 .bt-attach-card.is-drop-before { box-shadow: -2px 0 0 0 var(--lake-accent); }
 .bt-attach-card.is-drop-after { box-shadow: 2px 0 0 0 var(--lake-accent); }
 .bt-attach-card-file { position: relative; display: flex; align-items: center; justify-content: center; height: 92px; background: var(--lake-bg-block); cursor: pointer; }
-.bt-attach-card-file img { width: 100%; height: 100%; object-fit: cover; }
 .bt-attach-card-ext { font-size: 12px; letter-spacing: .04em; color: var(--lake-text-3); }
-.bt-attach-card-remove { position: absolute; top: 4px; right: 4px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 0; border-radius: var(--lake-radius-pill); padding: 0; background: var(--lake-bg-panel); color: var(--lake-text-3); cursor: pointer; }
-.bt-attach-card-remove:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.bt-attach-card-remove { position: absolute; top: 4px; right: 4px; }
+/* 卡片预览区是深色缩略图，这颗 × 需要**白底药丸**才看得见 —— 只覆盖「面」，盒子/命中区仍来自 .ln-iconbtn。 */
+.bt-attach-card-remove { background: var(--lake-bg-panel); border-radius: var(--lake-radius-pill); }
 .bt-attach-card-meta { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 6px; border-top: 1px solid var(--lake-border-1); }
 .bt-attach-card-name { flex: 1; min-width: 0; font-size: 12px; line-height: 1.7; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .bt-attach-card-name:hover { color: var(--lake-text-1); }
@@ -403,8 +398,7 @@
 .bt-attach-card-rename { display: flex; align-items: baseline; gap: 1px; flex: 1; min-width: 0; }
 .bt-attach-card-rename-input { flex: 0 1 auto; min-width: 2ch; max-width: 100%; field-sizing: content; border: 0; border-bottom: 1px solid var(--lake-accent); padding: 0 2px; background: transparent; font: inherit; font-size: 12px; color: var(--lake-text-1); outline: none; }
 .bt-attach-card-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--lake-text-2); }
-.bt-attach-card-icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); padding: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
-.bt-attach-card-icon:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.bt-attach-card-icon { flex: 0 0 auto; }   /* 盒子/配色走 kit 的 .ln-iconbtn */
 .bt-attach-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; width: 100%; border: 0; border-radius: var(--lake-radius-sm); padding: 9px; background: transparent; color: var(--lake-text-2); font: inherit; font-size: 13px; cursor: pointer; }
 .bt-attach-add:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 .bt-attach-expand-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--lake-text-3) 50%); }

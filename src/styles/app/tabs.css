@@ -285,7 +285,7 @@
   line-height: 1;
 }
 
-.tab-switcher-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .tab-switcher-title：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 
 .tab-switcher-close {
   display: grid;

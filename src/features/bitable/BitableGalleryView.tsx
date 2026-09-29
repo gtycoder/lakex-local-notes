@@ -59,7 +59,7 @@ export function BitableGalleryView({ noteId, table, view, records, onOpenRecord,
               <button type="button" className={"bt-gallery-cover" + (fit === "contain" ? " is-contain" : "")}
                 title={cover.name} aria-label={"预览 " + cover.name}
                 onClick={(event) => { event.stopPropagation(); onOpenImages(cellImages, coverIndex < 0 ? 0 : coverIndex); }}>
-                <img src={coverSrc(cover.file)} alt={cover.name} loading="lazy" />
+                <img className="ln-imgfill" src={coverSrc(cover.file)} alt={cover.name} loading="lazy" />
               </button>
             ) : (
               <div className="bt-gallery-cover">
@@ -67,7 +67,7 @@ export function BitableGalleryView({ noteId, table, view, records, onOpenRecord,
               </div>
             )}
             <div className="bt-gallery-body">
-              <div className="bt-gallery-title">{bitableRecordTitle(table, record, ctx)}</div>
+              <div className="bt-gallery-title ln-ellipsis">{bitableRecordTitle(table, record, ctx)}</div>
               {cardFields.map((field) => {
                 /* 附件/图片字段与表格/看板/选择器**同一套**渲染（用户 260930：「画册视图的附件也要改」）：
                    附件字段 = 类型图标、图片字段 = 缩略图，都不显示名称（名字靠 hover 气泡）。

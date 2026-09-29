@@ -52,16 +52,16 @@ const FILES = [
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
-  "styles/feature.css": { decls: 105, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
-  "styles/kit.css": { decls: 577, dupGroups: 0 },     // 260929：横向页签原语按用户选定的「墨线 + 计数徽标」重建（基座取自 components.css 的 legacy 墨线 + 补回 min-width/cursor，新增 .ln-tabs__count；随后回收站/历史/表单全部迁入、删掉过渡的 .ln-tabs--seg 变体 ⇒ 558 → 593 → 577）。原记录 —— P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线
-  "styles/chrome.css": { decls: 509, dupGroups: 0 },  // 260929 续：+2 = 多维表状态栏改为**贴着底栏上沿停靠**（[data-doc-kind="bitable"] 再补 height/min-height 22px，与 sheet 同口径）⇒ 底栏不被状态栏压住。260929：+1 = 多维表文档状态栏上移让位底部常驻汇总栏（[data-doc-kind="bitable"] 的 bottom，与 sheet 同层变体）。P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）；260926 续：+1 = 本地空间指示 .workspace-local（未配置云同步时尾段显示本地图标）；+3 = 表格文档状态栏并入 sheet 底部统计行（[data-doc-kind="sheet"] 的 bottom/height/min-height——高度基线在本层，同层就地加变体，合法新增非覆盖回涨）
+  "styles/feature.css": { decls: 53, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
+  "styles/kit.css": { decls: 588, dupGroups: 0 },   // 260930 大统一：+14 = 单行省略工具类 .ln-ellipsis(--grow) + 图标按钮主色变体 .ln-iconbtn--accent + 菜单项选中态；并把 overlay.css 的 legacy 菜单项选择器（.top-menu > button 等 5 个）**收编进本文件的 .ln-menu__item 单一规则**（那边对应减少，见基线注释）     // 260929：横向页签原语按用户选定的「墨线 + 计数徽标」重建（基座取自 components.css 的 legacy 墨线 + 补回 min-width/cursor，新增 .ln-tabs__count；随后回收站/历史/表单全部迁入、删掉过渡的 .ln-tabs--seg 变体 ⇒ 558 → 593 → 577）。原记录 —— P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线
+  "styles/chrome.css": { decls: 467, dupGroups: 0 },   // 260930 大统一：-39 = 目录栏图标钮（.dock-icon-btn 6 条规则）与目录行动作钮（.tree-row-action 3 条）的视觉声明收编到 kit 的 .ln-iconbtn(--compact/--accent),  // 260929 续：+2 = 多维表状态栏改为**贴着底栏上沿停靠**（[data-doc-kind="bitable"] 再补 height/min-height 22px，与 sheet 同口径）⇒ 底栏不被状态栏压住。260929：+1 = 多维表文档状态栏上移让位底部常驻汇总栏（[data-doc-kind="bitable"] 的 bottom，与 sheet 同层变体）。P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）；260926 续：+1 = 本地空间指示 .workspace-local（未配置云同步时尾段显示本地图标）；+3 = 表格文档状态栏并入 sheet 底部统计行（[data-doc-kind="sheet"] 的 bottom/height/min-height——高度基线在本层，同层就地加变体，合法新增非覆盖回涨）
   "styles/kernel-theme.css": { decls: 61, dupGroups: 0 },  // 260928：+1 = ④「内核品牌绿」例外（固定工具栏加号单独钉回 --lake-kernel-brand-green；浅/深分别走 Lake 原生 schema）—— 刻意的不统一，合法新增非覆盖回涨；原记录 —— 260926：内核 lakex --lakex-editor-* 集中映射（未分层）；60 = ①dark+warm 共用 43 + ②dark 反相 9 + ③light accent 8
-  "styles/overlay.css": { decls: 154, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一；+3 = 多维表收编 .ln-overlay-surface--raised（对话框内嵌套下拉抬层）+ .ln-scrim--right（记录详情侧边抽屉），合法新增非覆盖回涨——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
+  "styles/overlay.css": { decls: 125, dupGroups: 0 },   // 260930 大统一：-29 = 菜单项规格（.top-menu > button / .context-menu > button / .context-menu-item / .context-menu-submenu > button / .create-menu > button）**整段收编进 kit.css 的 .ln-menu__item 单一规则**（那边 +14）  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一；+3 = 多维表收编 .ln-overlay-surface--raised（对话框内嵌套下拉抬层）+ .ln-scrim--right（记录详情侧边抽屉），合法新增非覆盖回涨——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
   "styles/compat.css": { decls: 222, dupGroups: 0 },  // 260928：+10 = 内核卡片错误兜底块 .ne-card-error-fallback（把 lakeRuntime 里违反 #14 的内联样式收成类，双端共用）；260923：-4 = .tab-item 盒收编到 app/tabs.css；260926：+4 = 补上 .config-block__actions 布局（该 JSX 类此前无任何定义）；+3 = 复位 <button>.b3-list-item 浏览器默认边框/底色/居中（历史快照行等，合法新增非覆盖回涨）
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
   "features/attachment/attachment-preview.css": { decls: 82, dupGroups: 0 },   // 260928：+4 = 预览表面与图片 Lightbox 同源（backdrop-filter blur ×2）+ 工具栏浅色化的 border-bottom + macOS 红绿灯让位 .is-mac（合法新增，非覆盖回涨）
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
-  "features/outline/outline.css": { decls: 267, dupGroups: 0 },
+  "features/outline/outline.css": { decls: 259, dupGroups: 0 },
   "features/editor/selectionToolbar/selectionToolbar.css": { decls: 135, dupGroups: 0 },   // 260924 点验：+2 = __kmenu / __cardpop 各加 width:max-content（固定浮栏内绝对定位 width:auto 会 shrink-to-fit 压窄子菜单 → 文字换行；合法新增，非覆盖回涨）
   // 260924 续：图片形态改内核卡片工具栏结构 + 云端顺序 ⇒ 删自有 menu/item/row/input/apply（-53），+4 外壳只定位；再 +45 = 图片弹窗（宽高/链接/边距）的 __cardpop 白卡 + 输入/复选/开关行 + 百分比段（均 --lake-* 令牌）；
   // 另：+18 = 浮栏 hover 说明（名称+快捷键）portal DOM 浮层；同批 -6 = 删「转为」下拉/heading 字形覆盖
@@ -74,7 +74,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/sheet/sheetEditor.css": { decls: 64, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   // 260929：-30 = 分组样式按职责移出（→ bitableViews.css）+ 表底「添加记录」旧样式删除（改用共用 .bt-add-round）+ 删掉已冗余的 .bt-panel-add 组合规则；实测 1051（重复组 0）
-  "features/bitable/bitableEditor.css": { decls: 1062, dupGroups: 0 },   // 260930：+6 = 列宽自由设置/行高不被内容撑高（`.bt-grid th/td` 补 `white-space: nowrap` = 永不换行；新增 `.bt-date-trigger > span` 的 min-width/overflow/text-overflow/white-space = 日期时间列窄了出省略号；`.bt-cell-input` 补 `text-overflow: ellipsis` = 文本格窄了出省略号而不是硬裁；合法新增非覆盖回涨）。再+1 = `.bt-input::placeholder`（选项编辑的新行用 placeholder 显示默认名「选项 N」；顺带把 .bt-input 的占位色收敛到 --lake-text-4，浏览器默认灰不是令牌）。此前：+1 = .bt-select-trigger 显式 text-align:left（修「编辑字段」类型名被 button 默认居中）；数据表行「⋯/删除表」改**绝对定位浮层 + 悬停浮现**（+8：position:relative×1 + 两钮 absolute/居中/隐藏 ×6 + hover 显形 ×2；原 2 条 opacity 规则被替换）；260929 续 2：+1 = 单元格有自身选中环时不再叠输入框焦点环
+  "features/bitable/bitableEditor.css": { decls: 975, dupGroups: 0 },   // 260930 大统一：-63 = 图标钮（.bt-th-more/.bt-row-grip/.bt-row-expander/.bt-attach-card-icon/.bt-attach-card-remove）与菜单项（.bt-menu-item 4 条）收编到 kit 原语。260930：+6 = 列宽自由设置/行高不被内容撑高（`.bt-grid th/td` 补 `white-space: nowrap` = 永不换行；新增 `.bt-date-trigger > span` 的 min-width/overflow/text-overflow/white-space = 日期时间列窄了出省略号；`.bt-cell-input` 补 `text-overflow: ellipsis` = 文本格窄了出省略号而不是硬裁；合法新增非覆盖回涨）。再+1 = `.bt-input::placeholder`（选项编辑的新行用 placeholder 显示默认名「选项 N」；顺带把 .bt-input 的占位色收敛到 --lake-text-4，浏览器默认灰不是令牌）。此前：+1 = .bt-select-trigger 显式 text-align:left（修「编辑字段」类型名被 button 默认居中）；数据表行「⋯/删除表」改**绝对定位浮层 + 悬停浮现**（+8：position:relative×1 + 两钮 absolute/居中/隐藏 ×6 + hover 显形 ×2；原 2 条 opacity 规则被替换）；260929 续 2：+1 = 单元格有自身选中环时不再叠输入框焦点环
   // 260928 V01 多视图工作台：视图相关新规则一律进本文件（bitableEditor.css 已顶到基线，只允许变小）
   // 260928 V02：净 +4 = 看板配置面板的说明文案 .bt-panel-note（合法新增，非覆盖回涨）
   // 260928 T01：+4 = 表格底部列统计行贴底常驻（合法新增，非覆盖回涨）
@@ -87,41 +87,41 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260929 续 5：+5 = 表格撑满一屏（.bt-grid min-height + .bt-grid-filler 占位行），底部汇总栏才贴视图底
   // 260929 续 6：+5 = 「加进本组」不占行（行高 0 + 圆钮绝对定位悬浮在分组边界上）
   // 260929 续 7：+13 = 统计格改白底 chip + 共用 StatCell 内容样式（右对齐/▾/未配置 hover 显形），并删掉旧的「统计」占位钮规则
-  "features/bitable/bitableViews.css": { decls: 148, dupGroups: 0 },  // 260930：+2 = 表头「新增字段」的 + 贴着左侧最后一列（`.bt-grid th.bt-th-add { text-align:left; padding-left:8px }`——th 默认居中把它甩到空白区中央；合法新增非覆盖回涨）。260929 续：+5 = 分组底衬（表头下 20px 间隙 .bt-group-head-gap、加进本组通道、组间、末尾占位行统一走 --lake-bg-subtle）；此前：单级分组卡片 + + 行下线
+  "features/bitable/bitableViews.css": { decls: 138, dupGroups: 0 },  // 260930：+2 = 表头「新增字段」的 + 贴着左侧最后一列（`.bt-grid th.bt-th-add { text-align:left; padding-left:8px }`——th 默认居中把它甩到空白区中央；合法新增非覆盖回涨）。260929 续：+5 = 分组底衬（表头下 20px 间隙 .bt-group-head-gap、加进本组通道、组间、末尾占位行统一走 --lake-bg-subtle）；此前：单级分组卡片 + + 行下线
   // 260928 T02A：布尔 / 链接 / 评分 / 进度 单元格 + 字段类型 2 列网格（全新文件，合法新增）
   // 260928 续：+15 = 评分空星改实心（颜色换 --lake-border-strong）+ 进度条可拖动（轨道 position/cursor/touch-action、圆形把手 .bt-progress-thumb、只读隐藏把手）；合法新增非覆盖回涨
   // 260929：净 -3 = 进度数值框整体删除（随之删掉 appearance: textfield 与 ::-webkit-{inner,outer}-spin-button 两条声明）⇒ 回落 84 → 81
-  "features/bitable/bitableFieldCells.css": { decls: 99, dupGroups: 0 },   // T02B.2：+17 = 关联选择器行/页脚（.bt-relation-row / -row-title / -foot / -count）−15 = T02B.1 的 .bt-relation-chips/-chip（已改为复用 .bt-option-* 原语）⇒ 净 +2；此前：+1 = 链接格的展示文本 .bt-link-text
+  "features/bitable/bitableFieldCells.css": { decls: 88, dupGroups: 0 },   // T02B.2：+17 = 关联选择器行/页脚（.bt-relation-row / -row-title / -foot / -count）−15 = T02B.1 的 .bt-relation-chips/-chip（已改为复用 .bt-option-* 原语）⇒ 净 +2；此前：+1 = 链接格的展示文本 .bt-link-text
   // 260928 V02 看板视图：分栏 / 卡片 / 折叠 / 新建分组（全部合法新增；空栏目必须能当投放区）
   // 260928 追加需求：卡片上的图片字段改为缩略图（.bt-kanban-thumbs/.bt-kanban-thumb，+9 合法新增）
-  "features/bitable/bitableKanbanView.css": { decls: 100, dupGroups: 0 },   // 260930：-9 = 卡片附件**复用**表格那套 AttachmentChipList（删自养的 `.bt-kanban-thumb` 五条 + `.bt-kanban-files` 四条——行容器改挂共用的 `.bt-card-files`）
+  "features/bitable/bitableKanbanView.css": { decls: 97, dupGroups: 0 },   // 260930：-9 = 卡片附件**复用**表格那套 AttachmentChipList（删自养的 `.bt-kanban-thumb` 五条 + `.bt-kanban-files` 四条——行容器改挂共用的 `.bt-card-files`）
   // 260928 V03 画册视图：卡片网格 / 封面（裁剪·适应）/ 常规·紧凑（全部合法新增）
   // 260928 追加需求：封面改成可点按钮（就地重置原生按钮样式 + button 选择器），净 +4
-  "features/bitable/bitableGalleryView.css": { decls: 69, dupGroups: 0 },
+  "features/bitable/bitableGalleryView.css": { decls: 62, dupGroups: 0 },
   // 260928 追加需求：表单「编辑表单 / 预览表单」双模的壳、题目顺序与直填直提布局（全部合法新增）
   "features/bitable/bitableFormView.css": { decls: 27, dupGroups: 0 },   // 260929：表单双模页签改 kit 原语后 -3（原 .seg 容器改由原语给几何，只留居中一条）
-  "features/bitable/bitableRelationPicker.css": { decls: 113, dupGroups: 0 },   // 260930：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）——删掉自养的 `.bt-rel-thumb`（含 hover）共 9 条，`.bt-rel-files` 由 3 → 5（inline-flex + max-width/overflow）。此前 120 —— 260929：关联记录选择器（全局大弹窗）——大弹窗尺寸/两个 tab/搜索框+筛选排序（内联条）/整表（吸顶表头、超长省略）/页脚；+24 = 图片缩略图与附件 chip
+  "features/bitable/bitableRelationPicker.css": { decls: 108, dupGroups: 0 },   // 260930：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）——删掉自养的 `.bt-rel-thumb`（含 hover）共 9 条，`.bt-rel-files` 由 3 → 5（inline-flex + max-width/overflow）。此前 120 —— 260929：关联记录选择器（全局大弹窗）——大弹窗尺寸/两个 tab/搜索框+筛选排序（内联条）/整表（吸顶表头、超长省略）/页脚；+24 = 图片缩略图与附件 chip
   // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
-  "features/bitable/bitableFileIcon.css": { decls: 37, dupGroups: 0 },
+  "features/bitable/bitableFileIcon.css": { decls: 25, dupGroups: 0 },
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）
   "features/bitable/bitableCalendarView.css": { decls: 75, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
   "features/board/boardEditor.css": { decls: 14, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）
   "components/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },   // 260926 新增：历史快照预览样式 = 事实清单 / 摘要小表格 / 只读编辑器槽位（.history-editor-preview 用「列方向 flex + 子项 flex:1 + min-height:320px 兜底」保证编辑器铺满，不依赖百分比高度；预览里隐藏表格统计行），令牌全走 --lake-*，由组件自身 import
-  "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
+  "styles/dialog.css": { decls: 204, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 99, dupGroups: 2 },   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）
-  "styles/components.css": { decls: 388, dupGroups: 1 },   // 260929：-45 = .ln-tabs* 页签整套收编到 kit 层单一来源（那边同时 +33）；260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in；260926 续：+4 = .sync-status-local-note
+  "styles/components.css": { decls: 384, dupGroups: 1 },   // 260929：-45 = .ln-tabs* 页签整套收编到 kit 层单一来源（那边同时 +33）；260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in；260926 续：+4 = .sync-status-local-note
   "styles/tokens.css": { decls: 6, dupGroups: 0 },   // 260923 审计：按实测收紧（隔离/桥接规则拆走后基线一直是 83，围栏形同虚设）
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 33, dupGroups: 0 },   // 260923：+3 垂直几何令牌；同批删掉全仓零引用的 6 条死令牌（--ease-in-out/--dur-press/--shell-toolbar/--shell-radius/--shell-card-shadow/--shell-micro-card）   // 260923：+3 = 垂直几何令牌 --breadcrumb-height / --editor-toolbar-height / --tab-item-height（合法新增，非覆盖回涨）
-  "styles/app/dialogs.css": { decls: 137, dupGroups: 7 },   // 260923 W1-L2：-9 = 被 overlay 层同名选择器完全压制   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）
+  "styles/app/dialogs.css": { decls: 114, dupGroups: 7 },   // 260923 W1-L2：-9 = 被 overlay 层同名选择器完全压制   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）
   "styles/app/editor.css": { decls: 70, dupGroups: 0 },   // 260923 W1-L2：-1 = 字体规则被 tokens/feature 层覆盖   // P7-c：并入 styles/editor.css（选择器无交集 ⇒ 层叠等价）；+5 = maxView 适配；+4 = 锁定/解锁延迟销毁的旧实例层 .is-outgoing；+3 = 阅读态大纲只调位置（top/right）与「pinned 展开时正文让位」（260916）；260922：+1 = 正文左内距 56px（内核默认 40 不够块手柄簇 54；顺手修掉 H1 手柄出窗口）——合法新增
-  "styles/app/misc.css": { decls: 288, dupGroups: 0 },   // 260923 审计：按实测收紧
-  "styles/app/panels.css": { decls: 98, dupGroups: 0 },   // 260926：-1 = 删掉 `.history-panel{position:relative}`（它把 .floating-dialog 的 position:fixed 顶掉 ⇒ 拖拽用的视口绝对坐标退化成"相对居中偏移"，每次拖/点都把居中量再叠一遍、弹窗跑出屏幕；护栏见 floatingDialogCoords.test.ts）
-  "styles/app/quick-notes.css": { decls: 516, dupGroups: 8 },   // 260923 W1-L2：-3（260923）   // P7-c：并入 styles/quick-notes.css（选择器无交集 ⇒ 层叠等价）；原有：+24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
-  "styles/app/settings.css": { decls: 120, dupGroups: 0 },   // P7-c：并入 styles/settings.css（选择器无交集 ⇒ 层叠等价）；260926：-2 = 删掉死规则 `.settings-resize::after` 与 `.history-panel .settings-resize`（旧缩放手柄遗留，全仓无引用；它正是 `.history-panel{position:relative}` 的来历）
+  "styles/app/misc.css": { decls: 285, dupGroups: 0 },   // 260923 审计：按实测收紧
+  "styles/app/panels.css": { decls: 94, dupGroups: 0 },   // 260926：-1 = 删掉 `.history-panel{position:relative}`（它把 .floating-dialog 的 position:fixed 顶掉 ⇒ 拖拽用的视口绝对坐标退化成"相对居中偏移"，每次拖/点都把居中量再叠一遍、弹窗跑出屏幕；护栏见 floatingDialogCoords.test.ts）
+  "styles/app/quick-notes.css": { decls: 496, dupGroups: 8 },   // 260923 W1-L2：-3（260923）   // P7-c：并入 styles/quick-notes.css（选择器无交集 ⇒ 层叠等价）；原有：+24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
+  "styles/app/settings.css": { decls: 111, dupGroups: 0 },   // P7-c：并入 styles/settings.css（选择器无交集 ⇒ 层叠等价）；260926：-2 = 删掉死规则 `.settings-resize::after` 与 `.history-panel .settings-resize`（旧缩放手柄遗留，全仓无引用；它正是 `.history-panel{position:relative}` 的来历）
   "styles/app/shell.css": { decls: 424, dupGroups: 9 },   // 260923 收敛：-13 声明 / -1 重复组 = 大纲栏的壳层材质规则并回 features/outline/outline.css 单一来源   // 260923 W1-L2：-65 = 被 shell(层) chrome.css 同名选择器完全压制   // P7-c：并入 styles/shell.css（属性级交集为 0 ⇒ 层叠等价）；260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖；260922：+1 = 非停靠态编辑区整体右移 53px 给左侧整边缩略图条让位（块手柄/标题折叠钮不再压缩略图；停靠态不加）——合法新增，非覆盖回涨
-  "styles/app/tabs.css": { decls: 193, dupGroups: 0 },   // 260923 W1-L2：-9 = 被 shell 层 chrome.css 覆盖   // +1 = .tab-panels grid-template-columns:minmax(0,1fr)（根修：面板不被内容撑宽，多维表/表格才能横向滚动）
+  "styles/app/tabs.css": { decls: 189, dupGroups: 0 },   // 260923 W1-L2：-9 = 被 shell 层 chrome.css 覆盖   // +1 = .tab-panels grid-template-columns:minmax(0,1fr)（根修：面板不被内容撑宽，多维表/表格才能横向滚动）
   "styles/app/vendor-board.css": { decls: 7, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层
 };
 

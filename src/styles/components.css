@@ -246,7 +246,6 @@
 }
 
 /* 单行省略：vendored 的 text-clamp 混入只给了 overflow，长文件名会把 meta/操作挤出列宽 */
-.b3-list-item__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 内嵌预览（历史快照 / 孤儿文件）：右列整体可滚，图片不越界 */
 .history-preview-inline { display: flex; flex-direction: column; align-items: center; }
