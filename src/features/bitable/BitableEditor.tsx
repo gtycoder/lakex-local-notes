@@ -1056,21 +1056,25 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                   <td />
                 </tr>
               </tbody>
-              {/* T01 列级统计：口径 = 当前视图筛选后的记录（排序不影响），配置存视图、值现算 */}
-              <tfoot>
-                <tr className="bt-stat-row">
-                  <td className="bt-td bt-cell-muted" />
-                  {visibleFields.map((field) => {
-                    const stat = statForField(activeView, field.id);
-                    return (
-                      <td key={field.id} className="bt-td bt-cell-muted" title={stat ? BITABLE_STAT_LABEL[stat] : undefined}>
-                        {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, shownRecords, stat) : "—"}
-                      </td>
-                    );
-                  })}
-                  <td className="bt-td bt-cell-muted" />
-                </tr>
-              </tfoot>
+              {/* T01 列级统计：口径 = 当前视图筛选后的记录（排序不影响），配置存视图、值现算。
+                  **没有任何可见列配置统计时整行不渲染**（260929：否则底栏是一条全 `—` 的灰条，
+                  会被当成「添加记录下面多出来的奇怪的条」；配置了统计才出现，见专项 §13）。 */}
+              {visibleFields.some((field) => statForField(activeView, field.id)) && (
+                <tfoot>
+                  <tr className="bt-stat-row">
+                    <td className="bt-td bt-cell-muted" />
+                    {visibleFields.map((field) => {
+                      const stat = statForField(activeView, field.id);
+                      return (
+                        <td key={field.id} className="bt-td bt-cell-muted" title={stat ? BITABLE_STAT_LABEL[stat] : undefined}>
+                          {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, shownRecords, stat) : "—"}
+                        </td>
+                      );
+                    })}
+                    <td className="bt-td bt-cell-muted" />
+                  </tr>
+                </tfoot>
+              )}
             </table>
             <div className="bt-grid-foot">{selectedRecordIds.size > 0 ? "已选择 " + selectedRecordIds.size + " 条记录" : cellRange ? "已选择 " + ((cellRange.r1 - cellRange.r0 + 1) * (cellRange.c1 - cellRange.c0 + 1)) + " 个单元格" : "共 " + activeTable.records.length + " 条记录"}{findQuery ? "，匹配 " + shownRecords.length + " 条" : ""}</div>
           </div>

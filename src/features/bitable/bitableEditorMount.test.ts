@@ -304,6 +304,8 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/const setColumnStat = /);
     expect(EDITOR).toMatch(/setStatFor\(\{ fieldId, anchor \}\)/);
     expect(VIEWCSS).toMatch(/\.bt-stat-row td \{/);
+    // 没有可见列配置统计时**整行不渲染**（否则是底栏一条全 — 的灰条，用户 260929 报为「奇怪的条」）
+    expect(EDITOR).toMatch(/visibleFields\.some\(\(field\) => statForField\(activeView, field\.id\)\)/);
   });
 
   it("追加修复：文档图片预览取正文全量、看板图片字段出缩略图", () => {
