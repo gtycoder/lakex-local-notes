@@ -1048,7 +1048,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                     </th>
                   ))}
                   <th className="bt-th-add">
-                    <button type="button" className="bt-add-col" title="新增字段" aria-label="新增字段" disabled={readOnly}
+                    <button type="button" className="bt-add-round" title="新增字段" aria-label="新增字段" disabled={readOnly}
                       onClick={(event) => setAddFieldAnchor(event.currentTarget)}><Plus size={14} /></button>
                   </th>
                 </tr>
@@ -1080,7 +1080,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                     return (
                       <tr key={"ga:" + item.key} className="bt-group-add-row">
                         <td colSpan={visibleFields.length + 2}>
-                          <button type="button" className="bt-group-add" title="加进本组" aria-label="加进本组" disabled={readOnly}
+                          <button type="button" className="bt-add-round" title="加进本组" aria-label="加进本组" disabled={readOnly}
                             onClick={() => addRecordInGroup(item.fieldId, item.value)}><Plus size={14} /></button>
                         </td>
                       </tr>
@@ -1092,7 +1092,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
                 <tr className="bt-add-row">
                   <td colSpan={visibleFields.length + 1}>
-                    <button type="button" className="bt-add-record-row" disabled={readOnly} onClick={() => addRecord()}><Plus size={14} />添加记录</button>
+                    <button type="button" className="bt-add-round" title="添加记录" aria-label="添加记录" disabled={readOnly} onClick={() => addRecord()}><Plus size={14} /></button>
                   </td>
                   <td />
                 </tr>
