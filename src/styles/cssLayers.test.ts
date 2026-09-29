@@ -76,7 +76,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260928 V02：净 +4 = 看板配置面板的说明文案 .bt-panel-note（合法新增，非覆盖回涨）
   // 260928 T01：+4 = 表格底部列统计行贴底常驻（合法新增，非覆盖回涨）
   // 260928 T03：+2 = 多级分组层级缩进（变体选择器，合法新增）
-  "features/bitable/bitableViews.css": { decls: 20, dupGroups: 0 },
+  // 260929：-4 = T01 列统计整体回退（删掉 .bt-stat-row td 的 position/bottom/z-index/background）⇒ 20 → 16
+  "features/bitable/bitableViews.css": { decls: 16, dupGroups: 0 },
   // 260928 T02A：布尔 / 链接 / 评分 / 进度 单元格 + 字段类型 2 列网格（全新文件，合法新增）
   // 260928 续：+15 = 评分空星改实心（颜色换 --lake-border-strong）+ 进度条可拖动（轨道 position/cursor/touch-action、圆形把手 .bt-progress-thumb、只读隐藏把手）；合法新增非覆盖回涨
   // 260929：净 -3 = 进度数值框整体删除（随之删掉 appearance: textfield 与 ::-webkit-{inner,outer}-spin-button 两条声明）⇒ 回落 84 → 81

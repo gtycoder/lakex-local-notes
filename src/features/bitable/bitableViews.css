@@ -10,14 +10,6 @@
 .bt-group-row.level-1 .bt-group-label { padding-left: 18px; }
 .bt-group-row.level-2 .bt-group-label { padding-left: 36px; }
 
-/* 表格底部的列统计行（T01）：贴底常驻，长表格里不用滚到底才看得到 */
-.bt-stat-row td {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  background: var(--lake-bg-block);
-}
-
 .bt-panel-note {
   margin: 4px 0;
   color: var(--lake-text-3);
