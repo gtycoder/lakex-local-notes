@@ -419,6 +419,9 @@ string[]
 
 #### T01 列级统计
 
+> **⚠️ 260929 已整体废弃（用户决定）**：本编号已从实现、展示与持久化字段中**全部删除**。
+> 原因：用户认为列统计意义不大（「我的问题，没有问清楚如何统计就做功能」）。以下为历史方案，**勿再实施**。
+
 目标：
 
 - 在表格底部显示列统计。
@@ -697,7 +700,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | V02 看板视图 | 待验收 | 260928-V02 | 代码 + 全部门禁 + CDP 真实端点验收完成；含只读写入口泄漏修复（见 §13） |
 | V03 画册视图 | 待验收 | 260928-V03 | 封面 / 裁剪·适应 / 常规·紧凑 / 卡片字段全部落地（见 §13） |
 | V04 日历视图 | 待验收 | 260928-V04 | 月网格 + 跨天 + 颜色 + 拖拽平移，全程本地日期语义（见 §13） |
-| T01 列级统计 | 待验收 | 260928-T01 | 视图级列统计（通用/数字/日期），底栏贴底常驻、随筛选现算（见 §13） |
+| T01 列级统计 | **已废弃** | 260929 | **260929 用户决定整体回退**（觉得意义不大）：底栏 `tfoot`、列菜单「统计」、core 纯函数（`BitableStatType`/`computeColumnStat` 等）与 `view.columnStats` 持久化字段全部删除；旧正文残留字段在下次保存时被丢弃（见 §13） |
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
 | T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间；**系统时间可筛选/排序/分组/统计**（记录级取值口径，见 §13） |
@@ -741,7 +744,8 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
-| 2026-09-29 | 260929 | T01 续 空统计行不渲染 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：未配统计时 `tfoot/.bt-stat-row` 均不存在（截图无灰条）；配一列统计后出现 `记录总数 3` | 统计行样式与功能保留；若用户要整个列统计功能回退需另议 |
+| 2026-09-29 | 260929 | **T01 整体回退** | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：底栏与列菜单「统计」均不存在；旧正文残留 `columnStats` 保存后消失 | 功能整体删除（含持久化字段）；`bitableViews.css` 基线 20 → 16 |
+| 2026-09-29 | 260929 | T01 续 空统计行不渲染（随后被整体回退） | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：未配统计时 `tfoot/.bt-stat-row` 均不存在（截图无灰条）；配一列统计后出现 `记录总数 3` | 统计行样式与功能保留；若用户要整个列统计功能回退需另议 |
 
 ## 13. 会话记录（只追加）
 
@@ -1304,6 +1308,29 @@ UI 与交互变化：
   - **配置一列统计**（`columnStats = { 文本: "count" }` + 重载）：`tfoot` 出现，单元格 = `["", "记录总数 3", "—", "—", ""]`。
 
 遗留：统计行样式与 `.bt-stat-row` 规则**保留**（配置统计时仍用）。若用户要的不是「空行不渲染」而是**整个列统计功能都不要**，属产品级回退，需用户明确后再做。
+
+### 2026-09-29 · T01 整体回退（用户决定：列统计意义不大，实现与展示清干净）
+
+用户 260929 在看过列统计的口径说明后决定：**整体去掉**，并且「实现和展示都清除干净」，
+自述「我的问题，没有问清楚如何统计就做功能」。这是**产品级回退**（推翻 §7 批次 D/T01 的原始需求），不是 bug 修复。
+
+删除范围（全链路清干净）：
+
+- **core** `src/core/bitableDoc.ts`：删 `BitableStatType` / `BITABLE_STAT_LABEL` / `GENERIC_STATS` / `statsForField` / `statForField` / `formatStatNumber` / `statPct` / `computeColumnStat`；删 `BitableView.columnStats` 字段与 `normalizeView` 里对应的校验分支。
+  - **注意**：`normalizeView` 是「`{...raw}` 原样保留未知键」，所以只删校验分支会**反而让旧 `columnStats` 一直被保留**（本轮实测踩到：加记录保存后字段仍在）。因此补一行 `delete next.columnStats;` 显式丢弃旧数据 —— 这是删除残留、不是为旧数据写兼容。
+- **编辑器** `src/features/bitable/BitableEditor.tsx`：删 `<tfoot>` 统计行、列菜单「统计」入口、`statFor` 选择器浮层（含 `setColumnStat`、`statFor` state 与相关 import）。
+- **样式** `src/features/bitable/bitableViews.css`：删 `.bt-stat-row td`（4 条声明）⇒ `cssLayers` 基线 **20 → 16**。
+- **测试**：删 `bitableDoc.test.ts` 的「列统计」用例与相关断言、`bitableEditorMount.test.ts` 的 T01 护栏用例；新增 1 条护栏锁住「旧 `columnStats` 不再被保留」。
+
+验证结果：
+
+- 门禁全绿：tsc / vitest **1377 passed / 16 skipped**（1378 − 2 个 T01 用例 + 1 个旧数据丢弃护栏）/ check:core 0 违规 / 双端构建 / ui-metrics（hex=0、!important=9、未定义令牌=0）/ cssLayers+uiPrimitives / git diff --check。
+- CDP 真实端点（隔离 userData + 9238，重建后的 dist）：
+  - `tfoot` 与 `.bt-stat-row` **都不存在**；表格本体正常。
+  - 列菜单项 = `编辑列 / 复制列 / 向左插入列 / 向右插入列 / 高亮重复值 / 文本颜色 / 删除列` —— **没有「统计」**。
+  - 旧数据：故意在正文里塞 `views[0].columnStats = { 文本: "count" }`，打开不炸；触发一次保存后落盘视图键 = `id/name/type/rowHeight`，`columnStats` **已消失**。
+
+遗留：无。T01 相关的旧会话记录（§13 的 2026-09-28 T01、2026-09-29 T01 续）保留作历史，不再代表当前能力。
 
 ## 14. 会话执行模板
 
