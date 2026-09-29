@@ -15,6 +15,17 @@
 所有中间产物默认写进仓库根的 `.css-audit/`（已 gitignore），可用环境变量 `LK_CSS_AUDIT_DIR` 改到别处。
 **别放 `/tmp`**：重启就没了，上一轮就吃过这个亏（工具还在、数据没了）。
 
+## 「同一交互多套实现」审计（260930）
+
+上面那套是查**冗余声明**的；这两条是查**散落重复的操作模式**（用户 260930 要求把相同操作模式做成正式原语）：
+
+```bash
+node scripts/css-audit/audit-lookalike.mjs 0.62 7   # 像原语却没复用（命中数就是"还有多少没统一"）
+node scripts/css-audit/audit-primitives.mjs         # 跨文件规则体重复族
+```
+
+判定与口径见 `AGENTS.md` §3#14「样式统一」与 `HANDOFF.md` §3 第 10 条（含已暂缓项与接手姿势）。
+
 ## 常用流程
 
 ```bash
@@ -56,6 +67,8 @@ node scripts/css-audit/drive.mjs 9222 scripts/css-audit/shotset.mjs before "<屏
 | `fingerprint-all.mjs` | 为每个选择器跨状态打"命中了哪些元素"的指纹 → `fingerprints-all.json`（~3.4 MB，按需重生成） |
 | `plan-l2-shadowed.mjs` | 找"整条规则被更高层同名选择器完全压制"的可删规则（同 `@media` + 同单选择器 + 高层覆盖全部属性）；`--apply` 按源码区间删除并剪掉变空的 `@media` 壳 |
 | `l3-plan.mjs` | L3 安全筛选（260923）：零命中 **且** 类名在应用代码里无生产者（含动态模板串前缀，保守）才判可删；依赖 `fingerprints-all.json` |
+| `audit-lookalike.mjs` | **260930 大统一**：以 kit 的 `.ln-*` 控件级原语为签名，找「**长得像原语却自己写了一套**」的规则（加权相似度：同名同值 1.0 / 同名长度类 0.45 / 阈值 0.62）。用法 `node scripts/css-audit/audit-lookalike.mjs [阈值] [原语最小声明数]` |
+| `audit-primitives.mjs` | **260930 大统一**：找**跨文件、跨类名的规则体重复族**（同一套声明被写在多个不同选择器里）——同类里出现 ≥2 个不同「身份」才报。用法 `node scripts/css-audit/audit-primitives.mjs` |
 
 典型链路：`loadorder` → `allsel` → `fingerprint-all` → `condcollect` →（`drive` 跑 `cond-eval`）→ `imp-scan` → `imp-safe` → `plan-imp`。
 

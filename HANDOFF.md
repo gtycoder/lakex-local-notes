@@ -55,6 +55,7 @@
 | 选项编辑「添加」不再自动全选（260930） | 「添加选项 / 选项回车新建」时新行原先把默认名 `选项 N` 整块选中 ⇒ 输入框里一块系统蓝底（用户报「为什么会有蓝色的底色」）。改为：`focusOptionInput` 只 `focus()` + **光标落末尾**（去掉 `el.select()`）；新选项**留空**、默认名改走 `placeholder`；保存时空名按位置兜底成「选项 N」（`bitableEditor.css` 补 `.bt-input::placeholder { color: var(--lake-text-4) }`）。实测新行 `selection=[0,0]`、键入即选项名、空着保存落成「选项 7」 | **已提交（待验收）** |
 | 列宽自由设置 + 行高不被内容撑高（260930） | ① 列宽改为**以字段 `width` 为准**：`auto` 布局下 `<col style="width">` 只是「至少」，附件 chip 实测把 180 撑到 **413** ⇒ 每个格子加行内 `max-width`（`columnWidth(field)`；表头 / 记录格 / 分组统计格 / 底栏统计格四处）。② **行高绝对不被内容撑高**：`.bt-grid th, td` 补 `white-space: nowrap`（日期列 80px 时 `2026-09-07` 折行把行高 36→48），日期/时间格出省略号、文本格 `text-overflow: ellipsis`。③ 拖拽下限 **80 → 40**（用户：「可以设定一个比较小的下限值」） | **已提交（待验收）** |
 | 附件按**文档类型图标**展示（260930） | 附件不再显示文件名 chip / 缩略图：单元格 = **小类型图标** + hover 出**名称气泡**；展开面板 = **大类型图标**（名称仍在卡下方，**名字被省略号截掉时 hover 同样出全名气泡** —— 同一套 `useNameTip`，用 `scrollWidth > clientWidth` 判截断，没截断不弹）。图标用 **lucide-react**（内核 sprite 实测 325 个 symbol 无一个 file/pdf/doc 系，云端的彩色页图标不在 kernel bundle 里 ⇒ 无法复用），类型判定走 core 新增的 `fileKindOf()`（单一事实源），配色新增 `--lake-file-*` 令牌；**图片字段仍是缩略图**，但 **hover 名称气泡与附件同一套**（用户追加）。**移动端同步落地**（附件字段 = 小图标 + 名称；触屏没有 hover，名称保留），Android 模拟器实测通过；**关联选择器整表、看板卡片、画册卡片也复用同一套**（`AttachmentChipList` 单一来源：选择器不再自养「📎 文件名」chip；看板卡片不再只显示图片；画册卡片不再是一串文件名）——三处都只出**类型图标/缩略图**，名称靠 hover 气泡（用户：「看板视图不展示名称了」「画册视图的附件也要改」）| **已提交（待验收）** |
+| 样式大统一（260930 审计，三批） | **第一批**：菜单项收编 `.ln-menu__item`、图标按钮收编 `.ln-iconbtn`（`--compact`/`--accent`）、新增 `.ln-ellipsis`；**第二批**：`.ln-ellipsis` 落到 16 处、「选中行」三元组收编进 `.ln-row.is-selected`、面板头合并；**第三批**：新增 `.ln-imgfill`（图片填满+裁切，4 处）+ 收编**关联选择器搜索框**到 `.ln-input__field` + `.b3-list-item__text`/`.quick-note-file-chip__name` 换 `.ln-ellipsis`（10 个调用点）+ 删死代码 `.mobile-qn-img` 三条。审计脚本 `.css-audit/audit-{lookalike,primitives}.mjs`：命中 **29 → 16**、重复族 **46 → 39** | **未提交（待验收）** |
 
 ### 三、当前状态与门禁
 - 分支 `master`；**本批（上表所有行）已提交并推送**：代码提交 `681f148`（多维表专项收口，含 260928–260929 各批）、文档提交紧随其后；`origin/master` 已同步。更早的 23 个本地提交（`1494331..1fe4d22`）也一并推上去了。**上表各行的「已提交」只表示已入库，功能本身仍是「待用户验收」**。
@@ -110,6 +111,20 @@
 7. **低优先数据/性能**：附件哈希缓存仅在真实痛感出现后立项；回收站惰性下载暂缓；Word/PDF 大附件与历史 `lakex-contract.d.ts` 按需处理。
 8. **已知外观**：离线残余资源、移动端缩略图仅覆盖 png/jpg/jpeg（失败回退原图）、多维表附件旧数据的体积展示边界。
 
+10. **样式大统一（260930 审计，三批已完成；③⑤ 已记录、暂缓不做的理由见下）**：用户要求「找出散落各处的相同操作模式，做成正式原语统一起来」。
+    **已完成**（详见 §0 行 + AGENTS §3#14 的单一来源清单）：
+    ① **菜单项** `.ln-menu__item`（顶栏下拉 / 右键菜单 / ＋菜单 / 多维表列菜单，legacy 选择器一并收编，overlay −29 条）；
+    ② **图标按钮** `.ln-iconbtn`（新增 `--compact` 22×22 / `--accent` 主色 hover 两个正式变体；目录栏 12 处 + 目录行动作 + 多维表 6 处，chrome −39 / bitableEditor −63 条）；
+    ③ **单行省略** `.ln-ellipsis`（新工具类，27 个调用点；**flex/宽度属于布局、仍留业务规则**）；
+    ④ **选中行** 三元组收编进 `.ln-row.is-selected`（页签溢出菜单行 / 设置左导航，overlay 菜单 hover 随①）；
+    ⑤ **图片填满裁切** `.ln-imgfill`（4 处；顺带删掉死代码 `.mobile-qn-img` 3 条）；
+    ⑥ **输入框** 关联选择器搜索框 → `.ln-input__field`；面板头（回收站/历史）合并；卡片标题随③收编。
+    **明确暂缓（已记录，不做）**：
+    - **顶栏 `.toolbar__item` 并进 `.ln-btn`**：两者只差 1px 高与 padding（26/8 vs 27/11），但**顶栏几何被 `--shell-*` 令牌、面包屑高度、窄窗 media 的多处让位规则引用** —— 动它必须连顶栏做逐屏截图对拍，收益（少 10 条声明）不抵回归风险。**接手姿势**：先跑 `scripts/css-audit/shotset.mjs` 钉住 27 屏基线，再改，再逐屏 diff。
+    - **toast 三套合一**（`.ln-toast` kit / `.b3-snackbar` compat / `.mobile-toast` mobile-kit）：数值 90% 相同，但一头牵动移动端、另一头 toast 是**瞬时浮层**（隐藏窗口里 CSS `:hover`/动画不跑，没法像素对拍）。**接手姿势**：单独一批 + 模拟器/真机验证，别在桌面会话顺手改。
+    - **`.protyle-breadcrumb__item` / `.quick-note-index-main`**：审计把它们和输入框归为相似，实为**可点击的文本条目**，收编前先定性（是「行」还是「输入框」）。
+    **工具（已入库）**：`scripts/css-audit/audit-lookalike.mjs`（找「像原语却没复用」，260930 命中 29 → 16）、`scripts/css-audit/audit-primitives.mjs`（跨文件规则体重复族，46 → 39）。改完样式重跑对比即可；判定只认这两份数据 + 实机几何，不认「看着像」。
+
 9. **多维表优化专项**：唯一方案/进度/修改记录/会话结论在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`；专项会话先完整读它、结束前必须回写它，**不在 HANDOFF 内展开专项细节**。当前进度见 §0 第二节。
 
 ## 4. 关键坑（长期有效）
@@ -152,6 +167,7 @@
 - **行高必须与内容无关**（260930 用户：「不能为了展示内容而自动扩大行高。例如日期缩短了就会导致换行，而行高变大」）：`td` 上的 `height` 只是最小值，**内容一折行行高就涨**（实测日期列 80px 时 36 → 48）。所以 `.bt-grid th/td` 统一 `white-space: nowrap`（永不折行），装不下由各自的 `text-overflow: ellipsis` / 裁切处理（日期/时间格在 `.bt-date-trigger > span` 上省略；文本格靠 `input` 的 `text-overflow: ellipsis`；chip/缩略图类没有省略号语义，就是裁切）。`overflow: hidden` 在 table cell 上**不裁剪**（Chrome），别指望它。
 - **附件「文档类型图标」没有现成的内核图标可用**（260930 用户问「我们是否有对应的图标样式可以使用」——**没有**）：内核 sprite 实测 **325 个 symbol，无一个 file/pdf/doc/ppt 系**（只有 `icon-card-mention-doc`）；云端那套彩色「页」图标属于**语雀 App 自己的 sprite**，不在 kernel bundle 里（同 §2 的 `note-*` 图标问题）。⇒ 用**自己的图标库 lucide-react**（全站同一套线性图标）按类型分色，类型判定收敛到 `src/core/assetNaming.ts` 的 `fileKindOf()`（单一事实源，桌面/移动端共用），颜色新增 `--lake-file-*` 令牌（只在 `themes/base.css`，内容/品牌色不随主题分叉）。`hover 名称气泡 = kit 的 .ln-tip 表面 + usePopoverPosition 定位`（`position: fixed` ⇒ 不被 `.bt-grid-wrap` 的 overflow 裁掉）。**附件字段与图片字段就此分叉**：`attachment` = 类型图标（不显示名称/缩略图）、`image` = 缩略图（该字段的语义就是看图），分叉点是 `AttachmentCell` 的 `imageOnly`。
 
+- **样式「收编到原语」时，必须把 feature 层里那份声明删掉**（260930 大统一踩到）：层序是 `@layer … kit, shell, feature, overlay …`，**kit 层低于 feature 层** —— 只在 JSX 挂上 `.ln-iconbtn`/`.ln-menu__item` 而不删掉 feature 文件里的同名视觉声明，旧的那份照样赢（同选择器比层序）。正确姿势 = 原语给「盒子/圆角/配色/状态」，feature 只留**本处特有**的布局（绝对定位、`visibility`、卡片上的白底药丸等）。
 ### 工程 / 环境
 - Node 必须 24；better-sqlite3 是 Electron ABI，系统 Node 不能替代运行时。
 - 改 `electron/**` 或 `src/core/**` 会触发 Electron 重启；验证前确认 CDP 端口连的是新实例。
