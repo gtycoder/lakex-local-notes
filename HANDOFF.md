@@ -38,8 +38,8 @@
 ### 260930-S0（非多维表审计 S0 已实施 9/9，待验收；未合 master/未推送）
 - 分支 codex/audit-s0（从 6a0ec68 开出）。唯一权威进度在 docs/NON-BITABLE-ENGINEERING-AUDIT-2026-09-30.md §12。
 - 已完成：F09 孤儿草稿不再自动删（无测试）· F10 文档级孤儿清理用完整保护集 · F07 历史文件身份唯一 · F05 移动 flush 真保存 · F11 整体请求 deadline 覆盖 body · **F06 移动 create/save 分离（missing/gone 明确拒绝）** · **F01 保存失败不关闭/淘汰/锁定** · **F02 revision 快照入队前绑定** · **F04 恢复只按真实 gone 判只读 + 普通保存不隐式复活** · **F17 容量基准断言现契约**。
-- 门禁：tsc 通过、全量 vitest **1480 passed / 16 skipped**、check:core 70 文件 0 违规、git diff --check 通过、opt-in 容量基准实跑通过。**绝不启动路线 C（正文入 SQLite）**；S1 DocumentSession 也未批准。
-- 已知取舍：F09 仍无自动化测试；F04 只收掉**普通保存**的隐式 revive（元数据路径"编辑即恢复"未动）；F06 的 bridge.saveNote 对"无墓碑的新 id"仍可初始化。
+- 门禁：tsc 通过、全量 vitest **1481 passed / 16 skipped**、check:core 70 文件 0 违规、git diff --check 通过、opt-in 容量基准实跑通过；**桌面真实端 CDP `scripts/e2e-audit-s0.mjs` 11/11 通过**（隔离 userData/端口）。**绝不启动路线 C（正文入 SQLite）**；S1 DocumentSession 也未批准。
+- 已知取舍：F04 只收掉**普通保存**的隐式 revive（元数据路径"编辑即恢复"未动）；F06 的 bridge.saveNote 对"无墓碑的新 id"仍可初始化；**F06 真实 Android 未验（本机无 AVD）**，由真实 sql.js SQL 测试覆盖。
 
 ### 当前会话 · 260930-ARCH（仅文档，待讨论）
 - 用户要求多维表功能扩展暂告一段落，先只读评估整体代码与架构，再讨论是否需要大规模重构；**本轮不实施代码**。

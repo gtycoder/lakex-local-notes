@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   listTreeNodes: vi.fn(async () => []),
   listNoteSummaries: vi.fn(async () => []),
   readNote: vi.fn(),
+  deleteDraftJournal: vi.fn(async () => {}),
 }));
 vi.mock("../lib/native", () => ({ native: h }));
 
@@ -20,13 +21,18 @@ import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions";
 import type { OpenTab } from "../desktop/desktopTypes";
 
 let handleTrashRestored: ((restoredId?: string) => void) | null = null;
+let refreshDraftEntries: (() => Promise<void>) | null = null;
+let draftEntries: unknown[] = [];
 const openTabsRef: { current: OpenTab[] } = { current: [] };
+function applyDraftEntries(updater: any) {
+  draftEntries = typeof updater === "function" ? updater(draftEntries) : updater;
+}
 
 function Harness() {
   const tabReloadVersionRef = useRef(createRequestVersion());
   const api = useSyncRefresh({
     setPendingSummary: () => {},
-    setDraftEntries: () => {},
+    setDraftEntries: applyDraftEntries as never,
     setTreeNodes: () => {},
     setNotes: () => {},
     setOpenTabs: ((updater: unknown) => {
@@ -39,6 +45,7 @@ function Harness() {
     bumpRevision: () => {},
   });
   handleTrashRestored = api.handleTrashRestored;
+  refreshDraftEntries = api.refreshDraftEntries;
   return null;
 }
 
@@ -48,6 +55,8 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   h.readNote.mockReset();
+  h.deleteDraftJournal.mockClear();
+  draftEntries = [];
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); handleTrashRestored = null; });
 
@@ -84,5 +93,17 @@ describe("useSyncRefresh.handleTrashRestored（审计 F04）", () => {
     await act(async () => { handleTrashRestored!("b"); await tick(); await tick(); });
     expect(openTabsRef.current.find((t) => t.noteId === "b")!.deleted).toBe(false);
     expect(openTabsRef.current.find((t) => t.noteId === "a")!.deleted).toBe(true);
+  });
+});
+
+describe("useSyncRefresh.refreshDraftEntries（审计 F09）", () => {
+  it("孤儿草稿（对应文档不存在）仍列出，不自动 deleteDraftJournal", async () => {
+    const orphan = { noteId: "missing-doc", title: "孤儿草稿", content: "<p>last input</p>", updatedAt: "2026-09-30T00:00:00.000Z" };
+    h.listDraftJournals.mockResolvedValue([orphan] as never);
+    act(() => root.render(createElement(Harness)));
+    await act(async () => { await refreshDraftEntries!(); });
+    expect(draftEntries).toEqual([orphan]);
+    // 审计 F09：不存在的草稿是最后的恢复出口，刷新路径绝不允许自动删除。
+    expect(h.deleteDraftJournal).not.toHaveBeenCalled();
   });
 });
