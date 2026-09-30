@@ -443,6 +443,8 @@ export function MultiTabEditor({
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
                 onPreserveDraft={onPreserveBitableDraft ? (content) => onPreserveBitableDraft(tab.noteId, content) : undefined}
               />
             </EditorErrorBoundary>
