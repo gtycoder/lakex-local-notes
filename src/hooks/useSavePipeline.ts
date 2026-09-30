@@ -1,11 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 import { native } from "../lib/native";
-import { getNativeErrorCode, getNativeErrorMessage } from "../lib/nativeErrors";
+import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { SavePipelineCore } from "./savePipelineCore";
 import type { NoteDocument } from "../lib/types";
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
+/**
+ * 显式保存结果（审计 F01）：调用者（关闭 / 淘汰 / 锁定）必须据此决定是否继续。
+ * ok:false 表示这次 revision 没有持久化；blocked:true 特指文档已在回收站/被 purge（只读，无内容可存，允许关闭）。
+ */
+export type PersistOutcome = { ok: true } | { ok: false; blocked?: boolean };
 
 // P1-3：放宽自动保存频率——保存落盘防抖 1s（人类打字节奏下无必要更频繁）；
 // 草稿防抖 1.5s，略晚于保存且保存成功即清草稿定时器（见 persistTab 内 onDraftCleared 前 clearTimeout）。
@@ -47,39 +53,47 @@ export function useSavePipeline(options: SavePipelineOptions) {
   if (coreRef.current === null) coreRef.current = new SavePipelineCore();
   const core = coreRef.current;
 
-  const persistTab = useCallback((noteId: string, title: string, content: string) => {
-    return core.run(noteId, async () => {
-      // 已在回收站/被他端 purge（标记 deleted）的文档不保存：避免把内容写回已回收的笔记。
-      // 必须出声——静默丢弃会让用户以为已保存（编辑器此时已只读，这里是最后一道闸）。
-      const openTab = getOpenTab(noteId);
-      if (openTab?.deleted) { onBlockedSave?.(noteId); return; }
-      // 审计 #7：保存时快照当前 revision；响应返回后仅当期间无新编辑才覆盖草稿/清除 dirty
-      const revision = core.revision(noteId);
-      setSaveState("saving");
+  const persistTab = useCallback((noteId: string, title: string, content: string): Promise<PersistOutcome> => {
+    // 已在回收站/被他端 purge（标记 deleted）的文档不保存：避免把内容写回已回收的笔记。
+    // 必须出声——静默丢弃会让用户以为已保存（编辑器此时已只读，这里是最后一道闸）。
+    const openTab = getOpenTab(noteId);
+    if (openTab?.deleted) { onBlockedSave?.(noteId); return Promise.resolve({ ok: false, blocked: true }); }
+    // 审计 F02：body/title/caches/revision 是同一次不可变快照，**入队前绑定**。
+    // 任务拿到 queue 执行权后不得再读 live revision / live editor——否则旧正文会被新 revision 认证成"最新"。
+    const snapshot = {
+      noteId,
+      title,
+      content,
+      caches: getEditorCaches(noteId),
+      revision: core.revision(noteId),
+    };
+    setSaveState("saving");
+    return core.run(noteId, async (): Promise<PersistOutcome> => {
       try {
-        // M1：保存时由 Lake 内核生成 markdown/纯文本缓存，随正文同批落库
-        const caches = getEditorCaches(noteId);
-        const saved = await native.saveNote(noteId, title.trim() || "无标题", content, caches);
+        const saved = await native.saveNote(snapshot.noteId, snapshot.title.trim() || "无标题", snapshot.content, snapshot.caches);
         onNoteSaved(saved);
-        if (core.revision(noteId) === revision) {
+        // ack 只认自己的 revision：期间有新编辑则不清 dirty、不清草稿、不覆盖正文（审计 F02）。
+        if (core.revision(snapshot.noteId) === snapshot.revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
           onOpenTabsApplied(saved);
-          const draftTimer = draftTimers.current.get(noteId);
-          if (draftTimer !== undefined) { window.clearTimeout(draftTimer); draftTimers.current.delete(noteId); }
-          onDraftCleared(noteId);
+          const draftTimer = draftTimers.current.get(snapshot.noteId);
+          if (draftTimer !== undefined) { window.clearTimeout(draftTimer); draftTimers.current.delete(snapshot.noteId); }
+          onDraftCleared(snapshot.noteId);
           setLastSavedAt(new Date().toISOString());
           setSaveState("saved");
         } else {
           // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
           setSaveState("dirty");
         }
-        return saved;
+        return { ok: true };
       } catch (reason) {
-        if (getNativeErrorCode(reason) === "NOT_FOUND") return;
+        // 审计 F01：显式 save/flush 必须返回明确失败（不再把错误吞成 fulfilled 的成功）。
+        // NotFound / 磁盘满 / DB 失败一视同仁：调用者据 ok:false 停下并提示真实原因。
         setSaveState("error"); onError(getNativeErrorMessage(reason));
+        return { ok: false };
       }
     });
-  }, [getOpenTab, getEditorCaches, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave]);
+  }, [core, getOpenTab, getEditorCaches, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave]);
 
   /** 防抖保存：SAVE_DEBOUNCE_MS（1s）无新输入后落盘。 */
   const scheduleSave = useCallback((noteId: string, content: string) => {

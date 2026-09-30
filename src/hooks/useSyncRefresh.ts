@@ -5,6 +5,7 @@ import { reportNativeActionError } from "../lib/nativeErrors";
 import type { DraftJournalEntry, NoteSummary, SyncPendingSummary, TreeNode } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
 import type { RequestVersion } from "../core/requestVersion";
+import { isGoneNote } from "../core/syncDecisions";
 
 export interface UseSyncRefreshOptions {
   setPendingSummary: Dispatch<SetStateAction<SyncPendingSummary>>;
@@ -50,23 +51,27 @@ export function useSyncRefresh({
     }
   }, [setDraftEntries]);
 
-  /** 回收站恢复后：刷新草稿/树/摘要；若恢复的文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。 */
-  const handleTrashRestored = useCallback(() => {
+  /** 回收站恢复后：刷新草稿/树/摘要；重载曾被标记"已删除"的 tab。
+   * 审计 F04：回调必须带本次恢复的 id；每个 tab 的只读状态按**真实 gone 判定**（isGoneNote）重算——
+   * 软删本来就保留正文，"能读"不等于"已恢复"；恢复 b 绝不能把仍在回收站的 a 一起解锁。 */
+  const handleTrashRestored = useCallback((restoredId?: string) => {
     void refreshDraftEntries();
     void native.listTreeNodes().then(setTreeNodes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void native.listNoteSummaries().then(setNotes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void (async () => {
       const reloadVersion = tabReloadVersionRef.current.next();
       const t0 = performance.now();
-      for (const tab of openTabsRef.current.filter((t) => t.deleted)) {
+      // 目标 = 本次恢复的 id（若提供）+ 所有仍标记 deleted 的标签（逐个按真实状态复核）。
+      for (const tab of openTabsRef.current.filter((t) => t.deleted || (restoredId !== undefined && t.noteId === restoredId))) {
         if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
         try {
           const readT0 = performance.now();
           const note = await native.readNote(tab.noteId);
           if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-          console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, readMs: Math.round(performance.now() - readT0) }));
+          const gone = isGoneNote(note);
+          console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, restoredId: restoredId ?? null, gone, readMs: Math.round(performance.now() - readT0) }));
           setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
-            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: gone, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
             : t));
         } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
       }

@@ -16,7 +16,7 @@ export interface UseNoteLifecycleOptions {
   clearNote: (noteId: string) => void;
   scheduleDraftJournal: (noteId: string, title: string, content: string) => void;
   scheduleSave: (noteId: string, content: string) => void;
-  evictTabsForLimit: (nextTabs: OpenTab[], openedId: string) => Promise<string[]>;
+  evictTabsForLimit: (nextTabs: OpenTab[], openedId: string) => Promise<{ evictedIds: string[]; failedIds: string[] }>;
   showNotice: (text: string) => void;
   setError: Dispatch<SetStateAction<string | null>>;
   treeNodes: TreeNode[];
@@ -56,10 +56,11 @@ export function useNoteLifecycle({
     {
       resetRevision(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "doc" };
-      const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+      const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
       setOpenTabs((tabs) => {
         const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+        // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
       });
       if (evictedIds.length > 0) {
         setPinnedNoteIds((prev) => {
@@ -86,10 +87,11 @@ export function useNoteLifecycle({
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
     const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "sheet" };
-    const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
     setOpenTabs((tabs) => {
       const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
     });
     if (evictedIds.length > 0) {
       setPinnedNoteIds((prev) => {
@@ -110,10 +112,11 @@ export function useNoteLifecycle({
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
     const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "bitable" };
-    const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
     setOpenTabs((tabs) => {
       const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
     });
     if (evictedIds.length > 0) {
       setPinnedNoteIds((prev) => {
@@ -134,10 +137,11 @@ export function useNoteLifecycle({
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
     const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "board" };
-    const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
     setOpenTabs((tabs) => {
       const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
     });
     if (evictedIds.length > 0) {
       setPinnedNoteIds((prev) => {

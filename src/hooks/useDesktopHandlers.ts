@@ -5,6 +5,7 @@ import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErr
 import { cleanLakeMarkdown } from "../core/markdownClean";
 import { stripAssetAccessToken } from "../lib/assetPort";
 import { patchNoteById, summaryOf, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
+import type { PersistOutcome } from "./useSavePipeline";
 import type { NoteDocument, NoteSummary, S3Settings, TreeNode } from "../lib/types";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 
@@ -16,7 +17,7 @@ export interface UseDesktopHandlersOptions {
   activeNoteId: string | null;
   notes: NoteSummary[];
   openTabsRef: MutableRefObject<OpenTab[]>;
-  persistTab: (noteId: string, title: string, content: string) => Promise<unknown>;
+  persistTab: (noteId: string, title: string, content: string) => Promise<PersistOutcome>;
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>;
   setTreeNodes: Dispatch<SetStateAction<TreeNode[]>>;
   setDesktopWorkspace: Dispatch<SetStateAction<DesktopWorkspace>>;
@@ -64,7 +65,11 @@ export function useDesktopHandlers({
     if (!summary) return;
     const next = !summary.isLocked;
     const tab = openTabsRef.current.find((t) => t.noteId === tabId);
-    if (next && tab?.dirty) await persistTab(tabId, tab.title, tab.content);
+    if (next && tab?.dirty) {
+      // 审计 F01：锁定前必须确认该 revision 已持久化；失败则留在可编辑状态（错误已由保存管线提示）。
+      const outcome = await persistTab(tabId, tab.title, tab.content);
+      if (!outcome.ok && !outcome.blocked) return;
+    }
     // 锁定态 Viewer 无法用内核生成文本缓存；锁定前确保 md/text 缓存存在（已有则跳过）
     if (next) {
       try {

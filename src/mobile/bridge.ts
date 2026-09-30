@@ -389,9 +389,19 @@ export const bridge = {
     });
   },
 
+  /** 保存文档（编辑器自动保存 / createNote 的落库入口）。审计 F06：create 与 save 分离——
+   * gone（回收站 / sync_state='purged'）明确拒绝；missing 仅当无永久墓碑时初始化新文档；
+   * 绝不 upsert 覆盖回收站/已 purge 的行，也不复活已写墓碑的条目。 */
   async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
+      const state = await noteRepository.noteWriteState(d, id);
+      if (state === "gone") throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
+      if (state === "missing") {
+        if (await noteRepository.isTombstoned(d, id)) throw new Error("笔记已被彻底删除，保存被拒绝");
+        await noteRepository.createNote(d, id, title, content, parentId, assets, plain);
+        return;
+      }
       await noteRepository.saveNote(d, id, title, content, parentId, assets, plain);
     });
   },

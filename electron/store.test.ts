@@ -476,7 +476,7 @@ describe("目录树操作", () => {
     expect(store.searchNotes("无引用").some((x) => x.id === note.id)).toBe(false);
   });
 
-  it("审计（编辑即恢复）：编辑 purged 条目 = 隐式恢复（移出回收站 + restore_pending + 可上传）", () => {
+  it("审计 F04：普通保存拒绝回收站/purged，不再隐式恢复；显式恢复后才可继续保存", () => {
     const nb = store.createNotebook("目标册");
     const note = store.createNoteIn(nb.id, "待编辑");
     store.saveNote(note.id, "待编辑", "<p>v1</p>");
@@ -484,14 +484,21 @@ describe("目录树操作", () => {
     // 模拟"他端已 purge、本端保留"：标 purged（applyRemotePurge 的等价状态）
     (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
     (store as any).db.prepare("UPDATE tree_nodes SET sync_state='purged' WHERE id=?").run(note.id);
-    // 编辑 = 隐式恢复：移出回收站 + restore_pending + 内容落盘
+    // 审计 F04：普通保存不再"编辑即恢复"——明确拒绝，且不改写正文/生命周期
+    expect(() => store.saveNote(note.id, "待编辑", "<p>隐式恢复版</p>")).toThrow();
+    const stillTrashed = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(stillTrashed.parentId).toBe("notebook-trash"); // 仍在回收站
+    expect(stillTrashed.syncState).toBe("purged");
+    expect(store.readNote(note.id).content).toContain("v1");
+    // 显式恢复是唯一例外：恢复后可正常保存（restore_pending_at → local-wins）
+    store.restoreTrashItem(note.id);
+    expect((store as any).isRestorePending(note.id)).toBe(true);
     store.saveNote(note.id, "待编辑", "<p>恢复后编辑版</p>");
     const row = store.listNotesForSync().find((n) => n.id === note.id)!;
-    expect(row.parentId).toBe(nb.id); // 不在回收站
+    expect(row.parentId).toBe(nb.id); // 回到原位置
     expect(row.trashedAt).toBeNull();
     expect(row.deletedFromParentId).toBeNull();
     expect(row.syncState).toBe("local");
-    expect((store as any).isRestorePending(note.id)).toBe(true);
     expect(store.readNote(note.id).content).toContain("恢复后编辑版");
   });
 

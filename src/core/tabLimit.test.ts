@@ -38,6 +38,16 @@ describe("selectEvictionIds", () => {
     expect(selectEvictionIds(tabs, { limit: 3, activeNoteId: "d", pinnedNoteIds: pinned })).toEqual(["a"]);
   });
 
+  it("protectNoteIds：保存失败的候选被保留且不补位（不顺手淘汰其它未持久化标签）", () => {
+    // limit=2 → evictCount=2；LRU 候选 [b,c]，保护 b → 只淘汰 c（不补位淘汰 d）
+    expect(selectEvictionIds(tabs, { limit: 2, activeNoteId: "a", protectNoteIds: new Set(["b"]) })).toEqual(["c"]);
+    // 未被保护时行为不变
+    expect(selectEvictionIds(tabs, { limit: 2, activeNoteId: "a" })).toEqual(["b", "c"]);
+    // trim 同样保留受保护者
+    const next = trimTabsToLimit(tabs, { limit: 2, activeNoteId: "a", protectNoteIds: new Set(["b"]) });
+    expect(next.map((t) => t.noteId)).toEqual(["a", "b", "d"]);
+  });
+
   it("trimTabsToLimit 幂等返回封顶数组", () => {
     const next = trimTabsToLimit(tabs, { limit: 2, activeNoteId: "d", pinnedNoteIds: new Set(["a"]) });
     expect(next.map((t) => t.noteId)).toEqual(["a", "d"]);

@@ -12,8 +12,6 @@ interface NoteContentRepositoryDeps {
   db: DbLike;
   notePathFor(noteId: string): string;
   atomicWrite(filePath: string, content: string): void;
-  revivePurgedIfNeeded(noteId: string): boolean;
-  createHistorySnapshot(noteId: string, content?: string, force?: boolean): number | null;
   upsertSearch(noteId: string, title: string, body: string | null): void;
   detectOrphans(noteId: string, content: string): void;
   markHistoryDirty(noteId: string): void;
@@ -23,6 +21,9 @@ interface NoteContentRepositoryDeps {
  * Coordinates a single note content save. It intentionally does not own
  * note metadata, history, or asset repositories; those remain explicit
  * callbacks so the old ordering and transaction boundary stay visible.
+ *
+ * 审计 F04：普通保存只写"活跃"文档，不兼职恢复——回收站条目 / 他端 purge 的保留副本在这里明确拒绝；
+ * 旧 revivePurgedIfNeeded（编辑即隐式恢复）已删除。恢复是唯一显式例外，走 trashLifecycle.restoreTrashItem。
  */
 export class NoteContentRepository {
   constructor(private readonly deps: NoteContentRepositoryDeps) {}
@@ -31,11 +32,15 @@ export class NoteContentRepository {
     const notePath = this.deps.notePathFor(noteId);
     if (!fs.existsSync(notePath)) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
 
-    const current = this.deps.db.prepare("SELECT title FROM notes WHERE id=? AND deleted_at IS NULL").get(noteId) as { title: string } | undefined;
+    const current = this.deps.db.prepare("SELECT title, trashed_at, sync_state FROM notes WHERE id=? AND deleted_at IS NULL").get(noteId) as
+      | { title: string; trashed_at: string | null; sync_state: string | null }
+      | undefined;
     if (!current) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
-    const revived = this.deps.revivePurgedIfNeeded(noteId);
+    if (current.trashed_at != null || current.sync_state === "purged") {
+      throw new AppError("InvalidInput", `笔记已在回收站或已被删除，保存被拒绝；请先显式恢复: ${noteId}`);
+    }
     const currentContent = fs.readFileSync(notePath, "utf8");
-    if (!revived && !hasNoteSaveChanges({ title: current.title, content: currentContent }, { title, content })) {
+    if (!hasNoteSaveChanges({ title: current.title, content: currentContent }, { title, content })) {
       // 编辑器打开时可能只补派生缓存；缓存更新不能改变 updated_at/sync_state。
       if (caches) {
         const transaction = this.deps.db.transaction(() => {
@@ -46,12 +51,6 @@ export class NoteContentRepository {
         transaction();
       }
       return;
-    }
-
-    // Editing a purged local copy is an implicit restore. Preserve the old
-    // content before the new body replaces it, exactly as the legacy flow did.
-    if (revived) {
-      try { this.deps.createHistorySnapshot(noteId, undefined, true); } catch { /* 留档失败不阻断编辑 */ }
     }
 
     const updatedAt = new Date().toISOString();

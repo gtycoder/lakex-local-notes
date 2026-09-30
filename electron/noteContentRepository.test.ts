@@ -5,13 +5,15 @@ import path from "node:path";
 import { NoteContentRepository } from "./noteContentRepository.js";
 import type { DbLike } from "./dbLike.js";
 
+type NoteRow = { title: string; trashed_at: string | null; sync_state: string | null };
+
 /** 最小 DbLike mock：prepare 返回 run()（计入 calls）/ get()；transaction(fn) 直接执行。 */
-function makeDb() {
+function makeDb(row: NoteRow = { title: "旧标题", trashed_at: null, sync_state: "synced" }) {
   const runCalls: string[] = [];
   const db = {
     prepare(sql: string) {
       return {
-        get: (..._args: unknown[]) => (sql.includes("SELECT title") ? { title: "旧标题" } : undefined),
+        get: (..._args: unknown[]) => (sql.includes("SELECT title") ? row : undefined),
         all: () => [],
         run: (..._args: unknown[]) => { runCalls.push(sql); return { changes: 1, lastInsertRowid: 1 }; },
       };
@@ -33,8 +35,6 @@ function deps(over: Partial<ConstructorParameters<typeof NoteContentRepository>[
     db,
     notePathFor: () => notePath,
     atomicWrite: vi.fn((_fp: string, content: string) => fs.writeFileSync(notePath, content, "utf8")),
-    revivePurgedIfNeeded: () => false,
-    createHistorySnapshot: () => 1,
     upsertSearch: vi.fn(),
     detectOrphans: vi.fn(),
     markHistoryDirty: vi.fn(),
@@ -59,5 +59,23 @@ describe("NoteContentRepository.save (W-7 文件写与 DB 事务分离)", () => 
     const repo = new NoteContentRepository(base);
     expect(() => repo.save("n1", "新标题", "<p>新内容</p>")).toThrow("ENOSPC");
     expect(runCalls.length).toBe(0); // 事务内的 UPDATE 从未执行
+  });
+
+  it("审计 F04：回收站条目不能被普通保存改写（明确拒绝，正文/DB 都不动）", () => {
+    const { db, runCalls } = makeDb({ title: "旧标题", trashed_at: "2026-09-30T00:00:00.000Z", sync_state: "local" });
+    const { base, notePath } = deps({ db });
+    const repo = new NoteContentRepository(base);
+    expect(() => repo.save("n1", "新标题", "<p>晚到保存</p>")).toThrow(/回收站|已删除/);
+    expect(fs.readFileSync(notePath, "utf8")).toBe("<p>旧内容</p>");
+    expect(base.atomicWrite).not.toHaveBeenCalled();
+    expect(runCalls.length).toBe(0);
+  });
+
+  it("审计 F04：sync_state='purged' 的保留副本同样拒绝（不兼职恢复）", () => {
+    const { db } = makeDb({ title: "旧标题", trashed_at: null, sync_state: "purged" });
+    const { base } = deps({ db });
+    const repo = new NoteContentRepository(base);
+    expect(() => repo.save("n1", "新标题", "<p>晚到保存</p>")).toThrow(/回收站|已删除/);
+    expect(base.atomicWrite).not.toHaveBeenCalled();
   });
 });

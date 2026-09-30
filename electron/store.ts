@@ -185,8 +185,6 @@ export class Store {
       db: this.db,
       notePathFor: (noteId) => this.notePath(noteId),
       atomicWrite: (filePath, content) => this.atomicWrite(filePath, content),
-      revivePurgedIfNeeded: (noteId) => this.revivePurgedIfNeeded(noteId),
-      createHistorySnapshot: (noteId, content, force) => this.createHistorySnapshot(noteId, content, force),
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
       detectOrphans: (noteId, content) => this.orphanLifecycle.detectOrphans(noteId, content),
       markHistoryDirty: (noteId) => this.markHistoryDirty(noteId),

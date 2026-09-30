@@ -576,7 +576,7 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 > 会话 260930-S0。分支 codex/audit-s0（从 master 6a0ec68 开出）。**未合 master、未推送**。
 > 约束：只做 §9 S0 的小而确定的问题，每项配真实反向行为测试；**不启动 §8 路线 C（正文入 SQLite）**，S1 DocumentSession 也未批准。
 
-### 已完成（5/9）
+### 已完成（9/9）
 
 | 发现 | 修法 | 改动 | 测试 |
 |---|---|---|---|
@@ -585,27 +585,25 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 | F07 | 历史快照文件名加随机后缀，同秒 + 同内容 + force 不再共用路径 | electron/historyLifecycle.ts | electron/store.test.ts 新增：两条同秒快照 file_path 不同，删一条另一条仍可恢复 |
 | F05 | 移动 useAutoSave.flush 改为立即保存挂起文档；新增独立 cancel；卸载只做取消兜底 | src/mobile/useAutoSave.ts | 新增 src/mobile/useAutoSave.test.ts：flush 保存全部/指定、cancel 不写 |
 | F11 | httpFetcher 收到响应头不清 deadline；包装 body 在消费完成/出错时清定时器，整体 deadline 覆盖 body | electron/httpFetcher.ts | electron/httpFetcher.test.ts 新增：头快 body 挂起仍 AbortError |
+| F06 | create 与 save 分离：`noteRepository.createNote` 走 INSERT；`saveNote` 只做 UPDATE，missing/gone（trashed_at / sync_state='purged'）抛错 + 写边界二次守卫；`bridge.saveNote` 对 gone 与"有永久墓碑的 missing"拒绝，只有无墓碑的新 id 才初始化 | src/mobile/noteRepository.ts、src/mobile/bridge.ts | 新增 src/mobile/noteRepository.test.ts（5 例，真实 sql.js SQL）；bridgePurge.test.ts +1（purge 后晚到保存不复活） |
+| F01 | 显式保存返回 `PersistOutcome`（失败不再吞成 fulfilled）；closeTab / 淘汰 / 锁定确认持久化成功才继续；`selectEvictionIds` 新增 `protectNoteIds`（失败标签保留且不补位） | src/hooks/useSavePipeline.ts、useDocumentTabs.ts、useTabLifecycle.ts、useNoteLifecycle.ts、useDesktopHandlers.ts、src/core/tabLimit.ts | 新增 useSavePipeline.test.ts / useDocumentTabs.test.ts / useTabLifecycle.test.ts + tabLimit.test.ts：磁盘失败不关 tab、淘汰保留失败标签、锁定前失败不锁 |
+| F02 | title/body/caches/revision **入队前**绑定为同一次不可变快照；任务内不再读 live revision/editor；ack 只认自己的 revision | src/hooks/useSavePipeline.ts | useSavePipeline.test.ts：排队旧正文 + bump 后两次 ack 都不 apply；无 bump 时正常 apply |
+| F04 | `handleTrashRestored(restoredId?)` 对每个 deleted tab 用 `isGoneNote` 重新判定（不再"能读即解锁"）；`noteContentRepository.save` 拒绝 trashed_at/purged，删除 `revivePurgedIfNeeded` 隐式 revive（普通保存不兼职恢复） | src/hooks/useSyncRefresh.ts、src/components/TrashPanel.tsx、src/desktop/DesktopOverlays.tsx、electron/noteContentRepository.ts、electron/store.ts | 新增 useSyncRefresh.test.ts（恢复 b 不解除 a 的只读）；noteContentRepository.test.ts +2；store.test.ts 隐式恢复用例改反向断言；sync.integration.test.ts S4 改为"保存被拒 → 显式恢复后可写并传播" |
+| F17 | 断言 `getSyncPendingSummary` 真实契约（resources 恒为 0；documents/folders = 本地待上传事实），fixture 生成与业务耗时分离 | electron/workspace.benchmark.test.ts | opt-in 基准实跑通过：`savedMs≈3 / fixtureMs≈843 / summary.resources=0` |
 
-门禁：tsc 通过；全量 vitest **1462 passed / 16 skipped**（S0 累计 +5 测试）；check:core 70 文件 0 违规；git diff --check 通过。
+门禁：tsc 通过；全量 vitest **1480 passed / 16 skipped**（本批 +18 新测试）；check:core 70 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
 
-### 未完成（4/9）
+### 未完成
 
-- **F01** 保存失败仍关闭/淘汰脏标签（useSavePipeline + useDocumentTabs + useTabLifecycle）。
-- **F02** revision 采样太晚，旧 payload 被认证成最新（useSavePipeline）。
-- **F04** 恢复任意条目解除仍在回收站标签只读 + 普通保存隐式复活（useSyncRefresh + noteContentRepository + trashLifecycle）。
-- **F06** 安卓普通保存 UPSERT 可重写仍被删除的记录（src/mobile/noteRepository.ts）。
-- **F17** opt-in 容量基准断言与现契约冲突（electron/workspace.benchmark.test.ts）。
-- （F03、F12–F16 不在 S0 本批。）
+无。F03、F12–F16 不在 S0 本批（见 §9）。
 
-### 下一步顺序（建议）
+### 诚实边界与已知取舍
 
-F06（移动、独立）→ F01 + F02（同属 useSavePipeline，同写集）→ F04（与已改的 useSyncRefresh 合看）→ F17（基准）。
-每项：**先写会失败的真实行为测试，再修**，跑全门禁；不要顺手启动路线 C 或 S1 DocumentSession。
-
-### 诚实边界
-
-- F09 无自动化测试；其余四项都有反向行为测试。
+- **F09 仍无自动化测试**（hook 级，需 React 行为环境）；其余 8 项都有反向行为测试，且都是真实执行路径（真实 sql.js SQL / React hook / 文件），不是源码正则护栏。
+- **F04 范围**：只收掉了**普通保存**的隐式 revive。`noteMetadataRepository` 的重命名/图标/锁定仍调用 `trashLifecycle.revivePurgedIfNeeded`（元数据"编辑即恢复"）。那是另一条写集，S0 未扩大范围；若要一并删除，必须同时定义元数据写对 gone 节点的拒绝语义（否则会把 purged 行改成 local 却不移出回收站）。
+- **F06 的 `bridge.saveNote`**：在"无行且无永久墓碑"时仍会初始化新文档（既有 `createNote` 流程依赖该入口）；真正被禁止的是覆盖回收站/已 purge 行、以及复活有墓碑的条目。repository 层的 `saveNote` 对 missing/gone 一律拒绝。
 - 未做真实 Electron CDP / Android / 真实 S3 验收（S0 是本地逻辑修复）。
-- 改动写在分支 codex/audit-s0 上，合并/推送待用户验收。
+- 改动写在分支 codex/audit-s0 上，**未合 master、未推送**，待用户验收。
+
 
 
