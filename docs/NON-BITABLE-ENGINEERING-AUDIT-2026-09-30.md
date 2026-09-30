@@ -570,3 +570,84 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 - [失效容量基准断言](/Users/admin/file/local-lake/lake-notes-electron/electron/workspace.benchmark.test.ts#L61)
 
 **收口原则：把不变量放在唯一能保证它的边界；把无用的内部防御删掉；把失败留给正确的调用者处理。简洁不是少几行，而是少几种状态、少几份真源、少几个可以绕过正确性的入口。**
+
+## 12. S0 实施进度（260930-S0，在本分支完成；路线 C 未触碰）
+
+> 会话 260930-S0。分支 codex/audit-s0（从 master 6a0ec68 开出）。**未合 master、未推送**。
+> 约束：只做 §9 S0 的小而确定的问题，每项配真实反向行为测试；**不启动 §8 路线 C（正文入 SQLite）**，S1 DocumentSession 也未批准。
+
+### 已完成（9/9）
+
+| 发现 | 修法 | 改动 | 测试 |
+|---|---|---|---|
+| F09 | 孤儿草稿不再自动 deleteDraftJournal，全部列出；显式丢弃才删 | src/hooks/useSyncRefresh.ts | useSyncRefresh.test.ts 新增：孤儿草稿仍列出、刷新路径不触达 deleteDraftJournal |
+| F10 | cleanNoteOrphans 删除判据改用 assetRepository.getProtectedRefs（当前正文 ∪ 历史 ∪ 草稿），不再只看 protectedByHistory | electron/orphanLifecycle.ts | electron/store.test.ts 新增：草稿唯一引用的图不被删，显式丢弃后才可删 |
+| F07 | 历史快照文件名加随机后缀，同秒 + 同内容 + force 不再共用路径 | electron/historyLifecycle.ts | electron/store.test.ts 新增：两条同秒快照 file_path 不同，删一条另一条仍可恢复 |
+| F05 | 移动 useAutoSave.flush 改为立即保存挂起文档；新增独立 cancel；卸载只做取消兜底 | src/mobile/useAutoSave.ts | 新增 src/mobile/useAutoSave.test.ts：flush 保存全部/指定、cancel 不写 |
+| F11 | httpFetcher 收到响应头不清 deadline；包装 body 在消费完成/出错时清定时器，整体 deadline 覆盖 body | electron/httpFetcher.ts | electron/httpFetcher.test.ts 新增：头快 body 挂起仍 AbortError |
+| F06 | create 与 save 分离：`noteRepository.createNote` 走 INSERT；`saveNote` 只做 UPDATE，missing/gone（trashed_at / sync_state='purged'）抛错 + 写边界二次守卫；`bridge.saveNote` 对 gone 与"有永久墓碑的 missing"拒绝，只有无墓碑的新 id 才初始化 | src/mobile/noteRepository.ts、src/mobile/bridge.ts | 新增 src/mobile/noteRepository.test.ts（5 例，真实 sql.js SQL）；bridgePurge.test.ts +1（purge 后晚到保存不复活） |
+| F01 | 显式保存返回 `PersistOutcome`（失败不再吞成 fulfilled）；closeTab / 淘汰 / 锁定确认持久化成功才继续；`selectEvictionIds` 新增 `protectNoteIds`（失败标签保留且不补位） | src/hooks/useSavePipeline.ts、useDocumentTabs.ts、useTabLifecycle.ts、useNoteLifecycle.ts、useDesktopHandlers.ts、src/core/tabLimit.ts | 新增 useSavePipeline.test.ts / useDocumentTabs.test.ts / useTabLifecycle.test.ts + tabLimit.test.ts：磁盘失败不关 tab、淘汰保留失败标签、锁定前失败不锁 |
+| F02 | title/body/caches/revision **入队前**绑定为同一次不可变快照；任务内不再读 live revision/editor；ack 只认自己的 revision | src/hooks/useSavePipeline.ts | useSavePipeline.test.ts：排队旧正文 + bump 后两次 ack 都不 apply；无 bump 时正常 apply |
+| F04 | ① `handleTrashRestored(restoredId?)` 对每个 deleted tab 用 `isGoneNote` 重新判定（不再"能读即解锁"）；`noteContentRepository.save` 拒绝 trashed_at/purged，删除普通保存的隐式 revive；② **元数据写边界 fail-closed**：`noteMetadataRepository` 的 rename/icon/lock 先 `assertNodeWritable`，回收站/purged 节点明确拒绝，删除 `trashLifecycle.revivePurgedIfNeeded`（隐式恢复最后入口） | src/hooks/useSyncRefresh.ts、TrashPanel.tsx、DesktopOverlays.tsx、electron/noteContentRepository.ts、noteMetadataRepository.ts、trashLifecycle.ts、store.ts | useSyncRefresh.test.ts（恢复 b 不解除 a）；noteContentRepository.test.ts +2；store.test.ts +2（保存 + 元数据反向断言）；sync.integration.test.ts S4 改反向断言；桌面真实端 +6 |
+| F03 | 全工作区单一 `tabReloadVersionRef` 会让不同文档的合法重载互相取消 → 新增 `createNoteReloadGuard`（按 noteId token）；`handleTrashRestored`/`handleHistoryRestored`/`reloadNoteTab` 按文档取消；`useSyncProgress` 全库同步改用自己的 sync run id | src/core/requestVersion.ts、useSyncRefresh.ts、useSyncProgress.ts、useWorkspaceState.ts、App.tsx | requestVersion.test +2；useSyncRefresh.test +2（R03：reload a/b 互不取消；同文档旧响应作废）；桌面真实端 +2 |
+| F17 | 断言 `getSyncPendingSummary` 真实契约（resources 恒为 0；documents/folders = 本地待上传事实），fixture 生成与业务耗时分离 | electron/workspace.benchmark.test.ts | opt-in 基准实跑通过：`savedMs≈3 / fixtureMs≈843 / summary.resources=0` |
+
+门禁：tsc 通过；全量 vitest **1493 passed / 16 skipped**（含后续捕获批 + F14/F15）；check:core 71 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
+
+**桌面真实端 CDP 验收**：`node scripts/e2e-audit-s0.mjs` **17/17 通过**（捕获批新增「输入后立即关闭也把最后输入落盘」）（隔离 `LAKE_USER_DATA`/端口、owned child 精确收尾）——scheme origin `lake://app`；F04 回收站/purge 后普通保存被真实 IPC+SQLite 拒绝且正文不改写、显式恢复后可写、恢复 c 不解除仍在回收站的 d、元数据 rename/icon/lock 对回收站节点被拒且显式恢复后可写；F03 两篇不同文档各自历史恢复都生效；F01/F02 输入→自动保存落盘；F01 保存失败（.lake 缺失→NotFound）时脏标签不关闭、恢复可写后再关成功。
+
+**安卓真实端验收**：`node scripts/e2e-f06-android.mjs` **6/6 通过**（emulator-5554 + `android-build.sh --sync` debug APK；用 MobileApp 暴露的 `window.lakeNative` 调试契约直驱 bridge）——回收站晚到保存被拒且正文 sizeBytes 不变；条目仍在回收站；purge 后晚到保存被拒且不复活；显式恢复后可写。
+
+### 未完成
+
+无（F03 + F04 元数据尾已补）。F12–F16 不在 S0 本批（见 §9）。
+
+### 诚实边界与已知取舍
+
+- 9 项都有反向行为测试，且都是真实执行路径（真实 sql.js SQL / React hook / 真实文件），不是源码正则护栏。
+- **F06 安卓真实端已完成**（模拟器 + debug APK，6/6）。移动端"他端 purge 的保留副本（行保留 + `sync_state='purged'`）"这一状态不经暴露的调试契约构造，由 `src/mobile/noteRepository.test.ts` 的真实 sql.js SQL 用例直接覆盖。
+- 桌面真实端只走隔离临时 userData + 独立端口 + owned child，全程未触碰正式数据目录。
+- **F04 元数据尾已收口**：rename/icon/lock 对 trash/purged 明确拒绝；`trashLifecycle.revivePurgedIfNeeded` 已删除，仓库内不再有隐式恢复入口。
+- **F03 竞态**在真实 hook（jsdom，受控延迟）下验证（R03）；桌面真实端因 `window.lakeNative` 被 contextBridge 冻结（实测 `Object.isFrozen===true`、不可写、不可配置），无法向真实 App 注入 `readNote` 延迟，故真实端覆盖"两篇不同文档各自历史恢复都生效"的路径，竞态本身由 hook 测试 + core guard 单测证明。
+- **F06 的 `bridge.saveNote`**：在"无行且无永久墓碑"时仍会初始化新文档（既有 `createNote` 流程依赖该入口）；真正被禁止的是覆盖回收站/已 purge 行、以及复活有墓碑的条目。repository 层的 `saveNote` 对 missing/gone 一律拒绝。
+- 未做真实 S3 双端/GC 验收（S0 是本地逻辑修复）。
+- 改动写在分支 codex/audit-s0 上，**未合 master、未推送**，待用户验收。
+
+### 后续小范围收口（C / B / A：捕获契约，审计 §6.1 / §7.3）
+
+> S0 之后的独立增量：**不启动 S1 DocumentSession**，只解决"多 MB 文档每键整篇序列化"这一个已测量的真问题，并顺手收敛生命周期闸门。
+
+| 项 | 内容 | 提交 |
+|---|---|---|
+| C | 关闭/淘汰/锁定的持久化闸门收敛为 `src/core/lifecycleFlush.ts` 单一来源（blocked 视为可继续），避免规则漂移 | 962f4b0 |
+| B | 新增 opt-in `scripts/profile-editor-input.mjs` 实测：2MB 文档单键 getDocument+state ≈ 58ms、0.5MB ≈ 17ms、~0 ≈ 0.6ms | f994ee2 |
+| A+B | **捕获契约**：EditorTab contentchange 只通知「有变更」、不再每键序列化；正文由 `useSavePipeline.captureContent` 在保存/草稿/关闭时按需 capture；删除 `MultiTabEditor.contentCache`/`reloadKeysRef`（第二份可写正文）；close/evict/lock/beforeunload 不再传可能过期的 `tab.content` | 24a21cc |
+
+**效果**（同一 profile 脚本、同口径）：2MB 单键 **57.9 → 10.0 ms**、长任务 **1761ms → 0**；0.5MB **16.8 → 5.3 ms**、长任务 533ms → 0；~0 不变（0.6→0.7ms）。桌面 e2e **17/17**。
+
+**诚实边界（捕获批）**：
+- profile 脚本的「tab 就绪」判定不严（曾出现 `openMs=4`，即在目标 tab 渲染完成前开测），**只信量级、不信精确 before/after**；已按同一脚本同口径对比。
+- 重建（锁/自愈/换文档）前的最后捕获放在 `EditorTab` effect cleanup（写入 `latestDocumentRef`），保证不丢在途输入；但「内核中途自愈时正好在打字」这一竞态没有真实端注入点，只有代码路径保证（未实测）。
+- doc 每键只 `bumpRevision` + 重置防抖，**只在 clean→dirty 第一次**更新 tab 状态；sheet/board 仍走显式 content（其内部本就防抖）。
+- `src/core/editorChangeGuard.ts` 因捕获契约后不再被调用（模块与单测保留，未清理）。
+- 未做真实 Electron 前台长文输入体感验收（profile 是程序化注入，非人手打字）。
+
+### 后续小范围收口（D：F14 错误边界真实重试 + F15 Sheet/Board 保存时机）
+
+| 项 | 内容 | 提交 |
+|---|---|---|
+| F14 | 抽出 EditorErrorBoundary：提供可点的「重试」（换 mount generation 强制重建子树），删除「切换标签即可恢复」这句不可执行的话；新增 errorBoundary.test.ts（抛错→显示重试→点击后真实恢复） | e6aab97 |
+| profile | profile-editor-input.mjs 就绪判定加固（先等目标 tab active、再等可见引擎内容长度连续两轮一致），消除 openMs=4 假象 | e6aab97 |
+| F15 | Sheet/Board/Bitable 一改动立即 onDirty（早于各自 800ms 内部防抖）+ 注册按需同步序列化 capture；useSavePipelineGlue 新增捕获注册表（优先于 Lake getDocument）；关闭/退出/淘汰/锁定走 capture ⇒ 消除「改完 <800ms 就关」丢最后编辑 | 87e5e4e + c726e23 |
+
+**明确不做**：**F13**（经用户评估：后果仅同步状态/提示偶发不一致、无数据影响，审计当时也未复现最强变体）；**§6.1-#2**（保存响应回传整篇正文：收益小、动 IPC 契约）。**editorChangeGuard 不是死代码**（仍被 LakeEditor 使用），未删。
+
+**门禁**：全量 vitest **1493 passed / 16 skipped**；tsc / check:core（71 文件 0 违规）/ git diff --check 通过；桌面 e2e 17/17。
+
+**诚实边界（F14/F15）**：
+- F14 的「重试」有 jsdom 行为测试，但「真实内核崩一次再点重试」未在真实端注入。
+- F15 覆盖 Sheet/Board/Bitable。三者的「编辑→立即关闭」都无法用 CDP 稳定驱动，未做自动化真实端，待人工抽验；图片提升未落地时 capture 返回 null，由外层回退到 tab 最后已提交版本。
+- profile 绝对值仍受机器负载影响（只信量级）。
+
+
+

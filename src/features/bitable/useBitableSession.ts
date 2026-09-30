@@ -10,6 +10,10 @@ export function useBitableSession(initialDoc: () => BitableDoc, options: {
   readOnly: boolean;
   onChange: (content: string) => void;
   onPreserveDraft?: (content: string) => void;
+  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖），让外层 dirty / 关闭 / 退出及时看到。 */
+  onDirty?: () => void;
+  /** 审计 F15：注册按需同步序列化（关闭/保存/退出时现取），避免「改完 <800ms 就关」丢最后编辑。 */
+  onEditorCapture?: (capture: (() => string | null) | null) => void;
 }) {
   const [doc, setDoc] = useState(initialDoc);
   const docRef = useRef(doc);
@@ -34,7 +38,10 @@ export function useBitableSession(initialDoc: () => BitableDoc, options: {
     if (!latest.current.readOnly) {
       lastEditableRef.current = next;
       pendingRef.current = true;
-      if (edit) pendingEditRef.current = true;
+      if (edit) {
+        pendingEditRef.current = true;
+        latest.current.onDirty?.(); // 立即标脏（不等 800ms 内部防抖）
+      }
     }
     setDoc(next);
   }, [history]);
@@ -74,6 +81,17 @@ export function useBitableSession(initialDoc: () => BitableDoc, options: {
     mountedRef.current = true;
     return () => { mountedRef.current = false; flushNow(); };
   }, [flushNow]);
+
+  // 审计 F15：注册按需同步序列化（关闭/保存/退出时现取），不依赖 800ms 内部防抖。
+  const captureContent = useCallback((): string | null => {
+    if (latest.current.readOnly) return null;
+    const current = lastEditableRef.current;
+    return bitablesToBody(current.tables, current.activeTableId);
+  }, []);
+  useEffect(() => {
+    latest.current.onEditorCapture?.(captureContent);
+    return () => { latest.current.onEditorCapture?.(null); };
+  }, [captureContent]);
 
   const beginGesture = useCallback(() => {
     if (!latest.current.readOnly && !gestureRef.current) gestureRef.current = docRef.current.tables;

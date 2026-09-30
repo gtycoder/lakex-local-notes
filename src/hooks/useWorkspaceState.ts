@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { createRequestVersion } from "../core/requestVersion";
+import { createNoteReloadGuard } from "../core/requestVersion";
 import { loadSettings, type AppSettings } from "../lib/settings";
 import type { DraftJournalEntry, NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
@@ -35,7 +35,9 @@ export function useWorkspaceState() {
   const syncBtnRef = useRef<HTMLButtonElement>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
   const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
-  const tabReloadVersionRef = useRef(createRequestVersion());
+  // 审计 F03：reload 取消按文档作用域（旧的全工作区单一 RequestVersion 会让不同文档互相取消）。
+  // 全库同步自己的取消在 useSyncProgress 内部另有 sync run id。
+  const noteReloadGuardRef = useRef(createNoteReloadGuard());
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
 
   const tocEnabled = true; // 大纲始终可用（显示大纲由「大纲增强」决定用哪套，不再有显式开关）
@@ -51,6 +53,6 @@ export function useWorkspaceState() {
     s3Settings, setS3Settings, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
     settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
-    quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
+    quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, noteReloadGuardRef, editorsRef,
   };
 }

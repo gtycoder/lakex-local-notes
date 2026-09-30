@@ -7,7 +7,7 @@ import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
 import { createStoreSyncPort } from "./syncAdapters.js";
-import { draftJournalDir } from "./draftJournal.js";
+import { DraftJournal, draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
@@ -476,7 +476,7 @@ describe("目录树操作", () => {
     expect(store.searchNotes("无引用").some((x) => x.id === note.id)).toBe(false);
   });
 
-  it("审计（编辑即恢复）：编辑 purged 条目 = 隐式恢复（移出回收站 + restore_pending + 可上传）", () => {
+  it("审计 F04：普通保存拒绝回收站/purged，不再隐式恢复；显式恢复后才可继续保存", () => {
     const nb = store.createNotebook("目标册");
     const note = store.createNoteIn(nb.id, "待编辑");
     store.saveNote(note.id, "待编辑", "<p>v1</p>");
@@ -484,15 +484,44 @@ describe("目录树操作", () => {
     // 模拟"他端已 purge、本端保留"：标 purged（applyRemotePurge 的等价状态）
     (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
     (store as any).db.prepare("UPDATE tree_nodes SET sync_state='purged' WHERE id=?").run(note.id);
-    // 编辑 = 隐式恢复：移出回收站 + restore_pending + 内容落盘
+    // 审计 F04：普通保存不再"编辑即恢复"——明确拒绝，且不改写正文/生命周期
+    expect(() => store.saveNote(note.id, "待编辑", "<p>隐式恢复版</p>")).toThrow();
+    const stillTrashed = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(stillTrashed.parentId).toBe("notebook-trash"); // 仍在回收站
+    expect(stillTrashed.syncState).toBe("purged");
+    expect(store.readNote(note.id).content).toContain("v1");
+    // 显式恢复是唯一例外：恢复后可正常保存（restore_pending_at → local-wins）
+    store.restoreTrashItem(note.id);
+    expect((store as any).isRestorePending(note.id)).toBe(true);
     store.saveNote(note.id, "待编辑", "<p>恢复后编辑版</p>");
     const row = store.listNotesForSync().find((n) => n.id === note.id)!;
-    expect(row.parentId).toBe(nb.id); // 不在回收站
+    expect(row.parentId).toBe(nb.id); // 回到原位置
     expect(row.trashedAt).toBeNull();
     expect(row.deletedFromParentId).toBeNull();
     expect(row.syncState).toBe("local");
-    expect((store as any).isRestorePending(note.id)).toBe(true);
     expect(store.readNote(note.id).content).toContain("恢复后编辑版");
+  });
+
+  it("审计 F04（元数据尾）：回收站/purged 节点的重命名/图标/锁定被拒绝，显式恢复后可写", () => {
+    const nb = store.createNotebook("元数据边界册");
+    const note = store.createNoteIn(nb.id, "原标题");
+    store.saveNote(note.id, "原标题", "<p>x</p>");
+    store.deleteTreeNode(note.id); // 进回收站
+    // 元数据写边界 fail-closed：不再"编辑即隐式恢复"
+    expect(() => store.renameTreeNode(note.id, "改名")).toThrow(/回收站|已删除/);
+    expect(() => store.setNodeIcon(note.id, "star")).toThrow(/回收站|已删除/);
+    expect(() => store.setNoteLocked(note.id, true)).toThrow(/回收站|已删除/);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("原标题");
+    // 他端已 purge、本端保留副本：同样拒绝
+    (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE tree_nodes SET sync_state='purged' WHERE id=?").run(note.id);
+    expect(() => store.renameTreeNode(note.id, "改名2")).toThrow(/回收站|已删除/);
+    // 显式恢复（唯一例外）后三个入口都能写
+    store.restoreTrashItem(note.id);
+    expect(store.renameTreeNode(note.id, "恢复后名").title).toBe("恢复后名");
+    expect(store.setNodeIcon(note.id, "star").icon).toBe("star");
+    store.setNoteLocked(note.id, true);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("恢复后名");
   });
 
   it("审计（W-4）：恢复后未同步再删除 → restore_pending_at 无残留，删除以软删语义传播", () => {
@@ -730,6 +759,23 @@ describe("文档历史（快照，纯本地）", () => {
     // 手动创建快照（HistoryPanel 传 force=true）：用户显式意图，同 hash 也写
     expect(store.createHistorySnapshot(id, undefined, true)).toBeTruthy();
     expect(store.listNoteHistory(id).length).toBe(2);
+  });
+
+  it("同秒 force 同内容快照文件名唯一：删一条不毁另一条（审计 F07）", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>同内容</p>");
+    const h1 = store.createHistorySnapshot(id, undefined, true);
+    const h2 = store.createHistorySnapshot(id, undefined, true);
+    expect(h1).toBeTruthy();
+    expect(h2).toBeTruthy();
+    const rows = (store as any).db.prepare("SELECT id, file_path FROM note_history WHERE note_id=? ORDER BY id").all(id) as Array<{ id: number; file_path: string }>;
+    expect(rows.length).toBe(2);
+    expect(rows[0].file_path).not.toBe(rows[1].file_path); // 文件身份不再撞车
+    // 删 h1 后 h2 的文件仍在，且能恢复
+    store.deleteHistory(h1!);
+    expect(fs.existsSync(path.join(dir, rows[1].file_path))).toBe(true);
+    store.restoreHistory(h2!);
+    expect(store.readNote(id).content).toContain("同内容");
   });
 
   it("恢复前留档去重：当前内容 24h 内已有快照时恢复不新增重复", () => {
@@ -978,6 +1024,27 @@ describe("文档历史（快照，纯本地）", () => {
     const hist = store.listNoteHistory(id);
     for (const h of hist) store.deleteHistory(h.id);
     expect(store.listNoteOrphans(id).find((o) => o.filename === refName)?.protectedByHistory).toBe(false);
+  });
+
+  it("cleanNoteOrphans：草稿唯一引用的资源受保护，不被删除（审计 F10）", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const draftName = "1786123456789_d1a2b3c4.png";
+    fs.writeFileSync(path.join(assetsDir, draftName), "draftdata");
+    store.saveNote(id, "草稿保护", "<p>无图</p>"); // 正文不引用该图
+    const journal = new DraftJournal(draftJournalDir(dir));
+    journal.write({ noteId: id, title: "草稿保护", content: `<p><img src="http://127.0.0.1:19876/${id}/${draftName}"></p>`, updatedAt: new Date().toISOString() });
+    expect(readDraftEntry(draftJournalDir(dir), id)?.content).toContain(draftName);
+    // 展示仍按「当前正文 ∪ 历史」：草稿图显示为孤儿（protectedByHistory=false）
+    expect(store.listNoteOrphans(id).find((o) => o.filename === draftName)?.protectedByHistory).toBe(false);
+    // 但删除判定走完整保护集（含草稿）⇒ 不删
+    expect(store.cleanNoteOrphans(id, [draftName]).count).toBe(0);
+    expect(fs.existsSync(path.join(assetsDir, draftName))).toBe(true);
+    // 显式丢弃草稿后才可删
+    journal.remove(id);
+    expect(store.cleanNoteOrphans(id, [draftName]).count).toBe(1);
+    expect(fs.existsSync(path.join(assetsDir, draftName))).toBe(false);
   });
 
   it("listRemovedAssets：聚合未引用(可删) + 历史保护(只读)；readAssetPreview 按路径预览", () => {

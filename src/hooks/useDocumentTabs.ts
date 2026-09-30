@@ -1,4 +1,6 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import type { PersistOutcome } from "./useSavePipeline";
+import { flushDirtyBeforeLifecycle } from "../core/lifecycleFlush";
 
 export interface DocumentTabLike {
   noteId: string;
@@ -16,7 +18,7 @@ interface UseDocumentTabsInput<T extends DocumentTabLike> {
   setActiveNoteId: Dispatch<SetStateAction<string | null>>;
   setSaveState: Dispatch<SetStateAction<SaveStateLike>>;
   saveTimers: MutableRefObject<Map<string, number>>;
-  persistTab: (noteId: string, title: string, content: string) => Promise<unknown>;
+  persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   clearScrollMemory: (noteId: string) => void;
 }
 
@@ -50,13 +52,17 @@ export function useDocumentTabs<T extends DocumentTabLike>({
   const closeTab = useCallback(async (noteId: string) => {
     const tab = tabsRef.current.find((item) => item.noteId === noteId);
     if (!tab) return;
-    clearScrollMemory(noteId);
     const pendingTimer = saveTimers.current.get(noteId);
     if (pendingTimer !== undefined) {
       window.clearTimeout(pendingTimer);
       saveTimers.current.delete(noteId);
     }
-    if (tab.dirty) await persistTab(noteId, tab.title, tab.content);
+    {
+      // 审计 F01：关闭前必须确认该 revision 已持久化；失败留在原文档（错误已由保存管线提示）。
+      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(noteId));
+      if (!proceed) return;
+    }
+    clearScrollMemory(noteId);
     const currentTabs = tabsRef.current;
     const closedIndex = currentTabs.findIndex((item) => item.noteId === noteId);
     if (closedIndex === -1) return;

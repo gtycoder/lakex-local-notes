@@ -39,9 +39,10 @@ export interface DesktopLibraryProps {
   onTabClose: (noteId: string) => void;
   onTabsReorder: (ordered: string[]) => void;
   onTogglePin: (noteId: string) => void;
-  onContentChange: (noteId: string, content: string) => void;
+  onContentChange: (noteId: string, content?: string) => void;
   onPreserveBitableDraft?: (noteId: string, content: string) => void;
   onEditorReady: (noteId: string, editor: LakeEditorInstance | null) => void;
+  onEditorCapture?: (noteId: string, capture: (() => string | null) | null) => void;
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote: (noteId: string) => void;
   onCreateNote: () => void;
@@ -61,7 +62,8 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     onScrollToTop, onNavigateToHeading,
     lockedNoteIds, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
-    onEditorReady, onReloadNote, onCreateNote, onOpenTrash, outlineSlot,
+    onEditorReady,
+  onEditorCapture, onReloadNote, onCreateNote, onOpenTrash, outlineSlot,
     visible = true,
   } = props;
 
@@ -122,6 +124,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onPreserveBitableDraft={props.onPreserveBitableDraft}
         prefs={editorPrefs}
         onEditorReady={onEditorReady}
+        onEditorCapture={onEditorCapture}
         onReloadNote={onReloadNote}
         emptyAction={<button className="b3-button" onClick={onCreateNote}>新建文档</button>}
       />

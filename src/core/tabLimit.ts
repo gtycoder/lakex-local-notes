@@ -12,11 +12,14 @@ export interface EvictionOptions {
   limit: number;
   activeNoteId: string | null;
   pinnedNoteIds?: ReadonlySet<string>;
+  /** 本次不得淘汰的 id（审计 F01：保存失败/未确认持久化的标签必须留在原处）。
+   * 被保护的标签**不补位**——补位会淘汰另一个尚未确认持久化的标签，等于换个对象丢数据。 */
+  protectNoteIds?: ReadonlySet<string>;
 }
 
 /** 返回需要淘汰的 noteId 列表（数量 = 超出上限的个数，按淘汰优先级从高到低）。 */
 export function selectEvictionIds(tabs: readonly TabLike[], options: EvictionOptions): string[] {
-  const { limit, activeNoteId, pinnedNoteIds } = options;
+  const { limit, activeNoteId, pinnedNoteIds, protectNoteIds } = options;
   if (limit <= 0) return [];
   const evictCount = tabs.length - limit;
   if (evictCount <= 0) return [];
@@ -28,7 +31,16 @@ export function selectEvictionIds(tabs: readonly TabLike[], options: EvictionOpt
     if (pinA !== pinB) return pinA - pinB;
     return a.lastAccessedAt - b.lastAccessedAt;
   });
-  return sorted.slice(0, evictCount).map((tab) => tab.noteId);
+  // 先按 LRU 选出 evictCount 个候选，再剔除受保护者；剔除后**不补位**（保持与"实际已持久化"的候选集一致）。
+  const result: string[] = [];
+  let considered = 0;
+  for (const tab of sorted) {
+    if (considered >= evictCount) break;
+    considered += 1;
+    if (protectNoteIds?.has(tab.noteId)) continue;
+    result.push(tab.noteId);
+  }
+  return result;
 }
 
 /**

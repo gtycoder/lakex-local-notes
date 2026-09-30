@@ -47,6 +47,10 @@ export interface BoardEditorProps {
   visible: boolean;
   readOnly: boolean;
   onChange: (content: string) => void;
+  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖）。 */
+  onDirty?: () => void;
+  /** 审计 F15：注册按需同步序列化（关闭/保存时现取）。 */
+  onEditorCapture?: (capture: (() => string | null) | null) => void;
 }
 
 function cardValueOf(doc: BoardDoc, viewport: BoardViewport | null): BoardCardValue {
@@ -85,7 +89,7 @@ function currentLocale(): "zh-CN" | "en-US" {
   return navigator.language?.toLowerCase().startsWith("zh") === false ? "en-US" : "zh-CN";
 }
 
-export function BoardEditor({ noteId, content, visible, readOnly, onChange }: BoardEditorProps) {
+export function BoardEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture }: BoardEditorProps) {
   /**
    * 打开时的视图：**本机记下的优先**（用户上次拖/缩到的位置），其次才是正文里那份
    * （历史遗留的 viewport）。两者都没有 = 交给引擎自适应。见 boardViewStore.ts。
@@ -262,9 +266,15 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange }: Bo
 
   /** flush 的自引用：推迟保存时要重新排队（避免闭包捕获旧 timer）。 */
   const flushRef = useRef<() => void>(() => {});
+  // 审计 F15：回调放 ref（避免父层内联函数导致重复注册）+ 按需同步序列化。
+  const onDirtyRef = useRef(onDirty);
+  onDirtyRef.current = onDirty;
+  const onEditorCaptureRef = useRef(onEditorCapture);
+  onEditorCaptureRef.current = onEditorCapture;
 
   const scheduleSave = useCallback(() => {
     if (readOnlyRef.current) return;
+    onDirtyRef.current?.(); // 立即标脏（不等 800ms 内部防抖）
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
@@ -294,6 +304,20 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange }: Bo
     changeRef.current(json);
   }, [initialDoc, scheduleSave]);
   flushRef.current = flush;
+  /** 审计 F15：关闭/保存/退出时现取正文（与 flush 同口径，但不改 lastSerialized/不回调）。 */
+  const captureContent = useCallback((): string | null => {
+    if (readOnlyRef.current) return null;
+    if (promoteInFlightRef.current > 0) return null;
+    const forDisk: BoardCardValue = {
+      ...cardValueRef.current,
+      plaitValue: replaceInlineImageUrls(cardValueRef.current.plaitValue, promotedRef.current) as unknown[],
+    };
+    return boardToBody(docOf(forDisk, initialDoc.viewport ?? null));
+  }, [initialDoc]);
+  useEffect(() => {
+    onEditorCaptureRef.current?.(captureContent);
+    return () => { onEditorCaptureRef.current?.(null); };
+  }, [captureContent]);
 
   /** 同一张 data URL 的并发提升去重（打开时 hydrate 与首次变更可能同时触发）。 */
   const promoteInflightRef = useRef<Map<string, Promise<string | null>>>(new Map());

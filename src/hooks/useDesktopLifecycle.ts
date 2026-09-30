@@ -6,6 +6,7 @@ import { reportNativeActionError } from "../lib/nativeErrors";
 import { applyTheme } from "../lib/theme";
 import { subscribeSettings, type AppSettings, type ThemeMode } from "../lib/settings";
 import { OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type OpenTab } from "../desktop/desktopTypes";
+import type { PersistOutcome } from "./useSavePipeline";
 
 export interface UseDesktopLifecycleOptions {
   syncToast: unknown;
@@ -27,7 +28,7 @@ export interface UseDesktopLifecycleOptions {
   saveTimers: MutableRefObject<Map<string, number>>;
   layoutWidthsRef: MutableRefObject<{ sidebar: number; outline: number }>;
   quickNotesDirty: boolean;
-  persistTab: (noteId: string, title: string, content: string) => Promise<unknown>;
+  persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   /** ⌘1/2/3 切空间（S1+A）；不传则不注册 */
   onSwitchDesktopWorkspace?: (workspace: "library" | "quick-notes" | "trash") => void;
 }
@@ -143,7 +144,7 @@ export function useDesktopLifecycle({
           draftTimers.current.delete(tab.noteId);
         }
         void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
-        void persistTab(tab.noteId, tab.title, tab.content);
+        void persistTab(tab.noteId);
       }
       event.preventDefault();
       event.returnValue = "";

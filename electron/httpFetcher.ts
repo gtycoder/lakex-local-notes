@@ -128,12 +128,18 @@ export function createPinnedHttpFetcher(deps: HttpFetcherDeps = {}): HttpFetcher
             }
             if (settled) return;
             settled = true;
-            clearTimeout(timer);
+            // 审计 F11：收到响应头时**不**清 deadline —— body 停滞（头快 body 慢/挂起）也必须被整体超时截止。
+            // 用包装 body 在消费完成/出错时清定时器；超时仍走上面的 request.destroy + reject。
+            const stream = response as AsyncIterable<Uint8Array>;
+            const body = (async function* () {
+              try { for await (const chunk of stream) yield chunk; }
+              finally { clearTimeout(timer); }
+            })();
             resolve({
               response: {
                 status,
                 headers: response.headers,
-                body: response,
+                body,
                 abort: () => request.destroy(),
               },
             });

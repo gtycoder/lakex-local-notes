@@ -127,18 +127,6 @@ export class TrashLifecycle {
     return rows.length;
   }
 
-  /** 审计（编辑即恢复）：编辑"他端已 purge、本端保留"（sync_state='purged'）的回收站条目时，
-   * 视为一次显式恢复：移出回收站 + restore_pending_at（D2 例外，后续编辑内容作为恢复版上传）。
-   * 返回是否发生了恢复。 */
-  revivePurgedIfNeeded(id: string): boolean {
-    const row = this.ctx.db.prepare(
-      "SELECT t.note_file_id FROM tree_nodes t JOIN notes n ON n.id = t.note_file_id WHERE t.id=? AND t.parent_id=? AND n.sync_state='purged' AND n.deleted_at IS NULL"
-    ).get(id, this.ctx.trashNotebookId) as { note_file_id: string | null } | undefined;
-    if (!row?.note_file_id) return false;
-    this.restoreTrashItem(row.note_file_id);
-    return true;
-  }
-
   /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。
    * 无墓碑可压（回收站条目是普通条目），恢复 = 移出 + 标 local 待上传（LWW 由 updatedAt 承担）。 */
   restoreTrashItem(id: string): void {

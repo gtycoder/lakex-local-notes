@@ -124,13 +124,17 @@ export interface BitableEditorProps {
   onChange: (content: string) => void;
   /** 进入只读时保留先前合法但尚未发布的输入；不写回只读正文。 */
   onPreserveDraft?: (content: string) => void;
+  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖）。 */
+  onDirty?: () => void;
+  /** 审计 F15：注册按需同步序列化（关闭/保存/退出时现取）。 */
+  onEditorCapture?: (capture: (() => string | null) | null) => void;
   /** 是否显示编辑器外壳（数据表列表 / 视图页签 / 工具条，默认 true）。历史快照预览传 false。 */
   chrome?: boolean;
 }
 
-export function BitableEditor({ noteId, content, visible, readOnly, onChange, onPreserveDraft, chrome = true }: BitableEditorProps) {
+export function BitableEditor({ noteId, content, visible, readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture, chrome = true }: BitableEditorProps) {
   const { doc, docRef, updateDoc, navigateDoc, beginGesture, endGesture, undoEdit, redoEdit } = useBitableSession(
-    () => initialDoc(content), { readOnly, onChange, onPreserveDraft },
+    () => initialDoc(content), { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
   );
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;

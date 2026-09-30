@@ -208,4 +208,17 @@ describe("mobile purge 删除传播", () => {
     expect(tombstones.find((item) => item.id === "purge-nested-parent")?.nodeType).toBe("note");
     expect(tombstones.find((item) => item.id === "purge-nested-child")?.nodeType).toBe("note");
   });
+
+  it("审计 F06：purge 后晚到保存不复活文档（墓碑守卫），也不做 upsert 自愈", async () => {
+    const NID = "purge-resurrect-guard";
+    await bridge.saveNote(NID, "已彻底删", "<p>v1</p>", null);
+    await bridge.trashNote(NID);
+    await bridge.purgeTreeItem(NID, "note");
+    expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
+
+    await expect(bridge.saveNote(NID, "晚到保存", "<p>v2</p>", null)).rejects.toThrow();
+    // 未被复活：行仍是物理删除，墓碑仍在（删除继续传播）
+    expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
+    expect((await bridge.listDeletedNotesForSync()).some((t) => t.id === NID)).toBe(true);
+  });
 });

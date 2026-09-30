@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { isDesktop, native } from "../lib/native";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { planTabReload } from "../core/planTabReload";
-import type { RequestVersion } from "../core/requestVersion";
+import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDigest, NoteSummary, SyncStatus, TreeNode } from "../lib/types";
 import type { NoticeState, OpenTab } from "../desktop/desktopTypes";
 import type { QuickNotesWorkspaceHandle } from "../components/QuickNotesWorkspace";
@@ -21,7 +21,6 @@ export interface UseSyncProgressOptions {
   setTrashOpen: Dispatch<SetStateAction<boolean>>;
   showNoticeWithAction: (text: string, action: NoticeState["action"]) => void;
   quickNotesRef: MutableRefObject<QuickNotesWorkspaceHandle | null>;
-  tabReloadVersionRef: MutableRefObject<RequestVersion>;
   openTabsRef: MutableRefObject<OpenTab[]>;
 }
 
@@ -29,8 +28,10 @@ export interface UseSyncProgressOptions {
 export function useSyncProgress({
   setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,
   setConflictSnapshotNotice, setHistoryNoteId, setHistoryOpen, setNotice, setTrashOpen,
-  showNoticeWithAction, quickNotesRef, tabReloadVersionRef, openTabsRef,
+  showNoticeWithAction, quickNotesRef, openTabsRef,
 }: UseSyncProgressOptions) {
+  // 审计 F03：全库同步是一整轮任务，用它自己的 run id 取消——不再与"按文档 reload"共用一个 guard。
+  const syncRunRef = useRef(createRequestVersion());
   useEffect(() => {
     if (!isDesktop()) return;
     return native.onSyncProgress((progress) => {
@@ -68,7 +69,7 @@ export function useSyncProgress({
         const supersededIds = new Set(supersededList.map((n) => n.id));
         // 渲染进程日志经主进程 console-message 转发落盘；[sync-tab] 前缀便于 grep。
         const tabRefreshStart = performance.now();
-        const reloadVersion = tabReloadVersionRef.current.next();
+        const reloadVersion = syncRunRef.current.next();
         const tabsAtSync = openTabsRef.current.slice();
         console.log("[sync-tab] refresh start", JSON.stringify({ open: tabsAtSync.length, superseded: supersededList.length }));
         void (async () => {
@@ -76,13 +77,13 @@ export function useSyncProgress({
           let reloaded = 0;
           let skipped = 0;
           for (const tab of tabsAtSync) {
-            if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+            if (!syncRunRef.current.isCurrent(reloadVersion)) return;
             const superseded = supersededIds.has(tab.noteId);
             if (!superseded && tab.dirty) { skipped += 1; continue; }
             const tabT0 = performance.now();
             let digest: NoteDigest | null = null;
             try { digest = await native.getNoteDigest(tab.noteId); } catch { continue; }
-            if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+            if (!syncRunRef.current.isCurrent(reloadVersion)) return;
             const digestMs = Math.round(performance.now() - tabT0);
             // 远端已删除（软删/墓碑/purge）：标记 tab 提示用户，保留正文供复制/从回收站恢复。
             // 前置检查同时让 TS 收窄 digest 非空（reload 分支无需非空断言）。
@@ -108,7 +109,7 @@ export function useSyncProgress({
             try {
               const readT0 = performance.now();
               const fresh = await native.readNote(tab.noteId);
-              if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+              if (!syncRunRef.current.isCurrent(reloadVersion)) return;
               const readMs = Math.round(performance.now() - readT0);
               // 正文或标题任一变化才重载（标题变化不重建 Lake 实例，只更新标签文案）。
               if (fresh && (superseded || fresh.content !== tab.content || fresh.title !== tab.title)) {
@@ -133,7 +134,7 @@ export function useSyncProgress({
               }
             } catch { /* 读取失败（已删除等）则跳过 */ }
           }
-          if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+          if (!syncRunRef.current.isCurrent(reloadVersion)) return;
           console.log("[sync-tab] refresh done", JSON.stringify({ totalMs: Math.round(performance.now() - tabRefreshStart), open: openTabsRef.current.length, reloaded, deleted: deletedIds.length, skipped }));
           if (deletedIds.length > 0) {
             const deletedSet = new Set(deletedIds);

@@ -1,4 +1,5 @@
 import { isGoneNote } from "../core/syncDecisions";
+import { flushDirtyBeforeLifecycle } from "../core/lifecycleFlush";
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
@@ -8,13 +9,13 @@ import { clearScrollMemory, locateEditorSearchHit } from "../features/editor/Edi
 import { selectEvictionIds, trimTabsToLimit } from "../core/tabLimit";
 import type { DraftJournalEntry } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
-import type { SaveState } from "./useSavePipeline";
+import type { PersistOutcome, SaveState } from "./useSavePipeline";
 
 export interface UseTabLifecycleOptions {
   settingsMaxOpenTabs: number;
   pinnedNoteIds: Set<string>;
   openTabsRef: MutableRefObject<OpenTab[]>;
-  persistTab: (noteId: string, title: string, content: string) => Promise<unknown>;
+  persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   scheduleSave: (noteId: string, content: string) => void;
   resetRevision: (noteId: string, revision?: number) => void;
   showNotice: (text: string) => void;
@@ -31,17 +32,25 @@ export function useTabLifecycle({
   settingsMaxOpenTabs, pinnedNoteIds, openTabsRef, persistTab, scheduleSave, resetRevision,
   showNotice, setError, setOpenTabs, setActiveNoteId, setPinnedNoteIds, setDraftEntries, setSaveState,
 }: UseTabLifecycleOptions) {
-  const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<string[]> => {
+  /** 返回本次真正淘汰的 id 与因保存失败而必须保留的 id（审计 F01：未确认持久化不得淘汰）。 */
+  const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<{ evictedIds: string[]; failedIds: string[] }> => {
     const limit = settingsMaxOpenTabs;
-    if (limit <= 0) return [];
-    const evictedIds = selectEvictionIds(nextTabs, { limit, activeNoteId: openedId, pinnedNoteIds });
-    for (const id of evictedIds) {
+    if (limit <= 0) return { evictedIds: [], failedIds: [] };
+    const candidates = selectEvictionIds(nextTabs, { limit, activeNoteId: openedId, pinnedNoteIds });
+    const evictedIds: string[] = [];
+    const failedIds: string[] = [];
+    for (const id of candidates) {
       const tab = openTabsRef.current.find((t) => t.noteId === id);
-      if (tab?.dirty) await persistTab(id, tab.title, tab.content);
+      if (tab) {
+        // 审计 F01：未确认持久化的标签不得淘汰（失败留在原处）。
+        const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(id));
+        if (!proceed) { failedIds.push(id); continue; }
+      }
+      evictedIds.push(id);
       // V5 Phase 4：淘汰路径同步清理滚动记忆（避免残留导致下次打开位置错乱）
       clearScrollMemory(id);
     }
-    return evictedIds;
+    return { evictedIds, failedIds };
   }, [settingsMaxOpenTabs, pinnedNoteIds, persistTab, openTabsRef]);
 
   const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false): Promise<boolean> => {
@@ -91,11 +100,12 @@ export function useTabLifecycle({
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
         : [...openTabsRef.current, newTab];
-      const evictedIds = await evictTabsForLimit(nextForEvict, id);
+      const { evictedIds, failedIds } = await evictTabsForLimit(nextForEvict, id);
       setOpenTabs((tabs) => {
         const base = tabs.some((t) => t.noteId === id) ? tabs : [...tabs, newTab];
         // 更新器内再次封顶：并发打开时以最新已提交状态为准，杜绝旧 ref 竞态超限。
-        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: id, pinnedNoteIds });
+        // 保存失败的标签受保护，不因封顶被顺手淘汰。
+        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
       });
       if (evictedIds.length > 0) {
         setPinnedNoteIds((prev) => {

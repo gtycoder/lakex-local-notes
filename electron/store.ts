@@ -178,15 +178,12 @@ export class Store {
       assertParentCompatible: (parentId, childType) => this.assertParentCompatible(parentId, childType),
       descendantIds: (id) => this.descendantIds(id),
       readTreeNode: (id) => this.readTreeNode(id),
-      revivePurgedIfNeeded: (id) => this.revivePurgedIfNeeded(id),
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
     });
     this.noteContent = new NoteContentRepository({
       db: this.db,
       notePathFor: (noteId) => this.notePath(noteId),
       atomicWrite: (filePath, content) => this.atomicWrite(filePath, content),
-      revivePurgedIfNeeded: (noteId) => this.revivePurgedIfNeeded(noteId),
-      createHistorySnapshot: (noteId, content, force) => this.createHistorySnapshot(noteId, content, force),
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
       detectOrphans: (noteId, content) => this.orphanLifecycle.detectOrphans(noteId, content),
       markHistoryDirty: (noteId) => this.markHistoryDirty(noteId),
@@ -898,12 +895,6 @@ export class Store {
   /** 回收站自动过期（TRASH-NOTEBOOK）：trashed_at 超过 N 天的 trash 顶级条目自动 purge。返回 purge 数。 */
   autoPurgeExpiredTrash(days: number): number {
     return this.trashLifecycle.autoPurgeExpiredTrash(days);
-  }
-
-  /** 审计（编辑即恢复）：编辑"他端已 purge、本端保留"（sync_state='purged'）的回收站条目时，
-   * 视为一次显式恢复（移出回收站 + restore_pending_at，D2 例外）。返回是否发生了恢复。 */
-  revivePurgedIfNeeded(id: string): boolean {
-    return this.trashLifecycle.revivePurgedIfNeeded(id);
   }
 
   /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。 */

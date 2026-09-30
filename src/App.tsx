@@ -52,7 +52,7 @@ export function App() {
     setS3Settings, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
     settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
-    quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
+    quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, noteReloadGuardRef, editorsRef,
   } = useWorkspaceState();
   const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus({
     workspaceTriggerRef: wsMenuWrapRef,
@@ -99,7 +99,7 @@ export function App() {
   // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
   // pending 计数刷新已收敛为主进程 IPC 层事件广播（思源模式）：pending-summary-changed 单点订阅，
   // 渲染层不再需要各操作点手动触发（历史上 10+ 处手动刷新屡有遗漏）。
-  const { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches } = useSavePipelineGlue({
+  const { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent, handleCaptureReady } = useSavePipelineGlue({
     setNotes, setTreeNodes, setSync, setOpenTabs, setDraftEntries, setError, openTabsRef, editorsRef,
   });
 
@@ -117,6 +117,7 @@ export function App() {
     onBlockedSave: () => showNotice("文档已在回收站中，编辑不会保存；恢复后才能继续写。"),
     getOpenTab: handleGetOpenTab,
     getEditorCaches: handleGetEditorCaches,
+    captureContent: handleCaptureContent,
   });
 
   const preserveBitableDraft = useCallback((noteId: string, content: string) => {
@@ -208,7 +209,7 @@ export function App() {
   useSyncProgress({
     setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,
     setConflictSnapshotNotice, setHistoryNoteId, setHistoryOpen, setNotice, setTrashOpen,
-    showNoticeWithAction, quickNotesRef, tabReloadVersionRef, openTabsRef,
+    showNoticeWithAction, quickNotesRef, openTabsRef,
   });
 
 
@@ -228,7 +229,7 @@ export function App() {
   });
 
   const { refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab } = useSyncRefresh({
-    setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef, bumpRevision,
+    setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, noteReloadGuardRef, openTabsRef, bumpRevision,
   });
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
@@ -521,6 +522,7 @@ export function App() {
             onContentChange={handleContentChange}
             onPreserveBitableDraft={preserveBitableDraft}
             onEditorReady={handleEditorReady}
+        onEditorCapture={handleCaptureReady}
             onReloadNote={reloadNoteTab}
             onCreateNote={() => void createNote()}
             outlineSlot={outlineVisible ? (

@@ -63,7 +63,7 @@ export interface DesktopOverlaysProps {
   trashOpen: boolean;
   onCloseTrash: () => void;
   onTrashChanged: () => void;
-  onTrashRestored: () => void;
+  onTrashRestored: (restoredId?: string) => void;
   /** 成页回收站（空间）：embed 布局与弹窗一致 */
   trashEmbed?: boolean;
 

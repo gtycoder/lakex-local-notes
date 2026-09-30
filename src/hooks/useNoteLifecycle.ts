@@ -14,9 +14,9 @@ export interface UseNoteLifecycleOptions {
   bumpRevision: (noteId: string) => void;
   resetRevision: (noteId: string, revision?: number) => void;
   clearNote: (noteId: string) => void;
-  scheduleDraftJournal: (noteId: string, title: string, content: string) => void;
-  scheduleSave: (noteId: string, content: string) => void;
-  evictTabsForLimit: (nextTabs: OpenTab[], openedId: string) => Promise<string[]>;
+  scheduleDraftJournal: (noteId: string, content?: string) => void;
+  scheduleSave: (noteId: string, content?: string) => void;
+  evictTabsForLimit: (nextTabs: OpenTab[], openedId: string) => Promise<{ evictedIds: string[]; failedIds: string[] }>;
   showNotice: (text: string) => void;
   setError: Dispatch<SetStateAction<string | null>>;
   treeNodes: TreeNode[];
@@ -41,11 +41,18 @@ export function useNoteLifecycle({
   settingsMaxOpenTabs, pinnedNoteIds, activeNoteId,
   setNotes, setTreeNodes, setOpenTabs, setActiveNoteId, setPinnedNoteIds, setPendingRenameId, setDraftEntries,
 }: UseNoteLifecycleOptions) {
-  const handleContentChange = useCallback((noteId: string, content: string) => {
+  const handleContentChange = useCallback((noteId: string, content?: string) => {
+    // 审计 §6.1/§7.4：每键只涨 revision + 重置防抖；正文不在这里序列化，也不每键全量 setState。
+    // sheet/board 显式给 content（它们内部已防抖）；doc 走捕获契约——保存/草稿/关闭时按需 capture。
     bumpRevision(noteId);
-    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
-    const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
-    scheduleDraftJournal(noteId, title, content);
+    const existing = openTabsRef.current.find((tab) => tab.noteId === noteId);
+    if (content !== undefined) {
+      setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
+    } else if (!existing?.dirty) {
+      // 只有 clean→dirty 的第一次才更新 tab（避免每键 setState 大数组）。
+      setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, dirty: true } : tab));
+    }
+    scheduleDraftJournal(noteId, content);
     scheduleSave(noteId, content);
   }, [bumpRevision, setOpenTabs, openTabsRef, scheduleDraftJournal, scheduleSave]);
 
@@ -56,10 +63,11 @@ export function useNoteLifecycle({
     {
       resetRevision(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "doc" };
-      const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+      const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
       setOpenTabs((tabs) => {
         const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+        // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
       });
       if (evictedIds.length > 0) {
         setPinnedNoteIds((prev) => {
@@ -86,10 +94,11 @@ export function useNoteLifecycle({
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
     const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "sheet" };
-    const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
     setOpenTabs((tabs) => {
       const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
     });
     if (evictedIds.length > 0) {
       setPinnedNoteIds((prev) => {
@@ -110,10 +119,11 @@ export function useNoteLifecycle({
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
     const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "bitable" };
-    const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
     setOpenTabs((tabs) => {
       const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
     });
     if (evictedIds.length > 0) {
       setPinnedNoteIds((prev) => {
@@ -134,10 +144,11 @@ export function useNoteLifecycle({
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
     const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "board" };
-    const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
     setOpenTabs((tabs) => {
       const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
+      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
     });
     if (evictedIds.length > 0) {
       setPinnedNoteIds((prev) => {

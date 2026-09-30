@@ -492,7 +492,7 @@ describe("多端场景验证（用户验收建议 1/2/3）", () => {
 
 describe("多端场景验证（用户验收建议 4/5）", () => {
 
-  it("S4 回收站内编辑：A 删除 → B 在回收站里编辑已删笔记 → 同步不回滚 → 恢复后位置正确", async () => {
+  it("S4 回收站内普通保存被拒绝（审计 F04：不再编辑即隐式恢复）；显式恢复后编辑并同步", async () => {
     const s3 = new MockS3();
     const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice(), B = makeDevice();
@@ -505,20 +505,20 @@ describe("多端场景验证（用户验收建议 4/5）", () => {
       // B 同步进回收站
       await syncNow(B.store, undefined, remote);
       expect(B.store.listNotesForSync().find((n: any) => n.id === note.id)!.parentId).toBe(TRASH_NOTEBOOK_ID);
-      // B 在回收站里编辑
-      B.store.saveNote(note.id, "回收站改", "<p>B 回收站编辑</p>");
-      const rb2 = await syncNow(B.store, undefined, remote);
-      // 协议 §3 删除压编辑：回收站里的编辑被压制回删除前内容 + 强制留档（不溜进回收站内容）
+      // 审计 F04：普通保存在回收站被明确拒绝——不再"编辑即隐式恢复"，也不改写正文
+      expect(() => B.store.saveNote(note.id, "回收站改", "<p>B 回收站编辑</p>")).toThrow();
       expect(B.store.readNote(note.id).content).not.toBe("<p>B 回收站编辑</p>");
-      expect(rb2.supersededNotes.some((n) => n.id === note.id)).toBe(true);
-      // B 恢复 → 恢复删除前内容，位置回默认笔记本
+      expect(B.store.listNotesForSync().find((n: any) => n.id === note.id)!.parentId).toBe(TRASH_NOTEBOOK_ID);
+      // 恢复是唯一显式例外：restore_pending → local-wins，编辑随恢复上传覆盖墓碑
       B.store.restoreTrashItem(note.id);
+      B.store.saveNote(note.id, "恢复后改", "<p>B 恢复后编辑</p>");
       await syncNow(B.store, undefined, remote);
-      // A 跟随恢复（restore_pending 传播）
+      // A 跟随恢复（restore_pending 传播），拿到恢复后的编辑内容
       await syncNow(A.store, undefined, remote);
       const aNote = A.store.listNotesForSync().find((n: any) => n.id === note.id);
       expect(aNote).toBeTruthy();
       expect(aNote!.parentId).not.toBe(TRASH_NOTEBOOK_ID);
+      expect(A.store.readNote(note.id).content).toBe("<p>B 恢复后编辑</p>");
     } finally { cleanup([A, B]); }
   });
 

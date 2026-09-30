@@ -94,7 +94,8 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   /** 彻底删除/清空后通知外部清理与文档关联的本地草稿。 */
   onChanged?: () => void;
   /** 恢复/删除后通知外部刷新树 */
-  onRestored: () => void;
+  /** 只读原因（本次恢复的条目 id）；清空回收站时可不传（表示批量恢复）。 */
+  onRestored: (restoredId?: string) => void;
 }) {
   const [tab, setTab] = useState<"docs" | "quick">("docs");
   const [items, setItems] = useState<TrashItem[]>([]);
@@ -224,7 +225,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       await native.restoreTrash(id);
       setSelected(null);
       await refresh();
-      onRestored();
+      onRestored(id);
     } catch (e) {
       setError(getNativeErrorMessage(e));
     }

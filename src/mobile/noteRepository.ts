@@ -107,7 +107,44 @@ export async function searchNotes(d: MobileDb, query: string): Promise<SearchRes
   return searchNotesIndexed(d, query);
 }
 
-/** 返回 false 表示内容无变化，调用方无需持久化快照。 */
+/** 写入边界判定（审计 F06）：missing = 无行；gone = 已在回收站（trashed_at）或被 purge（sync_state='purged'）。 */
+export async function noteWriteState(d: MobileDb, id: string): Promise<"missing" | "gone" | "active"> {
+  const row = await d.prepare("SELECT trashed_at, sync_state FROM notes WHERE id=?").get(id) as
+    | { trashed_at: string | null; sync_state: string | null }
+    | undefined;
+  if (!row) return "missing";
+  return row.trashed_at != null || row.sync_state === "purged" ? "gone" : "active";
+}
+
+/** 该 id 是否已有永久墓碑（purge 后行被物理删除，只剩 deleted_notes）——缺失的 id 只有在无墓碑时才允许初始化。 */
+export async function isTombstoned(d: MobileDb, id: string): Promise<boolean> {
+  const row = await d.prepare("SELECT 1 FROM deleted_notes WHERE id=?").get(id);
+  return !!row;
+}
+
+/** 新建笔记（审计 F06：create 与 save 分离——新建走 INSERT，不对任何既有 id 做 upsert）。 */
+export async function createNote(
+  d: MobileDb,
+  id: string,
+  title: string,
+  content: string,
+  parentId: string | null,
+  assets: Map<string, Uint8Array>,
+  plain?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const safeTitle = title.trim() ? title.trim() : "无标题文档";
+  const bodyPlain = plain ?? searchTextForKind("doc", content).plain ?? "";
+  await d.prepare(
+    "INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state, text_cache) VALUES (?,?,?,?,?,?,'local',?)"
+  ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain);
+  await detectOrphans(d, id, content, assets);
+  await indexNote(d, id);
+}
+
+/** 保存已有笔记（审计 F06）：missing/gone 明确拒绝，绝不做 upsert 自愈。
+ * 生命周期判定在写边界（不依赖当前屏幕 editing 标记）：回收站条目/他端 purge 的保留副本不得被改成 local 并覆写正文。
+ * 返回 false 表示内容无变化，调用方无需持久化快照。 */
 export async function saveNote(
   d: MobileDb,
   id: string,
@@ -119,18 +156,25 @@ export async function saveNote(
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
-  const existing = await d.prepare("SELECT title, content FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as { title: string; content: string } | undefined;
-  if (existing && !hasNoteSaveChanges(existing, { title: safeTitle, content })) return false;
+  const existing = await d.prepare("SELECT title, content, doc_kind, trashed_at, sync_state FROM notes WHERE id=?").get(id) as
+    | { title: string; content: string; doc_kind?: string | null; trashed_at: string | null; sync_state: string | null }
+    | undefined;
+  if (!existing) throw new Error("笔记不存在，不能保存（新建请走 createNote）");
+  if (existing.trashed_at != null || existing.sync_state === "purged") {
+    throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
+  }
+  if (!hasNoteSaveChanges(existing, { title: safeTitle, content })) return false;
   // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省按 **kind** 派生（sheet/bitable/board 的正文是 JSON，
   // 直接 lakeHtmlToPlain 会把 JSON 碎片写进 text_cache ⇒ 搜索索引与摘要全脏）。口径见 src/core/noteSearchText.ts。
-  const kindRow = await d.prepare("SELECT doc_kind FROM notes WHERE id=?").get(id) as { doc_kind?: string | null } | undefined;
-  const kind = normalizeDocKind(kindRow?.doc_kind);
+  const kind = normalizeDocKind(existing.doc_kind);
   const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
 
-  await d.prepare(
-    `INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state, text_cache) VALUES (?,?,?,?,?,?,'local',?)
-     ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, content_hash=excluded.content_hash, sync_state='local', text_cache=excluded.text_cache`
-  ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain);
+  // 写边界二次守卫：检查与写入之间若状态变为 trash/purge，UPDATE 不命中 → 抛错，绝不静默写脏。
+  const changed = (await d.prepare(
+    `UPDATE notes SET title=?, content=?, parent_id=?, updated_at=?, content_hash=?, sync_state='local', text_cache=?
+     WHERE id=? AND trashed_at IS NULL AND sync_state != 'purged'`
+  ).run(safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, id)).changes;
+  if (changed === 0) throw new Error("笔记状态已变化（回收站/已删除），保存被拒绝");
   await detectOrphans(d, id, content, assets);
   await indexNote(d, id);
   return true;

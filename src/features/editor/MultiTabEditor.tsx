@@ -1,4 +1,5 @@
-import { Component, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { EditorErrorBoundary } from "./EditorErrorBoundary";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
@@ -47,12 +48,14 @@ interface MultiTabEditorProps {
   pinnedNoteIds?: ReadonlySet<string>;
   /** 切换标签钉住状态（由上层更新状态）。 */
   onTogglePin?: (noteId: string) => void;
-  onContentChange: (noteId: string, content: string) => void;
+  onContentChange: (noteId: string, content?: string) => void;
   onPreserveBitableDraft?: (noteId: string, content: string) => void;
   /** 工作区级可见性（keep-alive：外部隐藏整个工作区时把所有 tab 视为不可见，切回时触发重新水合） */
   visible?: boolean;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
+  /** 审计 F15：Sheet/Board 注册按需同步序列化（关闭/保存/退出时现取），null 表示卸载。 */
+  onEditorCapture?: (noteId: string, capture: (() => string | null) | null) => void;
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote?: (noteId: string) => void;
   /** 顶栏左侧元素（工作空间/云同步），渲染在标签左侧，与多 tab 融合成一条顶栏 */
@@ -80,6 +83,7 @@ export function MultiTabEditor({
   visible = true,
   prefs,
   onEditorReady,
+  onEditorCapture,
   onReloadNote,
   onOpenTrash,
   topbarLeading,
@@ -87,9 +91,9 @@ export function MultiTabEditor({
   emptyAction,
   breadcrumb,
 }: MultiTabEditorProps) {
-  const contentCache = useRef<Map<string, string>>(new Map());
-  // 外部刷新（reloadKey 变化）时，必须丢弃 contentCache 里旧的编辑器内容，否则新实例仍用旧正文。
-  const reloadKeysRef = useRef<Map<string, number>>(new Map());
+  // 审计 §7.3：不再持有第二份可写正文（旧 contentCache/reloadKeysRef 已删）——
+  // tab.content 只表示「最后已提交版本」；实时正文由 EditorTab 捕获、保存/草稿/关闭时按需 capture；
+  // 外部刷新仍靠 key=noteId-reloadKey 重挂载 + tab.content 提供新正文。
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   /** tab 切换按钮（portal 弹窗的 fixed 定位锚点） */
@@ -226,30 +230,11 @@ export function MultiTabEditor({
   };
 
   const handleChange = useCallback(
-    (noteId: string, content: string) => {
-      contentCache.current.set(noteId, content);
+    (noteId: string, content?: string) => {
       onContentChange(noteId, content);
     },
     [onContentChange]
   );
-
-  /** 渲染期确定当前应喂给 EditorTab 的正文；reloadKey 变化时先清缓存再返回 tab.content。 */
-  const contentFor = (tab: TabInfo): string => {
-    const key = tab.reloadKey ?? 0;
-    const prev = reloadKeysRef.current.get(tab.noteId) ?? 0;
-    if (prev !== key) {
-      contentCache.current.delete(tab.noteId);
-      reloadKeysRef.current.set(tab.noteId, key);
-    }
-    return contentCache.current.get(tab.noteId) ?? tab.content;
-  };
-
-  useEffect(() => {
-    const activeIds = new Set(tabs.map((t) => t.noteId));
-    for (const key of contentCache.current.keys()) {
-      if (!activeIds.has(key)) contentCache.current.delete(key);
-    }
-  }, [tabs]);
 
   useEffect(() => {
     if (!tabCtx) return;
@@ -439,46 +424,52 @@ export function MultiTabEditor({
           {emptyAction}
         </section> : <Suspense fallback={<div className="empty-workspace-hint">正在加载表格编辑器…</div>}>{tabs.map((tab) => (
           tab.kind === "sheet" ? (
-            <SheetEditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
+            <EditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
               <SheetEditor
                 noteId={tab.noteId}
-                content={contentFor(tab)}
+                content={tab.content}
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
               />
-            </SheetEditorErrorBoundary>
+            </EditorErrorBoundary>
           ) : tab.kind === "bitable" ? (
-            <SheetEditorErrorBoundary key={"bt-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+            <EditorErrorBoundary key={"bt-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <BitableEditor
                 noteId={tab.noteId}
-                content={contentFor(tab)}
+                content={tab.content}
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
                 onPreserveDraft={onPreserveBitableDraft ? (content) => onPreserveBitableDraft(tab.noteId, content) : undefined}
               />
-            </SheetEditorErrorBoundary>
+            </EditorErrorBoundary>
           ) : tab.kind === "board" ? (
-            <SheetEditorErrorBoundary key={"bd-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+            <EditorErrorBoundary key={"bd-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <BoardEditor
                 noteId={tab.noteId}
-                content={contentFor(tab)}
+                content={tab.content}
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
               />
-            </SheetEditorErrorBoundary>
+            </EditorErrorBoundary>
           ) : (
           <EditorTab
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
             locked={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
-            content={contentFor(tab)}
+            content={tab.content}
             visible={visible && tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}
             outlineEnhance={outlineEnhance}
-            onChange={(content) => handleChange(tab.noteId, content)}
+            onChange={() => handleChange(tab.noteId)}
             prefs={prefs}
             onEditorReady={onEditorReady}
             onReloadNote={onReloadNote}
@@ -537,26 +528,6 @@ export function MultiTabEditor({
   );
 }
 
-/**
- * 表格编辑器错误边界（260919 用户报窗口被 FortuneSheet 异常打崩）。
- * 第三方 canvas 内核的渲染/状态异常不应连累整个窗口：单表崩了只显示占位，切标签/重开即恢复。
- * key 由调用方按 noteId-reloadKey 给，切换文档时边界状态自然重置。
- */
-class SheetEditorErrorBoundary extends Component<{ noteId: string; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch(error: unknown, info: ErrorInfo) {
-    console.error("[sheet] editor crashed", this.props.noteId, error, info.componentStack);
-  }
-  render() {
-    if (this.state.failed) {
-      return <div className="empty-workspace-hint">该类型编辑器渲染出错（已隔离，未影响其他文档）。切换标签或重新打开该文档即可恢复。</div>;
-    }
-    return this.props.children;
-  }
-}
 
 interface TabContextMenuProps {
   x: number;
