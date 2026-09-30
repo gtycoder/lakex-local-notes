@@ -2,7 +2,7 @@
  * 密钥加解密注入点（lake-core，V5 Phase 2）。
  * 桌面默认实现 = Electron safeStorage（macOS Keychain），由主进程装配注入；
  * 纯逻辑/测试环境可用明文回退实现（createPlaintextSecretCipher）。
- * 存储格式约定：加密值带 "enc:v1:" 前缀 + base64；旧版明文无前缀，decrypt 原样返回。
+ * 存储格式约定：加密值带 "enc:v1:" 前缀 + base64；非该格式视为旧明文，decrypt 不再放行、返回空串提示重配（S2）。
  */
 
 export interface SecretCipher {

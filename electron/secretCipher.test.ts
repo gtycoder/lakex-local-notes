@@ -35,8 +35,8 @@ describe("createSafeStorageSecretCipher（fail-closed）", () => {
     expect(() => c.encrypt("sk-secret")).toThrow(/安全存储/);
   });
 
-  it("旧明文仍可读（不破坏既有数据）", () => {
+  it("S2：旧明文格式不再放行，返回空串（提示重新配置）", () => {
     const c = createSafeStorageSecretCipher();
-    expect(c.decrypt("plain-old")).toBe("plain-old");
+    expect(c.decrypt("plain-old")).toBe("");
   });
 });

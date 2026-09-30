@@ -43,46 +43,9 @@ export function isBlockedIPv6(ip: string): boolean {
   return false;
 }
 
-// ===== DNS 感知校验（修复：域名解析到私网 / DNS rebinding 绕过） =====
-// isBlockedHost 只拦截 URL 中直接出现的 IP/字面 host；域名必须解析后逐地址校验。
-// 解析与请求之间仍存在理论 TOCTOU（DNS rebinding），本项目用 electronNet.fetch
-// （Chromium 网络栈）无法在连接层钉死已校验地址；作为缓解，连接前解析并拒绝任一
-// 解析结果为私网/本机的域名，同时下载侧改为逐跳校验重定向目标（见 store.ts）。
-
-import dns from "node:dns";
-
 export class SsrfError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "SsrfError";
-  }
-}
-
-/**
- * 校验远程 host 安全：字面 IP 直接拦截；域名解析 A/AAAA 后任一地址命中
- * 本机/私网/链路本地/保留/组播即拒绝。解析失败同样拒绝（宁可误伤不可放行）。
- */
-export async function assertSafeRemoteHost(hostname: string): Promise<void> {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "localhost" || h.endsWith(".localhost")) {
-    throw new SsrfError("不允许下载本机或私网地址");
-  }
-  const ipVersion = net.isIP(h);
-  if (ipVersion !== 0) {
-    if (isBlockedHost(h)) throw new SsrfError("不允许下载本机或私网地址");
-    return;
-  }
-  let records: { address: string; family: number }[];
-  try {
-    records = await dns.promises.lookup(h, { all: true, verbatim: true });
-  } catch {
-    throw new SsrfError(`域名解析失败，拒绝下载: ${h}`);
-  }
-  if (records.length === 0) throw new SsrfError(`域名解析为空，拒绝下载: ${h}`);
-  for (const record of records) {
-    const blocked = record.family === 4
-      ? isBlockedIPv4(record.address)
-      : isBlockedIPv6(record.address);
-    if (blocked) throw new SsrfError(`域名解析到本机或私网地址，拒绝下载: ${h} -> ${record.address}`);
   }
 }

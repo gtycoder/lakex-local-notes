@@ -31,7 +31,11 @@ export function createSafeStorageSecretCipher(): SecretCipher {
       throw new Error("系统安全存储不可用，无法加密保存 S3 Secret（请启用系统钥匙串后重试）");
     },
     decrypt(value: string): string {
-      if (!value.startsWith("enc:v1:")) return value; // 旧版明文数据：可读，但不再回写明文
+      if (!value.startsWith("enc:v1:")) {
+        // S2：不再接受旧明文格式——明确提示重新配置，而不是原样返回明文。
+        console.warn("[store] S3 Secret 为非当前加密格式（旧明文），请重新配置");
+        return "";
+      }
       try {
         return safeStorage.decryptString(Buffer.from(value.slice("enc:v1:".length), "base64"));
       } catch (error) {
