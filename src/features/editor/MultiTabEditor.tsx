@@ -1,4 +1,5 @@
-import { Component, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { EditorErrorBoundary } from "./EditorErrorBoundary";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
@@ -420,7 +421,7 @@ export function MultiTabEditor({
           {emptyAction}
         </section> : <Suspense fallback={<div className="empty-workspace-hint">正在加载表格编辑器…</div>}>{tabs.map((tab) => (
           tab.kind === "sheet" ? (
-            <SheetEditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
+            <EditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
               <SheetEditor
                 noteId={tab.noteId}
                 content={tab.content}
@@ -428,9 +429,9 @@ export function MultiTabEditor({
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
               />
-            </SheetEditorErrorBoundary>
+            </EditorErrorBoundary>
           ) : tab.kind === "bitable" ? (
-            <SheetEditorErrorBoundary key={"bt-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+            <EditorErrorBoundary key={"bt-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <BitableEditor
                 noteId={tab.noteId}
                 content={tab.content}
@@ -439,9 +440,9 @@ export function MultiTabEditor({
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onPreserveDraft={onPreserveBitableDraft ? (content) => onPreserveBitableDraft(tab.noteId, content) : undefined}
               />
-            </SheetEditorErrorBoundary>
+            </EditorErrorBoundary>
           ) : tab.kind === "board" ? (
-            <SheetEditorErrorBoundary key={"bd-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+            <EditorErrorBoundary key={"bd-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <BoardEditor
                 noteId={tab.noteId}
                 content={tab.content}
@@ -449,7 +450,7 @@ export function MultiTabEditor({
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
               />
-            </SheetEditorErrorBoundary>
+            </EditorErrorBoundary>
           ) : (
           <EditorTab
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
@@ -518,26 +519,6 @@ export function MultiTabEditor({
   );
 }
 
-/**
- * 表格编辑器错误边界（260919 用户报窗口被 FortuneSheet 异常打崩）。
- * 第三方 canvas 内核的渲染/状态异常不应连累整个窗口：单表崩了只显示占位，切标签/重开即恢复。
- * key 由调用方按 noteId-reloadKey 给，切换文档时边界状态自然重置。
- */
-class SheetEditorErrorBoundary extends Component<{ noteId: string; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch(error: unknown, info: ErrorInfo) {
-    console.error("[sheet] editor crashed", this.props.noteId, error, info.componentStack);
-  }
-  render() {
-    if (this.state.failed) {
-      return <div className="empty-workspace-hint">该类型编辑器渲染出错（已隔离，未影响其他文档）。切换标签或重新打开该文档即可恢复。</div>;
-    }
-    return this.props.children;
-  }
-}
 
 interface TabContextMenuProps {
   x: number;

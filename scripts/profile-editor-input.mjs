@@ -63,6 +63,7 @@ const INJECT = [
   "  window.__prof.makeContent = function(bytes){ var per='<p>'+Array(181).join('x')+'</p>'; var n=Math.ceil(bytes/per.length); var out=''; for(var i=0;i<n;i++) out+=per; return out; };",
   "  window.__prof.status = function(){ var el=document.querySelector('.document-statusbar'); return el? el.innerText : ''; };",
   "  window.__prof.count = function(){ var en=window.__prof.engine(); return en? (en.innerText||'').length : -1; };",
+  "  window.__prof.activeTab = function(id){ return Array.prototype.some.call(document.querySelectorAll('.tab-item.active'), function(t){ return t.getAttribute('data-note-id')===id; }); };",
   "  return true;",
   "})()",
 ].join(NL);
@@ -90,9 +91,19 @@ try {
       while (Date.now() < rowDeadline) { rowFound = await evaluate("Boolean(Array.prototype.find.call(document.querySelectorAll('[data-tree-node-id]'), function(x){ return x.getAttribute('data-tree-node-id')===" + JSON.stringify(noteId) + "; }))"); if (rowFound) break; await wait(200); }
       const openT0 = Date.now();
       await evaluate("(function(){ var r=Array.prototype.find.call(document.querySelectorAll('[data-tree-node-id]'), function(x){ return x.getAttribute('data-tree-node-id')===" + JSON.stringify(noteId) + "; }); if(r) r.click(); return true; })()");
+      // 就绪判定加固：先等目标 tab 变 active，再等可见引擎出现并让内容长度连续两轮一致，
+      // 避免测到上一个 keep-alive tab 的引擎（曾出现 openMs=4 的假象）。
+      await waitFor("window.__prof.activeTab(" + JSON.stringify(noteId) + ")", 20000);
       await waitFor("window.__prof.engine() !== null", 90000);
+      let stableLen = -1;
+      for (let i = 0; i < 60; i += 1) {
+        const len = await evaluate("window.__prof.count()");
+        if (len > 0 && len === stableLen) break;
+        stableLen = len;
+        await wait(200);
+      }
       row.openMs = Date.now() - openT0;
-      await wait(1500);
+      await wait(500);
       // 聚焦编辑区
       const rectRaw = await evaluate("JSON.stringify(window.__prof.paraRect())");
       if (rectRaw) {
