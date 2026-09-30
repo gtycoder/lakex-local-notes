@@ -638,7 +638,7 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 |---|---|---|
 | F14 | 抽出 EditorErrorBoundary：提供可点的「重试」（换 mount generation 强制重建子树），删除「切换标签即可恢复」这句不可执行的话；新增 errorBoundary.test.ts（抛错→显示重试→点击后真实恢复） | e6aab97 |
 | profile | profile-editor-input.mjs 就绪判定加固（先等目标 tab active、再等可见引擎内容长度连续两轮一致），消除 openMs=4 假象 | e6aab97 |
-| F15 | Sheet/Board 一改动立即 onDirty（早于 800ms 内部防抖）+ 注册按需同步序列化 capture；useSavePipelineGlue 新增捕获注册表（优先于 Lake getDocument）；关闭/退出/淘汰/锁定走 capture ⇒ 消除「改完 <800ms 就关」丢最后编辑 | 87e5e4e |
+| F15 | Sheet/Board/Bitable 一改动立即 onDirty（早于各自 800ms 内部防抖）+ 注册按需同步序列化 capture；useSavePipelineGlue 新增捕获注册表（优先于 Lake getDocument）；关闭/退出/淘汰/锁定走 capture ⇒ 消除「改完 <800ms 就关」丢最后编辑 | 87e5e4e + c726e23 |
 
 **明确不做**：**F13**（经用户评估：后果仅同步状态/提示偶发不一致、无数据影响，审计当时也未复现最强变体）；**§6.1-#2**（保存响应回传整篇正文：收益小、动 IPC 契约）。**editorChangeGuard 不是死代码**（仍被 LakeEditor 使用），未删。
 
@@ -646,7 +646,7 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 
 **诚实边界（F14/F15）**：
 - F14 的「重试」有 jsdom 行为测试，但「真实内核崩一次再点重试」未在真实端注入。
-- F15：FortuneSheet/Drawnix 的「编辑→立即关闭」无法用 CDP 稳定驱动，未做自动化真实端，待人工抽验；图片提升未落地时 capture 返回 null，由外层回退到 tab 最后已提交版本；Bitable 未纳入本批。
+- F15 覆盖 Sheet/Board/Bitable。三者的「编辑→立即关闭」都无法用 CDP 稳定驱动，未做自动化真实端，待人工抽验；图片提升未落地时 capture 返回 null，由外层回退到 tab 最后已提交版本。
 - profile 绝对值仍受机器负载影响（只信量级）。
 
 
