@@ -588,25 +588,29 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 | F06 | create 与 save 分离：`noteRepository.createNote` 走 INSERT；`saveNote` 只做 UPDATE，missing/gone（trashed_at / sync_state='purged'）抛错 + 写边界二次守卫；`bridge.saveNote` 对 gone 与"有永久墓碑的 missing"拒绝，只有无墓碑的新 id 才初始化 | src/mobile/noteRepository.ts、src/mobile/bridge.ts | 新增 src/mobile/noteRepository.test.ts（5 例，真实 sql.js SQL）；bridgePurge.test.ts +1（purge 后晚到保存不复活） |
 | F01 | 显式保存返回 `PersistOutcome`（失败不再吞成 fulfilled）；closeTab / 淘汰 / 锁定确认持久化成功才继续；`selectEvictionIds` 新增 `protectNoteIds`（失败标签保留且不补位） | src/hooks/useSavePipeline.ts、useDocumentTabs.ts、useTabLifecycle.ts、useNoteLifecycle.ts、useDesktopHandlers.ts、src/core/tabLimit.ts | 新增 useSavePipeline.test.ts / useDocumentTabs.test.ts / useTabLifecycle.test.ts + tabLimit.test.ts：磁盘失败不关 tab、淘汰保留失败标签、锁定前失败不锁 |
 | F02 | title/body/caches/revision **入队前**绑定为同一次不可变快照；任务内不再读 live revision/editor；ack 只认自己的 revision | src/hooks/useSavePipeline.ts | useSavePipeline.test.ts：排队旧正文 + bump 后两次 ack 都不 apply；无 bump 时正常 apply |
-| F04 | `handleTrashRestored(restoredId?)` 对每个 deleted tab 用 `isGoneNote` 重新判定（不再"能读即解锁"）；`noteContentRepository.save` 拒绝 trashed_at/purged，删除 `revivePurgedIfNeeded` 隐式 revive（普通保存不兼职恢复） | src/hooks/useSyncRefresh.ts、src/components/TrashPanel.tsx、src/desktop/DesktopOverlays.tsx、electron/noteContentRepository.ts、electron/store.ts | 新增 useSyncRefresh.test.ts（恢复 b 不解除 a 的只读）；noteContentRepository.test.ts +2；store.test.ts 隐式恢复用例改反向断言；sync.integration.test.ts S4 改为"保存被拒 → 显式恢复后可写并传播" |
+| F04 | ① `handleTrashRestored(restoredId?)` 对每个 deleted tab 用 `isGoneNote` 重新判定（不再"能读即解锁"）；`noteContentRepository.save` 拒绝 trashed_at/purged，删除普通保存的隐式 revive；② **元数据写边界 fail-closed**：`noteMetadataRepository` 的 rename/icon/lock 先 `assertNodeWritable`，回收站/purged 节点明确拒绝，删除 `trashLifecycle.revivePurgedIfNeeded`（隐式恢复最后入口） | src/hooks/useSyncRefresh.ts、TrashPanel.tsx、DesktopOverlays.tsx、electron/noteContentRepository.ts、noteMetadataRepository.ts、trashLifecycle.ts、store.ts | useSyncRefresh.test.ts（恢复 b 不解除 a）；noteContentRepository.test.ts +2；store.test.ts +2（保存 + 元数据反向断言）；sync.integration.test.ts S4 改反向断言；桌面真实端 +6 |
+| F03 | 全工作区单一 `tabReloadVersionRef` 会让不同文档的合法重载互相取消 → 新增 `createNoteReloadGuard`（按 noteId token）；`handleTrashRestored`/`handleHistoryRestored`/`reloadNoteTab` 按文档取消；`useSyncProgress` 全库同步改用自己的 sync run id | src/core/requestVersion.ts、useSyncRefresh.ts、useSyncProgress.ts、useWorkspaceState.ts、App.tsx | requestVersion.test +2；useSyncRefresh.test +2（R03：reload a/b 互不取消；同文档旧响应作废）；桌面真实端 +2 |
 | F17 | 断言 `getSyncPendingSummary` 真实契约（resources 恒为 0；documents/folders = 本地待上传事实），fixture 生成与业务耗时分离 | electron/workspace.benchmark.test.ts | opt-in 基准实跑通过：`savedMs≈3 / fixtureMs≈843 / summary.resources=0` |
 
-门禁：tsc 通过；全量 vitest **1481 passed / 16 skipped**（S0 本批 9 项全部有测试）；check:core 70 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
+门禁：tsc 通过；全量 vitest **1486 passed / 16 skipped**；check:core 70 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
 
-**桌面真实端 CDP 验收**：`node scripts/e2e-audit-s0.mjs` **11/11 通过**（隔离 `LAKE_USER_DATA`/端口、owned child 精确收尾）——scheme origin `lake://app`；F04 回收站/purge 后普通保存被真实 IPC+SQLite 拒绝且正文不改写；显式恢复后可写；恢复 c 不解除仍在回收站的 d；F01/F02 输入→自动保存落盘；F01 保存失败（.lake 缺失→NotFound）时脏标签不关闭、恢复可写后再关成功。
+**桌面真实端 CDP 验收**：`node scripts/e2e-audit-s0.mjs` **16/16 通过**（隔离 `LAKE_USER_DATA`/端口、owned child 精确收尾）——scheme origin `lake://app`；F04 回收站/purge 后普通保存被真实 IPC+SQLite 拒绝且正文不改写、显式恢复后可写、恢复 c 不解除仍在回收站的 d、元数据 rename/icon/lock 对回收站节点被拒且显式恢复后可写；F03 两篇不同文档各自历史恢复都生效；F01/F02 输入→自动保存落盘；F01 保存失败（.lake 缺失→NotFound）时脏标签不关闭、恢复可写后再关成功。
+
+**安卓真实端验收**：`node scripts/e2e-f06-android.mjs` **6/6 通过**（emulator-5554 + `android-build.sh --sync` debug APK；用 MobileApp 暴露的 `window.lakeNative` 调试契约直驱 bridge）——回收站晚到保存被拒且正文 sizeBytes 不变；条目仍在回收站；purge 后晚到保存被拒且不复活；显式恢复后可写。
 
 ### 未完成
 
-无。F03、F12–F16 不在 S0 本批（见 §9）。
+无（F03 + F04 元数据尾已补）。F12–F16 不在 S0 本批（见 §9）。
 
 ### 诚实边界与已知取舍
 
 - 9 项都有反向行为测试，且都是真实执行路径（真实 sql.js SQL / React hook / 真实文件），不是源码正则护栏。
-- **F06 未做 Android 真机/模拟器**：本机无 AVD（`emulator -list-avds` 为空）。其行为由 `src/mobile/noteRepository.test.ts`（真实 sql.js SQL）与 `bridgePurge.test.ts` 的墓碑守卫覆盖；真实 Android 待有设备时补。
+- **F06 安卓真实端已完成**（模拟器 + debug APK，6/6）。移动端"他端 purge 的保留副本（行保留 + `sync_state='purged'`）"这一状态不经暴露的调试契约构造，由 `src/mobile/noteRepository.test.ts` 的真实 sql.js SQL 用例直接覆盖。
 - 桌面真实端只走隔离临时 userData + 独立端口 + owned child，全程未触碰正式数据目录。
-- **F04 范围**：只收掉了**普通保存**的隐式 revive。`noteMetadataRepository` 的重命名/图标/锁定仍调用 `trashLifecycle.revivePurgedIfNeeded`（元数据"编辑即恢复"）。那是另一条写集，S0 未扩大范围；若要一并删除，必须同时定义元数据写对 gone 节点的拒绝语义（否则会把 purged 行改成 local 却不移出回收站）。
+- **F04 元数据尾已收口**：rename/icon/lock 对 trash/purged 明确拒绝；`trashLifecycle.revivePurgedIfNeeded` 已删除，仓库内不再有隐式恢复入口。
+- **F03 竞态**在真实 hook（jsdom，受控延迟）下验证（R03）；桌面真实端因 `window.lakeNative` 被 contextBridge 冻结（实测 `Object.isFrozen===true`、不可写、不可配置），无法向真实 App 注入 `readNote` 延迟，故真实端覆盖"两篇不同文档各自历史恢复都生效"的路径，竞态本身由 hook 测试 + core guard 单测证明。
 - **F06 的 `bridge.saveNote`**：在"无行且无永久墓碑"时仍会初始化新文档（既有 `createNote` 流程依赖该入口）；真正被禁止的是覆盖回收站/已 purge 行、以及复活有墓碑的条目。repository 层的 `saveNote` 对 missing/gone 一律拒绝。
-- 未做真实 Electron CDP / Android / 真实 S3 验收（S0 是本地逻辑修复）。
+- 未做真实 S3 双端/GC 验收（S0 是本地逻辑修复）。
 - 改动写在分支 codex/audit-s0 上，**未合 master、未推送**，待用户验收。
 
 
