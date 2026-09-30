@@ -573,7 +573,7 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 
 ## 12. S0 实施进度（260930-S0，在本分支完成；路线 C 未触碰）
 
-> 会话 260930-S0。分支 codex/audit-s0（从 master 6a0ec68 开出）。**已合入 master（本地 merge commit 42ad41b）、未推送**。
+> 会话 260930-S0。分支 codex/audit-s0（从 master 6a0ec68 开出）。**已合入 master 并推送 origin/master**。
 > 约束：只做 §9 S0 的小而确定的问题，每项配真实反向行为测试；**不启动 §8 路线 C（正文入 SQLite）**，S1 DocumentSession 也未批准。
 
 ### 已完成（9/9）
