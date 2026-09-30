@@ -35,6 +35,7 @@ const FILES = [
   "features/bitable/bitableFormView.css",   // 表单双模（编辑/预览）样式
   "features/bitable/bitableRelationPicker.css",   // 关联记录选择器（260929：全局大弹窗）
   "features/bitable/bitableFileIcon.css",   // 260930：附件「文档类型」图标 + hover 名称气泡
+  "features/bitable/bitableFilterEditor.css",   // 260930：筛选条件树（远端 lake 风格 + 可复用）
   "features/board/boardEditor.css",
   "styles/dialog.css", "styles/document-status.css",   "styles/components.css",   "styles/tokens.css",   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   "styles/kit.css",       // P4 起：自有组件库（14 件）
@@ -100,9 +101,10 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableGalleryView.css": { decls: 62, dupGroups: 0 },
   // 260928 追加需求：表单「编辑表单 / 预览表单」双模的壳、题目顺序与直填直提布局（全部合法新增）
   "features/bitable/bitableFormView.css": { decls: 27, dupGroups: 0 },   // 260929：表单双模页签改 kit 原语后 -3（原 .seg 容器改由原语给几何，只留居中一条）
-  "features/bitable/bitableRelationPicker.css": { decls: 108, dupGroups: 0 },   // 260930：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）——删掉自养的 `.bt-rel-thumb`（含 hover）共 9 条，`.bt-rel-files` 由 3 → 5（inline-flex + max-width/overflow）。此前 120 —— 260929：关联记录选择器（全局大弹窗）——大弹窗尺寸/两个 tab/搜索框+筛选排序（内联条）/整表（吸顶表头、超长省略）/页脚；+24 = 图片缩略图与附件 chip
+  "features/bitable/bitableRelationPicker.css": { decls: 145, dupGroups: 0 },   // 260930：+7 = 筛选编辑器在关联选择器里的内联布局（根编辑器/视图基线行）；此前 138：+30 = 关联选择器视图基线（只读筛选/排序行 + 视图分组表头/标签/计数）；此前 108：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）
   // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
   "features/bitable/bitableFileIcon.css": { decls: 25, dupGroups: 0 },
+  "features/bitable/bitableFilterEditor.css": { decls: 150, dupGroups: 0 },   // 260930：筛选规则/分组树/日期动态值/多选值/增删菜单 + 面板最大高度/滚动（全新文件）
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）
   "features/bitable/bitableCalendarView.css": { decls: 75, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）

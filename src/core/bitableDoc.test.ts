@@ -4,6 +4,7 @@ import {
   BITABLE_FIELD_TYPES,
   BITABLE_FIELD_TYPE_LABEL,
   BITABLE_IMPLEMENTED_VIEW_TYPES,
+  BITABLE_TEXT_COLOR_PALETTE,
   BITABLE_VIEW_TYPES,
   applyViewToRecords,
   bitableAttachments,
@@ -24,7 +25,11 @@ import {
   createBitableRecord,
   createBitableView,
   createDefaultBitableTable,
+  dateFilterRangeFor,
+  evaluateFilter,
   filterOperatorsFor,
+  filterOperatorLabel,
+  bitableFilterRuleCount,
   groupRecords,
   defaultViewName,
   emptyBitableBody,
@@ -50,6 +55,7 @@ import {
   isAttachmentLikeField,
   isImplementedViewType,
   isNumericFieldType,
+  isRelationFieldType,
   isSystemTimeField,
   localDateTimeString,
   isKnownFieldType,
@@ -60,15 +66,18 @@ import {
   kanbanGroupField,
   localDateDiff,
   orderedTableFields,
+  orderedAllTableFields,
   parseBitableBody,
   applyRelationMirror,
   createRelationPair,
+  defaultGridView,
   relationRecordIds,
   relationReverseFieldName,
   relationTargetRecords,
   relationTargetTable,
   relationTargetView,
   relationCandidateRecords,
+  relationPickerFields,
   toggleRelationDraft,
   unpairRelationFields,
   shiftLocalDate,
@@ -91,6 +100,25 @@ function fixtureTable(name = "数据表 1", id = "tbl-1"): BitableTable {
 }
 
 describe("bitableDoc 数据模型", () => {
+  it("关联字段类型（260930）：单向/双向拆成两个真实类型，各自有标签和默认配置", () => {
+    const one = createBitableField("relationOneWay", undefined, "f-one");
+    const two = createBitableField("relationTwoWay", undefined, "f-two");
+    expect(BITABLE_FIELD_TYPES).toContain("relationOneWay");
+    expect(BITABLE_FIELD_TYPES).toContain("relationTwoWay");
+    expect(BITABLE_FIELD_TYPES).not.toContain("relation");
+    expect(BITABLE_FIELD_TYPE_LABEL.relationOneWay).toBe("单向关联");
+    expect(BITABLE_FIELD_TYPE_LABEL.relationTwoWay).toBe("双向关联");
+    expect(isRelationFieldType(one.type)).toBe(true);
+    expect(isRelationFieldType(two.type)).toBe(true);
+    expect(one.relation).toEqual({ allowMultiple: true });
+    expect(two.relation).toEqual({ allowMultiple: true });
+  });
+
+  it("列文本颜色有独立深色调色板（不复用浅色选项背景）", () => {
+    expect(BITABLE_TEXT_COLOR_PALETTE).toHaveLength(18);
+    expect(BITABLE_TEXT_COLOR_PALETTE.every((color) => /^#[0-9a-f]{6}$/i.test(color))).toBe(true);
+  });
+
   it("默认数据表（260929）：只建 1 列文本 + 3 行空白记录 + 1 个表格视图", () => {
     const table = createDefaultBitableTable("数据表 1", "tbl-def");
     expect(table.fields.map((f) => ({ name: f.name, type: f.type }))).toEqual([{ name: "文本", type: "text" }]);
@@ -187,13 +215,107 @@ describe("bitableDoc 数据模型", () => {
     };
     table.records.push(mk("r1", "A", "2026-01-03", "进行中"), mk("r2", "B", "2026-01-01", "进行中"), mk("r3", "C", "2026-01-02", "已完成"));
     const view = createBitableView("grid", "g", "vew1");
-    view.filters = [{ fieldId: status.id, operator: "equals", value: "进行中" }];
+    view.filters = [{ fieldId: status.id, operator: "is", value: status.options!.find((o) => o.name === "进行中")!.id }];
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r2"]);
     view.filters = [];
     view.sorts = [{ fieldId: date.id }];
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r2", "r3", "r1"]);
     view.sorts = [{ fieldId: date.id, desc: true }];
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r3", "r2"]);
+  });
+
+  it("筛选能力矩阵：按字段类型给操作符，并按远端 lake 口径求值", () => {
+    const text = createBitableField("text", "文本", "f-text");
+    expect(filterOperatorsFor(text)).toEqual(["startsWith", "notStartsWith", "endsWith", "notEndsWith", "contains", "notContains", "isEmpty", "isNotEmpty"]);
+    expect(evaluateFilter(text, "Hello world", { fieldId: text.id, operator: "startsWith", value: "hello" })).toBe(true);
+    expect(evaluateFilter(text, "Hello world", { fieldId: text.id, operator: "endsWith", value: "WORLD" })).toBe(true);
+    expect(evaluateFilter(text, "Hello world", { fieldId: text.id, operator: "notContains", value: "bye" })).toBe(true);
+
+    const number = createBitableField("number", "数字", "f-number");
+    expect(filterOperatorsFor(number)).toEqual(["equalTo", "notEqualTo", "greaterThan", "greaterThanOrEqualTo", "lessThan", "lessThanOrEqualTo", "isEmpty", "isNotEmpty"]);
+    expect(evaluateFilter(number, 12, { fieldId: number.id, operator: "greaterThan", value: "10" })).toBe(true);
+    expect(evaluateFilter(number, "", { fieldId: number.id, operator: "isEmpty" })).toBe(true);
+    expect(evaluateFilter(number, "", { fieldId: number.id, operator: "equalTo", value: "0" })).toBe(false);
+
+    const rating = createBitableField("rating", "评分", "f-rate");
+    expect(evaluateFilter(rating, "", { fieldId: rating.id, operator: "equalTo", value: "0" })).toBe(true);
+
+    const date = createBitableField("date", "日期", "f-date");
+    const now = new Date(2026, 8, 30, 12);
+    expect(filterOperatorsFor(date)).toEqual(["equalTo", "lessThan", "greaterThan", "isEmpty", "isNotEmpty"]);
+    expect(filterOperatorLabel(date, "lessThan")).toBe("早于");
+    expect(filterOperatorLabel(date, "greaterThan")).toBe("晚于");
+    expect(evaluateFilter(date, "2026-09-30", { fieldId: date.id, operator: "equalTo", value: "today", valueMode: "today" }, now)).toBe(true);
+    expect(evaluateFilter(date, "2026-09-29", { fieldId: date.id, operator: "equalTo", value: "yesterday", valueMode: "yesterday" }, now)).toBe(true);
+    expect(evaluateFilter(date, "2026-09-29", { fieldId: date.id, operator: "equalTo", value: "lastWeek", valueMode: "lastWeek" }, now)).toBe(false);
+    expect(dateFilterRangeFor("thisWeek", now)).toEqual({ start: "2026-09-28", end: "2026-10-04" });
+    expect(dateFilterRangeFor("lastWeek", now)).toEqual({ start: "2026-09-21", end: "2026-09-27" });
+
+    const select = createBitableField("select", "单选", "f-select");
+    select.options = [{ id: "o1", name: "进行中" }, { id: "o2", name: "已完成" }];
+    expect(filterOperatorsFor(select)).toEqual(["is", "isNot", "isEmptySelect", "isNotEmptySelect"]);
+    expect(evaluateFilter(select, "o1", { fieldId: select.id, operator: "is", value: "o1" })).toBe(true);
+    expect(evaluateFilter(select, "o2", { fieldId: select.id, operator: "isNot", value: "o1" })).toBe(true);
+
+    const multi = createBitableField("multiSelect", "多选", "f-multi");
+    multi.options = select.options;
+    expect(filterOperatorsFor(multi)).toEqual(["isExactly", "isNot", "hasAnyOf", "hasAllOf", "hasNoneOf", "isEmptySelect", "isNotEmptySelect"]);
+    expect(evaluateFilter(multi, ["o1", "o2"], { fieldId: multi.id, operator: "hasAnyOf", value: ["o2"] })).toBe(true);
+    expect(evaluateFilter(multi, ["o1", "o2"], { fieldId: multi.id, operator: "hasAllOf", value: ["o1", "o2"] })).toBe(true);
+    expect(evaluateFilter(multi, ["o1"], { fieldId: multi.id, operator: "hasNoneOf", value: ["o2"] })).toBe(true);
+    expect(evaluateFilter(multi, ["o1", "o2"], { fieldId: multi.id, operator: "isExactly", value: ["o2", "o1"] })).toBe(true);
+
+    const bool = createBitableField("boolean", "布尔", "f-bool");
+    expect(filterOperatorsFor(bool)).toEqual(["equalTo"]);
+    expect(evaluateFilter(bool, false, { fieldId: bool.id, operator: "equalTo", value: false })).toBe(true);
+
+    const file = createBitableField("attachment", "附件", "f-file");
+    expect(filterOperatorsFor(file)).toEqual(["isEmpty", "isNotEmpty"]);
+    const attachment = [{ file: "a_pdf", name: "a.pdf", size: 1 }];
+    expect(evaluateFilter(file, [], { fieldId: file.id, operator: "isEmpty" })).toBe(true);
+    expect(evaluateFilter(file, attachment, { fieldId: file.id, operator: "isNotEmpty" })).toBe(true);
+  });
+
+  it("筛选分组：根组 AND/OR、嵌套子组与规则计数", () => {
+    const text = createBitableField("text", "文本", "f-text");
+    const status = createBitableField("select", "状态", "f-status");
+    status.options = [{ id: "o1", name: "进行中" }, { id: "o2", name: "已完成" }];
+    const amount = createBitableField("number", "数量", "f-amount");
+    const table: BitableTable = { id: "tbl-filter", name: "筛选", fields: [text, status, amount], views: [], activeViewId: "v", records: [] };
+    const mk = (id: string, title: string, state: string, n: number) => {
+      const record = createBitableRecord(id);
+      record.values[text.id] = title;
+      record.values[status.id] = state;
+      record.values[amount.id] = n;
+      return record;
+    };
+    table.records = [mk("r1", "Alpha", "o1", 11), mk("r2", "Alpha", "o2", 11), mk("r3", "Beta", "o1", 99)];
+    const view = createBitableView("grid", "筛选", "v");
+    view.filters = [
+      { id: "rule-a", fieldId: text.id, operator: "contains", value: "alpha" },
+      {
+        id: "group-b",
+        operator: "or",
+        filters: [
+          { id: "rule-b", fieldId: status.id, operator: "is", value: "o2" },
+          { id: "rule-c", fieldId: amount.id, operator: "greaterThan", value: "10" },
+        ],
+      },
+    ];
+    view.filterOperator = "and";
+    expect(bitableFilterRuleCount(view.filters)).toBe(3);
+    expect(applyViewToRecords(table, view).map((record) => record.id)).toEqual(["r1", "r2"]);
+    view.filterOperator = "or";
+    expect(applyViewToRecords(table, view).map((record) => record.id)).toEqual(["r1", "r2", "r3"]);
+  });
+
+  it("空筛选不写回正文：filters/operator 同时清空", () => {
+    const table = fixtureTable("t", "tbl-empty-filter");
+    table.views[0].filters = [{ id: "empty-group", operator: "or", filters: [] }];
+    table.views[0].filterOperator = "and";
+    const doc = parseBitableBody(bitablesToBody([table], table.id))!;
+    expect(doc.tables[0].views[0].filters).toBeUndefined();
+    expect(doc.tables[0].views[0].filterOperator).toBeUndefined();
   });
 
   it("defaultRecordValues：只收集有默认值的字段（含单选 option id）", () => {
@@ -587,8 +709,8 @@ describe("bitableDoc 数据模型", () => {
     expect(applyViewToRecords(table, view).map((x) => x.id)).toEqual(["r3", "r1", "r2"]);
     expect(computeColumnStat(rating, table.records, "sum")).toBe("9");
     expect(computeColumnStat(progress, table.records, "max")).toBe("90");
-    expect(filterOperatorsFor(rating)).toContain("gte");
-    expect(filterOperatorsFor(bool)).toEqual(["equals", "notEquals", "isEmpty", "isNotEmpty"]);
+    expect(filterOperatorsFor(rating)).toContain("greaterThanOrEqualTo");
+    expect(filterOperatorsFor(bool)).toEqual(["equalTo"]);
     // 默认值预填（false / 0 不能被当成空值丢掉）
     bool.defaultValue = false;
     rating.defaultValue = 0;
@@ -624,10 +746,10 @@ describe("bitableDoc 数据模型", () => {
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r2", "r1", "r3"]);
     view.sorts = [{ fieldId: created.id, desc: true }];
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r3", "r1", "r2"]);
-    // 筛选：操作符与 date 同口径（gte），值域 = 本地日期
-    expect(filterOperatorsFor(created)).toContain("gte");
+    // 筛选：操作符与 date 同口径（晚于），值域 = 本地日期
+    expect(filterOperatorsFor(created)).toContain("greaterThan");
     view.sorts = [];
-    view.filters = [{ fieldId: created.id, operator: "gte", value: localDateString("2026-09-03T10:00:00.000Z") }];
+    view.filters = [{ fieldId: created.id, operator: "greaterThan", value: localDateString("2026-09-02T10:00:00.000Z") }];
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r3"]);
     view.filters = [];
     // 分组 + 列统计：走同一取值口径
@@ -670,7 +792,7 @@ describe("bitableDoc 数据模型", () => {
     const date = table.fields[2];
     const num = createBitableField("number", "数量", "fld-num");
     const att = createBitableField("attachment", "附件", "fld-att");
-    const rel = createBitableField("relation", "关联", "fld-rel");
+    const rel = createBitableField("relationOneWay", "单向关联", "fld-rel");
     table.fields.push(num, att, rel);
     const optionIds = status.options!.map((o) => o.id);
     const mk = (id: string, title: string, n: number | "", day: string, opt: string) => {
@@ -761,9 +883,9 @@ describe("bitableDoc 数据模型", () => {
     const ctx = { tables: [source, target] };
 
     // 默认配置：单向 + 允许多个记录
-    const field = createBitableField("relation", "关联", "f-rel");
-    expect(field.relation).toEqual({ mode: "oneWay", allowMultiple: true });
-    field.relation = { mode: "oneWay", allowMultiple: true, tableId: "tbl-dst" };
+    const field = createBitableField("relationOneWay", "单向关联", "f-rel");
+    expect(field.relation).toEqual({ allowMultiple: true });
+    field.relation = { allowMultiple: true, tableId: "tbl-dst" };
 
     // 值解析：去重、保序、丢非法
     expect(relationRecordIds(["d1", "d2", "d1", "", 3, null])).toEqual(["d1", "d2"]);
@@ -775,7 +897,7 @@ describe("bitableDoc 数据模型", () => {
     expect(bitableFieldText(source.records[0], field, ctx)).toBe("记录一, 记录二");
     // 没有 ctx / 目标表被删 → 展示为空（不级联删字段）
     expect(bitableDisplayValue(field, ["d1"], undefined)).toBe("");
-    expect(bitableDisplayValue({ ...field, relation: { mode: "oneWay", allowMultiple: true, tableId: "tbl-missing" } }, ["d1"], ctx)).toBe("");
+    expect(bitableDisplayValue({ ...field, relation: { allowMultiple: true, tableId: "tbl-missing" } }, ["d1"], ctx)).toBe("");
     // 目标记录被删 → 该条不再解析，其余仍在（内部 id 原样保留）
     const pruned = { tables: [source, { ...target, records: [target.records[1]] }] };
     expect(relationTargetRecords(pruned, field, ["d1", "d2"]).map((r) => r.id)).toEqual(["d2"]);
@@ -796,21 +918,21 @@ describe("bitableDoc 数据模型", () => {
       { id: "d3", values: { "f-dst-title": "丙", "f-dst-state": "s-done" }, createdAt: ts, updatedAt: ts },
     ];
     const ctx = { tables: [source, target] };
-    const field = createBitableField("relation", "关联", "f-rel");
-    field.relation = { mode: "oneWay", allowMultiple: true, tableId: "tbl-dst" };
+    const field = createBitableField("relationOneWay", "单向关联", "f-rel");
+    field.relation = { allowMultiple: true, tableId: "tbl-dst" };
 
     // 未绑定视图：全部记录（顺序 = 表内顺序）
     expect(relationTargetView(ctx, field)).toBeUndefined();
     expect(relationCandidateRecords(ctx, field).map((r) => r.id)).toEqual(["d1", "d2", "d3"]);
 
     // 绑定视图「只看已完成」：候选 = 该视图筛选后的记录
-    target.views = [{ id: "v-done", name: "已完成", type: "grid", filters: [{ fieldId: "f-dst-state", operator: "equals", value: "s-done" }] }];
+    target.views = [{ id: "v-done", name: "已完成", type: "grid", filters: [{ fieldId: "f-dst-state", operator: "is", value: "s-done" }] }];
     target.activeViewId = "v-done";
-    field.relation = { mode: "oneWay", allowMultiple: true, tableId: "tbl-dst", viewId: "v-done" };
+    field.relation = { allowMultiple: true, tableId: "tbl-dst", viewId: "v-done" };
     expect(relationTargetView(ctx, field)?.id).toBe("v-done");
     expect(relationCandidateRecords(ctx, field).map((r) => r.id)).toEqual(["d1", "d3"]);
     // 视图自带排序也一并生效（标题升序：丙 < 甲）
-    target.views = [{ id: "v-done", name: "已完成", type: "grid", filters: [{ fieldId: "f-dst-state", operator: "equals", value: "s-done" }], sorts: [{ fieldId: "f-dst-title", desc: false }] }];
+    target.views = [{ id: "v-done", name: "已完成", type: "grid", filters: [{ fieldId: "f-dst-state", operator: "is", value: "s-done" }], sorts: [{ fieldId: "f-dst-title", desc: false }] }];
     expect(relationCandidateRecords(ctx, field).map((r) => r.id)).toEqual(["d3", "d1"]);
     // 视图被删 → 回落全部记录（不级联、不报错）
     target.views = [];
@@ -822,7 +944,41 @@ describe("bitableDoc 数据模型", () => {
     // 序列化往返保留 viewId（不认识的关系键仍只保留认识的）
     const body = bitablesToBody([{ ...target, fields: [field] }], target.id);
     const parsed = parseBitableBody(body)!;
-    expect(parsed.tables[0].fields[0].relation).toEqual({ mode: "oneWay", allowMultiple: true, tableId: "tbl-dst", viewId: "v-done" });
+    expect(parsed.tables[0].fields[0].type).toBe("relationOneWay");
+    expect(parsed.tables[0].fields[0].relation).toEqual({ allowMultiple: true, tableId: "tbl-dst", viewId: "v-done" });
+  });
+
+  it("关联选择器字段投影（260930）：绑定视图应用顺序+隐藏；未绑定用默认视图顺序但保留全部字段", () => {
+    const source = createDefaultBitableTable("来源", "tbl-src");
+    source.fields = [createBitableField("text", "来源字段", "f-src")];
+    const target = createDefaultBitableTable("目标", "tbl-dst");
+    target.fields = [
+      createBitableField("text", "文本", "f-text"),
+      createBitableField("select", "单选", "f-select"),
+      createBitableField("date", "日期", "f-date"),
+      createBitableField("progress", "进度", "f-progress"),
+      createBitableField("boolean", "布尔", "f-bool"),
+    ];
+    const grid = { ...createBitableView("grid", "默认视图"), id: "v-grid", fieldOrder: ["f-bool", "f-progress", "f-text", "f-select", "f-date"], hiddenFieldIds: ["f-select"] };
+    const bound = { ...createBitableView("grid", "关联视图"), id: "v-bound", fieldOrder: ["f-progress", "f-text", "f-bool", "f-select", "f-date"], hiddenFieldIds: ["f-select"] };
+    target.views = [grid, bound];
+    target.activeViewId = grid.id;
+    const ctx = { tables: [source, target] };
+    const field = createBitableField("relationOneWay", "单向关联", "f-rel");
+    field.relation = { allowMultiple: true, tableId: target.id };
+
+    expect(defaultGridView(target)?.id).toBe("v-grid");
+    expect(orderedAllTableFields(target, grid).map((item) => item.id)).toEqual(["f-bool", "f-progress", "f-text", "f-select", "f-date"]);
+    expect(relationPickerFields(ctx, field).map((item) => item.id)).toEqual(["f-bool", "f-progress", "f-text", "f-select", "f-date"]);
+
+    target.fields.push(createBitableField("link", "新链接", "f-new"));
+    expect(relationPickerFields(ctx, field).map((item) => item.id)).toEqual(["f-bool", "f-progress", "f-text", "f-select", "f-date", "f-new"]);
+
+    field.relation = { ...field.relation, viewId: bound.id };
+    expect(relationPickerFields(ctx, field).map((item) => item.id)).toEqual(["f-progress", "f-text", "f-bool", "f-date", "f-new"]);
+
+    target.views = [grid, { ...bound, hiddenFieldIds: [] }];
+    expect(relationPickerFields(ctx, field).map((item) => item.id)).toEqual(["f-progress", "f-text", "f-bool", "f-select", "f-date", "f-new"]);
   });
 
   it("关联选择器草稿（T02B.2）：多选增删、单选替换/取消（未确认不落正文由 UI 保证）", () => {
@@ -841,7 +997,7 @@ describe("bitableDoc 数据模型", () => {
       ...createDefaultBitableTable("来源", "tbl-src"),
       fields: [
         createBitableField("text", "名称", "f-name"),
-        { id: "f-rel", name: "关联", type: "relation", relation: { tableId: "tbl-tgt", mode: "oneWay" as const, allowMultiple: true } },
+        { id: "f-rel", name: "双向关联", type: "relationTwoWay", relation: { tableId: "tbl-tgt", allowMultiple: true } },
       ],
       records: [
         { id: "r1", values: { "f-name": "甲", "f-rel": ["d1"] }, createdAt: ts, updatedAt: ts },
@@ -858,15 +1014,16 @@ describe("bitableDoc 数据模型", () => {
       ],
     };
     let tables: BitableTable[] = [source, target];
-    expect(relationReverseFieldName(source, source.fields[1])).toBe("来源关联");
+    expect(relationReverseFieldName(source, source.fields[1])).toBe("来源双向关联");
 
     tables = createRelationPair(tables, "tbl-src", "f-rel");
     const rel = tables.find((t) => t.id === "tbl-src")!.fields.find((f) => f.id === "f-rel")!;
-    expect(rel.relation?.mode).toBe("twoWay");
+    expect(rel.type).toBe("relationTwoWay");
     const reverseId = rel.relation!.pairedFieldId!;
     const reverse = tables.find((t) => t.id === "tbl-tgt")!.fields.find((f) => f.id === reverseId)!;
-    expect(reverse.name).toBe("来源关联");
-    expect(reverse.relation).toEqual({ tableId: "tbl-src", mode: "twoWay", allowMultiple: true, pairedFieldId: "f-rel" });
+    expect(reverse.name).toBe("来源双向关联");
+    expect(reverse.type).toBe("relationTwoWay");
+    expect(reverse.relation).toEqual({ tableId: "tbl-src", allowMultiple: true, pairedFieldId: "f-rel" });
     // 回填：d1 ← r1、d2 ← r2、d3 无
     const tgtRecords = () => tables.find((t) => t.id === "tbl-tgt")!.records;
     expect(tgtRecords().find((r) => r.id === "d1")!.values[reverseId]).toEqual(["r1"]);
@@ -888,8 +1045,10 @@ describe("bitableDoc 数据模型", () => {
 
     // 解除配对：两侧降级为单向、数据都保留
     tables = unpairRelationFields(tables, "tbl-src", "f-rel");
-    expect(tables.find((t) => t.id === "tbl-src")!.fields.find((f) => f.id === "f-rel")!.relation).toEqual({ tableId: "tbl-tgt", mode: "oneWay", allowMultiple: true });
-    expect(tables.find((t) => t.id === "tbl-tgt")!.fields.find((f) => f.id === reverseId)!.relation).toEqual({ tableId: "tbl-src", mode: "oneWay", allowMultiple: true });
+    expect(tables.find((t) => t.id === "tbl-src")!.fields.find((f) => f.id === "f-rel")!.type).toBe("relationOneWay");
+    expect(tables.find((t) => t.id === "tbl-src")!.fields.find((f) => f.id === "f-rel")!.relation).toEqual({ tableId: "tbl-tgt", allowMultiple: true });
+    expect(tables.find((t) => t.id === "tbl-tgt")!.fields.find((f) => f.id === reverseId)!.type).toBe("relationOneWay");
+    expect(tables.find((t) => t.id === "tbl-tgt")!.fields.find((f) => f.id === reverseId)!.relation).toEqual({ tableId: "tbl-src", allowMultiple: true });
     expect(tgtRecords().find((r) => r.id === "d3")!.values[reverseId]).toEqual(["r1"]);
   });
 
@@ -897,7 +1056,7 @@ describe("bitableDoc 数据模型", () => {
     const ts = "2026-09-20T00:00:00.000Z";
     const table: BitableTable = {
       ...createDefaultBitableTable("t", "tbl-1"),
-      fields: [{ id: "f-rel", name: "关联", type: "relation", relation: { tableId: "tbl-x", mode: "oneWay" as const, allowMultiple: true } }],
+      fields: [{ id: "f-rel", name: "单向关联", type: "relationOneWay", relation: { tableId: "tbl-x", allowMultiple: true } }],
       records: [{ id: "r1", values: {}, createdAt: ts, updatedAt: ts }],
     };
     const next = applyRelationMirror([table], "tbl-1", "f-rel", "r1", ["a", "b"]);
@@ -906,18 +1065,20 @@ describe("bitableDoc 数据模型", () => {
 
   it("关联配置经正文往返保留（缺 relation 的关联字段补默认、不丢字段）", () => {
     const table = fixtureTable("t1", "tbl1");
-    const rel = createBitableField("relation", "关联", "f-rel");
-    rel.relation = { tableId: "tbl2", mode: "twoWay", allowMultiple: false, pairedFieldId: "f-back" };
+    const rel = createBitableField("relationTwoWay", "双向关联", "f-rel");
+    rel.relation = { tableId: "tbl2", allowMultiple: false, pairedFieldId: "f-back" };
     table.fields.push(rel);
     const parsed = parseBitableBody(bitablesToBody([table], table.id))!;
+    expect(parsed.tables[0].fields.find((f) => f.id === "f-rel")?.type).toBe("relationTwoWay");
     expect(parsed.tables[0].fields.find((f) => f.id === "f-rel")?.relation)
-      .toEqual({ tableId: "tbl2", mode: "twoWay", allowMultiple: false, pairedFieldId: "f-back" });
+      .toEqual({ tableId: "tbl2", allowMultiple: false, pairedFieldId: "f-back" });
 
     const table2 = createDefaultBitableTable("t2", "tbl2");
-    table2.fields.push({ id: "f-bare", name: "关联2", type: "relation" });
+    table2.fields.push({ id: "f-bare", name: "单向关联2", type: "relationOneWay" });
     const parsed2 = parseBitableBody(bitablesToBody([table2], table2.id))!;
+    expect(parsed2.tables[0].fields.find((f) => f.id === "f-bare")?.type).toBe("relationOneWay");
     expect(parsed2.tables[0].fields.find((f) => f.id === "f-bare")?.relation)
-      .toEqual({ mode: "oneWay", allowMultiple: true });
+      .toEqual({ allowMultiple: true });
   });
 
   it("日历字段解析：类型不符即无效；标题回落主字段；颜色只认单选", () => {

@@ -16,6 +16,8 @@ const EDITOR_TAB = readFileSync(new URL("../editor/LakeEditor.tsx", import.meta.
 const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
 const PICKER = readFileSync(new URL("./BitableRelationPicker.tsx", import.meta.url), "utf8");
+const FILTER_EDITOR = readFileSync(new URL("./BitableFilterEditor.tsx", import.meta.url), "utf8");
+const FILTER_CSS = readFileSync(new URL("./bitableFilterEditor.css", import.meta.url), "utf8");
 const PICKER_CSS = readFileSync(new URL("./bitableRelationPicker.css", import.meta.url), "utf8");
 const ASSET_URL = readFileSync(new URL("./bitableAssetUrl.ts", import.meta.url), "utf8");
 const FILE_ICON = readFileSync(new URL("./FileKindIcon.tsx", import.meta.url), "utf8");
@@ -115,6 +117,8 @@ describe("多维表编辑器护栏", () => {
     // 3) 调色板锚到列头：⋯ 按钮 hover 才 display，菜单一关量到的 rect 是 0×0 → 浮层跑左上角
     expect(EDITOR).toMatch(/const anchor = columnMenu\.header;/);
     expect(EDITOR).toMatch(/if \(anchor\) setTextColorFor\(\{ fieldId, anchor \}\)/);
+    expect(EDITOR).toMatch(/隐藏列<\/button>|隐藏列/);
+    expect(EDITOR).toMatch(/toggleFieldHidden\(columnMenu\.fieldId\)/);
   });
 
   it("日期字段默认值三态：无 / 指定时间 / 添加记录时间（260928 用户）", () => {
@@ -219,6 +223,9 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/DatePicker/);
     expect(CARDS).toMatch(/ColorPalette/);
     expect(DOC).toMatch(/BITABLE_OPTION_PALETTE/);
+    expect(DOC).toMatch(/BITABLE_TEXT_COLOR_PALETTE/);
+    expect(EDITOR).toMatch(/palette=\{BITABLE_TEXT_COLOR_PALETTE\}/);
+    expect(CARDS).toMatch(/palette\?: readonly string\[\]/);
   });
 
   it("字段编辑弹窗：进度字段的颜色面板不被「选项编辑器」块吞掉（260929-OPT 修）", () => {
@@ -293,11 +300,15 @@ describe("多维表编辑器护栏", () => {
     expect(PICKER).toMatch(/placeholder="搜索相关记录"/);
     expect(PICKER).toMatch(/title="筛选"/);
     expect(PICKER).toMatch(/title="排序"/);
-    expect(PICKER).toMatch(/filterOperatorsFor\(/);
+    expect(PICKER).toMatch(/import \{ BitableFilterEditor \} from "\.\/BitableFilterEditor\.js"/);
+    expect(PICKER).toMatch(/<BitableFilterEditor fields=\{ruleFields\}/);
+    expect(PICKER).toMatch(/<BitableFilterEditor fields=\{ruleFields\} filters=\{viewFilters\}/);
     expect(PICKER).toMatch(/sortModesForField\(/);
     // 主区域 = 目标表整表（每个字段一列），值统一走 bitableFieldText
     expect(PICKER).toMatch(/fields\.map\(\(item\) => <th key=\{item\.id\}/);
     expect(PICKER).toMatch(/bitableFieldText\(record, item, ctx\)/);
+    // 只读值统一复用主表格 CellEditor：单选/多选/评分/进度/布尔等与正式行视图同一套渲染
+    expect(PICKER).toMatch(/<CellEditor\s+field=\{field\}\s+value=\{record\.values\[field\.id\]\}\s+readOnly/);
     // 可关联范围走 core 单一口径；草稿经 toggleRelationDraft；确认才写正文
     expect(PICKER).toMatch(/relationCandidateRecords\(ctx, field\)/);
     expect(PICKER).toMatch(/toggleRelationDraft\(prev, recordId, allowMultiple\)/);
@@ -305,6 +316,33 @@ describe("多维表编辑器护栏", () => {
     // 不做「添加记录」（用户 260929 明确）—— 页脚只有「已选 N 条记录 / 取消 / 确认」三件
     expect(PICKER).not.toMatch(/添加记录<\/button>|新建记录<\/button>/);
     expect(PICKER).toMatch(/className="bt-rel-foot"/);
+  });
+
+  it("筛选重做：远端字段操作符矩阵 + 递归条件组 + 共享编辑器", () => {
+    // core 单一来源：字段类型 → 操作符；日期动态值；规则数与递归求值。
+    expect(DOC).toMatch(/export type BitableFilterJoin = "and" \| "or"/);
+    expect(DOC).toMatch(/export function filterOperatorsFor/);
+    expect(DOC).toMatch(/export function dateFilterModesFor/);
+    expect(DOC).toMatch(/export function evaluateFilterNode/);
+    expect(DOC).toMatch(/export function bitableFilterRuleCount/);
+    expect(DOC).toMatch(/BITABLE_FILTER_MAX_GROUP_DEPTH = 2/);
+    // 视图保存根连接符；旧 filters 数组升级为可递归节点。
+    expect(DOC).toMatch(/filterOperator\?: BitableFilterJoin/);
+    expect(DOC).toMatch(/filters\?: BitableFilterNode\[\]/);
+    // 主编辑器与关联选择器共用同一个编辑器，不各自维护一套规则 UI。
+    expect(EDITOR).toMatch(/import \{ BitableFilterEditor \} from "\.\/BitableFilterEditor\.js"/);
+    expect(EDITOR).toMatch(/<BitableFilterEditor\s+fields=\{activeTable\.fields\}/);
+    // 打开筛选面板不得偷偷写入一条空规则；空态由编辑器自己提供“添加筛选规则”。
+    expect(EDITOR).not.toMatch(/setFilters\(\[createBitableFilterRule\(/);
+    expect(PICKER).toMatch(/<BitableFilterEditor fields=\{ruleFields\}/);
+    expect(FILTER_EDITOR).toMatch(/function FilterGroupView/);
+    expect(FILTER_EDITOR).toMatch(/function pruneEmptyGroups/);
+    expect(FILTER_EDITOR).toMatch(/onReplace\(childPath, \{ \.\.\.createBitableFilterGroup/);
+    expect(FILTER_EDITOR).toMatch(/BITABLE_DATE_FILTER_MODE_LABEL/);
+    expect(FILTER_EDITOR).toMatch(/FilterMultiSelect/);
+    expect(FILTER_CSS).toMatch(/\.bt-filter-group-surface/);
+    expect(FILTER_CSS).toMatch(/\.bt-filter-rule \{ display: grid;/);
+    expect(FILTER_CSS).toMatch(/\.bt-filter-delete/);
   });
 
   it("T02B.4 关联数据范围：不勾选=全部记录，勾选=绑定目标表的一个视图", () => {
@@ -325,16 +363,46 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).not.toMatch(/const applySortMode = /);
   });
 
+  it("关联选择器视图投影（260930）：绑定视图跟随顺序+隐藏，默认视图只给全部记录排序", () => {
+    expect(DOC).toMatch(/export function defaultGridView/);
+    expect(DOC).toMatch(/export function relationPickerFields/);
+    expect(DOC).toMatch(/orderedAllTableFields\(target, defaultGridView\(target\)\)/);
+    expect(DOC).toMatch(/if \(boundView\) return orderedTableFields\(target, boundView\)/);
+    expect(PICKER).toMatch(/relationPickerFields\(ctx, field\)/);
+    expect(PICKER).toMatch(/scopeView\?\.filters \?\? \[\]/);
+    expect(PICKER).toMatch(/scopeView\?\.sorts \?\? \[\]/);
+    expect(PICKER).toMatch(/scopeView\?\.groups\?\.\[0\]/);
+    expect(PICKER).toMatch(/groupRecords\(target, rows, rule\)/);
+    expect(PICKER).toMatch(/className="bt-rule-row is-view"/);
+    expect(PICKER).toMatch(/<Lock size=\{12\} \/>视图/);
+    expect(PICKER_CSS).toMatch(/\.bt-rel-group-row/);
+  });
+
+  it("关联选择器只读值与历史/回收站共用 CellEditor（同一主表格渲染）", () => {
+    expect(PICKER).toMatch(/import \{ AttachmentChipList, CellEditor, SelectMenu \} from "\.\/bitableCells\.js"/);
+    expect(PICKER).toMatch(/<CellEditor\s+field=\{field\}\s+value=\{record\.values\[field\.id\]\}\s+readOnly\s+onChange=\{\(\) => undefined\}\s+onAddOption=\{\(\) => undefined\}/);
+    expect(EDITOR).toMatch(/<CellEditor[\s\S]*?value=\{record\.values\[field\.id\]\}[\s\S]*?readOnly=\{readOnly\}/);
+    const HISTORY = readFileSync(new URL("../../components/HistorySnapshotPreview.tsx", import.meta.url), "utf8");
+    const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.url), "utf8");
+    expect(HISTORY).toMatch(/<BitableEditor noteId=\{noteId\} content=\{body\} visible readOnly onChange=\{noop\} chrome=\{false\} \/>/);
+    expect(TABS).toMatch(/tab\.kind === "bitable"[\s\S]*?readOnly=\{\(lockedNoteIds\?\.has\(tab\.noteId\) \?\? false\) \|\| tab\.deleted === true\}/);
+  });
+
   it("T02B.3 双向关联：反向字段 / 双向镜像唯一写入口 / 删一侧解除配对", () => {
     expect(DOC).toMatch(/export function relationReverseFieldName/);
     expect(DOC).toMatch(/export function createRelationPair/);
     expect(DOC).toMatch(/export function applyRelationMirror/);
     expect(DOC).toMatch(/export function unpairRelationFields/);
-    expect(EDITOR).toMatch(/双向关联（在目标表生成反向字段）/);
+    expect(DOC).toMatch(/relationOneWay/);
+    expect(DOC).toMatch(/relationTwoWay/);
+    expect(CARDS).toMatch(/case "relationOneWay": return <Link2/);
+    expect(CARDS).toMatch(/case "relationTwoWay": return <ArrowLeftRight/);
+    expect(EDITOR).toMatch(/patch\.type === "relationTwoWay"/);
     expect(EDITOR).toMatch(/createRelationPair\(prev\.tables/);
     expect(EDITOR).toMatch(/unpairRelationFields\(prev\.tables/);
     // 关联字段的写值必须走镜像入口（否则双向会不同步）
     expect(EDITOR).toMatch(/applyRelationMirror\(prev\.tables, tableId, fieldId, recordId, relationRecordIds\(value\)\)/);
+    expect(EDITOR).not.toMatch(/双向关联（在目标表生成反向字段）/);
   });
 
   it("编辑字段：字段类型是**弹出选择**（不再内联一大块占位）", () => {
@@ -431,7 +499,7 @@ describe("多维表编辑器护栏", () => {
 
   it("关联选择器整表复用同一套附件渲染（用户 260930：「这两处不是同一套代码吗？能做成一套吗？」）", () => {
     // 选择器不再自养「📎 文件名」chip / 自己的缩略图，改用表格那套 AttachmentChipList
-    expect(PICKER).toMatch(/import \{ AttachmentChipList, SelectMenu \} from "\.\/bitableCells\.js"/);
+    expect(PICKER).toMatch(/import \{ AttachmentChipList, CellEditor, SelectMenu \} from "\.\/bitableCells\.js"/);
     expect(PICKER).toMatch(/<AttachmentChipList noteId=\{noteId\} attachments=\{files\} imageOnly=\{field\.type === "image"\}/);
     expect(PICKER).not.toMatch(/bt-rel-thumb/);
     expect(PICKER).not.toMatch(/Paperclip/);
@@ -684,10 +752,11 @@ describe("多维表编辑器护栏", () => {
     // ⑨ 三个规则面板（筛选 / 排序 / 分组）的删除按钮**同一套**：行尾的 .bt-icon-btn + Trash2（用户 260929：
     //    「说了多少次了，样式保持一致」）——分组原先用的是行首的 ✕ + 「取消分组」，已改齐。
     //    三个规则面板的删除按钮都长这样（选项面板里那条「删除选项」是第四处，同款，一并计入）
-    expect(EDITOR.match(/className="bt-icon-btn" title="删除/g)?.length ?? 0).toBe(4);
-    for (const label of ["删除规则", "删除排序", "删除分组"]) {
+    expect(EDITOR.match(/className="bt-icon-btn" title="删除/g)?.length ?? 0).toBe(3);
+    for (const label of ["删除排序", "删除分组"]) {
       expect(EDITOR).toMatch(new RegExp(`className="bt-icon-btn" title="${label}" aria-label="${label}"`));
     }
+    expect(FILTER_EDITOR).toMatch(/删除规则/);
     expect(EDITOR).toMatch(/title="删除分组" aria-label="删除分组"/);
     expect(EDITOR).not.toMatch(/title="取消分组"/);
     // ⑩ 链接格（260929 对齐云端）：**展示文本 + 右端 🔗 图标**（点它用本地浏览器打开），**不再常驻输入框**

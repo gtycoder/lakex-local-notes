@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as Rea
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { BitableRelationPicker } from "./BitableRelationPicker.js";
-import { Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
+import { ArrowLeftRight, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { placePopoverPosition } from "../../hooks/topMenuPosition";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
@@ -46,7 +46,8 @@ export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number
     case "progress": return <Gauge size={size} />;
     case "createdTime": return <CalendarClock size={size} />;
     case "updatedTime": return <Clock size={size} />;
-    case "relation": return <Link2 size={size} />;
+    case "relationOneWay": return <Link2 size={size} />;
+    case "relationTwoWay": return <ArrowLeftRight size={size} />;
     default: return <HelpCircle size={size} />;
   }
 }
@@ -814,9 +815,11 @@ function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextE
 }
 
 /** 颜色选择面板（图2：hover 出现色卡；点选即定色）。 */
-export function ColorPalette({ anchor, value, onPick, onClose, onClear }: {
+export function ColorPalette({ anchor, value, palette = BITABLE_OPTION_PALETTE, onPick, onClose, onClear }: {
   anchor: HTMLElement;
   value?: string;
+  /** 调色板来源：选项底色 / 列文字色分开，避免文字使用过浅的背景色。 */
+  palette?: readonly string[];
   onPick: (color: string) => void;
   onClose: () => void;
   /** 传了就显示「无颜色」清除项（列文字颜色用；选项颜色不传）。 */
@@ -826,7 +829,7 @@ export function ColorPalette({ anchor, value, onPick, onClose, onClear }: {
   return (
     <Popover open anchor={anchor} onClose={onClose} width={236} align="start">
       <div className="bt-color-palette">
-        {BITABLE_OPTION_PALETTE.map((color) => (
+        {palette.map((color) => (
           <button key={color} type="button" className="bt-color-swatch" style={{ backgroundColor: color }} aria-label={"颜色 " + color}
             onClick={() => { onPick(color); onClose(); }}>{active === color ? <Check size={12} /> : null}</button>
         ))}
@@ -1180,7 +1183,8 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
     case "createdTime":
     case "updatedTime":
       return <span className="bt-cell-muted ln-ellipsis">{record ? (bitableFieldText(record, field, ctx) || "—") : "—"}</span>;
-    case "relation":
+    case "relationOneWay":
+    case "relationTwoWay":
       return <RelationCell field={field} value={value} readOnly={readOnly} ctx={ctx} onChange={onChange}
         noteId={noteId} onOpenImages={onOpenImages} />;
     default:

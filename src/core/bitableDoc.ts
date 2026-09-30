@@ -22,7 +22,7 @@ export const BITABLE_DOC_VERSION = 1 as const;
 export type BitableFieldType =
   | "text" | "number" | "select" | "multiSelect" | "date" | "attachment" | "image"
   | "boolean" | "link" | "rating" | "progress" | "createdTime" | "updatedTime"
-  | "relation";
+  | "relationOneWay" | "relationTwoWay";
 
 /** 字段类型选择器的顺序（v1 只暴露这 7 种）。 */
 export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
@@ -39,7 +39,8 @@ export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
   "progress",
   "createdTime",
   "updatedTime",
-  "relation",
+  "relationOneWay",
+  "relationTwoWay",
 ] as const;
 
 export const BITABLE_FIELD_TYPE_LABEL: Record<BitableFieldType, string> = {
@@ -56,7 +57,8 @@ export const BITABLE_FIELD_TYPE_LABEL: Record<BitableFieldType, string> = {
   progress: "进度",
   createdTime: "创建时间",
   updatedTime: "修改时间",
-  relation: "关联",
+  relationOneWay: "单向关联",
+  relationTwoWay: "双向关联",
 };
 
 /** 单选/多选选项。 */
@@ -73,8 +75,6 @@ export interface BitableFieldOption {
 export interface BitableRelation {
   /** 目标数据表 id（同一文档内；缺省 = 未配置，界面显示为空）。 */
   tableId?: string;
-  /** oneWay 单向 / twoWay 双向（双向的反向字段由 T02B.3 维护；本批默认单向）。 */
-  mode?: "oneWay" | "twoWay";
   /** 是否允许添加多个记录（默认 true；关闭后单元格最多保留一条）。 */
   allowMultiple?: boolean;
   /**
@@ -86,8 +86,15 @@ export interface BitableRelation {
   pairedFieldId?: string;
 }
 
-/** 新建关联字段的默认配置：单向 + 允许多个记录（对齐飞书「默认勾选」）。 */
-export const BITABLE_RELATION_DEFAULT: Readonly<BitableRelation> = { mode: "oneWay", allowMultiple: true };
+/** 新建关联字段的默认配置：允许多个记录（对齐飞书「默认勾选」）。方向由字段类型决定。 */
+export const BITABLE_RELATION_DEFAULT: Readonly<BitableRelation> = { allowMultiple: true };
+
+export type BitableRelationFieldType = "relationOneWay" | "relationTwoWay";
+
+/** 是否为关联字段类型（单向/双向共用值模型与展示）。 */
+export function isRelationFieldType(type: string): type is BitableRelationFieldType {
+  return type === "relationOneWay" || type === "relationTwoWay";
+}
 
 export interface BitableField {
   id: string;
@@ -162,23 +169,74 @@ export function defaultViewName(type: string): string {
   return isKnownViewType(type) ? BITABLE_VIEW_TYPE_LABEL[type] : "视图";
 }
 
+/** 筛选条件连接符；一个条件组内统一使用同一个连接符（对齐远端 lake packet）。 */
+export type BitableFilterJoin = "and" | "or";
+
+/** 筛选操作符（字段类型对应的子集由 filterOperatorsFor 决定；命名对齐远端 lake）。 */
 export type BitableFilterOperator =
-  | "contains"
-  | "notContains"
-  | "equals"
-  | "notEquals"
+  | "equalTo"
+  | "notEqualTo"
+  | "greaterThan"
+  | "greaterThanOrEqualTo"
+  | "lessThan"
+  | "lessThanOrEqualTo"
   | "isEmpty"
   | "isNotEmpty"
-  | "gt"
-  | "lt"
-  | "gte"
-  | "lte";
+  | "startsWith"
+  | "notStartsWith"
+  | "endsWith"
+  | "notEndsWith"
+  | "contains"
+  | "notContains"
+  | "is"
+  | "isNot"
+  | "isEmptySelect"
+  | "isNotEmptySelect"
+  | "isExactly"
+  | "hasAnyOf"
+  | "hasAllOf"
+  | "hasNoneOf";
+
+/** 日期筛选的右侧值：具体日期或远端 lake 支持的动态日期。 */
+export type BitableDateFilterMode =
+  | "custom"
+  | "today"
+  | "tomorrow"
+  | "yesterday"
+  | "thisWeek"
+  | "lastWeek"
+  | "nextWeek"
+  | "lastMonth"
+  | "thisMonth"
+  | "nextMonth"
+  | "thisYear"
+  | "last7days"
+  | "next7days"
+  | "last30days"
+  | "next30days";
+
+export type BitableFilterValue = string | string[] | boolean;
 
 export interface BitableFilterRule {
+  id?: string;
   fieldId: string;
   operator: BitableFilterOperator;
-  value?: string;
+  value?: BitableFilterValue;
+  /** 仅日期类字段使用；缺省按 custom 处理。 */
+  valueMode?: BitableDateFilterMode;
 }
+
+/** 可递归的筛选分组；根组的连接符存在 BitableView.filterOperator。 */
+export interface BitableFilterGroup {
+  id?: string;
+  operator: BitableFilterJoin;
+  filters: BitableFilterNode[];
+}
+
+export type BitableFilterNode = BitableFilterRule | BitableFilterGroup;
+
+/** 远端 lake 的分组上限：根组外最多再套 2 层。 */
+export const BITABLE_FILTER_MAX_GROUP_DEPTH = 2;
 
 export interface BitableSortRule {
   fieldId: string;
@@ -239,7 +297,10 @@ export interface BitableView {
   name: string;
   /** **开放字符串**：新版本写入的未知类型在本版本里必须原样保留（只回退显示，不清空、不降级成 grid）。 */
   type: string;
-  filters?: BitableFilterRule[];
+  /** 根筛选组 = 顶层规则/分组的顺序；根连接符见 filterOperator。 */
+  filters?: BitableFilterNode[];
+  /** 根筛选组的连接符；缺省 and。 */
+  filterOperator?: BitableFilterJoin;
   sorts?: BitableSortRule[];
   /** 分组（云端单级；UI 只用第 0 条）。 */
   groups?: BitableGroupRule[];
@@ -358,6 +419,13 @@ export const BITABLE_OPTION_PALETTE = [
   "#d5e8f4", "#efe0f0", "#e8f3d6", "#f6e2c9", "#d9e2f5", "#f0d9d9",
 ] as const;
 
+/** 列文字颜色专用调色板：比选项底色更深，保证白底上的可读性。 */
+export const BITABLE_TEXT_COLOR_PALETTE = [
+  "#111827", "#374151", "#6b7280", "#7f1d1d", "#b91c1c", "#c2410c",
+  "#b45309", "#a16207", "#4d7c0f", "#15803d", "#047857", "#0f766e",
+  "#0e7490", "#0369a1", "#2563eb", "#4f46e5", "#7c3aed", "#be185d",
+] as const;
+
 /** 兼容别名（旧命名色键与 hex 通用；新代码用 BITABLE_OPTION_PALETTE）。 */
 export const BITABLE_OPTION_COLORS = BITABLE_OPTION_PALETTE;
 
@@ -394,7 +462,7 @@ export function createBitableFieldOptions(names: string[], colors?: Array<string
 export function createBitableField(type: BitableFieldType, name?: string, id = newBitableId("fld")): BitableField {
   const field: BitableField = { id, name: name ?? BITABLE_FIELD_TYPE_LABEL[type], type };
   if (type === "select" || type === "multiSelect") field.options = [];
-  if (type === "relation") field.relation = { ...BITABLE_RELATION_DEFAULT };
+  if (isRelationFieldType(type)) field.relation = { ...BITABLE_RELATION_DEFAULT };
   return field;
 }
 
@@ -445,6 +513,55 @@ function asStringArray(value: unknown): string[] | undefined {
   return value.filter((v): v is string => typeof v === "string");
 }
 
+const BITABLE_FILTER_OPERATORS = new Set<BitableFilterOperator>([
+  "equalTo", "notEqualTo", "greaterThan", "greaterThanOrEqualTo", "lessThan", "lessThanOrEqualTo",
+  "isEmpty", "isNotEmpty", "startsWith", "notStartsWith", "endsWith", "notEndsWith", "contains", "notContains",
+  "is", "isNot", "isEmptySelect", "isNotEmptySelect", "isExactly", "hasAnyOf", "hasAllOf", "hasNoneOf",
+]);
+
+const BITABLE_DATE_FILTER_MODE_SET = new Set<BitableDateFilterMode>([
+  "custom", "today", "tomorrow", "yesterday", "thisWeek", "lastWeek", "nextWeek", "lastMonth", "thisMonth",
+  "nextMonth", "thisYear", "last7days", "next7days", "last30days", "next30days",
+]);
+
+function normalizeFilterValue(value: unknown): BitableFilterValue | undefined {
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  return undefined;
+}
+
+function normalizeFilterNode(raw: unknown, depth: number): BitableFilterNode | null {
+  if (!raw || typeof raw !== "object") return null;
+  const node = raw as { id?: unknown; fieldId?: unknown; operator?: unknown; value?: unknown; valueMode?: unknown; filters?: unknown };
+  if (Array.isArray(node.filters)) {
+    if (depth > BITABLE_FILTER_MAX_GROUP_DEPTH) return null;
+    const children = node.filters.map((child) => normalizeFilterNode(child, depth + 1)).filter((child): child is BitableFilterNode => !!child);
+    if (children.length === 0) return null;
+    return {
+      ...(typeof node.id === "string" ? { id: node.id } : {}),
+      operator: node.operator === "or" ? "or" : "and",
+      filters: children,
+    };
+  }
+  if (typeof node.fieldId !== "string" || typeof node.operator !== "string" || !BITABLE_FILTER_OPERATORS.has(node.operator as BitableFilterOperator)) return null;
+  const next: BitableFilterRule = {
+    ...(typeof node.id === "string" ? { id: node.id } : {}),
+    fieldId: node.fieldId,
+    operator: node.operator as BitableFilterOperator,
+  };
+  const value = normalizeFilterValue(node.value);
+  if (value !== undefined) next.value = value;
+  if (typeof node.valueMode === "string" && BITABLE_DATE_FILTER_MODE_SET.has(node.valueMode as BitableDateFilterMode)) {
+    next.valueMode = node.valueMode as BitableDateFilterMode;
+  }
+  return next;
+}
+
+function normalizeFilters(raw: unknown): BitableFilterNode[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map((node) => normalizeFilterNode(node, 1)).filter((node): node is BitableFilterNode => !!node);
+}
+
 function normalizeField(raw: unknown): BitableField | null {
   if (!raw || typeof raw !== "object") return null;
   const field = raw as Partial<BitableField>;
@@ -455,14 +572,16 @@ function normalizeField(raw: unknown): BitableField | null {
       .filter((o): o is BitableFieldOption => !!o && typeof o === "object" && typeof (o as BitableFieldOption).id === "string" && typeof (o as BitableFieldOption).name === "string")
       .map((o) => ({ ...o }));
   }
-  // 关联配置归一：只保留认识的键，方向/多选补默认（缺省 = 单向 + 允许多个）。
-  if (field.type === "relation") {
+  // 关联配置归一：只保留认识的键，多选补默认（方向由 relationOneWay / relationTwoWay 类型决定）。
+  if (isRelationFieldType(field.type)) {
     const rel = field.relation && typeof field.relation === "object" ? field.relation : {};
-    const relation: BitableRelation = { mode: rel.mode === "twoWay" ? "twoWay" : "oneWay", allowMultiple: rel.allowMultiple !== false };
+    const relation: BitableRelation = { allowMultiple: rel.allowMultiple !== false };
     if (typeof rel.tableId === "string" && rel.tableId) relation.tableId = rel.tableId;
     if (typeof rel.viewId === "string" && rel.viewId) relation.viewId = rel.viewId;
     if (typeof rel.pairedFieldId === "string" && rel.pairedFieldId) relation.pairedFieldId = rel.pairedFieldId;
     next.relation = relation;
+  } else {
+    delete next.relation;
   }
   return next;
 }
@@ -503,7 +622,10 @@ function normalizeView(raw: unknown): BitableView | null {
   if (typeof view.formDescription !== "string") delete next.formDescription;
   if (view.gallerySize !== "regular" && view.gallerySize !== "compact") delete next.gallerySize;
   if (view.galleryFit !== "cover" && view.galleryFit !== "contain") delete next.galleryFit;
-  if (!Array.isArray(view.filters)) delete next.filters;
+  const filters = normalizeFilters(view.filters);
+  if (filters && filters.length > 0) next.filters = filters; else delete next.filters;
+  if (next.filters && (view.filterOperator === "or" || view.filterOperator === "and")) next.filterOperator = view.filterOperator;
+  else delete next.filterOperator;
   if (!Array.isArray(view.sorts)) delete next.sorts;
   if (Array.isArray(view.groups)) next.groups = view.groups.slice(0, 1);
   else delete next.groups;
@@ -847,6 +969,25 @@ export function relationTargetView(ctx: BitableDisplayContext | undefined, field
   return table.views.find((view) => view.id === viewId);
 }
 
+/** 目标表的默认视图：优先第一个表格视图，其次第一个视图；没有视图则为 undefined。 */
+export function defaultGridView(table: BitableTable): BitableView | undefined {
+  return table.views.find((view) => view.type === "grid") ?? table.views[0];
+}
+
+/**
+ * 关联选择器展示的字段：
+ * - 绑定视图：像正式表格视图一样应用 fieldOrder + hiddenFieldIds；
+ * - 未绑定视图：应用目标表默认视图的 fieldOrder，但不隐藏字段、不过滤记录。
+ * 每次由当前 `ctx` 重新计算，因此后加字段会在下次打开时动态进入候选列。
+ */
+export function relationPickerFields(ctx: BitableDisplayContext | undefined, field: BitableField): BitableField[] {
+  const target = relationTargetTable(ctx, field);
+  if (!target) return [];
+  const boundView = relationTargetView(ctx, field);
+  if (boundView) return orderedTableFields(target, boundView);
+  return orderedAllTableFields(target, defaultGridView(target));
+}
+
 /**
  * **关联选择器能选的记录**：绑定了数据范围视图就走该视图的筛选 + 排序（`applyViewToRecords`），
  * 否则就是目标表全部记录。只影响「能选什么」，不影响已有值的展示解析。
@@ -865,23 +1006,23 @@ export function relationReverseFieldName(sourceTable: BitableTable, field: Bitab
   return sourceTable.name + field.name;
 }
 
-/** 把字段降级为单向：保留 tableId / allowMultiple，清掉 mode=twoWay 与 pairedFieldId。 */
+/** 把字段降级为单向：保留 tableId / allowMultiple，清掉 pairedFieldId。 */
 function asOneWay(field: BitableField): BitableField {
-  if (!field.relation) return field;
-  const relation: BitableRelation = { ...field.relation, mode: "oneWay" };
+  if (!isRelationFieldType(field.type) || !field.relation) return field;
+  const relation: BitableRelation = { ...field.relation };
   delete relation.pairedFieldId;
-  return { ...field, relation };
+  return { ...field, type: "relationOneWay", relation };
 }
 
 /**
- * **建立双向关联**（T02B.3）：在目标表创建反向字段、两侧写 `pairedFieldId`、`mode="twoWay"`，
+ * **建立双向关联**（T02B.3）：在目标表创建反向字段、两侧写 `pairedFieldId`、类型改为 `relationTwoWay`，
  * 并把来源表**已有值**镜像到反向侧（所以「A 关联 B 后，B 反向出现 A」对历史数据也成立）。
  * 返回新的 tables；来源字段非关联 / 目标表缺失 / 已配对时原样返回（幂等）。
  */
 export function createRelationPair(tables: readonly BitableTable[], sourceTableId: string, fieldId: string): BitableTable[] {
   const source = tables.find((table) => table.id === sourceTableId);
   const field = source?.fields.find((f) => f.id === fieldId);
-  if (!source || !field || field.type !== "relation") return [...tables];
+  if (!source || !field || field.type !== "relationTwoWay") return [...tables];
   const target = relationTargetTable({ tables }, field);
   if (!target) return [...tables];
   const pairedId = field.relation?.pairedFieldId;
@@ -889,12 +1030,12 @@ export function createRelationPair(tables: readonly BitableTable[], sourceTableI
   const reverse: BitableField = {
     id: newBitableId("fld"),
     name: relationReverseFieldName(source, field),
-    type: "relation",
-    relation: { tableId: sourceTableId, mode: "twoWay", allowMultiple: field.relation?.allowMultiple !== false, pairedFieldId: field.id },
+    type: "relationTwoWay",
+    relation: { tableId: sourceTableId, allowMultiple: field.relation?.allowMultiple !== false, pairedFieldId: field.id },
   };
   return tables.map((table) => {
     if (table.id === sourceTableId) {
-      return { ...table, fields: table.fields.map((f) => (f.id === fieldId ? { ...f, relation: { ...f.relation, mode: "twoWay", pairedFieldId: reverse.id } } : f)) };
+      return { ...table, fields: table.fields.map((f) => (f.id === fieldId ? { ...f, type: "relationTwoWay", relation: { ...f.relation, pairedFieldId: reverse.id } } : f)) };
     }
     if (table.id !== target.id) return table;
     // 反向侧：凡被来源记录引用过的目标记录，都补上来源记录 id（历史值一次性对齐）
@@ -919,10 +1060,13 @@ export function unpairRelationFields(tables: readonly BitableTable[], tableId: s
   const table = tables.find((t) => t.id === tableId);
   const field = table?.fields.find((f) => f.id === fieldId);
   if (!field) return [...tables];
-  const pairedId = field.relation?.pairedFieldId;
+  const reverse = tables
+    .flatMap((t) => t.fields)
+    .find((candidate) => candidate.id !== fieldId && candidate.relation?.pairedFieldId === fieldId);
+  const pairedId = field.relation?.pairedFieldId ?? reverse?.id;
   return tables.map((t) => {
     let next = t;
-    if (t.id === tableId) next = { ...next, fields: next.fields.map((f) => (f.id === fieldId ? asOneWay(f) : f)) };
+    if (t.id === tableId && isRelationFieldType(field.type)) next = { ...next, fields: next.fields.map((f) => (f.id === fieldId ? asOneWay(f) : f)) };
     if (typeof pairedId === "string") next = { ...next, fields: next.fields.map((f) => (f.id === pairedId ? asOneWay(f) : f)) };
     return next;
   });
@@ -939,7 +1083,7 @@ export function applyRelationMirror(tables: readonly BitableTable[], tableId: st
   if (!source || !field) return [...tables];
   const prev = relationRecordIds(source.records.find((r) => r.id === recordId)?.values[fieldId]);
   const next = relationRecordIds(nextIds);
-  const pairedId = field.relation?.pairedFieldId;
+  const pairedId = field.type === "relationTwoWay" ? field.relation?.pairedFieldId : undefined;
   const pairedTable = typeof pairedId === "string" ? tables.find((t) => t.fields.some((f) => f.id === pairedId)) : undefined;
   const added = next.filter((id) => !prev.includes(id));
   const removed = prev.filter((id) => !next.includes(id));
@@ -947,7 +1091,7 @@ export function applyRelationMirror(tables: readonly BitableTable[], tableId: st
     if (t.id === tableId) {
       return { ...t, records: t.records.map((r) => (r.id === recordId ? { ...r, values: { ...r.values, [fieldId]: next }, updatedAt: nowIso() } : r)) };
     }
-    if (!pairedTable || t.id !== pairedTable.id || typeof pairedId !== "string") return t;
+    if (field.type !== "relationTwoWay" || !pairedTable || t.id !== pairedTable.id || typeof pairedId !== "string") return t;
     return {
       ...t,
       records: t.records.map((record) => {
@@ -986,7 +1130,8 @@ export function bitableDisplayValue(field: BitableField, value: unknown, ctx?: B
     case "attachment":
     case "image":
       return bitableAttachments(value).map((a) => a.name).join(", ");
-    case "relation": {
+    case "relationOneWay":
+    case "relationTwoWay": {
       const target = relationTargetTable(ctx, field);
       const primary = target?.fields[0];
       if (!target || !primary) return "";
@@ -1366,18 +1511,26 @@ export function calendarMovePatch(table: BitableTable, view: BitableView | undef
 
 // ---- 视图求值（纯函数，UI 与测试共用） ----
 
-/** 未隐藏字段按 fieldOrder 排好序（fieldOrder 未列出的字段按原始顺序追加）。 */
-export function orderedTableFields(table: BitableTable, view: BitableView | undefined): BitableField[] {
-  const hidden = new Set(view?.hiddenFieldIds ?? []);
-  const visible = table.fields.filter((f) => !hidden.has(f.id));
+function orderFieldsByView(fields: readonly BitableField[], view: BitableView | undefined): BitableField[] {
   const order = view?.fieldOrder;
-  if (!order || order.length === 0) return visible;
+  if (!order || order.length === 0) return [...fields];
   const rank = new Map(order.map((id, index) => [id, index] as const));
-  return [...visible].sort((a, b) => {
+  return [...fields].sort((a, b) => {
     const ra = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
     const rb = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
     return ra - rb;
   });
+}
+
+/** 未隐藏字段按 fieldOrder 排好序（fieldOrder 未列出的字段按原始顺序追加）。 */
+export function orderedTableFields(table: BitableTable, view: BitableView | undefined): BitableField[] {
+  const hidden = new Set(view?.hiddenFieldIds ?? []);
+  return orderFieldsByView(table.fields.filter((f) => !hidden.has(f.id)), view);
+}
+
+/** 全部字段按 fieldOrder 排好序，但**不应用 hiddenFieldIds**（“全部记录”只看顺序）。 */
+export function orderedAllTableFields(table: BitableTable, view: BitableView | undefined): BitableField[] {
+  return orderFieldsByView(table.fields, view);
 }
 
 /** 排序比较（含 T04 语义排序）：选项语义序下，空值/指向已删选项的值**恒排最后**（与分组口径一致）。 */
@@ -1413,74 +1566,309 @@ function compareValues(field: BitableField, a: unknown, b: unknown): number {
   return sa.localeCompare(sb, "zh-Hans-CN");
 }
 
-export function evaluateFilter(field: BitableField, value: unknown, rule: BitableFilterRule): boolean {
-  const display = bitableDisplayValue(field, value);
-  const target = rule.value ?? "";
-  switch (rule.operator) {
-    case "isEmpty":
-      return display.trim() === "";
-    case "isNotEmpty":
-      return display.trim() !== "";
-    case "contains":
-      return display.includes(target);
-    case "notContains":
-      return !display.includes(target);
-    case "equals":
-      return display === target;
-    case "notEquals":
-      return display !== target;
-    case "gt":
-    case "lt":
-    case "gte":
-    case "lte": {
-      const a = Number(display);
-      const b = Number(target);
-      const useNumber = Number.isFinite(a) && Number.isFinite(b);
-      const left: string | number = useNumber ? a : display;
-      const right: string | number = useNumber ? b : target;
-      if (rule.operator === "gt") return left > right;
-      if (rule.operator === "lt") return left < right;
-      if (rule.operator === "gte") return left >= right;
-      return left <= right;
-    }
-    default:
-      return true;
-  }
+export type BitableFilterValueKind = "none" | "text" | "number" | "date" | "select" | "multiSelect" | "boolean" | "file";
+
+const BITABLE_FILTER_EMPTY_OPERATORS = new Set<BitableFilterOperator>(["isEmpty", "isNotEmpty", "isEmptySelect", "isNotEmptySelect"]);
+
+export function isBitableFilterGroup(node: BitableFilterNode): node is BitableFilterGroup {
+  return !!node && typeof node === "object" && Array.isArray((node as BitableFilterGroup).filters);
 }
 
-/** 某个字段类型可用的筛选操作符（v1 全类型共用一套，按类型给主要项）。 */
+/** 当前筛选树里的规则数（分组不计入；用于工具栏「N个筛选」徽标）。 */
+export function bitableFilterRuleCount(filters: readonly BitableFilterNode[] | undefined): number {
+  if (!filters?.length) return 0;
+  return filters.reduce((count, node) => count + (isBitableFilterGroup(node) ? bitableFilterRuleCount(node.filters) : 1), 0);
+}
+
+/** 某个操作符右侧值 UI 的类型；none = 该操作符不需要值。 */
+export function filterValueKindFor(field: BitableField, operator: BitableFilterOperator): BitableFilterValueKind {
+  if (BITABLE_FILTER_EMPTY_OPERATORS.has(operator)) return "none";
+  if (field.type === "date" || isSystemTimeField(field.type)) return "date";
+  if (isNumericFieldType(field.type)) return "number";
+  if (field.type === "select") return "select";
+  if (field.type === "multiSelect" || isRelationFieldType(field.type)) return "multiSelect";
+  if (field.type === "boolean") return "boolean";
+  if (field.type === "attachment" || field.type === "image") return "file";
+  if (field.type === "text" || field.type === "link") return "text";
+  return "none";
+}
+
+/** 某个字段类型可用的筛选操作符（逐项对齐远端 lake 的类型分组）。 */
 export function filterOperatorsFor(field: BitableField): BitableFilterOperator[] {
-  if (isNumericFieldType(field.type) || field.type === "date" || isSystemTimeField(field.type)) return ["equals", "notEquals", "gt", "lt", "gte", "lte", "isEmpty", "isNotEmpty"];
-  if (field.type === "boolean") return ["equals", "notEquals", "isEmpty", "isNotEmpty"];
-  return ["contains", "notContains", "equals", "notEquals", "isEmpty", "isNotEmpty"];
+  if (field.type === "text" || field.type === "link") {
+    return ["startsWith", "notStartsWith", "endsWith", "notEndsWith", "contains", "notContains", "isEmpty", "isNotEmpty"];
+  }
+  if (isNumericFieldType(field.type)) {
+    return ["equalTo", "notEqualTo", "greaterThan", "greaterThanOrEqualTo", "lessThan", "lessThanOrEqualTo", "isEmpty", "isNotEmpty"];
+  }
+  if (field.type === "date" || isSystemTimeField(field.type)) {
+    return ["equalTo", "lessThan", "greaterThan", "isEmpty", "isNotEmpty"];
+  }
+  if (field.type === "select") return ["is", "isNot", "isEmptySelect", "isNotEmptySelect"];
+  if (field.type === "multiSelect" || isRelationFieldType(field.type)) {
+    return ["isExactly", "isNot", "hasAnyOf", "hasAllOf", "hasNoneOf", "isEmptySelect", "isNotEmptySelect"];
+  }
+  if (field.type === "boolean") return ["equalTo"];
+  if (field.type === "attachment" || field.type === "image") return ["isEmpty", "isNotEmpty"];
+  return [];
 }
 
 export const BITABLE_FILTER_OPERATOR_LABEL: Record<BitableFilterOperator, string> = {
+  equalTo: "等于",
+  notEqualTo: "不等于",
+  greaterThan: "大于",
+  greaterThanOrEqualTo: "大于等于",
+  lessThan: "小于",
+  lessThanOrEqualTo: "小于等于",
+  isEmpty: "为空",
+  isNotEmpty: "非空",
+  startsWith: "开头是",
+  notStartsWith: "开头不是",
+  endsWith: "结尾是",
+  notEndsWith: "结尾不是",
   contains: "包含",
   notContains: "不包含",
-  equals: "等于",
-  notEquals: "不等于",
-  isEmpty: "为空",
-  isNotEmpty: "不为空",
-  gt: "大于",
-  lt: "小于",
-  gte: "大于等于",
-  lte: "小于等于",
+  is: "是",
+  isNot: "不是",
+  isEmptySelect: "为空",
+  isNotEmptySelect: "非空",
+  isExactly: "是",
+  hasAnyOf: "包含一个",
+  hasAllOf: "包含所有",
+  hasNoneOf: "不包含",
 };
 
+/** 操作符展示文案（日期类把小于/大于改为远端 lake 的早于/晚于）。 */
+export function filterOperatorLabel(field: BitableField, operator: BitableFilterOperator): string {
+  if (field.type === "date" || isSystemTimeField(field.type)) {
+    if (operator === "lessThan") return "早于";
+    if (operator === "greaterThan") return "晚于";
+  }
+  return BITABLE_FILTER_OPERATOR_LABEL[operator];
+}
+
+export const BITABLE_DATE_FILTER_MODE_LABEL: Record<BitableDateFilterMode, string> = {
+  custom: "具体日期",
+  today: "今天",
+  tomorrow: "明天",
+  yesterday: "昨天",
+  thisWeek: "本周",
+  lastWeek: "上周",
+  nextWeek: "下周",
+  lastMonth: "上月",
+  thisMonth: "本月",
+  nextMonth: "下月",
+  thisYear: "本年",
+  last7days: "过去7天内",
+  next7days: "未来7天内",
+  last30days: "过去30天内",
+  next30days: "未来30天内",
+};
+
+const BITABLE_DATE_FILTER_MODES: BitableDateFilterMode[] = [
+  "custom", "today", "tomorrow", "yesterday", "thisWeek", "lastWeek", "nextWeek", "lastMonth", "thisMonth",
+  "nextMonth", "thisYear", "last7days", "next7days", "last30days", "next30days",
+];
+
+/** 日期规则右侧可选模式；与远端 bundle 的 matchFuncs 一致：滚动 7/30 天只用于“等于”。 */
+export function dateFilterModesFor(operator: BitableFilterOperator): BitableDateFilterMode[] {
+  if (operator === "equalTo") return BITABLE_DATE_FILTER_MODES;
+  return ["custom", "today", "tomorrow", "yesterday", "thisWeek", "lastWeek", "nextWeek", "lastMonth", "thisMonth", "nextMonth", "thisYear"];
+}
+
+export function defaultFilterValueFor(field: BitableField, operator: BitableFilterOperator): BitableFilterValue | undefined {
+  const kind = filterValueKindFor(field, operator);
+  if (kind === "none") return undefined;
+  if (kind === "boolean") return undefined;
+  if (kind === "select") return "";
+  if (kind === "multiSelect") return [];
+  return "";
+}
+
+/** 新建一条默认规则（默认字段必须可筛选）。 */
+export function createBitableFilterRule(field: BitableField, id = newBitableId("flt")): BitableFilterRule {
+  const operator = filterOperatorsFor(field)[0] ?? "isEmpty";
+  const rule: BitableFilterRule = { id, fieldId: field.id, operator };
+  const value = defaultFilterValueFor(field, operator);
+  if (value !== undefined) rule.value = value;
+  if (field.type === "date" || isSystemTimeField(field.type)) rule.valueMode = "custom";
+  return rule;
+}
+
+export function createBitableFilterGroup(id = newBitableId("fgr"), operator: BitableFilterJoin = "or"): BitableFilterGroup {
+  return { id, operator, filters: [] };
+}
+
+function startOfLocalDay(at: Date): Date { return new Date(at.getFullYear(), at.getMonth(), at.getDate()); }
+function endOfLocalDay(at: Date): Date { return new Date(at.getFullYear(), at.getMonth(), at.getDate(), 23, 59, 59, 999); }
+function startOfLocalWeek(at: Date): Date {
+  const day = (at.getDay() + 6) % 7; // 周一为一周起点，与日历视图一致
+  return new Date(at.getFullYear(), at.getMonth(), at.getDate() - day);
+}
+function addLocalDays(at: Date, days: number): Date {
+  return new Date(at.getFullYear(), at.getMonth(), at.getDate() + days, at.getHours(), at.getMinutes(), at.getSeconds(), at.getMilliseconds());
+}
+
+/** 动态日期 → 本地日期闭区间；custom 返回 null。 */
+export function dateFilterRangeFor(mode: BitableDateFilterMode, now: Date = new Date()): { start: string; end: string } | null {
+  if (mode === "custom") return null;
+  if (mode === "today") return { start: localDateString(startOfLocalDay(now)), end: localDateString(endOfLocalDay(now)) };
+  if (mode === "tomorrow") { const d = addLocalDays(now, 1); return { start: localDateString(startOfLocalDay(d)), end: localDateString(endOfLocalDay(d)) }; }
+  if (mode === "yesterday") { const d = addLocalDays(now, -1); return { start: localDateString(startOfLocalDay(d)), end: localDateString(endOfLocalDay(d)) }; }
+  if (mode === "thisWeek") { const s = startOfLocalWeek(now); return { start: localDateString(s), end: localDateString(addLocalDays(s, 6)) }; }
+  if (mode === "lastWeek") { const s = addLocalDays(startOfLocalWeek(now), -7); return { start: localDateString(s), end: localDateString(addLocalDays(s, 6)) }; }
+  if (mode === "nextWeek") { const s = addLocalDays(startOfLocalWeek(now), 7); return { start: localDateString(s), end: localDateString(addLocalDays(s, 6)) }; }
+  if (mode === "thisMonth") return { start: localDateString(new Date(now.getFullYear(), now.getMonth(), 1)), end: localDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+  if (mode === "lastMonth") return { start: localDateString(new Date(now.getFullYear(), now.getMonth() - 1, 1)), end: localDateString(new Date(now.getFullYear(), now.getMonth(), 0)) };
+  if (mode === "nextMonth") return { start: localDateString(new Date(now.getFullYear(), now.getMonth() + 1, 1)), end: localDateString(new Date(now.getFullYear(), now.getMonth() + 2, 0)) };
+  if (mode === "thisYear") return { start: localDateString(new Date(now.getFullYear(), 0, 1)), end: localDateString(new Date(now.getFullYear(), 11, 31)) };
+  if (mode === "last7days") return { start: localDateString(addLocalDays(now, -7)), end: localDateString(now) };
+  if (mode === "next7days") return { start: localDateString(now), end: localDateString(addLocalDays(now, 7)) };
+  if (mode === "last30days") return { start: localDateString(addLocalDays(now, -30)), end: localDateString(now) };
+  return { start: localDateString(now), end: localDateString(addLocalDays(now, 30)) };
+}
+
+function ruleExpectedIsEmpty(rule: BitableFilterRule): boolean {
+  if (rule.value === undefined || rule.value === null) return true;
+  if (typeof rule.value === "string") return rule.value === "";
+  if (Array.isArray(rule.value)) return rule.value.length === 0;
+  return false;
+}
+
+function textMatches(actual: string, expected: string, operator: BitableFilterOperator): boolean {
+  const a = actual.toLowerCase();
+  const b = expected.toLowerCase();
+  if (operator === "startsWith") return a.startsWith(b);
+  if (operator === "notStartsWith") return !a.startsWith(b);
+  if (operator === "endsWith") return a.endsWith(b);
+  if (operator === "notEndsWith") return !a.endsWith(b);
+  if (operator === "contains") return a.includes(b);
+  if (operator === "notContains") return !a.includes(b);
+  return true;
+}
+
+function numericMatches(actual: unknown, expected: string, operator: BitableFilterOperator, zeroWhenEmpty = false): boolean {
+  if (operator === "isEmpty") return actual == null || actual === "";
+  if (operator === "isNotEmpty") return !(actual == null || actual === "");
+  const a = actual === "" || actual == null ? (zeroWhenEmpty ? 0 : NaN) : Number(actual);
+  const b = Number(expected);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  if (operator === "equalTo") return a === b;
+  if (operator === "notEqualTo") return a !== b;
+  if (operator === "greaterThan") return a > b;
+  if (operator === "greaterThanOrEqualTo") return a >= b;
+  if (operator === "lessThan") return a < b;
+  if (operator === "lessThanOrEqualTo") return a <= b;
+  return true;
+}
+
+function sameStringSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((value, index) => value === sb[index]);
+}
+
+function multiMatches(actualValues: string[], expectedValues: string[], operator: BitableFilterOperator): boolean {
+  if (operator === "isEmptySelect") return actualValues.length === 0;
+  if (operator === "isNotEmptySelect") return actualValues.length > 0;
+  if (operator === "isExactly") return sameStringSet(actualValues, expectedValues);
+  if (operator === "isNot") return !sameStringSet(actualValues, expectedValues);
+  if (operator === "hasAnyOf") return expectedValues.some((value) => actualValues.includes(value));
+  if (operator === "hasAllOf") return expectedValues.every((value) => actualValues.includes(value));
+  if (operator === "hasNoneOf") return expectedValues.every((value) => !actualValues.includes(value));
+  return true;
+}
+
+function dateMatches(actual: unknown, rule: BitableFilterRule, now: Date): boolean {
+  const day = dateValueOf(actual);
+  if (rule.operator === "isEmpty") return day === "";
+  if (rule.operator === "isNotEmpty") return day !== "";
+  if (!day) return false;
+  const mode = rule.valueMode ?? "custom";
+  let start = "";
+  let end = "";
+  if (mode === "custom") {
+    start = dateValueOf(rule.value);
+    end = start;
+  } else {
+    const range = dateFilterRangeFor(mode, now);
+    if (range) { start = range.start; end = range.end; }
+  }
+  if (!start) return false;
+  if (rule.operator === "equalTo") return day >= start && day <= end;
+  if (rule.operator === "lessThan") return day < start;
+  if (rule.operator === "greaterThan") return day > end;
+  return true;
+}
+
+/** 单条规则求值（公开供条件着色等复用；值不完整时视为“未配置”，不拦截记录）。 */
+export function evaluateFilter(field: BitableField, value: unknown, rule: BitableFilterRule, now: Date = new Date()): boolean {
+  const operator = rule.operator;
+  const kind = filterValueKindFor(field, operator);
+  if (kind !== "none" && ruleExpectedIsEmpty(rule)) return true;
+  if (operator === "isEmpty" || operator === "isEmptySelect") {
+    if (field.type === "attachment" || field.type === "image") return bitableAttachments(value).length === 0;
+    if (field.type === "multiSelect" || isRelationFieldType(field.type)) return relationRecordIds(value).length === 0;
+    if (field.type === "boolean") return value == null;
+    return value == null || value === "";
+  }
+  if (operator === "isNotEmpty" || operator === "isNotEmptySelect") return !evaluateFilter(field, value, { ...rule, operator: operator === "isNotEmptySelect" ? "isEmptySelect" : "isEmpty" }, now);
+  if (field.type === "date" || isSystemTimeField(field.type)) return dateMatches(value, rule, now);
+  if (field.type === "text" || field.type === "link") return textMatches(bitableDisplayValue(field, value), String(rule.value ?? ""), operator);
+  if (isNumericFieldType(field.type)) return numericMatches(value, String(rule.value ?? ""), operator, field.type === "rating" || field.type === "progress");
+  if (field.type === "boolean") {
+    const actual = value === true || value === "true";
+    const expected = rule.value === true || rule.value === "true";
+    return operator === "equalTo" ? actual === expected : true;
+  }
+  if (field.type === "select") {
+    const actual = Array.isArray(value) ? value[0] : value;
+    const expected = String(rule.value ?? "");
+    return operator === "is" ? actual === expected : operator === "isNot" ? actual !== expected : true;
+  }
+  if (field.type === "multiSelect" || isRelationFieldType(field.type)) {
+    return multiMatches(relationRecordIds(value), Array.isArray(rule.value) ? rule.value : typeof rule.value === "string" ? rule.value.split(",").filter(Boolean) : [], operator);
+  }
+  if (field.type === "attachment" || field.type === "image") {
+    return bitableAttachments(value).length > 0;
+  }
+  return true;
+}
+
+/** 递归求值一个筛选组（组内统一 AND/OR）。 */
+export function evaluateFilterGroup(
+  group: BitableFilterGroup,
+  record: BitableRecord,
+  fieldById: ReadonlyMap<string, BitableField>,
+  now: Date = new Date(),
+): boolean {
+  if (group.filters.length === 0) return true;
+  const check = (node: BitableFilterNode): boolean => evaluateFilterNode(node, record, fieldById, now);
+  return group.operator === "or" ? group.filters.some(check) : group.filters.every(check);
+}
+
+export function evaluateFilterNode(
+  node: BitableFilterNode,
+  record: BitableRecord,
+  fieldById: ReadonlyMap<string, BitableField>,
+  now: Date = new Date(),
+): boolean {
+  if (isBitableFilterGroup(node)) return evaluateFilterGroup(node, record, fieldById, now);
+  const field = fieldById.get(node.fieldId);
+  if (!field) return true;
+  return evaluateFilter(field, bitableFieldValue(record, field), node, now);
+}
+
 /** 对记录套用视图的筛选 + 排序（返回新数组，不改原值）。 */
-export function applyViewToRecords(table: BitableTable, view: BitableView | undefined): BitableRecord[] {
+export function applyViewToRecords(table: BitableTable, view: BitableView | undefined, options?: { now?: Date }): BitableRecord[] {
   const fieldById = new Map(table.fields.map((f) => [f.id, f] as const));
   let records = [...table.records];
   const filters = view?.filters ?? [];
   if (filters.length > 0) {
-    records = records.filter((record) =>
-      filters.every((rule) => {
-        const field = fieldById.get(rule.fieldId);
-        if (!field) return true;
-        return evaluateFilter(field, bitableFieldValue(record, field), rule);
-      }),
-    );
+    const group: BitableFilterGroup = { operator: view?.filterOperator ?? "and", filters };
+    const now = options?.now ?? new Date();
+    records = records.filter((record) => evaluateFilterGroup(group, record, fieldById, now));
   }
   const sorts = view?.sorts ?? [];
   if (sorts.length > 0) {

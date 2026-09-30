@@ -20,13 +20,13 @@ import {
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
-  BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, applyRelationMirror, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitablesToBody, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, relationRecordIds, unpairRelationFields,
+  BITABLE_OPTION_COLORS, BITABLE_TEXT_COLOR_PALETTE, applyViewToRecords, applyRelationMirror, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitablesToBody, bitableFilterRuleCount, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, relationRecordIds, unpairRelationFields,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
-  createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
+  createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, applySortMode, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
-  isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
-  type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
+  isBitableFilterGroup, isKnownFieldType, isRelationFieldType, newBitableId, orderedTableFields, parseBitableBody,
+  type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { StatCell } from "./bitableCells";
@@ -45,6 +45,7 @@ import { BitableViewBar } from "./BitableViewBar.js";
 import { bitableAssetUrl, openBitableAttachment } from "./bitableAssetUrl.js";
 import { CalendarConfigPanel, GalleryConfigPanel, KanbanConfigPanel } from "./BitableViewConfigPanels.js";
 import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeGrid, FieldTypeSelect, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
+import { BitableFilterEditor } from "./BitableFilterEditor.js";
 import { createSnapshotHistory, type SnapshotHistory } from "../../core/bitableHistory.js";
 import { BitableViewFallback, ViewTypeIcon } from "./bitableViews.js";
 import "./bitableEditor.css";
@@ -298,7 +299,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       const table = prev.tables.find((t) => t.id === tableId);
       const field = table?.fields.find((f) => f.id === fieldId);
       // 关联字段走**双向镜像唯一写入口**（非双向时行为等价于普通写值）；其余字段保持原路径
-      if (field && field.type === "relation") {
+      if (field && isRelationFieldType(field.type)) {
         return { ...prev, tables: applyRelationMirror(prev.tables, tableId, fieldId, recordId, relationRecordIds(value)) };
       }
       return {
@@ -467,7 +468,18 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           next.highlightDuplicateFieldIds = strip(next.highlightDuplicateFieldIds);
           next.kanbanFieldIds = strip(next.kanbanFieldIds);
           next.galleryFieldIds = strip(next.galleryFieldIds);
-          if (next.filters) next.filters = next.filters.filter((rule) => rule.fieldId !== fieldId);
+          const stripFilters = (nodes: readonly BitableFilterNode[]): BitableFilterNode[] => {
+            const out: BitableFilterNode[] = [];
+            for (const node of nodes) {
+              if (isBitableFilterGroup(node)) {
+                const children = stripFilters(node.filters);
+                if (children.length > 0) out.push({ ...node, filters: children });
+              }
+              else if (node.fieldId !== fieldId) out.push(node);
+            }
+            return out;
+          };
+          if (next.filters) next.filters = stripFilters(next.filters);
           if (next.sorts) next.sorts = next.sorts.filter((rule) => rule.fieldId !== fieldId);
           if (next.groups) next.groups = next.groups.filter((rule) => rule.fieldId !== fieldId);
           if (next.columnStats?.[fieldId] !== undefined) {
@@ -645,7 +657,10 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   // ---- 视图配置：筛选 / 排序 ----
   const filters = activeView.filters ?? [];
   const sorts = activeView.sorts ?? [];
-  const setFilters = (next: BitableFilterRule[]) => patchView(activeView.id, { filters: next });
+  const setFilters = (next: BitableFilterNode[], operator: BitableFilterJoin = activeView.filterOperator ?? "and") => patchView(
+    activeView.id,
+    next.length > 0 ? { filters: next, filterOperator: operator } : { filters: undefined, filterOperator: undefined },
+  );
   const setSorts = (next: BitableView["sorts"]) => patchView(activeView.id, { sorts: next });
   const setGroup = (next: BitableGroupRule | null) => patchView(activeView.id, { groups: next ? [next] : [] });
   const toggleGroup = (key: string) => setCollapsedGroups((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
@@ -1016,10 +1031,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             onClick={(event) => {
               setMenuAnchor(event.currentTarget);
               if (panel === "filter") { setPanel(null); return; }
-              if (filters.length === 0 && activeTable.fields.length > 0) setFilters([{ fieldId: activeTable.fields[0].id, operator: "contains", value: "" }]);
               setPanel("filter");
             }}>
-            <ListFilter size={14} />筛选{filters.length > 0 && <span className="bt-badge">{filters.length}</span>}
+            <ListFilter size={14} />筛选{bitableFilterRuleCount(filters) > 0 && <span className="bt-badge">{bitableFilterRuleCount(filters)}</span>}
           </button>
           {showGridTools && (
             <button type="button" className={"bt-tool-btn" + (panel === "group" ? " is-active" : "")}
@@ -1272,24 +1286,17 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         </div>
       </Popover>
 
-      <Popover open={panel === "filter"} anchor={menuAnchor} onClose={() => setPanel(null)} width={420}>
-        <div className="bt-panel">
-          <h4>筛选</h4>
-          {filters.map((rule, index) => (
-            <div key={index} className="bt-rule-row">
-              <SelectMenu value={rule.fieldId} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, fieldId: value } : r)))}
-                options={activeTable.fields.map((f) => ({ value: f.id, label: f.name }))} />
-              <SelectMenu value={rule.operator} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, operator: value as BitableFilterRule["operator"] } : r)))}
-                options={(filterOperatorsFor(activeTable.fields.find((f) => f.id === rule.fieldId) ?? activeTable.fields[0])).map((op) => ({ value: op, label: BITABLE_FILTER_OPERATOR_LABEL[op] }))} />
-              {rule.operator !== "isEmpty" && rule.operator !== "isNotEmpty" && (
-                <input value={rule.value ?? ""} placeholder="值" onChange={(event) => setFilters(filters.map((r, i) => (i === index ? { ...r, value: event.target.value } : r)))} />
-              )}
-              <button type="button" className="bt-icon-btn" title="删除规则" aria-label="删除规则" onClick={() => setFilters(filters.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
-            </div>
-          ))}
-          <button type="button" className="bt-panel-add" disabled={readOnly || activeTable.fields.length === 0}
-            onClick={() => setFilters([...filters, { fieldId: activeTable.fields[0].id, operator: "contains", value: "" }])}><Plus size={14} />添加筛选规则</button>
-          <button type="button" className="bt-panel-add danger" disabled={readOnly || filters.length === 0} onClick={() => setFilters([])}><Trash2 size={13} />删除筛选</button>
+      <Popover open={panel === "filter"} anchor={menuAnchor} onClose={() => setPanel(null)} width={820}>
+        <div className="bt-filter-panel">
+          <BitableFilterEditor
+            fields={activeTable.fields}
+            filters={filters}
+            operator={activeView.filterOperator ?? "and"}
+            readOnly={readOnly}
+            ctx={displayCtx}
+            onChange={(next, operator) => setFilters(next, operator)}
+            onClear={() => setFilters([], "and")}
+          />
         </div>
       </Popover>
 
@@ -1376,6 +1383,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         <div className="bt-panel">
           <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) setFieldEditor({ fieldId: columnMenu.fieldId }); setColumnMenu(null); }}><Pencil size={13} />编辑列</button>
           <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) duplicateField(columnMenu.fieldId); }}><Copy size={13} />复制列</button>
+          <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) toggleFieldHidden(columnMenu.fieldId); setColumnMenu(null); }}><EyeOff size={13} />隐藏列</button>
           <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "before"); }}><ChevronRight size={13} />向左插入列</button>
           <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "after"); }}><ChevronRight size={13} />向右插入列</button>
           {/* 260928 用户：「本列分组 / 本列筛选 / 升序 / 降序」四条快捷项**彻底删除**
@@ -1412,7 +1420,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       </Popover>
 
       {textColorFor && (
-        <ColorPalette anchor={textColorFor.anchor} value={(activeView.columnTextColors ?? {})[textColorFor.fieldId]}
+        <ColorPalette anchor={textColorFor.anchor} value={(activeView.columnTextColors ?? {})[textColorFor.fieldId]} palette={BITABLE_TEXT_COLOR_PALETTE}
           onPick={(color) => patchView(activeView.id, { columnTextColors: { ...(activeView.columnTextColors ?? {}), [textColorFor.fieldId]: color } })}
           onClear={() => patchView(activeView.id, { columnTextColors: Object.fromEntries(Object.entries(activeView.columnTextColors ?? {}).filter(([id]) => id !== textColorFor.fieldId)) })}
           onClose={() => setTextColorFor(null)} />
@@ -1470,7 +1478,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             if (fieldId) {
               const before = activeTable.fields.find((f) => f.id === fieldId);
               const wasPaired = typeof before?.relation?.pairedFieldId === "string";
-              const wantsPair = patch.relation?.mode === "twoWay";
+              const wantsPair = patch.type === "relationTwoWay";
               updateField(fieldId, options ? { ...patch, options } : patch);
               // 双向开关：新建配对（在目标表生成反向字段）或解除配对（对侧降级为单向、数据保留）
               if (wantsPair && !wasPaired) setDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, fieldId) }));
@@ -1489,7 +1497,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             if (patch.relation) field.relation = patch.relation;
             patchActiveTable((table) => ({ ...table, fields: [...table.fields, field] }));
             // 新增即双向 → 立刻在目标表建反向字段并回填已有引用
-            if (patch.relation?.mode === "twoWay") setDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, field.id) }));
+            if (patch.type === "relationTwoWay") setDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, field.id) }));
             setFieldEditor(null);
           }}
         />
@@ -1587,13 +1595,13 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
   /** 关联字段配置（T02B.1/T02B.3）：目标表 + 是否允许多个记录 + 单向/双向。 */
   const [relationTableId, setRelationTableId] = useState<string>(typeof field?.relation?.tableId === "string" ? field.relation.tableId : "");
   const [relationAllowMultiple, setRelationAllowMultiple] = useState<boolean>(field?.relation?.allowMultiple !== false);
-  const [relationMode, setRelationMode] = useState<"oneWay" | "twoWay">(field?.relation?.mode === "twoWay" ? "twoWay" : "oneWay");
   /** **数据范围**（260929 用户追加）：勾选 = 绑定目标表的一个视图；不勾选 = 从目标表全部记录里选。 */
   const [relationViewId, setRelationViewId] = useState<string>(typeof field?.relation?.viewId === "string" ? field.relation.viewId : "");
   const relationTarget = tables.find((table) => table.id === relationTableId);
   const relationViews = relationTarget?.views ?? [];
   const supportsOptions = type === "select" || type === "multiSelect";
   const knownType = isKnownFieldType(type) ? (type as BitableFieldType) : null;
+  const isRelation = isRelationFieldType(type);
   /**
    * 选项编辑（用户口径）：**回车 = 当前选项编辑完成 → 切到下一个选项；已是最后一个才新建一个**。
    * ref map 让「切到下一个」能直接聚焦已存在的输入框；新建的则在 options 变化后的 effect 里聚焦。
@@ -1641,13 +1649,12 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
     const nextDefault = parseDefault();
     const dateAutoFill = knownType === "date" && dateMode === "created" ? true : undefined;
     const nextColor = knownType === "progress" ? progressColor : undefined;
-    // 关联配置：方向由用户选（双向时由 createRelationPair 建反向字段/写配对）；目标表未选则不写 tableId
-    const relation: BitableRelation | undefined = knownType === "relation" ? {
-      mode: relationMode,
+    // 关联配置：方向由字段类型决定（relationTwoWay 由 createRelationPair 建反向字段/写配对）；目标表未选则不写 tableId
+    const relation: BitableRelation | undefined = isRelation ? {
       allowMultiple: relationAllowMultiple,
       ...(relationTableId ? { tableId: relationTableId } : {}),
       ...(relationTableId && relationViewId ? { viewId: relationViewId } : {}),
-      ...(relationMode === "twoWay" && typeof field?.relation?.pairedFieldId === "string" ? { pairedFieldId: field.relation.pairedFieldId } : {}),
+      ...(type === "relationTwoWay" && typeof field?.relation?.pairedFieldId === "string" ? { pairedFieldId: field.relation.pairedFieldId } : {}),
     } : undefined;
     // 选项名兜底：新加的行留空（placeholder 才是默认名），保存时空名按位置落成「选项 N」——
     // 不加行时 `options` 原样返回，不产生任何差异。
@@ -1655,7 +1662,7 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
       ? options.map((option, index) => ({ ...option, name: option.name.trim() || "选项 " + (index + 1) }))
       : undefined;
     if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: nextOptions, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation }); return; }
-    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, ...(relation ? { relation } : {}) }, nextOptions);
+    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation: isRelation ? relation : undefined }, nextOptions);
   };
   return (
     <Dialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
@@ -1706,7 +1713,7 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
             )}
           </label>
         )}
-        {knownType === "relation" && (
+        {isRelation && (
           <>
             <div className="bt-field-label"><span>关联数据表</span>
               {/* 已配对的双向字段不允许改目标表（改表会让对侧反向字段失去意义） */}
@@ -1728,8 +1735,6 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
             )}
             <label className="bt-field-check"><input type="checkbox" checked={relationAllowMultiple} disabled={readOnly}
               onChange={(event) => setRelationAllowMultiple(event.target.checked)} />允许添加多个记录</label>
-            <label className="bt-field-check"><input type="checkbox" checked={relationMode === "twoWay"} disabled={readOnly || !relationTableId}
-              onChange={(event) => setRelationMode(event.target.checked ? "twoWay" : "oneWay")} />双向关联（在目标表生成反向字段）</label>
           </>
         )}
         {supportsOptions && (

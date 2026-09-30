@@ -1,0 +1,42 @@
+/* 多维表筛选编辑器：远端 lake「条件组 / 子组」结构。令牌全部走 --lake-*。 */
+.bt-filter-panel { width: 820px; max-width: calc(100vw - 24px); max-height: min(680px, calc(100vh - 24px)); overflow: auto; }
+.bt-filter-editor { display: flex; flex-direction: column; min-width: 0; padding: 8px 12px 0; }
+.bt-filter-group { display: flex; flex-direction: column; min-width: 0; }
+.bt-filter-line { display: grid; grid-template-columns: 60px minmax(0, 1fr) 32px; gap: 8px; align-items: start; min-width: 0; margin-top: 8px; }
+.bt-filter-join { display: flex; align-items: flex-start; justify-content: flex-start; min-width: 0; height: 32px; color: var(--lake-text-3); }
+.bt-filter-join .bt-select { width: 60px; }
+.bt-filter-join .bt-select-trigger { height: 32px; padding: 0 8px; border-color: transparent; background: transparent; color: var(--lake-text-2); }
+.bt-filter-join .bt-select-trigger:hover { background: var(--lake-bg-hover); }
+.bt-filter-join-text { display: inline-flex; align-items: center; height: 32px; padding: 0 8px; font-size: 13px; color: var(--lake-text-3); }
+.bt-filter-node { min-width: 0; }
+.bt-filter-rule { display: grid; grid-template-columns: minmax(130px, .72fr) minmax(110px, .62fr) minmax(160px, 1.2fr); gap: 8px; align-items: center; min-width: 0; }
+.bt-filter-rule .bt-select { min-width: 0; }
+.bt-filter-rule .bt-select-trigger { width: 100%; height: 32px; padding: 0 8px; }
+.bt-filter-input, .bt-filter-value-trigger { width: 100%; height: 32px; min-width: 0; padding: 0 10px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); color: var(--lake-text-1); font: inherit; text-align: left; }
+.bt-filter-input:focus, .bt-filter-value-trigger:focus { outline: 2px solid var(--lake-accent); outline-offset: -2px; }
+.bt-filter-value-trigger { display: flex; align-items: center; overflow: hidden; cursor: pointer; }
+.bt-filter-value-trigger:disabled { cursor: default; opacity: .55; }
+.bt-filter-value-text { min-width: 0; }
+.bt-filter-value-placeholder { display: block; height: 32px; }
+.bt-filter-boolean { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); color: var(--lake-text-1); }
+.bt-filter-date-value { display: grid; grid-template-columns: minmax(96px, .8fr) minmax(120px, 1.2fr); gap: 8px; min-width: 0; }
+.bt-filter-date-value .bt-select-trigger { width: 100%; height: 32px; padding: 0 8px; }
+.bt-filter-date-value .bt-date-trigger { width: 100%; height: 32px; border-radius: var(--lake-radius-xs); }
+.bt-filter-add { display: inline-flex; align-items: center; gap: 6px; height: 28px; margin: 8px 0; padding: 0; border: 0; background: transparent; color: var(--lake-text-3); font: inherit; cursor: pointer; }
+.bt-filter-add:hover { color: var(--lake-accent-text); }
+.bt-filter-setting-slot { display: flex; justify-content: flex-end; }
+.bt-filter-more { margin-top: 4px; }
+.bt-filter-group-surface { padding: 0 8px 4px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-subtle); }
+.bt-filter-group-surface .bt-filter-group-surface { background: var(--lake-bg-block); }
+.bt-filter-multi { display: flex; flex-direction: column; max-height: 320px; }
+.bt-filter-multi-search { display: flex; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--lake-border-2); color: var(--lake-text-3); }
+.bt-filter-multi-search .ln-input__field { flex: 1 1 auto; min-width: 0; }
+.bt-filter-multi-list { overflow: auto; padding: 4px; }
+.bt-filter-multi-empty { padding: 12px; color: var(--lake-text-3); font-size: 13px; text-align: center; }
+.bt-filter-empty { padding: 16px 12px; color: var(--lake-text-3); font-size: 13px; }
+.bt-filter-missing { display: inline-flex; align-items: center; height: 32px; color: var(--lake-text-3); }
+.bt-filter-hr { height: 1px; margin: 8px 0 0; background: var(--lake-border-2); }
+.bt-filter-delete { display: inline-flex; align-items: center; gap: 6px; height: 32px; margin: 8px 0; padding: 0 8px; border: 0; border-radius: var(--lake-radius-xs); background: transparent; color: var(--lake-status-error); font: inherit; cursor: pointer; }
+.bt-filter-delete:hover { background: var(--lake-bg-hover); }
+.bt-filter-delete:disabled { cursor: default; opacity: .45; }
+.is-danger { color: var(--lake-status-error); }

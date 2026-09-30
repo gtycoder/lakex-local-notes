@@ -21,6 +21,7 @@ import {
   isAttachmentLikeField,
   isImplementedViewType,
   isKnownViewType,
+  isRelationFieldType,
   optionChipStyle,
   orderedTableFields,
   parseBitableBody,
@@ -162,7 +163,7 @@ function FieldValue({ noteId, ctx, field, record }: { noteId: string; ctx: Bitab
   if (field.type === "link") return <LinkCell value={value} />;
   if (field.type === "rating") return <RatingCell value={value} />;
   if (field.type === "progress") return <ProgressCell value={value} />;
-  if (field.type === "relation") return <RelationCell ctx={ctx} field={field} value={value} />;
+  if (isRelationFieldType(field.type)) return <RelationCell ctx={ctx} field={field} value={value} />;
   const text = bitableFieldText(record, field, ctx);
   return text === "" ? <EmptyCell /> : <>{text}</>;
 }

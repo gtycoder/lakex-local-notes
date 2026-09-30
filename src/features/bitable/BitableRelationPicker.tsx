@@ -11,17 +11,18 @@
  * 可关联范围由字段的**数据范围**决定（`relation.viewId` → `relationCandidateRecords`，单一来源）；
  * 单元格里的 chip 展示仍走 `relationTargetRecords`（已选记录即使被数据范围过滤掉也照常显示）。
  */
-import { useMemo, useState } from "react";
-import { ArrowDownUp, Filter, Plus, Search, Trash2 } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { ArrowDownUp, Filter, Lock, Plus, Search, Trash2 } from "lucide-react";
 import {
-  BITABLE_FILTER_OPERATOR_LABEL, applySortMode, applyViewToRecords, bitableAttachments, bitableFieldText, bitableRecordTitle,
-  changeSortField, filterOperatorsFor, relationCandidateRecords, relationRecordIds, relationTargetTable,
-  relationTargetView, sortModeLabel, sortModeOf, sortModesForField, toggleRelationDraft,
-  type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFilterRule, type BitableRecord,
+  applySortMode, applyViewToRecords, bitableAttachments, bitableFieldText, bitableFilterRuleCount, bitableRecordTitle,
+  changeSortField, groupRecords, relationCandidateRecords, relationPickerFields,
+  relationRecordIds, relationTargetTable, relationTargetView, sortModeLabel, sortModeOf, sortModesForField, toggleRelationDraft,
+  type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFilterJoin, type BitableFilterNode, type BitableRecord,
   type BitableSortMode, type BitableSortRule, type BitableView,
 } from "../../core/bitableDoc.js";
 import { Dialog } from "../../components/ui/Overlay.js";
-import { AttachmentChipList, SelectMenu } from "./bitableCells.js";
+import { BitableFilterEditor } from "./BitableFilterEditor.js";
+import { AttachmentChipList, CellEditor, SelectMenu } from "./bitableCells.js";
 import { openBitableAttachment } from "./bitableAssetUrl.js";
 import "./bitableRelationPicker.css";
 
@@ -69,8 +70,19 @@ function PickerCellValue({ record, field, ctx, noteId, onOpenImages }: {
       </span>
     );
   }
-  const text = bitableFieldText(record, field, ctx);
-  return <>{text || <span className="bt-rel-blank">—</span>}</>;
+  return (
+    <CellEditor
+      field={field}
+      value={record.values[field.id]}
+      readOnly
+      onChange={() => undefined}
+      onAddOption={() => undefined}
+      record={record}
+      ctx={ctx}
+      noteId={noteId}
+      onOpenImages={onOpenImages}
+    />
+  );
 }
 
 export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages, onCancel, onConfirm }: BitableRelationPickerProps) {
@@ -81,11 +93,15 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
   const [tab, setTab] = useState<PickerTab>("all");
   const [query, setQuery] = useState("");
   /** 选择器**本机**的筛选 / 排序（不写正文；复用视图求值引擎，不另造一套规则实现）。 */
-  const [filters, setFilters] = useState<BitableFilterRule[]>([]);
+  const [filters, setFilters] = useState<BitableFilterNode[]>([]);
+  const [filterOperator, setFilterOperator] = useState<BitableFilterJoin>("and");
   const [sorts, setSorts] = useState<BitableSortRule[]>([]);
   const [panel, setPanel] = useState<"filter" | "sort" | null>(null);
 
-  const fields = target?.fields ?? [];
+  const fields = useMemo(() => relationPickerFields(ctx, field), [ctx, field]);
+  const ruleFields = target?.fields ?? [];
+  const viewFilters = scopeView?.filters ?? [];
+  const viewSorts = scopeView?.sorts ?? [];
   /** 可关联记录 = 目标表全部 或 字段绑定的数据范围视图（core 单一口径）。 */
   const candidates = useMemo(
     () => (target ? relationCandidateRecords(ctx, field) : []),
@@ -93,20 +109,25 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
   );
   const allRows = useMemo(() => {
     if (!target) return [];
-    const view: BitableView = { id: "rel-picker", name: "rel-picker", type: "grid", filters, sorts };
+    const view: BitableView = { id: "rel-picker", name: "rel-picker", type: "grid", filters, filterOperator, sorts };
     return applyViewToRecords({ ...target, records: candidates }, view);
-  }, [target, candidates, filters, sorts]);
+  }, [target, candidates, filters, filterOperator, sorts]);
   /** 已选页签：保持**选择顺序**（不参与字段排序），仍可被搜索与本机筛选收敛。 */
   const selectedRows = useMemo(() => {
     if (!target) return [];
     const byId = new Map(target.records.map((record) => [record.id, record] as const));
     const picked = draft.map((id) => byId.get(id)).filter((record): record is BitableRecord => !!record);
-    return applyViewToRecords({ ...target, records: picked }, { id: "rel-picker-picked", name: "rel-picker-picked", type: "grid", filters });
-  }, [target, draft, filters]);
+    return applyViewToRecords({ ...target, records: picked }, { id: "rel-picker-picked", name: "rel-picker-picked", type: "grid", filters, filterOperator });
+  }, [target, draft, filters, filterOperator]);
 
   const q = query.trim().toLowerCase();
-  const matches = (record: BitableRecord) => !q || fields.some((item) => bitableFieldText(record, item, ctx).toLowerCase().includes(q));
+  const matches = (record: BitableRecord) => !q || ruleFields.some((item) => bitableFieldText(record, item, ctx).toLowerCase().includes(q));
   const rows = (tab === "all" ? allRows : selectedRows).filter(matches);
+  const groupedRows = useMemo(() => {
+    const rule = tab === "all" ? scopeView?.groups?.[0] : undefined;
+    if (!target || !rule) return [{ key: "", label: "", records: rows }];
+    return groupRecords(target, rows, rule);
+  }, [target, rows, scopeView, tab]);
   const draftSet = new Set(draft);
   const toggle = (recordId: string) => setDraft((prev) => toggleRelationDraft(prev, recordId, allowMultiple));
 
@@ -137,10 +158,10 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
           <input className="ln-input__field" autoFocus value={query} placeholder="搜索相关记录" aria-label="搜索相关记录"
             onChange={(event) => setQuery(event.target.value)} />
         </span>
-        <button type="button" className={"bt-icon-btn" + (filters.length > 0 ? " is-on" : "")}
+        <button type="button" className={"bt-icon-btn" + (bitableFilterRuleCount(viewFilters) > 0 || bitableFilterRuleCount(filters) > 0 ? " is-on" : "")}
           title="筛选" aria-label="筛选" aria-expanded={panel === "filter"}
           onClick={() => setPanel((prev) => (prev === "filter" ? null : "filter"))}><Filter size={15} /></button>
-        <button type="button" className={"bt-icon-btn" + (sorts.length > 0 ? " is-on" : "")}
+        <button type="button" className={"bt-icon-btn" + (viewSorts.length > 0 || sorts.length > 0 ? " is-on" : "")}
           title="排序" aria-label="排序" aria-expanded={panel === "sort"}
           onClick={() => setPanel((prev) => (prev === "sort" ? null : "sort"))}><ArrowDownUp size={15} /></button>
       </div>
@@ -149,32 +170,34 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
       {panel === "filter" && (
         <section className="bt-rel-config" aria-label="筛选条件">
           <span className="bt-rel-config-title">筛选</span>
-          {filters.map((rule, index) => (
-            <div key={index} className="bt-rule-row">
-              <SelectMenu value={rule.fieldId} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, fieldId: value } : r)))}
-                options={fields.map((item) => ({ value: item.id, label: item.name }))} />
-              <SelectMenu value={rule.operator} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, operator: value as BitableFilterRule["operator"] } : r)))}
-                options={filterOperatorsFor(fields.find((f) => f.id === rule.fieldId) ?? fields[0]).map((op) => ({ value: op, label: BITABLE_FILTER_OPERATOR_LABEL[op] }))} />
-              {rule.operator !== "isEmpty" && rule.operator !== "isNotEmpty" && (
-                <input value={rule.value ?? ""} placeholder="值" onChange={(event) => setFilters(filters.map((r, i) => (i === index ? { ...r, value: event.target.value } : r)))} />
-              )}
-              <button type="button" className="bt-icon-btn" title="删除规则" aria-label="删除规则"
-                onClick={() => setFilters(filters.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
+          {viewFilters.length > 0 && (
+            <div className="bt-rel-view-filter">
+              <span className="bt-rel-rule-badge"><Lock size={12} />视图</span>
+              <BitableFilterEditor fields={ruleFields} filters={viewFilters} operator={scopeView?.filterOperator ?? "and"} readOnly ctx={ctx} />
             </div>
-          ))}
-          <button type="button" className="bt-panel-add" disabled={fields.length === 0}
-            onClick={() => setFilters([...filters, { fieldId: fields[0].id, operator: "contains", value: "" }])}><Plus size={14} />添加筛选规则</button>
+          )}
+          <BitableFilterEditor fields={ruleFields} filters={filters} operator={filterOperator} ctx={ctx}
+            onChange={(next, operator) => { setFilters(next); setFilterOperator(operator); }} />
         </section>
       )}
       {panel === "sort" && (
         <section className="bt-rel-config" aria-label="排序">
           <span className="bt-rel-config-title">排序</span>
+          {viewSorts.map((rule, index) => {
+            const item = ruleFields.find((fieldItem) => fieldItem.id === rule.fieldId);
+            return (
+              <div key={"view-sort-" + index} className="bt-rule-row is-view">
+                <span className="bt-rel-rule-badge"><Lock size={12} />视图</span>
+                <span className="bt-rel-rule-text">{item ? item.name + " · " + sortModeLabel(item, sortModeOf(rule)) : "已删除字段"}</span>
+              </div>
+            );
+          })}
           {sorts.map((rule, index) => (
             <div key={index} className="bt-rule-row">
-              <SelectMenu value={rule.fieldId} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? changeSortField(fields, r, value) : r)))}
-                options={fields.map((item) => ({ value: item.id, label: item.name }))} />
+              <SelectMenu value={rule.fieldId} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? changeSortField(ruleFields, r, value) : r)))}
+                options={ruleFields.map((item) => ({ value: item.id, label: item.name }))} />
               {(() => {
-                const item = fields.find((f) => f.id === rule.fieldId) ?? fields[0];
+                const item = ruleFields.find((f) => f.id === rule.fieldId) ?? ruleFields[0];
                 return (
                   <SelectMenu value={sortModeOf(rule)} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? applySortMode(r, value as BitableSortMode) : r)))}
                     options={sortModesForField(item).map((mode) => ({ value: mode, label: sortModeLabel(item, mode) }))} />
@@ -184,8 +207,8 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
                 onClick={() => setSorts(sorts.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
             </div>
           ))}
-          <button type="button" className="bt-panel-add" disabled={fields.length === 0}
-            onClick={() => setSorts([...sorts, { fieldId: fields[0].id, desc: false }])}><Plus size={14} />添加排序</button>
+          <button type="button" className="bt-panel-add" disabled={ruleFields.length === 0}
+            onClick={() => setSorts([...sorts, { fieldId: ruleFields[0].id, desc: false }])}><Plus size={14} />添加排序</button>
         </section>
       )}
       <div className="bt-rel-body">
@@ -202,26 +225,38 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
               </tr>
             </thead>
             <tbody>
-              {rows.map((record) => {
-                const title = target ? bitableRecordTitle(target, record, ctx) : "";
-                const checked = draftSet.has(record.id);
-                return (
-                  <tr key={record.id} className={checked ? "is-selected" : ""} onClick={() => toggle(record.id)}>
-                    <td className="bt-rel-check">
-                      <input type="checkbox" checked={checked} aria-label={"选择 " + title}
-                        onClick={(event) => event.stopPropagation()} onChange={() => toggle(record.id)} />
-                    </td>
-                    {fields.map((item) => {
-                      const text = bitableFieldText(record, item, ctx);
-                      return (
-                        <td key={item.id} title={text}>
-                          <PickerCellValue record={record} field={item} ctx={ctx} noteId={noteId} onOpenImages={onOpenImages} />
+              {groupedRows.map((group) => (
+                <Fragment key={group.key || "all-records"}>
+                  {group.label && (
+                    <tr className="bt-rel-group-row">
+                      <td colSpan={fields.length + 1}>
+                        <span className="bt-rel-group-label">{group.label}</span>
+                        <span className="bt-rel-group-count">{group.records.length} 条</span>
+                      </td>
+                    </tr>
+                  )}
+                  {group.records.map((record) => {
+                    const title = target ? bitableRecordTitle(target, record, ctx) : "";
+                    const checked = draftSet.has(record.id);
+                    return (
+                      <tr key={record.id} className={checked ? "is-selected" : ""} onClick={() => toggle(record.id)}>
+                        <td className="bt-rel-check">
+                          <input type="checkbox" checked={checked} aria-label={"选择 " + title}
+                            onClick={(event) => event.stopPropagation()} onChange={() => toggle(record.id)} />
                         </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+                        {fields.map((item) => {
+                          const text = bitableFieldText(record, item, ctx);
+                          return (
+                            <td key={item.id} title={text}>
+                              <PickerCellValue record={record} field={item} ctx={ctx} noteId={noteId} onOpenImages={onOpenImages} />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         )}

@@ -20,7 +20,7 @@ const body = JSON.stringify({
         { id: "f-link", name: "链接", type: "link" },
         { id: "f-rate", name: "评分", type: "rating" },
         { id: "f-prog", name: "进度", type: "progress" },
-        { id: "f-rel", name: "关联", type: "relation", relation: { tableId: "t2", mode: "oneWay", allowMultiple: true } },
+        { id: "f-rel", name: "单向关联", type: "relationOneWay", relation: { tableId: "t2", allowMultiple: true } },
         { id: "f-created", name: "创建时间", type: "createdTime" },
       ],
       records: [
