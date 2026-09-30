@@ -99,7 +99,7 @@ export function App() {
   // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
   // pending 计数刷新已收敛为主进程 IPC 层事件广播（思源模式）：pending-summary-changed 单点订阅，
   // 渲染层不再需要各操作点手动触发（历史上 10+ 处手动刷新屡有遗漏）。
-  const { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent } = useSavePipelineGlue({
+  const { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent, handleCaptureReady } = useSavePipelineGlue({
     setNotes, setTreeNodes, setSync, setOpenTabs, setDraftEntries, setError, openTabsRef, editorsRef,
   });
 
@@ -522,6 +522,7 @@ export function App() {
             onContentChange={handleContentChange}
             onPreserveBitableDraft={preserveBitableDraft}
             onEditorReady={handleEditorReady}
+        onEditorCapture={handleCaptureReady}
             onReloadNote={reloadNoteTab}
             onCreateNote={() => void createNote()}
             outlineSlot={outlineVisible ? (

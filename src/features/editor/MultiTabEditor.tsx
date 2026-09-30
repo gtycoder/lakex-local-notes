@@ -54,6 +54,8 @@ interface MultiTabEditorProps {
   visible?: boolean;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
+  /** 审计 F15：Sheet/Board 注册按需同步序列化（关闭/保存/退出时现取），null 表示卸载。 */
+  onEditorCapture?: (noteId: string, capture: (() => string | null) | null) => void;
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote?: (noteId: string) => void;
   /** 顶栏左侧元素（工作空间/云同步），渲染在标签左侧，与多 tab 融合成一条顶栏 */
@@ -81,6 +83,7 @@ export function MultiTabEditor({
   visible = true,
   prefs,
   onEditorReady,
+  onEditorCapture,
   onReloadNote,
   onOpenTrash,
   topbarLeading,
@@ -428,6 +431,8 @@ export function MultiTabEditor({
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
               />
             </EditorErrorBoundary>
           ) : tab.kind === "bitable" ? (
@@ -449,6 +454,8 @@ export function MultiTabEditor({
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
               />
             </EditorErrorBoundary>
           ) : (

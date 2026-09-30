@@ -260,6 +260,10 @@ export interface SheetEditorProps {
   visible: boolean;
   readOnly: boolean;
   onChange: (content: string) => void;
+  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖），让外层 dirty / 关闭 / 退出及时看到。 */
+  onDirty?: () => void;
+  /** 审计 F15：注册按需同步序列化（关闭/保存时现取），避免「改完 <800ms 就关」丢最后编辑。 */
+  onEditorCapture?: (capture: (() => string | null) | null) => void;
   /** 是否显示内核工具条（默认 true）。历史快照预览传 false ⇒ 只读预览不要"半个编辑器"的观感。 */
   showToolbar?: boolean;
 }
@@ -335,7 +339,7 @@ function initialSheets(content: string, noteId: string): SheetWorksheet[] {
     .map((sheet) => withRenderableImageSrc(sheet, noteId));
 }
 
-export function SheetEditor({ noteId, content, visible, readOnly, onChange, showToolbar = true }: SheetEditorProps) {
+export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture, showToolbar = true }: SheetEditorProps) {
   const workbookRef = useRef<WorkbookInstance>(null);
   /** 宿主容器：只用来观察宽度变化（见下方「补发 resize」effect）。 */
   const hostRef = useRef<HTMLDivElement>(null);
@@ -361,6 +365,20 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, show
   const promoteInFlightRef = useRef(0);
   /** 本次会话已提升过的 data URL → 资产 URL（保存时按它换写盘口径；同一张图不重复上传）。 */
   const promotedRef = useRef<Map<string, string>>(new Map());
+  // 审计 F15：回调放 ref（避免父层内联函数导致重复注册）+ 按需同步序列化。
+  const onDirtyRef = useRef(onDirty);
+  onDirtyRef.current = onDirty;
+  const onEditorCaptureRef = useRef(onEditorCapture);
+  onEditorCaptureRef.current = onEditorCapture;
+  const captureContent = useCallback((): string | null => {
+    if (readOnlyRef.current) return null;
+    if (promoteInFlightRef.current > 0) return null; // 图片提升未落地：不写 data URL 版本
+    return sheetsToBody(withPromotedImageSrc(latestRef.current, promotedRef.current));
+  }, []);
+  useEffect(() => {
+    onEditorCaptureRef.current?.(captureContent);
+    return () => { onEditorCaptureRef.current?.(null); };
+  }, [captureContent]);
   /** 同一张 data URL 的并发提升去重（打开时自愈与首次变更可能同时触发）。 */
   const promoteInflightRef = useRef<Map<string, Promise<string | null>>>(new Map());
   /** 单元格图片（P2）：选择本地图片用的隐藏 input。 */
@@ -933,6 +951,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, show
   };
   const scheduleSave = () => {
     if (readOnlyRef.current) return;
+    onDirtyRef.current?.(); // 立即标脏（不等 800ms 内部防抖）
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => { timerRef.current = null; flush(); }, AUTOSAVE_DEBOUNCE_MS);
   };
