@@ -5,7 +5,6 @@ import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
-import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick, extractImagesFromContent } from "./imagePreview";
 import { attachFileCardClick, buildAttachmentPreviewItem, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { openAssetEntry } from "../attachment/openAssetEntry";
@@ -13,7 +12,6 @@ import { CardContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { attachLongPress } from "./longPress";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
-import { AttachmentPreview } from "../attachment/AttachmentPreview";
 import { isDesktop, native } from "../../lib/native";
 
 interface LakeEditorProps {
@@ -185,8 +183,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   if (error) {
     return <div className="editor-error"><AlertCircle size={18} /><span>{error}</span></div>;
   }
-  // ImageLightbox：图片点击放大预览（桌面/移动端共用）。单例控制器，任何 LakeEditor
-  // 实例挂载即提供预览 UI；previewImgs 事件由 envAdapter 转发到控制器。
+  // 预览事件由 envAdapter 转发到共享控制器，UI 只由应用根挂载。
   const attachmentPrefs = prefs?.attachment;
   const openOriginalFromMenu = (it: AttachmentPreviewItem): void => {
     if (attachmentPrefs?.onOpenAttachment) attachmentPrefs.onOpenAttachment(it);
@@ -197,8 +194,6 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   return (
     <>
       <div className={`lake-editor lake-${mode}`} ref={hostRef} />
-      <ImageLightbox />
-      <AttachmentPreview />
       {cardMenu && (
         <CardContextMenu
           x={cardMenu.x}

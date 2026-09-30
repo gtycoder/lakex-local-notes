@@ -6,7 +6,6 @@ import { createRequestVersion } from "../core/requestVersion";
 import { isQuickNoteImageMime } from "../core/quickNoteModel";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, ResourceUploadOutput, TreeNode } from "../lib/types";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
-import { ImageLightbox } from "../features/editor/ImageLightbox";
 import { uploadLakeResource } from "../features/editor/resourceUpload";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../features/quickNotes/QuickNoteEditor";
 import { QuickNotePreview } from "../features/quickNotes/QuickNotePreview";
@@ -796,7 +795,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       </div>
     </div>}
     {/* 卡片里的图片点击放大：复用编辑器同一套 Lightbox 单例（与 EditorTab / LakeEditor 同款挂法） */}
-    <ImageLightbox />
     {pendingDelete && <div className="quick-notes-toast" role="status" aria-live="polite"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
     {/* 排序菜单 / 行内 ⋯ 菜单：标准 <Menu>（portal + 外点/Esc + .quick-notes-*-menu 表面） */}
     <Menu open={sortOpen} onDismiss={() => setSortOpen(false)} surfaceClassName="quick-notes-sort-menu" style={sortMenuPos ?? undefined}>

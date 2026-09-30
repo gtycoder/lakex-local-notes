@@ -40,6 +40,7 @@ export interface DesktopLibraryProps {
   onTabsReorder: (ordered: string[]) => void;
   onTogglePin: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
+  onPreserveBitableDraft?: (noteId: string, content: string) => void;
   onEditorReady: (noteId: string, editor: LakeEditorInstance | null) => void;
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote: (noteId: string) => void;
@@ -118,6 +119,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         pinnedNoteIds={pinnedNoteIds}
         onTogglePin={onTogglePin}
         onContentChange={onContentChange}
+        onPreserveBitableDraft={props.onPreserveBitableDraft}
         prefs={editorPrefs}
         onEditorReady={onEditorReady}
         onReloadNote={onReloadNote}

@@ -27,6 +27,8 @@ import { useSavePipeline } from "./hooks/useSavePipeline";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
+import { ImageLightbox } from "./features/editor/ImageLightbox";
+import { AttachmentPreview } from "./features/attachment/AttachmentPreview";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import type { TreeNode } from "./lib/types";
@@ -116,6 +118,21 @@ export function App() {
     getOpenTab: handleGetOpenTab,
     getEditorCaches: handleGetEditorCaches,
   });
+
+  const preserveBitableDraft = useCallback((noteId: string, content: string) => {
+    const saveTimer = saveTimers.current.get(noteId);
+    if (saveTimer !== undefined) { window.clearTimeout(saveTimer); saveTimers.current.delete(noteId); }
+    const draftTimer = draftTimers.current.get(noteId);
+    if (draftTimer !== undefined) { window.clearTimeout(draftTimer); draftTimers.current.delete(noteId); }
+    // 已经在途的旧保存响应不能清掉这份恢复草稿。
+    bumpRevision(noteId);
+    const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
+    const entry = { noteId, title, content, updatedAt: new Date().toISOString() };
+    void native.saveDraftJournal(entry).then(() => {
+      setDraftEntries((entries) => [...entries.filter((item) => item.noteId !== noteId), entry]);
+      showNotice("文档已只读，切换前的未保存输入已保留为本机草稿；解锁或恢复后可恢复草稿。");
+    }).catch((reason) => setError("保留多维表草稿失败：" + getNativeErrorMessage(reason)));
+  }, [saveTimers, draftTimers, bumpRevision, openTabsRef, setDraftEntries, showNotice, setError]);
 
   const { evictTabsForLimit, openNote, restoreDraft, discardDraft } = useTabLifecycle({
     settingsMaxOpenTabs: settings.maxOpenTabs,
@@ -432,6 +449,9 @@ export function App() {
 
   return (
     <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
+      {/* 单例控制器只配一个应用级宿主，keep-alive 编辑器/历史/小记共享。 */}
+      <ImageLightbox />
+      <AttachmentPreview />
       {/* 整边触发（左）：隐形 8px 热区 + 跟手把手 —— 资料库空间（260922） */}
       {desktopWorkspace === "library" && (
         <div
@@ -499,6 +519,7 @@ export function App() {
             onTabsReorder={reorderTabs}
             onTogglePin={handleTogglePin}
             onContentChange={handleContentChange}
+            onPreserveBitableDraft={preserveBitableDraft}
             onEditorReady={handleEditorReady}
             onReloadNote={reloadNoteTab}
             onCreateNote={() => void createNote()}

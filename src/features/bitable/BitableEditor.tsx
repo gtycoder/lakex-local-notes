@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
-  BITABLE_OPTION_COLORS, applyViewToRecords, applyRelationMirror, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitablesToBody, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, relationRecordIds, stripFillRulesForField, unpairRelationFields,
+  BITABLE_OPTION_COLORS, applyViewToRecords, applyRelationMirror, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, relationRecordIds, stripFillRulesForField, unpairRelationFields,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
@@ -34,9 +34,7 @@ import { StatCell } from "./bitableCells";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
-import { AttachmentPreview } from "../attachment/AttachmentPreview.js";
 import { openImagePreview } from "../editor/imagePreview.js";
-import { ImageLightbox } from "../editor/ImageLightbox.js";
 import { BitableCalendarView } from "./BitableCalendarView.js";
 import { BitableFormView } from "./BitableFormView.js";
 import { BitableGalleryView } from "./BitableGalleryView.js";
@@ -48,11 +46,10 @@ import { CalendarConfigPanel, GalleryConfigPanel, KanbanConfigPanel } from "./Bi
 import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeGrid, FieldTypeSelect, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
 import { BitableFillEditor } from "./BitableFillEditor.js";
 import { BitableFilterEditor } from "./BitableFilterEditor.js";
-import { createSnapshotHistory, type SnapshotHistory } from "../../core/bitableHistory.js";
+import { useBitableSession } from "./useBitableSession";
 import { BitableViewFallback, ViewTypeIcon } from "./bitableViews.js";
 import "./bitableEditor.css";
 
-const AUTOSAVE_DEBOUNCE_MS = 800;
 const DEFAULT_COL_WIDTH = 180;
 /**
  * 列的**硬宽度**（用户 260930：「所有的列都是根据内容长度算的左右宽度，我需要能自由设置」）。
@@ -106,56 +103,38 @@ function stamp(): string {
   return new Date().toISOString();
 }
 
+/** 网格快捷键不能抢弹窗草稿、输入控件或应用共享预览的事件。 */
+function isGridShortcut(event: KeyboardEvent, root: HTMLElement | null): boolean {
+  if (event.isComposing || event.altKey || !root?.isConnected) return false;
+  if (document.querySelector('[aria-modal="true"], .image-lightbox, .attachment-preview')) return false;
+  const target = event.target instanceof HTMLElement && event.target !== document.body
+    ? event.target : document.activeElement;
+  if (!target || target === document.body || target === document.documentElement) return true;
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.closest('input, textarea, [contenteditable="true"], [role="dialog"], [data-context-menu], .bt-form-shell')) return false;
+  return root.contains(target) && Boolean(target.closest(".bt-grid-wrap"));
+}
+
 export interface BitableEditorProps {
   noteId: string;
   content: string;
   visible: boolean;
   readOnly: boolean;
   onChange: (content: string) => void;
+  /** 进入只读时保留先前合法但尚未发布的输入；不写回只读正文。 */
+  onPreserveDraft?: (content: string) => void;
   /** 是否显示编辑器外壳（数据表列表 / 视图页签 / 工具条，默认 true）。历史快照预览传 false。 */
   chrome?: boolean;
 }
 
-export function BitableEditor({ noteId, content, visible, readOnly, onChange, chrome = true }: BitableEditorProps) {
-  const [doc, setDoc] = useState<BitableDoc>(() => initialDoc(content));
-  const docRef = useRef(doc);
-  docRef.current = doc;
-  const lastSerializedRef = useRef(bitablesToBody(doc.tables, doc.activeTableId));
-  const timerRef = useRef<number | null>(null);
-  const changeRef = useRef(onChange);
-  changeRef.current = onChange;
-  /** 撤销/重做：快照 doc.tables（数据），不记录 activeTableId/activeViewId 这类导航态。 */
-  const historyRef = useRef<SnapshotHistory<BitableTable[]> | null>(null);
-  if (historyRef.current === null) historyRef.current = createSnapshotHistory<BitableTable[]>(100);
-  const prevTablesRef = useRef<BitableTable[] | null>(null);
+export function BitableEditor({ noteId, content, visible, readOnly, onChange, onPreserveDraft, chrome = true }: BitableEditorProps) {
+  const { doc, docRef, updateDoc, navigateDoc, beginGesture, endGesture, undoEdit, redoEdit } = useBitableSession(
+    () => initialDoc(content), { readOnly, onChange, onPreserveDraft },
+  );
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
-
-  const flushNow = useCallback(() => {
-    const current = docRef.current;
-    const json = bitablesToBody(current.tables, current.activeTableId);
-    if (json === lastSerializedRef.current) return;
-    lastSerializedRef.current = json;
-    changeRef.current(json);
-  }, []);
-
-  useEffect(() => {
-    if (readOnly) return;
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => { timerRef.current = null; flushNow(); }, AUTOSAVE_DEBOUNCE_MS);
-    return () => {
-      if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
-    };
-  }, [doc, readOnly, flushNow]);
-
-  useEffect(() => () => { flushNow(); }, [flushNow]);
-
-  // 数据变化即压栈（只记 tables；导航不记）
-  useEffect(() => {
-    const tables = doc.tables;
-    if (prevTablesRef.current && prevTablesRef.current !== tables) historyRef.current!.push(prevTablesRef.current);
-    prevTablesRef.current = tables;
-  }, [doc.tables]);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
 
   // ---- 面板/浮层状态 ----
   const [panel, setPanel] = useState<null | "fields" | "filter" | "fill" | "group" | "sort" | "rowHeight" | "viewConfig">(null);
@@ -200,6 +179,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const activeTable = doc.tables.find((t) => t.id === doc.activeTableId) ?? doc.tables[0];
   const activeView = activeTable.views.find((v) => v.id === activeTable.activeViewId) ?? activeTable.views[0];
   const groupRule = activeView.groups?.[0];
+  const interactionRef = useRef({ tableId: activeTable.id, viewId: activeView.id, cellSel });
+  interactionRef.current = { tableId: activeTable.id, viewId: activeView.id, cellSel };
   /** 关联解析上下文（同一文档的 tables）：表格 / 看板 / 画册 / 日历 / 表单 / 记录详情 / 搜索共用一套。 */
   const displayCtx = useMemo(() => ({ tables: doc.tables }), [doc.tables]);
   const visibleFields = useMemo(() => orderedTableFields(activeTable, activeView), [activeTable, activeView]);
@@ -280,8 +261,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
   // ---- 变更助手 ----
   const patchTable = useCallback((tableId: string, updater: (table: BitableTable) => BitableTable) => {
-    setDoc((prev) => ({ ...prev, tables: prev.tables.map((t) => (t.id === tableId ? updater(t) : t)) }));
-  }, []);
+    updateDoc((prev) => ({ ...prev, tables: prev.tables.map((t) => (t.id === tableId ? updater(t) : t)) }));
+  }, [updateDoc]);
   const patchActiveTable = useCallback((updater: (table: BitableTable) => BitableTable) => {
     const id = docRef.current.activeTableId;
     patchTable(id, updater);
@@ -316,7 +297,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
   const setCellValue = useCallback((recordId: string, fieldId: string, value: unknown) => {
     const tableId = docRef.current.activeTableId;
-    setDoc((prev) => {
+    updateDoc((prev) => {
       const table = prev.tables.find((t) => t.id === tableId);
       const field = table?.fields.find((f) => f.id === fieldId);
       // 关联字段走**双向镜像唯一写入口**（非双向时行为等价于普通写值）；其余字段保持原路径
@@ -328,7 +309,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         tables: prev.tables.map((t) => (t.id === tableId ? { ...t, records: t.records.map((r) => (r.id === recordId ? { ...r, values: { ...r.values, [fieldId]: value }, updatedAt: stamp() } : r)) } : t)),
       };
     });
-  }, []);
+  }, [updateDoc]);
 
   /** 上传 → 附件单元格条目。两个名字必须分开：
    *  - `file`（磁盘名）= 生成名，只在 url 末段；拿它当路径以外的东西都会 404（除图片外全打不开）。
@@ -388,24 +369,24 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
   // ---- 表 ----
   const addTable = useCallback(() => {
-    setDoc((prev) => {
+    updateDoc((prev) => {
       const table = createDefaultBitableTable("数据表 " + (prev.tables.length + 1));
       return { ...prev, tables: [...prev.tables, table], activeTableId: table.id };
     });
-  }, []);
+  }, [updateDoc]);
   const renameTable = useCallback((id: string, name: string) => {
     patchTable(id, (table) => ({ ...table, name: name.trim() || "数据表" }));
   }, [patchTable]);
   const deleteTable = useCallback((id: string) => {
-    setDoc((prev) => {
+    updateDoc((prev) => {
       if (prev.tables.length <= 1) return prev;
       const tables = prev.tables.filter((t) => t.id !== id);
       return { ...prev, tables, activeTableId: prev.activeTableId === id ? tables[0].id : prev.activeTableId };
     });
-  }, []);
+  }, [updateDoc]);
   const reorderTables = useCallback((fromId: string, toId: string) => {
-    setDoc((prev) => ({ ...prev, tables: moveItem(prev.tables, fromId, toId, (t) => t.id) }));
-  }, []);
+    updateDoc((prev) => ({ ...prev, tables: moveItem(prev.tables, fromId, toId, (t) => t.id) }));
+  }, [updateDoc]);
   const reorderViews = useCallback((fromId: string, toId: string) => {
     patchActiveTable((table) => ({ ...table, views: moveItem(table.views, fromId, toId, (v) => v.id) }));
   }, [patchActiveTable]);
@@ -449,8 +430,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     setViewMenu(null);
   }, [patchActiveTable]);
   const setActiveView = useCallback((viewId: string) => {
-    patchActiveTable((table) => ({ ...table, activeViewId: viewId }));
-  }, [patchActiveTable]);
+    navigateDoc((prev) => ({ ...prev, tables: prev.tables.map((table) => table.id === prev.activeTableId ? { ...table, activeViewId: viewId } : table) }));
+  }, [navigateDoc]);
 
   // ---- 字段 ----
   const addField = useCallback((rawType: string) => {
@@ -466,7 +447,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   }, [patchActiveTable]);
   const deleteField = useCallback((fieldId: string) => {
     const tableId = docRef.current.activeTableId;
-    setDoc((prev) => {
+    updateDoc((prev) => {
       const table = prev.tables.find((t) => t.id === tableId);
       if (!table || table.fields.length <= 1) return prev;
       // 先解除双向配对（对侧降级为单向、数据保留），再删字段并清视图配置
@@ -649,12 +630,19 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
+    beginGesture();
     // 下限 80 → **40**（用户 260930：「可以设定一个比较小的下限值」）；上限仍是 640
     const onMove = (ev: PointerEvent) => updateField(fieldId, { width: Math.max(40, Math.min(640, startW + (ev.clientX - startX))) });
-    const onUp = () => { document.removeEventListener("pointermove", onMove); document.removeEventListener("pointerup", onUp); };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+      endGesture();
+    };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
-  }, [updateField]);
+    document.addEventListener("pointercancel", onUp);
+  }, [updateField, beginGesture, endGesture]);
 
   useEffect(() => {
     if (!rowCtx) return;
@@ -754,9 +742,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     try { await navigator.clipboard.writeText(lines.join("\n")); } catch { /* ignore */ }
   }, [cellRange, shownRecords, visibleFields, displayCtx]);
   const pasteSelection = useCallback(async () => {
-    if (!cellRange) return;
+    if (!cellRange || !visibleRef.current || readOnlyRef.current) return;
+    const origin = interactionRef.current;
     let text = "";
     try { text = await navigator.clipboard.readText(); } catch { return; }
+    const current = interactionRef.current;
+    if (!rootRef.current?.isConnected || !visibleRef.current || readOnlyRef.current
+      || current.tableId !== origin.tableId || current.viewId !== origin.viewId || current.cellSel !== origin.cellSel) return;
     const lines = text.replace(/\r/g, "").split("\n");
     patchActiveTable((table) => {
       const next = table.records.map((r) => ({ ...r, values: { ...r.values } }));
@@ -800,8 +792,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     });
   }, [cellRange, patchActiveTable, shownRecords, visibleFields]);
   useEffect(() => {
+    if (!visible || readOnly) return;
     const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || !cellRange) return;
+      if (!(event.metaKey || event.ctrlKey) || !cellRange || !isGridShortcut(event, rootRef.current)) return;
       const el = document.activeElement as HTMLElement | null;
       // 焦点在输入/可编辑区、附件格、或附件展开面板（panel 是 portal，不在单元格 DOM 内）时，
       // 不要拦截 Cmd+C/V——否则 preventDefault 会把原生 paste 事件挡掉，永远收不到粘贴。
@@ -813,7 +806,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [cellRange, copySelection, pasteSelection]);
+  }, [visible, readOnly, cellRange, copySelection, pasteSelection]);
 
   /**
    * 底部汇总栏（底栏）是这套表格最底下的一条；文档状态栏要塞进它**正上方**（用户 260929 定稿：
@@ -822,6 +815,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
    * 这里实测一次写进 CSS 变量交给 chrome.css 消费，姿势与 SheetEditor 写 `--lake-sheet-status-w` 一致。
    */
   useEffect(() => {
+    if (!visible) return;
     const host = rootRef.current;
     if (!host) return;
     const workspace = host.closest<HTMLElement>(".workspace");
@@ -849,30 +843,19 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       workspace.style.removeProperty("--lake-bitable-status-bottom");
     };
     // 只在这些结构变化时重建观察：其余变化（列宽/列数/行高/窗口尺寸）由 ResizeObserver + resize 覆盖
-  }, [activeTable.id, activeView.id, activeView.type]);
+  }, [visible, activeTable.id, activeView.id, activeView.type]);
 
-  const undoEdit = useCallback(() => {
-    const next = historyRef.current!.undo(docRef.current.tables);
-    if (!next) return;
-    prevTablesRef.current = next;
-    setDoc((d) => ({ ...d, tables: next, activeTableId: next.some((t) => t.id === d.activeTableId) ? d.activeTableId : next[0].id }));
-  }, []);
-  const redoEdit = useCallback(() => {
-    const next = historyRef.current!.redo(docRef.current.tables);
-    if (!next) return;
-    prevTablesRef.current = next;
-    setDoc((d) => ({ ...d, tables: next, activeTableId: next.some((t) => t.id === d.activeTableId) ? d.activeTableId : next[0].id }));
-  }, []);
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || readOnly) return;
     const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z" || !isGridShortcut(event, rootRef.current)) return;
       event.preventDefault();
+      event.stopPropagation();
       if (event.shiftKey) redoEdit(); else undoEdit();
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [visible, undoEdit, redoEdit]);
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [visible, readOnly, undoEdit, redoEdit]);
   useEffect(() => {
     const onUp = () => { cellSelectingRef.current = false; };
     document.addEventListener("mouseup", onUp);
@@ -1001,7 +984,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               onDragStart={() => setDragging({ kind: "table", id: table.id })}
               onDragOver={(event: DragEvent) => { event.preventDefault(); reorderByDrag("table", table.id); }}
               onDragEnd={() => setDragging(null)}
-              onClick={() => setDoc((prev) => ({ ...prev, activeTableId: table.id }))}
+              onClick={() => navigateDoc((prev) => ({ ...prev, activeTableId: table.id }))}
             >
               <GripVertical size={13} className="bt-grip" />
               {tableEditor?.id === table.id
@@ -1508,7 +1491,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         <div className="bt-panel">
           {doc.tables.map((table) => (
             <button key={table.id} type="button" className={"bt-menu-item ln-menu__item" + (table.id === activeTable.id ? " is-selected" : "")}
-              onClick={() => { setDoc((prev) => ({ ...prev, activeTableId: table.id })); setTableSwitchAnchor(null); }}>
+              onClick={() => { navigateDoc((prev) => ({ ...prev, activeTableId: table.id })); setTableSwitchAnchor(null); }}>
               {table.name}
             </button>
           ))}
@@ -1530,8 +1513,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               const wantsPair = patch.type === "relationTwoWay";
               updateField(fieldId, options ? { ...patch, options } : patch);
               // 双向开关：新建配对（在目标表生成反向字段）或解除配对（对侧降级为单向、数据保留）
-              if (wantsPair && !wasPaired) setDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, fieldId) }));
-              else if (!wantsPair && wasPaired) setDoc((prev) => ({ ...prev, tables: unpairRelationFields(prev.tables, prev.activeTableId, fieldId) }));
+              if (wantsPair && !wasPaired) updateDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, fieldId) }));
+              else if (!wantsPair && wasPaired) updateDoc((prev) => ({ ...prev, tables: unpairRelationFields(prev.tables, prev.activeTableId, fieldId) }));
             }
             setFieldEditor(null);
           }}
@@ -1546,7 +1529,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             if (patch.relation) field.relation = patch.relation;
             patchActiveTable((table) => ({ ...table, fields: [...table.fields, field] }));
             // 新增即双向 → 立刻在目标表建反向字段并回填已有引用
-            if (patch.type === "relationTwoWay") setDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, field.id) }));
+            if (patch.type === "relationTwoWay") updateDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, field.id) }));
             setFieldEditor(null);
           }}
         />
@@ -1585,8 +1568,6 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         </Menu>
       )}
 
-      <ImageLightbox />
-      <AttachmentPreview />
 
       {drawerRecord && (
         <BitableRecordDrawer

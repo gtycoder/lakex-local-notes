@@ -11,6 +11,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const EDITOR = readFileSync(new URL("./BitableEditor.tsx", import.meta.url), "utf8");
+const SESSION = readFileSync(new URL("./useBitableSession.ts", import.meta.url), "utf8");
+const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
+const MOBILE_APP = readFileSync(new URL("../../mobile/MobileApp.tsx", import.meta.url), "utf8");
 const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.url), "utf8");
 const EDITOR_TAB = readFileSync(new URL("../editor/LakeEditor.tsx", import.meta.url), "utf8");
 const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
@@ -168,9 +171,10 @@ describe("多维表编辑器护栏", () => {
   });
 
   it("自动保存：防抖 + 与上次序列化比较（避免打开即标脏）", () => {
-    expect(EDITOR).toMatch(/AUTOSAVE_DEBOUNCE_MS/);
-    expect(EDITOR).toMatch(/lastSerializedRef/);
-    expect(EDITOR).toMatch(/bitablesToBody/);
+    expect(EDITOR).toMatch(/useBitableSession/);
+    expect(SESSION).toMatch(/AUTOSAVE_DEBOUNCE_MS/);
+    expect(SESSION).toMatch(/lastSerializedRef/);
+    expect(SESSION).toMatch(/bitablesToBody/);
   });
 
   it("字段默认值：新建记录 / 表单用 defaultRecordValues 预填", () => {
@@ -602,8 +606,14 @@ describe("多维表编辑器护栏", () => {
 
   it("附件打开走公共入口（图片 Lightbox / 音视频内嵌 / 其它系统）", () => {
     expect(EDITOR).toMatch(/openAssetEntry/);
-    expect(EDITOR).toMatch(/AttachmentPreview/);
-    expect(EDITOR).toMatch(/ImageLightbox/);
+    // 控制器是单例：宿主只归应用根，不归每个 keep-alive 文档。
+    for (const app of [APP, MOBILE_APP]) {
+      expect((app.match(/<ImageLightbox\s*\/>/g) ?? []).length).toBe(1);
+      expect((app.match(/<AttachmentPreview\s*\/>/g) ?? []).length).toBe(1);
+    }
+    for (const child of [EDITOR, EDITOR_TAB, TABS]) {
+      expect(child).not.toMatch(/<ImageLightbox|<AttachmentPreview/);
+    }
     expect(ATTACH).toMatch(/openImagePreview/);
     expect(ATTACH).toMatch(/openAttachmentPreview/);
     expect(ATTACH).toMatch(/isMediaFilename/);

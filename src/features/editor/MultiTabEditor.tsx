@@ -48,6 +48,7 @@ interface MultiTabEditorProps {
   /** 切换标签钉住状态（由上层更新状态）。 */
   onTogglePin?: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
+  onPreserveBitableDraft?: (noteId: string, content: string) => void;
   /** 工作区级可见性（keep-alive：外部隐藏整个工作区时把所有 tab 视为不可见，切回时触发重新水合） */
   visible?: boolean;
   prefs?: LakeEditorPrefs;
@@ -75,6 +76,7 @@ export function MultiTabEditor({
   pinnedNoteIds,
   onTogglePin,
   onContentChange,
+  onPreserveBitableDraft,
   visible = true,
   prefs,
   onEditorReady,
@@ -454,6 +456,7 @@ export function MultiTabEditor({
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
+                onPreserveDraft={onPreserveBitableDraft ? (content) => onPreserveBitableDraft(tab.noteId, content) : undefined}
               />
             </SheetEditorErrorBoundary>
           ) : tab.kind === "board" ? (

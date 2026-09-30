@@ -383,7 +383,7 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
   const [rejectNote, setRejectNote] = useState<string | null>(null);
   const takeFiles = (list: FileList | File[] | null | undefined) => {
     const files = list ? Array.from(list) : [];
-    if (files.length === 0) return;
+    if (readOnly || files.length === 0) return;
     const { accepted, rejected } = splitImageFiles(files, imageOnly);
     setRejectNote(rejected > 0 ? IMAGE_ONLY_HINT + "，已忽略 " + rejected + " 个" : null);
     if (accepted.length > 0) onUpload(accepted);
@@ -417,6 +417,7 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
         setExpandAnchor(cellRef.current);
       }}
       onPaste={(event) => {
+        if (readOnly) return;
         const items = event.clipboardData?.items;
         const picked: File[] = [];
         if (items) for (const item of items) if (item.kind === "file") { const f = item.getAsFile(); if (f) picked.push(f); }

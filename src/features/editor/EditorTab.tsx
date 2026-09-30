@@ -16,13 +16,11 @@ import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
 import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
-import { ImageLightbox } from "./ImageLightbox";
 import { attachFileCardClick, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { openAssetEntry } from "../attachment/openAssetEntry";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
-import { AttachmentPreview } from "../attachment/AttachmentPreview";
 
 export interface EditorTabProps {
   noteId: string;
@@ -1001,8 +999,6 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       }}
     >
       <div ref={editorMountRef} className="lake-editor-main" />
-      <ImageLightbox />
-      <AttachmentPreview />
       {cardMenu && (
         <CardContextMenu
           x={cardMenu.x}

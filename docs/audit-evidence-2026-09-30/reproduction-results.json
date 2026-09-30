@@ -1,0 +1,138 @@
+[
+  {
+    "id": "R01",
+    "description": "save throws disk-full; close still removes dirty tab",
+    "removed": true
+  },
+  {
+    "id": "R02",
+    "description": "old queued body gets current revision and clears newer draft",
+    "calls": [
+      {
+        "content": "v1",
+        "caches": {
+          "plain": "v1",
+          "markdown": "v1"
+        }
+      },
+      {
+        "content": "v1",
+        "caches": {
+          "plain": "v2",
+          "markdown": "v2"
+        }
+      }
+    ],
+    "finalContent": "v1",
+    "dirty": false,
+    "clears": 1
+  },
+  {
+    "id": "R03",
+    "description": "reload(b) invalidates independent reload(a)",
+    "tabs": [
+      {
+        "noteId": "a",
+        "content": "old-a",
+        "dirty": false
+      },
+      {
+        "noteId": "b",
+        "content": "new-b",
+        "dirty": false,
+        "title": "B",
+        "reloadKey": 1
+      }
+    ]
+  },
+  {
+    "id": "R04",
+    "description": "unrelated restore unlocks still-purged tab",
+    "tabs": [
+      {
+        "noteId": "a",
+        "content": "trash-a",
+        "deleted": false,
+        "title": "still-trash",
+        "dirty": false,
+        "reloadKey": 1,
+        "lastDigest": {
+          "title": "still-trash"
+        }
+      }
+    ]
+  },
+  {
+    "id": "R05",
+    "description": "mobile flush with two dirty documents causes zero writes",
+    "writes": [],
+    "pending": 0
+  },
+  {
+    "id": "R06",
+    "description": "public fixed key decrypts AES-GCM without device-specific secret",
+    "decoded": "test-secret-NOT-real"
+  },
+  {
+    "id": "R07",
+    "description": "same-second forced snapshots share path; deleting one breaks remaining snapshot",
+    "rows": [
+      {
+        "id": 1,
+        "file_path": "history/a/2026-09-30-08-00-00-11d9bf87598cc456.lake.gz"
+      },
+      {
+        "id": 2,
+        "file_path": "history/a/2026-09-30-08-00-00-11d9bf87598cc456.lake.gz"
+      }
+    ],
+    "remainingFileExists": false
+  },
+  {
+    "id": "R08",
+    "description": "DB commit failure after body write is not atomic",
+    "error": "injected DB commit failure",
+    "fileBody": "new body",
+    "metadata": "old/synced (injected rollback)"
+  },
+  {
+    "id": "R09",
+    "description": "15ms HTTP timeout still permits 80ms body; body stalled forever would have no deadline",
+    "elapsedMs": 82,
+    "bodyBytes": 1
+  },
+  {
+    "id": "R10",
+    "description": "current mobile UPSERT changes still-trashed purged row back to local",
+    "row": {
+      "content": "late-save",
+      "trashed_at": "2026-09-30",
+      "sync_state": "local"
+    }
+  },
+  {
+    "id": "R11",
+    "description": "refresh deletes missing-note draft automatically",
+    "deletedJournals": [
+      "missing"
+    ]
+  },
+  {
+    "id": "R12",
+    "description": "per-note cleanNoteOrphans deletes asset protected by draft-only references",
+    "protectedBefore": true,
+    "cleanup": {
+      "count": 1,
+      "freedBytes": 7
+    },
+    "fileStillExists": false
+  },
+  {
+    "id": "R13",
+    "description": "nested debounces leave outer dirty=false during first 800ms; full persistence delay >=1800ms",
+    "boardInnerMs": 800,
+    "sheetInnerMs": 800,
+    "outerMs": 1000,
+    "evidence": "static scheduling trace; not a runtime close/OOM test"
+  }
+]
