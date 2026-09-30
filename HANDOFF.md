@@ -47,6 +47,13 @@
 - 效果：2MB 单键 57.9→10.0ms、长任务 1761ms→0；桌面 e2e 17/17；全量 vitest 1490 passed / 16 skipped。
 - 诚实边界：profile 脚本就绪判定不严（只信量级）；自愈竞态无真实端注入点；doc 每键不 setState 大字符串。
 
+### 260930-S0 后续 D（F14/F15，已实施，待验收；未合 master/未推送）
+- F14：抽出 EditorErrorBoundary，错误边界给可点的「重试」（换 mount generation 重建子树），删除「切换标签即可恢复」空话；补 jsdom 行为测试（e6aab97）。
+- profile：scripts/profile-editor-input.mjs 就绪判定加固（先等目标 tab active + 内容长度两轮稳定），可作可信性能基线（e6aab97）。
+- F15：Sheet/Board 一改动即标脏 + 注册按需序列化，关闭/退出/淘汰/锁定走捕获契约，消除「改完 <800ms 就关」丢最后编辑（87e5e4e）。
+- **F13 明确不做**（仅状态显示不一致、无数据影响）；**§6.1-#2 不做**。editorChangeGuard 仍在用，未删。
+- 门禁：全量 1493 passed / 16 skipped；桌面 e2e 17/17。诚实边界：F15 的 FortuneSheet/Drawnix 编辑→关闭未做自动化真实端（待人工抽验）；Bitable 未纳入。
+
 ### 当前会话 · 260930-ARCH（仅文档，待讨论）
 - 用户要求多维表功能扩展暂告一段落，先只读评估整体代码与架构，再讨论是否需要大规模重构；**本轮不实施代码**。
 - 当前源码 `ae1cfda`（条件填色、统一选色与筛选面板优化），工作树在本轮开始时干净、仅一个 master 工作树；本地 `origin/master` 跟踪引用同 HEAD（未联网 fetch）。**条件填色已提交**，下方旧描述的“未提交”是历史状态；功能验收状态不擅自变更。

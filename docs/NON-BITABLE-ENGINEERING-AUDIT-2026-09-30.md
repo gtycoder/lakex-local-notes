@@ -592,7 +592,7 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 | F03 | 全工作区单一 `tabReloadVersionRef` 会让不同文档的合法重载互相取消 → 新增 `createNoteReloadGuard`（按 noteId token）；`handleTrashRestored`/`handleHistoryRestored`/`reloadNoteTab` 按文档取消；`useSyncProgress` 全库同步改用自己的 sync run id | src/core/requestVersion.ts、useSyncRefresh.ts、useSyncProgress.ts、useWorkspaceState.ts、App.tsx | requestVersion.test +2；useSyncRefresh.test +2（R03：reload a/b 互不取消；同文档旧响应作废）；桌面真实端 +2 |
 | F17 | 断言 `getSyncPendingSummary` 真实契约（resources 恒为 0；documents/folders = 本地待上传事实），fixture 生成与业务耗时分离 | electron/workspace.benchmark.test.ts | opt-in 基准实跑通过：`savedMs≈3 / fixtureMs≈843 / summary.resources=0` |
 
-门禁：tsc 通过；全量 vitest **1490 passed / 16 skipped**（含后续捕获批）；check:core 71 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
+门禁：tsc 通过；全量 vitest **1493 passed / 16 skipped**（含后续捕获批 + F14/F15）；check:core 71 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
 
 **桌面真实端 CDP 验收**：`node scripts/e2e-audit-s0.mjs` **17/17 通过**（捕获批新增「输入后立即关闭也把最后输入落盘」）（隔离 `LAKE_USER_DATA`/端口、owned child 精确收尾）——scheme origin `lake://app`；F04 回收站/purge 后普通保存被真实 IPC+SQLite 拒绝且正文不改写、显式恢复后可写、恢复 c 不解除仍在回收站的 d、元数据 rename/icon/lock 对回收站节点被拒且显式恢复后可写；F03 两篇不同文档各自历史恢复都生效；F01/F02 输入→自动保存落盘；F01 保存失败（.lake 缺失→NotFound）时脏标签不关闭、恢复可写后再关成功。
 
@@ -631,6 +631,23 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 - doc 每键只 `bumpRevision` + 重置防抖，**只在 clean→dirty 第一次**更新 tab 状态；sheet/board 仍走显式 content（其内部本就防抖）。
 - `src/core/editorChangeGuard.ts` 因捕获契约后不再被调用（模块与单测保留，未清理）。
 - 未做真实 Electron 前台长文输入体感验收（profile 是程序化注入，非人手打字）。
+
+### 后续小范围收口（D：F14 错误边界真实重试 + F15 Sheet/Board 保存时机）
+
+| 项 | 内容 | 提交 |
+|---|---|---|
+| F14 | 抽出 EditorErrorBoundary：提供可点的「重试」（换 mount generation 强制重建子树），删除「切换标签即可恢复」这句不可执行的话；新增 errorBoundary.test.ts（抛错→显示重试→点击后真实恢复） | e6aab97 |
+| profile | profile-editor-input.mjs 就绪判定加固（先等目标 tab active、再等可见引擎内容长度连续两轮一致），消除 openMs=4 假象 | e6aab97 |
+| F15 | Sheet/Board 一改动立即 onDirty（早于 800ms 内部防抖）+ 注册按需同步序列化 capture；useSavePipelineGlue 新增捕获注册表（优先于 Lake getDocument）；关闭/退出/淘汰/锁定走 capture ⇒ 消除「改完 <800ms 就关」丢最后编辑 | 87e5e4e |
+
+**明确不做**：**F13**（经用户评估：后果仅同步状态/提示偶发不一致、无数据影响，审计当时也未复现最强变体）；**§6.1-#2**（保存响应回传整篇正文：收益小、动 IPC 契约）。**editorChangeGuard 不是死代码**（仍被 LakeEditor 使用），未删。
+
+**门禁**：全量 vitest **1493 passed / 16 skipped**；tsc / check:core（71 文件 0 违规）/ git diff --check 通过；桌面 e2e 17/17。
+
+**诚实边界（F14/F15）**：
+- F14 的「重试」有 jsdom 行为测试，但「真实内核崩一次再点重试」未在真实端注入。
+- F15：FortuneSheet/Drawnix 的「编辑→立即关闭」无法用 CDP 稳定驱动，未做自动化真实端，待人工抽验；图片提升未落地时 capture 返回 null，由外层回退到 tab 最后已提交版本；Bitable 未纳入本批。
+- profile 绝对值仍受机器负载影响（只信量级）。
 
 
 
