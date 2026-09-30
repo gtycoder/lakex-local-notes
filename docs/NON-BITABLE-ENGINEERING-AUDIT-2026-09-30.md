@@ -649,5 +649,17 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 - F15 覆盖 Sheet/Board/Bitable。三者的「编辑→立即关闭」都无法用 CDP 稳定驱动，未做自动化真实端，待人工抽验；图片提升未落地时 capture 返回 null，由外层回退到 tab 最后已提交版本。
 - profile 绝对值仍受机器负载影响（只信量级）。
 
+### 后续：S2 过时路径清理 + §6.1 剩余性能测量
+
+**S2 清理（已实施）**：secretCipher 旧明文兼容、ssrf `assertSafeRemoteHost` 旧预解析入口、syncAdapters 旧 FakeStore `?.` 兜底（测试补齐完整 port）、schemaInit 旧逐列 ALTER + 旧 trigram 重建 + 旧 notes→tree seed 迁移（改为当前完整 DDL）。**暂缓**：assetServer 旧 file/null origin（审计标注为条件删除，需真实浏览器核对消费者）。
+
+**§6.1 测量**（脚本 opt-in、隔离实例）：
+| 项 | 结果 | 判断 |
+|---|---|---|
+| #4 音频兜底全工作区扫描 | 1 标签 ~11 次、8 标签 ~53 次（≈6.6×标签数/前 6s） | 确认成倍；绝对成本低；改法=限制到 host 的卡 |
+| #5 代码块水合扫描 | 8 标签总计仅 1 次（仅可见实例、交互期 defer） | 未测到高频，不作为问题 |
+| #6 保存后孤儿/历史 refs 扫描 | 裸 ~1ms；500 资源+100 历史 ~7ms（增量 ~6ms/次） | 量小，暂不改 |
+- 脚本：`scripts/profile-save-orphans.mjs`、`scripts/profile-scan-counts.mjs`。
+
 
 

@@ -54,6 +54,20 @@
 - **F13 明确不做**（仅状态显示不一致、无数据影响）；**§6.1-#2 不做**。editorChangeGuard 仍在用，未删。
 - 门禁：全量 1493 passed / 16 skipped；桌面 e2e 17/17。诚实边界：Sheet/Board/Bitable 的编辑→关闭未做自动化真实端（待人工抽验）。
 
+### 260930-S2（过时路径清理，已实施；已合 master 本地、未推送）
+- secretCipher.decrypt：非 enc:v1 不再返回明文，改为提示重配 + 空串（44eb4a0）。
+- ssrf：删除只被自身测试调用的 assertSafeRemoteHost 预解析入口（44eb4a0）。
+- syncAdapters：删除旧 FakeStore 的 `?.` 可选兜底，测试补齐完整 port（88c3f3f）。
+- schemaInit：改用当前完整 DDL，删除逐列 ALTER / 旧 trigram 重建 / 旧 notes→tree seed 迁移（7986f22）。
+- **暂缓（审计标注为条件删除）**：assetServer 旧 file/null origin —— 需真实浏览器核对 Origin:null/file:// 消费者后再删。
+- 门禁：tsc / 全量 1488 passed / 16 skipped / check:core 71 文件 0 违规 / diff --check；全新 workspace 桌面 e2e 17/17。
+
+### §6.1 剩余性能项测量（260930）
+- **#4 音频兜底全工作区扫描**：CDP 计数 `document.querySelectorAll(音频选择器)`——1 标签 ~11 次、8 标签 ~53 次（≈6.6×标签数/前 6s）。确认「乘以编辑器实例数」；绝对成本低（无卡时只做选择器匹配）。改法：限制到该 host 的卡。
+- **#5 代码块水合扫描**：`host.querySelectorAll('.ne-codeblock')` 计数——8 标签总计仅 1 次（仅可见实例扫、交互期 defer）。**未测到高频，不作为问题**。
+- **#6 保存后孤儿/历史 refs 扫描**：裸文档保存 ~1ms；500 资源 + 100 历史快照 ~7ms（增量 ~6ms/次）。量小，暂不改。
+- 脚本：scripts/profile-save-orphans.mjs、scripts/profile-scan-counts.mjs（均 opt-in、隔离实例）。
+
 ### 当前会话 · 260930-ARCH（仅文档，待讨论）
 - 用户要求多维表功能扩展暂告一段落，先只读评估整体代码与架构，再讨论是否需要大规模重构；**本轮不实施代码**。
 - 当前源码 `ae1cfda`（条件填色、统一选色与筛选面板优化），工作树在本轮开始时干净、仅一个 master 工作树；本地 `origin/master` 跟踪引用同 HEAD（未联网 fetch）。**条件填色已提交**，下方旧描述的“未提交”是历史状态；功能验收状态不擅自变更。
@@ -199,7 +213,7 @@
     - **F12 安卓固定密钥** → **不做**：属设备安全（Android Keystore）范畴，本项目不承担设备安全职责。
     - **S1 DocumentSession / F13 / §6.1-#2** → **不做**（会话正确性已由 S0 + 捕获契约覆盖；后两者收益不足）。
     - **F08 双介质一致性** → 走 §8 **路线 A**（保持文件+DB、只修会话）；**A 不修 F08 跨介质窗口**（需 B/C）。A 的会话修复已完成。
-    - **§6.1 剩余性能项**（#4 音频全局扫描 / #5 代码块 observer 扫描 / #6 保存后孤儿与历史 refs 扫描）→ **先测量再定**，未测量不动。
+    - **§6.1 剩余性能项**：已测量（见 §0「§6.1 剩余性能项测量」）。#4 确认成倍（每实例 ~6.6 次全文档扫描），改法限制到 host、待定；#5 未测到高频（不做）；#6 增量 ~6ms/次（暂不改）。
 
 ## 4. 关键坑（长期有效）
 
