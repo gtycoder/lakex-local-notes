@@ -1,5 +1,6 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { PersistOutcome } from "./useSavePipeline";
+import { flushDirtyBeforeLifecycle } from "../core/lifecycleFlush";
 
 export interface DocumentTabLike {
   noteId: string;
@@ -56,11 +57,10 @@ export function useDocumentTabs<T extends DocumentTabLike>({
       window.clearTimeout(pendingTimer);
       saveTimers.current.delete(noteId);
     }
-    if (tab.dirty) {
+    {
       // 审计 F01：关闭前必须确认该 revision 已持久化；失败留在原文档（错误已由保存管线提示）。
-      // blocked（文档已在回收站，只读）没有可保存内容，允许关闭。
-      const outcome = await persistTab(noteId, tab.title, tab.content);
-      if (!outcome.ok && !outcome.blocked) return;
+      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(noteId, tab.title, tab.content));
+      if (!proceed) return;
     }
     clearScrollMemory(noteId);
     const currentTabs = tabsRef.current;

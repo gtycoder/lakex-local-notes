@@ -1,4 +1,5 @@
 import { isGoneNote } from "../core/syncDecisions";
+import { flushDirtyBeforeLifecycle } from "../core/lifecycleFlush";
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
@@ -40,9 +41,10 @@ export function useTabLifecycle({
     const failedIds: string[] = [];
     for (const id of candidates) {
       const tab = openTabsRef.current.find((t) => t.noteId === id);
-      if (tab?.dirty) {
-        const outcome = await persistTab(id, tab.title, tab.content);
-        if (!outcome.ok && !outcome.blocked) { failedIds.push(id); continue; }
+      if (tab) {
+        // 审计 F01：未确认持久化的标签不得淘汰（失败留在原处）。
+        const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(id, tab.title, tab.content));
+        if (!proceed) { failedIds.push(id); continue; }
       }
       evictedIds.push(id);
       // V5 Phase 4：淘汰路径同步清理滚动记忆（避免残留导致下次打开位置错乱）
