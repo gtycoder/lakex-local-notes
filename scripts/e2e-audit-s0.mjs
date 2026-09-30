@@ -300,6 +300,27 @@ try {
   check("F01 保存失败时脏标签不关闭（留在原文档）", stayed, dirty2 ? (lakePath || "no .lake") : "未能制造 dirty");
   check("F01 恢复可写后再次关闭成功", closed);
 
+  // 捕获契约：输入后不等 1s 防抖、直接关闭 → 关闭前按需 capture 必须把最后输入落盘
+  const qId = await evaluate("(async function(){ var n = await window.lakeNative.createNote('S0-quick-close'); return n.id; })()");
+  await waitFor("Boolean(Array.prototype.find.call(document.querySelectorAll('[data-tree-node-id]'), function(x){ return x.getAttribute('data-tree-node-id')===" + JSON.stringify(qId) + "; }))", 15000);
+  await evaluate("window.__s0.clickRow(" + JSON.stringify(qId) + ")");
+  await waitFor("window.__s0.hasTab(" + JSON.stringify(qId) + ")", 15000);
+  await wait(1500);
+  const qRectRaw = await evaluate("JSON.stringify(window.__s0.paraRect())");
+  let quickTyped = false;
+  if (qRectRaw) {
+    const rect = JSON.parse(qRectRaw);
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
+    await wait(200);
+    await send("Input.insertText", { text: "QCLOSE-MARKER" });
+    quickTyped = true;
+  }
+  await evaluate("window.__s0.closeTab(" + JSON.stringify(qId) + ")");
+  await wait(1600);
+  const qSaved = await evaluate("(async function(){ var n = await window.lakeNative.readNote(" + JSON.stringify(qId) + "); return !!(n && n.content && n.content.indexOf('QCLOSE-MARKER') >= 0); })()");
+  check("捕获契约：输入后立即关闭也把最后输入落盘", quickTyped && qSaved);
+
   const failed = checks.filter(function (c) { return !c.ok; });
   console.log(NL + "RESULT " + JSON.stringify({ dataDir: dataDir, passed: checks.length - failed.length, failed: failed.length, checks: checks }, null, 2));
   process.exitCode = failed.length ? 1 : 0;

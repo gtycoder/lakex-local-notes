@@ -36,6 +36,7 @@ function Harness({ caches }: { caches: Array<{ markdown: string | null; plain: s
     onError: (message) => { events.push(`error:${message}`); },
     getOpenTab: () => ({ title: "T", content: "live" }),
     getEditorCaches: () => caches[Math.min(cacheIdx++, caches.length - 1)],
+    captureContent: () => undefined,
   });
   return null;
 }

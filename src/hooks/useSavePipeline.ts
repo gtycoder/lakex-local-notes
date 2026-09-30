@@ -36,6 +36,8 @@ export interface SavePipelineOptions {
   getOpenTab: (noteId: string) => { title: string; content: string; deleted?: boolean } | undefined;
   /** 从编辑器实例生成派生缓存（markdown/plain；无实例返回空）。 */
   getEditorCaches: (noteId: string) => { markdown: string | null; plain: string | null };
+  /** 捕获契约（审计 §6.1）：按需从编辑器取当前 text/lake 正文；无实例/失败返回 undefined。 */
+  captureContent: (noteId: string) => string | undefined;
 }
 
 /**
@@ -44,7 +46,7 @@ export interface SavePipelineOptions {
  * 旧响应不得覆盖最新草稿/清除 dirty（审计 #7）。
  */
 export function useSavePipeline(options: SavePipelineOptions) {
-  const { onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave, getOpenTab, getEditorCaches } = options;
+  const { onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave, getOpenTab, getEditorCaches, captureContent } = options;
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const saveTimers = useRef<Map<string, number>>(new Map());
@@ -53,17 +55,19 @@ export function useSavePipeline(options: SavePipelineOptions) {
   if (coreRef.current === null) coreRef.current = new SavePipelineCore();
   const core = coreRef.current;
 
-  const persistTab = useCallback((noteId: string, title: string, content: string): Promise<PersistOutcome> => {
+  const persistTab = useCallback((noteId: string, title?: string, content?: string): Promise<PersistOutcome> => {
     // 已在回收站/被他端 purge（标记 deleted）的文档不保存：避免把内容写回已回收的笔记。
     // 必须出声——静默丢弃会让用户以为已保存（编辑器此时已只读，这里是最后一道闸）。
     const openTab = getOpenTab(noteId);
     if (openTab?.deleted) { onBlockedSave?.(noteId); return Promise.resolve({ ok: false, blocked: true }); }
     // 审计 F02：body/title/caches/revision 是同一次不可变快照，**入队前绑定**。
     // 任务拿到 queue 执行权后不得再读 live revision / live editor——否则旧正文会被新 revision 认证成"最新"。
+    // 捕获契约（审计 §6.1）：正文不在每次按键序列化，而是在这里按需 capture
+    //（显式 content > 编辑器实时 capture > tab 最后已提交版本）。
     const snapshot = {
       noteId,
-      title,
-      content,
+      title: title ?? openTab?.title ?? "无标题",
+      content: content ?? captureContent(noteId) ?? openTab?.content ?? "",
       caches: getEditorCaches(noteId),
       revision: core.revision(noteId),
     };
@@ -93,31 +97,34 @@ export function useSavePipeline(options: SavePipelineOptions) {
         return { ok: false };
       }
     });
-  }, [core, getOpenTab, getEditorCaches, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave]);
+  }, [core, getOpenTab, getEditorCaches, captureContent, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave]);
 
   /** 防抖保存：SAVE_DEBOUNCE_MS（1s）无新输入后落盘。 */
-  const scheduleSave = useCallback((noteId: string, content: string) => {
+  const scheduleSave = useCallback((noteId: string, content?: string) => {
     setSaveState("dirty");
     const existing = saveTimers.current.get(noteId);
     if (existing) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
       saveTimers.current.delete(noteId);
       const tab = getOpenTab(noteId);
-      if (tab) void persistTab(noteId, tab.title, content);
+      if (tab) void persistTab(noteId, undefined, content);
     }, SAVE_DEBOUNCE_MS);
     saveTimers.current.set(noteId, timer);
   }, [persistTab, getOpenTab]);
 
   /** 草稿防抖：1.5s 无新输入后写草稿（未保存内容兜底；晚于保存，正常路径由保存清草稿）。 */
-  const scheduleDraftJournal = useCallback((noteId: string, title: string, content: string) => {
+  const scheduleDraftJournal = useCallback((noteId: string, content?: string) => {
     const existing = draftTimers.current.get(noteId);
     if (existing !== undefined) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
       draftTimers.current.delete(noteId);
-      void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存草稿", error));
+      const tab = getOpenTab(noteId);
+      // 捕获契约：草稿也按需 capture（显式 content > 编辑器实时 > tab 最后已提交版本）。
+      const body = content ?? captureContent(noteId) ?? tab?.content ?? "";
+      void native.saveDraftJournal({ noteId, title: tab?.title ?? "无标题", content: body, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存草稿", error));
     }, DRAFT_JOURNAL_DEBOUNCE_MS);
     draftTimers.current.set(noteId, timer);
-  }, []);
+  }, [captureContent, getOpenTab]);
 
   const bumpRevision = useCallback((noteId: string) => {
     core.bump(noteId);

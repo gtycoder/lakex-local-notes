@@ -18,7 +18,7 @@ interface UseDocumentTabsInput<T extends DocumentTabLike> {
   setActiveNoteId: Dispatch<SetStateAction<string | null>>;
   setSaveState: Dispatch<SetStateAction<SaveStateLike>>;
   saveTimers: MutableRefObject<Map<string, number>>;
-  persistTab: (noteId: string, title: string, content: string) => Promise<PersistOutcome>;
+  persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   clearScrollMemory: (noteId: string) => void;
 }
 
@@ -59,7 +59,7 @@ export function useDocumentTabs<T extends DocumentTabLike>({
     }
     {
       // 审计 F01：关闭前必须确认该 revision 已持久化；失败留在原文档（错误已由保存管线提示）。
-      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(noteId, tab.title, tab.content));
+      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(noteId));
       if (!proceed) return;
     }
     clearScrollMemory(noteId);

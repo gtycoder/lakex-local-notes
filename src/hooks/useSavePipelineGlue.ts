@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { patchNoteById, patchTabById, readEditorDocumentCaches, summaryOf, type OpenTab } from "../desktop/desktopTypes";
+import { stripAssetAccessToken } from "../lib/assetPort";
 import type { DraftJournalEntry, NoteDocument, NoteSummary, SyncStatus, TreeNode } from "../lib/types";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 
@@ -41,6 +42,12 @@ export function useSavePipelineGlue({
   const handleGetEditorCaches = useCallback((noteId: string) => {
     return readEditorDocumentCaches(editorsRef.current.get(noteId)) ?? { markdown: null, plain: null };
   }, [editorsRef]);
+  /** 捕获契约：按需取当前 text/lake 正文（doc 走 Lake 实例；sheet/board 不在此注册，返回 undefined 由调用方兜底）。 */
+  const handleCaptureContent = useCallback((noteId: string): string | undefined => {
+    const editor = editorsRef.current.get(noteId);
+    if (!editor || typeof editor.getDocument !== "function") return undefined;
+    try { return stripAssetAccessToken(editor.getDocument("text/lake")); } catch { return undefined; }
+  }, [editorsRef]);
 
-  return { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches };
+  return { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent };
 }

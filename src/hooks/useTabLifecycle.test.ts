@@ -18,7 +18,7 @@ import type { PersistOutcome } from "./useSavePipeline";
 let evict: ((tabs: OpenTab[], openedId: string) => Promise<{ evictedIds: string[]; failedIds: string[] }>) | null = null;
 const openTabsRef: { current: OpenTab[] } = { current: [] };
 
-function Harness({ persistTab, maxOpenTabs }: { persistTab: (id: string, title: string, content: string) => Promise<PersistOutcome>; maxOpenTabs: number }) {
+function Harness({ persistTab, maxOpenTabs }: { persistTab: (id: string, title?: string, content?: string) => Promise<PersistOutcome>; maxOpenTabs: number }) {
   const api = useTabLifecycle({
     settingsMaxOpenTabs: maxOpenTabs,
     pinnedNoteIds: new Set<string>(),

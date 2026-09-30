@@ -18,7 +18,7 @@ export interface UseDesktopHandlersOptions {
   activeNoteId: string | null;
   notes: NoteSummary[];
   openTabsRef: MutableRefObject<OpenTab[]>;
-  persistTab: (noteId: string, title: string, content: string) => Promise<PersistOutcome>;
+  persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>;
   setTreeNodes: Dispatch<SetStateAction<TreeNode[]>>;
   setDesktopWorkspace: Dispatch<SetStateAction<DesktopWorkspace>>;
@@ -68,7 +68,7 @@ export function useDesktopHandlers({
     const tab = openTabsRef.current.find((t) => t.noteId === tabId);
     if (next && tab) {
       // 审计 F01：锁定前必须确认该 revision 已持久化；失败则留在可编辑状态（错误已由保存管线提示）。
-      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(tabId, tab.title, tab.content));
+      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(tabId));
       if (!proceed) return;
     }
     // 锁定态 Viewer 无法用内核生成文本缓存；锁定前确保 md/text 缓存存在（已有则跳过）

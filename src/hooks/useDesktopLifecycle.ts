@@ -28,7 +28,7 @@ export interface UseDesktopLifecycleOptions {
   saveTimers: MutableRefObject<Map<string, number>>;
   layoutWidthsRef: MutableRefObject<{ sidebar: number; outline: number }>;
   quickNotesDirty: boolean;
-  persistTab: (noteId: string, title: string, content: string) => Promise<PersistOutcome>;
+  persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   /** ⌘1/2/3 切空间（S1+A）；不传则不注册 */
   onSwitchDesktopWorkspace?: (workspace: "library" | "quick-notes" | "trash") => void;
 }
@@ -144,7 +144,7 @@ export function useDesktopLifecycle({
           draftTimers.current.delete(tab.noteId);
         }
         void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
-        void persistTab(tab.noteId, tab.title, tab.content);
+        void persistTab(tab.noteId);
       }
       event.preventDefault();
       event.returnValue = "";

@@ -47,7 +47,7 @@ interface MultiTabEditorProps {
   pinnedNoteIds?: ReadonlySet<string>;
   /** 切换标签钉住状态（由上层更新状态）。 */
   onTogglePin?: (noteId: string) => void;
-  onContentChange: (noteId: string, content: string) => void;
+  onContentChange: (noteId: string, content?: string) => void;
   onPreserveBitableDraft?: (noteId: string, content: string) => void;
   /** 工作区级可见性（keep-alive：外部隐藏整个工作区时把所有 tab 视为不可见，切回时触发重新水合） */
   visible?: boolean;
@@ -87,9 +87,9 @@ export function MultiTabEditor({
   emptyAction,
   breadcrumb,
 }: MultiTabEditorProps) {
-  const contentCache = useRef<Map<string, string>>(new Map());
-  // 外部刷新（reloadKey 变化）时，必须丢弃 contentCache 里旧的编辑器内容，否则新实例仍用旧正文。
-  const reloadKeysRef = useRef<Map<string, number>>(new Map());
+  // 审计 §7.3：不再持有第二份可写正文（旧 contentCache/reloadKeysRef 已删）——
+  // tab.content 只表示「最后已提交版本」；实时正文由 EditorTab 捕获、保存/草稿/关闭时按需 capture；
+  // 外部刷新仍靠 key=noteId-reloadKey 重挂载 + tab.content 提供新正文。
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   /** tab 切换按钮（portal 弹窗的 fixed 定位锚点） */
@@ -226,30 +226,11 @@ export function MultiTabEditor({
   };
 
   const handleChange = useCallback(
-    (noteId: string, content: string) => {
-      contentCache.current.set(noteId, content);
+    (noteId: string, content?: string) => {
       onContentChange(noteId, content);
     },
     [onContentChange]
   );
-
-  /** 渲染期确定当前应喂给 EditorTab 的正文；reloadKey 变化时先清缓存再返回 tab.content。 */
-  const contentFor = (tab: TabInfo): string => {
-    const key = tab.reloadKey ?? 0;
-    const prev = reloadKeysRef.current.get(tab.noteId) ?? 0;
-    if (prev !== key) {
-      contentCache.current.delete(tab.noteId);
-      reloadKeysRef.current.set(tab.noteId, key);
-    }
-    return contentCache.current.get(tab.noteId) ?? tab.content;
-  };
-
-  useEffect(() => {
-    const activeIds = new Set(tabs.map((t) => t.noteId));
-    for (const key of contentCache.current.keys()) {
-      if (!activeIds.has(key)) contentCache.current.delete(key);
-    }
-  }, [tabs]);
 
   useEffect(() => {
     if (!tabCtx) return;
@@ -442,7 +423,7 @@ export function MultiTabEditor({
             <SheetEditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
               <SheetEditor
                 noteId={tab.noteId}
-                content={contentFor(tab)}
+                content={tab.content}
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
@@ -452,7 +433,7 @@ export function MultiTabEditor({
             <SheetEditorErrorBoundary key={"bt-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <BitableEditor
                 noteId={tab.noteId}
-                content={contentFor(tab)}
+                content={tab.content}
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
@@ -463,7 +444,7 @@ export function MultiTabEditor({
             <SheetEditorErrorBoundary key={"bd-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <BoardEditor
                 noteId={tab.noteId}
-                content={contentFor(tab)}
+                content={tab.content}
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
@@ -474,11 +455,11 @@ export function MultiTabEditor({
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
             locked={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
-            content={contentFor(tab)}
+            content={tab.content}
             visible={visible && tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}
             outlineEnhance={outlineEnhance}
-            onChange={(content) => handleChange(tab.noteId, content)}
+            onChange={() => handleChange(tab.noteId)}
             prefs={prefs}
             onEditorReady={onEditorReady}
             onReloadNote={onReloadNote}

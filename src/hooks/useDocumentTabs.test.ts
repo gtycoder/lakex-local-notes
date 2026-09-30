@@ -10,7 +10,7 @@ let closeTab: ((id: string) => Promise<void>) | null = null;
 const refs: { current: Tab[] } = { current: [] };
 const saveTimersRef = { current: new Map<string, number>() };
 
-function Harness({ persistTab }: { persistTab: (id: string, title: string, content: string) => Promise<PersistOutcome> }) {
+function Harness({ persistTab }: { persistTab: (id: string, title?: string, content?: string) => Promise<PersistOutcome> }) {
   const api = useDocumentTabs<Tab>({
     tabsRef: refs,
     activeNoteId: "a",

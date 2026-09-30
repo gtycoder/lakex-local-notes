@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
-import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import {
   createLakeDocument,
   destroyLakeEditor,
@@ -28,7 +27,8 @@ export interface EditorTabProps {
   visible: boolean;
   tocEnabled: boolean;
   outlineEnhance: boolean;
-  onChange: (content: string) => void;
+  /** 只通知「有变更」（捕获契约）：正文不再随每次按键回传，由保存/草稿/关闭按需 capture。 */
+  onChange: () => void;
   prefs?: LakeEditorPrefs;
   /** 只读锁：true 时重建为 Lake 原生 Viewer（真只读，含画板/表格/代码块） */
   locked?: boolean;
@@ -447,23 +447,19 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         mode,
         () => {
           if (retired) return;
-          // 审计 §6.1：初始化/setDocument 期间的 contentchange 不需要序列化——原 guard 在 getDocument 之后判断，
-          // 等于每次都白序列化一遍整篇正文（数 MB 文档实测量级数十 ms）。前置到序列化之前，语义不变。
+          // 审计 §6.1 捕获契约：初始化阶段忽略；此后每次 contentchange 只通知「有变更」，
+          // 不再每次按键整篇 getDocument 序列化（数 MB 文档实测每键数十 ms）。
+          // 正文在保存/草稿/关闭时按需 capture；重建（锁/自愈/换文档）前的最后捕获见下方 cleanup。
           if (setting) return;
-          if (editor) {
-            const next = stripAssetAccessToken(editor.getDocument("text/lake"));
-            if (!shouldAcceptEditorChange({ initializing: setting, previous: latestDocumentRef.current, next })) return;
-            latestDocumentRef.current = next;
-            onChangeRef.current(next);
-            // 画板元素通过键盘 Delete/Backspace 删除，可能没有新的 pointerdown；
-            // 用最近一次画板交互锚点兜底恢复异常跳顶。普通文本输入不会进入该分支。
-            if (Date.now() < boardInteractionUntilRef.current) {
-              const anchor = boardInteractionScrollRef.current || stableScrollTopRef.current;
-              const scroller = resolveScrollNode(host);
-              if (anchor >= 100 && scroller) {
-                restoreBoardScrollImmediately(anchor);
-                scheduleBoardScrollRestore(anchor);
-              }
+          onChangeRef.current();
+          // 画板元素通过键盘 Delete/Backspace 删除，可能没有新的 pointerdown；
+          // 用最近一次画板交互锚点兜底恢复异常跳顶。普通文本输入不会进入该分支。
+          if (Date.now() < boardInteractionUntilRef.current) {
+            const anchor = boardInteractionScrollRef.current || stableScrollTopRef.current;
+            const scroller = resolveScrollNode(host);
+            if (anchor >= 100 && scroller) {
+              restoreBoardScrollImmediately(anchor);
+              scheduleBoardScrollRestore(anchor);
             }
           }
         },
@@ -812,6 +808,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     });
 
     return () => {
+      // 捕获契约：重建（锁/解锁、自愈、换文档）前抓一次当前正文，供新实例 setDocument 续用；
+      // 取代旧的「每次按键更新 latestDocumentRef」，保证不丢在途输入。
+      if (editor) {
+        try { latestDocumentRef.current = stripAssetAccessToken(editor.getDocument("text/lake")); } catch { /* 实例可能已不可读 */ }
+      }
       window.clearTimeout(tocRefreshTimer);
       disposeTocRefresh?.();
       disposeTocRefresh = undefined;

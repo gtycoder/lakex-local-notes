@@ -15,7 +15,7 @@ export interface UseTabLifecycleOptions {
   settingsMaxOpenTabs: number;
   pinnedNoteIds: Set<string>;
   openTabsRef: MutableRefObject<OpenTab[]>;
-  persistTab: (noteId: string, title: string, content: string) => Promise<PersistOutcome>;
+  persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   scheduleSave: (noteId: string, content: string) => void;
   resetRevision: (noteId: string, revision?: number) => void;
   showNotice: (text: string) => void;
@@ -43,7 +43,7 @@ export function useTabLifecycle({
       const tab = openTabsRef.current.find((t) => t.noteId === id);
       if (tab) {
         // 审计 F01：未确认持久化的标签不得淘汰（失败留在原处）。
-        const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(id, tab.title, tab.content));
+        const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(id));
         if (!proceed) { failedIds.push(id); continue; }
       }
       evictedIds.push(id);
