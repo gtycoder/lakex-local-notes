@@ -270,6 +270,20 @@ class FakeStore {
     for (const n of this.notes.values()) if (n.syncState !== "synced") return true;
     return false;
   }
+  // ---- S2：补齐 adapter 现在直接调用的能力（与旧「可选/`?.`」实现行为等价） ----
+  getAllSyncBases() {
+    // 与逐条 getSyncBase 等价：仅 baseHash 非空的笔记进账本。
+    const out = new Map<string, { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null }>();
+    for (const [id, contentHash] of this.baseHashes) out.set(id, { contentHash, lastUploadedHash: this.lastUploadedHashes.get(id) ?? null, lastSyncedMetaAt: this.lastSyncedMetaAtMap.get(id) ?? null });
+    return out;
+  }
+  recordDeclaredAssets() { /* 该 FakeStore 不跟踪声明资产账（与先前空实现等价） */ }
+  listDeclaredAssets() { return [] as Array<{ filename: string; size: number; hash: string }>; }
+  markTombstonesPublished() { /* 与先前 no-op 等价 */ }
+  isFolderPurged() { return false; }
+  applyRemoteFolderDelete() { /* 与先前 no-op 等价 */ }
+  rememberFolderDeleted() { /* 与先前 no-op 等价 */ }
+  orphanFilenamesForNote() { return new Set<string>(); }
   allSyncBaseInfo() {
     const out = new Map<string, { syncState: string; updatedAt: string; baseHash: string | null; lastSyncedMetaAt: string | null; lastUploadedHash: string | null }>();
     for (const n of this.notes.values()) {

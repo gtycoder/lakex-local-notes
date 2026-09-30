@@ -81,13 +81,13 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       const out = { contentHash: base, lastUploadedHash: store.lastUploadedHash(id), lastSyncedMetaAt: store.lastSyncedMetaAt(id) ?? null };
       return out;
     },
-    // 仅当 Store 提供批量账本时才暴露（测试桩/旧实现缺此方法 → 引擎回退逐条 getSyncBase）。
-    ...(typeof store.getAllSyncBases === "function" ? { async getAllSyncBases() { return store.getAllSyncBases(); } } : {}),
+    // 桌面 Store 恒提供批量账本与声明资产账（S2：删除「旧测试桩可能没有」的运行时分支）。
+    async getAllSyncBases() { return store.getAllSyncBases(); },
     async recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): Promise<void> {
-      if (typeof (store as any).recordDeclaredAssets === "function") store.recordDeclaredAssets(noteId, assets);
+      store.recordDeclaredAssets(noteId, assets);
     },
     async listDeclaredAssets(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>> {
-      return typeof (store as any).listDeclaredAssets === "function" ? store.listDeclaredAssets(noteId) : [];
+      return store.listDeclaredAssets(noteId);
     },
     async applyRemoteNote(note: ManifestNote, content: string): Promise<void> {
       store.importRemoteNote(note as never, Buffer.from(content, "utf8"), []);
@@ -165,7 +165,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       // P1（对齐思源“未引用资源不上传”）：跳过本笔记孤儿登记的文件——从文档删除的图片
       // 在本地清理前不再上传/声明，云端由回收机制收回；仍被当前正文或历史快照引用的
       // 文件不会是孤儿（store.detectOrphans 已剔除），不会误跳过。
-      const orphans = store.orphanFilenamesForNote?.(noteId) ?? new Set<string>();
+      const orphans = store.orphanFilenamesForNote(noteId);
       const out: Array<{ filename: string; size: number; hash: string }> = [];
       for (const filename of fs.readdirSync(dir)) {
         if (orphans.has(filename)) continue;
@@ -188,9 +188,8 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     async listDeletedNotesForSync() {
       return store.listDeletedNotesForSync().map((d) => ({ id: d.id, deletedAt: d.deletedAt, title: d.title, nodeType: d.nodeType }));
     },
-    // 可选：sync.test FakeStore 等旧桩可能无此方法（发布方向标记缺失时计数降级，不影响同步正确性）
     async markTombstonesPublished(ids: string[]): Promise<void> {
-      store.markTombstonesPublished?.(ids);
+      store.markTombstonesPublished(ids);
     },
     async readDeletedContent(id: string): Promise<string | null> {
       try { return fs.readFileSync(store.notePathFor(id), "utf8"); } catch { return null; }
@@ -200,11 +199,10 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     },
     async revokeLocalDeletion(id: string): Promise<void> { store.revokeLocalDeletion(id); },
     async markFolderSynced(id: string, expectedUpdatedAt: string): Promise<boolean> { return store.markFolderSynced(id, expectedUpdatedAt); },
-    // 可选调用：测试 FakeStore/旧实现可能无此方法（文件夹级 purge 墓碑是新能力），无则 false
-    async isFolderPurged(id: string): Promise<boolean> { return store.isFolderPurged?.(id) ?? false; },
-    // v5：folder 墓碑（删除传播）——学习端应用 / 从未持有记墓碑
-    async applyRemoteFolderDelete(id: string, deletedAt: string): Promise<void> { store.applyRemoteFolderDelete?.(id, deletedAt); },
-    async rememberFolderDeleted(folder: ManifestFolder, deletedAt: string): Promise<void> { store.rememberFolderDeleted?.(folder, deletedAt); },
+    // v5：folder 墓碑（删除传播）——学习端应用 / 从未持有记墓碑（S2：桌面 Store 恒提供）
+    async isFolderPurged(id: string): Promise<boolean> { return store.isFolderPurged(id); },
+    async applyRemoteFolderDelete(id: string, deletedAt: string): Promise<void> { store.applyRemoteFolderDelete(id, deletedAt); },
+    async rememberFolderDeleted(folder: ManifestFolder, deletedAt: string): Promise<void> { store.rememberFolderDeleted(folder, deletedAt); },
     async getLastSeenCommitId(): Promise<string | null> { return store.getLastSeenCommitId(); },
     async setLastSeenCommitId(commitId: string): Promise<void> { store.setLastSeenCommitId(commitId); },
     async getLastTombstoneSig(): Promise<string> { return store.getLastTombstoneSig(); },
