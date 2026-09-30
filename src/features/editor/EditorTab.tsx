@@ -447,6 +447,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         mode,
         () => {
           if (retired) return;
+          // 审计 §6.1：初始化/setDocument 期间的 contentchange 不需要序列化——原 guard 在 getDocument 之后判断，
+          // 等于每次都白序列化一遍整篇正文（数 MB 文档实测量级数十 ms）。前置到序列化之前，语义不变。
+          if (setting) return;
           if (editor) {
             const next = stripAssetAccessToken(editor.getDocument("text/lake"));
             if (!shouldAcceptEditorChange({ initializing: setting, previous: latestDocumentRef.current, next })) return;
