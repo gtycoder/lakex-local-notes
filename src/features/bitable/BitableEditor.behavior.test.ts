@@ -158,6 +158,17 @@ describe("多维表编辑会话行为", () => {
     } finally { document.removeEventListener("keydown", blocked, true); }
   });
 
+  it("网格选区用行列索引命中：单击一格四边齐全（AR-F5）", () => {
+    act(() => root.render(createElement(BitableEditor, props("a"))));
+    selectCell(host);
+    const td = host.querySelector<HTMLTableCellElement>(".bt-td.cell-selected");
+    expect(td).not.toBeNull();
+    expect(td!.className).toContain("sel-top");
+    expect(td!.className).toContain("sel-bottom");
+    expect(td!.className).toContain("sel-left");
+    expect(td!.className).toContain("sel-right");
+  });
+
 });
 
 it("应用只挂一个共享预览，两个多维表标签只前进一张图片", async () => {

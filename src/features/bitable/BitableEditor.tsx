@@ -20,16 +20,17 @@ import {
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
-  BITABLE_OPTION_COLORS, applyViewToRecords, applyRelationMirror, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, relationRecordIds, stripFillRulesForField, unpairRelationFields,
-  bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
+  BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
+  removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, applySortMode, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
-  isBitableFilterGroup, isKnownFieldType, isRelationFieldType, newBitableId, orderedTableFields, parseBitableBody,
+  isKnownFieldType, isRelationFieldType, newBitableId, orderedAllTableFields, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
+import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField, duplicateBitableField, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
 import { StatCell } from "./bitableCells";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
@@ -184,15 +185,19 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
   /** 关联解析上下文（同一文档的 tables）：表格 / 看板 / 画册 / 日历 / 表单 / 记录详情 / 搜索共用一套。 */
   const displayCtx = useMemo(() => ({ tables: doc.tables }), [doc.tables]);
   const visibleFields = useMemo(() => orderedTableFields(activeTable, activeView), [activeTable, activeView]);
-  /** 表格配置面板顺序 = 视图 fieldOrder 应用到全部字段（含隐藏），与网格列顺序同源。 */
-  const allOrderedFields = useMemo(() => {
-    const order = activeView.fieldOrder;
-    if (!order || order.length === 0) return activeTable.fields;
-    const rank = new Map(order.map((id, index) => [id, index] as const));
-    const max = Number.MAX_SAFE_INTEGER;
-    return [...activeTable.fields].sort((x, y) => (rank.get(x.id) ?? max) - (rank.get(y.id) ?? max));
-  }, [activeTable, activeView]);
-  const viewRecords = useMemo(() => applyViewToRecords(activeTable, activeView), [activeTable, activeView]);
+  /** 表格配置面板顺序 = 视图 fieldOrder 应用到全部字段（含隐藏），与网格列顺序 / 关联选择器同源（单一来源）。 */
+  const allOrderedFields = useMemo(() => orderedAllTableFields(activeTable, activeView), [activeTable, activeView]);
+  /** 动态日期（今天/本周…）的计算时点：切回可见或窗口重新聚焦时刷新，不造后台轮询框架（AR-F7 续）。 */
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    if (!visible) return;
+    const refresh = () => setClock(new Date());
+    refresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [visible]);
+  const viewRecords = useMemo(() => applyViewToRecords(activeTable, activeView), [activeTable, activeView, clock]);
   const shownRecords = useMemo(() => {
     if (!findQuery.trim()) return viewRecords;
     const q = findQuery.trim().toLowerCase();
@@ -201,7 +206,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
   }, [viewRecords, findQuery, activeTable, displayCtx]);
   const fillProjection = useMemo(
     () => buildBitableFillProjection(activeTable, activeView, shownRecords),
-    [activeTable, activeView, shownRecords],
+    [activeTable, activeView, shownRecords, clock],
   );
   const fillBackgroundImage = useCallback((recordId: string, fieldId: string) => {
     const tokens = bitableFillBackgroundTokens(fillProjection, recordId, fieldId);
@@ -216,6 +221,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
     return match?.color;
   }, [fillProjection]);
   const rowIndexById = useMemo(() => new Map(shownRecords.map((r, i) => [r.id, i] as const)), [shownRecords]);
+  const columnIndexById = useMemo(() => new Map(visibleFields.map((f, i) => [f.id, i] as const)), [visibleFields]);
   const rowItems = useMemo(() => {
     /** 单级分组：分组头（含本组记录，供按组统计）/「加进本组」/ 组间间隔 / 记录行。 */
     type RowItem =
@@ -289,26 +295,14 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
 
   /** 日历拖拽落值：开始 + 结束一起平移（一次写多个字段，口径与单元格编辑一致）。 */
   const setRecordValues = useCallback((recordId: string, patch: Record<string, unknown>) => {
-    patchActiveTable((table) => ({
-      ...table,
-      records: table.records.map((r) => (r.id === recordId ? { ...r, values: { ...r.values, ...patch }, updatedAt: stamp() } : r)),
-    }));
-  }, [patchActiveTable]);
+    const tableId = docRef.current.activeTableId;
+    updateDoc((prev) => setBitableRecordValues(prev, tableId, recordId, patch));
+  }, [updateDoc]);
 
+  /** 单元格写值（AR02）：字段定位、关联双向镜像与「值未变不写」全部收敛到 core 纯函数。 */
   const setCellValue = useCallback((recordId: string, fieldId: string, value: unknown) => {
     const tableId = docRef.current.activeTableId;
-    updateDoc((prev) => {
-      const table = prev.tables.find((t) => t.id === tableId);
-      const field = table?.fields.find((f) => f.id === fieldId);
-      // 关联字段走**双向镜像唯一写入口**（非双向时行为等价于普通写值）；其余字段保持原路径
-      if (field && isRelationFieldType(field.type)) {
-        return { ...prev, tables: applyRelationMirror(prev.tables, tableId, fieldId, recordId, relationRecordIds(value)) };
-      }
-      return {
-        ...prev,
-        tables: prev.tables.map((t) => (t.id === tableId ? { ...t, records: t.records.map((r) => (r.id === recordId ? { ...r, values: { ...r.values, [fieldId]: value }, updatedAt: stamp() } : r)) } : t)),
-      };
-    });
+    updateDoc((prev) => setBitableCellValue(prev, tableId, recordId, fieldId, value));
   }, [updateDoc]);
 
   /** 上传 → 附件单元格条目。两个名字必须分开：
@@ -334,16 +328,10 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
     openImagePreview(images.map((image) => ({ src: bitableAssetUrl(noteId, image.file) })), index);
   }, [noteId]);
 
-  const appendAttachments = useCallback((recordId: string, fieldId: string, entries: BitableAttachment[]) => {
-    patchActiveTable((table) => ({
-      ...table,
-      records: table.records.map((r) => {
-        if (r.id !== recordId) return r;
-        const current = bitableAttachments(r.values[fieldId]);
-        return { ...r, values: { ...r.values, [fieldId]: [...current, ...entries] }, updatedAt: stamp() };
-      }),
-    }));
-  }, [patchActiveTable]);
+  /** 上传成功后回填附件（AR02）：目标 tableId 由调用点捕获，切表/删字段后不再写到「那时的当前表」。 */
+  const appendAttachments = useCallback((tableId: string, recordId: string, fieldId: string, entries: BitableAttachment[]) => {
+    updateDoc((prev) => appendBitableAttachments(prev, tableId, recordId, fieldId, entries));
+  }, [updateDoc]);
 
   const addOption = useCallback((fieldId: string, name: string, recordId?: string) => {
     patchActiveTable((table) => {
@@ -443,86 +431,28 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
   /** 打开「新增字段」弹窗（记录详情抽屉 / 字段面板共用）。 */
   const openAddField = useCallback(() => setFieldEditor({ fieldId: null }), []);
   const updateField = useCallback((fieldId: string, patch: Partial<BitableField>) => {
-    patchActiveTable((table) => ({ ...table, fields: table.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)) }));
+    patchActiveTable((table) => {
+      const fields = table.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f));
+      const field = fields.find((f) => f.id === fieldId);
+      if (!field) return table;
+      // 类型变更后清掉不再成立的视图引用（AR-F7 续）：只清配置、不迁移记录值。
+      const views = table.views.map((view) => stripViewRefsForFieldType(view, field));
+      return { ...table, fields, views };
+    });
   }, [patchActiveTable]);
+  /** 删除字段（AR02）：解除双向配对 + 清空**全部视图**里指向它的配置，收敛到 core 单一来源。 */
   const deleteField = useCallback((fieldId: string) => {
     const tableId = docRef.current.activeTableId;
-    updateDoc((prev) => {
-      const table = prev.tables.find((t) => t.id === tableId);
-      if (!table || table.fields.length <= 1) return prev;
-      // 先解除双向配对（对侧降级为单向、数据保留），再删字段并清视图配置
-      const tables = unpairRelationFields(prev.tables, tableId, fieldId);
-      return {
-        ...prev,
-        tables: tables.map((t) => {
-          if (t.id !== tableId) return t;
-          return {
-            ...t,
-            fields: t.fields.filter((f) => f.id !== fieldId),
-        // 删字段要把**所有视图**里指向它的配置一起清掉：残留的 filter/sort/group/统计/视图专属字段
-        // 会让面板下拉回落到已删字段的内部 id、工具栏还挂着 badge（260929-OPT 修）。
-        views: table.views.map((view) => {
-          const next: BitableView = { ...view };
-          const strip = (ids: string[] | undefined) => (ids ? ids.filter((id) => id !== fieldId) : ids);
-          next.hiddenFieldIds = strip(next.hiddenFieldIds);
-          next.fieldOrder = strip(next.fieldOrder);
-          next.formFieldIds = strip(next.formFieldIds);
-          next.highlightDuplicateFieldIds = strip(next.highlightDuplicateFieldIds);
-          const fillRules = stripFillRulesForField(next.fillRules, fieldId);
-          if (fillRules.length > 0) next.fillRules = fillRules; else delete next.fillRules;
-          next.kanbanFieldIds = strip(next.kanbanFieldIds);
-          next.galleryFieldIds = strip(next.galleryFieldIds);
-          const stripFilters = (nodes: readonly BitableFilterNode[]): BitableFilterNode[] => {
-            const out: BitableFilterNode[] = [];
-            for (const node of nodes) {
-              if (isBitableFilterGroup(node)) {
-                const children = stripFilters(node.filters);
-                if (children.length > 0) out.push({ ...node, filters: children });
-              }
-              else if (node.fieldId !== fieldId) out.push(node);
-            }
-            return out;
-          };
-          if (next.filters) next.filters = stripFilters(next.filters);
-          if (next.sorts) next.sorts = next.sorts.filter((rule) => rule.fieldId !== fieldId);
-          if (next.groups) next.groups = next.groups.filter((rule) => rule.fieldId !== fieldId);
-          if (next.columnStats?.[fieldId] !== undefined) {
-            const columnStats = { ...next.columnStats };
-            delete columnStats[fieldId];
-            next.columnStats = columnStats;
-          }
-          if (next.columnTextColors?.[fieldId] !== undefined) {
-            const columnTextColors = { ...next.columnTextColors };
-            delete columnTextColors[fieldId];
-            next.columnTextColors = columnTextColors;
-          }
-          if (next.kanbanGroupFieldId === fieldId) delete next.kanbanGroupFieldId;
-          if (next.galleryCoverFieldId === fieldId) delete next.galleryCoverFieldId;
-          if (next.calendarStartFieldId === fieldId) delete next.calendarStartFieldId;
-          if (next.calendarEndFieldId === fieldId) delete next.calendarEndFieldId;
-          if (next.calendarTitleFieldId === fieldId) delete next.calendarTitleFieldId;
-          if (next.calendarColorFieldId === fieldId) delete next.calendarColorFieldId;
-          return next;
-            }),
-          };
-        }),
-      };
-    });
+    updateDoc((prev) => deleteBitableField(prev, tableId, fieldId));
     setColumnMenu(null);
     setFieldEditor(null);
-  }, [patchActiveTable]);
+  }, [updateDoc]);
   const duplicateField = useCallback((fieldId: string) => {
-    patchActiveTable((table) => {
-      const index = table.fields.findIndex((f) => f.id === fieldId);
-      if (index < 0) return table;
-      const source = table.fields[index];
-      const field: BitableField = { ...source, id: newBitableId("fld"), name: source.name + " 副本", options: (source.options ?? []).map((o) => ({ ...o, id: newBitableId("opt") })) };
-      const fields = [...table.fields];
-      fields.splice(index + 1, 0, field);
-      return { ...table, fields };
-    });
+    // AR-F7 续：复制关联字段回落为单向、不继承配对（单一来源在 core）。
+    const tableId = docRef.current.activeTableId;
+    updateDoc((prev) => ({ ...prev, tables: duplicateBitableField(prev.tables, tableId, fieldId) }));
     setColumnMenu(null);
-  }, [patchActiveTable]);
+  }, [updateDoc]);
   const insertField = useCallback((fieldId: string, side: "before" | "after") => {
     patchActiveTable((table) => {
       const index = table.fields.findIndex((f) => f.id === fieldId);
@@ -551,9 +481,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
     patchActiveTable((table) => {
       const view = table.views.find((v) => v.id === table.activeViewId);
       if (!view) return table;
-      const max = Number.MAX_SAFE_INTEGER;
-      const rank = new Map((view.fieldOrder ?? []).map((id, index) => [id, index] as const));
-      const current = table.fields.map((f) => f.id).sort((x, y) => (rank.get(x) ?? max) - (rank.get(y) ?? max));
+      // 与网格列顺序 / 关联选择器同源：orderedAllTableFields（不再自己算 rank/sort）
+      const current = orderedAllTableFields(table, view).map((f) => f.id);
       const fieldOrder = moveItem(current, fromId, toId, (id) => id);
       return { ...table, views: table.views.map((v) => (v.id === view.id ? { ...v, fieldOrder } : v)) };
     });
@@ -573,19 +502,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
   const addRecord = useCallback(() => {
     const record = createBitableRecord();
     // createdAt 传进去：日期字段若配了「添加记录时间」，填的就是这条记录自己的创建日
-    patchActiveTable((table) => ({ ...table, records: [...table.records, { ...record, values: defaultRecordValues(table, record.createdAt) }] }));
+    updateDoc((prev) => addBitableRecord(prev, prev.activeTableId, { record }).doc);
     return record.id;
-  }, [patchActiveTable]);
+  }, [updateDoc]);
   /** 复刻云端：分组下方的圆 + 直接**加进本组**（给新记录预置该分组字段的值；空值组则不写值）。 */
   const addRecordInGroup = useCallback((fieldId: string, value: unknown) => {
     const record = createBitableRecord();
-    patchActiveTable((table) => {
-      const values = defaultRecordValues(table, record.createdAt);
-      if (value !== undefined && value !== "") values[fieldId] = value;
-      return { ...table, records: [...table.records, { ...record, values }] };
-    });
+    updateDoc((prev) => addBitableRecord(prev, prev.activeTableId, { record, fieldId, value }).doc);
     return record.id;
-  }, [patchActiveTable]);
+  }, [updateDoc]);
   const deleteRecords = useCallback((ids: string[]) => {
     const set = new Set(ids);
     patchActiveTable((table) => ({ ...table, records: table.records.filter((r) => !set.has(r.id)) }));
@@ -714,17 +639,20 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
     }
     return null;
   }, [selectedRecordIds, cellRange]);
+  // AR-F5：逐格命中用行/列索引（O(1)），不再每个格子 findIndex 扫全表（原 O(R×C×(R+C))）。
   const cellInSelection = (recordId: string, fieldId: string) => {
     if (!cellRange) return false;
-    const ri = shownRecords.findIndex((r) => r.id === recordId);
-    const ci = visibleFields.findIndex((f) => f.id === fieldId);
+    const ri = rowIndexById.get(recordId);
+    const ci = columnIndexById.get(fieldId);
+    if (ri === undefined || ci === undefined) return false;
     return ri >= cellRange.r0 && ri <= cellRange.r1 && ci >= cellRange.c0 && ci <= cellRange.c1;
   };
   /** 选中态的**边框**只画在选区外缘（单格 = 一整圈；见 bitableEditor.css 的四边 box-shadow 拼法）。 */
   const selectionEdgeClass = (recordId: string, fieldId: string) => {
     if (!cellRange) return "";
-    const ri = shownRecords.findIndex((r) => r.id === recordId);
-    const ci = visibleFields.findIndex((f) => f.id === fieldId);
+    const ri = rowIndexById.get(recordId);
+    const ci = columnIndexById.get(fieldId);
+    if (ri === undefined || ci === undefined) return "";
     if (ri < cellRange.r0 || ri > cellRange.r1 || ci < cellRange.c0 || ci > cellRange.c1) return "";
     return (ri === cellRange.r0 ? " sel-top" : "") + (ri === cellRange.r1 ? " sel-bottom" : "")
       + (ci === cellRange.c0 ? " sel-left" : "") + (ci === cellRange.c1 ? " sel-right" : "");
@@ -947,7 +875,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
                 value={record.values[field.id]}
                 readOnly={readOnly}
                 imageOnly={imageOnly}
-                onUpload={(files) => { void uploadFiles(files).then((entries) => appendAttachments(record.id, field.id, entries)); }}
+                onUpload={(files) => { void uploadFiles(files).then((entries) => appendAttachments(activeTable.id, record.id, field.id, entries)); }}
                 onRemove={(file) => setCellValue(record.id, field.id, removeBitableAttachment(record.values[field.id], file))}
                 onOpen={openAsset}
                 onOpenImages={openImages}
@@ -1097,9 +1025,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
             readOnly={readOnly}
             onUpdateView={(patch) => patchView(activeView.id, patch)}
             onSubmit={(values) => {
-              const record = createBitableRecord();
-              record.values = values;
-              patchActiveTable((table) => ({ ...table, records: [...table.records, record] }));
+              // AR-F7 续：表单草稿里的双向关联也要镜像到目标表（走 core 唯一入口）。
+              updateDoc((prev) => ({ ...prev, tables: addBitableRecordWithValues(prev.tables, prev.activeTableId, values).tables }));
             }}
             defaults={formDefaults}
             onUploadFiles={uploadFiles}
@@ -1582,7 +1509,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
           onSetValue={setCellValue}
           onAddOption={(fieldId, name, recordId) => addOption(fieldId, name, recordId)}
           onAddField={openAddField}
-          onUpload={(recordId, fieldId, files) => { void uploadFiles(files).then((entries) => appendAttachments(recordId, fieldId, entries)); }}
+          onUpload={(recordId, fieldId, files) => { void uploadFiles(files).then((entries) => appendAttachments(activeTable.id, recordId, fieldId, entries)); }}
           onOpenAsset={openAsset}
           onOpenImages={openImages}
         />

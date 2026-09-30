@@ -1,7 +1,7 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
 > 状态：**方案已冻结；V01 已完成（用户验收通过）；V02–V04 + 260928 三批追加需求 + T01/T04 + T02A + 260929 单级分组/UI2 + 260929-OPT 阶段优化 + T02B.1/.2/.3/.4 关联 + 260929 收口各条 + 260930 四条 + **260930 筛选重做：类型操作符矩阵 / 动态日期 / AND·OR 条件组 / 最多 2 层子组（代码已提交 `7dd81ba3`）** + **260930 条件填色：单元格 / 整行 / 行侧 / 整列 + 钉钉同款 alpha 混色 + 应用内统一 70 色实色卡/自定义（已提交 `ae1cfda`，待验收）** 已实施，一并待验收**（T03 多级分组已按用户决定废弃；T06 表单双模已完成待验收；D01/D02 暂缓）。
-> **当前工作（2026-09-30）**：AR01 编辑会话安全收口已实施；用户明确停止后续验证，授权合入 master 并与非多维表审计文档一并提交推送，之后停止。实施与验证边界见 **§17.11 / §13 最新记录**。AR02–AR04 未开始。
+> **当前工作（2026-09-30）**：用户确认按**路线 B（有边界的内部重构）**推进，AR02 第一段「业务写入收敛为 core 纯函数」已在隔离分支实施、门禁全绿、待验收；AR02 的 core 拆分与 AR03/AR04 未开始。AR01 已合入并在 `8de061e` 停止，边界见 §17.11 / §13 最新记录。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -778,6 +778,11 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 筛选精准重做 | 待验收 | 260930-FILTER | 字段类型操作符矩阵、15 种动态日期、AND/OR 条件组、最多 2 层子组；`BitableFilterEditor` 与 `evaluateFilterNode` 可复用于视图筛选、关联选择器和后续条件着色；见 §13 |
 | AR00 整体代码/架构评估与讨论 | 待验收 | 260930-ARCH | 只读审计与讨论稿已完成（§17）；推荐有限内部重构，不重写模型/引擎。已复现行为风险，尚未修复；AR01–AR04 只是建议，未开始、待讨论授权。 |
 | AR01 编辑会话安全收口 | 待验收 | 260930-AR01 | 独立 worktree 实施；1441 passed / 16 skipped、双端构建与静态门禁通过；真实 Electron 仅部分场景完成，列宽重做断言未通过且未定位完。用户明确停止验证并授权合入提交推送；不宣称全部验收通过。详见 §17.11。 |
+| AR02 业务写入收敛（第一段） | 待验收 | 260930-AR02 | 新建 `src/core/bitableMutations.ts`：`stripFieldFromView` / `deleteBitableField` / `setBitableCellValue` / `setBitableRecordValues` / `appendBitableAttachments` / `addBitableRecord`（无变化一律返回原引用）；`BitableEditor` 的内联字段删除清理与各写入动作改调 core；附件回填捕获发起时的 tableId，切表后不再写到「那时的当前表」。9 例纯函数单测 + 挂载护栏；门禁 1451/16 全绿。core 按依赖拆分（AR02 后续）未开始；见 §13 |
+| AR03 已证实热点优化 | 待验收 | 260930-AR03 | AR-F5 选区逐格命中改走行/列索引（原每格 `findIndex` 扫全表）；AR-F6 `relationTargetRecords` 按 `records` 数组引用建 WeakMap 索引（原每格重建 Map）；`allOrderedFields` 与列配置面板拖拽收敛到 `orderedAllTableFields` 单一来源。CPU 前置基准（中位数/同结果）：3000×15 选区 228.8ms→1.2ms、3000×3000 关联 389.4ms→0.7ms。AR03 的网格/字段面板结构拆分与 `bitableCells↔RelationPicker` 循环依赖未做（无实测收益前按「可停点」停止）。见 §13 |
+| AR04 真实端性能验收 | 待验收 | 260930-AR04 | 真实 Electron 压测（隔离 userData+CDP；依附窗口是隐藏的 ⇒ 量挂载/DOM/堆/交互延迟，量不到 FPS）：500×20 打开 1.33s/8.7万 DOM/75MB；2000×20 4.96s/34万/201MB；目标 5000×20 打开 12.42s/84.8万/395MB/首次点选 2.25s；10000×20 24.8s/169万/1342MB；20000×50（100万格）200s 内未渲染完成；50000×50 因正文 >32MiB 直接被拒。结论：CPU 热点已消除，DOM 全量渲染是确认瓶颈 ⇒ 支持目标规模前需要行虚拟化/渲染策略（§17.7 AR04 触发条件成立）。**用户 260930 决定：先不做行虚拟化，留待后续**；审计其余遗留见 §17.12。见 §13 |
+| AR-F7 续（B 项修复） | 待验收 | 260930-B | 表单提交走双向关联镜像；复制关联字段回落单向、不继承配对；字段类型变更清掉不再成立的视图引用；「加进本组」不预置系统时间；动态日期改为切回可见/聚焦时刷新计算时点。core 纯函数 + 4 例新单测；门禁 1457/16 全绿。见 §13 |
+| D 真实端收尾 + 整体 UI 回归 | 待验收 | 260930-D | 列宽 redo 澄清为驱动假象（真实端 260→180→260，通过）；关 tab 保留通过；只读草稿 IPC 未定论；整体 UI 回归 13 项通过。见 §13 |
 
 ## 12. 修改记录
 
@@ -862,6 +867,12 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-30 | 260930-FILL-DROPDOWN | 填色下拉互斥修复 | `bitableCells.tsx`(SelectMenu 唯一打开事件 + 外层 pointerdown 收起) · `bitableEditorMount.test.ts` · `BITABLE-FILL-COLOR-RESEARCH.md` · 本文件 | 用户截图报“三个下拉同时出现”。修复：任一 SelectMenu 打开时广播唯一打开事件，其它下拉立即关闭；点击弹层空白/其它触发器也收起；CDP 连续点模式/字段/操作符后可见下拉恒为 1，点空白后为 0 | 未提交（待用户验收） |
 | 2026-09-30 | 260930-ARCH | 整体代码/架构只读评估与讨论 | 仅本文 §17/§11/§12/§13 与 HANDOFF 当前入口；校正当前填色提交状态，保留历史会话 | 基线 ae1cfda；仓库测试 1430/16；临时 React/CPU 9 用例复核现有问题；结论：优先安全所有权与行为护栏，推荐有限内部重构 | 未修改产品代码；未 build/CDP/Android；待用户讨论，不实施 AR01–AR04 |
 | 2026-09-30 | 260930-AR01 | 编辑会话安全收口与用户授权提交 | useBitableSession、BitableEditor、附件只读控件、预览根宿主、草稿回调接线、2 个行为测试文件及护栏、本文/HANDOFF | 1441 passed / 16 skipped；tsc/core/CSS/双端构建通过；用户停止后续真实端验证，授权与另一会话审计文档合入 master 提交推送 | 功能待验收；真实端列宽 redo 断言失败未定位、草稿/预览端到端流程未走完、Android 未实测；AR02–AR04 未开始 |
+| 2026-09-30 | 260930-AR02 | AR02 业务写入收敛（第一段） | `src/core/bitableMutations.ts`(新) · `bitableMutations.test.ts`(新，9 例) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 字段删除清理（含双向解除配对、全部视图引用、补上原先漏掉的 `formDescriptions`）与单元格/日历/附件回填/新增记录收敛到 core 纯函数；异步附件回填捕获原表；`BitableEditor.tsx` 净减约 62 行。门禁：tsc / vitest 1451-16 / check:core 70 文件 0 违规 / ui-metrics / cssLayers+uiPrimitives / 桌面+移动构建 / git diff --check 全绿 | 分支 `codex/bitable-ar02` 未提交、未合 master、未推送；未跑 Electron CDP 真实端点与 Android；core 按依赖拆分未开始 |
+| 2026-09-30 | 260930-AR03 | 已证实热点优化（AR-F5/AR-F6）+ 字段序单一来源 | `src/core/bitableDoc.ts`（`relationTargetRecords` 引用缓存） · `relationIndex.test.ts`(新) · `BitableEditor.tsx`（行/列索引命中、`orderedAllTableFields`） · `BitableEditor.behavior.test.ts` | 两处已证实热点在 CPU 前置基准中消除（选区 3000×15 228.8→1.2ms；关联 3000×3000 389.4→0.7ms）；门禁 tsc / vitest 1453-16 / check:core 70-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / git diff --check 全绿 | 分支 `codex/bitable-ar02` 未提交/未合 master/未推送；真实 Electron 渲染帧与内存未测；AR03 结构拆分未做 |
+| 2026-09-30 | 260930-AR04 | 真实端性能验收（前置） | 仓库外临时基准，跑完即删、未入库；无产品源码改动 | CPU 抽样：选区 3000×15 由 228.8ms 降到 1.2ms；关联 3000×3000 由 389.4ms 降到 0.7ms（中位数、与旧路径同结果断言） | 真实 Electron median/P95、React commit、DOM、内存、丢帧未测；等用户真实单表规模样本；未测前不评估虚拟化 |
+| 2026-09-30 | 260930-AR04 | 真实端性能验收（压测 + 行为验收） | scripts/bitable-stress.mjs(新) · HANDOFF/本文件 | 行为验收 7/7 通过（关联 chip / 选区四边 / 列菜单删除 / 字段移除 / 对侧降级 / 数据保留 / 视图配置清理）；压测：目标 5000×20 打开 12.42s/848k DOM/395MB/点选 2.25s，10000×20 24.8s/1.69M/1342MB，20000×50（1M 格）200s 未完成，50000×50 保存被 32MiB 正文上限拒绝 | CPU 热点已消除；DOM 是瓶颈，行虚拟化待立项；隐藏窗口量不到 FPS |
+| 2026-09-30 | 260930-B | AR-F7 续 + 动态日期计算时点 | src/core/bitableMutations.ts(+test，4 例新) · BitableEditor.tsx（onSubmit/duplicateField/updateField/clock） | 表单双向关联镜像、复制关联字段回落单向、类型变更清视图引用、系统时间不预置、动态日期在切回可见/聚焦时重算。门禁：tsc / vitest 1457-16 / check:core 70-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / git diff --check 全绿 | 分支未提交/未合 master；AR-F8 行为护栏仍不完整；C/D 未实施 |
+| 2026-09-30 | 260930-D | 真实端收尾 + 多维表整体 UI 回归 | 仅验证，无产品代码改动 | CDP 启动真实 Electron 实操：列宽撤销/重做 260-180-260；关 tab 保留通过；13 项 UI 回归（统计/五视图/添加记录/新增字段/隐藏列/关联选择器/填色/筛选/搜索入口）通过；只读草稿 IPC 未定论 | 只读草稿需「先提交输入再锁定」复验；共享预览仅 jsdom；Android 未做；仍未提交/未合 master |
 
 ## 13. 会话记录（只追加）
 
@@ -3398,6 +3409,179 @@ UI 与交互变化：
 - 功能状态保持待验收；未完成的真实端/Android 验证如上。AR02–AR04、全局审计建议均未实施。
 - 合并推送后停止，等待用户下一步指令。隔离实例按具体 PID 清理，临时日志/测试数据保留，不触碰正式数据。
 
+### 2026-09-30 · 260930-AR02 · 业务写入收敛为 core 纯函数（第一段）
+
+接手与范围：
+
+- 按 README → HANDOFF → AGENTS → 本文件 §17 接手，确认**路线 B（有边界的内部重构）**；AR01 已合入并在 `8de061e` 停止，本轮从 AR02 起步。
+- 只取 AR02 里「已发生遗漏的 deleteField、记录/字段写入、关联镜像」这一切口；AR02 的另一半（按依赖拆 `bitableDoc.ts`）与 AR03/AR04 明确未开始。不改正文格式、同步、GC、资源与样式。
+
+本次完成：
+
+- 新建 `src/core/bitableMutations.ts`（纯函数，无 DOM/React/native 依赖）：
+  - `stripFieldFromView`：删除字段时从单个视图清掉**所有**指向它的配置（隐藏列/列序/表单题目/重复值高亮/条件填色/看板卡片/画册卡片/筛选树递归且空组移除/排序/分组/列统计/列文字颜色/表单逐字段描述，以及看板分组字段、画册封面、日历四字段）。
+  - `deleteBitableField`：先解除双向配对（对侧降级单向、两侧数据保留），再移除字段并跨**全部视图**清配置；表不存在 / 只剩一列 / 字段不存在 → 原 doc。
+  - `setBitableCellValue`：关联字段走 `applyRelationMirror` 唯一写入口；普通字段写值并更新时间；值与现状相同 → 原 doc。
+  - `setBitableRecordValues`：一次写多字段（日历平移）。
+  - `appendBitableAttachments`：上传成功回填；空条目 / 目标不存在 → 原 doc。
+  - `addBitableRecord`：按表默认值新增，支持预置分组字段（「加进本组」）。
+- `BitableEditor.tsx`：删除字段内联大块清理（原 60+ 行）、`setCellValue`、日历写值、附件回填、`addRecord`/`addRecordInGroup` 全部改调 core；**附件回填改为由调用点捕获 `activeTable.id`**，切表后不再写进「那时的当前表」。
+- `bitableEditorMount.test.ts`：3 处只认旧内联写法的源码护栏（填色删除清理、260929-OPT 删字段清理、双向镜像写值）改指向 `bitableMutations.ts` 单一来源；新增 1 条 AR02 护栏。
+
+数据结构/接口变化：
+
+- 无正文格式变化；新增 6 个 core 导出与 `BitableRecordAdd`（`addBitableRecord` 的固定 record / 预置字段）。
+- 不改 S3、同步、历史、GC、样式与依赖。
+
+UI 与交互变化：
+
+- 行为对拍：字段删除仍解除配对并清全部视图配置（顺带补上原先漏掉的 `formDescriptions`）；单元格/日历/新增记录行为不变；附件上传回填目标从「当时的当前表」改为「发起上传的表」。
+
+改动文件：
+
+- `src/core/bitableMutations.ts`(新) · `src/core/bitableMutations.test.ts`(新，9 例)
+- `src/features/bitable/BitableEditor.tsx` · `src/features/bitable/bitableEditorMount.test.ts`
+- `HANDOFF.md` · 本文件
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest run`：**1451 passed / 16 skipped**（163 文件通过 / 5 跳过；较 AR01 的 1441 增加 10 = 9 条纯函数用例 + 1 条 AR02 护栏）
+- `check:core`：70 文件 / 0 违规
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：8 passed
+- 桌面构建 / 移动构建：通过
+- `git diff --check`：通过
+- 未跑 **Electron CDP 真实端点**与 Android（本批为 core 写入收拢、未新增可见 UI）。
+
+遗留问题：
+
+- 隔离分支 `codex/bitable-ar02` 上**未提交、未合 master、未推送**，按红线等用户功能验收。
+- 真实端行为验收（删字段、附件上传后切表、日历写值）与 Android 未做；异步上传的端到端行为测试未补（当前由「纯函数 no-op 测试 + 源码护栏」覆盖）。
+- AR02 的「按真实依赖拆 `bitableDoc.ts`」、AR-F7 其余写入动作（复制字段配对、改字段类型脏配置等）未开始；AR03/AR04 未开始。
+
+下一步：
+
+- 等用户对本批的功能验收；通过后再决定继续 AR02 的 core 拆分，还是先补真实端/Android 验收。
+
+### 2026-09-30 · 260930-AR03/AR04 · 已证实热点优化与真实端性能前置
+
+承接用户「继续推进到 AR04」。
+
+本次完成：
+
+- 按 §17.7 AR03「做已证实热点优化」，只动两处有 CPU 证据的路径：
+  - **AR-F5**：`cellInSelection` / `selectionEdgeClass` 由每格 `shownRecords.findIndex` + `visibleFields.findIndex`（O(R×C×(R+C))）改为复用 `rowIndexById` 并新增 `columnIndexById`（O(1)）。
+  - **AR-F6**：`relationTargetRecords` 不再每格重建 `Map`，改为按 `records` **数组引用**建 WeakMap 索引（正文是不可变快照 ⇒ 编辑必换新数组、缓存天然失效；不进 localStorage、不留长期缓存）。
+- **字段序单一来源**：`allOrderedFields` 与列配置面板拖拽 `reorderPanelFields` 改走 core 的 `orderedAllTableFields`，删掉编辑器里重复的 rank/sort。
+- 测试：新增 `relationIndex.test.ts`（同一引用复用、换数组失效、失效 id 跳过）；`BitableEditor.behavior.test.ts` 增 1 条选区四边断言。
+
+数据结构/接口变化：无正文格式变化；复用既有 `orderedAllTableFields` 导出。
+
+改动文件：
+
+- `src/core/bitableDoc.ts`（`relationTargetRecords` 索引） · `src/core/relationIndex.test.ts`(新)
+- `src/features/bitable/BitableEditor.tsx` · `src/features/bitable/BitableEditor.behavior.test.ts`
+- `HANDOFF.md` · 本文件
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest run`：**1453 passed / 16 skipped**
+- `check:core`：70 文件 / 0 违规；`ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers+uiPrimitives` 8 passed；桌面 + 移动构建通过；`git diff --check` 通过
+- **AR04 CPU 前置基准**（临时文件跑完即删、未入库；中位数、与旧路径同结果断言）：选区 3000 行 × 15 列 **228.8ms → 1.2ms**；关联 3000 × 3000 **389.4ms → 0.7ms**。
+
+遗留问题：
+
+- **AR04 真实端未做**：`打开 / 输入 / 拖列宽 / 选区拖动 / 关联选择器 / 视图切换 / 滚动 / 保存` 的 median·P95、React commit、长任务、DOM 数、内存与丢帧都需要真实 Electron；先要用户给**真实常用单表规模**（行/列/附件·关联比例/填色规则数）才能定样本。没测到真实瓶颈前不评估行虚拟化。
+- AR02 的「按依赖拆 `bitableDoc.ts`」、AR03 的网格/字段面板结构拆分与 `bitableCells ↔ RelationPicker` 循环依赖**未做**——按 §17.7「搬文件本身不会自动让 UI 变快」「没有明确约束收拢或测量收益就停止」，留待有实测收益或约束需求再做。
+- 本批仍在隔离分支 `codex/bitable-ar02`，未提交/未合 master/未推送。
+
+下一步：
+
+- 用户给出真实单表规模 → 做 AR04 真实端采样；或先做 AR02/AR03 的真实 Electron CDP 行为验收。
+
+### 2026-09-30 · 260930-AR04 · 真实端行为验收 + 目标规模压测
+
+用户选择「先做真实端验收」，并给出目标 5000 条 × 20 字段、要求看 5 万条 × 50 字段的表现。
+
+真实端行为验收（隔离 userData + LAKE_RENDERER=scheme + --no-sandbox + 独立 CDP 端口 9341；真实 UI 操作 + 落盘断言）——7/7 通过：
+
+- 双向关联 chip 显示目标主字段「目标甲」⇒ AR-F6 关联索引路径端到端可用；
+- 单击一格得到 sel-top/sel-bottom/sel-left/sel-right 四边 ⇒ AR-F5 行列索引选区端到端可用；
+- 打开列菜单 → 删除列 → 落盘断言：字段移除、对侧 relationTwoWay 降级为 relationOneWay 且 pairedFieldId 清除、对侧数据保留 r1、视图 sorts 清空 / columnTextColors 去掉该列 / 另一视图 galleryCoverFieldId 移除 ⇒ AR02 删除·解配·全视图清理端到端可用。
+
+目标规模压测（scripts/bitable-stress.mjs；每个规模全新隔离 userData，跑完删除；真实 Electron CDP）：
+
+| 规模 | 打开耗时 | DOM 节点 | 单元格 | JS 堆 | 首次点选 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 500 × 20 | 1.33s | 87,123 | 10,000 | 75MB | 280ms |
+| 2000 × 20 | 4.96s | 340,623 | 40,000 | 201MB | 876ms |
+| 5000 × 20（目标） | 12.42s | 847,623 | 100,000 | 395MB | 2.25s |
+| 10000 × 20 | 24.8s | 1,692,623 | 200,000 | 1,342MB | 2.45s |
+| 20000 × 50 | >200s 未渲染完成 | — | 1,000,000 | — | — |
+| 50000 × 50 | 保存即被拒：正文不能超过 32 MiB | — | — | — | — |
+
+结论与边界：
+
+- 目标 5000×20 能打开，但 12.42s 挂载 / 84.8 万 DOM / 395MB 堆 / 首次点选 2.25s，不满足日常使用；20 万格已接近 1.7M DOM、1.3GB 堆。
+- 5 万×50（250 万格）在当前产品里不可能存在：saveNote 的正文上限是 32 MiB，超限直接 INVALID_INPUT。
+- CPU 热点（AR-F5/F6）已消除，瓶颈确认在 DOM 全量渲染 ⇒ §17.7 AR04 的触发条件成立，行虚拟化需要单独立项。
+- 诚实边界：CDP 依附窗口是隐藏的（document.hidden === true），无法测 rAF/FPS/丢帧；上表是挂载耗时、DOM 数、堆与交互延迟，不是帧率；长任务 PerformanceObserver 未采集。
+
+改动文件：scripts/bitable-stress.mjs(新，可复用压测工具) · HANDOFF.md · 本文件。行为验收脚本在仓库外临时目录。
+
+遗留问题：
+
+- 行虚拟化/渲染策略尚未设计；需要用户决定是否立项（会牵动焦点、选区、拖拽、分组、粘性统计、浮层锚点的既有契约）。
+- 32 MiB 正文上限是硬约束；若目标含超大表，需要产品级讨论（分表/分文档）。
+- 未做：真实端长任务/FPS（隐藏窗口限制）、Android、附件上传后切表的端到端 CDP 用例。
+
+下一步：
+
+- 等用户对「是否为行虚拟化立项」的决定；在此之前 AR02/AR03 剩余结构拆分继续按可停点不动。
+
+### 2026-09-30 · 260930-AR04-TODO · 记录压测结论与遗留审计清单
+
+- 用户决定：**先不做行虚拟化，留待后续**；本轮只记录待办，不改产品代码。
+- 真实端行为验收 7/7 与压测数据已在前面两条 §13 记录；新增 §17.12「多维表审计遗留清单」汇总 §17.3/§17.9 的当前状态（已实施 / 未修 / 暂缓 / AR01 真实端未完成 / 产品硬约束）。
+- 测试工具 scripts/bitable-stress.mjs 已在上一批入库；HANDOFF §3 登记行虚拟化待办、§6 登记压测命令。
+
+### 2026-09-30 · 260930-B · AR-F7 续（表单镜像 / 复制字段 / 类型变更 / 动态日期）
+
+按用户要求先修 §17.12 的 B 类。用户同时要求 C（除虚拟化）与 D 也做、最后整体回归；本批只完成 B，C/D 见下方评估（未实施）。
+
+本次完成（core 纯函数 + 编辑器接线）：
+
+- addBitableRecordWithValues：表单草稿新增记录时对每个关联字段走 applyRelationMirror，修复「表单选的双向关联不镜像」（关联值先留空再镜像，否则差集为空、对侧永不更新）。
+- duplicateBitableField：复制关联字段回落为 relationOneWay、不继承 pairedFieldId；字段/选项 id 重生成。
+- stripViewRefsForFieldType：字段类型变更后清掉看板分组 / 画册封面 / 日历开始·结束·颜色里不再成立的引用（只清配置，不迁移记录值）。
+- addBitableRecord：系统时间字段不接受「加进本组」的预置值。
+- 动态日期计算时点：编辑器加 clock，在切回可见 / 窗口聚焦时刷新，applyViewToRecords 与 buildBitableFillProjection 的 memo 纳入该依赖（不造后台轮询，求值语义不变）。
+
+验证结果：
+
+- tsc --noEmit：通过
+- vitest run：**1457 passed / 16 skipped**（+4 = bitableMutations 新增用例）
+- check:core：70 文件 / 0 违规；ui-metrics：hex=0 / rgb=0 / !important=9 / 未定义令牌=0；cssLayers+uiPrimitives 8 passed；桌面 + 移动构建通过；git diff --check 通过
+
+遗留与下一步：
+
+- C（核心拆分 / 网格与字段面板拆分 / bitableCells↔RelationPicker 循环依赖）与 D（AR01 真实端收尾、Android）**未实施**；评估见 §17.12 与 HANDOFF。
+- 仍未提交、未合 master。
+
+
+
+### 2026-09-30 · 260930-D · 真实端收尾 + 多维表整体 UI 回归
+
+用户要求只做 D，完成后用 CDP 启动项目、实际操作 UI 做一次多维表整体回归（结果汇总见 §17.12 D）。
+
+- D-1 列宽 redo：真实 Electron CDP 实操 = 拖到 260 → 撤销 180 → 重做 260；AR01 的 redo 断言失败是驱动未带 Shift 的假象，产品无 bug。
+- D-3 关 tab 保留：输入后关闭标签再打开，输入仍在，通过。
+- D-2 只读草稿 IPC：仍未定论（注入方式未先提交输入，drafts=0）；需用「先 blur/Enter 提交、再 setNoteLocked」复验。
+- 多维表整体 UI 回归（真实 Electron + 隔离 userData + scheme + CDP 实操）：底栏统计、看板、画册、日历、表单、回表格、添加记录、新增字段面板、隐藏列、关联选择器打开、填色面板、筛选面板、搜索入口——13 项通过。
+- 未改产品代码；仍未提交、未合 master。
+
 ## 14. 会话执行模板
 
 每次实现会话结束前，把下面模板复制到 §13 末尾并填写完整：
@@ -3743,3 +3927,41 @@ node node_modules/vitest/vitest.mjs run \
 - 只读审计文档/复现材料已保留；忽略规则覆盖的临时 benchmark 日志仍在本机，未强行纳入提交。
 - 不再运行验证、不继续修复、不推进 AR02–AR04。真实端列宽 redo 断言未通过/未定位、其它未验证项保持前述记录；功能仍待验收。
 - 测试 Electron 实例已按明确 PID 关闭。保留隔离 worktree 与本机证据，未操作正式数据。
+
+### 17.12 多维表审计遗留清单（2026-09-30 · AR04 后更新）
+
+> 汇总 §17.3 / §17.9 的当前状态；**不是新的实施授权**。用户 260930 决定：**先不做行虚拟化，留待后续**。
+
+**A. 已确认问题 — 已实施**
+
+- AR-F1 隐藏标签一起粘贴 · AR-F2 只读仍撤销/发布 · AR-F3 导航占用编辑历史 · AR-F4 重复预览宿主 —— AR01 已实施（真实端验证未走完，功能仍待验收）。
+- AR-F5 选区逐格线性查找 → 改行/列索引；AR-F6 关联逐格重建索引 → 按 records 引用缓存 —— AR03 已实施。
+- AR-F7 的「删字段留脏配置」段 → deleteBitableField 单一来源并补 formDescriptions；异步附件回填目标 → 捕获发起上传时的 tableId —— AR02 已实施。
+- 字段序重复实现 → 统一 orderedAllTableFields —— AR03 已实施。
+
+**B. 已确认问题 — 状态（260930-B 更新）**
+
+- AR-F7 其余业务写入 —— **已修**：表单提交走 addBitableRecordWithValues（双向关联镜像到目标表）；复制关联字段回落为单向、不继承 pairedFieldId（duplicateBitableField）；字段类型变更清掉不再成立的视图引用（stripViewRefsForFieldType，只清配置不迁移值）；「加进本组」对系统时间字段不再预置无意义值；动态日期改为「切回可见 / 窗口聚焦」刷新计算时点。core 单测覆盖（bitableMutations.test.ts）。
+- AR-F8 行为护栏 —— **部分改善，仍未完成**：本批补了 4 条 core 单测；bitableEditorMount.test.ts 仍有大量源码正则护栏，隐藏标签/计时/卸载等运行时行为仍缺 DOM 行为测试与真实端覆盖。
+- 关联列的筛选/排序/分组/统计按「空」处理 —— **产品口径（§6.4）**，不是缺陷。
+- 颜色遗留分支 BITABLE_OPTION_COLORS / LEGACY_OPTION_COLOR_HEX —— **复核为非缺陷**：别名仍被新建选项取色使用；LEGACY 映射只服务旧命名色键，按「不为旧数据扩大改动」保留，不为此新增改动。
+
+**C. 结构 / 性能 — 已确认但暂缓（用户 260930 决定不做）**
+
+- **行虚拟化 / 渲染策略**：AR04 真实端压测已证全量 DOM 是瓶颈（目标 5000×20 打开 12.42s / 84.8 万 DOM / 395MB / 首次点选 2.25s；10000×20 24.8s / 169 万 / 1.34GB；20000×50（100 万格）200s 未完成；50000×50 撞 32 MiB 正文上限）。工具 scripts/bitable-stress.mjs。**留待后续；立项前先定「5000×20 滚动/编辑目标 + 验收口径」。**
+- AR02 的「按依赖拆 bitableDoc.ts」：未做（无实测收益/约束需求前停止）。
+- AR03 的网格 / FieldEditorModal 结构拆分：未做。
+- bitableCells.tsx ↔ BitableRelationPicker.tsx 真实 ESM 循环依赖：未解（本轮未观察到初始化错误）。
+
+**D. AR01 的真实端收尾（260930-D 更新）**
+
+- 列宽 redo —— 已澄清为驱动假象：真实 Electron CDP 实操 260 → 撤销 180 → 重做 260（正确带 Shift）；产品无 bug。
+- 关 tab 保留 —— 真实端通过：输入后关标签再打开，输入仍在。
+- 只读草稿 IPC —— 未定论（已复验）：即便先 Enter/失焦提交再立刻锁定，程序化注入仍无法可靠触发受控文本输入的 React onChange（落盘始终为「原值」、drafts=0）。需改用 Playwright/手工真实操作复验，才能区分「无输入可保留」与「未发布输入丢失」。这是 D 唯一未闭合项。
+- 共享预览 —— 由 AR01 的 jsdom 行为测试覆盖，未做真实端复验。
+- Android 未实测（另行处理）。
+- 多维表整体 UI 回归（真实 Electron CDP 实操）：底栏统计 / 看板 / 画册 / 日历 / 表单 / 回表格 / 添加记录 / 新增字段面板 / 隐藏列 / 关联选择器打开 / 填色面板 / 筛选面板 / 搜索入口 —— 13 项通过。
+
+**E. 产品硬约束（非待办）**
+
+- 正文 32 MiB 上限：50000×50（250 万格）无法保存；超大表需要分表/分文档的产品决策。

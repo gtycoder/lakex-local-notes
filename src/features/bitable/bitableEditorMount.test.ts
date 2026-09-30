@@ -17,6 +17,7 @@ const MOBILE_APP = readFileSync(new URL("../../mobile/MobileApp.tsx", import.met
 const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.url), "utf8");
 const EDITOR_TAB = readFileSync(new URL("../editor/LakeEditor.tsx", import.meta.url), "utf8");
 const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
+const MUTATIONS = readFileSync(new URL("../../core/bitableMutations.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
 const PICKER = readFileSync(new URL("./BitableRelationPicker.tsx", import.meta.url), "utf8");
 const FILTER_EDITOR = readFileSync(new URL("./BitableFilterEditor.tsx", import.meta.url), "utf8");
@@ -275,15 +276,29 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/cells\.push\(bitableFieldText\(record, visibleFields\[ci\], displayCtx\)\)/);
     // A4 搜索走统一展示口径
     expect(EDITOR).toMatch(/bitableFieldText\(record, field, displayCtx\)\.toLowerCase\(\)\.includes\(q\)/);
-    // A6 删字段清理所有视图里指向它的配置
-    expect(EDITOR).toMatch(/next\.highlightDuplicateFieldIds = strip\(next\.highlightDuplicateFieldIds\)/);
-    expect(EDITOR).toMatch(/next\.columnStats\?\.\[fieldId\]/);
+    // A6 删字段清理所有视图里指向它的配置（AR02：收敛到 core 纯函数单一来源）
+    expect(MUTATIONS).toMatch(/stripId\(view\[key\], fieldId\)/);
+    expect(MUTATIONS).toMatch(/stripKey\(view\[key\], fieldId\)/);
+    expect(EDITOR).toMatch(/deleteBitableField\(prev, tableId, fieldId\)/);
     // A5 statForField 不走原型链
     expect(DOC).toMatch(/Object\.prototype\.hasOwnProperty\.call\(BITABLE_STAT_LABEL, stat\)/);
     // 单一来源：移动端附件判定复用 isAttachmentLikeField
     expect(MOBILE).toMatch(/isAttachmentLikeField\(field\.type\)/);
     // 令牌唯一来源：桌面组件 CSS 不再有颜色字面量（抽屉阴影除外，无对应令牌）
     expect(CSS).not.toMatch(/#fff|#1f1f1f/);
+  });
+
+  it("AR02 业务写入收敛：字段删除/单元格写入/附件回填走 core 纯函数", () => {
+    expect(MUTATIONS).toMatch(/export function deleteBitableField/);
+    expect(MUTATIONS).toMatch(/export function setBitableCellValue/);
+    expect(MUTATIONS).toMatch(/export function setBitableRecordValues/);
+    expect(MUTATIONS).toMatch(/export function appendBitableAttachments/);
+    expect(MUTATIONS).toMatch(/export function addBitableRecord/);
+    // 附件回填必须捕获**发起上传时**的表，切表后不再写到「那时的当前表」。
+    expect(EDITOR).toMatch(/appendAttachments\(activeTable\.id, record\.id, field\.id, entries\)/);
+    expect(EDITOR).toMatch(/appendAttachments\(activeTable\.id, recordId, fieldId, entries\)/);
+    // 组件不再自己做整套视图配置清理（单一来源在 core）。
+    expect(EDITOR).not.toMatch(/next\.highlightDuplicateFieldIds = strip\(/);
   });
 
   it("T02B.1 关联基础模型：core 统一解析 + 字段配置 + 各视图透传 ctx", () => {
@@ -404,7 +419,9 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/<PaintBucket size=\{14\} \/>填色/);
     expect(EDITOR).toMatch(/panel === "fill"/);
     expect(EDITOR).toMatch(/buildBitableFillProjection\(activeTable, activeView, shownRecords\)/);
-    expect(EDITOR).toMatch(/stripFillRulesForField\(next\.fillRules, fieldId\)/);
+    expect(MUTATIONS).toMatch(/export function stripFieldFromView/);
+    expect(MUTATIONS).toMatch(/stripFillRulesForField\(view\.fillRules, fieldId\)/);
+    expect(EDITOR).toMatch(/deleteBitableField\(prev, tableId, fieldId\)/);
     expect(FILL_CSS).toMatch(/\.bt-fill-row/);
     expect(FILL_CSS).toMatch(/\.bt-row\[data-fill-side\] \.bt-td-index::before/);
   });
@@ -465,7 +482,8 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/createRelationPair\(prev\.tables/);
     expect(EDITOR).toMatch(/unpairRelationFields\(prev\.tables/);
     // 关联字段的写值必须走镜像入口（否则双向会不同步）
-    expect(EDITOR).toMatch(/applyRelationMirror\(prev\.tables, tableId, fieldId, recordId, relationRecordIds\(value\)\)/);
+    expect(MUTATIONS).toMatch(/applyRelationMirror\(doc\.tables, tableId, fieldId, recordId, next\)/);
+    expect(EDITOR).toMatch(/setBitableCellValue\(prev, tableId, recordId, fieldId, value\)/);
     expect(EDITOR).not.toMatch(/双向关联（在目标表生成反向字段）/);
   });
 

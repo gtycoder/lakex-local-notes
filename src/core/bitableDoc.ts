@@ -993,11 +993,26 @@ export function relationTargetTable(ctx: BitableDisplayContext | undefined, fiel
   return ctx.tables.find((table) => table.id === tableId);
 }
 
+/**
+ * 目标记录 id → 记录索引：按 `records` **数组引用**缓存（正文是不可变快照，编辑必换新数组）。
+ * 关联列逐格解析时不再每格重建 Map（AR-F6；专项 §17.3：来源 R 行 × 目标 T 行 = O(R×T)）。
+ * WeakMap 随旧快照一起回收，不进 localStorage、不留长期缓存。
+ */
+const relationRecordsIndex = new WeakMap<readonly BitableRecord[], Map<string, BitableRecord>>();
+function recordIndexFor(records: readonly BitableRecord[]): Map<string, BitableRecord> {
+  let index = relationRecordsIndex.get(records);
+  if (!index) {
+    index = new Map(records.map((record) => [record.id, record] as const));
+    relationRecordsIndex.set(records, index);
+  }
+  return index;
+}
+
 /** 关联单元格 → 现存目标记录（按存值顺序；已删 / 失效目标跳过，内部 id 原样保留、恢复后自动重现）。 */
 export function relationTargetRecords(ctx: BitableDisplayContext | undefined, field: BitableField, value: unknown): BitableRecord[] {
   const target = relationTargetTable(ctx, field);
   if (!target) return [];
-  const byId = new Map(target.records.map((record) => [record.id, record] as const));
+  const byId = recordIndexFor(target.records);
   return relationRecordIds(value)
     .map((id) => byId.get(id))
     .filter((record): record is BitableRecord => !!record);

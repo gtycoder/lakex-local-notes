@@ -15,6 +15,26 @@
 - 用户明确“不要验证了直接合并到 master 并推送远程”，且授权与另一会话只读审计文档一起提交。保留 `docs/NON-BITABLE-ENGINEERING-AUDIT-2026-09-30.md` 与 `docs/audit-evidence-2026-09-30/`，不实施其中方案。
 - **已合入 master 并推送成功**：`9535ed91`「fix(bitable): AR01 会话安全收口并记录整体工程审计」，包含本批代码/讨论记录与另一会话审计文档。已停止后续验证和开发；AR02–AR04 未开始。提交授权不代表功能验收通过。
 
+### 当前批次 · 260930-AR02（第一段已实施，待验收；未提交/未合 master）
+- 用户确认按**路线 B（有边界的内部重构）**继续推进。本批从 AR02 起步，只取「字段删除 / 单元格写入 / 记录新增 / 附件回填」这一切口：新建 `src/core/bitableMutations.ts`（`stripFieldFromView` / `deleteBitableField` / `setBitableCellValue` / `setBitableRecordValues` / `appendBitableAttachments` / `addBitableRecord`，无变化一律返回原引用），`BitableEditor.tsx` 的内联删除清理与各写入动作全部改调 core；**附件回填改为捕获发起上传时的 tableId**（切表后不再写到「那时的当前表」）。
+- 隔离分支 `codex/bitable-ar02`（主工作树，未新建 worktree）：全量 **1451 passed / 16 skipped**，tsc / check:core（70 文件 0 违规）/ ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿；新增 9 例纯函数单测 + 1 条挂载护栏，并更新 3 处只认旧内联写法的源码护栏指向新单一来源。
+- **未提交、未合 master、未推送**；未跑 Electron CDP 真实端点与 Android；AR02 的 core 按依赖拆分、AR03/AR04 未开始。功能保持待验收。明细只在专项 §11/§13。
+
+### 260930-AR03/AR04（已证实热点优化 + 真实端性能前置）
+- 用户要求「继续推进到 AR04」。已做 AR03 的**已证实热点**：AR-F5 选区逐格命中改行/列索引、AR-F6 `relationTargetRecords` 改按 `records` 引用缓存、字段序收敛到 `orderedAllTableFields`；新增 `relationIndex.test.ts`。
+- 同一分支 `codex/bitable-ar02`：全量 **1453 passed / 16 skipped**、全门禁 + 双端构建通过；CPU 前置基准：3000×15 选区 228.8ms→1.2ms、3000×3000 关联 389.4ms→0.7ms。
+- **AR04 真实端已完成**：行为验收 7/7 通过（关联 chip / 选区四边 / 列菜单删除字段：移除+对侧降级+数据保留+视图配置清理）；压测工具 scripts/bitable-stress.mjs，目标 5000×20 打开 **12.42s / 84.8 万 DOM / 395MB / 首次点选 2.25s**，10000×20 = 24.8s/1.69M/1.34GB，20000×50（100 万格）200s 未完成，**50000×50 因正文 >32MiB 直接存不下**。结论：CPU 热点已消除、**DOM 全量渲染是瓶颈**，行虚拟化需单独立项，等用户拍板。
+- 仍未提交/未合 master；未跑 Android；AR02 的 core 拆分与 AR03 结构拆分未做（无实测收益前停止）。
+
+### 260930-B（AR-F7 续已实施，待验收；未提交/未合 master）
+- 表单提交双向关联镜像、复制关联字段不继承配对、字段类型变更清视图引用、「加进本组」系统时间护栏、动态日期在切回可见/聚焦时刷新计算时点；core bitableMutations.ts + 4 例新单测。
+- 全量 **1457 passed / 16 skipped**、全门禁 + 双端构建通过。仍未提交/未合 master。
+- C（结构拆分/循环依赖）与 D（真实端收尾/Android）未实施；见专项 §17.12。
+
+### 260930-D（真实端收尾 + 整体 UI 回归）
+- 列宽 redo 澄清为驱动假象（真实端 260/180/260，通过）；关 tab 保留通过；整体 UI 回归 13 项通过（统计/五视图/添加记录/新增字段/隐藏列/关联选择器/填色/筛选/搜索入口）。
+- 只读草稿 IPC 仍未定论（需先提交输入再锁定复验）；共享预览仅 jsdom 覆盖；Android 未做。仍未提交/未合 master。
+
 ### 当前会话 · 260930-ARCH（仅文档，待讨论）
 - 用户要求多维表功能扩展暂告一段落，先只读评估整体代码与架构，再讨论是否需要大规模重构；**本轮不实施代码**。
 - 当前源码 `ae1cfda`（条件填色、统一选色与筛选面板优化），工作树在本轮开始时干净、仅一个 master 工作树；本地 `origin/master` 跟踪引用同 HEAD（未联网 fetch）。**条件填色已提交**，下方旧描述的“未提交”是历史状态；功能验收状态不擅自变更。
@@ -152,6 +172,8 @@
 9. **多维表优化专项**：唯一方案/进度/修改记录/会话结论在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`；专项会话先完整读它、结束前必须回写它，**不在 HANDOFF 内展开专项细节**。当前进度见 §0 第二节。
    **条件填色 + 统一选色已实现、待验收**：详见 `docs/BITABLE-FILL-COLOR-RESEARCH.md` 与专项文档 §11/§12/§13。四模式复用筛选单规则编辑器，按钉钉语义做 alpha 混色；应用内选色统一为内核 70 色实色卡 + 最近使用/自定义；最近使用按入口独立分桶并存 localStorage，Lake 内核适配器样式不变；当前代码已提交 `ae1cfda`；功能验收状态以专项 §11 为准，当前转入 §17 架构讨论。
 
+11. **多维表行虚拟化（AR04 已证瓶颈；用户 260930 决定暂不做，留待后续）**：真实 Electron 压测（scripts/bitable-stress.mjs）——目标 5000×20 打开 **12.42s / 84.8 万 DOM / 395MB 堆 / 首次点选 2.25s**；10000×20 = 24.8s/169 万/1.34GB；20000×50（100 万格）200s 内未渲染完成；50000×50 因**正文 32 MiB 上限**根本无法保存。结论：CPU 热点（AR-F5/F6）已消除，**DOM 全量渲染是瓶颈**，支持 5000 级规模需行虚拟化/渲染策略；立项前先定「5000×20 滚动/编辑目标 + 验收口径」。多维表审计其余遗留见专项 §17.12。
+
 ## 4. 关键坑（长期有效）
 
 ### 同步 / 数据
@@ -193,6 +215,9 @@
 - **附件「文档类型图标」没有现成的内核图标可用**（260930 用户问「我们是否有对应的图标样式可以使用」——**没有**）：内核 sprite 实测 **325 个 symbol，无一个 file/pdf/doc/ppt 系**（只有 `icon-card-mention-doc`）；云端那套彩色「页」图标属于**语雀 App 自己的 sprite**，不在 kernel bundle 里（同 §2 的 `note-*` 图标问题）。⇒ 用**自己的图标库 lucide-react**（全站同一套线性图标）按类型分色，类型判定收敛到 `src/core/assetNaming.ts` 的 `fileKindOf()`（单一事实源，桌面/移动端共用），颜色新增 `--lake-file-*` 令牌（只在 `themes/base.css`，内容/品牌色不随主题分叉）。`hover 名称气泡 = kit 的 .ln-tip 表面 + usePopoverPosition 定位`（`position: fixed` ⇒ 不被 `.bt-grid-wrap` 的 overflow 裁掉）。**附件字段与图片字段就此分叉**：`attachment` = 类型图标（不显示名称/缩略图）、`image` = 缩略图（该字段的语义就是看图），分叉点是 `AttachmentCell` 的 `imageOnly`。
 
 - **样式「收编到原语」时，必须把 feature 层里那份声明删掉**（260930 大统一踩到）：层序是 `@layer … kit, shell, feature, overlay …`，**kit 层低于 feature 层** —— 只在 JSX 挂上 `.ln-iconbtn`/`.ln-menu__item` 而不删掉 feature 文件里的同名视觉声明，旧的那份照样赢（同选择器比层序）。正确姿势 = 原语给「盒子/圆角/配色/状态」，feature 只留**本处特有**的布局（绝对定位、`visibility`、卡片上的白底药丸等）。
+- **正文有 32 MiB 上限**（260930 压测实测）：saveNote 超过即 LAKE_IPC_CODE:INVALID_INPUT「正文不能超过 32 MiB」。因此 50000×50（250 万格）根本存不下去，不是渲染慢的问题。
+- **网格是全量 DOM 渲染、无虚拟化**（260930 AR04 压测，真实 Electron）：DOM ≈ 8.5 个/格；目标 5000×20 打开 12.4s / 84.8 万节点 / 395MB 堆 / 首次点选 2.25s；10000×20 → 24.8s / 169 万 / 1.34GB；20000×50（100 万格）200s 内未渲染完。支持 5000 级规模前需要行虚拟化/渲染策略（专项 §17.7 AR04 触发条件已成立）。压测工具 scripts/bitable-stress.mjs；CDP 依附窗口隐藏，量不到 FPS，只能量挂载/DOM/堆/交互延迟。
+
 ### 工程 / 环境
 - Node 必须 24；better-sqlite3 是 Electron ABI，系统 Node 不能替代运行时。
 - 改 `electron/**` 或 `src/core/**` 会触发 Electron 重启；验证前确认 CDP 端口连的是新实例。
@@ -224,6 +249,8 @@ npm run dev                 # = vite --host 127.0.0.1 --port 1421（vite-plugin-
 # 压测（opt-in，默认被 npm test 跳过）
 LAKE_RUN_BENCHMARK=1 npx vitest run src/core/syncEngine.benchmark.test.ts
 LAKE_RUN_BENCHMARK=1 npx vitest run src/core/syncEngine.dualStress.benchmark.test.ts
+# 多维表真实端压测（隔离 userData/CDP，跑完自清；见专项 §17.12）
+STRESS_SIZES="5000x20,20000x50,50000x50" node scripts/bitable-stress.mjs
 # Tier B 真实云（隔离前缀+自动清理；凭证仅环境变量，勿入库）
 LAKE_RUN_BENCHMARK=1 LAKE_STRESS_S3_ENDPOINT=... _REGION=... _BUCKET=... _AK=... _SK=... npx vitest run electron/syncStress.benchmark.test.ts
 # 云端对象查看
