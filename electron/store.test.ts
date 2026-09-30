@@ -502,6 +502,28 @@ describe("目录树操作", () => {
     expect(store.readNote(note.id).content).toContain("恢复后编辑版");
   });
 
+  it("审计 F04（元数据尾）：回收站/purged 节点的重命名/图标/锁定被拒绝，显式恢复后可写", () => {
+    const nb = store.createNotebook("元数据边界册");
+    const note = store.createNoteIn(nb.id, "原标题");
+    store.saveNote(note.id, "原标题", "<p>x</p>");
+    store.deleteTreeNode(note.id); // 进回收站
+    // 元数据写边界 fail-closed：不再"编辑即隐式恢复"
+    expect(() => store.renameTreeNode(note.id, "改名")).toThrow(/回收站|已删除/);
+    expect(() => store.setNodeIcon(note.id, "star")).toThrow(/回收站|已删除/);
+    expect(() => store.setNoteLocked(note.id, true)).toThrow(/回收站|已删除/);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("原标题");
+    // 他端已 purge、本端保留副本：同样拒绝
+    (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE tree_nodes SET sync_state='purged' WHERE id=?").run(note.id);
+    expect(() => store.renameTreeNode(note.id, "改名2")).toThrow(/回收站|已删除/);
+    // 显式恢复（唯一例外）后三个入口都能写
+    store.restoreTrashItem(note.id);
+    expect(store.renameTreeNode(note.id, "恢复后名").title).toBe("恢复后名");
+    expect(store.setNodeIcon(note.id, "star").icon).toBe("star");
+    store.setNoteLocked(note.id, true);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("恢复后名");
+  });
+
   it("审计（W-4）：恢复后未同步再删除 → restore_pending_at 无残留，删除以软删语义传播", () => {
     const nb = store.createNotebook("恢复后再删");
     const note = store.createNoteIn(nb.id, "子笔记");

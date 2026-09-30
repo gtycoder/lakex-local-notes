@@ -142,6 +142,28 @@ const F04B_EXPR = [
   "})()",
 ].join(NL);
 
+const F04M_EXPR = [
+  "(async function(){",
+  "  var api = window.lakeNative;",
+  "  var out = {};",
+  "  var m = await api.createNote('S0-F04-meta');",
+  "  await api.saveNote(m.id, m.title, '<p>m1</p>');",
+  "  await api.deleteNote(m.id);",
+  "  out.renameRejected = false;",
+  "  try { await api.renameTreeNode(m.id, '改名'); } catch(e){ out.renameRejected = true; out.renameErr = String((e && e.message) || e); }",
+  "  out.iconRejected = false;",
+  "  try { await api.setNodeIcon(m.id, 'star'); } catch(e){ out.iconRejected = true; }",
+  "  out.lockRejected = false;",
+  "  try { await api.setNoteLocked(m.id, true); } catch(e){ out.lockRejected = true; }",
+  "  var after = await api.readNote(m.id);",
+  "  out.titleUnchanged = !!after && after.title === 'S0-F04-meta';",
+  "  await api.restoreTrash(m.id);",
+  "  out.afterRestore = false;",
+  "  try { var t = await api.renameTreeNode(m.id, '恢复后名'); out.afterRestore = !!t && t.title === '恢复后名'; } catch(e){ out.afterRestoreErr = String((e && e.message) || e); }",
+  "  return JSON.stringify(out);",
+  "})()",
+].join(NL);
+
 const checks = [];
 function check(name, ok, detail) {
   checks.push({ name: name, ok: !!ok, detail: detail === undefined ? null : detail });
@@ -171,6 +193,11 @@ try {
 
   const f04b = JSON.parse(await evaluate(F04B_EXPR));
   check("F04 恢复 c 不改写仍在回收站的 d", f04b.cDeleted === false && f04b.dDeleted === true, JSON.stringify(f04b));
+
+  const f04m = JSON.parse(await evaluate(F04M_EXPR));
+  check("F04 元数据：回收站节点 rename/icon/lock 被拒绝", f04m.renameRejected && f04m.iconRejected && f04m.lockRejected, f04m.renameErr);
+  check("F04 元数据：拒绝后标题未被改写", f04m.titleUnchanged);
+  check("F04 元数据：显式恢复后 rename 可写", f04m.afterRestore, f04m.afterRestoreErr);
 
   // ---- F01/F02 非回归：正常输入 → 自动保存 ----
   const g = await evaluate("(async function(){ var n = await window.lakeNative.createNote('S0-normal-save'); await window.lakeNative.saveNote(n.id, n.title, '<p>base</p>'); return n.id; })()");

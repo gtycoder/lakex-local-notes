@@ -14,7 +14,6 @@ interface MetadataRepositoryDeps {
   assertParentCompatible(parentId: string | null, childType: string): void;
   descendantIds(id: string): string[];
   readTreeNode(id: string): TreeNode;
-  revivePurgedIfNeeded(id: string): boolean;
   upsertSearch(noteId: string, title: string, body: string | null): void;
 }
 
@@ -45,6 +44,20 @@ export class NoteMetadataRepository {
     this.deps = deps;
   }
 
+  /** 审计 F04：元数据写边界——回收站条目 / 已 purge（含他端保留副本）节点一律 fail-closed。
+   * 旧行为是 revivePurgedIfNeeded"编辑即隐式恢复"，违反"恢复是唯一显式例外"，已删除；
+   * 这里明确拒绝，避免把 purged 行改成 local 却仍留在回收站产生脏态。 */
+  private assertNodeWritable(id: string): void {
+    const row = this.db.prepare(
+      "SELECT t.parent_id AS parent_id, t.trashed_at AS trashed_at, t.sync_state AS node_sync, n.sync_state AS note_sync " +
+      "FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id WHERE t.id = ?"
+    ).get(id) as { parent_id: string | null; trashed_at: string | null; node_sync: string | null; note_sync: string | null } | undefined;
+    if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
+    if (row.parent_id === this.trashNotebookId || row.trashed_at != null || row.node_sync === "purged" || row.note_sync === "purged") {
+      throw new AppError("InvalidInput", `节点已在回收站或已被删除，不能修改；请先显式恢复: ${id}`);
+    }
+  }
+
   createNotebook(title: string): TreeNode {
     let trimmed: string;
     try { trimmed = assertTreeNodeTitle(title); }
@@ -72,9 +85,9 @@ export class NoteMetadataRepository {
   }
 
   renameTreeNode(id: string, title: string): TreeNode {
-    this.deps.revivePurgedIfNeeded(id);
     const trimmed = title.trim();
     if (!trimmed) throw new AppError("InvalidInput", "名称不能为空");
+    this.assertNodeWritable(id);
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
       const changed = this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(trimmed, now, id).changes;
@@ -92,7 +105,7 @@ export class NoteMetadataRepository {
       throw new AppError("InvalidInput", "无效的图标");
     }
     const now = this.deps.nowIso();
-    this.deps.revivePurgedIfNeeded(id);
+    this.assertNodeWritable(id);
     const transaction = this.db.transaction(() => {
       this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
       this.db.prepare("UPDATE notes SET updated_at=?, sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL")
@@ -164,7 +177,7 @@ export class NoteMetadataRepository {
 
   setNoteLocked(id: string, locked: boolean): void {
     const now = this.deps.nowIso();
-    this.deps.revivePurgedIfNeeded(id);
+    this.assertNodeWritable(id);
     const transaction = this.db.transaction(() => {
       this.db.prepare("UPDATE notes SET is_locked=?, locked_at=?, sync_state='local' WHERE id=? AND deleted_at IS NULL")
         .run(locked ? 1 : 0, now, id);
