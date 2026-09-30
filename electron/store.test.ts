@@ -7,7 +7,7 @@ import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
 import { createStoreSyncPort } from "./syncAdapters.js";
-import { draftJournalDir } from "./draftJournal.js";
+import { DraftJournal, draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
@@ -732,6 +732,23 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteHistory(id).length).toBe(2);
   });
 
+  it("同秒 force 同内容快照文件名唯一：删一条不毁另一条（审计 F07）", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>同内容</p>");
+    const h1 = store.createHistorySnapshot(id, undefined, true);
+    const h2 = store.createHistorySnapshot(id, undefined, true);
+    expect(h1).toBeTruthy();
+    expect(h2).toBeTruthy();
+    const rows = (store as any).db.prepare("SELECT id, file_path FROM note_history WHERE note_id=? ORDER BY id").all(id) as Array<{ id: number; file_path: string }>;
+    expect(rows.length).toBe(2);
+    expect(rows[0].file_path).not.toBe(rows[1].file_path); // 文件身份不再撞车
+    // 删 h1 后 h2 的文件仍在，且能恢复
+    store.deleteHistory(h1!);
+    expect(fs.existsSync(path.join(dir, rows[1].file_path))).toBe(true);
+    store.restoreHistory(h2!);
+    expect(store.readNote(id).content).toContain("同内容");
+  });
+
   it("恢复前留档去重：当前内容 24h 内已有快照时恢复不新增重复", () => {
     const { id } = makeNote();
     store.saveNote(id, "历史测试", "<p>版本1</p>");
@@ -978,6 +995,27 @@ describe("文档历史（快照，纯本地）", () => {
     const hist = store.listNoteHistory(id);
     for (const h of hist) store.deleteHistory(h.id);
     expect(store.listNoteOrphans(id).find((o) => o.filename === refName)?.protectedByHistory).toBe(false);
+  });
+
+  it("cleanNoteOrphans：草稿唯一引用的资源受保护，不被删除（审计 F10）", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const draftName = "1786123456789_d1a2b3c4.png";
+    fs.writeFileSync(path.join(assetsDir, draftName), "draftdata");
+    store.saveNote(id, "草稿保护", "<p>无图</p>"); // 正文不引用该图
+    const journal = new DraftJournal(draftJournalDir(dir));
+    journal.write({ noteId: id, title: "草稿保护", content: `<p><img src="http://127.0.0.1:19876/${id}/${draftName}"></p>`, updatedAt: new Date().toISOString() });
+    expect(readDraftEntry(draftJournalDir(dir), id)?.content).toContain(draftName);
+    // 展示仍按「当前正文 ∪ 历史」：草稿图显示为孤儿（protectedByHistory=false）
+    expect(store.listNoteOrphans(id).find((o) => o.filename === draftName)?.protectedByHistory).toBe(false);
+    // 但删除判定走完整保护集（含草稿）⇒ 不删
+    expect(store.cleanNoteOrphans(id, [draftName]).count).toBe(0);
+    expect(fs.existsSync(path.join(assetsDir, draftName))).toBe(true);
+    // 显式丢弃草稿后才可删
+    journal.remove(id);
+    expect(store.cleanNoteOrphans(id, [draftName]).count).toBe(1);
+    expect(fs.existsSync(path.join(assetsDir, draftName))).toBe(false);
   });
 
   it("listRemovedAssets：聚合未引用(可删) + 历史保护(只读)；readAssetPreview 按路径预览", () => {

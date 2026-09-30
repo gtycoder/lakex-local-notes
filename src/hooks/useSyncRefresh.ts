@@ -40,12 +40,10 @@ export function useSyncRefresh({
 
   const refreshDraftEntries = useCallback(async () => {
     try {
-      const [entries, summaries] = await Promise.all([native.listDraftJournals(), native.listNoteSummaries()]);
-      const liveIds = new Set(summaries.map((note) => note.id));
-      const valid = entries.filter((entry) => liveIds.has(entry.noteId));
-      setDraftEntries(valid);
-      const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
-      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch((error) => reportNativeActionError("删除孤儿草稿", error))));
+      // 审计 F09：孤儿草稿（对应文档不存在）是最后的恢复出口，不能自动删。
+      // 保留在列表里；恢复入口对 missing 文档会提示「草稿仍保留，可手动丢弃」，显式丢弃才删。
+      const entries = await native.listDraftJournals();
+      setDraftEntries(entries);
     } catch (error) {
       // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
       reportNativeActionError("刷新草稿", error);

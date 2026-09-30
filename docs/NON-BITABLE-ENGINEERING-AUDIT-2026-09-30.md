@@ -570,3 +570,42 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 - [失效容量基准断言](/Users/admin/file/local-lake/lake-notes-electron/electron/workspace.benchmark.test.ts#L61)
 
 **收口原则：把不变量放在唯一能保证它的边界；把无用的内部防御删掉；把失败留给正确的调用者处理。简洁不是少几行，而是少几种状态、少几份真源、少几个可以绕过正确性的入口。**
+
+## 12. S0 实施进度（260930-S0，在本分支完成；路线 C 未触碰）
+
+> 会话 260930-S0。分支 codex/audit-s0（从 master 6a0ec68 开出）。**未合 master、未推送**。
+> 约束：只做 §9 S0 的小而确定的问题，每项配真实反向行为测试；**不启动 §8 路线 C（正文入 SQLite）**，S1 DocumentSession 也未批准。
+
+### 已完成（5/9）
+
+| 发现 | 修法 | 改动 | 测试 |
+|---|---|---|---|
+| F09 | 孤儿草稿不再自动 deleteDraftJournal，全部列出；显式丢弃才删 | src/hooks/useSyncRefresh.ts | 无（hook 级，需 React 行为测试环境；已如实标注） |
+| F10 | cleanNoteOrphans 删除判据改用 assetRepository.getProtectedRefs（当前正文 ∪ 历史 ∪ 草稿），不再只看 protectedByHistory | electron/orphanLifecycle.ts | electron/store.test.ts 新增：草稿唯一引用的图不被删，显式丢弃后才可删 |
+| F07 | 历史快照文件名加随机后缀，同秒 + 同内容 + force 不再共用路径 | electron/historyLifecycle.ts | electron/store.test.ts 新增：两条同秒快照 file_path 不同，删一条另一条仍可恢复 |
+| F05 | 移动 useAutoSave.flush 改为立即保存挂起文档；新增独立 cancel；卸载只做取消兜底 | src/mobile/useAutoSave.ts | 新增 src/mobile/useAutoSave.test.ts：flush 保存全部/指定、cancel 不写 |
+| F11 | httpFetcher 收到响应头不清 deadline；包装 body 在消费完成/出错时清定时器，整体 deadline 覆盖 body | electron/httpFetcher.ts | electron/httpFetcher.test.ts 新增：头快 body 挂起仍 AbortError |
+
+门禁：tsc 通过；全量 vitest **1462 passed / 16 skipped**（S0 累计 +5 测试）；check:core 70 文件 0 违规；git diff --check 通过。
+
+### 未完成（4/9）
+
+- **F01** 保存失败仍关闭/淘汰脏标签（useSavePipeline + useDocumentTabs + useTabLifecycle）。
+- **F02** revision 采样太晚，旧 payload 被认证成最新（useSavePipeline）。
+- **F04** 恢复任意条目解除仍在回收站标签只读 + 普通保存隐式复活（useSyncRefresh + noteContentRepository + trashLifecycle）。
+- **F06** 安卓普通保存 UPSERT 可重写仍被删除的记录（src/mobile/noteRepository.ts）。
+- **F17** opt-in 容量基准断言与现契约冲突（electron/workspace.benchmark.test.ts）。
+- （F03、F12–F16 不在 S0 本批。）
+
+### 下一步顺序（建议）
+
+F06（移动、独立）→ F01 + F02（同属 useSavePipeline，同写集）→ F04（与已改的 useSyncRefresh 合看）→ F17（基准）。
+每项：**先写会失败的真实行为测试，再修**，跑全门禁；不要顺手启动路线 C 或 S1 DocumentSession。
+
+### 诚实边界
+
+- F09 无自动化测试；其余四项都有反向行为测试。
+- 未做真实 Electron CDP / Android / 真实 S3 验收（S0 是本地逻辑修复）。
+- 改动写在分支 codex/audit-s0 上，合并/推送待用户验收。
+
+

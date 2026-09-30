@@ -81,7 +81,9 @@ export class HistoryLifecycle {
     const refs = [...extractAssetRefs(body)];
     const gz = this.gzipContent(body);
     const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19); // YYYY-MM-DD-HH-mm-ss
-    const filename = `${ts}-${hash.slice(0, 16)}.lake.gz`;
+    // 审计 F07：文件名必须唯一。同秒 + 同内容 + force=true 会生成同一路径，
+    // deleteHistory 只 unlink 路径、不知道别行也指向它 ⇒ 删一条会毁掉另一条。加随机后缀。
+    const filename = `${ts}-${hash.slice(0, 16)}-${crypto.randomBytes(4).toString("hex")}.lake.gz`;
     const relPath = `history/${noteId}/${filename}`;
     const absPath = path.join(this.ctx.root, relPath);
     fs.mkdirSync(path.dirname(absPath), { recursive: true });

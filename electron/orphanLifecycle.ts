@@ -88,11 +88,14 @@ export class OrphanLifecycle {
     return out;
   }
 
-  /** 清理文档级孤儿：只删非 protectedByHistory 的文件（被历史引用的跳过）。
+  /** 清理文档级孤儿：删除判据必须与其它删除入口同源 —— 用 assetRepository.getProtectedRefs
+   * （当前正文 ∪ 历史 ∪ 未保存草稿），而不是只看 protectedByHistory（审计 F10：草稿唯一引用的图不会被删）。
+   * 列表展示仍按「当前正文 ∪ 历史」判 protectedByHistory，展示与删除判定分离。
    * filenames 缺省清全部可清。 */
   cleanNoteOrphans(noteId: string, filenames?: string[]): { count: number; freedBytes: number } {
+    const protectedRefs = this.ctx.assetRepository.getProtectedRefs(noteId);
     const orphans = this.listNoteOrphans(noteId);
-    const targets = orphans.filter((o) => !o.protectedByHistory && (!filenames || filenames.includes(o.filename)));
+    const targets = orphans.filter((o) => !protectedRefs.has(o.filename) && (!filenames || filenames.includes(o.filename)));
     let count = 0, freed = 0;
     for (const o of targets) {
       const full = path.join(this.ctx.noteAssetsDirFor(noteId), o.filename);

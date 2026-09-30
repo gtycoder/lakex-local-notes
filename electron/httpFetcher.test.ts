@@ -170,4 +170,29 @@ describe("createPinnedHttpFetcher TOCTOU 修复（连接层钉死已校验地址
     await expect(fetcher.fetch("http://safe.test/slow", { timeoutMs: 60, maxRedirects: 5, userAgent: "test" }))
       .rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("响应头到达后 body 停滞仍受整体 deadline 截止（审计 F11）", async () => {
+    const lookup = vi.fn(async () => [{ address: PUBLIC_IP, family: 4 }]);
+    let failBody: ((err: Error) => void) | null = null;
+    const request = vi.fn(() => {
+      const fake = makeFakeRequest();
+      const response: Record<string, unknown> = {
+        statusCode: 200,
+        headers: {},
+        async *[Symbol.asyncIterator]() {
+          await new Promise((_res, rej) => { failBody = rej; });
+          yield new Uint8Array();
+        },
+      };
+      fake.destroy = (err?: Error) => { failBody?.(err ?? new Error("destroyed")); };
+      setTimeout(() => fake.emitResponse(response), 0);
+      return fake;
+    });
+    const fetcher = createPinnedHttpFetcher({ lookup: lookup as unknown as HttpFetcherDeps["lookup"], request: request as unknown as HttpFetcherDeps["request"] });
+    const response = await fetcher.fetch("http://safe.test/slow-body", { timeoutMs: 40, maxRedirects: 5, userAgent: "test" });
+    expect(response.status).toBe(200);
+    let error: unknown = null;
+    try { for await (const _chunk of response.body as AsyncIterable<Uint8Array>) { /* drain */ } } catch (e) { error = e; }
+    expect((error as Error | null)?.name).toBe("AbortError");
+  });
 });
