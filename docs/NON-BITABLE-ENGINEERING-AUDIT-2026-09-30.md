@@ -573,7 +573,7 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 
 ## 12. S0 实施进度（260930-S0，在本分支完成；路线 C 未触碰）
 
-> 会话 260930-S0。分支 codex/audit-s0（从 master 6a0ec68 开出）。**未合 master、未推送**。
+> 会话 260930-S0。分支 codex/audit-s0（从 master 6a0ec68 开出）。**已合入 master（本地 merge commit 42ad41b）、未推送**。
 > 约束：只做 §9 S0 的小而确定的问题，每项配真实反向行为测试；**不启动 §8 路线 C（正文入 SQLite）**，S1 DocumentSession 也未批准。
 
 ### 已完成（9/9）
@@ -611,7 +611,7 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 - **F03 竞态**在真实 hook（jsdom，受控延迟）下验证（R03）；桌面真实端因 `window.lakeNative` 被 contextBridge 冻结（实测 `Object.isFrozen===true`、不可写、不可配置），无法向真实 App 注入 `readNote` 延迟，故真实端覆盖"两篇不同文档各自历史恢复都生效"的路径，竞态本身由 hook 测试 + core guard 单测证明。
 - **F06 的 `bridge.saveNote`**：在"无行且无永久墓碑"时仍会初始化新文档（既有 `createNote` 流程依赖该入口）；真正被禁止的是覆盖回收站/已 purge 行、以及复活有墓碑的条目。repository 层的 `saveNote` 对 missing/gone 一律拒绝。
 - 未做真实 S3 双端/GC 验收（S0 是本地逻辑修复）。
-- 改动写在分支 codex/audit-s0 上，**未合 master、未推送**，待用户验收。
+- 改动已合入 master（本地 merge commit 42ad41b），**未推送**；待用户验收。
 
 ### 后续小范围收口（C / B / A：捕获契约，审计 §6.1 / §7.3）
 
