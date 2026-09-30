@@ -4,7 +4,7 @@ import { native } from "../lib/native";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import type { DraftJournalEntry, NoteSummary, SyncPendingSummary, TreeNode } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
-import type { RequestVersion } from "../core/requestVersion";
+import type { NoteReloadGuard } from "../core/requestVersion";
 import { isGoneNote } from "../core/syncDecisions";
 
 export interface UseSyncRefreshOptions {
@@ -13,7 +13,7 @@ export interface UseSyncRefreshOptions {
   setTreeNodes: Dispatch<SetStateAction<TreeNode[]>>;
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>;
   setOpenTabs: Dispatch<SetStateAction<OpenTab[]>>;
-  tabReloadVersionRef: MutableRefObject<RequestVersion>;
+  noteReloadGuardRef: MutableRefObject<NoteReloadGuard>;
   openTabsRef: MutableRefObject<OpenTab[]>;
   bumpRevision: (noteId: string) => void;
 }
@@ -21,7 +21,7 @@ export interface UseSyncRefreshOptions {
 /** 同步/回收站/历史恢复后的刷新与 tab 重载（从 App.tsx 收拢）。 */
 export function useSyncRefresh({
   setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs,
-  tabReloadVersionRef, openTabsRef, bumpRevision,
+  noteReloadGuardRef, openTabsRef, bumpRevision,
 }: UseSyncRefreshOptions) {
   const refreshPendingSummary = useCallback(() => {
     void native.getSyncPendingSummary().then(setPendingSummary).catch((error) => reportNativeActionError("刷新同步摘要", error));
@@ -59,15 +59,15 @@ export function useSyncRefresh({
     void native.listTreeNodes().then(setTreeNodes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void native.listNoteSummaries().then(setNotes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void (async () => {
-      const reloadVersion = tabReloadVersionRef.current.next();
       const t0 = performance.now();
       // 目标 = 本次恢复的 id（若提供）+ 所有仍标记 deleted 的标签（逐个按真实状态复核）。
       for (const tab of openTabsRef.current.filter((t) => t.deleted || (restoredId !== undefined && t.noteId === restoredId))) {
-        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        // 审计 F03：取消作用域按文档——不同 tab 的重载互不取消；同一 tab 的更新一次胜出。
+        const token = noteReloadGuardRef.current.next(tab.noteId);
         try {
           const readT0 = performance.now();
           const note = await native.readNote(tab.noteId);
-          if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+          if (!noteReloadGuardRef.current.isCurrent(token)) continue;
           const gone = isGoneNote(note);
           console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, restoredId: restoredId ?? null, gone, readMs: Math.round(performance.now() - readT0) }));
           setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
@@ -77,18 +77,18 @@ export function useSyncRefresh({
       }
       console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
     })();
-  }, [refreshDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef]);
+  }, [refreshDraftEntries, setTreeNodes, setNotes, setOpenTabs, noteReloadGuardRef, openTabsRef]);
 
   /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
   const handleHistoryRestored = useCallback((restoredId: string) => {
     void native.listTreeNodes().then(setTreeNodes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void native.listNoteSummaries().then(setNotes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void (async () => {
-      const reloadVersion = tabReloadVersionRef.current.next();
+      const token = noteReloadGuardRef.current.next(restoredId);
       try {
         const t0 = performance.now();
         const updated = await native.readNote(restoredId);
-        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        if (!noteReloadGuardRef.current.isCurrent(token)) return;
         console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
           ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
@@ -96,22 +96,22 @@ export function useSyncRefresh({
         bumpRevision(restoredId);
       } catch { /* 文档未打开或读取失败则跳过 */ }
     })();
-  }, [setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, bumpRevision]);
+  }, [setTreeNodes, setNotes, setOpenTabs, noteReloadGuardRef, bumpRevision]);
 
   /** 外部改动正文后重载某个 tab（bump reloadKey 强制重建 Lake 实例）。用于附件重命名等主进程写正文的场景。 */
   const reloadNoteTab = useCallback((noteId: string) => {
     void (async () => {
-      const reloadVersion = tabReloadVersionRef.current.next();
+      const token = noteReloadGuardRef.current.next(noteId);
       try {
         const updated = await native.readNote(noteId);
-        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        if (!noteReloadGuardRef.current.isCurrent(token)) return;
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId
           ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
           : tab));
         bumpRevision(noteId);
       } catch { /* 文档未打开则跳过 */ }
     })();
-  }, [setOpenTabs, tabReloadVersionRef, bumpRevision]);
+  }, [setOpenTabs, noteReloadGuardRef, bumpRevision]);
 
   return { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab };
 }

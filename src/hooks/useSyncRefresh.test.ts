@@ -16,12 +16,13 @@ const h = vi.hoisted(() => ({
 vi.mock("../lib/native", () => ({ native: h }));
 
 import { useSyncRefresh } from "./useSyncRefresh";
-import { createRequestVersion } from "../core/requestVersion";
+import { createNoteReloadGuard } from "../core/requestVersion";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions";
 import type { OpenTab } from "../desktop/desktopTypes";
 
 let handleTrashRestored: ((restoredId?: string) => void) | null = null;
 let refreshDraftEntries: (() => Promise<void>) | null = null;
+let reloadNoteTab: ((noteId: string) => void) | null = null;
 let draftEntries: unknown[] = [];
 const openTabsRef: { current: OpenTab[] } = { current: [] };
 function applyDraftEntries(updater: any) {
@@ -29,7 +30,7 @@ function applyDraftEntries(updater: any) {
 }
 
 function Harness() {
-  const tabReloadVersionRef = useRef(createRequestVersion());
+  const noteReloadGuardRef = useRef(createNoteReloadGuard());
   const api = useSyncRefresh({
     setPendingSummary: () => {},
     setDraftEntries: applyDraftEntries as never,
@@ -40,12 +41,13 @@ function Harness() {
         ? (updater as (t: OpenTab[]) => OpenTab[])(openTabsRef.current)
         : (updater as OpenTab[]);
     }) as never,
-    tabReloadVersionRef,
+    noteReloadGuardRef,
     openTabsRef,
     bumpRevision: () => {},
   });
   handleTrashRestored = api.handleTrashRestored;
   refreshDraftEntries = api.refreshDraftEntries;
+  reloadNoteTab = api.reloadNoteTab;
   return null;
 }
 
@@ -58,7 +60,7 @@ beforeEach(() => {
   h.deleteDraftJournal.mockClear();
   draftEntries = [];
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); handleTrashRestored = null; });
+afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); handleTrashRestored = null; reloadNoteTab = null; });
 
 const note = (id: string, parentId: string | null, syncState: string) => ({
   id, title: id.toUpperCase(), content: `<p>${id}</p>`, parentId, syncState,
@@ -105,5 +107,38 @@ describe("useSyncRefresh.refreshDraftEntries（审计 F09）", () => {
     expect(draftEntries).toEqual([orphan]);
     // 审计 F09：不存在的草稿是最后的恢复出口，刷新路径绝不允许自动删除。
     expect(h.deleteDraftJournal).not.toHaveBeenCalled();
+  });
+});
+
+describe("useSyncRefresh reload guard（审计 F03）", () => {
+  it("reload(a) 后 reload(b)：b 的请求不取消 a（不同文档互不取消，R03）", async () => {
+    const reads: Array<{ id: string; resolve: (v: unknown) => void }> = [];
+    h.readNote.mockImplementation((id: string) => new Promise((resolve) => { reads.push({ id, resolve }); }));
+    openTabsRef.current = [
+      { noteId: "a", title: "A", content: "<p>old-a</p>", dirty: false, lastAccessedAt: 1 },
+      { noteId: "b", title: "B", content: "<p>old-b</p>", dirty: false, lastAccessedAt: 2 },
+    ];
+    act(() => root.render(createElement(Harness)));
+    act(() => { reloadNoteTab!("a"); reloadNoteTab!("b"); });
+    await act(async () => { await tick(); });
+    const readOf = (id: string) => reads.find((r) => r.id === id)!;
+    await act(async () => { readOf("b").resolve(note("b", "nb", "local")); await tick(); });
+    await act(async () => { readOf("a").resolve(note("a", "nb", "local")); await tick(); });
+    expect(openTabsRef.current.find((t) => t.noteId === "b")!.content).toBe("<p>b</p>");
+    // 旧实现：b 的 next() 会把 a 的 token 判为过期 ⇒ a 被丢弃、保持旧正文
+    expect(openTabsRef.current.find((t) => t.noteId === "a")!.content).toBe("<p>a</p>");
+  });
+
+  it("同一文档连续两次 reload：旧响应作废，最新一次胜出", async () => {
+    const reads: Array<{ id: string; resolve: (v: unknown) => void }> = [];
+    h.readNote.mockImplementation((id: string) => new Promise((resolve) => { reads.push({ id, resolve }); }));
+    openTabsRef.current = [{ noteId: "a", title: "A", content: "<p>old</p>", dirty: false, lastAccessedAt: 1 }];
+    act(() => root.render(createElement(Harness)));
+    act(() => { reloadNoteTab!("a"); reloadNoteTab!("a"); });
+    await act(async () => { await tick(); });
+    // 第二次（最新）先回，第一次（旧）后回：旧响应不得覆盖新正文
+    await act(async () => { reads[1]!.resolve(note("a", "nb", "local")); await tick(); });
+    await act(async () => { reads[0]!.resolve({ ...note("a", "nb", "local"), content: "<p>stale</p>" }); await tick(); });
+    expect(openTabsRef.current.find((t) => t.noteId === "a")!.content).toBe("<p>a</p>");
   });
 });

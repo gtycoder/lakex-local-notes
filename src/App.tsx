@@ -52,7 +52,7 @@ export function App() {
     setS3Settings, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
     settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
-    quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
+    quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, noteReloadGuardRef, editorsRef,
   } = useWorkspaceState();
   const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus({
     workspaceTriggerRef: wsMenuWrapRef,
@@ -208,7 +208,7 @@ export function App() {
   useSyncProgress({
     setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,
     setConflictSnapshotNotice, setHistoryNoteId, setHistoryOpen, setNotice, setTrashOpen,
-    showNoticeWithAction, quickNotesRef, tabReloadVersionRef, openTabsRef,
+    showNoticeWithAction, quickNotesRef, openTabsRef,
   });
 
 
@@ -228,7 +228,7 @@ export function App() {
   });
 
   const { refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab } = useSyncRefresh({
-    setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef, bumpRevision,
+    setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, noteReloadGuardRef, openTabsRef, bumpRevision,
   });
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）

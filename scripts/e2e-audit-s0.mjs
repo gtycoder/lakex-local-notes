@@ -92,7 +92,12 @@ const INJECT = [
   "    status: function(){ var el=document.querySelector('.document-statusbar'); return el? el.innerText : ''; },",
   "    engine: function(){ var eds=Array.prototype.slice.call(document.querySelectorAll('.ne-editor')).filter(function(e){ return e.getBoundingClientRect().height>0; }); var e=eds[0]; return e? e.querySelector('.ne-engine') : null; },",
   "    paraRect: function(){ var en=window.__s0.engine(); if(!en) return null; var p=en.querySelector('ne-p')||en; var r=p.getBoundingClientRect(); return { x: Math.round(r.left+Math.min(30, r.width/2)), y: Math.round(r.top+Math.min(12, r.height/2)) }; },",
-  "    dirty: function(){ return /待保存/.test(window.__s0.status()) || Boolean(document.querySelector('.tab-item.active .tab-dirty')); }",
+  "    dirty: function(){ return /待保存/.test(window.__s0.status()) || Boolean(document.querySelector('.tab-item.active .tab-dirty')); },",
+  "    tabText: function(){ var en=window.__s0.engine(); return en? (en.innerText || '') : ''; },",
+  "    ctxHistory: function(id){ var r=Array.prototype.find.call(document.querySelectorAll('[data-tree-node-id]'), function(x){ return x.getAttribute('data-tree-node-id')===id; }); if(!r) return false; var b=r.getBoundingClientRect(); r.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:Math.round(b.left+40),clientY:Math.round(b.top+8)})); return true; },",
+  "    clickMenuText: function(text){ var items=Array.prototype.slice.call(document.querySelectorAll('.context-menu button, .context-menu .context-menu-item')); var hit=items.find(function(el){ return (el.textContent||'').trim()===text; }); if(!hit) return false; hit.click(); return true; },",
+  "    restoreHistory: function(historyId){ var rows=Array.prototype.slice.call(document.querySelectorAll('.b3-list-item[data-history-id]')); var row=rows.find(function(r){ return r.getAttribute('data-history-id')===String(historyId); }) || rows[rows.length-1]; if(!row) return false; var btn=row.querySelector('button[aria-label=\"恢复此版本\"]'); if(!btn) return false; btn.click(); return true; },",
+  "    closeDialog: function(){ document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; }",
   "  };",
   "  return true;",
   "})()",
@@ -198,6 +203,48 @@ try {
   check("F04 元数据：回收站节点 rename/icon/lock 被拒绝", f04m.renameRejected && f04m.iconRejected && f04m.lockRejected, f04m.renameErr);
   check("F04 元数据：拒绝后标题未被改写", f04m.titleUnchanged);
   check("F04 元数据：显式恢复后 rename 可写", f04m.afterRestore, f04m.afterRestoreErr);
+
+  // ---- F03：按文档 reload 取消作用域（真实端：两篇不同文档各自历史恢复都生效）----
+  const f03 = JSON.parse(await evaluate([
+    "(async function(){",
+    "  var api = window.lakeNative;",
+    "  var a = await api.createNote('S0-F03-a'); await api.saveNote(a.id, a.title, '<p>A0</p>');",
+    "  var ha = await api.createHistorySnapshot(a.id, undefined, true);",
+    "  await api.saveNote(a.id, 'S0-F03-a', '<p>A1</p>');",
+    "  var b = await api.createNote('S0-F03-b'); await api.saveNote(b.id, b.title, '<p>B0</p>');",
+    "  var hb = await api.createHistorySnapshot(b.id, undefined, true);",
+    "  await api.saveNote(b.id, 'S0-F03-b', '<p>B1</p>');",
+    "  return JSON.stringify({ a: a.id, ha: ha, b: b.id, hb: hb });",
+    "})()",
+  ].join(NL)));
+  await evaluate("window.confirm = function(){ return true; }; true");
+  for (const id of [f03.a, f03.b]) {
+    await waitFor("Boolean(Array.prototype.find.call(document.querySelectorAll('[data-tree-node-id]'), function(x){ return x.getAttribute('data-tree-node-id')===" + JSON.stringify(id) + "; }))", 15000);
+    await evaluate("window.__s0.clickRow(" + JSON.stringify(id) + ")");
+    await waitFor("window.__s0.hasTab(" + JSON.stringify(id) + ")", 15000);
+    await wait(1200);
+  }
+  const restoreOne = async (id, historyId) => {
+    await evaluate("window.__s0.ctxHistory(" + JSON.stringify(id) + ")");
+    await wait(500);
+    await evaluate("window.__s0.clickMenuText('历史版本')");
+    const panel = await waitFor("Boolean(document.querySelector('.b3-list-item[data-history-id]'))", 10000);
+    const clicked = await evaluate("window.__s0.restoreHistory(" + historyId + ")");
+    await wait(1600);
+    await evaluate("window.__s0.closeDialog()");
+    await wait(500);
+    return { panel, clicked };
+  };
+  const ra = await restoreOne(f03.a, f03.ha);
+  const rb = await restoreOne(f03.b, f03.hb);
+  await evaluate("window.__s0.clickRow(" + JSON.stringify(f03.a) + ")");
+  await wait(1000);
+  const textA = await evaluate("window.__s0.tabText()");
+  await evaluate("window.__s0.clickRow(" + JSON.stringify(f03.b) + ")");
+  await wait(1000);
+  const textB = await evaluate("window.__s0.tabText()");
+  check("F03 A 历史恢复生效（tab 重载为快照内容）", ra.clicked && /A0/.test(textA), JSON.stringify({ panel: ra.panel, clicked: ra.clicked, text: String(textA).slice(0, 40) }));
+  check("F03 B 历史恢复生效（不同文档不被互相取消）", rb.clicked && /B0/.test(textB), JSON.stringify({ panel: rb.panel, clicked: rb.clicked, text: String(textB).slice(0, 40) }));
 
   // ---- F01/F02 非回归：正常输入 → 自动保存 ----
   const g = await evaluate("(async function(){ var n = await window.lakeNative.createNote('S0-normal-save'); await window.lakeNative.saveNote(n.id, n.title, '<p>base</p>'); return n.id; })()");
