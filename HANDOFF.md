@@ -41,6 +41,12 @@
 - 门禁：tsc 通过、全量 vitest **1486 passed / 16 skipped**、check:core 70 文件 0 违规、git diff --check 通过、opt-in 容量基准实跑通过；**桌面真实端 CDP `scripts/e2e-audit-s0.mjs` 16/16**、**安卓真实端 `scripts/e2e-f06-android.mjs` 6/6**（emulator-5554 + debug APK）。**绝不启动路线 C（正文入 SQLite）**；S1 DocumentSession 也未批准。
 - 已知取舍：F06 的 bridge.saveNote 对"无墓碑的新 id"仍可初始化；F03 竞态在真实 hook（jsdom 受控延迟）层验证——`window.lakeNative` 被 contextBridge 冻结，无法向真实 App 注入读延迟，真实端覆盖两篇不同文档各自历史恢复都生效。
 
+### 260930-S0 后续（C/B/A 捕获契约，已实施，待验收；未合 master/未推送）
+- C：生命周期持久化闸门收敛为 `src/core/lifecycleFlush.ts` 单一来源（962f4b0）。
+- B：新增 `scripts/profile-editor-input.mjs`（opt-in）实测多 MB 文档每键整篇序列化 ≈ 数十 ms；据此实施**捕获契约**（f994ee2 + 24a21cc）：EditorTab 每键只通知"有变更"、正文改在保存/草稿/关闭时按需 capture；删除 `MultiTabEditor.contentCache/reloadKeysRef` 第二份正文。
+- 效果：2MB 单键 57.9→10.0ms、长任务 1761ms→0；桌面 e2e 17/17；全量 vitest 1490 passed / 16 skipped。
+- 诚实边界：profile 脚本就绪判定不严（只信量级）；自愈竞态无真实端注入点；doc 每键不 setState 大字符串。
+
 ### 当前会话 · 260930-ARCH（仅文档，待讨论）
 - 用户要求多维表功能扩展暂告一段落，先只读评估整体代码与架构，再讨论是否需要大规模重构；**本轮不实施代码**。
 - 当前源码 `ae1cfda`（条件填色、统一选色与筛选面板优化），工作树在本轮开始时干净、仅一个 master 工作树；本地 `origin/master` 跟踪引用同 HEAD（未联网 fetch）。**条件填色已提交**，下方旧描述的“未提交”是历史状态；功能验收状态不擅自变更。

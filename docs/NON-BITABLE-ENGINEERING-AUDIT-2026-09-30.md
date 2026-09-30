@@ -592,9 +592,9 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 | F03 | 全工作区单一 `tabReloadVersionRef` 会让不同文档的合法重载互相取消 → 新增 `createNoteReloadGuard`（按 noteId token）；`handleTrashRestored`/`handleHistoryRestored`/`reloadNoteTab` 按文档取消；`useSyncProgress` 全库同步改用自己的 sync run id | src/core/requestVersion.ts、useSyncRefresh.ts、useSyncProgress.ts、useWorkspaceState.ts、App.tsx | requestVersion.test +2；useSyncRefresh.test +2（R03：reload a/b 互不取消；同文档旧响应作废）；桌面真实端 +2 |
 | F17 | 断言 `getSyncPendingSummary` 真实契约（resources 恒为 0；documents/folders = 本地待上传事实），fixture 生成与业务耗时分离 | electron/workspace.benchmark.test.ts | opt-in 基准实跑通过：`savedMs≈3 / fixtureMs≈843 / summary.resources=0` |
 
-门禁：tsc 通过；全量 vitest **1486 passed / 16 skipped**；check:core 70 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
+门禁：tsc 通过；全量 vitest **1490 passed / 16 skipped**（含后续捕获批）；check:core 71 文件 0 违规；git diff --check 通过；opt-in `LAKE_RUN_BENCHMARK=1 npx vitest run electron/workspace.benchmark.test.ts` 通过。
 
-**桌面真实端 CDP 验收**：`node scripts/e2e-audit-s0.mjs` **16/16 通过**（隔离 `LAKE_USER_DATA`/端口、owned child 精确收尾）——scheme origin `lake://app`；F04 回收站/purge 后普通保存被真实 IPC+SQLite 拒绝且正文不改写、显式恢复后可写、恢复 c 不解除仍在回收站的 d、元数据 rename/icon/lock 对回收站节点被拒且显式恢复后可写；F03 两篇不同文档各自历史恢复都生效；F01/F02 输入→自动保存落盘；F01 保存失败（.lake 缺失→NotFound）时脏标签不关闭、恢复可写后再关成功。
+**桌面真实端 CDP 验收**：`node scripts/e2e-audit-s0.mjs` **17/17 通过**（捕获批新增「输入后立即关闭也把最后输入落盘」）（隔离 `LAKE_USER_DATA`/端口、owned child 精确收尾）——scheme origin `lake://app`；F04 回收站/purge 后普通保存被真实 IPC+SQLite 拒绝且正文不改写、显式恢复后可写、恢复 c 不解除仍在回收站的 d、元数据 rename/icon/lock 对回收站节点被拒且显式恢复后可写；F03 两篇不同文档各自历史恢复都生效；F01/F02 输入→自动保存落盘；F01 保存失败（.lake 缺失→NotFound）时脏标签不关闭、恢复可写后再关成功。
 
 **安卓真实端验收**：`node scripts/e2e-f06-android.mjs` **6/6 通过**（emulator-5554 + `android-build.sh --sync` debug APK；用 MobileApp 暴露的 `window.lakeNative` 调试契约直驱 bridge）——回收站晚到保存被拒且正文 sizeBytes 不变；条目仍在回收站；purge 后晚到保存被拒且不复活；显式恢复后可写。
 
@@ -612,6 +612,25 @@ node docs/audit-evidence-2026-09-30/reproduce.mjs
 - **F06 的 `bridge.saveNote`**：在"无行且无永久墓碑"时仍会初始化新文档（既有 `createNote` 流程依赖该入口）；真正被禁止的是覆盖回收站/已 purge 行、以及复活有墓碑的条目。repository 层的 `saveNote` 对 missing/gone 一律拒绝。
 - 未做真实 S3 双端/GC 验收（S0 是本地逻辑修复）。
 - 改动写在分支 codex/audit-s0 上，**未合 master、未推送**，待用户验收。
+
+### 后续小范围收口（C / B / A：捕获契约，审计 §6.1 / §7.3）
+
+> S0 之后的独立增量：**不启动 S1 DocumentSession**，只解决"多 MB 文档每键整篇序列化"这一个已测量的真问题，并顺手收敛生命周期闸门。
+
+| 项 | 内容 | 提交 |
+|---|---|---|
+| C | 关闭/淘汰/锁定的持久化闸门收敛为 `src/core/lifecycleFlush.ts` 单一来源（blocked 视为可继续），避免规则漂移 | 962f4b0 |
+| B | 新增 opt-in `scripts/profile-editor-input.mjs` 实测：2MB 文档单键 getDocument+state ≈ 58ms、0.5MB ≈ 17ms、~0 ≈ 0.6ms | f994ee2 |
+| A+B | **捕获契约**：EditorTab contentchange 只通知「有变更」、不再每键序列化；正文由 `useSavePipeline.captureContent` 在保存/草稿/关闭时按需 capture；删除 `MultiTabEditor.contentCache`/`reloadKeysRef`（第二份可写正文）；close/evict/lock/beforeunload 不再传可能过期的 `tab.content` | 24a21cc |
+
+**效果**（同一 profile 脚本、同口径）：2MB 单键 **57.9 → 10.0 ms**、长任务 **1761ms → 0**；0.5MB **16.8 → 5.3 ms**、长任务 533ms → 0；~0 不变（0.6→0.7ms）。桌面 e2e **17/17**。
+
+**诚实边界（捕获批）**：
+- profile 脚本的「tab 就绪」判定不严（曾出现 `openMs=4`，即在目标 tab 渲染完成前开测），**只信量级、不信精确 before/after**；已按同一脚本同口径对比。
+- 重建（锁/自愈/换文档）前的最后捕获放在 `EditorTab` effect cleanup（写入 `latestDocumentRef`），保证不丢在途输入；但「内核中途自愈时正好在打字」这一竞态没有真实端注入点，只有代码路径保证（未实测）。
+- doc 每键只 `bumpRevision` + 重置防抖，**只在 clean→dirty 第一次**更新 tab 状态；sheet/board 仍走显式 content（其内部本就防抖）。
+- `src/core/editorChangeGuard.ts` 因捕获契约后不再被调用（模块与单测保留，未清理）。
+- 未做真实 Electron 前台长文输入体感验收（profile 是程序化注入，非人手打字）。
 
 
 
