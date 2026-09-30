@@ -949,8 +949,10 @@ export function createLakeDocument(
     const tryEnsureAudio = (tries: number): void => {
       let allReady = true;
       try {
-        // audio + video 卡都覆盖：两者初次渲染都可能撞上 AssetServer 启动竞态（error 4）
-        const cards = document.querySelectorAll('ne-card[name="audio"], NE-CARD[data-card-name="audio"], ne-card[name="video"], NE-CARD[data-card-name="video"]');
+        // audio + video 卡都覆盖：两者初次渲染都可能撞上 AssetServer 启动竞态（error 4）。
+        // §6.1-#4：扫描范围收窄到本实例自己的 mount——此前用 document.querySelectorAll 扫全工作区，
+        // 每个 keep-alive 编辑器实例都重复扫同一批卡（实测 8 标签 ~53 次/前 6s）。卡都在本 mount 内。
+        const cards = mount.querySelectorAll('ne-card[name="audio"], NE-CARD[data-card-name="audio"], ne-card[name="video"], NE-CARD[data-card-name="video"]');
         if (cards.length === 0) {
           // 卡尚未渲染（setDocument 异步）——前几轮继续等待；之后无媒体卡则停止（避免白跑）
           allReady = tries >= 5;
