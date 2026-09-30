@@ -71,6 +71,8 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 18. **依赖 / vendor 代码的「冗余、未用路径、死代码」不做清理**：`vendor/**` 与任何第三方依赖本来就带冗余，**不因为"我们没用到"就去删/重写**（会牵动 vendor 构建与上游契约，且不属于我们维护的范围）。只在我们**必须改行为**时，按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 的流程做最小改动。**以后不要再提议清理依赖侧的死路径。**
 
+19. **多维表条件求值必须单一来源**：视图筛选、关联选择器临时筛选以及后续条件着色，统一使用 `BitableFilterRule` / `BitableFilterNode`、`filterOperatorsFor()`、`evaluateFilterNode()` 与共享 `BitableFilterEditor`。禁止为填色、图表或某个视图另造一套操作符、空值语义或条件 UI；字段取值继续走 `bitableFieldValue()`。
+
 ## 4. 关键机制速览（同步）
 
 - **Manifest V1 重置**：旧数据与远端清零后，Lake manifest 重新使用 `version=1`，但内容 schema 沿用原 v7（folders/墓碑/锁/`kind`/board 保留）。代码只读写 `{1}`；所有端必须一起升级。传输/GC/类型分别见 `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/syncTypes.ts`，编排见 `electron/syncEngineController.ts`。
