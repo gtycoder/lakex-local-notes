@@ -17,8 +17,9 @@ export interface SchemaInitContext {
 }
 
 /**
- * schema 初始化/迁移 + 首次种子（原样迁移自 Store；REFACTOR：只搬家不改行为）。
- * migrate 每次 Store 构造幂等执行：建表 → 旧库补列 → 容器/种子初始化。
+ * schema 初始化 + 首次种子。
+ * migrate 每次 Store 构造幂等执行：建表（**当前完整 DDL**）→ 容器/种子初始化；
+ * 不再做旧库逐列补列 / 旧 trigram 重建 / 旧模型 notes→tree 迁移（AGENTS §3 #7：不做旧数据兼容）。
  * seed 仅在 notes 全空时写欢迎笔记（固定 id 跨端一致）。
  */
 export class SchemaInit {
@@ -35,7 +36,14 @@ export class SchemaInit {
         sort_order INTEGER NOT NULL, updated_at TEXT NOT NULL,
         sync_state TEXT NOT NULL DEFAULT 'local', is_conflict INTEGER NOT NULL DEFAULT 0,
         deleted_at TEXT,
-        kind TEXT NOT NULL DEFAULT 'doc'
+        kind TEXT NOT NULL DEFAULT 'doc',
+        is_locked INTEGER NOT NULL DEFAULT 0,
+        locked_at TEXT,
+        md_cache TEXT,
+        text_cache TEXT,
+        restore_pending_at TEXT,
+        trashed_at TEXT,
+        deleted_from_parent_id TEXT
       );
       CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -45,6 +53,9 @@ export class SchemaInit {
         title TEXT NOT NULL, note_file_id TEXT, sort_order INTEGER NOT NULL,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
         sync_state TEXT NOT NULL DEFAULT 'local', is_conflict INTEGER NOT NULL DEFAULT 0,
+        icon TEXT,
+        trashed_at TEXT,
+        deleted_from_parent_id TEXT,
         CHECK((node_type IN ('notebook','group') AND note_file_id IS NULL) OR (node_type = 'note' AND note_file_id IS NOT NULL))
       );
       CREATE INDEX IF NOT EXISTS idx_tree_nodes_parent ON tree_nodes(workspace_id,parent_id,deleted_at,sort_order);
@@ -69,7 +80,8 @@ export class SchemaInit {
       CREATE TABLE IF NOT EXISTS sync_base (
         note_id TEXT PRIMARY KEY,
         content_hash TEXT NOT NULL,
-        last_synced_meta_at TEXT
+        last_synced_meta_at TEXT,
+        last_uploaded_hash TEXT
       );
       CREATE TABLE IF NOT EXISTS deleted_notes (
         id TEXT PRIMARY KEY,
@@ -79,7 +91,8 @@ export class SchemaInit {
         updated_at TEXT NOT NULL,
         deleted_at TEXT NOT NULL,
         node_type TEXT NOT NULL DEFAULT 'note',
-        published_at TEXT
+        published_at TEXT,
+        purged_at TEXT
       );
       -- 文档历史快照（纯本地，不参与同步）。refs_json=该快照引用的资源文件名清单。
       -- 不设 UNIQUE(note_id,content_hash)：恢复/回退同内容会再次出现，UNIQUE 会让
@@ -92,7 +105,8 @@ export class SchemaInit {
         created_at TEXT NOT NULL,
         size INTEGER NOT NULL,
         refs_json TEXT NOT NULL,
-        ref_count INTEGER NOT NULL
+        ref_count INTEGER NOT NULL,
+        protected_until TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_note_history_note ON note_history(note_id, created_at DESC);
       -- S3 GC：待回收清单（提示/审计；删除依据 = 差集重算）与删除审计日志
@@ -111,40 +125,8 @@ export class SchemaInit {
         ok INTEGER NOT NULL
       );
     `);
-    // 锁状态列（v3 同步元数据）：旧库无列时补齐
-    const cols = this.ctx.db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>;
-    if (!cols.some((c) => c.name === "is_locked")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0");
-    }
-    if (!cols.some((c) => c.name === "locked_at")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN locked_at TEXT");
-    }
-    // 文档类型（doc | sheet | bitable）：进 manifest.kind 跨端同步（见 docs/STORAGE-LAYERS.md §4.3）。
-    // 缺省 'doc' 兼容旧库；tree_nodes.node_type 仍只区分 notebook/group/note（不新增 node_type，避免动目录约束）。
-    if (!cols.some((c) => c.name === "kind")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'doc'");
-    }
-    // B3（冲突归档保护）：superseded 快照保护窗口（protected_until 未到不自动清理；手动删除不受限）
-    const histCols = this.ctx.db.prepare("PRAGMA table_info(note_history)").all() as Array<{ name: string }>;
-    if (!histCols.some((c) => c.name === "protected_until")) {
-      this.ctx.db.exec("ALTER TABLE note_history ADD COLUMN protected_until TEXT");
-    }
-    // M1 文本缓存列：保存时由 Lake 内核生成的 markdown/纯文本（供导出资料包/复制MD/全文搜索）
-    if (!cols.some((c) => c.name === "md_cache")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN md_cache TEXT");
-    }
-    // M1.6 文档/分组自定义图标（**同步**：进 manifest icon 字段，两端 applyRemoteNoteMeta/listFoldersForSync；见 docs/STORAGE-LAYERS.md）
-    const treeCols = this.ctx.db.prepare("PRAGMA table_info(tree_nodes)").all() as Array<{ name: string }>;
-    if (!treeCols.some((c) => c.name === "icon")) {
-      this.ctx.db.exec("ALTER TABLE tree_nodes ADD COLUMN icon TEXT");
-    }
-    // M2 全文搜索 v2：FTS5 + unicode61；中文按单字预分词（src/core/search），任意长度查询都可走索引。
-    // 旧库若仍是 trigram，直接 DROP 重建（开发期数据可重建，AGENTS §3 #7/#10）。
-    const ftsSql = (this.ctx.db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'").get() as { sql: string | null } | undefined)?.sql ?? "";
-    if (ftsSql && !ftsSql.includes("unicode61")) {
-      this.ctx.db.exec("DROP TABLE notes_fts");
-      this.ctx.db.exec("DROP TABLE IF EXISTS search_index");
-    }
+
+    // M2 全文搜索 v2：FTS5 + unicode61；中文按单字预分词（src/core/search），任意长度查询都可走索引。（S2：不再做旧 trigram 重建）
     this.ctx.db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, tokenize='unicode61')");
     this.ctx.db.exec(
       "CREATE TABLE IF NOT EXISTS search_index (" +
@@ -155,51 +137,7 @@ export class SchemaInit {
       "indexed_at TEXT NOT NULL)"
     );
     this.ctx.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
-    if (!cols.some((c) => c.name === "text_cache")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN text_cache TEXT");
-    }
-    // P0-1：sync_base 记录"本机最后一次成功上传的 hash"，用于恢复后判定"远端是否本机传的"
-    const baseCols = this.ctx.db.prepare("PRAGMA table_info(sync_base)").all() as Array<{ name: string }>;
-    if (!baseCols.some((c) => c.name === "last_uploaded_hash")) {
-      this.ctx.db.exec("ALTER TABLE sync_base ADD COLUMN last_uploaded_hash TEXT");
-    }
-    // 统一冲突语义（先同步者胜）：记录"本设备上次成功同步时该笔记的 updated_at"（元数据已确认版本）。
-    // 下载对账据此判定远端元数据是否"新于本设备已确认版本"：是 → 应用远端（先同步者胜）；
-    // 否 → 保留本地（在已确认基础上续编/改名不被远端旧值回滚）。与正文 baseHash、小记 baseHash 同构。
-    if (!baseCols.some((c) => c.name === "last_synced_meta_at")) {
-      this.ctx.db.exec("ALTER TABLE sync_base ADD COLUMN last_synced_meta_at TEXT");
-    }
-    const deletedCols = this.ctx.db.prepare("PRAGMA table_info(deleted_notes)").all() as Array<{ name: string }>;
-    if (!deletedCols.some((c) => c.name === "purged_at")) {
-      this.ctx.db.exec("ALTER TABLE deleted_notes ADD COLUMN purged_at TEXT");
-    }
-    // node_type：区分 folder/group 墓碑（仅本地下载过滤，不进 manifest.notes）与 note 墓碑（发布 deleted:true）
-    if (!deletedCols.some((c) => c.name === "node_type")) {
-      this.ctx.db.exec("ALTER TABLE deleted_notes ADD COLUMN node_type TEXT NOT NULL DEFAULT 'note'");
-    }
-    // published_at：墓碑已发布到 manifest 的时间（NULL = 未发布，计入"待上传"）
-    if (!deletedCols.some((c) => c.name === "published_at")) {
-      this.ctx.db.exec("ALTER TABLE deleted_notes ADD COLUMN published_at TEXT");
-    }
-    // 恢复标记（墓碑权威的显式例外）：restoreTrashItem 写入，markSynced 清除。
-    // 同步下载分支据此区分"被动编辑"（跟随删除）与"主动恢复"（local wins）。
-    if (!cols.some((c) => c.name === "restore_pending_at")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN restore_pending_at TEXT");
-    }
-    // TRASH-NOTEBOOK：回收站笔记本重构（删除=移动）。trashed_at=进入回收站时间（自动过期基准），
-    // deleted_from_parent_id=删除前父目录（恢复位置，上云）。
-    if (!cols.some((c) => c.name === "trashed_at")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN trashed_at TEXT");
-    }
-    if (!cols.some((c) => c.name === "deleted_from_parent_id")) {
-      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN deleted_from_parent_id TEXT");
-    }
-    if (!treeCols.some((c) => c.name === "trashed_at")) {
-      this.ctx.db.exec("ALTER TABLE tree_nodes ADD COLUMN trashed_at TEXT");
-    }
-    if (!treeCols.some((c) => c.name === "deleted_from_parent_id")) {
-      this.ctx.db.exec("ALTER TABLE tree_nodes ADD COLUMN deleted_from_parent_id TEXT");
-    }
+
     const now = nowIso();
     // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除。唯一机制容器，不可删。
     this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
@@ -211,11 +149,7 @@ export class SchemaInit {
     if (!seeded) {
       this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
         VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(this.ctx.defaultNotebookId, this.ctx.workspaceId, null, "notebook", "个人笔记", now, now);
-      // Migrate any notes not yet in tree_nodes（旧库升级兜底）
-      this.ctx.db.prepare(`INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-        SELECT id,?,COALESCE(parent_id,?),'note',title,id,sort_order,updated_at,updated_at,deleted_at,sync_state,is_conflict
-        FROM notes WHERE id NOT IN (SELECT id FROM tree_nodes)`).run(this.ctx.workspaceId, this.ctx.defaultNotebookId);
-      this.ctx.db.prepare("UPDATE notes SET parent_id=? WHERE parent_id IS NULL").run(this.ctx.defaultNotebookId);
+
       this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('seed_initialized','1')").run();
     }
   }
