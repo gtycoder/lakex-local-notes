@@ -1,5 +1,5 @@
 /* 多维表筛选编辑器：远端 lake「条件组 / 子组」结构。令牌全部走 --lake-*。 */
-.bt-filter-panel { width: 820px; max-width: calc(100vw - 24px); max-height: min(680px, calc(100vh - 24px)); overflow: auto; }
+.bt-filter-panel { width: 100%; max-width: 100%; max-height: min(680px, calc(100vh - 24px)); overflow: auto; }
 .bt-filter-editor { display: flex; flex-direction: column; min-width: 0; padding: 8px 12px 0; }
 .bt-filter-group { display: flex; flex-direction: column; min-width: 0; }
 .bt-filter-line { display: grid; grid-template-columns: 60px minmax(0, 1fr) 32px; gap: 8px; align-items: start; min-width: 0; margin-top: 8px; }

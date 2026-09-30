@@ -5,7 +5,9 @@
  * 组件里**不写静态内联样式**；仅浮层定位这类动态坐标用 inline style（与 Sidebar 右键菜单同做法）。
  * 单元格值按 fieldId 存，编辑通过 onChange(value) 回传，由 BitableEditor 统一写 doc。
  */
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { COLOR_BOARD_GROUPS, contrastTextColor } from "../../core/colorPalette.js";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { BitableRelationPicker } from "./BitableRelationPicker.js";
@@ -17,7 +19,7 @@ import { bitableAssetUrl } from "./bitableAssetUrl.js";
 import { FileKindIcon } from "./FileKindIcon.js";
 import "./bitableFieldCells.css";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import type { CSSProperties } from "react";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
@@ -113,6 +115,10 @@ export interface PopoverProps {
   children: ReactNode;
   width?: number;
   align?: "start" | "end";
+  /** 默认在锚点下方；right = 作为点击子菜单贴锚点右侧展开。 */
+  side?: "below" | "right";
+  /** 点击其它嵌套浮层时也关闭；颜色选择器用，普通菜单保持父层保护。 */
+  closeOnNestedOverlay?: boolean;
 }
 
 /** 锚定浮层：portal 到 body，避免被表格 overflow 裁剪；外点/Esc 关闭。
@@ -120,11 +126,11 @@ export interface PopoverProps {
  *  锚点在对话框/抽屉内时抬层，避免被对话框表面盖住。
  *  锚点可为 null 而改用 at 坐标（列头右键菜单没有稳定锚点元素）。
  *  **定位走 usePopoverPosition：先量真实尺寸，下方放不下翻上方**（260929 修日期选择器贴底被裁）。 */
-export function Popover({ open, anchor, at, onClose, children, width = 240, align = "start" }: PopoverProps) {
-  const { surfaceRef, style } = usePopoverPosition({ open, anchor, at, width, align });
+export function Popover({ open, anchor, at, onClose, children, width = 240, align = "start", side = "below", closeOnNestedOverlay = false }: PopoverProps) {
+  const { surfaceRef, style } = usePopoverPosition({ open, anchor, at, width, align, side });
   if (!open || !style) return null;
   return (
-    <OverlayPopover className="bt-popover" raised={isInsideDialog(anchor)} onDismiss={onClose} surfaceRef={surfaceRef} ignoreOutside={(t) => !!anchor?.contains(t)} style={style}>
+    <OverlayPopover className="bt-popover" raised={isInsideDialog(anchor)} onDismiss={onClose} surfaceRef={surfaceRef} ignoreOutside={(t) => !!anchor?.contains(t)} closeOnNestedOverlay={closeOnNestedOverlay} style={style}>
       {children}
     </OverlayPopover>
   );
@@ -814,29 +820,99 @@ function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextE
   );
 }
 
-/** 颜色选择面板（图2：hover 出现色卡；点选即定色）。 */
-export function ColorPalette({ anchor, value, palette = BITABLE_OPTION_PALETTE, onPick, onClose, onClear }: {
+const recentColorStore = new Map<string, string[]>();
+const RECENT_COLOR_PREFIX = "lake.bitable.recent-colors.";
+
+function recentStorageKey(key: string) {
+  return RECENT_COLOR_PREFIX + key;
+}
+
+function readRecentColors(key: string): string[] {
+  const cached = recentColorStore.get(key);
+  if (cached) return [...cached];
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(recentStorageKey(key)) ?? "[]");
+    const colors = Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string" && /^#[0-9a-fA-F]{6}$/.test(item)).slice(0, 5)
+      : [];
+    recentColorStore.set(key, colors);
+    return [...colors];
+  } catch {
+    return [];
+  }
+}
+
+function rememberColor(key: string, color: string) {
+  const normalized = color.toLowerCase();
+  const next = [normalized, ...readRecentColors(key).filter((item) => item !== normalized)].slice(0, 5);
+  recentColorStore.set(key, next);
+  writeLocalStorage(recentStorageKey(key), JSON.stringify(next));
+}
+
+/** 应用内统一颜色选择面板：全量内核实色卡 + 最近使用 + 自定义颜色。 */
+export function ColorPalette({ anchor, value, recentKey, onPick, onClose, defaultLabel, defaultKind = "background", onDefault, side = "below", closeOnPick = true, closeOnNestedOverlay = false }: {
   anchor: HTMLElement;
   value?: string;
-  /** 调色板来源：选项底色 / 列文字色分开，避免文字使用过浅的背景色。 */
-  palette?: readonly string[];
+  /** 最近使用独立分桶：不同业务入口互不混合。 */
+  recentKey: string;
   onPick: (color: string) => void;
   onClose: () => void;
-  /** 传了就显示「无颜色」清除项（列文字颜色用；选项颜色不传）。 */
-  onClear?: () => void;
+  /** 顶部默认项：文字色 = 默认色；背景/填色 = 无背景色。 */
+  defaultLabel?: string;
+  defaultKind?: "text" | "background";
+  onDefault?: () => void;
+  /** 列文字颜色以点击子菜单打开；选择后继续保持，便于实时预览，直到点击空白。 */
+  side?: "below" | "right";
+  closeOnPick?: boolean;
+  /** 普通浮层语义：点击其它嵌套浮层也关闭；列文字子菜单不传，保留子菜单行为。 */
+  closeOnNestedOverlay?: boolean;
 }) {
-  const active = optionColorHex(value);
+  const active = optionColorHex(value)?.toLowerCase();
+  const defaultActive = !value || value === "transparent";
+  const [recent, setRecent] = useState(() => readRecentColors(recentKey));
+  useEffect(() => setRecent(readRecentColors(recentKey)), [recentKey]);
+  const pick = (color: string) => {
+    rememberColor(recentKey, color);
+    setRecent(readRecentColors(recentKey));
+    onPick(color);
+    if (closeOnPick) onClose();
+  };
   return (
-    <Popover open anchor={anchor} onClose={onClose} width={236} align="start">
+    <Popover open anchor={anchor} onClose={onClose} width={296} align="start" side={side} closeOnNestedOverlay={closeOnNestedOverlay}>
       <div className="bt-color-palette">
-        {palette.map((color) => (
-          <button key={color} type="button" className="bt-color-swatch" style={{ backgroundColor: color }} aria-label={"颜色 " + color}
-            onClick={() => { onPick(color); onClose(); }}>{active === color ? <Check size={12} /> : null}</button>
-        ))}
-        {onClear && (
-          <button type="button" className="bt-color-swatch bt-color-swatch--clear" aria-label="无颜色" title="无颜色"
-            onClick={() => { onClear(); onClose(); }}><X size={12} /></button>
+        <div className="bt-color-title">选择颜色</div>
+        {onDefault && defaultLabel && (
+          <button type="button" className="bt-color-clear" onClick={() => { onDefault(); if (closeOnPick) onClose(); }}>
+            <span className={"bt-color-swatch bt-color-swatch--clear" + (defaultActive ? " is-selected" : "")}
+              style={defaultKind === "text" ? { backgroundColor: "var(--lake-text-1)" } : undefined}>
+              {defaultKind === "background" ? <X size={12} /> : null}
+            </span>
+            {defaultLabel}
+          </button>
         )}
+        <div className="bt-color-rows">
+          {COLOR_BOARD_GROUPS.map((row, rowIndex) => (
+            <div className="bt-color-row" key={rowIndex}>
+              {row.map((color) => (
+                <button key={color} type="button" className={"bt-color-swatch" + (active === color.toLowerCase() ? " is-selected" : "")}
+                  style={{ backgroundColor: color }} aria-label={"颜色 " + color}
+                  onClick={() => pick(color)}>{active === color.toLowerCase() ? <Check size={12} color={contrastTextColor(color)} /> : null}</button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="bt-color-recent-title">最近使用自定义颜色</div>
+        <div className="bt-color-recent">
+          {recent.length > 0 ? recent.map((color) => (
+            <button key={color} type="button" className="bt-color-swatch" style={{ backgroundColor: color }} aria-label={"最近使用 " + color} onClick={() => pick(color)} />
+          )) : <span>暂无</span>}
+        </div>
+        <label className="bt-color-custom">
+          <span className="bt-color-custom-rainbow" aria-hidden="true" />
+          <span>更多颜色</span>
+          <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value ?? "") ? value : "#262626"} onChange={(event) => pick(event.target.value)} aria-label="更多颜色" />
+        </label>
       </div>
     </Popover>
   );
@@ -852,15 +928,40 @@ export function SelectMenu({ value, options, disabled, onChange, placeholder }: 
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const menuId = useId();
   const anchorRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const current = options.find((o) => o.value === value);
+  useEffect(() => {
+    const onOtherOpen = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== menuId) setOpen(false);
+    };
+    window.addEventListener("bt-select-menu-open", onOtherOpen);
+    return () => window.removeEventListener("bt-select-menu-open", onOtherOpen);
+  }, [menuId]);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (rootRef.current?.contains(target) || target.closest(`[data-select-menu-id="${menuId}"]`)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [menuId, open]);
   return (
-    <div className="bt-select">
-      <button ref={anchorRef} type="button" className="bt-select-trigger" aria-expanded={open} disabled={disabled} onClick={() => setOpen((v) => !v)}>
+    <div ref={rootRef} className="bt-select">
+      <button ref={anchorRef} type="button" className="bt-select-trigger" aria-expanded={open} disabled={disabled}
+        onClick={() => {
+          const next = !open;
+          if (next) window.dispatchEvent(new CustomEvent("bt-select-menu-open", { detail: menuId }));
+          setOpen(next);
+        }}>
         <span className={current ? undefined : "bt-select-placeholder"}>{current ? current.label : (value || placeholder || "")}</span><ChevronDown size={14} />
       </button>
       <Popover open={open} anchor={anchorRef.current} onClose={() => setOpen(false)} width={260} align="start">
-        <div className="bt-panel">
+        <div className="bt-panel" data-select-menu-id={menuId}>
           {options.map((option) => (
             <button key={option.value} type="button" className={"bt-menu-item ln-menu__item" + (option.value === value ? " is-selected" : "")}
               onClick={() => { onChange(option.value); setOpen(false); }}>

@@ -1,6 +1,6 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
-> 状态：**方案已冻结；V01 已完成（用户验收通过）；V02–V04 + 260928 三批追加需求 + T01/T04 + T02A + 260929 单级分组/UI2 + 260929-OPT 阶段优化 + T02B.1/.2/.3/.4 关联 + 260929 收口各条 + 260930 四条 + **260930 筛选重做：类型操作符矩阵 / 动态日期 / AND·OR 条件组 / 最多 2 层子组（代码已提交 `7dd81ba3`）** 已实施，一并待验收**（T03 多级分组已按用户决定废弃；T06 表单双模已完成待验收；D01/D02 暂缓）。
+> 状态：**方案已冻结；V01 已完成（用户验收通过）；V02–V04 + 260928 三批追加需求 + T01/T04 + T02A + 260929 单级分组/UI2 + 260929-OPT 阶段优化 + T02B.1/.2/.3/.4 关联 + 260929 收口各条 + 260930 四条 + **260930 筛选重做：类型操作符矩阵 / 动态日期 / AND·OR 条件组 / 最多 2 层子组（代码已提交 `7dd81ba3`）** + **260930 条件填色：单元格 / 整行 / 行侧 / 整列 + 钉钉同款 alpha 混色 + 应用内统一 70 色实色卡/自定义（未提交，待验收）** 已实施，一并待验收**（T03 多级分组已按用户决定废弃；T06 表单双模已完成待验收；D01/D02 暂缓）。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -758,7 +758,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | D01 CSV 导入导出 | 未开始 | - | 不依赖新重型库优先 |
 | D02 JSON 导入导出 | 未开始 | - | 完整结构导出 |
 | V05 图表视图 | 已废弃 | - | 产品确认不做 |
-| T05 条件填色 | 阻塞 | 260930-FILL-RESEARCH | 已完成独立预研：`docs/BITABLE-FILL-COLOR-RESEARCH.md`；用户明确等筛选重构完成后再讨论着色，当前不实施 |
+| T05 条件填色 + 统一选色 | 待验收 | 260930-FILL | 已按钉钉四模式实现：单元格 / 整行 / 行侧 / 整列；复用筛选单规则编辑器与求值器；`cell/row/column` 按钉钉候选顺序做 alpha 混色，`rowSide` 独立；应用内选色统一为内核 70 色实色卡 + 最近使用/自定义，最近使用按入口分桶且持久化，Lake 适配器样式不变；桌面 + 移动只读 + 全门禁 + CDP 真实验收完成；见 §13 |
 | 关联字段「选择数据表」占位修复 | 待验收 | 260929-REL-FIX | `关联数据表` 下拉不再把占位文案当选项（用户报「选择数据表仅是提示，不能当做选项」）；见 §13 |
 | T02B.4 关联数据范围 + 选择器改版 | 待验收 | 260929-T02B.4 | 字段配置加「从视图筛选记录」（不勾选=全部记录 / 勾选=绑定目标表的一个视图）；选择器由单元格小气泡改**全局大弹窗**（两个 tab / 全局搜索 / 筛选·排序 / 目标表整表 / 不做添加记录）；见 §13 |
 | 新建数据表默认结构 | 待验收 | 260929-DEF-TBL | 默认表 = **1 列文本 + 3 行空白记录**（取消预置的单选/日期列）；「新建数据表」与空正文兜底共用 `createDefaultBitableTable`；见 §13 |
@@ -851,6 +851,12 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-30 | 260930-FILTER-UI | 筛选 UI 实测修复 | `BitableEditor.tsx`（打开筛选面板不再自动写入空规则；清空筛选时删除 `filters/filterOperator` 键） · `BitableFilterEditor.tsx`（删除分组内最后一条规则后递归清掉空组） · `bitableDoc.ts`（空组规范化丢弃） · 测试 | CDP 真实 UI 逐视图点验：发现并修掉“空视图打开筛选即写一条空规则”“删除最后一条筛选仍残留空键”“删除组内最后规则残留空组”；日期动态值、多选值、关联值、根组/子组 AND/OR 均实测可用 | 未提交（待用户验收）；无运行时异常 |
 
 | 2026-09-30 | 260930-FILTER-COMMIT | 筛选重构与 260930 待提交批次合并提交 | `src/core/bitableDoc.ts` · `bitableDoc.test.ts` · `BitableEditor.tsx` · `BitableFilterEditor.tsx`(新) · `bitableFilterEditor.css`(新) · `BitableRelationPicker.tsx` · `bitableCells.tsx` · `bitableEditorMount.test.ts` · `bitableRelationPicker.css` · `MobileBitableViewer.tsx` · `mobileBitableViewer.test.ts` · `cssLayers.test.ts` | 代码提交 `7dd81ba3`「feat(bitable): 筛选精准重构与 260930 多维表收口」；将筛选依赖的前置关联/只读/附件/隐藏列改动与筛选一并入库。最终门禁：tsc / vitest 1423-16 / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check 全绿 | 功能待用户验收；填色可复用筛选引擎 |
+| 2026-09-30 | 260930-FILL | 条件填色（钉钉四模式 + alpha 混色） | `src/core/bitableDoc.ts`(+test) · `BitableFilterEditor.tsx`(导出单规则编辑器) · `BitableFillEditor.tsx`(新) · `bitableFillRules.css`(新) · `bitableCells.tsx`(ColorPalette token 支持) · `BitableEditor.tsx` · `MobileBitableViewer.tsx`(+test) · `mobile.css` · `themes/base.css` · `themes/dark.css` · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 · `BITABLE-FILL-COLOR-RESEARCH.md` | 四种模式、视图级 `fillRules`、40 条上限、筛选单规则复用、删除字段清理、桌面/移动投影、18 色软色板 token、DingTalk 同款候选混色、行侧独立通道全部落地。门禁：tsc / vitest 1428-16 / check:core / 桌面+移动构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check 全绿；隔离 Electron CDP 实测 cell/row/rowSide/column、条件保留、双规则双层背景与 JSON 落盘 | 未提交（待用户验收）；Android 模拟器未重新跑条件填色截图 |
+| 2026-09-30 | 260930-COLOR-SYSTEM | 应用内统一选色（70 色实色卡 + 自定义） | `src/core/colorPalette.ts`(新) · `bitableDoc.ts`(+test) · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableFillEditor.tsx` · `MobileBitableViewer.tsx`(+test) · `mobile.css` · `bitableEditor.css` · `cssLayers.test.ts` · `LakeColorBoard.tsx`(仅改数据来源) · 本文件 · `BITABLE-FILL-COLOR-RESEARCH.md` | 新建共享 7×10 内核实色阶；Lake 适配器保持原样式/渐变色/默认行不变；应用内选项色、进度色、列文字色、填色全部改用同一 `ColorPalette`（70 色 + 最近使用 + 自定义），不再按角色传不同 palette；填色改为存/用 hex，混色透明度由渲染层 `color-mix` 处理；模式切换保留颜色值。门禁全绿 + 隔离 Electron CDP 实测 70 色卡、自定义入口、深浅色跨模式保留 | 未提交（待用户验收）；Android 模拟器未重跑统一色卡截图 |
+| 2026-09-30 | 260930-FILL-SIDE-WIDTH | 行侧色条宽度试验 | `bitableFillRules.css` · `mobile.css` · `BITABLE-FILL-COLOR-RESEARCH.md` · `HANDOFF.md` · 本文件 | 桌面与移动端行侧色条宽度由 **3px → 6px**；只改宽度，颜色/条件/混色顺序/背景通道不变 | 未提交（待用户验收） |
+| 2026-09-30 | 260930-RECENT-COLOR-SWATCH | 最近使用颜色小色块 + 分桶 | `bitableEditor.css` · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableFillEditor.tsx` · `bitableEditorMount.test.ts` · 本文件 | 最近使用区恢复 24×24 小色块；`ColorPalette` 增加 `recentKey`，按选项/进度/列文字独立分桶；填色只分“最近背景色”（cell/row/column 共用）与“行侧色”两桶，并写入 localStorage | 未提交（待用户验收） |
+| 2026-09-30 | 260930-LAKE-MORECOLOR | Lake 更多颜色无法弹出修复 | `selectionToolbar.css` · `cssLayers.test.ts` · 本文件 | 修复 `.selection-toolbar__nativecolor` 的 `1px + pointer-events:none`：改为覆盖整行透明原生 color input；Lake 色卡视觉/渐变色不变，点击“更多颜色”可重新触发系统取色器 | 未提交（待用户验收） |
+| 2026-09-30 | 260930-FILL-DROPDOWN | 填色下拉互斥修复 | `bitableCells.tsx`(SelectMenu 唯一打开事件 + 外层 pointerdown 收起) · `bitableEditorMount.test.ts` · `BITABLE-FILL-COLOR-RESEARCH.md` · 本文件 | 用户截图报“三个下拉同时出现”。修复：任一 SelectMenu 打开时广播唯一打开事件，其它下拉立即关闭；点击弹层空白/其它触发器也收起；CDP 连续点模式/字段/操作符后可见下拉恒为 1，点空白后为 0 | 未提交（待用户验收） |
 
 ## 13. 会话记录（只追加）
 
@@ -3071,6 +3077,269 @@ UI 与交互变化：
 - 功能本身仍标记为待用户验收；提交只表示代码已入库。
 
 下一步：开始填色功能，按修订后的 `BitableFillRule` / `targetFieldId` / `condition` / token 色板方案实施。
+
+### 2026-09-30 · 条件填色（钉钉四模式 + alpha 混色，待验收）
+
+用户确认：填色混色按钉钉实现，不采用上一轮“后色压前色”的理解；随后授权开始实施。
+
+本次完成：
+
+- 重新用 BrowserSkill + Microsoft Edge 打开钉钉填色面板，独立核对四模式、一行一色、整列无条件、单条件复用、40 条上限和颜色面板；并读取当前 `we-notable@3.27.2` bundle 确认候选选择与混色算法。
+- **core 数据模型**：新增 `BitableFillMode` / `BitableFillColorToken` / `BitableFillRule` / `BITABLE_FILL_MAX_RULES=40`；`BitableView.fillRules` 为视图级配置；normalize 校验模式、token、字段和单条筛选条件。
+- **求值语义**：`cell / row / rowSide` 复用 `BitableFilterRule`、`filterOperatorsFor()`、`filterValueKindFor()`、`evaluateFilter()`；`column` 无条件。同一模式取首个命中规则；`cell / row / column` 三个候选按原始数组下标做 alpha 混色；`rowSide` 独立通道。
+- **投影**：新增 `buildBitableFillProjection()` 与 `bitableFillBackgroundTokens()`；后者返回 CSS 顶层优先的 token 顺序，与钉钉 `mix_colors` 的先放后置为底、再叠前置的视觉结算一致。禁止在 JSX 逐格重复跑规则。
+- **条件编辑器复用**：从 `BitableFilterEditor.tsx` 导出 `BitableFilterRuleEditor`，筛选树与填色规则行共用；未新增第二套操作符/值控件。
+- **UI**：工具栏新增「填色」入口（仅 grid）；`BitableFillEditor` 支持一行一色、拖动排序、删除、模式切换、颜色选择、40 条上限；模式切换只改 mode，保留当前条件与值。
+- **颜色**：复用现有 `ColorPalette`，新增 18 个 `soft-01…soft-18` 稳定 token；色值只定义在 `themes/base.css`（深色在 `dark.css` 降透明度）；不照搬钉钉 5×11 色板。
+- **移动端只读**：`MobileBitableViewer` 复用同一投影渲染背景和行侧，不新增编辑入口。
+- **字段删除**：所有视图的 `fillRules` 同步清理；历史快照 / 回收站 / 锁定文档继续走只读 `BitableEditor`。
+
+数据结构/接口变化：
+
+- `BitableView.fillRules?: BitableFillRule[]`；规则严格为 `cell / row / rowSide` + 单条 `BitableFilterRule` 条件，或 `column` + `fieldId`。
+- `BITABLE_FILL_COLOR_TOKENS = soft-01…soft-18`；正文不存 hex/rgb。
+- 新增 `createBitableFillRule` / `stripFillRulesForField` / `buildBitableFillProjection` / `bitableFillBackgroundTokens` / `isBitableFilterRuleConfigured`。
+- 无正文版本、S3、同步、历史、GC 变更。
+
+改动文件：
+
+- `src/core/bitableDoc.ts` · `src/core/bitableDoc.test.ts`
+- `src/features/bitable/BitableFilterEditor.tsx` · `BitableFillEditor.tsx`(新) · `bitableFillRules.css`(新)
+- `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `bitableEditorMount.test.ts`
+- `src/mobile/bitable/MobileBitableViewer.tsx` · `mobileBitableViewer.test.ts` · `src/mobile/mobile.css`
+- `src/styles/themes/base.css` · `dark.css` · `src/styles/cssLayers.test.ts`
+- `docs/BITABLE-FILL-COLOR-RESEARCH.md` · `HANDOFF.md` · 本文件
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest run`：**1428 passed / 16 skipped**
+- `check:core`：0 违规
+- 桌面构建 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：8 passed
+- `git diff --check`：通过
+- **隔离 Electron + CDP 真实验收**（`LAKE_RENDERER=scheme`、独立 userData、端口 9290/19893、`--no-sandbox`）：
+  - 面板打开；18 个软色块正常；规则 badge、增删、拖动把手和条件行正常。
+  - `单元格`：7 条「单选=进行中」记录只着色对应单选格。
+  - 模式切到 `整行` 后条件值保留；7 条记录 × 14 个可见字段 = 98 个数据格着色。
+  - `行侧`：背景格 0，7 条记录各出现 3px 侧条。
+  - `整列`：24 条记录的单选列着色，条件行消失。
+  - 两条规则同时命中时，目标格 computed background-image 含两层 `linear-gradient`；顺序与钉钉 alpha 混色一致。
+  - 落盘 JSON：`views[].fillRules` 的两条规则、条件、颜色 token 完整保存。
+- 证据截图：`/tmp/lake-fill-final.png`；暗色主题截图：`/tmp/lake-fill-dark.png`（临时文件，未入库）。
+
+遗留问题：
+
+- 未提交（项目红线：代码批次需用户验收后再处理提交/合并）。
+- Android 模拟器未重新做条件填色截图验收；移动端已完成构建和静态渲染单测。
+- AI「智能配色」不做；文字颜色填色不做；AND/OR 填色条件组不做。
+
+下一步：
+
+- 等用户验收填色；通过后按项目流程提交/推送，并回写最终验收状态。
+
+### 2026-09-30 · 填色下拉互斥修复（用户现场反馈）
+
+用户截图反馈：模式、字段、操作符三个下拉可以同时悬浮，要求下拉自己消失。
+
+根因：
+
+- `SelectMenu` 各自维护 `open`；虽然 `Overlay` 有外点关闭，但填色规则的下拉位于外层填色 Popover 内，`Overlay` 的嵌套浮层豁免把“同一父 Popover 内的其它点击”也当成嵌套交互，旧下拉不会被关闭。
+
+本次完成：
+
+- `SelectMenu` 增加唯一打开事件 `bt-select-menu-open`：任一菜单打开时广播自己的 id，其它菜单收到后立即 `setOpen(false)`。
+- `SelectMenu` 打开时增加 capture 阶段 `pointerdown` 监听：点击自己的触发器/面板不关；点击外层弹层空白、其它触发器或其它浮层时立即关闭。
+- 保留原有 `Overlay` 外点/Esc 行为和旧命名色键的选中态映射。
+
+改动文件：
+
+- `src/features/bitable/bitableCells.tsx`
+- `src/features/bitable/bitableEditorMount.test.ts`
+- `docs/BITABLE-FILL-COLOR-RESEARCH.md` · 本文件
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- 相关 `vitest`：115 passed
+- 隔离 Electron CDP 实测：连续快速点模式 / 字段 / 操作符后，可见 `.bt-panel[data-select-menu-id]` 始终只有 **1** 个；点击填色面板空白后为 **0**。
+
+遗留问题：
+
+- 未提交（待用户验收）。
+
+下一步：
+
+- 等用户复验下拉互斥与整体填色。
+
+### 2026-09-30 · 应用内统一选色（70 色实色卡 + 自定义，待验收）
+
+用户决定不再按“文字色 / 文字背景 / 区域背景 / 行侧 / 边框”分别过滤色板；应用内只保留一套全量色卡，由用户根据实时预览自行判断。Lake 编辑器继续使用自己的内核色卡适配器，不改现有样式和渐变色。
+
+本次完成：
+
+- 新增 `src/core/colorPalette.ts`：保存内核 7×10 实色色阶、浅色默认值、亮度判断、对比文字色、填充混合色辅助函数。
+- `LakeColorBoard.tsx` 仅改为引用共享色阶数据；原有的默认/无填充行、渐变颜色、最近使用、更多颜色和 Lake 内核 CSS 类均保持原样。
+- `ColorPalette` 改为应用内统一实色卡：70 个固定色 + 最近使用自定义颜色 + 原生自定义颜色入口，不再接收角色专用 palette/items。
+- 多维表选项颜色、进度颜色、列文字颜色、条件填色的颜色入口全部接同一个 `ColorPalette`。
+- 填色规则的 `color` 改为存储 hex；渲染时再通过 `fillSurfaceColor()` 做低透明度分层，钉钉候选顺序与 alpha 混色语义不变。
+- 选项 chip 文字色改为按背景亮度自动取深/浅对比色，避免全量色卡中的黑/白/深色导致文字消失。
+- 模式切换不换色、重映射或过滤色板；行侧选深色、整行选浅色由用户通过实时效果自行调整。
+
+数据结构/接口变化：
+
+- `BitableFillRule.color` 从稳定 token 改为 hex 实色字符串；不再使用 `BITABLE_FILL_COLOR_TOKENS` / `soft-01…18`。
+- 新增 `COLOR_BOARD_GROUPS` / `COLOR_BOARD_VALUES` / `DEFAULT_LIGHT_COLORS` / `isHexColor` / `isLightColor` / `contrastTextColor` / `fillSurfaceColor`。
+- 无同步、S3、历史、GC 版本变化。
+
+改动文件：
+
+- `src/core/colorPalette.ts`(新) · `src/core/bitableDoc.ts`(+test)
+- `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `BitableFillEditor.tsx` · `bitableEditor.css`
+- `src/features/editor/selectionToolbar/LakeColorBoard.tsx`（只改共享数据源）
+- `src/mobile/bitable/MobileBitableViewer.tsx`(+test) · `src/mobile/mobile.css`
+- `src/styles/cssLayers.test.ts` · `HANDOFF.md` · 本文件 · `BITABLE-FILL-COLOR-RESEARCH.md`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest run`：**1428 passed / 16 skipped**
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：8 passed
+- `git diff --check`：通过
+- 隔离 Electron CDP：填色面板完整色卡为 **7 行 × 10 色 = 70**；最近使用区存在；原生自定义颜色入口存在；选深红后从“单元格”切到“行侧”颜色保持 `rgb(207,19,34)`，没有角色重映射。
+
+遗留问题：
+
+- 未提交（待用户验收）。
+- 最近使用目前是渲染进程内存态，重启后清空；如需跨重启记忆，再接 `localStorage`。
+- Android 模拟器未重新截图验收统一色卡；已完成移动构建与静态渲染单测。
+
+下一步：
+
+- 等用户复验应用内统一色卡、Lake 适配器视觉不变、填色深浅自由选择。
+
+### 2026-09-30 · 行侧色条加宽（用户现场反馈）
+
+- 用户要求“行侧的色块加宽一点试试”。
+- 桌面 `.bt-row[data-fill-side] .bt-td-index::before` 与移动端 `.mbt-grid tr[data-fill-side] td:first-child::before` 的色条宽度由 **3px → 6px**。
+- 仅改宽度，不改颜色、条件、混色顺序和背景通道；桌面与移动端同步。
+
+### 2026-09-30 · 最近使用颜色小色块修复
+
+- 用户截图反馈“最近使用颜色”区域被拉成整行大色条。
+- 根因：最近使用区的按钮继承了固定色卡的 `.bt-color-swatch { width:100% }`；在 flex 行里被拉伸。
+- 修复：新增 `.bt-color-recent .bt-color-swatch { flex:0 0 auto; width:24px; height:24px; }`，恢复为与固定色卡一致的小块颜色。
+
+### 2026-09-30 · 最近使用颜色按入口独立分桶
+
+- 用户追问：所有位置是否共用最近使用颜色，要求每个位置自己维护，禁止混用。
+- 实现：`ColorPalette` 新增必填 `recentKey`；最近颜色按 key 存在内存 Map + `localStorage`。
+- 当前分桶键：`bitable-option`、`bitable-progress`、`bitable-column-text`、`bitable-fill:background`（cell/row/column 共用）、`bitable-fill:rowSide`。
+- 行为：同一入口再次打开恢复自己的最近颜色；不同入口互不影响；固定色卡和自定义颜色本身仍完全一致。
+- 验证：`tsc` 与相关测试通过；完整门禁后续统一重跑。
+
+### 2026-09-30 · Lake 浮动工具栏“更多颜色”无法弹出修复
+
+- 用户截图反馈：统一色卡后，Lake 文档浮动工具栏的文字色/背景色“更多颜色”无法弹出。
+- 根因：`selection-toolbar__nativecolor` 使用 `width:1px; height:1px; opacity:0; pointer-events:none`，视觉存在但原生 `<input type="color">` 无法被点击激活。
+- 修复：改为 `position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer`，让原生 color input 覆盖“更多颜色”整行作为透明命中层；Lake 色卡 DOM、视觉和渐变色都不改。
+- 说明：这是应用侧对原生 input 命中层的修复，不是改内核色卡逻辑。
+
+### 2026-09-30 · Lake 文档选区遮住文字背景修复（用户现场反馈）
+
+本次完成：
+
+- 用户提供两段 GIF：本地 Lake 文档跨普通文字选择时，原有行内背景被系统选区高亮盖住；云端 Yuque 选中时原背景仍可见。
+- 用隔离 Electron 复现真实路径：保存数据中同段落是连续的 `ne-text` 节点，只有中间节点带 `ne-bg-color` / `background-color`。只选中有背景节点时原背景可见；一旦跨普通节点与有背景节点拖选，Chromium 会把整段 `::selection` 画在父级上，逐节点 `::selection` 规则压不住父级高亮。
+- 用 BrowserSkill + Microsoft Edge 对云端同页取证：`.ne-engine ::selection` 直接使用 `--lakex-editor-selection`，当前计算值为 `rgba(27,162,227,.2)`；云端没有针对 `ne-bg-color` 的特殊规则。
+
+修复：
+
+- `src/styles/kernel-theme.css` 中 `--lakex-editor-selection` 从 `var(--lake-accent-tint)` 改为既有的半透明选区令牌 `var(--lake-select-bg)`，light / warm / dark 三套主题统一。
+- 删除上一轮尝试的 `[style*="background-color"]::selection { background-color: inherit !important }` 特判；它只对单节点选区表面上有效，跨节点仍会被父级高亮覆盖。
+- 不改 Lake 色卡 DOM、颜色数据、渐变色或 `LakeColorBoard`；只修正文选区绘制层。
+
+验证结果：
+
+- 隔离 Electron 加载与用户 GIF 相同的 `welcome-note.lake`（`#e31616` 行内背景）后，真实鼠标拖选整段：普通文字出现半透明蓝灰选区，红色段在选区下仍清晰可见并正常混色。
+- 选区变量计算值 `#5b6f9629`（light 下即 `rgba(91,111,150,.16)`），与云端“半透明选区承载原背景”的机制一致。
+- `tsc --noEmit` 通过；`vitest run` **1428 passed / 16 skipped**；`check:core` 0 违规；桌面 + 移动构建通过。
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers + uiPrimitives` 8 passed；`git diff --check` 通过。
+
+遗留问题：
+
+- 无数据模型、同步、历史或存储变化；待用户复验视觉。
+
+### 2026-09-30 · 选色交互收口（用户现场三项反馈）
+
+本次完成：
+
+- 应用内统一 `ColorPalette` 整体缩小：浮层宽 344px → **296px**，色块高度 24px → **22px**，行列间距 5px → **4px**，内距 10px → **8px**；最近色与更多颜色入口同步缩到 22px。只改应用内色板，Lake `LakeColorBoard` 的渐变、默认/无填充行和内核样式不变。
+- 进度字段的颜色配置从 18px 小方块改为与输入框同宽的 `.bt-select-trigger`：左侧色块 + “进度条颜色”文案 + ▾，放在进度默认值输入框下方，不再容易被忽略。
+- 列菜单「文本颜色」从“关闭列菜单，再去列头附近另开调色板”改为**点击式右侧子菜单**：色板贴菜单行右侧展开，右侧空间不足自动翻左侧；选任何颜色/无颜色后父菜单与色板都保持打开，列文字实时更新；点击空白或 Esc 才关闭。
+- `ColorPalette` 新增 `side` 与 `closeOnPick` 两个可选能力；通用子菜单定位新增 `placePopoverBeside`，仍复用 `usePopoverPosition` 的真实尺寸测量、视口夹取和 ResizeObserver。
+
+验证结果：
+
+- 隔离 Electron + 真实 24 行多维表 CDP 点验：列菜单“文本颜色”行 → 色板从左右侧展开，父菜单保持；点击 `#F5222D` 后色板仍为 open、父菜单仍为 open，文本列计算色变为 `rgb(245, 34, 45)`；点击表格空白后两个浮层都关闭，颜色保留。
+- 进度字段编辑弹窗实测：颜色触发器宽 386px、高 32px，位于默认值输入框下方；点击后色板锚定弹出。
+- 应用面色板实测尺寸：宽 296px、色块高 22px；Lake 色板代码未改。
+- `tsc --noEmit` 通过；`vitest run` **1429 passed / 16 skipped**；`check:core` 0 违规；桌面 + 移动构建通过。
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers + uiPrimitives` 8 passed；`git diff --check` 通过。
+
+改动文件：`BitableEditor.tsx` · `bitableCells.tsx` · `bitableEditor.css` · `usePopoverPosition.ts` · `topMenuPosition.ts`（+test） · `bitableEditorMount.test.ts` · 本文件 · `BITABLE-FILL-COLOR-RESEARCH.md` · `HANDOFF.md`。
+
+### 2026-09-30 · 所有色卡统一默认项（用户现场反馈）
+
+本次完成：
+
+- `ColorPalette` 新增统一的 `defaultLabel / defaultKind / onDefault`：所有应用内色卡顶部都保留一个默认项；文字类叫「默认色」，背景/选项/填色类叫「无背景色」。
+- 列文字色：点「默认色」清除该列自定义文字色，回到正文色；列菜单与色板仍保持打开供预览。
+- 选项色：点「无背景色」清除选项 color，chip 回到无自定义底色的默认态。
+- 进度色：点「默认色」清除 `progressColor`，进度条回到主题强调色。
+- 填色规则：新增持久哨兵 `BITABLE_FILL_NO_COLOR = "transparent"`；点「无背景色」保留规则、模式和条件，不参与 projection。规则色块显示空态 ×，后续重新选色即可恢复，不需要删除整条规则。
+
+验证结果：
+
+- 隔离 Electron 实测：列文字色 `rgb(245,34,45)` 点默认后回 `rgb(23,25,28)`；选项色方块从 `rgb(253,228,211)` 清到默认灰；进度色板显示「默认色」；填色规则点「无背景色」后 row 数仍为 1、swatch 切为空态、规则保留。
+- `tsc --noEmit` 通过；`vitest run` **1429 passed / 16 skipped**；`check:core` 0 违规；桌面 + 移动构建通过。
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers + uiPrimitives` 8 passed；`git diff --check` 通过。
+
+改动文件：`bitableCells.tsx` · `BitableEditor.tsx` · `BitableFillEditor.tsx` · `bitableFillRules.css` · `bitableDoc.ts`(+test) · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 · `BITABLE-FILL-COLOR-RESEARCH.md` · `HANDOFF.md`。
+
+### 2026-09-30 · 筛选面板横向滚动条修复与空态收口
+
+本次完成：
+
+- 用户截图反馈筛选面板底部出现横向横条。实测根因：`Popover` 外框宽 820px，左右边框吃掉 2px 后内容区为 818px；`.bt-filter-panel` 又写死 820px，导致父层 `scrollWidth 820 / clientWidth 818`，触发横向滚动条。
+- `.bt-filter-panel` 改为 `width: 100%; max-width: 100%`，固定占满父级内容区；实测子层与父层均为 `clientWidth = scrollWidth = 818`，横向条消失。
+- 空筛状态宽度从 820px 收为 320px；没有筛选规则时不再渲染分隔线和禁用的“删除筛选”页脚，空态只保留“添加筛选规则”。
+
+验证结果：
+
+- 1298px 窗口、真实 Electron CDP：空筛选面板父/子 `scrollWidth === clientWidth`；面板宽 318/320px，无横向滚动条，无禁用删除页脚。
+- 空态与分组弹层一样收口；有规则时仍使用 820px 宽度承载三段式规则行。
+- `tsc --noEmit` 通过；`vitest run` **1430 passed / 16 skipped**；`check:core` 0 违规；桌面 + 移动构建通过。
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers + uiPrimitives` 8 passed；`git diff --check` 通过。
+
+### 2026-09-30 · 填色浮层外点关闭与列文字子菜单解耦
+
+本次完成：
+
+- 用户指出：填色色板打开后若未换色，点击填色面板其它位置也应关闭。根因是 `Overlay` 为悬停子菜单保留了 `[data-context-menu]` 嵌套豁免，填色面板恰好也是 `data-context-menu`，导致色板把父面板误当子菜单。
+- `Overlay` 新增 `closeOnNestedOverlay`，默认 `false` 保留既有子菜单行为；只有填色 `ColorPalette` 显式传 `true`。列文字 `ColorPalette` 不传，继续保持“选色后不关、点空白才关”的子菜单行为。
+- `ColorPalette` 本身不再写死任一种外点策略：`closeOnNestedOverlay` 由调用位置决定，避免两个场景相互影响。
+
+验证结果：
+
+- 填色：打开色板（2 个浮层）→ 用真实 `mousedown` 点填色行里的模式触发器 → 色板关闭，仅保留填色面板/新菜单。
+- 列文字：打开子菜单 → 点击 `#1890FF` → 父菜单与色板保持，文本列实时变为 `rgb(24,144,255)`；点击空白后两个浮层都关闭。
+- `tsc --noEmit` 通过；`vitest run` **1430 passed / 16 skipped**；`check:core` 0 违规；桌面 + 移动构建通过。
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers + uiPrimitives` 8 passed；`git diff --check` 通过。
 
 ## 14. 会话执行模板
 

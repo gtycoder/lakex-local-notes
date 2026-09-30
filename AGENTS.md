@@ -71,7 +71,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 18. **依赖 / vendor 代码的「冗余、未用路径、死代码」不做清理**：`vendor/**` 与任何第三方依赖本来就带冗余，**不因为"我们没用到"就去删/重写**（会牵动 vendor 构建与上游契约，且不属于我们维护的范围）。只在我们**必须改行为**时，按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 的流程做最小改动。**以后不要再提议清理依赖侧的死路径。**
 
-19. **多维表条件求值必须单一来源**：视图筛选、关联选择器临时筛选以及后续条件着色，统一使用 `BitableFilterRule` / `BitableFilterNode`、`filterOperatorsFor()`、`evaluateFilterNode()` 与共享 `BitableFilterEditor`。禁止为填色、图表或某个视图另造一套操作符、空值语义或条件 UI；字段取值继续走 `bitableFieldValue()`。
+19. **多维表条件求值必须单一来源**：视图筛选、关联选择器临时筛选以及条件填色，统一使用 `BitableFilterRule` / `BitableFilterNode`、`filterOperatorsFor()`、`evaluateFilterNode()`、共享 `BitableFilterEditor` / `BitableFilterRuleEditor`。禁止为填色、图表或某个视图另造一套操作符、空值语义或条件 UI；字段取值继续走 `bitableFieldValue()`。填色的 `cell / row / column` 候选按规则数组下标做钉钉同款 alpha 混色，`rowSide` 独立，不得擅自改回“后色压前色”或其他混色语义。**应用内所有选色**统一走 `src/core/colorPalette.ts` 的 70 色实色阶 + `ColorPalette`（最近使用/自定义）；最近使用必须按入口分桶，禁止选项/进度/列文字/填色模式混用；Lake 编辑器继续通过 `LakeColorBoard` 适配器调用自己的内核色卡，样式和渐变色入口不得改。
 
 ## 4. 关键机制速览（同步）
 

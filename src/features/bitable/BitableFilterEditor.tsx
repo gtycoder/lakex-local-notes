@@ -306,7 +306,7 @@ function FilterGroupView({ fields, group, path, depth, root, readOnly, ctx, onRe
                     onReplace={onReplace} onRemove={onRemove} onInsert={onInsert} onFlatten={onFlatten} onRootOperator={onRootOperator} />
                 </div>
               ) : (
-                <FilterRuleView fields={fields} rule={node} readOnly={readOnly} ctx={ctx} onChange={(next) => onReplace(childPath, next)} />
+                <BitableFilterRuleEditor fields={fields} rule={node} readOnly={readOnly} ctx={ctx} onChange={(next) => onReplace(childPath, next)} />
               )}
             </div>
             <div className="bt-filter-setting-slot">
@@ -325,19 +325,20 @@ function FilterGroupView({ fields, group, path, depth, root, readOnly, ctx, onRe
   );
 }
 
-function FilterRuleView({ fields, rule, readOnly, ctx, onChange }: {
+export function BitableFilterRuleEditor({ fields, rule, readOnly, ctx, onChange, className }: {
   fields: readonly BitableField[];
   rule: BitableFilterRule;
   readOnly?: boolean;
   ctx?: BitableDisplayContext;
   onChange: (next: BitableFilterRule) => void;
+  className?: string;
 }) {
   const field = fields.find((item) => item.id === rule.fieldId);
   if (!field) return <span className="bt-filter-missing">已删除字段</span>;
   const operators = filterOperatorsFor(field).map((operator) => ({ value: operator, label: filterOperatorLabel(field, operator) }));
   const operator = effectiveOperator(field, rule);
   return (
-    <div className="bt-filter-rule" title={labelForRule(field, rule)}>
+    <div className={"bt-filter-rule" + (className ? " " + className : "")} title={labelForRule(field, rule)}>
       <SelectMenu value={field.id} disabled={readOnly} options={fields.map((item) => ({ value: item.id, label: item.name }))}
         onChange={(fieldId) => { const nextField = fields.find((item) => item.id === fieldId); if (nextField) onChange(filterRuleWithField(rule, nextField)); }} />
       <SelectMenu value={operator} disabled={readOnly} options={operators}
@@ -365,7 +366,7 @@ export function BitableFilterEditor({ fields, filters, operator = "and", readOnl
       <FilterGroupView fields={filterFields} group={rootGroup} path={[]} depth={0} root readOnly={readOnly} ctx={ctx}
         onReplace={replace} onRemove={remove} onInsert={insert} onFlatten={flatten}
         onRootOperator={(next) => onChange?.([...filters], next)} />
-      {onClear && (
+      {onClear && filters.length > 0 && (
         <>
           <div className="bt-filter-hr" />
           <button type="button" className="bt-filter-delete" disabled={readOnly || filters.length === 0} onClick={onClear}><Trash2 size={14} />删除筛选</button>

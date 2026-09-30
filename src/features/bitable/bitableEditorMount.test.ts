@@ -18,6 +18,8 @@ const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8
 const PICKER = readFileSync(new URL("./BitableRelationPicker.tsx", import.meta.url), "utf8");
 const FILTER_EDITOR = readFileSync(new URL("./BitableFilterEditor.tsx", import.meta.url), "utf8");
 const FILTER_CSS = readFileSync(new URL("./bitableFilterEditor.css", import.meta.url), "utf8");
+const FILL_EDITOR = readFileSync(new URL("./BitableFillEditor.tsx", import.meta.url), "utf8");
+const FILL_CSS = readFileSync(new URL("./bitableFillRules.css", import.meta.url), "utf8");
 const PICKER_CSS = readFileSync(new URL("./bitableRelationPicker.css", import.meta.url), "utf8");
 const ASSET_URL = readFileSync(new URL("./bitableAssetUrl.ts", import.meta.url), "utf8");
 const FILE_ICON = readFileSync(new URL("./FileKindIcon.tsx", import.meta.url), "utf8");
@@ -108,15 +110,16 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/selectionEdgeClass/);
   });
 
-  it("列菜单：列头右键也能开、四条快捷项彻底删除、文本颜色锚到列头（260928 用户）", () => {
+  it("列菜单：列头右键也能开、四条快捷项彻底删除、文本颜色作为右侧子菜单（260930 用户）", () => {
     // 1) 列头右键 = 列菜单（坐标定位）
     expect(EDITOR).toMatch(/onContextMenu=\{\(event\) => \{[\s\S]{0,240}?openColumnMenu\(field\.id, event\.clientX, event\.clientY, event\.currentTarget\)/);
     expect(EDITOR).toMatch(/openColumnMenu\(/);
     // 2) 「按本列分组/按本列筛选/升序/降序」四条快捷项删除（工具栏已有分组/筛选/排序）
     for (const label of ["按本列分组", "按本列筛选", "升序</button>", "降序</button>"]) expect(EDITOR).not.toContain(label);
-    // 3) 调色板锚到列头：⋯ 按钮 hover 才 display，菜单一关量到的 rect 是 0×0 → 浮层跑左上角
-    expect(EDITOR).toMatch(/const anchor = columnMenu\.header;/);
-    expect(EDITOR).toMatch(/if \(anchor\) setTextColorFor\(\{ fieldId, anchor \}\)/);
+    // 3) 文本颜色是列菜单子项：锚到菜单行本身，右侧展开；选色后保持打开用于预览，直到点空白。
+    expect(EDITOR).toMatch(/setTextColorFor\(\(current\) => current\?\.fieldId === fieldId \? null : \{ fieldId, anchor: event\.currentTarget \}\)/);
+    expect(EDITOR).toMatch(/aria-haspopup="dialog"/);
+    expect(EDITOR).toMatch(/side="right" closeOnPick=\{false\}/);
     expect(EDITOR).toMatch(/隐藏列<\/button>|隐藏列/);
     expect(EDITOR).toMatch(/toggleFieldHidden\(columnMenu\.fieldId\)/);
   });
@@ -223,9 +226,18 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/DatePicker/);
     expect(CARDS).toMatch(/ColorPalette/);
     expect(DOC).toMatch(/BITABLE_OPTION_PALETTE/);
-    expect(DOC).toMatch(/BITABLE_TEXT_COLOR_PALETTE/);
-    expect(EDITOR).toMatch(/palette=\{BITABLE_TEXT_COLOR_PALETTE\}/);
-    expect(CARDS).toMatch(/palette\?: readonly string\[\]/);
+    expect(CARDS).toMatch(/COLOR_BOARD_GROUPS/);
+    expect(EDITOR).toMatch(/<ColorPalette anchor=\{textColorFor\.anchor\}[^>]*side="right" closeOnPick=\{false\}/);
+    expect(EDITOR).toMatch(/recentKey="bitable-column-text"/);
+    expect(EDITOR).toMatch(/recentKey="bitable-option"/);
+    expect(EDITOR).toMatch(/recentKey="bitable-progress"/);
+    expect(EDITOR).toMatch(/defaultLabel="默认色" defaultKind="text"/);
+    expect(EDITOR).toMatch(/defaultLabel="无背景色" defaultKind="background"/);
+    expect(CARDS).toMatch(/最近使用自定义颜色/);
+    expect(CARDS).toMatch(/type="color"/);
+    expect(CARDS).toMatch(/localStorage/);
+    expect(CSS).toMatch(/\.bt-color-swatch \{[^}]*height: 22px/);
+    expect(CSS).toMatch(/\.bt-color-recent \.bt-color-swatch \{[^}]*width: 22px/);
   });
 
   it("字段编辑弹窗：进度字段的颜色面板不被「选项编辑器」块吞掉（260929-OPT 修）", () => {
@@ -236,6 +248,18 @@ describe("多维表编辑器护栏", () => {
     expect(optionsBtnIdx).toBeGreaterThan(-1);
     expect(progressPaletteIdx).toBeGreaterThan(optionsBtnIdx);
     expect(EDITOR).toMatch(/进度字段的颜色面板/);
+    // 进度颜色不再是一颗易被忽略的小方块，而是与输入框同高的整行触发器。
+    expect(EDITOR).toMatch(/className="bt-select-trigger"[\s\S]{0,160}选择进度条颜色/);
+    expect(EDITOR).toMatch(/进度条颜色<\/span>/);
+  });
+
+  it("颜色选择器点其它浮层或面板空白即关闭（不沿用悬停子菜单的父层豁免）", () => {
+    expect(CARDS).toMatch(/closeOnNestedOverlay/);
+    expect(CARDS).toMatch(/<Popover open anchor=\{anchor\} onClose=\{onClose\} width=\{296\} align="start" side=\{side\} closeOnNestedOverlay=\{closeOnNestedOverlay\}>/);
+    // 填色 = 普通浮层，点击填色面板其它位置即关；列文字 = 子菜单，不继承该行为。
+    expect(FILL_EDITOR).toMatch(/closeOnNestedOverlay\s+defaultLabel="无背景色"/);
+    const textPalette = EDITOR.match(/<ColorPalette anchor=\{textColorFor\.anchor\}[\s\S]{0,240}?\/>/)?.[0] ?? "";
+    expect(textPalette).not.toContain("closeOnNestedOverlay");
   });
 
   it("阶段优化批（260929-OPT）：表单题序 / 系统时间复制·查重 / 搜索口径 / 删字段清理 / 令牌", () => {
@@ -342,7 +366,43 @@ describe("多维表编辑器护栏", () => {
     expect(FILTER_EDITOR).toMatch(/FilterMultiSelect/);
     expect(FILTER_CSS).toMatch(/\.bt-filter-group-surface/);
     expect(FILTER_CSS).toMatch(/\.bt-filter-rule \{ display: grid;/);
+    expect(FILTER_CSS).toMatch(/\.bt-filter-panel \{ width: 100%; max-width: 100%;/);
     expect(FILTER_CSS).toMatch(/\.bt-filter-delete/);
+    expect(FILTER_EDITOR).toMatch(/onClear && filters\.length > 0/);
+    expect(EDITOR).toMatch(/anchor=\{menuAnchor\} onClose=\{\(\) => setPanel\(null\)\} width=\{filters\.length > 0 \? 820 : 320\}/);
+  });
+
+  it("条件填色：视图级规则 + 钉钉混色候选 + 复用筛选单规则编辑器", () => {
+    expect(DOC).toMatch(/export type BitableFillMode = "cell" \| "row" \| "rowSide" \| "column"/);
+    expect(DOC).toMatch(/BITABLE_FILL_MAX_RULES = 40/);
+    expect(DOC).toMatch(/BITABLE_FILL_NO_COLOR = "transparent"/);
+    expect(DOC).toMatch(/fillRules\?: BitableFillRule\[\]/);
+    expect(DOC).toMatch(/export function buildBitableFillProjection/);
+    expect(DOC).toMatch(/export function bitableFillBackgroundTokens/);
+    expect(DOC).toMatch(/matches\.sort\(\(a, b\) => b\.ruleIndex - a\.ruleIndex\)/);
+    expect(DOC).toMatch(/return matches\.reverse\(\)\.map\(\(match\) => match\.color\)/);
+    expect(DOC).toMatch(/export function stripFillRulesForField/);
+    // 填色编辑器必须复用筛选的单规则编辑器；操作符/值类型不能出现第二套实现。
+    expect(FILL_EDITOR).toMatch(/BitableFilterRuleEditor/);
+    expect(FILL_EDITOR).not.toMatch(/BITABLE_FILTER_OPERATOR_LABEL|filterOperatorsFor\(field\).*map/);
+    expect(FILL_EDITOR).toMatch(/DEFAULT_LIGHT_COLORS/);
+    expect(FILL_EDITOR).toMatch(/recentKey=\{rules\[colorEditor\.index\]\?\.mode === "rowSide" \? "bitable-fill:rowSide" : "bitable-fill:background"\}/);
+    expect(FILL_EDITOR).toMatch(/defaultLabel="无背景色" defaultKind="background"/);
+    expect(FILL_EDITOR).toMatch(/BITABLE_FILL_NO_COLOR/);
+    expect(FILL_EDITOR).toMatch(/BITABLE_FILL_MAX_RULES/);
+    // 模式切换保留条件与值（260930 现场实测抓到的交互回归）。
+    expect(FILL_EDITOR).toMatch(/mode !== "column" && rule\.mode !== "column"[\s\S]{0,100}?\{ \.\.\.rule, mode, condition: rule\.condition \}/);
+    // 通用下拉同一时刻只允许一个打开；点击其它触发器或面板空白都自动收起旧下拉。
+    expect(CARDS).toMatch(/bt-select-menu-open/);
+    expect(CARDS).toMatch(/data-select-menu-id/);
+    expect(FILTER_EDITOR).toMatch(/export function BitableFilterRuleEditor/);
+    // 主编辑器接工具栏入口、投影与字段删除清理。
+    expect(EDITOR).toMatch(/<PaintBucket size=\{14\} \/>填色/);
+    expect(EDITOR).toMatch(/panel === "fill"/);
+    expect(EDITOR).toMatch(/buildBitableFillProjection\(activeTable, activeView, shownRecords\)/);
+    expect(EDITOR).toMatch(/stripFillRulesForField\(next\.fillRules, fieldId\)/);
+    expect(FILL_CSS).toMatch(/\.bt-fill-row/);
+    expect(FILL_CSS).toMatch(/\.bt-row\[data-fill-side\] \.bt-td-index::before/);
   });
 
   it("T02B.4 关联数据范围：不勾选=全部记录，勾选=绑定目标表的一个视图", () => {
@@ -448,7 +508,7 @@ describe("多维表编辑器护栏", () => {
     // 真正卡住列的是每个格子的 max-width（按列写行内：宽度来自正文数据，CSS 没法按列取值）。
     expect(EDITOR).toMatch(/const columnWidth = \(field: BitableField\) => \(field\.width \?\? DEFAULT_COL_WIDTH\) \+ "px";/);
     expect(EDITOR).toMatch(/<th key=\{field\.id\}[\s\S]{0,400}?style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
-    expect(EDITOR).toMatch(/style=\{\{ maxWidth: columnWidth\(field\), \.\.\.\(columnTextColor\(field\.id\)/);
+    expect(EDITOR).toMatch(/style=\{\{ maxWidth: columnWidth\(field\), \.\.\.\(fillBackground[\s\S]{0,120}?columnTextColor\(field\.id\)/);
     expect(EDITOR).toMatch(/className="bt-group-stat" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
     expect(EDITOR).toMatch(/className="bt-stat-cell" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
     // 行高**绝对**不被内容撑高：单元格永不换行（实测日期列 80px 时折行 ⇒ 行高 36 → 48），日期/时间单行省略

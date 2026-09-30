@@ -58,7 +58,7 @@
   --lakex-editor-color-theme: var(--lake-accent);
   --lakex-editor-color-theme-light: var(--lake-accent-tint);
   --lakex-editor-cursor: var(--lake-accent);
-  --lakex-editor-selection: var(--lake-accent-tint);
+  --lakex-editor-selection: var(--lake-select-bg);
   /* 命名色板（内核用于文字色/高亮的预设色）→ 映射到语义色，保证暗底可读 */
   --lakex-editor-color-blue1: var(--lake-accent-tint);
   --lakex-editor-color-blue8: var(--lake-accent);
@@ -89,7 +89,7 @@
   --lakex-editor-color-theme: var(--lake-accent);
   --lakex-editor-color-theme-light: var(--lake-accent-tint);
   --lakex-editor-cursor: var(--lake-accent);
-  --lakex-editor-selection: var(--lake-accent-tint);
+  --lakex-editor-selection: var(--lake-select-bg);
   --lakex-editor-text-link: var(--lake-accent);
   --lakex-editor-text-link-hover: var(--lake-accent);
   --lakex-editor-card-border-selected: var(--lake-accent);

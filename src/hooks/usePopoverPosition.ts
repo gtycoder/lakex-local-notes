@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { placePopoverAtPoint, placePopoverPosition } from "./topMenuPosition";
+import { placePopoverAtPoint, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
 
 export interface UsePopoverPositionOptions {
   open: boolean;
@@ -10,6 +10,8 @@ export interface UsePopoverPositionOptions {
   /** 固定宽度：首帧就要写进 style，否则量到的是收缩后的宽度。 */
   width?: number;
   align?: "start" | "end";
+  /** 默认在下方；right = 作为点击子菜单贴锚点右侧展开。 */
+  side?: "below" | "right";
   gap?: number;
   margin?: number;
 }
@@ -30,6 +32,7 @@ export function usePopoverPosition({
   at,
   width,
   align = "start",
+  side = "below",
   gap = 4,
   margin = 8,
 }: UsePopoverPositionOptions): { surfaceRef: (el: HTMLElement | null) => void; style: CSSProperties | null } {
@@ -45,11 +48,13 @@ export function usePopoverPosition({
     const next = atX !== undefined && atY !== undefined
       ? placePopoverAtPoint({ x: atX, y: atY }, viewport, size, margin)
       : anchor
-        ? placePopoverPosition(anchor.getBoundingClientRect(), viewport, size, gap, { align, margin })
+        ? side === "right"
+          ? placePopoverBeside(anchor.getBoundingClientRect(), viewport, size, gap, { margin })
+          : placePopoverPosition(anchor.getBoundingClientRect(), viewport, size, gap, { align, margin })
         : null;
     if (!next) return;
     setStyle({ left: next.left, top: next.top, width });
-  }, [anchor, atX, atY, align, gap, margin, width]);
+  }, [anchor, atX, atY, align, side, gap, margin, width]);
 
   useLayoutEffect(() => {
     if (!open) { setStyle(null); return; }

@@ -133,4 +133,35 @@ describe("MobileBitableViewer 只读单元", () => {
     expect((html.match(/bt-file-icon--/g) ?? []).length).toBe(2);
     expect((html.match(/class="mbt-attachment"/g) ?? []).length).toBe(1);
   });
+
+  it("条件填色在移动端只读表格复用桌面投影（背景 + 行侧）", () => {
+    const filled = JSON.stringify({
+      kind: "bitable",
+      version: 1,
+      activeTableId: "t1",
+      tables: [
+        {
+          id: "t1",
+          name: "表",
+          activeViewId: "v1",
+          views: [{
+            id: "v1",
+            name: "表格视图",
+            type: "grid",
+            rowHeight: "low",
+            fillRules: [
+              { id: "f1", mode: "row", color: "#FFE8E6", condition: { fieldId: "f", operator: "contains", value: "x" } },
+              { id: "f2", mode: "rowSide", color: "#FA541C", condition: { fieldId: "f", operator: "contains", value: "x" } },
+            ],
+          }],
+          fields: [{ id: "f", name: "文本", type: "text" }],
+          records: [{ id: "r", createdAt: ts, updatedAt: ts, values: { f: "x" } }],
+        },
+      ],
+    });
+    const html = render(filled);
+    expect(html).toContain("linear-gradient(color-mix(in srgb, #FFE8E6 62%, transparent), color-mix(in srgb, #FFE8E6 62%, transparent))");
+    expect(html).toContain('data-fill-side=""');
+    expect(html).toContain("--mbt-fill-side:#FA541C");
+  });
 });

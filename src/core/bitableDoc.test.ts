@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { extractAssetRefs } from "./assetNaming.js";
+import { COLOR_BOARD_GROUPS } from "./colorPalette.js";
 import {
   BITABLE_FIELD_TYPES,
   BITABLE_FIELD_TYPE_LABEL,
+  BITABLE_FILL_MAX_RULES,
+  BITABLE_FILL_NO_COLOR,
   BITABLE_IMPLEMENTED_VIEW_TYPES,
-  BITABLE_TEXT_COLOR_PALETTE,
   BITABLE_VIEW_TYPES,
   applyViewToRecords,
   bitableAttachments,
@@ -30,6 +32,9 @@ import {
   filterOperatorsFor,
   filterOperatorLabel,
   bitableFilterRuleCount,
+  bitableFillBackgroundTokens,
+  buildBitableFillProjection,
+  createBitableFillRule,
   groupRecords,
   defaultViewName,
   emptyBitableBody,
@@ -81,6 +86,7 @@ import {
   toggleRelationDraft,
   unpairRelationFields,
   shiftLocalDate,
+  stripFillRulesForField,
   viewTypeLabel,
   type BitableTable,
 } from "./bitableDoc.js";
@@ -114,9 +120,10 @@ describe("bitableDoc 数据模型", () => {
     expect(two.relation).toEqual({ allowMultiple: true });
   });
 
-  it("列文本颜色有独立深色调色板（不复用浅色选项背景）", () => {
-    expect(BITABLE_TEXT_COLOR_PALETTE).toHaveLength(18);
-    expect(BITABLE_TEXT_COLOR_PALETTE.every((color) => /^#[0-9a-f]{6}$/i.test(color))).toBe(true);
+  it("统一选色源使用内核实色卡的 7×10 色阶", () => {
+    expect(COLOR_BOARD_GROUPS).toHaveLength(7);
+    expect(COLOR_BOARD_GROUPS.every((row) => row.length === 10)).toBe(true);
+    expect(COLOR_BOARD_GROUPS.flat()).toHaveLength(70);
   });
 
   it("默认数据表（260929）：只建 1 列文本 + 3 行空白记录 + 1 个表格视图", () => {
@@ -222,6 +229,93 @@ describe("bitableDoc 数据模型", () => {
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r2", "r3", "r1"]);
     view.sorts = [{ fieldId: date.id, desc: true }];
     expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r3", "r2"]);
+  });
+
+  it("条件填色：cell/row/column 按钉钉候选顺序混色，rowSide 独立", () => {
+    const table = fixtureTable("t", "tbl-fill");
+    const text = table.fields[0];
+    const status = table.fields[1];
+    const pending = status.options!.find((option) => option.name === "待开始")!.id;
+    const done = status.options!.find((option) => option.name === "已完成")!.id;
+    const r1 = createBitableRecord("r1");
+    r1.values[text.id] = "A";
+    r1.values[status.id] = pending;
+    const r2 = createBitableRecord("r2");
+    r2.values[text.id] = "B";
+    r2.values[status.id] = done;
+    table.records = [r1, r2];
+    const view = table.views[0];
+    view.fillRules = [
+      { id: "fill-row", mode: "row", color: "#FFE8E6", condition: { fieldId: status.id, operator: "is", value: pending } },
+      { id: "fill-row-late", mode: "row", color: "#FADB14", condition: { fieldId: status.id, operator: "is", value: pending } },
+      { id: "fill-column", mode: "column", color: "#D4EEFC", fieldId: text.id },
+      { id: "fill-cell", mode: "cell", color: "#FFA39E", condition: { fieldId: status.id, operator: "is", value: done } },
+      { id: "fill-side", mode: "rowSide", color: "#FA541C", condition: { fieldId: status.id, operator: "is", value: pending } },
+      { id: "fill-side-none", mode: "rowSide", color: BITABLE_FILL_NO_COLOR, condition: { fieldId: status.id, operator: "is", value: done } },
+    ];
+
+    const projection = buildBitableFillProjection(table, view, table.records);
+    // row 模式同类型取首个命中（#FFE8E6），不与后一条 row 规则叠加。
+    expect(projection.row.get("r1")).toEqual({ ruleIndex: 0, color: "#FFE8E6" });
+    // r1：先放 column(2) 为底，再叠 row(0)；CSS 顶层在前 ⇒ [#FFE8E6, #D4EEFC]。
+    expect(bitableFillBackgroundTokens(projection, "r1", text.id)).toEqual(["#FFE8E6", "#D4EEFC"]);
+    // r2：text 只命中 column；status 命中 cell。
+    expect(bitableFillBackgroundTokens(projection, "r2", text.id)).toEqual(["#D4EEFC"]);
+    expect(bitableFillBackgroundTokens(projection, "r2", status.id)).toEqual(["#FFA39E"]);
+    // rowSide 独立于背景通道。
+    expect(projection.rowSide.get("r1")?.color).toBe("#FA541C");
+    expect(projection.rowSide.has("r2")).toBe(false);
+  });
+
+  it("条件填色：未填完整的条件不命中；normalize 校验 token / 模式 / 40 条上限", () => {
+    const table = fixtureTable("t", "tbl-fill-normalize");
+    const primary = table.fields[0];
+    const record = createBitableRecord("r1");
+    record.values[primary.id] = "A";
+    table.records = [record];
+    const view = table.views[0];
+    view.fillRules = [
+      { id: "incomplete", mode: "row", color: "#FFE8E6", condition: { fieldId: primary.id, operator: "contains" } },
+      { id: "valid", mode: "column", color: "#D4EEFC", fieldId: primary.id },
+    ];
+    const projection = buildBitableFillProjection(table, view, table.records);
+    expect(projection.row.size).toBe(0);
+    expect(bitableFillBackgroundTokens(projection, record.id, primary.id)).toEqual(["#D4EEFC"]);
+
+    const rawFillRules = [
+      { id: "none", mode: "column", color: BITABLE_FILL_NO_COLOR, fieldId: primary.id },
+      { id: "bad-color", mode: "column", color: "not-a-token", fieldId: primary.id },
+      { id: "bad-mode", mode: "diagonal", color: "#FFE8E6", fieldId: primary.id },
+      ...Array.from({ length: BITABLE_FILL_MAX_RULES + 5 }, (_, index) => ({
+        id: "fill-" + index,
+        mode: "column" as const,
+        color: COLOR_BOARD_GROUPS.flat()[index % COLOR_BOARD_GROUPS.flat().length],
+        fieldId: primary.id,
+      })),
+    ];
+    (view as unknown as { fillRules: unknown[] }).fillRules = rawFillRules;
+    const parsed = parseBitableBody(bitablesToBody([table], table.id))!;
+    expect(parsed.tables[0].views[0].fillRules).toHaveLength(BITABLE_FILL_MAX_RULES);
+    expect(parsed.tables[0].views[0].fillRules?.map((rule) => rule.color)).toContain(BITABLE_FILL_NO_COLOR);
+    expect(parsed.tables[0].views[0].fillRules?.every((rule) => rule.color === BITABLE_FILL_NO_COLOR || /^#[0-9a-f]{6}$/i.test(rule.color))).toBe(true);
+  });
+
+  it("条件填色：创建规则与删字段清理复用同一套条件字段", () => {
+    const table = fixtureTable("t", "tbl-fill-strip");
+    const status = table.fields[1];
+    const created = createBitableFillRule("cell", table.fields, "#FFE8E6", status.id);
+    expect(created).toEqual({
+      id: expect.any(String),
+      mode: "cell",
+      color: "#FFE8E6",
+      condition: expect.objectContaining({ fieldId: status.id }),
+    });
+    const rules = [
+      created!,
+      { id: "keep", mode: "column" as const, color: "#D4EEFC" as const, fieldId: table.fields[0].id },
+      { id: "drop-column", mode: "column" as const, color: "#FFA39E" as const, fieldId: status.id },
+    ];
+    expect(stripFillRulesForField(rules, status.id).map((rule) => rule.id)).toEqual(["keep"]);
   });
 
   it("筛选能力矩阵：按字段类型给操作符，并按远端 lake 口径求值", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseVisibleAnchor, clampPopoverPosition, placePopoverAtPoint, placePopoverPosition } from "./topMenuPosition";
+import { chooseVisibleAnchor, clampPopoverPosition, placePopoverAtPoint, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
 
 type Rect = { top: number; bottom: number; left: number; right: number; width: number; height: number };
 
@@ -51,6 +51,15 @@ describe("top menu positioning", () => {
     expect(placePopoverAtPoint({ x: 100, y: 700 }, viewport, size)).toEqual({ top: 540, left: 100 });
     // 点贴近右边：水平夹回
     expect(placePopoverAtPoint({ x: 980, y: 100 }, viewport, size)).toEqual({ top: 100, left: 792 });
+  });
+
+  it("侧向子菜单优先右侧，空间不足时翻左侧", () => {
+    const viewport = { width: 1000, height: 800 };
+    const size = { width: 296, height: 320 };
+    expect(placePopoverBeside({ top: 120, bottom: 148, left: 200, right: 380 }, viewport, size, 4))
+      .toEqual({ top: 116, left: 384 });
+    expect(placePopoverBeside({ top: 120, bottom: 148, left: 760, right: 940 }, viewport, size, 4))
+      .toEqual({ top: 116, left: 460 });
   });
 
   it("clampPopoverPosition 与锚定定位同源：也获得向上翻转", () => {

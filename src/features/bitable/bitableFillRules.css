@@ -1,0 +1,22 @@
+/* 多维表条件填色：配置弹层 + 表格投影；颜色值由统一实色卡提供。 */
+.bt-fill-editor { width: 100%; max-height: min(680px, calc(100vh - 24px)); overflow: auto; padding: 12px; }
+.bt-fill-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 2px 10px; border-bottom: 1px solid var(--lake-border-2); }
+.bt-fill-head strong { display: block; font-size: 14px; font-weight: 600; color: var(--lake-text-1); }
+.bt-fill-head span { display: block; margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--lake-text-3); }
+.bt-fill-list { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+.bt-fill-row { display: grid; grid-template-columns: 20px 32px 92px minmax(0, 1fr) 28px; gap: 8px; align-items: start; min-width: 0; }
+.bt-fill-row.is-dragging { opacity: .5; }
+.bt-fill-grip { margin-top: 4px; cursor: grab; color: var(--lake-text-3); }
+.bt-fill-grip:active { cursor: grabbing; }
+.bt-fill-swatch { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-xs); cursor: pointer; padding: 0; color: var(--lake-text-3); }
+.bt-fill-swatch:hover { box-shadow: inset 0 0 0 1px var(--lake-accent); }
+.bt-fill-mode, .bt-fill-column { min-width: 0; }
+.bt-fill-condition { width: 100%; }
+.bt-fill-delete { margin-top: 4px; color: var(--lake-text-3); }
+.bt-fill-delete:hover:not(:disabled) { color: var(--lake-status-error); }
+.bt-fill-empty { padding: 18px 4px; color: var(--lake-text-3); font-size: 13px; text-align: center; }
+.bt-fill-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.bt-fill-limit { font-size: 12px; color: var(--lake-text-3); }
+
+/* 行侧色条：独立于 cell/row/column 的背景混色通道。 */
+.bt-row[data-fill-side] .bt-td-index::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 6px; background: var(--bt-fill-side); pointer-events: none; z-index: 2; }

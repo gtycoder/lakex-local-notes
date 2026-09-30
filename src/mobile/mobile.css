@@ -767,6 +767,15 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   background: var(--lake-border-2, #f6f7f9);
   font-weight: 600;
 }
+.mbt-grid tr[data-fill-side] td:first-child { position: relative; }
+.mbt-grid tr[data-fill-side] td:first-child::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: var(--mbt-fill-side);
+  pointer-events: none;
+}
 .mbt-cell-empty {
   color: var(--lake-text-3, #adb5bd);
 }

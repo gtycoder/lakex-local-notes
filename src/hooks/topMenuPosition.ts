@@ -74,6 +74,26 @@ export function placePopoverPosition(
   };
 }
 
+/** 侧向子菜单定位：优先贴锚点右侧；右侧放不下则翻到左侧，最后再夹进视口。 */
+export function placePopoverBeside(
+  anchor: Pick<AnchorRectLike, "top" | "bottom" | "left" | "right">,
+  viewport: ViewportSize,
+  popover: PopoverSize,
+  gap: number,
+  options: PopoverPlacementOptions = {},
+): { top: number; left: number } {
+  const margin = options.margin ?? gap;
+  const right = anchor.right + gap;
+  const left = anchor.left - gap - popover.width;
+  const openLeft = right + popover.width + margin > viewport.width && left >= margin;
+  const maxLeft = Math.max(margin, viewport.width - popover.width - margin);
+  const maxTop = Math.max(margin, viewport.height - popover.height - margin);
+  return {
+    top: Math.round(Math.max(margin, Math.min(anchor.top - 4, maxTop))),
+    left: Math.round(Math.max(margin, Math.min(openLeft ? left : right, maxLeft))),
+  };
+}
+
 /** 坐标锚点定位（右键菜单：没有稳定锚点元素）：点当作「零高度锚点」，同样优先下方、放不下翻上方。 */
 export function placePopoverAtPoint(
   point: { x: number; y: number },

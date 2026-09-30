@@ -9,15 +9,18 @@
  * 单元格按字段类型给**只读控件**（与桌面同一语义，但不可交互）：布尔复选框、链接（系统浏览器打开）、
  * 评分星级、进度条、关联 chip、选项色块、图片缩略图；其余走记录级展示文本。
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon.js";
+import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
   BITABLE_PROGRESS_MAX,
   BITABLE_RATING_MAX,
   bitableAttachments,
+  bitableFillBackgroundTokens,
   bitableFieldText,
   bitableRecordTitle,
+  buildBitableFillProjection,
   isAttachmentLikeField,
   isImplementedViewType,
   isKnownViewType,
@@ -179,6 +182,7 @@ export function MobileBitableViewer({ noteId, content }: MobileBitableViewerProp
   const view = table.views.find((item) => item.id === table.activeViewId) ?? table.views[0];
   const fields = orderedTableFields(table, view);
   const records = applyViewToRecords(table, view);
+  const fillProjection = buildBitableFillProjection(table, view, records);
   /** 关联字段展示需要同一文档的 tables（桌面同一条 core 口径）。 */
   const displayCtx: BitableDisplayContext = { tables: doc.tables };
 
@@ -234,15 +238,25 @@ export function MobileBitableViewer({ noteId, content }: MobileBitableViewerProp
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => (
-              <tr key={record.id}>
-                {fields.map((field) => (
-                  <td key={field.id}>
+            {records.map((record) => {
+              const side = fillProjection.rowSide.get(record.id)?.color;
+              return (
+              <tr key={record.id} data-fill-side={side ? "" : undefined}
+                style={side ? ({ "--mbt-fill-side": side } as CSSProperties) : undefined}>
+                {fields.map((field) => {
+                  const fillTokens = bitableFillBackgroundTokens(fillProjection, record.id, field.id);
+                  const backgroundImage = fillTokens.length > 0
+                    ? fillTokens.map((color) => fillSurfaceColor(color)).map((color) => `linear-gradient(${color}, ${color})`).join(", ")
+                    : undefined;
+                  return (
+                  <td key={field.id} style={backgroundImage ? { backgroundImage } : undefined}>
                     <FieldValue noteId={noteId} ctx={displayCtx} field={field} record={record} />
                   </td>
-                ))}
+                  );
+                })}
               </tr>
-            ))}
+              );
+            })}
             {records.length === 0 && (
               <tr>
                 <td className="mbt-empty" colSpan={Math.max(1, fields.length)}>当前视图没有记录</td>

@@ -16,11 +16,11 @@ import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import {
   ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Copy, Eye, EyeOff, GripVertical, ListFilter,
-  MoreHorizontal, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Trash2, X,
+  MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Trash2, X,
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
-  BITABLE_OPTION_COLORS, BITABLE_TEXT_COLOR_PALETTE, applyViewToRecords, applyRelationMirror, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitablesToBody, bitableFilterRuleCount, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, relationRecordIds, unpairRelationFields,
+  BITABLE_OPTION_COLORS, applyViewToRecords, applyRelationMirror, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitablesToBody, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, relationRecordIds, stripFillRulesForField, unpairRelationFields,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
@@ -29,6 +29,7 @@ import {
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
+import { fillSurfaceColor } from "../../core/colorPalette.js";
 import { StatCell } from "./bitableCells";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
@@ -45,6 +46,7 @@ import { BitableViewBar } from "./BitableViewBar.js";
 import { bitableAssetUrl, openBitableAttachment } from "./bitableAssetUrl.js";
 import { CalendarConfigPanel, GalleryConfigPanel, KanbanConfigPanel } from "./BitableViewConfigPanels.js";
 import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeGrid, FieldTypeSelect, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
+import { BitableFillEditor } from "./BitableFillEditor.js";
 import { BitableFilterEditor } from "./BitableFilterEditor.js";
 import { createSnapshotHistory, type SnapshotHistory } from "../../core/bitableHistory.js";
 import { BitableViewFallback, ViewTypeIcon } from "./bitableViews.js";
@@ -156,12 +158,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   }, [doc.tables]);
 
   // ---- 面板/浮层状态 ----
-  const [panel, setPanel] = useState<null | "fields" | "filter" | "group" | "sort" | "rowHeight" | "viewConfig">(null);
+  const [panel, setPanel] = useState<null | "fields" | "filter" | "fill" | "group" | "sort" | "rowHeight" | "viewConfig">(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  /** 列菜单：坐标定位（⋯ 按钮 / 列头右键都能开）；header = 列头 <th>，给「文本颜色」调色板当锚点
-   *  —— ⋯ 按钮是 hover 才 display 的，菜单一关就量不到位置（调色板会跑到左上角）。 */
+  /** 列菜单：坐标定位（⋯ 按钮 / 列头右键都能开）；header 留给列统计等仍以列头为锚点的子面板。
+   *  文本颜色改为菜单行右侧子菜单，锚到触发按钮本身，不再依赖菜单关闭后的列头位置。 */
   const [columnMenu, setColumnMenu] = useState<{ fieldId: string; x: number; y: number; header: HTMLElement | null } | null>(null);
   const [textColorFor, setTextColorFor] = useState<{ fieldId: string; anchor: HTMLElement } | null>(null);
+  useEffect(() => { if (!columnMenu) setTextColorFor(null); }, [columnMenu]);
   /** 列统计选择器（列菜单「统计」→ 锚到列头）。 */
   const [statFor, setStatFor] = useState<{ fieldId: string; anchor: HTMLElement } | null>(null);
   const [configDragId, setConfigDragId] = useState<string | null>(null);
@@ -215,6 +218,22 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     // 走统一展示口径：附件不再变 "[object Object]"，布尔/系统时间也能搜到
     return viewRecords.filter((record) => activeTable.fields.some((field) => bitableFieldText(record, field, displayCtx).toLowerCase().includes(q)));
   }, [viewRecords, findQuery, activeTable, displayCtx]);
+  const fillProjection = useMemo(
+    () => buildBitableFillProjection(activeTable, activeView, shownRecords),
+    [activeTable, activeView, shownRecords],
+  );
+  const fillBackgroundImage = useCallback((recordId: string, fieldId: string) => {
+    const tokens = bitableFillBackgroundTokens(fillProjection, recordId, fieldId);
+    if (tokens.length === 0) return undefined;
+    return tokens
+      .map((color) => fillSurfaceColor(color))
+      .map((color) => `linear-gradient(${color}, ${color})`)
+      .join(", ");
+  }, [fillProjection]);
+  const rowSideColor = useCallback((recordId: string) => {
+    const match = fillProjection.rowSide.get(recordId);
+    return match?.color;
+  }, [fillProjection]);
   const rowIndexById = useMemo(() => new Map(shownRecords.map((r, i) => [r.id, i] as const)), [shownRecords]);
   const rowItems = useMemo(() => {
     /** 单级分组：分组头（含本组记录，供按组统计）/「加进本组」/ 组间间隔 / 记录行。 */
@@ -276,6 +295,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const viewConfigLabel = activeView.type === "kanban" ? "看板配置" : activeView.type === "gallery" ? "画册配置" : activeView.type === "calendar" ? "日历配置" : null;
   /** 网格专属工具（分组 / 行高）只在「确实是网格」「表单」或「回退到网格显示」时出现。 */
   const showGridTools = !isImplementedViewType(activeView.type) || activeView.type === "grid" || activeView.type === "form";
+  /** 条件填色只属于表格视图，不扩散到表单/看板/画册/日历。 */
+  const showFillTools = activeView.type === "grid";
   /** 看板「新建分组」要往分组字段追加选项。 */
   const kanbanField = kanbanGroupField(activeTable, activeView);
   /** 设置/清除某列的统计口径（视图级配置，不写记录）。 */
@@ -466,6 +487,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           next.fieldOrder = strip(next.fieldOrder);
           next.formFieldIds = strip(next.formFieldIds);
           next.highlightDuplicateFieldIds = strip(next.highlightDuplicateFieldIds);
+          const fillRules = stripFillRulesForField(next.fillRules, fieldId);
+          if (fillRules.length > 0) next.fillRules = fillRules; else delete next.fillRules;
           next.kanbanFieldIds = strip(next.kanbanFieldIds);
           next.galleryFieldIds = strip(next.galleryFieldIds);
           const stripFilters = (nodes: readonly BitableFilterNode[]): BitableFilterNode[] => {
@@ -892,9 +915,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     else if (event.key === "Escape") (event.target as HTMLElement).blur();
   };
 
-  const renderRecordRow = (record: BitableRecord, index: number, extraClass = "") => (
+  const renderRecordRow = (record: BitableRecord, index: number, extraClass = "") => {
+    const fillSide = rowSideColor(record.id);
+    return (
     <tr key={record.id} data-record-id={record.id}
       className={"bt-row" + (extraClass ? " " + extraClass : "") + (rowDragId === record.id ? " dragging" : "") + (rowDragOverId === record.id && rowDragId !== record.id ? " drag-over" : "") + (selectedRecordIds.has(record.id) ? " selected" : "")}
+      data-fill-side={fillSide ? "" : undefined}
+      style={fillSide ? ({ "--bt-fill-side": fillSide } as CSSProperties) : undefined}
       onContextMenu={(event) => { if (readOnly) return; event.preventDefault(); setRowCtx({ recordId: record.id, x: event.clientX, y: event.clientY }); }}>
       <td className="bt-td-index">
         <button type="button" className="bt-row-num" title="选择记录" disabled={readOnly}
@@ -908,10 +935,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             onClick={() => openDrawer(record.id)}><RowExpandIcon /></button>
         </div>
       </td>
-      {visibleFields.map((field) => (
+      {visibleFields.map((field) => {
+        const fillBackground = fillBackgroundImage(record.id, field.id);
+        return (
         <td key={field.id} data-record-id={record.id} data-field-id={field.id}
           className={"bt-td" + (selectedColumnId === field.id ? " col-selected" : "") + (cellInSelection(record.id, field.id) ? " cell-selected" + selectionEdgeClass(record.id, field.id) : "") + (isDuplicateCell(field, record) ? " in-highlight" : "")}
-          style={{ maxWidth: columnWidth(field), ...(columnTextColor(field.id) ? { color: columnTextColor(field.id) } : {}) }}
+          style={{ maxWidth: columnWidth(field), ...(fillBackground ? { backgroundImage: fillBackground } : {}), ...(columnTextColor(field.id) ? { color: columnTextColor(field.id) } : {}) }}
           onMouseDown={(event) => {
             if (readOnly || event.button !== 0) return;
             if (event.shiftKey && cellSel) setCellSel({ anchor: cellSel.anchor, focus: { recordId: record.id, fieldId: field.id } });
@@ -945,10 +974,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             )}
           />
         </td>
-      ))}
+        );
+      })}
       <td className="bt-td-empty" />
     </tr>
-  );
+    );
+  };
 
   return (
     <div ref={rootRef} className={"bitable-editor" + (visible ? "" : " fn__none")}>
@@ -1049,6 +1080,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             <button type="button" className={"bt-tool-btn" + (panel === "rowHeight" ? " is-active" : "")}
               onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "rowHeight" ? null : "rowHeight"); }}>
               <Rows3 size={14} />行高
+            </button>
+          )}
+          {showFillTools && (
+            <button type="button" className={"bt-tool-btn" + (panel === "fill" ? " is-active" : "")}
+              onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "fill" ? null : "fill"); }}>
+              <PaintBucket size={14} />填色{(activeView.fillRules?.length ?? 0) > 0 && <span className="bt-badge">{activeView.fillRules!.length}</span>}
             </button>
           )}
           <button type="button" className={"bt-tool-btn" + (findOpen ? " is-active" : "")} onClick={() => setFindOpen((v) => !v)}>
@@ -1286,7 +1323,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         </div>
       </Popover>
 
-      <Popover open={panel === "filter"} anchor={menuAnchor} onClose={() => setPanel(null)} width={820}>
+      <Popover open={panel === "filter"} anchor={menuAnchor} onClose={() => setPanel(null)} width={filters.length > 0 ? 820 : 320}>
         <div className="bt-filter-panel">
           <BitableFilterEditor
             fields={activeTable.fields}
@@ -1298,6 +1335,16 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             onClear={() => setFilters([], "and")}
           />
         </div>
+      </Popover>
+
+      <Popover open={panel === "fill"} anchor={menuAnchor} onClose={() => setPanel(null)} width={820}>
+        <BitableFillEditor
+          fields={activeTable.fields}
+          rules={activeView.fillRules ?? []}
+          ctx={displayCtx}
+          readOnly={readOnly}
+          onChange={(fillRules) => patchView(activeView.id, { fillRules: fillRules.length > 0 ? fillRules : undefined })}
+        />
       </Popover>
 
       <Popover open={panel === "sort"} anchor={menuAnchor} onClose={() => setPanel(null)} width={360}>
@@ -1408,21 +1455,23 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           })()}
           {columnMenu && (() => {
             const fieldId = columnMenu.fieldId;
-            // 调色板锚到**列头**（不是 ⋯ 按钮）：菜单一关按钮就 display:none、量出来的 rect 是 0×0，
-            // 浮层会跑到左上角（260928 用户报「颜色框错位」）
-            const anchor = columnMenu.header;
             return (
-              <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => { if (anchor) setTextColorFor({ fieldId, anchor }); setColumnMenu(null); }}>文本颜色</button>
+              <button type="button" className={"bt-menu-item ln-menu__item" + (textColorFor?.fieldId === fieldId ? " is-selected" : "")} disabled={readOnly}
+                aria-haspopup="dialog" aria-expanded={textColorFor?.fieldId === fieldId}
+                onClick={(event) => setTextColorFor((current) => current?.fieldId === fieldId ? null : { fieldId, anchor: event.currentTarget })}>
+                <span className="bt-menu-label ln-ellipsis">文本颜色</span><ChevronRight size={14} />
+              </button>
             );
           })()}
           <button type="button" className="bt-menu-item ln-menu__item ln-menu__item--danger" disabled={readOnly || activeTable.fields.length <= 1} onClick={() => { if (columnMenu) deleteField(columnMenu.fieldId); }}><Trash2 size={13} />删除列</button>
         </div>
       </Popover>
 
-      {textColorFor && (
-        <ColorPalette anchor={textColorFor.anchor} value={(activeView.columnTextColors ?? {})[textColorFor.fieldId]} palette={BITABLE_TEXT_COLOR_PALETTE}
+      {textColorFor && columnMenu && (
+        <ColorPalette anchor={textColorFor.anchor} value={(activeView.columnTextColors ?? {})[textColorFor.fieldId]} recentKey="bitable-column-text" side="right" closeOnPick={false}
+          defaultLabel="默认色" defaultKind="text"
           onPick={(color) => patchView(activeView.id, { columnTextColors: { ...(activeView.columnTextColors ?? {}), [textColorFor.fieldId]: color } })}
-          onClear={() => patchView(activeView.id, { columnTextColors: Object.fromEntries(Object.entries(activeView.columnTextColors ?? {}).filter(([id]) => id !== textColorFor.fieldId)) })}
+          onDefault={() => patchView(activeView.id, { columnTextColors: Object.fromEntries(Object.entries(activeView.columnTextColors ?? {}).filter(([id]) => id !== textColorFor.fieldId)) })}
           onClose={() => setTextColorFor(null)} />
       )}
 
@@ -1703,9 +1752,13 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
               <div className="bt-date-default">
                 <input className="bt-input" type="number" min={0} max={100} value={defaultValue} readOnly={readOnly} aria-label="进度默认值"
                   onChange={(event) => setDefaultValue(event.target.value)} />
-                <button type="button" className="bt-color-square" style={{ backgroundColor: optionColorHex(progressColor) ?? "#e8e8e8" }}
-                  aria-label="选择进度条颜色" disabled={readOnly}
-                  onClick={(event) => setProgressColorAnchor(event.currentTarget)} />
+                <button type="button" className="bt-select-trigger"
+                  aria-label="选择进度条颜色" aria-haspopup="dialog" aria-expanded={Boolean(progressColorAnchor)} disabled={readOnly}
+                  onClick={(event) => setProgressColorAnchor(event.currentTarget)}>
+                  <span className="bt-color-square" style={{ backgroundColor: optionColorHex(progressColor) ?? "#e8e8e8" }} />
+                  <span className="bt-field-name ln-ellipsis">进度条颜色</span>
+                  <ChevronDown size={14} />
+                </button>
               </div>
             ) : (
               <input className="bt-input" type={knownType === "number" ? "number" : "text"} placeholder={knownType === "link" ? "https://" : undefined}
@@ -1760,8 +1813,10 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
               </div>
             ))}
             {colorFor && (
-              <ColorPalette anchor={colorFor.anchor} value={options.find((o) => o.id === colorFor.optionId)?.color}
+              <ColorPalette anchor={colorFor.anchor} value={options.find((o) => o.id === colorFor.optionId)?.color} recentKey="bitable-option"
+                defaultLabel="无背景色" defaultKind="background"
                 onPick={(color) => setOptions(options.map((o) => (o.id === colorFor.optionId ? { ...o, color } : o)))}
+                onDefault={() => setOptions(options.map((o) => (o.id === colorFor.optionId ? { ...o, color: undefined } : o)))}
                 onClose={() => setColorFor(null)} />
             )}
             <button type="button" className="bt-panel-add" disabled={readOnly} onClick={addOptionRow}><Plus size={14} />添加选项</button>
@@ -1770,8 +1825,10 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
         {/* 进度字段的颜色面板：它不属于「选项编辑器」（进度字段 supportsOptions=false）。
             此前被嵌在 options 块内 ⇒ 点色块永远打不开面板（260929-OPT 修复）。 */}
         {progressColorAnchor && (
-          <ColorPalette anchor={progressColorAnchor} value={progressColor}
+          <ColorPalette anchor={progressColorAnchor} value={progressColor} recentKey="bitable-progress"
+            defaultLabel="默认色" defaultKind="text"
             onPick={(color) => setProgressColor(color)}
+            onDefault={() => setProgressColor(undefined)}
             onClose={() => setProgressColorAnchor(null)} />
         )}
       </div>
