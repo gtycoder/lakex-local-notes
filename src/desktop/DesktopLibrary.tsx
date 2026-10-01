@@ -32,6 +32,10 @@ export interface DesktopLibraryProps {
   onScrollToTop: () => void;
   onNavigateToHeading: (id: string) => void;
   lockedNoteIds: ReadonlySet<string>;
+  /** 锁定/解锁活动文档（透传给多维表右上角菜单）。 */
+  onToggleNoteLock?: () => void;
+  /** 多维表导出 CSV（透传给多维表右上角菜单）。 */
+  onExportBitableCsv?: (noteId: string) => void;
   /** 活动标签在回收站中：横幅里的"打开回收站"出口。 */
   onOpenTrash?: () => void;
   pinnedNoteIds: ReadonlySet<string>;
@@ -60,7 +64,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     wideMode, editorPrefs,
     activePathTitle, headingPath, moreMenuWrapRef, onToggleMoreMenu,
     onScrollToTop, onNavigateToHeading,
-    lockedNoteIds, pinnedNoteIds,
+    lockedNoteIds, onToggleNoteLock, onExportBitableCsv, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
     onEditorReady,
   onEditorCapture, onReloadNote, onCreateNote, onOpenTrash, outlineSlot,
@@ -117,6 +121,8 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onTabClose={onTabClose}
         onTabsReorder={onTabsReorder}
         lockedNoteIds={lockedNoteIds}
+        onToggleNoteLock={onToggleNoteLock}
+        onExportBitableCsv={onExportBitableCsv}
         onOpenTrash={onOpenTrash}
         pinnedNoteIds={pinnedNoteIds}
         onTogglePin={onTogglePin}

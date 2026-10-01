@@ -750,9 +750,14 @@ export class Store {
     return chain;
   }
 
-  /** M1：导出原生 Lake 文档（图片 base64 内嵌，VS Code Lake 插件兼容）。 */
-  exportNativeLake(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
-    return this.noteExport.exportNativeLake(id, baseDir);
+  /** D01：导出多维表活动数据表为 CSV（UTF-8 BOM + CRLF，Excel 通用）。 */
+  exportBitableCsv(id: string, baseDir?: string): { exportPath: string; rowCount: number; size: number } {
+    return this.noteExport.exportBitableCsv(id, baseDir);
+  }
+
+  /** D01 续：导出多维表活动数据表为 ZIP（CSV + 附件/图片文件）。 */
+  exportBitableZip(id: string, baseDir?: string): { exportPath: string; rowCount: number; fileCount: number; skipped: number; size: number } {
+    return this.noteExport.exportBitableZip(id, baseDir);
   }
 
   /** M1：导出 HTML（读缓存 Markdown → 转换 + 复制图片 + 相对引用 → index.html）。 */

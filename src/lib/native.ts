@@ -31,7 +31,13 @@ export interface LakeNative {
   /** 只改附件展示名（不动存储文件/路径） */
   renameAssetDisplay(noteId: string, filename: string, newName: string): Promise<{ ok: boolean; changed: number }>;
   pickExportDir(): Promise<string | null>;
-  exportNote(id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
+  exportNote(id: string, format: "markdown" | "html" | "pdf" | "docx", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
+  /** 多维表：导出活动数据表为 CSV（UTF-8 BOM + CRLF，Excel 通用） */
+  exportBitableCsv(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; size: number }>;
+  /** 多维表：导出活动数据表为 ZIP（CSV + 附件/图片文件） */
+  exportBitableZip(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; fileCount: number; skipped: number; size: number }>;
+  /** 多维表：系统选择框选一个 CSV 文件并读取文本（导入用；取消返回 null） */
+  pickImportCsv(): Promise<{ name: string; content: string } | null>;
   pickBackupDir(): Promise<string | null>;
   runWorkspaceBackup(dir: string): Promise<{ backupPath: string; copiedDirs: string[] }>;
   prepareCloudRestore(): Promise<{ quarantinePath: string }>;
@@ -200,7 +206,10 @@ export const native = {
   getNoteInfo: (id: string) => api().getNoteInfo(id),
   renameAssetDisplay: (noteId: string, filename: string, newName: string) => api().renameAssetDisplay(noteId, filename, newName),
   pickExportDir: () => api().pickExportDir(),
-  exportNote: (id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string) => api().exportNote(id, format, baseDir),
+  exportNote: (id: string, format: "markdown" | "html" | "pdf" | "docx", baseDir?: string) => api().exportNote(id, format, baseDir),
+  exportBitableCsv: (id: string, baseDir?: string) => api().exportBitableCsv(id, baseDir),
+  exportBitableZip: (id: string, baseDir?: string) => api().exportBitableZip(id, baseDir),
+  pickImportCsv: () => api().pickImportCsv(),
   pickBackupDir: () => api().pickBackupDir(),
   runWorkspaceBackup: (dir: string) => api().runWorkspaceBackup(dir),
   prepareCloudRestore: () => api().prepareCloudRestore(),

@@ -7,6 +7,15 @@ import { isSafePathSegment, sanitizeFileName } from "../src/core/storeUtils.js";
 import { mdToHtml, wrapHtmlPage } from "../src/core/mdToHtml.js";
 import { mimeTypeForFilename } from "../src/core/assetNaming.js";
 import { ASSET_PORT } from "./assetServer.js";
+import { bitableAttachments, parseBitableBody } from "../src/core/bitableDoc.js";
+import { bitableTableCsv, csvFileNameFor } from "../src/core/bitableCsv.js";
+import { ZipWriter } from "../src/core/zipArchive.js";
+
+/** 同名附件归档时的去重后缀：a.pdf → a (2).pdf。 */
+function withSuffix(name: string, n: number): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) + " (" + n + ")" + name.slice(dot) : name + " (" + n + ")";
+}
 
 /**
  * W-3：资产服务器 URL 提取正则工厂。端口跟随 ASSET_PORT（LAKE_ASSET_PORT 可覆盖，
@@ -34,7 +43,7 @@ export interface NoteExportContext {
 }
 
 /**
- * 文档导出域（原生 Lake / HTML / Markdown 资料包）。
+ * 文档导出域（HTML / Markdown 资料包 / 多维表 CSV）。
  * 从事务语义到 SQL 全部原样迁移自 Store（REFACTOR：只搬家不改行为）。
  */
 export class NoteExport {
@@ -61,44 +70,94 @@ export class NoteExport {
   }
 
   /**
-   * M1：导出原生 Lake 文档（图片 base64 内嵌，VS Code Lake 插件兼容）。
-   * 把 image card 的 src 从本地 assetServer URL 替换为 data:image/...;base64，其余结构原样保留。
+   * D01：导出多维表**活动数据表**为 CSV（UTF-8 BOM + CRLF，Excel 通用）。
+   * 只读 / 锁定文档也允许导出（导出不改数据）；非多维表明确拒绝。
    */
-  exportNativeLake(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
+  exportBitableCsv(id: string, baseDir?: string): { exportPath: string; rowCount: number; size: number } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
-    const lakePath = this.ctx.notePathFor(id);
-    if (!fs.existsSync(lakePath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
-    const lake = fs.readFileSync(lakePath, "utf8");
-    const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
-    const title = sanitizeFileName(titleRow?.title ?? "未命名");
+    const row = this.ctx.db.prepare("SELECT title, kind FROM notes WHERE id=?").get(id) as { title?: string; kind?: string | null } | undefined;
+    if ((row?.kind ?? "doc") !== "bitable") throw new AppError("InvalidInput", "该文档不是多维表，无法导出 CSV");
+    const bodyPath = this.ctx.notePathFor(id);
+    if (!fs.existsSync(bodyPath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    const doc = parseBitableBody(fs.readFileSync(bodyPath, "utf8"));
+    if (!doc || doc.tables.length === 0) throw new AppError("InvalidInput", "多维表正文为空，无可导出的数据表");
+    const table = doc.tables.find((t) => t.id === doc.activeTableId) ?? doc.tables[0];
+    const csv = bitableTableCsv(table, { tables: doc.tables });
+    const title = sanitizeFileName(row?.title ?? "未命名");
     const base = baseDir ?? this.defaultExportBase();
-    const exportDir = this.uniqueExportDir(base, title);
-    fs.mkdirSync(exportDir, { recursive: true });
-    const exportPath = path.join(exportDir, `${title}.lake`);
-    // image card: <card ... name="image" ... value="data:...">（value = "data:" + encodeURIComponent(JSON)）
-    const cardRe = /(<card\b[^>]*\bname="image"[^>]*\bvalue=")data:([^"]+)(")/g;
-    let imageCount = 0;
+    fs.mkdirSync(base, { recursive: true });
+    const stem = `${title} - ${csvFileNameFor(table).replace(/\.csv$/, "")}`;
+    const exportPath = this.uniqueExportFile(base, stem, "csv");
+    fs.writeFileSync(exportPath, csv, "utf8");
+    return { exportPath, rowCount: table.records.length, size: csv.length };
+  }
+
+  /**
+   * D01 续：导出多维表**活动数据表**为 ZIP 压缩包 —— 内含 `{表名}.csv` + `附件/{文件名}`。
+   * 附件/图片字段引用的真实文件一并打包；同名附件自动加 (2)/(3) 后缀，并让 CSV 对应单元格指向归档内相对路径。
+   * store（不压缩）**流式写盘**：每次只读一个附件，避免整包进内存；4GiB 以上明确报错（需 ZIP64）。
+   */
+  exportBitableZip(id: string, baseDir?: string): { exportPath: string; rowCount: number; fileCount: number; skipped: number; size: number } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const row = this.ctx.db.prepare("SELECT title, kind FROM notes WHERE id=?").get(id) as { title?: string; kind?: string | null } | undefined;
+    if ((row?.kind ?? "doc") !== "bitable") throw new AppError("InvalidInput", "该文档不是多维表，无法导出压缩包");
+    const bodyPath = this.ctx.notePathFor(id);
+    if (!fs.existsSync(bodyPath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    const doc = parseBitableBody(fs.readFileSync(bodyPath, "utf8"));
+    if (!doc || doc.tables.length === 0) throw new AppError("InvalidInput", "多维表正文为空，无可导出的数据表");
+    const table = doc.tables.find((t) => t.id === doc.activeTableId) ?? doc.tables[0];
+
+    // 1) 收集附件（按磁盘名去重）：附件 / 图片字段引用的 { file, name }
+    const pairs: Array<{ file: string; name: string }> = [];
+    const seen = new Set<string>();
+    for (const field of table.fields) {
+      if (field.type !== "attachment" && field.type !== "image") continue;
+      for (const record of table.records) {
+        for (const attachment of bitableAttachments(record.values[field.id])) {
+          if (seen.has(attachment.file)) continue;
+          seen.add(attachment.file);
+          pairs.push({ file: attachment.file, name: attachment.name });
+        }
+      }
+    }
+    // 2) 归档内文件名去重（与 CSV 单元格一一对应）
+    const used = new Set<string>();
+    const archiveName = new Map<string, string>();
+    for (const pair of pairs) {
+      const base = pair.name.replace(/[\\/:*?"<>|\r\n]/g, "_").trim() || "附件";
+      let candidate = base;
+      let suffix = 2;
+      while (used.has(candidate)) candidate = withSuffix(base, suffix++);
+      used.add(candidate);
+      archiveName.set(pair.file, candidate);
+    }
+    const labelOf = (attachment: { file: string; name: string }): string => "附件/" + (archiveName.get(attachment.file) ?? attachment.name);
+    const csv = bitableTableCsv(table, { tables: doc.tables }, { attachmentLabel: labelOf });
+
+    // 3) 流式写 zip
+    const title = sanitizeFileName(row?.title ?? "未命名");
+    const tableName = csvFileNameFor(table).replace(/\.csv$/, "") || "数据表";
+    const base0 = baseDir ?? this.defaultExportBase();
+    fs.mkdirSync(base0, { recursive: true });
+    const exportPath = this.uniqueExportFile(base0, `${title} - ${tableName}`, "zip");
+    const fd = fs.openSync(exportPath, "w");
+    let fileCount = 0;
     let skipped = 0;
-    const out = lake.replace(cardRe, (whole, prefix: string, encoded: string, suffixTag: string) => {
-      try {
-        const value = JSON.parse(decodeURIComponent(encoded)) as { src?: string };
-        const src = typeof value.src === "string" ? value.src : "";
-        const m = localAssetLakeSrcRe(ASSET_PORT).exec(src);
-        if (!m) { skipped++; return whole; } // 远程 URL 保持原样
-        const noteId = m[1];
-        const filename = m[2];
-        if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) { skipped++; return whole; }
-        const file = path.join(this.ctx.noteAssetsDir, noteId, filename);
-        if (!fs.existsSync(file)) { skipped++; return whole; }
-        const bytes = fs.readFileSync(file);
-        const mime = mimeTypeForFilename(filename);
-        value.src = `data:${mime};base64,${bytes.toString("base64")}`;
-        imageCount++;
-        return prefix + "data:" + encodeURIComponent(JSON.stringify(value)) + suffixTag;
-      } catch { skipped++; return whole; }
-    });
-    fs.writeFileSync(exportPath, out, "utf8");
-    return { exportPath, imageCount, skipped, size: out.length };
+    try {
+      const writer = new ZipWriter((chunk) => fs.writeSync(fd, chunk));
+      writer.addFile(tableName + ".csv", Buffer.from(csv, "utf8"));
+      for (const pair of pairs) {
+        if (!isSafePathSegment(pair.file)) { skipped++; continue; }
+        const src = path.join(this.ctx.noteAssetsDir, id, pair.file);
+        if (!fs.existsSync(src)) { skipped++; continue; }
+        writer.addFile("附件/" + (archiveName.get(pair.file) ?? pair.name), fs.readFileSync(src));
+        fileCount++;
+      }
+      writer.finish();
+    } finally {
+      fs.closeSync(fd);
+    }
+    return { exportPath, rowCount: table.records.length, fileCount, skipped, size: fs.statSync(exportPath).size };
   }
 
   /**

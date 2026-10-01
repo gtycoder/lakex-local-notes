@@ -17,6 +17,8 @@ export interface BitableViewBarProps {
   readOnly: boolean;
   /** 数据表列表收起后的「展开 + 切换数据表」区（属于表格维度，不属于视图）。 */
   leading?: ReactNode;
+  /** 视图页签行最右侧的「更多」入口（多维表右上角菜单）。 */
+  trailing?: ReactNode;
   onSelect: (viewId: string) => void;
   /** 双击页签 = 重命名（弹窗由上层持有）。 */
   onRenameRequest: (viewId: string) => void;
@@ -26,7 +28,7 @@ export interface BitableViewBarProps {
   onReorder: (fromId: string, toId: string) => void;
 }
 
-export function BitableViewBar({ views, activeViewId, readOnly, leading, onSelect, onRenameRequest, onMore, onAddView, onReorder }: BitableViewBarProps) {
+export function BitableViewBar({ views, activeViewId, readOnly, leading, trailing, onSelect, onRenameRequest, onMore, onAddView, onReorder }: BitableViewBarProps) {
   /** 拖拽重排是页签栏自己的展示态，不进正文、也不该由编辑器持有。 */
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [addAnchor, setAddAnchor] = useState<HTMLElement | null>(null);
@@ -59,6 +61,7 @@ export function BitableViewBar({ views, activeViewId, readOnly, leading, onSelec
           ))}
         </div>
       </Popover>
+      {trailing && <div className="bt-viewbar-trailing">{trailing}</div>}
     </div>
   );
 }

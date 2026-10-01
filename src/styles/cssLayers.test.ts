@@ -89,7 +89,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260929 续 5：+5 = 表格撑满一屏（.bt-grid min-height + .bt-grid-filler 占位行），底部汇总栏才贴视图底
   // 260929 续 6：+5 = 「加进本组」不占行（行高 0 + 圆钮绝对定位悬浮在分组边界上）
   // 260929 续 7：+13 = 统计格改白底 chip + 共用 StatCell 内容样式（右对齐/▾/未配置 hover 显形），并删掉旧的「统计」占位钮规则
-  "features/bitable/bitableViews.css": { decls: 138, dupGroups: 0 },  // 260930：+2 = 表头「新增字段」的 + 贴着左侧最后一列（`.bt-grid th.bt-th-add { text-align:left; padding-left:8px }`——th 默认居中把它甩到空白区中央；合法新增非覆盖回涨）。260929 续：+5 = 分组底衬（表头下 20px 间隙 .bt-group-head-gap、加进本组通道、组间、末尾占位行统一走 --lake-bg-subtle）；此前：单级分组卡片 + + 行下线
+  "features/bitable/bitableViews.css": { decls: 141, dupGroups: 0 },  // 260930 续：+3 = 多维表右上角「更多」入口 .bt-viewbar-trailing（margin-left:auto 顶右）。原：+2 = 表头「新增字段」的 + 贴着左侧最后一列（`.bt-grid th.bt-th-add { text-align:left; padding-left:8px }`——th 默认居中把它甩到空白区中央；合法新增非覆盖回涨）。260929 续：+5 = 分组底衬（表头下 20px 间隙 .bt-group-head-gap、加进本组通道、组间、末尾占位行统一走 --lake-bg-subtle）；此前：单级分组卡片 + + 行下线
   // 260928 T02A：布尔 / 链接 / 评分 / 进度 单元格 + 字段类型 2 列网格（全新文件，合法新增）
   // 260928 续：+15 = 评分空星改实心（颜色换 --lake-border-strong）+ 进度条可拖动（轨道 position/cursor/touch-action、圆形把手 .bt-progress-thumb、只读隐藏把手）；合法新增非覆盖回涨
   // 260929：净 -3 = 进度数值框整体删除（随之删掉 appearance: textfield 与 ::-webkit-{inner,outer}-spin-button 两条声明）⇒ 回落 84 → 81

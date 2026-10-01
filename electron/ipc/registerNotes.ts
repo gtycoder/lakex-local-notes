@@ -6,7 +6,7 @@ import type { DraftJournal } from "../draftJournal.js";
 import { Store } from "../store.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
 import { isSafePathSegment, isSafeShellOpenFilename, sanitizeFileName } from "../../src/core/storeUtils.js";
-import { exportNote, type ExportFormat } from "../export.js";
+import { exportBitableCsv, exportBitableZip, exportNote, type ExportFormat } from "../export.js";
 import {
   IpcInputError,
   assertContentBytes,
@@ -18,6 +18,9 @@ import {
 import type { IpcRegistrar } from "./registrar.js";
 import { restoreTrashWithAssets, ensureTrashNoteAssets } from "../syncEngineController.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
+
+/** 多维表 CSV 导入文件大小上限（本地优先、量级有限，防一次性读入超大文件）。 */
+const MAX_CSV_IMPORT_BYTES = 20 * 1024 * 1024;
 
 interface ResourceUploadInput {
   bytes: Uint8Array;
@@ -81,6 +84,33 @@ export function registerNotesIpc(
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
     return exportNote(store, id, format, baseDir ?? undefined);
+  });
+  ipc.handle("export_bitable_csv", (id: string, baseDir?: string) => {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+      throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
+    }
+    return exportBitableCsv(store, id, baseDir ?? undefined);
+  });
+  ipc.handle("export_bitable_zip", (id: string, baseDir?: string) => {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+      throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
+    }
+    return exportBitableZip(store, id, baseDir ?? undefined);
+  });
+  ipc.handle("pick_import_csv", async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const result = await dialog.showOpenDialog(win, {
+      title: "选择要导入的 CSV 文件",
+      buttonLabel: "导入",
+      properties: ["openFile"],
+      filters: [{ name: "CSV", extensions: ["csv", "txt"] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = result.filePaths[0];
+    if (fs.statSync(filePath).size > MAX_CSV_IMPORT_BYTES) {
+      throw new IpcInputError("CSV 文件过大（上限 " + Math.round(MAX_CSV_IMPORT_BYTES / 1024 / 1024) + "MB）");
+    }
+    return { name: path.basename(filePath), content: fs.readFileSync(filePath, "utf8") };
   });
   // ---- A1 整库备份 / A2 云端恢复 ----
   let lastPickedBackupDir: string | null = null;

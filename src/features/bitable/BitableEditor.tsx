@@ -15,8 +15,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import {
-  ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Copy, Eye, EyeOff, GripVertical, ListFilter,
-  MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Trash2, X,
+  ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Copy, Eye, EyeOff, FileUp, GripVertical, ListFilter,
+  Download, Lock, LockOpen, MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Trash2, X,
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
@@ -31,7 +31,11 @@ import {
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField, duplicateBitableField, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
+import { parseCsv, defaultCsvMapping, importCsvRows, type CsvColumnMapping, type CsvImportResult } from "../../core/bitableCsv.js";
 import { StatCell } from "./bitableCells";
+import { BitableCsvImportDialog } from "./BitableCsvImportDialog.js";
+import { native } from "../../lib/native";
+import { reportNativeActionError } from "../../lib/nativeErrors";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
@@ -130,9 +134,15 @@ export interface BitableEditorProps {
   onEditorCapture?: (capture: (() => string | null) | null) => void;
   /** 是否显示编辑器外壳（数据表列表 / 视图页签 / 工具条，默认 true）。历史快照预览传 false。 */
   chrome?: boolean;
+  /** 文档是否处于「锁定（只读）」态（与 readOnly 区分：readOnly 还包含回收站 / 被他端 purge）。 */
+  locked?: boolean;
+  /** 切换当前文档锁定（只读）——由外壳注入；不传则不显示「锁定」入口。 */
+  onToggleLock?: () => void;
+  /** 从本编辑器导出当前数据表 CSV（由外壳注入导出管线）。 */
+  onExportCsv?: () => void;
 }
 
-export function BitableEditor({ noteId, content, visible, readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture, chrome = true }: BitableEditorProps) {
+export function BitableEditor({ noteId, content, visible, readOnly, locked = false, onChange, onPreserveDraft, onDirty, onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
   const { doc, docRef, updateDoc, navigateDoc, beginGesture, endGesture, undoEdit, redoEdit } = useBitableSession(
     () => initialDoc(content), { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
   );
@@ -158,7 +168,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
   const [viewEditor, setViewEditor] = useState<string | null>(null);
   const viewNameRef = useRef<HTMLInputElement>(null);
   const [tableEditor, setTableEditor] = useState<{ id: string; draft: string } | null>(null);
+  const [csvImport, setCsvImport] = useState<{ fileName: string; header: string[]; rows: string[][]; mapping: CsvColumnMapping[] } | null>(null);
+  const [csvResult, setCsvResult] = useState<CsvImportResult | null>(null);
   const [findOpen, setFindOpen] = useState(false);
+  /** 右上角「更多」菜单锚点（视图页签行最右）。 */
+  const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
   const [findQuery, setFindQuery] = useState("");
   const [drawerRecordId, setDrawerRecordId] = useState<string | null>(null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
@@ -515,6 +529,30 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
     updateDoc((prev) => addBitableRecord(prev, prev.activeTableId, { record, fieldId, value }).doc);
     return record.id;
   }, [updateDoc]);
+
+  // ---- CSV 导入（D01）----
+  /** 选文件 → 解析 → 打开映射对话框（只读会话直接拒绝）。 */
+  const startCsvImport = useCallback(async () => {
+    if (readOnlyRef.current) return;
+    try {
+      const picked = await native.pickImportCsv();
+      if (!picked) return;
+      const parsed = parseCsv(picked.content);
+      const header = parsed[0] ?? [];
+      setCsvResult(null);
+      setCsvImport({ fileName: picked.name, header, rows: parsed.slice(1), mapping: defaultCsvMapping(activeTable, header) });
+    } catch (reason) {
+      reportNativeActionError("导入 CSV", reason);
+    }
+  }, [activeTable]);
+  /** 确认导入：追加到当前活动表；结果（新增/丢弃/跳过 + 原因）留在对话框里展示，不悄悄吞错。 */
+  const confirmCsvImport = useCallback(() => {
+    if (!csvImport) return;
+    const current = docRef.current;
+    const result = importCsvRows(current, activeTable.id, [csvImport.header, ...csvImport.rows], csvImport.mapping, { hasHeader: true });
+    if (result.doc !== current) updateDoc(() => result.doc);
+    setCsvResult(result);
+  }, [csvImport, activeTable.id, updateDoc]);
   const deleteRecords = useCallback((ids: string[]) => {
     const set = new Set(ids);
     patchActiveTable((table) => ({ ...table, records: table.records.filter((r) => !set.has(r.id)) }));
@@ -959,6 +997,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
             onMore={(viewId, anchor) => setViewMenu({ viewId, anchor })}
             onAddView={addView}
             onReorder={reorderViews}
+            trailing={(
+              <button type="button" className="bt-icon-btn" title="更多" aria-label="更多操作" onClick={(event) => setMoreAnchor(event.currentTarget)}><MoreHorizontal size={15} /></button>
+            )}
           />
         )}
 
@@ -1003,8 +1044,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
               <PaintBucket size={14} />填色{(activeView.fillRules?.length ?? 0) > 0 && <span className="bt-badge">{activeView.fillRules!.length}</span>}
             </button>
           )}
-          <button type="button" className={"bt-tool-btn" + (findOpen ? " is-active" : "")} onClick={() => setFindOpen((v) => !v)}>
-            <Search size={14} />搜索
+          <button type="button" className="bt-tool-btn" disabled={readOnly} onClick={() => { void startCsvImport(); }}>
+            <FileUp size={14} />导入 CSV
           </button>
           {findOpen && (
             <div className="bt-find">
@@ -1016,6 +1057,30 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
           <div className="bt-toolbar-spacer" />
           <button type="button" className="bt-tool-btn bt-add-record" disabled={readOnly} onClick={() => addRecord()}><Plus size={14} />添加记录</button>
         </div>}
+
+        {/* 多维表右上角菜单（用户 260930）：搜索 / 导出 CSV / 锁定（只读）。与 lake 文档的右上角菜单同义。 */}
+        {chrome && (
+          <Popover open={Boolean(moreAnchor)} anchor={moreAnchor} onClose={() => setMoreAnchor(null)} width={200}>
+            <div className="bt-panel">
+              <button type="button" className="bt-menu-item ln-menu__item" onClick={() => { setFindOpen(true); setMoreAnchor(null); }}>
+                <Search size={14} />搜索
+              </button>
+              {onExportCsv && (
+                <button type="button" className="bt-menu-item ln-menu__item" onClick={() => { setMoreAnchor(null); onExportCsv(); }}>
+                  <Download size={14} />导出为 CSV
+                </button>
+              )}
+              {onToggleLock && (
+                <>
+                  <div className="context-menu-sep" />
+                  <button type="button" className="bt-menu-item ln-menu__item" onClick={() => { setMoreAnchor(null); onToggleLock(); }}>
+                    {locked ? <LockOpen size={14} /> : <Lock size={14} />}{locked ? "解锁当前文档" : "锁定当前文档（只读）"}
+                  </button>
+                </>
+              )}
+            </div>
+          </Popover>
+        )}
 
         {/* 本版本还没实现正文渲染的视图类型（gallery/calendar 及未来未知类型）：明确提示 + 表格正文，绝不白屏、不改数据 */}
         {!isImplementedViewType(activeView.type) && <BitableViewFallback view={activeView} />}
@@ -1516,6 +1581,20 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, on
           onUpload={(recordId, fieldId, files) => { void uploadFiles(files).then((entries) => appendAttachments(activeTable.id, recordId, fieldId, entries)); }}
           onOpenAsset={openAsset}
           onOpenImages={openImages}
+        />
+      )}
+      {csvImport && (
+        <BitableCsvImportDialog
+          fileName={csvImport.fileName}
+          table={activeTable}
+          header={csvImport.header}
+          rows={csvImport.rows}
+          mapping={csvImport.mapping}
+          result={csvResult}
+          onChange={(mapping) => setCsvImport((prev) => (prev ? { ...prev, mapping } : prev))}
+          onConfirm={confirmCsvImport}
+          onDone={() => { setCsvImport(null); setCsvResult(null); }}
+          onDismiss={() => { setCsvImport(null); setCsvResult(null); }}
         />
       )}
     </div>

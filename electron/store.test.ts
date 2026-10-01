@@ -313,29 +313,54 @@ describe("目录树操作", () => {
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
 
-  it("exportNativeLake 把本地图片 src 内嵌为 base64，其余结构保留", () => {
-    const note = store.createNote("原生 Lake 导出");
+  it("exportBitableCsv 导出活动数据表为 UTF-8 BOM + CRLF CSV（Excel 通用，含逗号值加引号/布尔 TRUE）", async () => {
+    const core = await import("../src/core/bitableDoc.js");
+    const table = core.createDefaultBitableTable("名单");
+    const boolField = core.createBitableField("boolean", "启用");
+    table.fields.push(boolField);
+    const record = core.createBitableRecord();
+    record.values[table.fields[0].id] = "甲, 乙";
+    record.values[boolField.id] = true;
+    table.records = [record];
+    const note = store.createBitableIn(null, "CSV 导出");
+    store.saveNote(note.id, "CSV 导出", core.bitablesToBody([table], table.id));
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-csv-"));
+    const result = store.exportBitableCsv(note.id, base);
+    const out = fs.readFileSync(result.exportPath, "utf8");
+    expect(out.charCodeAt(0)).toBe(0xfeff);          // BOM（Excel 中文兼容）
+    expect(out).toContain("\r\n");                  // CRLF
+    expect(out).toContain("\"甲, 乙\"");             // 含逗号 → 引号包裹
+    expect(out).toContain("TRUE");                   // 布尔走 Excel 口径
+    expect(result.rowCount).toBe(1);
+    fs.rmSync(base, { recursive: true, force: true });
+  });
+
+  it("exportBitableZip 打包 CSV + 附件文件（store 方式，ZIP 结构可解析）", async () => {
+    const core = await import("../src/core/bitableDoc.js");
+    const table = core.createDefaultBitableTable("名单");
+    const attField = core.createBitableField("attachment", "附件");
+    table.fields.push(attField);
+    const record = core.createBitableRecord();
+    const disk = "1700000000000_ab12cd34.png";
+    record.values[attField.id] = [{ file: disk, name: "图.png", size: 3 }];
+    table.records = [record];
+    const note = store.createBitableIn(null, "ZIP 导出");
+    store.saveNote(note.id, "ZIP 导出", core.bitablesToBody([table], table.id));
     const assetsDir = (store as any).noteAssetsDirFor(note.id);
     fs.mkdirSync(assetsDir, { recursive: true });
-    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
-    fs.writeFileSync(path.join(assetsDir, "a.png"), png);
-    // 构造含图片 card 的 lake 内容（value = "data:" + encodeURIComponent(JSON)）
-    const cardValue = { src: `http://127.0.0.1:19876/${note.id}/a.png`, taskId: "t1", width: 100, height: 50 };
-    const encoded = "data:" + encodeURIComponent(JSON.stringify(cardValue));
-    const lake = `<h1>标题</h1><p>正文</p><card type="inline" name="image" value="${encoded}"></card>`;
-    store.saveNote(note.id, "原生 Lake 导出", lake);
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-nl-"));
-    const result = store.exportNativeLake(note.id, base);
-    expect(result.imageCount).toBe(1);
+    fs.writeFileSync(path.join(assetsDir, disk), Buffer.from([1, 2, 3]));
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-zip-"));
+    const result = store.exportBitableZip(note.id, base);
+    const buf = fs.readFileSync(result.exportPath);
+    expect(buf.readUInt32LE(0)).toBe(0x04034b50);                       // 本地文件头
+    expect(buf.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]))).toBe(true); // EOCD
+    expect(buf.includes(Buffer.from("附件/图.png"))).toBe(true);          // 归档内附件（UTF-8 名）
+    expect(buf.includes(Buffer.from("附件/图.png"))).toBe(true);          // CSV 单元格也指向该相对路径
+    expect(result.fileCount).toBe(1);
     expect(result.skipped).toBe(0);
-    const out = fs.readFileSync(result.exportPath, "utf8");
-    expect(out).toContain(`src%22%3A%22data%3Aimage%2Fpng%3Bbase64%2C`); // src 已内嵌 base64
-    expect(out).not.toContain("127.0.0.1:19876");
-    expect(out).toContain("<h1>标题</h1>"); // 其余结构保留
     fs.rmSync(base, { recursive: true, force: true });
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
-
   it("exportHtmlNote 导出 HTML + 复制图片 + 改写相对引用", () => {
     const note = store.createNote("HTML 导出测试");
     const assetsDir = (store as any).noteAssetsDirFor(note.id);

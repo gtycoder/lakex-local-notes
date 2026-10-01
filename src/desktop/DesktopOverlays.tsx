@@ -39,7 +39,7 @@ export interface DesktopOverlaysProps {
   focusMode: boolean;
   onToggleFocusMode: () => void;
   activeNoteId: string | null;
-  /** 当前活动文档类型（v6）；非 doc 时隐藏导出入口（导出会产出坏文件）。 */
+  /** 当前活动文档类型（v6）；导出菜单按类型区分（doc/sheet/bitable/board），不再只对 doc 显示。 */
   activeKind: "doc" | "sheet" | "bitable" | "board";
   lockedNoteIds: ReadonlySet<string>;
   onToggleNoteLock: () => void;
@@ -138,9 +138,10 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
               <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
             </button>
           )}
-          {/* 导出：与目录树右键「导出」子菜单同一套动作（作用于当前文档），见 ExportSubmenuItem */}
-          {activeNoteId && activeKind === "doc" && (
+          {/* 导出：与目录树右键「导出」子菜单同一套动作（作用于当前文档），按 activeKind 区分菜单，见 ExportSubmenuItem */}
+          {activeNoteId && (
             <ExportSubmenuItem
+              kind={activeKind}
               onExportAs={onExportAs}
               onCopyMarkdown={onCopyMarkdown}
               onCopyPaths={onCopyPaths}

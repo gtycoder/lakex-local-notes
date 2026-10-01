@@ -42,6 +42,10 @@ interface MultiTabEditorProps {
   onTabsReorder?: (noteIds: string[]) => void;
   /** 只读锁的 noteId 集合（驱动 EditorTab viewer 重建） */
   lockedNoteIds?: ReadonlySet<string>;
+  /** 锁定/解锁当前活动文档（多维表右上角菜单用；由上层处理持久化与状态）。 */
+  onToggleNoteLock?: () => void;
+  /** 多维表「导出 CSV」（来自多维表右上角菜单，走上层导出管线）。 */
+  onExportBitableCsv?: (noteId: string) => void;
   /** 当前活动标签在回收站/已被他端 purge：顶部横幅 + 只读（见 tab.deleted）。 */
   onOpenTrash?: () => void;
   /** 钉住的标签（由上层持有，保证关闭/自动淘汰时能感知钉住状态）。 */
@@ -76,6 +80,8 @@ export function MultiTabEditor({
   onTabClose,
   onTabsReorder,
   lockedNoteIds,
+  onToggleNoteLock,
+  onExportBitableCsv,
   pinnedNoteIds,
   onTogglePin,
   onContentChange,
@@ -442,6 +448,9 @@ export function MultiTabEditor({
                 content={tab.content}
                 visible={visible && tab.noteId === activeNoteId}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
+                locked={lockedNoteIds?.has(tab.noteId) ?? false}
+                onToggleLock={onToggleNoteLock && tab.deleted !== true ? onToggleNoteLock : undefined}
+                onExportCsv={onExportBitableCsv ? () => onExportBitableCsv(tab.noteId) : undefined}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}
                 onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}

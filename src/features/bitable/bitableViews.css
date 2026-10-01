@@ -126,3 +126,6 @@
   font-size: 12px;
   line-height: 18px;
 }
+
+/* 260930：视图页签行最右侧的「更多」入口（多维表右上角菜单），靠 margin-left:auto 顶到右边。 */
+.bt-viewbar-trailing { display: flex; align-items: center; margin-left: auto; }

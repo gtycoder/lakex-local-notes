@@ -2,11 +2,35 @@ import fs from "node:fs";
 import type { Store } from "./store.js";
 import { renderPdfToBuffer } from "./pdfRenderer.js";
 
+export interface BitableCsvExportResult {
+  exportPath: string;
+  rowCount: number;
+  size: number;
+}
+
+/** D01：多维表活动数据表 → CSV（Excel 通用；只读/锁定也允许）。 */
+export function exportBitableCsv(store: Store, id: string, baseDir?: string): BitableCsvExportResult {
+  return store.exportBitableCsv(id, baseDir);
+}
+
+export interface BitableZipExportResult {
+  exportPath: string;
+  rowCount: number;
+  fileCount: number;
+  skipped: number;
+  size: number;
+}
+
+/** D01 续：多维表活动数据表 → ZIP（CSV + 附件/图片文件）。 */
+export function exportBitableZip(store: Store, id: string, baseDir?: string): BitableZipExportResult {
+  return store.exportBitableZip(id, baseDir);
+}
+
 /**
  * 收口导出：右键「导出」子菜单的所有格式统一走这一个入口。
- * 当前支持 markdown / html / lake / pdf；word 已注册、待实现。
+ * 当前支持 markdown / html / pdf；word 已注册、待实现。多维表 CSV 走 exportBitableCsv。
  */
-export type ExportFormat = "markdown" | "html" | "lake" | "docx" | "pdf";
+export type ExportFormat = "markdown" | "html" | "docx" | "pdf";
 
 export interface ExportResult {
   format: ExportFormat;
@@ -31,10 +55,6 @@ export async function exportNote(store: Store, id: string, format: ExportFormat,
     }
     case "html": {
       const r = store.exportHtmlNote(id, baseDir);
-      return { format, exportPath: r.exportPath, imageCount: r.imageCount, skipped: r.skipped, size: r.size };
-    }
-    case "lake": {
-      const r = store.exportNativeLake(id, baseDir);
       return { format, exportPath: r.exportPath, imageCount: r.imageCount, skipped: r.skipped, size: r.size };
     }
     case "pdf": {

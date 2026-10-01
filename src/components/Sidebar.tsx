@@ -8,9 +8,9 @@ import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "./treeDrag";
 import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
-import { ExportSubmenuItem } from "./ExportSubmenuItem";
+import { ExportSubmenuItem, type ExportFormat } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
-import { Dialog, Menu, Popover } from "./ui/Overlay";
+import { Dialog, Menu, Popover, Submenu } from "./ui/Overlay";
 
 type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
@@ -36,7 +36,7 @@ interface SidebarProps {
   onMoveNode: (id: string, targetId: string, position: DropPosition) => void;
   onRequestDelete: (node: TreeNode) => void;
   onCopyMarkdown: (node: TreeNode) => void;
-  onExportAs: (node: TreeNode, format: "markdown" | "html" | "lake" | "pdf") => void;
+  onExportAs: (node: TreeNode, format: ExportFormat) => void;
   onCopyPaths: (node: TreeNode) => void;
   onSetIcon: (node: TreeNode, icon: string | null) => void;
   /** 文档属性弹窗 */
@@ -44,7 +44,6 @@ interface SidebarProps {
   /** 历史版本面板 */
   onOpenHistory: (node: TreeNode) => void;
   /** 在文件管理器中显示笔记 .lake */
-  onRevealNoteFile: (node: TreeNode) => void;
   /** 属性面板父级路径跳转：展开到该节点并滚动可见 */
   revealNodeId: string | null;
   onRevealConsumed: () => void;
@@ -674,7 +673,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
         {roots.length === 0 && <div className="empty-list">{query ? "没有匹配的目录项，Esc 或再点筛选图标可清空" : "点击 + 新建第一个笔记本"}</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} onRevealNoteFile={() => props.onRevealNoteFile(contextNode)} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} onClose={() => setContextMenu(null)} />}
       {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} onDoubleClick={() => props.onWidthCommit(SIDEBAR_DEFAULT_WIDTH)} />
     </aside>
@@ -828,15 +827,14 @@ interface ContextMenuProps {
   onRename: () => void;
   onDelete: () => void;
   onCopyMarkdown: () => void;
-  onExportAs: (format: "markdown" | "html" | "lake" | "pdf") => void;
+  onExportAs: (format: ExportFormat) => void;
   onCopyPaths: () => void;
   onShowInfo: () => void;
   onOpenHistory: () => void;
-  onRevealNoteFile: () => void;
   onClose: () => void;
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, onRevealNoteFile, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -861,22 +859,22 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
   return (
     <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={menuRef} style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
-      <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus size={15} /><span>新建文档</span></button>
-      <button role="menuitem" onClick={() => { onNewChild("sheet"); onClose(); }}><Table size={15} /><span>新建表格</span></button>
-      <button role="menuitem" onClick={() => { onNewChild("bitable"); onClose(); }}><Database size={15} /><span>新建数据表</span></button>
-      <button role="menuitem" onClick={() => { onNewChild("board"); onClose(); }}><PenTool size={15} /><span>新建画板</span></button>
-      <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
+      {/* 「新建」收进子菜单：同一组创建动作只占一行，避免右键菜单过长（290930 用户） */}
+      <Submenu label={<><Plus size={15} /><span>新建</span></>}>
+        <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus size={15} /><span>新建文档</span></button>
+        <button role="menuitem" onClick={() => { onNewChild("sheet"); onClose(); }}><Table size={15} /><span>新建表格</span></button>
+        <button role="menuitem" onClick={() => { onNewChild("bitable"); onClose(); }}><Database size={15} /><span>新建数据表</span></button>
+        <button role="menuitem" onClick={() => { onNewChild("board"); onClose(); }}><PenTool size={15} /><span>新建画板</span></button>
+        <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
+      </Submenu>
       <div className="context-menu-sep" />
       {node.nodeType === "note" ? (
         <>
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
-          <button role="menuitem" onClick={() => { onRevealNoteFile(); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
           <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
-          {/* v6：非 doc（表格/多维表）正文不是 Lake 文档格式，导出会产出坏文件 → 隐藏入口 */}
-          {(node.kind ?? "doc") === "doc" && (
-            <ExportSubmenuItem onExportAs={onExportAs} onCopyMarkdown={onCopyMarkdown} onCopyPaths={onCopyPaths} onClose={onClose} />
-          )}
+          {/* 按文档类型给各自的导出菜单（doc/sheet/bitable/board 不混用）；见 ExportSubmenuItem */}
+          <ExportSubmenuItem kind={node.kind ?? "doc"} onExportAs={onExportAs} onCopyMarkdown={onCopyMarkdown} onCopyPaths={onCopyPaths} onClose={onClose} />
         </>
       ) : (
         <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>

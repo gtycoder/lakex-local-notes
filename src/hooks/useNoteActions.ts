@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { replaceTreeNode } from "../desktop/desktopTypes";
+import type { ExportFormat } from "../components/ExportSubmenuItem";
 import type { TreeNode } from "../lib/types";
 
 export interface UseNoteActionsOptions {
@@ -26,24 +27,38 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
     }
   }, [showNotice]);
 
-  /** M1：收口导出（按 noteId）——右键「导出」子菜单所有格式统一入口（markdown/html/lake/pdf；word 待实现） */
-  const exportNoteById = useCallback(async (noteId: string | null, format: "markdown" | "html" | "lake" | "pdf") => {
+  /**
+   * M1：收口导出（按 noteId）——右键「导出」子菜单统一入口。
+   * doc：markdown/html/pdf；bitable：csv / zip（活动数据表）；sheet 的 csv/xlsx、board 的 png/svg 仍是占位（不从这里调用）。
+   * 原生 Lake 导出已按用户要求**彻底移除**。
+   */
+  const exportNoteById = useCallback(async (noteId: string | null, format: ExportFormat) => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
     // 浏览器端：导出靠系统目录选择框（宿主专属），暂不支持 —— 明确提示，不弹桌面弹窗
     if (!native.capabilities.nativeDialog) { showNotice("浏览器端暂不支持导出（请在桌面端操作）"); return; }
+    if (format === "xlsx" || format === "png" || format === "svg") { showNotice("该导出格式尚在开发中"); return; }
     try {
       const dir = await native.pickExportDir();
       if (!dir) return; // 用户取消
+      if (format === "csv") {
+        const result = await native.exportBitableCsv(noteId, dir);
+        showNotice(`已导出 CSV：${result.exportPath}（${result.rowCount} 条记录）`);
+        return;
+      }
+      if (format === "zip") {
+        const result = await native.exportBitableZip(noteId, dir);
+        const skippedText = result.skipped > 0 ? `（${result.skipped} 个附件缺失已跳过）` : "";
+        showNotice(`已导出压缩包：${result.exportPath}（${result.fileCount} 个附件${skippedText}）`);
+        return;
+      }
       const result = await native.exportNote(noteId, format, dir);
       const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
       if (format === "markdown") {
         showNotice(`已导出 Markdown 资料包到 ${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
       } else if (format === "html") {
         showNotice(`已导出 HTML：${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
-      } else if (format === "pdf") {
-        showNotice(`已导出 PDF：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       } else {
-        showNotice(`已导出原生 Lake：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
+        showNotice(`已导出 PDF：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       }
     } catch (reason) {
       setError("导出失败: " + (getNativeErrorMessage(reason)));
@@ -76,7 +91,7 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
 
   // 文档右键（TreeNode 版）包装
   const copyMarkdownFromCache = useCallback((node: TreeNode) => void copyMarkdownById(node.noteFileId), [copyMarkdownById]);
-  const exportAs = useCallback((node: TreeNode, format: "markdown" | "html" | "lake" | "pdf") => void exportNoteById(node.noteFileId, format), [exportNoteById]);
+  const exportAs = useCallback((node: TreeNode, format: ExportFormat) => void exportNoteById(node.noteFileId, format), [exportNoteById]);
   const copyNotePaths = useCallback((node: TreeNode) => void copyPathsById(node.noteFileId), [copyPathsById]);
 
   return { copyMarkdownById, exportNoteById, copyPathsById, setNodeIcon, copyMarkdownFromCache, exportAs, copyNotePaths };
