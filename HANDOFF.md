@@ -19,7 +19,8 @@
 - UI：设置页新增「AI」分类（供应商 / 模型 / Base URL / API Key / 温度 / 测试连接）+ `settingsSearch` 条目；渲染层 `src/lib/ai.ts`（load/save/test/runAiChat 流式/cancel）。
 - 真实端验证（mock OpenAI + 隔离实例 + CDP）：保存设置 → `aiTestConnection` `{ok:true}` → 流式对话 deltas `["hello"," from"," mock"]`、最终文本 `hello from mock`；主库 `ai_settings` 落盘为 `enc:v1:` 密文、**无明文 Key**。
 - 门禁：tsc / vitest **1523 passed / 16 skipped** / check:core 74-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿。
-- **未做（下一步）**：用户可见的 AI 动作入口（选区浮动工具栏「AI」或顶栏「AI 助手」面板）；按供应商切换的 UI（底层已支持，P0 只内置 OpenAI）。
+- 动作入口：编辑器**选区浮动工具栏「AI」** → `AiAssistantDialog`（预设 润色/译成中文/译成英文/总结/自定义 → 流式输出 → 复制 / 替换选区；**结果不自动改写正文**，由用户决定）。真实端 CDP：拖选文字 → 工具栏出「AI」→ 对话框带入选区文本 + 5 预设 → 生成 → 流式 `hello from mock`。
+- **未做（下一步）**：按供应商切换的 UI（底层已支持，P0 只内置 OpenAI；Base URL 目前可编辑、`editableBaseUrl` 未强制）；顶栏入口/快捷键；对话历史与多轮。
 ### 当前批次 · 260930-LOCK（已实施，本轮提交并推送）
 - 用户 260930：只读锁做成**文档级、按类型统一**的入口，并让"锁"真正落到**内核层**（不能只隐藏工具栏）。
 - **目录栏右键**加入口「锁定（只读）/ 解锁」（与 重命名/历史版本/属性 同组）；`toggleNoteLock(targetNoteId?)` 泛化 ⇒ **不必先打开**文档即可锁；`Sidebar` 增 `lockedNoteIds` / `onToggleLockNote`。
