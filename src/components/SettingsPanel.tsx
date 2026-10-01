@@ -149,6 +149,14 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   };
   /** 拉模型列表：本身就是一次轻量连通验证；失败按字段贴错、回落手填。 */
   const fetchAiModels = async () => {
+    // 没有已存 Key、草稿里也没填 → 先把 Key 输入框打开并明确提示，别发一次注定失败的请求
+    // （用户实测坑：配完 Key 但没走「测试并保存」，Key 未落盘，点拉列表只看到"未配置 API Key"）。
+    if (!activeAi?.hasApiKey && !(aiKeyEditing && aiDraft.apiKey)) {
+      setAiErr({ apiKey: "请先填写 API Key（拉取模型列表需要它）" });
+      setAiKeyEditing(true);
+      setAiMsg("请先填写 API Key，再获取模型列表");
+      return;
+    }
     setAiModelsBusy(true); setAiErr({}); setAiMsg(null); setAiForceSave(false);
     try {
       const r = await native.aiListModels(aiPending);
