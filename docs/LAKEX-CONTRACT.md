@@ -1177,6 +1177,19 @@ PY
 - 评估全文档：工作区根 `lake-kernel-swap-analysis-260908.md`（差距矩阵/换核结论/许可观察）。
 ---
 
+### 5.17 AI 供应商侧（非内核）：真实 DeepSeek 实测结论（260930）
+
+> 这一节记的是**供应商 API**（不是 lakex 内核）的真实行为，来自「本地 mock 端点 + 真实 DeepSeek 账户」实测。
+
+- **`GET {baseUrl}/models` 可用**：`https://api.deepseek.com/v1/models` 与 `/models` 都 200；返回**富结构**：`{ id, name, context_window, max_output_tokens, input_modalities, output_modalities, effort: { supported_levels: ["low","high","max"], default_level }, api_capabilities }`。
+  ⇒ 官方 `openai` SDK 的 `client.models.list()` 能解析（实测 `deepseek-flash, deepseek-v4-pro`）。
+- **思考相关参数**（官方文档 + 实测均确认）：`reasoning_effort: low|high|max`（思考模式默认开、默认 `high`）；开关是 `thinking: { type: "enabled"|"disabled" }`；**思考模式下 `temperature` 不生效**（传了不报错、也不生效）。我们默认发的 `thinking:enabled + reasoning_effort:high` 被 `deepseek-chat` / `deepseek-v4-pro` 正常接受。
+- **模型名写错返回 400 而不是 404**，body 是英文原文：`The supported API model names are deepseek-flash, deepseek-v4-pro, but you passed <name>.` ⇒ 只按状态码归类会漏；`src/core/aiErrors.ts` 因此改为**先按错误类名、再按文案关键词**（含 `supported api model names`），归到 `not_found` + 中文前缀（保留原文里的支持列表）。
+- **Key 无效**：`401`，归到 `auth`（"API Key 无效或已失效"）；`aiTestProvider` 回传 `retryable:false`，UI 硬拦保存。
+- **账户现状**（260930）：模型为 `deepseek-flash`、`deepseek-v4-pro`；旧名 `deepseek-chat` 仍可作别名调用但**不在 /models 列表里**。静态兜底目录已据此更新，**拉取成功时以接口返回为准**。
+
+---
+
 ### 5.16 AI 助手：内核插件形态 + 「替换/后插选区」的正确接法（260930 云端 bundle 取证 + 真机验证）
 
 **云端语雀的 AI 面板是内核插件，不是页面自己写的**（扒云端 240 个 bundle，命中 `doc_editor.*.async.js`）：
