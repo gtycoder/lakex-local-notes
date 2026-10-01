@@ -34,7 +34,7 @@ describe("条目级设置搜索", () => {
   });
 
   it("每条都有分类、标题与定位锚点", () => {
-    const categories = new Set(["editor", "appearance", "shortcuts", "history", "sync", "resources", "trash", "browser", "logs", "about"]);
+    const categories = new Set(["editor", "appearance", "shortcuts", "history", "sync", "ai", "resources", "trash", "browser", "logs", "about"]);
     for (const item of SETTING_ITEMS) {
       expect(categories.has(item.category)).toBe(true);
       expect(item.label.length).toBeGreaterThan(0);

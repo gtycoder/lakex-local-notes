@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Cloud, Coffee, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
+import { AI_PROVIDERS, type AiSettingsPatch, type AiSettingsView } from "../core/aiProviders";
 import { LAKE_THEMES } from "../lib/themes";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
@@ -11,7 +13,7 @@ import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "browser" | "logs" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "resources" | "trash" | "browser" | "logs" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -87,6 +89,28 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [logInfo, setLogInfo] = useState<string | null>(null);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
+  // AI（P0）：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）
+  const [aiView, setAiView] = useState<AiSettingsView | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
+  const activeAi = useMemo(() => aiView?.providers.find((p) => p.id === aiView.activeProviderId) ?? null, [aiView]);
+  const aiProviderId = aiView?.activeProviderId ?? AI_PROVIDERS[0].id;
+  useEffect(() => {
+    if (!open || category !== "ai") return;
+    let alive = true;
+    void native.aiGetSettings().then((v) => { if (alive) setAiView(v); }).catch(() => {});
+    return () => { alive = false; };
+  }, [open, category]);
+  const saveAi = async (patch: AiSettingsPatch) => {
+    try { setAiView(await native.aiSaveSettings(patch)); setAiMsg(null); }
+    catch (e) { setAiMsg(getNativeErrorMessage(e)); }
+  };
+  const testAi = async () => {
+    setAiBusy(true); setAiMsg(null);
+    try { const r = await native.aiTestConnection(); setAiMsg(r.ok ? "连接成功 ✓" : "失败：" + (r.error ?? "未知错误")); }
+    catch (e) { setAiMsg("失败：" + getNativeErrorMessage(e)); }
+    finally { setAiBusy(false); }
+  };
   const [gcCfg, setGcCfg] = useState<{ gcRetentionDays: number; gcIntervalHours: number; trashAutoPurgeDays: number } | null>(null);
   const [gcPending, setGcPending] = useState<number>(0);
   const [gcLog, setGcLog] = useState<Array<{ id: number; ts: string; action: string; key: string; reason: string; ok: boolean }>>([]);
@@ -317,6 +341,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
+    { id: "ai" as const, label: "AI", keywords: "AI 助手 供应商 模型 key api openai deepseek 密钥", icon: <Sparkles size={15} /> },
     { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <ImageIcon size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash size={15} /> },
     { id: "browser" as const, label: "浏览器端", keywords: "浏览器 网页 web 附属窗口 端口 局域网 伺服", icon: <Globe size={15} /> },
@@ -900,6 +925,38 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               </Group>
             )}
 
+            {category === "ai" && (
+              <>
+                <Group title="AI 助手" icon={<Sparkles size={16} />}>
+                  <Item itemId="ai-provider" name="供应商" desc="P0 只内置 OpenAI；结构已按多供应商预留（新增一家只需在目录里加一条）。">
+                    <select className="b3-select fn__size200" value={aiProviderId ?? AI_PROVIDERS[0].id} onChange={(e) => void saveAi({ activeProviderId: e.target.value })}>
+                      {AI_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    </select>
+                  </Item>
+                  <Item itemId="ai-model" name="模型" desc="例如 gpt-4o-mini；可直接手填。">
+                    <TextField label="模型" value={activeAi?.model ?? ""} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, model: v }] })} />
+                  </Item>
+                  <Item itemId="ai-base-url" name="Base URL" desc="OpenAI 默认 https://api.openai.com/v1；留空回落默认。">
+                    <TextField label="Base URL" value={activeAi?.baseUrl ?? ""} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, baseUrl: v }] })} wide />
+                  </Item>
+                  <Item itemId="ai-api-key" name="API Key" desc="加密保存在本机（macOS Keychain），不会同步/上传；留空表示沿用已保存的。">
+                    <TextField label="API Key" type="password" placeholder={activeAi?.hasApiKey ? "已保存（留空沿用）" : "sk-..."} value="" onSave={(v) => { if (v.trim()) void saveAi({ providers: [{ id: aiProviderId, apiKey: v }] }); }} />
+                  </Item>
+                  <Item itemId="ai-temperature" name="温度" desc="0 更稳定、2 更发散。">
+                    <NumField label="温度" min={0} max={2} floor={0} fallback={0.7} value={activeAi?.temperature ?? 0.7} onSave={(n) => void saveAi({ providers: [{ id: aiProviderId, temperature: n }] })} />
+                  </Item>
+                  <Item itemId="ai-test" name="连通性" desc="用当前配置发一次最小真实请求。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" disabled={aiBusy} onClick={() => void testAi()}>{aiBusy ? "测试中…" : "测试连接"}</button>
+                      {aiMsg && <span className="settings-hint">{aiMsg}</span>}
+                    </div>
+                  </Item>
+                </Group>
+                <Group title="说明">
+                  <Block name="内容只在你主动触发时外发" desc="AI 只把你要处理的文本发到上面配置的供应商；API Key 只保存在本机主进程，不参与同步、S3 与备份。" />
+                </Group>
+              </>
+            )}
             {category === "about" && (
               <>
                 {!sysInfo && (
