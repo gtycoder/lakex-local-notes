@@ -109,6 +109,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [aiDraft, setAiDraft] = useState<{ baseUrl?: string; model?: string; apiKey?: string; temperature?: number; reasoningEffort?: AiReasoningEffort; thinking?: AiThinkingMode }>({});
   const [aiKeyEditing, setAiKeyEditing] = useState(false);
   const [aiModels, setAiModels] = useState<string[] | null>(null);
+  /** 模型列表存在时仍强制手填（select 里选「手填…」）。 */
+  const [aiManualModel, setAiManualModel] = useState(false);
   const [aiModelsBusy, setAiModelsBusy] = useState(false);
   /** 连通测试失败但可重试（网络/限流）⇒ 允许「仍要保存」。 */
   const [aiForceSave, setAiForceSave] = useState(false);
@@ -160,7 +162,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     setAiModelsBusy(true); setAiErr({}); setAiMsg(null); setAiForceSave(false);
     try {
       const r = await native.aiListModels(aiPending);
-      if (r.ok) { setAiModels(r.models ?? []); setAiMsg("已获取模型列表：" + (r.models?.length ?? 0) + " 个"); }
+      if (r.ok) {
+        const ms = r.models ?? [];
+        setAiModels(ms); setAiManualModel(false);
+        setAiMsg("已获取模型列表：" + ms.length + " 个");
+        // 还没选模型（如「自定义」默认模型为空）→ 自动选第一个，省得用户对着空下拉
+        setAiDraft((d) => (d.model ?? activeAi?.model) ? d : { ...d, model: ms[0] ?? "" });
+      }
       else { setAiModels(null); setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable)); setAiMsg("拉取模型列表失败：" + (r.error ?? "未知错误")); }
     } catch (e) { setAiMsg("拉取模型列表失败：" + getNativeErrorMessage(e)); }
     finally { setAiModelsBusy(false); }
@@ -179,7 +187,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     setAiBusy(true); setAiErr({}); setAiMsg(null); setAiForceSave(false);
     try {
       const r = await native.aiTestConnection(aiPending);
-      if (r.ok) { await saveAi({ providers: [aiPendingPatch()] }); resetAiDraft(); setAiMsg("连接成功，已保存 ✓"); }
+      if (r.ok) {
+        await saveAi({ providers: [aiPendingPatch()] });
+        resetAiDraft();
+        setAiMsg("连接成功，已保存 ✓");
+        // 连通已证明可用：顺手拉一次列表（用**已保存**配置），让模型下拉马上能选
+        void native.aiListModels().then((lr) => { if (lr.ok && lr.models?.length) { setAiModels(lr.models); setAiManualModel(false); } }).catch(() => {});
+      }
       else { setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable)); setAiMsg("连接失败：" + (r.error ?? "未知错误")); setAiForceSave(Boolean(r.retryable)); }
     } catch (e) { setAiMsg("连接失败：" + getNativeErrorMessage(e)); }
     finally { setAiBusy(false); }
@@ -1034,10 +1048,20 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </div>
                     {aiErr.apiKey && <span className="settings-hint">{aiErr.apiKey}</span>}
                   </Item>
-                  <Item itemId="ai-model" name="模型" desc="从供应商拉取候选（这一步同时验证连通性）；端点不实现 /models 时直接手填。">
+                  <Item itemId="ai-model" name="模型" desc="从供应商拉取候选（这一步同时验证连通性）；端点不实现 /models 时可手填。">
                     <div className="config-block__actions">
-                      <span className="ln-input"><input className="ln-input__field" list="ai-model-options" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} /></span>
-                      <datalist id="ai-model-options">{(aiModels ?? []).map((m) => <option key={m} value={m} />)}</datalist>
+                      {aiModels && aiModels.length > 0 && !aiManualModel ? (
+                        <select className="b3-select fn__size200" value={aiPending.model} onChange={(e) => { const v = e.target.value; if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }}>
+                          {aiModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                          {aiPending.model && aiModels.indexOf(aiPending.model) < 0 && <option value={aiPending.model}>{aiPending.model}</option>}
+                          <option value="__manual__">手填…</option>
+                        </select>
+                      ) : (
+                        <>
+                          <span className="ln-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} /></span>
+                          {aiModels && aiModels.length > 0 && <button className="b3-button b3-button--outline" onClick={() => setAiManualModel(false)}>用列表</button>}
+                        </>
+                      )}
                       <button className="b3-button b3-button--outline" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>{aiModelsBusy ? "拉取中…" : "获取模型列表"}</button>
                     </div>
                     {aiErr.model && <span className="settings-hint">{aiErr.model}</span>}
