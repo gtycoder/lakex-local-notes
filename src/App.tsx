@@ -69,7 +69,8 @@ export function App() {
   const replaceActiveSelection = useCallback((text: string) => {
     const editor = activeNoteId ? editorsRef.current.get(activeNoteId) : null;
     if (!editor) return;
-    try { editor.execCommand?.("insertAtSelection", "text/plain", text); } catch { /* 命令不可用时忽略，结果仍可复制 */ }
+    // 与选区入口一致：用 text/markdown 让内核把模型输出的 MD 转成 Lake 节点。
+    try { editor.execCommand?.("insertAtSelection", "text/markdown", text); } catch { /* 命令不可用时忽略，结果仍可复制 */ }
   }, [activeNoteId, editorsRef]);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });

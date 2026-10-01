@@ -307,10 +307,10 @@ export function SelectionToolbar({ editor, container }: {
         try {
           // 把内核选区折叠到捕获范围的**末尾**再插入 ⇒ 落到选区之后（对应云端「插入选区下方」）。
           if (applyModelRangeAtEnd(editor, aiModelRangeRef.current)) {
-            editor.execCommand?.("insertAtSelection", "text/plain", text);
+            editor.execCommand?.("insertAtSelection", "text/markdown", text);
             return;
           }
-          editor.execCommand?.("insertAtSelection", "text/plain", text);
+          editor.execCommand?.("insertAtSelection", "text/markdown", text);
         } catch { /* 命令不可用时忽略，结果仍可复制 */ }
       }}
       onReplace={(text) => {
@@ -318,15 +318,16 @@ export function SelectionToolbar({ editor, container }: {
           // 首选：把打开前捕获的**内核模型选区**设回内核，再按当前选区插入 ⇒ 非折叠 = 替换。
           // 依据 = 云端 lakex AI 面板同款做法（selection 命令 + 内核插入），不需要 DOM→view 映射。
           if (applyModelRange(editor, aiModelRangeRef.current)) {
-            editor.execCommand?.("insertAtSelection", "text/plain", text);
+            editor.execCommand?.("insertAtSelection", "text/markdown", text);
             return;
           }
-          // 兜底：拿不到模型选区时，恢复 DOM 选区走浏览器 insertText。
+          // 格式用 text/markdown：模型输出天然是 MD，交给内核转成 Lake 节点（**加粗**/- 列表 等不会以字面量落盘）。
+          // 兜底：拿不到模型选区时，恢复 DOM 选区走浏览器 insertText（这条只能纯文本）。
           const range = aiRangeRef.current;
           const sel = window.getSelection();
           if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
           if (!document.execCommand("insertText", false, text)) {
-            editor.execCommand?.("insertAtSelection", "text/plain", text);
+            editor.execCommand?.("insertAtSelection", "text/markdown", text);
           }
         } catch { /* 命令不可用时忽略，结果仍可复制 */ }
       }}
