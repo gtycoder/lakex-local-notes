@@ -25,9 +25,7 @@ export interface AiProviderDef {
   protocol: AiProtocol;
   defaultBaseUrl: string;
   defaultModel: string;
-  /** 允许用户改 Base URL（现在一律可改，预填默认值 + 可一键恢复）。 */
-  editableBaseUrl?: boolean;
-  /** 模型候选（空 = 纯手填）。 */
+  /** 模型候选（离线兜底；拉取成功时以接口返回为准）。 */
   models?: string[];
   defaultTemperature?: number;
   /** 该家是否支持「思考强度」（reasoning_effort）。 */
@@ -35,8 +33,6 @@ export interface AiProviderDef {
   /** 该家是否支持「思考模式」开关（DeepSeek 的 thinking）。 */
   supportsThinking?: boolean;
   defaultReasoningEffort?: AiReasoningEffort;
-  /** 模型列表接口路径（OpenAI 兼容默认 `/models`；不支持的端点拉取会失败并回落手填）。 */
-  modelsPath?: string;
 }
 
 export const AI_PROVIDERS: readonly AiProviderDef[] = [
@@ -46,7 +42,6 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     protocol: "openai-compatible",
     defaultBaseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o-mini",
-    editableBaseUrl: true,
     models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"],
     defaultTemperature: 0.7,
     supportsReasoning: true,
@@ -59,7 +54,6 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     // 260930 按真实账户的 GET /models 更新（旧值 deepseek-chat/deepseek-reasoner 已不在列表里，
     // 但 deepseek-chat 仍可作别名调用）；拉取成功时以接口返回为准，这里只是离线兜底。
     defaultModel: "deepseek-flash",
-    editableBaseUrl: true,
     models: ["deepseek-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
     defaultTemperature: 0.7,
     // DeepSeek：思考模式默认开启、effort 默认 high；思考模式下 temperature 会被忽略（官方文档）。
@@ -73,7 +67,6 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     protocol: "openai-compatible",
     defaultBaseUrl: "http://127.0.0.1:11434/v1",
     defaultModel: "",
-    editableBaseUrl: true,
     models: [],
     defaultTemperature: 0.7,
   },

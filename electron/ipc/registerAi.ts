@@ -1,9 +1,9 @@
 import type { IpcMainInvokeEvent } from "electron";
 import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
-import { aiChat, aiListModels, aiTestProvider, normalizeAiError, type AiMessage } from "../ai/aiClient.js";
+import { aiChat, aiListModels, aiTestProvider, type AiMessage } from "../ai/aiClient.js";
 import { activeAiProvider, aiSettingsView, mergeAiSettings, type AiProviderPatch, type AiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
-import { aiErrorInfo } from "../../src/core/aiErrors.js";
+import { aiErrorInfo, aiErrorMessage } from "../../src/core/aiErrors.js";
 import { AppError } from "../../src/core/storeErrors.js";
 
 /**
@@ -90,7 +90,7 @@ export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
       });
       return { ok: true, text };
     } catch (err) {
-      return { ok: false, error: normalizeAiError(err) };
+      return { ok: false, error: aiErrorMessage(err) };
     } finally {
       inflight.delete(id);
     }

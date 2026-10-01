@@ -7,11 +7,13 @@ import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
 import type { AiChatMessage } from "../../core/aiProviders";
 
 /**
- * AI 助手对话框（P0/P1）。
+ * AI 助手浮动面板。
  *
- * - 有选区（编辑器浮动工具栏入口）→ 预设 润色/翻译/总结 + 自定义；无选区（顶栏入口）→ 直接从自定义提问。
+ * - 进入即「向智能助手提问…」输入框（**无预设**）；有选区时选区作为上下文随指令发出，
+ *   面板内**不回显**原文（对齐云端形态）。
  * - **多轮**：首次生成后可继续追问，历史（含首次拼好的 prompt）作为上下文继续发。
- * - 结果**不自动改写正文**：由用户点「复制 / 替换选区」（替换作用于最后一条回复）。
+ * - 结果**不自动改写正文**：由用户点「替换选区 / 插入到选区后 / 复制 / 重新生成」。
+ *   回写一律用 `insertAtSelection("text/markdown", …)`，由内核把 MD 转成 Lake 节点。
  */
 interface Turn { role: "user" | "assistant"; text: string }
 

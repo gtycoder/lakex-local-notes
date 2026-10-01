@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { AiChatMessage, AiProviderConfig, AiReasoningEffort, AiThinkingMode } from "../../src/core/aiProviders.js";
-import { aiErrorInfo, aiErrorMessage } from "../../src/core/aiErrors.js";
+import { aiErrorInfo } from "../../src/core/aiErrors.js";
 
 /**
  * 主进程 AI 网关（P0：OpenAI / OpenAI 兼容）。
@@ -103,6 +103,3 @@ export async function aiTestProvider(provider: AiProviderConfig, factory: AiClie
 export async function aiListModels(provider: AiProviderConfig, factory: AiClientFactory = defaultAiClientFactory): Promise<string[]> {
   return factory(provider).listModels();
 }
-
-/** 兼容旧调用点：错误分类已抽到 `src/core/aiErrors.ts`（纯函数 + 单测）。 */
-export const normalizeAiError = aiErrorMessage;

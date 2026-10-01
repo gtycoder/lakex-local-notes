@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { aiChat, aiTestProvider, normalizeAiError, type AiClientFactory } from "./aiClient.js";
+import { aiChat, aiTestProvider, type AiClientFactory } from "./aiClient.js";
+import { aiErrorMessage as normalizeAiError } from "../../src/core/aiErrors.js";
 import { defaultAiProviderConfig } from "../../src/core/aiProviders.js";
 
 function provider(over: Partial<ReturnType<typeof defaultAiProviderConfig>> = {}) {
