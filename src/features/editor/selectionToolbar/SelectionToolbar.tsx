@@ -514,11 +514,11 @@ export function SelectionToolbar({ editor, container }: {
           onReplace={(text) => {
             try {
               // 恢复打开对话框前的选区（否则内核已折叠到起点 → 变成"插入"）
+              // 恢复打开前的 DOM 选区后走浏览器 insertText（模态框已折叠内核选区 ⇒ 只会落在原选区起点）。
+              // modelRange 第三参（契约 §5.8）试过：构造出的 range 传进去直接 no-op，形状未对齐，见 HANDOFF。
               const range = aiRangeRef.current;
               const sel = window.getSelection();
               if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
-              // 浏览器 insertText 会**替换**当前 DOM 选区；内核监听 input 同步进模型（与 CardContextMenu 同路径）。
-              // 内核 insertAtSelection 走的是它自己的选区模型，对话框抢焦点后已被折叠 ⇒ 会变成"插入"。
               if (!document.execCommand("insertText", false, text)) {
                 editor.execCommand?.("insertAtSelection", "text/plain", text);
               }
