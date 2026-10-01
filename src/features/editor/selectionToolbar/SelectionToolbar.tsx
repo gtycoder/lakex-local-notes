@@ -147,6 +147,8 @@ export function SelectionToolbar({ editor, container }: {
   const aiSelectionRef = useRef("");
   /** 打开对话框会丢焦点 → 内核选区被折叠。这里克隆 DOM Range，替换前恢复，保证「替换」而不是「插入」。 */
   const aiRangeRef = useRef<Range | null>(null);
+  /** 打开时选区的视口落点（面板贴选区悬浮，无遮罩）。 */
+  const aiAtRef = useRef<{ x: number; y: number } | null>(null);
   /** 打开对话框前捕获的**内核模型选区**（替换用；模型态不随焦点丢失）。 */
   const aiModelRangeRef = useRef<CapturedModelRange | null>(null);
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */
@@ -298,6 +300,7 @@ export function SelectionToolbar({ editor, container }: {
   const aiDialog = aiOpen ? (
     <AiAssistantDialog
       open
+      at={aiAtRef.current}
       selectionText={aiSelectionRef.current}
       onClose={() => { setAiOpen(false); setMenu(null); aiRangeRef.current = null; aiModelRangeRef.current = null; }}
       onInsertAfter={(text) => {
@@ -425,6 +428,8 @@ export function SelectionToolbar({ editor, container }: {
           const sel = window.getSelection();
           aiSelectionRef.current = sel?.toString() ?? "";
           aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+          const aiRect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
+          aiAtRef.current = aiRect && (aiRect.width || aiRect.height) ? { x: aiRect.left, y: aiRect.bottom + 8 } : null;
           aiModelRangeRef.current = captureModelRange(editor);
           setMenu("ai"); setAiOpen(true);
         }}>

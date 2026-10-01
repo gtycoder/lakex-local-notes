@@ -119,6 +119,7 @@
    表面/按钮复用 Overlay 的 .ln-dialog / kit 的 .ln-btn；这里只补内容布局。 */
 /* AI 助手：视觉对齐云端语雀智能助手（近白面板 + 1px 分隔 + 8~12px 圆角 + 14px 正文、左对齐灰底疑问/白底回答）。 */
 .ai-dialog__presets { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 12px 16px 0; }
+.ai-dialog .ln-dialog__actions { flex-wrap: wrap; gap: 6px; padding: 6px 16px 12px; }
 .ai-dialog__presets .ln-btn--ghost { padding: 2px 8px; border-radius: var(--lake-radius-sm); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .ai-dialog__presets .ln-btn--ghost.is-selected { color: var(--lake-accent); font-weight: 600; }
 .ai-dialog__input { display: block; width: calc(100% - 32px); min-height: 44px; margin: 10px 16px 12px; padding: 8px 10px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-small); resize: vertical; }

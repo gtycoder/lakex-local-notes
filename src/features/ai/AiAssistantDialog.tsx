@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, CornerDownRight, RotateCcw, Sparkles, X } from "lucide-react";
-import { Dialog } from "../../components/ui/Overlay";
+import { Popover } from "../../components/ui/Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
 import type { AiChatMessage } from "../../core/aiProviders";
 
@@ -21,8 +22,12 @@ const PRESETS = [
 
 interface Turn { role: "user" | "assistant"; text: string }
 
-export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter }: {
+export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at }: {
   open: boolean; selectionText: string; onClose: () => void;
+  /** 贴靠的锚点元素（浮动工具栏的 AI 按钮）——给了就悬浮在它下方，无遮罩、不压暗文档。 */
+  anchor?: HTMLElement | null;
+  /** 无锚点时的落点（顶栏入口）；缺省落在右上角。 */
+  at?: { x: number; y: number } | null;
   /** 替换选区内容（无选区时= 插到光标处）。 */
   onReplace?: (text: string) => void;
   /** 插到选区**之后**（无选区时不提供）。 */
@@ -112,10 +117,13 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     await send(messages);
   };
   const stop = () => { if (reqRef.current) void cancelAiChat(reqRef.current); };
+  // 贴选区/锚点悬浮（无遮罩）：与格式浮栏同款定位原语，贴底自动翻上方。
+  const fallbackAt = { x: Math.max(16, window.innerWidth - 456), y: 64 };
+  const pos = usePopoverPosition({ open, anchor: anchor ?? null, at: at ?? (anchor ? null : fallbackAt), width: 420, align: "start", side: "below", gap: 8 });
   const copy = () => { void navigator.clipboard?.writeText(lastOutput); };
 
   return (
-    <Dialog open={open} onDismiss={onClose} label="AI 助手">
+    <Popover open={open} onDismiss={onClose} style={pos.style ?? undefined} surfaceRef={pos.surfaceRef} className="ai-dialog" label="AI 助手">
       <header className="ln-dialog__head"><h3 className="ln-dialog__title"><Sparkles size={15} /> AI 助手</h3></header>
       <div className="ln-dialog__body">
         {turns.length === 0 ? (
@@ -159,6 +167,6 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
         <button type="button" className="ln-btn ln-btn--primary" disabled={!lastOutput || !onReplace} onClick={() => { onReplace?.(lastOutput); onClose(); }}><Check size={14} /> 替换选区</button>
         <button type="button" className="ln-btn" onClick={onClose}><X size={14} /> 关闭</button>
       </div>
-    </Dialog>
+    </Popover>
   );
 }
