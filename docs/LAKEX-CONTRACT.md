@@ -1175,3 +1175,23 @@ PY
 - 应用锚点：`src/features/editor/lakeRuntime.ts`（实例化 540-815、私有字段 466-905、命令 454-538）、`EditorTab.tsx`、`LakeEditor.tsx`、`editorCommands.ts`、`canvasInteractionGate.tsx`、`mediaCardRouting.ts`、`attachmentPreviewController.ts`。
 - 镜像/注入：`public/vendor/cdn/**`、`electron/cdnRedirect.ts`、`electron/assetServer.ts`。
 - 评估全文档：工作区根 `lake-kernel-swap-analysis-260908.md`（差距矩阵/换核结论/许可观察）。
+---
+
+### 5.16 AI 助手：内核插件形态 + 「替换/后插选区」的正确接法（260930 云端 bundle 取证 + 真机验证）
+
+**云端语雀的 AI 面板是内核插件，不是页面自己写的**（扒云端 240 个 bundle，命中 `doc_editor.*.async.js`）：
+
+- 注册：`pluginRegister({ pluginName:"ai", command:{ aiInsert, aiInsertCard, aiDelete }, service:{ IAIEditorService, IAIViewerService }, toolbar:{ deepSeek } })`，默认选项 `{ api:"", showSelectToolbar:true }`；工具条项类名 `ne-ui-toolbar-deep-seek`。
+- 「替换选中内容」= `kernel.execCommand("aiInsert", { dataType:"text/plain", data, select, insertAtAfter:false })`；「插入选区下方」= 同命令 `insertAtAfter:true`。
+- `AIInsertCommand.execute` 拿 **job 的当前选区**做 `SelectionUtil.insertINode`（非折叠=替换）；插件自设 `plugin.ignoreSelectionChange = true` 护住选区 ⇒ 浮层抢焦点也不塌。
+
+**我们 vendored 内核（`@alipay/lakex-doc` v1.99.0）这几样全无**：`aiInsert`/`aiInsertCard`/`aiDelete`/`deepSeek`/`ignoreSelectionChange` 实测计数皆为 0；公开 npm 也没有（同族 `@lakex-react/core@0.2.1` 同样为 0）。
+
+**自己拼的正确接法（已真机验证 ✅）**：
+
+1. **打开 AI 面板前**捕获**内核模型选区** `kernel.document.selection.firstRange` 的 `{start:{node,offset}, end:{node,offset}}`（模型态；浮层抢焦点也不丢）—— `aiModelSelection.ts` 的 `captureModelRange()`。
+2. **替换**：用内核 `selection` 命令把选区设回 `{start, end}`，再 `insertAtSelection("text/plain", text)` —— 非折叠即替换（`applyModelRange()`）。
+3. **插到选区之后**：把内核选区设成**折叠在 `end`**（`{start: end, end: end}`）再 `insertAtSelection`（`applyModelRangeAtEnd()`）。
+4. 真实鼠标选中下实测：替换成立，且焦点在编辑器时 **⌘Z 可撤销**。
+
+**反面教材（都试过、都不通）**：`renderer.toViewRange`/`engine.transformDOMRange` 一律返回 null（`dM→dF→cv` 拿不到 view node）；`createModelRange(...)` 当第三参传 `insertAtSelection` → no-op；浏览器 `insertText` / 聚焦+恢复 DOM Range → 插到起点或 no-op；官方 `insertText`/`insertAtSelection` 都依赖「内核当前选区」，而**合成 DOM 选区同步不进内核模型**（CDP 合成拖选后 `firstRange` offset 恒 0/0）⇒ **自动化验证不了，必须真实鼠标**。
