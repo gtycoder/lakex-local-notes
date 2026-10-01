@@ -12,14 +12,6 @@ import type { AiChatMessage } from "../../core/aiProviders";
  * - **多轮**：首次生成后可继续追问，历史（含首次拼好的 prompt）作为上下文继续发。
  * - 结果**不自动改写正文**：由用户点「复制 / 替换选区」（替换作用于最后一条回复）。
  */
-const PRESETS = [
-  { id: "polish", label: "润色", instruction: "请润色下面的文字：保持原意和语言不变，修正语病与措辞，只输出润色后的正文。" },
-  { id: "zh", label: "译成中文", instruction: "把下面的文字翻译成简体中文，只输出译文。" },
-  { id: "en", label: "译成英文", instruction: "Translate the following text into English. Output only the translation." },
-  { id: "summary", label: "总结", instruction: "用简洁的中文要点总结下面的文字，只输出总结。" },
-  { id: "custom", label: "自定义", instruction: "" },
-] as const;
-
 interface Turn { role: "user" | "assistant"; text: string }
 
 export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at }: {
@@ -33,7 +25,6 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
   /** 插到选区**之后**（无选区时不提供）。 */
   onInsertAfter?: (text: string) => void;
 }) {
-  const [preset, setPreset] = useState<string>("polish");
   const [instruction, setInstruction] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -44,17 +35,14 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
 
   useEffect(() => {
     if (!open) return;
-    // 有选区 → 默认「润色」；无选区（顶栏入口）→ 默认「自定义」，让用户直接提问。
-    setPreset(selectionText.trim() ? "polish" : "custom");
     setInstruction(""); setFollowUp(""); setTurns([]); setError(null); setBusy(false);
     reqRef.current = null; historyRef.current = [];
   }, [open, selectionText]);
 
-  const active = PRESETS.find((p) => p.id === preset) ?? PRESETS[0];
-  const instructionText = preset === "custom" ? instruction : active.instruction;
-  const firstPrompt = selectionText.trim() ? instructionText + "\n\n" + selectionText : instructionText;
+  // 无预设：进来就是自定义提问；选区只作为**上下文**附在后面（不在面板里回显原文，对齐云端）。
+  const firstPrompt = selectionText.trim() ? instruction.trim() + "\n\n" + selectionText : instruction.trim();
   const lastOutput = [...turns].reverse().find((t) => t.role === "assistant")?.text ?? "";
-  const canSendFirst = Boolean(selectionText.trim() || instruction.trim());
+  const canSendFirst = Boolean(instruction.trim());
 
   const appendAssistant = (delta: string) => setTurns((prev) => {
     const next = prev.slice();
@@ -91,7 +79,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     const messages: AiChatMessage[] = [...base, { role: "user", content }];
     historyRef.current = messages;
     setTurns((prev) => [...(first ? [] : prev),
-      { role: "user", text: first ? (selectionText.trim() || instructionText) : followUp.trim() },
+      { role: "user", text: first ? instruction.trim() : followUp.trim() },
       { role: "assistant", text: "" }]);
     setFollowUp("");
     await send(messages);
@@ -127,17 +115,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
       <header className="ln-dialog__head"><h3 className="ln-dialog__title"><Sparkles size={15} /> AI 助手</h3></header>
       <div className="ln-dialog__body">
         {turns.length === 0 ? (
-          <>
-            <div className="ai-dialog__presets">
-              {PRESETS.map((p) => (
-                <button key={p.id} type="button" className={"ln-btn ln-btn--ghost" + (p.id === preset ? " is-selected" : "")} onClick={() => setPreset(p.id)}>{p.label}</button>
-              ))}
-            </div>
-            {preset === "custom" && (
-              <textarea className="ai-dialog__input" rows={2} placeholder="要让 AI 做什么？例如：把这几点整理成一段话" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
-            )}
-            {selectionText.trim() && <pre className="ai-dialog__source">{selectionText}</pre>}
-          </>
+          <textarea className="ai-dialog__input" rows={2} autoFocus placeholder="向智能助手提问…" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
         ) : (
           <>
             <div className="ai-dialog__thread">
