@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { AiChatMessage, AiProviderConfig } from "../../src/core/aiProviders.js";
+import type { AiChatMessage, AiProviderConfig, AiReasoningEffort, AiThinkingMode } from "../../src/core/aiProviders.js";
 import { aiErrorMessage } from "../../src/core/aiErrors.js";
 
 /**
@@ -19,6 +19,10 @@ export interface AiStreamArgs {
   model: string;
   messages: AiMessage[];
   temperature: number;
+  /** 思考强度：DeepSeek 的 `reasoning_effort`（low/high/max）。 */
+  reasoningEffort?: AiReasoningEffort;
+  /** 思考模式开关：DeepSeek 的 `thinking: { type }`。 */
+  thinking?: AiThinkingMode;
   signal?: AbortSignal;
 }
 
@@ -27,6 +31,8 @@ export interface AiChatClient {
   streamChat(args: AiStreamArgs): AsyncIterable<string>;
   /** 连通性探测：一次极小的真实请求。 */
   ping(model: string): Promise<void>;
+  /** 模型列表（OpenAI 兼容 `GET /models`）；端点不支持时抛错，由调用方回落手填。 */
+  listModels(): Promise<string[]>;
 }
 export type AiClientFactory = (provider: AiProviderConfig) => AiChatClient;
 
@@ -34,11 +40,16 @@ export function defaultAiClientFactory(provider: AiProviderConfig): AiChatClient
   // maxRetries 交给 SDK（它懂指数退避与 retry-after）；我们只把它调到 1 次，避免默认 2 次叠上我们的重试。
   const client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseUrl, maxRetries: 1 });
   return {
-    async *streamChat({ model, messages, temperature, signal }) {
-      const stream = await client.chat.completions.create(
-        { model, messages: messages as never, temperature, stream: true },
-        { signal },
-      );
+    async *streamChat({ model, messages, temperature, reasoningEffort, thinking, signal }) {
+      // 思考相关参数不在 SDK 的通用类型里，按需附加；只在供应商声明支持时才由上层传入。
+      const extra: Record<string, unknown> = {};
+      if (reasoningEffort) extra.reasoning_effort = reasoningEffort;
+      if (thinking) extra.thinking = { type: thinking };
+      const body: Record<string, unknown> = { model, messages, temperature, stream: true, ...extra };
+      // 整体断言会丢掉 SDK 的「流式」重载（返回类型退化为非流式），故只对返回值断言。
+      const stream = (await client.chat.completions.create(body as never, { signal })) as unknown as AsyncIterable<{
+        choices?: { delta?: { content?: string } }[];
+      }>;
       for await (const chunk of stream) {
         const delta = chunk.choices?.[0]?.delta?.content;
         if (delta) yield delta;
@@ -47,6 +58,10 @@ export function defaultAiClientFactory(provider: AiProviderConfig): AiChatClient
     async ping(model) {
       // 最小真实请求：max_tokens=1，验证 key/baseUrl/model 三者都可用
       await client.chat.completions.create({ model, messages: [{ role: "user", content: "ping" }], max_tokens: 1, temperature: 0 });
+    },
+    async listModels() {
+      const res = await client.models.list();
+      return (res.data ?? []).map((m) => m.id).filter((id): id is string => Boolean(id)).sort();
     },
   };
 }
@@ -64,7 +79,7 @@ export async function aiChat({ provider, messages, signal, onDelta, factory = de
   const client = factory(provider);
   let text = "";
   // 重试由 client 一侧负责（默认工厂已给 SDK maxRetries:1）；这里再重试会造成双重重试与重复输出。
-  for await (const delta of client.streamChat({ model: provider.model, messages, temperature: provider.temperature, signal })) {
+  for await (const delta of client.streamChat({ model: provider.model, messages, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, thinking: provider.thinking, signal })) {
     text += delta;
     onDelta?.(delta);
   }
@@ -81,6 +96,11 @@ export async function aiTestProvider(provider: AiProviderConfig, factory: AiClie
   } catch (err) {
     return { ok: false, error: normalizeAiError(err) };
   }
+}
+
+/** 拉取模型列表（供设置页下拉）；失败时抛原始错误，由 IPC 层用 aiErrors 归类。 */
+export async function aiListModels(provider: AiProviderConfig, factory: AiClientFactory = defaultAiClientFactory): Promise<string[]> {
+  return factory(provider).listModels();
 }
 
 /** 兼容旧调用点：错误分类已抽到 `src/core/aiErrors.ts`（纯函数 + 单测）。 */

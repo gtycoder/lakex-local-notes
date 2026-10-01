@@ -12,17 +12,31 @@
 /** 协议：P0 只实现 openai-compatible（DeepSeek / Ollama / OneAPI / vLLM 都属这一类）。 */
 export type AiProtocol = "openai-compatible";
 
+/** 思考强度（DeepSeek 官方参数 `reasoning_effort`；OpenAI o 系列同义）。 */
+export type AiReasoningEffort = "low" | "high" | "max";
+/** 思考模式开关（DeepSeek 的 `thinking: {type}`）。 */
+export type AiThinkingMode = "enabled" | "disabled";
+export const AI_REASONING_EFFORTS: readonly AiReasoningEffort[] = ["low", "high", "max"];
+export const AI_THINKING_MODES: readonly AiThinkingMode[] = ["enabled", "disabled"];
+
 export interface AiProviderDef {
   id: string;
   label: string;
   protocol: AiProtocol;
   defaultBaseUrl: string;
   defaultModel: string;
-  /** 允许用户改 Base URL（自定义/兼容端点）；false = 只读展示默认值。 */
+  /** 允许用户改 Base URL（现在一律可改，预填默认值 + 可一键恢复）。 */
   editableBaseUrl?: boolean;
   /** 模型候选（空 = 纯手填）。 */
   models?: string[];
   defaultTemperature?: number;
+  /** 该家是否支持「思考强度」（reasoning_effort）。 */
+  supportsReasoning?: boolean;
+  /** 该家是否支持「思考模式」开关（DeepSeek 的 thinking）。 */
+  supportsThinking?: boolean;
+  defaultReasoningEffort?: AiReasoningEffort;
+  /** 模型列表接口路径（OpenAI 兼容默认 `/models`；不支持的端点拉取会失败并回落手填）。 */
+  modelsPath?: string;
 }
 
 export const AI_PROVIDERS: readonly AiProviderDef[] = [
@@ -32,9 +46,10 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     protocol: "openai-compatible",
     defaultBaseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o-mini",
-    editableBaseUrl: false,
+    editableBaseUrl: true,
     models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"],
     defaultTemperature: 0.7,
+    supportsReasoning: true,
   },
   {
     id: "deepseek",
@@ -42,9 +57,13 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     protocol: "openai-compatible",
     defaultBaseUrl: "https://api.deepseek.com/v1",
     defaultModel: "deepseek-chat",
-    editableBaseUrl: false,
+    editableBaseUrl: true,
     models: ["deepseek-chat", "deepseek-reasoner"],
     defaultTemperature: 0.7,
+    // DeepSeek：思考模式默认开启、effort 默认 high；思考模式下 temperature 会被忽略（官方文档）。
+    supportsReasoning: true,
+    supportsThinking: true,
+    defaultReasoningEffort: "high",
   },
   {
     id: "custom",
@@ -73,6 +92,10 @@ export interface AiProviderConfig {
   model: string;
   apiKey?: string;
   temperature: number;
+  /** 仅在 supportsReasoning 的供应商上发送。 */
+  reasoningEffort?: AiReasoningEffort;
+  /** 仅在 supportsThinking 的供应商上发送。 */
+  thinking?: AiThinkingMode;
 }
 
 export interface AiSettings {
@@ -88,6 +111,8 @@ export interface AiProviderView {
   baseUrl: string;
   model: string;
   temperature: number;
+  reasoningEffort?: AiReasoningEffort;
+  thinking?: AiThinkingMode;
   hasApiKey: boolean;
 }
 export interface AiSettingsView {
@@ -102,6 +127,8 @@ export interface AiProviderPatch {
   baseUrl?: string;
   model?: string;
   temperature?: number;
+  reasoningEffort?: AiReasoningEffort;
+  thinking?: AiThinkingMode;
   apiKey?: string;
   clearApiKey?: boolean;
 }
@@ -118,6 +145,8 @@ export function defaultAiProviderConfig(id: string = DEFAULT_AI_PROVIDER_ID): Ai
     baseUrl: def.defaultBaseUrl,
     model: def.defaultModel,
     temperature: def.defaultTemperature ?? DEFAULT_TEMPERATURE,
+    reasoningEffort: def.supportsReasoning ? def.defaultReasoningEffort : undefined,
+    thinking: def.supportsThinking ? "enabled" : undefined,
   };
 }
 
@@ -131,6 +160,9 @@ export function defaultAiSettings(): AiSettings {
 
 function asTrimmed(v: unknown, fallback: string): string {
   return typeof v === "string" && v.trim() ? v.trim() : fallback;
+}
+function asEnum<T extends string>(v: unknown, allowed: readonly T[]): T | undefined {
+  return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : undefined;
 }
 function clampTemperature(v: unknown, fallback: number): number {
   const n = typeof v === "number" ? v : Number(v);
@@ -155,6 +187,8 @@ export function normalizeAiSettings(raw: unknown): AiSettings {
       model: asTrimmed(v.model, fallback.model),
       apiKey: typeof v.apiKey === "string" && v.apiKey ? v.apiKey : undefined,
       temperature: clampTemperature(v.temperature, fallback.temperature),
+      reasoningEffort: asEnum(v.reasoningEffort, AI_REASONING_EFFORTS),
+      thinking: asEnum(v.thinking, AI_THINKING_MODES),
     };
   }
   if (Object.keys(providers).length === 0) providers[DEFAULT_AI_PROVIDER_ID] = defaultAiProviderConfig();
@@ -179,6 +213,8 @@ export function mergeAiSettings(current: AiSettings, patch: AiSettingsPatch): Ai
       model: asTrimmed(p.model, base.model),
       apiKey,
       temperature: clampTemperature(p.temperature, base.temperature),
+      reasoningEffort: asEnum(p.reasoningEffort, AI_REASONING_EFFORTS) ?? base.reasoningEffort,
+      thinking: asEnum(p.thinking, AI_THINKING_MODES) ?? base.thinking,
     };
   }
   if (Object.keys(providers).length === 0) providers[DEFAULT_AI_PROVIDER_ID] = defaultAiProviderConfig();
@@ -198,6 +234,8 @@ export function aiSettingsView(settings: AiSettings): AiSettingsView {
       baseUrl: c.baseUrl,
       model: c.model,
       temperature: c.temperature,
+      reasoningEffort: c.reasoningEffort,
+      thinking: c.thinking,
       hasApiKey: Boolean(c.apiKey),
     })),
   };

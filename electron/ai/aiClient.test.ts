@@ -8,6 +8,7 @@ function provider(over: Partial<ReturnType<typeof defaultAiProviderConfig>> = {}
 const fakeFactory = (deltas: string[], pong: () => void = () => {}) : AiClientFactory => () => ({
   async *streamChat() { for (const d of deltas) yield d; },
   async ping() { pong(); },
+  async listModels() { return ["fake-model"]; },
 });
 
 describe("主进程 aiClient", () => {
@@ -43,6 +44,7 @@ describe("重试职责", () => {
     const factory: AiClientFactory = () => ({
       async *streamChat() { calls += 1; throw Object.assign(new Error("rate limited"), { status: 429 }); },
       async ping() {},
+      async listModels() { return []; },
     });
     await expect(aiChat({ provider: provider(), messages: [{ role: "user", content: "hi" }], factory })).rejects.toThrow();
     expect(calls).toBe(1);
