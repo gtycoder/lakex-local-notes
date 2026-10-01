@@ -9,6 +9,7 @@ import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
+import type { AiSettings } from "../src/core/aiProviders.js";
 import { emptySheetBody } from "../src/core/sheetDoc.js";
 import { emptyBitableBody } from "../src/core/bitableDoc.js";
 import { emptyBoardBody } from "../src/core/boardDoc.js";
@@ -1050,6 +1051,15 @@ export class Store {
 
   saveHistorySettings(settings: HistorySettings): void {
     this.settingsRepository.saveHistorySettings(settings);
+  }
+
+  /** AI 设置（P0）：密钥加密落盘、独立 key，不参与 S3/同步/导出。 */
+  getAiSettings(): AiSettings {
+    return this.settingsRepository.getAiSettings();
+  }
+
+  saveAiSettings(settings: AiSettings): void {
+    this.settingsRepository.saveAiSettings(settings);
   }
 
   saveS3Settings(settings: S3Settings): void {

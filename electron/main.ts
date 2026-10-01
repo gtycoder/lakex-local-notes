@@ -24,6 +24,7 @@ import { registerWebIpc } from "./ipc/registerWeb.js";
 import { registerSyncIpc } from "./ipc/registerSync.js";
 import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 import { registerLogIpc } from "./ipc/registerLogIpc.js";
+import { registerAiIpc } from "./ipc/registerAi.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
@@ -413,6 +414,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
   }, enqueueMaintenance);
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
+  registerAiIpc(ipc, store);
   registerWebIpc(ipc, () => webServerController);
   registerSyncIpc(ipc, {
     store,

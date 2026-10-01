@@ -135,6 +135,16 @@ contextBridge.exposeInMainWorld("lakeNative", {
   getWebStatus: () => invoke("get_web_status"),
   setWebEnabled: (enabled) => invoke("set_web_enabled", enabled),
   openWebClient: () => invoke("open_web_client"),
+  aiGetSettings: () => invoke("ai_get_settings"),
+  aiSaveSettings: (patch) => invoke("ai_save_settings", patch),
+  aiTestConnection: () => invoke("ai_test_connection"),
+  aiChat: (requestId, messages) => invoke("ai_chat", requestId, messages),
+  aiCancel: (requestId) => invoke("ai_cancel", requestId),
+  onAiStream: (callback) => {
+    const listener = (_event, chunk) => callback(chunk);
+    ipcRenderer.on("ai:stream", listener);
+    return () => { ipcRenderer.removeListener("ai:stream", listener); };
+  },
   onSyncProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on("sync-progress", listener);

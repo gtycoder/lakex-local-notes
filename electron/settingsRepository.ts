@@ -1,6 +1,7 @@
 import type { DbLike } from "./dbLike.js";
 import type { SecretCipher } from "../src/core/secretCipher.js";
 import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings } from "./storeTypes.js";
+import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "../src/core/aiProviders.js";
 
 /**
  * settings 表存取（S3 / 同步 / S3 GC / 历史保留策略 + 密钥加解密）。
@@ -53,6 +54,39 @@ export class SettingsRepository {
     // 密钥用 Electron safeStorage（macOS Keychain）加密落盘；不可用时退回明文
     const stored = { ...settings, secretAccessKey: this.encryptSecret(settings.secretAccessKey) };
     this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(stored));
+  }
+
+  /**
+   * AI 设置（P0）：apiKey 用同一个 SecretCipher 加密落盘（safeStorage 不可用时 fail-closed）。
+   * 红线：ai_settings 是**独立的 settings key**，不参与 S3/同步/任何导出路径（A2 seed 只读 s3_settings）。
+   */
+  getAiSettings(): AiSettings {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='ai_settings'").get() as { value: string } | undefined;
+    if (!row) return defaultAiSettings();
+    try {
+      const normalized = normalizeAiSettings(JSON.parse(row.value) as unknown);
+      for (const provider of Object.values(normalized.providers)) {
+        if (!provider.apiKey) continue;
+        try {
+          provider.apiKey = this.decryptSecret(provider.apiKey);
+        } catch {
+          // 密文不可解（换机/Keychain 变更）：当作未配置，绝不落明文、也不阻断其它设置
+          provider.apiKey = undefined;
+        }
+      }
+      return normalized;
+    } catch {
+      return defaultAiSettings();
+    }
+  }
+
+  saveAiSettings(settings: AiSettings): void {
+    const stored: AiSettings = { version: 1, activeProviderId: settings.activeProviderId, providers: {} };
+    for (const [id, provider] of Object.entries(settings.providers)) {
+      stored.providers[id] = { ...provider, apiKey: provider.apiKey ? this.encryptSecret(provider.apiKey) : undefined };
+    }
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('ai_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(JSON.stringify(stored));
   }
 

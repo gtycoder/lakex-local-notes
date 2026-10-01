@@ -1,6 +1,7 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
+import type { AiChatMessage, AiChatResult, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 
 /** 小记 staging 入参：桌面传 `Uint8Array`（IPC 结构化克隆），移动端走 HTTP JSON 传 `number[]`。 */
 export interface QuickNoteStageInput {
@@ -17,6 +18,13 @@ export interface LakeNative {
   readNote(id: string): Promise<NoteDocument>;
   getNoteDigest(id: string): Promise<NoteDigest | null>;
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
+  /** AI（P0）：设置读写/连通性测试/流式对话/取消；Key 绝不出主进程（视图已脱敏）。 */
+  aiGetSettings(): Promise<AiSettingsView>;
+  aiSaveSettings(patch: AiSettingsPatch): Promise<AiSettingsView>;
+  aiTestConnection(): Promise<AiTestResult>;
+  aiChat(requestId: string, messages: AiChatMessage[]): Promise<AiChatResult>;
+  aiCancel(requestId: string): Promise<void>;
+  onAiStream(callback: (chunk: AiStreamEvent) => void): () => void;
   createNote(title: string): Promise<NoteDocument>;
   saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): Promise<NoteDocument>;
   updateNoteCaches(id: string, markdown: string | null, plain: string | null): Promise<void>;
@@ -194,6 +202,12 @@ export const native = {
   readNote: (id: string) => api().readNote(id),
   getNoteDigest: (id: string) => api().getNoteDigest(id),
   setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
+  aiGetSettings: () => api().aiGetSettings(),
+  aiSaveSettings: (patch: AiSettingsPatch) => api().aiSaveSettings(patch),
+  aiTestConnection: () => api().aiTestConnection(),
+  aiChat: (requestId: string, messages: AiChatMessage[]) => api().aiChat(requestId, messages),
+  aiCancel: (requestId: string) => api().aiCancel(requestId),
+  onAiStream: (callback: (chunk: AiStreamEvent) => void) => api().onAiStream(callback),
   createNote: (title: string) => api().createNote(title),
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => api().saveNote(id, title, content, caches),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),
