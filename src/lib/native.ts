@@ -1,7 +1,7 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
-import type { AiChatMessage, AiChatResult, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
+import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 
 /** 小记 staging 入参：桌面传 `Uint8Array`（IPC 结构化克隆），移动端走 HTTP JSON 传 `number[]`。 */
 export interface QuickNoteStageInput {
@@ -21,7 +21,10 @@ export interface LakeNative {
   /** AI（P0）：设置读写/连通性测试/流式对话/取消；Key 绝不出主进程（视图已脱敏）。 */
   aiGetSettings(): Promise<AiSettingsView>;
   aiSaveSettings(patch: AiSettingsPatch): Promise<AiSettingsView>;
-  aiTestConnection(): Promise<AiTestResult>;
+  /** 可传未保存的草稿；省略则测已存配置。 */
+  aiTestConnection(draft?: AiProviderPatch): Promise<AiTestResult>;
+  /** 拉模型列表（草稿同上）；端点不实现时 ok:false，调用方回落手填。 */
+  aiListModels(draft?: AiProviderPatch): Promise<AiListModelsResult>;
   aiChat(requestId: string, messages: AiChatMessage[]): Promise<AiChatResult>;
   aiCancel(requestId: string): Promise<void>;
   onAiStream(callback: (chunk: AiStreamEvent) => void): () => void;
@@ -204,7 +207,8 @@ export const native = {
   setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   aiGetSettings: () => api().aiGetSettings(),
   aiSaveSettings: (patch: AiSettingsPatch) => api().aiSaveSettings(patch),
-  aiTestConnection: () => api().aiTestConnection(),
+  aiTestConnection: (draft?: AiProviderPatch) => api().aiTestConnection(draft),
+  aiListModels: (draft?: AiProviderPatch) => api().aiListModels(draft),
   aiChat: (requestId: string, messages: AiChatMessage[]) => api().aiChat(requestId, messages),
   aiCancel: (requestId: string) => api().aiCancel(requestId),
   onAiStream: (callback: (chunk: AiStreamEvent) => void) => api().onAiStream(callback),

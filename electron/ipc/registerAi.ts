@@ -1,8 +1,9 @@
 import type { IpcMainInvokeEvent } from "electron";
 import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
-import { aiChat, aiTestProvider, normalizeAiError, type AiMessage } from "../ai/aiClient.js";
-import { activeAiProvider, aiSettingsView, mergeAiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
+import { aiChat, aiListModels, aiTestProvider, normalizeAiError, type AiMessage } from "../ai/aiClient.js";
+import { activeAiProvider, aiSettingsView, mergeAiSettings, type AiProviderPatch, type AiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
+import { aiErrorInfo } from "../../src/core/aiErrors.js";
 import { AppError } from "../../src/core/storeErrors.js";
 
 /**
@@ -33,6 +34,14 @@ function assertMessages(raw: unknown): AiMessage[] {
   return out;
 }
 
+/** 草稿（未保存值）叠加到当前配置上做测试/拉列表：未给的字段沿用已存值（包括 Key）。 */
+function resolveDraftProvider(settings: AiSettings, draft: unknown) {
+  const d = (draft && typeof draft === "object" ? draft : {}) as AiProviderPatch;
+  const id = typeof d.id === "string" && d.id ? d.id : settings.activeProviderId;
+  const merged = mergeAiSettings(settings, { providers: [{ ...d, id }] });
+  return merged.providers[id] ?? null;
+}
+
 export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
   const inflight = new Map<string, AbortController>();
 
@@ -44,10 +53,26 @@ export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
     return aiSettingsView(merged);
   });
 
-  ipc.handle("ai_test_connection", async () => {
-    const provider = activeAiProvider(store.getAiSettings());
+  // 连通测试：可传**未保存的草稿**（baseUrl/model/apiKey/高级项），未给的字段沿用已存值。
+  // 返回 retryable 让渲染层实现"分级保存"：鉴权/模型类错误硬拦，网络/限流允许用户仍要保存。
+  ipc.handle("ai_test_connection", async (draft: unknown) => {
+    const provider = resolveDraftProvider(store.getAiSettings(), draft);
     if (!provider) return { ok: false, error: "未配置供应商" };
     return aiTestProvider(provider);
+  });
+
+  // 模型列表：OpenAI 兼容 GET /models；端点不实现时返回 ok:false（渲染层回落手填）。
+  ipc.handle("ai_list_models", async (draft: unknown) => {
+    const provider = resolveDraftProvider(store.getAiSettings(), draft);
+    if (!provider) return { ok: false, error: "未配置供应商" };
+    if (!provider.apiKey) return { ok: false, error: "未配置 API Key" };
+    if (!provider.baseUrl) return { ok: false, error: "未配置 Base URL" };
+    try {
+      return { ok: true, models: await aiListModels(provider) };
+    } catch (err) {
+      const info = aiErrorInfo(err);
+      return { ok: false, error: info.message, retryable: info.retryable };
+    }
   });
 
   ipc.handleEvent("ai_chat", async (event: IpcMainInvokeEvent, requestId: unknown, messages: unknown) => {

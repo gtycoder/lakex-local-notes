@@ -137,7 +137,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   openWebClient: () => invoke("open_web_client"),
   aiGetSettings: () => invoke("ai_get_settings"),
   aiSaveSettings: (patch) => invoke("ai_save_settings", patch),
-  aiTestConnection: () => invoke("ai_test_connection"),
+  aiTestConnection: (draft) => invoke("ai_test_connection", draft),
+  aiListModels: (draft) => invoke("ai_list_models", draft),
   aiChat: (requestId, messages) => invoke("ai_chat", requestId, messages),
   aiCancel: (requestId) => invoke("ai_cancel", requestId),
   onAiStream: (callback) => {

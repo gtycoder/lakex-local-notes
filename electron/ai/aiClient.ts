@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { AiChatMessage, AiProviderConfig, AiReasoningEffort, AiThinkingMode } from "../../src/core/aiProviders.js";
-import { aiErrorMessage } from "../../src/core/aiErrors.js";
+import { aiErrorInfo, aiErrorMessage } from "../../src/core/aiErrors.js";
 
 /**
  * 主进程 AI 网关（P0：OpenAI / OpenAI 兼容）。
@@ -87,14 +87,15 @@ export async function aiChat({ provider, messages, signal, onDelta, factory = de
 }
 
 /** 连通性测试：成功返回 { ok:true }，失败返回归类后的中文原因。 */
-export async function aiTestProvider(provider: AiProviderConfig, factory: AiClientFactory = defaultAiClientFactory): Promise<{ ok: boolean; error?: string }> {
+export async function aiTestProvider(provider: AiProviderConfig, factory: AiClientFactory = defaultAiClientFactory): Promise<{ ok: boolean; error?: string; retryable?: boolean }> {
   if (!provider.apiKey) return { ok: false, error: "未配置 API Key" };
   if (!provider.model) return { ok: false, error: "未配置模型" };
   try {
     await factory(provider).ping(provider.model);
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: normalizeAiError(err) };
+    const info = aiErrorInfo(err);
+    return { ok: false, error: info.message, retryable: info.retryable };
   }
 }
 

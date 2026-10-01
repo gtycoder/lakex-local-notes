@@ -252,7 +252,8 @@ export interface AiChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
-export interface AiTestResult { ok: boolean; error?: string }
+export interface AiTestResult { ok: boolean; error?: string; /** 网络/限流类失败可"仍要保存"。 */ retryable?: boolean }
+export interface AiListModelsResult { ok: boolean; models?: string[]; error?: string; retryable?: boolean }
 export interface AiChatResult { ok: boolean; text?: string; error?: string }
 export interface AiStreamEvent { requestId: string; delta: string }
 

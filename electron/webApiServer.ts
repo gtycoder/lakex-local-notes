@@ -57,6 +57,7 @@ export const WEB_METHODS: Record<string, string> = {
   aiGetSettings: "ai_get_settings",
   aiSaveSettings: "ai_save_settings",
   aiTestConnection: "ai_test_connection",
+  aiListModels: "ai_list_models",
   aiChat: "ai_chat",
   aiCancel: "ai_cancel",
   listTreeNodes: "list_tree_nodes",
