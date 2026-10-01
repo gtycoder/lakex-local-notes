@@ -1001,6 +1001,26 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
     })();
   };
 
+  /**
+   * 内核（FortuneSheet）的 onChange effect **依赖 onChange 的身份**：若每次 render 都传新的内联函数，
+   * 它会每次 render 都回调一次 onChange → 我们无条件 `scheduleSave()` → `onDirty` → 外层保存状态
+   * 变 dirty → render → 内核又回调……形成 dirty↔saving 的死循环（260930 实测：一个隐藏的表格 tab
+   * 每 ~1s 触发一次 onDirty，把**全局** saveState 反复推脏，当前文档的状态栏就一直闪）。
+   * 这里给内核传**稳定身份**的包装函数，真正的逻辑走 ref（始终指向最新闭包），既不丢功能也断开循环。
+   */
+  const workbookChangeRef = useRef<(next: SheetWorksheet[]) => void>(() => {});
+  workbookChangeRef.current = (next) => {
+    latestRef.current = next;
+    // 几何同步的**主触发点**：列宽/行高/隐藏/合并都写在 `luckysheetfile` 里，只要模型变了
+    // 一定回调这里。不能只靠 `onOp`——实测拖列宽有时只落一次 op、甚至不落（内核在 mouseup
+    // 直接改 config），漏一次几何就永久停在旧值。两处都挂，rAF 内合并，值没变就早退。
+    scheduleGeometrySync();
+    scheduleSave();
+    // 有内联图片就立刻提升（不等 800ms 防抖，尽量在第一次保存前完成）；只读态不碰资源
+    if (!readOnlyRef.current) promoteInlineImages(latestRef.current);
+  };
+  const handleWorkbookChange = useCallback((next: SheetWorksheet[]) => workbookChangeRef.current(next), []);
+
   useEffect(() => () => {
     // 卸载/切走前把未落盘的改动补齐（不丢最后一次编辑）
     if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
@@ -1073,16 +1093,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
           customToolbarItems={customToolbarItems as never}
           hooks={hooks}
           onOp={handleOp}
-          onChange={(next) => {
-            latestRef.current = next as SheetWorksheet[];
-            // 几何同步的**主触发点**：列宽/行高/隐藏/合并都写在 `luckysheetfile` 里，只要模型变了
-            // 一定回调这里。不能只靠 `onOp`——实测拖列宽有时只落一次 op、甚至不落（内核在 mouseup
-            // 直接改 config），漏一次几何就永久停在旧值。两处都挂，rAF 内合并，值没变就早退。
-            scheduleGeometrySync();
-            scheduleSave();
-            // 有内联图片就立刻提升（不等 800ms 防抖，尽量在第一次保存前完成）；只读态不碰资源
-            if (!readOnlyRef.current) promoteInlineImages(latestRef.current);
-          }}
+          onChange={handleWorkbookChange}
         />
       )}
       {cellImageMenu && (
