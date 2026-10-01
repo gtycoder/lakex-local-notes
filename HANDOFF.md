@@ -16,6 +16,7 @@
 - **画板内核级只读**（vendor LOCAL-CHANGE #22）：`DrawnixBoardCore` 原来只在 `afterInit` 设一次 `board.options.readonly` ⇒ **已打开**的画板锁定后仍可编辑（思维导图还能加节点、画布仍可编辑）。改为 `React.useEffect([board, readOnly])` 运行期同步；宿主 `BoardEditor.handleCoreChange` 另加 `readOnlyRef` 兜底。**重建 vendor dist（chunk 增删改，需一并提交）**。
 - **表格内核级只读**：上游 `@fortune-sheet/react` 的 `InputBox` 只按**行/列级** `rowReadOnly/colReadOnly` 判定，不看全局 `context.allowEdit` ⇒ 锁定时输入框仍 `contentEditable=true`（能敲字、提交被内核丢弃）。在**已有 patch** 里加 `context.allowEdit === false ? false : …`，用 `patch-package` 重建 `@fortune-sheet+react+1.0.4.patch`（注意 `patch-package` 会调 x86 git，需 `PATH="/usr/bin:…"`）。
 - **状态栏「已锁定」可点解锁**（方案 B）：**只有锁胶囊可点**（`button.document-statusbar-lock` + `pointer-events:auto`），点开 `Popover`「本文档已锁定（只读）／解锁」；「表格」「同步状态」保持**纯展示、不可点**（可选中文字）。App 传 `onUnlock`。
+- **表格只读工具栏**（260930 续）：只读时工具栏只留**视图类**——批注查看 / 定位条件 / 查找（`TOOLBAR_ITEMS_READONLY`）。依据内核 `allowEdit` 门禁：加粗/对齐/边框/合并/排序/筛选/冻结/链接/快速公式/批注增删改全部直接 return，留着就是"点了没反应的死按钮"；`cell-image` 是**插入图片**（写操作）故只读下不出现（查看已有图片走点单元格里的图片，菜单只读时已去「删除」）。
 - 护栏：`sidebarContextMenu.test.ts` · `boardEditorMount.test.ts` · `sheetEditorMount.test.ts` · `desktopStatusBar.test.ts`。
 - 真实端 CDP：目录栏锁**未打开**的文档 → 树行出现小锁 → 打开即只读；画板 `board.options.readonly` false→true→false；表格 `contentEditable` 未锁 true / 锁定 false 且真实按键进不去；状态栏点表格/同步**无浮层**、点胶囊出浮层、点「解锁」生效。
 - 门禁：tsc / vitest **1515 passed / 16 skipped** / check:core 73-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿。

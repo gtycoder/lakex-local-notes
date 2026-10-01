@@ -47,6 +47,12 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
     expect(patch).toContain("context.allowEdit === false ? false");
   });
 
+  it("只读工具栏：只留视图类（批注查看/定位条件/查找），写操作项不渲染", () => {
+    // 260930 用户：只读时不必全隐藏，留一部分不影响数据的；依据=内核 allowEdit 门禁。
+    expect(SRC).toMatch(/const TOOLBAR_ITEMS_READONLY = \["comment", "locationCondition", "\|", "search"\];/);
+    expect(SRC).toMatch(/toolbarItems=\{readOnly \? TOOLBAR_ITEMS_READONLY : TOOLBAR_ITEMS\}/);
+  });
+
   it("完全去掉浮动图片：工具栏 / 右键菜单都用 cell-image 取代 image", () => {
     expect(SRC).not.toMatch(/TOOLBAR_ITEMS = \[[\s\S]*?"image"/);
     expect(SRC).toContain('"filter", "link", "cell-image", "comment"');

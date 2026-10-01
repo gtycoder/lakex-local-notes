@@ -60,6 +60,17 @@ const TOOLBAR_ITEMS = [
 ];
 
 /**
+ * 只读（锁定 / 回收站 / 被他端删除）时的工具栏：**只留点得动、且不写数据的视图类**（260930 用户要求
+ * 「不用都隐藏，只留一部分不影响数据的」）。
+ * 排除依据是内核 @fortune-sheet/core 的 `allowEdit` 门禁：加粗/字号/颜色/对齐/边框/合并/填充格式、
+ * 排序/筛选/冻结/超链接/快速公式、批注的增删改、增删工作表……在 allowEdit=false 时全部直接 return，
+ * 留在工具栏里就是「点了没反应的死按钮」，比不显示更糟。
+ * 保留三项：comment（showHideComment，显示/隐藏批注）· locationCondition（定位条件）· search（查找）。
+ * `cell-image` 是**插入图片**（写操作），只读下不出现；查看已有单元格图片走"点单元格里的图片"。
+ */
+const TOOLBAR_ITEMS_READONLY = ["comment", "locationCondition", "|", "search"];
+
+/**
  * 单元格右键菜单：与内核默认一致，只把「插入图片」由浮动图改为**单元格图片**（260921 用户要求
  * 「完全去掉浮动图片」）。`cell-image` 由 customToolbarItems 提供（同一个 key 两处复用）。
  */
@@ -895,7 +906,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
     };
   }, [everVisible, insertCellImage]);
 
-  /** 自定义工具栏项：单元格图片（只读态不给）。 */
+  /** 自定义工具栏项：单元格图片（**插入图片**属写操作，只读态不提供；查看已有图片走单元格内图片的菜单）。 */
   const customToolbarItems = useMemo(
     () =>
       readOnly
@@ -1088,7 +1099,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
           showToolbar={showToolbar}
           showFormulaBar={false}
           showSheetTabs
-          toolbarItems={TOOLBAR_ITEMS}
+          toolbarItems={readOnly ? TOOLBAR_ITEMS_READONLY : TOOLBAR_ITEMS}
           cellContextMenu={CELL_CONTEXT_MENU}
           customToolbarItems={customToolbarItems as never}
           hooks={hooks}
