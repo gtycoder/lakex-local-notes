@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { AiChatMessage, AiProviderConfig } from "../../src/core/aiProviders.js";
+import { aiErrorMessage } from "../../src/core/aiErrors.js";
 
 /**
  * 主进程 AI 网关（P0：OpenAI / OpenAI 兼容）。
@@ -30,7 +31,8 @@ export interface AiChatClient {
 export type AiClientFactory = (provider: AiProviderConfig) => AiChatClient;
 
 export function defaultAiClientFactory(provider: AiProviderConfig): AiChatClient {
-  const client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseUrl });
+  // maxRetries 交给 SDK（它懂指数退避与 retry-after）；我们只把它调到 1 次，避免默认 2 次叠上我们的重试。
+  const client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseUrl, maxRetries: 1 });
   return {
     async *streamChat({ model, messages, temperature, signal }) {
       const stream = await client.chat.completions.create(
@@ -61,6 +63,7 @@ export interface AiChatOptions {
 export async function aiChat({ provider, messages, signal, onDelta, factory = defaultAiClientFactory }: AiChatOptions): Promise<string> {
   const client = factory(provider);
   let text = "";
+  // 重试由 client 一侧负责（默认工厂已给 SDK maxRetries:1）；这里再重试会造成双重重试与重复输出。
   for await (const delta of client.streamChat({ model: provider.model, messages, temperature: provider.temperature, signal })) {
     text += delta;
     onDelta?.(delta);
@@ -80,18 +83,5 @@ export async function aiTestProvider(provider: AiProviderConfig, factory: AiClie
   }
 }
 
-/** 把供应商/网络错误归类成用户可读的中文（绝不泄露 Key）。 */
-export function normalizeAiError(err: unknown): string {
-  const e = (err ?? {}) as { status?: number; statusCode?: number; code?: string; name?: string; message?: string; error?: { message?: string } };
-  const status = e.status ?? e.statusCode;
-  const raw = e.message || e.error?.message || "";
-  if (e.name === "AbortError" || e.code === "ABORT_ERR") return "已取消";
-  if (status === 401) return "API Key 无效或已失效";
-  if (status === 403) return "无权访问该模型";
-  if (status === 404) return "模型不存在，或 Base URL 配置不对";
-  if (status === 429) return "请求过于频繁或额度不足，请稍后再试";
-  if (typeof status === "number" && status >= 500) return "供应商服务异常（" + status + "）";
-  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|timeout|network/i.test(raw)) return "网络不可达：检查网络或 Base URL";
-  if (raw) return raw.slice(0, 200);
-  return "未知错误";
-}
+/** 兼容旧调用点：错误分类已抽到 `src/core/aiErrors.ts`（纯函数 + 单测）。 */
+export const normalizeAiError = aiErrorMessage;

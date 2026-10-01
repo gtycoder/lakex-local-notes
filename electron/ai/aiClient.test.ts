@@ -29,9 +29,22 @@ describe("主进程 aiClient", () => {
 
   it("normalizeAiError 归类常见错误，且不回显 Key", () => {
     expect(normalizeAiError({ status: 401, message: "Incorrect API key provided: sk-secret" })).toBe("API Key 无效或已失效");
-    expect(normalizeAiError({ status: 429 })).toBe("请求过于频繁或额度不足，请稍后再试");
+    expect(normalizeAiError({ status: 429 })).toBe("请求过于频繁，请稍后再试");
+    expect(normalizeAiError({ status: 429, code: "insufficient_quota" })).toContain("额度不足");
     expect(normalizeAiError({ status: 503 })).toContain("503");
     expect(normalizeAiError({ name: "AbortError" })).toBe("已取消");
     expect(normalizeAiError(new Error("fetch failed"))).toContain("网络不可达");
+  });
+});
+
+describe("重试职责", () => {
+  it("网关不再自行重试：工厂抛错直接冒泡且只调用一次（重试交给 client 侧的 SDK）", async () => {
+    let calls = 0;
+    const factory: AiClientFactory = () => ({
+      async *streamChat() { calls += 1; throw Object.assign(new Error("rate limited"), { status: 429 }); },
+      async ping() {},
+    });
+    await expect(aiChat({ provider: provider(), messages: [{ role: "user", content: "hi" }], factory })).rejects.toThrow();
+    expect(calls).toBe(1);
   });
 });
