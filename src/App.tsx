@@ -104,7 +104,7 @@ export function App() {
   });
 
   const {
-    saveState, setSaveState,
+    saveStates, setSaveState,
     persistTab, scheduleSave, scheduleDraftJournal,
     bumpRevision, resetRevision, clearNote, flushTimers,
     saveTimers, draftTimers,
@@ -576,7 +576,10 @@ export function App() {
           documentStatus={getDocumentStatus({
             hasCloudConfig: cloudConfigured,
             syncState: activeNodeSyncState as "local" | "synced" | "conflict",
-            saveState,
+            // 只取**活动文档**的保存状态；没有记录时回落到标签自身的 dirty（按文档，后台保存不污染当前状态栏）
+            saveState: activeNoteId
+              ? (saveStates[activeNoteId] ?? (tabInfos.find((tab) => tab.noteId === activeNoteId)?.dirty ? "dirty" : "idle"))
+              : "idle",
             historyCount: activeHistoryCount,
           })}
         />

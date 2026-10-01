@@ -47,13 +47,21 @@ export interface SavePipelineOptions {
  */
 export function useSavePipeline(options: SavePipelineOptions) {
   const { onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave, getOpenTab, getEditorCaches, captureContent } = options;
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  /**
+   * 保存状态**按文档**记录（260930：不能做成全局单值——后台文档保存会污染当前文档的状态栏，
+   * 表现为当前文档底栏在「保存中 ⇄ 待保存」之间闪）。状态栏只读活动文档那一条。
+   */
+  const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
   const saveTimers = useRef<Map<string, number>>(new Map());
   const draftTimers = useRef<Map<string, number>>(new Map());
   const coreRef = useRef<SavePipelineCore | null>(null);
   if (coreRef.current === null) coreRef.current = new SavePipelineCore();
   const core = coreRef.current;
+
+  /** 写某文档的保存状态；值未变返回原对象（不触发无谓 render）。 */
+  const markSaveState = useCallback((noteId: string, state: SaveState) => {
+    setSaveStates((prev) => (prev[noteId] === state ? prev : { ...prev, [noteId]: state }));
+  }, []);
 
   const persistTab = useCallback((noteId: string, title?: string, content?: string): Promise<PersistOutcome> => {
     // 已在回收站/被他端 purge（标记 deleted）的文档不保存：避免把内容写回已回收的笔记。
@@ -71,7 +79,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
       caches: getEditorCaches(noteId),
       revision: core.revision(noteId),
     };
-    setSaveState("saving");
+    markSaveState(noteId, "saving");
     return core.run(noteId, async (): Promise<PersistOutcome> => {
       try {
         const saved = await native.saveNote(snapshot.noteId, snapshot.title.trim() || "无标题", snapshot.content, snapshot.caches);
@@ -83,25 +91,24 @@ export function useSavePipeline(options: SavePipelineOptions) {
           const draftTimer = draftTimers.current.get(snapshot.noteId);
           if (draftTimer !== undefined) { window.clearTimeout(draftTimer); draftTimers.current.delete(snapshot.noteId); }
           onDraftCleared(snapshot.noteId);
-          setLastSavedAt(new Date().toISOString());
-          setSaveState("saved");
+          markSaveState(snapshot.noteId, "saved");
         } else {
           // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
-          setSaveState("dirty");
+          markSaveState(snapshot.noteId, "dirty");
         }
         return { ok: true };
       } catch (reason) {
         // 审计 F01：显式 save/flush 必须返回明确失败（不再把错误吞成 fulfilled 的成功）。
         // NotFound / 磁盘满 / DB 失败一视同仁：调用者据 ok:false 停下并提示真实原因。
-        setSaveState("error"); onError(getNativeErrorMessage(reason));
+        markSaveState(snapshot.noteId, "error"); onError(getNativeErrorMessage(reason));
         return { ok: false };
       }
     });
-  }, [core, getOpenTab, getEditorCaches, captureContent, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave]);
+  }, [core, getOpenTab, getEditorCaches, captureContent, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave, markSaveState]);
 
   /** 防抖保存：SAVE_DEBOUNCE_MS（1s）无新输入后落盘。 */
   const scheduleSave = useCallback((noteId: string, content?: string) => {
-    setSaveState("dirty");
+    markSaveState(noteId, "dirty");
     const existing = saveTimers.current.get(noteId);
     if (existing) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
@@ -110,7 +117,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
       if (tab) void persistTab(noteId, undefined, content);
     }, SAVE_DEBOUNCE_MS);
     saveTimers.current.set(noteId, timer);
-  }, [persistTab, getOpenTab]);
+  }, [persistTab, getOpenTab, markSaveState]);
 
   /** 草稿防抖：1.5s 无新输入后写草稿（未保存内容兜底；晚于保存，正常路径由保存清草稿）。 */
   const scheduleDraftJournal = useCallback((noteId: string, content?: string) => {
@@ -150,7 +157,10 @@ export function useSavePipeline(options: SavePipelineOptions) {
   }, []);
 
   return {
-    saveState, setSaveState, lastSavedAt, setLastSavedAt,
+    /** 每个文档各自的保存状态（状态栏只取活动文档那一条）。 */
+    saveStates,
+    /** 写某文档的保存状态（供标签切换/草稿恢复等外部入口使用）。 */
+    setSaveState: markSaveState,
     persistTab, scheduleSave, scheduleDraftJournal,
     bumpRevision, resetRevision, clearNote, flushTimers,
     saveTimers, draftTimers,

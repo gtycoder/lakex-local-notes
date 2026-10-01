@@ -24,7 +24,8 @@ export interface UseTabLifecycleOptions {
   setActiveNoteId: Dispatch<SetStateAction<string | null>>;
   setPinnedNoteIds: Dispatch<SetStateAction<Set<string>>>;
   setDraftEntries: Dispatch<SetStateAction<DraftJournalEntry[]>>;
-  setSaveState: Dispatch<SetStateAction<SaveState>>;
+  /** 写某文档的保存状态（按文档，不再是全局单值）。 */
+  setSaveState: (noteId: string, state: SaveState) => void;
 }
 
 /** 标签生命周期：打开/切换、超限淘汰、草稿恢复/丢弃（从 App.tsx 收拢）。 */
@@ -135,7 +136,7 @@ export function useTabLifecycle({
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === entry.noteId ? { ...tab, title: entry.title || tab.title, content: entry.content, dirty: true, reloadKey: (tab.reloadKey ?? 0) + 1 } : tab));
     setActiveNoteId(entry.noteId);
     setDraftEntries((entries) => entries.filter((item) => item.noteId !== entry.noteId));
-    setSaveState("dirty");
+    setSaveState(entry.noteId, "dirty");
     scheduleSave(entry.noteId, entry.content);
   }, [openNote, scheduleSave, showNotice, setOpenTabs, setActiveNoteId, setDraftEntries, setSaveState]);
 

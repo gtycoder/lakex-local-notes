@@ -102,4 +102,20 @@ describe("useSavePipeline 保存契约（审计 F01/F02）", () => {
     expect(events).toContain("tabs:n2:v");
     expect(events).toContain("draft:n2");
   });
+
+  it("保存状态按文档隔离：后台文档保存不污染其它文档（260930 状态栏不再被后台 churn 带着闪）", async () => {
+    render([{ markdown: "m", plain: "p" }]);
+    let p!: Promise<PersistOutcome>;
+    act(() => { p = api!.persistTab("n1", "T", "v1"); });
+    await act(async () => { await tick(); });
+    expect(api!.saveStates["n1"]).toBe("saving");
+    expect(api!.saveStates["n2"]).toBeUndefined();
+    await act(async () => { h.pending[0]!.resolve(savedNote("n1", "v1")); await p; await tick(); });
+    expect(api!.saveStates["n1"]).toBe("saved");
+    expect(api!.saveStates["n2"]).toBeUndefined();
+    // 外部入口（标签切换/草稿恢复）也按文档写状态
+    act(() => { api!.setSaveState("n2", "dirty"); });
+    expect(api!.saveStates["n2"]).toBe("dirty");
+    expect(api!.saveStates["n1"]).toBe("saved");
+  });
 });

@@ -16,7 +16,8 @@ interface UseDocumentTabsInput<T extends DocumentTabLike> {
   activeNoteId: string | null;
   setTabs: Dispatch<SetStateAction<T[]>>;
   setActiveNoteId: Dispatch<SetStateAction<string | null>>;
-  setSaveState: Dispatch<SetStateAction<SaveStateLike>>;
+  /** 写某文档的保存状态（按文档，不再是全局单值）。 */
+  setSaveState: (noteId: string, state: SaveStateLike) => void;
   saveTimers: MutableRefObject<Map<string, number>>;
   persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
   clearScrollMemory: (noteId: string) => void;
@@ -37,7 +38,7 @@ export function useDocumentTabs<T extends DocumentTabLike>({
     setActiveNoteId(noteId);
     setTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab));
     const tab = tabsRef.current.find((item) => item.noteId === noteId);
-    setSaveState(tab?.dirty ? "dirty" : "idle");
+    setSaveState(noteId, tab?.dirty ? "dirty" : "idle");
   }, [setActiveNoteId, setTabs, setSaveState, tabsRef]);
 
   const reorderTabs = useCallback((noteIds: string[]) => {
