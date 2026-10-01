@@ -20,7 +20,8 @@
 - 真实端验证（mock OpenAI + 隔离实例 + CDP）：保存设置 → `aiTestConnection` `{ok:true}` → 流式对话 deltas `["hello"," from"," mock"]`、最终文本 `hello from mock`；主库 `ai_settings` 落盘为 `enc:v1:` 密文、**无明文 Key**。
 - 门禁：tsc / vitest **1523 passed / 16 skipped** / check:core 74-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿。
 - 动作入口：编辑器**选区浮动工具栏「AI」** → `AiAssistantDialog`（预设 润色/译成中文/译成英文/总结/自定义 → 流式输出 → 复制 / 替换选区；**结果不自动改写正文**，由用户决定）。真实端 CDP：拖选文字 → 工具栏出「AI」→ 对话框带入选区文本 + 5 预设 → 生成 → 流式 `hello from mock`。
-- **未做（下一步）**：按供应商切换的 UI（底层已支持，P0 只内置 OpenAI；Base URL 目前可编辑、`editableBaseUrl` 未强制）；顶栏入口/快捷键；对话历史与多轮。
+- **P1 已完成**：①供应商切换（目录加 DeepSeek / 自定义 OpenAI 兼容端点；按 `editableBaseUrl` 收口 Base URL；切换即按该家默认初始化）②顶栏「更多」→「AI 助手」入口（无选区也能用，默认「自定义」）③对话**多轮**（消息线程 + 追问）。真实端 CDP：切 deepseek 自动建配置（`https://api.deepseek.com/v1` / `deepseek-chat`）；顶栏入口默认「自定义」；两轮追问 `echo:写一句问候` / `echo:再翻译成英文`。
+- **④ 的诚实结论（未做到替换）**：模态对话框会折叠内核选区 ⇒「替换选区」三次尝试（DOM Range 恢复 / 浏览器 insertText / 内核 insertAtSelection）**都退化为『插入到原选区起点』**，且内核 Cmd+Z 未恢复改动。**按钮已改名「插入到光标处」**，不再承诺替换。真正替换需用内核 modelRange：`engine.transformDOMRange` + `renderer.kernel.createModelRange` 构造后走 `insertAtSelection(format, data, modelRange)`（契约 §5.8），属下一步。
 ### 当前批次 · 260930-LOCK（已实施，本轮提交并推送）
 - 用户 260930：只读锁做成**文档级、按类型统一**的入口，并让"锁"真正落到**内核层**（不能只隐藏工具栏）。
 - **目录栏右键**加入口「锁定（只读）/ 解锁」（与 重命名/历史版本/属性 同组）；`toggleNoteLock(targetNoteId?)` 泛化 ⇒ **不必先打开**文档即可锁；`Sidebar` 增 `lockedNoteIds` / `onToggleLockNote`。
