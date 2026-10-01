@@ -422,6 +422,9 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange, onDi
 
   const handleCoreChange = useCallback<NonNullable<DrawnixBoardCoreProps["onChange"]>>(
     (partial) => {
+      // 只读（锁定/回收站/被他端删除）：防御性兜底，绝不接收内容变更。
+      // 正常路径由 plait 的 board.options.readonly 拦住；这里挡住"内核漏放"的写入。
+      if (readOnlyRef.current) return;
       setCardValue((prev) => {
         // previewImage（整幅 PNG）与 cardHeight 是卡片专用字段：独立文档不持久化，收下即丢。
         const next: BoardCardValue = {

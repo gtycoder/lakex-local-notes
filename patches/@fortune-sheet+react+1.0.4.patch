@@ -1,7 +1,16 @@
 diff --git a/node_modules/@fortune-sheet/react/dist/index.esm.js b/node_modules/@fortune-sheet/react/dist/index.esm.js
-index c4486a2..a17e788 100644
+index c4486a2..d0e17f4 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.esm.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.esm.js
+@@ -1102,7 +1102,7 @@ var InputBox = function InputBox() {
+   var cfg = context.config || {};
+   var rowReadOnly = cfg.rowReadOnly || {};
+   var colReadOnly = cfg.colReadOnly || {};
+-  var edit = !((colReadOnly[col_index] || rowReadOnly[row_index]) && context.allowEdit === true);
++  var edit = context.allowEdit === false ? false : !((colReadOnly[col_index] || rowReadOnly[row_index]) && context.allowEdit === true);
+   return /*#__PURE__*/React.createElement("div", {
+     className: "luckysheet-input-box",
+     style: firstSelection && !((_context$rangeDialog = context.rangeDialog) === null || _context$rangeDialog === void 0 ? void 0 : _context$rangeDialog.show) ? {
 @@ -1126,7 +1126,7 @@ var InputBox = function InputBox() {
      style: firstSelection ? _objectSpread2({
        minWidth: (firstSelection === null || firstSelection === void 0 ? void 0 : firstSelection.width) || 0,
@@ -109,9 +118,18 @@ index c4486a2..a17e788 100644
    }, [context.currentSheetId, context.lang, context.luckysheet_select_save, context.defaultrowlen, context.defaultcollen, rightclick, info, setContext, showAlert, showDialog, drag, generalDialog]);
    useLayoutEffect(function () {
 diff --git a/node_modules/@fortune-sheet/react/dist/index.js b/node_modules/@fortune-sheet/react/dist/index.js
-index e404551..37d9e51 100644
+index e404551..1caf6f2 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.js
+@@ -1113,7 +1113,7 @@ var InputBox = function InputBox() {
+   var cfg = context.config || {};
+   var rowReadOnly = cfg.rowReadOnly || {};
+   var colReadOnly = cfg.colReadOnly || {};
+-  var edit = !((colReadOnly[col_index] || rowReadOnly[row_index]) && context.allowEdit === true);
++  var edit = context.allowEdit === false ? false : !((colReadOnly[col_index] || rowReadOnly[row_index]) && context.allowEdit === true);
+   return /*#__PURE__*/React__default['default'].createElement("div", {
+     className: "luckysheet-input-box",
+     style: firstSelection && !((_context$rangeDialog = context.rangeDialog) === null || _context$rangeDialog === void 0 ? void 0 : _context$rangeDialog.show) ? {
 @@ -1137,7 +1137,7 @@ var InputBox = function InputBox() {
      style: firstSelection ? _objectSpread2({
        minWidth: (firstSelection === null || firstSelection === void 0 ? void 0 : firstSelection.width) || 0,

@@ -40,6 +40,13 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
     expect(SRC).toMatch(/readOnlyRef\.current/);
   });
 
+  it("内核级只读：patch 让全局锁定时单元格输入框也不可编辑", () => {
+    // 上游 InputBox 的 edit 只看行/列级 rowReadOnly/colReadOnly、不看全局 context.allowEdit ⇒
+    // 锁定时仍能往输入框敲字（提交被内核丢弃，但观感等同"还能编辑"）。补丁把全局锁定纳入判定。
+    const patch = readFileSync(new URL("../../../patches/@fortune-sheet+react+1.0.4.patch", import.meta.url), "utf8");
+    expect(patch).toContain("context.allowEdit === false ? false");
+  });
+
   it("完全去掉浮动图片：工具栏 / 右键菜单都用 cell-image 取代 image", () => {
     expect(SRC).not.toMatch(/TOOLBAR_ITEMS = \[[\s\S]*?"image"/);
     expect(SRC).toContain('"filter", "link", "cell-image", "comment"');

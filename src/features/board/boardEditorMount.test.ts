@@ -27,6 +27,16 @@ describe("画板编辑器护栏", () => {
     expect(TABS).toMatch(/<BoardEditor/);
   });
 
+  it("只读（锁定）必须封死画板写入：运行中同步 plait options.readonly + 宿主兜底", () => {
+    // 260930 用户报「画板锁定后还能编辑、思维导图还能加节点」——只隐藏工具栏不够。
+    // plait-core / plait-mind 按 board.options.readonly 判定 ⇒ 锁定那一刻必须把它同步过去。
+    const CORE = readFileSync(new URL("../../../vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.tsx", import.meta.url), "utf8");
+    expect(CORE).toMatch(/React\.useEffect\(\(\) => \{\s*if \(board\) board\.options\.readonly = !!readOnly;\s*\}, \[board, readOnly\]\)/);
+    const start = EDITOR.indexOf("const handleCoreChange");
+    const end = EDITOR.indexOf("return (", start);
+    expect(EDITOR.slice(start, end)).toContain("if (readOnlyRef.current) return;");
+  });
+
   it("BoardEditor 不引用 Lake 内核（独立画板 = 零内核实例）", () => {
     expect(EDITOR).not.toMatch(/from "\.\.\/editor\/EditorTab"/);
     expect(EDITOR).not.toMatch(/lakeRuntime|createLakeDocument|EditorTab/);
