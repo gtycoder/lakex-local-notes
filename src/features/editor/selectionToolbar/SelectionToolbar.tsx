@@ -22,6 +22,8 @@ import {
   IconImageSize, IconImageSpacing, IconImageStyle, IconImageTitle,
 } from "./imageIcons";
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
+import { Sparkles } from "lucide-react";
+import { AiAssistantDialog } from "../../ai/AiAssistantDialog";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
@@ -139,6 +141,9 @@ export function SelectionToolbar({ editor, container }: {
   editor: LakeEditorInstance; container: HTMLElement;
 }) {
   const [menu, setMenu] = useState<string | null>(null);
+  /** AI 助手（P0）：点按钮时先冻结浮栏并抓住选区文本，再开对话框。 */
+  const [aiOpen, setAiOpen] = useState(false);
+  const aiSelectionRef = useRef("");
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */
   const holdRef = useRef(false);
   holdRef.current = menu !== null;
@@ -371,6 +376,11 @@ export function SelectionToolbar({ editor, container }: {
             disabled={state.itemDisabled[item.name]}
             className={TOGGLE} onClick={() => run(item.name)} />
         ))}
+        <span className="selection-toolbar__sep" />
+        {/* AI 助手：结果只进对话框，用户再决定复制/替换（不自动改写正文）。 */}
+        <KToolbarButton name="ai" title="AI 助手" className={TOGGLE} onClick={() => { aiSelectionRef.current = window.getSelection()?.toString() ?? ""; setMenu("ai"); setAiOpen(true); }}>
+          <Sparkles size={16} />
+        </KToolbarButton>
         {/* 内核 link-toolbar-descriptor.getUIState：disabled = !link && !insertLink（选区里已有链接时两个都不可用）。
             不用内核「下拉按钮」类：.ne-ui-toolbar-arrow-button 固定 42px，是给已去掉的三角预留的 ⇒ 用 26px 普通按钮。 */}
         <KToolbarButton name="link" icon="editor-link" disabled={!canCommand("link") && !canCommand("insertLink")} checked={menu === "txtlink"} title="超链接" hotkey={hot("link")} className="ne-ui-toolbar-button ne-toolbar-widget" onClick={(e) => openLinkEditor(e.currentTarget)} />
@@ -489,6 +499,14 @@ export function SelectionToolbar({ editor, container }: {
     >
       {target.kind === "text" ? renderText() : renderImage(target)}
       {target.kind === "text" ? renderTextMenu() : null}
+      {aiOpen && (
+        <AiAssistantDialog
+          open
+          selectionText={aiSelectionRef.current}
+          onClose={() => { setAiOpen(false); setMenu(null); }}
+          onReplace={(text) => { try { editor.execCommand?.("insertAtSelection", "text/plain", text); } catch { /* 命令不可用时忽略，结果仍可复制 */ } }}
+        />
+      )}
     </div>
   );
 }

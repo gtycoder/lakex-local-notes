@@ -115,3 +115,11 @@
 .selection-toolbar__colorpop .lake-more-color-container { position: relative; }
 .selection-toolbar__more-arrow { position: absolute; right: 12px; width: 16px; height: 16px; }
 .selection-toolbar__more-arrow .ne-icon-symbol { width: 16px; height: 16px; }
+/* AI 助手对话框（选区工具栏入口，260930）。
+   表面/按钮复用 Overlay 的 .ln-dialog / kit 的 .ln-btn；这里只补内容布局。 */
+.ai-dialog__presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ai-dialog__input { width: 100%; min-height: 44px; margin-bottom: 10px; padding: 6px 8px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font: inherit; resize: vertical; }
+.ai-dialog__source, .ai-dialog__output { margin: 0 0 10px; padding: 8px 10px; overflow: auto; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); color: var(--lake-text-2); font-size: var(--lake-font-size-small); white-space: pre-wrap; }
+.ai-dialog__source { max-height: 120px; }
+.ai-dialog__output { max-height: 240px; color: var(--lake-text-1); }
+.ai-dialog__error { margin-top: 8px; color: var(--lake-status-error); font-size: var(--lake-font-size-small); }
