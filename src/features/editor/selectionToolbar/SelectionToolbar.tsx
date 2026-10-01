@@ -24,6 +24,7 @@ import {
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { Sparkles } from "lucide-react";
 import { AiAssistantDialog } from "../../ai/AiAssistantDialog";
+import { applyModelRange, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
@@ -146,6 +147,8 @@ export function SelectionToolbar({ editor, container }: {
   const aiSelectionRef = useRef("");
   /** 打开对话框会丢焦点 → 内核选区被折叠。这里克隆 DOM Range，替换前恢复，保证「替换」而不是「插入」。 */
   const aiRangeRef = useRef<Range | null>(null);
+  /** 打开对话框前捕获的**内核模型选区**（替换用；模型态不随焦点丢失）。 */
+  const aiModelRangeRef = useRef<CapturedModelRange | null>(null);
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */
   const holdRef = useRef(false);
   holdRef.current = menu !== null;
@@ -384,6 +387,7 @@ export function SelectionToolbar({ editor, container }: {
           const sel = window.getSelection();
           aiSelectionRef.current = sel?.toString() ?? "";
           aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+          aiModelRangeRef.current = captureModelRange(editor);
           setMenu("ai"); setAiOpen(true);
         }}>
           <Sparkles size={16} />
@@ -510,12 +514,16 @@ export function SelectionToolbar({ editor, container }: {
         <AiAssistantDialog
           open
           selectionText={aiSelectionRef.current}
-          onClose={() => { setAiOpen(false); setMenu(null); aiRangeRef.current = null; }}
+          onClose={() => { setAiOpen(false); setMenu(null); aiRangeRef.current = null; aiModelRangeRef.current = null; }}
           onReplace={(text) => {
             try {
-              // 恢复打开对话框前的选区（否则内核已折叠到起点 → 变成"插入"）
-              // 恢复打开前的 DOM 选区后走浏览器 insertText（模态框已折叠内核选区 ⇒ 只会落在原选区起点）。
-              // modelRange 第三参（契约 §5.8）试过：构造出的 range 传进去直接 no-op，形状未对齐，见 HANDOFF。
+              // 首选：把打开前捕获的**内核模型选区**设回内核，再按当前选区插入 ⇒ 非折叠 = 替换。
+              // 依据 = 云端 lakex AI 面板同款做法（selection 命令 + 内核插入），不需要 DOM→view 映射。
+              if (applyModelRange(editor, aiModelRangeRef.current)) {
+                editor.execCommand?.("insertAtSelection", "text/plain", text);
+                return;
+              }
+              // 兜底：拿不到模型选区时，恢复 DOM 选区走浏览器 insertText。
               const range = aiRangeRef.current;
               const sel = window.getSelection();
               if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
