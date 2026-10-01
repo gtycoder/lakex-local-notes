@@ -54,7 +54,7 @@
 
 .tree-list { padding-bottom: 4px; }
 
-.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto; gap: 4px; }
+.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto auto; gap: 4px; }
 
 /* 行内动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）：
    默认 display:none 不占宽度；hover/键盘聚焦时才出现并挤出位置（选中态不常驻，用户 260914）。

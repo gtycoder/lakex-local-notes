@@ -59,8 +59,9 @@ export function useDesktopHandlers({
     }
   }, [editorsRef]);
 
-  async function toggleNoteLock() {
-    const tabId = activeNoteId;
+  async function toggleNoteLock(targetNoteId?: string | null) {
+    // 目录栏右键可锁**任意文档**（含未打开的）；不传 = 顶栏那一处，作用于当前活动文档。
+    const tabId = targetNoteId ?? activeNoteId;
     if (!tabId) return;
     const summary = notes.find((n) => n.id === tabId);
     if (!summary) return;

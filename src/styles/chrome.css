@@ -493,6 +493,8 @@
    不再按行类型区分字重：未选中 medium(500) / 选中 semibold(600)（与大纲一致）。 */
 .note-row.active .note-row-copy strong { font-weight: var(--lake-font-weight-semibold); }
 .tree-row-icon { color: var(--lake-text-3); }
+/* 已锁定（只读）的目录行小锁：非交互、行尾常驻（不随 hover 消失，锁状态要一直看得见）。 */
+.tree-row-lock { display: inline-flex; align-items: center; color: var(--lake-text-3); }
 .note-row.active .tree-row-icon { color: var(--lake-accent); }
 .tree-chevron {
   display: inline-flex;
