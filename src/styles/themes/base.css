@@ -1,6 +1,10 @@
 /* 生成物：主题无关令牌（P2）。改令牌请改 src/styles/themes/*.css 的源模板或直接编辑本文件。 */
 /* 主题无关令牌（P2 主题即数据）：几何/动效/层级/字体不随主题变 */
 :root {
+  /* AI 助手图标（取自云端 larkui-icon-icon-queque-ai；品牌固定色，不随主题变） */
+  --lake-ai-icon-ink: #00b96b;
+  --lake-ai-icon-soft: #c7f0df;
+  --lake-ai-icon-star: #f5da80;
   /* 间距 */
   --lake-space-xxs: 2px;
   --lake-space-xs: 4px;

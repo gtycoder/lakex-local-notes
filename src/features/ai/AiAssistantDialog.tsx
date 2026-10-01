@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, CornerDownRight, RotateCcw, Sparkles, X } from "lucide-react";
+import { Check, Copy, CornerDownRight, RotateCcw, X } from "lucide-react";
+import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
@@ -127,7 +128,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
       </div>
       {/* 单横条：✦ 在框内左侧、✕ 在框内右侧（对齐云端浮条形态）。 */}
       <div className="ai-dialog__bar">
-        <Sparkles size={16} />
+        <AiSparkIcon size={18} />
         {turns.length === 0 ? (
           <textarea className="ai-dialog__field" rows={1} autoFocus placeholder="向智能助手提问…" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
         ) : (
