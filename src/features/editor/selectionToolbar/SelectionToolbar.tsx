@@ -22,7 +22,7 @@ import {
   IconImageSize, IconImageSpacing, IconImageStyle, IconImageTitle,
 } from "./imageIcons";
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
-import { Sparkles } from "lucide-react";
+import { AiTagIcon } from "../../ai/AiTagIcon";
 import { AiAssistantDialog } from "../../ai/AiAssistantDialog";
 import { applyModelRange, applyModelRangeAtEnd, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
 import { LakeColorBoard } from "./LakeColorBoard";
@@ -433,7 +433,7 @@ export function SelectionToolbar({ editor, container }: {
           aiModelRangeRef.current = captureModelRange(editor);
           setMenu("ai"); setAiOpen(true);
         }}>
-          <Sparkles size={16} />
+          <AiTagIcon size={18} />
         </KToolbarButton>
         {/* 内核 link-toolbar-descriptor.getUIState：disabled = !link && !insertLink（选区里已有链接时两个都不可用）。
             不用内核「下拉按钮」类：.ne-ui-toolbar-arrow-button 固定 42px，是给已去掉的三角预留的 ⇒ 用 26px 普通按钮。 */}

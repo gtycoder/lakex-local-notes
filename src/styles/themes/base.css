@@ -5,6 +5,9 @@
   --lake-ai-icon-ink: #00b96b;
   --lake-ai-icon-soft: #c7f0df;
   --lake-ai-icon-star: #f5da80;
+  /* 工具栏 AI 入口图标（IconAiTagNew 的绿色渐变） */
+  --lake-ai-tag-from: #4cc871;
+  --lake-ai-tag-to: #08b66d;
   /* 间距 */
   --lake-space-xxs: 2px;
   --lake-space-xs: 4px;
