@@ -9,6 +9,39 @@
 
 > 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
+### 收口 · 260930-按文档保存状态（已实施，待验收；未提交/未合 master）
+- `useSavePipeline` 的 `saveState` 由**全局单值**改为**按文档** `saveStates: Record<noteId, SaveState>`；`setSaveState(noteId, state)`；App 的 `getDocumentStatus` 只取**活动文档**那条（缺记录时回落到该标签的 `dirty`）。⇒ 后台文档保存不再污染当前文档状态栏。
+- 顺带删除死状态 `lastSavedAt/setLastSavedAt`（全仓无消费者）。
+- 改动：`useSavePipeline.ts` · `useDocumentTabs.ts` · `useTabLifecycle.ts` · `App.tsx`；新增 1 条「按文档隔离」单测。
+- 门禁：tsc / vitest **1508 passed / 16 skipped** / check:core 73-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿。**不改**保存/落盘/revision 语义（只改状态归属）。
+- 仍未提交、未合 master。
+
+### 修复 · 260930-状态栏闪烁（已实施，待验收；未提交/未合 master）
+- **现象**：当前文档底栏状态在「保存中 ⇄ 待保存」高频摆动（~2s 一次），看着一直闪。
+- **根因**：一个隐藏的**表格 tab**（keep-alive）里 `<Workbook onChange>` 是**内联箭头**（每次 render 新身份），而 FortuneSheet 内核的 onChange effect **依赖该身份** ⇒ 每次 render 都回调 onChange ⇒ 无条件 `scheduleSave()` → `onDirty` → **全局** `saveState` 变脏 → render → 再回调，形成 dirty↔saving 死循环；而状态栏的 saveState 是**全局单值**，于是当前多维表的状态栏被隐藏表格的churn带着闪。
+- **修法**：SheetEditor 给内核传**稳定身份**的 `handleWorkbookChange`（`useCallback([])`，逻辑走 `workbookChangeRef` 指向最新闭包），函数体逐字不变、行为等价，只断掉"身份变化→伪回调"这一环。
+- **验证**：真实 dev 实例（9222）修复前每 2s 一次 `dirty→saving→dirty`；修复后 6s 内只剩一次 `local-only`，表格 tab 从 `[dirty]` 变干净。门禁：tsc / vitest **1506 passed / 16 skipped** / check:core 73-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿；新增 1 条身份护栏。
+- 仍未提交、未合 master。
+
+### 当前批次 · 260930-BTCHROME（已实施，待验收；未提交/未合 master）
+- 多维表**右上角「更多」菜单**（视图页签行最右；`BitableViewBar` 新增 `trailing` 槽）：**搜索 / 导出为 CSV / 锁定当前文档（只读）**；搜索从工具条移入菜单（内联查找框仍在工具条下方）；锁定复用文档的 `setNoteLocked`。
+- 接线：App 的 `toggleNoteLock` / `exportNoteById(noteId,"csv")` → DesktopLibrary → MultiTabEditor → BitableEditor（新增 `locked` / `onToggleLock` / `onExportCsv`）；`bitableViews.css` 新增 `.bt-viewbar-trailing`（baseline 138→141）。
+- 门禁：tsc / vitest **1506 passed / 16 skipped** / check:core 73-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿；真实端 CDP：菜单=搜索/导出为 CSV/锁定当前文档（只读），搜索出内联框，锁定后「添加记录」禁用且菜单变「解锁当前文档」，解锁后恢复可编辑（「导出为 CSV」因弹系统目录框未自动点击，仅验存在）。
+- 仍未提交、未合 master、未推送。
+
+### 当前批次 · 260930-SIDEMENU（已实施，待验收；未提交/未合 master）
+- 目录栏右键菜单优化（用户 260930）：① 「新建文档/新建表格/新建数据表/新建画板/新建分组」收进**「新建」子菜单**（复用 Overlay `Submenu`，同一组创建动作只占一行）；② 右键菜单**去掉「打开文件位置」**（属性弹窗 `NoteInfoDialog` 仍保留）。
+- 门禁：tsc / vitest **1503 passed / 16 skipped** / check:core 73 文件 0 违规 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿；真实端 CDP：笔记右键 = 新建/重命名/历史版本/属性/导出/删除（无「打开文件位置」），「新建」展开为 5 项；笔记本右键同类。
+- 仍未提交、未合 master、未推送。
+
+### 当前批次 · 260930-CSV（已实施，待验收；未提交/未合 master）
+- 用户 260930 定调：**只做 CSV 导入导出（D02 JSON 不做）**；导出菜单**按文档类型拆分、不混用**；**彻底删除「导出为原生 Lake」**；CSV 用**主流通用格式**（Excel 通用）；sheet/board 先做**占位**（表格 CSV/Excel、画板 PNG/SVG，逻辑后续）。
+- 已实施：新增 core `src/core/bitableCsv.ts`（UTF-8 BOM + CRLF + RFC4180 导出；首行表头 + 列映射 + 坏格丢弃的导入）；bitable 右键/⋯「导出为 CSV」+ 工具栏「导入 CSV」（映射对话框 `BitableCsvImportDialog`）；新增 `export_bitable_csv` / `pick_import_csv` 两个 IPC；导出菜单按 kind 拆分并删除 Lake 导出。
+- 门禁：tsc / vitest **1501 passed / 16 skipped** / check:core 73 文件 0 违规 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿。
+- **真实端 CDP 已做**（隔离实例、按端口精确回收）：CSV 导出真实 IPC 落盘（BOM/CRLF/`"甲, 乙",TRUE`/无磁盘名）；右键导出菜单 bitable=CSV、doc=Markdown/HTML/PDF、sheet=CSV·Excel 占位、board=PNG·SVG 占位，**全页无「原生 Lake」**；bitable 工具栏有「导入 CSV」。**未自动化**：导入的文件选择走原生 NSOpenPanel，导入端到端未跑（core 有单测）。sheet/board 占位无逻辑。明细只在专项 §11/§12/§13。
+- 续：新增**多维表「导出为压缩包（含附件）」**（自写 store 方式 ZIP，无新依赖）：zip 内含 `{表名}.csv` + `附件/{文件名}`，附件/图片真实文件一并打包、同名自动 (2)、CSV 指向归档内相对路径；真实端用 ditto/bsdtar/Python `zipfile` 校验通过（Apple Info-ZIP `unzip` 不认 UTF-8 名属工具限制）。
+- 仍未提交、未合 master、未推送。
+
 ### 当前批次 · 260930-AR01（已实施，用户授权合入推送后停止）
 - 隔离分支 `codex/bitable-ar01`，worktree `/Users/admin/file/local-lake/lake-notes-electron-worktrees/bitable-ar01`；本批为编辑会话/写入/导航历史/快捷键/只读草稿/共享预览所有权收口。**实际改动及验证只在专项 §13 最新记录 / §17.11。**
 - 全量测试 **1441 passed / 16 skipped**、tsc/core/CSS/原语/双端构建通过；11 个新行为测试。**真实 Electron 验证不完整：列宽 redo 断言失败（未定位产品或驱动原因），后续只读草稿与预览完整流程未走完；Android 未实测。功能保持待验收。**

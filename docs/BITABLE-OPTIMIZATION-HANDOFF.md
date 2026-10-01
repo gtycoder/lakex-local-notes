@@ -784,6 +784,11 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | AR-F7 续（B 项修复） | 待验收 | 260930-B | 表单提交走双向关联镜像；复制关联字段回落单向、不继承配对；字段类型变更清掉不再成立的视图引用；「加进本组」不预置系统时间；动态日期改为切回可见/聚焦时刷新计算时点。core 纯函数 + 4 例新单测；门禁 1457/16 全绿。见 §13 |
 | D 真实端收尾 + 整体 UI 回归 | 待验收 | 260930-D | 列宽 redo 澄清为驱动假象（真实端 260→180→260，通过）；关 tab 保留通过；只读草稿 IPC 未定论；整体 UI 回归 13 项通过。见 §13 |
 
+| D01 CSV 导出（bitable） | 待验收 | 260930-CSV | 活动数据表 → UTF-8 **BOM** + CRLF + RFC4180（Excel 通用）；值走展示口径单一来源；附件只出**展示文件名**；多值 ", "；布尔 TRUE/FALSE；整表全部字段+记录。见 §13 |
+| D01 CSV 导入（bitable） | 待验收 | 260930-CSV | 首行表头 → 列映射（已有字段 / 新建文本字段 / 忽略）→ 追加到当前活动表；类型不符**丢弃该格并报告**，绝不写坏值；关联按目标主字段标题匹配。见 §13 |
+| 导出菜单按文档类型拆分 + 移除 Lake 导出 | 待验收 | 260930-CSV | doc：markdown/html/pdf/资料路径（**删除「导出为原生 Lake」**）；sheet：CSV/Excel 占位；bitable：CSV；board：PNG/SVG 占位。见 §13 |
+| D01 续：导出为压缩包（bitable） | 待验收 | 260930-CSV | 活动数据表 → ZIP：内含 `{表名}.csv` + `附件/{文件名}`；附件/图片字段引用的真实文件一并打包；同名附件自动 (2) 后缀并让 CSV 指向归档内相对路径；自写 store 方式流式写盘（无新依赖，标准 ZIP，UTF-8 名）。见 §13 |
+
 ## 12. 修改记录
 
 > 追加格式：`日期 / 会话 / 任务 / 改动文件 / 结果 / 遗留`。
@@ -873,6 +878,8 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-30 | 260930-AR04 | 真实端性能验收（压测 + 行为验收） | scripts/bitable-stress.mjs(新) · HANDOFF/本文件 | 行为验收 7/7 通过（关联 chip / 选区四边 / 列菜单删除 / 字段移除 / 对侧降级 / 数据保留 / 视图配置清理）；压测：目标 5000×20 打开 12.42s/848k DOM/395MB/点选 2.25s，10000×20 24.8s/1.69M/1342MB，20000×50（1M 格）200s 未完成，50000×50 保存被 32MiB 正文上限拒绝 | CPU 热点已消除；DOM 是瓶颈，行虚拟化待立项；隐藏窗口量不到 FPS |
 | 2026-09-30 | 260930-B | AR-F7 续 + 动态日期计算时点 | src/core/bitableMutations.ts(+test，4 例新) · BitableEditor.tsx（onSubmit/duplicateField/updateField/clock） | 表单双向关联镜像、复制关联字段回落单向、类型变更清视图引用、系统时间不预置、动态日期在切回可见/聚焦时重算。门禁：tsc / vitest 1457-16 / check:core 70-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / git diff --check 全绿 | 分支未提交/未合 master；AR-F8 行为护栏仍不完整；C/D 未实施 |
 | 2026-09-30 | 260930-D | 真实端收尾 + 多维表整体 UI 回归 | 仅验证，无产品代码改动 | CDP 启动真实 Electron 实操：列宽撤销/重做 260-180-260；关 tab 保留通过；13 项 UI 回归（统计/五视图/添加记录/新增字段/隐藏列/关联选择器/填色/筛选/搜索入口）通过；只读草稿 IPC 未定论 | 只读草稿需「先提交输入再锁定」复验；共享预览仅 jsdom；Android 未做；仍未提交/未合 master |
+| 2026-10-01 | 260930-CSV | D01 多维表 CSV 导出/导入 + 导出菜单按类型拆分（含真实端 CDP） | `src/core/bitableCsv.ts`(新) · `bitableCsv.test.ts`(新) · `src/features/bitable/BitableCsvImportDialog.tsx`(新) · `BitableEditor.tsx` · `src/components/ExportSubmenuItem.tsx` · `exportMenu.test.ts`(新) · `Sidebar.tsx` · `DesktopOverlays.tsx` · `useNoteActions.ts` · `native.ts` · `electron/{export,noteExport,store}.ts` · `ipc/registerNotes.ts` · `preload.cjs` · `webApiServer.ts` · `store.test.ts` | 导出 UTF-8 BOM + CRLF + RFC4180；导入首行表头+列映射+坏格丢弃；菜单按 doc/sheet/bitable/board 拆分并删除 Lake 导出。门禁：tsc / vitest 1496-16 / check:core 72-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / git diff --check 全绿 | 真实端 CDP 未做（导出落盘/导入对话框/菜单分类型）；sheet 与 board 仅占位；待用户验收 |
+| 2026-10-01 | 260930-CSV | 多维表「导出为压缩包（含附件）」（D01 续） | `src/core/zipArchive.ts`(新) · `zipArchive.test.ts`(新) · `src/core/bitableCsv.ts`(attachmentLabel 选项) · `noteExport.ts`(exportBitableZip) · `export.ts` · `store.ts` · `ipc/registerNotes.ts` · `preload.cjs` · `webApiServer.ts` · `native.ts` · `ExportSubmenuItem.tsx` · `useNoteActions.ts` · `bitableCsv.test.ts` · `store.test.ts` · `exportMenu.test.ts` | 自写 store 方式 ZIP（CRC32 + 本地头 + 中央目录 + EOCD），无新依赖；真实端 CDP：ditto（macOS 原生）/bsdtar/Python zipfile 均正确解析 UTF-8 名与 CRC，CSV 单元格指向 `附件/图.png`。门禁：tsc / vitest 1501-16 / check:core 73-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / diff --check 全绿 | Apple 的 Info-ZIP `unzip` 不认 UTF-8 名（乱码，工具限制非归档缺陷）；>4GiB 需 ZIP64 暂不支持；sheet/board 仍占位 |
 
 ## 13. 会话记录（只追加）
 
@@ -3581,6 +3588,61 @@ UI 与交互变化：
 - D-2 只读草稿 IPC：仍未定论（注入方式未先提交输入，drafts=0）；需用「先 blur/Enter 提交、再 setNoteLocked」复验。
 - 多维表整体 UI 回归（真实 Electron + 隔离 userData + scheme + CDP 实操）：底栏统计、看板、画册、日历、表单、回表格、添加记录、新增字段面板、隐藏列、关联选择器打开、填色面板、筛选面板、搜索入口——13 项通过。
 - 未改产品代码；仍未提交、未合 master。
+
+### 2026-10-01 · 260930-CSV · 多维表 CSV 导出/导入（D01）+ 导出菜单按类型拆分
+
+本次完成：
+
+- **导出菜单按文档类型拆分（不混用）**：`ExportSubmenuItem.tsx` 由共用一套改为按 `kind` 分支；`Sidebar.tsx` 右键与 `DesktopOverlays.tsx` 顶栏 ⋯ 都传 `kind`，不再"只有 doc 显示导出"。
+- **彻底移除「导出为原生 Lake」**：菜单项与 `ExportFormat` 类型、`useNoteActions`、`native.ts`、`electron/export.ts` 路由、`store/noteExport.exportNativeLake` 全部删除；`store.test.ts` 的 Lake 导出入用例改为 CSV 导出用例。
+- **sheet / board 占位**：sheet「导出为 CSV/Excel（开发中）」、board「导出为 PNG/SVG（开发中）」，disabled，后续补逻辑。
+- **新增 core `src/core/bitableCsv.ts`（纯函数）**：`bitableTableCsv`（UTF-8 BOM + CRLF + RFC4180；表头=字段名；值走 `bitableFieldText` 展示单一来源；布尔 `TRUE`/`FALSE`；附件只出展示名；整表全部字段 + 全部记录）、`parseCsv`、`defaultCsvMapping`、`coerceCsvCell`、`importCsvRows`（首行表头、列映射、逐格按目标类型转换、坏格丢弃/整行跳过、可新建文本列、关联走 `addBitableRecordWithValues` 镜像唯一入口）、`csvImportSummary`、`csvFileNameFor`。
+- **electron / 渲染层接线**：`export_bitable_csv`（复用 `pick_export_dir` 目录白名单）、`pick_import_csv`（openFile + 20MB 上限 + BOM/编码按 UTF-8）；preload / webApiServer / native 同步新增。bitable 右键与 ⋯ 菜单「导出为 CSV」→ `native.exportBitableCsv` 导出**活动数据表**；bitable 工具栏「导入 CSV」→ 新增 `BitableCsvImportDialog`（复用既有 Dialog / SelectMenu，**不新增 CSS 文件**）→ 追加记录 + 结果报告（新增/丢弃/跳过 + 逐条原因）。
+
+数据结构/接口变化：
+
+- 无正文格式变化；新增 core 导出若干与 2 个 IPC（`export_bitable_csv` / `pick_import_csv`）。
+
+验证结果：
+
+- `tsc --noEmit` 通过；`vitest run` **1496 passed / 16 skipped**（新增 `bitableCsv.test.ts` 6 例、`exportMenu.test.ts` 2 例、store CSV 1 例）。
+- `check:core` 72 文件 0 违规；`ui-metrics` hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers+uiPrimitives` 8 passed；桌面 + 移动构建通过；`git diff --check` 通过。
+- **隔离 Electron CDP 真实验收**（scheme + `--no-sandbox` + 独立 userData/资产端口 19895/CDP 9350；跑完按唯一端口精确 SIGTERM 回收）：
+  - **CSV 导出走真实 IPC + 主进程**：活动数据表导出成功 `CSV验收表 - 数据表 1.csv`，文件 **BOM=true / CRLF=true / 表头 `文本,启用` / 记录 `"甲, 乙",TRUE`**、无磁盘名；验证后删除测试文件。
+  - **右键导出菜单（真实 DOM + CDP 真实鼠标事件）**：bitable=「导出为 CSV」；doc=Markdown 资料包/文本/HTML/Word(占位)/PDF；sheet=CSV/Excel（开发中）；board=PNG/SVG（开发中）；四类均含「资料路径」；**全页无「原生 Lake」**。
+  - **工具栏**：bitable 打开后 `.bt-toolbar` 含「导入 CSV」按钮。
+  - **未自动化**：导入的文件选择走 macOS 原生 NSOpenPanel，CDP 无法驱动 ⇒ **导入端到端（选文件→映射对话框→追加）未在真实端跑**；导入 core 有 6 例单测，映射对话框是薄接线。
+
+遗留问题与下一步：
+
+- **导入端到端未在真实端跑**（原生文件选择框无法 CDP 驱动）；导出落盘与四类菜单已真实端验收。
+- sheet 的 CSV/Excel 与 board 的 PNG/SVG 仅占位，逻辑未实现。
+- 导入对附件/图片、系统时间列按"不能导入"丢弃（无字节 / 只读）；关联按目标记录主字段标题匹配，匹配不到即丢该格。
+- `localAssetLakeSrcRe` 仍作为独立正则保留（其单测仍在），但已无生产调用点。
+- 功能待用户验收；按红线未合 master。
+
+### 2026-10-01 · 260930-CSV · 多维表「导出为压缩包（含附件）」（D01 续）
+
+本次完成：
+
+- 新增 core `src/core/zipArchive.ts`（纯函数、**无新依赖**）：CRC32 + 本地文件头 + 中央目录 + EOCD，**store（不压缩）**方式；`ZipWriter` 把数据流式写到调用方注入的 sink（electron 侧直接写 fd，每次只持有一个条目字节，避免整包进内存）；`createZip` 供测试/小包。文件名 UTF-8（通用位 0x0800），>4GiB 明确报错（需 ZIP64）。
+- `src/core/bitableCsv.ts` 增 `BitableCsvOptions.attachmentLabel`：压缩包导出时附件单元格写成归档内相对路径 `附件/{文件名}`。
+- `electron/noteExport.exportBitableZip`：收集活动表附件/图片字段引用的真实文件（按磁盘名去重），归档内同名自动加 ` (2)` 后缀并让 CSV 一一对应；输出 `{标题} - {表名}.zip`（内含 `{表名}.csv` + `附件/…`）。
+- 接线：`export_bitable_zip` IPC（复用导出目录白名单）+ preload/webApiServer/native/export/store；bitable 右键/⋯ 菜单加「导出为压缩包（含附件）」。
+
+数据结构/接口变化：无正文格式变化；新增 core `ZipWriter/createZip/crc32` 与 1 个 IPC。
+
+验证结果：
+
+- `tsc` 通过；`vitest run` **1501 passed / 16 skipped**（新增 `zipArchive.test.ts` 3 例 + `bitableCsv` 1 例 + store zip 1 例；`exportMenu` 增 zip 断言）。
+- check:core 73 文件 0 违规；ui-metrics hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；cssLayers+uiPrimitives 8 passed；桌面 + 移动构建通过；`git diff --check` 通过。
+- **隔离 Electron CDP 真实验收**：造含真实附件文件的多维表 → `window.lakeNative.exportBitableZip` 导出成功；用 **macOS 原生 `ditto -x -k`**、**`bsdtar -tf`**、**Python `zipfile`** 校验：名 `附件表.csv` / `附件/图.png` 正确（UTF-8）、`testzip` 无错、CSV = `第一条,附件/图.png`、PNG 字节原样；测试产物已清理。
+
+遗留与下一步：
+
+- Apple 自带 Info-ZIP `unzip` 不识别 UTF-8 名（列名乱码、`-p` 按名匹配失败）——是其不处理通用位 0x0800 的**工具限制**；ditto（Finder）/Windows/7zip/bsdtar/Python 均正常。
+- store 方式不压缩；>4GiB 需 ZIP64，暂不支持（明确报错）；sheet/board 仍占位。
+- 功能待用户验收；按红线未合 master。
 
 ## 14. 会话执行模板
 
