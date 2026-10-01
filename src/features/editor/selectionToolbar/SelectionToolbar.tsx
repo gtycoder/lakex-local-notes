@@ -144,6 +144,8 @@ export function SelectionToolbar({ editor, container }: {
   /** AI 助手（P0）：点按钮时先冻结浮栏并抓住选区文本，再开对话框。 */
   const [aiOpen, setAiOpen] = useState(false);
   const aiSelectionRef = useRef("");
+  /** 打开对话框会丢焦点 → 内核选区被折叠。这里克隆 DOM Range，替换前恢复，保证「替换」而不是「插入」。 */
+  const aiRangeRef = useRef<Range | null>(null);
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */
   const holdRef = useRef(false);
   holdRef.current = menu !== null;
@@ -378,7 +380,12 @@ export function SelectionToolbar({ editor, container }: {
         ))}
         <span className="selection-toolbar__sep" />
         {/* AI 助手：结果只进对话框，用户再决定复制/替换（不自动改写正文）。 */}
-        <KToolbarButton name="ai" title="AI 助手" className={TOGGLE} onClick={() => { aiSelectionRef.current = window.getSelection()?.toString() ?? ""; setMenu("ai"); setAiOpen(true); }}>
+        <KToolbarButton name="ai" title="AI 助手" className={TOGGLE} onClick={() => {
+          const sel = window.getSelection();
+          aiSelectionRef.current = sel?.toString() ?? "";
+          aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+          setMenu("ai"); setAiOpen(true);
+        }}>
           <Sparkles size={16} />
         </KToolbarButton>
         {/* 内核 link-toolbar-descriptor.getUIState：disabled = !link && !insertLink（选区里已有链接时两个都不可用）。
@@ -503,8 +510,20 @@ export function SelectionToolbar({ editor, container }: {
         <AiAssistantDialog
           open
           selectionText={aiSelectionRef.current}
-          onClose={() => { setAiOpen(false); setMenu(null); }}
-          onReplace={(text) => { try { editor.execCommand?.("insertAtSelection", "text/plain", text); } catch { /* 命令不可用时忽略，结果仍可复制 */ } }}
+          onClose={() => { setAiOpen(false); setMenu(null); aiRangeRef.current = null; }}
+          onReplace={(text) => {
+            try {
+              // 恢复打开对话框前的选区（否则内核已折叠到起点 → 变成"插入"）
+              const range = aiRangeRef.current;
+              const sel = window.getSelection();
+              if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
+              // 浏览器 insertText 会**替换**当前 DOM 选区；内核监听 input 同步进模型（与 CardContextMenu 同路径）。
+              // 内核 insertAtSelection 走的是它自己的选区模型，对话框抢焦点后已被折叠 ⇒ 会变成"插入"。
+              if (!document.execCommand("insertText", false, text)) {
+                editor.execCommand?.("insertAtSelection", "text/plain", text);
+              }
+            } catch { /* 命令不可用时忽略，结果仍可复制 */ }
+          }}
         />
       )}
     </div>

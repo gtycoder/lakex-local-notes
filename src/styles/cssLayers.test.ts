@@ -64,7 +64,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/attachment/attachment-preview.css": { decls: 82, dupGroups: 0 },   // 260928：+4 = 预览表面与图片 Lightbox 同源（backdrop-filter blur ×2）+ 工具栏浅色化的 border-bottom + macOS 红绿灯让位 .is-mac（合法新增，非覆盖回涨）
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 259, dupGroups: 0 },
-  "features/editor/selectionToolbar/selectionToolbar.css": { decls: 164, dupGroups: 0 },   // 260930：+28 = AI 助手对话框内容布局（表面/按钮复用 ln-dialog/ln-btn）   // 260930：+1 = Lake 颜色面板的 native color input 覆盖整行透明命中层；此前 +2 = __kmenu / __cardpop 各加 width:max-content
+  "features/editor/selectionToolbar/selectionToolbar.css": { decls: 179, dupGroups: 0 },   // 260930：+43 = AI 助手对话框（内容布局 + 多轮消息线程），表面/按钮复用 ln-dialog/ln-btn   // 260930：+1 = Lake 颜色面板的 native color input 覆盖整行透明命中层；此前 +2 = __kmenu / __cardpop 各加 width:max-content
   // 260924 续：图片形态改内核卡片工具栏结构 + 云端顺序 ⇒ 删自有 menu/item/row/input/apply（-53），+4 外壳只定位；再 +45 = 图片弹窗（宽高/链接/边距）的 __cardpop 白卡 + 输入/复选/开关行 + 百分比段（均 --lake-* 令牌）；
   // 另：+18 = 浮栏 hover 说明（名称+快捷键）portal DOM 浮层；同批 -6 = 删「转为」下拉/heading 字形覆盖
   // 260924：+2 = 段落样式/字号去掉三角后，内核 .ne-ui-toolbar-select-value 固定 width:40px 需按内容收缩 + 收窄工具栏按钮内距（合法新增覆盖内核 legacy 层，非多层叠加）   // 260923 收敛：大纲样式从 feature.css/shell.css 并回本文件单一来源；再 -12 = 层级徽标改「两级语义+中性」，删掉 6 色相里 H3–H6 的 4 条规则   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）；260923 收敛：+2 + 删死 ::before —— 增强大纲样式从 feature.css 并回本文件单一来源（见下）

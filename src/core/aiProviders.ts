@@ -36,6 +36,26 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"],
     defaultTemperature: 0.7,
   },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    protocol: "openai-compatible",
+    defaultBaseUrl: "https://api.deepseek.com/v1",
+    defaultModel: "deepseek-chat",
+    editableBaseUrl: false,
+    models: ["deepseek-chat", "deepseek-reasoner"],
+    defaultTemperature: 0.7,
+  },
+  {
+    id: "custom",
+    label: "自定义（OpenAI 兼容）",
+    protocol: "openai-compatible",
+    defaultBaseUrl: "http://127.0.0.1:11434/v1",
+    defaultModel: "",
+    editableBaseUrl: true,
+    models: [],
+    defaultTemperature: 0.7,
+  },
 ];
 
 export const DEFAULT_AI_PROVIDER_ID = AI_PROVIDERS[0].id;

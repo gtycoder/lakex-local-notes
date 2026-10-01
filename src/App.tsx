@@ -36,6 +36,7 @@ import { NoteInfoDialog } from "./components/NoteInfoDialog";
 import { saveSettings } from "./lib/settings";
 import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
+import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
@@ -62,6 +63,14 @@ export function App() {
   });
   const [infoNote, setInfoNote] = useState<TreeNode | null>(null);
   const [revealNodeId, setRevealNodeId] = useState<string | null>(null);
+  /** 顶栏「AI 助手」入口（无选区也能用）：打开时抓一次当前选区文本。 */
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [aiAssistantSelection, setAiAssistantSelection] = useState("");
+  const replaceActiveSelection = useCallback((text: string) => {
+    const editor = activeNoteId ? editorsRef.current.get(activeNoteId) : null;
+    if (!editor) return;
+    try { editor.execCommand?.("insertAtSelection", "text/plain", text); } catch { /* 命令不可用时忽略，结果仍可复制 */ }
+  }, [activeNoteId, editorsRef]);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });
   const {
@@ -617,6 +626,7 @@ export function App() {
         activeKind={activeKind}
         lockedNoteIds={lockedNoteIds}
         onToggleNoteLock={() => { void toggleNoteLock(); setTopMenuOpen(false); }}
+        onOpenAiAssistant={() => { setAiAssistantSelection(window.getSelection()?.toString() ?? ""); setAiAssistantOpen(true); setTopMenuOpen(false); }}
         // 文档右上角「更多」里的导出：与目录树右键同一套动作，作用于当前文档
         onExportAs={(format) => { void exportNoteById(activeNoteId, format); }}
         onCopyMarkdown={() => void copyMarkdownById(activeNoteId)}
@@ -649,6 +659,12 @@ export function App() {
         onSettingsChange={(patch) => saveSettings(patch)}
         onS3SettingsChanged={handleS3SettingsChanged}
         onSyncSettingsChanged={handleSyncSettingsChanged}
+      />
+      <AiAssistantDialog
+        open={aiAssistantOpen}
+        selectionText={aiAssistantSelection}
+        onClose={() => setAiAssistantOpen(false)}
+        onReplace={replaceActiveSelection}
       />
 
     </div>

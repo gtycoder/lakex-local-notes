@@ -95,6 +95,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [aiMsg, setAiMsg] = useState<string | null>(null);
   const activeAi = useMemo(() => aiView?.providers.find((p) => p.id === aiView.activeProviderId) ?? null, [aiView]);
   const aiProviderId = aiView?.activeProviderId ?? AI_PROVIDERS[0].id;
+  const activeDef = AI_PROVIDERS.find((p) => p.id === aiProviderId) ?? AI_PROVIDERS[0];
   useEffect(() => {
     if (!open || category !== "ai") return;
     let alive = true;
@@ -928,16 +929,27 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "ai" && (
               <>
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
-                  <Item itemId="ai-provider" name="供应商" desc="P0 只内置 OpenAI；结构已按多供应商预留（新增一家只需在目录里加一条）。">
-                    <select className="b3-select fn__size200" value={aiProviderId ?? AI_PROVIDERS[0].id} onChange={(e) => void saveAi({ activeProviderId: e.target.value })}>
+                  <Item itemId="ai-provider" name="供应商" desc="内置 OpenAI / DeepSeek；也可选「自定义」指向任意 OpenAI 兼容端点（Ollama / OneAPI 等）。切换即按该家默认值初始化。">
+                    <select className="b3-select fn__size200" value={aiProviderId} onChange={(e) => { const id = e.target.value; void saveAi({ activeProviderId: id, providers: [{ id }] }); }}>
                       {AI_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                     </select>
                   </Item>
-                  <Item itemId="ai-model" name="模型" desc="例如 gpt-4o-mini；可直接手填。">
-                    <TextField label="模型" value={activeAi?.model ?? ""} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, model: v }] })} />
+                  <Item itemId="ai-model" name="模型" desc="下拉选择，或按供应商手填模型名。">
+                    {activeDef.models && activeDef.models.length > 0 ? (
+                      <select className="b3-select fn__size200" value={activeAi?.model ?? activeDef.defaultModel} onChange={(e) => void saveAi({ providers: [{ id: aiProviderId, model: e.target.value }] })}>
+                        {activeDef.models.map((m) => <option key={m} value={m}>{m}</option>)}
+                        {activeAi?.model && activeDef.models.indexOf(activeAi.model) < 0 && <option value={activeAi.model}>{activeAi.model}</option>}
+                      </select>
+                    ) : (
+                      <TextField label="模型" value={activeAi?.model ?? ""} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, model: v }] })} />
+                    )}
                   </Item>
-                  <Item itemId="ai-base-url" name="Base URL" desc="OpenAI 默认 https://api.openai.com/v1；留空回落默认。">
-                    <TextField label="Base URL" value={activeAi?.baseUrl ?? ""} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, baseUrl: v }] })} wide />
+                  <Item itemId="ai-base-url" name="Base URL" desc={activeDef.editableBaseUrl === false ? "该供应商使用官方端点（固定不可改）。" : "任意 OpenAI 兼容端点，例如本地 Ollama / OneAPI。"}>
+                    {activeDef.editableBaseUrl === false ? (
+                      <span className="settings-hint">{activeAi?.baseUrl ?? activeDef.defaultBaseUrl}</span>
+                    ) : (
+                      <TextField label="Base URL" value={activeAi?.baseUrl ?? ""} placeholder={activeDef.defaultBaseUrl} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, baseUrl: v }] })} wide />
+                    )}
                   </Item>
                   <Item itemId="ai-api-key" name="API Key" desc="加密保存在本机（macOS Keychain），不会同步/上传；留空表示沿用已保存的。">
                     <TextField label="API Key" type="password" placeholder={activeAi?.hasApiKey ? "已保存（留空沿用）" : "sk-..."} value="" onSave={(v) => { if (v.trim()) void saveAi({ providers: [{ id: aiProviderId, apiKey: v }] }); }} />

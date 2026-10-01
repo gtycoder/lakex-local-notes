@@ -5,7 +5,7 @@
  */
 import { Menu } from "../components/ui/Overlay";
 import type { RefObject } from "react";
-import { Focus, Lock, LockOpen } from "lucide-react";
+import { Focus, Lock, LockOpen, Sparkles } from "lucide-react";
 import { ConfirmDelete } from "../components/Sidebar";
 import { ExportSubmenuItem, type ExportFormat } from "../components/ExportSubmenuItem";
 import { DraftRecoveryDialog } from "../components/DraftRecoveryDialog";
@@ -43,6 +43,8 @@ export interface DesktopOverlaysProps {
   activeKind: "doc" | "sheet" | "bitable" | "board";
   lockedNoteIds: ReadonlySet<string>;
   onToggleNoteLock: () => void;
+  /** 顶栏「更多」→ AI 助手（无选区也能用）。 */
+  onOpenAiAssistant: () => void;
   /** 顶栏「更多」里的导出（与目录树右键「导出」子菜单同一套动作，作用于当前文档） */
   onExportAs: (format: ExportFormat) => void;
   onCopyMarkdown: () => void;
@@ -91,7 +93,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
     workspaceMenuOpen, onCloseWorkspaceMenu, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
     desktopWorkspace, onSwitchWorkspace,
     onOpenSettingsFromMenu,
-    focusMode, onToggleFocusMode, activeNoteId, activeKind, lockedNoteIds, onToggleNoteLock,
+    focusMode, onToggleFocusMode, activeNoteId, activeKind, lockedNoteIds, onToggleNoteLock, onOpenAiAssistant,
     onExportAs, onCopyMarkdown, onCopyPaths, onCloseTopMenu,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
     searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onCloseSearch,
@@ -129,6 +131,9 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
             const rect = moreMenuWrapRef.current?.getBoundingClientRect();
             return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 236, height: 200 }, 6) : undefined;
           })()}>
+          <button role="menuitem" onClick={onOpenAiAssistant}>
+            <Sparkles size={15} /><span>AI 助手<small>润色 · 翻译 · 总结</small></span>
+          </button>
           <button role="menuitem" aria-checked={focusMode} onClick={onToggleFocusMode}>
             <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
           </button>
