@@ -574,6 +574,7 @@ export function App() {
           wordCount={docStats.wordCount}
           imageCount={docStats.imageCount}
           locked={activeNoteId !== null && lockedNoteIds.has(activeNoteId)}
+          onUnlock={activeNoteId !== null ? () => { void toggleNoteLock(activeNoteId); } : undefined}
           notice={notice}
           documentStatus={getDocumentStatus({
             hasCloudConfig: cloudConfigured,

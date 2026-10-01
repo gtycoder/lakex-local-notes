@@ -1,5 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, History, LoaderCircle, Lock, Save, Upload, WifiOff } from "lucide-react";
 import type { DocumentStatusModel } from "./documentStatusModel";
+import { Popover } from "./ui/Overlay";
+import { usePopoverPosition } from "../hooks/usePopoverPosition";
 
 export interface StatusBarNotice {
   text: string;
@@ -14,8 +17,13 @@ export interface DesktopStatusBarProps {
   imageCount: number;
   notice: StatusBarNotice | null;
   documentStatus: DocumentStatusModel;
-  /** 当前文档已锁定（只读）：仅状态栏左侧显示锁标识，不做任何操作入口。 */
+  /** 当前文档已锁定（只读）。 */
   locked?: boolean;
+  /**
+   * 解锁当前文档。传了才把锁标识做成可点胶囊（点开一个小浮层再确认解锁）；
+   * 不传 = 退回纯展示的静态标识（原行为）。
+   */
+  onUnlock?: () => void;
 }
 
 function StatusIcon({ status }: { status: DocumentStatusModel }) {
@@ -31,7 +39,13 @@ function StatusIcon({ status }: { status: DocumentStatusModel }) {
   }
 }
 
-export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount, imageCount, notice, documentStatus, locked = false }: DesktopStatusBarProps) {
+export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount, imageCount, notice, documentStatus, locked = false, onUnlock }: DesktopStatusBarProps) {
+  const lockRef = useRef<HTMLButtonElement | null>(null);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  // 锁标识的小浮层：锚在胶囊上，贴底会自动翻到上方（usePopoverPosition 先量真实尺寸）
+  const unlockPos = usePopoverPosition({ open: unlockOpen, anchor: lockRef.current, width: 232, align: "start" });
+  // 解锁后（或切到未锁定文档）关掉浮层
+  useEffect(() => { if (!locked) setUnlockOpen(false); }, [locked]);
   if (!showDocumentStats) return null;
   return (
     <>
@@ -40,12 +54,27 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
         data-doc-kind={docKind}
         aria-label="当前文档状态"
       >
-        {locked && (
+        {/* 只有这一枚胶囊可点（pointer-events:auto）；「表格」「同步状态」保持不可点。 */}
+        {locked && (onUnlock ? (
+          <button
+            type="button"
+            ref={lockRef}
+            className="document-statusbar-lock"
+            title="点击解锁"
+            aria-label="解锁当前文档"
+            aria-haspopup="dialog"
+            aria-expanded={unlockOpen}
+            onClick={() => setUnlockOpen((open) => !open)}
+          >
+            <Lock size={11} aria-hidden="true" />
+            <span>已锁定</span>
+          </button>
+        ) : (
           <span className="document-statusbar-lock" title="文档已锁定（只读）" aria-label="文档已锁定（只读）">
             <Lock size={11} aria-hidden="true" />
             <span>已锁定</span>
           </span>
-        )}
+        ))}
         <div className="document-statusbar-message" aria-live="polite">
           {notice?.text || ""}
         </div>
@@ -66,6 +95,15 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
           </div>
         </div>
       </footer>
+      {locked && onUnlock && unlockOpen && (
+        <Popover open onDismiss={() => setUnlockOpen(false)} style={unlockPos.style ?? undefined} surfaceRef={unlockPos.surfaceRef}>
+          <div className="document-lock-popover">
+            <strong>本文档已锁定（只读）</strong>
+            <span>锁定期间编辑与工具栏被禁用。</span>
+            <button type="button" className="ln-btn ln-btn--primary" onClick={() => { setUnlockOpen(false); onUnlock(); }}>解锁</button>
+          </div>
+        </Popover>
+      )}
       {notice && (
         <div className="document-notice-toast" role="status" aria-live="polite">
           <span>{notice.text}</span>

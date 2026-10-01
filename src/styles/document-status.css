@@ -99,7 +99,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 锁定标识：只做状态提示，不提供操作入口（锁定模式隐藏了工具栏，进文档需要能看出原因） */
+/* 锁定标识：显示锁状态；**只有这一枚胶囊可点**（点开解锁浮层，260930 用户）。
+   「表格」「同步状态」仍是纯展示（可选中文字、无任何动作）——状态栏容器仍 pointer-events:none。 */
 .document-statusbar-lock {
   display: inline-flex;
   align-items: center;
@@ -109,6 +110,22 @@
   font-weight: 600;
   white-space: nowrap;
 }
+button.document-statusbar-lock {
+  padding: 1px 5px;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+}
+button.document-statusbar-lock:hover { background: var(--lake-bg-hover); }
+button.document-statusbar-lock:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+
+/* 解锁浮层内容（表面仍是 Overlay 的 .ln-popover，单一来源） */
+.document-lock-popover { display: grid; gap: 8px; padding: 10px 12px; font-size: var(--lake-font-size-small); }
+.document-lock-popover > span { color: var(--lake-text-3); }
 .document-statusbar.has-message .document-statusbar-message { display: block; }
 .document-statusbar-fixed { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .document-statusbar-stats { flex: 0 0 auto; }
