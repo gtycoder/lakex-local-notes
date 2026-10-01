@@ -21,8 +21,12 @@ const PRESETS = [
 
 interface Turn { role: "user" | "assistant"; text: string }
 
-export function AiAssistantDialog({ open, selectionText, onClose, onReplace }: {
-  open: boolean; selectionText: string; onClose: () => void; onReplace?: (text: string) => void;
+export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter }: {
+  open: boolean; selectionText: string; onClose: () => void;
+  /** 替换选区内容（无选区时= 插到光标处）。 */
+  onReplace?: (text: string) => void;
+  /** 插到选区**之后**（无选区时不提供）。 */
+  onInsertAfter?: (text: string) => void;
 }) {
   const [preset, setPreset] = useState<string>("polish");
   const [instruction, setInstruction] = useState("");
@@ -54,18 +58,9 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace }: {
     return next;
   });
 
-  /** first=true 用预设+选区起头；first=false 用追问，带上历史。 */
-  const run = async (first: boolean) => {
-    if (busy) return;
-    const content = first ? firstPrompt : followUp.trim();
-    if (!content) { setError("请先写要让 AI 做什么"); return; }
-    const base = first ? [] : historyRef.current;
-    const messages: AiChatMessage[] = [...base, { role: "user", content }];
-    historyRef.current = messages;
-    setTurns((prev) => [...(first ? [] : prev),
-      { role: "user", text: first ? (selectionText.trim() || instructionText) : followUp.trim() },
-      { role: "assistant", text: "" }]);
-    setBusy(true); setError(null); setFollowUp("");
+  /** 发一轮：messages 已是完整上下文（含本轮 user）。 */
+  const send = async (messages: AiChatMessage[]) => {
+    setBusy(true); setError(null);
     const reqId = newAiRequestId();
     reqRef.current = reqId;
     try {
@@ -80,6 +75,41 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace }: {
     } finally {
       setBusy(false); reqRef.current = null;
     }
+  };
+
+  /** first=true 用预设+选区起头；first=false 用追问，带上历史。 */
+  const run = async (first: boolean) => {
+    if (busy) return;
+    const content = first ? firstPrompt : followUp.trim();
+    if (!content) { setError("请先写要让 AI 做什么"); return; }
+    const base = first ? [] : historyRef.current;
+    const messages: AiChatMessage[] = [...base, { role: "user", content }];
+    historyRef.current = messages;
+    setTurns((prev) => [...(first ? [] : prev),
+      { role: "user", text: first ? (selectionText.trim() || instructionText) : followUp.trim() },
+      { role: "assistant", text: "" }]);
+    setFollowUp("");
+    await send(messages);
+  };
+
+  /** 重新生成：丢掉最后一条助手回复，用同样的上文再要一次（对应云端「重新生成」）。 */
+  const regenerate = async () => {
+    if (busy) return;
+    const hist = historyRef.current;
+    let cut = -1;
+    for (let i = hist.length - 1; i >= 0; i--) { if (hist[i].role === "user") { cut = i; break; } }
+    if (cut < 0) return;
+    const messages = hist.slice(0, cut + 1);
+    historyRef.current = messages;
+    const lastUser = messages[messages.length - 1].content;
+    setTurns((prev) => {
+      const next = prev.slice();
+      while (next.length && next[next.length - 1].role === "assistant") next.pop();
+      if (!next.length || next[next.length - 1].role !== "user") next.push({ role: "user", text: lastUser });
+      next.push({ role: "assistant", text: "" });
+      return next;
+    });
+    await send(messages);
   };
   const stop = () => { if (reqRef.current) void cancelAiChat(reqRef.current); };
   const copy = () => { void navigator.clipboard?.writeText(lastOutput); };
@@ -119,9 +149,13 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace }: {
           <button type="button" className="ln-btn" disabled={busy || !followUp.trim()} onClick={() => void run(false)}>{busy ? "生成中…" : "发送"}</button>
         )}
         {busy && <button type="button" className="ln-btn" onClick={stop}>停止</button>}
+        {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}>重新生成</button>}
         <button type="button" className="ln-btn" disabled={!lastOutput} onClick={copy}>复制</button>
-        {/* 说明：模态对话框会折叠内核选区，"替换"实际只能"插入到原选区起点" ⇒ 只承诺插入。 */}
-        <button type="button" className="ln-btn ln-btn--primary" disabled={!lastOutput || !onReplace} onClick={() => { onReplace?.(lastOutput); onClose(); }}>插入到光标处</button>
+        {onInsertAfter && (
+          <button type="button" className="ln-btn" disabled={!lastOutput} onClick={() => { onInsertAfter(lastOutput); onClose(); }}>插入到选区后</button>
+        )}
+        {/* 260930 真机验证：打开前捕获内核模型选区、回写前用 selection 命令设回，非折叠即**替换**（⌘Z 可撤销）。 */}
+        <button type="button" className="ln-btn ln-btn--primary" disabled={!lastOutput || !onReplace} onClick={() => { onReplace?.(lastOutput); onClose(); }}>替换选区</button>
         <button type="button" className="ln-btn" onClick={onClose}>关闭</button>
       </div>
     </Dialog>

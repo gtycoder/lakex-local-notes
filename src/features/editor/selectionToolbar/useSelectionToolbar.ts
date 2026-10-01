@@ -174,6 +174,9 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     const onPointerDown = (event: PointerEvent) => {
       const t = event.target as HTMLElement | null;
       if (toolbarRef.current && t && toolbarRef.current.contains(t)) return;
+      // 独立浮层（AI 对话框等）不是挂在浮栏上的菜单：点它**不该**把浮栏整条隐掉。
+      // 否则「点生成 → 浮栏消失 → 松手后再出现」就是用户看到的闪烁（260930 报）。
+      if (t?.closest?.(".ln-dialog, .ln-scrim")) return;
       // 块句柄交互（点手柄 / 点块菜单 / 拖块）：与图片浮栏同机制 —— 立即隐，且**不进入**「松开后重开」
       // 流程，否则 pointerup 会从仍存活的文字选区把浮栏推导回来。下一次非句柄 pointerdown 自动解除。
       const inBlockHandle = !!t?.closest?.(".lake-block-handle-host");

@@ -39,6 +39,17 @@ export function captureModelRange(editor: unknown): CapturedModelRange | null {
   } catch { return null; }
 }
 
+/** 把内核选区设到捕获范围的**末尾并折叠** ⇒ 随后的插入等于「插到选区之后」。 */
+export function applyModelRangeAtEnd(editor: unknown, range: CapturedModelRange | null): boolean {
+  if (!range) return false;
+  try {
+    const ed = (editor ?? {}) as AnyRec;
+    if (typeof ed.execCommand !== "function") return false;
+    (ed.execCommand as (n: string, a: unknown) => unknown).call(ed, "selection", { ranges: [{ start: range.end, end: range.end }] });
+    return true;
+  } catch { return false; }
+}
+
 /** 把捕获的模型选区设回内核（`selection` 命令）。成功返回 true。 */
 export function applyModelRange(editor: unknown, range: CapturedModelRange | null): boolean {
   if (!range) return false;

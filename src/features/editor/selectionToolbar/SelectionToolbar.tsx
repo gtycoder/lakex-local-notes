@@ -24,7 +24,7 @@ import {
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { Sparkles } from "lucide-react";
 import { AiAssistantDialog } from "../../ai/AiAssistantDialog";
-import { applyModelRange, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
+import { applyModelRange, applyModelRangeAtEnd, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
@@ -151,7 +151,8 @@ export function SelectionToolbar({ editor, container }: {
   const aiModelRangeRef = useRef<CapturedModelRange | null>(null);
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */
   const holdRef = useRef(false);
-  holdRef.current = menu !== null;
+  // AI 对话框开着时也冻结：它覆盖浮栏上方，选区的变化不应让浮栏跳动。
+  holdRef.current = menu !== null || aiOpen;
   const { target, state, run, refresh, toolbarRef } = useSelectionToolbar(editor, container, holdRef);
   const [draft, setDraft] = useState("");
   /** 宽高弹窗的「高」输入。 */
@@ -292,7 +293,44 @@ export function SelectionToolbar({ editor, container }: {
     setMenu(null);
   }, [editor, linkSrc, linkText, run]);
 
-  if (!target) return null;
+  // AI 对话框渲染在工具栏**之外**：选中态丢失时工具栏会 `return null`，对话框若挂在工具栏内部
+  // 会被一起卸载 ⇒ 状态清零（用户 260930 报「点生成页面闪烁、插入按钮点不了」的根因就在这里）。
+  const aiDialog = aiOpen ? (
+    <AiAssistantDialog
+      open
+      selectionText={aiSelectionRef.current}
+      onClose={() => { setAiOpen(false); setMenu(null); aiRangeRef.current = null; aiModelRangeRef.current = null; }}
+      onInsertAfter={(text) => {
+        try {
+          // 把内核选区折叠到捕获范围的**末尾**再插入 ⇒ 落到选区之后（对应云端「插入选区下方」）。
+          if (applyModelRangeAtEnd(editor, aiModelRangeRef.current)) {
+            editor.execCommand?.("insertAtSelection", "text/plain", text);
+            return;
+          }
+          editor.execCommand?.("insertAtSelection", "text/plain", text);
+        } catch { /* 命令不可用时忽略，结果仍可复制 */ }
+      }}
+      onReplace={(text) => {
+        try {
+          // 首选：把打开前捕获的**内核模型选区**设回内核，再按当前选区插入 ⇒ 非折叠 = 替换。
+          // 依据 = 云端 lakex AI 面板同款做法（selection 命令 + 内核插入），不需要 DOM→view 映射。
+          if (applyModelRange(editor, aiModelRangeRef.current)) {
+            editor.execCommand?.("insertAtSelection", "text/plain", text);
+            return;
+          }
+          // 兜底：拿不到模型选区时，恢复 DOM 选区走浏览器 insertText。
+          const range = aiRangeRef.current;
+          const sel = window.getSelection();
+          if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
+          if (!document.execCommand("insertText", false, text)) {
+            editor.execCommand?.("insertAtSelection", "text/plain", text);
+          }
+        } catch { /* 命令不可用时忽略，结果仍可复制 */ }
+      }}
+    />
+  ) : null;
+
+  if (!target) return aiDialog;
 
   const renderTextMenu = () => {
     if (menu === "style") {
@@ -510,30 +548,7 @@ export function SelectionToolbar({ editor, container }: {
     >
       {target.kind === "text" ? renderText() : renderImage(target)}
       {target.kind === "text" ? renderTextMenu() : null}
-      {aiOpen && (
-        <AiAssistantDialog
-          open
-          selectionText={aiSelectionRef.current}
-          onClose={() => { setAiOpen(false); setMenu(null); aiRangeRef.current = null; aiModelRangeRef.current = null; }}
-          onReplace={(text) => {
-            try {
-              // 首选：把打开前捕获的**内核模型选区**设回内核，再按当前选区插入 ⇒ 非折叠 = 替换。
-              // 依据 = 云端 lakex AI 面板同款做法（selection 命令 + 内核插入），不需要 DOM→view 映射。
-              if (applyModelRange(editor, aiModelRangeRef.current)) {
-                editor.execCommand?.("insertAtSelection", "text/plain", text);
-                return;
-              }
-              // 兜底：拿不到模型选区时，恢复 DOM 选区走浏览器 insertText。
-              const range = aiRangeRef.current;
-              const sel = window.getSelection();
-              if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
-              if (!document.execCommand("insertText", false, text)) {
-                editor.execCommand?.("insertAtSelection", "text/plain", text);
-              }
-            } catch { /* 命令不可用时忽略，结果仍可复制 */ }
-          }}
-        />
-      )}
+      {aiDialog}
     </div>
   );
 }
