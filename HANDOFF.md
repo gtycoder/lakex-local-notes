@@ -9,6 +9,17 @@
 
 > 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
+### 当前批次 · 260930-AI-P0（已实施，本轮提交）
+- 目标：为产品接入**可配置供应商**的 AI（P0 只做 OpenAI / OpenAI 兼容），**结构按多供应商切换预留**（新增一家 = core 目录加一条 + 设置下拉自动出现，IPC/渲染层不动）。
+- 架构红线：Key **只在主进程**（渲染层 CSP connect-src 只放行 self/本机，已挡死外发）；密钥走 `SecretCipher`（safeStorage/Keychain，**fail-closed**）；`ai_settings` 是**独立 settings key**，不入同步/S3/备份。
+- core：`src/core/aiProviders.ts`（`AI_PROVIDERS` 目录 + 设置规整/脱敏/合并；视图只给 `hasApiKey`）。
+- main：`electron/ai/aiClient.ts`（官方 `openai` SDK + 任意 OpenAI 兼容 baseURL；流式/连通性/错误归类；可注入 factory 便于单测）；`electron/ipc/registerAi.ts`（`ai_get_settings` / `ai_save_settings` / `ai_test_connection` / `ai_chat`（handleEvent，`ai:stream` 推流）/ `ai_cancel`）。
+- IPC 同步四处：`registerAi.ts` + `preload.cjs` + `native.ts` + `webApiServer.ts` 的 `WEB_METHODS`（有测试卡一致性）。
+- 依赖：`openai@^7.25.0`（Apache-2.0、0 依赖、CJS；主进程 external 自动派生）。
+- UI：设置页新增「AI」分类（供应商 / 模型 / Base URL / API Key / 温度 / 测试连接）+ `settingsSearch` 条目；渲染层 `src/lib/ai.ts`（load/save/test/runAiChat 流式/cancel）。
+- 真实端验证（mock OpenAI + 隔离实例 + CDP）：保存设置 → `aiTestConnection` `{ok:true}` → 流式对话 deltas `["hello"," from"," mock"]`、最终文本 `hello from mock`；主库 `ai_settings` 落盘为 `enc:v1:` 密文、**无明文 Key**。
+- 门禁：tsc / vitest **1523 passed / 16 skipped** / check:core 74-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / `git diff --check` 全绿。
+- **未做（下一步）**：用户可见的 AI 动作入口（选区浮动工具栏「AI」或顶栏「AI 助手」面板）；按供应商切换的 UI（底层已支持，P0 只内置 OpenAI）。
 ### 当前批次 · 260930-LOCK（已实施，本轮提交并推送）
 - 用户 260930：只读锁做成**文档级、按类型统一**的入口，并让"锁"真正落到**内核层**（不能只隐藏工具栏）。
 - **目录栏右键**加入口「锁定（只读）/ 解锁」（与 重命名/历史版本/属性 同组）；`toggleNoteLock(targetNoteId?)` 泛化 ⇒ **不必先打开**文档即可锁；`Sidebar` 增 `lockedNoteIds` / `onToggleLockNote`。
