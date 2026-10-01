@@ -24,7 +24,7 @@ import {
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { AiTagIcon } from "../../ai/AiTagIcon";
 import { AiAssistantDialog } from "../../ai/AiAssistantDialog";
-import { applyModelRange, applyModelRangeAtEnd, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
+import { applyModelRange, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
@@ -306,11 +306,18 @@ export function SelectionToolbar({ editor, container }: {
       onInsertAfter={(text) => {
         try {
           // 把内核选区折叠到捕获范围的**末尾**再插入 ⇒ 落到选区之后（对应云端「插入选区下方」）。
-          if (applyModelRangeAtEnd(editor, aiModelRangeRef.current)) {
-            editor.execCommand?.("insertAtSelection", "text/markdown", text);
+          // ⚠️ 实测教训（260930）：内核**不接受"折叠的模型选区"**（execCommand('selection') 设成折叠态后
+          // 再插入，会退化成按**原选区替换**，把用户选中的文字吃掉）；insertAtPosition(…, end) 同样没生效；
+          // breakLine 的语义本身就是"删除选区内容并换行"。所以这里**不碰内核选区**，改成把
+          // 「原文 + 空行 + AI 结果」一起作为一次替换写回：文本不丢，AI 结果另起一段（MD 空行 = 新块）。
+          const original = aiSelectionRef.current;
+          const data = original.trim() ? original + "\n\n" + text : text;
+          if (applyModelRange(editor, aiModelRangeRef.current)) {
+            editor.execCommand?.("insertAtSelection", "text/markdown", data);
             return;
           }
-          editor.execCommand?.("insertAtSelection", "text/markdown", text);
+          // 兜底（拿不到模型选区）：同样写组合串，宁可位置不准也不吞原文。
+          editor.execCommand?.("insertAtSelection", "text/markdown", data);
         } catch { /* 命令不可用时忽略，结果仍可复制 */ }
       }}
       onReplace={(text) => {
