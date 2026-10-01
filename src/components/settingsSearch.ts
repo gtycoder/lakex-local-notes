@@ -42,6 +42,8 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "ai-base-url", category: "ai", label: "AI Base URL", keywords: "AI 接口 地址 endpoint base url" },
   { id: "ai-api-key", category: "ai", label: "AI API Key", keywords: "AI 密钥 key token sk 加密" },
   { id: "ai-temperature", category: "ai", label: "AI 温度", keywords: "AI temperature 随机 发散" },
+  { id: "ai-reasoning", category: "ai", label: "AI 思考强度", keywords: "AI reasoning_effort 思考强度 effort low high max deepseek 推理" },
+  { id: "ai-thinking", category: "ai", label: "AI 思考模式", keywords: "AI thinking 思考模式 开关 推理 deepseek" },
   { id: "ai-test", category: "ai", label: "AI 连通性测试", keywords: "AI 测试 连接 test 可用" },
   { id: "search-rebuild", category: "resources", label: "重建全文搜索索引", keywords: "搜索 索引 fts 重建 修复 分词" },
   { id: "shortcut-esc", category: "shortcuts", label: "关闭当前菜单或浮层", keywords: "关闭 浮层 菜单 Esc" },

@@ -2,7 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Cloud, Coffee, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
-import { AI_PROVIDERS, type AiSettingsPatch, type AiSettingsView } from "../core/aiProviders";
+import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
+
+/** 把归类后的中文错误贴到对应字段：Key 类 → apiKey；端点/模型类 → baseUrl+model；其余整条。 */
+function fieldErrorFor(message: string, retryable?: boolean): Record<string, string> {
+  // 先判可重试：断网/限流的文案里也可能出现 "Base URL" 字样，若先按文案匹配会误贴到字段上。
+  if (retryable) return {};
+  if (/API Key|无权访问|额度/.test(message)) return { apiKey: message };
+  if (/模型不存在|Base URL/.test(message)) return { baseUrl: message, model: message };
+  return message ? { all: message } : {};
+}
 import { LAKE_THEMES } from "../lib/themes";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
@@ -89,28 +98,88 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [logInfo, setLogInfo] = useState<string | null>(null);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
-  // AI（P0）：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）
+  // AI：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）。
+  // 采用**草稿式**：编辑不落盘，先「拉模型 / 测试」验证草稿，通过（或用户选择仍要保存）才写回。
   const [aiView, setAiView] = useState<AiSettingsView | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMsg, setAiMsg] = useState<string | null>(null);
+  /** 字段级错误（键：apiKey / baseUrl / model / all）——比一个笼统提示好用。 */
+  const [aiErr, setAiErr] = useState<Record<string, string>>({});
+  /** 未保存的编辑值；apiKey 只在本组件内存里，测通后才落盘。 */
+  const [aiDraft, setAiDraft] = useState<{ baseUrl?: string; model?: string; apiKey?: string; temperature?: number; reasoningEffort?: AiReasoningEffort; thinking?: AiThinkingMode }>({});
+  const [aiKeyEditing, setAiKeyEditing] = useState(false);
+  const [aiModels, setAiModels] = useState<string[] | null>(null);
+  const [aiModelsBusy, setAiModelsBusy] = useState(false);
+  /** 连通测试失败但可重试（网络/限流）⇒ 允许「仍要保存」。 */
+  const [aiForceSave, setAiForceSave] = useState(false);
   const activeAi = useMemo(() => aiView?.providers.find((p) => p.id === aiView.activeProviderId) ?? null, [aiView]);
   const aiProviderId = aiView?.activeProviderId ?? AI_PROVIDERS[0].id;
   const activeDef = AI_PROVIDERS.find((p) => p.id === aiProviderId) ?? AI_PROVIDERS[0];
+  /** 草稿 + 已存值合成的「待保存配置」，给拉列表/测试用。 */
+  const aiPending = useMemo(() => ({
+    id: aiProviderId,
+    baseUrl: aiDraft.baseUrl ?? activeAi?.baseUrl ?? activeDef.defaultBaseUrl,
+    model: aiDraft.model ?? activeAi?.model ?? activeDef.defaultModel,
+    apiKey: aiKeyEditing ? aiDraft.apiKey : undefined,
+    temperature: aiDraft.temperature ?? activeAi?.temperature ?? 0.7,
+    reasoningEffort: aiDraft.reasoningEffort ?? activeAi?.reasoningEffort,
+    thinking: aiDraft.thinking ?? activeAi?.thinking,
+  }), [aiDraft, aiKeyEditing, activeAi, aiProviderId, activeDef]);
+  const resetAiDraft = () => { setAiDraft({}); setAiKeyEditing(false); setAiErr({}); setAiForceSave(false); };
   useEffect(() => {
     if (!open || category !== "ai") return;
     let alive = true;
-    void native.aiGetSettings().then((v) => { if (alive) setAiView(v); }).catch(() => {});
+    void native.aiGetSettings().then((v) => { if (alive) { setAiView(v); setAiDraft({}); setAiKeyEditing(false); setAiErr({}); setAiForceSave(false); } }).catch(() => {});
     return () => { alive = false; };
   }, [open, category]);
   const saveAi = async (patch: AiSettingsPatch) => {
     try { setAiView(await native.aiSaveSettings(patch)); setAiMsg(null); }
     catch (e) { setAiMsg(getNativeErrorMessage(e)); }
   };
+  /** 待保存字段的补丁（Key 只在编辑态才带上）。 */
+  const aiPendingPatch = () => ({
+    id: aiProviderId, baseUrl: aiPending.baseUrl, model: aiPending.model, temperature: aiPending.temperature,
+    reasoningEffort: aiPending.reasoningEffort, thinking: aiPending.thinking,
+    ...(aiKeyEditing && aiDraft.apiKey ? { apiKey: aiDraft.apiKey } : {}),
+  });
+  /** 切供应商：按该家默认初始化，并清空草稿与模型列表。 */
+  const switchAiProvider = async (id: string) => {
+    resetAiDraft(); setAiModels(null); setAiMsg(null);
+    await saveAi({ activeProviderId: id, providers: [{ id }] });
+  };
+  /** 拉模型列表：本身就是一次轻量连通验证；失败按字段贴错、回落手填。 */
+  const fetchAiModels = async () => {
+    setAiModelsBusy(true); setAiErr({}); setAiMsg(null); setAiForceSave(false);
+    try {
+      const r = await native.aiListModels(aiPending);
+      if (r.ok) { setAiModels(r.models ?? []); setAiMsg("已获取模型列表：" + (r.models?.length ?? 0) + " 个"); }
+      else { setAiModels(null); setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable)); setAiMsg("拉取模型列表失败：" + (r.error ?? "未知错误")); }
+    } catch (e) { setAiMsg("拉取模型列表失败：" + getNativeErrorMessage(e)); }
+    finally { setAiModelsBusy(false); }
+  };
   const testAi = async () => {
-    setAiBusy(true); setAiMsg(null);
-    try { const r = await native.aiTestConnection(); setAiMsg(r.ok ? "连接成功 ✓" : "失败：" + (r.error ?? "未知错误")); }
-    catch (e) { setAiMsg("失败：" + getNativeErrorMessage(e)); }
+    setAiBusy(true); setAiMsg(null); setAiErr({});
+    try {
+      const r = await native.aiTestConnection(aiPending);
+      setAiMsg(r.ok ? "连接成功 ✓" : "失败：" + (r.error ?? "未知错误"));
+      if (!r.ok) setAiErr(fieldErrorFor(r.error ?? "", r.retryable));
+    } catch (e) { setAiMsg("失败：" + getNativeErrorMessage(e)); }
     finally { setAiBusy(false); }
+  };
+  /** 保存前 gate：先测草稿。鉴权/模型类硬拦；网络/限流给「仍要保存」。 */
+  const testAndSaveAi = async () => {
+    setAiBusy(true); setAiErr({}); setAiMsg(null); setAiForceSave(false);
+    try {
+      const r = await native.aiTestConnection(aiPending);
+      if (r.ok) { await saveAi({ providers: [aiPendingPatch()] }); resetAiDraft(); setAiMsg("连接成功，已保存 ✓"); }
+      else { setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable)); setAiMsg("连接失败：" + (r.error ?? "未知错误")); setAiForceSave(Boolean(r.retryable)); }
+    } catch (e) { setAiMsg("连接失败：" + getNativeErrorMessage(e)); }
+    finally { setAiBusy(false); }
+  };
+  /** 仅保存不测试（只在「仍要保存」路径出现）。 */
+  const forceSaveAi = async () => {
+    await saveAi({ providers: [aiPendingPatch()] });
+    resetAiDraft(); setAiForceSave(false); setAiMsg("已保存（未通过连通测试）");
   };
   const [gcCfg, setGcCfg] = useState<{ gcRetentionDays: number; gcIntervalHours: number; trashAutoPurgeDays: number } | null>(null);
   const [gcPending, setGcPending] = useState<number>(0);
@@ -929,39 +998,69 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "ai" && (
               <>
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
-                  <Item itemId="ai-provider" name="供应商" desc="内置 OpenAI / DeepSeek；也可选「自定义」指向任意 OpenAI 兼容端点（Ollama / OneAPI 等）。切换即按该家默认值初始化。">
-                    <select className="b3-select fn__size200" value={aiProviderId} onChange={(e) => { const id = e.target.value; void saveAi({ activeProviderId: id, providers: [{ id }] }); }}>
+                  <Item itemId="ai-provider" name="供应商" desc="只支持 **OpenAI 兼容** 接口：内置 OpenAI / DeepSeek，也可选「自定义」指向任意兼容端点（Ollama / vLLM / OneAPI 等）。切换即按该家默认值初始化。">
+                    <select className="b3-select fn__size200" value={aiProviderId} onChange={(e) => void switchAiProvider(e.target.value)}>
                       {AI_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                     </select>
                   </Item>
-                  <Item itemId="ai-model" name="模型" desc="下拉选择，或按供应商手填模型名。">
-                    {activeDef.models && activeDef.models.length > 0 ? (
-                      <select className="b3-select fn__size200" value={activeAi?.model ?? activeDef.defaultModel} onChange={(e) => void saveAi({ providers: [{ id: aiProviderId, model: e.target.value }] })}>
-                        {activeDef.models.map((m) => <option key={m} value={m}>{m}</option>)}
-                        {activeAi?.model && activeDef.models.indexOf(activeAi.model) < 0 && <option value={activeAi.model}>{activeAi.model}</option>}
-                      </select>
-                    ) : (
-                      <TextField label="模型" value={activeAi?.model ?? ""} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, model: v }] })} />
-                    )}
-                  </Item>
-                  <Item itemId="ai-base-url" name="Base URL" desc={activeDef.editableBaseUrl === false ? "该供应商使用官方端点（固定不可改）。" : "任意 OpenAI 兼容端点，例如本地 Ollama / OneAPI。"}>
-                    {activeDef.editableBaseUrl === false ? (
-                      <span className="settings-hint">{activeAi?.baseUrl ?? activeDef.defaultBaseUrl}</span>
-                    ) : (
-                      <TextField label="Base URL" value={activeAi?.baseUrl ?? ""} placeholder={activeDef.defaultBaseUrl} onSave={(v) => void saveAi({ providers: [{ id: aiProviderId, baseUrl: v }] })} wide />
-                    )}
-                  </Item>
-                  <Item itemId="ai-api-key" name="API Key" desc="加密保存在本机（macOS Keychain），不会同步/上传；留空表示沿用已保存的。">
-                    <TextField label="API Key" type="password" placeholder={activeAi?.hasApiKey ? "已保存（留空沿用）" : "sk-..."} value="" onSave={(v) => { if (v.trim()) void saveAi({ providers: [{ id: aiProviderId, apiKey: v }] }); }} />
-                  </Item>
-                  <Item itemId="ai-temperature" name="温度" desc="0 更稳定、2 更发散。">
-                    <NumField label="温度" min={0} max={2} floor={0} fallback={0.7} value={activeAi?.temperature ?? 0.7} onSave={(n) => void saveAi({ providers: [{ id: aiProviderId, temperature: n }] })} />
-                  </Item>
-                  <Item itemId="ai-test" name="连通性" desc="用当前配置发一次最小真实请求。">
+                  <Item itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点。默认：" + activeDef.defaultBaseUrl}>
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" disabled={aiBusy} onClick={() => void testAi()}>{aiBusy ? "测试中…" : "测试连接"}</button>
-                      {aiMsg && <span className="settings-hint">{aiMsg}</span>}
+                      <span className="ln-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} /></span>
+                      <button className="b3-button b3-button--outline" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
                     </div>
+                    {aiErr.baseUrl && <span className="settings-hint">{aiErr.baseUrl}</span>}
+                  </Item>
+                  <Item itemId="ai-api-key" name="API Key" desc="加密保存在本机（macOS Keychain），不同步、不上传；留空即沿用已保存的。">
+                    <div className="config-block__actions">
+                      {aiKeyEditing ? (
+                        <>
+                          <span className="ln-input"><input className="ln-input__field" type="password" placeholder="sk-..." value={aiDraft.apiKey ?? ""} onChange={(e) => setAiDraft((d) => ({ ...d, apiKey: e.target.value }))} /></span>
+                          <button className="b3-button b3-button--outline" onClick={() => { setAiKeyEditing(false); setAiDraft((d) => ({ ...d, apiKey: "" })); }}>取消</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="settings-hint">{activeAi?.hasApiKey ? "已保存" : "未配置"}</span>
+                          <button className="b3-button b3-button--outline" onClick={() => setAiKeyEditing(true)}>{activeAi?.hasApiKey ? "更换" : "填写"}</button>
+                        </>
+                      )}
+                    </div>
+                    {aiErr.apiKey && <span className="settings-hint">{aiErr.apiKey}</span>}
+                  </Item>
+                  <Item itemId="ai-model" name="模型" desc="从供应商拉取候选（这一步同时验证连通性）；端点不实现 /models 时直接手填。">
+                    <div className="config-block__actions">
+                      <span className="ln-input"><input className="ln-input__field" list="ai-model-options" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} /></span>
+                      <datalist id="ai-model-options">{(aiModels ?? []).map((m) => <option key={m} value={m} />)}</datalist>
+                      <button className="b3-button b3-button--outline" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>{aiModelsBusy ? "拉取中…" : "获取模型列表"}</button>
+                    </div>
+                    {aiErr.model && <span className="settings-hint">{aiErr.model}</span>}
+                  </Item>
+                  {activeDef.supportsReasoning && (
+                    <Item itemId="ai-reasoning" name="思考强度" desc="DeepSeek 的 reasoning_effort（默认 high）。思考模式下 temperature 不生效。">
+                      <select className="b3-select fn__size200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(e) => setAiDraft((d) => ({ ...d, reasoningEffort: e.target.value as AiReasoningEffort }))}>
+                        {AI_REASONING_EFFORTS.map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </Item>
+                  )}
+                  {activeDef.supportsThinking && (
+                    <Item itemId="ai-thinking" name="思考模式" desc="DeepSeek 的 thinking：关闭更省 token 与延迟；开启时温度不生效。">
+                      <select className="b3-select fn__size200" value={aiPending.thinking ?? "enabled"} onChange={(e) => setAiDraft((d) => ({ ...d, thinking: e.target.value as AiThinkingMode }))}>
+                        {AI_THINKING_MODES.map((v) => <option key={v} value={v}>{v === "enabled" ? "开启" : "关闭"}</option>)}
+                      </select>
+                    </Item>
+                  )}
+                  {(!activeDef.supportsThinking || aiPending.thinking === "disabled") && (
+                    <Item itemId="ai-temperature" name="温度" desc="0 更稳定、2 更发散。">
+                      <NumField label="温度" min={0} max={2} floor={0} fallback={0.7} value={aiPending.temperature} onSave={(n) => setAiDraft((d) => ({ ...d, temperature: n }))} />
+                    </Item>
+                  )}
+                  <Item itemId="ai-test" name="连通性" desc="保存前先发一次最小真实请求：鉴权/模型类错误会拦住保存；网络/限流可选择仍要保存。">
+                    <div className="config-block__actions">
+                      <button className="b3-button" disabled={aiBusy} onClick={() => void testAndSaveAi()}>{aiBusy ? "测试中…" : "测试并保存"}</button>
+                      <button className="b3-button b3-button--outline" disabled={aiBusy} onClick={() => void testAi()}>仅测试</button>
+                      {aiForceSave && <button className="b3-button b3-button--outline" onClick={() => void forceSaveAi()}>仍要保存</button>}
+                    </div>
+                    {aiErr.all && <span className="settings-hint">{aiErr.all}</span>}
+                    {aiMsg && <span className="settings-hint">{aiMsg}</span>}
                   </Item>
                 </Group>
                 <Group title="说明">
