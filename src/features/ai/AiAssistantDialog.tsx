@@ -112,22 +112,28 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
 
   return (
     <Popover open={open} onDismiss={onClose} style={pos.style ?? undefined} surfaceRef={pos.surfaceRef} className="ai-dialog" label="AI 助手">
-      <header className="ln-dialog__head"><h3 className="ln-dialog__title"><Sparkles size={15} /> AI 助手</h3></header>
       <div className="ln-dialog__body">
-        {turns.length === 0 ? (
-          <textarea className="ai-dialog__input" rows={2} autoFocus placeholder="向智能助手提问…" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
-        ) : (
+        {turns.length > 0 && (
           <>
             <div className="ai-dialog__thread">
               {turns.map((t, i) => (
                 <div key={i} className={"ai-dialog__msg ai-dialog__msg--" + t.role}>{t.text || (busy && i === turns.length - 1 ? "…" : "")}</div>
               ))}
             </div>
-            <textarea className="ai-dialog__input" rows={2} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
+            {lastOutput && <div className="ai-dialog__note">内容由 AI 生成，请自行核对</div>}
           </>
         )}
-        {lastOutput && <div className="ai-dialog__note">内容由 AI 生成，请自行核对</div>}
         {error && <div className="ai-dialog__error">{error}</div>}
+      </div>
+      {/* 单横条：✦ 在框内左侧、✕ 在框内右侧（对齐云端浮条形态）。 */}
+      <div className="ai-dialog__bar">
+        <Sparkles size={16} />
+        {turns.length === 0 ? (
+          <textarea className="ai-dialog__field" rows={1} autoFocus placeholder="向智能助手提问…" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
+        ) : (
+          <textarea className="ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
+        )}
+        <button type="button" className="ai-dialog__close" onClick={onClose} aria-label="关闭"><X size={14} /></button>
       </div>
       <div className="ln-dialog__actions">
         {turns.length === 0 ? (
