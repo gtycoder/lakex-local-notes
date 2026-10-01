@@ -56,9 +56,11 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     label: "DeepSeek",
     protocol: "openai-compatible",
     defaultBaseUrl: "https://api.deepseek.com/v1",
-    defaultModel: "deepseek-chat",
+    // 260930 按真实账户的 GET /models 更新（旧值 deepseek-chat/deepseek-reasoner 已不在列表里，
+    // 但 deepseek-chat 仍可作别名调用）；拉取成功时以接口返回为准，这里只是离线兜底。
+    defaultModel: "deepseek-flash",
     editableBaseUrl: true,
-    models: ["deepseek-chat", "deepseek-reasoner"],
+    models: ["deepseek-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
     defaultTemperature: 0.7,
     // DeepSeek：思考模式默认开启、effort 默认 high；思考模式下 temperature 会被忽略（官方文档）。
     supportsReasoning: true,

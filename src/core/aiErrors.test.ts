@@ -29,6 +29,15 @@ describe("aiErrorInfo", () => {
     expect(aiErrorInfo({ message: "content_filter triggered" }).kind).toBe("content_filter");
   });
 
+  it("模型名写错（真实 DeepSeek 是 400 + 英文原文）也归到 not_found 且给中文前缀", () => {
+    const msg = "400 The supported API model names are deepseek-flash, deepseek-v4-pro, but you passed no-such-model.";
+    const info = aiErrorInfo({ status: 400, message: msg });
+    expect(info.kind).toBe("not_found");
+    expect(info.message).toContain("模型名不被支持");
+    expect(info.message).toContain("deepseek-flash");
+    expect(info.retryable).toBe(false);
+  });
+
   it("retryable 只对 限流/5xx/网络/超时 为真", () => {
     expect(aiErrorInfo({ status: 429 }).retryable).toBe(true);
     expect(aiErrorInfo({ status: 500 }).retryable).toBe(true);

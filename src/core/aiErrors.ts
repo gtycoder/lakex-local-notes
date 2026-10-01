@@ -82,6 +82,12 @@ export function aiErrorInfo(err: unknown): AiErrorInfo {
   if (/content_filter|content policy|safety/.test(hay)) return mk("content_filter");
   if (/timeout|etimedout|timed out/.test(hay)) return mk("timeout");
   if (/connection error|fetch failed|enotfound|econnrefused|econnreset|eai_again|socket hang up|network/.test(hay)) return mk("network");
+  // 真实 DeepSeek 实测：模型名写错返回的是 **400 + 英文原文**
+  // "The supported API model names are deepseek-flash, deepseek-v4-pro, but you passed no-such-model."
+  // 这句里的支持列表很有用，所以保留原文尾巴，但加中文前缀并归到 not_found（贴到「模型」字段）。
+  if (/supported api model names|unknown model|model not found|invalid model|does not exist|no such model/.test(hay)) {
+    return mk("not_found", raw ? "模型名不被支持：" + raw.slice(0, 180) : MESSAGE.not_found);
+  }
   if (status === 400) return mk("bad_request", raw ? raw.slice(0, 200) : undefined);
   if (raw) return mk("unknown", raw.slice(0, 200));
   return mk("unknown");

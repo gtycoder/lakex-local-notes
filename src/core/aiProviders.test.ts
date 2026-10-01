@@ -47,7 +47,7 @@ describe("aiProviders 设置模型", () => {
     // 首次切到 deepseek：取该家默认，且**不**带上 openai 的 Key
     s = mergeAiSettings(s, { activeProviderId: "deepseek", providers: [{ id: "deepseek" }] });
     expect(s.activeProviderId).toBe("deepseek");
-    expect(s.providers.deepseek.model).toBe("deepseek-chat");
+    expect(s.providers.deepseek.model).toBe("deepseek-flash");
     expect(s.providers.deepseek.apiKey).toBeUndefined();
     s = mergeAiSettings(s, { providers: [{ id: "deepseek", apiKey: "sk-ds" }] });
     // 切回 openai：原配置原样保留

@@ -9,6 +9,7 @@ function fieldErrorFor(message: string, retryable?: boolean): Record<string, str
   // 先判可重试：断网/限流的文案里也可能出现 "Base URL" 字样，若先按文案匹配会误贴到字段上。
   if (retryable) return {};
   if (/API Key|无权访问|额度/.test(message)) return { apiKey: message };
+  if (/模型名不被支持/.test(message)) return { model: message };
   if (/模型不存在|Base URL/.test(message)) return { baseUrl: message, model: message };
   return message ? { all: message } : {};
 }
@@ -1043,6 +1044,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                         <>
                           <span className="settings-hint">{activeAi?.hasApiKey ? "已保存" : "未配置"}</span>
                           <button className="b3-button b3-button--outline" onClick={() => setAiKeyEditing(true)}>{activeAi?.hasApiKey ? "更换" : "填写"}</button>
+                          {/* 清除：只删本机的 Key（换机/共享设备时抹掉），不清其它配置项 */}
+                          {activeAi?.hasApiKey && (
+                            <button className="b3-button b3-button--outline" onClick={() => void saveAi({ providers: [{ id: aiProviderId, clearApiKey: true }] })}>清除</button>
+                          )}
                         </>
                       )}
                     </div>
