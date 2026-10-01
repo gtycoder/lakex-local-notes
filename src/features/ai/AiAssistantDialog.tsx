@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Check, Copy, CornerDownRight, RotateCcw, Sparkles, X } from "lucide-react";
 import { Dialog } from "../../components/ui/Overlay";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
 import type { AiChatMessage } from "../../core/aiProviders";
@@ -140,6 +140,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
             <textarea className="ai-dialog__input" rows={2} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
           </>
         )}
+        {lastOutput && <div className="ai-dialog__note">内容由 AI 生成，请自行核对</div>}
         {error && <div className="ai-dialog__error">{error}</div>}
       </div>
       <div className="ln-dialog__actions">
@@ -149,14 +150,14 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
           <button type="button" className="ln-btn" disabled={busy || !followUp.trim()} onClick={() => void run(false)}>{busy ? "生成中…" : "发送"}</button>
         )}
         {busy && <button type="button" className="ln-btn" onClick={stop}>停止</button>}
-        {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}>重新生成</button>}
-        <button type="button" className="ln-btn" disabled={!lastOutput} onClick={copy}>复制</button>
+        {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={14} /> 重新生成</button>}
+        <button type="button" className="ln-btn" disabled={!lastOutput} onClick={copy}><Copy size={14} /> 复制</button>
         {onInsertAfter && (
-          <button type="button" className="ln-btn" disabled={!lastOutput} onClick={() => { onInsertAfter(lastOutput); onClose(); }}>插入到选区后</button>
+          <button type="button" className="ln-btn" disabled={!lastOutput} onClick={() => { onInsertAfter(lastOutput); onClose(); }}><CornerDownRight size={14} /> 插入到选区后</button>
         )}
         {/* 260930 真机验证：打开前捕获内核模型选区、回写前用 selection 命令设回，非折叠即**替换**（⌘Z 可撤销）。 */}
-        <button type="button" className="ln-btn ln-btn--primary" disabled={!lastOutput || !onReplace} onClick={() => { onReplace?.(lastOutput); onClose(); }}>替换选区</button>
-        <button type="button" className="ln-btn" onClick={onClose}>关闭</button>
+        <button type="button" className="ln-btn ln-btn--primary" disabled={!lastOutput || !onReplace} onClick={() => { onReplace?.(lastOutput); onClose(); }}><Check size={14} /> 替换选区</button>
+        <button type="button" className="ln-btn" onClick={onClose}><X size={14} /> 关闭</button>
       </div>
     </Dialog>
   );
