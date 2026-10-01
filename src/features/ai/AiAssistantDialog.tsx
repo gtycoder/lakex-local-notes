@@ -107,7 +107,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
   const stop = () => { if (reqRef.current) void cancelAiChat(reqRef.current); };
   // 贴选区/锚点悬浮（无遮罩）：与格式浮栏同款定位原语，贴底自动翻上方。
   const fallbackAt = { x: Math.max(16, window.innerWidth - 456), y: 64 };
-  const pos = usePopoverPosition({ open, anchor: anchor ?? null, at: at ?? (anchor ? null : fallbackAt), width: 420, align: "start", side: "below", gap: 8 });
+  const pos = usePopoverPosition({ open, anchor: anchor ?? null, at: at ?? (anchor ? null : fallbackAt), width: 460, align: "start", side: "below", gap: 8 });
   const copy = () => { void navigator.clipboard?.writeText(lastOutput); };
 
   return (
@@ -133,7 +133,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
         ) : (
           <textarea className="ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
         )}
-        <button type="button" className="ai-dialog__close" onClick={onClose} aria-label="关闭"><X size={14} /></button>
+        <button type="button" className="ai-dialog__close" onClick={onClose} aria-label="关闭"><X size={12} /></button>
       </div>
       <div className="ln-dialog__actions">
         {turns.length === 0 ? (
@@ -142,14 +142,14 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
           <button type="button" className="ln-btn" disabled={busy || !followUp.trim()} onClick={() => void run(false)}>{busy ? "生成中…" : "发送"}</button>
         )}
         {busy && <button type="button" className="ln-btn" onClick={stop}>停止</button>}
-        {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={14} /> 重新生成</button>}
-        <button type="button" className="ln-btn" disabled={!lastOutput} onClick={copy}><Copy size={14} /> 复制</button>
+        {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
+        <button type="button" className="ln-btn" disabled={!lastOutput} onClick={copy}><Copy size={12} /> 复制</button>
         {onInsertAfter && (
-          <button type="button" className="ln-btn" disabled={!lastOutput} onClick={() => { onInsertAfter(lastOutput); onClose(); }}><CornerDownRight size={14} /> 插入到选区后</button>
+          <button type="button" className="ln-btn" disabled={!lastOutput} onClick={() => { onInsertAfter(lastOutput); onClose(); }}><CornerDownRight size={12} /> 插入到选区后</button>
         )}
         {/* 260930 真机验证：打开前捕获内核模型选区、回写前用 selection 命令设回，非折叠即**替换**（⌘Z 可撤销）。 */}
-        <button type="button" className="ln-btn ln-btn--primary" disabled={!lastOutput || !onReplace} onClick={() => { onReplace?.(lastOutput); onClose(); }}><Check size={14} /> 替换选区</button>
-        <button type="button" className="ln-btn" onClick={onClose}><X size={14} /> 关闭</button>
+        <button type="button" className="ln-btn ln-btn--primary" disabled={!lastOutput || !onReplace} onClick={() => { onReplace?.(lastOutput); onClose(); }}><Check size={12} /> 替换选区</button>
+        <button type="button" className="ln-btn" onClick={onClose}><X size={12} /> 关闭</button>
       </div>
     </Popover>
   );
