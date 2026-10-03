@@ -39,8 +39,10 @@
   - **高度按行盒撑开（用户 261003 反馈"高度不够、跨行露缝"）**：原生 `::selection` 按**行盒**（line-height）画，而 `Range.getClientRects()` 给的是**文字盒**（只到字形高，实测 21px vs 行高 30px）⇒ 跨行时两行的色带之间会露一条缝。现在取所在块的 `computedStyle.lineHeight`（`normal` 时按 1.6×字号兜底）把每个矩形**居中撑到行高**，两行自然首尾相接，与原生一致。
   - **零闪烁（用户 261003「还是有一点点闪烁」）—— 两个根因都修了**：
     ① **对话框换了树位置 ⇒ React 重挂载**：它原先在「工具栏可见时挂在工具栏内部、工具栏消失时挂在外层」，点进提问框（选区折叠 → 工具栏卸载）时整棵子树被重新挂载 = 闪一下。现在对话框与工具栏是**同一 Fragment 的两个固定槽位**，`!target` 分支也保留 `null` 占位（Fragment 按 index 对账，少一个槽位照样会换位置）。
-    ② **原生 ↔ 自绘的交接帧**：面板一打开就把**原生选区色置透明**，自绘层从那一刻起一直画 ⇒ 全程没有交接。
-       ⚠️ 这条规则必须写在 **`src/styles/kernel-theme.css`（未分层）**，不能写在组件 CSS（overlay 层）：**层序里未分层普通声明压过所有分层普通声明**（我第一版写在 overlay 层，实测 `getComputedStyle` 仍是原色 —— 静默失效）。规则 = `.lake-editor-mount.lake-ai-sel-hidden{--lakex-editor-selection:transparent}`（与本文件上面那条同层同特异性、位置更靠后 ⇒ 胜出，不需要 `!important`）。
+    ② **原生 ↔ 自绘的交接帧**：面板一打开就把**原生选区色置透明**，自绘层从那一刻起一直画 ⇒ 全程没有交接。两个必须（两条都踩过）：
+       · 规则要写在 **`src/styles/kernel-theme.css`（未分层）**，不能写组件 CSS（overlay 层）——**层序里未分层普通声明压过所有分层普通声明**，写在 overlay 层会静默失效（实测 `getComputedStyle` 仍是原色）。
+       · 规则要**同时指到 `.ne-engine` / `.lakex-default-theme`**：CSS 变量取**最近祖先**，而内核运行时注入的 `<style>` 把 `.lakex-default-theme{--lakex-editor-selection:rgba(27,162,227,.2)}` 挂在**引擎元素**上，只写挂载点（在更外层）会被"就近"盖掉 ⇒ 点 AI 后**两层叠加、颜色变深**（用户 261003 截图实证）。
+       最终规则 = `.lake-editor-mount.lake-ai-sel-hidden, .lake-ai-sel-hidden .ne-engine, .lake-ai-sel-hidden .lakex-default-theme { --lakex-editor-selection: transparent; }`（(0,2,0) > 内核那条 (0,1,0) ⇒ 胜出，仍不需要 `!important`）。
   - **零闪烁实测（MutationObserver 事件流）**：打开面板 → `mount-class suppressed` 与自绘层挂载在**同一帧**（13ms 内）完成；之后「点进提问框 → focusin → selectionchange collapsed」以及连续打字，**全程没有任何 `mount-class` / 宿主 DOM 变更** ⇒ 视觉上完全不闪。用户另选了别的文字时会把选区还给原生（否则他看不到自己新选的内容）。
 - **调研结论（已排除，避免重复投入）**：morphicons（https://www.morphicons.com）**不是图标库**，是"两个**描边**图标之间的形变动画引擎"（MIT、~6-8KB gzip、零依赖）。内核那 325 个图标是**填充**图标（`fill="currentColor"` 236 处 + 硬编码灰阶）且带 `<g>`/`transform` —— README 明确：纯填充会在解析期报错、不支持 `<g>`/`transform` ⇒ **内核图标一个都换不了**（要换=改 vendor，红线）；我们自己那 57 个文件用 `lucide-react`（描边，兼容），但它只吃 vanilla `lucide` 的**数据**、不吃 `lucide-react` 组件 ⇒ 等于给图标开第二个来源。**用户 261003 决定先不做。**
 - 门禁：`tsc` ✓ · vitest **1537 passed / 16 skipped** ✓ · 桌面 + 移动构建 ✓ · `ui-metrics`（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · `check:core` 0 违规 ✓ · `git diff --check` ✓。
