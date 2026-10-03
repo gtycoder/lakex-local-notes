@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import {
-  bitableAttachments, bitableDisplayValue, isSystemTimeField, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
+  bitableAttachments, bitableDisplayValue, isAiFieldType, isSystemTimeField, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
@@ -44,8 +44,8 @@ export function BitableFormView(props: BitableFormViewProps) {
   const [submitted, setSubmitted] = useState(false);
 
   // 未配置时沿用 v1 口径：默认收入全部字段（不是"空表单"）
-  /** 表单可用字段：排除系统时间字段（值来自记录时间戳，表单无法录入）。 */
-  const formableFields = table.fields.filter((f) => !isSystemTimeField(f.type));
+  /** 表单可用字段：排除系统时间字段（值来自记录时间戳）与 AI 字段（值由生成产生），表单无法录入。 */
+  const formableFields = table.fields.filter((f) => !isSystemTimeField(f.type) && !isAiFieldType(f.type));
   const includedIds = view.formFieldIds ?? formableFields.map((f) => f.id);
   /** 题目顺序 = formFieldIds 顺序（契约见 BitableView.formFieldIds），不是表字段顺序。 */
   const includedFields = includedIds

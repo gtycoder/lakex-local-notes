@@ -35,7 +35,7 @@ export function usePopoverPosition({
   side = "below",
   gap = 4,
   margin = 8,
-}: UsePopoverPositionOptions): { surfaceRef: (el: HTMLElement | null) => void; style: CSSProperties | null } {
+}: UsePopoverPositionOptions): { surfaceRef: (el: HTMLElement | null) => void; style: CSSProperties | null; placed: boolean } {
   const elRef = useRef<HTMLElement | null>(null);
   const [style, setStyle] = useState<CSSProperties | null>(null);
   const atX = at?.x; const atY = at?.y;
@@ -43,6 +43,10 @@ export function usePopoverPosition({
   const place = useCallback(() => {
     const el = elRef.current;
     if (!el) return;
+    // 调用方给了目标宽度就**先落到元素再量**：宽度变化时 style state 还停在旧值，
+    // 直接量 offsetWidth 会拿到旧宽 ⇒ 横向夹取用错宽度、左缘会偏（AI 弹窗跟随正文栏时实测到）。
+    // 高度照旧实测（翻转全靠它）。写在 useLayoutEffect 里，绘制前完成，无视觉影响。
+    if (width !== undefined) el.style.width = `${width}px`;
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const size = { width: el.offsetWidth, height: el.offsetHeight };
     const next = atX !== undefined && atY !== undefined
@@ -72,5 +76,7 @@ export function usePopoverPosition({
 
   const surfaceRef = useCallback((el: HTMLElement | null) => { elRef.current = el; }, []);
   const provisional: CSSProperties | null = open ? { left: -9999, top: -9999, width, visibility: "hidden" } : null;
-  return { surfaceRef, style: style ?? provisional };
+  // `placed` = 定位已算完（首帧的 visibility:hidden 占位已换掉）。调用方若要「打开就聚焦」必须等它：
+  // 占位帧的元素不可聚焦，此刻 focus() 会被浏览器静默忽略（AI 弹窗实测踩到）。
+  return { surfaceRef, style: style ?? provisional, placed: style !== null };
 }

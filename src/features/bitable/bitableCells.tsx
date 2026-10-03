@@ -11,15 +11,19 @@ import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { BitableRelationPicker } from "./BitableRelationPicker.js";
-import { ArrowLeftRight, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
+import { ArrowLeftRight, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Sparkles, SquareCheck, Star, Tags, TextQuote, Type, X } from "lucide-react";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { placePopoverPosition } from "../../hooks/topMenuPosition";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import { bitableAssetUrl } from "./bitableAssetUrl.js";
 import { FileKindIcon } from "./FileKindIcon.js";
+import type { AiCellRunState } from "./useAiFieldGeneration.js";
 import "./bitableFieldCells.css";
+import "./bitableAiField.css";
+import "./bitableMarkdown.css";
+import { MarkdownView, markdownToPlainText } from "./markdown.js";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import type { CSSProperties } from "react";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
@@ -50,6 +54,8 @@ export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number
     case "updatedTime": return <Clock size={size} />;
     case "relationOneWay": return <Link2 size={size} />;
     case "relationTwoWay": return <ArrowLeftRight size={size} />;
+    case "ai": return <Sparkles size={size} />;
+    case "markdown": return <TextQuote size={size} />;
     default: return <HelpCircle size={size} />;
   }
 }
@@ -779,8 +785,11 @@ interface TextExpandPopoverProps {
   onClose: () => void;
 }
 
-/** 贴单元格浮窗：初始落在单元格下方，可拖动（标题栏）与缩放（右下角），正文直接改单元格值。 */
-function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextExpandPopoverProps) {
+/**
+ * 贴单元格展开浮窗的**共用壳**（261004 抽出）：定位（贴单元格下方、贴底翻上方）+ 拖拽（头部）+
+ * 缩放（右下角）+ 关闭按钮。文本格与 Markdown 格共用同一套几何/交互（单一来源，不再各写一份）。
+ */
+function ExpandPanel({ anchor, head, body, onClose }: { anchor: HTMLElement; head: ReactNode; body: ReactNode; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [size, setSize] = useState({ w: 400, h: 260 });
@@ -812,12 +821,101 @@ function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextE
   return (
     <OverlayPopover className="bt-text-expand" raised={isInsideDialog(anchor)} onDismiss={onClose} surfaceRef={panelRef} ignoreOutside={(t) => anchor.contains(t)} style={{ left: pos.left, top: pos.top, width: size.w, height: size.h }}>
       <header className="bt-text-expand-head" onPointerDown={startDrag}>
-        <span>展开编辑</span>
+        {head}
         <button type="button" className="bt-icon-btn" aria-label="关闭" title="关闭" onPointerDown={(event) => event.stopPropagation()} onClick={onClose}><X size={14} /></button>
       </header>
-      <textarea className="bt-text-expand-body" autoFocus value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
+      {body}
       <div className="bt-text-expand-resize" onPointerDown={startResize} title="拖动调整大小" />
     </OverlayPopover>
+  );
+}
+
+/** 文本格展开：贴单元格浮窗（头部「展开编辑」），正文直接改单元格值。 */
+function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextExpandPopoverProps) {
+  return (
+    <ExpandPanel anchor={anchor} onClose={onClose}
+      head={<span>展开编辑</span>}
+      body={<textarea className="bt-text-expand-body" autoFocus value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />}
+    />
+  );
+}
+
+/** Markdown / AI 字段展开：**编辑 / 预览** 双模（对齐钉钉）；只读默认预览、可写默认编辑。 */
+function MarkdownExpandPopover({ anchor, title, value, readOnly, onChange, onRegenerate, onClose }: {
+  anchor: HTMLElement;
+  /** 面板标题（字段名）。 */
+  title: string;
+  value: string;
+  readOnly: boolean;
+  onChange: (value: string) => void;
+  /** AI 字段：头部的「重新生成」（Markdown 字段不传）。 */
+  onRegenerate?: () => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<"edit" | "preview">(readOnly ? "preview" : "edit");
+  return (
+    <ExpandPanel anchor={anchor} onClose={onClose}
+      head={(
+        <div className="bt-md-expand-head">
+          <span className="bt-md-expand-title ln-ellipsis" title={title}>{title}</span>
+          <span className="seg bt-md-expand-seg" role="group" aria-label="编辑或预览">
+            <button type="button" className={"b3-button b3-button--outline seg__item" + (mode === "edit" ? " is-active" : "")}
+              disabled={readOnly} onPointerDown={(event) => event.stopPropagation()} onClick={() => setMode("edit")}>编辑</button>
+            <button type="button" className={"b3-button b3-button--outline seg__item" + (mode === "preview" ? " is-active" : "")}
+              onPointerDown={(event) => event.stopPropagation()} onClick={() => setMode("preview")}>预览</button>
+          </span>
+          {onRegenerate && (
+            <button type="button" className="bt-secondary bt-md-expand-regen" disabled={readOnly}
+              onPointerDown={(event) => event.stopPropagation()} onClick={onRegenerate}>
+              <Sparkles size={12} />重新生成
+            </button>
+          )}
+        </div>
+      )}
+      body={mode === "edit" && !readOnly ? (
+        <textarea className="bt-text-expand-body bt-md-expand-editor" autoFocus value={value} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <div className="bt-text-expand-body bt-md-expand-preview">
+          {value.trim() ? <MarkdownView source={value} /> : <p className="bt-md-expand-empty">（空）</p>}
+        </div>
+      )}
+    />
+  );
+}
+
+/**
+ * Markdown 字段单元格（261004）：单元格 = **去标记的单行预览**（行高不变、截断）；
+ * 悬停「展开」→ 编辑/预览浮窗（只读时只能预览）。**AI 字段复用本组件**（另传 onRegenerate）。
+ */
+export function MarkdownCell({ field, value, readOnly, onChange, onRegenerate }: {
+  field: BitableField;
+  value: unknown;
+  readOnly: boolean;
+  onChange: (value: unknown) => void;
+  /** AI 字段：展开面板头部的「重新生成」（Markdown 字段不传）。 */
+  onRegenerate?: () => void;
+}) {
+  const text = typeof value === "string" ? value : value == null ? "" : String(value);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const preview = markdownToPlainText(text);
+  return (
+    <div className="bt-md-cell">
+      <span className="bt-md-cell-preview ln-ellipsis" title={preview || undefined}>{preview || "—"}</span>
+      <button
+        type="button"
+        className="bt-expand-btn"
+        title="展开（编辑 / 预览）"
+        aria-label="展开编辑与预览"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => { event.stopPropagation(); setAnchor(event.currentTarget); }}
+      >
+        <Maximize2 size={12} />
+      </button>
+      {anchor && (
+        <MarkdownExpandPopover anchor={anchor} title={field.name} value={text} readOnly={readOnly}
+          onChange={(next) => onChange(next)} onRegenerate={onRegenerate} onClose={() => setAnchor(null)} />
+      )}
+    </div>
   );
 }
 
@@ -1191,6 +1289,10 @@ export interface CellEditorProps {
   noteId?: string;
   /** 关联字段：点选择器里的缩略图 → 预览**该单元格**的图片（与表格/画册同一条 Lightbox）。 */
   onOpenImages?: (images: BitableAttachment[], index: number) => void;
+  /** AI 字段：该格的运行态（生成中 / 失败）；缺省 = 空闲（有值或空值）。 */
+  aiState?: AiCellRunState;
+  /** AI 字段：请求生成 / 重新生成；缺省时该格只展示快照文本（记录详情 / 表单 / 关联选择器等入口）。 */
+  onAiGenerate?: () => void;
 }
 
 /**
@@ -1237,8 +1339,44 @@ export function RelationCell({ field, value, readOnly, ctx, onChange, noteId, on
   );
 }
 
+/**
+ * AI 字段单元格（261003；261004 起按 **Markdown** 口径）：值 = 文本快照。
+ * - 未配置（命令里没有字段变量）→ 提示去「编辑列」配置；
+ * - 空值 → 「AI 生成」按钮；生成中 → 状态；失败 → 重试；
+ * - 有值 → 复用 {@link MarkdownCell}（单行预览 +「展开」编辑/预览；面板头部带「重新生成」，可手动编辑）。
+ * 只读 / 没有生成回调（记录详情、表单、关联选择器、历史快照）→ 只展示预览。
+ */
+export function AiFieldCell({ field, value, readOnly, state, onGenerate, onChange }: {
+  field: BitableField;
+  value: unknown;
+  readOnly: boolean;
+  state?: AiCellRunState;
+  onGenerate?: () => void;
+  /** 手动编辑（展开面板里改完写回；与 MD 字段同一路径）。 */
+  onChange: (value: unknown) => void;
+}) {
+  const text = typeof value === "string" ? value : value == null ? "" : String(value);
+  const configured = aiPromptFieldNames(field.ai?.prompt ?? "").length > 0;
+  const canGenerate = !readOnly && Boolean(onGenerate) && configured;
+  if (!configured) {
+    return <span className="bt-cell-ai is-unconfigured ln-ellipsis" title="AI 字段未配置完整：请在「编辑列」里写命令，并用「插入字段」加入字段变量">未配置</span>;
+  }
+  if (state?.status === "running") {
+    return <span className="bt-cell-ai is-running" aria-label="生成中"><span className="bt-cell-ai-dot" aria-hidden />生成中…</span>;
+  }
+  if (state?.status === "failed") {
+    if (!canGenerate) return <span className="bt-cell-ai is-failed" title={state.error ?? "生成失败"}>生成失败</span>;
+    return <button type="button" className="bt-cell-ai-action" title={state.error ?? "生成失败"} onClick={onGenerate}>生成失败，重试</button>;
+  }
+  if (!text) {
+    if (!canGenerate) return <span className="bt-cell-ai is-empty">—</span>;
+    return <button type="button" className="bt-cell-ai-action" title="按字段里配置的命令生成" onClick={onGenerate}><Sparkles size={13} />AI 生成</button>;
+  }
+  return <MarkdownCell field={field} value={value} readOnly={readOnly} onChange={onChange} onRegenerate={canGenerate ? onGenerate : undefined} />;
+}
+
 /** 按字段类型分派单元格编辑器（未知类型只读展示、不清空）。 */
-export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages }: CellEditorProps) {
+export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages, aiState, onAiGenerate }: CellEditorProps) {
   if (!isKnownFieldType(field.type)) {
     return <span className="bt-cell-unknown ln-ellipsis" title="未知字段类型（只读展示）">{bitableDisplayValue(field, value) || "—"}</span>;
   }
@@ -1289,6 +1427,10 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
     case "relationTwoWay":
       return <RelationCell field={field} value={value} readOnly={readOnly} ctx={ctx} onChange={onChange}
         noteId={noteId} onOpenImages={onOpenImages} />;
+    case "ai":
+      return <AiFieldCell field={field} value={value} readOnly={readOnly} state={aiState} onGenerate={onAiGenerate} onChange={onChange} />;
+    case "markdown":
+      return <MarkdownCell field={field} value={value} readOnly={readOnly} onChange={onChange} />;
     default:
       return <span className="bt-cell-unknown ln-ellipsis">{bitableDisplayValue(field, value) || "—"}</span>;
   }

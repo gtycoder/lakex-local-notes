@@ -209,6 +209,8 @@ export function coerceCsvCell(field: BitableField, raw: string, ctx?: BitableDis
     case "createdTime":
     case "updatedTime":
       return { ok: false, reason: "系统时间字段只读，不能导入" };
+    case "ai":
+      return { ok: false, reason: "AI 字段由生成产生，不能从 CSV 导入" };
     case "attachment":
     case "image":
       return { ok: false, reason: "附件/图片不能从 CSV 导入" };

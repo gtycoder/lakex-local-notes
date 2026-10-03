@@ -15,6 +15,7 @@
  */
 import { extOf, isAssetFilename, isImageExtension } from "./assetNaming.js";
 import { contrastTextColor, DEFAULT_LIGHT_COLORS, isHexColor } from "./colorPalette.js";
+import type { AiChatMessage } from "./aiProviders.js";
 
 export const BITABLE_DOC_KIND = "bitable" as const;
 export const BITABLE_DOC_VERSION = 1 as const;
@@ -23,7 +24,7 @@ export const BITABLE_DOC_VERSION = 1 as const;
 export type BitableFieldType =
   | "text" | "number" | "select" | "multiSelect" | "date" | "attachment" | "image"
   | "boolean" | "link" | "rating" | "progress" | "createdTime" | "updatedTime"
-  | "relationOneWay" | "relationTwoWay";
+  | "relationOneWay" | "relationTwoWay" | "ai" | "markdown";
 
 /** 字段类型选择器的顺序（v1 只暴露这 7 种）。 */
 export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
@@ -42,6 +43,8 @@ export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
   "updatedTime",
   "relationOneWay",
   "relationTwoWay",
+  "ai",
+  "markdown",
 ] as const;
 
 export const BITABLE_FIELD_TYPE_LABEL: Record<BitableFieldType, string> = {
@@ -60,6 +63,8 @@ export const BITABLE_FIELD_TYPE_LABEL: Record<BitableFieldType, string> = {
   updatedTime: "修改时间",
   relationOneWay: "单向关联",
   relationTwoWay: "双向关联",
+  ai: "AI 字段",
+  markdown: "Markdown",
 };
 
 /** 单选/多选选项。 */
@@ -97,6 +102,22 @@ export function isRelationFieldType(type: string): type is BitableRelationFieldT
   return type === "relationOneWay" || type === "relationTwoWay";
 }
 
+/**
+ * AI 字段配置（261003 用户定稿：**全项目只做一个 AI 字段类型**）。
+ * - `prompt`：自定义命令（**字段变量直接写在命令里**，形如 `{{字段名}}`，可用「插入字段」插入多个）；
+ *   生成时每个变量**原位替换**为当前行该字段的展示值，命令原样作为 user message（不再把字段值拼到末尾）。
+ * - 结果作为**文本快照**写进 `record.values`；**不自动重跑**，生成 / 重新生成都是手动触发的显式命令。
+ * - 字段重命名会**联动改写**同表 AI 命令里的 `{{旧名}}`；字段删除后变量保留（编辑器提示未找到、生成按空处理）。
+ */
+export interface BitableAiConfig {
+  prompt: string;
+}
+
+/** 是否为 AI 字段类型。 */
+export function isAiFieldType(type: string): type is "ai" {
+  return type === "ai";
+}
+
 export interface BitableField {
   id: string;
   name: string;
@@ -109,6 +130,8 @@ export interface BitableField {
    *  （对齐云端「添加新记录的创建时间」）。 */
   dateAutoFill?: boolean;
   relation?: BitableRelation;
+  /** AI 字段专用配置（仅 type === "ai" 有意义）。 */
+  ai?: BitableAiConfig;
   /** 进度字段专用：进度条颜色（调色板 hex；缺省走主题强调色）。 */
   progressColor?: string;
   /** 表格视图默认列宽（视图可覆盖；v1 直接写字段上）。 */
@@ -482,6 +505,7 @@ export function createBitableField(type: BitableFieldType, name?: string, id = n
   const field: BitableField = { id, name: name ?? BITABLE_FIELD_TYPE_LABEL[type], type };
   if (type === "select" || type === "multiSelect") field.options = [];
   if (isRelationFieldType(type)) field.relation = { ...BITABLE_RELATION_DEFAULT };
+  if (type === "ai") field.ai = { prompt: "" };
   return field;
 }
 
@@ -625,6 +649,13 @@ function normalizeField(raw: unknown): BitableField | null {
     next.relation = relation;
   } else {
     delete next.relation;
+  }
+  // AI 配置归一（261003）：只保留 prompt（字段变量写在命令里）；非 AI 字段一律不带配置。
+  if (isAiFieldType(field.type)) {
+    const rawAi = field.ai && typeof field.ai === "object" ? (field.ai as Partial<BitableAiConfig>) : {};
+    next.ai = { prompt: typeof rawAi.prompt === "string" ? rawAi.prompt : "" };
+  } else {
+    delete next.ai;
   }
   return next;
 }
@@ -1306,6 +1337,63 @@ export function bitableToSearchText(content: string | null | undefined, maxChars
   return text.length > maxChars ? text.slice(0, maxChars) : text;
 }
 
+// ---- AI 字段（261003；纯函数，编辑器与测试共用） ----
+
+/** AI 字段系统提示（单一来源）：命令里的字段变量已替换成当前行的值，只输出结果本身。 */
+export const BITABLE_AI_SYSTEM_PROMPT =
+  "你是数据表字段的 AI 生成助手。严格按用户给出的命令生成该字段的内容；命令里的字段变量已经被替换成当前记录对应字段的值。只输出结果本身：不要解释、不要前后缀、不要引号或代码块。";
+
+/** 单次请求字符上限（主进程 ai_chat 入参上限 20 万，留出余量；与画板 AI 同口径）。 */
+export const BITABLE_AI_MAX_CHARS = 190000;
+
+export type BitableAiMessagesResult =
+  | { ok: true; messages: AiChatMessage[] }
+  | { ok: false; error: string };
+
+/** 命令里的字段变量：`{{字段名}}`（两端可含空白）。 */
+const AI_TOKEN_SOURCE = "\\{\\{([^{}]+)\\}\\}";
+
+/** 命令里引用的字段名（去重、按首次出现顺序；不做字段存在性判断——UI 用它提示「未找到字段」）。 */
+export function aiPromptFieldNames(prompt: string): string[] {
+  const names: string[] = [];
+  const re = new RegExp(AI_TOKEN_SOURCE, "g");
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(prompt)) !== null) {
+    const name = match[1].trim();
+    if (name && !names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * 组装一次 AI 字段生成请求（**单一来源**，纯函数）：
+ * 固定系统提示 + 命令（`{{字段名}}` **原位替换**为当前行该字段的展示值——值走 bitableFieldText 口径，
+ * 附件只出展示名、绝不传字节；空值 / 字段不存在 / 自引用按「（空）」）。
+ * 未配置 / 命令里没有变量 / 变量全失效 / 超长 → 返回可展示的错误。
+ */
+export function buildAiFieldMessages(doc: BitableDoc, tableId: string, recordId: string, fieldId: string): BitableAiMessagesResult {
+  const table = doc.tables.find((t) => t.id === tableId);
+  const field = table?.fields.find((f) => f.id === fieldId);
+  const record = table?.records.find((r) => r.id === recordId);
+  if (!table || !field || !record) return { ok: false, error: "找不到目标字段或记录" };
+  if (!isAiFieldType(field.type)) return { ok: false, error: "这个字段不是 AI 字段" };
+  const prompt = field.ai?.prompt.trim() ?? "";
+  if (!prompt) return { ok: false, error: "AI 字段还没有配置命令：请在「编辑字段」里写命令，并用「插入字段」加入字段变量" };
+  if (aiPromptFieldNames(prompt).length === 0) return { ok: false, error: "命令里还没有字段变量：请用「插入字段」把要参考的字段插入到命令里" };
+  const ctx: BitableDisplayContext = { tables: doc.tables };
+  let resolved = 0;
+  const text = prompt.replace(new RegExp(AI_TOKEN_SOURCE, "g"), (_raw, inner: string) => {
+    const ref = table.fields.find((f) => f.id !== field.id && f.name === String(inner).trim());
+    if (!ref) return "（空）";
+    resolved += 1;
+    return bitableFieldText(record, ref, ctx).trim() || "（空）";
+  });
+  if (resolved === 0) return { ok: false, error: "命令里引用的字段都不存在了：请用「插入字段」重新添加" };
+  const total = BITABLE_AI_SYSTEM_PROMPT.length + text.length;
+  if (total > BITABLE_AI_MAX_CHARS) return { ok: false, error: "上下文太长（" + total + " 字符），请精简命令" };
+  return { ok: true, messages: [{ role: "system", content: BITABLE_AI_SYSTEM_PROMPT }, { role: "user", content: text }] };
+}
+
 // ---- 看板视图求值（V02；纯函数，UI 与测试共用） ----
 
 /** 看板可用的分组字段 = 单选字段（多选/其他类型不做看板分组）。 */
@@ -1649,13 +1737,13 @@ export function filterValueKindFor(field: BitableField, operator: BitableFilterO
   if (field.type === "multiSelect" || isRelationFieldType(field.type)) return "multiSelect";
   if (field.type === "boolean") return "boolean";
   if (field.type === "attachment" || field.type === "image") return "file";
-  if (field.type === "text" || field.type === "link") return "text";
+  if (field.type === "text" || field.type === "link" || field.type === "ai" || field.type === "markdown") return "text";
   return "none";
 }
 
 /** 某个字段类型可用的筛选操作符（逐项对齐远端 lake 的类型分组）。 */
 export function filterOperatorsFor(field: BitableField): BitableFilterOperator[] {
-  if (field.type === "text" || field.type === "link") {
+  if (field.type === "text" || field.type === "link" || field.type === "ai" || field.type === "markdown") {
     return ["startsWith", "notStartsWith", "endsWith", "notEndsWith", "contains", "notContains", "isEmpty", "isNotEmpty"];
   }
   if (isNumericFieldType(field.type)) {

@@ -28,6 +28,10 @@ const PICKER_CSS = readFileSync(new URL("./bitableRelationPicker.css", import.me
 const ASSET_URL = readFileSync(new URL("./bitableAssetUrl.ts", import.meta.url), "utf8");
 const FILE_ICON = readFileSync(new URL("./FileKindIcon.tsx", import.meta.url), "utf8");
 const FILE_ICON_CSS = readFileSync(new URL("./bitableFileIcon.css", import.meta.url), "utf8");
+const AI_HOOK = readFileSync(new URL("./useAiFieldGeneration.ts", import.meta.url), "utf8");
+const AI_DIALOG = readFileSync(new URL("./BitableAiGenerateDialog.tsx", import.meta.url), "utf8");
+const AI_CSS = readFileSync(new URL("./bitableAiField.css", import.meta.url), "utf8");
+const CSV = readFileSync(new URL("../../core/bitableCsv.ts", import.meta.url), "utf8");
 const DRAWER = readFileSync(new URL("./BitableRecordDrawer.tsx", import.meta.url), "utf8");
 const BAR = readFileSync(new URL("./BitableViewBar.tsx", import.meta.url), "utf8");
 const VIEWS = readFileSync(new URL("./bitableViews.tsx", import.meta.url), "utf8");
@@ -973,5 +977,101 @@ describe("多维表编辑器护栏", () => {
     expect(VIEWCSS).toMatch(/\.bt-grid th\.bt-th-add \{ text-align: left; padding-left: 8px; \}/);
     // 不能把这一格变成固定宽度（那会把剩余宽度摊给数据列 ⇒ 列宽被撑开）；也不许居中
     expect(VIEWCSS).not.toMatch(/\.bt-th-add \{[^}]*text-align: center/);
+  });
+});
+
+describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动生成）", () => {
+  it("单一字段类型：core 注册 ai + 工厂给空配置；单元格图标与分派就位", () => {
+    expect(DOC).toContain('| "relationOneWay" | "relationTwoWay" | "ai"');
+    expect(DOC).toContain('ai: "AI 字段"');
+    expect(DOC).toMatch(/if \(type === "ai"\) field\.ai = \{ prompt: "" \};/);
+    expect(DOC).toContain("export function buildAiFieldMessages");
+    expect(DOC).toContain("export function aiPromptFieldNames");
+    expect(CARDS).toContain('case "ai": return <Sparkles size={size} />;');
+    expect(CARDS).toMatch(/case "ai":\s*\n\s*return <AiFieldCell/);
+  });
+
+  it("单元格：未配置 / 生成中 / 失败重试 / 重新生成 状态齐全；生成只能手动触发（只读与无回调都不出按钮）", () => {
+    expect(CARDS).toContain("export function AiFieldCell");
+    expect(CARDS).toMatch(/aria-label="生成中"/);
+    expect(CARDS).toContain("生成失败，重试");
+    expect(CARDS).toContain("重新生成");
+    expect(CARDS).toContain("未配置");
+    expect(CARDS).toMatch(/const canGenerate = !readOnly && Boolean\(onGenerate\) && configured/);
+    expect(CARDS).toContain('aiPromptFieldNames(field.ai?.prompt ?? "")');
+  });
+
+  it("编辑器：整列生成走 hook（整批一次撤销）+ 列菜单入口（只读禁用）+ 对话框；值走 mutations 单一闸口", () => {
+    expect(EDITOR).toContain("useAiFieldGeneration({");
+    expect(EDITOR).toMatch(/aiGen\.cellStates\[aiCellKey\(field\.id, record\.id\)\]/);
+    expect(EDITOR).toContain("AI 生成整列");
+    expect(EDITOR).toMatch(/disabled=\{readOnly\}\s*\n\s*onClick=\{\(\) => \{ setAiGenerateFieldId/);
+    expect(EDITOR).toContain("BitableAiGenerateDialog");
+    expect(EDITOR).toMatch(/void aiGen\.runBatch\(activeTable\.id, field\.id, ids\)/);
+    expect(EDITOR).toContain("onAiGenerate={field.type === \"ai\"");
+    expect(EDITOR).toContain("renameAiFieldToken(f, oldName, nextName)");
+  });
+
+  it("hook：并发自限 3 / 可取消 / begin-endGesture 包裹 / core 组装请求 / 不自动重跑", () => {
+    expect(AI_HOOK).toContain("export const AI_GENERATE_CONCURRENCY = 3");
+    expect(AI_HOOK).toContain("buildAiFieldMessages(latest.current.docRef.current");
+    expect(AI_HOOK).toContain("setBitableCellValue(prev, tableId, recordId, fieldId, text)");
+    expect(AI_HOOK).toContain("latest.current.beginGesture()");
+    expect(AI_HOOK).toContain("latest.current.endGesture()");
+    expect(AI_HOOK).toContain("void cancelAiChat(requestId)");
+    expect(AI_HOOK).toContain("if (latest.current.isReadOnly()) return;");
+    // 生成前显式确认（对话框里有费用/发送说明），不是后台自动跑
+    expect(AI_DIALOG).toContain("将逐条调用你配置的 AI 服务");
+    expect(AI_HOOK).not.toMatch(/useEffect\([^)]*runBatch/);
+  });
+
+  it("字段编辑器：命令 + 上下文字段（候选不含自己）；表单与 CSV 不吃 AI 字段", () => {
+    expect(EDITOR).toContain("命令（AI 按它生成内容；字段变量插在命令里）");
+    expect(EDITOR).toContain("插入字段");
+    expect(EDITOR).toContain("insertAiToken");
+    expect(EDITOR).toMatch(/filter\(\(candidate\) => candidate\.id !== field\?\.id\)/);
+    expect(FORM).toContain("!isAiFieldType(f.type)");
+    expect(CSV).toContain("AI 字段由生成产生，不能从 CSV 导入");
+    // 样式走新文件且由使用方 import（AGENTS §3 #14：新 CSS 必须登记 + 被 import）
+    expect(AI_CSS).toContain(".bt-cell-ai");
+    expect(CARDS).toContain('import "./bitableAiField.css";');
+  });
+});
+
+describe("Markdown 字段与展开浮窗护栏（261004）", () => {
+  const MD = readFileSync(new URL("./markdown.tsx", import.meta.url), "utf8");
+  const MD_CSS = readFileSync(new URL("./bitableMarkdown.css", import.meta.url), "utf8");
+
+  it("字段类型注册 + 单元格分派 + 图标", () => {
+    expect(DOC).toContain('| "ai" | "markdown"');
+    expect(DOC).toContain('markdown: "Markdown"');
+    expect(CARDS).toContain('case "markdown": return <TextQuote size={size} />;');
+    expect(CARDS).toMatch(/case "markdown":\s*\n\s*return <MarkdownCell/);
+    // 文本口径：筛选操作符/值类型都按文本（markdown 与 ai 同组）
+    expect(DOC).toMatch(/field\.type === "markdown"\) \{/);
+  });
+
+  it("展开浮窗：文本 / Markdown 共用同一个壳（单一来源）+ 编辑·预览双模 + AI 头部重新生成", () => {
+    expect(CARDS).toContain("function ExpandPanel(");
+    expect(CARDS.match(/<ExpandPanel anchor=\{anchor\}/g)).toHaveLength(2);
+    expect(CARDS).toContain('aria-label="编辑或预览"');
+    expect(CARDS).toContain('className={"b3-button b3-button--outline seg__item" + (mode === "edit" ? " is-active" : "")}');
+    expect(CARDS).toContain('onClick={() => setMode("preview")}');
+    expect(CARDS).toMatch(/onRegenerate=\{canGenerate \? onGenerate : undefined\}/);
+    expect(CARDS).toContain("重新生成");
+  });
+
+  it("Markdown 渲染器：子集渲染 + 单行纯文本预览 + 不用 innerHTML + 链接只认 http(s)", () => {
+    expect(MD).toContain("export function MarkdownView");
+    expect(MD).toContain("export function markdownToPlainText");
+    expect(MD).toContain("export function parseMarkdownBlocks");
+    expect(MD).not.toContain("dangerouslySetInnerHTML");
+    expect(MD).toContain("^https?:");
+    expect(MD_CSS).toContain(".bt-md-preview");
+    expect(CARDS).toContain('import "./bitableMarkdown.css";');
+  });
+
+  it("AI 字段复用 Markdown 单元格（值按 MD 预览/展开；手动编辑走同一 onChange 写回）", () => {
+    expect(CARDS).toMatch(/return <MarkdownCell field=\{field\} value=\{value\} readOnly=\{readOnly\} onChange=\{onChange\} onRegenerate=/);
   });
 });

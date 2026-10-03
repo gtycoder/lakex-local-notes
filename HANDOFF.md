@@ -9,6 +9,15 @@
 
 > 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
+### 当前批次 · 261004 块编辑（引用内块独立 / 引用内转化为裁剪 / 合并手柄 / 取消引用）
+
+- 云端实测（browser-skill + Edge）：引用**首个子块**的手柄 = 整个引用的合并手柄；引用内**非首**块各自出柄；引用内「转化为」= 11 项（h1–h6 / 正文 / 有序 / 无序 / 任务 / 高亮块，图 2），引用外 15 项；主菜单 6 项；手柄**顶对齐块首行**；多块选中样式 = **整块背景**（比文字选中浅）；**取消引用** = 引用第一行手柄 → 转化为 → 「引用」**回显 selected** → 点一下。
+- 落地（vendor LOCAL-CHANGES #23 · `docs/LAKEX-CONTRACT.md` §5.8.6）：`NE-QUOTE` 移出 `STRUCTURAL_BLOCK_TAGS`（非首块各自出柄）**但保留父块上提**（首块 → 整个引用）；`QUOTE_HIDDEN_CONVERT_VALUES` 按 `isInsideQuote` 裁掉 codeblock/quote/columns/collapse，且「转化为」整体**内联到第一级**（沿用原样式：紧凑图标格 + 卡片格）；`updateHandlePosition` 顶对齐；`selectedTopBlocks` 加 `blockContainerOfRange`（支持引用内多选）；**块编辑只在鼠标触达块句柄时触发**（`selectionchange` 不扫描/不高亮，多块判定在 `mousemove` 的 `e.buttons===0`，拖选中不判定）；选中样式覆盖**所有行级块**（正文/标题/列表），段间距用动态入参 `--ln-brick-hl-extend`（= 与下一个高亮行的实际空隙；单行/末尾为 0 ⇒ 只用行高本身）补齐 ⇒ 无行间隙也不溢出（内核 `::before + z-index:-1` 在列表项上不可见，故不用）；选中样式用 `highlightedRef` 记录、每次先全清再重记并在选区收缩时清除（用户实测「选中过一次背景就不消失」，已修）；新增 `unwrapQuote`（`dropPositionOf` + `insertAtPosition` + 节点级删除，内部块按原类型提升）。
+- 顺带修 bug：`getCurrentConvertValue` 原无条件下探列表标记，把「含列表的引用」误判成 `ol/ul`（「转化为」回显成「有序」、点「引用」不取消反而再包一层）→ 收窄为「块自身是列表项时才下探」。
+- 门禁：`tsc` ✓ · 全量 vitest **1580 passed / 16 skipped** ✓ · 双端 build ✓ · `check:core` 0 违规 ✓ · `ui-metrics`（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · 护栏 `blockMenuNative.test.ts`（28）+ 新增 jsdom `blockMenuHelpers.test.ts`（3）✓。
+- 真实 Electron（隔离 `/tmp/lake-blk-261004`，自造「引用 + 无序/有序列表」文档）实测：引用内第二个列表项句柄 top=233=该项；其「转化为」11 项（无序*）；引用内两项多选 → 高亮 2 块、句柄 top=203=首项；引用首行句柄 top=166=引用 top、「转化为」15 项（引用*）→ 点「引用」→ `ne-quote` 消失、内部块（含列表类型）提升到顶层；整块背景像素实测 rgb(220,234,250) 铺满整行。
+- 诚实边界：云端「多块拖选合并」的真实鼠标拖拽手势未复现（browser-skill 无拖拽）；`git diff --check` 仅报 vendor **重建产物** `dist/index.cjs.js` 的**既有**行尾空白（HEAD 同位置也有）。
+
 ### 当前批次 · 261003-UI（设置页重做 + 浮动工具栏「格式」合并 + AI 选区高亮）
 
 #### 261003 · 画板 AI（已接通，实机验收通过）
@@ -69,6 +78,13 @@
 - 门禁：`tsc` ✓ · vitest **1537 passed / 16 skipped** ✓ · 桌面 + 移动构建 ✓ · `ui-metrics`（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · `check:core` 0 违规 ✓ · `git diff --check` ✓。
 - **本批未验证（诚实边界）**：移动端设置抽屉（共用同一套原语，但只加载自己的 CSS，本批**未跑模拟器**）；深色/暖色主题未逐屏对拍；窄窗（<800px）下目录栏为浮层盖住编辑区时，菜单仍可能被该浮层压住（那种布局通常也选不到被盖住的文字）。
 - 改动文件：`SettingsPanel.tsx` · `settingsPrimitives.tsx` · `editorCommands.ts` · `selectionToolbar/SelectionToolbar.tsx` · `selectionToolbar/selectionToolbar.css` · `styles/feature.css` · `styles/kit.css` · `styles/overlay.css` · `styles/components.css` · `styles/cssLayers.test.ts`。
+
+### 当前批次 · 261003-AIFIELD（多维表 AI 字段 + Markdown 字段 · 已实施待验收）
+- 用户定稿路线：**不做飞书式 AI 单元格操作**；`ai` 字段——**命令里用 `{{字段名}}` 字段变量**（「插入字段」可插多个、生成时**原位替换**；不再拼字段值列表）、值为文本快照、**手动生成/不自动重跑**；**261004 追加**：新增 `markdown` 字段类型，**AI 字段默认按 Markdown 口径**（单元格去标记单行预览 + 悬停「展开」→ 浮窗**编辑/预览**双模，模仿钉钉；AI 面板头部带「重新生成」、**值可手动编辑**）。任务定义见专项文档 §7 批次 G，明细见 §11/§13。
+- 实现：core（`ai` 类型 + `{prompt}` 单一来源 + `buildAiFieldMessages`/`aiPromptFieldNames` + 重命名联动 `renameAiFieldToken` + `markdown` 类型并入文本口径 + CSV 拒绝导入 AI）；渲染器 `markdown.tsx`（常用子集、React 元素、不用 innerHTML；表格/图片首版不做）；单元格（AI 状态机 + `MarkdownCell`；展开浮窗抽出**共用壳 `ExpandPanel`**，文本格同款）；列菜单「AI 生成整列」（仅空缺/全部、确认、进度、取消、失败重试）；并发 3、整批 `beginGesture/endGesture` = **一次撤销**；只读无入口（展开只给预览）；移动端文本回退。**无新 IPC、无新依赖**。
+- 门禁：tsc ✓ · vitest **1580 passed / 16 skipped** ✓ · check:core 75 文件 0 违规 ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · cssLayers+uiPrimitives ✓ · 桌面 + 移动构建 ✓ · 本改动范围 `git diff --check` 干净（仓库级报错在另一会话在途的 vendor dist，未触碰）。
+- 真实端 CDP **21/21**（隔离实例 + mock OpenAI）：插入字段 → `根据{{文本}}` 原位替换；Markdown 字段展开编辑→预览→落盘；AI 值 MD 预览 / 展开 / 手改落盘 / 「重新生成」回写；整列空缺 2/2；**一次 ⌘Z 撤销整批**（单格结果保留）；锁定入口消失/值保留；解锁恢复。
+- **未提交（待验收）**；Android 未跑（移动端代码本批未改）；**图片/附件内容（多模态）不做**（用户 261004 决定：只传文件名）。
 
 ### 当前批次 · 260930-AI-P0（已实施，本轮提交）
 - 目标：为产品接入**可配置供应商**的 AI（P0 只做 OpenAI / OpenAI 兼容），**结构按多供应商切换预留**（新增一家 = core 目录加一条 + 设置下拉自动出现，IPC/渲染层不动）。

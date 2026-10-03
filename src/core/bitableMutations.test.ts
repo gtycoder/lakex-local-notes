@@ -5,7 +5,7 @@ import {
 } from "./bitableDoc";
 import {
   addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField,
-  duplicateBitableField, setBitableCellValue, setBitableRecordValues, stripFieldFromView, stripViewRefsForFieldType,
+  duplicateBitableField, renameAiFieldToken, setBitableCellValue, setBitableRecordValues, stripFieldFromView, stripViewRefsForFieldType,
 } from "./bitableMutations";
 
 const T = "2026-09-01T00:00:00.000Z";
@@ -227,5 +227,17 @@ describe("多维表业务写入纯函数（AR02）", () => {
     expect(date.kanbanGroupFieldId).toBeUndefined();
     const untouched = view("v2", { kanbanGroupFieldId: "other" });
     expect(stripViewRefsForFieldType(untouched, field("f", "text"))).toBe(untouched);
+  });
+
+  it("renameAiFieldToken：重命名改写同表 AI 命令里的 {{旧名}}；删除字段不改写（变量保留、生成按空处理）", () => {
+    const ai = field("ai", "ai", "AI", { ai: { prompt: "把 {{备注}} 和 {{补充}} 合成一句" } });
+    const renamed = renameAiFieldToken(ai, "备注", "备注 2");
+    expect(renamed.ai?.prompt).toBe("把 {{备注 2}} 和 {{补充}} 合成一句");
+    expect(renameAiFieldToken(ai, "不存在", "x")).toBe(ai);
+    // 删除字段：命令原样保留（不静默改写用户命令；编辑器提示「未找到字段」）
+    const t1 = table("t1", [field("a", "text"), ai], [record("r1", {})], [view("v")]);
+    const next = deleteBitableField(doc([t1]), "t1", "a");
+    expect(next.tables[0].fields.map((f) => f.id)).toEqual(["ai"]);
+    expect(next.tables[0].fields[0].ai?.prompt).toBe("把 {{备注}} 和 {{补充}} 合成一句");
   });
 });

@@ -16,6 +16,7 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 const HANDLE_SRC = read("../../../vendor/lakex-doc-react/src/components/BlockHoverHandle/BlockHoverHandle.tsx");
 const HELPERS_SRC = read("../../../vendor/lakex-doc-react/src/components/BlockHoverHandle/blockMenuHelpers.ts");
 const MENU_SRC = read("../../../vendor/lakex-doc-react/src/components/BlockContextMenu/BlockContextMenu.tsx");
+const HANDLE_CSS = read("../../../vendor/lakex-doc-react/src/components/BlockHoverHandle/BlockHoverHandle.css");
 
 /** blockDoc 的「整篇 JSON 读改写」函数：任何一处被调用都会毁自定义卡。 */
 const JSON_PATH_FNS = ["moveBlock", "deleteBlock", "duplicateBlock", "convertBlock", "insertBlock"];
@@ -148,7 +149,9 @@ describe("块操作菜单：多块选区 / 批量操作（Issue 4）", () => {
   it("用 DOM 选区识别多块选区（≥2 顶层块，且不属于同一列表父项整段）", () => {
     expect(HELPERS_SRC).toMatch(/export function selectedTopBlocks\(/);
     expect(HELPERS_SRC).toMatch(/export function hasMultiBlockSelection\(/);
-    expect(HELPERS_SRC).toMatch(/range\.intersectsNode\(el\)/);
+    // 261004 改为按「选区端点 → 首/末块索引」的 O(选区跨度) 取块（不再逐块 intersectsNode）
+    expect(HELPERS_SRC).toMatch(/const childIndex = \(node: Node \| null\): number =>/);
+    expect(HELPERS_SRC).toMatch(/range\.startContainer === container \? range\.startOffset/);
     expect(HELPERS_SRC).toMatch(/TOP_BLOCK_TAGS/);
   });
 
@@ -208,5 +211,70 @@ describe("块操作菜单：删除/拖拽不留空行 + 手柄不压项目符号
     expect(HANDLE_SRC).toMatch(/ne-uli-i, ne-oli-i, ne-tli-i/);
     expect(HANDLE_SRC).toMatch(/const anchorEl = marker \|\| content;/);
     expect(HANDLE_SRC).toMatch(/anchorLeft = anchorEl\.getBoundingClientRect\(\)\.left/);
+  });
+});
+
+describe("块编辑：引用内块独立 / 引用内转化为裁剪 / 顶对齐 / 选中样式（261004 云端 Edge 实测）", () => {
+  it("引用不是结构块：引用内非首块各自出柄（NE-QUOTE 移出 STRUCTURAL）", () => {
+    const structural = /const STRUCTURAL_BLOCK_TAGS = \[([\s\S]*?)\] as const;/.exec(HANDLE_SRC)?.[1] ?? "";
+    expect(structural).not.toMatch(/NE-QUOTE/);
+  });
+
+  it("引用首个子块 → 整个引用的合并手柄（父块上提保留）", () => {
+    expect(HANDLE_SRC).toMatch(/parent\.firstElementChild\?\.id === el\.id/);
+  });
+
+  it("取消引用：目标为「引用」且当前是引用时走 unwrap（引用项回显 → 点一下取消）", () => {
+    expect(HELPERS_SRC).toMatch(/function unwrapQuote\(/);
+    expect(HELPERS_SRC).toMatch(/target === "quote" && \(blockElement\.tagName \|\| ""\)\.toUpperCase\(\) === "NE-QUOTE"/);
+    expect(MENU_SRC).toMatch(/'ne-quote': 'quote'/);
+    // 含列表的引用不能被误判成 ol/ul（261004 实测 bug）
+    expect(MENU_SRC).toMatch(/const isListItem = tagName === 'NE-ULI' \|\| tagName === 'NE-OLI' \|\| tagName === 'NE-TLI';/);
+    expect(MENU_SRC).toMatch(/if \(blockElement && isListItem\)/);
+  });
+
+  it("手柄顶对齐块首行（不再按块高垂直居中）", () => {
+    expect(HANDLE_SRC).toMatch(/LOCAL-CHANGE\(261004\)：手柄\*\*顶对齐块首行\*\*/);
+    expect(HANDLE_SRC).not.toMatch(/blockRect\.height - handleSize\) \/ 2/);
+    expect(HANDLE_SRC).toMatch(/top: [^\n]*blockRect\.top\}px/);
+  });
+
+  it("块编辑只在触达块句柄时触发：selectionchange 不扫描/不高亮，多块判定在 mousemove", () => {
+    const selBody = /const onSelectionChange = \(\) => \{([\s\S]*?)\n    \};/.exec(HANDLE_SRC)?.[1] ?? "";
+    expect(selBody, "selectionchange 不得扫描块选区").not.toMatch(/selectedTopBlocks\(/);
+    expect(selBody, "selectionchange 不得高亮").not.toMatch(/setBlockHighlight\(true\)/);
+    // 多块判定挪到「松开按键的普通移动」；拖选中（buttons!==0）不扫描，避免拖垮跨行选择
+    expect(HANDLE_SRC).toMatch(/if \(e\.buttons === 0\) \{[\s\S]*?selectedTopBlocks\(\)/);
+  });
+
+  it("「转化为」整体内联到第一级且沿用原样式（261004 用户要求）", () => {
+    expect(MENU_SRC).toMatch(/ne-block-convert-submenu ne-block-convert-inline/);
+    expect(MENU_SRC).toMatch(/ne-block-convert-item--/);
+  });
+
+  it("引用内「转化为」裁掉 代码块/引用/分栏/折叠（对齐云端图 2 的 11 项）", () => {
+    expect(MENU_SRC).toMatch(/QUOTE_HIDDEN_CONVERT_VALUES = new Set\(\['codeblock', 'quote', 'columns', 'collapse'\]\)/);
+    expect(MENU_SRC).toMatch(/function isInsideQuote\(/);
+    expect(MENU_SRC).toMatch(/QUOTE_HIDDEN_CONVERT_VALUES\.has\(subItem\.value/);
+  });
+
+  it("多块选区识别到引用内部的 brick（块容器 = 同一引用）", () => {
+    expect(HELPERS_SRC).toMatch(/function blockContainerOfRange\(/);
+    expect(HELPERS_SRC).toMatch(/closest\("ne-quote"\)/);
+  });
+
+  it("选中样式覆盖所有行级块且补段间距（261004 用户口径：不留行间隙）", () => {
+    expect(HANDLE_CSS).toMatch(/\.ne-engine \.ne-brick-highlight \{/);
+    expect(HANDLE_CSS).toMatch(/box-shadow: 0 var\(--ln-brick-hl-extend, 0px\) 0 0 var\(--lakex-editor-background-focus\)/);
+    expect(HANDLE_SRC).toMatch(/--ln-brick-hl-extend/);
+    expect(HANDLE_CSS).toMatch(/--lakex-editor-background-focus/);
+  });
+
+  it("选中样式必须可清理：跨选区不残留（261004 用户实测 bug）", () => {
+    // 用 highlightedRef 记录已高亮节点，每次 setBlockHighlight 先全清再重记。
+    expect(HANDLE_SRC).toMatch(/highlightedRef/);
+    expect(HANDLE_SRC).toMatch(/for \(const node of highlightedRef\.current\) \{/);
+    expect(HANDLE_SRC).toMatch(/node\.classList\.remove\('ne-brick-highlight'\)/);
+    expect(HANDLE_SRC).toMatch(/node\.style\.removeProperty\('--ln-brick-hl-extend'\)/);
   });
 });

@@ -1,0 +1,83 @@
+/* AI 字段（261003）：单元格状态 + 字段配置 + 整列生成对话框（颜色只用 --lake-* 令牌）。 */
+.bt-cell-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.bt-cell-ai.is-unconfigured,
+.bt-cell-ai.is-empty {
+  color: var(--lake-text-4);
+}
+.bt-cell-ai.is-running,
+.bt-cell-ai.is-failed {
+  color: var(--lake-text-3);
+}
+.bt-cell-ai-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lake-accent);
+  animation: bt-ai-pulse 1s ease-in-out infinite;
+}
+@keyframes bt-ai-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.bt-cell-ai-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.bt-cell-ai-action:hover:not(:disabled) {
+  border-color: var(--lake-accent);
+  color: var(--lake-accent);
+}
+.bt-cell-ai-action:disabled {
+  opacity: 0.64;
+  cursor: default;
+}
+.bt-ai-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bt-ai-prompt {
+  resize: vertical;
+  min-height: 56px;
+}
+.bt-ai-prompt-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bt-ai-insert {
+  align-self: flex-start;
+}
+.bt-ai-warn {
+  color: var(--lake-text-2);
+}
+.bt-ai-dialog-note {
+  margin: 0;
+  color: var(--lake-text-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+.bt-ai-dialog-summary {
+  margin: 0;
+  color: var(--lake-text-2);
+  font-size: 13px;
+}

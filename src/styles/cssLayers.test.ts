@@ -35,6 +35,8 @@ const FILES = [
   "features/bitable/bitableFormView.css",   // 表单双模（编辑/预览）样式
   "features/bitable/bitableRelationPicker.css",   // 关联记录选择器（260929：全局大弹窗）
   "features/bitable/bitableFileIcon.css",   // 260930：附件「文档类型」图标 + hover 名称气泡
+  "features/bitable/bitableAiField.css",   // 261003：AI 字段（单元格状态 + 字段配置 + 整列生成对话框）
+  "features/bitable/bitableMarkdown.css",   // 261004：Markdown / AI 字段（单元格预览 + 展开浮窗 + 预览排版）
   "features/bitable/bitableFilterEditor.css",   // 260930：筛选条件树（远端 lake 风格 + 可复用）
   "features/bitable/bitableFillRules.css",   // 260930：条件填色配置与表格投影
   "features/board/boardEditor.css",
@@ -105,6 +107,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableRelationPicker.css": { decls: 145, dupGroups: 0 },   // 260930：+7 = 筛选编辑器在关联选择器里的内联布局（根编辑器/视图基线行）；此前 138：+30 = 关联选择器视图基线（只读筛选/排序行 + 视图分组表头/标签/计数）；此前 108：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）
   // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
   "features/bitable/bitableFileIcon.css": { decls: 25, dupGroups: 0 },
+  "features/bitable/bitableAiField.css": { decls: 43, dupGroups: 0 },   // 261004：-14 =「重新生成」入口移入展开面板（删 is-done / text / refresh 相关 5 条规则）；@keyframes 不计数
+  "features/bitable/bitableMarkdown.css": { decls: 67, dupGroups: 0 },   // 261004：Markdown 字段（单元格单行预览 + 展开浮窗 + 预览排版，全新文件）
   "features/bitable/bitableFilterEditor.css": { decls: 150, dupGroups: 0 },   // 260930：筛选规则/分组树/日期动态值/多选值/增删菜单 + 面板最大高度/滚动（全新文件）
   "features/bitable/bitableFillRules.css": { decls: 67, dupGroups: 0 },   // 260930：条件填色配置与表格投影（全新文件）；+4 = 「无背景色」填色块居中态（flex 三项 + 图标色），合法新增
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）

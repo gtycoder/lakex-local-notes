@@ -1,7 +1,7 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
 > 状态：**方案已冻结；V01 已完成（用户验收通过）；V02–V04 + 260928 三批追加需求 + T01/T04 + T02A + 260929 单级分组/UI2 + 260929-OPT 阶段优化 + T02B.1/.2/.3/.4 关联 + 260929 收口各条 + 260930 四条 + **260930 筛选重做：类型操作符矩阵 / 动态日期 / AND·OR 条件组 / 最多 2 层子组（代码已提交 `7dd81ba3`）** + **260930 条件填色：单元格 / 整行 / 行侧 / 整列 + 钉钉同款 alpha 混色 + 应用内统一 70 色实色卡/自定义（已提交 `ae1cfda`，待验收）** 已实施，一并待验收**（T03 多级分组已按用户决定废弃；T06 表单双模已完成待验收；D01/D02 暂缓）。
-> **当前工作（2026-09-30）**：用户确认按**路线 B（有边界的内部重构）**推进，AR02 第一段「业务写入收敛为 core 纯函数」已在隔离分支实施、门禁全绿、待验收；AR02 的 core 拆分与 AR03/AR04 未开始。AR01 已合入并在 `8de061e` 停止，边界见 §17.11 / §13 最新记录。
+> **当前工作（2026-10-04）**：用户定稿 **AI 字段**路线（**不做飞书式 AI 单元格操作**；全项目只做一个 `ai` 字段类型：命令里用 `{{字段名}}` **字段变量**——「插入字段」可插多个、生成时**原位替换**，值为文本快照、手动生成/不自动重跑；**另有 `markdown` 字段类型，AI 字段默认按 Markdown 口径**——单元格预览 + 展开**编辑/预览**双模）——**AI01 已实施（含「字段变量内联」「Markdown 字段 / AI 默认 MD」两次修订），门禁全绿、真实端 CDP 21/21，待用户验收**；任务定义见 §7 批次 G、状态见 §11、明细见 §13。历史：AR01–AR04 / B / D / CSV 已全部合入 master（`9535ed91` / `6a0ec68` / `5864845`）；AR02 的 core 拆分与 AR03 结构拆分按「无实测收益前停止」保留未做。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -65,6 +65,7 @@
 - 进度
 - 创建时间
 - 修改时间
+- **AI 字段（`ai`，261003 定稿）**：全项目**只做一个** AI 字段类型；命令（prompt）配置在字段里，可勾选**多个字段作为上下文**（同行引用）；生成结果为**文本快照**（存 `record.values`）。
 
 保留并补全：
 
@@ -85,6 +86,8 @@
 - 公式
 - 汇总/rollup
 - 流程、按钮、签名、条码、身份证号、地理位置等企业字段
+- 飞书式 AI 单元格操作（智能工具栏）/ AI 字段捷径中心（用户 261003 明确不做）
+- 钉钉式自动重跑（首版不做：值快照 + 手动「生成/重新生成」；后续可作为字段配置开关另议）
 
 ### 2.4 关联能力
 
@@ -662,6 +665,38 @@ string[]
 - 导入前校验 `kind`、`version` 和结构。
 - 保留未知字段类型和未知视图配置。
 
+### 批次 G：AI 字段（261003 用户新增 · 路线已定稿）
+
+#### AI01 AI 字段（单一类型）+ Markdown 字段（261004）
+
+> 用户 261003 定稿：**不做飞书式 AI 单元格操作（智能工具栏）**；全项目**只做一个 AI 字段**——命令（prompt）配置在字段里，可勾选多个字段作上下文；生成结果为文本快照。**261004 用户追加**：新增 Markdown 字段类型，且 **AI 字段默认按 Markdown 格式**（预览 + 展开编辑/预览，模仿钉钉）。这是明确路线，不再拆分多批。
+
+目标：
+
+- 新增字段类型 `ai`（显示名「AI 字段」）：该列由 AI 按字段内配置的命令生成内容；**结果按 Markdown 展示**（261004）。
+- 新增字段类型 `markdown`（显示名「Markdown」，261004 用户追加）：手工填写的 MD 字段，单元格预览 + 展开「编辑 / 预览」。
+
+实现范围：
+
+- `BitableFieldType` 新增 `ai`；字段配置 `ai: { prompt }`——**字段变量写在命令里**（`{{字段名}}`，编辑器「插入字段」插到**光标处**、可插多个；生成时**原位替换**为当前行该字段的展示值，**不再把字段值拼到命令末尾**）。
+- 值 = `record.values[fieldId]` **文本快照**（走现有同步/历史/CSV 管线）；**不自动重跑**，提供手动「生成 / 重新生成」。
+- AI 单元格：空态「生成」、生成中、失败（可重试）；**有值按 Markdown 口径**（单元格 = 去标记单行预览；悬停「展开」进编辑/预览，面板头部带「重新生成」、值**可手动编辑**）。
+- **Markdown 字段（261004 用户追加）**：`BitableFieldType` 新增 `markdown`（**文本口径**：筛选/排序/搜索/CSV 原样导入）；值 = `record.values[fieldId]` 原文；单元格 = 去标记单行预览 + 悬停「展开」；展开浮窗与 AI 字段共用——贴单元格、可拖动/缩放（抽出 `ExpandPanel` 共用壳，文本格同款，不再第三套几何），头部 = 字段名 + **编辑 / 预览** 双模（只读默认预览、可写默认编辑）+ 关闭；预览为**自写轻量子集渲染**（标题/段落/粗体/斜体/删除线/行内代码/代码块/引用/有序无序列表/链接/分割线；React 元素渲染、**不用 innerHTML**、链接只认 http(s)；**表格与图片首版不做**，按原文呈现）。
+- 列菜单「生成整列」（可只补空缺）；批量 = 逐行 `runAiChat`、渲染层并发 2–3、生成前确认、进度 + 取消、失败重试；`beginGesture/endGesture` 让整批 = 一次撤销。
+- 字段**重命名**联动改写同表 AI 命令里的 `{{旧名}}`→`{{新名}}`（`renameAiFieldToken`）；字段**删除**不改写命令（变量保留，编辑器提示「未找到字段」、生成按「（空）」处理）。
+- 只读（锁定/回收站/历史）无生成入口、值照常显示；移动端（v1）保持文本回退显示。
+- **图片/附件内容（多模态）本版不做（用户 2026-10-04 决定：先不做）**：变量替换走展示口径，附件/图片只出**文件名**；AI 通道只发纯文本消息。
+
+验收：
+
+- 建 AI 字段 → 写命令 + 「插入字段」插入 `{{字段名}}`（可多个；生成时原位替换）→ 单格/整列生成落盘；重新生成覆盖；失败可重试；重命名字段后变量跟随改写。
+- Markdown 字段：展开默认编辑（原文）→ 切预览出渲染（标题/列表/粗体等）→ 编辑落盘；单元格 = 去标记单行预览。
+- AI 字段值按 MD 预览/展开、**可手动编辑**（落盘）、展开面板「重新生成」可用。
+- 整列生成一次撤销可全回退；只读不可生成/不可编辑；移动端只读显示文本值。
+- 门禁全绿 + CDP 真实验收（先 mock OpenAI 兼容端点；真实供应商另记）。
+
+不做（首版）：飞书式单元格 AI、字段捷径中心、自动重跑、多输出类型（仅文本）、跨表/跨文档引用、Markdown 预览的表格/图片（按原文呈现）。
+
 ## 8. 推荐执行顺序
 
 1. `V01` 多视图工作台
@@ -787,7 +822,8 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | D01 CSV 导出（bitable） | 待验收 | 260930-CSV | 活动数据表 → UTF-8 **BOM** + CRLF + RFC4180（Excel 通用）；值走展示口径单一来源；附件只出**展示文件名**；多值 ", "；布尔 TRUE/FALSE；整表全部字段+记录。见 §13 |
 | D01 CSV 导入（bitable） | 待验收 | 260930-CSV | 首行表头 → 列映射（已有字段 / 新建文本字段 / 忽略）→ 追加到当前活动表；类型不符**丢弃该格并报告**，绝不写坏值；关联按目标主字段标题匹配。见 §13 |
 | 导出菜单按文档类型拆分 + 移除 Lake 导出 | 待验收 | 260930-CSV | doc：markdown/html/pdf/资料路径（**删除「导出为原生 Lake」**）；sheet：CSV/Excel 占位；bitable：CSV；board：PNG/SVG 占位。见 §13 |
-| D01 续：导出为压缩包（bitable） | 待验收 | 260930-CSV | 活动数据表 → ZIP：内含 `{表名}.csv` + `附件/{文件名}`；附件/图片字段引用的真实文件一并打包；同名附件自动 (2) 后缀并让 CSV 指向归档内相对路径；自写 store 方式流式写盘（无新依赖，标准 ZIP，UTF-8 名）。见 §13 |
+| D01 续：导出为压缩包（bitable） | 待验收 | 260930-CSV | 活动数据表 → ZIP：内含 `{表名}.csv` + `附件/{文件名}`；附件/图片字段引用的真实文件一并打包；同名附件自动 (2) 后缀并让 CSV 指向归档内相对路径；自写 store 方式流式写盘（无新依赖，标准 ZIP、UTF-8 名）。见 §13 |
+| AI01 AI 字段（单一类型） | 待验收 | 261003-AIFIELD | 用户 261003 定稿路线：**不做飞书式 AI 单元格**；只做一个 `ai` 字段类型——**命令里用 `{{字段名}}` 字段变量**（编辑器「插入字段」插到光标处、可插多个，生成时**原位替换**；不再拼字段值列表）、值为文本快照、**不自动重跑**（手动「生成/重新生成」）。已实施：core（类型 + `{prompt}` 单一来源 + `buildAiFieldMessages`/`aiPromptFieldNames` + 重命名联动 `renameAiFieldToken` + CSV 拒绝导入）+ 单元格状态机（未配置/生成中/失败重试/重新生成）+ 列菜单「AI 生成整列」（仅空缺/全部 + 生成前确认 + 进度 + 取消 + 失败重试）+ 并发 2–3 + 整批一次撤销 + 只读无入口 + 移动端文本回退；表单排除 AI 字段。**261004 追加**：新增 `markdown` 字段类型（文本口径；单元格去标记预览 + 展开**编辑/预览**双模，自写轻量子集渲染、不用 innerHTML），且 **AI 字段默认按 Markdown 口径**（值可手动编辑；展开面板头部「重新生成」；展开壳 `ExpandPanel` 与文本格共用）。门禁全绿（vitest **1580/16**）；**真实端 CDP 21/21**（mock 端点：「插入字段」`{{文本}}` 原位替换、Markdown 字段展开编辑→预览→落盘、AI 值 MD 预览/展开/手改落盘/重新生成、整列空缺 2/2、一次 ⌘Z 撤销整批、锁定入口消失/值保留、解锁恢复）。**图片/附件内容（多模态）不做**（用户 261004 决定：只传文件名）。Android 未跑；未提交（待验收）。明细见 §13 |
 
 ## 12. 修改记录
 
@@ -880,6 +916,9 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-30 | 260930-D | 真实端收尾 + 多维表整体 UI 回归 | 仅验证，无产品代码改动 | CDP 启动真实 Electron 实操：列宽撤销/重做 260-180-260；关 tab 保留通过；13 项 UI 回归（统计/五视图/添加记录/新增字段/隐藏列/关联选择器/填色/筛选/搜索入口）通过；只读草稿 IPC 未定论 | 只读草稿需「先提交输入再锁定」复验；共享预览仅 jsdom；Android 未做；仍未提交/未合 master |
 | 2026-10-01 | 260930-CSV | D01 多维表 CSV 导出/导入 + 导出菜单按类型拆分（含真实端 CDP） | `src/core/bitableCsv.ts`(新) · `bitableCsv.test.ts`(新) · `src/features/bitable/BitableCsvImportDialog.tsx`(新) · `BitableEditor.tsx` · `src/components/ExportSubmenuItem.tsx` · `exportMenu.test.ts`(新) · `Sidebar.tsx` · `DesktopOverlays.tsx` · `useNoteActions.ts` · `native.ts` · `electron/{export,noteExport,store}.ts` · `ipc/registerNotes.ts` · `preload.cjs` · `webApiServer.ts` · `store.test.ts` | 导出 UTF-8 BOM + CRLF + RFC4180；导入首行表头+列映射+坏格丢弃；菜单按 doc/sheet/bitable/board 拆分并删除 Lake 导出。门禁：tsc / vitest 1496-16 / check:core 72-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / git diff --check 全绿 | 真实端 CDP 未做（导出落盘/导入对话框/菜单分类型）；sheet 与 board 仅占位；待用户验收 |
 | 2026-10-01 | 260930-CSV | 多维表「导出为压缩包（含附件）」（D01 续） | `src/core/zipArchive.ts`(新) · `zipArchive.test.ts`(新) · `src/core/bitableCsv.ts`(attachmentLabel 选项) · `noteExport.ts`(exportBitableZip) · `export.ts` · `store.ts` · `ipc/registerNotes.ts` · `preload.cjs` · `webApiServer.ts` · `native.ts` · `ExportSubmenuItem.tsx` · `useNoteActions.ts` · `bitableCsv.test.ts` · `store.test.ts` · `exportMenu.test.ts` | 自写 store 方式 ZIP（CRC32 + 本地头 + 中央目录 + EOCD），无新依赖；真实端 CDP：ditto（macOS 原生）/bsdtar/Python zipfile 均正确解析 UTF-8 名与 CRC，CSV 单元格指向 `附件/图.png`。门禁：tsc / vitest 1501-16 / check:core 73-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / diff --check 全绿 | Apple 的 Info-ZIP `unzip` 不认 UTF-8 名（乱码，工具限制非归档缺陷）；>4GiB 需 ZIP64 暂不支持；sheet/board 仍占位 |
+| 2026-10-03 | 261003-AIFIELD | AI01 AI 字段（单一类型 · 命令在字段里 · 手动生成） | `src/core/bitableDoc.ts`(+test) · `src/core/bitableMutations.ts`(+test) · `src/core/bitableCsv.ts` · `src/features/bitable/useAiFieldGeneration.ts`(新) · `useAiFieldGeneration.test.ts`(新) · `BitableAiGenerateDialog.tsx`(新) · `bitableAiField.css`(新) · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableFormView.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` · 本文件 | 用户定稿路线：不做飞书式 AI 单元格；只做一个 `ai` 字段（字段内命令 + 多字段上下文 + 文本快照 + 手动生成、不自动重跑）。`buildAiFieldMessages` core 单一来源（附件只出展示名）；并发 3、可取消、失败重试、整批 `beginGesture/endGesture` 一次撤销；删被引用字段联动清引用；只读无入口；CSV 拒绝导入、表单排除。门禁：tsc / vitest **1554 passed / 16 skipped** / check:core 75 文件 0 违规 / ui-metrics（hex=0/rgb=0/!important=9/未定义令牌=0）/ cssLayers+uiPrimitives / 桌面+移动构建 / git diff --check 全绿；隔离 Electron + mock OpenAI CDP **13/13**（单格请求体断言+落盘、整列空缺 2/2、一次 ⌘Z 撤销整批、锁定入口消失/值保留、解锁恢复） | 功能待用户验收；Android 未跑（移动端代码未改，值走文本回退）；不自动重跑（有意）；未提交 |
+| 2026-10-04 | 261003-AIFIELD | AI01 续：命令内「字段变量」内联（去掉末尾字段值列表） | `src/core/bitableDoc.ts`(+test) · `src/core/bitableMutations.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableCells.tsx` · `useAiFieldGeneration.test.ts` · `bitableEditorMount.test.ts` · `bitableAiField.css` · HANDOFF/本文件 | 用户纠正（附钉钉截图）：字段要**动态插入到命令里**（「插入字段」、可多个），不是把字段值拼到末尾。改为 `ai: { prompt }` 单一来源：`{{字段名}}` 变量 + 编辑器「插入字段」（插到光标处）+ 生成时原位替换（空/失效/自引用→（空）；无变量/变量全失效→明确报错）；重命名联动改写 `{{旧名}}`；删除保留变量并由编辑器提示。门禁：tsc / vitest **1564 passed / 16 skipped** / check:core 75-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / 本范围 `git diff --check` 全绿；真实端 CDP **13/13**（「插入字段」→ `根据{{文本}}` → mock 收到 `根据（空）`、无字段值列表） | 功能待用户验收；**多模态（图片/附件内容）不做**（用户 261004 决定：先不做）；仓库级 diff --check 报错在另一会话在途的 `vendor/lakex-doc-react/dist`（未触碰）；未提交 |
+| 2026-10-04 | 261003-AIFIELD | Markdown 字段 + AI 字段默认 MD 口径（编辑 / 预览） | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/markdown.tsx`(新) · `markdown.test.ts`(新) · `bitableMarkdown.css`(新) · `bitableMarkdown.behavior.test.ts`(新) · `bitableCells.tsx` · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 | 用户（附钉钉截图）两条需求：① Markdown 字段的编辑 / 预览；② 新增 MD 字段类型且 AI 字段默认该格式。实现：`markdown` 字段类型（文本口径）+ 自写轻量子集渲染（React 元素、不用 innerHTML、链接只认 http(s)）+ `markdownToPlainText` 单行预览 + 展开浮窗**编辑/预览**双模（抽出 `ExpandPanel` 共用壳，文本格同款；只读默认预览）+ AI 字段复用同一单元格与面板（头部「重新生成」、值**可手动编辑**）。门禁：tsc / vitest **1580 passed / 16 skipped** / check:core 75-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / 本范围 `git diff --check` 全绿；真实端 CDP **21/21** | 功能待用户验收；表格/图片预览首版不做（按原文）；Android 未跑；未提交 |
 
 ## 13. 会话记录（只追加）
 
@@ -3643,6 +3682,110 @@ UI 与交互变化：
 - Apple 自带 Info-ZIP `unzip` 不识别 UTF-8 名（列名乱码、`-p` 按名匹配失败）——是其不处理通用位 0x0800 的**工具限制**；ditto（Finder）/Windows/7zip/bsdtar/Python 均正常。
 - store 方式不压缩；>4GiB 需 ZIP64，暂不支持（明确报错）；sheet/board 仍占位。
 - 功能待用户验收；按红线未合 master。
+
+### 2026-10-03 · 261003-AIFIELD · AI01 AI 字段（单一类型 · 命令在字段里 · 手动生成）
+
+接手与路线：
+
+- 按 README → HANDOFF → AGENTS → 本文件接手；用户先讨论飞书/钉钉 AI 字段形态，随后**明确纠正路线**：**不做飞书式 AI 单元格操作**，直接做**钉钉式 AI 字段**——但全项目**只做一个** AI 字段类型，命令配置在字段里、可勾选多个字段作上下文；把方案收敛为单批 AI01（不再拆三步）。
+
+本次完成：
+
+- **core**（`bitableDoc.ts`）：`BitableFieldType` 新增 `ai`（标签「AI 字段」）；字段配置 `BitableAiConfig = { prompt, referenceFieldIds }`（同一张表内、同行；`normalizeField` 归一：去重/去非字符串/非 AI 字段不保留）；`createBitableField("ai")` 给空配置；`isAiFieldType`；筛选操作符/值类型按文本口径（可筛选/排序/分组/统计、进搜索文本）；**`buildAiFieldMessages(doc, tableId, recordId, fieldId)` 请求组装单一来源**（固定 system 提示 + 「命令 + 每个引用字段的展示值」，空值标「（空）」、附件只出展示名、自引用过滤、19 万字符上限）——**不自动重跑**，只由显式命令触发。
+- **core**（`bitableMutations.ts`）：`stripAiFieldRef`——删除被引用字段时从同表 AI 字段的 `referenceFieldIds` 联动摘除（`deleteBitableField` 内调用，无变化返回原引用）。
+- **core**（`bitableCsv.ts`）：`coerceCsvCell` 对 `ai` 明确拒绝（「AI 字段由生成产生，不能从 CSV 导入」），默认分支不再把原样文本写进快照。
+- **渲染层**：新 `useAiFieldGeneration`（单格 + 整列；并发 `AI_GENERATE_CONCURRENCY=3`、可取消（`cancelAiChat`）、失败可重试；请求走 `buildAiFieldMessages`、写入走 `setBitableCellValue`；整批 `beginGesture/endGesture` = **一次撤销**；只读/字段被删/取消即停并保留已完成；卸载中止在途请求）；新 `BitableAiGenerateDialog`（生成前确认「将逐条调用你配置的 AI 服务」、仅空缺/全部、进度、取消、重试失败项、生成中不可关闭）；新 `bitableAiField.css`（登记 cssLayers 基线 57）；`bitableCells.tsx` 新增 `AiFieldCell`（未配置/生成中/失败重试/重新生成/只读只展示文本）+ `CellEditor` 分派 + `Sparkles` 类型图标；`BitableEditor.tsx` 接线（会话 hook 注入、单元格态、列菜单「AI 生成整列」、字段编辑器「命令 + 上下文字段（候选不含自己）」、`ai` patch 新增/保存）；`BitableFormView` 表单候选排除 AI 字段。
+- **测试**：core 新用例（类型/归一/报文组装成功与全部错误路径/文本口径/联动清引用）；新 `useAiFieldGeneration.test.ts`（jsdom：单格成功、整列并发 ≤3 + 一次手势、失败态、取消不写盘、`runPool` 纯函数）；`bitableEditorMount.test.ts` 新增 5 条 AI 护栏。
+
+验证结果：
+
+- `tsc --noEmit` 通过；`vitest run` **1554 passed / 16 skipped**（185 文件通过 / 5 跳过）。
+- `check:core` 75 文件 0 违规；`ui-metrics` hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers+uiPrimitives` 通过；桌面 + 移动构建通过；`git diff --check` 通过。
+- **隔离 Electron + mock OpenAI 兼容端点 + CDP 真实 UI 13/13**（脚本 `/tmp/lake-ai-field-e2e.mjs`，跑完按 PID 回收）：配置供应商（连通 ok）→ 新建/打开多维表 → 快速面板加「AI 字段」→ 编辑列配命令 + 上下文字段（3 个空格出现「AI 生成」）→ 单格生成（mock 收到 `stream:true`、system=固定提示、user=`命令：…/字段值：- 文本：（空）`；单元格出结果；自动保存落盘轮询命中）→ 列菜单「AI 生成整列」默认「仅生成空缺记录（2 条）」→ 完成 2/2 → 3 格全有值 → **一次 ⌘Z 撤销整批且单格结果保留** → 目录栏锁定（只读）：生成入口 0 个、值保留、状态栏带锁 → 解锁后入口恢复。
+
+数据结构/接口变化：
+
+- 正文格式不 bump 版本：`ai` 为开放类型集合新增一项；字段配置走 `BitableField.ai` 可选属性；值 = `record.values[fieldId]` 文本快照（复用同步/历史/CSV/搜索管线）；**无新 IPC、无新依赖**。
+
+UI 与交互变化：
+
+- 字段类型选择器新增「AI 字段」（2 列网格末位）；编辑字段弹窗在 AI 类型下多出「命令 / 上下文字段」两段；单元格按运行态渲染；列菜单对 AI 列多出「AI 生成整列」；生成走显式对话框（含费用/发送说明与取消）。**对齐钉钉、有意不做的**：自动重跑（引用字段变化不重跑）、多输出类型（仅文本）、字段捷径中心。
+
+改动文件：
+
+- `src/core/bitableDoc.ts`(+`bitableDoc.test.ts`) · `src/core/bitableMutations.ts`(+`bitableMutations.test.ts`) · `src/core/bitableCsv.ts`
+- `src/features/bitable/useAiFieldGeneration.ts`(新) · `useAiFieldGeneration.test.ts`(新) · `BitableAiGenerateDialog.tsx`(新) · `bitableAiField.css`(新)
+- `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `BitableFormView.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts`
+- `HANDOFF.md` · 本文件
+
+遗留问题：
+
+- **未提交**（按红线等用户验收）；Android 未跑——移动端代码本批未改，AI 值走 `bitableFieldText` 文本回退（记录详情/表单/关联选择器/历史快照同理：只展示快照，不提供生成入口）。
+- 生成结果为**非流式落格**（单元格显示「生成中…」直到完成；不做逐字上屏）。
+- 批量范围为**整表记录**（「仅空缺 / 全部」两档），不按当前视图筛选；并发 3 为渲染层自限（主进程无并发上限）。
+- 记录详情抽屉与表单内不提供生成入口（首版有意）；自动重跑与多输出类型未做。
+
+下一步：
+
+- 等用户对 AI 字段的功能验收（重点：字段配置交互、单格/整列生成体验、与钉钉语义的差异是否接受）；通过后再议是否补 Android 模拟器复验与提交。
+
+### 2026-10-04 · 261003-AIFIELD 续 · 命令内「字段变量」内联（去掉末尾拼接）
+
+本次完成：
+
+- 用户反馈（附钉钉截图）：字段要**动态插入到命令里**（「插入字段」可插多个），不是纯拼到命令末尾。据此把 `ai` 配置收敛为 `{ prompt }` **单一来源**：
+  - core：`AI_TOKEN_SOURCE` / `aiPromptFieldNames`（解析去重、按首次出现顺序）；`buildAiFieldMessages` 改为**原位替换**——每个 `{{字段名}}` 替换为当前行该字段的展示值（空值 / 字段不存在 / 自引用 → 「（空）」）；命令原样作为 user message（**不再有「字段值：」列表**）；无命令 / 无变量 / 变量全失效 / 超长分别给明确错误。
+  - core/mutations：`stripAiFieldRef` → `renameAiFieldToken`（重命名改写同表 AI 命令的 `{{旧名}}`；**删除字段不改写命令**——变量保留、编辑器提示「未找到字段」、生成按空处理）；`deleteBitableField` 去掉联动清理调用。
+  - UI：字段编辑器把「上下文字段勾选」换成「**插入字段**」按钮（Popover 列出同表其它字段，插到**光标处**、可多次插入多个；`requestAnimationFrame` 恢复光标）+ 已插入数量 / 未找到字段提示；`AiFieldCell` 的「未配置」判据改为「命令里有没有变量」；`updateField` 重命名时联动改写。
+  - 测试：core 新用例（原位替换多字段、空值/自引用、无变量/全失效、`aiPromptFieldNames`）；mutations 换成 rename 用例；hook 测试断言内联后的 user 内容；挂载护栏同步更新。
+
+验证结果：
+
+- `tsc --noEmit` 通过；`vitest run` **1564 passed / 16 skipped**（含另一会话在途改动，全绿）；`check:core` 75 文件 0 违规；`ui-metrics` hex=0/rgb=0/`!important`=9/未定义令牌=0；`cssLayers+uiPrimitives` 通过；桌面 + 移动构建通过；**本改动范围 `git diff --check` 干净**（仓库级报的 trailing whitespace 在另一会话在途的 `vendor/lakex-doc-react/dist`，未触碰）。
+- 真实端 CDP **13/13**（隔离实例 + mock 端点重新跑）：编辑列里「插入字段」→ 命令变 `根据{{文本}}` → 单格生成 mock 收到 `根据（空）`（**无字段值列表**）→ 落盘 → 整列空缺 2/2 → 一次 ⌘Z 撤销整批 → 锁定/解锁。
+
+数据结构/接口变化：
+
+- `BitableAiConfig` 去掉 `referenceFieldIds`（预验收期、无兼容负担）：字段变量即引用，`prompt` 为单一来源；正文仍不 bump 版本。
+- **附件/图片仍是纯文本口径**：变量替换走 `bitableFieldText`（附件/图片只出**文件名列表**）；AI 通道（IPC → 主进程 SDK）目前只发 `{ role, content: string }`，**不支持图片/附件内容（多模态）**——用户 2026-10-04 决定**先不做**（保持只传文件名）。若将来要做需扩 IPC 消息结构（content parts）+ 主进程透传 + 本地资源读取（渲染层可经本地资产服务取图）。
+
+遗留问题：
+
+- 多模态（图片/附件内容）**不做**（用户 261004 决定）；其余同首版（Android 未跑、非流式落格、整表范围、记录详情/表单无生成入口）。
+- 未提交（待验收）。
+
+下一步：
+
+- 等用户验收（多模态已决定不做）。
+
+### 2026-10-04 · 261003-AIFIELD 续② · Markdown 字段 + AI 字段默认 MD（编辑/预览）
+
+本次完成：
+
+- 用户（附钉钉截图）两条需求：① 支持 Markdown 的**编辑与预览**（类似文本格展开、两个模式，模仿钉钉）；② 新增 **Markdown 字段类型**，且 **AI 字段默认是该格式**。确认口径：AI 值**允许手动编辑**；预览支持**常用子集**。
+- core：`BitableFieldType` 新增 `markdown`（标签「Markdown」）；筛选操作符/值类型并入文本口径；CSV 按文本原样导入。
+- 渲染器（新 `markdown.tsx`）：`parseMarkdownBlocks` / `MarkdownView` / `markdownToPlainText`——标题/段落/粗体/斜体/删除线/行内代码/代码块/引用/有序·无序列表（缩进嵌套）/链接/分割线；**React 元素渲染、不用 innerHTML**；链接只认 `http(s)`、点击交系统浏览器；表格/图片首版不做（按原文呈现）。
+- 单元格（`bitableCells.tsx`）：从 `TextExpandPopover` 抽出**共用壳 `ExpandPanel`**（定位/拖拽/缩放/关闭；文本格与 MD 格共用，单一来源，不再第三套几何）；新增 `MarkdownCell`（单元格 = 去标记单行预览 + 悬停「展开」；面板头部 = 字段名 + **编辑/预览**（`.seg` 取值控件）+ 关闭；只读默认预览、可写默认编辑）；`AiFieldCell` 有值分支**复用 `MarkdownCell`**（头部多一个「重新生成」；`onChange` 走同一写入路径 ⇒ **AI 值可手动编辑**）；`CellEditor` 新增 `case "markdown"`。
+- 样式：新 `bitableMarkdown.css`（登记 cssLayers，67 条）；`bitableAiField.css` 删除随「重新生成」入面板而失效的 5 条规则（57→43）。
+- 测试：渲染器 6 例（子集/HTML 转义/链接白名单/纯文本预览/拆块）；jsdom 行为 4 例（默认编辑、切预览渲染、输入写回、只读预览+编辑禁用）；挂载护栏 4 条（类型注册 / 共用壳 + 双模 + AI 复用 MarkdownCell / 不用 innerHTML / CSS 登记）。
+
+验证结果：
+
+- `tsc --noEmit` 通过；`vitest run` **1580 passed / 16 skipped**；`check:core` 75 文件 0 违规；`ui-metrics` hex=0/rgb=0/`!important`=9/未定义令牌=0；`cssLayers+uiPrimitives` 通过（新文件基线 67、aiField 收紧到 43）；桌面 + 移动构建通过；**本改动范围 `git diff --check` 干净**（仓库级报错仍是另一会话在途的 `vendor/lakex-doc-react/dist`）。
+- 真实端 CDP **21/21**（隔离实例 + mock 端点；脚本 `/tmp/lake-ai-field-e2e.mjs` 扩展）：Markdown 字段展开默认编辑（原文）→ 切预览出渲染（标题/列表/粗体）→ 编辑落盘 → 单元格 = 去标记预览；AI 字段单元格 MD 预览、展开编辑/预览、**手改落盘**、面板「重新生成」端到端回写；其余（插入字段原位替换、整列空缺 2/2、一次 ⌘Z、锁定/解锁）全过。
+
+数据结构/接口变化：
+
+- 正文开放类型集合再加 `markdown`（不 bump 版本）；值 = 字符串原文（走同步/历史/CSV/搜索现有管线）；**无新依赖**（渲染器自写）。
+
+遗留问题：
+
+- 预览**不含表格/图片**（首版有意；按原文呈现）；移动端 v1 仍文本回退（未渲染 MD）；Android 未跑。
+- 未提交（待验收）。
+
+下一步：
+
+- 等用户验收（重点：展开面板的编辑/预览交互、AI 值手改体验）；确认后可提交。
 
 ## 14. 会话执行模板
 

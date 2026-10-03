@@ -122,6 +122,17 @@ export function stripFieldFromView(view: BitableView, fieldId: string): BitableV
 }
 
 /**
+ * 字段重命名联动（261003，单一来源）：把同表 AI 字段命令里的 `{{旧名}}` 改写成 `{{新名}}`，
+ * 保证「插入字段」插入的变量在重命名后仍然可用。无变化返回原字段引用。
+ * （字段**删除**不做改写：命令里的变量保留，编辑器提示「未找到字段」、生成时按「（空）」处理，不静默改写用户命令。）
+ */
+export function renameAiFieldToken(field: BitableField, oldName: string, newName: string): BitableField {
+  const ai = field.ai;
+  if (!ai || !ai.prompt.includes("{{" + oldName + "}}")) return field;
+  return { ...field, ai: { ...ai, prompt: ai.prompt.split("{{" + oldName + "}}").join("{{" + newName + "}}") } };
+}
+
+/**
  * 删除一个字段（**一次覆盖全部视图引用**）：
  * 先解除双向配对（对侧降级为单向、两侧数据都保留），再移除字段，并把所有视图中指向它的配置清干净。
  * 表不存在 / 只剩一个字段 / 字段不存在 → 返回原 doc（组件因此不会产生空写入）。
@@ -132,6 +143,7 @@ export function deleteBitableField(doc: BitableDoc, tableId: string, fieldId: st
   const unpaired = unpairRelationFields(doc.tables, tableId, fieldId);
   const tables = unpaired.map((t) => (t.id !== tableId ? t : {
     ...t,
+    // AI 命令里的 `{{字段名}}` 变量保留（见 renameAiFieldToken 注释）：删除后编辑器提示、生成按空处理。
     fields: t.fields.filter((f) => f.id !== fieldId),
     views: t.views.map((view) => stripFieldFromView(view, fieldId)),
   }));

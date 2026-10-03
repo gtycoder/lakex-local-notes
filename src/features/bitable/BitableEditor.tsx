@@ -16,21 +16,21 @@ import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import {
   ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Copy, Eye, EyeOff, FileUp, GripVertical, ListFilter,
-  Download, Lock, LockOpen, MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Trash2, X,
+  Download, Lock, LockOpen, MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Sparkles, Trash2, X,
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
-  BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
+  BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
   removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, applySortMode, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
   isKnownFieldType, isRelationFieldType, newBitableId, orderedAllTableFields, orderedTableFields, parseBitableBody,
-  type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
+  type BitableAttachment, type BitableAiConfig, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
-import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField, duplicateBitableField, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
+import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField, duplicateBitableField, renameAiFieldToken, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
 import { parseCsv, defaultCsvMapping, importCsvRows, type CsvColumnMapping, type CsvImportResult } from "../../core/bitableCsv.js";
 import { StatCell } from "./bitableCells";
 import { BitableCsvImportDialog } from "./BitableCsvImportDialog.js";
@@ -53,6 +53,8 @@ import { BitableFillEditor } from "./BitableFillEditor.js";
 import { BitableFilterEditor } from "./BitableFilterEditor.js";
 import { useBitableSession } from "./useBitableSession";
 import { BitableViewFallback, ViewTypeIcon } from "./bitableViews.js";
+import { BitableAiGenerateDialog, isAiCellEmpty, type AiGenerateMode } from "./BitableAiGenerateDialog.js";
+import { aiCellKey, useAiFieldGeneration } from "./useAiFieldGeneration.js";
 import "./bitableEditor.css";
 
 const DEFAULT_COL_WIDTH = 180;
@@ -151,6 +153,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
 
+  /** AI 字段生成（261003）：单格 + 整列；写值走 setBitableCellValue，整批一次撤销（见 hook 文件头）。 */
+  const aiGen = useAiFieldGeneration({
+    docRef,
+    updateDoc,
+    beginGesture,
+    endGesture,
+    isReadOnly: () => readOnlyRef.current,
+  });
+
   // ---- 面板/浮层状态 ----
   const [panel, setPanel] = useState<null | "fields" | "filter" | "fill" | "group" | "sort" | "rowHeight" | "viewConfig">(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -165,6 +176,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   const [viewMenu, setViewMenu] = useState<{ viewId: string; anchor: HTMLElement } | null>(null);
   const [addFieldAnchor, setAddFieldAnchor] = useState<HTMLElement | null>(null);
   const [fieldEditor, setFieldEditor] = useState<{ fieldId: string | null } | null>(null);
+  /** AI 字段「整列生成」对话框（261003）。 */
+  const [aiGenerateFieldId, setAiGenerateFieldId] = useState<string | null>(null);
   const [viewEditor, setViewEditor] = useState<string | null>(null);
   const viewNameRef = useRef<HTMLInputElement>(null);
   const [tableEditor, setTableEditor] = useState<{ id: string; draft: string } | null>(null);
@@ -450,12 +463,19 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   const openAddField = useCallback(() => setFieldEditor({ fieldId: null }), []);
   const updateField = useCallback((fieldId: string, patch: Partial<BitableField>) => {
     patchActiveTable((table) => {
+      const before = table.fields.find((f) => f.id === fieldId);
       const fields = table.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f));
       const field = fields.find((f) => f.id === fieldId);
       if (!field) return table;
+      // 字段重命名 → 同表 AI 字段命令里的 {{旧名}} 跟随改写（「插入字段」的变量保持可用；261003）。
+      const nextName = typeof patch.name === "string" ? patch.name : null;
+      const oldName = before?.name ?? null;
+      const renamed = nextName && oldName && nextName !== oldName
+        ? fields.map((f) => renameAiFieldToken(f, oldName, nextName))
+        : fields;
       // 类型变更后清掉不再成立的视图引用（AR-F7 续）：只清配置、不迁移记录值。
       const views = table.views.map((view) => stripViewRefsForFieldType(view, field));
-      return { ...table, fields, views };
+      return { ...table, fields: renamed, views };
     });
   }, [patchActiveTable]);
   /** 删除字段（AR02）：解除双向配对 + 清空**全部视图**里指向它的配置，收敛到 core 单一来源。 */
@@ -907,6 +927,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
             ctx={displayCtx}
             value={record.values[field.id]}
             readOnly={readOnly}
+            aiState={field.type === "ai" ? aiGen.cellStates[aiCellKey(field.id, record.id)] : undefined}
+            onAiGenerate={field.type === "ai" ? () => { void aiGen.generateCell(activeTable.id, record.id, field.id); } : undefined}
             onChange={(value) => setCellValue(record.id, field.id, value)}
             onAddOption={(name) => addOption(field.id, name, record.id)}
             noteId={noteId}
@@ -1442,6 +1464,17 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
               </button>
             );
           })()}
+          {columnMenu && (() => {
+            const fieldId = columnMenu.fieldId;
+            const field = activeTable.fields.find((item) => item.id === fieldId);
+            if (!field || field.type !== "ai") return null;
+            return (
+              <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly}
+                onClick={() => { setAiGenerateFieldId(fieldId); setColumnMenu(null); }}>
+                <Sparkles size={13} />AI 生成整列
+              </button>
+            );
+          })()}
           <button type="button" className="bt-menu-item ln-menu__item ln-menu__item--danger" disabled={readOnly || activeTable.fields.length <= 1} onClick={() => { if (columnMenu) deleteField(columnMenu.fieldId); }}><Trash2 size={13} />删除列</button>
         </div>
       </Popover>
@@ -1523,6 +1556,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
             if (patch.dateAutoFill) field.dateAutoFill = true;
             if (patch.progressColor) field.progressColor = patch.progressColor;
             if (patch.relation) field.relation = patch.relation;
+            if (patch.ai) field.ai = patch.ai;
             patchActiveTable((table) => ({ ...table, fields: [...table.fields, field] }));
             // 新增即双向 → 立刻在目标表建反向字段并回填已有引用
             if (patch.type === "relationTwoWay") updateDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, field.id) }));
@@ -1530,6 +1564,29 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
           }}
         />
       )}
+
+      {aiGenerateFieldId && (() => {
+        const field = activeTable.fields.find((item) => item.id === aiGenerateFieldId);
+        if (!field) return null;
+        const batchForField = aiGen.batch && aiGen.batch.fieldId === field.id ? aiGen.batch : null;
+        return (
+          <BitableAiGenerateDialog
+            open
+            field={field}
+            table={activeTable}
+            batch={batchForField}
+            onStart={(mode: AiGenerateMode) => {
+              const ids = activeTable.records
+                .filter((record) => mode === "all" || isAiCellEmpty(record.values[field.id]))
+                .map((record) => record.id);
+              void aiGen.runBatch(activeTable.id, field.id, ids);
+            }}
+            onCancelRun={() => aiGen.cancelBatch()}
+            onRetryFailed={() => aiGen.retryFailed()}
+            onClose={() => { aiGen.clearBatch(); setAiGenerateFieldId(null); }}
+          />
+        );
+      })()}
 
       {viewEditor && (
         <Dialog open onDismiss={() => setViewEditor(null)} label="重命名视图" className="bt-dialog">
@@ -1611,7 +1668,7 @@ interface FieldEditorModalProps {
   onClose: () => void;
   onSave: (patch: Partial<BitableField>, options?: BitableField["options"]) => void;
   onDelete: () => void;
-  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown; dateAutoFill?: boolean; progressColor?: string; relation?: BitableRelation }) => void;
+  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown; dateAutoFill?: boolean; progressColor?: string; relation?: BitableRelation; ai?: BitableAiConfig }) => void;
 }
 
 function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, onDelete, onAddField }: FieldEditorModalProps) {
@@ -1639,6 +1696,27 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
   const [relationViewId, setRelationViewId] = useState<string>(typeof field?.relation?.viewId === "string" ? field.relation.viewId : "");
   const relationTarget = tables.find((table) => table.id === relationTableId);
   const relationViews = relationTarget?.views ?? [];
+  /** AI 字段配置（261003）：命令里用「插入字段」插入 `{{字段名}}` 变量（可多个；生成时**原位替换**）。 */
+  const [aiPrompt, setAiPrompt] = useState(typeof field?.ai?.prompt === "string" ? field.ai.prompt : "");
+  const [aiInsertAnchor, setAiInsertAnchor] = useState<HTMLElement | null>(null);
+  const aiPromptRef = useRef<HTMLTextAreaElement>(null);
+  const isAi = type === "ai";
+  const aiRefCandidates = (tables.find((table) => table.id === tableId)?.fields ?? []).filter((candidate) => candidate.id !== field?.id);
+  const aiTokenNames = aiPromptFieldNames(aiPrompt);
+  const aiCandidateNames = new Set(aiRefCandidates.map((candidate) => candidate.name));
+  const aiMissingNames = aiTokenNames.filter((name) => !aiCandidateNames.has(name));
+  /** 把 `{{字段名}}` 插到命令的**光标处**（可多次插入多个字段）；插完把光标移到变量之后。 */
+  const insertAiToken = (name: string) => {
+    const token = "{{" + name + "}}";
+    const el = aiPromptRef.current;
+    const start = el ? el.selectionStart : aiPrompt.length;
+    const end = el ? el.selectionEnd : aiPrompt.length;
+    setAiPrompt(aiPrompt.slice(0, start) + token + aiPrompt.slice(end));
+    requestAnimationFrame(() => {
+      const node = aiPromptRef.current;
+      if (node) { node.focus(); node.setSelectionRange(start + token.length, start + token.length); }
+    });
+  };
   const supportsOptions = type === "select" || type === "multiSelect";
   const knownType = isKnownFieldType(type) ? (type as BitableFieldType) : null;
   const isRelation = isRelationFieldType(type);
@@ -1701,8 +1779,10 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
     const nextOptions = supportsOptions
       ? options.map((option, index) => ({ ...option, name: option.name.trim() || "选项 " + (index + 1) }))
       : undefined;
-    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: nextOptions, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation }); return; }
-    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation: isRelation ? relation : undefined }, nextOptions);
+    // AI 配置（261003）：仅 AI 字段带（字段变量写在命令里，可多个）；切走类型时显式 undefined，清掉旧配置。
+    const ai: BitableAiConfig | undefined = isAi ? { prompt: aiPrompt.trim() } : undefined;
+    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: nextOptions, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation, ai }); return; }
+    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation: isRelation ? relation : undefined, ai }, nextOptions);
   };
   return (
     <Dialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
@@ -1780,6 +1860,42 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
             <label className="bt-field-check"><input type="checkbox" checked={relationAllowMultiple} disabled={readOnly}
               onChange={(event) => setRelationAllowMultiple(event.target.checked)} />允许添加多个记录</label>
           </>
+        )}
+        {isAi && (
+          <div className="bt-ai-config">
+            <div className="bt-field-label"><span>命令（AI 按它生成内容；字段变量插在命令里）</span></div>
+            <div className="bt-ai-prompt-wrap">
+              <textarea ref={aiPromptRef} className="bt-input bt-ai-prompt" rows={4} value={aiPrompt} readOnly={readOnly}
+                placeholder="例如：阅读{{附件}}，先写一段摘要，再列出核心要点"
+                onChange={(event) => setAiPrompt(event.target.value)} />
+              <button type="button" className="bt-select-trigger bt-ai-insert" disabled={readOnly}
+                aria-haspopup="dialog" aria-expanded={Boolean(aiInsertAnchor)}
+                onClick={(event) => setAiInsertAnchor(event.currentTarget)}>
+                <Plus size={13} />插入字段<ChevronDown size={14} />
+              </button>
+            </div>
+            {aiInsertAnchor && (
+              <Popover open anchor={aiInsertAnchor} onClose={() => setAiInsertAnchor(null)} width={220}>
+                <div className="bt-panel">
+                  {aiRefCandidates.length === 0 && <div className="bt-ai-dialog-note">这张表里还没有其它字段可以引用</div>}
+                  {aiRefCandidates.map((candidate) => (
+                    <button key={candidate.id} type="button" className="bt-menu-item ln-menu__item"
+                      onClick={() => { insertAiToken(candidate.name); setAiInsertAnchor(null); }}>
+                      <FieldTypeIcon type={candidate.type} size={13} /><span className="bt-menu-label ln-ellipsis">{candidate.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </Popover>
+            )}
+            <p className="bt-ai-dialog-note">
+              {aiTokenNames.length === 0
+                ? "还没有插入字段：请用「插入字段」把要参考的字段插入到命令里（单元格才会出现「AI 生成」）。"
+                : "已插入 " + aiTokenNames.length + " 个字段；生成时 " + "{{字段名}}" + " 会原位替换为当前行该字段的值。"}
+              {aiMissingNames.length > 0 && (
+                <span className="bt-ai-warn">（未找到：{aiMissingNames.map((name) => "{{" + name + "}}").join("、")}，生成时按空处理）</span>
+              )}
+            </p>
+          </div>
         )}
         {supportsOptions && (
           <div className="bt-options-editor">

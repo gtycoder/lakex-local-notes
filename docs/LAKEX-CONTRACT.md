@@ -482,6 +482,28 @@ txn.commit();
 **实测（修复后）**：删除 `顶层块 63→62`、拖拽 `63→63`、空段落两者都不变；三个 e2e 套件
 （`e2e-block-list-span` / `e2e-block-menu-smoke` / `e2e-block-multi-select`）全绿。
 
+### 5.8.6 引用内块独立编辑 + 引用内「转化为」裁剪 + 手柄顶对齐/选中样式（261004 云端实测）
+
+来源 = browser-skill 驱动 Microsoft Edge 实测云端语雀编辑态（主要做 hover / 开菜单；**经用户授权**在云端对该引用做过一次「取消引用」实测，内部块原样提升、未丢内容）。
+
+**云端 DOM（新 brick 版）**：块手柄 = `.ne-brick-toolbar`（`data-testid=<blockId>`；`position:absolute` + `transform:translate(-100%,0)`），点开 = `.ne-brick-toolbar-overlay > ul.ne-brick-menu.ne-brick-actions`；「转化为」子菜单 = `.ne-ui-turn-into-menu`（图标项 `.ne-ui-turn-into-icon[data-testid]` + 常规项 `.ne-ui-turn-into-normal[data-testid]`，当前项带 `selected`）。
+> 注：我们 vendored 的是**旧 brick 实现**（`.ne-block-hover-handle` / `.ne-block-context-menu`），上面的类名仅供对照，**不要照搬**。
+
+**四条已核实行为（照此复刻）**：
+1. **引用的首个子块 = 整个引用的合并手柄；其余子块各自出柄**：hover 引用**第一行**（首个 `ne-p`）→ `data-testid` 是外层 `ne-quote`；hover 引用内**非首**的 `ne-tli` → `data-testid` 就是该 `ne-tli`。即「容器第一行手柄 = 合并手柄，其他行仍可单独块编辑」（用户 261004 口径）。
+2. **「转化为」按上下文裁剪**：引用**外** 15 项 = h1–h6 / 正文 / 有序 / 无序 / 任务 / 代码块 / 高亮块 / 引用 / 分栏 / 折叠块；引用**内** 11 项 = 去掉 **代码块 / 引用 / 分栏 / 折叠块**（= 用户图 2）。
+3. **手柄顶对齐块首行**：实测列表项块 `y=464` → 手柄 `y=464`；引用块 `y=266` → 手柄 `y=266`。**不是**按块高垂直居中。
+4. **主操作菜单 6 项**：`转化为 / 删除 / 复制 / 剪切 / 缩进 / 在下方添加`（云端该处没有「取消缩进 / 在上方添加」入口）。
+5. **取消引用**：引用第一行手柄 → 转化为 → 「引用」是**回显(selected)** 状态（`.ne-ui-turn-into-normal[data-testid="quote"].selected`）→ 点一下取消引用（实测 `ne-quote` 消失、内部块提升到顶层）。
+
+**我方落地（vendor LOCAL-CHANGES #23）**：`NE-QUOTE` 移出 `STRUCTURAL_BLOCK_TAGS`（非首子块各自出柄）**但保留父块上提**（首个子块 → 整个 `ne-quote`，即合并手柄）；`BlockContextMenu` 的 `QUOTE_HIDDEN_CONVERT_VALUES`（codeblock/quote/columns/collapse）按 `isInsideQuote` 裁剪；**「转化为」不再走子菜单，整体内联到第一级**（沿用原样式：正文/标题/列表/代码为紧凑图标格，「高亮块/引用/分栏/折叠块」为图标 + 文字卡片格；用户 261004 要求）；`updateHandlePosition` 的 `top` 改顶对齐；`selectedTopBlocks` 增加 `blockContainerOfRange`（支持同一引用内部多选）；**块编辑只在「鼠标触达块句柄」时触发**（用户 261004 口径）：`selectionchange` **不扫描块选区、不高亮**（只做选区收缩时的廉价清理），多块判定挪到 `handleMouseMove` 的「松开按键后的普通移动」（`e.buttons === 0`），拖选中不判定 ⇒ 不影响跨行选择性能；选中样式只在鼠标进入手柄时上（`highlightedRef` 记录、每次先全清再重记），并覆盖所有行级块（正文/标题/列表），用 `box-shadow: 0 var(--ln-brick-hl-extend)` **动态**补段间距 —— 扩展量 = 与「下一个高亮行」的实际空隙（单行 / 末尾 / 空隙过大 → 0 ⇒ 只用行高本身，不无谓加高）⇒ 相邻行连成一片且不溢出；`BlockHoverHandle.css` 直接给 `ne-tli/ne-uli/ne-oli` 上 `.ne-brick-highlight` 的**整块背景**（内核只覆盖 p / 标题 / `ne-card` / `ne-collapse` / `ne-columns` / `ne-quote[ne-indent]`，列表项原本没有规则）；⚠️ **不要**照抄内核 `ne-p` 的 `::before + z-index:-1` 画法 —— 在列表项上会被引擎背景盖住、完全不可见（实测像素全白），改用元素自身 `background-color`；新增 `unwrapQuote` 实现取消引用（内部块按原类型提升，不丢列表结构）。
+
+**顺带修掉一个真 bug（261004 实测）**：`getCurrentConvertValue` 原先**无条件** `blockElement.querySelector('ne-oli-i/ne-uli-i/ne-tli-i')` 下探，会把**含列表的引用**误判成 `ol/ul` —— 表现为引用第一行「转化为」回显成「有序」、点「引用」不取消反而再包一层。已收窄为「**块自身是列表项**时才下探」。
+
+**选中样式（用户 261004 明确）**：多块合并的选中样式是**整个块的背景色**（比选中文字浅），不是只盖文字 —— 对应内核 `ne-p.ne-brick-highlight::before` 的画法（`--lakex-editor-background-focus` @ 0.4，`left:-6px; right:0` 铺满整行）；列表项原本没有这条规则，本项目已补齐。
+
+**仍未复现**：云端「多块拖选 → 句柄合并」的确切手势（browser-skill 无法做真实鼠标拖拽；用户口径：多选多行即自动合并，引用这类容器第一行手柄本来就是合并手柄）。
+
 ### 5.9 内核命令注册表（43 插件 / 147 条 kO 命令 + 4 条命令式 = 151，bundle 实测枚举，260917）
 
 来源 = `vendor/lakex-doc-react/src/components/lakex/lakex.js` 里 `kO({ pluginName:'X', command:{…} })` 的**括号配对解析**（脚本见本节末），补上 §5.8.1 第 7 条「只给计数、没给清单」的缺口。**新增块级能力前先在这张表里找命令；表里没有才写 wrapper 层。**

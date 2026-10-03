@@ -1,0 +1,137 @@
+/* Markdown 字段与 AI 字段（261004）：单元格单行预览 / 展开浮窗内容 / 预览排版。颜色只用 --lake-* 令牌。 */
+.bt-md-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
+.bt-md-cell-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bt-md-cell:hover .bt-expand-btn,
+.bt-md-cell:focus-within .bt-expand-btn {
+  display: inline-flex;
+}
+.bt-md-expand-head {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.bt-md-expand-title {
+  min-width: 0;
+  font-weight: 500;
+}
+.bt-md-expand-seg {
+  flex: 0 0 auto;
+}
+.bt-md-expand-regen {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.bt-md-expand-preview {
+  overflow: auto;
+}
+.bt-md-expand-empty {
+  margin: 0;
+  color: var(--lake-text-4);
+}
+.bt-md-preview {
+  color: var(--lake-text-1);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.bt-md-preview > :first-child {
+  margin-top: 0;
+}
+.bt-md-preview > :last-child {
+  margin-bottom: 0;
+}
+.bt-md-preview p {
+  margin: 0 0 8px;
+}
+.bt-md-preview h1,
+.bt-md-preview h2,
+.bt-md-preview h3,
+.bt-md-preview h4,
+.bt-md-preview h5,
+.bt-md-preview h6 {
+  margin: 14px 0 6px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.bt-md-preview h1 {
+  font-size: 18px;
+}
+.bt-md-preview h2 {
+  font-size: 16px;
+}
+.bt-md-preview h3 {
+  font-size: 15px;
+}
+.bt-md-preview h4,
+.bt-md-preview h5,
+.bt-md-preview h6 {
+  font-size: 14px;
+}
+.bt-md-preview ul,
+.bt-md-preview ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.bt-md-preview li {
+  margin: 2px 0;
+}
+.bt-md-preview blockquote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid var(--lake-border-2);
+  color: var(--lake-text-2);
+}
+.bt-md-preview blockquote p {
+  margin: 0 0 4px;
+}
+.bt-md-preview code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--lake-bg-subtle);
+  font-family: var(--lake-font-family-mono);
+  font-size: 12px;
+}
+.bt-md-preview pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: 6px;
+  background: var(--lake-bg-subtle);
+  overflow-x: auto;
+}
+.bt-md-preview pre code {
+  padding: 0;
+  background: transparent;
+}
+.bt-md-preview a {
+  color: var(--lake-accent);
+  text-decoration: none;
+}
+.bt-md-preview a:hover {
+  text-decoration: underline;
+}
+.bt-md-preview hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--lake-border-2);
+}
+.bt-md-preview del {
+  color: var(--lake-text-3);
+}
+.bt-md-preview strong {
+  font-weight: 600;
+}

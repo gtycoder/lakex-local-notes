@@ -145,11 +145,14 @@
 .ai-dialog .ln-dialog__body { padding: 0; }
 .ai-dialog .ln-dialog__actions { flex-wrap: nowrap; align-items: center; gap: 2px; padding: 0 8px 8px; }
 .ai-dialog .ln-dialog__actions .ln-btn { padding: 2px 6px; gap: 4px; font-size: var(--lake-font-size-small); }
-.ai-dialog__bar { display: flex; align-items: flex-end; gap: 8px; margin: 8px 8px 6px; padding: 6px 8px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); color: var(--lake-text-3); }
+/* ✦ 与输入框同排：**顶部对齐**（用户 261003：图标保持左侧顶部，对齐云端）——输入框长高时图标不跟着往下沉。 */
+.ai-dialog__bar { display: flex; align-items: flex-start; gap: 8px; margin: 8px 8px 6px; padding: 6px 8px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); color: var(--lake-text-3); }
+/* 长文本框：随内容自增高（组件按 scrollHeight 写行内 height），到 120px 上限后自身滚动。 */
 .ai-dialog__field { flex: 1; max-height: 120px; border: 0; background: transparent; color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-small); resize: none; outline: none; }
 .ai-dialog__field::placeholder { color: var(--lake-text-3); }
-.ai-dialog__close { display: inline-flex; padding: 2px; border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
-.ai-dialog__close:hover { color: var(--lake-text-1); }
+/* ✕ = 清除输入内容（用户 261003：不是关闭面板）；只在有内容时出现。 */
+.ai-dialog__clear { display: inline-flex; padding: 2px; border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
+.ai-dialog__clear:hover { color: var(--lake-text-1); }
 .ai-dialog__thread { display: flex; flex-direction: column; gap: 8px; max-height: 300px; margin: 8px 8px 4px; overflow: auto; }
 .ai-dialog__msg { padding: 8px 10px; border-radius: var(--lake-radius-sm); font-size: var(--lake-font-size-small); white-space: pre-wrap; }
 .ai-dialog__msg--user { align-self: flex-end; max-width: 86%; background: var(--lake-bg-block); color: var(--lake-text-2); }

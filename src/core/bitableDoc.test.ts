@@ -88,6 +88,14 @@ import {
   shiftLocalDate,
   stripFillRulesForField,
   viewTypeLabel,
+  buildAiFieldMessages,
+  aiPromptFieldNames,
+  BITABLE_AI_MAX_CHARS,
+  BITABLE_AI_SYSTEM_PROMPT,
+  filterValueKindFor,
+  isAiFieldType,
+  sortModesForField,
+  type BitableField,
   type BitableTable,
 } from "./bitableDoc.js";
 
@@ -1191,5 +1199,115 @@ describe("bitableDoc 数据模型", () => {
     expect(calendarColorField(table, view)).toBeUndefined();
     view.calendarEndFieldId = table.fields[1].id;
     expect(calendarEndField(table, view)).toBeUndefined();
+  });
+});
+
+describe("AI 字段（261003 · 单一类型 · 命令在字段里）", () => {
+  const T = "2026-10-03T00:00:00.000Z";
+
+  function aiFixture(): BitableTable {
+    const table = fixtureTable("ai 表", "tbl-ai");
+    const ai = createBitableField("ai", "AI 总结", "f-ai");
+    ai.ai = { prompt: "把「{{备注}}」和「{{补充}}」合成一句，再参考{{AI 总结}}" };
+    table.fields.push({ id: "f-note", name: "备注", type: "text" }, { id: "f-extra", name: "补充", type: "text" }, ai);
+    table.records.push({ id: "r1", values: { "f-note": "今天很顺利", "f-ai": "已生成的旧值" }, createdAt: T, updatedAt: T });
+    return table;
+  }
+
+  it("ai 是已知字段类型：工厂给空配置、标签「AI 字段」", () => {
+    const f = createBitableField("ai");
+    expect(f.type).toBe("ai");
+    expect(f.ai).toEqual({ prompt: "" });
+    expect(BITABLE_FIELD_TYPE_LABEL.ai).toBe("AI 字段");
+    expect(BITABLE_FIELD_TYPES).toContain("ai");
+    expect(isKnownFieldType("ai")).toBe(true);
+    expect(isAiFieldType("ai")).toBe(true);
+    expect(isAiFieldType("text")).toBe(false);
+  });
+
+  it("配置经正文往返归一：只保留 prompt、去未知键；非 AI 字段不保留 ai 配置", () => {
+    const table = fixtureTable();
+    const ai = createBitableField("ai", "AI", "f-ai");
+    ai.ai = { prompt: "参考 {{文本}} 写一句" };
+    (ai.ai as unknown as Record<string, unknown>).extra = 1;
+    const plain = { id: "f-plain", name: "文本2", type: "text", ai: { prompt: "x" } } as unknown as BitableField;
+    table.fields.push(ai, plain);
+    const parsed = parseBitableBody(bitablesToBody([table], table.id))!;
+    const parsedAi = parsed.tables[0].fields.find((f) => f.id === "f-ai")!;
+    expect(parsedAi.ai).toEqual({ prompt: "参考 {{文本}} 写一句" });
+    expect(parsed.tables[0].fields.find((f) => f.id === "f-plain")!.ai).toBeUndefined();
+  });
+
+  it("buildAiFieldMessages：字段变量**原位替换**（多字段；空值/自引用按（空）；不再拼字段值列表）", () => {
+    const table = aiFixture();
+    const doc = parseBitableBody(bitablesToBody([table], table.id))!;
+    const res = buildAiFieldMessages(doc, table.id, "r1", "f-ai");
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.messages[0]).toEqual({ role: "system", content: BITABLE_AI_SYSTEM_PROMPT });
+    expect(res.messages[1]).toEqual({
+      role: "user",
+      content: "把「今天很顺利」和「（空）」合成一句，再参考（空）",
+    });
+    expect(res.messages[1].content).not.toContain("字段值：");
+  });
+
+  it("aiPromptFieldNames：解析 {{字段名}}（去重、按首次出现顺序、容忍空白）", () => {
+    expect(aiPromptFieldNames("把 {{备注}} 和 {{ 备注 }}、{{补充}} 合成")).toEqual(["备注", "补充"]);
+    expect(aiPromptFieldNames("没有变量")).toEqual([]);
+  });
+
+  it("buildAiFieldMessages 错误路径：非 AI / 目标不存在 / 未配命令 / 无变量 / 变量全失效 / 超长", () => {
+    const table = aiFixture();
+    const doc = parseBitableBody(bitablesToBody([table], table.id))!;
+    expect(buildAiFieldMessages(doc, table.id, "r1", table.fields[0].id)).toEqual({ ok: false, error: "这个字段不是 AI 字段" });
+    expect(buildAiFieldMessages(doc, table.id, "nope", "f-ai").ok).toBe(false);
+    expect(buildAiFieldMessages(doc, "tbl-x", "r1", "f-ai").ok).toBe(false);
+
+    const draft = fixtureTable("draft", "tbl-d");
+    const bare = createBitableField("ai", "AI", "f-bare");
+    draft.fields.push(bare);
+    draft.records.push({ id: "r1", values: {}, createdAt: T, updatedAt: T });
+    const bareDoc = parseBitableBody(bitablesToBody([draft], draft.id))!;
+    expect(buildAiFieldMessages(bareDoc, draft.id, "r1", "f-bare")).toEqual({
+      ok: false,
+      error: "AI 字段还没有配置命令：请在「编辑字段」里写命令，并用「插入字段」加入字段变量",
+    });
+
+    bare.ai = { prompt: "写一句摘要" };
+    const noTokenDoc = parseBitableBody(bitablesToBody([draft], draft.id))!;
+    expect(buildAiFieldMessages(noTokenDoc, draft.id, "r1", "f-bare")).toEqual({
+      ok: false,
+      error: "命令里还没有字段变量：请用「插入字段」把要参考的字段插入到命令里",
+    });
+
+    bare.ai = { prompt: "参考{{不存在的字段}}" };
+    const lostRefDoc = parseBitableBody(bitablesToBody([draft], draft.id))!;
+    expect(buildAiFieldMessages(lostRefDoc, draft.id, "r1", "f-bare")).toEqual({
+      ok: false,
+      error: "命令里引用的字段都不存在了：请用「插入字段」重新添加",
+    });
+
+    const huge = fixtureTable("huge", "tbl-h");
+    const hugeAi = createBitableField("ai", "AI", "f-huge");
+    hugeAi.ai = { prompt: "长".repeat(BITABLE_AI_MAX_CHARS) + "{{文本}}" };
+    huge.fields.push(hugeAi);
+    huge.records.push({ id: "r1", values: {}, createdAt: T, updatedAt: T });
+    const hugeDoc = parseBitableBody(bitablesToBody([huge], huge.id))!;
+    const oversize = buildAiFieldMessages(hugeDoc, huge.id, "r1", "f-huge");
+    expect(oversize.ok).toBe(false);
+    if (!oversize.ok) expect(oversize.error).toContain("上下文太长");
+  });
+
+  it("AI 字段走文本口径：筛选操作符 / 值类型 / 排序方式 / 快照取值 / 搜索文本", () => {
+    const table = aiFixture();
+    const aiField = table.fields.find((f) => f.id === "f-ai")!;
+    expect(filterOperatorsFor(aiField)).toEqual(filterOperatorsFor(table.fields[0]));
+    expect(filterValueKindFor(aiField, "contains")).toBe("text");
+    expect(sortModesForField(aiField)).toEqual(["asc", "desc"]);
+    const record = table.records[0];
+    expect(bitableFieldValue(record, aiField)).toBe("已生成的旧值");
+    expect(bitableFieldText(record, aiField)).toBe("已生成的旧值");
+    expect(bitableToSearchText(bitablesToBody([table], table.id))).toContain("已生成的旧值");
   });
 });
