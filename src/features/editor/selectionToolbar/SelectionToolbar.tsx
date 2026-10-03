@@ -373,11 +373,15 @@ export function SelectionToolbar({ editor, container }: {
    * （实测 `getSelection().isCollapsed === true`）⇒ 原生高亮消失，用户看不到自己在处理哪段文字。
    * 这里用**打开对话框前捕获的 Range**（aiRangeRef）自绘一层矩形，颜色取内核选区同一个令牌
    * `--lake-select-bg`（内核 `--lakex-editor-selection` 就是它 ⇒ 观感一致），关闭即移除。
+   * ⚠️ 只在**原生高亮已经没了**的时候才画：原生还在画时再叠一层会变成「两层选中」（用户 261003 实测反馈）。
    */
   const [aiSelRects, setAiSelRects] = useState<Array<{ left: number; top: number; width: number; height: number }> | null>(null);
   useEffect(() => {
     if (!aiOpen) { setAiSelRects(null); return; }
     const measure = () => {
+      // 原生选区还在（浏览器仍在画高亮）⇒ 交给它画，我们一层都不画，避免叠成两层。
+      const native = window.getSelection();
+      if (native && !native.isCollapsed && native.rangeCount > 0) { setAiSelRects(null); return; }
       const range = aiRangeRef.current;
       if (!range) { setAiSelRects(null); return; }
       try {
@@ -388,10 +392,17 @@ export function SelectionToolbar({ editor, container }: {
       } catch { setAiSelRects(null); }
     };
     measure();
-    // 跟着正文滚动/窗口变化重算（对话框开着时正文仍可滚动）；捕获的 Range 会随 DOM 节点失效，测不到就自动收起。
+    // 触发点：选区变化（原生被折叠/又被恢复）、焦点进出（点进/离开提问框）、正文滚动、窗口缩放。
+    // 捕获的 Range 会随 DOM 节点失效，测不到就自动收起（不画假的）。
+    document.addEventListener("selectionchange", measure);
+    document.addEventListener("focusin", measure, true);
+    document.addEventListener("focusout", measure, true);
     window.addEventListener("scroll", measure, true);
     window.addEventListener("resize", measure);
     return () => {
+      document.removeEventListener("selectionchange", measure);
+      document.removeEventListener("focusin", measure, true);
+      document.removeEventListener("focusout", measure, true);
       window.removeEventListener("scroll", measure, true);
       window.removeEventListener("resize", measure);
     };
