@@ -385,9 +385,23 @@ export function SelectionToolbar({ editor, container }: {
       const range = aiRangeRef.current;
       if (!range) { setAiSelRects(null); return; }
       try {
+        // 原生 ::selection 按**行盒**（line-height）画；Range.getClientRects() 给的是**文字盒**（只到字形高度）
+        // ⇒ 直接用会比原生矮一截、跨行时行间露缝（用户 261003 截图实证）。这里按所在块的行高把每个矩形撑开。
+        const el = range.startContainer.nodeType === Node.ELEMENT_NODE
+          ? (range.startContainer as Element)
+          : range.startContainer.parentElement;
+        const cs = el ? window.getComputedStyle(el) : null;
+        const fontSize = cs ? Number.parseFloat(cs.fontSize) : NaN;
+        const rawLineHeight = cs ? Number.parseFloat(cs.lineHeight) : NaN;
+        // line-height 可能是 "normal"（parseFloat → NaN）：那就按 1.6 倍字号兜底（与正文默认行高一致）。
+        const lineHeight = Number.isFinite(rawLineHeight) ? rawLineHeight
+          : (Number.isFinite(fontSize) ? fontSize * 1.6 : 0);
         const next = [...range.getClientRects()]
           .filter((r) => r.width > 0 && r.height > 0)
-          .map((r) => ({ left: r.left, top: r.top, width: r.width, height: r.height }));
+          .map((r) => {
+            const height = Math.max(r.height, lineHeight);
+            return { left: r.left, top: r.top - (height - r.height) / 2, width: r.width, height };
+          });
         const value = next.length > 0 ? next : null;
         // 只在矩形**真的变了**时才更新状态（打字时每次 selectionchange 都会走到这里，无脑 set 会反复重渲染 = 闪）。
         setAiSelRects((prev) => {
