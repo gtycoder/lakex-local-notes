@@ -1,0 +1,4 @@
+# vendor 生成产物（压缩 bundle）里有跨行模板字符串，其行尾空白是**字符串内容**，
+# 不是可清理的缩进 —— 对它们关闭 trailing-space 空白检查，避免 git diff --check 误报。
+# 详见 vendor/lakex-doc-react/LOCAL-CHANGES.md。
+vendor/lakex-doc-react/dist/* whitespace=-trailing-space
