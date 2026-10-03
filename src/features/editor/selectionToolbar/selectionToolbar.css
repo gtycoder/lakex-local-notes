@@ -90,6 +90,10 @@
 /* 关键：用 multiply 让这层「等效于背景色」——原生选区是 `.ne-engine ::selection{background;color:inherit}`
    画在**文字底下**的；直接盖在文字上会把字色也染蓝（用户 261003 报「样式不对」）。
    multiply 下白底得到同一色值（255*.84+91*.16），黑字仍是纯黑 ⇒ 与原生逐像素一致；也不加圆角（原生没有）。 */
+/* 零闪烁（用户 261003「还是有一点点闪烁，能做到没有吗」）：面板一打开就把内核原生选区色置透明，
+   自绘层从那一刻起一直画 ⇒ 点进提问框时"原生→自绘"没有交接帧。
+   ⚠️ 这条规则**不在本文件**：层序里「未分层普通声明压过所有分层普通声明」，而 kernel-theme.css 是故意不分层的
+   ⇒ 写在 overlay 层永远赢不了它。改放 `src/styles/kernel-theme.css` 末尾（同层同特异性、位置更靠后）。 */
 .selection-toolbar__aisel { position: fixed; inset: 0; z-index: var(--lake-z-dropdown); pointer-events: none; mix-blend-mode: multiply; }
 .selection-toolbar__aisel > span { position: absolute; background: var(--lake-select-bg); }
 /* 图片浮栏的「非菜单」弹窗（宽高 / 链接 / 边距）：白卡 + 内距，令牌化；定位同 __kmenu（贴触发项、越界左移）。

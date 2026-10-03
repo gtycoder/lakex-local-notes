@@ -378,12 +378,27 @@ export function SelectionToolbar({ editor, container }: {
   const [aiSelRects, setAiSelRects] = useState<Array<{ left: number; top: number; width: number; height: number }> | null>(null);
   useEffect(() => {
     if (!aiOpen) { setAiSelRects(null); return; }
-    const measure = () => {
-      // 原生选区还在（浏览器仍在画高亮）⇒ 交给它画，我们一层都不画，避免叠成两层。
+    const captured = aiRangeRef.current;
+    /**
+     * 原生选区是否就是「打开面板前捕获的那段」。
+     *   是 / 已被输入框折叠 ⇒ **由我们接管**：把内核原生选区色置透明（.lake-ai-sel-hidden）+ 自绘。
+     *     自绘层从面板打开那一刻就一直在画，所以「点进提问框」前后视觉完全不变 —— 没有交接帧 = 不闪
+     *     （用户 261003：要零闪烁）。
+     *   用户另选了别的文字 ⇒ 把选区还给原生，否则他看不到自己新选的内容。
+     */
+    const ownsSelection = () => {
       const native = window.getSelection();
-      if (native && !native.isCollapsed && native.rangeCount > 0) { setAiSelRects(null); return; }
-      const range = aiRangeRef.current;
-      if (!range) { setAiSelRects(null); return; }
+      if (!native || native.rangeCount === 0 || native.isCollapsed) return true;
+      if (!captured) return false;
+      const r = native.getRangeAt(0);
+      return r.startContainer === captured.startContainer && r.startOffset === captured.startOffset
+        && r.endContainer === captured.endContainer && r.endOffset === captured.endOffset;
+    };
+    const measure = () => {
+      const own = ownsSelection();
+      container.classList.toggle("lake-ai-sel-hidden", own);
+      const range = captured;
+      if (!own || !range) { setAiSelRects(null); return; }
       try {
         // 原生 ::selection 按**行盒**（line-height）画；Range.getClientRects() 给的是**文字盒**（只到字形高度）
         // ⇒ 直接用会比原生矮一截、跨行时行间露缝（用户 261003 截图实证）。这里按所在块的行高把每个矩形撑开。
@@ -422,13 +437,14 @@ export function SelectionToolbar({ editor, container }: {
     window.addEventListener("scroll", measure, true);
     window.addEventListener("resize", measure);
     return () => {
+      container.classList.remove("lake-ai-sel-hidden");
       document.removeEventListener("selectionchange", measure);
       document.removeEventListener("focusin", measure, true);
       document.removeEventListener("focusout", measure, true);
       window.removeEventListener("scroll", measure, true);
       window.removeEventListener("resize", measure);
     };
-  }, [aiOpen]);
+  }, [aiOpen, container]);
   const aiSelectionOverlay = aiSelRects ? (
     <div className="selection-toolbar__aisel" aria-hidden="true">
       {aiSelRects.map((r, i) => <span key={i} style={{ left: r.left, top: r.top, width: r.width, height: r.height }} />)}
@@ -482,7 +498,9 @@ export function SelectionToolbar({ editor, container }: {
   ) : null;
 
   // 选区被对话框折叠后工具栏会消失 ⇒ 这时只剩「自绘选区 + 对话框」，两者都不依赖工具栏。
-  if (!target) return <>{aiSelectionOverlay}{aiDialog}</>;
+  // ⚠️ 工具栏槽位**必须保留成 null**（不是把整棵子树换成两个孩子）：Fragment 按位置对账，
+  //    槽位少一个会让对话框换到另一个 index ⇒ 仍然整体重挂载、照样闪。
+  if (!target) return <>{aiSelectionOverlay}{null}{aiDialog}</>;
 
   const renderTextMenu = () => {
     if (menu === "fontsize") {
@@ -769,25 +787,28 @@ export function SelectionToolbar({ editor, container }: {
   return (
     <>
       {aiSelectionOverlay}
+      {/* ⚠️ AI 对话框必须待在**固定树位置**（工具栏之外、且两条返回分支都在同一处）：
+          它原先在「工具栏可见时挂在工具栏内部、工具栏消失时挂在外层」之间来回搬 —— React 换了树位置就整体
+          重新挂载，用户点进提问框（选区折叠 → 工具栏卸载）时会看到面板闪一下（用户 261003 报「还有一点点闪烁」）。 */}
       <div
         ref={toolbarRef}
-      className="selection-toolbar lakex-default-theme"
-      data-kind={target.kind}
-      role="toolbar"
-      aria-label={target.kind === "text" ? "文字格式工具栏" : "图片工具栏"}
-      style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
-      onMouseDown={(event) => {
-        // 默认 preventDefault 保选区（点按钮不丢编辑器选区）；但链接弹层的输入框必须能获得焦点，
-        // 否则鼠标点不进输入框（用户 260924 报「输入即关闭 / 写不进去」的一部分）。
-        const t = event.target as HTMLElement | null;
-        if (t && t.closest("input, textarea, .ne-link-editor")) return;
-        event.preventDefault();
-      }}
-    >
+        className="selection-toolbar lakex-default-theme"
+        data-kind={target.kind}
+        role="toolbar"
+        aria-label={target.kind === "text" ? "文字格式工具栏" : "图片工具栏"}
+        style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
+        onMouseDown={(event) => {
+          // 默认 preventDefault 保选区（点按钮不丢编辑器选区）；但链接弹层的输入框必须能获得焦点，
+          // 否则鼠标点不进输入框（用户 260924 报「输入即关闭 / 写不进去」的一部分）。
+          const t = event.target as HTMLElement | null;
+          if (t && t.closest("input, textarea, .ne-link-editor")) return;
+          event.preventDefault();
+        }}
+      >
         {target.kind === "text" ? renderText() : renderImage(target)}
         {target.kind === "text" ? renderTextMenu() : null}
-        {aiDialog}
       </div>
+      {aiDialog}
     </>
   );
 }

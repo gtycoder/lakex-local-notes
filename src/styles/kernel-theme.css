@@ -114,3 +114,10 @@
 :root .ne-ui-toolbar .ant-btn .ne-ui-toolbar-insert-card .ne-icon-t-insert-card.ne-icon {
   color: var(--lake-kernel-brand-green);
 }
+
+/* AI 面板打开时把**原生选区色**置透明（SelectionToolbar 会在编辑器挂载点加 .lake-ai-sel-hidden）：
+   面板一打开就屏蔽内核 `.ne-engine ::selection{background:var(--lakex-editor-selection)}`，
+   自绘高亮从那一刻起一直画 ⇒ 点进提问框时没有「原生高亮消失 → 自绘出现」的交接帧（用户 261003 要零闪烁）。
+   放这里而不是组件 CSS：层序里**未分层普通声明压过所有分层普通声明**，写在 overlay 层永远赢不了本文件；
+   且本规则与本文件上面那条 `--lakex-editor-selection` 同层、同特异性 (0,2,0)，位置更靠后 ⇒ 天然胜出，不需要 !important。 */
+.lake-editor-mount.lake-ai-sel-hidden { --lakex-editor-selection: transparent; }
