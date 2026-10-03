@@ -70,7 +70,10 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       return typeof v === "string" ? v : fallback;
     };
     const marks: Record<string, boolean> = {};
-    for (const name of ["bold", "italic", "underline", "strikethrough", "code"]) marks[name] = isMarkActive(q(name));
+    // ⚠️ 行内代码**不在**这一组：它是内核 moremark 家族的「状态型」命令，判据是 queryCommandState('code')，
+    //    不是 queryCommandValue（用错会「点了不亮」——用户 261003 报「行内代码不能回显」）。
+    //    内核自己的写法（bundle moremark 段）：`r = queryCommandState('code'); checked = r === 1; disabled = r === -1`。
+    for (const name of ["bold", "italic", "underline", "strikethrough"]) marks[name] = isMarkActive(q(name));
     // 块级命令（列表/待办/引用）：与内核固定栏状态按钮同判据。queryCommandState 返回内核
     // CommandState 数值（-1/0/1/2），不是布尔 ⇒ 用 isCommandExecuted/isCommandUnavailable 解。
     const st = (name: string): unknown => { try { return editor.queryCommandState?.(name); } catch { return undefined; } };
@@ -83,7 +86,8 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       // 内核 descriptor 判据：list 用 !queryCommandEnabled；quote 用 state === -1（Unavailable）。
       itemDisabled[name] = name === "quote" ? isCommandUnavailable(v) : !enabled(name);
     }
-    // 行内代码是 mark：checked 走 marks（queryCommandValue）；disabled 按内核 moremark descriptor = state === -1。
+    // 行内代码：checked / disabled 都走 queryCommandState（Executed=1 / Unavailable=-1），与内核一致。
+    marks.code = isCommandExecuted(st("code"));
     itemDisabled.code = isCommandUnavailable(st("code"));
     return {
       style: str("style", "p") || "p",

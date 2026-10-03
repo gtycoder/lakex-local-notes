@@ -549,6 +549,7 @@ txn.commit();
 | 选区内写入模型 | `selection` | ✅ 已用 |
 | 缩进 | `indent`/`outdent`/`canIndent`/`firstIndent` | ✅ 已用 |
 | 行内样式 / 列表 / 引用 | `bold`/`italic`/…, `unorderedList`/`orderedList`/`taskList`, `quote`, `plainText`, `hr` | ✅ 已用 |
+| ⚠️ `code`（行内代码）的**状态判据** | **`queryCommandState('code')`**（Executed=1 / Unavailable=-1），**不是** `queryCommandValue('code')` | ✅ 已用（261003 修） |
 | 选区字数 / 空判 | `wordCount`/`wordCountSelection`, `isEmpty` | ⚠️ **未用** |
 | 批量卡片应用 | `cardBatchApply` | ⚠️ 语义**待实测**：当前只查到 `getValue` = `getNodesByName(name).some(isConnected)`（工具栏 enable 判定） |
 
