@@ -1189,7 +1189,9 @@ PY
 - **返回值形态**由 `parseAIBoardResponse` 判定：① 原生 `{ plaitValue | elements: [...] }`；② 中间格式 `{ version:1, diagramType?, nodes:[≤80], edges:[≤120] }`（JSON 字符串或对象皆可）。中间格式约束：`node.id`/`edge.id` 只允许 `[A-Za-z0-9_-]+` 且全局唯一、`source/target` 必须指向已声明节点且不能自环、`shape` 取 `shapeMap` 白名单（`rectangle`/`roundRectangle`/`ellipse`/`diamond`/`terminal`/`decision`/`process`…）；给了 `diagramType` 时形状还必须属于该图类型白名单。
 - **本项目的接法**（`src/features/board/BoardEditor.tsx`，唯一改动点）：`ai={{ generate }}` → 组 `[system=systemPrompt, user=contextPrompt ?? description]` → 交给**既有** `runAiChat`（主进程 `ai_chat`，Key 不出主进程、不新增 IPC）；`request.signal` abort → `cancelAiChat`；**只读（锁定/回收站）不传 `ai`**（AI 会往正文落元素，属写操作）。
 - **长度**：主进程 `ai_chat` 入参上限 = 40 条消息 / 20 万字符 ⇒ 大画板会把整张画布 JSON 顶到上限，接的时候要先算总长并给中文提示（本项目阈值取 19 万）。
-- 实机（261003）：mock OpenAI 兼容端点收到 `stream:true` + system 8450 / user 243 字符；生成后画布出现「开始→判断→是→结束」；取消时上游连接**真的被中断**（服务端观测到 abort）；锁定画板徽标消失、解锁复现。
+- 实机（261003 · mock）：mock OpenAI 兼容端点收到 `stream:true` + system 8450 / user 243 字符；生成后画布出现「开始→判断→是→结束」；取消时上游连接**真的被中断**（服务端观测到 abort）；锁定画板徽标消失、解锁复现。
+- 实机（261003 · **真实 DeepSeek**）：`deepseek-flash` + 思考默认开（effort=high）下，喂「用户登录流程图（含失败重试）」**约 10s** 返回 18 个元素，「是/否」两个分支 + 失败回环 + 「锁定账号」终止都正确，并自动落盘 5.9KB；同一把 Key 在编辑器选区 AI 上「翻译成英文」6s 返回正确译文。
+  ⚠️ **模型不传 `width` 时按本文件默认 180px 出节点**，长文本会被截断（实测「输入账号和密码」→「输入账号和密」）。要修应在宿主侧按文本估宽，别改 vendor 的 `aiBoardSchema`。
 
 ---
 

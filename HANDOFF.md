@@ -23,7 +23,9 @@
   - 取消：mock 切慢速 → 点「生成」显示「正在生成…」→ 点「取消生成」→ **mock 侧 `aborts:1`（上游请求真的被中断）**、画布无变化、不弹错误提示。
   - 只读：锁定画板 → 徽标消失；解锁 → 回来。
 - 护栏：`src/features/board/boardEditorMount.test.ts` 新增一条源码级断言（接的是 `ai.generate`、只读不给入口、走 `runAiChat`/`cancelAiChat`、有 19 万上限）。
-- **未做（有意）**：文内「文本绘图」卡片（`TextToDiagram`）—— 内核那支绿色徽标没有注入点；以及未用真实供应商跑画板（本地端点已覆盖协议/流式/错误/取消路径）。
+- **真实供应商已验（261003 · DeepSeek 真 Key）**：连通性 `{ok:true}`、`/models` 返回 `deepseek-flash` / `deepseek-v4-pro`；画板 AI 喂「用户登录流程图（含失败重试）」**约 10s** 返回 **18 个元素**、分支与回环都正确并自动落盘（`boards/{id}.board.json` 5.9KB）；编辑器选区 AI 喂「翻译成英文」**6s** 返回正确译文。Key 全程只在主进程加密存储：渲染层设置视图 `hasKeyInView:false`、隔离实例库中**明文出现 0 次**、仓库 grep 0 次。
+- **已知小瑕疵（真模型）**：模型不给 `width` 时按内核默认 180px 出节点，「输入账号和密码」被截成「输入账号和密」。这是内核 `aiBoardSchema` 的默认/归一化资产（vendor），暂不动；要修就在我们侧按文本估宽。
+- **未做（有意）**：文内「文本绘图」卡片（`TextToDiagram`）—— 内核那支绿色徽标没有注入点。
 
 - **设置页整体重做**（用户出图定稿「Sections」风格；AI 页先做一版、确认后铺到整页）。
   - 原语：`src/components/settingsPrimitives.tsx` 新增 `Section`（分组内的一段白卡，可带标题条）与 `Field`（**堆叠行**：标题/说明在上、控件整行在下，带字段级 error）。`Group` 现在自动把整组内容包成一张卡；组内已显式用 `Section` 时不再套（避免卡中卡）。
