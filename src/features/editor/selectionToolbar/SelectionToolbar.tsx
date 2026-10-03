@@ -453,12 +453,30 @@ export function SelectionToolbar({ editor, container }: {
 
   // AI 对话框渲染在工具栏**之外**：选中态丢失时工具栏会 `return null`，对话框若挂在工具栏内部
   // 会被一起卸载 ⇒ 状态清零（用户 260930 报「点生成页面闪烁、插入按钮点不了」的根因就在这里）。
+  /**
+   * 关闭 AI 面板（AI 按钮再点一下、面板里的「关闭」都走这里）。
+   * ⚠️ 必须把**原生选区还回去**：面板输入框把 DOM 选区折叠过，不还的话关掉面板后用户会觉得
+   *    「我的选区没了」（用户 261003 实测）。等一帧再设，避免面板输入框还持有焦点时被顶掉。
+   */
+  const closeAi = useCallback(() => {
+    setAiOpen(false);
+    setMenu(null);
+    const range = aiRangeRef.current;
+    if (!range) return;
+    window.setTimeout(() => {
+      try {
+        const sel = window.getSelection();
+        if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+        editor.execCommand?.("focus");
+      } catch { /* 选区已随 DOM 失效则忽略 */ }
+    }, 0);
+  }, [editor]);
   const aiDialog = aiOpen ? (
     <AiAssistantDialog
       open
       at={aiAtRef.current}
       selectionText={aiSelectionRef.current}
-      onClose={() => { setAiOpen(false); setMenu(null); aiRangeRef.current = null; aiModelRangeRef.current = null; }}
+      onClose={closeAi}
       onInsertAfter={(text) => {
         try {
           // 把内核选区折叠到捕获范围的**末尾**再插入 ⇒ 落到选区之后（对应云端「插入选区下方」）。
@@ -676,31 +694,18 @@ export function SelectionToolbar({ editor, container }: {
         <KColorButton label="背景色" variant="bg" color={currentColor(editor, "bg")} active={menu === "bgcolor" || Boolean(state.bgColor)} hotkey={hot("bgColor")} onApply={() => applyCurrentColor("bg")} onOpen={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
         {/* AI 助手：结果只进对话框，用户再决定复制/替换（不自动改写正文）。 */}
-        <KToolbarButton name="ai" title="AI 助手" checked={aiOpen} className={TOGGLE} onClick={() => {
-          // 面板已开 ⇒ 再点一次 = 关闭（面板里也有「关闭」）。
-          // ⚠️ 这里**绝不能**按"当前选区"重算锚点：用户点过面板之后选区已被输入框折叠，量到的是空矩形
-          //    ⇒ aiAtRef 变 null ⇒ 面板落到 AiAssistantDialog 的 fallbackAt（右上角）——用户 261003 报的
-          //    「点 AI → 点面板 → 再点 AI，面板飞到右上角」就是这个。见 docs/LAKEX-CONTRACT.md 无关，属本组件约定。
-          if (aiOpen) {
-            setAiOpen(false); setMenu(null);
-            aiRangeRef.current = null; aiModelRangeRef.current = null;
-            return;
-          }
+        <KToolbarButton name="ai" title="AI 助手" className={TOGGLE} onClick={() => {
+          // 再点一下 = 面板消失（用户 261003 定稿，不做开关态）。
+          // 这条分支**不重算锚点**：此时选区已被面板输入框折叠，量到空矩形就会让面板落到
+          // AiAssistantDialog 的 fallbackAt（右上角，那是给顶栏入口用的）—— 就是之前报的那个 bug。
+          if (aiOpen) { closeAi(); return; }
           const sel = window.getSelection();
-          const text = sel?.toString() ?? "";
-          // 只认「非折叠 + 落在编辑器里」的选区：面板输入框自己的光标选区（折叠、且在面板内）不算，
-          // 否则会把捕获的上下文/锚点覆盖成面板内的光标位置（写回也会跟着跑偏）。
-          const range = sel && sel.rangeCount > 0 && !sel.isCollapsed ? sel.getRangeAt(0).cloneRange() : null;
-          const usable = range && container.contains(range.commonAncestorContainer) ? range : null;
-          // 只在拿得到**有效**选区时覆盖打开时捕获的上下文/锚点；拿不到就沿用上一次的
-          // （宁可位置不动，也不要跳到 AiAssistantDialog 的 fallbackAt 右上角）。
-          if (usable) {
-            if (text) aiSelectionRef.current = text;
-            aiRangeRef.current = usable;
-            const rect = usable.getBoundingClientRect();
-            if (rect.width || rect.height) aiAtRef.current = { x: rect.left, y: rect.bottom + 8 };
-            aiModelRangeRef.current = captureModelRange(editor);
-          }
+          aiSelectionRef.current = sel?.toString() ?? "";
+          aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+          const aiRect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
+          // 只在量到**有效**矩形时更新锚点；拿不到就沿用上一次的（宁可位置不动，也不要跳到右上角）。
+          if (aiRect && (aiRect.width || aiRect.height)) aiAtRef.current = { x: aiRect.left, y: aiRect.bottom + 8 };
+          aiModelRangeRef.current = captureModelRange(editor);
           setMenu("ai"); setAiOpen(true);
         }}>
           <AiTagIcon size={18} />
