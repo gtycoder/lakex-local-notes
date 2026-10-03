@@ -676,13 +676,31 @@ export function SelectionToolbar({ editor, container }: {
         <KColorButton label="背景色" variant="bg" color={currentColor(editor, "bg")} active={menu === "bgcolor" || Boolean(state.bgColor)} hotkey={hot("bgColor")} onApply={() => applyCurrentColor("bg")} onOpen={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
         {/* AI 助手：结果只进对话框，用户再决定复制/替换（不自动改写正文）。 */}
-        <KToolbarButton name="ai" title="AI 助手" className={TOGGLE} onClick={() => {
+        <KToolbarButton name="ai" title="AI 助手" checked={aiOpen} className={TOGGLE} onClick={() => {
+          // 面板已开 ⇒ 再点一次 = 关闭（面板里也有「关闭」）。
+          // ⚠️ 这里**绝不能**按"当前选区"重算锚点：用户点过面板之后选区已被输入框折叠，量到的是空矩形
+          //    ⇒ aiAtRef 变 null ⇒ 面板落到 AiAssistantDialog 的 fallbackAt（右上角）——用户 261003 报的
+          //    「点 AI → 点面板 → 再点 AI，面板飞到右上角」就是这个。见 docs/LAKEX-CONTRACT.md 无关，属本组件约定。
+          if (aiOpen) {
+            setAiOpen(false); setMenu(null);
+            aiRangeRef.current = null; aiModelRangeRef.current = null;
+            return;
+          }
           const sel = window.getSelection();
-          aiSelectionRef.current = sel?.toString() ?? "";
-          aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
-          const aiRect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
-          aiAtRef.current = aiRect && (aiRect.width || aiRect.height) ? { x: aiRect.left, y: aiRect.bottom + 8 } : null;
-          aiModelRangeRef.current = captureModelRange(editor);
+          const text = sel?.toString() ?? "";
+          // 只认「非折叠 + 落在编辑器里」的选区：面板输入框自己的光标选区（折叠、且在面板内）不算，
+          // 否则会把捕获的上下文/锚点覆盖成面板内的光标位置（写回也会跟着跑偏）。
+          const range = sel && sel.rangeCount > 0 && !sel.isCollapsed ? sel.getRangeAt(0).cloneRange() : null;
+          const usable = range && container.contains(range.commonAncestorContainer) ? range : null;
+          // 只在拿得到**有效**选区时覆盖打开时捕获的上下文/锚点；拿不到就沿用上一次的
+          // （宁可位置不动，也不要跳到 AiAssistantDialog 的 fallbackAt 右上角）。
+          if (usable) {
+            if (text) aiSelectionRef.current = text;
+            aiRangeRef.current = usable;
+            const rect = usable.getBoundingClientRect();
+            if (rect.width || rect.height) aiAtRef.current = { x: rect.left, y: rect.bottom + 8 };
+            aiModelRangeRef.current = captureModelRange(editor);
+          }
           setMenu("ai"); setAiOpen(true);
         }}>
           <AiTagIcon size={18} />
