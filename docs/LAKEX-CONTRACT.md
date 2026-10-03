@@ -1178,6 +1178,21 @@ PY
 - 评估全文档：工作区根 `lake-kernel-swap-analysis-260908.md`（差距矩阵/换核结论/许可观察）。
 ---
 
+### 5.13.1 画板 AI 助手：内核只给一个 `generate` 钩子（261003 接通 + 实机验收）
+
+- **配置驱动**：`DrawnixBoardCore` 的 `ai?: DrawingBoardAIConfig` 给了才渲染 `LakexAIBoardAssistant`（工具栏绿色徽标 + 生成面板 + `applyAIGeneratedElements` 落元素）；**不给就连按钮都不渲染**（不是"有按钮点了没反应"）。dist 里对应 `P = l ? (...lakex-ai-board-trigger-wrap)`。
+- **契约**（`vendor/.../components/lakex/types.ts`）：`DrawingBoardAIConfig = { generate(request) => Promise<string | Record<string, unknown>> }`；`request = { description, systemPrompt, contextPrompt?, history?, currentBoard?, locale, signal? }`。
+  - `systemPrompt` = 内核自带的画板 JSON 规范（实测 **8450 字符**，源自 `docs/lakex-drawing-board-json-format-skills.md`，可直接当 system message）。
+  - `contextPrompt` = 历史需求 + **当前画布唯一一份最新 JSON** + 本轮需求；内核注释：**业务侧应优先把它当 user message 发送**（我们照做）。
+  - `signal` = 关闭面板时 abort，用于取消业务侧请求。
+  - 注释原话：「前端画板不会保存 API Key，也不绑定具体模型」⇒ 与本项目「Key 只在主进程」的架构天然对齐。
+- **返回值形态**由 `parseAIBoardResponse` 判定：① 原生 `{ plaitValue | elements: [...] }`；② 中间格式 `{ version:1, diagramType?, nodes:[≤80], edges:[≤120] }`（JSON 字符串或对象皆可）。中间格式约束：`node.id`/`edge.id` 只允许 `[A-Za-z0-9_-]+` 且全局唯一、`source/target` 必须指向已声明节点且不能自环、`shape` 取 `shapeMap` 白名单（`rectangle`/`roundRectangle`/`ellipse`/`diamond`/`terminal`/`decision`/`process`…）；给了 `diagramType` 时形状还必须属于该图类型白名单。
+- **本项目的接法**（`src/features/board/BoardEditor.tsx`，唯一改动点）：`ai={{ generate }}` → 组 `[system=systemPrompt, user=contextPrompt ?? description]` → 交给**既有** `runAiChat`（主进程 `ai_chat`，Key 不出主进程、不新增 IPC）；`request.signal` abort → `cancelAiChat`；**只读（锁定/回收站）不传 `ai`**（AI 会往正文落元素，属写操作）。
+- **长度**：主进程 `ai_chat` 入参上限 = 40 条消息 / 20 万字符 ⇒ 大画板会把整张画布 JSON 顶到上限，接的时候要先算总长并给中文提示（本项目阈值取 19 万）。
+- 实机（261003）：mock OpenAI 兼容端点收到 `stream:true` + system 8450 / user 243 字符；生成后画布出现「开始→判断→是→结束」；取消时上游连接**真的被中断**（服务端观测到 abort）；锁定画板徽标消失、解锁复现。
+
+---
+
 ### 5.17 AI 供应商侧（非内核）：真实 DeepSeek 实测结论（260930）
 
 > 这一节记的是**供应商 API**（不是 lakex 内核）的真实行为，来自「本地 mock 端点 + 真实 DeepSeek 账户」实测。

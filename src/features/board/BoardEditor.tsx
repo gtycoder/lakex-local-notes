@@ -11,12 +11,13 @@
  *   只在真的保存时把当前视口一并写进正文（保住 260916「拖一下画布不该触发保存」的结论）。
  * - keep-alive：首次可见前不挂载画布（隐藏态量到 0 尺寸会画不出来，与 SheetEditor 同因）。
  */
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadDrawnixBoardCore } from "@dlient/lakex-doc-react";
-import type { DrawnixBoardCoreProps } from "@dlient/lakex-doc-react";
+import type { DrawingBoardAIConfig, DrawnixBoardCoreProps } from "@dlient/lakex-doc-react";
 import "./boardEditor.css";
 import { uploadLakeResource } from "../editor/resourceUpload";
 import { native } from "../../lib/native";
+import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
 import { parseLocalAssetUrl } from "../../core/assetUrl";
 import { boardToBody, parseBoardBody, type BoardDoc, type BoardViewport } from "../../core/boardDoc.js";
 import { collectBoardAssetUrls, collectInlineImageUrls, replaceInlineImageUrls } from "./boardImageAssets.js";
@@ -446,6 +447,40 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange, onDi
     [promoteInlineImages, scheduleSave],
   );
 
+  /**
+   * 画板 AI 助手（内核 `LakexAIBoardAssistant`，工具栏上的绿色 AI 徽标）：
+   * 内核只认 `ai.generate(request)` 一个钩子 —— 它**不存 Key、不绑模型**，只把
+   * `{ systemPrompt, contextPrompt, history, currentBoard, signal }` 交给宿主（官方示例 examples/aiProxyPlugin.ts 同款分工）。
+   * 我们把这一枪转给主进程既有的 AI 通道（`ai_chat` / `ai_cancel`）⇒ Key 始终不出主进程、不新增 IPC。
+   * 返回值形态由内核 `parseAIBoardResponse` 判定：原生 `plaitValue/elements`，或 `{version:1,nodes,edges}` 的中间格式（JSON 字符串/对象皆可）。
+   */
+  const aiGenerate = useCallback<DrawingBoardAIConfig["generate"]>(async (request) => {
+    const requestId = newAiRequestId();
+    const onAbort = () => { void cancelAiChat(requestId); };
+    request.signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      // 内核建议：直接用 contextPrompt 当 user message（里面已含历史需求 + 当前画布唯一一份最新 JSON + 本轮需求）。
+      const messages = [
+        { role: "system" as const, content: request.systemPrompt },
+        { role: "user" as const, content: request.contextPrompt ?? request.description },
+      ];
+      const total = messages.reduce((n, m) => n + m.content.length, 0);
+      // 主进程 ai_chat 的入参上限 = 20 万字符（electron/ipc/registerAi.ts）——大画板会撞上；
+      // 与其透出「内容过长」，不如给一句能看懂、能指导下一步的提示。
+      if (total > 190_000) throw new Error("画板内容过大，已超出 AI 上下文上限，请先拆分或精简画板");
+      const res = await runAiChat(requestId, messages);
+      if (!res.ok) throw new Error(res.error || "AI 调用失败");
+      return res.text ?? "";
+    } finally {
+      request.signal?.removeEventListener("abort", onAbort);
+    }
+  }, []);
+  /** 只读（锁定 / 回收站）不给 AI 入口：它会往正文里落元素，属写操作（与「只读必须封死所有写入口」一致）。 */
+  const aiConfig = useMemo<DrawingBoardAIConfig | undefined>(
+    () => (readOnly ? undefined : { generate: aiGenerate }),
+    [readOnly, aiGenerate],
+  );
+
   return (
     <div
       ref={hostRef}
@@ -458,6 +493,7 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange, onDi
             locale={currentLocale()}
             theme={theme}
             readOnly={readOnly}
+            ai={aiConfig}
             onChange={handleCoreChange}
             onViewportPersist={(next) => {
               const viewport = { x: next.x, y: next.y, zoom: next.zoom };

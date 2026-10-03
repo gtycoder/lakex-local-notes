@@ -11,6 +11,20 @@
 
 ### 当前批次 · 261003-UI（设置页重做 + 浮动工具栏「格式」合并 + AI 选区高亮）
 
+#### 261003 · 画板 AI（已接通，实机验收通过）
+
+- **内核侧本来就是「配置驱动」，一直没接**：`DrawnixBoardCore` 有可选 prop `ai?: DrawingBoardAIConfig`，满足它才会渲染 `LakexAIBoardAssistant`（工具栏上的绿色 AI 徽标 + 生成面板 + 落元素）。我们原先没传 ⇒ 画板**连 AI 按钮都不显示**（不是"有按钮点了没反应"）。
+- **契约**（`vendor/lakex-doc-react/src/components/lakex/types.ts`）：`generate(request) => Promise<string | object>`；request = `{ description, systemPrompt（内核自带的画板 JSON 规范，实测 ~8.5k 字符）, contextPrompt（历史需求 + 当前画布唯一一份最新 JSON + 本轮需求，内核建议直接当 user message）, history, currentBoard, locale, signal }`；注释明说「前端画板不会保存 API Key，也不绑定具体模型」——正好对上我们「Key 只在主进程」。
+- **接线**（`src/features/board/BoardEditor.tsx`，只改这一个文件）：`ai={{ generate: aiGenerate }}`；`aiGenerate` 把 system/user 组好后交给**既有**的 `runAiChat(newAiRequestId(), messages)`，返回累计文本；`request.signal` 的 abort → `cancelAiChat(requestId)`。**不新增 IPC、不动主进程**。
+- **只读门禁**：`readOnly ? undefined : { generate }` —— 锁定/回收站的画板不给 AI 入口（AI 会往正文落元素，属写操作）。实测：锁定后徽标消失、解锁后回来。
+- **长度护栏**：主进程 `ai_chat` 入参上限 = 40 条消息 / **20 万字符**（`electron/ipc/registerAi.ts`）。画板会把整张画布 JSON 塞进 `contextPrompt`，所以在 generate 里先算总长，>19 万就抛一句能看懂的提示（而不是透出「内容过长」）。
+- **实机验收（隔离实例 + 本地 mock OpenAI 兼容端点 + 真实 SSE + CDP）**：
+  - 生成：点徽标 → 面板（描述框 placeholder「例如：生成一个用户登录流程图…」）→ 输入 → 点「生成」→ mock 收到 `stream:true`、system 8450 字符、user 243 字符 → 画布上出现 **开始→判断→是→结束**，提示「✓ AI 图形已生成」。
+  - 取消：mock 切慢速 → 点「生成」显示「正在生成…」→ 点「取消生成」→ **mock 侧 `aborts:1`（上游请求真的被中断）**、画布无变化、不弹错误提示。
+  - 只读：锁定画板 → 徽标消失；解锁 → 回来。
+- 护栏：`src/features/board/boardEditorMount.test.ts` 新增一条源码级断言（接的是 `ai.generate`、只读不给入口、走 `runAiChat`/`cancelAiChat`、有 19 万上限）。
+- **未做（有意）**：文内「文本绘图」卡片（`TextToDiagram`）—— 内核那支绿色徽标没有注入点；以及未用真实供应商跑画板（本地端点已覆盖协议/流式/错误/取消路径）。
+
 - **设置页整体重做**（用户出图定稿「Sections」风格；AI 页先做一版、确认后铺到整页）。
   - 原语：`src/components/settingsPrimitives.tsx` 新增 `Section`（分组内的一段白卡，可带标题条）与 `Field`（**堆叠行**：标题/说明在上、控件整行在下，带字段级 error）。`Group` 现在自动把整组内容包成一张卡；组内已显式用 `Section` 时不再套（避免卡中卡）。
   - 样式单一来源 = `src/styles/feature.css` 的 `.settings-panel .config-*`：分组内容由「灰底块」改成**一叠白卡**（1px 边框 + 圆角 + 分段标题条）。**11 个分类全部统一**（编辑器/外观/快捷键/文档与历史/云端与同步/AI/资源/回收站/浏览器端/日志/关于）。
@@ -307,7 +321,7 @@
 > 当前主线是多维表专项（见 §0 与专项文档）；以下是专项之外真正保留的低优先项。
 
 1. **同步 warning 结构化**：`SyncReport.warnings` 从字符串改为 `{ kind, noteId?, filename?, message }`，与 UI 展示/点击定位一起做。同步红线区，单独立项。
-2. **画板 AI 助手**：只接画板卡的 `generate` 钩子；模型、endpoint、Key 代理方式待产品决定。内核绿色文本绘图徽标无注入点，不做。
+2. ~~**画板 AI 助手**~~ **已完成（261003）**：接的就是内核 `ai.generate` 钩子，转主进程既有 AI 通道（Key 不出主进程、不新增 IPC），只读不给入口。见 §0「261003 · 画板 AI」。仍不做的是**文内文本绘图卡片**（`TextToDiagram`，内核那支绿色徽标无注入点）。
 3. **UI 低优先**：目录树窗口化（先量到真实卡顿再立项）·设计词表继续裁剪·画板 `Wt is not a function` 根因定位。
 4. **移动端剩余**：真机验收、数据导出/导入、粘贴与资源 URL、长文档大纲跳转；详细步骤见 §8。
 5. **搜索整体重构**：FTS/短词/增量搜索不并入普通维护，单独立项。

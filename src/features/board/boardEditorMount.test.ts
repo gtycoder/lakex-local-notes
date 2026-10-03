@@ -143,4 +143,18 @@ describe("画板编辑器护栏", () => {
     // 内存 data URL / 磁盘资产 URL：写盘前用 promotedRef 映射换口径
     expect(EDITOR).toMatch(/replaceInlineImageUrls\(cardValueRef\.current\.plaitValue, promotedRef\.current\)/);
   });
+
+  it("画板 AI：只接内核 ai.generate 钩子，Key 走主进程既有通道，只读不给入口", () => {
+    // 内核契约（vendor types）：ai?: { generate(request) => Promise<string|object> }，
+    // 请求里给 systemPrompt（画板 JSON 规范）/ contextPrompt（历史+当前画布+本轮需求）/ signal（取消）。
+    expect(EDITOR).toMatch(/ai=\{aiConfig\}/);
+    // 只读（锁定/回收站）不给 AI 入口 —— 它会往正文落元素，属写操作。
+    expect(EDITOR).toMatch(/readOnly \? undefined : \{ generate: aiGenerate \}/);
+    // 转给主进程既有的 AI 通道：不新增 IPC、Key 不出主进程。
+    expect(EDITOR).toMatch(/runAiChat\(requestId, messages\)/);
+    expect(EDITOR).toMatch(/cancelAiChat\(requestId\)/);
+    expect(EDITOR).toMatch(/request\.signal\?\.addEventListener\("abort"/);
+    // 主进程 ai_chat 入参上限 20 万字符（electron/ipc/registerAi.ts）——超了要给能看懂的提示。
+    expect(EDITOR).toMatch(/190_000/);
+  });
 });
