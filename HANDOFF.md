@@ -9,6 +9,34 @@
 
 > 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
+### 当前批次 · 261003-UI（设置页重做 + 浮动工具栏「格式」合并 + AI 选区高亮）
+
+- **设置页整体重做**（用户出图定稿「Sections」风格；AI 页先做一版、确认后铺到整页）。
+  - 原语：`src/components/settingsPrimitives.tsx` 新增 `Section`（分组内的一段白卡，可带标题条）与 `Field`（**堆叠行**：标题/说明在上、控件整行在下，带字段级 error）。`Group` 现在自动把整组内容包成一张卡；组内已显式用 `Section` 时不再套（避免卡中卡）。
+  - 样式单一来源 = `src/styles/feature.css` 的 `.settings-panel .config-*`：分组内容由「灰底块」改成**一叠白卡**（1px 边框 + 圆角 + 分段标题条）。**11 个分类全部统一**（编辑器/外观/快捷键/文档与历史/云端与同步/AI/资源/回收站/浏览器端/日志/关于）。
+  - 行型规则：长输入 / 下拉 → `Field`（堆叠、整行）；开关 / 数字 / 段控件 → `Item`（内联右对齐），与思源一致。
+  - AI 页 = 四张卡：**服务 / 凭据 / 模型与参数 / 连通性**。API Key 改**常驻输入框 + 眼睛按钮**（明文/密文切换），保留「留空即沿用已保存」；状态用 `badge`（已保存/未配置）。供应商差异字段（思考强度/思考模式/温度）仍**动态增删**（实测切 DeepSeek 自动出现两项、温度按 thinking 隐藏）。
+  - 设置弹窗头 **52px → 40px**：根因是 `.settings-panel-large .settings-header` 的 `min-height:52px` + 共享的 `.floating-dialog-header{padding:14px 16px 0}`（上 14 / 下 0）。已把这条几何**从 components.css 并到 overlay.css** 紧邻 `.floating-dialog-header`（同一层、更高特异性，非叠覆盖）。
+  - **顺手修掉两个真 bug（影响全站，不止设置页）**：① `.b3-button--outline` / `--cancel` 被基座 `.b3-button:not(.quick-note-publish):not(.quick-note-discard)`（(0,3,0)）压掉 —— 全仓 **40 处**「描边次按钮」实际都渲染成实心主色（`getComputedStyle` 实证）；② `.ft__error`（危险操作）同样没变红。均在 `kit.css` 补齐特异性修复。
+- **浮动工具栏「格式」合并**（用户三轮定稿；文件 `src/features/editor/selectionToolbar/SelectionToolbar.tsx` + `editorCommands.ts` + `selectionToolbar.css`）。
+  - 原「段落样式(T)」+「有序/无序/待办/引用/行内代码/链接」共 6 个按钮 → **一个父入口 + 菜单**；父入口回到**原 T 的位置**（字号左边）。**浮栏 466px → 338px**。
+  - 菜单 = `正文 · 标题›`（「标题」是**二级菜单**，悬停/点击展开 标题1–6，贴右放不下自动翻左侧）‖ `有序/无序/待办/引用` ‖ `行内代码/链接`；**正文（默认态）也打勾**。行高 38→26、分隔线上下 4→2 ⇒ 整个菜单 ~360px → **226px**。
+  - 父入口图标**跟随当前块类型**：标题→`editor-h1..h6`、列表/引用/代码→各自图标、正文→`editor-paragraph`；尾部箭头复用文字色/背景色那支内核箭头（`.ne-ui-toolbar-color-dropdown-arrow`，本地已镜像）。当前类型同时写进 tooltip。
+  - ⚠️ **图标选择坑（别再走一遍）**：`editor-format` **不在内核 sprite 里**（KIcon 只会渲染空白，已踩）；`t-moremark` 是内核原生「更多标记」入口（= 上标/下标/行内代码），我们没有上标下标，不能用；`editor-paragraph` 会和原「段落样式」按钮撞图 —— 最终靠**把段落样式并进同一个入口**从根上消掉了这道选择题。内核 sprite 共 **325 个 symbol**（`icon-editor-*` 53 个）。
+  - ⚠️ 内核把工具条按钮**定死 26px 宽**：父入口要放"图标+箭头"，必须 `width:auto`，否则箭头被挤成 0 宽（实测）。
+- **所有浮层的边缘适配**（用户第 3 条：不固定位置的弹窗都不能被裁/被盖）：
+  - 四类浮层（字号/格式菜单、颜色面板、链接编辑层、图片三种白卡）+ 二级菜单，全部改 `position: fixed` + **项目单一来源** `placePopoverPosition` / `placePopoverBeside`（`src/hooks/topMenuPosition.ts`，目录右键同款：下方优先 → 放不下翻上方 → 夹进视口；子菜单贴右 → 放不下翻左侧）。
+  - 关键补充：**再夹进「编辑器区域」**（`clampToEditorArea`）。因为浮栏层序低于目录栏/顶栏/大纲，只按视口夹会让菜单跑到**目录栏底下被盖住**（= 看不见，正是用户要避免的）。
+  - 实测：视口 900×620 + 选中最靠右文字 → 菜单 `590..817` 完全在视口内且 `elementFromPoint` 命中菜单本身；子菜单自动翻到主菜单**左侧**（`379..588`）。
+- **AI 交互期间保留原选区高亮**（用户报「点 AI 后选中的文字高亮消失」）：
+  - 根因 = AI 面板提问框 **`autoFocus`**：输入框一聚焦，浏览器就**折叠 DOM 选区**（实测 `getSelection().isCollapsed === true`）⇒ 原生高亮消失，不是内核丢了选区。
+  - 修法 = 用**打开前捕获的 Range**（`aiRangeRef`，P2 做「替换选区」时留下的）**自绘一层高亮**：颜色取内核选区同一令牌 `--lake-select-bg`（内核 `--lakex-editor-selection` 即它，观感一致）；跟滚动/缩放重算；Range 失效（DOM 重渲染）就自动收起，不画假的；关闭面板即移除。渲染在**工具栏之外**（选区折叠后工具栏会 `return null`，挂里面会被一起卸载）。
+  - 实测：打开面板 → 覆盖层出现且矩形与原文一致；在提问框真实输入后 `nativeCollapsed:true` 但覆盖层**仍在**；点关闭 → 移除。
+- **调研结论（已排除，避免重复投入）**：morphicons（https://www.morphicons.com）**不是图标库**，是"两个**描边**图标之间的形变动画引擎"（MIT、~6-8KB gzip、零依赖）。内核那 325 个图标是**填充**图标（`fill="currentColor"` 236 处 + 硬编码灰阶）且带 `<g>`/`transform` —— README 明确：纯填充会在解析期报错、不支持 `<g>`/`transform` ⇒ **内核图标一个都换不了**（要换=改 vendor，红线）；我们自己那 57 个文件用 `lucide-react`（描边，兼容），但它只吃 vanilla `lucide` 的**数据**、不吃 `lucide-react` 组件 ⇒ 等于给图标开第二个来源。**用户 261003 决定先不做。**
+- 门禁：`tsc` ✓ · vitest **1537 passed / 16 skipped** ✓ · 桌面 + 移动构建 ✓ · `ui-metrics`（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · `check:core` 0 违规 ✓ · `git diff --check` ✓。
+- **本批未验证（诚实边界）**：移动端设置抽屉（共用同一套原语，但只加载自己的 CSS，本批**未跑模拟器**）；深色/暖色主题未逐屏对拍；窄窗（<800px）下目录栏为浮层盖住编辑区时，菜单仍可能被该浮层压住（那种布局通常也选不到被盖住的文字）。
+- 改动文件：`SettingsPanel.tsx` · `settingsPrimitives.tsx` · `editorCommands.ts` · `selectionToolbar/SelectionToolbar.tsx` · `selectionToolbar/selectionToolbar.css` · `styles/feature.css` · `styles/kit.css` · `styles/overlay.css` · `styles/components.css` · `styles/cssLayers.test.ts`。
+
 ### 当前批次 · 260930-AI-P0（已实施，本轮提交）
 - 目标：为产品接入**可配置供应商**的 AI（P0 只做 OpenAI / OpenAI 兼容），**结构按多供应商切换预留**（新增一家 = core 目录加一条 + 设置下拉自动出现，IPC/渲染层不动）。
 - 架构红线：Key **只在主进程**（渲染层 CSP connect-src 只放行 self/本机，已挡死外发）；密钥走 `SecretCipher`（safeStorage/Keychain，**fail-closed**）；`ai_settings` 是**独立 settings key**，不入同步/S3/备份。

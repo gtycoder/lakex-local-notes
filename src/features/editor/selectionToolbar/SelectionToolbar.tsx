@@ -1,7 +1,9 @@
 /**
  * 桌面编辑态「浮动工具栏」（选区气泡）——两种形态：
  *   · 文字选区（对齐内核固定工具栏的 Lake 风格，顺序 260924 用户定）：
- *     清除格式 · 段落样式(H1–6) · 字号 · 加粗 · 倾斜 · 中划线 · 下划线 · 文字颜色 · 背景色 · 转为 · 超链接
+ *     清除格式 · 字号 · 加粗 · 倾斜 · 中划线 · 下划线 · 文字颜色 · 背景色 · 格式 · AI
+ *     （「格式」= 260930 起把 段落样式(正文/标题1–6) + 有序/无序/待办/引用/行内代码/链接 并成
+ *      **一个父入口 + 菜单**；父入口图标跟着当前块类型走，正文时是内核的「正文」图标）
  *   · 图片选中：裁剪 / 旋转 / 宽高 / 链接 / 描述 / 对齐 / 样式 / 边距 / 批量应用 / 复制 / 下载 / 删除
  *
  * 规则：
@@ -11,10 +13,12 @@
  *     不用第三方（钉钉）风格；active 态用内核的 .checked 类。
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区；定位自算 + 避开固定工具栏；表格/代码块内不出现。
  */
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { reportNativeActionError } from "../../../lib/nativeErrors";
 import { native } from "../../../lib/native";
-import { FONT_SIZE_OPTIONS, PARAGRAPH_STYLES, TOOLBAR_BLOCK_ITEMS } from "../editorCommands";
+import {
+  FONT_SIZE_OPTIONS, TOOLBAR_BLOCK_TYPE_ITEMS, TOOLBAR_FORMAT_ITEMS, type ToolbarBlockTypeItem,
+} from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
 import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta, setImageSpacing } from "./imageCardOps";
 import {
@@ -31,6 +35,12 @@ import {
 } from "./colorMemory";
 import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, parseAssetRef, TOOLBAR_MARGIN } from "./selectionToolbarModel";
 import { useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
+import { placePopoverBeside, placePopoverPosition } from "../../../hooks/topMenuPosition";
+
+/** 取真实有盒子的触发元素：内核原子件外层是 display:contents 包裹（它的 rect 恒为 0×0，量不出锚点）。 */
+function resolveTriggerEl(trigger?: HTMLElement | null): HTMLElement | null {
+  return trigger ? ((trigger.querySelector("button") as HTMLElement | null) ?? trigger) : null;
+}
 
 /** 链接合法性（首版，对齐固定栏「请输入正确的链接」）：有 scheme（http/https/mailto/tel）、以 / 或 # 开头，或形如域名。 */
 function isValidLink(value: string): boolean {
@@ -61,25 +71,39 @@ function KColorButton({ label, variant, color, active, hotkey, onApply, onOpen }
   );
 }
 
-/** 内核下拉菜单（ant-dropdown-menu + ne-ui-select-*），与固定工具栏一致。 */
-function KMenu({ menu, children }: { menu: string; children: ReactNode }) {
+/** 浮层未定位前先挂到屏外：layout effect 在浏览器绘制前就会写入实测坐标，所以用户看不到这一帧。 */
+const OFFSCREEN: CSSProperties = { left: -9999, top: -9999, visibility: "hidden" };
+
+/** 内核下拉菜单（ant-dropdown-menu + ne-ui-select-*），与固定工具栏一致。
+ *  `sub` = 挂在某个菜单项里的**二级菜单**（贴该项右侧展开，见 .selection-toolbar__kmenu--sub）。 */
+function KMenu({ menu, sub, surfaceRef, style, children }: { menu: string; sub?: boolean; surfaceRef?: (el: HTMLElement | null) => void; style?: CSSProperties; children: ReactNode }) {
   return (
     // 字号菜单额外挂内核的 dropdown 类，让 .ne-ui-toolbar-fontsize-dropdown 规则也生效（与固定栏一致）。
-    <div className={"selection-toolbar__kmenu" + (menu === "fontsize" ? " ne-ui-toolbar-fontsize-dropdown" : "")} data-menu={menu}>
+    <div ref={surfaceRef} style={style} className={"selection-toolbar__kmenu" + (sub ? " selection-toolbar__kmenu--sub" : "") + (menu === "fontsize" ? " ne-ui-toolbar-fontsize-dropdown" : "")} data-menu={menu}>
       <ul className="ant-dropdown-menu ant-dropdown-menu-root ant-dropdown-menu-vertical ant-dropdown-menu-light ne-ui-select-menu" role="menu">{children}</ul>
     </div>
   );
 }
 
-function KMenuItem({ label, selected, shortcut, labelClass, onClick }: {
-  label: string; selected?: boolean; shortcut?: string; labelClass?: string; onClick?: () => void;
+function KMenuItem({ label, icon, selected, disabled, shortcut, labelClass, onClick }: {
+  label: string; icon?: string; selected?: boolean; disabled?: boolean; shortcut?: string; labelClass?: string; onClick?: () => void;
 }) {
   return (
-    <li role="menuitem" className={"ant-dropdown-menu-item ne-ui-select-item" + (selected ? " ant-dropdown-menu-item-selected" : "")} onClick={onClick}>
+    <li
+      role="menuitem"
+      aria-disabled={disabled || undefined}
+      className={"ant-dropdown-menu-item ne-ui-select-item"
+        + (selected ? " ant-dropdown-menu-item-selected" : "")
+        + (disabled ? " ant-dropdown-menu-item-disabled" : "")}
+      onClick={disabled ? undefined : onClick}
+    >
       <div className="ne-ui-select-item-check-icon">{selected ? <KIcon type="check" /> : null}</div>
       <div className="ne-ui-select-item-label">
         <div className="ne-ui-select-content">
-          <span className={labelClass ?? "ne-ui-item-content"}>{label}</span>
+          <span className={labelClass ?? "ne-ui-item-content"}>
+            {icon ? <span className="selection-toolbar__mi-icon"><KIcon type={icon} size={15} /></span> : null}
+            {label}
+          </span>
           {shortcut ? <span className="ne-ui-command-style">{shortcut}</span> : null}
         </div>
       </div>
@@ -173,8 +197,36 @@ export function SelectionToolbar({ editor, container }: {
   /** 打开弹层时暂存的编辑器选区：输入框会抢走 DOM 选区，确认前要还回去（内核弹层 closeCallback 亦然）。 */
   const linkRangeRef = useRef<Range | null>(null);
   const linkSelRef = useRef("");
-  const [menuAnchor, setMenuAnchor] = useState(0);
-  const [menuLeft, setMenuLeft] = useState<number | null>(null);
+  /** 每次打开浮层自增：同一个菜单名换触发项再开时也要重新定位。 */
+  const [menuSeq, setMenuSeq] = useState(0);
+  /** 二级菜单（目前只有「标题」，见 blockformat 菜单）。 */
+  const [subMenu, setSubMenu] = useState<string | null>(null);
+  /** 打开浮层的触发元素（已解到真实按钮）：既当定位锚点，也供菜单项「链接」弹内核链接编辑层。 */
+  const menuTriggerRef = useRef<HTMLElement | null>(null);
+  /** 主浮层 / 二级菜单的实测定位（fixed 坐标，由 placePopover* 单一来源算出）。 */
+  const popoverRef = useRef<HTMLElement | null>(null);
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
+  const subRef = useRef<HTMLElement | null>(null);
+  const [subStyle, setSubStyle] = useState<CSSProperties | null>(null);
+  const setPopoverRef = useCallback((el: HTMLElement | null) => { popoverRef.current = el; }, []);
+  const setSubMenuRef = useCallback((el: HTMLElement | null) => { subRef.current = el; }, []);
+  /**
+   * 把 placePopover* 算出的**视口**坐标再夹进**编辑器区域**：浮栏的 z-index 低于目录栏/顶栏/大纲，
+   * 只按视口夹会让菜单跑到目录栏下面被盖住（= 看不见，用户 260930 第 3 条要的正是"不能不可见"）。
+   * 竖向还额外让开编辑器固定工具栏（.ne-ui-toolbar），否则翻到上方时会钻到它后面。
+   */
+  const clampToEditorArea = useCallback((point: { left: number; top: number }, size: { width: number; height: number }) => {
+    const host = container.getBoundingClientRect();
+    const chrome = document.querySelector(".ne-ui-toolbar");
+    const topLimit = Math.max(host.top, chrome ? chrome.getBoundingClientRect().bottom : 0) + TOOLBAR_MARGIN;
+    const minLeft = host.left + TOOLBAR_MARGIN;
+    const maxLeft = Math.max(minLeft, Math.min(window.innerWidth, host.right) - size.width - TOOLBAR_MARGIN);
+    const maxTop = Math.max(topLimit, Math.min(window.innerHeight, host.bottom) - size.height - TOOLBAR_MARGIN);
+    return {
+      left: Math.round(Math.max(minLeft, Math.min(point.left, maxLeft))),
+      top: Math.round(Math.max(topLimit, Math.min(point.top, maxTop))),
+    };
+  }, [container]);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const keyRef = useRef<string>("none");
 
@@ -193,21 +245,48 @@ export function SelectionToolbar({ editor, container }: {
     setPos({ left, top: p.top });
   }, [target, menu, toolbarRef, container]);
 
-  // 子菜单定位：左侧贴触发按钮 offsetLeft，右侧越界则左移，保证不超出浮栏宽度。
+  /**
+   * 浮层定位（260930 用户第 3 条：所有这种「位置不固定」的弹窗都要做边缘适配）——
+   * 统一走项目里的单一来源 `placePopoverPosition`（下方优先 → 放不下翻上方 → 夹进视口），
+   * 和目录栏右键菜单同一套；不再用「只夹横向、还夹在浮栏宽度内」的土办法（那套贴窗口边照样被裁）。
+   * 主浮层与二级菜单都改成 position:fixed + 实测坐标。
+   */
   useLayoutEffect(() => {
-    if (!menu) { setMenuLeft(null); return; }
-    const root = toolbarRef.current;
-    const el = root?.querySelector('[data-menu="' + menu + '"]') as HTMLElement | null;
-    if (!root || !el) return;
-    const rootW = root.getBoundingClientRect().width;
-    const menuW = el.getBoundingClientRect().width;
-    setMenuLeft(Math.max(0, Math.min(menuAnchor, Math.max(0, rootW - menuW))));
-  }, [menu, menuAnchor, toolbarRef]);
+    if (!menu) { setPopoverStyle(null); return; }
+    const el = popoverRef.current;
+    const trigger = menuTriggerRef.current;
+    if (!el || !trigger) return;
+    const placed = placePopoverPosition(
+      trigger.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+      { width: el.offsetWidth, height: el.offsetHeight },
+      6,
+      { margin: TOOLBAR_MARGIN },
+    );
+    setPopoverStyle(clampToEditorArea(placed, { width: el.offsetWidth, height: el.offsetHeight }));
+  }, [menu, menuSeq, clampToEditorArea]);
+  /** 二级菜单：贴所在行右侧展开；右侧放不下翻左侧、再夹进视口（placePopoverBeside 同款）。 */
+  useLayoutEffect(() => {
+    if (!subMenu) { setSubStyle(null); return; }
+    const el = subRef.current;
+    const row = el?.parentElement?.getBoundingClientRect();
+    if (!el || !row) return;
+    const placed = placePopoverBeside(
+      row,
+      { width: window.innerWidth, height: window.innerHeight },
+      { width: el.offsetWidth, height: el.offsetHeight },
+      2,
+      { margin: TOOLBAR_MARGIN },
+    );
+    setSubStyle(clampToEditorArea(placed, { width: el.offsetWidth, height: el.offsetHeight }));
+  }, [subMenu, menu, clampToEditorArea]);
 
   const key = target ? target.kind + ":" + Math.round(target.rect.top) + ":" + Math.round(target.rect.left) : "none";
   useEffect(() => {
-    if (keyRef.current !== key) { keyRef.current = key; setMenu(null); setDraft(""); setLinkText(""); setLinkSrc(""); }
+    if (keyRef.current !== key) { keyRef.current = key; setMenu(null); setSubMenu(null); setDraft(""); setLinkText(""); setLinkSrc(""); }
   }, [key]);
+  /** 主菜单收起/换项时一并收起二级菜单（否则下次打开会残留上一次的展开态）。 */
+  useEffect(() => { if (!menu) setSubMenu(null); }, [menu]);
 
   const pick = useCallback((name: string, value: unknown) => { run(name, value); setMenu(null); }, [run]);
 
@@ -241,29 +320,22 @@ export function SelectionToolbar({ editor, container }: {
     applyColorValue(variant, value);
   }, [editor, applyColorValue]);
 
-  /** 取真实有盒子的触发元素：内核原子件外层是 display:contents 包裹（offsetLeft 恒为 0）。 */
-  const anchorLeft = (trigger?: HTMLElement | null): number => {
-    if (!trigger) return 0;
-    const el = (trigger.querySelector("button") as HTMLElement | null) ?? trigger;
-    return el.offsetLeft;
-  };
-
-  /** 打开/切换菜单；记录触发按钮的左偏移，子菜单以该「主菜单项」定位。 */
+  /** 打开/切换主菜单（触发元素留给定位用；menuSeq 让「同名菜单换触发项再开」也能重新定位）。 */
   const toggleMenu = useCallback((m: string, trigger?: HTMLElement | null) => {
-    setMenuAnchor(anchorLeft(trigger));
-    setMenuLeft(null);
+    menuTriggerRef.current = resolveTriggerEl(trigger);
+    setMenuSeq((n) => n + 1);
     setMenu((current) => (current === m ? null : m));
   }, []);
   const openWithDraft = useCallback((m: string, value: string, trigger?: HTMLElement | null) => {
-    setMenuAnchor(anchorLeft(trigger));
-    setMenuLeft(null);
+    menuTriggerRef.current = resolveTriggerEl(trigger);
+    setMenuSeq((n) => n + 1);
     setDraft(value);
     setMenu((current) => (current === m ? null : m));
   }, []);
   /** 打开内核样式的链接编辑弹层：文本预填当前选区、链接为空；同时暂存选区以便确认时还原。 */
   const openLinkEditor = useCallback((trigger?: HTMLElement | null) => {
-    setMenuAnchor(anchorLeft(trigger));
-    setMenuLeft(null);
+    menuTriggerRef.current = resolveTriggerEl(trigger);
+    setMenuSeq((n) => n + 1);
     const sel = window.getSelection();
     const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
     linkRangeRef.current = range;
@@ -294,6 +366,41 @@ export function SelectionToolbar({ editor, container }: {
     else if (canCommand("link")) run("link", url, true, true);
     setMenu(null);
   }, [editor, linkSrc, linkText, run]);
+
+  /**
+   * AI 交互期间**自己画一层「原选区」高亮**（用户 260930 要求）。
+   * 起因：AI 对话框的提问框是 autoFocus，它一拿到焦点，浏览器就把 DOM 选区折叠
+   * （实测 `getSelection().isCollapsed === true`）⇒ 原生高亮消失，用户看不到自己在处理哪段文字。
+   * 这里用**打开对话框前捕获的 Range**（aiRangeRef）自绘一层矩形，颜色取内核选区同一个令牌
+   * `--lake-select-bg`（内核 `--lakex-editor-selection` 就是它 ⇒ 观感一致），关闭即移除。
+   */
+  const [aiSelRects, setAiSelRects] = useState<Array<{ left: number; top: number; width: number; height: number }> | null>(null);
+  useEffect(() => {
+    if (!aiOpen) { setAiSelRects(null); return; }
+    const measure = () => {
+      const range = aiRangeRef.current;
+      if (!range) { setAiSelRects(null); return; }
+      try {
+        const rects = [...range.getClientRects()]
+          .filter((r) => r.width > 0 && r.height > 0)
+          .map((r) => ({ left: r.left, top: r.top, width: r.width, height: r.height }));
+        setAiSelRects(rects.length > 0 ? rects : null);
+      } catch { setAiSelRects(null); }
+    };
+    measure();
+    // 跟着正文滚动/窗口变化重算（对话框开着时正文仍可滚动）；捕获的 Range 会随 DOM 节点失效，测不到就自动收起。
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [aiOpen]);
+  const aiSelectionOverlay = aiSelRects ? (
+    <div className="selection-toolbar__aisel" aria-hidden="true">
+      {aiSelRects.map((r, i) => <span key={i} style={{ left: r.left, top: r.top, width: r.width, height: r.height }} />)}
+    </div>
+  ) : null;
 
   // AI 对话框渲染在工具栏**之外**：选中态丢失时工具栏会 `return null`，对话框若挂在工具栏内部
   // 会被一起卸载 ⇒ 状态清零（用户 260930 报「点生成页面闪烁、插入按钮点不了」的根因就在这里）。
@@ -341,25 +448,83 @@ export function SelectionToolbar({ editor, container }: {
     />
   ) : null;
 
-  if (!target) return aiDialog;
+  // 选区被对话框折叠后工具栏会消失 ⇒ 这时只剩「自绘选区 + 对话框」，两者都不依赖工具栏。
+  if (!target) return <>{aiSelectionOverlay}{aiDialog}</>;
 
   const renderTextMenu = () => {
-    if (menu === "style") {
+    if (menu === "fontsize") {
       return (
-        <KMenu menu="style">
-          {PARAGRAPH_STYLES.map((b) => (
-            <KMenuItem key={b.value} label={b.menuLabel} selected={state.style === b.value} shortcut={b.keys}
-              labelClass={b.menuClass}
-              onClick={() => pick("style", b.value)} />
+        <KMenu menu="fontsize" surfaceRef={setPopoverRef} style={popoverStyle ?? OFFSCREEN}>
+          {FONT_SIZE_OPTIONS.map((v) => (
+            <KMenuItem key={v} label={v + "px"} labelClass="ne-ui-font-size-item" selected={state.fontSize === v} onClick={() => pick("fontsize", v)} />
           ))}
         </KMenu>
       );
     }
-    if (menu === "fontsize") {
+    if (menu === "blockformat") {
+      // 父入口菜单（260930 用户第二次调整）：正文留在主菜单、「标题1–6」收进二级菜单；
+      //   主菜单 = 正文 · 标题› ｜ 有序/无序/待办/引用 ｜ 行内代码/链接。
+      const plainItem = TOOLBAR_BLOCK_TYPE_ITEMS.find((item) => item.kind === "style" && item.value === "p");
+      const headingItems = TOOLBAR_BLOCK_TYPE_ITEMS.filter((item) => item.kind === "style" && item.value !== "p");
+      const otherItems = TOOLBAR_BLOCK_TYPE_ITEMS.filter((item) => item.kind !== "style");
+      const headingActive = headingItems.find((item) => item === activeBlockTypeItem);
+      const headingOpen = subMenu === "heading";
       return (
-        <KMenu menu="fontsize">
-          {FONT_SIZE_OPTIONS.map((v) => (
-            <KMenuItem key={v} label={v + "px"} labelClass="ne-ui-font-size-item" selected={state.fontSize === v} onClick={() => pick("fontsize", v)} />
+        <KMenu menu="blockformat" surfaceRef={setPopoverRef} style={popoverStyle ?? OFFSCREEN}>
+          {plainItem && (
+            <KMenuItem icon={plainItem.icon} label={plainItem.label} labelClass="selection-toolbar__mi-label"
+              // 260930 用户：默认（正文）也要打勾 —— 没有任何块级/行内格式、也不是标题时，当前就是正文。
+              shortcut={plainItem.shortcut} selected={!activeBlockTypeItem}
+              onClick={() => pickBlockTypeItem(plainItem)} />
+          )}
+          {/* 「标题」二级菜单：悬停展开（移入子菜单时行仍处于 hover ⇒ 不会误关），点击也可切换（触屏/键盘）。 */}
+          <li
+            role="menuitem"
+            aria-haspopup="menu"
+            aria-expanded={headingOpen}
+            className={"ant-dropdown-menu-item ne-ui-select-item" + (headingActive ? " ant-dropdown-menu-item-selected" : "")}
+            onMouseEnter={() => setSubMenu("heading")}
+            onMouseLeave={() => setSubMenu(null)}
+            onClick={(event) => { event.stopPropagation(); setSubMenu((current) => (current === "heading" ? null : "heading")); }}
+          >
+            <div className="ne-ui-select-item-check-icon">{headingActive ? <KIcon type="check" /> : null}</div>
+            <div className="ne-ui-select-item-label">
+              <div className="ne-ui-select-content">
+                <span className="selection-toolbar__mi-label">
+                  <span className="selection-toolbar__mi-icon"><KIcon type={headingActive?.icon ?? "editor-h1"} size={15} /></span>
+                  {headingActive ? headingActive.label : "标题"}
+                </span>
+                <span className="selection-toolbar__mi-arrow"><KIcon type="right-arrow" size={14} /></span>
+              </div>
+            </div>
+            {headingOpen && (
+              <KMenu menu="blockformat-heading" sub surfaceRef={setSubMenuRef} style={subStyle ?? OFFSCREEN}>
+                {headingItems.map((item) => (
+                  <KMenuItem key={item.key} icon={item.icon} label={item.label} labelClass="selection-toolbar__mi-label"
+                    shortcut={item.shortcut} selected={activeBlockTypeItem === item}
+                    onClick={() => pickBlockTypeItem(item)} />
+                ))}
+              </KMenu>
+            )}
+          </li>
+          <li className="ant-dropdown-menu-item-divider" role="separator" />
+          {otherItems.map((item, i) => (
+            <Fragment key={item.key}>
+              {i > 0 && item.kind !== "block" && otherItems[i - 1].kind === "block" ? (
+                <li className="ant-dropdown-menu-item-divider" role="separator" />
+              ) : null}
+              <KMenuItem
+                icon={item.icon}
+                label={item.label}
+                // `.selection-toolbar__mi-label`（inline-flex + gap）给「图标 + 文字」留间距；菜单统一 13px
+                // —— 内核那种"标题按 28/24/20px 预览"的字号在浮栏这种紧凑气泡里会让图标也跟着要放大，不用。
+                labelClass="selection-toolbar__mi-label"
+                shortcut={hot(item.key)}
+                selected={activeBlockTypeItem === item}
+                disabled={blockTypeItemDisabled(item)}
+                onClick={() => pickBlockTypeItem(item)}
+              />
+            </Fragment>
           ))}
         </KMenu>
       );
@@ -367,7 +532,7 @@ export function SelectionToolbar({ editor, container }: {
     if (menu === "color" || menu === "bgcolor") {
       const variant: ColorVariant = menu === "color" ? "text" : "bg";
       return (
-        <div className="selection-toolbar__colorpop ne-ui-toolbar-color-picker-overlay" data-menu={menu}>
+        <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__colorpop ne-ui-toolbar-color-picker-overlay" data-menu={menu}>
           <LakeColorBoard
             variant={variant}
             value={variant === "text" ? state.color : state.bgColor}
@@ -378,7 +543,7 @@ export function SelectionToolbar({ editor, container }: {
     }
     if (menu === "txtlink") {
       return (
-        <div className="selection-toolbar__popover" data-menu="txtlink">
+        <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__popover" data-menu="txtlink">
           <KLinkEditor
             text={linkText}
             src={linkSrc}
@@ -400,16 +565,52 @@ export function SelectionToolbar({ editor, container }: {
   // .ne-ui-toolbar-button（已定义 26×26 / padding:0，单一起源），不再自写尺寸覆盖。
   const VALUE = "ant-dropdown-trigger ne-ui-toolbar-button ne-toolbar-widget";
 
+  /** hover 说明 / 菜单快捷键列 = 名称 + 内核快捷键（短，无 markdown 行；见 kernelUiAtoms.KTooltip）。 */
+  const hot = (name: string) => kernelHotkey(editor, name);
+  /** 父入口当前生效项：**块级/行内优先**（列表项同时是「正文」段落样式），其次标题；都没有 = 正文。 */
+  const activeFormatItem = TOOLBAR_FORMAT_ITEMS.find((item) =>
+    item.kind === "block" ? state.blocks[item.name] : item.kind === "mark" ? state.marks[item.name] : false);
+  const activeStyleItem = state.style && state.style !== "p"
+    ? TOOLBAR_BLOCK_TYPE_ITEMS.find((item) => item.kind === "style" && item.value === state.style)
+    : undefined;
+  const activeBlockTypeItem: ToolbarBlockTypeItem | undefined = activeFormatItem
+    ? TOOLBAR_BLOCK_TYPE_ITEMS.find((item) => item.key === activeFormatItem.name)
+    : activeStyleItem;
+  /** 菜单项可用性：块级/行内沿用内核状态；链接同内核 link descriptor（link 与 insertLink 都不可用才置灰）；
+   *  段落样式（正文/标题）恒可用（内核固定栏的正文下拉 likewise）。 */
+  const blockTypeItemDisabled = (item: ToolbarBlockTypeItem): boolean =>
+    item.kind === "link" ? (!canCommand("link") && !canCommand("insertLink"))
+      : item.kind === "style" ? false
+        : Boolean(state.itemDisabled[item.key]);
+  /** 选中菜单项：段落样式走内核 style 命令；链接弹内核链接编辑层（锚点 = 父入口按钮）；其余直接执行命令。 */
+  const pickBlockTypeItem = (item: ToolbarBlockTypeItem) => {
+    if (item.kind === "style") { pick("style", item.value); return; }
+    if (item.kind === "link") { setMenu(null); openLinkEditor(menuTriggerRef.current); return; }
+    run(item.key);
+    setMenu(null);
+  };
+
   const renderText = () => {
     const sizeLabel = String(state.fontSize ?? 15);   // 260924 用户口径：字号只显示数值（如 16），不带 px
-    /** hover 说明 = 名称 + 内核快捷键（短，无 markdown 行；见 kernelUiAtoms.KTooltip）。 */
-    const hot = (name: string) => kernelHotkey(editor, name);
     return (
       <>
         <KToolbarButton name="clearFormat" icon="editor-clearFormat" title="清除格式" hotkey={hot("clearFormat")} className="ne-ui-toolbar-button ne-ui-toolbar-clear-format ne-toolbar-widget" onClick={() => run("clearFormat")} />
         <span className="selection-toolbar__sep" />
-        {/* 260924 续：标题按钮改用原「转为」的图标（内核「段落/块类型」editor-paragraph），不再显示 T/H1..H6 符号。 */}
-        <KToolbarButton name="format" icon="editor-paragraph" title="段落样式" checked={menu === "style"} className={VALUE + " ne-ui-toolbar-format"} onClick={(e) => toggleMenu("style", e.currentTarget)} />
+        {/* 260930 用户（第二次调整）：把「段落样式」与「有序/无序/待办/引用/行内代码/链接」并成**一个**父入口 + 菜单，
+            且父入口回到**原「段落样式」按钮的位置**（字号左边，而不是末尾）。
+            父入口图标 = 当前生效的块类型（列表/引用/代码 → 对应图标；标题 → H1..H6 图标；正文 → editor-paragraph），
+            尾部箭头用文字色/背景色同款的内核下拉箭头（.ne-ui-toolbar-color-dropdown-arrow，16×16 背景图，
+            本地 public/vendor 已镜像、离线可用）；当前类型同时写进 tooltip。 */}
+        <KToolbarButton
+          name="formatBlock"
+          icon={activeBlockTypeItem?.icon ?? "editor-paragraph"}
+          caret
+          caretClass="ne-ui-toolbar-color-dropdown-arrow"
+          title={activeBlockTypeItem ? "格式 · " + activeBlockTypeItem.label : "格式"}
+          checked={Boolean(activeBlockTypeItem)}
+          className={TOGGLE + " ant-dropdown-trigger selection-toolbar__fmtbtn"}
+          onClick={(e) => toggleMenu("blockformat", e.currentTarget)}
+        />
         {/* 内核 getUIState：字号按钮 disabled = !queryCommandEnabled('fontsize')（标题是固定样式 ⇒ 不可调）。 */}
         <KToolbarButton name="fontsize" title="字号" disabled={!canCommand("fontsize")} checked={menu === "fontsize"} className={VALUE + " ne-ui-toolbar-fontsize"} onClick={(e) => toggleMenu("fontsize", e.currentTarget)}>
           <div className="ne-ui-toolbar-select-value">{sizeLabel}</div>
@@ -423,14 +624,6 @@ export function SelectionToolbar({ editor, container }: {
         <KColorButton label="文字颜色" variant="text" color={currentColor(editor, "text")} active={menu === "color" || Boolean(state.color)} hotkey={hot("color")} onApply={() => applyCurrentColor("text")} onOpen={(e) => toggleMenu("color", e.currentTarget)} />
         <KColorButton label="背景色" variant="bg" color={currentColor(editor, "bg")} active={menu === "bgcolor" || Boolean(state.bgColor)} hotkey={hot("bgColor")} onApply={() => applyCurrentColor("bg")} onOpen={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
-        {/* 260924 续：原「转为」下拉已拆散 —— 每个块级转换各成一个独立按钮（顺序 = 有序/无序/待办/引用/行内代码）。 */}
-        {TOOLBAR_BLOCK_ITEMS.map((item) => (
-          <KToolbarButton key={item.name} name={item.name} icon={item.icon} title={item.label} hotkey={hot(item.name)}
-            checked={item.kind === "mark" ? state.marks[item.name] : state.blocks[item.name]}
-            disabled={state.itemDisabled[item.name]}
-            className={TOGGLE} onClick={() => run(item.name)} />
-        ))}
-        <span className="selection-toolbar__sep" />
         {/* AI 助手：结果只进对话框，用户再决定复制/替换（不自动改写正文）。 */}
         <KToolbarButton name="ai" title="AI 助手" className={TOGGLE} onClick={() => {
           const sel = window.getSelection();
@@ -443,9 +636,6 @@ export function SelectionToolbar({ editor, container }: {
         }}>
           <AiTagIcon size={18} />
         </KToolbarButton>
-        {/* 内核 link-toolbar-descriptor.getUIState：disabled = !link && !insertLink（选区里已有链接时两个都不可用）。
-            不用内核「下拉按钮」类：.ne-ui-toolbar-arrow-button 固定 42px，是给已去掉的三角预留的 ⇒ 用 26px 普通按钮。 */}
-        <KToolbarButton name="link" icon="editor-link" disabled={!canCommand("link") && !canCommand("insertLink")} checked={menu === "txtlink"} title="超链接" hotkey={hot("link")} className="ne-ui-toolbar-button ne-toolbar-widget" onClick={(e) => openLinkEditor(e.currentTarget)} />
       </>
     );
   };
@@ -491,7 +681,7 @@ export function SelectionToolbar({ editor, container }: {
 
         {/* 宽高：宽/高输入 + 25/50/75/100% 档位（云端同内容） */}
         {menu === "imgsize" && (
-          <div className="selection-toolbar__cardpop" data-menu="imgsize">
+          <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="imgsize">
             <div className="selection-toolbar__inputrow">
               <span className="ne-card-toolbar-input-title">宽</span>
               <input className="ne-card-toolbar-input" type="number" min="16" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyWidth(); } }} />
@@ -507,14 +697,14 @@ export function SelectionToolbar({ editor, container }: {
         )}
         {/* 链接：网址输入 + 「在当前页面打开」 */}
         {menu === "imglink" && (
-          <div className="selection-toolbar__cardpop" data-menu="imglink">
+          <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="imglink">
             <input className="ne-card-toolbar-input selection-toolbar__urlinput" type="text" placeholder="请输入网址" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } }} />
             <label className="selection-toolbar__checkrow"><KCheckbox checked={linkSelf} onChange={setLinkSelf} />在当前页面打开</label>
           </div>
         )}
         {/* 边距：上/下两个开关（内核 card spacing） */}
         {menu === "imgmargin" && (
-          <div className="selection-toolbar__cardpop" data-menu="imgmargin">
+          <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="imgmargin">
             <div className="selection-toolbar__switchrow"><span>为图片添加上边距</span><KSwitch checked={spacingTop} onChange={(v) => setSpacing(v, spacingBottom)} /></div>
             <div className="selection-toolbar__switchrow"><span>为图片添加下边距</span><KSwitch checked={spacingBottom} onChange={(v) => setSpacing(spacingTop, v)} /></div>
           </div>
@@ -544,13 +734,15 @@ export function SelectionToolbar({ editor, container }: {
   };
 
   return (
-    <div
-      ref={toolbarRef}
+    <>
+      {aiSelectionOverlay}
+      <div
+        ref={toolbarRef}
       className="selection-toolbar lakex-default-theme"
       data-kind={target.kind}
       role="toolbar"
       aria-label={target.kind === "text" ? "文字格式工具栏" : "图片工具栏"}
-      style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden", "--menu-left": (menuLeft ?? menuAnchor) + "px" } as CSSProperties}
+      style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
       onMouseDown={(event) => {
         // 默认 preventDefault 保选区（点按钮不丢编辑器选区）；但链接弹层的输入框必须能获得焦点，
         // 否则鼠标点不进输入框（用户 260924 报「输入即关闭 / 写不进去」的一部分）。
@@ -559,9 +751,10 @@ export function SelectionToolbar({ editor, container }: {
         event.preventDefault();
       }}
     >
-      {target.kind === "text" ? renderText() : renderImage(target)}
-      {target.kind === "text" ? renderTextMenu() : null}
-      {aiDialog}
-    </div>
+        {target.kind === "text" ? renderText() : renderImage(target)}
+        {target.kind === "text" ? renderTextMenu() : null}
+        {aiDialog}
+      </div>
+    </>
   );
 }

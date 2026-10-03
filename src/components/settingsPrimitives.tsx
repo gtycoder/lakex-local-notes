@@ -4,19 +4,35 @@
  * 定义已随 W2 删源收编到 src/styles/compat.css（骨架）与 src/styles/kit.css（规格），值走 --lake-*。
  * 从 SettingsPanel 抽出：桌面 SettingsPanel 与移动 SettingsDrawer 共用同一套版式原语。
  */
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 
 export function Group({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
   return (
     <section className="config-group">
       <h4 className="config-title">{icon}{title}</h4>
-      <div className="config-items">{children}</div>
+      <div className="config-items">
+        {/* 分组 =「标题 + 一张白卡」。若子项里已经显式用了 <Section>（多段分组，如 AI 的
+            服务 / 凭据 / 模型与参数），就不再自动套一层，避免卡中卡 —— 每段 Section 自己是一张卡。 */}
+        {Children.toArray(children).some((child) => isValidElement(child) && child.type === Section)
+          ? children
+          : <Section>{children}</Section>}
+      </div>
     </section>
   );
 }
 
+/** 分组内的一段：可选标题条 + 一张白卡（表面/圆角/分隔在 styles/feature.css 的 .config-section）。 */
+export function Section({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <div className="config-section">
+      {title && <div className="config-section__title">{title}</div>}
+      {children}
+    </div>
+  );
+}
+
 /** 标准行：左侧标题+说明，右侧控件（不拉伸）。 */
-export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: string; name: string; desc?: string; pathDesc?: boolean; children?: ReactNode }) {
+export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; children?: ReactNode }) {
   return (
     <div className={"b3-label config-item" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
       <div className="config-item__main">
@@ -24,6 +40,21 @@ export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: stri
         {desc && <div className="b3-label__text">{desc}</div>}
       </div>
       {children && (<><span className="fn__space" /><div className="config-item__ctl">{children}</div></>)}
+    </div>
+  );
+}
+
+/** 堆叠行：标题 + 说明在上、控件在下（设置页表单主形态：URL / Key / 模型 / 下拉；短控件仍用 Item）。
+ *  error = 该字段的校验/连接错误，落在控件下方一行（走 .config-item__error）。 */
+export function Field({ itemId, name, desc, pathDesc, error, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; error?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className={"b3-label config-item config-item--stack" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
+      <div className="config-item__main">
+        <div className="config-name">{name}</div>
+        {desc && <div className="b3-label__text">{desc}</div>}
+      </div>
+      {children && <div className="config-item__ctl">{children}</div>}
+      {error && <div className="config-item__error">{error}</div>}
     </div>
   );
 }
@@ -94,11 +125,11 @@ export function NumField({ label, value, min, max, floor, fallback, onSave }: { 
   );
 }
 
-/** 文本设置项（S3 配置等；wide = 比思源默认 200px 更宽，便于看长 URL）。 */
-export function TextField({ label, value, onSave, type = "text", placeholder, wide }: { label: string; value: string; onSave: (v: string) => void; type?: "text" | "password"; placeholder?: string; wide?: boolean }) {
+/** 文本设置项（S3 配置等）。放在 Field 里，宽度由行的布局给（整行铺满），不再各自定宽。 */
+export function TextField({ label, value, onSave, type = "text", placeholder }: { label: string; value: string; onSave: (v: string) => void; type?: "text" | "password"; placeholder?: string }) {
   return (
     <input
-      className={"b3-text-field" + (wide ? " input--wide" : " fn__size200")}
+      className="b3-text-field"
       type={type}
       aria-label={label}
       value={value}

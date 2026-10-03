@@ -143,7 +143,6 @@
   padding: 24px;
   background: var(--lake-bg-panel);
 }
-.settings-panel-large .settings-header { min-height: 52px; padding: 0 20px; }
 .settings-panel-large .ln-close { margin-left: auto; }
 .settings-statusbar {
   flex: 0 0 auto;
@@ -366,7 +365,6 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .config-item.item--path .b3-label__text { word-break: break-all; }
 
 /* 长文本输入（S3 Endpoint 等）：思源默认 200px 放不下 URL */
-.config-item__ctl .b3-text-field.input--wide { width: min(360px, 40vw); flex-shrink: 0; }
 .logs__filter { flex: 1 1 auto; min-width: 120px; }
 
 /* #4 遮罩淡入：弹窗背景层不再瞬间出现，消除突兀/闪烁；与 .floating-dialog 的入场缩放协同 */

@@ -51,6 +51,14 @@
 /* 内核颜色分裂按钮的尺寸规则只写在 .ne-ui-toolbar 作用域内，浮栏按同值补齐（25+16 与固定栏一致）。 */
 .selection-toolbar__colorbtn .ne-ui-toolbar-color-show-button { width: 25px; height: 26px; padding: 0; }
 .selection-toolbar__colorbtn .ne-ui-toolbar-color-dropdown-button { width: 16px; height: 25px; padding: 0; }
+/* 「格式」父入口（260930）：当前格式图标 + 与文字色/背景色同款的内核下拉箭头。
+   箭头本身是内核 16×16 背景图（.ne-ui-toolbar-color-dropdown-arrow，本地 public/vendor 已镜像）；
+   浮栏不在 .ne-ui-toolbar 作用域内、吃不到内核尺寸规则 ⇒ 与颜色 split 按钮同一姿势自写几何。
+   `width: auto` 必须有：内核把工具条按钮定死 26px，不放开的话「图标 + 箭头」里的箭头会被挤成 0 宽。 */
+.selection-toolbar .selection-toolbar__fmtbtn { width: auto; min-width: 0; height: 26px; padding: 0 4px; gap: 4px; }
+/* 父入口菜单项：图标 + 常规字号标签（内核 .ne-ui-item-content 是 16px/700 的「段落样式」预览字形，这里不适用） */
+.selection-toolbar__mi-label { display: inline-flex; align-items: center; gap: 8px; color: inherit; font-size: 13px; font-weight: 400; }
+.selection-toolbar__mi-icon { display: inline-flex; color: var(--lake-text-3); }
 /* 段落样式/字号：按钮几何直接复用内核 .ne-ui-toolbar-button（26×26 / padding:0，单一起源，不另写尺寸），
    这里只覆盖内核为「文字 ▾ 下拉」写的那两处：
    ① 内核 .ne-ui-toolbar-select-value 固定 width:40px 是给箭头预留的 → 按内容收缩，避免标签与字号间距过大；
@@ -64,14 +72,27 @@
    选中色/快捷键色/字号预览全与固定栏一致，单一起源）。这里只留定位（浮层用）。
    `width: max-content`（260924 点验修）：弹层是**固定浮栏内的绝对定位**，width:auto 会对
    「栏宽 − 触发项偏移」做 shrink-to-fit ⇒ 触发项越靠右可用宽度越小、条目文字被压成多行。
-   按内容取宽即可一行放下；右侧越界由上面 menuLeft 的左移逻辑兜住（实测贴齐，偶有 1px 舍入）。 */
-.selection-toolbar__kmenu { position: absolute; top: calc(100% + 6px); left: var(--menu-left, 0); z-index: 1; width: max-content; }
+   按内容取宽即可一行放下；越界由组件用 placePopoverPosition 的「翻上方 + 夹进视口」兜住。 */
+/* 浮层一律 position:fixed + **组件实测坐标**（left/top 由 placePopoverPosition / placePopoverBeside 给：
+   下方优先 → 放不下翻上方 → 夹进视口；二级菜单贴右侧放不下翻左侧）。
+   不再用先前「只夹横向、还夹在浮栏宽度内」的自造逻辑 —— 那套贴窗口边照样被裁（用户 260930 第 3 条）。 */
+.selection-toolbar__kmenu { position: fixed; z-index: 1; width: max-content; }
+/* 二级菜单（「标题1–6」）抬一层：它会压在主菜单边缘上（.ne-ui-select-item 自带 position:relative）。 */
+.selection-toolbar__kmenu--sub { z-index: 2; }
+/* 菜单紧凑化（用户 260930：太长）：行高 38 → 26、分隔线上下留白 4 → 2（内核数值是未分层样式，本层可压）。 */
+.selection-toolbar__kmenu .ne-ui-select-item { padding-top: 0; padding-bottom: 0; line-height: 26px; }
+.selection-toolbar__kmenu .ant-dropdown-menu-item-divider { margin: 2px 0; }
+.selection-toolbar__mi-arrow { display: inline-flex; flex: none; color: var(--lake-text-3); }
+/* AI 交互期间的「原选区」自绘高亮（用户 260930）：对话框提问框 autoFocus 会折叠 DOM 选区、
+   原生高亮随之消失；这里按打开前捕获的 Range 画一层，交互结束即移除。
+   颜色用内核选区同一个令牌（--lakex-editor-selection = --lake-select-bg），观感与原生选区一致；
+   层级与浮栏同级但排在浮栏之前 ⇒ 浮栏/对话框压在它上面。 */
+.selection-toolbar__aisel { position: fixed; inset: 0; z-index: var(--lake-z-dropdown); pointer-events: none; }
+.selection-toolbar__aisel > span { position: absolute; border-radius: 2px; background: var(--lake-select-bg); }
 /* 图片浮栏的「非菜单」弹窗（宽高 / 链接 / 边距）：白卡 + 内距，令牌化；定位同 __kmenu（贴触发项、越界左移）。
    `width: max-content` 同 __kmenu：否则「为图片添加上/下边距」会被压成多行（260924 点验修）。 */
 .selection-toolbar__cardpop {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: var(--menu-left, 0);
+  position: fixed;
   z-index: 1;
   width: max-content;
   display: flex;
@@ -93,15 +114,11 @@
 /* 链接编辑弹层：只负责浮层定位；表面（背景/边框/阴影/圆角/内距/宽度）全部由内核
    .ne-link-editor 提供 ⇒ 与固定栏链接弹窗一致，不再自造。 */
 .selection-toolbar__popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: var(--menu-left, 0);
+  position: fixed;
   z-index: 1;
 }
 .selection-toolbar__colorpop {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: var(--menu-left, 0);
+  position: fixed;
   z-index: 1;
   width: max-content;
   padding: 4px 0;

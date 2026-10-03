@@ -133,6 +133,10 @@
   font-size: var(--lake-font-size-bodyLg);
   font-weight: var(--lake-font-weight-semibold);
 }
+/* 面板型标题栏（设置）：与对话框头同一套排版，但面板头自带底边、下面紧跟内容区
+   ⇒ 不能用「上 14 / 下 0」的非对称内边距，也不能再被撑厚。常规高度 + 对称内边距，
+   标题与关闭钮在栏内垂直居中（自然高度 39px；此前 components.css 把它撑到 52px 才是「厚」。 */
+.settings-panel-large .settings-header { min-height: 40px; padding: 0 20px; }
 
 /* ── 菜单统一表面（顶栏下拉 / 右键菜单 / ＋菜单 / 页签溢出菜单） ─────── */
 .top-menu,

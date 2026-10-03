@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Cloud, Coffee, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
 
@@ -71,7 +71,7 @@ interface RemovedAsset {
   detectedAt?: string;
 }
 
-import { Group, Item, Block, Switch, Shortcut, Seg, NumField, TextField } from "./settingsPrimitives";
+import { Group, Section, Item, Field, Block, Switch, Shortcut, Seg, NumField, TextField } from "./settingsPrimitives";
 
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
@@ -108,7 +108,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [aiErr, setAiErr] = useState<Record<string, string>>({});
   /** 未保存的编辑值；apiKey 只在本组件内存里，测通后才落盘。 */
   const [aiDraft, setAiDraft] = useState<{ baseUrl?: string; model?: string; apiKey?: string; temperature?: number; reasoningEffort?: AiReasoningEffort; thinking?: AiThinkingMode }>({});
-  const [aiKeyEditing, setAiKeyEditing] = useState(false);
+  /** API Key 是否明文显示（眼睛按钮）。仅影响当前输入框，不改变任何存储语义。 */
+  const [aiKeyVisible, setAiKeyVisible] = useState(false);
   const [aiModels, setAiModels] = useState<string[] | null>(null);
   /** 模型列表存在时仍强制手填（select 里选「手填…」）。 */
   const [aiManualModel, setAiManualModel] = useState(false);
@@ -123,16 +124,16 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     id: aiProviderId,
     baseUrl: aiDraft.baseUrl ?? activeAi?.baseUrl ?? activeDef.defaultBaseUrl,
     model: aiDraft.model ?? activeAi?.model ?? activeDef.defaultModel,
-    apiKey: aiKeyEditing ? aiDraft.apiKey : undefined,
+    apiKey: aiDraft.apiKey || undefined,
     temperature: aiDraft.temperature ?? activeAi?.temperature ?? 0.7,
     reasoningEffort: aiDraft.reasoningEffort ?? activeAi?.reasoningEffort,
     thinking: aiDraft.thinking ?? activeAi?.thinking,
-  }), [aiDraft, aiKeyEditing, activeAi, aiProviderId, activeDef]);
-  const resetAiDraft = () => { setAiDraft({}); setAiKeyEditing(false); setAiErr({}); setAiForceSave(false); };
+  }), [aiDraft, activeAi, aiProviderId, activeDef]);
+  const resetAiDraft = () => { setAiDraft({}); setAiKeyVisible(false); setAiErr({}); setAiForceSave(false); };
   useEffect(() => {
     if (!open || category !== "ai") return;
     let alive = true;
-    void native.aiGetSettings().then((v) => { if (alive) { setAiView(v); setAiDraft({}); setAiKeyEditing(false); setAiErr({}); setAiForceSave(false); } }).catch(() => {});
+    void native.aiGetSettings().then((v) => { if (alive) { setAiView(v); setAiDraft({}); setAiKeyVisible(false); setAiErr({}); setAiForceSave(false); } }).catch(() => {});
     return () => { alive = false; };
   }, [open, category]);
   const saveAi = async (patch: AiSettingsPatch) => {
@@ -143,7 +144,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const aiPendingPatch = () => ({
     id: aiProviderId, baseUrl: aiPending.baseUrl, model: aiPending.model, temperature: aiPending.temperature,
     reasoningEffort: aiPending.reasoningEffort, thinking: aiPending.thinking,
-    ...(aiKeyEditing && aiDraft.apiKey ? { apiKey: aiDraft.apiKey } : {}),
+    ...(aiDraft.apiKey ? { apiKey: aiDraft.apiKey } : {}),
   });
   /** 切供应商：按该家默认初始化，并清空草稿与模型列表。 */
   const switchAiProvider = async (id: string) => {
@@ -154,9 +155,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const fetchAiModels = async () => {
     // 没有已存 Key、草稿里也没填 → 先把 Key 输入框打开并明确提示，别发一次注定失败的请求
     // （用户实测坑：配完 Key 但没走「测试并保存」，Key 未落盘，点拉列表只看到"未配置 API Key"）。
-    if (!activeAi?.hasApiKey && !(aiKeyEditing && aiDraft.apiKey)) {
+    if (!activeAi?.hasApiKey && !aiDraft.apiKey) {
       setAiErr({ apiKey: "请先填写 API Key（拉取模型列表需要它）" });
-      setAiKeyEditing(true);
       setAiMsg("请先填写 API Key，再获取模型列表");
       return;
     }
@@ -658,18 +658,18 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "editor" && (
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>
-                  <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
-                    <select className="b3-select fn__size200" value={settings.fontSize} onChange={(e) => onChange({ fontSize: Number(e.target.value) })} aria-label="正文字号">
+                  <Field itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
+                    <select className="b3-select" value={settings.fontSize} onChange={(e) => onChange({ fontSize: Number(e.target.value) })} aria-label="正文字号">
                       {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
                     </select>
-                  </Item>
+                  </Field>
                   <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启=应用自建增强大纲（筛选/折叠/级别徽标/悬停；桌面右栏）；关闭（默认）=直接使用 Lake 原生大纲。移动端始终使用应用大纲面板。" checked={settings.outlineEnhance} onChange={(checked) => onChange({ outlineEnhance: checked })} />
                   <Switch itemId="editor-toolbar" name="显示固定工具栏" desc="编辑器顶部那条固定工具栏。关掉后编辑区更干净，格式操作走浮动工具栏。" checked={settings.showToolbar} onChange={(checked) => onChange({ showToolbar: checked })} />
                   <Switch itemId="editor-floating-toolbar" name="浮动工具栏" desc="选中文字或图片时，在选区上方弹出格式浮框。与固定工具栏互相独立，可任意组合开关。" checked={settings.floatingToolbar} onChange={(checked) => onChange({ floatingToolbar: checked })} />
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
-                  <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
-                    <select className="b3-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => onChange({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
+                  <Field itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
+                    <select className="b3-select" value={settings.maxOpenTabs} onChange={(e) => onChange({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
                       <option value={0}>不限</option>
                       <option value={4}>4 个</option>
                       <option value={6}>6 个</option>
@@ -678,16 +678,16 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       <option value={16}>16 个</option>
                       <option value={24}>24 个</option>
                     </select>
-                  </Item>
+                  </Field>
                 </Group>
                 <Group title="附件" icon={<Paperclip size={16} />}>
-                  <Item itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">
-                    <select className="b3-select fn__size200" value={settings.maxAttachmentBytes / (1024 * 1024)} onChange={(e) => onChange({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
+                  <Field itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">
+                    <select className="b3-select" value={settings.maxAttachmentBytes / (1024 * 1024)} onChange={(e) => onChange({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
                       <option value={25}>25 MiB</option>
                       <option value={50}>50 MiB</option>
                       <option value={100}>100 MiB</option>
                     </select>
-                  </Item>
+                  </Field>
                 </Group>
               </>
             )}
@@ -780,13 +780,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       <Switch itemId="sync-enabled" name="启用云同步" desc="S3 配置与同步策略均为本机配置，不会上传云端；A 端关闭不影响 B 端。" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
                       {syncCfg.enabled && (
                         <>
-                          <Item itemId="sync-auto-mode" name="自动同步模式">
-                            <select className="b3-select fn__size200" value={syncCfg.autoMode} onChange={(e) => void saveSyncCfg({ autoMode: e.target.value as SyncSettings["autoMode"] })} aria-label="自动同步模式">
+                          <Field itemId="sync-auto-mode" name="自动同步模式">
+                            <select className="b3-select" value={syncCfg.autoMode} onChange={(e) => void saveSyncCfg({ autoMode: e.target.value as SyncSettings["autoMode"] })} aria-label="自动同步模式">
                               <option value="manual">完全手动</option>
                               <option value="interval">按固定间隔自动同步</option>
                               <option value="onOpenClose">仅在开启/关闭时同步</option>
                             </select>
-                          </Item>
+                          </Field>
                           {syncCfg.autoMode === "interval" && (
                             <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
@@ -809,12 +809,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   {backupMsg && <Block name={backupMsg} />}
                 </Group>
                 <Group title="S3 对象存储" icon={<Cloud size={16} />}>
-                  <Item itemId="s3-endpoint" name="Endpoint"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} wide /></Item>
-                  <Item itemId="s3-access-key" name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} wide /></Item>
-                  <Item itemId="s3-secret-key" name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} wide /></Item>
-                  <Item itemId="s3-bucket" name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} wide /></Item>
-                  <Item itemId="s3-region" name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} wide /></Item>
-                  <Item itemId="s3-prefix" name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} wide /></Item>
+                  <Field itemId="s3-endpoint" name="Endpoint" desc="七牛 Kodo 形如 https://s3.cn-north-1.qiniucs.com。"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
+                  <Field itemId="s3-access-key" name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} /></Field>
+                  <Field itemId="s3-secret-key" name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
+                  <Field itemId="s3-bucket" name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} /></Field>
+                  <Field itemId="s3-region" name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} /></Field>
+                  <Field itemId="s3-prefix" name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} /></Field>
                   <Switch itemId="s3-path-style" name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(checked) => setS3Field("forcePathStyle", checked)} />
                   <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
                     <div className="config-block__actions">
@@ -1021,84 +1021,99 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "ai" && (
               <>
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
-                  <Item itemId="ai-provider" name="供应商" desc="只支持 **OpenAI 兼容** 接口：内置 OpenAI / DeepSeek，也可选「自定义」指向任意兼容端点（Ollama / vLLM / OneAPI 等）。切换即按该家默认值初始化。">
-                    <select className="b3-select fn__size200" value={aiProviderId} onChange={(e) => void switchAiProvider(e.target.value)}>
-                      {AI_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
-                  </Item>
-                  <Item itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点。默认：" + activeDef.defaultBaseUrl}>
-                    <div className="config-block__actions">
-                      <span className="ln-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} /></span>
+                  <Section title="服务">
+                    <Field itemId="ai-provider" name="供应商" desc="只支持 OpenAI 兼容接口：内置 OpenAI / DeepSeek，也可选「自定义」指向任意兼容端点（Ollama / vLLM / OneAPI 等）。切换即按该家默认值初始化。">
+                      <select className="b3-select" value={aiProviderId} onChange={(e) => void switchAiProvider(e.target.value)} aria-label="AI 供应商">
+                        {AI_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                      </select>
+                    </Field>
+                    <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
+                      <span className="ln-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
                       <button className="b3-button b3-button--outline" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
-                    </div>
-                    {aiErr.baseUrl && <span className="settings-hint">{aiErr.baseUrl}</span>}
-                  </Item>
-                  <Item itemId="ai-api-key" name="API Key" desc="加密保存在本机（macOS Keychain），不同步、不上传；留空即沿用已保存的。">
-                    <div className="config-block__actions">
-                      {aiKeyEditing ? (
-                        <>
-                          <span className="ln-input"><input className="ln-input__field" type="password" placeholder="sk-..." value={aiDraft.apiKey ?? ""} onChange={(e) => setAiDraft((d) => ({ ...d, apiKey: e.target.value }))} /></span>
-                          <button className="b3-button b3-button--outline" onClick={() => { setAiKeyEditing(false); setAiDraft((d) => ({ ...d, apiKey: "" })); }}>取消</button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="settings-hint">{activeAi?.hasApiKey ? "已保存" : "未配置"}</span>
-                          <button className="b3-button b3-button--outline" onClick={() => setAiKeyEditing(true)}>{activeAi?.hasApiKey ? "更换" : "填写"}</button>
-                          {/* 清除：只删本机的 Key（换机/共享设备时抹掉），不清其它配置项 */}
-                          {activeAi?.hasApiKey && (
-                            <button className="b3-button b3-button--outline" onClick={() => void saveAi({ providers: [{ id: aiProviderId, clearApiKey: true }] })}>清除</button>
-                          )}
-                        </>
+                    </Field>
+                  </Section>
+
+                  <Section title="凭据">
+                    <Field
+                      itemId="ai-api-key"
+                      name={<>API Key <span className={"badge " + (activeAi?.hasApiKey ? "badge--accent" : "badge--muted")}>{activeAi?.hasApiKey ? "已保存" : "未配置"}</span></>}
+                      desc="加密保存在本机（macOS Keychain），不同步、不上传；留空即沿用已保存的，输入新值即替换。"
+                      error={aiErr.apiKey}
+                    >
+                      <span className="ln-input">
+                        <input
+                          className="ln-input__field"
+                          type={aiKeyVisible ? "text" : "password"}
+                          value={aiDraft.apiKey ?? ""}
+                          placeholder={activeAi?.hasApiKey ? "留空沿用已保存的密钥" : "sk-..."}
+                          autoComplete="off"
+                          spellCheck={false}
+                          onChange={(e) => setAiDraft((d) => ({ ...d, apiKey: e.target.value }))}
+                          aria-label="API Key"
+                        />
+                        <button
+                          type="button"
+                          className="ln-iconbtn ln-iconbtn--compact"
+                          aria-label={aiKeyVisible ? "隐藏 API Key" : "显示 API Key"}
+                          aria-pressed={aiKeyVisible}
+                          onClick={() => setAiKeyVisible((v) => !v)}
+                        >{aiKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                      </span>
+                      {/* 清除：只删本机的 Key（换机/共享设备时抹掉），不清其它配置项 */}
+                      {activeAi?.hasApiKey && (
+                        <button className="b3-button b3-button--outline" onClick={() => void saveAi({ providers: [{ id: aiProviderId, clearApiKey: true }] })}>清除</button>
                       )}
-                    </div>
-                    {aiErr.apiKey && <span className="settings-hint">{aiErr.apiKey}</span>}
-                  </Item>
-                  <Item itemId="ai-model" name="模型" desc="从供应商拉取候选（这一步同时验证连通性）；端点不实现 /models 时可手填。">
-                    <div className="config-block__actions">
+                    </Field>
+                  </Section>
+
+                  <Section title="模型与参数">
+                    <Field itemId="ai-model" name="模型" desc="从供应商拉取候选会同时验证连通性；端点不实现 /models 时可手填。" error={aiErr.model}>
                       {aiModels && aiModels.length > 0 && !aiManualModel ? (
-                        <select className="b3-select fn__size200" value={aiPending.model} onChange={(e) => { const v = e.target.value; if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }}>
+                        <select className="b3-select" value={aiPending.model} onChange={(e) => { const v = e.target.value; if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }} aria-label="AI 模型">
                           {aiModels.map((m) => <option key={m} value={m}>{m}</option>)}
                           {aiPending.model && aiModels.indexOf(aiPending.model) < 0 && <option value={aiPending.model}>{aiPending.model}</option>}
                           <option value="__manual__">手填…</option>
                         </select>
                       ) : (
                         <>
-                          <span className="ln-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} /></span>
+                          <span className="ln-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} aria-label="AI 模型" /></span>
                           {aiModels && aiModels.length > 0 && <button className="b3-button b3-button--outline" onClick={() => setAiManualModel(false)}>用列表</button>}
                         </>
                       )}
                       <button className="b3-button b3-button--outline" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>{aiModelsBusy ? "拉取中…" : "获取模型列表"}</button>
-                    </div>
-                    {aiErr.model && <span className="settings-hint">{aiErr.model}</span>}
-                  </Item>
-                  {activeDef.supportsReasoning && (
-                    <Item itemId="ai-reasoning" name="思考强度" desc="DeepSeek 的 reasoning_effort（默认 high）。思考模式下 temperature 不生效。">
-                      <select className="b3-select fn__size200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(e) => setAiDraft((d) => ({ ...d, reasoningEffort: e.target.value as AiReasoningEffort }))}>
-                        {AI_REASONING_EFFORTS.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </Item>
-                  )}
-                  {activeDef.supportsThinking && (
-                    <Item itemId="ai-thinking" name="思考模式" desc="DeepSeek 的 thinking：关闭更省 token 与延迟；开启时温度不生效。">
-                      <select className="b3-select fn__size200" value={aiPending.thinking ?? "enabled"} onChange={(e) => setAiDraft((d) => ({ ...d, thinking: e.target.value as AiThinkingMode }))}>
-                        {AI_THINKING_MODES.map((v) => <option key={v} value={v}>{v === "enabled" ? "开启" : "关闭"}</option>)}
-                      </select>
-                    </Item>
-                  )}
-                  {(!activeDef.supportsThinking || aiPending.thinking === "disabled") && (
-                    <Item itemId="ai-temperature" name="温度" desc="0 更稳定、2 更发散。">
-                      <NumField label="温度" min={0} max={2} floor={0} fallback={0.7} value={aiPending.temperature} onSave={(n) => setAiDraft((d) => ({ ...d, temperature: n }))} />
-                    </Item>
-                  )}
-                  <Item itemId="ai-test" name="连通性" desc="保存前先发一次最小真实请求：鉴权/模型类错误会拦住保存；网络/限流可选择仍要保存。">
-                    <div className="config-block__actions">
-                      <button className="b3-button" disabled={aiBusy} onClick={() => void testAndSaveAi()}>{aiBusy ? "测试中…" : "测试并保存"}</button>
-                      <button className="b3-button b3-button--outline" disabled={aiBusy} onClick={() => void testAi()}>仅测试</button>
-                      {aiForceSave && <button className="b3-button b3-button--outline" onClick={() => void forceSaveAi()}>仍要保存</button>}
-                    </div>
-                    {aiErr.all && <span className="settings-hint">{aiErr.all}</span>}
-                    {aiMsg && <span className="settings-hint">{aiMsg}</span>}
-                  </Item>
+                    </Field>
+                    {activeDef.supportsReasoning && (
+                      <Item itemId="ai-reasoning" name="思考强度" desc="DeepSeek 的 reasoning_effort（默认 high）。思考模式下 temperature 不生效。">
+                        <select className="b3-select fn__size200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(e) => setAiDraft((d) => ({ ...d, reasoningEffort: e.target.value as AiReasoningEffort }))}>
+                          {AI_REASONING_EFFORTS.map((v) => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </Item>
+                    )}
+                    {activeDef.supportsThinking && (
+                      <Item itemId="ai-thinking" name="思考模式" desc="DeepSeek 的 thinking：关闭更省 token 与延迟；开启时温度不生效。">
+                        <select className="b3-select fn__size200" value={aiPending.thinking ?? "enabled"} onChange={(e) => setAiDraft((d) => ({ ...d, thinking: e.target.value as AiThinkingMode }))}>
+                          {AI_THINKING_MODES.map((v) => <option key={v} value={v}>{v === "enabled" ? "开启" : "关闭"}</option>)}
+                        </select>
+                      </Item>
+                    )}
+                    {(!activeDef.supportsThinking || aiPending.thinking === "disabled") && (
+                      <Item itemId="ai-temperature" name="温度" desc="0 更稳定、2 更发散。">
+                        <NumField label="温度" min={0} max={2} floor={0} fallback={0.7} value={aiPending.temperature} onSave={(n) => setAiDraft((d) => ({ ...d, temperature: n }))} />
+                      </Item>
+                    )}
+                  </Section>
+
+                  <Section title="连通性">
+                    <Block itemId="ai-test" name="测试并保存" desc="保存前先发一次最小真实请求：鉴权 / 模型类错误会拦住保存；网络 / 限流可选择仍要保存。">
+                      <div className="config-block__actions">
+                        <button className="b3-button" disabled={aiBusy} onClick={() => void testAndSaveAi()}>{aiBusy ? "测试中…" : "测试并保存"}</button>
+                        <button className="b3-button b3-button--outline" disabled={aiBusy} onClick={() => void testAi()}>仅测试</button>
+                        {aiForceSave && <button className="b3-button b3-button--outline" onClick={() => void forceSaveAi()}>仍要保存</button>}
+                      </div>
+                      {aiErr.all && <div className="config-item__error">{aiErr.all}</div>}
+                      {aiMsg && <div className="config-note">{aiMsg}</div>}
+                    </Block>
+                  </Section>
                 </Group>
                 <Group title="说明">
                   <Block name="内容只在你主动触发时外发" desc="AI 只把你要处理的文本发到上面配置的供应商；API Key 只保存在本机主进程，不参与同步、S3 与备份。" />

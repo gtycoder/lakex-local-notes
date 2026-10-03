@@ -534,19 +534,23 @@
 .b3-button:not(.quick-note-publish):not(.quick-note-discard):active { background: var(--lake-accent-ink-press); }
 .b3-button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .b3-button:disabled { opacity: .4; cursor: default; }
-.b3-button--outline {
+/* ⚠️ 变体必须带上与基座相同的 :not() 链：260930 给基座加 :not(.quick-note-publish):not(.quick-note-discard)
+ * 时把基座特异性抬到 (0,3,0)，而 --outline/--cancel 只有 (0,1,0) ⇒ **背景被基座压掉**，
+ * 全仓 40 处「描边次要钮」实际渲染成实心主色钮（260930 复核 getComputedStyle 实证）。
+ * 这里补齐特异性把变体救回来（值/语义不变，仍是「--outline = secondary 描边 / --cancel = ghost」）。 */
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).b3-button--outline {
   color: var(--lake-text-1);
   background: transparent;
   border-color: var(--lake-border-1);
 }
-.b3-button--outline:hover { background: var(--lake-bg-hover); }
-.b3-button--outline:active { background: var(--lake-bg-press); }
-.b3-button--cancel {
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).b3-button--outline:hover { background: var(--lake-bg-hover); }
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).b3-button--outline:active { background: var(--lake-bg-press); }
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).b3-button--cancel {
   color: var(--lake-text-2);
   background: transparent;
   border-color: transparent;
 }
-.b3-button--cancel:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).b3-button--cancel:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
 
 /* ── 输入框 / 下拉（P5-h：思源 .b3-text-field / .b3-select → 设计 07 / 08）────────
  * 桌面专属层。设置面板的字号/标签数/附件上限下拉与 S3 输入框、搜索框都走这两个类。 */
@@ -624,5 +628,6 @@
 
 /* Destructive-action button (P7-e): .ft__error is the existing semantic class used by buttons like 清空;
  * living in the kit layer lets the LAYER ORDER (not !important) beat .b3-button--outline neutrals. */
-.b3-button.ft__error { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 42%, transparent); }
-.b3-button.ft__error:hover { background: var(--lake-status-error-soft); }
+/* 同上：带上基座的 :not() 链，否则被 .b3-button 基座/--outline 变体的 color 压掉（危险操作看不出是危险操作）。 */
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).ft__error { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 42%, transparent); }
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).ft__error:hover { background: var(--lake-status-error-soft); }

@@ -66,6 +66,44 @@ export const TOOLBAR_BLOCK_ITEMS: ToolbarBlockItem[] = [
   { name: "code", label: "行内代码", icon: "editor-inlinecode", kind: "mark" },
 ];
 
+/**
+ * 浮动栏「格式」父入口的菜单项（260930 用户：6 个按钮合并成一个父级入口 + 6 个子功能）。
+ *   = 上面的块级/行内代码 5 项 + 链接；菜单里在 `block` 与 `mark|link` 之间插一条分隔线。
+ *   `kind: "link"` 不是格式命令：选中它要弹内核链接编辑层（文本 + 地址），走 openLinkEditor。
+ */
+export interface ToolbarFormatItem { name: string; label: string; icon: string; kind: "block" | "mark" | "link"; }
+export const TOOLBAR_FORMAT_ITEMS: ToolbarFormatItem[] = [
+  ...TOOLBAR_BLOCK_ITEMS,
+  { name: "link", label: "链接", icon: "editor-link", kind: "link" },
+];
+/**
+ * 浮动栏「段落与格式」父入口的完整菜单（260930 用户：把原**独立**的「段落样式」按钮并进来）。
+ * 顺序 = 段落样式（正文 / 标题1–6）→ 块级（有序 / 无序 / 待办 / 引用）→ 行内（行内代码 / 链接）；
+ * 菜单里按这三组插两条分隔线。并进来之后父入口默认态直接显示内核的「正文」图标（editor-paragraph），
+ * 不必再为它单独挑一个"不撞图"的图标 —— 原来那个独立按钮已经不存在了。
+ */
+export interface ToolbarBlockTypeItem {
+  /** 稳定键：段落样式用 `style:p|h1..h6`，其余用内核命令名。 */
+  key: string;
+  label: string;
+  icon: string;
+  kind: "style" | "block" | "mark" | "link";
+  /** 仅 `kind:"style"`：内核段落样式命令的取值（p / h1..h6）。 */
+  value?: string;
+  shortcut?: string;
+}
+export const TOOLBAR_BLOCK_TYPE_ITEMS: ToolbarBlockTypeItem[] = [
+  ...PARAGRAPH_STYLES.map((s) => ({
+    key: "style:" + s.value,
+    label: s.menuLabel,
+    icon: s.value === "p" ? "editor-paragraph" : "editor-" + s.value,
+    kind: "style" as const,
+    value: s.value,
+    shortcut: s.keys,
+  })),
+  ...TOOLBAR_FORMAT_ITEMS.map((i) => ({ key: i.name, label: i.label, icon: i.icon, kind: i.kind })),
+];
+
 /** 行内标记命令（需先有选中文本，且不可在面板 blur 后执行） */
 export const MARK_COMMANDS: EditorCommandDef[] = [
   { name: "bold", label: "加粗", group: "mark" },
