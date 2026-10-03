@@ -87,8 +87,11 @@
    原生高亮随之消失；这里按打开前捕获的 Range 画一层，交互结束即移除。
    颜色用内核选区同一个令牌（--lakex-editor-selection = --lake-select-bg），观感与原生选区一致；
    层级与浮栏同级但排在浮栏之前 ⇒ 浮栏/对话框压在它上面。 */
-.selection-toolbar__aisel { position: fixed; inset: 0; z-index: var(--lake-z-dropdown); pointer-events: none; }
-.selection-toolbar__aisel > span { position: absolute; border-radius: 2px; background: var(--lake-select-bg); }
+/* 关键：用 multiply 让这层「等效于背景色」——原生选区是 `.ne-engine ::selection{background;color:inherit}`
+   画在**文字底下**的；直接盖在文字上会把字色也染蓝（用户 261003 报「样式不对」）。
+   multiply 下白底得到同一色值（255*.84+91*.16），黑字仍是纯黑 ⇒ 与原生逐像素一致；也不加圆角（原生没有）。 */
+.selection-toolbar__aisel { position: fixed; inset: 0; z-index: var(--lake-z-dropdown); pointer-events: none; mix-blend-mode: multiply; }
+.selection-toolbar__aisel > span { position: absolute; background: var(--lake-select-bg); }
 /* 图片浮栏的「非菜单」弹窗（宽高 / 链接 / 边距）：白卡 + 内距，令牌化；定位同 __kmenu（贴触发项、越界左移）。
    `width: max-content` 同 __kmenu：否则「为图片添加上/下边距」会被压成多行（260924 点验修）。 */
 .selection-toolbar__cardpop {

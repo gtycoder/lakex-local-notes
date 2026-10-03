@@ -385,10 +385,18 @@ export function SelectionToolbar({ editor, container }: {
       const range = aiRangeRef.current;
       if (!range) { setAiSelRects(null); return; }
       try {
-        const rects = [...range.getClientRects()]
+        const next = [...range.getClientRects()]
           .filter((r) => r.width > 0 && r.height > 0)
           .map((r) => ({ left: r.left, top: r.top, width: r.width, height: r.height }));
-        setAiSelRects(rects.length > 0 ? rects : null);
+        const value = next.length > 0 ? next : null;
+        // 只在矩形**真的变了**时才更新状态（打字时每次 selectionchange 都会走到这里，无脑 set 会反复重渲染 = 闪）。
+        setAiSelRects((prev) => {
+          if (prev === value) return prev;
+          if (!prev || !value || prev.length !== value.length) return value;
+          const same = prev.every((r, i) => Math.abs(r.left - value[i].left) < 0.5 && Math.abs(r.top - value[i].top) < 0.5
+            && Math.abs(r.width - value[i].width) < 0.5 && Math.abs(r.height - value[i].height) < 0.5);
+          return same ? prev : value;
+        });
       } catch { setAiSelRects(null); }
     };
     measure();

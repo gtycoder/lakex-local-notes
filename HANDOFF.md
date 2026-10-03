@@ -33,6 +33,9 @@
   - 修法 = 用**打开前捕获的 Range**（`aiRangeRef`，P2 做「替换选区」时留下的）**自绘一层高亮**：颜色取内核选区同一令牌 `--lake-select-bg`（内核 `--lakex-editor-selection` 即它，观感一致）；跟滚动/缩放重算；Range 失效（DOM 重渲染）就自动收起，不画假的；关闭面板即移除。渲染在**工具栏之外**（选区折叠后工具栏会 `return null`，挂里面会被一起卸载）。
   - ⚠️ **只在原生高亮已经没了的时候才画**（用户 261003 实测反馈「叠成了两层」）：`measure()` 先看 `window.getSelection()`，原生还非折叠就**一层都不画**，交给浏览器画；触发点 = `selectionchange` + `focusin/focusout` + 滚动 + 缩放。
   - 实测：打开面板（原生还在画）→ 自绘层 `exists:false`（不叠）；在提问框输入使原生折叠（`nativeCollapsed:true`）→ 自绘层出现、矩形与原文一致；点关闭 → 移除。
+  - **试过"不自绘层"的替代方案并否决**（用户 261003 问「有没有不自绘层的修法」）：把捕获的 Range 塞回 `document.getSelection()`（云端 AI 插件"护选区"的思路）。实测两个致命问题：① 会把**输入框的焦点顶掉**、之后完全打不进字（`textarea.value` 不再更新）；② 触发 `selectionchange` **无限循环**（2 秒 22749 次）。根因：浏览器只在"document selection 所在的那个可编辑区"里画原生高亮，另一个输入框拿到焦点后旧选区无法保留 ⇒ **必须自绘**。
+  - **样式对齐（用户 261003 反馈"样式不对"）**：原生是 `.ne-engine ::selection{background:var(--lakex-editor-selection);color:inherit}`——画在文字**底下**；自绘层盖在文字**上面**会把字色也染蓝、还多了 2px 圆角。改法 = `mix-blend-mode: multiply`（白底得到与原生同一色值 `255*.84+91*.16`，黑字仍是纯黑 ⇒ 4× 放大截屏逐像素一致）+ 去掉圆角。
+  - **去抖（用户 261003 反馈"有点闪烁"）**：打字时每次 `selectionchange` 都会走到 `measure()`，无脑 `setState` 会反复重渲染 ⇒ 现在只在矩形**真的变了**（>0.5px）时才更新状态。
 - **调研结论（已排除，避免重复投入）**：morphicons（https://www.morphicons.com）**不是图标库**，是"两个**描边**图标之间的形变动画引擎"（MIT、~6-8KB gzip、零依赖）。内核那 325 个图标是**填充**图标（`fill="currentColor"` 236 处 + 硬编码灰阶）且带 `<g>`/`transform` —— README 明确：纯填充会在解析期报错、不支持 `<g>`/`transform` ⇒ **内核图标一个都换不了**（要换=改 vendor，红线）；我们自己那 57 个文件用 `lucide-react`（描边，兼容），但它只吃 vanilla `lucide` 的**数据**、不吃 `lucide-react` 组件 ⇒ 等于给图标开第二个来源。**用户 261003 决定先不做。**
 - 门禁：`tsc` ✓ · vitest **1537 passed / 16 skipped** ✓ · 桌面 + 移动构建 ✓ · `ui-metrics`（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · `check:core` 0 违规 ✓ · `git diff --check` ✓。
 - **本批未验证（诚实边界）**：移动端设置抽屉（共用同一套原语，但只加载自己的 CSS，本批**未跑模拟器**）；深色/暖色主题未逐屏对拍；窄窗（<800px）下目录栏为浮层盖住编辑区时，菜单仍可能被该浮层压住（那种布局通常也选不到被盖住的文字）。
