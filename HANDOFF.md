@@ -18,6 +18,54 @@
 - 真实 Electron（隔离 `/tmp/lake-blk-261004`，自造「引用 + 无序/有序列表」文档）实测：引用内第二个列表项句柄 top=233=该项；其「转化为」11 项（无序*）；引用内两项多选 → 高亮 2 块、句柄 top=203=首项；引用首行句柄 top=166=引用 top、「转化为」15 项（引用*）→ 点「引用」→ `ne-quote` 消失、内部块（含列表类型）提升到顶层；整块背景像素实测 rgb(220,234,250) 铺满整行。
 - 诚实边界：云端「多块拖选合并」的真实鼠标拖拽手势未复现（browser-skill 无拖拽）；`git diff --check` 仅报 vendor **重建产物** `dist/index.cjs.js` 的**既有**行尾空白（HEAD 同位置也有）。
 
+### 修复 · 261004 · AI 助手弹窗定位（绝不盖住选区）
+
+- 用户 261004 报「AI 弹窗又盖住了选区」；隔离 Electron + mock OpenAI SSE 真实端复现：面板内容流式长到 `maxHeight` 后**翻到选区上方**（实测面板 top **153**、选区 bottom 471）。
+- 根因：弹窗走通用 `usePopoverPosition` / `placePopoverAtPoint` 的「下方放不下就翻上方」；而 `maxHeight` 用 `Math.round` 向上取整、恰好比可用空间多不到 1px，令「下方是否放得下」判定失败 ⇒ 翻转。
+- 修复：① 新增 `placePopoverAtPointBelow`（只放锚点下方）+ `usePopoverPosition` 的 `allowFlip` 选项（默认 true，其它浮层不变），AI 弹窗传 `allowFlip:false`；② `maxHeight` 改 `Math.floor`；③ 选区自绘层 `measure()` 同步刷新锚点，**面板跟随选区滚动**；④ 打开时 `reserveAiDialogSpace` 只补到 `AI_DIALOG_MIN_HEIGHT`（**克制版**：生成再长交面板内滚动，不再推编辑区）；⑤ 顺带修 `reserveAiDialogSpace/clearAiDialogSpace` 取「文档第一个 `.lake-editor-mount`」（keep-alive 下可能是隐藏实例）→ 改取可见挂载点。
+- 真实端实测（隔离 userData/端口）：`AT OPEN` / `AFTER STREAM` / 上滚 / 下滚 四态 `covers:false`；护栏 `aiAssistantDialog.test.ts`(5) + `topMenuPosition.test.ts` 新增用例。
+- 门禁：tsc ✓ · vitest **1592 passed / 16 skipped** ✓ · check:core 0 ✓ · ui-metrics（hex=0/rgb=0/`!important`=9/未定义令牌=0）✓ · 双端 build ✓ · cssLayers+uiPrimitives ✓ · `git diff --check` ✓。**未提交（待验收）**。
+- 改动：`src/features/ai/AiAssistantDialog.tsx` · `src/features/editor/selectionToolbar/SelectionToolbar.tsx` · `src/hooks/topMenuPosition.ts` · `src/hooks/usePopoverPosition.ts` · `src/hooks/topMenuPosition.test.ts` · `src/features/ai/aiAssistantDialog.test.ts`(新)。
+
+### 修复 · 261004 · 浮动选区工具栏滚动后「干到顶栏」
+
+- 用户 261004 报：选中文字后浮动工具栏正常，**一滚动就跑到顶栏里**。隔离 Electron 实测两处根因：
+  1. `computeToolbarPosition` 的「下方档」只按 `anchor.bottom + gap` 定位、**没有夹 topLimit**；选区被滚到顶部时 anchor.bottom+gap 落进/越过顶界（内核固定工具栏底边）⇒ 浮栏出现在固定工具栏之上、乃至顶栏。
+  2. 顶界来源 `document.querySelector(".ne-ui-toolbar")` 取的是**文档第一个**实例；多 tab keep-alive 下第一个是隐藏实例（实测 rect 高 **0**），顶界塌成 host.top+8，进一步让「上方档」成立。
+- 修复：① `computeToolbarPosition` 下方档 top = `Math.max(topLimit, belowTop)`（与上方档同一条顶界线）；② 新增 `visibleChromeToolbar()`（取 rect 高 >0 的 `.ne-ui-toolbar`），浮动栏定位与 `clampToEditorArea` 两处都改用它。
+- **最终口径（用户 261004 三次追加后定稿）**：浮栏**始终贴在选区上方**、随滚动自然移动；**不做**显隐切换（会闪）；滚到顶界以上时**被固定工具栏/顶区盖过去**（不是盖在它们上面）；快滚不能跳。
+- **最终方案（用户「做，还是跳」后彻底改）**：浮栏宿主挂进编辑区**滚动容器** `.ne-editor-wrap`（内核实测 `position:relative + overflow:auto`），用**内容坐标**绝对定位
+  （`top = rect.top - wrapRect.top + wrap.scrollTop`）⇒ 它随正文一起滚（合成器线程同步、零相对位移）、并被滚动容器裁切
+  （滚到顶界以上从固定工具栏下沿滑出）。**滚动时无需任何 JS 更新**，从根上消除跳动。
+- 关键改动：`mountSelectionToolbar` 把 host 挂到 `.ne-editor-wrap`；`.selection-toolbar` 由 `position:fixed` 改 `absolute`；
+  `placeToolbarNow` 用**实时**选区 rect（非 state 快照）换算内容坐标（避免快照与 scrollTop 不同步造成的漂移）；不再用 clip-path / scroll 重定位。
+- AI 自绘选区层保持 inline（`position:fixed` 逃逸 overflow，照常工作）；**不用 createPortal**（否则触 UI 原语门禁）。
+- 过程中试过并撤掉：可见带收起/重现；clip-path 裁切版；命令式 scroll 重定位版（摆动 99→10px 仍有残留）。
+- 真实端（隔离 userData/端口）：页面内 rAF 平滑滚 wrap 实测 `selTop - toolbarTop` **range 0**（完美跟随）；`toolbarCount` 恒 1；越过顶界由滚动容器裁切。
+- 门禁：tsc ✓ · 全量 vitest **1600 passed / 16 skipped** ✓ · 双端 build ✓ · ui-metrics/cssLayers/uiPrimitives ✓ · `git diff --check` ✓。**未提交（待验收）**。
+- 改动：`SelectionToolbar.tsx` · `useSelectionToolbar.ts` · `mountSelectionToolbar.ts` · `selectionToolbar.css` · `selectionToolbarModel.ts`(+test) · `selectionToolbar.wiring.test.ts`(新)。
+
+### 修复 · 261004 · AI 弹窗跳动 / 自绘选区画到顶栏
+
+- 用户 261004 报：AI 弹窗也跳；自绘选区高亮也画进顶栏（与浮动工具栏同类问题）。**定稿口径**：AI 浮窗也要**跟着滚动**（浮动工具栏在选区上方、AI 在选区下方），并且**高度封顶、超出面板内滚动**。
+- 修复（全部统一到「挂在滚动内容里 + 内容坐标」）：
+  1. **原选区高亮：自绘**（用户 261004「彻查/别反复打补丁」）。三条路都实测过：
+     · **保留内核原生选区**（最理想，逐像素一致）：实测 `selection.addRange()` / `setBaseAndExtent()` 都会把焦点**拉回编辑器**（`activeElement` 从提问框变成 `ne-engine`）⇒ 提问框失去焦点、没法打字，与「输入框可聚焦」**互斥**，不可行。
+     · **CSS Custom Highlight API**（`::highlight()`）：不动选区/焦点、很稳；但实测 Chromium 里它**只画字形盒（≈21px）**，而内核原生选区按**行盒（≈30px）**绘制 ⇒ 比原生矮一截、行间露缝（用户 261004：「行间距没处理，前后效果不同」）⇒ 放弃。
+     · **自绘（采用）**：**逐文本节点**取矩形 —— `Range.getClientRects()` 跨块时会额外返回「块盒」（整块满宽、还可能跨多行），列表/标题会被并成一大条满宽背景（用户 261004 截图实证）；改成逐文本节点的子 Range，只拿文字盒。**逐片段**取行高（标题/列表/正文行高各不相同，统一行高会把正文撑得过高）。**列表标志**（`ne-oli-i` / `ne-uli-i` / `.ne-list-symbol`）**排除**（内核原生选区**不渲染**标志，用户 261004 截图实证）；每个矩形**右缘补一个空格宽**（内核选区矩形含行尾空格，`getClientRects()` 只到最后一个字形）。再走单一来源 `lineBoxRects()` 撑到行高 + 按**垂直中心**按行并成一个（有单测）。宿主在 `.ne-editor-wrap` 里用**内容坐标**绝对定位（随正文滚、被容器裁切、**不监听 scroll** ⇒ 不跳动）。
+     ⚠️ 分组判据必须是**垂直中心**（同一行的行盒/文字盒中心一致，相邻行相差一个行高）；**不能用「矩形相交」**——撑开后相邻行首尾相接、稍一重叠就会把 2~4 行并成一大块（用户 261004 实测截图），已有回归单测。
+  2. **AI 弹窗**：`Overlay` 新增可选 `container`（portal 目标）；`AiAssistantDialog` 新增 `scroller`，浮动工具栏入口传 `.ne-editor-wrap`，面板渲染进滚动容器、`position:absolute` + **内容坐标**（`contentAnchor = at − 内容原点`，只在 open/at 变化时算一次）⇒ 随正文滚；顶栏入口不传 `scroller`，维持原视口级 fixed。
+  3. **高度封顶**：内容自适应与手动拖拽上限都 = **编辑区可视高 − 2×边距**，超出交 `.ln-dialog__body` 内部滚动（不无限扩大）。
+  4. **右下角拖拽把手**（用户 261004）：`.ai-dialog__grip`，**只改高度**（上下可拖、左右不动），夹在 `[AI_DIALOG_RESIZE_MIN=140, resizeMax]`；**不做记忆**（关掉即恢复自适应）；按钮行右侧留 18px 不压「关闭」。
+  5. **按钮不做特殊高亮**（用户 261004）：「替换选区」去掉 `.ln-btn--primary`，与其它按钮同级。
+  7. **点 AI 不闪**（用户 261004）：自绘层的测量改 **`useLayoutEffect`**（绘制前同步算好并 setState）——原生选区会被提问框 autoFocus 折叠，自绘层若晚一帧才挂上，中间就有一帧「原生已消失、自绘还没出现」= 闪一下。逐帧实测：点击后**第 0 帧就有自绘矩形、原生已隐藏**，其后每帧 diff=0。
+  6. **打开面板不滚动编辑区**（用户 261004：选区跳动体感极差）：删掉整条 `reserveAiDialogSpace`（打开时向下滚编辑区补空间，实测一帧内最多跳 **807px**）；追问框改 `focus({ preventScroll: true })`（面板在滚动容器里，普通 focus 会把面板滚进可视区 ⇒ 整个编辑区跟着跳）。
+- 真实端（隔离 userData/端口）：打开面板前后 `scrollTop` **恒 0**（不跳）；自绘高亮与原生选区**同高**（每行 59px@2x）；AI 弹窗 `styleTop` 恒 1250.5（内容坐标），滚动时面板与选区**同步位移**。
+- 缩放手感实测：下拖 +160 → 高 89→**249**（宽不变）；左拖 −120 → 宽仍 **654**；上拖 −400 → 夹到 **140**；下拖 +600 → 到达 **682**（编辑区可视高）。
+- 全格式对拍（标题 h1/h2 · 段落 · 无序列表 · 有序列表 · 引用 · 尾段，逐条像素比）：自绘与内核原生各条高亮带的 y/宽在 **≤8px（2x 图，≈4 CSS px，行尾空格/取整）**内一致，行高逐片段正确（h1 37 / h2 32 / 正文·列表 30）。
+- 门禁：tsc ✓ · 全量 vitest **1607 passed / 16 skipped** ✓ · 双端 build ✓ · ui-metrics/cssLayers/uiPrimitives ✓ · `git diff --check` ✓。**未提交（待验收）**。
+- 改动：`Overlay.tsx` · `AiAssistantDialog.tsx` · `SelectionToolbar.tsx` · `selectionToolbar.css` · 护栏 `aiAssistantDialog.test.ts`/`selectionToolbar.wiring.test.ts`。
+
 ### 当前批次 · 261003-UI（设置页重做 + 浮动工具栏「格式」合并 + AI 选区高亮）
 
 #### 261003 · 画板 AI（已接通，实机验收通过）
@@ -81,9 +129,9 @@
 
 ### 当前批次 · 261003-AIFIELD（多维表 AI 字段 + Markdown 字段 · 已实施待验收）
 - 用户定稿路线：**不做飞书式 AI 单元格操作**；`ai` 字段——**命令里用 `{{字段名}}` 字段变量**（「插入字段」可插多个、生成时**原位替换**；不再拼字段值列表）、值为文本快照、**手动生成/不自动重跑**；**261004 追加**：新增 `markdown` 字段类型，**AI 字段默认按 Markdown 口径**（单元格去标记单行预览 + 悬停「展开」→ 浮窗**编辑/预览**双模，模仿钉钉；AI 面板头部带「重新生成」、**值可手动编辑**）。任务定义见专项文档 §7 批次 G，明细见 §11/§13。
-- 实现：core（`ai` 类型 + `{prompt}` 单一来源 + `buildAiFieldMessages`/`aiPromptFieldNames` + 重命名联动 `renameAiFieldToken` + `markdown` 类型并入文本口径 + CSV 拒绝导入 AI）；渲染器 `markdown.tsx`（常用子集、React 元素、不用 innerHTML；表格/图片首版不做）；单元格（AI 状态机 + `MarkdownCell`；展开浮窗抽出**共用壳 `ExpandPanel`**，文本格同款）；列菜单「AI 生成整列」（仅空缺/全部、确认、进度、取消、失败重试）；并发 3、整批 `beginGesture/endGesture` = **一次撤销**；只读无入口（展开只给预览）；移动端文本回退。**无新 IPC、无新依赖**。
-- 门禁：tsc ✓ · vitest **1580 passed / 16 skipped** ✓ · check:core 75 文件 0 违规 ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · cssLayers+uiPrimitives ✓ · 桌面 + 移动构建 ✓ · 本改动范围 `git diff --check` 干净（仓库级报错在另一会话在途的 vendor dist，未触碰）。
-- 真实端 CDP **21/21**（隔离实例 + mock OpenAI）：插入字段 → `根据{{文本}}` 原位替换；Markdown 字段展开编辑→预览→落盘；AI 值 MD 预览 / 展开 / 手改落盘 / 「重新生成」回写；整列空缺 2/2；**一次 ⌘Z 撤销整批**（单格结果保留）；锁定入口消失/值保留；解锁恢复。
+- 实现：core（`ai` 类型 + `{prompt}` 单一来源 + `buildAiFieldMessages`/`aiPromptFieldNames` + 重命名联动 `renameAiFieldToken` + `markdown` 类型并入文本口径 + CSV 拒绝导入 AI）；渲染器 `markdown.tsx`（常用子集、React 元素、不用 innerHTML；表格/图片首版不做）；单元格（AI 状态机 + `MarkdownCell`；展开浮窗抽出**共用壳 `ExpandPanel`**，文本格同款）；列菜单「AI 生成整列」（仅空缺/全部、确认、进度、取消、失败重试）；并发 3、整批 `beginGesture/endGesture` = **一次撤销**；只读无入口（展开只给预览）；移动端文本回退。**无新 IPC、无新依赖**。**261004-b 样式归位（用户指出后按官方审计收敛）**：编辑·预览走 kit 的 `.ln-segment`、说明文字 `.bt-field-label-text`、告警 `.ln-tag--error`、「插入字段」`.bt-secondary`；删繁写头与自写小按钮；两 CSS 字号/间距/圆角全量化令牌（官方审计 lookalike 0.86→0.61、重复族清零；基线 43→32 / 67→59）。**261004 续**：展开浮窗**尺寸本地记忆**（`text`/`md` 各一份、松手写盘、只记大小）+ `.bt-md-cell` 右缘留位（与文本格 26px 同义，两格都不压字）。
+- 门禁：tsc ✓ · vitest **1586 passed / 16 skipped** ✓ · check:core 75 文件 0 违规 ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · cssLayers+uiPrimitives ✓ · 桌面 + 移动构建 ✓ · 本改动范围 `git diff --check` 干净（仓库级报错在另一会话在途的 vendor dist，未触碰）。
+- 真实端 CDP **23/23**（隔离实例 + mock OpenAI）：插入字段 → `根据{{文本}}` 原位替换；Markdown 字段展开编辑→预览→落盘；AI 值 MD 预览 / 展开 / 手改落盘 / 「重新生成」回写；展开浮窗拖动/缩放不回弹 + **重开沿用记住的大小（480×320）**；整列空缺 2/2；**一次 ⌘Z 撤销整批**（单格结果保留）；锁定入口消失/值保留；解锁恢复。
 - **未提交（待验收）**；Android 未跑（移动端代码本批未改）；**图片/附件内容（多模态）不做**（用户 261004 决定：只传文件名）。
 
 ### 当前批次 · 260930-AI-P0（已实施，本轮提交）

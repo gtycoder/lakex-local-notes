@@ -46,6 +46,8 @@ interface OverlayProps {
   surfaceRef?: Ref<HTMLElement>;
   /** 外点关闭豁免：返回 true 时不关闭（如锚点按钮本身） */
   ignoreOutside?: (target: Node) => boolean;
+  /** portal 目标容器；缺省 document.body。传编辑器滚动容器可让浮层随内容滚（见 AI 弹窗）。 */
+  container?: HTMLElement | null;
   /** 点击其它嵌套浮层时也关闭本层；默认 false = 保留悬停子菜单的父层保护。 */
   closeOnNestedOverlay?: boolean;
   /** dialog 打开后的首焦点；缺省取首个可操作项 */
@@ -53,7 +55,7 @@ interface OverlayProps {
   children: ReactNode;
 }
 
-export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, raised, surfaceRef, ignoreOutside, closeOnNestedOverlay = false, initialFocus, children }: OverlayProps) {
+export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, raised, surfaceRef, ignoreOutside, container, closeOnNestedOverlay = false, initialFocus, children }: OverlayProps) {
   const [overlayId] = useState(() => (overlaySeq += 1));
   const innerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -166,7 +168,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
           {children}
         </section>
       </div>,
-      document.body,
+      container ?? document.body,
     );
   }
 
@@ -182,7 +184,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     >
       {children}
     </div>,
-    document.body,
+    container ?? document.body,
   );
 }
 

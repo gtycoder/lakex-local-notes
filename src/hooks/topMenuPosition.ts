@@ -107,6 +107,31 @@ export function placePopoverAtPoint(
   };
 }
 
+/** 水平夹取的共用实现（至少留出 margin）。 */
+function clampLeft(x: number, viewport: ViewportSize, popover: PopoverSize, margin: number): number {
+  return Math.round(Math.max(margin, Math.min(x, Math.max(margin, viewport.width - popover.width - margin))));
+}
+
+/**
+ * 坐标锚点定位，但**只放在锚点下方、绝不翻到上方**（AI 弹窗专用，用户 261004 定稿）。
+ *
+ * 为什么需要它：`placePopoverAtPoint` 在「下方放不下」时会翻到锚点上方 —— 对单元格/右键菜单
+ * 是对的（"至少完整可见"），但对**贴着选区**的 AI 弹窗是错的：翻上去就直接盖住选区，
+ * 正是用户反复报的那个问题。这里顶部只夹到 margin，永远 >= 锚点 y；空间不足由调用方
+ * 先滚动编辑区补足，或让面板内部滚动，而不是改到选区上方。
+ */
+export function placePopoverAtPointBelow(
+  point: { x: number; y: number },
+  viewport: ViewportSize,
+  popover: PopoverSize,
+  margin = 8,
+): { top: number; left: number } {
+  return {
+    top: Math.round(Math.max(margin, point.y)),
+    left: clampLeft(point.x, viewport, popover, margin),
+  };
+}
+
 /**
  * 兼容入口（原有 5 处调用）：现已是 placePopoverPosition 的薄封装，
  * 因此也获得「下方放不下就向上翻」的行为；margin 取 gap 保持原语义。

@@ -1864,20 +1864,18 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
         {isAi && (
           <div className="bt-ai-config">
             <div className="bt-field-label"><span>命令（AI 按它生成内容；字段变量插在命令里）</span></div>
-            <div className="bt-ai-prompt-wrap">
-              <textarea ref={aiPromptRef} className="bt-input bt-ai-prompt" rows={4} value={aiPrompt} readOnly={readOnly}
-                placeholder="例如：阅读{{附件}}，先写一段摘要，再列出核心要点"
-                onChange={(event) => setAiPrompt(event.target.value)} />
-              <button type="button" className="bt-select-trigger bt-ai-insert" disabled={readOnly}
-                aria-haspopup="dialog" aria-expanded={Boolean(aiInsertAnchor)}
-                onClick={(event) => setAiInsertAnchor(event.currentTarget)}>
-                <Plus size={13} />插入字段<ChevronDown size={14} />
-              </button>
-            </div>
+            <textarea ref={aiPromptRef} className="bt-input bt-ai-prompt" rows={4} value={aiPrompt} readOnly={readOnly}
+              placeholder="例如：阅读{{附件}}，先写一段摘要，再列出核心要点"
+              onChange={(event) => setAiPrompt(event.target.value)} />
+            <button type="button" className="bt-secondary bt-ai-insert" disabled={readOnly}
+              aria-haspopup="dialog" aria-expanded={Boolean(aiInsertAnchor)}
+              onClick={(event) => setAiInsertAnchor(event.currentTarget)}>
+              <Plus size={13} />插入字段<ChevronDown size={14} />
+            </button>
             {aiInsertAnchor && (
               <Popover open anchor={aiInsertAnchor} onClose={() => setAiInsertAnchor(null)} width={220}>
                 <div className="bt-panel">
-                  {aiRefCandidates.length === 0 && <div className="bt-ai-dialog-note">这张表里还没有其它字段可以引用</div>}
+                  {aiRefCandidates.length === 0 && <div className="bt-field-label-text">这张表里还没有其它字段可以引用</div>}
                   {aiRefCandidates.map((candidate) => (
                     <button key={candidate.id} type="button" className="bt-menu-item ln-menu__item"
                       onClick={() => { insertAiToken(candidate.name); setAiInsertAnchor(null); }}>
@@ -1887,14 +1885,17 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
                 </div>
               </Popover>
             )}
-            <p className="bt-ai-dialog-note">
+            <div className="bt-field-label-text">
               {aiTokenNames.length === 0
                 ? "还没有插入字段：请用「插入字段」把要参考的字段插入到命令里（单元格才会出现「AI 生成」）。"
                 : "已插入 " + aiTokenNames.length + " 个字段；生成时 " + "{{字段名}}" + " 会原位替换为当前行该字段的值。"}
               {aiMissingNames.length > 0 && (
-                <span className="bt-ai-warn">（未找到：{aiMissingNames.map((name) => "{{" + name + "}}").join("、")}，生成时按空处理）</span>
+                <>
+                  {" "}
+                  <span className="ln-tag ln-tag--error">未找到：{aiMissingNames.map((name) => "{{" + name + "}}").join("、")}（生成时按空处理）</span>
+                </>
               )}
-            </p>
+            </div>
           </div>
         )}
         {supportsOptions && (

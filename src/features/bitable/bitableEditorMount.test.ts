@@ -1051,14 +1051,34 @@ describe("Markdown 字段与展开浮窗护栏（261004）", () => {
     expect(DOC).toMatch(/field\.type === "markdown"\) \{/);
   });
 
-  it("展开浮窗：文本 / Markdown 共用同一个壳（单一来源）+ 编辑·预览双模 + AI 头部重新生成", () => {
+  it("展开浮窗：共用壳（单一来源）+ 编辑·预览走 ln-segment 原语 + AI 头部重新生成（261004-b 样式归位）", () => {
     expect(CARDS).toContain("function ExpandPanel(");
     expect(CARDS.match(/<ExpandPanel anchor=\{anchor\}/g)).toHaveLength(2);
     expect(CARDS).toContain('aria-label="编辑或预览"');
-    expect(CARDS).toContain('className={"b3-button b3-button--outline seg__item" + (mode === "edit" ? " is-active" : "")}');
+    expect(CARDS).toContain('className={"ln-segment__item" + (mode === "edit" ? " is-active" : "")}');
     expect(CARDS).toContain('onClick={() => setMode("preview")}');
     expect(CARDS).toMatch(/onRegenerate=\{canGenerate \? onGenerate : undefined\}/);
     expect(CARDS).toContain("重新生成");
+    expect(CARDS).toContain('className="bt-secondary"');
+    expect(CARDS).toContain('remember="text"');
+    expect(CARDS).toContain('remember="md"');
+    expect(CARDS).toContain("lake-notes-v3.bitable-expand-size");
+    // 不再用 legacy 分段（.seg / b3-button--outline），也不再自写繁写头 / 小按钮规则
+    expect(CARDS).not.toMatch(/seg__item/);
+    expect(CARDS).not.toContain("bt-md-expand-head");
+    expect(CARDS).not.toContain("bt-md-expand-regen");
+  });
+
+  it("样式归位：字号 / 间距 / 圆角全走令牌（无字面量、无颜色字面量）；说明文字走既有 .bt-field-label-text", () => {
+    const AI_FIELD_CSS = readFileSync(new URL("./bitableAiField.css", import.meta.url), "utf8");
+    for (const css of [MD_CSS, AI_FIELD_CSS]) {
+      expect(css).not.toMatch(/(font-size|gap|margin[a-z-]*|padding[a-z-]*):\s*[^;]*\d+px/);
+      expect(css).not.toMatch(/border-radius:\s*\d+px/);
+      expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+    }
+    expect(EDITOR).toContain("bt-field-label-text");
+    expect(EDITOR).toContain("ln-tag ln-tag--error");
+    expect(EDITOR).not.toMatch(/bt-ai-dialog-note|bt-ai-dialog-summary|bt-ai-warn|bt-ai-prompt-wrap/);
   });
 
   it("Markdown 渲染器：子集渲染 + 单行纯文本预览 + 不用 innerHTML + 链接只认 http(s)", () => {

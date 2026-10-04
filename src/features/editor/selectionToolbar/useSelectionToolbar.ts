@@ -33,7 +33,7 @@ function toRect(r: DOMRect | DOMRectReadOnly): Rect {
   return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
 }
 
-function firstRangeRect(range: Range): Rect | null {
+export function firstRangeRect(range: Range): Rect | null {
   const rects = Array.from(range.getClientRects());
   const r = (rects.length > 0 ? rects[0] : range.getBoundingClientRect()) as DOMRect;
   if (!r || (r.width <= 0 && r.height <= 0)) return null;
@@ -50,6 +50,8 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   const [target, setTarget] = useState<SelectionTarget | null>(null);
   const [state, setState] = useState<ToolbarState>(EMPTY_STATE);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  /** 最新目标（与 target state 同步更新）：滚动时命令式定位要**同步**读它，不能等 React 渲染。 */
+  const targetRef = useRef<SelectionTarget | null>(null);
   const imageRef = useRef<ImageTarget | null>(null);
   /** 指针按住中（拖选进行中）：此时不弹浮框，等完全松开再弹（否则从下往上选会被挡住）。 */
   const pressingRef = useRef(false);
@@ -134,6 +136,7 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     // pointerdown 直接 setTarget(null) 关闭，不受此影响。
     if (holdRef?.current) return;
     const next = computeTarget();
+    targetRef.current = next;
     setTarget(next);
     if (next?.kind === "text") setState(readState());
   }, [computeTarget, readState, holdRef]);
@@ -246,5 +249,5 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     };
   }, [container, editor, refresh, refreshSettled]);
 
-  return { target, state, run, refresh, toolbarRef };
+  return { target, state, run, refresh, toolbarRef, targetRef };
 }

@@ -823,7 +823,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | D01 CSV 导入（bitable） | 待验收 | 260930-CSV | 首行表头 → 列映射（已有字段 / 新建文本字段 / 忽略）→ 追加到当前活动表；类型不符**丢弃该格并报告**，绝不写坏值；关联按目标主字段标题匹配。见 §13 |
 | 导出菜单按文档类型拆分 + 移除 Lake 导出 | 待验收 | 260930-CSV | doc：markdown/html/pdf/资料路径（**删除「导出为原生 Lake」**）；sheet：CSV/Excel 占位；bitable：CSV；board：PNG/SVG 占位。见 §13 |
 | D01 续：导出为压缩包（bitable） | 待验收 | 260930-CSV | 活动数据表 → ZIP：内含 `{表名}.csv` + `附件/{文件名}`；附件/图片字段引用的真实文件一并打包；同名附件自动 (2) 后缀并让 CSV 指向归档内相对路径；自写 store 方式流式写盘（无新依赖，标准 ZIP、UTF-8 名）。见 §13 |
-| AI01 AI 字段（单一类型） | 待验收 | 261003-AIFIELD | 用户 261003 定稿路线：**不做飞书式 AI 单元格**；只做一个 `ai` 字段类型——**命令里用 `{{字段名}}` 字段变量**（编辑器「插入字段」插到光标处、可插多个，生成时**原位替换**；不再拼字段值列表）、值为文本快照、**不自动重跑**（手动「生成/重新生成」）。已实施：core（类型 + `{prompt}` 单一来源 + `buildAiFieldMessages`/`aiPromptFieldNames` + 重命名联动 `renameAiFieldToken` + CSV 拒绝导入）+ 单元格状态机（未配置/生成中/失败重试/重新生成）+ 列菜单「AI 生成整列」（仅空缺/全部 + 生成前确认 + 进度 + 取消 + 失败重试）+ 并发 2–3 + 整批一次撤销 + 只读无入口 + 移动端文本回退；表单排除 AI 字段。**261004 追加**：新增 `markdown` 字段类型（文本口径；单元格去标记预览 + 展开**编辑/预览**双模，自写轻量子集渲染、不用 innerHTML），且 **AI 字段默认按 Markdown 口径**（值可手动编辑；展开面板头部「重新生成」；展开壳 `ExpandPanel` 与文本格共用）。门禁全绿（vitest **1580/16**）；**真实端 CDP 21/21**（mock 端点：「插入字段」`{{文本}}` 原位替换、Markdown 字段展开编辑→预览→落盘、AI 值 MD 预览/展开/手改落盘/重新生成、整列空缺 2/2、一次 ⌘Z 撤销整批、锁定入口消失/值保留、解锁恢复）。**图片/附件内容（多模态）不做**（用户 261004 决定：只传文件名）。Android 未跑；未提交（待验收）。明细见 §13 |
+| AI01 AI 字段（单一类型） | 待验收 | 261003-AIFIELD | 用户 261003 定稿路线：**不做飞书式 AI 单元格**；只做一个 `ai` 字段类型——**命令里用 `{{字段名}}` 字段变量**（编辑器「插入字段」插到光标处、可插多个，生成时**原位替换**；不再拼字段值列表）、值为文本快照、**不自动重跑**（手动「生成/重新生成」）。已实施：core（类型 + `{prompt}` 单一来源 + `buildAiFieldMessages`/`aiPromptFieldNames` + 重命名联动 `renameAiFieldToken` + CSV 拒绝导入）+ 单元格状态机（未配置/生成中/失败重试/重新生成）+ 列菜单「AI 生成整列」（仅空缺/全部 + 生成前确认 + 进度 + 取消 + 失败重试）+ 并发 2–3 + 整批一次撤销 + 只读无入口 + 移动端文本回退；表单排除 AI 字段。**261004 追加**：新增 `markdown` 字段类型（文本口径；单元格去标记预览 + 展开**编辑/预览**双模，自写轻量子集渲染、不用 innerHTML），且 **AI 字段默认按 Markdown 口径**（值可手动编辑；展开面板头部「重新生成」；展开壳 `ExpandPanel` 与文本格共用）。门禁全绿（vitest **1583/16**）；**真实端 CDP 22/22**（mock 端点：「插入字段」`{{文本}}` 原位替换、Markdown 字段展开编辑→预览→落盘、AI 值 MD 预览/展开/手改落盘/重新生成、**展开浮窗拖动/缩放不回弹（261004 修复）**、整列空缺 2/2、一次 ⌘Z 撤销整批、锁定入口消失/值保留、解锁恢复）。**261004-b 样式归位**：编辑·预览走 kit 的 `.ln-segment`、说明文字走既有 `.bt-field-label-text`、告警 `.ln-tag--error`、「插入字段」`.bt-secondary`；两 CSS 全量化令牌（基线 43→32 / 67→59），官方审计 lookalike 0.86→0.61、重复族清零；vitest **1586/16**；实机截图复核四张。**261004 续**：展开浮窗**尺寸本地记忆**（`text`/`md` 各一份，`lake-notes-v3.bitable-expand-size`，松手写盘）+ `.bt-md-cell` 右缘留位（与文本格同义，两格都不压字）；**真实端 CDP 23/23**。**图片/附件内容（多模态）不做**（用户 261004 决定：只传文件名）。Android 未跑；未提交（待验收）。明细见 §13 |
 
 ## 12. 修改记录
 
@@ -919,6 +919,9 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-10-03 | 261003-AIFIELD | AI01 AI 字段（单一类型 · 命令在字段里 · 手动生成） | `src/core/bitableDoc.ts`(+test) · `src/core/bitableMutations.ts`(+test) · `src/core/bitableCsv.ts` · `src/features/bitable/useAiFieldGeneration.ts`(新) · `useAiFieldGeneration.test.ts`(新) · `BitableAiGenerateDialog.tsx`(新) · `bitableAiField.css`(新) · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableFormView.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` · 本文件 | 用户定稿路线：不做飞书式 AI 单元格；只做一个 `ai` 字段（字段内命令 + 多字段上下文 + 文本快照 + 手动生成、不自动重跑）。`buildAiFieldMessages` core 单一来源（附件只出展示名）；并发 3、可取消、失败重试、整批 `beginGesture/endGesture` 一次撤销；删被引用字段联动清引用；只读无入口；CSV 拒绝导入、表单排除。门禁：tsc / vitest **1554 passed / 16 skipped** / check:core 75 文件 0 违规 / ui-metrics（hex=0/rgb=0/!important=9/未定义令牌=0）/ cssLayers+uiPrimitives / 桌面+移动构建 / git diff --check 全绿；隔离 Electron + mock OpenAI CDP **13/13**（单格请求体断言+落盘、整列空缺 2/2、一次 ⌘Z 撤销整批、锁定入口消失/值保留、解锁恢复） | 功能待用户验收；Android 未跑（移动端代码未改，值走文本回退）；不自动重跑（有意）；未提交 |
 | 2026-10-04 | 261003-AIFIELD | AI01 续：命令内「字段变量」内联（去掉末尾字段值列表） | `src/core/bitableDoc.ts`(+test) · `src/core/bitableMutations.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableCells.tsx` · `useAiFieldGeneration.test.ts` · `bitableEditorMount.test.ts` · `bitableAiField.css` · HANDOFF/本文件 | 用户纠正（附钉钉截图）：字段要**动态插入到命令里**（「插入字段」、可多个），不是把字段值拼到末尾。改为 `ai: { prompt }` 单一来源：`{{字段名}}` 变量 + 编辑器「插入字段」（插到光标处）+ 生成时原位替换（空/失效/自引用→（空）；无变量/变量全失效→明确报错）；重命名联动改写 `{{旧名}}`；删除保留变量并由编辑器提示。门禁：tsc / vitest **1564 passed / 16 skipped** / check:core 75-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / 本范围 `git diff --check` 全绿；真实端 CDP **13/13**（「插入字段」→ `根据{{文本}}` → mock 收到 `根据（空）`、无字段值列表） | 功能待用户验收；**多模态（图片/附件内容）不做**（用户 261004 决定：先不做）；仓库级 diff --check 报错在另一会话在途的 `vendor/lakex-doc-react/dist`（未触碰）；未提交 |
 | 2026-10-04 | 261003-AIFIELD | Markdown 字段 + AI 字段默认 MD 口径（编辑 / 预览） | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/markdown.tsx`(新) · `markdown.test.ts`(新) · `bitableMarkdown.css`(新) · `bitableMarkdown.behavior.test.ts`(新) · `bitableCells.tsx` · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 | 用户（附钉钉截图）两条需求：① Markdown 字段的编辑 / 预览；② 新增 MD 字段类型且 AI 字段默认该格式。实现：`markdown` 字段类型（文本口径）+ 自写轻量子集渲染（React 元素、不用 innerHTML、链接只认 http(s)）+ `markdownToPlainText` 单行预览 + 展开浮窗**编辑/预览**双模（抽出 `ExpandPanel` 共用壳，文本格同款；只读默认预览）+ AI 字段复用同一单元格与面板（头部「重新生成」、值**可手动编辑**）。门禁：tsc / vitest **1580 passed / 16 skipped** / check:core 75-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / 本范围 `git diff --check` 全绿；真实端 CDP **21/21** | 功能待用户验收；表格/图片预览首版不做（按原文）；Android 未跑；未提交 |
+| 2026-10-04 | 261003-AIFIELD | 修复：展开浮窗拖动/缩放弹回锚点默认位 | `src/features/bitable/bitableCells.tsx`（ExpandPanel 定位 deps `[anchor, size.h]`→`[anchor]`） · `bitableMarkdown.behavior.test.ts` | 用户实测：文本 / AI 字段展开浮窗一调大小就跳回默认位（表格在窗口左上区，像「跑到左上角」）。根因：resize → setSize → 定位 effect 重跑 → `placePopoverPosition` 覆盖 `pos`、丢掉拖动位置；**HEAD 原文本浮窗即带此缺陷**（抽共用壳时继承到 MD/AI 面板）。修复 + 护栏：jsdom 行为（拖动→缩放位置不回弹、宽度 400→480）+ CDP H 步（PointerEvent 拖拽/缩放实测） | tsc / vitest **1583 passed / 16 skipped** / 双端构建 / 本范围 diff clean；CDP **22/22** | 未提交（随本批等验收） |
+| 2026-10-04 | 261003-AIFIELD | 样式归位：AI / Markdown 字段按原语与官方审计收敛 | `bitableCells.tsx` · `BitableEditor.tsx` · `BitableAiGenerateDialog.tsx` · `bitableAiField.css` · `bitableMarkdown.css` · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 | 用户指出「样式很多是自己写的、没用设计原语」。按 AGENTS 14 判定口径收敛：`.seg`→`.ln-segment`；删繁写头 `.bt-md-expand-head` 与自写小按钮 `.bt-md-expand-regen`；说明文字/包裹层 → 既有 `.bt-field-label-text`；告警 → `.ln-tag--error`；「插入字段」`.bt-select-trigger`→`.bt-secondary`；两文件字号/间距/圆角全量化 + 新增字面量护栏 | 官方审计：lookalike 0.86→0.61（残留同档）、primitives 重复族清零；基线 43→32 / 67→59；tsc / vitest **1584 passed / 16 skipped** / 双端构建 / 本范围 diff clean；CDP **22/22** + 实机截图复核四张 | 残留 0.61（.bt-md-expand-actions，布局必需）已记录；未提交（随本批等验收） |
+| 2026-10-04 | 261003-AIFIELD | 展开浮窗：尺寸本地记忆 + 单元格右缘留位（两格都不压字） | `bitableCells.tsx`（ExpandPanel `remember` + load/save） · `bitableMarkdown.css` · `bitableMarkdown.behavior.test.ts` · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 | 用户「继续优化」：① 记忆「展开编辑」与「AI 字段展开」的大小（存本地即可）→ localStorage `lake-notes-v3.bitable-expand-size`，text/md 各一份、松手写盘、只记大小；② 问「两个展开位置为何不同（一个压字一个不压）」→ 根因：文本格有 `.bt-cell-input { padding-right: 26px }` 预留按钮位，MD/AI 格没有 → `.bt-md-cell` 补 `padding-right: var(--lake-space-xxxl)` | tsc / vitest **1586 passed / 16 skipped** / 双端构建 / 本范围 diff clean；CDP **23/23**（新增「重开沿用记住的大小 480×320」） | 附件展开面板（另一套壳）未纳入记忆（用户未要求）；未提交（随本批等验收） |
 
 ## 13. 会话记录（只追加）
 
@@ -3786,6 +3789,60 @@ UI 与交互变化：
 下一步：
 
 - 等用户验收（重点：展开面板的编辑/预览交互、AI 值手改体验）；确认后可提交。
+
+### 2026-10-04 · 261003-AIFIELD 续③ · 修复：展开浮窗拖动/缩放弹回锚点默认位
+
+- 用户实测：文本字段与 AI 字段的展开浮窗，一调大小就跳回默认位置（表格在窗口左上区，看起来像「跑到左上角」）。
+- 根因：`ExpandPanel` 定位 `useLayoutEffect` 依赖含 `size.h`——resize（setSize）触发 effect 重跑，`placePopoverPosition` 重算并覆盖 `pos`，把用户拖到的位置丢掉。**该缺陷在 HEAD 的文本格展开浮窗就存在**（`[anchor, size.h]`），抽共用壳时被原样继承到 Markdown / AI 面板（非本批新引入，但本批把它带到了新面板）。
+- 修复：定位只在**打开 / 换锚点**时算一次（依赖 `[anchor]`）；拖动与缩放各自只改自己的 state（`bitableCells.tsx` `ExpandPanel`）。
+- 护栏：jsdom 行为测试新增「拖头部移动 → 拖右下角缩放：位置不回弹、宽度 400→480」；CDP 真实端新增 H 步（PointerEvent 拖拽 + 缩放，断言 left/top 不变、width 变化）→ **22/22 全过**；门禁全绿（vitest **1583 passed / 16 skipped**），双端构建、本范围 diff 干净。
+- 未提交（随本批等验收）。
+
+### 2026-10-04 · 261003-AIFIELD 续④ · 样式归位：原语审计与替换（用户指出「很多样式自己写」）
+
+- 用户反馈（附截图）：AI 字段/展开面板的样式很多是自己写的、没走设计原语。核查属实——按 AGENTS 14 的判定口径（`scripts/css-audit/audit-lookalike.mjs` + `audit-primitives.mjs` + 实机截图）逐条收敛：
+  - 「编辑 / 预览」原用 legacy `.seg` + `b3-button--outline`（AGENTS 明令 `.seg` 只用于取值选择、横向 tab 走 `.ln-tabs`）→ 改用 kit 分段原语 **`.ln-segment` / `.ln-segment__item`（is-active）**；
+  - 展开头 `.bt-md-expand-head`（审计判为 `.ln-tabs__track` 仿写 0.86 / `.ln-modal__head` 0.75）→ **删除**，改为「标题 + 动作组」直排（动作组 `margin-left: auto` 贴右）；
+  - 自写小按钮 `.bt-md-expand-regen` → **删除**，直接走 bitable 既有 **`.bt-secondary`**；
+  - 说明文字 `.bt-ai-dialog-note/.bt-ai-dialog-summary/.bt-ai-warn` + 包裹层 `.bt-ai-prompt-wrap`（审计判为重复族）→ **全部删除**，统一走既有 **`.bt-field-label-text`**（与 CSV 导入对话框同款）；未找到字段的告警 → kit 的 **`.ln-tag--error`**；
+  - 「插入字段」原借用 `.bt-select-trigger`（全宽选择器语义，实机截图里成了一条通栏下拉）→ 改 **`.bt-secondary`** 紧凑按钮；
+  - 两个 CSS 文件的字号 / 间距 / 圆角全部改为 `--lake-*` 令牌，并新增围栏断言：这两文件不得出现 `font-size/gap/margin/padding` 的 px 字面量与颜色字面量。
+
+验证结果：
+
+- 官方审计（本批文件）：lookalike 最高分 **0.86 → 0.61**（`.bt-md-expand-actions`，与仓库内其它 0.61 残留同档；`.bt-md-expand-head` / `.regen` 已清零）；primitives 重复族 **0 命中**。
+- cssLayers 基线收紧：`bitableAiField.css` 43→**32**、`bitableMarkdown.css` 67→**59**；`ui-metrics` hex=0/rgb=0/`!important`=9/未定义令牌=0。
+- 门禁：tsc ✓；vitest **1584 passed / 16 skipped**（新增 2 条样式归位护栏）；双端构建 ✓；本范围 `git diff --check` 干净。
+- CDP 真实端 **22/22** + **实机截图复核四张**（编辑列 AI 配置 / MD 展开浮窗 / AI 展开浮窗 / 整列生成对话框，存 `/tmp/ui-*.png`）：控件语言与既有 `ln-dialog` / `ln-segment` / `bt-secondary` / `bt-field-label-text` 一致。
+
+遗留问题：
+
+- 接受的残留：`.bt-md-expand-actions` 与 `.ln-modal__head` 相似度 0.61（布局必需；与仓库现有 0.61 残留同档，在此记录）。
+- 未提交（随本批等验收）。
+
+下一步：
+
+- 等用户验收。
+
+### 2026-10-04 · 261003-AIFIELD 续⑤ · 展开浮窗：尺寸本地记忆 + 单元格右缘留位（用户「继续优化」）
+
+- 需求 1（用户）：记忆「展开编辑」与「AI 字段展开」的大小，存本地即可。实现：共用壳 `ExpandPanel` 增加 `remember: "text" | "md"`——**两类各记一份**，localStorage 键 `lake-notes-v3.bitable-expand-size`（与侧栏宽度/数据表栏宽同款做法）；打开时读取并夹进视口，**松手（pointerup）才写盘**；只记大小、不记位置。实现细节：resize 的最新尺寸记在闭包里而非 state/ref（pointerup 可能先于这一批渲染到达——单测抓出过这个旧值问题）。
+- 需求 2（用户看图问「为什么这两个展开的位置不同，一个覆盖文字一个不覆盖」）：根因 = 文本格有一条 `.bt-text-cell .bt-cell-input { padding-right: 26px }`——右缘**预留按钮空隙**，悬停出现的 ⤢ 不压文字；AI/Markdown 格（本批新增）没预留，预览文字会铺到按钮下面（覆盖）。修复：`.bt-md-cell` 增 `padding-right: var(--lake-space-xxxl)`（与文本格同义，24≈26px），两格行为统一为**都不压字**。
+
+验证结果：
+
+- 单测：jsdom 行为新增「打开用记住的大小（500×360）→ 缩放到 580 松手写回 localStorage」「未记忆时默认 400×260」；护栏新增 `remember="text"/"md"` 与键名断言；cssLayers 基线 `bitableMarkdown.css` 60。
+- 门禁：tsc ✓；vitest **1586 passed / 16 skipped**；双端构建 ✓；本范围 `git diff --check` 干净。
+- CDP 真实端 **23/23**：新增「缩放后关闭 → 重新打开沿用记住的大小（480×320）」；其余全过。
+
+遗留问题：
+
+- 附件展开面板（另一套壳，未纳入共用壳）未做尺寸记忆（用户未要求，保持现状）。
+- 未提交（随本批等验收）。
+
+下一步：
+
+- 等用户验收。
 
 ## 14. 会话执行模板
 

@@ -18,6 +18,7 @@ let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  localStorage.clear();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -39,7 +40,7 @@ function openPanel() {
   act(() => { host.querySelector<HTMLButtonElement>(".bt-expand-btn")!.click(); });
 }
 function segButton(label: string): HTMLButtonElement {
-  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".bt-md-expand-seg .seg__item"));
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".ln-segment .ln-segment__item"));
   const hit = buttons.find((button) => button.textContent === label);
   if (!hit) throw new Error("找不到分段按钮：" + label);
   return hit;
@@ -88,5 +89,55 @@ describe("Markdown 单元格与展开浮窗（261004）", () => {
     expect(document.querySelector(".bt-md-expand-preview h1")?.textContent).toBe("标题");
     expect(segButton("编辑").disabled).toBe(true);
     expect(segButton("预览").classList.contains("is-active")).toBe(true);
+  });
+
+  it("拖动头部移动后再拖右下角缩放：面板位置不回弹（261004 修复 size.h 依赖导致的跳回锚点）", () => {
+    render("abc");
+    openPanel();
+    const panel = document.querySelector<HTMLElement>(".bt-text-expand")!;
+    expect(panel.style.left).not.toBe("");
+    // 拖头部移动 (100,100) → (220,180)
+    act(() => {
+      panel.querySelector<HTMLElement>(".bt-text-expand-head")!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 220, clientY: 180 }));
+      window.dispatchEvent(new MouseEvent("pointerup", {}));
+    });
+    const moved = { left: panel.style.left, top: panel.style.top };
+    expect(moved.left).not.toBe("");
+    // 再拖右下角缩放 +80/+60：位置必须保持、尺寸必须变化
+    act(() => {
+      panel.querySelector<HTMLElement>(".bt-text-expand-resize")!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 300, clientY: 300 }));
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 380, clientY: 360 }));
+      window.dispatchEvent(new MouseEvent("pointerup", {}));
+    });
+    expect(panel.style.width).toBe("480px");
+    expect(panel.style.left).toBe(moved.left);
+    expect(panel.style.top).toBe(moved.top);
+  });
+
+  it("尺寸本地记忆：打开用记住的大小、松手写回；未记忆时用默认（261004）", () => {
+    localStorage.setItem("lake-notes-v3.bitable-expand-size", JSON.stringify({ md: { w: 500, h: 360 } }));
+    render("abc");
+    openPanel();
+    const panel = document.querySelector<HTMLElement>(".bt-text-expand")!;
+    expect(panel.style.width).toBe("500px");
+    expect(panel.style.height).toBe("360px");
+    // 缩放到 580 宽 → 松手写回本地
+    act(() => {
+      panel.querySelector<HTMLElement>(".bt-text-expand-resize")!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 300, clientY: 300 }));
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 380, clientY: 300 }));
+      window.dispatchEvent(new MouseEvent("pointerup", {}));
+    });
+    expect(panel.style.width).toBe("580px");
+    const stored = JSON.parse(localStorage.getItem("lake-notes-v3.bitable-expand-size")!) as { md?: { w: number } };
+    expect(stored.md?.w).toBe(580);
+  });
+
+  it("未记忆过时用默认大小（400×260）", () => {
+    render("abc");
+    openPanel();
+    const panel = document.querySelector<HTMLElement>(".bt-text-expand")!;
+    expect(panel.style.width).toBe("400px");
+    expect(panel.style.height).toBe("260px");
   });
 });

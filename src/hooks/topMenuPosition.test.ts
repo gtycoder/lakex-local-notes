@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseVisibleAnchor, clampPopoverPosition, placePopoverAtPoint, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
+import { chooseVisibleAnchor, clampPopoverPosition, placePopoverAtPoint, placePopoverAtPointBelow, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
 
 type Rect = { top: number; bottom: number; left: number; right: number; width: number; height: number };
 
@@ -51,6 +51,20 @@ describe("top menu positioning", () => {
     expect(placePopoverAtPoint({ x: 100, y: 700 }, viewport, size)).toEqual({ top: 540, left: 100 });
     // 点贴近右边：水平夹回
     expect(placePopoverAtPoint({ x: 980, y: 100 }, viewport, size)).toEqual({ top: 100, left: 792 });
+  });
+
+  it("坐标锚点（AI 弹窗）只放下方：空间不够也绝不翻到锚点上方", () => {
+    const viewport = { width: 1000, height: 800 };
+    const size = { width: 320, height: 400 };
+    // 下方充足：原样放在点下方
+    expect(placePopoverAtPointBelow({ x: 100, y: 100 }, viewport, size)).toEqual({ top: 100, left: 100 });
+    // 点贴底、面板比下方空间高：仍然 >= 点的 y（对照 placePopoverAtPoint 会翻到 300 上方）
+    expect(placePopoverAtPointBelow({ x: 100, y: 700 }, viewport, size).top).toBe(700);
+    expect(placePopoverAtPoint({ x: 100, y: 700 }, viewport, size).top).toBe(300);
+    // 锚点被滚到视口上方（负数/很小）：只夹到上边距，不翻到锚点上方
+    expect(placePopoverAtPointBelow({ x: 50, y: -40 }, viewport, size).top).toBe(8);
+    // 水平仍然夹进视口
+    expect(placePopoverAtPointBelow({ x: 980, y: 100 }, viewport, size)).toEqual({ top: 100, left: 672 });
   });
 
   it("侧向子菜单优先右侧，空间不足时翻左侧", () => {

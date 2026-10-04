@@ -27,20 +27,39 @@ import {
 } from "./imageIcons";
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { AiTagIcon } from "../../ai/AiTagIcon";
-import { AiAssistantDialog } from "../../ai/AiAssistantDialog";
+import { AiAssistantDialog, AI_DIALOG_GAP } from "../../ai/AiAssistantDialog";
 import { applyModelRange, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
 } from "./colorMemory";
-import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, parseAssetRef, TOOLBAR_MARGIN } from "./selectionToolbarModel";
-import { useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
+import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, lineBoxRects, parseAssetRef, TOOLBAR_MARGIN, type SelectionRect } from "./selectionToolbarModel";
+import { firstRangeRect, useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
 import { placePopoverBeside, placePopoverPosition } from "../../../hooks/topMenuPosition";
 
 /** 取真实有盒子的触发元素：内核原子件外层是 display:contents 包裹（它的 rect 恒为 0×0，量不出锚点）。 */
 function resolveTriggerEl(trigger?: HTMLElement | null): HTMLElement | null {
   return trigger ? ((trigger.querySelector("button") as HTMLElement | null) ?? trigger) : null;
 }
+
+/** 两个矩形列表是否近似相等：避免无意义的 state 更新 → 重渲染 → 闪（用户 261004：不许跳动）。 */
+function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((r, i) => Math.abs(r.left - b[i].left) < 0.5 && Math.abs(r.top - b[i].top) < 0.5
+    && Math.abs(r.width - b[i].width) < 0.5 && Math.abs(r.height - b[i].height) < 0.5);
+}
+
+
+/**
+ * 取**可见**的内核固定工具栏（.ne-ui-toolbar）：多 tab keep-alive 下文档里有多个，
+ * 隐藏实例那个 rect 为 0 且常排在文档最前 —— 取第一个会把浮栏/菜单的「顶界」算成 0。
+ */
+function visibleChromeToolbar(): HTMLElement | null {
+  const all = Array.from(document.querySelectorAll<HTMLElement>(".ne-ui-toolbar"));
+  return all.find((el) => el.getBoundingClientRect().height > 0) ?? null;
+}
+
 
 /** 链接合法性（首版，对齐固定栏「请输入正确的链接」）：有 scheme（http/https/mailto/tel）、以 / 或 # 开头，或形如域名。 */
 function isValidLink(value: string): boolean {
@@ -179,7 +198,7 @@ export function SelectionToolbar({ editor, container }: {
   const holdRef = useRef(false);
   // AI 对话框开着时也冻结：它覆盖浮栏上方，选区的变化不应让浮栏跳动。
   holdRef.current = menu !== null || aiOpen;
-  const { target, state, run, refresh, toolbarRef } = useSelectionToolbar(editor, container, holdRef);
+  const { target, state, run, refresh, toolbarRef, targetRef } = useSelectionToolbar(editor, container, holdRef);
   const [draft, setDraft] = useState("");
   /** 宽高弹窗的「高」输入。 */
   const [draftH, setDraftH] = useState("");
@@ -217,7 +236,7 @@ export function SelectionToolbar({ editor, container }: {
    */
   const clampToEditorArea = useCallback((point: { left: number; top: number }, size: { width: number; height: number }) => {
     const host = container.getBoundingClientRect();
-    const chrome = document.querySelector(".ne-ui-toolbar");
+    const chrome = visibleChromeToolbar();
     const topLimit = Math.max(host.top, chrome ? chrome.getBoundingClientRect().bottom : 0) + TOOLBAR_MARGIN;
     const minLeft = host.left + TOOLBAR_MARGIN;
     const maxLeft = Math.max(minLeft, Math.min(window.innerWidth, host.right) - size.width - TOOLBAR_MARGIN);
@@ -227,23 +246,49 @@ export function SelectionToolbar({ editor, container }: {
       top: Math.round(Math.max(topLimit, Math.min(point.top, maxTop))),
     };
   }, [container]);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const keyRef = useRef<string>("none");
 
-  useLayoutEffect(() => {
+  /**
+   * 浮栏挂在**滚动内容**（.ne-editor-wrap，position:relative+overflow:auto）里、用**内容坐标**定位：
+   * 它随正文一起滚（合成器线程同步、零相对位移 ⇒ 快滚也不跳），并被滚动容器裁掉
+   * （滚到顶界以上从固定工具栏下沿滑出，而不是盖在顶区）。因此**滚动时无需任何 JS 更新**。
+   * 只在选区变化 / 内容尺寸变化 / 窗口缩放时定位；规则：始终放在选区上方（allowBelow=false）。
+   */
+  const placeToolbarNow = useCallback(() => {
     const el = toolbarRef.current;
-    if (!target || !el) { setPos(null); return; }
+    if (!el || holdRef.current) return;          // 浮层开着时冻结，与 hook 的 refresh 一致
+    const t = targetRef.current;
+    if (!t) return;
+    const wrap = container.querySelector<HTMLElement>(".ne-editor-wrap");
+    if (!wrap) return;                           // 内核滚动容器尚未就绪：先不显示（稍后会再定位）
+    // 宿主确保在滚动容器内（首次挂载时 wrap 可能还没建好）
+    const host = el.parentElement;
+    if (host && host.parentElement !== wrap) wrap.appendChild(host);
+    // 用**当前**选区 rect（而非 state 快照）：它与下面的 scrollTop 同一时刻读 ⇒ 内容坐标恒定，滚动不漂移
+    const sel = window.getSelection();
+    const rect = t.kind === "image"
+      ? t.cardEl.getBoundingClientRect()
+      : (sel && !sel.isCollapsed && sel.rangeCount > 0 ? firstRangeRect(sel.getRangeAt(0)) : null);
+    if (!rect) return;
     const size = el.getBoundingClientRect();
-    const chrome = document.querySelector(".ne-ui-toolbar");
-    const host = container.getBoundingClientRect();
-    const topLimit = Math.max(chrome ? chrome.getBoundingClientRect().bottom : 0, host.top + TOOLBAR_MARGIN);
-    const p = computeToolbarPosition(target.rect, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, topLimit);
-    let left = p.left;
-    const minLeft = host.left + TOOLBAR_MARGIN;
-    const maxLeft = host.right - size.width - TOOLBAR_MARGIN;
-    if (maxLeft >= minLeft) left = Math.min(Math.max(left, minLeft), maxLeft);
-    setPos({ left, top: p.top });
-  }, [target, menu, toolbarRef, container]);
+    const p = computeToolbarPosition(rect, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, TOOLBAR_MARGIN, false);
+    const wr = wrap.getBoundingClientRect();
+    // 水平仍夹在编辑区（wrap）内；再换算成 wrap 的**内容坐标**（+scrollLeft/scrollTop）
+    let leftViewport = p.left;
+    const minLeft = wr.left + TOOLBAR_MARGIN;
+    const maxLeft = wr.right - size.width - TOOLBAR_MARGIN;
+    if (maxLeft >= minLeft) leftViewport = Math.min(Math.max(leftViewport, minLeft), maxLeft);
+    el.style.left = leftViewport - wr.left + wrap.scrollLeft + "px";
+    el.style.top = p.top - wr.top + wrap.scrollTop + "px";
+    el.style.visibility = "visible";
+  }, [container, targetRef, toolbarRef]);
+
+  // 挂载首帧 / 目标变化 / 菜单态变化后定位；缩放会改变 wrap 几何，需重算。滚动不需要（随内容滚）。
+  useLayoutEffect(() => { placeToolbarNow(); }, [target, menu, placeToolbarNow]);
+  useEffect(() => {
+    window.addEventListener("resize", placeToolbarNow);
+    return () => window.removeEventListener("resize", placeToolbarNow);
+  }, [placeToolbarNow]);
 
   /**
    * 浮层定位（260930 用户第 3 条：所有这种「位置不固定」的弹窗都要做边缘适配）——
@@ -368,24 +413,26 @@ export function SelectionToolbar({ editor, container }: {
   }, [editor, linkSrc, linkText, run]);
 
   /**
-   * AI 交互期间**自己画一层「原选区」高亮**（用户 260930 要求）。
-   * 起因：AI 对话框的提问框是 autoFocus，它一拿到焦点，浏览器就把 DOM 选区折叠
-   * （实测 `getSelection().isCollapsed === true`）⇒ 原生高亮消失，用户看不到自己在处理哪段文字。
-   * 这里用**打开对话框前捕获的 Range**（aiRangeRef）自绘一层矩形，颜色取内核选区同一个令牌
-   * `--lake-select-bg`（内核 `--lakex-editor-selection` 就是它 ⇒ 观感一致），关闭即移除。
-   * ⚠️ 只在**原生高亮已经没了**的时候才画：原生还在画时再叠一层会变成「两层选中」（用户 261003 实测反馈）。
+   * AI 交互期间保持「原选区」高亮。
+   *
+   * 背景：AI 提问框 autoFocus 会把 DOM 选区折叠 ⇒ 原生 ::selection 消失，用户看不到自己在处理哪段文字。
+   *
+   * ⚠️ 为什么不用 CSS Custom Highlight API（`::highlight()`）：Chromium 里它**只画字形盒**（≈21px），
+   *    而内核原生选区按**行盒**（line-height ≈30px）绘制 ⇒ 比原生矮一截、行与行之间露缝（用户 261004
+   *    实测「行间距没处理，前后效果不同」）。要复刻原生，唯一口径就是按行盒自己画矩形。
+   *
+   * 几何全部走 `lineBoxRects()`（撑到行高 + 按行合并成一个；单一来源、有单测）。宿主挂在滚动容器里、
+   * 用**内容坐标** ⇒ 随正文一起滚、被滚动容器裁切（不画到顶栏）；也因此**不监听 scroll**（内容坐标本就跟随）。
+   * 只监听选区/焦点变化，并用矩形比对去重 ⇒ 不来回重画（用户 261004：不许跳动）。
+   * 只在「原生选区已被折叠 / 就是捕获的那段」时接管；用户另选了别的文字就把高亮让回原生。
    */
-  const [aiSelRects, setAiSelRects] = useState<Array<{ left: number; top: number; width: number; height: number }> | null>(null);
-  useEffect(() => {
+  const [aiSelRects, setAiSelRects] = useState<SelectionRect[] | null>(null);
+  // ⚠️ 用 useLayoutEffect（绘制前同步完成）：原生选区会被提问框 autoFocus 折叠，若自绘层晚一帧才挂上，
+  //    中间有一帧「原生已消失、自绘还没出现」⇒ 点 AI 按钮时会闪一下（用户 261004 报）。布局阶段
+  //    先算好并 setAiSelRects，React 会在同一帧同步重渲染 ⇒ 第一帧就有「面板 + 自绘 + 原生已隐藏」。
+  useLayoutEffect(() => {
     if (!aiOpen) { setAiSelRects(null); return; }
     const captured = aiRangeRef.current;
-    /**
-     * 原生选区是否就是「打开面板前捕获的那段」。
-     *   是 / 已被输入框折叠 ⇒ **由我们接管**：把内核原生选区色置透明（.lake-ai-sel-hidden）+ 自绘。
-     *     自绘层从面板打开那一刻就一直在画，所以「点进提问框」前后视觉完全不变 —— 没有交接帧 = 不闪
-     *     （用户 261003：要零闪烁）。
-     *   用户另选了别的文字 ⇒ 把选区还给原生，否则他看不到自己新选的内容。
-     */
     const ownsSelection = () => {
       const native = window.getSelection();
       if (!native || native.rangeCount === 0 || native.isCollapsed) return true;
@@ -397,59 +444,89 @@ export function SelectionToolbar({ editor, container }: {
     const measure = () => {
       const own = ownsSelection();
       container.classList.toggle("lake-ai-sel-hidden", own);
-      const range = captured;
-      if (!own || !range) { setAiSelRects(null); return; }
+      if (!own || !captured) { setAiSelRects(null); return; }
       try {
-        // 原生 ::selection 按**行盒**（line-height）画；Range.getClientRects() 给的是**文字盒**（只到字形高度）
-        // ⇒ 直接用会比原生矮一截、跨行时行间露缝（用户 261003 截图实证）。这里按所在块的行高把每个矩形撑开。
-        const el = range.startContainer.nodeType === Node.ELEMENT_NODE
-          ? (range.startContainer as Element)
-          : range.startContainer.parentElement;
+        // 行高取捕获范围所在块（line-height 可能是 "normal" → 按 1.6×字号兜底）。
+        const el = captured.startContainer.nodeType === Node.ELEMENT_NODE
+          ? (captured.startContainer as Element)
+          : captured.startContainer.parentElement;
         const cs = el ? window.getComputedStyle(el) : null;
         const fontSize = cs ? Number.parseFloat(cs.fontSize) : NaN;
         const rawLineHeight = cs ? Number.parseFloat(cs.lineHeight) : NaN;
-        // line-height 可能是 "normal"（parseFloat → NaN）：那就按 1.6 倍字号兜底（与正文默认行高一致）。
-        const lineHeight = Number.isFinite(rawLineHeight) ? rawLineHeight
-          : (Number.isFinite(fontSize) ? fontSize * 1.6 : 0);
-        const next = [...range.getClientRects()]
-          .filter((r) => r.width > 0 && r.height > 0)
-          .map((r) => {
-            const height = Math.max(r.height, lineHeight);
-            return { left: r.left, top: r.top - (height - r.height) / 2, width: r.width, height };
-          });
-        const value = next.length > 0 ? next : null;
-        // 只在矩形**真的变了**时才更新状态（打字时每次 selectionchange 都会走到这里，无脑 set 会反复重渲染 = 闪）。
-        setAiSelRects((prev) => {
-          if (prev === value) return prev;
-          if (!prev || !value || prev.length !== value.length) return value;
-          const same = prev.every((r, i) => Math.abs(r.left - value[i].left) < 0.5 && Math.abs(r.top - value[i].top) < 0.5
-            && Math.abs(r.width - value[i].width) < 0.5 && Math.abs(r.height - value[i].height) < 0.5);
-          return same ? prev : value;
-        });
+        const lineHeight = Number.isFinite(rawLineHeight) ? rawLineHeight : (Number.isFinite(fontSize) ? fontSize * 1.6 : 0);
+        // 内容坐标 = 视口坐标 − 内容原点（宿主在 .ne-editor-wrap 里 ⇒ 随正文滚、被滚动容器裁掉）。
+        const wrap = container.querySelector<HTMLElement>(".ne-editor-wrap");
+        const wrapRect = wrap ? wrap.getBoundingClientRect() : null;
+        const ox = wrap && wrapRect ? wrapRect.left - wrap.scrollLeft : 0;
+        const oy = wrap && wrapRect ? wrapRect.top - wrap.scrollTop : 0;
+        // ⚠️ **必须逐文本节点取矩形**：`Range.getClientRects()` 在跨块（列表项 / 标题 / 段落）时会额外
+        //    返回「块盒」——整块的满宽矩形、还可能横跨多行，于是列表/标题被并成一大条满宽背景
+        //    （用户 261004 实测）。逐文本节点的子 Range 只返回**文字盒**，块盒不会出现。
+        const raw: SelectionRect[] = [];
+        // 画布用来量「空格」宽：内核选区矩形含**行尾空格**，而 getClientRects() 只到最后一个字形
+        // ⇒ 不补这一段，右缘会比内核短 4~8px（用户 261004 要求逐条对齐）。
+        const canvasCtx = document.createElement("canvas").getContext("2d");
+        const spaceWidthOf = (el: Element | null) => {
+          if (!canvasCtx || !el) return 0;
+          const cs = window.getComputedStyle(el);
+          canvasCtx.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+          return canvasCtx.measureText(" ").width;
+        };
+        const collect = (r: Range, node: Node) => {
+          const parent = node.parentElement;
+          // 列表标志（一、/ • / 1.）：内核原生选区**不渲染**它们（用户 261004 截图实证）⇒ 跳过，
+          // 否则我们会在标志上多画一小块背景。
+          if (parent?.closest("ne-oli-i, ne-uli-i, .ne-list-symbol")) return;
+          // 行高**逐片段**取：标题 / 列表 / 正文的行高各不相同，用统一行高会把正文撑得过高。
+          const cs = parent ? window.getComputedStyle(parent) : null;
+          const fontSize = cs ? Number.parseFloat(cs.fontSize) : NaN;
+          const rawLh = cs ? Number.parseFloat(cs.lineHeight) : NaN;
+          const lineHeight = Number.isFinite(rawLh) ? rawLh : (Number.isFinite(fontSize) ? fontSize * 1.6 : 0);
+          const pad = spaceWidthOf(parent);
+          for (const q of Array.from(r.getClientRects())) {
+            if (q.width > 0 && q.height > 0) raw.push({ left: q.left - ox, top: q.top - oy, width: q.width + pad, height: q.height, lineHeight });
+          }
+        };
+        const startNode = captured.startContainer;
+        const endNode = captured.endContainer;
+        const root = captured.commonAncestorContainer;
+        const rootEl = root.nodeType === Node.TEXT_NODE ? root.parentNode : root;
+        if (rootEl) {
+          const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+          let node: Node | null;
+          while ((node = walker.nextNode())) {
+            if (!captured.intersectsNode(node)) continue;
+            const sub = document.createRange();
+            try {
+              sub.setStart(node, node === startNode ? captured.startOffset : 0);
+              sub.setEnd(node, node === endNode ? captured.endOffset : (node.textContent?.length ?? 0));
+            } catch { continue; }
+            if (!sub.collapsed) collect(sub, node);
+          }
+        }
+        const value = lineBoxRects(raw, lineHeight);
+        setAiSelRects((prev) => (sameRects(prev, value) ? prev : value));
       } catch { setAiSelRects(null); }
     };
     measure();
-    // 触发点：选区变化（原生被折叠/又被恢复）、焦点进出（点进/离开提问框）、正文滚动、窗口缩放。
-    // 捕获的 Range 会随 DOM 节点失效，测不到就自动收起（不画假的）。
+    // 不监听 scroll/resize：内容坐标本就随正文滚动；重算交给选区/焦点变化。
     document.addEventListener("selectionchange", measure);
     document.addEventListener("focusin", measure, true);
     document.addEventListener("focusout", measure, true);
-    window.addEventListener("scroll", measure, true);
-    window.addEventListener("resize", measure);
     return () => {
       container.classList.remove("lake-ai-sel-hidden");
       document.removeEventListener("selectionchange", measure);
       document.removeEventListener("focusin", measure, true);
       document.removeEventListener("focusout", measure, true);
-      window.removeEventListener("scroll", measure, true);
-      window.removeEventListener("resize", measure);
     };
   }, [aiOpen, container]);
+  // 自绘高亮层：absolute 铺满滚动容器，span 用内容坐标 ⇒ 随正文滚、被容器裁切。
   const aiSelectionOverlay = aiSelRects ? (
     <div className="selection-toolbar__aisel" aria-hidden="true">
       {aiSelRects.map((r, i) => <span key={i} style={{ left: r.left, top: r.top, width: r.width, height: r.height }} />)}
     </div>
   ) : null;
+
 
   // AI 对话框渲染在工具栏**之外**：选中态丢失时工具栏会 `return null`，对话框若挂在工具栏内部
   // 会被一起卸载 ⇒ 状态清零（用户 260930 报「点生成页面闪烁、插入按钮点不了」的根因就在这里）。
@@ -475,6 +552,8 @@ export function SelectionToolbar({ editor, container }: {
     <AiAssistantDialog
       open
       at={aiAtRef.current}
+      // 传入编辑区滚动容器：AI 浮窗渲染进滚动内容、用内容坐标定位 ⇒ 随正文一起滚（与浮动工具栏同款几何）
+      scroller={container.querySelector<HTMLElement>(".ne-editor-wrap")}
       selectionText={aiSelectionRef.current}
       onClose={closeAi}
       onInsertAfter={(text) => {
@@ -515,7 +594,7 @@ export function SelectionToolbar({ editor, container }: {
     />
   ) : null;
 
-  // 选区被对话框折叠后工具栏会消失 ⇒ 这时只剩「自绘选区 + 对话框」，两者都不依赖工具栏。
+  // 选区被对话框折叠后工具栏会消失 ⇒ 这时只剩「对话框」，它不依赖工具栏。
   // ⚠️ 工具栏槽位**必须保留成 null**（不是把整棵子树换成两个孩子）：Fragment 按位置对账，
   //    槽位少一个会让对话框换到另一个 index ⇒ 仍然整体重挂载、照样闪。
   if (!target) return <>{aiSelectionOverlay}{null}{aiDialog}</>;
@@ -702,9 +781,13 @@ export function SelectionToolbar({ editor, container }: {
           const sel = window.getSelection();
           aiSelectionRef.current = sel?.toString() ?? "";
           aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
-          const aiRect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
+          let aiRect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
           // 只在量到**有效**矩形时更新锚点；拿不到就沿用上一次的（宁可位置不动，也不要跳到右上角）。
-          if (aiRect && (aiRect.width || aiRect.height)) aiAtRef.current = { x: aiRect.left, y: aiRect.bottom + 8 };
+          if (aiRect && (aiRect.width || aiRect.height)) {
+            // **不滚动编辑区**（用户 261004：开面板时选区绝不能跳）。锚点就按当前选区落点；
+            // 面板高度以编辑区可视高为上限、内容超出面板内滚动，下方不够时由用户自己滚动或拖右下角把手。
+            aiAtRef.current = { x: aiRect.left, y: aiRect.bottom + AI_DIALOG_GAP };
+          }
           aiModelRangeRef.current = captureModelRange(editor);
           setMenu("ai"); setAiOpen(true);
         }}>
@@ -809,17 +892,18 @@ export function SelectionToolbar({ editor, container }: {
 
   return (
     <>
-      {aiSelectionOverlay}
       {/* ⚠️ AI 对话框必须待在**固定树位置**（工具栏之外、且两条返回分支都在同一处）：
           它原先在「工具栏可见时挂在工具栏内部、工具栏消失时挂在外层」之间来回搬 —— React 换了树位置就整体
           重新挂载，用户点进提问框（选区折叠 → 工具栏卸载）时会看到面板闪一下（用户 261003 报「还有一点点闪烁」）。 */}
+      {aiSelectionOverlay}
       <div
         ref={toolbarRef}
         className="selection-toolbar lakex-default-theme"
         data-kind={target.kind}
         role="toolbar"
         aria-label={target.kind === "text" ? "文字格式工具栏" : "图片工具栏"}
-        style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
+        // 首帧占位；实际坐标由 placeToolbarNow 命令式写入（style 常量引用不变，React 不会覆盖它）
+        style={OFFSCREEN}
         onMouseDown={(event) => {
           // 默认 preventDefault 保选区（点按钮不丢编辑器选区）；但链接弹层的输入框必须能获得焦点，
           // 否则鼠标点不进输入框（用户 260924 报「输入即关闭 / 写不进去」的一部分）。

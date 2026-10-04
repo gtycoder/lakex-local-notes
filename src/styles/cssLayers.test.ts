@@ -66,7 +66,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/attachment/attachment-preview.css": { decls: 82, dupGroups: 0 },   // 260928：+4 = 预览表面与图片 Lightbox 同源（backdrop-filter blur ×2）+ 工具栏浅色化的 border-bottom + macOS 红绿灯让位 .is-mac（合法新增，非覆盖回涨）
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 259, dupGroups: 0 },
-  "features/editor/selectionToolbar/selectionToolbar.css": { decls: 217, dupGroups: 0 },   // 260930：「格式」父入口（+8）= 当前格式图标 + 颜色同款内核箭头的自写几何（含 width:auto —— 内核把按钮定死 26px，不放开箭头会被挤成 0 宽）+ 菜单项的图标/常规字号标签（内核 .ne-ui-item-content 是 16px/700，不适用）；再 +10 = 「标题1–6」二级菜单（贴行右侧展开 / is-flip 翻左侧 / 箭头格）。此前：+4 = 动作行换行（无遮罩浮层）；+16 = AI 助手对齐云端视觉（面板内边距/分隔/消息气泡/生成提示）；+43 = AI 助手对话框，表面/按钮复用 ln-dialog/ln-btn   // +1 = Lake 颜色面板的 native color input 覆盖整行透明命中层；+2 = __kmenu / __cardpop 各加 width:max-content
+  "features/editor/selectionToolbar/selectionToolbar.css": { decls: 230, dupGroups: 0 },   // 261004 续：+7 = AI 弹窗右下角**垂直**拖拽把手 `.ai-dialog__grip`（只改高度）及其 hover；按钮行右侧留出把手位。此前 223：261004：AI 弹窗改为「外壳 max-height + 面板内滚动」——新增 .ai-dialog 纵向 flex + overflow、body 的 flex/min-height/overflow、bar 与 actions 的 flex:none（共 +8），并删掉 .ai-dialog__thread 的 max-height/overflow（-2）⇒ 净 +6。此前 217：260930「格式」父入口（+8）= 当前格式图标 + 颜色同款内核箭头的自写几何（含 width:auto —— 内核把按钮定死 26px，不放开箭头会被挤成 0 宽）+ 菜单项的图标/常规字号标签（内核 .ne-ui-item-content 是 16px/700，不适用）；再 +10 = 「标题1–6」二级菜单（贴行右侧展开 / is-flip 翻左侧 / 箭头格）。此前：+4 = 动作行换行（无遮罩浮层）；+16 = AI 助手对齐云端视觉（面板内边距/分隔/消息气泡/生成提示）；+43 = AI 助手对话框，表面/按钮复用 ln-dialog/ln-btn   // +1 = Lake 颜色面板的 native color input 覆盖整行透明命中层；+2 = __kmenu / __cardpop 各加 width:max-content
   // 260924 续：图片形态改内核卡片工具栏结构 + 云端顺序 ⇒ 删自有 menu/item/row/input/apply（-53），+4 外壳只定位；再 +45 = 图片弹窗（宽高/链接/边距）的 __cardpop 白卡 + 输入/复选/开关行 + 百分比段（均 --lake-* 令牌）；
   // 另：+18 = 浮栏 hover 说明（名称+快捷键）portal DOM 浮层；同批 -6 = 删「转为」下拉/heading 字形覆盖
   // 260924：+2 = 段落样式/字号去掉三角后，内核 .ne-ui-toolbar-select-value 固定 width:40px 需按内容收缩 + 收窄工具栏按钮内距（合法新增覆盖内核 legacy 层，非多层叠加）   // 260923 收敛：大纲样式从 feature.css/shell.css 并回本文件单一来源；再 -12 = 层级徽标改「两级语义+中性」，删掉 6 色相里 H3–H6 的 4 条规则   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）；260923 收敛：+2 + 删死 ::before —— 增强大纲样式从 feature.css 并回本文件单一来源（见下）
@@ -107,8 +107,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableRelationPicker.css": { decls: 145, dupGroups: 0 },   // 260930：+7 = 筛选编辑器在关联选择器里的内联布局（根编辑器/视图基线行）；此前 138：+30 = 关联选择器视图基线（只读筛选/排序行 + 视图分组表头/标签/计数）；此前 108：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）
   // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
   "features/bitable/bitableFileIcon.css": { decls: 25, dupGroups: 0 },
-  "features/bitable/bitableAiField.css": { decls: 43, dupGroups: 0 },   // 261004：-14 =「重新生成」入口移入展开面板（删 is-done / text / refresh 相关 5 条规则）；@keyframes 不计数
-  "features/bitable/bitableMarkdown.css": { decls: 67, dupGroups: 0 },   // 261004：Markdown 字段（单元格单行预览 + 展开浮窗 + 预览排版，全新文件）
+  "features/bitable/bitableAiField.css": { decls: 32, dupGroups: 0 },   // 261004-b：-11 = 说明文字/包裹层归位到既有 .bt-field-label-text 与直排结构（删 prompt-wrap / warn / dialog-note / dialog-summary），字号/间距/圆角全量化令牌；@keyframes 不计数
+  "features/bitable/bitableMarkdown.css": { decls: 60, dupGroups: 0 },   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
   "features/bitable/bitableFilterEditor.css": { decls: 150, dupGroups: 0 },   // 260930：筛选规则/分组树/日期动态值/多选值/增删菜单 + 面板最大高度/滚动（全新文件）
   "features/bitable/bitableFillRules.css": { decls: 67, dupGroups: 0 },   // 260930：条件填色配置与表格投影（全新文件）；+4 = 「无背景色」填色块居中态（flex 三项 + 图标色），合法新增
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）

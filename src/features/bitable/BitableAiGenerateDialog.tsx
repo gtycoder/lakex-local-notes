@@ -49,18 +49,18 @@ export function BitableAiGenerateDialog({ open, field, table, batch, onStart, on
               <input type="radio" name="bt-ai-mode" disabled={running} checked={mode === "all"} onChange={() => setMode("all")} />
               全部记录（{table.records.length} 条）
             </label>
-            <p className="bt-ai-dialog-note">将逐条调用你配置的 AI 服务生成 {targetCount} 格（可能产生费用）；可随时取消，已生成的结果会保留。</p>
+            <div className="bt-field-label-text">将逐条调用你配置的 AI 服务生成 {targetCount} 格（可能产生费用）；可随时取消，已生成的结果会保留。</div>
           </>
         )}
         {batch && (
-          <p className="bt-ai-dialog-summary" aria-live="polite">
+          <div className="bt-field-label-text" aria-live="polite">
             已完成 {batch.done} / {batch.total}
             {batch.failed > 0 ? "，失败 " + batch.failed : ""}
             {batch.running ? "（生成中…）" : batch.cancelled ? "（已取消）" : "（已结束）"}
-          </p>
+          </div>
         )}
         {batch && !batch.running && batch.failed > 0 && (
-          <p className="bt-ai-dialog-note">失败的格子已在单元格里标出（可单格重试）；也可以直接重试失败项。</p>
+          <div className="bt-field-label-text">失败的格子已在单元格里标出（可单格重试）；也可以直接重试失败项。</div>
         )}
       </div>
       <div className="ln-dialog__actions">

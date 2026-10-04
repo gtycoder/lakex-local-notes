@@ -1,8 +1,11 @@
-/* AI 字段（261003）：单元格状态 + 字段配置 + 整列生成对话框（颜色只用 --lake-* 令牌）。 */
+/* AI 字段（261003）：单元格状态 + 字段配置。
+   261004-b 样式归位：说明文字统一 .bt-field-label-text、错误用 .ln-tag--error、
+   命令按钮走 bitable 既有 .bt-secondary/.bt-primary；本文件只留单元格与配置的布局，
+   字号/间距/圆角一律 --lake-* 令牌（颜色同样只用令牌）。 */
 .bt-cell-ai {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--lake-space-xs);
   min-width: 0;
   max-width: 100%;
 }
@@ -33,13 +36,13 @@
 .bt-cell-ai-action {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
+  gap: var(--lake-space-xs);
+  padding: var(--lake-space-xxs) var(--lake-space-md);
   border: 1px solid var(--lake-border-2);
-  border-radius: 6px;
+  border-radius: var(--lake-radius-xs);
   background: transparent;
   color: var(--lake-text-2);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
   cursor: pointer;
 }
 .bt-cell-ai-action:hover:not(:disabled) {
@@ -53,31 +56,12 @@
 .bt-ai-config {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--lake-space-sm);
 }
 .bt-ai-prompt {
   resize: vertical;
   min-height: 56px;
 }
-.bt-ai-prompt-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 .bt-ai-insert {
   align-self: flex-start;
-}
-.bt-ai-warn {
-  color: var(--lake-text-2);
-}
-.bt-ai-dialog-note {
-  margin: 0;
-  color: var(--lake-text-3);
-  font-size: 12px;
-  line-height: 18px;
-}
-.bt-ai-dialog-summary {
-  margin: 0;
-  color: var(--lake-text-2);
-  font-size: 13px;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, Copy, CornerDownRight, RotateCcw, X } from "lucide-react";
 import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
@@ -24,7 +24,23 @@ const FALLBACK_WIDTH = 460;
 /** 面板最小宽度：再窄按钮行就放不下（正文栏更窄时按此兜底）。 */
 const MIN_WIDTH = 360;
 
-interface EditorColumn { mount: HTMLElement; left: number; width: number; top: number }
+interface EditorColumn { mount: HTMLElement; left: number; width: number; top: number; bottom: number }
+
+/** 与 usePopoverPosition 的 gap/margin 同值（夹取与补空间必须用同一口径）。 */
+export const AI_DIALOG_GAP = 8;
+export const AI_DIALOG_MARGIN = 8;
+/** 右下角拖动把手可缩到的最小高度（保住输入条 + 按钮行）。 */
+export const AI_DIALOG_RESIZE_MIN = 140;
+// 拖出来的高度**不做记忆**（用户 261004：每次场景都不同，关掉就恢复默认自适应）。
+
+/**
+ * 当前**可见**的编辑器挂载点。多 tab keep-alive 下文档里会有多个 `.lake-editor-mount`（隐藏的 h=0），
+ * 文档顺序第一的未必是活动的 ⇒ 取第一个「有盒子宽度」的；拿不到返回 null（不滚错那个）。
+ */
+function visibleEditorMount(): HTMLElement | null {
+  const mounts = Array.from(document.querySelectorAll<HTMLElement>(".lake-editor-mount:not(.is-outgoing)"));
+  return mounts.find((m) => m.getBoundingClientRect().width > 0) ?? null;
+}
 
 /**
  * 取当前**可见**正文的「文字栏」几何（左缘 + 宽度 + 编辑区顶）——AI 弹窗按它取宽，
@@ -34,16 +50,16 @@ interface EditorColumn { mount: HTMLElement; left: number; width: number; top: n
  * 拿不到再回落到 `.ne-engine` 的内容盒 ⇒ 两种布局态都能得到真正的文字栏。
  */
 function resolveEditorColumn(): EditorColumn | null {
-  const mounts = Array.from(document.querySelectorAll<HTMLElement>(".lake-editor-mount:not(.is-outgoing)"));
-  const mount = mounts.find((m) => m.offsetParent !== null && m.getBoundingClientRect().width > 0);
+  const mount = visibleEditorMount();
   if (!mount) return null;
   const engine = mount.querySelector<HTMLElement>(".ne-engine");
   if (!engine) return null;
-  const top = mount.getBoundingClientRect().top;
+  const mr = mount.getBoundingClientRect();
+  const { top, bottom } = mr;
   const block = engine.querySelector<HTMLElement>("ne-p, ne-h1, ne-h2, ne-h3, ne-h4, ne-h5, ne-h6");
   if (block) {
     const r = block.getBoundingClientRect();
-    if (r.width > 0) return { mount, left: r.left, width: r.width, top };
+    if (r.width > 0) return { mount, left: r.left, width: r.width, top, bottom };
   }
   const cs = getComputedStyle(engine);
   const er = engine.getBoundingClientRect();
@@ -51,15 +67,17 @@ function resolveEditorColumn(): EditorColumn | null {
   const padR = parseFloat(cs.paddingRight) || 0;
   const width = engine.clientWidth - padL - padR;
   if (width <= 0) return null;
-  return { mount, left: er.left + padL, width, top };
+  return { mount, left: er.left + padL, width, top, bottom };
 }
 
-export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at }: {
+export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at, scroller }: {
   open: boolean; selectionText: string; onClose: () => void;
   /** 贴靠的锚点元素（浮动工具栏的 AI 按钮）——给了就悬浮在它下方，无遮罩、不压暗文档。 */
   anchor?: HTMLElement | null;
   /** 无锚点时的落点（顶栏入口）；缺省落在右上角。 */
   at?: { x: number; y: number } | null;
+  /** 编辑区滚动容器（.ne-editor-wrap）：给了就把面板渲染进去、用内容坐标定位 ⇒ 随正文一起滚。 */
+  scroller?: HTMLElement | null;
   /** 替换选区内容（无选区时= 插到光标处）。 */
   onReplace?: (text: string) => void;
   /** 插到选区**之后**（无选区时不提供）。 */
@@ -73,10 +91,14 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
   const reqRef = useRef<string | null>(null);
   const historyRef = useRef<AiChatMessage[]>([]);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
+  /** 用户在右下角拖出来的高度（null = 跟随内容自适应）；**不做记忆**，每次打开都从自适应开始。 */
+  const [userHeight, setUserHeight] = useState<number | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setInstruction(""); setFollowUp(""); setTurns([]); setError(null); setBusy(false);
+    setUserHeight(null);   // 打开即恢复默认高度（内容自适应），不沿用上次拖出来的大小
     reqRef.current = null; historyRef.current = [];
   }, [open, selectionText]);
 
@@ -175,34 +197,121 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     await send(messages);
   };
   const stop = () => { if (reqRef.current) void cancelAiChat(reqRef.current); };
-  // 贴选区/锚点悬浮（无遮罩）：与格式浮栏同款定位原语，贴底自动翻上方。
-  // 宽度与左缘跟随正文文字栏（量不到正文时回落固定宽度/右上角）：
-  //   有文字栏 → 左缘对齐文字栏、宽度 = 文字栏宽（夹进视口）；
-  //   无文字栏 → 维持原行为（选区落点 / 右上角兜底）。
+
+  /** 回车 = 确定（发这一轮，等同点「生成 / 发送」）；Ctrl/⌥（及 ⌘/⇧）+回车 = 换行（对齐 Codex 输入框）。 */
+  const submit = () => {
+    if (busy) return;
+    if (turns.length === 0) { if (canSendFirst) void run(true); }
+    else if (followUp.trim()) void run(false);
+  };
+  const onFieldKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter") return;
+    if (e.nativeEvent.isComposing) return;                       // 中文输入法组字中不提交
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return; // 带修饰键 → 换行（浏览器默认行为）
+    e.preventDefault();
+    submit();
+  };
+  // 贴选区/锚点悬浮（无遮罩）：
+  //   · 有 scroller（浮动工具栏入口）→ 渲染进编辑区滚动容器、用**内容坐标**绝对定位 ⇒ 随正文一起滚；
+  //   · 无 scroller（顶栏入口）→ 维持原来的视口级 fixed 定位。
   const viewportW = typeof window === "undefined" ? 0 : window.innerWidth;
+  const viewportH = typeof window === "undefined" ? 0 : window.innerHeight;
+  // 内容坐标锚点：只在 open / at 变化时算一次（at 打开时给定、滚动不再更新）⇒ 内容位置恒定，随正文滚不漂。
+  const contentAnchor = useMemo(() => {
+    if (!open || !scroller || !at) return null;
+    const wr = scroller.getBoundingClientRect();
+    return { top: at.y - wr.top + scroller.scrollTop, left: at.x - wr.left + scroller.scrollLeft };
+  }, [open, scroller, at]);
+  // 内容坐标几何：宽度=正文栏宽、顶=内容锚点、高上限=**打开时选区下方在编辑区内的可用高度**
+  // 高度上限 = **编辑区可视高**（减上下边距）：超出交面板内滚动，不无限扩大。
+  // 不再按「选区下方可用高」封顶，也**不在打开时自动滚动编辑区**（用户 261004：选区绝不能跳）。
+  const contentGeom = contentAnchor && scroller && at ? (() => {
+    const wr = scroller.getBoundingClientRect();
+    const w = column ? Math.max(MIN_WIDTH, Math.min(column.width, wr.width - 16)) : FALLBACK_WIDTH;
+    const leftContent = column ? column.left - wr.left + scroller.scrollLeft : contentAnchor.left;
+    // 内容自适应上限 = 手动拖拽硬上限 = 编辑区可视高（用户 261004：拖动不该被默认上限锁死）。
+    const resizeMax = Math.max(AI_DIALOG_RESIZE_MIN, Math.floor(wr.height - 2 * AI_DIALOG_MARGIN));
+    return {
+      left: Math.max(0, Math.min(leftContent, Math.max(0, wr.width - w - AI_DIALOG_MARGIN))),
+      top: contentAnchor.top,
+      width: w,
+      maxHeight: resizeMax,
+      resizeMax,
+    };
+  })() : null;
+
   const width = column ? Math.max(MIN_WIDTH, Math.min(column.width, viewportW - 16)) : FALLBACK_WIDTH;
   const fallbackAt = { x: Math.max(16, viewportW - (FALLBACK_WIDTH - 4)), y: 64 };
-  const atPoint = column
+  const rawAt = column
     ? { x: column.left, y: at?.y ?? column.top + 24 }
     : (at ?? (anchor ? null : fallbackAt));
-  const pos = usePopoverPosition({ open, anchor: column ? null : anchor ?? null, at: atPoint, width, align: "start", side: "below", gap: 8 });
+  const minTop = (column ? column.top : 0) + AI_DIALOG_MARGIN;
+  const atPoint = rawAt ? { x: rawAt.x, y: Math.max(rawAt.y, minTop) } : null;
+  // allowFlip:false —— 贴选区的弹窗**绝不翻到选区上方**（用户 261004 明确禁止）；空间不足时面板内部滚动。
+  // 有 contentGeom 时位置由内容坐标直接给，关掉这套视口定位。
+  const pos = usePopoverPosition({ open: open && !contentGeom, anchor: column ? null : anchor ?? null, at: atPoint, width, align: "start", side: "below", gap: AI_DIALOG_GAP, allowFlip: false });
+
+  // 视口级兜底（顶栏入口）的高度上限 = 弹窗顶到「可见空间底部」的距离；内容超出在面板内滚动。
+  // ⚠️ 必须 floor 而不是 round：round 会向上越界 ~1px，让「下方是否放得下」判定失败（261004 实测翻转）。
+  const limitBottom = column ? Math.min(viewportH, column.bottom) : viewportH;
+  const topY = atPoint ? atPoint.y : AI_DIALOG_MARGIN;
+  const maxHeight = Math.max(1, Math.floor(limitBottom - AI_DIALOG_MARGIN - topY));
+  const capHeight = contentGeom ? contentGeom.maxHeight : maxHeight;
+  // 手动拖拽的硬上限（编辑区可视高）：**不受**内容自适应上限 capHeight 限制（用户 261004）。
+  const resizeMax = contentGeom
+    ? contentGeom.resizeMax
+    : Math.max(AI_DIALOG_RESIZE_MIN, Math.floor(viewportH - 2 * AI_DIALOG_MARGIN));
+  const appliedHeight = userHeight === null ? undefined : Math.max(AI_DIALOG_RESIZE_MIN, Math.min(userHeight, resizeMax));
+  // 拖过之后 max-height 必须放到拖出的高度，否则会被 capHeight 夹回去；没拖过时按内容自适应上限。
+  const effectiveMaxHeight = userHeight === null || appliedHeight === undefined ? capHeight : Math.max(capHeight, appliedHeight);
+  const dialogStyle = contentGeom
+    ? { left: contentGeom.left, top: contentGeom.top, width: contentGeom.width, maxHeight: effectiveMaxHeight, height: appliedHeight, position: "absolute" as const }
+    : { ...(pos.style ?? {}), maxHeight: effectiveMaxHeight, height: appliedHeight };
+  const placed = contentGeom ? true : pos.placed;
+
+  /** 面板表面元素：测真实高度用（拖拽起点），也交给 usePopoverPosition 定位。 */
+  const setSurface = useCallback((el: HTMLElement | null) => { panelRef.current = el; pos.surfaceRef(el); }, [pos.surfaceRef]);
+
+  /**
+   * 右下角拖拽把手：**只改高度**（用户 261004：上下可拖、左右不动）。
+   * 宽度继续跟随正文栏宽；高度夹在 [AI_DIALOG_RESIZE_MIN, 上限] 内，松手写回本地记忆。
+   */
+  const startResize = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    event.preventDefault(); event.stopPropagation();
+    const startY = event.clientY;
+    const startH = panelRef.current?.getBoundingClientRect().height ?? 0;
+    const cap = resizeMax;   // 手动拖拽用硬上限（编辑区可视高），不用内容自适应上限
+    const onMove = (ev: PointerEvent) => {
+      setUserHeight(Math.max(AI_DIALOG_RESIZE_MIN, Math.min(cap, Math.round(startH + (ev.clientY - startY)))));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, [resizeMax]);
+
+  // 关闭/卸载时把临时底部余量还回去（滚动位置按用户 261004 口径**不还原**）。
 
   // 打开即把光标放进提问框（用户 261003）。必须等 `pos.placed`：面板首帧是定位用的
   // `visibility:hidden` 占位样式，**隐藏元素不可聚焦** ⇒ 那一刻（以及 autoFocus）的 focus() 会被
   // 浏览器静默忽略。等定位落地（可见）后再聚焦、光标落末尾。
   useEffect(() => {
-    if (!open || !pos.placed) return;
+    if (!open || !placed) return;
     const el = fieldRef.current;
     if (!el) return;
-    el.focus();
+    // preventScroll：面板是**内容坐标**绝对定位在滚动容器里的，直接 focus() 会让浏览器把它
+    // 滚进可视区 ⇒ 整个编辑区跟着跳（用户 261004：选区/视图绝不能跳）。
+    el.focus({ preventScroll: true });
     const end = el.value.length;
     try { el.setSelectionRange(end, end); } catch { /* 个别输入类型不支持选区，忽略 */ }
-  }, [open, pos.placed]);
+  }, [open, placed]);
 
   const copy = () => { void navigator.clipboard?.writeText(lastOutput); };
 
   return (
-    <Popover open={open} onDismiss={onClose} style={pos.style ?? undefined} surfaceRef={pos.surfaceRef} className="ai-dialog" label="AI 助手">
+    <Popover open={open} onDismiss={onClose} container={scroller} style={dialogStyle} surfaceRef={setSurface} className="ai-dialog" label="AI 助手">
       <div className="ln-dialog__body">
         {turns.length > 0 && (
           <>
@@ -220,9 +329,9 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
       <div className="ai-dialog__bar">
         <AiSparkIcon size={18} />
         {turns.length === 0 ? (
-          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
+          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => setInstruction(e.target.value)} onKeyDown={onFieldKeyDown} />
         ) : (
-          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
+          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} onKeyDown={onFieldKeyDown} />
         )}
         {activeValue && (
           <button type="button" className="ai-dialog__clear" aria-label="清除内容" onClick={() => {
@@ -245,9 +354,11 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
           <button type="button" className="ln-btn" onClick={() => { onInsertAfter(lastOutput); onClose(); }}><CornerDownRight size={12} /> 插入到选区后</button>
         )}
         {/* 260930 真机验证：打开前捕获内核模型选区、回写前用 selection 命令设回，非折叠即**替换**（⌘Z 可撤销）。 */}
-        {lastOutput && onReplace && <button type="button" className="ln-btn ln-btn--primary" onClick={() => { onReplace(lastOutput); onClose(); }}><Check size={12} /> 替换选区</button>}
+        {lastOutput && onReplace && <button type="button" className="ln-btn" onClick={() => { onReplace(lastOutput); onClose(); }}><Check size={12} /> 替换选区</button>}
         <button type="button" className="ln-btn" onClick={onClose}><X size={12} /> 关闭</button>
       </div>
+      {/* 右下角拖拽把手：只改高度（用户 261004：左右不动）。 */}
+      <div className="ai-dialog__grip" role="separator" aria-label="拖动调整高度" onPointerDown={startResize} />
     </Popover>
   );
 }

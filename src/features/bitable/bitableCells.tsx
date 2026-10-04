@@ -786,19 +786,46 @@ interface TextExpandPopoverProps {
 }
 
 /**
+ * 展开浮窗尺寸记忆（261004 用户要求；存本地 localStorage，与「侧栏宽度 / 数据表栏宽」同款做法）：
+ * 文本格与 AI/Markdown 格**各记一份**，只记大小、不记位置。键 = lake-notes-v3.bitable-expand-size。
+ */
+const BT_EXPAND_SIZE_KEY = "lake-notes-v3.bitable-expand-size";
+type ExpandRemember = "text" | "md";
+function loadExpandSize(kind: ExpandRemember): { w: number; h: number } | null {
+  try {
+    const raw = localStorage.getItem(BT_EXPAND_SIZE_KEY);
+    if (!raw) return null;
+    const entry = (JSON.parse(raw) as Record<string, { w?: unknown; h?: unknown } | undefined>)[kind];
+    const w = typeof entry?.w === "number" ? entry.w : 0;
+    const h = typeof entry?.h === "number" ? entry.h : 0;
+    if (w < 240 || h < 160) return null;
+    return { w: Math.min(w, Math.max(240, window.innerWidth - 16)), h: Math.min(h, Math.max(160, window.innerHeight - 16)) };
+  } catch { return null; }
+}
+function saveExpandSize(kind: ExpandRemember, size: { w: number; h: number }) {
+  try {
+    const raw = localStorage.getItem(BT_EXPAND_SIZE_KEY);
+    const all = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    all[kind] = { w: Math.round(size.w), h: Math.round(size.h) };
+    localStorage.setItem(BT_EXPAND_SIZE_KEY, JSON.stringify(all));
+  } catch { /* 本地记忆失败不影响功能 */ }
+}
+
+/**
  * 贴单元格展开浮窗的**共用壳**（261004 抽出）：定位（贴单元格下方、贴底翻上方）+ 拖拽（头部）+
  * 缩放（右下角）+ 关闭按钮。文本格与 Markdown 格共用同一套几何/交互（单一来源，不再各写一份）。
  */
-function ExpandPanel({ anchor, head, body, onClose }: { anchor: HTMLElement; head: ReactNode; body: ReactNode; onClose: () => void }) {
+function ExpandPanel({ anchor, head, body, remember, onClose }: { anchor: HTMLElement; head: ReactNode; body: ReactNode; remember: ExpandRemember; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const [size, setSize] = useState({ w: 400, h: 260 });
+  const [size, setSize] = useState(() => loadExpandSize(remember) ?? { w: 400, h: 260 });
   useLayoutEffect(() => {
     const r = anchor.getBoundingClientRect();
     const w = Math.min(400, Math.max(240, window.innerWidth - 24));
     setPos(placePopoverPosition(r, { width: window.innerWidth, height: window.innerHeight }, { width: w, height: size.h }, 4, { margin: 8 }));
-    // size 只在拖动缩放的起点用，这里只按锚点/面板尺寸定位
-  }, [anchor, size.h]);
+    // 只在**打开 / 换锚点**时定位一次：拖动缩放（size 变化）不得重算，否则会把用户拖到的位置弹回锚点默认位（261004 用户实测修复；
+    // 该缺陷在 HEAD 的文本格展开浮窗就存在——定位依赖里带了 size.h——抽共用壳时被原样继承到 Markdown / AI 面板）。
+  }, [anchor]);
   const startDrag = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
     const startX = event.clientX; const startY = event.clientY;
@@ -812,8 +839,17 @@ function ExpandPanel({ anchor, head, body, onClose }: { anchor: HTMLElement; hea
     event.preventDefault(); event.stopPropagation();
     const startX = event.clientX; const startY = event.clientY;
     const base = { ...size };
-    const onMove = (ev: PointerEvent) => setSize({ w: Math.max(240, base.w + (ev.clientX - startX)), h: Math.max(160, base.h + (ev.clientY - startY)) });
-    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
+    // 最新尺寸记在闭包里（不能读 state/ref：pointerup 可能先于这一批渲染到达）
+    let next = { ...size };
+    const onMove = (ev: PointerEvent) => {
+      next = { w: Math.max(240, base.w + (ev.clientX - startX)), h: Math.max(160, base.h + (ev.clientY - startY)) };
+      setSize(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      saveExpandSize(remember, next); // 松手即记（拖拽过程不写盘）
+    };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
@@ -833,7 +869,7 @@ function ExpandPanel({ anchor, head, body, onClose }: { anchor: HTMLElement; hea
 /** 文本格展开：贴单元格浮窗（头部「展开编辑」），正文直接改单元格值。 */
 function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextExpandPopoverProps) {
   return (
-    <ExpandPanel anchor={anchor} onClose={onClose}
+    <ExpandPanel anchor={anchor} remember="text" onClose={onClose}
       head={<span>展开编辑</span>}
       body={<textarea className="bt-text-expand-body" autoFocus value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />}
     />
@@ -854,23 +890,26 @@ function MarkdownExpandPopover({ anchor, title, value, readOnly, onChange, onReg
 }) {
   const [mode, setMode] = useState<"edit" | "preview">(readOnly ? "preview" : "edit");
   return (
-    <ExpandPanel anchor={anchor} onClose={onClose}
+    <ExpandPanel anchor={anchor} remember="md" onClose={onClose}
       head={(
-        <div className="bt-md-expand-head">
+        <>
           <span className="bt-md-expand-title ln-ellipsis" title={title}>{title}</span>
-          <span className="seg bt-md-expand-seg" role="group" aria-label="编辑或预览">
-            <button type="button" className={"b3-button b3-button--outline seg__item" + (mode === "edit" ? " is-active" : "")}
-              disabled={readOnly} onPointerDown={(event) => event.stopPropagation()} onClick={() => setMode("edit")}>编辑</button>
-            <button type="button" className={"b3-button b3-button--outline seg__item" + (mode === "preview" ? " is-active" : "")}
-              onPointerDown={(event) => event.stopPropagation()} onClick={() => setMode("preview")}>预览</button>
+          {/* 「编辑 / 预览」= kit 的分段控件原语 ln-segment（原语清单第 13 件）；按钮 = bitable 既有 bt-secondary */}
+          <span className="bt-md-expand-actions">
+            <span className="ln-segment" role="group" aria-label="编辑或预览">
+              <button type="button" className={"ln-segment__item" + (mode === "edit" ? " is-active" : "")}
+                disabled={readOnly} onPointerDown={(event) => event.stopPropagation()} onClick={() => setMode("edit")}>编辑</button>
+              <button type="button" className={"ln-segment__item" + (mode === "preview" ? " is-active" : "")}
+                onPointerDown={(event) => event.stopPropagation()} onClick={() => setMode("preview")}>预览</button>
+            </span>
+            {onRegenerate && (
+              <button type="button" className="bt-secondary" disabled={readOnly}
+                onPointerDown={(event) => event.stopPropagation()} onClick={onRegenerate}>
+                <Sparkles size={12} />重新生成
+              </button>
+            )}
           </span>
-          {onRegenerate && (
-            <button type="button" className="bt-secondary bt-md-expand-regen" disabled={readOnly}
-              onPointerDown={(event) => event.stopPropagation()} onClick={onRegenerate}>
-              <Sparkles size={12} />重新生成
-            </button>
-          )}
-        </div>
+        </>
       )}
       body={mode === "edit" && !readOnly ? (
         <textarea className="bt-text-expand-body bt-md-expand-editor" autoFocus value={value} onChange={(event) => onChange(event.target.value)} />

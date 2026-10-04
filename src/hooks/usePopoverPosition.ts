@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { placePopoverAtPoint, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
+import { placePopoverAtPoint, placePopoverAtPointBelow, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
 
 export interface UsePopoverPositionOptions {
   open: boolean;
@@ -14,6 +14,11 @@ export interface UsePopoverPositionOptions {
   side?: "below" | "right";
   gap?: number;
   margin?: number;
+  /**
+   * 坐标锚点（at）时是否允许「下方放不下就翻到锚点上方」。默认 true（右键菜单等要「至少完整可见」）。
+   * 贴选区的 AI 弹窗必须传 false：翻上去会盖住选区（用户 261004 明确禁止）。
+   */
+  allowFlip?: boolean;
 }
 
 /**
@@ -35,6 +40,7 @@ export function usePopoverPosition({
   side = "below",
   gap = 4,
   margin = 8,
+  allowFlip = true,
 }: UsePopoverPositionOptions): { surfaceRef: (el: HTMLElement | null) => void; style: CSSProperties | null; placed: boolean } {
   const elRef = useRef<HTMLElement | null>(null);
   const [style, setStyle] = useState<CSSProperties | null>(null);
@@ -50,7 +56,7 @@ export function usePopoverPosition({
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const size = { width: el.offsetWidth, height: el.offsetHeight };
     const next = atX !== undefined && atY !== undefined
-      ? placePopoverAtPoint({ x: atX, y: atY }, viewport, size, margin)
+      ? (allowFlip ? placePopoverAtPoint : placePopoverAtPointBelow)({ x: atX, y: atY }, viewport, size, margin)
       : anchor
         ? side === "right"
           ? placePopoverBeside(anchor.getBoundingClientRect(), viewport, size, gap, { margin })
@@ -58,7 +64,7 @@ export function usePopoverPosition({
         : null;
     if (!next) return;
     setStyle({ left: next.left, top: next.top, width });
-  }, [anchor, atX, atY, align, side, gap, margin, width]);
+  }, [anchor, atX, atY, align, side, gap, margin, width, allowFlip]);
 
   useLayoutEffect(() => {
     if (!open) { setStyle(null); return; }

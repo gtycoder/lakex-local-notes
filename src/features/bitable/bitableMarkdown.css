@@ -1,10 +1,15 @@
-/* Markdown 字段与 AI 字段（261004）：单元格单行预览 / 展开浮窗内容 / 预览排版。颜色只用 --lake-* 令牌。 */
+/* Markdown 字段与 AI 字段（261004；261004-b 样式归位）。
+   原语优先：编辑·预览分段 = kit 的 .ln-segment；命令按钮 = bitable 既有 .bt-secondary / .bt-primary；
+   说明文字 = .bt-field-label-text；省略 = .ln-ellipsis。这里只留「单元格布局 + 预览排版」两类本域样式，
+   字号/间距/圆角/颜色一律走 --lake-* 令牌（不含任何字面量）。 */
 .bt-md-cell {
   position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
   width: 100%;
+  /* 右缘给展开按钮留空隙（与文本格的 .bt-cell-input padding-right 同义，261004 用户指出「一个覆盖文字一个不覆盖」） */
+  padding-right: var(--lake-space-xxxl);
 }
 .bt-md-cell-preview {
   flex: 1 1 auto;
@@ -14,26 +19,15 @@
 .bt-md-cell:focus-within .bt-expand-btn {
   display: inline-flex;
 }
-.bt-md-expand-head {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
+/* 展开面板头部：标题在左（.ln-ellipsis 截断），动作组自动贴右（auto 外边距吸收剩余空间） */
 .bt-md-expand-title {
-  min-width: 0;
-  font-weight: 500;
+  font-weight: var(--lake-font-weight-medium);
 }
-.bt-md-expand-seg {
-  flex: 0 0 auto;
-}
-.bt-md-expand-regen {
-  display: inline-flex;
-  flex: 0 0 auto;
+.bt-md-expand-actions {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: var(--lake-space-md);
+  margin-left: auto;
 }
 .bt-md-expand-preview {
   overflow: auto;
@@ -42,10 +36,11 @@
   margin: 0;
   color: var(--lake-text-4);
 }
+/* 预览排版（渲染子集；无现成原语，故按令牌自建这一套） */
 .bt-md-preview {
   color: var(--lake-text-1);
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: var(--lake-font-size-small);
+  line-height: var(--lake-line-height-reading);
   overflow-wrap: anywhere;
 }
 .bt-md-preview > :first-child {
@@ -55,7 +50,7 @@
   margin-bottom: 0;
 }
 .bt-md-preview p {
-  margin: 0 0 8px;
+  margin: 0 0 var(--lake-space-md);
 }
 .bt-md-preview h1,
 .bt-md-preview h2,
@@ -63,53 +58,53 @@
 .bt-md-preview h4,
 .bt-md-preview h5,
 .bt-md-preview h6 {
-  margin: 14px 0 6px;
-  font-weight: 600;
-  line-height: 1.4;
+  margin: var(--lake-space-lg) 0 var(--lake-space-sm);
+  font-weight: var(--lake-font-weight-semibold);
+  line-height: var(--lake-line-height-tight);
 }
 .bt-md-preview h1 {
-  font-size: 18px;
+  font-size: var(--lake-font-size-title);
 }
 .bt-md-preview h2 {
-  font-size: 16px;
+  font-size: var(--lake-font-size-bodyLg);
 }
 .bt-md-preview h3 {
-  font-size: 15px;
+  font-size: var(--lake-font-size-body);
 }
 .bt-md-preview h4,
 .bt-md-preview h5,
 .bt-md-preview h6 {
-  font-size: 14px;
+  font-size: var(--lake-font-size-small);
 }
 .bt-md-preview ul,
 .bt-md-preview ol {
-  margin: 0 0 8px;
-  padding-left: 20px;
+  margin: 0 0 var(--lake-space-md);
+  padding-left: var(--lake-space-xxl);
 }
 .bt-md-preview li {
-  margin: 2px 0;
+  margin: var(--lake-space-xxs) 0;
 }
 .bt-md-preview blockquote {
-  margin: 0 0 8px;
-  padding: 2px 0 2px 10px;
+  margin: 0 0 var(--lake-space-md);
+  padding: var(--lake-space-xxs) 0 var(--lake-space-xxs) var(--lake-space-sm);
   border-left: 3px solid var(--lake-border-2);
   color: var(--lake-text-2);
 }
 .bt-md-preview blockquote p {
-  margin: 0 0 4px;
+  margin: 0 0 var(--lake-space-xs);
 }
 .bt-md-preview code {
-  padding: 0 4px;
-  border-radius: 4px;
+  padding: 0 var(--lake-space-xs);
+  border-radius: var(--lake-radius-xs);
   background: var(--lake-bg-subtle);
   font-family: var(--lake-font-family-mono);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
 }
 .bt-md-preview pre {
-  margin: 0 0 8px;
-  padding: 8px 10px;
+  margin: 0 0 var(--lake-space-md);
+  padding: var(--lake-space-md) var(--lake-space-lg);
   border: 1px solid var(--lake-border-2);
-  border-radius: 6px;
+  border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-subtle);
   overflow-x: auto;
 }
@@ -125,7 +120,7 @@
   text-decoration: underline;
 }
 .bt-md-preview hr {
-  margin: 12px 0;
+  margin: var(--lake-space-lg) 0;
   border: 0;
   border-top: 1px solid var(--lake-border-2);
 }
@@ -133,5 +128,5 @@
   color: var(--lake-text-3);
 }
 .bt-md-preview strong {
-  font-weight: 600;
+  font-weight: var(--lake-font-weight-semibold);
 }

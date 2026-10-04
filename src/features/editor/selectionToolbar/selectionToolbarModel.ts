@@ -16,12 +16,18 @@ export function computeToolbarPosition(
   size: { width: number; height: number },
   viewport: { width: number; height: number },
   topLimit = TOOLBAR_MARGIN,
+  allowBelow = true,
 ): ToolbarPosition {
   const rawAbove = anchor.top - size.height - TOOLBAR_GAP;
-  const placement: "above" | "below" = rawAbove >= topLimit ? "above" : "below";
+  // allowBelow=false：浮栏**只放在选区上方**（用户 261004：一直保持在上边、只随选区改位置）；
+  // 上方放不下时由调用方收起浮栏，而不是翻到下方（下方档仍夹 topLimit，兜其它调用方）。
+  const placement: "above" | "below" = !allowBelow || rawAbove >= topLimit ? "above" : "below";
+  // 下方档必须夹 topLimit：选区被滚到顶部时 anchor.bottom 会落进/越过顶界（内核固定工具栏底边 /
+  // 编辑区上沿），只按 anchor 定位会把浮栏甩到顶栏里（用户 261004 报「滚动后浮栏干到顶栏」）。
+  const belowTop = Math.min(anchor.bottom + TOOLBAR_GAP, Math.max(TOOLBAR_MARGIN, viewport.height - size.height - TOOLBAR_MARGIN));
   const top = placement === "above"
     ? rawAbove
-    : Math.min(anchor.bottom + TOOLBAR_GAP, Math.max(TOOLBAR_MARGIN, viewport.height - size.height - TOOLBAR_MARGIN));
+    : Math.max(topLimit, belowTop);
   const centered = anchor.left + anchor.width / 2 - size.width / 2;
   const maxLeft = Math.max(TOOLBAR_MARGIN, viewport.width - size.width - TOOLBAR_MARGIN);
   const left = Math.min(Math.max(centered, TOOLBAR_MARGIN), maxLeft);
@@ -88,6 +94,45 @@ export function imageSizeWidth(preset: ImageSizePreset, originalWidth: number): 
   const base = Number.isFinite(originalWidth) && originalWidth > 0 ? originalWidth : 320;
   if (preset === "original") return Math.max(1, Math.round(base));
   return Math.max(16, Math.round(base * IMAGE_SIZE_SCALES[preset]));
+}
+
+export interface SelectionRect { left: number; top: number; width: number; height: number; lineHeight?: number }
+
+/**
+ * 把 `Range.getClientRects()` 的**字形盒**矩形还原成内核原生选区的**行盒**。
+ *
+ * 内核选区由浏览器按行盒绘制，而 getClientRects 给的是字形盒 ⇒ 不撑开就比原生矮一截、行间露缝
+ * （用户 261004：「行间距没处理，前后效果不同」）。
+ * 做法：每个矩形垂直居中撑到**它自己那一行**的行高（`SelectionRect.lineHeight`，逐片段取，
+ * 标题/列表/正文行高不同）→ 按**垂直中心**分组（同一行只保留一个行盒）→ 水平取并集。
+ *
+ * ⚠️ 分组判据必须是**中心**而不是「矩形相交」：撑开后相邻行首尾相接，用相交会把 2~4 行并成一大块。
+ * ⚠️ 这是复刻原生观感的唯一口径：CSS Custom Highlight API（`::highlight()`）在 Chromium 里只画
+ *    字形盒，撑不到行盒高度。
+ */
+export function lineBoxRects(rects: readonly SelectionRect[], defaultLineHeight: number): SelectionRect[] {
+  const fallback = Number.isFinite(defaultLineHeight) && defaultLineHeight > 0 ? defaultLineHeight : 0;
+  const lhOf = (r: SelectionRect) => { const v = r.lineHeight ?? fallback; return Number.isFinite(v) && v > 0 ? v : 0; };
+  if (rects.every((r) => lhOf(r) === 0)) return rects.map((r) => ({ ...r }));
+  const expanded = rects.map((r) => {
+    const lh = lhOf(r);
+    const height = Math.max(r.height, lh);
+    // natural 记住原始高度：行盒顶端要取**原始最高**的那个（通常是行盒/块盒），而不是撑开后同高的任意一个
+    return { left: r.left, top: r.top - (height - r.height) / 2, width: r.width, height, lh, natural: r.height };
+  });
+  const center = (r: { top: number; height: number }) => r.top + r.height / 2;
+  const groups: typeof expanded[] = [];
+  for (const r of expanded.slice().sort((a, b) => center(a) - center(b))) {
+    // 同一行：中心相差不到「两者行高的一半」；相邻行相差一个行高 ⇒ 不会串行
+    const group = groups.find((g) => Math.abs(center(g[0]) - center(r)) < Math.max(r.lh, g[0].lh) * 0.5);
+    if (group) group.push(r); else groups.push([r]);
+  }
+  return groups.map((g) => {
+    const left = Math.min(...g.map((r) => r.left));
+    const right = Math.max(...g.map((r) => r.left + r.width));
+    const anchor = g.reduce((best, r) => (r.natural > best.natural ? r : best), g[0]);
+    return { left, top: anchor.top, width: right - left, height: anchor.height };
+  });
 }
 
 /** 从 canonical 资源 URL 解析 {noteId, filename}；解析不到返回 null（data:/外链 不支持复制下载）。 */
