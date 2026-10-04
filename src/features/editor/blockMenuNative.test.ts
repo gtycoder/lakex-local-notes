@@ -252,6 +252,14 @@ describe("块编辑：引用内块独立 / 引用内转化为裁剪 / 顶对齐 
     expect(MENU_SRC).toMatch(/ne-block-convert-item--/);
   });
 
+  it("转化为网格『图标+文字卡片格』按 value 判断（引用内下标前移也不会把高亮块降级成纯图标）", () => {
+    // 261005：原用 subIndex < 11 判断，引用内裁掉 4 项后「高亮块」跳到下标 10 ⇒ 只剩图标、没有文字，
+    // 与云端不一致（用户实测）。卡片格必须按 value 判断。
+    expect(MENU_SRC).toMatch(/CARD_CONVERT_VALUES = new Set\(\['callout', 'quote', 'columns', 'collapse'\]\)/);
+    expect(MENU_SRC).toMatch(/CARD_CONVERT_VALUES\.has\(subItem\.value/);
+    expect(MENU_SRC).not.toMatch(/subIndex < 11/);
+  });
+
   it("引用内「转化为」裁掉 代码块/引用/分栏/折叠（对齐云端图 2 的 11 项）", () => {
     expect(MENU_SRC).toMatch(/QUOTE_HIDDEN_CONVERT_VALUES = new Set\(\['codeblock', 'quote', 'columns', 'collapse'\]\)/);
     expect(MENU_SRC).toMatch(/function isInsideQuote\(/);
