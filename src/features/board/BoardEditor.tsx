@@ -484,7 +484,8 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange, onDi
   return (
     <div
       ref={hostRef}
-      className={`board-editor${visible ? "" : " board-editor--hidden"}${viewReady ? "" : " board-editor--restoring"}`}
+      className={`board-editor${viewReady ? "" : " board-editor--restoring"}`}
+      data-active={visible ? "true" : undefined}
     >
       {everVisible && (
         <Suspense fallback={<div className="board-editor-loading" />}>

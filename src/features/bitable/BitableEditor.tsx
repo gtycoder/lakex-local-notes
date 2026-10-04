@@ -957,7 +957,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   };
 
   return (
-    <div ref={rootRef} className={"bitable-editor" + (visible ? "" : " fn__none")}>
+    <div ref={rootRef} className="bitable-editor" data-active={visible ? "true" : undefined}>
       {chrome && !tablesCollapsed && (
       <aside className="bt-tables" style={{ width: tablesWidth }}>
         <header className="bt-tables-head">

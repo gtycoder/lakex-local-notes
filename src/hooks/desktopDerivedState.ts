@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { activeEditorHost } from "../features/editor/activeEditor";
 import { clearScrollMemory } from "../features/editor/EditorTab";
 import { resolveScrollNode } from "../features/editor/lakeRuntime";
 import type { TabInfo } from "../features/editor/MultiTabEditor";
@@ -53,10 +54,11 @@ export function deriveDesktopView(input: DesktopViewInput) {
     clearScrollMemory(activeNoteId);
     const activeHost = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${CSS.escape(activeNoteId)}"]`);
     // 正常路径按 activeNoteId 定位；多标签切换/懒加载的瞬间如果属性还未回流，
-    // 再兜底处理当前可见的编辑器，避免点击后仍停留在旧滚动位置。
-    const hosts = activeHost
-      ? [activeHost]
-      : [...document.querySelectorAll<HTMLElement>(".lake-editor-tab")].filter((host) => getComputedStyle(host).display !== "none");
+    // 再兜底处理**当前显示中**的编辑器，避免点击后仍停留在旧滚动位置。
+    // ⚠️ 兜底判据用显式信号 data-active（activeEditorHost），**不要**再用 display/几何猜可见：
+    // 261005 起非活动标签保留布局尺寸（opacity+visibility 隐藏），display 恒为 block ⇒ 会命中的所有标签。
+    const fallback = activeEditorHost();
+    const hosts = activeHost ? [activeHost] : fallback ? [fallback] : [];
     for (const host of hosts) {
       const scroller = resolveScrollNode(host);
       try {

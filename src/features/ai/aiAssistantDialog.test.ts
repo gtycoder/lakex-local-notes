@@ -24,10 +24,14 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).not.toMatch(/Math\.round\(limitBottom/);
   });
 
-  it("补空间/清空间取可见挂载点，不取文档里第一个（keep-alive 下可能是隐藏实例）", () => {
-    expect(DIALOG).toContain("visibleEditorMount()");
+  it("文字栏几何取**显式**活动挂载点（容器优先，退回 data-active），不全局猜可见实例", () => {
+    expect(DIALOG).toContain("container ?? activeEditorMount()");
+    // 261005：不再用几何（rect.width>0）在全局 .lake-editor-mount 里挑「可见的那个」——
+    // 隐藏方式一换成保留布局就会静默拿错（详见 features/editor/activeEditor.ts）
+    expect(DIALOG).not.toContain("visibleEditorMount");
+    expect(DIALOG).not.toMatch(/querySelectorAll[^\n]*lake-editor-mount/);
     // 打开时补空间（滚编辑区）已整条删除 —— 见下一条护栏
-    expect(DIALOG).not.toContain("editorScroller(visibleEditorMount())");
+    expect(DIALOG).not.toContain("editorScroller(");
   });
 
   it("弹窗只在打开时锚定一次，之后不再追滚动（消除快滚跳动）", () => {

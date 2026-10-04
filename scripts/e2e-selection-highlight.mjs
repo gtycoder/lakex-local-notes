@@ -42,7 +42,7 @@ async function connect() {
   return { evalJs, send, close: () => ws.close() };
 }
 
-const AI = "(function(){ var M=Array.prototype.filter.call(document.querySelectorAll('.lake-editor-mount'), function(x){ return x.getBoundingClientRect().width>0 && x.querySelectorAll('ne-p').length>0; })[0]; var ov=M?M.querySelector('.selection-toolbar__aisel'):null; return JSON.stringify({spans: ov?ov.querySelectorAll('span').length:0, hidden: M?M.classList.contains('lake-ai-sel-hidden'):null}); })()";
+const AI = "(function(){ var M=document.querySelector('[data-active=true] .lake-editor-mount'); var ov=M?M.querySelector('.selection-toolbar__aisel'):null; return JSON.stringify({spans: ov?ov.querySelectorAll('span').length:0, hidden: M?M.classList.contains('lake-ai-sel-hidden'):null}); })()";
 const BRICK = "document.querySelectorAll('.ne-brick-highlight').length";
 const HANDLE = "(function(){ var hs=Array.prototype.filter.call(document.querySelectorAll('.ne-block-hover-handle'), function(x){ var q=x.getBoundingClientRect(); return q.width>0 && getComputedStyle(x).opacity!=='0'; }); if(!hs.length) return 'null'; var q=hs[0].getBoundingClientRect(); return JSON.stringify({x:Math.round(q.left+q.width/2), y:Math.round(q.top+q.height/2), t:Math.round(q.top)}); })()";
 
@@ -52,6 +52,7 @@ async function main() {
   let pass = 0, fail = 0;
   const check = (name, ok, detail) => { if (ok) pass++; else fail++; console.log((ok ? "PASS" : "FAIL") + " | " + name + " | " + detail); };
   let noteId = null;
+  let quoteId = null;
   try {
     const paragraphs = Array.from({ length: 24 }, (_, i) => "<p>选区回归 " + (i + 1) + "：综合场景。</p>").join("");
     noteId = await evalJs("(async function(){ var n = await window.lakeNative.createNote('SEL-REG-" + Date.now() + "'); await window.lakeNative.saveNote(n.id, n.title, " + JSON.stringify(paragraphs) + "); return n.id; })()");
@@ -61,7 +62,7 @@ async function main() {
     await evalJs("(function(){ var t=document.querySelector('.tab-item[data-note-id=\"" + noteId + "\"]'); if(t) t.click(); return true; })()");
     await sleep(1800);
 
-    const geo = JSON.parse(await evalJs("(function(){ var M=Array.prototype.filter.call(document.querySelectorAll('.lake-editor-mount'), function(x){ return x.getBoundingClientRect().width>0 && x.querySelectorAll('ne-p').length>3; })[0]; var ps=Array.prototype.slice.call(M.querySelectorAll('ne-p')); window.__m=M; window.__p=ps; var r=document.createRange(); r.setStartBefore(ps[2].firstChild); r.setEndAfter(ps[4].firstChild); var s=window.getSelection(); s.removeAllRanges(); s.addRange(r); document.dispatchEvent(new Event('selectionchange')); var w=M.querySelector('.ne-editor-wrap'); return JSON.stringify({scrollTop:Math.round(w.scrollTop)}); })()"));
+    const geo = JSON.parse(await evalJs("(function(){ var M=document.querySelector('[data-active=true] .lake-editor-mount'); var ps=Array.prototype.slice.call(M.querySelectorAll('ne-p')); window.__m=M; window.__p=ps; var r=document.createRange(); r.setStartBefore(ps[2].firstChild); r.setEndAfter(ps[4].firstChild); var s=window.getSelection(); s.removeAllRanges(); s.addRange(r); document.dispatchEvent(new Event('selectionchange')); var w=M.querySelector('.ne-editor-wrap'); return JSON.stringify({scrollTop:Math.round(w.scrollTop)}); })()"));
     await sleep(600);
     await evalJs("(function(){ var b=document.querySelector('.selection-toolbar button[aria-label=\"AI 助手\"]'); if(b) b.click(); return true; })()");
     await sleep(700);
@@ -109,8 +110,40 @@ async function main() {
     await mouse("mouseReleased", B.ax, B.by, { button: "left", clickCount: 1 }); await sleep(500);
     await mouse("mouseMoved", B.ax + 4, B.ay + 2); await sleep(600);
     check("BH-7 跨块拖选后句柄仍可用", (await evalJs(HANDLE)) !== "null", "handle=" + (await evalJs(HANDLE)));
+
+    // BH-8（261005）：引用内**非首块标题**的手柄 —— 从标题正文向左走向句柄时不能跳回首行合并柄。
+    quoteId = await evalJs("(async function(){ var n = await window.lakeNative.createNote('SEL-QT-" + Date.now() + "'); await window.lakeNative.saveNote(n.id, n.title, " + JSON.stringify("<blockquote><h2>标题一</h2><p>段落</p><h3>标题二</h3><p>段落二</p></blockquote>") + "); return n.id; })()");
+    await sleep(600);
+    await evalJs("(function(){ var r=Array.prototype.find.call(document.querySelectorAll('[data-tree-node-id]'), function(x){ return x.getAttribute('data-tree-node-id')===" + JSON.stringify(quoteId) + "; }); if(r) r.click(); return true; })()");
+    await sleep(700);
+    await evalJs("(function(){ var t=document.querySelector('.tab-item[data-note-id=" + JSON.stringify(quoteId) + "]'); if(t) t.click(); return true; })()");
+    await sleep(1800);
+    const H3 = JSON.parse(await evalJs("(function(){ var M=document.querySelector('[data-active=true] .lake-editor-mount'); var h=M.querySelector('ne-quote ne-h3'); var r=h.getBoundingClientRect(); return JSON.stringify({x:Math.round(r.left+60), y:Math.round(r.top+r.height/2), top:Math.round(r.top)}); })()"));
+    await mouse("mouseMoved", 400, 40); await sleep(350);
+    await evalJs("(function(){ window.getSelection().removeAllRanges(); document.dispatchEvent(new Event('selectionchange')); return true; })()");
+    await sleep(200);
+    await mouse("mouseMoved", H3.x, H3.y); await sleep(500);
+    // 决定性信号：鼠标移到**该标题自己的句柄**上，被高亮的必须是这个标题（而不是 ne-quote 首行）。
+    // 261005 的 bug：标题手柄比正文更靠左，鼠标过去时先经过引用背景、被解析成 ne-quote ⇒ 跳回首行。
+    let brick = "[]", why = "no visible handle";
+    for (let i = 0; i < 12; i += 1) {
+      const hp = await evalJs(HANDLE);
+      if (hp !== "null") {
+        const H = JSON.parse(hp);
+        await mouse("mouseMoved", H.x, H.y); await sleep(250);
+        brick = await evalJs("(function(){ var b=Array.prototype.map.call(document.querySelectorAll('.ne-brick-highlight'), function(x){ return x.tagName; }); return JSON.stringify(b); })()");
+        why = "handle=" + hp + " brick=" + brick;
+        if (brick.indexOf("NE-H3") >= 0) break;
+      }
+      await mouse("mouseMoved", H3.x, H3.y); await sleep(200);
+    }
+    check("BH-8 引用内标题的手柄：拿到的是该标题（不是引用首行合并柄）", brick.indexOf("NE-H3") >= 0, why);
   } finally {
-    if (noteId && !KEEP) { await evalJs("(function(){ return window.lakeNative.deleteNote ? window.lakeNative.deleteNote(" + JSON.stringify(noteId) + ") : true; })()").catch(() => {}); }
+    if (!KEEP) {
+      for (const id of [noteId, quoteId]) {
+        if (id) await evalJs("(function(){ return window.lakeNative.deleteNote ? window.lakeNative.deleteNote(" + JSON.stringify(id) + ") : true; })()").catch(() => {});
+      }
+    }
     close();
   }
   console.log("SUMMARY pass=" + pass + " fail=" + fail);

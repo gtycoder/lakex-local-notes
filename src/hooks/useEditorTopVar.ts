@@ -1,4 +1,5 @@
 import { useLayoutEffect, type RefObject } from "react";
+import { activeEditorHost } from "../features/editor/activeEditor";
 
 /**
  * 把「编辑内容可视区顶边」实时写进 CSS 变量 `--lake-editor-top`（单位 px，**相对 .document-pane 顶边**）。
@@ -23,15 +24,24 @@ export function useEditorTopVar(paneRef: RefObject<HTMLElement | null>, activeNo
     const pane = paneRef.current;
     if (!pane || typeof ResizeObserver === "undefined") return;
 
+    /**
+     * 候选 = pane 级常驻面包屑 + **当前显示中**编辑器的内核工具条。
+     * 261005：原来把 pane 下**所有** `.ne-ui` 都当候选 —— 那是几何猜可见（靠隐藏实例 rect 为 0
+     * 才被 height>0 挡住）；隐藏方式一改成保留布局，隐藏标签的工具条就会被算进来。
+     * 现在只量 `data-active` 那个宿主里的（唯一来源见 activeEditor.ts）。
+     */
+    const collectInto = (out: Array<{ top: number; bottom: number }>, scope: ParentNode | null, selector: string) => {
+      if (!scope) return;
+      for (const el of scope.querySelectorAll<HTMLElement>(selector)) {
+        const rect = el.getBoundingClientRect();
+        if (rect.height > 0) out.push({ top: rect.top, bottom: rect.bottom });
+      }
+    };
     const compute = () => {
       const paneTop = pane.getBoundingClientRect().top;
       const candidates: Array<{ top: number; bottom: number }> = [];
-      for (const sel of [".protyle-breadcrumb", ".ne-ui"]) {
-        for (const el of pane.querySelectorAll<HTMLElement>(sel)) {
-          const rect = el.getBoundingClientRect();
-          if (rect.height > 0) candidates.push({ top: rect.top, bottom: rect.bottom });
-        }
-      }
+      collectInto(candidates, pane, ".protyle-breadcrumb");
+      collectInto(candidates, activeEditorHost(), ".ne-ui");
       candidates.sort((a, b) => a.top - b.top);
       let cursor = paneTop;
       for (const c of candidates) {
@@ -44,9 +54,14 @@ export function useEditorTopVar(paneRef: RefObject<HTMLElement | null>, activeNo
     const observed = new Set<Element>();
     const ro = new ResizeObserver(() => compute());
     const rescan = () => {
-      for (const el of pane.querySelectorAll(".protyle-breadcrumb, .ne-ui")) {
-        if (!observed.has(el)) { ro.observe(el); observed.add(el); }
-      }
+      const observeAll = (scope: ParentNode | null, selector: string) => {
+        if (!scope) return;
+        for (const el of scope.querySelectorAll(selector)) {
+          if (!observed.has(el)) { ro.observe(el); observed.add(el); }
+        }
+      };
+      observeAll(pane, ".protyle-breadcrumb");
+      observeAll(activeEditorHost(), ".ne-ui");
     };
 
     compute();

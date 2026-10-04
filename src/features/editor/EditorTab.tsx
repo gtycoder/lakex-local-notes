@@ -375,8 +375,10 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     };
     // 工具栏可能通过 portal 离开 host；补一层 document 捕获监听，只认 Drawnix
     // 工具节点且要求当前标签内存在画板，避免影响其它标签/普通编辑操作。
+    // 本标签是否在显示只看 visibleRef（= 宿主上的 data-active）；不要再判 host.style.display——
+    // 261005 起隐藏标签不再用 display:none（会把尺寸压成 0，切回来触发内核表格重排）。
     const documentBoardPointerGuard = (event: PointerEvent): void => {
-      if (!visibleRef.current || !host.isConnected || host.style.display === "none") return;
+      if (!visibleRef.current || !host.isConnected) return;
       if (!(event.target instanceof Element) || host.contains(event.target)) return;
       if (!host.querySelector(".plait-board-container")) return;
       if (!event.target.closest(".island, .tool-icon")) return;
@@ -384,7 +386,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       armBoardScrollRestore(Math.max(scroller?.scrollTop ?? 0, stableScrollTopRef.current, lastScrollTopRef.current));
     };
     const documentBoardKeyGuard = (event: KeyboardEvent): void => {
-      if (!visibleRef.current || !host.isConnected || host.style.display === "none") return;
+      if (!visibleRef.current || !host.isConnected) return;
       if (event.target instanceof Node && host.contains(event.target)) return;
       if (event.key !== "Delete" && event.key !== "Backspace") return;
       if (!host.querySelector(".plait-board-container")) return;
@@ -990,8 +992,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     <div
       ref={hostRef}
       className={`lake-editor lake-editor-tab${locked ? " lake-locked" : ""}${outlineEnhance ? " native-toc-hidden" : ""}`}
-      style={{ display: visible ? "flex" : "none", width: "100%" }}
+      // 隐藏交给 CSS（.lake-editor-tab:not([data-active]) → opacity:0 + visibility:hidden，见 tabs.css）：
+      // 这里再写 display:none 会把尺寸压成 0，切回来触发内核表格重排（261005）。
+      style={{ width: "100%" }}
       data-note-id={noteId}
+      data-active={visible ? "true" : undefined}
       onContextMenu={(event) => {
         event.preventDefault();
         const target = event.target as HTMLElement;

@@ -66,6 +66,28 @@
 
 .tab-panels { min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); }
 
+/* ── 非活动标签的隐藏方式（261005 统一）──────────────────────────────────────
+ * 所有标签宿主**保留布局尺寸**地隐藏，不再用 display:none。三个实测理由：
+ *  ① 内核 fit-width 表格：display:none 把容器宽压成 0，切回来 0→N 被当成真实 resize，
+ *     重算列宽 + 重渲染整张表（实测 263 次 ResizeObserver / 1095 次 DOM 变动；改后 0/0）。
+ *  ② 画板：display:none 让 .viewport-container 塌成 0，浏览器把滚动位置钳掉 ⇒ 切回来跳回原处（260926 用户报）。
+ *  ③ 内核工具条自己用 visibility:visible 做显隐，会把继承的 hidden 顶掉 ⇒ 切走后按钮永久停留（260926 用户报）。
+ * 所以用 opacity + visibility **同时**：
+ *  - visibility:hidden 跳过绘制、并让子树退出无障碍树与 Tab 焦点（不需要额外 inert/aria-hidden）；
+ *  - opacity:0 兜住上面第 ③ 条——内核把子元素 visibility 顶回 visible 时，整组仍是全透明；
+ *  - 两者都**保留盒子与内部滚动位置**，且都给元素建了独立的绘制/包含上下文。
+ * ⚠️ 不要改回 content-visibility:hidden：实测「content-visibility:hidden + 宿主重叠在同一网格格
+ * （grid-area:1/1）」会把**活动**编辑器的绘制整个压掉（261005 用户实测：文档与多维表整片空白；
+ * 像素判据 ink 0.23% ↔ 1.61%，且 display:none / visibility / opacity / 去掉重叠 四种都能恢复）。
+ * 「哪个标签在显示」的唯一来源 = 宿主上的 data-active（见 features/editor/activeEditor.ts），
+ * 这里只按属性判断，不再依赖 display 造成的 0 尺寸。 */
+:is(.lake-editor-tab, .sheet-editor, .bitable-editor, .board-editor):not([data-active="true"]),
+.board-editor--restoring {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* The tab strip is a window-level title bar. It must not inherit the
    document column's x offset when the library is docked or previewed. */
 .tab-bar {

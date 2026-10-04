@@ -5,6 +5,7 @@ import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
 import type { AiChatMessage } from "../../core/aiProviders";
+import { activeEditorMount } from "../editor/activeEditor";
 
 /**
  * AI 助手浮动面板。
@@ -34,25 +35,19 @@ export const AI_DIALOG_RESIZE_MIN = 140;
 // 拖出来的高度**不做记忆**（用户 261004：每次场景都不同，关掉就恢复默认自适应）。
 
 /**
- * 当前**可见**的编辑器挂载点。多 tab keep-alive 下文档里会有多个 `.lake-editor-mount`（隐藏的 h=0），
- * 文档顺序第一的未必是活动的 ⇒ 取第一个「有盒子宽度」的；拿不到返回 null（不滚错那个）。
- */
-function visibleEditorMount(): HTMLElement | null {
-  const mounts = Array.from(document.querySelectorAll<HTMLElement>(".lake-editor-mount:not(.is-outgoing)"));
-  return mounts.find((m) => m.getBoundingClientRect().width > 0) ?? null;
-}
-
-/**
- * 取当前**可见**正文的「文字栏」几何（左缘 + 宽度 + 编辑区顶）——AI 弹窗按它取宽，
+ * 取当前正文的「文字栏」几何（左缘 + 宽度 + 编辑区顶）——AI 弹窗按它取宽，
  * 实现「与正文文字栏等宽」（用户 261003 选定）。宽度**不能**用编辑器挂载点整宽：
  * 内核在大纲展开布局态下给正文块留 `margin-right:280px`（见 lakeRuntime.ts），
  * 直接用挂载点宽度会比正文栏宽出一大截。这里优先量**真实正文块**（p / h1–h6），
  * 拿不到再回落到 `.ne-engine` 的内容盒 ⇒ 两种布局态都能得到真正的文字栏。
+ *
+ * 261005：`container` = 本面板所属编辑器的挂载点（浮栏入口传进来，天然正确，不用猜）；
+ * 顶栏入口没有容器，退回 `activeEditorMount()`（唯一来源 = data-active，不再看几何）。
  */
-function resolveEditorColumn(): EditorColumn | null {
-  const mount = visibleEditorMount();
+function resolveEditorColumn(container?: HTMLElement | null): EditorColumn | null {
+  const mount = container ?? activeEditorMount();
   if (!mount) return null;
-  const engine = mount.querySelector<HTMLElement>(".ne-engine");
+  const engine = mount.matches(".ne-engine") ? mount : mount.querySelector<HTMLElement>(".ne-engine");
   if (!engine) return null;
   const mr = mount.getBoundingClientRect();
   const { top, bottom } = mr;
@@ -70,7 +65,7 @@ function resolveEditorColumn(): EditorColumn | null {
   return { mount, left: er.left + padL, width, top, bottom };
 }
 
-export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at, scroller }: {
+export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at, scroller, container }: {
   open: boolean; selectionText: string; onClose: () => void;
   /** 贴靠的锚点元素（浮动工具栏的 AI 按钮）——给了就悬浮在它下方，无遮罩、不压暗文档。 */
   anchor?: HTMLElement | null;
@@ -78,6 +73,8 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
   at?: { x: number; y: number } | null;
   /** 编辑区滚动容器（.ne-editor-wrap）：给了就把面板渲染进去、用内容坐标定位 ⇒ 随正文一起滚。 */
   scroller?: HTMLElement | null;
+  /** 本面板所属编辑器的挂载点（.lake-editor-mount）：浮栏入口传入 ⇒ 文字栏几何直接量自己，不猜。 */
+  container?: HTMLElement | null;
   /** 替换选区内容（无选区时= 插到光标处）。 */
   onReplace?: (text: string) => void;
   /** 插到选区**之后**（无选区时不提供）。 */
@@ -124,7 +121,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     let observed: HTMLElement | null = null;
     let ro: ResizeObserver | null = null;
     function update() {
-      const next = resolveEditorColumn();
+      const next = resolveEditorColumn(container);
       setColumn((prev) => (prev && next && prev.left === next.left && prev.width === next.width ? prev : next));
       if (next && typeof ResizeObserver !== "undefined") {
         if (!ro) ro = new ResizeObserver(update);
@@ -134,7 +131,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     update();
     window.addEventListener("resize", update);
     return () => { window.removeEventListener("resize", update); ro?.disconnect(); };
-  }, [open]);
+  }, [open, container]);
 
   const appendAssistant = (delta: string) => setTurns((prev) => {
     const next = prev.slice();

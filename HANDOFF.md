@@ -9,6 +9,27 @@
 
 > 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
+### 修复 · 261005 · 切标签「表格重排闪烁」+ 活动标签判定重构
+
+- 先排除误判：用户报「dev 切标签极卡、内容加载不出来」，日志证据显示渲染进程跑在**过期 HMR 模块**上（`menuLeft` / `TOOLBAR_FORMAT_FALLBACK_ICON` 在当前源码里已是 0 处引用）并有 `[sheet] editor crashed`；**重启 vite + Electron 后即恢复** ⇒ 不是「功能变多导致性能下降」。剩下的真问题 = **文档里 `fit-width` 表格切回来重排闪烁**。
+- 根因：非活动标签用 `display:none` 藏 ⇒ 表格容器宽度变 0；切回来 **0→N** 被内核 `fitWidth` 的 ResizeObserver（`lakex.js` `_updateFitWidth` / `s2`）当成一次真实 resize ⇒ 重算列宽 + 重渲染整张表。真实端实测（4 标签 / 用户那篇 `520d143d` 正文）：**ResizeObserver 触发 263 次 / 693ms、表格 DOM 变动 1095 次、LayoutCount +14 / RecalcStyle +18**。
+- 修法（方案 2 = 保留布局地隐藏）：`EditorTab` 去掉 inline `display:none`，改按 `data-active` 的共享规则隐藏。修后同条件实测：**ResizeObserver 0 次、表格 DOM 变动 0、LayoutCount +3**。
+- ⚠️ **踩坑（261005 用户实测，勿改回）**：第一版共享规则用 `content-visibility: hidden`，结果**活动编辑器的绘制被整个压掉**——用户实例里文档与多维表整片空白（DOM 都在、命中测试也命中，就是没画出来）。像素判据（编辑区 ink 比例）：`content-visibility:hidden` + 宿主重叠在同一网格格（`grid-area:1/1`）**0.23%**（空白）；`display:none` / `visibility:hidden` / `opacity:0` / `content-visibility` 但**不重叠** 四种都是 **1.61%**（正常）。结论：**`content-visibility: hidden` + 网格重叠**这个组合有 Chromium 层面的问题。
+- 最终口径：`tabs.css` 里 `:is(.lake-editor-tab, .sheet-editor, .bitable-editor, .board-editor):not([data-active="true"]),
+.board-editor--restoring { opacity: 0; visibility: hidden; pointer-events: none; }`（画板「贴位置」过渡态也并入同一条，避免同一个语义两套实现）。`visibility:hidden` 负责跳过绘制 + 退出无障碍树与 Tab 焦点（不需要额外 `inert`/`aria-hidden`）；`opacity:0` 兜住内核工具条自己写 `visibility:visible` 的泄漏（画板 260926 那个「按钮永久停留」）；两者都保留盒子与内部滚动位置。护栏 `boardEditorMount.test.ts` 已断言这条最终形态。
+- 前置重构（用户定为「即使只为整洁也要做」）：把「谁是活动标签」从**几何推断**改成**显式信号**。4 种编辑器宿主（`EditorTab` / `SheetEditor` / `BitableEditor` / `BoardEditor`）显示时打 `data-active=true`；新增唯一来源 `src/features/editor/activeEditor.ts`（只认属性、绝不看几何）。原先 3 处「白猜」的消费者改回自己手里的数据：`SelectionToolbar` 的内核工具条 → `container.querySelector('.ne-ui-toolbar')`（工具条本就在自己容器内，实测 `.ne-ui-toolbar → .ne-ui → .ne-editor → .lake-editor-mount`）；AI 面板文字栏 → 新增 `container` prop（顶栏入口无容器，退回 `activeEditorMount()`）；`useEditorTopVar` 的 `.ne-ui` 候选只取 `activeEditorHost()`。`lakeRuntime.visibleToolbarExists` 补 `content-visibility` 排除且卡工具栏只在本编辑器内查。
+- 内存实测（4 标签 / 3 篇表格文档，两独立实例交替跑）：heap 26.7 / 26.5 / 32.0 / 26.5 MB，nodes 4820 / 4826 / 5276 / 4820 ⇒ **无上升**（不重排反而少建节点）。保留布局确实会多建布局对象，但被「少一次重排重渲染」抵消，未观测到增量。
+- 护栏：新增 `src/features/editor/activeEditor.test.ts`（3 条：唯一来源不看几何 / 4 宿主都打信号 / 原白猜消费者不再全局搜——含 `desktopDerivedState` 的滚动归零与 `EditorTab` 里 `style.display` 判隐藏这两处**补漏**）；更新 `selectionToolbar.wiring.test.ts`、`aiAssistantDialog.test.ts`、`boardEditorMount.test.ts`；`cssLayers` 基线：`tabs.css` 189→192（+3 = 共享隐藏规则）、`boardEditor.css` 14→12（隐藏声明上移）、`editor.css` 基线仍是原值 70（中途 +2 的隐藏规则已上移到 `tabs.css` 统一）。⚠️ **e2e 脚本自己也曾用同一几何启发式**（`getBoundingClientRect().width>0` 挑 mount），随方案 2 一并改成 `[data-active=true]`——否则 AI-1 会误判（这正是「几何猜可见」脆弱的现场证据）。
+- ⚠️ **vendor 重建产物的 diff 会很大，属正常**：`npm run build:vendor` 每次都会重新 mangling 压缩标识符（`Ps→Fs`、`Fp→Ip`…），`dist/index.es.js` 可整体重排 3 万行左右（语义等价）。判断重建是否正确**不要看 diff**，看两件事：① 源码侧 `LOCAL-CHANGES` 对应的行为在真实端复现（本次：BH-8 走廊修复、引用内「高亮块」带文字）；② `git diff --check` 干净。
+- 独立事项（不在本条范围）：`@fortune-sheet/core` 的 `updateContextWithCanvas` 在 React ref 为 null 时裸读 `placeholder.clientWidth` 会抛 `TypeError`（日志 `[editor] crashed ce04a097…` ⇒ 错误边界整编辑器重建）。已在 `patches/@fortune-sheet+core+1.0.4.patch` 加判空（保留原有 hunk）。**诚实边界：只验证了补丁已生成/应用，未复现原始崩溃**。
+- 门禁：`tsc` ✓ · vitest **1611 passed / 16 skipped** ✓ · `check:core` ✓ · `ui-metrics`（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · 桌面 + 移动 build ✓ · `git diff --check` ✓ · 选区/块手柄 e2e **13/13** ✓ · 真实端 `--lake-editor-top` 三标签恒定 64px、活动标签内恰好 1 个内核工具条 ✓。
+- **已统一（用户追加「统一吧」）**：4 种编辑器宿主现在共用同一条隐藏规则 —— `tabs.css`：
+  最终形态 = `opacity: 0; visibility: hidden; pointer-events: none;`（**不是** content-visibility，原因见上一条踩坑）；
+  同时删掉三处各自的隐藏实现（`EditorTab` 的 inline `display:none`、sheet/bitable 的 `fn__none`、画板的 `board-editor--hidden`）。`grid-area: 1/1` 本来就每种宿主各自有（未动）。
+- 真实端四态验证：**恰好 1 个 `data-active`**，活动项 `pointer-events:auto`、其余 `none`（隐藏靠 opacity/visibility），且四种编辑器都正常渲染（doc 1 / sheet 2 / bitable 1 / board 21 个 svg·canvas）；宿主盒子都保留（1056×748~778）。像素判据复测：编辑区 ink = 1.61%（与旧 `display:none` 一致 ⇒ 绘制正常）。
+- 重编辑器内存实测（同实例三次交替）：「统一」30.1MB / 3842 nodes →「模拟旧 `display:none !important`」30.1MB / 3844 nodes →「统一」30.1MB / 3844 nodes ⇒ **完全相同**，统一没有内存代价。
+- 旁证：画板 `boardEditor.css` 的注释里 260926 就实测过两个反面教材（`display:none` 让画布 `.viewport-container` 塌成 0 ⇒ 浏览器钳掉滚动位置、切回跳回原处；`visibility:hidden` 被内核工具条自己的 `visibility:visible` 顶掉 ⇒ 画笔/箭头/形状按钮永久停留），与这次表格重排实测量指向同一结论。
+
 ### 当前批次 · 261004 块编辑（引用内块独立 / 引用内转化为裁剪 / 合并手柄 / 取消引用）
 
 - 云端实测（browser-skill + Edge）：引用**首个子块**的手柄 = 整个引用的合并手柄；引用内**非首**块各自出柄；引用内「转化为」= 11 项（h1–h6 / 正文 / 有序 / 无序 / 任务 / 高亮块，图 2），引用外 15 项；主菜单 6 项；手柄**顶对齐块首行**；多块选中样式 = **整块背景**（比文字选中浅）；**取消引用** = 引用第一行手柄 → 转化为 → 「引用」**回显 selected** → 点一下。

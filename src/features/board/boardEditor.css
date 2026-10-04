@@ -18,19 +18,17 @@
   height: 100%;
   background: transparent;
 }
-/* 画板被隐藏（切到别的标签）与"记下了位置、正在贴位置"这两个态都用 **content-visibility: hidden**。
-   两个反面教材（都实测过）：
-   - `display: none`（其它编辑器用的 fn__none）：画布容器塌成 0 尺寸 ⇒ 浏览器把 .viewport-container
-     的滚动位置钳掉（切走再回来变成 0,0 或 max,max）⇒ 位置"跳回原处"（用户 260926 报）；
-   - `visibility: hidden`：内核工具条自己用 `visibility: visible` 做显隐，会把继承下来的 hidden 顶掉
-     ⇒ 切到文档/表格后，画笔/箭头/形状三个按钮仍留在页面上（用户 260926 报"永久停留"）。
-   content-visibility:hidden 兼顾两者：内容不渲染（不绘制、不进无障碍树、不参与命中），
-   但元素盒子与内部滚动位置按上次布局保留（实测滚动量可读可写）。 */
-.board-editor--restoring,
-.board-editor--hidden {
-  content-visibility: hidden;
-  pointer-events: none;
-}
+/* 画板「记下了位置、正在贴位置」过渡态：由 **tabs.css 的共享隐藏规则**统一隐藏
+   （`.board-editor--restoring` 也列在那条选择器里）——切到别的标签那态同样走它。
+   两个反面教材（260926 均实测，所以隐藏必须**保留盒子**）：
+   - `display: none`（旧的 fn__none）：画布容器塌成 0 尺寸 ⇒ 浏览器把 .viewport-container
+     的滚动位置钳掉（切走再回来变成 0,0 或 max,max）⇒ 位置"跳回原处"；
+   - `visibility: hidden` 单用：内核工具条自己用 `visibility: visible` 做显隐，会把继承的 hidden 顶掉
+     ⇒ 切到文档/表格后，画笔/箭头/形状三个按钮仍留在页面上。
+   最终 `opacity + visibility` 两者同上：visibility 跳过绘制/退出无障碍与焦点，opacity 兜住工具条泄漏，
+   盒子与内部滚动位置都保留（实测滚动量可读可写）。
+   ⚠️ 不要用 content-visibility:hidden：它与 `.tab-panels` 的网格重叠（grid-area:1/1）组合会把
+   **当前活动**编辑器的绘制整个压掉（261005 用户实测：文档/多维表整片空白）。 */
 /*
  * 右下角：内核的「主题选择」岛（`.theme-toolbar`，位置在 vendor 镜像
  * src/styles/app/vendor-board.css 里，那份标注勿手改）本来贴在 right/bottom 20px 上，

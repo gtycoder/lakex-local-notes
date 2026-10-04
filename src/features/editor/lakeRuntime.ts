@@ -1272,12 +1272,22 @@ function setupCardToolbarHoverBridge(host: HTMLElement): () => void {
     }
   };
   const visibleToolbarExists = (): boolean => {
-    const selectors = ".ne-card-toolbar, .ne-ui-toolbar, .ne-ui-boundary-popover, ne-overlay-tmp, .ant-dropdown, .ant-select-dropdown, .ant-popover";
-    return [...document.querySelectorAll<HTMLElement>(selectors)].some((el) => {
+    const isVisible = (el: HTMLElement): boolean => {
       const rect = el.getBoundingClientRect();
       const style = getComputedStyle(el);
-      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
-    });
+      return (
+        rect.width > 0 && rect.height > 0
+        && style.display !== "none" && style.visibility !== "hidden"
+        // 261005：非活动标签现在**保留布局尺寸**（opacity+visibility 隐藏），隐藏实例的工具条
+        // 仍有真实 rect；上面 visibility 那条挡住共享规则，这条挡住画板「贴位置」态的 content-visibility，
+        // 否则会把「另一个（隐藏）编辑器的工具条」当成当前编辑器的 ⇒ 卡片工具栏悬停后不消失。
+        && style.contentVisibility !== "hidden"
+      );
+    };
+    // 卡工具栏/内核工具栏都在**本编辑器内**；overlay 类浮层 portal 到 body ⇒ 只能全局查。
+    const inEditor = host.querySelectorAll<HTMLElement>(".ne-card-toolbar, .ne-ui-toolbar");
+    const portaled = document.querySelectorAll<HTMLElement>(".ne-ui-boundary-popover, ne-overlay-tmp, .ant-dropdown, .ant-select-dropdown, .ant-popover");
+    return [...inEditor, ...portaled].some(isVisible);
   };
   const fireLeave = (card: Element): void => {
     const fire = (el: Element): void => {

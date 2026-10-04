@@ -42,6 +42,49 @@ function resolveTriggerEl(trigger?: HTMLElement | null): HTMLElement | null {
   return trigger ? ((trigger.querySelector("button") as HTMLElement | null) ?? trigger) : null;
 }
 
+/**
+ * AI 结果一律转成**引用格式**落盘（用户 261004：「替换选区」「插入到选区后」都用引用）。
+ * markdown 引用 = 每行前加 `> `；空行写成 `>`（引用续行），交给内核转成 <blockquote>。
+ */
+export function toQuoteMarkdown(text: string): string {
+  return text.replace(/\r\n/g, "\n").split("\n").map((line) => (line.trim().length > 0 ? "> " + line : ">")).join("\n");
+}
+
+/**
+ * AI 结果自动选中新内容时要认的**行级块**。
+ * ⚠️ 插入前记集合、插入后取差集**必须用同一个选择器**，否则差集失真（会漏选或多选）。
+ */
+const SELECTABLE_BLOCKS = "ne-quote, ne-p, ne-h1, ne-h2, ne-h3, ne-h4, ne-h5, ne-h6, ne-tli, ne-oli, ne-alert, ne-collapse";
+
+/** 引擎内当前所有可自动选中的行级块（插入前快照用）。 */
+function blockSetOf(container: HTMLElement): Set<Element> {
+  const engine = container.querySelector(".ne-engine");
+  return new Set<Element>(engine ? Array.from(engine.querySelectorAll(SELECTABLE_BLOCKS)) : []);
+}
+
+/**
+ * 插入完成后**自动选中刚插入的块**（用户 261004）。用 DOM 实现：内核模型选区捕获后可能已随渲染失效
+ * （applyModelRange 实测返回 false —— 它内部自己吞掉异常），而新增块在 DOM 里是确定的
+ * ⇒ 插入前后各取一次集合，差集就是新块。
+ */
+function selectNewBlocks(container: HTMLElement, before: Set<Element>): void {
+  const engine = container.querySelector(".ne-engine");
+  if (!engine) return;
+  const fresh = Array.from(engine.querySelectorAll(SELECTABLE_BLOCKS))
+    .filter((el) => !before.has(el));
+  if (fresh.length === 0) return;
+  try {
+    const range = document.createRange();
+    range.setStartBefore(fresh[0]);
+    range.setEndAfter(fresh[fresh.length - 1]);
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  } catch { /* 选区设置失败不影响已插入内容 */ }
+}
+
 /** 两个矩形列表是否近似相等：避免无意义的 state 更新 → 重渲染 → 闪（用户 261004：不许跳动）。 */
 function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolean {
   if (a === b) return true;
@@ -52,12 +95,16 @@ function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolea
 
 
 /**
- * 取**可见**的内核固定工具栏（.ne-ui-toolbar）：多 tab keep-alive 下文档里有多个，
- * 隐藏实例那个 rect 为 0 且常排在文档最前 —— 取第一个会把浮栏/菜单的「顶界」算成 0。
+ * 取**本编辑器**的内核固定工具栏（.ne-ui-toolbar）。
+ *
+ * 261005：原来在 document 全局找「第一个 height>0 的」——那是**几何猜可见**。而 261005 起非活动标签
+ * 改用保留布局的方式隐藏（opacity+visibility），隐藏实例的 rect **不再是 0** ⇒ 那个启发式必然会拿错
+ * （拿到别的标签的工具栏当顶界）。
+ * 内核固定工具栏本来就在本编辑器挂载点内（.ne-ui-toolbar → .ne-ui → .ne-editor → .lake-editor-mount），
+ * 直接在**自己的 container 里**取，天然正确（锁定时不存在 ⇒ 返回 null，回退到 host 顶边）。
  */
-function visibleChromeToolbar(): HTMLElement | null {
-  const all = Array.from(document.querySelectorAll<HTMLElement>(".ne-ui-toolbar"));
-  return all.find((el) => el.getBoundingClientRect().height > 0) ?? null;
+function chromeToolbarOf(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>(".ne-ui-toolbar");
 }
 
 
@@ -192,6 +239,8 @@ export function SelectionToolbar({ editor, container }: {
   const aiRangeRef = useRef<Range | null>(null);
   /** 打开时选区的视口落点（面板贴选区悬浮，无遮罩）。 */
   const aiAtRef = useRef<{ x: number; y: number } | null>(null);
+  /** 「插入 / 替换」刚写完正文并**自动选中了新内容** ⇒ 关闭面板时不要再把选区还原成原选区（会盖掉选中）。 */
+  const aiKeepSelectionRef = useRef(false);
   /** 打开对话框前捕获的**内核模型选区**（替换用；模型态不随焦点丢失）。 */
   const aiModelRangeRef = useRef<CapturedModelRange | null>(null);
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */
@@ -236,7 +285,7 @@ export function SelectionToolbar({ editor, container }: {
    */
   const clampToEditorArea = useCallback((point: { left: number; top: number }, size: { width: number; height: number }) => {
     const host = container.getBoundingClientRect();
-    const chrome = visibleChromeToolbar();
+    const chrome = chromeToolbarOf(container);
     const topLimit = Math.max(host.top, chrome ? chrome.getBoundingClientRect().bottom : 0) + TOOLBAR_MARGIN;
     const minLeft = host.left + TOOLBAR_MARGIN;
     const maxLeft = Math.max(minLeft, Math.min(window.innerWidth, host.right) - size.width - TOOLBAR_MARGIN);
@@ -538,6 +587,8 @@ export function SelectionToolbar({ editor, container }: {
   const closeAi = useCallback(() => {
     setAiOpen(false);
     setMenu(null);
+    // 刚插入/替换并自动选中了新内容 ⇒ 不要再还原成原选区（否则「选中新内容」会被立刻盖掉）。
+    if (aiKeepSelectionRef.current) { aiKeepSelectionRef.current = false; return; }
     const range = aiRangeRef.current;
     if (!range) return;
     window.setTimeout(() => {
@@ -554,6 +605,8 @@ export function SelectionToolbar({ editor, container }: {
       at={aiAtRef.current}
       // 传入编辑区滚动容器：AI 浮窗渲染进滚动内容、用内容坐标定位 ⇒ 随正文一起滚（与浮动工具栏同款几何）
       scroller={container.querySelector<HTMLElement>(".ne-editor-wrap")}
+      // 本编辑器挂载点：AI 面板的文字栏几何直接量自己（不再全局猜「哪个 mount 可见」）。
+      container={container}
       selectionText={aiSelectionRef.current}
       onClose={closeAi}
       onInsertAfter={(text) => {
@@ -564,31 +617,32 @@ export function SelectionToolbar({ editor, container }: {
           // breakLine 的语义本身就是"删除选区内容并换行"。所以这里**不碰内核选区**，改成把
           // 「原文 + 空行 + AI 结果」一起作为一次替换写回：文本不丢，AI 结果另起一段（MD 空行 = 新块）。
           const original = aiSelectionRef.current;
-          const data = original.trim() ? original + "\n\n" + text : text;
-          if (applyModelRange(editor, aiModelRangeRef.current)) {
-            editor.execCommand?.("insertAtSelection", "text/markdown", data);
-            return;
-          }
-          // 兜底（拿不到模型选区）：同样写组合串，宁可位置不准也不吞原文。
+          // AI 结果一律**引用格式**（用户 261004）。
+          const quoted = toQuoteMarkdown(text);
+          const data = original.trim() ? original + "\n\n" + quoted : quoted;
+          // 插入前记下已有块集合（差集 = 新插入的块，用于插入后自动选中）。
+          const before = blockSetOf(container);
+          applyModelRange(editor, aiModelRangeRef.current);   // best-effort：设回原选区（返回 false 也不影响下面的插入）
           editor.execCommand?.("insertAtSelection", "text/markdown", data);
+          aiKeepSelectionRef.current = true;
+          window.setTimeout(() => selectNewBlocks(container, before), 0);   // 插入后自动选中新内容
+          return;
         } catch { /* 命令不可用时忽略，结果仍可复制 */ }
       }}
       onReplace={(text) => {
         try {
-          // 首选：把打开前捕获的**内核模型选区**设回内核，再按当前选区插入 ⇒ 非折叠 = 替换。
-          // 依据 = 云端 lakex AI 面板同款做法（selection 命令 + 内核插入），不需要 DOM→view 映射。
-          if (applyModelRange(editor, aiModelRangeRef.current)) {
-            editor.execCommand?.("insertAtSelection", "text/markdown", text);
-            return;
-          }
-          // 格式用 text/markdown：模型输出天然是 MD，交给内核转成 Lake 节点（**加粗**/- 列表 等不会以字面量落盘）。
-          // 兜底：拿不到模型选区时，恢复 DOM 选区走浏览器 insertText（这条只能纯文本）。
+          // AI 结果一律**引用格式**（用户 261004）；插入后自动选中新内容。
+          // 模型选区优先（设回内核 ⇒ 非折叠 = 替换）；模型选区可能已随渲染失效，故再补一条 DOM 兜底：
+          // 把打开前的 DOM 选区设回去，让内核按当前选区做替换。
+          const quoted = toQuoteMarkdown(text);
+          const before = blockSetOf(container);
+          applyModelRange(editor, aiModelRangeRef.current);   // best-effort
           const range = aiRangeRef.current;
           const sel = window.getSelection();
           if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
-          if (!document.execCommand("insertText", false, text)) {
-            editor.execCommand?.("insertAtSelection", "text/markdown", text);
-          }
+          editor.execCommand?.("insertAtSelection", "text/markdown", quoted);
+          aiKeepSelectionRef.current = true;
+          window.setTimeout(() => selectNewBlocks(container, before), 0);
         } catch { /* 命令不可用时忽略，结果仍可复制 */ }
       }}
     />

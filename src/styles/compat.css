@@ -52,7 +52,9 @@
 
 /* ══ B. 思源组件类复刻（原 src/b3/siyuan.scss） ═══════════════════════ */
 
-/* 工具类（原 _function.scss；fn__none 是**承重**的：隐藏 keep-alive 的表格/画板/多维表编辑器） */
+/* 工具类（原 _function.scss）。261005 起 keep-alive 的非活动标签不再用它隐藏（改走 tabs.css 的
+   :is(...):not([data-active]) → opacity+visibility，保留布局尺寸），现在只用于一次性元素
+   （如表格编辑器的隐藏 file input）。 */
 .fn__none { display: none  !important; }
 .fn__space { width: 8px; display: inline-block; flex-shrink: 0; }
 .fn__size200 { width: 200px; }

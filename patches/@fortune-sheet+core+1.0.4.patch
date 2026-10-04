@@ -1,5 +1,5 @@
 diff --git a/node_modules/@fortune-sheet/core/dist/index.esm.js b/node_modules/@fortune-sheet/core/dist/index.esm.js
-index 5c9820b..2eb1ecc 100644
+index 5c9820b..d8b3238 100644
 --- a/node_modules/@fortune-sheet/core/dist/index.esm.js
 +++ b/node_modules/@fortune-sheet/core/dist/index.esm.js
 @@ -61295,6 +61295,7 @@ function getStyleByCell(ctx, d, r, c) {
@@ -10,7 +10,17 @@ index 5c9820b..2eb1ecc 100644
    return style;
  }
  function getInlineStringHTML(r, c, data) {
-@@ -65789,12 +65790,12 @@ function insertRowCol(ctx, op) {
+@@ -63569,6 +63570,9 @@ function updateContextWithSheetData(ctx, data) {
+   normalizeSelection(ctx, ctx.luckysheet_select_save);
+ }
+ function updateContextWithCanvas(ctx, canvas, placeholder) {
++  // LOCAL-CHANGE(261005)：隐藏标签页切换瞬间 canvas/placeholder 的 React ref 可能是 null，
++  // 原实现裸读 placeholder.clientWidth ⇒ TypeError，被错误边界接住后整编辑器重建（表格闪烁 ~2s）。
++  if (!canvas || !placeholder) return;
+   ctx.luckysheetTableContentHW = [placeholder.clientWidth, placeholder.clientHeight];
+   ctx.cellmainHeight = placeholder.clientHeight - ctx.columnHeaderHeight;
+   ctx.cellmainWidth = placeholder.clientWidth - ctx.rowHeaderWidth;
+@@ -65789,12 +65793,12 @@ function insertRowCol(ctx, op) {
      }
      if (direction === "lefttop") {
        if (index === 0) {
@@ -26,7 +36,7 @@ index 5c9820b..2eb1ecc 100644
      }
    } else {
      if (cfg.columnlen != null) {
-@@ -76262,7 +76263,7 @@ function setCellFormat(ctx, row, column, attr, value) {
+@@ -76262,7 +76266,7 @@ function setCellFormat(ctx, row, column, attr, value) {
      throw new Error("attr cannot be null or undefined");
    }
    var sheet = getSheet(ctx, options);
@@ -35,7 +45,7 @@ index 5c9820b..2eb1ecc 100644
    var cellData = (targetSheetData === null || targetSheetData === void 0 ? void 0 : (_targetSheetData$row = targetSheetData[row]) === null || _targetSheetData$row === void 0 ? void 0 : _targetSheetData$row[column]) || {};
    var cfg = sheet.config || {};
    if (attr === "ct" && (!value || value.fa == null || value.t == null)) {
-@@ -77022,6 +77023,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
+@@ -77022,6 +77026,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
      return;
    } else if (e.code === "KeyA") {
      selectAll(ctx);
@@ -43,7 +53,7 @@ index 5c9820b..2eb1ecc 100644
    } else if (e.code === "KeyD") {
      if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
        return;
-@@ -77265,31 +77267,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+@@ -77265,31 +77270,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
    var row_st = _.sortedIndex(visibledatarow_c, scrollTop) + 1;
    var rowscroll = 0;
    var scrollNum = 1;
@@ -81,7 +91,7 @@ index 5c9820b..2eb1ecc 100644
    }
    mouseWheelUniqueTimeout = setTimeout(function () {
 diff --git a/node_modules/@fortune-sheet/core/dist/index.js b/node_modules/@fortune-sheet/core/dist/index.js
-index 04113a1..c98d68f 100644
+index 04113a1..6ae0191 100644
 --- a/node_modules/@fortune-sheet/core/dist/index.js
 +++ b/node_modules/@fortune-sheet/core/dist/index.js
 @@ -61305,6 +61305,7 @@ function getStyleByCell(ctx, d, r, c) {
@@ -92,7 +102,17 @@ index 04113a1..c98d68f 100644
    return style;
  }
  function getInlineStringHTML(r, c, data) {
-@@ -65799,12 +65800,12 @@ function insertRowCol(ctx, op) {
+@@ -63579,6 +63580,9 @@ function updateContextWithSheetData(ctx, data) {
+   normalizeSelection(ctx, ctx.luckysheet_select_save);
+ }
+ function updateContextWithCanvas(ctx, canvas, placeholder) {
++  // LOCAL-CHANGE(261005)：隐藏标签页切换瞬间 canvas/placeholder 的 React ref 可能是 null，
++  // 原实现裸读 placeholder.clientWidth ⇒ TypeError，被错误边界接住后整编辑器重建（表格闪烁 ~2s）。
++  if (!canvas || !placeholder) return;
+   ctx.luckysheetTableContentHW = [placeholder.clientWidth, placeholder.clientHeight];
+   ctx.cellmainHeight = placeholder.clientHeight - ctx.columnHeaderHeight;
+   ctx.cellmainWidth = placeholder.clientWidth - ctx.rowHeaderWidth;
+@@ -65799,12 +65803,12 @@ function insertRowCol(ctx, op) {
      }
      if (direction === "lefttop") {
        if (index === 0) {
@@ -108,7 +128,7 @@ index 04113a1..c98d68f 100644
      }
    } else {
      if (cfg.columnlen != null) {
-@@ -76272,7 +76273,7 @@ function setCellFormat(ctx, row, column, attr, value) {
+@@ -76272,7 +76276,7 @@ function setCellFormat(ctx, row, column, attr, value) {
      throw new Error("attr cannot be null or undefined");
    }
    var sheet = getSheet(ctx, options);
@@ -117,7 +137,7 @@ index 04113a1..c98d68f 100644
    var cellData = (targetSheetData === null || targetSheetData === void 0 ? void 0 : (_targetSheetData$row = targetSheetData[row]) === null || _targetSheetData$row === void 0 ? void 0 : _targetSheetData$row[column]) || {};
    var cfg = sheet.config || {};
    if (attr === "ct" && (!value || value.fa == null || value.t == null)) {
-@@ -77032,6 +77033,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
+@@ -77032,6 +77036,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
      return;
    } else if (e.code === "KeyA") {
      selectAll(ctx);
@@ -125,7 +145,7 @@ index 04113a1..c98d68f 100644
    } else if (e.code === "KeyD") {
      if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
        return;
-@@ -77275,31 +77277,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+@@ -77275,31 +77280,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
    var row_st = ___default['default'].sortedIndex(visibledatarow_c, scrollTop) + 1;
    var rowscroll = 0;
    var scrollNum = 1;

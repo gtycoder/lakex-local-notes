@@ -1077,7 +1077,8 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
   return (
     <div
       ref={hostRef}
-      className={visible ? "sheet-editor" : "sheet-editor fn__none"}
+      className="sheet-editor"
+      data-active={visible ? "true" : undefined}
     >
       {/* 单元格图片（P2）：选择本地图片（隐藏 input，由自定义工具栏按钮触发）。 */}
       <input

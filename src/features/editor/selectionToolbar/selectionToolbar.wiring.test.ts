@@ -15,9 +15,12 @@ const MOUNT = readFileSync(new URL("./mountSelectionToolbar.ts", import.meta.url
 const CSS = readFileSync(new URL("./selectionToolbar.css", import.meta.url), "utf8");
 
 describe("浮动工具栏定位护栏（261004）", () => {
-  it("顶界（内核固定工具栏）取可见实例，不取文档第一个隐藏实例", () => {
-    expect(SRC).toContain("visibleChromeToolbar()");
-    expect(SRC).not.toMatch(/document\.querySelector\("\.ne-ui-toolbar"\)/);
+  it("顶界（内核固定工具栏）取**本编辑器自己的**容器，不全局猜可见实例", () => {
+    expect(SRC).toContain("chromeToolbarOf(container)");
+    expect(SRC).not.toContain("visibleChromeToolbar");
+    // 261005：不得用几何（height>0）在全局 .ne-ui-toolbar 里挑「可见的那个」——
+    // 隐藏方式一旦换成保留布局就会静默拿错（详见 features/editor/activeEditor.ts）。
+    expect(SRC).not.toMatch(/document\.querySelectorAll[^\n]*ne-ui-toolbar/);
   });
 
   it("宿主要挂在编辑区滚动容器里（随正文滚、被滚出裁切）", () => {

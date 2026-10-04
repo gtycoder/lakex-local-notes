@@ -97,15 +97,22 @@ describe("画板编辑器护栏", () => {
     expect(EDITOR).toMatch(/board-editor--restoring/);
     expect(EDITOR).toMatch(/setViewReady\(true\)/);
     const CSS = readFileSync(new URL("./boardEditor.css", import.meta.url), "utf8");
-    // 隐藏/贴位置两态都用 content-visibility:hidden：
+    // 隐藏必须**保留盒子**，两个反面教材（260926 实测）：
     // ① display:none 会让容器塌成 0 尺寸 ⇒ 浏览器钳掉滚动位置（切走再回来变成 0,0 / max,max）；
-    // ② visibility:hidden 会被内核工具条自己的 `visibility: visible` 顶掉 ⇒ 画笔/箭头/形状三个按钮
+    // ② visibility:hidden 单用会被内核工具条自己的 `visibility: visible` 顶掉 ⇒ 画笔/箭头/形状三个按钮
     //    切到文档后仍留在页面上（用户 260926 报"永久停留"）。
-    expect(CSS).toMatch(/\.board-editor--restoring,\s*\.board-editor--hidden \{\s*content-visibility: hidden;\s*pointer-events: none;\s*\}/);
-    // 不许出现 visibility 声明（注释里提到不算）
+    // 261005 起「贴位置」过渡态也并入 tabs.css 的共享隐藏规则（见下面 TABS 断言），本文件不再自带隐藏声明。
+    // 只查**声明**（注释里提到 content-visibility 是反面教材，不算）
+    expect(CSS).not.toMatch(/content-visibility\s*:\s*hidden\s*;/);
     expect(CSS).not.toMatch(/^\s*visibility: hidden;/m);
-    expect(EDITOR).toMatch(/visible \? "" : " board-editor--hidden"/);
-    expect(EDITOR).not.toMatch(/board-editor fn__none/);
+    // 261005：切标签的隐藏**统一**走共享规则（tabs.css 的 :is(...):not([data-active])），
+    // 画板不再自带 --hidden、也不用 fn__none（同一个语义只能有一套实现）。
+    expect(EDITOR).not.toMatch(/board-editor--hidden/);
+    expect(EDITOR).toMatch(/data-active=\{visible \? "true" : undefined\}/);
+    const TABS = readFileSync(new URL("../../styles/app/tabs.css", import.meta.url), "utf8");
+    // 261005：切标签统一用 opacity+visibility（保留布局尺寸；content-visibility 与网格重叠组合会压掉
+    // 活动编辑器的绘制，实测文档/多维表整片空白，勿改回）。
+    expect(TABS).toMatch(/:is\([^)]*\.board-editor[^)]*\):not\(\[data-active="true"\]\),\s*\.board-editor--restoring \{\s*opacity: 0;\s*visibility: hidden;\s*pointer-events: none;\s*\}/);
   });
 
   it("kind=board 端到端接线：noteKind / 正文目录 / 搜索文本 / 主进程新建", () => {
