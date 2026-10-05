@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { AiChatMessage, AiProviderConfig, AiReasoningEffort, AiThinkingMode } from "../../src/core/aiProviders.js";
+import type { AiProviderConfig, AiReasoningEffort, AiThinkingMode } from "../../src/core/aiProviders.js";
 import { aiErrorInfo } from "../../src/core/aiErrors.js";
 
 /**
@@ -12,8 +12,15 @@ import { aiErrorInfo } from "../../src/core/aiErrors.js";
  * - 可注入 factory：单测不碰网络（默认工厂才建官方 client）。
  */
 
-/** 对话消息：单一来源在 core（主进程/渲染层共用）。 */
-export type AiMessage = AiChatMessage;
+/** 主进程解析后的供应商消息：图片已是 `image_url` data URL，文档已抽成文本。 */
+export type AiResolvedContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: "low" | "high" | "original" | "auto" } };
+export interface AiResolvedMessage {
+  role: "system" | "user" | "assistant";
+  content: string | AiResolvedContentPart[];
+}
+export type AiMessage = AiResolvedMessage;
 
 export interface AiStreamArgs {
   model: string;

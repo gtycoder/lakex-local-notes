@@ -18,6 +18,13 @@ export const AI_PROMPT_PRESETS: AiPromptPreset[] = [
   { id: "fix", label: "修正", prompt: "请修正下面内容的错别字、语法和标点，不改变原意：" },
 ];
 
+/** 图片上下文的预设提示词（图片浮栏「AI」/ 选区含图时用；同样只填词、不发送）。 */
+export const AI_IMAGE_PRESETS: AiPromptPreset[] = [
+  { id: "image-describe", label: "描述", prompt: "请详细描述这张图片的内容：" },
+  { id: "image-ocr", label: "提取文字", prompt: "请提取这张图片里的所有文字，原样输出：" },
+  { id: "image-translate", label: "翻译", prompt: "请把这张图片里的文字翻译成中文：" },
+];
+
 /** 「自定义」段（默认/兜底，排在最后）。 */
 export const AI_PROMPT_CUSTOM_ID = "custom";
 export const AI_PROMPT_CUSTOM_LABEL = "自定义";

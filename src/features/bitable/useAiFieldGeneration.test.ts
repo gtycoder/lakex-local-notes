@@ -72,6 +72,7 @@ function renderHarness(doc: BitableDoc) {
     const docRef = useRef(current);
     const api = useAiFieldGeneration({
       docRef,
+      noteId: "note-1",
       updateDoc: (update) => { const next = update(docRef.current); docRef.current = next; current = next; writes.push(next); },
       beginGesture,
       endGesture,

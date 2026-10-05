@@ -970,6 +970,11 @@ export class Store {
     return this.orphanLifecycle.readAssetPreview(noteId, filename);
   }
 
+  /** 读取 note-assets 下文件原始字节（多模态 AI 用：图片 / PDF）。 */
+  readAssetBytes(noteId: string, filename: string): { bytes: Buffer; size: number; mimeType: string } | null {
+    return this.orphanLifecycle.readAssetBytes(noteId, filename);
+  }
+
   /** 全局“未引用/被移除资源”汇总（orphan 可删 / history 受保护；设置页聚合）。 */
   listRemovedAssets(): Array<{
     noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number;

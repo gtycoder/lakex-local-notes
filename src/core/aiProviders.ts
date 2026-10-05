@@ -242,10 +242,50 @@ export function aiSettingsReady(settings: AiSettings): boolean {
   return Boolean(active && active.apiKey && active.model && active.baseUrl);
 }
 
-/** 对话消息（主进程/渲染层共用）。 */
+/**
+ * 本地资产引用（多模态 · 261006）：跨 IPC **只传引用**，字节读取与解析只在主进程。
+ * `noteId` + `filename` 是 `note-assets/{noteId}/{filename}` 的磁盘寻址；`name` 只作提示词里的展示标签。
+ * 附件既不落正文、也不进 S3 / 同步，消息载荷是瞬时的。
+ */
+export interface AiAssetRef {
+  noteId: string;
+  /** 磁盘名（`note-assets/{noteId}/{filename}`）。 */
+  filename: string;
+  /** 展示名（用户原始文件名；缺省回落 filename）。 */
+  name?: string;
+}
+
+/**
+ * 多模态内容块：
+ * - `text`     —— 普通文本；
+ * - `image`    —— 主进程读本地图片 → OpenAI 兼容 `image_url` data URL；
+ * - `document` —— 主进程读本地文档并抽取文本（当前仅 PDF）→ 文本块。
+ * 图片 / 文档块**只允许出现在 `user` 消息**（供应商对 system/assistant 带图直接 400）。
+ */
+export type AiContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; asset: AiAssetRef }
+  | { type: "document"; asset: AiAssetRef };
+
+/** 对话消息（主进程/渲染层共用）；`content` 为字符串或内容块数组。 */
 export interface AiChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | AiContentPart[];
+}
+
+/** 消息的纯文本部分（字符预算与展示口径；附件不计字符）。 */
+export function aiMessageText(message: AiChatMessage): string {
+  if (typeof message.content === "string") return message.content;
+  return message.content
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+}
+
+/** 归一成内容块数组（字符串 → 单个文本块；空串 → 空数组）。 */
+export function aiContentPartsOf(content: string | AiContentPart[]): AiContentPart[] {
+  if (typeof content === "string") return content ? [{ type: "text", text: content }] : [];
+  return content;
 }
 export interface AiTestResult { ok: boolean; error?: string; /** 网络/限流类失败可"仍要保存"。 */ retryable?: boolean }
 export interface AiListModelsResult { ok: boolean; models?: string[]; error?: string; retryable?: boolean }

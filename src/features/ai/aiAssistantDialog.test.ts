@@ -20,7 +20,7 @@ describe("AI 弹窗定位护栏（261004）", () => {
   });
 
   it("高度上限用 floor：round 会向上越界 ~1px，正好触发「下方放不下」的翻转", () => {
-    expect(DIALOG).toContain("Math.floor(limitBottom - AI_DIALOG_MARGIN - topY)");
+    expect(DIALOG).toContain("Math.min(Math.ceil(limitBottom - AI_DIALOG_MARGIN - topY), AI_DIALOG_MAX_HEIGHT)");
     expect(DIALOG).not.toMatch(/Math\.round\(limitBottom/);
   });
 
@@ -49,6 +49,8 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).not.toContain("AI_DIALOG_MIN_HEIGHT");
     // 内容上限 = 手动拖拽上限 = 编辑区可视高
     expect(DIALOG).toContain("const resizeMax = Math.max(AI_DIALOG_RESIZE_MIN");
+    // 261005：面板最高 = 配置整数（不再按比例算；全高太长）
+    expect(DIALOG).toContain("AI_DIALOG_MAX_HEIGHT = 512");
     expect(DIALOG).not.toContain("surfaceElRef"); // 261004 曾按面板真实高度二次推编辑区，已按用户要求收敛掉
   });
 
@@ -57,7 +59,7 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).toContain("container={scroller}");
     expect(DIALOG).toContain('position: "absolute"');
     // 高度上限 = 编辑区可视高 ⇒ 超出交面板内滚动（不再按选区下方可用高封顶）
-    expect(DIALOG).toContain("Math.floor(wr.height - 2 * AI_DIALOG_MARGIN)");
+    expect(DIALOG).toContain("Math.min(Math.ceil(wr.height - 2 * AI_DIALOG_MARGIN), AI_DIALOG_MAX_HEIGHT)");
     // 浮动工具栏入口把它传进滚动容器
     expect(TOOLBAR).toMatch(/scroller=\{container\.querySelector<HTMLElement>\("\.ne-editor-wrap"\)\}/);
   });
@@ -105,8 +107,10 @@ describe("AI 弹窗定位护栏（261004）", () => {
 
 
   it("首轮预设：仅「有选区 + 首轮」显示；点击只填词不发送；手动改字回自定义", () => {
-    expect(DIALOG).toContain("AI_PROMPT_PRESETS.map");
-    expect(DIALOG).toContain("turns.length === 0 && selectionText.trim().length > 0");
+    // 261005 多模态：预设数组改为按上下文选（有图无字 → 图片预设），gate 也放开了「有图片」
+    expect(DIALOG).toContain("{presets.map((preset) => (");
+    expect(DIALOG).toContain("turns.length === 0 && (selectionText.trim().length > 0 || hasImages)");
+    expect(DIALOG).toContain("AI_PROMPT_PRESETS");
     expect(DIALOG).toContain("applyPreset(preset)");
     // applyPreset 只 setInstruction + 聚焦，绝不调 run()（发送必须由用户点按钮）
     const body = DIALOG.slice(DIALOG.indexOf("const applyPreset"), DIALOG.indexOf("const copyMessage"));
@@ -128,6 +132,15 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).toContain("copyTip.show(");
     expect(DIALOG).toContain('className="ln-tip ai-dialog__tip"');
     expect(DIALOG).not.toContain("title={copied?.index");
+  });
+
+  it("多模态：attachments 作为 image 块随首轮发出；无文字选区时改出图片预设", () => {
+    expect(DIALOG).toContain("attachments?: AiAssetRef[]");
+    expect(DIALOG).toContain('...attachments!.map((asset) => ({ type: "image" as const, asset }))');
+    expect(DIALOG).toContain("AI_IMAGE_PRESETS");
+    expect(DIALOG).toContain("hasImages");
+    // 预设 gate：有文字选区**或**有图片才出现（图片-only 用图片预设）
+    expect(DIALOG).toContain("selectionText.trim().length > 0 || hasImages");
   });
 
 });

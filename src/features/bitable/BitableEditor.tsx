@@ -156,6 +156,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   /** AI 字段生成（261003）：单格 + 整列；写值走 setBitableCellValue，整批一次撤销（见 hook 文件头）。 */
   const aiGen = useAiFieldGeneration({
     docRef,
+    noteId,
     updateDoc,
     beginGesture,
     endGesture,
@@ -1698,6 +1699,8 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
   const relationViews = relationTarget?.views ?? [];
   /** AI 字段配置（261003）：命令里用「插入字段」插入 `{{字段名}}` 变量（可多个；生成时**原位替换**）。 */
   const [aiPrompt, setAiPrompt] = useState(typeof field?.ai?.prompt === "string" ? field.ai.prompt : "");
+  /** 多模态（261006）：把被引用字段里的图片 / PDF 作为内容块一并发送（缺省关闭）。 */
+  const [aiIncludeAttachments, setAiIncludeAttachments] = useState<boolean>(field?.ai?.includeAttachments === true);
   const [aiInsertAnchor, setAiInsertAnchor] = useState<HTMLElement | null>(null);
   const aiPromptRef = useRef<HTMLTextAreaElement>(null);
   const isAi = type === "ai";
@@ -1780,7 +1783,9 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
       ? options.map((option, index) => ({ ...option, name: option.name.trim() || "选项 " + (index + 1) }))
       : undefined;
     // AI 配置（261003）：仅 AI 字段带（字段变量写在命令里，可多个）；切走类型时显式 undefined，清掉旧配置。
-    const ai: BitableAiConfig | undefined = isAi ? { prompt: aiPrompt.trim() } : undefined;
+    const ai: BitableAiConfig | undefined = isAi
+      ? { prompt: aiPrompt.trim(), ...(aiIncludeAttachments ? { includeAttachments: true } : {}) }
+      : undefined;
     if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: nextOptions, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation, ai }); return; }
     onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation: isRelation ? relation : undefined, ai }, nextOptions);
   };
@@ -1884,6 +1889,11 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
                   ))}
                 </div>
               </Popover>
+            )}
+            <label className="bt-field-check"><input type="checkbox" checked={aiIncludeAttachments} disabled={readOnly}
+              onChange={(event) => setAiIncludeAttachments(event.target.checked)} />把引用的图片 / PDF 一起发送给 AI</label>
+            {aiIncludeAttachments && (
+              <div className="bt-field-label-text">图片直接发送；PDF 抽取文字后发送（当前只支持 PDF）；其余附件仍只发文件名。</div>
             )}
             <div className="bt-field-label-text">
               {aiTokenNames.length === 0

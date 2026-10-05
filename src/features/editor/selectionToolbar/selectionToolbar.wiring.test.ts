@@ -103,4 +103,39 @@ describe("AI 回写「插入到选区后」护栏（261005）", () => {
     // 浮栏的替换也走共用实现（含打开前的 DOM 选区兜底）
     expect(SRC).toContain("applyAiReplace(editor, container, aiModelRangeRef.current, text, aiRangeRef.current)");
   });
+
+  it("多模态：选区含图自动带图；图片浮栏有「AI」入口；面板收到 attachments", () => {
+    // 文字 AI 入口：开面板前收集选区里的图片（不用手动附图）
+    expect(SRC).toContain("collectSelectionImageRefs(aiRangeRef.current)");
+    // 图片浮栏入口：单张图片作为上下文
+    expect(SRC).toContain("openAiForImage");
+    expect(SRC).toContain("imageCardAssetRef");
+    expect(SRC).toMatch(/tip="AI"[^\n]*openAiForImage/);
+    // 面板拿到图片上下文
+    expect(SRC).toContain("attachments={aiAttachmentsRef.current}");
+    // 关面板清上下文（下次顶栏/文字入口不带旧图）
+    expect(SRC).toContain("aiAttachmentsRef.current = []");
+    // 图片浮栏的 AI 入口放**最后**（与文字浮栏「分隔线 + AI 收尾」一致）：源码顺序上「另存为」在它前面
+    expect(SRC.indexOf('tip="另存为"')).toBeLessThan(SRC.indexOf('tip="AI"'));
+    // 图片弹层必须在 .ne-card-toolbar **外面**：内核给它设了 transform（实测 offsetParent=ne-card-toolbar），
+    // position:fixed 会相对工具栏定位 ⇒ 坐标再加一次偏移（260930「弹窗歪到最左」的根因）。
+    const toolbarStart = SRC.indexOf('className="ne-card-toolbar"');
+    const firstPopover = SRC.indexOf("selection-toolbar__cardpop");
+    expect(toolbarStart).toBeGreaterThanOrEqual(0);
+    expect(SRC.slice(toolbarStart, firstPopover)).toContain("</div>");
+    // 图片浮栏只留图标（261005）：文字标签与 -has-title 全部退掉，名称靠 hover tip
+    for (const label of ["宽高", "描述", "样式", "边距"]) expect(SRC).not.toContain("<span>" + label + "</span>");
+    expect(SRC).not.toContain("ne-card-toolbar-dropdown-item-has-title");
+    expect(SRC).not.toContain("ne-card-toolbar-select-item-has-title");
+    expect(SRC).not.toContain("ne-card-toolbar-item-has-title");
+    // 图片选中时 Cmd/Ctrl+X = 剪切：copy 到剪贴板 + **单卡**删除
+    // （绝不能用块级删除 —— 会把同一个块里的其它图片/文字一起删掉）
+    expect(SRC).toContain("deleteCardNative(cardEl, cardId, editor)");
+    // 覆盖所有卡片类型：任意 ne-card 都记「最近点过的卡」，图片 target 优先
+    expect(SRC).toContain("el.closest(\"ne-card\")");
+    expect(SRC).toContain("activeCardRef.current");
+    expect(SRC).toContain('document.execCommand("copy")');
+    expect(SRC).not.toMatch(/deleteBlockByRange\s*\(/);   // 注释里可以提到，但不能真的调用
+    expect(SRC).not.toContain("topLevelBlockOf");
+  });
 });

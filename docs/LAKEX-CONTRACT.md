@@ -1284,3 +1284,31 @@ PY
 - **块 DOM 元素带模型 id**：段落等块元素是 `<ne-p id="<nodeId>-body" ne-role="render-unit">`；`engine.transformDOMRange(range)`（`range.selectNodeContents(el)`）返回**非折叠**的 `{start,end}`，交给 `kernel.execCommand('selection', { focus:'end', anchor:'start', ranges:[mr] })` 即可设成块选区（与 vendor `selectBlockInEditor` 同口径）。
 - **⚠️ 菜单点击会把模型选区压成折叠**：`kernel.document.selection.firstRange.start === end`（实测 offset 都落在块末）。⇒ **用选区前必须判折叠**，折叠就自己按块元素选整块；否则 `insertAtSelection` 会退化成「光标处插入」——症状＝AI「替换选区」变成把结果**追加**在原块内容后面（实测 "原始段落内容。AI写的替换内容"）。
 - **多块选区**由 vendor 在自己的 `handleMenuAction` 里先 `selectBlocksInEditor(editor, multi)` 还原（非折叠）⇒ 宿主直接 `captureModelRange` 即可拿到整段；`getSelectionContent('text/markdown')` / `insertAtSelection` / `deleteByRange` 均按整段工作。
+
+### 5.20 图片浮栏弹层定位：`.ne-card-toolbar` 自带 `transform`，`position: fixed` 会相对它定位（261005 实测）
+
+- **现象**：图片浮栏（`.selection-toolbar[data-kind=image]` 的内层是内核 `.ne-card-toolbar`）的下拉弹层（对齐/样式/批量，以及宽高/链接/边距）组件已算出**视口坐标**，却出现在错误位置（用户截图：跑到最左）。
+- **根因（实测）**：内核 `.ne-card-toolbar` 自带 `transform` ⇒ 对它内部 `position: fixed` 的后代，**包含块从视口变成 `.ne-card-toolbar`**（实测弹层 `offsetParent === ne-card-toolbar`；inline `left:531/top:169` 的最终 `getBoundingClientRect` = 工具栏 `232/128` + `531/169` = `764/298`）。组件按视口算的坐标被**再加一次工具栏偏移**。
+- **正确接法**：把 `position: fixed` 的弹层渲染在 `.ne-card-toolbar` **外面**（作为其兄弟节点；父级 `.selection-toolbar` 无 transform ⇒ `offsetParent === null` 即正确）。**不要**用 `!important`/改 CSS 去压 —— 问题在包含块选择，不在样式优先级。
+- **旁证**：文字浮栏（`.selection-toolbar` 直接作父级、无 transform）的同类弹层一直正常 ⇒ 不是「浮层原语」的问题，纯粹是「塞进了带 transform 的内核容器」。
+- 落地：`src/features/editor/selectionToolbar/SelectionToolbar.tsx`（`renderImage` 返回 Fragment：`.ne-card-toolbar` 只放条目，弹层在其后）+ 护栏 `selectionToolbar.wiring.test.ts`。
+
+### 5.21 图片裁剪：本构建**实际可用**（推翻 vendor 注释的「空桩」说法，261005 实测）
+
+- vendor `src/components/plugin/imageToolbar/ImageToolbar.tsx` 的 crop 分支注释写「本构建中原生 crop 通道是空桩，`_cropImageOp` 恒为 null」，并走 `cardUI._$cardUI._setCroping({croping})`。
+- **实测不成立**：直接调 `cardUI._$cardUI.setCro(true)`（= 我们 `imageCardOps.enterImageCrop` 的路径）后：`_isCroping === true`、`getCroping() === true`、`_cropImageOp` 由 `null` 变为**已设置**、裁剪相关 DOM 节点 **11 个**。⇒ **crop 通道可用**；vendor 那句是过期结论（或只针对 `_setCroping` 的某条分支）。
+- 结论：图片浮栏的「裁剪」按钮**保留**（不是死按钮）。后续若有人报「裁剪不可用」，先按本口径复核，**不要**据 vendor 注释删按钮。
+
+### 5.22 卡片删除：用内核命令 `deleteCard(cardId)`（**单卡**）；块级删除 / `delete` / `deleteByRange` 都不对（261005 实测）
+
+- 背景：图片上按 Cmd+X 无效。根因是宿主 capture 的 `cut` / `copy` handler 都要求**非折叠 DOM 选区**，而点图片不会建立选区；内核原生 cut 拿到卡片时只把 `image/png` 写进剪贴板，**不删卡片**。
+- 强行 `selectNode(卡片)` 后再走这些路径，实测**都不删卡片**：
+  - `kernel.execCommand("delete")`（宿主 cut handler 现用）→ 卡片原样留下；
+  - outer range → `transformDOMRange` → `createModelRange` → `kernel.execCommand("deleteByRange")` → 不删卡片节点；
+  - `editor.execCommand("deleteCard", cardId)`（用**卡片实例自己的 editor**）→ **正确**：只摘这一张卡 ✓。
+- ⚠️ vendor 的 `blockMenuHelpers.removeBlockNodesNative`（模型事务）删的是**整块**，**不能**用来删单张卡；它的兜底 `deleteByRange` 又删不掉卡片节点。
+- **落地（261005 最终版）**：宿主 `SelectionToolbar` 的 Cmd/Ctrl+X = `selectNode(卡片)` + `execCommand("copy")` 写剪贴板 → `deleteCardNative(cardEl, cardId, editor)`（取**卡片实例自己的 editor** 调 `execCommand("deleteCard", cardId)`）。**不需要任何 vendor 改动**（一度导出过 `deleteBlockByRange`，因**整块删除会连坐同段其它图片/文字**被用户否掉，vendor 已整体还原）。
+- **覆盖所有卡片类型（261005）**：`SelectionToolbar` 在 `pointerdown`(capture) 记「最近点过的 `ne-card`」（`activeCardRef`）；Cmd+X 时**图片优先用浮栏 target、其它类型用它**，仅命中卡片才拦（有非折叠文字选区且不在该卡上则让位；卡片内标题等可编辑元素不抢）。真实端实测同文档 **image/file/video/audio 各 2 张**逐个切：计数 `2,2,2,2 → 1,2,2,2 → 1,1,2,2 → 1,1,1,2 → 1,1,1,1`，每类只掉目标 1 张、其余类型零变化。内联卡（父 `NE-P`）与块卡（`NE-HOLE` 包裹）都只删目标卡。
+- ⚠️ **踩过的坑**：处理器最初用 `el.closest("input, textarea, [contenteditable='true']")` 当「别抢输入框」守卫，但**主编辑器引擎本身就是 contenteditable** ⇒ 守卫恒真、Cmd+X 永远进不来（表现为「处理器根本没跑」）。守卫必须**排除 `.ne-engine`**。另：e2e 验证剪贴板前要先**清空系统剪贴板**，否则读到跨次运行的残留、误判成「已写入」。
+- 真实端实测（可信 CDP 输入）：一个段落 3 张图，Cmd+X **中间那张** → 落盘只剩 seed_1/seed_3、**块内文字保留**、DOM 剩 2 张、剪贴板拿到含 `<img>` 的 `text/html`。
+- 另：早期一度判定 `deleteCard`「只移除 DOM、落盘仍有图片」是**误判** —— 当时 handler 因上面那条守卫从未执行，且落盘读得太早。

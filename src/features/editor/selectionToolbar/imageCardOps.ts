@@ -105,6 +105,25 @@ export function setImageSpacing(cardEl: HTMLElement, value: "both" | "top" | "bo
   try { cd.setCardSpacing(value); cd.sync?.(false); return true; } catch { return false; }
 }
 
+/**
+ * 删除**单张卡片**（图片 / 附件等）：内核命令 `deleteCard(cardId)`。
+ *
+ * 为什么不用块级删除：`deleteBlockByRange` / 顶层块删除会**整块**删掉 —— 同一个块里的其它图片 / 文字一起没
+ * （用户 261005 实测：一个段落放多张户型图，删一张会全没）。`deleteCard` 只摘这一张卡，块与其它元素保留。
+ * `cardId` = 卡片 DOM 的 `id`（内核按 id 认卡片，`updateImageData` 同源）。
+ */
+export function deleteCardNative(cardEl: HTMLElement | null, cardId: string | null | undefined, fallbackEditor?: unknown): boolean {
+  if (!cardEl || !cardId) return false;
+  try {
+    const ref = (cardEl as unknown as { _neRef?: { _virtualNode?: { _instance?: unknown }; _instance?: unknown } })._neRef;
+    const inst = (ref?._virtualNode?._instance ?? ref?._instance) as { editor?: { execCommand?: (n: string, a: unknown) => unknown }; _$cardUI?: { editor?: { execCommand?: (n: string, a: unknown) => unknown } } } | undefined;
+    const editor = inst?.editor ?? inst?._$cardUI?.editor ?? (fallbackEditor as { execCommand?: (n: string, a: unknown) => unknown } | undefined);
+    if (!editor || typeof editor.execCommand !== "function") return false;
+    editor.execCommand("deleteCard", cardId);
+    return true;
+  } catch { return false; }
+}
+
 /** 是否处于内核交互式裁剪态（裁剪时浮框应让位）。 */
 export function isImageCropping(cardEl: HTMLElement): boolean {
   try { return cardUi(cardEl)?.getCroping?.() === true; } catch { return false; }

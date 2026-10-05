@@ -196,6 +196,20 @@ export class OrphanLifecycle {
     return { filename, mimeType, supported: true, dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}` };
   }
 
+  /** 读取 note-assets 下文件**原始字节**（多模态 AI：图片 → data URL / PDF → 抽文本；双段路径校验）。 */
+  readAssetBytes(noteId: string, filename: string): { bytes: Buffer; size: number; mimeType: string } | null {
+    if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) return null;
+    const full = path.join(this.ctx.noteAssetsDirFor(noteId), filename);
+    if (!fs.existsSync(full)) return null;
+    try {
+      const stat = fs.statSync(full);
+      if (!stat.isFile()) return null;
+      return { bytes: fs.readFileSync(full), size: stat.size, mimeType: mimeTypeForFilename(filename) };
+    } catch {
+      return null;
+    }
+  }
+
   /** 全局“未引用/被移除资源”汇总：当前正文不再引用的本地资产文件，分两类——
    *   orphan  —— 未引用且不在任何历史快照（可删除，即 orphan_assets 行）；
    *   history —— 仍被某历史快照引用（受保护：只预览不可删）。

@@ -4,12 +4,12 @@ import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
-import type { AiChatMessage } from "../../core/aiProviders";
+import { aiMessageText, type AiAssetRef, type AiChatMessage } from "../../core/aiProviders";
 import { activeEditorMount } from "../editor/activeEditor";
 import { AiMessageBody } from "./AiMessageBody";
 import { copyMarkdownAsLake, type LakePayloadKernel } from "./aiLakeClipboard";
 import { editorInstanceAt } from "../editor/editorRegistry";
-import { AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, AI_PROMPT_PRESETS, type AiPromptPreset } from "./aiPrompts";
+import { AI_IMAGE_PRESETS, AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, AI_PROMPT_PRESETS, type AiPromptPreset } from "./aiPrompts";
 import "./aiDialogParts.css";
 
 /**
@@ -37,6 +37,8 @@ export const AI_DIALOG_GAP = 8;
 export const AI_DIALOG_MARGIN = 8;
 /** 右下角拖动把手可缩到的最小高度（保住输入条 + 按钮行）。 */
 export const AI_DIALOG_RESIZE_MIN = 140;
+/** 面板最大高度（px，配置值）：需要多高直接改这个数（用户 261005）。 */
+export const AI_DIALOG_MAX_HEIGHT = 512;
 // 拖出来的高度**不做记忆**（用户 261004：每次场景都不同，关掉就恢复默认自适应）。
 
 /**
@@ -83,8 +85,10 @@ function useCopyTip() {
   return { surface, show, hide };
 }
 
-export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at, scroller, container }: {
+export function AiAssistantDialog({ open, selectionText, attachments, onClose, onReplace, onInsertAfter, anchor, at, scroller, container }: {
   open: boolean; selectionText: string; onClose: () => void;
+  /** 多模态上下文（图片浮栏「AI」/ 选区含图）：随首轮 user 消息作为 image 块发送。 */
+  attachments?: AiAssetRef[];
   /** 贴靠的锚点元素（浮动工具栏的 AI 按钮）——给了就悬浮在它下方，无遮罩、不压暗文档。 */
   anchor?: HTMLElement | null;
   /** 无锚点时的落点（顶栏入口）；缺省落在右上角。 */
@@ -135,6 +139,9 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
   const firstPrompt = selectionText.trim() ? instruction.trim() + "\n\n" + selectionText : instruction.trim();
   const lastOutput = [...turns].reverse().find((t) => t.role === "assistant")?.text ?? "";
   const canSendFirst = Boolean(instruction.trim());
+  /** 图片上下文：有图时首轮把图片作为 image 块一起发出；没有文字选区时改出图片预设。 */
+  const hasImages = (attachments?.length ?? 0) > 0;
+  const presets = hasImages && !selectionText.trim() ? AI_IMAGE_PRESETS : AI_PROMPT_PRESETS;
   // 当前生效的输入（首轮=提问，之后=追问）——叉号「清除内容」与自增高都以它为准。
   const activeValue = turns.length === 0 ? instruction : followUp;
 
@@ -197,7 +204,10 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     const content = first ? firstPrompt : followUp.trim();
     if (!content) { setError("请先写要让 AI 做什么"); return; }
     const base = first ? [] : historyRef.current;
-    const messages: AiChatMessage[] = [...base, { role: "user", content }];
+    const firstContent: AiChatMessage["content"] = hasImages
+      ? [{ type: "text", text: content }, ...attachments!.map((asset) => ({ type: "image" as const, asset }))]
+      : content;
+    const messages: AiChatMessage[] = [...base, { role: "user", content: first ? firstContent : content }];
     historyRef.current = messages;
     setTurns((prev) => [...(first ? [] : prev),
       { role: "user", text: first ? instruction.trim() : followUp.trim() },
@@ -215,7 +225,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     if (cut < 0) return;
     const messages = hist.slice(0, cut + 1);
     historyRef.current = messages;
-    const lastUser = messages[messages.length - 1].content;
+    const lastUser = aiMessageText(messages[messages.length - 1]);
     setTurns((prev) => {
       const next = prev.slice();
       while (next.length && next[next.length - 1].role === "assistant") next.pop();
@@ -259,7 +269,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     const w = column ? Math.max(MIN_WIDTH, Math.min(column.width, wr.width - 16)) : FALLBACK_WIDTH;
     const leftContent = column ? column.left - wr.left + scroller.scrollLeft : contentAnchor.left;
     // 内容自适应上限 = 手动拖拽硬上限 = 编辑区可视高（用户 261004：拖动不该被默认上限锁死）。
-    const resizeMax = Math.max(AI_DIALOG_RESIZE_MIN, Math.floor(wr.height - 2 * AI_DIALOG_MARGIN));
+    const resizeMax = Math.max(AI_DIALOG_RESIZE_MIN, Math.min(Math.ceil(wr.height - 2 * AI_DIALOG_MARGIN), AI_DIALOG_MAX_HEIGHT));
     return {
       left: Math.max(0, Math.min(leftContent, Math.max(0, wr.width - w - AI_DIALOG_MARGIN))),
       top: contentAnchor.top,
@@ -284,12 +294,12 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
   // ⚠️ 必须 floor 而不是 round：round 会向上越界 ~1px，让「下方是否放得下」判定失败（261004 实测翻转）。
   const limitBottom = column ? Math.min(viewportH, column.bottom) : viewportH;
   const topY = atPoint ? atPoint.y : AI_DIALOG_MARGIN;
-  const maxHeight = Math.max(1, Math.floor(limitBottom - AI_DIALOG_MARGIN - topY));
+  const maxHeight = Math.max(1, Math.min(Math.ceil(limitBottom - AI_DIALOG_MARGIN - topY), AI_DIALOG_MAX_HEIGHT));
   const capHeight = contentGeom ? contentGeom.maxHeight : maxHeight;
   // 手动拖拽的硬上限（编辑区可视高）：**不受**内容自适应上限 capHeight 限制（用户 261004）。
   const resizeMax = contentGeom
     ? contentGeom.resizeMax
-    : Math.max(AI_DIALOG_RESIZE_MIN, Math.floor(viewportH - 2 * AI_DIALOG_MARGIN));
+    : Math.max(AI_DIALOG_RESIZE_MIN, Math.min(Math.ceil(viewportH - 2 * AI_DIALOG_MARGIN), AI_DIALOG_MAX_HEIGHT));
   const appliedHeight = userHeight === null ? undefined : Math.max(AI_DIALOG_RESIZE_MIN, Math.min(userHeight, resizeMax));
   // 拖过之后 max-height 必须放到拖出的高度，否则会被 capHeight 夹回去；没拖过时按内容自适应上限。
   const effectiveMaxHeight = userHeight === null || appliedHeight === undefined ? capHeight : Math.max(capHeight, appliedHeight);
@@ -435,10 +445,10 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
         )}
       </div>
       {/* 首轮预设（用户 261005）：**仅首轮 + 有选区**才出现；点击只填词、不发送；分段控件复用 kit 的 .ln-segment。 */}
-      {turns.length === 0 && selectionText.trim().length > 0 && (
+      {turns.length === 0 && (selectionText.trim().length > 0 || hasImages) && (
         <div className="ai-dialog__presets">
           <span className="ln-segment" role="group" aria-label="预设提示词">
-            {AI_PROMPT_PRESETS.map((preset) => (
+            {presets.map((preset) => (
               <button key={preset.id} type="button" className={"ln-segment__item" + (presetId === preset.id ? " is-active" : "")} onClick={() => applyPreset(preset)}>{preset.label}</button>
             ))}
             <button type="button" className={"ln-segment__item" + (presetId === AI_PROMPT_CUSTOM_ID ? " is-active" : "")} onClick={() => applyPreset(null)}>{AI_PROMPT_CUSTOM_LABEL}</button>

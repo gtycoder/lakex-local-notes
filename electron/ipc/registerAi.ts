@@ -3,6 +3,7 @@ import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
 import { aiChat, aiListModels, aiTestProvider } from "../ai/aiClient.js";
 import { assertMessages } from "../ai/aiChatMessages.js";
+import { resolveAiMessages } from "../ai/aiContentResolver.js";
 import { activeAiProvider, aiSettingsView, mergeAiSettings, type AiProviderPatch, type AiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
 import { aiErrorInfo, aiErrorMessage } from "../../src/core/aiErrors.js";
 
@@ -63,9 +64,10 @@ export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
     const controller = new AbortController();
     inflight.set(id, controller);
     try {
+      const resolved = await resolveAiMessages(assertMessages(messages), store);
       const text = await aiChat({
         provider,
-        messages: assertMessages(messages),
+        messages: resolved,
         signal: controller.signal,
         onDelta: (delta) => { try { event.sender.send("ai:stream", { requestId: id, delta }); } catch { /* 窗口已关 */ } },
       });

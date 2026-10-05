@@ -102,3 +102,29 @@ export function positionAfterModelRange(range: CapturedModelRange | null): { id:
     return { id: rootId, offset: idx < 0 ? kids.length : idx + 1 };
   } catch { return null; }
 }
+
+/**
+ * 按**节点 id** 在模型树里定位（图片浮栏 AI 的「插入到选区后」落点用）：
+ * 内核卡片命令（`updateImageData`）就是按 id 认卡片 ⇒ DOM 卡片的 id 就是模型节点 id。
+ * 命中后返回一个落在该节点上的**折叠**模型选区，交给 `positionAfterModelRange` 算顶层块之后。
+ * 找不到返回 null（调用方可回退到当前模型选区）。
+ */
+export function modelRangeForNodeId(editor: unknown, nodeId: string): CapturedModelRange | null {
+  if (!nodeId) return null;
+  try {
+    const ed = (editor ?? {}) as AnyRec;
+    const kernel = (ed.kernel ?? (ed.engine as AnyRec | undefined)?.kernel) as AnyRec | undefined;
+    const doc = (kernel?.document ?? (kernel?.model as AnyRec | undefined)?.document) as AnyRec | undefined;
+    if (!doc) return null;
+    const stack: AnyRec[] = [doc];
+    const seen = new Set<unknown>();
+    while (stack.length > 0) {
+      const node = stack.pop() as AnyRec;
+      if (seen.has(node)) continue;
+      seen.add(node);
+      if (modelIdOf(node) === nodeId) return { start: { node, offset: 0 }, end: { node, offset: 0 } };
+      for (const child of modelChildrenOf(node)) stack.push(child);
+    }
+    return null;
+  } catch { return null; }
+}

@@ -20,7 +20,7 @@ import {
   FONT_SIZE_OPTIONS, TOOLBAR_BLOCK_TYPE_ITEMS, TOOLBAR_FORMAT_ITEMS, type ToolbarBlockTypeItem,
 } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
-import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta, setImageSpacing } from "./imageCardOps";
+import { IMAGE_STYLE_OPTIONS, deleteCardNative, enterImageCrop, readImageMeta, setImageSpacing } from "./imageCardOps";
 import {
   IconImageAlign, IconImageBatch, IconImageCrop, IconImageLink, IconImageRotate,
   IconImageSize, IconImageSpacing, IconImageStyle, IconImageTitle,
@@ -28,13 +28,15 @@ import {
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { AiTagIcon } from "../../ai/AiTagIcon";
 import { AiAssistantDialog, AI_DIALOG_GAP } from "../../ai/AiAssistantDialog";
-import { captureModelRange, type CapturedModelRange } from "./aiModelSelection";
+import { captureModelRange, modelRangeForNodeId, type CapturedModelRange } from "./aiModelSelection";
 import { applyAiInsertAfter, applyAiReplace } from "./aiResultOps";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
 } from "./colorMemory";
 import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, lineBoxRects, parseAssetRef, TOOLBAR_MARGIN, type SelectionRect } from "./selectionToolbarModel";
+import { collectSelectionImageRefs, imageCardAssetRef } from "./selectionImages";
+import type { AiAssetRef } from "../../../core/aiProviders";
 import { firstRangeRect, useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
 import { placePopoverBeside, placePopoverPosition } from "../../../hooks/topMenuPosition";
 
@@ -43,9 +45,6 @@ function resolveTriggerEl(trigger?: HTMLElement | null): HTMLElement | null {
   return trigger ? ((trigger.querySelector("button") as HTMLElement | null) ?? trigger) : null;
 }
 
-
-
-
 /** 两个矩形列表是否近似相等：避免无意义的 state 更新 → 重渲染 → 闪（用户 261004：不许跳动）。 */
 function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolean {
   if (a === b) return true;
@@ -53,7 +52,6 @@ function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolea
   return a.every((r, i) => Math.abs(r.left - b[i].left) < 0.5 && Math.abs(r.top - b[i].top) < 0.5
     && Math.abs(r.width - b[i].width) < 0.5 && Math.abs(r.height - b[i].height) < 0.5);
 }
-
 
 /**
  * 取**本编辑器**的内核固定工具栏（.ne-ui-toolbar）。
@@ -67,7 +65,6 @@ function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolea
 function chromeToolbarOf(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>(".ne-ui-toolbar");
 }
-
 
 /** 链接合法性（首版，对齐固定栏「请输入正确的链接」）：有 scheme（http/https/mailto/tel）、以 / 或 # 开头，或形如域名。 */
 function isValidLink(value: string): boolean {
@@ -168,9 +165,9 @@ function CardItem({ tip, className, selected, disabled, onClick, children }: {
 }
 
 /** 图片浮栏：内核卡片工具栏下拉菜单（云端同款 `.ne-card-toolbar-select-menu`）。 */
-function CardMenu({ menu, children }: { menu: string; children: ReactNode }) {
+function CardMenu({ menu, style, surfaceRef, children }: { menu: string; style?: CSSProperties; surfaceRef?: (el: HTMLElement | null) => void; children: ReactNode }) {
   return (
-    <div className="selection-toolbar__kmenu" data-menu={menu}>
+    <div ref={surfaceRef} style={style} className="selection-toolbar__kmenu" data-menu={menu}>
       <ul className="ant-dropdown-menu ant-dropdown-menu-root ant-dropdown-menu-vertical ant-dropdown-menu-light ne-card-toolbar-select-menu" role="menu">{children}</ul>
     </div>
   );
@@ -188,7 +185,6 @@ function CardMenuItem({ label, icon, selected, onClick }: { label: string; icon?
   );
 }
 
-
 export function SelectionToolbar({ editor, container }: {
   editor: LakeEditorInstance; container: HTMLElement;
 }) {
@@ -204,6 +200,10 @@ export function SelectionToolbar({ editor, container }: {
   const aiKeepSelectionRef = useRef(false);
   /** 打开对话框前捕获的**内核模型选区**（替换用；模型态不随焦点丢失）。 */
   const aiModelRangeRef = useRef<CapturedModelRange | null>(null);
+  /** 图片上下文（图片浮栏「AI」/ 选区含图）：随首轮提问一起作为 image 块发送。 */
+  const aiAttachmentsRef = useRef<AiAssetRef[]>([]);
+  /** 「最近点过的卡片」（**任意类型**：image / file / video / audio / codeblock / board…）：Cmd+X 剪切用。 */
+  const activeCardRef = useRef<HTMLElement | null>(null);
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */
   const holdRef = useRef(false);
   // AI 对话框开着时也冻结：它覆盖浮栏上方，选区的变化不应让浮栏跳动。
@@ -452,7 +452,8 @@ export function SelectionToolbar({ editor, container }: {
         && r.endContainer === captured.endContainer && r.endOffset === captured.endOffset;
     };
     const measure = () => {
-      const own = ownsSelection();
+      // 没捕获到文字选区（图片 AI / 顶栏入口）就不接管：不隐藏原生选区、也不画自绘层。
+      const own = captured ? ownsSelection() : false;
       container.classList.toggle("lake-ai-sel-hidden", own);
       if (!own || !captured) { setAiSelRects(null); return; }
       try {
@@ -537,7 +538,6 @@ export function SelectionToolbar({ editor, container }: {
     </div>
   ) : null;
 
-
   // AI 对话框渲染在工具栏**之外**：选中态丢失时工具栏会 `return null`，对话框若挂在工具栏内部
   // 会被一起卸载 ⇒ 状态清零（用户 260930 报「点生成页面闪烁、插入按钮点不了」的根因就在这里）。
   /**
@@ -548,6 +548,7 @@ export function SelectionToolbar({ editor, container }: {
   const closeAi = useCallback(() => {
     setAiOpen(false);
     setMenu(null);
+    aiAttachmentsRef.current = [];
     // 刚插入/替换并自动选中了新内容 ⇒ 不要再还原成原选区（否则「选中新内容」会被立刻盖掉）。
     if (aiKeepSelectionRef.current) { aiKeepSelectionRef.current = false; return; }
     const range = aiRangeRef.current;
@@ -560,6 +561,81 @@ export function SelectionToolbar({ editor, container }: {
       } catch { /* 选区已随 DOM 失效则忽略 */ }
     }, 0);
   }, [editor]);
+
+  /**
+   * 图片浮栏「AI」入口：把这张图片作为唯一上下文打开面板（无文字选区 ⇒ 不提供「替换选区」）。
+   * 同时把图片卡片在**模型**里定位好，供「插入到选区后」算落点（DOM→模型映射走不通，见契约 §5.16）。
+   */
+  const openAiForImage = useCallback((target: ImageTarget) => {
+    const asset = imageCardAssetRef(target.src);
+    if (!asset) return;
+    aiSelectionRef.current = "";
+    aiRangeRef.current = null;
+    aiModelRangeRef.current = modelRangeForNodeId(editor, target.cardId) ?? captureModelRange(editor);
+    aiAttachmentsRef.current = [asset];
+    const rect = target.cardEl.getBoundingClientRect();
+    if (rect.width || rect.height) aiAtRef.current = { x: rect.left, y: rect.bottom + AI_DIALOG_GAP };
+    setMenu("ai");
+    setAiOpen(true);
+  }, [editor]);
+
+  /**
+   * **卡片选中时 Cmd/Ctrl+X = 剪切这张卡**（261005；覆盖所有卡片类型）。
+   *
+   * 内核原生 cut 只认内核模型选区，点卡片不建立选区 ⇒ 原本完全无反应。这里：
+   * ① `selectNode(卡片)` + `execCommand("copy")` ⇒ 宿主 capture 的 **copy** handler 把卡片写进剪贴板；
+   * ② 内核卡片命令 `deleteCard(cardId)` 删掉**这一张卡**（契约 §5.9/§5.10）。
+   * ⚠️ **不要**用块级删除（`deleteBlockByRange` / 顶层块）：会连带删掉同一个块里的**其它图片 / 文字**
+   *    （用户 261005 实测：一个段落放多张户型图，删一张会全没）。
+   * ⚠️ 刻意不经宿主 cut handler：它那句 `kernel.execCommand("delete")` 删不掉卡片、还会回滚内核事务。
+   */
+  useEffect(() => {
+    // 任意类型的卡片都记「最近点过的这张」，供 Cmd+X 用；点卡片以外则清空（避免切到上一次的卡）。
+    const onPointerDown = (event: PointerEvent) => {
+      const el = event.target as HTMLElement | null;
+      activeCardRef.current = el && typeof el.closest === "function" && container.contains(el)
+        ? (el.closest("ne-card") as HTMLElement | null)
+        : null;
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [container]);
+
+  useEffect(() => {
+    const onCutCardKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "x") return;
+      const t = targetRef.current;
+      const cardEl = t && t.kind === "image" ? t.cardEl : activeCardRef.current;
+      const cardId = t && t.kind === "image" ? t.cardId : (cardEl?.getAttribute("id") ?? "");
+      if (!cardEl || !cardId || !cardEl.isConnected) return;
+      // 有非折叠文字选区、且不在该卡上 ⇒ 让常规 cut 处理（不抢用户的文字剪切）。
+      const current = window.getSelection();
+      if (current && !current.isCollapsed && current.rangeCount > 0 && !cardEl.contains(current.anchorNode)) return;
+      const el = event.target as HTMLElement | null;
+      if (el && typeof el.closest === "function") {
+        // 输入框 / 链接编辑 / AI 面板里不抢 Cmd+X；但**主编辑器引擎本身就是 contenteditable**，
+        // 不能一刀切（否则图片态下 Cmd+X 永远进不来）——只拦引擎以外的可编辑元素。
+        if (el.closest("input, textarea, .ne-link-editor, .ai-dialog")) return;
+        const ce = el.closest("[contenteditable='true']");
+        if (ce && !ce.classList.contains("ne-engine")) return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const selection = window.getSelection();
+      if (selection) {
+        const range = document.createRange();
+        range.selectNode(cardEl);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      try { document.execCommand("copy"); } catch { /* 剪贴板失败不阻塞删除 */ }
+      deleteCardNative(cardEl, cardId, editor);
+    };
+    document.addEventListener("keydown", onCutCardKey, true);
+    return () => document.removeEventListener("keydown", onCutCardKey, true);
+  }, [editor, targetRef]);
+
   const aiDialog = aiOpen ? (
     <AiAssistantDialog
       open
@@ -569,15 +645,17 @@ export function SelectionToolbar({ editor, container }: {
       // 本编辑器挂载点：AI 面板的文字栏几何直接量自己（不再全局猜「哪个 mount 可见」）。
       container={container}
       selectionText={aiSelectionRef.current}
+      attachments={aiAttachmentsRef.current}
       onClose={closeAi}
       onInsertAfter={(text) => {
         // 「插入到选区后」= 共用实现（aiResultOps）：分隔线 + 「AI 生成」提示 + 原生 Markdown + 分隔线。
         if (applyAiInsertAfter(editor, container, aiModelRangeRef.current, text)) aiKeepSelectionRef.current = true;
       }}
-      onReplace={(text) => {
+      // 「替换选区」只在**有文字选区**时提供（图片入口没有选区，替换无意义 —— 用户 261005）。
+      onReplace={aiSelectionRef.current.trim() || aiRangeRef.current ? (text) => {
         // 选区替换 = 共用实现（aiResultOps）：原样插入 AI 输出；模型选区优先，再补 DOM 兜底。
         if (applyAiReplace(editor, container, aiModelRangeRef.current, text, aiRangeRef.current)) aiKeepSelectionRef.current = true;
-      }}
+      } : undefined}
     />
   ) : null;
 
@@ -768,6 +846,8 @@ export function SelectionToolbar({ editor, container }: {
           const sel = window.getSelection();
           aiSelectionRef.current = sel?.toString() ?? "";
           aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+          // 选区含图片（多模态）：把选中的图片作为上下文一起发给 AI（不需要手动附图）。
+          aiAttachmentsRef.current = collectSelectionImageRefs(aiRangeRef.current);
           let aiRect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
           // 只在量到**有效**矩形时更新锚点；拿不到就沿用上一次的（宁可位置不动，也不要跳到右上角）。
           if (aiRect && (aiRect.width || aiRect.height)) {
@@ -805,23 +885,30 @@ export function SelectionToolbar({ editor, container }: {
     /** 描述：**无弹窗** —— 打开卡片内联描述编辑框并聚焦（内核 `.ne-image-title-content`，云端同款）。 */
     const openTitleEditor = () => { apply({ showTitle: true }); window.setTimeout(() => { (t.cardEl.querySelector(".ne-image-title-content") as HTMLElement | null)?.focus(); }, 80); };
     return (
+      <>
+      {/* ⚠️ 弹层必须放在 `.ne-card-toolbar` **外面**：内核给它设了 transform（实测 offsetParent=ne-card-toolbar），
+          若把 position:fixed 的弹层放进去，会相对工具栏定位 ⇒ 坐标再加一次工具栏偏移（用户 260930 报「弹窗歪到最左」）。 */}
       <div className="ne-card-toolbar">
-        {/* 与云端图片工具栏**同构同序**：旋转 · 裁剪 · 宽高 | 链接 · 描述 | 对齐 · 样式 · 边距 · 批量 |（末尾多一个 另存为）。
+        {/* 与云端图片工具栏**同构同序**：旋转 · 裁剪 · 宽高 | 链接 · 描述 | 对齐 · 样式 · 边距 · 批量 |（末尾多 另存为 + AI）。
             类名全部是内核卡片工具栏的 `.ne-card-toolbar-*`（样式来自 vendored lakex-doc.css，非自造）；
             图标 1:1 取自云端 SVG（见 imageIcons.tsx）。 */}
         <CardItem tip="旋转 90°" className="ne-card-toolbar-item" onClick={() => apply({ rotation: ((meta.rotation || 0) + 90) % 360 })}><IconImageRotate /></CardItem>
         <CardItem tip="裁剪" className="ne-card-toolbar-item" onClick={() => { enterImageCrop(t.cardEl); refresh(); }}><IconImageCrop /></CardItem>
-        <CardItem tip="宽高" className="ne-card-toolbar-dropdown-item ne-card-toolbar-dropdown-item-has-title ant-dropdown-trigger" selected={menu === "imgsize"} onClick={(e) => { setDraft(meta.width ? String(meta.width) : ""); setDraftH(String(displayH)); openWithDraft("imgsize", meta.width ? String(meta.width) : "", e.currentTarget); }}><IconImageSize /><span>宽高</span></CardItem>
+        <CardItem tip="宽高" className="ne-card-toolbar-dropdown-item ant-dropdown-trigger" selected={menu === "imgsize"} onClick={(e) => { setDraft(meta.width ? String(meta.width) : ""); setDraftH(String(displayH)); openWithDraft("imgsize", meta.width ? String(meta.width) : "", e.currentTarget); }}><IconImageSize /></CardItem>
         <div className="ne-ui-card-toolbar-divider" />
         <CardItem tip="链接" className="ne-card-toolbar-dropdown-item ant-dropdown-trigger" selected={menu === "imglink" || Boolean(meta.link)} onClick={(e) => { setLinkSelf(meta.linkSelf); openWithDraft("imglink", meta.link, e.currentTarget); }}><IconImageLink /></CardItem>
-        <CardItem tip="描述" className="ne-card-toolbar-item ne-card-toolbar-item-has-title" selected={Boolean(meta.title)} onClick={() => openTitleEditor()}><IconImageTitle /><span>描述</span></CardItem>
+        <CardItem tip="描述" className="ne-card-toolbar-item" selected={Boolean(meta.title)} onClick={() => openTitleEditor()}><IconImageTitle /></CardItem>
         <div className="ne-ui-card-toolbar-divider" />
         <CardItem tip="对齐" className="ne-card-toolbar-select-item ant-dropdown-trigger" selected={menu === "imgalign"} onClick={(e) => toggleMenu("imgalign", e.currentTarget)}><IconImageAlign /><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
-        <CardItem tip="样式" className="ne-card-toolbar-select-item ne-card-toolbar-select-item-has-title ant-dropdown-trigger" selected={menu === "imgstyle"} onClick={(e) => toggleMenu("imgstyle", e.currentTarget)}><IconImageStyle /><span>样式</span><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
-        <CardItem tip="边距" className="ne-card-toolbar-dropdown-item ne-card-toolbar-dropdown-item-has-title ant-dropdown-trigger" selected={menu === "imgmargin"} onClick={(e) => toggleMenu("imgmargin", e.currentTarget)}><IconImageSpacing /><span>边距</span></CardItem>
+        <CardItem tip="样式" className="ne-card-toolbar-select-item ant-dropdown-trigger" selected={menu === "imgstyle"} onClick={(e) => toggleMenu("imgstyle", e.currentTarget)}><IconImageStyle /><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
+        <CardItem tip="边距" className="ne-card-toolbar-dropdown-item ant-dropdown-trigger" selected={menu === "imgmargin"} onClick={(e) => toggleMenu("imgmargin", e.currentTarget)}><IconImageSpacing /></CardItem>
         <CardItem tip="批量应用" className="ne-card-toolbar-select-item ant-dropdown-trigger" selected={menu === "imgbatch"} onClick={(e) => toggleMenu("imgbatch", e.currentTarget)}><IconImageBatch /><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
         <div className="ne-ui-card-toolbar-divider" />
         <CardItem tip="另存为" className="ne-card-toolbar-item" disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename).catch((error) => reportNativeActionError("另存图片", error)); }}><KIcon type="download" /></CardItem>
+        <div className="ne-ui-card-toolbar-divider" />
+        {/* AI 入口放**最后**（与文字浮栏一致：分隔线 + AI 收尾）；单张图片作为唯一上下文。 */}
+        <CardItem tip="AI" className="ne-card-toolbar-item" disabled={!asset} onClick={() => openAiForImage(t)}><AiTagIcon size={18} /></CardItem>
+      </div>
 
         {/* 宽高：宽/高输入 + 25/50/75/100% 档位（云端同内容） */}
         {menu === "imgsize" && (
@@ -854,26 +941,26 @@ export function SelectionToolbar({ editor, container }: {
           </div>
         )}
         {menu === "imgalign" && (
-          <CardMenu menu="imgalign">
+          <CardMenu menu="imgalign" style={popoverStyle ?? OFFSCREEN} surfaceRef={setPopoverRef}>
             <CardMenuItem label="左对齐" icon="editor-alignmentLeft" selected={meta.alignment === "left"} onClick={() => align("left")} />
             <CardMenuItem label="居中对齐" icon="editor-alignmentCenter" selected={meta.alignment === "center"} onClick={() => align("center")} />
             <CardMenuItem label="右对齐" icon="editor-alignmentRight" selected={meta.alignment === "right"} onClick={() => align("right")} />
           </CardMenu>
         )}
         {menu === "imgstyle" && (
-          <CardMenu menu="imgstyle">
+          <CardMenu menu="imgstyle" style={popoverStyle ?? OFFSCREEN} surfaceRef={setPopoverRef}>
             {IMAGE_STYLE_OPTIONS.map((s) => (
               <CardMenuItem key={s.value} label={s.label} selected={meta.style === s.value} onClick={() => apply({ style: s.value })} />
             ))}
           </CardMenu>
         )}
         {menu === "imgbatch" && (
-          <CardMenu menu="imgbatch">
+          <CardMenu menu="imgbatch" style={popoverStyle ?? OFFSCREEN} surfaceRef={setPopoverRef}>
             <CardMenuItem label="同步图片样式到全文" onClick={() => batch({ style: meta.style })} />
             <CardMenuItem label="同步图片宽度到全文" onClick={() => batch({ width: meta.width || imageSizeWidth("medium", meta.originalWidth) })} />
           </CardMenu>
         )}
-      </div>
+      </>
     );
   };
 

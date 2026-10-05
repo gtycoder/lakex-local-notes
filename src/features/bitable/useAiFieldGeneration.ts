@@ -51,6 +51,8 @@ export async function runPool<T>(items: readonly T[], limit: number, worker: (it
 
 export function useAiFieldGeneration(options: {
   docRef: { current: BitableDoc };
+  /** 当前文档 id（字段开启附件内容时用于资产寻址）。 */
+  noteId: string;
   updateDoc: (update: (doc: BitableDoc) => BitableDoc) => void;
   beginGesture: () => void;
   endGesture: () => void;
@@ -77,7 +79,7 @@ export function useAiFieldGeneration(options: {
   /** 生成一格：成功即写入（单一闸口）；失败 / 取消由调用方决定展示。 */
   const generateOne = useCallback(async (tableId: string, recordId: string, fieldId: string): Promise<GenerateOneResult> => {
     const key = aiCellKey(fieldId, recordId);
-    const built = buildAiFieldMessages(latest.current.docRef.current, tableId, recordId, fieldId);
+    const built = buildAiFieldMessages(latest.current.docRef.current, tableId, recordId, fieldId, { noteId: latest.current.noteId });
     if (!built.ok) return { ok: false, error: built.error };
     const requestId = newAiRequestId();
     inflightRef.current.add(requestId);

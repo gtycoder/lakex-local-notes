@@ -40,7 +40,8 @@
     "better-sqlite3": "^13.0.3",
     "electron-log": "^5.4.4",
     "openai": "^7.25.0",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.4",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "@capacitor-community/sqlite": "^8.1.1",

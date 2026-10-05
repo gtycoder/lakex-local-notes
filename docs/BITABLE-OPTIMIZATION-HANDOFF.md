@@ -825,6 +825,9 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | D01 续：导出为压缩包（bitable） | 待验收 | 260930-CSV | 活动数据表 → ZIP：内含 `{表名}.csv` + `附件/{文件名}`；附件/图片字段引用的真实文件一并打包；同名附件自动 (2) 后缀并让 CSV 指向归档内相对路径；自写 store 方式流式写盘（无新依赖，标准 ZIP、UTF-8 名）。见 §13 |
 | AI01 AI 字段（单一类型） | 待验收 | 261003-AIFIELD | 用户 261003 定稿路线：**不做飞书式 AI 单元格**；只做一个 `ai` 字段类型——**命令里用 `{{字段名}}` 字段变量**（编辑器「插入字段」插到光标处、可插多个，生成时**原位替换**；不再拼字段值列表）、值为文本快照、**不自动重跑**（手动「生成/重新生成」）。已实施：core（类型 + `{prompt}` 单一来源 + `buildAiFieldMessages`/`aiPromptFieldNames` + 重命名联动 `renameAiFieldToken` + CSV 拒绝导入）+ 单元格状态机（未配置/生成中/失败重试/重新生成）+ 列菜单「AI 生成整列」（仅空缺/全部 + 生成前确认 + 进度 + 取消 + 失败重试）+ 并发 2–3 + 整批一次撤销 + 只读无入口 + 移动端文本回退；表单排除 AI 字段。**261004 追加**：新增 `markdown` 字段类型（文本口径；单元格去标记预览 + 展开**编辑/预览**双模，自写轻量子集渲染、不用 innerHTML），且 **AI 字段默认按 Markdown 口径**（值可手动编辑；展开面板头部「重新生成」；展开壳 `ExpandPanel` 与文本格共用）。门禁全绿（vitest **1583/16**）；**真实端 CDP 22/22**（mock 端点：「插入字段」`{{文本}}` 原位替换、Markdown 字段展开编辑→预览→落盘、AI 值 MD 预览/展开/手改落盘/重新生成、**展开浮窗拖动/缩放不回弹（261004 修复）**、整列空缺 2/2、一次 ⌘Z 撤销整批、锁定入口消失/值保留、解锁恢复）。**261004-b 样式归位**：编辑·预览走 kit 的 `.ln-segment`、说明文字走既有 `.bt-field-label-text`、告警 `.ln-tag--error`、「插入字段」`.bt-secondary`；两 CSS 全量化令牌（基线 43→32 / 67→59），官方审计 lookalike 0.86→0.61、重复族清零；vitest **1586/16**；实机截图复核四张。**261004 续**：展开浮窗**尺寸本地记忆**（`text`/`md` 各一份，`lake-notes-v3.bitable-expand-size`，松手写盘）+ `.bt-md-cell` 右缘留位（与文本格同义，两格都不压字）；**真实端 CDP 23/23**。**图片/附件内容（多模态）不做**（用户 261004 决定：只传文件名）。Android 未跑；未提交（待验收）。明细见 §13 |
 
+| AI 字段多模态（图片 + PDF） | 待验收 | 261005-MM | AI 字段可把被引用字段里的图片 / PDF 作为内容块一并发送（`includeAttachments`）：图片 → `image_url` data URL、PDF → 本地抽文本；跨 IPC 只传资产引用、主进程解析；图片 / 文档仅 user 消息且限量；其余附件仍只出文件名。见 §13 |
+| AI 图片上下文（选区含图 / 图片浮栏 AI） | 待验收 | 261005-MM | 文字选区含图片时**自动**随问答发送（无需手动附图）；图片浮动工具栏新增「AI」入口（单图上下文 + 图片预设 描述/提取文字/翻译）。见 §13 |
+
 ## 12. 修改记录
 
 > 追加格式：`日期 / 会话 / 任务 / 改动文件 / 结果 / 遗留`。
@@ -922,6 +925,13 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-10-04 | 261003-AIFIELD | 修复：展开浮窗拖动/缩放弹回锚点默认位 | `src/features/bitable/bitableCells.tsx`（ExpandPanel 定位 deps `[anchor, size.h]`→`[anchor]`） · `bitableMarkdown.behavior.test.ts` | 用户实测：文本 / AI 字段展开浮窗一调大小就跳回默认位（表格在窗口左上区，像「跑到左上角」）。根因：resize → setSize → 定位 effect 重跑 → `placePopoverPosition` 覆盖 `pos`、丢掉拖动位置；**HEAD 原文本浮窗即带此缺陷**（抽共用壳时继承到 MD/AI 面板）。修复 + 护栏：jsdom 行为（拖动→缩放位置不回弹、宽度 400→480）+ CDP H 步（PointerEvent 拖拽/缩放实测） | tsc / vitest **1583 passed / 16 skipped** / 双端构建 / 本范围 diff clean；CDP **22/22** | 未提交（随本批等验收） |
 | 2026-10-04 | 261003-AIFIELD | 样式归位：AI / Markdown 字段按原语与官方审计收敛 | `bitableCells.tsx` · `BitableEditor.tsx` · `BitableAiGenerateDialog.tsx` · `bitableAiField.css` · `bitableMarkdown.css` · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 | 用户指出「样式很多是自己写的、没用设计原语」。按 AGENTS 14 判定口径收敛：`.seg`→`.ln-segment`；删繁写头 `.bt-md-expand-head` 与自写小按钮 `.bt-md-expand-regen`；说明文字/包裹层 → 既有 `.bt-field-label-text`；告警 → `.ln-tag--error`；「插入字段」`.bt-select-trigger`→`.bt-secondary`；两文件字号/间距/圆角全量化 + 新增字面量护栏 | 官方审计：lookalike 0.86→0.61（残留同档）、primitives 重复族清零；基线 43→32 / 67→59；tsc / vitest **1584 passed / 16 skipped** / 双端构建 / 本范围 diff clean；CDP **22/22** + 实机截图复核四张 | 残留 0.61（.bt-md-expand-actions，布局必需）已记录；未提交（随本批等验收） |
 | 2026-10-04 | 261003-AIFIELD | 展开浮窗：尺寸本地记忆 + 单元格右缘留位（两格都不压字） | `bitableCells.tsx`（ExpandPanel `remember` + load/save） · `bitableMarkdown.css` · `bitableMarkdown.behavior.test.ts` · `bitableEditorMount.test.ts` · `cssLayers.test.ts` · 本文件 | 用户「继续优化」：① 记忆「展开编辑」与「AI 字段展开」的大小（存本地即可）→ localStorage `lake-notes-v3.bitable-expand-size`，text/md 各一份、松手写盘、只记大小；② 问「两个展开位置为何不同（一个压字一个不压）」→ 根因：文本格有 `.bt-cell-input { padding-right: 26px }` 预留按钮位，MD/AI 格没有 → `.bt-md-cell` 补 `padding-right: var(--lake-space-xxxl)` | tsc / vitest **1586 passed / 16 skipped** / 双端构建 / 本范围 diff clean；CDP **23/23**（新增「重开沿用记住的大小 480×320」） | 附件展开面板（另一套壳）未纳入记忆（用户未要求）；未提交（随本批等验收） |
+| 2026-10-05 | 261005-MM | AI 多模态基础能力（图片 + PDF → 多维表 AI 字段） | src/core/aiProviders.ts · src/core/bitableDoc.ts(+bitableAiFieldAttachments.test.ts) · electron/ai/{aiChatMessages,aiClient,aiContentResolver,aiImages,pdfText}.ts(+tests) · electron/ai/aiMultimodal{,.integration}.test.ts · electron/ipc/registerAi.ts · electron/orphanLifecycle.ts · electron/store.ts · src/features/bitable/{useAiFieldGeneration,BitableEditor}.tsx(+tests) · src/features/ai/AiAssistantDialog.tsx · package.json(unpdf) · 本文件 | 消息内容支持 text/image/document 块；附件跨 IPC 只传引用、主进程解析（图片→image_url、PDF→本地抽文本）；图片/文档仅 user、各限 10/5；AI 字段开关 `includeAttachments`。门禁：tsc / vitest 1673-16 / check:core 75-0 / ui-metrics / cssLayers+uiPrimitives / 双端构建 / git diff --check 全绿；真实 unpdf 抽取实测；隔离 Electron CDP 9/9 | 功能待用户验收；Office / AI 生图 / 对话附图 UI 不做或未做；Android 未跑；未提交 |
+| 2026-10-05 | 261005-MM | 图片入口：选区含图自动带图 + 图片浮栏 AI | src/features/ai/AiAssistantDialog.tsx · aiPrompts.ts(+test) · src/features/editor/selectionToolbar/selectionImages.ts(新,+test) · SelectionToolbar.tsx · selectionToolbar.wiring.test.ts · 本文件 | 面板新增 attachments → 首轮 user 消息以 image 块发送；选区用 range.cloneContents() 取图（仅本地资产、按磁盘名去重）；图片浮栏新增「AI」入口（CardItem aria-label=AI → 单图上下文）；无文字选区时出图片预设；关面板清上下文。门禁：tsc / vitest 1679-16 / check:core / ui-metrics / cssLayers+uiPrimitives / 双端构建 / diff --check 全绿；隔离 Electron CDP 18/18 | 选区图 >10 张无 UI 截断提示；未提交 |
+| 2026-10-05 | 261005-MM | 图片入口修复（面板高 3/4 / 图片去替换留插入 / 弹层定位） | src/features/ai/AiAssistantDialog.tsx(+test) · src/features/editor/selectionToolbar/{SelectionToolbar.tsx,aiModelSelection.ts,selectionToolbar.wiring.test.ts} · 本文件 | ① 面板最高 = 可用高 × 0.75；② 图片入口去「替换选区」、补「插入到选区后」（按图片模型节点定位落点）；③ 修弹层歪到最左：根因内核 .ne-card-toolbar 有 transform，position:fixed 相对它定位 ⇒ 弹层移出 .ne-card-toolbar。门禁全绿；CDP 定位实测通过 | 图片栏图标化（④）调研结论已出、未实施，待用户拍板；未提交 |
+| 2026-10-05 | 261005-MM | 高度改配置整数 + 图片栏图标化 + 裁剪可用性核实 | src/features/ai/AiAssistantDialog.tsx(+test) · src/features/editor/selectionToolbar/{SelectionToolbar.tsx,selectionToolbar.wiring.test.ts} · docs/LAKEX-CONTRACT.md · 本文件 | ① 删比例常量，改 AI_DIALOG_MAX_HEIGHT=512 直接夹上限（实测 512px）；② 图片浮栏去 4 处文字标签与 -has-title（hover 仍出名称），实测 584→432px；③ 核实图片裁剪**可用**（setCro(true) 真进裁剪态），vendor 「空桩」注释过期并回填 §5.21；顺带清理 438 处文档转义反引号 | 功能待验收；未提交 |
+| 2026-10-05 | 261005-MM | 图片 Cmd+X 剪切（vendor 导出 deleteBlockByRange） | vendor/lakex-doc-react/{src/index.ts,LOCAL-CHANGES.md,dist/*} · src/features/editor/selectionToolbar/{SelectionToolbar.tsx,selectionToolbar.wiring.test.ts} · docs/LAKEX-CONTRACT.md · 本文件 | vendor 导出块级删除（LOCAL-CHANGES #28）+ 宿主 Cmd/Ctrl+X：copy 写剪贴板 + deleteBlockByRange 删顶层块。真实端实测图片从正文/DOM 都删除、剪贴板得 text/html 图。踩坑：contenteditable 守卫拦了主编辑器引擎 | 删的是整个顶层块（图独占段落=删图；同段夹字会连文字删）；未提交 |
+| 2026-10-05 | 261005-MM | 修正：图片剪切改用 deleteCard（单卡），撤销块级删除方案 | src/features/editor/selectionToolbar/{SelectionToolbar.tsx,imageCardOps.ts,selectionToolbar.wiring.test.ts} · docs/LAKEX-CONTRACT.md · 本文件 | 用户指出 deleteBlockByRange 会删整个块、连坐同段其它图片/文字。改用内核 deleteCard(cardId)（取卡片实例自己的 editor）。真实端实测：同段 3 图删中间一张，只掉它、文字与另两图保留。vendor 改动整体还原（零 vendor 分叉） | 未提交 |
+| 2026-10-05 | 261005-MM | 卡片剪切泛化到所有类型（image/file/video/audio…） | src/features/editor/selectionToolbar/{SelectionToolbar.tsx,selectionToolbar.wiring.test.ts} · docs/LAKEX-CONTRACT.md · 本文件 | 新增 activeCardRef（任意 ne-card）+ 命中卡片才拦 Cmd+X；非折叠文字选区让位。真实端同文档 4 类各 2 张逐个剪切：每类只掉 1 张、无跨类误伤 | 未提交 |
 
 ## 13. 会话记录（只追加）
 
@@ -2159,7 +2169,7 @@ ui-metrics（hex=0、rgb=0、!important=9、未定义令牌=0）/ cssLayers+uiPr
 本次完成：
 
 - `MobileBitableViewer` 单元格改为**按字段类型分派的只读控件**（不再是统一裸文本）：
-  - boolean → 禁用复选框；link → `<a target="_blank">`（外部 origin 走系统浏览器）；rating → 5 星（选中 \`--lake-rating-star\`、空星 \`--lake-border-strong\`）；progress → 条 + 百分比（宽度数据驱动）；relation → 目标记录主字段 chip（复用 core `relationTargetRecords`/`bitableRecordTitle`）；附件/图片、单选/多选维持缩略图/色块；其余走 `bitableFieldText`（系统时间到分钟）。
+  - boolean → 禁用复选框；link → `<a target="_blank">`（外部 origin 走系统浏览器）；rating → 5 星（选中 `--lake-rating-star`、空星 `--lake-border-strong`）；progress → 条 + 百分比（宽度数据驱动）；relation → 目标记录主字段 chip（复用 core `relationTargetRecords`/`bitableRecordTitle`）；附件/图片、单选/多选维持缩略图/色块；其余走 `bitableFieldText`（系统时间到分钟）。
   - 目标表/目标记录失效 → `关联已失效`，与桌面同一 core 口径。
 - 非 grid 视图（看板/画册/日历/未知）仍走 `mbt-view-notice` 明确提示 + 表格只读。
 - `mobile.css` 新增只读控件样式（`.mbt-bool/-link/-rating/-star/-progress*/-relation*`）。
@@ -3843,6 +3853,145 @@ UI 与交互变化：
 下一步：
 
 - 等用户验收。
+
+### 2026-10-05 · 261005-MM · AI 多模态基础能力（图片 + PDF，落到多维表 AI 字段）
+
+接手与范围：
+
+- 用户先问「AI 支持多模态」的系统方案。核对官方文档后确认 **DeepSeek 的 `deepseek-flash` 本身支持图片输入**（旧 `deepseek-v4-flash-vision-exp` 由最新 Flash 承接；OpenAI 兼容 `content` 数组 + `image_url`，格式 JPEG/PNG/GIF/WebP、单图 ≤1024 token），无需换供应商、无需新协议。
+- 成本澄清后用户定稿：**先做图片 + PDF 的「基础能力」**；Office 不做、**AI 生成图片不做且不立项**（「不是笔记软件该有的功能」）；移动端确认只读无 AI（`src/mobile` 0 处 AI 引用）。
+- 关键约束：**DeepSeek 的 file / Files API 只收图片** ⇒ PDF 必须本地抽文本，方案不押供应商原生 file 输入。
+
+本次完成：
+
+- **core 内容块模型**（`src/core/aiProviders.ts`）：`AiAssetRef`（`{noteId, filename, name?}`）+ `AiContentPart`（`text` / `image` / `document`）+ `AiChatMessage.content: string | AiContentPart[]`；纯函数 `aiMessageText` / `aiContentPartsOf`。字符串路径完全兼容。
+- **主进程护栏**（`electron/ai/aiChatMessages.ts`）：接受内容块；图片 / 文档**只允许 `user` 消息**（system/assistant 直接拒）；图片 ≤10、文档 ≤5、文本仍 20 万字符；纯文本数组归一回字符串。
+- **主进程解析**（新 `electron/ai/aiContentResolver.ts`，**唯一入口**）：资产引用 → 供应商消息。图片读盘 → 嗅探/尺寸/字节护栏 → `image_url` data URL；文档读盘 → 抽文本 → 带 `【附件：名】` 标题的文本块。附件缺失 / 超限 / 非 PDF 一律 `AppError` 中文原因，**不静默降级**。
+- **图片**（新 `electron/ai/aiImages.ts`）：按内容嗅探 JPEG/PNG/GIF/WebP；合规即**原样透传**（不重编码），否则 `sharp` 缩放（透明保 PNG、其余 JPEG）。
+- **PDF**（新 `electron/ai/pdfText.ts`）：引入 `unpdf@1.8.1`（MIT、CJS/ESM 双出口、`@napi-rs/canvas` 为可选 peer，抽文本不需要）；限额源文件 32MiB / 结果 6 万字符 / 10s 超时；扫描件（无文字层）明确报错；按 `noteId/filename/size` 做请求间缓存，整列生成不重复抽同一份。
+- **Store 原字节读取**：`orphanLifecycle.readAssetBytes` + `store.readAssetBytes`（与既有 `readAssetPreview` 同源、同 `isSafePathSegment` 双段校验）。
+- **IPC**：`ai_chat` 签名不变；`registerAi` 改为 `resolveAiMessages(assertMessages(messages), store)` 后再发供应商；`preload` / `native` / `webApiServer` **无需新增方法**。
+- **AI 字段**：`BitableAiConfig` 新增 `includeAttachments?`；`buildAiFieldMessages` 增 `options.noteId`，对 `image`/`attachment` 被引用字段里的图片与 PDF 产出内容块（**PDF 按扩展名判定**——既有护栏禁止 `fileKindOf` 进入文档模型），上限图片 10 / PDF 5，其余附件仍只出文件名；`useAiFieldGeneration` 透传 `noteId`；字段编辑器加「把引用的图片 / PDF 一起发送给 AI」开关（复用既有 `.bt-field-check`，**无新 CSS**）。
+
+数据结构 / 接口变化：
+
+- `AiChatMessage.content` 由 `string` 扩为 `string | AiContentPart[]`（**向后兼容**：纯文本仍是字符串）。
+- `BitableAiConfig` 加可选 `includeAttachments`（缺省关闭；归一化只保留 `true`）。
+- 新增运行期依赖 `unpdf@^1.8.1`（写 `dependencies`，主进程 external 由此派生）。
+- **无正文格式变化、无新 S3 对象、不进同步 / 历史**；附件载荷是瞬时的。
+
+验证结果：
+
+- `tsc --noEmit` ✓；`vitest run` **1673 passed / 16 skipped**（新增 25 例：校验层内容块 6、图片嗅探 3、PDF 抽取 5（mock unpdf）、解析器 4、AI 字段出块 2、链路护栏 4、**真实 unpdf + sharp 集成 1**）。
+- `check:core` 75 文件 0 违规 ✓；`ui-metrics` hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0 ✓；`cssLayers+uiPrimitives` 8 passed ✓（本批未加 CSS）；桌面 + 移动构建 ✓；`git diff --check` ✓。
+- 依赖可用性实测：Node 24 下用自造最小 PDF 走**真实 unpdf** 抽出 `"Hello Lake"` ✓（并固化为 `aiMultimodal.integration.test.ts`）。
+- **隔离 Electron + CDP + mock OpenAI 端点 9/9**：出站 `content` = `[text, image_url, text]`；图片为 `data:image/png;base64,…`；PDF 文本块 = `【附件：报告.pdf】\nHello Lake`；非 PDF 文档 → 「暂不支持读取该附件类型…（当前仅支持 PDF）」；缺失附件 → 「附件文件不存在…」；system 带图 → 「图片 / 文档只能作为「用户」消息发送」；跑完按 PID 回收、**无残留实例**、临时 userData 已删。
+
+遗留问题：
+
+- **Office（docx/xlsx/pptx）不做**（用户 261005 决定）：`document` 块当前只认 PDF，其它类型明确报错。
+- **AI 生成图片不做、不立项**（用户明确）。
+- **移动端不动**：只读、无 AI 通道。
+- **对话面板（`AiAssistantDialog`）手动附图 UI 未做**：本轮只把基础能力接到多维表 AI 字段；对话附图（含「主进程弹选择框 → 返回能力令牌」的小 IPC）留待后续。
+- 扫描件 PDF 无 OCR（明确报错）；PDF 抽取在主进程，超大文档可能短暂阻塞（已有 10s 超时与缓存，未做 worker）。
+- **未提交**（按红线等用户验收）。
+
+下一步：
+
+- 等用户对「AI 字段读图片 / PDF」的功能验收；通过后再议对话面板附图、Office 与提交。
+
+改动文件：
+
+- `src/core/aiProviders.ts` · `src/core/bitableDoc.ts`(+ `bitableAiFieldAttachments.test.ts` 新)
+- `electron/ai/aiChatMessages.ts`(+test) · `aiClient.ts` · `aiContentResolver.ts`(新，+test，+integration test) · `aiImages.ts`(新，+test) · `pdfText.ts`(新，+test) · `aiMultimodal.test.ts`(新) · `electron/ipc/registerAi.ts` · `electron/orphanLifecycle.ts` · `electron/store.ts`
+- `src/features/bitable/useAiFieldGeneration.ts`(+test) · `BitableEditor.tsx` · `bitableEditorMount.test.ts`
+- `src/features/ai/AiAssistantDialog.tsx`（`aiMessageText` 兼容内容块）
+- `package.json` / `package-lock.json`（unpdf）
+- 本文件 §11/§12/§13 · `HANDOFF.md` §0/§4 · `AGENTS.md` §3
+
+
+### 2026-10-05 · 261005-MM 续 · 图片入口（选区含图自动带图 + 图片浮栏 AI）
+
+用户定稿（261005）：**不做手动附图**，按上下文自动取图 —— ① 文字选区里含图片时，一起发给 AI；② 图片的浮动工具栏加「AI」入口，单独对图片下命令。
+
+本次完成：
+
+- **面板支持图片上下文**（`AiAssistantDialog`）：新增 `attachments?: AiAssetRef[]`，首轮 user 消息 = `[{text}, …image 块]`；追问沿用 `historyRef`（图片随上下文保留）。**无文字选区但有图片**时，首轮预设换成图片预设（描述 / 提取文字 / 翻译 / 自定义，`aiPrompts.AI_IMAGE_PRESETS`，复用 `.ln-segment`）。
+- **选区取图**（新 `selectionToolbar/selectionImages.ts`）：`range.cloneContents()` 取选区克隆片段 → 在片段里找 `ne-card[data-card-name=image] img, img.ne-image` → `parseAssetRef` 解析本地资产 → 按磁盘名去重；data:/外链跳过（主进程也读不到）。
+- **文字 AI 入口**：开面板前 `collectSelectionImageRefs(aiRangeRef.current)`（选区图片自动附上）。
+- **图片浮栏「AI」入口**（`renderImage`）：`CardItem tip="AI"`（真实 DOM `aria-label=AI`）→ `openAiForImage(cardEl, src)`：单张图片作为唯一上下文、锚点在图片下方；图标复用 `AiTagIcon`。
+- **关闭清上下文**：`closeAi` 清 `aiAttachmentsRef`（顶栏 / 文字入口下次不带旧图）。
+- **收窄自绘选区接管**：无文字选区（图片 AI / 顶栏入口）时不再给容器加 `lake-ai-sel-hidden`、也不画自绘选区层（改为「只有捕获到文字选区才接管」）。
+
+数据结构 / 接口变化：
+
+- `AiAssistantDialog` 新增可选 `attachments`（向后兼容；顶栏入口不传）。
+- 无正文格式变化、无新 IPC、无新依赖；图片仍只在主进程解析。
+
+验证结果：
+
+- `tsc` ✓；`vitest run` **1679 passed / 16 skipped**（本批新增 6 例：选区取图 4、面板图片上下文护栏 1、浮栏接线护栏 1）。
+- `check:core` 75-0 / `ui-metrics`（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）/ `cssLayers+uiPrimitives` / 桌面 + 移动构建 / `git diff --check` 全绿。
+- **隔离 Electron + CDP + mock OpenAI 端点 18/18**（真实文档 + 真实图片卡片）：① 跨图文字选区 → 文字浮栏 → 「AI 助手」→ 生成，出站 `content` 带 `image_url` data URL；② 点图片 → 图片浮栏出现且含「AI」入口 → 图片预设 `描述,提取文字,翻译,自定义` → 生成，出站同样带 `image_url`。过程中实测真实 Lake DOM 确有 `ne-card[data-card-name=image] img.ne-image` 且 src 为 canonical 资产 URL。
+
+遗留问题：
+
+- 选区含图 >10 张时由主进程护栏拒绝（一次最多 10 张），UI 未做截断/提示。
+- 图片 AI 面板没有文字选区，「替换选区 / 插入到选区后」无意义（保持不提供）。
+- **未提交**（随本批等验收）。
+
+下一步：
+
+- 等用户对两条图片入口的验收。
+
+
+### 2026-10-05 · 261005-MM 续② · 图片入口三处修复 + 图片栏图标化调研
+
+用户四条反馈的落地：
+
+- **① AI 面板最高 = 可用高 3/4**（`AI_DIALOG_MAX_HEIGHT_RATIO = 0.75`）：`contentGeom` 与视口兜底两处上限都乘该比例（原先 = 编辑区可视高，太长）。实测 **511 / 698**。
+- **② 图片入口去掉「替换选区」、补「插入到选区后」**：面板 `onReplace` 改为**仅有文字选区时**才提供；新增 `modelRangeForNodeId(editor, cardId)`（在模型树里按 id 定位图片卡片 —— 内核 `updateImageData` 就是按 id 认卡片 ⇒ DOM 卡片 id = 模型节点 id），用它给「插入到选区后」算落点。实测：图片入口按钮 = `发送|重新生成|插入到选区后|关闭`，插入落在**图片块之后**；文字入口仍为 `…插入到选区后|替换选区|关闭`。
+- **③ 修「图片浮栏弹层歪到最左」**（用户截图）：根因 = 内核给 `.ne-card-toolbar` 设了 `transform`（实测弹层 `offsetParent === ne-card-toolbar`），而弹层是 `position: fixed` ⇒ 相对**工具栏**定位，组件算出的视口坐标被再加一次工具栏偏移。修法：把图片浮栏弹层（宽高/链接/边距 三个 `cardpop` + 对齐/样式/批量 三个 `CardMenu`）**移出 `.ne-card-toolbar`**，改为其兄弟节点（父级 `.selection-toolbar` 无 transform）。实测：样式弹层左缘 **531 = 触发按钮 531**、边距 **613 = 613**，`offsetParent === null`。顺带给 `CardMenu` 补上 `style`/`surfaceRef`（它原先**根本没接定位**，这是「无 style ⇒ 静态位置」的直接原因）。
+- **④ 调研（未实施）**：图片浮栏能否只留图标。结论：只有 **4 项带文字**（宽高 / 描述 / 边距 / 样式，靠 `-has-title` 把 width 放开成 auto）；其余（旋转·裁剪·链接·对齐·批量应用·另存为·AI）本就是纯图标。去掉这 4 个 `<span>` 并退掉 `-has-title` 即可（`CardItem` 的 hover 已用 `useHoverTip` 提供名称，**无新 CSS**）；估算宽度 **584 → ~465px**。代价：偏离云端「带文字」形态、纯 hover 可发现性略降（图片栏仅桌面用）。**等用户拍板**。
+
+验证：`tsc` ✓ · `vitest` **1679 passed / 16 skipped** ✓ · `check:core` / `ui-metrics` / 双端构建 / `git diff --check` 全绿；隔离 Electron + CDP 实测定位（样式/边距）与比例（511/698）。未提交。
+
+
+### 2026-10-05 · 261005-MM 续③ · 高度改配置整数 + 图片栏图标化 + 裁剪可用性核实
+
+- **① 面板高度改为配置整数**（用户口径：不要比例乘法）：删 `AI_DIALOG_MAX_HEIGHT_RATIO`，改 `AI_DIALOG_MAX_HEIGHT = 512`（px）；三处上限统一为 `Math.min(Math.ceil(可用高), AI_DIALOG_MAX_HEIGHT)`。实测面板高 **512**（编辑区可视高 698）。
+- **④ 图片浮栏只留图标**：去掉 宽高/描述/样式/边距 四处 `<span>文字</span>` 与对应 `-has-title` 类（下拉箭头保留；`CardItem` 的 `useHoverTip` 仍出名称）。实测工具栏宽 **584 → 432px**、无文字标签；新增源码护栏锁住「4 个标签与 `-has-title` 均已移除」。
+- **② 图片裁剪可用性核实**（用户报「好像不支持」）：实测**支持** —— 调 `cardUI._$cardUI.setCro(true)` 后 `_isCroping === true`、`getCroping() === true`、`_cropImageOp` 由 `null` 变为**已设置**、裁剪相关 DOM **11 个**。vendor `ImageToolbar.tsx` 的 crop 注释（「本构建空桩、`_cropImageOp` 恒 null」）是**过期结论**，已回填 `LAKEX-CONTRACT §5.21`。**按钮保留**（不是死按钮）。
+- **顺带修复**：前几轮用 `String.raw` 写文档导致 **438 处** `\`` （转义反引号）全部清理为真反引号（LAKEX-CONTRACT 50 / 专项 316 / HANDOFF 72；其中 4 处是更早会话遗留）。
+
+验证：`tsc` ✓ · `vitest` **1679 passed / 16 skipped** ✓ · `check:core` / `ui-metrics` / 双端构建 / `git diff --check` 全绿；隔离 Electron CDP 实测（高度 512、宽度 432、裁剪态 true）。未提交。
+
+### 2026-10-05 · 261005-MM 续④ · 图片 Cmd+X 剪切（vendor 导出 deleteBlockByRange）
+
+- 用户报「图片剪切（Cmd+X）不支持」。根因：宿主 capture 的 cut/copy handler 都要求**非折叠 DOM 选区**，点图片不建立选区；内核原生 cut 只写 `image/png`、不删卡片。
+- 三条删除路径实测**都不改模型**：`kernel.execCommand("delete")`（只写剪贴板）、outer-range `deleteByRange`（不删卡片节点）、`editor.execCommand("deleteCard", id)`（只移除 DOM，落盘正文仍有图片）。
+- **落地（用户选方案 1）**：vendor `src/index.ts` 导出 `deleteBlockByRange`（LOCAL-CHANGES #28；重建 `dist/` 三件产物）；宿主 `SelectionToolbar` 加 Cmd/Ctrl+X：`selectNode(卡片)` + `execCommand("copy")` 写剪贴板 → `deleteBlockByRange(editor, topLevelBlockOf(cardEl))`（**传顶层块** `ne-p`；传卡片会撞 `removeBlockNodesNative` 的「父节点不能只剩一个子节点」守卫、落到不生效的 `deleteByRange`）。
+- ⚠️ **踩坑**：处理器守卫 `[contenteditable='true']` 把**主编辑器引擎**也拦了（它本身就是 contenteditable）⇒ Cmd+X 永远进不来；必须排除 `.ne-engine`。另：e2e 验证剪贴板前要先**清空系统剪贴板**（跨次残留会误判）。
+- 真实端实测（隔离 Electron + 可信 CDP 输入）：Cmd+X 后图片从**正文与 DOM 都删除**（落盘 `len=204`、前/后文保留），剪贴板拿到含 `<img>` 的 `text/html`。
+- 代价：删的是**整个顶层块** —— 图片独占段落时等同删图；图与文字同段会连文字一起删。
+- 验证：tsc ✓ · vitest **1679/16** ✓ · check:core / ui-metrics / 双端构建 / `git diff --check` 全绿。未提交。
+
+### 2026-10-05 · 261005-MM 续⑤ · 修正：图片剪切改用 deleteCard（单卡）
+
+- 用户实测反馈：上一版用 `deleteBlockByRange` **删的是整个顶层块** —— 一个段落里放多张户型图时，删一张会把同段**其它图片和文字一起删掉**，不可接受。
+- 重新核实：内核有**卡片级**命令 `deleteCard(cardId)`（契约 §5.9/§5.10；vendor 各卡片编辑器都用它）。决定性实测：一个段落 3 张图，删中间一张 → **只掉它**（落盘 imageCards 3→2、seed_1/seed_3 在、seed_2 没了、块内文字保留、DOM 剩 2）。
+- 落地：`deleteCardNative(cardEl, cardId, fallbackEditor)`（`imageCardOps.ts`）取**卡片实例自己的 editor** 调 `execCommand("deleteCard", cardId)`；Cmd+X 处理器 = copy 到剪贴板 + 该命令。
+- **撤销 vendor 改动**：移除 `src/index.ts` 的 `deleteBlockByRange` 导出、撤回 LOCAL-CHANGES #28、`git checkout` 还原 `dist/` ⇒ **vendor 零分叉**。
+- 教训（已回填契约 §5.22）：块级删除与单卡删除是两件事，删卡片一律用 `deleteCard`；`deleteBlockByRange` 只适合「整块（含列表子项）删除」。
+- 验证：tsc ✓ · vitest **1679/16** ✓ · check:core / ui-metrics / 双端构建 / `git diff --check` 全绿；真实端多图剪切 **6/6**。未提交。
+
+### 2026-10-05 · 261005-MM 续⑥ · 卡片剪切泛化为「所有卡片类型」
+
+- 用户要求把 Cmd+X 剪切覆盖到所有卡片类型（文件 / 视频 / 音频…）且不误伤。
+- 泛化：`SelectionToolbar` 新增 `activeCardRef`，在 `pointerdown`(capture) 记录**任意** `ne-card`（`el.closest("ne-card")`）；Cmd+X 时图片来源用浮栏 target、其它类型用该 ref；仅当命中卡片才拦，且**有非折叠文字选区且不在该卡上时让位**（不抢文字剪切）；卡片内标题等可编辑元素也不抢。
+- 真实端实测（可信 CDP 输入，同文档内 image/file/video/audio **各 2 张**）：依次对每类第一张 Cmd+X → 计数 `2,2,2,2 → 1,2,2,2 → 1,1,2,2 → 1,1,1,2 → 1,1,1,1`，每次只掉目标 1 张、其余类型零变化，剪贴板有内容。
+- 覆盖两种结构：内联卡（image/file，父节点 `NE-P`）与块卡（video/audio，`NE-HOLE` 包裹）都只删目标卡。
+- 验证：tsc ✓ · vitest **1679/16** ✓ · check:core / ui-metrics / 双端构建 / `git diff --check` 全绿。未提交。
 
 ## 14. 会话执行模板
 

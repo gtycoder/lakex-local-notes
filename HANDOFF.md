@@ -9,6 +9,23 @@
 
 > 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
+### 当前批次 · 261005-MM · AI 多模态基础能力（图片 + PDF，落到多维表 AI 字段）
+
+- 范围（用户 261005 定稿）：**先做图片 + PDF 的「基础能力」**；Office 不做、**AI 生成图片不做且不立项**、移动端只读无 AI（`src/mobile` 0 处 AI 引用，已核实）。
+- 关键事实：**DeepSeek 的 `deepseek-flash` 本身支持图片输入**（OpenAI 兼容 `content` 数组 + `image_url`；格式 JPEG/PNG/GIF/WebP、单图 ≤1024 token；见官方《图像理解》）⇒ 不换供应商、不加协议。**但 DeepSeek 的 file / Files API 只收图片** ⇒ PDF 必须本地抽文本。
+- 落地：core 内容块模型（`text` / `image` / `document`；附件跨 IPC **只传 `{noteId, filename}` 引用**）→ 主进程唯一解析入口 `electron/ai/aiContentResolver.ts`（图片 → data URL；PDF → `electron/ai/pdfText.ts` 用 `unpdf` 抽文本，限额 32MiB / 6 万字符 / 10s、扫描件明确报错、按 `noteId/filename/size` 缓存）；图片 / 文档**只允许 `user` 消息**、各限 10 / 5。
+- AI 字段：字段配置加 `includeAttachments`（编辑器「把引用的图片 / PDF 一起发送给 AI」开关），`buildAiFieldMessages(..., { noteId })` 出内容块；其余附件仍只出文件名。**PDF 按扩展名判定**（`fileKindOf` 不许进文档模型，既有护栏禁止）。
+- 门禁全绿：tsc ✓ · vitest **1673 passed / 16 skipped** ✓ · check:core 75-0 ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · cssLayers+uiPrimitives ✓ · 双端构建 ✓ · `git diff --check` ✓。
+- 真实端：**隔离 Electron + CDP + mock OpenAI 端点 9/9**（出站 `[text, image_url, text]`、图片 data URL、PDF `【附件：报告.pdf】\nHello Lake`、非 PDF / 缺失附件 / system 带图三条错误路径均正确）；另用自造最小 PDF 走**真实 unpdf** 抽取实测 ✓。
+- **续 · 图片入口（用户 261005 定稿：不做手动附图）**：① 文字选区含图片 → **自动**随首轮问答作为 image 块发出（`selectionToolbar/selectionImages.ts` 用 `range.cloneContents()` 取图，仅本地资产、按磁盘名去重）；② 图片浮动工具栏新增「AI」入口（`CardItem tip="AI"` → 单图上下文），无文字选区时首轮出**图片预设**（描述 / 提取文字 / 翻译 / 自定义）。面板新增 `attachments`，追问沿用 history。
+- 门禁续：tsc ✓ · vitest **1679 passed / 16 skipped** ✓ · check:core 75-0 ✓ · ui-metrics ✓ · cssLayers+uiPrimitives ✓ · 双端构建 ✓ · `git diff --check` ✓；**隔离 Electron + CDP 18/18**（真实文档 + 真实图片卡片：两条入口都实测出站带 `image_url` data URL）。仍未提交。
+- **续② 三处修复（261005 用户反馈）**：① AI 面板最高收到**可用高 3/4**（原先全高太长）；② 图片入口去掉「替换选区」、保留「插入到选区后」（按图片模型节点定位落点；文字入口不受影响）；③ 修「图片浮栏弹层歪到最左」—— 根因内核 **`.ne-card-toolbar` 有 `transform`**，`position:fixed` 相对它定位 ⇒ 已把弹层移出 `.ne-card-toolbar`（放 `.selection-toolbar` 下）。④「图片栏只留图标」调研已出（仅 4 项带文字，去 span 即可，~584→465px），**未实施、待拍板**。
+- **续③**：① AI 面板最高改**配置整数** `AI_DIALOG_MAX_HEIGHT = 512`（不再比例乘法；实测 512px）；② **图片浮栏只留图标**（去 4 处文字标签，实测 584→432px；hover 仍出名称）；③ 核实**图片裁剪可用**（`setCro(true)` 真进裁剪态：`_isCroping=true`、`_cropImageOp` 已设置、裁剪 DOM 11 个）—— vendor 「空桩」注释过期，已回填 `LAKEX-CONTRACT §5.21`。另清理 438 处文档转义反引号。
+- **续④ 图片 Cmd+X 剪切（用户选方案 1）**：vendor `src/index.ts` 导出 `deleteBlockByRange`（LOCAL-CHANGES #28，已重建 `dist/` 三件产物）；宿主 `SelectionToolbar` 加 Cmd/Ctrl+X = `selectNode(卡片)` + `execCommand("copy")` 写剪贴板 → `deleteBlockByRange(editor, topLevelBlockOf(cardEl))`。真实端实测：图片从**正文与 DOM 都删除**、剪贴板得 `text/html` 图。⚠️ 坑：守卫**别用裸 `[contenteditable='true']`**（主编辑器引擎就是它 ⇒ Cmd+X 永远进不来）；验证剪贴板前要先清空。
+- **续⑤ 修正（用户实测）**：图片剪切**不能用块级删除**（`deleteBlockByRange` 删整个块，会把同段的其它图片/文字一起删）；改用内核**卡片级**命令 `deleteCard(cardId)`。真实端：同段 3 图删中间一张 → 只掉它、文字与另两图保留。vendor 改动**已整体还原**（零分叉）。
+- **续⑥ 泛化（261005）**：Cmd+X 卡片剪切覆盖**所有卡片类型**——`SelectionToolbar` 用 `activeCardRef` 记最近点过的任意 `ne-card`，命中卡片才拦（非折叠文字选区让位）。真实端同文档 image/file/video/audio 各 2 张逐个切：每类只掉目标 1 张、其余类型零变化。
+- 明细只在专项文档 §11/§12/§13。**未提交（待验收）**。
+
 ### 修复 · 261005 · AI「插入到选区后」压扁原块 + 最终改为「分隔线 + AI 生成提示」
 
 - 用户 261005 报：选 4 项无序列表 → 用 AI「插入到选区后」→ 4 项被压成 1 项（多行变软换行、只剩一个项目符号）、**每行块句柄消失**，「格式绝对是错误了」，要求彻查并看其他格式是否同样。
@@ -524,6 +541,11 @@
 - **用户可能与测试实例共用同一个进程/窗口**（260929 用户明确交代）：我起的隔离实例（LAKE_USER_DATA=$TMPDIR/lake-accept + LAKE_RENDERER=scheme）用户会**直接在同一个窗口里看/操作** ⇒ **不要默认 kill 实例、不要 rm -rf 该 userData**（那是他正在看的数据）；只有用户明确说「清理/重建」时才收尾。同理，验证脚本不要顺手删掉自己建的测试笔记。
 - **读落盘要轮询**：自动保存有防抖，改完立刻读会拿到旧值。
 - **AI 结果回写正文：绝不「纯文本重建原选区」，也不要用 `insertAtSelection` 折叠光标做块级插入**（261005）：只用 `insertAtPosition({id,offset}, "text/markdown", …)` 插新块，原块一个字节不动；`offset` 按模型 `_parent`/`_children` 算（DOM 的「某元素之后」映射少 1）。`applyModelRange` 一类模型选区命令必须走 `kernel.execCommand`（editor 层会抛且被 try/catch 静默吞掉）。详见 `docs/LAKEX-CONTRACT.md` §5.16。
+
+### AI 多模态（261005-MM，长期有效）
+- **附件内容跨 IPC 只传引用**（`{noteId, filename}`），字节读取 / 解析只在主进程（`electron/ai/aiContentResolver.ts`）：渲染层 CSP 读不了文件；base64 过 IPC 既翻倍内存又冲垮 20 万字符预算。附件**不落正文、不进 S3 / 同步**。
+- **图片 / 文档块只能出现在 `user` 消息**（供应商对 system/assistant 带图直接 400），校验在 `electron/ai/aiChatMessages.ts`。
+- **PDF 只能本地抽文本**（DeepSeek 的 file / Files API 只收图片）：`electron/ai/pdfText.ts`（unpdf）；扫描件无文字层 → 明确报错，不静默发空。**Office 与 AI 生图明确不做**。
 
 ## 5. 上线与后续建议
 1. 主线是多维表专项（§0）；专项之外只从 §3 取项并单独立项，不要恢复已完成的研究/计划文档。

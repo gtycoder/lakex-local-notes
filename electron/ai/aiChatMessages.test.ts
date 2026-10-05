@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_MAX_MESSAGES, AI_MAX_TOTAL_CHARS, assertMessages } from "./aiChatMessages.js";
+import { AI_MAX_DOCUMENTS, AI_MAX_IMAGES, AI_MAX_MESSAGES, AI_MAX_TOTAL_CHARS, assertMessages } from "./aiChatMessages.js";
 
 /**
  * AI 对话消息护栏（261005）。
@@ -39,5 +39,55 @@ describe("assertMessages：保留最近 N 条", () => {
     expect(() => assertMessages("nope")).toThrow();
     expect(() => assertMessages([{ role: "user", content: "" }])).toThrow();
     expect(() => assertMessages([{ role: "user", content: "x".repeat(AI_MAX_TOTAL_CHARS + 1) }])).toThrow(/内容过长/);
+  });
+});
+
+/**
+ * 多模态内容块（261006）：跨 IPC 传资产引用；图片 / 文档只允许 user；附件超量报错。
+ * 纯文本数组归一回字符串，保持既有调用方形态不变。
+ */
+describe("assertMessages：内容块", () => {
+  it("纯文本数组归一成字符串", () => {
+    expect(assertMessages([{ role: "user", content: [{ type: "text", text: "hi" }] }]))
+      .toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  it("user 消息的图片 / 文档块保留（含展示名）", () => {
+    const out = assertMessages([{ role: "user", content: [
+      { type: "text", text: "看图" },
+      { type: "image", asset: { noteId: "n1", filename: "a.png", name: "图.png" } },
+      { type: "document", asset: { noteId: "n1", filename: "b.pdf" } },
+    ] }]);
+    expect(out[0].content).toEqual([
+      { type: "text", text: "看图" },
+      { type: "image", asset: { noteId: "n1", filename: "a.png", name: "图.png" } },
+      { type: "document", asset: { noteId: "n1", filename: "b.pdf" } },
+    ]);
+  });
+
+  it("图片 / 文档只能出现在 user 消息", () => {
+    expect(() => assertMessages([{ role: "system", content: [{ type: "image", asset: { noteId: "n", filename: "a.png" } }] }])).toThrow(/用户/);
+    expect(() => assertMessages([{ role: "assistant", content: [{ type: "document", asset: { noteId: "n", filename: "a.pdf" } }] }])).toThrow(/用户/);
+  });
+
+  it("图片 / 文档各自超量报错", () => {
+    const images = Array.from({ length: AI_MAX_IMAGES + 1 }, (_, i) => ({ type: "image", asset: { noteId: "n", filename: i + ".png" } }));
+    expect(() => assertMessages([{ role: "user", content: images }])).toThrow(/图片/);
+    const docs = Array.from({ length: AI_MAX_DOCUMENTS + 1 }, (_, i) => ({ type: "document", asset: { noteId: "n", filename: i + ".pdf" } }));
+    expect(() => assertMessages([{ role: "user", content: docs }])).toThrow(/文档/);
+  });
+
+  it("只有附件、没有文本的消息保留", () => {
+    const out = assertMessages([{ role: "user", content: [{ type: "image", asset: { noteId: "n", filename: "a.png" } }] }]);
+    expect(Array.isArray(out[0].content)).toBe(true);
+  });
+
+  it("资产引用缺 noteId / filename 的块被丢弃", () => {
+    const out = assertMessages([{ role: "user", content: [
+      { type: "text", text: "x" },
+      { type: "image", asset: { noteId: "", filename: "a.png" } },
+      { type: "document", asset: { noteId: "n", filename: "" } },
+    ] }]);
+    expect(out[0].content).toBe("x");
   });
 });

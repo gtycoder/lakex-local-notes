@@ -1095,3 +1095,24 @@ describe("Markdown 字段与展开浮窗护栏（261004）", () => {
     expect(CARDS).toMatch(/return <MarkdownCell field=\{field\} value=\{value\} readOnly=\{readOnly\} onChange=\{onChange\} onRegenerate=/);
   });
 });
+
+/**
+ * 多模态护栏（261006）：AI 字段可把被引用的图片 / PDF 作为内容块一并发送。
+ * 锁死三件事：字段配置开关、构建器只对 image/attachment 且只对 PDF 出 document 块、渲染层传 noteId。
+ */
+describe("AI 字段多模态护栏（261006 · 图片 / PDF）", () => {
+  it("core：配置带 includeAttachments；图片 / PDF 出内容块，其它附件不进", () => {
+    expect(DOC).toContain("includeAttachments?: boolean");
+    expect(DOC).toContain("AI_FIELD_MAX_IMAGES");
+    expect(DOC).toContain("AI_FIELD_MAX_DOCUMENTS");
+    expect(DOC).toContain('parts.push({ type: "image", asset })');
+    expect(DOC).toContain('parts.push({ type: "document", asset })');
+    expect(DOC).toMatch(/extOf\(attachment\.file\)[\s\S]*"pdf"/);
+  });
+
+  it("渲染层：hook 传 noteId；编辑器有「图片 / PDF 一起发送」开关并保存该配置", () => {
+    expect(AI_HOOK).toContain("{ noteId: latest.current.noteId }");
+    expect(EDITOR).toContain("includeAttachments: true");
+    expect(EDITOR).toContain("把引用的图片 / PDF 一起发送给 AI");
+  });
+});
