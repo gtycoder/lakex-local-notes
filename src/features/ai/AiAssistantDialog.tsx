@@ -6,6 +6,11 @@ import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
 import type { AiChatMessage } from "../../core/aiProviders";
 import { activeEditorMount } from "../editor/activeEditor";
+import { AiMessageBody } from "./AiMessageBody";
+import { copyMarkdownAsLake, type LakePayloadKernel } from "./aiLakeClipboard";
+import { editorInstanceAt } from "../editor/editorRegistry";
+import { AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, AI_PROMPT_PRESETS, type AiPromptPreset } from "./aiPrompts";
+import "./aiDialogParts.css";
 
 /**
  * AI 助手浮动面板。
@@ -65,6 +70,19 @@ function resolveEditorColumn(container?: HTMLElement | null): EditorColumn | nul
   return { mount, left: er.left + padL, width, top, bottom };
 }
 
+/**
+ * hover 说明气泡：表面 = kit 的 `.ln-tip`（`.ai-dialog__tip` 补 position:fixed，与多维表 `.bt-file-tip` 同口径），
+ * 定位 = usePopoverPosition 实测；**无延时**（原生 title 有约 1s 延迟，用户 261005 要求实时出）。
+ */
+function useCopyTip() {
+  const [tip, setTip] = useState<{ text: string; anchor: HTMLElement } | null>(null);
+  const { surfaceRef, style } = usePopoverPosition({ open: Boolean(tip), anchor: tip?.anchor ?? null, gap: 6 });
+  const surface = tip ? <span ref={surfaceRef} className="ln-tip ai-dialog__tip" style={style ?? undefined} role="tooltip">{tip.text}</span> : null;
+  const show = (text: string, anchor: HTMLElement) => setTip({ text, anchor });
+  const hide = () => setTip(null);
+  return { surface, show, hide };
+}
+
 export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onInsertAfter, anchor, at, scroller, container }: {
   open: boolean; selectionText: string; onClose: () => void;
   /** 贴靠的锚点元素（浮动工具栏的 AI 按钮）——给了就悬浮在它下方，无遮罩、不压暗文档。 */
@@ -91,13 +109,27 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
   /** 用户在右下角拖出来的高度（null = 跟随内容自适应）；**不做记忆**，每次打开都从自适应开始。 */
   const [userHeight, setUserHeight] = useState<number | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  /** 复制反馈：记「哪一条 + 哪种复制」用于对应按钮上的勾（1200ms 复原）。 */
+  const [copied, setCopied] = useState<{ index: number; mode: "plain" | "lake" } | null>(null);
+  /** 首轮预设（有选区才显示）：点它只填词、不发送；手动改字退回「自定义」。 */
+  const [presetId, setPresetId] = useState<string>(AI_PROMPT_CUSTOM_ID);
+  const copyTimerRef = useRef<number | null>(null);
+  /** hover 说明气泡（两个复制按钮共用；无延时）。 */
+  const copyTip = useCopyTip();
+
 
   useEffect(() => {
     if (!open) return;
     setInstruction(""); setFollowUp(""); setTurns([]); setError(null); setBusy(false);
     setUserHeight(null);   // 打开即恢复默认高度（内容自适应），不沿用上次拖出来的大小
     reqRef.current = null; historyRef.current = [];
+    if (copyTimerRef.current !== null) { window.clearTimeout(copyTimerRef.current); copyTimerRef.current = null; }
+    setCopied(null);
+    setPresetId(AI_PROMPT_CUSTOM_ID);
   }, [open, selectionText]);
+
+  // 卸载时清掉「已复制」定时器（避免对已卸载组件 setState）。
+  useEffect(() => () => { if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current); }, []);
 
   // 无预设：进来就是自定义提问；选区只作为**上下文**附在后面（不在面板里回显原文，对齐云端）。
   const firstPrompt = selectionText.trim() ? instruction.trim() + "\n\n" + selectionText : instruction.trim();
@@ -305,7 +337,35 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
     try { el.setSelectionRange(end, end); } catch { /* 个别输入类型不支持选区，忽略 */ }
   }, [open, placed]);
 
-  const copy = () => { void navigator.clipboard?.writeText(lastOutput); };
+  /** 首轮预设：只把提示词填进输入框（**不发送**）；传 null = 「自定义」（清空）。 */
+  const applyPreset = (preset: AiPromptPreset | null) => {
+    setPresetId(preset ? preset.id : AI_PROMPT_CUSTOM_ID);
+    setInstruction(preset ? preset.prompt : "");
+    fieldRef.current?.focus({ preventScroll: true });
+  };
+
+  /** 复制成功反馈：对应按钮短暂显示勾再复原。 */
+  const markCopied = (index: number, mode: "plain" | "lake") => {
+    setCopied({ index, mode });
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => { setCopied(null); copyTimerRef.current = null; }, 1200);
+  };
+
+  /** 复制**某一条** AI 回答的纯文本（对话式：每条各自复制，用户 261005）。 */
+  const copyMessage = (text: string, index: number) => {
+    void navigator.clipboard?.writeText(text);
+    markCopied(index, "plain");
+  };
+
+  /** 复制为 **Lake 内核格式**：内核转换后放剪贴板，粘到 Lake 是原生样式、不弹「是否转换」。 */
+  const copyAsLake = async (text: string, index: number) => {
+    const kernel = editorInstanceAt(activeEditorMount())?.kernel;
+    if (!kernel) return;
+    const ok = await copyMarkdownAsLake(kernel as unknown as LakePayloadKernel, text, window.location.href);
+    if (ok) markCopied(index, "lake");
+  };
+
+
 
   return (
     <Popover open={open} onDismiss={onClose} container={scroller} style={dialogStyle} surfaceRef={setSurface} className="ai-dialog" label="AI 助手">
@@ -313,9 +373,46 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
         {turns.length > 0 && (
           <>
             <div className="ai-dialog__thread">
-              {turns.map((t, i) => (
-                <div key={i} className={"ai-dialog__msg ai-dialog__msg--" + t.role}>{t.text || (busy && i === turns.length - 1 ? "…" : "")}</div>
-              ))}
+              {turns.map((t, i) => {
+                const streaming = busy && i === turns.length - 1;
+                if (t.role === "user") return <div key={i} className="ai-dialog__msg ai-dialog__msg--user">{t.text}</div>;
+                return (
+                  <div key={i} className="ai-dialog__msg ai-dialog__msg--assistant">
+                    {t.text ? <AiMessageBody text={t.text} /> : (streaming ? "…" : "")}
+                    {/* 对话式：**每条** AI 回答各带一个复制（用户 261005），不再只给最后一条 */}
+                    {t.text && !streaming && (
+                      <div className="ai-dialog__copy-actions">
+                        {/* 两个复制：复制文字 / 复制为 Lake（用户 261005）。说明 = 即时 hover 气泡（无 title 延时）。 */}
+                        <button
+                          type="button"
+                          className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "plain" ? " is-selected" : "")}
+                          aria-label="复制文字"
+                          onMouseEnter={(e) => copyTip.show("复制文字", e.currentTarget)}
+                          onMouseLeave={copyTip.hide}
+                          onFocus={(e) => copyTip.show("复制文字", e.currentTarget)}
+                          onBlur={copyTip.hide}
+                          onClick={() => copyMessage(t.text, i)}
+                        >
+                          {copied?.index === i && copied.mode === "plain" ? <Check size={12} /> : <Copy size={12} />}
+                        </button>
+                        <button
+                          type="button"
+                          className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "lake" ? " is-selected" : "")}
+                          aria-label="复制为 Lake"
+                          disabled={!editorInstanceAt(activeEditorMount())?.kernel}
+                          onMouseEnter={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
+                          onMouseLeave={copyTip.hide}
+                          onFocus={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
+                          onBlur={copyTip.hide}
+                          onClick={() => void copyAsLake(t.text, i)}
+                        >
+                          {copied?.index === i && copied.mode === "lake" ? <Check size={12} /> : <span className="ai-dialog__lake-badge" aria-hidden="true">lake</span>}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {lastOutput && <div className="ai-dialog__note">内容由 AI 生成，请自行核对</div>}
           </>
@@ -326,7 +423,7 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
       <div className="ai-dialog__bar">
         <AiSparkIcon size={18} />
         {turns.length === 0 ? (
-          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => setInstruction(e.target.value)} onKeyDown={onFieldKeyDown} />
+          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => { setInstruction(e.target.value); setPresetId(AI_PROMPT_CUSTOM_ID); }} onKeyDown={onFieldKeyDown} />
         ) : (
           <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} onKeyDown={onFieldKeyDown} />
         )}
@@ -337,6 +434,17 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
           }}><X size={12} /></button>
         )}
       </div>
+      {/* 首轮预设（用户 261005）：**仅首轮 + 有选区**才出现；点击只填词、不发送；分段控件复用 kit 的 .ln-segment。 */}
+      {turns.length === 0 && selectionText.trim().length > 0 && (
+        <div className="ai-dialog__presets">
+          <span className="ln-segment" role="group" aria-label="预设提示词">
+            {AI_PROMPT_PRESETS.map((preset) => (
+              <button key={preset.id} type="button" className={"ln-segment__item" + (presetId === preset.id ? " is-active" : "")} onClick={() => applyPreset(preset)}>{preset.label}</button>
+            ))}
+            <button type="button" className={"ln-segment__item" + (presetId === AI_PROMPT_CUSTOM_ID ? " is-active" : "")} onClick={() => applyPreset(null)}>{AI_PROMPT_CUSTOM_LABEL}</button>
+          </span>
+        </div>
+      )}
       <div className="ln-dialog__actions">
         {turns.length === 0 ? (
           <button type="button" className="ln-btn" disabled={busy || !canSendFirst} onClick={() => void run(true)}>{busy ? "生成中…" : "生成"}</button>
@@ -346,7 +454,6 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
         {busy && <button type="button" className="ln-btn" onClick={stop}>停止</button>}
         {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
         {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「生成 + 关闭」。 */}
-        {lastOutput && <button type="button" className="ln-btn" onClick={copy}><Copy size={12} /> 复制</button>}
         {lastOutput && onInsertAfter && (
           <button type="button" className="ln-btn" onClick={() => { onInsertAfter(lastOutput); onClose(); }}><CornerDownRight size={12} /> 插入到选区后</button>
         )}
@@ -356,6 +463,8 @@ export function AiAssistantDialog({ open, selectionText, onClose, onReplace, onI
       </div>
       {/* 右下角拖拽把手：只改高度（用户 261004：左右不动）。 */}
       <div className="ai-dialog__grip" role="separator" aria-label="拖动调整高度" onPointerDown={startResize} />
+      {/* 复制按钮的即时说明（无延时；定位/夹取走 usePopoverPosition）。 */}
+      {copyTip.surface}
     </Popover>
   );
 }

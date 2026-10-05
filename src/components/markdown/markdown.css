@@ -1,0 +1,96 @@
+/* Markdown 轻量子集渲染的**共用排版**（261005 从 bitableMarkdown.css 提出，渲染件自带）。
+   作用域 `.md-preview`（中立名，bitable 与 AI 面板共用）；字号/间距/圆角/颜色一律走 --lake-* 令牌。 */
+/* 预览排版（渲染子集；无现成原语，故按令牌自建这一套） */
+.md-preview {
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+  line-height: var(--lake-line-height-reading);
+  overflow-wrap: anywhere;
+}
+.md-preview > :first-child {
+  margin-top: 0;
+}
+.md-preview > :last-child {
+  margin-bottom: 0;
+}
+.md-preview p {
+  margin: 0 0 var(--lake-space-md);
+}
+.md-preview h1,
+.md-preview h2,
+.md-preview h3,
+.md-preview h4,
+.md-preview h5,
+.md-preview h6 {
+  margin: var(--lake-space-lg) 0 var(--lake-space-sm);
+  font-weight: var(--lake-font-weight-semibold);
+  line-height: var(--lake-line-height-tight);
+}
+.md-preview h1 {
+  font-size: var(--lake-font-size-title);
+}
+.md-preview h2 {
+  font-size: var(--lake-font-size-bodyLg);
+}
+.md-preview h3 {
+  font-size: var(--lake-font-size-body);
+}
+.md-preview h4,
+.md-preview h5,
+.md-preview h6 {
+  font-size: var(--lake-font-size-small);
+}
+.md-preview ul,
+.md-preview ol {
+  margin: 0 0 var(--lake-space-md);
+  padding-left: var(--lake-space-xxl);
+}
+.md-preview li {
+  margin: var(--lake-space-xxs) 0;
+}
+.md-preview blockquote {
+  margin: 0 0 var(--lake-space-md);
+  padding: var(--lake-space-xxs) 0 var(--lake-space-xxs) var(--lake-space-sm);
+  border-left: 3px solid var(--lake-border-2);
+  color: var(--lake-text-2);
+}
+.md-preview blockquote p {
+  margin: 0 0 var(--lake-space-xs);
+}
+.md-preview code {
+  padding: 0 var(--lake-space-xs);
+  border-radius: var(--lake-radius-xs);
+  background: var(--lake-bg-subtle);
+  font-family: var(--lake-font-family-mono);
+  font-size: var(--lake-font-size-tiny);
+}
+.md-preview pre {
+  margin: 0 0 var(--lake-space-md);
+  padding: var(--lake-space-md) var(--lake-space-lg);
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-subtle);
+  overflow-x: auto;
+}
+.md-preview pre code {
+  padding: 0;
+  background: transparent;
+}
+.md-preview a {
+  color: var(--lake-accent);
+  text-decoration: none;
+}
+.md-preview a:hover {
+  text-decoration: underline;
+}
+.md-preview hr {
+  margin: var(--lake-space-lg) 0;
+  border: 0;
+  border-top: 1px solid var(--lake-border-2);
+}
+.md-preview del {
+  color: var(--lake-text-3);
+}
+.md-preview strong {
+  font-weight: var(--lake-font-weight-semibold);
+}

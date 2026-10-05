@@ -1117,6 +1117,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 </Group>
                 <Group title="说明">
                   <Block name="内容只在你主动触发时外发" desc="AI 只把你要处理的文本发到上面配置的供应商；API Key 只保存在本机主进程，不参与同步、S3 与备份。" />
+                  <Block name="多轮对话只保留最近 40 条消息" desc="同一个 AI 面板内会记住上下文（把前面的问答一起发给模型），但最多只带最近 40 条消息（一问一答算 2 条），更早的不会再发送；关闭面板后记忆即清空，不做长期记忆。" />
                 </Group>
               </>
             )}

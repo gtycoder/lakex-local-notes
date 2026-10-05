@@ -132,7 +132,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
             return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 236, height: 200 }, 6) : undefined;
           })()}>
           <button role="menuitem" onClick={onOpenAiAssistant}>
-            <Sparkles size={15} /><span>AI 助手<small>润色 · 翻译 · 总结</small></span>
+            <Sparkles size={15} /><span>AI 助手<small>对话</small></span>
           </button>
           <button role="menuitem" aria-checked={focusMode} onClick={onToggleFocusMode}>
             <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>

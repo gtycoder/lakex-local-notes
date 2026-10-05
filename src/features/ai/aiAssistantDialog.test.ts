@@ -80,4 +80,54 @@ describe("AI 弹窗定位护栏（261004）", () => {
   it("按钮不做特殊高亮：替换选区与其它按钮同级（用户 261004）", () => {
     expect(DIALOG).not.toContain("ln-btn--primary");
   });
+  it("对话式：每条 AI 回答各带两个复制按钮（纯文本 / Lake 格式，用户 261005）", () => {
+    expect(DIALOG).toContain("copyMessage(t.text, i)");
+    expect(DIALOG).toContain("void copyAsLake(t.text, i)");
+    expect(DIALOG).toContain('"ln-iconbtn ln-iconbtn--compact"');
+    expect(DIALOG).toContain("ai-dialog__copy-actions");
+    expect(DIALOG).not.toContain("onClick={copy}");
+  });
+
+
+  it("AI 回答正文走可替换的渲染接口 AiMessageBody（当前接自研 MarkdownView；换 md 库只改这一处）", () => {
+    expect(DIALOG).toContain("<AiMessageBody text={t.text} />");
+    const BODY = readFileSync(new URL("./AiMessageBody.tsx", import.meta.url), "utf8");
+    expect(BODY).toContain("return <MarkdownView source={text} />;");   // 当前接的是共用渲染器（换库只改这一处）
+    expect(BODY).not.toContain("dangerouslySetInnerHTML");
+  });
+
+
+  it("复制后有反馈（对应按钮 is-selected + 勾，无新 CSS）", () => {
+    expect(DIALOG).toContain("copied?.index === i");
+    expect(DIALOG).toContain("is-selected");
+    expect(DIALOG).toContain("<Check size={12} />");
+  });
+
+
+  it("首轮预设：仅「有选区 + 首轮」显示；点击只填词不发送；手动改字回自定义", () => {
+    expect(DIALOG).toContain("AI_PROMPT_PRESETS.map");
+    expect(DIALOG).toContain("turns.length === 0 && selectionText.trim().length > 0");
+    expect(DIALOG).toContain("applyPreset(preset)");
+    // applyPreset 只 setInstruction + 聚焦，绝不调 run()（发送必须由用户点按钮）
+    const body = DIALOG.slice(DIALOG.indexOf("const applyPreset"), DIALOG.indexOf("const copyMessage"));
+    expect(body).toContain("setInstruction(");
+    expect(body).not.toContain("run(");
+    // 手动改字退回自定义
+    expect(DIALOG).toContain("setPresetId(AI_PROMPT_CUSTOM_ID)");
+  });
+
+
+  it("两个复制按钮：「复制文字」/「复制为 Lake」（即时 hover 说明，Lake 图标 = lake 文字徽标）", () => {
+    expect(DIALOG).toContain('"复制文字"');
+    expect(DIALOG).toContain('"复制为 Lake"');
+    expect(DIALOG).toContain('className="ai-dialog__lake-badge"');
+    expect(DIALOG).toContain("copyMarkdownAsLake(");
+    expect(DIALOG).toContain("editorInstanceAt(activeEditorMount())?.kernel");   // 无内核时 Lake 按钮禁用
+    expect(DIALOG).not.toContain("Braces");   // 不再用代码块图标
+    // 说明走自绘 .ln-tip 即时气泡（原生 title 有约 1s 延迟，用户 261005 要求实时出）
+    expect(DIALOG).toContain("copyTip.show(");
+    expect(DIALOG).toContain('className="ln-tip ai-dialog__tip"');
+    expect(DIALOG).not.toContain("title={copied?.index");
+  });
+
 });

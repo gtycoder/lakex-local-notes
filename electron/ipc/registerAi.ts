@@ -1,10 +1,10 @@
 import type { IpcMainInvokeEvent } from "electron";
 import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
-import { aiChat, aiListModels, aiTestProvider, type AiMessage } from "../ai/aiClient.js";
+import { aiChat, aiListModels, aiTestProvider } from "../ai/aiClient.js";
+import { assertMessages } from "../ai/aiChatMessages.js";
 import { activeAiProvider, aiSettingsView, mergeAiSettings, type AiProviderPatch, type AiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
 import { aiErrorInfo, aiErrorMessage } from "../../src/core/aiErrors.js";
-import { AppError } from "../../src/core/storeErrors.js";
 
 /**
  * AI IPC（P0）：设置读写 / 连通性测试 / 流式对话 / 取消。
@@ -14,25 +14,6 @@ import { AppError } from "../../src/core/storeErrors.js";
  * - 参数设上限（防超长/超多消息），坏输入抛 AppError(InvalidInput) 由 registrar 统一编码。
  * - 流式经 ai:stream 事件推给发起窗口；HTTP 调用方（webApiServer 的 stub event）自动变 no-op。
  */
-const MAX_MESSAGES = 40;
-const MAX_TOTAL_CHARS = 200_000;
-
-function assertMessages(raw: unknown): AiMessage[] {
-  if (!Array.isArray(raw) || raw.length === 0) throw new AppError("InvalidInput", "消息为空");
-  const out: AiMessage[] = [];
-  let total = 0;
-  for (const item of raw.slice(0, MAX_MESSAGES)) {
-    const m = (item ?? {}) as { role?: unknown; content?: unknown };
-    const role = m.role === "system" || m.role === "assistant" ? m.role : "user";
-    const content = typeof m.content === "string" ? m.content : "";
-    if (!content) continue;
-    total += content.length;
-    if (total > MAX_TOTAL_CHARS) throw new AppError("InvalidInput", "内容过长");
-    out.push({ role, content });
-  }
-  if (out.length === 0) throw new AppError("InvalidInput", "消息为空");
-  return out;
-}
 
 /** 草稿（未保存值）叠加到当前配置上做测试/拉列表：未给的字段沿用已存值（包括 Key）。 */
 function resolveDraftProvider(settings: AiSettings, draft: unknown) {

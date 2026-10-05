@@ -36,7 +36,9 @@ const FILES = [
   "features/bitable/bitableRelationPicker.css",   // 关联记录选择器（260929：全局大弹窗）
   "features/bitable/bitableFileIcon.css",   // 260930：附件「文档类型」图标 + hover 名称气泡
   "features/bitable/bitableAiField.css",   // 261003：AI 字段（单元格状态 + 字段配置 + 整列生成对话框）
-  "features/bitable/bitableMarkdown.css",   // 261004：Markdown / AI 字段（单元格预览 + 展开浮窗 + 预览排版）
+  "features/bitable/bitableMarkdown.css",
+  "components/markdown/markdown.css",
+  "features/ai/aiDialogParts.css",   // 261005：AI 助手弹窗内局部布局（预设提示词行 + 复制动作行）   // 261005：Markdown 轻量子集渲染（从 bitable 提出，bitable 与 AI 面板共用）   // 261004：Markdown / AI 字段（单元格预览 + 展开浮窗 + 预览排版）
   "features/bitable/bitableFilterEditor.css",   // 260930：筛选条件树（远端 lake 风格 + 可复用）
   "features/bitable/bitableFillRules.css",   // 260930：条件填色配置与表格投影
   "features/board/boardEditor.css",
@@ -108,14 +110,16 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
   "features/bitable/bitableFileIcon.css": { decls: 25, dupGroups: 0 },
   "features/bitable/bitableAiField.css": { decls: 32, dupGroups: 0 },   // 261004-b：-11 = 说明文字/包裹层归位到既有 .bt-field-label-text 与直排结构（删 prompt-wrap / warn / dialog-note / dialog-summary），字号/间距/圆角全量化令牌；@keyframes 不计数
-  "features/bitable/bitableMarkdown.css": { decls: 60, dupGroups: 0 },   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
+  "features/bitable/bitableMarkdown.css": { decls: 17, dupGroups: 0 },   // 261005：Markdown 预览排版移到共用 components/markdown/markdown.css（60 → 17，只余本域单元格/展开面板样式）,   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
   "features/bitable/bitableFilterEditor.css": { decls: 150, dupGroups: 0 },   // 260930：筛选规则/分组树/日期动态值/多选值/增删菜单 + 面板最大高度/滚动（全新文件）
   "features/bitable/bitableFillRules.css": { decls: 67, dupGroups: 0 },   // 260930：条件填色配置与表格投影（全新文件）；+4 = 「无背景色」填色块居中态（flex 三项 + 图标色），合法新增
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）
   "features/bitable/bitableCalendarView.css": { decls: 75, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
   "features/board/boardEditor.css": { decls: 12, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）
-  "components/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },   // 260926 新增：历史快照预览样式 = 事实清单 / 摘要小表格 / 只读编辑器槽位（.history-editor-preview 用「列方向 flex + 子项 flex:1 + min-height:320px 兜底」保证编辑器铺满，不依赖百分比高度；预览里隐藏表格统计行），令牌全走 --lake-*，由组件自身 import
+  "components/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
+  "components/markdown/markdown.css": { decls: 43, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
+  "features/ai/aiDialogParts.css": { decls: 8, dupGroups: 0 },   // 260926 新增：历史快照预览样式 = 事实清单 / 摘要小表格 / 只读编辑器槽位（.history-editor-preview 用「列方向 flex + 子项 flex:1 + min-height:320px 兜底」保证编辑器铺满，不依赖百分比高度；预览里隐藏表格统计行），令牌全走 --lake-*，由组件自身 import
   "styles/dialog.css": { decls: 204, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 116, dupGroups: 2 },   // 260930：+17 = 状态栏锁标识改可点（button 形态 + hover/focus）+ 解锁浮层内容类   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）
   "styles/components.css": { decls: 382, dupGroups: 1 },   // 260930：-2 = .settings-panel-large .settings-header（其 padding 早已被 overlay 层的 .floating-dialog-header 压死）按职责并到 overlay.css 单一来源。此前 260929：-45 = .ln-tabs* 页签整套收编到 kit 层单一来源（那边同时 +33）；260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in；260926 续：+4 = .sync-status-local-note

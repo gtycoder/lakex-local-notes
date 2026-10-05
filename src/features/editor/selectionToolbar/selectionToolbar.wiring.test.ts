@@ -13,6 +13,9 @@ const MODEL = readFileSync(new URL("./selectionToolbarModel.ts", import.meta.url
 const HOOK = readFileSync(new URL("./useSelectionToolbar.ts", import.meta.url), "utf8");
 const MOUNT = readFileSync(new URL("./mountSelectionToolbar.ts", import.meta.url), "utf8");
 const CSS = readFileSync(new URL("./selectionToolbar.css", import.meta.url), "utf8");
+const AI_SEL = readFileSync(new URL("./aiModelSelection.ts", import.meta.url), "utf8");
+// AI 结果落库的两个操作抽成共用模块（浮栏 + 块句柄菜单同源，261005）
+const OPS = readFileSync(new URL("./aiResultOps.ts", import.meta.url), "utf8");
 
 describe("浮动工具栏定位护栏（261004）", () => {
   it("顶界（内核固定工具栏）取**本编辑器自己的**容器，不全局猜可见实例", () => {
@@ -67,5 +70,37 @@ describe("浮动工具栏定位护栏（261004）", () => {
     // 列表标志内核不渲染 ⇒ 排除；行尾补空格宽与内核对齐
     expect(SRC).toContain("ne-oli-i, ne-uli-i, .ne-list-symbol");
     expect(SRC).toContain("spaceWidthOf");
+  });
+});
+
+describe("AI 回写「插入到选区后」护栏（261005）", () => {
+  it("只把 AI 结果用 insertAtPosition 插到选区末块之后，绝不重建原选区", () => {
+    // 浮栏只负责把捕获的模型选区交给共用实现（块句柄菜单同源）
+    expect(SRC).toContain("applyAiInsertAfter(editor, container, aiModelRangeRef.current, text)");
+    expect(OPS).toContain("positionAfterModelRange(");
+    expect(OPS).toContain('"insertAtPosition"');
+    // 旧实现：原文(纯文本) + AI 整体 insertAtSelection 替换 ⇒ 列表/标题块结构被 markdown 重解析丢失
+    expect(SRC).not.toContain('"insertAtSelection", "text/markdown", data');
+    expect(SRC).not.toContain("const original = aiSelectionRef.current");
+  });
+
+  it("落点按模型父子关系算（内核 DOM「某元素之后」映射少 1，不能用）", () => {
+    expect(AI_SEL).toContain("positionAfterModelRange");
+    expect(AI_SEL).toContain("_parent");
+    expect(AI_SEL).toContain("_children");
+  });
+
+  it("applyModelRange 走 kernel.execCommand（editor 层拿模型节点会抛且被静默吞掉）", () => {
+    expect(AI_SEL).toMatch(/const target = kernel && typeof kernel\.execCommand === "function" \? kernel : ed/);
+  });
+
+  it("插入用「分隔线 + AI 生成提示」标记（不再用引用）；替换原样插入、不加标记", () => {
+    expect(OPS).toContain("buildAiInsertMarkdown(text)");
+    expect(SRC).not.toContain("toQuoteMarkdown");
+    expect(OPS).toContain('"insertAtSelection", "text/markdown", text');
+    // 插入后仍自动选中，且跳过前置的「AI 生成」提示段（用户 261005：AI 正文首次插入要保持选中）
+    expect(OPS).toContain("selectNewBlocks(container, before, true)");
+    // 浮栏的替换也走共用实现（含打开前的 DOM 选区兜底）
+    expect(SRC).toContain("applyAiReplace(editor, container, aiModelRangeRef.current, text, aiRangeRef.current)");
   });
 });

@@ -63,15 +63,12 @@ export function App() {
   });
   const [infoNote, setInfoNote] = useState<TreeNode | null>(null);
   const [revealNodeId, setRevealNodeId] = useState<string | null>(null);
-  /** 顶栏「AI 助手」入口（无选区也能用）：打开时抓一次当前选区文本。 */
+  /**
+   * 顶栏「更多 → AI 助手」入口（用户 261005 定稿）：**永远纯提问** —— 只问 + 复制。
+   * **不读选区、不提供「替换选区 / 插入到选区后」**：选区滚出可视区后从右上角进入会有锚点/滚动难题，
+   * 所以这里彻底不参与正文写回；要替换 / 插入请用**选区浮动工具栏**的 AI（它只在有选中时出现）。
+   */
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
-  const [aiAssistantSelection, setAiAssistantSelection] = useState("");
-  const replaceActiveSelection = useCallback((text: string) => {
-    const editor = activeNoteId ? editorsRef.current.get(activeNoteId) : null;
-    if (!editor) return;
-    // 与选区入口一致：用 text/markdown 让内核把模型输出的 MD 转成 Lake 节点。
-    try { editor.execCommand?.("insertAtSelection", "text/markdown", text); } catch { /* 命令不可用时忽略，结果仍可复制 */ }
-  }, [activeNoteId, editorsRef]);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });
   const {
@@ -627,7 +624,7 @@ export function App() {
         activeKind={activeKind}
         lockedNoteIds={lockedNoteIds}
         onToggleNoteLock={() => { void toggleNoteLock(); setTopMenuOpen(false); }}
-        onOpenAiAssistant={() => { setAiAssistantSelection(window.getSelection()?.toString() ?? ""); setAiAssistantOpen(true); setTopMenuOpen(false); }}
+        onOpenAiAssistant={() => { setAiAssistantOpen(true); setTopMenuOpen(false); }}
         // 文档右上角「更多」里的导出：与目录树右键同一套动作，作用于当前文档
         onExportAs={(format) => { void exportNoteById(activeNoteId, format); }}
         onCopyMarkdown={() => void copyMarkdownById(activeNoteId)}
@@ -663,9 +660,8 @@ export function App() {
       />
       <AiAssistantDialog
         open={aiAssistantOpen}
-        selectionText={aiAssistantSelection}
+        selectionText=""
         onClose={() => setAiAssistantOpen(false)}
-        onReplace={replaceActiveSelection}
       />
 
     </div>

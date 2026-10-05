@@ -58,8 +58,13 @@ describe("块操作菜单：白名单收敛", () => {
     return (matched?.[1] ?? "").match(/'[a-zA-Z]+'/g)?.map((token) => token.slice(1, -1)) ?? [];
   })();
 
-  it("白名单就是「内核有原生命令」的那些动作", () => {
-    expect(whitelist.sort()).toEqual(["addAfter", "convert", "copy", "cut", "delete", "indent", "outdent"]);
+  it("白名单 = 内核有原生命令的动作 + 只透传给宿主、自己不碰文档的 aiOutline", () => {
+    expect(whitelist.sort()).toEqual(["addAfter", "aiOutline", "convert", "copy", "cut", "delete", "indent", "outdent"]);
+    // aiOutline 是「宿主接入 AI 服务」的透传动作：vendor 侧只 break，不调任何文档命令（261005）
+    expect(MENU_SRC).toMatch(/action: 'aiOutline', label: 'AI 助手'/);
+    expect(MENU_SRC).toMatch(/items\.unshift\(\{ action: 'aiOutline'/);
+    const aiCase = /case 'aiOutline':([\s\S]*?)break;/.exec(HANDLE_SRC);
+    expect(aiCase?.[1] ?? "").not.toMatch(/execCommand|deleteBlockByRange|insertBlockNative|runNativeConvert/);
   });
 
   it("只有 JSON 实现的动作不上菜单", () => {

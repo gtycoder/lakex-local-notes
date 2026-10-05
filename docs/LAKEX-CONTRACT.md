@@ -1248,3 +1248,39 @@ PY
 4. 真实鼠标选中下实测：替换成立，且焦点在编辑器时 **⌘Z 可撤销**。
 
 **反面教材（都试过、都不通）**：`renderer.toViewRange`/`engine.transformDOMRange` 一律返回 null（`dM→dF→cv` 拿不到 view node）；`createModelRange(...)` 当第三参传 `insertAtSelection` → no-op；浏览器 `insertText` / 聚焦+恢复 DOM Range → 插到起点或 no-op；官方 `insertText`/`insertAtSelection` 都依赖「内核当前选区」，而**合成 DOM 选区同步不进内核模型**（CDP 合成拖选后 `firstRange` offset 恒 0/0）⇒ **自动化验证不了，必须真实鼠标**。
+
+**261005 补充（AI「插入到选区后」破坏原块格式的实测与正确接法）**：
+
+- **症状**：选 4 项无序列表 → 点「插入到选区后」→ 4 项被压成 **1 项**（多行变 `<br />` 软换行、只剩一个项目符号）、每行块句柄消失；标题/有序列表/引用同样被降级（用户 261005 报「格式绝对是错误了」）。
+- **根因**：旧实现把「原文（`window.getSelection().toString()` = **纯文本**，块结构已丢）+ 空行 + AI」整体 `insertAtSelection("text/markdown", …)` **替换原选区**；markdown 再把连续行并成一个段落/列表项。
+- **正确接法（已实施）**：「插入到选区后」**只插新块、绝不碰原块** —— `insertAtPosition({ id: 父节点, offset }, "text/markdown", aiText)`，其中 `offset` = 选区末端所在**顶层块**在父节点 `_children` 里的下标 **+ 1**。AI 结果仍按引用格式（`> ` 逐行）。整篇正文逐字节保留原块（列表 4 → 4、标题/有序/引用/混合均不变；真实 UI + mock AI 实测 31/31）。
+- ⚠️ **`transformDOMRange` 对「某元素之后」少 1**：`setStartAfter(el)` 映射出的 `offset` 是 **el 自己的下标**（不是下标+1）——实测 4 项列表得 `offset:3`，会插到第 3 项之后。块级插入落点**按模型父子关系算**（`node._parent` / `parent._children.indexOf(block) + 1`），不要用 DOM→模型映射的「之后」。列表在模型里是**一个 `<ul>`**、在 DOM 里被摊平成多个兄弟项，更要按模型算。
+- ⚠️ **`selection` 命令必须走 `kernel.execCommand`**：`editor.execCommand("selection", { ranges:[{start:{node,offset},end:{node,offset}}] })` 会拿模型节点去 `Range.setStart`（要 DOM 节点）→ 抛 `setStart: parameter 1 is not of type 'Node'`；包在 try/catch 里会**静默失败**（此前 `applyModelRange` 一直是 no-op）。`editor.kernel.execCommand("selection", {…})` 实测正确设回模型选区。
+- 代码单一来源：落点 `aiModelSelection.ts` 的 `positionAfterModelRange()`；写回 `SelectionToolbar.tsx` 的 `onInsertAfter`；单测 `aiModelSelection.test.ts` + 源码护栏 `selectionToolbar.wiring.test.ts`。
+- **内核 Markdown 原生支持表格、但表格不属于任何容器**（261005 实测）：`| a | b |` + `| --- | --- |` 经 `insertAtSelection/insertAtPosition("text/markdown", …)` 落成真 `<table class="lake-table">`（连每行 `> ` 前缀的引用表格也认）；但容器里放不下表格 —— `<alert><table/></alert>` 会连表格带容器一起消失，引用里的表格会被「拎」到引用外、前后文字并进同一引用（`tableHole.parents:[Root]`）。⇒「表格 + 容器式标记」二选一时只能放弃容器；本项目 261005 起插入改用「分隔线（hr 块卡） + AI 生成提示 + 原生正文 + 分隔线」，替换不加标记。
+
+
+### 5.18 剪贴板格式与 Markdown→内核格式转换（261005 实测）
+
+> **用途：实现「复制为 Lake」——把 AI 输出转成内核格式放剪贴板，粘到 Lake 是原生样式、不再弹「是否需要做样式转换」。**
+
+- **内核粘贴的格式优先级**（`plugins/clipboard/src/kernel/commands/paste-command.ts`，bundle L78340）：
+  `['text/ne-inode', 'text/lake', 'text/html', 'text/aone', 'text/plain', 'Files']` —— 按序取第一个「存在 + 在 payload.types 里 + 在 `kernel.getSupportedReaderTypes()` 里」的格式，再 `readData(fmt, data)` → `insertINode`。
+- **解析入口 / 序列化出口**：`kernel.readData(fmt, data, opts)`（字符串→inode）、`kernel.writeData(fmt, nodes, opts)`（inode→字符串）。Markdown→内核格式 = `writeData('text/ne-inode'|'text/lake'|'text/html'|'text/plain', readData('text/markdown', md), { since:'copy' })`。实测 `text/ne-inode` 与 `text/lake` 往返都能完整保留 `<strong>`/列表结构；**`text/html` 往返不干净**（内核解析自己的 HTML 会多套一层 `<p>`），不要用 HTML 做原生还原。
+- **`navigator.clipboard.write` 写不了自定义类型**：`ClipboardItem({ 'text/lake': … })` → `NotAllowedError: Type text/lake not supported on write`；只放行 `text/plain`/`text/html`。
+- **内核的绕法（bundle L205138 `eSz`）**：把 `text/ne-inode` 负载 URL-encode 后**当作 `text/html` 前缀**：
+  `'<ne-clipboard data="' + encodeURIComponent(neInode) + '" source="' + encodeURIComponent(location.href) + '"></ne-clipboard>' + html`
+  粘贴时 `process()`（L204598）用正则把它取出、还原成 `text/ne-inode` ⇒ 原生直插。**于是 `text/html` 这条可写通道就能携带内核原生负载。**
+- **实测达标**：按上面的配方 `navigator.clipboard.write` 写入、再 `read` 读回，`<ne-clipboard data=…>` 外壳**幸存**（只多一个 `<meta charset="utf-8">`）；`text/plain` 用内核 `writeData('text/plain')`（无 markdown 语法）⇒ 不命中内核的 markdown 转换提示。
+- **触发「是否需要做样式转换」的判据**（bundle L211374-211555）：粘贴文本命中 14 条宽松正则**任一**即弹（行首 `- `/`1.`/`# `/`> `、链接、代码围栏、表格、`:::`、行内反引号、`**bold**` 等）；`text/html` 前 100 字符含 `lake-content` 或 `types` 含 `text/ne-inode` 则跳过。
+- **⚠️ 未证实**：真实按 ⌘V 粘贴回原生样式这一环没在自动化里跑通（CDP 驱动不了真实粘贴），是内核自身标准路径但需真机手验。
+- **落地**：`src/features/ai/aiLakeClipboard.ts`（配方 + 护栏单测）；内核实例经 `src/features/editor/editorRegistry.ts` 按挂载点取。
+
+### 5.19 块菜单的 AI 透传口 + DOM→模型选区（261005 实测）
+
+> **用途：块句柄菜单唤起 AI 助手（本项目对所有块开放；云端 Lake 只给标题用）。**
+
+- **上游本来就留了业务接入口**：`BlockContextMenu` 的 `BlockMenuAction` 含 `aiOutline`，`BlockHoverHandle.handleMenuAction` 也有 `case 'aiOutline':`（注释："由业务层接入具体 AI 服务；下方的 onBlockAction 会携带当前块"），并在动作末尾 `onBlockAction(action, data)` 透传；`BlockHoverHandleProps` 有该 prop。缺的只是**菜单项**（上游第 730 行注释「"大纲写作法"入口暂不展示」）。⇒ vendor 只需「放行 + 注入菜单项」（LOCAL-CHANGES #27），AI 面板与落库全在宿主。
+- **块 DOM 元素带模型 id**：段落等块元素是 `<ne-p id="<nodeId>-body" ne-role="render-unit">`；`engine.transformDOMRange(range)`（`range.selectNodeContents(el)`）返回**非折叠**的 `{start,end}`，交给 `kernel.execCommand('selection', { focus:'end', anchor:'start', ranges:[mr] })` 即可设成块选区（与 vendor `selectBlockInEditor` 同口径）。
+- **⚠️ 菜单点击会把模型选区压成折叠**：`kernel.document.selection.firstRange.start === end`（实测 offset 都落在块末）。⇒ **用选区前必须判折叠**，折叠就自己按块元素选整块；否则 `insertAtSelection` 会退化成「光标处插入」——症状＝AI「替换选区」变成把结果**追加**在原块内容后面（实测 "原始段落内容。AI写的替换内容"）。
+- **多块选区**由 vendor 在自己的 `handleMenuAction` 里先 `selectBlocksInEditor(editor, multi)` 还原（非折叠）⇒ 宿主直接 `captureModelRange` 即可拿到整段；`getSelectionContent('text/markdown')` / `insertAtSelection` / `deleteByRange` 均按整段工作。

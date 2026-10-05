@@ -21,7 +21,7 @@ import type { AiCellRunState } from "./useAiFieldGeneration.js";
 import "./bitableFieldCells.css";
 import "./bitableAiField.css";
 import "./bitableMarkdown.css";
-import { MarkdownView, markdownToPlainText } from "./markdown.js";
+import { MarkdownView, markdownToPlainText } from "../../components/markdown/MarkdownView";
 import { native } from "../../lib/native.js";
 import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import type { CSSProperties } from "react";

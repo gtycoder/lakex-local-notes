@@ -1,13 +1,17 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MarkdownView, markdownToPlainText, parseMarkdownBlocks } from "./markdown";
+import { MarkdownView, markdownToPlainText, parseMarkdownBlocks } from "./MarkdownView";
 
 function html(source: string): string {
   return renderToStaticMarkup(createElement(MarkdownView, { source }));
 }
 
 describe("Markdown 轻量子集渲染（261004）", () => {
+  it("渲染出的作用域类 = 排版 CSS 的单一来源（.md-preview，261005 从 bitable 提出）", () => {
+    expect(html("文字")).toContain('class="md-preview"');
+  });
+
   it("标题 / 段落 / 粗斜体 / 删除线 / 行内代码", () => {
     const out = html("# 标题\n\n这是 **粗** 与 *斜* 与 ~~删~~ 与 `code`");
     expect(out).toContain("<h1>标题</h1>");

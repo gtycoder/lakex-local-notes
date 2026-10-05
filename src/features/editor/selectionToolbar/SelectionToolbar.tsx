@@ -28,7 +28,8 @@ import {
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { AiTagIcon } from "../../ai/AiTagIcon";
 import { AiAssistantDialog, AI_DIALOG_GAP } from "../../ai/AiAssistantDialog";
-import { applyModelRange, captureModelRange, type CapturedModelRange } from "./aiModelSelection";
+import { captureModelRange, type CapturedModelRange } from "./aiModelSelection";
+import { applyAiInsertAfter, applyAiReplace } from "./aiResultOps";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
@@ -42,48 +43,8 @@ function resolveTriggerEl(trigger?: HTMLElement | null): HTMLElement | null {
   return trigger ? ((trigger.querySelector("button") as HTMLElement | null) ?? trigger) : null;
 }
 
-/**
- * AI 结果一律转成**引用格式**落盘（用户 261004：「替换选区」「插入到选区后」都用引用）。
- * markdown 引用 = 每行前加 `> `；空行写成 `>`（引用续行），交给内核转成 <blockquote>。
- */
-export function toQuoteMarkdown(text: string): string {
-  return text.replace(/\r\n/g, "\n").split("\n").map((line) => (line.trim().length > 0 ? "> " + line : ">")).join("\n");
-}
 
-/**
- * AI 结果自动选中新内容时要认的**行级块**。
- * ⚠️ 插入前记集合、插入后取差集**必须用同一个选择器**，否则差集失真（会漏选或多选）。
- */
-const SELECTABLE_BLOCKS = "ne-quote, ne-p, ne-h1, ne-h2, ne-h3, ne-h4, ne-h5, ne-h6, ne-tli, ne-oli, ne-alert, ne-collapse";
 
-/** 引擎内当前所有可自动选中的行级块（插入前快照用）。 */
-function blockSetOf(container: HTMLElement): Set<Element> {
-  const engine = container.querySelector(".ne-engine");
-  return new Set<Element>(engine ? Array.from(engine.querySelectorAll(SELECTABLE_BLOCKS)) : []);
-}
-
-/**
- * 插入完成后**自动选中刚插入的块**（用户 261004）。用 DOM 实现：内核模型选区捕获后可能已随渲染失效
- * （applyModelRange 实测返回 false —— 它内部自己吞掉异常），而新增块在 DOM 里是确定的
- * ⇒ 插入前后各取一次集合，差集就是新块。
- */
-function selectNewBlocks(container: HTMLElement, before: Set<Element>): void {
-  const engine = container.querySelector(".ne-engine");
-  if (!engine) return;
-  const fresh = Array.from(engine.querySelectorAll(SELECTABLE_BLOCKS))
-    .filter((el) => !before.has(el));
-  if (fresh.length === 0) return;
-  try {
-    const range = document.createRange();
-    range.setStartBefore(fresh[0]);
-    range.setEndAfter(fresh[fresh.length - 1]);
-    const sel = window.getSelection();
-    if (!sel) return;
-    sel.removeAllRanges();
-    sel.addRange(range);
-    document.dispatchEvent(new Event("selectionchange"));
-  } catch { /* 选区设置失败不影响已插入内容 */ }
-}
 
 /** 两个矩形列表是否近似相等：避免无意义的 state 更新 → 重渲染 → 闪（用户 261004：不许跳动）。 */
 function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolean {
@@ -610,40 +571,12 @@ export function SelectionToolbar({ editor, container }: {
       selectionText={aiSelectionRef.current}
       onClose={closeAi}
       onInsertAfter={(text) => {
-        try {
-          // 把内核选区折叠到捕获范围的**末尾**再插入 ⇒ 落到选区之后（对应云端「插入选区下方」）。
-          // ⚠️ 实测教训（260930）：内核**不接受"折叠的模型选区"**（execCommand('selection') 设成折叠态后
-          // 再插入，会退化成按**原选区替换**，把用户选中的文字吃掉）；insertAtPosition(…, end) 同样没生效；
-          // breakLine 的语义本身就是"删除选区内容并换行"。所以这里**不碰内核选区**，改成把
-          // 「原文 + 空行 + AI 结果」一起作为一次替换写回：文本不丢，AI 结果另起一段（MD 空行 = 新块）。
-          const original = aiSelectionRef.current;
-          // AI 结果一律**引用格式**（用户 261004）。
-          const quoted = toQuoteMarkdown(text);
-          const data = original.trim() ? original + "\n\n" + quoted : quoted;
-          // 插入前记下已有块集合（差集 = 新插入的块，用于插入后自动选中）。
-          const before = blockSetOf(container);
-          applyModelRange(editor, aiModelRangeRef.current);   // best-effort：设回原选区（返回 false 也不影响下面的插入）
-          editor.execCommand?.("insertAtSelection", "text/markdown", data);
-          aiKeepSelectionRef.current = true;
-          window.setTimeout(() => selectNewBlocks(container, before), 0);   // 插入后自动选中新内容
-          return;
-        } catch { /* 命令不可用时忽略，结果仍可复制 */ }
+        // 「插入到选区后」= 共用实现（aiResultOps）：分隔线 + 「AI 生成」提示 + 原生 Markdown + 分隔线。
+        if (applyAiInsertAfter(editor, container, aiModelRangeRef.current, text)) aiKeepSelectionRef.current = true;
       }}
       onReplace={(text) => {
-        try {
-          // AI 结果一律**引用格式**（用户 261004）；插入后自动选中新内容。
-          // 模型选区优先（设回内核 ⇒ 非折叠 = 替换）；模型选区可能已随渲染失效，故再补一条 DOM 兜底：
-          // 把打开前的 DOM 选区设回去，让内核按当前选区做替换。
-          const quoted = toQuoteMarkdown(text);
-          const before = blockSetOf(container);
-          applyModelRange(editor, aiModelRangeRef.current);   // best-effort
-          const range = aiRangeRef.current;
-          const sel = window.getSelection();
-          if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
-          editor.execCommand?.("insertAtSelection", "text/markdown", quoted);
-          aiKeepSelectionRef.current = true;
-          window.setTimeout(() => selectNewBlocks(container, before), 0);
-        } catch { /* 命令不可用时忽略，结果仍可复制 */ }
+        // 选区替换 = 共用实现（aiResultOps）：原样插入 AI 输出；模型选区优先，再补 DOM 兜底。
+        if (applyAiReplace(editor, container, aiModelRangeRef.current, text, aiRangeRef.current)) aiKeepSelectionRef.current = true;
       }}
     />
   ) : null;

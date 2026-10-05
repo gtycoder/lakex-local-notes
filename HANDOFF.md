@@ -9,6 +9,28 @@
 
 > 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
+### 修复 · 261005 · AI「插入到选区后」压扁原块 + 最终改为「分隔线 + AI 生成提示」
+
+- 用户 261005 报：选 4 项无序列表 → 用 AI「插入到选区后」→ 4 项被压成 1 项（多行变软换行、只剩一个项目符号）、**每行块句柄消失**，「格式绝对是错误了」，要求彻查并看其他格式是否同样。
+- 根因（隔离 Electron + 程序化模型选区复现，正文级证据）：`SelectionToolbar.onInsertAfter` 旧实现把「`getSelection().toString()` 的**纯文本**原文 + 空行 + AI」整体 `insertAtSelection("text/markdown", …)` **替换原选区** ⇒ 纯文本丢块结构、markdown 再把连续行并成一段。实测 4 项列表落盘成 `<li>甲<br/>乙<br/>丙<br/>丁</li>`（1 项）+ 引用 + 残留 `<ul start="2">丁项</ul>`。
+- 修法（结构）：**只插新块、绝不碰原块** —— `insertAtPosition({ id: 父节点, offset }, "text/markdown", …)`，`offset` = 选区末端所在**顶层块**在父节点 `_children` 的下标 **+1**；新增 `aiModelSelection.positionAfterModelRange()`（按模型 `_parent`/`_children` 算，不用 DOM→模型映射）。
+- 顺带修：`applyModelRange` 一直走 `editor.execCommand("selection", …)` 会抛 `setStart: … not of type 'Node'` 并被 try/catch **静默吞掉（= 从未生效）** ⇒ 改走 `editor.kernel.execCommand`（实测正确设回模型选区）。
+- ⚠️ 内核坑（已回填 `docs/LAKEX-CONTRACT.md` §5.16）：`transformDOMRange(setStartAfter(el))` 把「某元素之后」映射成 **el 自己的下标（少 1）**；块级插入落点必须按模型父子关系算（列表在模型里是一个 `<ul>`、DOM 里是多个兄弟项）。
+- **标记口径（用户 261005 两次改向后的最终定稿）：不再包引用、也不加任何提示词约束。**
+  - 依据：实测内核 Markdown **原生支持表格**（连 `> ` 前缀的表格也解析成真表格），但 Lake 的容器（引用/高亮块/分栏/折叠块）**都装不下表格** —— 表格会从引用里跳出来、且前后文字被并进同一引用 ⇒ 顺序错位（见契约 §5.16）。
+  - 「插入到选区后」= 在落点插「**分隔线（hr 块卡） + 「以下内容由 AI 生成」提示 + AI 正文（原生 Markdown） + 分隔线**」；落点仍走 `insertAtPosition`。
+  - 「替换选区」= **原样插入** AI 输出，不加任何标记。
+  - 插入后仍**自动选中 AI 正文**（`selectNewBlocks(..., skipFirst=true)` 跳过前置提示段），保住「首次插入即选中」。
+- 真实端（隔离 userData + mock OpenAI + 真浮栏 + 真点按钮）：结构修复 **31/31**；最终标记 **11/11**（列表 4→4 保留、hr 块卡 ×2、提示在正文前、选中态只含正文；替换无提示/无 hr）。脚本 `/tmp/ai-after-fix.mjs` · `/tmp/ai-marker-check.mjs`。
+- 门禁：`tsc` ✓ · vitest **1625 passed / 16 skipped** ✓ · `check:core` 75 文件 0 违规 ✓ · `ui-metrics`（hex=0/rgb=0/`!important`=9/未定义令牌=0）✓ · `cssLayers+uiPrimitives` ✓ · 双端构建 ✓ · `git diff --check` ✓。
+- 改动：`selectionToolbar/SelectionToolbar.tsx` · `selectionToolbar/aiModelSelection.ts` · `selectionToolbar/aiInsertMarker.ts`(新) · 护栏 `aiModelSelection.test.ts`(新) · `aiInsertMarker.test.ts`(新) · `selectionToolbar.wiring.test.ts`。**未提交（待验收）**。
+- **顶栏「更多 → AI 助手」永远纯提问（用户 261005 定稿，已回滚"按选区区分"）**：**不读选区**（`selectionText` 恒空、不传 `onReplace`/`onInsertAfter`），只问 + 复制（每条回答各带复制）；浮动工具栏 AI 不变（有选区才出现，负责替换/插入）。原因：选区滚出可视区后从右上角进入会有锚点/滚动难题。为此临时抽出的 `aiWriteBack.ts` 共用模块已删除、写回逻辑回到 `SelectionToolbar.tsx` 内联。真实端：顶栏（哪怕有选区）按钮 = `[发送, 重新生成, 关闭]` 且请求不带选区；浮栏 = `[…插入到选区后, 替换选区…]`。
+- **AI 面板改对话式复制（用户 261005）**：**每条** AI 回答各自带一个复制按钮（复用 kit 的 `.ln-iconbtn--compact`，**不新增 CSS**）；去掉底部「只复制最后一条」的按钮。真实端 2 轮实测：2 条回答 = 2 个复制按钮、底部按钮 = `[发送, 重新生成, 关闭]`、点第 1 条复制得到**第 1 条**文本。改动 `AiAssistantDialog.tsx` + 护栏 `aiAssistantDialog.test.ts`。
+- **Markdown 渲染抽象（261005 预留替换接口）**：自研轻量子集渲染器从 bitable 提到中立共用件 **`src/components/markdown/MarkdownView.tsx`**（含排版 `markdown.css`，作用域 `.md-preview`；旧 `.bt-md-preview` 随之下线：`bitableMarkdown.css` 60→17、新文件 43）；AI 回答正文加**唯一可替换缝** `src/features/ai/AiMessageBody.tsx`（**当前已接自研 MarkdownView 渲染**；将来换 react-markdown / remark-gfm / llm-ui / streamdown **只改这一处**）。本轮**不引入任何 md 库**（社区调研：react-markdown+remark-gfm 最标准、streamdown 绑定 Tailwind 不适配、llm-ui headless 但 0.x）。
+- **AI 首轮预设提示词（261005）**：**有选区的浮动入口**在**首轮**显示一行预设（复用 kit 分段控件 `.ln-segment`，无新原语）：总结 / 续写 / 摘要 / 修正 / **自定义（最后）**。点击 = **只把提示词填进输入框**（绝不自动发送），用户点「生成」才确认；手动改字退回「自定义」；点「自定义」清空。顶栏入口无选区 ⇒ 不显示预设。提示词单一来源 `src/features/ai/aiPrompts.ts`；布局 `aiDialogParts.css`（预设行 + 复制动作行，已登记 cssLayers）。真实端 9/9。
+- **「复制为 Lake」（261005）**：AI 回答下方**两个复制按钮**（图标按钮原语 `.ln-iconbtn--compact`，间距在 `aiDialogParts.css`）：① 复制纯文本（原行为）② **复制为 Lake**（内核格式，粘到 Lake 原生直插、不弹「是否转换」；无内核时禁用）。两者说明走**自绘即时气泡**（kit `.ln-tip` + `.ai-dialog__tip` 补 `position: fixed`，与多维表 `.bt-file-tip` 同口径；**无延时**——原生 title 约 1s 延迟，用户 261005 要求实时，实测 5ms 出现）；Lake 按钮图标 = **`lake` 四字母文字徽标**（`.ai-dialog__lake-badge`，不用代码块图标）。配方 = `readData('text/markdown')` → `writeData('text/ne-inode'/'text/html'/'text/plain')` → 把 ne-inode 负载按内核 `<ne-clipboard data=…>` 约定嵌进 `text/html` 写剪贴板（见 CONTRACT §5.18）；内核实例靠新增 `editorRegistry.ts`（mount→editor WeakMap）取。真实端 7/7 + **用户真机 ⌘V 已验证原生还原、无转换弹窗**。
+- **块句柄菜单的「AI 助手」（261005）**：块菜单**第一项** = AI 助手（vendor 注入 + 透传，LOCAL-CHANGES #27），唤起**同一个** AI 面板；上下文 = **句柄覆盖的块**（多块=整段，单块=整块）。落库复用浮栏同源 `selectionToolbar/aiResultOps.ts`（替换 / 插入到选区后）。踩坑：**菜单点击会把模型选区压成折叠的光标** ⇒ 必须先判折叠、自己把整块选成模型选区，否则「替换」会退化成「光标处插入」（实测追加）。真实端 5/5（含"真替换"断言）。
+
 ### 修复 · 261005 · 切标签「表格重排闪烁」+ 活动标签判定重构
 
 - 先排除误判：用户报「dev 切标签极卡、内容加载不出来」，日志证据显示渲染进程跑在**过期 HMR 模块**上（`menuLeft` / `TOOLBAR_FORMAT_FALLBACK_ICON` 在当前源码里已是 0 处引用）并有 `[sheet] editor crashed`；**重启 vite + Electron 后即恢复** ⇒ 不是「功能变多导致性能下降」。剩下的真问题 = **文档里 `fit-width` 表格切回来重排闪烁**。
@@ -443,6 +465,8 @@
     - **F08 双介质一致性** → 走 §8 **路线 A**（保持文件+DB、只修会话）；**A 不修 F08 跨介质窗口**（需 B/C）。A 的会话修复已完成。
     - **§6.1 剩余性能项**：已测量（见 §0「§6.1 剩余性能项测量」）。#4 **已修**（5c70b1c，收窄到实例 mount）；#5 未测到高频（不做）；#6 增量 ~6ms/次（暂不改）。
 
+
+13. **AI 多轮对话记忆只保留最近 40 条（用户 261005 决定：先文档化、不做长期记忆）**：主进程 `electron/ai/aiChatMessages.ts` 的 `assertMessages` 只把**最近 40 条消息**发给供应商（更早的上下文丢弃；另有 `AI_MAX_TOTAL_CHARS=200000` 上限），面板关闭即清空、**无长期 / 跨会话记忆**，设置页「AI → 说明」已如实标注。若要长期记忆 / 摘要压缩 / 跨会话共享，需单独立项（涉及存储与成本，超出笔记软件当前范围）。
 ## 4. 关键坑（长期有效）
 
 ### 同步 / 数据
@@ -499,6 +523,7 @@
 - **要「仿照云端」时，优先读云端前端资源而不是一个个点 UI**（260929 用户提示，已实践）：`bsk evaluate` 里 fetch `performance.getEntriesByType('resource')` 找到 `gw.alipayobjects.com/**/lakex_table_yq.*.chunk.css|.async.js`（CORS 可读），配置表/样式规则直接 grep 就有（如统计项的 types 限制、占位 hover 规则）；点 UI 只用来交叉验证。
 - **用户可能与测试实例共用同一个进程/窗口**（260929 用户明确交代）：我起的隔离实例（LAKE_USER_DATA=$TMPDIR/lake-accept + LAKE_RENDERER=scheme）用户会**直接在同一个窗口里看/操作** ⇒ **不要默认 kill 实例、不要 rm -rf 该 userData**（那是他正在看的数据）；只有用户明确说「清理/重建」时才收尾。同理，验证脚本不要顺手删掉自己建的测试笔记。
 - **读落盘要轮询**：自动保存有防抖，改完立刻读会拿到旧值。
+- **AI 结果回写正文：绝不「纯文本重建原选区」，也不要用 `insertAtSelection` 折叠光标做块级插入**（261005）：只用 `insertAtPosition({id,offset}, "text/markdown", …)` 插新块，原块一个字节不动；`offset` 按模型 `_parent`/`_children` 算（DOM 的「某元素之后」映射少 1）。`applyModelRange` 一类模型选区命令必须走 `kernel.execCommand`（editor 层会抛且被 try/catch 静默吞掉）。详见 `docs/LAKEX-CONTRACT.md` §5.16。
 
 ## 5. 上线与后续建议
 1. 主线是多维表专项（§0）；专项之外只从 §3 取项并单独立项，不要恢复已完成的研究/计划文档。

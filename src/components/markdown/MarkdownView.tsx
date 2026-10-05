@@ -1,5 +1,5 @@
 /**
- * Markdown 轻量子集渲染（261004，AI 字段 / Markdown 字段共用）。
+ * Markdown 轻量子集渲染（261004；261005 提升为**共用渲染件**，bitable 与 AI 面板共用）。
  *
  * 约束：
  * - **只用 React 元素渲染、绝不 `innerHTML`**：AI 输出与用户输入都不可信，这样天然防注入，也不引入 markdown 依赖；
@@ -8,6 +8,7 @@
  * - 只把 `http(s)://` 链接渲染成可点链接（其它一律文本），点击用系统浏览器打开（与链接格同款 `window.open`）。
  */
 import { Fragment, useMemo, type ReactNode } from "react";
+import "./markdown.css";
 
 export interface MarkdownListItem {
   text: string;
@@ -190,12 +191,12 @@ function renderBlock(block: MarkdownBlock, key: string): ReactNode {
   }
 }
 
-/** 渲染入口：块级 + 行内子集 → React 元素（样式作用域 = `.bt-md-preview`）。 */
+/** 渲染入口：块级 + 行内子集 → React 元素（样式作用域 = `.md-preview`，排版在 ./markdown.css）。 */
 export function MarkdownView({ source, className }: { source: string; className?: string }) {
   const blocks = useMemo(() => parseMarkdownBlocks(source), [source]);
   if (blocks.length === 0) return null;
   return (
-    <div className={"bt-md-preview" + (className ? " " + className : "")}>
+    <div className={"md-preview" + (className ? " " + className : "")}>
       {blocks.map((block, index) => renderBlock(block, "b" + index))}
     </div>
   );

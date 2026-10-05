@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
 import { mountBlockHoverHandle } from "./blockHandleMount";
 import { mountSelectionToolbar } from "./selectionToolbar/mountSelectionToolbar";
+import { registerEditorInstance } from "./editorRegistry";
 import { uploadLakeResource } from "./resourceUpload";
 import { filterQuickNoteInsert } from "../quickNotes/quickNoteInsertFilter";
 import type { ResourceUploadOutput } from "../../lib/types";
@@ -1023,6 +1024,7 @@ export function createLakeDocument(
       disposeSelectionToolbar();
     };
   }
+  registerEditorInstance(mount, editor);
   return editor;
 }
 

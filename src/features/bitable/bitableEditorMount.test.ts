@@ -1039,8 +1039,8 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
 });
 
 describe("Markdown 字段与展开浮窗护栏（261004）", () => {
-  const MD = readFileSync(new URL("./markdown.tsx", import.meta.url), "utf8");
-  const MD_CSS = readFileSync(new URL("./bitableMarkdown.css", import.meta.url), "utf8");
+  const MD = readFileSync(new URL("../../components/markdown/MarkdownView.tsx", import.meta.url), "utf8");
+  const MD_CSS = readFileSync(new URL("../../components/markdown/markdown.css", import.meta.url), "utf8");
 
   it("字段类型注册 + 单元格分派 + 图标", () => {
     expect(DOC).toContain('| "ai" | "markdown"');
@@ -1087,7 +1087,7 @@ describe("Markdown 字段与展开浮窗护栏（261004）", () => {
     expect(MD).toContain("export function parseMarkdownBlocks");
     expect(MD).not.toContain("dangerouslySetInnerHTML");
     expect(MD).toContain("^https?:");
-    expect(MD_CSS).toContain(".bt-md-preview");
+    expect(MD_CSS).toContain(".md-preview");
     expect(CARDS).toContain('import "./bitableMarkdown.css";');
   });
 
