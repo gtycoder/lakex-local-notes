@@ -1,5 +1,7 @@
-/* 暖色：与亮色同结构 + 暖中性面（261006 · Phase 2 · canon）。主色与浅/深同一色相。
- * **间距/字号/几何一律不动**。 */
+/* 暖色：与亮色同结构 + 暖中性面；**主色＝橙**（261006 用户定稿：橙色归「暖色」主题，
+ * 即它本来的身份色，替代原先那套"蓝色暖色"）。**间距/字号/几何一律不动**。
+ * ⚠️ 橙不能照搬原值：`#ff6a00` vs 白只有 2.87:1（连 UI 的 3:1 都不到）、实心钮上的白字 3.50:1
+ * ⇒ 保持色相、压深到可读：accent 4.12:1、ink 上的白字 5.43:1、text 6.01:1。 */
 [data-theme="warm"] {
   color-scheme: light;
   /* 表面（三级，暖灰） */
@@ -23,13 +25,13 @@
   --lake-border-1: #e7e5e1;
   --lake-border-2: #f0efec;
   --lake-border-strong: #d6d3cd;
-  /* 主色（取亮色同一组值；暖色只靠暖中性面区分） */
-  --lake-accent: #3f5fa0;
-  --lake-accent-ink: #33497f;
-  --lake-accent-ink-hover: #3d558f;
-  --lake-accent-ink-press: #293c69;
-  --lake-accent-tint: #eef2fa;
-  --lake-accent-text: #33497f;
+  /* 主色（橙：与浅/深同一组值；暖色只靠暖中性面区分） */
+  --lake-accent: #d45500;
+  --lake-accent-ink: #b34900;
+  --lake-accent-ink-hover: #c24e00;
+  --lake-accent-ink-press: #993d00;
+  --lake-accent-tint: #fff2e8;
+  --lake-accent-text: #a8440a;
   /* 状态色 */
   --lake-status-sync: #2a6b80;
   --lake-status-pending: #8f5f0e;
@@ -42,7 +44,7 @@
   /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；未选中星走 --lake-border-strong。 */
   --lake-rating-star: #ecaa06;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(63,95,160,.16);
+  --lake-select-bg: rgba(212,85,0,.16);
   --lake-scrim: rgba(24,27,32,.28);
   --lake-scrollbar-thumb: rgba(28,31,36,.22);
   --lake-scrollbar-thumb-hover: #8c94a0;

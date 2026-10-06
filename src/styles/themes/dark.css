@@ -26,8 +26,8 @@
   --lake-border-1: #2d2f34;
   --lake-border-2: #232528;
   --lake-border-strong: #3b3e45;
-  /* 主色（261006 统一色相 222°；按暗底抬高明度）。
-   * 对比度实测：accent vs panel 7.92:1（旧紫 6.34）；ink 上的白字 4.89:1（hover 4.69 / press 5.95）。 */
+  /* 主色（261006：中性蓝，按暗底抬高明度）。
+   * 对比度实测：accent vs panel 7.13:1；ink 上的白字 4.89:1。 */
   --lake-accent: #9aabce;
   --lake-accent-ink: #5970a6;
   --lake-accent-ink-hover: #5d73a7;

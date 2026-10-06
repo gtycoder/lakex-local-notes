@@ -26,8 +26,8 @@
   --lake-border-1: #e6e8ec;
   --lake-border-2: #eff1f4;
   --lake-border-strong: #d3d7de;
-  /* 主色（261006 canon）：仍同一色相（222°），但从"雾状"收成更明确的墨蓝，
-   * 让焦点/选中/主操作真正成为锚点。四角色分工不变。 */
+  /* 主色（261006 canon）：同一色相（222°）的墨蓝，从"雾状"收成明确锚点。
+   * 橙是**暖色主题专属**的身份色（见 themes/warm.css），亮/暗保持中性蓝。 */
   --lake-accent: #3f5fa0;
   --lake-accent-ink: #33497f;
   --lake-accent-ink-hover: #3d558f;
