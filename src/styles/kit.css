@@ -637,6 +637,85 @@
 .b3-switch:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .b3-switch:disabled { opacity: .4; cursor: default; }
 
+/* ── 16 勾选（checkbox / radio）：自绘，收编桌面里散落的原生控件 ────────────────
+ * 261006 Phase 2.2：桌面里还有 13 处原生 <input type="checkbox"> 与 2 处 radio，它们由系统绘制，
+ * 既不跟主题也不跟尺寸。这里**只在桌面外壳内**把这些原生件重绘成同一套原语：
+ *   · 作用域 `.app-shell` ⇒ 移动端（自有根类）不受影响；
+ *   · 显式排除 `.lake-editor-mount`（内核正文里的待办框属于**文档内容**，保持内核原样）。
+ * 勾选符号用**边框旋转**画（不用带颜色的 SVG data URI —— 颜色字面量只允许出现在 themes/*）。
+ * 不改任何 JSX：`appearance:none` 之后原生 input 仍是同一个可聚焦、可键盘操作的控件。 */
+.app-shell input[type="checkbox"]:not(.bt-keep-native),
+.app-shell input[type="radio"]:not(.bt-keep-native) {
+  position: relative;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--lake-ctl-border);
+  border-radius: var(--lake-radius-xs);
+  background: var(--lake-bg-panel);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
+    border-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.app-shell input[type="radio"]:not(.bt-keep-native) { border-radius: var(--lake-radius-pill); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):hover,
+.app-shell input[type="radio"]:not(.bt-keep-native):hover { border-color: var(--lake-accent); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):checked,
+.app-shell input[type="radio"]:not(.bt-keep-native):checked {
+  border-color: var(--lake-accent);
+  background: var(--lake-accent);
+}
+/* 勾：右下两条边旋转 45°（颜色 = 面板底色，浅深主题都成立） */
+.app-shell input[type="checkbox"]:not(.bt-keep-native)::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--lake-bg-panel);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+.app-shell input[type="checkbox"]:not(.bt-keep-native):checked::after { transform: rotate(45deg) scale(1); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):indeterminate::after {
+  top: 3px;
+  left: 2px;
+  width: 7px;
+  height: 0;
+  border-width: 0 0 2px 0;
+  transform: none;
+}
+/* 单选：实心圆点 */
+.app-shell input[type="radio"]:not(.bt-keep-native)::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-panel);
+  transform: scale(0);
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+.app-shell input[type="radio"]:not(.bt-keep-native):checked::after { transform: scale(1); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):focus-visible,
+.app-shell input[type="radio"]:not(.bt-keep-native):focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--lake-focus-halo);
+}
+.app-shell input[type="checkbox"]:not(.bt-keep-native):disabled,
+.app-shell input[type="radio"]:not(.bt-keep-native):disabled {
+  opacity: var(--lake-disabled-opacity);
+  cursor: default;
+}
+/* 内核正文里的勾选（待办列表）维持内核自己的绘制。 */
+.app-shell .lake-editor-mount input[type="checkbox"],
+.app-shell .ne-engine input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; }
+
 /* Destructive-action button (P7-e): .ft__error is the existing semantic class used by buttons like 清空;
  * living in the kit layer lets the LAYER ORDER (not !important) beat .b3-button--outline neutrals. */
 /* 同上：带上基座的 :not() 链，否则被 .b3-button 基座/--outline 变体的 color 压掉（危险操作看不出是危险操作）。 */
