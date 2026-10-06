@@ -275,6 +275,10 @@
 .ln-select:disabled { background: var(--lake-bg-sunken); color: var(--lake-text-4); cursor: default; }
 .ln-select__value { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left; }
 .ln-select__chevron { flex: 0 0 auto; color: var(--lake-text-3); }
+/* 261006 Phase 2.2：下拉的**弹层**（不再用系统弹层）。列表落在 .ln-menu 表面里，
+ * 选项复用 .ln-menu__item（高度/圆角/悬停/选中/勾选位）——同一交互语义只有这一套。 */
+.ln-select__list { min-width: 100%; max-height: min(320px, 60vh); overflow: auto; }
+.ln-select__item { white-space: nowrap; }
 
 /* ── 09 开关 ───────────────────────────────────────────────── */
 .ln-switch {

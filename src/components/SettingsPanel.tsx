@@ -3,6 +3,7 @@ import { Cloud, Coffee, Copy, ExternalLink, Files, File, FolderOpen, Globe, Hist
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
+import { Select } from "./ui/Select";
 
 /** 把归类后的中文错误贴到对应字段：Key 类 → apiKey；端点/模型类 → baseUrl+model；其余整条。 */
 function fieldErrorFor(message: string, retryable?: boolean): Record<string, string> {
@@ -659,9 +660,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>
                   <Field itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
-                    <select className="b3-select" value={settings.fontSize} onChange={(e) => onChange({ fontSize: Number(e.target.value) })} aria-label="正文字号">
-                      {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
-                    </select>
+                    <Select label="正文字号" value={String(settings.fontSize)} onChange={(v) => onChange({ fontSize: Number(v) })} options={fontSizeOptions().map((fs) => ({ value: String(fs), label: `${fs} px` }))} />
                   </Field>
                   <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启=应用自建增强大纲（筛选/折叠/级别徽标/悬停；桌面右栏）；关闭（默认）=直接使用 Lake 原生大纲。移动端始终使用应用大纲面板。" checked={settings.outlineEnhance} onChange={(checked) => onChange({ outlineEnhance: checked })} />
                   <Switch itemId="editor-toolbar" name="显示固定工具栏" desc="编辑器顶部那条固定工具栏。关掉后编辑区更干净，格式操作走浮动工具栏。" checked={settings.showToolbar} onChange={(checked) => onChange({ showToolbar: checked })} />
@@ -669,24 +668,18 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
                   <Field itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
-                    <select className="b3-select" value={settings.maxOpenTabs} onChange={(e) => onChange({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
-                      <option value={0}>不限</option>
-                      <option value={4}>4 个</option>
-                      <option value={6}>6 个</option>
-                      <option value={8}>8 个</option>
-                      <option value={12}>12 个</option>
-                      <option value={16}>16 个</option>
-                      <option value={24}>24 个</option>
-                    </select>
+                    <Select label="最大同时打开标签数" value={String(settings.maxOpenTabs)} onChange={(v) => onChange({ maxOpenTabs: Number(v) })} options={[
+                      { value: "0", label: "不限" }, { value: "4", label: "4 个" }, { value: "6", label: "6 个" },
+                      { value: "8", label: "8 个" }, { value: "12", label: "12 个" }, { value: "16", label: "16 个" },
+                      { value: "24", label: "24 个" },
+                    ]} />
                   </Field>
                 </Group>
                 <Group title="附件" icon={<Paperclip size={16} />}>
                   <Field itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">
-                    <select className="b3-select" value={settings.maxAttachmentBytes / (1024 * 1024)} onChange={(e) => onChange({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
-                      <option value={25}>25 MiB</option>
-                      <option value={50}>50 MiB</option>
-                      <option value={100}>100 MiB</option>
-                    </select>
+                    <Select label="附件大小上限" value={String(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(v) => onChange({ maxAttachmentBytes: Number(v) * 1024 * 1024 })} options={[
+                      { value: "25", label: "25 MiB" }, { value: "50", label: "50 MiB" }, { value: "100", label: "100 MiB" },
+                    ]} />
                   </Field>
                 </Group>
               </>
@@ -781,11 +774,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式">
-                            <select className="b3-select" value={syncCfg.autoMode} onChange={(e) => void saveSyncCfg({ autoMode: e.target.value as SyncSettings["autoMode"] })} aria-label="自动同步模式">
-                              <option value="manual">完全手动</option>
-                              <option value="interval">按固定间隔自动同步</option>
-                              <option value="onOpenClose">仅在开启/关闭时同步</option>
-                            </select>
+                            <Select label="自动同步模式" value={syncCfg.autoMode} onChange={(v) => void saveSyncCfg({ autoMode: v as SyncSettings["autoMode"] })} options={[
+                              { value: "manual", label: "完全手动" },
+                              { value: "interval", label: "按固定间隔自动同步" },
+                              { value: "onOpenClose", label: "仅在开启/关闭时同步" },
+                            ]} />
                           </Field>
                           {syncCfg.autoMode === "interval" && (
                             <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
@@ -1023,9 +1016,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
                   <Section title="服务">
                     <Field itemId="ai-provider" name="供应商" desc="只支持 OpenAI 兼容接口：内置 OpenAI / DeepSeek，也可选「自定义」指向任意兼容端点（Ollama / vLLM / OneAPI 等）。切换即按该家默认值初始化。">
-                      <select className="b3-select" value={aiProviderId} onChange={(e) => void switchAiProvider(e.target.value)} aria-label="AI 供应商">
-                        {AI_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                      </select>
+                      <Select label="AI 供应商" value={aiProviderId} onChange={(v) => void switchAiProvider(v)} options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))} />
                     </Field>
                     <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
                       <span className="ln-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
@@ -1069,11 +1060,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <Section title="模型与参数">
                     <Field itemId="ai-model" name="模型" desc="从供应商拉取候选会同时验证连通性；端点不实现 /models 时可手填。" error={aiErr.model}>
                       {aiModels && aiModels.length > 0 && !aiManualModel ? (
-                        <select className="b3-select" value={aiPending.model} onChange={(e) => { const v = e.target.value; if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }} aria-label="AI 模型">
-                          {aiModels.map((m) => <option key={m} value={m}>{m}</option>)}
-                          {aiPending.model && aiModels.indexOf(aiPending.model) < 0 && <option value={aiPending.model}>{aiPending.model}</option>}
-                          <option value="__manual__">手填…</option>
-                        </select>
+                        <Select label="AI 模型" value={aiPending.model} onChange={(v) => { if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }} options={[
+                          ...aiModels.map((m) => ({ value: m, label: m })),
+                          ...(aiPending.model && aiModels.indexOf(aiPending.model) < 0 ? [{ value: aiPending.model, label: aiPending.model }] : []),
+                          { value: "__manual__", label: "手填…" },
+                        ]} />
                       ) : (
                         <>
                           <span className="ln-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} aria-label="AI 模型" /></span>
@@ -1084,16 +1075,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </Field>
                     {activeDef.supportsReasoning && (
                       <Item itemId="ai-reasoning" name="思考强度" desc="DeepSeek 的 reasoning_effort（默认 high）。思考模式下 temperature 不生效。">
-                        <select className="b3-select fn__size200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(e) => setAiDraft((d) => ({ ...d, reasoningEffort: e.target.value as AiReasoningEffort }))}>
-                          {AI_REASONING_EFFORTS.map((v) => <option key={v} value={v}>{v}</option>)}
-                        </select>
+                        <Select label="思考强度" className="fn__size200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(v) => setAiDraft((d) => ({ ...d, reasoningEffort: v as AiReasoningEffort }))} options={AI_REASONING_EFFORTS.map((v) => ({ value: v, label: v }))} />
                       </Item>
                     )}
                     {activeDef.supportsThinking && (
                       <Item itemId="ai-thinking" name="思考模式" desc="DeepSeek 的 thinking：关闭更省 token 与延迟；开启时温度不生效。">
-                        <select className="b3-select fn__size200" value={aiPending.thinking ?? "enabled"} onChange={(e) => setAiDraft((d) => ({ ...d, thinking: e.target.value as AiThinkingMode }))}>
-                          {AI_THINKING_MODES.map((v) => <option key={v} value={v}>{v === "enabled" ? "开启" : "关闭"}</option>)}
-                        </select>
+                        <Select label="思考模式" className="fn__size200" value={aiPending.thinking ?? "enabled"} onChange={(v) => setAiDraft((d) => ({ ...d, thinking: v as AiThinkingMode }))} options={AI_THINKING_MODES.map((v) => ({ value: v, label: v === "enabled" ? "开启" : "关闭" }))} />
                       </Item>
                     )}
                     {(!activeDef.supportsThinking || aiPending.thinking === "disabled") && (
