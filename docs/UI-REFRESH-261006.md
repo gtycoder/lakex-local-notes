@@ -34,7 +34,7 @@
 | 1.2 | 去 AI-slop 痕迹：桌面 toast 单侧色条 → 表面+1px 描边+状态色；布局属性动画 → transform | `chrome.css` `kit.css` `dialogs.css` `app/shell.css` | ✅ 完成（待验收） |
 | 1.3 | 图标族收敛：清 emoji 字形，统一 lucide 一族 + 单一 stroke + 光学尺寸 | TSX（Sidebar/StatusBar/tab 等） | ✅ 完成（结论修正：家族已统一，只修离群尺寸） |
 | 1.4 | 样式来源收敛：内联 `style={{}}` 能收敛的收进令牌/kit；核对 `!important` 口径 | `app/shell.css` `chrome.css` `Sidebar.tsx` | ✅ 完成（结论修正：多为合理动态几何） |
-| 1.5 | 删除：legacy 层可证死声明（同选择器 + 被更高层覆盖） | `src/styles/app/*` `components.css` `document-status.css` 等 11 个文件 | 🔄 扫描完成：**137 条**，待执行 |
+| 1.5 | 删除：可证死声明（同选择器 + 被更高层覆盖），含空壳规则 | `src/styles/app/*` `components.css` `document-status.css` `kit.css` 等 9 个文件 | ✅ 完成（**-83 条**，计算值对拍零差异） |
 
 **Phase 1 验证门禁**：`tsc` · `vitest` · `check:core` · `ui-metrics` · `cssLayers` + `uiPrimitives` · 双端 build · `git diff --check` · 真机三主题截图对比。
 
@@ -63,6 +63,44 @@
 | 261006 | Phase 1.3 图标族盘点 + 离群尺寸收敛 | ✅ 完成 |
 | 261006 | Phase 1.4 内联样式盘点 + 净收益为正的收敛 | ✅ 完成 |
 | 261006 | Phase 1.5 死声明静态扫描（137 条） | 🔄 待执行删除 |
+| 261006 | Phase 1.5 死声明删除（权威 CSSOM 扫描 + 计算值对拍） | ✅ 完成 |
+
+## 4e. 变更明细 · Phase 1.5（可证死声明清理）
+
+**方法（为什么不能靠读代码）**：把扫描搬到**运行中的 CSSOM**（Vite 给我们的样式表都带 `data-vite-dev-id`，可精确限定"只扫我们的 CSS"；`@media`/`@layer` 由 CSSOM 正确表达）。判据：**同选择器**下，低层的某个长属性被**更高层**声明覆盖 ⇒ 该声明永不生效。
+
+**关键前提：键必须带「层」**。第一版键只有「选择器+属性」，dry-run 立刻暴露它会把**覆盖者本身**也删掉（例如 chrome.css 里真正生效的那条）。加上层信息后：**legacy 230 / kit 15** 条，shell/overlay 一条没有。
+
+**结果：9 个文件共 −83 条声明**（空壳规则一并删除）
+
+| 文件 | 声明数 | 文件 | 声明数 |
+|------|--------|------|--------|
+| `app/shell.css` | 427 → **408** | `components.css` | 382 → **365** |
+| `document-status.css` | 116 → **94** | `app/misc.css` | 285 → **274** |
+| `compat.css` | 222 → **217** | `app/tabs.css` | 192 → **188** |
+| `kit.css` | 588 → **584** | `app/quick-notes.css` | 496 → **495** |
+| `dialog.css` | → **203** | | |
+
+基线已同步下调（锁住成果）。复扫后**剩余 5 条不可删**（简写局部被覆盖，无法只删一侧，例如 `.search-panel-spinner` 的 `border-*-color`）。
+
+**验证**
+
+| 项 | 结果 |
+|----|------|
+| 括号平衡（9 个文件） | ✅ |
+| 计算值对拍（受影响选择器的**已挂载**元素 × 39 个属性） | **零差异** ✅ |
+| `cssLayers`（含"空壳规则"检查）· `uiPrimitives` | ✅ |
+| `tsc` · `vitest` 全量 | ✅ 1679 passed / 16 skipped |
+| `ui-metrics`（hex=0/rgb=0/`!important` 9/未定义令牌=0） | ✅ |
+| `vite build` · `git diff --check` · 真机渲染 | ✅（无 Vite 错误覆盖层、`#root` 正常） |
+
+**⚠️ 本轮工具踩的坑（如实记录，三条都是我自己的删除器 bug）**
+
+1. **键不带层 → 会删覆盖者**：dry-run 时发现清单里出现 `chrome.css` 的同名规则，才改成带层的键。
+2. **正则匹配到注释里的伪声明**：删除器把注释里的 `xxx: yyy;` 当声明删了，**吃掉了注释的 `*/`** ⇒ `app/shell.css` 整段变成未闭合块 ⇒ Vite 报 `Unclosed block`、**渲染层直接卸载**（`#root` 空、错误覆盖层）。修法：匹配时**跳过注释区间** + 写盘前做**括号平衡校验，不平衡就拒绝写入**。事后已用 `git show HEAD:<file>` 恢复全部 9 个文件重做。
+3. **删空规则时留下悬空选择器**：`.tab-item.active` / `.ln-scrim` 的规则体被删空后只删了 `{}`，选择器行仍在 ⇒ 会与**下一条规则的选择器合并**（改变其语义）。修法：整条规则（含选择器）一起删。
+
+**本轮不做**：`misc.css` 的结构性拆分、`tokens.css` 的"移动端并入 themes"——Phase 2 会重写相当一部分 legacy CSS，此时做结构重构属于给即将替换的代码做手术，留到 Phase 2 之后按新世界一次性收口。
 
 ## 4c. 变更明细 · Phase 1.3（图标族）
 

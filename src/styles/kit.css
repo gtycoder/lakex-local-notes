@@ -183,7 +183,6 @@
 .ln-menu__submenu { position: absolute; top: -6px; left: calc(100% + 4px); }
 
 /* ── 05 对话框 / 抽屉 ──────────────────────────────────────── */
-.ln-scrim { position: fixed; inset: 0; background: var(--lake-scrim); z-index: var(--lake-z-scrim); }
 .ln-modal {
   position: relative;
   display: flex;

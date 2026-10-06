@@ -175,13 +175,10 @@
 
 /* 页签（.ln-tabs）已收编到 kit 层单一来源（260929：墨线 + 计数徽标原语，见 kit.css）。 */
 
-.ln-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px 0; }
-.ln-toolbar__info {
-  flex: 1 1 auto;
+.ln-toolbar {display: flex; align-items: center;}
+.ln-toolbar__info {  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--lake-text-3);
-  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -214,13 +211,8 @@
 .tab-gone-banner button:hover { background: var(--lake-accent-tint); }
 
 /* 空态（搜索 / 历史 / 回收站 / 设置通用） */
-.ln-empty {
-  display: grid;
-  gap: 4px;
+.ln-empty {  display: grid;
   justify-items: center;
-  padding: 32px 12px;
-  color: var(--lake-text-4);
-  font-size: 12px;
   text-align: center;
 }
 .ln-empty--idle { padding: 56px 20px; }
@@ -254,18 +246,12 @@
 .history-preview-image.is-loading { opacity: .55; transition: opacity var(--lake-motion-fast) ease-out; }
 
 /* 两行列表行（回收站 / 文档历史）：沿用思源 .b3-list-item 的密度与 hover 语言 */
-.ln-row2__main { display: grid; gap: 1px; padding: 3px 0; line-height: 18px; }
-.ln-row2__title {
-  overflow: hidden;
-  color: var(--lake-text-1);
-  font-size: 13px;
+.ln-row2__main {display: grid;}
+.ln-row2__title {  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ln-row2__meta {
-  overflow: hidden;
-  color: var(--lake-text-4);
-  font-size: 11px;
+.ln-row2__meta {  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

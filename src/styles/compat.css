@@ -38,9 +38,7 @@
   overflow-x: auto;
   overflow-y: hidden;
 }
-.activity-rail {
-  padding-top: var(--topbar-height);
-  background: transparent;
+.activity-rail {  padding-top: var(--topbar-height);
 }
 /* .tab-item 的盒（高/内距/外边距）已收编到 styles/app/tabs.css 单一来源（260923）：
    原先这里的 min-height:29px 会赢过 tabs.css 的 height，导致改顶栏高度时标签被裁。 */
@@ -259,13 +257,8 @@
 .config-empty { padding: 24px 0; color: var(--lake-text-4); font-size: 13px; text-align: center; }
 
 /* 下拉基础（原 b3/siyuan/component/_select.scss）：外观其余部分由 kit.css 的新规格给 */
-.b3-select {
-  border: 0;
-  border-radius: var(--lake-radius-sm);
-  padding: 4px 26px 4px 8px;
-  box-sizing: border-box;
+.b3-select {  box-sizing: border-box;
   line-height: 20px;
-  color: var(--lake-text-1);
   -webkit-appearance: none;
   appearance: none;
   display: block;

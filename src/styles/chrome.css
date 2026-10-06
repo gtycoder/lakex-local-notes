@@ -439,6 +439,8 @@
 .tab-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
 /* 选中页签：极浅强调色底 + 极浅强调色描边（用户 260923：参考思源给选中标签一个"很浅"的背景/边框提示，
    不是照抄其配色）。颜色全部由 --lake-* 令牌派生，深浅/暖色主题自动跟随。 */
+/* 页签 active（261006：原 app/shell.css 的同名规则是 legacy 层、被本条完全覆盖，已删）：
+ * 白卡底已足够标识当前页；文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」多重信号。 */
 .tab-item.active {
   color: var(--lake-text-1);
   background: var(--lake-accent-tint);

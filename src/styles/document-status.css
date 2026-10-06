@@ -2,8 +2,7 @@
 /* 本元素同时带 `.statusbar`（b3 骨架）与 `.document-statusbar`（本文件）两个**别名类**。
  * border / background / box-shadow 的真来源是 styles.css:583-584 与 b3/layout.css 里那几条带 的 `.statusbar` 规则，
  * 在这里再写就是死声明（260916 已删）；要改状态栏外观请改那两处。 */
-.document-statusbar {
-  grid-row: 1;
+.document-statusbar {  grid-row: 1;
   grid-column: 1 / -1;
   position: absolute;
   z-index: var(--lake-z-statusbar);
@@ -11,14 +10,9 @@
   bottom: 8px;
   display: grid;
   align-items: center;
-  height: 26px;
-  min-height: 26px;
   padding: 0 9px;
-  border-radius: var(--lake-radius-sm, 8px);
-  color: var(--lake-text-3);
-  backdrop-filter: blur(10px) saturate(1.04);
   pointer-events: none;
-  font-size: 11px; /* 10px 在 macOS 上已经低于可读下限（状态栏是可读信息，不是装饰） */
+   /* 10px 在 macOS 上已经低于可读下限（状态栏是可读信息，不是装饰） */
   font-variant-numeric: tabular-nums;
 }
 .document-statusbar-stats,
@@ -26,20 +20,16 @@
 /* 状态栏仅展示、不加任何点击交互；但允许选中复制文字（容器仍穿透，不挡编辑器点击） */
 .document-statusbar-stats,
 .document-statusbar-state { pointer-events: auto; -webkit-user-select: text; user-select: text; }
-.document-statusbar-stats { gap: 10px; white-space: nowrap; }
-.document-statusbar-state { justify-content: flex-end; color: var(--lake-text-2); white-space: nowrap; }
+.document-statusbar-stats {white-space: nowrap;}
+.document-statusbar-state {justify-content: flex-end; white-space: nowrap;}
 .document-statusbar-status-icon { display: inline-flex; align-items: center; gap: 4px; }
 
-.document-statusbar-state.synced-history {
-  padding: 2px 7px;
-  border: 1px solid color-mix(in srgb, var(--lake-accent) 24%, transparent);
+.document-statusbar-state.synced-history {  padding: 2px 7px;
   border-radius: 999px;
   color: var(--lake-accent, var(--lake-accent));
   background: color-mix(in srgb, var(--lake-accent) 10%, transparent);
-  font-weight: 600;
 }
-.document-notice-toast {
-  position: absolute;
+.document-notice-toast {  position: absolute;
   z-index: var(--lake-z-statusbar-popover);
   right: 50%;
   bottom: 42px;
@@ -50,13 +40,6 @@
   min-height: 30px;
   padding: 5px 8px 5px 11px;
   transform: translateX(50%);
-  border: 1px solid color-mix(in srgb, var(--lake-border-1) 84%, transparent);
-  border-radius: 8px;
-  color: var(--lake-text-2);
-  background: color-mix(in srgb, var(--lake-bg-panel) 96%, transparent);
-  box-shadow: var(--lake-shadow-card);
-  backdrop-filter: blur(10px) saturate(1.04);
-  font-size: 11px;
   pointer-events: auto;
 }
 .document-notice-toast > span {
@@ -64,12 +47,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.document-notice-toast button {
-  flex: 0 0 auto;
+.document-notice-toast button {  flex: 0 0 auto;
   padding: 2px 5px;
   border: 0;
-  border-radius: 5px;
-  color: var(--lake-accent, var(--lake-accent));
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -90,23 +70,19 @@
 .document-statusbar[data-doc-kind="board"] {
   right: calc(20px + var(--lake-outline-inset, 0px));
 }
-.document-statusbar-message {
-  display: none;
+.document-statusbar-message {  display: none;
   min-width: 0;
   max-width: min(360px, 42vw);
   overflow: hidden;
-  color: var(--lake-text-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 /* 锁定标识：显示锁状态；**只有这一枚胶囊可点**（点开解锁浮层，260930 用户）。
    「表格」「同步状态」仍是纯展示（可选中文字、无任何动作）——状态栏容器仍 pointer-events:none。 */
-.document-statusbar-lock {
-  display: inline-flex;
+.document-statusbar-lock {  display: inline-flex;
   align-items: center;
   gap: 5px;
   min-width: 0;
-  color: var(--lake-accent, var(--lake-accent));
   font-weight: 600;
   white-space: nowrap;
 }

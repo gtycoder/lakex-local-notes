@@ -5,7 +5,7 @@
 
 /* .ln-dialog 的布局与表面已并入 src/styles/overlay.css（单一来源，260926）。 */
 /* 右下角拖拽调整大小（默认大尺寸，见具体弹窗） */
-.ln-dialog__resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; color: var(--lake-text-3); opacity: .5; touch-action: none; }
+.ln-dialog__resize {position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; opacity: .5; touch-action: none;}
 .ln-dialog__resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; border-radius: 0 0 3px 0; }
 .ln-dialog__resize:hover { opacity: 1; }
 @media (max-width: 600px) { .ln-dialog__resize { display: none; } }

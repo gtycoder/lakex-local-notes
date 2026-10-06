@@ -35,7 +35,7 @@
 }
 
 /* 未保存标记：Tab 标签上的小圆点 */
-.tab-item .tab-pin { flex: none; color: var(--lake-text-3); }
+.tab-item .tab-pin {flex: none;}
 
 .tab-item .tab-custom-icon { flex: none; font-size: 13px; line-height: 1; }
 
@@ -124,8 +124,7 @@
  * 这一族原先也在下面的 `@media (min-width: 761px)` 里 ⇒ 761px 以下标签项掉回基础样式
  * （边框/内边距/字号全变、切换器露出浏览器默认按钮框与灰底）＝宽→窄最显眼的几处跳变。
  * 整族搬到共用作用域；窄窗块里对应的手抄副本同步删除。 */
-.tab-item {
-  /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
+.tab-item {  /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
   flex: 0 0 auto;
   /* 标签盒**单一来源**（260923 从 compat.css 收编）：高度走独立令牌，与顶栏解耦 ——
      顶栏收窄不再牵动标签；内距由 .tab-bar 按 (顶栏 − 标签)/2 派生，标签恒居中不被裁。 */
@@ -133,7 +132,6 @@
   min-height: 0;
   margin: 0;
   padding: 0 8px;
-  border: 1px solid transparent;
   font-size: 12px;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
@@ -256,12 +254,9 @@
   overscroll-behavior: contain;
 }
 
-.tab-switcher-item {
-  display: flex;
+.tab-switcher-item {  display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 32px;
-  border-radius: var(--lake-radius-md);
 }
 
 /* P5-i：原 `.tab-switcher-item.active { background: rgba(59,91,219,.11) }` 与

@@ -31,9 +31,9 @@
 
 .inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: 10px; }
 
-.note-list { flex: 1; min-height: 0; padding: 0 5px; }
+.note-list {flex: 1; min-height: 0;}
 
-.note-row { display: grid; align-items: center; width: 100%; padding: 2px 7px; color: var(--lake-text-2); background: transparent; text-align: left; }
+.note-row {display: grid; align-items: center; width: 100%; text-align: left;}
 
 /* P5-e：原 `.note-row:hover { background: #e9ebee }` 与 `.note-row.active { background: #eff0f0 }`
  * 两条**颜色字面量**已删 —— 行态（hover = --lake-bg-hover / 选中 = --lake-accent-tint）单一来源
@@ -42,7 +42,7 @@
 .note-row-copy { min-width: 0; }
 
 /* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
-.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text-2); font-size: var(--lake-font-size-body); white-space: nowrap; }
+.note-row-copy strong {display: block;}
 
 .tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); outline: 0; background: var(--lake-bg-panel); font-size: 13px; }
 
@@ -60,7 +60,7 @@
 /* 行内动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）：
    默认 display:none 不占宽度；hover/键盘聚焦时才出现并挤出位置（选中态不常驻，用户 260914）。
    标题恒单行、列宽处直接裁切不打省略号（见 .note-row-copy strong）。 */
-.tree-row-actions { display: none; align-items: center; justify-content: flex-end; background: inherit; }
+.tree-row-actions {align-items: center; justify-content: flex-end; background: inherit;}
 
 .tree-row:hover .tree-row-actions, .tree-row-actions:has(:focus-visible) { display: inline-flex; }
 
@@ -219,9 +219,7 @@
 
 /* 收起态 = 悬停预览（本体固定、藏在左轨里）；浮动带尺寸统一由 styles/shell.css 出。 */
 .sidebar.sidebar-floating,
-.sidebar.sidebar-collapsed {
-  position: fixed;
-  left: var(--activity-rail-width);
+.sidebar.sidebar-collapsed {  position: fixed;
   padding-top: 0;
 }
 
@@ -330,9 +328,7 @@
 /* 壳层定位与层叠上下文：宽窄共用（原先只在 @media (min-width: 761px) 里）。
  * 壳层背景（对角氛围渐变 + 底色）单一来源见 b3/layout.css 的 .app-shell；
  * 此处只保留定位与 isolation（层叠上下文），原 180deg 多层背景被其覆盖，已删。 */
-.app-shell {
-  position: relative;
-  isolation: isolate;
+.app-shell {  isolation: isolate;
 }
 
 @media (min-width: 761px) {
@@ -564,13 +560,9 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
  * Match the outline's bounded floating dock. The previous full-height fixed
  * sidebar made the panel appear to grow when it was leaving. */
 .sidebar.sidebar-floating,
-.sidebar.sidebar-collapsed {
-  top: var(--lake-floating-panel-top);
-  bottom: var(--lake-floating-panel-bottom);
-  /* 必须给显式高度：固定定位 + height:auto 在 Chromium 下不会按 top/bottom 撑满，
+.sidebar.sidebar-collapsed {  /* 必须给显式高度：固定定位 + height:auto 在 Chromium 下不会按 top/bottom 撑满，
      内容会把盒子顶到视口外（实测 y=0/h=957）。旧的"半幅"也是显式 calc。 */
   height: calc(100vh - var(--lake-floating-panel-top) - var(--lake-floating-panel-bottom));
-  max-height: none;
   overflow: hidden;
   transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard);
 }
@@ -609,13 +601,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 /* Tab close controls must own their layout slot; never overlay title or dirty dot. */
 .tab-item .tab-title { flex: 1 1 auto; min-width: 0; }
 
-.tab-item .tab-dirty-dot {
-  flex: 0 0 7px;
-  width: 7px;
-  height: 7px;
-  margin-left: 1px;
+.tab-item .tab-dirty-dot {  margin-left: 1px;
   border-radius: 50%;
-  background: var(--lake-status-pending);
 }
 
 .tab-item .tab-close {
@@ -870,12 +857,6 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .note-row,
 .list-heading .icon-button {
   border-radius: var(--lake-radius-sm);
-}
-
-/* 页签 active：白卡底（b3/components.css 的 .tab-item.active 提供）已足够标识当前页；
-   文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」多重信号。 */
-.tab-item.active {
-  color: var(--lake-text-1);
 }
 
 /* ---- 交互动效（B）：顶栏/图标按钮统一按压反馈 ---- */
