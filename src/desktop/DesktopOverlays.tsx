@@ -85,6 +85,8 @@ export interface DesktopOverlaysProps {
   onSettingsChange: (patch: Partial<AppSettings>) => void;
   onS3SettingsChanged: (next: S3Settings) => void;
   onSyncSettingsChanged: (next: { enabled: boolean }) => void;
+  cloudConfigured: boolean;
+  cloudEnabled: boolean;
 }
 
 export function DesktopOverlays(props: DesktopOverlaysProps) {
@@ -101,7 +103,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
     historyOpen, historyNoteId, onCloseHistory, onHistoryRestored,
     syncToast, syncAnchorRect, onCloseSyncToast,
     settingsOpen, settingsCategory, settings, onCloseSettings, onSettingsChange,
-    onS3SettingsChanged, onSyncSettingsChanged,
+    onS3SettingsChanged, onSyncSettingsChanged, cloudConfigured, cloudEnabled,
   } = props;
 
   return (
@@ -165,7 +167,8 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
       {syncToast && <SyncToast data={syncToast} onClose={onCloseSyncToast} anchorRect={syncAnchorRect} />}
       <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings}
         onClose={onCloseSettings} onChange={onSettingsChange}
-        onS3SettingsChanged={onS3SettingsChanged} onSyncSettingsChanged={onSyncSettingsChanged} />
+        onS3SettingsChanged={onS3SettingsChanged} onSyncSettingsChanged={onSyncSettingsChanged}
+        cloudConfigured={cloudConfigured} cloudEnabled={cloudEnabled} />
     </>
   );
 }

@@ -252,6 +252,32 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
     }
   });
 
+  it("护栏：关闭云同步 / 未配置 ⇒ 补拉入口一个字节都不碰网络（注入会抛错的 fetch 工厂）", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "lake-ab-offline-"));
+    let touched = 0;
+    const forbidden = () => { touched += 1; throw new Error("离线状态不应创建远端连接"); };
+    try {
+      const store = new Store(dir);
+      const note = store.createNote("离线笔记");
+      store.saveNote(note.id, "离线笔记", "<p>see 1786735000000_a1b2c3d4.png</p>");
+
+      // ① 未配置 S3
+      const a = await ensureTrashNoteAssets(store, note.id, forbidden);
+      expect(a.skipped).toBe("unconfigured");
+
+      // ② 配置了但关闭云同步（用户 261006：等同未配置 / 离线本地空间）
+      store.saveS3Settings(S3_CFG);
+      store.saveSyncSettings({ enabled: false, autoMode: "manual", autoIntervalMinutes: 15 });
+      const b = await ensureTrashNoteAssets(store, note.id, forbidden);
+      expect(b.skipped).toBe("offline");
+      expect(b.warnings).toEqual([]);
+
+      expect(touched).toBe(0);   // ← 关键：离线时远端工厂从未被调用
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("ensureTrashNoteAssets：预览按需补拉缺失资源（不恢复、仍在回收站）", async () => {
     const s3 = new SharedS3();
     const dirA = mkdtempSync(path.join(tmpdir(), "lake-ab-prev-a-"));

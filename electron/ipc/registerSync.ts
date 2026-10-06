@@ -7,6 +7,7 @@ import type { SyncProgress } from "../syncTypes.js";
 import { runGcDiagnostics } from "../syncGc.js";
 import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
 import { AppError } from "../../src/core/storeErrors.js";
+import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../../src/core/cloudState.js";
 import { IpcInputError } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 
@@ -60,6 +61,13 @@ interface SyncIpcDeps {
 
 export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   const { store, quickNotes, runFullSync, enqueueMaintenance, broadcastSyncProgress, restartGcTimers, restartSyncTimers } = deps;
+
+  /** 联网入口的**统一判据**（core/cloudState）：没配置 S3 或关闭了云同步 ⇒ 一律不出网。
+   *  用户 261006：「关闭云同步 = 当作完全没配置 / 离线本地空间」——所有联网 IPC 都先过这一关。 */
+  const requireCloud = (): void => {
+    const state = cloudStateOf(!!store.getS3Settings(), store.getSyncSettings());
+    if (!canTouchNetwork(state)) throw new AppError("NotConfigured", cloudStateHint(state) ?? "云同步不可用");
+  };
 
   ipc.handle("get_s3_settings", () => {
     const settings = store.getS3Settings();
@@ -125,15 +133,15 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
   ipc.handle("run_s3_gc_diagnostics", () => {
-    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
+    requireCloud();
     return enqueueMaintenance(() => runGcDiagnostics(store));
   });
   ipc.handle("run_s3_gc_reconcile", (ignoreRetention = false) => {
-    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
+    requireCloud();
     return enqueueMaintenance(() => runGcReconcile(store, { ignoreRetention: !!ignoreRetention }));
   });
   ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, ignoreRetention = false) => {
-    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
+    requireCloud();
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
       if (!settings) throw new AppError("NotConfigured", "请先保存 S3 配置");
@@ -148,7 +156,7 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     });
   });
   ipc.handleEvent("sync_now", (event: IpcMainInvokeEvent) => {
-    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭，请先在偏好设置中开启");
+    requireCloud();   // 没配置 / 关闭云同步 ⇒ 一个请求都不发（渲染层也拦，这里是兜底）
     const send = (progress: SyncProgress) => {
       try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ }
     };

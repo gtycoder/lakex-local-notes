@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
+import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
@@ -568,7 +569,8 @@ if (!app.requestSingleInstanceLock()) {
 
     // onOpenClose：应用就绪时对齐一次（失败仅告警）。
     const syncCfgOpen = store.getSyncSettings();
-    if (syncCfgOpen.enabled && syncCfgOpen.autoMode === "onOpenClose") {
+    // 单一判据（core/cloudState）：没配置 或 关闭云同步 ⇒ 不自动出网。
+    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && syncCfgOpen.autoMode === "onOpenClose") {
       void runFullSync().catch((error) => {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("[sync] 开启同步失败:", msg);
@@ -580,7 +582,8 @@ if (!app.requestSingleInstanceLock()) {
     let gcTimer: NodeJS.Timeout | null = null;
     const startGcTimer = () => {
       if (gcTimer) { clearInterval(gcTimer); gcTimer = null; }
-      if (!store.getSyncSettings().enabled) return;
+      // 云同步关闭 ⇒ 定期对账也不出网（与 core/cloudState 同一判据）。
+      if (!canTouchNetwork(cloudStateOf(!!store.getS3Settings(), store.getSyncSettings()))) return;
       const gcCfg = store.getS3GcSettings();
       if (gcCfg.gcIntervalHours > 0) {
         gcTimer = setInterval(() => {

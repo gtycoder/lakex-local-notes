@@ -680,6 +680,8 @@ export function App() {
         onSettingsChange={(patch) => saveSettings(patch)}
         onS3SettingsChanged={handleS3SettingsChanged}
         onSyncSettingsChanged={handleSyncSettingsChanged}
+        cloudConfigured={cloudConfigured}
+        cloudEnabled={cloudEnabled}
       />
       <AiAssistantDialog
         open={aiAssistantOpen}

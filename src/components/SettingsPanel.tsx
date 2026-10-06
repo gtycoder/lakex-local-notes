@@ -4,6 +4,7 @@ import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
 import { Select } from "./ui/Select";
+import { isCloudActive } from "../core/cloudState.js";
 
 /** 把归类后的中文错误贴到对应字段：Key 类 → apiKey；端点/模型类 → baseUrl+model；其余整条。 */
 function fieldErrorFor(message: string, retryable?: boolean): Record<string, string> {
@@ -36,6 +37,9 @@ interface SettingsPanelProps {
   openCategory?: SettingsCategory;
   onS3SettingsChanged?: (settings: S3Settings) => void;
   onSyncSettingsChanged?: (settings: SyncSettings) => void;
+  /** 云端是否已配置 / 是否启用（与顶栏状态灯同一来源，判"离线"用）。 */
+  cloudConfigured?: boolean;
+  cloudEnabled?: boolean;
 }
 
 const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lake-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
@@ -52,7 +56,7 @@ function formatDateTime(ms: number): string {
 
 import { Group, Section, Item, Field, Block, Switch, Shortcut, Seg, NumField, TextField } from "./settingsPrimitives";
 
-export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged }: SettingsPanelProps) {
+export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged, cloudConfigured = false, cloudEnabled = false }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
   const [navQuery, setNavQuery] = useState("");
   const navSearchRef = useRef<HTMLInputElement>(null);
@@ -195,6 +199,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [webMsg, setWebMsg] = useState<string | null>(null);
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
+  // 离线（未配置 S3 或关闭云同步）时云端动作一律禁用（261006：关闭云同步 = 纯离线本地空间）。
+  // 用 App 的两个标志（与顶栏状态灯同一来源），不要本面板的 s3（它只是表单初值、永远是对象）。
+  const cloudOffline = !isCloudActive(cloudConfigured, cloudEnabled);
   const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
   const [sysInfo, setSysInfo] = useState<import("../lib/types").SystemInfo | null>(null);
   const [pendingHit, setPendingHit] = useState<string | null>(null);
@@ -717,6 +724,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Block>
                 </Group>
                 <Group title="云端回收（S3 GC）" icon={<Trash size={16} />}>
+                  {cloudOffline && (
+                    <Block desc="云同步未启用（未配置 S3 或已关闭云同步）：按纯本地空间工作，云端相关操作一律不联网。重新开启云同步后即可使用。" />
+                  )}
                   <Block itemId="gc-status" name="回收状态" desc="手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。">
                     <div className="config-stats">
                       <span>待回收键 <strong>{gcPending}</strong> 个</span>
@@ -725,10 +735,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runReconcile()} disabled={gcBusy}><Trash size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
-                      <button className="b3-button b3-button--outline" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
-                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
-                      <button className="b3-button b3-button--outline" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void runReconcile()} disabled={gcBusy || cloudOffline}><Trash size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void runGcAction(true)} disabled={gcBusy || cloudOffline}>深度清理预览</button>
+                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runGcAction(false)} disabled={gcBusy || cloudOffline}>执行深度清理</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy || cloudOffline}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
                     </div>
                     {gcDiag && (
                       <div className="config-stats">
