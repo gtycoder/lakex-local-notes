@@ -1069,6 +1069,22 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);   // ← 关键
   });
 
+  it("上传落盘即登记孤儿：图片刚传上来、正文还没引用 → 资源页立刻可见（不靠保存、不靠扫描）", async () => {
+    const { id } = makeNote();
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const out = await store.uploadResource({ bytes: png, filename: "贴图.png" }, id);
+    const name = out.url.split("/").pop() ?? out.filename;
+    // 用户场景：刚传上来、马上又在正文里删掉（还没保存）⇒ 落盘那一刻就已登记，"可删"里当场可见
+    const row = store.listRemovedAssets().find((e) => e.filename === name);
+    expect(row?.status).toBe("orphan");
+    expect(row?.noteState).toBe("active");
+    expect(row?.orphanId).toBeDefined();
+
+    // 正文引用它并保存 ⇒ detectOrphans 撤登记，资源页里消失（同一判据：当前正文 ∪ 历史 ∪ 草稿）
+    store.saveNote(id, "带图文档", `<p>asset://${name}</p>`);
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);
+  });
+
   it("回收站里的文档：它的附件在 listRemovedAssets 里以「历史保护」列出（恢复要用，只读）", () => {
     const { id } = makeNote();
     const assetsDir = path.join(dir, "note-assets", id);
