@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
+import { isCloudActive } from "../core/cloudState.js";
 import type { SyncStatus, SyncStatusInfo } from "../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../lib/native";
@@ -77,7 +78,8 @@ export function SyncStatusPopover({
   const controlRef = useRef<HTMLDivElement | null>(null);
   const model = buildSyncStatusModel({ sync, pendingDocuments, pendingFolders, pendingQuickNotes, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
   // 云同步未启用 / 未配置 = 本地空间：同一个浮层，换成「仅本地」内容 + 去设置入口。
-  const localOnly = !cloudEnabled || !cloudConfigured;
+  // 顶栏图标 = 云同步状态灯：关了开关 或 没配置 S3 ⇒ 磁盘（判据与后端同源，见 core/cloudState）。
+  const localOnly = !isCloudActive(cloudConfigured, cloudEnabled);
 
   useEffect(() => {
     if (!visible) setOpen(false);

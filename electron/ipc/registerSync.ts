@@ -103,12 +103,12 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
       autoIntervalMinutes: clampNum(raw.autoIntervalMinutes, 15, 1, 1440),
     };
     const previous = store.getSyncSettings();
+    let alignWarning: string | undefined;
     if (previous.enabled && !next.enabled) {
-      try {
-        await runFullSync();
-      } catch (error) {
-        throw new Error(`关闭云同步前的最后对齐失败：${String(error)}`);
-      }
+      // 关掉云同步是**本地动作**：S3 连不上也必须能关（用户恰恰在 S3 不可用时最想关掉它，261006 实测关不掉）。
+      // 最后对齐降级为 best-effort：失败只回一条 warning，下次开启同步时会继续对齐。
+      try { await runFullSync(); }
+      catch (error) { alignWarning = String(error); store.logScopes.sync.warn(`[sync] 关闭云同步前的最后对齐失败（已关闭，下次开启同步时继续）: ${String(error)}`); }
     }
     store.saveSyncSettings(next);
     restartSyncTimers();
@@ -120,7 +120,7 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
         broadcastSyncProgress({ phase: "done", message: "同步失败", error: message });
       });
     }
-    return store.getSyncSettings();
+    return { ...store.getSyncSettings(), alignWarning };
   });
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());

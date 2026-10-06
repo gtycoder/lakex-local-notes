@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTouchNetwork, cloudStateHint, cloudStateOf } from "./cloudState";
+import { canTouchNetwork, cloudStateHint, cloudStateOf, isCloudActive } from "./cloudState";
 
 /** 云同步状态 = 单一判据（用户 261006：关闭云同步 = 当作完全没配置 / 离线本地空间）。 */
 describe("云同步状态（单一判据）", () => {
@@ -26,6 +26,13 @@ describe("云同步状态（单一判据）", () => {
     expect(cloudStateOf(true, { enabled: true, autoMode: "interval" })).toBe("auto");
     expect(cloudStateOf(true, { enabled: true, autoMode: "onOpenClose" })).toBe("auto");
     expect(canTouchNetwork("auto")).toBe(true);
+  });
+
+  it("UI 的「是不是云端」：没配置或关了开关都是本地（顶栏图标据此在磁盘/云之间切）", () => {
+    expect(isCloudActive(true, true)).toBe(true);     // 配了 + 开着 ⇒ 云
+    expect(isCloudActive(true, false)).toBe(false);   // 关掉 ⇒ 磁盘
+    expect(isCloudActive(false, true)).toBe(false);   // 没配置 ⇒ 磁盘
+    expect(isCloudActive(false, false)).toBe(false);
   });
 
   it("缺设置行（老库/异常）按 offline 处理，绝不放行出网", () => {

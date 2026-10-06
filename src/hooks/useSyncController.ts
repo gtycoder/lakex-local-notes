@@ -5,10 +5,12 @@ import type { SettingsCategory } from "../components/SettingsPanel";
 import type { SyncToastData } from "../components/SyncToast";
 import type { SyncStatus } from "../lib/types";
 import type { NoticeState } from "../desktop/desktopTypes";
+import { canTouchNetwork, cloudStateOf } from "../core/cloudState.js";
 
 interface SyncControllerInput {
   setSync: Dispatch<SetStateAction<SyncStatus>>;
   setCloudConfigured: Dispatch<SetStateAction<boolean>>;
+  setCloudEnabled: Dispatch<SetStateAction<boolean>>;
   setSyncToast: Dispatch<SetStateAction<SyncToastData | null>>;
   setConflictSnapshotNotice: Dispatch<SetStateAction<Array<{ noteId: string; title: string }>>>;
   setSettingsCategory: Dispatch<SetStateAction<SettingsCategory>>;
@@ -24,6 +26,7 @@ interface SyncControllerInput {
 export function useSyncController({
   setSync,
   setCloudConfigured,
+  setCloudEnabled,
   setSyncToast,
   setConflictSnapshotNotice,
   setSettingsCategory,
@@ -53,7 +56,17 @@ export function useSyncController({
       const settings = await native.getS3Settings();
       setCloudConfigured(Boolean(settings));
       const openSettings = () => { setSettingsCategory("sync"); setSettingsOpen(true); };
-      if (!settings) {
+      // 单一判据（core/cloudState）：没配置 / 关了云同步 ⇒ **一个请求都不发**
+      //（用户 261006：关闭云同步 = 当作纯离线本地空间；手动点同步也一样）。
+      const cfg = await native.getSyncSettings();
+      setCloudEnabled(cfg.enabled);
+      const state = cloudStateOf(Boolean(settings), cfg);
+      if (state === "offline") {
+        setSync((current) => ({ ...current, phase: "idle", message: "云同步已关闭" }));
+        showSyncToast({ kind: "unavailable", title: "云同步已关闭", message: "当前按纯本地空间工作，不会联网；到「设置 · 云端与同步」重新开启即可。", onConfigure: openSettings });
+        return;
+      }
+      if (!canTouchNetwork(state)) {
         setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
         showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: openSettings });
         return;

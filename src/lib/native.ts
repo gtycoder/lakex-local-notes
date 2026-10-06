@@ -128,7 +128,7 @@ export interface LakeNative {
   saveS3Settings(settings: S3Settings): Promise<void>;
   testS3Connection(): Promise<string>;
   getSyncSettings(): Promise<SyncSettings>;
-  saveSyncSettings(settings: SyncSettings): Promise<SyncSettings>;
+  saveSyncSettings(settings: SyncSettings): Promise<SyncSettings & { alignWarning?: string }>;
   syncNow(): Promise<SyncResult>;
   getSyncStatus(): Promise<SyncStatusInfo>;
   getSyncPendingSummary(): Promise<import("./types").SyncPendingSummary>;

@@ -27,6 +27,15 @@ export function canTouchNetwork(state: CloudState): boolean {
 }
 
 /** 给 UI 用的一句话说明（离线类状态为什么没去补拉）。 */
+/**
+ * UI 的「是不是云端」判据（顶栏图标 / 状态灯 / 状态文案）：**没配置 或 关了开关，都算本地**。
+ * 用户 261006：「这个图标就是开关云同步控制的，只要关了就展示这个磁盘，开了且 S3 通过了才是云」
+ * ——「S3 通过」由开启流程保证（只有连通测试通过才允许 enabled=true），所以这里只看这两项。
+ */
+export function isCloudActive(configured: boolean, enabled: boolean): boolean {
+  return configured && enabled;
+}
+
 export function cloudStateHint(state: CloudState): string | null {
   if (state === "unconfigured") return "未配置云同步：按纯本地空间处理，没有去云端补拉。";
   if (state === "offline") return "云同步已关闭：按纯本地空间处理，没有去云端补拉；重新开启后下次同步会自动补拉。";

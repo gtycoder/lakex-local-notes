@@ -442,7 +442,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       const saved = await native.saveSyncSettings(next);
       setSyncCfg(saved);
       onSyncSettingsChanged?.(saved);
-      setSyncMsg(saved.enabled ? "同步策略已保存" : "云同步已关闭（已完成最后一次对齐）");
+      setSyncMsg(saved.enabled
+        ? "同步策略已保存"
+        : saved.alignWarning
+          ? "云同步已关闭（未能完成最后对齐，下次开启同步时会继续）"
+          : "云同步已关闭（已完成最后一次对齐）");
     } catch (e) {
       setSyncMsg(getNativeErrorMessage(e));
       void native.getSyncSettings().then(setSyncCfg).catch((error) => reportNativeActionError("设置页读取", error));

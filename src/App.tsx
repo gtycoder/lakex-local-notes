@@ -265,6 +265,7 @@ export function App() {
   const runSync = useSyncController({
     setSync,
     setCloudConfigured,
+    setCloudEnabled,
     setSyncToast,
     setConflictSnapshotNotice,
     setSettingsCategory,
