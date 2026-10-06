@@ -50,10 +50,10 @@
 .tab-deleted-badge {
   flex: none;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: var(--lake-radius-2xs);
   background: var(--lake-status-error-soft);
   color: var(--lake-status-error);
-  font-size: 10px;
+  font-size: var(--lake-font-size-nano);
   line-height: 1.5;
 }
 

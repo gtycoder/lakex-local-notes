@@ -26,7 +26,7 @@
   overflow: hidden;
 }
 .image-lightbox img {
-  border-radius: 2px;
+  border-radius: var(--lake-radius-hairline);
   box-shadow: var(--lake-media-img-shadow);
   will-change: transform;
 }

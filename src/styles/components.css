@@ -8,25 +8,25 @@
 .sync-status-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 2px 2px 10px; border-bottom: 1px solid var(--lake-border-1); }
 .sync-status-popover-header div { display: grid; gap: 2px; }
 .sync-status-popover-header strong { font-size: 14px; }
-.sync-status-popover-header span { color: var(--lake-text-3); font-size: 11px; }
+.sync-status-popover-header span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .sync-status-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--lake-text-3); }
 .sync-status-dot.pending { background: var(--lake-status-pending); }
 .sync-status-dot.syncing { background: var(--lake-accent); animation: lake-status-pulse 1.2s ease-in-out infinite; }
 .sync-status-dot.error { background: var(--lake-status-error); }
 .sync-status-section { padding: 11px 0 0; }
-.sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-2); font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
+.sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-2); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 .sync-status-section dl { display: grid; gap: 5px; margin: 0; }
 .sync-status-section dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
 .sync-status-section dt { color: var(--lake-text-2); }
 .sync-status-section dd { margin: 0; color: var(--lake-text-1); font-variant-numeric: tabular-nums; text-align: right; }
 .sync-status-local-note { margin: 0; color: var(--lake-text-2); font-size: 12px; line-height: 1.5; }
-.sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 10px; padding: 9px; border-radius: var(--lake-radius-sm); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: 11px; }
+.sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 10px; padding: 9px; border-radius: var(--lake-radius-sm); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: var(--lake-font-size-micro); }
 .sync-status-history-note div { display: grid; gap: 2px; }
-.sync-status-history-note strong { font-size: 11px; }
+.sync-status-history-note strong { font-size: var(--lake-font-size-micro); }
 .sync-status-history-note span { color: var(--lake-text-3); line-height: 1.4; }
 .sync-status-history-list { display: grid; gap: 1px; margin: 4px -9px -4px; padding: 2px 0; max-height: 132px; overflow-y: auto; }
 .sync-status-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--lake-border-1); }
-.sync-status-footer-state { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lake-text-3); font-size: 11px; }
+.sync-status-footer-state { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .sync-status-actions .b3-button { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; }
 
 
@@ -35,7 +35,7 @@
 .search-command-panel { width: min(680px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 96px)); }
 
 
-.sync-status-history-list .b3-list-item { margin: 0 4px; font-size: 11px; line-height: 24px; min-height: 24px; }
+.sync-status-history-list .b3-list-item { margin: 0 4px; font-size: var(--lake-font-size-micro); line-height: 24px; min-height: 24px; }
 
 /* 草稿恢复框：表面/头体走浮层通用件 .ln-dialog，行复用思源 .b3-list-item（与回收站/历史同一套密度与 hover 语言）。
    这里只留间距与危险操作的着色。 */
@@ -45,7 +45,7 @@
 .draft-recovery-row .b3-list-item__text { min-width: 0; }
 .draft-recovery-restore:hover { color: var(--lake-accent); }
 .draft-recovery-discard:hover { color: var(--lake-status-error); }
-.draft-recovery-more { margin: 9px 0 0; color: var(--lake-text-4); font-size: 11px; }
+.draft-recovery-more { margin: 9px 0 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
 
 /* ══ 设置面板与浮层：自有设计系统版式（分组卡片 + 行 + 列表 + hover 图标操作）══
  * 组件类名沿用思源（.b3-*；AGPL-3.0 署名见设置页「关于」），本体规则已收编到 compat.css / kit.css，
@@ -132,10 +132,10 @@
 .settings-nav-hits__label {
   padding: 2px 10px 4px;
   color: var(--lake-text-4);
-  font-size: 11px;
+  font-size: var(--lake-font-size-micro);
 }
 .settings-nav-hit { min-height: 26px; font-size: 12px; }
-.settings-nav-hit .b3-list-item__meta { font-size: 10px; }
+.settings-nav-hit .b3-list-item__meta { font-size: var(--lake-font-size-nano); }
 .settings-panel-large .settings-content {
   flex: 1 1 auto;
   min-width: 0;
@@ -231,7 +231,7 @@
 }
 .search-snippet mark {
   padding: 0 1px;
-  border-radius: 2px;
+  border-radius: var(--lake-radius-hairline);
   color: var(--lake-text-1);
   background: var(--lake-accent-tint);
 }
@@ -270,7 +270,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
   border-radius: var(--lake-radius-xs);
   color: var(--lake-text-3);
   background: var(--lake-border-2);
-  font-size: 11px;
+  font-size: var(--lake-font-size-micro);
   line-height: 16px;
   white-space: nowrap;
 }

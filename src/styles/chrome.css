@@ -135,7 +135,7 @@
 .toolbar__space-ico {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--lake-radius-2xs);
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
@@ -146,7 +146,7 @@
 /* 合一菜单：空间分组标签 / 分隔 / 勾选 */
 .top-menu__label {
   padding: 6px 10px 4px;
-  font-size: 10px;
+  font-size: var(--lake-font-size-nano);
   font-weight: var(--lake-font-weight-semibold);
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -275,7 +275,7 @@
   color: var(--lake-text-3);
   background: color-mix(in srgb, var(--lake-bg-panel) 92%, transparent);
   box-shadow: var(--lake-shadow-card);
-  font-size: 9px;
+  font-size: var(--lake-font-size-nano);
   line-height: 1;
   opacity: 0;
   pointer-events: none;
@@ -337,7 +337,7 @@
 }
 .trash-space-header .panel-title h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--lake-font-size-display);
   letter-spacing: -.02em;
   font-weight: 700;
   color: var(--lake-text-1);
@@ -627,8 +627,8 @@
   color: var(--lake-text-3);
   font-size: var(--lake-font-size-micro);
 }
-.sync-toast-track { height: 5px; margin-top: 5px; border-radius: 3px; background: var(--lake-accent-tint); overflow: hidden; }
-.sync-toast-bar { height: 100%; border-radius: 3px; background: var(--lake-accent); transition: width .25s ease; }
+.sync-toast-track { height: 5px; margin-top: 5px; border-radius: var(--lake-radius-2xs); background: var(--lake-accent-tint); overflow: hidden; }
+.sync-toast-bar { height: 100%; border-radius: var(--lake-radius-2xs); background: var(--lake-accent); transition: width .25s ease; }
 .sync-toast-bar.indeterminate { width: 34%; animation: sync-indeterminate 1.2s ease-in-out infinite; }
 .sync-toast-sub { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .sync-toast-action { margin-top: 4px; align-self: flex-start; }

@@ -143,9 +143,9 @@ export function wrapHtmlPage(title: string, bodyHtml: string): string {
 body { max-width: 820px; margin: 0 auto; padding: 24px 20px; font: 16px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #24292f; }
 img { max-width: 100%; height: auto; }
 pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
-code { background: #f6f8fa; padding: 2px 5px; border-radius: 4px; font-size: 90%; }
+code { background: #f6f8fa; padding: 2px 5px; border-radius: var(--lake-radius-2xs); font-size: 90%; }
 pre code { background: none; padding: 0; }
-blockquote { margin: 0; padding-left: 12px; border-left: 3px solid #d0d7de; color: #57606a; }
+blockquote { margin: 0; padding-left: 12px; border-left: 1px solid var(--lake-border-strong); color: var(--lake-text-2); }
 </style>
 </head>
 <body>

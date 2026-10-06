@@ -38,7 +38,7 @@
   color: var(--lake-tooltip-fg);
   background: var(--lake-tooltip-bg);
   box-shadow: var(--lake-shadow-card);
-  font-size: 11px;
+  font-size: var(--lake-font-size-micro);
   font-weight: 500;
   line-height: 1.25;
   white-space: nowrap;
@@ -65,7 +65,7 @@
    ① 内核 .ne-ui-toolbar-select-value 固定 width:40px 是给箭头预留的 → 按内容收缩，避免标签与字号间距过大；
    ② 字号/颜色：T 17px（= B 图标 ink 12.6px）、H1–H6 与字号数值 15px、颜色对齐 B（--lake-text-2）。
    （内核类定义在 legacy 层，此处 overlay 层覆盖即可，无需 !important。） */
-.selection-toolbar .ne-ui-toolbar-select-value { width: auto; font-size: 17px; color: var(--lake-text-2); }
+.selection-toolbar .ne-ui-toolbar-select-value { width: auto; font-size: var(--lake-font-size-bodyLg); color: var(--lake-text-2); }
 /* 字号数值收小到 15px（26px 按钮里 17px 偏大）；标题已改用图标，不再有 heading 字形。 */
 .selection-toolbar .ne-ui-toolbar-fontsize .ne-ui-toolbar-select-value { font-size: 15px; }
 /* 子菜单（段落样式/字号/图片对齐·样式·批量）：**不再自造弹层样式** —— 直接复用内核固定栏弹层的

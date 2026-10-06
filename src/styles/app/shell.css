@@ -22,14 +22,14 @@
 
 .create-menu strong { font-size: 12px; font-weight: 600; }
 
-.create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); text-overflow: ellipsis; white-space: nowrap; }
 
 /* 261006：左侧外边距并入本处（原 Sidebar 另给 inline marginLeft:8）——值收单一来源。 */
 .inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px 8px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-tint); }
 
 .inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text-1); background: transparent; font-size: 12px; }
 
-.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: 10px; }
+.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: var(--lake-font-size-nano); }
 
 .note-list {flex: 1; min-height: 0;}
 
@@ -369,7 +369,7 @@
 
   .sidebar.sidebar-docked {
     border: 1px solid var(--lake-border-1);
-    border-radius: 12px;
+    border-radius: var(--lake-radius-card);
     box-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 22px var(--lake-shadow-color-2);
   }
 
@@ -705,7 +705,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 .top-menu > button span small {
   color: var(--lake-text-4);
-  font-size: 11px;
+  font-size: var(--lake-font-size-micro);
   white-space: nowrap;
 }
 
@@ -821,7 +821,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   right: 8px;
   left: 8px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--lake-radius-hairline);
   background: var(--lake-accent);
   pointer-events: none;
 }

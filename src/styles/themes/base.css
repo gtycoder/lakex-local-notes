@@ -20,9 +20,12 @@
   --lake-space-huge: 32px;
   --lake-space-giant: 40px;
   /* 圆角 */
+  --lake-radius-hairline: 2px;  /* 微件：单元格 / 表格格子 / 细条（比 xs 更小的一档，261006 补） */
+  --lake-radius-2xs: 4px;       /* 极小控件：chip / 色块 / 日历格（261006 补） */
   --lake-radius-xs: 6px;
   --lake-radius-sm: 8px;
   --lake-radius-md: 10px;
+  --lake-radius-card: 12px;     /* 卡片面（261006 补；craft floor 的卡片圆角区间 12–16） */
   --lake-radius-lg: 14px;
   --lake-radius-xl: 20px;
   --lake-radius-pill: 999px;
@@ -63,12 +66,14 @@
   --lake-z-overlay-menu-raised: 715; /* 对话框内打开的菜单/气泡：须高于 dialog、低于 lightbox（记录详情/字段弹窗里的嵌套下拉） */
   --lake-z-overlay-lightbox: 720;  /* 图片 / 附件预览 */
   /* 字号/字重/行高 */
-  --lake-font-size-micro: 11.5px;
+  --lake-font-size-nano: 10px;  /* 最小一档：表格统计 / 徽标数字（261006 补；11.5 与 11 合并为 11） */
+  --lake-font-size-micro: 11px;
   --lake-font-size-tiny: 12px;
   --lake-font-size-small: 13px;
   --lake-font-size-body: 14px;
   --lake-font-size-bodyLg: 15.5px;
   --lake-font-size-title: 18px;
+  --lake-font-size-display: 20px;  /* 显示档：面板大标题 / 预览标题（261006 补，位于 title 与 h1 之间） */
   --lake-font-size-h1: 24px;
   --lake-font-weight-regular: 400;
   --lake-font-weight-medium: 500;

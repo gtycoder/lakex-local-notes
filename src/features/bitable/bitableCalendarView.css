@@ -48,7 +48,7 @@
 
 .bt-cal-day.is-out { background: var(--lake-bg-block); }
 .bt-cal-day.is-today .bt-cal-day-num { color: var(--lake-accent); font-weight: 600; }
-.bt-cal-day-num { flex: 0 0 auto; font-size: 11px; color: var(--lake-text-3); }
+.bt-cal-day-num { flex: 0 0 auto; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 .bt-cal-events { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: hidden; }
 
 .bt-cal-event {
@@ -60,7 +60,7 @@
   background: var(--lake-accent-tint);
   color: var(--lake-text-1);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--lake-font-size-micro);
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -68,7 +68,7 @@
   white-space: nowrap;
 }
 
-.bt-cal-more { font-size: 10px; color: var(--lake-text-3); }
+.bt-cal-more { font-size: var(--lake-font-size-nano); color: var(--lake-text-3); }
 
 .bt-calendar-empty {
   flex: 1;

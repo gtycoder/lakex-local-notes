@@ -44,14 +44,14 @@
 /* 表面/定位/层序由标准 <Menu>（.ln-overlay-surface + .quick-notes-sort-menu）提供；这里只留内容尺寸。 */
 .quick-notes-sort-menu { display: grid; gap: 1px; min-width: 132px; padding: 4px; }
 
-.quick-notes-sort-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: 5px; color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+.quick-notes-sort-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
 
 .quick-notes-sort-menu button:hover { background: var(--lake-bg-hover); }
 
 .quick-notes-menu-gap { width: 14px; }
 
 /* 多选：勾选框（仿语雀：绿色实心方块 + 白勾） */
-.qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: 5px; color: var(--lake-text-on-accent); background: var(--lake-bg-panel); transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
+.qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); color: var(--lake-text-on-accent); background: var(--lake-bg-panel); transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
 
 .qn-check:hover { border-color: var(--lake-status-ok); }
 
@@ -103,7 +103,7 @@
 .quick-note-index-row.b3-list-item--focus .quick-note-index-actions { opacity: 1; }
 /* 表面/定位/层序由标准 <Menu> 提供；这里只留内容尺寸。 */
 .quick-note-row-menu { display: grid; gap: 1px; min-width: 132px; padding: 4px; }
-.quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: 5px; color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+.quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
 .quick-note-row-menu button:hover:not(:disabled) { background: var(--lake-bg-hover); }
 .quick-note-row-menu button:disabled { opacity: .45; cursor: default; }
 /* 顶部「新建小记」（对齐云端图3：绿色羽毛 + 号） */
@@ -121,7 +121,7 @@
 
 .quick-notes-list .quick-notes-timeline { flex: 1; }
 
-.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
+.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 
 .quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: 12px; }
 
@@ -226,8 +226,8 @@
 .quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent); background: transparent; font-size: 12px; cursor: pointer; }
 .quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
 .quick-note-preview-heading { margin: 2px 0 0; font-size: 15px; }
-.quick-note-preview h1.quick-note-preview-heading { font-size: 20px; }
-.quick-note-preview h2.quick-note-preview-heading { font-size: 17px; }
+.quick-note-preview h1.quick-note-preview-heading { font-size: var(--lake-font-size-display); }
+.quick-note-preview h2.quick-note-preview-heading { font-size: var(--lake-font-size-title); }
 .quick-note-preview-list { margin: 0; padding-left: 22px; }
 .quick-note-preview-list li { margin: 1px 0; }
 .quick-note-preview-task { list-style: none; display: flex; align-items: flex-start; gap: 6px; margin-left: -18px; }
@@ -280,7 +280,7 @@
 
 .quick-note-entry > header { display: flex; align-items: center; gap: 8px; min-height: 20px; }
 
-.quick-note-entry time { font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
+.quick-note-entry time { font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 
 .quick-note-entry p { margin: 9px 0 0; white-space: pre-wrap; line-height: 1.68; }
 
@@ -294,13 +294,13 @@
 
 .quick-note-card-actions button.danger:hover { color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 10%, transparent); }
 
-.quick-note-conflict { padding: 2px 6px; border-radius: var(--lake-radius-pill); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: 10px; }
+.quick-note-conflict { padding: 2px 6px; border-radius: var(--lake-radius-pill); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: var(--lake-font-size-nano); }
 
 .quick-note-entry.conflict { border-color: var(--lake-conflict-border); }
 
 .quick-note-convert-dialog { width: min(390px, 100%); padding: 20px; }
 
-.quick-note-convert-dialog h3 { margin: 0; color: var(--lake-text-1); font-size: 17px; }
+.quick-note-convert-dialog h3 { margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-title); }
 
 .quick-note-convert-dialog p { margin: 8px 0 15px; color: var(--lake-text-3); font-size: 12px; line-height: 1.55; }
 

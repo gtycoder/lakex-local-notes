@@ -6,7 +6,7 @@
 /* .ln-dialog 的布局与表面已并入 src/styles/overlay.css（单一来源，260926）。 */
 /* 右下角拖拽调整大小（默认大尺寸，见具体弹窗） */
 .ln-dialog__resize {position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; opacity: .5; touch-action: none;}
-.ln-dialog__resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; border-radius: 0 0 3px 0; }
+.ln-dialog__resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; border-radius: 0 0 var(--lake-radius-2xs) 0; }
 .ln-dialog__resize:hover { opacity: 1; }
 @media (max-width: 600px) { .ln-dialog__resize { display: none; } }
 
@@ -24,11 +24,11 @@
 .note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--lake-text-1); }
 .note-info-section-title span { flex: 1 1 auto; }
 /* 长路径必然要断行：balance 让两行长度接近，避免第二行只剩 "ke" 这种孤儿尾巴 */
-.note-info-path { margin-top: 6px; font-size: 11px; color: var(--lake-text-3); word-break: break-all; text-wrap: balance; }
+.note-info-path { margin-top: 6px; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); word-break: break-all; text-wrap: balance; }
 .note-info-assets { display: grid; grid-template-columns: repeat(auto-fill, 56px); gap: 6px; margin-top: 8px; max-height: 190px; overflow: auto; align-content: start; }
 .note-info-asset { width: 56px; height: 56px; padding: 0; border: 1px solid var(--lake-border-2); border-radius: 6px; background: var(--lake-bg-block); overflow: hidden; cursor: pointer; display: grid; place-items: center; }
 .note-info-asset-glyph { color: var(--lake-text-3); }
-.note-info-asset-more { align-self: center; font-size: 11px; color: var(--lake-text-3); }
+.note-info-asset-more { align-self: center; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 .note-info-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--lake-text-3); max-height: 200px; overflow: auto; }
 .note-info-history li { align-items: center; gap: 6px; }
 .note-info-history em { margin-left: auto; font-style: normal; opacity: .7; }
@@ -46,7 +46,7 @@
 .note-info-stat { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; background: var(--lake-bg-block); font-size: 12px; color: var(--lake-text-1); }
 .note-info-stat em { font-style: normal; color: var(--lake-text-3); }
 .note-info-history li { display: block; padding: 0; }
-.note-info-history-row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-radius: 4px; background: transparent; font-size: 12px; color: var(--lake-text-3); cursor: pointer; text-align: left; }
+.note-info-history-row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-radius: var(--lake-radius-2xs); background: transparent; font-size: 12px; color: var(--lake-text-3); cursor: pointer; text-align: left; }
 .note-info-history-row:hover, .note-info-history-row.is-active { background: var(--lake-bg-block); }
 .note-info-history-row em { margin-left: auto; font-style: normal; opacity: .7; }
 .note-info-history-hint { color: var(--lake-accent); }
@@ -64,7 +64,7 @@
 .asset-rename-field { display: flex; align-items: center; gap: 6px; }
 .asset-rename-field .b3-text-field { flex: 1 1 auto; min-width: 0; }
 .asset-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--lake-text-3); }
-.asset-rename-hint { margin: 8px 0 0; font-size: 11px; color: var(--lake-text-3); }
+.asset-rename-hint { margin: 8px 0 0; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 .asset-rename-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
 
 /* 窄屏（移动端）：两列折成一列 */

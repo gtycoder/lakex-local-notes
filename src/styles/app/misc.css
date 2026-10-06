@@ -138,7 +138,7 @@
     color: var(--lake-tooltip-fg);
     background: var(--lake-tooltip-bg);
     box-shadow: var(--lake-shadow-card);
-    font-size: 11px;
+    font-size: var(--lake-font-size-micro);
     font-weight: 500;
     line-height: 1.25;
     white-space: nowrap;
@@ -245,7 +245,7 @@
 
 .emoji-picker-grid { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 2px; }
 
-.emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 33px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: 24px; line-height: 1; cursor: pointer; }
+.emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 33px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--lake-font-size-h1); line-height: 1; cursor: pointer; }
 
 .emoji-picker-cell:hover { background: var(--lake-bg-hover); }
 

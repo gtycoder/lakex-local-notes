@@ -49,7 +49,7 @@
 .bt-kanban-caret { transition: transform 0.12s ease; }
 .bt-kanban-caret.is-open { transform: rotate(90deg); }
 .bt-kanban-chip { padding: 1px 8px; border-radius: var(--lake-radius-xs); font-size: 12px; background: var(--lake-bg-hover); color: var(--lake-text-2); }
-.bt-kanban-count { margin-left: auto; font-size: 11px; color: var(--lake-text-3); }
+.bt-kanban-count { margin-left: auto; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 
 .bt-kanban-col-body {
   flex: 1;

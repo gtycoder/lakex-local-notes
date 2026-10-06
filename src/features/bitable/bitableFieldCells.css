@@ -36,7 +36,7 @@
 .bt-progress-thumb { position: absolute; top: 50%; left: var(--bt-progress, 0%); width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-border-1), var(--lake-shadow-knob); pointer-events: none; }
 .bt-progress.is-readonly .bt-progress-thumb { display: none; }
 /* 进度只由「条 + 百分比」表达：数值输入框已删除（用户 260929），轨道是唯一控件。 */
-.bt-progress-value { flex: 0 0 auto; font-size: 11px; color: var(--lake-text-3); }
+.bt-progress-value { flex: 0 0 auto; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 
 /* 关联字段（T02B.2）：单元格 chip / 搜索列表**复用 .bt-option-* 单元格原语**（单一来源），这里只补选择器的行与页脚。 */
 .bt-relation-row { display: flex; align-items: center; gap: 2px; }

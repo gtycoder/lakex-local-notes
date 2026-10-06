@@ -93,7 +93,7 @@
   bottom: 4px;
   width: 9px;
   height: 1px;
-  border-radius: 1px;
+  border-radius: var(--lake-radius-hairline);
   background: var(--lake-text-3);
   transform: rotate(-45deg);
   transform-origin: right center;

@@ -86,7 +86,7 @@
   height: 24px;
   padding: 0 8px;
   background: var(--lake-bg-subtle);
-  font-size: 11px;
+  font-size: var(--lake-font-size-micro);
   color: var(--lake-text-3);
   text-align: right;
   white-space: nowrap;

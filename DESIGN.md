@@ -36,20 +36,48 @@ typography:
     fontSize: "18px"
     fontWeight: 600
     lineHeight: 1.35
+  display:
+    fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
+    fontSize: "20px"
+    fontWeight: 600
+    lineHeight: 1.35
+  h1:
+    fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
+    fontSize: "24px"
+    fontWeight: 600
+    lineHeight: 1.35
   label:
     fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
     fontSize: "13px"
     fontWeight: 500
     lineHeight: 1
+  tiny:
+    fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: 1.5
+  micro:
+    fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
+    fontSize: "11px"
+    fontWeight: 500
+    lineHeight: 1.5
+  nano:
+    fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
+    fontSize: "10px"
+    fontWeight: 500
+    lineHeight: 1.5
   mono:
     fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.5
 rounded:
+  hairline: "2px"
+  "2xs": "4px"
   xs: "6px"
   sm: "8px"
   md: "10px"
+  card: "12px"
   lg: "14px"
   xl: "20px"
   pill: "999px"

@@ -66,7 +66,7 @@
 /* FortuneSheet 的「添加 N 行」<input> 无 class、无自带样式 ⇒ 吃浏览器默认 2px inset 粗边框。 */
 .sheet-editor .luckysheet-bottom-controll-row input {
   border: 1px solid var(--lake-border-1);
-  border-radius: 3px;
+  border-radius: var(--lake-radius-2xs);
   box-sizing: border-box;
   padding: 0 4px;
   outline: none;
@@ -75,7 +75,7 @@
 .sheet-editor .fortune-context-menu input,
 .sheet-editor .luckysheet-cols-menu input {
   border: 1px solid var(--lake-border-1);
-  border-radius: 3px;
+  border-radius: var(--lake-radius-2xs);
   box-sizing: border-box;
   outline: none;
 }
@@ -98,7 +98,7 @@
   padding: 3px;
   border-radius: 6px;
   background: var(--lake-bg-panel);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 2px 8px var(--lake-shadow-color-1);
   transform: translate(-50%, 6px);
 }
 .sheet-cell-image-menu button {
@@ -108,13 +108,13 @@
   width: 26px;
   height: 26px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--lake-radius-2xs);
   background: transparent;
   color: var(--lake-text-1);
   cursor: pointer;
 }
 .sheet-cell-image-menu button:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--lake-bg-hover);
 }
 
 /*

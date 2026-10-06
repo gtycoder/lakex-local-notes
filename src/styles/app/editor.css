@@ -205,7 +205,7 @@ ne-card[data-card-name="file"] .ne-card-file {
 .lake-search-hit-target {
   outline: 2px solid color-mix(in srgb, var(--lake-accent) 72%, transparent);
   outline-offset: 4px;
-  border-radius: 4px;
+  border-radius: var(--lake-radius-2xs);
   animation: lake-search-hit-pulse 900ms ease-in-out 2;
 }
 @keyframes lake-search-hit-pulse { 50% { background: color-mix(in srgb, var(--lake-accent) 10%, transparent); } }

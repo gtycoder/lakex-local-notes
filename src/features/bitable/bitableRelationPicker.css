@@ -34,7 +34,7 @@
 .bt-rel-view-filter .bt-filter-editor { flex: 1 1 auto; }
 .bt-rel-config .bt-rule-row { flex: 1 1 auto; min-width: 0; }
 .bt-rel-config .bt-rule-row.is-view { flex: 0 1 auto; color: var(--lake-text-3); }
-.bt-rel-rule-badge { display: inline-flex; align-items: center; gap: var(--lake-space-xxs); flex: 0 0 auto; padding: 2px var(--lake-space-sm); font-size: 11px; font-weight: 500; color: var(--lake-text-3); background: var(--lake-bg-panel); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); }
+.bt-rel-rule-badge { display: inline-flex; align-items: center; gap: var(--lake-space-xxs); flex: 0 0 auto; padding: 2px var(--lake-space-sm); font-size: var(--lake-font-size-micro); font-weight: 500; color: var(--lake-text-3); background: var(--lake-bg-panel); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); }
 .bt-rel-rule-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 
 /* 主区域：整表；表头吸顶，列宽由内容决定但不超长（超长省略 + title 全文）。 */
