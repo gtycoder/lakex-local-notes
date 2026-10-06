@@ -1,172 +1,172 @@
 {
  "states": {
   "plain:1315:light": {
-   "n": 2354,
-   "hash": "1i6nxw0"
+   "n": 2334,
+   "hash": "z5gaau"
   },
   "plain:760:light": {
-   "n": 2296,
-   "hash": "zwz06j"
+   "n": 2298,
+   "hash": "cn2bz4"
   },
   "plain:1315:dark": {
-   "n": 2354,
-   "hash": "1jtojjo"
+   "n": 2334,
+   "hash": "2oiopu"
   },
   "plain:760:dark": {
-   "n": 2296,
-   "hash": "yornb2"
+   "n": 2298,
+   "hash": "1vkdh67"
   },
   "drag:1315:light": {
-   "n": 2356,
-   "hash": "12c0jl8"
+   "n": 2336,
+   "hash": "4348fu"
   },
   "drag:1315:dark": {
-   "n": 2356,
-   "hash": "1276m39"
+   "n": 2336,
+   "hash": "1y3bdk2"
   },
   "outline-docked:760:light": {
-   "n": 2300,
-   "hash": "43tnf"
+   "n": 2298,
+   "hash": "cn2bz4"
   },
   "hover-row:1315:light": {
-   "n": 2354,
-   "hash": "ekz7ps"
+   "n": 2334,
+   "hash": "15dwbs6"
   },
   "hover-tab:1315:light": {
-   "n": 2354,
-   "hash": "12kbnx4"
+   "n": 2334,
+   "hash": "9p6qwe"
   },
   "hover-rail:760:light": {
-   "n": 2296,
-   "hash": "1h7cg4t"
+   "n": 2298,
+   "hash": "7r6fpi"
   },
   "menus:1315:light": {
-   "n": 2404,
-   "hash": "1d9eunq"
+   "n": 2384,
+   "hash": "an0z"
   },
   "note-info:1315:light": {
-   "n": 2469,
-   "hash": "bn5od9"
+   "n": 2394,
+   "hash": "1kuhlx8"
   },
   "search:1315:light": {
-   "n": 2372,
-   "hash": "3mzra6"
+   "n": 2352,
+   "hash": "vurgzk"
   },
   "settings:1315:light": {
-   "n": 2483,
-   "hash": "f46sl6"
+   "n": 2463,
+   "hash": "1bx8xzs"
   },
   "settings-editor:1315:light": {
-   "n": 2519,
-   "hash": "90m8wg"
+   "n": 2499,
+   "hash": "1le6a5z"
   },
   "settings-data:1315:light": {
-   "n": 2517,
-   "hash": "1tqooey"
+   "n": 2497,
+   "hash": "kxzs9b"
   },
   "settings-trash:1315:light": {
-   "n": 2468,
-   "hash": "1qnp80i"
+   "n": 2448,
+   "hash": "196r5de"
   },
   "resources:1315:light": {
-   "n": 2463,
-   "hash": "1h5eihd"
+   "n": 2372,
+   "hash": "1ct48my"
   },
   "settings-about:1315:light": {
-   "n": 2629,
-   "hash": "f01joe"
+   "n": 2609,
+   "hash": "5rvs2t"
   },
   "search-empty:1315:light": {
-   "n": 2372,
-   "hash": "3mzra6"
+   "n": 2352,
+   "hash": "vurgzk"
   },
   "focus-create:1315:light": {
-   "n": 2360,
-   "hash": "1io3fyr"
+   "n": 2340,
+   "hash": "1rya23s"
   },
   "hover-card:1315:light": {
-   "n": 2354,
-   "hash": "1i6nxw0"
+   "n": 2334,
+   "hash": "z5gaau"
   },
   "outline-open:1315:light": {
-   "n": 2368,
-   "hash": "pgxhxs"
+   "n": 2341,
+   "hash": "vpppu5"
   },
   "quicknotes:1315:light": {
-   "n": 2354,
-   "hash": "1i6nxw0"
+   "n": 2334,
+   "hash": "z5gaau"
   },
   "plain:560:light": {
-   "n": 2205,
-   "hash": "m1jbpt"
+   "n": 2262,
+   "hash": "57gppe"
   },
   "plain:560:dark": {
-   "n": 2205,
-   "hash": "s079zz"
+   "n": 2262,
+   "hash": "5jmb0p"
   },
   "settings:1315:dark": {
-   "n": 2517,
-   "hash": "111su0"
+   "n": 2497,
+   "hash": "ydpfgq"
   },
   "plain:1315:warm": {
-   "n": 2354,
-   "hash": "b7dgne"
+   "n": 2334,
+   "hash": "lrhhtm"
   },
   "plain:560:warm": {
-   "n": 2205,
-   "hash": "kdc9i"
+   "n": 2262,
+   "hash": "m4ss0x"
   },
   "hover-row:1315:warm": {
-   "n": 2354,
-   "hash": "1dslxpf"
+   "n": 2334,
+   "hash": "hsr9gz"
   },
   "menus:1315:warm": {
-   "n": 2404,
-   "hash": "j12dae"
+   "n": 2384,
+   "hash": "2qc4rp"
   },
   "search:1315:warm": {
-   "n": 2372,
-   "hash": "1815v9e"
+   "n": 2352,
+   "hash": "1v5cfx6"
   },
   "settings:1315:warm": {
-   "n": 2517,
-   "hash": "xgq63f"
+   "n": 2497,
+   "hash": "230hew"
   },
   "quicknotes:1315:warm": {
-   "n": 2354,
-   "hash": "b7dgne"
+   "n": 2334,
+   "hash": "lrhhtm"
   },
   "outline-open:1315:warm": {
-   "n": 2368,
-   "hash": "4q8ze4"
+   "n": 2341,
+   "hash": "1srm20z"
   },
   "rm:1315:light": {
-   "n": 2354,
-   "hash": "aolzac"
+   "n": 2334,
+   "hash": "y17dk4"
   },
   "rm:1315:dark": {
-   "n": 2354,
-   "hash": "uup1jw"
+   "n": 2334,
+   "hash": "uvzgca"
   },
   "rm:760:light": {
-   "n": 2296,
-   "hash": "1g4in35"
+   "n": 2298,
+   "hash": "3xo8s8"
   },
   "rm-quicknotes:1315:light": {
-   "n": 2354,
-   "hash": "aolzac"
+   "n": 2334,
+   "hash": "y17dk4"
   },
   "rt:1315:light": {
-   "n": 2354,
-   "hash": "1i6nxw0"
+   "n": 2334,
+   "hash": "z5gaau"
   },
   "board:1315:light": {
-   "n": 2412,
-   "hash": "iqyzcs"
+   "n": 2392,
+   "hash": "osf0x5"
   },
   "board:1315:dark": {
-   "n": 2412,
-   "hash": "1i0nkri"
+   "n": 2392,
+   "hash": "vjqxpn"
   }
  }
 }

@@ -75,32 +75,45 @@ node scripts/css-audit/check-stylesnap.mjs --port 9231 --states "resources:1315:
 **例外**：宽度 560/760 的窄窗态仍**跨实例世代不稳**（内核原生大纲 hover/resize 时序态），照旧只采集入库、
 比对时跳过（`check-stylesnap.mjs` 的 `UNSTABLE`）。单独采窄窗态只为留档，**不能**用来判「没变」。
 
-### 夹具必须钉住（260906 起）
+### 夹具 = **合成夹具**（260906 起；不含任何真实数据）
 
-快照的输入有两份：**代码 + 数据**。数据用的是「开发工作区的副本」；若每次都从
-`~/Library/Application Support/lake-notes-dev` 现拷，那么只要**往回收站删一篇 / 新建一篇**，
-侧栏树就少/多一行 ⇒ **所有态一起漂**（实测少 2 篇 → 每态 −40 个元素，看起来像「CSS 变了」）。
-
-所以夹具**冻结**在一处、反复复用：
+快照的输入有两份：**代码 + 数据**。早期夹具是「开发工作区的副本」，于是**用户每次增删文档都会让所有态一起漂**
+（实测少 2 篇 = 每态 −40 个元素，看着像 CSS 变了），逼着整份重烤。现在夹具是**合成**的：
+由 `scripts/css-audit/make-fixture.mjs` 走应用自己的 IPC 造出来，内容固定、零真实数据，怎么改自己的库都不影响基线。
 
 ```bash
-FX="$HOME/Library/Caches/lake-notes-css-audit/fixture"
-DEV="$HOME/Library/Application Support/lake-notes-dev"
+cd <仓库根>
+FX="$HOME/Library/Caches/lake-notes-css-audit/fixture"   # 冻结位置（缓存目录，不进 git）
+RUN=/tmp/lake-fixture-build
 
-# 首次（或确实想换一份数据基准时）从开发数据冻一份：
-rm -rf "$FX" && mkdir -p "$FX"
-cp -R "$DEV/workspace-default" "$DEV/Local Storage" "$DEV/Preferences" "$FX/"
-/usr/bin/sqlite3 "$DEV/workspace-default/metadata.sqlite3" ".backup $FX/workspace-default/metadata.sqlite3"
-rm -f "$FX/workspace-default/metadata.sqlite3-shm" "$FX/workspace-default/metadata.sqlite3-wal"
-
-# 每次采集：从冻结夹具起实例（不要再拷开发数据）
-RUN=/tmp/lake-snap-run
-rm -rf "$RUN" && cp -R "$FX" "$RUN"
-env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA="$RUN" LAKE_ASSET_PORT=19801 \
+# ① 空用户目录起实例（必须空：生成器要从零造）
+rm -rf "$RUN"
+env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA="$RUN" LAKE_ASSET_PORT=19810 \
   ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9231 .
+
+# ② 造数据（另开一个终端）
+node scripts/css-audit/drive.mjs 9231 scripts/css-audit/make-fixture.mjs
+
+# ③ 收尾：删掉一个孤儿文件以造成「缺失」态 → 结束实例 → 冻结（DB 必须走 .backup，别 cp 热文件）
+rm "$RUN/workspace-default/note-assets/<noteId>/<orphan 文件名>"
+rm -rf "$FX" && mkdir -p "$FX"
+cp -R "$RUN/workspace-default" "$RUN/Local Storage" "$RUN/Preferences" "$FX/"
+/usr/bin/sqlite3 "$RUN/workspace-default/metadata.sqlite3" ".backup $FX/workspace-default/metadata.sqlite3"
+rm -f "$FX/workspace-default/metadata.sqlite3-wal" "$FX/workspace-default/metadata.sqlite3-shm"
+
+# ④ 整份重烤基线（只有**换夹具**时才需要整轮；平时改 CSS 只烤单态）
+RUN2=/tmp/lake-run && rm -rf "$RUN2" && cp -R "$FX" "$RUN2"
+env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA="$RUN2" LAKE_ASSET_PORT=19811 \
+  ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9231 .
+node scripts/css-audit/drive.mjs 9231 scripts/css-audit/stylesnap.mjs base
+node scripts/css-audit/check-stylesnap.mjs --from .css-audit/snap/base.json --write-baseline
 ```
 
-**换了夹具数据 = 换了基准 ⇒ 必须整份重烤一次**（之后又能只烤单态）。
+**合成夹具覆盖**（生成器保证）：富文本文档（标题/列表/代码/表格/图片）· 第二篇 · 表格 · 多维表 · 画板 · 两篇**同名**回收站文档
+（守住「分组 key 不能只用 title」这条回归）· 小记 2 篇 · 四种资源：在正文被引用 / **只被历史引用**（历史保护）/ **纯孤儿**（可删）/ **登记在但文件已删**（缺失）。
+
+**什么时候要重新生成 + 整份重烤**：只有想改基准数据时（改生成器、补覆盖面）。笔记 id 是 uuid ⇒ 每次生成都换一套 id，
+所以重新生成之后必须整份重烤一次；平时改 CSS 只烤单态（见上一节）。
 
 ## 各脚本干什么
 
