@@ -57,7 +57,14 @@
 
 ### Phase 3 · 固化为规则（route 3）
 
-`$impeccable document` → `DESIGN.md` + `.impeccable/design.json`，作为后续工作的规则来源。
+✅ 已完成：`DESIGN.md`（YAML 令牌前置 + 八节规范）+ `.impeccable/design.json`（schemaVersion 2：
+15 个颜色元数据 / 8 个组件快照 / 阴影·动效·断点·控件扩展 / 叙事与 Do·Don't）。
+
+**North Star**：`The Quiet Workbench（安静的工作台）`—— 先成为这一类产品里最好的那一个，
+性格只体现在精确的细节里；界面不属于任何「世界」，只借排版 / 调色板 / 密度 / 一个签名动作。
+
+**注**：`document` 的定性问答工具在本会话不可用（Default 模式），故 North Star 与措辞由
+既有令牌 + 本轮与用户的定稿推断，已在 DESIGN.md 中如实给出可直接修改的实体。
 
 ## 2. 待用户拍板
 

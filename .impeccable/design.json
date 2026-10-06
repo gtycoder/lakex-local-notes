@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-06T03:20:00Z",
+  "title": "Design System: Lake Notes",
+  "extensions": {
+    "colorMeta": {
+      "accent": { "role": "primary", "displayName": "Ink Blue", "canonical": "#3f5fa0", "tonalRamp": ["#1b2740", "#243656", "#2c4674", "#33528c", "#3f5fa0", "#6f88bd", "#9fb1d6", "#d3dcf0"] },
+      "accent-ink": { "role": "primary", "displayName": "Ink Blue Deep", "canonical": "#33497f", "tonalRamp": ["#141d33", "#1c2743", "#243352", "#2b3d62", "#33497f", "#5c6f9e", "#8f9dc0", "#ccd4e6"] },
+      "accent-tint": { "role": "primary", "displayName": "Ink Blue Wash", "canonical": "#eef2fa", "tonalRamp": ["#dfe6f4", "#e3e9f5", "#e7ecf7", "#eaf0f9", "#eef2fa", "#f2f5fb", "#f6f8fc", "#fafbfe"] },
+      "surface-window": { "role": "neutral", "displayName": "Window", "canonical": "#f3f4f6", "tonalRamp": ["#dfe1e4", "#e5e7ea", "#eaebee", "#eff0f3", "#f3f4f6", "#f6f7f8", "#f9fafb", "#fcfcfd"] },
+      "surface-panel": { "role": "neutral", "displayName": "Paper", "canonical": "#ffffff", "tonalRamp": ["#f0f1f3", "#f3f4f5", "#f6f6f8", "#f9fafa", "#ffffff", "#ffffff", "#ffffff", "#ffffff"] },
+      "surface-block": { "role": "neutral", "displayName": "Block", "canonical": "#f4f6f8", "tonalRamp": ["#e0e4e9", "#e5e9ee", "#eaeef2", "#eff2f5", "#f4f6f8", "#f7f8fa", "#fafbfc", "#fdfdfe"] },
+      "surface-sunken": { "role": "neutral", "displayName": "Sunken", "canonical": "#eceef1", "tonalRamp": ["#d5d8dd", "#dbdee3", "#e1e4e8", "#e6e9ec", "#eceef1", "#f1f3f5", "#f6f7f9", "#fbfbfc"] },
+      "ink-1": { "role": "neutral", "displayName": "Ink 1", "canonical": "#1f2329", "tonalRamp": ["#121417", "#171a1f", "#1b1f24", "#1f2329", "#4e5969", "#6f7784", "#8b93a1", "#c9ced6"] },
+      "ink-2": { "role": "neutral", "displayName": "Ink 2", "canonical": "#4e5969", "tonalRamp": ["#1f2329", "#2c333d", "#3b434f", "#4e5969", "#6f7784", "#8b93a1", "#adb3bd", "#d3d7de"] },
+      "ink-3": { "role": "neutral", "displayName": "Ink 3", "canonical": "#6f7784", "tonalRamp": ["#2c3138", "#3d434c", "#4e5969", "#5f6874", "#6f7784", "#8b93a1", "#adb3bd", "#d3d7de"] },
+      "ink-4": { "role": "neutral", "displayName": "Ink 4", "canonical": "#8b93a1", "tonalRamp": ["#3d434c", "#4e5969", "#5f6874", "#6f7784", "#8b93a1", "#aab1bd", "#c6cbd4", "#e6e8ec"] },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#e6e8ec", "tonalRamp": ["#cfd3d9", "#d5d9de", "#dce0e5", "#e1e4e9", "#e6e8ec", "#eef0f3", "#f5f6f8", "#fbfbfc"] },
+      "control-border": { "role": "neutral", "displayName": "Control Border", "canonical": "#d3d7de", "tonalRamp": ["#b8bec7", "#c0c6cf", "#c9ced6", "#ced3da", "#d3d7de", "#e1e4e9", "#eef0f3", "#f8f9fa"] },
+      "status-error": { "role": "tertiary", "displayName": "Error", "canonical": "#b3382f", "tonalRamp": ["#7a221c", "#8a2a24", "#9c312a", "#b3382f", "#c9564d", "#dd8c85", "#eec3bf", "#f8eae9"] },
+      "kernel-green": { "role": "secondary", "displayName": "Kernel Green (点缀)", "canonical": "#00b96b", "tonalRamp": ["#004f2d", "#00753f", "#009a55", "#00b96b", "#3dd08c", "#7fe0b3", "#b8eed5", "#e3f8ee"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "面板标题 / 设置分组标题。" },
+      "body": { "displayName": "Body", "purpose": "界面与编辑器正文。" },
+      "label": { "displayName": "Label", "purpose": "控件标签 / 菜单项 / 列表行。" },
+      "mono": { "displayName": "Mono", "purpose": "数字、代码、编号；数字一律 tabular-nums。" }
+    },
+    "shadows": [
+      { "name": "card", "value": "0 1px 2px rgba(16,24,40,.04), 0 6px 16px -8px rgba(16,24,40,.10)", "purpose": "抬升的小面（卡片、分段控件选中段）。" },
+      { "name": "popover", "value": "0 0 0 1px rgba(16,24,40,.05), 0 10px 28px -10px rgba(16,24,40,.14), 0 24px 56px -24px rgba(16,24,40,.16)", "purpose": "菜单 / 气泡 / 提示条。" },
+      { "name": "dialog", "value": "0 0 0 1px rgba(16,24,40,.06), 0 16px 40px -12px rgba(16,24,40,.16), 0 40px 88px -32px rgba(16,24,40,.20)", "purpose": "对话框。" }
+    ],
+    "motion": [
+      { "name": "instant", "value": "80ms", "purpose": "按压等即时反馈。" },
+      { "name": "fast", "value": "130ms", "purpose": "状态色/底色过渡的默认时长。" },
+      { "name": "panel", "value": "190ms", "purpose": "浮层入场。" },
+      { "name": "ease-standard", "value": "cubic-bezier(.2,.8,.24,1)", "purpose": "默认缓动。" }
+    ],
+    "breakpoints": [
+      { "name": "desktop", "value": "761px", "purpose": "窄窗/宽窗的分界（外壳几何的分水岭）。" }
+    ],
+    "controls": [
+      { "name": "control-height", "value": "27px", "purpose": "标准控件高（按钮/图标按钮/输入/下拉/行/菜单项）。" },
+      { "name": "control-height-sm", "value": "22px", "purpose": "紧凑控件高（图标按钮 compact / 分段内段 / 页签动作）。" },
+      { "name": "disabled-opacity", "value": ".45", "purpose": "禁用统一口径。" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "主操作；一屏最多一个。",
+      "html": "<button class=\"ds-btn ds-btn--primary\">保存</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:5px; height:var(--lake-ctl-h); padding:0 11px; border:1px solid transparent; border-radius:var(--lake-ctl-rad); font-family:inherit; font-size:var(--lake-font-size-small); font-weight:var(--lake-font-weight-medium); line-height:1; cursor:pointer; transition:background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); } .ds-btn--primary { color:var(--lake-text-on-accent); background:var(--lake-accent-ink); } .ds-btn--primary:hover { background:var(--lake-accent-ink-hover); } .ds-btn--primary:active { background:var(--lake-accent-ink-press); } .ds-btn:focus-visible { outline:var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset:var(--lake-focus-ring-offset); } .ds-btn:disabled { opacity:var(--lake-disabled-opacity); cursor:default; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "次要操作；描边控件边。",
+      "html": "<button class=\"ds-btn ds-btn--secondary\">取消</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:5px; height:var(--lake-ctl-h); padding:0 11px; border:1px solid transparent; border-radius:var(--lake-ctl-rad); font-family:inherit; font-size:var(--lake-font-size-small); font-weight:var(--lake-font-weight-medium); line-height:1; cursor:pointer; } .ds-btn--secondary { color:var(--lake-text-1); border-color:var(--lake-ctl-border); } .ds-btn--secondary:hover { background:var(--lake-bg-hover); } .ds-btn--secondary:active { background:var(--lake-bg-press); }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "工具栏 / 行内动作；静息无底，hover 出底。",
+      "html": "<button class=\"ds-iconbtn\" aria-label=\"更多\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\"><circle cx=\"12\" cy=\"5\" r=\"1.6\"/><circle cx=\"12\" cy=\"12\" r=\"1.6\"/><circle cx=\"12\" cy=\"19\" r=\"1.6\"/></svg></button>",
+      "css": ".ds-iconbtn { display:inline-flex; align-items:center; justify-content:center; width:var(--lake-ctl-h); height:var(--lake-ctl-h); padding:0; border:0; border-radius:var(--lake-ctl-rad); color:var(--lake-text-3); background:transparent; cursor:pointer; transition:background-color var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); } .ds-iconbtn:hover { color:var(--lake-text-1); background:var(--lake-bg-hover); } .ds-iconbtn:active { background:var(--lake-bg-press); } .ds-iconbtn:focus-visible { outline:var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset:var(--lake-focus-ring-offset); } .ds-iconbtn:disabled { opacity:var(--lake-disabled-opacity); cursor:default; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "输入框；静息边用控件边，聚焦用主色边 + 柔光环。",
+      "html": "<span class=\"ds-input\"><input class=\"ds-input__field\" placeholder=\"搜索\" /></span>",
+      "css": ".ds-input { display:flex; align-items:center; gap:6px; height:var(--lake-ctl-h); padding:0 9px; border:1px solid var(--lake-ctl-border); border-radius:var(--lake-ctl-rad); background:var(--lake-bg-panel); color:var(--lake-text-1); font-size:var(--lake-font-size-small); transition:border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard); } .ds-input:hover { border-color:var(--lake-border-strong); } .ds-input:focus-within { border-color:var(--lake-accent); box-shadow:0 0 0 2px var(--lake-focus-halo); } .ds-input__field { flex:1 1 auto; min-width:0; border:0; outline:0; background:transparent; color:inherit; font:inherit; } .ds-input__field::placeholder { color:var(--lake-text-4); }"
+    },
+    {
+      "name": "Select Trigger",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "下拉触发器；弹层是自有菜单表面，不用原生 select。",
+      "html": "<button class=\"ds-select\"><span class=\"ds-select__value\">16 px</span><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
+      "css": ".ds-select { display:inline-flex; align-items:center; gap:6px; min-width:140px; height:var(--lake-ctl-h); padding:0 8px; border:1px solid var(--lake-ctl-border); border-radius:var(--lake-ctl-rad); background:var(--lake-bg-panel); color:var(--lake-text-1); font:inherit; font-size:var(--lake-font-size-small); cursor:pointer; } .ds-select:hover { border-color:var(--lake-border-strong); } .ds-select[aria-expanded=\"true\"], .ds-select:focus-visible { outline:0; border-color:var(--lake-accent); box-shadow:0 0 0 2px var(--lake-focus-halo); } .ds-select__value { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; text-align:left; }"
+    },
+    {
+      "name": "List Row",
+      "kind": "nav",
+      "refersTo": "row",
+      "description": "列表/目录行；hover 出底，选中用主色淡底 + 主色字。",
+      "html": "<button class=\"ds-row is-selected\"><span class=\"ds-row__icon\"></span><span class=\"ds-row__title\">个人笔记</span></button>",
+      "css": ".ds-row { display:flex; align-items:center; gap:5px; min-height:var(--lake-ctl-h); padding:0 6px; border:0; border-radius:var(--lake-ctl-rad); color:var(--lake-text-1); background:transparent; font:inherit; font-size:var(--lake-font-size-small); text-align:left; cursor:pointer; } .ds-row:hover { background:var(--lake-bg-hover); } .ds-row.is-selected { color:var(--lake-accent-text); background:var(--lake-accent-tint); font-weight:var(--lake-font-weight-semibold); } .ds-row:disabled { opacity:var(--lake-disabled-opacity); cursor:default; } .ds-row__title { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; }"
+    },
+    {
+      "name": "Menu Surface",
+      "kind": "card",
+      "refersTo": "menu-surface",
+      "description": "菜单/气泡表面；实心面板 + 1px 细线 + 浮层阴影。",
+      "html": "<div class=\"ds-menu\"><button class=\"ds-menu__item is-selected\"><span class=\"ds-menu__check\">✓</span><span class=\"ds-menu__label\">16 px</span></button><button class=\"ds-menu__item\"><span class=\"ds-menu__check\"></span><span class=\"ds-menu__label\">19 px</span></button></div>",
+      "css": ".ds-menu { display:flex; flex-direction:column; min-width:206px; padding:var(--lake-space-sm); border:1px solid var(--lake-border-1); border-radius:var(--lake-radius-md); background:var(--lake-bg-panel); box-shadow:var(--lake-shadow-popover); color:var(--lake-text-1); } .ds-menu__item { display:flex; width:100%; align-items:center; gap:8px; min-height:var(--lake-ctl-h); padding:0 8px; border:0; border-radius:var(--lake-ctl-rad-sm); color:var(--lake-text-1); background:transparent; font:inherit; font-size:var(--lake-font-size-small); text-align:left; cursor:pointer; } .ds-menu__item:hover, .ds-menu__item.is-selected { color:var(--lake-accent-text); background:var(--lake-accent-tint); font-weight:var(--lake-font-weight-semibold); } .ds-menu__check { flex:0 0 auto; width:16px; color:var(--lake-accent); } .ds-menu__label { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; }"
+    },
+    {
+      "name": "Switch",
+      "kind": "input",
+      "refersTo": "control-height-sm",
+      "description": "开/关；选中主色实心，旋钮为白色圆形。",
+      "html": "<button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\"><span class=\"ds-switch__knob\"></span></button>",
+      "css": ".ds-switch { position:relative; display:inline-flex; align-items:center; width:32px; height:19px; padding:0; border:1px solid var(--lake-ctl-border); border-radius:var(--lake-radius-pill); background:transparent; cursor:pointer; transition:background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); } .ds-switch__knob { position:absolute; left:1px; width:15px; height:15px; border-radius:var(--lake-radius-pill); background:var(--lake-bg-raised); box-shadow:var(--lake-shadow-knob); transition:transform var(--lake-motion-fast) var(--lake-ease-standard); } .ds-switch[aria-checked=\"true\"] { background:var(--lake-accent); border-color:var(--lake-accent); } .ds-switch[aria-checked=\"true\"] .ds-switch__knob { transform:translateX(13px); } .ds-switch:focus-visible { outline:var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset:var(--lake-focus-ring-offset); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Workbench（安静的工作台）",
+    "overview": "这是一个效率工具，不是作品展示：用户的成功是「把笔记写完、把数据找出来」，不是「被界面打动」。所以这套系统的第一原则是先成为这一类产品里最好的那一个——对齐、间距、字阶、状态都做到位，然后才谈性格。性格体现在精确的细节里：一条看得见的输入框边、一个不多不少的主色、一套只说一次的状态语言。界面不属于任何「世界」。它不借用档案柜、印刷品、仪表盘或任何器物的外形；它借的只是排版、调色板、密度与一个签名动作。背景是表面，不是画布；装饰只有一条纪律：能删就删。",
+    "keyCharacteristics": [
+      "中性为主，主色是锚点不是装饰——只出现在焦点 / 选中 / 主操作 / 链接上。",
+      "三级表面（窗底 < 面板 < 抬升），用表面价值与一条细线表达层级，不堆阴影。",
+      "一套状态：同一交互语义全仓只有一个外观；禁用只有一种口径，焦点只有一种环。",
+      "等宽只用于数字与代码；中文正文用 MiSans，数字用 tabular-nums 避免跳动。",
+      "布局冻结：区域与构图不随「设计」变化；这套系统只改主题类的观感。"
+    ],
+    "rules": [
+      { "name": "The One Anchor Rule", "body": "一屏之内，主色只标记「当前在哪 / 能点什么」。它不铺底、不做装饰、不用来表达「重要」。", "section": "colors" },
+      { "name": "The Printed Ink Rule", "body": "颜色字面量只允许出现在 src/styles/themes/*。其他任何 CSS 里出现 hex/rgb 都算缺陷。", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "一切会变化的数字（计数、字数、进度、表格数值）必须 font-variant-numeric: tabular-nums。", "section": "typography" },
+      { "name": "The One-Step Rule", "body": "相邻层级的字重差至少一档（400↔500↔600），不要靠 1px 字号差表达层级。", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "静息态是平的。阴影只回答「这一层比下一层高多少」；没有偏移与模糊的光圈是装饰。", "section": "elevation" },
+      { "name": "The One Declaration Rule", "body": "一个面要么靠 1px 边，要么靠阴影，不要「细边 + 大软阴影」同时上。", "section": "elevation" }
+    ],
+    "dos": [
+      "Do 颜色只走 --lake-* 令牌；令牌的唯一定义处是 src/styles/themes/*。",
+      "Do 同一种交互语义复用 kit 的 ln-* 原语；需要新外观时改原语，不在调用点另写一套。",
+      "Do 用表面价值（三级）表达层级，用 1px 边或阴影二选一。",
+      "Do 让主色只出现在焦点 / 选中 / 主操作 / 链接上。",
+      "Do 交互状态六态齐全：default / hover / active / focus-visible / selected / disabled。"
+    ],
+    "donts": [
+      "Don't 在组件里写内联 style={{…}} 表达静态视觉（动态几何例外：实测坐标、数据驱动颜色）。",
+      "Don't 新增 !important（全仓上限 10，每条都要写明理由）。",
+      "Don't 用单侧 >1px 色条、渐变文字、玻璃拟态、为装饰而加的动效。",
+      "Don't 用 emoji 或系统字形充当图标；图标只有 lucide 一族、描边 1.75。",
+      "Don't 重新排列外壳区域——布局是冻结的。"
+    ]
+  }
+}
