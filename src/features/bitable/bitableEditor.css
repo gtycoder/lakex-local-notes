@@ -298,7 +298,25 @@
 .bt-form-error { color: var(--lake-status-error); font-size: 12px; }
 
 .bt-dialog { width: 420px; max-width: 90%; max-height: 86vh; }
-.bt-input { width: 100%; height: 30px; border: 1px solid var(--lake-border-1); border-radius: 6px; background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: 13px; padding: 0 8px; box-sizing: border-box; }
+/* 261006 Phase 2.2：字段类（输入 / 数字 / 多行）并入共用原语口径 ——
+ * 静息边用「控件边」而不是发丝分隔线（否则浅底上几乎看不见）、圆角走令牌、并补 hover/focus。
+ * 高度保持 30：多维表的字段编辑是更宽松的表单场景，不并入通用控件高 27。 */
+.bt-input {
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--lake-ctl-border);
+  border-radius: var(--lake-ctl-rad-sm);
+  background: var(--lake-bg-panel);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  transition: border-color var(--lake-motion-fast) var(--lake-ease-standard),
+    box-shadow var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.bt-input:hover { border-color: var(--lake-accent); }
+.bt-input:focus { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); outline: 0; }
 /* 占位文案统一走 --lake-text-4（与 kit.css/overlay.css 的 placeholder 同一口径；浏览器默认灰不是令牌）。
    选项编辑的新行用它显示默认名「选项 N」（用户 260930：不要在输入框里预填再全选 ⇒ 那块蓝色底色）。 */
 .bt-input::placeholder { color: var(--lake-text-4); }
