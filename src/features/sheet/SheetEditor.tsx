@@ -24,6 +24,7 @@ import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Workbook, type WorkbookInstance } from "@fortune-sheet/react";
 import "@fortune-sheet/react/dist/index.css";
 import "./sheetEditor.css";
+import { readSheetView, writeSheetView } from "./sheetViewStore";
 import { emptySheetBody, parseSheetBody, sheetImageDiskSrc, sheetImageSrc, sheetsToBody, type SheetWorksheet } from "../../core/sheetDoc.js";
 import { sheetRangeRect, sheetZoom } from "../../core/sheetGeometry.js";
 import { uploadLakeResource } from "../editor/resourceUpload";
@@ -341,12 +342,26 @@ function withPromotedImageSrc(sheets: SheetWorksheet[], promoted: Map<string, st
   });
 }
 
-/** 解析初始 sheets；空/非法 → 一张空表（不抛错，避免坏数据打不开）。缺省加上默认缩放。 */
+/**
+ * 解析初始 sheets；空/非法 → 一张空表（不抛错，避免坏数据打不开）。
+ * **缩放 / 当前工作表走本机记忆**（`sheetViewStore`，用户 261006）：只改展示，不进正文、不进 S3。
+ */
 function initialSheets(content: string, noteId: string): SheetWorksheet[] {
   const parsed = parseSheetBody(content);
   const sheets = parsed ? parsed.sheets : (parseSheetBody(emptySheetBody())?.sheets ?? []);
+  const view = readSheetView(noteId);
+  const remembered = view.activeSheetId;
+  const hasRemembered = remembered != null && sheets.some((sheet) => sheet.id === remembered);
   return sheets
-    .map((sheet) => withSheetDefaults(sheet.zoomRatio == null ? { ...sheet, zoomRatio: DEFAULT_SHEET_ZOOM } : sheet))
+    .map((sheet) => {
+      const id = typeof sheet.id === "string" ? sheet.id : "";
+      const local = id ? view.zooms[id] : undefined;
+      const stored = Number(sheet.zoomRatio);
+      const zoomRatio = local ?? (Number.isFinite(stored) ? stored : DEFAULT_SHEET_ZOOM);
+      // 恢复上次停留的工作表（内核初始化认 status===1）；没记忆就保持正文/新建里的标记。
+      const status = hasRemembered && id ? { status: id === remembered ? 1 : 0 } : {};
+      return withSheetDefaults({ ...sheet, zoomRatio, ...status });
+    })
     .map((sheet) => withRenderableImageSrc(sheet, noteId));
 }
 
@@ -364,6 +379,19 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
   changeRef.current = onChange;
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
+  /** 记下「当前工作表 + 缩放」到本机（用户 261006）：只改展示，不进正文、不进 S3。 */
+  const viewSigRef = useRef("");
+  const rememberSheetView = useCallback(() => {
+    const current = activeSheet(workbookRef.current, latestRef.current);
+    if (!current) return;
+    const id = typeof current.id === "string" ? current.id : "";
+    if (!id) return;
+    const zoom = Number((current as { zoomRatio?: unknown }).zoomRatio);
+    const sig = id + ":" + (Number.isFinite(zoom) ? zoom : "");
+    if (sig === viewSigRef.current) return;
+    viewSigRef.current = sig;
+    writeSheetView(noteId, { activeSheetId: id, zooms: Number.isFinite(zoom) ? { [id]: zoom } : undefined });
+  }, [noteId]);
   // keep-alive：首次可见前不挂载（canvas 在隐藏态初始化会量成 0）。
   const [everVisible, setEverVisible] = useState(visible);
   /**
@@ -935,6 +963,12 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
       syncCellImageGeometry();
       applyFrozenOffsets();
       refreshCellImageMenu();
+      // 恢复上次停留的工作表（内核初始化只认 status，多表下不可靠 ⇒ 显式 activateSheet）。
+      const remembered = readSheetView(noteId).activeSheetId;
+      const current = activeSheet(workbookRef.current, latestRef.current);
+      const currentId = typeof current?.id === "string" ? current.id : "";
+      if (remembered && currentId && currentId !== remembered) workbookRef.current?.activateSheet?.({ id: remembered });
+      rememberSheetView();
     });
     const onScroll = () => { applyFrozenOffsets(); refreshCellImageMenu(); };
     // 宿主尺寸变化（目录栏固定/悬浮切换等）会让图片位置变 ⇒ 重贴弹窗
@@ -946,8 +980,10 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
       host?.removeEventListener("scroll", onScroll, { capture: true });
       window.removeEventListener("resize", onResizeMenu);
     };
-  }, [everVisible, syncCellImageGeometry, applyFrozenOffsets, refreshCellImageMenu]);
+  }, [everVisible, syncCellImageGeometry, applyFrozenOffsets, refreshCellImageMenu, rememberSheetView, noteId]);
 
+  /** 当前可持久化正文（与 flush 同口径：资产 URL → filename）。 */
+  const bodyOf = (next: SheetWorksheet[]) => sheetsToBody(withPromotedImageSrc(next, promotedRef.current));
   const flush = () => {
     // 提升未落地前不保存：否则会把 base64 写进 sheets/*.sheet.json（正文膨胀 + 不走资产管线）。
     // 提升落地会再触发一次变更 → 那时才真正落盘（正文里是资产 URL，序列化时换成 filename）。
@@ -955,13 +991,16 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
       scheduleSave();
       return;
     }
-    const json = sheetsToBody(withPromotedImageSrc(latestRef.current, promotedRef.current));
+    const json = bodyOf(latestRef.current);
     if (json === lastSerializedRef.current) return; // 无实际变化（如仅选区变化）：不标脏
     lastSerializedRef.current = json;
     changeRef.current(json);
   };
   const scheduleSave = () => {
     if (readOnlyRef.current) return;
+    // 只有正文真的变了才立即标脏 / 排保存（用户 261006 审计）：点选单元格 / 滚动这类 onChange 不改
+    // 持久化正文，此前会把文档推成「待保存」并触发一次无谓的 saveNote；现在先比正文再决定。
+    if (bodyOf(latestRef.current) === lastSerializedRef.current) return;
     onDirtyRef.current?.(); // 立即标脏（不等 800ms 内部防抖）
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => { timerRef.current = null; flush(); }, AUTOSAVE_DEBOUNCE_MS);
@@ -1027,6 +1066,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
     // 直接改 config），漏一次几何就永久停在旧值。两处都挂，rAF 内合并，值没变就早退。
     scheduleGeometrySync();
     scheduleSave();
+    rememberSheetView();
     // 有内联图片就立刻提升（不等 800ms 防抖，尽量在第一次保存前完成）；只读态不碰资源
     if (!readOnlyRef.current) promoteInlineImages(latestRef.current);
   };

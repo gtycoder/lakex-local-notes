@@ -39,3 +39,26 @@
 .board-editor .lakex-drawnix-core .theme-toolbar {
   bottom: calc(8px + 26px + 8px);
 }
+/*
+ * 左侧竖排创建栏：三类工具项的图标中轴对齐（261006 用户报「画板的工具栏错位了」）。
+ * 真实实例实测图标圆心最多相差 15px，三个根因叠在一起：
+ *   · 内核原生 label.tool-icon 里那个隐藏 <input type="radio">（opacity:0）仍占 15px 流内宽度，
+ *     把 36px 的字形盒整体推到行右缘（圆心 57 / 行中心 49.5）；
+ *   · 内核原生 button.tool-icon 只有字形盒、天然居中（圆心 50）；
+ *   · lakex 注入的 36px 触发器（素材库 / AI / 导出）贴行左缘没居中（圆心 42.5）。
+ * 统一口径：隐藏 radio 移出文档流（仍可聚焦、点击 label 照常切换）＋ 注入触发器水平居中；
+ * 原生 button 已居中无需处理。三类的字形盒都是 36px，因此最终圆心一致。
+ * 基底规则在依赖包 lakex-drawnix-react-board 里（不手改内核），故此处按 AGENTS §3.14 的「内核例外」覆盖。
+ */
+.board-editor .lakex-drawnix-core .draw-toolbar .tool-icon {
+  position: relative;
+}
+.board-editor .lakex-drawnix-core .draw-toolbar .tool-icon > input[type="radio"] {
+  position: absolute;
+  margin: 0;
+  pointer-events: none;
+}
+.board-editor .lakex-drawnix-core .draw-toolbar
+  :is(.lakex-material-trigger, .lakex-ai-board-trigger, .lakex-drawnix-export__trigger) {
+  margin-inline: auto;
+}

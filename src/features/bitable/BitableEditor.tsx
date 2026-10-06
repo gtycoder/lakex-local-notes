@@ -89,11 +89,38 @@ function RowExpandIcon({ size = 15 }: { size?: number }) {
   );
 }
 
-function initialDoc(content: string): BitableDoc {
+/**
+ * 设备本地导航（用户 261006 选 C）：切数据表 / 切视图只写这里（localStorage，按 noteId），**不进正文、不同步**。
+ * 正文侧由 `useBitableSession` 恒写默认导航（见 serializeBody）⇒ 换台设备各记各的、也不会把导航带上 S3。
+ */
+const NAV_KEY_PREFIX = "lake-notes-v3.bitable-nav.";
+interface BitableNav { tableId?: string; viewIds?: Record<string, string>; }
+function readBitableNav(noteId: string): BitableNav {
+  try {
+    const raw = localStorage.getItem(NAV_KEY_PREFIX + noteId);
+    const parsed = raw ? (JSON.parse(raw) as BitableNav) : null;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch { return {}; }
+}
+function applyBitableNav(doc: BitableDoc, nav: BitableNav): BitableDoc {
+  const tables = doc.tables.map((table) => {
+    const viewId = nav.viewIds?.[table.id];
+    return viewId && table.views.some((view) => view.id === viewId) ? { ...table, activeViewId: viewId } : table;
+  });
+  const wanted = nav.tableId;
+  const activeTableId = wanted && tables.some((t) => t.id === wanted) ? wanted
+    : tables.some((t) => t.id === doc.activeTableId) ? doc.activeTableId
+    : tables[0]?.id ?? "";
+  return { ...doc, tables, activeTableId };
+}
+function initialDoc(content: string, navNoteId: string | null): BitableDoc {
   const parsed = parseBitableBody(content);
-  if (parsed) return parsed;
-  const table = createDefaultBitableTable();
-  return { kind: BITABLE_DOC_KIND, version: BITABLE_DOC_VERSION, tables: [table], activeTableId: table.id };
+  if (!parsed) {
+    const table = createDefaultBitableTable();
+    return { kind: BITABLE_DOC_KIND, version: BITABLE_DOC_VERSION, tables: [table], activeTableId: table.id };
+  }
+  // 只对「真实编辑器」应用设备本地导航；历史快照预览（chrome=false）保持快照本身。
+  return navNoteId ? applyBitableNav(parsed, readBitableNav(navNoteId)) : parsed;
 }
 
 function moveItem<T>(items: T[], fromId: string, toId: string, getId: (item: T) => string): T[] {
@@ -146,8 +173,17 @@ export interface BitableEditorProps {
 
 export function BitableEditor({ noteId, content, visible, readOnly, locked = false, onChange, onPreserveDraft, onDirty, onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
   const { doc, docRef, updateDoc, navigateDoc, beginGesture, endGesture, undoEdit, redoEdit } = useBitableSession(
-    () => initialDoc(content), { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
+    () => initialDoc(content, chrome ? noteId : null), { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
   );
+  // C（261006）：导航变化只落 localStorage（不进正文）。`navSig` 只在切表/切视图时变，正文编辑不会触发。
+  const navSig = doc.activeTableId + "|" + doc.tables.map((table) => `${table.id}:${table.activeViewId}`).join(",");
+  useEffect(() => {
+    if (!chrome) return; // 历史快照预览不写，免得把真实文档的导航覆盖成快照里的
+    const viewIds: Record<string, string> = {};
+    for (const table of doc.tables) viewIds[table.id] = table.activeViewId;
+    writeLocalStorage(NAV_KEY_PREFIX + noteId, JSON.stringify({ tableId: doc.activeTableId, viewIds }));
+  }, [chrome, noteId, navSig]);
+
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
   const visibleRef = useRef(visible);

@@ -50,12 +50,17 @@ describe("sheetDoc v2（FortuneSheet 正文格式 + 图片资产化）", () => {
         config: { rowlen: { "0": 30 } },
         data: [[null, { v: "x", m: "x" }], [null, null]],
         luckysheet_select_save: [{ row: [0], column: [1] }],
+        status: 1,
+        zoomRatio: 1.1,
       } as never,
     ]);
     const doc = parseSheetBody(body);
     expect(doc).not.toBeNull();
     const sheet = doc?.sheets[0] as Record<string, unknown>;
     expect(sheet.luckysheet_select_save).toBeUndefined();
+    // 261006：当前工作表 / 缩放是本机展示状态，不进正文（走 sheetViewStore）
+    expect(sheet.status).toBeUndefined();
+    expect(sheet.zoomRatio).toBeUndefined();
     expect(sheet.data).toBeUndefined();
     expect(sheet.celldata).toEqual([{ r: 0, c: 1, v: { v: "x", m: "x" } }]);
     expect(sheet.config).toEqual({ rowlen: { "0": 30 } });

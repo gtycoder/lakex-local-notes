@@ -198,6 +198,13 @@ export function parseSheetBody(content: string | null | undefined): SheetDoc | n
 /** FortuneSheet 运行时字段（选区等）——不持久化：属 L3 本机派生，不入正文。 */
 const TRANSIENT_SHEET_KEYS = ["luckysheet_select_save", "luckysheet_selection_range", "scrollLeft", "scrollTop"] as const;
 
+/**
+ * 本机视图字段（用户 261006）：**当前工作表**（`status`）与**缩放**（`zoomRatio`）只改展示、且与设备/窗口相关
+ * ⇒ 落 `sheetViewStore`（localStorage），不进正文、不进 S3。旧正文里可能有它们：读时照常读、保存时剔除。
+ * （与 TRANSIENT 分开：这两个是「本机持久化的展示状态」，不是每次 onChange 都会变的运行时字段。）
+ */
+const LOCAL_SHEET_KEYS = ["status", "zoomRatio"] as const;
+
 /** dense `data` 矩阵 → sparse `celldata`（只保留非空格子）。 */
 function denseToCelldata(data: Array<Array<SheetCellValue | null>>): SheetCell[] {
   const out: SheetCell[] = [];
@@ -224,6 +231,7 @@ export function sanitizeSheetWorksheet(sheet: SheetWorksheet): SheetWorksheet {
   const source = sheet as SheetWorksheet & { data?: Array<Array<SheetCellValue | null>> };
   const rest = { ...source } as Record<string, unknown>;
   for (const key of TRANSIENT_SHEET_KEYS) delete rest[key];
+  for (const key of LOCAL_SHEET_KEYS) delete rest[key];
   const celldata = Array.isArray(source.data) ? denseToCelldata(source.data) : (source.celldata ?? []);
   delete rest.data;
   if (Array.isArray(rest.images)) {

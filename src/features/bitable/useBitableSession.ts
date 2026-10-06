@@ -5,6 +5,17 @@ import { createSnapshotHistory } from "../../core/bitableHistory";
 const AUTOSAVE_DEBOUNCE_MS = 800;
 type Update = (doc: BitableDoc) => BitableDoc;
 
+/**
+ * 正文序列化口径（261006 用户选 C）：**导航字段不参与** —— `activeTableId` 与每张表的 `activeViewId`
+ * 一律写「第一张表 / 第一个视图」。导航现在是**设备本地 UI 状态**（`BitableEditor` 存 localStorage），
+ * 所以切换数据表 / 视图不会改动正文 ⇒ 不落盘、不标脏、不进 S3；正文里的导航字段恒为默认值（惰性、不再是真相）。
+ * 正文格式与移动端 / 搜索 / 导出共用同一份 core 序列化，未改字段结构（保持 `parseBitableBody` 可读旧数据）。
+ */
+function serializeBody(tables: BitableTable[]): string {
+  const canonical = tables.map((table) => ({ ...table, activeViewId: table.views[0]?.id ?? table.activeViewId }));
+  return bitablesToBody(canonical, canonical[0]?.id);
+}
+
 /** 一份文档的写入/导航/历史与发布。只读禁止新编辑，之前的输入另交草稿，不写回正文。 */
 export function useBitableSession(initialDoc: () => BitableDoc, options: {
   readOnly: boolean;
@@ -21,7 +32,7 @@ export function useBitableSession(initialDoc: () => BitableDoc, options: {
   latest.current = options;
   const [history] = useState(() => createSnapshotHistory<BitableTable[]>(100));
   const lastSerializedRef = useRef<string | null>(null);
-  if (lastSerializedRef.current === null) lastSerializedRef.current = bitablesToBody(doc.tables, doc.activeTableId);
+  if (lastSerializedRef.current === null) lastSerializedRef.current = serializeBody(doc.tables);
   const mountedRef = useRef(true);
   const pendingRef = useRef(false);
   const pendingEditRef = useRef(false);
@@ -51,7 +62,7 @@ export function useBitableSession(initialDoc: () => BitableDoc, options: {
   const flushNow = useCallback(() => {
     if (!pendingRef.current) return;
     const current = lastEditableRef.current;
-    const json = bitablesToBody(current.tables, current.activeTableId);
+    const json = serializeBody(current.tables);
     if (json === lastSerializedRef.current) {
       pendingRef.current = false;
       pendingEditRef.current = false;
@@ -86,7 +97,7 @@ export function useBitableSession(initialDoc: () => BitableDoc, options: {
   const captureContent = useCallback((): string | null => {
     if (latest.current.readOnly) return null;
     const current = lastEditableRef.current;
-    return bitablesToBody(current.tables, current.activeTableId);
+    return serializeBody(current.tables);
   }, []);
   useEffect(() => {
     latest.current.onEditorCapture?.(captureContent);

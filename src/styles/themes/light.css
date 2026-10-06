@@ -46,7 +46,6 @@
   /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；未选中星走 --lake-border-strong。 */
   --lake-rating-star: #ecaa06;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(63,95,160,.16);   /* 与 accent 同源 */
   --lake-scrim: rgba(24,27,32,.28);
   --lake-scrollbar-thumb: rgba(28,31,36,.22);
   --lake-scrollbar-thumb-hover: #8c94a0;

@@ -819,10 +819,23 @@ function ExpandPanel({ anchor, head, body, remember, onClose }: { anchor: HTMLEl
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [size, setSize] = useState(() => loadExpandSize(remember) ?? { w: 400, h: 260 });
+  // 定位读**当前**尺寸，但不能把它写进 effect 依赖（拖动缩放会改 size，却不应触发重新定位）。
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
   useLayoutEffect(() => {
-    const r = anchor.getBoundingClientRect();
-    const w = Math.min(400, Math.max(240, window.innerWidth - 24));
-    setPos(placePopoverPosition(r, { width: window.innerWidth, height: window.innerHeight }, { width: w, height: size.h }, 4, { margin: 8 }));
+    const fit = () => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      // 用**真实渲染尺寸**定位，并把尺寸本身收进视口（261006 用户：「单元格展开需要适配边界」）。
+      // 旧实现横向只按占位宽 400 夹取，而实际宽度是「记住的尺寸」⇒ 尺寸越宽越往右溢出视口。
+      const width = Math.max(240, Math.min(sizeRef.current.w, viewport.width - 16));
+      const height = Math.max(160, Math.min(sizeRef.current.h, viewport.height - 16));
+      if (width !== sizeRef.current.w || height !== sizeRef.current.h) setSize({ w: width, h: height });
+      setPos(placePopoverPosition(anchor.getBoundingClientRect(), viewport, { width, height }, 4, { margin: 8 }));
+    };
+    fit();
+    // 窗口尺寸变化会改变可用边界 ⇒ 重新适配（与 usePopoverPosition 的 resize 同口径）。
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
     // 只在**打开 / 换锚点**时定位一次：拖动缩放（size 变化）不得重算，否则会把用户拖到的位置弹回锚点默认位（261004 用户实测修复；
     // 该缺陷在 HEAD 的文本格展开浮窗就存在——定位依赖里带了 size.h——抽共用壳时被原样继承到 Markdown / AI 面板）。
   }, [anchor]);
@@ -876,19 +889,24 @@ function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextE
   );
 }
 
-/** Markdown / AI 字段展开：**编辑 / 预览** 双模（对齐钉钉）；只读默认预览、可写默认编辑。 */
-function MarkdownExpandPopover({ anchor, title, value, readOnly, onChange, onRegenerate, onClose }: {
+/**
+ * Markdown / AI 字段展开：**编辑 / 预览** 双模（对齐钉钉）；只读默认预览。
+ * 可写时：**AI 字段默认预览**（用户 261006：AI 结果先看效果，要改再点「编辑」）、Markdown 字段默认编辑。
+ */
+function MarkdownExpandPopover({ anchor, title, value, readOnly, isAi, onChange, onRegenerate, onClose }: {
   anchor: HTMLElement;
   /** 面板标题（字段名）。 */
   title: string;
   value: string;
   readOnly: boolean;
+  /** AI 字段（默认进预览）；Markdown 字段默认进编辑。 */
+  isAi: boolean;
   onChange: (value: string) => void;
   /** AI 字段：头部的「重新生成」（Markdown 字段不传）。 */
   onRegenerate?: () => void;
   onClose: () => void;
 }) {
-  const [mode, setMode] = useState<"edit" | "preview">(readOnly ? "preview" : "edit");
+  const [mode, setMode] = useState<"edit" | "preview">(() => (readOnly || isAi ? "preview" : "edit"));
   return (
     <ExpandPanel anchor={anchor} remember="md" onClose={onClose}
       head={(
@@ -952,7 +970,7 @@ export function MarkdownCell({ field, value, readOnly, onChange, onRegenerate }:
       </button>
       {anchor && (
         <MarkdownExpandPopover anchor={anchor} title={field.name} value={text} readOnly={readOnly}
-          onChange={(next) => onChange(next)} onRegenerate={onRegenerate} onClose={() => setAnchor(null)} />
+          isAi={field.type === "ai"} onChange={(next) => onChange(next)} onRegenerate={onRegenerate} onClose={() => setAnchor(null)} />
       )}
     </div>
   );

@@ -140,4 +140,36 @@ describe("Markdown 单元格与展开浮窗（261004）", () => {
     expect(panel.style.width).toBe("400px");
     expect(panel.style.height).toBe("260px");
   });
+
+  it("展开浮窗适配窗口边界：锚点贴右/下缘时不越出视口（261006 修复）", () => {
+    // jsdom 视口 1024×768；记住的宽度 900 —— 旧实现横向只按占位宽 400 夹取，会按左侧 616 定位、
+    // 实际 900 宽渲染 ⇒ 右缘 1516 越界；修复后必须用真实尺寸夹取，面板完整落在视口内。
+    localStorage.setItem("lake-notes-v3.bitable-expand-size", JSON.stringify({ md: { w: 900, h: 300 } }));
+    render("abc");
+    const button = host.querySelector<HTMLButtonElement>(".bt-expand-btn")!;
+    button.getBoundingClientRect = () => ({ x: 820, y: 100, top: 100, bottom: 140, left: 820, right: 900, width: 80, height: 40, toJSON: () => ({}) } as unknown as DOMRect);
+    openPanel();
+    const panel = document.querySelector<HTMLElement>(".bt-text-expand")!;
+    const left = Number.parseFloat(panel.style.left);
+    const top = Number.parseFloat(panel.style.top);
+    const width = Number.parseFloat(panel.style.width);
+    const height = Number.parseFloat(panel.style.height);
+    expect(width).toBe(900);
+    expect(left + width).toBeLessThanOrEqual(window.innerWidth - 8);
+    expect(top + height).toBeLessThanOrEqual(window.innerHeight - 8);
+  });
+
+  it("AI 字段展开默认进「预览」，Markdown 字段默认进「编辑」（261006）", () => {
+    // AI 字段：直接进预览（先看生成结果），点「编辑」才出 textarea
+    const aiField: BitableField = { id: "f-ai", name: "复盘", type: "ai" };
+    act(() => {
+      root.render(createElement(MarkdownCell, { field: aiField, value: SOURCE, readOnly: false, onChange: vi.fn() }));
+    });
+    openPanel();
+    expect(document.querySelector(".bt-md-expand-editor")).toBeNull();
+    expect(document.querySelector(".bt-md-expand-preview h1")?.textContent).toBe("标题");
+    expect(segButton("预览").classList.contains("is-active")).toBe(true);
+    act(() => segButton("编辑").click());
+    expect(document.querySelector<HTMLTextAreaElement>(".bt-md-expand-editor")!.value).toBe(SOURCE);
+  });
 });

@@ -126,3 +126,12 @@
 .lake-editor-mount.lake-ai-sel-hidden,
 .lake-ai-sel-hidden .ne-engine,
 .lake-ai-sel-hidden .lakex-default-theme { --lakex-editor-selection: transparent; }
+
+/* 全局文本选中：统一到主题令牌 --lake-select-bg（用户 261006：文档是主色变浅，多维表/表格/输入框却是固定深蓝）。
+   根因：内核自带的 antd 基底（vendor/lakex-doc-react/src/assets/antd.css → dist/style.css，import 进 legacy 层）
+   有一条裸的 ::selection{background:#1890ff}；它只被内核 .ne-engine ::selection（映射到同一主题令牌）覆盖，
+   于是文档跟主题、其它一律固定蓝。
+   写在未分层的本文件 ⇒ 未分层普通声明压过 legacy 层的它，不需要 !important 也不需要堆特异性；
+   内核那些 !important 的「卡片/表格用自绘选区、原生选区透明」规则仍然照常胜出（important 恒压 normal）。
+   color 用 inherit：与内核 .ne-engine ::selection 同口径，不把字色一起染蓝。 */
+::selection { background: var(--lake-select-bg); color: inherit; }

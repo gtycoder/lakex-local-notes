@@ -30,6 +30,12 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
     expect(SRC).toMatch(/data=\{renderSheets as never\}/);
   });
 
+  it("本机视图 / 脏判定（261006）：当前工作表 + 缩放走 sheetViewStore；只改展示不标脏", () => {
+    expect(SRC).toMatch(/readSheetView/);
+    expect(SRC).toMatch(/writeSheetView/);
+    expect(SRC).toMatch(/if \(bodyOf\(latestRef\.current\) === lastSerializedRef\.current\) return;/);
+  });
+
   it("非受控数据：onChange 只写 ref，绝不 setSheets 回灌", () => {
     expect(SRC).toMatch(/latestRef\.current = next/);
     expect(SRC).not.toMatch(/setSheets\(/);

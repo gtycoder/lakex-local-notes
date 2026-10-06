@@ -19,6 +19,7 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.useFakeTimers();
+  localStorage.clear(); // C（261006）：导航会写设备本地，逐用例清掉免串味
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
@@ -142,9 +143,18 @@ describe("多维表编辑会话行为", () => {
     act(() => host.querySelectorAll<HTMLElement>(".bt-table-item")[1].click());
     await act(async () => finish("迟到粘贴"));
     act(() => vi.advanceTimersByTime(801));
-    const saved = JSON.parse(change.mock.calls.at(-1)![0]);
-    expect(saved.tables[0].records[0].values.af).toBe("原值");
-    expect(saved.tables[1].records[0].values.bf).toBe("原值");
+    // C（261006）：切表只改设备本地导航、不再落正文 ⇒ 迟到的粘贴被丢弃时，什么都不该保存（新旧表都不得写）
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("切换数据表只写设备本地导航，不落正文、不触发 onChange（C，261006）", () => {
+    const change = vi.fn(); const data = JSON.parse(body("a"));
+    data.tables.push(JSON.parse(body("b")).tables[0]);
+    act(() => root.render(createElement(BitableEditor, props("a", { content: JSON.stringify(data), onChange: change }))));
+    act(() => host.querySelectorAll<HTMLElement>(".bt-table-item")[1].click());
+    act(() => vi.advanceTimersByTime(801));
+    expect(change).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("lake-notes-v3.bitable-nav.a")!).tableId).toBe("bt");
   });
 
   it("隐藏 Lake 内核提前 preventDefault 时，活动网格撤销仍只由本表处理", () => {
