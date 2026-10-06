@@ -254,20 +254,25 @@ export class OrphanLifecycle {
     const seen = new Set(out.map((o) => o.noteId + "/" + o.filename));
     for (const noteId of this.ctx.assetRepository.listNoteIdsWithHistory()) {
       const dir = this.ctx.noteAssetsDirFor(noteId);
-      if (!fs.existsSync(dir)) continue;
       const cur = this.ctx.assetRepository.getCurrentContentRefs(noteId);
       const hist = this.ctx.assetRepository.getHistoryRefs(noteId);
       if (hist.size === 0) continue;
-      for (const filename of fs.readdirSync(dir)) {
+      // ⚠️ 枚举集合必须 =「磁盘 ∪ 历史引用」，不能只扫磁盘：文件被手动删除后它就不在磁盘枚举里，
+      // 于是既不显示也不进「缺失」（用户 261006 实测：历史保护里"打开文件位置"删掉 .doc 后什么都没发生）。
+      const disk = fs.existsSync(dir) ? new Set(fs.readdirSync(dir)) : new Set<string>();
+      for (const filename of new Set<string>([...disk, ...hist])) {
         const key = noteId + "/" + filename;
         if (seen.has(key)) continue;
         if (cur.has(filename) || !hist.has(filename)) continue;   // 仍被当前正文引用 → 非“被移除”
         seen.add(key);
         const full = path.join(dir, filename);
         let size = 0;
-        try { if (!fs.statSync(full).isFile()) continue; size = fs.statSync(full).size; } catch { continue; }
-        // 这一支本来就是扫磁盘枚举出来的 ⇒ 文件必然在
-        out.push({ noteId, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: noteId, noteState: "active", fileMissing: false });
+        try {
+          const stat = fs.statSync(full);
+          if (!stat.isFile()) continue;
+          size = stat.size;
+        } catch { /* 磁盘没有 ⇒ 下面标 fileMissing（归入「缺失」） */ }
+        out.push({ noteId, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: noteId, noteState: "active", fileMissing: !disk.has(filename) });
       }
     }
     // 回收站里的文档：其附件仍在磁盘上、恢复后要用 ⇒ **以「历史保护」列出**（只读、不可删）。
@@ -277,17 +282,22 @@ export class OrphanLifecycle {
     const trashed = this.ctx.db.prepare("SELECT id, title FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string | null }>;
     for (const note of trashed) {
       const dir = dirOf(note.id);
-      if (!fs.existsSync(dir)) continue;
-      let names: string[] = [];
-      try { names = fs.readdirSync(dir); } catch { continue; }
-      for (const filename of names) {
+      const disk = fs.existsSync(dir) ? new Set(fs.readdirSync(dir)) : new Set<string>();
+      // 同历史那一支：集合 =「磁盘 ∪ 该文档正文引用 ∪ 历史引用」。回收站文档的正文仍算"它需要这些文件"，
+      // 所以正文引用但磁盘没有的也要列出来并标缺失（用户 261006 删掉的那个 .doc 就属于这一类）。
+      const refs = new Set<string>([...this.ctx.assetRepository.getCurrentContentRefs(note.id), ...this.ctx.assetRepository.getHistoryRefs(note.id)]);
+      for (const filename of new Set<string>([...disk, ...refs])) {
         const key = note.id + "/" + filename;
         if (seen.has(key)) continue;
         const full = path.join(dir, filename);
         let size = 0;
-        try { if (!fs.statSync(full).isFile()) continue; size = fs.statSync(full).size; } catch { continue; }
+        try {
+          const stat = fs.statSync(full);
+          if (!stat.isFile()) continue;
+          size = stat.size;
+        } catch { /* 磁盘没有 ⇒ 标缺失 */ }
         seen.add(key);
-        out.push({ noteId: note.id, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: note.title || "(无标题)", noteState: "trash", fileMissing: false });
+        out.push({ noteId: note.id, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: note.title || "(无标题)", noteState: "trash", fileMissing: !disk.has(filename) });
       }
     }
     // 统一补标题/状态（历史保护文档可能不在孤儿集合里）

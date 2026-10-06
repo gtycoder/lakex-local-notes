@@ -1069,6 +1069,25 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);   // ← 关键
   });
 
+  it("历史保护的文件被手动删除后仍要列出并标缺失（用户 261006：删了磁盘文件后「缺失」里什么都没有）", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const name = "1786888888888_dd44ee55.doc";
+    fs.writeFileSync(path.join(assetsDir, name), "docdata");
+    // 先让正文引用它 + 存一份快照，再从正文移除 ⇒ 只剩历史引用（「历史保护」）
+    store.saveNote(id, "历史保护测试", `<p>${name}</p>`);
+    store.createHistorySnapshot(id, `<p>${name}</p>`, true);
+    store.saveNote(id, "历史保护测试", "<p>正文已移除该附件</p>");
+    expect(store.listRemovedAssets().find((e) => e.filename === name)?.fileMissing).toBe(false);
+
+    fs.rmSync(path.join(assetsDir, name));                  // 用户从磁盘删掉它
+    const row = store.listRemovedAssets().find((e) => e.filename === name);
+    expect(row).toBeDefined();                              // 仍然列出来（此前会整条消失）
+    expect(row?.status).toBe("history");
+    expect(row?.fileMissing).toBe(true);                    // ⇒ 进「缺失」
+  });
+
   it("上传落盘即登记孤儿：图片刚传上来、正文还没引用 → 资源页立刻可见（不靠保存、不靠扫描）", async () => {
     const { id } = makeNote();
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
