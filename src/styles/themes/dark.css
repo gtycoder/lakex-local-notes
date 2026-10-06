@@ -1,4 +1,6 @@
-/* B · 暗 · 紫（深色基线；05-THEME-TOKENS-ABC.md）：Obsidian 向，深底分层 + 紫点缀。 */
+/* B · 暗（深色基线）：Obsidian 向，深底分层。
+ * 261006：主色与浅/暖**统一为同一色相**（板岩蓝 222°）——原先这里是紫色（与浅色板岩蓝、暖色橙
+ * 三个色相互不相干 = 主题漂移）。现在三套主题只换明度/饱和与中性面，不再换色相。 */
 [data-theme="dark"] {
   color-scheme: dark;
   /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
@@ -25,13 +27,14 @@
   --lake-border-1: #2e2f34;
   --lake-border-2: #242528;
   --lake-border-strong: #3a3b42;
-  /* 主色（B 紫） */
-  --lake-accent: #9b94ff;
-  --lake-accent-ink: #7f76ff;
-  --lake-accent-ink-hover: #8f87ff;
-  --lake-accent-ink-press: #6f66f0;
-  --lake-accent-tint: rgba(155,148,255,.14);
-  --lake-accent-text: #b7b1ff;
+  /* 主色（261006 统一色相 222°；按暗底抬高明度）。
+   * 对比度实测：accent vs panel 7.92:1（旧紫 6.34）；ink 上的白字 4.89:1（hover 4.69 / press 5.95）。 */
+  --lake-accent: #a6b4d3;
+  --lake-accent-ink: #5970a6;
+  --lake-accent-ink-hover: #5d73a7;
+  --lake-accent-ink-press: #4f6392;
+  --lake-accent-tint: rgba(166,180,211,.14);
+  --lake-accent-text: #bcc9e8;
   /* 状态色 */
   --lake-status-sync: #6fc0cc;
   --lake-status-pending: #e0ac63;
@@ -44,7 +47,7 @@
   /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；深色底比浅色亮一档（同 --lake-status-pending 在深色的处理），未选中星走 --lake-border-strong。 */
   --lake-rating-star: #e8b339;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(155,148,255,.22);
+  --lake-select-bg: rgba(166,180,211,.22);
   --lake-scrim: rgba(6,8,10,.55);
   --lake-scrollbar-thumb: rgba(230,235,242,.22);
   --lake-scrollbar-thumb-hover: #7d8695;

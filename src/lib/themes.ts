@@ -11,9 +11,11 @@ export interface LakeTheme {
 }
 
 export const LAKE_THEMES: LakeTheme[] = [
-  { id: "light", label: "亮 · 蓝", colorScheme: "light", preview: { bg: "#f4f5f7", panel: "#ffffff", accent: "#5b6f96", text: "#17191c" } },
-  { id: "dark", label: "暗 · 紫", colorScheme: "dark", preview: { bg: "#1a1b1e", panel: "#25262b", accent: "#9b94ff", text: "#e3e4e6" } },
-  { id: "warm", label: "亮 · 橙", colorScheme: "light", preview: { bg: "#f6f7f8", panel: "#ffffff", accent: "#ff6a00", text: "#1a1d21" } },
+  // 261006：主色统一为同一色相（板岩蓝 222°）后，主题之间靠**中性面**区分，
+  // 标签随之从「颜色名」改为「中性面性格」——否则「暗 · 紫 / 亮 · 橙」会与事实不符。
+  { id: "light", label: "亮 · 中性", colorScheme: "light", preview: { bg: "#f4f5f7", panel: "#ffffff", accent: "#5b6f96", text: "#17191c" } },
+  { id: "dark", label: "暗 · 深", colorScheme: "dark", preview: { bg: "#1a1b1e", panel: "#25262b", accent: "#a6b4d3", text: "#e3e4e6" } },
+  { id: "warm", label: "亮 · 暖", colorScheme: "light", preview: { bg: "#f6f7f8", panel: "#ffffff", accent: "#5b6f96", text: "#1a1d21" } },
 ];
 
 export const DEFAULT_THEME_ID: LakeThemeId = "light";
