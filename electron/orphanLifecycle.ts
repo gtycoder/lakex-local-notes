@@ -235,14 +235,21 @@ export class OrphanLifecycle {
   listRemovedAssets(): Array<{
     noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number;
     size: number; mimeType: string; noteTitle: string; noteState: "active" | "trash" | "missing"; detectedAt?: string;
+    /** 登记还在、磁盘文件已不在（"缺失"这一类；设置页可一键筛出来清理）。 */
+    fileMissing: boolean;
   }> {
     const enriched = this.listOrphanAssets() as Array<OrphanAsset & { noteTitle: string; noteState: "active" | "trash" | "missing" }>;
+    const dirOf = (noteId: string) => this.ctx.noteAssetsDirFor(noteId);
+    const missingOf = (noteId: string, filename: string) => !fs.existsSync(path.join(dirOf(noteId), filename));
     const out: Array<{
       noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number;
       size: number; mimeType: string; noteTitle: string; noteState: "active" | "trash" | "missing"; detectedAt?: string;
+      fileMissing: boolean;
     }> = enriched.map((o) => ({
       noteId: o.noteId, filename: o.filename, status: "orphan", orphanId: o.id,
       size: o.size, mimeType: o.mimeType, noteTitle: o.noteTitle, noteState: o.noteState, detectedAt: o.detectedAt,
+      // 孤儿登记行来自 DB，文件可能已被外部删除 / 早期 cleaner 漏删登记 ⇒ 这里比一次磁盘
+      fileMissing: missingOf(o.noteId, o.filename),
     }));
     const seen = new Set(out.map((o) => o.noteId + "/" + o.filename));
     for (const noteId of this.ctx.assetRepository.listNoteIdsWithHistory()) {
@@ -259,7 +266,8 @@ export class OrphanLifecycle {
         const full = path.join(dir, filename);
         let size = 0;
         try { if (!fs.statSync(full).isFile()) continue; size = fs.statSync(full).size; } catch { continue; }
-        out.push({ noteId, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: noteId, noteState: "active" });
+        // 这一支本来就是扫磁盘枚举出来的 ⇒ 文件必然在
+        out.push({ noteId, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: noteId, noteState: "active", fileMissing: false });
       }
     }
     // 统一补标题/状态（历史保护文档可能不在孤儿集合里）

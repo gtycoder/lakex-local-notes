@@ -46,9 +46,10 @@ describe("未引用资源浏览器", () => {
     expect(SRC).toContain('className="ln-empty"');
     // 用户 261006：去掉未引用资源的搜索框
     expect(SRC).not.toContain("ln-input__field");
-    // 灯箱经 portal 渲染到 body ⇒ 规则不能挂 .settings-panel 作用域，否则灯箱里会掉回固有尺寸。
-    expect(CSS).toContain(".asset-browser__body");
+    // 单栏上下分区（用户 261006）：上半列表自己滚、下半固定 1/3 高的纯预览
     expect(CSS).toContain(".asset-browser__status .seg__item");
+    expect(CSS).toContain(".asset-browser__preview { flex: 0 0 33%");
+    expect(CSS).toContain(".asset-browser__list { flex: 1 1 auto");
     expect(CSS).not.toContain(".settings-panel .asset-browser");
   });
 
@@ -60,10 +61,13 @@ describe("未引用资源浏览器", () => {
     expect(SRC).toContain("全选可删");
   });
 
-  it("文件不在本机（登记还在）：缩略图回落类型图标、预览给明确说明、行上标「文件缺失」", () => {
-    expect(SRC).toContain("onError={() => markBroken(key)}");
-    expect(SRC).toContain("文件已不在本机");
-    expect(SRC).toContain("文件缺失");
+  it("「缺失」是一等分类（走主进程 fileMissing，非图片类型也准）；预览是纯内容", () => {
+    expect(SRC).toContain("item.fileMissing === true");     // 分类与计数以主进程标志为准
+    expect(SRC).toContain("文件缺失");                       // 行上红标
+    expect(SRC).toContain("onError={() => markBroken(key)}"); // 缩略图仍留 onError 兜底
+    expect(SRC).toContain("asset-browser__placeholder");      // 空/不支持/缺失：只给图标，不放字
+    expect(SRC).not.toContain("asset-browser__meta");         // 预览区没有元信息与操作按钮
+    expect(SRC).not.toContain("asset-browser__metacts");
   });
 
   it("设置面板不再自带旧实现；细滚动条选择器随类名收敛", () => {

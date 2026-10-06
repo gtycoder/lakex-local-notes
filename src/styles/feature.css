@@ -188,25 +188,30 @@ pre {
  * （antd 禁用态 color = rgb(88,90,90)），是禁用色而非主题没跟上；改造前的深色基线同样如此。
  * 因此**不加**任何覆盖（否则会把真正禁用的按钮也照亮）。 */
 
-/* ── 设置 · 资源：未引用资源浏览器（261006 用户定稿：双栏 = 筛选列表 + 预览台）──────────────
- * 只有「版面」在这一层：行/动作钮/页签/徽章/空态分别走 kit 的 .ln-row（含 .is-selected）、
- * .ln-iconbtn、.ln-tabs、.badge、.ln-empty —— 本块不另起一套视觉。
- * 行内动作默认 opacity:0，由 .ln-row 在 hover / focus-within / is-selected 时显形。 */
-.asset-browser { display: flex; flex-direction: column; gap: var(--lake-space-md); }
-/* 三个大页签（.seg 原语撑满整行、三段等宽）+ 工具行（类型筛选 / 汇总 / 刷新） */
-.asset-browser__status .seg { display: flex; width: 100%; }
+/* ── 设置 · 资源：未引用资源浏览器（261006：**布局复刻思源资产页**，样式仍走我们自己的设计系统）
+ * 单栏上下分区：上半 = 操作 + 列表（吃满剩余高度、内容多了自己滚），下半 = 固定 1/3 高（内容区）的**纯预览**。
+ * 行 / 页签 / 空态 / 图标按钮 / 徽章分别走 kit 的 .ln-row、.seg、.ln-empty、.ln-iconbtn、.badge —— 本块只写版面。 */
+
+/* 资源页铺满：内容区不再整页滚，交给浏览器自己排版。链路：
+ * --fill > .config-group > .config-items > .config-section > .config-block(:has 浏览器) > .asset-browser。 */
+.settings-content--fill { display: flex; flex-direction: column; }
+.settings-content--fill > .config-group { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.settings-content--fill > .config-group > .config-items { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.settings-content--fill > .config-group > .config-items > .config-section { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.settings-content--fill .config-block:has(> .asset-browser) { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+
+.asset-browser { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--lake-space-md); min-height: 0; }
+.asset-browser__status { display: flex; align-items: center; gap: var(--lake-space-md); }
+.asset-browser__status .seg { display: flex; flex: 1 1 auto; min-width: 0; }
 .asset-browser__status .seg__item { flex: 1 1 0; min-width: 0; }
 .asset-browser__status .seg__item.is-active .ln-tabs__count { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
-.asset-browser__toolbar { display: flex; align-items: center; gap: var(--lake-space-md); }
-.asset-browser__kind { flex: 0 0 auto; width: 136px; }
-.asset-browser__bulk { display: flex; align-items: center; gap: var(--lake-space-sm); }
+.asset-browser__kind { flex: 0 0 auto; width: 132px; }
+.asset-browser__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-sm); }
 .asset-browser__all { display: inline-flex; align-items: center; gap: 6px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); cursor: pointer; }
 .asset-browser__summary { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; }
+.asset-browser__summary strong { color: var(--lake-text-2); font-weight: var(--lake-font-weight-medium); }
 .asset-browser__msg { padding: 6px 10px; border-radius: var(--lake-radius-sm); background: var(--lake-bg-subtle); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); }
-.asset-browser__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--lake-space-lg); align-items: start; }
-.asset-browser.is-narrow .asset-browser__body { grid-template-columns: minmax(0, 1fr); }
-.asset-browser.is-narrow .asset-browser__preview { display: none; }
-.asset-browser__list { max-height: 420px; padding: 4px; overflow: auto; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); }
+.asset-browser__list { flex: 1 1 auto; min-height: 0; padding: 4px; overflow: auto; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); }
 .asset-browser__list:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: 1px; }
 .asset-browser__group + .asset-browser__group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--lake-border-2); }
 .asset-browser__grouptitle { display: flex; align-items: center; gap: 6px; padding: 6px 8px 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
@@ -216,24 +221,15 @@ pre {
 .asset-browser__thumb { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--lake-radius-xs); background: var(--lake-bg-subtle); }
 .asset-browser__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .asset-browser__size { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; }
-.asset-browser__preview { position: sticky; top: 0; display: flex; flex-direction: column; gap: var(--lake-space-md); padding: var(--lake-space-md); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); }
-.asset-browser__stage { display: grid; place-items: center; min-height: 220px; max-height: 320px; overflow: auto; border-radius: var(--lake-radius-sm); background: var(--lake-bg-sunken); }
-.asset-browser__stage img { max-width: 100%; max-height: 320px; object-fit: contain; display: block; }
-.asset-browser__stage img.is-actual { max-width: none; max-height: none; }
-.asset-browser__stage video { max-width: 100%; max-height: 320px; }
-.asset-browser__stage audio { width: 100%; }
-.asset-browser__stage iframe { width: 100%; height: 320px; border: 0; background: var(--lake-bg-panel); }
-.asset-browser__meta { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.asset-browser__metaname { color: var(--lake-text-1); font-weight: var(--lake-font-weight-medium); overflow-wrap: anywhere; }
-.asset-browser__metaline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
-.asset-browser__note { padding: 6px 8px; border-radius: var(--lake-radius-sm); background: var(--lake-status-pending-soft); color: var(--lake-status-pending); font-size: var(--lake-font-size-tiny); }
-.asset-browser__metacts { display: flex; align-items: center; gap: var(--lake-space-sm); flex-wrap: wrap; margin-top: 2px; }
-/* 灯箱（窄栏预览）与删除确认：只定宽，表面仍由 overlay 层的 .ln-dialog 提供。
- * 灯箱经 portal 渲染到 body ⇒ 上面的规则**不能**挂 .settings-panel 作用域，否则灯箱里的
- * 舞台/图片会掉回固有尺寸（实测：第一次就是一整张 K 线图铺满弹窗）。 */
-.asset-browser-lightbox { width: min(720px, 92vw); }
-.asset-browser-lightbox .asset-browser__stage { min-height: 0; max-height: min(58vh, 480px); }
-.asset-browser-lightbox .asset-browser__stage img { max-height: min(58vh, 440px); }
+/* 纯预览（下半）：只有内容 —— 空态 / 不支持 / 已缺失一律只给一个图标，不放文字、不放按钮。
+ * 行必须是 minmax(0,1fr)：用 place-items:center 会让行变成 auto、img 的 height:100% 解析不出来
+ * （实测按宽度撑到 1034px 再被裁切）。图片/视频靠 object-fit: contain 留边，图标/音频各自居中。 */
+.asset-browser__preview { flex: 0 0 33%; min-height: 140px; display: grid; grid-template-rows: minmax(0, 1fr); overflow: hidden; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-sunken); }
+.asset-browser__preview img,
+.asset-browser__preview video { width: 100%; height: 100%; object-fit: contain; }
+.asset-browser__preview iframe { width: 100%; height: 100%; border: 0; background: var(--lake-bg-panel); }
+.asset-browser__preview audio { width: min(420px, 90%); align-self: center; justify-self: center; }
+.asset-browser__placeholder { color: var(--lake-text-4); align-self: center; justify-self: center; }
 .asset-browser-confirm { width: min(460px, 92vw); }
 .asset-browser-confirm__list { margin: 0 0 8px; padding-left: 18px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .asset-browser-confirm__note { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }

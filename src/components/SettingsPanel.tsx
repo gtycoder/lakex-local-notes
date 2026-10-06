@@ -552,7 +552,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               </div>
             )}
           </nav>
-          <div className="settings-content">
+          {/* 资源页：内容区交给浏览器自己排版（列表/预览铺满到底、各自滚动），见 feature.css 的 --fill 链 */}
+          <div className={"settings-content" + (category === "resources" ? " settings-content--fill" : "")}>
             {category === "editor" && (
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>

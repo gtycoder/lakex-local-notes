@@ -109,7 +109,7 @@ export interface LakeNative {
   cleanOrphanAssets(): Promise<CleanOrphanResult>;
   deleteOrphanAsset(id: number): Promise<{ deleted: boolean; freedBytes: number }>;
   readOrphanPreview(id: number): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
-  listRemovedAssets(): Promise<Array<{ noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number; size: number; mimeType: string; noteTitle?: string; noteState?: "active" | "trash" | "missing"; detectedAt?: string }>>;
+  listRemovedAssets(): Promise<Array<{ noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number; size: number; mimeType: string; noteTitle?: string; noteState?: "active" | "trash" | "missing"; detectedAt?: string; fileMissing?: boolean }>>;
   readAssetPreview(noteId: string, filename: string): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
   /** 附件操作（桌面本地优先）：系统默认应用打开。 */
   openAttachment(noteId: string, filename: string): Promise<{ ok: boolean; error?: string }>;

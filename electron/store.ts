@@ -979,6 +979,8 @@ export class Store {
   listRemovedAssets(): Array<{
     noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number;
     size: number; mimeType: string; noteTitle: string; noteState: "active" | "trash" | "missing"; detectedAt?: string;
+    /** 登记在、磁盘文件已不在（设置页「缺失」分类）。 */
+    fileMissing: boolean;
   }> {
     return this.orphanLifecycle.listRemovedAssets();
   }

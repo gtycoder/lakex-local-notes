@@ -1,14 +1,16 @@
 /**
- * 设置 · 资源 —— 未引用资源浏览器（用户 261006 定稿：双栏 / 按文档分组 / 预览类型全带 / 只留「清理选中」+ 全选）。
+ * 设置 · 资源 —— 未引用资源浏览器。
+ * **布局复刻思源资产页，样式仍走我们自己的设计系统**（用户 261006 定稿）。
  *
- * 左列 = 搜索 + 类型筛选 + 状态页签 + 按文档分组的列表（缩略图 · 体积 · 单条动作）；
- * 右列 = 预览台。删除一律走「选中 → 二次确认」，不再有「一键清理全部」。
+ * 单栏、上下分区：
+ *   · 上半 = 操作 + 列表（吃满剩余高度、内容多了自己滚）：三个大页签（可删 / 历史保护 / 缺失）、
+ *     类型筛选、全选 + 清理选中、按文档分组的列表（行内动作：复制路径 / 在文件夹中显示 / 删除）。
+ *   · 下半 = 固定 1/3 高的**纯预览**：只有内容（图片 / PDF / 视频 / 音频），不放文字、不放按钮。
  *
- * 预览**不经 IPC / base64**，直接用本地资源服务器直链（见 electron/assetServer.ts）：
- *   · 图片：`?w=1024` 离散档位（服务端 sharp 缩放 + immutable 缓存），1:1 时用原图；
- *   · PDF / 视频 / 音频：交给浏览器原生控件（服务端已支持 Range）；
- *   · 其余类型：类型图标 + 「在文件夹中显示」兜底。
- * 窄宽（设置弹窗可自由缩放）折叠为单列，点行开灯箱预览。
+ * 预览不经 IPC / base64，直接用本地资源服务器直链（electron/assetServer.ts）：
+ * 图片走 ?w=1024 档位，音视频与 PDF 用原图（服务端支持 Range）。
+ * "缺失"是**一等分类**（登记还在、磁盘文件已不在）：由主进程 listRemovedAssets 的 fileMissing 给出，
+ * 不靠前端图片 onError 猜——后者对非图片类型根本不触发。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, FolderOpen, Image as ImageIcon, Paperclip, RefreshCw, Trash } from "lucide-react";
@@ -34,6 +36,7 @@ export interface RemovedAsset {
   noteTitle?: string;
   noteState?: "active" | "trash" | "missing";
   detectedAt?: string;
+  fileMissing?: boolean;
 }
 
 export type AssetKindBucket = "image" | "media" | "doc" | "other";
@@ -62,16 +65,11 @@ export function assetPreviewKind(item: Pick<RemovedAsset, "filename" | "mimeType
   return "none";
 }
 
-/** 预览/缩略图直链：本地资源服务器 + 运行期 token；`width=null` 表示原图。 */
+/** 预览直链：本地资源服务器 + 运行期 token；`width=null` 表示原图。 */
 export function assetDisplayUrl(item: Pick<RemovedAsset, "noteId" | "filename">, width: number | null): string {
   const base = withAssetAccessToken(localAssetHttpUrl(item.noteId, item.filename, { port: ASSET_PORT }));
   return withAssetWidth(base, width);
 }
-
-const KIND_LABEL: Record<AssetFileKind, string> = {
-  image: "图片", pdf: "PDF", doc: "文档", sheet: "表格", slide: "演示",
-  archive: "压缩包", audio: "音频", video: "视频", code: "代码", text: "文本", file: "文件",
-};
 
 const KIND_OPTIONS = [
   { value: "all", label: "全部类型" },
@@ -83,69 +81,20 @@ const KIND_OPTIONS = [
 
 const keyOf = (item: Pick<RemovedAsset, "noteId" | "filename">): string => item.noteId + "/" + item.filename;
 
-type StatusFilter = "all" | "orphan" | "history";
+type StatusFilter = "orphan" | "history" | "missing";
 
-/** 预览台（宽栏右列 / 窄栏灯箱共用）。 */
-function AssetPreview({ item, fit, onFit, onDelete, onCopyPath, onOpenFolder, broken, onBroken }: {
-  item: RemovedAsset;
-  fit: "contain" | "actual";
-  onFit: (fit: "contain" | "actual") => void;
-  onDelete: () => void;
-  onCopyPath: () => void;
-  onOpenFolder: () => void;
-  /** 文件已不在本机（登记还在）：媒体元素的 onError 命中后由上层置位。 */
-  broken: boolean;
-  onBroken: () => void;
-}) {
+/** 纯预览台：只有内容，不放文字与按钮（思源式下半区）。 */
+function AssetStage({ item, broken, onBroken }: { item: RemovedAsset | null; broken: boolean; onBroken: () => void }) {
+  if (!item) return <div className="asset-browser__placeholder" aria-hidden="true"><ImageIcon size={26} /></div>;
   const preview = broken ? "none" : assetPreviewKind(item);
-  const kind = fileKindOf(item.filename);
-  const imageUrl = assetDisplayUrl(item, fit === "actual" ? null : 1024);
-  const originalUrl = assetDisplayUrl(item, null);
+  if (preview === "none") return <div className="asset-browser__placeholder" aria-hidden="true"><FileKindIcon name={item.filename} size={40} /></div>;
+  const src = assetDisplayUrl(item, preview === "image" ? 1024 : null);
   return (
     <>
-      <div className="asset-browser__stage">
-        {preview === "image" && <img src={imageUrl} alt={item.filename} className={fit === "actual" ? "is-actual" : ""} onError={onBroken} />}
-        {preview === "video" && <video src={originalUrl} controls preload="metadata" onError={onBroken} />}
-        {preview === "audio" && <audio src={originalUrl} controls preload="metadata" onError={onBroken} />}
-        {preview === "pdf" && <iframe src={originalUrl} title={item.filename} onError={onBroken} />}
-        {preview === "none" && (
-          <div className="ln-empty">
-            <FileKindIcon name={item.filename} size={40} />
-            <span>{broken ? "文件已不在本机（登记还在，可在文件夹里确认）" : "该类型不支持内嵌预览"}</span>
-          </div>
-        )}
-      </div>
-      <div className="asset-browser__meta">
-        <div className="asset-browser__metaname" title={item.filename}>{item.filename}</div>
-        <div className="asset-browser__metaline">
-          <span>{KIND_LABEL[kind]}</span>
-          <span>{item.mimeType || "未知类型"}</span>
-          <span>{formatBytes(item.size)}</span>
-        </div>
-        <div className="asset-browser__metaline">
-          <span>{item.noteTitle ?? item.noteId}</span>
-          {item.noteState === "trash" && <span className="badge badge--warn">回收站</span>}
-          {item.noteState === "missing" && <span className="badge badge--error">文档已删除</span>}
-          {item.detectedAt && <span>发现于 {item.detectedAt.slice(0, 10)}</span>}
-        </div>
-        {item.status === "history" && (
-          <div className="asset-browser__note">历史保护：仍被某份历史快照引用，删除会破坏历史版本，因此只读。</div>
-        )}
-        <div className="asset-browser__metacts">
-          {preview === "image" && (
-            <Seg ariaLabel="图片缩放">
-              <button className={`b3-button b3-button--outline seg__item${fit === "contain" ? " is-active" : ""}`} onClick={() => onFit("contain")}>适应</button>
-              <button className={`b3-button b3-button--outline seg__item${fit === "actual" ? " is-active" : ""}`} onClick={() => onFit("actual")}>1:1</button>
-            </Seg>
-          )}
-          <span className="fn__space" />
-          <button className="b3-button b3-button--outline" onClick={onCopyPath}><Copy size={14} /> 复制路径</button>
-          <button className="b3-button b3-button--outline" onClick={onOpenFolder}><FolderOpen size={14} /> 文件夹</button>
-          {item.orphanId != null
-            ? <button className="b3-button b3-button--outline ft__error" onClick={onDelete}><Trash size={14} /> 删除</button>
-            : <span className="asset-browser__lock">受保护</span>}
-        </div>
-      </div>
+      {preview === "image" && <img src={src} alt="" onError={onBroken} />}
+      {preview === "video" && <video src={src} controls preload="metadata" onError={onBroken} />}
+      {preview === "audio" && <audio src={src} controls preload="metadata" onError={onBroken} />}
+      {preview === "pdf" && <iframe src={src} title={item.filename} onError={onBroken} />}
     </>
   );
 }
@@ -156,15 +105,12 @@ export function AssetsBrowser({ active }: { active: boolean }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [focus, setFocus] = useState<string | null>(null);
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>("orphan");
   const [kind, setKind] = useState<string>("all");
-  const [fit, setFit] = useState<"contain" | "actual">("contain");
   const [pendingDelete, setPendingDelete] = useState<RemovedAsset[] | null>(null);
-  const [narrow, setNarrow] = useState(false);
-  /** 文件已不在本机（登记还在）的 key：由缩略图/预览媒体的 onError 置位。 */
+  /** 预览媒体的 onError 兜底（文件在列表加载后才消失等边角）：仅用于把内容换成类型图标。 */
   const [broken, setBroken] = useState<ReadonlySet<string>>(() => new Set());
 
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const allRef = useRef<HTMLInputElement | null>(null);
 
@@ -185,17 +131,9 @@ export function AssetsBrowser({ active }: { active: boolean }) {
     setFocus((prev) => (prev && alive.has(prev) ? prev : null));
   }, [items]);
 
-  // 设置弹窗可自由缩放：内容宽度不够就折成单列，用灯箱看预览。
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    // 阈值 600：默认 1000px 弹窗里本组件约 700px（双栏各 ~340），最小 620px 弹窗里约 470（折成单栏）。
-    const measure = () => setNarrow(el.clientWidth < 600);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  const markBroken = useCallback((key: string) => setBroken((prev) => (prev.has(key) ? prev : new Set(prev).add(key))), []);
+
+  const isMissing = useCallback((item: RemovedAsset) => item.fileMissing === true || broken.has(keyOf(item)), [broken]);
 
   const groupList = useMemo(() => {
     const map = new Map<string, { title: string; state: string; items: RemovedAsset[] }>();
@@ -209,19 +147,21 @@ export function AssetsBrowser({ active }: { active: boolean }) {
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
   }, [items]);
 
+  // 三个分类互斥（用户 261006：去掉「全部」，只留可删 / 历史保护 / 缺失）。
   const counts = useMemo(() => ({
-    all: items.length,
-    orphan: items.filter((item) => item.status === "orphan").length,
-    history: items.filter((item) => item.status === "history").length,
-  }), [items]);
+    orphan: items.filter((item) => item.status === "orphan" && !isMissing(item)).length,
+    history: items.filter((item) => item.status === "history" && !isMissing(item)).length,
+    missing: items.filter((item) => isMissing(item)).length,
+  }), [items, isMissing]);
 
   const filtered = useMemo(() => {
-    return items.filter((item) => {
-      if (status !== "all" && item.status !== status) return false;
-      if (kind !== "all" && assetKindBucket(fileKindOf(item.filename)) !== kind) return false;
-      return true;
-    });
-  }, [items, status, kind]);
+    const inStatus = (item: RemovedAsset) => {
+      if (status === "missing") return isMissing(item);
+      if (status === "history") return item.status === "history" && !isMissing(item);
+      return item.status === "orphan" && !isMissing(item);
+    };
+    return items.filter((item) => inStatus(item) && (kind === "all" || assetKindBucket(fileKindOf(item.filename)) === kind));
+  }, [items, status, kind, isMissing]);
 
   const groups = useMemo(() => {
     const visible = new Set(filtered.map(keyOf));
@@ -235,16 +175,13 @@ export function AssetsBrowser({ active }: { active: boolean }) {
   const selectedItems = useMemo(() => items.filter((item) => selected.has(keyOf(item))), [items, selected]);
   const selectedBytes = selectedItems.reduce((sum, item) => sum + (item.size || 0), 0);
   const totalBytes = items.reduce((sum, item) => sum + (item.size || 0), 0);
-  const focusItem = visibleItems.find((item) => keyOf(item) === focus) ?? null;
+  const focusItem = items.find((item) => keyOf(item) === focus) ?? null;
   const focusKey = focusItem ? keyOf(focusItem) : null;
-  const focusBroken = focusKey != null && broken.has(focusKey);
 
   useEffect(() => {
     const el = allRef.current;
     if (el) el.indeterminate = selected.size > 0 && selected.size < selectableItems.length;
   }, [selected, selectableItems.length]);
-
-  const markBroken = (key: string) => setBroken((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
 
   const toggleSelect = (item: RemovedAsset) => {
     if (item.orphanId == null) return;
@@ -308,16 +245,16 @@ export function AssetsBrowser({ active }: { active: boolean }) {
   };
 
   const STATUS_TABS: Array<{ id: StatusFilter; label: string; count: number }> = [
-    { id: "all", label: "全部", count: counts.all },
     { id: "orphan", label: "可删", count: counts.orphan },
     { id: "history", label: "历史保护", count: counts.history },
+    { id: "missing", label: "缺失", count: counts.missing },
   ];
 
   const pendingBytes = (pendingDelete ?? []).reduce((sum, item) => sum + (item.size || 0), 0);
 
   return (
-    <div className={`asset-browser${narrow ? " is-narrow" : ""}`} ref={rootRef}>
-      {/* 状态 = 三个大页签（kit 的分段控件 .seg：三段等宽、选中项浮起白块，用户 261006 定稿） */}
+    <div className="asset-browser">
+      {/* 上半 · 操作区：三个大页签 + 类型筛选 */}
       <div className="asset-browser__status">
         <Seg ariaLabel="资源状态">
           {STATUS_TABS.map((tab) => (
@@ -329,22 +266,20 @@ export function AssetsBrowser({ active }: { active: boolean }) {
             </button>
           ))}
         </Seg>
+        <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />
       </div>
 
       <div className="asset-browser__toolbar">
-        <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />
-        <span className="fn__space" />
-        <span className="asset-browser__summary">共 {counts.all} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档</span>
-        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
-      </div>
-
-      <div className="asset-browser__bulk">
         <label className="asset-browser__all">
           <input ref={allRef} type="checkbox" checked={selectableItems.length > 0 && selected.size >= selectableItems.length} onChange={toggleSelectAll} aria-label="全选可删资源" />
           <span>全选可删（{selectableItems.length}）</span>
         </label>
         <span className="fn__space" />
-        {selected.size > 0 && <span className="asset-browser__summary">{selected.size} 个 · {formatBytes(selectedBytes)}</span>}
+        <span className="asset-browser__summary">
+          {selected.size > 0 && <strong>{selected.size} 个 · {formatBytes(selectedBytes)}　</strong>}
+          共 {items.length} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档
+        </span>
+        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
         <button className="b3-button b3-button--outline ft__error" disabled={busy || selected.size === 0} onClick={() => setPendingDelete(selectedItems)}>
           {busy ? "清理中…" : `清理选中${selected.size > 0 ? `（${selected.size}）` : ""}`}
         </button>
@@ -355,14 +290,14 @@ export function AssetsBrowser({ active }: { active: boolean }) {
       {items.length === 0 ? (
         <div className="ln-empty"><strong>没有被移除的资源文件</strong><small>当前所有本地资产都仍被正文或历史快照引用。</small></div>
       ) : (
-        <div className="asset-browser__body">
+        <>
           <div className="asset-browser__list b3-list" ref={listRef} tabIndex={0}
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") { event.preventDefault(); moveFocus(1); }
               else if (event.key === "ArrowUp") { event.preventDefault(); moveFocus(-1); }
             }}>
             {groups.length === 0 ? (
-              <div className="ln-empty"><strong>没有匹配的资源</strong><small>换个筛选条件试试。</small></div>
+              <div className="ln-empty"><strong>没有匹配的资源</strong><small>换个分类或类型试试。</small></div>
             ) : groups.map((group) => (
               <div className="asset-browser__group" key={group.title + "|" + group.state}>
                 <div className="asset-browser__grouptitle">
@@ -374,6 +309,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
                 </div>
                 {group.items.map((item) => {
                   const key = keyOf(item);
+                  const missing = isMissing(item);
                   const isOrphan = item.orphanId != null;
                   const focused = key === focus;
                   return (
@@ -386,12 +322,12 @@ export function AssetsBrowser({ active }: { active: boolean }) {
                           : <span className="asset-browser__lock" title="被历史快照引用，不可删除">锁</span>}
                       </span>
                       <span className="ln-row__icon asset-browser__thumb">
-                        {assetPreviewKind(item) === "image" && !broken.has(key)
+                        {!missing && assetPreviewKind(item) === "image"
                           ? <img src={assetDisplayUrl(item, 128)} alt="" loading="lazy" onError={() => markBroken(key)} />
                           : <FileKindIcon name={item.filename} size={20} />}
                       </span>
                       <span className="ln-row__title" title={item.filename}>{item.filename}</span>
-                      <span className={`badge ${broken.has(key) ? "badge--error" : isOrphan ? "badge--muted" : "badge--warn"}`}>{broken.has(key) ? "文件缺失" : isOrphan ? "未引用" : "历史保护"}</span>
+                      <span className={`badge ${missing ? "badge--error" : isOrphan ? "badge--muted" : "badge--warn"}`}>{missing ? "文件缺失" : isOrphan ? "未引用" : "历史保护"}</span>
                       <span className="asset-browser__size">{formatBytes(item.size)}</span>
                       <span className="ln-row__actions asset-browser__acts">
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="复制路径" title="复制路径"
@@ -410,29 +346,11 @@ export function AssetsBrowser({ active }: { active: boolean }) {
             ))}
           </div>
 
+          {/* 下半 · 纯预览（固定 1/3 高，只有内容） */}
           <div className="asset-browser__preview">
-            {focusItem ? (
-              <AssetPreview item={focusItem} fit={fit} onFit={setFit} broken={focusBroken} onBroken={() => markBroken(keyOf(focusItem))}
-                onDelete={() => setPendingDelete([focusItem])}
-                onCopyPath={() => void copyPath(focusItem)}
-                onOpenFolder={() => void openFolder(focusItem)} />
-            ) : (
-              <div className="ln-empty">
-                <ImageIcon size={22} />
-                <strong>选择左侧资源查看预览</strong>
-              </div>
-            )}
+            <AssetStage item={focusItem} broken={focusKey != null && broken.has(focusKey)} onBroken={() => focusKey && markBroken(focusKey)} />
           </div>
-        </div>
-      )}
-
-      {narrow && focusItem && (
-        <Dialog open onDismiss={() => setFocus(null)} label={focusItem.filename} className="asset-browser-lightbox">
-          <AssetPreview item={focusItem} fit={fit} onFit={setFit} broken={focusBroken} onBroken={() => markBroken(keyOf(focusItem))}
-            onDelete={() => setPendingDelete([focusItem])}
-            onCopyPath={() => void copyPath(focusItem)}
-            onOpenFolder={() => void openFolder(focusItem)} />
-        </Dialog>
+        </>
       )}
 
       {pendingDelete && pendingDelete.length > 0 && (

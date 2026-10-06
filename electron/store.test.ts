@@ -1069,6 +1069,19 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);   // ← 关键
   });
 
+  it("listRemovedAssets：登记在、文件已不在 → fileMissing=true（设置页「缺失」分类的依据）", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const name = "1786123456789_ff66aa77.png";
+    fs.writeFileSync(path.join(assetsDir, name), "orphandata");
+    store.saveNote(id, "缺失标记", "<p>无图</p>");
+    expect(store.listRemovedAssets().find((e) => e.filename === name)?.fileMissing).toBe(false);
+
+    fs.rmSync(path.join(assetsDir, name));            // 外部删除：登记仍在、磁盘没了
+    expect(store.listRemovedAssets().find((e) => e.filename === name)?.fileMissing).toBe(true);
+  });
+
   it("反向对账：detectOrphans 会撤掉「登记还在、文件已不在」的行（外部删除 / 历史漂移自愈）", () => {
     const { id } = makeNote();
     const assetsDir = path.join(dir, "note-assets", id);
