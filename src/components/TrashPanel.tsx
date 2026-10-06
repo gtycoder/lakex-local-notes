@@ -12,6 +12,7 @@ import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "
 import { addAssetAccessToken } from "../lib/assetPort";
 import { trashDaysUntilPurge, type TrashItem } from "../core/trashPolicy";
 import { formatDateTime } from "../lib/formatTime";
+import { cloudStateHint } from "../core/cloudState.js";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
 import type { NoteKind } from "../core/noteKind.js";
 
@@ -239,8 +240,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       setRestoreNotice("正在从 S3 拉取缺失数据…");
       void native.ensureTrashNoteAssets(id)
         .then(({ warnings, skipped }) => {
-          if (skipped === "offline") setRestoreNotice("云同步已关闭：按纯本地空间处理，没有去云端补拉；重新开启后下次同步会自动补拉。");
-          else if (skipped === "unconfigured") setRestoreNotice("未配置云同步：按纯本地空间处理，没有去云端补拉。");
+          if (skipped) setRestoreNotice(cloudStateHint(skipped) ?? "云同步未启用：按纯本地空间处理。");
           else if (warnings.length > 0) setRestoreNotice(`已恢复，但有 ${warnings.length} 个资源未能下载（可能云端也没有）：附件/图片会显示为空，下次同步会自动重试。`);
           else setRestoreNotice(null);
         })

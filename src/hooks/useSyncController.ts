@@ -5,7 +5,7 @@ import type { SettingsCategory } from "../components/SettingsPanel";
 import type { SyncToastData } from "../components/SyncToast";
 import type { SyncStatus } from "../lib/types";
 import type { NoticeState } from "../desktop/desktopTypes";
-import { canTouchNetwork, cloudStateOf } from "../core/cloudState.js";
+import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../core/cloudState.js";
 
 interface SyncControllerInput {
   setSync: Dispatch<SetStateAction<SyncStatus>>;
@@ -63,7 +63,7 @@ export function useSyncController({
       const state = cloudStateOf(Boolean(settings), cfg);
       if (state === "offline") {
         setSync((current) => ({ ...current, phase: "idle", message: "云同步已关闭" }));
-        showSyncToast({ kind: "unavailable", title: "云同步已关闭", message: "当前按纯本地空间工作，不会联网；到「设置 · 云端与同步」重新开启即可。", onConfigure: openSettings });
+        showSyncToast({ kind: "unavailable", title: "云同步已关闭", message: cloudStateHint("offline") ?? "当前按纯本地空间工作，不会联网。", onConfigure: openSettings });
         return;
       }
       if (!canTouchNetwork(state)) {

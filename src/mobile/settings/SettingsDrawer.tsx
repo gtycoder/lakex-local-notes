@@ -4,7 +4,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
-import { Group, Item, Seg, Block, NumField } from "../../components/settingsPrimitives";
+import { Group, Item, Seg, Block, NumField, Switch } from "../../components/settingsPrimitives";
 import { bridge } from "../bridge";
 import { usePanelDrag } from "../usePanelDrag";
 import type { HistoryMobileSettings } from "../bridge";
@@ -15,7 +15,7 @@ import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
-import type { S3Settings } from "../../lib/types";
+import type { S3Settings, SyncSettings } from "../../lib/types";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -60,6 +60,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   useEffect(() => { void probePinShortcut().then(setPinState); }, []);  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
   const [listKey, setListKey] = useState(0);
   const [s3, setS3] = useState<S3Settings | null>(null);
+  /** 云同步开关（与桌面同语义：关闭 = 纯离线本地空间，任何路径都不出网） */
+  const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
   const [cacheMsg, setCacheMsg] = useState("");
@@ -117,6 +119,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
   useEffect(() => {
     if (!open) return;
+    setSyncCfg(bridge.getSyncSettings());
     void bridge.getS3Settings().then((cfg) => {
       setS3(cfg);
       if (cfg) {
@@ -310,13 +313,23 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="config-group">
                 <div className="config-title"><RefreshCw size={16} />连接与同步</div>
                 <div className="config-items">
+                  <Switch
+                    name="启用云同步"
+                    desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
+                    checked={syncCfg?.enabled !== false}
+                    onChange={(next) => {
+                      const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "manual" as const, autoIntervalMinutes: 15 }), enabled: next };
+                      setSyncCfg(value);
+                      bridge.saveSyncSettings(value);
+                    }}
+                  />
                   <div className="config-block">
                     <div className="config-block__name">保存并测试连接</div>
                     <div className="config-block__text">配置将由本地保存为真相，S3 仅作同步镜像。</div>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--primary" onClick={saveS3}>保存</button>
                       <button className="ln-btn ln-btn--primary" onClick={() => void testS3()}>测试连接</button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
+                      <button className="ln-btn ln-btn--secondary" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
                     </div>
                     {s3Test && <div className="config-block__text">{s3Test}</div>}
                     {syncMsg && <div className="config-block__text">{syncMsg}</div>}

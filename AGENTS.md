@@ -73,6 +73,9 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 19. **多维表条件求值必须单一来源**：视图筛选、关联选择器临时筛选以及条件填色，统一使用 `BitableFilterRule` / `BitableFilterNode`、`filterOperatorsFor()`、`evaluateFilterNode()`、共享 `BitableFilterEditor` / `BitableFilterRuleEditor`。禁止为填色、图表或某个视图另造一套操作符、空值语义或条件 UI；字段取值继续走 `bitableFieldValue()`。填色的 `cell / row / column` 候选按规则数组下标做钉钉同款 alpha 混色，`rowSide` 独立，不得擅自改回“后色压前色”或其他混色语义。**应用内所有选色**统一走 `src/core/colorPalette.ts` 的 70 色实色阶 + `ColorPalette`（最近使用/自定义）；最近使用必须按入口分桶，禁止选项/进度/列文字/填色模式混用；Lake 编辑器继续通过 `LakeColorBoard` 适配器调用自己的内核色卡，样式和渐变色入口不得改。
 
+20. **云同步只有一套状态判据（`src/core/cloudState.ts`），桌面与移动端共用**：`cloudStateOf(configured, syncSettings)` → `unconfigured | offline | manual | auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI（顶栏状态灯 / 离线禁用态）的判据。**关闭云同步 = 当作完全没配置 / 离线本地空间**（用户 261006 定稿）：任何路径都不出网 —— 手动同步、回收站恢复与预览的按需补拉、云 GC / 深度清理 / 换机恢复、自动同步与定期对账定时器，全部先过这一关；移动端 `src/mobile/bridge.ts` 用同一份 core 与同一语义。**新增任何联网功能必须挂这个判据**，不许各自去读 `enabled`。恢复红线不变且**不等网络**：恢复立刻生效，缺失资源后台补拉并给明确提示（"正在从 S3 拉取缺失数据…" / "未能下载…" / 离线未尝试）。
+    - 判据入口：`canTouchNetwork(cloudStateOf(...))`；离线文案统一走 `cloudStateHint(state)`，不要各写一句。护栏测试：桌面 `electron/syncDualAB.test.ts`（注入会抛错的远端工厂，断言调用次数 0）、移动 `src/mobile/bridgeCloudState.test.ts`（断言引擎未被调用）。
+
 ## 4. 关键机制速览（同步）
 
 - **Manifest V1 重置**：旧数据与远端清零后，Lake manifest 重新使用 `version=1`，但内容 schema 沿用原 v7（folders/墓碑/锁/`kind`/board 保留）。代码只读写 `{1}`；所有端必须一起升级。传输/GC/类型分别见 `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/syncTypes.ts`，编排见 `electron/syncEngineController.ts`。

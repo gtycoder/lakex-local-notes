@@ -27,7 +27,8 @@ import { buildAssetFilename, mimeTypeForFilename } from "../core/assetNaming.js"
 import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../core/storeLimits.js";
-import type { S3Settings, TreeNode } from "../lib/types";
+import type { S3Settings, SyncSettings, TreeNode } from "../lib/types";
+import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "../core/cloudState.js";
 import type { SearchResult } from "../core/searchTypes.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
@@ -69,6 +70,30 @@ export interface MobileSyncResult {
 const DEFAULT_S3_PREFIX = "lake-notes";
 
 const S3_STORAGE_KEY = "lake-notes-mobile.s3";
+/** 云同步开关 / 自动同步节奏（与桌面 SyncSettings 同形）。关闭 = 纯离线本地空间（用户 261006 定稿）。 */
+const SYNC_STORAGE_KEY = "lake-notes-mobile.sync";
+const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
+
+function readSyncSettings(): SyncSettings {
+  try {
+    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_SYNC_SETTINGS };
+    const parsed = JSON.parse(raw) as Partial<SyncSettings>;
+    return {
+      enabled: parsed.enabled !== false,
+      autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" ? parsed.autoMode : "manual",
+      autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" ? parsed.autoIntervalMinutes : 15,
+    };
+  } catch {
+    return { ...DEFAULT_SYNC_SETTINGS };
+  }
+}
+
+/** 云端状态（单一判据，与桌面同源 src/core/cloudState）：没配置 或 关闭云同步 ⇒ 一律不出网。 */
+async function mobileCloudState(): Promise<CloudState> {
+  const cfg = await bridge.getS3Settings();
+  return cloudStateOf(Boolean(cfg), readSyncSettings());
+}
 /* 初始 Lake 正文与桌面同一来源：src/core/lakeDocForm.ts（勿在此手拼正文）。 */
 
 let db: NativeSqliteDb | null = null;
@@ -142,6 +167,9 @@ const dbPort: SyncDbPort = createMobileSyncDbPort(() => db!, {
 async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false): Promise<void> {
   if (noteIds.length === 0) return;
   try {
+    // 单一判据：没配置 或 关闭云同步 ⇒ **一个请求都不发**（用户 261006：关闭云同步 = 离线本地空间）
+    const state = await mobileCloudState();
+    if (!canTouchNetwork(state)) { console.info(`[asset] 跳过补拉（${state}）`); return; }
     const cfg = await bridge.getS3Settings();
     if (!cfg) return;
     const syncCfg: SyncConfig = {
@@ -675,7 +703,14 @@ export const bridge = {
   async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await trashRepository.restoreTreeItem(d, id, kind, downloadDeclaredAssetsFor);
+      // 261006 B 方案（与桌面一致）：恢复**不等网络**。puller 立刻返回，缺失资源排到本次任务之后
+      // 在后台按需补拉（onlyMissing，仍走同一串行队列，不嵌套 → 不会自锁）；失败只告警，下次同步补拉。
+      await trashRepository.restoreTreeItem(d, id, kind, (noteIds) => {
+        void maintenance.run("main", () => downloadDeclaredAssetsFor(noteIds, true)).catch((error) => {
+          console.warn("[trash] 恢复后的资源补拉失败（下次同步补拉）", error);
+        });
+        return Promise.resolve();
+      });
       await reconcileIndex(d);
     });
   },
@@ -691,6 +726,16 @@ export const bridge = {
       await trashRepository.purgeTreeItem(d, id, kind);
       await reconcileIndex(d);
     });
+  },
+
+  // ---- 云同步开关（与桌面同语义：关闭 = 离线本地空间） ----
+
+  getSyncSettings(): SyncSettings {
+    return readSyncSettings();
+  },
+
+  saveSyncSettings(next: SyncSettings): void {
+    writeLocalStorage(SYNC_STORAGE_KEY, JSON.stringify(next));
   },
 
   // ---- S3（POC 通路验证） ----
@@ -837,6 +882,10 @@ export const bridge = {
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。
    * P2-5/6（GPT 审计）：结构化返回（notes/quickNotes 分字段）；主维护队列串行化防与本地写操作交错。 */
   async syncNow(): Promise<MobileSyncResult> {
+    // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面 runSync 同一判据）
+    if ((await mobileCloudState()) === "offline") {
+      return { message: cloudStateHint("offline") ?? "云同步已关闭", notes: null, quickNotes: null };
+    }
     return maintenance.run("main", async () => {
       const cfg = await bridge.getS3Settings();
       if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };

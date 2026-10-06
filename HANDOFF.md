@@ -58,6 +58,14 @@
   · 冻结在 `~/Library/Caches/lake-notes-css-audit/fixture`（416K，**不含真实数据**）；生成/冻结/重烤流程写进
     `scripts/css-audit/README.md` 的「夹具 = 合成夹具」。DB 冻结必须走 `sqlite3 .backup`（热拷会把 WAL 丢掉 ⇒ 表都读不到，本轮踩过一次）。
   · 从此：只有**换夹具**（改生成器 / 补覆盖面）才需要整份重烤；平时改 CSS 仍只烤单态（7 秒）。
+- ⑰ **云同步状态判据单点化 + 关闭云同步 = 离线本地空间（桌面 + 移动端）**（用户 261006）：
+  · 新增 `src/core/cloudState.ts`：`cloudStateOf` / `canTouchNetwork` / `isCloudActive` / `cloudStateHint`，双端共用；
+    桌面所有联网入口（sync_now、S3 GC 三件套、恢复/预览补拉、自动同步与定期对账定时器）统一挂它，
+    移动端 `bridge.ts` 同步实现（`getSyncSettings/saveSyncSettings` 落 localStorage + 同样的闸门）。
+  · 「关闭云同步」语义变更：以前只是"不自动同步"（手动同步/恢复补拉仍出网），现在**等同未配置、一律不出网**。
+  · **恢复不再等网络**（B 方案，双端）：恢复立刻生效（实测 2ms），缺失资源后台按需补拉 + 明确提示；
+    顶栏状态灯/设置页禁用态与后端**同源**（`isCloudActive`）；关闭云同步**永远能关**（最后对齐降级 best-effort）。
+  · 护栏：桌面 `syncDualAB`（远端工厂调用次数 = 0）+ 移动 `bridgeCloudState.test.ts`（引擎未被调用）；共 4 笔提交。
 - 门禁全绿：tsc ✓ · vitest **1703 passed / 16 skipped** ✓ · check:core 75-0 ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · cssLayers+uiPrimitives ✓ · 双端构建 ✓ · `git diff --check` ✓。真实端 CDP 实测：强制 900 宽面板 `right=1250`（视口 1258，8px 边距）。明细见专项文档 §11/§12/§13。已提交：`c361001`（修复批）· `0b60125`（目录栏 ＋/重命名弹窗）· `22def1f`（垂直几何）· `5397548`/`5ad4f64`（资源浏览器 + 基线）· `f6e2298`（删资产登记漂移）· `5c8f1e4`（快照装置）· 本轮设置微调与基线（后续提交）。
 
 ### 当前批次 · 261005-MM · AI 多模态基础能力（图片 + PDF，落到多维表 AI 字段）
