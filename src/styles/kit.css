@@ -326,8 +326,10 @@
   max-width: 260px;
   padding: 3px 8px;
   border-radius: var(--lake-radius-xs);
-  background: var(--lake-accent-ink);
-  color: var(--lake-text-on-accent);
+  /* 261006：提示气泡**不跟主色走** —— 它是临时浮层，三套主题共用同一个深色表面
+   * （原先用 accent-ink，暖色主题下会变成棕橙，和"提示"这件事无关）。走主题无关令牌。 */
+  background: var(--lake-tooltip-bg);
+  color: var(--lake-tooltip-fg);
   font-size: var(--lake-font-size-tiny);
   line-height: var(--lake-line-height-snug);
   z-index: var(--lake-z-tooltip);
