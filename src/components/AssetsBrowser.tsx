@@ -143,15 +143,17 @@ export function AssetsBrowser({ active }: { active: boolean }) {
   const isMissing = useCallback((item: RemovedAsset) => item.fileMissing === true || broken.has(keyOf(item)), [broken]);
 
   const groupList = useMemo(() => {
-    const map = new Map<string, { title: string; state: string; items: RemovedAsset[] }>();
+    // ⚠️ 分组身份必须带 noteId：多篇文档会重名（"无标题文档"满地都是），只按 title|state 做 key
+    // 会让 React 收到**重复 key** ⇒ 复用旧 DOM，切页签后左列表留下上一页签的行（用户 261006 报的残留）。
+    const map = new Map<string, { key: string; title: string; state: string; items: RemovedAsset[] }>();
     for (const item of items) {
       const state = item.noteState ?? "active";
       const key = item.noteId + "|" + state;
       let group = map.get(key);
-      if (!group) { group = { title: item.noteTitle ?? item.noteId, state, items: [] }; map.set(key, group); }
+      if (!group) { group = { key, title: item.noteTitle ?? item.noteId, state, items: [] }; map.set(key, group); }
       group.items.push(item);
     }
-    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
+    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
   }, [items]);
 
   // 三个分类互斥（用户 261006：去掉「全部」，只留可删 / 历史保护 / 缺失）。
@@ -316,7 +318,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
             {groups.length === 0 ? (
               <div className="ln-empty"><strong>没有匹配的资源</strong><small>换个分类或类型试试。</small></div>
             ) : groups.map((group) => (
-              <div className="asset-browser__group" key={group.title + "|" + group.state}>
+              <div className="asset-browser__group" key={group.key}>
                 <div className="asset-browser__grouptitle">
                   <Paperclip size={13} />
                   <span className="fn__ellipsis" title={group.title}>{group.title}</span>

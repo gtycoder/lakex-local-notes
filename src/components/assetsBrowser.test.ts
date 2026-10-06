@@ -58,6 +58,12 @@ describe("未引用资源浏览器", () => {
     expect(CSS).not.toContain(".settings-panel .asset-browser");
   });
 
+  it("分组 key 必须带 noteId：多篇文档重名（「无标题文档」）时只按 title|state 会 React 重复 key ⇒ 切页签留残影", () => {
+    expect(SRC).toContain('const key = item.noteId + "|" + state;');
+    expect(SRC).toContain("key={group.key}");
+    expect(SRC).not.toContain("key={group.title");
+  });
+
   it("删除：只有可删项可勾选、逐条删、无「一键全清」、带二次确认", () => {
     expect(SRC).toContain("checked={selected.has(key)}");
     expect(SRC).toContain("native.deleteOrphanAsset(item.orphanId)");

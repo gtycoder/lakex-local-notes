@@ -18,8 +18,11 @@ const nav = {
       // 261006：原先写死坐标 (178,19)，布局演进后该点落在 DIV.tabbar-leading（容器）上 ⇒ 菜单根本不开。
       // 改为按**可访问名**找工作区触发器（title="空间：资料库"），再点击其中心。
       // 空间视图是 keep-alive 的（每个空间各有一套顶栏）⇒ 必须按**可见性**挑，否则会点中隐藏视图里的按钮
+      // ⚠️ 必须限定在**可见**的工作区视图里：隐藏视图（.workspace-view--hidden）里的同款触发器 rect 非零，
+      // 只按 width>0 会点到隐藏按钮 ⇒ 菜单根本不开（261006 我手工验时又踩了一次，与那条注释同源）。
       const trig = await page.evaluate(`(() => {
-        const el = [...document.querySelectorAll('[title^="空间"], [aria-label^="空间"]')]
+        const scope = document.querySelector('.workspace-view:not(.workspace-view--hidden)') || document;
+        const el = [...scope.querySelectorAll('[title^="空间"], [aria-label^="空间"]')]
           .find(e => e.getBoundingClientRect().width > 0);
         if (!el) return null;
         const r = el.getBoundingClientRect();
@@ -40,7 +43,8 @@ const nav = {
   openSpace: async (page, label) => {
     for (let a = 0; a < 3; a++) {
       const trig = await page.evaluate(`(() => {
-        const el = [...document.querySelectorAll('[title^="空间"], [aria-label^="空间"]')]
+        const scope = document.querySelector('.workspace-view:not(.workspace-view--hidden)') || document;
+        const el = [...scope.querySelectorAll('[title^="空间"], [aria-label^="空间"]')]
           .find(e => e.getBoundingClientRect().width > 0);
         if (!el) return null;
         const r = el.getBoundingClientRect();
