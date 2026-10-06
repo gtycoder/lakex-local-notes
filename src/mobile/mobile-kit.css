@@ -10,7 +10,7 @@
 
 /* ── W2 移动端提示条（替代思源 .b3-snackbar*）──────────────────────── */
 .mobile-toast-host { position: fixed; z-index: var(--mobile-z-snackbar); right: 16px; left: 16px; top: calc(16px + var(--mobile-top-safe-area)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
-.mobile-toast { pointer-events: auto; max-width: min(420px, 100%); display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--lake-border-1) border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); color: var(--lake-text-1); box-shadow: var(--lake-shadow-popover); font-size: var(--lake-font-size-small); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out); }
+.mobile-toast { pointer-events: auto; max-width: min(420px, 100%); display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); color: var(--lake-text-1); box-shadow: var(--lake-shadow-popover); font-size: var(--lake-font-size-small); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out); }
 .mobile-toast.is-hide { transform: translateX(calc(100% + 16px)); opacity: 0; }
 .mobile-toast--error::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: var(--lake-radius-pill); background: var(--lake-status-error); }
 .mobile-toast__text { flex: 1 1 auto; min-width: 0; }
