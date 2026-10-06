@@ -176,6 +176,9 @@ export function registerNotesIpc(
     // 回收站惰性下载的补偿：恢复前强拉全量资产（best-effort，失败仍恢复）。
     const { warnings } = await restoreTrashWithAssets(store, id);
     for (const w of warnings) store.logScopes.sync.warn(`[restore] ${w}`);
+    // 回给渲染层 ⇒ 恢复后能提示"有 N 个资源没拉回来，已保留恢复、下次同步会补"（261006：
+    // 原先只写日志，用户以为恢复完就万事大吉，实际可能还有破图）。
+    return { warnings };
   });
   ipc.handle("ensure_trash_note_assets", async (id: string) => {
     // 回收站预览的补偿：预览前按需补拉该笔记缺失资源（best-effort，不恢复）。

@@ -99,7 +99,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   onChanged?: () => void;
   /** 恢复/删除后通知外部刷新树 */
   /** 只读原因（本次恢复的条目 id）；清空回收站时可不传（表示批量恢复）。 */
-  onRestored: (restoredId?: string) => void;
+  onRestored: (restoredId?: string, warnings?: string[]) => void;
 }) {
   const [tab, setTab] = useState<"docs" | "quick">("docs");
   const [items, setItems] = useState<TrashItem[]>([]);
@@ -107,6 +107,9 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string; kind?: NoteKind } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 恢复后的资源告警（恢复成功但有的资源没拉回来）——内联提示：回收站空间里状态栏是隐藏的，
+   *  走全局 notice 会看不见（261006 实测）。 */
+  const [restoreNotice, setRestoreNotice] = useState<string | null>(null);
   // 回收站预览资源补拉中的加载态（大文档首次预览需从云端补缺失资源）
   const [previewing, setPreviewing] = useState(false);
   // C1：回收站自动过期配置（trashAutoPurgeDays；0=关闭不显示倒计时/提示条）
@@ -228,10 +231,13 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     const label = item?.title || "该文档";
     if (!window.confirm(`恢复「${label}」及其全部内容到原位置？`)) return;
     try {
-      await native.restoreTrash(id);
+      const { warnings } = await native.restoreTrash(id);
       setSelected(null);
       await refresh();
-      onRestored(id);
+      setRestoreNotice(warnings.length > 0
+        ? `已恢复，但有 ${warnings.length} 个资源未能下载（可能云端也没有）：附件/图片会显示为空，下次同步会自动重试。`
+        : null);
+      onRestored(id, warnings);
     } catch (e) {
       setError(getNativeErrorMessage(e));
     }
@@ -310,6 +316,9 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
         <p className="trash-panel-notice">
           开启自动过期（{trashAutoPurgeDays} 天）：部分条目将在 7 天内自动彻底删除（含云端）。需要保留请在到期前恢复。
         </p>
+      )}
+      {restoreNotice && (
+        <p className="trash-panel-notice" role="status">{restoreNotice}</p>
       )}
       {error && <div className="trash-error">{error}</div>}
       <SplitPane ariaLabel="调整回收站列表宽度" storageKey="trash" hidden={tab !== "docs"} minRight={280}>
