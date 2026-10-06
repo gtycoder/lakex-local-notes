@@ -146,6 +146,11 @@ export const pin = async (page, w, theme, outlineMode, media) => {
     localStorage.setItem(k, JSON.stringify(s));
     localStorage.setItem("lake-notes-v2.sidebar-mode", "docked");
     localStorage.setItem("lake-notes-v2.outline-sidebar-mode", ${JSON.stringify(outlineMode || "collapsed")});
+    // 浮动弹窗（设置/历史/回收站）的位置与尺寸也持久化在 localStorage（useFloatingDialog 的
+    // lake-notes-v3.dialog-states）⇒ 夹具副本会带上"上一台机器把设置弹窗拖到哪、拉多大"，
+    // 让**所有 settings 态整体位移/缩放**（2026-10-06 实测：settings-* 全态 hash 变、根节点 .settings-panel 起）。
+    // 清掉它 = 每个态都按 initialSize 默认居中打开，几何只跟 CSS 与视口走。
+    localStorage.removeItem("lake-notes-v3.dialog-states");
   })()`);
   await page.send("Emulation.setDeviceMetricsOverride", { width: w, height: 868, deviceScaleFactor: 1, mobile: false });
   await page.send("Page.reload", { ignoreCache: true });
@@ -285,6 +290,15 @@ export const setupState = async (page, st) => {
     if (st.settings) { await nav.openSettings(page); await nav.settingsNav(page, "外观"); await page.sleep(600); }
     if (st.screen && SCREENS[st.screen]) { await SCREENS[st.screen](page); await page.sleep(500); }
     if (st.inject) await injectStates(page, st.inject);
+    // 墙钟文本归一化（2026-10-06）：设置·文档与历史页那行「上次清理 {时间}」的字符串宽度随
+    // **最后一次清理时间**变化 ⇒ settings-data / settings:dark / settings:warm 三个态会在不同
+    // 实例世代之间产生"元素数相同、只差一个裸 <span>"的假差异（实测连跑两次门禁一次绿一次红）。
+    // 这里只改文本、不改结构（span 仍在、样式照测），让指纹只跟 CSS 走。
+    await page.evaluate(`(() => {
+      for (const s of document.querySelectorAll(".config-stats span")) {
+        if ((s.textContent || "").startsWith("上次清理")) s.textContent = "上次清理 —";
+      }
+    })()`);
     await settle();
   }
 };

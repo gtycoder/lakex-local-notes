@@ -20,6 +20,16 @@ export class Page {
         else resolve(msg.result ?? {});
       }
     });
+    // 连接掉了必须让在途请求 reject：否则 Promise 永不 settle，Node 以 exit 13
+    // 「unsettled top-level await」退出，把真正的原因（target 崩溃 / 连接断开）整条盖掉
+    // —— 2026-10-06 实测两次（同一份代码、只换实例世代），排查时完全看不到线索。
+    const fail = (reason) => {
+      if (this.pending.size === 0) return;
+      for (const { reject } of this.pending.values()) reject(new Error("CDP 连接中断：" + reason));
+      this.pending.clear();
+    };
+    ws.addEventListener("close", () => fail("socket closed"));
+    ws.addEventListener("error", () => fail("socket error"));
   }
 
   send(method, params = {}) {
