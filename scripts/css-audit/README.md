@@ -75,6 +75,33 @@ node scripts/css-audit/check-stylesnap.mjs --port 9231 --states "resources:1315:
 **例外**：宽度 560/760 的窄窗态仍**跨实例世代不稳**（内核原生大纲 hover/resize 时序态），照旧只采集入库、
 比对时跳过（`check-stylesnap.mjs` 的 `UNSTABLE`）。单独采窄窗态只为留档，**不能**用来判「没变」。
 
+### 夹具必须钉住（260906 起）
+
+快照的输入有两份：**代码 + 数据**。数据用的是「开发工作区的副本」；若每次都从
+`~/Library/Application Support/lake-notes-dev` 现拷，那么只要**往回收站删一篇 / 新建一篇**，
+侧栏树就少/多一行 ⇒ **所有态一起漂**（实测少 2 篇 → 每态 −40 个元素，看起来像「CSS 变了」）。
+
+所以夹具**冻结**在一处、反复复用：
+
+```bash
+FX="$HOME/Library/Caches/lake-notes-css-audit/fixture"
+DEV="$HOME/Library/Application Support/lake-notes-dev"
+
+# 首次（或确实想换一份数据基准时）从开发数据冻一份：
+rm -rf "$FX" && mkdir -p "$FX"
+cp -R "$DEV/workspace-default" "$DEV/Local Storage" "$DEV/Preferences" "$FX/"
+/usr/bin/sqlite3 "$DEV/workspace-default/metadata.sqlite3" ".backup $FX/workspace-default/metadata.sqlite3"
+rm -f "$FX/workspace-default/metadata.sqlite3-shm" "$FX/workspace-default/metadata.sqlite3-wal"
+
+# 每次采集：从冻结夹具起实例（不要再拷开发数据）
+RUN=/tmp/lake-snap-run
+rm -rf "$RUN" && cp -R "$FX" "$RUN"
+env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA="$RUN" LAKE_ASSET_PORT=19801 \
+  ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9231 .
+```
+
+**换了夹具数据 = 换了基准 ⇒ 必须整份重烤一次**（之后又能只烤单态）。
+
 ## 各脚本干什么
 
 | 脚本 | 作用 |
