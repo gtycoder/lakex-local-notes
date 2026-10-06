@@ -202,29 +202,9 @@
 .ln-drawer--left { left: 0; }
 .ln-drawer--right { right: 0; }
 
-/* ── 06 提示条 ─────────────────────────────────────────────── */
-.ln-toast {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 420px;
-  min-height: 40px;
-  padding: 10px 12px;
-  border: 1px solid var(--lake-border-1);
-  border-radius: var(--lake-radius-md);
-  background: var(--lake-bg-panel);
-  box-shadow: var(--lake-shadow-popover);
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-small);
-}
-/* 261006：状态只用「图标颜色」表达 —— 单侧 >1px 色条是 craft floor 明令禁止的图案。
-   变体只换图标色；调用方若不带图标，请自行把状态文字设成对应的 --lake-status-*。 */
-.ln-toast__icon { flex: 0 0 auto; color: var(--lake-accent); }
-.ln-toast__text { flex: 1 1 auto; min-width: 0; }
-.ln-toast--ok .ln-toast__icon { color: var(--lake-status-ok); }
-.ln-toast--warn .ln-toast__icon { color: var(--lake-status-pending); }
-.ln-toast--error .ln-toast__icon { color: var(--lake-status-error); }
-
+/* ── 06 提示条 ───────────────────────────────────────────────
+ * 261006 Phase 2.2：`.ln-toast` 全仓**零调用**（同步提示走 .sync-toast、删除撤销走 .quick-notes-toast、
+ * 底部提示走 .document-notice-toast，各自是既有实现）⇒ 作为死原语删除。需要时从 git 历史取回。 */
 /* ── 07 输入框 / 搜索框 ───────────────────────────────────── */
 .ln-input {
   display: flex;
@@ -338,22 +318,9 @@
 .ln-tag--error { background: var(--lake-status-error-soft); color: var(--lake-status-error); }
 .ln-tag--hoverable:hover { background: var(--lake-bg-hover); }
 
-/* ── 11 卡片 ───────────────────────────────────────────────── */
-.ln-card {
-  border: 1px solid var(--lake-border-2);
-  border-radius: var(--lake-radius-md);
-  background: var(--lake-bg-canvas);
-  box-shadow: var(--lake-shadow-card);
-}
-.ln-card__head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
-.ln-card__title { flex: 1 1 auto; min-width: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
-.ln-card__body { padding: 10px 12px; }
-.ln-card--content { padding: 12px; }
-.ln-card--content:hover { background: var(--lake-bg-panel); }
-.ln-card--content:active { background: var(--lake-bg-press); }
-.ln-card.is-selected { border-color: var(--lake-accent); background: var(--lake-accent-tint); }
-.ln-card:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
-
+/* ── 11 卡片 ─────────────────────────────────────────────────
+ * 261006 Phase 2.2：`.ln-card` 全仓**零调用**（设置页走 .config-* 骨架、多维表走 .bt-* 自己的卡）
+ * ⇒ 作为死原语删除。需要时从 git 历史取回。 */
 /* ── 12 气泡 ───────────────────────────────────────────────── */
 .ln-tip {
   max-width: 260px;
@@ -378,7 +345,9 @@
   height: calc(var(--lake-ctl-h) - 1px);
   padding: 2px;
   border-radius: var(--lake-ctl-rad);
-  background: var(--lake-bg-block);
+  /* 261006 Phase 2.2 重绘：轨道用**下沉底**而不是块面底 —— 块面底在白面板上几乎看不见，
+     控件会读成「一行浮着的文字」。下沉一档后它才像一个「可切换的控件」。 */
+  background: var(--lake-bg-sunken);
 }
 .ln-segment__item {
   display: inline-flex;
@@ -467,7 +436,9 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--lake-text-2);
+  /* 261006 Phase 2.2 重绘：静息态退到 text-3 —— 原先用 text-2 太深，一排页签看起来「个个都是当前项」；
+     退一档后，选中项的主色 + 墨线才真正跳出来。 */
+  color: var(--lake-text-3);
   font-family: inherit;
   font-size: var(--lake-font-size-small);
   cursor: pointer;
