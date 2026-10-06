@@ -34,8 +34,20 @@ export class Page {
 
   send(method, params = {}) {
     const id = ++this.id;
+    const TIMEOUT_MS = Number(process.env.LK_CDP_TIMEOUT_MS || 90000);
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      // 页面/主进程卡住时 CDP 既不回也不断 ⇒ 没有超时的话整个进程以 exit 13
+      // 「unsettled top-level await」静默退出，看起来像"装置随机崩"（2026-10-06 实测三次）。
+      // 有超时至少能指名道姓说是哪个调用卡住了。
+      const timer = setTimeout(() => {
+        if (!this.pending.has(id)) return;
+        this.pending.delete(id);
+        reject(new Error("CDP 调用超时 " + TIMEOUT_MS + "ms：" + method));
+      }, TIMEOUT_MS);
+      this.pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      });
       this.ws.send(JSON.stringify({ id, method, params }));
     });
   }
