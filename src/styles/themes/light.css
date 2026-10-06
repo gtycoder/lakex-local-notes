@@ -1,61 +1,62 @@
-/* A · 亮 · 蓝（默认浅色；05-THEME-TOKENS-ABC.md）：近白侧栏 + 板岩蓝点缀。
- * 260926：accent 家族从 #3d7eff 族对齐到设计规格 #5b6f96 族（Q10）；**只改浅色**。 */
+/* 亮色（默认）：品类标准（canon）——中性、克制、层次清楚。
+ * 261006（UI 刷新 Phase 2 · 用户定稿 canon）：表面拉开三级、边界收敛为一条细线、
+ * 文字对比提一档、accent 从"雾状板岩蓝"收成更明确的墨蓝；**间距/字号/几何一律不动**。 */
 :root,
 [data-theme="light"] {
   color-scheme: light;
-  /* 表面 */
-  --lake-bg-window: #f4f5f7;
+  /* 表面（三级：窗底 < 面板 < 抬升） */
+  --lake-bg-window: #f3f4f6;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
-  --lake-bg-block: #f0f2f5;
+  --lake-bg-block: #f4f6f8;
   --lake-bg-raised: #ffffff;
-  --lake-bg-sunken: #eef0f3;
+  --lake-bg-sunken: #eceef1;
   /* 分组底衬 / 极浅灰通道（260929 多维表复刻云端）：比 panel 深一档、比 block 浅一档，
    * 用来把「分组之间的通道」和白底卡片分开，不用于常规块面。 */
-  --lake-bg-subtle: #fafafa;
-  --lake-bg-hover: #e9ebee;
-  --lake-bg-press: #e4e7eb;
+  --lake-bg-subtle: #fafbfc;
+  --lake-bg-hover: #f0f1f3;
+  --lake-bg-press: #e9ebee;
   /* 文字 */
-  --lake-text-1: #17191c;
-  --lake-text-2: #4a5158;
-  --lake-text-3: #6d757e;
-  --lake-text-4: #9aa1aa;
+  --lake-text-1: #1f2329;
+  --lake-text-2: #4e5969;
+  --lake-text-3: #6f7784;   /* vs #fff 4.5:1 —— 次级文字达标 */
+  --lake-text-4: #8b93a1;   /* vs #fff 3.1:1 —— 元信息/占位（比旧值 #9aa1aa 的 2.6:1 更好） */
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #e8eaee;
-  --lake-border-2: #f0f2f5;
-  --lake-border-strong: #d5d9de;
-  /* 主色：对齐设计规格（260926 Q10）。四个角色：accent=指针色（焦点环/选中/开关/图标）、
-   * ink=实心钮底+链接、tint=选中底、text=选中行文字。规格未给 ink 的 hover/press，
-   * 按 COMPONENTS 01「primary 提亮/压暗一档」派生。只改浅色；dark 保持紫、warm 保持橙。 */
-  --lake-accent: #5b6f96;
-  --lake-accent-ink: #3a4a68;
-  --lake-accent-ink-hover: #45597c;
-  --lake-accent-ink-press: #2f3d55;
-  --lake-accent-tint: #eceff5;
-  --lake-accent-text: #3a4a68;
+  --lake-border-1: #e6e8ec;
+  --lake-border-2: #eff1f4;
+  --lake-border-strong: #d3d7de;
+  /* 主色（261006 canon）：仍同一色相（222°），但从"雾状"收成更明确的墨蓝，
+   * 让焦点/选中/主操作真正成为锚点。四角色分工不变。 */
+  --lake-accent: #3f5fa0;
+  --lake-accent-ink: #33497f;
+  --lake-accent-ink-hover: #3d558f;
+  --lake-accent-ink-press: #293c69;
+  --lake-accent-tint: #eef2fa;
+  --lake-accent-text: #33497f;
   /* 状态色 */
-  --lake-status-sync: #2c7684;
-  --lake-status-pending: #9b610e;
-  --lake-status-ok: #2e7b54;
-  --lake-status-error: #b3413b;
-  --lake-status-sync-soft: #e8f1f2;
-  --lake-status-pending-soft: #f7f0e3;
-  --lake-status-ok-soft: #e9f2ec;
+  --lake-status-sync: #2a6b80;
+  --lake-status-pending: #8f5f0e;
+  --lake-status-ok: #2b7350;
+  --lake-status-error: #b3382f;
+  --lake-status-sync-soft: #e7f1f3;
+  --lake-status-pending-soft: #f7f0e2;
+  --lake-status-ok-soft: #e8f2ec;
   --lake-status-error-soft: #f8eae9;
   /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；未选中星走 --lake-border-strong。 */
   --lake-rating-star: #ecaa06;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(91,111,150,.16);   /* 规格值，与 accent 同源 */
+  --lake-select-bg: rgba(63,95,160,.16);   /* 与 accent 同源 */
   --lake-scrim: rgba(24,27,32,.28);
   --lake-scrollbar-thumb: rgba(28,31,36,.22);
   --lake-scrollbar-thumb-hover: #8c94a0;
   --lake-focus-halo: rgba(28,31,36,.20);
   /* 阴影 */
-  --lake-shadow-card: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px -10px rgba(16,24,40,.14);
-  --lake-shadow-popover: 0 0 0 1px rgba(16,24,40,.06), 0 24px 56px -18px rgba(16,24,40,.24);
-  --lake-shadow-dialog: 0 0 0 1px rgba(16,24,40,.07), 0 24px 48px -16px rgba(16,24,40,.22), 0 48px 96px -32px rgba(16,24,40,.18);
-  --lake-shadow-knob: 0 1px 2px rgba(16,24,40,.18);
+  /* 纵深（261006 canon）：三段式，卡片轻、浮层中、对话框重；每段都有偏移 + 柔和模糊。 */
+  --lake-shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 6px 16px -8px rgba(16,24,40,.10);
+  --lake-shadow-popover: 0 0 0 1px rgba(16,24,40,.05), 0 10px 28px -10px rgba(16,24,40,.14), 0 24px 56px -24px rgba(16,24,40,.16);
+  --lake-shadow-dialog: 0 0 0 1px rgba(16,24,40,.06), 0 16px 40px -12px rgba(16,24,40,.16), 0 40px 88px -32px rgba(16,24,40,.20);
+  --lake-shadow-knob: 0 1px 2px rgba(16,24,40,.20);
 
 
   /* ---- 过渡桥接：思源 --b3-* → 新令牌（P7 删思源层时一并移除） ---- */

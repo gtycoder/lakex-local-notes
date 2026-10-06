@@ -798,7 +798,8 @@ describe("多维表编辑器护栏", () => {
     expect(VIEWCSS).toMatch(/\.bt-group-start > td, \.bt-group-body > td, \.bt-group-end > td \{ background: var\(--lake-bg-panel\)/);
     // 令牌只允许定义在主题里（其它 CSS 里出现颜色字面量算缺陷）
     const THEME = readFileSync(new URL("../../styles/themes/light.css", import.meta.url), "utf8");
-    expect(THEME).toMatch(/--lake-bg-subtle: #fafafa/);
+    // 261006 Phase 2（canon）：令牌值随主题刷新为 #fafbfc（仍是「比 panel 深一档、比 block 浅一档」的同一语义）。
+    expect(THEME).toMatch(/--lake-bg-subtle: #fafbfc/);
     // 数据表选择区（.bt-tables）与表格区共用同一个底衬灰（用户 260929：风格要统一）
     expect(CSS).toMatch(/\.bt-tables \{[^}]*background: var\(--lake-bg-subtle\)/);
     expect(CSS).not.toMatch(/\.bt-tables \{[^}]*background: var\(--lake-bg-block\)/);

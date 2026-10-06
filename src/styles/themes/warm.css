@@ -1,58 +1,58 @@
-/* C · 亮 · 暖（warm 槽位）：同 A 结构 + 暖中性面。
- * 261006：主色与浅/深**统一为同一色相**（板岩蓝 222°，即 A 的取值）——
- * 原先这里是橙色，与浅色板岩蓝、深色紫三个色相互不相干 = 主题漂移。warm 现在只靠暖中性面区分。 */
+/* 暖色：与亮色同结构 + 暖中性面（261006 · Phase 2 · canon）。主色与浅/深同一色相。
+ * **间距/字号/几何一律不动**。 */
 [data-theme="warm"] {
   color-scheme: light;
-  /* 表面 */
-  --lake-bg-window: #f6f7f8;
+  /* 表面（三级，暖灰） */
+  --lake-bg-window: #f5f4f2;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
-  --lake-bg-block: #f0f2f4;
+  --lake-bg-block: #f4f3f0;
   --lake-bg-raised: #ffffff;
-  --lake-bg-sunken: #eef0f3;
+  --lake-bg-sunken: #ecebe8;
   /* 分组底衬 / 极浅灰通道（同 A 槽位；见 light.css 说明） */
-  --lake-bg-subtle: #fafafa;
-  --lake-bg-hover: #e9ebee;
-  --lake-bg-press: #e4e7eb;
+  --lake-bg-subtle: #faf9f7;
+  --lake-bg-hover: #f1f0ed;
+  --lake-bg-press: #e9e8e4;
   /* 文字 */
-  --lake-text-1: #1a1d21;
-  --lake-text-2: #495057;
-  --lake-text-3: #6f7780;
-  --lake-text-4: #939aa3;
+  --lake-text-1: #1f2329;
+  --lake-text-2: #4e5969;
+  --lake-text-3: #6f7784;   /* vs #fff 4.5:1 */
+  --lake-text-4: #8b93a1;   /* vs #fff 3.1:1 */
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #e4e6ea;
-  --lake-border-2: #eef0f3;
-  --lake-border-strong: #d0d4da;
-  /* 主色（261006 统一色相 222°，取 A 的同一组值；浅色面无需另调明度） */
-  --lake-accent: #5b6f96;
-  --lake-accent-ink: #3a4a68;
-  --lake-accent-ink-hover: #45597c;
-  --lake-accent-ink-press: #2f3d55;
-  --lake-accent-tint: #eceff5;
-  --lake-accent-text: #3a4a68;
+  --lake-border-1: #e7e5e1;
+  --lake-border-2: #f0efec;
+  --lake-border-strong: #d6d3cd;
+  /* 主色（取亮色同一组值；暖色只靠暖中性面区分） */
+  --lake-accent: #3f5fa0;
+  --lake-accent-ink: #33497f;
+  --lake-accent-ink-hover: #3d558f;
+  --lake-accent-ink-press: #293c69;
+  --lake-accent-tint: #eef2fa;
+  --lake-accent-text: #33497f;
   /* 状态色 */
-  --lake-status-sync: #2c7684;
-  --lake-status-pending: #9b610e;
-  --lake-status-ok: #2e7b54;
-  --lake-status-error: #b3413b;
-  --lake-status-sync-soft: #e8f1f2;
-  --lake-status-pending-soft: #f7f0e3;
-  --lake-status-ok-soft: #e9f2ec;
+  --lake-status-sync: #2a6b80;
+  --lake-status-pending: #8f5f0e;
+  --lake-status-ok: #2b7350;
+  --lake-status-error: #b3382f;
+  --lake-status-sync-soft: #e7f1f3;
+  --lake-status-pending-soft: #f7f0e2;
+  --lake-status-ok-soft: #e8f2ec;
   --lake-status-error-soft: #f8eae9;
   /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；未选中星走 --lake-border-strong。 */
   --lake-rating-star: #ecaa06;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(91,111,150,.16);
+  --lake-select-bg: rgba(63,95,160,.16);
   --lake-scrim: rgba(24,27,32,.28);
   --lake-scrollbar-thumb: rgba(28,31,36,.22);
   --lake-scrollbar-thumb-hover: #8c94a0;
   --lake-focus-halo: rgba(28,31,36,.20);
   /* 阴影 */
-  --lake-shadow-card: 0 1px 2px rgba(28,31,36,.05), 0 8px 24px -10px rgba(28,31,36,.14);
-  --lake-shadow-popover: 0 0 0 1px rgba(28,31,36,.06), 0 24px 56px -18px rgba(28,31,36,.24);
-  --lake-shadow-dialog: 0 0 0 1px rgba(28,31,36,.07), 0 24px 48px -16px rgba(28,31,36,.22), 0 48px 96px -32px rgba(28,31,36,.18);
-  --lake-shadow-knob: 0 1px 2px rgba(28,31,36,.18);
+  /* 纵深（261006 canon）：与亮色同一套三段式。 */
+  --lake-shadow-card: 0 1px 2px rgba(28,31,36,.04), 0 6px 16px -8px rgba(28,31,36,.10);
+  --lake-shadow-popover: 0 0 0 1px rgba(28,31,36,.05), 0 10px 28px -10px rgba(28,31,36,.14), 0 24px 56px -24px rgba(28,31,36,.16);
+  --lake-shadow-dialog: 0 0 0 1px rgba(28,31,36,.06), 0 16px 40px -12px rgba(28,31,36,.16), 0 40px 88px -32px rgba(28,31,36,.20);
+  --lake-shadow-knob: 0 1px 2px rgba(28,31,36,.20);
 
 
   /* ---- 过渡桥接：思源 --b3-* → 新令牌（P7 删思源层时一并移除） ---- */

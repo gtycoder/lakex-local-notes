@@ -1,40 +1,39 @@
-/* B · 暗（深色基线）：Obsidian 向，深底分层。
- * 261006：主色与浅/暖**统一为同一色相**（板岩蓝 222°）——原先这里是紫色（与浅色板岩蓝、暖色橙
- * 三个色相互不相干 = 主题漂移）。现在三套主题只换明度/饱和与中性面，不再换色相。 */
+/* 暗色：Obsidian 向，深底分层。261006（Phase 2 · canon）——中性面更细分、文字对比提一档，
+ * 主色与浅/暖同一色相（222°）。**间距/字号/几何一律不动**。 */
 [data-theme="dark"] {
   color-scheme: dark;
   /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
    * 深色若不同会出现"顶栏/面包屑/大纲/正文四种黑"的明显色阶。结构不随主题变，只换变量。） */
-  --lake-bg-window: #1a1b1e;
-  --lake-bg-panel: #1e1f22;
-  --lake-bg-canvas: #1e1f22;
-  --lake-bg-block: #2a2b30;
-  --lake-bg-raised: #2a2b30;
-  --lake-bg-sunken: #141517;
+  --lake-bg-window: #191a1d;
+  --lake-bg-panel: #1e1f23;
+  --lake-bg-canvas: #1e1f23;
+  --lake-bg-block: #292b30;
+  --lake-bg-raised: #26282d;
+  --lake-bg-sunken: #131417;
   /* 分组底衬 / 极浅灰通道（260929）：深色里「比 panel 亮一档」才是同一个语义（浅色是深一档）。 */
-  --lake-bg-subtle: #242528;
-  --lake-bg-hover: rgba(255,255,255,.06);
-  --lake-bg-press: rgba(255,255,255,.10);
+  --lake-bg-subtle: #232528;
+  --lake-bg-hover: rgba(255,255,255,.055);
+  --lake-bg-press: rgba(255,255,255,.09);
   /* 内核品牌绿在深色下使用 Lake dark schema，提升暗底对比度。 */
   --lake-kernel-brand-green: #2ed790;
   /* 文字 */
-  --lake-text-1: #e3e4e6;
-  --lake-text-2: #a8a9ad;
-  --lake-text-3: #7c7d82;
-  --lake-text-4: #5c5d62;
+  --lake-text-1: #e7e8ea;
+  --lake-text-2: #a9abb1;
+  --lake-text-3: #868a92;   /* vs #1e1f23 4.8:1 */
+  --lake-text-4: #6f7278;   /* vs #1e1f23 3.5:1（旧 #5c5d62 更低） */
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #2e2f34;
-  --lake-border-2: #242528;
-  --lake-border-strong: #3a3b42;
+  --lake-border-1: #2d2f34;
+  --lake-border-2: #232528;
+  --lake-border-strong: #3b3e45;
   /* 主色（261006 统一色相 222°；按暗底抬高明度）。
    * 对比度实测：accent vs panel 7.92:1（旧紫 6.34）；ink 上的白字 4.89:1（hover 4.69 / press 5.95）。 */
-  --lake-accent: #a6b4d3;
+  --lake-accent: #9aabce;
   --lake-accent-ink: #5970a6;
   --lake-accent-ink-hover: #5d73a7;
   --lake-accent-ink-press: #4f6392;
-  --lake-accent-tint: rgba(166,180,211,.14);
-  --lake-accent-text: #bcc9e8;
+  --lake-accent-tint: rgba(154,171,206,.15);
+  --lake-accent-text: #b9c6e2;
   /* 状态色 */
   --lake-status-sync: #6fc0cc;
   --lake-status-pending: #e0ac63;
@@ -47,15 +46,16 @@
   /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；深色底比浅色亮一档（同 --lake-status-pending 在深色的处理），未选中星走 --lake-border-strong。 */
   --lake-rating-star: #e8b339;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(166,180,211,.22);
+  --lake-select-bg: rgba(154,171,206,.22);
   --lake-scrim: rgba(6,8,10,.55);
   --lake-scrollbar-thumb: rgba(230,235,242,.22);
   --lake-scrollbar-thumb-hover: #7d8695;
   --lake-focus-halo: rgba(230,235,242,.20);
   /* 阴影 */
-  --lake-shadow-card: 0 1px 2px rgba(0,0,0,.40);
-  --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.07), 0 24px 56px -18px rgba(0,0,0,.62);
-  --lake-shadow-dialog: 0 0 0 1px rgba(255,255,255,.09), 0 28px 56px -18px rgba(0,0,0,.60), 0 56px 104px -36px rgba(0,0,0,.55);
+  /* 纵深（261006 canon）：与浅色同结构的三段式（深底用更重的黑）。 */
+  --lake-shadow-card: 0 1px 2px rgba(0,0,0,.34), 0 6px 16px -8px rgba(0,0,0,.42);
+  --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.06), 0 10px 28px -10px rgba(0,0,0,.55), 0 24px 56px -24px rgba(0,0,0,.50);
+  --lake-shadow-dialog: 0 0 0 1px rgba(255,255,255,.08), 0 16px 40px -12px rgba(0,0,0,.55), 0 40px 88px -32px rgba(0,0,0,.50);
   --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.45);
 
 
