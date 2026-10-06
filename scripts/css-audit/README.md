@@ -50,6 +50,31 @@ node scripts/css-audit/drive.mjs 9222 scripts/css-audit/shotset.mjs before "<屏
 - `plan`：读 `PLAN_FILE`（默认 `plan-applied.json`），对文件文本应用计划后注入 → 差异即"这计划会改变什么"。
 - `control`：读 `plan-control.json`，用于证明装置能抓到真改动。
 
+## 快照重烤的快速路径（260906 起：**态自包含**）
+
+**先说结论**：改了某个界面后**不用再整轮跑 42 态**（一轮约 8 分钟）。装置已做到「每个态自包含」——
+任意一个态单独采集，结果与整轮跑出来的**完全一致**（实测 `settings:1315:light` / `resources:1315:light`
+单采指纹与全量逐字节相同）。所以只烤 / 只检改动到的那 1~2 个态即可，**秒级**：
+
+```bash
+cd <仓库根>
+# 只采你改动到的态
+node scripts/css-audit/drive.mjs 9231 scripts/css-audit/stylesnap.mjs myfix "resources:1315:light"
+# 只复检这几个态（带了 --states，未采的态不在作用域内，不再报「本次未采集」）
+node scripts/css-audit/check-stylesnap.mjs --port 9231 --states "resources:1315:light"
+# 把这几态写进基线（--write-baseline 是整份覆盖；多态增量用脚本合并或全量重烤）
+```
+
+自包含靠三件事，都在 `stylesnap.mjs`：
+
+1. `pin()` 每个态都 `Page.reload` + 钉主题/侧栏/大纲模式 + **清 `lake-notes-v3.dialog-states`**（否则夹具副本会带上「上一台机器把弹窗拖到哪、拉多大」，所有 settings 态整体位移）；
+2. 每个态都**显式设置 CDP 媒体模拟**（没写的清空），避免 reduced-motion / transparency 泄漏到下一态；
+3. 末态**归位鼠标并等「块拖动把手」收干净** —— 它带过渡，而 `settle()` 只等 DOM/几何稳定、不等过渡结束，
+   否则 `settings:1315:light` 这类态连拍两份会出现「元素数相同、指纹不同」的 11 条假差异（260906 实测）。
+
+**例外**：宽度 560/760 的窄窗态仍**跨实例世代不稳**（内核原生大纲 hover/resize 时序态），照旧只采集入库、
+比对时跳过（`check-stylesnap.mjs` 的 `UNSTABLE`）。单独采窄窗态只为留档，**不能**用来判「没变」。
+
 ## 各脚本干什么
 
 | 脚本 | 作用 |
@@ -107,8 +132,9 @@ node scripts/css-audit/drive.mjs 9222 scripts/css-audit/shotset.mjs before "<屏
 
 ## 状态矩阵
 
-`stylesnap.mjs` 里的 `STATES` 是判定"是否真的没变"的覆盖面。当前 27 个：浅/深 × 1315/760/560 ×
-（资料库 / 小记 / 搜索 / 设置九个页 / 悬停行 / 右键菜单 / 属性面板 / 大纲展开 / 拖拽注入 / 已删标签 / 浮侧栏…）。
+`stylesnap.mjs` 里的 `STATES` 是判定"是否真的没变"的覆盖面。当前 **42 个**：浅/深/warm × 1315/760/560 ×
+（资料库 / 小记 / 搜索 / 设置各页 / **资源空间** / 悬停行 / 右键菜单 / 属性面板 / 大纲展开 / 拖拽注入 / 已删标签 / 浮侧栏 / reduced-motion / 画板注入…）。
+**260906**：设置·资源已从设置弹窗**提出来成独立空间**（`resources`），对应态由 `settings-assets` 换成 `resources:1315:light`。
 **已知空缺**（要动编辑器内部或标签相关样式时先补）：多标签、大纲缩放中、编辑器内部态（代码块/表格/文件卡）、
 选区与粘贴态。
 

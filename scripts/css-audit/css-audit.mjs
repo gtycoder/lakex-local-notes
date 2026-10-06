@@ -17,21 +17,54 @@ const nav = {
     for (let a = 0; a < 3; a++) {
       // 261006：原先写死坐标 (178,19)，布局演进后该点落在 DIV.tabbar-leading（容器）上 ⇒ 菜单根本不开。
       // 改为按**可访问名**找工作区触发器（title="空间：资料库"），再点击其中心。
+      // 空间视图是 keep-alive 的（每个空间各有一套顶栏）⇒ 必须按**可见性**挑，否则会点中隐藏视图里的按钮
       const trig = await page.evaluate(`(() => {
-        const el = document.querySelector('[title^="空间"], [aria-label^="空间"]');
+        const el = [...document.querySelectorAll('[title^="空间"], [aria-label^="空间"]')]
+          .find(e => e.getBoundingClientRect().width > 0);
         if (!el) return null;
         const r = el.getBoundingClientRect();
         return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
       })()`);
       if (!trig) throw new Error("no workspace trigger");
       await page.click(trig[0], trig[1]); await page.sleep(420);
-      const s = await page.evaluate(`(() => { const el = [...document.querySelectorAll('button,[role=menuitem]')].find(e => (e.textContent||'').includes('偏好设置')); if(!el) return null; const r = el.getBoundingClientRect(); return [Math.round(r.x+r.width/2), Math.round(r.y+r.height/2)]; })()`);
+      const s = await page.evaluate(`(() => { const el = [...document.querySelectorAll('button,[role=menuitem]')].find(e => (e.textContent||'').includes('偏好设置') && e.getBoundingClientRect().width > 0); if(!el) return null; const r = el.getBoundingClientRect(); return [Math.round(r.x+r.width/2), Math.round(r.y+r.height/2)]; })()`);
       if (s) { await page.click(s[0], s[1]); await page.sleep(650); return; }
       await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
       await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
       await page.sleep(600);
     }
     throw new Error("no 偏好设置 menu item");
+  },
+  /** 切到「工作空间」菜单里的空间（回收站 / 资源…）：点顶栏触发器 → 点同名菜单项 → 等壳类生效。
+   *  261006：资源从设置弹窗里提出来成了空间，快照装置原先用 settingsNav("资源") 已不适用。 */
+  openSpace: async (page, label) => {
+    for (let a = 0; a < 3; a++) {
+      const trig = await page.evaluate(`(() => {
+        const el = [...document.querySelectorAll('[title^="空间"], [aria-label^="空间"]')]
+          .find(e => e.getBoundingClientRect().width > 0);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+      })()`);
+      if (!trig) throw new Error("no workspace trigger");
+      await page.click(trig[0], trig[1]); await page.sleep(420);
+      const s = await page.evaluate(`(() => {
+        const want = ${JSON.stringify(label)};
+        const el = [...document.querySelectorAll('.top-menu button,[role=menuitemradio]')]
+          .find(e => (e.textContent || '').trim().startsWith(want) && e.getBoundingClientRect().width > 0);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+      })()`);
+      if (!s) throw new Error("no 空间 menu item: " + label);
+      await page.click(s[0], s[1]);
+      for (let i = 0; i < 12; i++) {
+        await page.sleep(250);
+        const cls = await page.evaluate(`(() => { const el = document.querySelector('.app-shell'); return el ? el.className : ''; })()`);
+        if (String(cls).includes(label === "资源" ? "resources-space-active" : "trash-space-active")) return;
+      }
+      throw new Error("空间未生效: " + label);
+    }
   },
   settingsNav: async (page, label) => {
     const p = await page.evaluate(`(() => { const el = [...document.querySelectorAll('.settings-nav-item, .settings-nav-hit, .settings-nav button')].find(e => (e.textContent||'').trim().replace(/\\s+/g,'') === ${JSON.stringify(label)} && e.getBoundingClientRect().width > 0); if(!el) return null; const r = el.getBoundingClientRect(); return [Math.round(r.x+r.width/2), Math.round(r.y+r.height/2)]; })()`);
@@ -160,7 +193,7 @@ const SCREENS = {
   "settings-logs": async (page) => { await nav.closeAll(page); await nav.openSettings(page); await nav.settingsNav(page, "日志"); },
   "settings-data": async (page) => { await nav.closeAll(page); await nav.openSettings(page); await nav.settingsNav(page, "文档与历史"); },
   "settings-trash": async (page) => { await nav.closeAll(page); await nav.openSettings(page); await nav.settingsNav(page, "回收站"); },
-  "settings-assets": async (page) => { await nav.closeAll(page); await nav.openSettings(page); await nav.settingsNav(page, "资源"); },
+  "resources": async (page) => { await nav.closeAll(page); await nav.openSpace(page, "资源"); },
   "settings-about": async (page) => { await nav.closeAll(page); await nav.openSettings(page); await nav.settingsNav(page, "关于"); },
   search: async (page) => { await nav.closeAll(page); await nav.rail(page, 0); await nav.search(page); },
 };

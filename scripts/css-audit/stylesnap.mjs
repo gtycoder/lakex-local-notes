@@ -184,7 +184,7 @@ export const STATES = [
     { name: "settings-editor:1315:light", w: 1315, theme: "light", screen: "settings-editor" },
     { name: "settings-data:1315:light", w: 1315, theme: "light", screen: "settings-data" },
     { name: "settings-trash:1315:light", w: 1315, theme: "light", screen: "settings-trash" },
-    { name: "settings-assets:1315:light", w: 1315, theme: "light", screen: "settings-assets" },
+    { name: "resources:1315:light", w: 1315, theme: "light", screen: "resources" },
     { name: "settings-about:1315:light", w: 1315, theme: "light", screen: "settings-about" },
     { name: "search-empty:1315:light", w: 1315, theme: "light", screen: "search-empty" },
     { name: "focus-create:1315:light", w: 1315, theme: "light", screen: "focus-create" },
@@ -299,6 +299,23 @@ export const setupState = async (page, st) => {
         if ((s.textContent || "").startsWith("上次清理")) s.textContent = "上次清理 —";
       }
     })()`);
+    // 归位鼠标并等"块拖动把手"收干净（2026-10-06 实测假差异源）：它带过渡，而 settle() 只等 DOM/几何稳定，
+    // 不等过渡结束 ⇒ settings:1315:light 连拍两份会出现"元素数相同、指纹不同"（11 条：把手本体 + 6×circle
+    // + tooltip 的透明度/位置）。hover 态故意把鼠标停在目标上，不能归位。
+    if (!st.hover) {
+      await page.move(2, 866);
+      for (let i = 0; i < 10; i++) {
+        const shown = await page.evaluate(`(() => {
+          const el = document.querySelector(".ne-block-hover-handle");
+          if (!el) return false;
+          const cs = getComputedStyle(el);
+          return cs.display !== "none" && cs.visibility !== "hidden" && Number(cs.opacity) > 0.01;
+        })()`);
+        if (!shown) break;
+        await page.sleep(200);
+      }
+      await page.sleep(150);
+    }
     await settle();
   }
 };
@@ -315,6 +332,9 @@ export default async ({ page, args }) => {
     const snap = await page.evaluate(SNAP);
     out.states[st.name] = snap;
     console.log(`  [snap] ${st.name}: ${snap.n} els`);
+    // 每态落盘：采集偶发在收尾卡死（CDP 超时），收尾才写会整轮白跑（2026-10-06 实测一次）。
+    fs.mkdirSync(data("snap"), { recursive: true });
+    fs.writeFileSync(data(`snap/${tag}.json`), JSON.stringify(out));
   }
   fs.mkdirSync(data("snap"), { recursive: true });
   fs.writeFileSync(data(`snap/${tag}.json`), JSON.stringify(out));

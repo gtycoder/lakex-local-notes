@@ -65,6 +65,9 @@ const snapshot = (tag) => {
 // 而 1315 宽度的态全部稳定。处理：**严格比对只覆盖 1315 宽的态**；窄窗态照常采集/入库（基线保留），比对时跳过并点名。
 // TODO：一旦在 stylesnap 的 pin() 里钉死内核原生 TOC 态，删掉此排除、恢复全量严格比对。
 const UNSTABLE = /:(?:560|760):/;
+/** 带了 --states 就是"只验这几个态"：没采的态不在作用域内，不能报成差异
+ *  （态自包含之后，改一处界面只需验 1~2 态；见 README「快照重烤的快速路径」）。 */
+const SCOPED = Boolean(STATES);
 const diffStates = (base, cur) => {
   const names = [...new Set([...Object.keys(base.states), ...Object.keys(cur.states)])].sort();
   const diffs = new Map();
@@ -74,7 +77,7 @@ const diffStates = (base, cur) => {
     const a = base.states[name];
     const b = cur.states[name];
     if (!a) { diffs.set(name, name + ": 基线缺失（新增状态）"); continue; }
-    if (!b) { diffs.set(name, name + ": 本次未采集"); continue; }
+    if (!b) { if (SCOPED) continue; diffs.set(name, name + ": 本次未采集"); continue; }
     if (a.n !== b.n || a.hash !== b.hash) diffs.set(name, name + ": 元素 " + a.n + " → " + b.n + " | 指纹 " + a.hash + " → " + b.hash);
   }
   return { names, diffs, skipped };
@@ -119,6 +122,6 @@ if (diffs.size) {
   console.error("  定位：VERBOSE=1 node scripts/css-audit/snapdiff.mjs <基线快照> .css-audit/snap/" + (FROM ? path.basename(FROM) : TAG) + ".json");
   process.exit(1);
 }
-console.log("[gate] " + (names.length - skipped.length) + " 态整页计算值 0 差异（对比 " + path.relative(ROOT, BASELINE) + "）"
+console.log("[gate] " + (SCOPED ? Object.keys(current.states).length + " 态（--states 指定）" : (names.length - skipped.length) + " 态") + "整页计算值 0 差异（对比 " + path.relative(ROOT, BASELINE) + "）"
   + (skipped.length ? "；跳过 " + skipped.length + " 态（窄窗装置不稳定，见脚本头 TODO）：" + skipped.join(", ") : "")
   + (flaky.length ? "；flaky（仅一轮出现，已重跑排除）：" + flaky.join(", ") : ""));
