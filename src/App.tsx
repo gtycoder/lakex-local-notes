@@ -29,6 +29,7 @@ import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { ImageLightbox } from "./features/editor/ImageLightbox";
 import { AttachmentPreview } from "./features/attachment/AttachmentPreview";
+import { NativeTitleTips } from "./components/ui/NativeTitleTips";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import type { TreeNode } from "./lib/types";
@@ -460,6 +461,8 @@ export function App() {
       {/* 单例控制器只配一个应用级宿主，keep-alive 编辑器/历史/小记共享。 */}
       <ImageLightbox />
       <AttachmentPreview />
+      {/* 261006：全局把原生 title 提示换成自绘 .ln-tip（一处实现覆盖全仓 168 处）。 */}
+      <NativeTitleTips />
       {/* 整边触发（左）：隐形 8px 热区 + 跟手把手 —— 资料库空间（260922） */}
       {desktopWorkspace === "library" && (
         <div

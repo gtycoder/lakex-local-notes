@@ -366,6 +366,9 @@
   z-index: var(--lake-z-tooltip);
 }
 .ln-tip__hint { margin-left: 6px; opacity: .72; }
+/* 261006 Phase 2.2：全局 title 拦截器的表面（见 components/ui/NativeTitleTips.tsx）。
+   定位由 JS 实测后写 left/top，这里只锁「固定定位 + 不拦鼠标 + 顶层序」。 */
+.native-title-tip { position: fixed; pointer-events: none; }
 
 /* ── 13 分段控件 ───────────────────────────────────────────── */
 .ln-segment {
