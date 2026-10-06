@@ -11,6 +11,11 @@ test-node-abi
 # CSS 审计工具的中间数据（指纹/快照/截图，可达数百 MB；用 LK_CSS_AUDIT_DIR 可改到别处）
 .css-audit/
 
+# Impeccable 的**运行时产物**（决策页的题目与作答状态、live 模式的会话）——过程数据，不入库。
+# 注意：DESIGN.md 的机器可读层 .impeccable/design.json 与 .impeccable/critique/ 的快照是**要入库**的。
+.impeccable/questions/
+.impeccable/live/
+
 # Local development credentials (never commit real values)
 .env
 .env.*
