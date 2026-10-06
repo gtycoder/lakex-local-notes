@@ -283,7 +283,9 @@
   user-select: none;
   /* 入场：从窗口外滑进来一点点 + 轻微缩放（比单纯淡入更有"召唤"感）。 */
   transform: translate(-6px, -50%) scale(.96);
-  transition: opacity 130ms var(--lake-ease-standard), transform 130ms var(--lake-ease-standard), top 80ms linear, width 130ms var(--lake-ease-standard), color 120ms ease-out, border-color 120ms ease-out;
+  /* 261006：原先还动画 top/width（布局属性，会造成 thrash）；现在只动画 transform/opacity/颜色。
+     hover 的加宽改为瞬时生效，观感更利落，也不再触发布局。 */
+  transition: opacity 130ms var(--lake-ease-standard), transform 130ms var(--lake-ease-standard), color 120ms ease-out, border-color 120ms ease-out;
 }
 .edge-hotzone.is-active .edge-hotzone-handle {
   opacity: 1;
@@ -561,7 +563,6 @@
   width: min(360px, calc(100vw - 32px));
   padding: 12px 12px 12px 14px;
   border: 1px solid var(--lake-border-1);
-  border-left: 3px solid var(--lake-accent);
   border-radius: var(--lake-radius-md);
   color: var(--lake-text-1);
   background: var(--lake-bg-panel);
@@ -579,7 +580,12 @@
   width: 30px;
   height: 30px;
   border-radius: var(--lake-radius-sm);
+  /* 261006：状态信号从「单侧 3px 色条」改为「图标颜色」。 */
+  color: var(--lake-accent);
 }
+.sync-toast-icon--ok { color: var(--lake-status-ok); }
+.sync-toast-icon--error { color: var(--lake-status-error); }
+.sync-toast-icon--unavailable { color: var(--lake-text-3); }
 .sync-toast-body { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 4px; }
 .sync-toast-title { color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
 .sync-toast-msg { color: var(--lake-text-3); font-size: var(--lake-font-size-small); line-height: var(--lake-line-height-snug); word-break: break-word; }

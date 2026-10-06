@@ -664,21 +664,27 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .sidebar:hover .sidebar-toolbar-row .list-heading,
 .sidebar-toolbar-row:focus-within .list-heading { opacity: 1; }
 
-/* 隐藏式筛选行：收起时高度 0 不占位；展开时 29px（与大纲头部原筛选行同高）。 */
+/* 隐藏式筛选行：收起时 0 不占位；展开时 29px（与大纲头部原筛选行同高）。
+ * 261006：高度动画改用 grid-template-rows（0fr → 1fr）——不再动画 height（布局属性）；
+ * 子项由容器 overflow 裁切，展开后的几何与原来完全一致。 */
 .dock-filter-row {
-  height: 0;
+  display: grid;
+  /* 必须写成 minmax(0, …fr)：裸 0fr 的轨道最小尺寸是 auto，会被 29px 的子项撑住而不塌陷。 */
+  grid-template-rows: minmax(0, 0fr);
+  min-width: 0;
   overflow: hidden;
   opacity: 0;
-  transition: height var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) linear;
+  transition: grid-template-rows var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) linear;
 }
 
-.dock-filter-row.is-open { height: 29px; opacity: 1; }
+.dock-filter-row.is-open { grid-template-rows: minmax(0, 1fr); opacity: 1; }
 
 .dock-filter-row__inner {
   display: flex;
   align-items: center;
   gap: 5px;
   height: 29px;
+  min-height: 0;
   padding: 0 9px;
   color: var(--lake-text-3);
   border-bottom: 1px solid var(--lake-border-1);

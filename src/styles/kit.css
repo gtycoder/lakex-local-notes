@@ -211,20 +211,20 @@
   gap: 8px;
   max-width: 420px;
   min-height: 40px;
-  padding: 10px 12px 10px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--lake-border-1);
-  border-left: 3px solid var(--lake-status-sync);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-popover);
   color: var(--lake-text-1);
   font-size: var(--lake-font-size-small);
 }
-.ln-toast__icon { flex: 0 0 auto; }
+/* 261006：状态只用「图标颜色」表达 —— 单侧 >1px 色条是 craft floor 明令禁止的图案。
+   变体只换图标色；调用方若不带图标，请自行把状态文字设成对应的 --lake-status-*。 */
+.ln-toast__icon { flex: 0 0 auto; color: var(--lake-accent); }
 .ln-toast__text { flex: 1 1 auto; min-width: 0; }
-.ln-toast--ok { border-left-color: var(--lake-status-ok); }
-.ln-toast--warn { border-left-color: var(--lake-status-pending); }
-.ln-toast--error { border-left-color: var(--lake-status-error); }
+.ln-toast--ok .ln-toast__icon { color: var(--lake-status-ok); }
+.ln-toast--warn .ln-toast__icon { color: var(--lake-status-pending); }
 .ln-toast--error .ln-toast__icon { color: var(--lake-status-error); }
 
 /* ── 07 输入框 / 搜索框 ───────────────────────────────────── */
@@ -298,13 +298,15 @@
   border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-knob);
-  transition: transform var(--lake-motion-fast) var(--lake-ease-standard), width var(--lake-motion-fast) var(--lake-ease-standard);
+  transition: transform var(--lake-motion-fast) var(--lake-ease-standard);
 }
 .ln-switch:hover { border-color: var(--lake-border-strong); }
-.ln-switch:active .ln-switch__knob { width: 16px; }
+/* 261006：按压反馈改用 transform（scale），不再动画 width（布局属性动画会造成 thrash）。 */
+.ln-switch:active .ln-switch__knob { transform: scale(.92); }
 .ln-switch:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-switch[aria-checked="true"] { background: var(--lake-accent); border-color: var(--lake-accent); }
 .ln-switch[aria-checked="true"] .ln-switch__knob { transform: translateX(13px); }
+.ln-switch[aria-checked="true"]:active .ln-switch__knob { transform: translateX(13px) scale(.92); }
 .ln-switch:disabled { opacity: .4; cursor: default; }
 
 /* ── 10 徽章与标签 ─────────────────────────────────────────── */
