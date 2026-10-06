@@ -192,6 +192,10 @@
   grid-column: 1 / -1;
   grid-row: 1;
   min-height: 0;
+  /* 顶栏是 fixed（compat.css）+ .workspace 已带 topbar+4px 上缝 ⇒ 本 pane 天然在顶栏之下；
+     基类的 `calc(--topbar-height + 14px)` 会把顶栏再算一遍（实测 48px 空档，用户 261006 报「空白太多」）。
+     与小记空间同口径：这里只留 28px（见 shell.css 的 .app-shell.quick-notes-active .quick-notes-pane）。 */
+  padding-top: 28px;
   background: var(--lake-bg-panel);
   border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
 }
