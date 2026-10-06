@@ -349,6 +349,9 @@
 .resources-space-pane > .asset-browser__msg {
   flex: 0 0 auto;
 }
+/* 段落节奏：页签行 / 工具行 / 分栏之间留出统一间隙（用户 261006：资源页要"保持适当间隙"）。
+ * 与回收站那套（.ln-tabs + hint + split）同口径，别贴在一起。 */
+.resources-space-pane { gap: var(--lake-space-md); }
 .resources-space-pane > .history-split {
   flex: 1 1 auto;
   min-height: 0;

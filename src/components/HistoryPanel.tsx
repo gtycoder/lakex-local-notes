@@ -10,6 +10,7 @@ import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { useHistorySnapshotViewer } from "./useHistorySnapshotViewer";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
 import type { NoteKind } from "../core/noteKind.js";
+import { formatDateTime } from "../lib/formatTime";
 
 export interface HistoryItem {
   id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
@@ -211,7 +212,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     try {
       const r = await native.previewHistorySnapshot(h.id);
       if (!previewVersionRef.current.isCurrent(version)) return;
-      if (r) setInline({ id: h.id, title: new Date(h.createdAt).toLocaleString(), kind: r.kind, html: r.html, size: h.size });
+      if (r) setInline({ id: h.id, title: formatDateTime(h.createdAt, true), kind: r.kind, html: r.html, size: h.size });
       else setError("快照预览失败（文件可能已删除）");
     } catch (e) {
       if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
@@ -317,7 +318,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             {!loading && tab === "orphans" && orphans.length === 0 && <div className="ln-empty">没有孤儿文件</div>}
             {!loading && tab === "history" && history.map((h) => {
               const protectedUntil = h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() ? Date.parse(h.protectedUntil as string) : null;
-              const label = new Date(h.createdAt).toLocaleString();
+              const label = formatDateTime(h.createdAt, true);
               return (
                 <div key={h.id} data-history-id={h.id} className={`b3-list-item b3-list-item--hide-action ln-row2${inline?.title === label ? " b3-list-item--focus" : ""}`}>
                   <span className="b3-list-item__graphic"><Clock size={14} /></span>

@@ -121,6 +121,13 @@ export function AssetsBrowser({ active }: { active: boolean }) {
 
   useEffect(() => { if (active) void refresh(); }, [active, refresh]);
 
+  // 切分类/换类型 = 换上下文：右侧预览与勾选都清掉（否则会出现"预览还是上一个页签的文件"、
+  // 以及"清理选中把看不见的条目也删了"——用户 261006 报的前者）。
+  useEffect(() => {
+    setFocus(null);
+    setSelected(new Set());
+  }, [status, kind]);
+
   // 列表变化后清理已失效的勾选与预览焦点（返回原引用避免多余渲染）。
   useEffect(() => {
     const alive = new Set(items.map(keyOf));
@@ -339,7 +346,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
                           : <FileKindIcon name={item.filename} size={20} />}
                       </span>
                       <span className="ln-row__title" title={item.filename}>{item.filename}</span>
-                      <span className={`badge ${missing ? "badge--error" : isOrphan ? "badge--muted" : "badge--warn"}`}>{missing ? "文件缺失" : isOrphan ? "未引用" : "历史保护"}</span>
+                      {/* 分类标签不放了：三个页签已经把「可删 / 历史保护 / 缺失」分好类（用户 261006） */}
                       <span className="asset-browser__size">{formatBytes(item.size)}</span>
                       <span className="ln-row__actions asset-browser__acts">
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="复制路径" title="复制路径"

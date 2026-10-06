@@ -11,6 +11,7 @@ import { reportNativeActionError } from "../lib/nativeErrors";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { addAssetAccessToken } from "../lib/assetPort";
 import { trashDaysUntilPurge, type TrashItem } from "../core/trashPolicy";
+import { formatDateTime } from "../lib/formatTime";
 
 /** 组树：根 = parentId 为回收站笔记本或父不在列表内（旧数据/孤儿兜底）。 */
 function buildTrashTree(items: TrashItem[]): TrashItem[] {
@@ -53,7 +54,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           <span className="ln-row2__title">{item.title || "无标题"}</span>
           <span className="ln-row2__meta">
             {item.nodeType === "note" ? "文档" : "目录"}
-            {item.deletedAt ? ` · ${new Date(item.deletedAt).toLocaleString()}` : ""}
+            {item.deletedAt ? ` · ${formatDateTime(item.deletedAt)}` : ""}
           </span>
         </div>
         {item.purged && <span className="badge badge--error" title="其他设备已彻底删除；本机仍保留可恢复副本">已被他端删除</span>}
@@ -342,7 +343,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
               <span className="b3-list-item__graphic"><File size={14} /></span>
               <div className="b3-list-item__text ln-row2__main ln-ellipsis">
                 <span className="ln-row2__title">小记</span>
-                <span className="ln-row2__meta">{new Date(item.deletedAt).toLocaleString()}</span>
+                <span className="ln-row2__meta">{formatDateTime(item.deletedAt)}</span>
               </div>
               <span className="fn__space" />
               <button className="b3-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
