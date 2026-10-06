@@ -1069,6 +1069,22 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);   // ← 关键
   });
 
+  it("回收站里的文档：它的附件在 listRemovedAssets 里以「历史保护」列出（恢复要用，只读）", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const name = "1786999999999_cc33dd44.jpg";
+    fs.writeFileSync(path.join(assetsDir, name), "imgdata");
+    store.saveNote(id, "待删多维表", `<p>附件：${name}</p>`);            // 正文引用它 ⇒ 不是孤儿
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);
+
+    store.applyRemoteMoveToTrash(id, new Date().toISOString(), null);      // 进回收站
+    const row = store.listRemovedAssets().find((e) => e.filename === name);
+    expect(row?.status).toBe("history");        // 保护：恢复后还要用 ⇒ 不给删
+    expect(row?.noteState).toBe("trash");
+    expect(row?.orphanId).toBeUndefined();      // 不是"可删"，UI 上不给勾选框
+  });
+
   it("listRemovedAssets：登记在、文件已不在 → fileMissing=true（设置页「缺失」分类的依据）", () => {
     const { id } = makeNote();
     const assetsDir = path.join(dir, "note-assets", id);

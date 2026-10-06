@@ -12,6 +12,8 @@ import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "
 import { addAssetAccessToken } from "../lib/assetPort";
 import { trashDaysUntilPurge, type TrashItem } from "../core/trashPolicy";
 import { formatDateTime } from "../lib/formatTime";
+import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
+import type { NoteKind } from "../core/noteKind.js";
 
 /** 组树：根 = parentId 为回收站笔记本或父不在列表内（旧数据/孤儿兜底）。 */
 function buildTrashTree(items: TrashItem[]): TrashItem[] {
@@ -102,7 +104,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   const [tab, setTab] = useState<"docs" | "quick">("docs");
   const [items, setItems] = useState<TrashItem[]>([]);
   const [quickItems, setQuickItems] = useState<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>([]);
-  const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string } | null>(null);
+  const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string; kind?: NoteKind } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 回收站预览资源补拉中的加载态（大文档首次预览需从云端补缺失资源）
@@ -175,7 +177,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       await native.ensureTrashNoteAssets(noteFileId).catch((error) => reportNativeActionError("预览回收站附件", error));
       const doc = await native.readNote(noteFileId);
       if (!previewVersionRef.current.isCurrent(version)) return;
-      setSelected({ id: item.id, title: item.title || "无标题", noteId: noteFileId, html: doc.content });
+      setSelected({ id: item.id, title: item.title || "无标题", noteId: noteFileId, html: doc.content, kind: (doc.kind ?? "doc") as NoteKind });
     } catch (e) {
       if (!previewVersionRef.current.isCurrent(version)) return;
       setSelected({ id: item.id, title: item.title || "无标题", noteId: null, html: "" });
@@ -186,9 +188,11 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   };
 
   // 选中文档 → Lake viewer 渲染（完整样式：图片/代码块/公式/画板；只读，不创建编辑器对象）
+  // ⚠️ 只给 **doc** 挂：表格/多维表/画板的正文是内部 JSON，塞给 doc viewer 会原样吐出 JSON
+  //（用户 261006 报"多维表预览又坏了"）⇒ 这三种走 <HistorySnapshotPreview>（与历史面板同一实现）。
   useEffect(() => {
     const host = previewHostRef.current;
-    if (!host || !selected?.noteId) {
+    if (!host || !selected?.noteId || (selected.kind ?? "doc") !== "doc") {
       if (viewerRef.current) { destroyLakeEditor(viewerRef.current); viewerRef.current = null; }
       return;
     }
@@ -325,7 +329,11 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
             <>
               <div className="history-preview-inline-title">{selected.title}</div>
               {canPreview ? (
-                <div className="trash-preview-viewer" ref={previewHostRef} />
+                selected.kind && selected.kind !== "doc" ? (
+                  <HistorySnapshotPreview kind={selected.kind} noteId={selected.noteId ?? ""} body={selected.html} snapshotId={selected.id} />
+                ) : (
+                  <div className="trash-preview-viewer" ref={previewHostRef} />
+                )
               ) : (
                 <div className="ln-empty">该节点无可预览内容（目录或正文已删）</div>
               )}

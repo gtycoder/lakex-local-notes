@@ -270,6 +270,26 @@ export class OrphanLifecycle {
         out.push({ noteId, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: noteId, noteState: "active", fileMissing: false });
       }
     }
+    // 回收站里的文档：其附件仍在磁盘上、恢复后要用 ⇒ **以「历史保护」列出**（只读、不可删）。
+    // 用户 261006：删掉多维表后，它的附件在资源页里完全看不到 —— 孤儿登记里没有（保存时它们还被正文引用），
+    // 历史那一支又要求"当前正文不再引用"，而回收站文档的正文文件还在 ⇒ 两边都不覆盖。
+    // 这也补上了资源页说明里承诺的"文档在回收站时文件仍列出"。
+    const trashed = this.ctx.db.prepare("SELECT id, title FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string | null }>;
+    for (const note of trashed) {
+      const dir = dirOf(note.id);
+      if (!fs.existsSync(dir)) continue;
+      let names: string[] = [];
+      try { names = fs.readdirSync(dir); } catch { continue; }
+      for (const filename of names) {
+        const key = note.id + "/" + filename;
+        if (seen.has(key)) continue;
+        const full = path.join(dir, filename);
+        let size = 0;
+        try { if (!fs.statSync(full).isFile()) continue; size = fs.statSync(full).size; } catch { continue; }
+        seen.add(key);
+        out.push({ noteId: note.id, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: note.title || "(无标题)", noteState: "trash", fileMissing: false });
+      }
+    }
     // 统一补标题/状态（历史保护文档可能不在孤儿集合里）
     const ids = [...new Set(out.map((o) => o.noteId))];
     const notes = sqlParameterBatches(ids).flatMap((batch) => {

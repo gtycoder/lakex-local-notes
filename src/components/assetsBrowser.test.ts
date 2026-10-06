@@ -69,7 +69,9 @@ describe("未引用资源浏览器", () => {
   it("「缺失」是一等分类（走主进程 fileMissing，非图片类型也准）；预览是纯内容", () => {
     expect(SRC).toContain("item.fileMissing === true");     // 分类与计数以主进程标志为准
     expect(SRC).toContain('label: "缺失"');                  // 行上不再挂分类标签（页签已分类，用户 261006）
-    expect(SRC).toContain("onError={() => markBroken(key)}"); // 缩略图仍留 onError 兜底
+    expect(SRC).toContain("onError={onBroken}");                      // 预览媒体的 onError 兜底
+    expect(SRC).toContain("onBroken={() => focusKey && markBroken(focusKey)}");
+    expect(SRC).not.toContain("loading=\"lazy\"");                   // 行首不再渲染缩略图（用户 261006）
     expect(SRC).toContain("asset-browser__placeholder");      // 空/不支持/缺失：只给图标，不放字
     expect(SRC).not.toContain("asset-browser__meta");         // 预览区没有元信息与操作按钮
     expect(SRC).not.toContain("asset-browser__metacts");

@@ -326,7 +326,6 @@ export function AssetsBrowser({ active }: { active: boolean }) {
                 </div>
                 {group.items.map((item) => {
                   const key = keyOf(item);
-                  const missing = isMissing(item);
                   const isOrphan = item.orphanId != null;
                   const focused = key === focus;
                   return (
@@ -340,10 +339,9 @@ export function AssetsBrowser({ active }: { active: boolean }) {
                           ? <input type="checkbox" checked={selected.has(key)} onChange={() => toggleSelect(item)} aria-label={`选择 ${item.filename}`} />
                           : <span className="asset-browser__lock" title="被历史快照引用，不可删除">锁</span>}
                       </label>
+                      {/* 行首只留类型图标：不再渲染缩略图（用户 261006：资源列表前边不用展示缩略图） */}
                       <span className="ln-row__icon asset-browser__thumb">
-                        {!missing && assetPreviewKind(item) === "image"
-                          ? <img src={assetDisplayUrl(item, 128)} alt="" loading="lazy" onError={() => markBroken(key)} />
-                          : <FileKindIcon name={item.filename} size={20} />}
+                        <FileKindIcon name={item.filename} size={20} />
                       </span>
                       <span className="ln-row__title" title={item.filename}>{item.filename}</span>
                       {/* 分类标签不放了：三个页签已经把「可删 / 历史保护 / 缺失」分好类（用户 261006） */}
