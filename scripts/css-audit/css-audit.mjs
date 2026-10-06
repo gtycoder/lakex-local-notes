@@ -15,7 +15,16 @@ const nav = {
   },
   openSettings: async (page) => {
     for (let a = 0; a < 3; a++) {
-      await page.click(178, 19); await page.sleep(420);
+      // 261006：原先写死坐标 (178,19)，布局演进后该点落在 DIV.tabbar-leading（容器）上 ⇒ 菜单根本不开。
+      // 改为按**可访问名**找工作区触发器（title="空间：资料库"），再点击其中心。
+      const trig = await page.evaluate(`(() => {
+        const el = document.querySelector('[title^="空间"], [aria-label^="空间"]');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+      })()`);
+      if (!trig) throw new Error("no workspace trigger");
+      await page.click(trig[0], trig[1]); await page.sleep(420);
       const s = await page.evaluate(`(() => { const el = [...document.querySelectorAll('button,[role=menuitem]')].find(e => (e.textContent||'').includes('偏好设置')); if(!el) return null; const r = el.getBoundingClientRect(); return [Math.round(r.x+r.width/2), Math.round(r.y+r.height/2)]; })()`);
       if (s) { await page.click(s[0], s[1]); await page.sleep(650); return; }
       await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
