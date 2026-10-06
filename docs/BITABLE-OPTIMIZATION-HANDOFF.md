@@ -827,6 +827,9 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 
 | AI 字段多模态（图片 + PDF） | 待验收 | 261005-MM | AI 字段可把被引用字段里的图片 / PDF 作为内容块一并发送（`includeAttachments`）：图片 → `image_url` data URL、PDF → 本地抽文本；跨 IPC 只传资产引用、主进程解析；图片 / 文档仅 user 消息且限量；其余附件仍只出文件名。见 §13 |
 | AI 图片上下文（选区含图 / 图片浮栏 AI） | 待验收 | 261005-MM | 文字选区含图片时**自动**随问答发送（无需手动附图）；图片浮动工具栏新增「AI」入口（单图上下文 + 图片预设 描述/提取文字/翻译）。见 §13 |
+| 展开浮窗边界适配（261006） | 待验收 | 261006 | 单元格展开浮窗（文本 / Markdown / AI）改用**真实渲染尺寸**定位并把尺寸夹进视口：旧实现横向只按占位宽 400 夹取，而实际宽度是「记住的尺寸」⇒ 越宽越往右溢出；新增窗口 resize 重新适配。见 §13 |
+| AI 字段展开默认预览（261006） | 待验收 | 261006 | AI 字段单元格展开默认进「预览」，Markdown 字段仍默认「编辑」；由 `field.type === "ai"` 决定初始态（只读恒预览）。见 §13 |
+| 导航改为设备本地（261006 · 方案 C） | 待验收 | 261006 | `activeTableId` / `activeViewId` 不再作为正文真相：序列化恒写默认导航（`serializeBody`），切表 / 切视图只写 localStorage ⇒ 切表不落盘、不标脏、不进同步；每台设备各记各的。见 §13 |
 
 ## 12. 修改记录
 
@@ -932,6 +935,9 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-10-05 | 261005-MM | 图片 Cmd+X 剪切（vendor 导出 deleteBlockByRange） | vendor/lakex-doc-react/{src/index.ts,LOCAL-CHANGES.md,dist/*} · src/features/editor/selectionToolbar/{SelectionToolbar.tsx,selectionToolbar.wiring.test.ts} · docs/LAKEX-CONTRACT.md · 本文件 | vendor 导出块级删除（LOCAL-CHANGES #28）+ 宿主 Cmd/Ctrl+X：copy 写剪贴板 + deleteBlockByRange 删顶层块。真实端实测图片从正文/DOM 都删除、剪贴板得 text/html 图。踩坑：contenteditable 守卫拦了主编辑器引擎 | 删的是整个顶层块（图独占段落=删图；同段夹字会连文字删）；未提交 |
 | 2026-10-05 | 261005-MM | 修正：图片剪切改用 deleteCard（单卡），撤销块级删除方案 | src/features/editor/selectionToolbar/{SelectionToolbar.tsx,imageCardOps.ts,selectionToolbar.wiring.test.ts} · docs/LAKEX-CONTRACT.md · 本文件 | 用户指出 deleteBlockByRange 会删整个块、连坐同段其它图片/文字。改用内核 deleteCard(cardId)（取卡片实例自己的 editor）。真实端实测：同段 3 图删中间一张，只掉它、文字与另两图保留。vendor 改动整体还原（零 vendor 分叉） | 未提交 |
 | 2026-10-05 | 261005-MM | 卡片剪切泛化到所有类型（image/file/video/audio…） | src/features/editor/selectionToolbar/{SelectionToolbar.tsx,selectionToolbar.wiring.test.ts} · docs/LAKEX-CONTRACT.md · 本文件 | 新增 activeCardRef（任意 ne-card）+ 命中卡片才拦 Cmd+X；非折叠文字选区让位。真实端同文档 4 类各 2 张逐个剪切：每类只掉 1 张、无跨类误伤 | 未提交 |
+| 2026-10-06 | 261006 | 展开浮窗边界适配 + 画板工具栏图标对齐 | src/features/bitable/bitableCells.tsx · src/features/bitable/bitableMarkdown.behavior.test.ts · src/features/board/boardEditor.css · src/styles/cssLayers.test.ts · HANDOFF.md · 本文件 | ① 展开浮窗定位改用真实尺寸并按视口夹取（旧实现按占位宽 400，记忆尺寸更宽时越界），窗口 resize 重新适配；② 画板左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 + 注入触发器居中）。门禁全绿（vitest 1680/16）；真实端实测：强制 900 宽面板右缘 1250 / 视口 1258（8px 边距）、11 个工具图标 centerX 全为 42 | 功能待验收；未提交 |
+| 2026-10-06 | 261006 | AI 字段展开默认预览 | src/features/bitable/bitableCells.tsx · src/features/bitable/bitableMarkdown.behavior.test.ts · HANDOFF.md · 本文件 | AI 字段展开默认进「预览」（`field.type === "ai"`），Markdown 字段仍默认「编辑」；只读恒预览。新增行为护栏；vitest 1681/16。真实端 CDP：AI 面板打开即 预览 高亮、无 textarea | 功能待验收；未提交 |
+| 2026-10-06 | 261006 | 导航改为设备本地（方案 C） | src/features/bitable/useBitableSession.ts · src/features/bitable/BitableEditor.tsx · src/features/bitable/BitableEditor.behavior.test.ts · HANDOFF.md · 本文件 | 切表 / 切视图不再落正文、不标脏、不进同步：`serializeBody` 恒写默认导航，导航只写 localStorage（`lake-notes-v3.bitable-nav.<noteId>`）。真实端 CDP：切表状态栏全程「仅本地」、正文 activeTableId 不变、localStorage 已更新；vitest 1682/16 | 功能待验收；未提交 |
 
 ## 13. 会话记录（只追加）
 
@@ -3992,6 +3998,37 @@ UI 与交互变化：
 - 真实端实测（可信 CDP 输入，同文档内 image/file/video/audio **各 2 张**）：依次对每类第一张 Cmd+X → 计数 `2,2,2,2 → 1,2,2,2 → 1,1,2,2 → 1,1,1,2 → 1,1,1,1`，每次只掉目标 1 张、其余类型零变化，剪贴板有内容。
 - 覆盖两种结构：内联卡（image/file，父节点 `NE-P`）与块卡（video/audio，`NE-HOLE` 包裹）都只删目标卡。
 - 验证：tsc ✓ · vitest **1679/16** ✓ · check:core / ui-metrics / 双端构建 / `git diff --check` 全绿。未提交。
+
+### 2026-10-06 · 261006 · 画板工具栏图标对齐 + 多维表展开浮窗适配边界
+
+用户反馈两条：① 画板左侧竖排创建栏的图标「错位」；② 多维表单元格展开浮窗需要「适配边界」。
+
+画板工具栏（`src/features/board/boardEditor.css`）：
+
+- 真实实例实测 11 个工具项的图标圆心分三档：内核原生 label（手形/选择/思维导图/文本/图片）**57**、原生 button（画笔/箭头/形状）**50**、lakex 注入触发器（素材库/AI/导出）**42.5**。
+- 根因：原生 `label.tool-icon` 里的隐藏 `<input type="radio">`（opacity:0）仍占 **15px 流内宽度**，把 36px 字形盒推到行右缘；注入的 36px 触发器贴行左缘、未居中。（内核基底 `lakex-drawnix/index.css` 本有 `.drawnix .tool-icon_type_radio{position:absolute}`，但运行态不生效 ⇒ 该 15px 属意外占位。）
+- 修法：隐藏 radio 移出流（`position:absolute`，仍可聚焦 / 点击 label 照常切换）＋注入触发器 `margin-inline:auto`；行宽回到 `--lg-button-size`(36)。实测 11 项 centerX **全为 42**；真实鼠标点「选择」仍正常切换并高亮。
+- 归属：覆盖的是依赖包基底规则，写在我们自己的 `boardEditor.css`（AGENTS §3.14 内核例外），不手改 vendor。
+
+展开浮窗（`src/features/bitable/bitableCells.tsx` 的 `ExpandPanel`）：
+
+- 根因：定位横向用占位宽 `Math.min(400, …)` 夹取，而实际渲染宽度是「记住的尺寸」⇒ 记忆宽度 > 400 且锚点靠右时右缘越出视口（1258 视口 / 锚点 x≈1020 / 记忆 900 宽时旧实现溢出 ~490px）。
+- 修法：用**真实渲染尺寸**调 `placePopoverPosition`，并把宽高夹进视口（`innerWidth/Height − 16`）；窗口 resize 重新适配；仍保持「拖动 / 缩放不重算定位」（261004 规则）。
+- 复现 / 验证（用户与该实例共用窗口，故用运行中的 dev 实例 + 临时 localStorage，验后已还原）：强制 `md` 尺寸 900×300 打开「晚间复盘」MD 面板 → 面板 `left=350 / right=1250 / 视口 1258`（8px 边距）；旧实现同条件 `right≈1750`。
+
+验证：`tsc` ✓ · 全量 vitest **1680 passed / 16 skipped**（+1 = 新增边界护栏）✓ · `check:core` 75-0 ✓ · `ui-metrics`（hex=0/rgb=0/`!important`=9/未定义令牌=0）✓ · `cssLayers`+`uiPrimitives` ✓ · 双端构建 ✓ · `git diff --check` ✓。未提交。
+
+改动文件：`src/features/board/boardEditor.css` · `src/features/bitable/bitableCells.tsx` · `src/features/bitable/bitableMarkdown.behavior.test.ts` · `src/styles/cssLayers.test.ts` · 本文件 · `HANDOFF.md`。
+
+补充（同日 · AI 字段展开默认预览）：用户 261006 第二条 —— 多维表 **AI 字段**的单元格展开默认进「预览」，「其他的」（Markdown 字段）仍默认进「编辑」。`MarkdownExpandPopover` 初始 mode = `readOnly || isAi ? "preview" : "edit"`，`isAi` 由 `MarkdownCell` 按 `field.type === "ai"` 传入；只读仍恒预览。新增单测「AI 字段展开默认进预览，Markdown 默认进编辑」；真实端 CDP 实测 AI 字段面板打开即 `预览` 高亮、无 textarea、头部「重新生成」在。门禁：tsc ✓ · vitest **1681/16** ✓ · check:core ✓ · ui-metrics ✓ · 双端构建 ✓ · `git diff --check` ✓。
+
+补充（同日 · 导航改为设备本地 · 方案 C）：用户 261006 在「B / C」里选 **C**（每台设备各记各的表）。改动：
+
+- `useBitableSession` 新增 `serializeBody(tables)`：序列化时把 `activeTableId` 与每张表的 `activeViewId` **恒写成第一张表 / 第一个视图**，三处 `bitablesToBody(...)` 调用全部改走它。
+- `BitableEditor`：新增 `readBitableNav` / `applyBitableNav`（按 `noteId` 读 localStorage `lake-notes-v3.bitable-nav.<noteId>`，打开时套到显示用 doc 上）＋一个按 `navSig` 触发的 effect 写回；历史快照预览 `chrome=false` 不读也不写。
+- 语义：切表 / 切视图**不再改正文** ⇒ 不落盘、不标脏、不进 S3；每台设备各记各的。正文格式**未改字段结构**（导航字段保留但恒为默认、惰性），移动端 / 搜索 / 导出 / 历史预览共用同一份 core 序列化不受影响。
+
+验证：新增/改写 jsdom 行为用例（切表后 `onChange` 不被调用、localStorage 导航落为切换后的表；异步晚到的粘贴不再借「导航保存」充当载体）；全量 vitest **1682/16**。真实端 CDP：切表后状态栏全程「仅本地」、`readNote` 正文 `activeTableId` 不变、localStorage 导航已更新为切换后的表。
 
 ## 14. 会话执行模板
 

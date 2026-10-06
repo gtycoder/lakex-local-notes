@@ -83,6 +83,28 @@
 | 261006 | Phase 1.5 死声明删除（权威 CSSOM 扫描 + 计算值对拍） | ✅ 完成 |
 | 261006 | Phase 2 定调：canon（品类标准）+ 布局冻结 + 只做主题类；已回执掷骰、关闭决策页 | ✅ |
 | 261006 | Phase 2.1 三主题令牌重塑（canon） | ✅ 完成（待验收） |
+| 261006 | 全应用「文本选中」统一到 `--lake-select-bg`（压掉内核 antd 基底的固定蓝 `#1890ff`） | ✅ 完成（待验收） |
+
+## 4h. 变更明细 · 文本选中固定色 + hover 气泡同色（用户 261006 现场）
+
+**现象**：文档（Lake 内核）文本选中是主题色变浅（warm 下为橙粉），而多维表单元格 / 表格 / 设置输入框等一律是**固定深蓝**。
+
+**根因**：内核自带的 antd 基底 `vendor/lakex-doc-react/src/assets/antd.css` 里有一条裸的 `::selection{background:#1890ff}`，
+编译进 `dist/style.css` 后由 `src/styles/index.css` **import 进 legacy 层**。它只被内核自身的 `.ne-engine ::selection`（映射到 `--lakex-editor-selection` = `--lake-select-bg`）覆盖 ⇒ 编辑器之外全部落回固定蓝。
+
+**修法**（`src/styles/kernel-theme.css`，未分层）：
+
+```css
+::selection { background: var(--lake-select-bg); color: inherit; }
+```
+
+- 未分层普通声明压过 `legacy` 层（层序里「未分层 > 任何 @layer」）⇒ 不需要 `!important`、也不需要堆特异性；
+- 内核那些 `!important` 的「卡片/表格用自绘选区、原生选区透明」规则仍照常胜出（important 恒压 normal）；
+- **结论（用户 261006 复看后改定）**：采用**固定色**，理由「选中的边框已经是主题色，多主题色放一起并不好看」。用户明确：**这不是设计系统的例外，而是「选中 / 气泡」这一处的独立设计。**
+  实现：把 `--lake-select-bg` 从三套主题收进 `themes/base.css`，定为**主题无关固定值** `rgba(63,95,160,.16)`（用户截图的 `#d8dde8` 就是它在 `#f5f5f5` 上的合成）。
+- **追加（用户 261006）**：hover 气泡「都改用选中色」—— `--lake-tooltip-bg/-fg` 由深蓝 `#3f4868` / `#f8f9ff` 改为同色系的 `#d8dde8` / `#1f2329`（`.ln-tip` 与各处 hover 气泡共用同一令牌，改一处即全改）。
+
+**验证**：三主题实测 —— `getComputedStyle(el,"::selection")` 恒为 `rgba(63,95,160,.16)`，`.ln-tip` 恒为 `#d8dde8` + `#1f2329`，引擎、多维表单元格、表格、普通输入框取值一致；`tsc` / 全量 vitest 1681-16 / `cssLayers`+`uiPrimitives` / `ui-metrics`（hex=0、rgb=0、`!important`=9）/ 双端构建 / `git diff --check` 全绿。
 
 ## 4f. 变更明细 · Phase 2.1（canon 主题令牌）
 
