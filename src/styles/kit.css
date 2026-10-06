@@ -115,8 +115,7 @@
 .context-menu-item:hover,
 .context-menu-submenu > button:hover:not(:disabled),
 .create-menu > button:hover:not(:disabled) { color: var(--lake-accent-text); background: var(--lake-accent-tint); font-weight: var(--lake-font-weight-semibold); }
-.ln-row.is-disabled { color: var(--lake-text-4); cursor: default; }
-.ln-row.is-disabled .ln-row__icon { color: var(--lake-text-4); }
+.ln-row.is-disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-row--notebook { min-height: calc(var(--lake-ctl-h) + 2px); }
 .ln-row__indent { flex: 0 0 auto; }
 
@@ -162,13 +161,13 @@
 .context-menu > button:disabled,
 .context-menu-item.is-disabled,
 .context-menu-submenu > button:disabled,
-.create-menu > button:disabled { color: var(--lake-text-4); cursor: default; opacity: 1; }
+.create-menu > button:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-menu__item.is-disabled:hover,
 .top-menu > button:disabled,
 .context-menu > button:disabled,
 .context-menu-item.is-disabled:hover,
 .context-menu-submenu > button:disabled,
-.create-menu > button:disabled { color: var(--lake-text-4); background: transparent; font-weight: inherit; }
+.create-menu > button:disabled { background: transparent; font-weight: inherit; }
 .ln-menu__item--danger,
 .context-menu > button.danger,
 .context-menu-item.danger { color: var(--lake-status-error); }
@@ -316,7 +315,7 @@
 .ln-switch[aria-checked="true"] { background: var(--lake-accent); border-color: var(--lake-accent); }
 .ln-switch[aria-checked="true"] .ln-switch__knob { transform: translateX(13px); }
 .ln-switch[aria-checked="true"]:active .ln-switch__knob { transform: translateX(13px) scale(.92); }
-.ln-switch:disabled { opacity: .4; cursor: default; }
+.ln-switch:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 
 /* ── 10 徽章与标签 ─────────────────────────────────────────── */
 .ln-tag {
@@ -418,6 +417,7 @@
 .ln-form__row + .ln-form__row { border-top: 1px solid var(--lake-border-2); }
 .ln-form__row:hover { background: var(--lake-bg-hover); }
 .ln-form__row:active { background: var(--lake-bg-press); }
+.ln-form__row:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
 .ln-form__main { flex: 1 1 auto; min-width: 0; }
 .ln-form__label { color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
 .ln-form__desc { margin-top: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); line-height: var(--lake-line-height-snug); }
@@ -470,6 +470,7 @@
   cursor: pointer;
 }
 .ln-tabs__item:hover { color: var(--lake-text-1); }
+.ln-tabs__item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
 .ln-tabs__item.is-active {
   color: var(--lake-accent-text);
   font-weight: var(--lake-font-weight-semibold);
@@ -635,7 +636,7 @@
 .b3-switch:checked::after { left: 21.5px; }
 .b3-switch:checked:hover { border-color: var(--lake-accent); }
 .b3-switch:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
-.b3-switch:disabled { opacity: .4; cursor: default; }
+.b3-switch:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 
 /* ── 16 勾选（checkbox / radio）：自绘，收编桌面里散落的原生控件 ────────────────
  * 261006 Phase 2.2：桌面里还有 13 处原生 <input type="checkbox"> 与 2 处 radio，它们由系统绘制，
