@@ -94,33 +94,17 @@
   .tree-row.type-notebook .note-row-copy strong { color: inherit; }
   .tree-children { border-left-color: var(--lake-border-2); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
 
+  /* 261006：光标/命中带/药丸已并入 kit 的 .ln-split-handle（分栏与侧栏唯一实现），
+     这里只留侧栏特有的定位。几何与原值逐像素相同（药丸 left:50% - 1px == 原 right:4px）。 */
   .sidebar-resize-handle {
     position: absolute;
-    z-index: 3;
     top: var(--topbar-height);
     right: -5px;
     bottom: 0;
     width: 10px;
-    cursor: col-resize;
-    touch-action: none;
   }
   .sidebar.sidebar-floating .sidebar-resize-handle,
   .sidebar.sidebar-collapsed .sidebar-resize-handle { top: 0; }
-  .sidebar-resize-handle::after {
-    content: "";
-    position: absolute;
-    top: 42%;
-    right: 4px;
-    width: 2px;
-    height: 48px;
-    border-radius: var(--lake-radius-pill);
-    background: transparent;
-    transform: translateY(-50%);
-    transition: background-color var(--lake-motion-fast) var(--lake-ease-standard);
-  }
-  .sidebar-resize-handle:hover::after,
-  .sidebar-resize-handle:focus-visible::after { background: var(--lake-accent); }
-  .sidebar-resize-handle:focus-visible { outline: none; }
 
   /* .workspace / .tab-bar / .tab-items / .tabbar-* 已搬到共用作用域（见上方「壳层几何」） */
 

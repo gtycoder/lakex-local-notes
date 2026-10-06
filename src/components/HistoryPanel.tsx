@@ -5,6 +5,7 @@ import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
+import { SplitPane } from "./ui/SplitPane";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { useHistorySnapshotViewer } from "./useHistorySnapshotViewer";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
@@ -300,7 +301,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             </button>
           </div>
         )}
-        <div className="history-split">
+        <SplitPane ariaLabel="调整历史列表宽度" storageKey="history" minRight={280}>
           <div
             className="history-list b3-list b3-list--background history-list-left"
             ref={listRef}
@@ -376,7 +377,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               <div className="ln-empty">{orphanLoading ? "加载中…" : "选择左侧文件查看预览"}</div>
             )}
           </div>
-        </div>
+        </SplitPane>
         <DialogResizeHandles onResize={floating.startResize} />
     </Dialog>
   );

@@ -111,10 +111,10 @@ export function useDesktopLifecycle({
       }
       if (!onSwitchDesktopWorkspace) return;
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
-      const map: Record<string, "library" | "quick-notes" | "trash"> = {
+      // 用户 261006：只有上半「空间」有快捷键；回收站/资源/偏好设置都不给（⌘3 已移除）。
+      const map: Record<string, "library" | "quick-notes"> = {
         "1": "library",
         "2": "quick-notes",
-        "3": "trash",
       };
       const next = map[event.key];
       if (!next) return;

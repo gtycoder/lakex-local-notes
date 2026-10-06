@@ -44,6 +44,37 @@
 .ln-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 40%, transparent); }
 .ln-btn--danger:hover { background: var(--lake-status-error-soft); }
 
+/* ── 分隔条（左右分栏 / 资料库侧栏共用**唯一**实现）────────────────────────
+ * 本层只定「外观与交互」，**定位由各站点自己给**（站点在各自层里写 position/inset，属性不重叠，
+ * 不构成层压层）：分栏把手贴在分栏边界（零宽 flex 项），侧栏把手贴侧栏右缘（absolute 10px）。
+ * 命中带与药丸都用伪元素 ⇒ 不占任何布局宽度，**不改变既有分栏几何**。 */
+.ln-split-handle { cursor: col-resize; touch-action: none; z-index: 3; }
+.ln-split-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 10px;
+  transform: translateX(-50%);
+}
+.ln-split-handle::after {
+  content: "";
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 2px;
+  height: 48px;
+  border-radius: var(--lake-radius-pill);
+  background: transparent;
+  transform: translate(-50%, -50%);
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.ln-split-handle:hover::after,
+.ln-split-handle:focus-visible::after { background: var(--lake-accent); }
+.ln-split-handle:focus-visible { outline: none; }
+.ln-split-handle.is-resizing::after { background: var(--lake-accent); }
+
 /* ── 02 图标按钮 ───────────────────────────────────────────── */
 .ln-iconbtn {
   display: inline-flex;
@@ -695,6 +726,13 @@
 
 /* Destructive-action button (P7-e): .ft__error is the existing semantic class used by buttons like 清空;
  * living in the kit layer lets the LAYER ORDER (not !important) beat .b3-button--outline neutrals. */
-/* 同上：带上基座的 :not() 链，否则被 .b3-button 基座/--outline 变体的 color 压掉（危险操作看不出是危险操作）。 */
-.b3-button:not(.quick-note-publish):not(.quick-note-discard).ft__error { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 42%, transparent); }
+/* 同上：带上基座的 :not() 链，否则被 .b3-button 基座/--outline 变体的 color 压掉（危险操作看不出是危险操作）。
+ * 261006 补 background: transparent：`.b3-button` 基座是**实心主色**，只改文字色会得到「红字压在主色实心底上」
+ * ——实测两个确认框（目录树删除 / 资源清理删除）都没带 --outline，渲染成看不清字的深色块（用户截图报障）。
+ * 让语义类自带透明底：调用方漏写 --outline 也仍是标准「描边红」，不再有第二种危险按钮长相。 */
+.b3-button:not(.quick-note-publish):not(.quick-note-discard).ft__error {
+  color: var(--lake-status-error);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--lake-status-error) 42%, transparent);
+}
 .b3-button:not(.quick-note-publish):not(.quick-note-discard).ft__error:hover { background: var(--lake-status-error-soft); }

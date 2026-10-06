@@ -22,8 +22,8 @@ import { ASSET_PORT, withAssetAccessToken } from "../lib/assetPort";
 import { fileKindOf, type AssetFileKind } from "../core/assetNaming.js";
 import { FileKindIcon } from "../features/bitable/FileKindIcon";
 import { Dialog } from "./ui/Overlay";
+import { SplitPane } from "./ui/SplitPane";
 import { Select } from "./ui/Select";
-import { Seg } from "./settingsPrimitives";
 
 /** 全局「被移除资源」条目（与主进程 listRemovedAssets 的返回一致）。 */
 export interface RemovedAsset {
@@ -252,20 +252,28 @@ export function AssetsBrowser({ active }: { active: boolean }) {
 
   const pendingBytes = (pendingDelete ?? []).reduce((sum, item) => sum + (item.size || 0), 0);
 
+  // 非当前空间时不渲染：空间视图是 keep-alive 的，若隐藏视图里仍挂着整块 pane，
+  // 每个页面的 DOM 都会多出这几十个元素（快照里表现为**所有态**一起漂）。
+  // 组件本身不卸载（勾选/焦点仍在），与 TrashPanel 的 `if (!open) return null` 同口径。
+  if (!active) return null;
+
   return (
-    <div className="asset-browser">
-      {/* 上半 · 操作区：三个大页签 + 类型筛选 */}
+    // 与回收站同构的整页 pane（用户 261006：资源提到和回收站一级，套回收站样式）
+    <section className="resources-space-pane" role="region" aria-label="资源">
+      {/* 操作区：横向页签走 kit 的 .ln-tabs（与回收站/历史面板同一原语）+ 类型筛选 */}
       <div className="asset-browser__status">
-        <Seg ariaLabel="资源状态">
-          {STATUS_TABS.map((tab) => (
-            <button key={tab.id} type="button"
-              className={`b3-button b3-button--outline seg__item${status === tab.id ? " is-active" : ""}`}
-              aria-pressed={status === tab.id}
-              onClick={() => setStatus(tab.id)}>
-              {tab.label}<span className="ln-tabs__count">{tab.count}</span>
-            </button>
-          ))}
-        </Seg>
+        <div className="ln-tabs">
+          <div className="ln-tabs__track" role="tablist" aria-label="资源分类">
+            {STATUS_TABS.map((tab) => (
+              <button key={tab.id} type="button" role="tab" aria-selected={status === tab.id}
+                className={`ln-tabs__item${status === tab.id ? " is-active" : ""}`}
+                onClick={() => setStatus(tab.id)}>
+                {tab.label}<span className="ln-tabs__count">{tab.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <span className="fn__space" />
         <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />
       </div>
 
@@ -291,6 +299,8 @@ export function AssetsBrowser({ active }: { active: boolean }) {
         <div className="ln-empty"><strong>没有被移除的资源文件</strong><small>当前所有本地资产都仍被正文或历史快照引用。</small></div>
       ) : (
         <>
+          {/* 左 2/3 列表、右 1/3 纯预览；可左右拖动（SplitPane 原语，与回收站/历史版本同一套） */}
+          <SplitPane ariaLabel="调整资源列表宽度" storageKey="resources" minRight={280}>
           <div className="asset-browser__list b3-list" ref={listRef} tabIndex={0}
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") { event.preventDefault(); moveFocus(1); }
@@ -316,11 +326,13 @@ export function AssetsBrowser({ active }: { active: boolean }) {
                     <div key={key} data-asset-key={key}
                       className={`ln-row asset-browser__row${focused ? " is-selected" : ""}`}
                       onClick={() => { setFocus(key); listRef.current?.focus(); }}>
-                      <span className="asset-browser__pick" onClick={(event) => { event.stopPropagation(); toggleSelect(item); }}>
+                      {/* label 包住勾选框：原生点击只切一次（早先是 span onClick + input onChange 各切一次 ⇒ 一次点击净零，
+                          表现为"勾不上"）；外层只拦冒泡，避免顺带改预览焦点。 */}
+                      <label className="asset-browser__pick" onClick={(event) => event.stopPropagation()}>
                         {isOrphan
                           ? <input type="checkbox" checked={selected.has(key)} onChange={() => toggleSelect(item)} aria-label={`选择 ${item.filename}`} />
                           : <span className="asset-browser__lock" title="被历史快照引用，不可删除">锁</span>}
-                      </span>
+                      </label>
                       <span className="ln-row__icon asset-browser__thumb">
                         {!missing && assetPreviewKind(item) === "image"
                           ? <img src={assetDisplayUrl(item, 128)} alt="" loading="lazy" onError={() => markBroken(key)} />
@@ -346,10 +358,11 @@ export function AssetsBrowser({ active }: { active: boolean }) {
             ))}
           </div>
 
-          {/* 下半 · 纯预览（固定 1/3 高，只有内容） */}
+          {/* 右栏 · 纯预览（只有内容，不放文字与按钮） */}
           <div className="asset-browser__preview">
             <AssetStage item={focusItem} broken={focusKey != null && broken.has(focusKey)} onBroken={() => focusKey && markBroken(focusKey)} />
           </div>
+          </SplitPane>
         </>
       )}
 
@@ -369,10 +382,10 @@ export function AssetsBrowser({ active }: { active: boolean }) {
           </div>
           <div className="ln-dialog__actions">
             <button className="b3-button b3-button--cancel" onClick={() => setPendingDelete(null)}>取消</button>
-            <button className="b3-button ft__error" disabled={busy} onClick={() => void confirmDelete()}>{busy ? "删除中…" : "删除"}</button>
+            <button className="b3-button b3-button--outline ft__error" disabled={busy} onClick={() => void confirmDelete()}>{busy ? "删除中…" : "删除"}</button>
           </div>
         </Dialog>
       )}
-    </div>
+    </section>
   );
 }

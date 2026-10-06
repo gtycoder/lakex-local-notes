@@ -188,6 +188,27 @@
 .app-shell.trash-space-active .workspace {
   grid-template-rows: minmax(0, 1fr);
 }
+/* 壳：资源空间（261006）—— 与回收站**同一套**：藏目录/大纲、状态栏，正文铺满 */
+.app-shell.resources-space-active .sidebar { display: none; }
+.app-shell.resources-space-active {
+  grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr);
+}
+.app-shell.resources-space-active .workspace {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  grid-template-rows: minmax(0, 1fr);
+}
+.app-shell.resources-space-active .statusbar { display: none; }
+.app-shell.resources-space-active .resources-space-pane {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 0;
+  padding-top: 28px;
+  background: var(--lake-bg-panel);
+  border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
+}
 .app-shell.trash-space-active .trash-space-pane {
   grid-column: 1 / -1;
   grid-row: 1;
@@ -310,6 +331,33 @@
   color: var(--lake-accent-text);
   background: var(--lake-accent-tint);
 }
+
+/* 资源整页空间：与 .trash-space-pane 同构（不是 floating-dialog） */
+.resources-space-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  flex: 1 1 auto;
+  background: var(--lake-bg-window);
+  padding: calc(var(--topbar-height) + 14px) clamp(18px, 2.4vw, 32px) 0 14px;
+}
+.resources-space-pane > .asset-browser__status,
+.resources-space-pane > .asset-browser__toolbar,
+.resources-space-pane > .asset-browser__msg {
+  flex: 0 0 auto;
+}
+.resources-space-pane > .history-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+/* 左 2/3 列表、右 1/3 纯预览（用户 261006：左侧宽右侧稍窄，预览才够用）；
+ * 可拖动（SplitPane）：默认 66%，拖过之后 --split-left 是像素值。 */
+.resources-space-pane > .history-split > .asset-browser__list { flex: 0 0 var(--split-left, 66%); }
+.resources-space-pane > .history-split > .asset-browser__preview { flex: 1 1 auto; }
 
 /* 回收站整页空间（对齐 .quick-notes-pane）：不是 floating-dialog */
 .trash-space-pane {

@@ -18,7 +18,7 @@ export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 export const EDGE_HANDLE_DWELL_MS = 240;
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-export type DesktopWorkspace = "library" | "quick-notes" | "trash";
+export type DesktopWorkspace = "library" | "quick-notes" | "trash" | "resources";
 
 // 左侧资料库与右侧大纲面板各自维护宽度；两侧常驻 activity rail 才保持同宽。
 export const SIDEBAR_DEFAULT_WIDTH = 224;

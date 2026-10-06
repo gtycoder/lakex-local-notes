@@ -59,7 +59,11 @@
 
 .history-split { display: flex; flex: 1 1 auto; min-height: 0; }
 
-.history-list-left { flex: 0 0 320px; border-right: 1px solid var(--lake-border-2); }
+/* 左栏宽度由 SplitPane 的 --split-left 驱动（拖过之后是像素值）；没拖过 = 320px 默认。
+ * 分隔条是零宽 flex 项 + 伪元素命中带：不占布局宽度 ⇒ 未拖动时几何与老实现逐像素一致。 */
+.history-list-left { flex: 0 0 var(--split-left, 320px); border-right: 1px solid var(--lake-border-2); }
+.history-split > .ln-split-handle { position: relative; flex: 0 0 0; width: 0; }
+.history-split.is-resizing { user-select: none; }
 
 .history-preview-inline { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 12px 16px; }
 

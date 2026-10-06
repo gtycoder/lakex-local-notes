@@ -1,6 +1,6 @@
 /** 桌面顶栏（§20 Phase C 收尾：topBarLeading 与右侧搜索钮从 App.tsx 移出）。
  *  260922 S1+A：工作空间钮内嵌「当前空间」图标（18px 软底），点开合一菜单（空间 + 工作空间）。 */
-import { Check, ChevronDown, Feather, Files, Search, Settings, Trash } from "lucide-react";
+import { Check, ChevronDown, Feather, Files, Paperclip, Search, Settings, Trash } from "lucide-react";
 import type { Ref, RefObject } from "react";
 import { SyncStatusPopover } from "../components/SyncStatusPopover";
 import type { DesktopWorkspace } from "./desktopTypes";
@@ -26,6 +26,7 @@ const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }
   library: { label: "资料库", Icon: Files },
   "quick-notes": { label: "小记", Icon: Feather },
   trash: { label: "回收站", Icon: Trash },
+  resources: { label: "资源", Icon: Paperclip },
 };
 
 /** 顶栏左侧：当前空间（空间图标 + 名 + ▾；点开合一菜单）+ 存储/同步段。
@@ -74,24 +75,30 @@ export interface DesktopWorkspaceMenuProps {
 
 /** 合一菜单条目（空间 ⊕ 工作空间）；由 DesktopOverlays 的 top-menu 渲染。 */
 export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace, onOpenSettings }: DesktopWorkspaceMenuProps) {
-  const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint: string }> = [
+  // 用户 261006：上半「空间」只剩资料库/小记（带 ⌘1/⌘2）；回收站与资源下沉到「工作空间」，
+  // 与偏好设置并列、且**都不再给快捷键**（⌘3 的绑定与提示一并去掉）。
+  const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }> = [
     { id: "library", label: "资料库", Icon: Files, hint: "⌘1" },
     { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },
-    { id: "trash", label: "回收站", Icon: Trash, hint: "⌘3" },
   ];
+  const tools: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files }> = [
+    { id: "trash", label: "回收站", Icon: Trash },
+    { id: "resources", label: "资源", Icon: Paperclip },
+  ];
+  const renderItem = ({ id, label, Icon, hint }: { id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }) => (
+    <button key={id} role="menuitemradio" aria-checked={desktopWorkspace === id} onClick={() => onSwitchWorkspace(id)}>
+      <Icon size={15} />
+      <span>{label}{hint && <small>{hint}</small>}</span>
+      {desktopWorkspace === id && <Check size={14} className="top-menu__check" aria-hidden="true" />}
+    </button>
+  );
   return (
     <>
       <div className="top-menu__label" role="presentation">空间</div>
-      {spaces.map(({ id, label, Icon, hint }) => (
-        <button key={id} role="menuitemradio" aria-checked={desktopWorkspace === id}
-          onClick={() => onSwitchWorkspace(id)}>
-          <Icon size={15} />
-          <span>{label}<small>{hint}</small></span>
-          {desktopWorkspace === id && <Check size={14} className="top-menu__check" aria-hidden="true" />}
-        </button>
-      ))}
+      {spaces.map(renderItem)}
       <div className="top-menu__sep" role="separator" />
       <div className="top-menu__label" role="presentation">工作空间</div>
+      {tools.map(renderItem)}
       <button role="menuitem" onClick={onOpenSettings}><Settings size={15} /><span>偏好设置</span></button>
     </>
   );

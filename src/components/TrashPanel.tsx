@@ -5,6 +5,7 @@ import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
+import { SplitPane } from "./ui/SplitPane";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
@@ -306,7 +307,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
         </p>
       )}
       {error && <div className="trash-error">{error}</div>}
-      <div className="history-split" style={{ display: tab === "docs" ? undefined : "none" }}>
+      <SplitPane ariaLabel="调整回收站列表宽度" storageKey="trash" hidden={tab !== "docs"} minRight={280}>
         <div className="history-list b3-list b3-list--background history-list-left">
           {loading && <div className="ln-empty">加载中…</div>}
           {!loading && items.length === 0 && <div className="ln-empty">回收站是空的</div>}
@@ -332,7 +333,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
             <div className="ln-empty">选择左侧文档查看内容</div>
           )}
         </div>
-      </div>
+      </SplitPane>
       {tab === "quick" && (
         <div className="history-list b3-list b3-list--background">
           {quickItems.length === 0 && <div className="ln-empty">回收站是空的</div>}

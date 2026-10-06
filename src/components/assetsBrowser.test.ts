@@ -5,11 +5,13 @@ import { assetDisplayUrl, assetKindBucket, assetPreviewKind } from "./AssetsBrow
 const SRC = readFileSync(new URL("./AssetsBrowser.tsx", import.meta.url), "utf8");
 const PANEL = readFileSync(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
 const CSS = readFileSync(new URL("../styles/feature.css", import.meta.url), "utf8");
+const CHROME = readFileSync(new URL("../styles/chrome.css", import.meta.url), "utf8");
+const APP = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 const SCROLL = readFileSync(new URL("../styles/app/settings.css", import.meta.url), "utf8");
 
 /**
- * 设置 · 资源 的未引用资源浏览器（用户 261006 定稿）结构护栏：
- * 双栏、按文档分组、只留「清理选中」+ 全选、删除二次确认、预览类型全带。
+ * 资源空间（用户 261006：从设置里提出来、与回收站同级，套回收站版式）结构护栏：
+ * 左 2/3 列表 / 右 1/3 纯预览、按文档分组、三分类页签、只留「清理选中」+ 全选、删除二次确认。
  * 这是结构护栏，真实观感/交互由 CDP 真实验收覆盖。
  */
 describe("未引用资源浏览器", () => {
@@ -40,16 +42,19 @@ describe("未引用资源浏览器", () => {
   it("行 / 页签 / 空态全部复用 kit 原语，样式只加版面；不再带搜索框", () => {
     expect(SRC).toContain("ln-row asset-browser__row");
     expect(SRC).toContain("ln-iconbtn ln-iconbtn--compact");
-    // 状态 = 三个大页签（kit 的分段控件 .seg，用户 261006 定稿：类似「未引用的资源文件/数据库/丢失的文件」那种）
-    expect(SRC).toContain("b3-button b3-button--outline seg__item");
+    // 分类页签走 kit 的横向页签原语 .ln-tabs（与回收站/历史面板同一套；用户 261006 定稿）
+    expect(SRC).toContain("ln-tabs__item");
+    expect(SRC).toContain('role="tablist"');
     expect(SRC).toContain("ln-tabs__count");
     expect(SRC).toContain('className="ln-empty"');
     // 用户 261006：去掉未引用资源的搜索框
     expect(SRC).not.toContain("ln-input__field");
-    // 单栏上下分区（用户 261006）：上半列表自己滚、下半固定 1/3 高的纯预览
-    expect(CSS).toContain(".asset-browser__status .seg__item");
-    expect(CSS).toContain(".asset-browser__preview { flex: 0 0 33%");
-    expect(CSS).toContain(".asset-browser__list { flex: 1 1 auto");
+    // 版式宿主 = 与回收站同构的整页 pane：操作行 + 左 2/3 列表 / 右 1/3 纯预览
+    expect(SRC).toContain('className="resources-space-pane"');
+    expect(SRC).toContain("<SplitPane");
+    expect(CHROME).toContain(".resources-space-pane > .history-split > .asset-browser__list { flex: 0 0 var(--split-left, 66%); }");
+    expect(CSS).toContain(".asset-browser__preview { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr)");
+    expect(CHROME).toContain(".resources-space-pane > .history-split > .asset-browser__preview { flex: 1 1 auto; }");
     expect(CSS).not.toContain(".settings-panel .asset-browser");
   });
 
@@ -70,9 +75,12 @@ describe("未引用资源浏览器", () => {
     expect(SRC).not.toContain("asset-browser__metacts");
   });
 
-  it("设置面板不再自带旧实现；细滚动条选择器随类名收敛", () => {
+  it("已从设置里整项迁出：设置面板不再有「资源」分类，改由 App 挂到空间上", () => {
     expect(PANEL).not.toContain("config-assets");
-    expect(PANEL).toContain('<AssetsBrowser active={open && category === "resources"} />');
+    expect(PANEL).not.toContain("AssetsBrowser");            // 设置里没有它了
+    expect(PANEL).not.toContain('"resources"');              // 分类与导航项一起删
+    expect(APP).toContain('<AssetsBrowser active={desktopWorkspace === "resources"} />');
+    expect(APP).toContain('desktopWorkspace === "resources" ? "resources-space-active"');
     expect(SCROLL).toContain(".asset-browser__list");
     expect(SCROLL).not.toContain("config-assets");
   });

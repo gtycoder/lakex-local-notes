@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
@@ -24,9 +24,8 @@ import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { formatBytes } from "../lib/formatBytes";
-import { AssetsBrowser } from "./AssetsBrowser";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "resources" | "trash" | "browser" | "logs" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "trash" | "browser" | "logs" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -374,7 +373,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
     { id: "ai" as const, label: "AI", keywords: "AI 助手 供应商 模型 key api openai deepseek 密钥", icon: <Sparkles size={15} /> },
-    { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <ImageIcon size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash size={15} /> },
     { id: "browser" as const, label: "浏览器端", keywords: "浏览器 网页 web 附属窗口 端口 局域网 伺服", icon: <Globe size={15} /> },
     { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <Terminal size={15} /> },
@@ -553,7 +551,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             )}
           </nav>
           {/* 资源页：内容区交给浏览器自己排版（列表/预览铺满到底、各自滚动），见 feature.css 的 --fill 链 */}
-          <div className={"settings-content" + (category === "resources" ? " settings-content--fill" : "")}>
+          <div className="settings-content">
             {category === "editor" && (
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>
@@ -764,15 +762,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Block>
                 </Group>
               </>
-            )}
-
-            {category === "resources" && (
-              <Group title="未引用资源（本地）" icon={<Paperclip size={16} />}>
-                <Block desc="汇总所有文档中“当前正文不再引用”的本地资产文件：未引用可勾选删除（二次确认），历史保护（仍被历史快照引用）只读。图片 / PDF / 视频 / 音频可就地预览；文档在回收站时文件仍列出，彻底删除时随 purge 一并清理。" />
-                <Block>
-                  <AssetsBrowser active={open && category === "resources"} />
-                </Block>
-              </Group>
             )}
 
             {category === "trash" && (

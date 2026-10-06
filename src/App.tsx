@@ -43,6 +43,7 @@ import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
 import { TrashPanel } from "./components/TrashPanel";
+import { AssetsBrowser } from "./components/AssetsBrowser";
 
 export function App() {
   const {
@@ -451,13 +452,21 @@ export function App() {
       syncBtnRef={desktopWorkspace === "trash" ? syncBtnRef : undefined}
     />
   );
+  const resourcesTopBarLeading = (
+    <DesktopTopBarLeading
+      {...topBarLeadingProps}
+      visible={desktopWorkspace === "resources"}
+      wsMenuWrapRef={desktopWorkspace === "resources" ? wsMenuWrapRef : undefined}
+      syncBtnRef={desktopWorkspace === "resources" ? syncBtnRef : undefined}
+    />
+  );
   /** 文档页顶栏最右侧：全文搜索（原在左侧工作空间下拉里；⇧⌘F 亦可）。 */
   const topBarSearch = (
     <DesktopTopBarSearch onOpenSearch={() => sidebarOpenSearch(search)} />
   );
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${desktopWorkspace === "resources" ? "resources-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
       {/* 单例控制器只配一个应用级宿主，keep-alive 编辑器/历史/小记共享。 */}
       <ImageLightbox />
       <AttachmentPreview />
@@ -578,6 +587,15 @@ export function App() {
             onRestored={handleTrashRestored}
           />
         </div>
+        {/* 资源空间：与回收站同构（顶栏 + 整页 pane）；左 2/3 列表、右 1/3 纯预览。261006 */}
+        <div className={"workspace-view" + (desktopWorkspace === "resources" ? "" : " workspace-view--hidden")}>
+          <header className="tab-bar desktop-only" aria-label="顶栏">
+            <div className="tabbar-leading">{resourcesTopBarLeading}</div>
+            <div className="tab-items" />
+            <div className="tabbar-trailing">{topBarSearch}</div>
+          </header>
+          <AssetsBrowser active={desktopWorkspace === "resources"} />
+        </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
           docKind={activeKind}
@@ -619,7 +637,8 @@ export function App() {
         topMenuOpen={topMenuOpen}
         onCloseWorkspaceMenu={() => setWorkspaceMenuOpen(false)}
         desktopWorkspace={desktopWorkspace}
-        onSwitchWorkspace={(w) => void switchDesktopWorkspace(w)}
+        // 261006：菜单里选完空间要**关菜单**（原先不关，遮着刚切过去的内容；回收站/资源/小记都受影响）
+        onSwitchWorkspace={(w) => { setWorkspaceMenuOpen(false); void switchDesktopWorkspace(w); }}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
         focusMode={focusMode}
         onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
