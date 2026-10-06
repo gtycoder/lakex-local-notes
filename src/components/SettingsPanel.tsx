@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cloud, Coffee, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
@@ -16,13 +16,15 @@ function fieldErrorFor(message: string, retryable?: boolean): Record<string, str
 }
 import { LAKE_THEMES } from "../lib/themes";
 import { native } from "../lib/native";
-import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import type { DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
+import { formatBytes } from "../lib/formatBytes";
+import { AssetsBrowser } from "./AssetsBrowser";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "resources" | "trash" | "browser" | "logs" | "about";
 
@@ -47,30 +49,7 @@ function formatDateTime(ms: number): string {
 }
 
 /** 让浏览器先把 data URL 解码好再上屏：<img> 换 src 的那一帧若未解码完会画空白（闪烁的另一半来源）。 */
-async function decodeImage(dataUrl: string): Promise<void> {
-  const img = new Image();
-  img.src = dataUrl;
-  try { await img.decode(); } catch { /* 解码失败交给 <img> 自己表现（不支持的类型会走 hint 分支） */ }
-}
 
-function formatBytes(n: number): string {
-  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${n} B`;
-}
-
-/** 全局“被移除资源”条目：status=orphan 可删；history=历史引用保护（只读）。 */
-interface RemovedAsset {
-  noteId: string;
-  filename: string;
-  status: "orphan" | "history";
-  orphanId?: number;
-  size: number;
-  mimeType: string;
-  noteTitle?: string;
-  noteState?: "active" | "trash" | "missing";
-  detectedAt?: string;
-}
 
 import { Group, Section, Item, Field, Block, Switch, Shortcut, Seg, NumField, TextField } from "./settingsPrimitives";
 
@@ -218,15 +197,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
   const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
-  const [orphans, setOrphans] = useState<RemovedAsset[]>([]);
-  const [orphanBusy, setOrphanBusy] = useState(false);
-  const [busyId, setBusyId] = useState<number | null>(null);
-  const [sel, setSel] = useState<RemovedAsset | null>(null);
-  const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
   const [sysInfo, setSysInfo] = useState<import("../lib/types").SystemInfo | null>(null);
   const [pendingHit, setPendingHit] = useState<string | null>(null);
   const [diagMsg, setDiagMsg] = useState<string | null>(null);
-  const [pvLoading, setPvLoading] = useState(false);
 
   /** A1 整库备份：选目录 → 备份到 <dir>/lake-notes-backup-<ts>/。 */
   const runBackup = async () => {
@@ -321,19 +294,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     return { due, inWindow, unknown, earliest };
   }, [gcPendingRows, gcCfg]);
 
-  /** 未引用资源按所属文档分组（含回收站/已删除状态标注）。 */
-  const groupedOrphans = useMemo(() => {
-    const map = new Map<string, { title: string; state: string; items: RemovedAsset[] }>();
-    for (const o of orphans) {
-      const state = o.noteState ?? "active";
-      const key = (o.noteTitle ?? o.noteId) + "|" + state;
-      let g = map.get(key);
-      if (!g) { g = { title: o.noteTitle ?? o.noteId, state, items: [] }; map.set(key, g); }
-      g.items.push(o);
-    }
-    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
-  }, [orphans]);
-
   useEffect(() => {
     if (!open) return;
     setCategory(openCategory);
@@ -347,10 +307,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void refreshGcPending();
     void native.listS3GcLog().then(setGcLog).catch((error) => reportNativeActionError("设置页读取", error));
   }, [open, openCategory]);
-
-  useEffect(() => {
-    if (open && category === "resources") void refreshOrphans();
-  }, [open, category]);
 
   // 关于页：只读概览（版本/环境/存储）。每次进入分类都刷新，保证计数与磁盘一致。
   useEffect(() => {
@@ -410,24 +366,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       setDiagMsg("诊断信息已复制到剪贴板");
     } catch { setDiagMsg("复制失败（剪贴板不可用）"); }
   };
-
-  // 选中即预览、切换自动加载（思源式资源管理交互）。
-  // 切换时**不清空**上一张已解码的图：旧实现 setPv(null) 会让预览区先塌成一行"加载中…"文本、
-  // 图到位再撑开（实测 220 → 412，192px 跳动），冷读盘时正好被看见 = "初次切换闪一下"。
-  // 现在：保留旧图 + 新图先 decode 再替换 + 预览舞台固定高度（见 .preview-stage），几何全程不变。
-  useEffect(() => {
-    if (!sel) { setPv(null); setPvLoading(false); return; }
-    let alive = true;
-    setPvLoading(true);
-    native.readAssetPreview(sel.noteId, sel.filename)
-      .then(async (r) => {
-        if (r.supported && r.dataUrl) await decodeImage(r.dataUrl);   // 解码完再上屏，避免换上去那一帧空白
-        if (!alive) return;
-        setPv(r); setPvLoading(false);
-      })
-      .catch(() => { if (alive) { setPv({ filename: sel.filename, mimeType: "", supported: false }); setPvLoading(false); } });
-    return () => { alive = false; };
-  }, [sel]);
 
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 大纲 工具栏 标签页" , icon: <Type size={15} /> },
@@ -573,45 +511,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
   };
-  const refreshOrphans = async () => {
-    try { setOrphans(await native.listRemovedAssets()); } catch { /* 忽略 */ }
-  };
-  const copyPath = async (o: RemovedAsset) => {
-    try {
-      const full = await native.copyAssetPath(o.noteId, o.filename);
-      setSyncMsg(`已复制路径：${full}`);
-    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
-  };
-  const openFolder = async (o: RemovedAsset) => {
-    try { await native.showAttachmentInFolder(o.noteId, o.filename); }
-    catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
-  };
-  const deleteOne = async (o: RemovedAsset) => {
-    if (busyId !== null || o.orphanId == null) return;
-    if (!window.confirm(`删除未引用资源「${o.filename}」？`)) return;
-    setBusyId(o.orphanId); setSyncMsg(null);
-    try {
-      const r = await native.deleteOrphanAsset(o.orphanId);
-      if (r.deleted) setSyncMsg(`已删除「${o.filename}」（释放 ${formatBytes(r.freedBytes)}）`);
-      else setSyncMsg(`「${o.filename}」此刻仍被引用或删除失败，已保留`);
-      setSel(null);
-      await refreshOrphans();
-    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
-    finally { setBusyId(null); }
-  };
-  const cleanOrphans = async () => {
-    if (orphanBusy || orphans.length === 0) return;
-    if (!window.confirm(`删除 ${orphans.length} 个未引用资源文件？
-此操作物理删除本地文件并使其不再上传；被当前正文或历史快照引用的会在此刻自动跳过。`)) return;
-    setOrphanBusy(true); setSyncMsg(null);
-    try {
-      const r: CleanOrphanResult = await native.cleanOrphanAssets();
-      setSel(null);
-      await refreshOrphans();
-      setSyncMsg(r.count > 0 ? `已清理 ${r.count} 个资源（释放 ${formatBytes(r.freedBytes)}）` : "没有可清理的未引用资源");
-    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
-    finally { setOrphanBusy(false); }
-  };
   const refreshCloudStats = async () => {
     if (gcDiagBusy) return;
     setGcDiagBusy(true); setSyncMsg(null);
@@ -623,8 +522,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     finally { setGcDiagBusy(false); }
   };
   const diagNs = (name: string) => gcDiag?.cloud.namespaces.find((n) => n.namespace === name);
-  const orphanCount = orphans.filter((o) => o.status === "orphan").length;
-  const historyCount = orphans.filter((o) => o.status === "history").length;
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
@@ -886,74 +783,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
             {category === "resources" && (
               <Group title="未引用资源（本地）" icon={<Paperclip size={16} />}>
-                <Block desc="汇总所有文档中“当前正文不再引用”的本地资产文件：未引用（可删除/复制/打开位置）与历史保护（仍被历史快照引用，仅查看不可删除）。点击条目即预览并自动切换；文档在回收站时文件仍列出，彻底删除时随 purge 一并清理。">
-                  <div className="config-stats">
-                    <span>共 <strong>{orphans.length}</strong> 个</span>
-                    <span>{formatBytes(orphans.reduce((s, o) => s + (o.size || 0), 0))}</span>
-                    <span>可删 <strong>{orphanCount}</strong></span>
-                    <span>历史保护 <strong>{historyCount}</strong></span>
-                    <span>涉及 <strong>{groupedOrphans.length}</strong> 篇文档</span>
-                  </div>
-                  <div className="config-block__actions">
-                    <button className="b3-button b3-button--outline" onClick={() => void refreshOrphans()}>刷新</button>
-                    <button className="b3-button b3-button--outline ft__error" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphanCount === 0}>{orphanBusy ? "清理中…" : `清理未引用（${orphanCount}）`}</button>
-                  </div>
+                <Block desc="汇总所有文档中“当前正文不再引用”的本地资产文件：未引用可勾选删除（二次确认），历史保护（仍被历史快照引用）只读。图片 / PDF / 视频 / 音频可就地预览；文档在回收站时文件仍列出，彻底删除时随 purge 一并清理。" />
+                <Block>
+                  <AssetsBrowser active={open && category === "resources"} />
                 </Block>
-                {orphans.length === 0 ? (
-                  <Block><div className="config-empty">没有被移除的资源文件。</div></Block>
-                ) : (
-                  <Block>
-                    <div className="config-assets">
-                      <div className="b3-list b3-list--background config-assets__list">
-                        {groupedOrphans.map((g) => (
-                          <div key={g.title + "|" + g.state} className="config-assets__group">
-                            <div className="config-assets__grouptitle">
-                              <Paperclip size={13} />
-                              <span className="fn__ellipsis">{g.title}</span>
-                              {g.state === "trash" && <span className="badge badge--warn">回收站</span>}
-                              {g.state === "missing" && <span className="badge badge--error">文档已删除</span>}
-                              <span className="config-assets__count">{g.items.length} 个</span>
-                            </div>
-                            {g.items.map((o) => (
-                              <div
-                                key={o.noteId + "/" + o.filename}
-                                className={`b3-list-item b3-list-item--hide-action${sel && sel.noteId === o.noteId && sel.filename === o.filename ? " b3-list-item--focus" : ""}`}
-                                onClick={() => setSel(sel && sel.noteId === o.noteId && sel.filename === o.filename ? null : o)}
-                                title="点击预览"
-                              >
-                                <File size={14} className="b3-list-item__graphic" />
-                                <span className="b3-list-item__text ln-ellipsis">{o.filename}</span>
-                                <span className={`badge ${o.status === "history" ? "badge--warn" : "badge--muted"}`}>{o.status === "history" ? "历史保护" : "未引用"}</span>
-                                <span className="b3-list-item__meta">{formatBytes(o.size)}</span>
-                                <span className="fn__space" />
-                                <button className="b3-list-item__action" title="复制路径" aria-label="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}><Copy size={14} /></button>
-                                <button className="b3-list-item__action" title="在文件夹中显示" aria-label="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}><FolderOpen size={14} /></button>
-                                {o.orphanId != null && (
-                                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除（不可撤销）" aria-label="删除" disabled={busyId !== null} onClick={(ev) => { ev.stopPropagation(); void deleteOne(o); }}><Trash size={14} /></button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                      <div className={`config-assets__preview${pvLoading ? " is-loading" : ""}`}>
-                        <div className="config-assets__stage">
-                          {pv?.supported && pv.dataUrl ? (
-                            <img key={pv.filename} src={pv.dataUrl} alt={pv.filename} />
-                          ) : (
-                            <span className="config-assets__hint">
-                              {!sel ? "点击左侧条目预览" : pvLoading ? "加载中…" : pv ? "该类型不支持预览" : "读取失败"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="config-assets__previewname">
-                          {sel?.filename ?? pv?.filename}
-                          {sel && <span className="config-assets__hint"> · {pv?.mimeType || sel.mimeType}{pvLoading ? " · 加载中" : ""}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </Block>
-                )}
               </Group>
             )}
 
