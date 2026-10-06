@@ -44,15 +44,6 @@
 /* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
 .note-row-copy strong {display: block;}
 
-.tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); outline: 0; background: var(--lake-bg-panel); font-size: 13px; }
-
-/* 只保留**一个**焦点环：输入框自带 border + 这里换主色即可。
-   原先再加 box-shadow 会和 b3 的 `input:focus-visible` 描边叠成 2~3 层同心蓝框（user 260918 报）。 */
-.tree-rename-input:focus,
-.tree-rename-input:focus-visible { border-color: var(--lake-accent); outline: 0; }
-
-.tree-rename-input::selection { color: var(--lake-accent-ink); background: var(--lake-accent-tint); }
-
 .tree-list { padding-bottom: 4px; }
 
 .tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto auto; gap: 4px; }

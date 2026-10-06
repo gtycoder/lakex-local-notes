@@ -61,6 +61,9 @@
 
 /* 附件重命名弹窗（复用 .ln-dialog） */
 .asset-rename-dialog { width: min(420px, 92vw); }
+/* 目录节点重命名弹窗（同族）：名字可能很长 ⇒ 用足弹窗宽度（比附件重命名再宽一档），
+   输入框随 .ln-input 撑满；超长名字仍靠输入框自身横向滚动。 */
+.rename-dialog { width: min(460px, 92vw); }
 .asset-rename-field { display: flex; align-items: center; gap: 6px; }
 .asset-rename-field .b3-text-field { flex: 1 1 auto; min-width: 0; }
 .asset-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--lake-text-3); }

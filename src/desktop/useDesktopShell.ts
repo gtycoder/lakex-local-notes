@@ -102,7 +102,14 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     clearSidebarPreviewTimer();
     setSidebarMode((current) => current === "collapsed" ? "floating" : current);
   }, [clearSidebarPreviewTimer]);
+  /** 临时「钉住」目录栏展开（用户 261006：重命名弹窗打开期间，指针移到弹窗上也不能收起目录）。 */
+  const sidebarHoldRef = useRef(false);
+  const holdSidebarExpanded = useCallback((active: boolean) => {
+    sidebarHoldRef.current = active;
+    if (active) showSidebarPreview();
+  }, [showSidebarPreview]);
   const hideSidebarPreview = useCallback(() => {
+    if (sidebarHoldRef.current) return;
     if (shouldKeepSidebarPreviewOpen(sidebarModeRef.current, sidebarResizingRef.current)) return;
     if (!shouldCollapseSidebarOnHoverLeave(sidebarModeRef.current)) return;
     if (sidebarPreviewTimer.current !== null) return;
@@ -178,7 +185,7 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     sidebarMode,
     setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
-    showSidebarPreview, hideSidebarPreview, clearSidebarPreviewTimer,
+    showSidebarPreview, hideSidebarPreview, clearSidebarPreviewTimer, holdSidebarExpanded,
     // 左轨按钮：停靠 ↔ 收起。窄窗下停靠态渲染成悬浮抽屉，所以这一个按钮就是"抽屉开/关"。
     toggleSidebarDock,
     // outline

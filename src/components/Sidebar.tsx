@@ -11,6 +11,7 @@ import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosi
 import { ExportSubmenuItem, type ExportFormat } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
 import { Dialog, Menu, Popover, Submenu } from "./ui/Overlay";
+import { usePopoverPosition } from "../hooks/usePopoverPosition";
 
 type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
@@ -60,6 +61,8 @@ interface SidebarProps {
   onResizeActiveChange: (active: boolean) => void;
   onWidthChange: (width: number) => void;
   onWidthCommit: (width: number) => void;
+  /** 重命名弹窗打开期间临时钉住目录栏展开（用户 261006：悬浮态下也不能收起） */
+  onSidebarHold?: (active: boolean) => void;
 }
 
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
@@ -80,6 +83,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     positions: Record<string, number>;
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  /** 目录行「＋」的快捷「新建」菜单（锚在该行按钮上） */
+  const [createMenu, setCreateMenu] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
   const [iconPicker, setIconPicker] = useState<{ node: TreeNode; x: number; y: number } | null>(null);
   const [createMenuPosition, setCreateMenuPosition] = useState<CreateMenuPosition | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -221,6 +226,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setEditingTitle(target.title);
     props.onPendingRenameConsumed();
   }, [props.pendingRenameId, props.nodes, props.onPendingRenameConsumed]);
+
+  // 重命名弹窗打开期间钉住目录栏展开（用户 261006）：悬浮态下指针移到弹窗上也不收起。
+  useEffect(() => {
+    props.onSidebarHold?.(editingId != null);
+    return () => { props.onSidebarHold?.(false); };
+  }, [editingId, props.onSidebarHold]);
 
   const buildExpectedOrder = (movingId: string, target: { id: string; position: DropPosition }): { parentId: string | null; order: string[] } | null => {
     const moving = props.nodes.find((node) => node.id === movingId);
@@ -380,12 +391,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setNewTitle("");
   }, [newTitle, pendingCreate, props.onCreate]);
 
-  const submitRename = useCallback(() => {
-    const title = editingTitle.trim();
-    if (editingId && title) props.onRename(editingId, title);
+  const submitRename = useCallback((title: string) => {
+    const next = title.trim();
+    if (editingId && next) props.onRename(editingId, next);
     setEditingId(null);
     setEditingTitle("");
-  }, [editingId, editingTitle, props.onRename]);
+  }, [editingId, props.onRename]);
 
   const beginRename = useCallback((node: TreeNode) => {
     setEditingId(node.id);
@@ -398,6 +409,13 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     event.stopPropagation();
     setContextId(node.id);
     setContextMenu({ id: node.id, x: event.clientX, y: event.clientY });
+  }, []);
+
+  /** 目录行「＋」：弹出「新建子项」快捷菜单（锚在该按钮上，定位走 usePopoverPosition）。 */
+  const openCreateMenu = useCallback((event: React.MouseEvent, node: TreeNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setCreateMenu({ node, anchor: event.currentTarget as HTMLElement });
   }, []);
 
   const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
@@ -484,19 +502,22 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     props.onRevealConsumed();
   }, [props.revealNodeId, props.onRevealConsumed]);
 
-  const menuNewChild = (kind: "group" | "note" | "sheet" | "bitable" | "board") => {
-    if (!contextNode) return;
+  /** 在 node 下创建子项（单一来源：右键菜单「新建」子菜单 + 目录行「＋」快捷菜单共用）。 */
+  const createChild = (node: TreeNode | null, kind: "group" | "note" | "sheet" | "bitable" | "board") => {
+    if (!node) return;
     // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档/表格）。
-    const parentId = contextNode.id;
-    if (kind === "sheet") { props.onCreate("sheet", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
-    if (kind === "bitable") { props.onCreate("bitable", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
-    if (kind === "board") { props.onCreate("board", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
-    if (kind === "note") { props.onCreate("note", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
-    setPendingCreate({ kind, parentId });
-    setNewTitle("新建分组");
+    const parentId = node.id;
+    if (kind === "group") {
+      setPendingCreate({ kind, parentId });
+      setNewTitle("新建分组");
+    } else {
+      props.onCreate(kind, parentId);
+    }
     setExpanded((current) => expandAncestors(current, props.nodes, parentId));
     setContextMenu(null);
+    setCreateMenu(null);
   };
+  const menuNewChild = (kind: "group" | "note" | "sheet" | "bitable" | "board") => createChild(contextNode, kind);
 
 
   const menuRename = () => {
@@ -610,21 +631,18 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     releasingId: releaseState?.id ?? null,
     pendingCreate,
     editingId,
-    editingTitle,
     createField,
-    onEditingTitle: setEditingTitle,
-    onSubmitRename: submitRename,
-    onCancelRename: cancelRename,
     onBeginRename: beginRename,
     onPointerDown: beginTreeDrag,
     consumeSuppressedClick,
     onContext: setContextNode,
     onContextMenu: openContext,
+    onCreateMenu: openCreateMenu,
     onToggle: toggleNode,
     onSelect: props.onSelect,
     onIconClick: setTreeIcon,
     lockedNoteIds: props.lockedNoteIds,
-  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, editingTitle, createField, submitRename, cancelRename, beginRename, beginTreeDrag, setContextNode, openContext, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds]);
+  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, createField, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds]);
 
   return (
     <aside
@@ -678,6 +696,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         {roots.length === 0 && <div className="empty-list">{query ? "没有匹配的目录项，Esc 或再点筛选图标可清空" : "点击 + 新建第一个笔记本"}</div>}
       </nav>
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onClose={() => setContextMenu(null)} />}
+      {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} onClose={() => setCreateMenu(null)} />}
+      {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} onDoubleClick={() => props.onWidthCommit(SIDEBAR_DEFAULT_WIDTH)} />
     </aside>
@@ -699,16 +719,14 @@ interface TreeRowProps {
   dropTarget: { id: string; position: DropPosition } | null;
   pendingCreate: { kind: CreateKind; parentId: string | null } | null;
   editingId: string | null;
-  editingTitle: string;
   createField: (depth: number) => React.ReactNode;
-  onEditingTitle: (title: string) => void;
-  onSubmitRename: () => void;
-  onCancelRename: () => void;
   onBeginRename: (node: TreeNode) => void;
   onPointerDown: (event: React.PointerEvent, id: string) => void;
   consumeSuppressedClick: () => boolean;
   onContext: (id: string) => void;
   onContextMenu: (event: React.MouseEvent, node: TreeNode) => void;
+  /** 目录行「＋」：弹「新建子项」快捷菜单 */
+  onCreateMenu: (event: React.MouseEvent, node: TreeNode) => void;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
   onIconClick?: (node: TreeNode, event: React.MouseEvent) => void;
@@ -751,9 +769,7 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
       <button type="button" className={`tree-chevron ${open && expandable ? "open" : ""}`} disabled={!expandable} onClick={(event) => { event.stopPropagation(); if (expandable) props.onToggle(props.node.id); }} aria-label={open ? "收起" : "展开"}>{expandable ? <ChevronRight size={14} /> : null}</button>
       <span className="tree-row-icon" title="设置图标" onClick={(event) => { event.stopPropagation(); props.onIconClick?.(props.node, event); }}>{icon}</span>
       <span className="note-row-copy">
-        {props.editingId === props.node.id
-          ? <input className="tree-rename-input" autoFocus aria-label="节点名称" value={props.editingTitle} onChange={(event) => props.onEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onFocus={(event) => event.currentTarget.select()} onBlur={props.onSubmitRename} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") props.onSubmitRename(); if (event.key === "Escape") props.onCancelRename(); }} />
-          : <strong>{props.node.title}</strong>}
+        <strong>{props.node.title}</strong>
       </span>
       {/* 锁标识格**每行都在**（未锁时为空）：否则 grid 的行内条目数与列数不一致时，"⋯"会掉到下一行（用户报的换行） */}
       {props.node.nodeType === "note" && props.node.noteFileId && props.lockedNoteIds.has(props.node.noteFileId)
@@ -762,6 +778,7 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
       {/* 行内悬浮动作（对齐思源：⋯ = more-root 弹右键菜单，＋ = new 新建子文档）。
           悬浮才显形（选中态不常驻）；标题恒单行、列宽处直接裁切，不打省略号。 */}
       <span className="tree-row-actions">
+        {/* ⋯ = 完整右键菜单；＋ = 新建子项（对齐思源 new-root）；用户 261006：＋ 放最右 */}
         <button
           type="button"
           className="tree-row-action ln-iconbtn ln-iconbtn--compact"
@@ -771,6 +788,16 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
           onClick={(event) => { event.stopPropagation(); props.onContextMenu(event, props.node); }}
         >
           <MoreVertical size={15} />
+        </button>
+        <button
+          type="button"
+          className="tree-row-action ln-iconbtn ln-iconbtn--compact"
+          aria-label="新建子项"
+          title="新建"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => { event.stopPropagation(); props.onCreateMenu(event, props.node); }}
+        >
+          <Plus size={15} />
         </button>
       </span>
     </div>
@@ -846,6 +873,70 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
+/** 目录节点重命名弹窗（用户 261006：原内联输入改成弹窗；打开期间目录栏保持展开）。 */
+function TreeRenameDialog({ initial, onCancel, onConfirm }: { initial: string; onCancel: () => void; onConfirm: (title: string) => void }) {
+  const [value, setValue] = useState(initial);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const trimmed = value.trim();
+  const canConfirm = trimmed.length > 0 && trimmed !== initial.trim();
+  return (
+    <Dialog open onDismiss={onCancel} label="重命名" className="rename-dialog" initialFocus={inputRef}>
+      <div className="ln-dialog__head"><span className="ln-dialog__title">重命名</span></div>
+      <div className="ln-dialog__body">
+        <span className="ln-input">
+          <input
+            ref={inputRef}
+            className="ln-input__field"
+            value={value}
+            aria-label="节点名称"
+            autoFocus
+            onChange={(event) => setValue(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => { if (event.key === "Enter" && canConfirm) onConfirm(trimmed); }}
+          />
+        </span>
+      </div>
+      <div className="ln-dialog__actions">
+        <button className="b3-button b3-button--cancel" onClick={onCancel}>取消</button>
+        <button className="b3-button" disabled={!canConfirm} onClick={() => { if (canConfirm) onConfirm(trimmed); }}>确定</button>
+      </div>
+    </Dialog>
+  );
+}
+
+type CreateChildKind = Exclude<CreateKind, "notebook">;
+
+/** 「新建子项」五个动作（单一来源：右键菜单「新建」子菜单 + 目录行「＋」快捷菜单共用）。 */
+const CREATE_CHILD_ITEMS: ReadonlyArray<{ kind: CreateChildKind; label: string; icon: React.ReactNode }> = [
+  { kind: "note", label: "新建文档", icon: <FilePlus size={15} /> },
+  { kind: "sheet", label: "新建表格", icon: <Table size={15} /> },
+  { kind: "bitable", label: "新建数据表", icon: <Database size={15} /> },
+  { kind: "board", label: "新建画板", icon: <PenTool size={15} /> },
+  { kind: "group", label: "新建分组", icon: <FolderPlus size={15} /> },
+];
+
+function CreateChildItems({ onNewChild, onClose }: { onNewChild: (kind: CreateChildKind) => void; onClose: () => void }) {
+  return (
+    <>
+      {CREATE_CHILD_ITEMS.map((item) => (
+        <button key={item.kind} role="menuitem" onClick={() => { onNewChild(item.kind); onClose(); }}>
+          {item.icon}<span>{item.label}</span>
+        </button>
+      ))}
+    </>
+  );
+}
+
+/** 目录行「＋」的快捷「新建」菜单：锚在该行按钮上，定位走 usePopoverPosition（贴底翻转）。 */
+function CreateMenu({ anchor, onNewChild, onClose }: { anchor: HTMLElement; onNewChild: (kind: CreateChildKind) => void; onClose: () => void }) {
+  const { surfaceRef, style } = usePopoverPosition({ open: true, anchor, gap: 4, margin: 8 });
+  return (
+    <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={surfaceRef} style={style ?? { visibility: "hidden" }}>
+      <CreateChildItems onNewChild={onNewChild} onClose={onClose} />
+    </Menu>
+  );
+}
+
 const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -873,11 +964,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
     <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={menuRef} style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
       {/* 「新建」收进子菜单：同一组创建动作只占一行，避免右键菜单过长（290930 用户） */}
       <Submenu label={<><Plus size={15} /><span>新建</span></>}>
-        <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus size={15} /><span>新建文档</span></button>
-        <button role="menuitem" onClick={() => { onNewChild("sheet"); onClose(); }}><Table size={15} /><span>新建表格</span></button>
-        <button role="menuitem" onClick={() => { onNewChild("bitable"); onClose(); }}><Database size={15} /><span>新建数据表</span></button>
-        <button role="menuitem" onClick={() => { onNewChild("board"); onClose(); }}><PenTool size={15} /><span>新建画板</span></button>
-        <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
+        <CreateChildItems onNewChild={onNewChild} onClose={onClose} />
       </Submenu>
       <div className="context-menu-sep" />
       {node.nodeType === "note" ? (
