@@ -1051,6 +1051,56 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteOrphans(id).find((o) => o.filename === refName)?.protectedByHistory).toBe(false);
   });
 
+  // 2026-10-06 用户实测：设置·资源页 5 条未引用资源里有 2 条"文件缺失"（登记在、磁盘没了）。
+  // 根因 = 三条删文件路径里，cleanNoteOrphans / cleanupUnreferencedAssetsForNote 只删文件不撤登记，
+  // 而保存时的正向对账（detectOrphans 按磁盘驱动）永远看不到这类行 ⇒ 必须成对删 + 反向对账兜底。
+  it("删文件必须同步撤登记：cleanNoteOrphans 不再留下「登记在、文件没了」的漂移行", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const name = "1786123456789_aa11bb22.png";
+    fs.writeFileSync(path.join(assetsDir, name), "orphandata");
+    store.saveNote(id, "漂移测试", "<p>无图</p>");           // 磁盘有、正文未引用 → 登记为孤儿
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(true);
+
+    const r = store.cleanNoteOrphans(id, [name]);
+    expect(r.count).toBe(1);
+    expect(fs.existsSync(path.join(assetsDir, name))).toBe(false);
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);   // ← 关键
+  });
+
+  it("反向对账：detectOrphans 会撤掉「登记还在、文件已不在」的行（外部删除 / 历史漂移自愈）", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const name = "1786123456789_cc33dd44.png";
+    fs.writeFileSync(path.join(assetsDir, name), "orphandata");
+    store.saveNote(id, "自愈测试", "<p>无图</p>");
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(true);
+
+    fs.rmSync(path.join(assetsDir, name));                    // 模拟漂移：文件没了、登记还在
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(true);
+
+    // ⚠️ save 对「标题+正文都没变」会短路（hasNoteSaveChanges）⇒ 这里直接调对账单元。
+    // 真实场景：该笔记任何一次真编辑触发的保存都会走到这段反向对账。
+    (store as unknown as { orphanLifecycle: { detectOrphans(noteId: string, content: string): void } }).orphanLifecycle.detectOrphans(id, "<p>无图</p>");
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);
+  });
+
+  it("删文件必须同步撤登记：cleanupUnreferencedAssetsForNote 也撤登记", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const name = "1786123456789_ee55ff66.png";
+    fs.writeFileSync(path.join(assetsDir, name), "orphandata");
+    store.saveNote(id, "自动清理测试", "<p>无图</p>");
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(true);
+
+    (store as unknown as { orphanLifecycle: { cleanupUnreferencedAssetsForNote(noteId: string): void } }).orphanLifecycle.cleanupUnreferencedAssetsForNote(id);
+    expect(fs.existsSync(path.join(assetsDir, name))).toBe(false);
+    expect(store.listRemovedAssets().some((e) => e.filename === name)).toBe(false);
+  });
+
   it("cleanNoteOrphans：草稿唯一引用的资源受保护，不被删除（审计 F10）", () => {
     const { id } = makeNote();
     const assetsDir = path.join(dir, "note-assets", id);

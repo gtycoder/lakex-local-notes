@@ -147,8 +147,11 @@ export class HistoryLifecycle {
     const t0 = Date.now();
     const row = this.ctx.db.prepare("SELECT file_path FROM note_history WHERE id=?").get(historyId) as { file_path: string } | undefined;
     if (!row) throw new AppError("NotFound", `历史快照不存在: ${historyId}`);
-    this.ctx.db.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
+    // 与 cleanupHistory 同口径：**先删文件再删行**（force 容忍不存在）。反过来的话，文件删失败/中途崩溃
+    // 会留下"文件在、行没了"的未登记残留；先删文件时最坏只是"行在、文件没了"，而那条行会被
+    // detectOrphans 的反向对账撤掉。
     try { fs.rmSync(path.join(this.ctx.root, row.file_path), { force: true }); } catch { /* 忽略 */ }
+    this.ctx.db.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
     // 若目录空则清理
     this.pruneEmptyHistoryDirs();
     this.ctx.logScopes.history.info(`[perf] delete-history ${historyId} ${Date.now() - t0}ms`);

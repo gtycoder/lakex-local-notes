@@ -56,16 +56,20 @@ export class OrphanLifecycle {
     }
   }
 
-  /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源。 */
+  /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源。
+   *  ⚠️ 删文件必须**同时撤销 orphan_assets 登记**（与 cleanNoteOrphans / cleanOrphanAssets 同口径）：
+   *  只删文件会留下"登记在、文件没了"的漂移行——正向对账（detectOrphans 扫磁盘）永远看不到它。 */
   cleanupUnreferencedAssetsForNote(noteId: string): void {
     const dir = this.ctx.noteAssetsDirFor(noteId);
     if (!fs.existsSync(dir)) return;
     const disk = fs.readdirSync(dir);
     if (disk.length === 0) return;
     const protectedRefs = this.ctx.assetRepository.getProtectedRefs(noteId);
+    const unregister = this.ctx.db.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
     for (const filename of disk) {
       if (protectedRefs.has(filename)) continue;
-      try { fs.rmSync(path.join(dir, filename), { force: true }); } catch { /* 忽略 */ }
+      try { fs.rmSync(path.join(dir, filename), { force: true }); } catch { /* 文件删失败：仍撤登记，detectOrphans 下次会按磁盘重新登记 */ }
+      unregister.run(noteId, filename);
     }
   }
 
@@ -96,10 +100,17 @@ export class OrphanLifecycle {
     const protectedRefs = this.ctx.assetRepository.getProtectedRefs(noteId);
     const orphans = this.listNoteOrphans(noteId);
     const targets = orphans.filter((o) => !protectedRefs.has(o.filename) && (!filenames || filenames.includes(o.filename)));
+    // ⚠️ 删文件与撤登记必须成对：历史上这里只 unlink、不删 orphan_assets 行，导致设置页出现
+    // "文件缺失"的资源（2026-10-06 用户实测：5 条里有 2 条）。文件已不在也算成功（与全局清理同口径）。
+    const unorphan = this.ctx.db.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
     let count = 0, freed = 0;
     for (const o of targets) {
       const full = path.join(this.ctx.noteAssetsDirFor(noteId), o.filename);
-      try { freed += fs.statSync(full).size; fs.unlinkSync(full); count++; } catch { /* 忽略 */ }
+      try {
+        if (fs.existsSync(full)) { freed += fs.statSync(full).size; fs.unlinkSync(full); }
+        unorphan.run(noteId, o.filename);
+        count++;
+      } catch { /* 保留登记待重试 */ }
     }
     return { count, freedBytes: freed };
   }
@@ -120,8 +131,8 @@ export class OrphanLifecycle {
 
   detectOrphans(noteId: string, content: string): void {
     const dir = this.ctx.noteAssetsDirFor(noteId);
-    if (!fs.existsSync(dir)) return;
-    const diskSet = new Set(fs.readdirSync(dir));
+    // 目录不存在 = 该笔记已无资产文件；此时**仍要**往下走，把陈旧的登记行撤掉（见下方反向对账）。
+    const diskSet = fs.existsSync(dir) ? new Set(fs.readdirSync(dir)) : new Set<string>();
     const referencedSet = this.referencedFilenames(content);
     // P2：孤儿登记并入"历史 refs"——被任何历史快照引用的资源不算孤儿，
     // 保证全局 cleanOrphanAssets / 同步跳过上传 / 文档级 listNoteOrphans 三个消费者一致，
@@ -132,6 +143,9 @@ export class OrphanLifecycle {
        VALUES(?,?,?,?,?)`
     );
     const unorphan = this.ctx.db.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
+    const rows = this.ctx.db.prepare("SELECT id, filename FROM orphan_assets WHERE note_id=?").all(noteId) as Array<{ id: number; filename: string }>;
+    if (diskSet.size === 0 && rows.length === 0) return;
+    const dropRow = this.ctx.db.prepare("DELETE FROM orphan_assets WHERE id=?");
     const tx = this.ctx.db.transaction(() => {
       for (const filename of diskSet) {
         if (referencedSet.has(filename) || historyRefs.has(filename)) {
@@ -142,6 +156,10 @@ export class OrphanLifecycle {
           insert.run(noteId, filename, `note-assets/${noteId}/${filename}`, stat.size, mimeTypeForFilename(filename));
         }
       }
+      // 反向对账：登记在、磁盘不在（外部删除 / 早期 cleaner 只删文件不撤登记）。上面那个循环按**磁盘**驱动，
+      // 这类行永远进不了它的视野 ⇒ 只会在这里被撤销。据此 orphan_assets 恒等于「磁盘上未被引用的文件」，
+      // diagnostics 的 orphanRowsFileMissing 应恒为 0。
+      for (const row of rows) if (!diskSet.has(row.filename)) dropRow.run(row.id);
     });
     tx();
   }
