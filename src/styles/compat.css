@@ -174,7 +174,7 @@
   color: var(--lake-text-1);
 }
 .b3-snackbar__content { flex: 1 1 auto; min-width: 0; }
-.b3-snackbar--error { border-left: 3px solid var(--lake-status-error); }
+.b3-snackbar--error { border-color: color-mix(in srgb, var(--lake-status-error) 45%, var(--lake-border-1)); }
 
 /* 对话框容器（属性弹窗等） */
 .b3-dialog {
