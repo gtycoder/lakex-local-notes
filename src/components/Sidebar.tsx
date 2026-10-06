@@ -512,7 +512,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   };
 
   // depth 不再用于定位：缩进由 .tree-children margin-left + border-left 实现
-  const createField = useCallback((_depth: number) => pendingCreate && <div className="inline-create" style={{ marginLeft: 8 }}>
+  const createField = useCallback((_depth: number) => pendingCreate && <div className="inline-create">
     {pendingCreate.kind === "notebook" ? <Book size={14} /> : <FolderPlus size={14} />}
     <input autoFocus aria-label={pendingCreate.kind === "notebook" ? "笔记本名称" : "分组名称"} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => { if (event.key === "Enter") submitCreate(); if (event.key === "Escape") setPendingCreate(null); }} />
     <button onClick={submitCreate}>创建</button>
@@ -735,7 +735,6 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
       tabIndex={0}
       data-tree-node-id={props.node.id}
       className={`note-row tree-row type-${props.node.nodeType} ${props.node.id === props.activeId ? "active" : ""} ${props.node.id === props.contextId && props.editingId !== props.node.id ? "context" : ""} ${isDragging ? "dragging" : ""} ${props.releasingId === props.node.id ? "releasing" : ""} ${isDropParent ? "drop-parent" : ""} ${sameLevelLine ? `drop-line-${dropPosition}` : ""}`}
-      style={{ paddingLeft: 8 }}
       onClick={() => {
         if (props.consumeSuppressedClick()) return;
         props.onContext(props.node.id);

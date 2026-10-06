@@ -32,9 +32,9 @@
 |---|------|----------|------|
 | 1.1 | 主题漂移归一：三主题统一为**同一色相**（板岩蓝 222°），只按明度/饱和与中性面区分 | `src/styles/themes/{dark,warm}.css` `src/lib/themes.ts` | ✅ 完成（待验收） |
 | 1.2 | 去 AI-slop 痕迹：桌面 toast 单侧色条 → 表面+1px 描边+状态色；布局属性动画 → transform | `chrome.css` `kit.css` `dialogs.css` `app/shell.css` | ✅ 完成（待验收） |
-| 1.3 | 图标族收敛：清 emoji 字形，统一 lucide 一族 + 单一 stroke + 2–3 个光学尺寸 | TSX（Sidebar/StatusBar/tab 等）+ `app/base.css` | 待做 |
-| 1.4 | 样式来源收敛：内联 `style={{}}`（32 处）能收敛的收进令牌/kit；核对 `!important` 口径 | 各 TSX + `styles/*` | 待做 |
-| 1.5 | 删除：legacy 层死声明（计算值对拍后删）、`misc.css` 拆分归并、（可选）`tokens.css` 移动端并入 themes | `src/styles/app/*` `styles/tokens.css` | 待做 |
+| 1.3 | 图标族收敛：清 emoji 字形，统一 lucide 一族 + 单一 stroke + 光学尺寸 | TSX（Sidebar/StatusBar/tab 等） | ✅ 完成（结论修正：家族已统一，只修离群尺寸） |
+| 1.4 | 样式来源收敛：内联 `style={{}}` 能收敛的收进令牌/kit；核对 `!important` 口径 | `app/shell.css` `chrome.css` `Sidebar.tsx` | ✅ 完成（结论修正：多为合理动态几何） |
+| 1.5 | 删除：legacy 层可证死声明（同选择器 + 被更高层覆盖） | `src/styles/app/*` `components.css` `document-status.css` 等 11 个文件 | 🔄 扫描完成：**137 条**，待执行 |
 
 **Phase 1 验证门禁**：`tsc` · `vitest` · `check:core` · `ui-metrics` · `cssLayers` + `uiPrimitives` · 双端 build · `git diff --check` · 真机三主题截图对比。
 
@@ -60,6 +60,47 @@
 | 261006 | 建分支 `feat/ui-refresh-261006`；建立本文档 | ✅ |
 | 261006 | Phase 1.2 去 slop 痕迹（toast / 布局动画） | ✅ 完成（待验收） |
 | 261006 | Phase 1.1 主题漂移归一（三主题统一色相） | ✅ 完成（待验收） |
+| 261006 | Phase 1.3 图标族盘点 + 离群尺寸收敛 | ✅ 完成 |
+| 261006 | Phase 1.4 内联样式盘点 + 净收益为正的收敛 | ✅ 完成 |
+| 261006 | Phase 1.5 死声明静态扫描（137 条） | 🔄 待执行删除 |
+
+## 4c. 变更明细 · Phase 1.3（图标族）
+
+**结论修正（重要）**：评审里「图标语言混用（lucide + emoji 字形 + 内核雪碧图）」是**旧截图带来的误判**。真实运行实例实测：
+
+| 指标 | 实测 |
+|------|------|
+| 外壳内 emoji 当图标 | **0**（唯一命中 `⌘` 是快捷键提示文字，属正常排版） |
+| 外壳内 lucide 图标 | **43 个** |
+| 内核雪碧图 `<use href="#…">` | **22 个，全部在 `.lake-editor-mount` 内**——外壳里一个都没有 |
+| 当图标用的 `<img>` | **0** |
+| lucide 描边宽度 | `svg.lucide { stroke-width: 1.75 }`，实测计算值 `1.75px`（单一来源） |
+
+锁 `🔒` / 更多 `⋮` 也已是 lucide 的 `<Lock>` / `<MoreVertical>`（`Sidebar.tsx:2`）。
+
+**真问题只剩"光学尺寸无体系"**（9/11/12/13/14/15/16/17/18/19/20/21/22/25/26 全在用）。本轮只收敛**离群尺寸**与**同语义不一致**：
+
+| 位置 | 改动 |
+|------|------|
+| `QuickNotesWorkspace.tsx` 空态「还没有小记」 | 两处 22 / 25（**同一语义两个尺寸**）→ 统一 24 |
+| `MultiTabEditor.tsx` 空态 / 标签钉 | `File` 26 → 24；`Pin` 11 → 12 |
+| `DesktopStatusBar.tsx` 锁定标识 | `Lock` 11 → 12 |
+| `ImageLightbox` / `HistoryPanel` / `TrashPanel` / `SyncToast` | 17 → 16 |
+
+**刻意不动**：13 / 15（共 143 处）等**近重复尺寸**是密集定高行里的取值，1px 变更会挪布局；且最终尺寸体系属 Phase 2 的世界规格，届时统一重定 —— 记入 Phase 2。
+
+## 4d. 变更明细 · Phase 1.4（内联样式）
+
+**结论修正**：32 处内联样式中 **27 处是合理的动态几何**（多维表列宽/`<col>` 宽、浮层实测坐标、数据驱动的 `backgroundColor`、进度条百分比、拖拽定位），属**应有的例外**，改成 CSS 反而增加声明数（项目指标正是"声明数只许降"）。
+
+本轮只做**净收益为正**的两处（并顺手修掉一个真实不对称）：
+
+| 位置 | 改动 |
+|------|------|
+| `Sidebar.tsx` 树行 `paddingLeft: 8` | 删除行内值；真值收到 **shell 层** `chrome.css` 的 `.note-row`，并由 `2px 7px` 改为**对称 `2px 8px`** |
+| `Sidebar.tsx` 新建行 `marginLeft: 8` | 删除行内值，并入 `app/shell.css` 的 `.inline-create`（`margin: 2px 7px 3px 8px`） |
+
+**踩坑（有价值）**：第一版把 `.note-row` 的 padding 改在 `app/shell.css`（legacy 层），实测**计算值没变**——真正生效的是 `chrome.css`（shell 层）的同名规则，legacy 那条**是死声明**。改对后再实测：`padding-left/right` 均 8px。这条正是 1.5 的第一条样本。
 
 ## 4b. 变更明细 · Phase 1.1（主题漂移归一）
 

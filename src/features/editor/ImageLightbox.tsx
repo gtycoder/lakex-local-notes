@@ -117,7 +117,7 @@ export function ImageLightbox() {
         <span className="image-lightbox__divider" />
         <button className="image-lightbox__btn" onClick={() => setScale((s) => Math.min(MAX_SCALE, s * 1.25))} aria-label="放大"><Plus size={18} /></button>
         <button className="image-lightbox__btn" onClick={() => setScale((s) => Math.max(MIN_SCALE, s / 1.25))} aria-label="缩小"><Minus size={18} /></button>
-        <button className="image-lightbox__btn" onClick={resetView} aria-label="重置"><Maximize2 size={17} /></button>
+        <button className="image-lightbox__btn" onClick={resetView} aria-label="重置"><Maximize2 size={16} /></button>
         <span className="image-lightbox__divider" />
         <button className="image-lightbox__btn image-lightbox__close" onClick={closeImagePreview} aria-label="关闭"><X size={20} /></button>
       </div>

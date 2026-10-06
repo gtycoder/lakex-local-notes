@@ -338,7 +338,7 @@ export function MultiTabEditor({
               aria-selected={tab.noteId === activeNoteId}
               role="tab"
             >
-              {pinned.has(tab.noteId) && <Pin size={11} className="tab-pin" aria-hidden="true" />}
+              {pinned.has(tab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
               {tab.icon && <span className="tab-custom-icon" aria-hidden="true">{tab.icon}</span>}
               <span className="tab-title">{tab.title || "无标题"}</span>
               {tab.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
@@ -424,7 +424,7 @@ export function MultiTabEditor({
       )}
       <div className="tab-panels">
         {tabs.length === 0 ? <section className="empty-workspace">
-          <span className="empty-workspace-icon" aria-hidden="true"><File size={26} /></span>
+          <span className="empty-workspace-icon" aria-hidden="true"><File size={24} /></span>
           <h2>开始写第一篇笔记</h2>
           <p className="empty-workspace-hint">新建文档开始记录，或按 ⌘K 搜索已有笔记</p>
           {emptyAction}

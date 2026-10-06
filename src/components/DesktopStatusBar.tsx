@@ -66,12 +66,12 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
             aria-expanded={unlockOpen}
             onClick={() => setUnlockOpen((open) => !open)}
           >
-            <Lock size={11} aria-hidden="true" />
+            <Lock size={12} aria-hidden="true" />
             <span>已锁定</span>
           </button>
         ) : (
           <span className="document-statusbar-lock" title="文档已锁定（只读）" aria-label="文档已锁定（只读）">
-            <Lock size={11} aria-hidden="true" />
+            <Lock size={12} aria-hidden="true" />
             <span>已锁定</span>
           </span>
         ))}

@@ -42,7 +42,7 @@ export function SyncToast({ data, onClose, anchorRect }: { data: SyncToastData; 
   return (
     <div className="sync-toast" role="status" aria-live="polite" style={anchorStyle}>
       <div className={`sync-toast-icon sync-toast-icon--${data.kind}`}>
-        {data.kind === "busy" ? <LoaderCircle className="spin" size={17} /> : data.kind === "ok" ? <Check size={17} /> : data.kind === "error" ? <TriangleAlert size={17} /> : <CloudOff size={17} />}
+        {data.kind === "busy" ? <LoaderCircle className="spin" size={16} /> : data.kind === "ok" ? <Check size={16} /> : data.kind === "error" ? <TriangleAlert size={16} /> : <CloudOff size={16} />}
       </div>
       <div className="sync-toast-body">
         <div className="sync-toast-title">{data.title}</div>

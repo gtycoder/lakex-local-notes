@@ -725,7 +725,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           {loading
             ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div>
             : items.length === 0
-              ? <div className="ln-empty ln-empty--idle"><Feather size={22} /><span>还没有小记</span></div>
+              ? <div className="ln-empty ln-empty--idle"><Feather size={24} /><span>还没有小记</span></div>
               : visibleItems.map((item) => <div
                   key={item.id}
                   className={"quick-note-index-row b3-list-item" + (selecting ? " is-selecting" : "") + (!selecting && editingId === item.id ? " b3-list-item--focus" : "") + (selected.has(item.id) ? " is-checked" : "")}
@@ -780,7 +780,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       <div className={"quick-notes-list" + (selecting ? " selecting" : "")}>
         <div className="quick-notes-timeline" aria-live="polite">
           {loading ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div> : items.length === 0
-            ? <div className="ln-empty ln-empty--idle"><Feather size={25} /><strong>还没有小记</strong><span>从左侧写下第一条临时记录。</span></div>
+            ? <div className="ln-empty ln-empty--idle"><Feather size={24} /><strong>还没有小记</strong><span>从左侧写下第一条临时记录。</span></div>
             : visibleItems.map((item) => editingId === item.id && editingDraft
               ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
                   draft={editingDraft} variant="inline" active={visible} saving={saving && activeIsEditing}

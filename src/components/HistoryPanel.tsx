@@ -267,7 +267,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     >
         <header className="floating-dialog-header" onPointerDown={floating.startDrag}>
           <div className="panel-title">
-            <History size={17} />
+            <History size={16} />
             <h2>历史版本</h2>
           </div>
           <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>

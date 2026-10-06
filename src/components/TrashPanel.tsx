@@ -271,7 +271,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     <>
       <header className={embed ? "trash-space-header" : "floating-dialog-header"} {...(embed ? {} : { onPointerDown: floating.startDrag })}>
         <div className="panel-title">
-          <Trash size={17} />
+          <Trash size={16} />
           <h2>回收站</h2>
         </div>
         <div className="panel-actions">
