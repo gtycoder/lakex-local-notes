@@ -67,8 +67,8 @@
 .settings-panel-large .settings-nav {
   display: flex;
   /* 导航宽度连续可调（原先窄窗块把它一刀切成 150px ⇒ 跨断点时面板内容区横跳 58px）。
-     宽窗（面板 ≥770px）恒定 208px 与原值一致；窄窗随面板收窄、但保底 150px。 */
-  flex: 0 0 clamp(150px, 27%, 208px);
+     261006 用户：设置项没那么长、左栏整体收窄 ⇒ 上限 208 → 184（百分比与保底同步收一档）。 */
+  flex: 0 0 clamp(140px, 22%, 184px);
   flex-direction: column;
   gap: 2px;
   min-height: 0;

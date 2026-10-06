@@ -193,10 +193,12 @@ pre {
  * .ln-iconbtn、.ln-tabs、.badge、.ln-empty —— 本块不另起一套视觉。
  * 行内动作默认 opacity:0，由 .ln-row 在 hover / focus-within / is-selected 时显形。 */
 .asset-browser { display: flex; flex-direction: column; gap: var(--lake-space-md); }
-.asset-browser__filters { display: flex; align-items: center; gap: var(--lake-space-md); }
-.asset-browser__search { flex: 1 1 auto; min-width: 0; }
+/* 三个大页签（.seg 原语撑满整行、三段等宽）+ 工具行（类型筛选 / 汇总 / 刷新） */
+.asset-browser__status .seg { display: flex; width: 100%; }
+.asset-browser__status .seg__item { flex: 1 1 0; min-width: 0; }
+.asset-browser__status .seg__item.is-active .ln-tabs__count { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.asset-browser__toolbar { display: flex; align-items: center; gap: var(--lake-space-md); }
 .asset-browser__kind { flex: 0 0 auto; width: 136px; }
-.asset-browser .ln-tabs__action { display: flex; align-items: center; gap: var(--lake-space-sm); }
 .asset-browser__bulk { display: flex; align-items: center; gap: var(--lake-space-sm); }
 .asset-browser__all { display: inline-flex; align-items: center; gap: 6px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); cursor: pointer; }
 .asset-browser__summary { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; }

@@ -11,7 +11,7 @@
  * 窄宽（设置弹窗可自由缩放）折叠为单列，点行开灯箱预览。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, FolderOpen, Image as ImageIcon, Paperclip, RefreshCw, Search, Trash, X } from "lucide-react";
+import { Copy, FolderOpen, Image as ImageIcon, Paperclip, RefreshCw, Trash } from "lucide-react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { formatBytes } from "../lib/formatBytes";
@@ -156,7 +156,6 @@ export function AssetsBrowser({ active }: { active: boolean }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [focus, setFocus] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [kind, setKind] = useState<string>("all");
   const [fit, setFit] = useState<"contain" | "actual">("contain");
@@ -217,14 +216,12 @@ export function AssetsBrowser({ active }: { active: boolean }) {
   }), [items]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase();
     return items.filter((item) => {
       if (status !== "all" && item.status !== status) return false;
       if (kind !== "all" && assetKindBucket(fileKindOf(item.filename)) !== kind) return false;
-      if (q && !item.filename.toLocaleLowerCase().includes(q) && !(item.noteTitle ?? "").toLocaleLowerCase().includes(q)) return false;
       return true;
     });
-  }, [items, status, kind, query]);
+  }, [items, status, kind]);
 
   const groups = useMemo(() => {
     const visible = new Set(filtered.map(keyOf));
@@ -320,35 +317,25 @@ export function AssetsBrowser({ active }: { active: boolean }) {
 
   return (
     <div className={`asset-browser${narrow ? " is-narrow" : ""}`} ref={rootRef}>
-      <div className="asset-browser__filters">
-        <span className="ln-input asset-browser__search">
-          <Search size={14} className="ln-input__icon" />
-          <input
-            className="ln-input__field"
-            value={query}
-            placeholder="搜索文件名或所属文档"
-            aria-label="搜索未引用资源"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {query && <button className="ln-input__clear ln-iconbtn ln-iconbtn--compact" aria-label="清空搜索" onClick={() => setQuery("")}><X size={13} /></button>}
-        </span>
-        <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />
-      </div>
-
-      <div className="ln-tabs asset-browser__tabs">
-        <div className="ln-tabs__track" role="tablist" aria-label="资源状态">
+      {/* 状态 = 三个大页签（kit 的分段控件 .seg：三段等宽、选中项浮起白块，用户 261006 定稿） */}
+      <div className="asset-browser__status">
+        <Seg ariaLabel="资源状态">
           {STATUS_TABS.map((tab) => (
-            <button key={tab.id} type="button" role="tab" aria-selected={status === tab.id}
-              className={`ln-tabs__item${status === tab.id ? " is-active" : ""}`}
+            <button key={tab.id} type="button"
+              className={`b3-button b3-button--outline seg__item${status === tab.id ? " is-active" : ""}`}
+              aria-pressed={status === tab.id}
               onClick={() => setStatus(tab.id)}>
               {tab.label}<span className="ln-tabs__count">{tab.count}</span>
             </button>
           ))}
-        </div>
-        <div className="ln-tabs__action">
-          <span className="asset-browser__summary">共 {counts.all} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档</span>
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
-        </div>
+        </Seg>
+      </div>
+
+      <div className="asset-browser__toolbar">
+        <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />
+        <span className="fn__space" />
+        <span className="asset-browser__summary">共 {counts.all} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档</span>
+        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
       </div>
 
       <div className="asset-browser__bulk">
@@ -375,7 +362,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
               else if (event.key === "ArrowUp") { event.preventDefault(); moveFocus(-1); }
             }}>
             {groups.length === 0 ? (
-              <div className="ln-empty"><strong>没有匹配的资源</strong><small>换个关键词或筛选条件试试。</small></div>
+              <div className="ln-empty"><strong>没有匹配的资源</strong><small>换个筛选条件试试。</small></div>
             ) : groups.map((group) => (
               <div className="asset-browser__group" key={group.title + "|" + group.state}>
                 <div className="asset-browser__grouptitle">

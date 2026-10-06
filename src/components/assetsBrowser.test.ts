@@ -37,15 +37,18 @@ describe("未引用资源浏览器", () => {
     expect(original).not.toContain("w=");
   });
 
-  it("行 / 页签 / 空态 / 输入框全部复用 kit 原语，样式只加版面", () => {
+  it("行 / 页签 / 空态全部复用 kit 原语，样式只加版面；不再带搜索框", () => {
     expect(SRC).toContain("ln-row asset-browser__row");
     expect(SRC).toContain("ln-iconbtn ln-iconbtn--compact");
-    expect(SRC).toContain('className="ln-tabs asset-browser__tabs"');
+    // 状态 = 三个大页签（kit 的分段控件 .seg，用户 261006 定稿：类似「未引用的资源文件/数据库/丢失的文件」那种）
+    expect(SRC).toContain("b3-button b3-button--outline seg__item");
     expect(SRC).toContain("ln-tabs__count");
     expect(SRC).toContain('className="ln-empty"');
-    expect(SRC).toContain("ln-input__field");
+    // 用户 261006：去掉未引用资源的搜索框
+    expect(SRC).not.toContain("ln-input__field");
     // 灯箱经 portal 渲染到 body ⇒ 规则不能挂 .settings-panel 作用域，否则灯箱里会掉回固有尺寸。
     expect(CSS).toContain(".asset-browser__body");
+    expect(CSS).toContain(".asset-browser__status .seg__item");
     expect(CSS).not.toContain(".settings-panel .asset-browser");
   });
 
