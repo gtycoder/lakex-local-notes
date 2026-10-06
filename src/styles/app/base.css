@@ -10,10 +10,10 @@
      目录 peek 顶边 / 浮层顶 / 阅读态大纲顶都由这三者派生 ⇒ 改高度只改这里（见 docs/PANEL-CONTRACT.md）。
      --tab-item-height 与顶栏**解耦**（用户 260923：顶栏收窄但标签高度不变）：
      标签条垂直内距 = (--topbar-height - --tab-item-height)/2，自动居中、不会再裁标签。
-     260923 续：32 时标签几乎贴顶（上下仅 2px）→ 38，标签上下各 5px，红绿灯/空间/云/标签随之居中。 */
-  --topbar-height: 38px;
-  --breadcrumb-height: 30px;
-  --editor-toolbar-height: 34px;
+     260923：32 时标签几乎贴顶 → 38。261006 用户「有点宽、上下收窄一点」→ 36 → 34（标签仍按公式居中，红绿灯由 layoutMetrics.ts 同步）。 */
+  --topbar-height: 34px;
+  --breadcrumb-height: 26px;
+  --editor-toolbar-height: 30px;
   --tab-item-height: 28px;
   --ease-out: var(--lake-ease-standard); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
 
