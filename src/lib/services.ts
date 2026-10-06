@@ -94,7 +94,7 @@ export function createNativeServices(api: LakeNative): AppServices {
     },
     trash: {
       list: () => api.listTrash().then((items) => items.map(trashItemToDto)),
-      restore: (id) => api.restoreTrash(id).then(() => undefined),
+      restore: (id) => api.restoreTrash(id),
       purge: (id) => api.purgeTrash(id),
       empty: () => api.emptyTrash(),
     },

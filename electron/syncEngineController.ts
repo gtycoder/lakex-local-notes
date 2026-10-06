@@ -12,6 +12,7 @@ import { pruneOldManifests } from "./s3Maintenance.js";
 import type { SyncProgress, SyncResult, SyncWarning } from "./syncTypes.js";
 import { parseLakeManifest, objectKey, MAX_MANIFEST_BYTES, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
 import { syncNow as engineSyncNow, downloadNoteAssets, type SyncReport } from "../src/core/syncEngine.js";
+import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
 import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
 
@@ -143,10 +144,12 @@ async function downloadDeclaredAssets(
   id: string,
   onlyMissing: boolean,
   createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore,
-): Promise<{ warnings: string[] }> {
+): Promise<{ warnings: string[]; skipped?: CloudState }> {
   const warnings: string[] = [];
   const settings = store.getS3Settings();
-  if (!settings) return { warnings };
+  // 单一判据：没配置 或 关了云同步 ⇒ 一律不出网（用户 261006：关闭云同步 = 当作纯离线本地空间）。
+  const state = cloudStateOf(!!settings, store.getSyncSettings());
+  if (!settings || !canTouchNetwork(state)) return { warnings, skipped: state };
   try {
     validateS3Settings(settings);
     const remote = createRemote(settings, store.logScopes);
@@ -173,25 +176,19 @@ async function downloadDeclaredAssets(
   return { warnings };
 }
 
-/** 回收站预览：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。 */
+/** 回收站预览 / 恢复后台补拉：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。
+ *  离线（未配置 / 关闭云同步）时直接返回 `skipped`，一个请求都不发。 */
 export async function ensureTrashNoteAssets(
   store: Store,
   id: string,
   createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
-): Promise<{ warnings: string[] }> {
+): Promise<{ warnings: string[]; skipped?: CloudState }> {
   return downloadDeclaredAssets(store, id, true, createRemote);
 }
 
-/**
- * 回收站恢复：恢复前强拉全量资产（惰性下载的补偿），best-effort——资源缺失/损坏/网络失败
- * 不阻断恢复（恢复红线：restore 是墓碑权威唯一显式例外）。资源下载失败时保留恢复，下次同步补拉。
+/*
+ * 261006 B 方案：**恢复不再等网络**（原先 restoreTrashWithAssets 会先 await 全量资产下载，
+ * 慢网/大附件会让"恢复"看起来卡死）。现在 restore 立刻生效，缺失资源由渲染层拿到 id 后
+ * 调 ensureTrashNoteAssets 在后台补拉，并按回执给用户「正在从 S3 拉取缺失数据…」/「未能下载」。
+ * 恢复红线不变：恢复是墓碑权威的唯一显式例外，永远成功。
  */
-export async function restoreTrashWithAssets(
-  store: Store,
-  id: string,
-  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
-): Promise<{ warnings: string[] }> {
-  const { warnings } = await downloadDeclaredAssets(store, id, false, createRemote);
-  store.restoreTrashItem(id);
-  return { warnings };
-}

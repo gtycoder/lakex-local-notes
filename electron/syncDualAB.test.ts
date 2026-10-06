@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import { Store } from "./store.js";
-import { syncNowViaEngine, restoreTrashWithAssets, ensureTrashNoteAssets } from "./syncEngineController.js";
+import { syncNowViaEngine, ensureTrashNoteAssets } from "./syncEngineController.js";
 import type { ObjectStore } from "./s3Store.js";
 import type { S3Settings } from "../src/core/syncUtils.js";
 import { syncNow as engineSync, type S3Store, type SyncConfig, type SyncDbPort, type LocalNoteRow } from "../src/core/syncEngine.js";
@@ -239,8 +239,10 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       expect(fs.existsSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toBe(false);
       expect(storeB.listDeclaredAssets(noteA.id)).toEqual([{ filename: assetName, size: imgBytes.length, hash: assetHash }]);
 
-      // B 恢复 → 强拉全量资产
-      const { warnings } = await restoreTrashWithAssets(storeB, noteA.id, remote);
+      // B 恢复 → 261006 B 方案：恢复立刻生效（不等网络），随后按需补拉缺失资源
+      storeB.restoreTrashItem(noteA.id);
+      expect(storeB.listTrash().some((t) => t.id === noteA.id)).toBe(false);
+      const { warnings } = await ensureTrashNoteAssets(storeB, noteA.id, remote);
       expect(warnings).toEqual([]);
       expect(fs.existsSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toBe(true);
       expect(fs.readFileSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toEqual(imgBytes);

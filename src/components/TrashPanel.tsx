@@ -231,13 +231,20 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     const label = item?.title || "该文档";
     if (!window.confirm(`恢复「${label}」及其全部内容到原位置？`)) return;
     try {
-      const { warnings } = await native.restoreTrash(id);
+      await native.restoreTrash(id);
       setSelected(null);
       await refresh();
-      setRestoreNotice(warnings.length > 0
-        ? `已恢复，但有 ${warnings.length} 个资源未能下载（可能云端也没有）：附件/图片会显示为空，下次同步会自动重试。`
-        : null);
-      onRestored(id, warnings);
+      onRestored(id);
+      // 261006 B 方案：恢复**不等网络**（立刻可见）。缺失资源在后台补拉，先给说明、再按回执更新。
+      setRestoreNotice("正在从 S3 拉取缺失数据…");
+      void native.ensureTrashNoteAssets(id)
+        .then(({ warnings, skipped }) => {
+          if (skipped === "offline") setRestoreNotice("云同步已关闭：按纯本地空间处理，没有去云端补拉；重新开启后下次同步会自动补拉。");
+          else if (skipped === "unconfigured") setRestoreNotice("未配置云同步：按纯本地空间处理，没有去云端补拉。");
+          else if (warnings.length > 0) setRestoreNotice(`已恢复，但有 ${warnings.length} 个资源未能下载（可能云端也没有）：附件/图片会显示为空，下次同步会自动重试。`);
+          else setRestoreNotice(null);
+        })
+        .catch(() => setRestoreNotice("资源补拉失败（已保留恢复），下次同步会自动重试。"));
     } catch (e) {
       setError(getNativeErrorMessage(e));
     }

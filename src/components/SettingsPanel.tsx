@@ -666,7 +666,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (
                     <>
-                      <Switch itemId="sync-enabled" name="启用云同步" desc="S3 配置与同步策略均为本机配置，不会上传云端；A 端关闭不影响 B 端。" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
+                      <Switch itemId="sync-enabled" name="启用云同步" desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式">

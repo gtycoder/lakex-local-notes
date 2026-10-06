@@ -16,7 +16,7 @@ import {
   clampSearchLimit,
 } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
-import { restoreTrashWithAssets, ensureTrashNoteAssets } from "../syncEngineController.js";
+import { ensureTrashNoteAssets } from "../syncEngineController.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
 
 /** 多维表 CSV 导入文件大小上限（本地优先、量级有限，防一次性读入超大文件）。 */
@@ -172,18 +172,16 @@ export function registerNotesIpc(
   ipc.handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));
   ipc.handle("delete_tree_node", (id: string) => store.deleteTreeNode(id));
   ipc.handle("list_trash", () => store.listTrash());
-  ipc.handle("restore_trash", async (id: string) => {
-    // 回收站惰性下载的补偿：恢复前强拉全量资产（best-effort，失败仍恢复）。
-    const { warnings } = await restoreTrashWithAssets(store, id);
-    for (const w of warnings) store.logScopes.sync.warn(`[restore] ${w}`);
-    // 回给渲染层 ⇒ 恢复后能提示"有 N 个资源没拉回来，已保留恢复、下次同步会补"（261006：
-    // 原先只写日志，用户以为恢复完就万事大吉，实际可能还有破图）。
-    return { warnings };
+  ipc.handle("restore_trash", (id: string) => {
+    // 261006 B 方案：**恢复立刻生效、不等网络**（原先先 await 全量资产下载，慢网会让恢复像卡死）。
+    // 缺失资源由渲染层随后调 ensure_trash_note_assets 在后台补拉（离线则直接 skipped、不出网）。
+    store.restoreTrashItem(id);
   });
   ipc.handle("ensure_trash_note_assets", async (id: string) => {
-    // 回收站预览的补偿：预览前按需补拉该笔记缺失资源（best-effort，不恢复）。
-    const { warnings } = await ensureTrashNoteAssets(store, id);
-    for (const w of warnings) store.logScopes.sync.warn(`[preview] ${w}`);
+    // 预览 / 恢复后台补拉：按需拉该笔记**缺失**的资源（best-effort，不恢复）。
+    const { warnings, skipped } = await ensureTrashNoteAssets(store, id);
+    for (const w of warnings) store.logScopes.sync.warn(`[assets] ${w}`);
+    return { warnings, skipped: skipped ?? null };
   });
   ipc.handle("purge_trash", (id: string) => store.purgeTrashItem(id));
   ipc.handle("empty_trash", () => store.emptyTrash());

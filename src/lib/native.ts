@@ -74,9 +74,9 @@ export interface LakeNative {
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
   deleteTreeNode(id: string): Promise<void>;
   listTrash(): Promise<TrashItem[]>;
-  restoreTrash(id: string): Promise<{ warnings: string[] }>;
+  restoreTrash(id: string): Promise<void>;
   /** 回收站预览：按需补拉该笔记本地缺失的资源（不恢复）。返回 warnings（best-effort）。 */
-  ensureTrashNoteAssets(id: string): Promise<{ warnings: string[] }>;
+  ensureTrashNoteAssets(id: string): Promise<{ warnings: string[]; skipped: "unconfigured" | "offline" | null }>;
   purgeTrash(id: string): Promise<void>;
   emptyTrash(): Promise<void>;
   createHistorySnapshot(noteId: string, content?: string, force?: boolean): Promise<number | null>;
