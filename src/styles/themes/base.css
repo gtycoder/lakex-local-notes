@@ -112,19 +112,17 @@
   --lake-outline-guide: var(--lake-border-strong);
   /* 媒体查看器 / 工具提示 / 冲突态取色（P7-d 收尾）：媒体层**任何主题下都是暗底**（全屏遮罩上的
    * 一层），所以放主题无关的 base；字面量只允许出现在主题文件，使用处一律引用令牌。 */
+  /* 词表口径（用户 261007）：尺度 ramp（space/motion/ease/font/line-height）与层序阶梯（z）
+   * 按设计词表整体保留（即使暂零引用）；只有被取代/无归属的特性令牌才裁剪
+   * （本轮删了 5 个被 -hover-2 / on / on-soft / scrim / toolbar 取代的媒体令牌）。 */
   --lake-media-scrim: rgba(0, 0, 0, .08);
-  --lake-media-surface: rgba(20, 22, 28, .90);
   --lake-media-toolbar: rgba(24, 26, 32, .72);
   --lake-media-toolbar-shadow: 0 4px 18px rgba(0, 0, 0, .35);
   --lake-media-img-shadow: 0 6px 40px rgba(0, 0, 0, .50);
-  --lake-media-btn: rgba(255, 255, 255, .12);
-  --lake-media-btn-hover: rgba(255, 255, 255, .22);
   --lake-media-btn-hover-2: rgba(255, 255, 255, .14);
   --lake-media-divider: rgba(255, 255, 255, .18);
   --lake-media-on: #e6e8ee;
   --lake-media-on-soft: #c3c7d0;
-  --lake-media-on-faint: #8f96a3;
-  --lake-media-on-dim: #a7adb8;
   --lake-media-danger: #ff9f9f;
   --lake-media-video: #000;
   --lake-media-embed: #fff;
