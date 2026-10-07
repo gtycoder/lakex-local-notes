@@ -15,11 +15,22 @@ if ! $ADB devices | grep -q "emulator-.*device"; then
   echo "错误：没有在跑/已开机的模拟器。先 ./scripts/emu-up.sh" >&2
   exit 1
 fi
-SOCK=$($ADB shell cat /proc/net/unix 2>/dev/null | grep -oiE "webview_devtools_remote_[0-9a-f]+" | tail -1)
+# socket 名带的是**宿主进程 PID**：App 重启后旧 socket 仍在 /proc/net/unix 里挂着，
+# 直接 tail -1 可能取到旧进程的 socket（/json/list 恒为空）。优先按当前 App PID 精确取。
+APP_PID="$($ADB shell pidof com.lakenotes.mobile 2>/dev/null | tr -d '\r' | awk '{print $1}')"
+SOCK=""
+if [ -n "$APP_PID" ]; then
+  SOCK="$($ADB shell cat /proc/net/unix 2>/dev/null | grep -oE "webview_devtools_remote_${APP_PID}$" | head -1)"
+fi
+if [ -z "$SOCK" ]; then
+  echo "提示：未按 App PID 找到 WebView socket（App 是否已启动？），回退取最后一个" >&2
+  SOCK="$($ADB shell cat /proc/net/unix 2>/dev/null | grep -oiE "webview_devtools_remote_[0-9a-f]+" | tail -1)"
+fi
 if [ -z "$SOCK" ]; then
   echo "错误：未发现 WebView devtools socket（App 是否已启动？需 debug 构建）" >&2
   exit 1
 fi
+$ADB forward --remove tcp:$PORT >/dev/null 2>&1 || true
 $ADB forward tcp:$PORT localabstract:$SOCK
 echo "==> 已转发 $SOCK -> tcp:$PORT"
 echo "    Chrome DevTools: http://127.0.0.1:$PORT/json/list"

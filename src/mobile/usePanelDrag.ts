@@ -7,9 +7,9 @@
  *  - 提交后先把面板摆到最终态（transition 已恢复 → 平滑归位），再清内联样式交还 React 类名。
  */
 import { useEffect, useRef } from "react";
-import { getTouchAxis, isHorizontalScrollable, panelCommit, panelProgress } from "./gestureCore";
+import { getTouchAxis, isHorizontalScrollable, panelCommit, panelProgress, swipeTargetSide, type PanelSide } from "./gestureCore";
 
-export type PanelSide = "left" | "right";
+export type { PanelSide };
 
 export interface PanelDragHandlers {
   getPanel: (side: PanelSide) => HTMLElement | null;
@@ -18,6 +18,8 @@ export interface PanelDragHandlers {
   isOpen: (side: PanelSide) => boolean;
   /** 手势结束后把结果写回 React 状态 */
   commit: (side: PanelSide, open: boolean) => void;
+  /** 该侧是否允许被手势「拉开」（缺省全部允许）。只约束打开；已展开的面板仍可滑走关闭。 */
+  canOpen?: (side: PanelSide) => boolean;
 }
 
 const SETTLE_MS = 200;         // 归位动画时长上限（CSS 是 150ms）
@@ -90,7 +92,9 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
         if (judged === "y") { axis = "y"; side = null; cancelled = true; return; }
         axis = "x";
         if (!side) {
-          side = dx > 0 ? "left" : "right";
+          // 该侧没有可开面板（如表格/多维表/画板没有大纲）→ 手势作废，既不拉抽屉也不拦原生滚动
+          side = swipeTargetSide(dx, ref.current.canOpen);
+          if (!side) { cancelled = true; return; }
           // 横向可滚动内容 → 交给原生滚动，不拉抽屉（对齐思源 isHorizontalScrollable）
           if (isHorizontalScrollable(targetOf(e), dx)) { cancelled = true; return; }
         } else {

@@ -108,13 +108,22 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   useSwipeToClose(iconSheetRef, () => setIconFor(null), !!iconFor);
   useSwipeToClose(historySheetRef, () => setHistoryFor(null), !!historyFor);
 
+  const active = tabs.find((t) => t.id === activeId) ?? null;
+  /** 大纲只属于 Lake 文档：表格 / 多维表 / 画板没有大纲（与顶栏「编辑」按钮同一口径）。 */
+  const outlineAvailable = !!active && (active.kind ?? "doc") === "doc";
+
   // 跟手开合抽屉（思源 touch.ts 口径：内容区任意横滑、面板跟手、释放按 1/3 屏宽提交）
   usePanelDrag({
     getPanel: (side: PanelSide) => document.querySelector<HTMLElement>(side === "left" ? ".side-panel--left" : ".side-panel--right"),
     getMask: (side: PanelSide) => document.querySelector<HTMLElement>('[data-panel-mask="' + side + '"]'),
     isOpen: (side: PanelSide) => (side === "left" ? sidebarOpen : outlineOpen),
     commit: (side: PanelSide, open: boolean) => { if (side === "left") openSidebar(open); else openOutline(open); },
+    // 没有大纲时左滑不再拉出空面板（右滑开目录不受影响）；已展开的大纲仍可滑走关闭
+    canOpen: (side: PanelSide) => side === "left" || outlineAvailable,
   });
+
+  // 切到没有大纲的文档类型（表格 / 多维表 / 画板）时收掉已展开的大纲抽屉，别停在空面板上
+  useEffect(() => { if (!outlineAvailable) setOutlineOpen(false); }, [outlineAvailable]);
 
   const loadTree = useCallback(async () => {
     const [treeArr, nodes] = await Promise.all([bridge.listNotebookTree(notebookId), bridge.listTreeNodes()]);
@@ -173,6 +182,17 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     }).catch((reason) => showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" }));
   }, [tabs]);
 
+  // 已进入工作区后又被指定文档（新建 / 首页「最近文档」/ 搜索）：组件 key 是 notebookId，
+  // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
+  // 否则会"文档建好了但界面不跳转"。
+  const handledInitialRef = useRef<string | null>(initialNoteId ?? null);
+  useEffect(() => {
+    if (!initialNoteId || handledInitialRef.current === initialNoteId) return;
+    handledInitialRef.current = initialNoteId;
+    pendingEditRef.current = initialMode === "editor";
+    void openTab(initialNoteId);
+  }, [initialNoteId, initialMode, openTab]);
+
   const closeTab = useCallback((id: string) => {
     const idx = tabs.findIndex((t) => t.id === id);
     const next = tabs.filter((t) => t.id !== id);
@@ -197,9 +217,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     }
     return null;
   };
-
-  // 编辑：保存当前 tab
-  const active = tabs.find((t) => t.id === activeId) ?? null;
 
   // 立即同步（思源顶栏右侧的云图标就是同步状态/触发器）
   const runSync = useCallback(async () => {
@@ -626,7 +643,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <nav className={"mobile-bottom-bar" + ((active?.editing || navHidden) ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={(active?.editing || navHidden) ? "true" : "false"}>
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => openSidebar(!sidebarOpen)} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => setTabsOpen(true)} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
-        <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} aria-label="大纲" title="大纲"><List /></button>
+        <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
         <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => setMoreOpen(true)} aria-label="更多" title="更多"><MoreHorizontal /></button>
       </nav>
 

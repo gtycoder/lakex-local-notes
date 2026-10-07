@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clamp01, getTouchAxis, panelCommit, panelProgress } from "./gestureCore";
+import { clamp01, getTouchAxis, panelCommit, panelProgress, swipeTargetSide } from "./gestureCore";
 
 describe("getTouchAxis（轴锁，对齐思源 touchGesture.ts）", () => {
   it("位移未过阈值 → undefined", () => {
@@ -50,5 +50,17 @@ describe("panelCommit（释放是否提交到目标态）", () => {
     expect(panelCommit(true, -40, 1500, 400)).toBe(true);
     expect(panelCommit(true, -200, 2000, 400)).toBe(false);
     expect(panelCommit(true, -55, 100, 400)).toBe(false);
+  });
+});
+
+describe("swipeTargetSide（新手势拉哪一侧；该侧没有面板则作废）", () => {
+  it("右滑开左栏、左滑开右栏（缺省两侧都可开）", () => {
+    expect(swipeTargetSide(40)).toBe("left");
+    expect(swipeTargetSide(-40)).toBe("right");
+  });
+  it("canOpen 拒绝该侧 → null（表格/多维表/画板没有大纲，左滑不拉出空面板）", () => {
+    const onlyLeft = (side: "left" | "right"): boolean => side === "left";
+    expect(swipeTargetSide(40, onlyLeft)).toBe("left");
+    expect(swipeTargetSide(-40, onlyLeft)).toBeNull();
   });
 });

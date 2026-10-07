@@ -3,6 +3,8 @@
  * 只放纯函数/常量，供 usePanelDrag / useHorizontalSwipe / 弹层右滑关闭共用，避免各写一套轴锁。
  */
 export type TouchAxis = "x" | "y";
+/** 抽屉侧：左 = 目录（设置页也复用它），右 = 大纲。 */
+export type PanelSide = "left" | "right";
 
 /** 轴锁阈值：位移先越过它才判定横/纵（与思源 SIZE_DRAG_THRESHOLD 同量级）。 */
 export const GESTURE_AXIS_THRESHOLD = 8;
@@ -39,6 +41,16 @@ export function isHorizontalScrollable(target: HTMLElement | null, dx: number): 
 /** 抽屉跟手进度：raw>0 表示往“拉开该侧”的方向；已展开时从 1 递减到 0（反向滑动自然回退）。 */
 export function panelProgress(openAtStart: boolean, raw: number, width: number): number {
   return openAtStart ? clamp01(1 + raw / width) : clamp01(raw / width);
+}
+
+/**
+ * 新手势要拉开哪一侧：右滑开左栏、左滑开右栏（思源口径）。
+ * 该侧没有可开的面板时返回 null ⇒ 手势作废、不拉任何抽屉（例：表格/多维表/画板没有大纲，
+ * 左滑就不该拉出一个空面板）。只用于“打开”，已展开的面板仍按原逻辑滑动关闭。
+ */
+export function swipeTargetSide(dx: number, canOpen?: (side: PanelSide) => boolean): PanelSide | null {
+  const side: PanelSide = dx > 0 ? "left" : "right";
+  return !canOpen || canOpen(side) ? side : null;
 }
 
 /**
