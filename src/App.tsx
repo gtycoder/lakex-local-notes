@@ -428,6 +428,7 @@ export function App() {
     onSync: () => { void runSync(); },
     onOpenSettings: () => { setSettingsCategory("sync"); setSettingsOpen(true); },
     onOpenHistory: (noteId: string) => { setHistoryNoteId(noteId); setHistoryOpen(true); },
+    onOpenNote: (noteId: string) => { void openNote(noteId); },
   };
   const libraryTopBarLeading = (
     <DesktopTopBarLeading

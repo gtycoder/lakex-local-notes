@@ -104,7 +104,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // W-2：正文下载后校验 hash（与资产强校验对齐）。不符 → 同“对象缺失”等级降级：warning + 跳过，不应用损坏正文。
   const verifyNoteHash = (contentBytes: Uint8Array, rn: ManifestNote): boolean => {
     if (sha256Sync(contentBytes) !== rn.contentHash) {
-      report.warnings.push(`正文哈希不符（跳过）: ${rn.id}-${rn.contentHash}`);
+      report.warnings.push({ kind: "remote_incomplete", noteId: rn.id, title: rn.title, message: `正文哈希不符（跳过）: ${rn.id}-${rn.contentHash}` });
       return false;
     }
     return true;
@@ -394,7 +394,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           // 本地从未持有（全新设备/重装）：导入远端 trash 条目（先拉删除前内容再建回收站条目，内容可恢复）。
           const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
           if (contentBytes == null) {
-            report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
+            report.warnings.push({ kind: "remote_incomplete", noteId: rn.id, title: rn.title, message: `对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}` });
             continue;
           }
           if (!verifyNoteHash(contentBytes, rn)) continue;
@@ -428,7 +428,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         } else {
           const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
           if (contentBytes == null) {
-            report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
+            report.warnings.push({ kind: "remote_incomplete", noteId: rn.id, title: rn.title, message: `对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}` });
             continue;
           }
           if (!verifyNoteHash(contentBytes, rn)) continue;
@@ -455,18 +455,18 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         if (remoteNewer) {
           const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
           if (contentBytes == null) {
-            report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
+            report.warnings.push({ kind: "remote_incomplete", noteId: rn.id, title: rn.title, message: `对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}` });
             continue;
           }
           if (!verifyNoteHash(contentBytes, rn)) continue;
           report.downloadedBytes += contentBytes.length;
           // 跟随恢复 = 应用远端 active（dbPort 清 trashed_at）+ 记账
           if (opts?.strictAssets) {
-            try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
-            catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
+            try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true, rn.title); }
+            catch (e) { if (e instanceof AssetMissingError) { report.warnings.push({ kind: "asset_missing", noteId: rn.id, title: rn.title, filename: e.filename, message: `资源缺失（跳过该条目）: ${rn.id}` }); continue; } throw e; }
           }
           await db.applyRemoteNote({ ...rn, parentId: await effectiveParent(), trashedAt: null, deleted: false, deletedAt: undefined, deletedFromParentId: null }, decodeText(contentBytes));
-          if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
+          if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false, rn.title);
           await db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
           report.appliedRemote++;
         } else {
@@ -523,7 +523,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       if (action.kind === "remote-wins") {
         const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
         if (contentBytes == null) {
-          report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
+          report.warnings.push({ kind: "remote_incomplete", noteId: rn.id, title: rn.title, message: `对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}` });
           continue;
         }
         if (!verifyNoteHash(contentBytes, rn)) continue;
@@ -534,11 +534,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           supersededTracker.push(rn.id, rn.title);
         }
         if (opts?.strictAssets) {
-          try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
-          catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
+          try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true, rn.title); }
+          catch (e) { if (e instanceof AssetMissingError) { report.warnings.push({ kind: "asset_missing", noteId: rn.id, title: rn.title, filename: e.filename, message: `资源缺失（跳过该条目）: ${rn.id}` }); continue; } throw e; }
         }
         await db.applyRemoteNote({ ...rn, parentId: await effectiveParent(), trashedAt: null, deleted: false }, decodeText(contentBytes));
-        if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
+        if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false, rn.title);
         await db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
         report.appliedRemote++;
       }

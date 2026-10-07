@@ -20,6 +20,7 @@ export interface DesktopTopBarLeadingProps {
   onSync: () => void;
   onOpenSettings: () => void;
   onOpenHistory: (noteId: string) => void;
+  onOpenNote: (noteId: string) => void;
 }
 
 const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }> = {
@@ -36,7 +37,7 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   const {
     desktopWorkspace, wsMenuWrapRef, syncBtnRef, visible = true, sync,
     pendingSummary, cloudEnabled, cloudConfigured, conflictSnapshots,
-    onToggleWorkspaceMenu, onSync, onOpenSettings, onOpenHistory,
+    onToggleWorkspaceMenu, onSync, onOpenSettings, onOpenHistory, onOpenNote,
   } = props;
   const space = SPACE_META[desktopWorkspace] ?? SPACE_META.library;
   return (
@@ -62,6 +63,7 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
         onSync={onSync}
         onOpenSettings={onOpenSettings}
         onOpenHistory={onOpenHistory}
+        onOpenNote={onOpenNote}
       />
     </>
   );

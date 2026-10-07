@@ -842,7 +842,9 @@ describe("syncNow 增量同步", () => {
     writeManifest(manifest);
     s3.bucket.set(key(`objects/n2-${sha256("<p>remote</p>")}.lake`), Buffer.from("<p>remote</p>", "utf8"));
     const r1 = await syncNow(store as unknown as Store);
-    expect(r1.warnings).toEqual([{ kind: "asset_missing", noteId: "n2" }]);
+    expect(r1.warnings).toHaveLength(1);
+    expect(r1.warnings![0]).toMatchObject({ kind: "asset_missing", noteId: "n2", title: "远端", filename: "img.png" });
+    expect(r1.warnings![0].message).toContain("资源缺失");
     expect(store.notes.has("n2")).toBe(false); // 未导入半成品
 
     // 基线：第一轮 syncNow 已重建 manifest（跳过 n2），无缺失时 warnings 应为 undefined
@@ -873,7 +875,9 @@ describe("syncNow 增量同步", () => {
     writeManifest(manifest);
     // 不写 objects/n3-...lake（对象缺失）
     const r3 = await syncNow(store as unknown as Store);
-    expect(r3.warnings).toEqual([{ kind: "remote_incomplete", noteId: "n3" }]);
+    expect(r3.warnings).toHaveLength(1);
+    expect(r3.warnings![0]).toMatchObject({ kind: "remote_incomplete", noteId: "n3", title: "缺失正文" });
+    expect(r3.warnings![0].message).toContain("对象缺失");
     expect(store.notes.has("n3")).toBe(false); // 未导入
   });
 

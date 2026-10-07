@@ -2,6 +2,7 @@ import type { ManifestNote } from "./manifestTypes.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { MAX_ATTACHMENT_BYTES } from "./storeLimits.js";
 import type { S3Store, SyncConfig, SyncDbPort, SyncReport } from "./syncEngineTypes.js";
+import type { SyncWarning } from "../lib/types.js";
 
 /** P3-3：资产传输并发批大小。桌面实测资产传输是同步长尾（串行逐条 RTT 占耗时 99%）。
  * 现方案：① 存在性用「远端清单声明差集」判定（对齐思源 dejavu，见 scanLocalAssets），彻底去掉每对象一次
@@ -29,7 +30,11 @@ export const decodeText = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
  * - strict=false（移动端读优先）：单个资源缺失/损坏 → 该资源跳过 + warning（图片占位），不阻断笔记正文导入。
  * - strict=true（桌面对齐 sync.ts:533-541）：资源缺失/损坏 → 抛 AssetMissingError，调用方跳过整个条目
  *   （不导入半成品；warning 由调用方记 kind=asset_missing）。 */
-export class AssetMissingError extends Error {}
+export class AssetMissingError extends Error {
+  /** 触发缺失的资源文件名（随错误结构化携带，调用方不必从 message 反解）。 */
+  filename?: string;
+  constructor(message: string, filename?: string) { super(message); this.filename = filename; }
+}
 
 /** 回收站惰性下载：只记录 manifest 声明的资产元数据（冻结清点），不下载资源文件。
  * 进回收站不可编辑 → 清点不变；他端删除可能随后被清空 → 先不拉资源；恢复时再强拉全量。 */
@@ -37,7 +42,7 @@ export async function recordDeclaredAssetsOnly(db: SyncDbPort, noteId: string, a
   if (typeof db.recordDeclaredAssets === "function") await db.recordDeclaredAssets(noteId, assets ?? []);
 }
 
-export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string, assets: ManifestNote["assets"], report: SyncReport, strict: boolean): Promise<void> {
+export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string, assets: ManifestNote["assets"], report: SyncReport, strict: boolean, noteTitle?: string): Promise<void> {
   const items = assets ?? [];
   // A 方案：记录 manifest 声明的资产元数据（即使某资源文件本地缺失，上传 union 仍可正确声明）。
   if (typeof db.recordDeclaredAssets === "function") await db.recordDeclaredAssets(noteId, items);
@@ -54,7 +59,7 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
   // 失败按索引归位，池结束后统一裁决：warnings 按原顺序入列、首个错误按原顺序抛出，
   // 与旧串行实现的裁决结果逐字节一致（仅失败前的多余请求会发出，结果确定）。
   const errors: Array<Error | null> = new Array(items.length).fill(null);
-  const warnings: Array<string | null> = new Array(items.length).fill(null);
+  const warnings: Array<SyncWarning | null> = new Array(items.length).fill(null);
   const saved: Array<number> = new Array(items.length).fill(0);
   let aborted = false; // strict 首错后停止落盘（并发车道已在途的请求自然完成但不写盘，防孤儿资产目录）
   // 可选：端口提供文件式下载（getObjectToFile + assetFilePath）时，字节不进 JS（原生 GET→落盘→原生校验）；
@@ -75,13 +80,13 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
           expectedSha256: asset.hash,
         });
         if (res == null) {
-          if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
-          else warnings[i] = `资源缺失（跳过）: ${noteId}/${asset.filename}`;
+          if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`, asset.filename); aborted = true; }
+          else warnings[i] = { kind: "asset_missing", noteId, title: noteTitle, filename: asset.filename, message: `资源缺失（跳过）: ${noteId}/${asset.filename}` };
           return;
         }
         if (res.status === "corrupt") {
           if (strict) { errors[i] = new Error(`资源校验不符: ${noteId}/${asset.filename}`); aborted = true; }
-          else warnings[i] = `资源校验不符（跳过）: ${noteId}/${asset.filename}`;
+          else warnings[i] = { kind: "asset_missing", noteId, title: noteTitle, filename: asset.filename, message: `资源校验不符（跳过）: ${noteId}/${asset.filename}` };
           return;
         }
         if (aborted) return; // strict 已首错：端口已落盘，不再记账（下轮 listLocalAssets 实扫自愈）
@@ -90,19 +95,19 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
       }
       const bytes = await s3.getObject(key, { maxBytes: MAX_ATTACHMENT_BYTES });
       if (bytes == null) {
-        if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
-        else warnings[i] = `资源缺失（跳过）: ${noteId}/${asset.filename}`;
+        if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`, asset.filename); aborted = true; }
+        else warnings[i] = { kind: "asset_missing", noteId, title: noteTitle, filename: asset.filename, message: `资源缺失（跳过）: ${noteId}/${asset.filename}` };
         return;
       }
       if (bytes.length !== asset.size) {
         // 损坏（声明 size 不符）→ 严格模式整轮中止（对齐桌面：损坏拒绝，不静默接受）
         if (strict) { errors[i] = new Error(`资源大小不符: ${noteId}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`); aborted = true; }
-        else warnings[i] = `资源大小不符（跳过）: ${noteId}/${asset.filename}`;
+        else warnings[i] = { kind: "asset_missing", noteId, title: noteTitle, filename: asset.filename, message: `资源大小不符（跳过）: ${noteId}/${asset.filename}` };
         return;
       }
       if (sha256Sync(bytes) !== asset.hash) {
         if (strict) { errors[i] = new Error(`资源哈希不符: ${noteId}/${asset.filename}`); aborted = true; }
-        else warnings[i] = `资源哈希不符（跳过）: ${noteId}/${asset.filename}`;
+        else warnings[i] = { kind: "asset_missing", noteId, title: noteTitle, filename: asset.filename, message: `资源哈希不符（跳过）: ${noteId}/${asset.filename}` };
         return;
       }
       if (aborted) return; // strict 已首错：不落盘（防半成品孤儿资产）

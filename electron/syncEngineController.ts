@@ -96,18 +96,8 @@ export async function syncNowViaEngine(
     store.logScopes.sync.info(`[perf] purge ${note.id} ${Date.now() - purgeStart}ms (objects=${objs}, assets=${assets})`);
   }
 
-  // warnings 结构化 + 结果组装
-  const warnings: SyncWarning[] = engineReport.warnings.map((w) => {
-    // 正文缺失："对象缺失（跳过+warning，B 方案）: {noteId}-{64hex}" → 去 hash 后缀取完整 UUID
-    // 资产缺失："资源缺失（跳过该条目）: {noteId}" / "资源缺失（跳过）: {noteId}/{filename}"
-    const m = /^(.+?)（跳过[^）]*）:\s*(\S+)/.exec(w);
-    const raw = m?.[2] ?? "";
-    // 完整 UUID 提取：对象缺失时 raw 带 "-{64hex}" 后缀；资源缺失时带 "/{filename}"（split("/") 去除）。
-    // 修复：此前 split("-")[0] 把 UUID 截成 8 字符，UI 无法定位文档。
-    const noteId = raw.split("/")[0].replace(/-[0-9a-f]{64}$/, "") || undefined;
-    const kind = w.includes("资源") ? "asset_missing" : "remote_incomplete";
-    return { kind, noteId };
-  });
+  // warnings 已由 core 直接产出结构化对象（kind/noteId/title/filename/message）；这里只透传，不再正则反解字符串。
+  const warnings: SyncWarning[] = engineReport.warnings;
   const completedAt = new Date().toISOString();
   const commitId = publishedCommitId ?? await readLatestCommitId(remote);
   const result: SyncResult = {
@@ -169,7 +159,8 @@ async function downloadDeclaredAssets(
       trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
     };
     await downloadNoteAssets(cfg, s3Store, dbPort, id, assets, report, false);
-    warnings.push(...report.warnings);
+    // 回收站恢复/预览的补拉对外仍是 string[]（TrashPanel 直接展示）；结构化只用于 SyncResult。
+    warnings.push(...report.warnings.map((w) => w.message));
   } catch (e) {
     warnings.push(`资源下载失败（保留恢复/预览，资源下次同步补拉）: ${(e as Error).message}`);
   }

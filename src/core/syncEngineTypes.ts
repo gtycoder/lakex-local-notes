@@ -1,4 +1,5 @@
 import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
+import type { SyncWarning } from "../lib/types.js";
 
 /** B3：冲突归档（superseded）快照保护窗口（天）。引擎在远端覆盖本机编辑的强制留档处请求保护；
  * 桌面 store 落 protected_until（未到期自动清理跳过、手动删除不受限）；移动端简化 schema 无保护、忽略。 */
@@ -50,7 +51,7 @@ export interface SyncReport {
   uploaded: number;
   published: boolean;
   message: string;
-  warnings: string[];
+  warnings: SyncWarning[];
   /** 本地修改被远端覆盖、已强制留档的文档（对齐桌面 SyncResult.supersededNotes，UI 提醒用）。 */
   supersededNotes: Array<{ id: string; title: string }>;
   /** 同步统计（思源式 tooltip 展示）：上传/下载的目录数与字节数（正文 + 资源 + manifest）。 */

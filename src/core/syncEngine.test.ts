@@ -560,7 +560,7 @@ describe("syncEngine（共享编排）", () => {
     const r = await syncNow(CFG, s3, db);
     expect(r.appliedRemote).toBe(0);
     expect(db.notes.has("n2")).toBe(false);
-    expect(r.warnings.some((w) => w.includes("正文哈希不符"))).toBe(true);
+    expect(r.warnings.some((w) => w.kind === "remote_incomplete" && w.noteId === "n2" && w.message.includes("正文哈希不符"))).toBe(true);
   });
 
   it("D2：远端 manifest 是非法 JSON → 整轮中止报错，不覆盖本地", async () => {

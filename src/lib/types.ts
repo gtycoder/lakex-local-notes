@@ -166,6 +166,21 @@ export interface QuickNotesSyncStatus {
   error?: string;
 }
 
+/** 同步警告：远端对象/资源缺失时「跳过受影响条目、不覆盖本地、其余继续」（V5 §5.5 B 方案）的结构化报告。
+ *  由 core 直接产出（不再拼字符串让消费方正则反解）；UI 据此展示与点击定位。 */
+export type SyncWarningKind = "remote_incomplete" | "asset_missing";
+export interface SyncWarning {
+  kind: SyncWarningKind;
+  /** 受影响文档 id（能定位时）。 */
+  noteId?: string;
+  /** 文档标题（core 能取到时带上，省 UI 一次回查）。 */
+  title?: string;
+  /** 资源文件名（asset_missing 且能定位到具体文件时）。 */
+  filename?: string;
+  /** 人类可读一行（日志/兜底展示；UI 优先用 title/filename）。 */
+  message: string;
+}
+
 export interface SyncResult {
   uploaded: number;
   downloaded: number;
@@ -185,6 +200,8 @@ export interface SyncResult {
   quickNotes?: QuickNotesSyncStatus;
   /** 本地修改被远端覆盖、已存入历史的文档（用于 UI 提醒） */
   supersededNotes: Array<{ id: string; title: string }>;
+  /** V5 §5.5：远端对象/资源缺失（B 方案——跳过受影响条目、不覆盖本地、其余继续；manifest 损坏仍中止）。 */
+  warnings?: SyncWarning[];
 }
 
 /** A3 数据体检（只读诊断）报告：检查本地数据自洽性，不自动修复。 */

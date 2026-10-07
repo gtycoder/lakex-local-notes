@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
 import { isCloudActive } from "../core/cloudState.js";
-import type { SyncStatus, SyncStatusInfo } from "../lib/types";
+import type { SyncStatus, SyncStatusInfo, SyncWarning } from "../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../lib/native";
 import { reportNativeActionError } from "../lib/nativeErrors";
@@ -23,6 +23,8 @@ export interface SyncStatusPopoverProps {
   onSync: () => void;
   onOpenSettings: () => void;
   onOpenHistory?: (noteId: string) => void;
+  /** 点击同步警告：打开对应文档（远端缺内容的那篇）。 */
+  onOpenNote?: (noteId: string) => void;
 }
 
 /** 思源式"云+对钩"组合图标：同步完成后展示（默认色，不变绿）。 */
@@ -55,6 +57,15 @@ function formatDuration(ms: number | undefined): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} 秒`;
 }
 
+/** 同步警告的一行展示：主文本取文档标题（缺则 id），副文本标注缺失类型/文件名。 */
+function warningPrimary(w: SyncWarning): string {
+  return w.title || w.noteId || "未命名文档";
+}
+function warningMeta(w: SyncWarning): string {
+  return w.kind === "asset_missing" ? (w.filename ?? "资源缺失") : "正文缺失";
+}
+
+
 export function SyncStatusPopover({
   buttonRef,
   visible = true,
@@ -69,6 +80,7 @@ export function SyncStatusPopover({
   onSync,
   onOpenSettings,
   onOpenHistory,
+  onOpenNote,
 }: SyncStatusPopoverProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -210,6 +222,29 @@ export function SyncStatusPopover({
                     <button key={item.noteId} type="button" className="b3-list-item" onClick={() => onOpenHistory?.(item.noteId)}>
                       <span className="b3-list-item__text ln-ellipsis">{item.title || "无标题"}</span>
                       <span className="b3-list-item__meta">查看历史</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+          {stats?.warnings && stats.warnings.length > 0 && (
+            <section className="sync-status-history-note" role="status">
+              <TriangleAlert size={14} aria-hidden="true" />
+              <div>
+                <strong>同步有 {stats.warnings.length} 项被跳过</strong>
+                <span>远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</span>
+                <div className="sync-status-history-list b3-list b3-list--background" role="list">
+                  {stats.warnings.map((w, i) => (
+                    <button
+                      key={`${w.kind}-${w.noteId ?? i}-${w.filename ?? ""}`}
+                      type="button"
+                      className="b3-list-item"
+                      disabled={!w.noteId || !onOpenNote}
+                      onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
+                    >
+                      <span className="b3-list-item__text ln-ellipsis">{warningPrimary(w)}</span>
+                      <span className="b3-list-item__meta">{warningMeta(w)}</span>
                     </button>
                   ))}
                 </div>
