@@ -129,3 +129,24 @@
 - **相关**：同一路径若拿**跨源**资产 URL（`http://127.0.0.1:19876/…`）去 fetch，会被资产服务的
   CORS 规则拦掉（`Access to fetch … blocked`）⇒ 独立画板文档因此采用「**写盘 = 资产 URL / 内存 = data URL**」
   的口径（见 `docs/STORAGE-LAYERS.md` §九）。
+
+## K. 2026-10-08 表格（FortuneSheet）暗色模式
+
+- **canvas 才是主角**：单元格区、行列头、网格线由**同一个 `<canvas>`** 画（`.fortune-container` 的 CSS
+  白底会被 `drawMain` 的白色 fillRect 完全盖住）⇒ 只改 CSS 只能得到「暗壳 + 白格」，要真暗必须让 canvas 读主题。
+- **颜色来源（`@fortune-sheet/core/dist/index.js`）**：
+  · 整格区底 `drawMain` 的 `fillStyle="#ffffff"`；空/非空格底 `nullCellRender`/`cellRender` 的 `"#FFFFFF"`；
+  · 网格线/表头分隔线 `defaultStyle.strokeStyle`（`#dfdfdf`）；表头底 `#ffffff`、表头字 `#000000`（写死）；
+  · 默认字色 = `normalizedCellAttr(cell,"fc")` 在没有 fc 时回落 `#000000`（**不是** `defaultStyle.fillStyle`）。
+- **接法（本仓库）**：`patches/@fortune-sheet+core+1.0.4.patch` 把上述常量改成读 `defaultStyle.{cellBgStyle,
+  headerBgStyle,fillStyle,strokeStyle}`，并新增 `syncLakeSheetCanvasTheme()` 从 `--lake-bg-canvas`/`--lake-bg-subtle`/
+  `--lake-text-1`/`--lake-border-1` 读取，调用点挂在 `updateContextWithCanvas`（挂载 / window.resize）。
+  **展示层，不写正文 / S3 / 历史 / 撤销栈**（正文文件哈希实测不变）。
+- **图标是 shadow 树，文档 CSS 打不到**：工具栏/菜单图标是 `<svg><use href="#id">` → `SVGDefines` 里的 `<symbol>`；
+  `fill`/`stroke` 写在 symbol 子元素上，外部 CSS 的 `fill: …` **无效**，只能把补丁里这些色值改成 `currentColor`
+  （`patches/@fortune-sheet+react+1.0.4.patch`），再由 `.fortune-toolbar-button { color: var(--lake-text-2) }` 驱动。
+- **重绘靠 `window.resize`**：FortuneSheet 没有 ResizeObserver，只在 `window.resize` 重算容器并重绘 ⇒ 主题切换
+  要补发一次 resize（`SheetEditor` 里观察 `data-theme`）。⚠️ **不能用 rAF 派发**：隐藏窗口（CDP 依附）里
+  `document.hidden === true` 时 rAF 不触发，会漏同步（表现＝主题已切、canvas 仍是白格）；用 `setTimeout`/直接派发。
+- **外壳仍要走令牌**：工具栏/工作表标签/浮层/选区/输入框在 `src/features/sheet/sheetEditor.css` 映射到 `--lake-*`
+  （三方组件是「自有设计系统」的唯一例外，几何沿用内核）；内核输入框额外显式给面板底，别依赖 UA 的 `color-scheme`。

@@ -509,6 +509,27 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
     };
   }, [everVisible]);
 
+  /**
+   * 主题切换 / 首次可见时让 canvas 重绘（表格暗色模式，261008）。
+   * canvas 的网格 / 行列头 / 单元格底色由内核 `defaultStyle` 决定，core patch 在
+   * `updateContextWithCanvas` 里按当前主题令牌同步一次；而该函数只在「挂载 / window.resize」
+   * 被调用，主题切换不改宿主宽度 ⇒ 这里观察 `data-theme` 变化、并在首次可见后补发一次
+   * `window.resize`（与上面「目录栏宽度变化补发」同一机制）。
+   * **不用 rAF**：隐藏窗口（CDP 依附）里 rAF 不触发，会漏掉同步；定时器照常触发。
+   * 只重绘、不写数据、不进撤销栈。
+   */
+  useEffect(() => {
+    if (!everVisible) return;
+    const ping = () => window.dispatchEvent(new Event("resize"));
+    const observer = new MutationObserver(ping);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    const timer = window.setTimeout(ping, 60);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [everVisible]);
+
   /** 底部「选区统计」行与文档状态栏共用同一条常驻底栏（260926 用户提议）：
    * 统计行常驻 + 状态栏固定展示，去掉「有无统计项」的收起/展开与随之而来的重算。
    * 统计行右对齐、状态栏钉在同一行最右端 ⇒ 要把状态栏实测宽度让给统计行，否则统计文字被压住

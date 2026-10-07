@@ -151,3 +151,266 @@
 .sheet-editor .fortune-toolbar > div:has(> div[style*="absolute"]) svg {
   clip-path: inset(0 0 26% 0);
 }
+
+/* ============================================================================
+ * 表格暗色模式（261008）—— FortuneSheet DOM 外壳跟随三套主题。
+ *
+ * 第三方组件是「自有设计系统」的唯一例外（AGENTS §3#14）：这里只把内核写死的浅色
+ * 面 / 边 / 字取值映射到 --lake-* 令牌，**几何一律沿用内核**（不改尺寸/间距/圆角）。
+ * canvas 内的网格线、行列头、单元格默认底色不在这里 —— 由
+ * patches/@fortune-sheet+{core,react}+1.0.4.patch 把常量改成读同一批令牌（展示层，
+ * 绝不写入正文 / 撤销栈）；react 补丁同时把图标 <symbol> 的颜色改为 currentColor，
+ * 因此下面的 color 规则会让图标跟随主题。
+ * ==========================================================================*/
+
+/* 容器 / 左上角 / 冻结与拖拽线 */
+.sheet-editor .fortune-container {
+  background: var(--lake-bg-canvas);
+}
+.sheet-editor .fortune-left-top {
+  background-color: var(--lake-bg-subtle);
+  border-color: var(--lake-border-1);
+}
+.sheet-editor .luckysheet-cell-flow-column-line {
+  border-right-color: var(--lake-border-1);
+}
+.sheet-editor .luckysheet-cell-flow-row-line {
+  border-bottom-color: var(--lake-border-1);
+}
+.sheet-editor .fortune-freeze-drag-line {
+  border-color: var(--lake-accent);
+}
+.sheet-editor .fortune-cols-change-size,
+.sheet-editor .fortune-rows-change-size,
+.sheet-editor .fortune-cols-freeze-handle,
+.sheet-editor .fortune-rows-freeze-handle {
+  background-color: var(--lake-accent);
+}
+.sheet-editor .fortune-col-header,
+.sheet-editor .fortune-row-header {
+  color: var(--lake-text-3);
+}
+
+/* 工具栏：面 / 分隔线 / 图标（图标靠 react 补丁改成 currentColor 后继承 color） */
+.sheet-editor .fortune-toolbar {
+  background: var(--lake-bg-subtle);
+  border-bottom-color: var(--lake-border-1);
+}
+.sheet-editor .fortune-toolbar-button,
+.sheet-editor .fortune-toolbar-combo,
+.sheet-editor .fortune-toolbar-combo-arrow {
+  color: var(--lake-text-2);
+}
+.sheet-editor .fortune-toolbar-divider,
+.sheet-editor .fortune-toolbar-menu-divider {
+  background-color: var(--lake-border-1);
+}
+.sheet-editor .fortune-toolbar-button:hover,
+.sheet-editor .fortune-toolbar-combo:hover,
+.sheet-editor .fortune-toolbar-combo-arrow:hover,
+.sheet-editor .fortune-link-modify-modal .fortune-toolbar-button:hover {
+  background-color: var(--lake-bg-hover);
+}
+.sheet-editor .fortune-toolbar-button:active,
+.sheet-editor .fortune-toolbar-combo:active {
+  background-color: var(--lake-bg-press);
+}
+.sheet-editor .fortune-toolbar-subtext {
+  color: var(--lake-text-2);
+}
+.sheet-editor .fortune-tooltip {
+  background: var(--lake-tooltip-bg);
+  color: var(--lake-tooltip-fg);
+}
+
+/* 浮层表面：下拉 / 右键菜单 / 对话框 / 气泡统一走面板面 + 浮层阴影 */
+.sheet-editor .fortune-toolbar-select,
+.sheet-editor .fortune-toolbar-color-picker,
+.sheet-editor .fortune-toolbar-more-container,
+.sheet-editor .fortune-toolbar-combo-popup,
+.sheet-editor .toolbar-item-sub-menu,
+.sheet-editor .fortune-context-menu,
+.sheet-editor .fortune-dialog,
+.sheet-editor .fortune-zoom-ratio-menu,
+.sheet-editor .fortune-sort-modal,
+.sheet-editor .fortune-sheet-list,
+.sheet-editor .condition-format-sub-menu,
+.sheet-editor .luckysheet-cols-menu,
+.sheet-editor .luckysheet-formula-search-c,
+.sheet-editor .luckysheet-formula-help-c {
+  background: var(--lake-bg-panel);
+  border-color: var(--lake-border-1);
+  box-shadow: var(--lake-shadow-popover);
+  color: var(--lake-text-1);
+}
+.sheet-editor .fortune-toolbar-select-option,
+.sheet-editor .fortune-border-select-option,
+.sheet-editor .fortune-border-style-picker-menu,
+.sheet-editor .fortune-zoom-ratio-item,
+.sheet-editor .fortune-sheet-list-item,
+.sheet-editor .condition-format-item,
+.sheet-editor .luckysheet-cols-menu .luckysheet-cols-menuitem,
+.sheet-editor .luckysheet-filter-bycolor-submenu .item {
+  color: var(--lake-text-1);
+}
+.sheet-editor .fortune-toolbar-select-option:hover,
+.sheet-editor .fortune-border-select-option:hover,
+.sheet-editor .fortune-border-style-picker-menu:hover,
+.sheet-editor .fortune-zoom-button:hover,
+.sheet-editor .fortune-zoom-ratio-item:hover,
+.sheet-editor .condition-format-item:hover,
+.sheet-editor .luckysheet-cols-menu .luckysheet-cols-menuitem:hover,
+.sheet-editor .luckysheet-cols-menu .luckysheet-cols-menuitem-hover,
+.sheet-editor .fortune-sheet-list :hover {
+  background: var(--lake-bg-hover);
+}
+
+/* 工作表标签条 */
+.sheet-editor .luckysheet-sheet-area,
+.sheet-editor #luckysheet-bottom-pager {
+  background-color: var(--lake-bg-subtle);
+}
+.sheet-editor .luckysheet-sheet-area div.luckysheet-sheets-item {
+  background-color: transparent;
+  border-left-color: var(--lake-border-1);
+  color: var(--lake-text-2);
+}
+.sheet-editor .luckysheet-sheet-area div.luckysheet-sheets-item:hover {
+  background-color: var(--lake-bg-hover);
+}
+.sheet-editor .luckysheet-sheet-area div.luckysheet-sheets-item-active,
+.sheet-editor .luckysheet-sheet-area div.luckysheet-sheets-item-active:hover {
+  background-color: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+}
+.sheet-editor .fortune-sheettab-container .boundary {
+  background: var(--lake-border-1);
+}
+.sheet-editor .fortune-sheettab-button,
+.sheet-editor .fortune-sheettab-scroll {
+  color: var(--lake-text-2);
+}
+.sheet-editor .fortune-sheettab-button:hover,
+.sheet-editor .fortune-sheettab-scroll:hover {
+  background-color: var(--lake-bg-hover);
+}
+
+/* 公式栏 / 名称框（当前 showFormulaBar=false，保留以防开启） */
+.sheet-editor .fortune-fx-editor {
+  background: var(--lake-bg-panel);
+  border-bottom-color: var(--lake-border-1);
+}
+.sheet-editor .fortune-fx-input {
+  background-color: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+}
+.sheet-editor .fortune-fx-input-container {
+  border-left-color: var(--lake-border-1);
+}
+.sheet-editor .fortune-name-box-container {
+  border-right-color: var(--lake-border-1);
+}
+.sheet-editor .fortune-name-box {
+  background-color: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+}
+
+/* 选区 / 填充柄 / 单元格编辑框 */
+.sheet-editor .luckysheet-cell-selected {
+  border-color: var(--lake-accent);
+  background: var(--lake-accent-tint);
+}
+.sheet-editor .luckysheet-cell-selected-focus {
+  background: var(--lake-accent-tint);
+}
+.sheet-editor .luckysheet-cs-inner-border {
+  border-color: var(--lake-bg-panel);
+}
+.sheet-editor .luckysheet-cs-fillhandle {
+  background-color: var(--lake-accent);
+  border-color: var(--lake-bg-panel);
+}
+.sheet-editor .luckysheet-cs-draghandle {
+  background-color: var(--lake-bg-panel);
+  border-color: var(--lake-bg-panel);
+}
+.sheet-editor .luckysheet-cs-touchhandle:before {
+  background-color: var(--lake-bg-panel);
+  border-color: var(--lake-border-1);
+}
+.sheet-editor .luckysheet-cs-touchhandle .luckysheet-cs-touchhandle-btn {
+  background-color: var(--lake-accent);
+}
+.sheet-editor .luckysheet-input-box-inner {
+  background-color: var(--lake-bg-panel);
+  border-color: var(--lake-accent);
+  box-shadow: var(--lake-shadow-popover);
+}
+.sheet-editor .luckysheet-cell-input {
+  color: var(--lake-text-1);
+}
+
+/* 缩放 / 底部统计 / 遮罩 */
+.sheet-editor .fortune-zoom-ratio {
+  color: var(--lake-text-2);
+}
+.sheet-editor .fortune-stat-area {
+  color: var(--lake-text-3);
+}
+.sheet-editor .fortune-modal-container {
+  background: var(--lake-scrim);
+}
+.sheet-editor .fortune-modal-dialog-icon-close {
+  color: var(--lake-text-3);
+}
+
+/* 内核各弹窗里写死白底的局部面 */
+.sheet-editor #range-dialog,
+.sheet-editor #range-dialog .dialog-title,
+.sheet-editor #range-dialog .button-close,
+.sheet-editor #luckysheet-dataVerification-dropdown-List,
+.sheet-editor #luckysheet-dataVerification-showHintBox,
+.sheet-editor #luckysheet-dataVerification-dropdown-btn,
+.sheet-editor #fortune-data-verification .button-close,
+.sheet-editor #fortune-split-column .button-close,
+.sheet-editor #fortune-location-condition .title,
+.sheet-editor #fortune-location-condition .button-close,
+.sheet-editor #fortune-search-replace #searchAllbox .boxTitle,
+.sheet-editor #fortune-change-color .color-reset,
+.sheet-editor #fortune-change-color .custom-color,
+.sheet-editor #fortune-custom-color .color-reset,
+.sheet-editor #fortune-custom-color .custom-color,
+.sheet-editor .condition-rules .button-close,
+.sheet-editor .fortune-link-modify-modal,
+.sheet-editor .fortune-sort-title {
+  background: var(--lake-bg-panel);
+  border-color: var(--lake-border-1);
+  color: var(--lake-text-1);
+}
+.sheet-editor .luckysheet-filter-options {
+  background: var(--lake-bg-panel);
+  border-color: var(--lake-border-1);
+  color: var(--lake-text-1);
+}
+
+/* 内核各弹窗/右键菜单里的输入框、下拉：显式令牌化，不依赖 UA 的 color-scheme 渲染 */
+.sheet-editor .fortune-context-menu input:not([type="checkbox"]):not([type="radio"]),
+.sheet-editor .luckysheet-cols-menu input:not([type="checkbox"]):not([type="radio"]),
+.sheet-editor .filtermenu-input-container input.luckysheet-mousedown-cancel,
+.sheet-editor .fortune-link-modify-input,
+.sheet-editor .fortune-link-modify-select,
+.sheet-editor .fortune-link-modify-modal .range-selection-input,
+.sheet-editor #range-dialog input:not([type="checkbox"]):not([type="radio"]),
+.sheet-editor #fortune-data-verification input:not([type="checkbox"]):not([type="radio"]),
+.sheet-editor #fortune-data-verification select,
+.sheet-editor #fortune-search-replace input:not([type="checkbox"]):not([type="radio"]),
+.sheet-editor #luckysheet-search-formula input,
+.sheet-editor #luckysheet-search-formula select,
+.sheet-editor #fortune-split-column input,
+.sheet-editor .condition-rules-inpbox,
+.sheet-editor .condition-rules-between-inpbox,
+.sheet-editor .condition-rules-setbox {
+  background: var(--lake-bg-panel);
+  border-color: var(--lake-border-1);
+  color: var(--lake-text-1);
+}

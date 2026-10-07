@@ -5,12 +5,23 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接（261007 → 261006）
+## 0. 最新交接（261008 → 261007）
 
-> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261007 / 261006）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
+> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261008 / 261007）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点：表格（FortuneSheet）暗色模式 —— 见 §3#14（已立项，含问题证据 / 方案 A·B / 落点 / 验收）。**
+> **下一会话焦点：无指定项** —— 从 §3 取（表格暗色模式已于 261008 完成，见下方条目与 §3#14）。
 
+### 261008 · 表格（FortuneSheet）暗色模式（§3#14 收口）
+
+- **从「暗壳 + 白格」做到真暗**：§3#14 原「方案 A」只覆盖 DOM 外壳；本轮把 canvas 也纳入 —— 单元格区/行列头是同一个 `<canvas>` 画的（`.fortune-container` 的 CSS 白底被 `drawMain` 覆盖），网格线与正文默认色走模块级可变的 `defaultStyle`。
+- **落点（全部展示层，零数据风险）**：
+  · `patches/@fortune-sheet+core+1.0.4.patch`：新增 `defaultStyle.cellBgStyle/headerBgStyle` + `syncLakeSheetCanvasTheme()`（读 `--lake-bg-canvas`/`--lake-bg-subtle`/`--lake-text-1`/`--lake-border-1`），挂在 `updateContextWithCanvas`；`drawMain`/`nullCellRender`/`cellRender` 的写死底色、两处表头底色与字色、`normalizedCellAttr("fc")` 的黑字默认全部改读 `defaultStyle`。**不写正文 / S3 / 历史 / 撤销栈**。
+  · `patches/@fortune-sheet+react+1.0.4.patch`：图标是 `<symbol>`+`<use>` shadow 树、文档 CSS 打不到 `fill` ⇒ 把 `SVGDefines` 里 11 个图标色值（186 处）改成 `currentColor`，由 `.fortune-toolbar-button { color: var(--lake-text-2) }` 驱动。
+  · [sheetEditor.css](src/features/sheet/sheetEditor.css)：DOM 外壳（工具栏/浮层/工作表标签/选区/编辑框/遮罩/局部弹窗/输入框）映射到 `--lake-*`（第三方组件是「自有设计系统」的合法例外，几何沿用内核）；cssLayers 基线 64 → 133。
+  · [SheetEditor.tsx](src/features/sheet/SheetEditor.tsx)：观察 `data-theme` + 首次可见后补发 `window.resize` 让 canvas 重绘。⚠️ **用 `setTimeout` 不用 rAF**（隐藏窗口里 rAF 不触发会漏同步 —— 实测踩到）。
+- **验收（真实端 scheme 构建 + 隔离 userData）**：三主题热切换 canvas 采样 = light `#fff`/`#fafbfc`、warm `#fff`/`#faf9f7`、dark `#1e1f23`/`#232528`；网格线 dark `#2d2f34`；右键菜单/数字格式下拉/查找对话框/单元格输入框全暗；选区 = `--lake-accent` + `--lake-accent-tint`；**切换前后正文文件 sha256 不变**。
+- 门禁：tsc ✓ · 全量 vitest **1720 passed / 16 skipped** ✓ · check:core 76-0 ✓ · ui-metrics（hex=0/rgb=0/`!important`=9/未定义=0）✓ · cssLayers+uiPrimitives ✓ · 双端构建 ✓ · `git diff --check` ✓。新增护栏 [sheetCanvasTheme.test.ts](src/features/sheet/sheetCanvasTheme.test.ts)（4 条）。机制与坑见 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §K。
+- 顺手修 [check-bundle-budget.mjs](scripts/check-bundle-budget.mjs) 的两处漂移：① 画板分块目标由已不存在的 `drawnix-*.js` 改为实际懒加载分块 `DrawnixBoardCore-*.js`（260923 手拆 chunk 会破坏 @plait vendor 绑定，已删）；② 入口 `app-js`/`app-css` 改为从 `dist/index.html` 解析（原先 `index-*.js` 的 `find` 会挑到 ~11KB 辅助 chunk，真入口根本没被守）。修后实测：app-js gzip 1.84MB/2.9MB · drawnix gzip 232KB/1.4MB · app-css gzip 301KB/2MB，退出码 0。
 ### 261007 · 文档精简 + 设置页版式收口 + AI 常用预置
 
 - **文档精简**：删除多维表专项（4415 行）/ 填色调研 / 非多维表审计+证据 / UI 刷新计划 / 旧安卓·资源·浏览器·对拍文档 / 虚拟渲染试验 / 设计评审稿，共 14 个 tracked 文件（−6948 行），并修掉 README/AGENTS/代码注释里的悬空引用；HANDOFF §0 压到只保留最新 1–2 批。删除内容都在 git 历史。
@@ -126,7 +137,8 @@
 
 
 13. **AI 多轮对话记忆只保留最近 40 条（用户 261005 决定：先文档化、不做长期记忆）**：主进程 `electron/ai/aiChatMessages.ts` 的 `assertMessages` 只把**最近 40 条消息**发给供应商（更早的上下文丢弃；另有 `AI_MAX_TOTAL_CHARS=200000` 上限），面板关闭即清空、**无长期 / 跨会话记忆**，设置页「AI → 说明」已如实标注。若要长期记忆 / 摘要压缩 / 跨会话共享，需单独立项（涉及存储与成本，超出笔记软件当前范围）。
-14. **表格（FortuneSheet）暗色模式 —— 用户 261006 立项；261007 定为下一会话焦点（未开工）**。
+14. ~~**表格（FortuneSheet）暗色模式**~~ **已完成（261008）**：canvas + 图标 + DOM 外壳全链路跟随三主题 —— 走 `patches/@fortune-sheet+{core,react}+1.0.4.patch` 把 canvas 常量改成读 `--lake-*` 令牌（**展示层，不写正文 / 撤销栈** ⇒ 原「剥除口径 / 撤销栈」问题不存在），主题热切换由 `SheetEditor` 补发 resize 重绘。机制与坑见 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §K；本轮明细见 §0。
+    > 已收口（261008）；以下为原任务书，保留作背景。
     - **问题**：`@fortune-sheet/react` 1.0.4 **无主题 API**。单元格区 / 网格线 / 行列头由 **canvas 绘制**，颜色在内核里硬编码：`@fortune-sheet/core/dist/index.js` 的 `strokeStyle:"#dfdfdf"`（网格线）、`rowFillStyle:"#5e5e5e"`（行列头字）、多处 `fillStyle="#ffffff"`、`bg = "#ffffff"`（缺省格底）；缺省字色 `defaultStyle.fillStyle=#000`。内核导出 `defaultStyle`（`@fortune-sheet/core/dist/canvas.d.ts`，UMD 里可见），**是否作为 `<Workbook>` / sheet 配置暴露需开工时先确认** —— 它是方案 B 的关键杠杆。
     - **DOM 外壳**（工具栏 `.fortune-toolbar*` / 工作表标签 / 公式栏 / 容器 `.fortune-container` / 滚动条）是普通 DOM + CSS、可覆盖；落点 `src/features/sheet/sheetEditor.css`，值一律 `--lake-*`。
     - **方案 A（推荐先落，低风险）**：只用令牌覆盖 **DOM 外壳**的浅色，跟随三套主题；单元格仍是白画布 ⇒「暗壳 + 白格」，是半成品但**零数据风险**。

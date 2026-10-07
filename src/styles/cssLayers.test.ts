@@ -81,7 +81,10 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
   // 260921 续：+35 = 去掉浮动图后新增的单元格图片工具弹窗（11 条）+ 细滚动条（11 条）+ 色条裁切与定位基准（2 条）
   //          —— 合法新增，非覆盖回涨
-  "features/sheet/sheetEditor.css": { decls: 64, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
+  // 261008：表格暗色模式 —— 新增 69 条 = FortuneSheet DOM 外壳的浅色面/边/字/输入框映射到 --lake-* 令牌
+  //         （工具栏/浮层/工作表标签/选区/编辑框/遮罩/局部弹窗；第三方组件是「自有设计系统」的合法例外，
+  //          几何沿用内核、只换取值；canvas 侧见 patches/@fortune-sheet+{core,react}+1.0.4.patch）
+  "features/sheet/sheetEditor.css": { decls: 133, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   // 260929：-30 = 分组样式按职责移出（→ bitableViews.css）+ 表底「添加记录」旧样式删除（改用共用 .bt-add-round）+ 删掉已冗余的 .bt-panel-add 组合规则；实测 1051（重复组 0）
   "features/bitable/bitableEditor.css": { decls: 1032, dupGroups: 0 },   //  261006 Phase 2.2: +5 = .bt-input 并入字段原语口径（控件静息边 + 圆角令牌 + hover/focus），高度保持 30  // 260930：统一实色卡（70 色 + 最近使用 + 自定义）新增 52 条声明。此前：-63 = 图标钮与菜单项收编 kit；+6 = 列宽/行高；+1 placeholder；+1 select text-align；+8 数据表行操作浮动

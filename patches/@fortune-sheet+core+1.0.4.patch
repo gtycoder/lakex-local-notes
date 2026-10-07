@@ -1,7 +1,16 @@
 diff --git a/node_modules/@fortune-sheet/core/dist/index.esm.js b/node_modules/@fortune-sheet/core/dist/index.esm.js
-index 5c9820b..d8b3238 100644
+index 5c9820b..d4f9d87 100644
 --- a/node_modules/@fortune-sheet/core/dist/index.esm.js
 +++ b/node_modules/@fortune-sheet/core/dist/index.esm.js
+@@ -60367,7 +60367,7 @@ function normalizedCellAttr(cell, attr) {
+   } else if (["fc", "bg", "bc"].includes(attr)) {
+     var _value;
+     if (["fc", "bc"].includes(attr)) {
+-      value || (value = "#000000");
++      value || (value = attr === "fc" && typeof defaultStyle !== "undefined" && defaultStyle && defaultStyle.fillStyle ? defaultStyle.fillStyle : "#000000");
+     }
+     if (((_value = value) === null || _value === void 0 ? void 0 : _value.indexOf("rgba")) > -1) {
+       value = rgbToHex(value);
 @@ -61295,6 +61295,7 @@ function getStyleByCell(ctx, d, r, c) {
    if (!isInline) {
      style = _.assign(style, getFontStyleByCell(cell, checksAF, checksCF));
@@ -10,17 +19,18 @@ index 5c9820b..d8b3238 100644
    return style;
  }
  function getInlineStringHTML(r, c, data) {
-@@ -63569,6 +63570,9 @@ function updateContextWithSheetData(ctx, data) {
+@@ -63569,6 +63570,10 @@ function updateContextWithSheetData(ctx, data) {
    normalizeSelection(ctx, ctx.luckysheet_select_save);
  }
  function updateContextWithCanvas(ctx, canvas, placeholder) {
 +  // LOCAL-CHANGE(261005)：隐藏标签页切换瞬间 canvas/placeholder 的 React ref 可能是 null，
 +  // 原实现裸读 placeholder.clientWidth ⇒ TypeError，被错误边界接住后整编辑器重建（表格闪烁 ~2s）。
 +  if (!canvas || !placeholder) return;
++  syncLakeSheetCanvasTheme();
    ctx.luckysheetTableContentHW = [placeholder.clientWidth, placeholder.clientHeight];
    ctx.cellmainHeight = placeholder.clientHeight - ctx.columnHeaderHeight;
    ctx.cellmainWidth = placeholder.clientWidth - ctx.rowHeaderWidth;
-@@ -65789,12 +65793,12 @@ function insertRowCol(ctx, op) {
+@@ -65789,12 +65794,12 @@ function insertRowCol(ctx, op) {
      }
      if (direction === "lefttop") {
        if (index === 0) {
@@ -36,7 +46,98 @@ index 5c9820b..d8b3238 100644
      }
    } else {
      if (cfg.columnlen != null) {
-@@ -76262,7 +76266,7 @@ function setCellFormat(ctx, row, column, attr, value) {
+@@ -72532,8 +72537,29 @@ var defaultStyle = {
+   textBaseline: "middle",
+   strokeStyle: "#dfdfdf",
+   rowFillStyle: "#5e5e5e",
+-  textAlign: "center"
++  textAlign: "center",
++  cellBgStyle: "#ffffff",
++  headerBgStyle: "#ffffff"
+ };
++// LOCAL-CHANGE(261008): 表格暗色模式 —— canvas 颜色由 CSS 令牌驱动（展示层，绝不写入正文/撤销栈）。
++// 调用点 = updateContextWithCanvas（挂载 / 窗口 resize；宿主切主题时补发 resize）。
++function syncLakeSheetCanvasTheme() {
++  if (typeof document === "undefined" || !document.documentElement) return;
++  var cs;
++  try {
++    cs = getComputedStyle(document.documentElement);
++  } catch (e) {
++    return;
++  }
++  function readVar(name, fallback) {
++    var v = cs.getPropertyValue(name).trim();
++    return v || fallback;
++  }
++  defaultStyle.fillStyle = readVar("--lake-text-1", "#000000");
++  defaultStyle.strokeStyle = readVar("--lake-border-1", "#dfdfdf");
++  defaultStyle.cellBgStyle = readVar("--lake-bg-canvas", "#ffffff");
++  defaultStyle.headerBgStyle = readVar("--lake-bg-subtle", "#fafbfc");
++}
+ function isRealNum$1(val) {
+   return !Number.isNaN(Number(val));
+ }
+@@ -72663,9 +72689,9 @@ var Canvas = /*#__PURE__*/function () {
+           continue;
+         }
+         if (((_this$sheetCtx$config = this.sheetCtx.config) === null || _this$sheetCtx$config === void 0 ? void 0 : (_this$sheetCtx$config2 = _this$sheetCtx$config.rowhidden) === null || _this$sheetCtx$config2 === void 0 ? void 0 : _this$sheetCtx$config2[r]) == null) {
+-          renderCtx.fillStyle = "#ffffff";
++          renderCtx.fillStyle = defaultStyle.headerBgStyle;
+           renderCtx.fillRect(0, start_r + offsetTop + firstOffset, this.sheetCtx.rowHeaderWidth - 1, end_r - start_r + 1 + lastOffset - firstOffset);
+-          renderCtx.fillStyle = "#000000";
++          renderCtx.fillStyle = defaultStyle.fillStyle;
+           renderCtx.save();
+           renderCtx.scale(this.sheetCtx.zoomRatio, this.sheetCtx.zoomRatio);
+           var textMetrics = getMeasureText(r + 1, renderCtx, this.sheetCtx);
+@@ -72756,9 +72782,9 @@ var Canvas = /*#__PURE__*/function () {
+           continue;
+         }
+         if (((_this$sheetCtx$config5 = this.sheetCtx.config) === null || _this$sheetCtx$config5 === void 0 ? void 0 : (_this$sheetCtx$config6 = _this$sheetCtx$config5.colhidden) === null || _this$sheetCtx$config6 === void 0 ? void 0 : _this$sheetCtx$config6[c]) == null) {
+-          renderCtx.fillStyle = "#ffffff";
++          renderCtx.fillStyle = defaultStyle.headerBgStyle;
+           renderCtx.fillRect(start_c + offsetLeft - 1, 0, end_c - start_c, this.sheetCtx.columnHeaderHeight - 1);
+-          renderCtx.fillStyle = "#000000";
++          renderCtx.fillStyle = defaultStyle.fillStyle;
+           renderCtx.save();
+           renderCtx.scale(this.sheetCtx.zoomRatio, this.sheetCtx.zoomRatio);
+           var textMetrics = getMeasureText(abc, renderCtx, this.sheetCtx);
+@@ -72884,7 +72910,7 @@ var Canvas = /*#__PURE__*/function () {
+       }
+       var rowEndY = this.sheetCtx.visibledatarow[rowEnd];
+       var colEndX = this.sheetCtx.visibledatacolumn[colEnd];
+-      renderCtx.fillStyle = "#ffffff";
++      renderCtx.fillStyle = defaultStyle.cellBgStyle;
+       renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, colEndX - scrollWidth, rowEndY - scrollHeight);
+       renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
+       renderCtx.fillStyle = defaultStyle.fillStyle;
+@@ -73280,7 +73306,7 @@ var Canvas = /*#__PURE__*/function () {
+         fillStyle = checksCF.cellColor;
+       }
+       if (!fillStyle) {
+-        renderCtx.fillStyle = "#FFFFFF";
++        renderCtx.fillStyle = defaultStyle.cellBgStyle;
+       } else {
+         renderCtx.fillStyle = fillStyle;
+       }
+@@ -73298,7 +73324,7 @@ var Canvas = /*#__PURE__*/function () {
+       renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
+       if ("".concat(r, "_").concat(c) in dynamicArrayCompute) {
+         var value = dynamicArrayCompute["".concat(r, "_").concat(c)].v;
+-        renderCtx.fillStyle = "#000000";
++        renderCtx.fillStyle = defaultStyle.fillStyle;
+         var fontset = defaultFont(this.sheetCtx.defaultFontSize);
+         renderCtx.font = fontset;
+         var horizonAlignPos = startX + 4 + offsetLeft;
+@@ -73373,7 +73399,7 @@ var Canvas = /*#__PURE__*/function () {
+         fillStyle = checksCF.cellColor;
+       }
+       if (!fillStyle) {
+-        renderCtx.fillStyle = "#FFFFFF";
++        renderCtx.fillStyle = defaultStyle.cellBgStyle;
+       } else {
+         renderCtx.fillStyle = fillStyle;
+       }
+@@ -76262,7 +76288,7 @@ function setCellFormat(ctx, row, column, attr, value) {
      throw new Error("attr cannot be null or undefined");
    }
    var sheet = getSheet(ctx, options);
@@ -45,7 +146,7 @@ index 5c9820b..d8b3238 100644
    var cellData = (targetSheetData === null || targetSheetData === void 0 ? void 0 : (_targetSheetData$row = targetSheetData[row]) === null || _targetSheetData$row === void 0 ? void 0 : _targetSheetData$row[column]) || {};
    var cfg = sheet.config || {};
    if (attr === "ct" && (!value || value.fa == null || value.t == null)) {
-@@ -77022,6 +77026,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
+@@ -77022,6 +77048,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
      return;
    } else if (e.code === "KeyA") {
      selectAll(ctx);
@@ -53,7 +154,7 @@ index 5c9820b..d8b3238 100644
    } else if (e.code === "KeyD") {
      if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
        return;
-@@ -77265,31 +77270,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+@@ -77265,31 +77292,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
    var row_st = _.sortedIndex(visibledatarow_c, scrollTop) + 1;
    var rowscroll = 0;
    var scrollNum = 1;
@@ -91,9 +192,18 @@ index 5c9820b..d8b3238 100644
    }
    mouseWheelUniqueTimeout = setTimeout(function () {
 diff --git a/node_modules/@fortune-sheet/core/dist/index.js b/node_modules/@fortune-sheet/core/dist/index.js
-index 04113a1..6ae0191 100644
+index 04113a1..56e028f 100644
 --- a/node_modules/@fortune-sheet/core/dist/index.js
 +++ b/node_modules/@fortune-sheet/core/dist/index.js
+@@ -60377,7 +60377,7 @@ function normalizedCellAttr(cell, attr) {
+   } else if (["fc", "bg", "bc"].includes(attr)) {
+     var _value;
+     if (["fc", "bc"].includes(attr)) {
+-      value || (value = "#000000");
++      value || (value = attr === "fc" && typeof defaultStyle !== "undefined" && defaultStyle && defaultStyle.fillStyle ? defaultStyle.fillStyle : "#000000");
+     }
+     if (((_value = value) === null || _value === void 0 ? void 0 : _value.indexOf("rgba")) > -1) {
+       value = rgbToHex(value);
 @@ -61305,6 +61305,7 @@ function getStyleByCell(ctx, d, r, c) {
    if (!isInline) {
      style = ___default['default'].assign(style, getFontStyleByCell(cell, checksAF, checksCF));
@@ -102,17 +212,18 @@ index 04113a1..6ae0191 100644
    return style;
  }
  function getInlineStringHTML(r, c, data) {
-@@ -63579,6 +63580,9 @@ function updateContextWithSheetData(ctx, data) {
+@@ -63579,6 +63580,10 @@ function updateContextWithSheetData(ctx, data) {
    normalizeSelection(ctx, ctx.luckysheet_select_save);
  }
  function updateContextWithCanvas(ctx, canvas, placeholder) {
 +  // LOCAL-CHANGE(261005)：隐藏标签页切换瞬间 canvas/placeholder 的 React ref 可能是 null，
 +  // 原实现裸读 placeholder.clientWidth ⇒ TypeError，被错误边界接住后整编辑器重建（表格闪烁 ~2s）。
 +  if (!canvas || !placeholder) return;
++  syncLakeSheetCanvasTheme();
    ctx.luckysheetTableContentHW = [placeholder.clientWidth, placeholder.clientHeight];
    ctx.cellmainHeight = placeholder.clientHeight - ctx.columnHeaderHeight;
    ctx.cellmainWidth = placeholder.clientWidth - ctx.rowHeaderWidth;
-@@ -65799,12 +65803,12 @@ function insertRowCol(ctx, op) {
+@@ -65799,12 +65804,12 @@ function insertRowCol(ctx, op) {
      }
      if (direction === "lefttop") {
        if (index === 0) {
@@ -128,7 +239,98 @@ index 04113a1..6ae0191 100644
      }
    } else {
      if (cfg.columnlen != null) {
-@@ -76272,7 +76276,7 @@ function setCellFormat(ctx, row, column, attr, value) {
+@@ -72542,8 +72547,29 @@ var defaultStyle = {
+   textBaseline: "middle",
+   strokeStyle: "#dfdfdf",
+   rowFillStyle: "#5e5e5e",
+-  textAlign: "center"
++  textAlign: "center",
++  cellBgStyle: "#ffffff",
++  headerBgStyle: "#ffffff"
+ };
++// LOCAL-CHANGE(261008): 表格暗色模式 —— canvas 颜色由 CSS 令牌驱动（展示层，绝不写入正文/撤销栈）。
++// 调用点 = updateContextWithCanvas（挂载 / 窗口 resize；宿主切主题时补发 resize）。
++function syncLakeSheetCanvasTheme() {
++  if (typeof document === "undefined" || !document.documentElement) return;
++  var cs;
++  try {
++    cs = getComputedStyle(document.documentElement);
++  } catch (e) {
++    return;
++  }
++  function readVar(name, fallback) {
++    var v = cs.getPropertyValue(name).trim();
++    return v || fallback;
++  }
++  defaultStyle.fillStyle = readVar("--lake-text-1", "#000000");
++  defaultStyle.strokeStyle = readVar("--lake-border-1", "#dfdfdf");
++  defaultStyle.cellBgStyle = readVar("--lake-bg-canvas", "#ffffff");
++  defaultStyle.headerBgStyle = readVar("--lake-bg-subtle", "#fafbfc");
++}
+ function isRealNum$1(val) {
+   return !Number.isNaN(Number(val));
+ }
+@@ -72673,9 +72699,9 @@ var Canvas = /*#__PURE__*/function () {
+           continue;
+         }
+         if (((_this$sheetCtx$config = this.sheetCtx.config) === null || _this$sheetCtx$config === void 0 ? void 0 : (_this$sheetCtx$config2 = _this$sheetCtx$config.rowhidden) === null || _this$sheetCtx$config2 === void 0 ? void 0 : _this$sheetCtx$config2[r]) == null) {
+-          renderCtx.fillStyle = "#ffffff";
++          renderCtx.fillStyle = defaultStyle.headerBgStyle;
+           renderCtx.fillRect(0, start_r + offsetTop + firstOffset, this.sheetCtx.rowHeaderWidth - 1, end_r - start_r + 1 + lastOffset - firstOffset);
+-          renderCtx.fillStyle = "#000000";
++          renderCtx.fillStyle = defaultStyle.fillStyle;
+           renderCtx.save();
+           renderCtx.scale(this.sheetCtx.zoomRatio, this.sheetCtx.zoomRatio);
+           var textMetrics = getMeasureText(r + 1, renderCtx, this.sheetCtx);
+@@ -72766,9 +72792,9 @@ var Canvas = /*#__PURE__*/function () {
+           continue;
+         }
+         if (((_this$sheetCtx$config5 = this.sheetCtx.config) === null || _this$sheetCtx$config5 === void 0 ? void 0 : (_this$sheetCtx$config6 = _this$sheetCtx$config5.colhidden) === null || _this$sheetCtx$config6 === void 0 ? void 0 : _this$sheetCtx$config6[c]) == null) {
+-          renderCtx.fillStyle = "#ffffff";
++          renderCtx.fillStyle = defaultStyle.headerBgStyle;
+           renderCtx.fillRect(start_c + offsetLeft - 1, 0, end_c - start_c, this.sheetCtx.columnHeaderHeight - 1);
+-          renderCtx.fillStyle = "#000000";
++          renderCtx.fillStyle = defaultStyle.fillStyle;
+           renderCtx.save();
+           renderCtx.scale(this.sheetCtx.zoomRatio, this.sheetCtx.zoomRatio);
+           var textMetrics = getMeasureText(abc, renderCtx, this.sheetCtx);
+@@ -72894,7 +72920,7 @@ var Canvas = /*#__PURE__*/function () {
+       }
+       var rowEndY = this.sheetCtx.visibledatarow[rowEnd];
+       var colEndX = this.sheetCtx.visibledatacolumn[colEnd];
+-      renderCtx.fillStyle = "#ffffff";
++      renderCtx.fillStyle = defaultStyle.cellBgStyle;
+       renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, colEndX - scrollWidth, rowEndY - scrollHeight);
+       renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
+       renderCtx.fillStyle = defaultStyle.fillStyle;
+@@ -73290,7 +73316,7 @@ var Canvas = /*#__PURE__*/function () {
+         fillStyle = checksCF.cellColor;
+       }
+       if (!fillStyle) {
+-        renderCtx.fillStyle = "#FFFFFF";
++        renderCtx.fillStyle = defaultStyle.cellBgStyle;
+       } else {
+         renderCtx.fillStyle = fillStyle;
+       }
+@@ -73308,7 +73334,7 @@ var Canvas = /*#__PURE__*/function () {
+       renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
+       if ("".concat(r, "_").concat(c) in dynamicArrayCompute) {
+         var value = dynamicArrayCompute["".concat(r, "_").concat(c)].v;
+-        renderCtx.fillStyle = "#000000";
++        renderCtx.fillStyle = defaultStyle.fillStyle;
+         var fontset = defaultFont(this.sheetCtx.defaultFontSize);
+         renderCtx.font = fontset;
+         var horizonAlignPos = startX + 4 + offsetLeft;
+@@ -73383,7 +73409,7 @@ var Canvas = /*#__PURE__*/function () {
+         fillStyle = checksCF.cellColor;
+       }
+       if (!fillStyle) {
+-        renderCtx.fillStyle = "#FFFFFF";
++        renderCtx.fillStyle = defaultStyle.cellBgStyle;
+       } else {
+         renderCtx.fillStyle = fillStyle;
+       }
+@@ -76272,7 +76298,7 @@ function setCellFormat(ctx, row, column, attr, value) {
      throw new Error("attr cannot be null or undefined");
    }
    var sheet = getSheet(ctx, options);
@@ -137,7 +339,7 @@ index 04113a1..6ae0191 100644
    var cellData = (targetSheetData === null || targetSheetData === void 0 ? void 0 : (_targetSheetData$row = targetSheetData[row]) === null || _targetSheetData$row === void 0 ? void 0 : _targetSheetData$row[column]) || {};
    var cfg = sheet.config || {};
    if (attr === "ct" && (!value || value.fa == null || value.t == null)) {
-@@ -77032,6 +77036,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
+@@ -77032,6 +77058,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
      return;
    } else if (e.code === "KeyA") {
      selectAll(ctx);
@@ -145,7 +347,7 @@ index 04113a1..6ae0191 100644
    } else if (e.code === "KeyD") {
      if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
        return;
-@@ -77275,31 +77280,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+@@ -77275,31 +77302,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
    var row_st = ___default['default'].sortedIndex(visibledatarow_c, scrollTop) + 1;
    var rowscroll = 0;
    var scrollNum = 1;
