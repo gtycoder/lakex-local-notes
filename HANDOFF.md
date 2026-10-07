@@ -9,7 +9,52 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261008 / 261007）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点：无指定项** —— 从 §3 取（261008 已完成：表格暗色模式 + 文档分屏；分屏这批已提交推送 `ce035e4`）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+> **下一会话焦点：无指定项** —— 从 §3 取（261008 已完成：表格暗色模式 + 文档分屏 + 表格图标/换行/粘贴归属这一批；都已提交推送）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261008 三次反馈 · 表格「第一遍 Cmd+V 丢」结案 + 自动行高实测
+
+- **粘贴（用户 261008：「第一遍 cmd+v 没生效、第二遍才好」「闪烁了一下没有内容」）—— 已结案**：真因 = `@fortune-sheet/core`
+  的 `selectionCache` 是**模块级单例**（所有 Workbook 共用），而 react 侧 `onPaste` 是**每份挂载的 Workbook 各在 `document`
+  上挂一个**监听、判据只看 `document.activeElement.className === "fortune-sheet-overlay"` ⇒ **多标签常驻挂载时，隐藏的那份
+  表格也命中判据**，抢先把 `isPasteAction` 消费掉、把剪贴板内容写进**它自己**那张表；活动表格这一遍 `handlePaste` 空转，
+  但 react 侧的**插行是另一条 state 更新、不看这个标志** ⇒ 行被撑开、内容为空（= 用户看到的"闪烁一下没内容"）；第二遍
+  之所以好，是隐藏实例第一遍后 data 变了 → `useEffect` 重挂监听 → 它排到最后。
+  **修法（只动 react 补丁一处）**：判据加 `workbookContainer.current?.contains(document.activeElement)`（限定在本实例容器内）。
+  **同轮撤回两处错误尝试**：① core 里放宽为 `if (selectionCache.isPasteAction || e.clipboardData || window.clipboardData)`
+  —— 那会让**每个挂载实例各自粘一遍**（隐藏表格也被写入）；② 把插行并进同一次 `setContextWithProduce` —— 单实例路径本来就
+  按序 flush（一次 Cmd+V 就能落 300 行），合并**不解决**问题，只是多一处与上游的偏离。
+  **实证（隔离实例，300 行 HTML 表格 → 空表、一次 Cmd+V）**：修前 活动表 `row 300 / celldata 0`（丢）+ 隐藏表
+  `celldata 1500`（被写入）；修后 活动表 `row 300 / rowlen 300 / celldata 1500`、隐藏表 `celldata 0`（不动）；单标签场景
+  两版都正常。**复现三要素（缺一不复现）**：≥2 份挂载的表格实例（两个表格标签页）+ 剪贴板带 `text/html` 的 `<table>`
+  （纯文本时内核 `trs=0`、走不到插行分支）+ 焦点在目标表的 overlay。机制/复现姿势见 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §N。
+- **右键「自动行高」实测**：菜单项在（`复制/粘贴/插入行/行高px/自动行高/…`），refit 生效 —— 手动把第 1 行设成 300px
+  （`rowlen[0]=300, customHeight={"0":1}`）→ 点「自动行高」→ `rowlen[0]=117`（= 长 URL 换行后的真实高度）。⚠️ 已知余量：
+  内核没有清 `customHeight` 的公开 API，标记会留着 ⇒ 之后「只涨不缩」的自动触发仍跳过该行，直到列宽变化或再点一次
+  （要彻底恢复自动得往 config 删这个键，独立小项，见 §N）。
+- **护栏**：`sheetEditorMount.test.ts` 新增一条（react 补丁必须含 `contains(document.activeElement)`，且 core 补丁不得再出现
+  `isPasteAction || e.clipboardData`）；`AGENTS.md` 新增长期口径「内核里的模块级单例状态 × 多实例挂载会串台」。
+- 门禁：tsc ✓ · vitest **1731 passed / 16 skipped** ✓ · ui-metrics（hex=0/rgb=0/`!important`=9）✓ · check:core ✓ ·
+  sheet-icons `--check` 0 待改 ✓ · `git diff --check` ✓ · 双端构建 ✓；补丁做「干净包重打 → 与 node_modules 逐字节一致」复验 ✓
+  （core 仅 `tb` 缺省 `"2"`；react = 云端图标 + 右键菜单图标 + 内核级只读 + 粘贴归属）。
+
+### 261008 续 · 表格图标换云端 lakex + 右键菜单图标 + 选中色/把手回归 + 移动端三修
+
+- **用户四条现场反馈的收口**（全部"只改样式、不动功能"）：
+  · **表格选中色**：258380d 把 `.luckysheet-cell-selected` 的**填充**也换成了主题色 `--lake-accent-tint`，暖色主题（accent 本身是橙）下选区整片发橙。按既有口径（`themes/base.css` 里 `--lake-select-bg` 的注释：**填充固定、边框主题色**）改回 `--lake-select-bg`，边框仍留 `--lake-accent`。三主题实测填充恒为 `rgba(63,95,160,.16)`。
+  · **冻结把手 / 改列宽抓手 / 冻结拖拽线退回内核默认**（用户 261008 定稿）：这三样是**拖拽把手、不是选中语义**，258380d 把它们染成 `--lake-accent`，暖色下网格左上角挂两条橙角标 ⇒ 删掉那两条规则，用内核默认（把手 `#ddd`、拖拽线 `#ccc`、改宽线 `#0188fb`，后两者本来就只在悬停/拖拽时显现）。**别再改回主题色**（AGENTS §3#14 已入档）。
+  · **工具栏/右键图标换成云端 lakex 表格的图标**（用户 261008 定稿）：先做过一版 **lucide 线性图标**，被用户否掉（「很丑而且不直观」）——**用户要的"内核"指 lakex Lake 内核**（与云端表格同一套产品），不是 FortuneSheet 那套 Excel 血统。最终做法：云端表格工具栏用的是**阿里 iconfont 项目 `lake-icon`（font_943843）**，把用得到的**字形轮廓**抽成 `scripts/sheet-icons.cloud.json`（24 网格、Y 已翻转、纯 path）写进 vendored sprite；云端没字形的（**文字颜色 / 背景色**）用**云端内联 SVG**；**边框族**用**云端的 svg 资源**；两边都没有的**保持内核原样**。共覆盖 **76/102** 个 symbol，其余 26 个保留内核原样（清单与坑见 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §M）。图标盒仍是 18px（= 云端实测 14.5px 墨迹高度）、下拉箭头 12px。
+  · **右键菜单补图标位**：内核 `Menu` 只渲染文案 ⇒ 补丁给 `Menu` 注入「图标 + 文案」，容器两处 `map` 外挂装饰器（`cloneElement` 补 `menuKey`）；**不动条目、不加"快捷键提示"**（我们的键位与语雀不同，写上去就是编造）。菜单右侧 `7em` 留白（原本给子菜单箭头）收到 18px ⇒ 宽度 269 → 196px。
+  · **对齐 / 换行族逐项校正（用户 261008 现场比对）**：① **对齐用的不是字体的 `align-*`**（那是"框+竖条"样式）而是 **`left/center/right` + `top/middle/bottom` + `justify`**（≡ 样式，= 云端工具栏 `lake-icon-left/-middle` 那一族）⇒ 外层按钮与下拉项同时校正；② **下拉项要「图标在前、文案在后」**（云端如此，内核默认 `space-between` 把文案顶左、图标甩最右）⇒ 一行 CSS（`.fortune-toolbar-combo-popup .fortune-toolbar-menu-line` 的 `row-reverse`）改排布、不动 DOM。
+  · **表格「自动换行」四条一起收口（用户 261008 报）**：① **根因**：内核只在 `updateCell`（**单格编辑提交**）那条路上算行高，且要求该列宽 **或** 该行高**从未被显式设置过**；**粘贴、改列宽、打开已有文档都不走那条路**。② **内核默认 `tb` 是 `"0"`（截断）**，与本产品默认（自动换行）不符 ⇒ 粘贴进来的单元格**既不换行、也不被内核自适应认到**。**已改内核补丁**：`normalizedCellAttr` 里 `tb` 缺省 = `"2"`（`tr` 仍 `"0"`）—— 粘贴/新写入**立即换行**。③ **行高自适应** = `SheetEditor.syncAutoRowHeights(rows)`（只涨不缩；缺省 tb 当自动换行；用户手动调过的行按 `customHeight` 跳过），触发点 = 单格提交 / `onOp`（节流 160ms）/ **列宽变化 → 整表所有有内容的行**（用户明确「需要全都算」，用列宽快照比对触发）/ 首次可见（吃老文档）。④ **右键新增「自动行高」**：走 `customToolbarItems` 的兜底渲染（该 key **不在** `TOOLBAR_ITEMS` 里 ⇒ 只出现在右键菜单），点它 = 整表重算；菜单图标用 sprite 的 `cm-move-vertical`。护栏见 `sheetEditorMount.test.ts`；机制见 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §N。
+  · **选区「两边颜色不同」（用户 261008 报，附图为证）**：选区边框走 `--lake-accent`，但**行列头的「当前选区」指示线**是内核硬编码的 Luckysheet 蓝（`#0188fb`）⇒ 同一圈选区上/左边是蓝、下/右边是主题色。取色定位到 `fortune-col-header-selected` / `fortune-row-header-selected`（用户截图里蓝是 `#0088fb`、橙是暖色 accent `#d45500`）⇒ 连同"延长/移动选区"两个叠加框一起映射到 `--lake-accent`，**只改颜色、不动内核的宽度与位置**。
+  · **右键菜单焦点环**：菜单项是 `div[tabindex]`，不在 `tokens.css` 那条 `:where(button, input, …)` 焦点规范里 ⇒ 内核 `focus()` 第一个菜单项时浏览器画**它自己的默认环**（深色下是橙色 `rgb(229,151,0)`，与主题无关）。收编到项目同一套 `--lake-focus-ring-*` + `--lake-accent`。
+- **单一来源**：`scripts/sheet-icons.mjs`（映射表 + 生成器；幂等、`--check` 干跑）→ 改 node_modules → `PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" npx patch-package @fortune-sheet/react` 重建补丁。机制与三个坑见 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §M。
+- **验收**：真实 Electron 三主题（浅/暖/深）；把**全部 101 个 symbol** 渲染成对照表逐个确认无空图；**全新安装复验**（移走包 → `npm install` → 补丁自动打上、菜单改造 + 只读改动都在）。
+- 门禁：tsc ✓ · vitest **1729 passed / 16 skipped** ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9）✓ · check:core ✓ · `git diff --check` ✓ · cssLayers 基线 `sheetEditor.css` **150 → 147**（菜单图标 +13、把手退回 −3；理由写在该文件注释里）。
+- **移动端三修**（明细见 §8）：表格/多维表/画板不再能被左滑拉出空的大纲面板；「更多 → 新建文档」建好不跳转（`NotebookWorkspace` 没响应 `initialNoteId` 变化）；`emu-cdp.sh` 改成按 App PID 取 WebView socket（旧 socket 残留时会连到死 socket、`/json/list` 恒空）。
+- **状态**：本批已提交并推送 `origin/master`（`186ce93` 表格图标/换行/粘贴归属 + `eb5e2bc` 移动端三修；用户 261008 明确授权提交推送）。
+
+- **261008 二次反馈的两改**：① **行高改为「可涨可缩」**（`refit`）：右键「自动行高」= 真·自适应 + 忽略 `customHeight`，列宽变化 = refit，其余自动触发仍只涨不缩 —— 用户「点了自动行高没生效」多半就是旧版只涨不缩（他们的行本来偏高）。② **第一遍 Cmd+V 整块丢（用户「要按两次 / 闪烁一下没内容」）已结案**：根因 = `@fortune-sheet/core` 的 `selectionCache` 是**模块级单例**，而每份挂载的 Workbook 各在 `document` 上挂一个 paste 监听、判据只看 `document.activeElement.className === "fortune-sheet-overlay"` ⇒ **多标签常驻挂载时隐藏的那份表格抢先把 `isPasteAction` 消费掉、把数据写进自己的表**；活动表格这一遍空转但**插行照样发生**（另一条 state 更新）⇒ 行被撑开、内容为空、第二遍才好（隐藏实例第一遍后重挂监听排到最后）。**修法只在 react 补丁**：判据加 `workbookContainer.current?.contains(document.activeElement)`，**core 回到内核原样**（曾试过的「core 放宽判据」会让每个挂载实例都粘一遍，已撤回；同期「把插行并进同一次 setContextWithProduce」也一并撤回 —— 单实例路径本就不复现）。护栏 `sheetEditorMount.test.ts`；机制/复现姿势/修前修后数据见 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §N。
 
 ### 261008 · 文档分屏（左右两栏 · 方案 A）
 
@@ -310,6 +355,13 @@ bash scripts/mobile-preview.sh
 - **造数据**（模拟器是全新安装、库里 0 条）：DB = `databases/lake-notes-mobileSQLite.db`；`notes` 表写 `doc_kind='bitable'`、`content=<正文 JSON>`、`parent_id='notebook-personal'`（**必须挂到笔记本**，否则首页点开会提示「未找到该文档所属笔记本」）。改法：force-stop → `exec-out run-as … cat` 拉出 db/wal/shm → python sqlite3 写 + `PRAGMA wal_checkpoint(TRUNCATE)` → push 回 + 删 -wal/-shm → 重启 App。
 - **点开笔记必须用真实点按**：首页最近文档是 `<button class="doc-card">`，CDP 里 `el.click()` **不触发**导航（页面不动），要用 `Input.dispatchMouseEvent` 在元素中心 mousePressed/Released。
 - 已验收（模拟器 lake_mobile，Pixel 6 / API36）：`移动多维表`（全字段）断言 bool=[true,false] 且 disabled、链接 href/target 正确、评分星数=[4,2]、进度=60%/0%（条宽一致）、关联 chip=[目标A,目标B]/[目标B]、创建时间到分钟、只读徽标；`移动看板表` 显示「「看板视图」桌面已支持，移动端暂以表格只读展示。」
+
+### 261008 续 · 本轮三修（移动端）
+
+- **大纲手势按文档类型收敛**：表格 / 多维表 / 画板**没有大纲**，左滑不再拉出空面板 —— `usePanelDrag` 新增可选 `canOpen(side)`（只约束「打开」，已展开的仍可滑走关闭），判定走共享纯函数 `gestureCore.swipeTargetSide`；口径 = `(active.kind ?? "doc") === "doc"`（与顶栏「编辑」按钮同一条），切到无大纲类型时自动收起已展开的大纲抽屉，底栏「大纲」按钮同时置灰。**右滑开目录不受影响**。
+- **「更多 → 新建文档」建好不跳转（真 bug）**：`NotebookWorkspace` 的组件 key 是 `notebookId`，同一笔记本内再指定文档**不会重挂载**，而「初次进入」那段 effect 有 `autoOpenedRef` 守卫 ⇒ 新的 `initialNoteId` 被忽略（现象：文档已进 DB、界面不动）。修法 = 加 `handledInitialRef`，在 `initialNoteId` 变化时显式 `openTab`（并按 `initialMode` 决定是否进编辑态）。
+- **`emu-cdp.sh` 取错 WebView socket**：socket 名带的是**宿主进程 PID**，App 重启后旧 socket 仍挂在 `/proc/net/unix`，原来的 `tail -1` 会取到旧的 ⇒ `/json/list` 恒空、`check:mobilesnap` 直接报 `no page target`。改为优先按当前 App PID 精确取、取不到才回退，并在转发前 `forward --remove` 清旧映射。
+- 门禁：`npm run check:mobilesnap` **6 态 0 差异**；桌面 tsc / vitest 全绿。
 
 ### 当前剩余验收
 - V1 空库多端同步：创建/编辑/删除/恢复/GC。
