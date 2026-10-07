@@ -150,3 +150,23 @@
   `document.hidden === true` 时 rAF 不触发，会漏同步（表现＝主题已切、canvas 仍是白格）；用 `setTimeout`/直接派发。
 - **外壳仍要走令牌**：工具栏/工作表标签/浮层/选区/输入框在 `src/features/sheet/sheetEditor.css` 映射到 `--lake-*`
   （三方组件是「自有设计系统」的唯一例外，几何沿用内核）；内核输入框额外显式给面板底，别依赖 UA 的 `color-scheme`。
+
+## L. 2026-10-08 文档分屏（左右两栏）
+
+- **身份模型**：标签唯一键是 `noteId`（没有实例 id），保存定时器 / 保存状态 / revision / 正文捕获 / 滚动记忆 / 大纲注册全按 `noteId`。
+  ⇒ **同一文档不能开两次**（两个实例会互相覆盖，且是"静默丢输入"红线）；分屏只做**不同文档**。若将来要同文档多开，
+  必须先把这套身份拆成 `instanceId` 并定义并发保存语义，别只改 UI。
+- **`data-active` 仍必须全局唯一**（`activeEditor.ts` 只认它，浮栏/AI/滚动归零都按它找「当前编辑器」）。分屏的"显示"另走
+  新增的 `data-pane-visible`：隐藏判据仍是 `tabs.css` 的 `:not([data-active]):not([data-pane-visible])` 单一来源，别在别处再写隐藏。
+- **每栏顶部被编辑器自己的工具条占满**（文档 `.ne-ui-toolbar`、表格 `.fortune-toolbar`、多维表同理），最右还常有「更多」。
+  分屏控件若放在栏的 `top: 8px` 会盖住它 ⇒ 下移一个 `--editor-toolbar-height`（见 `features/editor/splitView.css`），
+  并用 `--lake-z-editor-sticky` 抬到内容之上。
+- **分隔条只有一处实现**：`src/components/ui/SplitHandle.tsx`（`SplitPane` 与分屏共用）。⚠️ 拖拽**不要只依赖 `setPointerCapture`**：
+  合成鼠标/无活动指针时它会抛错并中止拖拽 ⇒ 用 try/catch 包住，并在 window 上监听 `pointermove/pointerup`。
+- **面包屑必须归属「文档宿主」，不能是 pane 级全局一条**（用户 261008 定稿）：原先它是 `MultiTabEditor` 里按 `activeNoteId` 渲染的**一条**（`headingPath`/`navigateToHeading` 都只取活动文档的大纲）⇒ 分屏时①不随栏宽收缩（整块文档区宽度）、②只在「焦点标签是 doc」时出现、③换栏/点编辑区会闪烁。正解 = 移进 `EditorTab`，用**本文档自己的**大纲句柄自算/自导航；`useEditorTopVar` 的候选也必须只从 `activeEditorHost()` 内取（分屏有两条面包屑，否则会被叠起来量错 `--lake-editor-top`）。⚠️ 宿主改 flex 纵向两段后必须给 `.lake-editor-main` `flex:1; min-height:0`，否则内部百分比高度链断掉、编辑器塌高。
+- **CDP 验收陷阱**：`Input.dispatchMouseEvent` 注入的 `mouseMoved` **不会**产生 `pointermove`（`pointerdown` 会）。
+  验拖拽要用合成的 `PointerEvent`（在元素上 dispatch pointerdown、在 window 上 pointermove/pointerup），否则会误判成"拖不动"。
+  另外：**后台/被遮挡的 Electron 窗口会整批丢弃 CDP 注入的鼠标事件**（事件日志全空）⇒ 真实鼠标链路只能在可见/前台实例上验，或改用合成事件。
+- **portal 浮层的 outside-dismiss 必须把浮层表面也算「里面」**：`Menu`（Overlay）是 portal 到 `body` 的；若只在锚点容器（如 `[data-split-menu]`）里判断，
+  真实鼠标落在**菜单项**上的 `pointerdown` 会先触发 dismiss → 菜单卸载 → 随后的 `click` 落空（现象＝「点菜单项没反应」，用户 261008 报「点分屏没效果」）。
+  接法：把 `surfaceRef` 同时写进自己的 `menuRef`，判断 `target.closest(锚点容器) || menuRef.current.contains(target)`。分屏入口与右栏菜单各修一处。

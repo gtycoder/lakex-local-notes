@@ -52,6 +52,10 @@ export interface BoardEditorProps {
   onDirty?: () => void;
   /** 审计 F15：注册按需同步序列化（关闭/保存时现取）。 */
   onEditorCapture?: (capture: (() => string | null) | null) => void;
+  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
+  focused?: boolean;
+  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
+  pane?: "left" | "right" | null;
 }
 
 function cardValueOf(doc: BoardDoc, viewport: BoardViewport | null): BoardCardValue {
@@ -90,7 +94,7 @@ function currentLocale(): "zh-CN" | "en-US" {
   return navigator.language?.toLowerCase().startsWith("zh") === false ? "en-US" : "zh-CN";
 }
 
-export function BoardEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture }: BoardEditorProps) {
+export function BoardEditor({ noteId, content, visible, readOnly, focused, pane, onChange, onDirty, onEditorCapture }: BoardEditorProps) {
   /**
    * 打开时的视图：**本机记下的优先**（用户上次拖/缩到的位置），其次才是正文里那份
    * （历史遗留的 viewport）。两者都没有 = 交给引擎自适应。见 boardViewStore.ts。
@@ -485,7 +489,9 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange, onDi
     <div
       ref={hostRef}
       className={`board-editor${viewReady ? "" : " board-editor--restoring"}`}
-      data-active={visible ? "true" : undefined}
+      data-active={(focused ?? visible) ? "true" : undefined}
+      data-pane-visible={visible ? "true" : undefined}
+      data-pane={pane ?? undefined}
     >
       {everVisible && (
         <Suspense fallback={<div className="board-editor-loading" />}>

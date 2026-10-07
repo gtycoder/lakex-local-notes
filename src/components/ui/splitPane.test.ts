@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const SRC = readFileSync(new URL("./SplitPane.tsx", import.meta.url), "utf8");
+const HANDLE = readFileSync(new URL("./SplitHandle.tsx", import.meta.url), "utf8");
 const KIT = readFileSync(new URL("../../styles/kit.css", import.meta.url), "utf8");
 const MISC = readFileSync(new URL("../../styles/app/misc.css", import.meta.url), "utf8");
 const PANELS = readFileSync(new URL("../../styles/app/panels.css", import.meta.url), "utf8");
@@ -9,9 +10,10 @@ const SIDEBAR = readFileSync(new URL("../Sidebar.tsx", import.meta.url), "utf8")
 const TRASH = readFileSync(new URL("../TrashPanel.tsx", import.meta.url), "utf8");
 const HISTORY = readFileSync(new URL("../HistoryPanel.tsx", import.meta.url), "utf8");
 const ASSETS = readFileSync(new URL("../AssetsBrowser.tsx", import.meta.url), "utf8");
+const MULTITAB = readFileSync(new URL("../../features/editor/MultiTabEditor.tsx", import.meta.url), "utf8");
 
 /**
- * 左右分栏（可拖动）结构护栏（用户 261006：回收站 / 历史版本 / 资源 三处都要能左右拖）。
+ * 左右分栏（可拖动）结构护栏（用户 261006：回收站 / 历史版本 / 资源 三处都要能左右拖；261008 文档分屏复用）。
  * 判定只看"是不是同一套实现 + 关键行为在不在"，真实拖拽由真机 CDP 验收覆盖。
  */
 describe("左右分栏（可拖动）", () => {
@@ -25,12 +27,15 @@ describe("左右分栏（可拖动）", () => {
     }
   });
 
-  it("把手视觉/交互只有一处实现（kit 的 .ln-split-handle），侧栏把手也并进同一类", () => {
+  it("交互只有一处实现：SplitPane 与文档分屏都走 SplitHandle，视觉用 kit 的 .ln-split-handle", () => {
     expect(KIT).toContain(".ln-split-handle {");
     expect(KIT).toContain(".ln-split-handle::before {");   // 命中带
     expect(KIT).toContain(".ln-split-handle::after {");    // 药丸
-    expect(SRC).toContain('className="ln-split-handle"');
-    expect(SRC).toContain('role="separator"');
+    expect(HANDLE).toContain('className="ln-split-handle"');
+    expect(HANDLE).toContain('role="separator"');
+    expect(SRC).toContain("<SplitHandle");
+    expect(SRC).not.toContain('className="ln-split-handle"');   // SplitPane 不再自己写一份
+    expect(MULTITAB).toContain("<SplitHandle");                   // 文档分屏复用同一实现
     expect(SIDEBAR).toContain('className="ln-split-handle sidebar-resize-handle desktop-only"');
     // 侧栏那份旧实现里不该再留光标/药丸（已并入 kit 唯一实现），只留它自己的定位
     expect(MISC).not.toContain("cursor: col-resize");
@@ -41,9 +46,9 @@ describe("左右分栏（可拖动）", () => {
   it("宽度设备本地、默认走 CSS（没拖过不写内联变量）、键盘与双击复位齐全", () => {
     expect(SRC).toContain("lake-notes-v3.split.");
     expect(SRC).toContain("localStorage.removeItem");
-    expect(SRC).toContain("onDoubleClick={() => commit(null)}");
-    expect(SRC).toContain('"ArrowLeft"');
-    expect(SRC).toContain('"ArrowRight"');
+    expect(HANDLE).toContain("onDoubleClick={() => onCommit(null)}");
+    expect(HANDLE).toContain('"ArrowLeft"');
+    expect(HANDLE).toContain('"ArrowRight"');
     expect(SRC).toContain("ResizeObserver");              // 容器变窄时夹回合法区间
     expect(PANELS).toContain("flex: 0 0 var(--split-left, 320px)");
     expect(PANELS).toContain(".history-split > .ln-split-handle { position: relative; flex: 0 0 0; width: 0; }");

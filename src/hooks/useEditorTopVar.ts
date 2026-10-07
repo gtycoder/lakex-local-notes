@@ -9,7 +9,8 @@ import { activeEditorHost } from "../features/editor/activeEditor";
  * 所以顶边**不能写死常量**，必须运行时量。
  *
  * 量的口径 = pane 内**从顶部连续停靠**的 chrome 栈的底边：
- *  - 候选 = pane 内所有 `.protyle-breadcrumb`（面包屑）与 `.ne-ui`（内核工具条）；
+ *  - 候选 = **焦点编辑器宿主**内的 `.protyle-breadcrumb`（面包屑）与 `.ne-ui`（内核工具条）；
+ *    261008：面包屑已下沉到每个文档宿主内，分屏时有两条 —— 必须只量焦点栏，否则会被叠在一起量错。
  *  - 按 top 升序，只收「与当前栈底相接（top ≤ 栈底 + TOLERANCE）」的；一旦出现明显间隙说明它
  *    是浮动元素（例如将来的浮动工具栏），**不计入**（面板顶不跟随它下移）；
  *  - 工具条不存在（锁定/空态）→ 自然回退到面包屑底边；都没有 → 0。
@@ -40,7 +41,7 @@ export function useEditorTopVar(paneRef: RefObject<HTMLElement | null>, activeNo
     const compute = () => {
       const paneTop = pane.getBoundingClientRect().top;
       const candidates: Array<{ top: number; bottom: number }> = [];
-      collectInto(candidates, pane, ".protyle-breadcrumb");
+      collectInto(candidates, activeEditorHost(), ".protyle-breadcrumb");
       collectInto(candidates, activeEditorHost(), ".ne-ui");
       candidates.sort((a, b) => a.top - b.top);
       let cursor = paneTop;
@@ -60,7 +61,7 @@ export function useEditorTopVar(paneRef: RefObject<HTMLElement | null>, activeNo
           if (!observed.has(el)) { ro.observe(el); observed.add(el); }
         }
       };
-      observeAll(pane, ".protyle-breadcrumb");
+      observeAll(activeEditorHost(), ".protyle-breadcrumb");
       observeAll(activeEditorHost(), ".ne-ui");
     };
 

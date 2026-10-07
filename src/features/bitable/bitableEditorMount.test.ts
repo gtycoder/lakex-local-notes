@@ -216,7 +216,14 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/reorderViews/);
     expect(EDITOR).toMatch(/bt-tables-switch/);
     expect(CARDS).toMatch(/DatePicker/);
-    expect(TABS).toMatch(/tabs\.find\(\(t\) => t\.noteId === activeNoteId\)\?\.kind \?\? "doc"\) === "doc" && breadcrumb/);
+    // 261008：面包屑下沉进**文档宿主**（EditorTab 是 doc-only）⇒ 天然只出现在 doc 栏；
+    // MultiTabEditor 不再有全局面包屑，分屏时右端「更多」也不渲染（AI 只走浮窗）。
+    const HOST = readFileSync(new URL("../editor/EditorTab.tsx", import.meta.url), "utf8");
+    expect(HOST).toMatch(/className="protyle-breadcrumb"/);
+    expect(HOST).toMatch(/protyle-breadcrumb__more/);
+    expect(HOST).toMatch(/!split && \(focused \?\? visible\)/);
+    expect(TABS).not.toMatch(/&& breadcrumb/);
+    expect(TABS).not.toMatch(/breadcrumb\?: ReactNode/);
   });
 
   it("云端对齐三：自定义下拉/选项颜色/视图图标/行高去自定义", () => {

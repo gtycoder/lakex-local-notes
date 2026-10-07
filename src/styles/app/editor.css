@@ -35,6 +35,9 @@
   grid-area: 1 / 1;
   min-height: 0;
   height: 100%;
+  /* 261008：面包屑下沉为**文档宿主自己的一部分**（每栏一条）⇒ 宿主内改纵向两段：面包屑 + 编辑器主体。 */
+  display: flex;
+  flex-direction: column;
   /* 定位上下文：锁定态阅读大纲（内核自己挂载、fixed 定位）位置由下方规则微调 */
   position: relative;
   /* 虚拟渲染 + TOC 固定定位：滚动层必须是 Lake 原生内部容器 .ne-editor-wrap。
@@ -123,6 +126,12 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 }
 
 .lake-editor-tab { min-width: 0; }
+
+/* 261008：面包屑 + 编辑器主体（flex 列）——主体吃掉剩余高度，内部百分比高度链照旧解析。 */
+.lake-editor-tab > .lake-editor-main {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 /* ===== 2026-08-06 只读锁（原生 Viewer）===== */
 /* 锁定标签：viewer 无工具栏；正文色略降暗示只读 */

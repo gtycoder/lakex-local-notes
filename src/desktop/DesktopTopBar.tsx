@@ -1,7 +1,9 @@
 /** 桌面顶栏（§20 Phase C 收尾：topBarLeading 与右侧搜索钮从 App.tsx 移出）。
  *  260922 S1+A：工作空间钮内嵌「当前空间」图标（18px 软底），点开合一菜单（空间 + 工作空间）。 */
-import { Check, ChevronDown, Feather, Files, Paperclip, Search, Settings, Trash } from "lucide-react";
-import type { Ref, RefObject } from "react";
+import { Check, ChevronDown, Columns2, Feather, Files, Paperclip, Search, Settings, Trash } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type Ref, type RefObject } from "react";
+import { Menu } from "../components/ui/Overlay";
+import { usePopoverPosition } from "../hooks/usePopoverPosition";
 import { SyncStatusPopover } from "../components/SyncStatusPopover";
 import type { DesktopWorkspace } from "./desktopTypes";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
@@ -117,5 +119,78 @@ export function DesktopTopBarSearch(props: DesktopTopBarSearchProps) {
     <button className="toolbar__item" onClick={onOpenSearch} title="全文搜索（⇧⌘F）" aria-label="全文搜索">
       <Search size={15} />
     </button>
+  );
+}
+export interface DesktopSplitButtonProps {
+  /** 已打开的标签（标题 + 类型图标展示用）。 */
+  openTabs: Array<{ noteId: string; title: string; kind?: string }>;
+  activeNoteId: string | null;
+  /** 已经在分屏中：点击 = 直接取消分屏（快捷；右栏右上角菜单里也有同一项）。 */
+  splitActive: boolean;
+  onEnterSplit: (noteId: string) => void;
+  onExitSplit: () => void;
+}
+
+/** 顶栏右侧：文档分屏入口（左右两栏、最多两个、不同文档、临时不持久化）。
+ *  未分屏时点开列出**除当前标签外**的已打开标签；已分屏时点击直接取消。 */
+export function DesktopSplitButton({ openTabs, activeNoteId, splitActive, onEnterSplit, onExitSplit }: DesktopSplitButtonProps) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLElement | null>(null);
+  const { surfaceRef, style } = usePopoverPosition({ open, anchor: btnRef.current, align: "end" });
+  /** Menu 是 portal 到 body 的：outside-dismiss 必须把浮层表面也算「里面」，否则真实鼠标 pointerdown 会先把菜单关掉、选择被吞。 */
+  const setMenuRef = useCallback((el: HTMLElement | null) => { menuRef.current = el; surfaceRef(el); }, [surfaceRef]);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest("[data-split-menu]") && !menuRef.current?.contains(target)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+  const candidates = openTabs.filter((t) => t.noteId !== activeNoteId);
+  return (
+    <span className="split-entry" data-split-menu>
+      <button
+        ref={btnRef}
+        type="button"
+        className="toolbar__item"
+        disabled={!splitActive && candidates.length === 0}
+        onClick={() => {
+          if (splitActive) { setOpen(false); onExitSplit(); return; }
+          setOpen((o) => !o);
+        }}
+        title={splitActive ? "分屏选项（点击取消分屏）" : "分屏：从右侧选择一个已打开的标签"}
+        aria-label="分屏"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Columns2 size={15} />
+      </button>
+      {open && (
+        <Menu surfaceClassName="tab-switcher-menu" label="选择分屏标签" onDismiss={() => setOpen(false)} surfaceRef={setMenuRef} style={style ?? undefined}>
+          <div className="tab-switcher-heading"><strong>选择右侧标签</strong><span>{candidates.length}</span></div>
+          <div className="tab-switcher-list">
+            {candidates.map((t) => (
+              <button
+                key={t.noteId}
+                type="button"
+                className="tab-switcher-select"
+                onClick={() => { onEnterSplit(t.noteId); setOpen(false); }}
+                title={t.title || "无标题"}
+              >
+                <span className="tab-switcher-title ln-ellipsis">{t.title || "无标题"}</span>
+              </button>
+            ))}
+          </div>
+        </Menu>
+      )}
+    </span>
   );
 }

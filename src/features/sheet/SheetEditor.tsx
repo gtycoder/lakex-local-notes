@@ -278,6 +278,10 @@ export interface SheetEditorProps {
   onEditorCapture?: (capture: (() => string | null) | null) => void;
   /** 是否显示内核工具条（默认 true）。历史快照预览传 false ⇒ 只读预览不要"半个编辑器"的观感。 */
   showToolbar?: boolean;
+  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
+  focused?: boolean;
+  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
+  pane?: "left" | "right" | null;
 }
 
 /** 内核插图产出的内联图片（`FileReader.readAsDataURL` → `data:image/png;base64,…`）。 */
@@ -365,7 +369,7 @@ function initialSheets(content: string, noteId: string): SheetWorksheet[] {
     .map((sheet) => withRenderableImageSrc(sheet, noteId));
 }
 
-export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture, showToolbar = true }: SheetEditorProps) {
+export function SheetEditor({ noteId, content, visible, readOnly, focused, pane, onChange, onDirty, onEditorCapture, showToolbar = true }: SheetEditorProps) {
   const workbookRef = useRef<WorkbookInstance>(null);
   /** 宿主容器：只用来观察宽度变化（见下方「补发 resize」effect）。 */
   const hostRef = useRef<HTMLDivElement>(null);
@@ -1139,7 +1143,9 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, onDi
     <div
       ref={hostRef}
       className="sheet-editor"
-      data-active={visible ? "true" : undefined}
+      data-active={(focused ?? visible) ? "true" : undefined}
+      data-pane-visible={visible ? "true" : undefined}
+      data-pane={pane ?? undefined}
     >
       {/* 单元格图片（P2）：选择本地图片（隐藏 input，由自定义工具栏按钮触发）。 */}
       <input

@@ -13,6 +13,8 @@ export function useWorkspaceState() {
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  /** 分屏（261008）：左右两栏的文档成对；null = 未分屏。**临时状态**，不落盘、不进 settings。 */
+  const [splitPair, setSplitPair] = useState<{ left: string; right: string } | null>(null);
   const [search, setSearch] = useState("");
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
   const [activeHistoryCount, setActiveHistoryCount] = useState(0);
@@ -46,7 +48,7 @@ export function useWorkspaceState() {
 
   return {
     workspace, setWorkspace, notes, setNotes, treeNodes, setTreeNodes, openTabs, setOpenTabs,
-    activeNoteId, setActiveNoteId, search, setSearch, conflictSnapshotNotice, setConflictSnapshotNotice,
+    activeNoteId, setActiveNoteId, splitPair, setSplitPair, search, setSearch, conflictSnapshotNotice, setConflictSnapshotNotice,
     activeHistoryCount, setActiveHistoryCount,
     workspaceMenuRef, moreMenuRef, wsMenuWrapRef, moreMenuWrapRef, syncBtnRef,
     sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,

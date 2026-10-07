@@ -81,7 +81,7 @@
  * 像素判据 ink 0.23% ↔ 1.61%，且 display:none / visibility / opacity / 去掉重叠 四种都能恢复）。
  * 「哪个标签在显示」的唯一来源 = 宿主上的 data-active（见 features/editor/activeEditor.ts），
  * 这里只按属性判断，不再依赖 display 造成的 0 尺寸。 */
-:is(.lake-editor-tab, .sheet-editor, .bitable-editor, .board-editor):not([data-active="true"]),
+:is(.lake-editor-tab, .sheet-editor, .bitable-editor, .board-editor):not([data-active="true"]):not([data-pane-visible="true"]),
 .board-editor--restoring {
   opacity: 0;
   visibility: hidden;
@@ -135,6 +135,7 @@
   font-size: 12px;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
+
 
 .tab-item:active { transform: scale(.98); }
 

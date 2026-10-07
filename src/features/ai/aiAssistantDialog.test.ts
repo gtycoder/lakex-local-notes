@@ -126,7 +126,8 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).toContain('"复制为 Lake"');
     expect(DIALOG).toContain('className="ai-dialog__lake-badge"');
     expect(DIALOG).toContain("copyMarkdownAsLake(");
-    expect(DIALOG).toContain("editorInstanceAt(activeEditorMount())?.kernel");   // 无内核时 Lake 按钮禁用
+    // 261008：分屏下「从哪栏选就在哪栏回写」——容器（本面板所属编辑器）优先，退回 data-active。
+    expect(DIALOG).toContain("editorInstanceAt(container ?? activeEditorMount())?.kernel");   // 无内核时 Lake 按钮禁用
     expect(DIALOG).not.toContain("Braces");   // 不再用代码块图标
     // 说明走自绘 .ln-tip 即时气泡（原生 title 有约 1s 延迟，用户 261005 要求实时出）
     expect(DIALOG).toContain("copyTip.show(");

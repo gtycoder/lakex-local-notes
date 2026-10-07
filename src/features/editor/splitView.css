@@ -1,0 +1,75 @@
+/**
+ * 文档分屏（261008）：同一窗口内左右两栏、最多两个、不同文档、**临时不持久化**。
+ *
+ * 结构与既有「标签面板网格」兼容：.tab-panels 平时是单格 grid、所有标签重叠、只有活动标签可见；
+ * 分屏时改为两列 grid，左/右栏各占一列（靠宿主上的 data-pane），其余标签照旧隐藏。
+ * 可见性判据仍归 tabs.css 的共享隐藏规则（多了 data-pane-visible 一路），这里只管几何与分屏控件。
+ */
+
+.tab-panels.is-split {
+  grid-template-columns: minmax(0, var(--split-left, 1fr)) minmax(0, 1fr);
+  /* 只作浮动工具条的定位基准（base 是 static，否则 absolute 会窜到 .document-pane 顶上）。
+     不再放开 overflow：控件**不躲在栏顶**，而是浮在两栏之上、可被拖到任意位置。 */
+  position: relative;
+}
+
+.tab-panels.is-split > [data-pane="left"] { grid-column: 1; }
+.tab-panels.is-split > [data-pane="right"] { grid-column: 2; }
+
+/* 分隔条：绝对定位在两列交界处（左栏顶边由 --split-left 给；没拖过时它等于 1fr，量出来再写）。
+   命中带/药丸视觉仍由 kit 的 .ln-split-handle 唯一提供，这里只给位置。 */
+.tab-panels.is-split > .ln-split-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--split-left, 50%);
+  width: 0;
+}
+
+/* 右栏右上角：细箭头菜单（取消分屏 / 左右互换）+ 关闭。浮在内容之上，尽量不挡正文。 */
+/* 分屏浮动工具条（用户 261008 定稿）：**浮在两栏之上、可拖到任意位置**，不属于任一栏 ⇒
+   不会被任何编辑器自己的工具条盖住；默认停在右栏工具条下方（那是最不挡内容的位置）。 */
+.tab-split-controls {
+  position: absolute;
+  top: calc(var(--editor-toolbar-height, 30px) + var(--lake-space-sm));
+  right: var(--lake-space-md);
+  z-index: var(--lake-z-editor-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xxs);
+  padding: var(--lake-space-xxs) var(--lake-space-xs);
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-panel);
+  border: 1px solid var(--lake-border-1);
+  box-shadow: var(--lake-shadow-popover);
+  cursor: grab;
+}
+
+.tab-split-controls.is-dragging {
+  cursor: grabbing;
+}
+
+/* 拖拽把手：按住它（或工具条空白处）即可把整条拖到别处。 */
+.tab-split-controls .tab-split-grip {
+  display: flex;
+  align-items: center;
+  color: var(--lake-text-4);
+  cursor: inherit;
+}
+
+/* 两枚按钮做成**实心圆**（保留用户 261008 的定稿观感）。
+   `.ln-iconbtn` 负责交互状态（hover/focus/disabled），这里只换「盒子」为实心圆。 */
+.tab-split-controls .tab-split-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-block);
+  border: 1px solid var(--lake-border-1);
+}
+
+.tab-split-controls .tab-split-btn:hover {
+  border-color: var(--lake-border-strong);
+}
+
+/* 分屏中的标签（两栏都在标签栏里）*/
+.tab-item.in-split[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--lake-accent); }

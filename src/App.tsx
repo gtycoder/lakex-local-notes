@@ -41,14 +41,14 @@ import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
-import { DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
+import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
 import { TrashPanel } from "./components/TrashPanel";
 import { AssetsBrowser } from "./components/AssetsBrowser";
 
 export function App() {
   const {
     workspace, setWorkspace, notes, setNotes, treeNodes, setTreeNodes, openTabs, setOpenTabs,
-    activeNoteId, setActiveNoteId, search, setSearch, conflictSnapshotNotice, setConflictSnapshotNotice,
+    activeNoteId, setActiveNoteId, splitPair, setSplitPair, search, setSearch, conflictSnapshotNotice, setConflictSnapshotNotice,
     activeHistoryCount, setActiveHistoryCount,
     workspaceMenuRef, moreMenuRef, wsMenuWrapRef, moreMenuWrapRef, syncBtnRef,
     sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,
@@ -250,7 +250,7 @@ export function App() {
   // scheduleDraftJournal / scheduleSave 已收拢到 useSavePipeline（hook 提供）
   // notice/showNotice 已收拢到 useDesktopShell（Phase C）
 
-  const { handleTabChange, reorderTabs, closeTab } = useDocumentTabs<OpenTab>({
+  const { handleTabChange: handleTabChangeBase, reorderTabs, closeTab: closeTabBase } = useDocumentTabs<OpenTab>({
     tabsRef: openTabsRef,
     activeNoteId,
     setTabs: setOpenTabs,
@@ -260,6 +260,41 @@ export function App() {
     persistTab,
     clearScrollMemory,
   });
+
+  // ---- 分屏（261008）：左右两栏、最多两个、不同文档、临时不持久化 ----
+  /** 分屏开关：把另一个已打开标签放到右栏（焦点留在原栏）。 */
+  const enterSplit = useCallback((noteId: string) => {
+    if (!activeNoteId || noteId === activeNoteId) return;
+    setSplitPair({ left: activeNoteId, right: noteId });
+  }, [activeNoteId, setSplitPair]);
+  const exitSplit = useCallback(() => setSplitPair(null), [setSplitPair]);
+  const swapSplit = useCallback(() => setSplitPair((p) => (p ? { left: p.right, right: p.left } : p)), [setSplitPair]);
+  // 标签关掉/被淘汰后自愈：任一侧不在已开标签里就退出分屏（不做嵌套、不留悬空）。
+  useEffect(() => {
+    if (!splitPair) return;
+    const ids = new Set(openTabs.map((t) => t.noteId));
+    if (splitPair.left === splitPair.right || !ids.has(splitPair.left) || !ids.has(splitPair.right)) setSplitPair(null);
+  }, [openTabs, splitPair, setSplitPair]);
+  /** 分屏组（261008 定稿，Edge 式）：标签栏里两页是**一个合并标签**，点它才回到分屏区域；
+   *  点其它标签 = 普通切换（**不再有"点第三个标签替换分屏栏"**）。组内记住最后焦点，供再次点开时恢复。 */
+  const splitFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (splitPair && activeNoteId && (activeNoteId === splitPair.left || activeNoteId === splitPair.right)) {
+      splitFocusRef.current = activeNoteId;
+    }
+  }, [splitPair, activeNoteId]);
+  /** 点合并标签：回到分屏（焦点恢复到最后看的那一栏）。 */
+  const activateSplit = useCallback(() => {
+    if (!splitPair) return;
+    setActiveNoteId(splitFocusRef.current ?? splitPair.left);
+  }, [splitPair, setActiveNoteId]);
+  /** 合并标签上的 ×：**取消分屏、两个标签都保留**（不做任何分屏替换/连带关闭）。 */
+  const closeSplit = useCallback(() => setSplitPair(null), [setSplitPair]);
+  /** 关闭分屏中的标签：先退出分屏（标签本身照常关闭/淘汰）。 */
+  const closeTab = useCallback((noteId: string) => {
+    if (splitPair && (noteId === splitPair.left || noteId === splitPair.right)) setSplitPair(null);
+    void closeTabBase(noteId);
+  }, [splitPair, setSplitPair, closeTabBase]);
 
   // 云同步 toast 壳已收拢到 useSyncShell（busy 常驻，ok/error/其他自动消失）
   const runSync = useSyncController({
@@ -408,8 +443,8 @@ export function App() {
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const {
-    activeNodeSyncState, editorPrefs, activePath, scrollActiveEditorToTop, navigateToHeading,
-    headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
+    activeNodeSyncState, editorPrefs, notePathTitle,
+    tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   } = deriveDesktopView({
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
     fontSize: settings.fontSize, showToolbar: settings.showToolbar, floatingToolbar: settings.floatingToolbar,
@@ -465,6 +500,19 @@ export function App() {
   /** 文档页顶栏最右侧：全文搜索（原在左侧工作空间下拉里；⇧⌘F 亦可）。 */
   const topBarSearch = (
     <DesktopTopBarSearch onOpenSearch={() => sidebarOpenSearch(search)} />
+  );
+  /** 文档页顶栏最右侧：分屏入口 + 全文搜索。 */
+  const topBarTrailing = (
+    <>
+      <DesktopSplitButton
+        openTabs={openTabs}
+        activeNoteId={activeNoteId}
+        splitActive={splitPair != null}
+        onEnterSplit={enterSplit}
+        onExitSplit={exitSplit}
+      />
+      {topBarSearch}
+    </>
   );
 
   return (
@@ -524,21 +572,23 @@ export function App() {
             tocEnabled={tocEnabled}
             outlineEnhance={outlineEnhance}
             topbarLeading={libraryTopBarLeading}
-            topbarTrailing={topBarSearch}
+            topbarTrailing={topBarTrailing}
+            splitPair={splitPair}
+            onExitSplit={exitSplit}
+            onSwapSplit={swapSplit}
             wideMode={wideMode}
             editorPrefs={editorPrefs}
-            activePathTitle={activePath.length > 0 ? (activePath[0].title || "无标题") : null}
-            headingPath={headingPath}
+            notePathTitle={notePathTitle}
             moreMenuWrapRef={moreMenuWrapRef}
             onToggleMoreMenu={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }}
-            onScrollToTop={scrollActiveEditorToTop}
-            onNavigateToHeading={navigateToHeading}
             lockedNoteIds={lockedNoteIds}
             onToggleNoteLock={() => { void toggleNoteLock(); }}
             onExportBitableCsv={(noteId) => { void exportNoteById(noteId, "csv"); }}
             onOpenTrash={() => void switchDesktopWorkspace("trash")}
             pinnedNoteIds={pinnedNoteIds}
-            onTabChange={handleTabChange}
+            onTabChange={handleTabChangeBase}
+            onActivateSplit={activateSplit}
+            onCloseSplit={closeSplit}
             onTabClose={closeTab}
             onTabsReorder={reorderTabs}
             onTogglePin={handleTogglePin}

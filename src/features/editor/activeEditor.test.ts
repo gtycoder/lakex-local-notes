@@ -37,7 +37,8 @@ describe("活动标签判定：唯一来源 data-active（261005）", () => {
       ["BoardEditor", read("../board/BoardEditor.tsx")],
     ];
     for (const [name, src] of hosts) {
-      expect(src, name + " 必须打 data-active").toMatch(/data-active=\{visible \? "true" : undefined\}/);
+      expect(src, name + " 必须打 data-active（焦点栏）").toMatch(/data-active=\{\(focused \?\? visible\) \? "true" : undefined\}/);
+      expect(src, name + " 必须打 data-pane-visible（分屏可见）").toContain('data-pane-visible={visible ? "true" : undefined}');
     }
   });
 

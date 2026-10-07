@@ -169,9 +169,13 @@ export interface BitableEditorProps {
   onToggleLock?: () => void;
   /** 从本编辑器导出当前数据表 CSV（由外壳注入导出管线）。 */
   onExportCsv?: () => void;
+  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
+  focused?: boolean;
+  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
+  pane?: "left" | "right" | null;
 }
 
-export function BitableEditor({ noteId, content, visible, readOnly, locked = false, onChange, onPreserveDraft, onDirty, onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
+export function BitableEditor({ noteId, content, visible, readOnly, locked = false, focused, pane, onChange, onPreserveDraft, onDirty, onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
   const { doc, docRef, updateDoc, navigateDoc, beginGesture, endGesture, undoEdit, redoEdit } = useBitableSession(
     () => initialDoc(content, chrome ? noteId : null), { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
   );
@@ -994,7 +998,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   };
 
   return (
-    <div ref={rootRef} className="bitable-editor" data-active={visible ? "true" : undefined}>
+    <div
+      ref={rootRef}
+      className="bitable-editor"
+      data-active={(focused ?? visible) ? "true" : undefined}
+      data-pane-visible={visible ? "true" : undefined}
+      data-pane={pane ?? undefined}
+    >
       {chrome && !tablesCollapsed && (
       <aside className="bt-tables" style={{ width: tablesWidth }}>
         <header className="bt-tables-head">

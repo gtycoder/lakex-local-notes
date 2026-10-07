@@ -4,7 +4,6 @@ import { clearScrollMemory } from "../features/editor/EditorTab";
 import { resolveScrollNode } from "../features/editor/lakeRuntime";
 import type { TabInfo } from "../features/editor/MultiTabEditor";
 import type { OutlineMode } from "../features/outline/OutlineController";
-import { getOutlineTab } from "../features/outline/registry";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "../features/outline/outlineInteraction";
 import { treeNodePath, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
 import type { NoteSummary, TreeNode } from "../lib/types";
@@ -70,23 +69,11 @@ export function deriveDesktopView(input: DesktopViewInput) {
     }
   };
 
-  const navigateToHeading = (id: string) => {
-    getOutlineTab(activeNoteId)?.navigate(id);
+  /** 每个文档 tab 的**笔记本名**（面包屑首段）：EditorTab 按自己的 noteId 取，不再依赖活动文档。 */
+  const notePathTitle = (noteId: string): string | null => {
+    const path = treeNodePath(treeNodes, noteId);
+    return path.length > 0 ? (path[0].title || "无标题") : null;
   };
-
-  // 大纲路径：从当前滚动标题沿 parentId 上溯（H1→H2→…），与目录路径可区分
-  const headingPath: Array<{ id: string; level: number; text: string }> = (() => {
-    const handle = getOutlineTab(activeNoteId);
-    const selectedId = handle?.controller.getSelectedId() ?? null;
-    if (!handle || !selectedId) return [];
-    const path: Array<{ id: string; level: number; text: string }> = [];
-    let node = handle.controller.getNode(selectedId);
-    while (node) {
-      path.unshift({ id: node.id, level: node.level, text: node.text });
-      node = node.parentId ? handle.controller.getNode(node.parentId) : null;
-    }
-    return path;
-  })();
 
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
@@ -125,7 +112,7 @@ export function deriveDesktopView(input: DesktopViewInput) {
   } as CSSProperties;
 
   return {
-    activeNodeSyncState, editorPrefs, activePath, scrollActiveEditorToTop, navigateToHeading,
-    headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
+    activeNodeSyncState, editorPrefs, activePath, scrollActiveEditorToTop, notePathTitle,
+    tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   };
 }

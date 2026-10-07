@@ -522,6 +522,27 @@
   background: var(--lake-accent-tint);
   border-color: color-mix(in srgb, var(--lake-accent) 30%, transparent);
 }
+/* ── 分屏合并标签（261008 定稿，Edge 式）───────────────────────────────
+   分屏的两页在标签栏里是**一个**标签：两段标题 + 中间分隔线 + 一个 ×；
+   点它进入分屏区域，点其它标签就是普通切换（不做任何分屏替换）。 */
+.tab-split-tab .tab-split-tab__half {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lake-space-xxs);
+  min-width: 0;
+}
+
+.tab-split-tab .tab-split-tab__divider {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  background: var(--lake-border-1);
+}
+
+.tab-split-tab .tab-split-tab__glyph {
+  flex: none;
+  color: var(--lake-text-4);
+}
 
 /* ── 目录树行（P5-e；设计 COMPONENTS.md 03 列表与列表项）─────────────────
  * 产品既有决策一律保留：标题超长**直接裁切不打省略号**；行内动作（⋯ ＋）**仅 hover/聚焦显形**

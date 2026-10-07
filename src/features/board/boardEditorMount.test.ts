@@ -108,11 +108,11 @@ describe("画板编辑器护栏", () => {
     // 261005：切标签的隐藏**统一**走共享规则（tabs.css 的 :is(...):not([data-active])），
     // 画板不再自带 --hidden、也不用 fn__none（同一个语义只能有一套实现）。
     expect(EDITOR).not.toMatch(/board-editor--hidden/);
-    expect(EDITOR).toMatch(/data-active=\{visible \? "true" : undefined\}/);
+    expect(EDITOR).toMatch(/data-active=\{\(focused \?\? visible\) \? "true" : undefined\}/);
     const TABS = readFileSync(new URL("../../styles/app/tabs.css", import.meta.url), "utf8");
     // 261005：切标签统一用 opacity+visibility（保留布局尺寸；content-visibility 与网格重叠组合会压掉
     // 活动编辑器的绘制，实测文档/多维表整片空白，勿改回）。
-    expect(TABS).toMatch(/:is\([^)]*\.board-editor[^)]*\):not\(\[data-active="true"\]\),\s*\.board-editor--restoring \{\s*opacity: 0;\s*visibility: hidden;\s*pointer-events: none;\s*\}/);
+    expect(TABS).toMatch(/:is\([^)]*\.board-editor[^)]*\):not\(\[data-active="true"\]\):not\(\[data-pane-visible="true"\]\),\s*\.board-editor--restoring \{\s*opacity: 0;\s*visibility: hidden;\s*pointer-events: none;\s*\}/);
   });
 
   it("kind=board 端到端接线：noteKind / 正文目录 / 搜索文本 / 主进程新建", () => {

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ChevronRight, File } from "lucide-react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import {
   createLakeDocument,
@@ -32,6 +33,16 @@ export interface EditorTabProps {
   prefs?: LakeEditorPrefs;
   /** 只读锁：true 时重建为 Lake 原生 Viewer（真只读，含画板/表格/代码块） */
   locked?: boolean;
+  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
+  focused?: boolean;
+  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
+  pane?: "left" | "right" | null;
+  /** 面包屑（261008）：本栏文档所属**笔记本名**；null = 不渲染面包屑（如非文档栏 / 无路径）。 */
+  pathTitle?: string | null;
+  /** 面包屑右端「更多」的锚点。**只在单栏时渲染该按钮**（分屏下按用户定稿隐藏）。 */
+  moreMenuWrapRef?: RefObject<HTMLDivElement>;
+  /** 打开顶栏「更多」菜单（分屏下不渲染按钮，故不用）。 */
+  onToggleMoreMenu?: () => void;
   /** 编辑器实例就绪回调（导出 md 等需要访问 editor 实例的场景） */
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
   /** 外部改动正文后重载该 tab（附件重命名后主进程改写了正文） */
@@ -102,7 +113,7 @@ export function locateEditorSearchHit(noteId: string, query: string): boolean {
   return true;
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, onEditorReady, onReloadNote }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, focused, pane, pathTitle = null, moreMenuWrapRef, onToggleMoreMenu, onEditorReady, onReloadNote }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -180,6 +191,29 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     };
     window.setTimeout(correct, 50);
     window.setTimeout(correct, 200);
+  };
+
+  // 面包屑标题路径（261008）：来自**本文档自己的**大纲句柄（`getSelectedId` + `getNode` 上溯），
+  // 不再依赖全局 activeNoteId ⇒ 分屏时每栏各自一条、随栏宽收缩、互不影响。
+  const [outlineVersion, setOutlineVersion] = useState(0);
+  useEffect(() => controller.subscribe(() => setOutlineVersion((v) => v + 1)), [controller]);
+  const headingPath = useMemo(() => {
+    const selectedId = controller.getSelectedId();
+    if (!selectedId) return [] as Array<{ id: string; level: number; text: string }>;
+    const path: Array<{ id: string; level: number; text: string }> = [];
+    let node = controller.getNode(selectedId);
+    while (node) {
+      path.unshift({ id: node.id, level: node.level, text: node.text });
+      node = node.parentId ? controller.getNode(node.parentId) : null;
+    }
+    return path;
+    // outlineVersion 进依赖：滚动切换标题时 controller 内部变化，靠订阅 bump 让它重算。
+  }, [controller, outlineVersion]);
+  const split = pane != null;
+  /** 面包屑笔记本名 → 回到本文档顶部（用本文档自己的滚动容器，不作用于别的栏）。 */
+  const handleScrollTop = (): void => {
+    const scroller = resolveScrollNode(hostRef.current);
+    if (scroller) scroller.scrollTop = 0;
   };
 
   // 向全局注册表暴露本标签的大纲句柄（右侧栏读取 active tab 的句柄）
@@ -996,7 +1030,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       // 这里再写 display:none 会把尺寸压成 0，切回来触发内核表格重排（261005）。
       style={{ width: "100%" }}
       data-note-id={noteId}
-      data-active={visible ? "true" : undefined}
+      data-active={(focused ?? visible) ? "true" : undefined}
+      data-pane-visible={visible ? "true" : undefined}
+      data-pane={pane ?? undefined}
       onContextMenu={(event) => {
         event.preventDefault();
         const target = event.target as HTMLElement;
@@ -1007,6 +1043,37 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         setTextMenu({ x: event.clientX, y: event.clientY });
       }}
     >
+      {pathTitle !== null && (
+        <nav className="protyle-breadcrumb" aria-label="文档路径">
+          <button type="button" className="protyle-breadcrumb__item protyle-breadcrumb__item--notebook" onClick={handleScrollTop} title="回到文档顶部">{pathTitle || "无标题"}</button>
+          {headingPath.length > 0 && (
+            <>
+              <span className="protyle-breadcrumb__divider" aria-hidden="true"><ChevronRight size={12} /></span>
+              <span className="protyle-breadcrumb__outline" aria-label="大纲位置">
+                {headingPath.map((hn, i) => (
+                  <button
+                    key={hn.id}
+                    type="button"
+                    className={`protyle-breadcrumb__item${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}
+                    onClick={() => handleOutlineNavigate(hn.id)}
+                    title={`跳转到 H${hn.level}：${hn.text}`}
+                  >
+                    {i > 0 && <ChevronRight size={12} />}
+                    <span className="protyle-breadcrumb__h">H{hn.level}</span>
+                    {hn.text}
+                  </button>
+                ))}
+              </span>
+            </>
+          )}
+          {/* 分屏下按用户 261008 定稿**隐藏**「更多」：AI 只走浮窗，导出走目录树右键。 */}
+          {!split && (focused ?? visible) && moreMenuWrapRef && onToggleMoreMenu && (
+            <div className="toolbar__menu-wrap protyle-breadcrumb__more" ref={moreMenuWrapRef}>
+              <button className="toolbar__item protyle-breadcrumb__more-btn" onClick={onToggleMoreMenu} title="更多" aria-label="更多"><File size={15} /></button>
+            </div>
+          )}
+        </nav>
+      )}
       <div ref={editorMountRef} className="lake-editor-main" />
       {cardMenu && (
         <CardContextMenu

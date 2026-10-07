@@ -2,17 +2,10 @@
  * 桌面资料库主区（§20 Phase B：从 src/App.tsx 拆出）。
  * 渲染 MultiTabEditor + 思源式面包屑 + 空态。所有状态/回调由 App 注入，本组件不持有业务状态。
  */
-import { ChevronRight, File } from "lucide-react";
-import { useRef, type ReactNode, type Ref, type RefObject } from "react";
+import { useRef, type ReactNode, type RefObject } from "react";
 import { useEditorTopVar } from "../hooks/useEditorTopVar";
 import { MultiTabEditor, type TabInfo } from "../features/editor/MultiTabEditor";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
-
-export interface HeadingPathItem {
-  id: string;
-  level: number;
-  text: string;
-}
 
 export interface DesktopLibraryProps {
   tabs: TabInfo[];
@@ -23,14 +16,12 @@ export interface DesktopLibraryProps {
   topbarTrailing: ReactNode;
   wideMode: boolean;
   editorPrefs: { fontSize: number; showToolbar?: boolean; floatingToolbar?: boolean; blockHandle?: boolean };
-  activePathTitle: string | null;
-  headingPath: HeadingPathItem[];
+  /** 每个文档 tab 的笔记本名（面包屑首段）：透传给 EditorTab，由它自渲染面包屑。 */
+  notePathTitle: (noteId: string) => string | null;
   /** 工作区级可见性（keep-alive：小记模式隐藏资料库但不卸载，切回时避免重建全部 Lake 编辑器） */
   visible?: boolean;
-  moreMenuWrapRef: RefObject<HTMLDivElement | null>;
+  moreMenuWrapRef: RefObject<HTMLDivElement>;
   onToggleMoreMenu: () => void;
-  onScrollToTop: () => void;
-  onNavigateToHeading: (id: string) => void;
   lockedNoteIds: ReadonlySet<string>;
   /** 锁定/解锁活动文档（透传给多维表右上角菜单）。 */
   onToggleNoteLock?: () => void;
@@ -41,6 +32,14 @@ export interface DesktopLibraryProps {
   pinnedNoteIds: ReadonlySet<string>;
   onTabChange: (noteId: string) => void;
   onTabClose: (noteId: string) => void;
+  /** 分屏（261008）：左右两栏的文档；null = 未分屏。 */
+  splitPair?: { left: string; right: string } | null;
+  /** 点标签栏里的**合并分屏标签** = 回到分屏区域（261008，Edge 式）。 */
+  onActivateSplit?: () => void;
+  /** 合并标签上的 ×：取消分屏（两个标签都保留）。 */
+  onCloseSplit?: () => void;
+  onExitSplit?: () => void;
+  onSwapSplit?: () => void;
   onTabsReorder: (ordered: string[]) => void;
   onTogglePin: (noteId: string) => void;
   onContentChange: (noteId: string, content?: string) => void;
@@ -62,10 +61,10 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
   const {
     tabs, activeNoteId, tocEnabled, outlineEnhance, topbarLeading, topbarTrailing,
     wideMode, editorPrefs,
-    activePathTitle, headingPath, moreMenuWrapRef, onToggleMoreMenu,
-    onScrollToTop, onNavigateToHeading,
+    moreMenuWrapRef, onToggleMoreMenu, notePathTitle,
     lockedNoteIds, onToggleNoteLock, onExportBitableCsv, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
+    splitPair, onActivateSplit, onCloseSplit, onExitSplit, onSwapSplit,
     onEditorReady,
   onEditorCapture, onReloadNote, onCreateNote, onOpenTrash, outlineSlot,
     visible = true,
@@ -76,35 +75,6 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
   const paneRef = useRef<HTMLElement | null>(null);
   useEditorTopVar(paneRef, activeNoteId);
 
-  const breadcrumb = activePathTitle !== null ? (
-    <nav className="protyle-breadcrumb" aria-label="文档路径">
-      {/* 只保留笔记本名（目录路径不重要，顶部有文档名） */}
-      <button type="button" className="protyle-breadcrumb__item protyle-breadcrumb__item--notebook" onClick={onScrollToTop} title="回到文档顶部">{activePathTitle || "无标题"}</button>
-      {headingPath.length > 0 && (
-        <>
-          <span className="protyle-breadcrumb__divider" aria-hidden="true"><ChevronRight size={12} /></span>
-          <span className="protyle-breadcrumb__outline" aria-label="大纲位置">
-            {headingPath.map((hn, i) => (
-              <button
-                key={hn.id}
-                type="button"
-                className={`protyle-breadcrumb__item${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}
-                onClick={() => onNavigateToHeading(hn.id)}
-                title={`跳转到 H${hn.level}：${hn.text}`}
-              >
-                {i > 0 && <ChevronRight size={12} />}
-                <span className="protyle-breadcrumb__h">H{hn.level}</span>
-                {hn.text}
-              </button>
-            ))}
-          </span>
-        </>
-      )}
-      <div className="toolbar__menu-wrap protyle-breadcrumb__more" ref={moreMenuWrapRef as Ref<HTMLDivElement>}>
-        <button className="toolbar__item protyle-breadcrumb__more-btn" onClick={onToggleMoreMenu} title="更多" aria-label="更多"><File size={15} /></button>
-      </div>
-    </nav>
-  ) : undefined;
 
   return (
     <section ref={paneRef} className={`document-pane${wideMode ? " wide-mode" : ""}`}>
@@ -116,9 +86,16 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         outlineEnhance={outlineEnhance}
         topbarLeading={topbarLeading}
         topbarTrailing={topbarTrailing}
-        breadcrumb={breadcrumb}
+        notePathTitle={notePathTitle}
+        moreMenuWrapRef={moreMenuWrapRef}
+        onToggleMoreMenu={onToggleMoreMenu}
         onTabChange={onTabChange}
         onTabClose={onTabClose}
+        splitPair={splitPair}
+        onActivateSplit={onActivateSplit}
+        onCloseSplit={onCloseSplit}
+        onExitSplit={onExitSplit}
+        onSwapSplit={onSwapSplit}
         onTabsReorder={onTabsReorder}
         lockedNoteIds={lockedNoteIds}
         onToggleNoteLock={onToggleNoteLock}

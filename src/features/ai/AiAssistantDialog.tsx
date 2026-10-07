@@ -369,7 +369,7 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
 
   /** 复制为 **Lake 内核格式**：内核转换后放剪贴板，粘到 Lake 是原生样式、不弹「是否转换」。 */
   const copyAsLake = async (text: string, index: number) => {
-    const kernel = editorInstanceAt(activeEditorMount())?.kernel;
+    const kernel = editorInstanceAt(container ?? activeEditorMount())?.kernel;
     if (!kernel) return;
     const ok = await copyMarkdownAsLake(kernel as unknown as LakePayloadKernel, text, window.location.href);
     if (ok) markCopied(index, "lake");
@@ -409,7 +409,7 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
                           type="button"
                           className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "lake" ? " is-selected" : "")}
                           aria-label="复制为 Lake"
-                          disabled={!editorInstanceAt(activeEditorMount())?.kernel}
+                          disabled={!editorInstanceAt(container ?? activeEditorMount())?.kernel}
                           onMouseEnter={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
                           onMouseLeave={copyTip.hide}
                           onFocus={(e) => copyTip.show("复制为 Lake", e.currentTarget)}

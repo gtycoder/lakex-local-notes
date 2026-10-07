@@ -1,10 +1,12 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { EditorErrorBoundary } from "./EditorErrorBoundary";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, GripVertical, MoreHorizontal, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { SplitHandle } from "../../components/ui/SplitHandle";
 import { EditorTab } from "./EditorTab";
+import "./splitView.css";
 
 /** 表格编辑器（FortuneSheet，~0.6MiB gzip）按需加载：只在真的打开表格文档时才进首屏之外的分包。 */
 const SheetEditor = lazy(() => import("../sheet/SheetEditor").then((m) => ({ default: m.SheetEditor })));
@@ -67,8 +69,22 @@ interface MultiTabEditorProps {
   /** 顶栏右侧元素（外观/更多），渲染在标签最右侧 */
   topbarTrailing?: ReactNode;
   emptyAction?: ReactNode;
-  /** 正文顶部路径（思源 protyle-breadcrumb），插在标签栏与编辑器之间 */
-  breadcrumb?: ReactNode;
+  /** 面包屑（261008）：按 noteId 取该文档的笔记本名；由 EditorTab **自渲染**（每栏一条、随栏宽收缩）。 */
+  notePathTitle?: (noteId: string) => string | null;
+  /** 面包屑右端「更多」的锚点 + 回调（只在单栏时由焦点栏渲染）。 */
+  moreMenuWrapRef?: RefObject<HTMLDivElement>;
+  onToggleMoreMenu?: () => void;
+  /** 分屏（261008）：左右两栏的文档；null = 未分屏。最多两栏、不同文档、临时不持久化。
+   *  标签栏里这两页渲染成**一个合并标签**；点它才显示分屏区域。 */
+  splitPair?: { left: string; right: string } | null;
+  /** 点合并标签 = 回到分屏区域。 */
+  onActivateSplit?: () => void;
+  /** 合并标签上的 × = 取消分屏（两个标签都保留）。 */
+  onCloseSplit?: () => void;
+  /** 取消分屏（右栏标签仍保留在标签栏，只是回到单栏）。 */
+  onExitSplit?: () => void;
+  /** 左右位置互换（焦点跟随文档 ⇒ 视觉上焦点移到另一侧）。 */
+  onSwapSplit?: () => void;
 }
 
 export function MultiTabEditor({
@@ -95,7 +111,14 @@ export function MultiTabEditor({
   topbarLeading,
   topbarTrailing,
   emptyAction,
-  breadcrumb,
+  notePathTitle,
+  moreMenuWrapRef,
+  onToggleMoreMenu,
+  splitPair = null,
+  onActivateSplit,
+  onCloseSplit,
+  onExitSplit,
+  onSwapSplit,
 }: MultiTabEditorProps) {
   // 审计 §7.3：不再持有第二份可写正文（旧 contentCache/reloadKeysRef 已删）——
   // tab.content 只表示「最后已提交版本」；实时正文由 EditorTab 捕获、保存/草稿/关闭时按需 capture；
@@ -151,6 +174,49 @@ export function MultiTabEditor({
   const pinned = pinnedNoteIds ?? EMPTY_PINNED;
   const [tabCtx, setTabCtx] = useState<{ noteId: string; x: number; y: number } | null>(null);
 
+  // ---- 分屏（261008）：左右两栏、最多两个、不同文档、临时不持久化 ----
+  const panelsRef = useRef<HTMLDivElement>(null);
+  /** 左栏宽度（px）；null = 没拖过，两栏平分（CSS 的 1fr）。拖过只活在本次会话。 */
+  const [splitLeft, setSplitLeft] = useState<number | null>(null);
+  useEffect(() => { if (!splitPair) setSplitLeft(null); }, [splitPair]);
+  /** 分屏组是否**当前激活**（焦点在组内两页之一）：只有激活时才显示两栏；
+   *  点别的标签 = 普通单栏（合并标签仍在，点它再回分屏）。 */
+  const splitActive = useMemo(
+    () => splitPair != null && activeNoteId != null && (activeNoteId === splitPair.left || activeNoteId === splitPair.right),
+    [splitPair, activeNoteId],
+  );
+  /** 合并标签挂在组内更靠前那页的位置；任一侧不在已开标签里 → null（自愈）。 */
+  const splitFirstNote = useMemo(() => {
+    if (!splitPair) return null;
+    const li = tabs.findIndex((t) => t.noteId === splitPair.left);
+    const ri = tabs.findIndex((t) => t.noteId === splitPair.right);
+    if (li < 0 || ri < 0) return null;
+    return li <= ri ? splitPair.left : splitPair.right;
+  }, [splitPair, tabs]);
+  const splitLeftTab = useMemo(() => (splitPair ? tabs.find((t) => t.noteId === splitPair.left) ?? null : null), [splitPair, tabs]);
+  const splitRightTab = useMemo(() => (splitPair ? tabs.find((t) => t.noteId === splitPair.right) ?? null : null), [splitPair, tabs]);
+  /** 本标签显示在哪一栏：分屏组**激活**时 left/right，否则恒 null。 */
+  const paneOf = useCallback((noteId: string): "left" | "right" | null => {
+    if (!splitActive || !splitPair) return null;
+    if (noteId === splitPair.left) return "left";
+    if (noteId === splitPair.right) return "right";
+    return null;
+  }, [splitActive, splitPair]);
+  /** 本标签是否显示：分屏组激活时两栏都显示（右栏非焦点由 data-pane-visible 放行）；否则只有焦点标签。 */
+  const paneVisible = useCallback((noteId: string) => (splitActive && splitPair ? paneOf(noteId) != null : noteId === activeNoteId), [splitActive, splitPair, paneOf, activeNoteId]);
+  const measureSplitLeft = useCallback(() => {
+    const first = panelsRef.current?.querySelector<HTMLElement>('[data-pane="left"]');
+    return first ? first.getBoundingClientRect().width : 320;
+  }, []);
+  /** 点进任一栏即把焦点切到该栏（焦点栏决定 data-active / 面包屑 / 大纲 / 快捷键）。 */
+  const handlePanePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!splitActive || !splitPair) return;
+    const host = (event.target as HTMLElement).closest<HTMLElement>("[data-pane]");
+    const pane = host?.getAttribute("data-pane");
+    const noteId = pane === "left" ? splitPair.left : pane === "right" ? splitPair.right : null;
+    if (noteId && noteId !== activeNoteId) onTabChange(noteId);
+  }, [splitActive, splitPair, activeNoteId, onTabChange]);
+
   // ---- 拖拽排序（pointer 事件，无外部依赖）----
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; active: boolean } | null>(null);
@@ -188,7 +254,7 @@ export function MultiTabEditor({
   }, [tabOrderKey]);
 
   const beginTabDrag = (event: ReactPointerEvent<HTMLButtonElement>, noteId: string) => {
-    if (event.button !== 0 || !onTabsReorder) return;
+    if (event.button !== 0 || !onTabsReorder || splitPair) return;   // 分屏组期间禁用拖拽（合并标签≠单 noteId）
     if ((event.target as HTMLElement).closest(".tab-close")) return;
     dragRef.current = { id: noteId, startX: event.clientX, startY: event.clientY, active: false };
   };
@@ -279,9 +345,12 @@ export function MultiTabEditor({
   }, [tabMenuOpen]);
 
   useEffect(() => {
-    const activeTab = tabItemsRef.current?.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(activeNoteId ?? "")}"]`);
+    const strip = tabItemsRef.current;
+    if (!strip) return;
+    const activeTab = strip.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(activeNoteId ?? "")}"]`)
+      ?? (splitActive ? strip.querySelector<HTMLElement>("[data-split-group]") : null);
     activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  }, [activeNoteId, tabs.length]);
+  }, [activeNoteId, tabs.length, splitActive]);
 
   /** 鼠标没有横向滚轮时，用垂直滚轮驱动顶部 tab 的横向滚动。
    * 触控板产生的 deltaX 保持原生行为；原生非 passive listener 才能安全 preventDefault。 */
@@ -319,10 +388,45 @@ export function MultiTabEditor({
         {topbarLeading && <div className="tabbar-leading">{topbarLeading}</div>}
         <div className="tab-items" ref={tabItemsRef} role="tablist" aria-label="打开的文档">
           {tabs.map((tab) => (
+            splitPair && splitFirstNote != null && (tab.noteId === splitPair.left || tab.noteId === splitPair.right) ? (
+              tab.noteId === splitFirstNote ? (
+                <button
+                  key="__split_group__"
+                  type="button"
+                  className={`tab-item tab-split-tab${splitActive ? " active" : ""}`}
+                  data-split-group="true"
+                  role="tab"
+                  aria-selected={splitActive}
+                  title={`分屏：${splitLeftTab?.title || "无标题"} ｜ ${splitRightTab?.title || "无标题"}`}
+                  onClick={() => { if (suppressClickRef.current) return; onActivateSplit?.(); }}
+                >
+                  <span className="tab-split-tab__half">
+                    {splitLeftTab?.icon && <span className="tab-custom-icon" aria-hidden="true">{splitLeftTab.icon}</span>}
+                    <span className="tab-title">{splitLeftTab?.title || "无标题"}</span>
+                    {splitLeftTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
+                  </span>
+                  <span className="tab-split-tab__divider" aria-hidden="true" />
+                  <span className="tab-split-tab__half">
+                    <Columns2 size={12} className="tab-split-tab__glyph" aria-hidden="true" />
+                    <span className="tab-title">{splitRightTab?.title || "无标题"}</span>
+                    {splitRightTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
+                  </span>
+                  <span
+                    className="tab-close"
+                    role="button"
+                    aria-label="取消分屏"
+                    title="取消分屏（两个标签都保留）"
+                    onClick={(event) => { event.stopPropagation(); onCloseSplit?.(); }}
+                  >
+                    <X size={12} />
+                  </span>
+                </button>
+              ) : null
+            ) : (
             <button
               key={tab.noteId}
               data-note-id={tab.noteId}
-              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${tab.deleted ? " deleted" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}`}
+              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${tab.deleted ? " deleted" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}${splitPair && (tab.noteId === splitPair.left || tab.noteId === splitPair.right) ? " in-split" : ""}`}
               onPointerDown={(e) => beginTabDrag(e, tab.noteId)}
               onPointerMove={moveTabDrag}
               onPointerUp={endTabDrag}
@@ -357,6 +461,7 @@ export function MultiTabEditor({
                 <X size={12} />
               </span>
             </button>
+            )
           ))}
         </div>
         {tabs.length > 0 && (
@@ -414,7 +519,6 @@ export function MultiTabEditor({
         )}
         {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
       </div>
-      {(tabs.find((t) => t.noteId === activeNoteId)?.kind ?? "doc") === "doc" && breadcrumb}
       {activeTabGone && (
         <div className="tab-gone-banner" role="status">
           <TriangleAlert size={14} aria-hidden="true" />
@@ -422,7 +526,12 @@ export function MultiTabEditor({
           {onOpenTrash && <button type="button" onClick={onOpenTrash}>打开回收站</button>}
         </div>
       )}
-      <div className="tab-panels">
+      <div
+        ref={panelsRef}
+        className={`tab-panels${splitActive ? " is-split" : ""}`}
+        style={splitActive && splitLeft != null ? ({ "--split-left": `${splitLeft}px` } as React.CSSProperties) : undefined}
+        onPointerDownCapture={handlePanePointerDown}
+      >
         {tabs.length === 0 ? <section className="empty-workspace">
           <span className="empty-workspace-icon" aria-hidden="true"><File size={24} /></span>
           <h2>开始写第一篇笔记</h2>
@@ -434,7 +543,9 @@ export function MultiTabEditor({
               <SheetEditor
                 noteId={tab.noteId}
                 content={tab.content}
-                visible={visible && tab.noteId === activeNoteId}
+                visible={visible && paneVisible(tab.noteId)}
+                focused={tab.noteId === activeNoteId}
+                pane={paneOf(tab.noteId)}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}
@@ -446,7 +557,9 @@ export function MultiTabEditor({
               <BitableEditor
                 noteId={tab.noteId}
                 content={tab.content}
-                visible={visible && tab.noteId === activeNoteId}
+                visible={visible && paneVisible(tab.noteId)}
+                focused={tab.noteId === activeNoteId}
+                pane={paneOf(tab.noteId)}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 locked={lockedNoteIds?.has(tab.noteId) ?? false}
                 onToggleLock={onToggleNoteLock && tab.deleted !== true ? onToggleNoteLock : undefined}
@@ -462,7 +575,9 @@ export function MultiTabEditor({
               <BoardEditor
                 noteId={tab.noteId}
                 content={tab.content}
-                visible={visible && tab.noteId === activeNoteId}
+                visible={visible && paneVisible(tab.noteId)}
+                focused={tab.noteId === activeNoteId}
+                pane={paneOf(tab.noteId)}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}
@@ -475,7 +590,12 @@ export function MultiTabEditor({
             noteId={tab.noteId}
             locked={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
             content={tab.content}
-            visible={visible && tab.noteId === activeNoteId}
+            visible={visible && paneVisible(tab.noteId)}
+            focused={tab.noteId === activeNoteId}
+            pane={paneOf(tab.noteId)}
+            pathTitle={notePathTitle?.(tab.noteId) ?? null}
+            moreMenuWrapRef={moreMenuWrapRef}
+            onToggleMoreMenu={onToggleMoreMenu}
             tocEnabled={tocEnabled}
             outlineEnhance={outlineEnhance}
             onChange={() => handleChange(tab.noteId)}
@@ -485,6 +605,20 @@ export function MultiTabEditor({
           />
           )
         ))}</Suspense>}
+        {splitActive && (
+          <SplitHandle
+            ariaLabel="调整分屏宽度"
+            minWidth={280}
+            maxWidth={2400}
+            minRight={280}
+            containerRef={panelsRef}
+            width={splitLeft}
+            measureLeft={measureSplitLeft}
+            onPreview={setSplitLeft}
+            onCommit={(next) => setSplitLeft(next)}
+          />
+        )}
+        {splitActive && <SplitPaneControls onExit={() => onExitSplit?.()} onSwap={() => onSwapSplit?.()} />}
       </div>
       {tabCtx && (
         <TabContextMenu
@@ -537,6 +671,99 @@ export function MultiTabEditor({
   );
 }
 
+
+/** 分屏浮动工具条（用户 261008 定稿）：浮在两栏之上、**按住可拖到任意位置**；
+ *  内容 = 拖拽把手 + `⋯` 菜单（取消分屏 / 左右互换）+ `×`。位置只存内存（分屏本身临时、不持久化）。 */
+function SplitPaneControls({ onExit, onSwap }: { onExit: () => void; onSwap: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const pillRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLElement | null>(null);
+  const { surfaceRef, style } = usePopoverPosition({ open, anchor: btnRef.current, align: "end" });
+  /** Menu 是 portal 到 body 的：outside-dismiss 必须把浮层表面也算「里面」，否则真实鼠标 pointerdown 会先把菜单关掉、选择被吞。 */
+  const setMenuRef = useCallback((el: HTMLElement | null) => { menuRef.current = el; surfaceRef(el); }, [surfaceRef]);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest("[data-split-controls]") && !menuRef.current?.contains(target)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  /** 按住工具条（按钮以外）拖动：坐标相对分栏容器、夹在容器内；只写内存。 */
+  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    const pill = pillRef.current;
+    const container = pill?.offsetParent as HTMLElement | null;
+    if (!pill || !container) return;
+    event.preventDefault();
+    const pillRect = pill.getBoundingClientRect();
+    const box = container.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const originLeft = pillRect.left - box.left;
+    const originTop = pillRect.top - box.top;
+    setDragging(true);
+    const onMove = (ev: PointerEvent) => {
+      const maxLeft = Math.max(0, box.width - pillRect.width);
+      const maxTop = Math.max(0, box.height - pillRect.height);
+      const x = Math.max(0, Math.min(originLeft + (ev.clientX - startX), maxLeft));
+      const y = Math.max(0, Math.min(originTop + (ev.clientY - startY), maxTop));
+      setPos({ x, y });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setDragging(false);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
+
+  return (
+    <div
+      ref={pillRef}
+      className={`tab-split-controls${dragging ? " is-dragging" : ""}`}
+      data-split-controls
+      style={pos ? { left: pos.x, top: pos.y, right: "auto" } : undefined}
+      onPointerDown={onPointerDown}
+      title="按住拖动可移到任意位置"
+    >
+      <span className="tab-split-grip" aria-hidden="true"><GripVertical size={14} /></span>
+      <button
+        ref={btnRef}
+        type="button"
+        className="ln-iconbtn ln-iconbtn--compact tab-split-btn"
+        aria-label="分屏选项"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <MoreHorizontal size={15} />
+      </button>
+      <button type="button" className="ln-iconbtn ln-iconbtn--compact tab-split-btn" aria-label="取消分屏" onClick={onExit}>
+        <X size={14} />
+      </button>
+      {open && (
+        <Menu surfaceClassName="context-menu" label="分屏" onDismiss={() => setOpen(false)} surfaceRef={setMenuRef} style={style ?? undefined}>
+          <button role="menuitem" onClick={() => { onExit(); setOpen(false); }}><X size={15} /><span>取消分屏</span></button>
+          <button role="menuitem" onClick={() => { onSwap(); setOpen(false); }}><ArrowLeftRight size={15} /><span>左右互换</span></button>
+        </Menu>
+      )}
+    </div>
+  );
+}
 
 interface TabContextMenuProps {
   x: number;
