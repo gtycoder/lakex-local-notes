@@ -84,5 +84,4 @@ origin  git@gitee.com:gtycoder/local-lake.git
 | docs/TROUBLESHOOTING.md                      | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑）                        | 遇坑查          |
 | docs/PANEL-CONTRACT.md · docs/UI-PRIMITIVES-PHASE1-260926.md | 面板几何/层序契约、浮层原语规范 | 改 UI/外壳前读 |
 | docs/RELEASE.md · docs/SYNC-RELIABILITY-VERIFY.md | 打包发布与同步可靠性验收 | 发布前读 |
-| VIRTUAL-RENDERING-TEST.md                    | 虚拟渲染回归清单（逐项手测）                                                  | 动虚拟渲染相关代码前后跑 |
 

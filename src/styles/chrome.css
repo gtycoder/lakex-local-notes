@@ -530,7 +530,7 @@
 .note-row {
   /* 261006：改**对称** 8px（原右 7 / 左 8——左侧那 1px 来自 Sidebar 的行内 paddingLeft:8，
    * 已删除；值现在只在本条 shell 层规则里）。注意 app/shell.css 里那条 .note-row 的 padding
-   * 是 legacy 层、被本条覆盖，属死声明（见 docs/UI-REFRESH-261006.md 的 1.5）。 */
+   * 是 legacy 层、被本条覆盖，属死声明。 */
   padding: 2px 8px;
   border-radius: var(--lake-radius-sm);
   color: var(--lake-text-2);

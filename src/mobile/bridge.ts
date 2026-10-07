@@ -3,7 +3,7 @@
  * - 数据层：Android 原生 SQLite（WAL，见 nativeSqliteDb.ts）
  * - S3：@aws-sdk/client-s3 + CapacitorHttpHandler（原生传输层，无 CORS）
  * - 同步：syncEngine（manifest v4 协议，复用 src/core 决策纯函数）
- * - 范围 = docs/MOBILE-TECH-STACK.md §9.2 的最小 IPC 集（POC 版）
+ * - 范围 = docs/MOBILE-TECH-STACK.md 的最小 IPC 集（POC 版）
  */
 import { NativeSqliteDb } from "./nativeSqliteDb";
 import { writeLocalStorage } from "../lib/localStorageSafe";

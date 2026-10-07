@@ -4,7 +4,7 @@
  * 把「一次用户操作要改哪些字段、哪些视图配置」从编辑器组件收敛到 core 单一来源：
  * 组件只决定「什么时候调用、调用谁」，不再自己遍历 tables/views 做清理。
  *
- * 约束（见 docs/BITABLE-OPTIMIZATION-HANDOFF.md §17.7 AR02）：
+ * 约束：
  * - 纯函数，无 DOM / React / node: 依赖；
  * - 入参是当前 doc + 明确目标（tableId / recordId / fieldId）与值，返回新 doc；
  * - **没有实际变化时返回原引用**，避免空写入消耗写事件/撤销步数；

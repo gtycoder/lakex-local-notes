@@ -1,7 +1,7 @@
 /**
  * AI 字段生成控制器（261003）：单格生成 + 整列批量生成（并发 2–3、可取消、失败可重试）。
  *
- * 约束（见 docs/BITABLE-OPTIMIZATION-HANDOFF.md §7 批次 G）：
+ * 约束：
  * - 生成 = **显式用户命令**（不自动重跑）；请求组装走 core 的 buildAiFieldMessages 单一来源；
  * - 写入走 setBitableCellValue 唯一闸口；整列生成用 beginGesture/endGesture 包住 ⇒ **一次撤销**；
  * - 只读 / 字段被删 / 取消 → 未开始的格不再发请求，已完成的保留（与附件回填同一契约：结果只写原目标）。

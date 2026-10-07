@@ -4,7 +4,7 @@
  * - 与桌面 `electron/dbLike.ts`（V5 Phase 2）的接口形态对齐：
  *   prepare / exec / transaction 全同步（better-sqlite3 风格）。
  * - 历史遗留 POC 持久化已移除；现在只保留同步 API 形态供测试和一次性迁移验证使用。
- * - POC 结论（见 docs/MOBILE-TECH-STACK.md §9.3）：
+ * - POC 结论（见 docs/MOBILE-TECH-STACK.md）：
  *   wa-sqlite 官方包 JS 层硬编码 Asyncify（async=true），无法直接同步调用；
  *   sql.js 提供现成同步 API，作为 WASM 路线的 DbLike 实现。
  */
