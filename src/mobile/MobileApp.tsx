@@ -259,6 +259,7 @@ export function MobileApp() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onRefresh={refreshAll}
+        onOpenNote={(id) => void openNote(id, "viewer")}
       />
       {route.kind === "home" && (
         <HomePage

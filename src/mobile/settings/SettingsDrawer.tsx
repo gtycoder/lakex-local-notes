@@ -15,7 +15,7 @@ import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
-import type { S3Settings, SyncSettings } from "../../lib/types";
+import type { S3Settings, SyncSettings, SyncWarning } from "../../lib/types";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -24,6 +24,8 @@ export interface SettingsDrawerProps {
   open: boolean;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  /** 点击同步告警：打开对应文档。 */
+  onOpenNote?: (noteId: string) => void;
 }
 
 type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "cache" | "trash" | "about";
@@ -51,7 +53,7 @@ function formatBytes(n: number): string {
 }
 
 export function SettingsDrawer(props: SettingsDrawerProps) {
-  const { open, onClose, onRefresh } = props;
+  const { open, onClose, onRefresh, onOpenNote } = props;
   const [view, setView] = useState<View>("menu");
 
   /** 小记桌面快捷方式：部分机型不展示静态快捷方式，这里给「添加到桌面」兜底（对齐思源）。 */
@@ -64,6 +66,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
+  const [syncWarnings, setSyncWarnings] = useState<SyncWarning[]>([]);
   const [cacheMsg, setCacheMsg] = useState("");
   const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
@@ -149,6 +152,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     try {
       const result = await bridge.syncNow();
       setSyncMsg(result.message);
+      setSyncWarnings(result.notes?.warnings ?? []);
       await onRefresh();
     } catch (e) {
       setSyncMsg("同步失败: " + (e as Error).message);
@@ -334,6 +338,26 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     {s3Test && <div className="config-block__text">{s3Test}</div>}
                     {syncMsg && <div className="config-block__text">{syncMsg}</div>}
                   </div>
+                  {syncWarnings.length > 0 && (
+                    <div className="config-block">
+                      <div className="config-block__name">同步有 {syncWarnings.length} 项被跳过</div>
+                      <div className="config-block__text">远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</div>
+                      <div className="b3-list b3-list--background" role="list">
+                        {syncWarnings.map((w, i) => (
+                          <button
+                            key={`${w.kind}-${w.noteId ?? i}-${w.filename ?? ""}`}
+                            type="button"
+                            className="b3-list-item"
+                            disabled={!w.noteId || !onOpenNote}
+                            onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
+                          >
+                            <span className="b3-list-item__text ln-ellipsis">{w.title || w.noteId || "未命名文档"}</span>
+                            <span className="b3-list-item__meta">{w.kind === "asset_missing" ? (w.filename ?? "资源缺失") : "正文缺失"}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </>

@@ -133,7 +133,7 @@ export function HomePage(props: HomePageProps) {
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
   const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
-    try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
+    try { const r = await bridge.syncNow(); const w = r.notes?.warnings?.length ?? 0; showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : "")); }
     catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
   const toggleView = (): void => {
