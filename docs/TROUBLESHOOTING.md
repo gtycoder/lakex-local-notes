@@ -171,3 +171,105 @@
 - **portal 浮层的 outside-dismiss 必须把浮层表面也算「里面」**：`Menu`（Overlay）是 portal 到 `body` 的；若只在锚点容器（如 `[data-split-menu]`）里判断，
   真实鼠标落在**菜单项**上的 `pointerdown` 会先触发 dismiss → 菜单卸载 → 随后的 `click` 落空（现象＝「点菜单项没反应」，用户 261008 报「点分屏没效果」）。
   接法：把 `surfaceRef` 同时写进自己的 `menuRef`，判断 `target.closest(锚点容器) || menuRef.current.contains(target)`。分屏入口与右栏菜单各修一处。
+
+## M. 2026-10-08 表格图标改成云端 lakex 图标（iconfont 字形）+ 补丁重建
+
+- **图标是内联 `<symbol>` 雪碧图，不是图标字体、也不是独立 SVG 文件**（语雀云端是后者：`background-image: url(....svg)` +
+  `::before`）。内核用 `React.createElement("symbol", {...}, …)` 定义、`<use xlinkHref="#bold">` 引用 ⇒ **换形状只能改 symbol 的 path**。
+  一律走 `scripts/sheet-icons.mjs` + `scripts/sheet-icons.cloud.json`（幂等，`--check` 干跑不落盘），**不要手改 bundle**。
+- **图标从哪来**（用户 261008 定稿：**用云端 lakex 表格的图标**；`lucide` 那版被否：「很丑而且不直观」）：
+  ① **云端工具栏/菜单是阿里 iconfont `lake-icon`**（`@font-face` 指 `at.alicdn.com/.../font_943843_*.ttf`，
+  CSS 里 `.lake-icon-<name>:before { content: "\ea46" }`）⇒ 下载 ttf，用 fontTools 的 `SVGPathPen` 抽字形，
+  **em 盒（unitsPerEm=1024）映射到 24 并翻转 Y**（`Transform(24/1024, 0, 0, -24/1024, 0, 24)`），TrueType 用非零环绕
+  ⇒ 存成 `{"d": ...}` + `fill="currentColor"`。
+  ② **云端没字形的**：文字颜色 / 背景色是**内联 SVG**（256 viewBox，与内核 `icon-editor-color` / `icon-editor-cellBgColor` 同一张图），
+  边框族是 `.lake-sheet-svg-icon-border-*` 的 **svg 资源**（`gw.alipayobjects.com/zos/...`）⇒ `scale(24/256)` 后内联。
+  ⚠️ 这两类**必须保留 `<g transform>` 嵌套**（扁平化成兄弟节点会丢掉 `translate`，图形整体移位）；填充色除产品自带的色条红
+  （`#F5222D`）一律换成 `currentColor`。
+  ③ **两边都没有的保持内核原样**（26 个：`border-horizontal` / `border_diagonal_*` / `border-vertical` / `border-slash` /
+  `comment` / `merge-horizontal` / `merge-vertical` / `minus` / `fx` / `percentage-format` / `text-rotation-*`（6）/
+  `screenshot` / `splitColumn` / `locationCondition` / `dataVerification` / `eraser` / `filter-fill` / `filter-fill-white` /
+  `tab` / `default`）。覆盖 76/102。
+  ⚠️ **下拉箭头**：云端是「右向 chevron + CSS `rotate(90deg)`」⇒ 抽的时候要把旋转**烘进 transform**（否则方向是横的）。
+- ⚠️ **别按名字想当然挑字形**（261008 现场返工一次）：对齐族该用字体的 **`left` / `center` / `right` / `top` / `middle` / `bottom` / `justify`**
+  （≡ 与箭头样式，= 云端工具栏 `lake-icon-left` / `-middle` 那一支）；按名字直译去挑 `align-left` / `align-h-center` / `align-v-center`
+  会拿到「框 + 竖条」的另一套（看着也像对齐，但外层按钮与下拉项全错）。**逐个渲染出来对照截图再定映射**。
+- ⚠️ **下拉项里图标与文案的先后顺序**：云端是「**图标在前、文案在后**」且左对齐；内核默认 `.fortune-toolbar-menu-line`
+  是 `justify-content: space-between`（文案顶左、图标甩最右）⇒ 用一行 CSS 在 `.fortune-toolbar-combo-popup` 内
+  `flex-direction: row-reverse; justify-content: flex-end` 改排布（不动 DOM）。
+- ⚠️ **ESM 与 CJS 的 callee 不同**：`dist/index.esm.js` 是 `React.createElement`，`dist/index.js` 是
+  `React__default['default'].createElement`。生成器必须**先识别 callee 前缀再替换**；写死 `React.` 会产出
+  `React.React.createElement`（`React.React` 为 undefined）⇒ 表格整块渲染崩，被 `SheetEditorErrorBoundary` 接住成
+  「该类型编辑器渲染出错」。症状是**只有表格挂着、其它编辑器正常**。
+- ⚠️ **`npm install --ignore-scripts` 会把包还原成"只有原始包"**（其它 hunk 全失效）。在那之后重建补丁 = 把别人的本地改动
+  一起抹掉——本轮踩过一次，靠 `sheetEditorMount.test.ts`（断言补丁里含 `context.allowEdit === false ? false` /
+  `_lakeUseInternal`）才抓出来。要动某个包的 node_modules：**先 `git checkout -- patches/<该包>.patch` 恢复补丁**，
+  再移走目录、`npm install`（**不带** `--ignore-scripts`）让它重新打上，然后才做改动。
+- **重建流程**（改完 node_modules 之后）：
+  ```bash
+  node scripts/sheet-icons.mjs                                                  # 幂等；加 --check 只报告
+  PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" npx patch-package @fortune-sheet/react
+  ```
+  重建会**重排 hunk**，可能多出「纯空格上下文行」（行内容只有一个空格）⇒ `git diff --check` 报尾随空格。
+  把这些行转成真空行即可（实测 `patch-package` 仍能从头应用；`patches/@plait+draw+0.93.4.patch` 本来就有这种写法）。
+- **必须做"全新安装"复验**，别只看本机现在能跑：`mv node_modules/@fortune-sheet/react <备份>` → `npm install` →
+  确认日志里 `@fortune-sheet/react@1.0.4 ✔`，再 `rg -c "strokeWidth|_LAKE_MENU_ICONS|_lakeUseInternal" node_modules/@fortune-sheet/react/dist/index.esm.js`。
+- **右键菜单图标位**：内核 `Menu` 只渲染文案 ⇒ 补丁注入 `_LAKE_MENU_ICONS`（key→symbol）与 `_lakeMenuIcon` 装饰器
+  （在容器两处 `map` 外包一层，用 `cloneElement` 把 `key` 变成 `menuKey` 传给 `Menu`），`Menu` 再渲染「图标 + 文案」。
+  图标落进菜单项本来就留着的 30px 左内边距（原来是空的勾选位），**不动内边距与条目顺序**。
+
+## N. 2026-10-08 表格「自动换行」不撑开行高
+
+- **内核只做一条路**：`@fortune-sheet/core` 的自适应写在 `updateCell`（**单格编辑提交**）里，而且前置条件是
+  「`config.columnlen[c]` 与 `config.rowlen[r]` **都没设过**」——列宽被手动调过、或行高被设过，就**永久跳过**（源码里那句
+  `if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r]))`）。它用的度量是内核的 `getCellTextInfo`（canvas 精确换行）。
+- **三条路根本不触发**：粘贴（批量写入）、改列宽、打开已有文档。实测：粘贴 2×5 数据后 `rowlen` 只保留旧值，新行没有条目。
+- **我们的补法**：`SheetEditor.syncAutoRowHeights(rows?)`（**只涨不缩**、只算自动换行的单元格、按整行取最大值），
+  触发点 = ① `afterUpdateCell`（单格）② `onOp` → `scheduleAutoRowHeights()`（节流 160ms；粘贴后内核把选区设成落盘范围，
+  正好用来定位行）③ 首次可见时 `rowsWithCells()` 补一遍（吃老文档）。自己算是因为 `getCellTextInfo` 要内核内部 ctx，
+  公开 API 拿不到；口径按 `fontSize × 96/72` 与 `defaultRowHeight(19)` 对齐。
+- ⚠️ **粘贴进来的单元格没有 `tb`**：我们的默认 WRAP 是在 `withCellDefaults` 里对**已有内容**补的，内核批量写入不经过它
+  ⇒ 行高判定必须把 **缺省 tb 当 WRAP**，只跳过显式 `0` / `1`（截断 / 溢出）。漏了这条 = 粘贴的行永远不参与自适应。
+- **更根上的那条：内核默认 `tb` 是 `"0"`（截断）**。`normalizedCellAttr` 里那句 `attr === "tb" || attr === "tr"` 把两者
+  的缺省都设成 `"0"` —— 与本产品默认（自动换行）相反 ⇒ 粘贴进来的单元格**渲染上也不换行**（不只是行高的事）。
+  已在 `patches/@fortune-sheet+core+1.0.4.patch` 拆开：`tb` 缺省 `"2"`、`tr` 仍 `"0"`（`tr` 是文字旋转，别一起改）。
+  **别把 `tb` 缺省改回 `"0"`**：改回去 = 粘贴不换行 + 内核自适应认不到（`curv.tb === "2"` 判据）。
+- **右键「自动行高」**：内核右键菜单对**未知 key** 会兜底到 `settings.customToolbarItems`（`getMenuElement` 末尾那段）
+  ⇒ 加一个 `{key, tooltip, icon, onClick}` 就能进菜单；**只要不把这个 key 列进 `TOOLBAR_ITEMS`，它就不会出现在工具栏**。
+  ⚠️ **已知余量**：点完「自动行高」后，该行在内核里的 `config.customHeight[r]` **仍留着**（内核没有清这个标记的公开 API：
+  `setRowHeight(info, options, custom=false)` 只写 `rowlen`、不删 `customHeight`）⇒ 之后**只涨不缩**的那些自动触发
+  （单格提交 / 批量 op）仍会跳过这一行，直到下次列宽变化（整表 refit）或再点一次「自动行高」。实测（261008 隔离实例）：
+  手动把第 1 行设成 300px（`rowlen[0]=300, customHeight={"0":1}`）→ 点「自动行高」→ `rowlen[0]=117`（=长 URL 换行后的高度），
+  `customHeight` 仍为 `{"0":1}`。要彻底"恢复自动"得往 config 里删这个键，属独立小项，**别顺手改内核**。
+- **列宽变化要整表重算**（用户 261008：「需要全都算」）：拖列宽时内核**可能只落一次 op、甚至不落**（mouseup 直接改 config），
+ 所以判据用「`config.columnlen` 快照变了」而不是 op 类型；命中就按 `rowsWithCells()` 整表重算（节流 160ms）。
+- ⚠️ **第一遍 Cmd+V 整块丢（用户 261008 报「要按两次才生效 / 闪烁了一下没有内容」）= 内核单例 `selectionCache` × 多实例挂载**
+  （261008 结案，**不是**「两段式协议太脆」）：
+  · 粘贴协议：**keydown** 里 `handleWithCtrlOrMetaKey` 把 `selectionCache.isPasteAction = true`，**paste 事件**里 `handlePaste`
+    消费它并复位。`selectionCache` 在 `@fortune-sheet/core` 里是**模块级单例**（`var selectionCache = {…}`，被所有 Workbook 共用）。
+  · 而 react 侧 `onPaste` 是**每份挂载的 Workbook 各挂一次**的 `document` 监听，判据只看 `document.activeElement.className
+    === "fortune-sheet-overlay"`。本应用**多标签常驻挂载**（隐藏标签页里的表格实例仍在 DOM 里，`getBoundingClientRect` 非 0）⇒
+    隐藏那份**也满足判据**，于是**先注册的那份抢先把标志消费掉、把剪贴板内容写进自己的表**；活动表格这一遍
+    `isPasteAction` 已是 false ⇒ `handlePaste` 空转，但 react 侧的**插行是另一条 state 更新、不看这个标志**，所以行被撑开到
+    300 而内容为空 —— 正是用户描述的「闪烁了一下没有内容」。第二遍为什么好？第一遍后隐藏实例的 data 变了 → 它的
+    `onPaste` 依赖（`[context, setContextWithProduce]`）变化 → `useEffect` 重挂监听 → 它排到最后，轮到活动表格消费。
+  · **修法（只在 react 补丁里，core 保持内核原样）**：判据限定在**本实例容器内** ——
+    `… className === "fortune-sheet-overlay" && workbookContainer.current?.contains(document.activeElement)`。
+    ⚠️ **不要再回到「在 core 里放宽判据」那条路**（曾试过 `if (selectionCache.isPasteAction || e.clipboardData || window.clipboardData)`）：
+    那会让**每一份挂载的实例**各自粘贴一遍（隐藏表格也被写入）。护栏见 `sheetEditorMount.test.ts`。
+  · **复现/验收姿势（隔离实例实测，300 行 HTML 表格 → 空表 = 需要插 250 行）**：① 剪贴板要带 **`text/html` 的 `<table>`**
+    （`pbpaste` 只有纯文本时 `trs=0`、不触发插行分支 ⇒ 测不到；macOS 可用
+    `osascript -e 'set the clipboard to (read (POSIX file "x.html") as «class HTML»)'`）；② **必须开两份表格实例**（两个表格标签页，
+    隐藏那份才是元凶；单实例永远不复现）；③ 焦点落在目标表的 overlay（CDP 里先 `Input.dispatchMouseEvent` 点网格，再
+    `document.querySelector('.sheet-editor[data-active="true"] .fortune-sheet-overlay').focus()`，否则 `onPaste` 判据不成立）；
+    ④ `Input.dispatchKeyEvent({modifiers:4, commands:["Paste"]})`；⑤ 落盘**有几秒延迟**（`…/workspace-default/sheets/<noteId>.sheet.json`
+    会晚于界面出现）。修前：活动表 `row=300 / celldata=0`（丢），隐藏表 `celldata=1500`（被写入）；修后：活动表
+    `row=300 / rowlen=300 / celldata=1500`，隐藏表 `celldata=0`。
+  · **别顺手把「插行」挪进同一次 `setContextWithProduce`**：261008 试过并撤回了 —— 单实例路径下上游那两次 state 更新本来
+    就按序 flush（只按一次 Cmd+V 就能落 300 行），合并**不解决**这个问题，只是多一处与上游的偏离。
+- **没虚拟化 ⇒ 行数多就重**：280×5 粘贴实测 JS 工作量 ~350ms、无 long task（Profile 采样），但**高行会让画布重绘变重**；
+  要追大表滚动性能属于「表格行虚拟化」立项（同 §3#11 的多维表那条），不在小修范围。
+- **验收姿势**：把带长 URL 的表格 `pbcopy` → 应用里选一个空行 → CDP
+  `Input.dispatchKeyEvent({modifiers:4, commands:["Paste"]})`（macOS 的 Cmd+V）→ 读
+  `<userData>/workspace-default/sheets/<noteId>.sheet.json` 的 `config.rowlen` 是否新增该行。**注意**
+  `Input.insertText` 不会触发内核的输入处理（DOM 里有字、模型是空的），要用逐字符 keyDown+text 或真 Cmd+V。

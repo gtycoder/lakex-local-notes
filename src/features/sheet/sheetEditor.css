@@ -177,15 +177,10 @@
 .sheet-editor .luckysheet-cell-flow-row-line {
   border-bottom-color: var(--lake-border-1);
 }
-.sheet-editor .fortune-freeze-drag-line {
-  border-color: var(--lake-accent);
-}
-.sheet-editor .fortune-cols-change-size,
-.sheet-editor .fortune-rows-change-size,
-.sheet-editor .fortune-cols-freeze-handle,
-.sheet-editor .fortune-rows-freeze-handle {
-  background-color: var(--lake-accent);
-}
+/* 冻结把手 / 改列宽抓手 / 冻结拖拽线**故意不做主题映射**（用户 261008 定稿）：
+ * 这三样是拖拽用的操作把手，不是「选中/状态」语义。258380d 曾把它们染成 --lake-accent，
+ * 暖色主题下网格左上角会挂两条扎眼的橙角标 ⇒ 退回**内核默认色**（把手浅灰、拖拽线浅灰、改宽线蓝；
+ * 后两者本来就只在悬停 / 拖拽时显现）。别再把它们改回主题色。 */
 .sheet-editor .fortune-col-header,
 .sheet-editor .fortune-row-header {
   color: var(--lake-text-3);
@@ -200,6 +195,18 @@
 .sheet-editor .fortune-toolbar-combo,
 .sheet-editor .fortune-toolbar-combo-arrow {
   color: var(--lake-text-2);
+}
+/* 图标盒：图标已换成**云端 lakex 表格的图标**（字形墨迹约占 24 网格的 78%，见 patches/ 与
+ * scripts/sheet-icons.mjs）⇒ 18px 正好还原云端实测的 14~15px 墨迹高度（云端按钮 32px/图标 14.5px，
+ * 我们是 28px/≈14px，密度更紧但同一套观感）；下拉箭头 12px。 */
+.sheet-editor .fortune-toolbar-button svg,
+.sheet-editor .fortune-toolbar-combo svg {
+  width: 18px;
+  height: 18px;
+}
+.sheet-editor .fortune-toolbar-combo-arrow svg {
+  width: 12px;
+  height: 12px;
 }
 .sheet-editor .fortune-toolbar-divider,
 .sheet-editor .fortune-toolbar-menu-divider {
@@ -252,6 +259,42 @@
 .sheet-editor .luckysheet-cols-menu .luckysheet-cols-menuitem,
 .sheet-editor .luckysheet-filter-bycolor-submenu .item {
   color: var(--lake-text-1);
+}
+/* 右键菜单图标位：菜单项本来就留了 30px 左内边距（内核原用于勾选位，一直空着），
+ * 图标直接落进这条槽，不改菜单内边距/条目顺序；图标来自同一套 sprite（见 patches/ 的 menuKey 注入）。 */
+.sheet-editor .luckysheet-cols-menuitem-content .luckysheet-cols-menuicon {
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--lake-text-3);
+}
+.sheet-editor .luckysheet-cols-menuicon svg {
+  width: 16px;
+  height: 16px;
+}
+/* 菜单项是 div[tabindex]，不在 tokens.css 那条 :where(button,…) 的焦点规范里 ⇒ 内核 focus() 第一项时
+ * 浏览器会画它**自己的默认焦点环**（深色下是橙色），跟主题完全无关。收编到项目同一套焦点环。 */
+.sheet-editor .luckysheet-cols-menu .luckysheet-cols-menuitem:focus-visible {
+  outline: var(--lake-focus-ring-width) solid var(--lake-accent);
+  outline-offset: -2px;
+}
+/* 内核给菜单项右侧留了 7em（供子菜单箭头），我们没有任何子菜单 ⇒ 收到 18px，菜单不再拖一条空尾。 */
+.sheet-editor .luckysheet-cols-menu .luckysheet-cols-menuitem-content {
+  padding-right: 18px;
+}
+/* 「对齐 / 换行 / 边框 …」这几个工具条下拉：云端是**图标在前、文案在后**（且左对齐），
+ * 内核默认 `justify-content: space-between` 把文案顶左、图标甩到最右 ⇒ 翻转成同一顺序。
+ * 只改这一处容器内的排布，不动 DOM / 其它菜单。 */
+.sheet-editor .fortune-toolbar-combo-popup .fortune-toolbar-menu-line {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .sheet-editor .fortune-toolbar-select-option:hover,
 .sheet-editor .fortune-border-select-option:hover,
@@ -315,13 +358,30 @@
   color: var(--lake-text-1);
 }
 
-/* 选区 / 填充柄 / 单元格编辑框 */
+/* 选区 / 填充柄 / 单元格编辑框
+ * 填充走**全应用统一的选中色** --lake-select-bg（主题无关固定值，见 themes/base.css）：它与文档正文、
+ * 多维表、输入框、AI 高亮是同一个色，用户 261006 定稿「填充固定 + 边框主题色」。
+ * 边框仍留 --lake-accent（与多维表 sel-* 边线同一套）。261008 深色模式那批误把填充也换成
+ * --lake-accent-tint，暖色主题（其 accent 本身就是橙色）下选区整片发橙，用户已指出并改回。 */
 .sheet-editor .luckysheet-cell-selected {
   border-color: var(--lake-accent);
-  background: var(--lake-accent-tint);
+  background: var(--lake-select-bg);
 }
 .sheet-editor .luckysheet-cell-selected-focus {
-  background: var(--lake-accent-tint);
+  background: var(--lake-select-bg);
+}
+/* 「当前选区」的行列头指示线：内核是硬编码的 Luckysheet 蓝，而选区边框走 --lake-accent
+ * ⇒ 同一圈选区出现两种颜色（用户 261008 报「边框两边颜色不同」就是这个）。
+ * 只改颜色、不动内核的宽度/位置；延长/移动选区的两个叠加框同理（都是"选区"语义，不跟主题就撞色）。 */
+.sheet-editor .fortune-col-header-selected {
+  border-bottom-color: var(--lake-accent);
+}
+.sheet-editor .fortune-row-header-selected {
+  border-right-color: var(--lake-accent);
+}
+.sheet-editor .fortune-cell-selected-extend,
+.sheet-editor .fortune-cell-selected-move {
+  border-color: var(--lake-accent);
 }
 .sheet-editor .luckysheet-cs-inner-border {
   border-color: var(--lake-bg-panel);

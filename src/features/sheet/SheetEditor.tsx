@@ -79,6 +79,7 @@ const CELL_CONTEXT_MENU = [
   "copy", "paste", "|",
   "insert-row", "insert-column", "delete-row", "delete-column", "delete-cell",
   "hide-row", "hide-column", "set-row-height", "set-column-width", "|",
+  "auto-row-height",   // 自定义项（由 customToolbarItems 提供；不在 TOOLBAR_ITEMS 里 ⇒ 只出现在右键菜单）
   "clear", "sort", "orderAZ", "orderZA", "filter", "chart", "cell-image", "link", "data", "cell-format",
 ];
 
@@ -224,6 +225,14 @@ const CELL_IMAGE_ICON = (
   </svg>
 );
 
+/** 右键「自动行高」的图标（自带 svg；该菜单项的图标位由 sprite 的 `cm-move-vertical` 提供）。 */
+const AUTO_ROW_HEIGHT_ICON = (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="M3.5 4.5h13M3.5 15.5h13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M10 7v6M7.6 9.2 10 6.8l2.4 2.4M7.6 10.8 10 13.2l2.4-2.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 /**
  * 估算「自动换行」后该行需要的高度。FortuneSheet 的行高自适应只在「旧值已存在 + 带 canvas」的
  * 编辑路径里跑，公开 API 触发不到；首次录入空单元格时更不会调（所以第二行会被压住）。
@@ -240,6 +249,38 @@ function estimateWrappedRowHeight(text: string, fontSize: number, cellWidth: num
   const lines = Math.max(1, Math.ceil(ctx.measureText(text).width / usable));
   const lineHeight = Math.round(fontPx * 1.43); // 10pt → ≈19px，与 defaultRowHeight 对齐
   return lines * lineHeight + 3;
+}
+
+/** 某行的单元格（优先 dense `data`，退回 sparse `celldata`）。 */
+function rowCellsOf(sheet: SheetWorksheet | null, row: number): Array<{ c: number; cell: Record<string, unknown> }> {
+  const dense = (sheet as { data?: unknown } | null)?.data;
+  if (Array.isArray(dense) && Array.isArray(dense[row])) {
+    return (dense[row] as Array<Record<string, unknown> | null>)
+      .map((cell, c) => (cell ? { c, cell } : null))
+      .filter((item): item is { c: number; cell: Record<string, unknown> } => item != null);
+  }
+  const sparse = (sheet as { celldata?: unknown } | null)?.celldata;
+  if (Array.isArray(sparse)) {
+    return (sparse as Array<{ r?: number; c?: number; v?: Record<string, unknown> | null }>)
+      .filter((item) => item?.r === row && item.v != null)
+      .map((item) => ({ c: Number(item.c) || 0, cell: item.v as Record<string, unknown> }));
+  }
+  return [];
+}
+
+/** 有内容的行号（打开已有文档时用来补一次行高；空表返回空）。 */
+function rowsWithCells(sheet: SheetWorksheet | null): number[] {
+  const dense = (sheet as { data?: unknown } | null)?.data;
+  if (Array.isArray(dense)) {
+    return dense.map((row, r) => (Array.isArray(row) && row.some((cell) => cell != null) ? r : -1)).filter((r) => r >= 0);
+  }
+  const sparse = (sheet as { celldata?: unknown } | null)?.celldata;
+  if (Array.isArray(sparse)) {
+    const rows = new Set<number>();
+    for (const item of sparse as Array<{ r?: number; v?: unknown }>) if (item?.v != null && Number.isInteger(item.r)) rows.add(Number(item.r));
+    return [...rows].sort((a, b) => a - b);
+  }
+  return [];
 }
 
 /** 给单元格补默认样式（只补缺省、不覆盖显式设置）：自动换行 + 全局字体。 */
@@ -439,6 +480,10 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
   const frozenOffsetAppliedRef = useRef(false);
   /** 几何同步的 rAF 句柄（合并突发变更：拖列宽会每帧一个 op）。 */
   const geomRafRef = useRef(0);
+  /** 行高自适应节流（粘贴等批量写入用；内核只在单格编辑提交那条路算行高）。 */
+  const autoRowTimerRef = useRef<number | null>(null);
+  /** 上一次见到的列宽快照（变了就整表重算行高）。 */
+  const colWidthsKeyRef = useRef<string>("");
   /** 单元格图片弹窗的有限重试计数（图片 DOM 由 React 提交，可能晚于本次刷新）。 */
   const menuRetryRef = useRef(0);
 
@@ -813,6 +858,81 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
     window.setTimeout(run, 120);
   }, [reconcileCellImages, syncCellImageGeometry, applyFrozenOffsets, refreshCellImageMenu]);
 
+  /** 当前选区的行号（粘贴后内核会把选区设成落盘范围，正好用来定位要重算的行）。 */
+  const selectionRows = useCallback((): number[] => {
+    const rows = new Set<number>();
+    for (const range of safeGetSelection(workbookRef.current)) {
+      const r = (range as { row?: unknown } | null)?.row;
+      if (!Array.isArray(r)) continue;
+      const from = Number(r[0]);
+      const to = Number(r[1] ?? r[0]);
+      if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
+      for (let i = Math.max(0, Math.min(from, to)); i <= Math.max(from, to); i++) rows.add(i);
+    }
+    return [...rows];
+  }, []);
+
+  /**
+   * 按「自动换行」重算行高（**只涨不缩**；只算 `tb==="2"` 且非空的单元格）。
+   *
+   * 为什么自己算：内核只在 `updateCell`（单格编辑提交）那条路上做自适应，而且要求「列宽 **或** 行高从未显式设置过」
+   * ——实测粘贴（批量写入）、改列宽、打开已有文档都不走那条路，于是「自动换行 + 长内容」的行高不撑开、文字被压住。
+   * `rows` 省略时取当前选区的行。
+   */
+  const syncAutoRowHeights = useCallback((rows?: number[], opts?: { refit?: boolean; ignoreCustom?: boolean }) => {
+    const wb = workbookRef.current;
+    if (!wb || readOnlyRef.current) return;
+    const sheet = activeSheet(wb, latestRef.current);
+    if (!sheet) return;
+    const refit = opts?.refit === true;          // 真·自适应：可涨**可缩**（右键「自动行高」/ 列宽变化）
+    const ignoreCustom = opts?.ignoreCustom === true; // 连用户手动调过的行也重算（仅在用户显式点菜单时）
+    const targetRows = (rows ?? selectionRows()).filter((r) => Number.isInteger(r) && r >= 0);
+    if (targetRows.length === 0) return;
+    const cellsByRow = targetRows.map((r) => rowCellsOf(sheet, r));
+    const cols = [...new Set(cellsByRow.flat().map((item) => item.c))];
+    if (cols.length === 0) return;
+    let widths: Record<number, number> = {};
+    let heights: Record<number, number> = {};
+    try { widths = (wb.getColumnWidth(cols) as Record<number, number>) ?? {}; } catch { widths = {}; }
+    try { heights = (wb.getRowHeight(targetRows) as Record<number, number>) ?? {}; } catch { heights = {}; }
+    const next: Record<number, number> = {};
+    targetRows.forEach((row, index) => {
+      // 用户手动调过的行高不参与自适应（与内核 `cfg.customHeight[r]` 的判据一致）
+      if (!ignoreCustom && (sheet.config as { customHeight?: Record<number, unknown> } | undefined)?.customHeight?.[row]) return;
+      let needed = 0;
+      for (const { c, cell } of cellsByRow[index]) {
+        // 只处理「自动换行」：本应用默认就是 WRAP（`withCellDefaults` 给缺省单元格补 tb=2），
+        // 而**粘贴进来的单元格没有 tb**（内核批量写入不走我们的补默认路径）⇒ tb 缺省按 WRAP 处理，
+        // 显式设成 0/1（截断/溢出）的才跳过。
+        if (cell.tb != null && String(cell.tb) !== "2") continue;
+        const text = typeof cell.m === "string" ? cell.m : cell.v == null ? "" : String(cell.v);
+        if (!text) continue;
+        const fontSize = Number(cell.fs) || 10;
+        const width = Number(widths[c]) || 73;
+        needed = Math.max(needed, estimateWrappedRowHeight(text, fontSize, width));
+      }
+      const current = Number(heights[row]) || 19;
+      const target = needed > 0 ? needed : 19; // 没有需要换行的内容 → 回到默认行高
+      if (refit ? Math.abs(target - current) > 1 : target > current + 1) next[row] = target;
+    });
+    if (Object.keys(next).length > 0) {
+      try { wb.setRowHeight(next); } catch { /* 忽略 */ }
+    }
+  }, [selectionRows]);
+
+  /** 行高重算的节流入口（粘贴是异步落盘，等一拍再算）。 */
+  const scheduleAutoRowHeights = useCallback((full = false) => {
+    if (autoRowTimerRef.current !== null) window.clearTimeout(autoRowTimerRef.current);
+    autoRowTimerRef.current = window.setTimeout(() => {
+      autoRowTimerRef.current = null;
+      const wb = workbookRef.current;
+      const sheet = wb ? activeSheet(wb, latestRef.current) : null;
+      // 列宽变化是显式布局动作 ⇒ 真·自适应（列变宽要能缩回去）；其它批量写入只涨不缩
+      syncAutoRowHeights(full && sheet ? rowsWithCells(sheet) : undefined, full ? { refit: true } : undefined);
+    }, 160);
+  }, [syncAutoRowHeights]);
+
+
   /** 当前选中的单元格（多选取左上角那格）。 */
   const selectedAnchor = useCallback((): CellAnchor => {
     const selection = safeGetSelection(workbookRef.current);
@@ -964,13 +1084,34 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
     () =>
       readOnly
         ? []
-        : [{ key: "cell-image", tooltip: "插入图片", icon: CELL_IMAGE_ICON, onClick: () => cellImageInputRef.current?.click() }],
-    [readOnly],
+        : [
+            { key: "cell-image", tooltip: "插入图片", icon: CELL_IMAGE_ICON, onClick: () => cellImageInputRef.current?.click() },
+            {
+              // 只在右键菜单出现（没有列进 TOOLBAR_ITEMS）；点它 = 整表重算「自动换行」的行高
+              key: "auto-row-height",
+              tooltip: "自动行高",
+              icon: AUTO_ROW_HEIGHT_ICON,
+              onClick: () => {
+                const wb = workbookRef.current;
+                const sheet = wb ? activeSheet(wb, latestRef.current) : null;
+                // 显式动作 = 真·自适应（可涨可缩），并覆盖用户手动调过的行高；
+                // 没选中任何东西时退化为整表。用户 261008：「点了自动行高并没有生效」就是只涨不缩导致的。
+                const picked = selectionRows();
+                syncAutoRowHeights(picked.length > 0 ? picked : sheet ? rowsWithCells(sheet) : undefined, {
+                  refit: true,
+                  ignoreCustom: true,
+                });
+              },
+            },
+          ],
+    [readOnly, syncAutoRowHeights],
   );
 
   const handleOp = useCallback(() => {
     scheduleGeometrySync();
-  }, [scheduleGeometrySync]);
+    // 批量写入（粘贴 / 填充 / 撤销）不走内核的单格提交路径 ⇒ 这里按选区行补一次行高（幂等：不涨就不再 set）
+    scheduleAutoRowHeights();
+  }, [scheduleGeometrySync, scheduleAutoRowHeights]);
 
   /**
    * 首次可见后：对一次几何（正文里的几何可能是上次会话留下的，中间改过列宽就对不上了），
@@ -986,6 +1127,8 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
     const host = hostRef.current;
     const raf = window.requestAnimationFrame(() => {
       syncCellImageGeometry();
+      // 打开已有文档：正文里「自动换行 + 长内容」的行若没存过行高（粘贴进来的），这里补一次
+      syncAutoRowHeights(rowsWithCells(activeSheet(workbookRef.current, latestRef.current)));
       applyFrozenOffsets();
       refreshCellImageMenu();
       // 恢复上次停留的工作表（内核初始化只认 status，多表下不可靠 ⇒ 显式 activateSheet）。
@@ -1005,7 +1148,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
       host?.removeEventListener("scroll", onScroll, { capture: true });
       window.removeEventListener("resize", onResizeMenu);
     };
-  }, [everVisible, syncCellImageGeometry, applyFrozenOffsets, refreshCellImageMenu, rememberSheetView, noteId]);
+  }, [everVisible, syncCellImageGeometry, syncAutoRowHeights, applyFrozenOffsets, refreshCellImageMenu, rememberSheetView, noteId]);
 
   /** 当前可持久化正文（与 flush 同口径：资产 URL → filename）。 */
   const bodyOf = (next: SheetWorksheet[]) => sheetsToBody(withPromotedImageSrc(next, promotedRef.current));
@@ -1090,6 +1233,14 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
     // 一定回调这里。不能只靠 `onOp`——实测拖列宽有时只落一次 op、甚至不落（内核在 mouseup
     // 直接改 config），漏一次几何就永久停在旧值。两处都挂，rAF 内合并，值没变就早退。
     scheduleGeometrySync();
+    // 列宽变了 ⇒ **整表**（所有有内容的行）重算行高（用户 261008：「需要全都算」）：
+    // 列宽直接决定自动换行的行数，只重算选区那几行会漏掉同列其它行。
+    const sheet = activeSheet(workbookRef.current, next);
+    const colKey = JSON.stringify((sheet?.config as { columnlen?: unknown } | undefined)?.columnlen ?? {});
+    if (colKey !== colWidthsKeyRef.current) {
+      colWidthsKeyRef.current = colKey;
+      scheduleAutoRowHeights(true);
+    }
     scheduleSave();
     rememberSheetView();
     // 有内联图片就立刻提升（不等 800ms 防抖，尽量在第一次保存前完成）；只读态不碰资源
@@ -1100,6 +1251,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
   useEffect(() => () => {
     // 卸载/切走前把未落盘的改动补齐（不丢最后一次编辑）
     if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
+    if (autoRowTimerRef.current !== null) { window.clearTimeout(autoRowTimerRef.current); autoRowTimerRef.current = null; }
     flush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1125,19 +1277,11 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
         // 默认自动换行 + 全局字体（只补缺省）
         if (wb.getCellValue(row, column, { type: "tb" } as never) == null) wb.setCellFormat(row, column, "tb", WRAP);
         if (wb.getCellValue(row, column, { type: "ff" } as never) == null) wb.setCellFormat(row, column, "ff", GLOBAL_FONT);
-        // 行高自适应（公开 API 触发不到内核那段 canvas 计算）：自己按列宽估算后 setRowHeight
-        const value = wb.getCellValue(row, column);
-        if (value == null || value === "") return;
-        const fontSize = Number(wb.getCellValue(row, column, { type: "fs" } as never)) || 10;
-        const colWidths = wb.getColumnWidth([column]) as Record<number, number> | undefined;
-        const cellWidth = Number(colWidths?.[column]) || 73;
-        const needed = estimateWrappedRowHeight(String(value), fontSize, cellWidth);
-        const rowHeights = wb.getRowHeight([row]) as Record<number, number> | undefined;
-        const current = Number(rowHeights?.[row]) || 19;
-        if (needed > current + 1) wb.setRowHeight({ [row]: needed });
+        // 行高自适应（内核那段 canvas 计算只在单格提交且列宽/行高未被显式设置过时才跑）：按整行重算
+        syncAutoRowHeights([row]);
       } catch { /* 忽略 */ }
     },
-  }), [refreshCellImageMenu]);
+  }), [refreshCellImageMenu, syncAutoRowHeights]);
 
   return (
     <div

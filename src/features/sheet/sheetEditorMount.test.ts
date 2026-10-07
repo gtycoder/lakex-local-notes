@@ -53,6 +53,25 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
     expect(patch).toContain("context.allowEdit === false ? false");
   });
 
+  it("自动换行行高：编辑提交 / 批量写入（粘贴）/ 打开文档三条路都要触发（内核只在单格提交且列宽行高未被显式设置时才自适应）", () => {
+    expect(SRC).toMatch(/afterUpdateCell[\s\S]{0,600}syncAutoRowHeights\(\[row\]\)/);
+    expect(SRC).toMatch(/const handleOp[\s\S]{0,240}scheduleAutoRowHeights\(\)/);
+    expect(SRC).toMatch(/syncAutoRowHeights\(rowsWithCells\(activeSheet/);
+    // 粘贴进来的单元格没有 tb（内核批量写入不走我们的补默认路径）⇒ 缺省必须按自动换行处理
+    expect(SRC).toMatch(/if \(cell\.tb != null && String\(cell\.tb\) !== "2"\) continue;/);
+  });
+
+  it("粘贴归属：内核单例 selectionCache 只能由「聚焦的那份 Workbook」消费（多标签下隐藏表格会抢走第一遍 Cmd+V）", () => {
+    // core 的 selectionCache 是**模块级单例**，而每份挂载的 Workbook 都会在 document 上挂一个 paste 监听 ⇒
+    // 内核原判据只看 document.activeElement 的**类名**，隐藏标签页里的表格也命中、把 isPasteAction 消费掉：
+    // 活动表格这一遍拿不到剪贴板数据（行被撑开、内容为空），用户要按第二次 Cmd+V。补丁把判据限定在**本实例容器内**。
+    const patch = readFileSync(new URL("../../../patches/@fortune-sheet+react+1.0.4.patch", import.meta.url), "utf8");
+    expect(patch).toContain("contains(document.activeElement)");
+    // 别再回到「在 core 里放宽判据」的老路：那会让所有挂载实例各自粘贴一遍。
+    const corePatch = readFileSync(new URL("../../../patches/@fortune-sheet+core+1.0.4.patch", import.meta.url), "utf8");
+    expect(corePatch).not.toContain("isPasteAction || e.clipboardData");
+  });
+
   it("只读工具栏：只留视图类（批注查看/定位条件/查找），写操作项不渲染", () => {
     // 260930 用户：只读时不必全隐藏，留一部分不影响数据的；依据=内核 allowEdit 门禁。
     expect(SRC).toMatch(/const TOOLBAR_ITEMS_READONLY = \["comment", "locationCondition", "\|", "search"\];/);
