@@ -16,6 +16,7 @@
 - **修一个真 bug**：`Switch` 的按钮是设置行的**直接 flex 子项**（没走 `.config-item__ctl` 包裹），而 `.ln-switch` 只写了 `width:32px`、没写 `flex-shrink:0` ⇒ 说明一长开关就被压扁（「启用云同步」「启用浏览器端」「使用 Path-style URL」等都中招）。修在单一来源 [kit.css](src/styles/kit.css) 的 `.ln-switch { flex: 0 0 auto }`；顺带给 `.ln-select__value` 补 `text-overflow: ellipsis`。
 - **同步配置收口**：「云端与同步」页顺序改为 **S3 对象存储 → 同步策略 → 云端回收（S3 GC）→ 备份与恢复**；`启用云同步` 加**真闸门**——只有 S3「测试连接」成功（会话内 `s3Verified`，改任一 S3 字段即失效）才能开启，且 `saveSyncCfg({enabled:true})` 兜底测试失败即中止（此前注释写「通过才开」、代码却照样写 `enabled`）。
 - **AI 常用预置**：[aiProviders.ts](src/core/aiProviders.ts) 新增 通义千问（`dashscope.aliyuncs.com/compatible-mode/v1`）/ 智谱 GLM（`open.bigmodel.cn/api/paas/v4`）/ 小米 MiMo（`api.xiaomimimo.com/v1`）；三家**不开**思考强度/思考模式（参数形状与 DeepSeek 不同，避免 400）。
+- **同步 warning 结构化**（backlog §3#1，本轮一并完成）：core 从「拼中文字符串 → 控制器正则反解」改为**直接产出结构化 `SyncWarning`**（`{kind, noteId?, title?, filename?, message}`；类型单一来源 [lib/types.ts](src/lib/types.ts)，`electron/syncTypes.ts` 改为 re-export）；`AssetMissingError` 结构化携带 `filename`；同步浮窗新增「被跳过」列表（复用冲突快照那块表面）并可**点击打开对应文档**。**同步语义不变**（仍是 B 方案：跳过受影响条目、不覆盖本地、下轮重试），只改报告契约。真实端 CDP：注入带 2 条 warnings 的 lastResult → 浮窗渲染 2 行、点击打开目标文档。
 - 门禁：tsc ✓ · 全量 vitest **1716 passed / 16 skipped** ✓ · check:core 76-0 ✓ · ui-metrics（hex=0/rgb=0/`!important`=9/未定义=0）✓ · 双端构建 ✓ · `git diff --check` ✓；快照重烤 7 个设置态（两次采集一致）。真实端 CDP 实测：单行版式、开关 32×19、S3 输入 332→390px、闸门禁用态、AI 下拉 6 项。
 
 ### 修复 · 261006 · 画板工具栏图标对齐 + 多维表展开浮窗适配边界
@@ -88,7 +89,7 @@
 
 > 多维表专项已收口；以下是专项之外真正保留的低优先项。
 
-1. **同步 warning 结构化**：`SyncReport.warnings` 从字符串改为 `{ kind, noteId?, filename?, message }`，与 UI 展示/点击定位一起做。同步红线区，单独立项。
+1. ~~**同步 warning 结构化**~~ **已完成（261007）**：core 直接产出 `SyncWarning`（`{kind, noteId?, title?, filename?, message}`，单一来源 `src/lib/types.ts`），控制器不再正则反解；同步浮窗展示「被跳过」列表 + 点击打开文档；`AssetMissingError` 结构化携带 `filename`。**同步语义未变**（仅报告契约）。
 2. ~~**画板 AI 助手**~~ **已完成（261003）**：接的就是内核 `ai.generate` 钩子，转主进程既有 AI 通道（Key 不出主进程、不新增 IPC），只读不给入口。见 git 历史。仍不做的是**文内文本绘图卡片**（`TextToDiagram`，内核那支绿色徽标无注入点）。
 3. **UI 低优先**：目录树窗口化（先量到真实卡顿再立项）·设计词表继续裁剪·画板 `Wt is not a function` 根因定位。
 4. **移动端剩余**：真机验收、数据导出/导入、粘贴与资源 URL、长文档大纲跳转；详细步骤见 §8。
