@@ -44,11 +44,11 @@ export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: stri
   );
 }
 
-/** 堆叠行：标题 + 说明在上、控件在下（设置页表单主形态：URL / Key / 模型 / 下拉；短控件仍用 Item）。
- *  error = 该字段的校验/连接错误，落在控件下方一行（走 .config-item__error）。 */
+/** 表单行：标题 + 说明在左、控件在右的**单行**版式（用户 261007 定稿：短配置不再堆叠）。控件列伸展、输入/下拉铺满。
+ *  error = 该字段的校验/连接错误，自动折到下一行整宽（走 .config-item__error）。 */
 export function Field({ itemId, name, desc, pathDesc, error, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; error?: ReactNode; children?: ReactNode }) {
   return (
-    <div className={"b3-label config-item config-item--stack" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
+    <div className={"b3-label config-item config-item--field" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
         {desc && <div className="b3-label__text">{desc}</div>}
@@ -125,7 +125,7 @@ export function NumField({ label, value, min, max, floor, fallback, onSave }: { 
   );
 }
 
-/** 文本设置项（S3 配置等）。放在 Field 里，宽度由行的布局给（整行铺满），不再各自定宽。 */
+/** 文本设置项（S3 配置等）。放在 Field 里，宽度由行的布局给（铺满右侧控件列），不再各自定宽。 */
 export function TextField({ label, value, onSave, type = "text", placeholder }: { label: string; value: string; onSave: (v: string) => void; type?: "text" | "password"; placeholder?: string }) {
   return (
     <input

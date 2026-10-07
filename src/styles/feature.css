@@ -43,7 +43,7 @@ pre {
 /* 260930 重做（用户：整页按 AI 页新风格统一）：分组内容由「灰底块」改成「一叠白卡」。
    卡 = 1px 边框 + 圆角；多段分组（AI 的 服务/凭据/模型与参数）各占一张卡，单段分组由
    Group 自动包一张匿名 Section —— 只有一个表面实现，不再靠 CSS 覆盖叠出来。 */
-.settings-panel .config-items { display: flex; flex-direction: column; gap: var(--lake-space-lg); }
+.settings-panel .config-items { display: flex; flex-direction: column; gap: var(--lake-space-xl); }
 .settings-panel .config-section {
   border: 1px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
@@ -51,7 +51,7 @@ pre {
   overflow: hidden;
 }
 .settings-panel .config-section__title {
-  padding: 8px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--lake-border-2);
   background: var(--lake-bg-subtle);
   color: var(--lake-text-3);
@@ -60,10 +60,10 @@ pre {
 }
 .settings-panel .config-item,
 .settings-panel .config-block {
-  padding: 12px 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--lake-border-2);
 }
-.settings-panel .config-item { min-height: 48px; }
+.settings-panel .config-item { min-height: 52px; }
 .settings-panel .config-item:last-child,
 .settings-panel .config-block:last-child { border-bottom: 0; }
 .settings-panel .config-item:hover { background: var(--lake-bg-hover); }
@@ -78,12 +78,17 @@ pre {
 .settings-panel .config-name { display: flex; align-items: center; gap: var(--lake-space-sm); flex-wrap: wrap; }
 .settings-panel .config-block__text { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .settings-panel .config-item__ctl { flex: 0 0 auto; min-width: 200px; justify-content: flex-end; }
-/* 堆叠行（Field）：标题/说明在上、控件占满整行 —— 设置页表单主形态。短控件（开关/数字/段）仍走 Item。 */
-.settings-panel .config-item--stack { display: block; padding: 14px 16px; }
-.settings-panel .config-item--stack .config-item__ctl { min-width: 0; margin-top: var(--lake-space-md); justify-content: flex-start; }
-.settings-panel .config-item--stack .b3-text-field,
-.settings-panel .config-item--stack .b3-select { flex: 1 1 0; width: auto; min-width: 0; }
-.settings-panel .config-item--stack .ln-input { flex: 1 1 0; min-width: 0; }
+/* 表单行（Field）：标题/说明在左、控件在右的单行版式（用户 261007：短配置不再堆叠）。
+   控件列固定占比并让输入/下拉铺满；字段错误自动折到下一行整宽。紧凑控件（开关/数字/段）仍走 Item。 */
+.settings-panel .config-item--field { flex-wrap: wrap; column-gap: var(--lake-space-xl); }
+/* flex-basis:0（不是 auto）：否则长说明按 max-content 撑开主列，flex-wrap 下会先把控件挤到下一行 */
+.settings-panel .config-item--field .config-item__main { flex-basis: 0; }
+.settings-panel .config-item--field .config-item__ctl { flex: 0 0 54%; min-width: 200px; justify-content: flex-start; }
+.settings-panel .config-item--field .config-item__ctl > .b3-text-field,
+.settings-panel .config-item--field .config-item__ctl > .b3-select,
+.settings-panel .config-item--field .config-item__ctl > .ln-select { flex: 1 1 auto; width: auto; min-width: 0; }
+.settings-panel .config-item--field .config-item__ctl > .ln-input { flex: 1 1 auto; min-width: 0; }
+.settings-panel .config-item--field .config-item__error { flex: 1 1 100%; }
 /* 字段级错误 / 行内提示（此前 .settings-hint 没有任何定义，这些文案是裸文本） */
 .settings-panel .config-item__error,
 .settings-panel .config-note {

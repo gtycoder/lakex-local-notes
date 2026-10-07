@@ -82,6 +82,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [logInfo, setLogInfo] = useState<string | null>(null);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
+  /** 本次会话内 S3 连接测试是否通过：通过后才允许开启云同步；改动任一 S3 字段即失效。 */
+  const [s3Verified, setS3Verified] = useState(false);
   // AI：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）。
   // 采用**草稿式**：编辑不落盘，先「拉模型 / 测试」验证草稿，通过（或用户选择仍要保存）才写回。
   const [aiView, setAiView] = useState<AiSettingsView | null>(null);
@@ -424,7 +426,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     finally { setHistBusy(false); }
   };
 
-  const setS3Field = (key: keyof S3Settings, value: string | boolean) => setS3((c) => ({ ...c, [key]: value }));
+  const setS3Field = (key: keyof S3Settings, value: string | boolean) => { setS3((c) => ({ ...c, [key]: value })); setS3Verified(false); };
   const saveS3 = async () => {
     setSyncMsg(null);
     try { await native.saveS3Settings(s3); onS3SettingsChanged?.(s3); setSyncMsg("S3 配置已保存在当前设备"); }
@@ -432,8 +434,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   };
   const testS3 = async () => {
     setSyncMsg("正在连接...");
-    try { await native.saveS3Settings(s3); onS3SettingsChanged?.(s3); setSyncMsg(await native.testS3Connection()); }
-    catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+    try {
+      await native.saveS3Settings(s3); onS3SettingsChanged?.(s3);
+      setSyncMsg(await native.testS3Connection());
+      setS3Verified(true);
+    } catch (e) { setS3Verified(false); setSyncMsg(getNativeErrorMessage(e)); }
   };
 
   const saveSyncCfg = async (patch: Partial<SyncSettings>) => {
@@ -441,12 +446,19 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     const next = { ...syncCfg, ...patch };
     setSyncCfgBusy(true); setSyncMsg(null);
     try {
-      // 只有 S3 配置可保存且连通测试通过，才允许开启云同步；任一失败都保持关闭。
+      // 只有 S3 配置可保存且连通测试通过，才允许开启云同步；测试失败则保持关闭、不写 enabled。
       if (patch.enabled === true) {
         setSyncMsg("正在测试 S3 连接...");
-        await native.saveS3Settings(s3);
-        onS3SettingsChanged?.(s3);
-        setSyncMsg(await native.testS3Connection());
+        try {
+          await native.saveS3Settings(s3);
+          onS3SettingsChanged?.(s3);
+          setSyncMsg(await native.testS3Connection());
+          setS3Verified(true);
+        } catch (e) {
+          setS3Verified(false);
+          setSyncMsg(getNativeErrorMessage(e) + "（未通过测试，云同步保持关闭）");
+          return;
+        }
       }
       const saved = await native.saveSyncSettings(next);
       setSyncCfg(saved);
@@ -676,10 +688,25 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
             {category === "sync" && (
               <>
+                <Group title="S3 对象存储" icon={<Cloud size={16} />}>
+                  <Field itemId="s3-endpoint" name="Endpoint" desc="七牛 Kodo 形如 https://s3.cn-north-1.qiniucs.com。"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
+                  <Field itemId="s3-access-key" name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} /></Field>
+                  <Field itemId="s3-secret-key" name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
+                  <Field itemId="s3-bucket" name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} /></Field>
+                  <Field itemId="s3-region" name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} /></Field>
+                  <Field itemId="s3-prefix" name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} /></Field>
+                  <Switch itemId="s3-path-style" name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(checked) => setS3Field("forcePathStyle", checked)} />
+                  <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void testS3()}>测试连接</button>
+                      <button className="b3-button" onClick={() => void saveS3()}>保存配置</button>
+                    </div>
+                  </Block>
+                </Group>
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (
                     <>
-                      <Switch itemId="sync-enabled" name="启用云同步" desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
+                      <Switch itemId="sync-enabled" name="启用云同步" desc={s3Verified || syncCfg.enabled ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"} checked={syncCfg.enabled} disabled={syncCfgBusy || (!syncCfg.enabled && !s3Verified)} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式">
@@ -696,34 +723,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       )}
                     </>
                   )}
-                </Group>
-                <Group title="备份与恢复" icon={<Archive size={16} />}>
-                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
-                    <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runBackup()} disabled={backupBusy}><Archive size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
-                    </div>
-                  </Block>
-                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
-                    <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runCloudRestore()} disabled={backupBusy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
-                    </div>
-                  </Block>
-                  {backupMsg && <Block name={backupMsg} />}
-                </Group>
-                <Group title="S3 对象存储" icon={<Cloud size={16} />}>
-                  <Field itemId="s3-endpoint" name="Endpoint" desc="七牛 Kodo 形如 https://s3.cn-north-1.qiniucs.com。"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
-                  <Field itemId="s3-access-key" name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} /></Field>
-                  <Field itemId="s3-secret-key" name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
-                  <Field itemId="s3-bucket" name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} /></Field>
-                  <Field itemId="s3-region" name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} /></Field>
-                  <Field itemId="s3-prefix" name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} /></Field>
-                  <Switch itemId="s3-path-style" name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(checked) => setS3Field("forcePathStyle", checked)} />
-                  <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
-                    <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void testS3()}>测试连接</button>
-                      <button className="b3-button" onClick={() => void saveS3()}>保存配置</button>
-                    </div>
-                  </Block>
                 </Group>
                 <Group title="云端回收（S3 GC）" icon={<Trash size={16} />}>
                   {cloudOffline && (
@@ -776,6 +775,19 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       <div className="block__text">暂无删除记录。</div>
                     )}
                   </Block>
+                </Group>
+                <Group title="备份与恢复" icon={<Archive size={16} />}>
+                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void runBackup()} disabled={backupBusy}><Archive size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
+                    </div>
+                  </Block>
+                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runCloudRestore()} disabled={backupBusy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                    </div>
+                  </Block>
+                  {backupMsg && <Block name={backupMsg} />}
                 </Group>
               </>
             )}
@@ -854,7 +866,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <>
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
                   <Section title="服务">
-                    <Field itemId="ai-provider" name="供应商" desc="只支持 OpenAI 兼容接口：内置 OpenAI / DeepSeek，也可选「自定义」指向任意兼容端点（Ollama / vLLM / OneAPI 等）。切换即按该家默认值初始化。">
+                    <Field itemId="ai-provider" name="供应商" desc="只支持 OpenAI 兼容接口：内置 OpenAI / DeepSeek / 通义千问 / 智谱 / 小米 MiMo，也可选「自定义」指向任意兼容端点（Ollama / vLLM / OneAPI 等）。切换即按该家默认值初始化。">
                       <Select label="AI 供应商" value={aiProviderId} onChange={(v) => void switchAiProvider(v)} options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))} />
                     </Field>
                     <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>

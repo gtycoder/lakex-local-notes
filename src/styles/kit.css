@@ -285,7 +285,7 @@
 .ln-select[aria-expanded="true"],
 .ln-select:focus-visible { outline: 0; border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
 .ln-select:disabled { background: var(--lake-bg-sunken); color: var(--lake-text-4); cursor: default; }
-.ln-select__value { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left; }
+.ln-select__value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .ln-select__chevron { flex: 0 0 auto; color: var(--lake-text-3); }
 /* 261006 Phase 2.2：下拉的**弹层**（不再用系统弹层）。列表落在 .ln-menu 表面里，
  * 选项复用 .ln-menu__item（高度/圆角/悬停/选中）——同一交互语义只有这一套。
@@ -299,6 +299,7 @@
 .ln-switch {
   position: relative;
   display: inline-flex;
+  flex: 0 0 auto; /* 固定尺寸：不随行内长说明被压缩（曾有开关被压扁变形） */
   align-items: center;
   width: 32px;
   height: 19px;
