@@ -8,6 +8,8 @@
 ## 0. 最新交接（261007 → 261006）
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261007 / 261006）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
+>
+> **下一会话焦点：表格（FortuneSheet）暗色模式 —— 见 §3#14（已立项，含问题证据 / 方案 A·B / 落点 / 验收）。**
 
 ### 261007 · 文档精简 + 设置页版式收口 + AI 常用预置
 
@@ -124,7 +126,14 @@
 
 
 13. **AI 多轮对话记忆只保留最近 40 条（用户 261005 决定：先文档化、不做长期记忆）**：主进程 `electron/ai/aiChatMessages.ts` 的 `assertMessages` 只把**最近 40 条消息**发给供应商（更早的上下文丢弃；另有 `AI_MAX_TOTAL_CHARS=200000` 上限），面板关闭即清空、**无长期 / 跨会话记忆**，设置页「AI → 说明」已如实标注。若要长期记忆 / 摘要压缩 / 跨会话共享，需单独立项（涉及存储与成本，超出笔记软件当前范围）。
-14. **表格（FortuneSheet）暗色模式 —— 用户 261006 立项，本会话不做**：FortuneSheet **无主题 API**，单元格区是 canvas 硬编码白底（内核源码 `if (bg == null) bg = "#ffffff"`）、默认字色 `defaultStyle.fillStyle=#000`、网格线 `#dfdfdf`、行列头字 `#5e5e5e`；DOM 外壳（工具栏 / 行列头 / 工作表标签 / 公式栏 / 容器）是硬编码浅色、可 CSS 覆盖。可选做法：**A** 只覆盖 DOM 外壳（低风险，但单元格仍白）；**B** 渲染层给缺省格补暗底 / 亮字、**保存前剥除**（真暗，但需解决「剥除口径 / 主题热切换 / 撤销栈」三件事）。推荐 A 先落、B 单独立项。详见 git 历史。
+14. **表格（FortuneSheet）暗色模式 —— 用户 261006 立项；261007 定为下一会话焦点（未开工）**。
+    - **问题**：`@fortune-sheet/react` 1.0.4 **无主题 API**。单元格区 / 网格线 / 行列头由 **canvas 绘制**，颜色在内核里硬编码：`@fortune-sheet/core/dist/index.js` 的 `strokeStyle:"#dfdfdf"`（网格线）、`rowFillStyle:"#5e5e5e"`（行列头字）、多处 `fillStyle="#ffffff"`、`bg = "#ffffff"`（缺省格底）；缺省字色 `defaultStyle.fillStyle=#000`。内核导出 `defaultStyle`（`@fortune-sheet/core/dist/canvas.d.ts`，UMD 里可见），**是否作为 `<Workbook>` / sheet 配置暴露需开工时先确认** —— 它是方案 B 的关键杠杆。
+    - **DOM 外壳**（工具栏 `.fortune-toolbar*` / 工作表标签 / 公式栏 / 容器 `.fortune-container` / 滚动条）是普通 DOM + CSS、可覆盖；落点 `src/features/sheet/sheetEditor.css`，值一律 `--lake-*`。
+    - **方案 A（推荐先落，低风险）**：只用令牌覆盖 **DOM 外壳**的浅色，跟随三套主题；单元格仍是白画布 ⇒「暗壳 + 白格」，是半成品但**零数据风险**。
+    - **方案 B（真暗，单独立项）**：让画布也变暗，两条路 —— ① 给缺省格补 `bg`/`color`（`defaultStyle` 或按需写入）、**保存前剥除**；② 走 `patches/@fortune-sheet+core+1.0.4.patch` 把 canvas 常量改成读主题。**B 必须先解决三件事**：剥除口径（哪些算展示补写、何时剥）、主题热切换（重绘且不触发保存）、撤销栈（内核 undo 是否记录这些补写）。
+    - **红线 / 约束**：① 暗色最脆弱，三主题逐条实测（AGENTS §3#14「主题即数据」）；② **展示性颜色绝不进正文 / S3 / 历史**（同类先例：表格当前工作表 / 缩放改本机 —— `sheetViewStore.ts` + `sheetDoc.ts` 的 `LOCAL_SHEET_KEYS`）；③ 不手改 vendor，要改走 `patches/`（重建 patch 需 `PATH="/usr/bin:…"`，见 §4「表格内核级只读」先例）；④ 挂载既有约束见 `SheetEditor.tsx` 头注释：只在**首次可见后**挂载 `<Workbook>`、**非受控 data**（onChange 不回灌）、`allowEdit=false` 只读、`key=[noteId]-[reloadKey]`。
+    - **验收**：三主题真机截图 + `tsc` / vitest / `check:core` / `ui-metrics` / `cssLayers+uiPrimitives` / 双端构建 / `git diff --check`；真实端 CDP 走查（工具栏 / 标签 / 公式栏 / 单元格 / 行列头 / 滚动条 / 只读态）。**当前快照矩阵不含 sheet 态**，如要像素防回归需先补一个 sheet 快照态。
+    - **落点**：`src/features/sheet/SheetEditor.tsx`（61KB：挂载 / 序列化 / 只读 / 图片提升）· `sheetEditor.css`（外壳覆盖唯一落点）· `src/core/sheetDoc.ts`（正文序列化；B 的剥除在此）· `src/core/sheetGeometry.ts`（单元格图片几何）· `patches/@fortune-sheet+{core,react}+1.0.4.patch`。
 ## 4. 关键坑（长期有效）
 
 ### 同步 / 数据
