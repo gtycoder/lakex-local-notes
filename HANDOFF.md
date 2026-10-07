@@ -9,21 +9,23 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261008 / 261007）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点：无指定项** —— 从 §3 取（261008 已完成：表格暗色模式 + 文档分屏，见下方两条）。
+> **下一会话焦点：无指定项** —— 从 §3 取（261008 已完成：表格暗色模式 + 文档分屏；分屏这批已提交推送 `ce035e4`）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
 ### 261008 · 文档分屏（左右两栏 · 方案 A）
 
-- **决策（用户 261008）**：只做**左右两栏、最多两个、不同文档、临时不持久化**；入口在顶栏右上角（点开列出其余已打开标签）；右栏右上角一个细箭头菜单（取消分屏 / 左右互换）+ X；分隔条可拖。**同文档仍只能开一次**（`noteId` 是标签唯一键，多开会撞保存/捕获/版本/滚动记忆，见调研结论）。
+- **决策（用户 261008）**：只做**左右两栏、最多两个、不同文档、临时不持久化**；入口在顶栏右上角（点开列出其余已打开标签）；右栏右上角一个细箭头菜单（取消分屏 / 左右互换）+ X；分隔条可拖（**最终形态 = 可拖浮动工具条 + 标签栏一个合并标签，见下两条；本条为最初决策**）。**同文档仍只能开一次**（`noteId` 是标签唯一键，多开会撞保存/捕获/版本/滚动记忆，见调研结论）。
 - **状态**：[useWorkspaceState.ts](src/hooks/useWorkspaceState.ts) 新增 `splitPair: { left, right } | null`（临时 state，不落盘、不进 settings）；`activeNoteId` 语义不变 = **焦点栏**文档 ⇒ 面包屑/大纲/状态栏/`activeEditorHost` 等 119 处引用无需改。
-- **渲染**：[MultiTabEditor.tsx](src/features/editor/MultiTabEditor.tsx) 分屏时 `.tab-panels` 变两列（`is-split`），宿主按 `data-pane` 分列；**`data-active` 仍全局唯一（焦点栏）**，右栏靠新增的 `data-pane-visible` 显示（隐藏判据仍归 [tabs.css](src/styles/app/tabs.css) 单一来源）。点进任一栏即切焦点；点第三个标签替换焦点栏并保留分屏。四个宿主（doc/sheet/bitable/board）都加了 `focused`/`pane`。
+- **渲染**：[MultiTabEditor.tsx](src/features/editor/MultiTabEditor.tsx) 分屏时 `.tab-panels` 变两列（`is-split`），宿主按 `data-pane` 分列；**`data-active` 仍全局唯一（焦点栏）**，右栏靠新增的 `data-pane-visible` 显示（隐藏判据仍归 [tabs.css](src/styles/app/tabs.css) 单一来源）。点进任一栏即切焦点（**点第三个标签 = 普通切换**；"替换分屏栏"已被后面的合并标签定稿删除）。四个宿主（doc/sheet/bitable/board）都加了 `focused`/`pane`。
 - **分隔条**：抽出唯一实现 [SplitHandle.tsx](src/components/ui/SplitHandle.tsx)（[SplitPane.tsx](src/components/ui/SplitPane.tsx) 与分屏共用）；拖拽改走 window 监听 + try/catch `setPointerCapture`（合成鼠标无活动指针时 capture 会抛错并中止拖拽）。分屏宽度只活在内存。
-- **入口/菜单**：[DesktopTopBar.tsx](src/desktop/DesktopTopBar.tsx) 的 `DesktopSplitButton`（未分屏点开选标签、已分屏点击取消）；右栏控件见 [splitView.css](src/features/editor/splitView.css)。⚠️ 右栏顶部被编辑器自己的工具条占满，控件**下移一个工具条高度**，避免盖住工具条的「更多」。
+- **入口/菜单**：[DesktopTopBar.tsx](src/desktop/DesktopTopBar.tsx) 的 `DesktopSplitButton`（未分屏点开选标签、已分屏点击取消）；右栏控件见 [splitView.css](src/features/editor/splitView.css)（**最终是浮动工具条，见下方一条**；早期"下移一个工具条高度"的贴角方案已废弃）。
 - **验收**：真实端 CDP 走查 —— 入口菜单只列其余标签（排除当前）；进入分屏两栏 517/517、`data-pane` 正确、`data-active` 唯一；点非焦点栏切焦点；左右互换（焦点跟随文档、列位互换）；取消分屏；点第三标签替换焦点栏；合成 pointer 拖拽 517→697（`--split-left` 生效，无 localStorage 写入）。
 - 门禁：tsc ✓ · 全量 vitest **1726 passed / 16 skipped** ✓ · check:core 76-0 ✓ · ui-metrics（hex=0/rgb=0/`!important`=9/未定义=0）✓ · cssLayers+uiPrimitives ✓ · check:bundle ✓ · 双端构建 ✓ · `git diff --check` ✓。新增护栏 [splitView.test.ts](src/features/editor/splitView.test.ts)（6 条）+ 更新 `activeEditor`/`boardEditorMount` 的 `data-active` 断言。
 - **右栏控件 → 可拖浮动工具条（用户 261008 最终定稿）**：贴角 / 骑线方案已废弃 —— 它与每个编辑器自己的工具条冲突（文档只是"画到了面包屑那一行"才显得正常；非文档会被工具条盖住）。改为 **`.tab-split-controls` 浮动工具条**：浮在两栏之上（`z-index: --lake-z-editor-sticky`）、不属于任一栏 ⇒ **不会被任何编辑器 chrome 盖住**；`⋮⋮` 把手 + `⋯`（取消分屏 / 左右互换）+ `×`（两枚实心圆钮）；按住可在分栏容器内**拖到任意位置**（位置只存内存，分屏本身临时、不持久化）。默认停在右栏工具条下方。
 - **分屏在标签栏 = 一个合并标签（用户 261008 定稿，Edge 式）**：分屏两页渲染成**一个** `.tab-split-tab`（两段标题 + 中间分隔线 + `Columns2` 分组图标 + **一个 ×**，`data-split-group`）。点它 = 回到分屏（`activeNoteId` 恢复到最后看的那栏，`splitFocusRef`），点其它标签 = 普通单栏切换（合并标签仍在、`splitPair` 保留）。`splitActive = splitPair && activeNoteId ∈ {left,right}` 才显示两栏 / 分隔条 / 浮动工具条。**已删除「点第三个标签替换分屏栏」**；合并标签的 × = 取消分屏（两个标签都保留，不做连带关闭）。分屏组期间禁用标签拖拽（合并标签不是单 noteId，顺序算不了）。⚠️ 合并标签要插在**标签栏**的 `tabs.map`（MultiTabEditor ~L390），不是 `.tab-panels` 的编辑器 `tabs.map`（~L504）—— 第一次插错地方，渲染进了面板里。
 - **面包屑归属重构（用户 261008 定稿）**：面包屑从「pane 级全局一条」下沉为**文档宿主自己的一部分** —— [EditorTab.tsx](src/features/editor/EditorTab.tsx) 用**本文档自己的**大纲句柄（`getSelectedId`+`getNode` 上溯）自算标题路径、自导航、自滚动到顶 ⇒ 分屏时**每栏一条、随栏宽收缩、与文档联动**、不再看 `activeNoteId`、不再闪烁。`DesktopLibrary`/`MultiTabEditor` 删除全局 `breadcrumb`（App 的 `headingPath`/`navigateToHeading`/`activePathTitle` 随之删除，改传 `notePathTitle(noteId)`）。`.lake-editor-tab` 改 flex 纵向两段（面包屑 + 主体 `flex:1;min-height:0`）。**分屏下隐藏面包屑右端「更多」**（AI 只走浮窗、导出走目录树右键）；`useEditorTopVar` 改为只量 `activeEditorHost()` 内的面包屑+工具条。验收：两文档并排 = 2 条面包屑（各 629px = 半宽）、`more:false`；单栏 `more:true`（全宽 1258）；文档+表格 = 只有文档栏有面包屑；编辑器高度链正常（host 714 / wrap 638）。坑记入 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §L。
 - **收尾修复（用户 261008 报「点分屏没效果」）**：`Menu` 是 portal 到 body 的，outside-dismiss 原先只在锚点容器（`[data-split-menu]`/`[data-split-controls]`）里判断 ⇒ 真实鼠标落在菜单项上的 `pointerdown` 先关菜单、`click` 落空。改为「锚点容器 + `menuRef.contains`」双判；合成 `pointerdown`+`click` 复验 split 成功。坑记入 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §L。
+
+- **已提交/已推送（261008）**：`ce035e4`（master，28 文件），与 `origin/master` 同步。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧（见 §3#9）。
 
 ### 261008 · 表格（FortuneSheet）暗色模式（§3#14 收口）
 
@@ -124,6 +126,7 @@
 6. **历史快照恢复为新文档**：用户已明确先不做；恢复入口仍只覆盖当前文档，恢复前自动留档。
 7. **低优先数据/性能**：附件哈希缓存仅在真实痛感出现后立项；回收站惰性下载暂缓；Word/PDF 大附件与历史 `lakex-contract.d.ts` 按需处理。
 8. **已知外观**：离线残余资源、移动端缩略图仅覆盖 png/jpg/jpeg（失败回退原图）、多维表附件旧数据的体积展示边界。
+9. **多标签切换时内核工具条 1~4 帧绘制空帧（261008 记录，未修）**：非活动宿主用 `visibility: hidden` 隐藏 ⇒ 浏览器**丢弃其绘制图层**，切回来整棵子树重新栅格化，内核工具条（子树最重）最后画完。**实测口径**：`.ne-ui` 切换瞬间已是 `opacity:1 / visibility:visible / transition-duration:0s`（不是 CSS 淡入）；标签高亮与可见宿主同帧、`--lake-editor-top`/`.tab-panels` 顶边不跳（rAF 逐帧 0 错位）。**方案 2（宿主 `will-change: opacity`）实测无效、已撤**。可行方向 = 方案 1：非活动宿主改 `opacity: 0` + `inert` + `pointer-events: none`（不再丢层），代价是非活动编辑器保持绘制，需按 10 万文档量级评估。**别再无证据试提层类改动**。
 
 10. **样式大统一（260930 审计，三批已完成；③⑤ 已记录、暂缓不做的理由见下）**：用户要求「找出散落各处的相同操作模式，做成正式原语统一起来」。
     **已完成**（详见 AGENTS §3#14 的单一来源清单与 git 历史）：

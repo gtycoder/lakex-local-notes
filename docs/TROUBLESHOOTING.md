@@ -163,6 +163,7 @@
   并用 `--lake-z-editor-sticky` 抬到内容之上。
 - **分隔条只有一处实现**：`src/components/ui/SplitHandle.tsx`（`SplitPane` 与分屏共用）。⚠️ 拖拽**不要只依赖 `setPointerCapture`**：
   合成鼠标/无活动指针时它会抛错并中止拖拽 ⇒ 用 try/catch 包住，并在 window 上监听 `pointermove/pointerup`。
+- **切换标签时内核工具条空 1~4 帧（261008 排查）**：非活动宿主靠 `visibility: hidden` 隐藏 ⇒ 浏览器丢弃其绘制图层，切回来整棵子树重栅格化，内核工具条（`.ne-ui`）最后画完。**别误判成 CSS 淡入或状态错位**：实测切换瞬间 `.ne-ui` 已 `opacity:1/visibility:visible/transition-duration:0s`，且 rAF 逐帧显示标签高亮与可见宿主同帧、布局不跳。给宿主加 `will-change: opacity` **无效**（`visibility` 照样丢层）；机制级解法 = 不丢层（`opacity:0` + `inert`），代价是非活动编辑器保持绘制。
 - **面包屑必须归属「文档宿主」，不能是 pane 级全局一条**（用户 261008 定稿）：原先它是 `MultiTabEditor` 里按 `activeNoteId` 渲染的**一条**（`headingPath`/`navigateToHeading` 都只取活动文档的大纲）⇒ 分屏时①不随栏宽收缩（整块文档区宽度）、②只在「焦点标签是 doc」时出现、③换栏/点编辑区会闪烁。正解 = 移进 `EditorTab`，用**本文档自己的**大纲句柄自算/自导航；`useEditorTopVar` 的候选也必须只从 `activeEditorHost()` 内取（分屏有两条面包屑，否则会被叠起来量错 `--lake-editor-top`）。⚠️ 宿主改 flex 纵向两段后必须给 `.lake-editor-main` `flex:1; min-height:0`，否则内部百分比高度链断掉、编辑器塌高。
 - **CDP 验收陷阱**：`Input.dispatchMouseEvent` 注入的 `mouseMoved` **不会**产生 `pointermove`（`pointerdown` 会）。
   验拖拽要用合成的 `PointerEvent`（在元素上 dispatch pointerdown、在 window 上 pointermove/pointerup），否则会误判成"拖不动"。
