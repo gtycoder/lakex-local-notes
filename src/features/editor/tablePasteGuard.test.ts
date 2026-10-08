@@ -28,6 +28,9 @@ describe("大表格粘贴护栏：纯逻辑", () => {
   });
 
   it("阈值：超行数或超格数才拦（边界不拦）", () => {
+    // 口径值（261008 用户定稿）：1000 行 / 5000 格；边界本身放行，超出才拦
+    expect(TABLE_PASTE_MAX_ROWS).toBe(1000);
+    expect(TABLE_PASTE_MAX_CELLS).toBe(5000);
     expect(oversizeTableShape(table(TABLE_PASTE_MAX_ROWS, 2))).toBeNull();
     expect(oversizeTableShape(table(TABLE_PASTE_MAX_ROWS + 1, 2))).not.toBeNull();
     const wideCols = Math.ceil(TABLE_PASTE_MAX_CELLS / 2) + 1;

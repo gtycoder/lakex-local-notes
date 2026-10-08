@@ -58,7 +58,8 @@ export function TablePasteGuardDialog({ parentId }: { parentId: string | null })
         {pending && (
           <>
             <p>这张表格有 <strong>{pending.shape.rows}</strong> 行 / <strong>{pending.shape.cells}</strong> 个单元格，
-              直接粘进文档会让界面卡住十几秒到几十秒（内核表格卡片没有虚拟化）。</p>
+              直接粘进文档会把界面同步卡住、越大越久（实测 1000 行约 2 秒，数千行要十几到几十秒 ——
+              内核表格卡片没有虚拟化）。</p>
             <p>已<strong>阻止本次粘贴</strong>，剪贴板内容保持原样；可以：</p>
             <ul className="ln-list">
               <li>点下面的「存为表格文档」——会新建一篇<strong>表格</strong>文档写入这份数据，并在光标处插入一张指向它的<strong>文档引用</strong>卡；</li>

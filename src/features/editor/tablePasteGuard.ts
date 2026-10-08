@@ -15,9 +15,15 @@
  */
 import { NOTE_REF_CARD_NAME, type NoteRefValue } from "./noteRef";
 
-/** 阈值：行 > 500 或格 > 3000 即拦（1000 行实测已 1.4s 可感知，宁可早拦）。 */
-export const TABLE_PASTE_MAX_ROWS = 500;
-export const TABLE_PASTE_MAX_CELLS = 3000;
+/**
+ * 阈值：行 > 1000 或格 > 5000 即拦（用户 261008 定稿上调；旧值 500/3000）。
+ * **边界实测**（隔离实例 + 合成 HTML，量的是 `dispatchEvent` 的同步耗时 = 主线程阻塞）：
+ *   1000 行 × 5 列 = 5000 格（行驱动满档）→ **1.93s** / DOM +2.65 万；
+ *   100 行 × 50 列 = 5000 格（格子驱动满档）→ **1.41s**；
+ *   旧上限 500 行 × 6 列 = 3000 格 → 0.79s；超限则护栏同步返回 **≤1ms**（内核完全不接）。
+ */
+export const TABLE_PASTE_MAX_ROWS = 1000;
+export const TABLE_PASTE_MAX_CELLS = 5000;
 
 export interface TableShape {
   rows: number;
