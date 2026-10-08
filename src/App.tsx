@@ -7,6 +7,7 @@ import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
 import { clearScrollMemory } from "./features/editor/EditorTab";
+import { setNoteRefHost } from "./features/editor/noteRef";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
@@ -159,6 +160,15 @@ export function App() {
     setDraftEntries,
     setSaveState,
   });
+
+  // 「文档引用」卡片的宿主注入（R2，261008）：自定义卡由**内核自己的 React 树**渲染，拿不到我们的
+  // context/props ⇒ 把「文档清单 + 打开文档」注册到模块级注册表（与 imagePreview 同一姿势）。
+  // 依赖 notes/openNote：每次 notes 变化都重注册，卡片读到的永远是最新快照。
+  useEffect(() => {
+    setNoteRefHost({ listNotes: () => notes, openNote });
+    return () => setNoteRefHost(null);
+  }, [notes, openNote]);
+
   const { handleContentChange, createNoteIn, createNote, createSheetIn, createBitableIn, createBoardIn, deleteTreeNode } = useNoteLifecycle({
     bumpRevision,
     resetRevision,

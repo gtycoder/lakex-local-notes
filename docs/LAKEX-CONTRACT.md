@@ -1312,3 +1312,17 @@ PY
 - ⚠️ **踩过的坑**：处理器最初用 `el.closest("input, textarea, [contenteditable='true']")` 当「别抢输入框」守卫，但**主编辑器引擎本身就是 contenteditable** ⇒ 守卫恒真、Cmd+X 永远进不来（表现为「处理器根本没跑」）。守卫必须**排除 `.ne-engine`**。另：e2e 验证剪贴板前要先**清空系统剪贴板**，否则读到跨次运行的残留、误判成「已写入」。
 - 真实端实测（可信 CDP 输入）：一个段落 3 张图，Cmd+X **中间那张** → 落盘只剩 seed_1/seed_3、**块内文字保留**、DOM 剩 2 张、剪贴板拿到含 `<img>` 的 `text/html`。
 - 另：早期一度判定 `deleteCard`「只移除 DOM、落盘仍有图片」是**误判** —— 当时 handler 因上面那条守卫从未执行，且落盘读得太早。
+### 5.23 自定义卡片（配置式）：注册契约 + 面板/序列化实测（261008 实测；落地「文档引用」卡）
+
+**官方出处** `yuque-developer-docs/docs/69 - 开发自定义卡片`；**同款模板** `vendor/lakex-doc-react/src/cards/MindMapCard/index.ts`。
+
+- **描述字段**（`CustomCardConfig`，`types.ts:451`）：`name` / `cardType: 'inline'|'block'` / `slash: { icon, mainSearch?, keywords?, label, description? }`（**`icon` 是 sprite 符号 id 字符串**，不是 React 组件）/ `initValue`（**不得用 `$name` 保留字段**，不放函数与循环引用）/ `editorComponent` / `viewerComponent`（props = `{ editor|viewer, cardValue, updateCardValue, cardType }`，`updateCardValue` 触发重渲染）/ `writeText` / `writeHtml`；`readHtml` 暂未支持。
+  卡片以 **`{ config, icon? }` 包装**进 `customCard.cards`（新 vendor 形状）：`lakeRuntime.prepareCustomCards` 把 `label/description` 的函数形态归一化成字符串，`ensureCustomCardIcons` 把包装上的 `icon` 组件渲成 sprite。
+- **只配 `slash` 不会出现在面板里**：斜杠项名必须是 `custom-${name}`，**还必须把它加进 `slash.cardSelect.<组>.groups[].items`**。我们的落地 = `lakeRuntime` 的 `customOptions.slash.cardSelect.{general,table}.groups` 里追加（那是"拷默认分组再过滤 `third-party-services`"的地方）。
+  ⚠️ **「小工具」组的 `name` 与「程序员」组重名**（都是 `group-files`，`configs/slash.ts` 默认如此）⇒ **只能按 `title` 找**（我们固定 `GetDefaultEditorConfig("zh-cn")`）。
+- **面板触发**：`/` 键入在本构建**不可靠**（keydown 与 insertText 两种注入实测都没触发；且光标须落在可触发块内）；**可靠入口 = 工具栏 `.ne-ui-toolbar-card-select-button`**（同一份 `cardSelect.general` 配置）。
+  面板 DOM：`.ne-ui-toolbar-card-select`（`.ne-ui-search-card-menu`）、`.ne-menu-item-group`、**`.ne-menu-item-container`（整行可点，内含 `…-title` / `…-content`）**。
+  ⚠️ 面板内容**内部滚动**：靠后的分组（如「小工具」）渲染在可视区之外（实测 rect y=1249，面板可视 [161,691]）⇒ CDP 点击前必须 `scrollIntoView` 再重新量 rect，否则会点到文档上并顺手关掉面板。
+- **`.lake` 序列化形态**（与 §5.3 一致，本卡实测）：`<card type="block" name="customBlock" customName="lake-note-ref" value="data:%7B%22%24name%22…">`，percent 解码后是 `{$name, $htmlStr, …我们的字段}`。
+- **React 实例**：卡组件由内核自己的 React 树渲染，但**与我们共用同一个 React 实例**（实测：本卡内的 `useState/useMemo` + 我们的 `Dialog`(Overlay) 浮层、受控输入、列表交互全部正常）⇒ 可直接用应用侧 React 组件，但**拿不到应用的 context/props** ⇒ 宿主数据只能走**模块级注册表**（我们照 `imagePreview` 的姿势做 `setNoteRefHost`）。
+- **内核没有"引用同库文档"的现成卡**（261008 bundle 排查 + 实测）：`mention` 在本构建的「小工具」组里是**被注释掉**的；`category === 'localDoc'` + `ne-card-local-doc(-btn-download/-preview)` 是**「本地文档（上传文件）」卡**（走 `checkFileSize(eZ.localDoc, file.size)`），**不是引用**；云端那张「插入可访问的语雀内容」（`/yq`、`insert-yuque` 图标）是**拉语雀线上内容**，本地没有解析通道 ⇒ "引用同库文档（含表格/多维表/画板）"只能自建自定义卡（本项目已按本套契约实现：`src/features/editor/noteRef.ts` + `noteRefCard.tsx`）。

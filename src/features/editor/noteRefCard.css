@@ -1,0 +1,34 @@
+/* 「文档引用」卡片（261008 R2）：只补**本卡特有的布局**；表面/行/按钮/输入框全部复用 kit 原语。 */
+.ne-note-ref {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-sm) var(--lake-space-md);
+}
+.ne-note-ref--empty { justify-content: flex-start; }
+.ne-note-ref__title {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--lake-accent-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ne-note-ref__title:hover { text-decoration: underline; }
+.ne-note-ref__title--gone { color: var(--lake-status-error); cursor: default; }
+.ne-note-ref__kind {
+  flex: 0 0 auto;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+}
+.ne-note-ref-dialog__search { width: 100%; margin-bottom: var(--lake-space-md); }
+.ne-note-ref-dialog__list { max-height: 320px; overflow: auto; }
+.ne-note-ref-dialog__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lake-space-md);
+  width: 100%;
+}

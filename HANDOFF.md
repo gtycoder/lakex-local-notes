@@ -11,6 +11,14 @@
 >
 > **下一会话焦点：无指定项** —— 从 §3 取（261008 最近两批：① 表格暗色模式 + 文档分屏 + 表格图标/换行/粘贴归属；② **云端对齐批**：字体统一 / 右键精简 / 颜色入口重做 / 小数位± + 导出修复 + 云端对齐调研）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261008 续 · 「文档引用」卡（R2）+ 大表粘贴 A+B 兜底
+
+- **用户诉求**：在文档里"插入同目录的表格"。调研结论（§2 三级检索 + bundle 排查）：**内核没有现成卡**——云端那张「插入可访问的语雀内容」（`/yq`）是**拉语雀线上内容**、本地无解析通道；`mention` 在本构建的分组里**被注释掉**；`localDoc` 是「本地文档（上传文件）」卡。⇒ 只能自建，按官方**配置式自定义卡片**做了 **「文档引用」卡**（R2）。
+- **能力**：`/`（实际入口是工具栏「+」面板）里的 **文档引用（/doc）** → 插入**区块引用卡** → 选择同库任意文档（**文档 / 表格 / 多维表 / 画板**都一样，只存引用元数据、不内嵌渲染）→ 点击标题打开对应标签页；目标被删/进回收站/purge → **「文档已删除」失效占位**。
+- **落点**：`src/features/editor/noteRef.ts`（纯逻辑：`lake-note://<id>` 约定、解析、宿主注册表、`isGoneNote` 失效判据、斜杠接线，可单测）+ `noteRefCard.tsx`（React 卡 + 选文档浮层，复用 kit/`Overlay` 原语）+ `noteRefCard.css`（新文件，已登记 cssLayers 基线 28）+ `lakeRuntime.ts`（`registerNoteRefCard(mergedOptions)` 必须在 `prepareCustomCards` 之前；斜杠项加进「小工具」组）+ `App.tsx`（`setNoteRefHost({ listNotes, openNote })` 注入宿主：卡片在内核 React 树里，拿不到应用 context）。
+- **契约与坑已回填** [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) **§5.23**（字段契约、`custom-${name}` 命名与分组 items 必需、「小工具」组 name 重名只能按 title 找、工具栏面板才是可靠入口、面板内部滚动要先 scrollIntoView、`.lake` 序列化形态、React 实例共享但无 context）。
+- **真实端验收**（隔离实例 + CDP 全链路）：面板里出现 `/doc 文档引用` ✓ → 插入后显示"选择文档…" ✓ → 浮层列出 3 篇、选中「被引用表格」✓ → 卡片显示 `被引用表格 表格 换` ✓ → **点标题打开表格标签页且 `sheetOpen:true`** ✓ → 落盘 `<card name="customBlock" customName="lake-note-ref" value="data:…lake-note://<sheetId>…">` ✓。
+- 门禁：tsc ✓ · vitest **1765 passed / 16 skipped** ✓（新增 8 条：`noteRef.test.ts` 6 条纯逻辑 + 2 条接线护栏）· ui-metrics ✓ · check:core ✓ · 双端构建 ✓ · `git diff --check` ✓。
 ### 261008 续 · 表格（编辑态一致性 / 默认字号 / 缩放 / 行高性能）+ 大表粘贴压测
 
 - **编辑态与展示态不一致（用户报「编辑时字号大、行高/换行对不上」）—— 真因是字体族，不是字号**：
