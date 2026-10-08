@@ -1,0 +1,8 @@
+/* Univer 表格（kind=usheet）编辑器。
+ * 宿主复用 .sheet-editor（拿到标签页显隐 + 尺寸那条单一来源，见 styles/app/tabs.css 的 :is(...)）。
+ * 这里只给 Univer 自绘的根节点足尺寸——**必须放在本分包自己的 CSS 里**：sheetEditor.css 属于
+ * FortuneSheet 分包，只打开 usheet 时它根本不会加载。 */
+.usheet-editor .usheet-univer-root {
+  height: 100%;
+  width: 100%;
+}

@@ -11,6 +11,7 @@ import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
 import type { AiSettings } from "../src/core/aiProviders.js";
 import { emptySheetBody } from "../src/core/sheetDoc.js";
+import { emptyUsheetBody } from "../src/core/usheetDoc.js";
 import { emptyBitableBody } from "../src/core/bitableDoc.js";
 import { emptyBoardBody } from "../src/core/boardDoc.js";
 import { searchTextForKind } from "../src/core/noteSearchText.js";
@@ -148,6 +149,7 @@ export class Store {
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
     // 表格（sheet）/ 多维表（bitable）/ 画板（board）正文独立目录：notes/ 仍是 doc 的容器（docs/STORAGE-LAYERS.md §4.1）
     fs.mkdirSync(path.join(root, "sheets"), { recursive: true });
+    fs.mkdirSync(path.join(root, "usheets"), { recursive: true });
     fs.mkdirSync(path.join(root, "bitables"), { recursive: true });
     fs.mkdirSync(path.join(root, "boards"), { recursive: true });
     fs.mkdirSync(this.noteAssetsDir, { recursive: true });
@@ -311,6 +313,7 @@ export class Store {
       throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     }
     if (kind === "sheet") return path.join(this.root, "sheets", `${id}.sheet.json`);
+    if (kind === "usheet") return path.join(this.root, "usheets", `${id}.usheet.json`);
     if (kind === "bitable") return path.join(this.root, "bitables", `${id}.bitable.json`);
     if (kind === "board") return path.join(this.root, "boards", `${id}.board.json`);
     return path.join(this.root, "notes", `${id}.lake`);
@@ -329,7 +332,7 @@ export class Store {
 
   /** 该类型是否有独立正文目录（用于「未登记残留」清理时逐个候选路径尝试）。 */
   private candidateBodyPaths(id: string): string[] {
-    const kinds: NoteKind[] = ["doc", "sheet", "bitable", "board"];
+    const kinds: NoteKind[] = ["doc", "sheet", "usheet", "bitable", "board"];
     return kinds.map((kind) => this.bodyPathFor(id, kind));
   }
 
@@ -434,6 +437,12 @@ export class Store {
   createSheetIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
     return this.createNoteInWithContent(parentId, title, emptySheetBody(), [], id, "bottom", "sheet");
+  }
+
+  /** 新建 Univer 表格文档（kind="usheet"）：正文是 usheets/{id}.usheet.json（Univer IWorkbookData 快照）。 */
+  createUsheetIn(parentId: string | null, title: string): NoteDocument {
+    const id = uuid();
+    return this.createNoteInWithContent(parentId, title, emptyUsheetBody(), [], id, "bottom", "usheet");
   }
 
   /**

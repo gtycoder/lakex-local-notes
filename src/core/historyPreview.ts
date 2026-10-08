@@ -13,6 +13,7 @@ import { boardToSearchText, parseBoardBody } from "./boardDoc.js";
 import { bitableFieldText, parseBitableBody } from "./bitableDoc.js";
 import type { NoteKind } from "./noteKind.js";
 import { parseSheetBody } from "./sheetDoc.js";
+import { parseUsheetBody } from "./usheetDoc.js";
 
 /** 预览模型：块级（事实清单 / 小表格 / 文本 / 提示），渲染层逐块画。 */
 export type SnapshotPreviewBlock =
@@ -46,10 +47,21 @@ function columnName(index: number): string {
 
 export function snapshotPreview(kind: NoteKind, body: string): SnapshotPreviewBlock[] {
   if (kind === "sheet") return sheetPreview(body);
+  if (kind === "usheet") return usheetPreview(body);
   if (kind === "bitable") return bitablePreview(body);
   if (kind === "board") return boardPreview(body);
   // doc：正文是 Lake HTML，走只读 viewer 渲染，不需要结构化模型
   return [{ type: "empty", text: "这份快照的正文用文档预览查看。" }];
+}
+
+/** 表格（kind=usheet）：工作表数 + 非空单元格数（Univer sparse cellData）。 */
+function usheetPreview(body: string): SnapshotPreviewBlock[] {
+  const doc = parseUsheetBody(body);
+  if (!doc) return [{ type: "empty", text: "无法解析这份 Univer 表格快照。" }];
+  const sheets = Object.values(doc.workbook.sheets ?? {});
+  let cells = 0;
+  for (const sheet of sheets) for (const row of Object.values(sheet.cellData ?? {})) cells += Object.keys(row).length;
+  return [{ type: "facts", items: [["工作表", `${sheets.length} 个`], ["非空单元格", `${cells} 个`]] }];
 }
 
 /** 表格（kind=sheet）：工作表数 + 各表前几行×前几列（取 sparse celldata）。 */

@@ -21,6 +21,7 @@ import "./historySnapshotPreview.css";
 const SheetEditor = lazy(() => import("../features/sheet/SheetEditor").then((m) => ({ default: m.SheetEditor })));
 const BitableEditor = lazy(() => import("../features/bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
 const BoardEditor = lazy(() => import("../features/board/BoardEditor").then((m) => ({ default: m.BoardEditor })));
+const UniverSheetEditor = lazy(() => import("../features/usheet/UniverSheetEditor").then((m) => ({ default: m.UniverSheetEditor })));
 
 export interface HistorySnapshotPreviewProps {
   kind: NoteKind;
@@ -123,6 +124,8 @@ export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: Histo
           <Suspense key={snapshotId} fallback={<p className="snapshot-preview__hint">正在加载预览…</p>}>
             {kind === "sheet" ? (
               <SheetEditor noteId={noteId} content={body} visible readOnly onChange={noop} showToolbar={false} />
+            ) : kind === "usheet" ? (
+              <UniverSheetEditor noteId={noteId} content={body} visible readOnly onChange={noop} showToolbar={false} />
             ) : kind === "bitable" ? (
               <BitableEditor noteId={noteId} content={body} visible readOnly onChange={noop} chrome={false} />
             ) : (

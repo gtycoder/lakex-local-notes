@@ -10,6 +10,7 @@ import "./splitView.css";
 
 /** 表格编辑器（FortuneSheet，~0.6MiB gzip）按需加载：只在真的打开表格文档时才进首屏之外的分包。 */
 const SheetEditor = lazy(() => import("../sheet/SheetEditor").then((m) => ({ default: m.SheetEditor })));
+const UniverSheetEditor = lazy(() => import("../usheet/UniverSheetEditor").then((m) => ({ default: m.UniverSheetEditor })));
 /** 多维表编辑器（自研，懒加载）：同样只在真的打开多维表文档时才进分包。 */
 const BitableEditor = lazy(() => import("../bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
 /** 画板编辑器（Drawnix/Plait 引擎，懒加载）：只在真的打开画板文档时才进分包（≈511KB gzip）。 */
@@ -30,7 +31,7 @@ export interface TabInfo {
   /** 远端已删除（软删/墓碑/purge）：tab 显示"已删除"标记，正文保留供复制/恢复。 */
   deleted?: boolean;
   /** v6/v7 文档类型（doc | sheet | bitable | board；缺省 doc）。 */
-  kind?: "doc" | "sheet" | "bitable" | "board";
+  kind?: "doc" | "sheet" | "usheet" | "bitable" | "board";
 }
 
 interface MultiTabEditorProps {
@@ -541,6 +542,20 @@ export function MultiTabEditor({
           tab.kind === "sheet" ? (
             <EditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
               <SheetEditor
+                noteId={tab.noteId}
+                content={tab.content}
+                visible={visible && paneVisible(tab.noteId)}
+                focused={tab.noteId === activeNoteId}
+                pane={paneOf(tab.noteId)}
+                readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
+                onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
+              />
+            </EditorErrorBoundary>
+          ) : tab.kind === "usheet" ? (
+            <EditorErrorBoundary key={"us-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+              <UniverSheetEditor
                 noteId={tab.noteId}
                 content={tab.content}
                 visible={visible && paneVisible(tab.noteId)}

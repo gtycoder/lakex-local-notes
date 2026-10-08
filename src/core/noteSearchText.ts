@@ -11,6 +11,7 @@ import { boardToSearchText } from "./boardDoc.js";
 import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
 import type { NoteKind } from "./noteKind.js";
 import { sheetToSearchText } from "./sheetDoc.js";
+import { usheetToSearchText } from "./usheetDoc.js";
 
 export interface NoteSearchText {
   /** Markdown 镜像（仅 doc 有；非 doc 恒为 null）。 */
@@ -23,6 +24,7 @@ export interface NoteSearchText {
 export function searchTextForKind(kind: NoteKind, content: string | null | undefined): NoteSearchText {
   const body = typeof content === "string" ? content : "";
   if (kind === "sheet") return { markdown: null, plain: sheetToSearchText(body) };
+  if (kind === "usheet") return { markdown: null, plain: usheetToSearchText(body) };
   if (kind === "bitable") return { markdown: null, plain: bitableToSearchText(body) };
   if (kind === "board") return { markdown: null, plain: boardToSearchText(body) };
   return { markdown: lakeHtmlToMarkdown(body), plain: lakeHtmlToPlain(body) };

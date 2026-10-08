@@ -23,6 +23,7 @@ export interface HistoryItem {
  */
 function prefetchPreviewChunk(kind: NoteKind): void {
   if (kind === "sheet") void import("../features/sheet/SheetEditor");
+  else if (kind === "usheet") void import("../features/usheet/UniverSheetEditor");
   else if (kind === "bitable") void import("../features/bitable/BitableEditor");
   else if (kind === "board") void import("../features/board/BoardEditor");
 }

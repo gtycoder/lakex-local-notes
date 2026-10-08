@@ -67,6 +67,7 @@ export const WEB_METHODS: Record<string, string> = {
   renameTreeNode: "rename_tree_node",
   createNoteIn: "create_note_in",
   createSheetIn: "create_sheet_in",
+  createUsheetIn: "create_usheet_in",
   createBitableIn: "create_bitable_in",
   createBoardIn: "create_board_in",
   moveTreeNode: "move_tree_node",

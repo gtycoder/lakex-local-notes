@@ -14,16 +14,16 @@ import { describe, expect, it } from "vitest";
 const SRC = readFileSync(new URL("./HistorySnapshotPreview.tsx", import.meta.url), "utf8");
 
 describe("历史快照只读编辑器预览", () => {
-  it("三个编辑器都懒加载（不额外增加首屏体积）", () => {
-    for (const mod of ["../features/sheet/SheetEditor", "../features/bitable/BitableEditor", "../features/board/BoardEditor"]) {
+  it("四个编辑器都懒加载（不额外增加首屏体积）", () => {
+    for (const mod of ["../features/sheet/SheetEditor", "../features/usheet/UniverSheetEditor", "../features/bitable/BitableEditor", "../features/board/BoardEditor"]) {
       expect(SRC).toContain(`import("${mod}")`);
     }
-    expect((SRC.match(/lazy\(\(\) => import\(/g) ?? []).length).toBe(3);
+    expect((SRC.match(/lazy\(\(\) => import\(/g) ?? []).length).toBe(4);
   });
 
   it("一律只读 + onChange no-op（预览绝不写盘）", () => {
-    // 三个编辑器各出现一次 readOnly 与 onChange={noop}
-    expect((SRC.match(/readOnly onChange=\{noop\}/g) ?? []).length).toBe(3);
+    // 四个编辑器各出现一次 readOnly 与 onChange={noop}
+    expect((SRC.match(/readOnly onChange=\{noop\}/g) ?? []).length).toBe(4);
     expect(SRC).toMatch(/const noop = useMemo\(\(\) => \(\) => undefined, \[\]\)/);
   });
 

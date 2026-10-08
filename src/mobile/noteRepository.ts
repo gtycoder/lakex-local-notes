@@ -26,6 +26,8 @@ export interface POCNoteSummary {
 }
 
 function normalizeDocKind(value: unknown): "doc" | "sheet" | "bitable" | "board" {
+  // Univer 表格（kind=usheet）：移动端按「非 doc 只读占位」处理（复用 sheet 占位页），**绝不**交给 Lake 编辑器。
+  if (value === "usheet") return "sheet";
   return value === "sheet" || value === "bitable" || value === "board" ? value : "doc";
 }
 

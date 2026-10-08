@@ -13,7 +13,7 @@ import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
 import { Dialog, Menu, Popover, Submenu } from "./ui/Overlay";
 import { usePopoverPosition } from "../hooks/usePopoverPosition";
 
-type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable" | "board";
+type CreateKind = "notebook" | "group" | "note" | "sheet" | "usheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
 export type SidebarMode = "docked" | "floating" | "collapsed";
 
@@ -503,7 +503,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   }, [props.revealNodeId, props.onRevealConsumed]);
 
   /** 在 node 下创建子项（单一来源：右键菜单「新建」子菜单 + 目录行「＋」快捷菜单共用）。 */
-  const createChild = (node: TreeNode | null, kind: "group" | "note" | "sheet" | "bitable" | "board") => {
+  const createChild = (node: TreeNode | null, kind: "group" | "note" | "sheet" | "usheet" | "bitable" | "board") => {
     if (!node) return;
     // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档/表格）。
     const parentId = node.id;
@@ -517,7 +517,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setContextMenu(null);
     setCreateMenu(null);
   };
-  const menuNewChild = (kind: "group" | "note" | "sheet" | "bitable" | "board") => createChild(contextNode, kind);
+  const menuNewChild = (kind: "group" | "note" | "sheet" | "usheet" | "bitable" | "board") => createChild(contextNode, kind);
 
 
   const menuRename = () => {
@@ -859,7 +859,7 @@ interface ContextMenuProps {
   node: TreeNode;
   x: number;
   y: number;
-  onNewChild: (kind: "group" | "note" | "sheet" | "bitable" | "board") => void;
+  onNewChild: (kind: "group" | "note" | "sheet" | "usheet" | "bitable" | "board") => void;
   onRename: () => void;
   onDelete: () => void;
   onCopyMarkdown: () => void;
@@ -910,6 +910,7 @@ type CreateChildKind = Exclude<CreateKind, "notebook">;
 const CREATE_CHILD_ITEMS: ReadonlyArray<{ kind: CreateChildKind; label: string; icon: React.ReactNode }> = [
   { kind: "note", label: "新建文档", icon: <FilePlus size={15} /> },
   { kind: "sheet", label: "新建表格", icon: <Table size={15} /> },
+  { kind: "usheet", label: "新建表格（新）", icon: <Table size={15} /> },
   { kind: "bitable", label: "新建数据表", icon: <Database size={15} /> },
   { kind: "board", label: "新建画板", icon: <PenTool size={15} /> },
   { kind: "group", label: "新建分组", icon: <FolderPlus size={15} /> },

@@ -30,7 +30,7 @@ function rowToLocal(r: Record<string, unknown>) {
     icon: r.icon ? String(r.icon) : null,
     isConflict: !!r.is_conflict,
     // TS 会在推断的返回类型里放宽字面量 → 显式标注联合类型（否则外层 SyncDbPort 不兼容）
-    kind: (r.doc_kind === "sheet" ? "sheet" : r.doc_kind === "bitable" ? "bitable" : r.doc_kind === "board" ? "board" : "doc") as "doc" | "sheet" | "bitable" | "board",
+    kind: (r.doc_kind === "sheet" ? "sheet" : r.doc_kind === "usheet" ? "sheet" : r.doc_kind === "bitable" ? "bitable" : r.doc_kind === "board" ? "board" : "doc") as "doc" | "sheet" | "bitable" | "board",
   };
 }
 

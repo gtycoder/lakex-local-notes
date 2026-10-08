@@ -37,7 +37,7 @@ function Placeholder({ label }: { label: string }) {
  */
 export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPaths, onClose }: ExportSubmenuItemProps) {
   const run = (action: () => void) => () => { action(); onClose(); };
-  const type = kind === "sheet" || kind === "bitable" || kind === "board" ? kind : "doc";
+  const type = kind === "sheet" ? kind : kind === "usheet" ? "sheet" : kind === "bitable" || kind === "board" ? kind : "doc";
 
   return (
     <Submenu label={<><Download size={15} /><span>导出</span></>}>

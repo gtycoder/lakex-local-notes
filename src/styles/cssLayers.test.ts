@@ -26,6 +26,7 @@ const FILES = [
   "features/editor/selectionToolbar/selectionToolbar.css",
   "features/editor/splitView.css",   // 261008：文档分屏布局（两列 grid + 分隔条定位 + 右栏控件）
   "features/sheet/sheetEditor.css",
+  "features/usheet/usheetEditor.css",   // 261009：Univer 表格（kind=usheet）编辑器容器（分包自有样式）
   "components/colorPalette.css",   // 261008：统一选色盘（从多维表 CSS 移出，表格/多维表共用）
   "components/historySnapshotPreview.css",
   "features/bitable/bitableEditor.css",
@@ -106,7 +107,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 261008：+1 = 表格字体接产品字体 —— `.sheet-editor .fortune-container / .luckysheet-input-box(-inner)` 一条 font-family
   //        （内核 FortuneSheet CSS 是**未分层**的，未分层 > 任何 @layer ⇒ 只能像本文件其它内核覆盖一样用 .sheet-editor 提高特异性）
   // 261008：+11 = 颜色按钮的下拉三角 `.sheet-color-caret`（命中区/圆角/三色 + hover 两态）—— 对齐 Lake 的分体交互
-  "features/sheet/sheetEditor.css": { decls: 168, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
+  "features/sheet/sheetEditor.css": { decls: 168, dupGroups: 0 },
+  "features/usheet/usheetEditor.css": { decls: 2, dupGroups: 0 },   // 261009：Univer 表格分包自有容器样式（.usheet-univer-root 给足尺寸）   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   // 260929：-30 = 分组样式按职责移出（→ bitableViews.css）+ 表底「添加记录」旧样式删除（改用共用 .bt-add-round）+ 删掉已冗余的 .bt-panel-add 组合规则；实测 1051（重复组 0）
   "features/bitable/bitableEditor.css": { decls: 1032, dupGroups: 0 },   //  261006 Phase 2.2: +5 = .bt-input 并入字段原语口径（控件静息边 + 圆角令牌 + hover/focus），高度保持 30  // 260930：统一实色卡（70 色 + 最近使用 + 自定义）新增 52 条声明。此前：-63 = 图标钮与菜单项收编 kit；+6 = 列宽/行高；+1 placeholder；+1 select text-align；+8 数据表行操作浮动

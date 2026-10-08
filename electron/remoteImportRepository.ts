@@ -17,7 +17,7 @@ interface RemoteImportDeps {
   trashNotebookId: string;
   notePathFor(noteId: string): string;
   /** v6：按 manifest 的 kind 解析正文路径（导入时 DB 尚未建行，notePathFor 会回退 doc）。 */
-  bodyPathFor(noteId: string, kind: "doc" | "sheet" | "bitable" | "board"): string;
+  bodyPathFor(noteId: string, kind: "doc" | "sheet" | "usheet" | "bitable" | "board"): string;
   assetDirFor(noteId: string): string;
   isSafeSegment(value: string): boolean;
   detectOrphans(noteId: string, content: string): void;

@@ -84,6 +84,7 @@ export function isNoteRefGone(noteId: string | null): boolean {
 export function noteKindLabel(kind: string | undefined): string {
   switch (kind) {
     case "sheet": return "表格";
+    case "usheet": return "表格（新）";
     case "bitable": return "多维表";
     case "board": return "画板";
     default: return "文档";
