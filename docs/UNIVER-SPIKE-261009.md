@@ -111,3 +111,23 @@ Capacitor WebView 复验；正文 v3 转换器（把旧 FortuneSheet 表迁到 u
 | 表A「粗体」→ 切走 → 切回 | 落盘正文仍含 styles/cellData.s（无丢失），hasBlob=false |
 
 **仍未自动验证**：文件选择器本身是 OS 原生弹窗，CDP 喂不了文件 ⇒ "插入即上传"的实际点击路径需你手动插一张图确认（预期：note-assets 出新文件、正文只有 filename、且不会出现 blob: 中间态）。
+
+## 9. 大表压测（261009，真实 Electron + CDP）
+
+脚本 [scripts/usheet-stress.mjs](../scripts/usheet-stress.mjs)：页内生成 cellData → saveNote → reload → 点行开表量 openMs/DOM/堆 → 关标签并在**强制 GC 后**再量堆。列固定 20。
+
+| 行×列 | 单元格 | 正文 | saveNote | 开表 | DOM 节点 | 堆(GC后) | 关标签后堆 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 500×20 | 1 万 | 165 KB | 10 ms | 803 ms | 2889 | 59 MB | 51 MB |
+| 1000×20 | 2 万 | 338 KB | 11 ms | 530 ms | 2889 | 61 MB | 53 MB |
+| 2000×20 | 4 万 | 691 KB | 18 ms | 551 ms | 2889 | 65 MB | 53 MB |
+| 5000×20 | 10 万 | 1.7 MB | 39 ms | 582 ms | 2889 | 71 MB | 54 MB |
+
+（base 堆 GC 后 29 MB；heap 含应用自身。）
+
+**结论**：
+- **开表时间基本不随规模增长**（1 万 → 10 万格都是 ~0.5–0.8s）；Univer 是 canvas 渲染，DOM 恒定 ~2889 节点，没有"每格一个 DOM"。这正是它相对 FortuneSheet（DOM/全量渲染）的根性优势。
+- **内存**：表格本体约 30 MB(1 万格) → 42 MB(10 万格)，≈ 0.13 KB/格，增量温和。
+- **释放有效**：关标签后 canvas=0、堆回到 base+~22 MB（dispose-on-hide 那套生效）。
+- **真正的天花板是正文 32 MiB 上限**：10 万格正文 1.7 MB ⇒ 约 180 万格触顶；内存 100 万格约 +130 MB。
+- 建议软目标：单表 ≤ 5000 行 × 100 列（50 万格）；更大走"表格文档 + 文档引用"或分表，保留 32 MiB 护栏。
