@@ -131,3 +131,20 @@ Capacitor WebView 复验；正文 v3 转换器（把旧 FortuneSheet 表迁到 u
 - **释放有效**：关标签后 canvas=0、堆回到 base+~22 MB（dispose-on-hide 那套生效）。
 - **真正的天花板是正文 32 MiB 上限**：10 万格正文 1.7 MB ⇒ 约 180 万格触顶；内存 100 万格约 +130 MB。
 - 建议软目标：单表 ≤ 5000 行 × 100 列（50 万格）；更大走"表格文档 + 文档引用"或分表，保留 32 MiB 护栏。
+
+## 10. plugin 瘦身 / Capacitor / xlsx 评估（261009）
+
+### 10.1 plugin 模式瘦身：**不做**
+- 现状：UniverSheetEditor 懒加载分包 **1.65 MB gzip**（preset 模式）。
+- 可裁包（插件模式相对 preset 省下的）：@univerjs/network 8.4KB + rpc 6.4KB + protocol 5.2KB + telemetry 0.5KB + presets 0.7KB ≈ **21 KB gzip（约 1%）**。
+- 大头都是不可裁的核心：sheets-ui 456KB、engine-render 335KB、engine-formula 289KB、docs-ui 260KB、core 215KB、sheets 120KB。
+- 结论：**plugin 模式重构收益 ~1%、维护成本高（逐包版本对齐 / CSS / locale / 升级回归）⇒ 不做**（AGENTS §3#17）。真正有效的体积杠杆是 **不开 worker**（省第二个 1.66 MB gzip 分包）与**精简 locale 分包**，并给该懒加载分包加 check:bundle 预算项守住。
+
+### 10.2 Capacitor / WebView：**可行，暂缓实现**
+- Univer 纯 web（canvas + worker，无原生依赖）；已在 Android 模拟器 Chrome 实测渲染 + 只读置灰（见 §2）。
+- 移动端 CSP 本就含 unsafe-eval；障碍只是体积（+1.65MB）与"移动端表格只读"的定位。
+- 结论：**可行**；当前移动端把 usheet 归为非 doc 只读占位（零成本）。要开只读渲染就复用 UniverSheetEditor 的 readOnly 分支，单独立项 + 模拟器验收。
+
+### 10.3 xlsx 导入导出：**不做**
+- Univer OSS 不含 xlsx（在 Pro）；本项目口径本就是"结构化存储 + 简单公式，真 Excel 挂附件"。
+- 结论：**不做**；将来若要，走 ExcelJS（MIT）桥，或继续挂附件。
