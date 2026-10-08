@@ -11,7 +11,7 @@
  * - 正文 = `usheets/{id}.usheet.json`（Univer IWorkbookData 快照），见 `core/usheetDoc.ts`。
  */
 import { useEffect, useRef, useState } from "react";
-import { createUniver, LocaleType, mergeLocales, type FUniver } from "@univerjs/presets";
+import { createUniver, LocaleType, mergeLocales, ICommandService, CommandType, type FUniver } from "@univerjs/presets";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
@@ -54,6 +54,29 @@ function diskSource(src: string): string {
   return ref && ref.space === "note" && !ref.staging ? ref.filename : src;
 }
 
+/** 自建文件选择器选图（**不经过 Univer 的 blob 流程**）；用户取消返回 null。 */
+function pickImageFile(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.style.position = "fixed";
+    input.style.left = "-10000px";
+    document.body.appendChild(input);
+    const done = (file: File | null) => { input.remove(); resolve(file); };
+    input.addEventListener("change", () => done(input.files?.[0] ?? null), { once: true });
+    input.addEventListener("cancel", () => done(null), { once: true });
+    input.click();
+  });
+}
+
+/** 选中的图 → 资产 URL：先落盘（uploadLakeResource），正文与活跃模型都只出现资产 URL，**永不产生 blob:**。 */
+async function uploadPickedFile(file: File, noteId: string): Promise<string | null> {
+  const out = await uploadLakeResource(file, noteId);
+  const ref = parseLocalAssetUrl(out.url);
+  return ref ? localAssetHttpUrl(noteId, ref.filename, { port: ASSET_PORT }) : out.url;
+}
+
 /** 把 data:/blob:/外部 http 图片走 uploadLakeResource 提升成资产，返回 filename。 */
 async function promoteInlineSource(src: string, noteId: string): Promise<string | null> {
   let out: ResourceUploadOutput | null = null;
@@ -83,6 +106,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const dirtyRef = useRef(onDirty); dirtyRef.current = onDirty;
   const captureRef = useRef(onEditorCapture); captureRef.current = onEditorCapture;
   const readOnlyRef = useRef(readOnly); readOnlyRef.current = readOnly;
+  /** 最近一次的**磁盘形态**正文（正文真相）：隐藏释放实例后，显示时按它重建。 */
+  const lastBodyRef = useRef<string>(content);
   /** data:/blob: 源 → 资产 filename（同一会话内缓存，避免每次 flush 重复上传同一张图）。 */
   const promotedRef = useRef(new Map<string, string>());
   const flushInflightRef = useRef(false);
@@ -92,7 +117,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
 
   // 首次可见后量高度：隐藏容器会量到 0，retry 到有高度为止（避免 Univer 挂在 0 尺寸容器里）。
   useEffect(() => {
-    if (!everVisible || ready) return;
+    if (!everVisible || ready || !visible) return;
     const host = hostRef.current;
     if (!host) return;
     let raf = 0;
@@ -102,7 +127,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     };
     measure();
     return () => { if (raf) window.cancelAnimationFrame(raf); };
-  }, [everVisible, ready]);
+  }, [everVisible, ready, visible]);
 
   const doFlush = async () => {
     const state = instanceRef.current;
@@ -125,7 +150,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       // 2) 落盘口径：已提升 → filename；本地资产 URL → filename；其余原样。
       mapUsheetImageSources(snapshot, (src) => promotedRef.current.get(src) ?? diskSource(src));
       const body = usheetToBody(snapshot);
-      if (body !== state.last) { state.last = body; changeRef.current(body); }
+      if (body !== state.last) { state.last = body; lastBodyRef.current = body; changeRef.current(body); }
     } finally {
       flushInflightRef.current = false;
       if (flushPendingRef.current) { flushPendingRef.current = false; void doFlush(); }
@@ -141,12 +166,12 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   // 挂载 Univer（首次可见 + 有高度后一次）。key 由宿主按 noteId/reloadKey 给，切文档整棵重挂。
   useEffect(() => {
     if (!ready || instanceRef.current) return;
-    const parsed = parseUsheetBody(content);
+    const parsed = parseUsheetBody(lastBodyRef.current);
     const workbook = parsed?.workbook ?? emptyUsheetWorkbook();
     // 打开：正文里的 filename → 资产服务器 URL（Univer 直接把 source 当图渲染）。
     mapUsheetImageSources(workbook, (src) => renderSource(src, noteId));
     let created: { univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook } | null = null;
-    let disposable: { dispose: () => void } | null = null;
+    const disposables: Array<{ dispose: () => void }> = [];
     try {
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
@@ -163,15 +188,49 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       // last = 规范化后的**磁盘形态**正文；避免打开即被判为"有改动"或把 URL 写回正文。
       const canonical = deepCloneWorkbook(book.save() as unknown as UsheetWorkbook);
       mapUsheetImageSources(canonical, (src) => promotedRef.current.get(src) ?? diskSource(src));
-      instanceRef.current = { ...created, last: usheetToBody(canonical) };
-      disposable = univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => scheduleFlush());
+      const canonicalBody = usheetToBody(canonical);
+      lastBodyRef.current = canonicalBody;
+      instanceRef.current = { ...created, last: canonicalBody };
+      disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => scheduleFlush()));
+      // 插图入口换成「先上传成资产、再插入资产 URL」——从源头消灭 blob（Univer 默认走 URL.createObjectURL）。
+      const commandService = univer.__getInjector().get(ICommandService) as unknown as {
+        registerCommand: (command: { id: string; type: CommandType; handler: () => Promise<boolean> }) => { dispose: () => void };
+      };
+      const registerUpload = (id: string, insert: (url: string) => unknown) => commandService.registerCommand({
+        id,
+        type: CommandType.COMMAND,
+        handler: async () => {
+          const file = await pickImageFile();
+          if (!file) return false;
+          const url = await uploadPickedFile(file, noteId);
+          if (!url) return false;
+          await insert(url);
+          scheduleFlush();
+          return true;
+        },
+      });
+      disposables.push(registerUpload("usheet.insert-float-image", (url) =>
+        (book as unknown as { getActiveSheet: () => { insertImage: (u: string) => unknown } }).getActiveSheet().insertImage(url)));
+      disposables.push(registerUpload("usheet.insert-cell-image", (url) => {
+        const ws = (book as unknown as {
+          getActiveSheet: () => {
+            getActiveRange: () => { insertCellImageAsync: (u: string) => unknown } | null;
+            getRange: (a1: string) => { insertCellImageAsync: (u: string) => unknown };
+          };
+        }).getActiveSheet();
+        return (ws.getActiveRange() ?? ws.getRange("A1")).insertCellImageAsync(url);
+      }));
+      (univerAPI as unknown as { updateMenuConfig: (config: Record<string, unknown>) => void }).updateMenuConfig({
+        "sheet.command.insert-float-image": { commandId: "usheet.insert-float-image" },
+        "sheet.command.insert-cell-image": { commandId: "usheet.insert-cell-image" },
+      });
       captureRef.current?.(() => instanceRef.current?.last ?? null);
     } catch (error) {
       console.error("Univer 表格挂载失败", error);
       created = null;
     }
     return () => {
-      try { disposable?.dispose(); } catch { /* ignore */ }
+      for (const item of disposables) { try { item.dispose(); } catch { /* ignore */ } }
       try { created?.univer.dispose(); } catch { /* ignore */ }
       instanceRef.current = null;
       captureRef.current?.(null);
@@ -200,8 +259,16 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     return () => observer.disconnect();
   }, [ready]);
 
-  // 切走 / 卸载前补齐未落盘的改动
-  useEffect(() => { if (!visible) flush(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [visible]);
+  // 隐藏 = 先把未落盘改动补齐，再释放 Univer 实例（canvas/模型/DOM）；显示时按 lastBodyRef 重建。
+  // 目的：多标签 keep-alive 下不把每个 usheet 实例常驻在内存里（Univer 实例不轻）。
+  useEffect(() => {
+    if (visible || !instanceRef.current) return;
+    void (async () => {
+      await doFlush();
+      setReady(false); // 触发挂载 effect 的 cleanup → univer.dispose()
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
   useEffect(() => () => {
     if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
     flush();
