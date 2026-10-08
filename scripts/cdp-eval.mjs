@@ -11,16 +11,25 @@ const page = list.find((t) => t.type === "page");
 if (!page) { console.error("no page target"); process.exit(1); }
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((res, rej) => { ws.addEventListener("open", res); ws.addEventListener("error", rej); });
-let id = 0; const pending = new Map();
+let id = 0; const pending = new Map(); const logs = [];
 ws.addEventListener("message", (ev) => {
   const msg = JSON.parse(String(ev.data));
-  if (msg.id && pending.has(msg.id)) { const p = pending.get(msg.id); pending.delete(msg.id); msg.error ? p.reject(new Error(JSON.stringify(msg.error))) : p.resolve(msg.result); }
+  if (msg.id && pending.has(msg.id)) { const p = pending.get(msg.id); pending.delete(msg.id); msg.error ? p.reject(new Error(JSON.stringify(msg.error))) : p.resolve(msg.result); return; }
+  if (msg.method === "Runtime.consoleAPICalled" && (msg.params.type === "error" || msg.params.type === "warning")) {
+    logs.push({ t: msg.params.type, args: (msg.params.args || []).map((a) => a.value ?? a.description ?? "").join(" ").slice(0, 400) });
+  } else if (msg.method === "Runtime.exceptionThrown") {
+    logs.push({ t: "exception", args: String(msg.params.exceptionDetails?.exception?.description || msg.params.exceptionDetails?.text || "").slice(0, 500) });
+  } else if (msg.method === "Log.entryAdded" && msg.params.entry?.level === "error") {
+    logs.push({ t: "log", args: String(msg.params.entry.text).slice(0, 400) });
+  }
 });
 const send = (method, params = {}) => new Promise((resolve, reject) => { const i = ++id; pending.set(i, { resolve, reject }); ws.send(JSON.stringify({ id: i, method, params })); setTimeout(() => { if (pending.has(i)) { pending.delete(i); reject(new Error("timeout " + method)); } }, 30000); });
 await send("Runtime.enable");
+await send("Log.enable");
 const r = await send("Runtime.evaluate", { expression: expr, awaitPromise: !noAwait, returnByValue: true });
 if (r.exceptionDetails) { console.error("EXCEPTION:", JSON.stringify(r.exceptionDetails).slice(0, 500)); process.exit(1); }
 console.log(JSON.stringify(r.result?.value, null, 1));
+if (process.argv.includes("--logs")) console.error("__LOGS__" + JSON.stringify(logs));
 if (process.argv.includes("--shot")) {
   const file = process.argv[process.argv.indexOf("--shot") + 1] || "/tmp/shot.png";
   await send("Page.enable");
