@@ -103,9 +103,10 @@ function NoteRefCard({ value, update, mode }: { value: NoteRefValue | null; upda
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const anchorRef = useRef<HTMLElement | null>(null);
+  /** 浮窗锚点 = **标题文字元素**（不是整块卡片）：用户 261008「浮窗要贴近文字」，贴块底会飘到行外。
+   *  ⚠️ 用 useState 存元素（不是 ref）：定位要等元素挂上后才量得到真实尺寸/位置。 */
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const rootRef = useCallback((el: HTMLElement | null) => { anchorRef.current = el; setAnchor(el); }, []);
+  const titleRef = useCallback((el: HTMLElement | null) => setAnchor(el), []);
   const pos = usePopoverPosition({ open: menuOpen, anchor, gap: 6 });
   const noteId = parseNoteRef(value);
   const note = findNoteRef(noteId);
@@ -153,7 +154,7 @@ function NoteRefCard({ value, update, mode }: { value: NoteRefValue | null; upda
   // 空引用：先出「选择文档…」；已经"取消链接"过（有展示名无引用）⇒ 纯文本 + 点开菜单重新引用
   if (!noteId) {
     return (
-      <div className="ne-note-ref ne-note-ref--plain" ref={rootRef}>
+      <div className="ne-note-ref ne-note-ref--plain" ref={titleRef}>
         {value?.title
           ? <span className="ne-note-ref__plain ln-ellipsis" onClick={() => setMenuOpen(true)}>{value.title}</span>
           : <button type="button" className="ln-btn" onClick={() => setPicking(true)}>选择文档…</button>}
@@ -165,10 +166,10 @@ function NoteRefCard({ value, update, mode }: { value: NoteRefValue | null; upda
   }
 
   return (
-    <div className="ne-note-ref" ref={rootRef} data-gone={gone ? "true" : undefined} onClick={() => setMenuOpen(true)}>
+    <div className="ne-note-ref" ref={titleRef} data-gone={gone ? "true" : undefined} onClick={() => setMenuOpen(true)}>
       {gone
         ? <span className="ne-note-ref__title ne-note-ref__title--gone" title="目标文档已删除或不可用">文档已删除{title ? `：${title}` : ""}</span>
-        : <span className="ne-note-ref__title ln-ellipsis" title={`点击操作：${title || noteId}`}><span className="ne-link">{title || "无标题"}</span></span>}
+        : <span className="ne-note-ref__title ln-ellipsis" ref={titleRef} title={`点击操作：${title || noteId}`}><span className="ne-link">{title || "无标题"}</span></span>}
       <span className="ne-note-ref__kind">{gone ? "失效" : noteKindLabel(note?.kind)}</span>
       {actionsMenu}
       {editing && <NoteRefEditPopover value={value ?? {}} anchor={anchor} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} />}

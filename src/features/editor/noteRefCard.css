@@ -11,7 +11,9 @@
   border: 0;
   background: transparent;
   padding: 0;
-  color: var(--lake-accent-text);
+  /* 与内核链接同源：用**内核自己的链接色令牌**（用户 261008：链接/附件是鲜艳主题色，我们过去用的
+     --lake-accent-text 偏深）。这是内核 token，不是自造色值，也不进颜色字面量护栏。 */
+  color: var(--lakex-editor-text-link);
   font: inherit;
   text-align: left;
   cursor: pointer;
