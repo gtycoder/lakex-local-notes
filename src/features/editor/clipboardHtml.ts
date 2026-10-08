@@ -241,6 +241,8 @@ function findRealImageUrl(img: Element): string | null {
  * 所以必须在 document 捕获阶段包一层 getData，返回升级（空 SVG 占位 → 真实 URL）后的 HTML，
  * 让 Lake 读到的就是处理过的内容。
  */
+import { emitOversizeTablePaste, oversizeTableShape } from "./tablePasteGuard";
+
 let pasteInterceptorInstalled = false;
 export function installPasteInterceptor(): void {
   if (pasteInterceptorInstalled) return;
@@ -252,6 +254,18 @@ export function installPasteInterceptor(): void {
       if (!dt) return;
       const clipboardData = dt as unknown as { getData: (type: string) => string };
       const originalGetData = clipboardData.getData.bind(clipboardData);
+      // A（261008）：**大表格不进内核** —— 实测 5500 行 × 6 列（2.7MB HTML）会让主线程同步卡 30.7 秒
+      // （内核表格卡片整表全量渲染、无虚拟化；云端 Lake 同样卡，见 HANDOFF §3#16）。
+      // 拦在捕获阶段：阻止本次粘贴 + 抛事件让 TablePasteGuardDialog 给明确出口；
+      // **剪贴板内容保留、绝不静默丢弃**（AGENTS §3#16）。
+      const pastedHtml = originalGetData("text/html");
+      const oversized = oversizeTableShape(pastedHtml);
+      if (oversized) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        emitOversizeTablePaste({ shape: oversized, html: pastedHtml, at: Date.now() });
+        return;
+      }
       clipboardData.getData = (type: string): string => {
         const value = originalGetData(type);
         if (type === "text/html" && value) {

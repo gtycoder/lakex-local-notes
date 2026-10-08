@@ -8,6 +8,7 @@ import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
 import { clearScrollMemory } from "./features/editor/EditorTab";
 import { setNoteRefHost } from "./features/editor/noteRef";
+import { TablePasteGuardDialog } from "./features/editor/TablePasteGuardDialog";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
@@ -749,6 +750,8 @@ export function App() {
         selectionText=""
         onClose={() => setAiAssistantOpen(false)}
       />
+      {/* 大表格粘贴护栏（A+B，261008）：超阈值不粘进文档，改为明确提示 + 一键「存为表格文档」 */}
+      <TablePasteGuardDialog parentId={notes.find((n) => n.id === activeNoteId)?.parentId ?? null} />
 
     </div>
   );
