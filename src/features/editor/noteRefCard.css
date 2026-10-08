@@ -18,7 +18,9 @@
   text-align: left;
   cursor: pointer;
 }
-.ne-note-ref__title:hover { text-decoration: underline; }
+/* 内核链接静息态**没有下划线**（实例实测 text-decoration: none）⇒ 我们也不加，只留 hover 变深一档。
+   （截图里那条橙色下划线是内核的"选中/激活"指示，不是静息样式，别照抄。） */
+.ne-note-ref__title:hover { text-decoration: none; }
 .ne-note-ref__title--gone { color: var(--lake-status-error); cursor: default; }
 .ne-note-ref__kind {
   flex: 0 0 auto;
