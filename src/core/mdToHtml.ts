@@ -140,12 +140,14 @@ export function wrapHtmlPage(title: string, bodyHtml: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${safeTitle}</title>
 <style>
+/* 独立导出页：**不引用应用 CSS 令牌**（页面在应用外打开，令牌没有定义；字体同理用系统栈）。
+   下面需要颜色的地方一律用字面量，值取自 src/styles/themes/light.css：小圆角 4px / 次级文字 #4e5969 / 分隔线 #d3d7de。 */
 body { max-width: 820px; margin: 0 auto; padding: 24px 20px; font: 16px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #24292f; }
 img { max-width: 100%; height: auto; }
 pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
-code { background: #f6f8fa; padding: 2px 5px; border-radius: var(--lake-radius-2xs); font-size: 90%; }
+code { background: #f6f8fa; padding: 2px 5px; border-radius: 4px; font-size: 90%; }
 pre code { background: none; padding: 0; }
-blockquote { margin: 0; padding-left: 12px; border-left: 1px solid var(--lake-border-strong); color: var(--lake-text-2); }
+blockquote { margin: 0; padding-left: 12px; border-left: 1px solid #d3d7de; color: #4e5969; }
 </style>
 </head>
 <body>

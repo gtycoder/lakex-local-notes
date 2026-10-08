@@ -34,6 +34,18 @@ describe("mdToHtml", () => {
     expect(page).toContain("<meta charset=\"utf-8\"");
     expect(page).toContain("<p>内容</p>");
   });
+
+  it("导出页不引用应用令牌（独立页面里没有令牌定义 ⇒ 引用等于样式失效）", () => {
+    // 261008 实测：模板曾用 var(--lake-radius-2xs) / var(--lake-border-strong) / var(--lake-text-2)
+    // ⇒ 导出物里这三条声明在计算值阶段失效（引用块竖线消失、次级色丢失）。值必须是字面量。
+    const page = wrapHtmlPage("测试", "<blockquote>x</blockquote>");
+    expect(page).not.toContain("var(--");
+    expect(page).not.toContain("--lake-");
+    // 字面量口径 = light 主题：小圆角 4px / 次级文字 #4e5969 / 分隔线 #d3d7de
+    expect(page).toContain("border-radius: 4px;");
+    expect(page).toContain("color: #4e5969;");
+    expect(page).toContain("border-left: 1px solid #d3d7de;");
+  });
 });
 describe("mdToHtml 危险协议过滤", () => {
   it("javascript: 链接降级为纯文本，不生成 <a>", () => {

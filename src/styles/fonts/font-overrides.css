@@ -51,9 +51,69 @@ html, body { font-family: var(--lake-font-family); }
 .ne-toc-item.ne-toc-selected .ne-toc-item-text,
 .ne-toc-item.ne-toc-selected .ne-toc-item-text a { color: var(--lake-accent-text); }
 
-/* 等宽：代码块（CodeMirror / cm6 / pre / code）统一 JetBrains Mono */
+/* 等宽：代码块（CodeMirror / cm6 / pre / code）+ 内核其余**等宽语义**的地方，统一 JetBrains Mono。
+ * 后者是 261008 全量排查补的：内核自己给这些元素写死了别的等宽栈（SFMono/Lucida/Cascadia/monospace）——
+ * 阅读态代码块正文 `ne-code-content`、公式输入框 `textarea.ne-math-input`、导图代码编辑器、
+ * 文本绘图对话框的输入/报错。 */
 pre, code, kbd, samp,
 .ne-codeblock,
 .CodeMirror,
 .cm-editor,
-.cm-content { font-family: var(--lake-font-family-mono); }
+.cm-content,
+ne-code-content,
+textarea.ne-math-input,
+.mindmap-text-editor,
+.mindmap-import-textarea,
+.mindmap-node-content .mindmap-inline-code,
+.text-to-diagram-code,
+.drawnix .ttd-dialog-input,
+.drawnix .ttd-dialog-panel textarea,
+.drawnix .ttd-dialog-output-error p { font-family: var(--lake-font-family-mono); }
+
+/* ---- 内核（lakex / antd / drawnix）**其余**硬编码字体栈：一律接产品字体（261008 全量排查） ----
+ *
+ * 排查方法：把两个真正被加载的第三方样式（`@dlient/lakex-doc-react/dist/style.css`、
+ * `@fortune-sheet/react/dist/index.css`）里所有 font-family 规则抽出来逐条分类 ——
+ * 属「等宽 / KaTeX 数学 / 图标字体（lake-icon）/ emoji」的保留（上面与下面各自处理），
+ * 其余 UI 文本全部在这里收口。桌面走 layer(feature) > legacy 压过内核；移动端 font-overrides.css
+ * 由 DocumentEditor 在内核 style.css **之后** import（无 @layer，靠顺序），同样生效。
+ *
+ * 刻意**不**覆盖的两类（记录在此，避免以后再排查一遍）：
+ *  ① KaTeX_*（数学字形）与 emoji 字体、`ne-heading-anchor` 的 lake-icon —— 功能性字形；
+ *  ② 内核 JS 运行时写进 **SVG 图标/导图主题** 的 fontFamily（如 H2/H3 图标里的 SVG `<text font-family="sans-serif">`、
+ *     mindmap theme 的 root/node 字体）：属图标字形与**内容**样式（内联，CSS 不可改，改也等于改内容）。
+ */
+.ant-select-multiple .ant-select-selection-search-input,
+.ant-select-multiple .ant-select-selection-search-mirror,
+.ant-pagination-item,
+.ant-pagination-prev, .ant-pagination-next,
+.ant-pagination-jump-prev, .ant-pagination-jump-next,
+.ant-pagination-jump-prev .ant-pagination-item-container .ant-pagination-item-ellipsis,
+.ant-pagination-jump-next .ant-pagination-item-container .ant-pagination-item-ellipsis,
+.ant-statistic-content,
+.ant-steps-item-icon,
+.ant-form-item-label > label.ant-form-item-required:not(.ant-form-item-required-mark-optional):before,
+.ne-block-context-menu,
+.ne-image-toolbar,
+.list-type-selector li .ne-list-symbol,
+.index-type-selector li .ne-list-symbol,
+ne-oli-i .ne-list-symbol,
+.ne-toc-normal-view .ne-toc-item span.prefix,
+.ne-toc-small-view:hover .ne-toc-item span.prefix,
+.ne-viewer-toc-sidebar-hover .ne-toc-view .ne-toc-item span.prefix,
+.ne-toc-sidebar-hover .ne-toc-view .ne-toc-item span.prefix,
+.mindmap-context-menu,
+.mindmap-dialog-backdrop,
+.mindmap-remark-tooltip,
+.mindmap-ai-input,
+.mindmap-ctrl-pct,
+.mindmap-dialog-primary, .mindmap-dialog-secondary,
+.mindmap-import-segmented button,
+.mindmap-search-input,
+.mindmap-tag-filter,
+.text-to-diagram,
+/* drawnix 的自有变量：内核里没有定义 ⇒ 这几件会退化成继承。显式接上，别让它哪天被定义成别的栈 */
+.drawnix .tool-icon__label,
+.drawnix .tool-icon__keybinding,
+.drawnix .menu-button,
+.drawnix .drawnix-button { font-family: var(--lake-font-family); }

@@ -141,7 +141,7 @@
 .quick-note-tool input { display: none; }
 
 /* 写作区 = 单个 Lake 内核实例（260919）：外层撑开、内层编辑器滚动，替代原 textarea。 */
-.quick-note-composer .quick-note-editor { flex: 1; width: 100%; min-height: 200px; display: flex; flex-direction: column; overflow: auto; font: 450 14px/1.7 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif; }
+.quick-note-composer .quick-note-editor { flex: 1; width: 100%; min-height: 200px; display: flex; flex-direction: column; overflow: auto; font: 450 14px/1.7 var(--lake-font-family); }   /* 261008：字体走令牌（原写死的系统栈不是 MiSans） */
 
 .quick-note-composer .quick-note-editor > .lake-editor-mount { flex: 1; min-height: 200px; }
 
