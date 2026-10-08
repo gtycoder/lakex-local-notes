@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { createUniver, LocaleType, mergeLocales, ICommandService, CommandType, type FUniver } from "@univerjs/presets";
-import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
+import { UniverSheetsCorePreset, IMenuManagerService } from "@univerjs/preset-sheets-core";
 import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
@@ -52,6 +52,55 @@ function renderSource(src: string, noteId: string): string {
 function diskSource(src: string): string {
   const ref = parseLocalAssetUrl(src);
   return ref && ref.space === "note" && !ref.staging ? ref.filename : src;
+}
+
+type RibbonSchema = { key: string; order: number; contextual?: boolean; item?: { id?: string; commandId?: string; title?: string; icon?: unknown } };
+type MenuManagerLike = { getFlatMenuByPositionKey: (key: string) => RibbonSchema[] };
+type FacadeLike = {
+  createMenu: (item: { id: string; title: string; action: string; order?: number; icon?: string }) => { appendTo: (path: string) => void };
+  updateMenuConfig: (config: Record<string, unknown>) => void;
+};
+
+/** 单行工具栏里要隐藏的项（261009：先塞全、再精简；三类各验证一处）。 */
+const RIBBON_TRIM_IDS: Record<string, unknown> = {
+  "ui.operation.activate-format-painter": { hidden: true }, // 原有「开始」项：格式刷（title=ui.formatPainter）
+  "ui.command.clear-formatting": { hidden: true },          // 原有「开始」项：清除格式（title=ui.clearFormatting）
+};
+// 注：**append 进来的项**用 updateMenuConfig({ hidden:true }) 无效（实测），精简它们 = 塞的时候不 append。
+
+/**
+ * 单行工具栏：把 插入/公式/数据/视图 的项全部 append 到「开始」行（ribbon.start.others），
+ * 再按 RIBBON_TRIM_IDS 隐藏。先塞全 → 之后按需精简。依赖 `ribbonType: "simple"`（只留「开始」这一行）。
+ * @returns append 的条数（便于验证）
+ */
+function flattenRibbonIntoStart(injector: { get: (token: unknown) => unknown }, facade: FacadeLike, tabs: string[]): number {
+  const menuManager = injector.get(IMenuManagerService) as MenuManagerLike;
+  const seen = new Set<string>();
+  for (const schema of menuManager.getFlatMenuByPositionKey("ribbon.start")) {
+    const id = schema.item?.commandId ?? schema.item?.id;
+    if (id) seen.add(id);
+  }
+  let added = 0;
+  for (const tab of tabs) {
+    for (const schema of menuManager.getFlatMenuByPositionKey(tab)) {
+      const item = schema.item;
+      const commandId = item?.commandId ?? item?.id;
+      if (!item || !commandId || seen.has(commandId)) continue;
+      // 只搬**表格**的项：contextual 的（如 doc.* 富文本工具）与 doc/docs 前缀一律不要（261009 实测发现混入）。
+      if (schema.contextual || /^(doc|docs)\./.test(commandId)) continue;
+      seen.add(commandId);
+      const entry: { id: string; title: string; action: string; order?: number; icon?: string } = {
+        id: "usheet.merge." + commandId,
+        title: item.title ?? commandId,
+        action: commandId,
+        order: schema.order,
+      };
+      if (typeof item.icon === "string") entry.icon = item.icon;
+      try { facade.createMenu(entry).appendTo("ribbon.start.others"); added += 1; } catch { /* 单条失败不影响其它 */ }
+    }
+  }
+  facade.updateMenuConfig(RIBBON_TRIM_IDS);
+  return added;
 }
 
 /** 自建文件选择器选图（**不经过 Univer 的 blob 流程**）；用户取消返回 null。 */
@@ -178,7 +227,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
         theme: buildUniverTheme() as never,
         presets: [
-          UniverSheetsCorePreset({ container: "univer-sheet-" + noteId, disableAutoFocus: true, toolbar: showToolbar, formulaBar: showToolbar }),
+          UniverSheetsCorePreset({ container: "univer-sheet-" + noteId, disableAutoFocus: true, toolbar: showToolbar, formulaBar: showToolbar, ribbonType: "simple" }),
           UniverSheetsDrawingPreset(),
         ],
       });
@@ -224,6 +273,12 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         "sheet.command.insert-float-image": { commandId: "usheet.insert-float-image" },
         "sheet.command.insert-cell-image": { commandId: "usheet.insert-cell-image" },
       });
+      // 261009：单行工具栏 —— 先把 插入/公式/数据/视图 的项全塞进「开始」行，再按 RIBBON_TRIM_IDS 隐藏。
+      try {
+        const injector = univer.__getInjector() as unknown as { get: (token: unknown) => unknown };
+        const added = flattenRibbonIntoStart(injector, univerAPI as unknown as FacadeLike, ["ribbon.insert", "ribbon.formulas", "ribbon.data", "ribbon.view"]);
+        console.log("[usheet] ribbon 合并：append", added, "项");
+      } catch (error) { console.warn("[usheet] ribbon 合并失败", error); }
       captureRef.current?.(() => instanceRef.current?.last ?? null);
     } catch (error) {
       console.error("Univer 表格挂载失败", error);
