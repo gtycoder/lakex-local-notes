@@ -13,7 +13,7 @@
  */
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Check, Copy, Pencil, SquareArrowOutUpRight, Unlink } from "lucide-react";
-import { Menu, Popover } from "../../components/ui/Overlay";
+import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import type { NoteSummary } from "../../lib/types";
 import {
@@ -120,9 +120,16 @@ function NoteRefCard({ value, update, mode }: { value: NoteRefValue | null; upda
     window.setTimeout(() => setCopied(false), 1200);
   };
 
-  /** 动作菜单：与内核链接那套一致（访问 / 编辑 / 复制 / 取消链接）。 */
+  /**
+   * 动作条：与内核链接那套一致（访问 / 编辑 / 复制 / 取消链接）。
+   *
+   * ⚠️ 用 **`Popover`**（中性表面）而不是 `Menu`：`Menu` 是"竖向菜单"原语，自带
+   * `flex-direction: column`，会把四个图标排成竖列（261008 实测踩过两次 —— 先漏 import 让
+   * 覆盖失效，再发现"用错原语"本身才是根源：动作条不是菜单）。这里**不写任何 flex 覆盖**，
+   * 靠原语 + 本处一行间距即可横向排列。
+   */
   const actionsMenu = (
-    <Menu open={menuOpen} onDismiss={() => setMenuOpen(false)} className="ne-note-ref-actions" label="文档引用操作"
+    <Popover open={menuOpen} onDismiss={() => setMenuOpen(false)} className="ne-note-ref-actions" label="文档引用操作"
       surfaceRef={pos.surfaceRef} style={pos.style ?? undefined}>
       {noteId && !gone && (
         <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="访问" aria-label="访问"
@@ -140,7 +147,7 @@ function NoteRefCard({ value, update, mode }: { value: NoteRefValue | null; upda
         <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="取消链接（保留展示名）" aria-label="取消链接"
           onClick={() => { setMenuOpen(false); update({ noteId: "", title }); }}><Unlink size={14} /></button>
       )}
-    </Menu>
+    </Popover>
   );
 
   // 空引用：先出「选择文档…」；已经"取消链接"过（有展示名无引用）⇒ 纯文本 + 点开菜单重新引用

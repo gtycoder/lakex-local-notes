@@ -142,7 +142,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableMarkdown.css": { decls: 17, dupGroups: 0 },   // 261005：Markdown 预览排版移到共用 components/markdown/markdown.css（60 → 17，只余本域单元格/展开面板样式）,   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
   "features/bitable/bitableExpandPreview.css": { decls: 1, dupGroups: 0 },
   "features/editor/noteRefCard.css": { decls: 28, dupGroups: 0 },   // 261008 新建：文档引用卡（布局复用 kit，只补本卡排版）
-  "features/editor/noteRefCardActions.css": { decls: 13, dupGroups: 0 },   // 261008 新建：引用卡动作浮层（横向图标行）+ 编辑弹窗字段   // 261008 新建：展开预览正文 +0.5px（bitableEditor.css 已顶到基线，按「新样式 = 新文件」口径单开）
+  "features/editor/noteRefCardActions.css": { decls: 7, dupGroups: 0 },   // 261008：动作条改 Popover 中性表面（去掉与 .ln-menu 对抗的 flex 覆盖）、删已空的 __target，13 → 7   // 261008 新建：展开预览正文 +0.5px（bitableEditor.css 已顶到基线，按「新样式 = 新文件」口径单开）
   "features/bitable/bitableFilterEditor.css": { decls: 150, dupGroups: 0 },   // 260930：筛选规则/分组树/日期动态值/多选值/增删菜单 + 面板最大高度/滚动（全新文件）
   "features/bitable/bitableFillRules.css": { decls: 67, dupGroups: 0 },   // 260930：条件填色配置与表格投影（全新文件）；+4 = 「无背景色」填色块居中态（flex 三项 + 图标色），合法新增
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）

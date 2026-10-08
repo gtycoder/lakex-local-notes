@@ -1,13 +1,9 @@
-/* 「文档引用」卡的**悬停动作浮层 + 编辑弹窗**（261008 二改：模仿内核链接那套四动作）。
-   表面/按钮/输入框全部复用原语（`.ln-popover` / `.ln-iconbtn` / `.ln-input__field` / `.ln-dialog*`），
-   这里只补两处**本处特有**的排布：动作浮层是**横向**图标行（kit 的 .ln-menu 是纵向菜单），以及编辑弹窗的两段字段间距。
-   单开文件的原因：`noteRefCard.css` 已登记 cssLayers 基线（只允许变小）。 */
+/* 「文档引用」卡的**悬停/点击动作条 + 编辑浮层**（261008）。
+   复用原生表面：动作条 = `Popover`（.ln-popover 中性表面，四个 .ln-iconbtn 默认横向排列）、
+   编辑浮层 = 同一个 `Popover` + kit 的 .ln-input__field / .ln-btn。
+   ⇒ 这里只留**本处特有的布局**：图标行间距 + 编辑字段的「标签在上、控件在下」。 */
 .ne-note-ref-actions {
   display: flex;
-  /* ⚠️ 必须显式 row：.ln-menu 自带 flex-direction: column，只写 display/gap 会被排成**竖向**（261008 实测踩过）。
-     内距由 .ln-menu 提供，这里不再叠加 padding（保持声明数不变、cssLayers 基线不动）。 */
-  flex-direction: row;
-  align-items: center;
   gap: var(--lake-space-xs);
 }
 .ne-note-ref-edit__label {
@@ -16,10 +12,4 @@
   gap: var(--lake-space-xs);
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-small);
-}
-.ne-note-ref-edit__target {
-  display: flex;
-  flex-direction: column;
-  gap: var(--lake-space-xs);
-  margin-top: var(--lake-space-lg);
 }
