@@ -74,4 +74,23 @@
 `cellData` + `styles`；与旧 `sheet` **同时挂载**并可互相切换；状态栏显示「表格（新）」。
 
 **已知取舍（后续批次）**：一个编辑器一个 Univer 实例（未做共享实例多 workbook）；未接 xlsx 导出、大表压测、
-Capacitor WebView 复验；正文 v3 转换器（把旧 FortuneSheet 表迁到 usheet）尚未做。
+Capacitor WebView 复验；正文 v3 转换器（把旧 FortuneSheet 表迁到 usheet）**明确不做**（都是测试数据，可删可重建）。
+
+## 7. 附件/图片独立资产管线（261009 优先项）
+
+**口径**：图片一律落成 note-assets/{noteId}/ 资产文件，**正文只存 filename**（与 kind=sheet / 画板同一套资产协议）。
+
+| 环节 | 做法 |
+| --- | --- |
+| 遍历 | [core/usheetDoc.ts](../src/core/usheetDoc.ts) 的 mapUsheetImageSources：覆盖单元格图（cellData[].p.drawings）与浮动图（workbook.resources 里 SHEET_DRAWING_PLUGIN 的 JSON）；只在真的改了才写回（不重排 JSON） |
+| 打开 | filename → 资产服务器 URL（renderSource），喂给 createWorkbook 渲染 |
+| 插入/保存 | data: / blob: / 外部 http 图片经 uploadLakeResource 提升成资产（同会话按源缓存，避免重复上传）；本地资产 URL → filename；正文绝不出现 URL/base64 |
+| 声明/GC | 正文存 filename ⇒ ASSET_NAME_RE / extractAssetRefs / detectOrphans **天然识别**，同步/GC 侧零改动 |
+| 样式 | 合并 @univerjs/preset-sheets-drawing 的 zh-CN locale（否则插图按钮显示 sheets-drawing-ui.title） |
+
+**实测**（真实 Electron + CDP）：打开「正文只含 filename」的表 → 单元格图经资产 URL **渲染成功**；
+点「粗体」触发命令后，落盘正文 source **仍是 filename**（hasHttp=false / hasBase64=false），
+且 listOrphanAssets **不**把它列为孤儿 ⇒ 声明与引用检测生效。
+
+**未自动验证**：文件选择器插入（OS 原生弹窗，CDP 无法喂文件）→ 走 blob: 提升那条路径；
+代码已实现，建议手动插一张本地图片后检查 note-assets/{noteId}/ 是否出现文件、正文是否只有 filename。
