@@ -94,3 +94,20 @@ Capacitor WebView 复验；正文 v3 转换器（把旧 FortuneSheet 表迁到 u
 
 **未自动验证**：文件选择器插入（OS 原生弹窗，CDP 无法喂文件）→ 走 blob: 提升那条路径；
 代码已实现，建议手动插一张本地图片后检查 note-assets/{noteId}/ 是否出现文件、正文是否只有 filename。
+
+## 8. blob 与内存收口（261009 续）
+
+**问题**：Univer 的"本地文件插图"内部用 URL.createObjectURL 生成 blob:，字节在文档卸载/revoke 前一直占内存；我们此前只把落盘快照换成 filename，活跃模型仍持有 blob。
+
+**改动**：
+- **插入即上传**：自建文件选择器 → uploadLakeResource 落资产 → insertImage / insertCellImageAsync 资产 URL。用 ICommandService.registerCommand + univerAPI.updateMenuConfig 把「插入 → 图片」的两项（sheet.command.insert-float-image / insert-cell-image）指到我们的命令 ⇒ **从源头不产生 blob:**。data:/blob:/外部 http → 资产的 promote 仍保留作兜底（粘贴/拖拽）。
+- **不活动标签释放**：隐藏时先 doFlush（正文落 lastBodyRef）再 setReady(false)，由挂载 effect 的 cleanup 调 univer.dispose()；显示时量高重挂、按 lastBodyRef 重建。多标签下不活动标签不再常驻 Univer 实例。
+
+**实测（真实 Electron + CDP，两表 A/B）**：
+| 动作 | 结果 |
+| --- | --- |
+| 切到表B | 表A 的 .usheet-univer-root 子节点/canvas = 0（实例已释放）；表B = 3 canvas |
+| 切回表A | 表A 重新挂出 3 canvas |
+| 表A「粗体」→ 切走 → 切回 | 落盘正文仍含 styles/cellData.s（无丢失），hasBlob=false |
+
+**仍未自动验证**：文件选择器本身是 OS 原生弹窗，CDP 喂不了文件 ⇒ "插入即上传"的实际点击路径需你手动插一张图确认（预期：note-assets 出新文件、正文只有 filename、且不会出现 blob: 中间态）。
