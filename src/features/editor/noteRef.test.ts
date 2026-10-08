@@ -96,6 +96,20 @@ describe("文档引用卡：接线护栏", () => {
     expect(RUNTIME.indexOf("registerNoteRefCard(mergedOptions)")).toBeLessThan(RUNTIME.indexOf("prepareCustomCards(mergedOptions)"));
   });
 
+  it("悬停动作与内核链接一致：访问 / 编辑（改展示名称 + 换文档）/ 复制 / 取消链接", () => {
+    expect(CARD).toContain('title="访问"');
+    expect(CARD).toContain('title="编辑（改展示名称 / 换文档）"');
+    expect(CARD).toContain("复制引用");
+    expect(CARD).toContain('title="取消链接（保留展示名）"');
+    expect(CARD).toContain("HoverPopover");           // 浮层只走 Overlay 原语
+    expect(CARD).toContain("usePopoverPosition");     // 定位单一来源
+    expect(CARD).toMatch(/update\(\{ noteId: "", title \}\)/);   // 取消链接 = 清引用、保留展示名
+    expect(CARD).toContain("编辑文档引用");
+    expect(CARD).toContain("展示名称");
+    expect(CARD).toContain("目标文档");
+    expect(CARD).toMatch(/const readonly = mode === "view"/);       // 阅读态不给写操作
+  });
+
   it("卡片实现：编辑/阅读两态、失效占位、点击打开、不静默", () => {
     expect(CARD).toContain("editorComponent");
     expect(CARD).toContain("viewerComponent");

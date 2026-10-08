@@ -25,7 +25,12 @@
 - **落点**：`src/features/editor/noteRef.ts`（纯逻辑：`lake-note://<id>` 约定、解析、宿主注册表、`isGoneNote` 失效判据、斜杠接线，可单测）+ `noteRefCard.tsx`（React 卡 + 选文档浮层，复用 kit/`Overlay` 原语）+ `noteRefCard.css`（新文件，已登记 cssLayers 基线 28）+ `lakeRuntime.ts`（`registerNoteRefCard(mergedOptions)` 必须在 `prepareCustomCards` 之前；斜杠项加进「小工具」组）+ `App.tsx`（`setNoteRefHost({ listNotes, openNote })` 注入宿主：卡片在内核 React 树里，拿不到应用 context）。
 - **契约与坑已回填** [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) **§5.23**（字段契约、`custom-${name}` 命名与分组 items 必需、「小工具」组 name 重名只能按 title 找、工具栏面板才是可靠入口、面板内部滚动要先 scrollIntoView、`.lake` 序列化形态、React 实例共享但无 context）。
 - **真实端验收**（隔离实例 + CDP 全链路）：面板里出现 `/doc 文档引用` ✓ → 插入后显示"选择文档…" ✓ → 浮层列出 3 篇、选中「被引用表格」✓ → 卡片显示 `被引用表格 表格 换` ✓ → **点标题打开表格标签页且 `sheetOpen:true`** ✓ → 落盘 `<card name="customBlock" customName="lake-note-ref" value="data:…lake-note://<sheetId>…">` ✓。
-- 门禁：tsc ✓ · vitest **1765 passed / 16 skipped** ✓（新增 8 条：`noteRef.test.ts` 6 条纯逻辑 + 2 条接线护栏）· ui-metrics ✓ · check:core ✓ · 双端构建 ✓ · `git diff --check` ✓。
+- **261008 二改（用户要求「模仿内核链接的样式」）**：卡片改成「类型图标 + 展示名（主色/hover 下划线）」，**悬停出浮层**，四个动作与内核链接一致 ——
+  **访问 / 编辑（弹窗改「展示名称」+「换文档」）/ 复制（`lake-note://<id>` 写剪贴板）/ 取消链接（清引用、保留展示名并渲染成纯文本）**；
+  浮层走 `Overlay` 的 `HoverPopover`（共享悬停区 + 开/关延时）、定位走 `usePopoverPosition`、动作按钮复用 `.ln-iconbtn--compact` + lucide 图标；
+  阅读态（viewer）不给写操作。新增样式文件 `noteRefCardActions.css`（横向图标行 + 编辑弹窗字段，已登记 cssLayers 基线 13）。
+  ⚠️ **该交互的"真实端点按"尚未验收**：本轮 CDP 在被遮挡窗口里无法驱动 `mouseMoved`（§4 坑），合成 hover 路线又两次卡在"工具栏「+」面板未打开"的驱动步骤（面板项 0 个，是驱动/选择器问题，不是卡片代码）⇒ **请用户点一下确认四动作与样式**。
+- 门禁：tsc ✓ · vitest **1773 passed / 16 skipped** ✓（`noteRef.test.ts` 8 条 + `tablePasteGuard.test.ts` 7 条纯逻辑/护栏）· ui-metrics ✓ · check:core ✓ · 双端构建 ✓ · `git diff --check` ✓。
 ### 261008 续 · 表格（编辑态一致性 / 默认字号 / 缩放 / 行高性能）+ 大表粘贴压测
 
 - **编辑态与展示态不一致（用户报「编辑时字号大、行高/换行对不上」）—— 真因是字体族，不是字号**：
