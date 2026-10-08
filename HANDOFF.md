@@ -5,11 +5,21 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接（261008 → 261007）
+## 0. 最新交接（261009 → 261008）
 
-> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261008 / 261007）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
+> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261009 / 261008）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点：无指定项** —— 从 §3 取（261008 最近两批：① 表格暗色模式 + 文档分屏 + 表格图标/换行/粘贴归属；② **云端对齐批**：字体统一 / 右键精简 / 颜色入口重做 / 小数位± + 导出修复 + 云端对齐调研）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+> **下一会话焦点（261009）**：usheet 已**转正为唯一表格**、旧 FortuneSheet **已彻底移除**（见下条）。剩余待办：① MiSans 桌面字体文件是否引入（用户 261009 暂缓）；② 单行工具栏最终取舍（插入/视图塞入项露出 vs 收进最右「⋯」）；③ 旧表格历史正文按 §3#7 不做迁移，回退 doc。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261009 · usheet 转正为唯一表格 + 旧 FortuneSheet 彻底移除（已合入 master，未推送）
+
+- **转正**：`spike/univer-sheet` 以 **fast-forward 合入 `master`**（HEAD `d5a15d9`，领先 `origin/master` 22 个提交，**未推送**）。
+- **彻底移除旧 sheet**：删 `src/features/sheet/` 整目录、`core/sheetDoc.ts`/`sheetGeometry.ts`（+测试）、`mobile/sheet/MobileSheetViewer.tsx`、两个 `@fortune-sheet` 补丁、`scripts/sheet-icons.*`、`package.json` 的 `@fortune-sheet/react` 依赖；`NoteKind = doc|usheet|bitable|board`（旧 `sheet` 按 AGENTS §3#7 直接回退 doc，**无迁移**）。
+- **UI**：状态栏 / 侧栏文案「表格（新）」→「表格」。
+- **顺带**：大表格粘贴护栏「存为表格文档」改为产出 usheet 正文（`parseHtmlTableToUsheetBody` / `native.createUsheetIn`）。
+- **门禁**：tsc 干净 · vitest **209 文件 / 1698 用例** · ui-metrics · check:core 75-0 · 双端构建 · `git diff --check`；应用侧冒烟：建表 → 开表 canvas 正常、状态栏「表格」、全页无「表格（新）」。
+- **残留审计（多轮）**：`git grep` 源码/依赖/补丁/脚本/文档确认无 `@fortune-sheet` / 旧模块 / `create_sheet_in`；仅保留 4 处说明性注释（`noteKind`/`syncDecisions.test`/`usheetDoc`/`mobile/noteRepository`）与 1 处 CSP 历史对比（LAKEX-CONTRACT）。
+- **文档**：TROUBLESHOOTING 删旧表格章节 K/M/N/O/P/Q；HANDOFF 删旧表格 §0 小节与 §3 暗色任务书/补丁坑；AGENTS 删旧表格图标/换行/右键条目（保留通用「模块级单例串台」教训）。
 
 ### 261008 四改~十改 · 「文档引用」卡整体收口（浮层几何 / 悬停出条 / 点击访问 / 自绘图标+深色 / 插入即编辑 / 完整创建流程 / 取消链接转正文 / 复制资料库路径）（已交付并推送）
 
