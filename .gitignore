@@ -16,6 +16,10 @@ test-node-abi
 .impeccable/questions/
 .impeccable/live/
 
+# Univer spike 产物（分支 spike/univer-sheet）：构建输出与截图不入库
+/dist-spike
+/spike-*.png
+
 # Local development credentials (never commit real values)
 .env
 .env.*
