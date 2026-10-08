@@ -1,7 +1,7 @@
 /**
  * 应用内统一颜色选择面板（全量内核实色卡 + 最近使用 + 自定义颜色）+ 它用的锚定浮层原语 Popover。
  *
- * 261008：从 features/bitable/bitableCells.tsx 移到这里 —— 表格（FortuneSheet）工具栏的「文字颜色 /
+ * 261008：从 features/bitable/bitableCells.tsx 移到这里 —— 表格工具栏的「文字颜色 /
  * 背景颜色」与工作表标签右键的「更改颜色」也要用同一个选色盘（AGENTS §3#19：应用内选色只有一个实现，
  * 最近使用按入口分桶）。bitableCells 继续 re-export ⇒ 多维表调用点一行都不用改。
  */

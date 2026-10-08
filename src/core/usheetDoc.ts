@@ -1,8 +1,7 @@
 /**
  * Univer 表格文档（kind = "usheet"）正文格式与序列化 —— 桌面/移动端共享的单一事实源。
  *
- * 与 kind="sheet"（FortuneSheet，正文 sheets/{id}.sheet.json）**并存**，两者互不影响；
- * 新类型跑通、验收后才会撤掉旧实现。
+ * 唯一表格实现（旧的 FortuneSheet `kind="sheet"` 已彻底移除；按 AGENTS §3#7 不做迁移）。
  *
  * 正文 = `{ kind:"usheet", version:1, workbook: <Univer IWorkbookData> }`（纯文本 JSON）。
  * workbook 就是 Univer 的 `fWorkbook.save()` 快照，原样存、原样喂回 `createWorkbook()`。
