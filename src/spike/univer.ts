@@ -12,6 +12,7 @@
 import { createUniver, LocaleType, mergeLocales, defaultTheme, IUniverInstanceService } from "@univerjs/presets";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
+import workerURL from "./univer-worker?worker&url";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "../styles/themes/base.css";
 import "../styles/themes/light.css";
@@ -47,7 +48,7 @@ function readTokens(): Record<string, string> {
 /** 用我们的令牌覆盖 Univer defaultTheme 的调色板（保留其余键，Theme 形状必须完整）。 */
 function buildUniverTheme(): unknown {
   const tk = readTokens();
-  const theme = structuredClone(defaultTheme) as Record<string, Record<string, string>>;
+  const theme = structuredClone(defaultTheme) as unknown as Record<string, Record<string, unknown>>;
   const set = (pal: string, shade: string, v: string) => {
     if (theme[pal] && v) theme[pal][shade] = v;
   };
@@ -95,11 +96,13 @@ type Book = {
 const books = new Map<string, Book>();
 
 try {
+  /** 可选 worker 路径：?worker=1 时走 UniverRPC 主/worker 线程（CSP worker-src 'self' blob:）。 */
+  const useWorker = new URLSearchParams(location.search).has("worker");
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.ZH_CN,
     locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never) },
     theme: defaultTheme,
-    presets: [UniverSheetsCorePreset({ container: "univer-root" })],
+    presets: [UniverSheetsCorePreset({ container: "univer-root", ...(useWorker ? { workerURL } : {}) })],
   });
 
   const first = univerAPI.createWorkbook(demoWorkbook("spike-1", "Spike1") as never) as unknown as Book;
@@ -117,6 +120,7 @@ try {
 
   (window as unknown as Record<string, unknown>).__spike = {
     version: "univer-1.0.3",
+    worker: useWorker,
     violations,
     errors,
     listBooks: () => Array.from(books.keys()),
