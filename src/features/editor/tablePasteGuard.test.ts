@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   TABLE_PASTE_MAX_CELLS, TABLE_PASTE_MAX_ROWS, countHtmlTable, noteRefCardHtml, onOversizeTablePaste,
-  oversizeTableShape, parseHtmlTableToSheetBody, sheetDocTitle, emitOversizeTablePaste,
+  oversizeTableShape, parseHtmlTableToSheetBody, sheetDocTitle, emitOversizeTablePaste, shouldGuardOversizePaste,
 } from "./tablePasteGuard";
 
 // ⚠️ jsdom 环境下 import.meta.url 是 http:// ⇒ 不能给 readFileSync；源码护栏走 cwd 相对路径。
@@ -60,6 +60,16 @@ describe("大表格粘贴护栏：纯逻辑", () => {
     expect(decodeURIComponent(/data-value="([^"]*)"/.exec(html)![1])).toContain('"$name":"lake-note-ref"');
   });
 
+  it("护栏只对 Lake 文档生效：网格类编辑器不拦", () => {
+    const el = (cls: string) => { const d = document.createElement("div"); d.className = cls; return d; };
+    expect(shouldGuardOversizePaste(null)).toBe(true); // 拿不到宿主 → 保守护栏
+    expect(shouldGuardOversizePaste(el("lake-editor-tab"))).toBe(true);
+    expect(shouldGuardOversizePaste(el("usheet-editor sheet-editor"))).toBe(false);
+    expect(shouldGuardOversizePaste(el("sheet-editor"))).toBe(false);
+    expect(shouldGuardOversizePaste(el("bitable-editor"))).toBe(false);
+    expect(shouldGuardOversizePaste(el("board-editor"))).toBe(false);
+  });
+
   it("事件通道：订阅/退订/广播", () => {
     const seen: number[] = [];
     const off = onOversizeTablePaste((p) => seen.push(p.shape.rows));
@@ -78,6 +88,8 @@ describe("大表格粘贴护栏：接线", () => {
     expect(INTERCEPTOR).toContain("emitOversizeTablePaste(");
     expect(INTERCEPTOR.indexOf("oversizeTableShape(pastedHtml)")).toBeLessThan(INTERCEPTOR.indexOf("clipboardData.getData = "));
     expect(INTERCEPTOR).toMatch(/},\s*true\s*\);/);
+    // 261009：必须按"当前活动编辑器"收窄，网格类编辑器（usheet 等）不被拦
+    expect(INTERCEPTOR).toContain("shouldGuardOversizePaste(activeEditorHost())");
   });
 
   it("对话框：A 的明确提示 + B 的一键存为表格文档 + 引用卡落点", () => {

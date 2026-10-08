@@ -241,7 +241,8 @@ function findRealImageUrl(img: Element): string | null {
  * 所以必须在 document 捕获阶段包一层 getData，返回升级（空 SVG 占位 → 真实 URL）后的 HTML，
  * 让 Lake 读到的就是处理过的内容。
  */
-import { emitOversizeTablePaste, oversizeTableShape } from "./tablePasteGuard";
+import { emitOversizeTablePaste, oversizeTableShape, shouldGuardOversizePaste } from "./tablePasteGuard";
+import { activeEditorHost } from "./activeEditor";
 
 let pasteInterceptorInstalled = false;
 export function installPasteInterceptor(): void {
@@ -259,7 +260,9 @@ export function installPasteInterceptor(): void {
       // 拦在捕获阶段：阻止本次粘贴 + 抛事件让 TablePasteGuardDialog 给明确出口；
       // **剪贴板内容保留、绝不静默丢弃**（AGENTS §3#16）。
       const pastedHtml = originalGetData("text/html");
-      const oversized = oversizeTableShape(pastedHtml);
+      // 261009：护栏只对 **Lake 文档** 生效。网格类编辑器（usheet/sheet/bitable/board）自己按单元格
+      // 处理大表粘贴、不经过内核表格卡片，拦它会把用户的大表粘贴误当成"文档卡死"（用户实测粘进 usheet 弹了护栏）。
+      const oversized = shouldGuardOversizePaste(activeEditorHost()) ? oversizeTableShape(pastedHtml) : null;
       if (oversized) {
         event.preventDefault();
         event.stopImmediatePropagation();

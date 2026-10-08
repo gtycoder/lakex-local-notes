@@ -39,6 +39,22 @@ export function countHtmlTable(html: string): TableShape | null {
   return { rows, cells };
 }
 
+/** 网格类编辑器（自己按网格处理大表粘贴，**不该**被 Lake 文档的护栏拦）：
+ *  usheet（Univer）/ sheet（FortuneSheet）/ bitable / board。 */
+const GRID_EDITOR_SELECTOR = ".usheet-editor, .sheet-editor, .bitable-editor, .board-editor";
+
+/**
+ * 大表粘贴护栏只对 **Lake 文档** 生效。
+ * 护栏的动机是"内核表格卡片全量渲染 DOM、无虚拟化会把文档卡死"；网格类编辑器按单元格处理，
+ * 不经过内核表格卡片（Univer 实测 10 万格开表 ~0.6s），拦它反而是错（261009 用户实测：粘进
+ * usheet 却弹 Lake 的护栏）。
+ * @param host 当前显示的编辑器宿主（`activeEditorHost()`）；拿不到时保守起见仍护栏（保 Lake 文档语义）。
+ */
+export function shouldGuardOversizePaste(host: Element | null): boolean {
+  if (!host) return true;
+  return !host.matches(GRID_EDITOR_SELECTOR);
+}
+
 /** 超阈值才返回形状（用于拦截判据），否则 null。 */
 export function oversizeTableShape(html: string): TableShape | null {
   const shape = countHtmlTable(html);
