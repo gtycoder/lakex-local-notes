@@ -61,12 +61,44 @@ type FacadeLike = {
   updateMenuConfig: (config: Record<string, unknown>) => void;
 };
 
-/** 单行工具栏里要隐藏的项（261009：先塞全、再精简；三类各验证一处）。 */
+/** 单行工具栏里**要隐藏的原有项**（261009 定稿精简）。
+ *  注：append 进来的项用 updateMenuConfig({ hidden:true }) 无效（实测）⇒ 精简它们 = 以下白名单里不列。 */
 const RIBBON_TRIM_IDS: Record<string, unknown> = {
-  "ui.operation.activate-format-painter": { hidden: true }, // 原有「开始」项：格式刷（title=ui.formatPainter）
-  "ui.command.clear-formatting": { hidden: true },          // 原有「开始」项：清除格式（title=ui.clearFormatting）
+  "ui.operation.activate-format-painter": { hidden: true }, // 格式刷
+  "ui.command.clear-formatting": { hidden: true },          // 清除格式
+  "sheet.command.set-range-font-family": { hidden: true },  // 字体：统一走 --lake-font-family（MiSans），禁止自定义
+  "sheet.command.add-range-protection-from-toolbar": { hidden: true }, // 保护
+  "base-ui.operation.toggle-shortcut-panel": { hidden: true },         // 快捷键面板
 };
-// 注：**append 进来的项**用 updateMenuConfig({ hidden:true }) 无效（实测），精简它们 = 塞的时候不 append。
+
+/** 单行工具栏**保留**的「塞入项」白名单（其余 insert/公式/视图 项不 append）。 */
+const RIBBON_APPEND_ALLOW = new Set<string>([
+  "sheet.command.insert-cell-image",              // 图片（单元格）
+  "sheet.command.insert-float-image",             // 图片（浮动）
+  "sheet.command.add-worksheet-background-image", // 背景图片
+  "sheet.toolbar.sheet-frozen",                   // 冻结
+  "sheet.command.toggle-gridlines",               // 切换网格线
+  "base-ui.operation.toggle-fullscreen",          // 全屏
+  "formula-ui.operation.insert-function.common",  // 函数
+]);
+
+/** 应用字体令牌（`--lake-font-family`，即 MiSans 栈）；表格一律用它，**禁止自定义字体**。 */
+function lakeFontFamily(): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue("--lake-font-family").trim();
+  return value && !value.includes("var(") ? value : "MiSans, sans-serif";
+}
+
+/** 把 workbook 的默认样式与所有命名样式的 ff 钉到应用字体（打开、落盘、canonical 各过一遍）。 */
+function applyFontPolicy(workbook: UsheetWorkbook, fontStack: string): void {
+  const wb = workbook as unknown as { defaultStyle?: unknown; styles?: Record<string, unknown> };
+  const base = wb.defaultStyle && typeof wb.defaultStyle === "object" ? wb.defaultStyle as Record<string, unknown> : {};
+  wb.defaultStyle = { ...base, ff: fontStack };
+  if (wb.styles) {
+    for (const style of Object.values(wb.styles)) {
+      if (style && typeof style === "object") (style as Record<string, unknown>).ff = fontStack;
+    }
+  }
+}
 
 /**
  * 单行工具栏：把 插入/公式/数据/视图 的项全部 append 到「开始」行（ribbon.start.others），
@@ -88,6 +120,7 @@ function flattenRibbonIntoStart(injector: { get: (token: unknown) => unknown }, 
       if (!item || !commandId || seen.has(commandId)) continue;
       // 只搬**表格**的项：contextual 的（如 doc.* 富文本工具）与 doc/docs 前缀一律不要（261009 实测发现混入）。
       if (schema.contextual || /^(doc|docs)\./.test(commandId)) continue;
+      if (!RIBBON_APPEND_ALLOW.has(commandId)) continue;
       seen.add(commandId);
       const entry: { id: string; title: string; action: string; order?: number; icon?: string } = {
         id: "usheet.merge." + commandId,
@@ -185,6 +218,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     flushInflightRef.current = true;
     try {
       const snapshot = deepCloneWorkbook(state.book.save() as unknown as UsheetWorkbook);
+      applyFontPolicy(snapshot, lakeFontFamily());
       // 1) 收集尚未提升的内联图（data:/blob:），提升成资产文件并记住映射。
       const inline: string[] = [];
       mapUsheetImageSources(snapshot, (src) => { if (INLINE_SOURCE_RE.test(src) && !promotedRef.current.has(src)) inline.push(src); return src; });
@@ -217,6 +251,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     if (!ready || instanceRef.current) return;
     const parsed = parseUsheetBody(lastBodyRef.current);
     const workbook = parsed?.workbook ?? emptyUsheetWorkbook();
+    // 图表一律用应用字体令牌（MiSans），禁止自定义字体：默认样式 + 所有命名样式都钉死。
+    applyFontPolicy(workbook, lakeFontFamily());
     // 打开：正文里的 filename → 资产服务器 URL（Univer 直接把 source 当图渲染）。
     mapUsheetImageSources(workbook, (src) => renderSource(src, noteId));
     let created: { univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook } | null = null;
@@ -227,7 +263,15 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
         theme: buildUniverTheme() as never,
         presets: [
-          UniverSheetsCorePreset({ container: "univer-sheet-" + noteId, disableAutoFocus: true, toolbar: showToolbar, formulaBar: showToolbar, ribbonType: "simple" }),
+          UniverSheetsCorePreset({
+            container: "univer-sheet-" + noteId,
+            disableAutoFocus: true,
+            toolbar: showToolbar,
+            formulaBar: showToolbar,
+            ribbonType: "simple",
+            // 字体表收窄成唯一一项 = 应用字体令牌 ⇒ 不存在"自定义字体"这个选项（配合隐藏字体选择器）。
+            customFontFamily: { override: true, list: [{ value: lakeFontFamily(), label: "MiSans" }] },
+          }),
           UniverSheetsDrawingPreset(),
         ],
       });
@@ -236,6 +280,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       created = { univer, univerAPI, book };
       // last = 规范化后的**磁盘形态**正文；避免打开即被判为"有改动"或把 URL 写回正文。
       const canonical = deepCloneWorkbook(book.save() as unknown as UsheetWorkbook);
+      applyFontPolicy(canonical, lakeFontFamily());
       mapUsheetImageSources(canonical, (src) => promotedRef.current.get(src) ?? diskSource(src));
       const canonicalBody = usheetToBody(canonical);
       lastBodyRef.current = canonicalBody;
