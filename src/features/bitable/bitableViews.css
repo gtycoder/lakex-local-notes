@@ -22,7 +22,7 @@
 .bt-group-end > td:last-child { border-bottom-right-radius: var(--lake-radius-sm); }
 /* 分组头是**表格行**：内容必须**不进流**（绝对定位内层），否则它的长文本会参与 table-layout:auto 的
    列宽计算，把首列撑开、与记录行错位（260929 实测：表头首列 482px vs 记录行 80px）。 */
-.bt-group-cell { position: relative; height: 36px; padding: 0; font-size: 12px; color: var(--lake-text-1); cursor: pointer; }
+.bt-group-cell { position: relative; height: 36px; padding: 0; font-size: var(--lake-font-size-small); color: var(--lake-text-1); cursor: pointer; }
 .bt-group-inner { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; overflow: hidden; }
 /* 折叠钮：云端是**无边框**的裸三角（24×24 命中区 + 4px 圆角，仅 hover 有底色） */
 .bt-group-fold { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); background: transparent; }
@@ -41,7 +41,7 @@
    光标落在哪一格就把那一格加重一档（云端口径：未加重时统计格与所在行同色）。 */
 .bt-group-row .bt-group-stat { background: var(--lake-bg-panel); }
 /* StatCell 内容：右对齐 + ▾；**未配置时整块 opacity:0，仅 hover 显形**（云端口径：默认空白、不出现「统计」字样） */
-.bt-stat { display: flex; align-items: center; justify-content: flex-end; gap: 2px; width: 100%; height: 100%; border: 0; background: transparent; padding: 0; font: inherit; font-size: 12px; color: var(--lake-text-3); cursor: pointer; }
+.bt-stat { display: flex; align-items: center; justify-content: flex-end; gap: 2px; width: 100%; height: 100%; border: 0; background: transparent; padding: 0; font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-text-3); cursor: pointer; }
 /* .bt-stat-text：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 .bt-stat-caret { flex: 0 0 auto; }
 .bt-stat:not(.has-stat) .bt-stat-text, .bt-stat:not(.has-stat) .bt-stat-caret { opacity: 0; }
@@ -86,7 +86,7 @@
   height: 24px;
   padding: 0 8px;
   background: var(--lake-bg-subtle);
-  font-size: var(--lake-font-size-micro);
+  font-size: var(--lake-font-size-tiny);
   color: var(--lake-text-3);
   text-align: right;
   white-space: nowrap;
@@ -110,7 +110,7 @@
 .bt-panel-note {
   margin: 4px 0;
   color: var(--lake-text-3);
-  font-size: 12px;
+  font-size: var(--lake-font-size-small);
   line-height: 18px;
 }
 
@@ -123,7 +123,7 @@
   border-bottom: 1px solid var(--lake-border-1);
   background: var(--lake-status-pending-soft);
   color: var(--lake-text-2);
-  font-size: 12px;
+  font-size: var(--lake-font-size-small);
   line-height: 18px;
 }
 

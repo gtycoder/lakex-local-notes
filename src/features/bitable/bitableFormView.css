@@ -35,7 +35,7 @@
   border-top: 1px solid var(--lake-border-1);
 }
 
-.bt-form-field-label { font-size: 13px; color: var(--lake-text-1); }
+.bt-form-field-label { font-size: var(--lake-font-size-body); color: var(--lake-text-1); }
 .bt-form-field-control { min-width: 0; }
 
 .bt-form-actions {
@@ -45,4 +45,4 @@
   gap: 10px;
 }
 
-.bt-form-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--lake-accent); }
+.bt-form-ok { display: inline-flex; align-items: center; gap: 4px; font-size: var(--lake-font-size-small); color: var(--lake-accent); }

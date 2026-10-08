@@ -1,5 +1,5 @@
 diff --git a/node_modules/@fortune-sheet/react/dist/index.esm.js b/node_modules/@fortune-sheet/react/dist/index.esm.js
-index c4486a2..4cab2ad 100644
+index c4486a2..d1bc3dd 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.esm.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.esm.js
 @@ -1102,7 +1102,7 @@ var InputBox = function InputBox() {
@@ -20,7 +20,29 @@ index c4486a2..4cab2ad 100644
    }, /*#__PURE__*/React.createElement(ContentEditable, {
      innerRef: function innerRef(e) {
        inputRef.current = e;
-@@ -2061,6 +2061,7 @@ var ImgBoxs = function ImgBoxs() {
+@@ -1134,12 +1134,18 @@ var InputBox = function InputBox() {
+     },
+     className: "luckysheet-cell-input",
+     id: "luckysheet-rich-text-editor",
+-    style: {
++    style: (function () { var _fd2 = getFlowdata(context); var _cell2 = _fd2 && _fd2[row_index] && _fd2[row_index][col_index]; var _vt2 = _cell2 && _cell2.vt != null ? Number(_cell2.vt) : 1; var _justify = _vt2 === 0 ? "center" : _vt2 === 2 ? "flex-end" : "flex-start"; return {
+       transform: "scale(".concat(context.zoomRatio, ")"),
+       transformOrigin: "left top",
+       width: "".concat(100 / context.zoomRatio, "%"),
+-      height: "".concat(100 / context.zoomRatio, "%")
+-    },
++      height: "".concat(100 / context.zoomRatio, "%"),
++      // LOCAL-CHANGE(261008): 编辑框垂直对齐按单元格 vt（与画布 cellRender 的 normalizedCellAttr(cell,"vt") 一致）。
++      // 内核原来只给**容器** .luckysheet-input-box-inner 设 align-items，但本子元素 height:100% 撑满 ⇒ 对齐失效、
++      // 编辑态恒顶部，用户报「展示底对齐、一编辑变顶对齐」。这里把对齐落到真正承载文本的子元素上。
++      display: "flex",
++      flexDirection: "column",
++      justifyContent: _justify
++    }; })(),
+     onChange: onChange,
+     onKeyDown: onKeyDown,
+     onPaste: onPaste,
+@@ -2061,6 +2067,7 @@ var ImgBoxs = function ImgBoxs() {
      className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
      role: "button",
      tabIndex: 0,
@@ -28,7 +50,7 @@ index c4486a2..4cab2ad 100644
      "aria-label": "\u5220\u9664",
      title: "\u5220\u9664"
    }, /*#__PURE__*/React.createElement("i", {
-@@ -2185,6 +2186,7 @@ var ImgBoxs = function ImgBoxs() {
+@@ -2185,6 +2192,7 @@ var ImgBoxs = function ImgBoxs() {
      className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
      role: "button",
      tabIndex: 0,
@@ -36,7 +58,7 @@ index c4486a2..4cab2ad 100644
      "aria-label": "\u5220\u9664",
      title: "\u5220\u9664"
    }, /*#__PURE__*/React.createElement("i", {
-@@ -6128,10 +6130,7 @@ var Toolbar = function Toolbar(_ref) {
+@@ -6128,10 +6136,7 @@ var Toolbar = function Toolbar(_ref) {
          iconId: name,
          tooltip: toolbar.insertImage,
          key: name,
@@ -48,7 +70,7 @@ index c4486a2..4cab2ad 100644
        }, /*#__PURE__*/React.createElement("input", {
          id: "fortune-img-upload",
          type: "file",
-@@ -6624,6 +6623,10 @@ var Toolbar = function Toolbar(_ref) {
+@@ -6624,6 +6629,10 @@ var Toolbar = function Toolbar(_ref) {
          }));
        });
      }
@@ -59,7 +81,7 @@ index c4486a2..4cab2ad 100644
      return /*#__PURE__*/React.createElement(Button, {
        iconId: name,
        tooltip: tooltip,
-@@ -6642,7 +6645,7 @@ var Toolbar = function Toolbar(_ref) {
+@@ -6642,7 +6651,7 @@ var Toolbar = function Toolbar(_ref) {
      className: "fortune-toolbar",
      role: "toolbar",
      "aria-label": toolbar.toolbar
@@ -68,10 +90,10 @@ index c4486a2..4cab2ad 100644
      return /*#__PURE__*/React.createElement(CustomButton, {
        tooltip: n.tooltip,
        onClick: n.onClick,
-@@ -7357,6 +7360,12 @@ var Divider$1 = function Divider() {
+@@ -7357,6 +7366,12 @@ var Divider$1 = function Divider() {
    });
  };
-
+ 
 +var _LAKE_MENU_ICONS = {"copy":"copy","paste":"cm-paste","add-col-left":"cm-col-left","add-col-right":"cm-col-right","add-row-top":"cm-row-top","add-row-bottom":"cm-row-bottom","delete-row":"cm-delete","delete-column":"cm-delete","hide-row":"hidden","hide-column":"hidden","set-row-height":"cm-move-vertical","set-column-width":"cm-move-horizontal","clear":"clear-format","orderAZ":"cm-order-az","orderZA":"cm-order-za","sort":"sort","filter":"filter","image":"image","cell-image":"image","link":"link","auto-row-height":"cm-move-vertical"};
 +var _lakeMenuIcon = function _lakeMenuIcon(el, menu) {
 +  if (Array.isArray(el)) return el.map(function (item) { return _lakeMenuIcon(item, menu); });
@@ -81,16 +103,16 @@ index c4486a2..4cab2ad 100644
  var Menu = function Menu(_ref) {
    var _onClick = _ref.onClick,
      _onMouseLeave = _ref.onMouseLeave,
-@@ -7384,7 +7393,7 @@ var Menu = function Menu(_ref) {
+@@ -7384,7 +7399,7 @@ var Menu = function Menu(_ref) {
      tabIndex: 0
    }, /*#__PURE__*/React.createElement("div", {
      className: "luckysheet-cols-menuitem-content luckysheet-mousedown-cancel"
 -  }, children));
 +  }, React.createElement("span", { className: "luckysheet-cols-menuicon" }, _LAKE_MENU_ICONS[_ref.menuKey] ? React.createElement("svg", { width: 16, height: 16, "aria-hidden": "true" }, React.createElement("use", { xlinkHref: "#" + _LAKE_MENU_ICONS[_ref.menuKey] })) : null), children));
  };
-
+ 
  var CustomSort = function CustomSort() {
-@@ -7567,8 +7576,10 @@ var ContextMenu = function ContextMenu() {
+@@ -7567,8 +7582,10 @@ var ContextMenu = function ContextMenu() {
                    console.warn("Clipboard access blocked. Attempting to use sessionStorage fallback.");
                  case 4:
                    finalText = clipboardText || sessionClipboardText;
@@ -102,7 +124,7 @@ index c4486a2..4cab2ad 100644
                      draftCtx.contextMenu = {};
                    });
                  case 5:
-@@ -7629,7 +7640,7 @@ var ContextMenu = function ContextMenu() {
+@@ -7629,7 +7646,7 @@ var ContextMenu = function ContextMenu() {
            type: "text",
            className: "luckysheet-mousedown-cancel",
            placeholder: rightclick.number,
@@ -111,7 +133,7 @@ index c4486a2..4cab2ad 100644
          }), /*#__PURE__*/React.createElement("span", {
            className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
          }, "".concat(rightclick.column, "  ")), !_.startsWith((_context$lang2 = context.lang) !== null && _context$lang2 !== void 0 ? _context$lang2 : "", "zh") && (/*#__PURE__*/React.createElement("span", {
-@@ -7683,7 +7694,7 @@ var ContextMenu = function ContextMenu() {
+@@ -7683,7 +7700,7 @@ var ContextMenu = function ContextMenu() {
            type: "text",
            className: "luckysheet-mousedown-cancel",
            placeholder: rightclick.number,
@@ -120,7 +142,7 @@ index c4486a2..4cab2ad 100644
          }), /*#__PURE__*/React.createElement("span", {
            className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
          }, "".concat(rightclick.row, "  ")), !_.startsWith((_context$lang4 = context.lang) !== null && _context$lang4 !== void 0 ? _context$lang4 : "", "zh") && (/*#__PURE__*/React.createElement("span", {
-@@ -7926,6 +7937,7 @@ var ContextMenu = function ContextMenu() {
+@@ -7926,6 +7943,7 @@ var ContextMenu = function ContextMenu() {
              if (draftCtx.activeImg != null) {
                removeActiveImage(draftCtx);
              } else {
@@ -128,7 +150,7 @@ index c4486a2..4cab2ad 100644
                var msg = deleteSelectedCellText(draftCtx);
                if (msg === "partMC") {
                  showDialog(generalDialog.partiallyError, "ok");
-@@ -8007,6 +8019,10 @@ var ContextMenu = function ContextMenu() {
+@@ -8007,6 +8025,10 @@ var ContextMenu = function ContextMenu() {
          }
        }, rightclick.link);
      }
@@ -139,7 +161,7 @@ index c4486a2..4cab2ad 100644
      return null;
    }, [context.currentSheetId, context.lang, context.luckysheet_select_save, context.defaultrowlen, context.defaultcollen, rightclick, info, setContext, showAlert, showDialog, drag, generalDialog]);
    useLayoutEffect(function () {
-@@ -8057,9 +8073,9 @@ var ContextMenu = function ContextMenu() {
+@@ -8057,9 +8079,9 @@ var ContextMenu = function ContextMenu() {
        top: contextMenu.y
      }
    }, context.contextMenu.headerMenu === true ? settings.headerContextMenu.map(function (menu, i) {
@@ -150,8 +172,8 @@ index c4486a2..4cab2ad 100644
 +    return _lakeMenuIcon(getMenuElement(menu, i), menu);
    }));
  };
-
-@@ -8087,268 +8103,103 @@ var SVGDefines = function SVGDefines(_ref) {
+ 
+@@ -8087,268 +8109,103 @@ var SVGDefines = function SVGDefines(_ref) {
      },
      xmlns: "http://www.w3.org/2000/svg",
      xmlnsXlink: "http://www.w3.org/1999/xlink"
@@ -478,7 +500,7 @@ index c4486a2..4cab2ad 100644
      viewBox: "0 0 24 24",
      fill: "none",
      id: "border-horizontal"
-@@ -8357,28 +8208,28 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8357,28 +8214,28 @@ var SVGDefines = function SVGDefines(_ref) {
      y: "5.75",
      width: "12.5",
      height: "12.5",
@@ -511,7 +533,7 @@ index c4486a2..4cab2ad 100644
      strokeWidth: "1.5"
    })), /*#__PURE__*/React.createElement("symbol", {
      viewBox: "0 0 24 24",
-@@ -8389,14 +8240,14 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8389,14 +8246,14 @@ var SVGDefines = function SVGDefines(_ref) {
      y1: "18.0303",
      x2: "5.96967",
      y2: "6.03033",
@@ -528,7 +550,7 @@ index c4486a2..4cab2ad 100644
      strokeWidth: "1.5"
    })), /*#__PURE__*/React.createElement("symbol", {
      viewBox: "0 0 24 24",
-@@ -8407,155 +8258,36 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8407,348 +8264,102 @@ var SVGDefines = function SVGDefines(_ref) {
      x2: "16.9706",
      y2: "-0.75",
      transform: "matrix(0.707107 -0.707107 -0.707107 -0.707107 5.5 17.5)",
@@ -658,40 +680,12 @@ index c4486a2..4cab2ad 100644
      viewBox: "0 0 24 24",
      fill: "none",
      id: "border-right"
--  }, /*#__PURE__*/React.createElement("line", {
--    x1: "6.5",
--    y1: "12",
--    x2: "17.5",
--    y2: "12",
--    stroke: "#CCCED2",
--    strokeWidth: "1.5"
--  }), /*#__PURE__*/React.createElement("line", {
--    x1: "12",
--    y1: "17.5",
--    x2: "12",
--    y2: "6.5",
--    stroke: "#CCCED2",
--    strokeWidth: "1.5"
--  }), /*#__PURE__*/React.createElement("rect", {
--    x: "5.75",
--    y: "5.75",
--    width: "12.5",
--    height: "12.5",
--    stroke: "#CCCED2",
--    strokeWidth: "1.5"
--  }), /*#__PURE__*/React.createElement("line", {
--    x1: "18.25",
--    y1: "19",
--    x2: "18.25",
--    y2: "5",
--    stroke: "#535A68",
--    strokeWidth: "1.5"
--  })), /*#__PURE__*/React.createElement("symbol", {
 +  }, React.createElement("g", {"transform":"scale(0.09375)"}, React.createElement("g", {"strokeWidth":"1","fillRule":"evenodd"}, React.createElement("g", {}, React.createElement("g", {}), React.createElement("polygon", {"fill":"currentColor","points":"213.59842 118 213.59842 138 44 138 44 118"}), React.createElement("polygon", {"fill":"currentColor","points":"138 44.7896422 138 210.214328 118 210.214328 118 44.7896422"}), React.createElement("path", {"d":"M196,28 C213.673112,28 228,42.326888 228,60 L228,196 C228,213.673112 213.673112,228 196,228 L38,228 C31.9508552,228 28,213.673112 28,196 L28,60 C28,42.326888 28,28 38,28 L196,28 Z M196,48 L46.8197286,48 C47.716981,51.4723629 48.1116715,55.3707047 48.0037999,59.6950252 L48,60 L48,196 C48,200.350304 47.7845897,204.349038 47.3537692,207.9962 L196,208 C202.525457,208 207.834393,202.791456 207.9962,196.304975 L208,196 L208,60 C208,53.4745433 202.791456,48.1656072 196.304975,48.0037999 L196,48 Z","fill":"currentColor","fillRule":"nonzero","transform":"translate(128.000000, 128.000000) scale(-1, 1) translate(-128.000000, -128.000000) "}), React.createElement("rect", {"fill":"currentColor","x":"208","y":"28","width":"20","height":"200","rx":"10"}))))), /*#__PURE__*/React.createElement("symbol", {
-     viewBox: "0 0 24 24",
-     fill: "none",
-     id: "border-vertical"
-@@ -8564,28 +8296,28 @@ var SVGDefines = function SVGDefines(_ref) {
++    viewBox: "0 0 24 24",
++    fill: "none",
++    id: "border-vertical"
+   }, /*#__PURE__*/React.createElement("line", {
+     x1: "6.5",
      y1: "12",
      x2: "17.5",
      y2: "12",
@@ -703,7 +697,7 @@ index c4486a2..4cab2ad 100644
      y1: "17.5",
      x2: "12",
      y2: "6.5",
--    stroke: "#535A68",
+-    stroke: "#CCCED2",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
    }), /*#__PURE__*/React.createElement("rect", {
@@ -719,16 +713,31 @@ index c4486a2..4cab2ad 100644
      y1: "19",
      x2: "18.25",
      y2: "5",
--    stroke: "#CCCED2",
+-    stroke: "#535A68",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
    })), /*#__PURE__*/React.createElement("symbol", {
      viewBox: "0 0 24 24",
-@@ -8596,159 +8328,32 @@ var SVGDefines = function SVGDefines(_ref) {
-     y1: "5.75",
-     x2: "17.95",
-     y2: "17.95",
+     fill: "none",
+-    id: "border-vertical"
++    id: "border-slash"
+   }, /*#__PURE__*/React.createElement("line", {
+-    x1: "6.5",
+-    y1: "12",
+-    x2: "17.5",
+-    y2: "12",
+-    stroke: "#CCCED2",
+-    strokeWidth: "1.5"
+-  }), /*#__PURE__*/React.createElement("line", {
+-    x1: "12",
+-    y1: "17.5",
+-    x2: "12",
+-    y2: "6.5",
 -    stroke: "#535A68",
++    x1: "5.75",
++    y1: "5.75",
++    x2: "17.95",
++    y2: "17.95",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
    }), /*#__PURE__*/React.createElement("rect", {
@@ -736,6 +745,31 @@ index c4486a2..4cab2ad 100644
      y: "5.75",
      width: "12.5",
      height: "12.5",
+-    stroke: "#CCCED2",
+-    strokeWidth: "1.5"
+-  }), /*#__PURE__*/React.createElement("line", {
+-    x1: "18.25",
+-    y1: "19",
+-    x2: "18.25",
+-    y2: "5",
+-    stroke: "#CCCED2",
+-    strokeWidth: "1.5"
+-  })), /*#__PURE__*/React.createElement("symbol", {
+-    viewBox: "0 0 24 24",
+-    fill: "none",
+-    id: "border-slash"
+-  }, /*#__PURE__*/React.createElement("line", {
+-    x1: "5.75",
+-    y1: "5.75",
+-    x2: "17.95",
+-    y2: "17.95",
+-    stroke: "#535A68",
+-    strokeWidth: "1.5"
+-  }), /*#__PURE__*/React.createElement("rect", {
+-    x: "5.75",
+-    y: "5.75",
+-    width: "12.5",
+-    height: "12.5",
 -    stroke: "#CCCED2",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
@@ -892,7 +926,7 @@ index c4486a2..4cab2ad 100644
      fill: "none",
      viewBox: "0 0 24 24",
      id: "comment"
-@@ -8756,181 +8361,76 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8756,181 +8367,76 @@ var SVGDefines = function SVGDefines(_ref) {
      fillRule: "evenodd",
      clipRule: "evenodd",
      d: "M9.968 15.7L12 17.956l2.032-2.258H18.5v-10h-13v10h4.468zm1.289 3.673L9.3 17.2H5.5A1.5 1.5 0 014 15.7v-10a1.5 1.5 0 011.5-1.5h13A1.5 1.5 0 0120 5.7v10a1.5 1.5 0 01-1.5 1.5h-3.8l-1.957 2.174a1 1 0 01-1.486 0z",
@@ -1090,7 +1124,7 @@ index c4486a2..4cab2ad 100644
      viewBox: "0 0 1024 1024",
      version: "1.1",
      "p-id": "4116",
-@@ -8939,278 +8439,96 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8939,278 +8445,96 @@ var SVGDefines = function SVGDefines(_ref) {
      d: "M801.895 542.105h-579.79C205.479 542.105 192 528.627 192 512c0-16.627 13.479-30.105 30.105-30.105h579.789C818.521 481.895 832 495.373 832 512c0 16.627-13.479 30.105-30.105 30.105z",
      "p-id": "4117"
    })), /*#__PURE__*/React.createElement("symbol", {
@@ -1409,7 +1443,7 @@ index c4486a2..4cab2ad 100644
      id: "sort-asc"
    }, /*#__PURE__*/React.createElement("path", {
      d: "M839.6 433.8L749 150.5c-1.2-3.9-4.8-6.5-8.9-6.5h-77.4c-4.1 0-7.6 2.6-8.9 6.5l-91.3 283.3c-0.3 0.9-0.5 1.9-0.5 2.9 0 5.1 4.2 9.3 9.3 9.3h56.4c4.2 0 7.8-2.8 9-6.8l17.5-61.6h89l17.3 61.5c1.1 4 4.8 6.8 9 6.8h61.2c1 0 1.9-0.1 2.8-0.4 2.4-0.8 4.3-2.4 5.5-4.6 1.1-2.2 1.3-4.7 0.6-7.1zM663.3 325.5l32.8-116.9h6.3l32.1 116.9h-71.2z",
-@@ -9222,87 +8540,76 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9222,87 +8546,76 @@ var SVGDefines = function SVGDefines(_ref) {
      d: "M310.3 167.1c-3.2-4.1-9.4-4.1-12.6 0L185.7 309c-4.2 5.3-0.4 13 6.3 13h76v530c0 4.4 3.6 8 8 8h56c4.4 0 8-3.6 8-8V322h76c6.7 0 10.5-7.8 6.3-13l-112-141.9z",
      "p-id": "2265"
    })), /*#__PURE__*/React.createElement("symbol", {
@@ -1516,7 +1550,7 @@ index c4486a2..4cab2ad 100644
      id: "dataVerification"
    }, /*#__PURE__*/React.createElement("path", {
      d: "M510.9 921.6l-107.8-66.2c-124.6-76.5-202-214.8-202-361.1V243.9h21.7c205.1 0 262-115.5 267.8-128.6l5.7-13 28.7-0.3 6.2 13.1c5.9 13.3 62.8 128.8 267.8 128.8h21.7v250.4c0 146.3-77.4 284.6-202 361.1l-107.8 66.2zM244.5 287v207.3c0 131.2 69.5 255.4 181.3 324.1l85.1 52.2 85.1-52.2c111.8-68.6 181.3-192.8 181.3-324.1V287c-157.7-6.1-234.1-77.8-266.4-121.7-32.2 43.8-108.6 115.6-266.4 121.7z",
-@@ -9312,86 +8619,53 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9312,86 +8625,53 @@ var SVGDefines = function SVGDefines(_ref) {
      "p-id": "5515"
    })), /*#__PURE__*/React.createElement("symbol", {
      viewBox: "0 0 1024 1024",
@@ -1631,7 +1665,7 @@ index c4486a2..4cab2ad 100644
      id: "filter-fill"
    }, /*#__PURE__*/React.createElement("path", {
      d: "M776.341333 170.666667a64 64 0 0 1 49.557334 104.512L627.541333 517.76v273.386667L398.293333 687.018667v-169.237334l-192.469333-243.413333A64 64 0 0 1 256 170.666667h520.341333z",
-@@ -9404,57 +8678,30 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9404,57 +8684,30 @@ var SVGDefines = function SVGDefines(_ref) {
      d: "M776.341333 170.666667a64 64 0 0 1 49.557334 104.512L627.541333 517.76v273.386667L398.293333 687.018667v-169.237334l-192.469333-243.413333A64 64 0 0 1 256 170.666667h520.341333z",
      "p-id": "18344"
    })), /*#__PURE__*/React.createElement("symbol", {
@@ -1707,7 +1741,7 @@ index c4486a2..4cab2ad 100644
      viewBox: "0 0 1024 1024",
      id: "tab"
    }, /*#__PURE__*/React.createElement("path", {
-@@ -9462,7 +8709,7 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9462,7 +8715,7 @@ var SVGDefines = function SVGDefines(_ref) {
      "p-id": "3023"
    })), /*#__PURE__*/React.createElement("symbol", {
      viewBox: "0 0 1024 1024",
@@ -1716,7 +1750,7 @@ index c4486a2..4cab2ad 100644
      id: "default"
    }, /*#__PURE__*/React.createElement("path", {
      d: "M844.8 896c25.6 0 51.2-19.2 51.2-51.2v-185.6h-51.2c-44.8 0-83.2-38.4-83.2-83.2s38.4-83.2 83.2-83.2h51.2V313.6c0-25.6-19.2-51.2-51.2-51.2h-134.4c0-70.4-57.6-128-128-128S448 185.6 448 256H313.6c-25.6 0-51.2 19.2-51.2 51.2V448C185.6 448 128 505.6 128 576s57.6 128 128 128v134.4c0 25.6 19.2 51.2 51.2 51.2h185.6v-51.2c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v57.6h185.6zM576 710.4c-70.4 0-128 57.6-128 128H307.2v-185.6H256c-44.8 0-83.2-38.4-83.2-83.2S211.2 492.8 256 492.8h51.2V307.2h185.6V256c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v51.2h185.6V448c-70.4 0-128 57.6-128 128s57.6 128 128 128v140.8H704c6.4-70.4-51.2-134.4-128-134.4z",
-@@ -9712,6 +8959,13 @@ var SheetTabContextMenu = function SheetTabContextMenu() {
+@@ -9712,6 +8965,13 @@ var SheetTabContextMenu = function SheetTabContextMenu() {
        }, sheetconfig.copy);
      }
      if (name === "color") {
@@ -1730,7 +1764,7 @@ index c4486a2..4cab2ad 100644
        return /*#__PURE__*/React.createElement(Menu, {
          key: name,
          onMouseEnter: function onMouseEnter() {
-@@ -9934,6 +9188,14 @@ function generateAPIs(context, setContext, handleUndo, handleRedo, settings, cel
+@@ -9934,6 +9194,14 @@ function generateAPIs(context, setContext, handleUndo, handleRedo, settings, cel
          return api.setCellFormatByRange(draftCtx, attr, value, range, options);
        });
      },
@@ -1745,7 +1779,7 @@ index c4486a2..4cab2ad 100644
      mergeCells: function mergeCells(ranges, type) {
        var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
        return setContext(function (draftCtx) {
-@@ -11202,8 +10464,14 @@ var Workbook = /*#__PURE__*/React.forwardRef(function (_ref, ref) {
+@@ -11202,8 +10470,14 @@ var Workbook = /*#__PURE__*/React.forwardRef(function (_ref, ref) {
      });
    }, [handleRedo, handleUndo, setContextWithProduce]);
    var onPaste = useCallback(function (e) {
@@ -1763,7 +1797,7 @@ index c4486a2..4cab2ad 100644
        if (!clipboardData) {
          clipboardData = window.clipboardData;
 diff --git a/node_modules/@fortune-sheet/react/dist/index.js b/node_modules/@fortune-sheet/react/dist/index.js
-index e404551..4134132 100644
+index e404551..4005821 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.js
 @@ -1113,7 +1113,7 @@ var InputBox = function InputBox() {
@@ -1784,7 +1818,29 @@ index e404551..4134132 100644
    }, /*#__PURE__*/React__default['default'].createElement(ContentEditable, {
      innerRef: function innerRef(e) {
        inputRef.current = e;
-@@ -2072,6 +2072,7 @@ var ImgBoxs = function ImgBoxs() {
+@@ -1145,12 +1145,18 @@ var InputBox = function InputBox() {
+     },
+     className: "luckysheet-cell-input",
+     id: "luckysheet-rich-text-editor",
+-    style: {
++    style: (function () { var _fd2 = core.getFlowdata(context); var _cell2 = _fd2 && _fd2[row_index] && _fd2[row_index][col_index]; var _vt2 = _cell2 && _cell2.vt != null ? Number(_cell2.vt) : 1; var _justify = _vt2 === 0 ? "center" : _vt2 === 2 ? "flex-end" : "flex-start"; return {
+       transform: "scale(".concat(context.zoomRatio, ")"),
+       transformOrigin: "left top",
+       width: "".concat(100 / context.zoomRatio, "%"),
+-      height: "".concat(100 / context.zoomRatio, "%")
+-    },
++      height: "".concat(100 / context.zoomRatio, "%"),
++      // LOCAL-CHANGE(261008): 编辑框垂直对齐按单元格 vt（与画布 cellRender 的 normalizedCellAttr(cell,"vt") 一致）。
++      // 内核原来只给**容器** .luckysheet-input-box-inner 设 align-items，但本子元素 height:100% 撑满 ⇒ 对齐失效、
++      // 编辑态恒顶部，用户报「展示底对齐、一编辑变顶对齐」。这里把对齐落到真正承载文本的子元素上。
++      display: "flex",
++      flexDirection: "column",
++      justifyContent: _justify
++    }; })(),
+     onChange: onChange,
+     onKeyDown: onKeyDown,
+     onPaste: onPaste,
+@@ -2072,6 +2078,7 @@ var ImgBoxs = function ImgBoxs() {
      className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
      role: "button",
      tabIndex: 0,
@@ -1792,7 +1848,7 @@ index e404551..4134132 100644
      "aria-label": "\u5220\u9664",
      title: "\u5220\u9664"
    }, /*#__PURE__*/React__default['default'].createElement("i", {
-@@ -2196,6 +2197,7 @@ var ImgBoxs = function ImgBoxs() {
+@@ -2196,6 +2203,7 @@ var ImgBoxs = function ImgBoxs() {
      className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
      role: "button",
      tabIndex: 0,
@@ -1800,7 +1856,7 @@ index e404551..4134132 100644
      "aria-label": "\u5220\u9664",
      title: "\u5220\u9664"
    }, /*#__PURE__*/React__default['default'].createElement("i", {
-@@ -6139,10 +6141,7 @@ var Toolbar = function Toolbar(_ref) {
+@@ -6139,10 +6147,7 @@ var Toolbar = function Toolbar(_ref) {
          iconId: name,
          tooltip: toolbar.insertImage,
          key: name,
@@ -1812,7 +1868,7 @@ index e404551..4134132 100644
        }, /*#__PURE__*/React__default['default'].createElement("input", {
          id: "fortune-img-upload",
          type: "file",
-@@ -6635,6 +6634,10 @@ var Toolbar = function Toolbar(_ref) {
+@@ -6635,6 +6640,10 @@ var Toolbar = function Toolbar(_ref) {
          }));
        });
      }
@@ -1823,7 +1879,7 @@ index e404551..4134132 100644
      return /*#__PURE__*/React__default['default'].createElement(Button, {
        iconId: name,
        tooltip: tooltip,
-@@ -6653,7 +6656,7 @@ var Toolbar = function Toolbar(_ref) {
+@@ -6653,7 +6662,7 @@ var Toolbar = function Toolbar(_ref) {
      className: "fortune-toolbar",
      role: "toolbar",
      "aria-label": toolbar.toolbar
@@ -1832,10 +1888,10 @@ index e404551..4134132 100644
      return /*#__PURE__*/React__default['default'].createElement(CustomButton, {
        tooltip: n.tooltip,
        onClick: n.onClick,
-@@ -7368,6 +7371,12 @@ var Divider$1 = function Divider() {
+@@ -7368,6 +7377,12 @@ var Divider$1 = function Divider() {
    });
  };
-
+ 
 +var _LAKE_MENU_ICONS = {"copy":"copy","paste":"cm-paste","add-col-left":"cm-col-left","add-col-right":"cm-col-right","add-row-top":"cm-row-top","add-row-bottom":"cm-row-bottom","delete-row":"cm-delete","delete-column":"cm-delete","hide-row":"hidden","hide-column":"hidden","set-row-height":"cm-move-vertical","set-column-width":"cm-move-horizontal","clear":"clear-format","orderAZ":"cm-order-az","orderZA":"cm-order-za","sort":"sort","filter":"filter","image":"image","cell-image":"image","link":"link","auto-row-height":"cm-move-vertical"};
 +var _lakeMenuIcon = function _lakeMenuIcon(el, menu) {
 +  if (Array.isArray(el)) return el.map(function (item) { return _lakeMenuIcon(item, menu); });
@@ -1845,16 +1901,16 @@ index e404551..4134132 100644
  var Menu = function Menu(_ref) {
    var _onClick = _ref.onClick,
      _onMouseLeave = _ref.onMouseLeave,
-@@ -7395,7 +7404,7 @@ var Menu = function Menu(_ref) {
+@@ -7395,7 +7410,7 @@ var Menu = function Menu(_ref) {
      tabIndex: 0
    }, /*#__PURE__*/React__default['default'].createElement("div", {
      className: "luckysheet-cols-menuitem-content luckysheet-mousedown-cancel"
 -  }, children));
 +  }, React__default['default'].createElement("span", { className: "luckysheet-cols-menuicon" }, _LAKE_MENU_ICONS[_ref.menuKey] ? React__default['default'].createElement("svg", { width: 16, height: 16, "aria-hidden": "true" }, React__default['default'].createElement("use", { xlinkHref: "#" + _LAKE_MENU_ICONS[_ref.menuKey] })) : null), children));
  };
-
+ 
  var CustomSort = function CustomSort() {
-@@ -7578,8 +7587,10 @@ var ContextMenu = function ContextMenu() {
+@@ -7578,8 +7593,10 @@ var ContextMenu = function ContextMenu() {
                    console.warn("Clipboard access blocked. Attempting to use sessionStorage fallback.");
                  case 4:
                    finalText = clipboardText || sessionClipboardText;
@@ -1866,7 +1922,7 @@ index e404551..4134132 100644
                      draftCtx.contextMenu = {};
                    });
                  case 5:
-@@ -7640,7 +7651,7 @@ var ContextMenu = function ContextMenu() {
+@@ -7640,7 +7657,7 @@ var ContextMenu = function ContextMenu() {
            type: "text",
            className: "luckysheet-mousedown-cancel",
            placeholder: rightclick.number,
@@ -1875,7 +1931,7 @@ index e404551..4134132 100644
          }), /*#__PURE__*/React__default['default'].createElement("span", {
            className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
          }, "".concat(rightclick.column, "  ")), !___default['default'].startsWith((_context$lang2 = context.lang) !== null && _context$lang2 !== void 0 ? _context$lang2 : "", "zh") && (/*#__PURE__*/React__default['default'].createElement("span", {
-@@ -7694,7 +7705,7 @@ var ContextMenu = function ContextMenu() {
+@@ -7694,7 +7711,7 @@ var ContextMenu = function ContextMenu() {
            type: "text",
            className: "luckysheet-mousedown-cancel",
            placeholder: rightclick.number,
@@ -1884,7 +1940,7 @@ index e404551..4134132 100644
          }), /*#__PURE__*/React__default['default'].createElement("span", {
            className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
          }, "".concat(rightclick.row, "  ")), !___default['default'].startsWith((_context$lang4 = context.lang) !== null && _context$lang4 !== void 0 ? _context$lang4 : "", "zh") && (/*#__PURE__*/React__default['default'].createElement("span", {
-@@ -7937,6 +7948,7 @@ var ContextMenu = function ContextMenu() {
+@@ -7937,6 +7954,7 @@ var ContextMenu = function ContextMenu() {
              if (draftCtx.activeImg != null) {
                core.removeActiveImage(draftCtx);
              } else {
@@ -1892,7 +1948,7 @@ index e404551..4134132 100644
                var msg = core.deleteSelectedCellText(draftCtx);
                if (msg === "partMC") {
                  showDialog(generalDialog.partiallyError, "ok");
-@@ -8018,6 +8030,10 @@ var ContextMenu = function ContextMenu() {
+@@ -8018,6 +8036,10 @@ var ContextMenu = function ContextMenu() {
          }
        }, rightclick.link);
      }
@@ -1903,7 +1959,7 @@ index e404551..4134132 100644
      return null;
    }, [context.currentSheetId, context.lang, context.luckysheet_select_save, context.defaultrowlen, context.defaultcollen, rightclick, info, setContext, showAlert, showDialog, drag, generalDialog]);
    React.useLayoutEffect(function () {
-@@ -8068,9 +8084,9 @@ var ContextMenu = function ContextMenu() {
+@@ -8068,9 +8090,9 @@ var ContextMenu = function ContextMenu() {
        top: contextMenu.y
      }
    }, context.contextMenu.headerMenu === true ? settings.headerContextMenu.map(function (menu, i) {
@@ -1914,8 +1970,8 @@ index e404551..4134132 100644
 +    return _lakeMenuIcon(getMenuElement(menu, i), menu);
    }));
  };
-
-@@ -8098,268 +8114,103 @@ var SVGDefines = function SVGDefines(_ref) {
+ 
+@@ -8098,268 +8120,103 @@ var SVGDefines = function SVGDefines(_ref) {
      },
      xmlns: "http://www.w3.org/2000/svg",
      xmlnsXlink: "http://www.w3.org/1999/xlink"
@@ -2242,7 +2298,7 @@ index e404551..4134132 100644
      viewBox: "0 0 24 24",
      fill: "none",
      id: "border-horizontal"
-@@ -8368,28 +8219,28 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8368,28 +8225,28 @@ var SVGDefines = function SVGDefines(_ref) {
      y: "5.75",
      width: "12.5",
      height: "12.5",
@@ -2275,7 +2331,7 @@ index e404551..4134132 100644
      strokeWidth: "1.5"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
      viewBox: "0 0 24 24",
-@@ -8400,14 +8251,14 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8400,14 +8257,14 @@ var SVGDefines = function SVGDefines(_ref) {
      y1: "18.0303",
      x2: "5.96967",
      y2: "6.03033",
@@ -2292,7 +2348,7 @@ index e404551..4134132 100644
      strokeWidth: "1.5"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
      viewBox: "0 0 24 24",
-@@ -8418,155 +8269,36 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8418,348 +8275,102 @@ var SVGDefines = function SVGDefines(_ref) {
      x2: "16.9706",
      y2: "-0.75",
      transform: "matrix(0.707107 -0.707107 -0.707107 -0.707107 5.5 17.5)",
@@ -2422,40 +2478,12 @@ index e404551..4134132 100644
      viewBox: "0 0 24 24",
      fill: "none",
      id: "border-right"
--  }, /*#__PURE__*/React__default['default'].createElement("line", {
--    x1: "6.5",
--    y1: "12",
--    x2: "17.5",
--    y2: "12",
--    stroke: "#CCCED2",
--    strokeWidth: "1.5"
--  }), /*#__PURE__*/React__default['default'].createElement("line", {
--    x1: "12",
--    y1: "17.5",
--    x2: "12",
--    y2: "6.5",
--    stroke: "#CCCED2",
--    strokeWidth: "1.5"
--  }), /*#__PURE__*/React__default['default'].createElement("rect", {
--    x: "5.75",
--    y: "5.75",
--    width: "12.5",
--    height: "12.5",
--    stroke: "#CCCED2",
--    strokeWidth: "1.5"
--  }), /*#__PURE__*/React__default['default'].createElement("line", {
--    x1: "18.25",
--    y1: "19",
--    x2: "18.25",
--    y2: "5",
--    stroke: "#535A68",
--    strokeWidth: "1.5"
--  })), /*#__PURE__*/React__default['default'].createElement("symbol", {
 +  }, React__default['default'].createElement("g", {"transform":"scale(0.09375)"}, React__default['default'].createElement("g", {"strokeWidth":"1","fillRule":"evenodd"}, React__default['default'].createElement("g", {}, React__default['default'].createElement("g", {}), React__default['default'].createElement("polygon", {"fill":"currentColor","points":"213.59842 118 213.59842 138 44 138 44 118"}), React__default['default'].createElement("polygon", {"fill":"currentColor","points":"138 44.7896422 138 210.214328 118 210.214328 118 44.7896422"}), React__default['default'].createElement("path", {"d":"M196,28 C213.673112,28 228,42.326888 228,60 L228,196 C228,213.673112 213.673112,228 196,228 L38,228 C31.9508552,228 28,213.673112 28,196 L28,60 C28,42.326888 28,28 38,28 L196,28 Z M196,48 L46.8197286,48 C47.716981,51.4723629 48.1116715,55.3707047 48.0037999,59.6950252 L48,60 L48,196 C48,200.350304 47.7845897,204.349038 47.3537692,207.9962 L196,208 C202.525457,208 207.834393,202.791456 207.9962,196.304975 L208,196 L208,60 C208,53.4745433 202.791456,48.1656072 196.304975,48.0037999 L196,48 Z","fill":"currentColor","fillRule":"nonzero","transform":"translate(128.000000, 128.000000) scale(-1, 1) translate(-128.000000, -128.000000) "}), React__default['default'].createElement("rect", {"fill":"currentColor","x":"208","y":"28","width":"20","height":"200","rx":"10"}))))), /*#__PURE__*/React__default['default'].createElement("symbol", {
-     viewBox: "0 0 24 24",
-     fill: "none",
-     id: "border-vertical"
-@@ -8575,28 +8307,28 @@ var SVGDefines = function SVGDefines(_ref) {
++    viewBox: "0 0 24 24",
++    fill: "none",
++    id: "border-vertical"
+   }, /*#__PURE__*/React__default['default'].createElement("line", {
+     x1: "6.5",
      y1: "12",
      x2: "17.5",
      y2: "12",
@@ -2467,7 +2495,7 @@ index e404551..4134132 100644
      y1: "17.5",
      x2: "12",
      y2: "6.5",
--    stroke: "#535A68",
+-    stroke: "#CCCED2",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
    }), /*#__PURE__*/React__default['default'].createElement("rect", {
@@ -2483,16 +2511,31 @@ index e404551..4134132 100644
      y1: "19",
      x2: "18.25",
      y2: "5",
--    stroke: "#CCCED2",
+-    stroke: "#535A68",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
      viewBox: "0 0 24 24",
-@@ -8607,159 +8339,32 @@ var SVGDefines = function SVGDefines(_ref) {
-     y1: "5.75",
-     x2: "17.95",
-     y2: "17.95",
+     fill: "none",
+-    id: "border-vertical"
++    id: "border-slash"
+   }, /*#__PURE__*/React__default['default'].createElement("line", {
+-    x1: "6.5",
+-    y1: "12",
+-    x2: "17.5",
+-    y2: "12",
+-    stroke: "#CCCED2",
+-    strokeWidth: "1.5"
+-  }), /*#__PURE__*/React__default['default'].createElement("line", {
+-    x1: "12",
+-    y1: "17.5",
+-    x2: "12",
+-    y2: "6.5",
 -    stroke: "#535A68",
++    x1: "5.75",
++    y1: "5.75",
++    x2: "17.95",
++    y2: "17.95",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
    }), /*#__PURE__*/React__default['default'].createElement("rect", {
@@ -2500,6 +2543,31 @@ index e404551..4134132 100644
      y: "5.75",
      width: "12.5",
      height: "12.5",
+-    stroke: "#CCCED2",
+-    strokeWidth: "1.5"
+-  }), /*#__PURE__*/React__default['default'].createElement("line", {
+-    x1: "18.25",
+-    y1: "19",
+-    x2: "18.25",
+-    y2: "5",
+-    stroke: "#CCCED2",
+-    strokeWidth: "1.5"
+-  })), /*#__PURE__*/React__default['default'].createElement("symbol", {
+-    viewBox: "0 0 24 24",
+-    fill: "none",
+-    id: "border-slash"
+-  }, /*#__PURE__*/React__default['default'].createElement("line", {
+-    x1: "5.75",
+-    y1: "5.75",
+-    x2: "17.95",
+-    y2: "17.95",
+-    stroke: "#535A68",
+-    strokeWidth: "1.5"
+-  }), /*#__PURE__*/React__default['default'].createElement("rect", {
+-    x: "5.75",
+-    y: "5.75",
+-    width: "12.5",
+-    height: "12.5",
 -    stroke: "#CCCED2",
 +    stroke: "currentColor",
      strokeWidth: "1.5"
@@ -2656,7 +2724,7 @@ index e404551..4134132 100644
      fill: "none",
      viewBox: "0 0 24 24",
      id: "comment"
-@@ -8767,181 +8372,76 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8767,181 +8378,76 @@ var SVGDefines = function SVGDefines(_ref) {
      fillRule: "evenodd",
      clipRule: "evenodd",
      d: "M9.968 15.7L12 17.956l2.032-2.258H18.5v-10h-13v10h4.468zm1.289 3.673L9.3 17.2H5.5A1.5 1.5 0 014 15.7v-10a1.5 1.5 0 011.5-1.5h13A1.5 1.5 0 0120 5.7v10a1.5 1.5 0 01-1.5 1.5h-3.8l-1.957 2.174a1 1 0 01-1.486 0z",
@@ -2854,7 +2922,7 @@ index e404551..4134132 100644
      viewBox: "0 0 1024 1024",
      version: "1.1",
      "p-id": "4116",
-@@ -8950,278 +8450,96 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -8950,278 +8456,96 @@ var SVGDefines = function SVGDefines(_ref) {
      d: "M801.895 542.105h-579.79C205.479 542.105 192 528.627 192 512c0-16.627 13.479-30.105 30.105-30.105h579.789C818.521 481.895 832 495.373 832 512c0 16.627-13.479 30.105-30.105 30.105z",
      "p-id": "4117"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
@@ -3173,7 +3241,7 @@ index e404551..4134132 100644
      id: "sort-asc"
    }, /*#__PURE__*/React__default['default'].createElement("path", {
      d: "M839.6 433.8L749 150.5c-1.2-3.9-4.8-6.5-8.9-6.5h-77.4c-4.1 0-7.6 2.6-8.9 6.5l-91.3 283.3c-0.3 0.9-0.5 1.9-0.5 2.9 0 5.1 4.2 9.3 9.3 9.3h56.4c4.2 0 7.8-2.8 9-6.8l17.5-61.6h89l17.3 61.5c1.1 4 4.8 6.8 9 6.8h61.2c1 0 1.9-0.1 2.8-0.4 2.4-0.8 4.3-2.4 5.5-4.6 1.1-2.2 1.3-4.7 0.6-7.1zM663.3 325.5l32.8-116.9h6.3l32.1 116.9h-71.2z",
-@@ -9233,87 +8551,76 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9233,87 +8557,76 @@ var SVGDefines = function SVGDefines(_ref) {
      d: "M310.3 167.1c-3.2-4.1-9.4-4.1-12.6 0L185.7 309c-4.2 5.3-0.4 13 6.3 13h76v530c0 4.4 3.6 8 8 8h56c4.4 0 8-3.6 8-8V322h76c6.7 0 10.5-7.8 6.3-13l-112-141.9z",
      "p-id": "2265"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
@@ -3280,7 +3348,7 @@ index e404551..4134132 100644
      id: "dataVerification"
    }, /*#__PURE__*/React__default['default'].createElement("path", {
      d: "M510.9 921.6l-107.8-66.2c-124.6-76.5-202-214.8-202-361.1V243.9h21.7c205.1 0 262-115.5 267.8-128.6l5.7-13 28.7-0.3 6.2 13.1c5.9 13.3 62.8 128.8 267.8 128.8h21.7v250.4c0 146.3-77.4 284.6-202 361.1l-107.8 66.2zM244.5 287v207.3c0 131.2 69.5 255.4 181.3 324.1l85.1 52.2 85.1-52.2c111.8-68.6 181.3-192.8 181.3-324.1V287c-157.7-6.1-234.1-77.8-266.4-121.7-32.2 43.8-108.6 115.6-266.4 121.7z",
-@@ -9323,86 +8630,53 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9323,86 +8636,53 @@ var SVGDefines = function SVGDefines(_ref) {
      "p-id": "5515"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
      viewBox: "0 0 1024 1024",
@@ -3395,7 +3463,7 @@ index e404551..4134132 100644
      id: "filter-fill"
    }, /*#__PURE__*/React__default['default'].createElement("path", {
      d: "M776.341333 170.666667a64 64 0 0 1 49.557334 104.512L627.541333 517.76v273.386667L398.293333 687.018667v-169.237334l-192.469333-243.413333A64 64 0 0 1 256 170.666667h520.341333z",
-@@ -9415,57 +8689,30 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9415,57 +8695,30 @@ var SVGDefines = function SVGDefines(_ref) {
      d: "M776.341333 170.666667a64 64 0 0 1 49.557334 104.512L627.541333 517.76v273.386667L398.293333 687.018667v-169.237334l-192.469333-243.413333A64 64 0 0 1 256 170.666667h520.341333z",
      "p-id": "18344"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
@@ -3471,7 +3539,7 @@ index e404551..4134132 100644
      viewBox: "0 0 1024 1024",
      id: "tab"
    }, /*#__PURE__*/React__default['default'].createElement("path", {
-@@ -9473,7 +8720,7 @@ var SVGDefines = function SVGDefines(_ref) {
+@@ -9473,7 +8726,7 @@ var SVGDefines = function SVGDefines(_ref) {
      "p-id": "3023"
    })), /*#__PURE__*/React__default['default'].createElement("symbol", {
      viewBox: "0 0 1024 1024",
@@ -3480,7 +3548,7 @@ index e404551..4134132 100644
      id: "default"
    }, /*#__PURE__*/React__default['default'].createElement("path", {
      d: "M844.8 896c25.6 0 51.2-19.2 51.2-51.2v-185.6h-51.2c-44.8 0-83.2-38.4-83.2-83.2s38.4-83.2 83.2-83.2h51.2V313.6c0-25.6-19.2-51.2-51.2-51.2h-134.4c0-70.4-57.6-128-128-128S448 185.6 448 256H313.6c-25.6 0-51.2 19.2-51.2 51.2V448C185.6 448 128 505.6 128 576s57.6 128 128 128v134.4c0 25.6 19.2 51.2 51.2 51.2h185.6v-51.2c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v57.6h185.6zM576 710.4c-70.4 0-128 57.6-128 128H307.2v-185.6H256c-44.8 0-83.2-38.4-83.2-83.2S211.2 492.8 256 492.8h51.2V307.2h185.6V256c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v51.2h185.6V448c-70.4 0-128 57.6-128 128s57.6 128 128 128v140.8H704c6.4-70.4-51.2-134.4-128-134.4z",
-@@ -9723,6 +8970,13 @@ var SheetTabContextMenu = function SheetTabContextMenu() {
+@@ -9723,6 +8976,13 @@ var SheetTabContextMenu = function SheetTabContextMenu() {
        }, sheetconfig.copy);
      }
      if (name === "color") {
@@ -3494,7 +3562,7 @@ index e404551..4134132 100644
        return /*#__PURE__*/React__default['default'].createElement(Menu, {
          key: name,
          onMouseEnter: function onMouseEnter() {
-@@ -9945,6 +9199,14 @@ function generateAPIs(context, setContext, handleUndo, handleRedo, settings, cel
+@@ -9945,6 +9205,14 @@ function generateAPIs(context, setContext, handleUndo, handleRedo, settings, cel
          return core.api.setCellFormatByRange(draftCtx, attr, value, range, options);
        });
      },
@@ -3509,7 +3577,7 @@ index e404551..4134132 100644
      mergeCells: function mergeCells(ranges, type) {
        var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
        return setContext(function (draftCtx) {
-@@ -11213,8 +10475,10 @@ var Workbook = /*#__PURE__*/React__default['default'].forwardRef(function (_ref,
+@@ -11213,8 +10481,10 @@ var Workbook = /*#__PURE__*/React__default['default'].forwardRef(function (_ref,
      });
    }, [handleRedo, handleUndo, setContextWithProduce]);
    var onPaste = React.useCallback(function (e) {

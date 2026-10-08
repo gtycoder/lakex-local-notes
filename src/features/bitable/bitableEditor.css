@@ -37,7 +37,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--lake-font-size-small);
   color: var(--lake-text-2);
 }
 
@@ -59,7 +59,7 @@
   padding: 6px 8px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--lake-font-size-body);
 }
 
 .bt-table-item:hover { background: var(--lake-bg-hover); }
@@ -68,7 +68,7 @@
 
 .bt-grip { color: var(--lake-text-3); flex: 0 0 auto; }
 .bt-table-name { flex: 1; }   /* 截断走 kit 的 .ln-ellipsis（JSX 已挂） */
-.bt-table-count { font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
+.bt-table-count { font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 /* 「⋯ / 删除表」**浮在行上、悬停才浮现**：绝对定位（不占流内位置，不再挤压名称/计数）；
    default 不可见且不接收点击，悬停整行时才淡入。 */
 .bt-table-more, .bt-table-del { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); opacity: 0; visibility: hidden; }
@@ -100,7 +100,7 @@
 }
 
 .bt-view-tab.active { background: var(--lake-bg-block); }
-.bt-view-name { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 13px; padding: 6px 8px; color: inherit; }
+.bt-view-name { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: var(--lake-font-size-body); padding: 6px 8px; color: inherit; }
 .bt-view-more { border: 0; background: transparent; cursor: pointer; padding: 4px; color: var(--lake-text-3); }
 
 .bt-toolbar {
@@ -121,7 +121,7 @@
   border-radius: 6px;
   padding: 4px 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--lake-font-size-small);
   cursor: pointer;
   color: inherit;
 }
@@ -129,11 +129,11 @@
 .bt-tool-btn:hover { background: var(--lake-bg-hover); }
 .bt-tool-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
 .bt-toolbar-spacer { flex: 1; }
-.bt-badge { background: var(--lake-accent); color: var(--lake-text-on-accent); border-radius: 8px; font-size: var(--lake-font-size-nano); padding: 0 5px; }
+.bt-badge { background: var(--lake-accent); color: var(--lake-text-on-accent); border-radius: 8px; font-size: var(--lake-font-size-micro); padding: 0 5px; }
 
 .bt-find { display: inline-flex; align-items: center; gap: 6px; }
 .bt-find input { height: 26px; padding: 0 8px; border: 1px solid var(--lake-border-1); border-radius: 6px; background: var(--lake-bg-panel); color: inherit; }
-.bt-find-count { font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
+.bt-find-count { font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 
 .bt-row-menu { min-width: 140px; padding: 4px; }
 
@@ -150,12 +150,12 @@
 .bt-grid th, .bt-grid td { border-right: 1px solid var(--lake-border-2); border-bottom: 1px solid var(--lake-border-2); padding: 0; vertical-align: middle; white-space: nowrap; }
 .bt-grid .col-selected { background: var(--lake-accent-tint); }
 .bt-viewbar-leading { display: flex; align-items: center; gap: 4px; margin-right: 6px; }
-.bt-tables-switch { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 13px; cursor: pointer; color: inherit; max-width: 200px; }
+.bt-tables-switch { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; border-radius: 6px; padding: 3px 8px; font: inherit; font-size: var(--lake-font-size-body); cursor: pointer; color: inherit; max-width: 200px; }
 /* .bt-tables-switch-name：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 
 .bt-grid thead th { position: sticky; top: 0; z-index: 2; height: 36px; background: var(--lake-bg-panel); font-weight: 500; border-bottom: 1px solid var(--lake-border-2); }
 
-.bt-th-inner { position: relative; display: flex; align-items: center; justify-content: flex-start; padding: 0 8px; font-size: 14px; }
+.bt-th-inner { position: relative; display: flex; align-items: center; justify-content: flex-start; padding: 0 8px; font-size: var(--lake-font-size-body); }
 .bt-th-inner > svg { flex: 0 0 auto; margin-right: 6px; color: var(--lake-text-3); }
 .bt-th-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 显形用 visibility 而不是 display：它是绝对定位（不占标题宽度），但 display:none 时量出来的 rect 恒为
@@ -172,7 +172,7 @@
 .bt-th-index, .bt-td-index { width: 80px; background: var(--lake-bg-panel); }
 .bt-th-index { text-align: center; }
 .bt-td-index { position: relative; display: flex; align-items: center; justify-content: center; padding: 0; height: var(--bt-row-h, 36px); }
-.bt-row-num { flex: 0 0 auto; text-align: center; border: 0; background: transparent; cursor: pointer; color: var(--lake-text-3); font: inherit; font-size: 13px; }
+.bt-row-num { flex: 0 0 auto; text-align: center; border: 0; background: transparent; cursor: pointer; color: var(--lake-text-3); font: inherit; font-size: var(--lake-font-size-body); }
 .bt-row-handle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 2px 0 4px; opacity: 0; pointer-events: none; }
 .bt-row-grip, .bt-row-expander { flex: 0 0 auto; }   /* 盒子/配色走 kit 的 .ln-iconbtn */
 .bt-row-grip { cursor: grab; }
@@ -204,21 +204,21 @@
 .bt-add-row td { padding: 4px; }
 
 /* `text-overflow: ellipsis`：列窄了文本格出省略号（input 默认是硬裁；用户 260930「展示不下就截断省略」）。 */
-.bt-cell-input { width: 100%; height: 100%; min-height: 26px; border: 0; background: transparent; padding: 4px 8px; font: inherit; font-size: 13px; color: inherit; box-sizing: border-box; text-overflow: ellipsis; }
+.bt-cell-input { width: 100%; height: 100%; min-height: 26px; border: 0; background: transparent; padding: 4px 8px; font: inherit; font-size: var(--lake-font-size-body); color: inherit; box-sizing: border-box; text-overflow: ellipsis; }
 .bt-cell-input:focus { outline: 2px solid var(--lake-accent); outline-offset: -2px; }
 /* 单元格自己已经有 2px 选中环时（单格选区的四条边都在），格内输入框不再叠一层焦点环 ——
    否则就是「两层边框」（用户 260929 报的链接格 2 层边框；文本框同理）。多格选区只有外缘画环，
    内层格里仍保留输入框自己的焦点环，不丢可访问性。 */
 .bt-td.cell-selected.sel-top.sel-bottom.sel-left.sel-right .bt-cell-input:focus { outline: 0; }
-.bt-cell-unknown, .bt-cell-relation, .bt-cell-muted { padding: 4px 8px; font-size: 12px; color: var(--lake-text-3); }
+.bt-cell-unknown, .bt-cell-relation, .bt-cell-muted { padding: 4px 8px; font-size: var(--lake-font-size-body); color: var(--lake-text-3); }
 
 .bt-option-cell { position: relative; }
 .bt-option-trigger { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; text-align: left; color: inherit; }
 .bt-option-trigger:disabled { cursor: default; }
 .bt-option-label { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; min-width: 0; }
-.bt-option-placeholder { color: var(--lake-text-3); font-size: 12px; }
+.bt-option-placeholder { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .bt-option-caret { color: var(--lake-text-3); }
-.bt-option-chip { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: 12px; background: var(--lake-accent-tint); color: var(--lake-accent); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-option-chip { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: var(--lake-font-size-body); background: var(--lake-accent-tint); color: var(--lake-accent); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-option-search { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--lake-border-1); }
 .bt-option-search input { flex: 1; border: 0; background: transparent; font: inherit; color: inherit; outline: none; }
 .bt-option-list { max-height: 240px; overflow: auto; padding: 4px; }
@@ -226,37 +226,37 @@
 .bt-option-item:hover { background: var(--lake-bg-hover); }
 .bt-option-item.is-selected { background: var(--lake-accent-tint); }
 .bt-option-create { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; border-top: 1px solid var(--lake-border-1); background: transparent; cursor: pointer; padding: 7px 8px; font: inherit; color: var(--lake-accent); }
-.bt-popover-empty { padding: 10px; font-size: 12px; color: var(--lake-text-3); text-align: center; }
+.bt-popover-empty { padding: 10px; font-size: var(--lake-font-size-small); color: var(--lake-text-3); text-align: center; }
 
 .bt-attachment-cell { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; }
 .bt-attachment-chip { position: relative; display: inline-flex; align-items: center; }
 /* 光标统一为手型（260928 用户报：图片是放大镜、其他文件是手型，看着不一致）——缩略图点开=预览，
    与文件名 chip 同一动作，手势必须一致。 */
 .bt-attachment-chip img { width: 26px; height: 26px; object-fit: cover; border-radius: var(--lake-radius-2xs); cursor: pointer; }
-.bt-attachment-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: var(--lake-bg-hover); border-radius: var(--lake-radius-2xs); padding: 2px 6px; font: inherit; font-size: 12px; cursor: pointer; color: inherit; }
+.bt-attachment-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: var(--lake-bg-hover); border-radius: var(--lake-radius-2xs); padding: 2px 6px; font: inherit; font-size: var(--lake-font-size-body); cursor: pointer; color: inherit; }
 .bt-hidden-input { display: none; }
 
 .bt-panel { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
-.bt-panel h4 { margin: 4px 6px; font-size: 12px; color: var(--lake-text-2); }
-.bt-panel-add { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: var(--lake-radius-2xs); font: inherit; font-size: 12px; color: var(--lake-accent); }
+.bt-panel h4 { margin: 4px 6px; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
+.bt-panel-add { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: var(--lake-radius-2xs); font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-accent); }
 .bt-panel-add:hover { background: var(--lake-bg-hover); }
 /* 260930 审计：菜单项规格收编到 kit 的 .ln-menu__item（含 hover/选中/危险态与几何），
    JSX 上已同时挂 `bt-menu-item ln-menu__item`（前者仅作历史钩子，见 cssLayers 基线）。 */
-.bt-menu-custom { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 12px; }
+.bt-menu-custom { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: var(--lake-font-size-small); }
 .bt-menu-custom input { width: 64px; }
 
-.bt-field-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: var(--lake-radius-2xs); font-size: 13px; }
+.bt-field-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: var(--lake-radius-2xs); font-size: var(--lake-font-size-body); }
 .bt-field-row:hover { background: var(--lake-bg-hover); }
 .bt-field-name { flex: 1; }   /* 截断走 kit 的 .ln-ellipsis */
 
 .bt-rule-row { display: flex; align-items: center; gap: 4px; padding: 3px 2px; }
-.bt-rule-row select, .bt-rule-row input { min-width: 0; height: 26px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: 12px; padding: 0 4px; }
+.bt-rule-row select, .bt-rule-row input { min-width: 0; height: 26px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: var(--lake-font-size-small); padding: 0 4px; }
 
 .bt-icon-btn { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; cursor: pointer; padding: 3px; border-radius: var(--lake-radius-2xs); color: inherit; }
 .bt-icon-btn:hover { background: var(--lake-bg-hover); }
-.bt-inline-input { flex: 1; min-width: 0; border: 1px solid var(--lake-accent); border-radius: var(--lake-radius-2xs); background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: 13px; padding: 2px 4px; }
+.bt-inline-input { flex: 1; min-width: 0; border: 1px solid var(--lake-accent); border-radius: var(--lake-radius-2xs); background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: var(--lake-font-size-body); padding: 2px 4px; }
 
-.bt-primary, .bt-secondary, .bt-danger { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+.bt-primary, .bt-secondary, .bt-danger { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; padding: 5px 12px; font: inherit; font-size: var(--lake-font-size-body); cursor: pointer; border: 1px solid transparent; }
 .bt-primary { background: var(--lake-accent); color: var(--lake-text-on-accent); }
 .bt-secondary { background: transparent; border-color: var(--lake-border-1); color: inherit; }
 .bt-danger { background: transparent; border-color: var(--lake-status-error); color: var(--lake-status-error); }
@@ -268,33 +268,33 @@
 .bt-drawer-title { flex: 1; min-width: 0; margin: 0; font-size: var(--lake-font-size-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-drawer-body { flex: 1; overflow: auto; padding: 10px; }
 .bt-drawer-row { display: flex; flex-direction: column; gap: 3px; padding: 5px 0; }
-.bt-drawer-label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--lake-text-2); }
+.bt-drawer-label { display: flex; align-items: center; gap: 5px; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
 /* .bt-drawer-label-text：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 .bt-drawer-control { display: block; border: 1px solid var(--lake-border-1); border-radius: 6px; background: var(--lake-bg-panel); overflow: hidden; }
 .bt-drawer .bt-drawer-row { flex-direction: row; align-items: center; gap: 8px; padding: 4px 0; }
 .bt-drawer .bt-drawer-label { flex: 0 0 168px; width: 168px; }
 .bt-drawer .bt-drawer-control { flex: 1; min-width: 0; }
-.bt-drawer-addfield { display: flex; align-items: center; gap: 4px; margin-top: 8px; border: 1px dashed var(--lake-border-1); background: transparent; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; color: inherit; }
+.bt-drawer-addfield { display: flex; align-items: center; gap: 4px; margin-top: 8px; border: 1px dashed var(--lake-border-1); background: transparent; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: var(--lake-font-size-small); cursor: pointer; color: inherit; }
 
 .bt-form-view { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 12px; overflow: auto; }
 .bt-form-config { width: 240px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; }
 .bt-form-panel { border: 1px solid var(--lake-border-1); border-radius: 8px; padding: 8px; }
-.bt-form-panel h4 { margin: 0 0 6px; font-size: 12px; color: var(--lake-text-2); }
-.bt-form-topic { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px; font-size: 13px; }
+.bt-form-panel h4 { margin: 0 0 6px; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
+.bt-form-topic { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px; font-size: var(--lake-font-size-body); }
 .bt-form-topic-name { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.bt-form-add { display: flex; align-items: center; gap: 5px; width: 100%; border: 0; background: transparent; cursor: pointer; padding: 5px 4px; border-radius: var(--lake-radius-2xs); font: inherit; font-size: 13px; color: inherit; text-align: left; }
+.bt-form-add { display: flex; align-items: center; gap: 5px; width: 100%; border: 0; background: transparent; cursor: pointer; padding: 5px 4px; border-radius: var(--lake-radius-2xs); font: inherit; font-size: var(--lake-font-size-body); color: inherit; text-align: left; }
 .bt-form-add:hover { background: var(--lake-bg-hover); }
 .bt-form-canvas { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .bt-form-preview { border: 1px solid var(--lake-border-1); border-radius: 10px; padding: 16px; background: var(--lake-bg-block); }
-.bt-form-preview h3 { margin: 0 0 4px; font-size: 16px; }
-.bt-form-desc { margin: 0 0 12px; font-size: 12px; color: var(--lake-text-3); }
-.bt-form-preview-row { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--lake-border-1); font-size: 13px; }
+.bt-form-preview h3 { margin: 0 0 4px; font-size: var(--lake-font-size-title); }
+.bt-form-desc { margin: 0 0 12px; font-size: var(--lake-font-size-small); color: var(--lake-text-3); }
+.bt-form-preview-row { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--lake-border-1); font-size: var(--lake-font-size-body); }
 .bt-form-preview-label { display: flex; gap: 4px; }
-.bt-form-preview-hint { font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
+.bt-form-preview-hint { font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 .bt-form-entry { border: 1px solid var(--lake-border-1); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-.bt-form-entry h4 { margin: 0; font-size: 14px; }
+.bt-form-entry h4 { margin: 0; font-size: var(--lake-font-size-bodyLg); }
 .bt-form-entry-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.bt-form-error { color: var(--lake-status-error); font-size: 12px; }
+.bt-form-error { color: var(--lake-status-error); font-size: var(--lake-font-size-small); }
 
 .bt-dialog { width: 420px; max-width: 90%; max-height: 86vh; }
 /* 261006 Phase 2.2：字段类（输入 / 数字 / 多行）并入共用原语口径 ——
@@ -308,7 +308,7 @@
   background: var(--lake-bg-panel);
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--lake-font-size-body);
   padding: 0 8px;
   box-sizing: border-box;
   transition: border-color var(--lake-motion-fast) var(--lake-ease-standard),
@@ -319,11 +319,11 @@
 /* 占位文案统一走 --lake-text-4（与 kit.css/overlay.css 的 placeholder 同一口径；浏览器默认灰不是令牌）。
    选项编辑的新行用它显示默认名「选项 N」（用户 260930：不要在输入框里预填再全选 ⇒ 那块蓝色底色）。 */
 .bt-input::placeholder { color: var(--lake-text-4); }
-.bt-field-label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 12px; color: var(--lake-text-2); }
+.bt-field-label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
 /* 日期字段的默认值三态：形态下拉 +（选「指定时间」时）日期选择器 */
 .bt-date-default { display: flex; flex-direction: column; gap: 4px; }
-.bt-field-label-text { font-size: 12px; color: var(--lake-text-2); }
-.bt-field-check { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-bottom: 10px; }
+.bt-field-label-text { font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
+.bt-field-check { display: flex; align-items: center; gap: 6px; font-size: var(--lake-font-size-body); margin-bottom: 10px; }
 .bt-options-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .bt-option-edit-row { display: flex; align-items: center; gap: 6px; }
 
@@ -340,19 +340,19 @@
 .bt-grid .bt-td.sel-left { --bt-sel-l: inset 2px 0 0 0 var(--lake-accent); }
 .bt-grid .bt-td.sel-right { --bt-sel-r: inset -2px 0 0 0 var(--lake-accent); }
 .bt-date-cell { display: flex; align-items: center; height: 100%; }
-.bt-date-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; font-size: 13px; color: inherit; }
+.bt-date-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; font-size: var(--lake-font-size-body); color: inherit; }
 .bt-date-trigger.is-empty { color: var(--lake-text-3); }
 /* 日期/时间文案是**单行可省略**的：走 kit 的 .ln-ellipsis（挂在那个 <span> 上），列窄了省略号、行高不变。 */
 .bt-date-panel { padding: 8px; }
-.bt-date-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
-.bt-date-week { display: grid; grid-template-columns: repeat(7, 1fr); font-size: var(--lake-font-size-micro); color: var(--lake-text-3); text-align: center; margin-bottom: 2px; }
+.bt-date-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: var(--lake-font-size-body); }
+.bt-date-week { display: grid; grid-template-columns: repeat(7, 1fr); font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); text-align: center; margin-bottom: 2px; }
 .bt-date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.bt-date-day { border: 0; background: transparent; border-radius: var(--lake-radius-2xs); padding: 5px 0; cursor: pointer; font: inherit; font-size: 12px; color: inherit; }
+.bt-date-day { border: 0; background: transparent; border-radius: var(--lake-radius-2xs); padding: 5px 0; cursor: pointer; font: inherit; font-size: var(--lake-font-size-small); color: inherit; }
 .bt-date-day:hover { background: var(--lake-bg-hover); }
 .bt-date-day.is-selected { background: var(--lake-accent); color: var(--lake-text-on-accent); }
 .bt-date-empty { display: block; }
 .bt-date-foot { display: flex; justify-content: space-between; margin-top: 6px; border-top: 1px solid var(--lake-border-1); padding-top: 6px; }
-.bt-date-foot button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12px; color: var(--lake-accent); }
+.bt-date-foot button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-accent); }
 
 /* ── 260920 云端对齐：去边框 / 补动效 / 补齐颜色与自定义下拉 ── */
 .bt-tables-switch:hover { background: var(--lake-bg-hover); }
@@ -360,9 +360,9 @@
 .bt-menu-label { flex: 1; text-align: left; }
 .bt-view-icon { display: inline-flex; align-items: center; margin-right: 5px; }
 .bt-select { width: 100%; }
-.bt-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; height: 32px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); padding: 0 10px; font: inherit; font-size: 13px; color: inherit; cursor: pointer; text-align: left; }
+.bt-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; height: 32px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); padding: 0 10px; font: inherit; font-size: var(--lake-font-size-body); color: inherit; cursor: pointer; text-align: left; }
 .bt-rule-row .bt-select { flex: 1; min-width: 0; }
-.bt-rule-row .bt-select-trigger { height: 26px; font-size: 12px; padding: 0 6px; }
+.bt-rule-row .bt-select-trigger { height: 26px; font-size: var(--lake-font-size-small); padding: 0 6px; }
 .bt-row-menu { animation: bt-pop .13s ease-out; }
 .bt-tool-btn, .bt-icon-btn, .bt-menu-item, .bt-panel-add, .bt-primary, .bt-secondary, .bt-danger, .bt-tables-switch, .bt-select-trigger, .bt-option-item, .bt-date-day, .bt-tables-resize { transition: background .14s ease, border-color .14s ease, box-shadow .14s ease, color .14s ease; }
 
@@ -375,18 +375,18 @@
 /* 附件格：编辑态常显 ⤢（图1），悬停/聚焦也显形（与文本格同一约束） */
 .bt-attachment-cell:hover .bt-expand-btn, .bt-attachment-cell:focus-within .bt-expand-btn, .bt-attachment-cell.is-editing .bt-expand-btn { display: inline-flex; }
 .bt-text-expand { display: flex; flex-direction: column; overflow: hidden; min-width: 220px; min-height: 140px; }
-.bt-text-expand-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: move; user-select: none; background: var(--lake-bg-block); border-bottom: 1px solid var(--lake-border-1); font-size: 12px; }
-.bt-text-expand-body { flex: 1; width: 100%; min-height: 0; border: 0; outline: none; resize: none; padding: 8px 10px; font: inherit; font-size: 13px; line-height: 1.6; color: inherit; background: var(--lake-bg-panel); box-sizing: border-box; }
+.bt-text-expand-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: move; user-select: none; background: var(--lake-bg-block); border-bottom: 1px solid var(--lake-border-1); font-size: var(--lake-font-size-small); }
+.bt-text-expand-body { flex: 1; width: 100%; min-height: 0; border: 0; outline: none; resize: none; padding: 8px 10px; font: inherit; font-size: var(--lake-font-size-bodyMd); line-height: 1.6; color: inherit; background: var(--lake-bg-panel); box-sizing: border-box; }
 .bt-text-expand-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--lake-text-3) 50%); }
 /* 附件展开面板：上半 = 拖拽/粘贴投放区（有附件时即文件列表），下半 = 添加本地文件 */
 .bt-attach-expand { display: flex; flex-direction: column; overflow: hidden; min-width: 280px; min-height: 200px; }
-.bt-attach-expand-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: move; user-select: none; background: var(--lake-bg-block); border-bottom: 1px solid var(--lake-border-1); font-size: 12px; }
+.bt-attach-expand-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: move; user-select: none; background: var(--lake-bg-block); border-bottom: 1px solid var(--lake-border-1); font-size: var(--lake-font-size-small); }
 /* body 不滚、「添加本地文件」常驻；超过 3 行的卡片由投放区自己滚（面板高度自适应但封顶 3 行） */
 .bt-attach-expand-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--lake-bg-panel); box-sizing: border-box; overflow: hidden; }
 .bt-attach-dropzone { flex: 1; min-height: 96px; display: flex; align-items: center; justify-content: center; padding: 10px; border: 1px dashed var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); box-sizing: border-box; overflow: auto; scrollbar-gutter: stable; }
 .bt-attach-dropzone.has-items { align-items: stretch; justify-content: flex-start; border-color: transparent; background: transparent; padding: 2px; }
 .bt-attach-dropzone.is-drop-active { border-color: var(--lake-accent); border-style: solid; }
-.bt-attach-dropzone-hint { color: var(--lake-text-3); font-size: 13px; }
+.bt-attach-dropzone-hint { color: var(--lake-text-3); font-size: var(--lake-font-size-body); }
 /* 附件卡片网格（展开面板）：上 = 附件区（点击预览 / 按住拖动排序，右上角 × 删除）；
    下 = 名称行（名称可点击预览、✏️ 改名、⬇ 下载）。**没有悬停工具**。 */
 /* grid-auto-rows 必须等于 core 的 ATTACHMENT_GRID.cardHeight（121 = 附件区 92 + 名称行）。
@@ -398,20 +398,20 @@
 .bt-attach-card.is-drop-before { box-shadow: -2px 0 0 0 var(--lake-accent); }
 .bt-attach-card.is-drop-after { box-shadow: 2px 0 0 0 var(--lake-accent); }
 .bt-attach-card-file { position: relative; display: flex; align-items: center; justify-content: center; height: 92px; background: var(--lake-bg-block); cursor: pointer; }
-.bt-attach-card-ext { font-size: 12px; letter-spacing: .04em; color: var(--lake-text-3); }
+.bt-attach-card-ext { font-size: var(--lake-font-size-small); letter-spacing: .04em; color: var(--lake-text-3); }
 .bt-attach-card-remove { position: absolute; top: 4px; right: 4px; }
 /* 卡片预览区是深色缩略图，这颗 × 需要**白底药丸**才看得见 —— 只覆盖「面」，盒子/命中区仍来自 .ln-iconbtn。 */
 .bt-attach-card-remove { background: var(--lake-bg-panel); border-radius: var(--lake-radius-pill); }
 .bt-attach-card-meta { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 6px; border-top: 1px solid var(--lake-border-1); }
-.bt-attach-card-name { flex: 1; min-width: 0; font-size: 12px; line-height: 1.7; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.bt-attach-card-name { flex: 1; min-width: 0; font-size: var(--lake-font-size-body); line-height: 1.7; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .bt-attach-card-name:hover { color: var(--lake-text-1); }
 /* 行内改名：**只改主名，扩展名固定**（260928 用户：「编辑名称的时候不能改格式，直接编辑名称」）。
    输入框按内容自适应宽度（field-sizing: content），后缀紧跟在后面，一眼看出编辑的是名字本身。 */
 .bt-attach-card-rename { display: flex; align-items: baseline; gap: 1px; flex: 1; min-width: 0; }
-.bt-attach-card-rename-input { flex: 0 1 auto; min-width: 2ch; max-width: 100%; field-sizing: content; border: 0; border-bottom: 1px solid var(--lake-accent); padding: 0 2px; background: transparent; font: inherit; font-size: 12px; color: var(--lake-text-1); outline: none; }
-.bt-attach-card-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--lake-text-2); }
+.bt-attach-card-rename-input { flex: 0 1 auto; min-width: 2ch; max-width: 100%; field-sizing: content; border: 0; border-bottom: 1px solid var(--lake-accent); padding: 0 2px; background: transparent; font: inherit; font-size: var(--lake-font-size-body); color: var(--lake-text-1); outline: none; }
+.bt-attach-card-rename-ext { flex: 0 0 auto; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
 .bt-attach-card-icon { flex: 0 0 auto; }   /* 盒子/配色走 kit 的 .ln-iconbtn */
-.bt-attach-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; width: 100%; border: 0; border-radius: var(--lake-radius-sm); padding: 9px; background: transparent; color: var(--lake-text-2); font: inherit; font-size: 13px; cursor: pointer; }
+.bt-attach-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; width: 100%; border: 0; border-radius: var(--lake-radius-sm); padding: 9px; background: transparent; color: var(--lake-text-2); font: inherit; font-size: var(--lake-font-size-body); cursor: pointer; }
 .bt-attach-add:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 .bt-attach-expand-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--lake-text-3) 50%); }
 
@@ -429,4 +429,4 @@
 .bt-attachment-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; min-height: 34px; padding: 2px 6px; }
 .bt-attachment-plus { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex: 0 0 auto; border: 0; background: var(--lake-bg-block); border-radius: var(--lake-radius-2xs); cursor: pointer; color: var(--lake-text-2); padding: 0; }
 .bt-attachment-plus:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
-.bt-attachment-hint { flex: 1; min-width: 0; color: var(--lake-text-3); font-size: 12px; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-attachment-hint { flex: 1; min-width: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

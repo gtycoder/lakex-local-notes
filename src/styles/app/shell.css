@@ -20,14 +20,14 @@
 
 .create-menu > button > span { display: flex; flex-direction: column; min-width: 0; }
 
-.create-menu strong { font-size: 12px; font-weight: 600; }
+.create-menu strong { font-size: var(--lake-font-size-tiny); font-weight: 600; }
 
 .create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); text-overflow: ellipsis; white-space: nowrap; }
 
 /* 261006：左侧外边距并入本处（原 Sidebar 另给 inline marginLeft:8）——值收单一来源。 */
 .inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px 8px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-tint); }
 
-.inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text-1); background: transparent; font-size: 12px; }
+.inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-tiny); }
 
 .inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: var(--lake-font-size-nano); }
 
@@ -98,9 +98,9 @@
 
 .empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--lake-radius-xl); color: var(--lake-accent); background: var(--lake-accent-tint); }
 
-.empty-workspace h2 { margin: 0; color: var(--lake-text-1); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.empty-workspace h2 { margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-bodyLg); font-weight: 600; letter-spacing: -.01em; }
 
-.empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-3); font-size: 13px; }
+.empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 
 .create-menu { opacity: 1; transform: scale(1); }
 
@@ -613,7 +613,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .sidebar-toolbar-title {
   flex: 0 0 auto;
   margin-right: 8px;
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
   font-weight: 600;
   letter-spacing: .02em;
   color: var(--lake-text-2, var(--lake-text-1));
@@ -678,7 +678,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   outline: 0;
   background: transparent;
   color: var(--lake-text-1);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
 }
 
 .dock-filter-input::placeholder { color: var(--lake-text-3); }
@@ -705,7 +705,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 /* 该菜单里复用了目录树右键的「导出」二级行（.context-menu-item 默认 12px/36px），
    与同级按钮的行高/字号对齐，视觉上仍是一条普通菜单项 */
-.top-menu .context-menu-item { min-height: 32px; font-size: 13px; }
+.top-menu .context-menu-item { min-height: 32px; font-size: var(--lake-font-size-small); }
 
 /* Drag feedback: a soft lifted row plus a clear insertion guide, matching outline motion. */
 .tree-row.dragging {

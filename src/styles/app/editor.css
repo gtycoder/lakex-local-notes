@@ -219,7 +219,7 @@ ne-card[data-card-name="file"] .ne-card-file {
 }
 @keyframes lake-search-hit-pulse { 50% { background: color-mix(in srgb, var(--lake-accent) 10%, transparent); } }
 
-.board-card-loading { display: grid; place-items: center; min-height: 200px; color: var(--lake-text-3); background: color-mix(in srgb, var(--lake-bg-panel) 88%, transparent); font-size: 12px; }
+.board-card-loading { display: grid; place-items: center; min-height: 200px; color: var(--lake-text-3); background: color-mix(in srgb, var(--lake-bg-panel) 88%, transparent); font-size: var(--lake-font-size-tiny); }
 
 /* #6b 桌面编辑器工具栏变窄：vendor 默认 .ne-ui-toolbar{height:50px}，压到 --editor-toolbar-height（261006 再收到 30px）。
    原 34px 下限来自内核两个 32px 的「正文 / 字号」下拉触发器（.ant-dropdown-trigger，antd 默认 32px）⇒

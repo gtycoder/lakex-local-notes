@@ -48,8 +48,8 @@
 
 .bt-kanban-caret { transition: transform 0.12s ease; }
 .bt-kanban-caret.is-open { transform: rotate(90deg); }
-.bt-kanban-chip { padding: 1px 8px; border-radius: var(--lake-radius-xs); font-size: 12px; background: var(--lake-bg-hover); color: var(--lake-text-2); }
-.bt-kanban-count { margin-left: auto; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
+.bt-kanban-chip { padding: 1px 8px; border-radius: var(--lake-radius-xs); font-size: var(--lake-font-size-small); background: var(--lake-bg-hover); color: var(--lake-text-2); }
+.bt-kanban-count { margin-left: auto; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 
 .bt-kanban-col-body {
   flex: 1;
@@ -74,8 +74,8 @@
 
 .bt-kanban-card:hover { border-color: var(--lake-accent); }
 .bt-kanban-card.is-dragging { opacity: 0.5; }
-.bt-kanban-card-title { font-size: 13px; color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
-.bt-kanban-field { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
+.bt-kanban-card-title { font-size: var(--lake-font-size-body); color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
+.bt-kanban-field { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: var(--lake-font-size-small); }
 .bt-kanban-field-name { flex: 0 0 auto; color: var(--lake-text-3); }
 .bt-kanban-field-value { min-width: 0; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -92,7 +92,7 @@
   background: transparent;
   color: var(--lake-text-2);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--lake-font-size-small);
   cursor: pointer;
 }
 
@@ -108,6 +108,6 @@
   gap: 8px;
   padding: 24px;
   color: var(--lake-text-3);
-  font-size: 13px;
+  font-size: var(--lake-font-size-body);
   text-align: center;
 }

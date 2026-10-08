@@ -63,6 +63,10 @@ export function useAiFieldGeneration(options: {
   const latest = useRef(options);
   latest.current = options;
   const inflightRef = useRef(new Set<string>());
+  /** 每格在途请求：cellKey → requestId ⇒ 支持**只停这一格**（用户 261008）。 */
+  const cellRequestRef = useRef(new Map<string, string>());
+  /** 被用户单独停掉的格（与「整列取消」cancelledRef 区分）。 */
+  const cancelledCellsRef = useRef(new Set<string>());
   const cancelledRef = useRef(false);
   const batchRef = useRef<AiBatchState | null>(null);
 
@@ -83,10 +87,18 @@ export function useAiFieldGeneration(options: {
     if (!built.ok) return { ok: false, error: built.error };
     const requestId = newAiRequestId();
     inflightRef.current.add(requestId);
+    cellRequestRef.current.set(key, requestId);
     setCellState(key, { status: "running" });
+    /** 取消判据：整列取消（cancelledRef）或**本格**取消（cancelledCellsRef，用户 261008）。 */
+    const cancelledNow = () => {
+      if (cancelledRef.current) return true;
+      if (!cancelledCellsRef.current.has(key)) return false;
+      cancelledCellsRef.current.delete(key);
+      return true;
+    };
     try {
       const result = await runAiChat(requestId, built.messages);
-      if (cancelledRef.current) { setCellState(key, null); return { ok: false, cancelled: true }; }
+      if (cancelledNow()) { setCellState(key, null); return { ok: false, cancelled: true }; }
       const text = result.ok && typeof result.text === "string" ? result.text.trim() : "";
       if (!text) return { ok: false, error: result.error ?? "生成结果为空" };
       if (latest.current.isReadOnly()) { setCellState(key, null); return { ok: false, cancelled: true }; }
@@ -94,10 +106,11 @@ export function useAiFieldGeneration(options: {
       setCellState(key, null);
       return { ok: true };
     } catch (error) {
-      if (cancelledRef.current) { setCellState(key, null); return { ok: false, cancelled: true }; }
+      if (cancelledNow()) { setCellState(key, null); return { ok: false, cancelled: true }; }
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     } finally {
       inflightRef.current.delete(requestId);
+      if (cellRequestRef.current.get(key) === requestId) cellRequestRef.current.delete(key);
     }
   }, [setCellState]);
 
@@ -140,6 +153,15 @@ export function useAiFieldGeneration(options: {
     }
   }, [generateOne, setCellState]);
 
+  /** 停止**某一格**：只中止它这一次请求（不影响其它格与整列），状态回到空闲、不写盘（用户 261008）。 */
+  const cancelCell = useCallback((recordId: string, fieldId: string) => {
+    const key = aiCellKey(fieldId, recordId);
+    const requestId = cellRequestRef.current.get(key);
+    if (!requestId) return;   // 没有在途请求 ⇒ 不留悬空取消标记，免得下一次生成被误吞
+    cancelledCellsRef.current.add(key);
+    void cancelAiChat(requestId);
+  }, []);
+
   /** 取消：中止上游请求；未开始的格不再发请求，已完成的保留。 */
   const cancelBatch = useCallback(() => {
     cancelledRef.current = true;
@@ -165,5 +187,5 @@ export function useAiFieldGeneration(options: {
     for (const requestId of inflightRef.current) void cancelAiChat(requestId);
   }, []);
 
-  return { cellStates, batch, generateCell, runBatch, cancelBatch, retryFailed, clearBatch };
+  return { cellStates, batch, generateCell, cancelCell, runBatch, cancelBatch, retryFailed, clearBatch };
 }

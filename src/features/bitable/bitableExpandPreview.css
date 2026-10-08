@@ -1,0 +1,6 @@
+/* 多维表「展开预览」正文档（261008 用户：比表正文大半档，先试 +0.5px）。
+   MD / AI 字段的展开预览正文走共用的 .md-preview（默认 body），它自带字号会盖住容器，
+   故这里按**展开预览作用域**再抬半档；AI 助手面板的 .md-preview 不受影响。
+   单开文件的原因：bitableEditor.css 已顶到 cssLayers 基线（只允许变小），
+   按项目口径「新样式一律新建文件并登记 FILES + BASELINE」。 */
+.bt-md-expand-preview .md-preview { font-size: var(--lake-font-size-bodyMd); }

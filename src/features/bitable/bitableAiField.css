@@ -42,7 +42,7 @@
   border-radius: var(--lake-radius-xs);
   background: transparent;
   color: var(--lake-text-2);
-  font-size: var(--lake-font-size-tiny);
+  font-size: var(--lake-font-size-small);
   cursor: pointer;
 }
 .bt-cell-ai-action:hover:not(:disabled) {

@@ -144,4 +144,17 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).toContain("selectionText.trim().length > 0 || hasImages");
   });
 
+  it("生成中「生成/发送」原位变「停止」：走 ai_cancel，且是中性停止、不报红（用户 261008）", () => {
+    // 中断入口必须落在发送键那一格（三个入口共用本面板 ⇒ 一处覆盖全部）
+    expect(DIALOG).toContain("{busy ? (");
+    expect(DIALOG).toContain("onClick={stop}>停止</button>");
+    expect(DIALOG).toContain("void cancelAiChat(reqRef.current)");
+    // 旧的「disabled 生成中… + 旁边一个次要停止」形态已收敛
+    expect(DIALOG).not.toContain("生成中…");
+    // 主动停止 ≠ 报错：走 stoppedRef 判据，给中性提示而不是 error
+    expect(DIALOG).toContain("stoppedRef.current");
+    expect(DIALOG).toContain("已停止生成，已生成的内容保留");
+    expect(DIALOG).toContain("return last && last.role === \"assistant\" && !last.text ? prev.slice(0, -1) : prev;");
+  });
+
 });

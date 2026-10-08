@@ -65,7 +65,7 @@
   min-width: 52px;
   text-align: center;
   color: var(--lake-media-on-soft);
-  font-size: 13px;
+  font-size: var(--lake-font-size-small);
   font-variant-numeric: tabular-nums;
 }
 .image-lightbox__divider {

@@ -7,7 +7,7 @@
  * - BitableEditor 不引用 Lake 内核编辑器/运行时；
  * - 只读态禁用编辑 + 不自动保存；自动保存有防抖 + 与上次序列化比较。
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const EDITOR = readFileSync(new URL("./BitableEditor.tsx", import.meta.url), "utf8");
@@ -1011,6 +1011,50 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
     expect(CARDS).toContain("未配置");
     expect(CARDS).toMatch(/const canGenerate = !readOnly && Boolean\(onGenerate\) && configured/);
     expect(CARDS).toContain('aiPromptFieldNames(field.ai?.prompt ?? "")');
+  });
+
+  it("字号一律走令牌：多维表 CSS 不允许出现任何 font-size 字面量（261008 收敛批）", () => {
+    const dir = new URL("./", import.meta.url);
+    const offenders: string[] = [];
+    for (const file of readdirSync(dir).filter((name) => name.endsWith(".css"))) {
+      const text = readFileSync(new URL(file, dir), "utf8");
+      for (const hit of text.match(/font-size:\s*[0-9.]+px/g) ?? []) offenders.push(file + ": " + hit);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("表正文一律 body；表头与内容**同级**、展开面板正文大半档（261008 用户口径）", () => {
+    const ED = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8");
+    const FIELD_CELLS = readFileSync(new URL("./bitableFieldCells.css", import.meta.url), "utf8");
+    const MARKDOWN = readFileSync(new URL("../../components/markdown/markdown.css", import.meta.url), "utf8");
+    const EXPAND = readFileSync(new URL("./bitableExpandPreview.css", import.meta.url), "utf8");
+    // 单元格内容：文本 / 选项 chip / 附件名 / 关联回退 / 系统时间 全部同号
+    expect(ED).toMatch(/\.bt-cell-input \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    expect(ED).toMatch(/\.bt-option-chip \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    expect(ED).toMatch(/\.bt-attachment-name \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    expect(ED).toMatch(/\.bt-cell-unknown, \.bt-cell-relation, \.bt-cell-muted \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    expect(FIELD_CELLS).toMatch(/\.bt-link-text \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    // 表头与内容**同级**（用户 261008：表头缩小到和内容一致）
+    expect(ED).toMatch(/\.bt-th-inner \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    expect(ED).not.toMatch(/\.bt-th-inner \{[^}]*font-size: var\(--lake-font-size-bodyLg\)/);
+    // 展开面板：容器（文本展开 textarea / MD·AI 展开编辑）与 MD 预览都大半档（+0.5px）
+    expect(ED).toMatch(/\.bt-text-expand-body \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);
+    expect(EXPAND).toMatch(/\.bt-md-expand-preview \.md-preview \{\s*font-size: var\(--lake-font-size-bodyMd\)/);
+    // 共用 .md-preview（AI 助手面板正文）仍是 body，不被多维表拉大
+    expect(MARKDOWN).toMatch(/\.md-preview \{[^}]*font-size: var\(--lake-font-size-body\)/);
+  });
+
+  it("AI 单元格「生成中」带停止（只停本格，用户 261008）；视觉复用既有原语、不新增 CSS", () => {
+    expect(CARDS).toMatch(/aria-label="生成中"[\s\S]{0,400}?停止<\/button>/);
+    expect(CARDS).toContain("onStop?: () => void");
+    expect(CARDS).toContain('className="bt-cell-ai-action" title="停止本次生成"');
+    // 网格把「停止」接到 hook 的**按格**取消
+    expect(EDITOR).toContain("onAiStop={field.type === \"ai\"");
+    expect(EDITOR).toContain("aiGen.cancelCell(record.id, field.id)");
+    // 按格取消只中止该格这次的 requestId（与整列的 cancelledRef 分开）
+    expect(AI_HOOK).toContain("const cancelCell = useCallback((recordId: string, fieldId: string)");
+    expect(AI_HOOK).toContain("cellRequestRef");
+    expect(AI_HOOK).toContain("cancelledCellsRef");
   });
 
   it("编辑器：整列生成走 hook（整批一次撤销）+ 列菜单入口（只读禁用）+ 对话框；值走 mutations 单一闸口", () => {

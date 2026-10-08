@@ -19,6 +19,70 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
     expect(SRC).not.toMatch(/from "jspreadsheet-ce"/);
   });
 
+  it("全表行高重算用更长的静默窗口，且不被选区请求降级（261008：拖列宽不再拖一帧算一次）", () => {
+    expect(SRC).toContain("const AUTO_ROW_FULL_THROTTLE_MS = 400");
+    expect(SRC).toContain("const AUTO_ROW_THROTTLE_MS = 160");
+    expect(SRC).toContain("const pendingFullRowRef = useRef(false)");
+    expect(SRC).toContain("if (full) pendingFullRowRef.current = true");
+    expect(SRC).toContain("const useFull = pendingFullRowRef.current");
+    expect(SRC).toMatch(/pendingFullRowRef\.current \? AUTO_ROW_FULL_THROTTLE_MS : AUTO_ROW_THROTTLE_MS/);
+    // 防抖加大（保存不再落在拖拽中途）
+    expect(SRC).toContain("const AUTOSAVE_DEBOUNCE_MS = 1500");
+  });
+
+  it("旧默认字号（fs=10，粘贴数据几乎每格都有）也归一化到当前默认 11pt（261008）", () => {
+    expect(SRC).toContain("const LEGACY_DEFAULT_FONT_SIZE = 10");
+    expect(SRC).toContain("function needsDefaultFontSize");
+    expect(SRC).toMatch(/Math\.ceil\(n\) === LEGACY_DEFAULT_FONT_SIZE/);
+    expect(SRC).toMatch(/needsDefaultFontSize\(next\.fs\)/);
+    expect(SRC).toMatch(/needsDefaultFontSize\(wb\.getCellValue\(row, column, \{ type: "fs" \}/);
+  });
+
+  it("表格默认缩放 = 100%（旧默认 1.1 视为未自定义）（261008）", () => {
+    expect(SRC).toContain("const DEFAULT_SHEET_ZOOM = 1;");
+    expect(SRC).toContain("const LEGACY_DEFAULT_ZOOM = 1.1;");
+    expect(SRC).toMatch(/local !== LEGACY_DEFAULT_ZOOM/);
+    expect(SRC).toMatch(/stored !== LEGACY_DEFAULT_ZOOM/);
+  });
+
+  it("内核补丁：编辑框垂直对齐按单元格 vt（画布/编辑态一致），且两版产物都要打（261008）", () => {
+    const PATCH = readFileSync(new URL("../../../patches/@fortune-sheet+react+1.0.4.patch", import.meta.url), "utf8");
+    expect(PATCH).toContain("编辑框垂直对齐按单元格 vt");
+    expect(PATCH).toContain("justifyContent: _justify");
+    // vite 走 module=dist/index.esm.js；CJS 版给别的消费者 —— 漏一个就会出现「改完没生效」
+    expect(PATCH).toMatch(/dist\/index\.esm\.js/);
+    expect(PATCH).toMatch(/b\/node_modules\/@fortune-sheet\/react\/dist\/index\.js/);
+  });
+
+  it("数字字体索引（fontarray 下标，0=Times New Roman）也归一化成 MiSans（261008：画布与编辑框两套字体）", () => {
+    expect(SRC).toContain("function needsGlobalFont");
+    expect(SRC).toMatch(/typeof ff === "number"/);
+    expect(SRC).toMatch(/needsGlobalFont\(next\.ff\)/);
+    expect(SRC).toMatch(/needsGlobalFont\(wb\.getCellValue\(row, column, \{ type: "ff" \}/);
+    // 别再退回「只认 null / 旧字面量」的窄判据（漏掉 ff:0 就是本次用户报的那个 bug）
+    expect(SRC).not.toContain("next.ff == null || next.ff === LEGACY_GLOBAL_FONT");
+  });
+
+  it("行高估算复用同一个离屏 canvas + 文本宽度缓存（261008：原来每格新建 canvas，5453 行一个来回 2.5s）", () => {
+    expect(SRC).toContain("let measureCtx");
+    expect(SRC).toContain("textWidthCache");
+    expect(SRC).toMatch(/TEXT_WIDTH_CACHE_MAX = \d+/);
+    // estimateWrappedRowHeight 体内不得再新建 canvas（必须走共享 ctx）
+    const body = SRC.slice(SRC.indexOf("function estimateWrappedRowHeight"), SRC.indexOf("function rowCellsOf"));
+    expect(body).not.toContain('createElement("canvas")');
+    expect(body).toContain("widthOfText(");
+    // 共享 ctx 只在模块级懒建一次
+    expect(SRC).toMatch(/measureCtx = document\.createElement\("canvas"\)\.getContext\("2d"\)/);
+  });
+
+  it("默认字号比内核默认(10pt)大 1 档：<Workbook> 传 defaultFontSize，行高估算用同一常量（261008）", () => {
+    expect(SRC).toContain("const SHEET_DEFAULT_FONT_SIZE = 11");
+    expect(SRC).toMatch(/defaultFontSize=\{SHEET_DEFAULT_FONT_SIZE\}/);
+    expect(SRC).toContain("Number(cell.fs) || SHEET_DEFAULT_FONT_SIZE");
+    // 不要再出现写死的默认 10（必须与内核 defaultFontSize 一致）
+    expect(SRC).not.toContain("Number(cell.fs) || 10");
+  });
+
   it("keep-alive：用 everVisible 保证首次可见后才挂载 Workbook", () => {
     expect(SRC).toMatch(/everVisible/);
     expect(SRC).toMatch(/\{everVisible && fillMin && sheets\.length > 0 && \(/);
@@ -54,7 +118,8 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
   });
 
   it("自动换行行高：编辑提交 / 批量写入（粘贴）/ 打开文档三条路都要触发（内核只在单格提交且列宽行高未被显式设置时才自适应）", () => {
-    expect(SRC).toMatch(/afterUpdateCell[\s\S]{0,600}syncAutoRowHeights\(\[row\]\)/);
+    // 窗口按"两个钩子之间可能有若干行归一化/默认值"放宽（261008 加了 fs 归一化后 600 不够）
+    expect(SRC).toMatch(/afterUpdateCell[\s\S]{0,900}syncAutoRowHeights\(\[row\]\)/);
     expect(SRC).toMatch(/const handleOp[\s\S]{0,240}scheduleAutoRowHeights\(\)/);
     expect(SRC).toMatch(/syncAutoRowHeights\(rowsWithCells\(activeSheet/);
     // 粘贴进来的单元格没有 tb（内核批量写入不走我们的补默认路径）⇒ 缺省必须按自动换行处理
@@ -117,7 +182,8 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
   it("单元格字体 = MiSans（内核 getFontSet 把多族串当**单族名**加引号 ⇒ 我们只给单族名）；旧值打开即归一化", () => {
     expect(SRC).toMatch(/const GLOBAL_FONT = "MiSans";/);
     expect(SRC).toMatch(/const LEGACY_GLOBAL_FONT =\s*'BlinkMacSystemFont, "Segoe UI"/);
-    expect(SRC).toContain("next.ff === LEGACY_GLOBAL_FONT");
+    // 归一化判据统一走 needsGlobalFont（含数字索引 ff:0 = Times New Roman，261008 修）
+    expect(SRC).toContain("needsGlobalFont(next.ff)");
     // DOM 外壳的字体接线必须落在**未分层**的 sheetEditor.css（内核 CSS 未分层 ⇒ layer(feature) 压不过它）
     const CSS = readFileSync(new URL("./sheetEditor.css", import.meta.url), "utf8");
     expect(CSS).toMatch(/\.sheet-editor \.fortune-container,[\s\S]{0,200}font-family: var\(--lake-font-family\)/);

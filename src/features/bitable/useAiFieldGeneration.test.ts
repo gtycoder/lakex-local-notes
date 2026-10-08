@@ -146,6 +146,35 @@ describe("AI 字段生成控制器（261003）", () => {
     expect(harness.writes).toHaveLength(0);
   });
 
+  it("单格停止：只中止本格那一次请求（其它格照常落盘），状态回空闲、不写盘（261008）", async () => {
+    const resolvers = new Map<string, (value: { ok: boolean; text?: string; error?: string }) => void>();
+    mocks.runAiChat.mockImplementation((requestId) => new Promise((resolve) => { resolvers.set(requestId, resolve); }));
+    const harness = renderHarness(makeDoc(2));
+    let first: Promise<void> = Promise.resolve();
+    let second: Promise<void> = Promise.resolve();
+    await act(async () => {
+      first = harness.api().generateCell("t1", "r0", "f-ai");
+      second = harness.api().generateCell("t1", "r1", "f-ai");
+    });
+    const ids = mocks.runAiChat.mock.calls.map((call) => call[0]);
+    expect(ids).toHaveLength(2);
+    expect(harness.api().cellStates[aiCellKey("f-ai", "r0")]).toMatchObject({ status: "running" });
+    expect(harness.api().cellStates[aiCellKey("f-ai", "r1")]).toMatchObject({ status: "running" });
+
+    act(() => harness.api().cancelCell("r0", "f-ai"));
+    expect(mocks.cancelAiChat).toHaveBeenCalledTimes(1);
+    expect(mocks.cancelAiChat).toHaveBeenCalledWith(ids[0]);
+
+    await act(async () => { resolvers.get(ids[0])!({ ok: false, error: "aborted" }); await first; });
+    expect(harness.api().cellStates[aiCellKey("f-ai", "r0")]).toBeUndefined();
+    expect(harness.valueOf("r0")).toBeUndefined();
+    // 只停了 r0：r1 仍在途，结果照常写入
+    expect(harness.api().cellStates[aiCellKey("f-ai", "r1")]).toMatchObject({ status: "running" });
+    await act(async () => { resolvers.get(ids[1])!({ ok: true, text: "结果1" }); await second; });
+    expect(harness.valueOf("r1")).toBe("结果1");
+    expect(harness.writes).toHaveLength(1);
+  });
+
   it("runPool：并发上限生效且不丢任务（纯函数）", async () => {
     const items = [1, 2, 3, 4, 5, 6, 7];
     const seen: number[] = [];

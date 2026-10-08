@@ -3,6 +3,6 @@
 .ai-dialog__presets { margin: 0 8px 6px; }
 .ai-dialog__copy-actions { display: inline-flex; gap: 2px; }
 /* 「复制为 Lake」的图标 = lake 四个字母（用户 261005：不用代码块图标）。 */
-.ai-dialog__lake-badge { font-size: 9.5px; font-weight: var(--lake-font-weight-semibold); letter-spacing: .1px; }
+.ai-dialog__lake-badge { font-size: var(--lake-font-size-nano); font-weight: var(--lake-font-weight-semibold); letter-spacing: .1px; }
 /* 复制按钮的 hover 说明：表面复用 kit 的 .ln-tip，这里只补定位（与 .bt-file-tip 同口径）。 */
 .ai-dialog__tip { position: fixed; pointer-events: none; }

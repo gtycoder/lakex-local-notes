@@ -30,7 +30,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--lake-font-size-body);
   font-weight: 500;
   min-width: 0;
   overflow: hidden;
@@ -48,7 +48,7 @@
   padding: 7px 12px;
   background: var(--lake-bg-block);
   color: var(--lake-text-1);
-  font-size: 13px;
+  font-size: var(--lake-font-size-small);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -90,11 +90,11 @@
   max-width: 80vw;
 }
 .attachment-preview__fallback-name {
-  font-size: 15px;
+  font-size: var(--lake-font-size-bodyLg);
   color: var(--lake-text-1);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.attachment-preview__hint { color: var(--lake-text-3); font-size: 13px; margin: 0; }
+.attachment-preview__hint { color: var(--lake-text-3); font-size: var(--lake-font-size-small); margin: 0; }

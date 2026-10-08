@@ -37,7 +37,7 @@
 /* 未保存标记：Tab 标签上的小圆点 */
 .tab-item .tab-pin {flex: none;}
 
-.tab-item .tab-custom-icon { flex: none; font-size: 13px; line-height: 1; }
+.tab-item .tab-custom-icon { flex: none; font-size: var(--lake-font-size-small); line-height: 1; }
 
 .tab-item.pinned .tab-close { display: none; }
 
@@ -132,7 +132,7 @@
   min-height: 0;
   margin: 0;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 
@@ -183,7 +183,7 @@
   max-width: 260px;
   padding: 6px 9px;
   border: 1px solid var(--lake-border-strong);
-  font-size: 11px;
+  font-size: var(--lake-font-size-micro);
   font-weight: 500;
   line-height: 1.25;
   white-space: nowrap;
@@ -244,7 +244,7 @@
   min-height: 28px;
   padding: 0 7px 5px;
   color: var(--lake-text-2);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
 }
 
 .tab-switcher-heading span { color: var(--lake-text-4); font-variant-numeric: tabular-nums; }
@@ -292,14 +292,14 @@
   flex: 0 0 18px;
   width: 18px;
   color: var(--lake-text-3);
-  font-size: 15px;
+  font-size: var(--lake-font-size-bodyLg);
   line-height: 1;
 }
 
 .tab-switcher-status {
   width: 7px;
   color: var(--lake-status-pending);
-  font-size: 10px;
+  font-size: var(--lake-font-size-nano);
   line-height: 1;
 }
 

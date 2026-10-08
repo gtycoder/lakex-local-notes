@@ -260,7 +260,7 @@
 .outline-panel__empty {
   padding: 16px 12px;
   color: var(--lake-text-4);
-  font-size: 13px;
+  font-size: var(--lake-font-size-small);
   text-align: center;
 }
 
@@ -365,7 +365,7 @@
   border: 0;
   border-radius: 6px;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
   color: var(--shell-text-secondary);
   background: transparent;
   cursor: pointer;

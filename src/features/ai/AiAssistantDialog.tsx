@@ -107,6 +107,9 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 用户**主动停止**：是正常操作、不是错误（不报红）；已生成的片段保留在对话里（用户 261008）。 */
+  const [stopped, setStopped] = useState(false);
+  const stoppedRef = useRef(false);
   const reqRef = useRef<string | null>(null);
   const historyRef = useRef<AiChatMessage[]>([]);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
@@ -125,6 +128,7 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
   useEffect(() => {
     if (!open) return;
     setInstruction(""); setFollowUp(""); setTurns([]); setError(null); setBusy(false);
+    setStopped(false); stoppedRef.current = false;
     setUserHeight(null);   // 打开即恢复默认高度（内容自适应），不沿用上次拖出来的大小
     reqRef.current = null; historyRef.current = [];
     if (copyTimerRef.current !== null) { window.clearTimeout(copyTimerRef.current); copyTimerRef.current = null; }
@@ -182,17 +186,25 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
   /** 发一轮：messages 已是完整上下文（含本轮 user）。 */
   const send = async (messages: AiChatMessage[]) => {
     setBusy(true); setError(null);
+    stoppedRef.current = false; setStopped(false);
     const reqId = newAiRequestId();
     reqRef.current = reqId;
     try {
       const res = await runAiChat(reqId, messages, appendAssistant);
-      if (!res.ok) {
+      if (stoppedRef.current) {
+        // 主动停止 ≠ 出错：半截回答**不写进 history**（不把它当完整上下文再发），但留在面板里可复制/插入；
+        // 一个字都没生成时把那个空气泡收掉（否则留下一个空边框块）。
+        setTurns((prev) => {
+          const last = prev[prev.length - 1];
+          return last && last.role === "assistant" && !last.text ? prev.slice(0, -1) : prev;
+        });
+      } else if (!res.ok) {
         setError(res.error ?? "未知错误");
       } else {
         historyRef.current = [...messages, { role: "assistant", content: res.text ?? "" }];
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!stoppedRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false); reqRef.current = null;
     }
@@ -235,7 +247,12 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
     });
     await send(messages);
   };
-  const stop = () => { if (reqRef.current) void cancelAiChat(reqRef.current); };
+  /** 停止生成：立刻中止主进程那一次请求（流断在这里），并记「主动停止」而非报错（用户 261008）。 */
+  const stop = () => {
+    if (!reqRef.current) return;
+    stoppedRef.current = true; setStopped(true);
+    void cancelAiChat(reqRef.current);
+  };
 
   /** 回车 = 确定（发这一轮，等同点「生成 / 发送」）；Ctrl/⌥（及 ⌘/⇧）+回车 = 换行（对齐 Codex 输入框）。 */
   const submit = () => {
@@ -428,6 +445,7 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
           </>
         )}
         {error && <div className="ai-dialog__error">{error}</div>}
+        {stopped && !error && <div className="ai-dialog__note">已停止生成，已生成的内容保留</div>}
       </div>
       {/* 单横条：✦ 贴框内**左上角**（对齐云端浮条形态）；✕ 只清除输入内容，不关面板。 */}
       <div className="ai-dialog__bar">
@@ -456,12 +474,15 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
         </div>
       )}
       <div className="ln-dialog__actions">
-        {turns.length === 0 ? (
-          <button type="button" className="ln-btn" disabled={busy || !canSendFirst} onClick={() => void run(true)}>{busy ? "生成中…" : "生成"}</button>
+        {/* 生成中 = 「生成/发送」**原位**变「停止」（用户 261008）：中断入口就落在发送键那一格，
+            不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
+        {busy ? (
+          <button type="button" className="ln-btn" onClick={stop}>停止</button>
+        ) : turns.length === 0 ? (
+          <button type="button" className="ln-btn" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
         ) : (
-          <button type="button" className="ln-btn" disabled={busy || !followUp.trim()} onClick={() => void run(false)}>{busy ? "生成中…" : "发送"}</button>
+          <button type="button" className="ln-btn" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
         )}
-        {busy && <button type="button" className="ln-btn" onClick={stop}>停止</button>}
         {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
         {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「生成 + 关闭」。 */}
         {lastOutput && onInsertAfter && (

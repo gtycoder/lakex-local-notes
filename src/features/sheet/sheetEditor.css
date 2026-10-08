@@ -93,7 +93,7 @@
 }
 .sheet-editor .fortune-toolbar .material-icons,
 .sheet-editor .fortune-toolbar [class*="icon"] {
-  font-size: 16px;
+  font-size: var(--lake-font-size-bodyLg);
 }
 /* FortuneSheet 的「添加 N 行」<input> 无 class、无自带样式 ⇒ 吃浏览器默认 2px inset 粗边框。 */
 .sheet-editor .luckysheet-bottom-controll-row input {

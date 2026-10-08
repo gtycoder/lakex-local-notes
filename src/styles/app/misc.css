@@ -3,7 +3,7 @@
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。 */
 
 /* 树行同步绿点已移除：自动保存窗口仅 1s，该点无实际意义。顶栏/标签的同步状态另见 .sync-state-dot。 */
-.empty-list { padding: 28px 10px; color: var(--lake-text-3); font-size: 12px; text-align: center; }
+.empty-list { padding: 28px 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); text-align: center; }
 
 .save-label.error { color: var(--lake-status-error); }
 
@@ -11,7 +11,7 @@
 
 .mode-toggle.selected { background: var(--lake-accent-tint); }
 
-.editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-status-error-soft); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: 13px; }
+.editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-status-error-soft); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: var(--lake-font-size-small); }
 
 .loading-screen { height: 100vh; }
 
@@ -19,7 +19,7 @@
 
 .form-grid .wide { grid-column: 1 / -1; }
 
-.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border-1); outline: 0; font-size: 12px; font-weight: 400; }
+.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border-1); outline: 0; font-size: var(--lake-font-size-tiny); font-weight: 400; }
 
 .checkbox { flex-direction: row; align-items: center; font-weight: 400; }
 
@@ -201,7 +201,7 @@
 .connection-message.ok { color: var(--lake-status-ok); background: var(--lake-status-ok-soft); }
 
 /* M1.6 自定义图标 + emoji 选择器 */
-.tree-node-custom-icon { font-size: 15px; line-height: 1; }
+.tree-node-custom-icon { font-size: var(--lake-font-size-bodyLg); line-height: 1; }
 
 .emoji-picker-backdrop { position: fixed; inset: 0; z-index: 699; }
 
@@ -209,17 +209,17 @@
 
 .emoji-picker-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
 
-.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-border-2); color: var(--lake-text-2); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-border-2); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); cursor: pointer; white-space: nowrap; }
 
 .emoji-picker-tab:hover { background: var(--lake-bg-hover); }
 
 .emoji-picker-tab.active { background: var(--lake-accent-tint); color: var(--lake-accent); font-weight: 600; }
 
-.emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: var(--lake-text-4); font-size: 12px; }
+.emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 
 .emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); color: var(--lake-text-3); }
 
-.emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: 12px; background: transparent; color: var(--lake-text-1); }
+.emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: var(--lake-font-size-tiny); background: transparent; color: var(--lake-text-1); }
 
 .emoji-picker-search { flex: none; }
 
@@ -233,7 +233,7 @@
 
 .emoji-picker-cell:hover { background: var(--lake-bg-hover); }
 
-.emoji-picker-clear { border: 0; border-radius: var(--lake-radius-sm); padding: 6px; background: var(--lake-border-2); color: var(--lake-text-3); cursor: pointer; font-size: 12px; }
+.emoji-picker-clear { border: 0; border-radius: var(--lake-radius-sm); padding: 6px; background: var(--lake-border-2); color: var(--lake-text-3); cursor: pointer; font-size: var(--lake-font-size-tiny); }
 
 .emoji-picker-clear:hover { background: var(--lake-bg-hover); }
 
@@ -266,7 +266,7 @@
     color: var(--lake-tooltip-fg);
     background: var(--lake-tooltip-bg);
     box-shadow: var(--lake-shadow-card);
-    font-size: 12px;
+    font-size: var(--lake-font-size-tiny);
     line-height: 1.45;
     text-align: left;
     white-space: pre-line;

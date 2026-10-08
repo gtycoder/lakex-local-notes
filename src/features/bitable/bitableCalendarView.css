@@ -20,8 +20,8 @@
   padding-bottom: 8px;
 }
 
-.bt-calendar-title { font-size: 13px; color: var(--lake-text-1); }
-.bt-calendar-week { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); padding-bottom: 4px; color: var(--lake-text-3); font-size: 12px; text-align: center; }
+.bt-calendar-title { font-size: var(--lake-font-size-body); color: var(--lake-text-1); }
+.bt-calendar-week { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); padding-bottom: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-small); text-align: center; }
 
 .bt-calendar-grid {
   flex: 1;
@@ -48,7 +48,7 @@
 
 .bt-cal-day.is-out { background: var(--lake-bg-block); }
 .bt-cal-day.is-today .bt-cal-day-num { color: var(--lake-accent); font-weight: 600; }
-.bt-cal-day-num { flex: 0 0 auto; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
+.bt-cal-day-num { flex: 0 0 auto; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 .bt-cal-events { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: hidden; }
 
 .bt-cal-event {
@@ -60,7 +60,7 @@
   background: var(--lake-accent-tint);
   color: var(--lake-text-1);
   font: inherit;
-  font-size: var(--lake-font-size-micro);
+  font-size: var(--lake-font-size-tiny);
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -68,7 +68,7 @@
   white-space: nowrap;
 }
 
-.bt-cal-more { font-size: var(--lake-font-size-nano); color: var(--lake-text-3); }
+.bt-cal-more { font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 
 .bt-calendar-empty {
   flex: 1;
@@ -80,6 +80,6 @@
   gap: 8px;
   padding: 24px;
   color: var(--lake-text-3);
-  font-size: 13px;
+  font-size: var(--lake-font-size-body);
   text-align: center;
 }

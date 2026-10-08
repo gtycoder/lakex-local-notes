@@ -36,9 +36,15 @@ import { ASSET_PORT, assetThumbWidthForCss } from "../../lib/assetPort";
 import { Download, Maximize2, Trash2 } from "lucide-react";
 
 /** 自动保存防抖：FortuneSheet 每次变更都回调，必须合并。 */
-const AUTOSAVE_DEBOUNCE_MS = 800;
-/** 默认缩放（260919 用户要求「整体偏小，默认 110%」）。已有 zoomRatio 的 sheet 不覆盖（尊重用户改过的缩放）。 */
-const DEFAULT_SHEET_ZOOM = 1.1;
+const AUTOSAVE_DEBOUNCE_MS = 1500;
+/** 行高重算节流：批量写入（粘贴/填充）等一拍即可。 */
+const AUTO_ROW_THROTTLE_MS = 160;
+/** 全表重算（列宽变化）的**静默窗口**：拖列宽会连续改 columnlen，窗口内不重算、停手后只跑一次（261008）。 */
+const AUTO_ROW_FULL_THROTTLE_MS = 400;
+/** 默认缩放 = 100%（261008 用户：「默认就是 110% 是当时我随口说的，改回 100%」）。
+ *  `LEGACY_DEFAULT_ZOOM` 是旧默认值：本机记忆里等于它的缩放一律视为"没自定义过" ⇒ 回落新默认（旧值打开即归一化）。 */
+const DEFAULT_SHEET_ZOOM = 1;
+const LEGACY_DEFAULT_ZOOM = 1.1;
 /**
  * 单元格默认字体（= 产品字体 MiSans，与 \`--lake-font-family\` 首族一致）。用户要求「默认用全局字体、
  * 不支持修改」⇒ 不放「字体」工具栏项。
@@ -54,8 +60,45 @@ const GLOBAL_FONT = "MiSans";
  */
 const LEGACY_GLOBAL_FONT =
   'BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", sans-serif';
+
+/**
+ * 该单元格的 `ff` 是否要归一化成 {@link GLOBAL_FONT}（261008 用户报「编辑态与展示态字号/换行不一样」= 本 bug）。
+ *
+ * 只认三类「不是用户显式选的字体名」的旧值：
+ * 1. `null`（从未设置）；
+ * 2. 旧的多族串 {@link LEGACY_GLOBAL_FONT}；
+ * 3. **数字 / 数字串** —— 那是内核 `fontarray` 的**下标**，而 `fontarray[0] = "Times New Roman"`
+ *    ⇒ 粘贴进来的数据常带 `ff: 0`，画布实际按 **Times New Roman** 渲染，与我们（编辑框 13px、行高估算
+ *    `estimateWrappedRowHeight` 用 MiSans）完全是两套字体：观感不同、换行点不同 ⇒ 行高也对不上。
+ * 用户显式设过的其它字体名一律不动。
+ */
+function needsGlobalFont(ff: unknown): boolean {
+  if (ff == null || ff === LEGACY_GLOBAL_FONT) return true;
+  if (typeof ff === "number") return true;
+  return /^\d+$/.test(String(ff).trim());
+}
+
+/** 内核旧的默认字号（`sheetCtx.defaultFontSize` 原值 10pt）。 */
+const LEGACY_DEFAULT_FONT_SIZE = 10;
+
+/**
+ * 该格的 `fs` 是否要归一化成当前默认字号 {@link SHEET_DEFAULT_FONT_SIZE}（261008 用户：「表格默认字号加1」）。
+ *
+ * 只认「等于旧默认」的：粘贴进来的数据几乎每格都显式带 `fs: 10` ⇒ 只改内核默认值对它们**完全无效**
+ * （用户实测就是没生效）。显式设过其它字号的格（如 12/14）一律不动。
+ */
+function needsDefaultFontSize(fs: unknown): boolean {
+  if (fs == null) return true;
+  const n = Number(fs);
+  return Number.isFinite(n) && Math.ceil(n) === LEGACY_DEFAULT_FONT_SIZE;
+}
 /** FortuneSheet 的自动换行 = `tb:"2"`（overflow:"1" / clip:"0"）；默认给单元格补上。 */
 const WRAP = "2";
+
+/** 表格默认字号（pt）。内核默认 10（@fortune-sheet/core 的 sheetCtx.defaultFontSize），
+ *  用户 261008 要求 +1 ⇒ 传进 <Workbook defaultFontSize>；行高估算必须用同一常量，
+ *  否则「按内容自适应行高」会按 10pt 算窄（estimateWrappedRowHeight 内部按 pt→px 换算）。 */
+const SHEET_DEFAULT_FONT_SIZE = 11;
 /**
  * 工具栏（260921 第三轮：用户点名加回 4 项 —— format / link / comment / locationCondition，各自放在内核默认顺序的位置）。
  * 相对内核默认 `toolbarItems` 仍然隐藏：数字格式快捷键（currency-format / percentage-format / number-decrease /
@@ -319,19 +362,46 @@ const AUTO_ROW_HEIGHT_ICON = (
 );
 
 /**
+ * 离屏测量用的**唯一** canvas / ctx（261008 性能修复）。
+ *
+ * 原实现每次调用都 `createElement("canvas") + getContext("2d")` —— 表格66（5453 行 / 32718 格）
+ * 实测一个来回 **2530ms**（其中 getContext 就占 578ms），拖一次列宽要触发多轮 ⇒ 卡顿数秒。
+ * 改为模块级复用：同一份文本只量一次，font 只在变化时设置。实测 32718 格 **4~17ms**（≈150×）。
+ */
+let measureCtx: CanvasRenderingContext2D | null = null;
+let measureFontKey = "";
+/** measureText 结果缓存（键 = 字体 + 文本；量与字号无关，列宽变化可复用）。 */
+const textWidthCache = new Map<string, number>();
+const TEXT_WIDTH_CACHE_MAX = 20000;
+
+function widthOfText(text: string, fontPx: number): number {
+  if (!measureCtx) {
+    measureCtx = document.createElement("canvas").getContext("2d");
+    if (!measureCtx) return 0;
+  }
+  const font = `normal normal ${fontPx}px ${GLOBAL_FONT}`;
+  const key = font + "\u0000" + text;
+  const cached = textWidthCache.get(key);
+  if (cached !== undefined) return cached;
+  if (measureFontKey !== font) { measureCtx.font = font; measureFontKey = font; }
+  const width = measureCtx.measureText(text).width;
+  if (textWidthCache.size >= TEXT_WIDTH_CACHE_MAX) textWidthCache.clear();  // 满了整体丢弃（简单、不引 LRU）
+  textWidthCache.set(key, width);
+  return width;
+}
+
+/**
  * 估算「自动换行」后该行需要的高度。FortuneSheet 的行高自适应只在「旧值已存在 + 带 canvas」的
  * 编辑路径里跑，公开 API 触发不到；首次录入空单元格时更不会调（所以第二行会被压住）。
- * 这里用离屏 canvas 按列宽量出行数，再按 defaultRowHeight(19px @10pt) 口径给出行高。
+ * 这里按列宽量出行数，再按 defaultRowHeight(19px @10pt) 口径给出行高。
  */
 function estimateWrappedRowHeight(text: string, fontSize: number, cellWidth: number): number {
   if (!text) return 0;
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return 0;
   const fontPx = Math.max(1, fontSize) * (96 / 72); // pt → px
-  ctx.font = `normal normal ${fontPx}px ${GLOBAL_FONT}`;
+  const textWidth = widthOfText(text, fontPx);
+  if (!textWidth) return 0;
   const usable = Math.max(8, cellWidth - 4);
-  const lines = Math.max(1, Math.ceil(ctx.measureText(text).width / usable));
+  const lines = Math.max(1, Math.ceil(textWidth / usable));
   const lineHeight = Math.round(fontPx * 1.43); // 10pt → ≈19px，与 defaultRowHeight 对齐
   return lines * lineHeight + 3;
 }
@@ -372,8 +442,10 @@ function rowsWithCells(sheet: SheetWorksheet | null): number[] {
 function withCellDefaults(cell: Record<string, unknown>): Record<string, unknown> {
   const next = { ...cell };
   if (next.tb == null) next.tb = WRAP;
-  // 旧文档正文里写死的旧字体值一并归一化（261008）；只认精确匹配，其它字体不动。
-  if (next.ff == null || next.ff === LEGACY_GLOBAL_FONT) next.ff = GLOBAL_FONT;
+  // 旧文档正文里写死的旧字体值/数字索引一并归一化（261008）；只认旧值，用户选的字体不动。
+  if (needsGlobalFont(next.ff)) next.ff = GLOBAL_FONT;
+  // 旧默认字号（10pt）同样归一化到当前默认（用户 261008：「表格默认字号加1」；显式带 fs:10 的粘贴数据也要受益）。
+  if (needsDefaultFontSize(next.fs)) next.fs = SHEET_DEFAULT_FONT_SIZE;
   return next;
 }
 
@@ -488,7 +560,9 @@ function initialSheets(content: string, noteId: string): SheetWorksheet[] {
       const id = typeof sheet.id === "string" ? sheet.id : "";
       const local = id ? view.zooms[id] : undefined;
       const stored = Number(sheet.zoomRatio);
-      const zoomRatio = local ?? (Number.isFinite(stored) ? stored : DEFAULT_SHEET_ZOOM);
+      // 旧默认（1.1）不算"用户改过" ⇒ 回落新默认 100%
+      const rememberedZoom = Number.isFinite(local) && local !== LEGACY_DEFAULT_ZOOM ? local : undefined;
+      const zoomRatio = rememberedZoom ?? (Number.isFinite(stored) && stored !== LEGACY_DEFAULT_ZOOM ? stored : DEFAULT_SHEET_ZOOM);
       // 恢复上次停留的工作表（内核初始化认 status===1）；没记忆就保持正文/新建里的标记。
       const status = hasRemembered && id ? { status: id === remembered ? 1 : 0 } : {};
       return withSheetDefaults({ ...sheet, zoomRatio, ...status });
@@ -568,6 +642,8 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
   const geomRafRef = useRef(0);
   /** 行高自适应节流（粘贴等批量写入用；内核只在单格编辑提交那条路算行高）。 */
   const autoRowTimerRef = useRef<number | null>(null);
+  /** 待跑的那一次是否要**整表**重算（全表请求不被后续的选区请求降级，261008）。 */
+  const pendingFullRowRef = useRef(false);
   /** 上一次见到的列宽快照（变了就整表重算行高）。 */
   const colWidthsKeyRef = useRef<string>("");
   /** 单元格图片弹窗的有限重试计数（图片 DOM 由 React 提交，可能晚于本次刷新）。 */
@@ -993,7 +1069,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
         if (cell.tb != null && String(cell.tb) !== "2") continue;
         const text = typeof cell.m === "string" ? cell.m : cell.v == null ? "" : String(cell.v);
         if (!text) continue;
-        const fontSize = Number(cell.fs) || 10;
+        const fontSize = Number(cell.fs) || SHEET_DEFAULT_FONT_SIZE;
         const width = Number(widths[c]) || 73;
         needed = Math.max(needed, estimateWrappedRowHeight(text, fontSize, width));
       }
@@ -1006,16 +1082,27 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
     }
   }, [selectionRows]);
 
-  /** 行高重算的节流入口（粘贴是异步落盘，等一拍再算）。 */
+  /**
+   * 行高重算的节流入口（粘贴是异步落盘，等一拍再算）。
+   *
+   * 261008 用户反馈「拖列宽卡好几秒」，两条口径：
+   * ① 列宽拖拽会**连续**改 `columnlen` ⇒ 全表重算等**停手**（400ms 静默）后只跑一次，
+   *    不再拖一帧算一次；
+   * ② 全表请求**不被后续的选区请求降级**（原来 `scheduleAutoRowHeights(false)` 会把待跑的全表
+   *    重算取消掉，行高偶发不刷新）。
+   */
   const scheduleAutoRowHeights = useCallback((full = false) => {
+    if (full) pendingFullRowRef.current = true;
     if (autoRowTimerRef.current !== null) window.clearTimeout(autoRowTimerRef.current);
     autoRowTimerRef.current = window.setTimeout(() => {
       autoRowTimerRef.current = null;
       const wb = workbookRef.current;
       const sheet = wb ? activeSheet(wb, latestRef.current) : null;
+      const useFull = pendingFullRowRef.current;
+      pendingFullRowRef.current = false;
       // 列宽变化是显式布局动作 ⇒ 真·自适应（列变宽要能缩回去）；其它批量写入只涨不缩
-      syncAutoRowHeights(full && sheet ? rowsWithCells(sheet) : undefined, full ? { refit: true } : undefined);
-    }, 160);
+      syncAutoRowHeights(useFull && sheet ? rowsWithCells(sheet) : undefined, useFull ? { refit: true } : undefined);
+    }, pendingFullRowRef.current ? AUTO_ROW_FULL_THROTTLE_MS : AUTO_ROW_THROTTLE_MS);
   }, [syncAutoRowHeights]);
 
 
@@ -1481,7 +1568,8 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
       try {
         // 默认自动换行 + 全局字体（只补缺省）
         if (wb.getCellValue(row, column, { type: "tb" } as never) == null) wb.setCellFormat(row, column, "tb", WRAP);
-        if (wb.getCellValue(row, column, { type: "ff" } as never) == null) wb.setCellFormat(row, column, "ff", GLOBAL_FONT);
+        if (needsGlobalFont(wb.getCellValue(row, column, { type: "ff" } as never))) wb.setCellFormat(row, column, "ff", GLOBAL_FONT);
+        if (needsDefaultFontSize(wb.getCellValue(row, column, { type: "fs" } as never))) wb.setCellFormat(row, column, "fs", SHEET_DEFAULT_FONT_SIZE);
         // 行高自适应（内核那段 canvas 计算只在单格提交且列宽/行高未被显式设置过时才跑）：按整行重算
         syncAutoRowHeights([row]);
       } catch { /* 忽略 */ }
@@ -1513,6 +1601,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
           ref={workbookRef}
           data={renderSheets as never}
           allowEdit={!readOnly}
+          defaultFontSize={SHEET_DEFAULT_FONT_SIZE}
           showToolbar={showToolbar}
           showFormulaBar={false}
           showSheetTabs

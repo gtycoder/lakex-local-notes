@@ -7,7 +7,7 @@
 .sync-status-popover { width: min(320px, calc(100vw - 16px)); padding: 12px; }
 .sync-status-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 2px 2px 10px; border-bottom: 1px solid var(--lake-border-1); }
 .sync-status-popover-header div { display: grid; gap: 2px; }
-.sync-status-popover-header strong { font-size: 14px; }
+.sync-status-popover-header strong { font-size: var(--lake-font-size-body); }
 .sync-status-popover-header span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .sync-status-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--lake-text-3); }
 .sync-status-dot.pending { background: var(--lake-status-pending); }
@@ -16,10 +16,10 @@
 .sync-status-section { padding: 11px 0 0; }
 .sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-2); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 .sync-status-section dl { display: grid; gap: 5px; margin: 0; }
-.sync-status-section dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.sync-status-section dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: var(--lake-font-size-tiny); }
 .sync-status-section dt { color: var(--lake-text-2); }
 .sync-status-section dd { margin: 0; color: var(--lake-text-1); font-variant-numeric: tabular-nums; text-align: right; }
-.sync-status-local-note { margin: 0; color: var(--lake-text-2); font-size: 12px; line-height: 1.5; }
+.sync-status-local-note { margin: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: 1.5; }
 .sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 10px; padding: 9px; border-radius: var(--lake-radius-sm); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: var(--lake-font-size-micro); }
 .sync-status-history-note div { display: grid; gap: 2px; }
 .sync-status-history-note strong { font-size: var(--lake-font-size-micro); }
@@ -40,7 +40,7 @@
 /* 草稿恢复框：表面/头体走浮层通用件 .ln-dialog，行复用思源 .b3-list-item（与回收站/历史同一套密度与 hover 语言）。
    这里只留间距与危险操作的着色。 */
 .draft-recovery-dialog { width: min(520px, calc(100vw - 32px)); }
-.draft-recovery-hint { margin: 0 0 10px; color: var(--lake-text-3); font-size: 12px; line-height: 1.55; }
+.draft-recovery-hint { margin: 0 0 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: 1.55; }
 .draft-recovery-list { max-height: 296px; overflow-y: auto; margin: 0 -6px; }
 .draft-recovery-row .b3-list-item__text { min-width: 0; }
 .draft-recovery-restore:hover { color: var(--lake-accent); }
@@ -98,13 +98,13 @@
   outline: 0;
   color: var(--lake-text-1);
   background: transparent;
-  font-size: 13px;
+  font-size: var(--lake-font-size-small);
 }
 .settings-nav-item {
   min-height: 30px;
   padding: 0 8px;
   color: var(--lake-text-3);
-  font-size: 13px;
+  font-size: var(--lake-font-size-small);
 }
 .settings-nav-item svg { flex: none; width: 15px; height: 15px; color: var(--lake-text-4); }
 .settings-nav-item:hover { color: var(--lake-text-1); }
@@ -118,7 +118,7 @@
   display: block;
   padding: 14px 10px;
   color: var(--lake-text-4);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
   text-align: center;
 }
 /* 条目级搜索结果（思源：每条设置都可搜到并定位，不只是跳分类） */
@@ -134,7 +134,7 @@
   color: var(--lake-text-4);
   font-size: var(--lake-font-size-micro);
 }
-.settings-nav-hit { min-height: 26px; font-size: 12px; }
+.settings-nav-hit { min-height: 26px; font-size: var(--lake-font-size-tiny); }
 .settings-nav-hit .b3-list-item__meta { font-size: var(--lake-font-size-nano); }
 .settings-panel-large .settings-content {
   flex: 1 1 auto;
@@ -151,12 +151,12 @@
   border-top: 1px solid var(--lake-border-1);
   color: var(--lake-text-3);
   background: var(--lake-bg-block);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
 }
 
 /* ---------- ② 浮层通用件 ---------- */
 .panel-title { display: flex; align-items: center; gap: 9px; color: var(--lake-text-1); }
-.panel-title h2 { margin: 0; font-size: 15px; }
+.panel-title h2 { margin: 0; font-size: var(--lake-font-size-bodyLg); }
 .panel-actions { display: flex; align-items: center; gap: 8px; }
 .ln-close {
   display: grid;
@@ -194,7 +194,7 @@
   border-bottom: 1px solid var(--lake-border-1);
   color: var(--lake-status-pending);
   background: var(--lake-status-pending-soft);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
 }
 .tab-gone-banner svg { flex: none; }
 .tab-gone-banner button {
@@ -205,7 +205,7 @@
   color: var(--lake-accent);
   background: transparent;
   box-shadow: inset 0 0 0 .6px var(--lake-accent);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
   cursor: pointer;
 }
 .tab-gone-banner button:hover { background: var(--lake-accent-tint); }
@@ -223,7 +223,7 @@
   display: -webkit-box;
   overflow: hidden;
   color: var(--lake-text-3);
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
   line-height: 1.55;
   white-space: normal;
   -webkit-line-clamp: 2;
@@ -301,7 +301,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
  * 实测（260923，桌面 5 个段项）：段项全部 background 透明、text-3 墨色、border 0；.is-active 与之**只差**
  * 一条 box-shadow ⇒ 下面 .is-active 里声明的 color / background-color / border-color 是被上面 !important
  * 压死的**死声明**（注释曾宣称的"抬起表面 + 中性墨色"并未生效）；保留仅为记录设计意图，待 W2 修正。 */
-.seg__item { min-width: 40px; height: 26px; padding: 0 10px; font-size: 12px; border: 0 !important; background: transparent !important; color: var(--lake-text-2) !important; box-shadow: none; }
+.seg__item { min-width: 40px; height: 26px; padding: 0 10px; font-size: var(--lake-font-size-tiny); border: 0 !important; background: transparent !important; color: var(--lake-text-2) !important; box-shadow: none; }
 .seg .seg__item:hover { color: var(--lake-text-1) !important; }
 .seg .seg__item.is-active {
   color: var(--lake-text-1);
@@ -312,7 +312,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .seg .seg__item.is-active:hover { color: var(--lake-text-1); }
 
 /* 体检结果（数据体检 / 一致性检查） */
-.checks { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; text-align: left; }
+.checks { display: grid; gap: 6px; margin-top: 10px; font-size: var(--lake-font-size-small); text-align: left; }
 .checks__row { color: var(--lake-text-3); line-height: 1.5; }
 .checks__row--ok { color: var(--lake-status-ok); }
 .checks__row--warn { color: var(--lake-status-pending); }
@@ -334,7 +334,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
   justify-content: space-between;
   gap: 12px;
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: var(--lake-font-size-tiny);
 }
 .kv__row + .kv__row { border-top: 1px solid color-mix(in srgb, var(--lake-border-1) 60%, transparent); }
 .kv__k {

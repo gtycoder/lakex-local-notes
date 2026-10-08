@@ -17,7 +17,7 @@
 .bt-bool-cell input { width: 15px; height: 15px; margin: 0; cursor: pointer; }
 
 .bt-link-cell { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
-.bt-link-text { flex: 1 1 auto; padding: 0 8px; font-size: 13px; color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
+.bt-link-text { flex: 1 1 auto; padding: 0 8px; font-size: var(--lake-font-size-body); color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
 .bt-link-open { display: inline-flex; align-items: center; border: 0; background: transparent; padding: 2px; color: var(--lake-text-3); cursor: pointer; }
 .bt-link-open:hover { color: var(--lake-accent); }
 
@@ -36,10 +36,10 @@
 .bt-progress-thumb { position: absolute; top: 50%; left: var(--bt-progress, 0%); width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-border-1), var(--lake-shadow-knob); pointer-events: none; }
 .bt-progress.is-readonly .bt-progress-thumb { display: none; }
 /* 进度只由「条 + 百分比」表达：数值输入框已删除（用户 260929），轨道是唯一控件。 */
-.bt-progress-value { flex: 0 0 auto; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
+.bt-progress-value { flex: 0 0 auto; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 
 /* 关联字段（T02B.2）：单元格 chip / 搜索列表**复用 .bt-option-* 单元格原语**（单一来源），这里只补选择器的行与页脚。 */
 .bt-relation-row { display: flex; align-items: center; gap: 2px; }
 .bt-relation-row .bt-option-item { flex: 1; }
 .bt-relation-foot { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--lake-border-1); }
-.bt-relation-count { margin-right: auto; font-size: 12px; color: var(--lake-text-3); }
+.bt-relation-count { margin-right: auto; font-size: var(--lake-font-size-small); color: var(--lake-text-3); }

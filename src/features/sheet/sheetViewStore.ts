@@ -5,7 +5,8 @@
  * **不进正文、不进 S3**。此前这两项写在 sheet 正文里（`status` / `zoomRatio`），导致「切工作表 / 改缩放」
  * 也会保存正文 → 下次同步上传（用户 261006 审计：只改展示的操作不得触发 S3）。
  *
- * 默认缩放仍是 1.1（新建 / 没记忆时，见 SheetEditor 的 DEFAULT_SHEET_ZOOM）；多表时按 sheet id 各记各的缩放。
+ * 默认缩放 = 1（100%；新建 / 没记忆时，见 SheetEditor 的 DEFAULT_SHEET_ZOOM；旧默认 1.1 视为未自定义）；
+ * 多表时按 sheet id 各记各的缩放。
  */
 export interface SheetView {
   /** 上次停留的工作表 id（无 = 用正文/默认第一张）。 */

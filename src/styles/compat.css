@@ -229,7 +229,7 @@
   gap: 6px;
   margin: 0 4px 12px;
   color: var(--lake-text-1);
-  font-size: 15px;
+  font-size: var(--lake-font-size-bodyLg);
   font-weight: bold;
 }
 .config-title svg { width: 16px; height: 16px; color: var(--lake-text-3); }
@@ -241,7 +241,7 @@
 .config-items > .config-item:last-child,
 .config-items > .b3-label:last-child,
 .config-items > .config-block:last-child { border-bottom: 0; }
-/* 注：原先此处是思源的 `.config-items .b3-label__text { font-size: 13px }`。
+/* 注：原先此处是思源的 `.config-items .b3-label__text { font-size: var(--lake-font-size-small) }`。
  * 删掉思源层后该 不再存在 ⇒ **设置项说明终于可以按设计走小字号**
  * （原「待移动端批次」阻塞项 ① 就此解除，见 HANDOFF）。 */
 .config-item { display: flex; align-items: center; }
@@ -250,11 +250,11 @@
 /* 整块行的按钮组：JSX 里用了 11 处，此前却没有任何样式定义 ⇒ 间距/换行/对齐
  * 全凭内联元素之间的空白字符，一排按钮贴在一起且宽度参差（260926 修）。 */
 .config-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
-.config-name { color: var(--lake-text-1); font-size: 14px; }
+.config-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 .config-block { padding: 16px 24px; border-bottom: 1px solid var(--lake-border-1); line-height: 20px; }
 .config-block:last-child { border-bottom: 0; }
-.config-block__name { color: var(--lake-text-1); font-size: 14px; }
-.config-empty { padding: 24px 0; color: var(--lake-text-4); font-size: 13px; text-align: center; }
+.config-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
+.config-empty { padding: 24px 0; color: var(--lake-text-4); font-size: var(--lake-font-size-small); text-align: center; }
 
 /* 下拉基础（原 b3/siyuan/component/_select.scss）：外观其余部分由 kit.css 的新规格给 */
 .b3-select {  box-sizing: border-box;

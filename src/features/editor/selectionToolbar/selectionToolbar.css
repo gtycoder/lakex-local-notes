@@ -58,7 +58,7 @@
    `width: auto` 必须有：内核把工具条按钮定死 26px，不放开的话「图标 + 箭头」里的箭头会被挤成 0 宽。 */
 .selection-toolbar .selection-toolbar__fmtbtn { width: auto; min-width: 0; height: 26px; padding: 0 4px; gap: 4px; }
 /* 父入口菜单项：图标 + 常规字号标签（内核 .ne-ui-item-content 是 16px/700 的「段落样式」预览字形，这里不适用） */
-.selection-toolbar__mi-label { display: inline-flex; align-items: center; gap: 8px; color: inherit; font-size: 13px; font-weight: 400; }
+.selection-toolbar__mi-label { display: inline-flex; align-items: center; gap: 8px; color: inherit; font-size: var(--lake-font-size-small); font-weight: 400; }
 .selection-toolbar__mi-icon { display: inline-flex; color: var(--lake-text-3); }
 /* 段落样式/字号：按钮几何直接复用内核 .ne-ui-toolbar-button（26×26 / padding:0，单一起源，不另写尺寸），
    这里只覆盖内核为「文字 ▾ 下拉」写的那两处：
@@ -67,7 +67,7 @@
    （内核类定义在 legacy 层，此处 overlay 层覆盖即可，无需 !important。） */
 .selection-toolbar .ne-ui-toolbar-select-value { width: auto; font-size: var(--lake-font-size-bodyLg); color: var(--lake-text-2); }
 /* 字号数值收小到 15px（26px 按钮里 17px 偏大）；标题已改用图标，不再有 heading 字形。 */
-.selection-toolbar .ne-ui-toolbar-fontsize .ne-ui-toolbar-select-value { font-size: 15px; }
+.selection-toolbar .ne-ui-toolbar-fontsize .ne-ui-toolbar-select-value { font-size: var(--lake-font-size-bodyLg); }
 /* 子菜单（段落样式/字号/图片对齐·样式·批量）：**不再自造弹层样式** —— 直接复用内核固定栏弹层的
    .ant-dropdown-menu + .ne-ui-select-menu/.ne-ui-select-item 规则（同一套类名 ⇒ 表面/圆角/阴影/
    选中色/快捷键色/字号预览全与固定栏一致，单一起源）。这里只留定位（浮层用）。
@@ -108,11 +108,11 @@
   box-shadow: var(--lake-shadow-popover);
 }
 .selection-toolbar__inputrow { display: flex; align-items: center; gap: 8px; }
-.selection-toolbar__inputrow .ne-card-toolbar-input { width: 96px; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-canvas); color: var(--lake-text-1); font: inherit; font-size: 13px; }
-.selection-toolbar__urlinput { width: 260px; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-canvas); color: var(--lake-text-1); font: inherit; font-size: 13px; }
+.selection-toolbar__inputrow .ne-card-toolbar-input { width: 96px; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-canvas); color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-small); }
+.selection-toolbar__urlinput { width: 260px; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-canvas); color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-small); }
 .selection-toolbar__urlinput:focus { outline: none; border-color: var(--lake-accent); }
-.selection-toolbar__checkrow { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--lake-text-1); cursor: pointer; }
-.selection-toolbar__switchrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; color: var(--lake-text-1); }
+.selection-toolbar__checkrow { display: flex; align-items: center; gap: 8px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); cursor: pointer; }
+.selection-toolbar__switchrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); }
 .selection-toolbar__scale { align-self: flex-start; }
 /* 链接编辑弹层：只负责浮层定位；表面（背景/边框/阴影/圆角/内距/宽度）全部由内核
    .ne-link-editor 提供 ⇒ 与固定栏链接弹窗一致，不再自造。 */
@@ -130,7 +130,7 @@
   background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-popover);
 }
-.selection-toolbar__colorboard-label { margin-left: 8px; font-size: 13px; color: var(--lake-text-1); }
+.selection-toolbar__colorboard-label { margin-left: 8px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); }
 .selection-toolbar__nativecolor { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0; cursor: pointer; }
 .selection-toolbar__colorpop .lake-more-color-container { position: relative; }
 .selection-toolbar__more-arrow { position: absolute; right: 12px; width: 16px; height: 16px; }

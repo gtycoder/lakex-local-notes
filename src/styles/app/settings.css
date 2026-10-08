@@ -6,7 +6,7 @@
  * `.settings-panel` / `.settings-panel-large` / `.floating-dialog` 是**同一元素上的别名类**
  * （SettingsPanel.tsx:467 三个类写在一处），面板几何/材质/配色的单一来源是后段的 `.floating-dialog*`
  * 与 styles/shell.css；这里只留排版类声明（260916 删掉 width/max-width/max-height/overflow/position/color 等重复项）。 */
-.settings-header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.settings-header { display: flex; align-items: center; gap: 8px; font-size: var(--lake-font-size-body); font-weight: 600; }
 
 .settings-header { padding: 0 16px; border-radius: 14px 14px 0 0; }
 

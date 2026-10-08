@@ -70,6 +70,15 @@ const onlyMobileB3 = desktopCss.filter((p) => p.includes('/src/b3/') && !desktop
 const d = scan(desktopGraph);
 const m = scan(mobileCss);
 const siyuanImportant = files.filter(isSiyuan).reduce((a, p) => a + count(readFileSync(p, 'utf8'), /!important/g), 0);
+// ── 字号护栏（261008）：桌面 CSS 里 font-size 一律走 --lake-font-size-* 令牌（含 font: 简写里的尺寸）──
+// 口径 = 全部桌面 CSS（含 features/components 下由组件 import 的文件，不只 styles/ 入口图），排除仅移动端的 b3。
+const fontScope = desktopCss.filter((p) => !onlyMobileB3.includes(p));
+let fontSizeLiterals = 0; const fontSizeTop = [];
+for (const p of fontScope) {
+  const s = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const n = count(s, /font-size:\s*[0-9.]+px/g) + count(s, /[^-\w]font:\s*[^;{}]*[0-9.]+px/g);
+  if (n) { fontSizeLiterals += n; fontSizeTop.push([relative(ROOT, p), n]); }
+}
 const appDir = join(ROOT, 'src/styles/app');
 const pairs = existsSync(appDir) ? readdirSync(appDir).filter((f) => f.endsWith('.css') && existsSync(join(ROOT, 'src/styles', f))) : [];
 const entry = readFileSync(join(ROOT, 'src/styles/index.css'), 'utf8');
@@ -78,7 +87,8 @@ const r = {
   desktop: { files: desktopGraph.length, b3VarRefs: d.b3, colorHex: d.hex, colorRgb: d.rgb, important: d.imp },
   desktopOnlyMobileB3: onlyMobileB3.map((p) => relative(ROOT, p)),
   mobileUntouched: { files: mobileCss.length, b3VarRefs: m.b3, important: m.imp },
-  targets: { b3VarRefs: 0, colorLiterals: 0, important: 10, b3ImportLines: 0, sameNamePairs: 0 },
+  fontGuard: { fontSizeLiterals, fontSizeTop: fontSizeTop.sort((a, b) => b[1] - a[1]) },
+  targets: { b3VarRefs: 0, colorLiterals: 0, fontSizeLiterals: 0, important: 10, b3ImportLines: 0, sameNamePairs: 0 },
   b3TopTen: d.b3Top.slice(0, 10),
   colorTopTen: d.litTop.slice(0, 10),
   importantSiyuan: siyuanImportant,
@@ -104,6 +114,7 @@ for (const p of cssAll) {
 }
 r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, aliasTop, undefTop };
 if (aliasHits || undefHits) process.exitCode = 1;
+if (fontSizeLiterals) process.exitCode = 1;
 
 if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
 else {
@@ -114,6 +125,8 @@ else {
   console.log('  颜色字面量(非主题)  ', 'hex=' + r.desktop.colorHex, 'rgb=' + r.desktop.colorRgb, ' / 目标 0');
   console.log('     top:', r.colorTopTen.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('  !important          ', r.desktop.important, ' / 目标 ≤10');
+  console.log('  字号字面量(非令牌)  ', r.fontGuard.fontSizeLiterals, ' / 目标 0');
+  console.log('     top:', r.fontGuard.fontSizeTop.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('  入口 b3 import 行数 ', r.entryB3ImportLines, ' / 目标 0');
   console.log('  同名文件对          ', r.sameNamePairs.join(', ') || '（无）');
   console.log('== 移动端（本批不动，仅记录） ==');

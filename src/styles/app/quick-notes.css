@@ -26,7 +26,7 @@
 .quick-notes-header-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
 
 /* 多选态占用同一行：信息在左、动作在右（靠 spacer 撑开），不额外占卡片区高度 */
-.quick-notes-select-info { color: var(--lake-text-1); font-size: 13px; white-space: nowrap; margin-left: 2px; }
+.quick-notes-select-info { color: var(--lake-text-1); font-size: var(--lake-font-size-small); white-space: nowrap; margin-left: 2px; }
 
 .quick-notes-tools-divider { width: 1px; height: 14px; background: color-mix(in srgb, var(--lake-text-1) 16%, transparent); }
 
@@ -44,7 +44,7 @@
 /* 表面/定位/层序由标准 <Menu>（.ln-overlay-surface + .quick-notes-sort-menu）提供；这里只留内容尺寸。 */
 .quick-notes-sort-menu { display: grid; gap: 1px; min-width: 132px; padding: 4px; }
 
-.quick-notes-sort-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+.quick-notes-sort-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-small); text-align: left; cursor: pointer; }
 
 .quick-notes-sort-menu button:hover { background: var(--lake-bg-hover); }
 
@@ -58,7 +58,7 @@
 .qn-check.is-on { border-color: var(--lake-status-ok); background: var(--lake-status-ok); }
 
 /* （多选条已并入头部那一行，见 .quick-notes-header-tools；这里只留链接按钮样式） */
-.quick-notes-link { border: 0; padding: 2px 4px; color: var(--lake-accent); background: transparent; font-size: 13px; cursor: pointer; }
+.quick-notes-link { border: 0; padding: 2px 4px; color: var(--lake-accent); background: transparent; font-size: var(--lake-font-size-small); cursor: pointer; }
 
 .quick-notes-link:hover:not(:disabled) { text-decoration: underline; }
 
@@ -82,7 +82,7 @@
 .quick-notes-index-wrap { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 标签行（对齐云端）：左侧「标签 ▾」，右侧条数/排序 */
 .quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 1px solid var(--lake-border-2); margin-bottom: 6px; }
-.quick-notes-filter { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 6px; color: var(--lake-text-3); background: transparent; font-size: 13px; cursor: pointer; }
+.quick-notes-filter { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 6px; color: var(--lake-text-3); background: transparent; font-size: var(--lake-font-size-small); cursor: pointer; }
 .quick-notes-filter:hover { background: var(--lake-bg-hover); }
 /* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作图标 */
 .quick-notes-batch { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
@@ -103,7 +103,7 @@
 .quick-note-index-row.b3-list-item--focus .quick-note-index-actions { opacity: 1; }
 /* 表面/定位/层序由标准 <Menu> 提供；这里只留内容尺寸。 */
 .quick-note-row-menu { display: grid; gap: 1px; min-width: 132px; padding: 4px; }
-.quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+.quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-small); text-align: left; cursor: pointer; }
 .quick-note-row-menu button:hover:not(:disabled) { background: var(--lake-bg-hover); }
 .quick-note-row-menu button:disabled { opacity: .45; cursor: default; }
 /* 顶部「新建小记」（对齐云端图3：绿色羽毛 + 号） */
@@ -111,7 +111,7 @@
 .quick-notes-new:hover { background: color-mix(in srgb, var(--lake-accent) 12%, transparent); }
 .quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--lake-accent); }
 .quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
-.quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: 12px; }
+.quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: var(--lake-font-size-tiny); }
 .quick-notes-index { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
 .quick-notes-index .b3-list-item { width: 100%; text-align: left; }
 .quick-notes-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -123,7 +123,7 @@
 
 .quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 
-.quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: 12px; }
+.quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: var(--lake-font-size-tiny); }
 
 .quick-notes-error button, .quick-note-card-actions button { display: grid; place-items: center; border: 0; background: transparent; }
 
@@ -141,11 +141,11 @@
 .quick-note-tool input { display: none; }
 
 /* 写作区 = 单个 Lake 内核实例（260919）：外层撑开、内层编辑器滚动，替代原 textarea。 */
-.quick-note-composer .quick-note-editor { flex: 1; width: 100%; min-height: 200px; display: flex; flex-direction: column; overflow: auto; font: 450 14px/1.7 var(--lake-font-family); }   /* 261008：字体走令牌（原写死的系统栈不是 MiSans） */
+.quick-note-composer .quick-note-editor { flex: 1; width: 100%; min-height: 200px; display: flex; flex-direction: column; overflow: auto; font: 450 var(--lake-font-size-body)/1.7 var(--lake-font-family); }   /* 261008：字体走令牌（原写死的系统栈不是 MiSans） */
 
 .quick-note-composer .quick-note-editor > .lake-editor-mount { flex: 1; min-height: 200px; }
 
-.quick-note-composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--lake-text-3); font-size: 12px; }
+.quick-note-composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 /* 动作行按版式分组（260920）：写作卡＝「小记一下 / 取消 / 提示」靠左；编辑既有小记＝「取消 / 保存」整组靠右下。
    改前用一个 `flex: 1` 的空占位把「取消」顶到最右，保存和取消分居两个角落（用户反馈太偏僻）。 */
@@ -213,19 +213,19 @@
 
 .quick-note-composer-actions .quick-note-discard:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 
-.quick-note-composer-actions .b3-button, .quick-note-composer-actions .b3-button--cancel, .quick-note-convert-dialog .b3-button--cancel { min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: 12px; }
+.quick-note-composer-actions .b3-button, .quick-note-composer-actions .b3-button--cancel, .quick-note-convert-dialog .b3-button--cancel { min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: var(--lake-font-size-tiny); }
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
-.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 8px; color: var(--lake-text-1); font-size: 13px; }
+.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 8px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
 
 /* 卡片预览（自研只读渲染，零内核实例）：块级结构 + 行内格式 + 媒体就地渲染 */
 .quick-note-preview { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .quick-note-preview.is-collapsed { overflow: hidden; position: relative; }
 .quick-note-preview.is-collapsed::after { content: ""; position: absolute; inset: auto 0 0 0; height: 44px; background: linear-gradient(to bottom, transparent, var(--lake-bg-panel)); pointer-events: none; }
-.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent); background: transparent; font-size: 12px; cursor: pointer; }
+.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent); background: transparent; font-size: var(--lake-font-size-tiny); cursor: pointer; }
 .quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
-.quick-note-preview-heading { margin: 2px 0 0; font-size: 15px; }
+.quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-bodyLg); }
 .quick-note-preview h1.quick-note-preview-heading { font-size: var(--lake-font-size-display); }
 .quick-note-preview h2.quick-note-preview-heading { font-size: var(--lake-font-size-title); }
 .quick-note-preview-list { margin: 0; padding-left: 22px; }
@@ -237,7 +237,7 @@
 .quick-note-preview-image { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; border-radius: 8px; cursor: zoom-in; }
 .quick-note-preview-video { display: block; width: 100%; max-width: 420px; max-height: 260px; border-radius: 8px; background: var(--lake-media-video); }
 .quick-note-preview-audio { width: 100%; max-width: 420px; height: 36px; }
-.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--lake-border-2); border-radius: 6px; color: var(--lake-text-3); font-size: 12px; }
+.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--lake-border-2); border-radius: 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 /* 小记编辑器的「展开」(内核 fullscreen) 适配窗口外壳：
    内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是为「无外壳编辑器」设计的，
@@ -302,7 +302,7 @@
 
 .quick-note-convert-dialog h3 { margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-title); }
 
-.quick-note-convert-dialog p { margin: 8px 0 15px; color: var(--lake-text-3); font-size: 12px; line-height: 1.55; }
+.quick-note-convert-dialog p { margin: 8px 0 15px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: 1.55; }
 
 .quick-note-convert-dialog footer { display: flex; justify-content: flex-end; margin-top: 14px; }
 

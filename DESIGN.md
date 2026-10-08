@@ -31,6 +31,11 @@ typography:
     fontSize: "15.5px"
     fontWeight: 400
     lineHeight: 1.6
+  body-md:
+    fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.6
   title:
     fontFamily: "MiSans, -apple-system, 'PingFang SC', sans-serif"
     fontSize: "18px"

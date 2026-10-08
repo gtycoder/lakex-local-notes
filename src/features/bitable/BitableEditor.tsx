@@ -970,6 +970,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
             readOnly={readOnly}
             aiState={field.type === "ai" ? aiGen.cellStates[aiCellKey(field.id, record.id)] : undefined}
             onAiGenerate={field.type === "ai" ? () => { void aiGen.generateCell(activeTable.id, record.id, field.id); } : undefined}
+            onAiStop={field.type === "ai" ? () => aiGen.cancelCell(record.id, field.id) : undefined}
             onChange={(value) => setCellValue(record.id, field.id, value)}
             onAddOption={(name) => addOption(field.id, name, record.id)}
             noteId={noteId}

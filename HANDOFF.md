@@ -11,6 +11,35 @@
 >
 > **下一会话焦点：无指定项** —— 从 §3 取（261008 最近两批：① 表格暗色模式 + 文档分屏 + 表格图标/换行/粘贴归属；② **云端对齐批**：字体统一 / 右键精简 / 颜色入口重做 / 小数位± + 导出修复 + 云端对齐调研）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261008 续 · 表格（编辑态一致性 / 默认字号 / 缩放 / 行高性能）+ 大表粘贴压测
+
+- **编辑态与展示态不一致（用户报「编辑时字号大、行高/换行对不上」）—— 真因是字体族，不是字号**：
+  粘贴进来的数据几乎每格都显式带 `ff: 0`（**数字 = 内核 `fontarray` 下标**，而 `fontarray[0] = "Times New Roman"`）
+  ⇒ **画布按 Times New Roman 渲染**，而编辑框（CSS 定死 MiSans 13px）与我们的行高估算（`estimateWrappedRowHeight` 用 MiSans）
+  完全是两套字体 ⇒ 观感不同 + 换行点不同 ⇒ 行高也对不上。修：新增 `needsGlobalFont()`，把 `null` / 旧多族串 /
+  **数字或数字串**三类 `ff` 一律归一化成 `MiSans`（加载时 `withCellDefaults` + 首可见 `setCellFormat` 两处）。
+  **实测**：造 `ff:0` 的表 → 打开保存后落盘 `ff: "MiSans"`（120/120）。
+- **「表格默认字号加1」此前完全没生效**：数据里每格都显式 `fs: 10`，只改内核 `defaultFontSize` 影响不到它们。
+  修：新增 `needsDefaultFontSize()`（`LEGACY_DEFAULT_FONT_SIZE = 10`）→ 归一化成 `SHEET_DEFAULT_FONT_SIZE`(11pt)。
+  **实测**：`fs: 10 → 11`（90/90）。
+- **默认缩放回 100%**：`DEFAULT_SHEET_ZOOM` 1.1 → 1；并把**旧默认 1.1 视为"没自定义过"**（`LEGACY_DEFAULT_ZOOM`），
+  否则本机记忆里的 1.1 会一直生效、改默认值等于没改。实测新表 `100%`。
+- **编辑框按单元格 `vt` 垂直对齐（内核补丁）**：`getStyleByCell` 其实把 `vt` 映射到**编辑框容器**的 `align-items`，
+  但子元素 `.luckysheet-cell-input` 是 `height:100%` 撑满 ⇒ 对齐永远失效、编辑态恒顶部（用户报「展示底对齐、一编辑变顶对齐」）。
+  补丁把对齐落到真正承载文本的子元素（`display:flex; flex-direction:column; justify-content:<vt 映射>`），与画布
+  `normalizedCellAttr(cell,"vt")` 同口径。**⚠️ 必须同时打 `dist/index.esm.js` 与 `dist/index.js`**（vite 用前者）。
+- **行高重算性能（用户报「拖列宽卡好几秒」）**：`estimateWrappedRowHeight` 原来**每格 createElement+getContext**
+  ⇒ 表格66（5453 行 / 32718 格）一趟 **2530ms**（getContext 占 578ms）。改为模块级共享离屏 canvas + `measureText` 缓存
+  （32718 格 4~17ms，≈150×）；端到端同一动作 **1434ms → 119ms**。另把**全表重算的静默窗口**放到 400ms（拖列宽停手后只跑一次）、
+  并修「全表请求被后续选区请求降级」的老 bug；`AUTOSAVE_DEBOUNCE_MS` 800 → 1500。
+- **大表格粘进「文档」会把窗口卡死（用户 261008）→ 是内核问题，A+B 待办见 §3#16**：脚本
+  [scripts/table-paste-stress.mjs](scripts/table-paste-stress.mjs) 可复现量化（5500 行 = 同步阻塞 **30.7s** / 269k DOM 节点）。
+- 门禁：tsc ✓ · vitest **1757 passed / 16 skipped** ✓ · ui-metrics（字号字面量 0 / 颜色 0 / `!important` 9）✓ ·
+  check:core ✓ · 双端构建 ✓ · `git diff --check` ✓。
+- **本批踩的三个坑**（写进 §4）：① 补丁替换漏结尾逗号 ⇒ 包语法错误 ⇒ 构建失败，而**只看 `tail -1` 会误判成功**（那是 main 进程输出）；
+  ② `@fortune-sheet/react` 的 vite 入口是 `module=dist/index.esm.js`，只打 CJS 等于没改；③ 生成的补丁文件里"行内容恰为一个空格"
+  被 `git diff --check` 判为行尾空白 ⇒ 按既有先例在 `.gitattributes` 给 `patches/*.patch` 关掉该项。
+
 ### 261008 续 · 云端对齐批（`e78c4bd` 字体+导出 / `4c3473e` 表格）
 
 - **字体全量统一（用户「彻底检查一遍」）**：把两个第三方样式里**所有** font-family 值（44 种）抽出来逐条定性 ——
@@ -249,6 +278,28 @@
     - 对齐良好、无需改的：B/I/S/U、字号、字色/背景色（含**分体交互 + 记忆上次颜色**，刚对齐）、对齐/换行、边框、合并、筛选/排序（工具栏）、冻结、查找、格式刷/清除格式、自动行高、单元格图片、链接、批注、缩放、工作表标签菜单。
     - ⚠️ 改动口径不变：上述都要**先证真实价值**（AGENTS §3#17）；涉及内核能力的一律按 §2 三级检索（官方文档 → LAKEX-CONTRACT → vendor/补丁），别凭云端 UI 猜 API。
 
+16. **大表格粘进「文档」会卡死（内核级，261008 用户实测；A+B 兜底，C 调研中）**：
+    - **现象**：从本应用的「表格」文档复制 ~5500 行数据，粘进**文档** ⇒ 整个窗口卡死；用户实测**同一份内容在思源约 3s 完成**，
+      而**云端语雀 Lake 同样卡死** ⇒ 判定为**闭源 lakex 内核的表格卡片问题**（不是我们这层能根治的）。
+    - **本机实测**（[scripts/table-paste-stress.mjs](scripts/table-paste-stress.mjs)，合成 paste + 真实 text/html，等价真实粘贴）：
+
+      | 粘贴内容（6 列） | 主线程**同步**阻塞 | DOM 节点 | 产物 |
+      | --- | --- | --- | --- |
+      | 1000 行 | 最大长任务 1,405ms | 43,400 | `ne-table-hole`（1001 行 / 6006 格） |
+      | **5500 行** | **30.7s** | **269,108**（单个 render unit **225,612**） | `ne-table-hole`（5501 行 / 33,006 格） |
+
+      5.5× 行数 → ~22× 时间（≈n^1.9，超线性）；CPU profile 34.6s 里 `value` 16.7s / `get` 5.9s / `e` 3.8s / **GC 2.8s**。
+      我们的粘贴预处理（`clipboardHtml.ts` 的 `upgradePastedHtml`）只花 **146ms** ⇒ 不背锅。
+      根因：**Lake 表格卡片整表全量渲染 DOM、没有虚拟化**，且粘贴在**一个同步任务**里建模型 + 渲染。
+    - **A（护栏，兜底方案）**：在 `clipboardHtml.ts`（本来就在处理每次 HTML 粘贴）量行列数/字节数，超阈值时不按表格卡片粘贴，
+      并**明确提示**（"表格过大 N 行 × M 列，为避免卡死未直接粘贴；请改用表格文档或分批粘贴"）——**剪贴板内容保留、绝不静默丢弃**。
+      阈值建议按上表定在 **≤500 行 / ≤3000 格**（1000 行实测已 1.4s 可感知）。
+    - **B（体验更好）**：超阈值时**自动落成「表格」文档**（表格侧性能已修好：共享 canvas + 400ms 静默窗口），
+      文档里留引用/链接。需先定交互语义（落哪个笔记本、命名、是否跳转）。
+    - **C（内核侧分批/异步粘贴，仅调研）**：把 33k 格的模型构建 + 渲染切片。**不轻易动 vendor**（用户 261008：改内核估计用处也不大，
+      云端同样卡死）。调研结论见 §0 对应批次 / 会话记录。
+    - **复现**：起隔离实例后 `SIZES=1000,5500 LAKE_CDP_PORT=9222 node scripts/table-paste-stress.mjs`（脚本头注释有完整启动命令）。
+
 ## 4. 关键坑（长期有效）
 
 ### 同步 / 数据
@@ -302,9 +353,18 @@
 - 打包版写正式数据目录；试跑必须覆盖 `LAKE_USER_DATA`，发布 smoke 用独立端口。
 - **scheme 模式验收前必须 `npx vite build`**（它服务 `dist/`，否则验收的是旧 bundle）。
 - **CDP 依附的窗口是隐藏的**（`document.hidden === true`）⇒ `loading="lazy"` 图片不加载；验收图片要临时去掉该属性，别误判成产品 bug。
+- **隐藏/被遮挡窗口里不要用「合成鼠标拖拽」做性能验收**（261008 实测教训）：`document.hidden === true` 时 Chromium 对 `Input.dispatchMouseEvent` 的 **`mouseMoved`** 要等到出帧才回包 ⇒ 连**非边界**位置的一次移动都要 ~5s（`mousePressed`/`mouseReleased` 只要 14~18ms）。用它量「拖列宽」会把 1.4s 的真实卡顿量成 46s 的假象。**正确姿势**：改用**同步动作**计价（例如右键列头 →「自动行高」会同步跑完整表重算，`Runtime.evaluate` 的往返时间 ≈ 该同步耗时），或直接在页面里微基准化目标函数。
 - **要「仿照云端」时，优先读云端前端资源而不是一个个点 UI**（260929 用户提示，已实践）：`bsk evaluate` 里 fetch `performance.getEntriesByType('resource')` 找到 `gw.alipayobjects.com/**/lakex_table_yq.*.chunk.css|.async.js`（CORS 可读），配置表/样式规则直接 grep 就有（如统计项的 types 限制、占位 hover 规则）；点 UI 只用来交叉验证。
 - **用户可能与测试实例共用同一个进程/窗口**（260929 用户明确交代）：我起的隔离实例（LAKE_USER_DATA=$TMPDIR/lake-accept + LAKE_RENDERER=scheme）用户会**直接在同一个窗口里看/操作** ⇒ **不要默认 kill 实例、不要 rm -rf 该 userData**（那是他正在看的数据）；只有用户明确说「清理/重建」时才收尾。同理，验证脚本不要顺手删掉自己建的测试笔记。
 - **读落盘要轮询**：自动保存有防抖，改完立刻读会拿到旧值。
+- **重建 `patches/@fortune-sheet+react` 补丁的三个坑（261008 实测）**：
+  ① **两个产物都要打**：vite 走 package.json 的 `module = dist/index.esm.js`，`main = dist/index.js` 给别的消费者 ——
+     只改 CJS 会出现「改完完全没生效」（我第一次就这样白验两轮）。
+  ② **替换既有代码块时别漏结尾逗号**：`style: (...)()` 后面少一个 `,` 就是整包 `PARSE_ERROR`、**构建失败**；
+     而 `npx vite build 2>&1 | tail -1` 只会显示 **main 进程**那行 `✓ built in 35ms` ⇒ **必须看完整输出**
+     （`grep -E "PARSE_ERROR|Build failed|modules transformed"`），否则会拿着旧 dist 反复"验证"。
+  ③ 生成的补丁文件里"行内容恰为一个空格"会被 `git diff --check` 判为行尾空白 ⇒ 已在 `.gitattributes`
+     对 `patches/*.patch` 关闭该项（与 `vendor/lakex-doc-react/dist/*` 同一先例：那是内核文件的**真实字节**，清掉补丁就打不上）。
 - **AI 结果回写正文：绝不「纯文本重建原选区」，也不要用 `insertAtSelection` 折叠光标做块级插入**（261005）：只用 `insertAtPosition({id,offset}, "text/markdown", …)` 插新块，原块一个字节不动；`offset` 按模型 `_parent`/`_children` 算（DOM 的「某元素之后」映射少 1）。`applyModelRange` 一类模型选区命令必须走 `kernel.execCommand`（editor 层会抛且被 try/catch 静默吞掉）。详见 `docs/LAKEX-CONTRACT.md` §5.16。
 
 ### AI 多模态（261005-MM，长期有效）

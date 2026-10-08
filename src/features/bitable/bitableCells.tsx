@@ -20,6 +20,7 @@ import type { AiCellRunState } from "./useAiFieldGeneration.js";
 import "./bitableFieldCells.css";
 import "./bitableAiField.css";
 import "./bitableMarkdown.css";
+import "./bitableExpandPreview.css";
 import { MarkdownView, markdownToPlainText } from "../../components/markdown/MarkdownView";
 import { native } from "../../lib/native.js";
 import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
@@ -1225,6 +1226,8 @@ export interface CellEditorProps {
   aiState?: AiCellRunState;
   /** AI 字段：请求生成 / 重新生成；缺省时该格只展示快照文本（记录详情 / 表单 / 关联选择器等入口）。 */
   onAiGenerate?: () => void;
+  /** AI 字段：停止**本格**正在进行的生成（用户 261008）；缺省时「生成中」只作状态展示。 */
+  onAiStop?: () => void;
 }
 
 /**
@@ -1278,12 +1281,14 @@ export function RelationCell({ field, value, readOnly, ctx, onChange, noteId, on
  * - 有值 → 复用 {@link MarkdownCell}（单行预览 +「展开」编辑/预览；面板头部带「重新生成」，可手动编辑）。
  * 只读 / 没有生成回调（记录详情、表单、关联选择器、历史快照）→ 只展示预览。
  */
-export function AiFieldCell({ field, value, readOnly, state, onGenerate, onChange }: {
+export function AiFieldCell({ field, value, readOnly, state, onGenerate, onStop, onChange }: {
   field: BitableField;
   value: unknown;
   readOnly: boolean;
   state?: AiCellRunState;
   onGenerate?: () => void;
+  /** 停止本格生成（用户 261008）：给了才在「生成中」旁出「停止」。 */
+  onStop?: () => void;
   /** 手动编辑（展开面板里改完写回；与 MD 字段同一路径）。 */
   onChange: (value: unknown) => void;
 }) {
@@ -1294,7 +1299,14 @@ export function AiFieldCell({ field, value, readOnly, state, onGenerate, onChang
     return <span className="bt-cell-ai is-unconfigured ln-ellipsis" title="AI 字段未配置完整：请在「编辑列」里写命令，并用「插入字段」加入字段变量">未配置</span>;
   }
   if (state?.status === "running") {
-    return <span className="bt-cell-ai is-running" aria-label="生成中"><span className="bt-cell-ai-dot" aria-hidden />生成中…</span>;
+    // 「生成中」旁边给「停止」（用户 261008）：语义 = 只停这一格，按完回到「AI 生成 / 重新生成」。
+    // 视觉复用既有的 .bt-cell-ai-action（无新增 CSS）。
+    return (
+      <span className="bt-cell-ai is-running" aria-label="生成中">
+        <span className="bt-cell-ai-dot" aria-hidden />生成中…
+        {onStop && <button type="button" className="bt-cell-ai-action" title="停止本次生成" onClick={onStop}>停止</button>}
+      </span>
+    );
   }
   if (state?.status === "failed") {
     if (!canGenerate) return <span className="bt-cell-ai is-failed" title={state.error ?? "生成失败"}>生成失败</span>;
@@ -1308,7 +1320,7 @@ export function AiFieldCell({ field, value, readOnly, state, onGenerate, onChang
 }
 
 /** 按字段类型分派单元格编辑器（未知类型只读展示、不清空）。 */
-export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages, aiState, onAiGenerate }: CellEditorProps) {
+export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages, aiState, onAiGenerate, onAiStop }: CellEditorProps) {
   if (!isKnownFieldType(field.type)) {
     return <span className="bt-cell-unknown ln-ellipsis" title="未知字段类型（只读展示）">{bitableDisplayValue(field, value) || "—"}</span>;
   }
@@ -1360,7 +1372,7 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
       return <RelationCell field={field} value={value} readOnly={readOnly} ctx={ctx} onChange={onChange}
         noteId={noteId} onOpenImages={onOpenImages} />;
     case "ai":
-      return <AiFieldCell field={field} value={value} readOnly={readOnly} state={aiState} onGenerate={onAiGenerate} onChange={onChange} />;
+      return <AiFieldCell field={field} value={value} readOnly={readOnly} state={aiState} onGenerate={onAiGenerate} onStop={onAiStop} onChange={onChange} />;
     case "markdown":
       return <MarkdownCell field={field} value={value} readOnly={readOnly} onChange={onChange} />;
     default:
