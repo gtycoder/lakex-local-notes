@@ -26,12 +26,11 @@
 - **契约与坑已回填** [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) **§5.23**（字段契约、`custom-${name}` 命名与分组 items 必需、「小工具」组 name 重名只能按 title 找、工具栏面板才是可靠入口、面板内部滚动要先 scrollIntoView、`.lake` 序列化形态、React 实例共享但无 context）。
 - **真实端验收**（隔离实例 + CDP 全链路）：面板里出现 `/doc 文档引用` ✓ → 插入后显示"选择文档…" ✓ → 浮层列出 3 篇、选中「被引用表格」✓ → 卡片显示 `被引用表格 表格 换` ✓ → **点标题打开表格标签页且 `sheetOpen:true`** ✓ → 落盘 `<card name="customBlock" customName="lake-note-ref" value="data:…lake-note://<sheetId>…">` ✓。
 - **261008 二改（用户要求「完全复刻内核链接那套」）——最终形态**：卡片 = 类型图标 + 展示名（正文用内核 `.ne-link` 类渲染，样式与链接同源）；
-  **点击卡片**在下方出**白底动作条**（访问 / 编辑 / 复制 / 取消链接）；点「编辑」出**锚定在卡片旁**的编辑浮层（**文本** / **链接** 两个字段 + **确定**，复刻内核链接编辑，**不是全局弹窗**）；
-  「取消链接」= 清引用、保留展示名并渲染成纯文本；阅读态只给读操作。
-  · 落点：`noteRefCard.tsx`（卡片 + 三个浮层）、`noteRefCardActions.css`（**只留本处布局**：图标行间距 + 编辑字段标签在上）、基线 13 → **7**。
-  · **三条根因（都已修，别再往覆盖方向想）**：① 浮层曾用 `surfaceClassName` 覆盖表面类 ⇒ `.ln-menu` 的白底/阴影被替掉、看着"透明且点不到" ⇒ 改用 `className`（追加）；
-  ② 新建的 CSS **忘了在组件 import** ⇒ 规则根本没进包（AGENTS §14 明写的坑）⇒ 补 import；③ **动作条用错原语**：`.ln-menu` 是"竖向菜单"（自带 `flex-direction: column`），
-  ⇒ 换 **`Popover`** 中性表面 + 本处只写 `display:flex; gap`，**不再写任何 flex 覆盖**。
+  **点击卡片**在下方出**白底动作条**（访问 / 编辑 / 复制 / 取消链接）；点「编辑」出**锚定在卡片旁**的编辑浮层（**文本** / **链接** 两字段 + **确定**，复刻内核链接编辑，**不是全局弹窗**）；「取消链接」= 清引用、保留展示名并渲染成纯文本；阅读态只给读操作。
+  · 落点：`noteRefCard.tsx`（卡片 + 三个浮层）· `noteRefCardActions.css`（**只留本处布局**：图标行间距 + 编辑字段「标签在上」）· 基线 13 → **7**。
+  · **三条根因（别再往"加覆盖"方向想）**：① 浮层曾用 `surfaceClassName` **覆盖**表面类 ⇒ `.ln-menu` 的白底/阴影被替掉（看着"透明、点不到"）⇒ 改用 `className`（**追加**）；
+  ② 新建的 CSS **忘了在组件里 import** ⇒ 规则根本没进包（AGENTS §14 明写的坑）⇒ 补 import；③ **动作条用错原语**：`.ln-menu` 是"竖向菜单"（自带 `flex-direction: column`）
+  ⇒ 换 **`Popover`**（中性表面），本处只写 `display:flex; gap`，**不再写任何 flex 覆盖**。
 - 门禁：tsc ✓ · vitest **1773 passed / 16 skipped** ✓（`noteRef.test.ts` 8 条 + `tablePasteGuard.test.ts` 7 条纯逻辑/护栏）· ui-metrics ✓ · check:core ✓ · 双端构建 ✓ · `git diff --check` ✓。
 ### 261008 续 · 表格（编辑态一致性 / 默认字号 / 缩放 / 行高性能）+ 大表粘贴压测
 
