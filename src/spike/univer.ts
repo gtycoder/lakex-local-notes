@@ -107,6 +107,8 @@ try {
 
   const first = univerAPI.createWorkbook(demoWorkbook("spike-1", "Spike1") as never) as unknown as Book;
   books.set("spike-1", first);
+  const readonlyMode = new URLSearchParams(location.search).has("readonly");
+  if (readonlyMode) first.setEditable(false);
   univerAPI.setTheme(buildUniverTheme() as never);
 
   const sheetOf = (id: string) => {
@@ -121,6 +123,7 @@ try {
   (window as unknown as Record<string, unknown>).__spike = {
     version: "univer-1.0.3",
     worker: useWorker,
+    readonlyMode,
     violations,
     errors,
     listBooks: () => Array.from(books.keys()),

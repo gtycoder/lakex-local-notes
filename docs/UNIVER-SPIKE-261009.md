@@ -22,6 +22,7 @@
 | 公式 / 删行列 | ✅ | `=SUM(A1:A2)`：删行后 **150ms 重算 11→1**；改值 → 100。**对照 FortuneSheet [#650](https://github.com/ruilisi/fortune-sheet/issues/650) 至今未修** |
 | 只读（移动端底座） | ✅（引擎级） | `setEditable(false)` → 禁用控件 11 → **53** |
 | worker 路径 | ✅ | `?worker=1`：公式同样算出；worker chunk 在 `worker-src 'self' blob:` 下无违规 |
+| 移动端渲染 / 只读 | ✅（模拟器 Chrome） | Pixel 6 / API36 的 Chrome 打开 spike 成功渲染、`=SUM(A1:A2)` 算出 C1=11；`?readonly=1` 下工具栏控件置灰。⚠️ **只读仍会自动聚焦并拉起软键盘（IME）**，正式接入需 `disableAutoFocus` / 只读不聚焦输入框 |
 
 **关键坑（已实测）**：`@univerjs/preset-sheets-core/worker` **只导出工厂、不自举线程**——直接拿它当 worker 入口会"worker 空转、公式恒 null"。必须自建入口调 `createUniver({ presets: [UniverSheetsCoreWorkerPreset()] })`，见 [src/spike/univer-worker.ts](../src/spike/univer-worker.ts)。
 
@@ -49,7 +50,7 @@
 
 ## 5. 未覆盖（属正式接入阶段，不在本次 spike 范围）
 
-- **Android 真机/模拟器只读实测**：引擎级 `setEditable(false)` 已验证；Univer 是纯 web、无原生依赖，移动端 CSP 另含 `unsafe-eval`，但仍需真机确认 IME/触摸/内存。
+- **Capacitor WebView 内实测**：本次已在模拟器 **Chrome** 里验证渲染 + 只读（引擎级 `setEditable(false)`）；正式端是 Capacitor WebView（系统 WebView），接入后需复验一次 IME/触摸/内存。只读下的软键盘问题已在上表记录。
 - **plugin 模式瘦身**（去掉 preset 里的 network/rpc/docs-ui 等未用插件）到具体数字。
 - **正文 v3 转换器**（FortuneSheet `sheets[]` ↔ `IWorkbookData`）与 `UniverSheetEditor` 组件、灰度开关。
 - **真实 Electron `lake://app`（scheme）复验**：本次用同一 `PROD_CSP` 的 headless Chromium，行为等价但非 Electron 本体。
