@@ -107,8 +107,8 @@ describe("文档引用卡：接线护栏", () => {
     expect(CARD).toContain("onClick={() => setMenuOpen(true)}");   // 点卡片打开菜单（不是悬停）
     expect(CARD).toMatch(/update\(\{ noteId: "", title \}\)/);   // 取消链接 = 清引用、保留展示名
     expect(CARD).toContain("编辑文档引用");
-    expect(CARD).toContain("展示名称");
-    expect(CARD).toContain("目标文档");
+    expect(CARD).toContain(">文本");      // 字段名复刻内核链接编辑
+    expect(CARD).toContain(">链接");
     expect(CARD).toMatch(/const readonly = mode === "view"/);       // 阅读态不给写操作
   });
 

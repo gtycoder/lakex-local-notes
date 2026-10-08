@@ -69,21 +69,20 @@ function NoteRefEditPopover({ value, anchor, onSave, onClose }: { value: NoteRef
     <>
       <Popover open={!picking} onDismiss={onClose} label="编辑文档引用" surfaceRef={pos.surfaceRef} style={pos.style ?? undefined}>
         <div className="ln-dialog__body">
-          <label className="ne-note-ref-edit__label">展示名称
+          {/* 复刻内核链接编辑：字段名在上、控件在下（截图为「文本 / 链接」+ 只留「确定」） */}
+          <label className="ne-note-ref-edit__label">文本
             <input className="ln-input__field" value={name} autoFocus placeholder="显示在文档里的名称"
               onChange={(e) => setName(e.target.value)} />
           </label>
-          <div className="ne-note-ref-edit__target">
-            <span className="ne-note-ref-edit__label">目标文档</span>
+          <label className="ne-note-ref-edit__label">链接
             <button type="button" className="ln-btn" onClick={() => setPicking(true)}>
               {target ? `${target.title || "无标题"} · ${noteKindLabel(target.kind)}` : "选择文档…"}
             </button>
-          </div>
+          </label>
         </div>
         <div className="ln-dialog__actions">
           <button type="button" className="ln-btn" disabled={!parseNoteRef(value)}
             onClick={() => onSave({ noteId: parseNoteRef(value) ?? "", title: name.trim() })}>确定</button>
-          <button type="button" className="ln-btn" onClick={onClose}>取消</button>
         </div>
       </Popover>
       {picking && (
@@ -122,7 +121,7 @@ function NoteRefCard({ value, update, mode }: { value: NoteRefValue | null; upda
 
   /** 动作菜单：与内核链接那套一致（访问 / 编辑 / 复制 / 取消链接）。 */
   const actionsMenu = (
-    <Menu open={menuOpen} onDismiss={() => setMenuOpen(false)} surfaceClassName="ne-note-ref-actions" label="文档引用操作"
+    <Menu open={menuOpen} onDismiss={() => setMenuOpen(false)} className="ne-note-ref-actions" label="文档引用操作"
       surfaceRef={pos.surfaceRef} style={pos.style ?? undefined}>
       {noteId && !gone && (
         <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="访问" aria-label="访问"
