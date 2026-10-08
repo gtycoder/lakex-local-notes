@@ -11,7 +11,7 @@
  * 只存引用元数据、**不内嵌渲染**目标正文（内核只渲染 Lake 正文；表格/多维表/画板正文是各自的 JSON）。
  * 浮层走 `Overlay` 的 `HoverPopover`（锚点与表面共享悬停区 + 开/关延时），定位走 `usePopoverPosition`。
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Check, Copy, Pencil, SquareArrowOutUpRight, Unlink } from "lucide-react";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
