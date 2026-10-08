@@ -8,6 +8,19 @@
   /* 工具栏 AI 入口图标（IconAiTagNew 的绿色渐变） */
   --lake-ai-tag-from: #4cc871;
   --lake-ai-tag-to: #08b66d;
+  /* 「文档引用」卡插入面板图标的两套调色板（设计稿 261008；几何在 src/features/editor/noteRefIcon.tsx）。
+   * 为什么必须在主题文件里：该图标是 lakex 自定义卡的 <symbol>，内容活在 <use> 的 shadow 树里 ——
+   * 选择器打不到、只有「继承」能进去 ⇒ 只能靠这些自定义属性着色（组件里 style={{ fill: var(…) }}）。
+   * 下面这份 = **浅色设计稿原值**（暖色同为浅底，沿用这份）；深色另给一套，见 themes/dark.css。 */
+  --lake-note-ref-icon-tile: #ffffff;          /* 圆角底框 */
+  --lake-note-ref-icon-tile-border: #e6e8e7;
+  --lake-note-ref-icon-page: #f6f6f2;          /* 文档面 */
+  --lake-note-ref-icon-page-ink: #2b2d2c;      /* 文档描边 */
+  --lake-note-ref-icon-fold: #dce1de;          /* 折角 */
+  --lake-note-ref-icon-rule: #626865;          /* 正文示意线 */
+  --lake-note-ref-icon-accent: #73adff;        /* 高亮短线（蓝） */
+  --lake-note-ref-icon-link: #20ba77;          /* 链接勾（绿） */
+  --lake-note-ref-icon-knockout: #ffffff;      /* 链接前的挖空描边（= 底框色） */
   /* 间距 */
   --lake-space-xxs: 2px;
   --lake-space-xs: 4px;

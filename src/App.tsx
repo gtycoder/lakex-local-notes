@@ -37,7 +37,7 @@ import { getNativeErrorMessage } from "./lib/nativeErrors";
 import type { TreeNode } from "./lib/types";
 import { NoteInfoDialog } from "./components/NoteInfoDialog";
 import { saveSettings } from "./lib/settings";
-import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, treeNodePath } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
@@ -166,9 +166,17 @@ export function App() {
   // context/props ⇒ 把「文档清单 + 打开文档」注册到模块级注册表（与 imagePreview 同一姿势）。
   // 依赖 notes/openNote：每次 notes 变化都重注册，卡片读到的永远是最新快照。
   useEffect(() => {
-    setNoteRefHost({ listNotes: () => notes, openNote });
+    setNoteRefHost({
+      listNotes: () => notes,
+      openNote,
+      /** 资料库全路径（`笔记本/分组/文档`）：「复制引用」复制的就是它（见 noteRef.ts 的 host 注释）。 */
+      pathOf: (noteId) => {
+        const path = treeNodePath(treeNodes, noteId);
+        return path.length > 0 ? path.map((node) => node.title || "无标题").join("/") : null;
+      },
+    });
     return () => setNoteRefHost(null);
-  }, [notes, openNote]);
+  }, [notes, openNote, treeNodes]);
 
   const { handleContentChange, createNoteIn, createNote, createSheetIn, createBitableIn, createBoardIn, deleteTreeNode } = useNoteLifecycle({
     bumpRevision,

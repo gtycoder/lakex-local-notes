@@ -10,6 +10,11 @@ import type { NoteSummary } from "../../lib/types";
 
 /** 卡片名（持久化在 cardValue.`$name` 上，**必须唯一且不要改**：改了旧正文就不再渲染本卡）。 */
 export const NOTE_REF_CARD_NAME = "lake-note-ref";
+/**
+ * 插入面板里本卡图标的 **sprite symbol id**（用户 261008 设计，见 noteRefIcon.tsx）。
+ * 面板按 slash.icon 的值直接解析成 use href="#<id>" ⇒ 这里必须是**全限定 id**，不是内核的短名。
+ */
+export const NOTE_REF_ICON_ID = "icon-lake-note-ref";
 /** 斜杠项名：官方规定必须是 `custom-${name}`（见 yuque-developer-docs 69·开发自定义卡片）。 */
 export const NOTE_REF_SLASH_ITEM = `custom-${NOTE_REF_CARD_NAME}`;
 /** 斜杠面板里的主搜索词（`/` 后直接打这几个字母命中）。 */
@@ -50,6 +55,12 @@ export function parseNoteRef(input: unknown): string | null {
 export interface NoteRefHost {
   listNotes(): NoteSummary[];
   openNote(noteId: string): void;
+  /**
+   * 目标文档在**资料库树里的全路径**（`笔记本/分组/…/文档`）——「复制引用」复制的就是它
+   * （用户 261008 定稿：不再复制只有本应用认识的 `lake-note://<id>`；一度改成"本机绝对路径"，用户最终定回资料库路径）。
+   * 取不到（树里没有该节点）时返回 null，调用方回落标题。签名允许同步或异步，调用方统一 `await`。
+   */
+  pathOf?(noteId: string): Promise<string | null> | string | null;
 }
 
 let host: NoteRefHost | null = null;
@@ -84,8 +95,9 @@ export const NOTE_REF_CARD_META = {
   name: NOTE_REF_CARD_NAME,
   cardType: "block" as const,
   slash: {
-    // 复用内核自带 sprite 的「文档提及」符号（免新增图标资源；不要引第三方图标库，AGENTS §14）
-    icon: "icon-card-mention-doc",
+    // 自绘图标（用户 261008 设计稿）：symbol 见 noteRefIcon.tsx，经 ensureCustomCardIcons 进 sprite。
+    // ⚠️ 值必须是**全限定 symbol id**（见 NOTE_REF_ICON_ID 注释）；不要退回内核短名，也不要引第三方图标库（AGENTS §14）。
+    icon: NOTE_REF_ICON_ID,
     mainSearch: NOTE_REF_MAIN_SEARCH,
     label: "文档引用",
     description: "插入同库文档（引用 + 点击打开）",
@@ -103,13 +115,17 @@ export const NOTE_REF_CARD_META = {
   },
 };
 
-/** 把本卡追加进内核的 `customCard.cards`（幂等；由 noteRefCard.tsx 传入带组件的完整描述）。 */
-export function appendNoteRefCard(config: Record<string, unknown>, cardConfig: unknown): void {
+/**
+ * 把本卡追加进内核的 customCard.cards（幂等；由 noteRefCard.tsx 传入带组件的完整描述）。
+ * icon 是可选的 **React 组件**（内核 CustomCard.icon 字段）：它必须渲染一个 **symbol id 元素**，
+ * 由 lakeRuntime.ensureCustomCardIcons() 收进隐藏 sprite（不传则用内核 sprite 里既有的符号）。
+ */
+export function appendNoteRefCard(config: Record<string, unknown>, cardConfig: unknown, icon?: unknown): void {
   const cc = config.customCard as { cards?: unknown[] } | undefined;
   if (!cc) return;
   const cards = Array.isArray(cc.cards) ? cc.cards : [];
   const exists = cards.some((card) => (card as { config?: { name?: string } })?.config?.name === NOTE_REF_CARD_NAME);
-  if (!exists) cards.push({ config: cardConfig });
+  if (!exists) cards.push({ config: cardConfig, ...(icon ? { icon } : {}) });
   cc.cards = cards;
 }
 

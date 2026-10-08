@@ -1,15 +1,8 @@
-/* 「文档引用」卡的**悬停/点击动作条 + 编辑浮层**（261008）。
-   复用原生表面：动作条 = `Popover`（.ln-popover 中性表面，四个 .ln-iconbtn 默认横向排列）、
-   编辑浮层 = 同一个 `Popover` + kit 的 .ln-input__field / .ln-btn。
-   ⇒ 这里只留**本处特有的布局**：图标行间距 + 编辑字段的「标签在上、控件在下」。 */
-.ne-note-ref-actions {
-  display: flex;
-  gap: var(--lake-space-xs);
-}
-.ne-note-ref-edit__label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--lake-space-xs);
-  color: var(--lake-text-2);
-  font-size: var(--lake-font-size-small);
-}
+/* 「文档引用」卡的**动作条 + 编辑浮层**（261008 三改）。
+   两个浮层都**不再自造几何**：
+   · 动作条 = 内核 `.ne-card-toolbar`（`surfaceClassName` 直接把表面换成它），条目 = `.ne-card-toolbar-item`；
+   · 编辑浮层 = 内核 `.ne-link-editor`，字段/字段名 = `.ne-link-editor-field(-title)`；
+   尺寸/间距/悬停底色/圆角全部来自 vendored lakex-doc.css（与选区浮栏 SelectionToolbar 同一姿势），
+   内部控件用 kit 原语（`.ln-input` / `.ln-btn`）。
+   ⇒ 这里只剩**本处特有的一处交互提示**：编辑浮层里的「链接」是只读输入框外观、点击/回车才打开选择器。 */
+.ne-note-ref-edit__link { cursor: pointer; }
