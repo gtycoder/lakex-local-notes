@@ -1,5 +1,5 @@
 diff --git a/node_modules/@fortune-sheet/react/dist/index.esm.js b/node_modules/@fortune-sheet/react/dist/index.esm.js
-index c4486a2..11db373 100644
+index c4486a2..4cab2ad 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.esm.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.esm.js
 @@ -1102,7 +1102,7 @@ var InputBox = function InputBox() {
@@ -1716,7 +1716,36 @@ index c4486a2..11db373 100644
      id: "default"
    }, /*#__PURE__*/React.createElement("path", {
      d: "M844.8 896c25.6 0 51.2-19.2 51.2-51.2v-185.6h-51.2c-44.8 0-83.2-38.4-83.2-83.2s38.4-83.2 83.2-83.2h51.2V313.6c0-25.6-19.2-51.2-51.2-51.2h-134.4c0-70.4-57.6-128-128-128S448 185.6 448 256H313.6c-25.6 0-51.2 19.2-51.2 51.2V448C185.6 448 128 505.6 128 576s57.6 128 128 128v134.4c0 25.6 19.2 51.2 51.2 51.2h185.6v-51.2c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v57.6h185.6zM576 710.4c-70.4 0-128 57.6-128 128H307.2v-185.6H256c-44.8 0-83.2-38.4-83.2-83.2S211.2 492.8 256 492.8h51.2V307.2h185.6V256c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v51.2h185.6V448c-70.4 0-128 57.6-128 128s57.6 128 128 128v140.8H704c6.4-70.4-51.2-134.4-128-134.4z",
-@@ -11202,8 +10449,14 @@ var Workbook = /*#__PURE__*/React.forwardRef(function (_ref, ref) {
+@@ -9712,6 +8959,13 @@ var SheetTabContextMenu = function SheetTabContextMenu() {
+       }, sheetconfig.copy);
+     }
+     if (name === "color") {
++      var _lakeTabColorHook = settings.hooks && settings.hooks.onSheetTabColor;
++      if (_lakeTabColorHook) {
++        return React.createElement(Menu, {
++          key: name,
++          onClick: function onClick(e) { _lakeTabColorHook(sheet.id, e && e.currentTarget); close(); }
++        }, sheetconfig.changeColor, React.createElement("span", { className: "change-color-triangle" }, React.createElement(SVGIcon, { name: "rightArrow", width: 18 })));
++      }
+       return /*#__PURE__*/React.createElement(Menu, {
+         key: name,
+         onMouseEnter: function onMouseEnter() {
+@@ -9934,6 +9188,14 @@ function generateAPIs(context, setContext, handleUndo, handleRedo, settings, cel
+         return api.setCellFormatByRange(draftCtx, attr, value, range, options);
+       });
+     },
++    setSheetColor: function setSheetColor(color, sheetId) {
++      return setContext(function (draftCtx) {
++        if (draftCtx.allowEdit === false) return;
++        var list = draftCtx.luckysheetfile || [];
++        var id = sheetId || draftCtx.currentSheetId;
++        for (var i = 0; i < list.length; i += 1) { if (list[i] && list[i].id === id) { list[i].color = color; return; } }
++      });
++    },
+     mergeCells: function mergeCells(ranges, type) {
+       var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+       return setContext(function (draftCtx) {
+@@ -11202,8 +10464,14 @@ var Workbook = /*#__PURE__*/React.forwardRef(function (_ref, ref) {
      });
    }, [handleRedo, handleUndo, setContextWithProduce]);
    var onPaste = useCallback(function (e) {
@@ -1734,7 +1763,7 @@ index c4486a2..11db373 100644
        if (!clipboardData) {
          clipboardData = window.clipboardData;
 diff --git a/node_modules/@fortune-sheet/react/dist/index.js b/node_modules/@fortune-sheet/react/dist/index.js
-index e404551..462a1db 100644
+index e404551..4134132 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.js
 @@ -1113,7 +1113,7 @@ var InputBox = function InputBox() {
@@ -3451,7 +3480,36 @@ index e404551..462a1db 100644
      id: "default"
    }, /*#__PURE__*/React__default['default'].createElement("path", {
      d: "M844.8 896c25.6 0 51.2-19.2 51.2-51.2v-185.6h-51.2c-44.8 0-83.2-38.4-83.2-83.2s38.4-83.2 83.2-83.2h51.2V313.6c0-25.6-19.2-51.2-51.2-51.2h-134.4c0-70.4-57.6-128-128-128S448 185.6 448 256H313.6c-25.6 0-51.2 19.2-51.2 51.2V448C185.6 448 128 505.6 128 576s57.6 128 128 128v134.4c0 25.6 19.2 51.2 51.2 51.2h185.6v-51.2c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v57.6h185.6zM576 710.4c-70.4 0-128 57.6-128 128H307.2v-185.6H256c-44.8 0-83.2-38.4-83.2-83.2S211.2 492.8 256 492.8h51.2V307.2h185.6V256c0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2v51.2h185.6V448c-70.4 0-128 57.6-128 128s57.6 128 128 128v140.8H704c6.4-70.4-51.2-134.4-128-134.4z",
-@@ -11213,8 +10460,10 @@ var Workbook = /*#__PURE__*/React__default['default'].forwardRef(function (_ref,
+@@ -9723,6 +8970,13 @@ var SheetTabContextMenu = function SheetTabContextMenu() {
+       }, sheetconfig.copy);
+     }
+     if (name === "color") {
++      var _lakeTabColorHook = settings.hooks && settings.hooks.onSheetTabColor;
++      if (_lakeTabColorHook) {
++        return React__default['default'].createElement(Menu, {
++          key: name,
++          onClick: function onClick(e) { _lakeTabColorHook(sheet.id, e && e.currentTarget); close(); }
++        }, sheetconfig.changeColor, React__default['default'].createElement("span", { className: "change-color-triangle" }, React__default['default'].createElement(SVGIcon, { name: "rightArrow", width: 18 })));
++      }
+       return /*#__PURE__*/React__default['default'].createElement(Menu, {
+         key: name,
+         onMouseEnter: function onMouseEnter() {
+@@ -9945,6 +9199,14 @@ function generateAPIs(context, setContext, handleUndo, handleRedo, settings, cel
+         return core.api.setCellFormatByRange(draftCtx, attr, value, range, options);
+       });
+     },
++    setSheetColor: function setSheetColor(color, sheetId) {
++      return setContext(function (draftCtx) {
++        if (draftCtx.allowEdit === false) return;
++        var list = draftCtx.luckysheetfile || [];
++        var id = sheetId || draftCtx.currentSheetId;
++        for (var i = 0; i < list.length; i += 1) { if (list[i] && list[i].id === id) { list[i].color = color; return; } }
++      });
++    },
+     mergeCells: function mergeCells(ranges, type) {
+       var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+       return setContext(function (draftCtx) {
+@@ -11213,8 +10475,10 @@ var Workbook = /*#__PURE__*/React__default['default'].forwardRef(function (_ref,
      });
    }, [handleRedo, handleUndo, setContextWithProduce]);
    var onPaste = React.useCallback(function (e) {

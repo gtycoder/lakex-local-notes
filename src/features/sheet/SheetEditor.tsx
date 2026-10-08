@@ -25,6 +25,8 @@ import { Workbook, type WorkbookInstance } from "@fortune-sheet/react";
 import "@fortune-sheet/react/dist/index.css";
 import "./sheetEditor.css";
 import { readSheetView, writeSheetView } from "./sheetViewStore";
+import { ColorPalette, lastUsedColor } from "../../components/ColorPalette.js";
+import { SheetBgColorIcon, SheetTextColorIcon } from "./sheetColorIcons.js";
 import { emptySheetBody, parseSheetBody, sheetImageDiskSrc, sheetImageSrc, sheetsToBody, type SheetWorksheet } from "../../core/sheetDoc.js";
 import { sheetRangeRect, sheetZoom } from "../../core/sheetGeometry.js";
 import { uploadLakeResource } from "../editor/resourceUpload";
@@ -37,8 +39,21 @@ import { Download, Maximize2, Trash2 } from "lucide-react";
 const AUTOSAVE_DEBOUNCE_MS = 800;
 /** 默认缩放（260919 用户要求「整体偏小，默认 110%」）。已有 zoomRatio 的 sheet 不覆盖（尊重用户改过的缩放）。 */
 const DEFAULT_SHEET_ZOOM = 1.1;
-/** 全局字体（与 app 的 --b3-font-family 对齐）。用户要求「默认用全局字体、不支持修改」⇒ 不放「字体」工具栏项。 */
-const GLOBAL_FONT = 'BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", sans-serif';
+/**
+ * 单元格默认字体（= 产品字体 MiSans，与 \`--lake-font-family\` 首族一致）。用户要求「默认用全局字体、
+ * 不支持修改」⇒ 不放「字体」工具栏项。
+ * ⚠️ **只给单个族名**：内核 \`getFontSet\` 会把多族串去掉引号后**整体加引号成"一个"族名**
+ * （\`"BlinkMacSystemFont, Segoe UI, PingFang SC, …"\` 并不存在）⇒ 实际渲染落到内核自带回退栈
+ * \`Helvetica Neue / PingFang SC\`。这正是用户 261008 报「表格不是 MiSans」的根因；
+ * 单族名不会被加引号，缺字由内核自带回退栈补齐。
+ */
+const GLOBAL_FONT = "MiSans";
+/**
+ * 261008 之前写进正文的旧默认值（多族串，被内核当单一族名 ⇒ 实际渲染 Helvetica Neue/PingFang SC）。
+ * 打开旧文档时就地归一化；只认这一条的**精确匹配**，不动内核/用户设过的其它字体。
+ */
+const LEGACY_GLOBAL_FONT =
+  'BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", sans-serif';
 /** FortuneSheet 的自动换行 = `tb:"2"`（overflow:"1" / clip:"0"）；默认给单元格补上。 */
 const WRAP = "2";
 /**
@@ -50,10 +65,10 @@ const WRAP = "2";
 const TOOLBAR_ITEMS = [
   "undo", "redo", "|",
   "format-painter", "clear-format", "|",
-  "format", "|",                        // 单元格格式（数字格式 / 对齐 / 字体 / 边框）
+  "format", "lake-decimals-decrease", "lake-decimals-increase", "|",   // 261008：内核这版没有小数位±的按钮（只有图标）⇒ 自建两个 custom item                        // 单元格格式（数字格式 / 对齐 / 字体 / 边框）
   "font-size", "|",
   "bold", "italic", "strike-through", "underline", "|",
-  "font-color", "background", "|",
+  "lake-text-color", "lake-bg-color", "|",   // 261008：颜色按钮改为宿主自绘（图标+色条+公共选色盘，见 customToolbarItems）
   "horizontal-align", "vertical-align", "text-wrap", "|",
   "border", "merge-cell", "|",
   "filter", "link", "cell-image", "comment", "|",   // cell-image = 单元格图片（浮动图已移除，占原 image 位）
@@ -72,15 +87,85 @@ const TOOLBAR_ITEMS = [
 const TOOLBAR_ITEMS_READONLY = ["comment", "locationCondition", "|", "search"];
 
 /**
- * 单元格右键菜单：与内核默认一致，只把「插入图片」由浮动图改为**单元格图片**（260921 用户要求
- * 「完全去掉浮动图片」）。`cell-image` 由 customToolbarItems 提供（同一个 key 两处复用）。
+ * 工作表标签右键菜单（261008 用户点名精简）：内核默认 = ["delete","copy","rename","color","hide","|","move"]，
+ * 去掉 「move」（向左移 / 向右移）—— 单文档里的工作表顺序就是新建顺序，没有搬来搬去的使用场景。
+ * 末位 "|" 一并去掉（否则菜单尾部会多一条分隔线）；其余（删除 / 复制 / 重命名 / 修改颜色 / 隐藏）保持内核原样。
+ */
+const SHEET_TAB_CONTEXT_MENU = ["delete", "copy", "rename", "color", "hide"];
+
+/**
+ * 三个颜色入口的「最近使用」分桶（AGENTS §3#19：不同入口不许混用）。
+ * 同时它就是**「上次使用的颜色」的记忆**：颜色按钮点图标即复用最近一条，不另存一份。
+ */
+const COLOR_BUCKET = { text: "sheet-text-color", bg: "sheet-bg-color", tab: "sheet-tab-color" } as const;
+
+/**
+ * 小数位增减（261008，对齐云端「0.0 ±」）。
+ * ⚠️ 内核这版**没有** number-decrease / number-increase 的处理（sprite 里有图标、渲染器没分支，与 delete-cell 同类死键）
+ * ⇒ 我们自建：按当前数字格式串增减小数位。只认纯数字格式（`0` / `#,##0.00` / `0.0%`），
+ * 其余（日期、文本、带货币前缀的复杂格式）保持不动 —— 与内核能力一致，不猜。
+ */
+const DECIMAL_FORMAT_RE = /^([#0,]+)(\.([0#]+))?(%)?$/;
+export function adjustDecimals(format: string, delta: number): string {
+  const fa = format || "General";
+  if (fa === "General") return delta > 0 ? "0." + "0".repeat(Math.min(delta, 9)) : fa;
+  const matched = DECIMAL_FORMAT_RE.exec(fa);
+  if (!matched) return fa;
+  const decimals = matched[3] ? matched[3].length : 0;
+  const next = Math.max(0, Math.min(9, decimals + delta));
+  return matched[1] + (next > 0 ? "." + "0".repeat(next) : "") + (matched[4] ?? "");
+}
+
+/** 工具栏「小数位 ±」图标 = 内核 sprite 里现成的 number-decrease / number-increase 字形。 */
+function DecimalsIcon({ name }: { name: "number-decrease" | "number-increase" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <use xlinkHref={"#" + name} />
+    </svg>
+  );
+}
+
+/**
+ * 颜色按钮右侧的下拉三角（261008，对齐 Lake / 内核 combo 的**分体交互**）：
+ * 点图标 = 直接用上次的颜色；点三角 = 开公共选色盘。三角用内核 sprite 的 `combo-arrow`（与工具栏其它下拉同一套图标）。
+ */
+function ColorCaret({ onOpen }: { onOpen: (anchor: HTMLElement | null) => void }) {
+  return (
+    <span
+      className="sheet-color-caret"
+      role="button"
+      aria-label="选择颜色"
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget.parentElement); }}
+    >
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <use xlinkHref="#combo-arrow" />
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * 单元格右键菜单：内核默认基础上只把「插入图片」由浮动图改为**单元格图片**（260921 用户要求
+ * 「完全去掉浮动图片」），并**去掉 261008 用户点名的 5 项**（精简）：
+ * - \`sort\` 排序选区 / \`orderAZ\` 升序排列 / \`orderZA\` 降序排列 / \`filter\` 筛选选区 —— 4 项近义、低频；
+ * - \`link\` 插入链接 —— 工具栏已有同一入口。
+ * - 「hide-row」/「hide-column」—— 内核这两个 key 各渲染**两行**（隐藏选中行 + 显示隐藏行 / 隐藏选中列 + 显示隐藏列）
+ *   ⇒ 去掉它们 = 去掉这 4 行（261008 用户第二轮点名）。
+ * - 'delete-cell' / 'chart' / 'data' / 'cell-format' —— 本版内核的单元格右键渲染器**根本不认**这几个名字
+ *   （实测：它只处理 copy / paste / insert-row / insert-column / delete-row / delete-column /
+ *   hide-row / hide-column / set-row-height / set-column-width / sort / orderAZ / orderZA / filter / link / image /
+ *   clear，共 17 个）⇒ 列了也不渲染，删掉让清单与实际一致。
+ * 代价（已知并接受）：自定义排序对话框、以及**隐藏/取消隐藏行列**从此没有菜单入口（要恢复得走 API
+ * wb.hideRowOrColumn / wb.showRowOrColumn）；升/降序仍可在工具栏「筛选」下拉里做，筛选/链接仍在工具栏。
+ * \`cell-image\` 由 customToolbarItems 提供（同一个 key 两处复用）。
  */
 const CELL_CONTEXT_MENU = [
   "copy", "paste", "|",
-  "insert-row", "insert-column", "delete-row", "delete-column", "delete-cell",
-  "hide-row", "hide-column", "set-row-height", "set-column-width", "|",
+  "insert-row", "insert-column", "delete-row", "delete-column",
+  "set-row-height", "set-column-width", "|",
   "auto-row-height",   // 自定义项（由 customToolbarItems 提供；不在 TOOLBAR_ITEMS 里 ⇒ 只出现在右键菜单）
-  "clear", "sort", "orderAZ", "orderZA", "filter", "chart", "cell-image", "link", "data", "cell-format",
+  "clear", "cell-image",
 ];
 
 /**
@@ -287,7 +372,8 @@ function rowsWithCells(sheet: SheetWorksheet | null): number[] {
 function withCellDefaults(cell: Record<string, unknown>): Record<string, unknown> {
   const next = { ...cell };
   if (next.tb == null) next.tb = WRAP;
-  if (next.ff == null) next.ff = GLOBAL_FONT;
+  // 旧文档正文里写死的旧字体值一并归一化（261008）；只认精确匹配，其它字体不动。
+  if (next.ff == null || next.ff === LEGACY_GLOBAL_FONT) next.ff = GLOBAL_FONT;
   return next;
 }
 
@@ -1079,12 +1165,128 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
     };
   }, [everVisible, insertCellImage]);
 
+  /**
+   * 颜色入口状态（261008）：文字颜色 / 背景色 / 工作表标签颜色共用一个公共选色盘（components/ColorPalette）。
+   * 为什么自己做按钮：内核把这两个按钮的色条画在硬编码的 17×2 inline div 上（bottom:8/left:9），
+   * 而云端字形本身已含色条 ⇒ 选完颜色「两层色条 + 位置错位」。自绘后只保留云端那一条，并按当前单元格颜色上色。
+   */
+  const [colorPick, setColorPick] = useState<{
+    kind: "text" | "bg" | "tab";
+    anchor: HTMLElement;
+    /** 点击那一刻量到的锚点坐标（优先用；菜单项这类锚点随后会卸载）。 */
+    at?: { x: number; y: number } | null;
+    sheetId?: string;
+  } | null>(null);
+  /** 当前焦点单元格的颜色（给色条上色；未着色 = undefined）。 */
+  const [cellColors, setCellColors] = useState<{ text?: string; bg?: string }>({});
+  /** 上次用过的颜色（点图标直接复用）；初值从「最近使用」桶里读，跨会话也记得。 */
+  const [lastColors, setLastColors] = useState<{ text?: string; bg?: string }>(() => ({
+    text: lastUsedColor(COLOR_BUCKET.text) ?? undefined,
+    bg: lastUsedColor(COLOR_BUCKET.bg) ?? undefined,
+  }));
+
+  /** 读焦点格的颜色（选区/内容变化后刷新）。 */
+  const refreshCellColors = useCallback((selection?: unknown) => {
+    const wb = workbookRef.current;
+    if (!wb) return;
+    const focus = selection ? selectionFocus(selection) : null;
+    const pick = (type: "fc" | "bg"): string | undefined => {
+      if (!focus) return undefined;
+      try {
+        const value = wb.getCellValue(focus.r, focus.c, { type } as never);
+        return typeof value === "string" && value ? value : undefined;
+      } catch { return undefined; }
+    };
+    setCellColors({ text: pick("fc"), bg: pick("bg") });
+  }, []);
+
+  /** 给选区上色（走内核公开 API：一次调用 = 一条历史；null = 恢复默认）。 */
+  const applyCellColor = useCallback((kind: "text" | "bg", color: string | null) => {
+    const wb = workbookRef.current;
+    if (!wb || readOnlyRef.current) return;
+    const rangeList = safeGetSelection(wb);
+    for (const range of rangeList) {
+      try { wb.setCellFormatByRange((kind === "text" ? "fc" : "bg") as never, color, range as never); } catch { /* 忽略 */ }
+    }
+    const field = kind === "text" ? "text" : "bg";
+    if (rangeList.length > 0) setCellColors((prev) => ({ ...prev, [field]: color ?? undefined }));
+    if (color) setLastColors((prev) => ({ ...prev, [field]: color }));   // 记住这次用的颜色（供点图标复用）
+  }, []);
+
+  /** 工作表标签颜色（颜色写入走补丁加的 WorkbookInstance.setSheetColor，语义与内核 ChangeColor 一致）。 */
+  const applySheetTabColor = useCallback((color: string | null, sheetId?: string) => {
+    const wb = workbookRef.current as unknown as { setSheetColor?: (value: string | null, id?: string) => void } | null;
+    if (!wb || readOnlyRef.current) return;
+    try { wb.setSheetColor?.(color, sheetId); } catch { /* 忽略 */ }
+  }, []);
+
+  /** 增减小数位（走 setCellFormatByRange，一次调用一条历史）。 */
+  const changeDecimals = useCallback((delta: number) => {
+    const wb = workbookRef.current;
+    if (!wb || readOnlyRef.current) return;
+    const ranges = safeGetSelection(wb);
+    const focus = selectionFocus(ranges[0]);
+    if (!focus || ranges.length === 0) return;
+    const ct = (wb.getCellValue(focus.r, focus.c, { type: "ct" } as never) ?? null) as { fa?: string } | null;
+    const fa = typeof ct?.fa === "string" && ct.fa ? ct.fa : "General";
+    const next = adjustDecimals(fa, delta);
+    if (next === fa) return;
+    const value = { ...(ct ?? {}), fa: next };
+    for (const range of ranges) {
+      try { wb.setCellFormatByRange("ct" as never, value, range as never); } catch { /* 忽略 */ }
+    }
+  }, []);
+
+  /** 打开公共选色盘（锚点 = 触发按钮 / 右键菜单项）。 */
+  const openColorPick = useCallback((kind: "text" | "bg" | "tab", anchor: HTMLElement | null, sheetId?: string) => {
+    if (readOnlyRef.current || !anchor) return;
+    if (kind === "text" || kind === "bg") refreshCellColors(safeGetSelection(workbookRef.current)[0]);
+    // **当场**量坐标：工作表标签的入口是右键菜单项，内核 close() 之后它会卸载，
+    // 之后再量 rect 全是 0 ⇒ 选色盘会贴到左上角（用户 261008 报）。
+    const rect = anchor.getBoundingClientRect();
+    setColorPick({ kind, anchor, sheetId, at: { x: rect.left, y: rect.bottom + 2 } });
+  }, [refreshCellColors]);
+
   /** 自定义工具栏项：单元格图片（**插入图片**属写操作，只读态不提供；查看已有图片走单元格内图片的菜单）。 */
   const customToolbarItems = useMemo(
     () =>
       readOnly
         ? []
         : [
+            {
+              key: "lake-decimals-decrease",
+              tooltip: "减少小数位",
+              icon: <DecimalsIcon name="number-decrease" />,
+              onClick: () => changeDecimals(-1),
+            },
+            {
+              key: "lake-decimals-increase",
+              tooltip: "增加小数位",
+              icon: <DecimalsIcon name="number-increase" />,
+              onClick: () => changeDecimals(1),
+            },
+            {
+              key: "lake-text-color",
+              tooltip: "文字颜色",
+              icon: <SheetTextColorIcon color={cellColors.text ?? lastColors.text} />,
+              onClick: (event: { currentTarget: HTMLElement }) => {
+                const last = lastColors.text;
+                if (last) applyCellColor("text", last);              // 点图标 = 直接用上次的颜色（对齐 Lake）
+                else openColorPick("text", event.currentTarget);     // 还没有记忆就退化成开选色盘
+              },
+              children: <ColorCaret onOpen={(anchor) => openColorPick("text", anchor)} />,
+            },
+            {
+              key: "lake-bg-color",
+              tooltip: "背景颜色",
+              icon: <SheetBgColorIcon color={cellColors.bg ?? lastColors.bg} />,
+              onClick: (event: { currentTarget: HTMLElement }) => {
+                const last = lastColors.bg;
+                if (last) applyCellColor("bg", last);
+                else openColorPick("bg", event.currentTarget);
+              },
+              children: <ColorCaret onOpen={(anchor) => openColorPick("bg", anchor)} />,
+            },
             { key: "cell-image", tooltip: "插入图片", icon: CELL_IMAGE_ICON, onClick: () => cellImageInputRef.current?.click() },
             {
               // 只在右键菜单出现（没有列进 TOOLBAR_ITEMS）；点它 = 整表重算「自动换行」的行高
@@ -1104,7 +1306,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
               },
             },
           ],
-    [readOnly, syncAutoRowHeights],
+    [readOnly, syncAutoRowHeights, cellColors, lastColors, openColorPick, applyCellColor, changeDecimals],
   );
 
   const handleOp = useCallback(() => {
@@ -1269,7 +1471,10 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
     // 选区变化 → 刷新单元格图片工具弹窗（对齐云端：选中带图格子就弹工具条）
     afterSelectionChange: (_sheetId: string, selection: unknown) => {
       refreshCellImageMenu(selection);
+      refreshCellColors(selection);   // 261008：色条跟着焦点格的颜色走
     },
+    /** 工作表标签右键「更改颜色」→ 打开公共选色盘（内核那个不能用的 ChangeColor 面板已由补丁旁路）。 */
+    onSheetTabColor: (sheetId: string, anchor: HTMLElement | null) => openColorPick("tab", anchor, sheetId),
     afterUpdateCell: (row: number, column: number) => {
       const wb = workbookRef.current;
       if (!wb) return;
@@ -1281,7 +1486,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
         syncAutoRowHeights([row]);
       } catch { /* 忽略 */ }
     },
-  }), [refreshCellImageMenu, syncAutoRowHeights]);
+  }), [refreshCellImageMenu, syncAutoRowHeights, refreshCellColors, openColorPick]);
 
   return (
     <div
@@ -1313,10 +1518,34 @@ export function SheetEditor({ noteId, content, visible, readOnly, focused, pane,
           showSheetTabs
           toolbarItems={readOnly ? TOOLBAR_ITEMS_READONLY : TOOLBAR_ITEMS}
           cellContextMenu={CELL_CONTEXT_MENU}
+          sheetTabContextMenu={SHEET_TAB_CONTEXT_MENU}
           customToolbarItems={customToolbarItems as never}
           hooks={hooks}
           onOp={handleOp}
           onChange={handleWorkbookChange}
+        />
+      )}
+      {/* 公共选色盘（261008）：文字颜色 / 背景色 / 工作表标签颜色共用 */}
+      {colorPick && (
+        <ColorPalette
+          anchor={colorPick.anchor}
+          at={colorPick.at}
+          value={colorPick.kind === "tab"
+            ? (latestRef.current.find((sheet) => (sheet as { id?: string }).id === colorPick.sheetId) as { color?: string } | undefined)?.color
+            : colorPick.kind === "text" ? cellColors.text : cellColors.bg}
+          recentKey={COLOR_BUCKET[colorPick.kind]}
+          defaultLabel={colorPick.kind === "text" ? "默认色" : colorPick.kind === "bg" ? "无背景色" : "无颜色"}
+          defaultKind={colorPick.kind === "text" ? "text" : "background"}
+          onPick={(color) => {
+            if (colorPick.kind === "tab") applySheetTabColor(color, colorPick.sheetId);
+            else applyCellColor(colorPick.kind, color);
+          }}
+          onDefault={() => {
+            if (colorPick.kind === "tab") applySheetTabColor(null, colorPick.sheetId);
+            else applyCellColor(colorPick.kind, null);
+          }}
+          onClose={() => setColorPick(null)}
+          closeOnPick
         />
       )}
       {cellImageMenu && (

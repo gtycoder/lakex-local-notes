@@ -19,6 +19,9 @@ const EDITOR_TAB = readFileSync(new URL("../editor/LakeEditor.tsx", import.meta.
 const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
 const MUTATIONS = readFileSync(new URL("../../core/bitableMutations.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
+// 261008：统一选色盘（组件 + 样式）移到了共用位置，逐条断言跟着改指向
+const SHARED_PALETTE = readFileSync(new URL("../../components/ColorPalette.tsx", import.meta.url), "utf8");
+const PALETTE_CSS = readFileSync(new URL("../../components/colorPalette.css", import.meta.url), "utf8");
 const PICKER = readFileSync(new URL("./BitableRelationPicker.tsx", import.meta.url), "utf8");
 const FILTER_EDITOR = readFileSync(new URL("./BitableFilterEditor.tsx", import.meta.url), "utf8");
 const FILTER_CSS = readFileSync(new URL("./bitableFilterEditor.css", import.meta.url), "utf8");
@@ -240,20 +243,21 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/bt-color-square/);
     expect(EDITOR).toMatch(/optionDragId/);
     expect(EDITOR).toMatch(/DatePicker/);
-    expect(CARDS).toMatch(/ColorPalette/);
+    expect(CARDS).toMatch(/export \{ ColorPalette, Popover \}/);
+    expect(SHARED_PALETTE).toMatch(/export function ColorPalette/);
     expect(DOC).toMatch(/BITABLE_OPTION_PALETTE/);
-    expect(CARDS).toMatch(/COLOR_BOARD_GROUPS/);
+    expect(SHARED_PALETTE).toMatch(/COLOR_BOARD_GROUPS/);
     expect(EDITOR).toMatch(/<ColorPalette anchor=\{textColorFor\.anchor\}[^>]*side="right" closeOnPick=\{false\}/);
     expect(EDITOR).toMatch(/recentKey="bitable-column-text"/);
     expect(EDITOR).toMatch(/recentKey="bitable-option"/);
     expect(EDITOR).toMatch(/recentKey="bitable-progress"/);
     expect(EDITOR).toMatch(/defaultLabel="默认色" defaultKind="text"/);
     expect(EDITOR).toMatch(/defaultLabel="无背景色" defaultKind="background"/);
-    expect(CARDS).toMatch(/最近使用自定义颜色/);
-    expect(CARDS).toMatch(/type="color"/);
-    expect(CARDS).toMatch(/localStorage/);
-    expect(CSS).toMatch(/\.bt-color-swatch \{[^}]*height: 22px/);
-    expect(CSS).toMatch(/\.bt-color-recent \.bt-color-swatch \{[^}]*width: 22px/);
+    expect(SHARED_PALETTE).toMatch(/最近使用自定义颜色/);
+    expect(SHARED_PALETTE).toMatch(/type="color"/);
+    expect(SHARED_PALETTE).toMatch(/localStorage/);
+    expect(PALETTE_CSS).toMatch(/\.bt-color-swatch \{[^}]*height: 22px/);
+    expect(PALETTE_CSS).toMatch(/\.bt-color-recent \.bt-color-swatch \{[^}]*width: 22px/);
   });
 
   it("字段编辑弹窗：进度字段的颜色面板不被「选项编辑器」块吞掉（260929-OPT 修）", () => {
@@ -270,8 +274,8 @@ describe("多维表编辑器护栏", () => {
   });
 
   it("颜色选择器点其它浮层或面板空白即关闭（不沿用悬停子菜单的父层豁免）", () => {
-    expect(CARDS).toMatch(/closeOnNestedOverlay/);
-    expect(CARDS).toMatch(/<Popover open anchor=\{anchor\} onClose=\{onClose\} width=\{296\} align="start" side=\{side\} closeOnNestedOverlay=\{closeOnNestedOverlay\}>/);
+    expect(SHARED_PALETTE).toMatch(/closeOnNestedOverlay/);
+    expect(SHARED_PALETTE).toMatch(/<Popover open anchor=\{anchor\} at=\{at\} onClose=\{onClose\} width=\{296\} align="start" side=\{side\} closeOnNestedOverlay=\{closeOnNestedOverlay\}>/);
     // 填色 = 普通浮层，点击填色面板其它位置即关；列文字 = 子菜单，不继承该行为。
     expect(FILL_EDITOR).toMatch(/closeOnNestedOverlay\s+defaultLabel="无背景色"/);
     const textPalette = EDITOR.match(/<ColorPalette anchor=\{textColorFor\.anchor\}[\s\S]{0,240}?\/>/)?.[0] ?? "";

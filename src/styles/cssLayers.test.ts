@@ -26,6 +26,7 @@ const FILES = [
   "features/editor/selectionToolbar/selectionToolbar.css",
   "features/editor/splitView.css",   // 261008：文档分屏布局（两列 grid + 分隔条定位 + 右栏控件）
   "features/sheet/sheetEditor.css",
+  "components/colorPalette.css",   // 261008：统一选色盘（从多维表 CSS 移出，表格/多维表共用）
   "components/historySnapshotPreview.css",
   "features/bitable/bitableEditor.css",
   "features/bitable/bitableViews.css",   // V01：视图层（视图页签/回退提示），按职责从 bitableEditor 分出
@@ -63,6 +64,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   //   shell.css +3 = 目录/大纲筛选行高度动画改 grid-template-rows（.dock-filter-row 的 display/grid-template-rows/min-width
   //   与 .dock-filter-row__inner 的 min-height）。两处都是合法新增（非覆盖回涨）。
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
+  "components/colorPalette.css": { decls: 77, dupGroups: 0 },   // 261008：统一选色盘（15 条 .bt-color-* + .bt-popover + @keyframes，从多维表 CSS 原样移出）
   "styles/feature.css": { decls: 266, dupGroups: 0 },   // 261006：+141 = 设置·资源改成「未引用资源浏览器」（.asset-browser 双栏版面：筛选/列表/预览台/批量条/5 类预览舞台/两个弹窗宽度；行与空态复用 kit 的 .ln-row / .ln-empty）——全是新增版面、无覆盖既有声明，且桌面专属作用域 .settings-panel  // 260930 设置页重做：+30 = 分组内容由「灰底块」改「一叠白卡」（.config-section 表面/标题条 + 行统一 padding/border）+ 新增表单行 .config-item--field（标题在左、控件在右单行）+ 字段级错误 .config-item__error/.config-note（此前 .settings-hint 无定义）+ 名称行对齐徽章；全是新增盒子/间隔，不覆盖既有声明，且桌面专属作用域 .settings-panel（移动端不加载本层）。此前：视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
   "styles/kit.css": { decls: 635, dupGroups: 0 },   //  261006 Phase 2.2: -40 = 删除零调用的死原语 .ln-card*（设置页走 .config-*、多维表走 .bt-*）与 .ln-toast*（同步/撤销/底部提示各有既有实现），并把分段控件轨道改下沉底、页签静息态退到 text-3  //  261006 Phase 2.2: +2 = .native-title-tip 表面（全局 title 拦截器，见 components/ui/NativeTitleTips.tsx）  //  261006 Phase 2.2: +48 = 新增 checkbox/radio 自绘原语（桌面 .app-shell 作用域，排除内核正文待办框）；勾选用边框旋转绘制，不引入颜色字面量  //  261006 Phase 2.2: +4 = 原为 +4；随后修「块状药丸/文字右移」再 +10（列表改 flex 列、选项 100% 宽、勾选位改右侧绝对定位、展开/聚焦统一为柔光环） 新增下拉弹层样式 .ln-select__list (min-width/max-height/overflow) + .ln-select__item (white-space)，取代原生 select 的系统弹层；选项复用 .ln-menu__item  // 260930 大统一：+14 = 单行省略工具类 .ln-ellipsis(--grow) + 图标按钮主色变体 .ln-iconbtn--accent + 菜单项选中态；并把 overlay.css 的 legacy 菜单项选择器（.top-menu > button 等 5 个）**收编进本文件的 .ln-menu__item 单一规则**（那边对应减少，见基线注释）     // 260929：横向页签原语按用户选定的「墨线 + 计数徽标」重建（基座取自 components.css 的 legacy 墨线 + 补回 min-width/cursor，新增 .ln-tabs__count；随后回收站/历史/表单全部迁入、删掉过渡的 .ln-tabs--seg 变体 ⇒ 558 → 593 → 577）。原记录 —— P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线
   "styles/chrome.css": { decls: 514, dupGroups: 0 },   // 261008：+10 = 分屏合并标签（两段标题 + 分隔线 + 分组图标；一个标签 = 分屏组）     // 261006：+1 = 回收站成页 pane 的 padding-top 归位（顶栏 fixed + workspace 上缝 ⇒ 基类又算了一遍顶栏）     // 260930 续：+3 = 目录行「已锁定」小锁 .tree-row-lock（非交互、行尾常驻）   // 260930 大统一：-39 = 目录栏图标钮（.dock-icon-btn 6 条规则）与目录行动作钮（.tree-row-action 3 条）的视觉声明收编到 kit 的 .ln-iconbtn(--compact/--accent),  // 260929 续：+2 = 多维表状态栏改为**贴着底栏上沿停靠**（[data-doc-kind="bitable"] 再补 height/min-height 22px，与 sheet 同口径）⇒ 底栏不被状态栏压住。260929：+1 = 多维表文档状态栏上移让位底部常驻汇总栏（[data-doc-kind="bitable"] 的 bottom，与 sheet 同层变体）。P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）；260926 续：+1 = 本地空间指示 .workspace-local（未配置云同步时尾段显示本地图标）；+3 = 表格文档状态栏并入 sheet 底部统计行（[data-doc-kind="sheet"] 的 bottom/height/min-height——高度基线在本层，同层就地加变体，合法新增非覆盖回涨）
@@ -98,7 +100,10 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   //         +5 = 选区同色收口（行列头指示线 2 条 + 延长/移动叠加框 2 条）+ 菜单焦点环收编 1 条；
   //              前四条只改内核硬编码的 Luckysheet 蓝（#0188fb）为 --lake-accent，否则同一圈选区两种颜色
   //         +3 = 工具条下拉项「图标在前、文案在后」（对齐云端）：flex-direction/justify-content/gap 各一条
-  "features/sheet/sheetEditor.css": { decls: 156, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
+  // 261008：+1 = 表格字体接产品字体 —— `.sheet-editor .fortune-container / .luckysheet-input-box(-inner)` 一条 font-family
+  //        （内核 FortuneSheet CSS 是**未分层**的，未分层 > 任何 @layer ⇒ 只能像本文件其它内核覆盖一样用 .sheet-editor 提高特异性）
+  // 261008：+11 = 颜色按钮的下拉三角 `.sheet-color-caret`（命中区/圆角/三色 + hover 两态）—— 对齐 Lake 的分体交互
+  "features/sheet/sheetEditor.css": { decls: 168, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   // 260929：-30 = 分组样式按职责移出（→ bitableViews.css）+ 表底「添加记录」旧样式删除（改用共用 .bt-add-round）+ 删掉已冗余的 .bt-panel-add 组合规则；实测 1051（重复组 0）
   "features/bitable/bitableEditor.css": { decls: 1032, dupGroups: 0 },   //  261006 Phase 2.2: +5 = .bt-input 并入字段原语口径（控件静息边 + 圆角令牌 + hover/focus），高度保持 30  // 260930：统一实色卡（70 色 + 最近使用 + 自定义）新增 52 条声明。此前：-63 = 图标钮与菜单项收编 kit；+6 = 列宽/行高；+1 placeholder；+1 select text-align；+8 数据表行操作浮动

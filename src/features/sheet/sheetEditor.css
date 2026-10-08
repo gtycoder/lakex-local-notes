@@ -28,6 +28,38 @@
 .sheet-editor .fortune-container {
   height: 100%;
 }
+/* 表格字体接产品字体（261008 用户：「表格的字体不是 MiSans」）。
+ * 内核 CSS 是未分层的（本组件直接 import "@fortune-sheet/react/dist/index.css"），未分层 > 任何 @layer
+ * ⇒ 只能像本文件其它内核覆盖一样用 .sheet-editor 前缀提高特异性取胜，不能写进 layer(feature) 的字体接线文件。
+ * 命中三处内核硬编码：.fortune-container（"Helvetica Neue", Helvetica, Arial, "PingFang SC", … ⇒ 工具栏/右键菜单/工作表标签，
+ * 拉丁走 Helvetica Neue）、单元格编辑框 .luckysheet-input-box(-inner)（font 简写写死 arial）。
+ * 单元格**内容**是 canvas 绘制，字体取每格 ff（见 SheetEditor 的 GLOBAL_FONT = "MiSans"），不在这里。 */
+/*
+ * 颜色按钮右侧的下拉三角（261008，对齐 Lake：点图标用上次颜色 / 点三角开选色盘）。
+ * 三角字形 = 内核 sprite 的 combo-arrow（与工具栏其它下拉同一套图标）；这里只给它命中区与六态。
+ */
+.sheet-editor .sheet-color-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 18px;
+  margin-left: -1px;
+  border-radius: var(--lake-radius-2xs);
+  color: var(--lake-text-3);
+  cursor: pointer;
+}
+.sheet-editor .sheet-color-caret:hover {
+  color: var(--lake-text-1);
+  background: var(--lake-bg-hover);
+}
+
+.sheet-editor .fortune-container,
+.sheet-editor .luckysheet-input-box,
+.sheet-editor .luckysheet-input-box-inner,
+.sheet-editor .fortune-toolbar-subtext {
+  font-family: var(--lake-font-family);
+}
 /* 纵向滚动条对齐「可见单元格区」（列头 + 横向滚动条区不计入）。
    FortuneSheet 给它 height:100%（= 整个 sheet 容器），最大滚动量比可见区少 ~40px ⇒
    最底部内容永远滚不到、表现为底部留白。高度/顶边由 SheetEditor 实测后写 CSS 变量；

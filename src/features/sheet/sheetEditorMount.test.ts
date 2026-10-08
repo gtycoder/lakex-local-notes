@@ -88,6 +88,41 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
     expect(SRC).toContain('key: "cell-image", tooltip: "插入图片"');
   });
 
+  it("右键精简（261008）：排序/筛选 4 项与「插入链接」不进右键菜单；工具栏仍保留 filter/link", () => {
+    const menu = SRC.match(/const CELL_CONTEXT_MENU = \[[\s\S]*?\];/)?.[0] ?? "";
+    expect(menu).toContain('"cell-image"');
+    // 261008 第二轮又点名去掉「隐藏/显示行列」（内核这两个 key 各渲染两行）
+    for (const gone of ["sort", "orderAZ", "orderZA", "filter", "link", "hide-row", "hide-column"]) {
+      expect(menu).not.toContain('"' + gone + '"');
+    }
+    // 本版内核单元格右键渲染器不认这几个名字（列了也不渲染）⇒ 不能留在清单里假装有功能
+    for (const dead of ["delete-cell", "chart", "data", "cell-format", '"image"']) {
+      expect(menu).not.toContain(dead);
+    }
+    // 精简的是**右键**：工具栏这两个入口必须还在（否则功能就真没了）
+    expect(SRC).toMatch(/const TOOLBAR_ITEMS = \[[\s\S]*?"filter", "link", "cell-image"/);
+  });
+
+  it("工作表标签右键精简（261008）：去掉「向左移 / 向右移」，其余保持内核默认", () => {
+    const menu = SRC.match(/const SHEET_TAB_CONTEXT_MENU = \[[\s\S]*?\];/)?.[0] ?? "";
+    // 内核默认 = ["delete","copy","rename","color","hide","|","move"]：只砍 move（+ 末位分隔线）
+    for (const keep of ["delete", "copy", "rename", "color", "hide"]) {
+      expect(menu).toContain('"' + keep + '"');
+    }
+    expect(menu).not.toContain('"move"');
+    expect(menu).not.toContain('"|"');
+    expect(SRC).toContain("sheetTabContextMenu={SHEET_TAB_CONTEXT_MENU}");
+  });
+
+  it("单元格字体 = MiSans（内核 getFontSet 把多族串当**单族名**加引号 ⇒ 我们只给单族名）；旧值打开即归一化", () => {
+    expect(SRC).toMatch(/const GLOBAL_FONT = "MiSans";/);
+    expect(SRC).toMatch(/const LEGACY_GLOBAL_FONT =\s*'BlinkMacSystemFont, "Segoe UI"/);
+    expect(SRC).toContain("next.ff === LEGACY_GLOBAL_FONT");
+    // DOM 外壳的字体接线必须落在**未分层**的 sheetEditor.css（内核 CSS 未分层 ⇒ layer(feature) 压不过它）
+    const CSS = readFileSync(new URL("./sheetEditor.css", import.meta.url), "utf8");
+    expect(CSS).toMatch(/\.sheet-editor \.fortune-container,[\s\S]{0,200}font-family: var\(--lake-font-family\)/);
+  });
+
   it("工具栏：用户 260921 点名加回的 4 项必须在列（防再次被静默精简）", () => {
     for (const item of ["format", "link", "comment", "locationCondition"]) {
       expect(SRC).toContain(`"${item}"`);
@@ -98,6 +133,125 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
     expect(SRC).toMatch(/new ResizeObserver/);
     expect(SRC).toMatch(/dispatchEvent\(new Event\("resize"\)\)/);
     expect(SRC).toMatch(/ref=\{hostRef\}/);
+  });
+});
+
+
+/**
+ * 颜色入口（261008）：工具栏「文字颜色 / 背景颜色」自绘 + 工作表标签「更改颜色」旁路内核 ChangeChange，
+ * 三处统一走应用内公共选色盘（components/ColorPalette），图标用云端字形。
+ */
+/** 261008：云端对齐 —— 小数位增减（内核这版没有该能力，自建）+ 删除项文案带目标（补丁）。 */
+describe("SheetEditor 云端对齐（261008）", () => {
+  it("小数位 ± 自建：只动纯数字格式，其余（General/日期/文本）按口径处理", async () => {
+    const { adjustDecimals } = await import("./SheetEditor.js");
+    expect(adjustDecimals("0", 1)).toBe("0.0");
+    expect(adjustDecimals("0.00", 1)).toBe("0.000");
+    expect(adjustDecimals("0.00", -1)).toBe("0.0");
+    expect(adjustDecimals("0", -1)).toBe("0");
+    expect(adjustDecimals("#,##0.0", 1)).toBe("#,##0.00");
+    expect(adjustDecimals("0.0%", 1)).toBe("0.00%");
+    expect(adjustDecimals("General", 1)).toBe("0.0");
+    expect(adjustDecimals("General", -1)).toBe("General");
+    expect(adjustDecimals("yyyy-mm-dd", 1)).toBe("yyyy-mm-dd");
+    expect(adjustDecimals("@", 1)).toBe("@");
+  });
+
+  it("工具栏两个按钮 + 右键删除文案带目标行/列（补丁）", () => {
+    const toolbar = SRC.match(/const TOOLBAR_ITEMS = \[[\s\S]*?\];/)?.[0] ?? "";
+    expect(toolbar).toContain('"lake-decimals-decrease", "lake-decimals-increase"');
+    expect(SRC).toContain('key: "lake-decimals-decrease"');
+    expect(SRC).toContain('key: "lake-decimals-increase"');
+    expect(SRC).toContain('tooltip: "减少小数位"');
+    expect(SRC).toContain('tooltip: "增加小数位"');
+    expect(SRC).toContain("wb.setCellFormatByRange(\"ct\" as never, value, range as never)");
+    // （删除项文案带目标曾做过，用户 261008 决定撤销 ⇒ 已还原内核原样，护栏一并去掉）
+  });
+});
+
+describe("SheetEditor 颜色入口（261008）", () => {
+  const ICONS = readFileSync(new URL("./sheetColorIcons.tsx", import.meta.url), "utf8");
+  const CLOUD = JSON.parse(readFileSync(new URL("../../../scripts/sheet-icons.cloud.json", import.meta.url), "utf8")).icons;
+  const RPATCH = readFileSync(new URL("../../../patches/@fortune-sheet+react+1.0.4.patch", import.meta.url), "utf8");
+
+  it("工具栏不再用内核的颜色按钮（它会在云端字形上再叠一条硬编码色条），改用宿主自绘 key", () => {
+    const toolbar = SRC.match(/const TOOLBAR_ITEMS = \[[\s\S]*?\];/)?.[0] ?? "";
+    expect(toolbar).toContain('"lake-text-color", "lake-bg-color"');
+    expect(toolbar).not.toContain('"font-color"');
+    expect(toolbar).not.toContain('"background"');
+    expect(SRC).toContain('key: "lake-text-color"');
+    expect(SRC).toContain('key: "lake-bg-color"');
+    expect(SRC).toContain('openColorPick("text", event.currentTarget)');
+    expect(SRC).toContain('openColorPick("bg", event.currentTarget)');
+  });
+
+  it("上色走内核公开 API（一条历史），标签颜色走补丁加的 setSheetColor", () => {
+    expect(SRC).toContain("wb.setCellFormatByRange(");
+    expect(SRC).toContain("wb.setSheetColor?.(");
+    expect(RPATCH).toContain("setSheetColor: function setSheetColor(");
+    expect(RPATCH).toContain("settings.hooks.onSheetTabColor");
+    expect(SRC).toContain("onSheetTabColor: (sheetId: string, anchor: HTMLElement | null)");
+  });
+
+  it("三处颜色入口共用公共选色盘，最近使用按入口分桶", () => {
+    expect(SRC).toContain('from "../../components/ColorPalette.js"');
+    expect(SRC).toContain("<ColorPalette");
+    for (const bucket of ["sheet-text-color", "sheet-bg-color", "sheet-tab-color"]) {
+      expect(SRC).toContain(bucket);
+    }
+    expect(SRC).toContain("refreshCellColors");
+    expect(SRC).toContain('wb.getCellValue(focus.r, focus.c, { type } as never)');
+  });
+
+  it("颜色按钮 = 分体交互（261008，对齐 Lake）：点图标用上次颜色、点下拉三角开选色盘，且记忆跨会话", () => {
+    // 三角：内核 sprite 的 combo-arrow + 独立命中区（stopPropagation 免得同时触发「用上次颜色」）
+    expect(SRC).toContain("function ColorCaret(");
+    expect(SRC).toContain('xlinkHref="#combo-arrow"');
+    expect(SRC).toContain("event.stopPropagation(); onOpen(event.currentTarget.parentElement)");
+    expect(SRC).toContain("children: <ColorCaret onOpen={(anchor) => openColorPick(\"text\", anchor)} />");
+    expect(SRC).toContain("children: <ColorCaret onOpen={(anchor) => openColorPick(\"bg\", anchor)} />");
+    // 点图标 = 上次颜色；没有记忆才退化成开选色盘
+    expect(SRC).toContain('if (last) applyCellColor("text", last);');
+    expect(SRC).toContain('if (last) applyCellColor("bg", last);');
+    expect(SRC).toContain('else openColorPick("text", event.currentTarget);');
+    // 记忆 = 该入口「最近使用」桶的第一条（不另存一份），初值也从桶里读
+    expect(SRC).toContain("lastUsedColor(COLOR_BUCKET.text)");
+    expect(SRC).toContain("lastUsedColor(COLOR_BUCKET.bg)");
+    expect(SRC).toContain("const COLOR_BUCKET = { text: \"sheet-text-color\", bg: \"sheet-bg-color\", tab: \"sheet-tab-color\" }");
+    const SHARED = readFileSync(new URL("../../components/ColorPalette.tsx", import.meta.url), "utf8");
+    expect(SHARED).toContain("export function lastUsedColor(");
+    // 色条：当前格颜色优先，其次才是上次用过的颜色
+    expect(SRC).toContain("<SheetTextColorIcon color={cellColors.text ?? lastColors.text} />");
+    expect(SRC).toContain("<SheetBgColorIcon color={cellColors.bg ?? lastColors.bg} />");
+    // 坐标锚点：右键菜单项点完就卸载 ⇒ 必须**当场**量坐标（261008 用户报「选色盘跑到左上角」）
+    expect(SRC).toContain("const rect = anchor.getBoundingClientRect();");
+    expect(SRC).toContain("at: { x: rect.left, y: rect.bottom + 2 }");
+    expect(SRC).toContain("at={colorPick.at}");
+    expect(readFileSync(new URL("../../components/ColorPalette.tsx", import.meta.url), "utf8")).toContain("at?: { x: number; y: number } | null;");
+  });
+
+  it("颜色图标 = 云端字形（path d 与 cloud.json 一致），色条按传入颜色而不是云端写死的红", () => {
+    const pathsOf = (name: string): string[] => {
+      const out: string[] = [];
+      const walk = (nodes: unknown[]) => {
+        for (const node of nodes as Array<[string, Record<string, string>, unknown[]?]>) {
+          if (node[0] === "path" && node[1].d) out.push(node[1].d);
+          if (node[2]) walk(node[2]);
+        }
+      };
+      walk(CLOUD[name].nodes);
+      return out;
+    };
+    for (const [name, comp] of [["font-color", "SheetTextColorIcon"], ["background", "SheetBgColorIcon"]] as const) {
+      expect(ICONS).toContain(comp);
+      for (const d of pathsOf(name)) expect(ICONS).toContain(d.slice(0, 60));
+    }
+    // 云端那条色条写死 #F5222D；我们生成时把它换成按 color 上色（注释里提到该色值不算）
+    expect(ICONS).toContain('fill={color ?? "none"}');
+    expect(ICONS).not.toContain('"#F5222D"');
+    // 云端约定 nodes[0] 是包装组（带 scale(0.09375)）：写成自闭合就会把 256 网格直接画进 24 viewBox ⇒ 图标看不见（261008 踩过）
+    expect(ICONS).not.toContain('scale(0.09375)" />');
+    expect(ICONS).toMatch(/transform="scale\(0\.09375\)">[\s\S]*?<path d="/);
   });
 });
 
