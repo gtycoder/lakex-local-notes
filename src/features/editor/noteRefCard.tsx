@@ -12,8 +12,8 @@
  * 浮层走 `Overlay` 的 `HoverPopover`（锚点与表面共享悬停区 + 开/关延时），定位走 `usePopoverPosition`。
  */
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Copy, Pencil, SquareArrowOutUpRight, Unlink } from "lucide-react";
-import { Dialog, HoverPopover } from "../../components/ui/Overlay";
+import { Check, Copy, Pencil, SquareArrowOutUpRight, Unlink } from "lucide-react";
+import { Menu, Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import type { NoteSummary } from "../../lib/types";
 import {
@@ -25,7 +25,7 @@ import "./noteRefCard.css";
 export { NOTE_REF_CARD_NAME, NOTE_REF_SLASH_ITEM, NOTE_REF_MAIN_SEARCH, noteRefUrl, parseNoteRef, setNoteRefHost, isNoteRefGone, findNoteRef, noteKindLabel, withNoteRefSlashItem } from "./noteRef";
 
 /** 选文档浮层：只列**未失效**的库内文档（按标题过滤）。表面/行/输入框全部复用 kit 原语。 */
-function NoteRefPicker({ onPick, onClose }: { onPick: (note: NoteSummary) => void; onClose: () => void }) {
+function NoteRefPicker({ onPick, onClose, surfaceRef, style }: { onPick: (note: NoteSummary) => void; onClose: () => void; surfaceRef?: (el: HTMLElement | null) => void; style?: { left: number; top: number } }) {
   const [query, setQuery] = useState("");
   const notes = useMemo(() => {
     const all = (noteRefHost()?.listNotes() ?? []).filter((n) => !isNoteRefGone(n.id));
@@ -33,8 +33,7 @@ function NoteRefPicker({ onPick, onClose }: { onPick: (note: NoteSummary) => voi
     return (q ? all.filter((n) => (n.title || "").toLowerCase().includes(q)) : all).slice(0, 200);
   }, [query]);
   return (
-    <Dialog open onDismiss={onClose} label="选择要引用的文档">
-      <header className="ln-dialog__head"><h3 className="ln-dialog__title">选择要引用的文档</h3></header>
+    <Popover open onDismiss={onClose} label="选择要引用的文档" surfaceRef={surfaceRef} style={style ?? undefined}>
       <div className="ln-dialog__body">
         <input className="ln-input__field ne-note-ref-dialog__search" autoFocus value={query} placeholder="搜索标题…"
           aria-label="搜索标题" onChange={(e) => setQuery(e.target.value)} />
@@ -56,19 +55,19 @@ function NoteRefPicker({ onPick, onClose }: { onPick: (note: NoteSummary) => voi
       <div className="ln-dialog__actions">
         <button type="button" className="ln-btn" onClick={onClose}>取消</button>
       </div>
-    </Dialog>
+    </Popover>
   );
 }
 
-/** 编辑弹窗（对齐内核链接的「编辑」）：改**展示名称** + **换文档**。 */
-function NoteRefEditDialog({ value, onSave, onClose }: { value: NoteRefValue; onSave: (next: NoteRefValue) => void; onClose: () => void }) {
+/** 编辑浮层（**锚定在卡片旁**，不是全局弹窗；对齐内核链接的「编辑」）：改**展示名称** + **换文档**。 */
+function NoteRefEditPopover({ value, anchor, onSave, onClose }: { value: NoteRefValue; anchor: HTMLElement | null; onSave: (next: NoteRefValue) => void; onClose: () => void }) {
   const [name, setName] = useState(value.title ?? "");
   const [picking, setPicking] = useState(false);
+  const pos = usePopoverPosition({ open: !picking, anchor, gap: 6 });
   const target = findNoteRef(parseNoteRef(value));
   return (
     <>
-      <Dialog open onDismiss={onClose} label="编辑文档引用">
-        <header className="ln-dialog__head"><h3 className="ln-dialog__title">编辑文档引用</h3></header>
+      <Popover open={!picking} onDismiss={onClose} label="编辑文档引用" surfaceRef={pos.surfaceRef} style={pos.style ?? undefined}>
         <div className="ln-dialog__body">
           <label className="ne-note-ref-edit__label">展示名称
             <input className="ln-input__field" value={name} autoFocus placeholder="显示在文档里的名称"
@@ -82,10 +81,11 @@ function NoteRefEditDialog({ value, onSave, onClose }: { value: NoteRefValue; on
           </div>
         </div>
         <div className="ln-dialog__actions">
-          <button type="button" className="ln-btn" disabled={!parseNoteRef(value)} onClick={() => onSave({ noteId: parseNoteRef(value) ?? "", title: name.trim() })}>确定</button>
+          <button type="button" className="ln-btn" disabled={!parseNoteRef(value)}
+            onClick={() => onSave({ noteId: parseNoteRef(value) ?? "", title: name.trim() })}>确定</button>
           <button type="button" className="ln-btn" onClick={onClose}>取消</button>
         </div>
-      </Dialog>
+      </Popover>
       {picking && (
         <NoteRefPicker onClose={() => setPicking(false)}
           onPick={(note) => { onSave({ noteId: note.id, title: name.trim() || note.title }); setPicking(false); }} />
@@ -95,79 +95,76 @@ function NoteRefEditDialog({ value, onSave, onClose }: { value: NoteRefValue; on
 }
 
 /**
- * 卡片本体（编辑态 / 阅读态共用）：`mode === "edit"` 时才挂编辑/取消链接（阅读态只读）。
- * 交互元素都 stopPropagation，免得内核把点击当成"选中卡片"。
+ * 卡片本体（编辑态 / 阅读态共用）：**点击卡片打开动作菜单**（可点、可靠 —— 悬停浮层在内核树里点不到）；
+ * 正文用内核自己的 `.ne-link` 类渲染 ⇒ **样式直接复刻链接**。`mode === "view"` 时只给读操作。
  */
 function NoteRefCard({ value, update, mode }: { value: NoteRefValue | null; update: (next: NoteRefValue) => void; mode: "edit" | "view" }) {
   const [picking, setPicking] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const anchorRef = useRef<HTMLElement | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const rootRef = useCallback((el: HTMLElement | null) => { anchorRef.current = el; setAnchor(el); }, []);
-  const pos = usePopoverPosition({ open, anchor, gap: 6 });
+  const pos = usePopoverPosition({ open: menuOpen, anchor, gap: 6 });
   const noteId = parseNoteRef(value);
   const note = findNoteRef(noteId);
   const gone = isNoteRefGone(noteId);
   const title = note?.title ?? value?.title ?? "";
-  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
   const readonly = mode === "view";
 
-  /** 空引用：先出「选择文档…」；已经"取消链接"过（有展示名无引用）⇒ 渲染纯文本 + 重新引用。 */
-  if (!noteId) {
-    return (
-      <div className="ne-note-ref ne-note-ref--plain" ref={rootRef} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-        {value?.title
-          ? <span className="ne-note-ref__plain ln-ellipsis">{value.title}</span>
-          : <button type="button" className="ln-btn" onMouseDown={stop} onClick={() => setPicking(true)}>选择文档…</button>}
-        {!readonly && (
-          <HoverPopover open={open} onOpenChange={setOpen} anchorRef={anchorRef} onDismiss={() => setOpen(false)}
-            className="ne-note-ref-actions" style={pos.style ?? undefined} label="文档引用操作" panelRef={pos.surfaceRef}>
-            <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="编辑" aria-label="编辑" onMouseDown={stop} onClick={() => { setOpen(false); setEditing(true); }}><Pencil size={14} /></button>
-          </HoverPopover>
-        )}
-        {picking && <NoteRefPicker onClose={() => setPicking(false)} onPick={(n) => { update({ noteId: n.id, title: n.title }); setPicking(false); }} />}
-        {editing && <NoteRefEditDialog value={value ?? {}} onClose={() => setEditing(false)} onSave={(next) => { update(next); setEditing(false); }} />}
-      </div>
-    );
-  }
-
   const copyRef = () => {
+    if (!noteId) return;
     void navigator.clipboard?.writeText(noteRefUrl(noteId));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };
 
+  /** 动作菜单：与内核链接那套一致（访问 / 编辑 / 复制 / 取消链接）。 */
+  const actionsMenu = (
+    <Menu open={menuOpen} onDismiss={() => setMenuOpen(false)} surfaceClassName="ne-note-ref-actions" label="文档引用操作"
+      surfaceRef={pos.surfaceRef} style={pos.style ?? undefined}>
+      {noteId && !gone && (
+        <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="访问" aria-label="访问"
+          onClick={() => { setMenuOpen(false); noteRefHost()?.openNote(noteId); }}><SquareArrowOutUpRight size={14} /></button>
+      )}
+      {!readonly && (
+        <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="编辑（改展示名称 / 换文档）" aria-label="编辑"
+          onClick={() => { setMenuOpen(false); setEditing(true); }}><Pencil size={14} /></button>
+      )}
+      {noteId && (
+        <button type="button" className="ln-iconbtn ln-iconbtn--compact" title={`复制引用（${noteRefUrl(noteId)}）`} aria-label="复制"
+          onClick={copyRef}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+      )}
+      {!readonly && noteId && (
+        <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="取消链接（保留展示名）" aria-label="取消链接"
+          onClick={() => { setMenuOpen(false); update({ noteId: "", title }); }}><Unlink size={14} /></button>
+      )}
+    </Menu>
+  );
+
+  // 空引用：先出「选择文档…」；已经"取消链接"过（有展示名无引用）⇒ 纯文本 + 点开菜单重新引用
+  if (!noteId) {
+    return (
+      <div className="ne-note-ref ne-note-ref--plain" ref={rootRef}>
+        {value?.title
+          ? <span className="ne-note-ref__plain ln-ellipsis" onClick={() => setMenuOpen(true)}>{value.title}</span>
+          : <button type="button" className="ln-btn" onClick={() => setPicking(true)}>选择文档…</button>}
+        {actionsMenu}
+        {picking && <NoteRefPicker onClose={() => setPicking(false)} onPick={(n) => { update({ noteId: n.id, title: n.title }); setPicking(false); }} />}
+        {editing && <NoteRefEditPopover value={value ?? {}} anchor={anchor} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} />}
+      </div>
+    );
+  }
+
   return (
-    <div className="ne-note-ref" ref={rootRef} data-gone={gone ? "true" : undefined}
-      onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div className="ne-note-ref" ref={rootRef} data-gone={gone ? "true" : undefined} onClick={() => setMenuOpen(true)}>
       {gone
         ? <span className="ne-note-ref__title ne-note-ref__title--gone" title="目标文档已删除或不可用">文档已删除{title ? `：${title}` : ""}</span>
-        : (
-          <button type="button" className="ne-note-ref__title ln-ellipsis" title={`打开：${title || noteId}`}
-            onMouseDown={stop} onClick={() => noteRefHost()?.openNote(noteId)}>{title || "无标题"}</button>
-        )}
+        : <span className="ne-note-ref__title ln-ellipsis" title={`点击操作：${title || noteId}`}><span className="ne-link">{title || "无标题"}</span></span>}
       <span className="ne-note-ref__kind">{gone ? "失效" : noteKindLabel(note?.kind)}</span>
-      {/* 悬停浮层：四个动作与内核链接一致（访问 / 编辑 / 复制 / 取消链接） */}
-      <HoverPopover open={open} onOpenChange={setOpen} anchorRef={anchorRef} onDismiss={() => setOpen(false)}
-        className="ne-note-ref-actions" style={pos.style ?? undefined} label="文档引用操作" panelRef={pos.surfaceRef}>
-        {!gone && (
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="访问" aria-label="访问"
-            onMouseDown={stop} onClick={() => { setOpen(false); noteRefHost()?.openNote(noteId); }}><SquareArrowOutUpRight size={14} /></button>
-        )}
-        {!readonly && (
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="编辑（改展示名称 / 换文档）" aria-label="编辑"
-            onMouseDown={stop} onClick={() => { setOpen(false); setEditing(true); }}><Pencil size={14} /></button>
-        )}
-        <button type="button" className="ln-iconbtn ln-iconbtn--compact" title={`复制引用（${noteRefUrl(noteId)}）`} aria-label="复制"
-          onMouseDown={stop} onClick={copyRef}>{copied ? <span className="ne-note-ref__copied">✓</span> : <Copy size={14} />}</button>
-        {!readonly && (
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact" title="取消链接（保留展示名）" aria-label="取消链接"
-            onMouseDown={stop} onClick={() => { setOpen(false); update({ noteId: "", title }); }}><Unlink size={14} /></button>
-        )}
-      </HoverPopover>
-      {editing && <NoteRefEditDialog value={value ?? {}} onClose={() => setEditing(false)} onSave={(next) => { update(next); setEditing(false); }} />}
+      {actionsMenu}
+      {editing && <NoteRefEditPopover value={value ?? {}} anchor={anchor} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} />}
     </div>
   );
 }

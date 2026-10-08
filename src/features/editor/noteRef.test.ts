@@ -101,8 +101,10 @@ describe("文档引用卡：接线护栏", () => {
     expect(CARD).toContain('title="编辑（改展示名称 / 换文档）"');
     expect(CARD).toContain("复制引用");
     expect(CARD).toContain('title="取消链接（保留展示名）"');
-    expect(CARD).toContain("HoverPopover");           // 浮层只走 Overlay 原语
+    expect(CARD).toContain("<Menu open={menuOpen}");    // 动作菜单走 Overlay 的 Menu 原语（点击打开 ⇒ 点得到）
     expect(CARD).toContain("usePopoverPosition");     // 定位单一来源
+    expect(CARD).toContain('className="ne-link"');     // 正文用内核链接类 ⇒ 样式复刻链接
+    expect(CARD).toContain("onClick={() => setMenuOpen(true)}");   // 点卡片打开菜单（不是悬停）
     expect(CARD).toMatch(/update\(\{ noteId: "", title \}\)/);   // 取消链接 = 清引用、保留展示名
     expect(CARD).toContain("编辑文档引用");
     expect(CARD).toContain("展示名称");
