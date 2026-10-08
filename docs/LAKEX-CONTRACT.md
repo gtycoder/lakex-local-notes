@@ -1326,3 +1326,44 @@ PY
 - **`.lake` 序列化形态**（与 §5.3 一致，本卡实测）：`<card type="block" name="customBlock" customName="lake-note-ref" value="data:%7B%22%24name%22…">`，percent 解码后是 `{$name, $htmlStr, …我们的字段}`。
 - **React 实例**：卡组件由内核自己的 React 树渲染，但**与我们共用同一个 React 实例**（实测：本卡内的 `useState/useMemo` + 我们的 `Dialog`(Overlay) 浮层、受控输入、列表交互全部正常）⇒ 可直接用应用侧 React 组件，但**拿不到应用的 context/props** ⇒ 宿主数据只能走**模块级注册表**（我们照 `imagePreview` 的姿势做 `setNoteRefHost`）。
 - **内核没有"引用同库文档"的现成卡**（261008 bundle 排查 + 实测）：`mention` 在本构建的「小工具」组里是**被注释掉**的；`category === 'localDoc'` + `ne-card-local-doc(-btn-download/-preview)` 是**「本地文档（上传文件）」卡**（走 `checkFileSize(eZ.localDoc, file.size)`），**不是引用**；云端那张「插入可访问的语雀内容」（`/yq`、`insert-yuque` 图标）是**拉语雀线上内容**，本地没有解析通道 ⇒ "引用同库文档（含表格/多维表/画板）"只能自建自定义卡（本项目已按本套契约实现：`src/features/editor/noteRef.ts` + `noteRefCard.tsx`）。
+### 5.24 内核链接的两个浮层：动作条 = 卡片工具栏类、编辑器 = `.ne-link-editor`（261008 源码定位 + 真实端实测）
+
+- **`.ne-link-editor` 的 CSS 就在 vendored 源码里**（`vendor/lakex-doc-react/src/assets/lakex-doc.css` ~L15755；本项目 HANDOFF 早前「类名在、规则没定位到、可能运行时注入」的说法**作废**）：
+  `width: 365px` / `max-width: calc(100vw - 32px)` / `border-radius: 5px` / `padding: 16px 12px` / `font-size: 14px`，
+  表面 = `--lakex-editor-background-foreground` + 1px `--lakex-editor-border-primary` + `0 8px 16px 4px rgba(0,0,0,.04)`；
+  `.ne-link-editor-field` 与 `.ne-link-editor-field-title` 一律 **`margin-bottom: 16px`**。
+  JSX 结构（`lakex.js` ~L209363）：`div.ne-link-editor > (div.ne-link-editor-field > label > div.ne-link-editor-field-title + Input) × 2 + Button(「确定」)`。
+- **横向动作条 = 卡片工具栏**：`.ne-card-toolbar` / `.ne-card-toolbar-item`（同一文件 ~L1000）：`padding: 6px 12px`、`border-radius: 4px`、
+  `display: inline-flex`、条目 **28×28**、条目间距 **margin-right: 4px**（`:first-child`/`:last-child` 收边）、**图标 16px**、
+  hover `--lakex-editor-background-tertiary`、`backdrop-filter: blur(50px)`、`box-shadow: 0 8px 16px 4px rgba(0,0,0,.04)`。
+  ⚠️ 条目**不要用原生 `<button>`**：该规则只给几何、不重置 UA 的底/边 ⇒ 会多一圈系统灰底（要去覆盖就变成"又写一套样式"）。用 `div[role=button]`（同 `SelectionToolbar` 的 `CardItem`）。
+- ⚠️ **内核链接的 hover 菜单不是这条横向工具条**：`plugins/link` 的 `_openMenu`（`lakex.js` ~L209789）用 `euH` 渲染**竖向** `.ne-ui-mode-menu-panel`
+  （每项 = 16px 图标 + 文案，首项是 `disabled` 的「链接」标签；`_getTargetNode()` 取 `ne-text` ⇒ 贴文字）。横向排的那条是**卡片工具栏**（图片卡/阅读态同一套）。
+  复刻"链接那种浮层"前先认准要的是哪一套，别把两套混成一个。
+- **主题桥（关键）**：内核把浅色 schema 以 `.lakex-default-theme{…}` 的 `<style>` 注入（`colorRegistry.toStyleValues(selector, scheme)`，`lakex.js` ~L36220，`selector = 'lakex-default-theme'`）。
+  那是**普通类选择器** ⇒ portal 到 `document.body` 的浮层只要自己带上 `lakex-default-theme` 类，就能吃到 `src/styles/kernel-theme.css` 的 `--lakex-editor-*` 主题映射。
+  **实测**（暗色）：`.ne-card-toolbar` 背景 `#1e1f23`、字色 text-1、边框 `#2d2f34`。不带这个类 = 暗/暖色下浮层仍是内核浅色字面值。
+- **锚点坑**：同一个回调 ref（`titleRef`）挂在外层卡片 div 与标题 span **两层**时，最终锚点漂到**卡片块**（实测浮层比文字低 6~8px）；
+  只挂标题文字 + `usePopoverPosition({ gap: 2 })` 才得到"贴文字"（= 内核卡片工具栏默认 offset 2）。
+- 落地：`src/features/editor/noteRefCard.tsx`（`surfaceClassName="ne-card-toolbar"` / `"ne-link-editor"` + `className="lakex-default-theme"`）+ `noteRefCardActions.css`（只剩 1 条 cursor）；护栏 `noteRef.test.ts` 卡住"不许用自造几何替换这两组类"。
+- **自定义卡的插入面板图标（261008 五改实测）**：
+  · `CustomCard.icon`（`types.ts:515`）是**一个 React 组件**，且组件**不画可见图形**，只渲染一个 `<symbol id=... viewBox=...>`；
+    它由我们自己的 `lakeRuntime.ensureCustomCardIcons()` 收进隐藏 sprite `#icon-lakexui-custom-cards`（prepend 到 body；
+    ⚠️ 必须在 `prepareCustomCards` **之前**调 —— 后者把 `{ config, icon }` 包装解包成 config，icon 就丢了）。
+  · `slash.icon` 的解析（`lakex.js` ~L227974 的图标组件）：先把 kebab 名 camelCase 化去查内核别名表（`card-mention-doc → icon-card-mention-doc` 那类）；
+    **查不到就原样当 symbol id 用** ⇒ 自绘图标填**全限定 id**（我们：`icon-lake-note-ref`）即可，渲染成 `<use xlink:href="#<id>">`。
+  · **尺寸不是固定像素**：卡片选择面板的图标盒 = `.ne-menu-item-container-icon` **36×36 / radius 7**，
+    `div.ne-icon { width:1em; height:1em; font-size:36px }`，而 `div.ne-icon .ne-icon-symbol { width:1em; height:1em; fill:currentColor }`
+    ⇒ **symbol 按 font-size 缩放**。所以设计稿按 72 网格画、描边 2 → 实测描边 1px；图标**自带底框**（与内核 `日历/表情` 那些彩色面板图标同姿势）才像一块"贴片"。
+  · **复核姿势**：面板不在 DOM 里时要先开它 —— 程序化 `button.click()` **不生效**（开关只挂在 React 处理链上）；
+    直接调 React 的 `onMouseDown/onClick`（`btn[__reactProps$…].onClick({ preventDefault(){}, stopPropagation(){}, currentTarget:btn, target:btn, button:0, nativeEvent:{} })`），
+    再用 `use.getBBox()` / `document.getElementById(<symbol id>).getBBox()` 量真实几何（实测：`use` 35×35 / symbol 70×70 / viewBox `0 0 72 72`）。
+  · **卡片的"刚插入"状态怎么认（261008 实测）**：内核给**新插入**的卡挂 `ne-focused`（插入后由内核 `focusCard` 设置），
+    **打开既有文档时卡上没有**该类；但 `ne-focused` 语义是「**当前聚焦的卡**」（点另一张会转移、原卡失去）⇒ 只能与「首见该 DOM 元素」配合用，不能单独当插入信号。
+    另：插入时内核**可能先把卡渲进游离节点再挂进文档**（挂载那一刻 `closest("ne-card")` 为 null）⇒ 宿主侧判定要**轮询一小段窗口**，一次性判定会漏。
+  · ⚠️ **`autoFocus` 在浮层里不可靠**：`usePopoverPosition` 首帧表面是 `visibility:hidden` 占位，此时 `focus()` 会被浏览器**静默忽略** ⇒
+    "打开即聚焦"必须等它的 `placed`（或下一帧再 focus）。
+  · ⚠️ **symbol 内容活在 `<use>` 的 shadow 树里**：**CSS 选择器打不到它**（`[data-theme=dark] .你` 之类一律无效），
+    而 **`var()` 也不能写在 presentation attribute 上**（`fill="var(--x)"` 浏览器不认）⇒ 想要"随主题换色"只有一条路：
+    元素用 **`style="fill:var(--x)"`**，变量定义在主题文件（`themes/base.css` + `themes/dark.css`），靠**继承**进 shadow 树。
+    本项目落地见 `src/features/editor/noteRefIcon.tsx`（浅色=设计稿原值 / 深色=重绘一套，两套都实测过）。
