@@ -15,11 +15,16 @@ import { createUniver, LocaleType, mergeLocales, type FUniver } from "@univerjs/
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
+import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
 import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
-import { emptyUsheetWorkbook, parseUsheetBody, usheetToBody } from "../../core/usheetDoc.js";
+import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
+import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
+import { ASSET_PORT } from "../../lib/assetPort";
+import { uploadLakeResource } from "../editor/resourceUpload";
+import type { ResourceUploadOutput } from "../../lib/types";
 import type { SheetEditorProps } from "../sheet/SheetEditor";
 
 /** 自动保存防抖：合并连续命令，停顿后落一次。 */
@@ -27,6 +32,46 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 
 /** 只用到 Univer workbook 的这两个方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
 type UniverBook = { save: () => unknown; setEditable: (value: boolean) => unknown };
+
+/** 内联图（刚插入的 base64 / 本地文件产生的 blob URL）：必须在保存前提升为资产。 */
+const INLINE_SOURCE_RE = /^(data:image\/|blob:)/i;
+/** 是否带 URL scheme（data:/blob:/http(s): 一律原样；裸文件名才是我们的资产）。 */
+const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+
+function deepCloneWorkbook(workbook: UsheetWorkbook): UsheetWorkbook {
+  return JSON.parse(JSON.stringify(workbook)) as UsheetWorkbook;
+}
+
+/** 磁盘 filename → 可渲染 URL（打开时喂给 createWorkbook）。 */
+function renderSource(src: string, noteId: string): string {
+  if (HAS_SCHEME_RE.test(src)) return src;
+  return localAssetHttpUrl(noteId, src, { port: ASSET_PORT });
+}
+
+/** 本地资产 URL → 磁盘 filename（落盘时写回正文）。非本地资产原样。 */
+function diskSource(src: string): string {
+  const ref = parseLocalAssetUrl(src);
+  return ref && ref.space === "note" && !ref.staging ? ref.filename : src;
+}
+
+/** 把 data:/blob:/外部 http 图片走 uploadLakeResource 提升成资产，返回 filename。 */
+async function promoteInlineSource(src: string, noteId: string): Promise<string | null> {
+  let out: ResourceUploadOutput | null = null;
+  if (src.startsWith("data:")) {
+    out = await uploadLakeResource({ type: "base64", data: src }, noteId);
+  } else if (src.startsWith("blob:")) {
+    const blob = await (await fetch(src)).blob();
+    const ext = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/gif" ? "gif" : blob.type === "image/webp" ? "webp" : blob.type === "image/svg+xml" ? "svg" : "png";
+    out = await uploadLakeResource(new File([blob], "image." + ext, { type: blob.type || "image/png" }), noteId);
+  } else if (src.startsWith("http://") || src.startsWith("https://")) {
+    if (parseLocalAssetUrl(src)) return null; // 已是本地资产：磁盘口径直接换 filename
+    out = await uploadLakeResource(src, noteId); // 外部网络图：主进程受控下载
+  } else {
+    return null;
+  }
+  const ref = parseLocalAssetUrl(out.url);
+  return ref ? ref.filename : null;
+}
 
 export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture, showToolbar = true, focused, pane }: SheetEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -38,6 +83,10 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const dirtyRef = useRef(onDirty); dirtyRef.current = onDirty;
   const captureRef = useRef(onEditorCapture); captureRef.current = onEditorCapture;
   const readOnlyRef = useRef(readOnly); readOnlyRef.current = readOnly;
+  /** data:/blob: 源 → 资产 filename（同一会话内缓存，避免每次 flush 重复上传同一张图）。 */
+  const promotedRef = useRef(new Map<string, string>());
+  const flushInflightRef = useRef(false);
+  const flushPendingRef = useRef(false);
 
   useEffect(() => { if (visible) setEverVisible(true); }, [visible]);
 
@@ -55,17 +104,34 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     return () => { if (raf) window.cancelAnimationFrame(raf); };
   }, [everVisible, ready]);
 
-  const snapshot = (): string | null => {
-    const state = instanceRef.current;
-    if (!state) return null;
-    try { return usheetToBody(state.book.save() as never); } catch { return null; }
-  };
-  const flush = () => {
+  const doFlush = async () => {
     const state = instanceRef.current;
     if (!state || readOnlyRef.current) return;
-    const body = snapshot();
-    if (body && body !== state.last) { state.last = body; changeRef.current(body); }
+    if (flushInflightRef.current) { flushPendingRef.current = true; return; }
+    flushInflightRef.current = true;
+    try {
+      const snapshot = deepCloneWorkbook(state.book.save() as unknown as UsheetWorkbook);
+      // 1) 收集尚未提升的内联图（data:/blob:），提升成资产文件并记住映射。
+      const inline: string[] = [];
+      mapUsheetImageSources(snapshot, (src) => { if (INLINE_SOURCE_RE.test(src) && !promotedRef.current.has(src)) inline.push(src); return src; });
+      for (const src of new Set(inline)) {
+        try {
+          const filename = await promoteInlineSource(src, noteId);
+          if (filename) promotedRef.current.set(src, filename);
+        } catch (error) {
+          console.warn("[usheet] 内联图片提升为资产失败（保持内联形态）", error);
+        }
+      }
+      // 2) 落盘口径：已提升 → filename；本地资产 URL → filename；其余原样。
+      mapUsheetImageSources(snapshot, (src) => promotedRef.current.get(src) ?? diskSource(src));
+      const body = usheetToBody(snapshot);
+      if (body !== state.last) { state.last = body; changeRef.current(body); }
+    } finally {
+      flushInflightRef.current = false;
+      if (flushPendingRef.current) { flushPendingRef.current = false; void doFlush(); }
+    }
   };
+  const flush = () => { void doFlush(); };
   const scheduleFlush = () => {
     if (readOnlyRef.current) return;
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -77,12 +143,14 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     if (!ready || instanceRef.current) return;
     const parsed = parseUsheetBody(content);
     const workbook = parsed?.workbook ?? emptyUsheetWorkbook();
+    // 打开：正文里的 filename → 资产服务器 URL（Univer 直接把 source 当图渲染）。
+    mapUsheetImageSources(workbook, (src) => renderSource(src, noteId));
     let created: { univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook } | null = null;
     let disposable: { dispose: () => void } | null = null;
     try {
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
-        locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never) },
+        locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
         theme: buildUniverTheme() as never,
         presets: [
           UniverSheetsCorePreset({ container: "univer-sheet-" + noteId, disableAutoFocus: true, toolbar: showToolbar, formulaBar: showToolbar }),
@@ -92,9 +160,12 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       const book = univerAPI.createWorkbook(workbook as never);
       book.setEditable(!readOnlyRef.current);
       created = { univer, univerAPI, book };
-      instanceRef.current = { ...created, last: usheetToBody(book.save() as never) };
+      // last = 规范化后的**磁盘形态**正文；避免打开即被判为"有改动"或把 URL 写回正文。
+      const canonical = deepCloneWorkbook(book.save() as unknown as UsheetWorkbook);
+      mapUsheetImageSources(canonical, (src) => promotedRef.current.get(src) ?? diskSource(src));
+      instanceRef.current = { ...created, last: usheetToBody(canonical) };
       disposable = univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => scheduleFlush());
-      captureRef.current?.(() => snapshot());
+      captureRef.current?.(() => instanceRef.current?.last ?? null);
     } catch (error) {
       console.error("Univer 表格挂载失败", error);
       created = null;

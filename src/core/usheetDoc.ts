@@ -89,6 +89,49 @@ export function usheetToBody(workbook: UsheetWorkbook): string {
   return JSON.stringify({ kind: USHEET_DOC_KIND, version: USHEET_DOC_VERSION, workbook } satisfies UsheetDoc);
 }
 
+/** 画板块的判据：Univer 的图片 drawing 一定带这几个字段之一（避免误伤普通对象的 `source`）。 */
+const DRAWING_MARKERS = ["drawingType", "imageSourceType", "drawingId"] as const;
+
+function mapDrawingSources(node: unknown, map: (source: string) => string, seen: Set<unknown>): boolean {
+  if (!node || typeof node !== "object" || seen.has(node)) return false;
+  seen.add(node);
+  let changed = false;
+  if (Array.isArray(node)) {
+    for (const item of node) if (mapDrawingSources(item, map, seen)) changed = true;
+    return changed;
+  }
+  const record = node as Record<string, unknown>;
+  if (typeof record.source === "string" && DRAWING_MARKERS.some((key) => key in record)) {
+    const next = map(record.source);
+    if (next !== record.source) { record.source = next; changed = true; }
+  }
+  // 浮动图存在 workbook.resources 的 JSON 字符串里（如 SHEET_DRAWING_PLUGIN 的 data）；
+  // 解析后继续走一遍，**只在真的改了才算/才写回**（否则每次 flush 都会重排 JSON 造成假变更）。
+  if (Array.isArray(record.resources)) {
+    for (const entry of record.resources) {
+      if (!entry || typeof entry !== "object") continue;
+      const res = entry as { data?: unknown };
+      if (typeof res.data !== "string") continue;
+      const trimmed = res.data.trim();
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (mapDrawingSources(parsed, map, seen)) { res.data = JSON.stringify(parsed); changed = true; }
+      } catch { /* 非 JSON 资源，跳过 */ }
+    }
+  }
+  for (const value of Object.values(record)) if (mapDrawingSources(value, map, seen)) changed = true;
+  return changed;
+}
+
+/**
+ * 遍历 workbook 里**所有图片 drawing 的 source**并原地做映射（单元格图 + 浮动图都覆盖）。
+ * 返回是否真的改过值。用于：打开时 filename→URL、落盘时 URL→filename、以及把内联图提升成资产。
+ */
+export function mapUsheetImageSources(workbook: UsheetWorkbook, map: (source: string) => string): boolean {
+  return mapDrawingSources(workbook, map, new Set());
+}
+
 /** 正文 → 搜索纯文本（抽单元格 v，公式结果优先用 m/v）。 */
 export function usheetToSearchText(content: string | null | undefined, maxChars = 20000): string {
   const doc = parseUsheetBody(content);
