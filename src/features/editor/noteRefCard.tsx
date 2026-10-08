@@ -21,6 +21,7 @@ import {
   type NoteRefValue,
 } from "./noteRef";
 import "./noteRefCard.css";
+import "./noteRefCardActions.css";   // ⚠️ 必须由使用它的组件 import（漏 import 时元素在、样式空 —— 261008 踩过）
 
 export { NOTE_REF_CARD_NAME, NOTE_REF_SLASH_ITEM, NOTE_REF_MAIN_SEARCH, noteRefUrl, parseNoteRef, setNoteRefHost, isNoteRefGone, findNoteRef, noteKindLabel, withNoteRefSlashItem } from "./noteRef";
 
