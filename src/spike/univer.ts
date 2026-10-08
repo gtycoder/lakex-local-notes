@@ -12,6 +12,8 @@
 import { createUniver, LocaleType, mergeLocales, defaultTheme, IUniverInstanceService } from "@univerjs/presets";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
+import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
+import "@univerjs/preset-sheets-drawing/lib/index.css";
 import workerURL from "./univer-worker?worker&url";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "../styles/themes/base.css";
@@ -102,7 +104,10 @@ try {
     locale: LocaleType.ZH_CN,
     locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never) },
     theme: defaultTheme,
-    presets: [UniverSheetsCorePreset({ container: "univer-root", ...(useWorker ? { workerURL } : {}) })],
+    presets: [
+      UniverSheetsCorePreset({ container: "univer-root", ...(useWorker ? { workerURL } : {}) }),
+      UniverSheetsDrawingPreset(),
+    ],
   });
 
   const first = univerAPI.createWorkbook(demoWorkbook("spike-1", "Spike1") as never) as unknown as Book;
@@ -152,10 +157,52 @@ try {
     tokens: () => readTokens(),
     // ---- 只读 ----
     setEditable: (id: string, v: boolean) => { books.get(id)!.setEditable(v); return v; },
+    // ---- 图片（drawing preset）----
+    insertCellImage: (id: string, a1: string, url: string) =>
+      (sheetOf(id).getRange(a1) as unknown as { insertCellImageAsync: (u: string) => Promise<boolean> }).insertCellImageAsync(url),
+    insertFloatingImage: (id: string, url: string, col?: number, row?: number) => {
+      const ws = sheetOf(id) as unknown as { insertImage: (u: string, c?: number, r?: number) => Promise<boolean> };
+      return typeof col === "number" && typeof row === "number" ? ws.insertImage(url, col, row) : ws.insertImage(url);
+    },
+    saveCellImages: (id: string, a1: string) =>
+      (sheetOf(id).getRange(a1) as unknown as { saveCellImagesAsync: (o?: unknown) => Promise<boolean> }).saveCellImagesAsync(),
     // ---- 多 workbook 切换 ----
     focusBook: (id: string) => { instanceService.focusUnit(id); return univerAPI.getActiveWorkbook()?.getId() ?? null; },
     activeBook: () => univerAPI.getActiveWorkbook()?.getId() ?? null,
   };
+  // ---- 交互控件（方便直接试用）----
+  const bar = document.createElement("div");
+  bar.id = "spike-controls";
+  const themeBtns: HTMLButtonElement[] = [];
+  const mkBtn = (label: string, onClick: () => void) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    bar.appendChild(b);
+    return b;
+  };
+  (["light", "warm", "dark"] as const).forEach((name) => {
+    const b = mkBtn({ light: "浅色", warm: "暖色", dark: "深色" }[name], () => {
+      (window as unknown as Record<string, unknown> & { __spike: { setAppTheme: (n: string) => void } }).__spike.setAppTheme(name);
+      themeBtns.forEach((x) => x.classList.toggle("is-on", x === b));
+    });
+    if (name === "light") b.classList.add("is-on");
+    themeBtns.push(b);
+  });
+  const roLabel = document.createElement("label");
+  const ro = document.createElement("input");
+  ro.type = "checkbox";
+  ro.addEventListener("change", () => {
+    (window as unknown as Record<string, unknown> & { __spike: { setEditable: (id: string, v: boolean) => void } }).__spike.setEditable("spike-1", !ro.checked);
+  });
+  roLabel.append(ro, document.createTextNode("只读"));
+  bar.appendChild(roLabel);
+  const mode = document.createElement("span");
+  mode.textContent = useWorker ? "worker 线程" : "主线程";
+  bar.appendChild(mode);
+  document.body.prepend(bar);
+
   (window as unknown as Record<string, unknown>).__spikeReady = true;
 } catch (err) {
   errors.push(String((err as Error)?.stack || err));

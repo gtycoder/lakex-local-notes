@@ -22,6 +22,7 @@
 | 公式 / 删行列 | ✅ | `=SUM(A1:A2)`：删行后 **150ms 重算 11→1**；改值 → 100。**对照 FortuneSheet [#650](https://github.com/ruilisi/fortune-sheet/issues/650) 至今未修** |
 | 只读（移动端底座） | ✅（引擎级） | `setEditable(false)` → 禁用控件 11 → **53** |
 | worker 路径 | ✅ | `?worker=1`：公式同样算出；worker chunk 在 `worker-src 'self' blob:` 下无违规 |
+| 图片（单元格图 / 浮动图） | ✅ | `FRange.insertCellImageAsync(url)` 与 `FWorksheet.insertImage(url,col,row)` 均返回 true 并渲染；**单元格图存在格内富文本 `p.drawings`（`layoutType:0`）、浮动图进 workbook `resources`**；`source` 直接支持 URL（可用我们的资产服务器，无需 base64）。需加 `@univerjs/preset-sheets-drawing` |
 | 移动端渲染 / 只读 | ✅（模拟器 Chrome） | Pixel 6 / API36 的 Chrome 打开 spike 成功渲染、`=SUM(A1:A2)` 算出 C1=11；`?readonly=1` 下工具栏控件置灰。⚠️ **只读仍会自动聚焦并拉起软键盘（IME）**，正式接入需 `disableAutoFocus` / 只读不聚焦输入框 |
 
 **关键坑（已实测）**：`@univerjs/preset-sheets-core/worker` **只导出工厂、不自举线程**——直接拿它当 worker 入口会"worker 空转、公式恒 null"。必须自建入口调 `createUniver({ presets: [UniverSheetsCoreWorkerPreset()] })`，见 [src/spike/univer-worker.ts](../src/spike/univer-worker.ts)。
@@ -30,7 +31,8 @@
 
 | 组成 | raw | gzip |
 | --- | --- | --- |
-| Univer 主 chunk | 6.19 MB | **1.63 MB** |
+| Univer 主 chunk（core preset） | 6.19 MB | **1.63 MB** |
+| + drawing preset（图片） | 6.79 MB | **1.80 MB** |
 | preset CSS | 132 KB | 20 KB |
 | worker chunk（可选） | 7.01 MB | **1.66 MB** |
 

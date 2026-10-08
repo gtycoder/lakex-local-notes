@@ -86,6 +86,13 @@ async function main() {
       await step("recalcAfterDeleteRow", `(async () => { const before=String(window.__spike.value('spike-1','C1')); window.__spike.deleteRow('spike-1',1); ${POLL} })()`.replace("return v;", "return { before, after: v, waitedMs: i*150 };"));
       await step("editRecalc", "(async () => { window.__spike.write('spike-1','A1',100); for (let i=0;i<30;i++){ const v=String(window.__spike.value('spike-1','C1')); if (v==='100') return { value: v, waitedMs: i*150 }; await new Promise(r=>setTimeout(r,150)); } return { value: String(window.__spike.value('spike-1','C1')), timedOut: true }; })()");
 
+      // 图片：单元格图片 + 浮动图片
+      await step("insertCellImage", "(async () => await window.__spike.insertCellImage('spike-1','E2','http://127.0.0.1:1422/cell.png'))()");
+      await step("insertFloatingImage", "(async () => await window.__spike.insertFloatingImage('spike-1','http://127.0.0.1:1422/float.png',7,5))()");
+      await sleep(900);
+      await step("imageSnapshot", "(() => { const s = window.__spike.save('spike-1'); const sh = s.sheets.s1; return { sheetKeys: Object.keys(sh), e2: sh.cellData && sh.cellData[1] ? sh.cellData[1][4] : null, imagesLen: sh.images ? sh.images.length : null, drawingsLen: sh.drawings ? sh.drawings.length : null, resourcesLen: s.resources ? s.resources.length : null, topKeys: Object.keys(s) }; })()");
+      out.results.imageShot = await cdp.shot("spike-images.png");
+
       // 主题桥：三主题各截图 + 记录令牌生效值
       out.results.themeBridge = {};
       for (const name of ["light", "warm", "dark"]) {
