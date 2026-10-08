@@ -64,7 +64,6 @@ export interface LakeNative {
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
   createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
   /** 新建表格文档（kind=sheet，v6）。 */
-  createSheetIn(parentId: string | null, title: string): Promise<NoteDocument>;
   createUsheetIn(parentId: string | null, title: string): Promise<NoteDocument>;
   /** 新建多维表文档（kind=bitable，v6）。 */
   createBitableIn(parentId: string | null, title: string): Promise<NoteDocument>;
@@ -84,7 +83,7 @@ export interface LakeNative {
   listNoteHistory(noteId: string): Promise<Array<{
     id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
     /** 文档类型（同篇快照同类型）：渲染层据此预热预览分包。 */
-    kind: "doc" | "sheet" | "usheet" | "bitable" | "board";
+    kind: "doc" | "usheet" | "bitable" | "board";
   }>>;
   restoreHistory(historyId: number): Promise<void>;
   deleteHistory(historyId: number): Promise<void>;
@@ -96,7 +95,7 @@ export interface LakeNative {
   listNoteOrphans(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }>>;
   previewHistorySnapshot(historyId: number): Promise<{
     /** 文档类型：doc 的 html 是 Lake 正文（viewer 渲染）；非 doc 是内部 JSON（结构化预览）。 */
-    kind: "doc" | "sheet" | "usheet" | "bitable" | "board";
+    kind: "doc" | "usheet" | "bitable" | "board";
     plain: string;
     html: string;
     createdAt: string;
@@ -243,7 +242,6 @@ export const native = {
   createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),
-  createSheetIn: (parentId: string | null, title: string) => api().createSheetIn(parentId, title),
   createUsheetIn: (parentId: string | null, title: string) => api().createUsheetIn(parentId, title),
   createBitableIn: (parentId: string | null, title: string) => api().createBitableIn(parentId, title),
   createBoardIn: (parentId: string | null, title: string) => api().createBoardIn(parentId, title),

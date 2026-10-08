@@ -14,7 +14,7 @@ export interface POCNote {
   updatedAt: string;
   parentId: string | null;
   /** v6/v7 文档类型（缺省 doc）。非 doc 类型移动端只读占位，**不得**交给 Lake 编辑器（会写坏正文）。 */
-  kind: "doc" | "sheet" | "bitable" | "board";
+  kind: "doc" | "usheet" | "bitable" | "board";
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
@@ -25,10 +25,10 @@ export interface POCNoteSummary {
   parentId: string | null;
 }
 
-function normalizeDocKind(value: unknown): "doc" | "sheet" | "bitable" | "board" {
-  // Univer 表格（kind=usheet）：移动端按「非 doc 只读占位」处理（复用 sheet 占位页），**绝不**交给 Lake 编辑器。
-  if (value === "usheet") return "sheet";
-  return value === "sheet" || value === "bitable" || value === "board" ? value : "doc";
+function normalizeDocKind(value: unknown): "doc" | "usheet" | "bitable" | "board" {
+  // 表格（kind=usheet）：移动端按「非 doc 只读占位」处理，**绝不**交给 Lake 编辑器。
+  // 旧 FortuneSheet 的 "sheet" 已废弃：不做迁移/兼容（AGENTS §3#7），直接回退 doc。
+  return value === "usheet" || value === "bitable" || value === "board" ? value : "doc";
 }
 
 function rowToNote(r: Record<string, unknown>): POCNote {
@@ -166,7 +166,7 @@ export async function saveNote(
     throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
   }
   if (!hasNoteSaveChanges(existing, { title: safeTitle, content })) return false;
-  // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省按 **kind** 派生（sheet/bitable/board 的正文是 JSON，
+  // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省按 **kind** 派生（usheet/bitable/board 的正文是 JSON，
   // 直接 lakeHtmlToPlain 会把 JSON 碎片写进 text_cache ⇒ 搜索索引与摘要全脏）。口径见 src/core/noteSearchText.ts。
   const kind = normalizeDocKind(existing.doc_kind);
   const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";

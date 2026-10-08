@@ -1,8 +1,7 @@
 /* Univer 表格（kind=usheet）编辑器容器。
- * 几何**自有**，不依赖 .sheet-editor 的样式（sheetEditor.css 属于 FortuneSheet 分包，只打开 usheet 时不会加载
- * —— 这正是「新建表格打开空白」的根因：宿主没有 grid-area/height，被网格压成 2px）。
+ * 几何**自有**：宿主没有 grid-area/height 就会被父网格压成 2px（这正是「新建表格打开空白」的根因）。
  * 与 .bitable-editor / .board-editor 同构：容器几何各自管。
- * 显隐仍由 styles/app/tabs.css 的 :is(...) 按 data-active 控制（宿主同时带 .sheet-editor 类）。 */
+ * 显隐仍由 styles/app/tabs.css 的 :is(...) 按 data-active 控制（宿主同时带 .sheet-editor 别名类）。 */
 .usheet-editor {
   grid-area: 1 / 1;
   min-height: 0;

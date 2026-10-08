@@ -7,9 +7,7 @@ import { patchNoteById, patchTabById, replaceTreeNode, type OpenTab } from "../d
 
 export interface UseTreeActionsOptions {
   createNoteIn: (parentId: string | null) => Promise<void>;
-  /** v6：新建表格文档（kind=sheet）。 */
-  createSheetIn: (parentId: string | null) => Promise<void>;
-  /** 新建 Univer 表格文档（kind=usheet）：与 sheet 并存。 */
+  /** 新建表格文档（kind=usheet）。 */
   createUsheetIn: (parentId: string | null) => Promise<void>;
   /** v6：新建多维表文档（kind=bitable）。 */
   createBitableIn: (parentId: string | null) => Promise<void>;
@@ -32,15 +30,14 @@ export interface UseTreeActionsOptions {
 
 /** 树 CRUD 与 Sidebar 操作回调（从 App.tsx 收拢）。 */
 export function useTreeActions({
-  createNoteIn, createSheetIn, createUsheetIn, createBitableIn, createBoardIn, openNote, setNodeIcon, treeNodes,
+  createNoteIn, createUsheetIn, createBitableIn, createBoardIn, openNote, setNodeIcon, treeNodes,
   setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
   setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
   setPendingRenameId, setError,
 }: UseTreeActionsOptions) {
-  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "sheet" | "usheet" | "bitable" | "board", parentId: string | null, title?: string) => {
+  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board", parentId: string | null, title?: string) => {
     try {
       if (kind === "note") { await createNoteIn(parentId); return; }
-      if (kind === "sheet") { await createSheetIn(parentId); return; }
       if (kind === "usheet") { await createUsheetIn(parentId); return; }
       if (kind === "bitable") { await createBitableIn(parentId); return; }
       if (kind === "board") { await createBoardIn(parentId); return; }
@@ -103,7 +100,7 @@ export function useTreeActions({
   const sidebarSelect = useCallback((id: string) => {
     void openNote(id);
   }, [openNote]);
-  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note" | "sheet" | "usheet" | "bitable" | "board", parentId: string | null, title?: string) => {
+  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board", parentId: string | null, title?: string) => {
     void createTreeItem(kind, parentId, title);
   }, [createTreeItem]);
   const sidebarRename = useCallback((id: string, title: string) => {

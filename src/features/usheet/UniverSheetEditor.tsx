@@ -1,5 +1,5 @@
 /**
- * Univer 表格编辑器（kind="usheet"）——**与 FortuneSheet 版（kind="sheet"）并存**，先在应用里跑通。
+ * Univer 表格编辑器（kind="usheet"）——当前**唯一**的表格实现。
  *
  * 约束 / 取舍（"先做到能用"）：
  * - **一个编辑器一个 Univer 实例**（未做"单实例多 workbook"共享；那是后续优化，先保证不串台）。
@@ -25,7 +25,6 @@ import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { ASSET_PORT } from "../../lib/assetPort";
 import { uploadLakeResource } from "../editor/resourceUpload";
 import type { ResourceUploadOutput } from "../../lib/types";
-import type { SheetEditorProps } from "../sheet/SheetEditor";
 
 /** 自动保存防抖：合并连续命令，停顿后落一次。 */
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -178,7 +177,25 @@ async function promoteInlineSource(src: string, noteId: string): Promise<string 
   return ref ? ref.filename : null;
 }
 
-export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture, showToolbar = true, focused, pane }: SheetEditorProps) {
+export interface UsheetEditorProps {
+  noteId: string;
+  content: string;
+  visible: boolean;
+  readOnly: boolean;
+  onChange: (content: string) => void;
+  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖），让外层 dirty / 关闭 / 退出及时看到。 */
+  onDirty?: () => void;
+  /** 审计 F15：注册按需同步序列化（关闭/保存时现取），避免「改完 <800ms 就关」丢最后编辑。 */
+  onEditorCapture?: (capture: (() => string | null) | null) => void;
+  /** 是否显示内核工具条（默认 true）。历史快照预览传 false ⇒ 只读预览不要"半个编辑器"的观感。 */
+  showToolbar?: boolean;
+  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
+  focused?: boolean;
+  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
+  pane?: "left" | "right" | null;
+}
+
+export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture, showToolbar = true, focused, pane }: UsheetEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [everVisible, setEverVisible] = useState(visible);
   const [ready, setReady] = useState(false);

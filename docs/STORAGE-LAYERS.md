@@ -35,7 +35,7 @@
 └─ workspace-default/                   # 工作区根
    ├─ metadata.sqlite3 (+ -wal/-shm)    # 主库
    ├─ notes/{noteId}.lake               # 文档正文（kind=doc）        L1（对象）
-   ├─ sheets/{noteId}.sheet.json         # 表格正文（kind=sheet，FortuneSheet v2）L1（对象）
+   ├─ usheets/{noteId}.usheet.json       # 表格正文（kind=usheet，Univer v1）L1（对象）
    ├─ bitables/{noteId}.bitable.json     # 多维表正文（kind=bitable，自研 v1）L1（对象）
    ├─ boards/{noteId}.board.json         # 画板正文（kind=board，Drawnix/Plait 场景）L1（对象）
    ├─ note-assets/{noteId}/{filename}   # 附件/图片                    L1（assets/）
@@ -51,12 +51,12 @@
 
 ---
 
-> **表格文档（`kind="sheet"`，260918 引入；260919 换内核；260920 图片资产化）**：正文落 `sheets/{noteId}.sheet.json`，路径由 `notes.kind` 决定（`store.bodyPathFor`）。
-> 正文格式 = **v2 FortuneSheet workbook**（`{kind:"sheet",version:2,sheets:Sheet[]}`；保存时剔 `luckysheet_select_save` 等运行时字段 + dense `data`→sparse `celldata`）。搜索文本由 `sheetToSearchText`（遍历 celldata）派生，**不进 Lake HTML 解析器**。见 `docs/STORAGE-LAYERS.md`。
-> **浮动图 = 资产引用**（260920 P1）：`sheets[].images[].src` 存**资产 filename**（`{13ts}_{8hex}.{ext}`，文件在 `note-assets/{noteId}/`），
-> **正文不存 base64、不存 URL**；渲染由 `sheetImageSrc(src, noteId, port)` 拼本实例 canonical URL，落盘由 `sheetImageDiskSrc` 换回 filename。
-> 声明/GC/同步/历史全复用现有资产管线（清单声明是**磁盘实扫** `listLocalAssets`，正文无需额外声明；GC 保护靠 `extractAssetRefs` 命中 JSON 里的 filename）。
-> 旧正文里遗留的 base64 在**打开时**由同一条「提升」路径收敛成资产（不加版本号、不写迁移）。见 `docs/STORAGE-LAYERS.md`。
+> **表格文档（`kind="usheet"`，Univer）**：正文落 `usheets/{noteId}.usheet.json`，路径由 `notes.kind` 决定（`store.bodyPathFor`）。
+> 正文格式 = **v1 Univer IWorkbookData 快照**（`{kind:"usheet",version:1,workbook:{…}}`）。搜索文本由 `usheetToSearchText`（遍历 `cellData`）派生，**不进 Lake HTML 解析器**。见 `src/core/usheetDoc.ts`。
+> **图片 = 资产引用**：workbook 里 drawing 的 `source` 存**资产 filename**（文件在 `note-assets/{noteId}/`），
+> **正文不存 base64、不存 URL**；渲染由 `localAssetHttpUrl` 拼本实例 URL，落盘由 `mapUsheetImageSources` 换回 filename（`src/features/usheet/UniverSheetEditor.tsx`）。
+> 声明/GC/同步/历史全复用现有资产管线（清单声明是**磁盘实扫** `listLocalAssets`；GC 保护靠 `extractAssetRefs` 命中 JSON 里的 filename）。
+> 旧 FortuneSheet 的 `kind="sheet"` 正文不再识别（AGENTS §3#7：不做迁移/兼容）。
 >
 > **多维表文档（`kind="bitable"`，260920 实现 v1）**：正文落 `bitables/{noteId}.bitable.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
 > 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/STORAGE-LAYERS.md`。

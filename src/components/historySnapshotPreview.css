@@ -109,9 +109,3 @@
   min-width: 0;
   min-height: 0;
 }
-
-/* 表格预览里那条"选区统计"行（.fortune-stat-area，第三方面板）在只读预览里永远空着，
-   关掉它免得在预览底部留一条空带（正式编辑器里它是状态栏的落点，见 sheetEditor.css，不要动那边）。 */
-.history-editor-preview .fortune-stat-area {
-  display: none;
-}

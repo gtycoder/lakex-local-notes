@@ -10,7 +10,7 @@ import { native } from "../../lib/native";
 import { activeEditorMount } from "./activeEditor";
 import { editorInstanceAt } from "./editorRegistry";
 import { applyModelRange, captureModelRange, positionAfterModelRange, type CapturedModelRange } from "./selectionToolbar/aiModelSelection";
-import { onOversizeTablePaste, parseHtmlTableToSheetBody, noteRefCardHtml, sheetDocTitle, type OversizeTablePaste } from "./tablePasteGuard";
+import { onOversizeTablePaste, parseHtmlTableToUsheetBody, noteRefCardHtml, usheetDocTitle, type OversizeTablePaste } from "./tablePasteGuard";
 
 export function TablePasteGuardDialog({ parentId }: { parentId: string | null }) {
   const [pending, setPending] = useState<OversizeTablePaste | null>(null);
@@ -25,14 +25,14 @@ export function TablePasteGuardDialog({ parentId }: { parentId: string | null })
     setPending(payload);
   }), []);
 
-  const saveAsSheet = async () => {
+  const saveAsUsheet = async () => {
     if (!pending || busy) return;
     setBusy(true);
     try {
-      const body = parseHtmlTableToSheetBody(pending.html);
+      const body = parseHtmlTableToUsheetBody(pending.html);
       if (!body) { setSaved({ title: "", failed: "无法解析该表格" }); return; }
-      const title = sheetDocTitle(pending.shape, pending.at);
-      const note = await native.createSheetIn(parentId, title);
+      const title = usheetDocTitle(pending.shape, pending.at);
+      const note = await native.createUsheetIn(parentId, title);
       await native.saveNote(note.id, title, body);
       // 在光标所在块之后插入「文档引用」卡（拿不到落点就只提示，不硬塞）
       const editor = editorInstanceAt(activeEditorMount()) as { execCommand?: (name: string, ...args: unknown[]) => unknown } | null;
@@ -74,7 +74,7 @@ export function TablePasteGuardDialog({ parentId }: { parentId: string | null })
         )}
       </div>
       <div className="ln-dialog__actions">
-        {pending && <button type="button" className="ln-btn" disabled={busy} onClick={() => void saveAsSheet()}>{busy ? "处理中…" : "存为表格文档"}</button>}
+        {pending && <button type="button" className="ln-btn" disabled={busy} onClick={() => void saveAsUsheet()}>{busy ? "处理中…" : "存为表格文档"}</button>}
         <button type="button" className="ln-btn" onClick={() => { setPending(null); setSaved(null); }}>{saved ? "知道了" : "取消"}</button>
       </div>
     </Dialog>

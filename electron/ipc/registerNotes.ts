@@ -162,8 +162,7 @@ export function registerNotesIpc(
   ipc.handle("create_group", (parentId: string, title: unknown) => store.createGroup(parentId, assertTitle(title)));
   ipc.handle("rename_tree_node", (id: string, title: unknown) => store.renameTreeNode(id, assertTitle(title)));
   ipc.handle("create_note_in", (parentId: string | null, title: unknown) => store.createNoteIn(parentId, assertTitle(title)));
-  // v6：新建表格文档（kind=sheet）；正文落 sheets/{id}.sheet.json，其余复用文档管线
-  ipc.handle("create_sheet_in", (parentId: string | null, title: unknown) => store.createSheetIn(parentId, assertTitle(title)));
+  // v6：新建表格文档（kind=usheet）；正文落 usheets/{id}.usheet.json，其余复用文档管线
   ipc.handle("create_usheet_in", (parentId: string | null, title: unknown) => store.createUsheetIn(parentId, assertTitle(title)));
   ipc.handle("create_bitable_in", (parentId: string | null, title: unknown) => store.createBitableIn(parentId, assertTitle(title)));
   // v7：新建画板文档（kind=board）；正文落 boards/{id}.board.json，其余复用文档管线

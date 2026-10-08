@@ -5,12 +5,12 @@ import { Submenu } from "./ui/Overlay";
 export type DocExportFormat = "markdown" | "html" | "pdf";
 /**
  * 导出动作格式全集：doc 用 markdown/html/pdf；
- * bitable 用 csv / zip（已实现）；sheet 的 csv/xlsx、board 的 png/svg 目前是**占位**（disabled，逻辑后续补）。
+ * bitable 用 csv / zip（已实现）；usheet 的 csv/xlsx、board 的 png/svg 目前是**占位**（disabled，逻辑后续补）。
  */
 export type ExportFormat = DocExportFormat | "csv" | "zip" | "xlsx" | "png" | "svg";
 
 export interface ExportSubmenuItemProps {
-  /** 文档类型：doc / sheet / bitable / board（未知按 doc 处理）。 */
+  /** 文档类型：doc / usheet / bitable / board（未知按 doc 处理）。 */
   kind: string;
   onExportAs: (format: ExportFormat) => void;
   onCopyMarkdown: () => void;
@@ -28,7 +28,7 @@ function Placeholder({ label }: { label: string }) {
  *
  * **按文档类型给各自的菜单，不混用**（用户 260930 明确）：
  * - doc：Markdown 资料包 / Markdown 文本（复制）/ HTML / PDF / 资料路径（**已彻底移除「导出为原生 Lake」**）；
- * - sheet：CSV / Excel —— 占位（disabled，待补逻辑）；
+ * - usheet：CSV / Excel —— 占位（disabled，待补逻辑）；
  * - bitable：CSV（活动数据表）；
  * - board：PNG / SVG —— 占位（disabled，待补逻辑）。
  * 「导出资料路径（本机 AI）」是与格式无关的本地路径工具，各类型都保留。
@@ -37,7 +37,7 @@ function Placeholder({ label }: { label: string }) {
  */
 export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPaths, onClose }: ExportSubmenuItemProps) {
   const run = (action: () => void) => () => { action(); onClose(); };
-  const type = kind === "sheet" ? kind : kind === "usheet" ? "sheet" : kind === "bitable" || kind === "board" ? kind : "doc";
+  const type = kind === "usheet" ? "sheet" : kind === "bitable" || kind === "board" ? kind : "doc";
 
   return (
     <Submenu label={<><Download size={15} /><span>导出</span></>}>

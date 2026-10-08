@@ -83,12 +83,12 @@ async function addNote(d: MobileDb, id: string, title: string, content: string, 
 }
 
 describe("mobile searchIndex（better-sqlite3 FTS5 验证）", () => {
-  it("非 doc（sheet/bitable/board）按 kind 派生搜索文本：不把 JSON 碎片塞进索引", async () => {
+  it("非 doc（usheet/bitable/board）按 kind 派生搜索文本：不把 JSON 碎片塞进索引", async () => {
     const d = makeDb();
-    const sheetBody = JSON.stringify({ kind: "sheet", version: 2, sheets: [{ name: "Sheet1", celldata: [{ r: 0, c: 0, v: { v: "季度预算表" } }, { r: 1, c: 0, v: { v: "差旅报销 1200" } }] }] });
+    const usheetBody = JSON.stringify({ kind: "usheet", version: 1, workbook: { id: "workbook", sheetOrder: ["s1"], sheets: { s1: { id: "s1", name: "Sheet1", cellData: { "0": { "0": { v: "季度预算表" } }, "1": { "0": { v: "差旅报销 1200" } } } } } } });
     const bitableBody = JSON.stringify({ kind: "bitable", version: 1, activeTableId: "t1", tables: [{ id: "t1", name: "持仓", fields: [{ id: "f1", name: "名称", type: "text" }], records: [{ id: "r1", values: { f1: "北斗七星持仓" }, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }], views: [{ id: "v1", type: "grid", name: "表格" }], activeViewId: "v1" }] });
     const boardBody = JSON.stringify({ kind: "board", version: 1, engine: "drawnix", preset: "drawing", elements: [{ id: "n1", type: "geometry", shape: "rectangle", text: { children: [{ text: "画板里的形状文字" }], type: "paragraph" } }] });
-    await addNote(d, "s1", "预算", sheetBody, "nb", "2026-01-01T00:00:00Z", "sheet");
+    await addNote(d, "s1", "预算", usheetBody, "nb", "2026-01-01T00:00:00Z", "usheet");
     await addNote(d, "b1", "持仓表", bitableBody, "nb", "2026-01-01T00:00:00Z", "bitable");
     await addNote(d, "p1", "我的画板", boardBody, "nb", "2026-01-01T00:00:00Z", "board");
     await reconcileIndex(d);

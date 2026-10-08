@@ -36,7 +36,7 @@ describe("usheetDoc", () => {
     expect(parseUsheetBody("")).toBeNull();
     expect(parseUsheetBody("not json")).toBeNull();
     expect(parseUsheetBody(JSON.stringify({ kind: "usheet", version: 2, workbook: {} }))).toBeNull();
-    expect(parseUsheetBody(JSON.stringify({ kind: "sheet", version: 1, workbook: {} }))).toBeNull();
+    expect(parseUsheetBody(JSON.stringify({ kind: "bitable", version: 1, workbook: {} }))).toBeNull();
     expect(parseUsheetBody(JSON.stringify({ kind: "usheet", version: 1, workbook: null }))).toBeNull();
   });
 

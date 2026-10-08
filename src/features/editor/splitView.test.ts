@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 const MULTITAB = read("./MultiTabEditor.tsx");
 const EDITORTAB = read("./EditorTab.tsx");
-const SHEET = read("../sheet/SheetEditor.tsx");
+const USHEET = read("../usheet/UniverSheetEditor.tsx");
 const BITABLE = read("../bitable/BitableEditor.tsx");
 const BOARD = read("../board/BoardEditor.tsx");
 const SPLITCSS = read("./splitView.css");
@@ -77,7 +77,7 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
   });
 
   it("data-active 全局唯一（焦点栏），右栏靠 data-pane-visible 显示", () => {
-    for (const host of [EDITORTAB, SHEET, BITABLE, BOARD]) {
+    for (const host of [EDITORTAB, USHEET, BITABLE, BOARD]) {
       expect(host).toContain("data-active={(focused ?? visible) ? \"true\" : undefined}");
       expect(host).toContain("data-pane-visible={visible ? \"true\" : undefined}");
       expect(host).toContain("data-pane={pane ?? undefined}");

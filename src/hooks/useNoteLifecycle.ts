@@ -87,34 +87,9 @@ export function useNoteLifecycle({
     await createNoteIn(notebookId);
   }
 
-  /** 新建表格文档（kind=sheet）：与文档同流程（进树、开 tab、可重命名），只是正文是 CE 快照 JSON。 */
-  async function createSheetIn(parentId: string | null) {
-    const note = await native.createSheetIn(parentId, "无标题表格");
-    setNotes((items) => [...items, summaryOf(note)]);
-    setTreeNodes(await native.listTreeNodes());
-    resetRevision(note.id, 0);
-    const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "sheet" };
-    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
-    setOpenTabs((tabs) => {
-      const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
-    });
-    if (evictedIds.length > 0) {
-      setPinnedNoteIds((prev) => {
-        const next = new Set(prev);
-        for (const ev of evictedIds) next.delete(ev);
-        return next.size === prev.size ? prev : next;
-      });
-      showNotice(`已自动关闭最旧的标签（上限 ${settingsMaxOpenTabs}）`);
-    }
-    setActiveNoteId(note.id);
-    setPendingRenameId(note.id);
-  }
-
-  /** 新建 Univer 表格文档（kind=usheet）：与 kind=sheet 并存；正文是 Univer IWorkbookData 快照 JSON。 */
+  /** 新建表格文档（kind=usheet）：正文是 Univer IWorkbookData 快照 JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createUsheetIn(parentId: string | null) {
-    const note = await native.createUsheetIn(parentId, "无标题表格（新）");
+    const note = await native.createUsheetIn(parentId, "无标题表格");
     setNotes((items) => [...items, summaryOf(note)]);
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
@@ -210,5 +185,5 @@ export function useNoteLifecycle({
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
-  return { handleContentChange, createNoteIn, createNote, createSheetIn, createUsheetIn, createBitableIn, createBoardIn, deleteTreeNode };
+  return { handleContentChange, createNoteIn, createNote, createUsheetIn, createBitableIn, createBoardIn, deleteTreeNode };
 }

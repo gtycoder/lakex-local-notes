@@ -25,7 +25,6 @@ const FILES = [
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
   "features/editor/selectionToolbar/selectionToolbar.css",
   "features/editor/splitView.css",   // 261008：文档分屏布局（两列 grid + 分隔条定位 + 右栏控件）
-  "features/sheet/sheetEditor.css",
   "features/usheet/usheetEditor.css",   // 261009：Univer 表格（kind=usheet）编辑器容器（分包自有样式）
   "components/colorPalette.css",   // 261008：统一选色盘（从多维表 CSS 移出，表格/多维表共用）
   "components/historySnapshotPreview.css",
@@ -88,27 +87,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260924 续：图片形态改内核卡片工具栏结构 + 云端顺序 ⇒ 删自有 menu/item/row/input/apply（-53），+4 外壳只定位；再 +45 = 图片弹窗（宽高/链接/边距）的 __cardpop 白卡 + 输入/复选/开关行 + 百分比段（均 --lake-* 令牌）；
   // 另：+18 = 浮栏 hover 说明（名称+快捷键）portal DOM 浮层；同批 -6 = 删「转为」下拉/heading 字形覆盖
   // 260924：+2 = 段落样式/字号去掉三角后，内核 .ne-ui-toolbar-select-value 固定 width:40px 需按内容收缩 + 收窄工具栏按钮内距（合法新增覆盖内核 legacy 层，非多层叠加）   // 260923 收敛：大纲样式从 feature.css/shell.css 并回本文件单一来源；再 -12 = 层级徽标改「两级语义+中性」，删掉 6 色相里 H3–H6 的 4 条规则   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）；260923 收敛：+2 + 删死 ::before —— 增强大纲样式从 feature.css 并回本文件单一来源（见下）
-  // 260919：换成 FortuneSheet；容器尺寸 + 工具栏紧凑 + 无样式输入框补边框（标签样式已按用户要求回滚）
-  // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）——合法新增，非覆盖回涨
-  // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
-  // 260921 续：+35 = 去掉浮动图后新增的单元格图片工具弹窗（11 条）+ 细滚动条（11 条）+ 色条裁切与定位基准（2 条）
-  //          —— 合法新增，非覆盖回涨
-  // 261008：表格暗色模式 —— 新增 69 条 = FortuneSheet DOM 外壳的浅色面/边/字/输入框映射到 --lake-* 令牌
-  //         （工具栏/浮层/工作表标签/选区/编辑框/遮罩/局部弹窗；第三方组件是「自有设计系统」的合法例外，
-  //          几何沿用内核、只换取值；canvas 侧见 patches/@fortune-sheet+{core,react}+1.0.4.patch）
-  // 261008 续：+4 = 换成云端 lakex 图标后把图标盒从内核的 24px 收到 18px、下拉箭头 12px（.fortune-toolbar-button/
-  //         -combo/-combo-arrow 的 width/height ×2 处；几何调整，非覆盖回涨；形状见 patches/ 与 §M）
-  //         +13 = 右键菜单图标位（.luckysheet-cols-menuicon 的定位/盒子 10 条 + 图标尺寸 2 条）
-  //               与右侧留白收窄 1 条（内核为子菜单箭头留 7em，我们没有子菜单）；均属第三方组件的合法覆盖
-  //         −3 = 冻结把手/改列宽抓手/冻结拖拽线退回内核默认色（不再染 --lake-accent，见文件内说明）
-  //         +5 = 选区同色收口（行列头指示线 2 条 + 延长/移动叠加框 2 条）+ 菜单焦点环收编 1 条；
-  //              前四条只改内核硬编码的 Luckysheet 蓝（#0188fb）为 --lake-accent，否则同一圈选区两种颜色
-  //         +3 = 工具条下拉项「图标在前、文案在后」（对齐云端）：flex-direction/justify-content/gap 各一条
-  // 261008：+1 = 表格字体接产品字体 —— `.sheet-editor .fortune-container / .luckysheet-input-box(-inner)` 一条 font-family
-  //        （内核 FortuneSheet CSS 是**未分层**的，未分层 > 任何 @layer ⇒ 只能像本文件其它内核覆盖一样用 .sheet-editor 提高特异性）
-  // 261008：+11 = 颜色按钮的下拉三角 `.sheet-color-caret`（命中区/圆角/三色 + hover 两态）—— 对齐 Lake 的分体交互
-  "features/sheet/sheetEditor.css": { decls: 168, dupGroups: 0 },
-  "features/usheet/usheetEditor.css": { decls: 9, dupGroups: 0 },   // 261009：Univer 表格分包自有容器几何（.usheet-editor 7 条 + .usheet-univer-root 2 条）——不依赖 sheetEditor.css（FortuneSheet 分包）   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
+  "features/usheet/usheetEditor.css": { decls: 9, dupGroups: 0 },   // 261009：Univer 表格分包自有容器几何（.usheet-editor 7 条 + .usheet-univer-root 2 条）——自有几何，不依赖任何表格内核样式
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   // 260929：-30 = 分组样式按职责移出（→ bitableViews.css）+ 表底「添加记录」旧样式删除（改用共用 .bt-add-round）+ 删掉已冗余的 .bt-panel-add 组合规则；实测 1051（重复组 0）
   "features/bitable/bitableEditor.css": { decls: 1032, dupGroups: 0 },   //  261006 Phase 2.2: +5 = .bt-input 并入字段原语口径（控件静息边 + 圆角令牌 + hover/focus），高度保持 30  // 260930：统一实色卡（70 色 + 最近使用 + 自定义）新增 52 条声明。此前：-63 = 图标钮与菜单项收编 kit；+6 = 列宽/行高；+1 placeholder；+1 select text-align；+8 数据表行操作浮动

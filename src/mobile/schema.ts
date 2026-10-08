@@ -43,7 +43,7 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
   await addNoteColumn("is_locked", "INTEGER NOT NULL DEFAULT 0");
   await addNoteColumn("locked_at", "TEXT");
   await addNoteColumn("icon", "TEXT");
-  // v6 文档类型（doc | sheet | bitable）：与桌面 notes.kind 对应，随 manifest 同步
+  // v6/v7 文档类型（doc | usheet | bitable | board）：与桌面 notes.kind 对应，随 manifest 同步
   await addNoteColumn("doc_kind", "TEXT NOT NULL DEFAULT 'doc'");
   await addNoteColumn("text_cache", "TEXT");
 

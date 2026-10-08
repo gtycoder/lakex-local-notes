@@ -72,8 +72,8 @@ textarea.ne-math-input,
 
 /* ---- 内核（lakex / antd / drawnix）**其余**硬编码字体栈：一律接产品字体（261008 全量排查） ----
  *
- * 排查方法：把两个真正被加载的第三方样式（`@dlient/lakex-doc-react/dist/style.css`、
- * `@fortune-sheet/react/dist/index.css`）里所有 font-family 规则抽出来逐条分类 ——
+ * 排查方法：把真正被加载的第三方样式（`@dlient/lakex-doc-react/dist/style.css`、
+ * Univer 的 preset 样式）里所有 font-family 规则抽出来逐条分类 ——
  * 属「等宽 / KaTeX 数学 / 图标字体（lake-icon）/ emoji」的保留（上面与下面各自处理），
  * 其余 UI 文本全部在这里收口。桌面走 layer(feature) > legacy 压过内核；移动端 font-overrides.css
  * 由 DocumentEditor 在内核 style.css **之后** import（无 @layer，靠顺序），同样生效。

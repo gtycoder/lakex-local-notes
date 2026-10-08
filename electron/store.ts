@@ -10,7 +10,6 @@ import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
 import type { AiSettings } from "../src/core/aiProviders.js";
-import { emptySheetBody } from "../src/core/sheetDoc.js";
 import { emptyUsheetBody } from "../src/core/usheetDoc.js";
 import { emptyBitableBody } from "../src/core/bitableDoc.js";
 import { emptyBoardBody } from "../src/core/boardDoc.js";
@@ -312,7 +311,6 @@ export class Store {
     if (!isSafePathSegment(id)) {
       throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     }
-    if (kind === "sheet") return path.join(this.root, "sheets", `${id}.sheet.json`);
     if (kind === "usheet") return path.join(this.root, "usheets", `${id}.usheet.json`);
     if (kind === "bitable") return path.join(this.root, "bitables", `${id}.bitable.json`);
     if (kind === "board") return path.join(this.root, "boards", `${id}.board.json`);
@@ -332,11 +330,11 @@ export class Store {
 
   /** 该类型是否有独立正文目录（用于「未登记残留」清理时逐个候选路径尝试）。 */
   private candidateBodyPaths(id: string): string[] {
-    const kinds: NoteKind[] = ["doc", "sheet", "usheet", "bitable", "board"];
+    const kinds: NoteKind[] = ["doc", "usheet", "bitable", "board"];
     return kinds.map((kind) => this.bodyPathFor(id, kind));
   }
 
-  /** 正文 → 搜索/缓存文本（按类型分派：doc 走 Lake HTML 解析，sheet 走单元格抽取，bitable v1 只索引标题）。 */
+  /** 正文 → 搜索/缓存文本（按类型分派：doc 走 Lake HTML 解析，usheet 走单元格抽取，bitable v1 只索引标题）。 */
   private searchTextFor(id: string, content: string): { markdown: string | null; plain: string | null } {
     const kind = this.kindOf(id);
     // 口径与移动端共用同一来源（src/core/noteSearchText.ts）
@@ -398,7 +396,7 @@ export class Store {
 
   private readTreeNode(id: string): TreeNode {
     // 与 listTreeNodes 共用同一 row 形状（LEFT JOIN notes 取 kind）——单节点回传绝不能丢 kind，
-    // 否则渲染层 replaceTreeNode() 会把 board/sheet/bitable 的图标退化成文档图标（刷新才恢复）。
+    // 否则渲染层 replaceTreeNode() 会把 board/usheet/bitable 的图标退化成文档图标（刷新才恢复）。
     return this.noteQueries.readTreeNode(id);
   }
 
@@ -428,15 +426,6 @@ export class Store {
   createNoteIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
     return this.createNoteInWithContent(parentId, title, emptyLakeBody(id), [], id, "bottom");
-  }
-
-  /**
-   * 新建表格文档（kind="sheet"）：正文是 `sheets/{id}.sheet.json`（CE 快照 JSON），
-   * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。
-   */
-  createSheetIn(parentId: string | null, title: string): NoteDocument {
-    const id = uuid();
-    return this.createNoteInWithContent(parentId, title, emptySheetBody(), [], id, "bottom", "sheet");
   }
 
   /** 新建 Univer 表格文档（kind="usheet"）：正文是 usheets/{id}.usheet.json（Univer IWorkbookData 快照）。 */

@@ -14,16 +14,16 @@ import { describe, expect, it } from "vitest";
 const SRC = readFileSync(new URL("./HistorySnapshotPreview.tsx", import.meta.url), "utf8");
 
 describe("历史快照只读编辑器预览", () => {
-  it("四个编辑器都懒加载（不额外增加首屏体积）", () => {
-    for (const mod of ["../features/sheet/SheetEditor", "../features/usheet/UniverSheetEditor", "../features/bitable/BitableEditor", "../features/board/BoardEditor"]) {
+  it("三个编辑器都懒加载（不额外增加首屏体积）", () => {
+    for (const mod of ["../features/usheet/UniverSheetEditor", "../features/bitable/BitableEditor", "../features/board/BoardEditor"]) {
       expect(SRC).toContain(`import("${mod}")`);
     }
-    expect((SRC.match(/lazy\(\(\) => import\(/g) ?? []).length).toBe(4);
+    expect((SRC.match(/lazy\(\(\) => import\(/g) ?? []).length).toBe(3);
   });
 
   it("一律只读 + onChange no-op（预览绝不写盘）", () => {
-    // 四个编辑器各出现一次 readOnly 与 onChange={noop}
-    expect((SRC.match(/readOnly onChange=\{noop\}/g) ?? []).length).toBe(4);
+    // 三个编辑器各出现一次 readOnly 与 onChange={noop}
+    expect((SRC.match(/readOnly onChange=\{noop\}/g) ?? []).length).toBe(3);
     expect(SRC).toMatch(/const noop = useMemo\(\(\) => \(\) => undefined, \[\]\)/);
   });
 
@@ -43,10 +43,10 @@ describe("历史快照只读编辑器预览", () => {
   it("预览里隐藏编辑器外壳（只读预览不要「半个编辑器」的观感）", () => {
     expect(SRC).toContain("showToolbar={false}");
     expect(SRC).toContain("chrome={false}");
-    const sheet = readFileSync(new URL("../features/sheet/SheetEditor.tsx", import.meta.url), "utf8");
+    const usheet = readFileSync(new URL("../features/usheet/UniverSheetEditor.tsx", import.meta.url), "utf8");
     const bitable = readFileSync(new URL("../features/bitable/BitableEditor.tsx", import.meta.url), "utf8");
-    expect(sheet).toMatch(/showToolbar\?: boolean;/);
-    expect(sheet).toContain("showToolbar={showToolbar}");
+    expect(usheet).toMatch(/showToolbar\?: boolean;/);
+    expect(usheet).toContain("toolbar: showToolbar");
     expect(bitable).toMatch(/chrome\?: boolean;/);
     // V01：视图页签栏按职责拆到 BitableViewBar，chrome 门控保持在同一位置
     expect(bitable).toMatch(/\{chrome && \(\s*<BitableViewBar/);
@@ -78,7 +78,7 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
 
   it("打开面板即预热预览分包（用历史列表里的 kind）", () => {
     expect(PANEL).toContain("function prefetchPreviewChunk(kind: NoteKind)");
-    expect(PANEL).toMatch(/import\("\.\.\/features\/sheet\/SheetEditor"\)/);
+    expect(PANEL).toMatch(/import\("\.\.\/features\/usheet\/UniverSheetEditor"\)/);
     expect(PANEL).toMatch(/prefetchPreviewChunk\(nextHistory\[0\]\?\.kind \?\? "doc"\)/);
   });
 

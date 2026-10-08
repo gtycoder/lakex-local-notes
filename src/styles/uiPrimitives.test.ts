@@ -76,7 +76,7 @@ describe("UI 原语门禁", () => {
  * 文档状态栏的落位门禁（260926）。
  *
  * 状态栏浮在正文右下，但**表格/画板正文自带底部控件**，浮上去就压住它们（用户各报过一次）：
- * - 表格：并入 sheet 底部那条常驻「选区统计」行（统计行常驻、让出实测宽度给状态栏）；
+ * - 表格：状态栏上移到 Univer 自有底栏正上方；
  * - 画板：满幅画布 + 画板自己的浮岛占着右上/右下/左中 ⇒ 状态栏改钉左下角。
  * 两侧必须成对存在（状态栏按 kind 定位 + 正文侧让位/让角），所以在这里一起卡住。
  */
@@ -87,15 +87,13 @@ describe("文档状态栏落位（按文档类型）", () => {
     expect(read("components/DesktopStatusBar.tsx")).toContain("data-doc-kind={docKind}");
   });
 
-  it("表格：状态栏并入 sheet 底部统计行（高度基线在 shell 层，变体必须同层）", () => {
+  it("表格：状态栏上移到 Univer 底栏正上方（高度基线在 shell 层，变体必须同层）", () => {
     const chrome = read("styles/chrome.css");
-    expect(chrome).toContain('.document-statusbar[data-doc-kind="sheet"] {');
-    const rule = chrome.slice(chrome.indexOf('.document-statusbar[data-doc-kind="sheet"] {'));
+    expect(chrome).toContain('.document-statusbar[data-doc-kind="usheet"] {');
+    const rule = chrome.slice(chrome.indexOf('.document-statusbar[data-doc-kind="usheet"] {'));
     const body = rule.slice(0, rule.indexOf("}"));
-    expect(body).toContain("bottom: 1px;");
-    expect(body).toContain("height: 22px;");   // = 内核统计行固定高度
-    // 统计行那一侧必须给它让位（否则右对齐的统计文字被压住）
-    expect(read("features/sheet/sheetEditor.css")).toContain("padding-right: var(--lake-sheet-status-w, 0px);");
+    expect(body).toContain("bottom: 41px;");   // = 1px 贴底 + Univer 36px 底栏 + 4px 缝
+    expect(body).toContain("height: 22px;");
   });
 
   it("画板：内核「主题选择」岛抬到状态栏上方（右下共存），且底距按状态栏几何派生", () => {

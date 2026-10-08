@@ -32,7 +32,7 @@ describe("活动标签判定：唯一来源 data-active（261005）", () => {
   it("4 种编辑器宿主都打 data-active", () => {
     const hosts: Array<[string, string]> = [
       ["EditorTab", read("./EditorTab.tsx")],
-      ["SheetEditor", read("../sheet/SheetEditor.tsx")],
+      ["UniverSheetEditor", read("../usheet/UniverSheetEditor.tsx")],
       ["BitableEditor", read("../bitable/BitableEditor.tsx")],
       ["BoardEditor", read("../board/BoardEditor.tsx")],
     ];

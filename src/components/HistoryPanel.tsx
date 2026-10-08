@@ -22,8 +22,7 @@ export interface HistoryItem {
  * ⇒ 第一次点快照不再等分包加载（第二次起本来就有缓存）。
  */
 function prefetchPreviewChunk(kind: NoteKind): void {
-  if (kind === "sheet") void import("../features/sheet/SheetEditor");
-  else if (kind === "usheet") void import("../features/usheet/UniverSheetEditor");
+  if (kind === "usheet") void import("../features/usheet/UniverSheetEditor");
   else if (kind === "bitable") void import("../features/bitable/BitableEditor");
   else if (kind === "board") void import("../features/board/BoardEditor");
 }

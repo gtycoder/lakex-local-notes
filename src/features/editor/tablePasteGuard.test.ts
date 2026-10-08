@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   TABLE_PASTE_MAX_CELLS, TABLE_PASTE_MAX_ROWS, countHtmlTable, noteRefCardHtml, onOversizeTablePaste,
-  oversizeTableShape, parseHtmlTableToSheetBody, sheetDocTitle, emitOversizeTablePaste, shouldGuardOversizePaste,
+  oversizeTableShape, parseHtmlTableToUsheetBody, usheetDocTitle, emitOversizeTablePaste, shouldGuardOversizePaste,
 } from "./tablePasteGuard";
 
 // ⚠️ jsdom 环境下 import.meta.url 是 http:// ⇒ 不能给 readFileSync；源码护栏走 cwd 相对路径。
@@ -38,22 +38,22 @@ describe("大表格粘贴护栏：纯逻辑", () => {
     expect(oversizeTableShape("<p>没有表格</p>")).toBeNull();
   });
 
-  it("解析成表格文档正文（kind=sheet v2，含 row/column 与 celldata）", () => {
-    const body = parseHtmlTableToSheetBody(table(2, 2));
+  it("解析成表格文档正文（kind=usheet v1，Univer workbook）", () => {
+    const body = parseHtmlTableToUsheetBody(table(2, 2));
     expect(body).toBeTruthy();
     const doc = JSON.parse(body!);
-    expect(doc.kind).toBe("sheet");
-    expect(doc.version).toBe(2);
-    expect(doc.sheets[0].row).toBe(2);
-    expect(doc.sheets[0].column).toBe(2);
-    expect(doc.sheets[0].celldata).toHaveLength(4);
-    expect(doc.sheets[0].celldata[0].v.m).toContain("第1行1列");
-    expect(doc.sheets[0].celldata[0].v.tb).toBe("2");
-    expect(parseHtmlTableToSheetBody("<p>无表</p>")).toBeNull();
+    expect(doc.kind).toBe("usheet");
+    expect(doc.version).toBe(1);
+    const sheet = doc.workbook.sheets.s1;
+    expect(sheet.cellData["0"]["0"].v).toContain("第1行1列");
+    expect(sheet.cellData["1"]["1"].v).toContain("第2行2列");
+    expect(sheet.rowCount).toBe(100); // Math.max(100, 2)
+    expect(sheet.columnCount).toBe(26); // Math.max(26, 2)
+    expect(parseHtmlTableToUsheetBody("<p>无表</p>")).toBeNull();
   });
 
   it("标题与卡片 HTML（内核认的 ne-custom-card 形态）", () => {
-    expect(sheetDocTitle({ rows: 5500, cells: 33000 }, Date.UTC(2026, 9, 8))).toContain("5500 行");
+    expect(usheetDocTitle({ rows: 5500, cells: 33000 }, Date.UTC(2026, 9, 8))).toContain("5500 行");
     const html = noteRefCardHtml({ noteId: "n-1", title: "被引用表格" });
     expect(html).toContain('class="ne-custom-card"');
     expect(html).toContain('data-custom-name="lake-note-ref"');
@@ -96,7 +96,7 @@ describe("大表格粘贴护栏：接线", () => {
     expect(DIALOG).toContain("粘贴的表格过大");
     expect(DIALOG).toContain("存为表格文档");
     expect(DIALOG).toContain("阻止本次粘贴");
-    expect(DIALOG).toContain("native.createSheetIn(parentId, title)");
+    expect(DIALOG).toContain("native.createUsheetIn(parentId, title)");
     expect(DIALOG).toContain("insertAtPosition");
     expect(DIALOG).toContain("noteRefCardHtml(");
     expect(APP).toContain("<TablePasteGuardDialog parentId=");

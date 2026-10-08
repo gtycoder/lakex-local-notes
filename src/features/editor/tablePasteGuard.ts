@@ -13,6 +13,7 @@
  * 本文件 = 纯逻辑（阈值 / 计数 / 解析成表格正文 / 卡片 HTML / 事件通道），UI 在
  * `TablePasteGuardDialog.tsx`。
  */
+import { usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc";
 import { NOTE_REF_CARD_NAME, type NoteRefValue } from "./noteRef";
 
 /**
@@ -40,7 +41,7 @@ export function countHtmlTable(html: string): TableShape | null {
 }
 
 /** 网格类编辑器（自己按网格处理大表粘贴，**不该**被 Lake 文档的护栏拦）：
- *  usheet（Univer）/ sheet（FortuneSheet）/ bitable / board。 */
+ *  usheet（Univer，宿主同时带 .sheet-editor 别名类）/ bitable / board。 */
 const GRID_EDITOR_SELECTOR = ".usheet-editor, .sheet-editor, .bitable-editor, .board-editor";
 
 /**
@@ -62,39 +63,44 @@ export function oversizeTableShape(html: string): TableShape | null {
   return shape.rows > TABLE_PASTE_MAX_ROWS || shape.cells > TABLE_PASTE_MAX_CELLS ? shape : null;
 }
 
-/** 把 HTML 表格解析成「表格」文档正文（kind=sheet v2；与 `core/sheetDoc.ts` 同格式）。 */
-export function parseHtmlTableToSheetBody(html: string): string | null {
+/** 把 HTML 表格解析成「表格」文档正文（kind=usheet v1；与 `core/usheetDoc.ts` 同格式）。 */
+export function parseHtmlTableToUsheetBody(html: string): string | null {
   try {
     const parsed = new DOMParser().parseFromString(html, "text/html");
     const table = parsed.querySelector("table");
     if (!table) return null;
     const trs = Array.from(table.querySelectorAll("tr"));
     if (trs.length === 0) return null;
-    const celldata: Array<{ r: number; c: number; v: Record<string, unknown> }> = [];
+    const cellData: Record<string, Record<string, { v: string }>> = {};
     let maxCols = 0;
+    let nonEmpty = 0;
     trs.forEach((tr, r) => {
       const tds = Array.from(tr.querySelectorAll("td,th"));
       maxCols = Math.max(maxCols, tds.length);
       tds.forEach((td, c) => {
         const text = (td.textContent ?? "").trim();
         if (!text) return;
-        celldata.push({ r, c, v: { v: text, m: text, tb: "2", ct: { fa: "General", t: "g" } } });
+        (cellData[String(r)] ??= {})[String(c)] = { v: text };
+        nonEmpty += 1;
       });
     });
-    if (celldata.length === 0) return null;
-    const body = {
-      kind: "sheet",
-      version: 2,
-      sheets: [{ name: "Sheet1", id: "sheet-1", status: 1, order: 0, celldata, config: {}, row: trs.length, column: Math.max(1, maxCols) }],
+    if (nonEmpty === 0) return null;
+    const workbook: UsheetWorkbook = {
+      id: "workbook",
+      name: "表格",
+      sheetOrder: ["s1"],
+      sheets: {
+        s1: { id: "s1", name: "Sheet1", rowCount: Math.max(100, trs.length), columnCount: Math.max(26, maxCols), defaultColumnWidth: 88, defaultRowHeight: 24, cellData },
+      },
     };
-    return JSON.stringify(body);
+    return usheetToBody(workbook);
   } catch {
     return null;
   }
 }
 
 /** 新表格文档的标题：带来源与规模，便于在树里认出来。 */
-export function sheetDocTitle(shape: TableShape, at: number): string {
+export function usheetDocTitle(shape: TableShape, at: number): string {
   return `粘贴的表格 ${shape.rows} 行 × ${shape.cells} 格（${new Date(at).toLocaleString("zh-CN")}）`;
 }
 

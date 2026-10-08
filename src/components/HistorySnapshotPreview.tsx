@@ -1,5 +1,5 @@
 /**
- * 历史快照预览（kind = sheet / bitable / board）。
+ * 历史快照预览（kind = usheet / bitable / board）。
  *
  * doc 的快照走只读 Lake viewer（调用方分支，本组件不处理）。
  * 非 doc 的正文是内部 JSON，**图片只有编辑器认识**（表格单元格图片按 filename 拼资产 URL、多维表附件
@@ -18,7 +18,6 @@ import type { NoteKind } from "../core/noteKind.js";
 import "./historySnapshotPreview.css";
 
 /** 与 MultiTabEditor 同款懒加载：预览与正式编辑共用同一份分包，不额外增加首屏体积。 */
-const SheetEditor = lazy(() => import("../features/sheet/SheetEditor").then((m) => ({ default: m.SheetEditor })));
 const BitableEditor = lazy(() => import("../features/bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
 const BoardEditor = lazy(() => import("../features/board/BoardEditor").then((m) => ({ default: m.BoardEditor })));
 const UniverSheetEditor = lazy(() => import("../features/usheet/UniverSheetEditor").then((m) => ({ default: m.UniverSheetEditor })));
@@ -26,7 +25,7 @@ const UniverSheetEditor = lazy(() => import("../features/usheet/UniverSheetEdito
 export interface HistorySnapshotPreviewProps {
   kind: NoteKind;
   noteId: string;
-  /** 快照正文（sheet/bitable/board 的内部 JSON）。 */
+  /** 快照正文（usheet/bitable/board 的内部 JSON）。 */
   body: string;
   /** 快照 id：作为编辑器的 key ⇒ 切快照重挂（一个实例槽位），同时用于错误边界复位。 */
   snapshotId: number | string;
@@ -122,9 +121,7 @@ export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: Histo
         <PreviewErrorBoundary fallback={<StructuredBlocks blocks={blocks} />}>
           {/* key = 快照 id：切快照重挂，始终只有一个编辑器实例 */}
           <Suspense key={snapshotId} fallback={<p className="snapshot-preview__hint">正在加载预览…</p>}>
-            {kind === "sheet" ? (
-              <SheetEditor noteId={noteId} content={body} visible readOnly onChange={noop} showToolbar={false} />
-            ) : kind === "usheet" ? (
+            {kind === "usheet" ? (
               <UniverSheetEditor noteId={noteId} content={body} visible readOnly onChange={noop} showToolbar={false} />
             ) : kind === "bitable" ? (
               <BitableEditor noteId={noteId} content={body} visible readOnly onChange={noop} chrome={false} />

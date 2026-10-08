@@ -28,7 +28,6 @@ import type { POCNote } from "../noteRepository";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
 /** 表格/多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
-const MobileSheetViewer = lazy(() => import("../sheet/MobileSheetViewer").then((m) => ({ default: m.MobileSheetViewer })));
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
 export interface NotebookTreeItem {
   id: string;
@@ -41,7 +40,7 @@ export interface NotebookTreeItem {
 import type { TreeNode } from "../../lib/types";
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
-interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "sheet" | "bitable" | "board"; }
+interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "usheet" | "bitable" | "board"; }
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -607,11 +606,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               // 多维表：移动端只读视图（同一份 core 数据模型求值，绝不写库）
               <Suspense fallback={<div className="mobile-empty">正在加载多维表…</div>}>
                 <MobileBitableViewer noteId={t.id} content={t.content} />
-              </Suspense>
-            ) : t.kind === "sheet" ? (
-              // 表格：移动端只读网格（共享 core 正文模型；不求值公式、不渲染单元格图片）
-              <Suspense fallback={<div className="mobile-empty">正在加载表格…</div>}>
-                <MobileSheetViewer noteId={t.id} content={t.content} />
               </Suspense>
             ) : t.kind !== "doc" ? (
               // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。

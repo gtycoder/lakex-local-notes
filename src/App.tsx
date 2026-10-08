@@ -178,7 +178,7 @@ export function App() {
     return () => setNoteRefHost(null);
   }, [notes, openNote, treeNodes]);
 
-  const { handleContentChange, createNoteIn, createNote, createSheetIn, createUsheetIn, createBitableIn, createBoardIn, deleteTreeNode } = useNoteLifecycle({
+  const { handleContentChange, createNoteIn, createNote, createUsheetIn, createBitableIn, createBoardIn, deleteTreeNode } = useNoteLifecycle({
     bumpRevision,
     resetRevision,
     clearNote,
@@ -342,7 +342,7 @@ export function App() {
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   } = useTreeActions({
-    createNoteIn, createSheetIn, createUsheetIn, createBitableIn, createBoardIn, openNote, setNodeIcon, treeNodes,
+    createNoteIn, createUsheetIn, createBitableIn, createBoardIn, openNote, setNodeIcon, treeNodes,
     setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
     setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
     setPendingRenameId, setError,

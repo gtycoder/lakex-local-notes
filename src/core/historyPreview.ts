@@ -1,18 +1,17 @@
 /**
  * 历史快照的**结构化预览模型**（260926）。
  *
- * 背景：doc 快照正文是 Lake HTML（只读 viewer 渲染即可）；而 sheet / bitable / board 的正文是**内部 JSON**，
+ * 背景：doc 快照正文是 Lake HTML（只读 viewer 渲染即可）；而 usheet / bitable / board 的正文是**内部 JSON**，
  * 喂 HTML 解析器只会得到一堆 JSON 碎片（用户报「历史快照预览还是 json 格式」）。
  *
  * 这里把三类 JSON 正文派生为**纯数据模型**：不碰 DOM、不挂编辑器、不加载任何大分包
- * （对比：挂 readOnly 编辑器要付 FortuneSheet ≈2.7MB / Drawnix ≈511KB 的分包与 canvas 语义）。
+ * （对比：挂 readOnly 编辑器要付 Univer ≈数 MB / Drawnix ≈511KB 的分包与 canvas 语义）。
  * 与搜索索引同一口径：复用各领域既有的 parse* / displayValue，不另写解析。
  * 渲染由 `src/components/HistorySnapshotPreview.tsx` 负责（桌面历史面板与单据属性弹窗共用）。
  */
 import { boardToSearchText, parseBoardBody } from "./boardDoc.js";
 import { bitableFieldText, parseBitableBody } from "./bitableDoc.js";
 import type { NoteKind } from "./noteKind.js";
-import { parseSheetBody } from "./sheetDoc.js";
 import { parseUsheetBody } from "./usheetDoc.js";
 
 /** 预览模型：块级（事实清单 / 小表格 / 文本 / 提示），渲染层逐块画。 */
@@ -34,19 +33,7 @@ function clip(value: string, max = CELL_MAX): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-/** 0 → A、25 → Z、26 → AA（表格列名，与内核一致）。 */
-function columnName(index: number): string {
-  let name = "";
-  let n = index;
-  do {
-    name = String.fromCharCode(65 + (n % 26)) + name;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return name;
-}
-
 export function snapshotPreview(kind: NoteKind, body: string): SnapshotPreviewBlock[] {
-  if (kind === "sheet") return sheetPreview(body);
   if (kind === "usheet") return usheetPreview(body);
   if (kind === "bitable") return bitablePreview(body);
   if (kind === "board") return boardPreview(body);
@@ -62,51 +49,6 @@ function usheetPreview(body: string): SnapshotPreviewBlock[] {
   let cells = 0;
   for (const sheet of sheets) for (const row of Object.values(sheet.cellData ?? {})) cells += Object.keys(row).length;
   return [{ type: "facts", items: [["工作表", `${sheets.length} 个`], ["非空单元格", `${cells} 个`]] }];
-}
-
-/** 表格（kind=sheet）：工作表数 + 各表前几行×前几列（取 sparse celldata）。 */
-function sheetPreview(body: string): SnapshotPreviewBlock[] {
-  const doc = parseSheetBody(body);
-  if (!doc) return [{ type: "empty", text: "无法解析这份表格快照（可能是较早的格式）。" }];
-  const blocks: SnapshotPreviewBlock[] = [];
-  let cellCount = 0;
-  for (const sheet of doc.sheets) cellCount += (sheet.celldata ?? []).length;
-  blocks.push({ type: "facts", items: [["工作表", `${doc.sheets.length} 个`], ["非空单元格", `${cellCount} 个`]] });
-  if (doc.sheets.length > MAX_SHEETS) {
-    blocks.push({ type: "empty", text: `仅预览前 ${MAX_SHEETS} 个工作表（共 ${doc.sheets.length} 个）。` });
-  }
-  for (const sheet of doc.sheets.slice(0, MAX_SHEETS)) {
-    // 实际范围按"有内容的格子"算（FortuneSheet 的 row/column 只是网格下限）
-    let maxRow = -1;
-    let maxCol = -1;
-    const cells = new Map<string, string>();
-    for (const cell of sheet.celldata ?? []) {
-      if (!Number.isFinite(cell.r) || !Number.isFinite(cell.c)) continue;
-      const raw = cell.v?.m ?? cell.v?.v;
-      if (raw == null || raw === "") continue;
-      cells.set(`${cell.r}:${cell.c}`, clip(String(raw)));
-      if (cell.r > maxRow) maxRow = cell.r;
-      if (cell.c > maxCol) maxCol = cell.c;
-    }
-    if (maxRow < 0 || maxCol < 0) {
-      blocks.push({ type: "empty", text: `「${sheet.name}」是空表。` });
-      continue;
-    }
-    const rowCount = maxRow + 1;
-    const colCount = maxCol + 1;
-    const head = Array.from({ length: Math.min(colCount, MAX_COLS) }, (_, c) => columnName(c));
-    const rows = Array.from({ length: Math.min(rowCount, MAX_ROWS) }, (_, r) =>
-      Array.from({ length: head.length }, (_, c) => cells.get(`${r}:${c}`) ?? "")
-    );
-    blocks.push({
-      type: "table",
-      title: sheet.name,
-      head,
-      rows,
-      more: `共 ${rowCount} 行 × ${colCount} 列${rowCount > MAX_ROWS || colCount > MAX_COLS ? `（预览前 ${rows.length} × ${head.length}）` : ""}`,
-    });
-  }
-  return blocks;
 }
 
 /** 多维表（kind=bitable）：每张数据表的字段与头几条记录。 */

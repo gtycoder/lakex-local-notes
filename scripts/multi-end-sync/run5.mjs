@@ -73,12 +73,12 @@ const tree = await ev('D1', 'window.lakeNative.listTreeNodes()');
 const nbId = (tree.find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
 const sfx = String(Date.now()).slice(-6);
 const doc = await ev('D1', 'window.lakeNative.createNoteIn(' + JSON.stringify(nbId) + ', "p1-doc-' + sfx + '")');
-const sheet = await ev('D1', 'window.lakeNative.createSheetIn(' + JSON.stringify(nbId) + ', "p1-sheet-' + sfx + '")');
+const sheet = await ev('D1', 'window.lakeNative.createUsheetIn(' + JSON.stringify(nbId) + ', "p1-usheet-' + sfx + '")');
 const bitable = await ev('D1', 'window.lakeNative.createBitableIn(' + JSON.stringify(nbId) + ', "p1-bitable-' + sfx + '")');
 const board = await ev('D1', 'window.lakeNative.createBoardIn(' + JSON.stringify(nbId) + ', "p1-board-' + sfx + '")');
 const quick1 = await ev('D1', 'window.lakeNative.createQuickNote({text:"p1-quick-' + sfx + '", draftId:"p1-' + sfx + '", stagedImageIds:[]})');
 console.log('  ids: doc=' + doc.id.slice(0,8) + ' sheet=' + sheet.id.slice(0,8) + ' bitable=' + bitable.id.slice(0,8) + ' board=' + board.id.slice(0,8) + ' quick=' + quick1.id.slice(0,8));
-const cases = [{ id: doc.id, kind: 'doc' }, { id: sheet.id, kind: 'sheet' }, { id: bitable.id, kind: 'bitable' }, { id: board.id, kind: 'board' }];
+const cases = [{ id: doc.id, kind: 'doc' }, { id: sheet.id, kind: 'usheet' }, { id: bitable.id, kind: 'bitable' }, { id: board.id, kind: 'board' }];
 await syncAll('D1');
 for (const id of IDS) {
   const ns = await notes(id);

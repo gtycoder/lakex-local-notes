@@ -63,11 +63,11 @@ const sfx = String(Date.now()).slice(-6);
 const nbId = ((await ev('D1', 'window.lakeNative.listTreeNodes()')).find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
 
 console.log('== Phase 11: non-doc content byte-equality across ends ==');
-const sheet = await ev('D1', 'window.lakeNative.createSheetIn(' + JSON.stringify(nbId) + ', "p11-sheet-' + sfx + '")');
+const usheet = await ev('D1', 'window.lakeNative.createUsheetIn(' + JSON.stringify(nbId) + ', "p11-usheet-' + sfx + '")');
 const bitable = await ev('D1', 'window.lakeNative.createBitableIn(' + JSON.stringify(nbId) + ', "p11-bitable-' + sfx + '")');
 const board = await ev('D1', 'window.lakeNative.createBoardIn(' + JSON.stringify(nbId) + ', "p11-board-' + sfx + '")');
 await syncAll('D1');
-for (const c of [{ n: sheet, k: 'sheet' }, { n: bitable, k: 'bitable' }, { n: board, k: 'board' }]) {
+for (const c of [{ n: usheet, k: 'usheet' }, { n: bitable, k: 'bitable' }, { n: board, k: 'board' }]) {
   const ref = await contentOf('D1', c.n.id);
   let allEq = ref.length > 0;
   for (const id of IDS) { const x = await contentOf(id, c.n.id); if (x !== ref) { allEq = false; check(id + ' ' + c.k + ' content bytes', false, 'len=' + x.length + ' vs ' + ref.length); } }

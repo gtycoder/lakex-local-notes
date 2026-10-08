@@ -69,7 +69,7 @@ async function flushIndexStatements(d: MobileDb, statements: IndexStatement[]): 
 
 async function writeIndexRow(d: MobileDb, row: NoteRow, prev: LedgerRow | undefined): Promise<void> {
   const title = row.title ?? "";
-  // 优先编辑器写入的纯文本缓存（与桌面同源）；缺失时**按 kind 派生**（sheet/bitable/board 是 JSON 正文，
+  // 优先编辑器写入的纯文本缓存（与桌面同源）；缺失时**按 kind 派生**（usheet/bitable/board 是 JSON 正文，
   // 直接 lakeHtmlToPlain 会把 JSON 碎片塞进索引 —— 与桌面 Store.searchTextFor 口径统一）。
   const plain = row.text_cache ?? searchTextForKind(normalizeNoteKind(row.doc_kind), row.content ?? "").plain ?? "";
   const titleHash = hashText(title);

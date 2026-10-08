@@ -7,8 +7,8 @@ for (const p of ports) {
     const inv = await c.ev("Promise.resolve(window.lakeNative.listNotes ? window.lakeNative.listNotes() : null).then(n => n ? n.length : null)");
     const tree = await c.ev("window.lakeNative.listTreeNodes().then(t => t.length)");
     const quick = await c.ev("window.lakeNative.listQuickNotes().then(q => q.length)");
-    const hasCreateSheet = await c.ev("typeof window.lakeNative.createSheetIn === 'function'");
-    console.log(labels[p] + " notes=" + inv + " tree=" + tree + " quick=" + quick + " createSheet=" + hasCreateSheet);
+    const hasCreateUsheet = await c.ev("typeof window.lakeNative.createUsheetIn === 'function'");
+    console.log(labels[p] + " notes=" + inv + " tree=" + tree + " quick=" + quick + " createUsheet=" + hasCreateUsheet);
   } catch (e) { console.log(labels[p] + " ERR " + e.message); }
 }
 process.exit(0);

@@ -4,10 +4,8 @@
  * 做法：把**真正被加载**的两个第三方样式里出现的每一种 font-family 值都登记成「已分类」，三者必居其一：
  *  · special —— 功能性字形，**故意不动**（KaTeX 数学、emoji、湖图标 iconfont、inherit）；
  *  · mono    —— 等宽语义，统一到 --lake-font-family-mono（JetBrains Mono）；
- *  · unified —— UI 文本，统一到 --lake-font-family（MiSans）；marker = 我们在 font-overrides.css 或
- *               features/sheet/sheetEditor.css 里用来接管的**选择器片段**。两处覆盖策略不同：
- *               lakex/antd/drawnix 走 layer(feature) > legacy；FortuneSheet 的 CSS 未分层，
- *               只能在未分层的 sheetEditor.css 里用 .sheet-editor 提高特异性。
+ *  · unified —— UI 文本，统一到 --lake-font-family（MiSans）；marker = 我们在 font-overrides.css 里用来接管的**选择器片段**。
+ *               覆盖策略：lakex/antd/drawnix 走 layer(feature) > legacy。
  *
  * ⇒ 内核升级换字体栈、或有人删掉某条覆盖，这里都会红。
  * ⚠️ 新增例外必须先判定「是不是功能性字形」，再往表里加 —— 不要为了让测试过而改分类。
@@ -17,9 +15,8 @@ import { describe, expect, it } from "vitest";
 
 const THIRD_PARTY = [
   "../../../node_modules/@dlient/lakex-doc-react/dist/style.css",
-  "../../../node_modules/@fortune-sheet/react/dist/index.css",
 ];
-const OUR_OVERRIDES = ["../fonts/font-overrides.css", "../../features/sheet/sheetEditor.css"];
+const OUR_OVERRIDES = ["../fonts/font-overrides.css"];
 
 /** 归一化：去引号 + 逗号后不留空格 + 折叠空白 + 小写（两个第三方的引号/换行写法不同）。 */
 const norm = (value: string) =>
@@ -57,12 +54,9 @@ const CLASSIFIED: Entry[] = [
   ["13px/1.55 ui-monospace,sfmono-regular,menlo,monospace", "mono", ".mindmap-import-textarea"],
   // —— UI 文本 → MiSans ——
   ["sans-serif", "unified", "html, body"],
-  ["normal normal 400 13px arial,sans,sans-serif", "unified", ".sheet-editor .luckysheet-input-box"],
-  ["arial", "unified", ".sheet-editor .fortune-toolbar-subtext"],
   ["arial,helvetica,sans-serif", "unified", ".ant-pagination-jump-prev .ant-pagination-item-container .ant-pagination-item-ellipsis"],
   ["simsun,sans-serif", "unified", ".ant-form-item-required"],
   ["helvetica neue,consolas", "unified", ".ne-toc-sidebar-hover .ne-toc-view .ne-toc-item span.prefix"],
-  ["helvetica neue,helvetica,arial,pingfang sc,hiragino sans gb,heiti sc,microsoft yahei,wenquanyi micro hei,sans-serif", "unified", ".sheet-editor .fortune-container"],
   ["chinese quote,segoe ui,pingfang sc,hiragino sans gb,microsoft yahei,helvetica neue,helvetica,arial,sans-serif", "unified", ".ne-engine"],
   ["pingfang sc,hiragino sans gb,microsoft yahei,helvetica neue,helvetica,arial,sans-serif,segoe ui", "unified", ".ne-paragraph-spacing-relax.ne-typography-classic"],
   ["-apple-system,blinkmacsystemfont,segoe ui,roboto,helvetica neue,arial,noto sans,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol,noto color emoji", "unified", ".ant-statistic-content"],

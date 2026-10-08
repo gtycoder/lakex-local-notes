@@ -164,7 +164,7 @@ describe("bitableDoc 数据模型", () => {
     expect(parseBitableBody(null)).toBeNull();
     expect(parseBitableBody(undefined)).toBeNull();
     expect(parseBitableBody("not json")).toBeNull();
-    expect(parseBitableBody(JSON.stringify({ kind: "sheet", version: 2, sheets: [] }))).toBeNull();
+    expect(parseBitableBody(JSON.stringify({ kind: "usheet", version: 2, sheets: [] }))).toBeNull();
     expect(parseBitableBody(JSON.stringify({ kind: "bitable", version: 99, tables: [] }))).toBeNull();
     expect(parseBitableBody(JSON.stringify({ kind: "bitable", version: 1, tables: [] }))).toBeNull();
   });

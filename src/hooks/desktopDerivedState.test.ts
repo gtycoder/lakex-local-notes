@@ -37,13 +37,13 @@ function input(openTabs: DesktopViewInput["openTabs"]): DesktopViewInput {
 }
 
 describe("deriveDesktopView — tabInfos 文档类型透传", () => {
-  it("kind=sheet 必须原样带出（否则表格被当成 Lake 文档渲染）", () => {
+  it("kind=usheet 必须原样带出（否则表格被当成 Lake 文档渲染）", () => {
     const { tabInfos } = deriveDesktopView(input([
-      { noteId: "s1", title: "无标题表格", content: "{}", dirty: false, lastAccessedAt: 0, kind: "sheet" },
+      { noteId: "s1", title: "无标题表格", content: "{}", dirty: false, lastAccessedAt: 0, kind: "usheet" },
       { noteId: "d1", title: "文档", content: "", dirty: false, lastAccessedAt: 0, kind: "doc" },
       { noteId: "b1", title: "多维表", content: "{}", dirty: false, lastAccessedAt: 0, kind: "bitable" },
     ]));
-    expect(tabInfos.map((t) => t.kind)).toEqual(["sheet", "doc", "bitable"]);
+    expect(tabInfos.map((t) => t.kind)).toEqual(["usheet", "doc", "bitable"]);
   });
 
   it("kind 缺省时归一为 doc（旧标签无类型字段）", () => {

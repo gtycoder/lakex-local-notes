@@ -9,7 +9,7 @@
  *   与 `cardHeight` 在独立文档里没有意义 —— 收到就丢，绝不写进正文。
  * - **视口走 ref、不回灌 value**：pan/zoom 是视图状态不是内容，用 `onViewportPersist` 被动记录，
  *   只在真的保存时把当前视口一并写进正文（保住 260916「拖一下画布不该触发保存」的结论）。
- * - keep-alive：首次可见前不挂载画布（隐藏态量到 0 尺寸会画不出来，与 SheetEditor 同因）。
+ * - keep-alive：首次可见前不挂载画布（隐藏态量到 0 尺寸会画不出来，与 UniverSheetEditor 同因）。
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadDrawnixBoardCore } from "@dlient/lakex-doc-react";

@@ -60,7 +60,6 @@ contextBridge.exposeInMainWorld("lakeNative", {
   createGroup: (parentId, title) => invoke("create_group", parentId, title),
   renameTreeNode: (id, title) => invoke("rename_tree_node", id, title),
   createNoteIn: (parentId, title) => invoke("create_note_in", parentId, title),
-  createSheetIn: (parentId, title) => invoke("create_sheet_in", parentId, title),
   createUsheetIn: (parentId, title) => invoke("create_usheet_in", parentId, title),
   createBitableIn: (parentId, title) => invoke("create_bitable_in", parentId, title),
   createBoardIn: (parentId, title) => invoke("create_board_in", parentId, title),

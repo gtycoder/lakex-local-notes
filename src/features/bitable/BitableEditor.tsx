@@ -843,7 +843,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
    * 底部汇总栏（底栏）是这套表格最底下的一条；文档状态栏要塞进它**正上方**（用户 260929 定稿：
    * 底栏必须是最底下那条，且不能被状态栏压住）。底栏上沿不是常数——它会随「有没有横向滚动条」
    * 上下浮动（滚动条吃掉内容盒高度；多维表列多，几乎总是有），所以在 CSS 里猜高度必然错位。
-   * 这里实测一次写进 CSS 变量交给 chrome.css 消费，姿势与 SheetEditor 写 `--lake-sheet-status-w` 一致。
+   * 这里实测一次写进 CSS 变量交给 chrome.css 消费，姿势与 UniverSheetEditor 的状态栏让位一致。
    */
   useEffect(() => {
     if (!visible) return;

@@ -381,11 +381,11 @@ describe("目录树操作", () => {
   });
 
   it("非 doc（表格）导出被 kind 守卫拦截（HTML/PDF/资料包）", () => {
-    const sheet = store.createSheetIn(null, "表格导出守卫");
+    const usheet = store.createUsheetIn(null, "表格导出守卫");
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-kind-"));
-    expect(() => store.exportHtmlNote(sheet.id, base)).toThrow(/表格文档暂不支持导出/);
-    expect(() => store.exportPdfHtml(sheet.id, base)).toThrow(/表格文档暂不支持导出/);
-    expect(() => store.exportNotePackage(sheet.id, base)).toThrow(/表格文档暂不支持导出/);
+    expect(() => store.exportHtmlNote(usheet.id, base)).toThrow(/表格文档暂不支持导出/);
+    expect(() => store.exportPdfHtml(usheet.id, base)).toThrow(/表格文档暂不支持导出/);
+    expect(() => store.exportNotePackage(usheet.id, base)).toThrow(/表格文档暂不支持导出/);
     fs.rmSync(base, { recursive: true, force: true });
   });
 
@@ -418,15 +418,15 @@ describe("目录树操作", () => {
 
   it("元数据写操作回传的节点必须保留 kind（rename/setNodeIcon/move）—— 否则画板/表格图标退化成文档图标", () => {
     // 回归：readTreeNode 曾只 SELECT tree_nodes（缺 note_kind）⇒ mapTreeNode 把 kind 兜底成 doc，
-    // 渲染层 replaceTreeNode(返回值) 会把 correct 的 board/sheet/bitable 换成 File 图标，直到下次 listTreeNodes 刷新。
+    // 渲染层 replaceTreeNode(返回值) 会把 correct 的 board/usheet/bitable 换成 File 图标，直到下次 listTreeNodes 刷新。
     const board = store.createBoardIn(null, "画板");
     expect(store.renameTreeNode(board.id, "画板改名").kind).toBe("board");
     expect(store.setNodeIcon(board.id, "🎨").kind).toBe("board");
     const nb = store.createNotebook("移动目标本");
     expect(store.moveTreeNode(board.id, nb.id, 0).kind).toBe("board");
 
-    const sheet = store.createSheetIn(null, "表格");
-    expect(store.renameTreeNode(sheet.id, "表格改名").kind).toBe("sheet");
+    const usheet = store.createUsheetIn(null, "表格");
+    expect(store.renameTreeNode(usheet.id, "表格改名").kind).toBe("usheet");
 
     const bitable = store.createBitableIn(null, "数据表");
     expect(store.setNodeIcon(bitable.id, "📊").kind).toBe("bitable");

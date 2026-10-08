@@ -372,7 +372,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   /** 目录树结构会变的 IPC 通道：写库后广播 library-changed，让其它窗口（含浏览器端）刷新目录树。 */
   const TREE_CHANGING_CHANNELS = new Set<string>([
     "create_note", "create_notebook", "create_group", "create_note_in",
-    "create_sheet_in", "create_bitable_in", "create_board_in",
+    "create_usheet_in", "create_bitable_in", "create_board_in",
     "rename_tree_node", "set_node_icon",
     "move_tree_node", "move_tree_node_ordered", "reorder_tree_nodes",
     "delete_tree_node", "delete_note", "restore_trash", "purge_trash", "empty_trash",

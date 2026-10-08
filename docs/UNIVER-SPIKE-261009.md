@@ -1,6 +1,6 @@
-# Univer 作为表格（kind="sheet"）新内核 —— 技术验证结论（261009）
+# Univer 表格（kind="usheet"）—— 技术验证与转正结论（261009）
 
-> 分支 `spike/univer-sheet`，**只读验证：未接入应用、未合并 master**。可运行 spike + 自动断言脚本都在本分支。
+> 分支 `spike/univer-sheet`。**已接入应用；旧的 `kind="sheet"`（FortuneSheet）已彻底移除，usheet 为唯一表格实现**。可运行 spike + 自动断言脚本仍在本分支。
 > 背景：语雀"表格"用的是自研闭源 LakeSheet（拿不到）；Lake 内核的表格卡在 ~5500 行粘贴下会卡死 30s。
 > 所以表格要做成主力，必须自己选一个能承载大表、可主题化、能从 CSP 过关的内核。本文回答 Univer 是否可行。
 
@@ -57,9 +57,9 @@
 - **正文 v3 转换器**（FortuneSheet `sheets[]` ↔ `IWorkbookData`）与 `UniverSheetEditor` 组件、灰度开关。
 - **真实 Electron `lake://app`（scheme）复验**：本次用同一 `PROD_CSP` 的 headless Chromium，行为等价但非 Electron 本体。
 
-## 6. 应用内接入（261009，已落地：与旧 sheet 并存）
+## 6. 应用内接入（261009，已落地：usheet 为唯一表格，旧 sheet 已移除）
 
-新增文档类型 **`kind="usheet"`**，与 `kind="sheet"`（FortuneSheet）**并存**，老实现不动：
+新增文档类型 **`kind="usheet"`**（旧的 `kind="sheet"`/FortuneSheet 已彻底移除；按 AGENTS §3#7 不做迁移，旧正文回退为 doc）：
 
 | 层 | 落点 |
 | --- | --- |

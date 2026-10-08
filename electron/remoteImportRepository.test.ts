@@ -30,7 +30,7 @@ function makeRepository(root: string): RemoteImportRepository {
     workspaceId: "workspace",
     trashNotebookId: "notebook-trash",
     notePathFor: (noteId) => path.join(root, "notes", `${noteId}.lake`),
-    bodyPathFor: (noteId, kind) => (kind === "sheet" ? path.join(root, "sheets", `${noteId}.sheet.json`) : path.join(root, "notes", `${noteId}.lake`)),
+    bodyPathFor: (noteId, kind) => (kind === "usheet" ? path.join(root, "usheets", `${noteId}.usheet.json`) : path.join(root, "notes", `${noteId}.lake`)),
     assetDirFor: (noteId) => path.join(root, "note-assets", noteId),
     isSafeSegment: () => true,
     detectOrphans: () => undefined,

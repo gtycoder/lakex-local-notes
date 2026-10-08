@@ -8,7 +8,7 @@
  * 为修内核 fit-width 表格切标签重排）。隐藏方式一变，那些几何判断就**静默失准**
  * （拿到隐藏实例的几何，浮栏/AI 面板/滚动归零就会作用于错的文档）。
  *
- * 现在统一走显式信号：各编辑器宿主（doc `EditorTab` / `SheetEditor` / `BitableEditor` /
+ * 现在统一走显式信号：各编辑器宿主（doc `EditorTab` / `UniverSheetEditor` / `BitableEditor` /
  * `BoardEditor`）只在**正在显示**时带 data-active="true"，这里只认这个属性，不再看几何。
  * 拿不到就返回 null（调用方各自回退），绝不退回去猜几何。
  */

@@ -217,9 +217,9 @@ describe("syncEngine（共享编排）", () => {
   });
 
   // 260925 多端实测回归：上传条目手工枚举字段时漏了 kind ⇒ manifest 不含 kind ⇒
-  // 他端把 sheet/bitable/board 当 doc 导入（正文落到 notes/*.lake，打开即毁）。这里卡住上传侧透传。
-  it("kind 透传：非 doc（sheet/bitable/board）上传条目带 kind", async () => {
-    for (const kind of ["sheet", "bitable", "board"] as const) {
+  // 他端把 usheet/bitable/board 当 doc 导入（正文落到 notes/*.lake，打开即毁）。这里卡住上传侧透传。
+  it("kind 透传：非 doc（usheet/bitable/board）上传条目带 kind", async () => {
+    for (const kind of ["usheet", "bitable", "board"] as const) {
       const s3 = new MemS3();
       const db = new MemDb();
       db.notes.set("n1", row({ id: "n1", kind }));
@@ -232,10 +232,10 @@ describe("syncEngine（共享编排）", () => {
   it("kind 透传：软删（回收站）条目也带 kind", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
-    db.notes.set("n2", row({ id: "n2", kind: "sheet", trashedAt: "2026-01-02T00:00:00.000Z", syncState: "local" }));
+    db.notes.set("n2", row({ id: "n2", kind: "usheet", trashedAt: "2026-01-02T00:00:00.000Z", syncState: "local" }));
     await syncNow(CFG, s3, db);
     const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
-    expect(manifest.notes.find((n: any) => n.id === "n2")?.kind).toBe("sheet");
+    expect(manifest.notes.find((n: any) => n.id === "n2")?.kind).toBe("usheet");
   });
 
   // 260925 下载并发预取回归：首同步每篇正文只取一次（预取，不再逐条串行重复取）；稳态零正文 GET。

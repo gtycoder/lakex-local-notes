@@ -30,7 +30,7 @@ function rowToLocal(r: Record<string, unknown>) {
     icon: r.icon ? String(r.icon) : null,
     isConflict: !!r.is_conflict,
     // TS 会在推断的返回类型里放宽字面量 → 显式标注联合类型（否则外层 SyncDbPort 不兼容）
-    kind: (r.doc_kind === "sheet" ? "sheet" : r.doc_kind === "usheet" ? "sheet" : r.doc_kind === "bitable" ? "bitable" : r.doc_kind === "board" ? "board" : "doc") as "doc" | "sheet" | "bitable" | "board",
+    kind: (r.doc_kind === "usheet" ? "usheet" : r.doc_kind === "bitable" ? "bitable" : r.doc_kind === "board" ? "board" : "doc") as "doc" | "usheet" | "bitable" | "board",
   };
 }
 
@@ -58,7 +58,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：全新导入的回收站条目
   // （L339 分支）靠它恢复原父——硬编码 NULL 会让「安卓首次同步拉到他端已删笔记 → 恢复」后 parent 卡在
   // TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
-  const noteUpsertValues = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): unknown[] => [note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "sheet" || note.kind === "bitable" || note.kind === "board" ? note.kind : "doc"];
+  const noteUpsertValues = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): unknown[] => [note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "usheet" || note.kind === "bitable" || note.kind === "board" ? note.kind : "doc"];
   const applyRemoteNoteNow = async (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): Promise<void> => {
     const d = getDb();
     await d.prepare(NOTE_UPSERT_SQL).run(...noteUpsertValues(note, content));

@@ -45,7 +45,7 @@ describe("文档引用卡：纯逻辑", () => {
   });
 
   it("类型中文名", () => {
-    expect(noteKindLabel("sheet")).toBe("表格");
+    expect(noteKindLabel("usheet")).toBe("表格");
     expect(noteKindLabel("bitable")).toBe("多维表");
     expect(noteKindLabel("board")).toBe("画板");
     expect(noteKindLabel(undefined)).toBe("文档");

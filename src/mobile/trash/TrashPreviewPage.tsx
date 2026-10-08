@@ -17,7 +17,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   // v6/v7：非 doc（表格/多维表/画板）正文不是 Lake 格式 → 预览一律挡住，**不挂 Lake 编辑器**。
-  const [kind, setKind] = useState<"doc" | "sheet" | "bitable" | "board">("doc");
+  const [kind, setKind] = useState<"doc" | "usheet" | "bitable" | "board">("doc");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -67,7 +67,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
           <div className="poc-center"><LoaderCircle className="spin" /><span>正在加载资源…</span></div>
         ) : kind !== "doc" ? (
           <div className="poc-center">
-            <span>{kind === "sheet" ? "表格" : kind === "bitable" ? "多维表" : "画板"}暂不支持在移动端预览，请在桌面端打开。</span>
+            <span>{kind === "usheet" ? "表格" : kind === "bitable" ? "多维表" : "画板"}暂不支持在移动端预览，请在桌面端打开。</span>
           </div>
         ) : (
           <LakeEditor
