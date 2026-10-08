@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-/**
- * Univer spike CDP 驱动（分支 spike/univer-sheet）——Node 内置 WebSocket 直驱 headless Chrome。
- * 用法: node scripts/spike-univer-cdp.mjs [url] [port] [shotDir]
- */
+/** Univer spike CDP 驱动（分支 spike/univer-sheet）。用法: node scripts/spike-univer-cdp.mjs [url] [port] [shotDir] */
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -24,23 +21,16 @@ const chrome = spawn(CHROME, [
 ], { stdio: "ignore" });
 
 async function fetchJson(url, tries = 80) {
-  for (let i = 0; i < tries; i++) {
-    try { const res = await fetch(url); if (res.ok) return await res.json(); } catch {}
-    await sleep(250);
-  }
+  for (let i = 0; i < tries; i++) { try { const r = await fetch(url); if (r.ok) return await r.json(); } catch {} await sleep(250); }
   throw new Error("CDP not reachable: " + url);
 }
-
 class Cdp {
   constructor(ws) {
     this.ws = ws; this.id = 0; this.pending = new Map(); this.handlers = new Map();
     ws.addEventListener("message", (ev) => {
       const msg = JSON.parse(typeof ev.data === "string" ? ev.data : String(ev.data));
-      if (msg.id && this.pending.has(msg.id)) {
-        const { resolve, reject } = this.pending.get(msg.id);
-        this.pending.delete(msg.id);
-        msg.error ? reject(new Error(JSON.stringify(msg.error))) : resolve(msg.result);
-      } else if (msg.method) { for (const h of (this.handlers.get(msg.method) || [])) h(msg.params); }
+      if (msg.id && this.pending.has(msg.id)) { const { resolve, reject } = this.pending.get(msg.id); this.pending.delete(msg.id); msg.error ? reject(new Error(JSON.stringify(msg.error))) : resolve(msg.result); }
+      else if (msg.method) { for (const h of (this.handlers.get(msg.method) || [])) h(msg.params); }
     });
   }
   send(method, params = {}) {
@@ -75,10 +65,7 @@ async function main() {
     ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((res, rej) => { ws.addEventListener("open", res); ws.addEventListener("error", rej); });
     const cdp = new Cdp(ws);
-    await cdp.send("Page.enable");
-    await cdp.send("Runtime.enable");
-    await cdp.send("Log.enable");
-    await cdp.send("Network.enable");
+    await cdp.send("Page.enable"); await cdp.send("Runtime.enable"); await cdp.send("Log.enable"); await cdp.send("Network.enable");
     cdp.on("Log.entryAdded", (p) => { if (p.entry && p.entry.level === "error") out.errors.push(`[${p.entry.source}] ${p.entry.text}`); });
     cdp.on("Network.responseReceived", (p) => { if (p.response && p.response.status >= 400) out.httpErrors.push(`${p.response.status} ${p.response.url}`); });
 
@@ -91,25 +78,36 @@ async function main() {
     }
     out.results.ready = ready;
     out.results.cspHasUnsafeEval = await cdp.eval("(document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]')?.content||'').includes('unsafe-eval')");
-    const step = async (name, expr) => {
-      try { out.results[name] = await cdp.eval(expr); }
-      catch (e) { out.results[name] = { error: String(e).slice(0, 240) }; }
-    };
+    const step = async (name, expr) => { try { out.results[name] = await cdp.eval(expr); } catch (e) { out.results[name] = { error: String(e).slice(0, 240) }; } };
     if (ready) {
       await sleep(1000);
       out.results.snapshotShape = await cdp.eval("(() => { const s = window.__spike.save('spike-1'); return { id: s.id, sheetIds: Object.keys(s.sheets||{}), c1: s.sheets?.s1?.cellData?.[0]?.[2] }; })()");
       await step("formulaInitial", `(async () => { ${POLL} })()`);
       await step("recalcAfterDeleteRow", `(async () => { const before=String(window.__spike.value('spike-1','C1')); window.__spike.deleteRow('spike-1',1); ${POLL} })()`.replace("return v;", "return { before, after: v, waitedMs: i*150 };"));
-      // 上面 replace 让 before 一并返回；若超时返回字符串
       await step("editRecalc", "(async () => { window.__spike.write('spike-1','A1',100); for (let i=0;i<30;i++){ const v=String(window.__spike.value('spike-1','C1')); if (v==='100') return { value: v, waitedMs: i*150 }; await new Promise(r=>setTimeout(r,150)); } return { value: String(window.__spike.value('spike-1','C1')), timedOut: true }; })()");
-      const light = await cdp.shot("spike-light.png");
-      await cdp.eval("window.__spike.setTheme('dark')");
-      await sleep(700);
-      const dark = await cdp.shot("spike-dark.png");
-      await cdp.eval("window.__spike.setTheme('light')");
-      out.results.themeScreenshots = { light, dark, changed: light.hash !== dark.hash };
+
+      // 主题桥：三主题各截图 + 记录令牌生效值
+      out.results.themeBridge = {};
+      for (const name of ["light", "warm", "dark"]) {
+        try {
+          const tk = await cdp.eval(`window.__spike.setAppTheme(${JSON.stringify(name)})`);
+          await sleep(500);
+          const shot = await cdp.shot(`spike-theme-${name}.png`);
+          out.results.themeBridge[name] = { accent: tk["accent"], bgCanvas: tk["bg-canvas"], text1: tk["text-1"], shot };
+        } catch (e) { out.results.themeBridge[name] = { error: String(e).slice(0, 200) }; }
+      }
+      const hashes = Object.values(out.results.themeBridge).map((v) => v.shot && v.shot.hash).filter(Boolean);
+      out.results.themeBridgeDistinct = new Set(hashes).size;
+
+      // 只读
+      await step("readonly", "(async () => { const before=document.querySelectorAll('[disabled],[aria-disabled=\"true\"],.univer-disabled').length; window.__spike.setEditable('spike-1', false); await new Promise(r=>setTimeout(r,400)); const after=document.querySelectorAll('[disabled],[aria-disabled=\"true\"],.univer-disabled').length; const s=await 0; return { disabledBefore: before, disabledAfter: after }; })()");
+      out.results.readonlyShot = await cdp.shot("spike-readonly.png");
+      await cdp.eval("window.__spike.setEditable('spike-1', true)");
+
+      // 单实例多 workbook + focusUnit 切换
+      await step("focusSwitch", "(() => { const id2 = window.__spike.createBook('spike-2','Spike2'); window.__spike.write(id2,'A1',777); const active1 = window.__spike.focusBook('spike-1'); const active2 = window.__spike.focusBook(id2); return { id2, afterFocus1: active1, afterFocus2: active2, book1A1: String(window.__spike.value('spike-1','A1')), book2A1: String(window.__spike.value(id2,'A1')) }; })()");
       await step("snapshotRoundtrip", "(() => { const s = window.__spike.save('spike-1'); const id = window.__spike.loadSnapshot(s); return { loadedId: id, total: window.__spike.listBooks().length }; })()");
-      await step("multiBookIsolation", "(() => { const id2 = window.__spike.createBook('spike-2','Spike2'); window.__spike.write(id2,'A1',777); return { book1A1: String(window.__spike.value('spike-1','A1')), book2A1: String(window.__spike.value(id2,'A1')), books: window.__spike.listBooks() }; })()");
+
       out.violations = await cdp.eval("window.__spike.violations");
       out.results.spikeErrors = await cdp.eval("window.__spike.errors");
     }
