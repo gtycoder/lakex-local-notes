@@ -56,3 +56,22 @@
 - **plugin 模式瘦身**（去掉 preset 里的 network/rpc/docs-ui 等未用插件）到具体数字。
 - **正文 v3 转换器**（FortuneSheet `sheets[]` ↔ `IWorkbookData`）与 `UniverSheetEditor` 组件、灰度开关。
 - **真实 Electron `lake://app`（scheme）复验**：本次用同一 `PROD_CSP` 的 headless Chromium，行为等价但非 Electron 本体。
+
+## 6. 应用内接入（261009，已落地：与旧 sheet 并存）
+
+新增文档类型 **`kind="usheet"`**，与 `kind="sheet"`（FortuneSheet）**并存**，老实现不动：
+
+| 层 | 落点 |
+| --- | --- |
+| 正文 | `usheets/{id}.usheet.json` = `{kind:"usheet",version:1,workbook:IWorkbookData}`（[core/usheetDoc.ts](../src/core/usheetDoc.ts)，桌面/移动共享） |
+| 编辑器 | [features/usheet/UniverSheetEditor.tsx](../src/features/usheet/UniverSheetEditor.tsx)（首次可见挂载 / 主题桥 / 只读 / 命令防抖 + 正文 diff 自动保存 / drawing preset 图片） |
+| 主题桥 | [features/usheet/univerTheme.ts](../src/features/usheet/univerTheme.ts)：`--lake-*` → Univer `Theme`，跟随 `data-theme` |
+| 管线 | noteKind / store（bodyPath + createUsheetIn + 建 `usheets/`）/ IPC+preload+native+webApiServer / useNoteLifecycle / useTreeActions / Sidebar「新建表格（新）」/ MultiTabEditor 分支 / 状态栏与 noteRef 文案 / noteSearchText / historyPreview / 导出映射 |
+| 移动端 | `normalizeDocKind` 把 usheet 归为「非 doc 只读占位」（复用 sheet 占位，**绝不**交给 Lake 编辑器） |
+
+**真实 Electron 实测**（scheme 模式 + 隔离 userData + CDP）：新建 → `kind/treeKind=usheet`、正文落盘 →
+打开渲染（主 canvas 1054×639、工具栏 开始/插入/公式/视图）→ 点「粗体」触发内核命令 → 自动保存写入
+`cellData` + `styles`；与旧 `sheet` **同时挂载**并可互相切换；状态栏显示「表格（新）」。
+
+**已知取舍（后续批次）**：一个编辑器一个 Univer 实例（未做共享实例多 workbook）；未接 xlsx 导出、大表压测、
+Capacitor WebView 复验；正文 v3 转换器（把旧 FortuneSheet 表迁到 usheet）尚未做。
