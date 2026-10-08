@@ -273,3 +273,114 @@
   `Input.dispatchKeyEvent({modifiers:4, commands:["Paste"]})`（macOS 的 Cmd+V）→ 读
   `<userData>/workspace-default/sheets/<noteId>.sheet.json` 的 `config.rowlen` 是否新增该行。**注意**
   `Input.insertText` 不会触发内核的输入处理（DOM 里有字、模型是空的），要用逐字符 keyDown+text 或真 Cmd+V。
+
+## O. 2026-10-08 表格字体不是 MiSans（用户 261008）
+
+- **现象**：表格（单元格文字、工具栏、右键菜单、工作表标签）看着不是产品字体 MiSans。**属实**，且有两个不同来源：
+
+- **① 单元格文字（canvas）**：字体取每格 `ff`，而 `@fortune-sheet/core` 的 `getFontSet` 会把 **`ff` 字符串去掉引号后
+  整体当成"一个"族名**（源码：`fontfamily.replace(/"/g,"")` → 若有空格再包一层引号）。实测（node 直调 `core.getFontSet`）：
+  ```
+  ff = 'BlinkMacSystemFont, "Segoe UI", "PingFang SC", …'   // 我们 261008 之前写进正文的旧值
+  →  normal normal normal 10pt "BlinkMacSystemFont, Segoe UI, PingFang SC, …","Helvetica Neue", Helvetica, Arial, "PingFang SC", …
+  ff = "MiSans"
+  →  normal normal normal 10pt MiSans,"Helvetica Neue", Helvetica, Arial, "PingFang SC", …
+  ```
+  即：**多族串整体变成一个不存在的族名 ⇒ 实际渲染落到内核自带的 `Helvetica Neue`（拉丁）/ `PingFang SC`（中文）回退栈**；
+  单族名不会被加引号，后面的内核回退栈照常兜底（生僻字/emoji）。⇒ 我们的口径 = `GLOBAL_FONT = "MiSans"`（**只给单族名**，
+  与 `--lake-font-family` 首族一致），并把这个旧值当"已知历史值"在打开文档时归一化（`withCellDefaults` 精确匹配替换）。
+  **别再写成多族栈**（包括别把 `--lake-font-family` 整串搬进 `ff`）。
+
+- **② DOM 外壳（工具栏/右键菜单/公式栏/工作表标签/单元格编辑框）**：内核 CSS
+  （`@fortune-sheet/react/dist/index.css`）把字体栈**硬编码**在 `.fortune-container` 上
+  （`"Helvetica Neue", Helvetica, Arial, "PingFang SC", …`），单元格编辑框 `.luckysheet-input-box(-inner)` 另用
+  `font` 简写写死 arial。
+
+- ⚠️ **覆盖它必须放"未分层"的 `features/sheet/sheetEditor.css`，不能放 `styles/fonts/font-overrides.css`**：
+  前者由组件直接 `import` ⇒ **未分层**，与内核 CSS 同层，用 `.sheet-editor` 前缀提高特异性（0-2-0 > 0-1-0）取胜；
+  后者是 `@import … layer(feature)`（已分层），而 **未分层 > 任何 @layer** ⇒ 分层那条永远压不过内核 CSS。
+  规则：`.sheet-editor .fortune-container, .sheet-editor .luckysheet-input-box, .sheet-editor .luckysheet-input-box-inner { font-family: var(--lake-font-family) } `。
+  产物核对（`dist/assets/SheetEditor-*.css`）：内核那条在前、我们这条在后且特异性更高。
+
+- **护栏**：`sheetEditorMount.test.ts` 断 `GLOBAL_FONT === "MiSans"` + 旧值归一化 + 字体规则落在 `sheetEditor.css`；
+  `styles/cssLayers.test.ts` 基线 `sheetEditor.css` 156 → 157（+1，理由写在基线处）。
+
+### O.2 全量排查：除功能性字形外全部 MiSans（用户 261008「彻底检查一遍」）
+
+- **方法**：抽出**真正被加载**的两个第三方样式（`@dlient/lakex-doc-react/dist/style.css`、`@fortune-sheet/react/dist/index.css`）
+  里**所有** `font-family` 与 `font` 简写值（共 **44 种**），逐条定性；定性结果与「我们用哪条选择器接管」一起**入护栏**
+  `src/styles/fonts/fontUnification.test.ts`（第三方新增未登记的栈、或我们删掉某条接管规则 ⇒ 直接红）。
+- **分类口径**：
+  · **special（故意不动）**：KaTeX_*（数学字形）、emoji 字体、`ne-heading-anchor` 的 `lake-icon`、`inherit`；
+    以及**内核 JS 运行时写进 SVG 图标的字体**（`<text font-family="sans-serif">` 的 H2/H3 图标、`STYuanti-SC-Regular`、
+    `LucidaGrande`、`SFMono-Semibold`）与**导图主题**的 root/node 字体（属内容样式、且是内联，CSS 改不动）。
+  · **mono → `--lake-font-family-mono`（JetBrains Mono）**：`pre/code/kbd/samp`、`.CodeMirror`、`.cm-*`、
+    阅读态代码正文 `ne-code-content`、公式输入 `textarea.ne-math-input`、导图代码编辑器 / 文本绘图对话框（ttd-*）。
+  · **unified → `--lake-font-family`（MiSans）**：其余全部 —— antd 基底（`.ant-select-multiple`/`.ant-pagination*`/
+    `.ant-statistic-content`/`.ant-steps-item-icon`/必填星号）、`.ne-block-context-menu`、`.ne-image-toolbar`、
+    列表序号与大纲前缀（内核用 `Helvetica Neue, Consolas`）、`.mindmap-*` UI、`.text-to-diagram`、
+    drawnix 未定义的 `var(--ui-font)` 那一族，以及 FortuneSheet 的 `.fortune-toolbar-subtext`（数字格式示例，内核写死 Arial）。
+- **同时抓出我们自己的一处**：`styles/app/quick-notes.css` 的 `.quick-note-composer .quick-note-editor` 原写死
+  `font: 450 14px/1.7 -apple-system, …` ⇒ 改 `var(--lake-font-family)`。护栏第二条用例**扫我们自己的 CSS**：
+  除 `themes/`（令牌定义）、`fonts/`（@font-face）、`vendor/` 外，出现任何字体字面量即红。
+- **有意例外（写在这里免得再排查一遍）**：`src/core/mdToHtml.ts` 的 `wrapHtmlPage` 是**导出到应用外**的独立 HTML，
+  拿不到 MiSans/令牌 ⇒ 必须用系统栈（已在代码里注明）。
+  同轮修掉它另一处真 bug：模板里 `code`/`blockquote` 原本引用 `var(--lake-radius-2xs)`/`var(--lake-border-strong)`/
+  `var(--lake-text-2)` —— 独立页面没有这些定义 ⇒ 引用块竖线**直接消失**、次级色丢失。现改为 light 主题字面量
+  （4px / `#d3d7de` / `#4e5969`），并在 `mdToHtml.test.ts` 加护栏：导出页**不得出现任何 `var(--`**。
+- **真实端实测（261008，隔离实例 + CDP）**：37 个 mock 选择器在真实页面里**全部**取到 MiSans / JetBrains Mono；
+  整页 DOM 扫描**只剩**上面那几处 SVG 图标字形；把产物 `dist/assets/SheetEditor-*.css` 注入后，
+  `.fortune-container` / `.fortune-toolbar-subtext` / `.luckysheet-input-box(-inner)` / `.fortune-context-menu` /
+  `.luckysheet-sheets-item` / `.fortune-stat-area` 等 14 项**全部 MiSans**。
+## P. 2026-10-08 表格右键菜单：哪些 key 真会渲染 + 本轮精简口径
+
+- **单元格右键（`cellContextMenu`）**：本版内核（`@fortune-sheet/react` 1.0.4）的渲染器**只处理 17 个名字**：
+  `copy` / `paste` / `insert-row` / `insert-column` / `delete-row` / `delete-column` / `hide-row` / `hide-column` /
+  `set-row-height` / `set-column-width` / `sort` / `orderAZ` / `orderZA` / `filter` / `link` / `image` / `clear`。
+  ⇒ `delete-cell` / `chart` / `data` / `cell-format` **列了也不渲染**（内核默认清单里那个 `delete-cell` 就是死键）；
+  我们另外用 `customToolbarItems` 提供 `cell-image`（插入图片）与 `auto-row-height`（自动行高）两个自定义键。
+  判定依据 = dist 里 `name === "…"` 的全集 + 真实端右键实测（两者一致）。
+- **`hide-row` / `hide-column` 各渲染两行**（`rightclick.hideSelected|showHide + rightclick.row|column` =
+  「隐藏选中行 / 显示隐藏行」「隐藏选中列 / 显示隐藏列」）⇒ 要去掉那 4 行就删这两个 key（261008 用户第二轮要求；
+  代价：隐藏/取消隐藏行列从此没有菜单入口，要用得走 `wb.hideRowOrColumn / showRowOrColumn`）。
+- **工作表标签右键（`sheetTabContextMenu`）**：内核默认 `["delete","copy","rename","color","hide","|","move"]`；
+  去掉 `move`（渲染成「向左移 / 向右移」两行）时**末位 `"|"` 要一起删**，否则菜单尾部留一条分隔线。
+- **真实端验收姿势**（隔离实例 + CDP，`Runtime.evaluate` 里合成事件就够，不必真鼠标）：给 **`.fortune-cell-area`**
+  与 **`.luckysheet-sheets-item`** dispatch 一个 `contextmenu` MouseEvent（带上 `clientX/clientY/pageX/pageY/button:2`），
+  再读可见 `.fortune-context-menu` 的 `innerText`。两个坑：① 单元格菜单要打在 `.fortune-cell-area` 上（打
+  `.fortune-sheet-overlay` 不出菜单）；② 菜单**不会自动关**，右击下一个目标前必须先用**真实**左键点一下别处
+  （合成 `mousedown` 关不掉）——否则读到的是上一个菜单，会误判成「标签菜单没生效」。
+- 实测结果（最终产物）：单元格右键 = 复制 / 粘贴 / 向上插入行 / 向下插入行 / 向左插入列 / 向右插入列 / 自动行高 /
+  清除内容 / 插入图片；工作表标签右键 = 删除 / 复制 / 重命名 / 更改颜色 / 隐藏。
+## Q. 2026-10-08 表格颜色入口：图标错乱 + 内核选色盘不可用（改成宿主自绘 + 公共选色盘）
+
+- **用户报的两件事**：① 工具栏「文字颜色 / 背景颜色」**选完颜色展示错乱**；② 工作表标签右键「更改颜色」的选色盘**点不动**。
+- **①的真因（两层色条）**：内核这两个按钮的画法是 —— 图标（sprite `<symbol>`）+ **另一个硬编码的色条 div**
+  （inline style：17×2、`bottom:8`、`left:9`、背景 = `globalCache.recentTextColor/BackgroundColor`）。
+  而 261008 我们把图标换成**云端 lakex 字形**后，云端字形**自己就带一条色条**（`font-color` 的第 1 条 path；
+  `background` 的第 3 条 path），且云端那条写死 `#F5222D` ⇒ 选完颜色就看到**红条 + 主题色条叠着、位置还错位**。
+- **②的真因**：内核 `ChangeColor` 面板（`#fortune-change-color`）在 `.fortune-context-menu`（`overflow-y:auto`）里按
+  `bottom:-110px; left:197px` 绝对定位 ⇒ 大片落在菜单可视区外/被裁，点不到；且它走 `context.currentSheetId`，
+  右键非当前表时还会改错表。
+- **修法（不放内核 UI，全走宿主自己的按钮 + 公共选色盘）**：
+  · `TOOLBAR_ITEMS` 把 `font-color`/`background` 换成 `lake-text-color`/`lake-bg-color` —— 这两个 key 内核不认，
+    但 `getToolbarItem` 末尾有 `customToolbarItems.find(n => n.key === name)` **原位兜底** ⇒ 位置不变、UI 全归我们。
+  · 图标 = `src/features/sheet/sheetColorIcons.tsx`（**由 `scripts/sheet-icons.cloud.json` 生成**，与内核 sprite 同源）：
+    字形 `currentColor`、色条 `fill={color}`（未着色 = none）⇒ 只剩一条色条，且跟着焦点格颜色走。
+  · 上色走内核公开 API `wb.setCellFormatByRange("fc"|"bg", color, range)`（一次调用一条历史；`null` = 恢复默认）。
+  · 标签颜色：补丁给 `generateAPIs` 加了 `setSheetColor(color, sheetId?)`，并把标签菜单的 `color` 分支改成
+    **有 `settings.hooks.onSheetTabColor` 就只回调宿主**（内核那套 `ChangeColor` 面板被旁路，条目/箭头不变）。
+  · 三处颜色入口共用 `components/ColorPalette`（**261008 从 `features/bitable/bitableCells.tsx` 连同它的 `Popover`
+    与原语一起移出**，bitableCells 继续 re-export ⇒ 多维表调用点零改动），最近使用按入口分桶：
+    `sheet-text-color` / `sheet-bg-color` / `sheet-tab-color`。
+- **内核事实（顺手记下，别再踩）**：
+  · `core.api.setCellFormat` **对空行直接 return**（`if (targetSheetData[row] == null) return;`）⇒ 空表上选颜色是 no-op，
+    这与内核自己的按钮行为一致，不是我们没接上；验证时要先往格子里写点内容。
+  · 内核自带 `palette`（toolbar ColorPicker）**色值是坏的**（`#f00f00`/`#f90f90`/`#0f00f0`…）—— 我们不再渲染它。
+- ⚠️ **右键菜单开出来的浮层必须用「坐标锚点」**：菜单项在内核 `close()` 之后**会卸载** ⇒ 把元素当锚点存下来，等浮层渲染时它已是游离
+  节点（`getBoundingClientRect()` 全 0）⇒ 选色盘跑到**左上角**（用户 261008 报）。口径：在**点击那一刻**量好 `{x, y}`，走
+  `ColorPalette` 的 `at` 透传给 `usePopoverPosition`（`at` 优先，且自带「下方放不下翻上方 + 夹进视口」——标签在窗口底部时会自动翻到上方）。
+
+- **实测（隔离实例 + CDP）**：工具栏出现 `data-tips="文字颜色/背景颜色"` 的自绘按钮、内核旧颜色图标（`#font-color`/`#background`）
+  在工具栏里为 0；点开是公共选色盘（71 个格子 + 最近使用 + 更多颜色）；选红后图标色条 = `#F5222D`，正文里写入 `{fc:"#F5222D"}`；
+  标签右键「更改颜色」打开同一选色盘，选绿后正文 `sheets[0].color = #389E0D`。
