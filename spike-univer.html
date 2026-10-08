@@ -8,6 +8,10 @@
     <style>
       html, body { height: 100%; margin: 0; }
       #univer-root { height: 100%; }
+      #spike-controls { position: fixed; left: 12px; bottom: 12px; z-index: 9999; display: flex; gap: 6px; align-items: center; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.94); box-shadow: 0 2px 12px rgba(0,0,0,.18); font: 12px/1.4 -apple-system, "PingFang SC", sans-serif; }
+      #spike-controls button { height: 24px; padding: 0 10px; border: 1px solid #d3d7de; border-radius: 6px; background: #fff; cursor: pointer; }
+      #spike-controls button.is-on { background: #33497f; color: #fff; border-color: #33497f; }
+      #spike-controls label { display: inline-flex; gap: 4px; align-items: center; }
     </style>
   </head>
   <body>
