@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { createUniver, LocaleType, mergeLocales, ICommandService, CommandType, type FUniver } from "@univerjs/presets";
-import { UniverSheetsCorePreset, IMenuManagerService } from "@univerjs/preset-sheets-core";
+import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
@@ -53,34 +53,6 @@ function diskSource(src: string): string {
   return ref && ref.space === "note" && !ref.staging ? ref.filename : src;
 }
 
-type RibbonSchema = { key: string; order: number; contextual?: boolean; item?: { id?: string; commandId?: string; title?: string; icon?: unknown } };
-type MenuManagerLike = { getFlatMenuByPositionKey: (key: string) => RibbonSchema[] };
-type FacadeLike = {
-  createMenu: (item: { id: string; title: string; action: string; order?: number; icon?: string }) => { appendTo: (path: string) => void };
-  updateMenuConfig: (config: Record<string, unknown>) => void;
-};
-
-/** 单行工具栏里**要隐藏的原有项**（261009 定稿精简）。
- *  注：append 进来的项用 updateMenuConfig({ hidden:true }) 无效（实测）⇒ 精简它们 = 以下白名单里不列。 */
-const RIBBON_TRIM_IDS: Record<string, unknown> = {
-  "ui.operation.activate-format-painter": { hidden: true }, // 格式刷
-  "ui.command.clear-formatting": { hidden: true },          // 清除格式
-  "sheet.command.set-range-font-family": { hidden: true },  // 字体：统一走 --lake-font-family（MiSans），禁止自定义
-  "sheet.command.add-range-protection-from-toolbar": { hidden: true }, // 保护
-  "base-ui.operation.toggle-shortcut-panel": { hidden: true },         // 快捷键面板
-};
-
-/** 单行工具栏**保留**的「塞入项」白名单（其余 insert/公式/视图 项不 append）。 */
-const RIBBON_APPEND_ALLOW = new Set<string>([
-  "sheet.command.insert-cell-image",              // 图片（单元格）
-  "sheet.command.insert-float-image",             // 图片（浮动）
-  "sheet.command.add-worksheet-background-image", // 背景图片
-  "sheet.toolbar.sheet-frozen",                   // 冻结
-  "sheet.command.toggle-gridlines",               // 切换网格线
-  "base-ui.operation.toggle-fullscreen",          // 全屏
-  "formula-ui.operation.insert-function.common",  // 函数
-]);
-
 /** 应用字体令牌（`--lake-font-family`，即 MiSans 栈）；表格一律用它，**禁止自定义字体**。 */
 function lakeFontFamily(): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue("--lake-font-family").trim();
@@ -97,42 +69,6 @@ function applyFontPolicy(workbook: UsheetWorkbook, fontStack: string): void {
       if (style && typeof style === "object") (style as Record<string, unknown>).ff = fontStack;
     }
   }
-}
-
-/**
- * 单行工具栏：把 插入/公式/数据/视图 的项全部 append 到「开始」行（ribbon.start.others），
- * 再按 RIBBON_TRIM_IDS 隐藏。先塞全 → 之后按需精简。依赖 `ribbonType: "simple"`（只留「开始」这一行）。
- * @returns append 的条数（便于验证）
- */
-function flattenRibbonIntoStart(injector: { get: (token: unknown) => unknown }, facade: FacadeLike, tabs: string[]): number {
-  const menuManager = injector.get(IMenuManagerService) as MenuManagerLike;
-  const seen = new Set<string>();
-  for (const schema of menuManager.getFlatMenuByPositionKey("ribbon.start")) {
-    const id = schema.item?.commandId ?? schema.item?.id;
-    if (id) seen.add(id);
-  }
-  let added = 0;
-  for (const tab of tabs) {
-    for (const schema of menuManager.getFlatMenuByPositionKey(tab)) {
-      const item = schema.item;
-      const commandId = item?.commandId ?? item?.id;
-      if (!item || !commandId || seen.has(commandId)) continue;
-      // 只搬**表格**的项：contextual 的（如 doc.* 富文本工具）与 doc/docs 前缀一律不要（261009 实测发现混入）。
-      if (schema.contextual || /^(doc|docs)\./.test(commandId)) continue;
-      if (!RIBBON_APPEND_ALLOW.has(commandId)) continue;
-      seen.add(commandId);
-      const entry: { id: string; title: string; action: string; order?: number; icon?: string } = {
-        id: "usheet.merge." + commandId,
-        title: item.title ?? commandId,
-        action: commandId,
-        order: schema.order,
-      };
-      if (typeof item.icon === "string") entry.icon = item.icon;
-      try { facade.createMenu(entry).appendTo("ribbon.start.others"); added += 1; } catch { /* 单条失败不影响其它 */ }
-    }
-  }
-  facade.updateMenuConfig(RIBBON_TRIM_IDS);
-  return added;
 }
 
 /** 自建文件选择器选图（**不经过 Univer 的 blob 流程**）；用户取消返回 null。 */
@@ -285,7 +221,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
             disableAutoFocus: true,
             toolbar: showToolbar,
             formulaBar: showToolbar,
-            ribbonType: "simple",
+            // 261009-ribbon：还原 Univer 原生**两层**工具栏（classic = 菜单行 + 工具行）；单行 simple 的收编逻辑已移除。
+            ribbonType: "classic",
             // 字体表收窄成唯一一项 = 应用字体令牌 ⇒ 不存在"自定义字体"这个选项（配合隐藏字体选择器）。
             customFontFamily: { override: true, list: [{ value: lakeFontFamily(), label: "MiSans" }] },
           }),
@@ -335,12 +272,6 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         "sheet.command.insert-float-image": { commandId: "usheet.insert-float-image" },
         "sheet.command.insert-cell-image": { commandId: "usheet.insert-cell-image" },
       });
-      // 261009：单行工具栏 —— 先把 插入/公式/数据/视图 的项全塞进「开始」行，再按 RIBBON_TRIM_IDS 隐藏。
-      try {
-        const injector = univer.__getInjector() as unknown as { get: (token: unknown) => unknown };
-        const added = flattenRibbonIntoStart(injector, univerAPI as unknown as FacadeLike, ["ribbon.insert", "ribbon.formulas", "ribbon.data", "ribbon.view"]);
-        console.log("[usheet] ribbon 合并：append", added, "项");
-      } catch (error) { console.warn("[usheet] ribbon 合并失败", error); }
       captureRef.current?.(() => instanceRef.current?.last ?? null);
     } catch (error) {
       console.error("Univer 表格挂载失败", error);
