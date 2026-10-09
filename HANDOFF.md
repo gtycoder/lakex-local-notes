@@ -7,9 +7,24 @@
 
 ## 0. 最新交接（261009 → 261008）
 
-> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261009 / 261008）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
+> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261010 / 261009）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点（261009 收尾 → 下一会话，用户定）**：① **表格（usheet）性能优化**；② **页面详细测试 + 优化细节**（逐页走查、查漏补缺）。**已定不再讨论**：「开始」工具栏按现状；公式栏收起方案仅存档（结论已并入本文件与代码注释）；MiSans 桌面字体（暂缓）。**Android 端"先保证能用"**，批量页面优化与查漏补缺留后续。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+> **下一会话焦点（261010 收尾 → 下一会话，用户定）**：① **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；② 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项（条件格式 / 数据验证 / 公式库完整版）单独立项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
+> **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261010 · 表格（usheet）性能 + 粘贴落点 + 右键插图 + 默认尺寸 + 内核契约与升级规范（已交付）
+
+- **性能（实测：隔离 userData + 真实 Electron + CDP，dev/scheme 双模式）**
+  · 切标签空窗 0.69s（scheme）/1.83s（dev）→ **0.01s**：UniverSheetEditor 隐藏**不再销毁实例**（keep-alive），只在卸载（关标签 / 换文档）时 dispose；隐藏态无空转（3s 内 rAF 0 次），每实例净增 6–15MB，总量受 maxOpenTabs（默认 8）约束。
+  · dev 首次打开 3.68s → **0.18s**：MultiTabEditor **仅 dev** 空闲预取表格分包（打包侧保持真懒加载）。
+  · 大表格（打包构建，点击→画面）：1 万格 92ms / 5 万格 126–148ms / 10 万格 240–485ms / 40 万格 340–1712ms（**方差大**，同一夹具复测到过 340 与 1712）；我们自己的 JSON 往返只占 ~30ms@2.2MB ⇒ 瓶颈在内核渲染，不在包装层。编辑落盘主线程长任务 75ms@10 万格 / 221ms@40 万格。**结论：5000 行这一档没问题，不必再优化我们的包装层。**
+- **粘贴图片落点**：单图 + 有活动单元格 ⇒ **单元格图片**（先上传成资产再插，从源头不产生 blob）；无选区 / 一次多图 ⇒ 放行内核默认（浮动图，**不静默丢图**）；只读封死；上传失败退回内联 data URL。为什么只能在 DOM 层（window 捕获）拦：见 docs/LAKEX-CONTRACT.md §5.25。
+- **单元格右键「插入」子菜单**新增「插入单元格图片」（facade createMenu({ action: 命令 id }).appendTo([...])，**复用**已有命令；路径逐段单个 key）。
+- **默认尺寸 = 50 行 × 16 列**（用户 261010）：新建表格文档（core/usheetDoc.ts 的 USHEET_DEFAULT_ROWS/COLUMNS，单一来源）与工作表标签「＋」（preset 的 footer.addSheetButtonConfig）两处同一口径；移动端 viewer 共用同一份 footer 配置。
+- **底部计算条 36px → 30px**；文档状态栏改为**实测变量**跟随（--usheet-status-bottom，与多维表 --lake-bitable-status-bottom 同姿势），保持其上沿 4px 缝。内核把该高度写成**行内样式** ⇒ 这一条覆盖是全仓新增 !important 的唯一理由（理由写在规则处）。
+- **架构/升级收口**：内核触点集中 src/features/usheet/usheetKernelContract.ts；静态护栏 univerContract.test.ts（版本一致性 + 触点符号存在性）；运行时探针 scripts/usheet-kernel-probes.mjs（升级后一条命令）；规范与路线 docs/USHEET-UPGRADE.md；@univerjs/* 全部**精确锁 1.0.3**（不许 caret/tilde 区间，避免两份 core 让 DI 静默失效）。
+- **用户已定「不做」（别再提）**：① 「开始」工具收窄里**隐藏旧工具就是为了让折叠的出来** ⇒ 不给白名单、不改现状；② canonical 快照挪到空闲时段（只对大表有意义）暂不做；③ 移动端/桌面抽公共 runtime、单实例多 workbook 共享不做（理由见 docs/USHEET-UPGRADE.md §7）。
+- 门禁：tsc ✓ · vitest **214 文件 / 1722 用例** ✓ · ui-metrics ✓ · check:core 75-0 ✓ · 双端构建 ✓ · bundle 预算 ✓ · git diff --check ✓ · 探针 **7 致命项全过**（2 项提示为「合成输入无 OS 焦点」偶发，不影响退出码）。
 
 ### 261009 收尾 · 移动端表格切换 + 三处移动端修复 + 跨端污染清理 + 手机口径适配（已合并并推送 master）
 
@@ -44,170 +59,6 @@
 - **残留审计（合并前全量复检）**：依赖（`package.json`/`package-lock.json` 里 `@fortune-sheet` = 0、`node_modules/@fortune-sheet` 不存在）、`patches/` 只剩 `@plait+draw`、旧模块文件全不存在。**又清掉 3 处此前遗漏的残留**：① `electron/store.ts` 仍在**创建旧 `sheets/` 正文目录**（已删）；② `src/mobile/mobile.css` 里 **23 条零引用的旧表格只读视图样式 `.mst-*`**（已删，−127 行）；③ 旧 kind 的措辞全部中性化（`noteKind`/`syncDecisions.test`/`usheetDoc`/`boardDoc`/`noteQueries`/`historyRepository`/`mobile/noteRepository`，以及 STORAGE-LAYERS 与 LAKEX-CONTRACT 的 CSP 对比），`make-fixture` 的 `notes.sheet` key 改名 `notes.usheet`。`dist`/`dist-mobile`/Android assets 里的旧 `SheetEditor-*`/`MobileSheetViewer-*`/`sheetDoc-*` 产物已随重建清除。**现状：全仓 `git grep -i "fortune|luckysheet"` 只剩文档里的迁移记录与本批对比结论，代码 / 依赖 / 产物零残留。**
 - **文档**：TROUBLESHOOTING 删旧表格章节 K/M/N/O/P/Q；HANDOFF 删旧表格 §0 小节与 §3 暗色任务书/补丁坑；AGENTS 删旧表格图标/换行/右键条目（保留通用「模块级单例串台」教训）。
 - **遗留清理（261009 收尾已完成）**：spike 验证设施已全部删除（见上条"收尾"）。
-
-### 261008 四改~十改 · 「文档引用」卡整体收口（浮层几何 / 悬停出条 / 点击访问 / 自绘图标+深色 / 插入即编辑 / 完整创建流程 / 取消链接转正文 / 复制资料库路径）（已交付并推送）
-
-- **用户反馈（①② 几何 / ③④ 交互 / ⑤~⑩ 见下）**：① 动作浮窗要**贴近文字**，并按内核链接浮窗**复刻大小与间距**（原来明显偏小、偏紧）；② 编辑浮层也要贴文字，且做成**两个输入框**（照内核链接编辑器）；
-  ③ 动作浮窗改为**鼠标移上来就出**（和链接一样，不再需要点一下打开）；④ **点击文字 = 直接打开被引用的文档**（点一下就是访问）。
-- **③④ 的落地**：动作条从 `Popover`（点击开）换成 **`HoverPopover`**（锚点与表面**共享悬停区** + 开/关延时 120/160ms ⇒ 光标能移到条上点按钮）；
-  标题文字挂 `onClick={openTarget}`（`role="link"` + Enter/Space 同义）⇒ 点击/回车**直接打开目标文档**（同一文档只有一个标签：已打开则激活它）。
-  编辑/选择器打开期间 `onOpenChange(next && !editing && !picking)` **屏蔽**悬停弹出；不再挂原生 `title`（悬停已是动作条，再叠一个 `.ln-tip` 反而乱）。
-  ⚠️ `HoverPopover` 的悬停监听**只在挂载时读一次** `anchorRef.current` ⇒ "取消链接/重新引用"会换掉锚点元素（链接态 ↔ 纯文本态），必须用 `key` 强制重挂，否则换态后悬停失效（见 §4）。
-- **做法：不自造几何，直接复用内核类**（与选区浮栏同一姿势，样式来自 vendored lakex-doc.css）——
-  动作条 `surfaceClassName="ne-card-toolbar"`（padding 6/12、条目 28×28、图标 16、间距 4、圆角 4）；
-  编辑浮层 `surfaceClassName="ne-link-editor"`（365 宽 / padding 16·12 / 字段间距 16 / 字段名在上）+ 两个 `.ln-input` 输入框
-  （「链接」是**只读输入框外观**，点击/回车打开文档选择器）+ `.ln-btn--secondary` 的「确定」（图4 那个描边钮）。
-  **两者都必须带 `lakex-default-theme`**（portal 到 body 后已在编辑器树外，靠这个类才吃得到内核主题桥）。
-- **顺带修两处真问题**：① 同一个回调 ref 挂在外层卡片 div 与标题 span **两层** ⇒ 锚点漂到卡片块、浮层比文字低 6~8px（现在只挂标题文字 + `gap: 2`）；
-  ② 编辑里点「链接」弹出的选择器原先**没有锚点坐标**（会掉到视口左上角），现在锚在同一处。
-- **真实端实测**（隔离 userData + `LAKE_RENDERER=scheme` + CDP 9234/9235，用开发库里那张真卡）：动作条 `padding 6px 12px` / `radius 4px` / 条目 28×28（间距 32）/ **上边距 2px** / 左缘 = 文字左缘（65）；
-  编辑浮层 `365×223` / `padding 16px 12px` / `radius 5px` / 字段 `margin-bottom 16px` / 输入框 339 宽 / 「确定」在左侧；**暗色**下两浮层背景 `#1e1f23`、边框 `#2d2f34`（主题桥生效）。
-  **交互实测**：`mouseenter` 标题 → 120ms 后条出现（4 项）；移出标题但**移入条上** → 保持打开；完全移开 → 关闭；**点标题 → 活动标签切到被引用文档** `eeeff8ed…`（原活动 `1b6b7362…`，不新建重复标签）。
-- **⑤ 插入面板图标换成用户设计稿（261008 五改）**：新 [noteRefIcon.tsx](src/features/editor/noteRefIcon.tsx) —— 组件**只渲染一个 `<symbol id="icon-lake-note-ref" viewBox="0 0 72 72">`**（不画可见 svg），
-  经 `appendNoteRefCard(config, card, NoteRefIconSymbol)` 挂进内核的 `{ config, icon }` 包装 → `lakeRuntime.ensureCustomCardIcons()` 收进隐藏 sprite；
-  `NOTE_REF_CARD_META.slash.icon` 改指该**全限定 id**（面板按 `<use href="#<id>">` 直接解析，短名要过内核别名表、自绘图标查不到）。
-  **实测**（隔离实例 + 面板里那一行）：图标盒 36×36 / radius 7、`div.ne-icon` font-size 36px、`<use href="#icon-lake-note-ref">`、`use` bbox 35×35、symbol 70×70（72 网格 ⇒ 0.5 缩放，描边 2→1px）。
-- **⑥ 图标的深色重绘（261008 六改，用户"你看着处理"）**：同一份几何两套调色板 —— 变量定义在 [themes/base.css](src/styles/themes/base.css)（浅色=设计稿原值）与 [themes/dark.css](src/styles/themes/dark.css)（深色：底框 `#232528` / 文档面 `#2b2e34` / 描边 `#d7dae0` / 高亮线 `#7fb2ff` / 链接绿 `#2ed790`）。
-  **机制（关键）**：`<use>` 的内容活在 **shadow 树**里 —— **选择器打不到、`var()` 也不能写在 presentation attribute（`fill="var(…)"`）里**，只有**继承**能进去 ⇒ 只能写成 `style={{ fill: "var(--lake-note-ref-icon-…)" }}`（本项目"禁内联样式"的唯一例外，理由写在 `noteRefIcon.tsx` 头注释）。
-  护栏：`noteRef.test.ts` 断言组件里**没有颜色字面量**、且**每个用到的变量都在 base.css 定义、dark.css 逐一同名覆盖**（缺一个就是深色下透明/黑）。实测两套取值：浅 `#fff/#f6f6f2/#20ba77` · 深 `#232528/#2b2e34/#2ed790`，面板实拍两主题均正常。
-- **⑦ 插入后直接打开编辑浮层（261008 七改，用户：「插入文档引用，直接打开编辑页面就行，还是类似链接」）**：与内核"插入链接后立刻弹链接编辑器"同口径 —— 从插入面板建卡后**自动弹出**同一套编辑浮层（文本 / 链接）。
-  **判据（实测）**：内核给**刚插入**的卡挂 `ne-focused`；**打开既有文档时卡上没有这个类**（重启复现两次均无），而 `ne-focused` 本身是"**当前聚焦卡**"标记（点另一张卡会转移）⇒ 单独用它会在"聚焦卡被重渲染"时误弹。
-  落地做法（`noteRefCard.tsx`）：空引用 + 编辑态时**轮询 ~1.4s（120ms×12）**找 `closest("ne-card").ne-focused`（插入时内核可能先把卡渲进**游离节点**再挂进文档，一次性判定会漏），
-  并用**模块级 `WeakSet` 按 DOM 元素去重**（开过一次就不再开，重渲染不重复弹）。阅读态 / 已有引用不弹。
-  **同时修**：打开即聚焦原本用 `autoFocus` 是**失效**的（首帧表面 `visibility:hidden`，`focus()` 被静默忽略）—— 编辑浮层改为等 `usePopoverPosition` 的 `placed` 再聚焦（**空引用落在「链接」、已有引用落在「文本」**，同内核链接编辑器的 defaultSelect 口径）；选择器搜索框同理改用下一帧聚焦。
-  **实测**（隔离实例）：插入后 **T+200ms 浮层已开**、字段 `["文本","链接"]`、焦点 = 「链接」输入框；点它 → 选择器**锚在卡旁**（left 57 / 12 行）且**搜索框已聚焦**；**打开既含空卡的文档时浮层不弹**。
-- **⑧ 完整创建流程（261008 八改，用户定稿）**：「插入 → **自动开编辑浮层** → 点「链接」**选文档** → **自动回填「文本」= 该文档标题** → 用户改完点「确定」→ 卡片**直接展示这段文本**」。
-  · **选文档只回填、不落库**：`NoteRefEditPopover` 里选中的目标先存本地 `picked`（`refId/targetTitle/targetLabel` 都是"预览值"），**只有「确定」才 `update` 写卡**；
-    回填规则 = 「文本为空 **或** 仍等于上次自动填的值」才覆盖（`autoFilledRef`）⇒ 用户改过的文本不会被下一次换文档冲掉；「确定」按钮的 disabled 也改看 `hasRef`（选完就能提交）。
-  · **展示文本 = 卡里存的 `title`**（`value?.title || note?.title`），**不再用目标文档的实时标题** —— 否则"改文本"等于没改（显示永远被目标标题覆写）。旧卡/未填文本才回落实时标题。
-  · 编辑器里的焦点走向与内核链接编辑器一致：**还没有引用 → 落在「链接」**；**选完文档回来 → 落在「文本」**（正好接着改展示名）。
-  **实测**（隔离实例全链路）：插入 → 浮层开（焦点=链接）→ 选择器 13 行（焦点=搜索）→ 选「多维111」→ 浮层回来、`文本=多维111`、`链接=多维111 · 多维表`、**焦点=文本** → 改成「我改过的展示文本」→ 确定 → 浮层关、卡片显示**我改过的展示文本**（链接色）；
-  落盘核对 `.lake`：`<card customName="lake-note-ref" value="data:{…"noteId":"a5fab08e…","title":"我改过的展示文本"…}">` ✓。
-- **⑨ 取消链接 = 转为正文（261008 九改，用户：「点取消链接就直接转为正文就行，不用保留卡片样式」）**：不再把卡留在正文里（旧行为是"清引用、保留卡片形态的纯文本"）。
-  落地 `unlinkCardToText(editor, cardEl, title)`（`noteRefCard.tsx`）—— **全走内核命令**：
-  ① `execCommand("focusCard", cardId)` 把选区落到这张卡上（就是内核给新插入卡挂 `ne-focused` 的那条；**卡片 DOM 的 id 就是模型节点 id**，实测选区 start/end 的 `node.id` 与之一致）；
-  ② `captureModelRange` → `positionAfterModelRange` 换算「该顶层块之后」的落点（模型里卡片外还包着一层洞节点，必须靠 `_parent` 上溯求顶层块）；
-  ③ `insertAtPosition(落点, "text/html", <p>转义后的展示名</p>)`；④ `deleteCard(cardId)` 摘卡。
-  ⚠️ **顺序不能反**（先删再算落点会得到 `indexOf = -1` ⇒ 文本跑到文档末尾）；⚠️ **自己 BFS 模型树找节点实测失败**（根节点的 `_children` 不适合外部遍历）⇒ 用内核的 `focusCard` 让它自己认。
-  失败（拿不到内核能力）才回退旧的"保留卡片"路径，**绝不静默丢文本**。
-  **实测**（隔离实例）：点「取消链接」后 `refs 1→0`、`ne-card 1→0`；落盘 `lake-note-ref` 卡数 **0**、原位置变成 `<p><span>展示名</span></p>` ✓。
-- **⑩ 复制引用 = 复制目标文档的**资料库全路径**（261008 十改，用户定稿）**：不再复制只有本应用认识的 `lake-note://<id>`。
-  中间改过一版"本机绝对路径"（`native.getNotePaths().lakePath`），用户最终拍板**回到资料库路径** ⇒ 定稿 = `笔记本/分组/文档`。
-  `NoteRefHost` 新增**可选** `pathOf(noteId)`（签名允许同步/异步，调用方统一 `await`；可选是为了不破坏既有注入点/单测），App 注入 `treeNodePath(treeNodes, noteId)` 拼出的全路径。
-  复制回退链：**资料库路径 → 展示名 → `lake-note://<id>`**（任何情况都不复制空串）。动作条文案 =「复制引用路径（目标文档在资料库里的全路径）」；
-  路径只在**点击那一刻**取（树遍历不该进渲染期）。**实测**：复制得到 `个人笔记/表格55`，与树里该文档的真实路径一致 ✓。
-- **回填** [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) **§5.24**（含一条纠偏：内核链接的 hover 菜单其实是**竖向** `.ne-ui-mode-menu-panel`，横向那条是卡片工具栏；以及"同一个 ref 别挂两层"）。
-- 门禁：tsc ✓ · vitest **1777 passed / 16 skipped** ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9 / 字号字面量=0）✓ · check:core 76-0 ✓ · 双端构建 ✓ · `git diff --check` ✓。**已提交并推送** `origin/master`（`342e14e` 表格阈值 · `4fef01d` 引用卡 · `14fd144` 文档）。
-
-### 261008 续 · 大表格粘贴 A+B 兜底（已交付）
-
-- **A 护栏**：粘贴的 HTML 表格 **> 1000 行或 > 5000 格**时**不发生给内核**（阈值 261008 上调，见 §3#16 的边界实测）（`document` 捕获阶段 `preventDefault + stopImmediatePropagation`，见 `clipboardHtml.ts`），改为弹明确提示；**剪贴板内容保留、绝不静默丢弃**（AGENTS §3#16）。
-- **B 兜底**：提示里一键「**存为表格文档**」= 解析该表格 → `createUsheetIn` 建表格文档写入 → 在光标所在块之后插入一张「**文档引用**」卡（复用 R2 的 `lake-note-ref`，`insertAtPosition` + `text/html`，落点用捕获的内核模型选区）。
-- **阈值上调（261008，用户定稿）**：`500 行 / 3000 格` → **`1000 行 / 5000 格`**（`tablePasteGuard.ts` 的 `TABLE_PASTE_MAX_ROWS/CELLS`；单测钉死这两个口径值）。
-  **边界实测**（隔离 userData + `LAKE_RENDERER=scheme` + CDP，合成 `paste` 事件，量 `dispatchEvent` 同步耗时）：**1000×5 = 5000 格 → 1.93s / DOM +2.65 万**；100×50 = 5000 格 → **1.41s**；旧上限 500×6 = 3000 格 → 0.79s；
-  1001 行 / 6000 格两例被护栏拦下 → **0.5~0.7ms**（内核完全不接，对话框正确弹出并显示 1001 行 / 5005 个单元格）。
-- **落点**：`src/features/editor/tablePasteGuard.ts`（阈值/计数/解析成 usheet 正文/卡片 HTML/事件通道）· `TablePasteGuardDialog.tsx`（提示 + 一键）· `clipboardHtml.ts`（拦截接线）· `App.tsx`（挂载 + 注入 parentId）。
-- **真实端实测**（隔离实例 + CDP，5500 行 × 6 列 / 1.5MB HTML）：同步阻塞 **30,743ms → 2ms**（wall 48ms）；文档未被塞进表格（`ne-table-hole: 0`，DOM 仅 +18 = 对话框）；提示文案含 `5500 行 / 33000 个单元格` 与「已阻止本次粘贴，剪贴板内容保持原样」；点「存为表格文档」后**库里新增 1 篇表格文档**且宿主正文出现 `<card name="customBlock" customName="lake-note-ref" value="data:{"$name":"lake-note-ref","noteId":…">` ✓。
-- 门禁：tsc ✓ · vitest **1772 passed / 16 skipped** ✓（新增 7 条：`tablePasteGuard.test.ts` 5 条纯逻辑 + 2 条接线护栏）· ui-metrics ✓ · check:core ✓ · 双端构建 ✓ · `git diff --check` ✓。
-### 261008 续 · 「文档引用」卡（R2）
-
-- **用户诉求**：在文档里"插入同目录的表格"。调研结论（§2 三级检索 + bundle 排查）：**内核没有现成卡**——云端那张「插入可访问的语雀内容」（`/yq`）是**拉语雀线上内容**、本地无解析通道；`mention` 在本构建的分组里**被注释掉**；`localDoc` 是「本地文档（上传文件）」卡。⇒ 只能自建，按官方**配置式自定义卡片**做了 **「文档引用」卡**（R2）。
-- **能力**：`/`（实际入口是工具栏「+」面板）里的 **文档引用（/doc）** → 插入**区块引用卡** → 选择同库任意文档（**文档 / 表格 / 多维表 / 画板**都一样，只存引用元数据、不内嵌渲染）→ 点击标题打开对应标签页；目标被删/进回收站/purge → **「文档已删除」失效占位**。
-- **落点**：`src/features/editor/noteRef.ts`（纯逻辑：`lake-note://<id>` 约定、解析、宿主注册表、`isGoneNote` 失效判据、斜杠接线，可单测）+ `noteRefCard.tsx`（React 卡 + 选文档浮层，复用 kit/`Overlay` 原语）+ `noteRefCard.css`（新文件，已登记 cssLayers 基线 28）+ `lakeRuntime.ts`（`registerNoteRefCard(mergedOptions)` 必须在 `prepareCustomCards` 之前；斜杠项加进「小工具」组）+ `App.tsx`（`setNoteRefHost({ listNotes, openNote })` 注入宿主：卡片在内核 React 树里，拿不到应用 context）。
-- **契约与坑已回填** [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) **§5.23**（字段契约、`custom-${name}` 命名与分组 items 必需、「小工具」组 name 重名只能按 title 找、工具栏面板才是可靠入口、面板内部滚动要先 scrollIntoView、`.lake` 序列化形态、React 实例共享但无 context）。
-- **真实端验收**（隔离实例 + CDP 全链路）：面板里出现 `/doc 文档引用` ✓ → 插入后显示"选择文档…" ✓ → 浮层列出 3 篇、选中「被引用表格」✓ → 卡片显示 `被引用表格 表格 换` ✓ → **点标题打开表格标签页且 `sheetOpen:true`** ✓ → 落盘 `<card name="customBlock" customName="lake-note-ref" value="data:…lake-note://<sheetId>…">` ✓。
-- **261008 二改（用户要求「模仿内核链接的样式」）**：卡片改成「类型图标 + 展示名（主色/hover 下划线）」，**悬停出浮层**，四个动作与内核链接一致 ——
-  **访问 / 编辑（弹窗改「展示名称」+「换文档」）/ 复制（`lake-note://<id>` 写剪贴板）/ 取消链接（清引用、保留展示名并渲染成纯文本）**；
-  浮层走 `Overlay` 的 `HoverPopover`（共享悬停区 + 开/关延时）、定位走 `usePopoverPosition`、动作按钮复用 `.ln-iconbtn--compact` + lucide 图标；
-  阅读态（viewer）不给写操作。新增样式文件 `noteRefCardActions.css`（横向图标行 + 编辑弹窗字段，已登记 cssLayers 基线 13）。
-  > **二次修正（用户 261008）**：① 悬停浮层"根本点不到" ⇒ **改成点击打开**（`Overlay` 的 `Menu`，定位仍 `usePopoverPosition`）；
-  > ② 样式要"直接复刻链接" ⇒ 正文改用**内核自己的 `.ne-link` 类**渲染（同源样式）；③ **不要全局弹窗** ⇒ 「编辑」从 `Dialog` 改成**锚定浮层** `Popover`（字段沿用本卡类，零新增 CSS），选文档也改成锚定浮层。
-  > ⚠️ **该交互的"真实端点按"仍未验收**：CDP 驱动在本会话反复卡在"工具栏「+」面板未打开"那一步（诊断：文档已开、按钮在、`panel:false / 菜单项 0`，是驱动/选择器问题，不是卡片代码；被遮挡窗口又无法驱动 `mouseMoved`）⇒ **请用户点一下确认**（点卡片出四个按钮 / 编辑是锚定小浮层 / 取消链接变纯文本）。
-  > 另：内核链接编辑那几个类（`.ne-link-editor*`）在 bundle 里只有类名、**CSS 规则没定位到**（很可能是运行时注入），所以"像素级完全复刻"拿不到现成样式；当前是**复用内核 `.ne-link` 类 + 自有设计系统原语**，若要逐像素对齐需你给出参考截图细节。
-- 门禁：tsc ✓ · vitest **1773 passed / 16 skipped** ✓（`noteRef.test.ts` 8 条 + `tablePasteGuard.test.ts` 7 条纯逻辑/护栏）· ui-metrics ✓ · check:core ✓ · 双端构建 ✓ · `git diff --check` ✓。
-### 261008 · 文档分屏（左右两栏 · 方案 A）
-
-- **决策（用户 261008）**：只做**左右两栏、最多两个、不同文档、临时不持久化**；入口在顶栏右上角（点开列出其余已打开标签）；右栏右上角一个细箭头菜单（取消分屏 / 左右互换）+ X；分隔条可拖（**最终形态 = 可拖浮动工具条 + 标签栏一个合并标签，见下两条；本条为最初决策**）。**同文档仍只能开一次**（`noteId` 是标签唯一键，多开会撞保存/捕获/版本/滚动记忆，见调研结论）。
-- **状态**：[useWorkspaceState.ts](src/hooks/useWorkspaceState.ts) 新增 `splitPair: { left, right } | null`（临时 state，不落盘、不进 settings）；`activeNoteId` 语义不变 = **焦点栏**文档 ⇒ 面包屑/大纲/状态栏/`activeEditorHost` 等 119 处引用无需改。
-- **渲染**：[MultiTabEditor.tsx](src/features/editor/MultiTabEditor.tsx) 分屏时 `.tab-panels` 变两列（`is-split`），宿主按 `data-pane` 分列；**`data-active` 仍全局唯一（焦点栏）**，右栏靠新增的 `data-pane-visible` 显示（隐藏判据仍归 [tabs.css](src/styles/app/tabs.css) 单一来源）。点进任一栏即切焦点（**点第三个标签 = 普通切换**；"替换分屏栏"已被后面的合并标签定稿删除）。四个宿主（doc/sheet/bitable/board）都加了 `focused`/`pane`。
-- **分隔条**：抽出唯一实现 [SplitHandle.tsx](src/components/ui/SplitHandle.tsx)（[SplitPane.tsx](src/components/ui/SplitPane.tsx) 与分屏共用）；拖拽改走 window 监听 + try/catch `setPointerCapture`（合成鼠标无活动指针时 capture 会抛错并中止拖拽）。分屏宽度只活在内存。
-- **入口/菜单**：[DesktopTopBar.tsx](src/desktop/DesktopTopBar.tsx) 的 `DesktopSplitButton`（未分屏点开选标签、已分屏点击取消）；右栏控件见 [splitView.css](src/features/editor/splitView.css)（**最终是浮动工具条，见下方一条**；早期"下移一个工具条高度"的贴角方案已废弃）。
-- **验收**：真实端 CDP 走查 —— 入口菜单只列其余标签（排除当前）；进入分屏两栏 517/517、`data-pane` 正确、`data-active` 唯一；点非焦点栏切焦点；左右互换（焦点跟随文档、列位互换）；取消分屏；点第三标签替换焦点栏；合成 pointer 拖拽 517→697（`--split-left` 生效，无 localStorage 写入）。
-- 门禁：tsc ✓ · 全量 vitest **1726 passed / 16 skipped** ✓ · check:core 76-0 ✓ · ui-metrics（hex=0/rgb=0/`!important`=9/未定义=0）✓ · cssLayers+uiPrimitives ✓ · check:bundle ✓ · 双端构建 ✓ · `git diff --check` ✓。新增护栏 [splitView.test.ts](src/features/editor/splitView.test.ts)（6 条）+ 更新 `activeEditor`/`boardEditorMount` 的 `data-active` 断言。
-- **右栏控件 → 可拖浮动工具条（用户 261008 最终定稿）**：贴角 / 骑线方案已废弃 —— 它与每个编辑器自己的工具条冲突（文档只是"画到了面包屑那一行"才显得正常；非文档会被工具条盖住）。改为 **`.tab-split-controls` 浮动工具条**：浮在两栏之上（`z-index: --lake-z-editor-sticky`）、不属于任一栏 ⇒ **不会被任何编辑器 chrome 盖住**；`⋮⋮` 把手 + `⋯`（取消分屏 / 左右互换）+ `×`（两枚实心圆钮）；按住可在分栏容器内**拖到任意位置**（位置只存内存，分屏本身临时、不持久化）。默认停在右栏工具条下方。
-- **分屏在标签栏 = 一个合并标签（用户 261008 定稿，Edge 式）**：分屏两页渲染成**一个** `.tab-split-tab`（两段标题 + 中间分隔线 + `Columns2` 分组图标 + **一个 ×**，`data-split-group`）。点它 = 回到分屏（`activeNoteId` 恢复到最后看的那栏，`splitFocusRef`），点其它标签 = 普通单栏切换（合并标签仍在、`splitPair` 保留）。`splitActive = splitPair && activeNoteId ∈ {left,right}` 才显示两栏 / 分隔条 / 浮动工具条。**已删除「点第三个标签替换分屏栏」**；合并标签的 × = 取消分屏（两个标签都保留，不做连带关闭）。分屏组期间禁用标签拖拽（合并标签不是单 noteId，顺序算不了）。⚠️ 合并标签要插在**标签栏**的 `tabs.map`（MultiTabEditor ~L390），不是 `.tab-panels` 的编辑器 `tabs.map`（~L504）—— 第一次插错地方，渲染进了面板里。
-- **面包屑归属重构（用户 261008 定稿）**：面包屑从「pane 级全局一条」下沉为**文档宿主自己的一部分** —— [EditorTab.tsx](src/features/editor/EditorTab.tsx) 用**本文档自己的**大纲句柄（`getSelectedId`+`getNode` 上溯）自算标题路径、自导航、自滚动到顶 ⇒ 分屏时**每栏一条、随栏宽收缩、与文档联动**、不再看 `activeNoteId`、不再闪烁。`DesktopLibrary`/`MultiTabEditor` 删除全局 `breadcrumb`（App 的 `headingPath`/`navigateToHeading`/`activePathTitle` 随之删除，改传 `notePathTitle(noteId)`）。`.lake-editor-tab` 改 flex 纵向两段（面包屑 + 主体 `flex:1;min-height:0`）。**分屏下隐藏面包屑右端「更多」**（AI 只走浮窗、导出走目录树右键）；`useEditorTopVar` 改为只量 `activeEditorHost()` 内的面包屑+工具条。验收：两文档并排 = 2 条面包屑（各 629px = 半宽）、`more:false`；单栏 `more:true`（全宽 1258）；文档+表格 = 只有文档栏有面包屑；编辑器高度链正常（host 714 / wrap 638）。坑记入 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §L。
-- **收尾修复（用户 261008 报「点分屏没效果」）**：`Menu` 是 portal 到 body 的，outside-dismiss 原先只在锚点容器（`[data-split-menu]`/`[data-split-controls]`）里判断 ⇒ 真实鼠标落在菜单项上的 `pointerdown` 先关菜单、`click` 落空。改为「锚点容器 + `menuRef.contains`」双判；合成 `pointerdown`+`click` 复验 split 成功。坑记入 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) §L。
-
-- **已提交/已推送（261008）**：`ce035e4`（master，28 文件），与 `origin/master` 同步。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧（见 §3#9）。
-
-### 261007 · 文档精简 + 设置页版式收口 + AI 常用预置
-
-- **文档精简**：删除多维表专项（4415 行）/ 填色调研 / 非多维表审计+证据 / UI 刷新计划 / 旧安卓·资源·浏览器·对拍文档 / 虚拟渲染试验 / 设计评审稿，共 14 个 tracked 文件（−6948 行），并修掉 README/AGENTS/代码注释里的悬空引用；HANDOFF §0 压到只保留最新 1–2 批。删除内容都在 git 历史。
-- **设置页版式**（用户 261007 现场反馈「不要这么挤 / 短配置放一行 / S3 输入更长」）：[settingsPrimitives.tsx](src/components/settingsPrimitives.tsx) 的 `Field` 由「堆叠」改**单行**（标题/说明在左、控件在右；`config-item--stack`→`config-item--field`；控件列 54%、主列 `flex-basis:0` 防长说明把控件挤到下一行）；`feature.css`：行内边距 12→14、最小高 48→52、分组标题条 8→10、卡片间距 12→16、行内列间距 16px；输入/下拉铺满控件列（S3 输入实测 332→390px）。紧凑控件（开关/数字/段）仍走 `Item`。
-- **修一个真 bug**：`Switch` 的按钮是设置行的**直接 flex 子项**（没走 `.config-item__ctl` 包裹），而 `.ln-switch` 只写了 `width:32px`、没写 `flex-shrink:0` ⇒ 说明一长开关就被压扁（「启用云同步」「启用浏览器端」「使用 Path-style URL」等都中招）。修在单一来源 [kit.css](src/styles/kit.css) 的 `.ln-switch { flex: 0 0 auto }`；顺带给 `.ln-select__value` 补 `text-overflow: ellipsis`。
-- **同步配置收口**：「云端与同步」页顺序改为 **S3 对象存储 → 同步策略 → 云端回收（S3 GC）→ 备份与恢复**；`启用云同步` 加**真闸门**——只有 S3「测试连接」成功（会话内 `s3Verified`，改任一 S3 字段即失效）才能开启，且 `saveSyncCfg({enabled:true})` 兜底测试失败即中止（此前注释写「通过才开」、代码却照样写 `enabled`）。
-- **AI 常用预置**：[aiProviders.ts](src/core/aiProviders.ts) 新增 通义千问（`dashscope.aliyuncs.com/compatible-mode/v1`）/ 智谱 GLM（`open.bigmodel.cn/api/paas/v4`）/ 小米 MiMo（`api.xiaomimimo.com/v1`）；三家**不开**思考强度/思考模式（参数形状与 DeepSeek 不同，避免 400）。
-- **同步 warning 结构化**（backlog §3#1，本轮一并完成）：core 从「拼中文字符串 → 控制器正则反解」改为**直接产出结构化 `SyncWarning`**（`{kind, noteId?, title?, filename?, message}`；类型单一来源 [lib/types.ts](src/lib/types.ts)，`electron/syncTypes.ts` 改为 re-export）；`AssetMissingError` 结构化携带 `filename`；同步浮窗新增「被跳过」列表（复用冲突快照那块表面）并可**点击打开对应文档**。**同步语义不变**（仍是 B 方案：跳过受影响条目、不覆盖本地、下轮重试），只改报告契约。真实端 CDP：注入带 2 条 warnings 的 lastResult → 浮窗渲染 2 行、点击打开目标文档。移动端同步设置页展示同一列表（可点开文档），首页/笔记本同步 toast 附「N 项被跳过」；**Android 模拟器未实测**（告警态在模拟器里不易复现）。
-- 门禁：tsc ✓ · 全量 vitest **1716 passed / 16 skipped** ✓ · check:core 76-0 ✓ · ui-metrics（hex=0/rgb=0/`!important`=9/未定义=0）✓ · 双端构建 ✓ · `git diff --check` ✓；快照重烤 7 个设置态（两次采集一致）。真实端 CDP 实测：单行版式、开关 32×19、S3 输入 332→390px、闸门禁用态、AI 下拉 6 项。
-
-### 修复 · 261006 · 画板工具栏图标对齐 + 多维表展开浮窗适配边界
-
-- 用户两条反馈。① **画板左侧竖排创建栏图标错位**：内核原生 `label.tool-icon` 里的隐藏 radio 占 15px 流内宽度、lakex 注入触发器未居中 ⇒ 三类工具项图标圆心分 57 / 50 / 42.5 三档。修在 `src/features/board/boardEditor.css`（内核例外覆盖，不手改 vendor）：radio 移出流 + 注入触发器居中 ⇒ 实测 11 项 centerX **全为 42**，真实点击切换 / 高亮正常。② **多维表单元格展开浮窗适配边界**：`ExpandPanel` 旧实现横向按占位宽 400 夹取，而实际宽度是「记住的尺寸」⇒ 越界（1258 视口 / 锚点 x≈1020 / 记忆 900 宽时旧实现溢出 ~490px）。改用**真实尺寸**定位 + 夹进视口 + 窗口 resize 重新适配（仍不因拖动 / 缩放重算定位）。
-- ③ **多维表 AI 字段展开默认进「预览」**（用户 261006），Markdown 字段仍默认「编辑」：`MarkdownExpandPopover` 按 `field.type === "ai"` 决定初始态（只读仍恒为预览）。真实端 CDP：AI 字段面板打开即 `预览` 高亮、无 textarea、头部「重新生成」在。
-- ④ **全应用「文本选中」统一为固定色 + hover 气泡改用同色**（用户 261006 报「文档是主色变浅，多维表/表格/输入框是固定深蓝」，随后定稿「固定色比较好；选中的边框已经是主题色，多主题色放一起不好看」）：① 根因是内核 antd 基底（编译进 `vendor/lakex-doc-react/dist/style.css`，import 在 legacy 层）里有一条裸 `::selection{background:#1890ff}`，只被内核 `.ne-engine ::selection` 覆盖 ⇒ 其它一律固定蓝；② 修法：把 `--lake-select-bg` 从三套主题收进 `themes/base.css`、定为**主题无关固定值** `rgba(63,95,160,.16)`（用户截图的 `#d8dde8` 就是它在 `#f5f5f5` 上的合成），再在未分层 `kernel-theme.css` 加全局 `::selection{background:var(--lake-select-bg);color:inherit}`（未分层普通声明压过 legacy 层，不需要 `!important`）；③ 用户追加「这种冒泡都改用选中色」：`--lake-tooltip-bg/-fg` 由深蓝 `#3f4868`/`#f8f9ff` 改为同色系的 `#d8dde8`/`#1f2329`（`.ln-tip` 与各处 hover 气泡同一令牌）。真实端实测三主题：`::selection` 恒 `rgba(63,95,160,.16)`、`.ln-tip` 恒 `#d8dde8` + `#1f2329`。**用户明确：这不是设计系统的例外，而是「选中 / 气泡」这一处的独立设计。**
-- ⑤ **多维表导航改为「设备本地」**（用户 261006 选 C）：`activeTableId` / 每张表的 `activeViewId` 不再作为正文真相 —— `useBitableSession` 序列化时恒写「第一张表 / 第一个视图」（新增 `serializeBody`），切表 / 切视图只写 `localStorage`（`lake-notes-v3.bitable-nav.<noteId>`，见 `BitableEditor`；历史快照预览 `chrome=false` 不读写）。效果：**切表不落盘、不标脏、不进同步**；每台设备各自记住最后看的表 / 视图。真实端 CDP：切表后状态栏全程 `仅本地`、正文 `activeTableId` 不变、localStorage 导航已更新。
-- ⑦ **目录行新增「＋」快捷新建**（用户 261006）：行内 `.tree-row-actions` 加「＋」（hover 显形、**在「⋯」右侧**），点击弹「新建子项」菜单（新建文档 / 表格 / 数据表 / 画板 / 分组）。五项动作抽成单一来源 `CreateChildItems`（`CREATE_CHILD_ITEMS`），右键菜单「新建」子菜单同一处引用；「＋」菜单锚在该按钮、定位走 `usePopoverPosition`（贴底翻转）。真实端 CDP：hover 表格行 → 点「＋」→ 五项菜单正常弹出、Esc 关闭、未新建任何文档。
-- ⑧ **目录重命名改弹窗 + 重命名期间钉住目录栏**（用户 261006）：① 删除行内 `.tree-rename-input`，改成 `TreeRenameDialog`（`Dialog` + `.ln-dialog__head/body/actions` + kit 的 `.ln-input`/`.ln-input__field`；标题「重命名」、文本默认全选、Enter=确定、未改动时「确定」禁用；弹窗宽度 `min(460px, 92vw)`——比附件重命名的 420 宽一档，给长名字留横向空间，实测 460×134、输入框 426px）；② 新增 `useDesktopShell.holdSidebarExpanded(active)`（`sidebarHoldRef`，`hideSidebarPreview` 先看它）—— 重命名弹窗打开期间调用，**悬浮态下指针移到弹窗/遮罩上也不收起目录**，关闭后释放。真实端 CDP：右键行→重命名→弹窗（值=标题、全选、取消/确定）→ 指针移到弹窗上 1.5s 目录仍 `sidebar-floating`；Esc 取消后离开 → 回到 `sidebar-collapsed`。同时清掉死掉的 `.tree-rename-input` CSS。
-- ⑨ **垂直几何整体收窄**（用户 261006「顶栏有点宽，上下收窄一点；面包屑和固定工具栏也缩小一下试试」）：几何是**单一来源两处** —— `src/styles/app/base.css` 的 `--topbar-height`（38→36→**34**，32 是 260923 试过的下限）与 `src/lib/layoutMetrics.ts` 的 `TOPBAR_HEIGHT`（`layoutMetrics.test.ts` 卡两者一致、红绿灯 y 必须整数）；另 `--breadcrumb-height` 30→**26**、`--editor-toolbar-height` 34→**30**。标签条按 `(顶栏 − 标签)/2 ±2px` 自动居中，面包屑/工具条按令牌高度 + flex 居中。工具条 30 的代价：内核两个 32px 的「正文/字号」下拉触发器（`.ant-dropdown-trigger`）与两个色彩按钮（`.ne-ui-toolbar-color-button`）在 `src/styles/app/editor.css` 压到 26px，否则裁切（内核覆盖例外，理由写在规则处）。实测：`.tab-bar` 34、标签中心 y=19 = 可见头区（34+4）中心；面包屑 26；工具条 30、条内最高元素 27。macOS 红绿灯 `y=(TOPBAR_HEIGHT+4−12)/2` = 13（**主进程值，需重启实例才生效**；面板宽度不受影响）。✅ `check:stylesnap` 已在**开发工作区的隔离副本**上重烤（用户 261006 授权）：42 态，**34 态 0 差异**、8 个窄窗态按脚本自带规则跳过。夹具与旧基线同构（每态恒 +28 元素 = 自上个基线以来新增的笔记），差异即本次几何收窄。⚠️ 重烤坑：首态 `plain:1315:light` 首捕易被残留浮层污染（本次 2944 vs 正常 2387）——**必须用第二轮干净快照**写该态（与上个基线同一坑）。
-- ⑩ **设置 · 资源重做 + 删资产「登记漂移」修复 + 快照装置去不确定化**（用户 261006）：
-  · **资源页 = 未引用资源浏览器**（新 `src/components/AssetsBrowser.tsx`，从 SettingsPanel 拆出；**布局复刻思源资产页，样式仍用自有设计系统**）：**单栏上下分区** —— 上半 = 操作 + 列表（吃满剩余高度、内容多了自己滚）：三个**互斥**大页签 **可删 / 历史保护 / 缺失**（去掉「全部」）+ 类型筛选 + 全选可删 + 「清理选中」（二次确认、无「一键全清」）+ 按文档分组、行内动作（复制路径 / 在文件夹中显示 / 删除）；下半 = 固定 **1/3 高**（内容区）的**纯预览**（只有图 / PDF / 视频 / 音频，不放文字与按钮）。预览**直连本地资源服务器**（图片 `?w=1024`、缩略图 `?w=128`、音视频与 PDF 原图），不再走 IPC+base64。另：设置左栏 208→**184**、资源页去掉搜索、「重建全文搜索索引」从「资源」挪到「日志」。
-  · **删资产文件必须与撤 `orphan_assets` 登记成对**：`cleanNoteOrphans`（历史面板清理）与 `cleanupUnreferencedAssetsForNote`（历史保留清理后自动清）原先**只删文件不撤登记**，而保存时的正向对账 `detectOrphans` 按磁盘驱动、看不见这类行 ⇒ 永不自愈（资源页显示「文件缺失」，预览 404）。修：这两条路径同步撤登记；`detectOrphans` 补**反向对账**（登记在、磁盘不在 → 撤行，目录缺失也照样对账）；`deleteHistory` 改为先删文件再删行。`listRemovedAssets` 另增 `fileMissing`（比一次磁盘）作为「缺失」分类的依据。据此体检的 `orphanRowsFileMissing` 应恒为 0。测试 +3（store.test.ts 131）。
-  · **快照装置去不确定化**：① 归一化「上次清理 {时间}」墙钟文本（否则 settings-data 三态随清理时间漂移）；② `pin()` 清 `lake-notes-v3.dialog-states`（弹窗持久几何会随夹具副本把"上一台机器拖到哪/拉多大"带进来 ⇒ 所有 settings 态整体位移）；③ `drive.mjs` 断线时 reject 在途请求（原先 exit 13「unsettled top-level await」把真因盖掉）。**跨实例世代**复跑 34 态 0 差异。
-- ⑪ **「资源」从设置里提出来，成为与回收站同级的空间**（用户 261006「先不动设置弹窗，把设置-资源提到和回收站一级，套回收站样式」）：
-  · 新增空间 `resources`（`DesktopWorkspace`）：**整套复用回收站空间** —— `.app-shell.resources-space-active`（藏目录/大纲/状态栏）+ `header.tab-bar` + 整页 `.resources-space-pane`（chrome.css，与 `.trash-space-pane` 同构）；分栏复用回收站的 `.history-split` 原语，**左 2/3 列表、右 1/3 纯预览**（用户定稿比例）。
-  · 顶栏合一菜单重组（用户定稿）：上半「空间」= 资料库 ⌘1 / 小记 ⌘2；下半「工作空间」= 回收站 / 资源 / 偏好设置，**下半一律不给快捷键** ⇒ `useDesktopLifecycle` 里 **⌘3 的绑定与提示一并移除**（只剩 ⌘1/⌘2）。
-  · 设置里「资源」分类**整项删除**（nav 项 / `SettingsCategory` / JSX / 设置搜索分类集），**设置弹窗本身没动**；随之删掉 `--fill` 铺满链（不再需要）。
-  · 顺手修既有 bug：从菜单里选完空间**菜单不关**（遮着刚切过去的内容；回收站/小记/资源都中招）⇒ `onSwitchWorkspace` 里一并 `setWorkspaceMenuOpen(false)`。
-  · 快照装置同步：新增 `nav.openSpace()`（按可见性找顶栏触发器 → 点同名菜单项 → 等壳类生效），`settings-assets` 态换成 **`resources:1315:light`**；顺带修掉 `openSettings/openSpace` 会取到**隐藏视图**里顶栏按钮的隐患（空间 keep-alive、每个空间各有一套顶栏 ⇒ 必须挑 `getBoundingClientRect().width > 0` 的那个）。
-- ⑫ **快照装置：态自包含 ⇒ 重烤从"整轮 8 分钟"降到"单态 15 秒"**（用户 261006「按提速的方法做」）：
-  · 实测验证：`settings:1315:light` / `resources:1315:light` **单采指纹与整轮全量逐字节一致** ⇒ 以后改哪个界面就只采/只检那几个态（`drive.mjs … stylesnap.mjs <tag> "<态名>"` + `check-stylesnap.mjs --states "<态名>"`，后者 15 秒）。
-  · 补了两处装置缺陷：① **块拖动把手的 hover 过渡**漏在 `settle()` 之外（`settle` 只等 DOM/几何）⇒ `settings:1315:light` 连拍两份出现"元素数相同、指纹不同"的 11 条假差异，现在末态归位鼠标并等把手收干净；② `check-stylesnap.mjs` 带 `--states` 时会把"没采的态"报成差异 ⇒ 加作用域（未采态不在比较范围）。
-  · 顺带：`stylesnap.mjs` **每态落盘**（原先收尾才写，采集在后段卡死就整轮白跑，本轮实测丢过一次）；`nav.openSettings/openSpace` 改为按**可见性**找顶栏触发器（空间 keep-alive，每个空间各有一套顶栏，原先会点到隐藏视图里的按钮）。
-  · 流程写进 `scripts/css-audit/README.md`「快照重烤的快速路径」。
-- ⑬ **三处收口（用户 261006 连发三条）**：
-  · ① **资源空间的分类页签改用 kit 横向页签 `.ln-tabs`**（与回收站/历史面板同一原语：墨线 + 计数徽标），删掉之前那套 `.seg` 大药丸（`.seg` 只留给取值选择/图标开关，见 AGENTS §14）。
-  · ② **破坏性按钮只有一种长相**：`.b3-button` 基座是**实心主色**，`.ft__error` 过去只改文字色 ⇒ 漏写 `--outline` 的两处（目录树删除确认、资源清理确认）渲染成"红字压实心底"看不清（用户截图报障）。现在 `.ft__error` 自带 `background: transparent`（漏写也不再走样），那两处也补上 `--outline`；全仓 7 处 `ft__error` 已复核一致。
-  · ③ **回收站 / 历史版本 / 资源 三处左右结构都能拖**：新增 `src/components/ui/SplitPane.tsx`（**唯一实现**）——指针拖拽 + ←/→（Shift 大步、Home/End 到两端）+ 双击复位 + `role=separator` 键盘可达；宽度**设备本地**存 `lake-notes-v3.split.<key>`，没拖过则用各站点 CSS 默认（回收站/历史 320px、资源 66%）。把手视觉与交互并进 kit 的 `.ln-split-handle`，**资料库侧栏的把手也并到同一个类**（实测几何逐像素不变：10px 命中带 + 居中 2×48 药丸）。
-  · 修一处真 bug：资源行勾选框原先外层 `span onClick` 与内层 `input onChange` **各 toggle 一次** ⇒ 一次点击净零（"勾不上"）；改为 `label` 包住（原生只切一次），外层只拦冒泡。
-- ⑭ **四处在细化 + 夹具钉死**（用户 261006）：
-  · 资源行**不再挂分类标签**（「未引用/历史保护/文件缺失」——三个页签已经分类了，标签纯占宽）。
-  · **切分类/换类型 = 清空右侧预览并清勾选**（原先预览还停在上一个页签的文件；顺带避免"清理选中删到看不见的条目"）。
-  · 资源空间 pane 补段落节奏（`gap: var(--lake-space-md)`：页签行 / 工具行 / 分栏之间不再贴死）。
-  · **回收站/历史版本行间距 8 → 4px**（`.b3-list-item` 一行 6 个间隙 = 48px，时间就是被它挤掉的）+ 回收站行时间改为**到分钟**（`src/lib/formatTime.ts` 单一来源，历史快照仍带秒）⇒ 默认宽度下"文档 · 时间"和「N 天后清除」都完整可见。
-  · **快照夹具钉死**：夹具是 dev 数据的实时副本 ⇒ 往回收站删/新建文档会让**所有态一起漂**（实测少 2 篇 = 每态 −40 元素、看着像 CSS 变了）。改为冻结在 `~/Library/Caches/lake-notes-css-audit/fixture` 反复复用；换夹具数据才需要整份重烤（流程见 `scripts/css-audit/README.md` 的「夹具必须钉住」）。
-- ⑮ **三条（用户 261006）**：
-  · **资源行首不再渲染缩略图**：只留 `FileKindIcon`（类型图标），行更窄、省掉每行一次图片请求。
-  · **回收站预览按 kind 分流**（回归修复）：原先无论什么正文都塞给 doc viewer，表格/多维表/画板的内部 JSON 被原样吐出来（用户报"多维表预览又坏了"）。现在只有 `doc` 走 Lake viewer，其余走 **`HistorySnapshotPreview`**（与历史面板同一实现，只读编辑器）。
-  · **回收站文档的资产进资源页**（用户："删了多维表，它的资源怎么没进资源菜单"）：孤儿登记里没有（保存时还被正文引用）、历史那一支又要求"当前正文不再引用"，而回收站文档的正文文件还在 ⇒ 两边都不覆盖。现在 `listRemovedAssets` 额外扫**回收站文档**的资产目录，以 **`status:"history"`（历史保护，只读不可删）** 列出——恢复后还要用，绝不能给删；这也补上了资源页说明里承诺的"文档在回收站时文件仍列出"。测试 +1（store.test 133）。另：用户实时删文档会让夹具变旧 ⇒ 本轮**刷新了冻结夹具**（现含 3 篇回收站文档）并整份重烤；首态又吃到「首捕污染」（2707 vs 干净 2354），用快速路径单采该态修回。
-- ⑯ **快照夹具改成「合成夹具」**（用户 261006：「你每次跑数据太慢了，我不可能不改数据」）：
-  · 旧夹具 = 开发数据的副本 ⇒ 用户每次增删文档，侧栏树行数就变 ⇒ **所有态一起漂**（实测少 2 篇 = 每态 −40 元素），
-    每次都要整份重烤（8 分钟）。现在由 **`scripts/css-audit/make-fixture.mjs`** 走应用自己的 IPC **造**一份合成夹具
-    （零真实数据、内容固定）：富文本文档（标题/列表/代码/表格/图片）+ 第二篇 + 表格 + 多维表 + 画板 +
-    两篇**同名**回收站文档（守住「分组 key 不能只用 title」那条回归）+ 小记 2 篇 +
-    四种资源（正文引用 / 只被历史引用 / 纯孤儿 / 登记在但文件已删 ⇒ 可删·历史保护·缺失都覆盖）。
-  · 冻结在 `~/Library/Caches/lake-notes-css-audit/fixture`（416K，**不含真实数据**）；生成/冻结/重烤流程写进
-    `scripts/css-audit/README.md` 的「夹具 = 合成夹具」。DB 冻结必须走 `sqlite3 .backup`（热拷会把 WAL 丢掉 ⇒ 表都读不到，本轮踩过一次）。
-  · 从此：只有**换夹具**（改生成器 / 补覆盖面）才需要整份重烤；平时改 CSS 仍只烤单态（7 秒）。
-- ⑰ **云同步状态判据单点化 + 关闭云同步 = 离线本地空间（桌面 + 移动端）**（用户 261006）：
-  · 新增 `src/core/cloudState.ts`：`cloudStateOf` / `canTouchNetwork` / `isCloudActive` / `cloudStateHint`，双端共用；
-    桌面所有联网入口（sync_now、S3 GC 三件套、恢复/预览补拉、自动同步与定期对账定时器）统一挂它，
-    移动端 `bridge.ts` 同步实现（`getSyncSettings/saveSyncSettings` 落 localStorage + 同样的闸门）。
-  · 「关闭云同步」语义变更：以前只是"不自动同步"（手动同步/恢复补拉仍出网），现在**等同未配置、一律不出网**。
-  · **恢复不再等网络**（B 方案，双端）：恢复立刻生效（实测 2ms），缺失资源后台按需补拉 + 明确提示；
-    顶栏状态灯/设置页禁用态与后端**同源**（`isCloudActive`）；关闭云同步**永远能关**（最后对齐降级 best-effort）。
-  · 护栏：桌面 `syncDualAB`（远端工厂调用次数 = 0）+ 移动 `bridgeCloudState.test.ts`（引擎未被调用）；共 4 笔提交。
-- 门禁全绿：tsc ✓ · vitest **1703 passed / 16 skipped** ✓ · check:core 75-0 ✓ · ui-metrics（hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0）✓ · cssLayers+uiPrimitives ✓ · 双端构建 ✓ · `git diff --check` ✓。真实端 CDP 实测：强制 900 宽面板 `right=1250`（视口 1258，8px 边距）。明细见专项文档 §11/§12/§13。已提交：`c361001`（修复批）· `0b60125`（目录栏 ＋/重命名弹窗）· `22def1f`（垂直几何）· `5397548`/`5ad4f64`（资源浏览器 + 基线）· `f6e2298`（删资产登记漂移）· `5c8f1e4`（快照装置）· 本轮设置微调与基线（后续提交）。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 44 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -305,6 +156,8 @@
       ③ **上游同样卡**：用户实测同一内容在思源 ~3s、而**云端语雀 Lake 也卡死** ⇒ 是内核层面的已知限制，不是我们这层的实现问题。
       ⇒ 结论：**按 A+B 兜底**（护栏 + 大表自动落成「表格」文档），不改 vendor 的表格渲染。
     - **复现**：起隔离实例后 `SIZES=1000,5500 LAKE_CDP_PORT=9222 node scripts/table-paste-stress.mjs`（脚本头注释有完整启动命令）。
+
+17. **表格（usheet / Univer）的取舍与已定「不做」（261010，别再提）**：① **「开始」工具收窄**——隐藏旧工具（字体/粘贴/百分比/货币/快捷键面板）**就是为了让原先挤在「更多」里的工具自动补位出来**，宽度变短不是目标 ⇒ **不给白名单**；② **canonical 快照挪到空闲时段**——只对大表有意义（40 万格约 130ms），50×16 规模无感，暂不做；③ **移动端与桌面抽公共 runtime**——差异是实质性的（只读闸门 / 焦点 / 资源 URL 带 token / 无工具条），抽出来只会变参数化分支；④ **单实例多 workbook 共享**——先保证不串台；⑤ 依赖侧冗余清理、运行时正文兼容层——不做（AGENTS §3#18 / §3#7）。升级内核依赖一律走 **docs/USHEET-UPGRADE.md**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），**不要 npm update**。
 
 ## 4. 关键坑（长期有效）
 
@@ -418,6 +271,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 ## 7. 文档索引（`docs/` 按需查）
 - **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 V1 重置）· `S3-GC-DESIGN.md`（存储/删除 GC）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）。
+- **表格（usheet / Univer）**：`USHEET-UPGRADE.md`（内核触点清单 + 依赖升级 playbook + 路线图；配套 `src/features/usheet/usheetKernelContract.ts` · `univerContract.test.ts` · `scripts/usheet-kernel-probes.mjs`）。
 - **正文写入（写 `.lake` 前必读）**：`LAKE-CONTENT-WRITING.md`（约定 + 反例 + 校验判据；配套 `src/core/lakeDocForm.ts` 与 `scripts/lake-roundtrip-check.mjs`）。
 - **指南**：`CODEX-GUIDE.md`（CDP 驱动真实 Electron，动手前必读）· `DEVELOPMENT.md` · `ARCHITECTURE.md` · `TROUBLESHOOTING.md` · `RELEASE.md` · `SYNC-RELIABILITY-VERIFY.md`（数据完整性门禁）。
 - **移动端**：`MOBILE-TECH-STACK.md`（当前唯一移动端架构规格；旧 `ANDROID-TECH-SCHEME`/`ASSET-URL-MOBILE-PLAN` 已删）。

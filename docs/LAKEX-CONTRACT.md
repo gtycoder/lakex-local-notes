@@ -1367,3 +1367,49 @@ PY
     而 **`var()` 也不能写在 presentation attribute 上**（`fill="var(--x)"` 浏览器不认）⇒ 想要"随主题换色"只有一条路：
     元素用 **`style="fill:var(--x)"`**，变量定义在主题文件（`themes/base.css` + `themes/dark.css`），靠**继承**进 shadow 树。
     本项目落地见 `src/features/editor/noteRefIcon.tsx`（浅色=设计稿原值 / 深色=重绘一套，两套都实测过）。
+
+### 5.25 表格（Univer 内核，非 lakex）图片粘贴：落点写死在命令里，只能在 DOM 层收口（261010 读码 + 真实端实测）
+
+- **内核行为**（`@univerjs/sheets-drawing-ui` v1.0.3）：图片粘贴钩子 `onPasteFiles(pasteTo, files, payload)` 只要剪贴板里有图片文件，
+  **无条件**返回 `{ redos: [{ id: "sheet.command.insert-float-image", params: { files } }] }` ⇒ 默认**永远落浮动图**（跟"有没有选中单元格"无关）。
+- **钩子层加不了自己的规则**：`@univerjs/sheets-ui` 的 `_executePaste` 是**聚合语义** —— 把所有 enabled hook 返回的 undo/redo mutations
+  push 进同两个数组后**一起执行**（`redoMutationsInfo.every((m) => executeCommand(m.id, m.params))`）
+  ⇒ 我们再注册一个 `onPasteFiles` 只会「单元格图片 + 浮动图」**两张都插**，压不掉内核那条。
+- **命令本身也换不掉**（读码 + 运行时实测三条）：
+  ① `CommandRegistry.registerCommand` 对**已存在 id 抛错**（必须先 `unregisterCommand`）；
+  ② 注入进来的 `CommandService` **没有 `getCommand`**（`getCommand` 只在 registry 上；运行时实测报 `d.getCommand is not a function`）⇒ 拿不到原实现做兜底委托；
+  ③ `beforeCommandExecuted` 的返回值**被忽略**（实现是 `listeners.forEach((l) => l(...))`，不检查返回值）⇒ 不能用它取消命令。
+- **本项目收口方式 = window 捕获阶段拦 `paste`**（早于内核任何 document / 元素监听），只接管这一种情况：
+  「剪贴板里有图片文件 **且** 纯图片（无 `text/plain` / `text/html`）**且** 事件目标或当前焦点在本表格宿主内 **且** 单图 **且** 有活动单元格」
+  ⇒ `preventDefault + stopImmediatePropagation` → `uploadLakeResource` 提升成资产 → `activeRange.insertCellImageAsync(资产URL)`。
+  其余（没有选中单元格 / 一次多图 / 带文本）一律**放行**给内核默认（浮动图，保证一张都不丢）。
+  落地：`src/features/usheet/usheetImagePaste.ts`（判据，纯函数可单测）+ `UniverSheetEditor.tsx` 的 `onPaste`。
+- **正文形态（验收判据）**：
+  · **单元格图片** = `cellData[r][c].p` 里的**内联 drawing**（`drawingType: DRAWING_IMAGE` / `layoutType: INLINE` / `docTransform`）；
+    它**不出现在** `workbook.resources` 里 ⇒ 落盘断言看 `cellData` 有没有 `p`、`drawingType` 计数即可。
+  · **浮动图** = `workbook.resources` 里 `name: "SHEET_DRAWING_PLUGIN"` 的 `data`（JSON 字符串）内的 drawings（每个 `drawingId` 一张）。
+- **实测验收**（隔离 userData + 真实 Electron + CDP）：单图粘贴 → 正文 230B → 2920B，`cellRichText: true / cellKeys: 1`（单元格图片）；
+  双图粘贴 → `cellRichText: false`，`SHEET_DRAWING_PLUGIN` 里 **2 个 drawingId**（两张都保留）。
+  ⚠️ 调试姿势：窗口没有 OS 焦点时**真实 ⌘V 不会产生原生 paste 事件** ⇒ 自动化要用
+  `new ClipboardEvent("paste", { clipboardData })` + `DataTransfer.items.add(file)` 合成事件驱动（本构建能跑通内核整条粘贴链）。
+
+### 5.26 表格（Univer）工作表默认尺寸 / 单元格图片 / 右键菜单：三个已核实的接口（261010 读码 + 实测）
+
+- **新建工作表（标签「＋」）的默认尺寸只能从 preset 的 footer 配**：内核 `SheetBar` 读
+  `useConfigValue(SHEETS_UI_PLUGIN_CONFIG_KEY)`，用 `footer.addSheetButtonConfig.{show,defaultRowCount,defaultColumnCount}`
+  （默认 **1000×20**），随后 `executeCommand("sheet.command.insert-sheet", { sheet: { rowCount, columnCount } })`。
+  `@univerjs/core` 里那两个 `DEFAULT_WORKSHEET_ROW_COUNT(_KEY)` **不参与**这条路径（只有常量，没读配置服务）。
+  ⚠️ 传 `footer` 时要**给全** `sheetBar/statisticBar/menus/zoomSlider` 四个开关，否则会把它们顶掉。
+  （本项目取 50×16，与 `core/usheetDoc.ts` 的空表是同一组常量 ⇒ 单一来源。）
+- **单元格图片是"整格覆盖"语义**：`insertCellImageByUrl(url, location)` 每次都 `createDocumentModelWithStyle("")`
+  新建空文档，`BuildTextUtils.drawing.add` 后 `syncExecuteCommand(SetRangeValuesCommand, { p: 新文档, t: 1 })`
+  ⇒ ① **一格只能放一张**，第二张替换第一张；② 格内原有文字 `v` 仍留在数据里，但 `t:1` 让单元格渲染富文本
+  ⇒ **界面上文字被图片顶掉、看不见**（实测：二次插入后 `cellData[0][0]` 字段恒为 `p,t,v`，`p` 里 drawing 数恒 1）。
+  ⇒ 宿主侧要"多图也进格"只能自己决定落到相邻格（本项目：多图回退浮动图，不静默丢图）。
+- **右键菜单加项的官方路径**：facade `univerAPI.createMenu({ id, title, icon, action, order }).appendTo(path)`；
+  `action` 传**字符串 = 已注册命令 id**（不会新建命令）；`appendTo` 收**路径数组、逐段单个 key**
+  （`["contextMenu.mainArea","contextMenu.layout","sheet.menu.cell-insert"]`；写成点号整串会挂到错误层级）。
+  ⚠️ `createMenu` 必须**作为方法调用**：解构出来会丢 `this` ⇒ `Cannot read properties of undefined (reading '_injector')`（实测踩到）。
+- **计算条（sheet bar）高度是行内样式** `style="height: 36px"`（不是类、也没有 CSS 变量）：我们压到 30px 时
+  只能 `!important`（`.usheet-editor section:has([data-u-comp="slide-tab-bar"])`），并把 `slide-tab-bar` 的
+  `padding-block` 收到 1px，让 28px 的标签在 30px 里装得下（实测 30 = 28 + 1×2）。

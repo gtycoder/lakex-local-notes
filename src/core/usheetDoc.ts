@@ -12,6 +12,12 @@
 export const USHEET_DOC_KIND = "usheet" as const;
 export const USHEET_DOC_VERSION = 1 as const;
 
+/** 新建表格的默认网格（用户 261010 定稿：50 行 × 16 列）。
+ *  ⚠️ **单一来源**：空表（下面 emptyUsheetWorkbook）与「工作表标签＋」所用的 preset footer 配置
+ *  （features/usheet/usheetKernelContract.ts 的 USHEET_FOOTER_CONFIG）都必须引用这两个常量，别各写一份。 */
+export const USHEET_DEFAULT_ROWS = 50;
+export const USHEET_DEFAULT_COLUMNS = 16;
+
 /** Univer 单元格（只声明搜索/校验要读的字段；样式等其余字段原样透传）。 */
 export interface UsheetCell {
   /** 原始值 */
@@ -55,14 +61,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** 新建空表：一行一表、100 行 × 26 列（Univer 默认网格之下给个合理下限）。 */
+/** 新建空表：一行一表、USHEET_DEFAULT_ROWS × USHEET_DEFAULT_COLUMNS（默认 50×16）。 */
 export function emptyUsheetWorkbook(): UsheetWorkbook {
   return {
     id: "workbook",
     name: "表格",
     sheetOrder: ["s1"],
     sheets: {
-      s1: { id: "s1", name: "Sheet1", rowCount: 100, columnCount: 26, defaultColumnWidth: 88, defaultRowHeight: 24, cellData: {} },
+      s1: {
+        id: "s1",
+        name: "Sheet1",
+        rowCount: USHEET_DEFAULT_ROWS,
+        columnCount: USHEET_DEFAULT_COLUMNS,
+        defaultColumnWidth: 88,
+        defaultRowHeight: 24,
+        cellData: {},
+      },
     },
   };
 }

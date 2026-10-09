@@ -4,6 +4,10 @@
  * 约束 / 取舍（"先做到能用"）：
  * - **一个编辑器一个 Univer 实例**（未做"单实例多 workbook"共享；那是后续优化，先保证不串台）。
  * - **首次可见后才挂载**：隐藏标签页里容器 0 尺寸，canvas 系引擎会渲染成空。
+ * - **隐藏不销毁（keep-alive，261010 实测结论）**：原先隐藏即 dispose、显示再重建，切一次标签就有
+ *   0.7s（打包 scheme）/1.8s（dev）的空窗；改为**隐藏只补落盘、实例常驻**，只在卸载（关标签 / 换文档）时 dispose。
+ *   代价是每个打开的表格标签常驻一个 Univer 实例（实测净增约 6–15MB/实例；标签数受设置里的
+ *   maxOpenTabs 限制，默认 8 ⇒ 上界约 +100MB；隐藏态无空转：3s 内 rAF 调用 0）。
  * - **主题**：`--lake-*` → Univer Theme，跟随 `data-theme`（MutationObserver）。
  * - **自动保存**：订阅 `Event.CommandExecuted` 防抖 + 正文 diff，只有真的变了才 `onChange`（选区/滚动不落盘）。
  * - **只读**：`setEditable(false)`；`disableAutoFocus` 避免一打开就拉软键盘（移动端实测坑）。
@@ -21,6 +25,13 @@ import "@univerjs/preset-sheets-drawing/lib/index.css";
 import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
+import { imageFilesFromClipboard, isPureImageClipboard, pasteImageTarget } from "./usheetImagePaste";
+import {
+  UNIVER_COMMAND_IDS,
+  UNIVER_CONTEXT_MENU_INSERT_PATH,
+  USHEET_FOOTER_CONFIG,
+  USHEET_HIDDEN_TOOLBAR_ITEMS,
+} from "./usheetKernelContract";
 import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { ASSET_PORT } from "../../lib/assetPort";
 import { uploadLakeResource } from "../editor/resourceUpload";
@@ -31,19 +42,9 @@ import { IRenderManagerService } from "@univerjs/engine-render";
 /** 自动保存防抖：合并连续命令，停顿后落一次。 */
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
+
 /** 工具栏「收起 / 展开」偏好（设备本地；遵 AGENTS §4，不进正文 / S3 / 历史）。 */
 const RIBBON_COLLAPSED_KEY = "lake-notes-v3.usheet.ribbon-collapsed";
-
-/** 「开始」里我们**不用**的工具：走内核公开的 MenuManager `updateMenuConfig({ hidden: true })` 隐藏（不是 DOM hack）。
- *  ⚠️ 只列**该位置专属**的 id：实测这 5 个只挂在 `ribbon.start`（右键菜单 / 其它页签都没有）；
- *    反例 `sheet.command.paste` 同时挂在右键菜单上，隐藏会连带干掉右键粘贴 ⇒ 粘贴只藏 `sheet.menu.paste`。 */
-const USHEET_HIDDEN_TOOLBAR_ITEMS: Record<string, unknown> = {
-  "sheet.command.set-range-font-family": { hidden: true },     // 字体：统一走 --lake-font-family，禁自定义
-  "sheet.menu.paste": { hidden: true },                        // 粘贴（右键菜单另有一套 sheet.command.paste）
-  "sheet.command.numfmt.set.percent": { hidden: true },        // 百分比
-  "sheet.command.numfmt.set.currency": { hidden: true },       // 货币
-  "base-ui.operation.toggle-shortcut-panel": { hidden: true }, // 快捷键面板
-};
 
 /** 只用到 Univer workbook 的这两个方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
 type UniverBook = { save: () => unknown; setEditable: (value: boolean) => unknown };
@@ -118,6 +119,16 @@ function applyFontPolicy(workbook: UsheetWorkbook, fontStack: string): void {
   }
 }
 
+/** File → data URL：粘贴时上传失败的兜底（至少把图保住；落盘时 promoteInlineSource 会把它提升成资产）。 */
+function fileToDataUrl(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 /** 自建文件选择器选图（**不经过 Univer 的 blob 流程**）；用户取消返回 null。 */
 function pickImageFile(): Promise<File | null> {
   return new Promise((resolve) => {
@@ -182,6 +193,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const hostRef = useRef<HTMLDivElement>(null);
   const [everVisible, setEverVisible] = useState(visible);
   const [ready, setReady] = useState(false);
+  /** 挂载失败：上面 catch 掉的异常外层 ErrorBoundary 看不到 ⇒ 必须自己给可见出口（不许静默空白）。 */
+  const [mountFailed, setMountFailed] = useState(false);
   const [ribbonCollapsed, setRibbonCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem(RIBBON_COLLAPSED_KEY) === "1"; } catch { return false; }
   });
@@ -280,6 +293,10 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
             formulaBar: showToolbar,
             // 字体策略（非工具栏工程）：字体表收窄成唯一一项 = 应用字体令牌 MiSans。
             customFontFamily: { override: true, list: [{ value: lakeFontFamily(), label: "MiSans" }] },
+            // 工作表标签「＋」新建的工作表默认 50 行 × 16 列（用户 261010）。内核默认是 1000×20，
+            // 只有这个入口能配（footer.addSheetButtonConfig），所以显式给全 footer 的四个开关避免覆盖掉默认值。
+            // ⚠️ 两处口径必须一致：空表在 src/core/usheetDoc.ts 的 emptyUsheetWorkbook（同一组 50×16）。
+            footer: USHEET_FOOTER_CONFIG,
           }),
           UniverSheetsDrawingPreset(),
         ],
@@ -299,39 +316,109 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       const commandService = univer.__getInjector().get(ICommandService) as unknown as {
         registerCommand: (command: { id: string; type: CommandType; handler: () => Promise<boolean> }) => { dispose: () => void };
       };
+      const activeSheet = () => (book as unknown as {
+        getActiveSheet: () => {
+          insertImage: (u: string) => unknown;
+          getActiveRange: () => { insertCellImageAsync: (u: string) => unknown } | null;
+          getRange: (a1: string) => { insertCellImageAsync: (u: string) => unknown };
+        };
+      }).getActiveSheet();
       const registerUpload = (id: string, insert: (url: string) => unknown) => commandService.registerCommand({
         id,
         type: CommandType.COMMAND,
         handler: async () => {
           const file = await pickImageFile();
           if (!file) return false;
-          const url = await uploadPickedFile(file, noteId);
+          // 上传失败要有出口（日志），不能静默什么都不发生 —— 粘贴那条路径另有"退回 data URL 绝不丢图"的兜底。
+          let url: string | null = null;
+          try {
+            url = await uploadPickedFile(file, noteId);
+          } catch (error) {
+            console.warn("[usheet] 插图上传失败", error);
+            return false;
+          }
           if (!url) return false;
           await insert(url);
           scheduleFlush();
           return true;
         },
       });
-      disposables.push(registerUpload("usheet.insert-float-image", (url) =>
-        (book as unknown as { getActiveSheet: () => { insertImage: (u: string) => unknown } }).getActiveSheet().insertImage(url)));
-      disposables.push(registerUpload("usheet.insert-cell-image", (url) => {
-        const ws = (book as unknown as {
-          getActiveSheet: () => {
-            getActiveRange: () => { insertCellImageAsync: (u: string) => unknown } | null;
-            getRange: (a1: string) => { insertCellImageAsync: (u: string) => unknown };
-          };
-        }).getActiveSheet();
+      disposables.push(registerUpload(UNIVER_COMMAND_IDS.ourInsertFloatImage, (url) => activeSheet().insertImage(url)));
+      disposables.push(registerUpload(UNIVER_COMMAND_IDS.ourInsertCellImage, (url) => {
+        const ws = activeSheet();
         return (ws.getActiveRange() ?? ws.getRange("A1")).insertCellImageAsync(url);
       }));
+      // 粘贴图片收口（用户 261010 定稿）：**默认落「单元格图片」**；没有选中单元格、或一次多图时，
+      // 一律放行给内核默认（浮动图）——多图硬塞单元格会静默丢图（AGENTS §3#16）。
+      // 为什么只能在 DOM 层拦（内核钩子/命令都改不动），见 usheetImagePaste.ts 头注释。
+      // 绑 **window 捕获阶段** ⇒ 早于内核任何 document / 元素监听；只拦「纯图片」粘贴，其余一律放行。
+      const onPaste = (event: ClipboardEvent) => {
+        if (readOnlyRef.current) return; // 只读（锁定 / 回收站 / 历史快照预览）必须封死所有写入口
+        const host = hostRef.current;
+        if (!host) return;
+        // 只接管「落在本表格里」的粘贴：事件目标或当前焦点在这个宿主内（Univer 的网格焦点元素在宿主里）
+        const isInsideHost = (node: unknown): boolean => node instanceof Node && host.contains(node);
+        if (!isInsideHost(event.target) && !isInsideHost(document.activeElement)) return;
+        const dt = event.clipboardData;
+        if (!dt) return;
+        const files = imageFilesFromClipboard(dt);
+        if (files.length === 0) return;
+        if (!isPureImageClipboard((type) => dt.getData(type))) return;
+        // 落点判据：单图 + 有活动单元格 ⇒ 我们自己插「单元格图片」；其余（无选中 / 多图）放行给内核默认
+        const range = activeSheet().getActiveRange();
+        if (pasteImageTarget(files, Boolean(range)) !== "cell" || !range) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void (async () => {
+          let url: string | null = null;
+          try {
+            url = await uploadPickedFile(files[0], noteId);
+          } catch (error) {
+            console.warn("[usheet] 粘贴图片上传失败，退回内联 data URL", error);
+          }
+          // 兜底：上传失败也**绝不丢图** —— 内联 data URL 先插进去，落盘时 promoteInlineSource 会提升成资产
+          if (!url) url = await fileToDataUrl(files[0]);
+          if (!url) {
+            console.warn("[usheet] 粘贴图片失败：上传与 data URL 兜底都不可用");
+            return;
+          }
+          await range.insertCellImageAsync(url);
+          scheduleFlush();
+        })();
+      };
+      window.addEventListener("paste", onPaste, true);
+      disposables.push({ dispose: () => window.removeEventListener("paste", onPaste, true) });
+      // 单元格右键 →「插入」子菜单里补一项「插入单元格图片」（用户 261010）。走内核公开 facade：
+      // `createMenu({ action: <命令 id> })` 的 action 传字符串 = **直接复用已注册的命令**（不会新建），
+      // 所以这里指到我们自己的 usheet.insert-cell-image（文件选择器 → 上传成资产 → 单元格图片）。
+      try {
+        // ⚠️ 必须**作为方法调用**（不能把 createMenu 解构出来）：facade 内部要用 this._injector，
+        //    解构后 this 丢失会报 "Cannot read properties of undefined (reading '_injector')"（实测踩到）。
+        const menuApi = univerAPI as unknown as {
+          createMenu: (item: { id: string; title: string; icon?: string; action: string; order?: number }) => {
+            appendTo: (path: string | string[]) => void;
+          };
+        };
+        menuApi.createMenu({
+          id: "usheet.menu.insert-cell-image",
+          title: "插入单元格图片",
+          icon: "AddImageIcon",
+          action: UNIVER_COMMAND_IDS.ourInsertCellImage,
+          order: 4, // 内核「插入」子菜单现有 4 项（0..3）之后
+        }).appendTo(UNIVER_CONTEXT_MENU_INSERT_PATH);
+      } catch (error) {
+        console.warn("[usheet] 右键菜单「插入单元格图片」注册失败", error);
+      }
       (univerAPI as unknown as { updateMenuConfig: (config: Record<string, unknown>) => void }).updateMenuConfig({
-        "sheet.command.insert-float-image": { commandId: "usheet.insert-float-image" },
-        "sheet.command.insert-cell-image": { commandId: "usheet.insert-cell-image" },
+        [UNIVER_COMMAND_IDS.insertFloatImage]: { commandId: UNIVER_COMMAND_IDS.ourInsertFloatImage },
+        [UNIVER_COMMAND_IDS.insertCellImage]: { commandId: UNIVER_COMMAND_IDS.ourInsertCellImage },
         ...USHEET_HIDDEN_TOOLBAR_ITEMS,
       });
       captureRef.current?.(() => instanceRef.current?.last ?? null);
     } catch (error) {
       console.error("Univer 表格挂载失败", error);
       created = null;
+      setMountFailed(true);
     }
     return () => {
       for (const item of disposables) { try { item.dispose(); } catch { /* ignore */ } }
@@ -363,6 +450,38 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     return () => observer.disconnect();
   }, [ready]);
 
+  /**
+   * 底部「计算条」（Sheet 标签 / 选区统计 / 缩放）是这套表格最底下的一条；文档状态栏要塞进它**正上方**
+   * （用户 261009 口径：不盖住那条复合底栏）。它的上沿不是常数 —— 内核版本、我们在 usheetEditor.css 里的
+   * 压缩、横向滚动条都会改变它，所以在 CSS 里猜高度必然错位。这里实测一次写进 CSS 变量交给 chrome.css 消费，
+   * 姿势与 BitableEditor 的 `--lake-bitable-status-bottom` 完全一致。
+   */
+  useEffect(() => {
+    if (!visible || !ready) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const workspace = host.closest<HTMLElement>(".workspace");
+    if (!workspace) return;
+    const apply = () => {
+      const bar = host.querySelector<HTMLElement>('[data-u-comp="slide-tab-bar"]');
+      if (!bar) { workspace.style.removeProperty("--usheet-status-bottom"); return; }
+      const above = Math.round(window.innerHeight - bar.getBoundingClientRect().top) + 4;
+      workspace.style.setProperty("--usheet-status-bottom", above + "px");
+    };
+    // ⚠️ 计算条是**实例挂载后**才出现在 DOM 里的：effect 首次跑时它还不在，且宿主的尺寸此后不一定再变
+    //   （ResizeObserver 不会触发）⇒ 按本文件既有姿势用 setTimeout 补几次（CDP/隐藏窗口里 rAF 不触发）。
+    const timers = [0, 160, 600].map((ms) => window.setTimeout(apply, ms));
+    window.addEventListener("resize", apply);
+    const observer = new ResizeObserver(apply);
+    observer.observe(host);
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      window.removeEventListener("resize", apply);
+      observer.disconnect();
+      workspace.style.removeProperty("--usheet-status-bottom");
+    };
+  }, [visible, ready]);
+
   // 收起 / 展开工具栏后让引擎重排画布（藏页签行改变可用高度；引擎不会自己重排）。
   // ⚠️ 用 setTimeout 而非 requestAnimationFrame：CDP 依附 / 隐藏窗口里 rAF 不触发（本项目已知坑）。
   useEffect(() => {
@@ -375,14 +494,12 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [ribbonCollapsed, ready]);
 
-  // 隐藏 = 先把未落盘改动补齐，再释放 Univer 实例（canvas/模型/DOM）；显示时按 lastBodyRef 重建。
-  // 目的：多标签 keep-alive 下不把每个 usheet 实例常驻在内存里（Univer 实例不轻）。
+  // 隐藏 = 只补齐未落盘改动（不再销毁实例）。实测（261010，隔离实例 + CDP）：
+  // 原「隐藏即 dispose、显示重建」每次切回都要付 createUniver + createWorkbook 的钱 —— 点击→画布
+  // 0.69s（scheme）/ 1.83s（dev，含模块图）；keep-alive 后切回不再重建。
   useEffect(() => {
     if (visible || !instanceRef.current) return;
-    void (async () => {
-      await doFlush();
-      setReady(false); // 触发挂载 effect 的 cleanup → univer.dispose()
-    })();
+    void doFlush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
   useEffect(() => () => {
@@ -400,6 +517,11 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       data-pane={pane ?? undefined}
     >
       <div id={"univer-sheet-" + noteId} className="usheet-univer-root" />
+      {mountFailed ? (
+        <div className="empty-workspace-hint" role="alert">
+          表格打开失败：编辑器内核初始化异常（详情见日志）。可切换标签或重新打开本文档重试。
+        </div>
+      ) : null}
       {showToolbar ? (
         <button
           type="button"

@@ -87,13 +87,20 @@ describe("文档状态栏落位（按文档类型）", () => {
     expect(read("components/DesktopStatusBar.tsx")).toContain("data-doc-kind={docKind}");
   });
 
-  it("表格：状态栏上移到 Univer 底栏正上方（高度基线在 shell 层，变体必须同层）", () => {
+  it("表格：状态栏停在 Univer 计算条正上方（底距 = 实测变量，默认 37px）", () => {
     const chrome = read("styles/chrome.css");
     expect(chrome).toContain('.document-statusbar[data-doc-kind="usheet"] {');
     const rule = chrome.slice(chrome.indexOf('.document-statusbar[data-doc-kind="usheet"] {'));
     const body = rule.slice(0, rule.indexOf("}"));
-    expect(body).toContain("bottom: 41px;");   // = 1px 贴底 + Univer 36px 底栏 + 4px 缝
+    // 261010 用户：底栏压到 30px ⇒ 底距不再写死 41px，改实测变量（默认 35 = 1px 贴底 + 30px 底栏 + 4px 缝）
+    expect(body).toContain("bottom: var(--usheet-status-bottom, 35px);");
     expect(body).toContain("height: 22px;");
+    // 变量必须由 usheet 编辑器自己实测写入（与 BitableEditor 的 --lake-bitable-status-bottom 同姿势）
+    const editor = read("features/usheet/UniverSheetEditor.tsx");
+    expect(editor).toContain("--usheet-status-bottom");
+    expect(editor).toContain("slide-tab-bar");
+    // 压缩规则落在 usheet 自己的样式文件（内核例外，理由写在规则处）
+    expect(read("features/usheet/usheetEditor.css")).toContain('section:has([data-u-comp="slide-tab-bar"])');
   });
 
   it("画板：内核「主题选择」岛抬到状态栏上方（右下共存），且底距按状态栏几何派生", () => {

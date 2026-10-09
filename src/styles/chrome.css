@@ -62,11 +62,13 @@
   height: 22px;
   min-height: 22px;
 }
-/* Univer 表格（kind=usheet）：底部是 Univer 自己的 36px 底栏（Sheet 标签 / 选区统计 / 缩放，
- * 实测贴底 1px、高 36px）；我们的状态栏**上移到它正上方**（1 + 36 + 4 缝 = 41px），
- * 不再盖住那条复合底栏（261009 用户口径，与画板"状态栏上移"同一姿势）。 */
+/* Univer 表格（kind=usheet）：底部是内核自己的「计算条」（Sheet 标签 / 选区统计 / 缩放；261010 已压到 32px，
+ * 见 features/usheet/usheetEditor.css）；我们的状态栏停在它**正上方**（贴底 1px + 底栏高 + 4px 缝），
+ * 不再盖住那条复合底栏（261009 用户口径，与画板"状态栏上移"同一姿势）。
+ * 底栏上沿不是常数（内核版本 / 压缩 / 横向滚动条都会变）⇒ 由 UniverSheetEditor 实测写进
+ * --usheet-status-bottom；变量未就绪时给 35px 兜底（= 1px + 30px + 4px 缝）。 */
 .document-statusbar[data-doc-kind="usheet"] {
-  bottom: 41px;
+  bottom: var(--usheet-status-bottom, 35px);
   height: 22px;
   min-height: 22px;
 }

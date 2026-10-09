@@ -18,6 +18,7 @@ import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
 import { buildUniverTheme } from "../../features/usheet/univerTheme";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody } from "../../core/usheetDoc.js";
+import { USHEET_FOOTER_CONFIG } from "../../features/usheet/usheetKernelContract";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 
@@ -74,8 +75,9 @@ export function MobileUsheetViewer({ noteId, content, active }: MobileUsheetView
         locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
         theme: buildUniverTheme() as never,
         presets: [
-          // 移动端只读：不挂工具条与公式栏（没有编辑入口）
-          UniverSheetsCorePreset({ container: containerId, disableAutoFocus: true, toolbar: false, formulaBar: false }),
+          // 移动端只读：不挂工具条与公式栏（没有编辑入口）。
+          // footer 与桌面共用同一份默认尺寸口径（当前只读、加表按钮被权限挡住，但口径别分叉）。
+          UniverSheetsCorePreset({ container: containerId, disableAutoFocus: true, toolbar: false, formulaBar: false, footer: USHEET_FOOTER_CONFIG }),
           UniverSheetsDrawingPreset(),
         ],
       });

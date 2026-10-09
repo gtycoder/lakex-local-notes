@@ -26,6 +26,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
   ② **本项目契约与踩坑** `docs/LAKEX-CONTRACT.md`（闭源 lakex 已核实的行为契约 + 调试速查表；含我们实测出的内核行为与反例）——**新观测必须回填此处**，别只留在 HANDOFF 或代码注释里。
   ③ **更精细的源码字典对照** `/Users/admin/file/local-lake/lake-editor-main/`（第三方 VSCode yuque-editor 插件）与 `/Users/admin/file/local-lake/lake-main/`（lakejs 开源社区版，仅"机制字典"）——用于挖机制/实现细节与交叉验证；**注意 lake-main 序列化方言已与运行内核分叉，结论不得直接套用**。
   最终仲裁 = 仓库内 vendor 内核 bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js`（即语雀 @alipay/lakex-doc，实际运行的代码）+ 运行时实测；以上资料与实测冲突时以实测为准。
+- **表格（usheet）用的是第三方内核 Univer（`@univerjs/*`，全部精确锁版本）**：动表格前先读 `src/features/usheet/usheetKernelContract.ts`（我们依赖的内核触点，每条都写了失效表现）；**升级依赖一律走 `docs/USHEET-UPGRADE.md` 的 playbook**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 `npm update`**。
 - **文档分工（防漂移）**：`README.md`=项目概览（不维护进度/计数）· `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）· `AGENTS.md`=长期红线/机制/坑。
   **仓库只保留当前有效的契约/规格/指南与仍在使用的设计依据**；已完成的研究、计划、spike、审计和 dated review 直接删除，需要时从 git 历史恢复，不建 archive 目录。**HANDOFF 只保留最新 §0 + 基线/待办/坑**，不要堆历史。
 

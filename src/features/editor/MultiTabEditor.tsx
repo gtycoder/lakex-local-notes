@@ -344,6 +344,23 @@ export function MultiTabEditor({
     };
   }, [tabMenuOpen]);
 
+  /** 空闲预热「表格编辑器」模块（Univer 分包）：**纯预取、不渲染**，且**只在 dev 生效**。
+   *  实测（261010，隔离实例 + CDP）：首次打开表格的「点击 → 宿主挂载」这段在 dev 要 **1.86s**
+   *  （Vite 逐个下发 dev 模块 + 未压缩代码执行，与点击无关），打包（scheme）只要 0.14s。
+   *  ⇒ dev 下把它挪到空闲时段；打包侧保持**真懒加载**（不为一个 0.14s 的收益常驻解析 6.3MB 分包）。 */
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    let idleId: number | undefined;
+    let timerId: number | undefined;
+    const warm = () => { void import("../usheet/UniverSheetEditor"); };
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(warm, { timeout: 5000 });
+      return () => { if (idleId !== undefined) window.cancelIdleCallback(idleId); };
+    }
+    timerId = window.setTimeout(warm, 2500);
+    return () => { if (timerId !== undefined) window.clearTimeout(timerId); };
+  }, []);
+
   useEffect(() => {
     const strip = tabItemsRef.current;
     if (!strip) return;

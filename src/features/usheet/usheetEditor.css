@@ -70,3 +70,18 @@
 .usheet-editor [data-u-comp="ribbon-toolbar"] {
   padding-right: 50px;
 }
+
+/* 底部「计算条」（Sheet 标签 / 选区统计 / 缩放）**压到 30px**（261010 用户：先 36→32，再试 30）。
+ * 内核把这条的高度**写成行内样式** `style="height: 36px"`（实测；不是类，也不是变量）⇒ 层序/特异性都压不过，
+ * 只能用 `!important`（AGENTS §3#14 允许的唯一例外：第三方组件写进 element 的 inline style）。
+ * 注：ui-metrics 的「桌面 !important」只统计 `src/styles/index.css` 可达的入口图，本文件由组件直接 import、
+ *     不在其中 ⇒ 不占那 10 条额度；但理由同样写在规则处（这条改的是第三方组件）。
+ * 同时把 slide-tab-bar 的 py-1(4px) 用 `padding-block` 收到 1px，让 28px 的标签在 30px 里正好放得下
+ * （实测 30 = 28 + 1×2，标签自身几何不变）。 */
+.usheet-editor section:has([data-u-comp="slide-tab-bar"]) {
+  height: 30px !important;
+}
+
+.usheet-editor [data-u-comp="slide-tab-bar"] {
+  padding-block: 1px;
+}
