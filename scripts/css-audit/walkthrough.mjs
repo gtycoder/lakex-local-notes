@@ -107,6 +107,31 @@ async function openSettings(label) {
     if (n) { await page.click(n[0], n[1]); await page.sleep(900); }
   }
 }
+async function contextRow(label) {
+  const page = pageRef;
+  const pt = await page.evaluate('(function () { var el = [].slice.call(document.querySelectorAll("[data-tree-node-id]")).find(function (e) { return (e.textContent || "").indexOf(' + JSON.stringify(label) + ') >= 0; }); if (!el) return null; el.scrollIntoView({ block: "center" }); var r = el.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
+  if (!pt) throw new Error("no row: " + label);
+  await page.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: pt[0], y: pt[1] });
+  await page.send("Input.dispatchMouseEvent", { type: "mousePressed", x: pt[0], y: pt[1], button: "right", clickCount: 1 });
+  await page.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: pt[0], y: pt[1], button: "right", clickCount: 1 });
+  await page.sleep(800);
+}
+async function clickMenuItem(text) {
+  const page = pageRef;
+  const p = await page.evaluate('(function () { var el = [].slice.call(document.querySelectorAll("[role=menuitem], .ln-menu__item, .context-menu-item, .context-menu > button, button")).find(function (e) { return (e.textContent || "").trim() === ' + JSON.stringify(text) + ' && e.getBoundingClientRect().width > 0; }); if (!el) return null; var r = el.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
+  if (!p) throw new Error("no menu item: " + text);
+  await page.click(p[0], p[1]); await page.sleep(1400);
+}
+async function splitWithFirstTab() {
+  const page = pageRef;
+  const b = await page.evaluate('(function () { var el = document.querySelector(".split-entry button"); if (!el || el.disabled) return null; var r = el.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
+  if (!b) throw new Error("split button unavailable");
+  await page.click(b[0], b[1]); await page.sleep(700);
+  const item = await page.evaluate('(function () { var el = [].slice.call(document.querySelectorAll(".tab-switcher-menu .tab-switcher-select, [data-split-menu] [role=menuitem]")).find(function (e) { return e.getBoundingClientRect().width > 0 && !e.disabled; }); if (!el) return null; var r = el.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
+  if (!item) throw new Error("no split candidate");
+  await page.click(item[0], item[1]); await page.sleep(2000);
+}
+
 async function closeAll() {
   const page = pageRef;
   for (var i = 0; i < 6; i++) {
@@ -138,6 +163,9 @@ export default async function run(ctx) {
     ["doc-board", async () => { await openDoc("合成·画板"); }],
     ["quicknotes", async () => { await closeAll(); await space("小记"); }],
     ["search", async () => { await space("资料库"); await page.sleep(700); const p = await page.evaluate('(function () { var el = [].slice.call(document.querySelectorAll("button")).find(function (e) { return /搜索/.test((e.title || "") + " " + (e.getAttribute("aria-label") || "")) && e.getBoundingClientRect().width > 0; }); if (!el) return null; var r = el.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()'); if (p) { await page.click(p[0], p[1]); await page.sleep(900); const ok = await page.evaluate('(function () { var i = document.querySelector("input[type=search], input[placeholder*=搜索]"); if (!i) return false; i.focus(); return true; })()'); if (ok) { await page.send("Input.insertText", { text: "记" }); await page.sleep(1500); } } }],
+    ["note-info", async () => { await openDoc("合成·富文本"); await contextRow("合成·富文本"); await clickMenuItem("属性"); }],
+    ["history-panel", async () => { await closeAll(); await contextRow("合成·富文本"); await clickMenuItem("历史版本"); }],
+    ["split-view", async () => { await openDoc("合成·富文本"); await openDoc("合成·表格"); await splitWithFirstTab(); }],
     ["resources", async () => { await closeAll(); await space("资源"); }],
     ["trash-space", async () => { await closeAll(); await space("回收站"); }],
   ];
@@ -145,9 +173,11 @@ export default async function run(ctx) {
     (function (label) { screens.push(["settings-" + label, async () => { await closeAll(); await openSettings(label); }]); })(settingsLabels[i]);
   }
 
+  const only = (ctx.args[2] || "").split(",").filter(Boolean);
+  const chosen = only.length ? screens.filter(function (s) { return only.indexOf(s[0]) >= 0; }) : screens;
   const report = { theme: theme, width: width, screens: {} };
-  for (var s = 0; s < screens.length; s++) {
-    const name = screens[s][0], nav = screens[s][1];
+  for (var s = 0; s < chosen.length; s++) {
+    const name = chosen[s][0], nav = chosen[s][1];
     const rec = { ok: false };
     try {
       await nav();
