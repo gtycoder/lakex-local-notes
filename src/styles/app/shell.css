@@ -57,6 +57,12 @@
 
 .tree-row { cursor: pointer; user-select: none; touch-action: pan-y; }
 
+/* 树行是 `div[tabindex="0"]`，**不落在** tokens.css 的焦点规范里
+   （`:where(button, input, textarea, select, [role="button"])`）⇒ 键盘聚焦时浏览器画的是
+   **它自己的默认环**（`outline: auto`，颜色随系统高亮色走、与我们的主题无关；实测本机为 1px auto）。
+   口径与 261008 收编内核 div[tabindex] 焦点环一致：就地补令牌环，**贴合行内边缘用负 offset**（261009 B1 实测）。 */
+.tree-row:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
+
 .tree-row.dragging { cursor: grabbing; }
 
 .tree-chevron:not(:disabled):hover { background: var(--lake-select-bg); color: var(--lake-accent); }
