@@ -7,7 +7,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Info } from "lucide-react";
-import { NoteInfoDialog } from "../../components/NoteInfoDialog";
+import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { loadSettings } from "../../lib/settings";
@@ -726,8 +726,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 文档属性（长按 → 属性） */}
       {infoFor && (
-        <NoteInfoDialog
-          note={{ noteFileId: infoFor.id, title: infoFor.title }}
+        <NoteInfoSheet
+          noteFileId={infoFor.id}
+          title={infoFor.title}
           onClose={() => setInfoFor(null)}
           onOpenHistory={() => { const n = infoFor; setInfoFor(null); void openHistory(n); }}
         />

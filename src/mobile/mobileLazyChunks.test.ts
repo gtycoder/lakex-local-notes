@@ -45,6 +45,12 @@ describe("移动端入口不静态引入 Lake 内核", () => {
     expect(code).not.toMatch(/<data[\s>]/);
   });
 
+  it("移动端不借桌面「文档属性」弹窗（否则会连带把桌面编辑器打进移动端包）", () => {
+    const nw = read("./notebook/NotebookWorkspace.tsx");
+    expect(nw).not.toMatch(/components\/NoteInfoDialog/);
+    expect(nw).toMatch(/from "\.\.\/ui\/NoteInfoSheet"/);
+  });
+
   it("移动端表格查看器（Univer 内核）也走 lazy，不进入口 chunk", () => {
     expect(read("./notebook/NotebookWorkspace.tsx")).toMatch(/lazy\(\(\) => import\("\.\.\/usheet\/MobileUsheetViewer"\)/);
   });

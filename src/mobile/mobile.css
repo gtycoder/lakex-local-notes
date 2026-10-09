@@ -966,3 +966,15 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   height: 100%;
   width: 100%;
 }
+
+/* 文档属性（移动端 NoteInfoSheet）：信息行 + 章节；桌面 NoteInfoDialog 的移动端对应物。 */
+.minfo-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 0 0 14px; }
+.minfo-rows > div { display: flex; gap: 6px; min-width: 0; font-size: var(--lake-font-size-small); }
+.minfo-rows dt { flex: none; color: var(--lake-text-3); }
+.minfo-rows dd { margin: 0; color: var(--lake-text-1); }
+.minfo-section { margin-bottom: 14px; }
+.minfo-title { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.minfo-path { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); word-break: break-all; }
+.minfo-list { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
+.minfo-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 0; border: 0; background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-small); text-align: left; }
+.minfo-action { margin-left: auto; padding: 4px 10px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); }
