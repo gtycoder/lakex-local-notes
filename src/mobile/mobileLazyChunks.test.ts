@@ -45,6 +45,10 @@ describe("移动端入口不静态引入 Lake 内核", () => {
     expect(code).not.toMatch(/<data[\s>]/);
   });
 
+  it("移动端表格查看器（Univer 内核）也走 lazy，不进入口 chunk", () => {
+    expect(read("./notebook/NotebookWorkspace.tsx")).toMatch(/lazy\(\(\) => import\("\.\.\/usheet\/MobileUsheetViewer"\)/);
+  });
+
   it("vite.mobile.config.ts 不给 @dlient/lakex-doc-react 加 codeSplitting 分组", () => {
     // 只匹配配置项本身（\`codeSplitting:\`），别被解释这条坑的注释误伤
     expect(read("../../vite.mobile.config.ts")).not.toMatch(/codeSplitting\s*:/);

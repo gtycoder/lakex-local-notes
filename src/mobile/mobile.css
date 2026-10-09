@@ -949,3 +949,15 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   background: var(--lake-scrim);
   color: #fff;
 }
+
+/* 表格只读查看器（kind=usheet，移动端）：占满文档层，Univer 容器铺满。 */
+.mobile-usheet {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.mobile-usheet .mobile-usheet-root {
+  height: 100%;
+  width: 100%;
+}

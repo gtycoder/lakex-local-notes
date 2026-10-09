@@ -26,8 +26,10 @@ import { longPressFeedback, successFeedback, warnFeedback } from "../ui/haptics"
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../noteRepository";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
-/** 表格/多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
+/** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
+/** 表格（usheet）：与桌面同一套 Univer 内核的**只读**查看器（Univer 运行时随之按需加载）。 */
+const MobileUsheetViewer = lazy(() => import("../usheet/MobileUsheetViewer").then((m) => ({ default: m.MobileUsheetViewer })));
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
 export interface NotebookTreeItem {
   id: string;
@@ -581,7 +583,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
           }}
         />
-        {/* 只有 doc 可编辑：表格/多维表/画板在移动端是只读（kind=board 走画板查看器，其余占位） */}
+        {/* 只有 doc 可编辑：表格 / 多维表 / 画板在移动端都是只读查看器（usheet / bitable / board 各一个） */}
         <button
           className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
           onClick={toggleEdit}
@@ -606,6 +608,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               // 多维表：移动端只读视图（同一份 core 数据模型求值，绝不写库）
               <Suspense fallback={<div className="mobile-empty">正在加载多维表…</div>}>
                 <MobileBitableViewer noteId={t.id} content={t.content} />
+              </Suspense>
+            ) : t.kind === "usheet" ? (
+              // 表格：移动端只读呈现（同一套 Univer 内核；只读、不保存，正文 JSON 绝不喂 Lake 编辑器）
+              <Suspense fallback={<div className="mobile-empty">正在加载表格…</div>}>
+                <MobileUsheetViewer noteId={t.id} content={t.content} active={t.id === activeId} />
               </Suspense>
             ) : t.kind !== "doc" ? (
               // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
