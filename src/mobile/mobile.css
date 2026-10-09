@@ -99,7 +99,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-qn-add input { display: none; }
 .mobile-qn-hint { font-size: 12px; color: var(--lake-text-3); }
 .mobile-qn-spacer { flex: 1; }
-.mobile-qn-btn { border: 1px solid var(--lake-border-1); background: var(--lake-bg-panel); border-radius: var(--lake-radius-sm); padding: 8px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+/* 261009 B2：两字按钮标签（取消 / 保存）在窄写作卡里会折成两行、按钮被撑到 62px 高（实测 57x62）。
+   nowrap 让 min-content 宽度＝整个标签，按钮高度回到正常档（与桌面 quick-notes 动作行同一族问题）。 */
+.mobile-qn-btn { border: 1px solid var(--lake-border-1); background: var(--lake-bg-panel); border-radius: var(--lake-radius-sm); padding: 8px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .mobile-qn-btn:disabled { opacity: .6; }
 .mobile-qn-primary { border: 0; background: var(--lake-accent); color: var(--lake-text-on-accent); font-weight: 600; }
 

@@ -321,6 +321,12 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ⇒ **移动端截图一律用设备级 screencap**（脚本里已改）。别据 CDP 截图报「表格空白」这种假缺陷（本轮差点误报，A/B 撤掉表格补丁后同样空白才定位到是截图问题）。
 > 已知观察（未改）：首页顶部 .mobile-htab 命中区 36×25 / 52×25（父容器 .mobile-home-tabs 仅 25 高），低于 48dp 建议；
 > 抽屉态下「侧栏右键菜单（属性 / 历史版本）」不在同一可见层 ⇒ 移动端这两个入口需换驱动方式（本轮未完成）。
+> **已修（261009 B2）**：小记写作卡的两字按钮（取消 / 保存）标签折成两行、按钮被撑到 62px 高（实测 57×62）——
+> `.mobile-qn-btn` 加 `white-space: nowrap`（mobile.css），修复后 58×38 / 75×37；`check:mobilesnap` 6 态 0 差异。
+> **未定性（下次接着查，别直接下结论）**：小记编辑器偶发**大图标 + 原生 `<input type=file>`（Choose File / No file chosen）+「返回文档」**的渲染态
+> （实测 7 个 >60px 的 SVG；样式表正常加载，mobile-*.css 1257 条规则在）。同一条屏在**早前一轮**是正常渲染（工具条小图标 + 取消/保存），
+> 两次差异只在于"重新安装后刚启动 vs 已运行一段时间" ⇒ 疑与内核 fullscreen 编辑器初始化时序有关；
+> 冷启动复测脚本没跑通（force-stop 后 WebSocket 变了，drive 连接失败），下轮先修驱动再判定。
 
 - 正式端：Capacitor Android，包名 `com.lakenotes.mobile`；定位为完整端，桌面红线同样适用。
 - 数据在模拟器 App 沙盒，不在 macOS 数据目录；开发可 `adb shell pm clear com.lakenotes.mobile` 重建。
