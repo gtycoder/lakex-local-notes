@@ -12,6 +12,19 @@
 > **下一会话焦点（261010 收尾 → 下一会话，用户定）**：① **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；② 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项（条件格式 / 数据验证 / 公式库完整版）单独立项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261009 追加 · 表格内核 floating 层收口（黄叹号不再逃出标签宿主；@univerjs/ui 补丁 + 两道护栏）
+
+- **用户报**：表格里那个**黄叹号**层级最高、切到别的文档也盖不住。
+- **定位（只读取证，链已完整）**：它是内核 **CellAlert**（`@univerjs/sheets-ui` 的 `ForceStringAlertRenderController`：单选「文本格式的数字」单元格时弹的警告，菜单项「转换为数字」——截图里的 600010 列正是这种单元格；`sheets-numfmt-ui` / `sheets-formula-ui` 另有两个同类，都走这一个浮层）。承载它的 floating 层（`CanvasPopup`）被内核**无条件 portal 到 `document.body`**（`@univerjs/ui` 的 `DesktopWorkbenchContent` / `MobileWorkbench`，读的是新建 div + `document.body.appendChild`）⇒ **它不在标签宿主里**：`styles/app/tabs.css` keep-alive 的 `opacity/visibility` 隐藏（刻意保留布局尺寸）对它无效；内核自己"看不见就隐藏"的判据读**画布 rect**（`visibility:hidden` 的元素 rect 仍有效）⇒ 它认为还在屏幕上。只有它长期可见，是因为 CellAlert **随选区常驻**（下拉/日期/颜色都是瞬态）。
+- **修法（用户 261009 选 A）**：`patches/@univerjs+ui+1.0.3.patch`（**唯一** Univer 补丁；两处 workbench 各 2 行）——floating 容器改挂实例自己的 `mountContainer`（`#univer-sheet-<noteId>`）+ 打 `data-lake-univer-floating` 标记（探针定位用）+ 卸载改 `portalContainer.remove()`（不再假定父节点是 body）。只改挂载点、不改内核逻辑 ⇒ 一次修掉**整类**浮层逃逸（CellAlert / 下拉 / 日期 / 颜色 / 选区），功能一个不丢。
+- **护栏**：`usheetKernelContract.ts` 的 `UNIVER_PATCH_HOOKS`（触点 + 为什么 + 失效表现）；`univerContract.test.ts` **护栏③**（补丁文件在仓库里；实装产物里**必须没有** `document.body.appendChild(portalContainer)`、必须有挂载/remove/标记）；`usheet-kernel-probes.mjs` **+2 条**（容器在宿主内；切走后不可见）。升级处置与 **patch-package「本机安装失败不以非零码退出」的陷阱**写进 `docs/USHEET-UPGRADE.md` §4.7，`AGENTS.md` §2 加了一句（原文明写"不要给 Univer 打 patch"，已改成"仅此一处例外"）。
+- **验证**：补丁对**上游原始 1.0.3** 可重放（`npm pack` + `patch --dry-run` + 真应用，结果与仓库内文件逐字节一致）；产物核对（`dist/assets/UniverSheetEditor-*.js` 内是 `setAttribute('data-lake-univer-floating'); s.appendChild(O)`，旧写法 0 处）；隔离实例探针 **退出码 0**（8/11 通过，3 项为既有"合成输入无 OS 焦点"提示；补丁两条全过：`{inHost:true,inUniverRoot:true,atBody:false}` / `{hostActive:null,visibility:"hidden"}`）。首轮那条 `工作表「＋」` 失败是**合成点击偶发**（复跑 PASS，且该路径与补丁无关）。
+- 门禁：tsc ✓ · vitest **214 文件 / 1724 用例**（+2）✓ · ui-metrics ✓ · check:core 75-0 ✓ · 双端构建 ✓ · bundle 预算 ✓ · `git diff --check` ✓。
+- **同批顺带（设置页文案，用户 261009 追加）**：`启用云同步` 行新增**隐私数据提示**（可见、琥珀色）——徽标「隐私数据 · 云端不加密」+ 说明「开启后笔记正文与附件会上传到你的 S3（按原样存储、不做加密）；请先确认该桶为私有、未开放公开读，且凭据只有你持有」。**用户追加口径（261009）**：**固定展示** —— 不开条件渲染，云同步关着、"还没测试连接通过"时也照常显示（"云端不加密"必须在开启前一直在眼前），也**不做**需要悬停才出现的隐藏提示。
+  实现**零新增 CSS**：`settingsPrimitives` 的 `Switch` 加可选 `note`（渲染进既有 `.config-note`）+ 徽标复用 `.ln-tag--pending`（`--lake-status-pending` 琥珀）——两条都是既有单一来源；文案收在 `core/cloudState.ts` 的 `CLOUD_PRIVACY_NOTICE`（桌面/移动**共用一份**，照 `cloudStateHint` 先例）；`settingsSearch` 的 `sync-enabled` 关键词补「隐私 / 隐私数据 / 加密 / 不加密 / 私有」（搜得到）。
+  **实机确认**：桌面（隔离实例 + CDP，把开关关掉 ⇒ 描述切到"先在上方…测试连接"变体）**提示仍在**；移动端（模拟器 + `emu-cdp`，同步设置页）徽标同样 `rgb(143,95,14)` / 软底 `rgb(247,240,226)`，380px 宽下 4 行显示正常；`npm run check:mobilesnap` **6 态 0 差异**（该子页不在基线态里）。
+- **未做 / 注意**：① **dev 实例（vite dev server）仍跑预打包的旧依赖** —— `node_modules/.vite/deps/facade-*.js` 里还是 `document.body.appendChild(portalContainer)`，要看效果需重启 vite（必要时 `--force`）；本轮**没动**用户正在看的 9222 实例。② 本批是**代码改动，未提交**，等用户验收。③ 移动端真机未跑（补丁同时覆盖 `MobileWorkbench`，移动端产物已重建）。
+
 ### 261010 · 表格（usheet）性能 + 粘贴落点 + 右键插图 + 默认尺寸 + 内核契约与升级规范（已交付）
 
 - **性能（实测：隔离 userData + 真实 Electron + CDP，dev/scheme 双模式）**

@@ -81,3 +81,37 @@ export const USHEET_FOOTER_CONFIG = {
     defaultColumnCount: USHEET_DEFAULT_COLUMNS,
   },
 } as const;
+
+/**
+ * 我们对内核打的补丁（`patches/@univerjs+ui+1.0.3.patch`）——**改行为的最小改动**，不是依赖侧清理。
+ *
+ * 为什么必须改：内核把 floating 层的 portal 容器**无条件挂到 `document.body`**
+ * （`@univerjs/ui` 的 `DesktopWorkbenchContent` / `MobileWorkbench`）。该容器承载
+ * `CanvasPopup`（cell popup、**CellAlert 警告徽标（黄叹号）**、下拉/日期/颜色/选区浮层），
+ * 因为挂在 body ⇒ **不在标签宿主里**：
+ *  ① 我们 keep-alive 的隐藏（`styles/app/tabs.css` 的 `opacity/visibility`，且**刻意保留布局尺寸**）
+ *     对它无效；
+ *  ② 内核自己"看不见就隐藏"的判据读的是**画布 rect**（`visibility:hidden` 的元素 rect 仍有效）⇒
+ *     它认为自己还在屏幕上，继续渲染。
+ * 表现（用户 261009 报）：表格里的黄叹号浮在最上层、切到别的文档也盖不住（CellAlert 随选区常驻，
+ * 不像下拉那样瞬态，所以只有它长期可见）。
+ *
+ * 补丁做三件事：把容器改挂到实例自己的 mountContainer（`#univer-sheet-<noteId>`）、打
+ * `data-lake-univer-floating` 标记供运行时探针定位、卸载改用 `remove()`（不再假定父节点是 body）。
+ *
+ * 失效表现：`document.body` 下重新出现内核 floating 容器 ⇒ 浮层又能逃出标签宿主。
+ * 守它的两处：`univerContract.test.ts`（静态：补丁形态在不在）与 `scripts/usheet-kernel-probes.mjs`
+ * （运行时：容器在不在宿主内 + 切走后是否不可见）。升级动作见 `docs/USHEET-UPGRADE.md` §4.7。
+ */
+export const UNIVER_PATCH_HOOKS = {
+  /** 补丁文件（仓库内的唯一 Univer 补丁；缺它 = 换机/CI 拿不到修复）。 */
+  patchFile: "patches/@univerjs+ui+1.0.3.patch",
+  /** 补丁后**必须存在**：floating 容器挂在实例容器里。 */
+  mountedInHost: "mountContainer.appendChild(portalContainer)",
+  /** 补丁后**必须存在**：卸载用 remove()，不假定父节点是 body。 */
+  removedSafely: "portalContainer.remove()",
+  /** 补丁加的运行时标记（探针靠它定位容器）。 */
+  floatingMarker: "data-lake-univer-floating",
+  /** 补丁要根治的原始写法：**必须不存在**，否则补丁没生效。 */
+  legacyBodyMount: "document.body.appendChild(portalContainer)",
+} as const;

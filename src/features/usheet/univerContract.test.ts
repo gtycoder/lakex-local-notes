@@ -17,6 +17,7 @@ import {
   UNIVER_DOM_HOOKS,
   UNIVER_FEATURE_NAMES,
   UNIVER_MENU_ITEM_IDS,
+  UNIVER_PATCH_HOOKS,
 } from "./usheetKernelContract";
 
 const ROOT = process.cwd();
@@ -108,5 +109,27 @@ describe("Univer 内核触点仍存在（升级护栏②）", () => {
   it("契约里的每个符号都能在实装内核里找到（失败即：该符号所在机制被改名/移除）", () => {
     const missing = symbols.filter(([, needle]) => !BUNDLE.includes(needle)).map(([label]) => label);
     expect(missing, `这些内核符号在实装产物里找不到了（升级后需要逐个核对并更新 usheetKernelContract.ts）：${missing.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("Univer 补丁仍生效（升级护栏③）", () => {
+  it("补丁文件在仓库里（不是只改了本地 node_modules）", () => {
+    expect(
+      existsSync(`${ROOT}/${UNIVER_PATCH_HOOKS.patchFile}`),
+      `缺少 ${UNIVER_PATCH_HOOKS.patchFile}：本地 node_modules 改了却没生成补丁 ⇒ 换机 / CI / 重新安装都拿不到修复`,
+    ).toBe(true);
+  });
+
+  it("floating 容器挂在实例宿主内（@univerjs/ui 补丁没被升级冲掉）", () => {
+    // 补丁前：内核把 floating 层 portal 到 document.body ⇒ 逃出标签宿主，切文档后浮层残留
+    // （用户 261009 报的表格黄叹号，见 usheetKernelContract.ts 的 UNIVER_PATCH_HOOKS 注释）。
+    expect(
+      BUNDLE.includes(UNIVER_PATCH_HOOKS.legacyBodyMount),
+      `@univerjs/ui 又出现「${UNIVER_PATCH_HOOKS.legacyBodyMount}」⇒ 补丁没应用` +
+        `（本机安装失败时 patch-package 不会以非零码退出，务必按 ${UNIVER_PATCH_HOOKS.patchFile} / docs/USHEET-UPGRADE.md §4.7 重生成）`,
+    ).toBe(false);
+    for (const needle of [UNIVER_PATCH_HOOKS.mountedInHost, UNIVER_PATCH_HOOKS.removedSafely, UNIVER_PATCH_HOOKS.floatingMarker]) {
+      expect(BUNDLE.includes(needle), `补丁形态缺失：${needle}`).toBe(true);
+    }
   });
 });

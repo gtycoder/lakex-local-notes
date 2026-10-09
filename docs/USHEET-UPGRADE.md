@@ -23,7 +23,9 @@
   `injector.get(IRenderManagerService)` 会拿到另一个 token 的实例 ⇒ 重排**静默失效**（画布不跟手）。
 - 间接依赖约 25 个 `@univerjs/*`（`sheets` / `sheets-ui` / `sheets-drawing-ui` / `core` / `ui` …）必须与上面同版本；
   **例外**：`@univerjs/icons` 是独立发版线（当前 1.43.x），不参与同版本约束。
-- 没有 Univer 的 **patch**（`patch-package` 只用于 `@plait/draw`、`@xiangfa/mindmap`）；也不要给 Univer 打 patch。
+- **有一个 Univer 补丁**：`patches/@univerjs+ui+1.0.3.patch`（261009 起，唯一一个；改的是内核 floating 层的挂载点，
+  理由与升级动作见 **§4.7**）。除这一处外**不要再给 Univer 打 patch**：`patch-package` 的其余用途仍是
+  `@plait/draw`（`patches/`）与 `@xiangfa/mindmap`（`vendor/lakex-doc-react/patches/`）。
 
 **我们集成的面**（升级时要一起想）：
 
@@ -52,6 +54,9 @@
 # 0) 读 release notes，确认目标版本；开分支（或 worktree），不要在 master 上试
 # 1) 改 package.json 的 4 个版本号（全部同一个目标版本），重新装
 npm install                     # 用 lockfile 语义安装，不要 npm update
+# 1b) 确认我们的 Univer 补丁仍应用成功（§4.7）。⚠️ 本机安装时 patch-package 失败**不会**以非零码退出，
+#     必须自己看输出；CI / NODE_ENV=production 才会让安装直接失败。
+npx patch-package --patch-dir patches
 # 2) 静态护栏：版本一致性 + 触点符号存在性
 npx tsc --noEmit && npm test
 # 3) 运行时探针（真实 Electron + CDP；先 build，探针只读 dist）
@@ -127,6 +132,19 @@ node scripts/check-bundle-budget.mjs
 - 单元格图片整格覆盖 / 一格一张 / 文字被顶掉：§5.26。
 - 计算条高度是**行内样式**（不是类也不是变量）⇒ 只能 `!important` 覆盖。
 
+### 4.7 我们打的补丁（`patches/@univerjs+ui+1.0.3.patch`）
+
+| 改了什么 | 为什么 | 失效表现 | 谁守它 |
+| --- | --- | --- | --- |
+| `DesktopWorkbenchContent` / `MobileWorkbench` 里 floating 层的 portal 容器：`document.body.appendChild(portalContainer)` → `mountContainer.appendChild(portalContainer)`；卸载 `document.body.removeChild(...)` → `portalContainer.remove()`；并加 `data-lake-univer-floating` 标记 | 内核把 floating 层（`CanvasPopup`：cell popup、**CellAlert 警告徽标（黄叹号）**、下拉/日期/颜色/选区浮层）**无条件挂到 `document.body`** ⇒ 它不在标签宿主里：我们 keep-alive 的 `opacity/visibility` 隐藏对它无效，而内核自己"看不见就隐藏"的判据读的是**画布 rect**（`visibility:hidden` 的元素 rect 仍有效）⇒ 切文档后浮层残留、层级高于内容（用户 261009 报：黄叹号盖住一切、切文档也盖不住） | `document.body` 下重新出现该容器 ⇒ 浮层又能逃出标签宿主 | `univerContract.test.ts`（护栏③：补丁形态）+ `scripts/usheet-kernel-probes.mjs`（容器在宿主内 / 切走后不可见） |
+
+- **只改 `lib/es/index.js`**（`module` / `exports.import` 入口，app / 移动端 / vitest 都走它）；`lib/cjs` 未改（当前没有 CJS 消费者）。
+- **重生成**：改完 node_modules 后执行 `npx patch-package @univerjs/ui --patch-dir patches`，然后跑探针 + 全量门禁。
+- **升级时它会怎样**（patch-package 8.0.1 实测行为）：
+  1. 这段代码上下文没变 → 补丁自动应用成功，只多一条 version-mismatch 警告（默认不阻塞）⇒ 仍要用上面的命令**重生成补丁**（版本号与内容一起更新）后提交。
+  2. 上下文变了（上游重构这段，或上游自己把挂载点修了）→ 补丁应用失败；⚠️ **本机非 CI 时 patch-package 故意不以非零码退出**（`dist/index.js` 注释 "don't want to exit(1) on postinstall locally"），安装照过、应用带着**未打补丁**的状态继续跑 ⇒ 靠护栏③变红发现（CI / `NODE_ENV=production` 才会让安装直接失败）。此时二选一：把这 2 行改动**前移**到新版本，或按上游实现**删掉补丁**（探针继续守行为）。
+  3. 若将来删掉补丁：`univerContract.test.ts` 的护栏③要一起删，并同步本表与 `usheetKernelContract.ts` 的 `UNIVER_PATCH_HOOKS`。
+
 ## 5. 升级后人工走查清单
 
 见 §3 第 5 步（10 条）。其中**必须亲手做**的两条：
@@ -142,8 +160,12 @@ node scripts/check-bundle-budget.mjs
 | 事件/钩子语义变化 ⇒ 粘贴落点变 | 探针第 5 条会红 | 复读 §5.25 重新定位收口点 |
 | 出现两份 `@univerjs/*` | `univerContract.test.ts` 会红 | 对齐版本 / 检查 lockfile |
 | 新版本要求新的 peer 或 polyfill | 构建期报错 | 按 release notes 补 |
+| **我们的 Univer 补丁被升级冲掉**（floating 层又逃出标签宿主） | 护栏③（静态）+ 探针（容器在不在宿主内、切走后可不可见） | 重生成补丁（`npx patch-package @univerjs/ui --patch-dir patches`）或按上游实现删补丁，见 §4.7 |
 
 ## 7. 路线图
+
+**已完成（261009 追加）**：内核 floating 层收口 —— `patches/@univerjs+ui+1.0.3.patch` 把 floating 容器挂回实例宿主
+（切文档后黄叹号 / CellAlert / 下拉等浮层不再残留）；配套静态护栏③ + 探针两条（§4.7）。
 
 **已完成（261010 批次）**：默认尺寸单一来源（50×16）；挂载失败可见提示；版本精确锁 + 静态护栏；
 运行时探针入库；触点集中到一个文件；粘贴图片默认单元格图；右键「插入单元格图片」；计算条 30px + 状态栏跟随。

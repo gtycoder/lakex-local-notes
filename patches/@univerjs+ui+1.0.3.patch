@@ -1,0 +1,34 @@
+diff --git a/node_modules/@univerjs/ui/lib/es/index.js b/node_modules/@univerjs/ui/lib/es/index.js
+index 9d289eb..15ba24e 100644
+--- a/node_modules/@univerjs/ui/lib/es/index.js
++++ b/node_modules/@univerjs/ui/lib/es/index.js
+@@ -6768,9 +6768,12 @@ function DesktopWorkbenchContent(props) {
+ 	const direction = useObservable(localeService.direction$, localeService.getDirection());
+ 	const portalContainer = useMemo(() => document.createElement("div"), []);
+ 	useEffect(() => {
+-		document.body.appendChild(portalContainer);
++		// [Lake Notes patch] floating 容器必须留在实例宿主内：body 级 portal 会逃出标签宿主，
++		// keep-alive 的 visibility/opacity 隐藏对它无效、切文档后浮层残留。见 patches/@univerjs+ui+1.0.3.patch
++		portalContainer.setAttribute("data-lake-univer-floating", "");
++		mountContainer.appendChild(portalContainer);
+ 		return () => {
+-			document.body.removeChild(portalContainer);
++			portalContainer.remove();
+ 		};
+ 	}, [mountContainer, portalContainer]);
+ 	useEffect(() => {
+@@ -25618,9 +25621,12 @@ function MobileWorkbench(props) {
+ 		};
+ 	}, [themeService.currentTheme$, themeSwitcherService]);
+ 	useEffect(() => {
+-		document.body.appendChild(portalContainer);
++		// [Lake Notes patch] floating 容器必须留在实例宿主内：body 级 portal 会逃出标签宿主，
++		// keep-alive 的 visibility/opacity 隐藏对它无效、切文档后浮层残留。见 patches/@univerjs+ui+1.0.3.patch
++		portalContainer.setAttribute("data-lake-univer-floating", "");
++		mountContainer.appendChild(portalContainer);
+ 		return () => {
+-			document.body.removeChild(portalContainer);
++			portalContainer.remove();
+ 		};
+ 	}, [mountContainer, portalContainer]);
+ 	useEffect(() => {
