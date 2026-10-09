@@ -184,3 +184,23 @@ node scripts/css-audit/check-stylesnap.mjs --from .css-audit/snap/base.json --wr
 （`l3-plan.mjs`），或先把状态矩阵补到覆盖这些功能；否则只能用 L2（层叠判定，与状态覆盖弱相关）。
 **但 260923 实测：真正的约束是"代码生产者"而非覆盖** —— 42 态 1112 个零命中里，**1099 个的类名在应用代码中都有生产者**（含 \`outline-item__level--\${d}\` 这类动态模板串，故过滤要按"前缀"保守判定）。
 叠加该过滤后只剩 3 个选择器 / 1 条整规则 ⇒ **L3 在本仓并无可证的死代码**，补矩阵不会增加安全产出。
+
+## 逐页走查装置（261009 B1 入库）
+
+上面那套解决的是"样式有没有被改坏"；**这一套解决"页面本身有没有可见缺陷"**（用户 261009 定的焦点：逐页走查、查漏补缺）。
+
+```bash
+# 1) 隔离实例 + 合成夹具（勿用真实数据；夹具构建见 make-fixture.mjs 头注释）
+RUN=/tmp/lake-fixture; rm -rf "$RUN"
+env -u ELECTRON_RUN_AS_NODE LAKE_RENDERER=scheme LAKE_USER_DATA="$RUN" LAKE_ASSET_PORT=19810 \
+  ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9231 .
+node scripts/css-audit/drive.mjs 9231 scripts/css-audit/make-fixture.mjs
+# 2) 跑一轮走查（主题 浅/深/暖 × 宽度 1315/1000）
+node scripts/css-audit/drive.mjs 9231 scripts/css-audit/walkthrough.mjs light 1315
+```
+
+- 覆盖 19 屏：资料库 / 富文本·表格·多维表·画板 / 小记 / 搜索 / 资源 / 回收站空间 / 设置十组；每屏存 **PNG + 探针 JSON**
+  （`<.css-audit>/walkthrough/`）。
+- 探针五类：**越界**（可见交互元素出视口，已排除滚动容器内的内容）· **截断**（nowrap+hidden+clip，已排除父级已有省略号的）·
+  **对比度**（我们组件族，WCAG 4.5/3.0）· **焦点环**（非 button 的 `[tabindex]` 是否仍落到 UA 默认环）· **整页横向溢出/固定层越界**。
+- 判定口径：只认实测值。**已知"有意"不算缺陷**的清单写在 `walkthrough.mjs` 头注释（如 `.note-row-copy strong` 的标题裁切）。

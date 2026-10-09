@@ -977,7 +977,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       <Item itemId="about-version" name="应用版本" desc={sysInfo.app.description || undefined}>
                         <span className="config-item__ctl"><code className="kv__v">v{sysInfo.app.version}</code></span>
                       </Item>
-                      <Block itemId="about-runtime" name="运行时" desc="Electron 43 是 Lake 内核的原生环境（Chromium）；Node 版本决定 better-sqlite3 的 N-API 加载。">
+                      <Block itemId="about-runtime" name="运行时" desc="Electron（Chromium）是 Lake 内核的原生环境；Node 版本决定 better-sqlite3 的 N-API 加载。实际版本见下表。">
                         <div className="kv">
                           <div className="kv__row"><span className="kv__k">Electron</span><span className="kv__v">{sysInfo.runtime.electron}</span></div>
                           <div className="kv__row"><span className="kv__k">Chromium</span><span className="kv__v">{sysInfo.runtime.chromium}</span></div>
