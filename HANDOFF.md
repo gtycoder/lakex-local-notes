@@ -323,10 +323,12 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > 抽屉态下「侧栏右键菜单（属性 / 历史版本）」不在同一可见层 ⇒ 移动端这两个入口需换驱动方式（本轮未完成）。
 > **已修（261009 B2）**：小记写作卡的两字按钮（取消 / 保存）标签折成两行、按钮被撑到 62px 高（实测 57×62）——
 > `.mobile-qn-btn` 加 `white-space: nowrap`（mobile.css），修复后 58×38 / 75×37；`check:mobilesnap` 6 态 0 差异。
-> **未定性（下次接着查，别直接下结论）**：小记编辑器偶发**大图标 + 原生 `<input type=file>`（Choose File / No file chosen）+「返回文档」**的渲染态
-> （实测 7 个 >60px 的 SVG；样式表正常加载，mobile-*.css 1257 条规则在）。同一条屏在**早前一轮**是正常渲染（工具条小图标 + 取消/保存），
-> 两次差异只在于"重新安装后刚启动 vs 已运行一段时间" ⇒ 疑与内核 fullscreen 编辑器初始化时序有关；
-> 冷启动复测脚本没跑通（force-stop 后 WebSocket 变了，drive 连接失败），下轮先修驱动再判定。
+> **已定位并修复（261009 B2 第二轮）**：小记编辑器在**冷启动后作为第一个内核消费者**时渲染成「大图标 + 原生 `<input type=file>`（Choose File / No file chosen）」——
+> 根因＝**内核样式表缺席**：桌面由 `styles/index.css` 的 `@import "@dlient/lakex-doc-react/style.css"` 全局引入，移动端入口没引、此前只有 `mobile/editor/DocumentEditor.tsx` 引；
+> 于是"先开文档"时正常（CSS 已随文档编辑器模块加载）、"先开小记"时内核图标按原生尺寸铺满。因果实测：坏态 `ne-icon` 规则 **0** 条 + 7 个 >60px 的 `ne-icon-symbol`；开过一次文档后 **76** 条、图标不再超大。
+> 修法：在**移动端**写作卡模块 `mobile/home/QuickNoteComposer.tsx` 引同一份 `@dlient/lakex-doc-react/style.css`（引在移动端模块而不是共享的 `QuickNoteEditor`：后者会把 CSS 也打进桌面入口，实测 app-css 1.79MB → 3.07MB、超 2MB 预算）。
+> 验证：重装后冷启动 → 小记 → 新建小记（首个内核消费者）`ne-icon` 规则 76 条、大图标 0、截图渲染正确；桌面 app-css 回到 1,791,242（预算 exit 0）。
+> **装置备注**：force-stop 后 WebView socket 会变，冷启动脚本要先 `emu-cdp.sh` 轮询重连再 `drive.mjs`（本轮已按此跑通）。
 
 - 正式端：Capacitor Android，包名 `com.lakenotes.mobile`；定位为完整端，桌面红线同样适用。
 - 数据在模拟器 App 沙盒，不在 macOS 数据目录；开发可 `adb shell pm clear com.lakenotes.mobile` 重建。

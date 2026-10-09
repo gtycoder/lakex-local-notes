@@ -16,6 +16,12 @@ import { successFeedback, warnFeedback } from "../ui/haptics";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
+// 内核样式（ne-* / ne-icon-symbol 的尺寸与配色）**由挂内核的入口自己保证**：
+// 桌面走 styles/index.css 的全局 @import；移动端入口不引它，此前只有 mobile/editor/DocumentEditor 引 ⇒
+// 冷启动后**先**开小记编辑器（另一个内核消费者）时样式缺席：内核图标按原生尺寸铺满 + 内核的原生
+// <input type=file> 直接可见（261009 B2 实测：ne-icon 规则 0 条、7 个 >60px 的 ne-icon-symbol；开过一次文档即自愈）。
+// 引在**移动端模块**而不是共享的 QuickNoteEditor：共享模块会把这份 CSS 也打进桌面入口，实测 app-css 1.79MB → 3.07MB（超预算）。
+import "@dlient/lakex-doc-react/style.css";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
 import { extractAssetRefs, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
