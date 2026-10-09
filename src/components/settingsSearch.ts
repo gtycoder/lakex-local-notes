@@ -53,7 +53,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "history-cleanup-interval", category: "history", label: "定期清理（小时）", keywords: "定期 清理 间隔 小时" },
   { id: "history-snapshot-interval", category: "history", label: "自动快照（分钟）", keywords: "自动 快照 间隔 分钟" },
   { id: "history-data-health", category: "history", label: "一致性检查", keywords: "体检 诊断 一致性 缺失 校验" },
-  { id: "sync-enabled", category: "sync", label: "启用云同步", keywords: "同步 开关 启用 云同步" },
+  { id: "sync-enabled", category: "sync", label: "启用云同步", keywords: "同步 开关 启用 云同步 隐私 隐私数据 加密 不加密 私有" },
   { id: "sync-auto-mode", category: "sync", label: "自动同步模式", keywords: "自动同步 模式 手动 间隔 开启关闭" },
   { id: "sync-auto-interval", category: "sync", label: "自动同步间隔（分钟）", keywords: "自动同步 间隔 分钟" },
   { id: "backup-export", category: "sync", label: "整库备份", keywords: "备份 整库 导出 目录" },

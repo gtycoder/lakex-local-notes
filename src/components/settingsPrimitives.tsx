@@ -70,13 +70,16 @@ export function Block({ itemId, name, desc, children }: { itemId?: string; name?
   );
 }
 
-/** 开关行（自有设计系统 COMPONENTS 09 / .ln-switch：button + role=switch + __knob）。 */
-export function Switch({ itemId, name, desc, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+/** 开关行（自有设计系统 COMPONENTS 09 / .ln-switch：button + role=switch + __knob）。
+ *  note = 该开关的**行内提示**（走既有 .config-note 单一来源，与 Field 的 error 行同构）——
+ *  用于"开启前必须知道"的说明（例：云同步的隐私数据提示：不加密上传 + 请确认桶为私有）。 */
+export function Switch({ itemId, name, desc, note, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; note?: ReactNode; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
     <div className="b3-label config-item" data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
         {desc && <div className="b3-label__text">{desc}</div>}
+        {note && <div className="config-note">{note}</div>}
       </div>
       <span className="fn__space" />
       <button

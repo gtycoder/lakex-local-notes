@@ -41,3 +41,14 @@ export function cloudStateHint(state: CloudState): string | null {
   if (state === "offline") return "云同步已关闭：按纯本地空间处理，没有去云端补拉；重新开启后下次同步会自动补拉。";
   return null;
 }
+
+/**
+ * 「启用云同步」行上的**隐私数据提示**（桌面 SettingsPanel 与移动 SettingsDrawer 共用同一份文案，
+ * 用户 261009 定稿）：**固定展示**，不随开关状态 / 是否已通过连通测试而变化——"云端不加密"这件事
+ * 必须在**开启之前**就一直在眼前，所以不做条件渲染、也不放进需要悬停才出现的隐藏提示。
+ * 这里只存文案（core 无 UI 依赖）；渲染用既有原语：徽标 .ln-tag--pending + 行内提示 .config-note。
+ */
+export const CLOUD_PRIVACY_NOTICE = {
+  badge: "隐私数据 · 云端不加密",
+  text: "开启后笔记正文与附件会上传到你的 S3（按原样存储、不做加密）；请先确认该桶为私有、未开放公开读，且凭据只有你持有。",
+} as const;

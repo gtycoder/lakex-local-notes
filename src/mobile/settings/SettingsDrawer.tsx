@@ -15,6 +15,7 @@ import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
+import { CLOUD_PRIVACY_NOTICE } from "../../core/cloudState";
 import type { S3Settings, SyncSettings, SyncWarning } from "../../lib/types";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
@@ -320,6 +321,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <Switch
                     name="启用云同步"
                     desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
+                    note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
                     checked={syncCfg?.enabled !== false}
                     onChange={(next) => {
                       const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "manual" as const, autoIntervalMinutes: 15 }), enabled: next };

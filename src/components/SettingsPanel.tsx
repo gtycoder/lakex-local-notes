@@ -4,7 +4,7 @@ import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
 import { Select } from "./ui/Select";
-import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../core/cloudState.js";
+import { canTouchNetwork, cloudStateHint, cloudStateOf, CLOUD_PRIVACY_NOTICE } from "../core/cloudState.js";
 
 /** 把归类后的中文错误贴到对应字段：Key 类 → apiKey；端点/模型类 → baseUrl+model；其余整条。 */
 function fieldErrorFor(message: string, retryable?: boolean): Record<string, string> {
@@ -706,7 +706,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (
                     <>
-                      <Switch itemId="sync-enabled" name="启用云同步" desc={s3Verified || syncCfg.enabled ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"} checked={syncCfg.enabled} disabled={syncCfgBusy || (!syncCfg.enabled && !s3Verified)} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
+                      <Switch itemId="sync-enabled" name="启用云同步" desc={s3Verified || syncCfg.enabled ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"} note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>} checked={syncCfg.enabled} disabled={syncCfgBusy || (!syncCfg.enabled && !s3Verified)} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式">
