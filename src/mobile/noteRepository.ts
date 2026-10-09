@@ -27,7 +27,7 @@ export interface POCNoteSummary {
 
 function normalizeDocKind(value: unknown): "doc" | "usheet" | "bitable" | "board" {
   // 表格（kind=usheet）：移动端按「非 doc 只读占位」处理，**绝不**交给 Lake 编辑器。
-  // 旧 FortuneSheet 的 "sheet" 已废弃：不做迁移/兼容（AGENTS §3#7），直接回退 doc。
+  // 已废弃的旧 kind：不做迁移 / 兼容（AGENTS §3#7），直接回退 doc。
   return value === "usheet" || value === "bitable" || value === "board" ? value : "doc";
 }
 

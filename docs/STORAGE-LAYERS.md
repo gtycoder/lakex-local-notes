@@ -56,7 +56,7 @@
 > **图片 = 资产引用**：workbook 里 drawing 的 `source` 存**资产 filename**（文件在 `note-assets/{noteId}/`），
 > **正文不存 base64、不存 URL**；渲染由 `localAssetHttpUrl` 拼本实例 URL，落盘由 `mapUsheetImageSources` 换回 filename（`src/features/usheet/UniverSheetEditor.tsx`）。
 > 声明/GC/同步/历史全复用现有资产管线（清单声明是**磁盘实扫** `listLocalAssets`；GC 保护靠 `extractAssetRefs` 命中 JSON 里的 filename）。
-> 旧 FortuneSheet 的 `kind="sheet"` 正文不再识别（AGENTS §3#7：不做迁移/兼容）。
+> 已废弃的旧表格 `kind="sheet"` 正文不再识别（AGENTS §3#7：不做迁移 / 兼容）。
 >
 > **多维表文档（`kind="bitable"`，260920 实现 v1）**：正文落 `bitables/{noteId}.bitable.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
 > 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/STORAGE-LAYERS.md`。

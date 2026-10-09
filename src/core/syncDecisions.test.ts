@@ -179,7 +179,7 @@ describe("rowToLocalState", () => {
     }).kind;
     expect(kindOf("board")).toBe("board");
     expect(kindOf("usheet")).toBe("usheet");
-    expect(kindOf("sheet")).toBe("doc");   // 旧 FortuneSheet kind：不做迁移/兼容（AGENTS §3#7）
+    expect(kindOf("legacy-kind")).toBe("doc");   // 未知 / 已废弃 kind：不做迁移 / 兼容（AGENTS §3#7），一律回退 doc
     expect(kindOf("bitable")).toBe("bitable");
     expect(kindOf("gantt")).toBe("doc");
     expect(kindOf(null)).toBe("doc");

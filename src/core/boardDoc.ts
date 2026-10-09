@@ -5,7 +5,7 @@
  * - 引擎来自 `lakex-drawnix`（plait-board/drawnix 的 MIT 抽取）+ `@plait/*`；编辑器是 vendor 的
  *   `DrawnixBoardCore`，它只吃 `{ value, readOnly, locale, theme, ai, onChange }`，运行时不 import 内核
  *   （卡片层的 CardResizer / editor 上下文在独立文档里都不需要）。
- * - 正文落 `boards/{id}.board.json`：与 `sheets/` `bitables/` 同构，是内部 JSON，**不喂 Lake 解析器**。
+ * - 正文落 `boards/{id}.board.json`：与 `usheets/` `bitables/` 同构，是内部 JSON，**不喂 Lake 解析器**。
  * - `elements` 就是文档内画板卡（`cards/DrawingBoard`）的 `plaitValue`，所以
  *   「文档内画板卡 ↔ 独立画板文档」可无损互搬，无需任何格式转换。
  *

@@ -1164,7 +1164,7 @@ PY
 5. **分包与懒加载（务必守住）**：`DrawnixBoardCore-*.js` 343KB raw / 118KB gzip + `drawnix-*.js` 1488KB / 415KB gzip，**必须留在独立 chunk**。
    ⇒ vendor 对外暴露画布核心**只能用懒加载器**（`loadDrawnixBoardCore()`）；写成 `export { DrawnixBoardCore }` 会让 vendor 入口静态依赖它，
    构建立刻报 `INEFFECTIVE_DYNAMIC_IMPORT`，`DrawnixBoardCore-*.js` 分包消失、首屏多背 ≈500KB gzip（实测复现过）。
-6. **CSP**：`lakex-drawnix` / `lakex-drawnix-react-board` / `@xiangfa/mindmap` 的 `eval`、`new Function` 计数均为 0（与 FortuneSheet/CE 那类坑不同，画板不受无 `unsafe-eval` 约束影响）。
+6. **CSP**：`lakex-drawnix` / `lakex-drawnix-react-board` / `@xiangfa/mindmap` 的 `eval`、`new Function` 计数均为 0（画板不受无 `unsafe-eval` 约束影响）。
 7. **视口**：`onViewportChange` 是 no-op（LOCAL-CHANGE #8，防 pan/zoom 触发保存）。独立画板若要「记住上次看到哪」，
    用**被动回调** `onViewportPersist` 存 ref、只在保存时写进正文，**不要回灌 value**。
 8. **图片**：工具条有图片入口（文件选择 / 粘贴 / 拖放），引擎把图**内联成 data URL** 写进场景元素（`data/image.d.ts` 的 `insertImage`/`buildImage`）。独立画板文档由宿主做**提升**：data URL → `note-assets/{noteId}/` 资产文件（写盘口径 = canonical URL，内存口径 = data URL，见 `docs/STORAGE-LAYERS.md` §九）。

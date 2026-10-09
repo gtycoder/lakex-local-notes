@@ -29,7 +29,7 @@ export interface TreeNode {
   syncState: string;
   isConflict: boolean;
   icon: string | null;
-  /** v6/v7 文档类型（doc | sheet | bitable | board；缺省 doc）。 */
+  /** 文档类型（doc | usheet | bitable | board；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board";
 }
 
@@ -171,7 +171,7 @@ export class NoteQueries {
   /** 单节点读取：与 listTreeNodes 使用同一 row 形状（LEFT JOIN notes 取 kind）。
    *  元数据写操作（rename/setNodeIcon/move）回传给渲染层的就是这个节点；
    *  若只查 tree_nodes（缺 note_kind），mapTreeNode 会把 kind 兜底成 "doc"，
-   *  渲染层 replaceTreeNode(返回值) 就把 board/sheet/bitable 换成了文档图标。 */
+   *  渲染层 replaceTreeNode(返回值) 就把 board/usheet/bitable 换成了文档图标。 */
   readTreeNode(id: string): TreeNode {
     const row = this.db.prepare(
       "SELECT t.*, n.kind AS note_kind FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id WHERE t.id=? AND t.deleted_at IS NULL"

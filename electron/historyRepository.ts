@@ -23,7 +23,7 @@ export interface HistorySnapshotPreview {
   /** 文档类型：doc 的 `html` 是 Lake 正文（只读 viewer 渲染）；非 doc 是内部 JSON（按 kind 渲染结构化预览）。 */
   kind: NoteKind;
   plain: string;
-  /** 快照正文原文：doc = Lake HTML（viewer 渲染用）；sheet/bitable/board = 各自的内部 JSON。 */
+  /** 快照正文原文：doc = Lake HTML（viewer 渲染用）；usheet/bitable/board = 各自的内部 JSON。 */
   html: string;
   createdAt: string;
   contentHash: string;
@@ -69,7 +69,7 @@ export class HistoryRepository {
   }
 
   preview(historyId: number): HistorySnapshotPreview | null {
-    // 带上文档类型：doc 的快照正文是 Lake HTML，sheet/bitable/board 是内部 JSON（渲染方式完全不同）。
+    // 带上文档类型：doc 的快照正文是 Lake HTML，usheet/bitable/board 是内部 JSON（渲染方式完全不同）。
     const row = this.db.prepare(
       "SELECT h.file_path AS file_path, h.created_at AS created_at, h.content_hash AS content_hash, n.kind AS kind" +
       " FROM note_history h LEFT JOIN notes n ON n.id = h.note_id WHERE h.id = ?"

@@ -73,7 +73,7 @@ export default async ({ page }) => {
   summary.notes.second = second.id;
   await api(`window.lakeNative.saveNote(${JSON.stringify(second.id)}, "合成·第二篇", ${JSON.stringify(h("h1", "合成·第二篇") + p(span("第二篇正文，含「记」字。")))})`);
   const usheet = await api(`window.lakeNative.createUsheetIn(${JSON.stringify(parentId)}, "合成·表格")`);
-  summary.notes.sheet = usheet.id;
+  summary.notes.usheet = usheet.id;
   const bitable = await api(`window.lakeNative.createBitableIn(${JSON.stringify(parentId)}, "合成·多维表")`);
   summary.notes.bitable = bitable.id;
   const board = await api(`window.lakeNative.createBoardIn(${JSON.stringify(parentId)}, "合成·画板")`);

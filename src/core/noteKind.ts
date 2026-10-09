@@ -12,8 +12,7 @@ export type NoteKind = "doc" | "usheet" | "bitable" | "board";
 
 export const NOTE_KINDS: readonly NoteKind[] = ["doc", "usheet", "bitable", "board"] as const;
 
-/** 任意输入 → 合法 kind（非法/缺失一律回退 "doc"）。
- *  旧 FortuneSheet 的 "sheet" 已废弃：按 AGENTS §3#7 不做迁移/兼容，直接回退成 doc。 */
+/** 任意输入 → 合法 kind（非法 / 缺失 / 已废弃的旧 kind 一律回退 "doc"：按 AGENTS §3#7 不做迁移 / 兼容）。 */
 export function normalizeNoteKind(value: unknown): NoteKind {
   return value === "usheet" || value === "bitable" || value === "board" ? value : "doc";
 }
