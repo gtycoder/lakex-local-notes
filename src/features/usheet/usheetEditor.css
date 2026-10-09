@@ -16,3 +16,36 @@
   height: 100%;
   width: 100%;
 }
+
+/* 工具栏「收起 / 展开」（261009）：
+ * 收起 = 只藏掉页签行（ribbon-header-menu），保留工具行；工具仍跟随**选中的大分类**（不合并各分类）。
+ * 几何：工具行相对 .usheet-editor 在展开时 top=45、收起时 top=9（页签行 36px），高 24px。 */
+.usheet-editor.is-ribbon-collapsed [data-u-comp="ribbon-header-menu"] {
+  display: none;
+}
+
+.usheet-editor .usheet-ribbon-toggle {
+  position: absolute;
+  right: 8px;
+  top: 45px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-2xs);
+  background: transparent;
+  color: var(--lake-text-2);
+  cursor: pointer;
+  z-index: var(--lake-z-editor-sticky);
+}
+
+.usheet-editor.is-ribbon-collapsed .usheet-ribbon-toggle {
+  top: 9px;
+}
+
+.usheet-editor .usheet-ribbon-toggle:hover {
+  background: var(--lake-bg-hover);
+}

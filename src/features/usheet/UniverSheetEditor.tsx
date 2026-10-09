@@ -25,9 +25,14 @@ import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { ASSET_PORT } from "../../lib/assetPort";
 import { uploadLakeResource } from "../editor/resourceUpload";
 import type { ResourceUploadOutput } from "../../lib/types";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { IRenderManagerService } from "@univerjs/engine-render";
 
 /** 自动保存防抖：合并连续命令，停顿后落一次。 */
 const AUTOSAVE_DEBOUNCE_MS = 800;
+
+/** 工具栏「收起 / 展开」偏好（设备本地；遵 AGENTS §4，不进正文 / S3 / 历史）。 */
+const RIBBON_COLLAPSED_KEY = "lake-notes-v3.usheet.ribbon-collapsed";
 
 /** 只用到 Univer workbook 的这两个方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
 type UniverBook = { save: () => unknown; setEditable: (value: boolean) => unknown };
@@ -51,6 +56,25 @@ function renderSource(src: string, noteId: string): string {
 function diskSource(src: string): string {
   const ref = parseLocalAssetUrl(src);
   return ref && ref.space === "note" && !ref.staging ? ref.filename : src;
+}
+
+/** 收起 / 展开工具栏后让 Univer 引擎重排画布：藏掉页签行改变了可用高度，而引擎不会自己重排（实测）。
+ *  ⚠️ 必须用**渲染单元（render unit）**的 engine：`defaultEngine.resize()` 实测是 no-op。 */
+function resizeUniverRender(instance: unknown): void {
+  try {
+    const rec = instance as { univer?: { __getInjector?: () => { get: (token: unknown) => unknown } } } | null;
+    const injector = rec?.univer?.__getInjector?.();
+    if (!injector) return;
+    const renderManager = injector.get(IRenderManagerService) as {
+      defaultEngine?: { resize?: () => void };
+      getRenderAll?: () => Map<string, { engine?: { resize?: () => void } }>;
+    } | null;
+    let resized = 0;
+    for (const unit of renderManager?.getRenderAll?.().values() ?? []) {
+      if (unit?.engine?.resize) { unit.engine.resize(); resized += 1; }
+    }
+    if (resized === 0) renderManager?.defaultEngine?.resize?.();
+  } catch { /* 重排失败不影响收起动作本身 */ }
 }
 
 /** 应用字体令牌（`--lake-font-family`，即 MiSans 栈）；表格一律用它，**禁止自定义字体**。 */
@@ -135,6 +159,16 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const hostRef = useRef<HTMLDivElement>(null);
   const [everVisible, setEverVisible] = useState(visible);
   const [ready, setReady] = useState(false);
+  const [ribbonCollapsed, setRibbonCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem(RIBBON_COLLAPSED_KEY) === "1"; } catch { return false; }
+  });
+  const toggleRibbonCollapsed = () => {
+    setRibbonCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(RIBBON_COLLAPSED_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  };
   const instanceRef = useRef<{ univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook; last: string } | null>(null);
   const timerRef = useRef<number | null>(null);
   const changeRef = useRef(onChange); changeRef.current = onChange;
@@ -305,6 +339,17 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     return () => observer.disconnect();
   }, [ready]);
 
+  // 收起 / 展开工具栏后让引擎重排画布（藏页签行改变可用高度；引擎不会自己重排）。
+  // ⚠️ 用 setTimeout 而非 requestAnimationFrame：CDP 依附 / 隐藏窗口里 rAF 不触发（本项目已知坑）。
+  useEffect(() => {
+    if (!ready) return;
+    const timers = [
+      window.setTimeout(() => resizeUniverRender(instanceRef.current), 0),
+      window.setTimeout(() => resizeUniverRender(instanceRef.current), 160),
+    ];
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [ribbonCollapsed, ready]);
+
   // 隐藏 = 先把未落盘改动补齐，再释放 Univer 实例（canvas/模型/DOM）；显示时按 lastBodyRef 重建。
   // 目的：多标签 keep-alive 下不把每个 usheet 实例常驻在内存里（Univer 实例不轻）。
   useEffect(() => {
@@ -324,12 +369,24 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   return (
     <div
       ref={hostRef}
-      className="sheet-editor usheet-editor"
+      className={"sheet-editor usheet-editor" + (ribbonCollapsed ? " is-ribbon-collapsed" : "")}
       data-active={(focused ?? visible) ? "true" : undefined}
       data-pane-visible={visible ? "true" : undefined}
       data-pane={pane ?? undefined}
     >
       <div id={"univer-sheet-" + noteId} className="usheet-univer-root" />
+      {showToolbar ? (
+        <button
+          type="button"
+          className="usheet-ribbon-toggle"
+          aria-label={ribbonCollapsed ? "展开工具栏" : "收起工具栏"}
+          aria-expanded={!ribbonCollapsed}
+          title={ribbonCollapsed ? "展开工具栏" : "收起工具栏"}
+          onClick={toggleRibbonCollapsed}
+        >
+          {ribbonCollapsed ? <ChevronDown size={16} aria-hidden /> : <ChevronUp size={16} aria-hidden />}
+        </button>
+      ) : null}
     </div>
   );
 }
