@@ -221,9 +221,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
             disableAutoFocus: true,
             toolbar: showToolbar,
             formulaBar: showToolbar,
-            // 261009-ribbon：还原 Univer 原生**两层**工具栏（classic = 菜单行 + 工具行）；单行 simple 的收编逻辑已移除。
-            ribbonType: "classic",
-            // 字体表收窄成唯一一项 = 应用字体令牌 ⇒ 不存在"自定义字体"这个选项（配合隐藏字体选择器）。
+            // 字体策略（非工具栏工程）：字体表收窄成唯一一项 = 应用字体令牌 MiSans。
             customFontFamily: { override: true, list: [{ value: lakeFontFamily(), label: "MiSans" }] },
           }),
           UniverSheetsDrawingPreset(),
