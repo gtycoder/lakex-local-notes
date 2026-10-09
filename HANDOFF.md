@@ -9,7 +9,7 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261009 / 261008）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点（261009 续）**：usheet 已是唯一表格、旧表格已彻底清除，**本批已合并 master**（`25ab081`）。剩余待办：① 「开始」工具栏最终取舍（继续点名隐藏 / 定白名单 / 维持现状——把「更多」当缓冲）；② 公式栏收起方案已记录未实现（[docs/USHEET-TOOLBAR-OPTIMIZATION.md](docs/USHEET-TOOLBAR-OPTIMIZATION.md)）；③ MiSans 桌面字体文件是否引入（用户 261009 暂缓）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+> **下一会话焦点（261009 续）**：usheet 已是唯一表格、旧表格已彻底清除，**本批已合并 master**（`25ab081`）。剩余待办：① 「开始」工具栏最终取舍（继续点名隐藏 / 定白名单 / 维持现状——把「更多」当缓冲）；② 公式栏收起方案（结论已并入本文件与代码注释；原记录文档随 spike 收尾删除，git 历史可查）；③ MiSans 桌面字体文件是否引入（用户 261009 暂缓）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
 ### 261009 续 · 工具栏「收起 / 展开」+「开始」精简 + 右侧槽位 + 残留收尾 + 合并 master（已交付并合并）
 
@@ -18,7 +18,7 @@
 - **右侧槽位与「更多」**：Univer 的溢出判定读 `ribbon-toolbar` 的 **`contentRect.width`（不含 padding）** ⇒ `padding-right: 50px` 既让「更多」**更早出现并左移**，又给收起按钮让出槽位（不预留时实测「更多」占 gap 19–43、按钮占 9–33 ⇒ **重叠**）。
 - **「开始」精简 5 项**：字体 / 粘贴 / 百分比 / 货币 / 快捷键面板，走公开 API `updateMenuConfig({ hidden: true })`。⚠️ **只列该位置专属的 id**：`sheet.command.paste` 同时挂在右键菜单（隐藏会连带干掉**右键粘贴**）⇒ 粘贴只藏 `sheet.menu.paste`。副作用：腾出的宽度会被原先挤在「更多」里的工具**自动补位**（缩小字体填充 / 文本旋转 / 合并单元格 / 常规 / 增加小数位）——要"真的变短"须继续点名或给「开始」定白名单（**待用户定**）。
 - **依赖**：`@univerjs/engine-render` 显式声明并**锁 `1.0.3`**（＝ presets 的精确 pin；出现第二份会让 DI token 不一致 ⇒ 引擎重排**静默失效**）。
-- **收尾**：旧表格残留全量复检并清零（见下条"残留审计"）；`master` 已 fast-forward 合并（`25ab081`）。pending：spike 验证设施（`src/spike/`、`spike-univer.html`、`vite.spike.config.ts`、`scripts/spike-univer-cdp.mjs`）按 AGENTS §2「已完成 spike 直接删」**尚未删**，待用户确认。
+- **收尾**：旧表格残留全量复检并清零（见下条"残留审计"）；`master` 已 fast-forward 合并（`25ab081`）。spike 验证设施已按 AGENTS §2「已完成 spike 直接删」**全部删除**（`src/spike/`、`spike-univer.html`、`vite.spike.config.ts`、`scripts/spike-univer-cdp.mjs`、`scripts/usheet-stress.mjs`、`docs/UNIVER-SPIKE-261009.md`、`docs/USHEET-TOOLBAR-OPTIMIZATION.md`，连同 `.gitignore` 的 `/dist-spike`、`/spike-*.png`）；**移动端表格组件同步切换**——新增 `src/mobile/usheet/MobileUsheetViewer.tsx`（同一套 Univer 内核、只读、不挂工具条/公式栏、不保存；懒加载不进首屏，由 `mobileLazyChunks.test.ts` 卡住），接进 `NotebookWorkspace` 的 kind=usheet 分派。
 - 门禁：tsc 0 · ui-metrics（未定义令牌 0）· cssLayers/uiPrimitives ✓ · vitest **209 文件 / 1698 用例** · check:core 75-0 · 双端构建 ✓ · `git diff --check` ✓。
 
 ### 261009 · usheet 转正为唯一表格 + 旧表格彻底移除（**已合并 master**：`25ab081`）
@@ -30,7 +30,7 @@
 - **门禁**：tsc 干净 · vitest **209 文件 / 1698 用例** · ui-metrics · check:core 75-0 · 双端构建 · `git diff --check`；应用侧冒烟：建表 → 开表 canvas 正常、状态栏「表格」、全页无「表格（新）」。
 - **残留审计（合并前全量复检）**：依赖（`package.json`/`package-lock.json` 里 `@fortune-sheet` = 0、`node_modules/@fortune-sheet` 不存在）、`patches/` 只剩 `@plait+draw`、旧模块文件全不存在。**又清掉 3 处此前遗漏的残留**：① `electron/store.ts` 仍在**创建旧 `sheets/` 正文目录**（已删）；② `src/mobile/mobile.css` 里 **23 条零引用的旧表格只读视图样式 `.mst-*`**（已删，−127 行）；③ 旧 kind 的措辞全部中性化（`noteKind`/`syncDecisions.test`/`usheetDoc`/`boardDoc`/`noteQueries`/`historyRepository`/`mobile/noteRepository`，以及 STORAGE-LAYERS 与 LAKEX-CONTRACT 的 CSP 对比），`make-fixture` 的 `notes.sheet` key 改名 `notes.usheet`。`dist`/`dist-mobile`/Android assets 里的旧 `SheetEditor-*`/`MobileSheetViewer-*`/`sheetDoc-*` 产物已随重建清除。**现状：全仓 `git grep -i "fortune|luckysheet"` 只剩文档里的迁移记录与本批对比结论，代码 / 依赖 / 产物零残留。**
 - **文档**：TROUBLESHOOTING 删旧表格章节 K/M/N/O/P/Q；HANDOFF 删旧表格 §0 小节与 §3 暗色任务书/补丁坑；AGENTS 删旧表格图标/换行/右键条目（保留通用「模块级单例串台」教训）。
-- **遗留可清理（未做）**：spike 验证设施仍保留（`src/spike/`、`spike-univer.html`、`vite.spike.config.ts`、`scripts/spike-univer-cdp.mjs`、`vite.spike.config.ts`）—— 后续优化还要用；按 AGENTS §2「已完成 spike 直接删」可在收尾时统一删除。
+- **遗留清理（261009 收尾已完成）**：spike 验证设施已全部删除（见上条"收尾"）。
 
 ### 261008 四改~十改 · 「文档引用」卡整体收口（浮层几何 / 悬停出条 / 点击访问 / 自绘图标+深色 / 插入即编辑 / 完整创建流程 / 取消链接转正文 / 复制资料库路径）（已交付并推送）
 
