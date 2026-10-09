@@ -90,7 +90,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
           {error && <p className="mobile-sheet-empty">{error}</p>}
           {!info && !error && <p className="mobile-sheet-empty">读取中…</p>}
           {info && (
-            <>
+            <div className="minfo">
               <dl className="minfo-rows">
                 {rows.map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
               </dl>
@@ -111,7 +111,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
 
               <div className="minfo-section">
                 <div className="minfo-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {fmtSize(info.assetTotalBytes)}</span></div>
-                {info.assets.length === 0 ? <p className="mobile-sheet-empty">无附件</p> : (
+                {info.assets.length === 0 ? <p className="minfo-empty">无附件</p> : (
                   <ul className="minfo-list">
                     {info.assets.slice(0, ITEM_LIMIT).map((a) => (
                       <li key={a.filename}>
@@ -128,7 +128,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
                 <div className="minfo-title"><History size={14} /><span>历史版本 {info.history.length} 个</span>
                   <button className="minfo-action" onClick={onOpenHistory}>打开历史版本</button>
                 </div>
-                {info.history.length === 0 ? <p className="mobile-sheet-empty">暂无历史快照</p> : (
+                {info.history.length === 0 ? <p className="minfo-empty">暂无历史快照</p> : (
                   <ul className="minfo-list">
                     {info.history.slice(0, ITEM_LIMIT).map((h) => (
                       <li key={h.id}><div className="minfo-row"><span>{fmtTime(h.createdAt)}</span><em>{fmtSize(h.size)}</em></div></li>
@@ -136,7 +136,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
                   </ul>
                 )}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
