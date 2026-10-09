@@ -145,7 +145,13 @@
 
 .quick-note-composer .quick-note-editor > .lake-editor-mount { flex: 1; min-height: 200px; }
 
-.quick-note-composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+/* 261009 B1：窄窗（1000px 档）下写作区分栏只有 ~346px，而这一行要装「小记一下 / 取消 / 按 ⌘ Enter 发布 /
+   可拖入或粘贴图片」≈340px ⇒ 默认 nowrap + 可收缩会把标签在按钮内折成两行、第二行被行盒裁掉（实测按钮 70×40、
+   行高 28 且文字可见被切）。改成"整组不收缩 + 放不下就换行"：容器宽度由分栏决定（36%），换行比按断点隐藏提示更稳。
+   子项 nowrap 是必需的：允许在按钮内部折行才是这条缺陷的成因。 */
+.quick-note-composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; row-gap: 4px; margin-top: 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+
+.quick-note-composer-actions > * { flex: 0 0 auto; white-space: nowrap; }
 
 /* 动作行按版式分组（260920）：写作卡＝「小记一下 / 取消 / 提示」靠左；编辑既有小记＝「取消 / 保存」整组靠右下。
    改前用一个 `flex: 1` 的空占位把「取消」顶到最右，保存和取消分居两个角落（用户反馈太偏僻）。 */
