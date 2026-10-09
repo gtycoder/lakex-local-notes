@@ -329,6 +329,15 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > 修法：在**移动端**写作卡模块 `mobile/home/QuickNoteComposer.tsx` 引同一份 `@dlient/lakex-doc-react/style.css`（引在移动端模块而不是共享的 `QuickNoteEditor`：后者会把 CSS 也打进桌面入口，实测 app-css 1.79MB → 3.07MB、超 2MB 预算）。
 > 验证：重装后冷启动 → 小记 → 新建小记（首个内核消费者）`ne-icon` 规则 76 条、大图标 0、截图渲染正确；桌面 app-css 回到 1,791,242（预算 exit 0）。
 > **装置备注**：force-stop 后 WebView socket 会变，冷启动脚本要先 `emu-cdp.sh` 轮询重连再 `drive.mjs`（本轮已按此跑通）。
+> **261009 B2 收尾（覆盖面 + 结论）**：本轮覆盖 = 首页（知识库 / 书架 / 小记）、笔记本工作区（文档树抽屉）、
+> doc×2 / 多维表×2 / 表格 / **画板**、文档属性抽屉、历史版本、大纲抽屉、小记编辑器、设置九页、资源管理。
+> **画板**是模拟器上原先缺的数据，按本节上面的种子法补了一篇 `移动画板`（`notes.doc_kind='board'` + `emptyBoardBody()` 那份 JSON，
+> id=`mobile-board-1`）——移动端 `MobileBoardViewer` 挂载正常（canvas 412×842、空板、底栏「大纲」如预期 disabled）。
+> 每屏探针（越界 / 截断 / 对比度 / 小点击目标 / 整页横向溢出）全绿；`check:mobilesnap` **6 态 0 差异**。
+> **未覆盖 / 边界（有理由，不是漏）**：① **缩略图** —— 模拟器上没有带图的小记或图片字段数据，且 png/jpg/jpeg 的边界已在本节记录；
+> 要看图得先造带图数据（下轮或真机）。② **大纲左滑手势**的运行期驱动没做：门控逻辑（`swipeTargetSide` + `canOpen`）
+> 已有单测 `src/mobile/gestureCore.test.ts` 明确断言「表格/多维表/画板没有大纲 ⇒ 左滑作废」，且本轮实测画板/表格底栏「大纲」按钮就是 disabled（同一 `outlineAvailable` 判据），价值重叠。
+> ③ 真机项（图片 / 附件、键盘安全区、同步后图片加载）仍待真机，与本节「当前剩余验收」合并。
 
 - 正式端：Capacitor Android，包名 `com.lakenotes.mobile`；定位为完整端，桌面红线同样适用。
 - 数据在模拟器 App 沙盒，不在 macOS 数据目录；开发可 `adb shell pm clear com.lakenotes.mobile` 重建。
