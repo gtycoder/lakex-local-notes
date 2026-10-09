@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
+    "@univerjs/engine-render": "1.0.3",
     "@univerjs/preset-sheets-core": "^1.0.3",
     "@univerjs/preset-sheets-drawing": "^1.0.3",
     "@univerjs/presets": "^1.0.3",

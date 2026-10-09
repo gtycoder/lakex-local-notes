@@ -80,7 +80,9 @@ function syncRibbonToggleTop(host: HTMLElement | null): void {
 }
 
 /** 收起 / 展开工具栏后让 Univer 引擎重排画布：藏掉页签行改变了可用高度，而引擎不会自己重排（实测）。
- *  ⚠️ 必须用**渲染单元（render unit）**的 engine：`defaultEngine.resize()` 实测是 no-op。 */
+ *  ⚠️ 必须用**渲染单元（render unit）**的 engine：`defaultEngine.resize()` 实测是 no-op。
+ *  依赖 `@univerjs/engine-render`（已在 package.json **显式声明并锁 1.0.3**＝ presets 的 pin：
+ *  出现两份会让 `injector.get(IRenderManagerService)` 拿不到同一 token，重排会静默失效）。 */
 function resizeUniverRender(instance: unknown): void {
   try {
     const rec = instance as { univer?: { __getInjector?: () => { get: (token: unknown) => unknown } } } | null;
