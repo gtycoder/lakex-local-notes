@@ -95,6 +95,22 @@ export function MobileUsheetViewer({ noteId, content, active }: MobileUsheetView
     };
   }, [ready, noteId]);
 
+  // 只读挡焦点：Univer 内部的 `div[contenteditable]`（#__editor___INTERNAL_EDITOR__DOCS_NORMAL）会自己拿焦点，
+  // 移动端会因此**拉起系统输入法**（实测 mInputShown=true）。本查看器是只读的，直接把落在容器内的编辑焦点 blur 掉。
+  useEffect(() => {
+    if (!ready) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const block = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && target !== host && target.closest?.("[contenteditable='true']")) target.blur();
+    };
+    host.addEventListener("focusin", block);
+    const active = document.activeElement as HTMLElement | null;
+    if (active && host.contains(active)) active.blur();
+    return () => host.removeEventListener("focusin", block);
+  }, [ready]);
+
   return (
     <div className="mobile-usheet" ref={hostRef}>
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mobile-empty">正在加载表格…</div>}

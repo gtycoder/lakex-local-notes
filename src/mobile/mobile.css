@@ -950,12 +950,17 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   color: #fff;
 }
 
-/* 表格只读查看器（kind=usheet，移动端）：占满文档层，Univer 容器铺满。 */
+/* 表格只读查看器（kind=usheet，移动端）：占满文档层，Univer 容器铺满。
+ * ⚠️ 必须建**层叠上下文**：Univer 内部给 canvas 写了 inline z-index:8，而移动端底栏 z-index:3、
+ * 侧滑抽屉 z-index:7 —— 不隔离的话画布会盖住底栏与抽屉（实测：底栏按钮的 elementFromPoint 全命中 CANVAS）。 */
 .mobile-usheet {
   height: 100%;
   width: 100%;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
 }
 .mobile-usheet .mobile-usheet-root {
   height: 100%;
