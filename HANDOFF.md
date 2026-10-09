@@ -336,7 +336,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > 每屏探针（越界 / 截断 / 对比度 / 小点击目标 / 整页横向溢出）全绿；`check:mobilesnap` **6 态 0 差异**。
 > **未覆盖 / 边界（有理由，不是漏）**：① **缩略图** —— 模拟器上没有带图的小记或图片字段数据，且 png/jpg/jpeg 的边界已在本节记录；
 > 要看图得先造带图数据（下轮或真机）。② **大纲左滑手势**的运行期驱动没做：门控逻辑（`swipeTargetSide` + `canOpen`）
-> 已有单测 `src/mobile/gestureCore.test.ts` 明确断言「表格/多维表/画板没有大纲 ⇒ 左滑作废」，且本轮实测画板/表格底栏「大纲」按钮就是 disabled（同一 `outlineAvailable` 判据），价值重叠。
+> 已有单测 `src/mobile/gestureCore.test.ts` 明确断言「表格/多维表/画板没有大纲 ⇒ 左滑作废」；本轮在设备上又量到**同一个 `outlineAvailable` 判据的两侧**：文档（无标题文档）底栏「大纲」`disabled=false`、画板与表格 `disabled=true`。运行期用 CDP touch 驱动左滑没做成——壳是 keep-alive（隐藏视图元素仍在 DOM、rect 为 0），我的导航在"从文档回首页"这一步反复选到不可见元素；由于门控已有单测 + 状态侧实测，判定为**价值重叠、不再投入**（真要驱动得先给 walkthrough 的 goHome 加命中测试版可见性判据，那是装置改进、不是产品验证）。
 > ③ 真机项（图片 / 附件、键盘安全区、同步后图片加载）仍待真机，与本节「当前剩余验收」合并。
 
 - 正式端：Capacitor Android，包名 `com.lakenotes.mobile`；定位为完整端，桌面红线同样适用。
