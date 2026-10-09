@@ -34,6 +34,17 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 /** 工具栏「收起 / 展开」偏好（设备本地；遵 AGENTS §4，不进正文 / S3 / 历史）。 */
 const RIBBON_COLLAPSED_KEY = "lake-notes-v3.usheet.ribbon-collapsed";
 
+/** 「开始」里我们**不用**的工具：走内核公开的 MenuManager `updateMenuConfig({ hidden: true })` 隐藏（不是 DOM hack）。
+ *  ⚠️ 只列**该位置专属**的 id：实测这 5 个只挂在 `ribbon.start`（右键菜单 / 其它页签都没有）；
+ *    反例 `sheet.command.paste` 同时挂在右键菜单上，隐藏会连带干掉右键粘贴 ⇒ 粘贴只藏 `sheet.menu.paste`。 */
+const USHEET_HIDDEN_TOOLBAR_ITEMS: Record<string, unknown> = {
+  "sheet.command.set-range-font-family": { hidden: true },     // 字体：统一走 --lake-font-family，禁自定义
+  "sheet.menu.paste": { hidden: true },                        // 粘贴（右键菜单另有一套 sheet.command.paste）
+  "sheet.command.numfmt.set.percent": { hidden: true },        // 百分比
+  "sheet.command.numfmt.set.currency": { hidden: true },       // 货币
+  "base-ui.operation.toggle-shortcut-panel": { hidden: true }, // 快捷键面板
+};
+
 /** 只用到 Univer workbook 的这两个方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
 type UniverBook = { save: () => unknown; setEditable: (value: boolean) => unknown };
 
@@ -313,6 +324,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       (univerAPI as unknown as { updateMenuConfig: (config: Record<string, unknown>) => void }).updateMenuConfig({
         "sheet.command.insert-float-image": { commandId: "usheet.insert-float-image" },
         "sheet.command.insert-cell-image": { commandId: "usheet.insert-cell-image" },
+        ...USHEET_HIDDEN_TOOLBAR_ITEMS,
       });
       captureRef.current?.(() => instanceRef.current?.last ?? null);
     } catch (error) {
