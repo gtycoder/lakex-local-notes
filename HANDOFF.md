@@ -313,6 +313,15 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 
 ## 8. 移动端速查（完整端）
 
+> **261009 B2（进行中）** 移动端逐页走查装置：scripts/css-audit/mobile-walkthrough.mjs（配合 drive.mjs 9335）。
+> 覆盖：首页（知识库 / 小记 / 书架）、笔记本工作区、各文档（doc / usheet / bitable / board）、设置抽屉九页；每屏「截图 + 探针」
+> （越界 / 截断 / 对比度 / 小点击目标 / 整页横向溢出）。
+> **⚠️ 关键工具坑（261009 实测）**：**Android WebView 的 CDP Page.captureScreenshot 抓不到 GPU canvas 层** ——
+> usheet 网格在页面截图里整片空白，但同屏画布 toDataURL() 有完整内容、设备级 adb screencap 也完全正常
+> ⇒ **移动端截图一律用设备级 screencap**（脚本里已改）。别据 CDP 截图报「表格空白」这种假缺陷（本轮差点误报，A/B 撤掉表格补丁后同样空白才定位到是截图问题）。
+> 已知观察（未改）：首页顶部 .mobile-htab 命中区 36×25 / 52×25（父容器 .mobile-home-tabs 仅 25 高），低于 48dp 建议；
+> 抽屉态下「侧栏右键菜单（属性 / 历史版本）」不在同一可见层 ⇒ 移动端这两个入口需换驱动方式（本轮未完成）。
+
 - 正式端：Capacitor Android，包名 `com.lakenotes.mobile`；定位为完整端，桌面红线同样适用。
 - 数据在模拟器 App 沙盒，不在 macOS 数据目录；开发可 `adb shell pm clear com.lakenotes.mobile` 重建。
 - AVD：`lake_mobile`（Pixel 6 / API 36 / arm64）；SDK 在 `/opt/homebrew/share/android-commandlinetools`。
