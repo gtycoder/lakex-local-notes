@@ -14,6 +14,7 @@
  */
 import { Component, Suspense, lazy, useMemo, type ErrorInfo, type ReactNode } from "react";
 import { snapshotPreview, type SnapshotPreviewBlock } from "../core/historyPreview.js";
+import { isMobileEnvironment } from "../features/editor/clipboardHtml";
 import type { NoteKind } from "../core/noteKind.js";
 import "./historySnapshotPreview.css";
 
@@ -110,6 +111,18 @@ export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: Histo
     return (
       <div className="history-snapshot">
         <StructuredBlocks blocks={blocks} />
+      </div>
+    );
+  }
+
+  // 移动端**绝不挂桌面编辑器**（261009）：下面这三个编辑器都绑桌面侧的东西（资源端口 / IPC / 桌面外壳），
+  // 移动端借道桌面的「文档属性」弹窗时会走到这里 ⇒ 与移动端 `TrashPreviewPage` 同口径，给明确提示即可。
+  // 桌面行为不受影响（isMobileEnvironment() 在桌面恒为 false）。
+  if (isMobileEnvironment() && kind !== "doc") {
+    return (
+      <div className="history-snapshot">
+        {facts.map((block, index) => <Facts items={block.items} key={`f${index}`} />)}
+        <p className="snapshot-preview__hint">该文档的历史快照暂不支持在移动端预览，请在桌面端打开。</p>
       </div>
     );
   }
