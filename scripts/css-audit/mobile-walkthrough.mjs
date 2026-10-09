@@ -135,13 +135,24 @@ export default async function run(ctx) {
   });
   add("notebook-workspace", async () => { await goHome(); await openNotebook(); });
   for (var di = 0; di < 5; di++) { (function (n) { add("doc-" + n, async () => { await goHome(); await openDoc(n); }); })(di); }
+  add("quicknote-editor", async () => {
+    await goHome();
+    await tapExpr(centerByText(".mobile-htab", "小记"), "小记 tab", 1500);
+    await tapExpr(centerByText(".mobile-bottom-bar__item", String.fromCharCode(0x65b0, 0x5efa, 0x5c0f, 0x8bb0)), "新建小记", 2000);
+  });
+  add("doc-outline", async () => {
+    await goHome(); await openDoc(0);
+    await tapExpr(centerByText(".mobile-bottom-bar__item", "大纲"), "底栏·大纲", 1500);
+  });
   add("doc-note-info", async () => { await goHome(); await openNotebook(); await openTreeMenu(0); await sheetItem("属性"); });
   add("doc-history", async () => { await goHome(); await openNotebook(); await openTreeMenu(0); await sheetItem("历史"); });
   add("settings", async () => { await openSettings(); });
   ["编辑器", "外观", "历史", "资源管理", "同步设置", "清理缓存", "回收站", "关于"].forEach(function (label) { add("settings-" + label, async () => { await openSettings(); await settingsPage(label); }); });
 
+  const only = (ctx.args[2] || "").split(",").filter(Boolean);
+  const chosen = only.length ? screens.filter(function (s) { return only.indexOf(s[0]) >= 0; }) : screens;
   const report = { screens: {} };
-  for (const [name, nav] of screens) {
+  for (const [name, nav] of chosen) {
     const rec = { ok: false };
     try {
       await nav();
