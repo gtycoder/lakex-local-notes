@@ -9,7 +9,20 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261009 / 261008）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点（261009 续）**：usheet 已是唯一表格、旧表格已彻底清除，**本批已合并 master**（`25ab081`）。剩余待办：① 「开始」工具栏最终取舍（继续点名隐藏 / 定白名单 / 维持现状——把「更多」当缓冲）；② 公式栏收起方案（结论已并入本文件与代码注释；原记录文档随 spike 收尾删除，git 历史可查）；③ MiSans 桌面字体文件是否引入（用户 261009 暂缓）。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+> **下一会话焦点（261009 收尾 → 下一会话，用户定）**：① **表格（usheet）性能优化**；② **页面详细测试 + 优化细节**（逐页走查、查漏补缺）。**已定不再讨论**：「开始」工具栏按现状；公式栏收起方案仅存档（结论已并入本文件与代码注释）；MiSans 桌面字体（暂缓）。**Android 端"先保证能用"**，批量页面优化与查漏补缺留后续。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261009 收尾 · 移动端表格切换 + 三处移动端修复 + 跨端污染清理 + 手机口径适配（已合并并推送 master）
+
+- **移动端表格组件切换（kind=usheet 只读查看器）**：新增 `src/mobile/usheet/MobileUsheetViewer.tsx` —— 与桌面**同一套 Univer 内核**；只读（`setEditable(false)`）、**不挂工具条/公式栏**、**不保存不写库**；首次可见才挂载；资源走本机 AssetServer canonical URL + token；**懒加载不进首屏**（入口 chunk 对 6.6MB 的 Univer 运行时零静态引用，由 `mobileLazyChunks.test.ts` 卡住）；接进 `NotebookWorkspace` 的 kind 分派（原为"暂不支持"占位）。
+- **模拟器实测（Capacitor WebView；AVD `lake_mobile` Pixel6/API36）**：网格正常渲染；`[data-u-comp=ribbon-toolbar|headerbar|formula-bar]` 计数 **0**（只读）；**在格子上输入不落库**（回读 DB 正文未变）；heap ≈ 58MB；无崩溃。
+- **三处移动端真问题（用户现场反馈，均已修）**：
+  ① **层序被内核打穿**：Univer 给 canvas 写了 inline `z-index:8`，而移动端底栏 `z-index:3`、侧滑抽屉 `z-index:7` ⇒ 画布盖住二者（实测底栏按钮 `elementFromPoint` 全命中 CANVAS）→ 给 `.mobile-usheet` 建层叠上下文（`position:relative; z-index:0; isolation:isolate`）。
+  ② **只读仍拉起输入法**：Univer 内部 `div[contenteditable]`（`#__editor___INTERNAL_EDITOR__DOCS_NORMAL`）自己抢焦点（实测 `mInputShown=true`）→ 只读查看器加**焦点闸门**（容器内 `[contenteditable]` 一律 blur）。
+  ③ **跨端污染**：移动端借桌面 `components/NoteInfoDialog` → `HistorySnapshotPreview` → 懒加载**桌面** `UniverSheetEditor`/`BitableEditor`/`BoardEditor` ⇒ 桌面编辑器被打进移动端包、且移动端打开表格历史快照会挂**桌面**编辑器 → 新增 `src/mobile/ui/NoteInfoSheet.tsx`（移动端自有「文档属性」抽屉）替代；桌面 `NoteInfoDialog` 未动；`HistorySnapshotPreview` 另加移动端提示护栏（纵深防御）；护栏见 `mobileLazyChunks.test.ts`。
+- **移动端「文档属性」按手机口径重排**：内容自带左右 16px 内边距（`.mobile-sheet-body` 本身是 0 内距）、信息**一行一项**（标签左/值右）、章节 1px 分隔线、空态紧凑左对齐（原误用为"整屏空"设计的 `.mobile-sheet-empty`）。实机几何：sheet 412×553、`.minfo` padding-left 16px、行宽 380。
+- **移动端残留审计（专项，全清）**：源码 / kind 取值 / CSS / `doc_kind` schema / Android 原生层 / 产物 / 快照脚本 —— 无 `fortune`/`luckysheet`/`MobileSheetViewer`/`.mst-*`/旧 `sheet` kind；重建后 `dist-mobile` 里的**桌面编辑器 chunk 与桌面专属标识全部消失**（只剩 `MobileUsheetViewer`）。
+- **未覆盖（后续/真机验收补）**：触摸滚动与双指缩放、软键盘弹出后的布局、移动端表格里的图片加载、真机；另有**首帧短暂空白**（画完即正常，未量化绘制耗时）。
+- 门禁：tsc 0 · ui-metrics ✓ · vitest **210 文件 / 1703 用例** · check:core 75-0 · 双端构建 ✓ · `git diff --check` ✓。
 
 ### 261009 续 · 工具栏「收起 / 展开」+「开始」精简 + 右侧槽位 + 残留收尾 + 合并 master（已交付并合并）
 
