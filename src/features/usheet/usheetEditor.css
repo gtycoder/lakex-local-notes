@@ -61,3 +61,12 @@
 .usheet-editor .usheet-ribbon-toggle:active {
   background: var(--lake-bg-press);
 }
+
+/* 给右侧「收起 / 展开」预留槽位（261009）：
+ * Univer 的溢出判定读的是 ribbon-toolbar 的 **contentRect.width**（不含 padding）⇒ 减少内容宽 =
+ * 「更多」更早出现并左移让出右侧。不预留时「开始」（工具最多）下「更多」占 gap 19–43，
+ * 而按钮占 9–33 ⇒ 实测**重叠**（截图里的 ⋯ 框压着 chevron）。56px 取自实测：更多右缘 19 → 47，
+ * 我们的分隔线在 gap 40，当前宽度下 14 个工具仍全部可见；窗口更窄时会更早收进「更多」（即预期行为）。 */
+.usheet-editor [data-u-comp="ribbon-toolbar"] {
+  padding-right: 56px;
+}
