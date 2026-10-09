@@ -19,7 +19,8 @@
 
 /* 工具栏「收起 / 展开」（261009）：
  * 收起 = 只藏掉页签行（ribbon-header-menu），保留工具行；工具仍跟随**选中的大分类**（不合并各分类）。
- * 几何：工具行相对 .usheet-editor 在展开时 top=45、收起时 top=9（页签行 36px），高 24px。 */
+ * 纵向位置不写死：由 syncRibbonToggleTop 量出工具行 top 写进 --usheet-ribbon-toggle-top（收起 / 展开自动跟随）。
+ * 规格对齐 Univer 工具按钮：24×24 / 圆角 4 / 静息透明 / 图标色 --lake-text-1。 */
 .usheet-editor.is-ribbon-collapsed [data-u-comp="ribbon-header-menu"] {
   display: none;
 }
@@ -27,7 +28,7 @@
 .usheet-editor .usheet-ribbon-toggle {
   position: absolute;
   right: 8px;
-  top: 45px;
+  top: var(--usheet-ribbon-toggle-top, 45px);
   width: 24px;
   height: 24px;
   display: flex;
@@ -37,15 +38,26 @@
   border: 0;
   border-radius: var(--lake-radius-2xs);
   background: transparent;
-  color: var(--lake-text-2);
+  color: var(--lake-text-1);
   cursor: pointer;
   z-index: var(--lake-z-editor-sticky);
 }
 
-.usheet-editor.is-ribbon-collapsed .usheet-ribbon-toggle {
-  top: 9px;
+/* 独立槽位：左侧一条 1px 分隔线，把「收起 / 展开」和工具行分开（对齐 Univer 工具分组的分隔线口径）。 */
+.usheet-editor .usheet-ribbon-toggle::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--lake-border-1);
 }
 
 .usheet-editor .usheet-ribbon-toggle:hover {
   background: var(--lake-bg-hover);
+}
+
+.usheet-editor .usheet-ribbon-toggle:active {
+  background: var(--lake-bg-press);
 }

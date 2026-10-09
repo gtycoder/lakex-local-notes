@@ -58,6 +58,16 @@ function diskSource(src: string): string {
   return ref && ref.space === "note" && !ref.staging ? ref.filename : src;
 }
 
+/** 把「收起 / 展开」按钮对齐到工具行：不同 ribbonType / 收起状态下工具行 top 会变，量出来写进 CSS 变量。 */
+function syncRibbonToggleTop(host: HTMLElement | null): void {
+  if (!host) return;
+  const toolbar = host.querySelector('[data-u-comp="ribbon-toolbar"]');
+  if (!toolbar) return;
+  // 相对宿主**内容盒**（绝对定位原点）算：扣掉宿主上边框（.sheet-editor 有 1px border-top），保留小数不取整。
+  const top = toolbar.getBoundingClientRect().top - host.getBoundingClientRect().top - host.clientTop;
+  if (top > 0) host.style.setProperty("--usheet-ribbon-toggle-top", `${top}px`);
+}
+
 /** 收起 / 展开工具栏后让 Univer 引擎重排画布：藏掉页签行改变了可用高度，而引擎不会自己重排（实测）。
  *  ⚠️ 必须用**渲染单元（render unit）**的 engine：`defaultEngine.resize()` 实测是 no-op。 */
 function resizeUniverRender(instance: unknown): void {
@@ -343,10 +353,11 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   // ⚠️ 用 setTimeout 而非 requestAnimationFrame：CDP 依附 / 隐藏窗口里 rAF 不触发（本项目已知坑）。
   useEffect(() => {
     if (!ready) return;
-    const timers = [
-      window.setTimeout(() => resizeUniverRender(instanceRef.current), 0),
-      window.setTimeout(() => resizeUniverRender(instanceRef.current), 160),
-    ];
+    const sync = () => {
+      resizeUniverRender(instanceRef.current);
+      syncRibbonToggleTop(hostRef.current);
+    };
+    const timers = [window.setTimeout(sync, 0), window.setTimeout(sync, 160)];
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [ribbonCollapsed, ready]);
 
