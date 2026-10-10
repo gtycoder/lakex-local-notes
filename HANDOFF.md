@@ -77,11 +77,6 @@
     （`freeGlobal || self || Function("return this")()` / `if (typeof globalThis=="object") return globalThis`）——Chromium WebView 里 `globalThis`/`self` 恒存在 ⇒ **永不执行**，webpack 那处还有 try/catch。
     加上设备实测（文档/画板/表格/搜索全路径零 CSP 违规；画板 canvas 300×150、表格 canvas 1081×1967 真渲染）⇒ **`unsafe-eval` 确实可去，无遗留风险**。
     ⚠️ **CDP `Runtime.evaluate` 绕过页面 CSP** ⇒ 不能用它测 CSP 行为（本轮踩过：`Function("return 1")()` 在 CDP 里照样成功）；CSP 验证必须走页面自身加载路径。
-  · **小记卡片：条目对齐浮动工具栏 + 移动端去掉展开（261010 用户定）**：条目 = 清除格式 | 正文/字号 | B I S U | 字色/背景色 | 图片 | 分割线
-    （护栏 `quickNoteToolbarWhitelist.test.ts` 卡住"只放预览能渲染的"）；移动端 `expand="none"` ⇒ **不传内核 `fullscreen`**，
-    ⛶ 不再出现（设备实测 `hasExpand:false`、note 版式仍正常 `卡片版式:true`）；**桌面保留展开** ⇒ 两端共用同一份清单、只差平台开关。
-    实测 412px 下只露 6 个（清除格式/正文▾/字号▾/B/I），其余进内核「…」溢出菜单 —— **待你定：要不要精简条目让常用的都露出来**。
-    顺带删掉 footer 那行写死的「工具条：图片 · 待办 · …」（条目早改了＝假话）与它的孤儿 CSS。
 
 ### 261009 B1 · 桌面逐页走查（页面详细测试）+ 3 条修复 + 走查装置入库
 
