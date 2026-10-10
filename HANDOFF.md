@@ -9,10 +9,60 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261010 / 261009）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **下一会话焦点（261010 收尾 → 下一会话，用户定）**：① **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；② 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项（条件格式 / 数据验证 / 公式库完整版）单独立项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
+> **在途（未完成，换机继续先读 §0「261010(五)」）**：① 移动端 dock 接 12 个缺失插入项；② 移动端文本增强面板（字号/字色/背景色/对齐/链接）。**截至 `53a0e5a` 应用代码零改动。**
+>
+> **下一会话焦点（261010 收尾 → 下一会话，用户定）**：① **在途任务优先**（见上）；② **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；③ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项（条件格式 / 数据验证 / 公式库完整版）单独立项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261010(五) · 在途：移动端 dock 接 12 个缺失插入项 + 文本增强面板（**未完成；换机继续先读本节**）
+
+**任务（用户 261010 定）**
+1. 把覆盖检测查出的 **12 个插入项**接进移动端 dock：分栏卡片、折叠块、画板、流程图、UML 图、思维导图、公式、文本绘图、日历、日期、表情、文档引用。
+2. **文本增强二级面板**：字号、字色、背景色、对齐、链接。
+
+**截至本节：`src/**` 零改动**（唯一提交 `53a0e5a` = 文档 + `scripts/mobile-lake-coverage.mjs`；用户 261010 特意确认过"没改代码吧"）。
+
+**已确认口径（别重开）**
+- 移动端输入面**只有** dock；`/` 不可用（`MOBILE-TECH-STACK` §八 · `LAKEX-CONTRACT` §5.30）。
+- 入口形态提议（**待用户确认，换机后先问**）：dock **新增一个按钮**（如「更多」）承载这 12 项，**不**把 `+` 面板从 11 项撑到 23 项。
+- **链接**：§5.10 七 记着 `link/insertLink/linkText` 在 `execCommand` 上多参数形态实测**均返回 false、正文无变化**；
+  桌面走的是 `SelectionToolbar.tsx:391` 的**内核链接编辑层** `openLinkEditor` ⇒ 计划**抽成共享函数**两端复用（单一来源），
+  **不要**自己写第二套链接 UI，也**不要**直接 execCommand 静默 no-op。
+- **颜色**：必须复用 `selectionToolbar/LakeColorBoard.tsx`（AGENTS §19：内核色卡走该适配器，样式/渐变色入口不得改）。
+- **字号**：内核 `fontsize` + `editorCommands.ts` 的 `FONT_SIZE_OPTIONS`（12 档）。**对齐**：内核 `alignment`（left/center/right）。
+- **表情**：`insertCard("unicodeEmoji")` 是**死占位卡**（§5.29）⇒ 只能插文本 `insertAtSelection('text/lake','<span>😀</span>')`；
+  若想复用现成选择器先看 `features/quickNotes/quickNoteToolbarWidgets.ts`（守「同一交互语义只有一套」红线）。
+
+**已抓到的权威内核调用（本次实测，省下次摸索）**
+- **自定义卡统一形态**（画板族，已实测画板/流程图）：
+  `editor.execCommand("insertCard", "customBlock", { $name:"drawing-board", $htmlStr:"", version:2, engine:"drawnix", preset:"drawing", plaitValue:[], plaitViewport:{x:0,y:0,zoom:1}, cardHeight:560 }, true)`
+  —— **不是** `insertCard("drawing-board")`（那样报 `schema.ts:396` 断言失败）；随后内核自己 `setCardValue(cardId, {…+previewImage})` 补预览。
+- **简单卡（已实测可用）**：`insertCard("math")` · `insertCard("calendar")` · `insertCard("dateCard", {date: Date.now()})` · `insertCard("unicodeEmoji")`（见上面表情口径）。
+- **命令式（面板走 execCommand，不是 insertCard）**：折叠块 `collapse` · 分栏卡片 `columns`（参数 = 列数，面板默认 2；子菜单有 2/3/4）· 表情 `unicodeEmoji`。
+- **卡式 `insertCard(name, value, flag)`（flag 末位实测不统一，照抄）**：
+  - `insertCard("math", null, true)`
+  - `insertCard("calendar", { currentDate: 20261001, colorIndex: 0, schedules: {}, __spacing: "both" }, true)`
+  - `insertCard("dateCard", {}, false)` ← ⚠️ 末位是 **false**（与 block 卡相反）
+  - 画板族统一 `insertCard("customBlock", { $name, $htmlStr: "", … }, true)`，`$name` 与其余字段：
+    - 画板 `drawing-board` / 流程图 `flowchart-board` / UML `uml-board` / 思维导图 `drawing-mindmap-board`（`preset` 依次 `drawing`/`flowchart`/`uml`/`mindmap`）
+      ⇒ `{ $name, $htmlStr:"", version:2, engine:"drawnix", preset, plaitValue:[], plaitViewport:{x:0,y:0,zoom:1}, cardHeight:560 }`
+    - 文本绘图 `{ $name:"text-to-diagram", $htmlStr:"", code:"flowchart TD\n    A[Start] --> B{Decision}…", type:"mermaid", cardHeight:500, showEditor:true, showPreview:true }`
+    - 文档引用 `{ $name:"lake-note-ref", $htmlStr:"", noteId:"", title:"" }`（noteId 空值即占位，用户在卡片内选目标文档）
+  - 插入后内核会自己再 `setCardValue(cardId, {…+previewImage})` 补预览（画板族）——**我们不需要重复调**。
+- **抓取方式**：`node scripts/mobile-lake-coverage.mjs --capture-panel "画板,思维导图,折叠块,分栏卡片"`
+  （桌面隔离实例；脚本在页面里 hook `editor/kernel/renderer.execCommand`，再 DOM 派发点击内核面板项，打印真实调用。）
+- **抓取方法（已入库，换机可直接跑）**：`node scripts/mobile-lake-coverage.mjs --capture-panel "画板,思维导图,折叠块,分栏卡片"`
+  （桌面隔离实例 + CDP；脚本在页面里 hook `editor/kernel/renderer.execCommand`，再 DOM 派发点击内核面板项，打印真实调用）。
+
+**装置现状（换机后需重建；数据一律不清理 —— 用户明确"不用清理数据"）**
+- 桌面隔离实例：`env -u ELECTRON_RUN_AS_NODE LAKE_RENDERER=scheme LAKE_USER_DATA="$TMPDIR/lake-detect" LAKE_ASSET_PORT=19891 LAKE_DEV_S3_* ./node_modules/.bin/electron --disable-gpu --no-sandbox --remote-debugging-port=9231 .`
+- 移动端：AVD `lake_mobile` + `bash scripts/emu-cdp.sh 9335`（App 已配 `lake-notes-dev1` 前缀）。
+- 夹具留痕：隔离实例 17 篇 + S3 `lake-notes-dev1` 对应对象 + 模拟器 App 内同名文档；「Lake 单卡 · 折叠块」被补过 `-body` 段。
+
+**改完必须过的门禁**：`npx tsc --noEmit` · `npx vitest run` · `npm run check:mobilesnap`（6 态 0 差异）·
+`node scripts/ui-metrics.mjs` · `cssLayers` 基线只许变小 · 设备级截图验收（`adb exec-out screencap -p`，按 §7.22）
++ `scripts/css-audit/mobile-walkthrough.mjs`。样式一律走 `--lake-*` 令牌与既有 `ln-*` 原语，**禁内联样式/禁新增 `!important`**。
 ### 261010(四) · 移动端 Lake 能力覆盖检测（桌面输入 vs 移动展示/编辑）+ 装置入库
 
 - **用户命题**：桌面端 Lake 能输入的东西，移动端能不能**展示**、能不能**编辑**；用真实数据（S3 `lake-notes-dev1` + `~/Documents` 真实附件），不要造玩具数据。

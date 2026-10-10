@@ -15,6 +15,7 @@
  *   node scripts/mobile-lake-coverage.mjs --dock            # 实测移动端输入面（dock / 两个面板 / 内核工具栏 / 斜杠）
  *   node scripts/mobile-lake-coverage.mjs --doc "标题"       # 打开某篇并逐格式探针其渲染
  *   node scripts/mobile-lake-coverage.mjs --doc "标题" --shot /tmp/x.png   # 附带设备级截图
+ *   node scripts/mobile-lake-coverage.mjs --capture-panel "画板,思维导图,折叠块"  # 桌面实例：抓面板项的真实内核调用（hook execCommand）
  *
  * 装置坑（都踩过，别退回旧写法）：
  *  1. 必须用 DOM 派发事件点树行：移动端左侧文档树在抽屉关闭时 x 约 -354（画布外），
@@ -170,8 +171,69 @@ async function probeDoc(port, title, shotPath) {
   return r;
 }
 
+// ---------- 桌面：抓「内核插入面板某一项」的真实调用（复核 / 换机复现用） ----------
+async function capturePanel(port, items) {
+  const cdp = await connect(port);
+  const out = {};
+  for (const label of items) {
+    const title = "zz 抓取 " + label;
+    await cdp.evalFn(async function (t) { await window.lakeNative.createNoteIn("notebook-personal", t); return true; }, title);
+    await sleep(1100);
+    await cdp.evalFn(function (t) {
+      const rows = [...document.querySelectorAll(".note-row.tree-row")];
+      const el = rows.find((r) => (r.textContent || "").trim() === t);
+      if (!el) return false;
+      el.scrollIntoView({ block: "nearest" });
+      const o = { bubbles: true, cancelable: true, view: window, button: 0 };
+      ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach((ty) => el.dispatchEvent(new (ty.startsWith("pointer") ? PointerEvent : MouseEvent)(ty, o)));
+      return true;
+    }, title);
+    await sleep(3200);
+    // 光标：必须有点进正文（否则面板打不开/插入落到无效位置）
+    const spot = JSON.parse(await cdp.evaluate("JSON.stringify((function(){const m=[...document.querySelectorAll('.lake-editor-mount')].filter(e=>getComputedStyle(e).visibility==='visible')[0];const w=m.querySelector('.ne-editor-wrap');const r=w.getBoundingClientRect();return{x:r.left+140,y:r.top+56};})())"));
+    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await cdp.send("Input.dispatchMouseEvent", { type, x: spot.x, y: spot.y, button: type === "mouseMoved" ? "none" : "left", clickCount: type === "mouseMoved" ? 0 : 1 });
+    await sleep(500);
+    // hook 三处 execCommand（面板可能走 editor / kernel / renderer 任一条）
+    await cdp.evalFn(function () {
+      const ed = window.__desktopEditor; window.__cmdLog = [];
+      const wrap = (obj, tag) => { if (!obj || typeof obj.execCommand !== "function" || obj.__hooked) return; const orig = obj.execCommand.bind(obj); obj.execCommand = function (...args) { try { window.__cmdLog.push({ via: tag, args }); } catch { /* 忽略 */ } return orig(...args); }; obj.__hooked = true; };
+      wrap(ed, "editor"); wrap(ed.kernel, "kernel"); wrap(ed.renderer, "renderer");
+      return "hooked";
+    });
+    const opened = await cdp.evalFn(function () {
+      if ([...document.querySelectorAll(".ne-overlay-container")].some((e) => e.querySelectorAll("*").length > 100)) return "already";
+      const m = [...document.querySelectorAll(".lake-editor-mount")].filter((e) => getComputedStyle(e).visibility === "visible")[0];
+      const b = m.querySelector('[data-testid="ui-toolbar-card-select-button"]');
+      const r = b.getBoundingClientRect();
+      return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    });
+    if (opened !== "already") {
+      const p = JSON.parse(opened);
+      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await cdp.send("Input.dispatchMouseEvent", { type, x: p.x, y: p.y, button: type === "mouseMoved" ? "none" : "left", clickCount: type === "mouseMoved" ? 0 : 1 });
+      for (let i = 0; i < 20; i++) { await sleep(250); if (await cdp.evaluate("[...document.querySelectorAll('.ne-overlay-container')].some(e=>e.querySelectorAll('*').length>100)")) break; }
+    }
+    // DOM 派发点击面板项（CDP 合成鼠标点面板项无效）
+    await cdp.evalFn(function (l) {
+      const host = [...document.querySelectorAll(".ne-overlay-container")].filter((e) => e.querySelectorAll("*").length > 100).pop();
+      if (!host) return "no panel";
+      const t = [...host.querySelectorAll(".ne-menu-item-container-title")].find((x) => (x.textContent || "").trim().includes(l));
+      if (!t) return "no item";
+      const item = t.closest(".ne-menu-item-container") || t;
+      const r = item.getBoundingClientRect();
+      const o = { bubbles: true, cancelable: true, view: window, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+      ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach((ty) => item.dispatchEvent(new (ty.startsWith("pointer") ? PointerEvent : MouseEvent)(ty, o)));
+      return "clicked";
+    }, label);
+    await sleep(1600);
+    out[label] = JSON.parse(await cdp.evaluate("JSON.stringify(window.__cmdLog||[])"));
+  }
+  cdp.close();
+  return out;
+}
+
 // ---------- CLI ----------
 const mobilePort = Number(arg("--port", 9335));
 if (has("--dock")) { console.log(JSON.stringify(await probeDock(mobilePort), null, 1)); }
 else if (has("--doc")) { console.log(JSON.stringify(await probeDoc(mobilePort, arg("--doc"), arg("--shot")), null, 1)); }
-else { printMatrix(); console.log(""); console.log("提示：--dock 实测移动端输入面；--doc <标题> 探针某篇渲染。"); }
+else if (has("--capture-panel")) { console.log(JSON.stringify(await capturePanel(Number(arg("--desktop-port", 9231)), String(arg("--capture-panel")).split(",")), null, 1)); }
+else { printMatrix(); console.log(""); console.log("提示：--dock 实测移动端输入面；--doc <标题> 探针某篇渲染；--capture-panel \"画板,折叠块\" 抓内核面板真实调用。"); }
