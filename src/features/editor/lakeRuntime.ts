@@ -516,6 +516,14 @@ export interface LakeEditorPrefs {
    *
    */
   quickNoteUi?: "card" | "full";
+  /**
+   * 小记卡片的「展开」由谁提供（261010）：
+   *  - `"kernel"`（默认，桌面）：用内核 `fullscreen` —— 展开成完整工具栏的桌面编辑器；
+   *  - `"none"`（移动端）：**不传 `fullscreen`** ⇒ 内核不渲染那个 ⛶、也不会弹出桌面 lake 页。
+   * 原因：内核展开态是**桌面横向工具条**（27 项，手机宽度装不下还被裁），移动端不该走它。
+   * 移动端改为"卡片本身就能干这些事"（工具条已扩充到预览白名单上限），不再需要展开。
+   */
+  quickNoteExpand?: "kernel" | "none";
 }
 
 /**
@@ -528,7 +536,27 @@ export interface LakeEditorPrefs {
  * 注：图片/待办用**标准项**（`image` / `taskList`）——内核 note 专用项 `note-image`/`notetaskList`
  * 画的是语雀 App 私有 symbol，本地会渲染成空白按钮（见 docs/LAKEX-CONTRACT.md §5.11 三）。
  */
-export const QUICK_NOTE_TOOLBAR_ITEMS = ["image", "taskList", "orderedList", "unorderedList", "hr"] as const;
+/**
+ * 小卡片（未展开）的工具条条目 —— **两端共用同一份清单**（261010 扩充）。
+ *
+ * 约束（用户 260919 定稿，规则不能破）：**只放预览能渲染的东西** ——
+ * 时间线卡片走 `quickNotePreviewParser` 的只读白名单（段落/标题/列表/待办/引用/分割线/
+ * 加粗·斜体·下划线·行内代码·链接/图片·附件）；放不进去的（表格/代码块/音视频/画板等）插入后
+ * 预览只能降级成 unsupported 占位 ⇒ 不允许进工具条。护栏：quickNoteToolbarWhitelist.test.ts。
+ *
+ * 261010 相比原来 5 件新增：撤销/重做（不产出内容）、标题(style)、加粗/斜体/下划线、引用。
+ */
+export const QUICK_NOTE_TOOLBAR_ITEMS = [
+  // 条目对齐**我们自己的浮动工具栏**（`features/editor/selectionToolbar`，用户 261010 指定）：
+  // 清除格式 · 正文/标题 · 字号 · B/I/S/U · 字色 · 背景色 —— 这几样预览解析器都能还原
+  // （`PreviewRun` 就有 fontSize/strike/color/background 字段）。
+  "clearFormat", "|",
+  "style", "fontsize", "|",
+  "bold", "italic", "strikethrough", "underline", "|",
+  "color", "bgColor", "|",
+  // 浮动工具栏**不含插入类**：保留图片（小记的核心用法＝随手拍照/贴图）+ 用户指定加的分割线。
+  "image", "hr",
+] as const;
 
 /**
  * 展开态（fullscreen）用的完整工具栏 = **逐字等于内核内置默认**（bundle `xP`）。
@@ -748,7 +776,9 @@ export function createLakeDocument(
     ...(quickNoteUi
       ? {
           // 两种版式的工具条：card＝小卡片最小集 + 展开后完整；full＝直接完整（文档样式）。
-          ...(quickNoteUi === "card" ? { uiSwitch: { default: "note" }, fullscreen: { enable: true } } : {}),
+          ...(quickNoteUi === "card"
+            ? { uiSwitch: { default: "note" }, ...(prefs?.quickNoteExpand === "none" ? {} : { fullscreen: { enable: true } }) }
+            : {}),
           toolbar: {
             agentConfig: {
               ...(quickNoteUi === "card" ? { note: { items: [...QUICK_NOTE_TOOLBAR_ITEMS] } } : {}),

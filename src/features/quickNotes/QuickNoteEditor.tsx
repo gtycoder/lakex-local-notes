@@ -19,6 +19,11 @@ interface QuickNoteEditorProps {
    * `full`＝文档样式（完整工具条，列表视图右侧用）。两者都只收「+」面板白名单。
    */
   ui?: "card" | "full";
+  /**
+   * 「展开」由谁提供（261010）：默认 `"kernel"`（桌面：内核 fullscreen → 完整工具栏的桌面编辑器）；
+   * 移动端传 `"none"` ⇒ 内核不渲染 ⛶、也不进桌面展开态（内核展开态是桌面横向工具条，手机上会被裁）。
+   */
+  expand?: "kernel" | "none";
   /** 归属 id：新建用草稿 id，编辑用小记 id（决定图片落在哪个作用域）。 */
   ownerId: string;
   /**
@@ -51,7 +56,7 @@ interface QuickNoteEditorProps {
  * `editor.getDocument("text/plain")` 可能拿不到内容 ⇒ 必须再加 DOM `input` 兜底 + DOM 文本回退，
  * 否则「输入了字但判定为空、点发布没反应」。
  */
-export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = true, uploadResource, onTextChange, onReady }: QuickNoteEditorProps) {
+export function QuickNoteEditor({ ownerId, initialBody, ui = "card", expand = "kernel", active = true, uploadResource, onTextChange, onReady }: QuickNoteEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const callbacksRef = useRef({ uploadResource, onTextChange, onReady });
   callbacksRef.current = { uploadResource, onTextChange, onReady };
@@ -92,7 +97,7 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
       // 虚拟渲染靠 `scrollNode` 量视口，而小记编辑器没有 Lake 内部滚动容器，fallback 到 `.document-pane`
       // 会量错 ⇒ 正文被换成 `.ne-virtual-render-placeholder`（顶部留白 100+px、输入触发重渲染后整片变占位）。
       // 移动端早已为此置位（见 QuickNotesWorkspace 前的 HANDOFF §8.8 同款坑）。
-      { disableNativeToc: true, quickNoteUi: ui, disableVirtualRendering: true },
+      { disableNativeToc: true, quickNoteUi: ui, quickNoteExpand: expand, disableVirtualRendering: true },
       (request: unknown) => callbacksRef.current.uploadResource(request),
     );
     // 兜底：DOM 层 input 事件（真实键入必触发）——内核 contentchange 之外的第二条信号。

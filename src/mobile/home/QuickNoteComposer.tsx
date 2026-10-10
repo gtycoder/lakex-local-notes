@@ -241,6 +241,9 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
         ownerId={noteId}
         initialBody={addAssetAccessToken(initialBody)}
         ui="card"
+        // 261010：移动端**不提供内核展开**（那是桌面横向工具条 27 项，手机宽度装不下还被裁）。
+        // 卡片本身已能完成白名单内的全部编辑（工具条已扩充），所以不再需要展开。
+        expand="none"
         active
         uploadResource={uploadResource}
         onTextChange={setText}
@@ -248,7 +251,8 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
       />
       {error && <div className="mobile-qn-error">{error}</div>}
       <footer className="mobile-qn-actions">
-        <span className="mobile-qn-hint">工具条：图片 · 待办 · 有序 · 无序 · 分割线</span>
+        {/* 原来这里写死一行「工具条：图片 · 待办 · …」——261010 工具条条目已改为对齐浮动工具栏，
+            那行文案立刻变成假话。**删掉**：工具条自己就是唯一来源，不要再抄一份会漂移的清单。 */}
         <div className="mobile-qn-spacer" />
         <button type="button" className="mobile-qn-btn" onClick={() => { committedRef.current = true; if (draft) void bridge.clearQuickNoteDraft().catch(() => undefined); onCancel(); }} disabled={saving}>取消</button>
         <button type="button" className="mobile-qn-btn mobile-qn-primary" onClick={() => void save()} disabled={saving}>
