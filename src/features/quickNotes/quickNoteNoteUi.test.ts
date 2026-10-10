@@ -38,8 +38,12 @@ describe("小记编辑器：文档外观 + 受限格式（只影响小记）", (
     const decl = /QUICK_NOTE_TOOLBAR_ITEMS\s*=\s*\[([\s\S]*?)\]\s*as const;/.exec(RUNTIME_SRC);
     expect(decl, "QUICK_NOTE_TOOLBAR_ITEMS 未找到").toBeTruthy();
     const items = [...(decl?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    // 小卡片 = 用户指定的最小集（图片/待办/有序/无序/分割线）
-    expect(items).toEqual(["image", "taskList", "orderedList", "unorderedList", "hr"]);
+    // 清单的权威断言在 quickNoteToolbar.test.ts；这里只保证「该有的在、禁的不在」（避免两处各维护一份清单）。
+    for (const must of ["cardSelect", "image", "taskList", "unorderedList", "orderedList", "quote", "hr"]) {
+      expect(items).toContain(must);
+    }
+    expect(items).not.toContain("file");
+    expect(items).not.toContain("emoji");
     // 展开态必须给内核**完整**默认工具栏（不给 default ⇒ 展开后是空工具条，实测）；
     // 但要在默认项基础上收掉"能插入、预览还原不了"的两个入口（toc / materialLibrary）——
     // 工具条的「…」溢出菜单装的正是同一批 items，去掉即同时收掉溢出里的入口（用户 260920 要求）。
