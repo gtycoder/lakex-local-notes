@@ -447,6 +447,9 @@ bash scripts/mobile-preview.sh
 
 ### CDP / 编辑器
 - App 重启后 WebView socket 会变化；重新 `adb forward` 后再连 `/json/list`。
+- **CDP `forward` 会指向旧 PID 的 socket（261010 本轮踩到）**：App 重启后 `/proc/net/unix` 里**新旧 webview socket 并存**，
+  `forward` 若还指着旧名，表现为 **`/json/list` 空** 或 node 侧 **`fetch failed: other side closed`** —— **不是 App 崩**（进程 `pidof` 仍在）。
+  修法（按**当前** PID 精确重转）：`PID=$(adb shell pidof com.lakenotes.mobile | tr -d "\r"); adb forward --remove tcp:9335; adb forward tcp:9335 localabstract:webview_devtools_remote_$PID`。
 - 活跃 Lake 实例暴露为 `window.__mobileEditor`；命令用 `renderer.execCommand`。
 - 有效命令：`bold`、`unorderedList`、`orderedList`、`taskList`、`quote`、`code`、`underline`、`italic`、`insertLink`、`hr`、`color`、`style("p"/"h1"/"h2")`、`undo/redo`。
 - 无效/易错命令：`insertUnorderedList`、`formatBlock`、`heading`、`strike`、`justify*`、`clearFormat`、`fontsize`。
