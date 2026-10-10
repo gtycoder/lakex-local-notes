@@ -106,10 +106,29 @@ export interface QuickNotesSyncDbPort {
   baseHash(id: string): Promise<string | null>;
   setBaseHash(id: string, contentHash: string): Promise<void>;
   markSynced(id: string): Promise<void>;
+  /**
+   * 记账快照保护（I2，见 core/maintenancePolicy）：仅当本地当前内容 hash 仍等于 expectedContentHash
+   * （= 同步期间未被编辑）才标 synced；否则保持 local，下轮重传。
+   *
+   * 为什么必须有：把"本地写"移出维护队列后，小记编辑可以与同步并发；
+   * 而 markSynced 无"未变才标"守卫 ⇒ 会上传旧内容却把新内容标成已同步（丢编辑）。
+   * 对齐 Lake 侧既有的 markSyncedIfUnchanged（V5 §5.2）。
+   * 缺失时引擎退回 markSynced（调用方必须以串行队列保证无并发编辑，如桌面）。
+   */
+  markSyncedIfUnchanged?(id: string, expectedContentHash: string): Promise<void>;
   log(message: string): void;
 }
 
 /** 兼容 Web/Node 的 UUID（移动端 WebView 也提供 crypto.randomUUID；兜底同 syncEngine）。 */
+/** 标记已同步：优先"未变才标"守卫（I2）；端口未实现时退回朴素 markSynced（见接口注释）。 */
+async function markSyncedGuarded(qn: QuickNotesSyncDbPort, id: string, expectedContentHash: string): Promise<void> {
+  if (typeof qn.markSyncedIfUnchanged === "function") {
+    await qn.markSyncedIfUnchanged(id, expectedContentHash);
+    return;
+  }
+  await qn.markSynced(id);
+}
+
 function randomUUID(): string {
   const c = globalThis.crypto;
   if (c && typeof c.randomUUID === "function") return c.randomUUID();
@@ -295,7 +314,7 @@ export async function syncQuickNotesViaEngine(
       const local = localById.get(item.id) ?? null;
       if (local?.contentHash === item.contentHash) {
         await qn.setBaseHash(item.id, item.contentHash);
-        await qn.markSynced(item.id);
+        await markSyncedGuarded(qn, item.id, item.contentHash);
         qn.log(`[perf] download ${item.id} unchanged ${Date.now() - itemStart}ms`);
         continue;
       }
@@ -494,7 +513,7 @@ export async function syncQuickNotesViaEngine(
 
   for (const item of localItems) {
     await qn.setBaseHash(item.id, item.contentHash);
-    await qn.markSynced(item.id);
+    await markSyncedGuarded(qn, item.id, item.contentHash);
   }
   qn.log(`[perf] quick-sync done ${Date.now() - quickStart}ms (uploaded=${uploaded}, downloaded=${downloaded}, conflicts=${conflicts})`);
   return { uploaded, downloaded, conflicts, manifestId: manifest.commitId, completedAt };

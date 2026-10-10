@@ -92,6 +92,7 @@ export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNote
     async baseHash(id) { return quickNotes.baseHash(id); },
     async setBaseHash(id, contentHash) { quickNotes.setBaseHash(id, contentHash); },
     async markSynced(id) { quickNotes.markSynced(id); },
+    async markSyncedIfUnchanged(id, expectedContentHash) { quickNotes.markSyncedIfUnchanged(id, expectedContentHash); },
     async log(message) { quickNotes.logScopes.quick.info(message); },
   };
 }

@@ -1413,3 +1413,53 @@ PY
 - **计算条（sheet bar）高度是行内样式** `style="height: 36px"`（不是类、也没有 CSS 变量）：我们压到 30px 时
   只能 `!important`（`.usheet-editor section:has([data-u-comp="slide-tab-bar"])`），并把 `slide-tab-bar` 的
   `padding-block` 收到 1px，让 28px 的标签在 30px 里装得下（实测 30 = 28 + 1×2）。
+
+### 5.27 `envAdapter` 官方适配口全量 + 我方覆盖率取证（261010 官方文档核对 + 仓库实测；**只取证、未改行为**）
+
+**官方出处**（本地副本 `yuque-developer-docs/docs/48 - 适配器（envAdapter）`，第 11–33 行）：
+「编辑模式和阅读模式都有自己的适配器」，事件由 `viewer` / `editor` 抛出、`EnvAdapter` 初始化时监听。
+
+| 适配口 | 阅读模式 | 编辑模式 | 我方实现 |
+| --- | --- | --- | --- |
+| `openLink(url, isExternal)` | ✅ | ✅ | ❌ 未接 —— **实测无需接**（壳层已接管，见下） |
+| `openMentionLink(url, isExternal)` | ✅ | ✅ | ❌ 未实现 |
+| `openLocalLink(url)` | — | ✅ | ❌ 未实现 |
+| `openBookmarkLink(url)` | — | ✅ | ❌ 未实现 |
+| `openThirdpartyLink(url)` | — | ✅ | ❌ 未实现 |
+| `previewImgs(imgs, index)` | ✅ | ✅ | ✅ **已实现**（`src/features/editor/imagePreview.ts` → 共享 Lightbox） |
+| `longPressCard(params)` | ✅ | ✅ | ❌ 未接 —— **官方语义是「使用方自实现 UI」**（原文见下），我方自写手势等价 ⇒ 保留 |
+
+**覆盖率 = 1/7。** 关键：**这个缺口一直没暴露，是因为桌面走了壳层而不是内核适配口** ——
+`electron/main.ts` 的窗口级 `setWindowOpenHandler` + will-navigate 把应用页之外的地址一律交给
+`shell.openExternal`（L302–326）。所以「编辑器里的链接能打开」是**壳层**的功劳，不是 `envAdapter` 的。
+
+**两条待办的取证结论（261010 均已实测收口）**：
+
+1. **移动端外链：实测「无缺陷」⇒ `envAdapter.openLink` 不必接。**
+   实测方法：探针文档 `外链探针 261010`（正文含 `<a href="https://example.com/261010" target="_blank">` 的外链），
+   从 **书架 → 最近文档** 打开（文档树抽屉的自动化打不开，改走这条入口），再用 `Input.dispatchMouseEvent` 真点按链接中心。
+   ⚠️ **判据必须看前台窗口**：`adb shell dumpsys window | grep mCurrentFocus`。
+   Intent 场景下 `location.href` 与 CDP target 列表**都不会变** —— 只看这两个会得出「点了没反应」的**错误**结论
+   （本轮就误判过一次，见本节末的修订记录）。
+   结果：点前 `com.lakenotes.mobile/MainActivity` → 点后 **`com.android.chrome/ChromeTabbedActivity`** ⇒ 系统浏览器正常打开。
+   对照 A/B：`<a target="_blank">` 与 `window.open(…, "_blank")` **两条路径都能**打开系统浏览器
+   （各自从 App 前台切到 Chrome）⇒ Capacitor 已把外部 origin 转成 Intent。
+   ⇒ **单一姿势 = 都靠壳层**（桌面 Electron 窗口钩子 / 移动 Capacitor Intent）。
+   仅当将来要「自定义打开方式」（应用内浏览器、域名白名单）才是新需求，那时再接 `openLink`。
+2. **`longPressCard`：取证结论 = 保留自写实现（官方口本来就要求使用方自实现 UI）。**
+   官方原文（`48 - 适配器`）：「卡片长按事件。提供给移动端使用。入参需要自定义，可以参考 editUI和viewerUI
+   **实现一个UI**，然后在UI中通过 `this.viewer.emitEvent('longPressCard', args);` 传递参数、触发该方法的执行。」
+   ⇒ 它**不是**「内核自带长按 UI、我们接一下就行」，而是「由使用方实现 UI 并回传参数」。
+   我方 `src/features/editor/longPress.ts`（450ms / 位移 < 10px / 吞掉随后的 click；经 `LakeEditor.tsx` 的 `attachLongPress` 挂载）
+   做的正是这件「给移动端实现长按交互」的事 ⇒ **保留**。且**无公开证据**表明本构建会主动抛该事件
+   （文档给的是「由我方 emit」的用法），要接必须先验证它真会抛，否则接了也不触发。
+
+> 探针文档（261010 建的，按 AGENTS §4 不自动删除）：`外链探针 261010` = `0b69d3ca-cd8b-45b1-8123-5f1b84a1f411`
+> （正文 = `<p><a href="https://example.com/261010" target="_blank">外链测试</a></p>`，可直接用它补做手工实测）。
+
+> 修订记录（261010）：本节初稿曾把「移动端外链点了没反应」写成结论 —— **那是观测缺陷**（只看 `location.href`/CDP target，
+> 没看前台窗口）。已改判为「工作正常」。留此记录提醒：**验证「是否打开了外部应用」必须看系统层（前台窗口 / Intent），
+> 不能只看页面内指标**。
+
+> 方法学提醒：查官方适配口这件事**方向做对了**（两处都查、都有结论）—— 结论是外链不用接、长按本就该自实现。
+> **涉及内核交互能力时先查官方适配器清单，再决定要不要自建**；查完得出「官方有但不需要」同样是有效结论。

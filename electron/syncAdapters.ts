@@ -45,6 +45,14 @@ function localHashOf(store: Store, n: ReturnType<Store["listNotesForSync"]>[numb
 }
 
 export function createStoreSyncPort(store: Store): SyncDbPort {
+  /**
+   * I2（下载方向）轮初快照：整轮下载的冲突判定基于**轮初**状态；若期间用户编辑了同一篇，
+   * 直接应用远端版本会静默覆盖用户刚写的正文。
+   * ⇒ beginNoteBatch 记下轮初 hash，applyRemoteNote 时"未变才应用"（变了就推迟到下一轮，
+   * 由引擎正常的冲突流程处理，含被覆盖方历史留档）。与移动端 syncDbPort 的批窗口守卫同语义。
+   * 判据见 src/core/maintenancePolicy.ts（I2）；护栏 electron/syncApplyGuard.test.ts。
+   */
+  let applySnapshot: Map<string, string | null> | null = null;
   const rowFromSync = (n: ReturnType<Store["listNotesForSync"]>[number]): LocalNoteRow => ({
     id: n.id, title: n.title, parentId: n.parentId ?? null, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
     syncState: n.syncState ?? "local",
@@ -89,7 +97,24 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     async listDeclaredAssets(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>> {
       return store.listDeclaredAssets(noteId);
     },
+    /** 引擎在下载窗口开头调用（可选钩子）：桌面不缓冲（逐条即时写），只取轮初快照。 */
+    async beginNoteBatch(): Promise<void> {
+      applySnapshot = new Map(store.listNotesForSync().map((n) => [n.id, localHashOf(store, n)]));
+    },
+    /** 下载窗口收尾：释放快照（不实现则快照会跨轮残留，虽更保守但语义不清）。 */
+    async flushNoteBatch(): Promise<void> { applySnapshot = null; },
     async applyRemoteNote(note: ManifestNote, content: string): Promise<void> {
+      if (applySnapshot) {
+        const before = applySnapshot.get(note.id);
+        if (before != null) {
+          const row = store.getNoteForSync(note.id);
+          const now = row ? localHashOf(store, row) : null;
+          if (now != null && now !== before) {
+            console.info(`[sync] ${note.id} 本轮已被本机编辑，推迟应用远端版本（下轮按冲突流程处理）`);
+            return;
+          }
+        }
+      }
       store.importRemoteNote(note as never, Buffer.from(content, "utf8"), []);
     },
     async applyRemoteTrash(id: string, content: string, _title: string, trashedAt: string, deletedFromParentId: string | null, _parentId: string | null, _sortOrder: number): Promise<void> {

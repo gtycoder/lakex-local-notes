@@ -797,7 +797,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         for (const t of folderTombstoneEntries) folderById.set(t.id, t);
         next.folders = [...folderById.values()];
       } else if (folderTombstoneEntries.length > 0) {
-        // 端口不发布目录（POC 透传）：仅追加本轮新墓碑（同 id 覆盖活跃残留）。
+        // 端口不发布目录（listFoldersForSync 未实现时的缺省）：仅追加本轮新墓碑（同 id 覆盖活跃残留）。
         const folderById = new Map((remote?.folders ?? []).map((f) => [f.id, f]));
         for (const t of folderTombstoneEntries) folderById.set(t.id, t);
         next.folders = [...folderById.values()];

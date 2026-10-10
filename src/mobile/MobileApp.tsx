@@ -7,7 +7,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "./bridge";
 import { resetAssetPerf, snapshotAssetPerf } from "./assetPerf";
-import type { POCNoteSummary } from "./noteRepository";
+import type { LocalNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
@@ -26,6 +26,7 @@ import { showToast } from "./ui/toastBus";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
 import { runNativeSqliteSpike } from "./nativeSqlite";
+import { buildLakeNative } from "./lakeNativeContract";
 import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
 import "./mobile.css";
 
@@ -46,7 +47,7 @@ export function MobileApp() {
   /** 每次打开「小记」框递增：作为 key 强制重挂载，保证 seed/草稿各自生效。 */
   const [captureNonce, setCaptureNonce] = useState(0);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
-  const [notes, setNotes] = useState<POCNoteSummary[]>([]);
+  const [notes, setNotes] = useState<LocalNoteSummary[]>([]);
   const activeIdRef = useRef<string | null>(null);
   const [phase, setPhase] = useState<"booting" | "ready">("booting");
   const [error, setError] = useState<string | null>(null);
@@ -67,61 +68,12 @@ export function MobileApp() {
       try {
         await bridge.init();
         // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口
-        (window as unknown as Record<string, unknown>).lakeNative = {
-          uploadResource: (input: { bytes: Uint8Array; filename: string }, noteId: string) =>
-            bridge.uploadResource(input, noteId),
-          syncNow: () => bridge.syncNow(),
-          testS3Connection: () => bridge.testS3Connection(),
-          listTreeNodes: () => bridge.listTreeNodes(),
-          listNotes: () => bridge.listNotes(),
-          listQuickNotes: () => bridge.listQuickNotes(),
-          listOrphanAssets: () => bridge.listOrphanAssets(),
-          cleanOrphanAssets: () => bridge.cleanOrphanAssets(),
-          deleteOrphanAsset: (id: number) => bridge.deleteOrphanAsset(id),
-          gcDeepCleanup: () => bridge.gcDeepCleanup(),
-          listNoteHistory: (noteId: string) => bridge.listNoteHistory(noteId),
-          getNoteInfo: (id: string) => bridge.getNoteInfo(id),
-          readAssetPreview: (noteId: string, filename: string) => bridge.readAssetPreview(noteId, filename),
-          previewHistorySnapshot: (historyId: number) => bridge.previewHistorySnapshot(historyId),
-          openAttachment: (noteId: string, filename: string) => bridge.openAttachment(noteId, filename),
-          saveAssetAs: (noteId: string, filename: string, name?: string) => bridge.saveAssetAs(noteId, filename, name),
-          restoreHistory: (historyId: number) => bridge.restoreHistory(historyId),
-          cleanupHistory: () => bridge.cleanupHistory(),
-          getHistorySettings: () => bridge.getHistorySettings(),
-          getDiagnostics: () => bridge.getDiagnostics(),
-          saveHistorySettings: (s: import("./bridge").HistoryMobileSettings) => bridge.saveHistorySettings(s),
-          snapshotNote: (id: string) => bridge.snapshotNote(id),
-          createQuickNote: (text: string) => bridge.createQuickNote(text),
-          deleteQuickNote: (id: string) => bridge.deleteQuickNote(id),
-          saveQuickNote: (id: string, text: string) => bridge.saveQuickNote(id, text),
-          saveQuickNoteWithImages: (id: string, text: string, images: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }>) =>
-            bridge.saveQuickNoteWithImages(id, text, images),
-          getQuickNoteImage: (id: string, filename: string) => bridge.getQuickNoteImage(id, filename),
-          listQuickNoteTrash: () => bridge.listQuickNoteTrash(),
-          restoreQuickNote: (id: string) => bridge.restoreQuickNote(id),
-          purgeQuickNote: (id: string) => bridge.purgeQuickNote(id),
-          listTrashTree: () => bridge.listTrashTree(),
-          getS3Settings: () => bridge.getS3Settings(),
-          saveS3Settings: (cfg: import("../lib/types").S3Settings) => bridge.saveS3Settings(cfg),
-          createNote: (title: string, parentId: string | null) => bridge.createNote(title, parentId),
-          saveNote: (id: string, title: string, content: string, parentId: string | null, plain?: string) => bridge.saveNote(id, title, content, parentId, plain),
-          trashNote: (id: string) => bridge.trashNote(id),
-          restoreNote: (id: string) => bridge.restoreNote(id),
-          listTrashed: () => bridge.listTrashed(),
-          restoreTreeItem: (id: string, kind: "folder" | "note") => bridge.restoreTreeItem(id, kind),
-          purgeTreeItem: (id: string, kind: "folder" | "note") => bridge.purgeTreeItem(id, kind),
-          createGroup: (parentId: string, title: string) => bridge.createGroup(parentId, title),
-          renameTreeNode: (id: string, title: string) => bridge.renameTreeNode(id, title),
-          setNodeIcon: (id: string, icon: string | null) => bridge.setNodeIcon(id, icon),
-          reorderSiblings: (parentId: string | null, orderedIds: string[]) => bridge.reorderSiblings(parentId, orderedIds),
-          moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => bridge.moveTreeNodeOrdered(id, parentId, orderedIds),
-          createNotebook: (input: { title: string; icon: string | null }) => bridge.createNotebook(input),
-          searchNotes: (q: string) => bridge.searchNotes(q),
-          runNativeSqliteSpike: (database?: string, reset?: boolean) =>
-            runNativeSqliteSpike(database, reset),
-          migrateSnapshotToNativeSqlite: (database?: string) =>
-            migrateSnapshotToNativeSqlite(database),
-        };
+        // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口。
+        // 实现从 bridge / 附加入口**派生**（名字清单单一来源见 ./lakeNativeContract）。
+        (window as unknown as Record<string, unknown>).lakeNative = buildLakeNative({
+          bridge: bridge as unknown as Record<string, unknown>,
+          extra: { runNativeSqliteSpike, migrateSnapshotToNativeSqlite },
+        });
         // 资产传输性能观测（CDP 诊断：__lakePerf.reset() / __lakePerf.snapshot()）。
         (window as unknown as Record<string, unknown>).__lakePerf = {
           reset: resetAssetPerf,

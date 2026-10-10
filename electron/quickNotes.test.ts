@@ -145,6 +145,22 @@ describe("QuickNotesStore", () => {
     expect(fs.existsSync(path.join(root, "quick-notes", "assets", source.id))).toBe(false);
   });
 
+  it("I2：同步期间被编辑过 ⇒ 不标 synced（不许把新内容记成已上传）", () => {
+    const draftId = crypto.randomUUID();
+    const note = quickNotes.createQuickNote({ text: "原始内容", draftId, stagedImageIds: [] });
+    const expected = quickNotes.listQuickNotesForSync().find((i) => i.id === note.id)!.contentHash;
+
+    // 模拟「同步读到 expected 之后、标记之前」用户又编辑了一次
+    quickNotes.updateQuickNote(note.id, { text: "同步期间改的", draftId, stagedImageIds: [] });
+    quickNotes.markSyncedIfUnchanged(note.id, expected);
+    expect(quickNotes.listQuickNotesForSync().find((i) => i.id === note.id)!.syncState).toBe("local");
+
+    // 内容未变时可正常标记
+    const now = quickNotes.listQuickNotesForSync().find((i) => i.id === note.id)!.contentHash;
+    quickNotes.markSyncedIfUnchanged(note.id, now);
+    expect(quickNotes.listQuickNotesForSync().find((i) => i.id === note.id)!.syncState).toBe("synced");
+  });
+
   it("拒绝远端多余的不安全文件名，且不留下小记资源目录", () => {
     const raw = Buffer.from(JSON.stringify({ version: 2, text: "远端文本", body: "<p><br></p>", images: [] }));
     const contentHash = crypto.createHash("sha256").update(raw).digest("hex");

@@ -22,7 +22,7 @@ import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { mediaKindOfFilename, isSafeShellOpenFilename } from "../../core/assetNaming.js";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
-import type { POCNote } from "../noteRepository";
+import type { LocalNote } from "../noteRepository";
 
 /** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开本地文件。 */
 const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");
@@ -40,7 +40,7 @@ function plainFromEditor(editor: unknown): string | undefined {
 }
 
 export interface DocumentEditorProps {
-  note: POCNote;
+  note: LocalNote;
   content: string;
   editing: boolean;
   onContentChange: (content: string, plain?: string) => void;

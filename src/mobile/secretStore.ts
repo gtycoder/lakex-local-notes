@@ -1,6 +1,8 @@
 /**
- * 移动端 SecretStore（Phase 0B-2，§17.5）。
- * 实现：WebCrypto AES-GCM 加密 + **localStorage 存密文**。
+ * 移动端 SecretStore 的**降级**实现：WebCrypto AES-GCM 加密 + **localStorage 存密文**。
+ *
+ * ⚠️ 生产路径不是这个文件：原生端用 Android Keystore（./keystoreSecretStore.ts + SecureStorePlugin.kt），
+ * 本文件只在 Web/vitest 下作为后端，并在**首次读取时把旧值迁移**到 Keystore（见下方组合层）。
  *
  * 为什么不是 IndexedDB（261009 实测，改了后端）：在 Capacitor 的 Android WebView 里，
  * **IndexedDB 不跨 App 重启**——同会话写读正常、磁盘上 `app_webview/Default/IndexedDB/http_localhost_0.indexeddb.leveldb`
@@ -14,6 +16,7 @@
  * 约束：Secret 不进入 SQLite 主表 / manifest / 日志；解密只在需要时进行。
  */
 import type { SecretStore } from "../core/ports.js";
+import { keystoreAvailable, keystoreSecretStore } from "./keystoreSecretStore";
 
 /** localStorage 键前缀（密文；格式 ivB64:dataB64）。 */
 const LS_PREFIX = "lake-notes-mobile.secret.";
@@ -96,7 +99,7 @@ function removeLegacy(key: string): void {
   } catch { /* ignore */ }
 }
 
-export const mobileSecretStore: SecretStore = {
+export const localStorageSecretStore: SecretStore = {
   async read(key) {
     try {
       const raw = localStorage.getItem(LS_PREFIX + key);
@@ -122,3 +125,46 @@ export const mobileSecretStore: SecretStore = {
     removeLegacy(key);
   },
 };
+
+/**
+ * 组合层：优先用 native（Keystore）；native 没有该键时，从 legacy（localStorage 密文）读一次并**迁移**过去，
+ * 迁移成功后清掉旧值（此后 secret 不再留在 WebView 存储里）。
+ * 写/删只走 native —— 这正是"正解"，降级件仅用于承接历史值。
+ */
+export function createMigratingSecretStore(native: SecretStore, legacy: SecretStore): SecretStore {
+  /** 已做过旧副本清理的键（一次性；避免每次读都去碰 IndexedDB 兜底）。 */
+  const legacyCleaned = new Set<string>();
+  return {
+    async read(key) {
+      const fromNative = await native.read(key);
+      if (fromNative != null) {
+        // 一次性清理残留旧副本：早期版本的迁移**只在 native 为空时**清 legacy，
+        // native 已有值（例如上一次启动已迁过）时旧密文会一直留在 WebView 存储里 —— 实测踩到（261010）。
+        if (!legacyCleaned.has(key)) {
+          legacyCleaned.add(key);
+          try { await legacy.remove(key); } catch { /* 清不掉不影响本次读取 */ }
+        }
+        return fromNative;
+      }
+      const old = await legacy.read(key);
+      if (old == null) return null;
+      try {
+        await native.write(key, old);
+        await legacy.remove(key);
+      } catch {
+        // 迁移失败：本次仍返回旧值（别让用户当场丢掉密钥），下次读再试
+      }
+      return old;
+    },
+    write: (key, value) => native.write(key, value),
+    async remove(key) {
+      await native.remove(key);
+      await legacy.remove(key);   // 双清：避免旧值残留又被迁移回来
+    },
+  };
+}
+
+/** 生产入口：原生可用 → Keystore（+ 迁移）；否则 → localStorage 降级件（Web/vitest）。 */
+export const mobileSecretStore: SecretStore = keystoreAvailable()
+  ? createMigratingSecretStore(keystoreSecretStore, localStorageSecretStore)
+  : localStorageSecretStore;

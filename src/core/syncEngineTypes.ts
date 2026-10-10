@@ -140,7 +140,7 @@ export interface SyncDbPort {
   /** 导入远端 notebook/group 节点（移动端 folders/tree 表）。 */
   importRemoteFolder(folder: ManifestFolder): Promise<void>;
   /** 发布方向：列出本地目录树（notebook/group），供 manifest.folders 写入（对齐桌面 listFoldersForSync）。
-   * 返回 null = 端口不支持本地目录发布（POC 只读 folders 时可不实现，folders 保持远端透传）。 */
+   * 返回 null = 端口不支持本地目录发布（只读 folders 的端可不实现，folders 保持远端透传）。 */
   listFoldersForSync?(): Promise<Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: string; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }>>;
   /** 本机编辑成果被远端覆盖前强制留档（D5，协议 §4.2）：写一条 note_history，防丢数据。 */
   createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): Promise<void>;

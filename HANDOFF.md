@@ -5,12 +5,78 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接（261009 → 261008）
+## 0. 最新交接（261010 → 261009）
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261010 / 261009）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
 > **下一会话焦点（261010 收尾 → 下一会话，用户定）**：① **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；② 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项（条件格式 / 数据验证 / 公式库完整版）单独立项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261010 · 移动端 F16 修复 + 互斥域上收 + 单一来源收口（**本批代码未提交，等用户验收**）
+
+- **背景裁决**：一个「移动端架构重做」会话把 F16 冻住等架构方回话。核查后**不存在重做** —— 本仓库无新分支 / 无 worktree /
+  无未提交改动，`1861a6b` 只加了 2 个文档文件。按 8 条业界判据体检（core 零依赖 / 平台差异集中 / 无自研跨端运行时 /
+  共享粒度到组件级 = 4 条通过；收益有护栏无代价账 = 1 条半；大对象过桥 / 升级内核改两处 / 边界泄漏 = 3 条定点缺陷）
+  ⇒ **判定不立项"重设计"**，按定点修复推进。承载方式属 Capacitor-WebView 范式（与 Obsidian/Logseq 同类）。
+- **F16 已修**。根因比"锁粒度"更准：**本地写被并进了维护队列** —— 桌面 `enqueueMaintenance` 只有 **3** 个调用点（整轮同步/备份/GC 对账），
+  移动端却有 **31** 个（其中 25+ 是纯本地写）。做法：
+  · 判据单一来源 `src/core/maintenancePolicy.ts`（71 个桥操作全量登记：write **30** / maintenance **3** / none **38**）；
+  · 两条队列 `src/mobile/maintenanceLocks.ts`（写域 / 维护域），`bridge.ts` 改 `runWrite(op,…)` / `runMaintenance(op,…)`（**带类别校验**，写错当场抛）；
+  · 同步侧「DB 片段短锁」`syncDbPort` 的 `withWriteLock`（一次端口调用进出各一次，**网络往返不持写域**）；
+  · `restoreTreeItem` 恢复不再等网络（原本被全局队列串在同步后面）。
+- **I2 守卫补齐**（拆域的前置条件，否则丢编辑）：引擎优先用 `markSyncedIfUnchanged`（小记新增实现，移动端；对齐 Lake 侧 V5 §5.2）；
+  下载侧 `flushNoteBatch` 批窗口守卫（批窗口跨网络取内容 ⇒ 窗口内被本机改过的笔记**推迟远端应用**，留给下一轮走正常冲突流程）。
+- **单一来源收口**：移动 CSP 唯一来源 = `vite.mobile.config.ts`（`mobile.html` 只留 `%MOBILE_CSP%`，此前两份不一致）；
+  `window.lakeNative` 改为**从实现派生**（`lakeNativeContract.ts`：49 = 47 bridge + 2 附带；此前手写 49 个包装、无护栏）；
+  `ports.ts` 6 处悬空《移动端方案 §x》引用清除；`bridge.ts` 头注释 "POC / manifest v4" 改成事实（Manifest **V1**）；`POCNote*` → `LocalNote*`。
+- **新增 7 道护栏**：`core/maintenancePolicy.test.ts` · `mobile/maintenancePolicyCoverage.test.ts`（含 **I3 同域嵌套静态卡死**）·
+  `mobile/maintenanceLocks.test.ts`（**F16 机制回归，CI 可跑不必上模拟器**）· `mobile/syncDbPortBatchGuard.test.ts` ·
+  `mobile/mobileCspSingleSource.test.ts` · `mobile/lakeNativeContract.test.ts` · `electron/maintenanceQueueScope.test.ts`（桌面反向护栏）。
+- **规格与契约**：`docs/MOBILE-TECH-STACK.md` 重写为正式架构规格（三层边界 + **每层用哪种复用方式** + 互斥域 + 能力矩阵 121/71/49 + 运行时硬约束 + 未结项）；
+  `LAKEX-CONTRACT.md` 新增 **§5.27**（`envAdapter` 官方 7 个口全量 + 我方覆盖率 **1/7**；桌面外链其实靠**壳层** `setWindowOpenHandler`→`shell.openExternal` 接管；`longPressCard` 取证待办）。
+- **门禁**：tsc ✓ · vitest **227 文件 / 1778 用例** ✓ · check:core 76-0 ✓ · ui-metrics ✓ · check:bundle ✓ · 双端构建 ✓ · `git diff --check` ✓。
+- **F16 弱网验收：已过（261010）**。口径照 §3#12 同一入口/同一量法（`window.lakeNative.syncNow()` → 等 250ms → 本地写 → 页内 `performance.now()`），
+  模拟器 `adb emu network delay|speed gprs`（7.0 KB/s ↓ / 3.5 KB/s ↑ / 35–200ms）：
+  **整轮同步 59.3s，同步中的本地写等待 32ms**（基线写 84ms）⇒ **写等待/同步时长 = 0.001**（旧实现 ≈1.00：152.0s / 152.3s）。
+  同步正常收尾「拉取 68 条，应用 0，上传 2，发布 是；小记已同步」，文档 68 → 70。装置入库：`scripts/mobile-f16-acceptance.mjs`。
+  ⚠️ 该次运行新建了 2 篇探针文档（按 AGENTS §4 不自动删）：`F16 验收 A` = `97756d6d-3ca0-42ea-8974-35128d0cd61b`、`F16 验收 B` = `c766a07f-131e-4272-920c-83b531145478`（父 `notebook-personal`）。
+- **内核预热/复用：已测（261010，AVD `lake_mobile`）**：冷启动 Activity **490ms**（`am start -W -S` TotalTime）；**首次内核挂载 ≈1847ms**；
+  keep-alive 复用下的**热切换 ≈73ms**（**25×**）⇒ 复用已在生效，剩下要优化的是"进程内第一次挂载"（1847ms 是端到端，纯挂载成本待细分）。装置：`scripts/mobile-kernel-perf.mjs [--cold]`。
+- **261010 追加（未完成项清零）**：
+  · **内核资源本地化收成单一来源** `scripts/lakexLocalize.ts`（此前桌面/移动各一份复制品）⇒ 升级内核只改一处；
+    顺带让**移动端也拿到** CSS `@import` 内联兜底（此前只有桌面有）。护栏 `electron/lakexLocalizeSingleSource.test.ts`；
+    两端口径核对：产物 `gw.alipayobjects.com` 残留 0、CSP 注入正常、index/preview 正常生成。
+  · **桌面补 I2 守卫**（下载方向）：`syncAdapters.ts` 的 `beginNoteBatch` 快照 + `applyRemoteNote`「未变才应用」⇒
+    两端语义一致（此前桌面该窗口是敞开的：并发编辑会被远端静默覆盖）。护栏 `electron/syncApplyGuard.test.ts`（2 例，含不误伤）。
+  · **Move SecretStore 到 Android Keystore**：新原生插件 `SecureStorePlugin.kt`（AndroidKeyStore AES-256-GCM + 私有 SharedPreferences）、
+    JS `keystoreSecretStore.ts` + 迁移层（native 优先、读到旧值迁一次、**native 有值时也一次性清掉残留旧副本**）；
+    降级件降为 Web/vitest 后端。**设备验证（AVD `lake_mobile`）**：冷启动 692ms → `skLen 40` / `testS3Connection OK（对象数 ≥ 1）` /
+    `localStorageSecretLen = null`（WebView 存储已无 secret）/ `keystore-ok`；`shared_prefs/lake-notes-secure.xml` 存的是 `base64(iv):base64(ct)`。
+  · **`envAdapter` 取证收口（261010，结论＝不改行为）**：
+    **外链**：端到端实测**正常**（点后前台从 `com.lakenotes.mobile` 切到 `com.android.chrome`）⇒ 壳层已接管，`openLink` 不必接。
+    ⚠️ **判据必须看前台窗口**（`dumpsys window | grep mCurrentFocus`）—— Intent 场景下 `location.href`/CDP target 都不变，
+    只看它们会误判「没反应」（本轮误判过一次，已在 CONTRACT §5.27 留修订记录）。
+    **`longPressCard`**：官方语义是「使用方**自实现 UI** 并回传参数」，不是内核自带长按 UI ⇒ 我方自写手势等价，**保留**。
+  · **契约面收窄（261010，用户定方向：不做纯文件拆分）**：`bridge` 71→**70**（删零引用死方法 `uploadObject`）；
+    按「谁在用」把 70 个方法分成 **T1 移动端 UI 49 / T2 共享契约 `native.*` 9 / T3 自动化契约 5 / 待定 7**；
+    护栏 `src/mobile/contractSurface.test.ts`：**新方法不写清用途直接红**、`PENDING_OWNER` 只许变小、`lakeNative` 必须是 `bridge` 子集。
+    分类与判据写进 `docs/MOBILE-TECH-STACK.md` §三（含"静态扫描会漏别名调用、删除前须人工复核"的教训）。
+  · **内核样式护栏（261010）**：`src/mobile/kernelStyleBootstrap.test.ts`（懒入口挂内核必须自带内核 CSS）——
+    立护栏时发现并修掉真实遗留缺陷 **`TrashPreviewPage`（设置→回收站→预览）挂了 `LakeEditor` 却没引内核样式**（与小记同款 bug）；AGENTS §7.22/§7.23 固化。
+  · **外链结论反转（261010）**：端到端实测移动端文档内链接**正常**（点后前台切到 Chrome）⇒ 上一轮"点了没反应"是**观测缺陷**
+    （Intent 场景 `location.href`/CDP target 都不变，必须看 `dumpsys window` 前台窗口）；`envAdapter.openLink` **不必接**。
+    `longPressCard` 取证：官方语义是"使用方自实现 UI"⇒ 我方自写手势等价，**保留**。两者均已入 `LAKEX-CONTRACT §5.27`（含修订记录）。
+  · **冷开分解（261010，三条路径）**：`scripts/mobile-coldopen-breakdown.mjs`（每次 `Page.reload` 重置 keep-alive 后再量）——
+    **深链小记（无内核）88/65/82ms** · 首页小记写作卡（内核）656/412/290ms · 打开文档（内核）427/366/347ms；**内核 chunk 加载/求值仅 27ms**。
+    ⇒ **结论：不立项预热/池化**（单 WebView 无池可建；不挂内核的小记已秒开；内核路径瓶颈在实例化+首帧，复开已由 keep-alive 覆盖 73ms）。
+  · **移动 CSP 已收紧（261010）**：`script-src` 去掉 `unsafe-inline` / `unsafe-eval`，内联 KITCHEN_URL 改 **sha256 hash**（与桌面 prod 同值）；
+    设备验证**零 CSP 违规、零运行时错误**：reload + 首页 + 知识库/书架 + 笔记本 + 6 篇文档 + 搜索 + **画板**（canvas 300×150）+ **表格 Univer**（canvas 1081×1967）。
+    护栏 `mobileCspSingleSource.test.ts` 重算 hash 比对（防「改了内联脚本忘改 hash ⇒ 白屏」）。
+  · **7 个「待定归属」已定去向（261010）**：生产走 `gcRepository` 直调 / `dbPort`，这几个只是再暴露一份；单测借它做**播种+观测**验证真实行为（GC 分批删除 / 维护队列写 / 墓碑发布 / folder 防复活）⇒ **保留为 T4 测试观测/播种口**（`contractSurface.test.ts` 的 `TEST_SEAM`，只许变小）。
+  · **mermaid/流程图路径已定性（261010）**：全产物含 `Function(` 的 5 个 chunk 经静态核对**全是 lodash/webpack 的「全局对象探测兜底」**
+    （`freeGlobal || self || Function("return this")()` / `if (typeof globalThis=="object") return globalThis`）——Chromium WebView 里 `globalThis`/`self` 恒存在 ⇒ **永不执行**，webpack 那处还有 try/catch。
+    加上设备实测（文档/画板/表格/搜索全路径零 CSP 违规；画板 canvas 300×150、表格 canvas 1081×1967 真渲染）⇒ **`unsafe-eval` 确实可去，无遗留风险**。
+    ⚠️ **CDP `Runtime.evaluate` 绕过页面 CSP** ⇒ 不能用它测 CSP 行为（本轮踩过：`Function("return 1")()` 在 CDP 里照样成功）；CSP 验证必须走页面自身加载路径。
 
 ### 261009 B1 · 桌面逐页走查（页面详细测试）+ 3 条修复 + 走查装置入库
 
@@ -139,7 +205,7 @@
 11. **多维表行虚拟化（AR04 已证瓶颈；用户 260930 决定暂不做，留待后续）**：真实 Electron 压测（scripts/bitable-stress.mjs）——目标 5000×20 打开 **12.42s / 84.8 万 DOM / 395MB 堆 / 首次点选 2.25s**；10000×20 = 24.8s/169 万/1.34GB；20000×50（100 万格）200s 内未渲染完成；50000×50 因**正文 32 MiB 上限**根本无法保存。结论：CPU 热点（AR-F5/F6）已消除，**DOM 全量渲染是瓶颈**，支持 5000 级规模需行虚拟化/渲染策略；立项前先定「5000×20 滚动/编辑目标 + 验收口径」。**用户 261007 确认：长期待办、暂不做。**
 
 12. **非多维表审计遗留（260930 会话决定）**：
-    - **F16 安卓整轮网络同步持本地写队列 —— 已实测（261009，用户授权用 dev 前缀 `lake-notes-dev1` 直连 S3）**：结论 **立项**（弱网下是分钟级窗口）。
+    - **F16 安卓整轮网络同步持本地写队列 —— 已实测（261009，用户授权用 dev 前缀 `lake-notes-dev1` 直连 S3）**：结论 **立项** ⇒ **已修复（261010，见 §0 本批）**：写域/维护域分离 + 判据单一来源 + I2 守卫；**弱网实测已收尾（261010）：同步 59.3s 期间写等待 32ms（旧 152.0s），见 §0**。
   - **量法**：移动端调试契约 `window.lakeNative`（`saveNote` / `syncNow`）+ 页内 `performance.now()` —— 先起 `syncNow()`，等 150–300ms 让同步进入队列，再发一次本地写，量这次写完成耗时；同法先量"无同步时"的基线写。
   - **数据**（AVD lake_mobile；弱网档 = 模拟器 `-netdelay gprs -netspeed gprs`，≈80kbps / 500ms RTT）：
 
@@ -331,11 +397,10 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 
 ## 8. 移动端速查（完整端）
 
-> **给移动端架构重构会话的情报（261010）**：重做移动端前先读 `docs/MOBILE-TECH-STACK.md` 的「**重构输入**」一节 —— 实测硬约束
-> （IndexedDB 不跨重启 / CDP 截不到 canvas / keep-alive 隐藏视图仍在 DOM / 可编程入口 `window.lakeNative`）、既有结构对照
-> （`bridge.ts` 的全局 `KeyedAsyncQueue`、`secretStore`）、本轮已修并已验收的三条（S3 密钥跨重启、内核样式缺席、按钮折行）、
-> 走查装置，以及**需要架构方回答的三问**（是否替换 bridge/queue/secretStore ⇒ F16 落点、是否接走查装置、是否保留可编程入口）。
-> **F16 在对方回话前保持不动**（避免在即将被替换的旧桥上打补丁）。
+> **「移动端架构重做」已结案（261010）**：核查确认本仓库**不存在重做**（无新分支/worktree/未提交改动）⇒ 不立项重设计。
+> 原「重构输入」三问的答复：① F16 **已按当前架构修复**（写域/维护域分离，见 §0 本批）；② 走查装置**必须接进验收流程**（`check:mobilesnap` + 设备级截图）；
+> ③ `window.lakeNative` **保留并改为从实现派生**（49 = 47 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
+> 移动端规格与硬约束现在只在 `docs/MOBILE-TECH-STACK.md`（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
 > **261009 B2（进行中）** 移动端逐页走查装置：scripts/css-audit/mobile-walkthrough.mjs（配合 drive.mjs 9335）。
 > 覆盖：首页（知识库 / 小记 / 书架）、笔记本工作区、各文档（doc / usheet / bitable / board）、设置抽屉九页；每屏「截图 + 探针」

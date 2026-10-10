@@ -24,7 +24,7 @@ import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { longPressFeedback, successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
-import type { POCNote } from "../noteRepository";
+import type { LocalNote } from "../noteRepository";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
 /** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -621,7 +621,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               </div>
             ) : (
             <DocumentEditor
-              note={{ id: t.id, title: t.title, content: t.content } as POCNote}
+              note={{ id: t.id, title: t.title, content: t.content } as LocalNote}
               content={t.content}
               editing={t.editing}
               onContentChange={(c, plain) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c, plain); }}

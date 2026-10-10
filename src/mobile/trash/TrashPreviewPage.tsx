@@ -5,6 +5,11 @@ import { reportNativeActionError } from "../../lib/nativeErrors";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { bridge } from "../bridge";
 import { LakeEditor } from "../../features/editor/LakeEditor";
+// 内核样式必须由**本懒加载入口自己**带（261010 护栏）：冷启动直接从「设置 → 回收站 → 预览」进来时，
+// 这条路径是第一个内核消费者 —— 缺样式会渲染成大图标 + 原生控件（261009 在小记上踩过同款）。
+// 顺序与 DocumentEditor 一致：内核 style.css 在前，字体覆盖在后（移动端无 @layer，靠顺序生效）。
+import "@dlient/lakex-doc-react/style.css";
+import "../../styles/fonts/font-overrides.css";
 import { loadSettings } from "../../lib/settings";
 
 export interface TrashPreviewPageProps {

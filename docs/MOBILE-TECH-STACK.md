@@ -1,74 +1,129 @@
-# 移动端技术栈
+# 移动端技术栈与架构规格
 
-> 当前移动端是正式端之一：Vite 前端 bundle + Capacitor Android + 原生 SQLite/AssetServer。
-> 运行方式、AVD、CDP、已知验收项见 `HANDOFF.md` §8。
+> 本文是移动端**唯一架构规格**。运行方式 / AVD / CDP / 验收见 `HANDOFF.md` §8；
+> 长期红线与机制见 `AGENTS.md`；内核（lakex）行为契约见 `docs/LAKEX-CONTRACT.md`。
+> 移动端是**正式端之一**（Capacitor Android，包名 `com.lakenotes.mobile`），桌面红线同样适用。
 
-## 架构
-- UI/编辑器：React + 共享 Lake/编辑器组件；mobile bundle 由 `vite.mobile.config.ts` 构建。
-- 壳：Capacitor 8，Android 包名 `com.lakenotes.mobile`。
-- 数据：Android native SQLite（WAL）保存 notes/folders/history/GC 等；`sql.js` 仅保留测试/迁移验证。
-- 文件：Capacitor Filesystem 保存工作区、资源和 staging；不映射 macOS 数据目录。
-- 资源：`AssetServer.kt` 提供本机 canonical URL，token/CORS 语义与桌面端对齐。
-- 同步：共享 `src/core/syncEngine.ts` / `quickNotesSyncEngine.ts`；移动端注入 SQLite、Filesystem、HTTP 与 secret ports。
-- 小记：v2 Lake body；编辑态挂单实例内核，时间线预览用白名单解析器。
+## 一、三层边界，以及"每层用哪种复用方式"
 
-## 数据与同步约束
+这两件事必须一起写清楚 —— 历史问题不是"没有分层"，而是**同一层里混用了两种复用哲学却无判据**。
+
+| 层 | 是什么 | **复用方式** | 明确不做 |
+| --- | --- | --- | --- |
+| **原生层**（Capacitor 插件，Kotlin） | `AssetServer.kt`（本机资源 HTTP + 图片转换）、`AssetSyncPlugin.kt` + `AwsV4Signer.kt`（S3 流式，字节不过桥）、`OpenFilePlugin.kt`、`SharedContentPlugin.kt`、`PinShortcutPlugin.kt` | **只做服务、零 UI**（对齐语雀 Native「重服务轻 UI」）；只暴露能力，不做业务判断 | 不在原生层放业务/UI；不新增 UI 型插件 |
+| **移动端外壳 UI**（`src/mobile/**`） | `MobileApp` / `HomePage` / `NotebookWorkspace` / `SettingsDrawer` / 抽屉与手势 | **整份各写**：移动与桌面外形差异是实质的（只读闸门 / 焦点闸门 / 资源 URL 带 token / 无工具条），强行抽公共 runtime 只会变成参数化分支 | 不把桌面外壳抽给移动端 |
+| **共享编辑器宿主**（`src/features/editor/**`） | `LakeEditor` / `lakeRuntime` / 图片预览 / 附件路由 | **参数化共享 + 零平台分支**：差异经 `LakeEditorPrefs` 与注入函数传入（实测该层 `isMobile/Capacitor` 分支 = 0） | 不在共享层写 `if (isMobile)` |
+| **共享核心**（`src/core/**`） | 同步引擎、决策纯函数、命名/哈希/尺寸校验 | **只上收"策略/决策"，不上收实现**；由跨端对拍测试保证等价 | 不合并两端的 schema / repository（AGENTS §3#17 已否决） |
+
+**规则一句话：策略与判据上收进 `src/core`（用跨端对拍证明等价）；实现与界面留在各端。**
+
+护栏：`scripts/check-core-boundaries.mjs`（`check:core`）卡住 `src/core/**` 零平台依赖；
+`src/mobile/mobileLazyChunks.test.ts` 卡住桌面编辑器不得进移动包。
+
+## 二、互斥域：写域 / 维护域（F16，261010 定稿）
+
+判据单一来源 = **`src/core/maintenancePolicy.ts`**（71 个桥操作全量登记：`write` / `maintenance` / `none`）。
+
+| 域 | 实例 | 收什么 | 关键约束 |
+| --- | --- | --- | --- |
+| **写域** | `src/mobile/maintenanceLocks.ts` 的 `writeLock` | 本地写：saveNote / 目录树 CRUD / 小记 / 历史 / 回收站 / 孤儿资产 / GC 账本；**以及同步引擎的 DB 片段**（经 `syncDbPort` 的 `withWriteLock` 短锁） | 可与网络阶段**并行**；同域内串行 |
+| **维护域** | 同文件 `maintenanceQueue` | 轮次级网络与维护：`syncNow` / `gcDeepCleanup` / `ensureTrashNoteAssets` | 彼此串行；**禁止持有写域** |
+
+三条不变量：
+
+- **I1（F16）**：网络往返期间不得持有写域。历史缺陷：两域共用一条 `key="main"` 的队列 ⇒ 弱网下本地写等整轮同步 **152.0s**（基线写 32ms）。
+- **I2**：跨网络窗口的「读 → 标记/落地」必须靠**"未变才标/未变才应用"守卫**（内容 hash 比较），不靠全局互斥。
+  已落地：Lake 侧 `markSyncedIfUnchanged`（V5 §5.2）；小记侧 `markSyncedIfUnchanged`（本次新增，两端引擎优先用）；
+  下载侧 `syncDbPort.flushNoteBatch` 的批窗口守卫（批窗口跨网络取内容 ⇒ 窗口内被本机改过的笔记推迟远端应用）。
+- **I3**：两条队列都**无重入** ⇒ 禁止在同域内再取同域（会自锁）。写域短锁按"一次端口调用进出各一次"，网络往返不在其中。
+
+护栏（改这里必跑）：
+
+- `src/core/maintenancePolicy.test.ts` —— 分类完备 / 域不相交 / 计数基线；
+- `src/mobile/maintenancePolicyCoverage.test.ts` —— 桥方法集合与判据表一致、调用点类别一致、**I3 同域嵌套静态卡死**；
+- `src/mobile/maintenanceLocks.test.ts` —— 维护域被占满时写域仍立刻完成（F16 机制回归，CI 可跑，不必上模拟器）；
+- `src/mobile/syncDbPortBatchGuard.test.ts` —— 批窗口内被本机编辑的笔记不被远端覆盖；
+- `electron/maintenanceQueueScope.test.ts` —— 桌面维护队列只包维护操作（反向护栏）。
+
+**弱网实测（261010 已收尾，验收通过）**：`adb emu network delay|speed gprs`（7.0 KB/s ↓ / 3.5 KB/s ↑ / 35–200ms）；
+整轮同步 **59.3s**，**同步中的本地写等待 32ms**（基线写 84ms）⇒ **写等待/同步时长 = 0.001**（旧实现 ≈1.00：152.0s/152.3s）。
+装置：`node scripts/mobile-f16-acceptance.mjs`（会新建 2 篇 `F16 验收 A/B` 探针，按 AGENTS §4 不自动删）。
+计时入口 = `window.lakeNative.syncNow()` / 本地写 + 页内 `performance.now()`。**回归门禁**为 CI 可跑的 `mobile/maintenanceLocks.test.ts`（不必上模拟器）。
+
+## 三、跨端能力矩阵（单一来源）
+
+| 面 | 数量 | 载体 | 说明 |
+| --- | --- | --- | --- |
+| 桌面 IPC | **121** | `electron/preload.cjs` | 桌面渲染层的能力面 |
+| 移动实现本体 | **70** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 互斥域判据按此表登记（261010 收窄：删死方法 `uploadObject`，71→70） |
+| 移动调试契约 | **49** + 2 | `window.lakeNative`（`src/mobile/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口；+2 = `runNativeSqliteSpike` / `migrateSnapshotToNativeSqlite` |
+| 移动性能探针 | 2 | `window.__lakePerf`（reset / snapshot） | 资产传输耗时观测 |
+
+### 契约面「归属」分类（261010：`bridge` 不再是「70 个方法没人知道谁在用」）
+
+`bridge` 同时是**共享契约 `window.lakeNative` 的移动端实现**（类型面 `src/lib/native.ts`，共享组件用 `native.X()` 调）
+与移动端 UI 的内部 API。每个方法必须至少有**一类归属**：
+
+| 类 | 数量 | 判据 | 含义 |
+| --- | --- | --- | --- |
+| **T1 移动端 UI 直接调** | **49** | `src/mobile/**`（非测试）出现 `bridge.X(` | 移动端自己的界面在用 |
+| **T2 共享契约** | **9** | 共享代码（非 mobile、非测试）出现 `native.X(` | 两端都跑的组件会调 ⇒ 移动端**必须实现**。成员：`createQuickNote` `getNoteInfo` `readAssetPreview` `previewHistorySnapshot` `openAttachment` `saveAssetAs` `cleanupHistory` `listS3GcPending` `uploadResource` |
+| **T3 自动化 / 调试契约** | **5** | `scripts/**` 出现 `.X(` 或登记在 `lakeNativeContract.ts` | 供 e2e 脚本与真机手工调试。成员：`saveQuickNote` `saveQuickNoteWithImages` `trashNote` `restoreNote` `listTrashed` |
+| **T4 测试观测/播种口**（显式登记，只许变小） | **7** | 三类都没有，但写在 `contractSurface.test.ts` 的 `TEST_SEAM` | **去向已定（261010）**：生产走 `gcRepository` 直调与 `dbPort`，这几个只是再暴露一份；现存单测借它**播种+观测**验证真实行为（GC 分批删除 / 维护队列写 / 墓碑发布 / folder 防复活）⇒ **保留并登记，不许增长** |
+
+**护栏** `src/mobile/contractSurface.test.ts`：无归属方法必须登记进 `TEST_SEAM`；`TEST_SEAM` 只许变小；`lakeNative` 声明必须是 `bridge` 的子集。
+⇒ **新方法不写清用途就直接失败**，从机制上阻止契约面无声增长（"上帝对象"的真实成因是契约面，不是文件行数）。
+
+⚠️ 判据是**静态扫描**（`bridge.X(` / `native.X(` / 脚本 `.X(`），**别名调用会漏判** —— 本轮就漏过一个
+（`scripts/e2e-f06-android.mjs` 用 `api.listTrashed()`，差点把在用的方法判成死方法）。**删除前必须人工复核全部引用形式，别只信扫描。**
+
+移动端**只读**范围（不写正文、不进 S3 正文）：表格（usheet，Univer 只读）/ 多维表 / 画板。doc 交给 Lake 编辑器。
+
+## 四、数据与同步约束
+
 - 本地是唯一真相，S3 只是镜像；墓碑、回收站、恢复语义与桌面一致。
-- 当前 Lake Manifest 为 V1（260928 重置），所有端必须一起升级。
+- 当前 Lake Manifest 为 **V1**（260928 重置），所有端必须一起升级。
 - 资源存在性按远端清单差集；下载按实扫 size+sha256 复用本地文件。
-- 移动端不写 Lake 文档正文：**表格（usheet，Univer 内核只读）/ 多维表 / 画板**只读展示；doc 交给 Lake 编辑器。
 - `note_history` 仍需补齐 `refs_json`/`protected_until`，纳入真机验收。
+- **secret 不落 WebView 存储**：Android Keystore 保管密钥（`SecureStorePlugin.kt` + `src/mobile/keystoreSecretStore.ts`），
+  密文进应用私有 SharedPreferences；`localStorageSecretStore` 只在 Web/vitest 作后端，并负责把历史值迁移过去。
+  设备验证（261010）：冷启动后 `skLen 40`、连通 OK、`localStorage` 里已无 secret。
+  背景：同一台 AVD 实测 localStorage 跨重启仍在、**IndexedDB 重启后被重建为空**；固定派生密钥的 WebCrypto 方案只是"混淆"不是硬件级保护。
 
-## 重构输入（261010 实测约束 + 既有修复 —— 架构重做前必读）
+## 五、运行时硬约束（实测，长期有效）
 
-> 来源：261009–261010 的移动端逐页走查（22 屏设备级截图 + 五类探针）、F16 弱网实测、S3 密钥缺陷修复。数字与截图口径见 `HANDOFF.md` §8。
-
-### A. 运行时硬约束（实测，别假设）
-1. **WebView 存储只有一半可靠**：同一台 AVD 上 **localStorage 跨 App 重启仍在**，而 **IndexedDB 重启后被重建为空**
-   （`app_webview/Default/IndexedDB/http_localhost_0.indexeddb.leveldb` 目录还在，库却消失、`onupgradeneeded` 再次触发）。
-   ⇒ **任何持久化（尤其密钥）都不要信 WebView 存储**，走 native（Keystore / SQLite / Preferences）。
-   这正是旧 `secretStore.ts`（WebCrypto+IDB）导致「S3 密钥每次重启丢失、同步报 signature mismatch」的根因。
-2. **CDP 的 `Page.captureScreenshot` 抓不到 GPU canvas 层**：usheet 网格在页面截图里整片空白，而同屏 `canvas.toDataURL()` 内容完整、
-   `adb exec-out screencap -p` 正常 ⇒ 移动端验收**一律设备级截图**（走查脚本已按此改），否则会误报「表格空白」。
-3. **keep-alive 的隐藏视图仍在 DOM**（`display:none`，元素还在、部分 rect 为 0）⇒ 自动化导航与可见性判据必须带**命中测试**
-   （`elementFromPoint`），只查 `querySelector` 会点到不可见元素（本轮为此反复踩）。
-4. **可编程入口 = `window.lakeNative`（当前 49 个方法）+ `window.__lakePerf`**：移动端自动化验收（含 F16 计时）全靠它。
-   **新架构必须保留等价入口**，否则验收退回手工。
+1. **WebView 存储只有一半可靠**：localStorage 跨 App 重启仍在；IndexedDB 重启后库被重建为空
+   （`app_webview/Default/IndexedDB/http_localhost_0.indexeddb.leveldb` 目录还在、库消失、`onupgradeneeded` 再次触发）。
+   ⇒ 任何持久化（尤其密钥）都不要信 WebView 存储。历史缺陷：S3 密钥每次重启丢失、同步报 `signature mismatch`。
+2. **CDP 的 `Page.captureScreenshot` 抓不到 GPU canvas 层**：usheet 网格在页面截图里整片空白，而同屏 `canvas.toDataURL()` 完整、
+   `adb exec-out screencap -p` 正常 ⇒ 移动端验收**一律设备级截图**，否则误报「表格空白」。
+3. **keep-alive 的隐藏视图仍在 DOM**：自动化导航与可见性判据必须带命中测试（`elementFromPoint`），只查 `querySelector` 会点到不可见元素。
+4. **可编程入口 = `window.lakeNative`（49 方法）+ `window.__lakePerf`**：自动化验收（含 F16 计时）全靠它；
+   换架构也必须保留等价入口（否则验收退回手工）。
 5. **弱网可复现**：模拟器 `-netdelay gprs -netspeed gprs`（≈80kbps / 500ms RTT）。
+6. **一个内核消费者必须自带宽样式**：内核 CSS 目前由消费者模块 import（桌面 `styles/index.css`、移动 `editor/DocumentEditor.tsx`、
+   移动 `home/QuickNoteComposer.tsx`）。历史缺陷：小记作为冷启动后**第一个**内核消费者时渲染成大图标 + 原生 file input。
+   改动装载/入口时必须重新验证这一条。
 
-### B. 需要重构替掉的既有结构（现状对照）
-- `src/mobile/bridge.ts`：`window.lakeNative` 兼容契约 + **一条 `KeyedAsyncQueue`（key 固定 `main`）**，把「整轮同步（含全部网络往返）」
-  与「所有本地写（saveNote / 小记 / 目录 CRUD / 回收站恢复与彻底删除 / 历史 / GC）」**完全互斥** ⇒ 弱网下本地写要等整轮同步
-  （实测 **152s**，见下面 D 的 F16）。桌面**没有**该问题（维护锁只包 同步 / 备份 / 定期 GC）。
-- `src/mobile/secretStore.ts`：当前是 WebCrypto AES-GCM + **localStorage 密文**（261009 刚从 IndexedDB 改过来）；
-  **正解仍是 native / Keystore-backed**（该文件头注释与 §17.5 的既定方向）⇒ 建议新架构直接吸收，别让密文继续留在 WebView 存储里。
-- 视图分派（`NotebookWorkspace`）：doc 可编辑（Lake 内核单实例）；**usheet（Univer 只读）/ 多维表 / 画板**只读。
-- 内核：与桌面**同一套**（lakex vendor + `@univerjs/*` 1.0.3 精确锁）；`@univerjs/ui` 有我们一个**补丁**（floating 层收口，两端共用）
-  —— 重构若改编辑器装载方式，补丁 + `univerContract.test.ts` 护栏 + `scripts/usheet-kernel-probes.mjs` 要一起复核。
+## 六、未结项（登记的债，改前先看）
 
-### C. 本轮已修 + 已验收（请当需求保留，别在重做时丢掉）
-1. **S3 密钥跨重启**（已修）：密文进 localStorage + 缺失时给可执行提示（`assertS3Credentials()`，同步 / 测连通 / 上传三条路径共用）。
-   设备验收：保存 →（force-stop 重启）→ `skLen 40` / 连通 OK / 同步成功。**需求**：密钥必须跨重启可用，缺失时明确提示而非签名错。
-2. **冷启动首用内核时内核样式缺席**（已修）：小记编辑器渲染成大图标 + 原生 `<input type=file>`；根因是 kernel CSS 只由文档编辑器模块引。
-   **需求**：任何内核消费者都要保证内核样式已加载。
-3. **小记写作卡两字按钮折行**（已修，`.mobile-qn-btn` nowrap）。
-4. **移动端逐页走查装置**：`scripts/css-audit/mobile-walkthrough.mjs`（22 屏 / 设备级截图 / 五类探针 / 可只复跑指定屏），覆盖面与未覆盖边界见 `HANDOFF.md` §8。
-5. **画板只读查看器**需要一篇 board 文档；模拟器按 `HANDOFF.md` §8 的种子法补了 `mobile-board-1`。
+| 项 | 现状 | 影响 |
+| --- | --- | --- |
+| ~~内核资源本地化插件两份~~ | **已收口（261010）**：单一来源 `scripts/lakexLocalize.ts`，两端传入各自 CSP；移动端同时补上 CSS `@import` 兜底 | — |
+| ~~CSP `script-src` 含 `unsafe-inline` / `unsafe-eval`~~ | **已收紧（261010）**：内联 KITCHEN_URL 只按 **sha256 hash** 放行（hash 与桌面 prod 相同）；两个 unsafe 均已去掉。设备验证零违规，护栏 `mobileCspSingleSource.test.ts` 重算 hash 比对 | — |
+| ~~SecretStore 非硬件级~~ | **已换 Android Keystore（261010 设备验证通过）**：`SecureStorePlugin.kt` + 迁移层；localStorage 降为 Web/vitest 后端 | — |
+| ~~内核预热/复用~~ | **已测并给出结论（261010，AVD `lake_mobile`）**。**三条路径对比**（`scripts/mobile-coldopen-breakdown.mjs`，每次 `Page.reload` 重置 keep-alive 后量真挂载，页内 `performance.now()`）：**深链小记（无内核）88/65/82ms** · 首页小记写作卡（内核）656/412/290ms · 打开文档（内核）427/366/347ms；**内核 chunk 加载/求值仅 27ms**。另：冷启动 Activity 490ms、keep-alive 热切换 ≈73ms。⇒ **结论：不立项预热/池化** —— 单 WebView 无池可建；不挂内核的小记已秒开；内核路径瓶颈在**实例化与首帧**（chunk 只 27ms），复开已由 keep-alive 覆盖（73ms）。数据留表不再投工 | ✅ 已收口 |
+| ~~`envAdapter` 只用 1/N~~ | **已收口（261010）**：外链端到端实测**正常**（点后前台切到 Chrome）⇒ `openLink` 不必接；`longPressCard` 官方语义是「使用方自实现 UI」⇒ 我方自写手势等价、保留。见 `LAKEX-CONTRACT §5.27`（含一次误判的修订记录） | — |
 
-### D. 与重构重叠、需要架构方一句话的点
-- **F16（弱网下同步中本地写等 ~2.5 分钟，已量完并判定立项）**：原计划「**网络阶段不占主队列 + DB 片段内短锁 + 跨端对拍先行**」。
-  若新架构要换掉移动端的数据/同步编排，请把 F16 作为**新架构的硬约束**（用户写不得被网络阻塞），我就不在旧 `bridge.ts` 上打补丁；
-  若仍走旧桥，我按原计划实现（对拍用例先行）。**在你回话前，F16 保持不动。**
-- 桌面侧与本重构无关（桌面走查批次、表格中期项），不冲突。
-- 两端共用物不要顺手删：`@univerjs/ui` 补丁、`univerContract.test.ts`、`scripts/usheet-kernel-probes.mjs`、`walkthrough.mjs` / `mobile-walkthrough.mjs`。
-
-### E. 需要架构方回的三个问题
-1. 新架构是否替换 `bridge.ts` / 全局 `KeyedAsyncQueue` / `secretStore`？（这决定 F16 的落点）
-2. 是否需要把 `mobile-walkthrough.mjs` 的设备级截图与探针口径接进新架构的验收流程？
-3. 新架构是否保留 `window.lakeNative` 等价的可编程入口？（我要用它量 F16、做自动验收）
 ## 验证
-- 构建：`node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts`
-- 安装：`bash scripts/android-build.sh --sync --install`
-- CDP：`bash scripts/emu-cdp.sh`
-- 模拟器：`bash scripts/emu-up.sh`
-- 真机重点：图片/附件、V1 同步、编辑保存、键盘安全区、长文档大纲、剪贴板。
+
+```bash
+node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts
+bash scripts/android-build.sh --sync --install
+bash scripts/emu-up.sh            # AVD lake_mobile（Pixel 6 / API 36 / arm64）
+bash scripts/emu-cdp.sh 9335      # -> http://127.0.0.1:9335/json/list
+bash scripts/mobile-preview.sh
+npm run check:mobilesnap          # 6 态视觉基线
+```
+
+真机重点：图片/附件、V1 同步、编辑保存、键盘安全区、长文档大纲、剪贴板。

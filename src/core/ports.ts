@@ -1,5 +1,5 @@
 /**
- * 共享端口接口（Phase 0A：移动端方案 §4.1/§6.3/§6.4/§17.5）。
+ * 共享端口接口（跨端契约；移动端现状与边界见 docs/MOBILE-TECH-STACK.md）。
  * - 只定义接口与类型，不包含实现——桌面/移动端 adapter 各自实现；
  * - 位于共享层 src/core（纯类型，零平台依赖），桌面与移动端从同一入口消费；
  * - 桌面 IPC 契约不变：桌面 adapter 组合现有 store/noteMetadataRepository 方法实现这些接口。
@@ -13,7 +13,7 @@ export interface CreateNotebookInput {
 }
 
 /**
- * 目录树 Repository（移动端方案 §4.1）。
+ * 目录树 Repository（两端各自实现：桌面 src/desktop/treeRepositoryAdapter.ts，移动 src/mobile/bridge.ts）。
  * 与桌面 noteMetadataRepository 方法对齐（createNotebook/createGroup/renameTreeNode/
  * setNodeIcon/moveTreeNodeOrdered），移动端不重新实现这些规则。
  */
@@ -27,7 +27,7 @@ export interface TreeRepository {
 }
 
 /**
- * 平台安全密钥存储（移动端方案 §17.5）。
+ * 平台安全密钥存储（桌面 safeStorage / 移动 native-SecretStore —— 见 src/mobile/secretStore.ts 头注释的现状与硬约束）。
  * 平台实现：Electron → safeStorage（Keychain）；Android → Keystore-backed storage；测试 → memory fake。
  * Secret 不进入 SQLite 主表/IndexedDB 普通 kv/manifest/日志。
  */
@@ -37,7 +37,7 @@ export interface SecretStore {
   remove(key: string): Promise<void>;
 }
 
-/** 缓存分类统计（移动端方案 §17.4）：按类别报告可清理字节，UI 区分"能清/不能清"。 */
+/** 缓存分类统计：按类别报告可清理字节，UI 区分"能清/不能清"（当前仅移动端实现）。 */
 export interface CacheSummary {
   runtimeBlobBytes: number;
   tempFileBytes: number;
@@ -51,7 +51,7 @@ export interface ClearCacheResult {
 }
 
 /**
- * 派生缓存端口（移动端方案 §6.3）：只清理可重建数据。
+ * 派生缓存端口：只清理可重建数据（当前仅移动端实现）。
  * 永远不可清理：SQLite 主库/正文/未同步修改/.lake/历史快照/待上传资源/仍被引用的本地资源。
  */
 export interface CachePort {
@@ -59,7 +59,7 @@ export interface CachePort {
   clearDerivedCaches(): Promise<ClearCacheResult>;
 }
 
-/** 应用信息（移动端方案 §6.4）：Android 读 Capacitor/App 原生版本，桌面读 Electron/package 元数据。 */
+/** 应用信息：Android 读 Capacitor/App 原生版本，桌面读 Electron/package 元数据（当前仅移动端实现）。 */
 export interface AppInfo {
   name: string;
   version: string;

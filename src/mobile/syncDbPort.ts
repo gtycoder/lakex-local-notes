@@ -7,6 +7,7 @@ import { stageAssetWrites } from "./assetWrites.js";
 import { orphanFilenamesForNote } from "./noteRepository.js";
 import { createHistorySnapshot as insertHistorySnapshot } from "./historyRepository.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";
+import { withWriteLock } from "./maintenanceLocks";
 import type { MobileDb } from "./sqliteDb.js";
 
 export interface MobileSyncDbPortDeps {
@@ -54,6 +55,8 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   const SYNCBASE_LAST_UPLOADED_SQL = "UPDATE sync_base SET last_uploaded_hash=? WHERE note_id=?";
   const DECLARED_ASSET_SQL = "INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?) ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash";
   let batch: Array<{ statement: string; values: unknown[] }> | null = null;
+  /** 批开始时的 (note id → content_hash)：用于识别"批窗口内被本机编辑过"的条目（I2 的下载方向）。 */
+  let batchHashes: Map<string, string> | null = null;
   const queue = (statement: string, values: unknown[]): boolean => { if (!batch) return false; batch.push({ statement, values }); return true; };
   // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：全新导入的回收站条目
   // （L339 分支）靠它恢复原父——硬编码 NULL 会让「安卓首次同步拉到他端已删笔记 → 恢复」后 parent 卡在
@@ -63,7 +66,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     const d = getDb();
     await d.prepare(NOTE_UPSERT_SQL).run(...noteUpsertValues(note, content));
   };
-  return {
+  const port: SyncDbPort = {
     async getNote(id) {
       const d = getDb();
       const row = await d.prepare("SELECT id, title, content, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, doc_kind FROM notes WHERE id = ?").get(id);
@@ -107,20 +110,49 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       if (queue(NOTE_UPSERT_SQL, noteUpsertValues(note, content))) return;
       await applyRemoteNoteNow(note, content);
     },
-    async beginNoteBatch() { batch = []; },
+    async beginNoteBatch() {
+      batch = [];
+      // I2（下载方向）：批窗口（beginNoteBatch→flushNoteBatch）**跨网络取内容**，本机编辑可以插进来。
+      // 记下批开始时的 content_hash；窗口内被改过的笔记不应用远端版本，留给下一轮走引擎正常的
+      // 冲突流程（含被覆盖方历史留档）——避免"远端覆盖静默丢掉用户刚写的正文"。
+      const d = getDb();
+      const rows = await d.prepare("SELECT id, content_hash FROM notes").all() as Array<{ id: string; content_hash: string | null }>;
+      batchHashes = new Map(rows.map((r) => [String(r.id), String(r.content_hash ?? "")]));
+    },
     async flushNoteBatch() {
-      const items = batch; batch = null;
+      const items = batch;
+      const snapshot = batchHashes;
+      batch = null;
+      batchHashes = null;
       if (!items || items.length === 0) return;
       const d = getDb();
+      // "未变才应用"：批窗口内被本机改过的笔记，推迟远端应用（下一轮走正常冲突流程）。
+      let toWrite = items;
+      if (snapshot) {
+        const rows = await d.prepare("SELECT id, content_hash FROM notes").all() as Array<{ id: string; content_hash: string | null }>;
+        const current = new Map(rows.map((r) => [String(r.id), String(r.content_hash ?? "")]));
+        const deferred: string[] = [];
+        toWrite = items.filter((s) => {
+          const id = String(s.values[0]);
+          const before = snapshot.get(id);
+          const now = current.get(id);
+          if (before !== undefined && now !== undefined && before !== now) { deferred.push(id); return false; }
+          return true;
+        });
+        if (deferred.length > 0) {
+          console.info(`[mobile-sync] 批窗口内本机已编辑，推迟远端应用 ${deferred.length} 条（下一轮按冲突流程处理）`);
+        }
+      }
+      if (toWrite.length === 0) return;
       try {
         if (typeof d.executeSet === "function") {
-          await d.executeSet(items);
+          await d.executeSet(toWrite);
         } else {
-          await d.transaction(async () => { for (const s of items) await d.prepare(s.statement).run(...s.values); });
+          await d.transaction(async () => { for (const s of toWrite) await d.prepare(s.statement).run(...s.values); });
         }
       } catch {
         // 回退逐条：批量失败不整批丢弃，保持与逐条写等价的提交/报错点。
-        for (const s of items) await d.prepare(s.statement).run(...s.values);
+        for (const s of toWrite) await d.prepare(s.statement).run(...s.values);
       }
     },
     async applyRemoteTrash(id, content, title, trashedAt, deletedFromParentId, parentId, sortOrder) {
@@ -407,4 +439,28 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       console.log("[mobile-sync]", msg);
     },
   };
+  return withWriteLockPort(port);
+}
+
+/** 同步方法（返回非 Promise，如 assetFilePath）不能包：包装会把返回类型变成 Promise。 */
+const SYNC_METHODS = new Set<string>(["assetFilePath"]);
+
+/**
+ * 给端口的每个方法加**写域片段锁**（I1/I3）。
+ *
+ * 为什么需要：拆开写域与维护域之后，同步的 DB 写入与用户写可以并发 ⇒
+ * markSyncedIfUnchanged 这类「SELECT 后 UPDATE」的守卫会被用户写插进中间（丢更新窗口）。
+ * 加锁后：**一次端口调用进出各一次**，网络往返不在锁内 ⇒ 用户写最多等一次 DB 片段（毫秒级），
+ * 而不是等整轮同步（F16 实测 152.0s）。
+ *
+ * 约束：入域方法内部**不得**再调本端口方法（同域嵌套会自锁，KeyedAsyncQueue 无重入）。
+ */
+function withWriteLockPort(port: SyncDbPort): SyncDbPort {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(port)) {
+    out[key] = typeof value === "function" && !SYNC_METHODS.has(key)
+      ? (...args: unknown[]) => withWriteLock(() => (value as (...a: unknown[]) => unknown)(...args))
+      : value;
+  }
+  return out as unknown as SyncDbPort;
 }

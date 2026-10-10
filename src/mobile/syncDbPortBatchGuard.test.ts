@@ -1,0 +1,93 @@
+/**
+ * 批窗口守卫（I2 的下载方向）：beginNoteBatch→flushNoteBatch 之间**跨网络取内容**，
+ * 本机编辑可以插进来。flush 时必须"未变才应用"，否则远端版本会静默盖掉用户刚写的正文。
+ */
+import { describe, expect, it } from "vitest";
+import { createMobileSyncDbPort } from "./syncDbPort";
+import type { MobileDb } from "./sqliteDb.js";
+
+interface Row { content: string; content_hash: string; sync_state: string }
+
+/** 最小假库：只实现本测试用到的 SELECT id, content_hash 与 executeSet。 */
+function fakeDb(rows: Map<string, Row>) {
+  const executed: Array<{ statement: string; values: unknown[] }> = [];
+  const db = {
+    prepare(sql: string) {
+      return {
+        async all() {
+          if (/SELECT id, content_hash FROM notes/.test(sql)) {
+            return [...rows.entries()].map(([id, r]) => ({ id, content_hash: r.content_hash }));
+          }
+          return [];
+        },
+        async get() { return undefined; },
+        async run() { return undefined; },
+      };
+    },
+    async executeSet(items: Array<{ statement: string; values: unknown[] }>) { executed.push(...items); },
+    async transaction<T>(fn: () => Promise<T>) { return await fn(); },
+  };
+  return { db: db as unknown as MobileDb, executed };
+}
+
+const assetFs = {
+  assets: new Map<string, Uint8Array>(),
+  saveAssetFile: async () => {},
+  loadAssetFile: async () => null,
+  removeAssetFile: async () => {},
+  listNoteAssetKeys: async () => [] as string[],
+};
+
+function remoteNote(id: string, contentHash: string) {
+  return {
+    id, title: "远端标题", parentId: "nb", sortOrder: 0, updatedAt: "2026-10-10T00:00:00.000Z",
+    contentHash, isConflict: false, isLocked: false, lockedAt: null, icon: null,
+    trashedAt: null, deletedFromParentId: null, kind: "doc", assets: [],
+  } as unknown as Parameters<ReturnType<typeof createMobileSyncDbPort>["applyRemoteNote"]>[0];
+}
+
+describe("批窗口守卫：本机编辑不被远端静默覆盖", () => {
+  it("批窗口内笔记被本机编辑 ⇒ 该条远端应用被推迟", async () => {
+    const rows = new Map<string, Row>([["n1", { content: "本机旧", content_hash: "h-old", sync_state: "synced" }]]);
+    const { db, executed } = fakeDb(rows);
+    const port = createMobileSyncDbPort(() => db, assetFs);
+
+    await port.beginNoteBatch!();
+    await port.applyRemoteNote(remoteNote("n1", "h-remote"), "远端新");
+    // 批窗口内用户写了新内容（saveNote 会同时更新 content_hash 与 sync_state）
+    rows.set("n1", { content: "本机新", content_hash: "h-local-new", sync_state: "local" });
+    await port.flushNoteBatch!();
+
+    expect(executed).toHaveLength(0);
+  });
+
+  it("批窗口内没被动过 ⇒ 正常应用远端版本", async () => {
+    const rows = new Map<string, Row>([["n1", { content: "本机旧", content_hash: "h-old", sync_state: "synced" }]]);
+    const { db, executed } = fakeDb(rows);
+    const port = createMobileSyncDbPort(() => db, assetFs);
+
+    await port.beginNoteBatch!();
+    await port.applyRemoteNote(remoteNote("n1", "h-remote"), "远端新");
+    await port.flushNoteBatch!();
+
+    expect(executed).toHaveLength(1);
+    expect(String(executed[0].values[0])).toBe("n1");
+  });
+
+  it("仅推迟被改动的那条，同批其它笔记照常应用", async () => {
+    const rows = new Map<string, Row>([
+      ["n1", { content: "a", content_hash: "h1", sync_state: "synced" }],
+      ["n2", { content: "b", content_hash: "h2", sync_state: "synced" }],
+    ]);
+    const { db, executed } = fakeDb(rows);
+    const port = createMobileSyncDbPort(() => db, assetFs);
+
+    await port.beginNoteBatch!();
+    await port.applyRemoteNote(remoteNote("n1", "r1"), "远端1");
+    await port.applyRemoteNote(remoteNote("n2", "r2"), "远端2");
+    rows.set("n1", { content: "a2", content_hash: "h1-new", sync_state: "local" });
+    await port.flushNoteBatch!();
+
+    expect(executed.map((e) => String(e.values[0]))).toEqual(["n2"]);
+  });
+});

@@ -639,6 +639,18 @@ export class QuickNotesStore {
     this.db.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
   }
 
+  /**
+   * 记账快照保护（I2，见 src/core/maintenancePolicy）：仅当本地当前 content_hash 仍等于 expectedContentHash
+   * （= 同步期间未被编辑）才标 synced；否则保持 local，下轮重传。
+   * 对齐 Lake 侧的 markSyncedIfUnchanged 与移动端同名实现。
+   */
+  markSyncedIfUnchanged(id: string, expectedContentHash: string): void {
+    const row = this.db.prepare("SELECT content_hash FROM quick_notes WHERE id=?").get(id) as { content_hash: string } | undefined;
+    if (!row) return;
+    if (row.content_hash !== expectedContentHash) return;
+    this.markSynced(id);
+  }
+
   /** 是否处于"小记回收站恢复后待同步"状态（显式恢复标记）。 */
   isRestorePending(id: string): boolean {
     return this.queries.isRestorePending(id);

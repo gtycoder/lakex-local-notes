@@ -1,32 +1,27 @@
 import { defineConfig, type Plugin } from "vite";
 import fs from "node:fs";
 import react from "@vitejs/plugin-react";
+import { lakexAlipayLocal, lakexGwUrlLocalPostcss } from "./scripts/lakexLocalize";
 
-/** 移动端独立构建配置（M0 POC）：
+/** 移动端独立构建配置：
  * - 入口 mobile.html → dist-mobile（桌面 vite.config.ts / dist 零改动，遵守「桌面行为零变化」红线）
  * - 无 electron 插件（Capacitor WebView 宿主）
- * - lakex alipay 资源本地化逻辑与 vite.config.ts 相同（POC 复制，正式迁移时抽共享模块）
+ * - lakex alipay 资源本地化（含 CSS @import 内联兜底）走 scripts/lakexLocalize.ts —— **与桌面共用一份**，改一处两端生效
  */
 
-const ALIPAY_JS_REUSE: Record<string, string> = {
-  "https://gw.alipayobjects.com/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js": "/vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js",
-  "https://gw.alipayobjects.com/render/p/yuyan_v/180020010000005484/7.1.27/CodeMirror.js": "/vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js",
-  "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/katex.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js",
-  "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
-};
-/** 少数非 gw host 的运行期图片：镜像后按完整 URL 精确重写（basename 有撞名风险，故用整串精确匹配）。 */
-const MIRROR_EXACT: Record<string, string> = {
-  "https://mdn.alipayobjects.com/huamei_0prmtq/afts/img/A*KA8xSYmgiYgAAAAAAAAAAAAADvuFAQ/original": "/vendor/lakex/misc/drawnix-default.jpg",
-};
 
-/** 移动端 CSP（M0 POC）：
+/** 移动端 CSP —— **唯一来源**（mobile.html 只留 %MOBILE_CSP% 占位符，构建期注入）：
  * - Capacitor Android WebView 默认 scheme：https://localhost（androidScheme=https）
  * - connect-src 放行七牛 S3 endpoint（https://s3.cn-north-1.qiniucs.com）与桌面资源端口（http://127.0.0.1:*）
  * - 资源全本地化（public/vendor + vendor/cdn），不放行外部 CDN
- * - POC 阶段 script-src 含 'unsafe-inline'（KITCHEN_URL 内联脚本）；正式版按桌面 prod 用 sha256 hash 收紧 */
+ * - script-src **已收紧（261010）**：不放开 unsafe-inline / unsafe-eval，内联 KITCHEN_URL 只按 sha256 hash 放行
+ *   （hash 与桌面 prod 相同；漂移护栏见 src/mobile/mobileCspSingleSource.test.ts） */
 const MOBILE_CSP =
   "default-src 'self' https://localhost capacitor://localhost; " +
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://localhost capacitor://localhost; " +
+  // 261010 收紧：内联脚本只放行 mobile.html 里那一句 KITCHEN_URL 的 sha256 hash（与桌面 prod 同款、hash 相同）；
+  // 去掉 unsafe-inline 与 unsafe-eval —— 全产物 chunk 实测不含 new Function/eval，也没有第二个内联脚本。
+  // hash 漂移护栏：src/mobile/mobileCspSingleSource.test.ts 会拿 mobile.html 的内联脚本重算并比对。
+  "script-src 'self' 'sha256-r1Dc4EBzntnjCYkAEc8BC4xSaA3dOE5dL5hlL2pG/6s=' https://localhost capacitor://localhost; " +
   "style-src 'self' 'unsafe-inline'; " +
   // 本地资源服务（http://127.0.0.1:19876）是 canonical URL 的真实来源：img/media 都要放行
   "img-src 'self' data: blob: https://localhost http://127.0.0.1:*; " +
@@ -67,50 +62,21 @@ const MOBILE_PREVIEW_HTML = `<!doctype html>
 </html>
 `;
 
-function lakexAlipayLocalMobile(): Plugin {
+/** 移动端构建收尾：Capacitor webDir 入口必须是 index.html；并生成浏览器预览宿主页。 */
+function mobileBundleFinalize(): Plugin {
   return {
-    name: "lakex-alipay-local-mobile",
-    enforce: "pre",
-    transformIndexHtml(html) {
-      // 正则强替换 CSP meta content（兼容占位符或已被处理成旧值——与桌面同款修复：
-      // vite8 收到的 html 里 %VITE_CSP% 可能已消失，字面 replace 不匹配导致旧 CSP 残留）
-      return html.replace(
-        /(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/,
-        `$1${MOBILE_CSP}$2`
-      );
-    },
-    /** Capacitor webDir 入口必须是 index.html：构建后复制 mobile.html → index.html；并生成浏览器预览宿主页 */
+    name: "mobile-bundle-finalize",
     closeBundle() {
       fs.copyFileSync("dist-mobile/mobile.html", "dist-mobile/index.html");
       fs.writeFileSync("dist-mobile/preview.html", MOBILE_PREVIEW_HTML);
-    },
-    transform(code, id) {
-      if (!id.includes("lakex-doc-react")) return;
-      for (const [from, to] of Object.entries(MIRROR_EXACT)) {
-        if (code.includes(from)) code = code.replaceAll(from, to);
-      }
-      const cleanId = id.split("?")[0];
-      if (cleanId.endsWith(".css")) {
-        return code.replace(/url\(https:\/\/gw\.alipayobjects\.com\/[^)]+\)/g, (m) => {
-          const name = m.slice(4, -1).split("/").pop()!;
-          return `url(/vendor/lakex/alipay/${name})`;
-        });
-      }
-      if (cleanId.endsWith(".js") || cleanId.endsWith(".mjs")) {
-        return code.replace(/https:\/\/gw\.alipayobjects\.com\/[^"'`\s)]+/g, (m) => {
-          const reuse = ALIPAY_JS_REUSE[m];
-          if (reuse) return reuse;
-          const name = m.split("/").pop()!;
-          return `/vendor/lakex/alipay/${name}`;
-        });
-      }
-      return code;
     },
   };
 }
 
 export default defineConfig({
-  plugins: [lakexAlipayLocalMobile(), react()],
+  plugins: [lakexAlipayLocal({ csp: MOBILE_CSP, name: "lakex-alipay-local-mobile" }), mobileBundleFinalize(), react()],
+  // CSS @import 内联兜底（与桌面同款）：Vite 会把 vendor 样式内联进入口表、绕过按模块 id 的 transform
+  css: { postcss: { plugins: [lakexGwUrlLocalPostcss()] } },
   resolve: {
     alias: {
       "@plait-board/react-board": "lakex-drawnix-react-board",

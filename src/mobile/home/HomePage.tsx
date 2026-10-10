@@ -10,7 +10,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash, FolderPlus } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
-import type { POCNoteSummary } from "../noteRepository";
+import type { LocalNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
@@ -43,7 +43,7 @@ export interface HomePageProps {
   tab: "quick" | "library";
   notebooks: TreeNode[];
   /** 全部笔记（「最近文档」用，按 updatedAt 取最近 N 条） */
-  notes: POCNoteSummary[];
+  notes: LocalNoteSummary[];
   quickNotes: MobileQuickNote[];
   /** 笔记本 → 文档数 */
   docCounts: Record<string, number>;

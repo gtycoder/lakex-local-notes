@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f6f8" />
-    <!-- 移动端 CSP：硬编码（含 'unsafe-eval' 供 sql.js WASM、七牛 S3 connect-src）。
-         放行 Capacitor Android WebView（https://localhost）自身；不放行外部 CDN。 -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://localhost capacitor://localhost; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://localhost capacitor://localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://localhost; font-src 'self' data:; connect-src 'self' https://localhost https://*.s3.cn-north-1.qiniucs.com https://s3.cn-north-1.qiniucs.com http://127.0.0.1:* ws://127.0.0.1:*; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <!-- 移动端 CSP：**单一来源 = vite.mobile.config.ts 的 MOBILE_CSP**，构建期注入本占位符。
+         ⚠️ 不要在这里手写策略 —— 第二份副本必然与构建脚本漂移（261010 收口前的实际状态）。
+         注入正确性由 src/mobile/mobileCspSingleSource.test.ts 卡住。 -->
+    <meta http-equiv="Content-Security-Policy" content="%MOBILE_CSP%" />
     <title>Lake Notes</title>
   </head>
   <body>

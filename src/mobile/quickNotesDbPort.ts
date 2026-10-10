@@ -248,6 +248,15 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
       // restore_pending_at 一并清除：恢复已生效后残留标记会让本设备永远 local-wins（墓碑永胜被破坏）。
       await d.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
     },
+    async markSyncedIfUnchanged(id, expectedContentHash) {
+      // I2（见 core/maintenancePolicy）：同步期间内容被编辑 ⇒ 不标 synced，保持 local 下轮重传。
+      // 判据是**实算内容 hash**（与 content_hash 列同源：sha256Sync(序列化字节)），不读可能陈旧的列。
+      const row = await d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content?: unknown } | undefined;
+      if (!row) return;
+      const currentHash = sha256Sync(new TextEncoder().encode(String(row.content)));
+      if (currentHash !== expectedContentHash) return;
+      await d.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
+    },
     log(msg) {
       console.log("[mobile-quick-sync]", msg);
     },

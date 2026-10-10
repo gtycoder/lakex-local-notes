@@ -7,7 +7,7 @@ import { sha256Sync } from "../core/sha256Sync.js";
 import { loadAssetBytesFs, listNoteAssetKeysFs } from "./assetFs";
 import type { MobileDb } from "./sqliteDb";
 
-export interface POCNote {
+export interface LocalNote {
   id: string;
   title: string;
   content: string;
@@ -18,7 +18,7 @@ export interface POCNote {
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
-export interface POCNoteSummary {
+export interface LocalNoteSummary {
   id: string;
   title: string;
   updatedAt: string;
@@ -31,11 +31,11 @@ function normalizeDocKind(value: unknown): "doc" | "usheet" | "bitable" | "board
   return value === "usheet" || value === "bitable" || value === "board" ? value : "doc";
 }
 
-function rowToNote(r: Record<string, unknown>): POCNote {
+function rowToNote(r: Record<string, unknown>): LocalNote {
   return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null, kind: normalizeDocKind(r.doc_kind) };
 }
 
-function rowToNoteSummary(r: Record<string, unknown>): POCNoteSummary {
+function rowToNoteSummary(r: Record<string, unknown>): LocalNoteSummary {
   return { id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
 }
 
@@ -88,12 +88,12 @@ export async function orphanFilenamesForNote(d: MobileDb, noteId: string): Promi
   return new Set(rows.map((r) => r.filename));
 }
 
-export async function listNotes(d: MobileDb): Promise<POCNoteSummary[]> {
+export async function listNotes(d: MobileDb): Promise<LocalNoteSummary[]> {
   const rows = await d.prepare("SELECT id, title, updated_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
   return rows.map(rowToNoteSummary);
 }
 
-export async function readNote(d: MobileDb, id: string): Promise<POCNote | null> {
+export async function readNote(d: MobileDb, id: string): Promise<LocalNote | null> {
   const row = await d.prepare("SELECT id, title, content, updated_at, parent_id, doc_kind FROM notes WHERE id = ?").get(id);
   return row ? rowToNote(row) : null;
 }
@@ -188,7 +188,7 @@ export async function trashNote(d: MobileDb, id: string): Promise<void> {
   await removeNoteFromIndex(d, id);
 }
 
-export async function listTrashed(d: MobileDb): Promise<POCNote[]> {
+export async function listTrashed(d: MobileDb): Promise<LocalNote[]> {
   const rows = await d.prepare("SELECT id, title, content, updated_at FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all();
   return rows.map(rowToNote);
 }

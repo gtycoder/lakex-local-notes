@@ -1,5 +1,5 @@
 /**
- * S3 请求分层（M0 POC）：AWS SDK requestHandler → Capacitor 原生 HTTP（Android OkHttp）。
+ * S3 请求分层：AWS SDK requestHandler → Capacitor 原生 HTTP（Android OkHttp）。
  *
  * 背景：WebView 内直接 fetch 会撞 CORS（七牛桶默认无 CORS 规则，且用户不改云端配置）。
  * 参考思源：网络请求在原生层（Go kernel）做，WebView 只做 UI——我们等价地把

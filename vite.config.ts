@@ -2,21 +2,12 @@ import { readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron";
+import { lakexAlipayLocal, lakexGwUrlLocalPostcss } from "./scripts/lakexLocalize";
 
 /** V5 §5.6 全本地化：lakex 编辑器 CSS/JS 内 gw.alipayobjects.com 资源（字体/图标 SVG/动态加载脚本）
  * 已本地镜像：public/vendor/lakex/alipay/（字体/图标）+ vendor/cdn/（katex/CodeMirror，复用现有本地）。
  * dev/build 统一重写为本地绝对路径，CSP 不再放行外部域。 */
-const ALIPAY_JS_REUSE: Record<string, string> = {
-  // 动态加载脚本 → 复用 index.html/vendor 已在用的本地文件
-  "https://gw.alipayobjects.com/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js": "/vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js",
-  "https://gw.alipayobjects.com/render/p/yuyan_v/180020010000005484/7.1.27/CodeMirror.js": "/vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js",
-  "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/katex.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js",
-  "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
-};
-/** 少数非 gw host 的运行期图片：镜像后按完整 URL 精确重写（basename 有撞名风险，故用整串精确匹配）。 */
-const MIRROR_EXACT: Record<string, string> = {
-  "https://mdn.alipayobjects.com/huamei_0prmtq/afts/img/A*KA8xSYmgiYgAAAAAAAAAAAAADvuFAQ/original": "/vendor/lakex/misc/drawnix-default.jpg",
-};
+// 镜像映射表 + CSS 兜底 + transform 都在 scripts/lakexLocalize.ts（**桌面与移动端共用一份**，改一处两端生效）。
 /** V5 §5.6：dev/prod 双 CSP（构建期注入，避免 .env 依赖）。
  * dev：vite/react-refresh 内联 preamble 需要 unsafe-inline；
  * prod：script-src 无 unsafe-inline，内联 KITCHEN_URL 脚本用 sha256 hash 放行。
@@ -29,58 +20,7 @@ const MIRROR_EXACT: Record<string, string> = {
 const DEV_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' http://127.0.0.1:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' data: http://127.0.0.1:* ws://127.0.0.1:1421; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
 const PROD_CSP = "default-src 'self'; script-src 'self' 'sha256-r1Dc4EBzntnjCYkAEc8BC4xSaA3dOE5dL5hlL2pG/6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' data: http://127.0.0.1:*; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
 
-/** Vite 的 CSS `@import` 会把 vendor 样式**内联**进入口表，绕过按模块 id 判断的 transform
- * （桌面就是因此漏改：dist CSS 里残留 186 处 gw 引用）。PostCSS 在 `@import` 内联**之后**运行，
- * 所以在 CSS 层兜底把 gw URL 改成本地 `/vendor/lakex/alipay/<basename>`（dev/build 都生效）。 */
-function lakexGwUrlLocal() {
-  return {
-    postcssPlugin: "lakex-gw-url-local",
-    Declaration(decl: { value: string }) {
-      if (!decl.value || !decl.value.includes("gw.alipayobjects.com")) return;
-      decl.value = decl.value.replace(/https:\/\/gw\.alipayobjects\.com\/[^\s)"']+/g, (m) => {
-        const reuse = ALIPAY_JS_REUSE[m];
-        if (reuse) return reuse;
-        return `/vendor/lakex/alipay/${m.split("/").pop()}`;
-      });
-    },
-  };
-}
-
-function lakexAlipayLocal(): Plugin {
-  return {
-    name: "lakex-alipay-local",
-    enforce: "pre",
-    transformIndexHtml(html, ctx) {
-      const csp = ctx.mode === "development" ? DEV_CSP : PROD_CSP;
-      // 正则强替换 CSP meta 的 content（兼容占位符 %VITE_CSP% 或已被其它步骤写成的旧值——
-      // 实测 vite8 收到的 html 里占位符已消失，字面 replace 不匹配导致旧 CSP 残留）
-      return html.replace(/(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/, `$1${csp}$2`);
-    },
-    transform(code, id) {
-      if (!id.includes("lakex-doc-react")) return;
-      for (const [from, to] of Object.entries(MIRROR_EXACT)) {
-        if (code.includes(from)) code = code.replaceAll(from, to);
-      }
-      // JS 模块 id 带 ?v= query，先剥离再判扩展名
-      const cleanId = id.split("?")[0];
-      if (cleanId.endsWith(".css")) {
-        return code.replace(/url\(https:\/\/gw\.alipayobjects\.com\/[^)]+\)/g, (m) => {
-          const name = m.slice(4, -1).split("/").pop()!;
-          return `url(/vendor/lakex/alipay/${name})`;
-        });
-      }
-      if (cleanId.endsWith(".js") || cleanId.endsWith(".mjs")) {
-        return code.replace(/https:\/\/gw\.alipayobjects\.com\/[^"'`\s)]+/g, (m) => {
-          const reuse = ALIPAY_JS_REUSE[m];
-          if (reuse) return reuse;
-          const name = m.split("/").pop()!;
-          return `/vendor/lakex/alipay/${name}`;
-        });
-      }
-      return code;
-    },
-  };
-}
+/** 移动端/桌面共用的本地化实现见 scripts/lakexLocalize.ts（见该文件头注释与「未结项」登记）。 */
 
 /** 主进程运行期依赖（package.json dependencies）：派生 external，而不是逐个硬编码。
  *  硬编码的旧写法（better-sqlite3/sharp/electron-log/@aws-sdk…）在新增原生依赖或传递依赖时
@@ -95,7 +35,7 @@ function isMainProcessExternal(id: string): boolean {
 
 export default defineConfig({
   plugins: [
-    lakexAlipayLocal(),
+    lakexAlipayLocal({ csp: (mode) => (mode === "development" ? DEV_CSP : PROD_CSP), name: "lakex-alipay-local" }),
     react(),
     electron([
       {
@@ -113,7 +53,7 @@ export default defineConfig({
     },
   },
   clearScreen: false,
-  css: { postcss: { plugins: [lakexGwUrlLocal()] } },
+  css: { postcss: { plugins: [lakexGwUrlLocalPostcss()] } },
   // lakex CSS 含 alipay 外部 URL，需走源码 transform（lakexAlipayLocal）本地化 → 排除依赖预构建
   optimizeDeps: {
     // 必须把「被 exclude 的 vendor 包内部按需 import 的重型依赖」全部预打包。

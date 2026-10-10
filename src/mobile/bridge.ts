@@ -1,9 +1,12 @@
 /**
- * POC JS 桥（M0/M1）：window.lakeNative 兼容接口的移动端实现。
+ * 移动端运行时桥：实现 window.lakeNative 契约（对齐桌面 preload 的 IPC 语义），
+ * 数据层与同步编排都在这里接线；同步决策不在本文件，一律复用 src/core 的纯函数。
+ *
  * - 数据层：Android 原生 SQLite（WAL，见 nativeSqliteDb.ts）
  * - S3：@aws-sdk/client-s3 + CapacitorHttpHandler（原生传输层，无 CORS）
- * - 同步：syncEngine（manifest v4 协议，复用 src/core 决策纯函数）
- * - 范围 = docs/MOBILE-TECH-STACK.md 的最小 IPC 集（POC 版）
+ * - 同步：共享 src/core/syncEngine（**Lake Manifest V1**，260928 协议重置）
+ * - 互斥域：写域 / 维护域分离，判据见 src/core/maintenancePolicy.ts（F16）
+ * - 结构：docs/MOBILE-TECH-STACK.md；跨端能力矩阵见该文档
  */
 import { NativeSqliteDb } from "./nativeSqliteDb";
 import { writeLocalStorage } from "../lib/localStorageSafe";
@@ -18,7 +21,8 @@ import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPor
 import { buildGcKeepSet } from "../core/gcDecisions.js";
 import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
 import type { Manifest } from "../core/manifestTypes.js";
-import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
+import { classifyOp, type MaintenanceOp, type WriteOp } from "../core/maintenancePolicy.js";
+import { maintenanceQueue, writeLock } from "./maintenanceLocks";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { emptyLakeBody } from "../core/lakeDocForm.js";
 import { createCapacitorS3Store } from "./s3Store";
@@ -44,7 +48,7 @@ import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
 import * as noteRepository from "./noteRepository.js";
 import { indexNote, reconcileIndex } from "./searchIndex.js";
-import type { POCNote, POCNoteSummary } from "./noteRepository.js";
+import type { LocalNote, LocalNoteSummary } from "./noteRepository.js";
 import * as trashRepository from "./trashRepository.js";
 import * as quickNotesRepository from "./quickNotesRepository.js";
 import { createMobileSyncDbPort } from "./syncDbPort.js";
@@ -100,9 +104,19 @@ let db: NativeSqliteDb | null = null;
 let dbInitialization: Promise<NativeSqliteDb> | null = null;
 /** 运行期资源缓存（新上传/同步中使用）；持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
 const assets = new Map<string, Uint8Array>();
-/** 主维护队列（GPT 审计 P2-6）：同步与本地写操作（保存/删除/恢复）串行化，防交错
- * 覆盖数据库写入/发布旧状态；小记同步与编辑竞态由队列闭合（引擎 markSynced 无"未变才标"守卫时也安全）。 */
-const maintenance = new KeyedAsyncQueue();
+/**
+ * 互斥域（判据单一来源：src/core/maintenancePolicy.ts —— F16 的红线化）。
+ *
+ * 旧实现把「整轮同步（含全部网络往返）」与「所有本地写」塞进**同一条** key 固定为 "main" 的队列，
+ * 于是弱网下用户保存要等整轮同步（实测 152.0s；基线写 32ms）。现按判据分两条：
+ *  - 写域 writeLock：本地写（saveNote / 目录 / 小记 / 历史 / 回收站 / GC 账本）——**不被网络阻塞**；
+ *  - 维护域 maintenanceQueue：轮次级网络与维护（syncNow / gcDeepCleanup / ensureTrashNoteAssets）——彼此串行。
+ *
+ * I3：两条队列都无重入 ⇒ **禁止同域嵌套**（由 src/mobile/maintenancePolicyCoverage.test.ts 静态卡住）。
+ * I2：跨网络窗口的「读 → 标记已同步」靠"未变才标"守卫，不靠全局互斥
+ *     （Lake 侧既有 markSyncedIfUnchanged；小记侧守卫见 quickNotesSyncEngine）。
+ */
+// 两个域的实际实例见 ./maintenanceLocks（同步侧的 DB 片段短锁也取同一实例）。
 
 function assertResourceBytes(bytes: Uint8Array): void {
   if (sniffImageFormat(bytes) != null) {
@@ -208,10 +222,24 @@ async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false)
   }
 }
 
-async function runMaintenanceOperation<T>(operation: () => T | Promise<T>): Promise<T> {
-  return maintenance.run("main", async () => {
-    return await operation();
-  });
+/** 判据校验：调用点声明的类别必须与 src/core/maintenancePolicy.ts 的表一致（写错当场抛，不静默降级）。 */
+function assertOpClass(op: string, expected: "write" | "maintenance"): void {
+  const actual = classifyOp(op);
+  if (actual !== expected) {
+    throw new Error("桥操作 " + op + " 被判据登记为 " + actual + "，但这里按 " + expected + " 入队（改其一必须同时改另一处）");
+  }
+}
+
+/** 入**写域**：本地写。可与网络阶段并行，同域内串行。 */
+function runWrite<T>(op: WriteOp, operation: () => T | Promise<T>): Promise<T> {
+  assertOpClass(op, "write");
+  return writeLock.run("write", async () => await operation());
+}
+
+/** 入**维护域**：轮次级网络/维护操作。禁止在其中持有写域（I1）。 */
+function runMaintenance<T>(op: MaintenanceOp, operation: () => T | Promise<T>): Promise<T> {
+  assertOpClass(op, "maintenance");
+  return maintenanceQueue.run("maintenance", async () => await operation());
 }
 
 export const bridge = {
@@ -232,7 +260,7 @@ export const bridge = {
 
   /** 新建 notebook：根层创建，名称必填（trim 校验，共享 treeRules），默认图标不落库（icon 由 setNodeIcon 单独写入）。 */
   async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
-    return maintenance.run("main", async () => {
+    return runWrite("createNotebook", async () => {
       const d = await ensureDb();
       const node = await treeRepository.createNotebook(d, input);
       return node;
@@ -241,7 +269,7 @@ export const bridge = {
 
   /** 新建 group：父节点必须存在（且非回收站），名称校验共享 treeRules。 */
   async createGroup(parentId: string, title: string): Promise<TreeNode> {
-    return maintenance.run("main", async () => {
+    return runWrite("createGroup", async () => {
       const d = await ensureDb();
       const node = await treeRepository.createGroup(d, parentId, title);
       return node;
@@ -249,7 +277,7 @@ export const bridge = {
   },
 
   async renameTreeNode(id: string, title: string): Promise<TreeNode> {
-    return maintenance.run("main", async () => {
+    return runWrite("renameTreeNode", async () => {
       const d = await ensureDb();
       const node = await treeRepository.renameTreeNode(d, id, title);
       // 重命名即时更新搜索索引（folder 重命名时 indexNote 找不到 notes 行，自动 no-op）。
@@ -259,7 +287,7 @@ export const bridge = {
   },
 
   async setNodeIcon(id: string, icon: string | null): Promise<TreeNode> {
-    return maintenance.run("main", async () => {
+    return runWrite("setNodeIcon", async () => {
       const d = await ensureDb();
       const node = await treeRepository.setNodeIcon(d, id, icon);
       return node;
@@ -267,7 +295,7 @@ export const bridge = {
   },
 
   async moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode> {
-    return maintenance.run("main", async () => {
+    return runWrite("moveTreeNodeOrdered", async () => {
       const d = await ensureDb();
       const node = await treeRepository.moveTreeNodeOrdered(d, id, parentId, orderedIds);
       return node;
@@ -276,18 +304,18 @@ export const bridge = {
 
   /** 同级重排（自定义排序）：单事务更新 sort_order，不改父节点。对齐桌面 reorderTreeNodes。 */
   async reorderSiblings(parentId: string | null, orderedIds: string[]): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("reorderSiblings", async () => {
       const d = await ensureDb();
       await treeRepository.reorderSiblings(d, parentId, orderedIds);
     });
   },
 
-  async listNotes(): Promise<POCNoteSummary[]> {
+  async listNotes(): Promise<LocalNoteSummary[]> {
     const d = await ensureDb();
     return await noteRepository.listNotes(d);
   },
 
-  async readNote(id: string): Promise<POCNote | null> {
+  async readNote(id: string): Promise<LocalNote | null> {
     const d = await ensureDb();
     return await noteRepository.readNote(d, id);
   },
@@ -317,7 +345,7 @@ export const bridge = {
   },
 
   async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
-    return maintenance.run("main", async () => {
+    return runWrite("saveQuickNote", async () => {
       const d = await ensureDb();
       const result = await quickNotesRepository.saveQuickNote(d, id, text, images);
       return result;
@@ -328,7 +356,7 @@ export const bridge = {
    * 与桌面端小记完全一致——纯文件存储，完全不用 BLOB。文件名用 buildAssetFilename 唯一化（同文件多次添加不覆盖）。
    * 全量替换本小记图片（编辑时传已有图片字节 + 新增字节；简单一致，不引入 staged/retained 两段式）。 */
   async saveQuickNoteWithImages(id: string, text: string, imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }> = []): Promise<string> {
-    return maintenance.run("main", async () => {
+    return runWrite("saveQuickNoteWithImages", async () => {
       const d = await ensureDb();
       const result = await quickNotesRepository.saveQuickNoteWithImages(d, id, text, imageFiles, {
         assets,
@@ -346,14 +374,18 @@ export const bridge = {
 
   /** 写草稿（写作者已在输入侧做防抖，这里只落库；图片一加入就已落盘，这里只记引用）。 */
   async saveQuickNoteDraft(draft: { id: string; text: string; images?: StoredQuickNoteImage[] }): Promise<void> {
-    const d = await ensureDb();
-    await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, images: draft.images ?? [], updatedAt: new Date().toISOString() });
+    return runWrite("saveQuickNoteDraft", async () => {
+      const d = await ensureDb();
+      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, images: draft.images ?? [], updatedAt: new Date().toISOString() });
+    });
   },
 
   /** 清除草稿（保存成功 / 用户主动取消后）。 */
   async clearQuickNoteDraft(): Promise<void> {
-    const d = await ensureDb();
-    await quickNotesRepository.clearQuickNoteDraft(d);
+    return runWrite("clearQuickNoteDraft", async () => {
+      const d = await ensureDb();
+      await quickNotesRepository.clearQuickNoteDraft(d);
+    });
   },
 
   /**
@@ -379,14 +411,14 @@ export const bridge = {
 
   /** 保存内核编辑器产出的小记正文（body + text 镜像 + 资源清单）。 */
   async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[] }): Promise<string> {
-    return maintenance.run("main", async () => {
+    return runWrite("saveQuickNoteContent", async () => {
       const d = await ensureDb();
       return await quickNotesRepository.saveQuickNoteContent(d, id, payload);
     });
   },
 
   async createQuickNote(text: string): Promise<string> {
-    return maintenance.run("main", async () => {
+    return runWrite("createQuickNote", async () => {
       const d = await ensureDb();
       const id = crypto.randomUUID();
       const result = await quickNotesRepository.saveQuickNote(d, id, text, []);
@@ -396,7 +428,7 @@ export const bridge = {
 
   /** 本地删除小记：软删（保留 content 供墓碑携带），同步时上传墓碑跨端传播删除。 */
   async deleteQuickNote(id: string): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("deleteQuickNote", async () => {
       const d = await ensureDb();
       await quickNotesRepository.deleteQuickNote(d, id);
     });
@@ -415,7 +447,7 @@ export const bridge = {
 
   /** 小记恢复（回收站 → active）：restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreQuickNote(id: string): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("restoreQuickNote", async () => {
       const d = await ensureDb();
       await quickNotesRepository.restoreQuickNote(d, id);
     });
@@ -423,7 +455,7 @@ export const bridge = {
 
   /** 小记彻底删除（回收站 → 不可恢复）：删行 + 删图片；保留墓碑记录（同步继续传播删除，正文已删 → 占位符 hash）。 */
   async purgeQuickNote(id: string): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("purgeQuickNote", async () => {
       const d = await ensureDb();
       await quickNotesRepository.purgeQuickNote(d, id, removeAssetBytesFs);
     });
@@ -433,7 +465,7 @@ export const bridge = {
    * gone（回收站 / sync_state='purged'）明确拒绝；missing 仅当无永久墓碑时初始化新文档；
    * 绝不 upsert 覆盖回收站/已 purge 的行，也不复活已写墓碑的条目。 */
   async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("saveNote", async () => {
       const d = await ensureDb();
       const state = await noteRepository.noteWriteState(d, id);
       if (state === "gone") throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
@@ -559,7 +591,7 @@ export const bridge = {
 
   /** 手动删除单个历史快照（对齐桌面 deleteHistory）。 */
   async deleteHistory(historyId: number): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("deleteHistory", async () => {
       const d = await ensureDb();
       await historyRepository.deleteHistory(d, historyId);
     });
@@ -573,7 +605,7 @@ export const bridge = {
 
   /** 保存历史快照设置（对齐桌面 saveHistorySettings）。 */
   async saveHistorySettings(settings: HistoryMobileSettings): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("saveHistorySettings", async () => {
       const d = await ensureDb();
       await historyRepository.saveHistorySettings(d, settings);
     });
@@ -581,7 +613,7 @@ export const bridge = {
 
   /** 给某笔记创建快照（定时自动快照用；读当前正文，24h 去重）。 */
   async snapshotNote(noteId: string): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("snapshotNote", async () => {
       const d = await ensureDb();
       await historyRepository.snapshotNote(d, noteId);
     });
@@ -589,7 +621,7 @@ export const bridge = {
 
   /** 历史快照清理（对齐桌面 cleanupHistory：分层保留 + 上限 + 保留天数，设置可配置）。 */
   async cleanupHistory(): Promise<{ deleted: number }> {
-    return runMaintenanceOperation(async () => {
+    return runWrite("cleanupHistory", async () => {
       const d = await ensureDb();
       const mobileDb = d;
       return await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
@@ -604,7 +636,7 @@ export const bridge = {
 
   /** 删除单个孤儿资源（本地文件 + 登记）。 */
   async deleteOrphanAsset(id: number): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("deleteOrphanAsset", async () => {
       const d = await ensureDb();
       await orphanAssetRepository.deleteOrphanAsset(d, id, {
         assets,
@@ -615,7 +647,7 @@ export const bridge = {
 
   /** 清理全部孤儿资源（本地文件 + 登记）。 */
   async cleanOrphanAssets(): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("cleanOrphanAssets", async () => {
       const d = await ensureDb();
       await orphanAssetRepository.cleanOrphanAssets(d, {
         assets,
@@ -626,7 +658,7 @@ export const bridge = {
 
   /** GC：登记待回收键（新 manifest 不再引用，对齐桌面 addS3GcPending）。 */
   async addS3GcPending(key: string): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("addS3GcPending", async () => {
       const d = await ensureDb();
       await gcRepository.addS3GcPending(d, key);
     });
@@ -634,7 +666,7 @@ export const bridge = {
 
   /** GC：从待回收表移除已被重新引用的键。 */
   async removeS3GcPending(keys: string[]): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("removeS3GcPending", async () => {
       const d = await ensureDb();
       await gcRepository.removeS3GcPending(d, keys);
     });
@@ -648,13 +680,13 @@ export const bridge = {
 
   /** GC：记录删除（对齐桌面 recordS3GcLog）。 */
   async recordS3GcLog(action: string, key: string, reason: string, ok: boolean): Promise<void> {
-    await runMaintenanceOperation(async () => {
+    await runWrite("recordS3GcLog", async () => {
       const d = await ensureDb();
       await gcRepository.recordS3GcLog(d, action, key, reason, ok);
     });
   },
 
-  async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
+  async createNote(title: string, parentId: string | null = null): Promise<LocalNote> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     // 无父新建 → 兜底父笔记本（存在的笔记本；无则自动创建"未分类"）
@@ -666,7 +698,7 @@ export const bridge = {
 
   /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑） */
   async trashNote(id: string): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("trashNote", async () => {
       const d = await ensureDb();
       await noteRepository.trashNote(d, id);
     });
@@ -674,7 +706,7 @@ export const bridge = {
 
   /** 回收站预览：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。 */
   async ensureTrashNoteAssets(id: string): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runMaintenance("ensureTrashNoteAssets", async () => {
       await downloadDeclaredAssetsFor([id], true);
     });
   },
@@ -687,7 +719,7 @@ export const bridge = {
   },
 
   /** 回收站列表 */
-  async listTrashed(): Promise<POCNote[]> {
+  async listTrashed(): Promise<LocalNote[]> {
     const d = await ensureDb();
     return await noteRepository.listTrashed(d);
   },
@@ -698,7 +730,7 @@ export const bridge = {
    * parent_id 不变（恢复即原地清 trashed_at，对齐 restoreTreeItem）。
    * 仅提供 API（lakeNative 契约/未来 UI 用），当前移动端 UI 未接入删除笔记本入口。 */
   async trashTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("trashTreeItem", async () => {
       const d = await ensureDb();
       await trashRepository.trashTreeItem(d, id, kind);
       await reconcileIndex(d);
@@ -713,12 +745,12 @@ export const bridge = {
 
   /** B2：恢复回收站项。folder = 恢复整棵（含深层子树）；note = 文档级恢复。恢复标记 restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("restoreTreeItem", async () => {
       const d = await ensureDb();
       // 261006 B 方案（与桌面一致）：恢复**不等网络**。puller 立刻返回，缺失资源排到本次任务之后
-      // 在后台按需补拉（onlyMissing，仍走同一串行队列，不嵌套 → 不会自锁）；失败只告警，下次同步补拉。
+      // 在后台按需补拉（onlyMissing，走**维护域**）：与当前写域不同域、且不 await ⇒ 不会自锁（I3）；失败只告警，下次同步补拉。
       await trashRepository.restoreTreeItem(d, id, kind, (noteIds) => {
-        void maintenance.run("main", () => downloadDeclaredAssetsFor(noteIds, true)).catch((error) => {
+        void runMaintenance("ensureTrashNoteAssets", () => downloadDeclaredAssetsFor(noteIds, true)).catch((error) => {
           console.warn("[trash] 恢复后的资源补拉失败（下次同步补拉）", error);
         });
         return Promise.resolve();
@@ -733,7 +765,7 @@ export const bridge = {
    * folder 墓碑（purged_at）供 isFolderPurged 下载过滤（防远端文件夹重新导入复活）。
    * 与收到他端 purge（applyRemotePurge：行保留标 purged、可恢复）语义不同：本地主动 purge 不可恢复。 */
   async purgeTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
-    return maintenance.run("main", async () => {
+    return runWrite("purgeTreeItem", async () => {
       const d = await ensureDb();
       await trashRepository.purgeTreeItem(d, id, kind);
       await reconcileIndex(d);
@@ -750,7 +782,7 @@ export const bridge = {
     writeLocalStorage(SYNC_STORAGE_KEY, JSON.stringify(next));
   },
 
-  // ---- S3（POC 通路验证） ----
+  // ---- S3（连接检查 / 单发上传 / 深度清理） ----
 
   async getS3Settings(): Promise<S3Settings | null> {
     try {
@@ -794,14 +826,6 @@ export const bridge = {
     }
   },
 
-  async uploadObject(key: string, body: Uint8Array | string): Promise<string> {
-    const cfg = await bridge.getS3Settings();
-    if (!cfg) throw new Error("S3 未配置");
-    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
-    const client = await createS3Client(cfg);
-    await client.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: body }));
-    return key;
-  },
 
   /** D8+：图片/附件上传（Lake 编辑器粘贴/插入调用）。本地落盘 + 返回 canonical URL（本地 AssetServer 服务）。
    * 附件（非图片）同样走本路径：任意字节落盘 + 保留原扩展名（与桌面 assetNaming 命名一致）。 */
@@ -873,7 +897,7 @@ export const bridge = {
     const keys = toDelete;
     const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
     if (keys.length > 0) {
-      await runMaintenanceOperation(async () => {
+      await runMaintenance("gcDeepCleanup", async () => {
         const mobileDb = d;
         for (const key of keys) await gcRepository.recordS3GcLog(mobileDb, "delete", key, "deep-clean", true);
       });
@@ -891,14 +915,14 @@ export const bridge = {
     });
   },
 
-  /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。
+  /** 整轮同步：Lake Manifest V1（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。
    * P2-5/6（GPT 审计）：结构化返回（notes/quickNotes 分字段）；主维护队列串行化防与本地写操作交错。 */
   async syncNow(): Promise<MobileSyncResult> {
     // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面 runSync 同一判据）
     if ((await mobileCloudState()) === "offline") {
       return { message: cloudStateHint("offline") ?? "云同步已关闭", notes: null, quickNotes: null };
     }
-    return maintenance.run("main", async () => {
+    return runMaintenance("syncNow", async () => {
       const cfg = await bridge.getS3Settings();
       if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
       // 同步也走同一条"密钥缺失"提示（别让用户以为"同步失败"却看不出该重填密钥）。

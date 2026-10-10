@@ -96,6 +96,14 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - 小记独立前缀 `quick-notes/` + 独立小记库 `quick-notes/metadata.sqlite3`。
 - **编辑器本机视图 = 设备本地**（用户 261006 审计「只改展示不得触发 S3」）：当前工作表 / 缩放 / 选区 / 滚动 / 折叠 / 画板视口这类**展示态不进正文、不标脏、不进 S3**；表格列宽/行高/隐藏/冻结与多维表视图配置（列宽/行高/隐藏/排序/筛选/分组/填色）仍属文档数据、照常同步。**编辑器 `onDirty` 必须只在正文真的变了时触发**。
 - **多维表导航 = 设备本地**（用户 261006 选 C）：`activeTableId` / 每张表的 `activeViewId` **不进正文真相** —— `useBitableSession.serializeBody` 序列化时恒写「第一张表 / 第一个视图」，切表 / 切视图只写 `localStorage`（`lake-notes-v3.bitable-nav.<noteId>`，见 `BitableEditor`；历史快照预览 `chrome=false` 不读写）。⇒ 切表不落盘、不标脏、不进 S3；每台设备各记各的。**不要**再把导航写回正文（会让纯导航产生一次 S3 上传）。
+- **互斥域 = 写域 / 维护域，判据单一来源 `src/core/maintenancePolicy.ts`**（261010 F16 定稿；移动端实例 `src/mobile/maintenanceLocks.ts`）：
+  **本地写**（saveNote / 目录 / 小记 / 历史 / 回收站 / 孤儿资产 / GC 账本 + 同步引擎的 DB 片段）入**写域**；
+  **轮次级网络与维护**（syncNow / gcDeepCleanup / 资产补拉）入**维护域**。三条不变量：
+  **I1** 网络往返不得持有写域（历史缺陷：两域共用一条队列 ⇒ 弱网下本地写等 **152.0s**，基线 32ms）；
+  **I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash 比较），不靠全局互斥
+  （Lake `markSyncedIfUnchanged` / 小记同名方法 / `syncDbPort.flushNoteBatch` 批窗口守卫）；
+  **I3** 同域内串行；**禁止同域嵌套**（KeyedAsyncQueue 无重入 ⇒ 自锁）。
+  桌面反向护栏 `electron/maintenanceQueueScope.test.ts`（维护队列只包维护操作）；规格与验收见 `docs/MOBILE-TECH-STACK.md` §二。
 
 ## 5. 数据路径与安全
 
@@ -107,6 +115,9 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 | 日志 A | `~/Library/Application Support/lake-notes-dev/logs/lake-notes.log` |
 | 日志 B | `$TMPDIR/lake-device-b/logs/lake-notes.log` |
 | 只读检查 DB | `workspace-default/metadata.sqlite3`（小记 `workspace-default/quick-notes/metadata.sqlite3`） |
+
+- **移动端 secret（S3 密钥）不落 WebView 存储**：走 Android Keystore（`android/.../SecureStorePlugin.kt` + `src/mobile/keystoreSecretStore.ts`），
+  密文在应用私有 SharedPreferences；`localStorageSecretStore` 只是 Web/vitest 后端 + 历史值迁移来源（261010 设备验证：重启后仍可读、localStorage 已无 secret）。
 
 ## 6. 关键命令
 
@@ -159,6 +170,18 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 18. **`electron-builder` 默认源在弱网下会整批失败**（症状 `Timeout awaiting 'request' for 600000ms`，且**不产出** `release/**/*.app`）：换镜像即可 —— `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/ npx electron-builder --dir --mac --arm64 --publish never`。判断"是不是网络"先看 `~/Library/Caches/electron` 是否为空。
 19. **打包版 .app 默认写正式数据目录** `~/Library/Application Support/lake-notes-electron`（§5 **禁止触碰**）⇒ 自己试跑打包产物**必须**覆盖 `LAKE_USER_DATA`：`env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA=/tmp/lake-x "./release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes"`。`npm run test:packaged` 已自带隔离 userData/端口，可放心跑。
 20. **e2e/冒烟脚本里"非 http(s) 页面"的判定不要写死 `file:`**：打包版页面是私有协议 `lake://app`（§4 壳层双 origin）。要表达"这是非 http 的本地页面"就写 `/^https?:$/.test(protocol)`，否则换 origin 后会误报（`e2e-drawnix-smoke.mjs` 踩过）。
+
+### 并发 / 互斥域
+21. **`KeyedAsyncQueue` 无重入 ⇒ 同域嵌套必自锁**（261010）：在同一 `key` 的任务里再 `run(同一个 key, …)` 会**永久挂起**（表现为"功能莫名不返回"，不是报错）。写互斥域时按 I3 自查：同一方法体内同域只允许一个取锁点，已取锁的方法不得再调同域的同类方法。护栏 `src/mobile/maintenancePolicyCoverage.test.ts` 静态卡住（含"同方法体同域多取锁"与"跨方法同域调用"两条）。
+
+### 移动端验收
+22. **移动端改动必须过走查装置**（261010 定为硬约定）：`npm run check:mobilesnap`（6 态视觉基线）+
+    `scripts/css-audit/mobile-walkthrough.mjs`（22 屏，设备级截图 + 五类探针）。**移动端验收一律设备级截图**
+    （`adb exec-out screencap -p`）—— CDP 的 `Page.captureScreenshot` 抓不到 GPU canvas 层，会误报「表格空白」。
+    keep-alive 隐藏视图仍在 DOM ⇒ 自动化导航必须带命中测试（`elementFromPoint`）。
+23. **移动端懒加载入口若会挂内核，必须自带内核样式**（261010 立护栏，来自真实缺陷）：`TrashPreviewPage`（设置→回收站→预览）
+    挂了 `LakeEditor` 却没引内核 CSS —— 冷启动直走这条路径同样是"第一个内核消费者"，会渲染成大图标 + 原生控件（261009 小记同款）。
+    护栏 `src/mobile/kernelStyleBootstrap.test.ts`：懒入口 + 其直接 import 层里出现内核挂载点 ⇒ 必须出现 `@dlient/lakex-doc-react/style.css`。
 
 ## 8. 会话启动指引
 
