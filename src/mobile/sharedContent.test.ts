@@ -3,7 +3,8 @@
  *
  * 链路：别的 App 分享 → MainActivity（android.intent.action.SEND）→ SharedContentPlugin 接住
  *   （文本原样；图片复制到 filesDir/shared-inbox/）→ JS 冷启动 consume / 热启动 "shared" 事件
- *   → 打开「小记」轻量框并预填（seed）。
+ *   → 打开小记 capture 入口并预填：261010 统一成内核卡片后，seed **先落成草稿**（图片落盘 + 正文由无内核写入通道合成），
+ *     再由 composer 挂载时恢复 —— 不再有 `seed=` prop（详见 quickNoteCapturePath.test.ts）。
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -32,7 +33,10 @@ describe("系统分享接入（ACTION_SEND）", () => {
     const app = read("./MobileApp.tsx");
     expect(app).toMatch(/consumeSharedContent\(/);
     expect(app).toMatch(/subscribeSharedContent\(/);
-    expect(app).toMatch(/seed=\{captureSeed\}/);
+    // 261010：seed 不再走 prop，而是先落成草稿（图片落盘 + body 合成），再由 composer 恢复
+    expect(app).toMatch(/sharedContentToSeed/);
+    expect(app).toMatch(/saveQuickNoteDraft\(\{ id, text: captureSeed\.text, body, images \}\)/);
+    expect(app).toMatch(/<QuickNoteComposer[\s\S]{0,200}draft/);
     const share = read("./sharedContent.ts");
     expect(share).toMatch(/Directory\.Data/);
     expect(share).toMatch(/registerPlugin<SharedContentPluginApi>\("SharedContent"\)/);

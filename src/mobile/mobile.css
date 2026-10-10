@@ -887,15 +887,10 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   text-align: center;
 }
 
-/* 小记：不挂内核的轻量速记框（长按桌面图标 / `lakenotes://quick-note` 深链路径）。 */
-.mobile-qn-flash {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  padding: 12px 12px 0;
-}
-.mobile-qn-flash-wrap {
+/* 小记 capture 路径的外层容器。
+ * 261010：capture 与工作台**统一为内核卡片**，原先"不挂内核的轻量速记框"（`.mobile-qn-flash*` 6 条规则）已删除——
+ * 只保留这层布局（与工作台 composer 同一套组件，见 MobileApp 的 capture 分支）。 */
+.mobile-qn-composer-wrap {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -903,55 +898,6 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   height: 100%;
   padding: 8px;
 }
-.mobile-qn-flash__input {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  padding: 10px 2px;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--lake-text-2, #1f2329);
-  font: inherit;
-  font-size: 16px;
-  line-height: 1.6;
-  resize: none;
-}
-.mobile-qn-flash__images {
-  display: flex;
-  gap: 8px;
-  padding: 8px 0;
-  overflow-x: auto;
-}
-.mobile-qn-flash__thumb {
-  position: relative;
-  flex: none;
-  width: 88px;
-  height: 88px;
-  margin: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--lake-border-2, #f1f3f5);
-}
-.mobile-qn-flash__thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.mobile-qn-flash__thumb button {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--lake-scrim);
-  color: #fff;
-}
-
 /* 表格只读查看器（kind=usheet，移动端）：占满文档层，Univer 容器铺满。
  * ⚠️ 必须建**层叠上下文**：Univer 内部给 canvas 写了 inline z-index:8，而移动端底栏 z-index:3、
  * 侧滑抽屉 z-index:7 —— 不隔离的话画布会盖住底栏与抽屉（实测：底栏按钮的 elementFromPoint 全命中 CANVAS）。 */

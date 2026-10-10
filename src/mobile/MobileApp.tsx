@@ -11,8 +11,19 @@ import type { LocalNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
-import { QuickNoteFlashComposer, type QuickNoteSeed } from "./home/QuickNoteFlashComposer";
-import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent } from "./sharedContent";
+import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent, type QuickNoteSeed } from "./sharedContent";
+import { sha256Sync } from "../core/sha256Sync.js";
+import { scheduleKernelPrewarm } from "./kernelPrewarm";
+import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
+import { localAssetHttpUrl } from "../core/assetUrl.js";
+
+/**
+ * 小记写作区（懒加载）：261010 起 **深链/长按那条 capture 路径与工作台共用同一个内核卡片**
+ * （桌面同款未展开版式：图片/待办/有序/无序/分割线 + 右上角展开）。
+ * 此前 capture 走不挂内核的 `QuickNoteFlashComposer`（秒开但不可展开、无富编辑），已按用户 261010 决定统一并删除。
+ * 懒加载保持入口 chunk 不含内核。
+ */
+const QuickNoteComposer = lazy(() => import("./home/QuickNoteComposer").then((m) => ({ default: m.QuickNoteComposer })));
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
@@ -46,6 +57,8 @@ export function MobileApp() {
   const [captureSeed, setCaptureSeed] = useState<QuickNoteSeed | null>(null);
   /** 每次打开「小记」框递增：作为 key 强制重挂载，保证 seed/草稿各自生效。 */
   const [captureNonce, setCaptureNonce] = useState(0);
+  /** 分享带入是否已落成草稿：落好再挂内核（composer 只在挂载时读 initialBody）。 */
+  const [seedReady, setSeedReady] = useState(true);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<LocalNoteSummary[]>([]);
   const activeIdRef = useRef<string | null>(null);
@@ -128,6 +141,52 @@ export function MobileApp() {
     })();
   }), []);
 
+  /**
+   * 系统分享带入：先把 seed 落成一份**草稿**（图片落盘 + 正文由无内核写入通道合成），
+   * 再让内核 composer 挂载时恢复它 —— 统一成内核卡片后仍支持分享带入，且不丢图/不丢文本。
+   */
+  useEffect(() => {
+    if (!captureOpen || !captureSeed) { setSeedReady(true); return; }
+    let alive = true;
+    setSeedReady(false);
+    void (async () => {
+      try {
+        const id = crypto.randomUUID();
+        const images: StoredQuickNoteImage[] = [];
+        for (const img of captureSeed.images) {
+          try {
+            const staged = await bridge.stageQuickNoteAsset(id, { filename: img.filename, bytes: img.bytes });
+            images.push({
+              id: crypto.randomUUID(),
+              filename: staged.filename,
+              mimeType: staged.mimeType,
+              width: null,
+              height: null,
+              size: staged.size,
+              hash: sha256Sync(img.bytes),
+            });
+          } catch { /* 坏图跳过，不阻断带入 */ }
+        }
+        const body = quickNoteBodyFromTextAndImages(
+          captureSeed.text,
+          images,
+          (filename) => localAssetHttpUrl(id, filename, { space: "quick-notes" }),
+          () => crypto.randomUUID(),
+        );
+        await bridge.saveQuickNoteDraft({ id, text: captureSeed.text, body, images });
+      } catch (error) {
+        reportNativeActionError("带入分享内容", error);
+      } finally {
+        if (alive) setSeedReady(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [captureOpen, captureSeed]);
+
+  // 内核预热（261010）：bridge 就绪后**空闲**点燃一次内核 —— 本次会话首次打开文档/小记卡片从 334–928ms 降到热态量级。
+  // 只点燃不保留实例（见 kernelPrewarm.ts 头注释：内核有模块级单例，不做实例池/移交）。
+  useEffect(() => { if (phase === "ready") scheduleKernelPrewarm(); }, [phase]);
+
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
   // 笔记本 → 直接文档数（首页列表行 .counter；与 listNotebookTree 的归属口径一致：parent 为笔记本）
   const docCounts = useMemo(() => {
@@ -190,13 +249,19 @@ export function MobileApp() {
   if (captureOpen) {
     return (
       <div className="mobile-app">
-        <div className="mobile-qn-flash-wrap">
-          <QuickNoteFlashComposer
-            key={captureNonce}
-            seed={captureSeed}
-            onSaved={async () => { setCaptureOpen(false); setCaptureSeed(null); void refreshAll(); }}
-            onCancel={() => { setCaptureOpen(false); setCaptureSeed(null); }}
-          />
+        <div className="mobile-qn-composer-wrap">
+          {seedReady ? (
+            <Suspense fallback={<div className="mobile-qn-composer" />}>
+              <QuickNoteComposer
+                key={captureNonce}
+                draft
+                onSaved={async () => { setCaptureOpen(false); setCaptureSeed(null); void refreshAll(); }}
+                onCancel={() => { setCaptureOpen(false); setCaptureSeed(null); }}
+              />
+            </Suspense>
+          ) : (
+            <div className="mobile-qn-composer" />
+          )}
         </div>
       </div>
     );

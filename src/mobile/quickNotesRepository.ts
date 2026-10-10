@@ -210,6 +210,12 @@ export interface QuickNoteDraft {
   /** 草稿对应的小记 id：一开始就固定，保存时沿用，避免每次重开换 id。 */
   id: string;
   text: string;
+  /**
+   * 内核草稿的**原样正文**（text/lake body，含富内容：待办/列表/分割线）。
+   * 261010 统一小记入口后新增：深链那条也挂内核，草稿若只存纯文本，恢复时会丢掉富格式。
+   * 兼容旧草稿（无 body ⇒ 由 text 经无内核写入通道重建，见 QuickNoteComposer）。
+   */
+  body?: string;
   /** 草稿引用的图片（图片加入时已落盘到 quick-notes/{id}/，这里只记元数据/文件名）。 */
   images: StoredQuickNoteImage[];
   updatedAt: string;
@@ -226,6 +232,7 @@ export async function readQuickNoteDraft(d: MobileDb): Promise<QuickNoteDraft | 
       return {
         id: parsed.id,
         text: parsed.text,
+        body: typeof parsed.body === "string" ? parsed.body : undefined,
         images: Array.isArray(parsed.images) ? (parsed.images as StoredQuickNoteImage[]) : [],
         updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
       };

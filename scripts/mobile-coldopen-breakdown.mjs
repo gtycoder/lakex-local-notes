@@ -4,7 +4,7 @@
  * 为什么量三条：语雀把小记做成"单独编辑器 + 离线包"，而我们已经有 `QuickNoteFlashComposer`（**不挂内核**）。
  * 要回答的问题是：**小记是否已经够快？内核是不是文档与小记的共同瓶颈？**
  *
- *   P1 深链小记  = `lakenotes://quick-note` → QuickNoteFlashComposer（**无内核**，textarea + 图片）
+ *   P1 深链小记  = `lakenotes://quick-note` → 统一后的**内核卡片**（261010：不再有不挂内核的轻量框）
  *   P2 首页小记写作卡 = 首页底栏「新建小记」→ QuickNoteComposer（**挂内核**）
  *   P3 打开文档   = 知识库 → 书架 → 文档卡片（**挂内核**）
  *
@@ -48,7 +48,7 @@ const waitFor = async (expr, ms = 15000) => { const t0 = Date.now(); while (Date
  * ⚠️ 不能等"元素出现"：标签宿主是 keep-alive，`.ne-editor-wrap` 早就挂在 DOM 里，
  *    存在性判据会立刻命中（实测给出 19ms 的**假**数字）。
  * 签名 = 所有内核宿主的 textContent 长度 + 宿主数；变化即"新文档内容就绪"。
- * kind=flash 时签名取 `[data-mobile-qn-flash]` 子树（轻量输入框无内核）。
+ * 三条路径现在**都挂内核**（261010 统一）⇒ 签名统一取内核宿主；本脚本现在主要用于"冷 vs 热内核"和文档路径对比。
  */
 const arm = (kind) => ev(`(function(){
   window.__bdKind=${JSON.stringify(kind)};

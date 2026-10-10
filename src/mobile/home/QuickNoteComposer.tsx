@@ -9,11 +9,12 @@
  * - 保存 = 内核 `text/lake`（body）+ 纯文本镜像 + **按正文引用派生的资源清单**（正文说什么就是什么，
  *   不依赖 UI 时序），与桌面 `.qnote` v2 同格式 ⇒ 两端互开互认。
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { bridge } from "../bridge";
 import { successFeedback, warnFeedback } from "../ui/haptics";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
+import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
 // 内核样式（ne-* / ne-icon-symbol 的尺寸与配色）**由挂内核的入口自己保证**：
@@ -25,11 +26,17 @@ import "@dlient/lakex-doc-react/style.css";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
 import { extractAssetRefs, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
-import { isQuickNoteImageMime, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
+import { isQuickNoteImageMime, quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 
 export interface QuickNoteComposerProps {
   /** 编辑目标（已有小记 id + 正文）；null = 新建 */
   editNote?: { id: string; text: string; body?: string; images: StoredQuickNoteImage[] } | null;
+  /**
+   * 草稿模式（261010：长按图标 / `lakenotes://quick-note` 深链那条 capture 路径用）：
+   * 挂载时恢复上一次未提交的草稿（含富内容 body）、输入防抖落库、保存/取消清除。
+   * 工作台里的「新建小记 / 编辑」不传（行为不变）。
+   */
+  draft?: boolean;
   onSaved: () => Promise<void>;
   onCancel: () => void;
 }
@@ -56,9 +63,15 @@ async function readDimensions(bytes: Uint8Array, mimeType: string): Promise<{ wi
   }
 }
 
-export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComposerProps) {
-  const noteId = useMemo(() => editNote?.id ?? crypto.randomUUID(), [editNote]);
-  const initialBody = editNote?.body && editNote.body.trim() ? editNote.body : emptyLakeBody(noteId);
+export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }: QuickNoteComposerProps) {
+  /** 初始 id：新建时先固定一个；草稿恢复后用**草稿自己的 id**（沿用 ⇒ 图片作用域一致）。 */
+  const initialId = useMemo(() => editNote?.id ?? crypto.randomUUID(), [editNote]);
+  const [noteId, setNoteId] = useState(initialId);
+  const [initialBody, setInitialBody] = useState(() => (editNote?.body && editNote.body.trim() ? editNote.body : emptyLakeBody(initialId)));
+  /** 草稿模式：**等草稿读完再挂内核**（QuickNoteEditor 只在挂载时读 initialBody，晚到会丢正文）。 */
+  const [draftReady, setDraftReady] = useState(!draft || Boolean(editNote));
+  /** 保存成功 / 主动取消后不再写草稿。 */
+  const committedRef = useRef(false);
   const [text, setText] = useState(editNote?.text ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +83,46 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
   const existingRef = useRef<Map<string, StoredQuickNoteImage>>(
     new Map((editNote?.images ?? []).map((image) => [image.filename, image])),
   );
+
+  // 草稿恢复（仅 capture 路径）：内核 body **原样**带回；旧草稿（260920 轻量框写的，只有 text）
+  // 用无内核写入通道 quickNoteBodyFromTextAndImages 重建，保证不产出裸 <img>。
+  useEffect(() => {
+    if (!draft || editNote) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const saved = await bridge.getQuickNoteDraft();
+        if (!alive || !saved) return;
+        setNoteId(saved.id);
+        // 旧草稿（260920 轻量框写的）只有 text ⇒ 用无内核写入通道重建正文（图片卡 + 段落，绝不裸 <img>）。
+        // URL 不带 token：JSX 里 initialBody={addAssetAccessToken(...)} 统一加，与编辑态一致。
+        setInitialBody(saved.body && saved.body.trim()
+          ? saved.body
+          : quickNoteBodyFromTextAndImages(
+            saved.text,
+            saved.images ?? [],
+            (filename) => localAssetHttpUrl(saved.id, filename, { space: "quick-notes" }),
+            () => crypto.randomUUID(),
+          ));
+        setText(saved.text);
+      } catch { /* 读草稿失败不阻断输入 */ }
+      finally { if (alive) setDraftReady(true); }
+    })();
+    return () => { alive = false; };
+  }, [draft, editNote]);
+
+  // 输入/正文变化后 300ms 防抖落草稿（纯本地 device_state，不进 S3）。body 存原样 ⇒ 恢复不丢富格式。
+  useEffect(() => {
+    if (!draft || !draftReady || committedRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (committedRef.current) return;
+      let body = "";
+      try { body = stripAssetAccessToken(apiRef.current?.getBody() ?? ""); } catch { body = ""; }
+      if (!text.trim() && !body.trim()) return;
+      void bridge.saveQuickNoteDraft({ id: noteId, text, body });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [draft, draftReady, text, noteId]);
 
   const uploadResource = useCallback(
     (request: unknown) =>
@@ -166,6 +219,9 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
         return;
       }
       await bridge.saveQuickNoteContent(noteId, { text: plain, body, images });
+      // 提交成功 ⇒ 草稿使命结束（不清会让下次 capture 恢复出已保存的内容）
+      committedRef.current = true;
+      if (draft) await bridge.clearQuickNoteDraft().catch(() => undefined);
       successFeedback();
       await onSaved();
     } catch (reason) {
@@ -175,6 +231,9 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
       setSaving(false);
     }
   };
+
+  // 草稿未读完先不挂内核（避免用空正文建实例、随后又拿不到已恢复的内容）
+  if (!draftReady) return <div className="mobile-qn-composer" />;
 
   return (
     <div className="mobile-qn-composer">
@@ -191,7 +250,7 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
       <footer className="mobile-qn-actions">
         <span className="mobile-qn-hint">工具条：图片 · 待办 · 有序 · 无序 · 分割线</span>
         <div className="mobile-qn-spacer" />
-        <button type="button" className="mobile-qn-btn" onClick={onCancel} disabled={saving}>取消</button>
+        <button type="button" className="mobile-qn-btn" onClick={() => { committedRef.current = true; if (draft) void bridge.clearQuickNoteDraft().catch(() => undefined); onCancel(); }} disabled={saving}>取消</button>
         <button type="button" className="mobile-qn-btn mobile-qn-primary" onClick={() => void save()} disabled={saving}>
           <Check size={15} />{saving ? "保存中…" : "保存"}
         </button>

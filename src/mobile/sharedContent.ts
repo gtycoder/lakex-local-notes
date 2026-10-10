@@ -6,7 +6,14 @@
  */
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
-import type { QuickNoteSeed } from "./home/QuickNoteFlashComposer";
+/**
+ * 系统分享带入的初始内容（文本 + 图片字节）。
+ * 261010 从已删除的轻量框 `QuickNoteFlashComposer` 迁到此处 —— 它本来就是**本模块的产物形状**。
+ */
+export interface QuickNoteSeed {
+  text: string;
+  images: Array<{ filename: string; mimeType: string; bytes: Uint8Array }>;
+}
 
 export interface SharedContent {
   text?: string;

@@ -367,16 +367,16 @@ export const bridge = {
   },
 
   /** 闪念速记未提交草稿（纯本地 device_state，不进 S3）：进程被杀后能恢复。 */
-  async getQuickNoteDraft(): Promise<{ id: string; text: string; images: StoredQuickNoteImage[]; updatedAt: string } | null> {
+  async getQuickNoteDraft(): Promise<{ id: string; text: string; body?: string; images: StoredQuickNoteImage[]; updatedAt: string } | null> {
     const d = await ensureDb();
     return await quickNotesRepository.readQuickNoteDraft(d);
   },
 
   /** 写草稿（写作者已在输入侧做防抖，这里只落库；图片一加入就已落盘，这里只记引用）。 */
-  async saveQuickNoteDraft(draft: { id: string; text: string; images?: StoredQuickNoteImage[] }): Promise<void> {
+  async saveQuickNoteDraft(draft: { id: string; text: string; body?: string; images?: StoredQuickNoteImage[] }): Promise<void> {
     return runWrite("saveQuickNoteDraft", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, images: draft.images ?? [], updatedAt: new Date().toISOString() });
+      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, body: draft.body, images: draft.images ?? [], updatedAt: new Date().toISOString() });
     });
   },
 

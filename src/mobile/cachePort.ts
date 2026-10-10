@@ -15,7 +15,7 @@ export const mobileCachePort: CachePort = {
       downloadableAssetBytes = fsKeys.length;
     } catch { /* Filesystem 不可用时忽略 */ }
     return {
-      // 运行时 blob（图片预览）由**创建者自己**在卸载/替换时 revoke（如 QuickNoteFlashComposer 的
+      // 运行时 blob（图片预览）由**创建者自己**在卸载/替换时 revoke（如附件/图片预览组件 的
       // urlsRef），不经过这里登记 ⇒ 恒为 0。保留字段是为了满足 CacheSummary 契约。
       runtimeBlobBytes: 0,
       tempFileBytes: 0,
