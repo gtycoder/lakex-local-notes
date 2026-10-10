@@ -331,6 +331,12 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 
 ## 8. 移动端速查（完整端）
 
+> **给移动端架构重构会话的情报（261010）**：重做移动端前先读 `docs/MOBILE-TECH-STACK.md` 的「**重构输入**」一节 —— 实测硬约束
+> （IndexedDB 不跨重启 / CDP 截不到 canvas / keep-alive 隐藏视图仍在 DOM / 可编程入口 `window.lakeNative`）、既有结构对照
+> （`bridge.ts` 的全局 `KeyedAsyncQueue`、`secretStore`）、本轮已修并已验收的三条（S3 密钥跨重启、内核样式缺席、按钮折行）、
+> 走查装置，以及**需要架构方回答的三问**（是否替换 bridge/queue/secretStore ⇒ F16 落点、是否接走查装置、是否保留可编程入口）。
+> **F16 在对方回话前保持不动**（避免在即将被替换的旧桥上打补丁）。
+
 > **261009 B2（进行中）** 移动端逐页走查装置：scripts/css-audit/mobile-walkthrough.mjs（配合 drive.mjs 9335）。
 > 覆盖：首页（知识库 / 小记 / 书架）、笔记本工作区、各文档（doc / usheet / bitable / board）、设置抽屉九页；每屏「截图 + 探针」
 > （越界 / 截断 / 对比度 / 小点击目标 / 整页横向溢出）。
