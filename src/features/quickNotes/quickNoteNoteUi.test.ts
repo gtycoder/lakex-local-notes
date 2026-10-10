@@ -27,25 +27,31 @@ describe("小记编辑器：文档外观 + 受限格式（只影响小记）", (
     expect(RUNTIME_SRC).toMatch(/mount\.className = quickNoteUi === "card"/);
     expect(RUNTIME_SRC).toMatch(/lake-editor-mount ne-doc-note-editor lakex-note-editor/);
     expect(RUNTIME_SRC).toMatch(/lake-editor-mount ne-doc-major-editor/);
-    expect(RUNTIME_SRC).toMatch(/quickNoteUi === "card" \? \{ uiSwitch: \{ default: "note" \}, fullscreen: \{ enable: true \} \} : \{\}/);
+    // 261010：移动端不要「展开」⇒ fullscreen 只在桌面开（isDesktop()）
+    expect(RUNTIME_SRC).toMatch(/quickNoteUi === "card"/);
+    expect(RUNTIME_SRC).toMatch(/uiSwitch: \{ default: "note" \}, fullscreen: \{ enable: isDesktop\(\) \}/);
   });
 
   it("小记开关只由小记编辑器传：文档编辑器不传 quickNoteUi", () => {
     expect(EDITOR_SRC).toMatch(/quickNoteUi: ui/);
     // 开关控制的两处裁剪必须都在 quickNoteUi 分支里（否则会误伤文档编辑器）
     expect(RUNTIME_SRC).toMatch(/const quickNoteUi = mode === "editor" \? prefs\?\.quickNoteUi : undefined;/);
-    expect(RUNTIME_SRC).toMatch(/note: \{ items: \[\.\.\.QUICK_NOTE_TOOLBAR_ITEMS\] \}/);
+    expect(RUNTIME_SRC).toMatch(/note: \{ items: \[\.\.\.QUICK_NOTE_TOOLBAR_ITEMS\] as unknown as string\[\] \}/);
     // 261010：小记开关只裁剪工具栏 items，「+」面板不再有第二处裁剪（filterOption 钩子已撤）
     expect(stripComments(RUNTIME_SRC)).not.toMatch(/filterOption/);
   });
 
-  it("工具栏 = 预览支持的白名单（内核 agentConfig 整体替换 ⇒ 必须显式给 default）", () => {
+  it("工具栏 = 用户指定的 9 项（内核 agentConfig 整体替换 ⇒ 必须显式给 default）", () => {
     const decl = /QUICK_NOTE_TOOLBAR_ITEMS\s*=\s*\[([\s\S]*?)\]\s*as const;/.exec(RUNTIME_SRC);
     expect(decl, "QUICK_NOTE_TOOLBAR_ITEMS 未找到").toBeTruthy();
     const items = [...(decl?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    // 清单的权威断言在 quickNoteToolbar.test.ts；这里只保证「该有的在、禁的不在」（避免两处各维护一份清单）。
-    for (const must of ["cardSelect", "image", "taskList", "unorderedList", "orderedList", "quote", "hr"]) {
+    // 清单的权威断言在 quickNoteToolbar.test.ts；这里只保证「内置 id 该有的在、禁的不在」（避免两处各维护一份清单）。
+    for (const must of ["image", "taskList", "unorderedList", "orderedList", "quote", "hr"]) {
       expect(items).toContain(must);
+    }
+    // 日期/表情/附件 = 自定义工具项类（不是字符串 id —— 字符串形态会被内核静默丢弃）
+    for (const cls of ["QuickNoteDateToolbarItem", "QuickNoteEmojiToolbarItem", "QuickNoteAttachmentToolbarItem"]) {
+      expect(RUNTIME_SRC).toContain(cls);
     }
     expect(items).not.toContain("file");
     expect(items).not.toContain("emoji");

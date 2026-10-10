@@ -1491,3 +1491,34 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 
 **推论（本仓机制）**：内核浮层不在我们的组件树里 ⇒ **移动端要覆盖内核浮层必须用 body 级选择器**（260923 起只有组件树内样式，够不到浮层）。
 移动端入口已加 `body.lake-mobile` 标记（`src/mobile/main.tsx`）。
+
+### 5.29 工具条「自定义工具项」契约 + `unicodeEmoji` 卡是**死占位**（261010 读码 + 设备实测）
+
+**内核怎么把 items 变成控件**（`_createToolbarUI` 160955-160974、`createWidget` 160497-160503）：
+`agentConfig.<mode>.items` 的元素有三种写法 ——
+① 字符串 ⇒ 查 `_descriptorDefines`（内置注册表）；
+② **函数/类** ⇒ `new Cls(editor, itemId)` 再 `init()`；
+③ 对象 `{clazz, pluginContext}` ⇒ `new clazz(editor, name, pluginContext)`。
+之后按 `descriptor.constructor.Type` 选控件（`'Button'` / `'StatusButton'` / `'FileButton'` / `'EmojiButton'` / `'CardSelect'` / …）。
+
+**`Button` 控件真正调用的 descriptor 接口**（159794-159883 + 控制器 160611-160651）：
+`getInitUIState()` / `getUIState()` / `onEvent('click', target)` / `isReady()` / `on('statechange', fn)` /
+`name` / `disabled` / `toolbarNode`（160706 写入）/ **`enable()` / `disable()` / `destroy()` / `close()` / `refresh()`**。
+⚠️ **漏 `enable()`/`disable()` 会整块白屏**（设备实测 `TypeError: e.enable is not a function`：控制器在工具条
+建好那一刻就逐个 `enable()`）。`icon` 给**字符串**时由内核图标组件渲染（`<m1 type={icon}/>`）⇒ 直接用内核图标名
+（`editor-main-date` / `editor-main-expression` / `editor-main-attachment`，与插入面板同款）；
+`tooltip` 形状 = **字符串数组**（`ToolbarUIDescriptor.getTooltip` 147920 返回 `[文案, 快捷键?]`）。
+⚠️ 本包**没有导出** `ToolbarUIDescriptor`（`dist/index.d.ts` 只有 `ToolbarItemSpec` 等类型）⇒ 用方按上述接口
+自实现最小基类（我方 `src/features/quickNotes/quickNoteToolbarWidgets.ts`）。
+
+**`unicodeEmoji` 卡 = 「插入表情」占位卡，不是表情容器**（设备实测 + 读码）：
+它的 `render` 写死 `createElement(m1, { type: 'card-emoji-insert' })`（200615-200625），**从不渲染 value**；
+内核自己的选择器逻辑是「选中 emoji ⇒ `execCommand('insertText', emoji, pos)` ⇒ 删掉这张卡」（200891-200897）。
+⇒ 在没有内核表情选择器上下文的宿主里插这张卡，只会得到一个**点不开的死框**（插入面板的「表情」项同样如此，实测两次）。
+**要表情就插文本**：走内核通用插入通道 `execCommand('insertAtSelection','text/lake', frag)`（与块菜单同一个口）。
+⚠️ 原生 `document.execCommand('insertText')` 在本内核模型下**不生效**（实测：选完表情正文无变化）。
+
+**工具条条目间距**：每条内置项自带 `margin: 8px 0 8px 12px` ⇒ 每项占 **44px**（按钮 32 + 间距 12）。
+9 项 = 396px > 手机写作卡内容宽 363px ⇒ 内核把最后几项收进「···」。移动端小记把间距收到 6px
+（`src/mobile/mobile-kit.css`，作用域 `body.lake-mobile .mobile-qn-composer`）即一行放得下 —— 注意**桌面写作卡
+根类叫 `quick-note-composer`、移动端叫 `mobile-qn-composer`**，写错作用域规则静默不生效（本轮踩过）。

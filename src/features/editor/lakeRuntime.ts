@@ -1,6 +1,12 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
+import { isDesktop } from "../../lib/native";
+import {
+  QuickNoteAttachmentToolbarItem,
+  QuickNoteDateToolbarItem,
+  QuickNoteEmojiToolbarItem,
+} from "../quickNotes/quickNoteToolbarWidgets";
 import { mountBlockHoverHandle } from "./blockHandleMount";
 import { mountSelectionToolbar } from "./selectionToolbar/mountSelectionToolbar";
 import { registerEditorInstance } from "./editorRegistry";
@@ -518,27 +524,30 @@ export interface LakeEditorPrefs {
 }
 
 /**
- * **小卡片（未展开）**的工具条 = 用户指定的最小集（260919 定稿）：
- * 图片 · 待办 · 有序列表 · 无序列表 · 分割线。
+ * **小卡片（未展开）工具条 = 用户指定的 9 项**（261010 定稿）：
+ * 日期 · 表情 · 图片 · 附件 · 待办 · 无序 · 有序 · 引用 · 分隔线。
  *
- * 展开（fullscreen）后切到**完整工具栏**（`DEFAULT_TOOLBAR_ITEMS` = 内核内置默认），
- * 与文档页一致；「+」插入面板两种状态下都取内核全量（261010 起不再过滤）。
+ * 两类条目：
+ * - **字符串 id** = 内核内置工具项（`image` / `taskList` / `unorderedList` / `orderedList` / `quote` / `hr`）。
+ *   注：图片/待办必须用标准项 —— 内核 note 专用项 `note-image`/`notetaskList` 画的是语雀 App 私有
+ *   symbol，本地渲染成空白按钮（见 docs/LAKEX-CONTRACT.md §5.11 三）。
+ * - **自定义工具项类** = 日期 / 表情 / 附件（`quickNoteToolbarWidgets.ts`）。实测内核**静默丢弃未知 id**
+ *   （`date`/`dateCard`/`emoji`/`file`/`attachment` 都无效，11 个候选只渲染 6 个）⇒ 只能走官方自定义通道：
+ *   items 元素是**函数**时内核 `new Cls(editor, id)` + `init()`，再按 `Cls.Type` 渲染控件（bundle 160955-160503）。
  *
- * 注：图片/待办用**标准项**（`image` / `taskList`）——内核 note 专用项 `note-image`/`notetaskList`
- * 画的是语雀 App 私有 symbol，本地会渲染成空白按钮（见 docs/LAKEX-CONTRACT.md §5.11 三）。
- */
-/**
- * 小卡片（未展开）工具条 —— 与"记东西"的结构对齐（261010 用户口径：小记重内容/结构，不堆样式类）。
- *
- * ⚠️ 实测（261010，设备枚举）：内核**静默丢弃未知项 id**。以下 id 有效：
- *   image / cardSelect / taskList / unorderedList / orderedList / quote / hr
- * 而 **file / attachment / dateCard / date / emoji 都无效**（无内置工具项）：
- *   · 附件/日期/表情 ⇒ 官方入口 = **`cardSelect` 插入面板**（面板里已实测有「附件」，日期走斜杠、表情见官方 05 的自定义按钮范例）；
- *   · 要做成独立按钮必须走官方 05 的**自定义工具项**（`ToolbarUIDescriptor`）。
- * 约束（260919）：只放预览能渲染的（`cardSelect` 例外——它是面板入口，不产出内容）。
+ * 展开（fullscreen）后切到**完整工具栏**（`DEFAULT_TOOLBAR_ITEMS` = 内核内置默认，含 `cardSelect` 插入面板），
+ * 与文档页一致 —— 表格/高亮块/分栏/画板等其余格式仍从那条路进。
  */
 export const QUICK_NOTE_TOOLBAR_ITEMS = [
-  "cardSelect", "image", "taskList", "unorderedList", "orderedList", "quote", "hr",
+  QuickNoteDateToolbarItem,
+  QuickNoteEmojiToolbarItem,
+  "image",
+  QuickNoteAttachmentToolbarItem,
+  "taskList",
+  "unorderedList",
+  "orderedList",
+  "quote",
+  "hr",
 ] as const;
 
 /**
@@ -759,10 +768,18 @@ export function createLakeDocument(
     ...(quickNoteUi
       ? {
           // 两种版式的工具条：card＝小卡片最小集 + 展开后完整；full＝直接完整（文档样式）。
-          ...(quickNoteUi === "card" ? { uiSwitch: { default: "note" }, fullscreen: { enable: true } } : {}),
+          // 展开（fullscreen）＝切到完整工具条，**只在桌面保留**：移动端用户 261010 定稿「不要展开，
+          // 一行放下全部工具图标」⇒ 移动端连展开按钮都不渲染（卡片右上角那个）。
+          ...(quickNoteUi === "card"
+            ? { uiSwitch: { default: "note" }, fullscreen: { enable: isDesktop() } }
+            : {}),
           toolbar: {
             agentConfig: {
-              ...(quickNoteUi === "card" ? { note: { items: [...QUICK_NOTE_TOOLBAR_ITEMS] } } : {}),
+              // 自定义工具项是**类**（内核按构造函数实例化），而 vendor 的 ToolbarItemSpec 只声明了
+              // string | Record<> ⇒ 这里显式放宽类型（内核实测接受函数，见 quickNoteToolbarWidgets.ts 的读码记录）。
+              ...(quickNoteUi === "card"
+                ? { note: { items: [...QUICK_NOTE_TOOLBAR_ITEMS] as unknown as string[] } }
+                : {}),
               default: { items: [...QUICK_NOTE_FULL_TOOLBAR_ITEMS] },
             },
           },

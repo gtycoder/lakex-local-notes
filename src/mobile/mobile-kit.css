@@ -13,6 +13,14 @@
      ② 改用容器顶部锚点、定位到工具条下方（内联 top/bottom 是内核写的行内样式 ⇒ 必须 !important，
         AGENTS §14 允许的「内核样式例外」，理由与实测数据即本注释）。
    内核没有定位/高度配置项：官方文档 55 - 斜杠命令只给 groups/disableQuickInput。 */
+/* ── 小记写作卡：9 个工具图标一行放下（261010 用户定稿）──────────────────
+   内核每条工具项自带 `margin: 8px 0 8px 12px`（实测）⇒ 每项占 **44px**（按钮 32 + 间距 12），
+   9 项 = 396px > 内容宽 363px ⇒ 最后两项被收进「···」。移动端小记里收紧入口间距（12→6px）：
+   9 项 = 342px，一行放得下。作用域 = **移动端写作卡根类 `mobile-qn-composer`**（注意桌面的根类叫
+   `quick-note-composer`，两者不同名 —— 一开始写错作用域导致规则没生效，实测才发现的），
+   桌面与文档编辑器不受影响。 */
+body.lake-mobile .mobile-qn-composer .ne-ui-toolbar-button.ant-btn { margin-left: 6px; }
+
 body.lake-mobile .ne-ui-search-card-menu { max-height: calc(100vh - 200px); }
 body.lake-mobile .ne-ui-card-menu-content { max-height: calc(100vh - 200px); overflow-y: auto; }
 body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120px !important; bottom: auto !important; }

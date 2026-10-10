@@ -223,6 +223,12 @@
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
+/* 自带表情选择器（261010）：内核那条路只插空占位卡（点不开面板，实测两次），所以选择器在我们这层。
+   表面沿用浮层令牌（--lake-*）；定位由 JS 按**真实尺寸**夹进视口（同 usePopoverPosition 的口径）。 */
+.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 8px; max-width: min(320px, calc(100vw - 16px)); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
+.quick-note-emoji-panel__item { width: 34px; height: 34px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--lake-font-size-title); line-height: 1; cursor: pointer; }
+.quick-note-emoji-panel__item:hover { background: var(--lake-bg-hover); }
+
 .quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 8px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
 
 /* 卡片预览（自研只读渲染，零内核实例）：块级结构 + 行内格式 + 媒体就地渲染 */
