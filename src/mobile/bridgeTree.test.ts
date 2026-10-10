@@ -53,7 +53,7 @@ vi.mock("../core/quickNotesSyncEngine.js", () => ({
 
 vi.mock("./secretStore.js", () => ({
   mobileSecretStore: {
-    read: vi.fn(async () => null),
+    read: vi.fn(async (key: string) => (key === "s3.secretAccessKey" ? "secret-key" : null)),
     write: vi.fn(async () => {}),
   },
 }));

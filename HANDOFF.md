@@ -104,13 +104,20 @@
 4. **移动端剩余**：真机验收、数据导出/导入、粘贴与资源 URL、长文档大纲跳转；详细步骤见 §8。
 5. ~~**搜索整体重构**~~ **已完成**（`984ccbc` 统一 FTS5+unicode61+CJK 单字预分词+增量账本、`d5ed6c0` 移动端纯文本源+拉丁前缀+多命中定位、`4fea72b` 设置页重建索引、`820305b` 标题-only upsert 保正文索引）：桌面/移动共享 `src/core/search/`。**剩余为可选增强（非缺陷）**：移动端索引源改 `getDocument("text/plain")`；拉丁子串检索（加 3-gram 列）；小记搜索（二期）；命中定位仍是 DOM 启发式（lakex 无公开查找 API）。
 6. **历史快照恢复为新文档**：用户已明确先不做；恢复入口仍只覆盖当前文档，恢复前自动留档。
-7c. **【高优先，261009 F16 测量中暴露】移动端 SecretStore 不跨重启 ⇒ S3 密钥丢失、同步报签名失败**：
-   `src/mobile/secretStore.ts` 是 WebCrypto+AES-GCM + IndexedDB 的**降级实现**（文件头已标注"正式版应替换为 Android Keystore-backed"）。
-   实测（AVD）：保存 S3 配置后当场 `testS3Connection` OK、同步 OK；**`am force-stop` + 重启 App 后** `getS3Settings().secretAccessKey` 长度 0，`testS3Connection` 直接报 `The request signature we calculated does not match the signature you provided`。
-   再往下一层量到根：重启后**该 WebView 的 `localStorage` 与 IndexedDB 都是空的**（原生 SQLite 与 Capacitor Preferences 正常持久 ✓，68 篇文档/桶/前缀都在）⇒ 这台运行时的 WebView 存储不跨重启，降级 SecretStore 因此失效。
-   **影响**：移动端每次重启后云端同步/备份不可用，且报错是"签名不匹配"（用户无从判断该重填密钥）。
-   **两条路（用户定）**：① 快速缓解——`bridge.init()` 早检：曾经配置过 S3 但 secret 读不到时，UI 明确提示"需重新填写 S3 密钥"，别抛签名错误；② 正解（文档 §17.5 已规划）——把 SecretStore 换成 native/Keystore 存储（新增或复用原生 bridge 方法，接口不变）。
-7b. **B1 走查留下的两条低优先候选（261009，均已实测、当前无可见症状）**：① **侧栏比可用高度高 38px** —— `.sidebar.sidebar-docked` 的 `height:100%` 取的是**网格容器**高度，而侧栏在第 2 行（顶栏之下）⇒ 实测 820 视口下侧栏/分隔条 bottom=858。因为没有底部锚定内容、背景与命中带都被窗口裁掉，**当前不可见**；真要清掉就改成由网格行决定高度（`align-self: stretch` 已在），属壳层几何改动，需前后截图对拍。② **文档内普通 2×2 表格会出现横向滚动条**（`table.ne-table` 750 > `.ne-table-hole` 654；夹具表格无固定宽度）—— 需要一条真实文档复现后再定性。
+7c. ~~移动端 SecretStore 不跨重启 ⇒ S3 密钥丢失~~ **已修（261009）**：
+   - **根因（实测澄清过一版）**：不是"整个 WebView 存储都不持久"——同批实验里 **localStorage 跨重启仍在**，而 **IndexedDB 被重建为空**
+     （重启后探针库的 `onupgradeneeded` 再次触发；磁盘上 `app_webview/Default/IndexedDB/http_localhost_0.indexeddb.leveldb` 还在）。
+     旧实现（`src/mobile/secretStore.ts`）把密文放 IndexedDB ⇒ 重启后 `getS3Settings().secretAccessKey` 长度 0，
+     所有 S3 操作报 `The request signature we calculated does not match the signature you provided`。
+   - **修法（保留原设计的降级语义，只换持久层）**：密文改存 **localStorage**（键 `lake-notes-mobile.secret.*`，仍是 WebCrypto AES-GCM 密文、**不是明文**）；
+     并在 `read` 时**一次性兼容迁移**旧 IDB 值（读到就搬进 localStorage 并清旧条目）。
+   - **顺带治理报错**：`bridge.ts` 在建 S3 客户端处加 `assertS3Credentials()`（单一来源，同步/测连通/上传三条路径共用）：
+     密钥缺失时给「请到「设置 → 同步设置」重新填写 Access Key / Secret Key」，不再让请求去报签名错。
+   - **护栏**：新增 `src/mobile/secretStore.test.ts`（4 例：往返、**落盘是密文**、**模拟重启仍可读**、缺失/删除返回 null）；
+     `bridgeCloudState.test.ts` 增 1 例（密钥缺失 ⇒ 提示 + 不发请求）。两个既有测试的 `secretStore` mock 改成"已配置 S3"的真值语义。
+   - **设备验收（AVD，决定性场景）**：保存 → 当场 `skLen 40` / 连通 OK → `am force-stop` 重启 → **`skLen 40` / 连通 OK / 同步成功**（原来必报签名错的场景）；
+     空密钥档实测两条路径都回「S3 密钥缺失…请到「设置 → 同步设置」重新填写」且**不发请求**；落盘的 localStorage 值不含明文。
+   - **遗留**：仍是"非硬件级安全"的降级实现（密钥材料固定派生、WebView 内存可读）——`secretStore.ts` 头注释与 §17.5 的"正式版换 Android Keystore-backed"未变，属后续项。
 7. **低优先数据/性能**：附件哈希缓存仅在真实痛感出现后立项；回收站惰性下载暂缓；Word/PDF 大附件与历史 `lakex-contract.d.ts` 按需处理。
 8. **已知外观**：离线残余资源、移动端缩略图仅覆盖 png/jpg/jpeg（失败回退原图）、多维表附件旧数据的体积展示边界。
 9. **多标签切换时内核工具条 1~4 帧绘制空帧（261008 记录，未修）**：非活动宿主用 `visibility: hidden` 隐藏 ⇒ 浏览器**丢弃其绘制图层**，切回来整棵子树重新栅格化，内核工具条（子树最重）最后画完。**实测口径**：`.ne-ui` 切换瞬间已是 `opacity:1 / visibility:visible / transition-duration:0s`（不是 CSS 淡入）；标签高亮与可见宿主同帧、`--lake-editor-top`/`.tab-panels` 顶边不跳（rAF 逐帧 0 错位）。**方案 2（宿主 `will-change: opacity`）实测无效、已撤**。可行方向 = 方案 1：非活动宿主改 `opacity: 0` + `inert` + `pointer-events: none`（不再丢层），代价是非活动编辑器保持绘制，需按 10 万文档量级评估。**别再无证据试提层类改动**。

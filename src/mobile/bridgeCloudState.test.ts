@@ -44,7 +44,9 @@ vi.mock("../core/quickNotesSyncEngine.js", () => ({
 
 vi.mock("./secretStore.js", () => ({
   mobileSecretStore: {
-    read: vi.fn(async () => null),
+    // 本文件按"已配置 S3"跑（S3 夹具里 ak/sk 齐全）；secret 从 store 读 ⇒ 这里要回真值，
+    // 否则 261009 的「密钥缺失」护栏会先返回提示、同步路径根本走不到。
+    read: vi.fn(async (key: string) => (key === "s3.secretAccessKey" ? "sk" : null)),
     write: vi.fn(async () => {}),
   },
 }));
@@ -97,5 +99,25 @@ describe("移动端云同步状态闸门", () => {
     const result = await bridge.syncNow();
     expect(coreSyncNow).toHaveBeenCalledTimes(1);
     expect(result.message).toContain("同步完成");   // 桥会再拼小记状态
+  });
+
+  it("密钥缺失 ⇒ 给可执行提示，而不是让请求去报签名错（261009）", async () => {
+    // 复现历史缺陷的输入：配置在、但 secret 读不到（曾因 IndexedDB 不跨重启而必然发生）。
+    await bridge.saveS3Settings(S3);     // 先"配置好"，再让 secret 读不到（复现历史缺陷的输入）
+    const store = await import("./secretStore.js");
+    const readMock = store.mobileSecretStore.read as unknown as { mockResolvedValue: (v: unknown) => void };
+    readMock.mockResolvedValue(null);   // 整个用例期间都读不到（别用 Once：mobileCloudState 会先读一次）
+    try {
+      // 测连通：给出可执行提示（不再是 "signature does not match"）
+      const test = await bridge.testS3Connection();
+      expect(test).toContain("S3 密钥缺失");
+      expect(test).toContain("同步设置");
+      // 同步：同样给提示，且**不发请求**（引擎不被调用）
+      const result = await bridge.syncNow();
+      expect(result.message).toContain("S3 密钥缺失");
+      expect(coreSyncNow).not.toHaveBeenCalled();
+    } finally {
+      readMock.mockResolvedValue("sk");   // 还原本文件"已配置 S3"的默认语义
+    }
   });
 });

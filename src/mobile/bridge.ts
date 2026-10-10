@@ -140,7 +140,19 @@ async function ensureDb(): Promise<NativeSqliteDb> {
   return dbInitialization;
 }
 
+/** S3 配置齐全性检查（261009）：密钥缺失时给**可执行**的提示。
+ *  背景：移动端 SecretStore 曾用 IndexedDB（重启即丢，见 secretStore.ts 头注释），密钥读回为空时
+ *  请求会用空密钥签名，用户看到的是 "The request signature we calculated does not match..." 这种无从下手的报错。
+ *  放在这里（所有 S3 客户端的唯一入口）⇒ 同步 / 测连通 / 上传三条路径统一受益。 */
+function assertS3Credentials(cfg: S3Settings): void {
+  if (!cfg.bucket) throw new Error("S3 未配置 Bucket：请到「设置 → 同步设置」填写并保存");
+  if (!cfg.accessKeyId || !cfg.secretAccessKey) {
+    throw new Error("S3 密钥缺失（本机未保存或已被清除）：请到「设置 → 同步设置」重新填写 Access Key / Secret Key");
+  }
+}
+
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
+  assertS3Credentials(cfg);
   // @aws-sdk/client-s3 保持动态（懒加载）；CapacitorHttpHandler 已是静态依赖（s3Store.ts 也静态用），
   // 这里再动态 import 只会触发 INEFFECTIVE_DYNAMIC_IMPORT，故提到模块顶部静态引入。
   const { S3Client } = await import("@aws-sdk/client-s3");
@@ -889,6 +901,8 @@ export const bridge = {
     return maintenance.run("main", async () => {
       const cfg = await bridge.getS3Settings();
       if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
+      // 同步也走同一条"密钥缺失"提示（别让用户以为"同步失败"却看不出该重填密钥）。
+      try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
       const d = await ensureDb();
       const syncCfg: SyncConfig = {
         endpoint: cfg.endpoint,
