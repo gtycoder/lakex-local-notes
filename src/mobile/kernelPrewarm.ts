@@ -30,6 +30,9 @@ export function resetKernelPrewarmForTest(): void { scheduled = false; }
 export async function runKernelPrewarmNow(): Promise<"ok" | "failed"> {
   let mount: HTMLElement | null = null;
   try {
+    // ① 预取 capture 用到的懒加载分包（**实测打开时还在现拉**：QuickNoteComposer.js 4ms / style.js 4ms /
+    //    style.css 16ms / 字体 4ms ⇒ 这一段在关键路径上）。只 import 模块、不建实例。
+    void import("./home/QuickNoteComposer").catch(() => undefined);
     const { createLakeDocument, destroyLakeEditor } = await import("../features/editor/lakeRuntime");
     mount = document.createElement("div");
     mount.setAttribute("aria-hidden", "true");
