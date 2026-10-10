@@ -535,8 +535,10 @@ export interface LakeEditorPrefs {
  *   （`date`/`dateCard`/`emoji`/`file`/`attachment` 都无效，11 个候选只渲染 6 个）⇒ 只能走官方自定义通道：
  *   items 元素是**函数**时内核 `new Cls(editor, id)` + `init()`，再按 `Cls.Type` 渲染控件（bundle 160955-160503）。
  *
- * 展开（fullscreen）后切到**完整工具栏**（`DEFAULT_TOOLBAR_ITEMS` = 内核内置默认，含 `cardSelect` 插入面板），
- * 与文档页一致 —— 表格/高亮块/分栏/画板等其余格式仍从那条路进。
+ * **紧凑条里没有「＋」插入面板入口**（用户 261010 定稿：移动端太突兀）⇒ 其余格式现在只有一条路：
+ * **桌面写作卡展开**（fullscreen）→ 完整工具栏（`DEFAULT_TOOLBAR_ITEMS`，含 `cardSelect` 面板）。
+ * （`/` 斜杠在本构建**不可靠**：LAKEX-CONTRACT §5.23 早先实测 + 261010 用 keydown/insertText 复测都没唤起面板
+ * ⇒ 不能把它当入口。移动端因此暂时插不了表格/代码块/公式/高亮块/分栏/画板，**显示**不受影响。）
  */
 export const QUICK_NOTE_TOOLBAR_ITEMS = [
   QuickNoteDateToolbarItem,

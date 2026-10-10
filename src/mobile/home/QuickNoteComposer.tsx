@@ -2,8 +2,11 @@
  * 移动端小记 composer（新建/编辑共用）——**完整编辑能力**，与桌面共用同一套小记编辑器：
  *
  * - 写作区 = 桌面同款 `QuickNoteEditor`（一个 Lake 内核实例 + 小记工具条：
- *   **插入面板(+) / 图片 / 待办 / 无序 / 有序 / 引用 / 分割线** —— 条目以 `lakeRuntime.QUICK_NOTE_TOOLBAR_ITEMS` 为单一来源；
- *   `+` 打开的是**内核全量**插入面板（与桌面端一致；261010 起不再白名单过滤）——
+ *   **日期 / 表情 / 图片 / 附件 / 待办 / 无序 / 有序 / 引用 / 分隔线**（用户 261010 定稿；移动端一行放下、不展开）
+ *   —— 条目以 `lakeRuntime.QUICK_NOTE_TOOLBAR_ITEMS` 为单一来源；工具条上**没有**「＋」插入面板入口
+ *   （用户 261010 定稿：移动端太突兀）。**其余格式（表格/代码块/公式/高亮块/分栏/画板…）移动端小记暂时插不了**：
+ *   `/` 斜杠在本构建**不可靠**（LAKEX-CONTRACT §5.23 早先实测；261010 用 keydown + insertText 两种注入复测仍未唤起）——
+ *   显示不受影响（预览走内核兜底）；要插这些格式走桌面写作卡（可展开 → 完整工具条里的面板）——
  *   `disableVirtualRendering` 必须开 —— 小记没有内核内部滚动容器，虚拟渲染会量错视口）；
  * - 附件按类型成卡：内核 file input 交给我们 `uploadResource`，经 `bridge.stageQuickNoteAsset` 落盘
  *   `quick-notes/{id}/`，mp4→视频卡、mp3→音频卡、png→图片卡、其它→附件卡（`installMediaCardCategoryRouter`

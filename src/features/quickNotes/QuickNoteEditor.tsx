@@ -107,8 +107,8 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
      */
     const detachMediaCardRouter = installMediaCardCategoryRouter(editor);
     // **空小记也必须装载一次正文**：内核 `document.ready` 只在真正 setDocument 后触发，
-    // 而小记版式的三样东西（`ne-note-ui` 版式类 / 右上角「展开」按钮 / note 工具条注册）
-    // 都挂在该钩子上。此前"有正文才 setDocument"⇒ 新建空小记时工具条空白、展开按钮不渲染、
+    // 而小记版式的三样东西（`ne-note-ui` 版式类 / 右上角「展开」按钮（**仅桌面**：移动端 fullscreen 关闭）/
+    // note 工具条注册）都挂在该钩子上。此前"有正文才 setDocument"⇒ 新建空小记时工具条空白、展开按钮不渲染、
     // 键入也不回传（HANDOFF §2.10 三.2 的根因）。空正文用单一来源 emptyLakeBody，与主进程同构。
     editor.setDocument("text/lake", addAssetAccessToken(initialBody || emptyLakeBody(ownerId)));
     callbacksRef.current.onReady({

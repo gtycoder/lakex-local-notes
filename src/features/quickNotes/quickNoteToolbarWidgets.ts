@@ -94,10 +94,10 @@ export abstract class QuickNoteToolbarButton {
 /**
  * 表情面板（自带，纯 DOM，不引依赖）。
  *
- * 为什么不用内核那条路：内核「表情」只是**插一张空占位卡**（`insertCardNode('unicodeEmoji', {})`，
- * bundle 121559），本构建里点它**不会**打开选择器（插入面板插出来的同样是空卡，实测两次）——
- * 按钮那样就是个死键。所以选择器我们自己给，选中后仍按**内核的卡模型**落库（`{ emoji }`），
- * 与文档里的表情卡同源。
+ * 为什么不用内核那条路：内核「表情」只会**插一张空占位卡**（`insertCardNode('unicodeEmoji', {})`，bundle 121559），
+ * 而那张卡的内核 UI 写死只画「插入表情」图标、**从不渲染 value**（200615-200625）⇒ 点不开选择器，是个死键
+ * （插入面板的「表情」项同样如此，实测两次）。所以选择器我们自己给，选中后按**内核原意插文本**
+ * （`insertAtSelection('text/lake', '<span>😀</span>')`；内核自己也是 `insertText` 后删卡，200896）。
  */
 const QUICK_NOTE_EMOJI = [
   "😀", "😄", "😁", "😆", "😅", "😂", "🙂", "😉", "😊", "😍", "🤔", "😐",
@@ -107,15 +107,19 @@ const QUICK_NOTE_EMOJI = [
 ] as const;
 
 let emojiPanel: HTMLElement | null = null;
+/** 面板的监听拆除函数（关面板时调用；显式持有，避免靠"观察 DOM 变化"猜什么时候该拆）。 */
+let detachEmojiPanel: (() => void) | null = null;
 
-/** 关掉表情面板（幂等）。 */
-export function closeQuickNoteEmojiPicker(): void {
+/** 关掉表情面板（幂等）：移面板 + 撤监听。 */
+function closeQuickNoteEmojiPicker(): void {
+  detachEmojiPanel?.();
+  detachEmojiPanel = null;
   emojiPanel?.remove();
   emojiPanel = null;
 }
 
-/** 打开表情面板（锚在传入的按钮下方，夹进视口；点外部/滚动即关）。 */
-export function openQuickNoteEmojiPicker(anchor: HTMLElement | null, onPick: (emoji: string) => void): void {
+/** 打开表情面板（锚在传入的按钮下方，夹进视口；点外部 / 滚动 / Esc 即关）。 */
+function openQuickNoteEmojiPicker(anchor: HTMLElement | null, onPick: (emoji: string) => void): void {
   closeQuickNoteEmojiPicker();
   const panel = document.createElement("div");
   panel.className = "quick-note-emoji-panel";
@@ -149,22 +153,24 @@ export function openQuickNoteEmojiPicker(anchor: HTMLElement | null, onPick: (em
     panel.style.top = Math.round(top) + "px";
   }
   const onPointerDown = (event: Event) => {
-    if (emojiPanel && !emojiPanel.contains(event.target as Node)) closeQuickNoteEmojiPicker();
+    if (!panel.contains(event.target as Node)) closeQuickNoteEmojiPicker();
   };
   const onScroll = () => closeQuickNoteEmojiPicker();
-  setTimeout(() => {
+  const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") closeQuickNoteEmojiPicker(); };
+  // 下一帧再挂：否则"打开面板的那一次点击"会立刻命中 onPointerDown 把面板关掉。
+  const timer = window.setTimeout(() => {
     document.addEventListener("mousedown", onPointerDown, true);
     document.addEventListener("touchstart", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("scroll", onScroll, true);
   }, 0);
-  const cleanup = () => {
+  detachEmojiPanel = () => {
+    window.clearTimeout(timer);
     document.removeEventListener("mousedown", onPointerDown, true);
     document.removeEventListener("touchstart", onPointerDown, true);
+    document.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("scroll", onScroll, true);
-    observer.disconnect();
   };
-  const observer = new MutationObserver(() => { if (!emojiPanel) cleanup(); });
-  observer.observe(document.body, { childList: true });
 }
 
 /** 把内核回传的 `event.target` 收敛成锚点元素（不直接用 `instanceof HTMLElement`：vitest 是 node 环境，没有该全局）。 */
@@ -173,7 +179,7 @@ function asAnchor(value: unknown): HTMLElement | null {
 }
 
 /** 选文件（附件路径）。Capacitor/WebView 里 `<input type=file>` 会拉起系统选择器。 */
-export function pickQuickNoteFiles(): Promise<File[]> {
+function pickQuickNoteFiles(): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
