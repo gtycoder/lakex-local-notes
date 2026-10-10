@@ -17,7 +17,6 @@ const WORKSPACE_SRC = read("../../components/QuickNotesWorkspace.tsx");
 const EDITOR_SRC = read("./QuickNoteEditor.tsx");
 const RUNTIME_SRC = read("../editor/lakeRuntime.ts");
 const PREVIEW_SRC = read("./QuickNotePreview.tsx");
-const INSERT_FILTER_SRC = read("./quickNoteInsertFilter.ts");
 const MODEL_SRC = read("../../core/quickNoteModel.ts");
 const UPLOAD_SRC = read("../editor/resourceUpload.ts");
 const MAIN_SRC = read("../../../electron/quickNotes.ts");
@@ -62,19 +61,19 @@ describe("小记附件（内核 file 卡）", () => {
     expect(MODEL_SRC).toMatch(/if \(image\.mimeType && !isQuickNoteImageMime\(image\.mimeType\)\) continue;/);
   });
 
-  it("附件/视频/音频走内核「+」面板的卡片类型（不再自定义拦截，面板条目受白名单过滤）", () => {
+  it("附件/视频/音频走内核「+」面板的卡片类型（面板 = 内核全量，不再过滤）", () => {
     // 旧的 note 版式里我们用 installAttachmentTypeRouting 拦附件按钮改 category；
     // 现在编辑态就是文档编辑器，「+」面板里图片/视频/音频/附件各有条目，类型天然由内核决定。
     expect(RUNTIME_SRC).not.toMatch(/installAttachmentTypeRouting/);
-    // 面板过滤是独立模块（纯函数、可单测），lakeRuntime 只做接线
-    expect(RUNTIME_SRC).toMatch(/import \{ filterQuickNoteInsert \} from "\.\.\/quickNotes\/quickNoteInsertFilter"/);
-    expect(INSERT_FILTER_SRC).toMatch(/export function filterQuickNoteInsert/);
-    expect(INSERT_FILTER_SRC).toMatch(/"\/tp"/);
+    // 261010：小记「+」面板不再白名单过滤（面板全量 = 与桌面端一致；格式还原交给内核只读兜底）。
+    expect(RUNTIME_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")).not.toMatch(/filterOption/);
   });
 
-  it("卡片预览走自研只读渲染（零内核实例），媒体按类型就地渲染", () => {
+  it("卡片预览 = 快路径（零内核实例）+ 内核只读兜底，媒体按类型就地渲染", () => {
     // 卡片不再直接铺 <img>/<video>，而是交给 QuickNotePreview 解析正文后按块渲染
     expect(WORKSPACE_SRC).toMatch(/<QuickNotePreview/);
+    // 兜底渲染要小记 id（内核解析资源/卡片要用）
+    expect(WORKSPACE_SRC).toMatch(/noteId=\{item\.id\}/);
     expect(WORKSPACE_SRC).toMatch(/fallbackText=\{item\.content\.text\}/);
     // 媒体仍按 MIME 分流（图片/视频/音频/附件条），且图片点击放大沿用 Lightbox
     expect(PREVIEW_SRC).toMatch(/isQuickNoteImageMime\(asset\.mimeType\)/);

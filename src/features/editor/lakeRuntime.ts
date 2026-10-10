@@ -5,7 +5,6 @@ import { mountBlockHoverHandle } from "./blockHandleMount";
 import { mountSelectionToolbar } from "./selectionToolbar/mountSelectionToolbar";
 import { registerEditorInstance } from "./editorRegistry";
 import { uploadLakeResource } from "./resourceUpload";
-import { filterQuickNoteInsert } from "../quickNotes/quickNoteInsertFilter";
 import { registerNoteRefCard, withNoteRefSlashItem } from "./noteRefCard";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
@@ -523,7 +522,7 @@ export interface LakeEditorPrefs {
  * 图片 · 待办 · 有序列表 · 无序列表 · 分割线。
  *
  * 展开（fullscreen）后切到**完整工具栏**（`DEFAULT_TOOLBAR_ITEMS` = 内核内置默认），
- * 与文档页一致；「+」插入面板在两种状态下都由 `filterQuickNoteInsert` 收成白名单。
+ * 与文档页一致；「+」插入面板两种状态下都取内核全量（261010 起不再过滤）。
  *
  * 注：图片/待办用**标准项**（`image` / `taskList`）——内核 note 专用项 `note-image`/`notetaskList`
  * 画的是语雀 App 私有 symbol，本地会渲染成空白按钮（见 docs/LAKEX-CONTRACT.md §5.11 三）。
@@ -700,10 +699,10 @@ export function createLakeDocument(
 ): LakeEditorInstance {
   /** 小记版式：仅编辑态可用（阅读态是 viewer，没有工具条/展开语义）。 */
   /**
-   * 小记专用：文档编辑器外观 + 受限格式（只影响小记，文档编辑器不传这个开关）。
+   * 小记专用：文档编辑器外观 + 受限工具栏（只影响小记，文档编辑器不传这个开关）。
    * 注意两个 default：
    * - 挂载点仍是文档版式（`ne-doc-major-editor`）⇒ 小记编辑态与文档页长得一样；
-   * - 只裁剪「工具栏 items」与「+ 面板 filterOption」，卡片注册、上传钩子、其余 option 全部照旧。
+   * - 只裁剪「工具栏 items」，卡片注册、「+」面板、上传钩子、其余 option 全部照旧（261010 起面板不再过滤）。
    */
   const quickNoteUi = mode === "editor" ? prefs?.quickNoteUi : undefined;
   const mount = document.createElement("div");
@@ -755,8 +754,8 @@ export function createLakeDocument(
     },
     input: {},
     defaultFontsize: prefsSize,
-    // 小记专用：**只裁剪入口**（工具栏 items + 「+」面板 filterOption），外观与文档页完全一致。
-    // 文档编辑器不传 `restrictedFormats` ⇒ 这段完全不生效（红线：不要影响文档）。
+    // 小记专用：**只裁剪工具栏 items**（261010 起「+」面板不再过滤），外观与文档页完全一致。
+    // 文档编辑器不传 `quickNoteUi` ⇒ 这段完全不生效（红线：不要影响文档）。
     ...(quickNoteUi
       ? {
           // 两种版式的工具条：card＝小卡片最小集 + 展开后完整；full＝直接完整（文档样式）。
@@ -830,9 +829,10 @@ export function createLakeDocument(
       },
     },
     // 移除第三方 embed 分组（我们不渲染外部嵌入卡）；画板/导图等分组由 lakex-doc-react 的卡片配置自带。
+    // 261010：**不再过滤「+」面板** —— 面板全量 = 与桌面端一致。此前用官方钩子 `filterOption` 把小记面板
+    // 收成白名单，理由是"不能预览展示的就不让插入"；现在预览对内核格式是「快路径 + 内核只读兜底」，
+    // 任何格式都能显示，白名单只剩坏处（日期/表情/表格在移动端被我们自己的清单藏起来）。
     slash: {
-      // 小记专用：「+」面板收成白名单（官方钩子；文档编辑器不传 restrictedFormats ⇒ 保持全量）。
-      ...(quickNoteUi ? { filterOption: filterQuickNoteInsert } : {}),
       cardSelect: {
         general: {
           groups: withNoteRefSlashItem(

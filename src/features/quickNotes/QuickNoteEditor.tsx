@@ -16,7 +16,7 @@ export interface QuickNoteEditorApi {
 interface QuickNoteEditorProps {
   /**
    * 编辑器版式：`card`＝小卡片（最小工具条 + 右上角展开，分块视图用）；
-   * `full`＝文档样式（完整工具条，列表视图右侧用）。两者都只收「+」面板白名单。
+   * `full`＝文档样式（完整工具条，列表视图右侧用）。两者「+」面板都取内核全量（261010 起不再白名单过滤）。
    */
   ui?: "card" | "full";
   /** 归属 id：新建用草稿 id，编辑用小记 id（决定图片落在哪个作用域）。 */
@@ -85,7 +85,7 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
       false,
       ownerId,
       null,
-      // 小记 = 文档编辑器外观 + 受限格式（工具栏/「+」面板只留预览能还原的那些）。
+      // 小记 = 文档编辑器外观 + 受限工具栏（只裁 toolbar items；「+」面板取内核全量）。
       // 这是**只给小记**的开关：文档编辑器不传 quickNoteUi，能力与外观完全不受影响。
       //
       // ⚠️ `disableVirtualRendering: true` 必须开（260919 用户报「输入一个字整片空白 + 编辑态顶部大空白」的根因）：

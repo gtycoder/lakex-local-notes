@@ -1463,3 +1463,31 @@ PY
 
 > 方法学提醒：查官方适配口这件事**方向做对了**（两处都查、都有结论）—— 结论是外链不用接、长按本就该自实现。
 > **涉及内核交互能力时先查官方适配器清单，再决定要不要自建**；查完得出「官方有但不需要」同样是有效结论。
+
+### 5.28 「+」插入面板：条目来自内核、工具条**没有**日期/表情 id、面板会翻到屏幕外（261010 读码 + 设备实测）
+
+**面板条目 = 内核注册表**（`configs/slash.ts` 的 `groups[].items`，由各卡插件 `registerCardSelect` 注册）。
+vendor 原文（`configs/slash.ts:103-113`）的「小工具」组：
+
+    { title: i18nMap[lan]['tools'], name: 'group-files', type: 'normal', items: ['calendar', 'dateCard', 'unicodeEmoji'] }
+
+别名（`lakex.js` 三处 `registerCardSelect`）：**`/rl` 日历 · `/rq` 日期 · `/bq` 表情**；
+dateCard 的 value 形态 = `{date: <epoch ms>}`（`insertCard('dateCard', { date })`，`lakex.js:193641`），
+unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`，初值为空对象）。
+⇒ **「移动端没有日期/表情」不是内核缺能力**，是我们自己的面板白名单（`quickNoteInsertFilter`）把它们裁掉了；
+261010 已删除该白名单（面板 = 内核全量）。移动端小记「+」面板实测 **25 项 / 1294px 高**。
+
+**工具条 id 是另一套**：`toolbar.agentConfig.*.items` 里放未知 id 会被**静默丢弃**（实测 11 个候选只渲染 6 个，
+`file`/`attachment`/`dateCard`/`date`/`emoji` 全不是有效工具项 id）⇒ 日期/表情/附件的唯一入口是 `cardSelect`（「+」面板）。
+
+**面板浮层定位（踩坑）**：`.ne-ui-boundary-popover` 默认 `position:absolute; top:-999999999px`，真实位置由内核 JS 写**行内**
+`top`/`bottom`；它挂在 **portal 到 `body` 的 `.ne-overlay-container`** 下（实测该容器 `position:fixed` 且 **0 尺寸**、位于视口左上）。
+面板过高时内核把它翻到 caret 上方 —— 用**负 `bottom`** 表达：24 项面板实测 `bottom:-84.76px` ⇒ 渲染在 `top=-558`（视口 842），
+**顶部整段出屏、「基础」那些条目点不到**。**只夹高度解决不了**（翻转判定不吃高度，钳制后仍是 `top=-558`），必须同时：
+① `max-height` + `overflow-y:auto`（面板自身 1225px 高，`clientH=scrollH` 时内部根本不能滚）；
+② 改锚点 `top:120px !important; bottom:auto !important`（压内核行内样式）。
+内核没有定位/高度配置项（官方文档 `55 - 斜杠命令（slash）` 只给 `groups`/`disableQuickInput`）⇒ 我方落在
+`src/mobile/mobile-kit.css`、作用域 `body.lake-mobile`。
+
+**推论（本仓机制）**：内核浮层不在我们的组件树里 ⇒ **移动端要覆盖内核浮层必须用 body 级选择器**（260923 起只有组件树内样式，够不到浮层）。
+移动端入口已加 `body.lake-mobile` 标记（`src/mobile/main.tsx`）。

@@ -105,6 +105,19 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
   **I3** 同域内串行；**禁止同域嵌套**（KeyedAsyncQueue 无重入 ⇒ 自锁）。
   桌面反向护栏 `electron/maintenanceQueueScope.test.ts`（维护队列只包维护操作）；规格与验收见 `docs/MOBILE-TECH-STACK.md` §二。
 
+- **小记预览 = 快路径 + 内核只读兜底（261010 定稿；不要再去写第二套"卡片覆盖清单"）**：
+  自研解析器（`features/quickNotes/quickNotePreviewParser.ts`）只是**快路径** —— 纯文字/列表/媒体用普通 DOM 画，
+  **零内核实例**（移动端冷开不受影响）；一旦出现它还原不了的块（表格/代码块/公式/画板/思维导图/日历/日期/表情…），
+  **整条卡片改由内核只读视图渲染**（`QuickNoteKernelPreview`：`createLakeDocument(host,"viewer",…)`，
+  用 `IntersectionObserver` 只给视口内的卡片挂实例）。判据 = 解析器自己的 `unsupported` 节点（`hasUnsupportedNodes`），
+  **不另立清单**（两份必然漂移）。⇒ **格式覆盖度由内核保证，不存在"我们没实现所以显示不出来"的格式**。
+  配套：「+」插入面板 = **内核全量**（261010 删掉 `quickNoteInsertFilter`）——旧的"不能预览展示的就不让插入"已废，
+  它正是"移动端没有日期/表情"的真因（内核面板「小工具」里本就有 `/rl` 日历 / `/rq` 日期 / `/bq` 表情）。
+  证据与浮层定位见 `docs/LAKEX-CONTRACT.md` §5.28、`docs/MOBILE-TECH-STACK.md` §七。
+- **内核浮层 portal 到 `body`**（`.ne-overlay-container`）：它们不在我们的组件树里 ⇒ 移动端要覆盖内核浮层
+  （尺寸/定位）**必须用 body 级选择器**；移动端入口已加 `body.lake-mobile` 标记（`src/mobile/main.tsx`）。
+  实例（插入面板夹进视口）见 §7「移动端验收」第 24 条。
+
 ## 5. 数据路径与安全
 
 | 项 | 路径 |
@@ -182,6 +195,12 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 23. **移动端懒加载入口若会挂内核，必须自带内核样式**（261010 立护栏，来自真实缺陷）：`TrashPreviewPage`（设置→回收站→预览）
     挂了 `LakeEditor` 却没引内核 CSS —— 冷启动直走这条路径同样是"第一个内核消费者"，会渲染成大图标 + 原生控件（261009 小记同款）。
     护栏 `src/mobile/kernelStyleBootstrap.test.ts`：懒入口 + 其直接 import 层里出现内核挂载点 ⇒ 必须出现 `@dlient/lakex-doc-react/style.css`。
+24. **内核「+」插入面板在手机上必须夹进视口并归位**（261010 立护栏，来自真实缺陷）：面板全量 **24 项 ≈1294px 高**，
+    手机视口只有 842px ⇒ 内核判定"下方放不下"、把整块面板翻到 caret 上方（它的浮层容器是**视口左上、0 尺寸的 fixed 盒**，
+    用**负 bottom** 定位，实测落在 `top=-558`）⇒ 顶部整段出屏、"基础"那些条目**点不到**。
+    **只夹高度不解决**（翻转判定不吃高度）⇒ 两条一起：① `max-height` + `overflow-y:auto`（交回内部滚动）；
+    ② 改锚点 `top:120px !important; bottom:auto !important`（内核写的是**行内样式**，只能 !important 压，§14 允许的例外）。
+    落点 `src/mobile/mobile-kit.css`、作用域 `body.lake-mobile`（内核无相关配置项：官方文档 55 只给 `groups`/`disableQuickInput`）。
 
 ## 8. 会话启动指引
 

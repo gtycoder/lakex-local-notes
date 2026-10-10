@@ -3,7 +3,7 @@
  *
  * - 写作区 = 桌面同款 `QuickNoteEditor`（一个 Lake 内核实例 + 小记工具条：
  *   **插入面板(+) / 图片 / 待办 / 无序 / 有序 / 引用 / 分割线** —— 条目以 `lakeRuntime.QUICK_NOTE_TOOLBAR_ITEMS` 为单一来源；
- *   `+` 打开的是被白名单过滤过的内核插入面板（日期/表情/附件等在那里，见 quickNoteInsertFilter）。
+ *   `+` 打开的是**内核全量**插入面板（与桌面端一致；261010 起不再白名单过滤）——
  *   `disableVirtualRendering` 必须开 —— 小记没有内核内部滚动容器，虚拟渲染会量错视口）；
  * - 附件按类型成卡：内核 file input 交给我们 `uploadResource`，经 `bridge.stageQuickNoteAsset` 落盘
  *   `quick-notes/{id}/`，mp4→视频卡、mp3→音频卡、png→图片卡、其它→附件卡（`installMediaCardCategoryRouter`

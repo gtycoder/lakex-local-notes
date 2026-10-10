@@ -62,8 +62,23 @@ export type QuickNotePreviewNode =
    * `label` 是卡片自带的**原始展示名**（附件卡的 `name` / 音频卡的 `fileName`），取不到时回落资源名。
    */
   | { kind: "media"; cardName: string; filename: string | null; label: string | null }
-  /** 白名单外的块（表格/代码块/公式/自定义卡…）：只读占位，不改写原文。 */
+  /**
+   * 快路径**还原不了**的块（表格/代码块/公式/画板/思维导图/日历/日期/表情…）。
+   *
+   * 它不再是"占位显示"，而是**切换渲染器的信号**：出现任意一个 ⇒ 整条卡片改由内核只读视图渲染
+   * （见 quickNoteKernelPreview / hasUnsupportedNodes）。渲染层仍保留了兜底文案，防止未知环境漏渲染。
+   */
   | { kind: "unsupported"; label: string };
+
+/**
+ * 快路径能否还原这段正文的**唯一判据**：有没有出现 `unsupported` 节点。
+ *
+ * 判据直接取解析器自己的输出（不再维护第二份"内核卡片白名单"）—— 两份清单必然漂移，
+ * 而这里只要解析器认不出来，就交给内核，**永远不会出现"显示不出来"的格式**。
+ */
+export function hasUnsupportedNodes(nodes: QuickNotePreviewNode[]): boolean {
+  return nodes.some((node) => node.kind === "unsupported" || (node.kind === "quote" && hasUnsupportedNodes(node.nodes)));
+}
 
 const BLOCK_TAGS = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "blockquote"]);
 const MEDIA_CARD_NAMES = new Set(["image", "video", "audio", "file", "localdoc"]);

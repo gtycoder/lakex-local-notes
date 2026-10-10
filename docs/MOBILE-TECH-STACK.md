@@ -115,6 +115,30 @@
 | ~~内核预热/复用~~ | **已测并给出结论（261010，AVD `lake_mobile`）**。**三条路径对比**（`scripts/mobile-coldopen-breakdown.mjs`，每次 `Page.reload` 重置 keep-alive 后量真挂载，页内 `performance.now()`）：**深链小记（无内核）88/65/82ms** · 首页小记写作卡（内核）656/412/290ms · 打开文档（内核）427/366/347ms；**内核 chunk 加载/求值仅 27ms**。另：冷启动 Activity 490ms、keep-alive 热切换 ≈73ms。⇒ **结论：不立项预热/池化** —— 单 WebView 无池可建；不挂内核的小记已秒开；内核路径瓶颈在**实例化与首帧**（chunk 只 27ms），复开已由 keep-alive 覆盖（73ms）。数据留表不再投工 | ✅ 已收口 |
 | ~~`envAdapter` 只用 1/N~~ | **已收口（261010）**：外链端到端实测**正常**（点后前台切到 Chrome）⇒ `openLink` 不必接；`longPressCard` 官方语义是「使用方自实现 UI」⇒ 我方自写手势等价、保留。见 `LAKEX-CONTRACT §5.27`（含一次误判的修订记录） | — |
 
+## 七、小记预览渲染：快路径 + 内核只读兜底（261010 定稿）
+
+**问题**：小记正文是标准 lake 标记，而**内核的格式集合是开放的**（每升级一次内核就可能多几种卡）。
+自研只读解析器（`src/features/quickNotes/quickNotePreviewParser.ts`）不可能穷举 ⇒ 只要它不认识某种卡，
+那条小记在时间线里就「显示不出来」（261010 的真实案例：日期 / 表情 / 表格 / 高亮块 / 分栏）。
+
+**方案（两条路，判据单一来源）**：
+
+| 路 | 何时走 | 代价 |
+| --- | --- | --- |
+| **快路径**（`QuickNotePreview` 的 DOM 渲染） | 解析器能**完整还原**正文（文字/标题/列表/待办/引用/分割线/媒体卡） | 零内核实例（移动端冷开不受影响） |
+| **内核只读兜底**（`QuickNoteKernelPreview`） | 解析结果里出现任意 `unsupported` 节点 | 一条 viewer 实例；**只给进入视口的卡片挂**（`IntersectionObserver`，提前 400px 预挂载，离开即销毁） |
+
+- 判据 = `hasUnsupportedNodes(parseQuickNotePreview(body))`（**解析器自己的输出**，不另立卡片清单 —— 两份必然漂移）。
+- 兜底 = `createLakeDocument(host, "viewer", …)` + `editor.setDocument("text/lake", addAssetAccessToken(body))`，
+  与文档阅读态（EditorTab 锁定 / 回收站预览）**同一条内核路径**；`destroyLakeEditor` 收尾。
+- ⇒ **格式覆盖度由内核保证**，不存在「我们没实现所以显示不出来」的格式。
+- 配套：「+」插入面板 = **内核全量**（`quickNoteInsertFilter` 已删）：面板全量 24 项 / 1294px 高 ⇒ 手机上必须夹进视口并改锚点
+  （`body.lake-mobile`，见 `mobile-kit.css` 与 `LAKEX-CONTRACT.md` §5.28）。
+
+**设备实测（261010，AVD `lake_mobile`）**：面板插入「日期 + 表情」→ 保存 → 时间线卡片由内核渲染
+（`.quick-note-kernel-preview` 内 `ne-card[data-card-name=dateCard|unicodeEmoji]`，显示「📅 10月10日」）；
+同屏另 2 条纯文字小记仍走快路径（兜底计数 = 1、残留占位条 = 0）。护栏 `quickNoteKernelFallback.test.ts`。
+
 ## 验证
 
 ```bash

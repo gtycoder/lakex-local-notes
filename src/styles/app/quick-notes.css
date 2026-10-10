@@ -245,6 +245,11 @@
 .quick-note-preview-audio { width: 100%; max-width: 420px; height: 36px; }
 .quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--lake-border-2); border-radius: 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
+/* 内核兜底渲染（261010）：正文出现快路径还原不了的块时，整条卡片由内核只读视图画。
+   内核阅读态根节点 `.ne-viewer` 是 height:100% + overflow-y:auto（为"整页阅读"设计），
+   放进卡片必须交回内容高度 —— 否则要么被压成固定高、要么卡片里出现第二个滚动条。 */
+.quick-note-kernel-preview .ne-viewer { height: auto; overflow: visible; }
+
 /* 小记编辑器的「展开」(内核 fullscreen) 适配窗口外壳：
    内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是为「无外壳编辑器」设计的，
    直接用在我们的窗口里会盖住红绿灯/顶栏/侧栏（用户 260919 报「样式错乱、收起不了」）。

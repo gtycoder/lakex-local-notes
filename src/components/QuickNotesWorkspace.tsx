@@ -911,6 +911,7 @@ function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect
         媒体卡按正文顺序就地渲染；白名单外的块显示占位。解析不出内容时回落到纯文本镜像。 */}
     <QuickNotePreview
       body={item.content.body}
+      noteId={item.id}
       assets={assets}
       fallbackText={item.content.text}
       onImageClick={(image) => openImagePreview(imagesOnly.map((it) => ({ src: it.url })), imagesOnly.findIndex((it) => it.id === image.id))}

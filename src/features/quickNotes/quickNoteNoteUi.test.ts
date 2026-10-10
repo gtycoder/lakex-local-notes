@@ -1,11 +1,12 @@
 /**
- * 小记编辑器接线护栏（260919，几轮迭代后的最终形态）。
+ * 小记编辑器接线护栏（260919 起，261010 更新）。
  *
- * **定稿分工**（用户 260919）：
- * - 编辑态 = **文档编辑器外观**（同一套 Lake 编辑器、同样的视觉与手感），只把「预览显示不了的格式」
- *   从**工具栏 items** 和**「+」插入面板**（内核官方钩子 `slash.filterOption`）里收掉；
- * - 卡片预览 = 自研只读渲染（零内核实例，见 `quickNotePreviewParser.ts`）；
- * - **只影响小记**：`restrictedFormats` 只由 `QuickNoteEditor` 传，文档编辑器一个 option 都不加。
+ * **定稿分工**：
+ * - 编辑态 = **文档编辑器外观**（同一套 Lake 编辑器、同样的视觉与手感），只把**工具栏 items** 收成小记最小集；
+ * - **「+」插入面板 = 内核全量**（261010：不再用官方钩子 `slash.filterOption` 收白名单 ——
+ *   那个白名单正是"移动端没有日期/表情"的真因）；
+ * - 卡片预览 = 快路径（零内核实例）+ **内核只读兜底**（见 quickNoteKernelFallback.test.ts）；
+ * - **只影响小记**：`quickNoteUi` 只由 `QuickNoteEditor` 传，文档编辑器一个 option 都不加。
  *
  * vitest 跑在 node 环境、起不了内核，故与 cssLayers/blockMenuNative 同套路做**源码级**断言。
  */
@@ -13,6 +14,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
+
+/** 去注释后再断言（注释里会提到旧实现/钩子名，不算代码里还在用）。 */
+const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 const RUNTIME_SRC = read("../editor/lakeRuntime.ts");
 const EDITOR_SRC = read("./QuickNoteEditor.tsx");
@@ -31,7 +35,8 @@ describe("小记编辑器：文档外观 + 受限格式（只影响小记）", (
     // 开关控制的两处裁剪必须都在 quickNoteUi 分支里（否则会误伤文档编辑器）
     expect(RUNTIME_SRC).toMatch(/const quickNoteUi = mode === "editor" \? prefs\?\.quickNoteUi : undefined;/);
     expect(RUNTIME_SRC).toMatch(/note: \{ items: \[\.\.\.QUICK_NOTE_TOOLBAR_ITEMS\] \}/);
-    expect(RUNTIME_SRC).toMatch(/quickNoteUi \? \{ filterOption: filterQuickNoteInsert \} : \{\}/);
+    // 261010：小记开关只裁剪工具栏 items，「+」面板不再有第二处裁剪（filterOption 钩子已撤）
+    expect(stripComments(RUNTIME_SRC)).not.toMatch(/filterOption/);
   });
 
   it("工具栏 = 预览支持的白名单（内核 agentConfig 整体替换 ⇒ 必须显式给 default）", () => {
@@ -54,10 +59,12 @@ describe("小记编辑器：文档外观 + 受限格式（只影响小记）", (
     }
   });
 
-  it("「+」面板用内核官方钩子过滤（白名单外的条目隐藏，卡片注册保留）", () => {
-    expect(RUNTIME_SRC).toMatch(/import \{ filterQuickNoteInsert \} from "\.\.\/quickNotes\/quickNoteInsertFilter"/);
-    expect(RUNTIME_SRC).toMatch(/filterOption: filterQuickNoteInsert/);
-    // 只过滤面板条目，不动 customCard 注册（否则已有小记里的表格/自定义卡一编辑就被内核丢弃）
+  it("「+」面板不再过滤（261010 = 内核全量；卡片注册照旧保留）", () => {
+    // 旧实现用官方钩子 filterOption 把小记面板收成白名单 —— 那正是"移动端没有日期/表情"的真因
+    // （钩子内核仍在，只是我们不再接：面板全量 = 与桌面端一致，格式还原交给内核兜底渲染）。
+    expect(stripComments(RUNTIME_SRC)).not.toMatch(/filterOption/);
+    expect(stripComments(RUNTIME_SRC)).not.toMatch(/quickNoteInsertFilter/);
+    // 卡片注册照旧全量（否则已有小记里的表格/自定义卡一编辑就被内核丢弃）
     expect(RUNTIME_SRC).toMatch(/prepareCustomCards\(mergedOptions\)/);
   });
 

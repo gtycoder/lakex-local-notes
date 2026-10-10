@@ -4,6 +4,19 @@
 .ln-row__title { text-overflow: ellipsis; }
 .ln-row__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 .ln-row__chevron { flex: 0 0 auto; color: var(--lake-text-4); }
+/* ── 内核「+」插入面板：夹进手机视口 + 归位（261010）────────────────────
+   拆掉白名单后「+」面板有 24 项（**实测 1294px 高**），手机视口只有 842px ⇒ 内核判定「下方放不下」，
+   把整块面板翻到 caret 上方：它的浮层容器是**视口左上、0 尺寸的 fixed 盒**，用**负 bottom** 定位，
+   实测面板落在 top=-558（顶部整段出屏、"基础"那些条目**根本点不到**）。注意**只夹高度不解决**定位，
+   内核的翻转判定不吃高度 ⇒ 两条都要：
+     ① 高度夹到视口内 + 交回内部滚动（面板本身 1225px 高，clientH=scrollH 时内部根本不能滚）；
+     ② 改用容器顶部锚点、定位到工具条下方（内联 top/bottom 是内核写的行内样式 ⇒ 必须 !important，
+        AGENTS §14 允许的「内核样式例外」，理由与实测数据即本注释）。
+   内核没有定位/高度配置项：官方文档 55 - 斜杠命令只给 groups/disableQuickInput。 */
+body.lake-mobile .ne-ui-search-card-menu { max-height: calc(100vh - 200px); }
+body.lake-mobile .ne-ui-card-menu-content { max-height: calc(100vh - 200px); overflow-y: auto; }
+body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120px !important; bottom: auto !important; }
+
 /* 触屏无 hover ⇒ 行内动作常驻可见（桌面 kit 默认 hover 才显示） */
 .ln-row__actions { opacity: 1; }
 .ln-input, .ln-select { height: 40px; font-size: var(--lake-font-size-body); }

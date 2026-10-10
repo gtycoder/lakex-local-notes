@@ -292,6 +292,7 @@ function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit
         {note.body ? (
           <QuickNotePreview
             body={note.body}
+            noteId={note.id}
             assets={previewAssets}
             // 卡片是「打开编辑」的入口：预览里的图片不抢点击（否则点图上只会弹放大预览、进不去编辑），
             // 需要放大看图时进编辑态点图（内核/浅色预览层在编辑态仍可用）。

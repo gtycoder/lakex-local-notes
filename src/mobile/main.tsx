@@ -25,6 +25,10 @@ import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读�
 import "../styles/dialog.css"; // 浮层通用弹窗（属性等）：与桌面共用同一套样式
 import "./mobile-kit.css"; // 移动端 kit 密度层（触屏点按目标 / 常驻动作）
 
+// 内核的浮层（插入面板/卡片工具栏/下拉）**portal 到 body 下的 .ne-overlay-container**（不在我们的组件树里），
+// 所以移动端要覆盖它们必须有一个 body 级标记（260923 W2 起只有组件树内样式，够不到浮层）。
+document.body.classList.add("lake-mobile");
+
 // M3：移动端深色模式——与桌面同语义：settings.theme 为权威（light=daylight / dark=midnight）。
 // 启动即应用；saveSettings 的订阅回调让设置面板切换立即生效（桌面此前一直如此，移动端曾缺失
 // 导致「点深色没反应」：设置已持久化但 data-theme 不变）。
