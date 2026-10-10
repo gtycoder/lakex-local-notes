@@ -122,6 +122,11 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - **内核浮层 portal 到 `body`**（`.ne-overlay-container`）：它们不在我们的组件树里 ⇒ 移动端要覆盖内核浮层
   （尺寸/定位）**必须用 body 级选择器**；移动端入口已加 `body.lake-mobile` 标记（`src/mobile/main.tsx`）。
   实例（插入面板夹进视口）见 §7「移动端验收」第 24 条。
+- **移动端 Lake 输入面 = 底部 dock，没有第二条路**（用户 261010 定稿，实测见 `docs/MOBILE-TECH-STACK.md` §八、
+  `LAKEX-CONTRACT §5.30`）：移动端编辑态 **内核固定工具栏整条不存在**（`showToolbar:!editing` ⇒ `disabledPlugins:["save","toolbar"]`），
+  **块悬浮手柄 / 选区浮栏不挂载**（两者是 opt-in prefs，移动端没传），**`/` 斜杠面板不可触发**（真实 IME 实测：
+  只落一个字面 `/`，面板计数 0）。⇒ 移动端能输入什么，**只取决于 dock 接线了什么**；桌面固定栏 27 项 + 插入面板 22 项
+  里没接进 dock 的，移动端**能显示、不能输入**。新增移动端输入能力一律走 dock（图1 那条），不要再试内核工具栏/斜杠。
 
 ## 5. 数据路径与安全
 
