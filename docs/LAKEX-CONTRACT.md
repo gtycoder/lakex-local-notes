@@ -1552,3 +1552,12 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 
 **观测（待确认，别当结论）**：内容以 `<h1>` 开头、缺 `-body` 段落的文档，出现过「标题栏对该篇、正文为空折叠块」；
 同内容补 `-body` 段后移动端正常，桌面渲染一直正常，设备 DB 内容完好（无损坏）。自动化未稳定隔离 ⇒ 需人工复核。
+
+### 5.31 移动端内嵌画板卡（Drawnix/Plait）：内核给的是**可编辑**组件，但 ≤720px 布局把画布盖住（261012 设备实测）
+
+- **卡片组件按模式选**：`cards/DrawingBoard/index.ts` 的 `editorComponent: DrawingBoardEditor` / `viewerComponent: DrawingBoardViewer`；
+  编辑态 `DrawingBoardEditor` 渲染 `DrawnixBoardCore` **不传 `readOnly`**（工具条/画布可交互），阅读态 `DrawingBoardViewer` 才传 `readOnly`。
+  我们这边由 `lakeRuntime.ts` 的 `createLakeDocument(mode)` 决定，`BOARD_CARD_NAMES = {drawing-board, flowchart-board, uml-board, drawing-mindmap-board}` 走 `withCanvasWheelGate`（点击激活滚轮门控）。
+- **移动端宽度下的真问题（实测）**：`.lakex-drawnix-core .draw-toolbar` 同时吃到 `@media (width<=720px)` 的 `top:auto; bottom:14px`（本意底部横条）与 `.drawnix--mobile.drawnix .draw-toolbar{top:20px}` ⇒ `top:20 + bottom:14` 把容器**上下拉满**（实测 351×524、`pointer-events:auto`、`z-index:20`）。`elementFromPoint` 在卡片内任意点都命中 `DIV.island draw-toolbar` ⇒ 画布 `.board-host-svg` 收不到指针事件。桌面是左侧窄条（36×288）所以不受影响。**把容器临时压到 44px 高 + `pointer-events:none`（工具行自身 `auto`）后，命中即回到 `svg`** ⇒ 覆盖层是直接原因。
+- **触摸第二道坎**：画布/板 `touch-action:auto`（无 `none`）⇒ 手指拖拽被判成滚动，事件序列实测 `pointerdown → pointermove → pointercancel`；且壳层「左滑开大纲 / 右滑开目录」会抢横滑（实测触摸拖拽把左抽屉滑开）。
+- **结论/口径**：移动端要放开画板族（画板 / 流程图 / UML / 思维导图 / 文本绘图）的编辑，需两处定点修改（内核 CSS 覆盖 + 壳层手势豁免），单独立项；在此之前这 5 项在移动端 dock 只作**置灰占位**。**不要**据此认为「内核不支持编辑」—— 它支持，只是移动端布局/手势没接好。
