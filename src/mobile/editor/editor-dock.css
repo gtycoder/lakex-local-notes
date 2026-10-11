@@ -100,22 +100,22 @@
 }
 .med-panel[data-open="0"] .med-panel-inner { transform: translateY(100%); opacity: 0; }
 .med-panel::-webkit-scrollbar, .med-panel-inner::-webkit-scrollbar { display: none; }
-/* 插入面板：对齐语雀移动端——两列「浅灰底 + 图标 + 文字」条目（原先 3 列纯图标方块，
-   85px 方格里只放一个图标，"引用/分割线"这类很难认）。
-   用户 260914：条目与间距都收紧一档，11 项尽量在键盘区（≈312px）里一次看全：
-   6 行 × 40 + 5 × 5 + 上下 16 = 281px（实测键盘区 311 → 一屏放下，不再需要滚动）。 */
+/* 插入面板：对齐语雀移动端——「浅灰底 + 图标 + 文字」条目。
+   261010 用户定稿：**每行 3 个**（+ 面板 17 项、更多面板 6 项共用这一套网格）
+   ⇒ 6 行 × 40 + 5 × 5 + 上下 16 = 281px（实测键盘区 311 → 一屏放下，不需要滚动）。 */
 .med-ins-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px 8px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px 6px;
   padding: 8px 12px;
 }
 .med-ins-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
+  min-width: 0;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: var(--lake-bg-panel);
@@ -126,8 +126,10 @@
   transition: background-color var(--mobile-duration-press) ease;
 }
 .med-ins-item:active { background: var(--lake-bg-hover); }
+/* 占位（置灰）：移动端暂未支持的能力仍然显示，但不可点（与桌面 disabled 同一口径） */
+.med-ins-item:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .med-ins-item svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--lake-text-2); }
-.med-ins-label { font-size: 14px; line-height: 1; }
+.med-ins-label { min-width: 0; font-size: 13px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .med-font-panel { display: flex; flex-direction: column; gap: 10px; }
 .med-f-row { display: flex; gap: 8px; }

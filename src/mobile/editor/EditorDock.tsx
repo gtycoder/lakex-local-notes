@@ -11,12 +11,19 @@
  * - `--mobile-dock-space` = 当前 --kb-offset（面板/键盘占位）+ 工具栏，正文底部留白始终跟着占位走。
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type } from "lucide-react";
+import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, Shapes, Workflow, Network, GitFork, FileCode2 } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
 import { useKeyboard } from "../useKeyboard";
+// 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
+import { openEmojiPicker } from "../../features/quickNotes/quickNoteToolbarWidgets";
 
-type PanelMode = "insert" | "font" | null;
+type PanelMode = "insert" | "font" | "more" | null;
+
+/** dock 面板条目的动作；`anchor` = 触发按钮（表情选择器要锚定它）。 */
+type DockAction = (anchor?: HTMLElement | null) => void;
+/** 面板条目形状（`+ ` /「更多」两个网格共用，保证几何与置灰态单一来源）。 */
+type DockItem = { label: string; Icon: typeof ImageIcon; run?: DockAction; disabled?: boolean };
 
 /** 选区/焦点节点是否属于编辑器正文（面板命令只认正文选区） */
 function isEditorNode(node: Node | null): boolean {
@@ -282,8 +289,16 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   };
   const showKeyboard = () => { focusEditor(); };
 
-  // 插入面板条目（对齐语雀移动端：图标 + 文字，两列）。顺序＝使用频次从高到低。
-  const insertItems: ReadonlyArray<{ label: string; Icon: typeof ImageIcon; run: () => void }> = [
+  /** 内核日历卡 `currentDate` 形态 = YYYYMMDD 整数（HANDOFF §0(五) 实测）。 */
+  const dateStamp = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
+  /** 表情：选中后按内核原意插**文本**（`unicodeEmoji` 卡是死占位，见 LAKEX-CONTRACT §5.29）。 */
+  const pickEmoji = (anchor?: HTMLElement | null) => {
+    snapshotSelection();
+    openEmojiPicker(anchor ?? null, (emoji) => runPanel("insertAtSelection", "text/lake", `<span>${emoji}</span>`));
+  };
+
+  // 插入面板条目（对齐语雀移动端：图标 + 文字，**每行 3 个**）。顺序＝使用频次从高到低。
+  const insertItems: ReadonlyArray<DockItem> = [
     { label: "图片", Icon: ImageIcon, run: () => onInsertImage?.() },
     { label: "拍照", Icon: Camera, run: () => onInsertCamera?.() },
     { label: "附件", Icon: Paperclip, run: () => onInsertAttachment?.() },
@@ -296,6 +311,22 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     { label: "引用", Icon: Quote, run: () => runPanel("quote") },
     { label: "分割线", Icon: Minus, run: () => runPanel("hr") },
     { label: "代码块", Icon: Code2, run: () => runPanel("insertCard", "codeblock") },
+    // 261010 扩展：桌面「+」面板的其余插入项（公式/画板族归「更多」，不在此）。
+    { label: "分栏卡片", Icon: Columns2, run: () => runPanel("columns", 2) },
+    { label: "折叠块", Icon: FoldVertical, run: () => runPanel("collapse") },
+    { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
+    { label: "日期", Icon: CalendarDays, run: () => runPanel("insertCard", "dateCard", { date: Date.now() }, false) },
+    { label: "表情", Icon: Smile, run: (anchor) => pickEmoji(anchor) },
+    { label: "文档引用", Icon: FileSymlink, run: () => runPanel("insertCard", "customBlock", { $name: "lake-note-ref", $htmlStr: "", noteId: "", title: "" }, true) },
+  ];
+  // 「更多」面板：公式可用；5 项画图/绘图是**占位（置灰）**，待逐项解决移动端编辑（画布覆盖层 + 触摸手势）后放开。
+  const moreItems: ReadonlyArray<DockItem> = [
+    { label: "公式", Icon: Sigma, run: () => runPanel("insertCard", "math", null, true) },
+    { label: "画板", Icon: Shapes, disabled: true },
+    { label: "流程图", Icon: Workflow, disabled: true },
+    { label: "UML 图", Icon: Network, disabled: true },
+    { label: "思维导图", Icon: GitFork, disabled: true },
+    { label: "文本绘图", Icon: FileCode2, disabled: true },
   ];
   // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）
   const onKbToggle = () => { if (panelMode) dismissKeyboard(); else if (keyboardOpen) dismissKeyboard(); else showKeyboard(); };
@@ -321,6 +352,9 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
         <button className={"med-btn" + (isOn("bold") ? " med-active" : "")} onClick={() => runInline("bold")} aria-label="加粗"><Bold size={19} /></button>
         <button className={"med-btn" + (isOn("unorderedList") ? " med-active" : "")} onClick={() => runInline("unorderedList" as never)} aria-label="列表"><List size={20} /></button>
         <button className={"med-btn" + (isOn("taskList") ? " med-active" : "")} onClick={() => runInline("taskList" as never)} aria-label="待办"><ListTodo size={20} /></button>
+        <button className={"med-btn med-toggle" + (panelMode === "more" ? " med-open" : "")} onClick={() => togglePanel("more")} aria-label="更多">
+          {panelMode === "more" ? <X size={20} /> : <MoreHorizontal size={20} />}
+        </button>
         <button className="med-btn" onClick={onKbToggle} aria-label={kbLabel}><Keyboard size={19} /></button>
       </div>
 
@@ -329,10 +363,17 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       {(panelMode || closing) && (
       <div className="med-panel" data-open={panelMode ? "1" : "0"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
         <div className="med-panel-inner">
-          {renderedPanel === "insert" ? (
+          {renderedPanel === "insert" || renderedPanel === "more" ? (
             <div className="med-ins-grid">
-              {insertItems.map(({ label, Icon, run }) => (
-                <button key={label} className="med-ins-item" aria-label={label} onClick={run}>
+              {(renderedPanel === "insert" ? insertItems : moreItems).map(({ label, Icon, run, disabled }) => (
+                <button
+                  key={label}
+                  className="med-ins-item"
+                  aria-label={label}
+                  disabled={!!disabled}
+                  title={disabled ? label + "（移动端暂未支持）" : undefined}
+                  onClick={run ? (e) => run(e.currentTarget) : undefined}
+                >
                   <Icon size={22} />
                   <span className="med-ins-label">{label}</span>
                 </button>

@@ -119,7 +119,7 @@ function closeQuickNoteEmojiPicker(): void {
 }
 
 /** 打开表情面板（锚在传入的按钮下方，夹进视口；点外部 / 滚动 / Esc 即关）。 */
-function openQuickNoteEmojiPicker(anchor: HTMLElement | null, onPick: (emoji: string) => void): void {
+export function openEmojiPicker(anchor: HTMLElement | null, onPick: (emoji: string) => void): void {
   closeQuickNoteEmojiPicker();
   const panel = document.createElement("div");
   panel.className = "quick-note-emoji-panel";
@@ -212,7 +212,7 @@ export class QuickNoteDateToolbarItem extends QuickNoteToolbarButton {
 }
 
 /**
- * 表情：**自带选择器**（内核那条路只插空卡且点不开面板，见 openQuickNoteEmojiPicker 的说明），
+ * 表情：**自带选择器**（内核那条路只插空卡且点不开面板，见 openEmojiPicker 的说明），
  * 选中后按内核卡模型插 `unicodeEmoji` 卡（value = `{ emoji }`）。
  */
 export class QuickNoteEmojiToolbarItem extends QuickNoteToolbarButton {
@@ -244,7 +244,7 @@ export class QuickNoteEmojiToolbarItem extends QuickNoteToolbarButton {
 
   /** 测试缝：单测覆写它，避免真开面板。 */
   protected openPicker(anchor: HTMLElement | null, onPick: (emoji: string) => void): void {
-    openQuickNoteEmojiPicker(anchor, onPick);
+    openEmojiPicker(anchor, onPick);
   }
 }
 

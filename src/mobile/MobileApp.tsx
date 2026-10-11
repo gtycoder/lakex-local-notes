@@ -9,6 +9,7 @@ import { bridge } from "./bridge";
 import { resetAssetPerf, snapshotAssetPerf } from "./assetPerf";
 import type { LocalNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
+import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
 import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent, type QuickNoteSeed } from "./sharedContent";
@@ -234,6 +235,20 @@ export function MobileApp() {
     await refreshAll();
     setRoute({ kind: "notebook", notebookId, initialNoteId: id, initialMode: mode });
   }, [notes, treeNodes, refreshAll]);
+
+  /** 「文档引用」卡（内核自定义卡）在移动端也要能选目标文档：注册宿主（与桌面 App.tsx 同一接口）。
+   *  移动端摘要只有 id/title/parentId/updatedAt ⇒ 补默认 sortOrder/syncState/isConflict；
+   *  成功态判定仍靠 parentId（回收站）兜底，不读 lake 正文。 */
+  useEffect(() => {
+    setNoteRefHost({
+      listNotes: () => notes.map((n) => ({
+        id: n.id, title: n.title, parentId: n.parentId, updatedAt: n.updatedAt,
+        sortOrder: 0, syncState: "synced" as const, isConflict: false,
+      })),
+      openNote: (id) => { void openNote(id, "viewer"); },
+    });
+    return () => setNoteRefHost(null);
+  }, [notes, openNote]);
 
   // 新建文档：归属指定父节点（home → 兜底笔记本；工作区 → 当前笔记本），随后进入工作区编辑态
   const createNoteInParent = useCallback(async (parentId: string | null) => {
