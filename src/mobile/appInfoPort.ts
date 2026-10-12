@@ -3,9 +3,11 @@
  * Web 预览环境（无 Capacitor）回退到构建常量。
  */
 import type { AppInfo, AppInfoPort } from "../core/ports.js";
+import { MANIFEST_VERSION } from "../core/syncUtils.js";
 
-/** manifest 协议版本（与 src/core/syncEngine 的协议版本一致）。 */
-const PROTOCOL_VERSION = "4";
+/** 同步协议版本 —— **单一来源** = core 的 MANIFEST_VERSION（260928 起重置为 V1，代码只读写 {1}）。
+ * 不要再写字面量：这里曾经硬编码 "4"（V1 重置前的老值），「关于」页因此显示成 manifest v4。 */
+const PROTOCOL_VERSION = String(MANIFEST_VERSION);
 
 export const mobileAppInfoPort: AppInfoPort = {
   async getAppInfo(): Promise<AppInfo> {
