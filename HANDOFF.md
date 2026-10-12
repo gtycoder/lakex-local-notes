@@ -16,6 +16,29 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261012 · 移动端 UI 独立化 P0–P2（本批；用户授权全做 P0–P7，进行中）
+
+- **用户 261012 定稿口径**（本会话确认）：全做 P0–P7 · 两端都由本会话负责（无并行会话）· 先在途改动已提交
+  · mobilesnap **已重烤** · 模拟器/语雀 App/数据随意用 · **沿用本项目色阶 + MiSans，只模仿语雀的形态与密度**
+  · 只有 `+` 号用绿 · 字号走令牌（7 档）· 浅/深先做、warm 后续补 · 修首页 tab 命中区 · 破坏性确认走 ActionSheet · 保留既有手势。
+- **P0 护栏（已交付）**：`src/mobile/mobileIndependence.test.ts` + `mobileLayers.test.ts`（允许红、基线只许降、
+  stale 条目必须同步删）。实测冻结：桌面样式 import 14 条、桌面类名 token 11 文件 / **150** 处、反向耦合 kit.css 18 处、
+  移动端 4 个 CSS 基线。口径写进文件头（**与文档里 56+8 的 grep 口径不同，不可直接比**）。
+- **P1 令牌/皮肤（已交付，验收=视觉中性）**：新增 `src/mobile/theme/{index,base,tokens,light,dark}.css`；
+  main.tsx 不再 import 桌面 themes/tokens；editor-dark.css 的取值块并入 theme/dark.css（54→13 条）。
+  **实测 check:mobilesnap 6 态 0 差异**（视觉中性达标）。
+- **P2 原语 + 首批迁移（已交付）**：`src/mobile/kit.css`（mb-* 248 条）；tokens 就地改字号 7 档（body 14→16）/
+  行高/动效 + 新增移动端几何槽；10 个组件迁到 mb-*（桌面类名 **150 → 109**，剩 SettingsDrawer 留 P4）；
+  **首页 tab 命中区 36×25 → ≥44**（走查 smallTap 2 → 0）；新增 `src/mobile/floating.css`（P3 浮层原语，已登记未接线）。
+  验收：mobilesnap 6 态**元素数不变**（1755/1840/1755/1755/1833/1833）· 设备走查 **22/22 ok** · tsc ✓ · vitest 231/1815 ✓。
+- **装置修复（本轮真因，已入 README）**：① stylesnap 的「内核 u<hex> id 不入 key」阈值 6 → 参数化（移动端 4 位，
+  否则 home-quicknotes 每次换 key 前缀）；② 首页态**冷/暖取样差 29 元素**（1784/1755）⇒ settle 收紧 + **基线必须
+  `--from` 暖态快照再写**；③ 走查选择器同时匹配 ln-*/mb-*（改名后 7 屏 ERR）。
+- **未做（下一轮继续）**：P3 浮层接线（mb-sheet/actionsheet/toast/menusheet 替换 mobile-sheet/dialog/toast/menu）·
+  P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
+  文档外壳/dock）· P6 六组件变体化 · P7 收口（MOBILE-DESIGN.md 定稿 + 指标转门禁 + 清反向耦合 18 行）。
+- **已知遗留**：`mobile-kit.css` 仍是「桌面 kit 之上的覆盖层」（SettingsDrawer 还在用 ln-*），P4/P5 收尾才删除。
+
 ### 261012 · 移动端批：dock「Aa」面板改语雀式分组卡 + 文本增强五项**（本批；移动端会话交付）**
 
 - **用户 261012 定稿（本轮）**：① 语雀 App **没有字号入口** ⇒ 字号自己设计、**放面板最底部**（用得不多）；
