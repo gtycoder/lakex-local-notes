@@ -55,6 +55,13 @@
 - **P7 部分（已交付）**：移动端指标**转门禁** —— 新增 `npm run check:mobileui`（= 独立性/层/内核样式三道护栏 +
   ui-metrics，一条命令，实测通过）；**`docs/MOBILE-DESIGN.md` 定稿**（YAML 令牌前置 + 色彩/字体/几何/浮层/组件/动效/门禁八节，
   含「只有 + 用绿」「44 命中区」「无居中对话框」「基线只许降账本」等长期判据）。
+- **P6b（已交付）**：小记编辑器宿主与只读预览改「移动端自有外观」—— 新增 `src/mobile/quick-notes.css`
+  （自桌面 `styles/app/quick-notes.css` **按移动端实际用到的选择器抽取** 22 条规则 / 102 条声明；
+  桌面小记写作卡外壳与列表版式移动端不用，故不搬）。⇒ **移动端入口现在只引字体资源
+  `styles/fonts/**`，桌面样式表 import = 0**。验收：check:mobilesnap **6 态 0 差异**（含 home-quicknotes，
+  说明抽取逐元素忠实）· 设备走查 **22/22 ok**（含 quicknote-editor）。
+  遗留桥接（1 条，写在文件头）：共享组件 `QuickNotePreview` 仍发桌面工具类 `.ln-ellipsis`，
+  移动端给了一条 `body.lake-mobile` 作用域的等价规则；组件改发 `.mb-ellipsis` 后即可删。
 - **未做（下一轮继续）**：
   P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
   文档外壳/dock）· P6 六组件变体化 · P7 收口（MOBILE-DESIGN.md 定稿 + 指标转门禁 + 清反向耦合 18 行）。

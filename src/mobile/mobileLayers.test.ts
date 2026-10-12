@@ -29,6 +29,7 @@ const FILES = [
   "mobile/kit.css", // P2：移动端自有原语库 mb-*（唯一来源）
   "mobile/floating.css", // P3：浮层原语 mb-sheet / mb-actionsheet / mb-toast / mb-menusheet（P3 接线）
   "mobile/features.css", // P6：图片 Lightbox / 附件预览的移动端外观（结构类名共享）
+  "mobile/quick-notes.css", // P6b：小记编辑器宿主与预览（自桌面 quick-notes.css 抽取移动端子集）
   "mobile/mobile.css", // 外壳（首页/工作区/设置/抽屉/toast/小记）
   "mobile/editor-dark.css", // 编辑器深色组件边界修复（取值 P1 起归 theme/dark.css）
   "mobile/editor/editor-dock.css", // 底部 dock + 面板
@@ -44,6 +45,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/kit.css": { decls: 409, dupGroups: 0 }, // P2 248 → P4 +113（mb-set-* / mb-switch）→ P5 +48（收编勾选原语）
   "mobile/floating.css": { decls: 256, dupGroups: 0 }, // P3：浮层原语（sheet/actionsheet/toast/menusheet + 两种遮罩进场）
   "mobile/features.css": { decls: 142, dupGroups: 0 }, // P6：图片 Lightbox（57→触屏版）+ 附件预览（82→触屏版）
+  "mobile/quick-notes.css": { decls: 102, dupGroups: 0 }, // P6b：自桌面 quick-notes.css 抽取的移动端子集（22 条规则）
   "mobile/mobile.css": { decls: 1349, dupGroups: 2 }, // P1 -39（令牌迁出）/ P2 +4（tab 触达）/ P5 +6（收编 mobile-kit 的内核修正）
   "mobile/mobile-kit.css": { decls: 177, dupGroups: 0 }, // P2 目标：整份消灭
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）

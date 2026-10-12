@@ -1,0 +1,65 @@
+/* ── 移动端自有外观：小记编辑器宿主与只读预览（P6b，261012）────────────────────
+ * 口径：**逻辑共享、外观移动端自有**。共享组件（features/quickNotes/QuickNotePreview.tsx）发出的结构类名
+ * （.quick-note-editor / .quick-note-preview* / .quick-note-file-chip*）在这里由移动端定义视觉；
+ * 桌面那份仍在 src/styles/app/quick-notes.css（只被桌面入口引用）。
+ *
+ * 本文件 = 从桌面那份**按移动端实际用到的选择器抽取**（小记时间线/卡片/预览），不是整份复制：
+ * 桌面小记的写作卡外壳（.quick-note-composer*）、列表版式、批量条等移动端**不用**（移动端有自己的
+ * .mobile-qn-composer 时间线外壳），故不搬。抽取后渲染应与抽取前**逐元素一致**（同一批声明、同一批类名）。
+ *
+ * ⚠️ 唯一桥接：共享组件 QuickNotePreview 目前仍发桌面工具类 .ln-ellipsis（桌面 kit 定义）。
+ * 移动端不再引桌面 kit ⇒ 这里给同一语义一条**作用域限于移动端**的等价规则；
+ * P6 收尾把组件改发 .mb-ellipsis 后删掉本条（届时 .mb-ellipsis 由 src/mobile/kit.css 提供）。 */
+body.lake-mobile .ln-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* 写作区 = 单个 Lake 内核实例（260919）：外层撑开、内层编辑器滚动，替代原 textarea。 */
+.quick-note-composer .quick-note-editor { flex: 1; width: 100%; min-height: 200px; display: flex; flex-direction: column; overflow: auto; font: 450 var(--lake-font-size-body)/1.7 var(--lake-font-family); }
+
+/* 261008：字体走令牌（原写死的系统栈不是 MiSans） */
+
+.quick-note-composer .quick-note-editor > .lake-editor-mount { flex: 1; min-height: 200px; }
+
+/* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
+   （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
+/* 自带表情选择器（261010）：内核那条路只插空占位卡（点不开面板，实测两次），所以选择器在我们这层。
+   表面沿用浮层令牌（--lake-*）；定位由 JS 按**真实尺寸**夹进视口（同 usePopoverPosition 的口径）。 */
+.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 8px; max-width: min(320px, calc(100vw - 16px)); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
+
+.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 8px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
+
+/* 卡片预览（自研只读渲染，零内核实例）：块级结构 + 行内格式 + 媒体就地渲染 */
+.quick-note-preview { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+
+.quick-note-preview.is-collapsed { overflow: hidden; position: relative; }
+
+.quick-note-preview.is-collapsed::after { content: ""; position: absolute; inset: auto 0 0 0; height: 44px; background: linear-gradient(to bottom, transparent, var(--lake-bg-panel)); pointer-events: none; }
+
+.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent-text); background: transparent; font-size: var(--lake-font-size-tiny); cursor: pointer; }
+
+.quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
+
+.quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-bodyLg); }
+
+.quick-note-preview h1.quick-note-preview-heading { font-size: var(--lake-font-size-display); }
+
+.quick-note-preview h2.quick-note-preview-heading { font-size: var(--lake-font-size-title); }
+
+.quick-note-preview-list { margin: 0; padding-left: 22px; }
+
+.quick-note-preview-list li { margin: 1px 0; }
+
+.quick-note-preview-task { list-style: none; display: flex; align-items: flex-start; gap: 6px; margin-left: -18px; }
+
+.quick-note-preview-task input { margin-top: 4px; }
+
+.quick-note-preview-quote { margin: 0; padding: 4px 10px; border-left: 3px solid var(--lake-border-2); color: var(--lake-text-3); }
+
+.quick-note-preview-divider { width: 100%; margin: 4px 0; border: none; border-top: 1px solid var(--lake-border-2); }
+
+.quick-note-preview-image { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; border-radius: 8px; cursor: zoom-in; }
+
+.quick-note-preview-video { display: block; width: 100%; max-width: 420px; max-height: 260px; border-radius: 8px; background: var(--lake-media-video); }
+
+.quick-note-preview-audio { width: 100%; max-width: 420px; height: 36px; }
+
+.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--lake-border-2); border-radius: 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }

@@ -14,10 +14,10 @@ import "../styles/fonts/jetbrains-mono/jetbrains-mono.css"; // 内置等宽 JetB
 import "./theme/index.css";
 import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，走 --lake-*）
 import "./editor/editor-dock.css";
-import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读预览（与桌面同一套类）
 import "./kit.css"; // P2：移动端自有原语库 mb-*（触屏密度；一个交互语义只有一套）
 import "./floating.css"; // P3：浮层原语（mb-sheet / mb-actionsheet / mb-toast / mb-menusheet + 遮罩）
 import "./features.css"; // P6：图片 Lightbox / 附件预览的**移动端外观**（结构类名共享、视觉各端自有）
+import "./quick-notes.css"; // P6b：小记编辑器宿主与只读预览的移动端外观（自桌面那份抽取移动端子集）
 
 // 内核的浮层（插入面板/卡片工具栏/下拉）**portal 到 body 下的 .ne-overlay-container**（不在我们的组件树里），
 // 所以移动端要覆盖它们必须有一个 body 级标记（260923 W2 起只有组件树内样式，够不到浮层）。

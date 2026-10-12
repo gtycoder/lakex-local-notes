@@ -46,7 +46,6 @@ const ALLOWED_DESKTOP_STYLE_IMPORTS: Record<string, string[]> = {
   "mobile/main.tsx": [
     "../styles/fonts/misans/misans.css", // 资源（MiSans，与桌面同一逻辑）
     "../styles/fonts/jetbrains-mono/jetbrains-mono.css", // 资源
-    "../styles/app/quick-notes.css", // P6 消灭（小记外壳/预览移动端自有）
   ],
   "mobile/trash/TrashPreviewPage.tsx": ["../../styles/fonts/font-overrides.css"], // 资源
   "mobile/editor/DocumentEditor.tsx": ["../../styles/fonts/font-overrides.css"], // 资源
