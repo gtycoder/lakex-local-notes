@@ -2,7 +2,7 @@
  "states": {
   "home-library": {
    "n": 1784,
-   "hash": "xl61rp"
+   "hash": "25a4pk"
   },
   "home-quicknotes": {
    "n": 1840,
@@ -13,16 +13,16 @@
    "hash": "o6wf75"
   },
   "home-doc": {
-   "n": 2720,
-   "hash": "1ckgdbu"
+   "n": 2707,
+   "hash": "at6i1f"
   },
   "settings": {
    "n": 1862,
-   "hash": "17yj0zv"
+   "hash": "16c5xvq"
   },
   "settings-appearance": {
    "n": 1811,
-   "hash": "14s6u0s"
+   "hash": "p5y7ox"
   }
  }
 }
