@@ -110,7 +110,7 @@
 | --- | --- | --- | --- |
 | **P0 立护栏（允许红）** | `src/mobile/mobileIndependence.test.ts`：① 移动端不得 import `styles/{kit,components,dialog,compat,themes/*}`；② `src/mobile/**/*.tsx` 的 `ln-*`/`b3-*`/`fn__*` 计数基线（现状 **56 + 8**，只许降）；③ 桌面 CSS 反向耦合基线（**19 行**，只许降）。`src/mobile/mobileLayers.test.ts`：移动端 CSS 逐文件声明数基线 | 两份护栏 + 现状数字报告 | 护栏可跑、数字与本文一致 |
 | **P1 移动端令牌/皮肤层** | `src/mobile/theme/{tokens,light,dark}.css` + `index.css` 层序；取值按 §5；桌面 `themes/**` 停用 | 移动端自己的令牌来源 | 不再 import 桌面 themes；浅/深切换无回归 |
-| **P2 移动端原语（`mb-*`）** | 行 / 列表 / 卡 / 按钮 / 图标按钮 / 输入 / 选择 / 开关 / 标签 / 分段 / 工具类 / 工具栏；**同时**把移动端自建的 `.ln-indent` 等换到 `mb-*` | `kit.css` + `components/ui/**` | `mobile-kit.css` 的「覆盖层」语义消失 |
+| **P2 移动端原语（`mb-*`）** | 行 / 列表 / 卡 / 按钮 / 图标按钮 / 输入 / 选择 / 开关 / 标签 / 分段 / 工具类 / 工具栏；**同时**把移动端自建的 `.ln-indent` 等换到 `mb-*` | `kit.css` + `components/ui/**` | `mobile-kit.css` 的「覆盖层」语义消失（**已达成：P5 整份删除**；`components/ui/**` 实际落在既有的 `src/mobile/ui/**`，未新造目录） |
 | **P3 浮层原语** | `mb-sheet` / `mb-dialog` / `mb-actionsheet` / `mb-toast`；定位用共享算法（夹进视口） | `floating/**` | 触屏可关、避让安全区、单手可达 |
 | **P4 样板屏 = 设置页** | 用 `mb-*` 重写设置抽屉（**IA 不动**，只换形态与皮肤） | 一屏样板 | 骨架够用的验证点；不够回改 P1–P3 |
 | **P5 逐屏迁移** | 首页 → 笔记本工作区 → 文档外壳 → 编辑器 dock；**每屏迁完即删对应桌面 import** | 逐屏 PR | 每屏：走查 + IA 冻结清单核对 |

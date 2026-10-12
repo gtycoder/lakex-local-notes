@@ -205,22 +205,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .mobile-drawer-item:active { background: var(--lake-bg-window); }
 
-/* Toast：样式见 mobile-kit.css（W2 去思源后自带；原 .mobile-toast 居中黑胶囊已废弃） */
-
-/* 新建知识库 Sheet */
-/* 注意：遮罩与 sheet 是父子关系，绝不能给遮罩设元素 opacity——会把整张 sheet（含文字）一起压淡。
-   半透明放进背景色（等价于旧 opacity:.2 × 遮罩底色），sheet 保持完全清晰。 */
-.mobile-sheet-mask { position: fixed; inset: 0; background: color-mix(in srgb, var(--lake-scrim, var(--lake-scrim)) 20%, transparent); z-index: var(--mobile-z-sheet-mask); transition: opacity var(--mobile-duration-panel) linear; }
-.mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--lake-bg-panel); border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0; box-shadow: var(--lake-shadow-popover); z-index: var(--mobile-z-sheet); max-height: 90dvh; display: flex; flex-direction: column; scrollbar-width: none; }
-.mobile-sheet-grab { display: none; } /* 与 .mobile-sheet-head::before 的 grabber 重复，统一由头部提供（思源 sheet 口径） */
-.mobile-sheet-head { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 8px 8px 0 16px; border-bottom: 0; flex: 0 0 auto; position: relative; touch-action: none; }
-.mobile-sheet-head::before { content: ""; position: absolute; top: 5px; left: calc(50% - 16px); width: 32px; height: 4px; border-radius: 2px; background-color: var(--lake-text-3); opacity: .45; }
-.mobile-sheet-title { font-size: 16px; line-height: 24px; color: var(--lake-text-2); }
-.mobile-sheet-body { overflow-y: auto; flex: 1; overscroll-behavior: contain; padding: 6px 0 calc(16px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
-.mobile-sheet-body::-webkit-scrollbar { display: none; }
-.mobile-sheet-body--form { padding: 16px 18px calc(20px + env(safe-area-inset-bottom)); }
-.mobile-sheet-empty { text-align: center; color: var(--lake-text-3); padding: 24px 0; font-size: 14px; }
-
 /* 笔记本切换下拉（锚定右上角按钮，跟手弹出） */
 
 .mobile-dropdown { position: fixed; z-index: var(--mobile-z-dropdown); min-width: 180px; max-width: 260px; background: var(--lake-bg-panel, var(--lake-bg-panel)); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); box-shadow: var(--lake-shadow-popover); overflow: hidden; animation: mobile-dropdown-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
@@ -255,9 +239,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   font-size: 16px; font-weight: 600; padding: 14px 0; cursor: pointer;
 }
 .create-nb-submit:disabled { background: var(--lake-accent-tint); color: var(--lake-text-3); cursor: not-allowed; }
-
-/* 搜索 Sheet */
-.mobile-sheet-search { max-height: 70%; }
 .mobile-search-input-row { display: flex; align-items: center; gap: 8px; margin: 8px 16px; background: var(--lake-bg-window); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 9px 12px; }
 .mobile-search-input { flex: 1; border: none; outline: none; background: transparent; font-size: 15px; }
 .mobile-search-results { overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
@@ -300,18 +281,16 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 @keyframes mobile-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mobile-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes mobile-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.mobile-drawer-mask, .mobile-sheet-mask { animation: mobile-fade-in var(--mobile-duration-panel) var(--mobile-ease-out); }
-
-.mobile-sheet { animation: mobile-sheet-in var(--mobile-duration-panel) var(--mobile-ease-out); }
+.mobile-drawer-mask{ animation: mobile-fade-in var(--mobile-duration-panel) var(--mobile-ease-out); }
 .mobile-htab { transition: color var(--mobile-duration-panel) var(--mobile-ease-panel); }
 .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard { transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel); }
 .mobile-fab:active { transform: scale(.94); }
 .mobile-icon-btn:active { transform: scale(.9); }
 @media (prefers-reduced-motion: reduce) {
-  .mobile-drawer-mask, .mobile-sheet-mask, .mobile-drawer, .mobile-sheet,
+  .mobile-drawer-mask, .mobile-drawer,
   .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-settings-page, .mobile-settings-mask { animation: none; }
   .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard,
-  .bottom-bar-btn, .ln-chevron, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
+  .bottom-bar-btn, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
   .mobile-fab:active, .bottom-bar-btn:active { transform: none; }
   .side-panel.side-panel, .side-mask.side-mask { transition: none; }
 }
@@ -461,14 +440,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .side-panel--right.on { transform: translateX(0); }
 
 .side-panel-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0 calc(24px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
-
-/* 目录树（ln-row 行） */
-.ln-chevron { flex: 0 0 auto; color: var(--lake-text-2, var(--lake-text-3)); transition: transform 120ms ease; }
-.ln-chevron.open { transform: rotate(90deg); }
-.ln-chevron-spacer { flex: 0 0 auto; width: 16px; }
-.ln-tree-icon { flex: 0 0 auto; margin-right: 8px; color: var(--lake-text-2, var(--lake-text-2)); }
 /* 列表密度 = 思源 .ln-list：16px 字号 / 40px 行高 / 18px 图标；触屏不给 hover 底色 */
-.side-panel-body .ln-row, .mobile-model-body .ln-row, .mobile-dropdown-body .ln-row, .mobile-sheet-body .ln-row, .mobile-settings-list .ln-row {
+.side-panel-body .ln-row, .mobile-model-body .ln-row, .mobile-dropdown-body .ln-row, .mobile-settings-list .ln-row {
   width: 100%; border: 0; background: transparent; cursor: pointer; gap: 4px;
   min-height: 40px; padding-top: 0; padding-bottom: 0; font-size: 16px; line-height: 40px;
   -webkit-tap-highlight-color: transparent;
@@ -481,13 +454,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .ln-list .ln-row__action { padding: 6px; height: 20px; }
 .ln-list .ln-row__action > svg { width: 20px; height: 20px; }
 .ln-list .ln-row__chevron { width: 16px; height: 16px; }
-/* 树缩进：思源 .ln-row 用 --file-toggle-width 口径；这里用 data-depth 属性选择器，避免内联 style */
-.ln-indent { --ln-indent: 12px; padding-left: 12px; }
-.ln-indent[data-depth="1"] { --ln-indent: 28px; padding-left: 28px; }
-.ln-indent[data-depth="2"] { --ln-indent: 44px; padding-left: 44px; }
-.ln-indent[data-depth="3"] { --ln-indent: 60px; padding-left: 60px; }
-.ln-indent[data-depth="4"] { --ln-indent: 76px; padding-left: 76px; }
-.ln-indent[data-depth="5"], .ln-indent[data-depth="6"], .ln-indent[data-depth="7"] { --ln-indent: 92px; padding-left: 92px; }
 
 /* 全屏 tab 列表（思源 #model） */
 .mobile-model-mask { position: fixed; inset: 0; z-index: var(--mobile-z-model-mask); background: var(--mobile-mask); display: flex; align-items: flex-end; }
@@ -505,16 +471,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-model-body .ln-row__title { flex: 1; min-width: 0; }
 .mobile-model-body .ln-row__action { border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
 .model-add { margin: 12px 20px 0; width: calc(100% - 40px); }
-
-/* ===== 弹层口径接线（移动端）：sheet 菜单 / dialog 确认 / snackbar 提示 =====
-   类名沿用思源的 .b3-menu / .b3-dialog / .b3-snackbar，本体规则在 W2 删源时已收编到 compat.css / mobile-kit.css；
-   这里只补移动端需要的层叠顺序、56dvh 面板高度、进出场与图标盒。 */
-/* 弹层菜单样式见 mobile-kit.css（W2 去思源后自带） */
-.ln-menu-note { flex: 0 0 auto; margin-left: 8px; font-size: 12px; color: var(--lake-text-3); }
-.ln-menu-head-action { margin-left: auto; display: inline-flex; align-items: center; }
-@media (prefers-reduced-motion: reduce) {
-  .mobile-menu, .mobile-menu__submenu, .mobile-dialog__box, .mobile-toast { transition: none; }
-}
 
 /* ===== 思源移动端 .toolbar 口径（移植自 siyuan-master app/src/assets/scss/main/_mobile.scss:157-300，AGPL-3.0）=====
    顶栏与侧栏头部用的就是这一套：图标 20 + padding 10（=40 热区）、激活/按压 --lake-bg-hover、
@@ -596,9 +552,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 源行留在原位只降透明度（跟手的是 [data-drag-ghost] 浮层） */
 .nb-dragging { position: relative; opacity: .4; }
 .side-panel-body .ln-row { position: relative; }
-/* 插入线贴到目标行的层级缩进（--ln-indent 由 .ln-indent[data-depth] 提供）：
-   同级父行 bottom 与首个子行 top 是同一视觉间隙，但缩进随层级变化 → 表示落到的层级。 */
-.side-panel-body .ln-row.drop-line-before::before,
 .side-panel-body .ln-row.drop-line-after::after {
   content: ""; position: absolute; right: 0; left: var(--ln-indent, 12px); height: 3px; border-radius: 2px;
   background: var(--lake-accent, var(--lake-accent)); pointer-events: none;
@@ -880,12 +833,6 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   height: 100%;
   width: 100%;
 }
-
-/* 文档属性（移动端 NoteInfoSheet）：桌面 NoteInfoDialog 的移动端对应物。
- * 手机口径：内容自己带左右内边距（.mobile-sheet-body 是 0 内距）；信息**一行一项**（标签左/值右），
- * 不做桌面那种两列网格（窄屏下"字数 449 字 · 1759 字符"会被挤断行）；章节用 1px 分隔线分组；
- * 空态用紧凑左对齐（.mobile-sheet-empty 是为"整屏空"设计的居中 + 24px，这里不合适）。 */
-.minfo { padding: 2px 16px 0; }
 .minfo-rows { margin: 0; }
 .minfo-rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 34px; padding: 5px 0; font-size: var(--lake-font-size-small); }
 .minfo-rows dt { flex: none; color: var(--lake-text-3); }
@@ -899,11 +846,6 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 .minfo-row em { flex: none; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-style: normal; }
 .minfo-empty { margin: 2px 0 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .minfo-action { margin-left: auto; padding: 5px 10px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); }
-
-/* ── P5：自 mobile-kit.css 收编的**活**规则（内核浮层/小记工具条的移动端修正）────────
- * 其余内容（.ln-* 覆盖、.mobile-toast/.mobile-dialog/.mobile-menu）在 P2–P4 迁移后已无 JSX 施加
- * ⇒ 那三组随 mobile-kit.css 一并删除；这里保留仍生效的内核侧修正。 */
-body.lake-mobile .mobile-qn-composer .ne-ui-toolbar-button.ant-btn { margin-left: 6px; }
 body.lake-mobile .ne-ui-search-card-menu { max-height: calc(100vh - 200px); }
 body.lake-mobile .ne-ui-card-menu-content { max-height: calc(100vh - 200px); overflow-y: auto; }
 body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120px !important; bottom: auto !important; }

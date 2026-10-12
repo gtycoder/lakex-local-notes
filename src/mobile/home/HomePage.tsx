@@ -291,6 +291,7 @@ function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit
       <div className="qn-card__body">
         {note.body ? (
           <QuickNotePreview
+            ellipsisClassName="mb-ellipsis"
             body={note.body}
             noteId={note.id}
             assets={previewAssets}

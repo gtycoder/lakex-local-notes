@@ -43,10 +43,10 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接
   "mobile/theme/dark.css": { decls: 112, dupGroups: 0 }, // +41 编辑器深色桥迁入 → P7b -22 删 --b3-* 过渡桥接
   "mobile/kit.css": { decls: 432, dupGroups: 0 }, // P2 248 → P4 +113 → P5 +48（勾选）→ P6c +6（内核宿主）→ P7 +17（选择器 PickerSheet）
-  "mobile/floating.css": { decls: 256, dupGroups: 0 }, // P3：浮层原语（sheet/actionsheet/toast/menusheet + 两种遮罩进场）
+  "mobile/floating.css": { decls: 255, dupGroups: 0 }, // P3 建库 → 收尾 -1（删掉未使用的 .mb-sheet--tall）
   "mobile/features.css": { decls: 142, dupGroups: 0 }, // P6：图片 Lightbox（57→触屏版）+ 附件预览（82→触屏版）
   "mobile/quick-notes.css": { decls: 102, dupGroups: 0 }, // P6b：自桌面 quick-notes.css 抽取的移动端子集（22 条规则）
-  "mobile/mobile.css": { decls: 1349, dupGroups: 2 }, // P1 -39（令牌迁出）/ P2 +4（tab 触达）/ P5 +6（收编 mobile-kit 的内核修正）
+  "mobile/mobile.css": { decls: 1266, dupGroups: 2 }, // P1 -39 / P2 +4 / P5 +6 → 收尾 -83（删死 CSS：旧 mobile-sheet/toast/dialog/menu/lv1-3 等 27 条规则 + 38 个分组内死成员）
   "mobile/mobile-kit.css": { decls: 177, dupGroups: 0 }, // P2 目标：整份消灭
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 241, dupGroups: 0 },

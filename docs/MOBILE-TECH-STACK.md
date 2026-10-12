@@ -143,7 +143,7 @@
   与文档阅读态（EditorTab 锁定 / 回收站预览）**同一条内核路径**；`destroyLakeEditor` 收尾。
 - ⇒ **格式覆盖度由内核保证**，不存在「我们没实现所以显示不出来」的格式。
 - 配套：「+」插入面板 = **内核全量**（`quickNoteInsertFilter` 已删）：面板全量 24 项 / 1294px 高 ⇒ 手机上必须夹进视口并改锚点
-  （`body.lake-mobile`，见 `mobile-kit.css` 与 `LAKEX-CONTRACT.md` §5.28）。
+  （`body.lake-mobile`；该修正在 261012 收尾时随 `mobile-kit.css` 退场一并收编进 `src/mobile/mobile.css`，见 `LAKEX-CONTRACT.md` §5.28）。
 - ⚠️ **移动端小记没有插入面板入口（用户 261010 定稿，别再提议加回）**：紧凑工具条 = 用户指定的九项（不含加号），
   且移动端不展开 ⇒ 面板按钮不存在；而 `/` 斜杠在本构建**不可靠**（§5.23 实测 + 261010 复测 keydown/insertText 都没唤起）。
   ⇒ 表格 / 代码块 / 公式 / 高亮块 / 分栏 / 折叠块 / 画板 / 思维导图 / 日历 / 文档引用 在移动端小记里**插不了**

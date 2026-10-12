@@ -60,7 +60,6 @@
 .mb-sheet__body--form { padding: var(--mb-page-pad) 18px calc(20px + var(--mobile-bottom-safe-area)); }
 .mb-sheet__empty { margin: 0; padding: 24px 0; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .mb-sheet--search { max-height: 70%; }
-.mb-sheet--tall { max-height: 90dvh; }
 
 /* ── ActionSheet（破坏性确认 / 底部动作列表）─────────────────────────── */
 .mb-actionsheet {

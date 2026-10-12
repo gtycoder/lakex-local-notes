@@ -1488,6 +1488,7 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 ② 改锚点 `top:120px !important; bottom:auto !important`（压内核行内样式）。
 内核没有定位/高度配置项（官方文档 `55 - 斜杠命令（slash）` 只给 `groups`/`disableQuickInput`）⇒ 我方落在
 `src/mobile/mobile-kit.css`、作用域 `body.lake-mobile`。
+> （261012 收尾：`mobile-kit.css` 已在移动端 UI 独立化 P5 整份删除，这两条内核修正现落在 `src/mobile/mobile.css` 末尾；规则本身未变。）
 
 **推论（本仓机制）**：内核浮层不在我们的组件树里 ⇒ **移动端要覆盖内核浮层必须用 body 级选择器**（260923 起只有组件树内样式，够不到浮层）。
 移动端入口已加 `body.lake-mobile` 标记（`src/mobile/main.tsx`）。
@@ -1520,7 +1521,7 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 
 **工具条条目间距**：每条内置项自带 `margin: 8px 0 8px 12px` ⇒ 每项占 **44px**（按钮 32 + 间距 12）。
 9 项 = 396px > 手机写作卡内容宽 363px ⇒ 内核把最后几项收进「···」。移动端小记把间距收到 6px
-（`src/mobile/mobile-kit.css`，作用域 `body.lake-mobile .mobile-qn-composer`）即一行放得下 —— 注意**桌面写作卡
+（原 `src/mobile/mobile-kit.css`，261012 P5 起已收编进 `src/mobile/mobile.css`；作用域 `body.lake-mobile .mobile-qn-composer`）即一行放得下 —— 注意**桌面写作卡
 根类叫 `quick-note-composer`、移动端叫 `mobile-qn-composer`**，写错作用域规则静默不生效（本轮踩过）。
 
 **副作用（用户已知并接受，261010 定稿）**：紧凑工具条按用户指定的九项做，**不含** `cardSelect`（面板按钮），

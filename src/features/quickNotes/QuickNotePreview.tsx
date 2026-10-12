@@ -51,9 +51,11 @@ interface MediaProps {
   label: string | null;
   assets: Asset[];
   onImageClick(image: Asset): void;
+  /** 单行省略的工具类（桌面 .ln-ellipsis / 移动端 .mb-ellipsis）——由调用方给，组件不写死。 */
+  ellipsisClassName: string;
 }
 
-function Media({ filename, cardName, label, assets, onImageClick }: MediaProps) {
+function Media({ filename, cardName, label, assets, onImageClick, ellipsisClassName }: MediaProps) {
   const asset = filename ? assets.find((item) => item.filename === filename) : undefined;
   /** 文件条上显示的名字：优先卡片里的原始名（"报告.pdf"），否则资源文件名（磁盘名）。 */
   const displayName = label ?? asset?.filename ?? filename ?? "";
@@ -72,14 +74,15 @@ function Media({ filename, cardName, label, assets, onImageClick }: MediaProps) 
   }
   return <span className="quick-note-file-chip" title={displayName}>
     <Paperclip size={14} />
-    <span className="quick-note-file-chip__name ln-ellipsis">{displayName}</span>
+    <span className={"quick-note-file-chip__name " + ellipsisClassName}>{displayName}</span>
   </span>;
 }
 
-function Nodes({ nodes, assets, onImageClick, onToggleTask }: {
+function Nodes({ nodes, assets, onImageClick, onToggleTask, ellipsisClassName }: {
   nodes: QuickNotePreviewNode[]; assets: Asset[]; onImageClick(image: Asset): void;
   /** 待办勾选（预览里点复选框就能完成/取消，用户 260919 要求：只做这一个交互）。 */
   onToggleTask?(checkboxIndex: number, checked: boolean): void;
+  ellipsisClassName: string;
 }) {
   return <>{nodes.map((node, index) => {
     switch (node.kind) {
@@ -109,11 +112,11 @@ function Nodes({ nodes, assets, onImageClick, onToggleTask }: {
         </ListTag>;
       }
       case "quote":
-        return <blockquote key={index} className="quick-note-preview-quote"><Nodes nodes={node.nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} /></blockquote>;
+        return <blockquote key={index} className="quick-note-preview-quote"><Nodes nodes={node.nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} /></blockquote>;
       case "divider":
         return <hr key={index} className="quick-note-preview-divider" />;
       case "media":
-        return <Media key={index} filename={node.filename} cardName={node.cardName} label={node.label} assets={assets} onImageClick={onImageClick} />;
+        return <Media key={index} filename={node.filename} cardName={node.cardName} label={node.label} assets={assets} onImageClick={onImageClick} ellipsisClassName={ellipsisClassName} />;
       default:
         return <span key={index} className="quick-note-preview-unsupported" title="该块不支持在卡片里预览，请在编辑态查看">{node.label}</span>;
     }
@@ -132,9 +135,12 @@ interface QuickNotePreviewProps {
   fallbackText?: string;
   /** 待办勾选回调（不传则复选框只读）。 */
   onToggleTask?(checkboxIndex: number, checked: boolean): void;
+  /** 单行省略的工具类（默认桌面 .ln-ellipsis；移动端传自有 .mb-ellipsis）——
+   *  两端各自拥有样式，组件只发**调用方给的那个类名**，满足「不共享样式、只共享逻辑」。 */
+  ellipsisClassName?: string;
 }
 
-export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackText, onToggleTask }: QuickNotePreviewProps) {
+export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackText, onToggleTask, ellipsisClassName = "ln-ellipsis" }: QuickNotePreviewProps) {
   const nodes = useMemo(() => parseQuickNotePreview(body), [body]);
   /** 快路径还原不了 ⇒ 整条卡片交给内核（判据 = 解析器自己的 unsupported 节点，不另立清单）。 */
   const kernelFallback = useMemo(() => hasUnsupportedNodes(nodes), [nodes]);
@@ -165,7 +171,7 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
     >
       {kernelFallback && noteId
         ? <QuickNoteKernelPreview body={body} noteId={noteId} />
-        : <Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} />}
+        : <Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} />}
     </div>
     {overflowing && <button
       className="quick-note-preview-toggle"
