@@ -284,8 +284,11 @@ export function App() {
   /** 分屏开关：把另一个已打开标签放到右栏（焦点留在原栏）。 */
   const enterSplit = useCallback((noteId: string) => {
     if (!activeNoteId || noteId === activeNoteId) return;
+    // 261012 修：分屏会隐藏两栏面包屑右端的「更多」触发钮 ⇒ 若顶栏菜单正开着，它的锚点元素被卸载，
+    // 浮层停在旧坐标且再无按钮可对齐（DesktopOverlays 取 moreMenuWrapRef 的 rect，取不到就没有锚点）。
+    closeMenus();
     setSplitPair({ left: activeNoteId, right: noteId });
-  }, [activeNoteId, setSplitPair]);
+  }, [activeNoteId, setSplitPair, closeMenus]);
   const exitSplit = useCallback(() => setSplitPair(null), [setSplitPair]);
   const swapSplit = useCallback(() => setSplitPair((p) => (p ? { left: p.right, right: p.left } : p)), [setSplitPair]);
   // 标签关掉/被淘汰后自愈：任一侧不在已开标签里就退出分屏（不做嵌套、不留悬空）。

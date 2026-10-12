@@ -28,10 +28,13 @@
 
 /* 右栏右上角：细箭头菜单（取消分屏 / 左右互换）+ 关闭。浮在内容之上，尽量不挡正文。 */
 /* 分屏浮动工具条（用户 261008 定稿）：**浮在两栏之上、可拖到任意位置**，不属于任一栏 ⇒
-   不会被任何编辑器自己的工具条盖住；默认停在右栏工具条下方（那是最不挡内容的位置）。 */
+   不会被任何编辑器自己的工具条盖住；默认停在右栏**工具条下方**（那是最不挡内容的位置）。
+   261012 修：顶边原先只加 `--editor-toolbar-height`，漏了宿主内的**面包屑**（--breadcrumb-height），
+   实测落在工具条带内、盖住焦点栏工具条右端按钮（那枚按钮点不到）；头部栈是「面包屑 + 工具条」，
+   与 PANEL-CONTRACT §1 的垂直几何同源。 */
 .tab-split-controls {
   position: absolute;
-  top: calc(var(--editor-toolbar-height, 30px) + var(--lake-space-sm));
+  top: calc(var(--breadcrumb-height) + var(--editor-toolbar-height) + var(--lake-space-md));
   right: var(--lake-space-md);
   z-index: var(--lake-z-editor-sticky);
   display: flex;
@@ -70,6 +73,3 @@
 .tab-split-controls .tab-split-btn:hover {
   border-color: var(--lake-border-strong);
 }
-
-/* 分屏中的标签（两栏都在标签栏里）*/
-.tab-item.in-split[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--lake-accent); }

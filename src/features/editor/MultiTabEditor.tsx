@@ -5,6 +5,7 @@ import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, Fil
 import { Menu } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
+import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
 import { EditorTab } from "./EditorTab";
 import "./splitView.css";
 
@@ -179,6 +180,25 @@ export function MultiTabEditor({
   /** 左栏宽度（px）；null = 没拖过，两栏平分（CSS 的 1fr）。拖过只活在本次会话。 */
   const [splitLeft, setSplitLeft] = useState<number | null>(null);
   useEffect(() => { if (!splitPair) setSplitLeft(null); }, [splitPair]);
+  /** 容器实测宽度：缩窗 / 开关目录栏 / 开关大纲栏都会改变它（261012 修「变窄后右栏塌成 0」）。 */
+  const [panelsWidth, setPanelsWidth] = useState(0);
+  useEffect(() => {
+    const el = panelsRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const read = () => el.getBoundingClientRect().width;
+    const ro = new ResizeObserver(() => {
+      const width = read();
+      setPanelsWidth((prev) => (Math.abs(prev - width) < 0.5 ? prev : width));
+    });
+    ro.observe(el);
+    setPanelsWidth(read());
+    return () => ro.disconnect();
+  }, []);
+  /** 实际生效的左栏宽度（px）；null = 没拖过，两栏平分（CSS 的 1fr）。几何口径见 splitGeometry.ts。 */
+  const effectiveSplitLeft = useMemo(
+    () => (splitLeft == null ? null : clampSplitLeft(panelsWidth, splitLeft)),
+    [splitLeft, panelsWidth],
+  );
   /** 分屏组是否**当前激活**（焦点在组内两页之一）：只有激活时才显示两栏；
    *  点别的标签 = 普通单栏（合并标签仍在，点它再回分屏）。 */
   const splitActive = useMemo(
@@ -415,18 +435,23 @@ export function MultiTabEditor({
                   role="tab"
                   aria-selected={splitActive}
                   title={`分屏：${splitLeftTab?.title || "无标题"} ｜ ${splitRightTab?.title || "无标题"}`}
+                  aria-label={`分屏组：${splitLeftTab?.title || "无标题"}${splitLeftTab?.deleted ? "（已删除）" : ""} ｜ ${splitRightTab?.title || "无标题"}${splitRightTab?.deleted ? "（已删除）" : ""}`}
                   onClick={() => { if (suppressClickRef.current) return; onActivateSplit?.(); }}
                 >
                   <span className="tab-split-tab__half">
+                    {splitLeftTab && pinned.has(splitLeftTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
                     {splitLeftTab?.icon && <span className="tab-custom-icon" aria-hidden="true">{splitLeftTab.icon}</span>}
                     <span className="tab-title">{splitLeftTab?.title || "无标题"}</span>
                     {splitLeftTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
+                    {splitLeftTab?.deleted && <span className="tab-deleted-badge" title="该侧文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
                   </span>
                   <span className="tab-split-tab__divider" aria-hidden="true" />
                   <span className="tab-split-tab__half">
                     <Columns2 size={12} className="tab-split-tab__glyph" aria-hidden="true" />
+                    {splitRightTab && pinned.has(splitRightTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
                     <span className="tab-title">{splitRightTab?.title || "无标题"}</span>
                     {splitRightTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
+                    {splitRightTab?.deleted && <span className="tab-deleted-badge" title="该侧文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
                   </span>
                   <span
                     className="tab-close"
@@ -443,7 +468,7 @@ export function MultiTabEditor({
             <button
               key={tab.noteId}
               data-note-id={tab.noteId}
-              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${tab.deleted ? " deleted" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}${splitPair && (tab.noteId === splitPair.left || tab.noteId === splitPair.right) ? " in-split" : ""}`}
+              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${tab.deleted ? " deleted" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}`}
               onPointerDown={(e) => beginTabDrag(e, tab.noteId)}
               onPointerMove={moveTabDrag}
               onPointerUp={endTabDrag}
@@ -546,7 +571,7 @@ export function MultiTabEditor({
       <div
         ref={panelsRef}
         className={`tab-panels${splitActive ? " is-split" : ""}`}
-        style={splitActive && splitLeft != null ? ({ "--split-left": `${splitLeft}px` } as React.CSSProperties) : undefined}
+        style={splitActive && effectiveSplitLeft != null ? ({ "--split-left": `${effectiveSplitLeft}px` } as React.CSSProperties) : undefined}
         onPointerDownCapture={handlePanePointerDown}
       >
         {tabs.length === 0 ? <section className="empty-workspace">
@@ -625,11 +650,13 @@ export function MultiTabEditor({
         {splitActive && (
           <SplitHandle
             ariaLabel="调整分屏宽度"
-            minWidth={280}
-            maxWidth={2400}
-            minRight={280}
+            minWidth={SPLIT_WIDTH_LIMITS.minLeft}
+            maxWidth={SPLIT_WIDTH_LIMITS.maxLeft}
+            minRight={SPLIT_WIDTH_LIMITS.minRight}
             containerRef={panelsRef}
-            width={splitLeft}
+            /* 传**生效宽度**：没拖过时也给出实测的一半 ⇒ 分隔条有 aria-valuenow，且拖拽起点与视觉一致。
+               用户期望值仍只存在 splitLeft（session-only），容器变化不会把它写坏。 */
+            width={effectiveSplitLeft ?? (panelsWidth > 0 ? Math.round(panelsWidth / 2) : null)}
             measureLeft={measureSplitLeft}
             onPreview={setSplitLeft}
             onCommit={(next) => setSplitLeft(next)}
