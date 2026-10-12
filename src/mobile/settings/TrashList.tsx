@@ -82,7 +82,7 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
             title={clickable ? "点击预览内容" : row.kind === "quick" ? "小记" : undefined}
           >
             <Icon size={18} />
-            <span className="mobile-trash-title ln-ellipsis">{row.title}</span>
+            <span className="mobile-trash-title mb-ellipsis">{row.title}</span>
             <span className="mobile-trash-date">{row.deletedAt ? row.deletedAt.slice(0, 10) : ""}</span>
             <button className="mobile-trash-action" onClick={(e) => { e.stopPropagation(); void restore(row); }} title="恢复"><RotateCcw size={16} /></button>
             <button className="mobile-trash-action mobile-trash-danger" onClick={(e) => { e.stopPropagation(); void purge(row); }} title="彻底删除"><Trash size={15} /></button>

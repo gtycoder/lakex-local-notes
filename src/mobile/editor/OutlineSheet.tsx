@@ -97,7 +97,7 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
             <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
           </div>
         )}
-        <div className={"mobile-sheet-body" + (side ? " side-panel-body ln-list" : "")}>
+        <div className={"mobile-sheet-body" + (side ? " side-panel-body mb-list" : "")}>
           {entries.length === 0 ? (
             <p className="mobile-sheet-empty">暂无标题</p>
           ) : (

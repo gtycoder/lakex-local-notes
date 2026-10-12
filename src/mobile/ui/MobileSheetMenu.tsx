@@ -88,7 +88,7 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
         }}>
         {Icon ? <span className="mobile-menu__icon"><Icon size={18} /></span> : <span className="mobile-menu__icon" aria-hidden="true" />}
         <span className="mobile-menu__label">{it.label}</span>
-        {it.note && <span className="ln-menu-note">{it.note}</span>}
+        {it.note && <span className="mb-menu-note">{it.note}</span>}
         {hasChildren && <span className="mobile-menu__icon"><ChevronRight size={16} /></span>}
         {hasChildren && (
           <div className="mobile-menu__submenu">
@@ -107,7 +107,7 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
         <div className={"mobile-menu__title" + (path.length === 0 ? " mobile-menu__title--root" : "")} onClick={() => { back(); }} data-prevent-swipe>
           {path.length > 0 && <span className="mobile-menu__icon"><ChevronLeft size={18} /></span>}
           <span className="mobile-menu__label">{title ?? ""}</span>
-          {headerAction && <span className="ln-menu-head-action">{headerAction}</span>}
+          {headerAction && <span className="mb-menu-head-action">{headerAction}</span>}
         </div>
         <div className="mobile-menu__items">{renderLevel(items, 0)}</div>
       </div>

@@ -83,7 +83,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
       <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="mobile-sheet-grab" />
         <div className="mobile-sheet-head">
-          <span className="mobile-sheet-title ln-ellipsis">{info?.title || title || "文档属性"}</span>
+          <span className="mobile-sheet-title mb-ellipsis">{info?.title || title || "文档属性"}</span>
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
         <div className="mobile-sheet-body">
@@ -116,7 +116,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
                     {info.assets.slice(0, ITEM_LIMIT).map((a) => (
                       <li key={a.filename}>
                         <button className="minfo-row" onClick={() => openAsset(a.filename)} title={a.filename}>
-                          <span className="ln-ellipsis">{a.filename}</span><em>{fmtSize(a.size)}</em>
+                          <span className="mb-ellipsis">{a.filename}</span><em>{fmtSize(a.size)}</em>
                         </button>
                       </li>
                     ))}

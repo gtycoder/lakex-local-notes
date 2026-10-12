@@ -71,7 +71,7 @@ export function SearchSheet(props: SearchSheetProps) {
           {results.map((r) => (
             <div key={r.id} className="mobile-doc-row" onClick={() => { onOpenNote(r.id); onClose(); }}>
               <span className="mobile-search-main">
-                <span className="mobile-search-title ln-ellipsis">{r.title}</span>
+                <span className="mobile-search-title mb-ellipsis">{r.title}</span>
                 {/* snippet 由 buildSnippet 全量转义、只含 <mark>（W-10；同桌面 SearchPanel） */}
                 {r.snippet && <span className="mobile-search-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />}
               </span>

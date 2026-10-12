@@ -21,7 +21,8 @@ import "../styles/components.css"; // 共用浮层件（seg/badge/ln-*）；须�
 import "./editor/editor-dock.css";
 import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读预览（与桌面同一套类）
 import "../styles/dialog.css"; // 浮层通用弹窗（属性等）：与桌面共用同一套样式
-import "./mobile-kit.css"; // 移动端 kit 密度层（触屏点按目标 / 常驻动作）
+import "./mobile-kit.css"; // 迁移期遗留：桌面 kit 之上的覆盖层（P2 起逐屏改用 mb-*，P5 收尾删除）
+import "./kit.css"; // P2：移动端自有原语库 mb-*（触屏密度；一个交互语义只有一套）
 
 // 内核的浮层（插入面板/卡片工具栏/下拉）**portal 到 body 下的 .ne-overlay-container**（不在我们的组件树里），
 // 所以移动端要覆盖它们必须有一个 body 级标记（260923 W2 起只有组件树内样式，够不到浮层）。

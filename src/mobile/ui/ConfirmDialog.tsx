@@ -65,9 +65,9 @@ export function ConfirmHost() {
         <div className="mobile-dialog__head">{req.title}</div>
         {req.body && <div className="mobile-dialog__body">{req.body}</div>}
         <div className="mobile-dialog__actions">
-          <button className="ln-btn ln-btn--secondary" onClick={() => close(false)}>{req.cancelText ?? "取消"}</button>
-          <div className="fn__space" />
-          <button className={"ln-btn ln-btn--primary" + (req.danger ? " ln-btn--danger" : "")} onClick={() => close(true)}>{req.confirmText ?? "确定"}</button>
+          <button className="mb-btn mb-btn--secondary" onClick={() => close(false)}>{req.cancelText ?? "取消"}</button>
+          <div className="mb-spacer" />
+          <button className={"mb-btn mb-btn--primary" + (req.danger ? " mb-btn--danger" : "")} onClick={() => close(true)}>{req.confirmText ?? "确定"}</button>
         </div>
       </div>
     </div>

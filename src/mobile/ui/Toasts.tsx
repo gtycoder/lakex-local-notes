@@ -11,7 +11,7 @@ export function Toasts() {
   if (items.length === 0) return null;
   return (
     <div className="mobile-toast-host is-show" role="status" aria-live="polite">
-      <div className="fn__flex-1">
+      <div className="mb-flex1">
         {items.map((t) => <Snackbar key={t.id} item={t} />)}
       </div>
     </div>
@@ -21,13 +21,13 @@ export function Toasts() {
 function Snackbar({ item }: { item: ToastItem }) {
   // 思源：先挂 --hide（屏外），下一帧移除 → 滑入
   useEffect(() => {
-    const el = document.getElementById("ln-sn-" + item.id);
+    const el = document.getElementById("mb-sn-" + item.id);
     if (!el) return;
     const raf = requestAnimationFrame(() => el.classList.remove("is-hide"));
     return () => cancelAnimationFrame(raf);
   }, [item.id]);
   return (
-    <div id={"ln-sn-" + item.id} data-id={item.id}
+    <div id={"mb-sn-" + item.id} data-id={item.id}
       className={"mobile-toast is-hide" + (item.type === "error" ? " mobile-toast--error" : "")}
       onClick={() => hideToast(item.id)}>
       <div className="mobile-toast__text">{item.text}</div>

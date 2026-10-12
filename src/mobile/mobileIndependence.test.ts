@@ -63,17 +63,8 @@ const ALLOWED_DESKTOP_STYLE_IMPORTS: Record<string, string[]> = {
  * 261012 P0 冻结实测（当时工作区 = 261012 移动端批交付后）。
  */
 const CLASS_TOKEN_BASELINE: Record<string, number> = {
-  "mobile/bitable/MobileBitableViewer.tsx": 1,
-  "mobile/editor/DocListSheet.tsx": 1,
-  "mobile/editor/OutlineSheet.tsx": 1,
-  "mobile/notebook/NotebookWorkspace.tsx": 23,
-  "mobile/settings/SearchSheet.tsx": 1,
+  // P2 已清零 10 个文件（150 → 109）；剩下这一个在 P4「设置页样板屏」整屏重写时清零。
   "mobile/settings/SettingsDrawer.tsx": 109,
-  "mobile/settings/TrashList.tsx": 1,
-  "mobile/ui/ConfirmDialog.tsx": 6,
-  "mobile/ui/MobileSheetMenu.tsx": 2,
-  "mobile/ui/NoteInfoSheet.tsx": 2,
-  "mobile/ui/Toasts.tsx": 3,
 };
 
 /** 桌面侧反向耦合基线（mobile-app 在 src/styles/** 的出现次数，只许降）。 */

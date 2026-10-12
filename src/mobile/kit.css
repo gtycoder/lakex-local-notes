@@ -1,0 +1,145 @@
+/* ── 移动端原语库 mb-*（P2，261012）──────────────────────────────────────────
+ * 口径（docs/MOBILE-TECH-STACK.md §一/§九 · docs/MOBILE-UI-REDESIGN.md §4/§5）：
+ *   移动端**自己一套** UI 与样式，不复用桌面 kit 的 ln-*；两端只共享必要**逻辑**。
+ *   词表（--lake-*）与桌面共享，取值由 src/mobile/theme/** 定义；几何按触屏密度（见 tokens.css 的
+ *   移动端密度档：触达 44/48、页内距 16、圆角 8/12、字号 7 档）。
+ * 纪律：
+ *   ① 一个交互语义只有一套原语（这里就是唯一来源，禁止在业务 CSS 里另写近似规则）；
+ *   ② 颜色/圆角/间距/字号/动效只走令牌，不写字面量；
+ *   ③ 不改内核（.ne-* / 画板 / Univer）外观 —— 那属「分不了」的①层；
+ *   ④ 迁移期与桌面 kit 并存：本文件在入口最后 import（main.tsx），同名元素上 mb-* 需要压过
+ *      ln-* 时靠加载顺序即可，**不写 !important**。
+ * 原语清单（P2 首批）：btn / iconbtn / row / list / input / select / tag / segment / card /
+ *   form__desc / menu-note / menu-head-action / 树（chevron·tree-icon·indent）/ 工具类。 */
+
+/* ── 工具类 ─────────────────────────────────────────────────────────── */
+.mb-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mb-flex1 { flex: 1 1 auto; min-width: 0; }
+.mb-spacer { flex: 1 1 auto; }
+
+/* ── 按钮（.mb-btn；主/次/危险/幽灵 + 三档高度）──────────────────────── */
+.mb-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad);
+  border: 1px solid transparent; border-radius: var(--mb-radius);
+  background: transparent; color: var(--lake-text-1);
+  font-family: inherit; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium);
+  line-height: var(--lake-line-height-tight); white-space: nowrap;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: background-color var(--mobile-duration-press) linear, border-color var(--mobile-duration-press) linear,
+    color var(--mobile-duration-press) linear, opacity var(--mobile-duration-press) linear;
+}
+.mb-btn:active:not(:disabled) { background: var(--lake-bg-press); }
+.mb-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.mb-btn--primary { background: var(--lake-accent-ink); border-color: transparent; color: var(--lake-text-on-accent); }
+.mb-btn--primary:active:not(:disabled) { background: var(--lake-accent-ink-press); }
+.mb-btn--secondary { border-color: var(--lake-border-strong); }
+.mb-btn--ghost { padding: 0 10px; }
+.mb-btn--danger { color: var(--lake-status-error); }
+/* 危险主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（与桌面 kit 的 --danger 描边风格分叉） */
+.mb-btn--primary.mb-btn--danger { background: var(--lake-status-error); border-color: transparent; color: var(--lake-text-on-accent); }
+.mb-btn--lg { min-height: var(--mb-ctl-h-lg); font-size: var(--lake-font-size-bodyMd); }
+.mb-btn--sm { min-height: var(--mb-ctl-h-sm); padding: 0 12px; font-size: var(--lake-font-size-small); }
+.mb-btn--block { display: flex; width: 100%; }
+
+/* ── 图标按钮（.mb-iconbtn；44×44 触达，紧凑 36）──────────────────────── */
+.mb-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--mb-ctl-h); height: var(--mb-ctl-h); flex: 0 0 auto;
+  border: 0; border-radius: var(--mb-radius); background: transparent; color: var(--lake-text-2);
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: background-color var(--mobile-duration-press) linear, color var(--mobile-duration-press) linear;
+}
+.mb-iconbtn:active:not(:disabled) { background: var(--lake-bg-press); }
+.mb-iconbtn--compact { width: var(--mb-ctl-h-sm); height: var(--mb-ctl-h-sm); border-radius: var(--mb-radius-sm); }
+.mb-iconbtn:disabled { opacity: var(--lake-disabled-opacity); }
+.mb-iconbtn > svg { display: block; }
+
+/* ── 行（.mb-row；列表行/设置行，两行版带 __meta）───────────────────── */
+.mb-row {
+  display: flex; align-items: center; gap: var(--mb-gap); width: 100%;
+  min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad);
+  border: 0; background: transparent; color: var(--lake-text-1); text-align: left;
+  font-family: inherit; font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-snug);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mb-row:active { background: var(--lake-bg-press); }
+.mb-row.is-selected { background: var(--lake-accent-tint); color: var(--lake-accent-text); font-weight: var(--lake-font-weight-medium); }
+.mb-row--two-line { min-height: var(--mb-list-item-h); padding-top: 8px; padding-bottom: 8px; }
+.mb-row__icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; color: var(--lake-text-3); }
+.mb-row__icon > svg { display: block; }
+.mb-row__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mb-row__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-row__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+.mb-row--two-line .mb-row__title { font-size: var(--lake-font-size-bodyMd); }
+.mb-row__sub { color: var(--lake-text-3); font-size: var(--lake-font-size-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-row__chevron { flex: 0 0 auto; color: var(--lake-text-4); }
+/* 触屏无 hover ⇒ 行内动作常驻可见（桌面 kit 是 hover 才显示） */
+.mb-row__action { flex: 0 0 auto; }
+.mb-row__actions { opacity: 1; }
+
+/* ── 列表容器（.mb-list / .mb-list-item；弹层与设置内的列表）──────────── */
+.mb-list { display: flex; flex-direction: column; padding: 4px 0; }
+.mb-list-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--mb-ctl-h);
+  padding: 0 var(--mb-page-pad); border: 0; background: transparent; color: var(--lake-text-1);
+  font-family: inherit; font-size: var(--lake-font-size-body); text-align: left;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mb-list-item:active { background: var(--lake-bg-press); }
+.mb-list-item__text { flex: 1 1 auto; min-width: 0; }
+.mb-list-item__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+
+/* ── 输入 / 下拉（触屏 44 高、16px 字号防 iOS 放大）──────────────────── */
+.mb-input {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--mb-ctl-h);
+  padding: 0 12px; border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius);
+  background: var(--lake-bg-panel); color: var(--lake-text-1);
+  font-family: inherit; font-size: var(--lake-font-size-body);
+}
+.mb-input:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
+.mb-input > input, .mb-input > textarea {
+  flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: inherit;
+  font: inherit; padding: 0; outline: none;
+}
+.mb-select { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: var(--mb-ctl-h); padding: 0 12px; border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
+
+/* ── 标签（.mb-tag）─────────────────────────────────────────────────── */
+.mb-tag {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 8px;
+  border-radius: var(--mb-radius-sm); background: var(--lake-bg-block); color: var(--lake-text-2);
+  font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-medium);
+}
+.mb-tag--pending { background: var(--lake-status-pending-soft); color: var(--lake-status-pending); }
+.mb-tag--ok { background: var(--lake-status-ok-soft); color: var(--lake-status-ok); }
+.mb-tag--error { background: var(--lake-status-error-soft); color: var(--lake-status-error); }
+
+/* ── 分段控件（.mb-segment；取值选择/图标型开关）────────────────────── */
+.mb-segment { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: var(--mb-radius); background: var(--lake-bg-sunken); }
+.mb-segment__item {
+  min-height: var(--mb-ctl-h-sm); padding: 0 14px; border: 0; border-radius: var(--mb-radius-sm);
+  background: transparent; color: var(--lake-text-2); font-family: inherit;
+  font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-medium);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mb-segment__item.is-active { background: var(--lake-bg-panel); color: var(--lake-accent-text); box-shadow: var(--lake-shadow-card); }
+
+/* ── 卡片（.mb-card）────────────────────────────────────────────────── */
+.mb-card { border: 1px solid var(--lake-border-1); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); }
+.mb-card__head { display: flex; align-items: center; gap: 8px; min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); }
+.mb-card__body { padding: 0 var(--mb-page-pad) var(--mb-page-pad); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+
+/* ── 表单说明（.mb-form__desc）───────────────────────────────────────── */
+.mb-form__desc { color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+
+/* ── 弹层行内件（备注 / 标题右侧动作）────────────────────────────────── */
+.mb-menu-note { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+.mb-menu-head-action { margin-left: auto; display: inline-flex; align-items: center; }
+
+/* ── 目录树（chevron / 树图标 / 缩进）───────────────────────────────── */
+.mb-chevron { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: var(--mb-ctl-h-sm); color: var(--lake-text-4); transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel); }
+.mb-chevron.open { transform: rotate(90deg); }
+.mb-chevron-spacer { flex: 0 0 auto; width: 20px; }
+.mb-tree-icon { flex: 0 0 auto; display: inline-flex; align-items: center; color: var(--lake-text-3); }
+.mb-tree-icon > svg { display: block; }
+.mb-indent { padding-left: calc(var(--mb-page-pad) + var(--indent, 0px)); }

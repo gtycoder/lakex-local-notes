@@ -1,0 +1,153 @@
+/* ── 移动端浮层原语（P3，261012）────────────────────────────────────────────
+ * 口径（docs/MOBILE-UI-REDESIGN.md §5.4 / §6 P3；用户 261012 定稿 C1）：
+ *   · **不建 mb-dialog**：破坏性确认改 ActionSheet，其余（属性/历史/大纲/目录/搜索/新建）统一底部 Sheet
+ *     —— 移动端不再需要「居中对话框」这一形态（避免死原语，AGENTS §3#17）。
+ *   · 触屏可关：遮罩点击 + 下拉（组件侧已接 useSwipeToClose）+ 安卓返回键（backStack）。
+ *   · 避让安全区：底部 padding 走 --mobile-bottom-safe-area；顶部贴 status bar 的内容不走这里。
+ *   · 定位/层序**只在本文件**（层序令牌 = tokens.css 的 --mobile-z-*；P7 收尾时与 --lake-z-* 对齐）。
+ * 结构契约：
+ *   Sheet       .mb-scrim + .mb-sheet > (.mb-sheet__grab, .mb-sheet__head > .mb-sheet__title, .mb-sheet__body)
+ *   ActionSheet .mb-scrim + .mb-actionsheet > .mb-actionsheet__group > .mb-actionsheet__item[--danger] + .mb-actionsheet__cancel
+ *   Toast       .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__close)
+ * 迁移期说明：这些原语是 .mobile-sheet* / .mobile-dialog* / .mobile-toast* / .mobile-menu* 的**替代**，
+ * 旧类随各组件迁完后删除（不许两套并存）。 */
+
+/* ── 遮罩（唯一来源）────────────────────────────────────────────────── */
+.mb-scrim {
+  position: fixed; inset: 0; z-index: var(--mobile-z-sheet-mask);
+  background: var(--lake-scrim); opacity: 0; transition: opacity var(--mobile-duration-panel) linear;
+}
+.mb-scrim.is-open { opacity: 1; }
+
+/* ── 底部 Sheet ─────────────────────────────────────────────────────── */
+.mb-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-sheet);
+  display: flex; flex-direction: column; max-height: 90dvh;
+  border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
+  background: var(--lake-bg-panel); color: var(--lake-text-1);
+  box-shadow: var(--lake-shadow-popover); scrollbar-width: none;
+  transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
+}
+.mb-sheet.is-open { transform: translateY(0); }
+.mb-sheet::-webkit-scrollbar { display: none; }
+.mb-sheet__grab { display: none; }   /* grabber 统一由头部提供（避免两处重复） */
+.mb-sheet__head {
+  position: relative; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; min-height: var(--mb-list-item-h); padding: 8px 8px 0 var(--mb-page-pad);
+  touch-action: none;
+}
+.mb-sheet__head::before {
+  content: ""; position: absolute; top: 6px; left: calc(50% - 16px); width: 32px; height: 4px;
+  border-radius: var(--lake-radius-hairline); background: var(--lake-text-3); opacity: .45;
+}
+.mb-sheet__title { font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-tight); color: var(--lake-text-2); }
+.mb-sheet__body {
+  flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 calc(16px + var(--mobile-bottom-safe-area));
+  scrollbar-width: none;
+}
+.mb-sheet__body::-webkit-scrollbar { display: none; }
+.mb-sheet__body--form { padding: var(--mb-page-pad) 18px calc(20px + var(--mobile-bottom-safe-area)); }
+.mb-sheet__empty { margin: 0; padding: 24px 0; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+.mb-sheet--search { max-height: 70%; }
+.mb-sheet--tall { max-height: 90dvh; }
+
+/* ── ActionSheet（破坏性确认 / 底部动作列表）─────────────────────────── */
+.mb-actionsheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-sheet);
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 8px calc(8px + var(--mobile-bottom-safe-area));
+  background: var(--lake-bg-window);
+  border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
+  transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
+}
+.mb-actionsheet.is-open { transform: translateY(0); }
+.mb-actionsheet__group { display: flex; flex-direction: column; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; }
+.mb-actionsheet__title { padding: 14px var(--mb-page-pad) 10px; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.mb-actionsheet__message { padding: 0 var(--mb-page-pad) 14px; text-align: center; color: var(--lake-text-2); font-size: var(--lake-font-size-small); line-height: var(--lake-line-height-normal); }
+.mb-actionsheet__item {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+  min-height: var(--mb-ctl-h-lg); padding: 0 var(--mb-page-pad);
+  border: 0; border-top: 1px solid var(--lake-border-2); background: transparent;
+  color: var(--lake-accent-text); font-family: inherit; font-size: var(--lake-font-size-body);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mb-actionsheet__group > .mb-actionsheet__item:first-child { border-top: 0; }
+.mb-actionsheet__item:active { background: var(--lake-bg-press); }
+.mb-actionsheet__item--danger { color: var(--lake-status-error); font-weight: var(--lake-font-weight-medium); }
+.mb-actionsheet__cancel {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: var(--mb-ctl-h-lg);
+  border: 0; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel);
+  color: var(--lake-text-1); font-family: inherit; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mb-actionsheet__cancel:active { background: var(--lake-bg-press); }
+
+/* ── 提示条（Toast；自有胶囊，与桌面 .ln-toast 无关）────────────────── */
+.mb-toast-host {
+  position: fixed; left: var(--mb-page-pad); right: var(--mb-page-pad);
+  top: calc(var(--mb-page-pad) + var(--mobile-top-safe-area)); z-index: var(--mobile-z-snackbar);
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none;
+}
+.mb-toast {
+  pointer-events: auto; display: flex; align-items: center; gap: 8px;
+  max-width: min(420px, 100%); padding: 12px 14px;
+  border: 1px solid var(--lake-border-1); border-radius: var(--mb-radius-card);
+  background: var(--lake-bg-panel); color: var(--lake-text-1);
+  box-shadow: var(--lake-shadow-popover); font-size: var(--lake-font-size-small);
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out);
+}
+.mb-toast.is-hide { transform: translateX(calc(100% + 16px)); opacity: 0; }
+.mb-toast--error::before {
+  content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: var(--lake-radius-pill);
+  background: var(--lake-status-error);
+}
+.mb-toast__text { flex: 1 1 auto; min-width: 0; }
+.mb-toast__close { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: var(--mb-radius-sm); background: transparent; color: var(--lake-text-3); cursor: pointer; }
+
+/* 减弱动效：与 mobile.css 的 reduced-motion 块同口径（新增浮层也必须在名单里） */
+@media (prefers-reduced-motion: reduce) {
+  .mb-scrim, .mb-sheet, .mb-actionsheet, .mb-toast { transition: none; }
+}
+
+/* ── 菜单式 Sheet（下钻菜单；原 .mobile-menu*）─────────────────────────
+ * 形态：贴底 56dvh + 顶部 grabber 头 + 子菜单整屏横向平移（对齐思源移动端 menu--sheet 口径）。
+ * 与 mb-sheet 的区别是「有层级、可下钻」，不是同一交互语义 ⇒ 单独一件，但共用 mb-scrim 与层序令牌。 */
+.mb-menusheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-menu);
+  height: 56dvh; max-height: 90dvh; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
+  background: var(--lake-bg-panel); color: var(--lake-text-1);
+  box-shadow: var(--lake-shadow-popover);
+  transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
+}
+.mb-menusheet.is-open { transform: translateY(0); }
+.mb-menusheet__title {
+  position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 4px;
+  min-height: var(--mb-list-item-h); padding: 4px 12px; border-bottom: 1px solid var(--lake-border-2);
+  font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold);
+}
+.mb-menusheet__title--root { min-height: 10px; border-bottom: 0; }
+.mb-menusheet__title::before {
+  content: ""; position: absolute; top: 6px; left: calc(50% - 16px); width: 32px; height: 4px;
+  border-radius: var(--lake-radius-hairline); background: var(--lake-text-3); opacity: .45;
+}
+.mb-menusheet__items { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0; scrollbar-width: none; }
+.mb-menusheet__items::-webkit-scrollbar { display: none; }
+.mb-menusheet__item {
+  position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: var(--mb-ctl-h-lg); padding: 0 var(--mb-page-pad);
+  border: 0; background: transparent; color: var(--lake-text-1); font-family: inherit;
+  font-size: var(--lake-font-size-body); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mb-menusheet__item:active { background: var(--lake-bg-press); }
+.mb-menusheet__item:disabled { color: var(--lake-text-4); }
+.mb-menusheet__item.is-danger, .mb-menusheet__item.is-danger .mb-menusheet__icon { color: var(--lake-status-error); }
+.mb-menusheet__icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; color: var(--lake-text-3); }
+.mb-menusheet__icon > svg { display: block; }
+.mb-menusheet__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-menusheet__submenu {
+  position: fixed; top: 0; left: 100vw; width: 100vw; bottom: 0; z-index: var(--mobile-z-menu);
+  background: var(--lake-bg-panel); overflow-y: auto; overscroll-behavior: contain;
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
+}
+.mb-menusheet__item.is-show > .mb-menusheet__submenu { transform: translateX(-100vw); }

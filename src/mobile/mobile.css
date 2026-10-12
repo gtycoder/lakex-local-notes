@@ -566,16 +566,19 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .mobile-nb-row .counter { flex: 0 0 auto; }
 
-/* 首页 tab：底部指示线（与桌面 .ln-tabs 同一语言；只给选中项灰底会被判读成"看不出是 tab"） */
-.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 20px; }
+/* 首页 tab：底部指示线（与桌面 .ln-tabs 同一语言；只给选中项灰底会被判读成"看不出是 tab"）
+   261012 P2（用户定稿 B5）：点按目标必须 ≥44 —— 旧实现命中区只有 25px 高（走查装置 smallTap 实测
+   36×25 / 52×25），是移动端最典型的"看得见点不准"。加 min-height 后 44×48，指示线仍与文字等宽。 */
+.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 12px; min-height: var(--mb-tap-min); }
 .mobile-htab {
-  position: relative; border: none; background: transparent; font-size: 16px; color: var(--lake-text-2);
-  cursor: pointer; padding: 0 2px; font-weight: 500; -webkit-tap-highlight-color: transparent;
+  position: relative; display: inline-flex; align-items: center; min-height: var(--mb-tap-min); padding: 0 8px;
+  border: none; background: transparent; font-size: var(--lake-font-size-body); color: var(--lake-text-2);
+  cursor: pointer; font-weight: 500; -webkit-tap-highlight-color: transparent;
   transition: color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mobile-htab.active { color: var(--lake-text-2); font-weight: 600; }
 .mobile-htab.active::after {
-  content: ""; position: absolute; right: 0; bottom: 4px; left: 0; height: 2px;
+  content: ""; position: absolute; right: 8px; bottom: 6px; left: 8px; height: 2px;
   border-radius: var(--lake-radius-hairline); background: var(--lake-accent);
   transform-origin: 50% 50%;
   animation: ln-indicator-in var(--mobile-duration-press) var(--mobile-ease-panel) both;
