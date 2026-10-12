@@ -80,19 +80,19 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
     const Icon = it.icon;
     return (
       <button key={it.id} role="menuitem" disabled={it.disabled}
-        className={"mobile-menu__item" + (expanded ? " is-show" : "") + (it.danger ? " is-danger" : "")}
+        className={"mb-menusheet__item" + (expanded ? " is-show" : "") + (it.danger ? " is-danger" : "")}
         onClick={() => {
           if (it.disabled) return;
           if (hasChildren) { setPath((p) => [...p.slice(0, depth), it]); return; }
           onSelect(it, [...path.slice(0, depth), it]);
         }}>
-        {Icon ? <span className="mobile-menu__icon"><Icon size={18} /></span> : <span className="mobile-menu__icon" aria-hidden="true" />}
-        <span className="mobile-menu__label">{it.label}</span>
+        {Icon ? <span className="mb-menusheet__icon"><Icon size={18} /></span> : <span className="mb-menusheet__icon" aria-hidden="true" />}
+        <span className="mb-menusheet__label">{it.label}</span>
         {it.note && <span className="mb-menu-note">{it.note}</span>}
-        {hasChildren && <span className="mobile-menu__icon"><ChevronRight size={16} /></span>}
+        {hasChildren && <span className="mb-menusheet__icon"><ChevronRight size={16} /></span>}
         {hasChildren && (
-          <div className="mobile-menu__submenu">
-            <div className="mobile-menu__items">{renderLevel(it.children!, depth + 1)}</div>
+          <div className="mb-menusheet__submenu">
+            <div className="mb-menusheet__items">{renderLevel(it.children!, depth + 1)}</div>
           </div>
         )}
       </button>
@@ -102,14 +102,14 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
   const title = path.length === 0 ? null : path[path.length - 1].label;
   return (
     <>
-      <div className="mobile-menu__scrim is-open" data-prevent-swipe onClick={close} aria-hidden="true" />
-      <div ref={sheetRef} className={"mobile-menu" + (shown ? " is-open" : "")} role="menu" data-prevent-swipe>
-        <div className={"mobile-menu__title" + (path.length === 0 ? " mobile-menu__title--root" : "")} onClick={() => { back(); }} data-prevent-swipe>
-          {path.length > 0 && <span className="mobile-menu__icon"><ChevronLeft size={18} /></span>}
-          <span className="mobile-menu__label">{title ?? ""}</span>
+      <div className="mb-scrim mb-scrim--state is-open" data-prevent-swipe onClick={close} aria-hidden="true" />
+      <div ref={sheetRef} className={"mb-menusheet" + (shown ? " is-open" : "")} role="menu" data-prevent-swipe>
+        <div className={"mb-menusheet__title" + (path.length === 0 ? " mb-menusheet__title--root" : "")} onClick={() => { back(); }} data-prevent-swipe>
+          {path.length > 0 && <span className="mb-menusheet__icon"><ChevronLeft size={18} /></span>}
+          <span className="mb-menusheet__label">{title ?? ""}</span>
           {headerAction && <span className="mb-menu-head-action">{headerAction}</span>}
         </div>
-        <div className="mobile-menu__items">{renderLevel(items, 0)}</div>
+        <div className="mb-menusheet__items">{renderLevel(items, 0)}</div>
       </div>
     </>
   );

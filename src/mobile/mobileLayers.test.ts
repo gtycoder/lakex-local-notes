@@ -42,7 +42,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/light.css": { decls: 83, dupGroups: 0 },
   "mobile/theme/dark.css": { decls: 134, dupGroups: 0 }, // +41 = 编辑器深色桥整块自 editor-dark.css 迁入（值未改）
   "mobile/kit.css": { decls: 248, dupGroups: 0 }, // P2：mb-* 原语库首批（btn/iconbtn/row/list/input/select/tag/segment/card/树/工具类）
-  "mobile/floating.css": { decls: 252, dupGroups: 0 }, // P3：浮层原语（sheet/actionsheet/toast/menusheet + 遮罩）
+  "mobile/floating.css": { decls: 256, dupGroups: 0 }, // P3：浮层原语（sheet/actionsheet/toast/menusheet + 两种遮罩进场）
   "mobile/mobile.css": { decls: 1343, dupGroups: 2 }, // P1：-39=令牌块迁出；P2：+4=首页 tab 点按目标 ≥44（B5）
   "mobile/mobile-kit.css": { decls: 177, dupGroups: 0 }, // P2 目标：整份消灭
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）

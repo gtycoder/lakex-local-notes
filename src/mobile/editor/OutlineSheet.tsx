@@ -82,9 +82,9 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
   };
 
   return (
-    <div className={side ? ("side-mask" + (open ? " on" : "")) : "mobile-sheet-mask"} data-panel-mask={side ? "right" : undefined} data-prevent-swipe={side ? undefined : true} onClick={onClose}>
-      <div ref={sheetRef} className={side ? ("side-panel side-panel--right" + (open ? " on" : "")) : "mobile-sheet med-outline-sheet"} data-prevent-swipe={side ? undefined : true} onClick={(e) => e.stopPropagation()}>
-        {!side && <div className="mobile-sheet-grab" />}
+    <div className={side ? ("side-mask" + (open ? " on" : "")) : "mb-scrim"} data-panel-mask={side ? "right" : undefined} data-prevent-swipe={side ? undefined : true} onClick={onClose}>
+      <div ref={sheetRef} className={side ? ("side-panel side-panel--right" + (open ? " on" : "")) : "mb-sheet med-outline-sheet"} data-prevent-swipe={side ? undefined : true} onClick={(e) => e.stopPropagation()}>
+        {!side && <div className="mb-sheet__grab" />}
         {side ? (
           /* 侧栏头 = 思源 #sidebarRight .toolbar 口径：标题 + 箭头关闭（左栏收右箭头、右栏收左箭头） */
           <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
@@ -92,14 +92,14 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
             <span className="toolbar__icon" role="button" tabIndex={0} onClick={onClose} aria-label="收起"><ChevronLeft /></span>
           </div>
         ) : (
-          <div className="mobile-sheet-head">
-            <span className="mobile-sheet-title">大纲</span>
+          <div className="mb-sheet__head">
+            <span className="mb-sheet__title">大纲</span>
             <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
           </div>
         )}
-        <div className={"mobile-sheet-body" + (side ? " side-panel-body mb-list" : "")}>
+        <div className={"mb-sheet__body" + (side ? " side-panel-body mb-list" : "")}>
           {entries.length === 0 ? (
-            <p className="mobile-sheet-empty">暂无标题</p>
+            <p className="mb-sheet__empty">暂无标题</p>
           ) : (
             entries.filter((e) => e.id && e.text).map((e) => (
               <button

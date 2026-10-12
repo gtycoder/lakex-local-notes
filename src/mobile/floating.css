@@ -12,23 +12,34 @@
  * 迁移期说明：这些原语是 .mobile-sheet* / .mobile-dialog* / .mobile-toast* / .mobile-menu* 的**替代**，
  * 旧类随各组件迁完后删除（不许两套并存）。 */
 
-/* ── 遮罩（唯一来源）────────────────────────────────────────────────── */
+/* ── 遮罩（唯一来源）──────────────────────────────────────────────────
+ * 两种进场各一件（同一表面/同一层序，不是两套视觉）：
+ *   .mb-scrim        = **挂载即淡入**（组件用 {open && …} 条件渲染：属性/搜索/新建/大纲/文档列表）
+ *   .mb-scrim--state = 常挂载 + .is-open 切换（组件自带 presence 状态：菜单 Sheet / ActionSheet，
+ *                      这样关闭时遮罩能跟着面板一起淡出） */
 .mb-scrim {
   position: fixed; inset: 0; z-index: var(--mobile-z-sheet-mask);
-  background: var(--lake-scrim); opacity: 0; transition: opacity var(--mobile-duration-panel) linear;
+  background: var(--lake-scrim); animation: mb-fade-in var(--mobile-duration-panel) linear;
 }
-.mb-scrim.is-open { opacity: 1; }
+.mb-scrim--state {
+  position: fixed; inset: 0; z-index: var(--mobile-z-sheet-mask);
+  background: var(--lake-scrim); opacity: 0; animation: none;
+  transition: opacity var(--mobile-duration-panel) linear;
+}
+.mb-scrim--state.is-open { opacity: 1; }
+@keyframes mb-fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* ── 底部 Sheet ─────────────────────────────────────────────────────── */
+/* 进场 = 挂载动画（组件用 {open && …} 渲染）；层序走 --mobile-z-* 令牌，不写魔法数字 */
 .mb-sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-sheet);
   display: flex; flex-direction: column; max-height: 90dvh;
   border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
   background: var(--lake-bg-panel); color: var(--lake-text-1);
   box-shadow: var(--lake-shadow-popover); scrollbar-width: none;
-  transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
+  animation: mb-sheet-in var(--mobile-duration-panel) var(--mobile-ease-out);
 }
-.mb-sheet.is-open { transform: translateY(0); }
+@keyframes mb-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .mb-sheet::-webkit-scrollbar { display: none; }
 .mb-sheet__grab { display: none; }   /* grabber 统一由头部提供（避免两处重复） */
 .mb-sheet__head {

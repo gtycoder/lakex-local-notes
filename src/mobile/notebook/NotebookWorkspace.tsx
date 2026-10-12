@@ -736,13 +736,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 图标选择器 */}
       {iconFor && (
-        <div className="mobile-sheet-mask" data-prevent-swipe onClick={() => setIconFor(null)}>
-          <div ref={iconSheetRef} className="mobile-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-sheet-head">
-              <span className="mobile-sheet-title">设置图标</span>
+        <div className="mb-scrim" data-prevent-swipe onClick={() => setIconFor(null)}>
+          <div ref={iconSheetRef} className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
+            <div className="mb-sheet__head">
+              <span className="mb-sheet__title">设置图标</span>
               <button className="mobile-icon-btn" onClick={() => setIconFor(null)} aria-label="关闭"><X size={20} /></button>
             </div>
-            <div className="mobile-sheet-body">
+            <div className="mb-sheet__body">
               <div className="mobile-emoji-grid">
                 {LAKE_EMOJIS.map((e) => (
                   <button key={e.name + e.char} className="mobile-emoji-cell" onClick={() => void applyIcon(e.char)} title={e.name}>{e.char}</button>
@@ -756,14 +756,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 历史版本 sheet */}
       {historyFor && (
-        <div className="mobile-sheet-mask" data-prevent-swipe onClick={() => setHistoryFor(null)}>
-          <div ref={historySheetRef} className="mobile-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-sheet-head">
-              <span className="mobile-sheet-title">历史版本</span>
+        <div className="mb-scrim" data-prevent-swipe onClick={() => setHistoryFor(null)}>
+          <div ref={historySheetRef} className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
+            <div className="mb-sheet__head">
+              <span className="mb-sheet__title">历史版本</span>
               <button className="mobile-icon-btn" onClick={() => setHistoryFor(null)} aria-label="关闭"><X size={20} /></button>
             </div>
-            <div className="mobile-sheet-body mb-list">
-              {historyList.length === 0 && <p className="mobile-sheet-empty">暂无历史版本</p>}
+            <div className="mb-sheet__body mb-list">
+              {historyList.length === 0 && <p className="mb-sheet__empty">暂无历史版本</p>}
               {historyList.map((h) => (
                 <div key={h.id} className="mb-row" onClick={() => void applyRestoreHistory(h.id)}>
                   <span className="mb-row__title">{h.title || "无标题"}</span>

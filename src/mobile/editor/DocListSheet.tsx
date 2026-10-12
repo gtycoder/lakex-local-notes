@@ -28,16 +28,16 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   if (!open) return null;
 
   return (
-    <div className="mobile-sheet-mask" onClick={onClose}>
-      <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="mobile-sheet-grab" />
-        <div className="mobile-sheet-head">
-          <span className="mobile-sheet-title">文档列表</span>
+    <div className="mb-scrim" onClick={onClose}>
+      <div className="mb-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-sheet__grab" />
+        <div className="mb-sheet__head">
+          <span className="mb-sheet__title">文档列表</span>
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
-        <div className="mobile-sheet-body">
+        <div className="mb-sheet__body">
           {documents.length === 0 ? (
-            <p className="mobile-sheet-empty">暂无文档</p>
+            <p className="mb-sheet__empty">暂无文档</p>
           ) : (
             documents.map((d) => (
               <button

@@ -79,16 +79,16 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
   ] : [];
 
   return (
-    <div className="mobile-sheet-mask" onClick={onClose}>
-      <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="mobile-sheet-grab" />
-        <div className="mobile-sheet-head">
-          <span className="mobile-sheet-title mb-ellipsis">{info?.title || title || "文档属性"}</span>
+    <div className="mb-scrim" onClick={onClose}>
+      <div className="mb-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-sheet__grab" />
+        <div className="mb-sheet__head">
+          <span className="mb-sheet__title mb-ellipsis">{info?.title || title || "文档属性"}</span>
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
-        <div className="mobile-sheet-body">
-          {error && <p className="mobile-sheet-empty">{error}</p>}
-          {!info && !error && <p className="mobile-sheet-empty">读取中…</p>}
+        <div className="mb-sheet__body">
+          {error && <p className="mb-sheet__empty">{error}</p>}
+          {!info && !error && <p className="mb-sheet__empty">读取中…</p>}
           {info && (
             <div className="minfo">
               <dl className="minfo-rows">

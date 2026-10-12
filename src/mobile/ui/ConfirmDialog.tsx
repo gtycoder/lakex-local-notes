@@ -59,18 +59,19 @@ export function ConfirmHost() {
 
   if (!req) return null;
   return (
-    <div className={"mobile-dialog" + (shown ? " is-open" : "")}>
-      <div className="mobile-dialog__scrim" data-prevent-swipe onClick={() => close(false)} />
-      <div className="mobile-dialog__box" role="alertdialog" aria-label={req.title} data-prevent-swipe>
-        <div className="mobile-dialog__head">{req.title}</div>
-        {req.body && <div className="mobile-dialog__body">{req.body}</div>}
-        <div className="mobile-dialog__actions">
-          <button className="mb-btn mb-btn--secondary" onClick={() => close(false)}>{req.cancelText ?? "取消"}</button>
-          <div className="mb-spacer" />
-          <button className={"mb-btn mb-btn--primary" + (req.danger ? " mb-btn--danger" : "")} onClick={() => close(true)}>{req.confirmText ?? "确定"}</button>
+    <>
+      <div className={"mb-scrim mb-scrim--state" + (shown ? " is-open" : "")} data-prevent-swipe onClick={() => close(false)} />
+      <div className={"mb-actionsheet" + (shown ? " is-open" : "")} role="alertdialog" aria-label={req.title} data-prevent-swipe>
+        <div className="mb-actionsheet__group">
+          <div className="mb-actionsheet__title">{req.title}</div>
+          {req.body && <div className="mb-actionsheet__message">{req.body}</div>}
+          <button className={"mb-actionsheet__item" + (req.danger ? " mb-actionsheet__item--danger" : "")} onClick={() => close(true)}>
+            {req.confirmText ?? "确定"}
+          </button>
         </div>
+        <button className="mb-actionsheet__cancel" onClick={() => close(false)}>{req.cancelText ?? "取消"}</button>
       </div>
-    </div>
+    </>
   );
 }
 

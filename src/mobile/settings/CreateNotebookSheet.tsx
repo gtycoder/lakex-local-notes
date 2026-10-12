@@ -45,14 +45,14 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
   };
 
   return (
-    <div className="mobile-sheet-mask" data-prevent-swipe onClick={() => !saving && onClose()}>
-      <div ref={sheetRef} className="mobile-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
-        <div className="mobile-sheet-grab" />
-        <div className="mobile-sheet-head">
-          <span className="mobile-sheet-title">基本信息</span>
+    <div className="mb-scrim" data-prevent-swipe onClick={() => !saving && onClose()}>
+      <div ref={sheetRef} className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
+        <div className="mb-sheet__grab" />
+        <div className="mb-sheet__head">
+          <span className="mb-sheet__title">基本信息</span>
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
-        <div className="mobile-sheet-body mobile-sheet-body--form">
+        <div className="mb-sheet__body mb-sheet__body--form">
           <div className="create-nb-row">
             <button className="create-nb-icon" onClick={() => setShowEmoji((v) => !v)} aria-label="选择图标">
               {icon ? <span className="create-nb-emoji">{icon}</span> : <Book size={22} />}
