@@ -66,6 +66,23 @@
   移动端统一传 `mb-kernel-host`（`src/mobile/kit.css` 给几何）。⇒ **P6 六组件变体化完成**：
   settingsPrimitives（移动端自建）/ AttachmentPreview / ImageLightbox / QuickNoteEditor / QuickNotePreview / LakeEditor 宿主类。
   门禁：tsc ✓ · vitest 231 文件 / 1816 用例 ✓ · `npm run check:mobileui` ✓
+- **P7d 终验 + IA 冻结清单逐条核对（已完成，本批收尾）**：
+  **门禁全绿**：tsc ✓ · vitest **231 文件 / 1816 用例** ✓ · `npm run check:mobileui` ✓（独立性 + 层 + 内核样式 + ui-metrics）
+  · `check:bundle` ✓（app-css 1.79MB / 2MB、drawnix 725KB / 1.4MB）· 设备级 `check:mobilesnap` **6 态 0 差异** ·
+  设备走查 **22/22 屏 ok**。
+  **IA 冻结清单逐条**（判据 = 存在性与从属关系不变；证据 = 22 屏设备走查 + 1 次定点探针）：
+  ① 首页两 tab —— home-library / home-quicknotes / home-library-shelf ✓
+  ② 知识库：笔记本列表 → 文档树抽屉 + 文档区 —— notebook-workspace ✓
+  ③ 文档区：顶栏 + 正文 + dock + 抽屉 —— doc-0..4 / quicknote-editor（顶栏与 dock）/ doc-outline（大纲）/ doc-note-info（属性）/ doc-history ✓
+  ④ 小记：时间线 + 写作卡九项工具条 —— home-quicknotes / quicknote-editor ✓
+  ⑤ 设置：抽屉九页 —— settings + settings-{编辑器,外观,历史,资源管理,同步设置,清理缓存,回收站,关于} ✓
+  ⑥ 回收站 / 历史版本 / 文档属性（抽屉形态）—— settings-回收站 / doc-history / doc-note-info ✓
+  ⑦ 搜索 —— 定点探针：点首页底栏「搜索」⇒ `.mb-sheet` 打开、标题「搜索」、输入框在、`.mb-scrim` 在 ✓
+  **结论：移动端 UI 独立化 P0–P7 全部交付并验证**（移动端桌面样式 import = 仅字体资源；桌面类名 token = 0；反向耦合 = 0）。
+- **登记为本批之后的小额遗留（不影响 P0–P7 结论，按 §3 续做）**：① 死 CSS 清理（旧 `mobile-sheet*/toast*/dialog*/menu*`
+  与部分 `mobile-settings-*` 已无 JSX 施加 ⇒ 交 `scripts/css-audit/audit-dead-css.mjs` 扫 + 删后对拍探针 0 差异）；
+  ② `components/treeDrag` 仍是移动端唯一冻结的共享「逻辑+DOM」件（要按「逻辑上收 + 移动端自有 DOM」改造，护栏允许清单里只剩它一条）；
+  ③ 小记预览的 `.ln-ellipsis` 桥接（组件改发 `.mb-ellipsis` 后可删）；④ Lightbox / 附件预览缺设备级探针（走查不打开这两个浮层）。
 - **未做（下一轮继续）**：
   P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
   文档外壳/dock）· P6 六组件变体化 · P7 收口（MOBILE-DESIGN.md 定稿 + 指标转门禁 + 清反向耦合 18 行）。
