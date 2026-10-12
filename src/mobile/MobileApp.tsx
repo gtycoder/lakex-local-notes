@@ -29,6 +29,7 @@ import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
+import { useAutoSync } from "./useAutoSync";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
@@ -100,6 +101,9 @@ export function MobileApp() {
       }
     })();
   }, [refreshAll]);
+
+  // 自动同步（261012）：autoMode=interval 起定时器；onOpenClose 在冷启动就绪 + 回到前台时补一次。
+  useAutoSync();
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
   // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）

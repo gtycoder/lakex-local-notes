@@ -20,6 +20,7 @@ import { native } from "../lib/native";
 import type { DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
+import { SYNC_AUTO_MODE_OPTIONS } from "../core/syncModes";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
@@ -710,11 +711,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式">
-                            <Select label="自动同步模式" value={syncCfg.autoMode} onChange={(v) => void saveSyncCfg({ autoMode: v as SyncSettings["autoMode"] })} options={[
-                              { value: "manual", label: "完全手动" },
-                              { value: "interval", label: "按固定间隔自动同步" },
-                              { value: "onOpenClose", label: "仅在开启/关闭时同步" },
-                            ]} />
+                            <Select label="自动同步模式" value={syncCfg.autoMode} onChange={(v) => void saveSyncCfg({ autoMode: v as SyncSettings["autoMode"] })} options={SYNC_AUTO_MODE_OPTIONS} />
                           </Field>
                           {syncCfg.autoMode === "interval" && (
                             <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>

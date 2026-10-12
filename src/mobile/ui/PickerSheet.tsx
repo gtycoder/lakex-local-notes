@@ -13,12 +13,13 @@ import { Check, ChevronDown } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useSwipeToClose } from "./useSwipeToClose";
 
-export interface PickerOption {
-  value: number;
+export interface PickerOption<T extends string | number = number> {
+  value: T;
   label: string;
 }
 
-export function PickerSheet({
+/** 通用选择器：值可以是 number（字号/数量）或 string（枚举，如同步模式）。 */
+export function PickerSheet<T extends string | number>({
   label,
   value,
   options,
@@ -27,11 +28,11 @@ export function PickerSheet({
 }: {
   /** Sheet 标题（同时作为触发器的无障碍名） */
   label: string;
-  value: number;
-  options: PickerOption[];
-  onChange: (value: number) => void;
+  value: T;
+  options: PickerOption<T>[];
+  onChange: (value: T) => void;
   /** 触发器上的文本（默认取当前项 label） */
-  formatValue?: (value: number) => string;
+  formatValue?: (value: T) => string;
 }) {
   const [open, setOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);

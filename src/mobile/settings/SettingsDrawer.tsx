@@ -8,6 +8,8 @@ import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List,
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
+import { SYNC_AUTO_MODE_OPTIONS, syncIntervalOptions } from "../../core/syncModes";
+import { writeSyncSettings } from "../syncSettingsStore";
 import { bridge } from "../bridge";
 import { MANIFEST_VERSION } from "../../core/syncUtils";
 import { usePanelDrag } from "../usePanelDrag";
@@ -339,9 +341,39 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     onChange={(next) => {
                       const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "manual" as const, autoIntervalMinutes: 15 }), enabled: next };
                       setSyncCfg(value);
-                      bridge.saveSyncSettings(value);
+                      writeSyncSettings(value); // 单一写入口：同步策略改了 → 自动同步定时器立刻重挂（useAutoSync）
                     }}
                   />
+                  {syncCfg?.enabled !== false && (
+                    <>
+                      <Item itemId="sync-auto-mode" name="自动同步模式" desc="与桌面同一套语义；仅在启用云同步时生效。">
+                        <PickerSheet
+                          label="自动同步模式"
+                          value={syncCfg?.autoMode ?? "manual"}
+                          options={SYNC_AUTO_MODE_OPTIONS}
+                          onChange={(v) => {
+                            const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 }), autoMode: v };
+                            setSyncCfg(value);
+                            writeSyncSettings(value);
+                          }}
+                        />
+                      </Item>
+                      {syncCfg?.autoMode === "interval" && (
+                        <Item itemId="sync-auto-interval" name="自动同步间隔" desc="按固定间隔自动同步：到点触发一次（离线/未配置时由引擎侧判据拦住，不会出网）。">
+                          <PickerSheet
+                            label="自动同步间隔"
+                            value={syncCfg?.autoIntervalMinutes ?? 15}
+                            options={syncIntervalOptions(syncCfg?.autoIntervalMinutes ?? 15).map((m) => ({ value: m, label: m + " 分钟" }))}
+                            onChange={(v) => {
+                              const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "interval", autoIntervalMinutes: 15 }), autoIntervalMinutes: v };
+                              setSyncCfg(value);
+                              writeSyncSettings(value);
+                            }}
+                          />
+                        </Item>
+                      )}
+                    </>
+                  )}
                   <div className="mb-set-block">
                     <div className="mb-set-block__name">保存并测试连接</div>
                     <div className="mb-set-item__desc">配置将由本地保存为真相，S3 仅作同步镜像。</div>
