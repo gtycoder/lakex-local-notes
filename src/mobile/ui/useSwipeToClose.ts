@@ -2,7 +2,7 @@ import { useEffect, type RefObject } from "react";
 import { getTouchAxis } from "../gestureCore";
 
 /**
- * 浮层右滑关闭/返回（对齐思源：全屏 menu/model 支持右滑关闭）。
+ * 浮层右滑关闭/返回（全屏面板支持右滑关闭，子层右滑 = 返回上一层）。
  * 只认右滑；纵向滑动交给原生滚动；目标元素需带 data-prevent-swipe，避免底层抽屉手势同时触发。
  */
 export function useSwipeToClose(

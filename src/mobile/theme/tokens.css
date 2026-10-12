@@ -215,14 +215,14 @@
  * 安全区 / 骨架高度 / 动效时长与曲线 / 层叠阶梯。层叠阶梯的语义是「移动端浮层顺序的
  * 唯一来源」——P3 建 mb-sheet/mb-dialog/mb-toast 时统一改走这里，不要再写魔法数字。 */
 :root {
-  /* 思源移动端骨架度量（_mobile.scss:4-15） */
+  /* 移动端骨架度量（早期口径参考过 siyuan-master 的移动端 SCSS，数值已由移动端自有令牌接管） */
   --mobile-topbar-height: 48px;
   --mobile-bottom-bar-height: 48px;
   --mobile-status-height: 24px;
   --mobile-bar-gap: 8px;
   --mobile-top-safe-area: env(safe-area-inset-top, 0px);
   --mobile-bottom-safe-area: env(safe-area-inset-bottom, 0px);
-  /* 思源动效：面板 150ms cubic-bezier(0,0,.2,1)；按压 80ms；遮罩 150ms linear */
+  /* 移动端动效：面板 150ms cubic-bezier(0,0,.2,1)；按压 80ms；遮罩 150ms linear */
   --mobile-ease-panel: cubic-bezier(0, 0, .2, 1);
   /* 进入/退出统一用「强 ease-out」：抽屉原先进场用 ease-out、退场用思源 Material 曲线（起步慢），
      一进一出两套手感；遮罩原先还是 linear。这里收敛成同一条曲线，退出也不再拖沓。

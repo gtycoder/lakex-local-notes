@@ -1,5 +1,5 @@
 /**
- * 移动端确认框（思源 .b3-dialog 口径：scrim opacity 150ms linear + 容器 scale(.8)→none / 150ms cubic-bezier(0,0,.2,1)）。
+ * 移动端确认框（P3 起 = 底部 ActionSheet，自有 .mb-actionsheet；进场用移动端动效令牌）。
  * 目的：替换 window.confirm —— 安卓上弹的是系统对话框，风格断裂且无法标危险色。
  * 用法：const ok = await confirmMobile({ title, body, confirmText, danger: true });
  *       <ConfirmHost/> 挂在 App 根部（与 Toasts 同级）。
@@ -12,7 +12,7 @@ export interface ConfirmOptions {
   body?: string;
   confirmText?: string;
   cancelText?: string;
-  /** 危险操作：确认按钮走 --b3-theme-error */
+  /** 危险操作：确认按钮走 .mb-actionsheet__item--danger（--lake-status-error） */
   danger?: boolean;
 }
 interface Pending extends ConfirmOptions { id: number; resolve: (ok: boolean) => void; }

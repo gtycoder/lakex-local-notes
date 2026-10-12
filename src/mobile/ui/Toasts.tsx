@@ -1,5 +1,5 @@
 /**
- * 移动端提示条容器（思源 .b3-snackbars 口径：右上角滑入、点按关闭、error 带 ❗）。
+ * 移动端提示条容器（形态口径参考：右上角滑入、点按关闭、error 带标记点；实现 = 自有 .mb-toast）。
  * 替换原 .mb-toast（居中黑色胶囊，无进出动效）。
  */
 import { useEffect, useSyncExternalStore } from "react";
@@ -19,7 +19,7 @@ export function Toasts() {
 }
 
 function Snackbar({ item }: { item: ToastItem }) {
-  // 思源：先挂 --hide（屏外），下一帧移除 → 滑入
+  // 先挂 is-hide（屏外），下一帧移除 → 滑入
   useEffect(() => {
     const el = document.getElementById("mb-sn-" + item.id);
     if (!el) return;

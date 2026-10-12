@@ -6,7 +6,8 @@ import { loadSettings, subscribeSettings } from "../lib/settings";
 import { applySystemBarTheme } from "./systemBars";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统**（--lake-*），不再用思源调色板。
-// 思源样式层（src/b3/**）已整体删除；仅 .b3-* / fn__* 类名保留，规则在 compat.css（值走 --lake-*）。
+// 思源样式层（src/b3/**）已整体删除；移动端自 P5 起连 compat.css 也不再引（P0–P7 独立性批次）——
+// 移动端 DOM 里没有任何 .b3-* / fn__* 类名（护栏恒为 0），样式全部来自 src/mobile/**。
 import "../styles/fonts/misans/misans.css"; // 内置 MiSans（简中+Latin，官方切片子集）
 import "../styles/fonts/jetbrains-mono/jetbrains-mono.css"; // 内置等宽 JetBrains Mono
 // P1（261012）：移动端令牌/皮肤改由 src/mobile/theme/** 提供（自有取值层）。

@@ -1,6 +1,7 @@
 /* 兼容层（P7-b 建立；260923 W2 起**双端共用**）：把原先由 src/b3/*.css 与 src/b3/siyuan.scss 提供的
  * 规则收编到我们自己的文件里，值一律走 --lake-*。原 b3 文件已随 W2 整体删除。
- * 桌面在 src/styles/index.css 以 layer(legacy) 原位置导入；移动端在 src/mobile/main.tsx 导入。
+ * 桌面在 src/styles/index.css 以 layer(legacy) 原位置导入。
+ * ⚠️ 移动端**不引本文件**（261012 P5 起）：移动端自有 mb-* 原语，DOM 里零 .b3-* / fn__* 类名。
  *
  * 两部分：
  *  A. 承重的壳层几何：原先借住在 b3/layout.css（标签栏 fixed 定位/尺寸、活动轨 padding-top、页签 margin 等）

@@ -1,5 +1,5 @@
-/* 移动端样式（W2：度量/动效/颜色一律取 --lake-* 与 --mobile-* 令牌；思源层已下线）
-   口径来源：siyuan-master app/src/assets/scss/main/_mobile.scss（见 HANDOFF §8）。 */
+/* 移动端样式（度量/动效/颜色一律取 --lake-* 与 --mobile-* 令牌；移动端自有，不依赖任何思源代码）。
+   历史：骨架度量的口径早年参考过 siyuan-master 的移动端 SCSS，P1 起数值由 src/mobile/theme/** 拥有。 */
 /* P1（261012）：本文件的 :root 令牌块（骨架度量 / 动效 / 层叠阶梯 / 安全区）已整块
    迁到 src/mobile/theme/tokens.css —— 移动端取值的唯一来源是那里，本文件只留规则。 */
 @media (max-width: 0px) { /* 占位：保持文件结构，勿删 */ }

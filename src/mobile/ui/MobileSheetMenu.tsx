@@ -1,9 +1,9 @@
 /**
- * 移动端弹层菜单（思源 .b3-menu--fullscreen.b3-menu--sheet 口径，逐条对齐 siyuan-master menus/Menu.ts）：
- *  - 贴底面板、高 56dvh（思源 setSheetHeight = innerHeight * .56）、顶部圆角 + grabber、遮罩 opacity .2；
- *  - 根层无标题（.b3-menu__title--root），下钻后标题 = 上一层项名 + 左箭头返回；
- *  - 子菜单 = 整屏横向平移（.b3-menu__item--show > .b3-menu__submenu{transform:translateX(-100%)}）；
- *  - 危险项 .b3-menu__item--warning（--b3-theme-error）；进出场 150ms cubic-bezier(0,0,.2,1)。
+ * 移动端弹层菜单 = 自有原语 **.mb-menusheet**（src/mobile/floating.css 是唯一来源）：
+ *  - 贴底面板、高 56dvh、顶部 grabber、遮罩走 --lake-scrim；
+ *  - 根层无标题，下钻后标题 = 上一层项名 + 左箭头返回；
+ *  - 子菜单 = 整屏横向平移（.is-show > .mb-menusheet__submenu）；
+ *  - 危险项 .mb-menusheet__item.is-danger（--lake-status-error）；进出场 150ms（--mobile-duration-panel）。
  * 替换原 .mobile-dropdown（跟随手指的小浮层 = 桌面右键语义）。
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -15,7 +15,7 @@ export interface MobileSheetItem {
   id: string;
   label: string;
   icon?: LucideIcon;
-  /** 危险操作：红色（思源 __item--warning） */
+  /** 危险操作：红色（.mb-menusheet__item.is-danger） */
   danger?: boolean;
   disabled?: boolean;
   /** 右侧浅色说明（计数/状态） */
@@ -29,7 +29,7 @@ export interface MobileSheetMenuProps {
   onClose: () => void;
   /** 叶子项被点击（父项点击只做下钻）；path = 从根到该项的项链 */
   onSelect: (item: MobileSheetItem, path: MobileSheetItem[]) => void;
-  /** 标题右侧动作（思源不放 X，靠遮罩/返回；这里留可选逃生口） */
+  /** 标题右侧动作（设计上不放 X：靠遮罩/返回关闭；这里留可选逃生口） */
   headerAction?: ReactNode;
 }
 
@@ -68,7 +68,7 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
     return pushBackHandler(() => { if (back()) return true; close(); return true; });
   }, [mounted, back, close]);
 
-  // 右滑关闭/返回（对齐思源：全屏 menu/model 右滑；子层右滑 = 返回上一层）
+  // 右滑关闭/返回（全屏面板右滑；子层右滑 = 返回上一层）
   const dismiss = useCallback(() => { if (!back()) close(); }, [back, close]);
   useSwipeToClose(sheetRef, dismiss, mounted);
 

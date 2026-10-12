@@ -40,8 +40,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/index.css": { decls: 0, dupGroups: 0 },
   "mobile/theme/base.css": { decls: 3, dupGroups: 0 },
   "mobile/theme/tokens.css": { decls: 167, dupGroups: 0 }, // P2：+11 = 移动端几何槽（触达/内距/圆角）
-  "mobile/theme/light.css": { decls: 83, dupGroups: 0 },
-  "mobile/theme/dark.css": { decls: 134, dupGroups: 0 }, // +41 = 编辑器深色桥整块自 editor-dark.css 迁入（值未改）
+  "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接
+  "mobile/theme/dark.css": { decls: 112, dupGroups: 0 }, // +41 编辑器深色桥迁入 → P7b -22 删 --b3-* 过渡桥接
   "mobile/kit.css": { decls: 415, dupGroups: 0 }, // P2 248 → P4 +113（mb-set-* / mb-switch）→ P5 +48（勾选）→ P6c +6（内核宿主 mb-kernel-host）
   "mobile/floating.css": { decls: 256, dupGroups: 0 }, // P3：浮层原语（sheet/actionsheet/toast/menusheet + 两种遮罩进场）
   "mobile/features.css": { decls: 142, dupGroups: 0 }, // P6：图片 Lightbox（57→触屏版）+ 附件预览（82→触屏版）
