@@ -23,6 +23,7 @@ const CHROMECSS = read("../../styles/chrome.css");
 const APP = read("../../App.tsx");
 const TOPBAR = read("../../desktop/DesktopTopBar.tsx");
 const STATE = read("../../hooks/useWorkspaceState.ts");
+const TABORDER = read("./tabOrder.ts");
 
 describe("文档分屏（左右两栏、不同文档、临时）", () => {
   it("只有两栏：splitPair 结构固定为 { left, right }，没有多栏/嵌套", () => {
@@ -66,6 +67,9 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
     // 只有分屏组**激活**（焦点在组内）才显示两栏 / 分隔条 / 浮动工具条
     expect(MULTITAB).toMatch(/const splitActive = useMemo\(/);
     expect(MULTITAB).toContain('className={`tab-panels${splitActive ? " is-split" : ""}`}');
+    // 两半各自带自己文档的图标（261012 用户点单：右半此前丢图标）
+    expect(MULTITAB).toContain('{splitLeftTab?.icon && <span className="tab-custom-icon"');
+    expect(MULTITAB).toContain('{splitRightTab?.icon && <span className="tab-custom-icon"');
     // 已删除「点第三个标签替换分屏栏」；点其它标签 = 普通切换
     expect(APP).not.toContain("placeSplitTabs");
     expect(APP).not.toContain("替换焦点那一栏并保留分屏");
@@ -74,6 +78,15 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
     expect(APP).toContain("const closeSplit = useCallback(() => setSplitPair(null)");
     // 合并标签视觉的单一来源在 shell 层 chrome.css
     expect(CHROMECSS).toContain(".tab-split-tab .tab-split-tab__divider");
+  });
+
+  it("分屏期间标签仍可拖拽排序：合并标签代表整组，两页整块落回同一槽位（261012）", () => {
+    // 旧实现是 beginTabDrag 里 splitPair 早退 ⇒ 分屏后完全不能拖；现在放开，并把「槽位 → 真实顺序」交给纯函数
+    expect(MULTITAB).toContain("if (event.button !== 0 || !onTabsReorder) return;");
+    expect(MULTITAB).toContain("data-note-id={splitFirstNote ?? undefined}");
+    expect(MULTITAB).toContain("expandTabSlots(nextSlots, splitFirstNote, groupMembers)");
+    expect(MULTITAB).toContain("onPointerDown={(event) => { if (splitFirstNote) beginTabDrag(event, splitFirstNote); }}");
+    expect(TABORDER).toContain("export function expandTabSlots");
   });
 
   it("data-active 全局唯一（焦点栏），右栏靠 data-pane-visible 显示", () => {

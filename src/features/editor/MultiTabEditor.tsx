@@ -6,6 +6,7 @@ import { Menu } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
+import { expandTabSlots, moveSlot } from "./tabOrder";
 import { EditorTab } from "./EditorTab";
 import "./splitView.css";
 
@@ -274,7 +275,8 @@ export function MultiTabEditor({
   }, [tabOrderKey]);
 
   const beginTabDrag = (event: ReactPointerEvent<HTMLButtonElement>, noteId: string) => {
-    if (event.button !== 0 || !onTabsReorder || splitPair) return;   // 分屏组期间禁用拖拽（合并标签≠单 noteId）
+    // 261012：分屏组期间**也允许拖拽**（合并标签带 data-note-id = 组内靠前那页，整体作为一个槽位移动）。
+    if (event.button !== 0 || !onTabsReorder) return;
     if ((event.target as HTMLElement).closest(".tab-close")) return;
     dragRef.current = { id: noteId, startX: event.clientX, startY: event.clientY, active: false };
   };
@@ -290,24 +292,29 @@ export function MultiTabEditor({
     }
     const strip = tabItemsRef.current;
     if (!strip) return;
-    const els = [...strip.querySelectorAll<HTMLElement>(".tab-item")];
-    const order = els.map((el) => el.dataset.noteId ?? "");
-    const from = order.indexOf(drag.id);
+    // **槽位** = 标签栏实际渲染出的项（分屏组只占一个槽：合并标签的 data-note-id = 组内靠前那页）。
+    // 先按槽位算移动（用户看到的就是槽位），再展开成真实顺序 —— 组内两页整块落回该槽位（见 tabOrder.ts）。
+    const items = [...strip.querySelectorAll<HTMLElement>(".tab-item")]
+      .map((el) => ({ id: el.dataset.noteId ?? "", el }))
+      .filter((item) => item.id);
+    const slots = items.map((item) => item.id);
+    const from = slots.indexOf(drag.id);
+    if (from < 0) return;
     // 以指针 x 与各标签中心比较，确定插入位置
     let to = from;
-    for (let i = 0; i < order.length; i += 1) {
+    for (let i = 0; i < slots.length; i += 1) {
       if (i === from) continue;
-      const r = els[i].getBoundingClientRect();
+      const r = items[i].el.getBoundingClientRect();
       const center = r.left + r.width / 2;
       if (i < from && event.clientX < center) { to = i; break; }
       if (i > from && event.clientX > center) to = i;
     }
-    if (to !== from) {
-      const next = [...order];
-      next.splice(from, 1);
-      next.splice(to, 0, drag.id);
-      onTabsReorder?.(next);
-    }
+    const nextSlots = moveSlot(slots, from, to);
+    if (nextSlots === slots) return;
+    const groupMembers = splitPair
+      ? tabs.map((t) => t.noteId).filter((id) => id === splitPair.left || id === splitPair.right)
+      : [];
+    onTabsReorder?.(expandTabSlots(nextSlots, splitFirstNote, groupMembers));
   };
 
   const endTabDrag = () => {
@@ -430,10 +437,17 @@ export function MultiTabEditor({
                 <button
                   key="__split_group__"
                   type="button"
-                  className={`tab-item tab-split-tab${splitActive ? " active" : ""}`}
+                  className={`tab-item tab-split-tab${splitActive ? " active" : ""}${draggingId != null && draggingId === splitFirstNote ? " dragging" : ""}`}
                   data-split-group="true"
+                  /* 合并标签在拖拽排序里代表整个组：id 用组内靠前那页（splitFirstNote），
+                     落到新槽位后由 tabOrder.expandTabSlots 把两页整块放回同一位置。 */
+                  data-note-id={splitFirstNote ?? undefined}
                   role="tab"
                   aria-selected={splitActive}
+                  onPointerDown={(event) => { if (splitFirstNote) beginTabDrag(event, splitFirstNote); }}
+                  onPointerMove={moveTabDrag}
+                  onPointerUp={endTabDrag}
+                  onPointerCancel={endTabDrag}
                   title={`分屏：${splitLeftTab?.title || "无标题"} ｜ ${splitRightTab?.title || "无标题"}`}
                   aria-label={`分屏组：${splitLeftTab?.title || "无标题"}${splitLeftTab?.deleted ? "（已删除）" : ""} ｜ ${splitRightTab?.title || "无标题"}${splitRightTab?.deleted ? "（已删除）" : ""}`}
                   onClick={() => { if (suppressClickRef.current) return; onActivateSplit?.(); }}
@@ -449,6 +463,8 @@ export function MultiTabEditor({
                   <span className="tab-split-tab__half">
                     <Columns2 size={12} className="tab-split-tab__glyph" aria-hidden="true" />
                     {splitRightTab && pinned.has(splitRightTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
+                    {/* 261012 用户点单：**两半各自带上自己文档的图标**（此前只有左半有，右半丢图标）。 */}
+                    {splitRightTab?.icon && <span className="tab-custom-icon" aria-hidden="true">{splitRightTab.icon}</span>}
                     <span className="tab-title">{splitRightTab?.title || "无标题"}</span>
                     {splitRightTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
                     {splitRightTab?.deleted && <span className="tab-deleted-badge" title="该侧文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
