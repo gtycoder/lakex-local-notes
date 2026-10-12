@@ -115,7 +115,7 @@ export function MobileUsheetViewer({ noteId, content, active }: MobileUsheetView
 
   return (
     <div className="mobile-usheet" ref={hostRef}>
-      {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mobile-empty">正在加载表格…</div>}
+      {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
     </div>
   );
 }

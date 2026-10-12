@@ -16,6 +16,19 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261012 · 桌面批：分屏体验修复（宽度重夹 / 浮条遮挡 / 合并标签状态）+ 三路调研（本批）
+
+- **触发**：用户「优化分屏体验；分屏当初没立项，现在有点粗糙」。三路调研（Edge 一手实测 / 本仓库静态审计 / 同类产品+架构选项）产物在 `.css-audit/split-research/`（gitignore，**不入库**）。
+- **架构结论（回答「要不要引技术架构/依赖」）**：**不需要新依赖、不需要组模型**。现有「全部标签宿主常驻挂载 + `.tab-panels` 两列 grid + `tabs.css` 唯一隐藏规则」已能承载两栏；**内核实例在打开标签时就已经创建**（`EditorTab` 大 effect 不含 `visible`）⇒ 分屏只是让第二个实例同时可见，不新增实例。**否决**：① 布局树/组模型 = 要引入 Group 实体 + tab 身份 `noteId→tabId` + 宿主跨组移动（= React 卸载重建内核，丢滚动/撤销/IME），参照量级是思源 `app/src/layout/` 一整个目录；② 第三方布局库（react-resizable-panels / allotment / flexlayout-react / golden-layout）自带 unlayered CSS 或不可覆盖的 inline style，撞 `@layer` 层序与「分隔条唯一实现 `SplitHandle`」，而它的增量能力（多栏/嵌套）恰是无证据需要的部分。
+- **本轮修掉 5 项（每条都有修复前实测）**：
+  1. **D1/D2 容器变窄后宽度不重夹（真缺陷）**：旧实现把左栏拖到 776px 后缩窗到 760 ⇒ 两列实测 **760px / 0px**（右栏内容消失、分隔条被 `.tab-panels` 的 `overflow:hidden` 裁掉、鼠标拖不回来，唯一恢复 = 退出再进分屏）。新增纯函数 `src/features/editor/splitGeometry.ts` 的 `clampSplitLeft()`（+ `splitGeometry.test.ts` 6 例），`MultiTabEditor` 用 ResizeObserver 量 `.tab-panels` 后重夹 ⇒ 实测 760 宽两列 **480 / 280**（右栏保住 `minRight`），再放宽**恢复用户原宽度 776**（期望值与显示值分离）。
+  2. **D3 分屏浮动工具条盖住焦点栏工具条按钮（真缺陷）**：`splitView.css` 顶边只加 `--editor-toolbar-height`、漏了宿主内的**面包屑** ⇒ 浮条落进工具条带，实测盖住右栏工具条最后一枚按钮（交集 20×18px）。改为 `calc(--breadcrumb-height + --editor-toolbar-height + --lake-space-md)`（与 PANEL-CONTRACT §1 垂直几何同源）⇒ 1280/1315 遮挡 **0**；280px 极窄栏下只剩 0 面积边界接触（诚实记录，未再优化）。
+  3. **D7 进分屏时顶栏「更多」菜单失锚**：分屏会隐藏两栏面包屑右端的「更多」触发钮 ⇒ 锚点元素被卸载、浮层停在旧坐标。`App.enterSplit` 里补 `closeMenus()`。
+  4. **D4 合并标签丢状态**：合并标签两半此前不显示 pin / 「已删除」徽标 ⇒ 组成员被软删时右栏**静默只读**。按独立标签同一套类补 `Pin` + `.tab-deleted-badge`，并给合并标签补 `aria-label`。
+  5. **D6 死 CSS**：`.tab-item.in-split` 恒不渲染（组员各自的 `<button>` 不进 DOM）⇒ 删 `splitView.css` 那条规则与 JSX 拼接；顺带让分隔条在**未拖过**时也有 `aria-valuenow`（传生效宽度）。
+- **门禁**：`tsc` ✓ · `vitest` **235 文件 / 1829 用例** ✓ · `ui-metrics` ✓（颜色字面量 0 · `!important` 9 · 字号字面量 0）· `check:bundle` ✓ · 桌面走查 light-1315 + dark-1000（本批产物在 `.css-audit/walkthrough/`）。
+- **未做（等用户定，逐条代价见 §3#21）**：分屏宽度/分屏对持久化 · 合并标签右键菜单 · 入口补齐（标签右键「在右侧打开」/ 快捷键）· 同文档分屏 · 多栏/上下。
+
 ### 261012 · 移动端 UI 独立化 P0–P7 全量交付 + 收尾 review（本批收尾；已推送 origin/master）
 
 - **总览**：本轮把「移动端要有自己的设计语言、只与桌面共享必要逻辑」从口径落成了可执行、可验收的工程状态。
@@ -675,6 +688,10 @@
     - **判据**：做完后全仓 `grep -rn "b3-\|fn__"` 只剩「许可署名 + 历史说明」两类注释，代码与选择器为 0。
     - **登记出处**：`AGENTS.md §3#14`「思源层已整体移除（`src/b3/**` 已删除；仅类名作为 JSX 契约保留）」——
       本条即是把"仅类名保留"这一步也做完。
+21. **分屏（261012 三路调研后的候选清单；本轮只做了缺陷修复，下列等用户定）**：调研产物 `.css-audit/split-research/{edge-split,code-audit,peers-arch}.md`（gitignore，**不入库**；要复现就重跑探针脚本，脚本也在同目录）。逐条「不做会付什么代价」见 peers-arch §5。
+    - **Edge 一手实测（261012，Edge 155.0.4283.45）**：Edge 的「拆分视图」**不是合并标签** —— 当前标签变左半（标题加「- 左视图」）、并**新增**一个右半标签（`edge://newtab`，后缀「- 右视图」，各占约半宽、**两者同时 selected**），原标签不被吞并；**同窗口可并存多组**拆分对（实测 2 组）；关闭任一侧 ⇒ 分屏**自动解散**、另一侧回落全宽；切到别的标签**不销毁**（重新选中即恢复）；分隔条可拖、最小 **~141px**、**双击复位 50/50**、Esc 无效；入口 = 菜单「标签页 → 将选项卡添加到新的拆分视图」= **⌥⌘N**（窗口 ≥2 标签才可用；工具栏按钮/右键链接/垂直分屏/持久化均**未验证**）。⇒ 我们的「一个合并标签」是**对 Edge 的简化**（261008 用户定稿），不是照抄；要不要改成「两个半宽标签」属产品决策。
+    - **候选（①~④ 尚未做；⑤⑥ 已判不做）**：① 分屏宽度持久化（现在每次重进要重拖一次）；② 分屏对跨重启恢复（重启后需 3 步重建；且恢复 = 冷启动同时挂两份内核实例）；③ 合并标签/组右键菜单（现在关组内单页只能走「切换标签」下拉的 ×，也不能对组成员右键钉住）；④ 入口补齐（标签右键「在右侧打开」= 就近入口；快捷键须先按 ⌘] 先例实测内核未占用该组合键）；⑤ 同文档分屏（同类产品默认能力，但要动 tab 身份模型，判不做）；⑥ 多栏/上下/嵌套（无证据，判不做；第三方布局库亦已否决）。
+
 ## 4. 关键坑（长期有效）
 
 ### 同步 / 数据
@@ -799,7 +816,109 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > **「移动端架构重做」已结案（261010）**：核查确认本仓库**不存在重做**（无新分支/worktree/未提交改动）⇒ 不立项重设计。
 > 原「重构输入」三问的答复：① F16 **已按当前架构修复**（写域/维护域分离，见 §0 本批）；② 走查装置**必须接进验收流程**（`check:mobilesnap` + 设备级截图）；
 > ③ `window.lakeNative` **保留并改为从实现派生**（49 = 47 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
-> 移动端规格与硬约束现在只在 `docs/MOBILE-TECH-STACK.md`（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
+> 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
+
+### 261013 · 移动端「必要项」批：装置四修 + 目录层失效修复（**待用户验收，未提交**）
+
+> 用户点单的落地顺序：**先 §6 必要项 → 再 A**。本批只做 §6；A 未开始，B 不做，D（平板/横屏新布局）留待办。
+
+- **装置四修 —— 三处「静默少测 / 测错」，正是「门禁全绿却漏掉整类问题」的根因**：
+  ① **走查 smallTap 探针一直是瞎的**：它要求「无滚动祖先 **且** 原生 button **且** 有文字」——而首页/目录/卡片全在 .mobile-scroll 里、
+     行内图标是 span[role=button] ⇒ **该探针从未报出过任何问题**（22 屏全 0）。现改为：inScroll 只约束 escape；smallTap 覆盖全部可点元素；
+     **算上 ::after 后的有效命中区**；跳过 disabled；排除内核/第三方（ne- / ant- / lakex- / univer / drawnix）。修好后首次产出 **22 类 / 42 处** <44。
+  ② check:mobilesnap 的 **settings-appearance** 选择器停在 .b3-list-item（行早已是 .mb-row.mobile-settings-row）⇒ 与 settings 同屏。
+  ③ 同装置 **home-doc** 用 el.click() ⇒ Android WebView 里**不触发导航**，且 .doc-card 只在书架视图存在 ⇒ **该态从未离开首页**
+     （元素数与 home-library 完全相同就是铁证）；加上开发库「最近文档」6 张全是 parent_id 为空的探针文档 ⇒ 改走走查里已验证的
+     「笔记本 → 目录抽屉 → 文档行」路径。
+  ④ 同装置 **home-library-list** 找「切换到列表」，而按钮在列表视图下写的是「切换到书架」⇒ 与 home-library 同屏。
+  **⇒ 6 态里原本只有 3 态有效**。现改为**每态钉住书架/列表 + 真实点按 + 到达断言**（到不了就抛错，不再静默沿用上一屏）。
+  **基线已按新语义重烤**：6 态 = 1784 / 1840 / 1755 / **2943** / 1862 / 1811（home-doc 1755 → 2943 = **首次真的覆盖到工作区**）；改后复跑 6 态 0 差异。
+- **目录层真缺陷（P2–P5 改名留下的）：一批 CSS 仍挂在 .ln-row 上，而 JSX 早已是 .mb-row ⇒ 整组静默失效**：
+  **拖拽落点线 · 拖入分组高亮 · 真机 touch-action（拖拽会被 WebView 判给滚动而 touchcancel）· 长按禁选字** 全部不生效；
+  另外 .drop-line-before::before 只写了 top、**没有 content** ⇒ 即使选择器对了，「插到上方」那条线也画不出来。已回接 .mb-row 并补齐 content
+  （设备实测 ::before 已渲染 3px accent 线）。全屏标签页列表同理（.mobile-model-body .ln-row 失效 ⇒ 标签页退化成裸行）；已回接（实测 1px 边 + 10px 圆角 + 48 高）。
+- **目录树缩进**：data-depth 一直在写，但 --indent **全仓从未被赋值** ⇒ 父子孙同一缩进、层级只能靠箭头猜。已在 kit.css 补 1–4+ 级档（14/28/42/56px），
+  落点线左端改用同一变量（不再读已死的 --ln-indent）。设备实测 0/1/2/3/4 级 = padding-left 16/30/44/58/72px ✓。
+  **⚠️ 开发库的树是平的**（74 篇全在根、depth 全 0）⇒ 真实数据上暂时看不出差别，需有嵌套分组才可见。
+- **命中区（44 Rule）**：新增**唯一注册表**（src/mobile/mobile.css 顶部注释块）—— 视觉尺寸刻意 <44 的类统一用 ::after 补到 --mb-tap-min，
+  **不改视觉盒子**（因此整页几何快照不受影响）；另把文档标题输入框 30→44、小记卡片按钮 40→44、.mb-input 内层 input 25→42→44
+  （外壳 44 减 1px 边框，负 margin 收回）。走查 smallTap：**22 类 / 42 处 → 0**。
+- **新增护栏**：mobileLayers.test.ts 增「移动端 CSS 不得再出现 .ln- / .b3- / .fn__ / .config- 选择器」（恒 0，防止再次静默失效）；
+  ui-metrics.mjs 增移动端**字号字面量**基线（52，只许降；桌面是硬 0）。MOBILE-DESIGN.md 增 44 Rule 的实现口径与账本两条。
+- **验证（全绿）**：tsc ✓ · vitest **235 文件 / 1829 用例** ✓ · check:mobileui ✓ · check:core 77-0 ✓ ·
+  设备 check:mobilesnap **6 态 0 差异** ✓ · 设备走查 **22/22 屏 ok 且五类探针全 0** ✓ · git diff --check clean ✓。
+- **未做（下一批）**：**A**（语雀对齐精修：顶栏 44 / 文字 tab / 胶囊底栏 56 / dock 条目 44 / 行高档收敛到 44-48-56）·
+  6.1 启用内核 -mobile 排版家族（156+203 条现成规则，当前零使用）· 6.2 阅读态 ne-doc-major-viewer（**改的是两端共用的 lakeRuntime.ts，
+  会同时改桌面观感 ⇒ 需单独实验 + 两端各自验收**）· 6.3 内核桌面几何残留（min-width:500 / min-height:1024 / padding 90px，先量再改）· 6.9 冷启动骨架。
+- **⚠️ 并发提醒**：本批期间**桌面会话在同一工作树并发改动**（HANDOFF.md / PANEL-CONTRACT.md / src/App.tsx / MultiTabEditor.tsx /
+  src/features/editor/splitView.css / 新增 splitGeometry.ts(+test)，时间 18:20–18:26）。**本批未提交** ⇒ 两部分改动现在混在同一工作树里，
+  提交前需按文件分开。dist/ 是本批未重建的共享产物（只重建了 dist-mobile/）。
+
+### 261013 · 移动端 A 批（形态对齐语雀）：顶栏 44 / 文字 tab / 胶囊 56 / dock 44 / 行高收敛（**待用户验收，未提交**）
+
+> 承接上一批：用户点单「先 §6 必要项 → 再 A」。本批即 A（**纯形态 + 令牌**，不动 IA、不碰路由与数据）。B 不做、D 留待办。
+
+- **落地内容**：
+  · **顶栏 48 → 44**（`--mobile-topbar-height`；连带 `.mobile-icon-btn` / `.toolbar__button` / `.mobile-model-head`）。
+  · **首页 tab 改语雀式纯文字 tab**：选中 = 加粗 + `--lake-text-1`、未选 = 常规 + `--lake-text-3`，**去掉下划线指示线**；
+    随之删除已无消费者的 `@keyframes ln-indicator-in`（不留死代码）。
+  · **底部胶囊 48 → 56、圆角 28**；宽度上限**改为独立槽位令牌**（`--mobile-bottom-bar-slot: 48px`）——
+    原来宽度由高度推导（`height × 6 = 288`），胶囊一加高就会连带被撑宽。实测宽度仍 **288** 不变。
+  · **dock 条目 40 → 44**（`.med-btn` / `.med-ins-item` / `.med-f-btn` / `.med-f-sizes` / `.med-outline-item` / `.med-doc-item`），
+    并从**触达补足注册表里移除**（口径：调大了就不该再补足，不许两套并存）。
+  · **行高档收敛到 44 / 48 / 56**：搜索/文档行 40 → 44、设置根页行 52 → 48（原先 40/44/48/52/56 五档并存）。
+  · **空态三套 → 一件**：`.mobile-empty`（外壳，padding 32/16 + 字号字面量 14）/ `.mb-set-empty`（设置卡内 20/0）/
+    `.mb-sheet__empty`（浮层内 24/0）收敛为 **`.mb-empty` + `.mb-empty--inset`**，21 个 JSX 站点改名（装置与测试均未引用旧类名，已核对）。
+  · **计数措辞统一**：列表副标题「共 N 篇文档」→「**N 篇**」（与书架视图同单位）；顺带把 `.nb-shelf-count` / `.nb-row__sub` /
+    `.mobile-empty` 三处字号字面量换成令牌 ⇒ 移动端字号字面量 **52 → 49**（基线同步调小）。
+- **本批唯一一次回归（已修）**：tab 横向内距收到 2px 后，「小记」宽度只剩 **36px**（<44）⇒ 走查 `smallTap` 从 0 弹到 **13 处**。
+  修法 = `min-width: var(--mb-tap-min)` 兜底（纯文字 tab 的宽度由字数决定，单字标签必然掉档）；修后 `smallTap` **回到 0**。
+  教训：**改视觉尺寸后必须重跑走查** —— 这正是上一批把探针修活的直接收益（否则这次回归会被静默放过）。
+- **设备实测（AVD lake_mobile）**：顶栏 **412×44** · 胶囊 **288×56 / 圆角 28** · tab 选中 **56×44 / 600 字重 / `--lake-text-1` / `::after = none`** ·
+  tab 未选 **44×44 / 400 字重 / `--lake-text-3`**。
+- **验证（全绿）**：`tsc` ✓ · `vitest` **235 文件 / 1829 用例** ✓ · `check:mobileui` ✓ · `check:core` 77-0 ✓ ·
+  设备 `check:mobilesnap` **重烤后 6 态 0 差异**（重烤前 6/6 态指纹变化但**元素数全部不变** = 纯计算值变化、无结构变化：1784/1840/1755/2943/1862/1811）·
+  设备走查 **22/22 屏 ok · 五类探针全 0 · 横向溢出 0** ✓ · `git diff --check` clean ✓。
+- **账本（`mobileLayers` / `ui-metrics`）**：tokens 167→**168**（+slot）· kit 439→**440**（+`.mb-empty--inset`）·
+  floating 255→**250**（−`.mb-sheet__empty`）· mobile.css 1218→**1220**（空态与指示线净减、tab 补 2 条 44 兜底）·
+  移动端字号字面量 52→**49**。`MOBILE-DESIGN.md` 已同步：YAML 加 topbar/bottom-bar、Layout 表加行高档收敛与 tab 形态、
+  Components 登记 `mb-empty`，并把「补足注册表 vs 真调大」的取舍写成 44 Rule 的补充口径。
+- **仍未做**：6.1 启用内核 `-mobile` 排版家族 · 6.2 阅读态 `ne-doc-major-viewer`（跨端共用 `lakeRuntime.ts`，需单独实验）·
+  6.3 内核桌面几何残留（先量再改）· 6.9 冷启动骨架 · **B**（首页「最近优先」权重重排，用户定：暂时不动）·
+  **D**（平板/横屏双栏新布局，用户定：留作待办）。
+- **⚠️ 并发仍在**：桌面会话的 `HANDOFF.md §0` / `PANEL-CONTRACT.md` / `src/App.tsx` / `MultiTabEditor.tsx` / `splitView.css` /
+  `splitGeometry.ts(+test)` 仍在同一工作树里；**本批同样未提交**。提交时必须按文件分开。
+
+### 261013 · 移动端 6.1–6.9 收口：内核两族 mount 类实测（不做）+ 引擎几何修复 + 冷启动骨架 + 装置确定化（**待用户验收，未提交**）
+
+- **6.1 内核 `-mobile` 排版家族（156 / 203 条）⇒ 实测零收益，不做**：这族几乎全部（156/156、201/203）挂在
+  `.ne-paragraph-spacing-relax.ne-typography-classic` 上，而我们运行的实例是 `ne-typography-traditional`（设备实测 `.ne-viewer` 类名）
+  ⇒ 选择器根本不匹配；给宿主加上该类后 h1/p 的 font-size/line-height/margin **逐项不变**。已回填 `LAKEX-CONTRACT §5.34`，
+  并写明「它不是现成的移动端排版，别再当低成本抓手提」。
+- **6.2 阅读态 `ne-doc-major-viewer`（19 条）⇒ 移动端不做，留给桌面**：读码核对「160 条非 -mobile 的 `.ne-doc-major-editor` 规则里
+  **0 条**指向 `ne-viewer`」（换类不丢东西），但那 19 条是按**桌面 750 版心**写的：`.ne-viewer-body{padding:0 50px}`（412px 屏正文只剩 312）、
+  `ne-table-hole.ne-full-width ne-table-wrap{min-width:750px}`、`ne-root-card-hole.ne-full-width > ne-card{min-width:750px}`
+  ⇒ 手机上必然溢出，且会被 `.ne-editor-wrap{overflow-x:hidden}` **静默裁掉**。要换必须同时中和这三条 ⇒ 收益不抵复杂度。
+  桌面端换类才可能吃到「750 版心」的正当收益 ⇒ **登记给桌面会话单独验收**（§5.34 ②）。
+- **6.3 引擎几何残留（已修）**：内核按桌面写死 `.ne-layout-mode-fixed/.adapt .ne-engine{min-height:1024px; padding:20px 70px 90px 70px!important}`，
+  我们原先只压了左右内距 ⇒ 手机（视口约 790）上短文档多出约 230px 幻觉滚动 **再叠加** 90px 重复底内距。
+  已压回 `min-height:0 / padding-bottom:0`（设备级联实测 1024/90 → **0 / 0**）。小记走 **note 版式**（`.ne-doc-note-editor`，16/8/24、min-height 实测 336.9）不受影响。
+- **6.9 冷启动骨架（已做）**：原冷启动只画满屏「启动中…」；现改为**与首页同构的静态骨架**（顶栏 + 内容块 + 胶囊底栏，尺寸同源）
+  ⇒ 数据到达原地填充、不整屏跳。设备时序实测：**~200ms 出现 11 个骨架节点 → ~250ms 接上真实首页**，「启动中」**0 次**出现。
+  新增 `.mb-skel` 原语并登记进 `prefers-reduced-motion` 名单。
+- **6.4–6.8 已在上一批「必要项」交付**（目录树缩进 / 命中区 44 / 走查探针 / 死 CSS 与目录层失效 / 文档数字）。**6.1–6.9 至此全部有结论**。
+- **装置第二处确定化（本轮附带，价值大）**：`check:mobilesnap` 每态先**清掉 `lake-notes-mobile.tabs.*`** 再 reload ——
+  整页快照把 keep-alive 的**隐藏 pane 也数进元素数**，而标签集随使用历史变 ⇒ 同一份代码得到不同计数
+  （历史 `home-library` 1784/1755 抖动、本轮 `home-doc` 2943/2937/2926 漂移，根因都是它）。清掉后**连续 3 次复跑 0 差异**。
+  同时把 `home-doc` 断言收紧到「**活动** pane 里真的有 `.ne-viewer` / `.ne-engine`」（此前只查 `.mobile-doc-body`，会被隐藏 pane 蒙混）。
+- **⚠️ 过程中我污染过开发库（已清理，留档当教训）**：探针点了目录菜单的「新建文档」，在「欢迎来到 Lake Notes」下建了一篇「无标题文档」，
+  并把那一行变成**分组行**（`hasChildren` ⇒ 点击只展开不打开），连带 `home-doc` 语义漂移。已用 `lakeNative.trashNote` 移入回收站（93 → 92 篇）。
+  **教训**：探针不要走「新建」类 UI 入口，要用 `createNote(title, parent)` 建独立文档（§0 早有此约定），跑完即清。
+- **验证（全绿）**：`tsc` ✓ · `vitest` **235 文件 / 1829 用例** ✓ · `check:mobileui` ✓ · `check:core` 77-0 ✓ ·
+  设备 `check:mobilesnap` **连续 3 次 0 差异** ✓ · 设备走查 **22/22 ok · 五类探针全 0 · 横向溢出 0** ✓ · `git diff --check` ✓。
+- **账本**：`mobile.css` 1220 → **1240**（骨架 ×20）· dupGroups 2 → **3**（`.mb-skel` 在 reduced-motion 名单里关 animation，
+  与主块同选择器同属性成一组 —— 本文件既有的无障碍登记模式，不是多层覆盖）· 移动端 `!important` 16 → **18**（6.3 的两条，压未分层内核 CSS）·
+  字号字面量仍 **49**。
 
 > **261009 B2（进行中）** 移动端逐页走查装置：scripts/css-audit/mobile-walkthrough.mjs（配合 drive.mjs 9335）。
 > 覆盖：首页（知识库 / 小记 / 书架）、笔记本工作区、各文档（doc / usheet / bitable / board）、设置抽屉九页；每屏「截图 + 探针」
@@ -807,7 +926,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > **⚠️ 关键工具坑（261009 实测）**：**Android WebView 的 CDP Page.captureScreenshot 抓不到 GPU canvas 层** ——
 > usheet 网格在页面截图里整片空白，但同屏画布 toDataURL() 有完整内容、设备级 adb screencap 也完全正常
 > ⇒ **移动端截图一律用设备级 screencap**（脚本里已改）。别据 CDP 截图报「表格空白」这种假缺陷（本轮差点误报，A/B 撤掉表格补丁后同样空白才定位到是截图问题）。
-> 已知观察（未改）：首页顶部 .mobile-htab 命中区 36×25 / 52×25（父容器 .mobile-home-tabs 仅 25 高），低于 48dp 建议；
+> ~~已知观察（未改）：首页顶部 .mobile-htab 命中区 36×25 / 52×25~~ **已于 261012 修复（现 48×44 / 64×44）**；
 > 抽屉态下「侧栏右键菜单（属性 / 历史版本）」不在同一可见层 ⇒ 移动端这两个入口需换驱动方式（本轮未完成）。
 > **已修（261009 B2）**：小记写作卡的两字按钮（取消 / 保存）标签折成两行、按钮被撑到 62px 高（实测 57×62）——
 > `.mobile-qn-btn` 加 `white-space: nowrap`（mobile.css），修复后 58×38 / 75×37；`check:mobilesnap` 6 态 0 差异。

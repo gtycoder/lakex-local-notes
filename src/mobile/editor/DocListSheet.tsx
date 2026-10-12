@@ -37,7 +37,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
         </div>
         <div className="mb-sheet__body">
           {documents.length === 0 ? (
-            <p className="mb-sheet__empty">暂无文档</p>
+            <p className="mb-empty mb-empty--inset">暂无文档</p>
           ) : (
             documents.map((d) => (
               <button

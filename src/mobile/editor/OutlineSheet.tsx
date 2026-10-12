@@ -99,7 +99,7 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
         )}
         <div className={"mb-sheet__body" + (side ? " side-panel-body mb-list" : "")}>
           {entries.length === 0 ? (
-            <p className="mb-sheet__empty">暂无标题</p>
+            <p className="mb-empty mb-empty--inset">暂无标题</p>
           ) : (
             entries.filter((e) => e.id && e.text).map((e) => (
               <button

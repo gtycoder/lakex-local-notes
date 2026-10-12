@@ -39,15 +39,16 @@ const FILES = [
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/index.css": { decls: 0, dupGroups: 0 },
   "mobile/theme/base.css": { decls: 3, dupGroups: 0 },
-  "mobile/theme/tokens.css": { decls: 167, dupGroups: 0 }, // P2：+11 = 移动端几何槽（触达/内距/圆角）
+  "mobile/theme/tokens.css": { decls: 168, dupGroups: 0 }, // P2：+11 = 移动端几何槽（触达/内距/圆角）→ 261013 A 批 +1（--mobile-bottom-bar-slot：胶囊加高后宽度上限不能再由高度推导）
   "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接
   "mobile/theme/dark.css": { decls: 112, dupGroups: 0 }, // +41 编辑器深色桥迁入 → P7b -22 删 --b3-* 过渡桥接
-  "mobile/kit.css": { decls: 432, dupGroups: 0 }, // P2 248 → P4 +113 → P5 +48（勾选）→ P6c +6（内核宿主）→ P7 +17（选择器 PickerSheet）
-  "mobile/floating.css": { decls: 255, dupGroups: 0 }, // P3 建库 → 收尾 -1（删掉未使用的 .mb-sheet--tall）
+  "mobile/kit.css": { decls: 440, dupGroups: 0 }, // P2 248 → P4 +113 → P5 +48（勾选）→ P6c +6（内核宿主）→ P7 +17（选择器 PickerSheet）→ 261013 +8（缩进 ×4 + .mb-input 内层 input ×3 + .mb-empty--inset ×1；空态从 3 套收敛成 1 套 + 1 变体）
+  "mobile/floating.css": { decls: 250, dupGroups: 0 }, // P3 建库 → 收尾 -1（删掉未使用的 .mb-sheet--tall）→ 261013 A -5（.mb-sheet__empty 并入 .mb-empty--inset）
   "mobile/features.css": { decls: 142, dupGroups: 0 }, // P6：图片 Lightbox（57→触屏版）+ 附件预览（82→触屏版）
-  "mobile/quick-notes.css": { decls: 102, dupGroups: 0 }, // P6b：自桌面 quick-notes.css 抽取的移动端子集（22 条规则）
-  "mobile/mobile.css": { decls: 1266, dupGroups: 2 }, // P1 -39 / P2 +4 / P5 +6 → 收尾 -83（删死 CSS：旧 mobile-sheet/toast/dialog/menu/lv1-3 等 27 条规则 + 38 个分组内死成员）
-  "mobile/mobile-kit.css": { decls: 177, dupGroups: 0 }, // P2 目标：整份消灭
+  "mobile/quick-notes.css": { decls: 98, dupGroups: 0 }, // P6b：自桌面 quick-notes.css 抽取的移动端子集（22 条规则）→ 261013 校准到实测值 98
+  "mobile/mobile.css": { decls: 1240, dupGroups: 3 }, // P1 -39 / P2 +4 / P5 +6 → 收尾 -83 → 261013 必要项 -33 → A -13 → 6.3/6.9 +20（冷启动骨架 mb-skel ×5 + 关键帧；引擎几何压回只改既有声明的值）
+  // dupGroups 2 → 3：新增的 .mb-skel 在 prefers-reduced-motion 名单里关掉 animation，与主块同名同属性成一组 ——
+  // 这是本文件既有的无障碍登记模式（.mobile-htab 等同样处理），不是多层覆盖。
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 241, dupGroups: 0 },
 };
@@ -172,6 +173,23 @@ describe("移动端 CSS 层围栏（P0）", () => {
       "src/mobile 下有未登记的样式文件（新文件必须登记 FILES + BASELINE，且必须由使用它的组件 import）：\n  " +
         unregistered.join("\n  ")
     ).toEqual([]);
+  });
+
+  it("移动端 CSS 不得再出现会作用于 JSX 的桌面类名选择器（ln-/b3-/fn__/config-）", () => {
+    // 261013 立的护栏：P2–P5 把 JSX 迁到 mb-* 之后，mobile.css 里还留着一批挂在 .ln-row 上的规则
+    // （拖拽落点线 / 真机 touch-action / 标签页卡片）——它们**永不命中**，缺陷就是这么静默丢的。
+    // 口径：只查**选择器里**出现这四类前缀；注释与变量名不算（--ln-indent 已删）。
+    const bad: string[] = [];
+    for (const rel of FILES) {
+      const css = readFileSync(path.join(SRC, rel), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const rule of css.split("}")) {
+        const brace = rule.indexOf("{");
+        if (brace < 0) continue;
+        const head = rule.slice(0, brace);
+        if (/(^|[\s,>+~(])\.(?:ln-|b3-|fn__|config-)/.test(head)) bad.push(rel + " :: " + head.trim().replace(/\s+/g, " ").slice(0, 90));
+      }
+    }
+    expect(bad, "以下选择器挂在桌面类名上，而移动端 JSX 只用 mb-* ⇒ 永不命中（要么删掉，要么回接到 mb-*）：\n  " + bad.join("\n  ")).toEqual([]);
   });
 
   it("没有留下「空壳规则」（选择器 { }）——清完声明必须连壳一起删", () => {

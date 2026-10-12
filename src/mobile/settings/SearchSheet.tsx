@@ -66,8 +66,8 @@ export function SearchSheet(props: SearchSheetProps) {
             />
           </div>
           <div className="mobile-search-results">
-          {searching && <div className="mobile-empty">搜索中…</div>}
-          {!searching && query.trim() && results.length === 0 && <div className="mobile-empty">无匹配结果</div>}
+          {searching && <div className="mb-empty">搜索中…</div>}
+          {!searching && query.trim() && results.length === 0 && <div className="mb-empty">无匹配结果</div>}
           {results.map((r) => (
             <div key={r.id} className="mobile-doc-row" onClick={() => { onOpenNote(r.id); onClose(); }}>
               <span className="mobile-search-main">

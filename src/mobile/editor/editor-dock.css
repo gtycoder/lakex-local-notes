@@ -33,8 +33,8 @@
 .med-btn {
   flex: 1 1 0;
   min-width: 0;
-  max-width: 52px;
-  height: 40px;
+  max-width: 56px;
+  height: var(--mb-ctl-h);
   border: none;
   background: transparent;
   border-radius: var(--lake-radius-sm);
@@ -131,7 +131,7 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
-  height: 40px;
+  height: var(--mb-ctl-h);
   padding: 0 8px;
   border: 0;
   border-radius: 8px;
@@ -175,7 +175,7 @@
   border: 0;
   background: transparent;
   border-radius: 8px;
-  height: 40px;
+  height: var(--mb-ctl-h);
   font-size: 15px;
   display: inline-flex;
   align-items: center;
@@ -249,14 +249,14 @@
 /* 字号：放最底部（用户 261012 定：用得不多）——**一行**放常用档、掐头去尾。
    档位不写在这里：见 EditorDock 的 MOBILE_FONT_SIZES（从内核 12 档里去掉最小 12/13 与最大 40/48）。 */
 .med-f-card.med-f-sizes { display: flex; }
-.med-f-card.med-f-sizes .med-f-btn { height: 40px; font-size: 14px; }
+.med-f-card.med-f-sizes .med-f-btn { height: var(--mb-ctl-h); font-size: 14px; }
 
-.med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: 40px; line-height: 40px; font-size: 16px; text-align: left; cursor: pointer; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); line-height: var(--mb-ctl-h); font-size: 16px; text-align: left; cursor: pointer; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
 .med-outline-item:active { background: var(--lake-bg-hover); }
 .med-outline-item.lv1 { font-weight: 600; }
 .med-outline-item.lv2 { padding-left: 36px; }
 .med-outline-item.lv3 { padding-left: 52px; color: var(--lake-text-2); }
-.med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: 40px; font-size: 16px; cursor: pointer; color: var(--lake-text-1); -webkit-tap-highlight-color: transparent; }
+.med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); font-size: 16px; cursor: pointer; color: var(--lake-text-1); -webkit-tap-highlight-color: transparent; }
 .med-doc-item:active { background: var(--lake-bg-hover); }
 .med-doc-item.med-active { color: var(--lake-accent); font-weight: 600; }
 /* .med-doc-item-title：截断走 kit 的 .ln-ellipsis（JSX 已挂） */

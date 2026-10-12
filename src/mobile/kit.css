@@ -78,6 +78,7 @@
 .mb-row__action { flex: 0 0 auto; }
 .mb-row__actions { opacity: 1; }
 
+
 /* ── 列表容器（.mb-list / .mb-list-item；弹层与设置内的列表）──────────── */
 .mb-list { display: flex; flex-direction: column; padding: 4px 0; }
 .mb-list-item {
@@ -143,6 +144,12 @@
 .mb-tree-icon { flex: 0 0 auto; display: inline-flex; align-items: center; color: var(--lake-text-3); }
 .mb-tree-icon > svg { display: block; }
 .mb-indent { padding-left: calc(var(--mb-page-pad) + var(--indent, 0px)); }
+/* 层级缩进（261013）：data-depth 一直由 NotebookWorkspace 写出，但 **--indent 全仓从未被赋值**
+ * ⇒ 父子孙同一缩进、层级只能靠 chevron 有无去猜。步长 14px；4 层以上封顶（412px 宽屏上再深已无意义）。 */
+.mb-indent[data-depth="1"] { --indent: 14px; }
+.mb-indent[data-depth="2"] { --indent: 28px; }
+.mb-indent[data-depth="3"] { --indent: 42px; }
+.mb-indent[data-depth="4"], .mb-indent[data-depth="5"], .mb-indent[data-depth="6"] { --indent: 56px; }
 
 /* ── 设置页骨架（mb-set-*，P4）────────────────────────────────────────────
  * 移动端自建（不再用桌面 .config-* / .b3-label）；契约不变：每个可搜索行带 data-set-id，
@@ -171,10 +178,18 @@
 .mb-set-block { display: flex; flex-direction: column; gap: 8px; padding: 12px var(--mb-page-pad); border-top: 1px solid var(--lake-border-2); }
 .mb-set-section > .mb-set-block:first-child { border-top: 0; }
 .mb-set-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
-.mb-set-empty { margin: 0; padding: 20px 0; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+/* ── 空态（.mb-empty；261013 A 批收敛，唯一来源）──────────────────────────
+ * 此前有三套：.mobile-empty（外壳，padding 32/16 + 字号字面量 14）· .mb-set-empty（设置卡内，20/0）
+ * · .mb-sheet__empty（浮层内，24/0）——同一语义三种几何。现收敛成一件 + 一个 --inset 变体。
+ * 对比度：一律 --lake-text-3（AA）；不要用 text-4（有意 3:1 档只给元信息/占位）。 */
+.mb-empty { margin: 0; padding: 32px var(--mb-page-pad); text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+.mb-empty--inset { padding: 20px 0; }
 .mb-set-stats { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .mb-input--num { flex: 0 0 auto; width: 96px; }
 .mb-input--num > input { text-align: right; font-variant-numeric: tabular-nums; }
+/* 261013：内层 input 必须撑满外壳，否则外壳 44 高、内层只有 25 高（走查 smallTap 实测 70×25）——
+   用户点到的是外壳而不是输入框，命中区等于没补。 */
+.mb-input > input { align-self: stretch; min-height: var(--mb-tap-min); margin-block: -1px; }
 .mb-kbd {
   display: inline-flex; align-items: center; min-height: 24px; padding: 0 6px;
   border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius-sm);

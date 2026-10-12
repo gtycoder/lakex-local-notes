@@ -4,8 +4,7 @@
  * 移动端没有这两个选择器，也不需要 !important。
  * 令牌定义不在这里：见 theme/tokens.css（令牌）+ theme/light.css · theme/dark.css（取值）。 */
 
-/* 指示线微入场（移动端 .mobile-htab 在用） */
-@keyframes ln-indicator-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* （261013 A 批：.mobile-htab 改为语雀式文字 tab、去掉下划线指示线后，ln-indicator-in 已无消费者 —— 一并删除。） */
 
 /* 阅读态正文字号跟随设置（lakeRuntime 把 prefsSize 挂在 .lake-editor-mount 根；
    vendor 对 .ne-viewer/.ne-viewer-body 写死 14px，两层都要恢复继承 —— 阅读/编辑同源） */

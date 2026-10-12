@@ -216,8 +216,11 @@
  * 唯一来源」——P3 建 mb-sheet/mb-dialog/mb-toast 时统一改走这里，不要再写魔法数字。 */
 :root {
   /* 移动端骨架度量（早期口径参考过 siyuan-master 的移动端 SCSS，数值已由移动端自有令牌接管） */
-  --mobile-topbar-height: 48px;
-  --mobile-bottom-bar-height: 48px;
+  /* 261013 A 批（对齐语雀 App 的形态与密度）：顶栏 48 → 44、底部胶囊 48 → 56（圆角 = 高/2 = 28）。
+   * 宽度上限**不再由高度推导**（原来是 height×6 = 288）：胶囊加高后会连带被撑宽，所以拆出独立槽位令牌。 */
+  --mobile-topbar-height: 44px;
+  --mobile-bottom-bar-height: 56px;
+  --mobile-bottom-bar-slot: 48px;
   --mobile-status-height: 24px;
   --mobile-bar-gap: 8px;
   --mobile-top-safe-area: env(safe-area-inset-top, 0px);

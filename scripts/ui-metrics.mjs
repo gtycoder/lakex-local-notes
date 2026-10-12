@@ -79,6 +79,16 @@ for (const p of fontScope) {
   const n = count(s, /font-size:\s*[0-9.]+px/g) + count(s, /[^-\w]font:\s*[^;{}]*[0-9.]+px/g);
   if (n) { fontSizeLiterals += n; fontSizeTop.push([relative(ROOT, p), n]); }
 }
+// ── 移动端字号护栏（261013）：与桌面**同一口径**（font-size 一律走令牌），但移动端先做「只许降」——
+//    存量 52 处（mobile.css 43 + editor-dock.css 9）是 P1–P7 迁移期的欠账；移动端还在做布局重做，
+//    一次性清零会把批次撑爆。这里把它变成**不许新增**的门禁：新增字面量直接 exit 1，清理后记得同步调小。
+const MOBILE_FONT_LITERAL_BASELINE = 49;
+let mobileFontLiterals = 0; const mobileFontTop = [];
+for (const p of mobileCss) {
+  const s = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const n = count(s, /font-size:\s*[0-9.]+px/g);
+  if (n) { mobileFontLiterals += n; mobileFontTop.push([relative(ROOT, p), n]); }
+}
 const appDir = join(ROOT, 'src/styles/app');
 const pairs = existsSync(appDir) ? readdirSync(appDir).filter((f) => f.endsWith('.css') && existsSync(join(ROOT, 'src/styles', f))) : [];
 const entry = readFileSync(join(ROOT, 'src/styles/index.css'), 'utf8');
@@ -88,6 +98,7 @@ const r = {
   desktopOnlyMobileB3: onlyMobileB3.map((p) => relative(ROOT, p)),
   mobileUntouched: { files: mobileCss.length, b3VarRefs: m.b3, important: m.imp },
   fontGuard: { fontSizeLiterals, fontSizeTop: fontSizeTop.sort((a, b) => b[1] - a[1]) },
+  mobileFontGuard: { fontSizeLiterals: mobileFontLiterals, baseline: MOBILE_FONT_LITERAL_BASELINE, fontSizeTop: mobileFontTop.sort((a, b) => b[1] - a[1]) },
   targets: { b3VarRefs: 0, colorLiterals: 0, fontSizeLiterals: 0, important: 10, b3ImportLines: 0, sameNamePairs: 0 },
   b3TopTen: d.b3Top.slice(0, 10),
   colorTopTen: d.litTop.slice(0, 10),
@@ -115,6 +126,7 @@ for (const p of cssAll) {
 r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, aliasTop, undefTop };
 if (aliasHits || undefHits) process.exitCode = 1;
 if (fontSizeLiterals) process.exitCode = 1;
+if (mobileFontLiterals > MOBILE_FONT_LITERAL_BASELINE) process.exitCode = 1;
 
 if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
 else {
@@ -129,8 +141,10 @@ else {
   console.log('     top:', r.fontGuard.fontSizeTop.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('  入口 b3 import 行数 ', r.entryB3ImportLines, ' / 目标 0');
   console.log('  同名文件对          ', r.sameNamePairs.join(', ') || '（无）');
-  console.log('== 移动端（本批不动，仅记录） ==');
+  console.log('== 移动端 ==');
   console.log('  样式文件', r.mobileUntouched.files, ' var(--b3-*)', r.mobileUntouched.b3VarRefs, ' !important', r.mobileUntouched.important);
+  console.log('  字号字面量        ', r.mobileFontGuard.fontSizeLiterals, ' / 基线', r.mobileFontGuard.baseline, '（只许降；新增直接失败）');
+  console.log('     top:', r.mobileFontGuard.fontSizeTop.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('== 思源层 !important  ', r.importantSiyuan, '（随 b3 一起删） ==');
   console.log('== 令牌护栏（260923） ==');
   console.log('  禁别名残用          ', r.tokensGuard.forbiddenAliasRefs, ' / 目标 0', r.tokensGuard.aliasTop.map(([f,n])=>f+':'+n).join(' ')||'');

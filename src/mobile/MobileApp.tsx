@@ -286,7 +286,7 @@ export function MobileApp() {
     );
   }
 
-  if (phase === "booting") return <div className="poc-center">启动中…</div>;
+  if (phase === "booting") return <MobileHomeSkeleton />;
   if (error) return <div className="poc-center poc-error">{error}</div>;
 
   return (
@@ -355,4 +355,40 @@ export function MobileApp() {
     </div>
   );
 
+}
+
+/**
+ * 冷启动骨架（261013，6.9）：结构与真实首页同构、尺寸走同一批令牌 ⇒ 数据到达后原地填充、不整屏跳。
+ * 纯静态、无内核、无数据依赖；容器 aria-busy，占位条 aria-hidden（读屏不会念出一堆无意义节点）。
+ */
+function MobileHomeSkeleton() {
+  return (
+    <div className="mobile-app">
+      <div className="mobile-home" aria-busy="true">
+        <header className="toolbar toolbar--border mobile-topbar">
+          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
+          <div className="mobile-home-tabs">
+            <span className="mb-skel mb-skel--tab" aria-hidden="true" />
+            <span className="mb-skel mb-skel--tab" aria-hidden="true" />
+          </div>
+          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
+        </header>
+        <div className="mobile-tab-stage">
+          <div className="mobile-scroll">
+            <section className="home-section">
+              <div className="home-section__head"><span className="mb-skel mb-skel--group" aria-hidden="true" /></div>
+              <span className="mb-skel mb-skel--row" aria-hidden="true" />
+              <span className="mb-skel mb-skel--row" aria-hidden="true" />
+              <span className="mb-skel mb-skel--row" aria-hidden="true" />
+            </section>
+          </div>
+        </div>
+        <nav className="mobile-bottom-bar" aria-hidden="true">
+          <span className="mb-skel mb-skel--baritem" />
+          <span className="mb-skel mb-skel--baritem" />
+          <span className="mb-skel mb-skel--baritem" />
+        </nav>
+      </div>
+    </div>
+  );
 }

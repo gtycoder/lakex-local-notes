@@ -288,7 +288,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 <button className="mb-btn mb-btn--primary" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch((error) => { setGcMsg("清理失败：" + getNativeErrorMessage(error)); reportNativeActionError("云端清理", error); }).finally(() => setOrphanBusy(false)); }}>清理云端</button>
                 {gcMsg && <div className="mb-form__desc">{gcMsg}</div>}
               </Block>
-              {orphans.length === 0 && <div className="mb-set-empty">暂无冗余资源</div>}
+              {orphans.length === 0 && <div className="mb-empty mb-empty--inset">暂无冗余资源</div>}
               {orphans.map((o) => (
                 <div key={o.id} className="mb-row">
                   <span className="mb-row__title">{o.filename}</span>
@@ -484,7 +484,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
       {previewNoteId && (
         <div className="mobile-settings-preview">
-          <Suspense fallback={<div className="mobile-empty">正在加载预览…</div>}>
+          <Suspense fallback={<div className="mb-empty">正在加载预览…</div>}>
             <TrashPreviewPage
               noteId={previewNoteId}
               onBack={() => setPreviewNoteId(null)}

@@ -177,7 +177,7 @@ export function HomePage(props: HomePageProps) {
       {tab === "quick" ? (
         composer !== null ? (
           <div className="mobile-scroll">
-            <Suspense fallback={<div className="mobile-empty">正在加载编辑器…</div>}>
+            <Suspense fallback={<div className="mb-empty">正在加载编辑器…</div>}>
               <QuickNoteComposer
                 editNote={editNote}
                 onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
@@ -188,7 +188,7 @@ export function HomePage(props: HomePageProps) {
         ) : (
           <div className="mobile-scroll">
             {sortedQuickNotes.length === 0 ? (
-              <div className="mobile-empty">暂无小记</div>
+              <div className="mb-empty">暂无小记</div>
             ) : (
               <div className="mobile-quick-cards">
                 {sortedQuickNotes.map((n) => (
@@ -304,7 +304,7 @@ function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit
         )}
         <div className="qn-card__meta">
           <span className="qn-card__date">{fmtDate(note.updatedAt)}</span>
-          <button className="qn-card__more" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
+          <button className="qn-card__more mb-tap" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
         </div>
       </div>
     </div>

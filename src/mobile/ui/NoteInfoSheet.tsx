@@ -87,8 +87,8 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
         <div className="mb-sheet__body">
-          {error && <p className="mb-sheet__empty">{error}</p>}
-          {!info && !error && <p className="mb-sheet__empty">读取中…</p>}
+          {error && <p className="mb-empty mb-empty--inset">{error}</p>}
+          {!info && !error && <p className="mb-empty mb-empty--inset">读取中…</p>}
           {info && (
             <div className="minfo">
               <dl className="minfo-rows">

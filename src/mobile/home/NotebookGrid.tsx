@@ -34,7 +34,7 @@ export interface NotebookGridProps {
 export function NotebookGrid(props: NotebookGridProps) {
   const { notebooks, docCounts, view, onOpenNotebook } = props;
 
-  if (notebooks.length === 0) return <div className="mobile-empty">暂无知识库</div>;
+  if (notebooks.length === 0) return <div className="mb-empty">暂无知识库</div>;
 
   // 书架视图：简约书卡（序号角标 + 图标 + 名称 + 文档数）
   if (view === "shelf") {
@@ -58,7 +58,8 @@ export function NotebookGrid(props: NotebookGridProps) {
     );
   }
 
-  // 列表视图：仿语雀排布（图标块 + 标题 + 副标题「共 N 篇文档 · 更新时间」）
+  // 列表视图：仿语雀排布（图标块 + 标题 + 副标题「N 篇 · 更新时间」）
+  // 261013 A 批：计数的**单位与措辞**与书架视图统一为「N 篇」（此前一处「N 篇」、一处「共 N 篇文档」）。
   return (
     <div className="nb-list">
       {notebooks.map((nb) => {
@@ -71,7 +72,7 @@ export function NotebookGrid(props: NotebookGridProps) {
             </span>
             <span className="nb-row__main">
               <span className="nb-row__title">{nb.title || "未命名"}</span>
-              <span className="nb-row__sub">共 {count} 篇文档{updated ? ` · ${updated}` : ""}</span>
+              <span className="nb-row__sub">{count} 篇{updated ? ` · ${updated}` : ""}</span>
             </span>
             <span className="nb-row__arrow"><ChevronRight size={16} /></span>
           </div>

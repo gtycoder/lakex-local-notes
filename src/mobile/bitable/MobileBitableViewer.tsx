@@ -177,7 +177,7 @@ export function MobileBitableViewer({ noteId, content }: MobileBitableViewerProp
   const table = doc?.tables.find((item) => item.id === tableId) ?? doc?.tables[0];
 
   if (!doc || !table) {
-    return <div className="mobile-empty">这张多维表还没有数据表。</div>;
+    return <div className="mb-empty">这张多维表还没有数据表。</div>;
   }
   const view = table.views.find((item) => item.id === table.activeViewId) ?? table.views[0];
   const fields = orderedTableFields(table, view);

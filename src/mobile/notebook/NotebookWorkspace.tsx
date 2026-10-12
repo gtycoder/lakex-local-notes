@@ -553,7 +553,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                 {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
                     ⋯ = 右键菜单，＋ = 新建子文档。 */}
                 <span className="nb-tree-actions">
-                  <span role="button" tabIndex={0} className="nb-tree-action" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenuFor(it); }}><MoreVertical size={17} /></span>
+                  <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenuFor(it); }}><MoreVertical size={17} /></span>
                 </span>
               </>
             )}
@@ -597,7 +597,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       {/* 文档层（正文） */}
       <section className="mobile-workspace-body">
         {tabs.length === 0 ? (
-          <div className="mobile-empty">暂无打开的文档，点左目录或底部打开</div>
+          <div className="mb-empty">暂无打开的文档，点左目录或底部打开</div>
         ) : tabs.map((t) => (
           <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "")}>
             {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
@@ -606,17 +606,17 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <MobileBoardViewer content={t.content} active={t.id === activeId} />
             ) : t.kind === "bitable" ? (
               // 多维表：移动端只读视图（同一份 core 数据模型求值，绝不写库）
-              <Suspense fallback={<div className="mobile-empty">正在加载多维表…</div>}>
+              <Suspense fallback={<div className="mb-empty">正在加载多维表…</div>}>
                 <MobileBitableViewer noteId={t.id} content={t.content} />
               </Suspense>
             ) : t.kind === "usheet" ? (
               // 表格：移动端只读呈现（同一套 Univer 内核；只读、不保存，正文 JSON 绝不喂 Lake 编辑器）
-              <Suspense fallback={<div className="mobile-empty">正在加载表格…</div>}>
+              <Suspense fallback={<div className="mb-empty">正在加载表格…</div>}>
                 <MobileUsheetViewer noteId={t.id} content={t.content} active={t.id === activeId} />
               </Suspense>
             ) : t.kind !== "doc" ? (
               // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
-              <div className="mobile-empty">
+              <div className="mb-empty">
                 {t.title || "此文档"}：该类型暂不支持在移动端查看，请在桌面端打开。
               </div>
             ) : (
@@ -677,7 +677,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
         </div>
         <div className="side-panel-body">
-          {childrenOf(notebookId).length === 0 && <div className="mobile-empty">暂无文档，点右上新建</div>}
+          {childrenOf(notebookId).length === 0 && <div className="mb-empty">暂无文档，点右上新建</div>}
           {renderBranch(notebookId, 0)}
         </div>
       </aside>
@@ -694,7 +694,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => setTabsOpen(false)} aria-label="关闭"><X /></span>
             </div>
             <div className="mobile-model-body">
-              {tabs.length === 0 && <div className="mobile-empty">暂无打开的文档</div>}
+              {tabs.length === 0 && <div className="mb-empty">暂无打开的文档</div>}
               {tabs.map((t) => (
                 <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => { openTab(t.id); setTabsOpen(false); }}>
                   <span className="mb-row__title">{t.title || "无标题"}</span>
@@ -763,7 +763,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <button className="mobile-icon-btn" onClick={() => setHistoryFor(null)} aria-label="关闭"><X size={20} /></button>
             </div>
             <div className="mb-sheet__body mb-list">
-              {historyList.length === 0 && <p className="mb-sheet__empty">暂无历史版本</p>}
+              {historyList.length === 0 && <p className="mb-empty mb-empty--inset">暂无历史版本</p>}
               {historyList.map((h) => (
                 <div key={h.id} className="mb-row" onClick={() => void applyRestoreHistory(h.id)}>
                   <span className="mb-row__title">{h.title || "无标题"}</span>

@@ -58,7 +58,7 @@
 }
 .mb-sheet__body::-webkit-scrollbar { display: none; }
 .mb-sheet__body--form { padding: var(--mb-page-pad) 18px calc(20px + var(--mobile-bottom-safe-area)); }
-.mb-sheet__empty { margin: 0; padding: 24px 0; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+/* （261013 A 批：浮层内空态改用 .mb-empty.mb-empty--inset —— 见 kit.css，空态只有一处定义。） */
 .mb-sheet--search { max-height: 70%; }
 
 /* ── ActionSheet（破坏性确认 / 底部动作列表）─────────────────────────── */

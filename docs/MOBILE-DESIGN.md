@@ -23,6 +23,8 @@ typography:
   rowTitle: "16px / 1.45 (500)"
   caption: "13px / 1.5"
 geometry:
+  topbar: "44px"
+  bottom-bar: "56px"
   tap-min: "44px"
   control-height: "44px"
   control-height-lg: "48px"
@@ -104,18 +106,29 @@ components:
 
 | 维度 | 档位 |
 | --- | --- |
+| 顶栏 | **44**（261013 A 批：48 → 44，对齐语雀标题条） |
+| 底部胶囊 | 高 **56** / 圆角 **28**（= 高/2）/ 宽上限 288（**不再由高度推导**，见 `--mobile-bottom-bar-slot`） |
 | 触达 | 主 **48** / 常规 **44** / 紧凑 **36**（44 是触屏最小点按目标） |
-| 列表行 | 单行 44 / 两行 **56** |
+| 列表行 | 单行 **44** / 两行 **56**；设置页行 **48** |
+| 行高档收敛（261013 A） | 只用 **44 / 48 / 56** —— 原先并存的 40 与 52 已消除 |
 | 页面左右内距 | **16** |
 | 圆角 | 控件 **8** / 卡片 **12** / 小件 6 / 面板顶 **20** / 胶囊 999 |
 
 **外壳（冻结的结构）**：顶栏（返回 / 标题 / 编辑·完成 / 同步）→ 内容 → 底部 dock；抽屉（文档树 / 大纲 /
 标签页 / 更多）从两侧进出；首页 = 小记 | 知识库 两个 tab + 底部悬浮操作条。
 
+**首页 tab = 语雀式纯文字 tab（261013 A 批定）**：选中 = **加粗 + `--lake-text-1`**，未选 = 常规 + `--lake-text-3`，
+**没有下划线/底色指示线**（原实现是桌面 `.ln-tabs` 的墨线语言；桌面侧有自己的一套，移动端按「两端 UI 不共享」自走语雀形态）。
+`min-width: var(--mb-tap-min)` 是 44 Rule 的兜底 —— 纯文字 tab 的宽度由字数决定，单字标签会掉到 44 以下。
+
 ### Named Rules
 
 **The 44 Rule.** 任何可点元素的有效命中区 **≥44×44**（含伪元素撑开的命中区，如 `.mb-switch::after`）。
-走查装置会以 `smallTap` 报出违反项（首页 tab 曾在 36×25，已修）。
+实现口径（261013 定）：**视觉尺寸刻意小于 44 的类，一律用 `::after` 把命中区补到 `--mb-tap-min`，不改视觉盒子**
+（因此整页几何快照不受影响）；唯一来源是 `src/mobile/mobile.css` 的「触达补足注册表」，新控件把类名加进去即可。
+**不要**靠调大按钮本身来达标 —— 那会改行密度与面板高度。走查装置会按**算上伪元素后的有效命中区**报 `smallTap`。
+⚠️ 但**该调大时就得调大**（261013 A：dock 条目 40 → 44、搜索/文档行 40 → 44、设置行 52 → 48）——
+补足注册表只服务「视觉尺寸被刻意压住」的那批；已经真的到 44 的类**必须从注册表移除**，不许"既调大又补足"两套并存。
 
 ## Elevation & Depth
 
@@ -152,7 +165,11 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 `mb-segment`/__item · `mb-card`（__head/__body）· `mb-form__desc` · `mb-menu-note`/`mb-menu-head-action` ·
 `mb-chevron`/--spacer · `mb-tree-icon` · `mb-indent` · `mb-spacer`/`mb-flex1`/`mb-ellipsis` ·
 **选择器 = `PickerSheet`（`mb-select--trigger` 触发器 + `mb-sheet--picker` 底部列表、选中项打勾）** ·
-**设置页骨架** `mb-set-group/title/items/section/item(--field)/name/desc/note/ctl/error/block/empty/stats` ·
+**设置页骨架** `mb-set-group/title/items/section/item(--field)/name/desc/note/ctl/error/block/stats` ·
+**空态 = `mb-empty`（+ `--inset` 变体；261013 A 批把 `.mobile-empty` / `.mb-set-empty` / `.mb-sheet__empty` 三套收敛成一件）** ·
+**首页文字 tab = `.mobile-htab`（选中加粗 + `--lake-text-1`）** ·
+**冷启动骨架 = `.mb-skel`（--icon/--tab/--group/--row/--baritem；结构与首页同构、尺寸同源，填充不跳动；
+`prefers-reduced-motion` 下关掉呼吸）** ·
 `mb-switch` · `mb-kbd` · **勾选原语**（`.mobile-app input[type=checkbox|radio]`，排除内核待办框）。
 
 页内交互（② 层）已定：设置页 = 抽屉九页 + 移动端自有版式原语（`src/mobile/ui/settingsPrimitives.tsx`，
@@ -175,7 +192,13 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 **基线只许降**的账本：桌面样式 import 白名单（现状 4 条：quick-notes + 2 feature CSS + 字体资源）·
 桌面类名 token（**0**，不允许回涨）· 反向耦合（**0**）· 各样式文件声明数/重复组（`mobileLayers.test.ts`）·
-`!important`（现状 **16**，只许降；都是压内核行内样式/未分层内核 CSS 的必需项，新增须写明理由）。
+`!important`（现状 **18**，新增须写明理由；都是压「内核行内样式 / 未分层内核 CSS」的必需项 ——
+未分层的普通声明会压过我们 @layer 里的普通声明，只有「分层里的 !important」才强于「未分层的 !important」，
+即 CSS Cascade 5 的 important 层序反转；261013 的 +2 来自压内核桌面引擎几何 `min-height:1024` 与 90px 底内距）·
+移动端 **字号字面量**（现状 **52** = mobile.css 43 + editor-dock.css 9，只许降；由 `ui-metrics.mjs` 卡住，
+新增字面量直接 exit 1 —— 桌面是硬 0，移动端先做单调下降）·
+**移动端 CSS 不得再出现桌面类名选择器**（`ln-`/`b3-`/`fn__`/`config-`，`mobileLayers.test.ts` 恒为 0；
+261013 立：P5 之后还留着一批挂在 `.ln-row` 上的规则永不命中 —— 拖拽落点线就是这么静默丢的）。
 
 ## Do's and Don'ts
 

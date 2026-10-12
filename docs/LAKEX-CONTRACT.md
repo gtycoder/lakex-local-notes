@@ -1640,3 +1640,34 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 
 **两处 ΔE 偏大、可人工换档**（留档，未改）：`#ED740C` 取 `#D46B08`（ΔE 9.0，视觉偏棕；次优 `#FA8C16` ΔE 10.2 更接近语雀的亮橙）、
 `#DF2A3F` 取 `#FF4D4F`（ΔE 10.8，视觉偏亮；`#F5222D` ΔE 17.0 但更接近语雀的绛红）。
+
+### 5.34 内核两族 mount 类与「桌面引擎几何」在移动端的实测（261013；设备实测 + 读码）
+
+**① ne-doc-major-editor-mobile / ne-doc-major-viewer-mobile（156 / 203 条）：实测零收益 ⇒ 不启用。**
+这两族几乎全部（editor 156/156、viewer 201/203）挂在 `.ne-paragraph-spacing-relax.ne-typography-classic` 上；
+而我们运行的实例是 **`ne-typography-traditional`**（设备实测 `.ne-viewer` 类名 = `ne-viewer lakex-default-theme fz16 ne-viewer-layout-mode-fixed ne-typography-traditional`）
+⇒ 选择器根本不匹配。设备实测：给宿主加上 `ne-doc-major-editor-mobile` 后，h1 / p 的 font-size / line-height / margin **逐项不变**。
+⇒ 这两族**不是**可用的「现成移动端排版」，别再当低成本抓手提（AGENTS §3#17：证不了收益就不做）。
+
+**② ne-doc-major-viewer（19 条）：官方要求阅读器带它，我们 viewer 用的是 editor 类 —— 但移动端直接换类是净负。**
+- 官方文档 59 要求「阅读器容器带 `ne-doc-major-viewer`、编辑器带 `ne-doc-major-editor`」。
+- **读码核对**：非 -mobile 的 `.ne-doc-major-editor` 规则共 160 条，其中**指向 `ne-viewer` 的 0 条** ⇒ 换类不会丢任何阅读态样式。
+- 但那 19 条**全部按桌面 750 版心**写：`.ne-viewer-body{padding:0 50px}`（412px 屏上正文只剩 312px）、
+  `ne-table-hole.ne-full-width ne-table-wrap{min-width:750px}`、`ne-root-card-hole.ne-full-width > ne-card{min-width:750px}`
+  （后两条在手机上必然溢出，且会被我们的 `.ne-editor-wrap{overflow-x:hidden}` 静默裁掉）。
+- ⇒ 移动端要换必须**同时中和这三条**，收益（4 条 `ne-*-hole.ne-full-width{max-width:100%}`）与新增复杂度不成比例 ⇒ **本批不做**；
+  桌面端换类才可能吃到「750 版心」的正当收益 ⇒ **留给桌面会话单独验收**（本条即实验记录）。
+
+**③ 引擎几何残留（已修）：`.ne-layout-mode-fixed/.ne-layout-mode-adapt .ne-engine { min-height:1024px; padding:20px 70px 90px 70px !important }` 是按桌面写的。**
+我们原先只压了左右内距 ⇒ 手机（视口约 790）上短文档会多出约 230px 幻觉滚动，再叠加 90px 底内距＝双份底部空白。
+设备级联实测（把合成的 `.ne-layout-mode-fixed > .ne-engine` 放进 `.mobile-doc-body` 读计算值）：
+改前 `min-height:1024px` / `padding-bottom:90px`；改后（`mobile.css` 加 `min-height:0!important; padding-bottom:0!important`）= **0 / 0**。
+小记写作卡用的是 **note 版式**（`.ne-doc-note-editor`），引擎几何是 16/8/24、min-height 实测 336.9px（不是 1024）⇒ 不受本条影响。
+
+**④ 为什么这里必须 `!important`（机制，别记错）**：内核 CSS **未分层**（由内核/入口直接注入），我们的移动端样式在 `@layer` 里。
+按 CSS Cascade 5：**普通声明：未分层 > 分层**；**`!important` 声明：分层 > 未分层（层序反转）**。
+所以「分层里的 `!important`」能压未分层的内核 CSS，而分层里的普通声明压不过 —— 这是 `mobile.css` 那 18 条 `!important` 的共同由来。
+
+**⑤ 复查命令（只读）**：`grep -c 'ne-doc-major-editor-mobile' vendor/lakex-doc-react/src/assets/lakex-doc.css` ·
+`grep 'ne-doc-major-editor-mobile' … | grep -c 'ne-typography-classic'` · `sed -n '5095,5100p' …/lakex-doc.css` ·
+`grep -n '^\.ne-doc-major-viewer[ ,{]' …/lakex-doc.css`

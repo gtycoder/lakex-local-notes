@@ -29,9 +29,26 @@ const PROBE = '(function () {' +
   ' var hasEll = function (el) { var n = el.parentElement; for (var d = 0; d < 4 && n; d++) { if (getComputedStyle(n).textOverflow === "ellipsis") return true; n = n.parentElement; } return false; };' +
   ' var vw = innerWidth, vh = innerHeight;' +
   ' document.querySelectorAll("button,a[href],[role=button],input,select,textarea,[tabindex],.doc-card,.mobile-htab").forEach(function (el) {' +
-  '   if (!vis(el) || inScroll(el)) return; var r = el.getBoundingClientRect();' +
-  '   var partiallyVisible = r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh;   if (partiallyVisible && (r.right > vw + 1 || r.left < -1 || r.bottom > vh + 1 || r.top < -1)) out.escape.push({ cls: String(el.className).slice(0, 40), text: (el.textContent || "").trim().slice(0, 14), rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)], vw: vw, vh: vh });' +
-  '   if ((r.width < 32 || r.height < 32) && el.tagName === "BUTTON" && (el.textContent || "").trim().length > 0) out.smallTap.push({ cls: String(el.className).slice(0, 36), text: (el.textContent || "").trim().slice(0, 12), size: [Math.round(r.width), Math.round(r.height)] });' +
+  '   if (!vis(el)) return; var r = el.getBoundingClientRect();' +
+  // ⚠️ 261013 修：旧实现把 inScroll(el) 与 escape 一起做**前置 return**，于是「位于任何可滚动祖先内」的元素
+  //    被**全部跳过** —— 列表行 / 目录树行 / 卡片（首页主体全在 .mobile-scroll 里）从来看不见。
+  //    现在 inScroll 只用于 escape（滚出去本来就不算越界），smallTap 不再被它过滤。
+  '   var partiallyVisible = r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh;' +
+  '   if (!inScroll(el) && partiallyVisible && (r.right > vw + 1 || r.left < -1 || r.bottom > vh + 1 || r.top < -1)) out.escape.push({ cls: String(el.className).slice(0, 40), text: (el.textContent || "").trim().slice(0, 14), rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)], vw: vw, vh: vh });' +
+  // smallTap 口径（261013）：**任何可点元素**（不再要求 tagName===BUTTON 且有文字 —— 图标按钮 / span[role=button]
+  // 正是最常点不中的那批），阈值对齐 MOBILE-DESIGN 的 44 Rule；只报在视口内的，避免滚出屏的噪声。
+  // 261013 三处精化：
+  //   ① **算上 ::after 的命中区扩张** —— 我们的补足手段就是伪元素（.mb-switch::after { inset:-8px }、
+  //      触达补足注册表的 width:max(100%,44px)），只看元素自身会把"已经补好的"一律误报；
+  //   ② 跳过 disabled（只读控件不是可点目标，如多维表只读复选框）；
+  //   ③ 排除内核 / 第三方命名空间（ant- 是 antd、ne-/lakex- 是 lake6 内核、univer/drawnix 是表格与画板），
+  //      它们的尺寸不归我们管（与对比度探针同一排除口径）。
+  '   var foreign = /(?:^|\s)(?:ant-|ne-|lakex-|univer|dv-|plait)/.test(String(el.className));' +
+  '   if (el.disabled || foreign) return;' +
+  '   var hitW = r.width, hitH = r.height;' +
+  '   try { var pe = getComputedStyle(el, "::after"); if (pe && pe.content && pe.content !== "none" && pe.content !== "normal") { var pw = parseFloat(pe.width) || 0, ph = parseFloat(pe.height) || 0; if (pw > hitW) hitW = pw; if (ph > hitH) hitH = ph; } } catch (e) {}' +
+  '   var inView = r.top < vh && r.bottom > 0 && r.right > 0 && r.left < vw;' +
+  '   if (inView && r.width > 0 && r.height > 0 && (hitW < 44 || hitH < 44)) out.smallTap.push({ cls: String(el.className).slice(0, 36), tag: el.tagName, role: el.getAttribute("role") || "", label: (el.getAttribute("aria-label") || el.title || "").slice(0, 16), text: (el.textContent || "").trim().slice(0, 12), size: [Math.round(r.width), Math.round(r.height)], hit: [Math.round(hitW), Math.round(hitH)] });' +
   ' });' +
   ' document.querySelectorAll("div,span,p,h1,h2,h3,strong,td").forEach(function (el) {' +
   '   if (!vis(el)) return; var cs = getComputedStyle(el);' +
