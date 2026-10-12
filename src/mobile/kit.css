@@ -159,7 +159,9 @@
 .mb-set-group { display: flex; flex-direction: column; gap: 8px; margin: 0 0 20px; }
 .mb-set-title { margin: 0; padding: 0 4px; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-medium); }
 .mb-set-items { display: flex; flex-direction: column; gap: 12px; }
-.mb-set-section { display: flex; flex-direction: column; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; }
+/* 分组卡：261013 窗底转白后，白卡落在白底上会"消失" ⇒ 补 1px 细线承担分组边界
+ * （语雀的设置页就是"白底 + 细线分组"，不是灰底白卡）。行间分隔仍由 .mb-set-item 的 border-top 提供。 */
+.mb-set-section { display: flex; flex-direction: column; border: 1px solid var(--lake-border-2); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; }
 .mb-set-section__title { padding: 12px var(--mb-page-pad) 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-medium); }
 .mb-set-item {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;

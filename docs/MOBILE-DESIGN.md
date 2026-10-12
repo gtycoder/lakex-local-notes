@@ -6,7 +6,7 @@ colors:
   accent-ink: "#33497f"
   accent-text: "#33497f"
   surface-panel: "#ffffff"
-  surface-window: "#f3f4f6"
+  surface-window: "#ffffff"   # 261013：浅色下窗底即白（原 #f3f4f6 整屏发灰）
   surface-block: "#f4f6f8"
   ink-1: "#1f2329"
   ink-2: "#4e5969"
@@ -78,6 +78,9 @@ components:
 
 **The Own-Values Rule.** 移动端取值的唯一来源是 `src/mobile/theme/**`；桌面改色板**不得**连带改到移动端。
 
+**The White Rule（261013 用户定稿）.** 浅色主题下**窗底就是白**：不再用灰色页面去衬托白卡；要表达分组就用 1px 细线，
+不用把整屏压灰。深色主题不受此条约束（近黑窗底 + 提亮面板仍是它的层级手段）。
+
 **The Two-Green Rule.** 语雀绿 `#00b96b`（`--lake-kernel-brand-green`）**只给内核品牌位（「+」）与内核自己的
 品牌色**；我们的选中态/强调/链接一律走 `--lake-accent` / `--lake-accent-text`（对语雀的**显式偏离项**）。
 
@@ -132,8 +135,18 @@ components:
 
 ## Elevation & Depth
 
-三级表面 + 一段阴影：`--lake-bg-window`（窗底）< `--lake-bg-panel`（卡/面板）< `--lake-bg-raised`（抬升）。
 浮层用 `--lake-shadow-popover`；卡片用 `--lake-shadow-card`；**同一面不用「细边 + 大软阴影」两套**。
+
+**浅色下没有"灰底 vs 白卡"的明度层级了**（261013 用户定稿）：`--lake-bg-window` = `--lake-bg-panel` = **#ffffff**，
+原来铺在 body / 顶栏 / 小记卡 / 文档区 / 设置页上的 `#f3f4f6` 让整屏发灰（用户原话「灰蒙蒙」）。
+层级改由**细线 + 阴影**承担：
+
+- 分组边界 = 1px `--lake-border-2`（设置页的分组卡 `.mb-set-section` 就是靠它从白底上"显形"的 —— 语雀的设置页同样是"白底 + 细线分组"，不是灰底白卡）；
+- 卡片/输入/胶囊底栏 = 本来就有的 1px `--lake-border-1` + `--lake-shadow-card`；
+- 行分隔 = `--lake-bg-block` / `--lake-border-2` 的 1px 线；
+- 按压/悬浮反馈仍走 `--lake-bg-hover` / `--lake-bg-press`（在白底上比原来更明显）。
+
+**深色主题不变**（窗底仍是 #191a1d 的近黑，层级照旧靠明度差）。
 
 ## Floating Surfaces
 

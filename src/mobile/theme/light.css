@@ -6,8 +6,11 @@
 :root,
 [data-theme="light"] {
   color-scheme: light;
-  /* 表面（三级：窗底 < 面板 < 抬升） */
-  --lake-bg-window: #f3f4f6;
+  /* 表面（261013 用户定稿：**浅色下窗底 = 白**，对齐语雀 App —— 原来的 #f3f4f6 铺在
+   * body / 顶栏 / 小记卡 / 文档区 / 设置页上，整屏发灰（用户原话「灰蒙蒙」）。
+   * 层级不再靠"灰底 vs 白卡"的明度差，改由**细线 + 阴影**承担；成对规则见 kit.css 的 .mb-set-section
+   * 与 mobile.css 的顶栏/胶囊底栏分隔线。深色主题不动（仍是 #191a1d 的近黑窗底）。 */
+  --lake-bg-window: #ffffff;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
   --lake-bg-block: #f4f6f8;
