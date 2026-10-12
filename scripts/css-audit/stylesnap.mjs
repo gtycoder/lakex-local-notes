@@ -21,7 +21,14 @@ const PROPS = [
   "paddingInlineStart","marginInlineStart","insetInlineStart","rowGap",
 ];
 
-const SNAP = `(() => {
+/**
+ * 生成整页快照表达式。
+ * kernelIdMinLen = 「内核自动发的正文文本节点 id」（形如 u<hex>，**跨 reload 不稳定**）被判为忽略时的最小位数。
+ *   桌面观察到 ≥6 位（260923 记录）；移动端内核实例观察到 **4 位**（261012 实测：home-quicknotes 态两条
+ *   ne-viewer 的 id 是 u80ff / u0e0b ⇒ 换个 key 前缀就让该态"元素数相同、指纹不同"，噪声淹没真信号）。
+ *   同一套内核生成器、位数随实例内节点数变化 ⇒ 参数化，两端**仍共用同一份表达式**（不另写第二套装置）。
+ */
+export const snapExpr = (kernelIdMinLen = 6) => `(() => {
   const PROPS = ${JSON.stringify(PROPS)};
   const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
   const els = [...document.querySelectorAll("body *")];
@@ -35,7 +42,7 @@ const SNAP = `(() => {
     const cls = [...el.classList].sort().join(".");
     // 260923：内核给正文文本节点发的 id 形如 u<hex>，**跨 reload 不稳定** ⇒ 不入 key。
     // 不排除的话，同一份代码连拍两份快照会得到"每态恒定 2 条差异 + 2 个新增"，噪声淹没真信号。
-    const stableId = /^u[0-9a-f]{6,}$/.test(el.id) ? "" : el.id;
+    const stableId = /^u[0-9a-f]{${kernelIdMinLen},}$/.test(el.id) ? "" : el.id;
     const key = el.tagName.toLowerCase() + (stableId ? "$" + stableId : "") + (cls ? "." + cls : "");
     const cs = getComputedStyle(el);
     const parts = [];
@@ -320,7 +327,7 @@ export const setupState = async (page, st) => {
   }
 };
 
-export const SNAP_EXPR = SNAP;
+export const SNAP_EXPR = snapExpr(6);
 
 export default async ({ page, args }) => {
   const tag = args[0] || "run";

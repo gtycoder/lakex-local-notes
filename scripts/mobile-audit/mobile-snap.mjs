@@ -3,7 +3,10 @@
 // 前置（见 scripts/mobile-audit/README.md）：emu-up → android-build --sync --install → emu-cdp（CDP 9335）。
 import fs from "node:fs";
 import { data } from "../css-audit/paths.mjs";
-import { SNAP_EXPR } from "../css-audit/stylesnap.mjs";
+import { snapExpr } from "../css-audit/stylesnap.mjs";
+// 移动端内核实例发的 u<hex> id 只有 4 位（桌面 ≥6）⇒ 这里把忽略阈值调到 4，否则 home-quicknotes 态每条
+// 内核兜底预览都会带一个不稳定的 id 前缀（实测"元素数相同、指纹不同"，装置噪声）。表达式仍是同一份。
+const SNAP_EXPR = snapExpr(4);
 
 const waitHome = async (page, ms = 20000) => {
   const t0 = Date.now();
