@@ -2,7 +2,7 @@
  * 口径：**逻辑共享、外观移动端自有**（MOBILE-TECH-STACK §一/§九；用户 261012 定稿）。
  * `ImageLightbox.tsx` / `AttachmentPreview.tsx` 是共享组件（不 fork 逻辑），它们发出的**结构类名**
  * （.image-lightbox* / .attachment-preview*）在这里由**移动端自己定义视觉**；桌面那份仍归桌面
- * （src/features/**/*.css 只被桌面入口引用）。
+ * （桌面那份仍在 src/features 下，只被桌面入口引用 —— 注意别在注释里写星号加斜杠）。
  * 与桌面版的差异（都是移动端必要的形态差异，不是随意改观）：
  *   ① 命中区：工具条按钮 34 → **44**（触屏最小点按目标）；
  *   ② 安全区：工具条/顶部条内距含 env(safe-area-inset-*)，全面屏手势条不压按钮；

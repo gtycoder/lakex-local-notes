@@ -79,6 +79,18 @@
   ⑥ 回收站 / 历史版本 / 文档属性（抽屉形态）—— settings-回收站 / doc-history / doc-note-info ✓
   ⑦ 搜索 —— 定点探针：点首页底栏「搜索」⇒ `.mb-sheet` 打开、标题「搜索」、输入框在、`.mb-scrim` 在 ✓
   **结论：移动端 UI 独立化 P0–P7 全部交付并验证**（移动端桌面样式 import = 仅字体资源；桌面类名 token = 0；反向耦合 = 0）。
+- **⚠️ 261012 收尾自查：移动端构建曾静默失败（已修；含一处验证口径更正）**：
+  **真因** = P6a 新增的 `src/mobile/features.css` 头注释里写了星号加斜杠的路径通配（`**` + `/*.css`）⇒ **注释提前闭合**、
+  lightningcss 报 `Invalid dangling combinator` ⇒ `vite build -c vite.mobile.config.ts` **在写盘前中止**
+  （表现：日志像正常、`dist-mobile/` 只剩 `vendor/`）；而 `android-build.sh` 在调用处接了 `| tail`，**退出码被吞**，
+  于是后续几次 `--install` 实际**没换包**（APK 一直停在 16:16）。
+  **影响与更正**：P6a / P6b / 思源痕迹清理那几轮报的「设备快照 0 差异 + 22 屏 ok」是**打在上一版包（16:16 = P5 时期）**上的，
+  不足以证明当轮改动。修复后已**重装真包重跑**：APK 时间 16:59、install 明确 `Success`/`Starting`，
+  `check:mobilesnap` **6 态 0 差异**（基线未动）+ 走查 **22/22 ok** ⇒ P6 各项的"视觉中性"这回是真的。
+  **顺带加固**：`vite.mobile.config.ts` 收尾插件由 `closeBundle` 改挂 `writeBundle`（+enforce post，保证在产物落盘后复制；
+  注释里写明它**不是**本次根因）。
+  **教训**：① CSS 注释里不要出现星号 + 斜杠组合；② 构建脚本外面套 `| tail` 会吞退出码 —— 换包后必须核对
+  **APK 时间戳**或 install 的 `Success`，不能只看"命令跑完了"。
 - **登记为本批之后的小额遗留（不影响 P0–P7 结论，按 §3 续做）**：① 死 CSS 清理（旧 `mobile-sheet*/toast*/dialog*/menu*`
   与部分 `mobile-settings-*` 已无 JSX 施加 ⇒ 交 `scripts/css-audit/audit-dead-css.mjs` 扫 + 删后对拍探针 0 差异）；
   ② `components/treeDrag` 仍是移动端唯一冻结的共享「逻辑+DOM」件（要按「逻辑上收 + 移动端自有 DOM」改造，护栏允许清单里只剩它一条）；

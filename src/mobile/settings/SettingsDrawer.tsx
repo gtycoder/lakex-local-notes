@@ -240,7 +240,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "appearance" && (
             <Group title="外观" icon={<Palette size={16} />}>
-              <Item itemId="appearance-theme" name="主题" desc="浅色=思源 daylight / 深色=midnight。">
+              {/* 用户 261012：说明文案去掉，只留「浅色 / 深色」两个选项（名字即语义）。 */}
+              <Item itemId="appearance-theme" name="主题">
                 <Seg ariaLabel="主题">
                   <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
                   <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>

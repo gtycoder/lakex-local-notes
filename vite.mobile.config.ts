@@ -62,11 +62,16 @@ const MOBILE_PREVIEW_HTML = `<!doctype html>
 </html>
 `;
 
-/** 移动端构建收尾：Capacitor webDir 入口必须是 index.html；并生成浏览器预览宿主页。 */
+/** 移动端构建收尾：Capacitor webDir 入口必须是 index.html；并生成浏览器预览宿主页。
+ * ⚠️ 挂在 **writeBundle**（不是 closeBundle）：writeBundle 保证在产物落盘之后调用，语义上更贴合
+ * 「拿写好的 mobile.html 再复制一份」。261012 排查过一次"构建失败"（ENOENT: dist-mobile/mobile.html），
+ * 真因其实在上游 —— features.css 的注释里写了 `**` + `/*.css`（星号斜杠提前闭合注释）导致 lightningcss
+ * 解析失败、**整次构建在写盘前就中止**；改成 writeBundle 是顺手加固，不是那次的根因。 */
 function mobileBundleFinalize(): Plugin {
   return {
     name: "mobile-bundle-finalize",
-    closeBundle() {
+    enforce: "post",
+    writeBundle() {
       fs.copyFileSync("dist-mobile/mobile.html", "dist-mobile/index.html");
       fs.writeFileSync("dist-mobile/preview.html", MOBILE_PREVIEW_HTML);
     },
