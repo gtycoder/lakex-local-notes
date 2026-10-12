@@ -202,7 +202,7 @@
   padding: 3px 9px;
   border: 0;
   border-radius: var(--lake-radius-sm);
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
   background: transparent;
   box-shadow: inset 0 0 0 .6px var(--lake-accent);
   font-size: var(--lake-font-size-tiny);
@@ -277,7 +277,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .badge--warn { color: var(--lake-status-pending); background: var(--lake-status-pending-soft); }
 .badge--error { color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 12%, transparent); }
 .badge--muted { color: var(--lake-text-4); background: transparent; box-shadow: inset 0 0 0 1px var(--lake-border-1); }
-.badge--accent { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.badge--accent { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
 
 /* ---------- ③ 本地小件 ---------- */
 /* 互斥选项组（字号 / 主题）：思源式「轨道 + 浮起滑块」（AGENTS §3 #14 定稿口径）——

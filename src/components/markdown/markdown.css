@@ -77,7 +77,7 @@
   background: transparent;
 }
 .md-preview a {
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
   text-decoration: none;
 }
 .md-preview a:hover {

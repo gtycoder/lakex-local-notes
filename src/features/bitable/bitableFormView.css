@@ -45,4 +45,4 @@
   gap: 10px;
 }
 
-.bt-form-ok { display: inline-flex; align-items: center; gap: 4px; font-size: var(--lake-font-size-small); color: var(--lake-accent); }
+.bt-form-ok { display: inline-flex; align-items: center; gap: 4px; font-size: var(--lake-font-size-small); color: var(--lake-accent-text); }

@@ -47,7 +47,7 @@
 }
 .bt-cell-ai-action:hover:not(:disabled) {
   border-color: var(--lake-accent);
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
 }
 .bt-cell-ai-action:disabled {
   opacity: 0.64;

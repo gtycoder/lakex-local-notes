@@ -213,7 +213,7 @@
 
 .emoji-picker-tab:hover { background: var(--lake-bg-hover); }
 
-.emoji-picker-tab.active { background: var(--lake-accent-tint); color: var(--lake-accent); font-weight: 600; }
+.emoji-picker-tab.active { background: var(--lake-accent-tint); color: var(--lake-accent-text); font-weight: 600; }
 
 .emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 

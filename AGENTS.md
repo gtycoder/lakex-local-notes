@@ -69,6 +69,15 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
       **色板 canonical 不动**（`#6f7784` 仍是 ink-3 的色板值，见 `.impeccable/design.json` 的 `tonalRamp`）。
       `--lake-text-4`（`#8b93a1` / 深色 `#6f7278`）是**有意的 3:1 档**（元信息/占位），**不追 AA 4.5，不要顺手把它提亮**（会与 text-3 塌成一层）。
       判据装置：`scripts/css-audit/walkthrough.mjs` 的 contrast 探针（261012 起扫**全仓自有文字** + **有效透明度**，排除 sr-only / 内核 / 第三方）。
+    - **主色文字口径（261012 定稿）**：`--lake-accent` 是**图形 / 边框 / 焦点环 / 底纹**的锚点，**文字一律用 `--lake-accent-text`**。
+      依据：暖色 accent（`#d45500`）当小字号文字在自家表面只有 **3.61–4.12**（AA 4.5 ✗），而 `--lake-accent-text`（暖 `#a8440a`）三主题都 ≥ **5.27**；
+      把 accent 压到 AA 需 `#b84a00`，会与 `--lake-accent-ink`（`#b34900`）视觉重合 ⇒ **不改令牌、只改用法**。
+      261012 已切 17 处文字站点（`.badge--accent` · `.bt-option-chip` · `.bt-tool-btn.is-active` · `.bt-form-ok` · `.bt-cal-day-num` · `.bt-panel-add` · `.bt-option-create` ·
+      `.bt-date-foot button` · `.bt-cell-ai-action` · `.quick-notes-link` · `.quick-note-preview-toggle` · `.quick-notes-toast button` · `.emoji-picker-tab.active` ·
+      `.document-notice-toast button` · `.tab-gone-banner button` · `.edge-hotzone-handle:hover` · `.md-preview a`）；
+      **纯图标站点保留 accent**（`.ln-iconbtn*` · `.ln-menu__check` · `tree-chevron` · `tab-pin` · `tree-row-icon` · `empty-workspace-icon` · `settings-nav-item svg` ·
+      `document-statusbar-lock` · `bt-add-round` · `bt-link-open` · `draft-recovery-restore` …）—— 图形只需 **3:1**，暖色 accent 最差 3.61 已达标。
+      **移动端 14 处同类站点未动**（属移动端会话写域）；另发现 `.activity-button` / `.sync-tab-action` 两类**全仓 0 引用的死 CSS**（本轮不动，留给样式清理批次）。
     - **内核组件里 `div[tabindex]` 这类元素的焦点环也要收编**（261008）：`tokens.css` 的焦点规范只覆盖 `button/input/textarea/select/[role=button]`；内核用 `focus()` 聚焦普通 div 时浏览器会画**它自己的默认环**（颜色与我们的主题无关）。命中就给 `:focus-visible` 补 `outline: var(--lake-focus-ring-width) solid var(--lake-accent)`（贴合容器边缘用负 `outline-offset`）。表格右键菜单项是第一处。
     - **内核/第三方库的「模块级单例状态」遇到多实例挂载（本应用：标签页常驻挂载）会串台**（261008 结案）：这类库里常有模块级单例（缓存 / 标志位），而每个挂载实例各挂一个 document 级监听、判据只看 document.activeElement ⇒ 隐藏标签页里的实例也会命中，抢先消费掉标志、把数据写进自己那份。**口径**：碰这类全局态时，判据一律**限定在本实例容器内**（本实例容器 .contains(document.activeElement)），**不要**靠在库里放宽判据来绕过；同类隐患出现时先查「谁在抢这份全局态」。
 
@@ -225,7 +234,9 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
     匹配 `rgb(31, 35, 41)` 时 `m[1]` 捕获到 `"(31, 35, 41"` ⇒ `parseFloat("(31")` = **NaN** ⇒ 所有 ratio 都是 NaN、
     `NaN < 4.5` 恒 false ⇒ **探针从不报任何对比度问题（假阴性）**。判定真相：`fg.r` 为 null/NaN（Chromium 里 JSON 化后是 `null`）。
     ⇒ **口径**：探针/脚本里凡「字符串内嵌正则」一律写**双反斜杠**（`\\\\(`），改完**必须**用一条已知会命中的样本自证（不能只看"跑通了、结果是 0"）。
-    `scripts/css-audit/mobile-walkthrough.mjs:18` 是**同一份拷贝、同一个 bug**（261012 已记录、**未修**：那是移动端验收装置，改动前先与移动端会话对齐）。
+    `scripts/css-audit/mobile-walkthrough.mjs:18` 是**同一份拷贝、同一个 bug**（**261012 已由移动端会话修掉**：与桌面版逐字一致的 `\\(` 双反斜杠写法；
+    自证 = 拿**运行期**正则跑已知样本：#6f7784 on #fff 由 NaN → **4.52**（该值在 §3#14 有独立记录，故是交叉验证不是自证自话）。
+    ⚠️ 这意味着**修好之后移动端走查会第一次真的报对比度数据** —— 那批新数字属"探针从死转活"的首次产出，不是回归；判读时别当基线漂移。）
 26. **探针"看不见"比探针"报错"危险**：261012 对比度探针还存在第二重盲区 —— 旧口径只扫组件族选择器（`ln-/config-/bt-/…`）且只读**元素自身** opacity
     ⇒ 状态栏内层"无类名 span"看不见、docked 下父级 `opacity:0` 的 `.edge-hotzone-handle__label` 反而误报。
     修法：扫**全仓自有文字** + **祖先连乘的有效透明度** + 排除 1×1 sr-only / 内核(`.ne-*`) / 第三方(univer/drawnix)。

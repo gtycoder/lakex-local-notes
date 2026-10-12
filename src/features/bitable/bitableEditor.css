@@ -127,7 +127,7 @@
 }
 
 .bt-tool-btn:hover { background: var(--lake-bg-hover); }
-.bt-tool-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
+.bt-tool-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 .bt-toolbar-spacer { flex: 1; }
 .bt-badge { background: var(--lake-accent); color: var(--lake-text-on-accent); border-radius: 8px; font-size: var(--lake-font-size-micro); padding: 0 5px; }
 
@@ -218,14 +218,14 @@
 .bt-option-label { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; min-width: 0; }
 .bt-option-placeholder { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .bt-option-caret { color: var(--lake-text-3); }
-.bt-option-chip { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: var(--lake-font-size-body); background: var(--lake-accent-tint); color: var(--lake-accent); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-option-chip { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: var(--lake-font-size-body); background: var(--lake-accent-tint); color: var(--lake-accent-text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-option-search { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--lake-border-1); }
 .bt-option-search input { flex: 1; border: 0; background: transparent; font: inherit; color: inherit; outline: none; }
 .bt-option-list { max-height: 240px; overflow: auto; padding: 4px; }
 .bt-option-item { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; background: transparent; cursor: pointer; padding: 5px 6px; border-radius: var(--lake-radius-2xs); font: inherit; color: inherit; }
 .bt-option-item:hover { background: var(--lake-bg-hover); }
 .bt-option-item.is-selected { background: var(--lake-accent-tint); }
-.bt-option-create { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; border-top: 1px solid var(--lake-border-1); background: transparent; cursor: pointer; padding: 7px 8px; font: inherit; color: var(--lake-accent); }
+.bt-option-create { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; border-top: 1px solid var(--lake-border-1); background: transparent; cursor: pointer; padding: 7px 8px; font: inherit; color: var(--lake-accent-text); }
 .bt-popover-empty { padding: 10px; font-size: var(--lake-font-size-small); color: var(--lake-text-3); text-align: center; }
 
 .bt-attachment-cell { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; }
@@ -238,7 +238,7 @@
 
 .bt-panel { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .bt-panel h4 { margin: 4px 6px; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
-.bt-panel-add { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: var(--lake-radius-2xs); font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-accent); }
+.bt-panel-add { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: var(--lake-radius-2xs); font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-accent-text); }
 .bt-panel-add:hover { background: var(--lake-bg-hover); }
 /* 260930 审计：菜单项规格收编到 kit 的 .ln-menu__item（含 hover/选中/危险态与几何），
    JSX 上已同时挂 `bt-menu-item ln-menu__item`（前者仅作历史钩子，见 cssLayers 基线）。 */
@@ -352,7 +352,7 @@
 .bt-date-day.is-selected { background: var(--lake-accent); color: var(--lake-text-on-accent); }
 .bt-date-empty { display: block; }
 .bt-date-foot { display: flex; justify-content: space-between; margin-top: 6px; border-top: 1px solid var(--lake-border-1); padding-top: 6px; }
-.bt-date-foot button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-accent); }
+.bt-date-foot button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-accent-text); }
 
 /* ── 260920 云端对齐：去边框 / 补动效 / 补齐颜色与自定义下拉 ── */
 .bt-tables-switch:hover { background: var(--lake-bg-hover); }

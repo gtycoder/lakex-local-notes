@@ -46,6 +46,19 @@
 - **数据留痕（不清）**：261010 覆盖夹具被本批探针改过（字号/对齐/字色/背景色/链接各若干处）；
   新建探针文档 `zz 链接探针 <5位>`——**后续探针一律用 `window.lakeNative.createNote(title, parentId)` 建干净文档**，别再污染既有夹具。
 
+- **色板改成「照抄语雀」**（用户 261012 定稿，同一批）：语雀 App 没有字号入口、色板是 **2 行 × 7 格圆形色块**
+  （浅色行首格=无填充 + 6 淡色；实色行 7 实色），实测几何 直径≈37dp / 列距≈52dp / 行距≈48dp。**颜色一律取内核色阶**（用户明确
+  「找内核相近用就行，不要自己造色」）⇒ 新增 `core/colorPalette.ts` 的 `MOBILE_BOARD_LIGHT`/`MOBILE_BOARD_SOLID` 并改写
+  `QUICK_TEXT_COLORS`（逐色 Lab ΔE 就近，**ΔE 0.9–14.9**，实测里 `#262626`/`#BFBFBF` 逐字节等于内核值 ⇒ 语雀用的就是同一套 lakex 色板）。
+  移动端**不再用 `LakeColorBoard`**，改为 `EditorDock` 自画 2×7 板（应用语义仍复用 `colorApplyCommand`+`colorMemory`）。
+  实测值/映射表/装置见 **`docs/LAKEX-CONTRACT.md` §5.33**。**副作用：面板内容高度 875px → 489px**（原来要滚很久的问题基本解决）。
+  设备验收：实色红 `#FF4D4F`、浅色蓝 `#DEE8FC`、无填充清空（`queryCommandValue('color')` 回 null）三项均生效。
+  ⚠️ **与 AGENTS §19 的措辞冲突点已记录**：§19 写「Lake 编辑器继续通过 LakeColorBoard 调内核色卡」⇒ 移动端面板改为语雀排布后不再适用，
+  待用户确认后同步该条（先按用户 261012 的口头定稿执行）。
+- **面板高度 A/B 问题 = A（用户判断正确，本轮作废了 B 建议）**：从用户提供的语雀录屏**客观量得** —— 工具栏在「面板态 / 键盘态」
+  两帧位置**完全一致**（778 vs 779），面板占据的就是「入口行 + 键盘」那一块；且滚动态帧显示**语雀面板内部本身就在滚动**。
+  ⇒ 我们的「面板占键盘区 + 内部滚动」与语雀结构一致，**不用改**；真差异只是**内容体量**（色板），已由上面的色板改造收敛。
+
 ### 261012 · 桌面批：逐页走查复跑（D）+ 文字色阶达标标定 + 走查装置三修（含探针假阴性）**（本批；桌面会话交付）**
 
 - **装置复跑（用户定的 D：页面详细测试 / 逐页走查）**：`.css-audit/d1` —— 5 轮 = light/dark/warm×1315 + light/dark×1000（22 屏/轮，97 屏），对 261009 B1 基线做**签名级 diff**：
@@ -78,6 +91,11 @@
   装置修好后复跑：`.css-audit/d3`（5 轮走查 + 3 主题加宽扫描）+ `.css-audit/d4`（accent 修后三主题复验）。
   **实测**：加宽扫描 light **42→8**、dark **39→8**、warm **51→13**（残留全为 text-4 的有意 3:1 档）；
   5 轮走查 `UA 焦点环 0 / 整页横向溢出 0 / 屏错误 0`，且 **`split-view` 在 1315 与 1000 宽均 ok**（修前 1000 宽必 ERR）。
+- **批②（本轮追加，用户点单「做 2」）：暖色主题主色文字 AA 化**。全仓 `color: var(--lake-accent)` 实为 **55 处（桌面 41 / 移动 14）**（上一轮"~10 处"是 grep 截断造成的低估）：
+  实测判定「文字 vs 图形」后，**17 处文字站点**切到 **`--lake-accent-text`**（含 `.badge--accent` 实测 3.75 ✗、`.edge-hotzone-handle` 的「目录」标签、`.bt-option-chip`/`.bt-tool-btn.is-active`/`.bt-panel-add`/`.bt-date-foot button`/`.quick-notes-link`/`.tab-gone-banner button`…），
+  **24 处保留 accent**（`.ln-iconbtn*`/`check`/`chevron`/`pin`/`tree-row-icon`/`lock`/`bt-add-round`/`bt-link-open`/`draft-recovery-restore` 等**纯图形**，只需 3:1，暖色最差 3.61 达标；另有 `.activity-button`/`.sync-tab-action` **0 引用死 CSS**）。
+  **不改令牌**的理由：暖色 accent 压到 AA 需 `#b84a00`，与 `--lake-accent-ink #b34900` 重合，会毁掉三令牌语义 ⇒ 只改用法。**移动端 14 处未动**（属移动端写域）。
+  复验（`.css-audit/d5`）：warm **13 → 8**、light/dark 保持 8 —— 三主题**收敛到同一组残留**（全部是 `--lake-text-4` 的有意 3:1 档），屏错误 0。口径已入 `AGENTS §3#14`「主色文字口径」。
 - **协同（重要）**：本批 `dist/` 重建于 **10:26:38**，**包含移动端会话未提交的「抽共享链接编辑层」改动**（`src/features/editor/selectionToolbar/{linkEditor.ts,linkEditor.test.ts,SelectionToolbar.tsx}` + `src/core/colorPalette.ts`，**非本批**）。
   `dist/` 是**共享产物** ⇒ 谁构建谁负责，别在别人验收中途重建。
 - **留痕**：合成夹具隔离实例 `/tmp/lake-walk-d1`（非真实数据，跑完按 CDP 端口精确 kill）+ `.css-audit/{d1,d1b,d1c,d2}`；`d1c` = 改前加宽扫描、`d2` = 改后验证。

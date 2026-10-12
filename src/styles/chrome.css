@@ -100,7 +100,7 @@
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-tiny);
 }
-.document-notice-toast button { border-radius: var(--lake-radius-xs); color: var(--lake-accent); }
+.document-notice-toast button { border-radius: var(--lake-radius-xs); color: var(--lake-accent-text); }
 .document-notice-toast button:hover { background: var(--lake-accent-tint); }
 @media (prefers-reduced-motion: reduce) {
   .document-statusbar, .document-notice-toast { backdrop-filter: none; }
@@ -319,7 +319,7 @@
   transform: translate(0, -50%) scale(1);
 }
 /* hover：稍微长胖一点 + 主色，明确"可以点" */
-.edge-hotzone .edge-hotzone-handle:hover { width: 34px; color: var(--lake-accent); border-color: var(--lake-accent); }
+.edge-hotzone .edge-hotzone-handle:hover { width: 34px; color: var(--lake-accent-text); border-color: var(--lake-accent); }
 /* 面板已经出来了 ⇒ 把手退场（它只负责把面板叫出来）。 */
 .app-shell.sidebar-floating .edge-hotzone .edge-hotzone-handle,
 .app-shell.sidebar-docked .edge-hotzone .edge-hotzone-handle { opacity: 0; pointer-events: none; }

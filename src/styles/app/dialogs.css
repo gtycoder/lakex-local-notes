@@ -70,7 +70,7 @@
 /* 261006：去掉单侧 3px 色条（craft floor 禁止的图案）；状态由 1px 主色描边 + 主色动作按钮表达。 */
 .quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px var(--lake-shadow-color-4), 0 2px 8px var(--lake-shadow-color-3); font-size: var(--lake-font-size-tiny); }
 
-.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--lake-accent); background: transparent; cursor: pointer; font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-semibold); }
+.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--lake-accent-text); background: transparent; cursor: pointer; font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-semibold); }
 
 /* 小记工作台：身份色归入主 accent（原紫色身份随氛围渐变一并移除），一律由令牌派生 */
 .quick-notes-toast { background: var(--lake-bg-block); }

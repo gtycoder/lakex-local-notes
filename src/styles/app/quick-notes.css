@@ -58,7 +58,7 @@
 .qn-check.is-on { border-color: var(--lake-status-ok); background: var(--lake-status-ok); }
 
 /* （多选条已并入头部那一行，见 .quick-notes-header-tools；这里只留链接按钮样式） */
-.quick-notes-link { border: 0; padding: 2px 4px; color: var(--lake-accent); background: transparent; font-size: var(--lake-font-size-small); cursor: pointer; }
+.quick-notes-link { border: 0; padding: 2px 4px; color: var(--lake-accent-text); background: transparent; font-size: var(--lake-font-size-small); cursor: pointer; }
 
 .quick-notes-link:hover:not(:disabled) { text-decoration: underline; }
 
@@ -235,7 +235,7 @@
 .quick-note-preview { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .quick-note-preview.is-collapsed { overflow: hidden; position: relative; }
 .quick-note-preview.is-collapsed::after { content: ""; position: absolute; inset: auto 0 0 0; height: 44px; background: linear-gradient(to bottom, transparent, var(--lake-bg-panel)); pointer-events: none; }
-.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent); background: transparent; font-size: var(--lake-font-size-tiny); cursor: pointer; }
+.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent-text); background: transparent; font-size: var(--lake-font-size-tiny); cursor: pointer; }
 .quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
 .quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-bodyLg); }
 .quick-note-preview h1.quick-note-preview-heading { font-size: var(--lake-font-size-display); }

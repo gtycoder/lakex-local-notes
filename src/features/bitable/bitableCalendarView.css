@@ -47,7 +47,7 @@
 }
 
 .bt-cal-day.is-out { background: var(--lake-bg-block); }
-.bt-cal-day.is-today .bt-cal-day-num { color: var(--lake-accent); font-weight: 600; }
+.bt-cal-day.is-today .bt-cal-day-num { color: var(--lake-accent-text); font-weight: 600; }
 .bt-cal-day-num { flex: 0 0 auto; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 .bt-cal-events { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: hidden; }
 
