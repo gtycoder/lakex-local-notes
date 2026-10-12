@@ -653,8 +653,8 @@
  *   · 显式排除 `.lake-editor-mount`（内核正文里的待办框属于**文档内容**，保持内核原样）。
  * 勾选符号用**边框旋转**画（不用带颜色的 SVG data URI —— 颜色字面量只允许出现在 themes/*）。
  * 不改任何 JSX：`appearance:none` 之后原生 input 仍是同一个可聚焦、可键盘操作的控件。 */
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native),
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native) {
+.app-shell input[type="checkbox"]:not(.bt-keep-native),
+.app-shell input[type="radio"]:not(.bt-keep-native) {
   position: relative;
   flex: 0 0 auto;
   width: 15px;
@@ -670,16 +670,16 @@
   transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
     border-color var(--lake-motion-fast) var(--lake-ease-standard);
 }
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native) { border-radius: var(--lake-radius-pill); }
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native):hover,
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native):hover { border-color: var(--lake-accent); }
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native):checked,
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native):checked {
+.app-shell input[type="radio"]:not(.bt-keep-native) { border-radius: var(--lake-radius-pill); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):hover,
+.app-shell input[type="radio"]:not(.bt-keep-native):hover { border-color: var(--lake-accent); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):checked,
+.app-shell input[type="radio"]:not(.bt-keep-native):checked {
   border-color: var(--lake-accent);
   background: var(--lake-accent);
 }
 /* 勾：右下两条边旋转 45°（颜色 = 面板底色，浅深主题都成立） */
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native)::after {
+.app-shell input[type="checkbox"]:not(.bt-keep-native)::after {
   content: "";
   position: absolute;
   top: 1px;
@@ -691,8 +691,8 @@
   transform: rotate(45deg) scale(0);
   transition: transform var(--lake-motion-press) var(--lake-ease-standard);
 }
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native):checked::after { transform: rotate(45deg) scale(1); }
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native):indeterminate::after {
+.app-shell input[type="checkbox"]:not(.bt-keep-native):checked::after { transform: rotate(45deg) scale(1); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):indeterminate::after {
   top: 3px;
   left: 2px;
   width: 7px;
@@ -701,7 +701,7 @@
   transform: none;
 }
 /* 单选：实心圆点 */
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native)::after {
+.app-shell input[type="radio"]:not(.bt-keep-native)::after {
   content: "";
   position: absolute;
   inset: 3px;
@@ -710,20 +710,20 @@
   transform: scale(0);
   transition: transform var(--lake-motion-press) var(--lake-ease-standard);
 }
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native):checked::after { transform: scale(1); }
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native):focus-visible,
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native):focus-visible {
+.app-shell input[type="radio"]:not(.bt-keep-native):checked::after { transform: scale(1); }
+.app-shell input[type="checkbox"]:not(.bt-keep-native):focus-visible,
+.app-shell input[type="radio"]:not(.bt-keep-native):focus-visible {
   outline: 0;
   box-shadow: 0 0 0 2px var(--lake-focus-halo);
 }
-:is(.app-shell, .mobile-app) input[type="checkbox"]:not(.bt-keep-native):disabled,
-:is(.app-shell, .mobile-app) input[type="radio"]:not(.bt-keep-native):disabled {
+.app-shell input[type="checkbox"]:not(.bt-keep-native):disabled,
+.app-shell input[type="radio"]:not(.bt-keep-native):disabled {
   opacity: var(--lake-disabled-opacity);
   cursor: default;
 }
 /* 内核正文里的勾选（待办列表）维持内核自己的绘制。 */
-:is(.app-shell, .mobile-app) .lake-editor-mount input[type="checkbox"],
-:is(.app-shell, .mobile-app) .ne-engine input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; }
+.app-shell .lake-editor-mount input[type="checkbox"],
+.app-shell .ne-engine input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; }
 
 /* Destructive-action button (P7-e): .ft__error is the existing semantic class used by buttons like 清空;
  * living in the kit layer lets the LAYER ORDER (not !important) beat .b3-button--outline neutrals. */

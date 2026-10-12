@@ -899,3 +899,11 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 .minfo-row em { flex: none; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-style: normal; }
 .minfo-empty { margin: 2px 0 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .minfo-action { margin-left: auto; padding: 5px 10px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); }
+
+/* ── P5：自 mobile-kit.css 收编的**活**规则（内核浮层/小记工具条的移动端修正）────────
+ * 其余内容（.ln-* 覆盖、.mobile-toast/.mobile-dialog/.mobile-menu）在 P2–P4 迁移后已无 JSX 施加
+ * ⇒ 那三组随 mobile-kit.css 一并删除；这里保留仍生效的内核侧修正。 */
+body.lake-mobile .mobile-qn-composer .ne-ui-toolbar-button.ant-btn { margin-left: 6px; }
+body.lake-mobile .ne-ui-search-card-menu { max-height: calc(100vh - 200px); }
+body.lake-mobile .ne-ui-card-menu-content { max-height: calc(100vh - 200px); overflow-y: auto; }
+body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120px !important; bottom: auto !important; }

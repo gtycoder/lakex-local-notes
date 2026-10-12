@@ -198,3 +198,38 @@
 }
 .mb-switch[aria-checked="true"] .mb-switch__knob { transform: translateX(18px); }
 .mb-set-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* ── 勾选（checkbox / radio）── P5：自桌面 styles/kit.css 收编 ──────────────────
+ * 桌面那份选择器写成 :is(.app-shell, .mobile-app) —— 那是**为移动端开的分支**（反向耦合）。
+ * P5 把它搬到这里（作用域 = 移动端自有根类 .mobile-app），桌面那边收窄回 .app-shell ⇒ 反向耦合归零。
+ * 排除内核正文待办框（.lake-editor-mount / .ne-engine 保持内核绘制）；勾号用边框旋转画（不引入颜色字面量）。 */
+.mobile-app input[type="checkbox"]:not(.bt-keep-native),
+.mobile-app input[type="radio"]:not(.bt-keep-native) {
+  position: relative; flex: 0 0 auto; width: 15px; height: 15px; margin: 0; padding: 0;
+  border: 1px solid var(--lake-ctl-border); border-radius: var(--mb-radius-sm);
+  background: var(--lake-bg-panel); appearance: none; -webkit-appearance: none; cursor: pointer;
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.mobile-app input[type="radio"]:not(.bt-keep-native) { border-radius: var(--lake-radius-pill); }
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):hover,
+.mobile-app input[type="radio"]:not(.bt-keep-native):hover { border-color: var(--lake-accent); }
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):checked,
+.mobile-app input[type="radio"]:not(.bt-keep-native):checked { border-color: var(--lake-accent); background: var(--lake-accent); }
+.mobile-app input[type="checkbox"]:not(.bt-keep-native)::after {
+  content: ""; position: absolute; top: 1px; left: 4px; width: 4px; height: 8px;
+  border: solid var(--lake-bg-panel); border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0);
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):checked::after { transform: rotate(45deg) scale(1); }
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):indeterminate::after { top: 3px; left: 2px; width: 7px; height: 0; border-width: 0 0 2px 0; transform: none; }
+.mobile-app input[type="radio"]:not(.bt-keep-native)::after {
+  content: ""; position: absolute; inset: 3px; border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-panel); transform: scale(0); transition: transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+.mobile-app input[type="radio"]:not(.bt-keep-native):checked::after { transform: scale(1); }
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):focus-visible,
+.mobile-app input[type="radio"]:not(.bt-keep-native):focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--lake-focus-halo); }
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):disabled,
+.mobile-app input[type="radio"]:not(.bt-keep-native):disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.mobile-app .lake-editor-mount input[type="checkbox"],
+.mobile-app .ne-engine input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; }

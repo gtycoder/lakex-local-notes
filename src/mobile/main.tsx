@@ -15,13 +15,8 @@ import "../styles/fonts/jetbrains-mono/jetbrains-mono.css"; // 内置等宽 JetB
 // 桌面 themes/** 不再是移动端契约；护栏 src/mobile/mobileIndependence.test.ts 卡住回退。
 import "./theme/index.css";
 import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，走 --lake-*）
-import "../styles/compat.css"; // 复用桌面兼容层（config-*/b3-label/b3-switch/fn__*，值走 --lake-*）
-import "../styles/kit.css"; // 自有组件库（ln-* 14 件）——新 UI 组件来源
-import "../styles/components.css"; // 共用浮层件（seg/badge/ln-*）；须晚于 compat.css（.seg 选中态要压过 .b3-button--outline）
 import "./editor/editor-dock.css";
 import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读预览（与桌面同一套类）
-import "../styles/dialog.css"; // 浮层通用弹窗（属性等）：与桌面共用同一套样式
-import "./mobile-kit.css"; // 迁移期遗留：桌面 kit 之上的覆盖层（P2 起逐屏改用 mb-*，P5 收尾删除）
 import "./kit.css"; // P2：移动端自有原语库 mb-*（触屏密度；一个交互语义只有一套）
 import "./floating.css"; // P3：浮层原语（mb-sheet / mb-actionsheet / mb-toast / mb-menusheet + 遮罩）
 

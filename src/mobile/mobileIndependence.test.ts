@@ -48,11 +48,7 @@ const ALLOWED_DESKTOP_STYLE_IMPORTS: Record<string, string[]> = {
     "../features/attachment/attachment-preview.css", // P6 变体化
     "../styles/fonts/misans/misans.css", // 资源（MiSans，与桌面同一逻辑）
     "../styles/fonts/jetbrains-mono/jetbrains-mono.css", // 资源
-    "../styles/compat.css", // P2/P5 消灭（config-*/b3-*/fn__*）
-    "../styles/kit.css", // P2 消灭（改用 mb-*）
-    "../styles/components.css", // P2/P3 消灭
-    "../styles/app/quick-notes.css", // P5 消灭（小记外壳移动端自有）
-    "../styles/dialog.css", // P3 消灭（改 mb-sheet/mb-dialog）
+    "../styles/app/quick-notes.css", // P6 消灭（小记外壳/预览移动端自有）
   ],
   "mobile/trash/TrashPreviewPage.tsx": ["../../styles/fonts/font-overrides.css"], // 资源
   "mobile/editor/DocumentEditor.tsx": ["../../styles/fonts/font-overrides.css"], // 资源
@@ -78,7 +74,8 @@ const ALLOWED_DESKTOP_COMPONENT_IMPORTS: Record<string, string[]> = {
 
 /** 桌面侧反向耦合基线（mobile-app 在 src/styles/** 的出现次数，只许降）。 */
 const REVERSE_COUPLING_BASELINE: Record<string, number> = {
-  "styles/kit.css": 18, // P2：checkbox/radio 的 :is(.app-shell,.mobile-app) 收窄回 .app-shell
+  // **已清零（P5）**：kit.css 的 18 行 :is(.app-shell, .mobile-app) 收窄回 .app-shell，
+  // 移动端那份勾选样式已搬进 src/mobile/kit.css。桌面样式里不允许再出现为移动端开的分支。
 };
 
 const read = (abs: string): string => readFileSync(abs, "utf8");

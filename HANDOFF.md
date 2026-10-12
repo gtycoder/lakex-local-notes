@@ -45,6 +45,13 @@
   ⇒ **移动端源码的桌面类名 token 归零（109 → 0）**；护栏升级为「不允许再出现」+ 新增「不得 import 桌面 UI 组件件」
   （只留 treeDrag 一条冻结项，P6 处理）。验收：mobilesnap 重烤后**两轮 0 差异**（仅 settings 两态指纹变、元素数不变）·
   设备走查 **22/22 ok** · 视觉复核 settings / settings-外观 两屏。
+- **P5 逐屏迁移 / 摘桌面样式（已交付）**：移动端入口**摘掉 4 个桌面样式表**（compat / kit / components / dialog），
+  删除 `src/mobile/mobile-kit.css`（覆盖层退场：活规则 = 4 条内核浮层/工具条修正，收编进 `mobile.css`；
+  其余在 P2–P4 迁移后已无 JSX 施加）。**反向耦合归零**：桌面 `styles/kit.css` 的 18 行
+  `:is(.app-shell, .mobile-app)` 收窄回 `.app-shell`，移动端那份勾选原语搬进 `src/mobile/kit.css`。
+  ⇒ 移动端现在只引 **1 个桌面样式表**（`styles/app/quick-notes.css`，P6 消灭）+ 2 个 feature CSS（P6 变体化）。
+  **验收（关键证据）**：摘掉 4 个样式表**渲染零变化** —— check:mobilesnap **6 态 0 差异**（与 P4 基线逐元素计算值相同）
+  + 设备走查 **22/22 ok**。
 - **未做（下一轮继续）**：
   P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
   文档外壳/dock）· P6 六组件变体化 · P7 收口（MOBILE-DESIGN.md 定稿 + 指标转门禁 + 清反向耦合 18 行）。
