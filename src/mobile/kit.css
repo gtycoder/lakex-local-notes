@@ -239,3 +239,14 @@
  * 移动端统一传 mb-kernel-host）。这里只给移动端需要的几何：铺满容器、不裁内容。 */
 .mb-kernel-host { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .mb-kernel-host > .ne-engine, .mb-kernel-host > .lake-engine { min-height: 0; }
+
+/* ── 选择器（P7 追加；替代原生 <select> 的系统弹层）────────────────────────────
+ * .mb-select--trigger = 触发器（外观沿用 .mb-select，但它是 <button>：没有系统弹层）；
+ * 选项列表复用 .mb-sheet + .mb-list-item，这里只补「选中态 + 右侧打勾位」。 */
+.mb-select--trigger { cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.mb-select--trigger:active { background: var(--lake-bg-press); }
+.mb-select__value { flex: 1 1 auto; min-width: 0; text-align: right; }
+.mb-list-item__check { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; color: var(--lake-accent-text); }
+.mb-list-item.is-selected { color: var(--lake-accent-text); font-weight: var(--lake-font-weight-medium); }
+.mb-sheet--picker .mb-sheet__body { padding-bottom: calc(8px + var(--mobile-bottom-safe-area)); }
+.mb-sheet--picker .mb-list-item + .mb-list-item { border-top: 1px solid var(--lake-border-2); }

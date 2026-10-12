@@ -7,6 +7,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
+import { PickerSheet } from "../ui/PickerSheet";
 import { bridge } from "../bridge";
 import { usePanelDrag } from "../usePanelDrag";
 import type { HistoryMobileSettings } from "../bridge";
@@ -205,20 +206,28 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "editor" && (
             <Group title="编辑器" icon={<Pencil size={16} />}>
               <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
-                <select className="mb-select" value={settings.fontSize} onChange={(e) => update({ fontSize: Number(e.target.value) })} aria-label="正文字号">
-                  {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
-                </select>
+                <PickerSheet
+                  label="正文字号"
+                  value={settings.fontSize}
+                  options={fontSizeOptions().map((fs) => ({ value: fs, label: fs + " px" }))}
+                  onChange={(v) => update({ fontSize: v })}
+                />
               </Item>
               <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限自动关闭最旧的标签。">
-                <select className="mb-select mb-input--num" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
-                  <option value={0}>不限</option>
-                  {[4, 6, 8, 12, 16, 24].map((n) => <option key={n} value={n}>{n} 个</option>)}
-                </select>
+                <PickerSheet
+                  label="最大同时打开标签数"
+                  value={settings.maxOpenTabs}
+                  options={[{ value: 0, label: "不限" }, ...[4, 6, 8, 12, 16, 24].map((n) => ({ value: n, label: n + " 个" }))]}
+                  onChange={(v) => update({ maxOpenTabs: v })}
+                />
               </Item>
               <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
-                <select className="mb-select mb-input--num" value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(e) => update({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
-                  {MAX_ATTACHMENT_MB_OPTIONS_SETTINGS.map((mb) => <option key={mb} value={mb}>{mb} MiB</option>)}
-                </select>
+                <PickerSheet
+                  label="附件大小上限"
+                  value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))}
+                  options={MAX_ATTACHMENT_MB_OPTIONS_SETTINGS.map((mb) => ({ value: mb, label: mb + " MiB" }))}
+                  onChange={(v) => update({ maxAttachmentBytes: v * 1024 * 1024 })}
+                />
               </Item>
               {pinState?.available && !pinState.pinned && (
                 <Item itemId="editor-pin-quick-note" name="新建小记" desc="添加到桌面。">

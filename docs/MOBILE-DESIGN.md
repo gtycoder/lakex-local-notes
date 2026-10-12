@@ -138,6 +138,9 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
   `.is-open`，用于自带 presence 状态、需要**退出也淡出**的浮层）。表面与层序只有一份。
 - **关闭方式三件套**：遮罩点击、下拉手势（`useSwipeToClose`）、安卓返回（`backStack`，先退子菜单再关面板）。
 - 安全区：底部内距一律含 `--mobile-bottom-safe-area`。
+- **禁止原生 `<select>` 的系统弹层**（用户 261012 反馈"有点丑"）：系统弹层不跟主题/字号走（深色下也是白底、
+  选中态是系统蓝绿圈），与移动端浮层语言割裂。选项类交互一律走 `PickerSheet`（底部 Sheet 列表 + 打勾），
+  触发器沿用 `.mb-select` 外观但是 `<button>`。与桌面 kit 的同类规则同源（桌面也不用原生 select 弹层）。
 
 ## Components
 
@@ -148,6 +151,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 `mb-list`/`mb-list-item`（__text/__meta）· `mb-input`（--num）· `mb-select` · `mb-tag`(--pending/--ok/--error) ·
 `mb-segment`/__item · `mb-card`（__head/__body）· `mb-form__desc` · `mb-menu-note`/`mb-menu-head-action` ·
 `mb-chevron`/--spacer · `mb-tree-icon` · `mb-indent` · `mb-spacer`/`mb-flex1`/`mb-ellipsis` ·
+**选择器 = `PickerSheet`（`mb-select--trigger` 触发器 + `mb-sheet--picker` 底部列表、选中项打勾）** ·
 **设置页骨架** `mb-set-group/title/items/section/item(--field)/name/desc/note/ctl/error/block/empty/stats` ·
 `mb-switch` · `mb-kbd` · **勾选原语**（`.mobile-app input[type=checkbox|radio]`，排除内核待办框）。
 
