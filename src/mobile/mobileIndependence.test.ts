@@ -44,8 +44,6 @@ const VENDOR_STYLE_PREFIXES = ["@dlient/lakex-doc-react", "@univerjs/"];
  */
 const ALLOWED_DESKTOP_STYLE_IMPORTS: Record<string, string[]> = {
   "mobile/main.tsx": [
-    "../features/editor/image-lightbox.css", // P6 变体化
-    "../features/attachment/attachment-preview.css", // P6 变体化
     "../styles/fonts/misans/misans.css", // 资源（MiSans，与桌面同一逻辑）
     "../styles/fonts/jetbrains-mono/jetbrains-mono.css", // 资源
     "../styles/app/quick-notes.css", // P6 消灭（小记外壳/预览移动端自有）

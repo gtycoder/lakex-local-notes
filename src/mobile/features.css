@@ -1,0 +1,92 @@
+/* ── 移动端自有外观：图片 Lightbox 与附件预览（P6，261012）─────────────────────
+ * 口径：**逻辑共享、外观移动端自有**（MOBILE-TECH-STACK §一/§九；用户 261012 定稿）。
+ * `ImageLightbox.tsx` / `AttachmentPreview.tsx` 是共享组件（不 fork 逻辑），它们发出的**结构类名**
+ * （.image-lightbox* / .attachment-preview*）在这里由**移动端自己定义视觉**；桌面那份仍归桌面
+ * （src/features/**/*.css 只被桌面入口引用）。
+ * 与桌面版的差异（都是移动端必要的形态差异，不是随意改观）：
+ *   ① 命中区：工具条按钮 34 → **44**（触屏最小点按目标）；
+ *   ② 安全区：工具条/顶部条内距含 env(safe-area-inset-*)，全面屏手势条不压按钮；
+ *   ③ 层序走 --lake-z-overlay-lightbox（移动端 theme 里的令牌，不写 1000 这类魔法数字）；
+ *   ④ 字号/圆角/间距全走移动端令牌（7 档字号、mb 圆角）。
+ * ⚠️ 这两个浮层**不在 22 屏设备走查的覆盖里**（走查不主动打开 Lightbox/附件预览）⇒ 本文件是
+ * 「按规则搬迁 + 触屏几何」，风险面 = 上述四条差异；若后续要在设备上验，用 .css-audit 的 drive.mjs
+ * 单写一段探针（点 .ne-image / 附件 chip 后量 .image-lightbox__btn 的 44×44 与安全区内距）。 */
+
+/* ── 图片放大预览 ─────────────────────────────────────────────────── */
+.image-lightbox {
+  position: fixed; inset: 0; z-index: var(--lake-z-overlay-lightbox);
+  display: flex; align-items: center; justify-content: center; cursor: zoom-out;
+  background: var(--lake-media-scrim);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  animation: mb-lightbox-fade var(--lake-motion-fast) linear;
+}
+@keyframes mb-lightbox-fade { from { opacity: 0; } to { opacity: 1; } }
+.image-lightbox__stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.image-lightbox img { border-radius: var(--lake-radius-hairline); box-shadow: var(--lake-media-img-shadow); will-change: transform; }
+.image-lightbox__toolbar {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(12px + var(--mobile-bottom-safe-area));
+  display: flex; align-items: center; gap: 2px; padding: 6px 10px;
+  border-radius: var(--mb-radius-card);
+  background: var(--lake-media-toolbar);
+  backdrop-filter: blur(8px); box-shadow: var(--lake-media-toolbar-shadow); user-select: none;
+}
+.image-lightbox__btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--mb-ctl-h); height: var(--mb-ctl-h);   /* 触屏命中区 44 */
+  border: none; border-radius: var(--mb-radius-sm); background: transparent;
+  color: var(--lake-media-on); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.image-lightbox__btn:active { background: var(--lake-media-btn-hover-2); }
+.image-lightbox__btn:disabled { opacity: .35; cursor: default; }
+.image-lightbox__btn:disabled:active { background: transparent; }
+.image-lightbox__close { color: var(--lake-media-danger); }
+.image-lightbox__count {
+  min-width: 52px; text-align: center; color: var(--lake-media-on-soft);
+  font-size: var(--lake-font-size-small); font-variant-numeric: tabular-nums;
+}
+.image-lightbox__divider { width: 1px; height: 18px; margin: 0 6px; background: var(--lake-media-divider); }
+
+/* ── 附件预览 overlay ─────────────────────────────────────────────── */
+.attachment-preview {
+  position: fixed; inset: 0; z-index: var(--lake-z-overlay-lightbox);
+  display: flex; flex-direction: column;   /* 表面与图片 Lightbox 同源：淡遮罩 + 背景模糊 */
+  background: var(--lake-media-scrim);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  animation: mb-lightbox-fade var(--lake-motion-fast) linear;
+}
+.attachment-preview__toolbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: calc(8px + var(--mobile-top-safe-area)) var(--mb-page-pad) 8px;
+  background: var(--lake-bg-panel); color: var(--lake-text-1);
+  border-bottom: 1px solid var(--lake-border-1);
+}
+.attachment-preview__title {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.attachment-preview__title small { margin-left: 8px; color: var(--lake-text-3); font-weight: var(--lake-font-weight-regular); }
+.attachment-preview__spacer { flex: 1 1 auto; }
+.attachment-preview__btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--mb-ctl-h); padding: 0 12px;   /* 触屏命中区 44 */
+  border: none; border-radius: var(--mb-radius-sm);
+  background: var(--lake-bg-block); color: var(--lake-text-1);
+  font-family: inherit; font-size: var(--lake-font-size-small); white-space: nowrap;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.attachment-preview__btn:active { background: var(--lake-bg-press); }
+.attachment-preview__btn--primary { background: var(--lake-accent-ink); color: var(--lake-text-on-accent); }
+.attachment-preview__close { margin-left: 4px; }
+.attachment-preview__body { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: var(--mb-page-pad); }
+.attachment-preview__embed { width: 100%; height: 100%; border: none; background: var(--lake-media-embed); border-radius: var(--mb-radius-sm); }
+.attachment-preview__video { max-width: 96vw; max-height: 92vh; background: var(--lake-bg-block); border-radius: var(--mb-radius-sm); }
+.attachment-preview__media { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.attachment-preview__audio { width: min(560px, 90vw); }
+.attachment-preview__fallback { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 80vw; color: var(--lake-text-2); }
+.attachment-preview__fallback-name {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--lake-text-1); font-size: var(--lake-font-size-bodyLg);
+}
+.attachment-preview__hint { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }

@@ -5,8 +5,6 @@ import { applyTheme } from "../lib/theme";
 import { loadSettings, subscribeSettings } from "../lib/settings";
 import { applySystemBarTheme } from "./systemBars";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
-import "../features/editor/image-lightbox.css";
-import "../features/attachment/attachment-preview.css";
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统**（--lake-*），不再用思源调色板。
 // 思源样式层（src/b3/**）已整体删除；仅 .b3-* / fn__* 类名保留，规则在 compat.css（值走 --lake-*）。
 import "../styles/fonts/misans/misans.css"; // 内置 MiSans（简中+Latin，官方切片子集）
@@ -19,6 +17,7 @@ import "./editor/editor-dock.css";
 import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读预览（与桌面同一套类）
 import "./kit.css"; // P2：移动端自有原语库 mb-*（触屏密度；一个交互语义只有一套）
 import "./floating.css"; // P3：浮层原语（mb-sheet / mb-actionsheet / mb-toast / mb-menusheet + 遮罩）
+import "./features.css"; // P6：图片 Lightbox / 附件预览的**移动端外观**（结构类名共享、视觉各端自有）
 
 // 内核的浮层（插入面板/卡片工具栏/下拉）**portal 到 body 下的 .ne-overlay-container**（不在我们的组件树里），
 // 所以移动端要覆盖它们必须有一个 body 级标记（260923 W2 起只有组件树内样式，够不到浮层）。
