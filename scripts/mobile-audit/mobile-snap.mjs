@@ -20,13 +20,16 @@ const waitHome = async (page, ms = 20000) => {
 };
 
 // 等 DOM 静默（元素数 + 高度和稳定）—— 对齐桌面 stylesnap 的 settle（避免拿到中间态）
+// 261012（P2 实测）：首页态会因**启动后的自动同步**在 1~2s 内再渲染一次（实测 home-library 连拍两份
+// 1784 / 1755 元素，差 29 ≈ 三个文档卡）⇒ 判据从「3 次稳定 × 200ms」收紧到「6 次稳定 × 300ms」
+// 并额外要求「没有瞬时提示条」——提示条出现过就说明还有异步动作在跑。
 const settle = async (page) => {
   let lastN = -1, lastH = -1, stable = 0;
-  for (let i = 0; i < 24; i++) {
-    const r = await page.evaluate("(function(){var els=document.querySelectorAll('body *');var s=0;for(var i=0;i<els.length;i++)s+=Math.round(els[i].getBoundingClientRect().height);return [els.length,s];})()");
-    const n = r[0], h = r[1];
-    if (n === lastN && h === lastH) { if (++stable >= 3) break; } else { stable = 0; lastN = n; lastH = h; }
-    await page.sleep(200);
+  for (let i = 0; i < 30; i++) {
+    const r = await page.evaluate("(function(){var els=document.querySelectorAll('body *');var s=0;for(var i=0;i<els.length;i++)s+=Math.round(els[i].getBoundingClientRect().height);var t=document.querySelector('.mb-toast,.mobile-toast');return [els.length,s,t?1:0];})()");
+    const n = r[0], h = r[1], toast = r[2];
+    if (n === lastN && h === lastH && !toast) { if (++stable >= 6) break; } else { stable = 0; lastN = n; lastH = h; }
+    await page.sleep(300);
   }
 };
 

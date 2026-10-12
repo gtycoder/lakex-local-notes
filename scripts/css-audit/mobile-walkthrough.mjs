@@ -62,7 +62,7 @@ async function tapExpr(expr, label, waitMs) {
 }
 const center = (sel) => '(function () { var e = document.querySelector(' + JSON.stringify(sel) + '); if (!e) return null; var r = e.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return null; return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
 const centerByText = (sel, t, nth) => '(function () { var els = [].slice.call(document.querySelectorAll(' + JSON.stringify(sel) + ')).filter(function (e) { return ((e.getAttribute("aria-label") || e.title || e.textContent || "")).indexOf(' + JSON.stringify(t) + ') >= 0 && e.getBoundingClientRect().width > 0; }); var e = els[' + (nth || 0) + ']; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
-const nthRow = (n) => '(function () { var rows = [].slice.call(document.querySelectorAll(".side-panel--left .ln-row, .mobile-workspace .ln-row")).filter(function (e) { return e.getBoundingClientRect().width > 0; }); var e = rows[' + n + ']; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
+const nthRow = (n) => '(function () { var rows = [].slice.call(document.querySelectorAll(".side-panel--left .ln-row, .side-panel--left .mb-row, .mobile-workspace .ln-row, .mobile-workspace .mb-row")).filter(function (e) { return e.getBoundingClientRect().width > 0; }); var e = rows[' + n + ']; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
 async function atHome() {
   return await pageRef.evaluate('(function () { return Boolean(document.querySelector(".mobile-htab")) && !document.querySelector(".mobile-settings-mask") && !document.querySelector(".mobile-settings-page") && !document.querySelector(".mobile-workspace"); })()');
 }
@@ -81,7 +81,7 @@ async function goHome() {
       ' if (back) return { kind: "back", pt: center(back) };' +
       ' var sheet = document.querySelector(".mobile-sheet-mask.on, .mobile-model-mask.on, .mobile-sheet-mask, .mobile-model-mask");' +
       ' if (sheet && sheet.getBoundingClientRect().width > 0 && hit(sheet)) { var sr = sheet.getBoundingClientRect(); return { kind: "sheet-mask", pt: [Math.round(innerWidth / 2), Math.round(sr.top + 24)] }; }' +
-      ' var scrim = document.querySelector(".mobile-menu__scrim.is-open, .mobile-menu__scrim");' +
+      ' var scrim = document.querySelector(".mobile-menu__scrim.is-open, .mobile-menu__scrim, .mb-scrim.is-open");' +
       ' if (scrim) { var sr = scrim.getBoundingClientRect(); if (sr.width > 0 && sr.height > 0) return { kind: "menu-scrim", pt: [Math.round(innerWidth / 2), 40] }; }' +
       ' var c = document.querySelector(".mobile-settings-close"); if (c && hit(c)) return { kind: "settings-back", pt: center(c) };' +
       ' var pg = document.querySelector(".mobile-settings-page"); var m = document.querySelector(".mobile-settings-mask");' +
@@ -101,7 +101,7 @@ async function openNotebook() {
   await pageRef.send("Input.dispatchMouseEvent", { type: "mousePressed", x: pt[0], y: pt[1], button: "left", clickCount: 1 });
   await pageRef.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: pt[0], y: pt[1], button: "left", clickCount: 1 });
   await sleep(1600);
-  const rowsVisible = await pageRef.evaluate('Boolean(document.querySelector(".side-panel--left.on .ln-row"))');
+  const rowsVisible = await pageRef.evaluate('Boolean(document.querySelector(".side-panel--left.on .ln-row, .side-panel--left.on .mb-row"))');
   if (!rowsVisible) {
     const btn = await pageRef.evaluate('(function () { var TREE = String.fromCharCode(0x6587, 0x6863, 0x6811); var els = [].slice.call(document.querySelectorAll(".mobile-bottom-bar__item")).filter(function (e) { var a = (e.getAttribute("aria-label") || "") + e.title; return a.indexOf(TREE) >= 0 && e.getBoundingClientRect().width > 0; }); var e = els[0]; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
     if (btn) { await pageRef.click(btn[0], btn[1]); await sleep(1100); }
@@ -109,10 +109,10 @@ async function openNotebook() {
 }
 async function openDoc(n) { await openNotebook(); await tapExpr(nthRow(n), "doc row #" + n, 2600); }
 async function openTreeMenu(n) {
-  const expr = '(function () { var rows = [].slice.call(document.querySelectorAll(".side-panel--left .ln-row, .mobile-workspace .ln-row")).filter(function (e) { return e.getBoundingClientRect().width > 0; }); var row = rows[' + n + ']; if (!row) return null; var btn = row.querySelector(".nb-tree-action") || row.querySelector(".ln-row__action"); if (!btn) return null; var r = btn.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
+  const expr = '(function () { var rows = [].slice.call(document.querySelectorAll(".side-panel--left .ln-row, .side-panel--left .mb-row, .mobile-workspace .ln-row, .mobile-workspace .mb-row")).filter(function (e) { return e.getBoundingClientRect().width > 0; }); var row = rows[' + n + ']; if (!row) return null; var btn = row.querySelector(".nb-tree-action") || row.querySelector(".ln-row__action") || row.querySelector(".mb-row__action"); if (!btn) return null; var r = btn.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
   await tapExpr(expr, "tree action #" + n, 1100);
 }
-async function sheetItem(t) { await tapExpr(centerByText('.mobile-menu__item, .mobile-menu [role=menuitem], .mobile-sheet .ln-row, .mobile-sheet button', t, 0), "menu item: " + t, 1500); }
+async function sheetItem(t) { await tapExpr(centerByText('.mb-menusheet__item, .mobile-menu__item, .mobile-menu [role=menuitem], .mb-sheet .mb-row, .mobile-sheet .ln-row, .mb-sheet button, .mobile-sheet button', t, 0), "menu item: " + t, 1500); }
 async function openSettings() {
   await goHome();
   await tapExpr(centerByText(".toolbar__button", "设置", 0), "设置按钮", 1300);
@@ -120,7 +120,7 @@ async function openSettings() {
 async function settingsPage(label) {
   const back = await pageRef.evaluate('Boolean(document.querySelector(".mobile-settings-close"))');
   if (back) { await tapExpr(center(".mobile-settings-close"), "settings back", 900); }
-  await tapExpr(centerByText('.mobile-settings-list button, .mobile-settings-list .ln-row, .mobile-settings-row', label, 0), "settings row: " + label, 1300);
+  await tapExpr(centerByText('.mobile-settings-list button, .mobile-settings-list .ln-row, .mobile-settings-list .mb-row, .mobile-settings-row', label, 0), "settings row: " + label, 1300);
 }
 
 export default async function run(ctx) {

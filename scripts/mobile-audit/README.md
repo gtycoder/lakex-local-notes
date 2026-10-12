@@ -45,6 +45,17 @@ curl -s http://127.0.0.1:9335/json/list         # 校验 type==page
 - **模拟器分辨率**：重烤前把 wm size/density 从 override（540×1200 @210）**reset 回物理值**
   （1080×2400 @420）⇒ CSS viewport 412×842，与本文档「实测设备事实」一致，避免基线绑在非常规档位。
 
+## ⚠️ 261012 P2 实测：首页态的「冷/暖」取样差异（重烤必须从暖态取）
+
+- 现象：同一个构建连跑门禁，**首次运行**（恰好跟在上一轮设备走查之后）home-library 取到 **1784** 元素，
+  之后每次都是 **1755**；home-library-list 偶发 1691/1755。差值 29 ≈ 三个文档卡。
+- 判定：**装置取样时机问题**，不是产品差异 —— 首页「最近文档」在启动后会随一次异步刷新重排。
+- 处置：① settle() 从「3 次稳定 × 200ms」收紧到「6 次稳定 × 300ms」且要求无瞬时提示条；
+  ② **基线必须从暖态取**：先跑一次拿到 .css-audit/snap/warm1.json，再
+  node scripts/mobile-audit/check-mobile-snap.mjs --from .css-audit/snap/warm1.json --write-baseline。
+  直接用 --write-baseline（= 第一轮取样）会把 1784 烤进基线 ⇒ 之后每次都红。
+- 待办：把「最近文档」的异步重排时机钉死（或在该态显式等待列表条目数稳定），从根上去掉这个坑。
+
 ## 待办（下一步）
 1. `mobile-states.mjs`：状态列表（首页·小记 / 首页·知识库书架 / 知识库列表 / 打开文档 / 编辑器 Dock / 小记编辑 / 设置抽屉），每态 DOM 导航 + 等静默。
 2. `mobile-snap.mjs`：复用桌面 `stylesnap` 的 SNAP（body * × ~90 计算属性 + 几何 + 伪元素，DJB2 哈希）。
