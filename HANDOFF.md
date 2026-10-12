@@ -34,7 +34,11 @@
 - **装置修复（本轮真因，已入 README）**：① stylesnap 的「内核 u<hex> id 不入 key」阈值 6 → 参数化（移动端 4 位，
   否则 home-quicknotes 每次换 key 前缀）；② 首页态**冷/暖取样差 29 元素**（1784/1755）⇒ settle 收紧 + **基线必须
   `--from` 暖态快照再写**；③ 走查选择器同时匹配 ln-*/mb-*（改名后 7 屏 ERR）。
-- **未做（下一轮继续）**：P3 浮层接线（mb-sheet/actionsheet/toast/menusheet 替换 mobile-sheet/dialog/toast/menu）·
+- **P3 浮层原语（已交付，commit dcad2b2）**：`src/mobile/floating.css` 接线（`mb-sheet` / `mb-actionsheet` / `mb-toast` /
+  `mb-menusheet` + 两种遮罩进场）；9 处组件迁名（6 个 Sheet + 菜单 Sheet + ConfirmDialog 改 ActionSheet + Toasts）；
+  **不建 mb-dialog**。验收：mobilesnap **6 态 0 差异** · 设备走查 **22/22 ok** · tsc/门禁全绿。
+  旧浮层类在 mobile.css / mobile-kit.css 已无 JSX 施加 ⇒ 留 P7 交 audit-dead-css 一次性清。
+- **未做（下一轮继续）**：
   P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
   文档外壳/dock）· P6 六组件变体化 · P7 收口（MOBILE-DESIGN.md 定稿 + 指标转门禁 + 清反向耦合 18 行）。
 - **已知遗留**：`mobile-kit.css` 仍是「桌面 kit 之上的覆盖层」（SettingsDrawer 还在用 ln-*），P4/P5 收尾才删除。
