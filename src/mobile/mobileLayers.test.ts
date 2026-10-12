@@ -42,7 +42,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/tokens.css": { decls: 167, dupGroups: 0 }, // P2：+11 = 移动端几何槽（触达/内距/圆角）
   "mobile/theme/light.css": { decls: 83, dupGroups: 0 },
   "mobile/theme/dark.css": { decls: 134, dupGroups: 0 }, // +41 = 编辑器深色桥整块自 editor-dark.css 迁入（值未改）
-  "mobile/kit.css": { decls: 409, dupGroups: 0 }, // P2 248 → P4 +113（mb-set-* / mb-switch）→ P5 +48（收编勾选原语）
+  "mobile/kit.css": { decls: 415, dupGroups: 0 }, // P2 248 → P4 +113（mb-set-* / mb-switch）→ P5 +48（勾选）→ P6c +6（内核宿主 mb-kernel-host）
   "mobile/floating.css": { decls: 256, dupGroups: 0 }, // P3：浮层原语（sheet/actionsheet/toast/menusheet + 两种遮罩进场）
   "mobile/features.css": { decls: 142, dupGroups: 0 }, // P6：图片 Lightbox（57→触屏版）+ 附件预览（82→触屏版）
   "mobile/quick-notes.css": { decls: 102, dupGroups: 0 }, // P6b：自桌面 quick-notes.css 抽取的移动端子集（22 条规则）

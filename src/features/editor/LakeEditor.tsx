@@ -21,10 +21,12 @@ interface LakeEditorProps {
   tocEnabled: boolean;
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
+  /** 宿主元素的额外类名：两端各自的外观由**各端自己的样式**定义（移动端传自有前缀，见 MOBILE-TECH-STACK §一）。 */
+  hostClassName?: string;
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
 
-export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, onEditorReady }: LakeEditorProps) {
+export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, onEditorReady, hostClassName }: LakeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const latestDocumentRef = useRef("");
@@ -193,7 +195,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   };
   return (
     <>
-      <div className={`lake-editor lake-${mode}`} ref={hostRef} />
+      <div className={"lake-editor lake-" + mode + (hostClassName ? " " + hostClassName : "")} ref={hostRef} />
       {cardMenu && (
         <CardContextMenu
           x={cardMenu.x}

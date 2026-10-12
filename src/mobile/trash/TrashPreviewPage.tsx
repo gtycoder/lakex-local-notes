@@ -79,6 +79,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
             noteId={noteId}
             content={content}
             mode="viewer"
+            hostClassName="mb-kernel-host"
             tocEnabled={false}
             onChange={() => undefined}
             prefs={{ fontSize: loadSettings().fontSize, showToolbar: false, disableVirtualRendering: true }}

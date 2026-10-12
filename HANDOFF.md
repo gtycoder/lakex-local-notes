@@ -62,6 +62,10 @@
   说明抽取逐元素忠实）· 设备走查 **22/22 ok**（含 quicknote-editor）。
   遗留桥接（1 条，写在文件头）：共享组件 `QuickNotePreview` 仍发桌面工具类 `.ln-ellipsis`，
   移动端给了一条 `body.lake-mobile` 作用域的等价规则；组件改发 `.mb-ellipsis` 后即可删。
+- **P6c（已交付）**：`LakeEditor` 增加可选 `hostClassName`（**宿主外观由各端自己的样式定义**，不在共享层写平台分支），
+  移动端统一传 `mb-kernel-host`（`src/mobile/kit.css` 给几何）。⇒ **P6 六组件变体化完成**：
+  settingsPrimitives（移动端自建）/ AttachmentPreview / ImageLightbox / QuickNoteEditor / QuickNotePreview / LakeEditor 宿主类。
+  门禁：tsc ✓ · vitest 231 文件 / 1816 用例 ✓ · `npm run check:mobileui` ✓
 - **未做（下一轮继续）**：
   P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
   文档外壳/dock）· P6 六组件变体化 · P7 收口（MOBILE-DESIGN.md 定稿 + 指标转门禁 + 清反向耦合 18 行）。

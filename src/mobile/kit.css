@@ -233,3 +233,9 @@
 .mobile-app input[type="radio"]:not(.bt-keep-native):disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .mobile-app .lake-editor-mount input[type="checkbox"],
 .mobile-app .ne-engine input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; }
+
+/* ── 内核宿主（P6c）────────────────────────────────────────────────────────
+ * 共享组件 LakeEditor 发出的宿主元素由**各端自己的样式**接管（hostClassName 由调用方给；
+ * 移动端统一传 mb-kernel-host）。这里只给移动端需要的几何：铺满容器、不裁内容。 */
+.mb-kernel-host { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.mb-kernel-host > .ne-engine, .mb-kernel-host > .lake-engine { min-height: 0; }
