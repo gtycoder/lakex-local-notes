@@ -1561,3 +1561,81 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 - **移动端宽度下的真问题（实测）**：`.lakex-drawnix-core .draw-toolbar` 同时吃到 `@media (width<=720px)` 的 `top:auto; bottom:14px`（本意底部横条）与 `.drawnix--mobile.drawnix .draw-toolbar{top:20px}` ⇒ `top:20 + bottom:14` 把容器**上下拉满**（实测 351×524、`pointer-events:auto`、`z-index:20`）。`elementFromPoint` 在卡片内任意点都命中 `DIV.island draw-toolbar` ⇒ 画布 `.board-host-svg` 收不到指针事件。桌面是左侧窄条（36×288）所以不受影响。**把容器临时压到 44px 高 + `pointer-events:none`（工具行自身 `auto`）后，命中即回到 `svg`** ⇒ 覆盖层是直接原因。
 - **触摸第二道坎**：画布/板 `touch-action:auto`（无 `none`）⇒ 手指拖拽被判成滚动，事件序列实测 `pointerdown → pointermove → pointercancel`；且壳层「左滑开大纲 / 右滑开目录」会抢横滑（实测触摸拖拽把左抽屉滑开）。
 - **结论/口径**：移动端要放开画板族（画板 / 流程图 / UML / 思维导图 / 文本绘图）的编辑，需两处定点修改（内核 CSS 覆盖 + 壳层手势豁免），单独立项；在此之前这 5 项在移动端 dock 只作**置灰占位**。**不要**据此认为「内核不支持编辑」—— 它支持，只是移动端布局/手势没接好。
+
+### 5.32 移动端「文本增强」五项命令实测：能干活，但**内核对选区的认账有时序**（261012 设备实测）
+
+> 装置：AVD `lake_mobile` + App `com.lakenotes.mobile` + CDP（`scripts/emu-cdp.sh 9335`）；走的是 dock 同一条路径
+> `window.__mobileEditor.renderer.execCommand`，并用 `queryCommandValue/queryCommandEnabled` 回读。
+
+**① 五项命令都有效**（返回 true 且正文确实改变）：
+
+| 能力 | 命令 | 落盘形态 |
+|---|---|---|
+| 字号 | `fontsize 12/22/32/48` | `<span class="lake-fontsize-N">` |
+| 对齐 | `alignment 'center'` | 块上 `style="text-align: center"` |
+| 字色 | `color '#ff0000'` | `style="color: #ff0000"` |
+| 背景色 | `bgColor '#ffff00'` | `style="background-color: #ffff00"` |
+| 链接 | `link url,true,true` | **行内** `<a href target="_blank" data-lake-id>`（不是卡片） |
+
+**② `lake-fontsize-N` 不是 px，禁止解析它。** 实测 12→`-9`、22→`-16`、32→`-24`、48→`-36`（≈ **px × 0.75**）；
+而 `queryCommandValue('fontsize', false)` **回读的就是原始 px**（12/22/32/48 精确一致）⇒ 面板高亮/回显只能读它。
+⚠️ 官方 `08 - 命令列表` 写 fontsize 取值 **10 档**（缺 48），**bundle 是 12 档** `[12,13,14,15,16,19,22,24,29,32,40,48]`
+（`lakex.js` 与 `dist/index.cjs.js` 一致）⇒ 以 bundle 为准，官方文档滞后。
+
+**③ 内核只认「真实用户选区」或内核自己建立的选区。** 纯 DOM Range（`selectNodeContents` + `addRange`）在**内核模型里不生效**：
+同一批命令在这种选线下**全部返回 false**；换成真实指针选区 / `selectAllDoc` 后全部生效。
+⇒ dock 的 `snapshotSelection/restoreSelection`（存的就是真实选区）方向正确。
+
+**④ ⚠️ 从我们自己的输入框交还选区后，内核要等一拍才认（最容易踩的一条）。** 链接编辑行里点「确定」时，
+「还原选区 → `execCommand('focus')` → **同一个 tick 内**执行 `link`」实测返回 **false、链接不落地**；
+同样的还原与 focus、**等一拍（实测 150ms）再执行**就成功（返回卡 id 并写出 `<a href>`）。
+⇒ 移动端链接确认必须**失败重试一次**（`EditorDock.confirmLink`，间隔 160ms）；桌面浮栏同 tick 执行正常，**不要**改成两边都延迟。
+
+**⑤ `queryCommandEnabled` 在上述时序下会误报 false。** 同一时刻 `queryCommandEnabled('link')`/`('insertLink')` 都是 false，
+而紧接着执行 `link` 完全成功 ⇒ **不能拿它当"能不能用"的门**（桌面旧实现正是用它把门，照搬到移动端会把可用功能整个挡掉）。
+共享实现 `selectionToolbar/linkEditor.ts` 因此改为「按选区形态决定 `link`/`insertLink` 先后 + 用**命令自身返回值**判成败」；
+配套：两端执行器都必须**回传内核返回值**（`useSelectionToolbar.run` / `EditorDock` 的 `useEditorExec`），
+吞掉返回值就会退化成"两条都算成功" = 静默 no-op。
+命令返回值的语义（实测）：`link`/`hr` 回**卡片 id 字符串**、简单命令回 `true`、失败回 `false` ⇒ 判据用 `=== false` 表示"内核明确拒绝"。
+
+**⑥ `unlink` 在"整篇跨块全选"这种选区下返回 false。** 正常选区下的取消链接未逐项复核（登记为待验收）。
+
+**⑦ 生成字色/背景色快捷行用的是 `src/core/colorPalette.ts` 的实色阶**（新增 `QUICK_TEXT_COLORS` 单一来源）。
+⚠️ **后续已改**：移动端色板改为**照抄语雀排布**（见 §5.33），不再使用 `LakeColorBoard`；颜色仍全部取自内核色阶。
+
+### 5.33 语雀 App 的色板实测 → 内核色阶就近映射（261012 设备采样；移动端色板照此复刻）
+
+> 装置：用户提供 `yuque-android-1.2.2.710-release.apk`（`com.yuque.mobile.android.app`）装在 AVD `lake_mobile`，
+> 编辑态格式面板展开后用 `adb exec-out screencap -p` 采样（540px 宽 / density 210 ⇒ **1.3125 px per dp**）。
+
+**排布 = 2 行 × 7 格**（上面还有一排「字色快捷 A」＝ 默认 + 灰/红/琥珀/绿/蓝 + 背景色方块）：
+
+| 排 | 语雀实测（7 格，从左到右） |
+|---|---|
+| 浅色系 | **无填充** `#FFFFFF` · 粉 `#FBE4E7` · 杏 `#FDE6D3` · 黄 `#F9EFCD` · 绿 `#E8F7CF` · 蓝 `#D9EAFC` · 紫 `#E6DCF9` |
+| 实色系 | 灰 `#D8DAD9` · 红 `#DF2A3F` · 橙 `#ED740C` · 琥珀 `#ECAA04` · 绿 `#74B602` · 蓝 `#117CEE` · 紫 `#601BDE` |
+| 字色快捷 A | 默认 `#262626` · 灰 `#8A8F8D` · 红 `#DF2A3F` · 琥珀 `#ECAA04` · 绿 `#74B602` · 蓝 `#117CEE` · 背景色方块 `#BFBFBF` |
+
+**几何（实测）**：色块**圆形**，直径 **49px≈37dp**；列距 **68px≈52dp**；行距 **63px≈48dp**（排间净空 ~11dp）。
+
+**★ 关键发现：语雀用的就是同一套 lakex 色板** —— 实测默认字色 `#262626` 与背景色方块 `#BFBFBF`
+**逐字节等于**内核色阶 `COLOR_BOARD_GROUPS[0]` 里的值（ΔE 0.0 / 0.9）。其余色按 Lab ΔE 就近取内核色：
+
+| 语雀 | 内核（取用） | ΔE | | 语雀 | 内核（取用） | ΔE |
+|---|---|---|---|---|---|---|
+| #FBE4E7 | #FFE8E6 | 2.9 | | #D8DAD9 | #D9D9D9 | 0.9 |
+| #FDE6D3 | #FFECE0 | 4.4 | | #DF2A3F | #FF4D4F | 10.8 |
+| #F9EFCD | #FFEFD1 | 3.0 | | #ED740C | #D46B08 | 9.0 |
+| #E8F7CF | #E4F7D2 | 2.1 | | #ECAA04 | #D4B106 | 14.3 |
+| #D9EAFC | #DEE8FC | 2.6 | | #74B602 | #73D13D | 13.8 |
+| #E6DCF9 | #EFE1FA | 3.2 | | #117CEE | #096DD9 | 6.3 |
+| | | | | #601BDE | #722ED1 | 14.9 |
+
+**口径（用户 261012 定）**：**色板照抄语雀的排布与格数，但颜色一律取内核色阶、不自己造色** ⇒ 落在
+`src/core/colorPalette.ts` 的 `MOBILE_BOARD_LIGHT` / `MOBILE_BOARD_SOLID` / `QUICK_TEXT_COLORS`（颜色字面量只在该文件）。
+移动端色板**不再使用** `LakeColorBoard`（内核色卡是 10 列 × 7 组 ≈ 70 色，与语雀 2×7 的观感与触达尺寸都差很远）；
+复刻件在 `src/mobile/editor/EditorDock.tsx` + `editor-dock.css`，**应用语义仍复用** `colorApplyCommand` + `colorMemory`
+（清除/无填充、最近使用色、持久值与视觉值的区分都走同一套）。副作用：面板内容高度 **875px → 489px**。
+
+**两处 ΔE 偏大、可人工换档**（留档，未改）：`#ED740C` 取 `#D46B08`（ΔE 9.0，视觉偏棕；次优 `#FA8C16` ΔE 10.2 更接近语雀的亮橙）、
+`#DF2A3F` 取 `#FF4D4F`（ΔE 10.8，视觉偏亮；`#F5222D` ΔE 17.0 但更接近语雀的绛红）。

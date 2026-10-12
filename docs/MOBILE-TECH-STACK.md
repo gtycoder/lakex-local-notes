@@ -14,8 +14,17 @@
 | **移动端外壳 UI**（`src/mobile/**`） | `MobileApp` / `HomePage` / `NotebookWorkspace` / `SettingsDrawer` / 抽屉与手势 | **整份各写**：移动与桌面外形差异是实质的（只读闸门 / 焦点闸门 / 资源 URL 带 token / 无工具条），强行抽公共 runtime 只会变成参数化分支 | 不把桌面外壳抽给移动端 |
 | **共享编辑器宿主**（`src/features/editor/**`） | `LakeEditor` / `lakeRuntime` / 图片预览 / 附件路由 | **参数化共享 + 零平台分支**：差异经 `LakeEditorPrefs` 与注入函数传入（实测该层 `isMobile/Capacitor` 分支 = 0） | 不在共享层写 `if (isMobile)` |
 | **共享核心**（`src/core/**`） | 同步引擎、决策纯函数、命名/哈希/尺寸校验 | **只上收"策略/决策"，不上收实现**；由跨端对拍测试保证等价 | 不合并两端的 schema / repository（AGENTS §3#17 已否决） |
+| **UI 与样式**（移动端 `src/mobile/**` 的组件 + CSS ↔ 桌面 `src/styles/**` 与 `kit.css`） | 面板、工具栏、色板、浮层的**外形与几何** | **两端各自拥有，不共享**（用户 261012 定稿） | 不把桌面设计系统的样式/组件/几何套给移动端，也不把移动端几何反向塞回桌面 |
 
 **规则一句话：策略与判据上收进 `src/core`（用跨端对拍证明等价）；实现与界面留在各端。**
+**第二句（261012 用户定稿）：`AGENTS §3#14` 那套设计系统（`--lake-*` 令牌 / `kit.css` 的 `ln-*` 原语 / Overlay 浮层原语 / `!important` 上限 / 层序 `@layer`）
+是**桌面端的规则**，不自动约束移动端**；移动端要有自己的适配与 UI 规则（当前方向：照语雀 App）。
+**两端只共享"必要逻辑"** —— 命令字典（`editorCommands`）、色板**数据**（`core/colorPalette.ts`）、
+应用语义（`colorApplyCommand`/`colorMemory`）、链接判定（`linkEditor`）、`core` 策略；**不共享样式与组件**。
+
+**本条的首个实例（261012）**：移动端色板不再用桌面的 `LakeColorBoard` 适配器，改为 `EditorDock` 自画**语雀式 2×7 圆点格**
+（几何实测自语雀：直径 37dp / 列距 52dp / 行距 48dp），**只共享** `core/colorPalette.ts` 的颜色数据与 `colorApplyCommand` 的清除/无填充语义。
+取证见 `docs/LAKEX-CONTRACT.md` §5.33。**后续凡遇"桌面已有同类件"的移动端 UI，一律按本条办**（不共享、不自造颜色/语义）。
 
 护栏：`scripts/check-core-boundaries.mjs`（`check:core`）卡住 `src/core/**` 零平台依赖；
 `src/mobile/mobileLazyChunks.test.ts` 卡住桌面编辑器不得进移动包。
@@ -109,6 +118,7 @@
 
 | 项 | 现状 | 影响 |
 | --- | --- | --- |
+| **移动端样式依附桌面设计系统** | **261012 review 已立项**：移动端入口引了 **10 个桌面样式表**，组件里用 ln-* 原语 **53** 处 / config-* **61** 处，自有样式仅 4 文件 1359 行 ⇒ 实质是"桌面样式之上的一层覆盖" | 桌面改令牌/原语会**连带改到移动端**，移动端无法按触屏独立演进。**审计、判据与重构清单见 §九**；安卓端样式重构按 §9.4 顺序推进 |
 | ~~内核资源本地化插件两份~~ | **已收口（261010）**：单一来源 `scripts/lakexLocalize.ts`，两端传入各自 CSP；移动端同时补上 CSS `@import` 兜底 | — |
 | ~~CSP `script-src` 含 `unsafe-inline` / `unsafe-eval`~~ | **已收紧（261010）**：内联 KITCHEN_URL 只按 **sha256 hash** 放行（hash 与桌面 prod 相同）；两个 unsafe 均已去掉。设备验证零违规，护栏 `mobileCspSingleSource.test.ts` 重算 hash 比对 | — |
 | ~~SecretStore 非硬件级~~ | **已换 Android Keystore（261010 设备验证通过）**：`SecureStorePlugin.kt` + 迁移层；localStorage 降为 Web/vitest 后端 | — |
@@ -175,6 +185,58 @@
 **待确认（1 项，不要当结论用）**：某篇内容以 `<h1>` 开头、缺 `-body` 段落的文档，出现过「标题栏是该篇、正文却是空折叠块」；
 同内容补 `-body` 段后移动端正常，桌面渲染该篇一直正常，设备 DB 内容完好（**无数据损坏**）。
 自动化未稳定隔离（App 恢复 8 个 keep-alive 标签页会干扰判据）⇒ 需人工复核一次。
+## 九、移动端 UI / 样式独立性：审计、判据与重构清单（261012 review）
+
+> 用户 261012 定稿口径：**移动端要有自己的适配与 UI 规则，仅共享"必要逻辑"；不能共享样式和 UI。**
+> 本节是这条口径的**取证（实测计数）+ 判据 + 不变量**；**执行方案（P0–P7 任务书 + 皮肤取值表 + IA 冻结清单）见 `docs/MOBILE-UI-REDESIGN.md`**。
+>
+> ⚠️ **范围别读偏（261012 用户澄清）**：这里的"分叉"指**皮肤层与页内交互形态**，**信息架构 / 页面层级冻结**（小记·知识库 第一层 → 笔记 第二层这种结构不动）；**弹层从居中对话框改底部 Sheet 这类页内交互属于允许范围**。三层划分与 IA 清单见 `MOBILE-UI-REDESIGN.md` §1 / §2。
+
+### 9.1 先把口径拆成三层，否则规则不可执行
+
+| 层 | 例 | 判据 |
+| --- | --- | --- |
+| **① 内核 UI** | lakex 自己的类与控件：`.ne-*`、`FrameworkUiLib`、`.lake-colorboard`、内核卡片/浮层 | **必须共享**（两端跑同一个内核；它不是我们的设计系统） |
+| **② 我们的逻辑 / 数据** | `src/core/**`、`src/lib/**`、`features/editor/editorCommands`（命令字典）、`core/colorPalette`（颜色数据）、`colorApplyCommand`/`colorMemory`/`linkEditor`（应用语义） | **应当共享** —— "仅共享必要逻辑"指的就是这一层 |
+| **③ 我们的 UI 与样式** | `src/styles/**`（`--lake-*` 令牌、`kit.css` 的 `ln-*`、`compat.css`、`dialog.css`、`components.css`…）、`src/components/**` 的 UI 件 | **不得共享**，各端自有 |
+
+### 9.2 审计结论（261012 实测计数）：现状是 ③ 被大面积共享
+
+| 证据 | 实测 |
+| --- | --- |
+| `src/mobile/main.tsx` 直接 import 的**桌面样式表** | **10 个**：`themes/{base,light,dark,warm}` · `tokens.css` · `compat.css` · `kit.css` · `components.css` · `dialog.css` · `app/quick-notes.css`，另加 `features/{editor/image-lightbox,attachment/attachment-preview}.css` |
+| 移动端 tsx 里使用的**桌面原语类名** | `ln-*` **56 处 / 10 文件**、`b3-*`·`fn__*` **8 处 / 3 文件**（桌面会话独立计数）；本会话按前缀扫描得 `ln-*` 53 / `config-*` 61 ⇒ 两口径都远大于 0 |
+| **反向耦合**（桌面为移动端开的分支） | `kit.css` **18 行** `:is(.app-shell, .mobile-app)` + `tokens.css` 1 条注释 = **19 行**（桌面会话发现）⇒ 解耦是**双向**的 |
+| 移动端**自有**样式 | 只有 **4 个文件 / 1359 行**：`mobile.css` 935 · `editor/editor-dock.css` 267 · `editor-dark.css` 85 · `mobile-kit.css` 72 |
+| 桌面样式体量（参照） | 53 个文件 / **8770 行** |
+| `mobile-kit.css` 的定位 | 头注释自述"组件外观的单一来源仍是 `styles/kit.css`，这里只做移动端**必要覆盖**" ⇒ 移动端被建成**桌面样式之上的一层覆盖**（AGENTS §3#14 禁止的"层压层"，在双端之间放大了一版） |
+
+**移动端引用的桌面 UI 件（③ 类，重构要拆）**：
+`components/settingsPrimitives`（设置页 Group/Item/Seg/Block/NumField/Switch）·
+`features/quickNotes/{QuickNoteEditor,QuickNotePreview}`（含 `quickNoteToolbarWidgets` 的表情选择器）·
+`features/bitable/FileKindIcon`（文件类型图标）· `components/treeDrag`（拖拽逻辑与 DOM 混合）·
+`features/editor/selectionToolbar/kernelUiAtoms`（`KLinkEditor`：渲染的是**内核** UI，属 ① 与 ③ 的边界件）。
+
+**移动端引用的逻辑（② 类，保留）**：
+`src/core/**`（14 个模块）· `lib/{types,settings,nativeErrors,assetPort,native,localStorageSafe,lakeEmojis,lakeEmojiGroups}` ·
+`features/editor/{lakeRuntime,LakeEditor,editorCommands,resourceUpload}` · `selectionToolbar/{selectionToolbarModel,colorMemory,linkEditor}` ·
+`features/attachment/attachmentPreviewController` · `features/usheet/*`。
+
+### 9.3 判据（重构后要满足的不变量）
+
+1. `src/mobile/**` **不得 import `src/styles/**`**（① 内核样式与字体资源除外）。
+2. `src/mobile/**` **不得 import `src/components/**` 的 UI 件**；`ln-*` / `config-*` / `b3-*` / `fn__*` **不得出现在移动端 JSX**。
+3. 跨端 import 只允许 **② 类白名单**（`src/core/**`、`src/lib/**`、内核宿主与命令字典、颜色数据与颜色/链接语义），**逐条登记**，新增走评审。
+4. 字体文件（MiSans / JetBrains Mono）属**资源**不是设计系统 ⇒ 可共享，但移动端的字号/行高/密度必须由移动端令牌决定。
+
+### 9.4 落地顺序
+
+**见 `docs/MOBILE-UI-REDESIGN.md` §6（P0 护栏 → P1 令牌/皮肤 → P2 原语 → P3 浮层 → P4 样板屏 → P5 逐屏迁移 → P6 组件变体化 → P7 收口）。**
+
+两条与本节的接口：
+- **类名前缀 = `mb-*`**（实测 `.mb-` 占用 0；`md-*` 与既有 `.md-preview` 撞族；`mobile-*` 已被外壳 278 处占用，只把原语放 `mb-*`）。
+- **令牌名沿用 `--lake-*`（共享词表），取值由移动端 `src/mobile/theme/**` 定义** —— 护栏卡的是「移动端不得 import 桌面 `themes/**`」，而不是「不许出现 `--lake-*`」。
+- 本节的 ③ 类"不得共享"**不追溯**已完成的合理共享（如内核样式），只约束后续新增与本次重构。
 
 ## 验证
 

@@ -69,6 +69,7 @@ origin  git@gitee.com:gtycoder/local-lake.git
 | `/Users/admin/file/local-lake/siyuan-master/`        | 思源笔记 v3.8.0（**AGPL-3.0**，移植样式需留 NOTICE）：S3 同步/dejavu、资源管理、UI 视觉基准 |
 | `/Users/admin/file/local-lake/lake-main/`            | lakejs 开源社区版内核（MIT）：**当"机制字典"读源码**，不是我们实际运行的 lakex 内核             |
 | `/Users/admin/file/local-lake/lake-editor-main/`     | 第三方 VSCode yuque-editor 插件（参考价值低）                                 |
+| `/Users/admin/file/local-lake/yuque-re/`            | **语雀逆向资料仓（证据仓，不是源码）**：安卓 RN/资源还原、web 文档编辑器·小记·多维表的运行时实测。**先读该目录的 `USAGE.md`**（查询器 `tools/qy.py`）；结论只作旁证，仲裁仍是 `AGENTS.md` §2 的三级检索 + 运行时实测 |
 
 ## 六、文档索引
 
