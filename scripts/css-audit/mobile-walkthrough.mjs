@@ -15,7 +15,11 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const PROBE = '(function () {' +
   ' var out = { escape: [], clipped: [], contrast: [], fixedBars: [], smallTap: [] };' +
-  ' var rgb = function (c) { var m = /rgba?\(([^)]+)\)/.exec(c || ""); if (!m) return null; var p = m[1].split(",").map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };' +
+  // ⚠️ 反斜杠必须写**双份**：这一段是**单引号字符串**，写 \( 会被字符串字面量吃掉，
+  // 运行期正则退化成 /rgba?(([^)]+))/ ⇒ m[1] 捕获 "(31, 35, 41"、parseFloat("(31")=NaN
+  // ⇒ 所有 ratio 都是 NaN、NaN < 4.5 恒 false ⇒ **对比度探针自 261009 起就是死的**（静默假阴性）。
+  // 与桌面版 scripts/css-audit/walkthrough.mjs 的修法逐字一致（AGENTS §7.25）。
+  ' var rgb = function (c) { var m = /rgba?\\(([^)]+)\\)/.exec(c || ""); if (!m) return null; var p = m[1].split(",").map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };' +
   ' var lum = function (c) { var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };' +
   ' var ratio = function (a, b) { var l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };' +
   ' var effBg = function (el) { var n = el; while (n) { var c = rgb(getComputedStyle(n).backgroundColor); if (c && c.a > 0.9) return c; n = n.parentElement; } return { r: 255, g: 255, b: 255, a: 1 }; };' +

@@ -31,6 +31,8 @@ import { AiAssistantDialog, AI_DIALOG_GAP } from "../../ai/AiAssistantDialog";
 import { captureModelRange, modelRangeForNodeId, type CapturedModelRange } from "./aiModelSelection";
 import { applyAiInsertAfter, applyAiReplace } from "./aiResultOps";
 import { LakeColorBoard } from "./LakeColorBoard";
+// 链接的捕获/还原/命令判定 = 桌面浮栏与移动端 dock 的**唯一来源**（261012 抽出；见 linkEditor.ts 头注释）
+import { applyTextLink as applyLinkCommand, captureLinkTarget, isValidLink, type LinkEditorTarget } from "./linkEditor";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
 } from "./colorMemory";
@@ -64,11 +66,6 @@ function sameRects(a: SelectionRect[] | null, b: SelectionRect[] | null): boolea
  */
 function chromeToolbarOf(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>(".ne-ui-toolbar");
-}
-
-/** 链接合法性（首版，对齐固定栏「请输入正确的链接」）：有 scheme（http/https/mailto/tel）、以 / 或 # 开头，或形如域名。 */
-function isValidLink(value: string): boolean {
-  return /^(https?:\/\/|mailto:|tel:|\/|#)/i.test(value) || /^[^\s]+\.[^\s]+/.test(value);
 }
 
 /**
@@ -223,9 +220,9 @@ export function SelectionToolbar({ editor, container }: {
   /** 链接编辑弹层：文本 / 链接地址（与内核 .ne-link-editor 的两个字段对应）。 */
   const [linkText, setLinkText] = useState("");
   const [linkSrc, setLinkSrc] = useState("");
-  /** 打开弹层时暂存的编辑器选区：输入框会抢走 DOM 选区，确认前要还回去（内核弹层 closeCallback 亦然）。 */
-  const linkRangeRef = useRef<Range | null>(null);
-  const linkSelRef = useRef("");
+  /** 打开弹层时暂存的编辑器选区：输入框会抢走 DOM 选区，确认前要还回去（内核弹层 closeCallback 亦然）。
+   *  形状与「捕获 → 还原 → 判定」全部来自共享实现 linkEditor.ts（两端同一套）。 */
+  const linkTargetRef = useRef<LinkEditorTarget>({ range: null, selected: "" });
   /** 每次打开浮层自增：同一个菜单名换触发项再开时也要重新定位。 */
   const [menuSeq, setMenuSeq] = useState(0);
   /** 二级菜单（目前只有「标题」，见 blockformat 菜单）。 */
@@ -391,11 +388,9 @@ export function SelectionToolbar({ editor, container }: {
   const openLinkEditor = useCallback((trigger?: HTMLElement | null) => {
     menuTriggerRef.current = resolveTriggerEl(trigger);
     setMenuSeq((n) => n + 1);
-    const sel = window.getSelection();
-    const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
-    linkRangeRef.current = range;
-    linkSelRef.current = range ? range.toString().trim() : "";
-    setLinkText(linkSelRef.current);
+    const target = captureLinkTarget();
+    linkTargetRef.current = target;
+    setLinkText(target.selected);
     setLinkSrc("");
     setMenu((current) => (current === "txtlink" ? null : "txtlink"));
   }, []);
@@ -407,18 +402,8 @@ export function SelectionToolbar({ editor, container }: {
   /** 文字链接：有选区走 link（包住选区），否则走 insertLink；文本被改过时走 insertLink。
    *  确认前先把选区/焦点还给编辑器 —— 弹层输入框获得焦点会让编辑器选区丢失，命令会静默无效。 */
   const applyTextLink = useCallback(() => {
-    const url = linkSrc.trim();
-    if (!url || !isValidLink(url)) return;
-    const selected = linkSelRef.current;
-    const text = linkText.trim();
-    try {
-      const sel = window.getSelection();
-      if (sel && linkRangeRef.current) { sel.removeAllRanges(); sel.addRange(linkRangeRef.current); }
-      editor.execCommand?.("focus");
-    } catch { /* 还原失败则按当前选区尽力执行 */ }
-    if (canCommand("link") && (!text || text === selected)) run("link", url, true, true);
-    else if (canCommand("insertLink")) run("insertLink", text || selected || "链接", url, true, true);
-    else if (canCommand("link")) run("link", url, true, true);
+    // 判定 + 选区还原 + 焦点交还全部在共享实现里（移动端 dock 调的是同一份）
+    applyLinkCommand({ editor, run, target: linkTargetRef.current, text: linkText, src: linkSrc });
     setMenu(null);
   }, [editor, linkSrc, linkText, run]);
 

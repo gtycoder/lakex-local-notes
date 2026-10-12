@@ -11,9 +11,17 @@
  * - `--mobile-dock-space` = 当前 --kb-offset（面板/键盘占位）+ 工具栏，正文底部留白始终跟着占位走。
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, Shapes, Workflow, Network, GitFork, FileCode2 } from "lucide-react";
+import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, Shapes, Workflow, Network, GitFork, FileCode2, AlignLeft, AlignCenter, AlignRight, Link2 } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
-import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
+import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
+import { QUICK_TEXT_COLORS, MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID, contrastTextColor, isHexColor } from "../../core/colorPalette";
+// 「Aa」面板的取值型命令（字号/对齐/字色/背景色）与链接，全部复用既有单一来源（本文不另造一套）
+// 注：移动端**色板**不再走内核色卡适配器 LakeColorBoard，而是照语雀排布自己画 2×7 圆点格
+//（用户 261012 定稿「色板照抄语雀、不用那么多颜色」）；颜色仍全部取自 core/colorPalette.ts 的内核色阶。
+import { normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant } from "../../features/editor/selectionToolbar/colorMemory";
+import { colorApplyCommand, toFontSize, unwrapValue } from "../../features/editor/selectionToolbar/selectionToolbarModel";
+import { applyTextLink, captureLinkTarget, isValidLink, type LinkEditorTarget } from "../../features/editor/selectionToolbar/linkEditor";
+import { KLinkEditor } from "../../features/editor/selectionToolbar/kernelUiAtoms";
 import { useKeyboard } from "../useKeyboard";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
 import { openEmojiPicker } from "../../features/quickNotes/quickNoteToolbarWidgets";
@@ -40,10 +48,23 @@ function blurActiveEditable(): void {
 
 /** 格式命令 → lucide 图标（正文面板用图标而非文字，对齐思源移动端） */
 const COMMAND_ICONS: Record<string, typeof Bold> = {
-  bold: Bold, italic: Italic, underline: Underline, code: Code2,
+  // 行内代码用 \`</>\`（Code），与「＋」面板的**代码块卡片**（SquareCode，方框内 code）一眼可辨（用户 261012）
+  bold: Bold, italic: Italic, underline: Underline, strikethrough: Strikethrough, code: Code,
   quote: Quote, unorderedList: List, orderedList: ListOrdered, taskList: ListTodo,
   hr: Minus, undo: Undo, redo: Redo,
 };
+
+/** 移动端「Aa」面板的字号档（用户 261012：**做成一行、只留常用、掐头去尾**）。
+ *  从内核 12 档 `FONT_SIZE_OPTIONS` 里掐掉最小的 12/13 与最大的 40/48 ⇒ 中间 8 档，一行放得下（实测每格 ≈48px）。
+ *  取值仍全部来自内核档位，不新增字号。要再少/再多只改这一处。 */
+const MOBILE_FONT_SIZES: readonly number[] = FONT_SIZE_OPTIONS.slice(2, -2);
+
+/** 对齐（内核 `alignment`：left/center/right；语雀移动端也只给这三档）。 */
+const ALIGN_ITEMS: ReadonlyArray<{ value: "left" | "center" | "right"; label: string; Icon: typeof Bold }> = [
+  { value: "left", label: "左对齐", Icon: AlignLeft },
+  { value: "center", label: "居中", Icon: AlignCenter },
+  { value: "right", label: "右对齐", Icon: AlignRight },
+];
 
 /** 需要监测实时状态（生效高亮）的命令 */
 const STATE_COMMANDS = ["bold", "italic", "underline", "code", "quote", "unorderedList", "orderedList", "taskList", "undo", "redo"] as const;
@@ -91,9 +112,25 @@ function isCommandActive(editor: LakeEditorInstance | null, name: string): boole
   return false;
 }
 
+/** 选区处的「取值型」命令状态（字号/对齐/字色/背景色）—— 面板高亮与色板回显的唯一来源。 */
+interface SelectionValues { fontSize: number | null; alignment: string; color: string; bgColor: string }
+const EMPTY_VALUES: SelectionValues = { fontSize: null, alignment: "", color: "", bgColor: "" };
+function sameValues(a: SelectionValues, b: SelectionValues): boolean {
+  return a.fontSize === b.fontSize && a.alignment === b.alignment && a.color === b.color && a.bgColor === b.bgColor;
+}
+/** 读内核查询值（解数组、异常归 undefined；调用方自行把 undefined/null 当"无值"，不误点亮）。 */
+function readCommandValue(editor: LakeEditorInstance, name: string, arg?: unknown): unknown {
+  try { return unwrapValue(editor.queryCommandValue?.(name, ...(arg === undefined ? [] : [arg]))); } catch { return undefined; }
+}
+function valueText(editor: LakeEditorInstance, name: string): string {
+  const v = readCommandValue(editor, name);
+  return v === null || v === undefined ? "" : String(v);
+}
+
 /** 光标/选区变化时刷新各命令生效状态（selectionchange + 命令执行后主动 refresh）。 */
 function useActiveCommandStates(editor: LakeEditorInstance | null) {
   const [states, setStates] = useState<Record<string, boolean>>({});
+  const [values, setValues] = useState<SelectionValues>(EMPTY_VALUES);
   const editorRef = useRef(editor);
   editorRef.current = editor;
   const refresh = useCallback(() => {
@@ -102,6 +139,15 @@ function useActiveCommandStates(editor: LakeEditorInstance | null) {
     const next: Record<string, boolean> = {};
     for (const name of STATE_COMMANDS) next[name] = isCommandActive(ed, name);
     setStates((prev) => (STATE_COMMANDS.some((k) => prev[k] !== next[k]) ? next : prev));
+    // 字号必须带第二参 false 才是「生效字号」（不带第二参时正文返回 null，与桌面固定栏同源）；
+    // ⚠️ 内核把字号序列化成 lake-fontsize-N（N = px × 0.75，不是 px）⇒ **不许解析 class**，只能读 queryCommandValue。
+    const nextValues: SelectionValues = {
+      fontSize: toFontSize(readCommandValue(ed, "fontsize", false)),
+      alignment: valueText(ed, "alignment"),
+      color: valueText(ed, "color"),
+      bgColor: valueText(ed, "bgColor"),
+    };
+    setValues((prev) => (sameValues(prev, nextValues) ? prev : nextValues));
   }, []);
   useEffect(() => {
     const onSel = () => refresh();
@@ -110,7 +156,7 @@ function useActiveCommandStates(editor: LakeEditorInstance | null) {
   }, [refresh]);
   // editor 就绪/切换时刷新一次（selectionchange 不会为首次光标触发）
   useEffect(() => { if (editor) refresh(); }, [editor, refresh]);
-  return { states, refresh };
+  return { states, values, refresh };
 }
 
 export interface EditorDockProps {
@@ -132,18 +178,31 @@ export interface EditorDockProps {
   onInsertCamera?: () => void;
 }
 
-/** 执行 Lake 命令（renderer 通道；editor 未就绪静默）。 */
+/** 执行 Lake 命令（renderer 通道；editor 未就绪静默）。
+ *  ⚠️ **必须回传内核返回值**：链接的「这条不行就换另一条」判定靠它（linkEditor.ts），
+ *  吞掉返回值会退化成"两条都算成功" = 静默 no-op。 */
 function useEditorExec(editor: LakeEditorInstance | null) {
   return (cmd: string, ...args: unknown[]) => {
     try {
       const renderer = lakeBridge(editor ?? undefined).renderer;
-      renderer?.execCommand?.(cmd as never, ...args);
-    } catch { /* 命令失败不阻断 */ }
+      return renderer?.execCommand?.(cmd as never, ...args);
+    } catch { return undefined; /* 命令失败不阻断 */ }
   };
 }
 
 export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
+  /**
+   * 「Aa」面板内的两个**内联展开**件（用户 261012 定：全套走语雀方式 —— 色板与链接编辑都在面板内展开，
+   * 不弹层、不做二级面板）：
+   *   - colorVariant：下方色板当前在编辑文字色还是背景色（由色卡行末位的方块切换）；
+   *   - linkOpen：链接编辑行是否展开（复用内核 .ne-link-editor 那套 UI 与共享判定 linkEditor.ts）。
+   */
+  const [colorVariant, setColorVariant] = useState<ColorVariant>("text");
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkText, setLinkText] = useState("");
+  const [linkSrc, setLinkSrc] = useState("");
+  const linkTargetRef = useRef<LinkEditorTarget>({ range: null, selected: "" });
 
   /** 面板打开期间的选区快照：命令执行前后都还原，才能连续加粗→倾斜→下划线 */
   const savedRangeRef = useRef<Range | null>(null);
@@ -173,12 +232,17 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
   execRef.current = exec;
-  const { states: activeStates, refresh: refreshActive } = useActiveCommandStates(editor);
+  const { states: activeStates, values: activeValues, refresh: refreshActive } = useActiveCommandStates(editor);
 
   // 退出编辑态时复位
   useEffect(() => {
     if (!editing) setPanelMode(null);
   }, [editing]);
+
+  // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
+  useEffect(() => {
+    if (!panelMode) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); setColorVariant("text"); }
+  }, [panelMode]);
 
   // 用户点击可编辑正文（要打字）→ 立即收起面板、恢复输入法键盘，绝不让「面板展开 + 键盘」同时出现。
   // 面板项按钮已 onMouseDown preventDefault 不抢焦点，故焦点落回 contenteditable 只可能是用户点了编辑区。
@@ -297,27 +361,115 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     openEmojiPicker(anchor ?? null, (emoji) => runPanel("insertAtSelection", "text/lake", `<span>${emoji}</span>`));
   };
 
-  // 插入面板条目（对齐语雀移动端：图标 + 文字，**每行 3 个**）。顺序＝使用频次从高到低。
-  const insertItems: ReadonlyArray<DockItem> = [
-    { label: "图片", Icon: ImageIcon, run: () => onInsertImage?.() },
-    { label: "拍照", Icon: Camera, run: () => onInsertCamera?.() },
-    { label: "附件", Icon: Paperclip, run: () => onInsertAttachment?.() },
-    { label: "表格", Icon: Table2, run: () => onInsertTable?.() },
-    { label: "音频", Icon: Music, run: () => onInsertAudio?.() },
-    { label: "视频", Icon: Video, run: () => onInsertVideo?.() },
-    // 高亮块：内核里是 `execCommand("alert", type)`（不是 insertCard），落盘为 <blockquote class="lake-alert lake-alert-tips">
-    { label: "高亮块", Icon: Highlighter, run: () => runPanel("alert", "tips") },
-    { label: "状态", Icon: Tag, run: () => runPanel("insertCard", "label") },
-    { label: "引用", Icon: Quote, run: () => runPanel("quote") },
-    { label: "分割线", Icon: Minus, run: () => runPanel("hr") },
-    { label: "代码块", Icon: Code2, run: () => runPanel("insertCard", "codeblock") },
-    // 261010 扩展：桌面「+」面板的其余插入项（公式/画板族归「更多」，不在此）。
-    { label: "分栏卡片", Icon: Columns2, run: () => runPanel("columns", 2) },
-    { label: "折叠块", Icon: FoldVertical, run: () => runPanel("collapse") },
-    { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
-    { label: "日期", Icon: CalendarDays, run: () => runPanel("insertCard", "dateCard", { date: Date.now() }, false) },
-    { label: "表情", Icon: Smile, run: (anchor) => pickEmoji(anchor) },
-    { label: "文档引用", Icon: FileSymlink, run: () => runPanel("insertCard", "customBlock", { $name: "lake-note-ref", $htmlStr: "", noteId: "", title: "" }, true) },
+  /**
+   * 应用颜色：语义**完全复用桌面那一套**（colorApplyCommand = 内核 descriptor 的 onEvent('select')：
+   * 文字色取到正文色 ⇒ clearColor、背景色空/等于当前 ⇒ clearBgColor），"最近使用色"也与桌面共用同一记忆
+   * （colorMemory）。空串 = 面板里的「默认/无填充」行 ⇒ 取内核默认色。
+   */
+  const pickColor = (raw: string, variant: ColorVariant = colorVariant) => {
+    if (!editor) return;
+    const value = raw || paletteDefaultValue(editor, variant);
+    rememberColor(editor, variant, value);
+    const { command, arg } = colorApplyCommand(variant, {
+      visual: value,
+      persistent: persistentColor(editor, value),
+      normalText: normalTextColor(editor),
+      currentBg: readCommandValue(editor, "bgColor"),
+    });
+    runPanel(command, ...(arg === undefined ? [] : [arg]));
+  };
+
+  /** 展开/收起链接编辑行：打开时捕获当前选区（我们自己的输入框会抢走内核选区，确认前必须还回去）。 */
+  const toggleLinkEditor = () => {
+    if (linkOpen) { setLinkOpen(false); return; }
+    snapshotSelection();
+    const captured = captureLinkTarget();
+    linkTargetRef.current = captured.range
+      ? captured
+      : { range: savedRangeRef.current, selected: savedRangeRef.current ? savedRangeRef.current.toString().trim() : "" };
+    setLinkText(linkTargetRef.current.selected);
+    setLinkSrc("");
+    setLinkOpen(true);
+  };
+
+  /**
+   * 确认链接：判定与选区还原全在共享实现里（桌面浮栏调的是同一份）。
+   *
+   * ⚠️ **移动端必须"失败重试一次"**（261012 设备实测）：我们的链接输入框拿到焦点后，
+   * 还原选区 + `focus` + **同一个 tick 内**执行 `link`，内核会返回 false、链接不落地；
+   * 同样还原、**等一拍**再执行就成功（实测返回卡 id 且写出 `<a href>`）。
+   * 内核要等一拍才认"刚从我们输入框交还回来的选区"。
+   * 桌面浮栏不受影响、保持同步执行 ⇒ 这条重试只放在移动端这一侧。
+   */
+  const confirmLink = () => {
+    const target = linkTargetRef.current;
+    const text = linkText;
+    const src = linkSrc;
+    const finish = (applied: boolean) => {
+      if (applied) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); }
+      snapshotSelection();
+      dismissIme();
+      refreshActive();
+    };
+    // 先立即试一次（选区本就还在编辑器里时这一步就成功）；失败说明内核选区尚未就绪 ⇒ 160ms 后重试一次。
+    const attempt = (delay: number) => {
+      window.setTimeout(() => {
+        const applied = applyTextLink({ editor: editor ?? {}, run: execRef.current, target, text, src });
+        if (!applied && delay === 0) attempt(160);
+        else finish(applied);
+      }, delay);
+    };
+    attempt(0);
+  };
+
+  /**
+   * 「＋」面板的分组排布（用户 261012 定稿：**按功能类型分组、组序与组内序都按使用频率**）。
+   *
+   * 5 组 / **6 行**：图片与文件(1 行) · 文本块(2 行) · 媒体｜布局(1 行，一行两卡) · 小工具(1 行) · 关联(1 行)
+   * ⇒ 行数与改造前的平铺网格**完全相同**，不新增滚动。词汇借内核/语雀的既有分类（布局 / 小工具），不新造概念。
+   */
+  const INSERT_GROUPS: ReadonlyArray<{ key: string; items: ReadonlyArray<DockItem> }> = [
+    { key: "file", items: [
+      { label: "图片", Icon: ImageIcon, run: () => onInsertImage?.() },
+      { label: "拍照", Icon: Camera, run: () => onInsertCamera?.() },
+      { label: "附件", Icon: Paperclip, run: () => onInsertAttachment?.() },
+    ] },
+    { key: "block", items: [
+      { label: "表格", Icon: Table2, run: () => onInsertTable?.() },
+      { label: "引用", Icon: Quote, run: () => runPanel("quote") },
+      { label: "分割线", Icon: Minus, run: () => runPanel("hr") },
+      { label: "代码块", Icon: SquareCode, run: () => runPanel("insertCard", "codeblock") },
+      // 高亮块：内核里是 `execCommand("alert", type)`（不是 insertCard），落盘为 <blockquote class="lake-alert lake-alert-tips">
+      { label: "高亮块", Icon: Highlighter, run: () => runPanel("alert", "tips") },
+      { label: "状态", Icon: Tag, run: () => runPanel("insertCard", "label") },
+    ] },
+    { key: "media", items: [
+      { label: "音频", Icon: Music, run: () => onInsertAudio?.() },
+      { label: "视频", Icon: Video, run: () => onInsertVideo?.() },
+    ] },
+    { key: "layout", items: [
+      // 标签用「分栏」而不是「分栏卡片」：与「媒体」同处一行时每格只有 84px，4 个字会截断（桌面端仍叫分栏卡片）
+      { label: "分栏", Icon: Columns2, run: () => runPanel("columns", 2) },
+      { label: "折叠块", Icon: FoldVertical, run: () => runPanel("collapse") },
+    ] },
+    { key: "widget", items: [
+      { label: "日期", Icon: CalendarDays, run: () => runPanel("insertCard", "dateCard", { date: Date.now() }, false) },
+      { label: "表情", Icon: Smile, run: (anchor) => pickEmoji(anchor) },
+      { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
+    ] },
+    { key: "ref", items: [
+      // 链接从「Aa」面板移到这里（用户 261012：链接融合到 + 号里）；点它在本面板内联展开链接编辑行
+      { label: "链接", Icon: Link2, run: () => toggleLinkEditor() },
+      { label: "文档引用", Icon: FileSymlink, run: () => runPanel("insertCard", "customBlock", { $name: "lake-note-ref", $htmlStr: "", noteId: "", title: "" }, true) },
+    ] },
+  ];
+  /** 分组 → 行（一行最多两卡；「媒体｜布局」那一行是唯一的双卡行）。 */
+  const INSERT_ROWS: ReadonlyArray<ReadonlyArray<ReadonlyArray<DockItem>>> = [
+    [INSERT_GROUPS[0].items],
+    [INSERT_GROUPS[1].items],
+    [INSERT_GROUPS[2].items, INSERT_GROUPS[3].items],
+    [INSERT_GROUPS[4].items],
+    [INSERT_GROUPS[5].items],
   ];
   // 「更多」面板：公式可用；5 项画图/绘图是**占位（置灰）**，待逐项解决移动端编辑（画布覆盖层 + 触摸手势）后放开。
   const moreItems: ReadonlyArray<DockItem> = [
@@ -327,6 +479,8 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     { label: "UML 图", Icon: Network, disabled: true },
     { label: "思维导图", Icon: GitFork, disabled: true },
     { label: "文本绘图", Icon: FileCode2, disabled: true },
+    // 撤销/重做从「Aa」面板移到这里（用户 261012：放更多里去）
+    ...HISTORY_COMMANDS.map((c) => ({ label: c.label, Icon: COMMAND_ICONS[c.name] ?? Undo, run: () => runPanel(c.name) })),
   ];
   // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）
   const onKbToggle = () => { if (panelMode) dismissKeyboard(); else if (keyboardOpen) dismissKeyboard(); else showKeyboard(); };
@@ -336,6 +490,59 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   // 面板开 = 面板占住的键盘区高度（键盘收起过程中 innerHeight 530→842 时它同步长出来，
   // 工具栏屏幕 Y 恒定、面板"接管"键盘腾出的位置 —— HANDOFF §8.3 原始结论）。
   const isOn = (name: string) => !!activeStates[name];
+  /** 「＋ / 更多」面板的插入条目（图标 + 文字）——两个面板共用一套渲染。 */
+  const insBtn = ({ label, Icon, run, disabled }: DockItem) => (
+    <button
+      key={label}
+      className="med-ins-item"
+      aria-label={label}
+      disabled={!!disabled}
+      title={disabled ? label + "（移动端暂未支持）" : undefined}
+      onClick={run ? (e) => run(e.currentTarget) : undefined}
+    >
+      <Icon size={22} />
+      <span className="med-ins-label">{label}</span>
+    </button>
+  );
+
+  /** 面板里的命令条目（行内 / 块级 / 历史共用一套渲染，避免三段重复 JSX）。 */
+  const cmdBtn = (c: { name: string; label: string }) => {
+    const Icon = COMMAND_ICONS[c.name];
+    return (
+      <button key={c.name} className={"med-f-btn" + (isOn(c.name) ? " med-f-on" : "")} onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>
+        {Icon ? <Icon size={17} /> : c.label}
+      </button>
+    );
+  };
+  // 「一卡一组、一行最多两卡」的分组（用户 261012 定：照语雀那样拆开排布）
+  // 行内标记：加粗/斜体/下划线/删除线/**行内代码**（用户 261012：行内代码恢复，就放在这一行）
+  const inlineMarks = MARK_COMMANDS;
+  // 列表：与「对齐」同处一行（用户 261012：对齐和列表放一行）
+  const listItems = BLOCK_INSERT_COMMANDS.filter((c) => c.name === "unorderedList" || c.name === "orderedList" || c.name === "taskList");
+  /** 取值型高亮：对齐（内核默认返回空串 = 左对齐）、字色（空串 = 正文色）、背景色。 */
+  const alignActive = (value: string) => (activeValues.alignment || "left") === value;
+  const textColorActive = (hex: string) => !!activeValues.color && activeValues.color.toLowerCase() === hex.toLowerCase();
+  const noTextColor = !activeValues.color;
+  /** 语雀式色板（2 行 × 7 格）的当前态：色块按当前变体（字色/背景色）回显。 */
+  const boardColorActive = (hex: string) => {
+    const cur = (colorVariant === "text" ? activeValues.color : activeValues.bgColor).toLowerCase();
+    return !!cur && cur === hex.toLowerCase();
+  };
+  /** 首格「无填充/默认」的当前态：字色=没有显式字色；背景色=无填充或 transparent。 */
+  const boardClearActive = colorVariant === "text"
+    ? !activeValues.color
+    : (!activeValues.bgColor || activeValues.bgColor === "transparent");
+  /** 色板色块（圆形，照语雀）。 */
+  const boardSwatch = (hex: string) => (
+    <button
+      key={hex}
+      className={"med-f-sw" + (boardColorActive(hex) ? " is-on" : "")}
+      style={{ background: hex }}
+      onClick={() => pickColor(hex)}
+      aria-label={"颜色 " + hex}
+      title={hex}
+    />
+  );
   const plusCls = "med-btn med-toggle" + (panelMode === "insert" ? " med-open" : "");
   const aaCls = "med-btn med-toggle med-aa" + (panelMode === "font" ? " med-open" : "");
 
@@ -364,51 +571,107 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       <div className="med-panel" data-open={panelMode ? "1" : "0"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
         <div className="med-panel-inner">
           {renderedPanel === "insert" || renderedPanel === "more" ? (
-            <div className="med-ins-grid">
-              {(renderedPanel === "insert" ? insertItems : moreItems).map(({ label, Icon, run, disabled }) => (
-                <button
-                  key={label}
-                  className="med-ins-item"
-                  aria-label={label}
-                  disabled={!!disabled}
-                  title={disabled ? label + "（移动端暂未支持）" : undefined}
-                  onClick={run ? (e) => run(e.currentTarget) : undefined}
-                >
-                  <Icon size={22} />
-                  <span className="med-ins-label">{label}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              {renderedPanel === "insert" ? (
+                /* 「＋」面板：一卡一组（用户 261012 定稿的分组排布；「媒体｜布局」是唯一的双卡行） */
+                <div className="med-ins-groups">
+                  {INSERT_ROWS.map((row, ri) => (
+                    <div className={"med-ins-row" + (row.length > 1 ? " med-ins-row--split" : "")} key={ri}>
+                      {row.map((items, ci) => (
+                        <div className="med-ins-card" key={ci}>{items.map(insBtn)}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="med-ins-grid">{moreItems.map(insBtn)}</div>
+              )}
+              {/* 链接编辑：**在本面板内联展开**（用户 261012：链接融合到 + 号里）。
+                  复用内核 .ne-link-editor 的 UI + 共享判定 linkEditor.ts（与桌面浮栏同一份）。 */}
+              {linkOpen && (
+                <div className="med-f-row">
+                  <div className="med-f-card med-f-link">
+                    <KLinkEditor
+                      text={linkText}
+                      src={linkSrc}
+                      allowModifyText
+                      invalid={linkSrc.trim().length > 0 && !isValidLink(linkSrc.trim())}
+                      onChangeText={setLinkText}
+                      onChangeSrc={setLinkSrc}
+                      onConfirm={confirmLink}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="med-font-panel">
-              {/* 块级样式（style 命令：光标在段内即可执行，面板 blur 后仍有效） */}
+              {/* 段落样式（独占一行） */}
               <div className="med-f-row">
-                {STYLE_BLOCKS.map((b) => (
-                  <button key={b.value} className="med-f-btn" onClick={() => runPanel("style", b.value)} aria-label={b.label} title={b.label}>
-                    {b.value === "p" ? <Pilcrow size={16} /> : b.label}
+                <div className="med-f-card" data-count={STYLE_BLOCKS.length}>
+                  {STYLE_BLOCKS.map((b) => (
+                    <button key={b.value} className="med-f-btn" onClick={() => runPanel("style", b.value)} aria-label={b.label} title={b.label}>
+                      {b.value === "p" ? <Pilcrow size={17} /> : b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 行内标记（独占一行）——行内代码/链接按用户 261012 移出本面板：
+                  代码块在「+」面板已有，链接融合进「+」面板 */}
+              <div className="med-f-row">
+                <div className="med-f-card" data-count={inlineMarks.length}>{inlineMarks.map(cmdBtn)}</div>
+              </div>
+
+              {/* 列表 ｜ 对齐（用户 261012：对齐和列表放一行）
+                  注：「引用 / 分割线」已删（+ 面板已有）、「撤销 / 重做」已移到「更多」面板 */}
+              <div className="med-f-row">
+                <div className="med-f-card" data-count={listItems.length}>{listItems.map(cmdBtn)}</div>
+                <div className="med-f-card" data-count={ALIGN_ITEMS.length}>
+                  {ALIGN_ITEMS.map(({ value, label, Icon }) => (
+                    <button key={value} className={"med-f-btn" + (alignActive(value) ? " med-f-on" : "")} onClick={() => runPanel("alignment", value)} aria-label={label} title={label}><Icon size={17} /></button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 字色：一排 A（默认 + 常用色）+ 末位背景色入口 —— 语雀那排 A 的口径 */}
+              <div className="med-f-row">
+                <div className="med-f-card med-f-colors" data-count={QUICK_TEXT_COLORS.length + 2}>
+                  <button className={"med-f-btn med-f-a" + (noTextColor && colorVariant === "text" ? " med-f-on" : "")} onClick={() => { setColorVariant("text"); pickColor("", "text"); }} aria-label="默认颜色" title="默认颜色">A</button>
+                  {QUICK_TEXT_COLORS.map((c) => (
+                    <button key={c} className={"med-f-btn med-f-a" + (colorVariant === "text" && textColorActive(c) ? " med-f-on" : "")} style={{ color: c }} onClick={() => { setColorVariant("text"); pickColor(c, "text"); }} aria-label={"字色 " + c} title={"字色 " + c}>A</button>
+                  ))}
+                  <button className={"med-f-btn med-f-a med-f-bgentry" + (colorVariant === "bg" ? " med-f-on" : "")} onClick={() => setColorVariant("bg")} aria-label="背景色" title="背景色">
+                    <span className="med-f-bgfill" style={isHexColor(activeValues.bgColor) ? { background: activeValues.bgColor, color: contrastTextColor(activeValues.bgColor) } : undefined}>A</span>
                   </button>
-                ))}
+                </div>
               </div>
-              {/* 行内标记（需先选中文本；主工具栏 B/列表/待办走 runInline 保选区更可靠） */}
+
+              {/* 色板：**内联展开** + **照抄语雀排布**（用户 261012 定稿）—— 2 行 × 7 格：
+                  浅色行首格 = 无填充/默认，其余 6 淡色；第二行 7 实色。颜色全部取内核色阶
+                  （core/colorPalette.ts 的 MOBILE_BOARD_*，逐色 ΔE 就近映射，不自己造色）。 */}
               <div className="med-f-row">
-                {MARK_COMMANDS.map((c) => {
-                  const Icon = COMMAND_ICONS[c.name];
-                  return <button key={c.name} className={"med-f-btn" + (isOn(c.name) ? " med-f-on" : "")} onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>{Icon ? <Icon size={17} /> : c.label}</button>;
-                })}
+                <div className="med-f-card med-f-board" data-variant={colorVariant}>
+                  <div className="med-f-board-row">
+                    <button
+                      className={"med-f-sw med-f-sw--none" + (boardClearActive ? " is-on" : "")}
+                      onClick={() => pickColor("")}
+                      aria-label={colorVariant === "text" ? "默认颜色" : "无填充"}
+                      title={colorVariant === "text" ? "默认颜色" : "无填充"}
+                    />
+                    {MOBILE_BOARD_LIGHT.map(boardSwatch)}
+                  </div>
+                  <div className="med-f-board-row">{MOBILE_BOARD_SOLID.map(boardSwatch)}</div>
+                </div>
               </div>
-              {/* 块级/插入命令 */}
+
+              {/* 字号：**放最底部**（用户 261012 定：用得不多） */}
               <div className="med-f-row">
-                {BLOCK_INSERT_COMMANDS.map((c) => {
-                  const Icon = COMMAND_ICONS[c.name];
-                  return <button key={c.name} className={"med-f-btn" + (isOn(c.name) ? " med-f-on" : "")} onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>{Icon ? <Icon size={17} /> : c.label}</button>;
-                })}
-              </div>
-              {/* 历史 */}
-              <div className="med-f-row">
-                {HISTORY_COMMANDS.map((c) => {
-                  const Icon = COMMAND_ICONS[c.name];
-                  return <button key={c.name} className={"med-f-btn" + (isOn(c.name) ? " med-f-on" : "")} onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>{Icon ? <Icon size={17} /> : c.label}</button>;
-                })}
+                <div className="med-f-card med-f-sizes" data-count={MOBILE_FONT_SIZES.length}>
+                  {MOBILE_FONT_SIZES.map((v) => (
+                    <button key={v} className={"med-f-btn" + (activeValues.fontSize === v ? " med-f-on" : "")} onClick={() => runPanel("fontsize", v)} aria-label={v + "px"} title={v + "px"}>{v}</button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

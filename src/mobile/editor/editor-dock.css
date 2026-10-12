@@ -109,6 +109,23 @@
   gap: 5px 6px;
   padding: 8px 12px;
 }
+/* 「＋」面板：**一卡一组**（用户 261012 定稿）—— 组间留白分组，卡内 3 列；
+   「媒体｜布局」那一行是一行两卡（卡内 2 列），条目宽度与相邻行的观感一致。
+   视觉语言与「Aa」面板的 .med-f-card 同一套（卡 = 浅灰圆角面）。 */
+.med-ins-groups { display: flex; flex-direction: column; gap: 5px; padding: 6px 12px; }
+.med-ins-row { display: flex; gap: 5px; min-width: 0; }
+.med-ins-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 6px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--lake-bg-panel);
+}
+.med-ins-row--split .med-ins-card { grid-template-columns: repeat(2, 1fr); }
+
 .med-ins-item {
   display: flex;
   align-items: center;
@@ -131,14 +148,33 @@
 .med-ins-item svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--lake-text-2); }
 .med-ins-label { min-width: 0; font-size: 13px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.med-font-panel { display: flex; flex-direction: column; gap: 10px; }
-.med-f-row { display: flex; gap: 8px; }
+/* 「Aa」面板：语雀式的**分组卡片**排布（用户 261012 定稿）。
+   口径：一卡一组、一行最多两卡；卡宽按条目数分配 ⇒ 同一行里各条目等宽（语雀那排 B I S U 比列表卡宽就是这个理）。
+   色板与链接编辑都在面板内**内联展开**（用户定：全套走语雀方式，不弹层、不做二级面板）。 */
+.med-font-panel { display: flex; flex-direction: column; gap: 8px; }
+.med-f-row { display: flex; gap: 6px; align-items: stretch; }
 
-.med-f-row .med-f-btn { flex: 1; }
+.med-f-card {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px;
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--lake-bg-panel);
+}
+/* 卡宽 ∝ 条目数（flex-basis 0 + 按 data-count 给 grow） */
+.med-f-card { flex: 1 1 0; }
+.med-f-card[data-count="2"] { flex-grow: 2; }
+.med-f-card[data-count="3"] { flex-grow: 3; }
+.med-f-card[data-count="4"] { flex-grow: 4; }
+.med-f-card[data-count="5"] { flex-grow: 5; }
+
+.med-f-card .med-f-btn { flex: 1 1 0; min-width: 0; }
 .med-f-btn {
-  border: 1px solid var(--lake-border-1);
-  background: var(--lake-bg-window);
-  border-radius: var(--lake-radius-sm);
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
   height: 40px;
   font-size: 15px;
   display: inline-flex;
@@ -151,16 +187,69 @@
   transition: background-color var(--mobile-duration-press) ease;
 }
 .med-f-btn:active { background: var(--lake-bg-hover); }
-/* 面板内命令生效（加粗/斜体/下划线/列表等）：主色 + 浅底 + 描边 */
+/* 面板内命令生效（加粗/斜体/列表/对齐/字号等）：主色 + 浅底 + 描边（用户 261012：样式先保持我们自己的） */
 .med-f-btn.med-f-on {
   color: var(--lake-accent);
   background: var(--lake-accent-tint);
   box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
 }
-.med-f-btn.med-b { font-weight: 700; }
-.med-f-btn.med-i { font-style: italic; }
-.med-f-btn.med-s { text-decoration: line-through; }
-.med-f-btn.med-u { text-decoration: underline; }
+
+/* 字色行：一排 A（默认 + 常用色）+ 末位背景色入口（语雀那排 A 的口径） */
+.med-f-card.med-f-colors .med-f-btn { font-size: 17px; font-weight: 600; }
+.med-f-bgfill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--lake-bg-sunken);
+  color: var(--lake-text-2);
+  font-size: 13px;
+}
+
+/* 色板：**照抄语雀排布**（用户 261012 定稿）—— 2 行 × 7 格圆形色块。
+   几何取自语雀 Android 1.2.2 设备实测（540px 宽 / density 210 ⇒ 1.3125 px per dp）：
+   色块直径 49px≈37dp、列距 68px≈52dp、行距 63px≈48dp（故排间 gap ≈ 11dp）。
+   颜色全部来自 core/colorPalette.ts 的内核色阶（MOBILE_BOARD_*），本文件不出现颜色字面量（色块底走内联 style，属数据驱动）。 */
+.med-f-card.med-f-board { display: block; padding: 8px 10px; }
+.med-f-board-row { display: flex; align-items: center; justify-content: space-between; }
+.med-f-board-row + .med-f-board-row { margin-top: 11px; }
+.med-f-sw {
+  width: 37px;
+  height: 37px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--lake-border-1);
+}
+.med-f-sw:active { transform: scale(0.92); }
+/* 选中态：先保持我们自己的口径（主色描边环）；移动端 UI 全量重构时再改语雀那套 */
+.med-f-sw.is-on { outline: 2px solid var(--lake-accent); outline-offset: 2px; }
+/* 首格「无填充 / 默认」：白底 + 一条 45° 斜线（与语雀同语义） */
+.med-f-sw--none { position: relative; background: var(--lake-bg-panel); overflow: hidden; }
+.med-f-sw--none::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 1px;
+  background: var(--lake-border-2);
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+/* 链接：内联展开的编辑行。约束内核 .ne-link-editor 的固定 365px 宽以适配手机面板宽度
+   （这是给内核组件做移动端布局适配，不改它的视觉语言）。 */
+.med-f-card.med-f-link { display: block; background: transparent; padding: 0; }
+.med-f-card.med-f-link .ne-link-editor { width: 100%; max-width: 100%; }
+
+/* 字号：放最底部（用户 261012 定：用得不多）——**一行**放常用档、掐头去尾。
+   档位不写在这里：见 EditorDock 的 MOBILE_FONT_SIZES（从内核 12 档里去掉最小 12/13 与最大 40/48）。 */
+.med-f-card.med-f-sizes { display: flex; }
+.med-f-card.med-f-sizes .med-f-btn { height: 40px; font-size: 14px; }
 
 .med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: 40px; line-height: 40px; font-size: 16px; text-align: left; cursor: pointer; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
 .med-outline-item:active { background: var(--lake-bg-hover); }

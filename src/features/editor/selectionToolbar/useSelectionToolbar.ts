@@ -169,11 +169,15 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
    * （实测：只刷下一帧时按钮高亮不亮，而 queryCommandValue 已是 "true"）。
    */
   const run = useCallback((name: string, ...args: unknown[]) => {
-    try { editor.execCommand?.(name, ...args); } catch { /* 不静默改 UI：命令失败即保持原样 */ }
+    // ⚠️ 必须**回传内核返回值**：链接的「这条被拒就换另一条」判定依赖它（linkEditor.ts）。
+    // 吞掉返回值 ⇒ 失败的 link 也被当成成功 ⇒ 桌面链接静默 no-op（261012 修正）。
+    let result: unknown;
+    try { result = editor.execCommand?.(name, ...args); } catch { /* 不静默改 UI：命令失败即保持原样 */ }
     refresh();
     // 直接调 refreshNow（不走 rAF 合并守卫）：命令后内核 queryCommandValue 缓存晚一拍，
     // 若这段时间已有 pending 帧，合并守卫会把这次补刷吞掉 ⇒ 按钮高亮不亮。
     window.setTimeout(() => { try { refreshNow(); } catch { /* 忽略 */ } }, 80);
+    return result;
   }, [editor, refresh, refreshNow]);
 
   useEffect(() => {
