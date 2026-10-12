@@ -17,14 +17,18 @@
  * 四类探针（判定只认实测值，不认"看着像"）：
  *   1) escape       可见交互元素越出视口（已排除"在滚动容器内"的内容 ⇒ 只见真越界；滚动后自然可见的不算）
  *   2) clipped      nowrap + overflow:hidden + clip 且内容被截断（已排除父级已有 ellipsis 的——那种是父级负责省略）
- *   3) contrast     我们组件族的文字对比度（WCAG：正文 4.5 / 大字 3.0），背景取最近的不透明祖先
+ *   3) contrast     全仓**自有**文字的对比度（WCAG：正文 4.5 / 大字 3.0），背景取最近的不透明祖先。
+ *                   **261012 起不再只扫组件族**（旧口径只扫 ln-/config-/bt-/tree/tab/toolbar/statusbar 外层，
+ *                   漏掉状态栏内层"无类名 span"这类真实命中）；排除项：有效透明度 ≤0.05 的子树（父级 opacity:0，
+ *                   如 docked 下的 .edge-hotzone-handle）、1×1 的 sr-only 文本、内核与第三方（.ne-* / univer / drawnix）。
  *   4) focus        非 button/input/[role=button] 的 [tabindex] 元素聚焦后的环是否仍走令牌（style=auto 即 UA 默认环）
  *   5) pageOverflowX / fixedOutside：整页横向溢出、固定层越界
  *
  * 已知无需报的（本项目**有意**如此，探针会命中但不算缺陷）：
  *   - `.note-row-copy strong` 的标题裁切（shell.css 注释：标题恒单行、列宽处直接裁切不打省略号）；
  *   - 设置弹窗内的内容"越出视口"（弹窗自己滚动，探针已按滚动祖先过滤）；
- *   - `.ln-split-handle` / 内核 `.ne-engine` 聚焦无环（它们各自处理，实测 outline-style: none）。
+ *   - `.ln-split-handle` / 内核 `.ne-engine` 聚焦无环（它们各自处理，实测 outline-style: none）；
+ *   - `--lake-text-4` 的 3:1 档（**设计有意**：元信息/占位；要合规得整档提亮并与 text-3 塌成一层，故保留）。
  */
 
 // B1 逐页走查：每屏「截图 + 四类实测探针」-> JSON 供分诊。
@@ -37,7 +41,10 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const PROBE = '(function () {' +
   ' var out = { escape: [], clipped: [], contrast: [] };' +
-  ' var rgb = function (c) { var m = /rgba?\(([^)]+)\)/.exec(c || ""); if (!m) return null; var p = m[1].split(",").map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };' +
+  // ⚠️ 这行是**单引号字符串**：正则里的反斜杠必须写双份（\( \)）。261012 修：此前写成 \( 被 JS 字符串吃掉，
+  // 正则退化成 /rgba?(([^)]+))/ ⇒ m[1] 捕获到 "(31, 35, 41"、parseFloat("(31")=NaN ⇒ 所有 ratio 都是 NaN、
+  // `NaN < 4.5` 恒 false ⇒ **对比度探针自 261009 B1 起一直静默返回 0（假阴性）**。mobile-walkthrough.mjs 同款待修。
+  ' var rgb = function (c) { var m = /rgba?\\(([^)]+)\\)/.exec(c || ""); if (!m) return null; var p = m[1].split(",").map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };' +
   ' var lum = function (c) { var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };' +
   ' var ratio = function (a, b) { var l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };' +
   ' var effBg = function (el) { var n = el; while (n) { var c = rgb(getComputedStyle(n).backgroundColor); if (c && c.a > 0.9) return c; n = n.parentElement; } return { r: 255, g: 255, b: 255, a: 1 }; };' +
@@ -45,6 +52,10 @@ const PROBE = '(function () {' +
   ' var vis = function (el) { var r = el.getBoundingClientRect(); var cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none" && parseFloat(cs.opacity) > 0.05; };' +
   ' var inScroll = function (el) { var n = el.parentElement; for (var d = 0; d < 8 && n; d++) { var oy = getComputedStyle(n).overflowY; if (oy === "auto" || oy === "scroll") return true; n = n.parentElement; } return false; };' +
   ' var hasEllipsisAncestor = function (el) { var n = el.parentElement; for (var d = 0; d < 4 && n; d++) { if (getComputedStyle(n).textOverflow === "ellipsis") return true; n = n.parentElement; } return false; };' +
+  // 对比度专用（261012）：祖先透明度必须参与（父级 opacity:0 的子树不可见，只看自身会误报，如 docked 下的 .edge-hotzone-handle）；
+  // 内核/第三方（lakex/univer/drawnix）不属我们的设计系统，一律排除。
+  ' var effOpacity = function (el) { var o = 1, n = el, d = 0; while (n && d < 10) { o *= parseFloat(getComputedStyle(n).opacity); if (o <= 0.05) return o; n = n.parentElement; d++; } return o; };' +
+  ' var notOurs = function (el) { return el.closest(".ne-engine") || el.closest(".ne-ui") || el.closest(".ne-overlay-container") || el.closest("[class*=univer]") || el.closest("[class*=drawnix]"); };' +
   ' document.querySelectorAll("button,a[href],[role=button],input,select,textarea,[tabindex]").forEach(function (el) {' +
   '   if (!vis(el) || inScroll(el)) return; var r = el.getBoundingClientRect();' +
   '   if (r.right > innerWidth + 1 || r.left < -1 || r.bottom > innerHeight + 1 || r.top < -1) out.escape.push({ cls: String(el.className).slice(0, 40), title: el.title || el.getAttribute("aria-label") || "", rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)], vw: innerWidth, vh: innerHeight });' +
@@ -55,8 +66,9 @@ const PROBE = '(function () {' +
   '   if (hasEllipsisAncestor(el)) return;' +
   '   if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 8) out.clipped.push({ cls: String(el.className).slice(0, 46), text: (el.textContent || "").trim().slice(0, 30), over: el.scrollWidth - el.clientWidth });' +
   ' });' +
-  ' document.querySelectorAll("[class*=ln-],[class*=config-],[class*=bt-],.tree-row,.tab-item,.toolbar__item,.dock-icon-btn,[class*=statusbar],[class*=breadcrumb],[class*=outline]").forEach(function (el) {' +
-  '   if (!vis(el) || !ownText(el)) return; var cs = getComputedStyle(el); var fg = rgb(cs.color); if (!fg || fg.a < 0.9) return;' +
+  ' document.querySelectorAll("body *").forEach(function (el) {' +
+  '   if (!ownText(el) || notOurs(el)) return; var r0 = el.getBoundingClientRect(); if (r0.width <= 2 || r0.height <= 2) return;' +
+  '   var cs = getComputedStyle(el); if (cs.visibility === "hidden" || cs.display === "none" || effOpacity(el) <= 0.05) return; var fg = rgb(cs.color); if (!fg || fg.a < 0.9) return;' +
   '   var bg = effBg(el); var size = parseFloat(cs.fontSize); var bold = parseInt(cs.fontWeight, 10) >= 600;' +
   '   var need = (size >= 18.66 || (size >= 14 && bold)) ? 3 : 4.5; var cr = ratio(fg, bg);' +
   '   if (cr < need) out.contrast.push({ cls: String(el.className).slice(0, 46), text: (el.textContent || "").trim().slice(0, 24), fg: cs.color, bg: "rgb(" + bg.r + "," + bg.g + "," + bg.b + ")", size: size, ratio: Math.round(cr * 100) / 100, need: need });' +
@@ -165,7 +177,7 @@ export default async function run(ctx) {
     ["search", async () => { await space("资料库"); await page.sleep(700); const p = await page.evaluate('(function () { var el = [].slice.call(document.querySelectorAll("button")).find(function (e) { return /搜索/.test((e.title || "") + " " + (e.getAttribute("aria-label") || "")) && e.getBoundingClientRect().width > 0; }); if (!el) return null; var r = el.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()'); if (p) { await page.click(p[0], p[1]); await page.sleep(900); const ok = await page.evaluate('(function () { var i = document.querySelector("input[type=search], input[placeholder*=搜索]"); if (!i) return false; i.focus(); return true; })()'); if (ok) { await page.send("Input.insertText", { text: "记" }); await page.sleep(1500); } } }],
     ["note-info", async () => { await openDoc("合成·富文本"); await contextRow("合成·富文本"); await clickMenuItem("属性"); }],
     ["history-panel", async () => { await closeAll(); await contextRow("合成·富文本"); await clickMenuItem("历史版本"); }],
-    ["split-view", async () => { await openDoc("合成·富文本"); await openDoc("合成·表格"); await splitWithFirstTab(); }],
+    ["split-view", async () => { await closeAll(); await openDoc("合成·富文本"); await openDoc("合成·表格"); await splitWithFirstTab(); }],
     ["resources", async () => { await closeAll(); await space("资源"); }],
     ["trash-space", async () => { await closeAll(); await space("回收站"); }],
   ];

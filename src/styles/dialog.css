@@ -38,7 +38,7 @@
 
 .note-info-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
 .note-info-crumb-wrap { display: inline-flex; align-items: center; }
-.note-info-crumb { padding: 0; border: 0; background: transparent; font-size: var(--lake-font-size-tiny); color: var(--lake-accent); cursor: pointer; }
+.note-info-crumb { padding: 0; border: 0; background: transparent; font-size: var(--lake-font-size-tiny); color: var(--lake-accent-text); cursor: pointer; }
 .note-info-crumb.is-current { color: var(--lake-text-1); cursor: default; }
 .note-info-crumb-sep { color: var(--lake-text-3); }
 
@@ -49,7 +49,7 @@
 .note-info-history-row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-radius: var(--lake-radius-2xs); background: transparent; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); cursor: pointer; text-align: left; }
 .note-info-history-row:hover, .note-info-history-row.is-active { background: var(--lake-bg-block); }
 .note-info-history-row em { margin-left: auto; font-style: normal; opacity: .7; }
-.note-info-history-hint { color: var(--lake-accent); }
+.note-info-history-hint { color: var(--lake-accent-text); }
 .note-info-history-preview { margin-top: 8px; max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 6px; background: var(--lake-bg-block); font-size: var(--lake-font-size-tiny); line-height: 1.6; }
 .note-info-history-preview img { max-width: 100%; height: auto; }
 .note-info-history-preview h1, .note-info-history-preview h2, .note-info-history-preview h3 { font-size: var(--lake-font-size-body); margin: 6px 0; }

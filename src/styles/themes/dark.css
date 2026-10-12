@@ -31,7 +31,8 @@
   /* 文字 */
   --lake-text-1: #e7e8ea;
   --lake-text-2: #a9abb1;
-  --lake-text-3: #868a92;   /* vs #1e1f23 4.8:1 */
+  --lake-text-3: #9398a1;   /* 提一档（261012）：panel 5.68 / block 4.89 / 最严 hover 4.86
+                             * —— 旧值 #868a92 只按 panel #1e1f23 标定（4.75），在 block/hover 掉到 4.07–4.44。 */
   --lake-text-4: #6f7278;   /* vs #1e1f23 3.5:1（旧 #5c5d62 更低） */
   --lake-text-on-accent: #ffffff;
   /* 边框 */

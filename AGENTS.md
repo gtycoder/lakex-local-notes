@@ -62,6 +62,13 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
     - **改动落点（硬约束）**：**所有 UI/前端改动必须找到根位置、直接改那一处；禁止一层层套 CSS 覆盖**（层压层会越积越多、越来越难查）。流程：先定位该视觉/几何的**单一来源规则**（组件根规则、令牌、layout 常量）→ **就地改**；不要为了调观感再往更高层加一条覆盖，也不要同一选择器多处重复声明。**唯一例外**：目标是**内核(lakex) / 第三方组件**（运行时注入的无层样式、或 element 上的 inline style，层序压不过）时，才允许更高层或 `!important`，且必须写明理由。
     - **`!important` 是例外而非手段**：当前全桌面只允许 **9 条**（每条都在代码里注明为何必需，典型是「要压过 JS 写进 element 的 inline style」如 `.settings-panel-large` 宽度，和双端共享文件里必须压住 `.b3-button--outline` 的 `.seg__item`）。目标 ≤10，**新增任何一条都要写明理由**。
     - **两条护栏**（改样式后必跑）：① `src/styles/cssLayers.test.ts` —— 逐文件「声明数 / 重复(选择器,属性)组数」基线上限，只允许变小；**注意它的扫描器不进入 `@layer {}` 块，所以新层文件要由入口 `@import … layer(x)` 指定层，不要在文件内自包 `@layer`**；② `node scripts/ui-metrics.mjs` —— 硬指标（桌面 `var(--b3-*)`=0、非主题颜色字面量=0、**字号字面量=0**、`!important`≤10、入口 b3 import=0、同名文件对=0）。**字号口径（261008 收敛批）**：桌面 CSS 里 `font-size`（含 `font:` 简写里的尺寸）**一律走 `--lake-font-size-*`**，令牌值只在 `themes/base.css`；离档值一律**向上取档**（9.5/10→nano、11→micro、12/12.5→tiny/small、13→small、14→body、15→bodyLg、16→title），不许出现字面量 px（`ui-metrics` 会以退出码 1 卡住）。要"整体抬一档"就**改 `themes/base.css` 的 9 个令牌值**，别去改使用处。
+    - **文字色阶口径（261012 定稿）**：`--lake-text-*` 是设计系统档位，取值必须按「它**实际会被铺到的最浅/最深表面**」标定，
+      **不能只按白底（浅色/暖色）或 panel（深色）标定**。261012 实测：`--lake-text-3` 旧值 `#6f7784` 是按白底标的（4.52），
+      铺到 `--lake-bg-hover/-block/-window`（`#f0f1f3/#f4f6f8/#f3f4f6`）掉到 **4.00–4.36**、不达 WCAG AA 4.5
+      ⇒ 三主题一起改档：浅/暖改用 **ink-3 ramp 深一档 `#5f6874`**（最严表面 4.95）、深色提一档 **`#9398a1`**（最严 4.86）；
+      **色板 canonical 不动**（`#6f7784` 仍是 ink-3 的色板值，见 `.impeccable/design.json` 的 `tonalRamp`）。
+      `--lake-text-4`（`#8b93a1` / 深色 `#6f7278`）是**有意的 3:1 档**（元信息/占位），**不追 AA 4.5，不要顺手把它提亮**（会与 text-3 塌成一层）。
+      判据装置：`scripts/css-audit/walkthrough.mjs` 的 contrast 探针（261012 起扫**全仓自有文字** + **有效透明度**，排除 sr-only / 内核 / 第三方）。
     - **内核组件里 `div[tabindex]` 这类元素的焦点环也要收编**（261008）：`tokens.css` 的焦点规范只覆盖 `button/input/textarea/select/[role=button]`；内核用 `focus()` 聚焦普通 div 时浏览器会画**它自己的默认环**（颜色与我们的主题无关）。命中就给 `:focus-visible` 补 `outline: var(--lake-focus-ring-width) solid var(--lake-accent)`（贴合容器边缘用负 `outline-offset`）。表格右键菜单项是第一处。
     - **内核/第三方库的「模块级单例状态」遇到多实例挂载（本应用：标签页常驻挂载）会串台**（261008 结案）：这类库里常有模块级单例（缓存 / 标志位），而每个挂载实例各挂一个 document 级监听、判据只看 document.activeElement ⇒ 隐藏标签页里的实例也会命中，抢先消费掉标志、把数据写进自己那份。**口径**：碰这类全局态时，判据一律**限定在本实例容器内**（本实例容器 .contains(document.activeElement)），**不要**靠在库里放宽判据来绕过；同类隐患出现时先查「谁在抢这份全局态」。
 
@@ -211,6 +218,17 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
     **只夹高度不解决**（翻转判定不吃高度）⇒ 两条一起：① `max-height` + `overflow-y:auto`（交回内部滚动）；
     ② 改锚点 `top:120px !important; bottom:auto !important`（内核写的是**行内样式**，只能 !important 压，§14 允许的例外）。
     落点 `src/mobile/mobile-kit.css`、作用域 `body.lake-mobile`（内核无相关配置项：官方文档 55 只给 `groups`/`disableQuickInput`）。
+
+### 走查装置 / 探针
+25. **写进「引号字符串」里的正则，反斜杠会被 JS 吃掉 ⇒ 探针静默失效（261012 实测，静默了 3 个月）**：`walkthrough.mjs` 的对比度探针把
+    `/rgba?\(([^)]+)\)/` 写在**单引号字符串**里 —— `\(` 被字符串字面量解释掉，运行期正则退化成 `/rgba?(([^)]+))/`，
+    匹配 `rgb(31, 35, 41)` 时 `m[1]` 捕获到 `"(31, 35, 41"` ⇒ `parseFloat("(31")` = **NaN** ⇒ 所有 ratio 都是 NaN、
+    `NaN < 4.5` 恒 false ⇒ **探针从不报任何对比度问题（假阴性）**。判定真相：`fg.r` 为 null/NaN（Chromium 里 JSON 化后是 `null`）。
+    ⇒ **口径**：探针/脚本里凡「字符串内嵌正则」一律写**双反斜杠**（`\\\\(`），改完**必须**用一条已知会命中的样本自证（不能只看"跑通了、结果是 0"）。
+    `scripts/css-audit/mobile-walkthrough.mjs:18` 是**同一份拷贝、同一个 bug**（261012 已记录、**未修**：那是移动端验收装置，改动前先与移动端会话对齐）。
+26. **探针"看不见"比探针"报错"危险**：261012 对比度探针还存在第二重盲区 —— 旧口径只扫组件族选择器（`ln-/config-/bt-/…`）且只读**元素自身** opacity
+    ⇒ 状态栏内层"无类名 span"看不见、docked 下父级 `opacity:0` 的 `.edge-hotzone-handle__label` 反而误报。
+    修法：扫**全仓自有文字** + **祖先连乘的有效透明度** + 排除 1×1 sr-only / 内核(`.ne-*`) / 第三方(univer/drawnix)。
 
 ## 8. 会话启动指引
 

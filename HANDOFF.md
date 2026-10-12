@@ -9,12 +9,78 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261012 / 261010）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **在途（未完成）**：**移动端文本增强二级面板**（字号 / 字色 / 背景色 / 对齐 / 链接）——本轮只交付了 6 个插入项 + 「更多」占位面板，这一项还没做；实现口径见 261010(五)。
+> **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
+> 仍缺的移动端文本格式 = **H5/H6、缩进、行高、清除格式、格式刷**（§3 的覆盖缺口表里其余项）。
 >
 > **下一会话焦点（261012 收尾 → 下一会话，用户定）**：① **移动端文本增强二级面板**（见上）；② **5 项画图插入项解禁**（画板 / 流程图 / UML / 思维导图 / 文本绘图，现为置灰占位；根因与修法见 §3#18）；③ **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；④ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261012 · 移动端批：dock「Aa」面板改语雀式分组卡 + 文本增强五项**（本批；移动端会话交付）**
+
+- **用户 261012 定稿（本轮）**：① 语雀 App **没有字号入口** ⇒ 字号自己设计、**放面板最底部**（用得不多）；
+  ② 选中态**先保留我们自己的**（后续移动端 UI 全量重构时再改语雀绿，且**只有「+」号用绿色**）；
+  ③ 色板与链接**一律内联展开**（"都是语雀的方式"），**不弹层、不做二级面板**；④ 分组按功能拆开（一卡一组、一行最多两卡）。
+- **落点**：`src/mobile/editor/EditorDock.tsx` —— `Aa` 面板重排为 **7 行分组卡**：
+  段落样式 ｜ 行内标记 ｜（同卡）行内代码+链接 ｜ 列表 ｜ 块级 ｜ 对齐 ｜ 历史 ｜ **字色行**（一排 A：默认 + 灰/红/橙/绿/蓝 + 末位背景色入口）
+  ｜ **内联色板** ｜ **字号 12 档（最底）**；`editor-dock.css` —— `.med-f-card` 卡 + `data-count` 让**卡宽 ∝ 条目数**（同行各条目等宽）、`.med-f-sizes` 6 列 × 2 行。
+- **单一来源（全部复用，未另造一套）**：色板 `LakeColorBoard` · 色语义 `colorApplyCommand`+`colorMemory` · 字号档 `FONT_SIZE_OPTIONS` ·
+  链接 UI `KLinkEditor` · 色阶 `core/colorPalette.ts` 新增 `QUICK_TEXT_COLORS`；
+  **新增 `selectionToolbar/linkEditor.ts`**（`isValidLink` / `captureLinkTarget` / `restoreLinkTarget` / `applyTextLink`）——
+  桌面 `SelectionToolbar` 已切过去、移动 dock 同调，链接的"捕获→还原→判定"**两端只剩一份**（9 例护栏，现 11 例）。
+- **设备验收（AVD `lake_mobile`，设备级截图）**：五项**全部实测生效** —— 字号 22（`queryCommandValue` 回 22）·
+  对齐 center（落 `text-align: center`）· 字色 `#F5222D` · 背景色与取消（走 clearBgColor）·
+  **链接端到端**（内联编辑行 → 确定 → 写入 `<a href="https://example.org/mobile-link">` 且编辑器自动收起）；色板 7 组 71 色内联展开。
+- **顺手修掉一条真缺陷**：内核色卡「更多颜色」行的宿主尺寸规则只写在桌面 `selectionToolbar.css`（移动端不加载）⇒
+  移动端渲染成**巨箭头**（实测占满整行）；已按同一几何补在 `editor-dock.css` 的 `.med-f-board` 作用域（事后 16×16 实测通过）。
+  ⚠️ 这等于**双端各一份宿主规则**，待移动端 UI 重构时并回 `LakeColorBoard` 自身样式。
+- **关键实测（已回填 `docs/LAKEX-CONTRACT.md` §5.32）**：`lake-fontsize-N` **不是 px**（实测 ≈px×0.75）⇒ 高亮只能读 `queryCommandValue('fontsize', false)`；
+  **内核只认真实用户选区**（纯 DOM Range 下五项全返 false）；**从我们自己的输入框交还选区后内核要等一拍**（同 tick `link` 返 false、链接不落地；
+  等一拍成功）⇒ 移动端链接确认**失败重试一次**（160ms，只加在移动端）；该时序下 `queryCommandEnabled` **会误报 false** ⇒
+  共享实现改为「按选区形态决定 `link`/`insertLink` 先后 + 用**命令返回值**判成败」，**两端执行器都必须回传内核返回值**（否则退化成静默 no-op）。
+- **门禁**：tsc ✓ · vitest **229 文件 / 1808 用例** ✓ · ui-metrics ✓ · cssLayers/uiPrimitives ✓ · check:core 76-0 ✓ · 双端构建 + bundle 预算 ✓。
+- **`check:mobilesnap`**：**6/6 态差异，与 261012 既有记录完全同型**（`home-library 元素 51 → 1755`，全在首页/设置态、不含 dock）⇒ 仍是既有基线/数据漂移，**非本批引入**；重烤待用户定。
+- **未做 / 待用户定**：① **面板高度** —— 内容实测 **875px**，而面板视口只有键盘区 **279px** ⇒ 必须滚动才能到字号；
+  语雀那套是面板比键盘区高（工具栏随之上移）。要不要让面板跟内容长会动 260914「面板占键盘区、工具栏停在面板上沿不动」的定稿口径 ⇒ **待用户定**；
+  ② `unlink` 在"整篇全选"下返 false（边缘态）未逐项复核；③ H5/H6、缩进、行高、清除格式、格式刷仍未接（本轮范围外）。
+- **数据留痕（不清）**：261010 覆盖夹具被本批探针改过（字号/对齐/字色/背景色/链接各若干处）；
+  新建探针文档 `zz 链接探针 <5位>`——**后续探针一律用 `window.lakeNative.createNote(title, parentId)` 建干净文档**，别再污染既有夹具。
+
+### 261012 · 桌面批：逐页走查复跑（D）+ 文字色阶达标标定 + 走查装置三修（含探针假阴性）**（本批；桌面会话交付）**
+
+- **装置复跑（用户定的 D：页面详细测试 / 逐页走查）**：`.css-audit/d1` —— 5 轮 = light/dark/warm×1315 + light/dark×1000（22 屏/轮，97 屏），对 261009 B1 基线做**签名级 diff**：
+  **escape / clipped / fixedOut 新增签名 0**、`UA 焦点环` 0、`整页横向溢出` 0；**但 `contrast: 0` 是假阴性**（装置 bug，见下条 ③，**基线那一列同样不可信**）。基线时期装置只有 19 屏，本次多 3 屏（note-info / history-panel / split-view）。
+- **装置修三条**（`scripts/css-audit/walkthrough.mjs`）：
+  ① `split-view` 屏**窄窗必现** `no split candidate`（1000 宽重跑 2/2、1315 三宽全过）—— 该屏没像其它屏那样先 `closeAll()`，被上一屏（history-panel）残留浮层吃掉树行点击。
+     独立探针定点复现：1000 宽下两标签时 `.split-entry` 按钮**可用**、菜单 1 候选 ⇒ **产品侧分屏正常，纯装置缺陷**，已补 `closeAll()`。
+  ② **对比度探针扩容**：旧口径只扫组件族（`ln-/config-/bt-/tree/tab/toolbar/statusbar 外层`）且只看**元素自身** opacity ⇒ 两类盲区
+     （状态栏内层「无类名 span」看不见；docked 下父级 `opacity:0` 的 `.edge-hotzone-handle__label` 反而误报）。改为扫**全仓自有文字** + **有效透明度**（祖先连乘）+ 排除 1×1 sr-only / 内核 / 第三方（`.ne-*` / univer / drawnix）。
+  ③ **探针「正则被字符串吃掉」⇒ 静默假阴性（本轮最值钱的发现）**：探针把 `/rgba?\(([^)]+)\)/` 写在**单引号字符串**里，
+     `\(` 被字符串字面量吃掉 ⇒ 运行期正则退化成 `/rgba?(([^)]+))/` ⇒ `m[1]` 捕获到 `"(31, 35, 41"` ⇒ `parseFloat("(31")` = **NaN**
+     ⇒ 所有 ratio = NaN、`NaN < 4.5` 恒 false ⇒ **该探针自 261009 B1 起从不报任何对比度问题**（判据：`fg.r` 在 JSON 里是 `null`）。
+     ⇒ **261009 B1 基线的 `contrast: 0`、以及第一遍复跑的「全 0」都是假阴性**；修好后才有真实数据（下条清单 + `.css-audit/d3`）。
+     `scripts/css-audit/mobile-walkthrough.mjs:18` 是**同一份拷贝、同一个 bug**（**未修**：属移动端验收装置，动它前先与移动端会话对齐）。
+- **清单与修复：`--lake-text-3` 标定错**。用**转义正确**的临时探针测出三主题共 **132 处**命中（light 42 / dark 39 / warm 51），聚成 2 类：
+  · **text-3 铺在灰底/淡色底的小字号**（34/31/37 处：状态栏元信息 ×21、`.ln-tabs__count`、`.config-section__title`、`.bt-table-count`/`.bt-stat-index`/`.search-snippet`/`.ln-row2__meta`/`.asset-browser__size`/`quick-notes-count`/`note-info-crumb`…）实测 **4.00–4.44 < AA 4.5**。
+    根因：旧值 `#6f7784` 是**按白底**标定的（白底 4.52 ✓），铺到 `--lake-bg-hover/-block/-window`（`#f0f1f3/#f4f6f8/#f3f4f6`）就掉下来。
+    **修法 = 改令牌档位、不改使用处**：浅/暖 → **ink-3 ramp 深一档 `#5f6874`**（最严表面 4.95）、深色 → **提一档 `#9398a1`**（最严 4.86）；
+    **色板 canonical 不动**（`#6f7784` 仍是 ink-3 的色板值，`#5f6874` 本就是该 ramp 既有档位）。落点 `src/styles/themes/{light,warm,dark}.css`。
+  · **text-4 的 3:1 档**（8/8/14 处：`.badge`/`.search-panel-help`/`.history-hint`/`.trash-panel-hint`/`.config-empty`/`.asset-browser__gcount`）**设计有意**（注释写明「元信息/占位 3:1」）
+    ⇒ **判定不动**（要合规得整档提亮并与 text-3 塌成一层，收益不明确）。口径已入 `AGENTS.md §3#14`「文字色阶口径」与 `DESIGN.md`「Colors」。
+  · **warm 主题把 `--lake-accent`（橙 `#d45500`）当小字号文字**（light/dark 的 accent 恰好够深/够亮，所以只有暖色暴露）：
+    `.note-info-crumb` 4.12、`.note-info-history-hint` 4.12、`.quick-notes-count` 4.12、`.bt-table-item.active`（即 `.bt-table-name`）**3.75** ＜ AA。
+    仓库**已有专供文字的 `--lake-accent-text`**（warm `#a8440a`、被 20+ 处选中态/链接使用；DESIGN.md 也写明"链接用更深的 accent"）⇒ **4 处改用该令牌**
+    （`styles/dialog.css` ×2、`styles/app/quick-notes.css`、`features/bitable/bitableEditor.css`；浅/深同步换用，比值更高、无回归）。
+    ⚠️ **未做**：全仓还有 ~10 处 `color: var(--lake-accent)`（多为图标色/悬浮态），本轮**未逐一复核**；要彻底 AA 化需单独立项逐条量。
+  · **内核悬浮提示的 1.1 假阳性**：`split-view`(1000) 里两条 `cls=""`（"清除格式" / "⌘ \"）白字被判 1.1 —— 内核提示气泡的底不是**不透明祖先前 8 层**，
+    effBg 落到 window 底色 ⇒ 探针口径（最近不透明祖先）的已知近似误差，**非产品缺陷**；已记入装置头注释。
+- **门禁**：`tsc` ✓ · `vitest` **229 文件 / 1808 用例** ✓（含移动端会话新增的 `linkEditor.test.ts`）· `ui-metrics` ✓（颜色字面量 0、`!important` 9）· `vite build` ✓ ·
+  装置修好后复跑：`.css-audit/d3`（5 轮走查 + 3 主题加宽扫描）+ `.css-audit/d4`（accent 修后三主题复验）。
+  **实测**：加宽扫描 light **42→8**、dark **39→8**、warm **51→13**（残留全为 text-4 的有意 3:1 档）；
+  5 轮走查 `UA 焦点环 0 / 整页横向溢出 0 / 屏错误 0`，且 **`split-view` 在 1315 与 1000 宽均 ok**（修前 1000 宽必 ERR）。
+- **协同（重要）**：本批 `dist/` 重建于 **10:26:38**，**包含移动端会话未提交的「抽共享链接编辑层」改动**（`src/features/editor/selectionToolbar/{linkEditor.ts,linkEditor.test.ts,SelectionToolbar.tsx}` + `src/core/colorPalette.ts`，**非本批**）。
+  `dist/` 是**共享产物** ⇒ 谁构建谁负责，别在别人验收中途重建。
+- **留痕**：合成夹具隔离实例 `/tmp/lake-walk-d1`（非真实数据，跑完按 CDP 端口精确 kill）+ `.css-audit/{d1,d1b,d1c,d2}`；`d1c` = 改前加宽扫描、`d2` = 改后验证。
 ### 261012 · 移动端 dock 扩展：`+` 面板收 6 项（改 3 列）+「更多」面板（公式可用 / 画图 5 项置灰）**（已交付，用户 261012 定稿）**
 
 - **用户定稿**：除 5 项画图外，其余插入项全部进 `+` 面板并要求**每行 3 个**；`+` 面板共 **17 项** = 原 11 项 + **分栏卡片 / 折叠块 / 日历 / 日期 / 表情 / 文档引用**（**公式不在 `+`** —— 用户定「公式与图属于同一类」）。

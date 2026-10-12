@@ -121,7 +121,7 @@
 
 .quick-notes-list .quick-notes-timeline { flex: 1; }
 
-.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
+.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent-text); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 
 .quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: var(--lake-font-size-tiny); }
 

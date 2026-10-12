@@ -63,7 +63,7 @@
 }
 
 .bt-table-item:hover { background: var(--lake-bg-hover); }
-.bt-table-item.active { background: var(--lake-accent-tint); color: var(--lake-accent); }
+.bt-table-item.active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 .bt-table-item.dragging { opacity: .5; }
 
 .bt-grip { color: var(--lake-text-3); flex: 0 0 auto; }

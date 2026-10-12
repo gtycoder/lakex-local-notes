@@ -18,7 +18,7 @@
   /* 文字 */
   --lake-text-1: #1f2329;
   --lake-text-2: #4e5969;
-  --lake-text-3: #6f7784;   /* vs #fff 4.5:1 */
+  --lake-text-3: #5f6874;   /* 同 light（261012）：ink-3 ramp 深一档；暖底最严 warm-hover #f1f0ed 4.95 */
   --lake-text-4: #8b93a1;   /* vs #fff 3.1:1 */
   --lake-text-on-accent: #ffffff;
   /* 边框 */
