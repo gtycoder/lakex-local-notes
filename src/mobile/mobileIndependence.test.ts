@@ -48,11 +48,6 @@ const ALLOWED_DESKTOP_STYLE_IMPORTS: Record<string, string[]> = {
     "../features/attachment/attachment-preview.css", // P6 变体化
     "../styles/fonts/misans/misans.css", // 资源（MiSans，与桌面同一逻辑）
     "../styles/fonts/jetbrains-mono/jetbrains-mono.css", // 资源
-    "../styles/themes/base.css", // P1 消灭（移动端自有 theme）
-    "../styles/themes/light.css", // P1 消灭
-    "../styles/themes/dark.css", // P1 消灭
-    "../styles/themes/warm.css", // P1 消灭（移动端暂不出暖色）
-    "../styles/tokens.css", // P1：契约部分下沉移动端
     "../styles/compat.css", // P2/P5 消灭（config-*/b3-*/fn__*）
     "../styles/kit.css", // P2 消灭（改用 mb-*）
     "../styles/components.css", // P2/P3 消灭
@@ -216,11 +211,11 @@ describe("移动端 UI 独立性围栏（P0）", () => {
     expect(stale, "以下桌面文件已无移动端分支，请从基线删掉：\n  " + stale.join("\n  ")).toEqual([]);
   });
 
-  it("桌面 themes/** 只允许 main.tsx 在 P1 前临时引用（取值层归移动端）", () => {
+  it("移动端不得 import 桌面 themes/**（取值层归 src/mobile/theme/**）", () => {
     const bad: string[] = [];
     for (const abs of listFiles(MOBILE, /\.(tsx|ts)$/)) {
       for (const spec of importSpecifiers(read(abs))) {
-        if (/styles\/themes\//.test(spec) && relOf(abs) !== "mobile/main.tsx") bad.push(relOf(abs) + " -> " + spec);
+        if (/styles\/themes\//.test(spec)) bad.push(relOf(abs) + " -> " + spec);
       }
     }
     expect(

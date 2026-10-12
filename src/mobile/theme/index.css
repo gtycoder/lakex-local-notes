@@ -1,0 +1,15 @@
+/* ── 移动端样式入口（P1，261012）────────────────────────────────────────────
+ * 层序与桌面**同构**、层名独立：移动端样式不得与桌面共享（docs/MOBILE-TECH-STACK.md §一/§九）。
+ *
+ * ⚠️ 为什么 P1 只声明层、不把现有文件放进层：P1–P5 期间桌面样式表仍在 import
+ * （compat / kit / components / dialog / app/quick-notes），它们是**未分层**的 ——
+ * 而未分层样式的优先级高于任何 @layer ⇒ 现在把移动端规则塞进层里会被桌面样式盖住。
+ * 逐屏迁移时按文件迁入：mkit（原语）→ mshell（外壳）→ mfeature（功能域）→ moverlay（浮层）→ ma11y。
+ *
+ * @import 之前只允许 @charset 与 @layer 语句（CSS 规范），顺序即层序。 */
+@layer mtokens, mkit, mshell, mfeature, moverlay, ma11y;
+
+@import "./base.css";
+@import "./tokens.css";
+@import "./light.css";
+@import "./dark.css";

@@ -1,0 +1,20 @@
+/* ── 移动端非令牌基础规则（P1，261012）────────────────────────────────────
+ * 从桌面 src/styles/tokens.css 收编**契约类**规则（指示线关键帧 / 阅读态字号继承 / 焦点环）。
+ * 桌面专属的 prefers-reduced-transparency 块（.create-menu / .context-menu + !important）不搬：
+ * 移动端没有这两个选择器，也不需要 !important。
+ * 令牌定义不在这里：见 theme/tokens.css（令牌）+ theme/light.css · theme/dark.css（取值）。 */
+
+/* 指示线微入场（移动端 .mobile-htab 在用） */
+@keyframes ln-indicator-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* 阅读态正文字号跟随设置（lakeRuntime 把 prefsSize 挂在 .lake-editor-mount 根；
+   vendor 对 .ne-viewer/.ne-viewer-body 写死 14px，两层都要恢复继承 —— 阅读/编辑同源） */
+.lake-editor-mount .ne-viewer,
+.lake-editor-mount .ne-viewer-body { font-size: inherit; }
+
+/* 焦点环：键盘/外接键盘可达性契约。取值与桌面 tokens.css 逐项一致（outline-offset 2px 是桌面口径，
+   不改成 --lake-focus-ring-offset 的 0px，避免任何非预期回归）。 */
+:where(button, input, textarea, select, [role="button"]):focus-visible {
+  outline: 2px solid var(--lake-accent);
+  outline-offset: 2px;
+}

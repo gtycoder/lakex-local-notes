@@ -1,44 +1,7 @@
 /* 移动端样式（W2：度量/动效/颜色一律取 --lake-* 与 --mobile-* 令牌；思源层已下线）
    口径来源：siyuan-master app/src/assets/scss/main/_mobile.scss（见 HANDOFF §8）。 */
-:root {
-  /* 思源移动端骨架度量（_mobile.scss:4-15） */
-  --mobile-topbar-height: 48px;
-  --mobile-bottom-bar-height: 48px;
-  --mobile-status-height: 24px;
-  --mobile-bar-gap: 8px;
-  --mobile-top-safe-area: env(safe-area-inset-top, 0px);
-  --mobile-bottom-safe-area: env(safe-area-inset-bottom, 0px);
-  /* 思源动效：面板 150ms cubic-bezier(0,0,.2,1)；按压 80ms；遮罩 150ms linear */
-  --mobile-ease-panel: cubic-bezier(0, 0, .2, 1);
-  /* 进入/退出统一用「强 ease-out」：抽屉原先进场用 ease-out、退场用思源 Material 曲线（起步慢），
-     一进一出两套手感；遮罩原先还是 linear。这里收敛成同一条曲线，退出也不再拖沓。
-     时长仍保持思源口径 150ms（面板/遮罩共用）。 */
-  --mobile-ease-out: cubic-bezier(.22, 1, .36, 1);
-  --mobile-duration-panel: 150ms;
-  --mobile-duration-press: 80ms;
-  --mobile-mask: var(--lake-scrim, var(--lake-scrim));
-  /* 移动端层叠层级令牌：浮层顺序的**唯一来源**，新浮层一律用这里的变量，别再写魔法数字。 */
-  --mobile-z-topbar: 3;
-  --mobile-z-dock-mask: 6;
-  --mobile-z-dock: 7;
-  --mobile-z-model-mask: 9;
-  --mobile-z-fab: 15;
-  --mobile-z-drawer-mask: 40;
-  --mobile-z-drawer: 45;
-  --mobile-z-settings-mask: 49;
-  --mobile-z-settings: 50;
-  --mobile-z-settings-preview: 55;
-  --mobile-z-toast: 60;
-  --mobile-z-sheet-mask: 70;
-  --mobile-z-sheet: 71;
-  --mobile-z-dropdown-mask: 71;
-  --mobile-z-dropdown: 72;
-  --mobile-z-menu-scrim: 80;
-  --mobile-z-menu: 81;
-  --mobile-z-dialog: 90;
-  --mobile-z-snackbar: 95;
-  --mobile-z-drag-ghost: 9999;
-}
+/* P1（261012）：本文件的 :root 令牌块（骨架度量 / 动效 / 层叠阶梯 / 安全区）已整块
+   迁到 src/mobile/theme/tokens.css —— 移动端取值的唯一来源是那里，本文件只留规则。 */
 @media (max-width: 0px) { /* 占位：保持文件结构，勿删 */ }
 
 * { box-sizing: border-box; }

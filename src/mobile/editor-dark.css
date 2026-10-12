@@ -1,51 +1,7 @@
-/* ── 深色主题：data-theme="dark" ──
- * 编辑区跟随 App 的冷灰蓝深色分层（值同步 src/styles/tokens.css [data-theme=dark]），
- * 不再各用一套中性黑——否则侧栏（冷灰蓝）与正文区（纯中性 #1E1E1E/#2C2C2C）肉眼可辨地不是一个色系。 */
-
-[data-theme="dark"] .lake-editor-mount,
-[data-theme="dark"] .lakex-default-theme {
-  --lakex-editor-background: #20242a;          /* = --lake-canvas */
-  --lakex-editor-background-primary: #262a31 !important;  /* = --lake-surface */
-  --lakex-editor-background-foreground: #262a31 !important;
-  --lakex-editor-background-secondary: #23272e;
-  --lakex-editor-background-tertiary: #2a2e36;
-  --lakex-editor-background-focus: #262a31;
-  --lakex-editor-background-primary-hover: #31363f;
-  --lakex-editor-background-primary-hover-light: #2c313a;
-  --lakex-editor-border-light: #31363f;
-  --lakex-editor-border-primary: #414855;
-  --lakex-editor-border-secondary: #31363f;
-  --lakex-editor-card-background-hover: #262a31;
-  --lakex-editor-card-border-hover: #414855;
-  --lakex-editor-card-border-selected: var(--lake-accent);
-  --lakex-editor-code-background: rgba(255, 255, 255, .06);
-  --lakex-editor-column-background-highlight: rgba(255, 255, 255, .04);
-  --lakex-editor-cursor: var(--lake-accent);
-  --lakex-editor-selection: rgba(122, 144, 234, .32);
-  --lakex-editor-table-bar-active: var(--lake-accent);
-  --lakex-editor-table-scrollbar-thumb: var(--lake-text-4);
-  --lakex-editor-text-body: #e8ecf3;
-  --lakex-editor-text-caption: #9aa4b2;
-  --lakex-editor-text-color: #e8ecf3;
-  --lakex-editor-text-danger: #d23f31;
-  --lakex-editor-text-disable: #5c6472;
-  --lakex-editor-text-link: #7a90ea;
-  --lakex-editor-text-link-hover: #93a6f0;
-  --lakex-editor-icon-primary: #d5dae4;
-  --lakex-editor-icon-secondary: #9aa4b2;
-  --lakex-editor-overlay-background-tertiary: #2a2e36;
-  --lakex-editor-color-black: #d5dae4;
-  --lakex-editor-color-black-f05: rgba(213, 218, 228, .05);
-  --lakex-editor-color-black-f08: rgba(213, 218, 228, .08);
-  --lakex-editor-color-black-f12: rgba(213, 218, 228, .12);
-  --lakex-editor-color-black-f30: rgba(213, 218, 228, .30);
-  --lakex-editor-color-black-f65: rgba(213, 218, 228, .65);
-  --lakex-editor-color-theme: var(--lake-accent);
-  --lakex-editor-color-theme-light: var(--lake-accent-tint);
-  --lakex-editor-color-white: #131519;
-  --lakex-editor-color-white-f60: rgba(19, 21, 25, .60);
-  --lakex-editor-color-white-f90: rgba(19, 21, 25, .90);
-}
+/* ── 移动端深色：组件级边界修复（取值已归 src/mobile/theme/dark.css）────────────
+ * P1（261012）：内核桥接令牌（--lakex-editor-*）与编辑区深色取值整块迁到 theme/dark.css；
+ * 本文件只保留**组件级**修：内核输入控件 / tab-switcher / 小记容器 在深色下的边界。
+ * 仍然放在入口第 19 位（compat/kit/components 之前）—— 迁移顺序不变 ⇒ 层叠结果不变。 */
 
 [data-theme="dark"] .document-pane {
   background: var(--lake-bg-window);

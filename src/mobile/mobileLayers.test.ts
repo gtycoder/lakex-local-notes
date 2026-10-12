@@ -20,17 +20,28 @@ const REPORT = !!process.env.MOBILE_LAYERS_REPORT;
 
 /** 移动端自有样式文件（P0 起必须全部登记；新增文件同步登记）。 */
 const FILES = [
+  // P1（261012）：移动端自有令牌/皮肤层（入口 index.css 只做层序声明 + @import，0 声明）
+  "mobile/theme/index.css",
+  "mobile/theme/base.css", // 非令牌基础规则（关键帧 / 阅读态字号 / 焦点环）
+  "mobile/theme/tokens.css", // 主题无关令牌（几何/动效/层级/字体 + 移动端自有度量）
+  "mobile/theme/light.css", // 浅色取值
+  "mobile/theme/dark.css", // 深色取值
   "mobile/mobile.css", // 外壳（首页/工作区/设置/抽屉/toast/小记）
   "mobile/mobile-kit.css", // 桌面 kit 之上的密度覆盖层 —— P2 目标：整份消灭（改用 mb-*）
-  "mobile/editor-dark.css", // 编辑器深色桥（P1 起并入移动端 theme）
+  "mobile/editor-dark.css", // 编辑器深色组件边界修复（取值 P1 起归 theme/dark.css）
   "mobile/editor/editor-dock.css", // 底部 dock + 面板
 ];
 
 /** 基线（只允许变小）。261012 P0 实测。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
-  "mobile/mobile.css": { decls: 1370, dupGroups: 2 },
+  "mobile/theme/index.css": { decls: 0, dupGroups: 0 },
+  "mobile/theme/base.css": { decls: 3, dupGroups: 0 },
+  "mobile/theme/tokens.css": { decls: 156, dupGroups: 0 },
+  "mobile/theme/light.css": { decls: 83, dupGroups: 0 },
+  "mobile/theme/dark.css": { decls: 134, dupGroups: 0 }, // +41 = 编辑器深色桥整块自 editor-dark.css 迁入（值未改）
+  "mobile/mobile.css": { decls: 1339, dupGroups: 2 }, // P1：:root 令牌块（39 条）迁去 theme/tokens.css
   "mobile/mobile-kit.css": { decls: 177, dupGroups: 0 }, // P2 目标：整份消灭
-  "mobile/editor-dark.css": { decls: 54, dupGroups: 0 }, // P1 目标：并入移动端 theme
+  "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 241, dupGroups: 0 },
 };
 

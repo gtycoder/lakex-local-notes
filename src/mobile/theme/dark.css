@@ -1,0 +1,171 @@
+/* ── 移动端取色 · 深色（P1）────────────────────────────────────────────
+ * 取值来源 = 本项目色阶（用户 261012 定稿：沿用我们的色阶、模仿语雀的形态）；
+ * P1 阶段逐字节等于 src/styles/themes/dark.css（暖色移动端暂不做，见 MOBILE-UI-REDESIGN §5.2）。 */
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
+   * 深色若不同会出现"顶栏/面包屑/大纲/正文四种黑"的明显色阶。结构不随主题变，只换变量。） */
+  --lake-bg-window: #191a1d;
+  --lake-bg-panel: #1e1f23;
+  --lake-bg-canvas: #1e1f23;
+  --lake-bg-block: #292b30;
+  --lake-bg-raised: #26282d;
+  --lake-bg-sunken: #131417;
+  /* 分组底衬 / 极浅灰通道（260929）：深色里「比 panel 亮一档」才是同一个语义（浅色是深一档）。 */
+  --lake-bg-subtle: #232528;
+  --lake-bg-hover: rgba(255,255,255,.055);
+  --lake-bg-press: rgba(255,255,255,.09);
+  /* 内核品牌绿在深色下使用 Lake dark schema，提升暗底对比度。 */
+  --lake-kernel-brand-green: #2ed790;
+  /* 「文档引用」卡插入面板图标的**深色重绘**（几何不动，只换调色板；浅色原值见 themes/base.css）。
+   * 口径：底框比 panel 亮一档（像个贴片）、文档面再亮一档、描边用浅墨（≠纯白，避免刺眼）、
+   * 高亮线提亮一档蓝、链接绿与 --lake-kernel-brand-green 同值。 */
+  --lake-note-ref-icon-tile: #232528;
+  --lake-note-ref-icon-tile-border: #3b3e45;
+  --lake-note-ref-icon-page: #2b2e34;
+  --lake-note-ref-icon-page-ink: #d7dae0;
+  --lake-note-ref-icon-fold: #3b3e45;
+  --lake-note-ref-icon-rule: #8b93a1;
+  --lake-note-ref-icon-accent: #7fb2ff;
+  --lake-note-ref-icon-link: #2ed790;
+  --lake-note-ref-icon-knockout: #232528;
+  /* 文字 */
+  --lake-text-1: #e7e8ea;
+  --lake-text-2: #a9abb1;
+  --lake-text-3: #9398a1;   /* 提一档（261012）：panel 5.68 / block 4.89 / 最严 hover 4.86
+                             * —— 旧值 #868a92 只按 panel #1e1f23 标定（4.75），在 block/hover 掉到 4.07–4.44。 */
+  --lake-text-4: #6f7278;   /* vs #1e1f23 3.5:1（旧 #5c5d62 更低） */
+  --lake-text-on-accent: #ffffff;
+  /* 边框 */
+  --lake-border-1: #2d2f34;
+  --lake-border-2: #232528;
+  --lake-border-strong: #3b3e45;
+  /* 主色（261006：中性蓝，按暗底抬高明度）。
+   * 对比度实测：accent vs panel 7.13:1；ink 上的白字 4.89:1。 */
+  --lake-accent: #9aabce;
+  --lake-accent-ink: #5970a6;
+  --lake-accent-ink-hover: #5d73a7;
+  --lake-accent-ink-press: #4f6392;
+  --lake-accent-tint: rgba(154,171,206,.15);
+  --lake-accent-text: #b9c6e2;
+  /* 状态色 */
+  --lake-status-sync: #6fc0cc;
+  --lake-status-pending: #e0ac63;
+  --lake-status-ok: #6cc392;
+  --lake-status-error: #ef8b84;
+  --lake-status-sync-soft: rgba(111,192,204,.14);
+  --lake-status-pending-soft: rgba(224,172,99,.14);
+  --lake-status-ok-soft: rgba(108,195,146,.14);
+  --lake-status-error-soft: rgba(239,139,132,.14);
+  /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；深色底比浅色亮一档（同 --lake-status-pending 在深色的处理），未选中星走 --lake-border-strong。 */
+  --lake-rating-star: #e8b339;
+  /* 选区 / 遮罩 / 滚动条 / 焦点 */
+  --lake-scrim: rgba(6,8,10,.55);
+  --lake-scrollbar-thumb: rgba(230,235,242,.22);
+  --lake-scrollbar-thumb-hover: #7d8695;
+  --lake-focus-halo: rgba(230,235,242,.20);
+  /* 阴影 */
+  /* 纵深（261006 canon）：与浅色同结构的三段式（深底用更重的黑）。 */
+  --lake-shadow-card: 0 1px 2px rgba(0,0,0,.34), 0 6px 16px -8px rgba(0,0,0,.42);
+  --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.06), 0 10px 28px -10px rgba(0,0,0,.55), 0 24px 56px -24px rgba(0,0,0,.50);
+  --lake-shadow-dialog: 0 0 0 1px rgba(255,255,255,.08), 0 16px 40px -12px rgba(0,0,0,.55), 0 40px 88px -32px rgba(0,0,0,.50);
+  --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.45);
+
+
+  /* ---- 过渡桥接：思源 --b3-* → 新令牌（P7 删思源层时一并移除） ---- */
+  --b3-body-background: var(--lake-bg-window);
+  --b3-theme-background: var(--lake-bg-panel);
+  --b3-theme-background-light: var(--lake-bg-block);
+  --b3-theme-surface: var(--lake-bg-block);
+  --b3-theme-surface-light: var(--lake-bg-panel);
+  --b3-theme-surface-lighter: var(--lake-border-2);
+  --b3-border-color: var(--lake-border-1);
+  --b3-theme-on-background: var(--lake-text-1);
+  --b3-theme-on-surface: var(--lake-text-3);
+  --b3-theme-on-surface-light: var(--lake-text-4);
+  --b3-theme-primary: var(--lake-accent);
+  --b3-theme-primary-light: var(--lake-select-bg);
+  --b3-theme-primary-lighter: var(--lake-accent-tint);
+  --b3-theme-primary-lightest: var(--lake-accent-tint);
+  --b3-theme-error: var(--lake-status-error);
+  --b3-dialog-shadow: var(--lake-shadow-popover);
+  --b3-mask-background: var(--lake-scrim);
+  --b3-list-hover: var(--lake-bg-hover);
+  --b3-scroll-color: var(--lake-scrollbar-thumb);
+  --b3-border-radius: var(--lake-radius-sm);
+  --b3-font-family: var(--lake-font-family);
+  --b3-font-family-code: var(--lake-font-family-mono);
+
+  /* ---- 过渡桥接：lakex 编辑器外围（设计 MIGRATION §3 批准的变量映射；选区色刻意不动） ---- */
+  --lakex-editor-background: var(--lake-bg-canvas);
+  --lakex-editor-background-primary: var(--lake-bg-block);
+  --lakex-editor-background-secondary: var(--lake-bg-block);
+  --lakex-editor-border-primary: var(--lake-border-1);
+  --lakex-editor-border-light: var(--lake-border-2);
+  --lakex-editor-text-body: var(--lake-text-1);
+  --lakex-editor-text-caption: var(--lake-text-3);
+  --lakex-editor-cursor: var(--lake-accent);
+  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d，深色：更重的黑 + 更亮的叠层） */
+  --lake-shadow-color-1: rgba(0, 0, 0, .40);
+  --lake-shadow-color-2: rgba(0, 0, 0, .45);
+  --lake-shadow-color-3: rgba(0, 0, 0, .35);
+  --lake-shadow-color-4: rgba(0, 0, 0, .50);
+  --lake-shadow-color-6: rgba(0, 0, 0, .50);
+  --lake-shadow-color-7: rgba(0, 0, 0, .60);
+  --lake-neutral-veil-1: rgba(255, 255, 255, .14);
+  --lake-neutral-veil-2: rgba(255, 255, 255, .06);
+  --lake-neutral-veil-3: rgba(255, 255, 255, .10);
+  --lake-veil-soft: rgba(255, 255, 255, .06);
+  --lake-veil-open: rgba(255, 255, 255, .12);
+  --lake-hairline-soft: rgba(255, 255, 255, .07);
+}
+
+/* ── 移动端内核桥接 · 深色（P1：整块自 src/mobile/editor-dark.css 迁入，值未改）────
+ * 编辑区（.lake-editor-mount / 内核 .lakex-default-theme）在深色下跟随 App 的冷灰蓝分层，
+ * 不再各用一套中性黑 —— 否则侧栏与正文区肉眼可辨不是一个色系。
+ * 只在这里放**取值**；组件级边界修仍在 src/mobile/editor-dark.css。 */
+[data-theme="dark"] .lake-editor-mount,
+[data-theme="dark"] .lakex-default-theme {
+  --lakex-editor-background: #20242a;          /* = 画布 */
+  --lakex-editor-background-primary: #262a31 !important;  /* = 表面 */
+  --lakex-editor-background-foreground: #262a31 !important;
+  --lakex-editor-background-secondary: #23272e;
+  --lakex-editor-background-tertiary: #2a2e36;
+  --lakex-editor-background-focus: #262a31;
+  --lakex-editor-background-primary-hover: #31363f;
+  --lakex-editor-background-primary-hover-light: #2c313a;
+  --lakex-editor-border-light: #31363f;
+  --lakex-editor-border-primary: #414855;
+  --lakex-editor-border-secondary: #31363f;
+  --lakex-editor-card-background-hover: #262a31;
+  --lakex-editor-card-border-hover: #414855;
+  --lakex-editor-card-border-selected: var(--lake-accent);
+  --lakex-editor-code-background: rgba(255, 255, 255, .06);
+  --lakex-editor-column-background-highlight: rgba(255, 255, 255, .04);
+  --lakex-editor-cursor: var(--lake-accent);
+  --lakex-editor-selection: rgba(122, 144, 234, .32);
+  --lakex-editor-table-bar-active: var(--lake-accent);
+  --lakex-editor-table-scrollbar-thumb: var(--lake-text-4);
+  --lakex-editor-text-body: #e8ecf3;
+  --lakex-editor-text-caption: #9aa4b2;
+  --lakex-editor-text-color: #e8ecf3;
+  --lakex-editor-text-danger: #d23f31;
+  --lakex-editor-text-disable: #5c6472;
+  --lakex-editor-text-link: #7a90ea;
+  --lakex-editor-text-link-hover: #93a6f0;
+  --lakex-editor-icon-primary: #d5dae4;
+  --lakex-editor-icon-secondary: #9aa4b2;
+  --lakex-editor-overlay-background-tertiary: #2a2e36;
+  --lakex-editor-color-black: #d5dae4;
+  --lakex-editor-color-black-f05: rgba(213, 218, 228, .05);
+  --lakex-editor-color-black-f08: rgba(213, 218, 228, .08);
+  --lakex-editor-color-black-f12: rgba(213, 218, 228, .12);
+  --lakex-editor-color-black-f30: rgba(213, 218, 228, .30);
+  --lakex-editor-color-black-f65: rgba(213, 218, 228, .65);
+  --lakex-editor-color-theme: var(--lake-accent);
+  --lakex-editor-color-theme-light: var(--lake-accent-tint);
+  --lakex-editor-color-white: #131519;
+  --lakex-editor-color-white-f60: rgba(19, 21, 25, .60);
+  --lakex-editor-color-white-f90: rgba(19, 21, 25, .90);
+}
+

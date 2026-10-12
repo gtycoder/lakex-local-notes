@@ -1,0 +1,229 @@
+/* ── 移动端令牌 · 主题无关（P1，261012）──────────────────────────────────
+ * 这里**是移动端取值的唯一来源**：桌面 src/styles/themes/** 不再是移动端契约（护栏
+ * src/mobile/mobileIndependence.test.ts 卡住「移动端不得 import 桌面 themes」）。
+ * 词表（变量名/语义）与桌面共享，取值由移动端自己定。
+ *
+ * P1 的取值 = **暂与桌面一致**（cp 自 src/styles/themes/base.css，逐字节相同）⇒ 本阶段
+ * 验收标准是「不再 import 桌面 themes && 浅/深切换无回归」（mobilesnap 0 差异）。
+ * P2 起按触屏密度调整（点按目标 ≥44/48、字号档、内距），每步都用 mobilesnap 对拍。 */
+/* 主题无关令牌：几何/动效/层级/字体不随主题变 */
+:root {
+  /* AI 助手图标（取自云端 larkui-icon-icon-queque-ai；品牌固定色，不随主题变） */
+  --lake-ai-icon-ink: #00b96b;
+  --lake-ai-icon-soft: #c7f0df;
+  --lake-ai-icon-star: #f5da80;
+  /* 工具栏 AI 入口图标（IconAiTagNew 的绿色渐变） */
+  --lake-ai-tag-from: #4cc871;
+  --lake-ai-tag-to: #08b66d;
+  /* 「文档引用」卡插入面板图标的两套调色板（设计稿 261008；几何在 src/features/editor/noteRefIcon.tsx）。
+   * 为什么必须在主题文件里：该图标是 lakex 自定义卡的 <symbol>，内容活在 <use> 的 shadow 树里 ——
+   * 选择器打不到、只有「继承」能进去 ⇒ 只能靠这些自定义属性着色（组件里 style={{ fill: var(…) }}）。
+   * 下面这份 = **浅色设计稿原值**（暖色同为浅底，沿用这份）；深色另给一套，见 themes/dark.css。 */
+  --lake-note-ref-icon-tile: #ffffff;          /* 圆角底框 */
+  --lake-note-ref-icon-tile-border: #e6e8e7;
+  --lake-note-ref-icon-page: #f6f6f2;          /* 文档面 */
+  --lake-note-ref-icon-page-ink: #2b2d2c;      /* 文档描边 */
+  --lake-note-ref-icon-fold: #dce1de;          /* 折角 */
+  --lake-note-ref-icon-rule: #626865;          /* 正文示意线 */
+  --lake-note-ref-icon-accent: #73adff;        /* 高亮短线（蓝） */
+  --lake-note-ref-icon-link: #20ba77;          /* 链接勾（绿） */
+  --lake-note-ref-icon-knockout: #ffffff;      /* 链接前的挖空描边（= 底框色） */
+  /* 间距 */
+  --lake-space-xxs: 2px;
+  --lake-space-xs: 4px;
+  --lake-space-sm: 6px;
+  --lake-space-md: 8px;
+  --lake-space-lg: 12px;
+  --lake-space-xl: 16px;
+  --lake-space-xxl: 20px;
+  --lake-space-xxxl: 24px;
+  --lake-space-huge: 32px;
+  --lake-space-giant: 40px;
+  /* 圆角 */
+  --lake-radius-hairline: 2px;  /* 微件：单元格 / 表格格子 / 细条（比 xs 更小的一档，261006 补） */
+  --lake-radius-2xs: 4px;       /* 极小控件：chip / 色块 / 日历格（261006 补） */
+  --lake-radius-xs: 6px;
+  --lake-radius-sm: 8px;
+  --lake-radius-md: 10px;
+  --lake-radius-card: 12px;     /* 卡片面（261006 补；craft floor 的卡片圆角区间 12–16） */
+  --lake-radius-lg: 14px;
+  --lake-radius-xl: 20px;
+  --lake-radius-pill: 999px;
+  /* 动效 */
+  --lake-motion-instant: 80ms;
+  --lake-motion-press: 90ms;   /* 按压 transform 微缩放（必须快于 fast，保跟手感）；260923 自 motion.css 并入 */
+  --lake-motion-fast: 130ms;
+  --lake-motion-panel: 190ms;
+  --lake-motion-slow: 240ms;
+  --lake-ease-standard: cubic-bezier(.2,.8,.24,1);
+  --lake-ease-exit: cubic-bezier(.4,0,1,1);
+  --lake-ease-emphasized: cubic-bezier(.2,.9,.2,1);
+  /* 层级 */
+  --lake-z-base: 0;
+  --lake-z-sticky: 10;
+  --lake-z-dropdown: 100;
+  --lake-z-scrim: 200;
+  --lake-z-dialog: 210;
+  --lake-z-toast: 300;
+  --lake-z-tooltip: 400;
+  /* 外壳层序（260923 W3：从散落字面量收拢；顺序由 src/styles/zOrder.test.ts 强制）——
+     只描述外壳各面之间的遮挡关系，数值本身无意义，只要求相对顺序稳定。
+     大纲内部 minimap（2/3/4/5）与浮层菜单级（600+）不在此表，按需再收。 */
+  --lake-z-block-handle: 100;      /* 内核块手柄（vendor 值，仅作基准，不改） */
+  --lake-z-edge-hotzone: 110;      /* 目录栏左缘触发热区：须高于块手柄 */
+  --lake-z-editor-sticky: 150;     /* 编辑区 sticky 工具条 .ne-ui */
+  --lake-z-statusbar: 180;         /* 底部文档状态栏 */
+  --lake-z-statusbar-popover: 190; /* 状态栏浮层（提示条） */
+  --lake-z-sidebar: 250;           /* 侧栏（目录树浮层） */
+  --lake-z-outline: 260;           /* 整边大纲 rail */
+  --lake-z-activity-rail: 270;     /* 左右活动轨 */
+  --lake-z-topbar: 400;            /* 顶栏 .tab-bar：外壳最高，始终可见 */
+  /* 浮层段（Overlay 原语，260926）：必须整体高于外壳（topbar 400）。
+     三型浮层统一由 src/components/ui/Overlay.tsx 渲染并引用这几个令牌。 */
+  --lake-z-overlay-menu: 600;      /* 菜单 / 下拉 / 气泡 */
+  --lake-z-overlay-scrim: 700;     /* 对话框遮罩 */
+  --lake-z-overlay-dialog: 710;    /* 对话框 */
+  --lake-z-overlay-menu-raised: 715; /* 对话框内打开的菜单/气泡：须高于 dialog、低于 lightbox（记录详情/字段弹窗里的嵌套下拉） */
+  --lake-z-overlay-lightbox: 720;  /* 图片 / 附件预览 */
+  /* 字号/字重/行高 */
+  --lake-font-size-nano: 10px;  /* 最小一档：表格统计 / 徽标数字（261006 补；11.5 与 11 合并为 11） */
+  --lake-font-size-micro: 11px;
+  --lake-font-size-tiny: 12px;
+  --lake-font-size-small: 13px;
+  --lake-font-size-body: 14px;
+  --lake-font-size-bodyMd: 15px;  /* 展开预览档（261008 用户：比表正文大 1px，先用 15 试） */
+  --lake-font-size-bodyLg: 15.5px;
+  --lake-font-size-title: 18px;
+  --lake-font-size-display: 20px;  /* 显示档：面板大标题 / 预览标题（261006 补，位于 title 与 h1 之间） */
+  --lake-font-size-h1: 24px;
+  --lake-font-weight-regular: 400;
+  --lake-font-weight-medium: 500;
+  --lake-font-weight-semibold: 600;
+  --lake-font-weight-bold: 700;
+  --lake-line-height-tight: 1.35;
+  --lake-line-height-snug: 1.5;
+  --lake-line-height-normal: 1.6;
+  --lake-line-height-reading: 1.85;
+  /* 字体（内置：界面/正文 = MiSans；等宽 = JetBrains Mono；见 src/styles/fonts/）
+     MiSans 为小米官方 web 切片的子集（含简中+Latin），生僻字/emoji 由后面的系统栈回退。 */
+  --lake-font-family: 'MiSans', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  --lake-font-family-reading: var(--lake-font-family);
+  --lake-font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* 滚动条 / 焦点环 */
+  --lake-scrollbar-width: 10px;
+  --lake-scrollbar-radius: 999px;
+  --lake-focus-ring-width: 2px;
+  --lake-focus-ring-offset: 0px;
+
+  /* ── 控件令牌（261006 Phase 2：共用原语的唯一来源）────────────────────────
+   * 一套控件只允许有这四个尺寸/状态来源；kit 的每个原语都引用它们，
+   * 不再各写一份高度/圆角/禁用透明度。**高度沿用产品现状，不改变行布局节奏。** */
+  --lake-ctl-h: 27px;            /* 标准控件高：按钮 / 图标按钮 / 输入 / 下拉 / 列表行 / 菜单项 */
+  --lake-ctl-h-sm: 22px;         /* 紧凑控件高：图标按钮 --compact / 分段内段 / 页签右侧动作 */
+  --lake-ctl-rad: var(--lake-radius-sm);   /* 控件圆角（8） */
+  --lake-ctl-rad-sm: var(--lake-radius-xs); /* 紧凑控件圆角（6） */
+  --lake-ctl-border: var(--lake-border-strong); /* 控件静息边：比分隔线更明确，输入类控件才「看得见」 */
+  --lake-disabled-opacity: .45;  /* 禁用：统一用透明度，不用逐个改颜色 */
+
+
+  /* 增强大纲层级：方案 B「两级语义 + 中性」（260923）——
+   * 结构层 H1–H3 用主题强调色做渐变色阶（浓度递减），细节层 H4–H6 用中性；全部引用主题令牌 ⇒ 自动跟随浅/深/暖，
+   * 修掉旧 6 色相「主题无关调色板」在深色下的对比度问题、暖色下的冷色撞色，也去掉"色相编码有序层级"。
+   * 引导线颜色同样收敛到这里的单个中性令牌（原先在 OutlineList.tsx 里另有一套硬编码 rgba）。 */
+  --lake-outline-guide: var(--lake-border-strong);
+  /* 媒体查看器 / 工具提示 / 冲突态取色（P7-d 收尾）：媒体层**任何主题下都是暗底**（全屏遮罩上的
+   * 一层），所以放主题无关的 base；字面量只允许出现在主题文件，使用处一律引用令牌。 */
+  /* 词表口径（用户 261007）：尺度 ramp（space/motion/ease/font/line-height）与层序阶梯（z）
+   * 按设计词表整体保留（即使暂零引用）；只有被取代/无归属的特性令牌才裁剪
+   * （本轮删了 5 个被 -hover-2 / on / on-soft / scrim / toolbar 取代的媒体令牌）。 */
+  --lake-media-scrim: rgba(0, 0, 0, .08);
+  --lake-media-toolbar: rgba(24, 26, 32, .72);
+  --lake-media-toolbar-shadow: 0 4px 18px rgba(0, 0, 0, .35);
+  --lake-media-img-shadow: 0 6px 40px rgba(0, 0, 0, .50);
+  --lake-media-btn-hover-2: rgba(255, 255, 255, .14);
+  --lake-media-divider: rgba(255, 255, 255, .18);
+  --lake-media-on: #e6e8ee;
+  --lake-media-on-soft: #c3c7d0;
+  --lake-media-danger: #ff9f9f;
+  --lake-media-video: #000;
+  --lake-media-embed: #fff;
+  /* 内核（Lake）品牌绿 —— 内核**固定工具栏最左边的「+」（插入特色卡片）**的原始配色。
+   * 出处：vendor 内核 bundle 的 editor.color.theme.light = #00B96B（dark 为 #2ED790），
+   * 内核规则 src/assets/lakex-doc.css 把它涂在 .ne-icon-t-insert-card 上。
+   * 基础值 = Lake 浅色 schema；dark.css 按 Lake 深色 schema 覆写为 #2ED790。
+   * 这是 Lake 的亮眼标志、也是"正文由 lakex 内核渲染"的可见证据（260928 用户要求，别改回 --lake-accent）。 */
+  --lake-kernel-brand-green: #00b96b;
+  /* 文本选中：**固定**蓝灰，不跟主题走（用户 261006 定稿：选中的边框已经是主题色，再叠一个主题色选区观感不好；
+   * 各主题统一到浅色主题这一档 —— 实测在 #f5f5f5 上合成即用户截图里的 #d8dde8）。
+   * 放 base.css = 主题无关令牌（与下方 --lake-file-* / --lake-tooltip-* 同区）。 */
+  --lake-select-bg: rgba(63,95,160,.16);
+  /* hover 气泡（名称/说明）：用户 261006 要求「都改用选中色」。气泡盖在内容上需不透明，
+   * 取上面的合成实色 #d8dde8 + 深字（原为主题无关的深蓝 #3f4868 / 近白字）。 */
+  --lake-tooltip-bg: #d8dde8;
+  --lake-tooltip-fg: #1f2329;
+  /* 附件「文档类型」图标配色（260930 用户：附件直接展示类型图标）。
+   * 内容/品牌色（不随主题语义变），与 --lake-board-canvas-* 同处「主题无关令牌」区；
+   * 深浅底都可辨，故不按主题分叉。用法见 features/bitable/bitableFileIcon.css。 */
+  --lake-file-image: #d98a00;
+  --lake-file-pdf: #d94a3d;
+  --lake-file-doc: #2f6fd0;
+  --lake-file-sheet: #2f9e5f;
+  --lake-file-slide: #e07b28;
+  --lake-file-archive: #b58a2b;
+  --lake-file-audio: #8b5cd6;
+  --lake-file-video: #c9539a;
+  --lake-file-code: #5b6f96;
+  --lake-file-text: #6d757e;
+  --lake-file-other: #8a9099;
+  --lake-conflict-border: rgba(211, 160, 68, .38);
+  /* 画板（drawnix）各 vendor 主题的画布底色 + 错误横幅阴影（P7-d 收尾）：vendor 自带调色板，
+   * 主题无关，按硬指标把字面量收在主题文件里。 */
+  --lake-board-canvas-default: #fff;
+  --lake-board-canvas-soft: #f5f5f5;
+  --lake-board-canvas-dark: #141414;
+  --lake-board-canvas-starry: #0d2537;
+  --lake-error-shadow: 0 18px 48px rgba(80, 35, 30, .18);
+}
+
+/* ── 移动端自有度量（P1：整块从 src/mobile/mobile.css 迁入，值未改）──────────
+ * 安全区 / 骨架高度 / 动效时长与曲线 / 层叠阶梯。层叠阶梯的语义是「移动端浮层顺序的
+ * 唯一来源」——P3 建 mb-sheet/mb-dialog/mb-toast 时统一改走这里，不要再写魔法数字。 */
+:root {
+  /* 思源移动端骨架度量（_mobile.scss:4-15） */
+  --mobile-topbar-height: 48px;
+  --mobile-bottom-bar-height: 48px;
+  --mobile-status-height: 24px;
+  --mobile-bar-gap: 8px;
+  --mobile-top-safe-area: env(safe-area-inset-top, 0px);
+  --mobile-bottom-safe-area: env(safe-area-inset-bottom, 0px);
+  /* 思源动效：面板 150ms cubic-bezier(0,0,.2,1)；按压 80ms；遮罩 150ms linear */
+  --mobile-ease-panel: cubic-bezier(0, 0, .2, 1);
+  /* 进入/退出统一用「强 ease-out」：抽屉原先进场用 ease-out、退场用思源 Material 曲线（起步慢），
+     一进一出两套手感；遮罩原先还是 linear。这里收敛成同一条曲线，退出也不再拖沓。
+     时长仍保持思源口径 150ms（面板/遮罩共用）。 */
+  --mobile-ease-out: cubic-bezier(.22, 1, .36, 1);
+  --mobile-duration-panel: 150ms;
+  --mobile-duration-press: 80ms;
+  --mobile-mask: var(--lake-scrim, var(--lake-scrim));
+  /* 移动端层叠层级令牌：浮层顺序的**唯一来源**，新浮层一律用这里的变量，别再写魔法数字。 */
+  --mobile-z-topbar: 3;
+  --mobile-z-dock-mask: 6;
+  --mobile-z-dock: 7;
+  --mobile-z-model-mask: 9;
+  --mobile-z-fab: 15;
+  --mobile-z-drawer-mask: 40;
+  --mobile-z-drawer: 45;
+  --mobile-z-settings-mask: 49;
+  --mobile-z-settings: 50;
+  --mobile-z-settings-preview: 55;
+  --mobile-z-toast: 60;
+  --mobile-z-sheet-mask: 70;
+  --mobile-z-sheet: 71;
+  --mobile-z-dropdown-mask: 71;
+  --mobile-z-dropdown: 72;
+  --mobile-z-menu-scrim: 80;
+  --mobile-z-menu: 81;
+  --mobile-z-dialog: 90;
+  --mobile-z-snackbar: 95;
+  --mobile-z-drag-ghost: 9999;
+}

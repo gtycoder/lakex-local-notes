@@ -7,15 +7,13 @@ import { applySystemBarTheme } from "./systemBars";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
 import "../features/editor/image-lightbox.css";
 import "../features/attachment/attachment-preview.css";
-// ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统** themes/*（--lake-*），不再用思源调色板。
+// ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统**（--lake-*），不再用思源调色板。
 // 思源样式层（src/b3/**）已整体删除；仅 .b3-* / fn__* 类名保留，规则在 compat.css（值走 --lake-*）。
 import "../styles/fonts/misans/misans.css"; // 内置 MiSans（简中+Latin，官方切片子集）
 import "../styles/fonts/jetbrains-mono/jetbrains-mono.css"; // 内置等宽 JetBrains Mono
-import "../styles/themes/base.css";
-import "../styles/themes/light.css";
-import "../styles/themes/dark.css";
-import "../styles/themes/warm.css";
-import "../styles/tokens.css"; // 非令牌基础规则（关键帧/焦点环/reduced-motion）
+// P1（261012）：移动端令牌/皮肤改由 src/mobile/theme/** 提供（自有取值层）。
+// 桌面 themes/** 不再是移动端契约；护栏 src/mobile/mobileIndependence.test.ts 卡住回退。
+import "./theme/index.css";
 import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，走 --lake-*）
 import "../styles/compat.css"; // 复用桌面兼容层（config-*/b3-label/b3-switch/fn__*，值走 --lake-*）
 import "../styles/kit.css"; // 自有组件库（ln-* 14 件）——新 UI 组件来源
