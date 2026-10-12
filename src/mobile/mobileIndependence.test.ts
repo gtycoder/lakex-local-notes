@@ -63,8 +63,17 @@ const ALLOWED_DESKTOP_STYLE_IMPORTS: Record<string, string[]> = {
  * 261012 P0 冻结实测（当时工作区 = 261012 移动端批交付后）。
  */
 const CLASS_TOKEN_BASELINE: Record<string, number> = {
-  // P2 已清零 10 个文件（150 → 109）；剩下这一个在 P4「设置页样板屏」整屏重写时清零。
-  "mobile/settings/SettingsDrawer.tsx": 109,
+  // **已清零**：P2 迁 10 个文件（150 → 109），P4 整屏重写设置页（109 → 0）。
+  // 这里保持空对象 = 移动端源码里**不允许再出现**任何 ln-/config-/b3-/fn__ 类名 token；
+  // 新增使用会被 "grew" 断言直接拦下（要加就说明你又把桌面原语引回移动端了）。
+};
+
+/**
+ * 桌面/共享 UI 组件件 import 允许清单（冻结现状，只许降）。
+ * treeDrag = 拖拽逻辑与 DOM 混合件（§9.2 列为待拆）；P6 组件变体化时一并处置。
+ */
+const ALLOWED_DESKTOP_COMPONENT_IMPORTS: Record<string, string[]> = {
+  "mobile/notebook/NotebookWorkspace.tsx": ["../../components/treeDrag"],
 };
 
 /** 桌面侧反向耦合基线（mobile-app 在 src/styles/** 的出现次数，只许降）。 */
@@ -200,6 +209,30 @@ describe("移动端 UI 独立性围栏（P0）", () => {
     if (REPORT) console.log("== 反向耦合（现状） ==\n" + JSON.stringify(actual, null, 1));
     expect(grew, "桌面样式里新增了为移动端开的分支（移动端应有自己的原语）：\n  " + grew.join("\n  ")).toEqual([]);
     expect(stale, "以下桌面文件已无移动端分支，请从基线删掉：\n  " + stale.join("\n  ")).toEqual([]);
+  });
+
+  it("src/mobile 不得 import 桌面/共享的 UI 组件件（只共享必要逻辑）", () => {
+    const surprises: string[] = [];
+    const seen = new Set<string>();
+    for (const abs of listFiles(MOBILE, /\.(tsx|ts)$/)) {
+      const rel = relOf(abs);
+      for (const spec of importSpecifiers(read(abs))) {
+        if (!/components\//.test(spec) || spec.endsWith(".css")) continue;
+        seen.add(rel + " :: " + spec);
+        const allowed = ALLOWED_DESKTOP_COMPONENT_IMPORTS[rel] ?? [];
+        if (!allowed.includes(spec)) surprises.push(rel + " -> " + spec);
+      }
+    }
+    const stale: string[] = [];
+    for (const [rel, specs] of Object.entries(ALLOWED_DESKTOP_COMPONENT_IMPORTS)) {
+      for (const spec of specs) if (!seen.has(rel + " :: " + spec)) stale.push(rel + " -> " + spec);
+    }
+    expect(
+      surprises,
+      "移动端不得复用桌面的 UI 组件件（MOBILE-TECH-STACK §9.3 第 2 条）；需要在移动端自建，或按 P6 做变体化：\n  " +
+        surprises.join("\n  ")
+    ).toEqual([]);
+    expect(stale, "以下 import 已消灭，请从 ALLOWED_DESKTOP_COMPONENT_IMPORTS 删掉（只许降）：\n  " + stale.join("\n  ")).toEqual([]);
   });
 
   it("移动端不得 import 桌面 themes/**（取值层归 src/mobile/theme/**）", () => {

@@ -41,7 +41,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/tokens.css": { decls: 167, dupGroups: 0 }, // P2：+11 = 移动端几何槽（触达/内距/圆角）
   "mobile/theme/light.css": { decls: 83, dupGroups: 0 },
   "mobile/theme/dark.css": { decls: 134, dupGroups: 0 }, // +41 = 编辑器深色桥整块自 editor-dark.css 迁入（值未改）
-  "mobile/kit.css": { decls: 248, dupGroups: 0 }, // P2：mb-* 原语库首批（btn/iconbtn/row/list/input/select/tag/segment/card/树/工具类）
+  "mobile/kit.css": { decls: 361, dupGroups: 0 }, // P2 首批 248 → P4 +113＝设置页骨架 mb-set-* + 开关 mb-switch
   "mobile/floating.css": { decls: 256, dupGroups: 0 }, // P3：浮层原语（sheet/actionsheet/toast/menusheet + 两种遮罩进场）
   "mobile/mobile.css": { decls: 1343, dupGroups: 2 }, // P1：-39=令牌块迁出；P2：+4=首页 tab 点按目标 ≥44（B5）
   "mobile/mobile-kit.css": { decls: 177, dupGroups: 0 }, // P2 目标：整份消灭

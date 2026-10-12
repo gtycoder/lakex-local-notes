@@ -120,7 +120,7 @@ async function openSettings() {
 async function settingsPage(label) {
   const back = await pageRef.evaluate('Boolean(document.querySelector(".mobile-settings-close"))');
   if (back) { await tapExpr(center(".mobile-settings-close"), "settings back", 900); }
-  await tapExpr(centerByText('.mobile-settings-list button, .mobile-settings-list .ln-row, .mobile-settings-list .mb-row, .mobile-settings-row', label, 0), "settings row: " + label, 1300);
+  await tapExpr(centerByText('.mobile-settings-list button, .mobile-settings-list .mb-list-item, .mobile-settings-list .ln-row, .mobile-settings-list .mb-row, .mobile-settings-row', label, 0), "settings row: " + label, 1300);
 }
 
 export default async function run(ctx) {

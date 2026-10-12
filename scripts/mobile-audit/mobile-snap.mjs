@@ -51,7 +51,7 @@ export const STATES = [
   { name: "home-library-list", nav: async (page) => { await clickText(page, ".mobile-htab", "知识库"); await clickText(page, ".toolbar__button", "切换到列表"); } },
   { name: "home-doc", nav: async (page) => { await page.evaluate("(function(){var el=document.querySelector('.doc-card');if(el)el.click();return true;})()"); await page.sleep(1500); } },
   { name: "settings", nav: async (page) => { await clickText(page, ".toolbar__button", "设置"); await page.sleep(600); } },
-  { name: "settings-appearance", nav: async (page) => { await clickText(page, ".toolbar__button", "设置"); await page.sleep(600); await clickText(page, ".mobile-settings-list .b3-list-item", "外观"); await page.sleep(600); } },
+  { name: "settings-appearance", nav: async (page) => { await clickText(page, ".toolbar__button", "设置"); await page.sleep(600); await clickText(page, ".mobile-settings-list .b3-list-item, .mobile-settings-list .mb-list-item", "外观"); await page.sleep(600); } },
 ];
 
 export default async ({ page, args }) => {

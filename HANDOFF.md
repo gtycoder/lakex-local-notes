@@ -38,6 +38,13 @@
   `mb-menusheet` + 两种遮罩进场）；9 处组件迁名（6 个 Sheet + 菜单 Sheet + ConfirmDialog 改 ActionSheet + Toasts）；
   **不建 mb-dialog**。验收：mobilesnap **6 态 0 差异** · 设备走查 **22/22 ok** · tsc/门禁全绿。
   旧浮层类在 mobile.css / mobile-kit.css 已无 JSX 施加 ⇒ 留 P7 交 audit-dead-css 一次性清。
+- **P4 设置页样板屏（已交付）**：新增 `src/mobile/ui/settingsPrimitives.tsx`（**移动端自建**版式原语，
+  `mb-set-*` 骨架 + `mb-switch` + `mb-segment` + `mb-input` 内嵌输入；**`data-set-id` 契约不变** ⇒
+  `settingsSearch.ts` 的 SETTING_ITEMS 继续有效）；SettingsDrawer 换 import + 全部类名换 `mb-*`；
+  走查查出的 `.config-empty` 2.86:1 换成 `.mb-set-empty`（走 --lake-text-3 = AA）⇒ **settings-资源管理 对比度告警消失**。
+  ⇒ **移动端源码的桌面类名 token 归零（109 → 0）**；护栏升级为「不允许再出现」+ 新增「不得 import 桌面 UI 组件件」
+  （只留 treeDrag 一条冻结项，P6 处理）。验收：mobilesnap 重烤后**两轮 0 差异**（仅 settings 两态指纹变、元素数不变）·
+  设备走查 **22/22 ok** · 视觉复核 settings / settings-外观 两屏。
 - **未做（下一轮继续）**：
   P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
   文档外壳/dock）· P6 六组件变体化 · P7 收口（MOBILE-DESIGN.md 定稿 + 指标转门禁 + 清反向耦合 18 行）。

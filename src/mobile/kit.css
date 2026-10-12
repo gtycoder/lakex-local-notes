@@ -143,3 +143,58 @@
 .mb-tree-icon { flex: 0 0 auto; display: inline-flex; align-items: center; color: var(--lake-text-3); }
 .mb-tree-icon > svg { display: block; }
 .mb-indent { padding-left: calc(var(--mb-page-pad) + var(--indent, 0px)); }
+
+/* ── 设置页骨架（mb-set-*，P4）────────────────────────────────────────────
+ * 移动端自建（不再用桌面 .config-* / .b3-label）；契约不变：每个可搜索行带 data-set-id，
+ * 供两端共用的 src/components/settingsSearch.ts 定位（漂移有单测卡住）。
+ * 几何：分组 =「灰底上的标题 + 一张白卡」；行 ≥48（两行 56）；页内距 16；圆角 12。
+ * 对比度：说明/空态一律用 --lake-text-3（AA），**不用 text-4** —— 走查实测 .config-empty 在灰卡上只有 2.86。 */
+.mb-set-group { display: flex; flex-direction: column; gap: 8px; margin: 0 0 20px; }
+.mb-set-title { margin: 0; padding: 0 4px; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-medium); }
+.mb-set-items { display: flex; flex-direction: column; gap: 12px; }
+.mb-set-section { display: flex; flex-direction: column; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; }
+.mb-set-section__title { padding: 12px var(--mb-page-pad) 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-medium); }
+.mb-set-item {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  min-height: var(--mb-ctl-h-lg); padding: 12px var(--mb-page-pad);
+  border-top: 1px solid var(--lake-border-2);
+}
+.mb-set-section > .mb-set-item:first-child, .mb-set-section__title + .mb-set-item { border-top: 0; }
+.mb-set-item--field { align-items: flex-start; }
+.mb-set-item--field .mb-set-item__ctl { flex: 1 1 100%; }
+.mb-set-item__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mb-set-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-snug); }
+.mb-set-item__desc { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+.mb-set-item__note { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); line-height: var(--lake-line-height-normal); }
+.mb-set-item__ctl { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.mb-set-item__error { flex: 1 1 100%; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
+.mb-set-block { display: flex; flex-direction: column; gap: 8px; padding: 12px var(--mb-page-pad); border-top: 1px solid var(--lake-border-2); }
+.mb-set-section > .mb-set-block:first-child { border-top: 0; }
+.mb-set-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
+.mb-set-empty { margin: 0; padding: 20px 0; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+.mb-set-stats { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.mb-input--num { flex: 0 0 auto; width: 96px; }
+.mb-input--num > input { text-align: right; font-variant-numeric: tabular-nums; }
+.mb-kbd {
+  display: inline-flex; align-items: center; min-height: 24px; padding: 0 6px;
+  border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius-sm);
+  background: var(--lake-bg-block); color: var(--lake-text-3);
+  font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-micro);
+}
+/* 开关：触屏命中区 44，本体 46×28（胶囊） */
+.mb-switch {
+  position: relative; flex: 0 0 auto; width: 46px; height: 28px; margin: 0 8px 0 0;
+  border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-bg-sunken);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--mobile-duration-panel) linear;
+}
+.mb-switch::after { content: ""; position: absolute; inset: -8px; }   /* 命中区扩到 44 */
+.mb-switch[aria-checked="true"] { background: var(--lake-accent-ink); }
+.mb-switch:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.mb-switch__knob {
+  position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-knob);
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel);
+}
+.mb-switch[aria-checked="true"] .mb-switch__knob { transform: translateX(18px); }
+.mb-set-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

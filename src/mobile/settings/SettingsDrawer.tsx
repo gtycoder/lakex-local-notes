@@ -1,10 +1,12 @@
 /** 移动端设置页（§6：同步设置 S3 / 清理缓存 / 回收站 / 关于）。
- * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
+ * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用移动端自有骨架 .mb-set-*。
+ * P4（261012）：版式原语已换成 src/mobile/ui/settingsPrimitives（mb-set-*），data-set-id 契约不变
+ * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
-import { Group, Item, Seg, Block, NumField, Switch } from "../../components/settingsPrimitives";
+import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
 import { usePanelDrag } from "../usePanelDrag";
 import type { HistoryMobileSettings } from "../bridge";
@@ -203,25 +205,25 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "editor" && (
             <Group title="编辑器" icon={<Pencil size={16} />}>
               <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
-                <select className="ln-select" value={settings.fontSize} onChange={(e) => update({ fontSize: Number(e.target.value) })} aria-label="正文字号">
+                <select className="mb-select" value={settings.fontSize} onChange={(e) => update({ fontSize: Number(e.target.value) })} aria-label="正文字号">
                   {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
                 </select>
               </Item>
               <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限自动关闭最旧的标签。">
-                <select className="ln-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
+                <select className="mb-select mb-input--num" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
                   <option value={0}>不限</option>
                   {[4, 6, 8, 12, 16, 24].map((n) => <option key={n} value={n}>{n} 个</option>)}
                 </select>
               </Item>
               <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
-                <select className="ln-select fn__size200" value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(e) => update({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
+                <select className="mb-select mb-input--num" value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(e) => update({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
                   {MAX_ATTACHMENT_MB_OPTIONS_SETTINGS.map((mb) => <option key={mb} value={mb}>{mb} MiB</option>)}
                 </select>
               </Item>
               {pinState?.available && !pinState.pinned && (
                 <Item itemId="editor-pin-quick-note" name="新建小记" desc="添加到桌面。">
                   <button
-                    className="ln-btn ln-btn--secondary"
+                    className="mb-btn mb-btn--secondary"
                     onClick={() => {
                       void requestPinQuickNoteShortcut().then((requested) => {
                         setPinMsg(requested ? "已请求，请在系统弹窗中确认" : "该机型不支持固定快捷方式");
@@ -232,7 +234,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   >添加到桌面</button>
                 </Item>
               )}
-              {pinMsg && <div className="ln-form__desc">{pinMsg}</div>}
+              {pinMsg && <div className="mb-form__desc">{pinMsg}</div>}
             </Group>
           )}
 
@@ -240,8 +242,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             <Group title="外观" icon={<Palette size={16} />}>
               <Item itemId="appearance-theme" name="主题" desc="浅色=思源 daylight / 深色=midnight。">
                 <Seg ariaLabel="主题">
-                  <button className={"ln-btn ln-btn--secondary seg__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
-                  <button className={"ln-btn ln-btn--secondary seg__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
+                  <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
+                  <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
                 </Seg>
               </Item>
             </Group>
@@ -267,18 +269,18 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "resources" && (
             <Group title="资源管理" icon={<Images size={16} />}>
               <Block itemId="resources-clean" name="未引用资源" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
-                <button className="ln-btn ln-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).catch((error) => { setOrphans([]); reportNativeActionError("清理孤儿资源", error); }).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
+                <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).catch((error) => { setOrphans([]); reportNativeActionError("清理孤儿资源", error); }).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
               </Block>
               <Block itemId="resources-gc" name="云端未引用对象" desc="删除云端未被任何清单/历史快照引用且超过 7 天的对象（对齐桌面深度清理）。">
-                <button className="ln-btn ln-btn--primary" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch((error) => { setGcMsg("清理失败：" + getNativeErrorMessage(error)); reportNativeActionError("云端清理", error); }).finally(() => setOrphanBusy(false)); }}>清理云端</button>
-                {gcMsg && <div className="ln-form__desc">{gcMsg}</div>}
+                <button className="mb-btn mb-btn--primary" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch((error) => { setGcMsg("清理失败：" + getNativeErrorMessage(error)); reportNativeActionError("云端清理", error); }).finally(() => setOrphanBusy(false)); }}>清理云端</button>
+                {gcMsg && <div className="mb-form__desc">{gcMsg}</div>}
               </Block>
-              {orphans.length === 0 && <div className="config-empty">暂无冗余资源</div>}
+              {orphans.length === 0 && <div className="mb-set-empty">暂无冗余资源</div>}
               {orphans.map((o) => (
-                <div key={o.id} className="ln-row">
-                  <span className="ln-row__title">{o.filename}</span>
-                  <span className="ln-row__meta">{formatBytes(o.size)}</span>
-                  <button className="ln-iconbtn ln-row__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))).catch((error) => reportNativeActionError("删除孤儿资源", error)); }} aria-label="删除"><Trash size={16} /></button>
+                <div key={o.id} className="mb-row">
+                  <span className="mb-row__title">{o.filename}</span>
+                  <span className="mb-row__meta">{formatBytes(o.size)}</span>
+                  <button className="mb-iconbtn mb-row__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))).catch((error) => reportNativeActionError("删除孤儿资源", error)); }} aria-label="删除"><Trash size={16} /></button>
                 </div>
               ))}
             </Group>
@@ -286,42 +288,42 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "s3" && (
             <>
-              <div className="config-group">
-                <div className="config-title"><Cloud size={16} />同步设置（七牛 S3）</div>
-                <div className="config-items">
-                  <div className="config-item">
-                    <div className="config-item__main"><div className="config-name">Endpoint</div></div>
-                    <div className="config-item__ctl"><input className="ln-input" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>
+              <div className="mb-set-group">
+                <div className="mb-set-title"><Cloud size={16} />同步设置（七牛 S3）</div>
+                <div className="mb-set-items">
+                  <div className="mb-set-item">
+                    <div className="mb-set-item__main"><div className="mb-set-name">Endpoint</div></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>
                   </div>
-                  <div className="config-item">
-                    <div className="config-item__main"><div className="config-name">Region</div></div>
-                    <div className="config-item__ctl"><input className="ln-input" value={region} onChange={(e) => setRegion(e.target.value)} /></div>
+                  <div className="mb-set-item">
+                    <div className="mb-set-item__main"><div className="mb-set-name">Region</div></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={region} onChange={(e) => setRegion(e.target.value)} /></div>
                   </div>
-                  <div className="config-item">
-                    <div className="config-item__main"><div className="config-name">Bucket</div></div>
-                    <div className="config-item__ctl"><input className="ln-input" value={bucket} onChange={(e) => setBucket(e.target.value)} /></div>
+                  <div className="mb-set-item">
+                    <div className="mb-set-item__main"><div className="mb-set-name">Bucket</div></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={bucket} onChange={(e) => setBucket(e.target.value)} /></div>
                   </div>
-                  <div className="config-item">
-                    <div className="config-item__main"><div className="config-name">Object prefix</div></div>
-                    <div className="config-item__ctl"><input className="ln-input" value={prefix} onChange={(e) => setPrefix(e.target.value)} /></div>
+                  <div className="mb-set-item">
+                    <div className="mb-set-item__main"><div className="mb-set-name">Object prefix</div></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={prefix} onChange={(e) => setPrefix(e.target.value)} /></div>
                   </div>
-                  <div className="config-item">
-                    <div className="config-item__main"><div className="config-name">Access Key</div></div>
-                    <div className="config-item__ctl"><input className="ln-input" value={ak} onChange={(e) => setAk(e.target.value)} /></div>
+                  <div className="mb-set-item">
+                    <div className="mb-set-item__main"><div className="mb-set-name">Access Key</div></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={ak} onChange={(e) => setAk(e.target.value)} /></div>
                   </div>
-                  <div className="config-item">
-                    <div className="config-item__main"><div className="config-name">Secret Key</div></div>
-                    <div className="config-item__ctl"><input className="ln-input" type="password" value={sk} onChange={(e) => setSk(e.target.value)} /></div>
+                  <div className="mb-set-item">
+                    <div className="mb-set-item__main"><div className="mb-set-name">Secret Key</div></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" type="password" value={sk} onChange={(e) => setSk(e.target.value)} /></div>
                   </div>
                 </div>
               </div>
-              <div className="config-group">
-                <div className="config-title"><RefreshCw size={16} />连接与同步</div>
-                <div className="config-items">
+              <div className="mb-set-group">
+                <div className="mb-set-title"><RefreshCw size={16} />连接与同步</div>
+                <div className="mb-set-items">
                   <Switch
                     name="启用云同步"
                     desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
-                    note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
+                    note={<><span className="mb-tag mb-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
                     checked={syncCfg?.enabled !== false}
                     onChange={(next) => {
                       const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "manual" as const, autoIntervalMinutes: 15 }), enabled: next };
@@ -329,32 +331,32 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       bridge.saveSyncSettings(value);
                     }}
                   />
-                  <div className="config-block">
-                    <div className="config-block__name">保存并测试连接</div>
-                    <div className="config-block__text">配置将由本地保存为真相，S3 仅作同步镜像。</div>
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--primary" onClick={saveS3}>保存</button>
-                      <button className="ln-btn ln-btn--primary" onClick={() => void testS3()}>测试连接</button>
-                      <button className="ln-btn ln-btn--secondary" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
+                  <div className="mb-set-block">
+                    <div className="mb-set-block__name">保存并测试连接</div>
+                    <div className="mb-set-item__desc">配置将由本地保存为真相，S3 仅作同步镜像。</div>
+                    <div className="mb-set-block__actions">
+                      <button className="mb-btn mb-btn--primary" onClick={saveS3}>保存</button>
+                      <button className="mb-btn mb-btn--primary" onClick={() => void testS3()}>测试连接</button>
+                      <button className="mb-btn mb-btn--secondary" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
                     </div>
-                    {s3Test && <div className="config-block__text">{s3Test}</div>}
-                    {syncMsg && <div className="config-block__text">{syncMsg}</div>}
+                    {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
+                    {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
                   </div>
                   {syncWarnings.length > 0 && (
-                    <div className="config-block">
-                      <div className="config-block__name">同步有 {syncWarnings.length} 项被跳过</div>
-                      <div className="config-block__text">远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</div>
-                      <div className="b3-list b3-list--background" role="list">
+                    <div className="mb-set-block">
+                      <div className="mb-set-block__name">同步有 {syncWarnings.length} 项被跳过</div>
+                      <div className="mb-set-item__desc">远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</div>
+                      <div className="mb-list" role="list">
                         {syncWarnings.map((w, i) => (
                           <button
                             key={`${w.kind}-${w.noteId ?? i}-${w.filename ?? ""}`}
                             type="button"
-                            className="b3-list-item"
+                            className="mb-list-item"
                             disabled={!w.noteId || !onOpenNote}
                             onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
                           >
-                            <span className="b3-list-item__text ln-ellipsis">{w.title || w.noteId || "未命名文档"}</span>
-                            <span className="b3-list-item__meta">{w.kind === "asset_missing" ? (w.filename ?? "资源缺失") : "正文缺失"}</span>
+                            <span className="mb-list-item__text mb-ellipsis">{w.title || w.noteId || "未命名文档"}</span>
+                            <span className="mb-list-item__meta">{w.kind === "asset_missing" ? (w.filename ?? "资源缺失") : "正文缺失"}</span>
                           </button>
                         ))}
                       </div>
@@ -366,43 +368,43 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           )}
 
           {view === "cache" && (
-            <div className="config-group">
-              <div className="config-title"><HardDrive size={16} />清理缓存</div>
-              <div className="config-items">
-                <div className="config-block">
-                  <div className="config-block__text">只清理可重建的派生数据（blob 运行时缓存）。<br />不会删除正文、未同步修改或已下载资源。</div>
+            <div className="mb-set-group">
+              <div className="mb-set-title"><HardDrive size={16} />清理缓存</div>
+              <div className="mb-set-items">
+                <div className="mb-set-block">
+                  <div className="mb-set-item__desc">只清理可重建的派生数据（blob 运行时缓存）。<br />不会删除正文、未同步修改或已下载资源。</div>
                   {cacheSummary && (
-                    <div className="config-stats">
+                    <div className="mb-set-stats">
                       <span><strong>Blob 运行时缓存</strong> {cacheSummary.runtimeBlobBytes} 项</span>
                       <span>已下载资源（不清理）{cacheSummary.downloadableAssetBytes} 项</span>
                       <span>待上传（不清理）{cacheSummary.pendingUploadBytes} 项</span>
                     </div>
                   )}
-                  <div className="config-block__actions">
-                    <button className="ln-btn ln-btn--primary" onClick={() => void clearCache()}>清理缓存</button>
+                  <div className="mb-set-block__actions">
+                    <button className="mb-btn mb-btn--primary" onClick={() => void clearCache()}>清理缓存</button>
                   </div>
-                  {cacheMsg && <div className="config-block__text">{cacheMsg}</div>}
+                  {cacheMsg && <div className="mb-set-item__desc">{cacheMsg}</div>}
                 </div>
               </div>
             </div>
           )}
 
           {view === "about" && (
-            <div className="config-group">
-              <div className="config-title"><Info size={16} />关于</div>
-              <div className="config-items">
-                <div className="config-block">
-                  <div className="config-block__name">{appInfo?.name ?? "Lake Notes"}</div>
-                  <div className="config-block__text">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
-                  <div className="config-block__text">协议：manifest v{appInfo?.protocolVersion ?? "4"} · 本地为真相，S3 为同步镜像</div>
-                  <div className="config-block__text">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + native SQLite)"}</div>
-                  <div className="config-block__text">本地优先笔记应用（Electron + 安卓共享同步层）</div>
-                  <div className="config-block__text">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>
+            <div className="mb-set-group">
+              <div className="mb-set-title"><Info size={16} />关于</div>
+              <div className="mb-set-items">
+                <div className="mb-set-block">
+                  <div className="mb-set-block__name">{appInfo?.name ?? "Lake Notes"}</div>
+                  <div className="mb-set-item__desc">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
+                  <div className="mb-set-item__desc">协议：manifest v{appInfo?.protocolVersion ?? "4"} · 本地为真相，S3 为同步镜像</div>
+                  <div className="mb-set-item__desc">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + native SQLite)"}</div>
+                  <div className="mb-set-item__desc">本地优先笔记应用（Electron + 安卓共享同步层）</div>
+                  <div className="mb-set-item__desc">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>
                 </div>
                 {diag && (
-                  <div className="config-block">
-                    <div className="config-block__name">数据诊断</div>
-                    <div className="config-stats">
+                  <div className="mb-set-block">
+                    <div className="mb-set-block__name">数据诊断</div>
+                    <div className="mb-set-stats">
                       <span><strong>文档</strong> {diag.noteCount}</span>
                       <span><strong>分组</strong> {diag.folderCount}</span>
                       <span><strong>小记</strong> {diag.quickNoteCount}</span>
@@ -427,10 +429,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {MENU.map((m) => {
             const Icon = m.icon;
             return (
-              <button key={m.key} className="ln-row mobile-settings-row" onClick={() => { setView(m.key); setPreviewNoteId(null); }}>
-                <Icon size={20} className="ln-row__icon" />
-                <span className="ln-row__title">{m.label}</span>
-                <ChevronRight size={18} className="ln-row__chevron" />
+              <button key={m.key} className="mb-row mobile-settings-row" onClick={() => { setView(m.key); setPreviewNoteId(null); }}>
+                <Icon size={20} className="mb-row__icon" />
+                <span className="mb-row__title">{m.label}</span>
+                <ChevronRight size={18} className="mb-row__chevron" />
               </button>
             );
           })}
