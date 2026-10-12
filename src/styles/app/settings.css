@@ -22,9 +22,7 @@
 .settings-nav-item.active { box-shadow: var(--lake-shadow-card); }
 
 /* 三个大面板共用同一套：居中打开、可拖动、可拉伸、尺寸受视口约束。 */
-.settings-overlay,
-.history-panel-backdrop,
-.trash-panel-backdrop {
+.settings-overlay {
   display: grid;
   position: fixed;
   z-index: 800;

@@ -26,7 +26,7 @@
 /* P7-e: reduced-motion contract moved to the highest layer (src/styles/a11y.css), which needs no !important. */
 
 /* 减弱透明度（macOS「降低透明度」/ Android 类似开关）：玻璃材质改为不透明表面
-   （只处理材质本身；.modal-backdrop 是遮罩不是材质，保持半透明） */
+   （只处理材质本身；.ln-scrim 是遮罩不是材质，保持半透明） */
 @media (prefers-reduced-transparency: reduce) {
   .create-menu,
   .context-menu {

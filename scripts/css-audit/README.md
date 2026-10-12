@@ -22,6 +22,7 @@
 ```bash
 node scripts/css-audit/audit-lookalike.mjs 0.62 7   # 像原语却没复用（命中数就是"还有多少没统一"）
 node scripts/css-audit/audit-primitives.mjs         # 跨文件规则体重复族
+node scripts/css-audit/audit-dead-css.mjs           # 死 CSS：类名在全仓产品代码里零引用（--all 连被排除的也打印）
 ```
 
 判定与口径见 `AGENTS.md` §3#14「样式统一」与 `HANDOFF.md` §3 第 10 条（含已暂缓项与接手姿势）。
@@ -133,6 +134,7 @@ node scripts/css-audit/check-stylesnap.mjs --from .css-audit/snap/base.json --wr
 | `plan-l2-shadowed.mjs` | 找"整条规则被更高层同名选择器完全压制"的可删规则（同 `@media` + 同单选择器 + 高层覆盖全部属性）；`--apply` 按源码区间删除并剪掉变空的 `@media` 壳 |
 | `l3-plan.mjs` | L3 安全筛选（260923）：零命中 **且** 类名在应用代码里无生产者（含动态模板串前缀，保守）才判可删；依赖 `fingerprints-all.json` |
 | `audit-lookalike.mjs` | **260930 大统一**：以 kit 的 `.ln-*` 控件级原语为签名，找「**长得像原语却自己写了一套**」的规则（加权相似度：同名同值 1.0 / 同名长度类 0.45 / 阈值 0.62）。用法 `node scripts/css-audit/audit-lookalike.mjs [阈值] [原语最小声明数]` |
+| `audit-dead-css.mjs` | **261012 清死 CSS**：找「选择器里的类名在产品代码里零引用」的规则。**三类必须排除**否则会误删：① 内核/第三方命名空间（`ne-`/`ant-`/`lakex-`/`plait-`/`univer-`/`b3-`/`fn__`，如 `.lakex-material-trigger` 由 drawnix 渲染）；② **动态拼接**（`` `sync-toast-icon--${kind}` `` ⇒ 该类名永远不字面出现；口径从模板串/字符串拼接提取前缀与后缀片段，**串中间的拼接也算**）；③ **设计词表**（`kit.css` 头注释写明 = COMPONENTS.md 14 件、P5 才逐屏迁移；`themes/`/`fonts/`/`kernel-theme.css`/`compat.css` 同理）。移动端（`src/mobile/**`）单独标注。用法 `node scripts/css-audit/audit-dead-css.mjs [--all]`，退出码恒 0（报告而非门禁）。 |
 | `audit-primitives.mjs` | **260930 大统一**：找**跨文件、跨类名的规则体重复族**（同一套声明被写在多个不同选择器里）——同类里出现 ≥2 个不同「身份」才报。用法 `node scripts/css-audit/audit-primitives.mjs` |
 
 典型链路：`loadorder` → `allsel` → `fingerprint-all` → `condcollect` →（`drive` 跑 `cond-eval`）→ `imp-scan` → `imp-safe` → `plan-imp`。

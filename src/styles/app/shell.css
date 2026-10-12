@@ -171,12 +171,6 @@
   padding: 0 3px 6px;
 }
 
-.activity-rail-spacer { display: none; }
-
-.activity-rail-fill { flex: 1; }
-
-.activity-button:active { transform: scale(.965); }
-
 /* ── 侧栏卡片几何（260915 窄窗彻底统一 · 组 6：侧栏壳层）── */
 .sidebar {
   position: relative;

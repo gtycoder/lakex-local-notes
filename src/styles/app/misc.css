@@ -5,31 +5,15 @@
 /* 树行同步绿点已移除：自动保存窗口仅 1s，该点无实际意义。顶栏/标签的同步状态另见 .sync-state-dot。 */
 .empty-list { padding: 28px 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); text-align: center; }
 
-.save-label.error { color: var(--lake-status-error); }
-
-.save-label.dirty { color: var(--lake-status-pending); }
-
-.mode-toggle.selected { background: var(--lake-accent-tint); }
-
 .editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-status-error-soft); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: var(--lake-font-size-small); }
 
 .loading-screen { height: 100vh; }
 
 .loading-screen small { color: var(--lake-status-error); }
 
-.form-grid .wide { grid-column: 1 / -1; }
-
-.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border-1); outline: 0; font-size: var(--lake-font-size-tiny); font-weight: 400; }
-
 .checkbox { flex-direction: row; align-items: center; font-weight: 400; }
 
-/* ===== 同步进度与最近结果（S3 同步面板） ===== */
-.sync-progress-bar.indeterminate { width: 34%; animation: sync-indeterminate 1.2s ease-in-out infinite; }
-
 @keyframes sync-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
-
-/* .connection-message.ok 在下方「同步面板 v2」一处定义（此处原有一份重复的被其覆盖，已删） */
-.connection-message.error { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 
 /* ===== 孤儿资源（未引用附件）清理 ===== */
 .spin { animation: spin 1s linear infinite; }
@@ -68,7 +52,7 @@
   .app-shell.sidebar-resizing { transition: none; }
 
   /* .activity-rail / .activity-rail-spacer / .activity-rail-fill / .activity-button
-     已搬到共用作用域（见上方「左右活动轨」）。 */
+     已搬到共用作用域（见上方「左右活动轨」）；其中 rail-spacer / rail-fill / activity-button 于 261012 清死 CSS 时删除（DOM 已无这些类）。 */
 
   /* .sidebar / .sidebar::before / .sidebar.sidebar-floating / .sidebar.sidebar-collapsed
      已搬到共用作用域（见上方「侧栏卡片几何」，浮动带见 b3/layout.css）。 */
@@ -108,49 +92,6 @@
 
   /* .workspace / .tab-bar / .tab-items / .tabbar-* 已搬到共用作用域（见上方「壳层几何」） */
 
-  .tabbar-action[data-tooltip]::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    top: calc(100% + 9px);
-    left: 50%;
-    z-index: 20;
-    width: max-content;
-    max-width: 260px;
-    padding: 6px 9px;
-    border: 1px solid var(--lake-border-strong);
-    border-radius: 6px;
-    color: var(--lake-tooltip-fg);
-    background: var(--lake-tooltip-bg);
-    box-shadow: var(--lake-shadow-card);
-    font-size: var(--lake-font-size-micro);
-    font-weight: 500;
-    line-height: 1.25;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transform: translate(-50%, -3px);
-    transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
-  }
-  .tabbar-action[data-tooltip]:hover::after,
-  .tabbar-action[data-tooltip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
-
-  .sync-tab-action.syncing { color: var(--lake-accent); }
-  .sync-tab-action.syncing svg { animation: shell-sync-pulse 1.25s ease-in-out infinite; }
-  .sync-tab-action.syncing .sync-state-dot { background: var(--lake-accent); animation: shell-sync-dot 1.25s ease-in-out infinite; }
-  .sync-tab-action.success { color: var(--lake-status-ok); }
-  .sync-tab-action.success .sync-state-dot { background: var(--lake-status-ok); }
-  .sync-tab-action.error { color: var(--lake-status-error); }
-  .sync-tab-action.error .sync-state-dot { background: var(--lake-status-error); }
-}
-
-@keyframes shell-sync-pulse {
-  0%, 100% { opacity: .62; transform: scale(.94); }
-  50% { opacity: 1; transform: scale(1.06); }
-}
-
-@keyframes shell-sync-dot {
-  0%, 100% { opacity: .45; transform: scale(.8); }
-  50% { opacity: 1; transform: scale(1.1); }
 }
 
 @keyframes shell-tree-reveal {
@@ -161,7 +102,6 @@
 @media (prefers-reduced-motion: reduce) {
   .app-shell,
   .sidebar,
-  .activity-button,
   .tab-item,
   .tab-switcher,
   .tab-switcher-menu,
@@ -198,12 +138,8 @@
 /* ===== 2026-08-06 同步视觉：弹窗/小记/按钮统一到暖紫灰体系（仅配色） ===== */
 /* 主/次按钮：绿 → shell 强调色；次按钮白微卡 */
 /* 同步/设置面板：去绿、去旧边框，融入 shell */
-.connection-message.ok { color: var(--lake-status-ok); background: var(--lake-status-ok-soft); }
-
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: var(--lake-font-size-bodyLg); line-height: 1; }
-
-.emoji-picker-backdrop { position: fixed; inset: 0; z-index: 699; }
 
 .emoji-picker { position: fixed; z-index: 700; width: 550px; height: 370px; min-width: 440px; min-height: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); resize: both; overflow: hidden; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 
@@ -238,8 +174,6 @@
 .emoji-picker-clear:hover { background: var(--lake-bg-hover); }
 
 /* M2 全文搜索面板（思源 b3-dialog / b3-text-field 令牌风格） */
-.search-panel-backdrop { position: fixed; inset: 0; z-index: 800; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
-
 .search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
 
 .search-panel-input-row {display: flex; align-items: center;}
@@ -256,41 +190,6 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 同步 tooltip：参考思源的深色多行提示，不再被 nowrap 吃掉换行。 */
-@media (min-width: 761px) {
-  .sync-tab-action[data-tooltip]::after {
-    max-width: 310px;
-    padding: 8px 11px;
-    border: 0;
-    border-radius: var(--lake-radius-md);
-    color: var(--lake-tooltip-fg);
-    background: var(--lake-tooltip-bg);
-    box-shadow: var(--lake-shadow-card);
-    font-size: var(--lake-font-size-tiny);
-    line-height: 1.45;
-    text-align: left;
-    white-space: pre-line;
-  }
-  .sync-tab-action[data-tooltip]::before {
-    content: "";
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 50%;
-    z-index: 21;
-    width: 8px;
-    height: 8px;
-    background: var(--lake-tooltip-bg);
-    opacity: 0;
-    transform: translate(-50%, -3px) rotate(45deg);
-    transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
-    pointer-events: none;
-  }
-  .sync-tab-action[data-tooltip]:hover::before,
-  .sync-tab-action[data-tooltip]:focus-visible::before {
-    opacity: 1;
-    transform: translate(-50%, 0) rotate(45deg);
-  }
-}
 
 /* 浮窗（设置/回收站/历史）入场动画。必须保留 translate(-50%,-50%) 居中偏移：
  * 任何只写 translateY/scale 的位移类 keyframes（如 lake-pop-in）套到 .floating-dialog

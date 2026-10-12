@@ -13,27 +13,6 @@
 .activity-rail {
   background: transparent;
 }
-.activity-button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  margin: 2px 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--lake-radius-md);
-  color: var(--lake-text-3);
-  background: transparent;
-  cursor: pointer;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
-    background-color var(--lake-motion-fast) var(--lake-ease-standard);
-}
-.activity-button:hover:not(:disabled) { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.activity-button:active:not(:disabled) { background: var(--lake-bg-press); transform: scale(.965); }
-.activity-button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
-.activity-button:disabled { opacity: .35; cursor: default; }
-.activity-button.active { color: var(--lake-accent); background: var(--lake-accent-tint); }
-
 /* ── 目录栏头部（5 个紧凑图标按钮；沿用产品既有"悬停才显形"） ───────────
  * 260930 大统一：盒子/圆角/配色/hover 全部来自 kit 的 `.ln-iconbtn--compact`（+ `--accent` 变体：
  * 目录栏这一排刻意用主色淡底、中性底「显得没反应」，用户 260914 定过 —— 那个变体现在是正式件）。
@@ -712,9 +691,7 @@
 
 /* 4) 提示气泡圆角 + 二级菜单表面（同样属 P7-b 漏搬：原在 b3/components.css；
  *    色/底已在 app/misc.css 与 overlay 层，仅圆角/内边距缺失 ⇒ 气泡曾是直角）。 */
-.tabbar-action[data-tooltip]::after,
 .tab-switcher[data-tooltip]::after,
-.sync-tab-action[data-tooltip]::after { border-radius: var(--lake-radius-sm); }
 .context-menu-submenu {
   padding: var(--lake-space-sm) 0;
   border-radius: var(--lake-radius-md);

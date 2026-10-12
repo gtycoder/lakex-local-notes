@@ -7,13 +7,6 @@
  * 本层高于 legacy ⇒ 普通规则即可压过旧样式；只有 legacy 的 !important 才需要先删（见各条注释）。
  */
 
-/* ── 遮罩 ─────────────────────────────────────────────────────────── */
-.modal-backdrop,
-.history-panel-backdrop,
-.search-panel-backdrop {
-  background: var(--lake-scrim);
-}
-
 /* ── 浮层基座：遮罩（唯一来源）。三型浮层由 src/components/ui/Overlay.tsx 统一渲染 ── */
 .ln-scrim {
   position: fixed;
@@ -180,7 +173,6 @@
 
 /* ── 全文搜索面板内层（P5-j；设计 05/07）───────────────────────────────
  * 面板表面已由本文件的 .search-panel 规则统一（并**覆盖掉 app/dialogs.css 里那条残留毛玻璃**）。 */
-.search-panel-backdrop { background: var(--lake-scrim); }
 .search-panel { border: 1px solid var(--lake-border-1); box-shadow: var(--lake-shadow-dialog); }
 .search-panel-input-row {
   gap: var(--lake-space-md);

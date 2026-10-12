@@ -82,9 +82,6 @@
 .quick-notes-index-wrap { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 标签行（对齐云端）：左侧「标签 ▾」，右侧条数/排序 */
 .quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 1px solid var(--lake-border-2); margin-bottom: 6px; }
-.quick-notes-filter { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 6px; color: var(--lake-text-3); background: transparent; font-size: var(--lake-font-size-small); cursor: pointer; }
-.quick-notes-filter:hover { background: var(--lake-bg-hover); }
-/* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作图标 */
 .quick-notes-batch { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
 .quick-notes-tool-btn--danger { color: var(--lake-status-error); }
 /* 行内「⋯」与复选框：默认隐藏，hover/选中/菜单展开时显形（对齐云端） */
@@ -130,15 +127,6 @@
 .quick-note-composer, .quick-note-entry { border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); }
 
 .quick-note-composer { display: flex; flex-direction: column; padding: 10px 12px 12px; }
-
-/* 工具条在写作区上方（仿语雀小记的图片/待办/书签那一行；我们目前只有图片能力） */
-.quick-note-composer-tools { display: flex; align-items: center; gap: 2px; margin-bottom: 8px; }
-
-.quick-note-tool { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--lake-text-3); cursor: pointer; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
-
-.quick-note-tool:hover { color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
-
-.quick-note-tool input { display: none; }
 
 /* 写作区 = 单个 Lake 内核实例（260919）：外层撑开、内层编辑器滚动，替代原 textarea。 */
 .quick-note-composer .quick-note-editor { flex: 1; width: 100%; min-height: 200px; display: flex; flex-direction: column; overflow: auto; font: 450 var(--lake-font-size-body)/1.7 var(--lake-font-family); }   /* 261008：字体走令牌（原写死的系统栈不是 MiSans） */

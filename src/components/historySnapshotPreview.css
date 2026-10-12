@@ -5,16 +5,6 @@
  * 所以桌面与移动端各自的 bundle 用到谁就带谁。颜色/间距/圆角一律走 --lake-* 令牌
  * （硬指标：主题外颜色字面量 0、未定义令牌 0）。
  */
-.snapshot-preview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--lake-space-lg);
-  padding: var(--lake-space-xs) 0 var(--lake-space-md);
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-tiny);
-}
-
-/* 事实清单：标签左、值右（两列自适应） */
 .snapshot-preview__facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

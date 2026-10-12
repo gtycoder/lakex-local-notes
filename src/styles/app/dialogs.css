@@ -43,10 +43,6 @@
 
 @starting-style { .error-banner { opacity: 0; transform: translate(-50%, calc(-50% - 6px)); } }
 
-.modal-backdrop { opacity: 1; }
-
-@starting-style { .modal-backdrop { opacity: 0; } }
-
 .tab-deleted-badge {
   flex: none;
   padding: 0 4px;
@@ -55,11 +51,6 @@
   color: var(--lake-status-error);
   font-size: var(--lake-font-size-nano);
   line-height: 1.5;
-}
-
-.modal-backdrop {
-  backdrop-filter: blur(8px) saturate(1.08);
-  -webkit-backdrop-filter: blur(8px) saturate(1.08);
 }
 
 .settings-panel,

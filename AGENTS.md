@@ -77,7 +77,14 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
       `.document-notice-toast button` · `.tab-gone-banner button` · `.edge-hotzone-handle:hover` · `.md-preview a`）；
       **纯图标站点保留 accent**（`.ln-iconbtn*` · `.ln-menu__check` · `tree-chevron` · `tab-pin` · `tree-row-icon` · `empty-workspace-icon` · `settings-nav-item svg` ·
       `document-statusbar-lock` · `bt-add-round` · `bt-link-open` · `draft-recovery-restore` …）—— 图形只需 **3:1**，暖色 accent 最差 3.61 已达标。
-      **移动端 14 处同类站点未动**（属移动端会话写域）；另发现 `.activity-button` / `.sync-tab-action` 两类**全仓 0 引用的死 CSS**（本轮不动，留给样式清理批次）。
+      **移动端 14 处同类站点未动**（属移动端会话写域）。
+    - **死 CSS 判定口径（261012 定稿）**：判「这个类名没人用」**不能只 grep 一下** —— 必须排除三类，否则会误删：
+      ① **内核 / 第三方命名空间**（`ne-` `ant-` `lakex-` `plait-` `univer-` `b3-` `fn__`）：这些类由 lakex / Univer / Drawnix / 思源 legacy 渲染，我们源码里**本来就不会出现**
+      （例：`.lakex-material-trigger`、`.ne-card-resizer-*`）；② **动态拼接**：`` `sync-toast-icon--${kind}` ``、`` `bt-file-icon--${kind}` `` 这类类名**永不字面出现**，
+      必须从模板字符串 / 字符串拼接里提取**前缀与后缀片段**来保护 —— **串中间的拼接也要算**（261012 正因为漏了它，把**活的** `sync-toast-icon--error` 误判成死类）；
+      ③ **设计词表**：`kit.css`（头注释写明 = COMPONENTS.md 14 件、**P5 才逐屏迁移**）、`themes/`、`fonts/`、`kernel-theme.css`、`compat.css` —— 暂未使用的原语/令牌是**迁移目标**，不是死代码。
+      ⇒ 工具 `scripts/css-audit/audit-dead-css.mjs`（口径写在文件头，退出码恒 0 = 报告而非门禁）。
+      **只删「确认无人施加」的规则块**；删完必须跑走查**对拍**：死 CSS 删对了 ⇒ 22 屏的**探针结果与截图应逐项/逐字节不变**（261012 用 `.css-audit/d5` vs `d7` 验证）。
     - **内核组件里 `div[tabindex]` 这类元素的焦点环也要收编**（261008）：`tokens.css` 的焦点规范只覆盖 `button/input/textarea/select/[role=button]`；内核用 `focus()` 聚焦普通 div 时浏览器会画**它自己的默认环**（颜色与我们的主题无关）。命中就给 `:focus-visible` 补 `outline: var(--lake-focus-ring-width) solid var(--lake-accent)`（贴合容器边缘用负 `outline-offset`）。表格右键菜单项是第一处。
     - **内核/第三方库的「模块级单例状态」遇到多实例挂载（本应用：标签页常驻挂载）会串台**（261008 结案）：这类库里常有模块级单例（缓存 / 标志位），而每个挂载实例各挂一个 document 级监听、判据只看 document.activeElement ⇒ 隐藏标签页里的实例也会命中，抢先消费掉标志、把数据写进自己那份。**口径**：碰这类全局态时，判据一律**限定在本实例容器内**（本实例容器 .contains(document.activeElement)），**不要**靠在库里放宽判据来绕过；同类隐患出现时先查「谁在抢这份全局态」。
 

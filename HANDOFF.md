@@ -53,8 +53,20 @@
   移动端**不再用 `LakeColorBoard`**，改为 `EditorDock` 自画 2×7 板（应用语义仍复用 `colorApplyCommand`+`colorMemory`）。
   实测值/映射表/装置见 **`docs/LAKEX-CONTRACT.md` §5.33**。**副作用：面板内容高度 875px → 489px**（原来要滚很久的问题基本解决）。
   设备验收：实色红 `#FF4D4F`、浅色蓝 `#DEE8FC`、无填充清空（`queryCommandValue('color')` 回 null）三项均生效。
-  ⚠️ **与 AGENTS §19 的措辞冲突点已记录**：§19 写「Lake 编辑器继续通过 LakeColorBoard 调内核色卡」⇒ 移动端面板改为语雀排布后不再适用，
-  待用户确认后同步该条（先按用户 261012 的口头定稿执行）。
+  ✅ **与 AGENTS §19 的关系已由用户 261012 裁定（这不是冲突，是我读窄了）**：§19 那一整套（`LakeColorBoard` 适配器 / `--lake-*` 令牌 /
+  `kit.css` 的 `ln-*` 原语 / Overlay 浮层原语 / `!important` 上限 / `@layer` 层序）**是桌面端的规则，不自动约束移动端**；
+  **移动端要有自己的适配与 UI 规则，两端只共享"必要逻辑"（策略/判据/命令字典/颜色数据/应用语义），不共享样式与组件**。
+  已落成长期口径：`docs/MOBILE-TECH-STACK.md` §一 新增「UI 与样式」层 + 「第二句」规则 + 本条为首个实例（用户明示"如果有后续也要做"）。
+  **AGENTS 的同步等另一个会话的样式统一批次结束后再做**（避免与其活跃编辑撞车）。
+- **「Aa」面板按用户 261012 的第二轮排布指令重排完毕**（同一批，设备验收通过）：
+  · **删**：`引用 / 分割线`（＋面板已有）、`撤销 / 重做`（移到「更多」面板）、`链接`（**链接融合进「＋」面板**，点它在 ＋ 面板内联展开链接编辑行）。
+  · **行内代码保留并回到「行内标记」那一行**（用户 261012 追加：先删后恢复，"我不知道这是行内代码"）⇒ 该行 = 加粗/斜体/下划线/删除线/**行内代码** 5 项。
+  · **两个代码图标必须可辨**（用户 261012 要求）：行内代码 = `Code`（`</>`），「＋」的**代码块卡片** = `SquareCode`（方框内 code）。
+  · **并**：`列表` 与 `对齐` 合成一行（两张卡）；`行内标记`（加粗/斜体/下划线/删除线）独占一行。
+  · **字号**：由 6 列 × 2 行（12 档）改成 **一行 8 档、掐头去尾** = `MOBILE_FONT_SIZES = FONT_SIZE_OPTIONS.slice(2, -2)` ⇒ **[14,15,16,19,22,24,29,32]**（去掉最小的 12/13 与最大的 40/48；取值仍全部来自内核档位，不新增字号）。
+  · **「＋」面板 18 项**（新增链接）· **「更多」面板 8 项**（公式 + 5 项灰占位 + 撤销/重做）。
+  · **副作用：面板内容高度 875px → 489px → 397px**（面板视口 279px，仅剩约 118px 需要滚动）。
+  · 门禁：tsc ✓ · vitest **229 文件 / 1808 用例** ✓ · ui-metrics ✓ · 移动端构建 + 装机 + 设备级核对 ✓。
 - **面板高度 A/B 问题 = A（用户判断正确，本轮作废了 B 建议）**：从用户提供的语雀录屏**客观量得** —— 工具栏在「面板态 / 键盘态」
   两帧位置**完全一致**（778 vs 779），面板占据的就是「入口行 + 键盘」那一块；且滚动态帧显示**语雀面板内部本身就在滚动**。
   ⇒ 我们的「面板占键盘区 + 内部滚动」与语雀结构一致，**不用改**；真差异只是**内容体量**（色板），已由上面的色板改造收敛。
@@ -96,6 +108,15 @@
   **24 处保留 accent**（`.ln-iconbtn*`/`check`/`chevron`/`pin`/`tree-row-icon`/`lock`/`bt-add-round`/`bt-link-open`/`draft-recovery-restore` 等**纯图形**，只需 3:1，暖色最差 3.61 达标；另有 `.activity-button`/`.sync-tab-action` **0 引用死 CSS**）。
   **不改令牌**的理由：暖色 accent 压到 AA 需 `#b84a00`，与 `--lake-accent-ink #b34900` 重合，会毁掉三令牌语义 ⇒ 只改用法。**移动端 14 处未动**（属移动端写域）。
   复验（`.css-audit/d5`）：warm **13 → 8**、light/dark 保持 8 —— 三主题**收敛到同一组残留**（全部是 `--lake-text-4` 的有意 3:1 档），屏错误 0。口径已入 `AGENTS §3#14`「主色文字口径」。
+- **批③（用户点单「清死 CSS」）+ 新审计工具入库**：新增 `scripts/css-audit/audit-dead-css.mjs`（保守口径写进文件头：词边界引用扫描 + **动态拼接保护** + 内核命名空间/设计词表排除；0.8s 扫完 47 个 CSS / 1257 个类名）。
+  结果：**桌面候选 0（已清零）**；移动端候选 24（`mobile-*` / `.med-b` / `.lv1-3` 等，交移动端会话）。
+  删除（**约 20 个类名 / 约 160 行**，每条都过「零引用 + 无动态拼接 + DOM 实测」三重确认）：`.activity-button` 整族 · `.activity-rail-spacer/fill` · `.sync-tab-action` + `.sync-state-dot` + `shell-sync-pulse/dot` 关键帧 ·
+  `.tabbar-action` 气泡 · 5 个 legacy 遮罩（`modal/history-panel/trash-panel/search-panel/emoji-picker-backdrop`）· `.save-label` · `.mode-toggle` · `.form-grid` · `.sync-progress-bar` · `.connection-message` ·
+  `.quick-notes-filter` · `.quick-note-composer-tools` · `.quick-note-tool` · `.snapshot-preview`；并从 5 处**分组选择器**里摘掉死成员（保留 live 的 `.settings-overlay`）。
+  **保留**：`kit.css` 全文（设计词表 = COMPONENTS.md 14 件、P5 迁移目标）· 内核命名空间（`ne-*`/`lakex-*`…）· 动态拼接类（`` `bt-file-icon--${kind}` `` 等）· `.activity-rail`（JS corridor selector 仍引用）· `sync-indeterminate` 关键帧（`.sync-toast-bar` 在用）。
+  **验收**：3 主题 22 屏走查与清死前 `.css-audit/d5` 对拍 **探针 0 差异**（escape/clipped/contrast/fixedOut/focus/pageX 逐项相同）；DOM 实测这 20 个类名在 library 屏 **全部 0 个**；`.css-audit/d6`（批1）/`d7`（最终）/`d8`（同构建重跑）。
+  ⚠️ **像素级 A/B 在本装置上不能用作此类判定**：实例状态跨轮累积（同一 CSS 的两次运行也会整屏差 239k 像素、hover 动作按钮时有时无）⇒ 正确判据 = **探针（DOM/几何/样式）对拍 + 零引用证明**。
+  口径已入 `AGENTS §3#14`「死 CSS 判定口径」；工具登记在 `scripts/css-audit/README.md`。
 - **协同（重要）**：本批 `dist/` 重建于 **10:26:38**，**包含移动端会话未提交的「抽共享链接编辑层」改动**（`src/features/editor/selectionToolbar/{linkEditor.ts,linkEditor.test.ts,SelectionToolbar.tsx}` + `src/core/colorPalette.ts`，**非本批**）。
   `dist/` 是**共享产物** ⇒ 谁构建谁负责，别在别人验收中途重建。
 - **留痕**：合成夹具隔离实例 `/tmp/lake-walk-d1`（非真实数据，跑完按 CDP 端口精确 kill）+ `.css-audit/{d1,d1b,d1c,d2}`；`d1c` = 改前加宽扫描、`d2` = 改后验证。
