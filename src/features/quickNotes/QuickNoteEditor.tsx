@@ -11,6 +11,12 @@ export interface QuickNoteEditorApi {
   getBody(): string;
   /** 纯文本镜像（预览/搜索/「有内容」判定）。 */
   getText(): string;
+  /**
+   * 聚焦编辑器（内核官方命令 `focus` 聚焦编辑器；用户 261013 定稿）。
+   * 用途：**新建小记自动聚焦**（快捷 capture 与页面「新建小记」两条路），提交后重挂的下一条也靠它续上焦点。
+   * 桌面端不调用 ⇒ 对桌面行为零影响。
+   */
+  focus(): void;
 }
 
 interface QuickNoteEditorProps {
@@ -114,6 +120,8 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
     callbacksRef.current.onReady({
       getBody: () => { try { return stripAssetAccessToken(editor.getDocument("text/lake")); } catch { return ""; } },
       getText: readText,
+      // 内核官方命令「focus 聚焦编辑器」。就绪瞬间未必吃得下焦点 ⇒ 调用方（写作卡）会隔一拍再补一次。
+      focus: () => { try { editor.execCommand?.("focus"); } catch { /* 内核未就绪/不支持：静默（不阻断输入） */ } },
     });
     callbacksRef.current.onTextChange(readText());
     return () => {

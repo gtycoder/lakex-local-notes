@@ -47,6 +47,15 @@ import "./mobile.css";
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
 const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
 
+/**
+ * 退出 App（Android：结束任务）。
+ * 两个调用点共用同一实现：① 首页返回键（原有）；② **快捷入口「保存后退出」**（用户 261013 定稿）。
+ */
+function exitApp(): void {
+  // @capacitor/app 动态引入：本模块被静态引，这里也静态引会让其它模块对它的懒加载分包失效。
+  void import("@capacitor/app").then(({ App }) => App.exitApp?.()).catch(() => undefined);
+}
+
 export type Route =
   | { kind: "home"; tab: "quick" | "library" }
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
@@ -103,7 +112,7 @@ export function MobileApp() {
   }, [refreshAll]);
 
   // 自动同步（261012）：autoMode=interval 起定时器；onOpenClose 在冷启动就绪 + 回到前台时补一次。
-  useAutoSync();
+  useAutoSync(phase === "ready");
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
   // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）
@@ -119,9 +128,28 @@ export function MobileApp() {
     return () => { if (timer != null) window.clearInterval(timer); };
   }, []);
 
+  /**
+   * 本次 capture 是否由**快捷入口**（长按桌面图标 / `lakenotes://quick-note` 深链）拉起 —— 决定两件事（用户 261013 定稿）：
+   *  ① **手动退出时直接退 App 回桌面**（"假单独模块"，模仿思源的闪念速记；首页底栏「新建小记」那条不受影响）；
+   *  ② 这次会话**不主动发起同步**（见 `useAutoSync` 的 capture 会话判定：入口 / 回前台 / 进后台三处都跳过）。
+   */
+  const captureLaunchedRef = useRef(false);
+
+  /**
+   * 手动退出 capture（系统返回键 / 「取消」按钮）：关界面 + 按需刷新小记列表；
+   * **快捷入口这次会话 = 直接退 App 回桌面**（"记完就走"，不再落进 App 的小记列表页）。
+   */
+  function closeCapture() {
+    setCaptureOpen(false);
+    setCaptureSeed(null);
+    if (captureLaunchedRef.current) { captureLaunchedRef.current = false; exitApp(); return; }
+    void refreshAll();
+  }
+
   // 长按桌面图标 →「小记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里。
   // 直接打开**独立入口**（见下方 captureOpen 分支）——不等 bridge.init()/refreshAll()，做到最早可输入。
   useEffect(() => subscribeQuickNoteShortcut(() => {
+    captureLaunchedRef.current = true;
     setRoute({ kind: "home", tab: "quick" });
     setCaptureSeed(null);
     setCaptureNonce((n) => n + 1);
@@ -207,13 +235,13 @@ export function MobileApp() {
     createNbOpen,
     searchOpen,
     captureOpen,
-    onCloseCapture: () => setCaptureOpen(false),
+    onCloseCapture: closeCapture,
     onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
     onAppExit: () => {
       // 首页返回：交给系统退出（@capacitor/app 默认行为）
-      void import("@capacitor/app").then(({ App }) => App.exitApp?.()).catch(() => undefined);
+      exitApp();
     },
   });
 
@@ -274,8 +302,12 @@ export function MobileApp() {
               <QuickNoteComposer
                 key={captureNonce}
                 draft
-                onSaved={async () => { setCaptureOpen(false); setCaptureSeed(null); void refreshAll(); }}
-                onCancel={() => { setCaptureOpen(false); setCaptureSeed(null); }}
+                raiseKeyboard
+                // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
+                // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
+                // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。
+                onSaved={async () => { setCaptureNonce((n) => n + 1); setCaptureSeed(null); }}
+                onCancel={closeCapture}
               />
             </Suspense>
           ) : (

@@ -18,6 +18,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { bridge } from "../bridge";
 import { successFeedback, warnFeedback } from "../ui/haptics";
+import { showToast } from "../ui/toastBus";
+import { showNativeKeyboard } from "../nativeKeyboard";
+import { canTouchNetwork } from "../../core/cloudState.js";
+import { subscribeSyncSettings } from "../syncSettingsStore";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
@@ -44,6 +48,12 @@ export interface QuickNoteComposerProps {
   draft?: boolean;
   onSaved: () => Promise<void>;
   onCancel: () => void;
+  /**
+   * 自动聚焦后**再请系统弹一次软键盘**（原生 ShowKeyboard 插件）。
+   * 只给"没有用户手势"的入口传（快捷 capture / 系统分享）：WebView 里程序化 focus 不弹键盘（AGENTS §7.28）。
+   * 页面路（点「新建小记」）有手势、键盘本来就弹，不必多此一举。
+   */
+  raiseKeyboard?: boolean;
 }
 
 interface AssetMeta {
@@ -68,7 +78,7 @@ async function readDimensions(bytes: Uint8Array, mimeType: string): Promise<{ wi
   }
 }
 
-export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }: QuickNoteComposerProps) {
+export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, raiseKeyboard = false }: QuickNoteComposerProps) {
   /** 初始 id：新建时先固定一个；草稿恢复后用**草稿自己的 id**（沿用 ⇒ 图片作用域一致）。 */
   const initialId = useMemo(() => editNote?.id ?? crypto.randomUUID(), [editNote]);
   const [noteId, setNoteId] = useState(initialId);
@@ -79,6 +89,14 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
   const committedRef = useRef(false);
   const [text, setText] = useState(editNote?.text ?? "");
   const [saving, setSaving] = useState(false);
+  /** 「保存并同步」的网络阶段（与保存分开：保存是本地写、同步是维护域网络操作）。 */
+  const [syncing, setSyncing] = useState(false);
+  /**
+   * 云同步是否可用（判据 = bridge.getCloudState() → core/cloudState 的 canTouchNetwork，单一来源）。
+   * false ⇒「保存并同步」**置灰**并给一行可见说明（用户 261013 定稿）；「保存」不受影响（本地是真相）。
+   * 先进后出：设置页开关云同步时会经 syncSettingsStore 通知，这里跟着刷新。
+   */
+  const [cloudReady, setCloudReady] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const apiRef = useRef<QuickNoteEditorApi | null>(null);
   /** 本会话上传过的资源元数据（filename → meta）：正文引用提取据此补齐清单。 */
@@ -128,6 +146,24 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
     }, 300);
     return () => window.clearTimeout(timer);
   }, [draft, draftReady, text, noteId]);
+
+  /**
+   * 新建小记**自动聚焦**（用户 261013 定稿：两条路都要 —— 快捷 capture 与页面「新建小记」）。
+   *
+   * 为什么补一拍：内核在"刚 setDocument / 刚挂载"那一刻未必吃得下焦点（与 LAKEX-CONTRACT §5.32 的
+   * "内核要等一拍"同一类时序），所以就绪后**立即试一次 + 150ms 再补一次**；两次都失败也不报错（用户可手动点）。
+   * **只在创建时聚焦**（`editNote` 为空）：打开一条已有小记来编辑时不抢焦点（用户可能只是想看看）。
+   * 提交后 capture 会重挂一条新的 ⇒ 这里再次触发，连续记不用手点。
+   */
+  const autoFocusIfCreating = useCallback(() => {
+    if (editNote) return;
+    const tryFocus = () => { try { apiRef.current?.focus(); } catch { /* 忽略：内核未就绪 */ } };
+    tryFocus();
+    window.setTimeout(tryFocus, 150);
+    // 没手势的入口（快捷 capture / 分享）：DOM 焦点不够，Android 不会自己弹键盘 ⇒ 请原生动一次手（AGENTS §7.28）。
+    // 放在两次聚焦之后，确保 WebView/编辑器已经拿到焦点再弹。
+    if (raiseKeyboard) window.setTimeout(() => showNativeKeyboard(), 300);
+  }, [editNote, raiseKeyboard]);
 
   const uploadResource = useCallback(
     (request: unknown) =>
@@ -200,7 +236,12 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
     return images;
   }, [noteId]);
 
-  const save = async (): Promise<void> => {
+  /**
+   * 保存：withSync=false 只存本机；true =「保存并同步」（用户 261013 点单）。
+   * 同步阶段放在 onSaved() **之前**：父组件收到 onSaved 会关掉 composer，之后再报结果就没地方显示了。
+   * 同步失败不丢内容（本地已经存住），只如实提示并可重试。
+   */
+  const save = async (withSync: boolean): Promise<void> => {
     setError(null);
     const api = apiRef.current;
     let body = "";
@@ -227,6 +268,20 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
       // 提交成功 ⇒ 草稿使命结束（不清会让下次 capture 恢复出已保存的内容）
       committedRef.current = true;
       if (draft) await bridge.clearQuickNoteDraft().catch(() => undefined);
+      if (withSync) {
+        setSyncing(true);
+        try {
+          const outcome = await bridge.syncQuickNote(noteId);
+          if (outcome.status === "not-found") showToast("这条小记不在本机（可能已被删除）", { type: "error" });
+          else if (outcome.status === "pushed") showToast(outcome.unchanged ? "已是最新，无需上传" : "已同步到云端");
+          else if (outcome.reason === "no-remote-manifest") showToast("云端还没有小记清单，已执行一次完整同步");
+          else showToast("这条小记已在其他设备删除，已按删除处理", { type: "error" });
+        } catch (reason) {
+          showToast("已保存到本机 · 同步失败：" + (reason as Error).message, { type: "error" });
+        } finally {
+          setSyncing(false);
+        }
+      }
       successFeedback();
       await onSaved();
     } catch (reason) {
@@ -236,6 +291,19 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
       setSaving(false);
     }
   };
+
+  // 云同步可用性：挂载时读一次 + 设置里改动时刷新（读操作，不触网）
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      void bridge.getCloudState()
+        .then((state) => { if (alive) setCloudReady(canTouchNetwork(state)); })
+        .catch(() => undefined);
+    };
+    refresh();
+    const unsubscribe = subscribeSyncSettings(refresh);
+    return () => { alive = false; unsubscribe(); };
+  }, []);
 
   // 草稿未读完先不挂内核（避免用空正文建实例、随后又拿不到已恢复的内容）
   if (!draftReady) return <div className="mobile-qn-composer" />;
@@ -249,15 +317,28 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false }
         active
         uploadResource={uploadResource}
         onTextChange={setText}
-        onReady={(api) => { apiRef.current = api; }}
+        onReady={(api) => { apiRef.current = api; if (api) autoFocusIfCreating(); }}
       />
       {error && <div className="mobile-qn-error">{error}</div>}
+      {/* 置灰必须给理由（移动端没有 hover 提示）：只在这一行说明，不新增样式 */}
+      {!cloudReady && <div className="mobile-qn-hint">云同步已关闭：不会联网。「保存」只存到本机，开启云同步后可再同步。</div>}
       <footer className="mobile-qn-actions">
         {/* 这里原有一行写死的「工具条：…」清单：工具条条目一变它就变成假话（本轮已发生两次）。
             删掉 —— 工具条自己就是唯一来源，不再抄一份会漂移的清单。 */}
         <div className="mobile-qn-spacer" />
-        <button type="button" className="mobile-qn-btn" onClick={() => { committedRef.current = true; if (draft) void bridge.clearQuickNoteDraft().catch(() => undefined); onCancel(); }} disabled={saving}>取消</button>
-        <button type="button" className="mobile-qn-btn mobile-qn-primary" onClick={() => void save()} disabled={saving}>
+        <button type="button" className="mobile-qn-btn" onClick={() => { committedRef.current = true; if (draft) void bridge.clearQuickNoteDraft().catch(() => undefined); onCancel(); }} disabled={saving || syncing}>取消</button>
+        {/* 「保存并同步」= 普通按钮，夹在「取消」与主按钮之间（用户 261013 定稿：主按钮保持原来的「保存」），
+            只推这一条小记；保存本身先落本地，网络失败也不丢内容。 */}
+        <button
+          type="button"
+          className="mobile-qn-btn"
+          onClick={() => void save(true)}
+          disabled={saving || syncing || !cloudReady}
+          title={cloudReady ? undefined : "云同步已关闭：不会联网"}
+        >
+          {syncing ? "同步中…" : "保存并同步"}
+        </button>
+        <button type="button" className="mobile-qn-btn mobile-qn-primary" onClick={() => void save(false)} disabled={saving || syncing}>
           <Check size={15} />{saving ? "保存中…" : "保存"}
         </button>
       </footer>

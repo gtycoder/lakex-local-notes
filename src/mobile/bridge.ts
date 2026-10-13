@@ -21,8 +21,8 @@ import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPor
 import { buildGcKeepSet } from "../core/gcDecisions.js";
 import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
 import type { Manifest } from "../core/manifestTypes.js";
-import { classifyOp, type MaintenanceOp, type WriteOp } from "../core/maintenancePolicy.js";
-import { maintenanceQueue, writeLock } from "./maintenanceLocks";
+import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from "../core/maintenancePolicy.js";
+import { maintenanceQueue, priorityQueue, writeLock } from "./maintenanceLocks";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { emptyLakeBody } from "../core/lakeDocForm.js";
 import { createCapacitorS3Store } from "./s3Store";
@@ -36,8 +36,10 @@ import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "
 import type { SearchResult } from "../core/searchTypes.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
+import { pushQuickNote, type QuickNotePushOutcome } from "../core/quickNotePush.js";
 import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
+import { writeSyncStatus } from "./syncStatusStore";
 
 /** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
 const OpenFile = registerPlugin<{
@@ -223,7 +225,7 @@ async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false)
 }
 
 /** 判据校验：调用点声明的类别必须与 src/core/maintenancePolicy.ts 的表一致（写错当场抛，不静默降级）。 */
-function assertOpClass(op: string, expected: "write" | "maintenance"): void {
+function assertOpClass(op: string, expected: "write" | "maintenance" | "priority"): void {
   const actual = classifyOp(op);
   if (actual !== expected) {
     throw new Error("桥操作 " + op + " 被判据登记为 " + actual + "，但这里按 " + expected + " 入队（改其一必须同时改另一处）");
@@ -240,6 +242,52 @@ function runWrite<T>(op: WriteOp, operation: () => T | Promise<T>): Promise<T> {
 function runMaintenance<T>(op: MaintenanceOp, operation: () => T | Promise<T>): Promise<T> {
   assertOpClass(op, "maintenance");
   return maintenanceQueue.run("maintenance", async () => await operation());
+}
+
+/**
+ * 入**高优先域**：用户当场发起、且必须不等整轮同步的操作（判据 PRIORITY_OPS）。
+ * 与维护域是两条独立队列 ⇒ 长按小记「保存并同步」不会被在途的整轮同步堵住（用户 261013 点单）。
+ */
+function runPriority<T>(op: PriorityOp, operation: () => T | Promise<T>): Promise<T> {
+  assertOpClass(op, "priority");
+  return priorityQueue.run("priority", async () => await operation());
+}
+
+/** 单条推送的一次尝试（高优先域与"推送后回核"共用；云状态判据在调用方）。 */
+async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutcome> {
+  const cfg = await bridge.getS3Settings();
+  if (!cfg) throw new Error("未配置 S3");
+  try { assertS3Credentials(cfg); } catch (e) { throw new Error((e as Error).message); }
+  const d = await ensureDb();
+  const syncCfg: SyncConfig = {
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket: cfg.bucket,
+    accessKeyId: cfg.accessKeyId,
+    secretAccessKey: cfg.secretAccessKey,
+    prefix: cfg.prefix,
+  };
+  return await pushQuickNote(syncCfg, createCapacitorS3Store(syncCfg), createQuickNotesSyncDbPort(d, {
+    assetBytes: assets,
+    saveAssetFile: saveAssetBytesFs,
+    loadAssetFile: loadAssetBytesFs,
+    removeAssetFile: removeAssetBytesFs,
+  }), id);
+}
+
+/**
+ * 推送后回核（幂等；排**维护域队尾** ⇒ 任何在途/排队的整轮同步跑完之后才轮到它）：
+ * 整轮同步若在"读到本地清单快照"之后才被我们插进来写清单，它落地时会把这一条覆盖掉；
+ * 回核就是把那一条补回来（`pushQuickNote` 在远端缺该条时会重传，不缺则只读一次清单）。
+ * 失败静默：下轮整轮同步仍会自愈（远端缺条目 ⇒ decideUpload 走 upload）。
+ */
+function scheduleQuickNoteVerify(id: string): void {
+  void maintenanceQueue.run("maintenance", async () => {
+    try {
+      if ((await mobileCloudState()) === "offline") return;
+      await pushSingleQuickNote(id);
+    } catch { /* 安全网失败：交给下轮整轮同步自愈 */ }
+  });
 }
 
 export const bridge = {
@@ -415,6 +463,30 @@ export const bridge = {
       const d = await ensureDb();
       return await quickNotesRepository.saveQuickNoteContent(d, id, payload);
     });
+  },
+
+  /**
+   * 「保存并同步」（261013）：只把**这一条**小记（正文 + 它的图片）推到 S3，其余小记在云端原样保留
+   * （core/quickNotePush 的合并语义）。
+   *
+   * 入**高优先域**（不是维护域）：长按小记 → 写完 → 同步 → 桌面端及时看到 是高频场景，
+   * **绝不能**排在在途的整轮同步后面（弱网整轮可到分钟级）。推送成功后往维护域队尾排一次
+   * **幂等回核**，兜住唯一交叉风险（整轮同步拿旧快照覆盖我们刚写的清单条目）。
+   * 出网判据与 syncNow 同一来源（AGENTS §3#20）：关闭云同步 ⇒ 直接抛、零请求。
+   */
+  async syncQuickNote(id: string): Promise<QuickNotePushOutcome> {
+    if ((await mobileCloudState()) === "offline") throw new Error(cloudStateHint("offline") ?? "云同步已关闭");
+    const outcome = await runPriority("syncQuickNote", () => pushSingleQuickNote(id));
+    if (outcome.status === "pushed") scheduleQuickNoteVerify(id);
+    return outcome;
+  },
+
+  /**
+   * 当前云同步状态（判据单一来源 `mobileCloudState` → core/cloudState）。
+   * UI 用它决定「保存并同步」是否可用（用户 261013：关闭云同步时置灰）。
+   */
+  async getCloudState(): Promise<CloudState> {
+    return mobileCloudState();
   },
 
   async createQuickNote(text: string): Promise<string> {
@@ -922,7 +994,8 @@ export const bridge = {
     if ((await mobileCloudState()) === "offline") {
       return { message: cloudStateHint("offline") ?? "云同步已关闭", notes: null, quickNotes: null };
     }
-    return runMaintenance("syncNow", async () => {
+    try {
+      const result = await runMaintenance("syncNow", async () => {
       const cfg = await bridge.getS3Settings();
       if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
       // 同步也走同一条"密钥缺失"提示（别让用户以为"同步失败"却看不出该重填密钥）。
@@ -998,7 +1071,16 @@ export const bridge = {
         console.log(`[sync] reconcileIndex ms=${indexMs}`);
       } catch { /* 索引对账失败不影响同步结果 */ }
       return { message: report.message + quickMsg, notes: report, quickNotes, indexMs };
-    });
+      });
+      // 可观测性（用户 261013）：**每次尝试只写一处**，成功与否按"**真的跑了引擎**"判（notes 非 null）——
+      // 「未配置 S3」「密钥缺失」是正常返回（不抛错）但**没跑成**，必须记成失败，否则状态行会显示"同步成功：未配置 S3"（探针实测踩到）。
+      writeSyncStatus({ at: new Date().toISOString(), ok: result.notes !== null, message: result.message });
+      return result;
+    } catch (error) {
+      // 引擎抛错（网络/协议）：记失败原因，错误照旧抛给调用方（它决定要不要 toast）
+      writeSyncStatus({ at: new Date().toISOString(), ok: false, message: (error as Error)?.message ?? String(error) });
+      throw error;
+    }
   },
   // ---- 目录树只读契约（同步调试/测试用） ----
   async listNotebookTree(notebookId: string): Promise<notebookTreeRepository.NotebookTreeItem[]> {

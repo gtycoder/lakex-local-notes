@@ -47,6 +47,11 @@ interface QuickNotesWorkspaceProps {
   visible?: boolean;
   onConverted(note: NoteDocument): void;
   onDirtyChange(dirty: boolean): void;
+  /**
+   * 云同步是否可用（判据 = core/cloudState 的 canTouchNetwork(cloudStateOf(...))，由 App 传入，单一来源）。
+   * false ⇒「保存并同步」**置灰**并给说明（用户 261013 定稿）；「保存」不受影响（本地是真相）。
+   */
+  cloudReady?: boolean;
 }
 
 const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", body: "", images: [], baseline: { text: "", body: "", imageCount: 0 } });
@@ -141,13 +146,15 @@ const writeViewPref = (value: QuickNotesView): void => {
 };
 
 export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNotesWorkspaceProps>(function QuickNotesWorkspace(props, ref) {
-  const { notebooks: notebookNodes, visible = true, onConverted, onDirtyChange } = props;
+  const { notebooks: notebookNodes, visible = true, onConverted, onDirtyChange, cloudReady = true } = props;
   const [items, setItems] = useState<QuickNoteDocument[]>([]);
   const [createDraft, setCreateDraft] = useState<DraftState>(() => newDraft());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<DraftState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** 「保存并同步」的网络阶段（与 saving 分开：保存是本地写，同步是维护域网络操作）。 */
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<QuickNoteDocument | null>(null);
   /** 待转成正式笔记的小记（多选时是一批） */
@@ -320,8 +327,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
    *      绝不因为死卡把整条小记锁死在编辑器里（文档保存本来就不等、不拒绝）；
    *    - 同时按「正文真正引用的资源」收敛清单（顺手解决"编辑器里删掉卡片但资源仍在清单"的幽灵资源）。
    */
-  async function saveDraft(clicked: DraftState): Promise<boolean> {
-    if (saving) return false;
+  async function saveDraft(clicked: DraftState): Promise<{ ok: boolean; id: string | null }> {
+    if (saving) return { ok: false, id: null };
     setSaving(true); setError(null);
     try {
       // ① 点击可能早于上传/暂存完成 ⇒ 先等**本会话真的在传**的上传落地，再取**最新**草稿
@@ -333,7 +340,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       }
       const draft = currentDraftFor(clicked);
       const isEditing = editingDraft !== null && draft.id === editingDraft.id;
-      if (!hasDraftContent(draft)) { setError("请至少记录文字、一张图片或一个附件"); return false; }
+      if (!hasDraftContent(draft)) { setError("请至少记录文字、一张图片或一个附件"); return { ok: false, id: null }; }
       // 正文以编辑器实时内容为准；编辑器取不到时回落到镜像（两者同源，见 QuickNoteEditor）。
       const api = draftEditorsRef.current.get(draft.id) ?? null;
       const editorText = api ? api.getText() : "";
@@ -364,7 +371,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       //    另外把新增/删除的资源数量算进去。命中直接退出编辑态、不发任何 IPC。
       if (isEditing) {
         const unchanged = body === draft.baseline.body && draft.images.length === draft.baseline.imageCount;
-        if (unchanged) { settleAfterSave(draft, { text, body, images: draft.images }); return true; }
+        // 没改动 = 不写库，但**小记 id 仍要回传**：「保存并同步」要能推一条"之前只是没同步"的小记（编辑草稿 id ≠ 小记 id，见 draftOf）。
+        if (unchanged) { settleAfterSave(draft, { text, body, images: draft.images }); return { ok: true, id: editingId }; }
       }
       const assets = draftAssets(draft);
       const stagedAssets = assets.filter((item) => item.source === "staged");
@@ -396,9 +404,40 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       });
       if (isEditing) settleAfterSave(draft, { text, body, images: saved.content.images.map((image) => ({ image, source: "saved" as const })) });
       else if (createDraft.id === draft.id) setCreateDraft(newDraft());
-      return true;
-    } catch (reason) { setError(`保存小记失败：${getNativeErrorMessage(reason)}`); return false; }
+      return { ok: true, id: saved.id };
+    } catch (reason) { setError(`保存小记失败：${getNativeErrorMessage(reason)}`); return { ok: false, id: null }; }
     finally { setSaving(false); }
+  }
+
+  /**
+   * 「保存并同步」（用户 261013）：只把**这一条**小记推到 S3（其余小记在云端原样保留，见 core/quickNotePush）。
+   * 失败不静默：本地已经存住了 ⇒ 提示「已保存到本机，同步失败：…」，用户可再点一次（幂等）。
+   */
+  async function pushOneNote(id: string) {
+    setSyncing(true); setError(null);
+    try {
+      const outcome = await native.syncQuickNote(id);
+      if (outcome.status === "not-found") {
+        setError("这条小记不在本机（可能已被删除或恢复过）");
+      } else if (outcome.status === "pushed") {
+        setViewHint(outcome.unchanged ? "已是最新，无需上传" : "已同步到云端");
+      } else if (outcome.reason === "no-remote-manifest") {
+        setViewHint("云端还没有小记清单，已改为执行一次完整同步");
+      } else {
+        setViewHint("这条小记已在其他设备删除，已按删除处理");
+        setEditingId(null); setEditingDraft(null);
+      }
+      await refreshItems(); // refreshItems 自己会 bump 版本号（不必先 invalidate）
+    } catch (reason) {
+      setError(`已保存到本机，同步失败：${getNativeErrorMessage(reason)}`);
+    } finally { setSyncing(false); }
+  }
+
+  /** 先保存（本地写，绝不丢内容）→ 成功才推送这一条；保存失败不推送。 */
+  async function saveDraftAndSync(clicked: DraftState) {
+    const result = await saveDraft(clicked);
+    if (!result.ok || !result.id) return;
+    await pushOneNote(result.id);
   }
 
   /**
@@ -496,7 +535,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   async function saveBeforeSwitch(): Promise<boolean> {
     const draft = editingDraft ?? createDraft;
     if (!hasDraftContent(draft)) return true;
-    return saveDraft(draft);
+    return (await saveDraft(draft)).ok;
   }
 
   /** 等进行中的资源上传/暂存归零（最多 15s）。false = 仍未落地（调用方**只提示、不再拒绝保存**）。 */
@@ -749,18 +788,18 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       <div className="quick-notes-detail">
         {activeIsEditing && editingDraft
           ? <QuickNoteComposer
-              draft={editingDraft} variant="inline" ui="full" active={visible} saving={saving && activeIsEditing}
+              draft={editingDraft} variant="inline" ui="full" active={visible} saving={saving && activeIsEditing} syncing={syncing && activeIsEditing} cloudReady={cloudReady}
               uploadResource={quickNoteUploader(editingDraft.id)}
               onTextChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
               onEditorReady={(api) => handleEditorReady(editingDraft.id, api)}
-              onSave={() => void saveDraft(editingDraft)} onCancel={() => void cancelDraft(editingDraft)}
+              onSave={() => void saveDraft(editingDraft)} onSaveAndSync={() => void saveDraftAndSync(editingDraft)} onCancel={() => void cancelDraft(editingDraft)}
             />
           : <QuickNoteComposer
-              draft={createDraft} variant="pane" ui="full" active={visible} saving={saving && !activeIsEditing}
+              draft={createDraft} variant="pane" ui="full" active={visible} saving={saving && !activeIsEditing} syncing={syncing && !activeIsEditing} cloudReady={cloudReady}
               uploadResource={quickNoteUploader(createDraft.id)}
               onTextChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
               onEditorReady={(api) => handleEditorReady(createDraft.id, api)}
-              onSave={() => void saveDraft(createDraft)} onCancel={() => void cancelDraft(createDraft)}
+              onSave={() => void saveDraft(createDraft)} onSaveAndSync={() => void saveDraftAndSync(createDraft)} onCancel={() => void cancelDraft(createDraft)}
             />}
       </div>
     </div> : <div className="quick-notes-split">
@@ -770,10 +809,13 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           variant="pane"
           active={visible}
           saving={saving && !activeIsEditing}
+          syncing={syncing && !activeIsEditing}
+          cloudReady={cloudReady}
           uploadResource={quickNoteUploader(createDraft.id)}
           onTextChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
           onEditorReady={(api) => handleEditorReady(createDraft.id, api)}
           onSave={() => void saveDraft(createDraft)}
+          onSaveAndSync={() => void saveDraftAndSync(createDraft)}
           onCancel={() => void cancelDraft(createDraft)}
         />
       </div>
@@ -783,11 +825,11 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
             ? <div className="ln-empty ln-empty--idle"><Feather size={24} /><strong>还没有小记</strong><span>从左侧写下第一条临时记录。</span></div>
             : visibleItems.map((item) => editingId === item.id && editingDraft
               ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
-                  draft={editingDraft} variant="inline" active={visible} saving={saving && activeIsEditing}
+                  draft={editingDraft} variant="inline" active={visible} saving={saving && activeIsEditing} syncing={syncing && activeIsEditing} cloudReady={cloudReady}
                   uploadResource={quickNoteUploader(editingDraft.id)}
                   onTextChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
                   onEditorReady={(api) => handleEditorReady(editingDraft.id, api)}
-                  onSave={() => void saveDraft(editingDraft)} onCancel={() => void cancelDraft(editingDraft)}
+                  onSave={() => void saveDraft(editingDraft)} onSaveAndSync={() => void saveDraftAndSync(editingDraft)} onCancel={() => void cancelDraft(editingDraft)}
                 /></article>
               : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} selecting={selecting} checked={selected.has(item.id)} onToggleSelect={() => toggleSelected(item.id)} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItems([item])} onToggleTask={(checkboxIndex, checked) => void togglePreviewTask(item.id, checkboxIndex, checked)} />)
           }
@@ -835,22 +877,52 @@ interface ComposerProps {
   /** pane＝常驻写作面板（发布行在卡片外，仿语雀）；inline＝编辑既有小记（动作行留在卡片内） */
   variant: "pane" | "inline";
   saving: boolean;
+  /** 「保存并同步」的网络阶段（与 saving 分开：保存是本地写、同步是维护域网络操作）。 */
+  syncing: boolean;
+  /** 云同步是否可用：false ⇒「保存并同步」置灰（判据由工作区透传，单一来源）。 */
+  cloudReady: boolean;
   /** 图片上传落盘（写进该草稿的 staging 空间）。 */
   uploadResource(request: unknown): Promise<ResourceUploadOutput>;
   onTextChange(text: string): void;
   onEditorReady(api: QuickNoteEditorApi | null): void;
+  /** 只保存到本机（原有语义）。 */
   onSave(): void;
+  /** 保存到本机 **并且** 只把这一条推送到 S3（用户 261013 点单；主按钮）。 */
+  onSaveAndSync(): void;
   onCancel(): void;
 }
 
-function QuickNoteComposer({ draft, saving, variant, ui = "card", active = true, uploadResource, onTextChange, onEditorReady, onSave, onCancel }: ComposerProps) {
-  /** ⌘/Ctrl + Enter 发布（对齐语雀小记的快捷键提示）：编辑器可能吞键，故挂捕获阶段兜底。 */
+function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "card", active = true, uploadResource, onTextChange, onEditorReady, onSave, onSaveAndSync, onCancel }: ComposerProps) {
+  /** ⌘/Ctrl + Enter 触发主按钮（发布/保存）：编辑器可能吞键，故挂捕获阶段兜底。 */
   function publishOnShortcut(event: React.KeyboardEvent<HTMLDivElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); onSave(); }
   }
+  /** 本地写与网络推送两段都要禁用动作行（避免半途中重复提交）。 */
+  const busy = saving || syncing;
   const publishLabel = variant === "pane" ? "小记一下" : "保存";
-  /** 有内容才强调（用户 260915）：新建空态＝中性描边；编辑既有小记的"保存"恒强调。 */
-  const emphasized = variant === "inline" || draft.text.trim().length > 0 || draft.images.length > 0;
+  /**
+   * 主按钮**恒用强调色**（用户 261013 点单："桌面端的小记一下应该有颜色吧"）。
+   * 旧口径（260915：新建空态＝中性描边、有内容才强调）作废 —— 动作行现在有**两个**同族描边按钮
+   * （主按钮 +「保存并同步」），主按钮再走中性就分不出主次了。
+   */
+  const primary = (
+    <button className="b3-button quick-note-publish is-emphasized" disabled={busy} onClick={onSave}>
+      {saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}
+    </button>
+  );
+  /** 「保存并同步」= **普通按钮**（不强调，与「取消」同族的中性描边），夹在主按钮与取消之间（用户 261013 定稿）。 */
+  const saveAndSync = (
+    <button
+      className="b3-button quick-note-publish"
+      disabled={busy || !cloudReady}
+      title={cloudReady ? undefined : "云同步已关闭：不会联网。可先「保存」到本机，开启云同步后再同步。"}
+      aria-label={cloudReady ? "保存并同步" : "保存并同步（云同步已关闭，不可用）"}
+      onClick={onSaveAndSync}
+    >
+      {syncing ? <LoaderCircle className="spin" size={15} /> : null}{syncing ? "同步中" : "保存并同步"}
+    </button>
+  );
+  const cancel = <button className="b3-button quick-note-discard" disabled={busy} onClick={onCancel}>取消</button>;
   return <>
     <div className="quick-note-composer" onKeyDownCapture={publishOnShortcut}>
       {/* 写作区 = 一个 Lake 内核实例（编辑时挂、离开即销毁）；图片直接拖入或粘贴 */}
@@ -866,16 +938,17 @@ function QuickNoteComposer({ draft, saving, variant, ui = "card", active = true,
     </div>
     <div className={`quick-note-composer-actions quick-note-composer-actions--${variant}`}>
       {variant === "pane" ? <>
-        {/* 写作卡（新建）：主按钮和「取消」并排成一组靠左，快捷键提示跟在后面（仿评论框：动作相邻、提示退后）。
-            改前是「发布在最左、取消被 flex:1 占位顶到最右」，两个按钮分居卡片两角（用户 260920 反馈太偏僻）。 */}
-        <button className={"b3-button quick-note-publish" + (emphasized ? " is-emphasized" : "")} disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}</button>
-        <button className="b3-button quick-note-discard" disabled={saving} onClick={onCancel}>取消</button>
+        {/* 写作卡（新建）：主按钮在最左、次级动作跟在后面（仿评论框），快捷键提示退到最后。 */}
+        {primary}
+        {saveAndSync}
+        {cancel}
         <span className="quick-note-publish-hint">按 ⌘ Enter 发布</span>
         <span className="quick-note-publish-hint-sub">可拖入或粘贴图片</span>
       </> : <>
-        {/* 编辑既有小记：「取消 / 保存」整组靠右下（对齐对话框底栏惯例：取消在左、主按钮在右），不再分居两角 */}
-        <button className="b3-button quick-note-discard" disabled={saving} onClick={onCancel}>取消</button>
-        <button className={"b3-button quick-note-publish" + (emphasized ? " is-emphasized" : "")} disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}</button>
+        {/* 编辑既有小记：整组靠右下（对齐对话框底栏惯例：次级在左、主按钮在右），不再分居两角 */}
+        {cancel}
+        {saveAndSync}
+        {primary}
       </>}
     </div>
   </>;

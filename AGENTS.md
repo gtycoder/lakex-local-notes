@@ -96,6 +96,9 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 17. **拒绝"迎合式找需求"：任何非 bug 改动先证真实价值，证不了就直说"不做"（红线）**。不要为了顺着用户去发明需求、把"看起来该做"的改动包装成必要。判断三问，**缺一即不做**：① 问题真实存在吗（有复现/数据/历史 bug 证据）？② 不做会付出什么代价？③ 收益是否明确大于新增复杂度？用户明确要求这种诚实——"不用迎合我、一定拒绝过分设计"。
     - **过度设计的信号**（命中即警惕）：为"统一/优雅/以后可能需要"而加抽象层或共享层；把两个本就不同的东西强行合并；用新依赖解决旧依赖能解决的问题；收益只停留在"代码更整洁"而非"解决了已发生的问题"；只给方案不给反对意见。
     - **实例（SQL 统一）**：曾提议"抽共享 SQL 常量 / 统一两端查询入口"。核查后**否决**：桌面 `notes` 只存元数据（正文在 `.lake`）、树是 `tree_nodes`；移动 `notes` 含 `content`、树是 `folders`，连 `search_index` 列都不同（多 `title`/`raw_hash`）→ 看似"重复"其实是**两套持久化模型**，不是同一份抄了两遍；共享 SQL 文本的前提是先收敛 schema（产品级决策），收益仅是整齐。真正该做的是**共享 core 逻辑 + 跨端对拍测试**（已有 `syncEquivalence`/`syncAdapterEquiv`/`syncDualAB`/`treeRules.equiv`）；**SQLite 也不需要连接池**（单写、better-sqlite3 同步单连接）。
+    - **实例（"替你补一次同步"）**：小记「保存并同步」按钮已提供的前提下，我曾提议"点『保存』后退出前再做一次 best-effort 单条推送"来堵所谓空洞；
+      用户 261013 否决：**不点同步 = 不着急，替他补就是想当然**。⇒ 显式入口已存在时，**不要**再为"用户可能忘了点"设计隐式兜底；
+      要补的是"他点了却没生效"，不是"他没点"。
     - 宁可少做，不要多做；不确定时先自问："这是真问题，还是我想做的？"
 
 18. **依赖 / vendor 代码的「冗余、未用路径、死代码」不做清理**：`vendor/**` 与任何第三方依赖本来就带冗余，**不因为"我们没用到"就去删/重写**（会牵动 vendor 构建与上游契约，且不属于我们维护的范围）。只在我们**必须改行为**时，按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 的流程做最小改动。**以后不要再提议清理依赖侧的死路径。**
@@ -120,15 +123,50 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - 小记独立前缀 `quick-notes/` + 独立小记库 `quick-notes/metadata.sqlite3`。
 - **编辑器本机视图 = 设备本地**（用户 261006 审计「只改展示不得触发 S3」）：当前工作表 / 缩放 / 选区 / 滚动 / 折叠 / 画板视口这类**展示态不进正文、不标脏、不进 S3**；表格列宽/行高/隐藏/冻结与多维表视图配置（列宽/行高/隐藏/排序/筛选/分组/填色）仍属文档数据、照常同步。**编辑器 `onDirty` 必须只在正文真的变了时触发**。
 - **多维表导航 = 设备本地**（用户 261006 选 C）：`activeTableId` / 每张表的 `activeViewId` **不进正文真相** —— `useBitableSession.serializeBody` 序列化时恒写「第一张表 / 第一个视图」，切表 / 切视图只写 `localStorage`（`lake-notes-v3.bitable-nav.<noteId>`，见 `BitableEditor`；历史快照预览 `chrome=false` 不读写）。⇒ 切表不落盘、不标脏、不进 S3；每台设备各记各的。**不要**再把导航写回正文（会让纯导航产生一次 S3 上传）。
-- **互斥域 = 写域 / 维护域，判据单一来源 `src/core/maintenancePolicy.ts`**（261010 F16 定稿；移动端实例 `src/mobile/maintenanceLocks.ts`）：
+- **互斥域 = 写域 / 维护域 / 高优先域，判据单一来源 `src/core/maintenancePolicy.ts`**（261010 F16 定稿；移动端实例 `src/mobile/maintenanceLocks.ts`；高优先域 261013 新增）：
   **本地写**（saveNote / 目录 / 小记 / 历史 / 回收站 / 孤儿资产 / GC 账本 + 同步引擎的 DB 片段）入**写域**；
-  **轮次级网络与维护**（syncNow / gcDeepCleanup / 资产补拉）入**维护域**。三条不变量：
+  **轮次级网络与维护**（syncNow / gcDeepCleanup / 资产补拉）入**维护域**；
+  **用户当场发起、必须不等整轮同步的单条推送**（`syncQuickNote`，判据 `PRIORITY_OPS`）入**高优先域**：
+  彼此串行（连点两下不会交叉"读→改→写"同一份无 CAS 的小记清单），但**绝不排在整轮同步后面** ——
+  "长按小记 → 写完 → 桌面端及时看到"是高频路径，排在整轮同步后面等于毁掉这个功能（用户 261013 定稿）。
+  它与维护域并行的唯一风险 = 整轮同步拿旧快照写清单时覆盖掉刚写的条目 ⇒ 用**"推送后回核"**兜底
+  （推送成功后往**维护域队尾**排一次幂等重推）。三条不变量：
   **I1** 网络往返不得持有写域（历史缺陷：两域共用一条队列 ⇒ 弱网下本地写等 **152.0s**，基线 32ms）；
   **I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash 比较），不靠全局互斥
   （Lake `markSyncedIfUnchanged` / 小记同名方法 / `syncDbPort.flushNoteBatch` 批窗口守卫）；
   **I3** 同域内串行；**禁止同域嵌套**（KeyedAsyncQueue 无重入 ⇒ 自锁）。
-  桌面反向护栏 `electron/maintenanceQueueScope.test.ts`（维护队列只包维护操作）；规格与验收见 `docs/MOBILE-TECH-STACK.md` §二。
+  桌面反向护栏 `electron/maintenanceQueueScope.test.ts`（维护队列只包维护操作）；移动端 `src/mobile/maintenancePolicyCoverage.test.ts` 同时卡住三条队列
+  （runWrite / runMaintenance / runPriority 的类别一致、每个登记操作都真的取锁、同域不嵌套）；规格与验收见 `docs/MOBILE-TECH-STACK.md` §二。
 
+- **同步必须"看得见"（用户 261013 定稿；移动端先落地）**：自动同步失败**不能只写 console** ——
+  移动端把「上次同步（时间 / 结果 / 失败原因）」落盘并**常驻**设置页：`src/mobile/syncStatusStore.ts`（设备本地，**不塞**两端共用的 `lib/settings.ts`），
+  **写入点唯一** = `bridge.syncNow()`（成功/失败/未配置/密钥缺失各一处；**离线这种"根本没尝试"不写**），读取点 = 设置页「连接与同步」那一行。
+  手动同步的 toast 保留（当场反馈），常驻行负责事后自查。桌面已有 `SyncStatusPopover`（上次同步 + 统计）。
+- **开/关应用各同步一次 = 只要云同步开着（`autoMode !== "manual"`）**（用户 261013 定稿；`manual` 例外**不补**、保持真正不出网）：
+  桌面 = 应用就绪（`ready`）+ 退出前（`before-quit`，`QUIT_SYNC_DEADLINE_MS = 60s` 兜底）；移动端 = **应用就绪（显式信号：`phase` 离开 booting，即 `bridge.init` + `refreshAll` 之后）** + 回到前台
+  （Android 可能直接杀进程、没有退出时机 ⇒ 不假装"关闭时同步"）+ **进入后台一次（best-effort）**：
+  这次是"离开设备前最后一次推送"（对齐思源安卓壳 `onBackground` → `performSync{mobileSwitch}`），但 WebView 可能随即被冻结 ⇒ **失败静默、不做任何等待**；
+  自动触发之间**在途去重**（对齐思源壳侧 `AtomicBoolean syncing`），手动「立即同步」不受影响。
+  **例外（用户 261013 定稿）：长按桌面图标「小记」的快捷入口，这次冷启动不跑整轮同步** ——
+  写作区要立刻可输入，而整轮同步在 WebView 主线程上会抢"开始打字"那几秒（判定 `whenQuickNoteLaunchResolved()`，带超时兜底）；
+  该入口做成**「假单独模块」**（用户 261013 定稿，模仿思源闪念速记，见 HANDOFF §0 261013）：
+  **提交后不进入小记列表** —— 重挂一条新的空小记、停在写作界面，可**连续记**；**手动退出（系统返回键 / 「取消」）= 直接退 App 回桌面**（首页底栏「新建小记」那条不受影响）；
+  **这次会话不主动发起任何同步**（入口 / 回前台 / 进后台三处全跳，只有点「保存并同步」出网）；用户自己配的「按固定间隔」定时器**不在此列**。
+  **点「保存」而不点「保存并同步」= 用户不着急同步** ⇒ **不得**在退出前/后台替他补一次隐式推送（用户 261013 明示："这种情况下做什么同步，不能想当然"）。
+  **入口形态走"语雀的路"**（拉起整个 App → 小记页，能看到已有小记），**不学思源的独立轻量 Activity**（思源 `ShortcutActivity` 自带独立任务栈 + 纯原生输入框 + 写 .md 文件给内核 3 秒捞取；核实见 HANDOFF §0 261013）。
+  **「按固定间隔」档同样补这两次**；「仅在开启/关闭时」档只补这两次。判据单一来源 = `src/core/syncModes.ts` 的 `shouldSyncOnOpenClose(...)`；
+  **能不能出网仍另走 `canTouchNetwork(cloudStateOf(...))`，两条判据别合并**。文案单一来源 = 同文件 `SYNC_OPEN_CLOSE_NOTE`（两端设置页共用）。
+- **小记「保存并同步」= 单条推送，且必须"先读远端清单 → 只 upsert 这一条"（用户 261013 需求；**红线**）**：
+  单一来源 `src/core/quickNotePush.ts` 的 `pushQuickNote`（两端注入各自端口）；桌面 IPC `sync_quick_note`、移动 `bridge.syncQuickNote`（走**高优先域** `PRIORITY_OPS` + 推送后回核，见上条互斥域）。
+  **绝不允许**写一份"只含当前小记"的清单：小记清单是单文件覆盖写、**没有 CAS**（`quick-notes/manifests/latest.json`），
+  覆盖式重建 = 向他端声明"小记全集就这一条" ⇒ 他端按未声明处理（墓碑/GC 误删）。其余条目必须**逐字段原样保留**（护栏 `src/core/quickNotePush.test.ts` 的"逐字节不变"）。
+  两条**退回完整同步**的路径（都不静默降级）：① 云端还没有清单（首次）；② 该条在远端是墓碑且本机无恢复标记（墓碑权威，不许复活）。
+  记账走 `setBaseHash` + `markSyncedGuarded`（I2 守卫）。
+  **UI（用户 261013 定稿，两端同构）**：**主按钮保持原来的「小记一下 / 保存」不动**；「保存并同步」是**普通按钮**，夹在主按钮与「取消」之间
+  （桌面 pane＝[小记一下][保存并同步][取消]，inline＝[取消][保存并同步][保存]；移动＝[取消][保存并同步][保存]）。
+  **不要**把它做成主按钮、也不要另加「仅保存」（主按钮本身就是只写本机）。
+  **云同步关闭/未配置时按钮置灰 + 给理由**（用户 261013 定稿）：桌面判据 `isCloudActive(cloudConfigured, cloudEnabled)`（cloudState 的 UI 判据）经 `cloudReady` 透传给工作区，移动端 `bridge.getCloudState()`（复用 `mobileCloudState`，已登记 `NONE_OPS`）；
+  移动端**必须给一行可见说明**（没有 hover，光置灰用户不知道为什么）。护栏 `src/components/quickNoteSyncGate.test.ts`。
 - **小记预览 = 快路径 + 内核只读兜底（261010 定稿；不要再去写第二套"卡片覆盖清单"）**：
   自研解析器（`features/quickNotes/quickNotePreviewParser.ts`）只是**快路径** —— 纯文字/列表/媒体用普通 DOM 画，
   **零内核实例**（移动端冷开不受影响）；一旦出现它还原不了的块（表格/代码块/公式/画板/思维导图/日历/日期/表情…），
@@ -248,6 +286,29 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 26. **探针"看不见"比探针"报错"危险**：261012 对比度探针还存在第二重盲区 —— 旧口径只扫组件族选择器（`ln-/config-/bt-/…`）且只读**元素自身** opacity
     ⇒ 状态栏内层"无类名 span"看不见、docked 下父级 `opacity:0` 的 `.edge-hotzone-handle__label` 反而误报。
     修法：扫**全仓自有文字** + **祖先连乘的有效透明度** + 排除 1×1 sr-only / 内核(`.ne-*`) / 第三方(univer/drawnix)。
+
+27. **移动端快照门禁依赖「设备里的数据」，会被用户改数据打红（261013 实测）**：`check:mobilesnap` 的 `home-quicknotes` 等态，
+    元素数与指纹**直接由沙盒里的小记条数决定** —— 用户在模拟器上记一条小记，该态就 **+17 元素**、门禁报"两轮一致 ⇒ 真差异"，而**代码一行没动**（本机实测：用户 10:51 记的那条就是那 17 个元素）。
+    ⇒ **跑设备门禁要另起专用实例**（本机已建：AVD `lake_gate`；装包/CDP 转发用 `ANDROID_SERIAL=emulator-5556`），**别把"用户正在用的那台"当基准环境**；
+    判读差异时先分清**数据漂移 vs UI 改动**（快速判据：`window.lakeNative.listQuickNotes()` 的条数 / 差异是否正好是一张卡片）。
+    **261013 已落定**：专用 AVD `lake_gate`（emulator-5556，CDP 9336）+ 固定夹具（默认笔记本下 **5 文档 + 4 小记**，`scripts/mobile-audit/gate-fixture.mjs`；
+    5 篇是**走查**的下限 —— 它要 doc-0..doc-4 五行，3 篇时 doc-3/doc-4 会报"not found: doc row #3/#4"）
+    + 在其上重烤的基线；**门禁只在这个实例上跑**（`--port 9336`），连跑两次 0 差异。完整步骤见 `scripts/mobile-audit/README.md`。
+    ⚠️ **重灌夹具 ⇒ 必须重烤基线**（261013 实测）：夹具里的文档/小记 id 是**每次新建的 UUID**，快照表达式只忽略内核的 u+十六进制 id，
+    UUID 落进 DOM 就会让指纹变（实测 home-doc 元素数相同 1822、指纹不同）⇒ 在门禁实例上做过"会建数据"的验证（或重跑 gate-fixture）之后，**先重烤基线再跑门禁**；
+    根治方向（未做）：让快照表达式也屏蔽 UUID 型值 —— 但那是**共享表达式**、会牵动桌面基线，需单独立项。
+    ⚠️ 另两条同源坑：① 基线只在**与采集时同构的数据**下才有意义（空库基线 vs 有数据实例必然 6/6 态红，见 §0 的 260923→261012 重烤史）；
+    ② `.css-audit/snap/` 的中间快照**会被同名 tag 覆盖** —— 别拿两份同批文件互 diff 当"对拍"（261013 在这上面白花了一轮）。
+
+28. **Android WebView：程序化 focus 不弹软键盘（除非有用户手势）**（261013 实测）：小记自动聚焦里，
+    页面路（用户点「新建小记」）焦点进内核编辑器后**键盘正常弹起**（innerHeight 842→530）；但**快捷入口冷启动深链**那一路
+    **焦点进去了、键盘不弹**（842→842）—— 深链冷启动没有用户手势，Android 只允许手势触发软键盘。
+    要在这个场景也弹，只能**原生侧** InputMethodManager.showSoftInput（思源能做到是因为它的闪念速记是**原生 EditText**）。
+    判据/探针：**innerHeight 收缩 >200px 即键盘弹起**（比 dumpsys 的字段名跨版本稳定）。
+    **261013 已解决**：新增原生插件 ShowKeyboardPlugin（InputMethodManager.showSoftInput）+ TS 封装 src/mobile/nativeKeyboard.ts；
+    写作卡新增 raiseKeyboard prop —— **只有"没有用户手势"的入口传**（快捷 capture / 系统分享），聚焦后 300ms 请原生弹一次；页面路有手势、天然会弹，不传。
+    设备复核：普通启动首页（无键盘）innerHeight **842** vs 快捷 capture **530**（键盘已弹、焦点也在内核编辑器里）。
+    ⚠️ 探针坑（本轮踩过）：before 取样必须取**无键盘**状态（首页），否则两次都量到 530、会把"已弹"误判成"没弹"。
 
 ## 8. 会话启动指引
 

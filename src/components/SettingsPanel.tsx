@@ -20,7 +20,7 @@ import { native } from "../lib/native";
 import type { DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
-import { SYNC_AUTO_MODE_OPTIONS } from "../core/syncModes";
+import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../core/syncModes";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
@@ -710,11 +710,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       <Switch itemId="sync-enabled" name="启用云同步" desc={s3Verified || syncCfg.enabled ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"} note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>} checked={syncCfg.enabled} disabled={syncCfgBusy || (!syncCfg.enabled && !s3Verified)} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
                       {syncCfg.enabled && (
                         <>
-                          <Field itemId="sync-auto-mode" name="自动同步模式">
+                          <Field itemId="sync-auto-mode" name="自动同步模式" desc={SYNC_OPEN_CLOSE_NOTE}>
                             <Select label="自动同步模式" value={syncCfg.autoMode} onChange={(v) => void saveSyncCfg({ autoMode: v as SyncSettings["autoMode"] })} options={SYNC_AUTO_MODE_OPTIONS} />
                           </Field>
                           {syncCfg.autoMode === "interval" && (
-                            <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
+                            <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）" desc="到点触发一次；应用退出后不会在后台继续定时（下次启动时的对齐会补上）。"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
                         </>
                       )}

@@ -13,16 +13,18 @@ export interface DesktopQuickNotesProps {
   topbarLeading: ReactNode;
   onDirtyChange: (dirty: boolean) => void;
   onConverted: (note: import("../lib/types").NoteDocument) => void;
+  /** 云同步可用（canTouchNetwork(cloudStateOf(...))）：false ⇒「保存并同步」置灰（判据在 App 里算，单一来源）。 */
+  cloudReady?: boolean;
 }
 
 export function DesktopQuickNotes(props: DesktopQuickNotesProps) {
-  const { notebooks, visible = true, quickNotesRef, topbarLeading, onDirtyChange, onConverted } = props;
+  const { notebooks, visible = true, quickNotesRef, topbarLeading, onDirtyChange, onConverted, cloudReady = true } = props;
   return (
     <>
       <header className="tab-bar desktop-only" aria-label="顶栏">
         <div className="tabbar-leading">{topbarLeading}</div>
       </header>
-      <QuickNotesWorkspace ref={quickNotesRef as Ref<QuickNotesWorkspaceHandle>} notebooks={notebooks} visible={visible} onDirtyChange={onDirtyChange} onConverted={onConverted} />
+      <QuickNotesWorkspace ref={quickNotesRef as Ref<QuickNotesWorkspaceHandle>} notebooks={notebooks} visible={visible} cloudReady={cloudReady} onDirtyChange={onDirtyChange} onConverted={onConverted} />
     </>
   );
 }

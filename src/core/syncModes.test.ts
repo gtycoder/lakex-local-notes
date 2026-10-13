@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SYNC_AUTO_MODE_OPTIONS, SYNC_INTERVAL_PRESETS, autoSyncIntervalMs, shouldSyncOnForeground, syncIntervalOptions } from "./syncModes";
+import { SYNC_AUTO_MODE_OPTIONS, SYNC_INTERVAL_PRESETS, SYNC_OPEN_CLOSE_NOTE, autoSyncIntervalMs, shouldSyncOnOpenClose, syncIntervalOptions } from "./syncModes";
 
 const base = { enabled: true, autoMode: "interval" as const, autoIntervalMinutes: 15 };
 
@@ -23,10 +23,21 @@ describe("同步策略选项与判定（单一来源）", () => {
     expect(autoSyncIntervalMs(null)).toBeNull();
   });
 
-  it("前台补同步只在 onOpenClose 档", () => {
-    expect(shouldSyncOnForeground({ enabled: true, autoMode: "onOpenClose" })).toBe(true);
-    expect(shouldSyncOnForeground({ enabled: true, autoMode: "interval" })).toBe(false);
-    expect(shouldSyncOnForeground({ enabled: false, autoMode: "onOpenClose" })).toBe(false);
-    expect(shouldSyncOnForeground(null)).toBe(false);
+  // 261013 用户定稿：只要云同步开着，开/关应用都各同步一次（interval 也含在内）；「完全手动」不补。
+  it("开/关应用补同步：interval 与 onOpenClose 两档都补", () => {
+    expect(shouldSyncOnOpenClose({ enabled: true, autoMode: "interval" })).toBe(true);
+    expect(shouldSyncOnOpenClose({ enabled: true, autoMode: "onOpenClose" })).toBe(true);
+  });
+
+  it("开/关应用补同步：「完全手动」与关闭开关都不补", () => {
+    expect(shouldSyncOnOpenClose({ enabled: true, autoMode: "manual" })).toBe(false);
+    expect(shouldSyncOnOpenClose({ enabled: false, autoMode: "interval" })).toBe(false);
+    expect(shouldSyncOnOpenClose({ enabled: false, autoMode: "onOpenClose" })).toBe(false);
+    expect(shouldSyncOnOpenClose(null)).toBe(false);
+  });
+
+  it("文案单一来源：开/关说明非空且提到三档语义", () => {
+    expect(SYNC_OPEN_CLOSE_NOTE).toContain("按固定间隔");
+    expect(SYNC_OPEN_CLOSE_NOTE).toContain("完全手动");
   });
 });

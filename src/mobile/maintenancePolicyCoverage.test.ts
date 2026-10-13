@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { MAINTENANCE_OPS, NONE_OPS, WRITE_OPS, classifyOp } from "../core/maintenancePolicy.js";
+import { MAINTENANCE_OPS, NONE_OPS, PRIORITY_OPS, WRITE_OPS, classifyOp } from "../core/maintenancePolicy.js";
 
 const SOURCE = readFileSync(path.join(process.cwd(), "src/mobile/bridge.ts"), "utf8");
 const LINES = SOURCE.split("\n");
@@ -40,14 +40,21 @@ function parseBridgeMethods(): Method[] {
 const METHODS = parseBridgeMethods();
 const bodyOf = (m: Method): string => LINES.slice(m.from - 1, m.to - 1).join("\n");
 
-/** 取方法体里的取锁调用点：runWrite("op" / runMaintenance("op"。 */
-function lockSites(body: string): Array<{ fn: "runWrite" | "runMaintenance"; op: string }> {
-  const out: Array<{ fn: "runWrite" | "runMaintenance"; op: string }> = [];
-  const re = /(runWrite|runMaintenance)\("([a-zA-Z_$][a-zA-Z0-9_$]*)"/g;
+/** 取方法体里的取锁调用点：runWrite("op" / runMaintenance("op" / runPriority("op"。 */
+function lockSites(body: string): Array<{ fn: "runWrite" | "runMaintenance" | "runPriority"; op: string }> {
+  const out: Array<{ fn: "runWrite" | "runMaintenance" | "runPriority"; op: string }> = [];
+  const re = /(runWrite|runMaintenance|runPriority)\("([a-zA-Z_$][a-zA-Z0-9_$]*)"/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) out.push({ fn: m[1] as "runWrite" | "runMaintenance", op: m[2] });
+  while ((m = re.exec(body)) !== null) out.push({ fn: m[1] as "runWrite" | "runMaintenance" | "runPriority", op: m[2] });
   return out;
 }
+
+/** 取锁函数 → 判据类别。 */
+const CLASS_OF_FN: Record<"runWrite" | "runMaintenance" | "runPriority", string> = {
+  runWrite: "write",
+  runMaintenance: "maintenance",
+  runPriority: "priority",
+};
 
 /** op 名与方法名不同名的例外（附理由）。 */
 const OP_NAME_EXCEPTIONS: Record<string, string> = {
@@ -56,7 +63,7 @@ const OP_NAME_EXCEPTIONS: Record<string, string> = {
 
 describe("移动端互斥域护栏（F16）", () => {
   it("判据表与 bridge 方法集合完全一致（新增/删除方法必须同时改判据）", () => {
-    const policy = [...WRITE_OPS, ...MAINTENANCE_OPS, ...NONE_OPS].sort();
+    const policy = [...WRITE_OPS, ...MAINTENANCE_OPS, ...PRIORITY_OPS, ...NONE_OPS].sort();
     const names = METHODS.map((m) => m.name).sort();
     expect(names).toEqual(policy);
   });
@@ -65,12 +72,12 @@ describe("移动端互斥域护栏（F16）", () => {
     const locked = new Set<string>();
     for (const m of METHODS) {
       for (const site of lockSites(bodyOf(m))) {
-        const expected = site.fn === "runWrite" ? "write" : "maintenance";
+        const expected = CLASS_OF_FN[site.fn];
         expect(classifyOp(site.op), `${m.name} 里 ${site.fn}("${site.op}") 与判据不符`).toBe(expected);
         locked.add(site.op);
       }
     }
-    for (const op of [...WRITE_OPS, ...MAINTENANCE_OPS]) {
+    for (const op of [...WRITE_OPS, ...MAINTENANCE_OPS, ...PRIORITY_OPS]) {
       expect(locked.has(op), `操作 ${op} 登记为取锁，但源码里没有任何取锁调用点`).toBe(true);
     }
   });
@@ -89,6 +96,7 @@ describe("移动端互斥域护栏（F16）", () => {
       const sites = lockSites(bodyOf(m));
       expect(sites.filter((s) => s.fn === "runWrite").length, `${m.name} 内有多个 runWrite（会自锁）`).toBeLessThanOrEqual(1);
       expect(sites.filter((s) => s.fn === "runMaintenance").length, `${m.name} 内有多个 runMaintenance（会自锁）`).toBeLessThanOrEqual(1);
+      expect(sites.filter((s) => s.fn === "runPriority").length, `${m.name} 内有多个 runPriority（会自锁）`).toBeLessThanOrEqual(1);
     }
   });
 
@@ -96,7 +104,7 @@ describe("移动端互斥域护栏（F16）", () => {
     const classOf = new Map(METHODS.map((m) => [m.name, classifyOp(m.name)]));
     for (const m of METHODS) {
       const mine = classOf.get(m.name);
-      if (mine !== "write" && mine !== "maintenance") continue;
+      if (mine !== "write" && mine !== "maintenance" && mine !== "priority") continue;
       const body = bodyOf(m);
       for (const callee of classOf.keys()) {
         if (callee === m.name || classOf.get(callee) !== mine) continue;

@@ -86,3 +86,61 @@ describe("小记深链订阅", () => {
     expect(isQuickNoteShortcutUrl(null)).toBe(false);
   });
 });
+
+// 用户 261013 定稿：长按小记快捷入口的**这次冷启动**不跑整轮同步（写作区要立刻可输入，
+// 而整轮同步在 WebView 主线程上会抢开始打字那几秒）。判据由本模块给 useAutoSync。
+// 用 resetModules + 动态 import 拿"全新进程"状态（出厂状态是模块级、每个进程只判定一次）。
+describe("冷启动性质判定（快捷入口 ⇒ useAutoSync 跳过本次整轮同步）", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    h.getLaunchUrl.mockReset();
+    h.remove.mockReset();
+    h.setCb(null);
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+  });
+
+  it("命中小记深链 ⇒ true", async () => {
+    h.getLaunchUrl.mockResolvedValue({ url: "lakenotes://quick-note" });
+    const mod = await import("./quickNoteShortcut");
+    const pending = mod.whenQuickNoteLaunchResolved();
+    mod.subscribeQuickNoteShortcut(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(pending).resolves.toBe(true);
+  });
+
+  it("其它深链 ⇒ false（不能被「任意深链」当成快捷入口）", async () => {
+    h.getLaunchUrl.mockResolvedValue({ url: "lakenotes://other" });
+    const mod = await import("./quickNoteShortcut");
+    const pending = mod.whenQuickNoteLaunchResolved();
+    mod.subscribeQuickNoteShortcut(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it("普通启动（没有深链）⇒ 轮询窗口走完才 false", async () => {
+    h.getLaunchUrl.mockResolvedValue({});
+    const mod = await import("./quickNoteShortcut");
+    const pending = mod.whenQuickNoteLaunchResolved();
+    mod.subscribeQuickNoteShortcut(() => undefined);
+    await vi.advanceTimersByTimeAsync(3200);
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it("兜底：没人订阅也不会永久挂起（超时即按普通启动）", async () => {
+    const mod = await import("./quickNoteShortcut");
+    const pending = mod.whenQuickNoteLaunchResolved(500);
+    await vi.advanceTimersByTimeAsync(600);
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it("非原生平台立即 false（Web 预览/测试）", async () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => false };
+    const mod = await import("./quickNoteShortcut");
+    await expect(mod.whenQuickNoteLaunchResolved()).resolves.toBe(false);
+  });
+});

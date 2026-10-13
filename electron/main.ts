@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
 import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
+import { shouldSyncOnOpenClose } from "../src/core/syncModes.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
@@ -96,6 +97,18 @@ let maintenanceQueue: Promise<unknown> = Promise.resolve();
 function enqueueMaintenance<T>(task: () => Promise<T>): Promise<T> {
   const run = maintenanceQueue.then(task, task);
   maintenanceQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+/**
+ * **高优先队列**（判据 `PRIORITY_OPS`）：用户当场发起的「把这一条推到云端」**不等整轮同步** ——
+ * 长按小记 → 写完 → 同步 → 桌面端及时看到 是高频场景（用户 261013 点单）；
+ * 与维护队列是两条独立队列，交叉风险由 IPC 侧的"推送后回核"（排维护队尾）兜底。
+ */
+let priorityQueue: Promise<unknown> = Promise.resolve();
+function enqueuePriority<T>(task: () => Promise<T>): Promise<T> {
+  const run = priorityQueue.then(task, task);
+  priorityQueue = run.then(() => undefined, () => undefined);
   return run;
 }
 
@@ -426,7 +439,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     restartGcTimers: () => restartGcTimers?.(),
     restartSyncTimers: () => restartSyncTimers?.(),
   });
-  registerQuickNotesIpc(ipc, quickNotes, store);
+  registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance, enqueuePriority);
   registerLogIpc(ipc);
   registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
   return ipc.registry;
@@ -567,10 +580,11 @@ if (!app.requestSingleInstanceLock()) {
     startSyncTimers();
     restartSyncTimers = startSyncTimers;
 
-    // onOpenClose：应用就绪时对齐一次（失败仅告警）。
+    // 开启应用时对齐一次（261013：interval 也含在内；manual 不补）。失败仅告警。
     const syncCfgOpen = store.getSyncSettings();
-    // 单一判据（core/cloudState）：没配置 或 关闭云同步 ⇒ 不自动出网。
-    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && syncCfgOpen.autoMode === "onOpenClose") {
+    // 两条判据都走单一来源：能不能出网 = core/cloudState（没配置 或 关闭云同步 ⇒ 不出网）；
+    // 该不该在开/关时补一次 = core/syncModes 的 shouldSyncOnOpenClose（enabled 且 autoMode ≠ "manual"）。
+    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && shouldSyncOnOpenClose(syncCfgOpen)) {
       void runFullSync().catch((error) => {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("[sync] 开启同步失败:", msg);
@@ -622,7 +636,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-// 退出前同步：onOpenClose 模式退出前做一次同步；任何模式只要同步在途都等它完成再退
+// 退出前同步（261013：interval 也做一次，manual 不做）；任何模式只要同步在途都等它完成再退
 // （否则可能停在"对象已传、manifest 未写"的中间态）。
 let quittingForSync = false;
 app.on("before-quit", (event) => {
@@ -635,7 +649,7 @@ app.on("before-quit", (event) => {
     scheduleQuitDeadline();
     return;
   }
-  if (cfg.autoMode === "onOpenClose") {
+  if (shouldSyncOnOpenClose(cfg)) {
     event.preventDefault();
     quittingForSync = true;
     scheduleQuitDeadline();

@@ -6,6 +6,55 @@
 没有原生实现 ⇒ **实测停在 `MobileApp` 的 booting 态**（`<div class="poc-center">启动中…</div>`）。
 ⇒ **快照门禁必须跑在模拟器（真实原生桥）上**。`shell/` 保留备用（等移动端有 web 回退实现时可直接启用）。
 
+## ⚠️ 两个装置用法（261013 实测）
+
+1. **走查必须"单独冷启动"跑**：把它紧接在 `check:mobilesnap` 之后跑会 **22/22 屏全 ERR**（判据 `goHome: 卡住（找不到退出控件）`）——
+   因为快照门禁最后一态把 App 停在「设置 · 外观」子页，走查的 `goHome()` 从那里恢复不回来。
+   正确顺序：`am force-stop` → `am start` → `emu-cdp.sh 9336` → 走查。
+2. **键盘状态会干扰导航**：深链进「小记」写作卡后键盘是弹着的（自动聚焦），此时直接跑走查同样可能卡住 ⇒ 同上，先冷启动。
+
+## ⚠️ 门禁跑在**专用实例**上（261013 起，硬约定）
+
+**为什么**：`home-quicknotes` / `home-doc` 这些态的元素数与指纹**直接由设备里的数据决定** ——
+用户在模拟器上随手记一条小记，该态就 +17 元素、门禁报"两轮一致 ⇒ 真差异"，而代码一行没动（261013 实测踩到）。
+⇒ **门禁固定跑在专用 AVD `lake_gate`（emulator-5556）上**，用户自己那台随便改数据都不影响门禁。
+
+```bash
+# 1) 起专用实例（首次）
+export JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home"   # avdmanager 需要 JDK17+
+export ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools
+export PATH="$JAVA_HOME/bin:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+emulator -list-avds | grep -qx lake_gate || echo no | avdmanager create avd -n lake_gate -k "system-images;android-36;google_apis;arm64-v8a" -d pixel_6
+nohup emulator -avd lake_gate -no-snapshot -no-boot-anim -gpu host &
+
+# 2) 装包 + CDP 转发到 9336（别占用用户那台的 9335）
+export ANDROID_SERIAL=emulator-5556
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n com.lakenotes.mobile/.MainActivity
+bash scripts/emu-cdp.sh 9336
+
+# 3) 灌固定夹具（幂等；**先 pm clear 保证干净**）
+adb shell pm clear com.lakenotes.mobile && adb shell am start -n com.lakenotes.mobile/.MainActivity && sleep 8
+bash scripts/emu-cdp.sh 9336
+node scripts/cdp-eval.mjs 9336 @scripts/mobile-audit/gate-fixture.mjs
+
+# 4) 跑门禁（--port 9336）
+node scripts/mobile-audit/check-mobile-snap.mjs --port 9336
+```
+
+**夹具口径**（`gate-fixture.mjs`）：默认笔记本「个人笔记」下 **5 篇文档** + **4 条小记**。
+5 篇是**走查**的下限（它要 doc-0..doc-4 五行；3 篇时 doc-3/doc-4 会 ERR "not found: doc row #3/#4"，261013 实测）。
+文档必须挂在**默认笔记本**上 —— 门禁的 `home-doc` 态是"点书架第一张卡"进的，另建笔记本会让第一张卡是空的默认本、抽屉里没有文档行（261013 实测）。
+该实例**不配 S3**（`pm clear` 后即未配置）⇒ 不走同步 ⇒ 少一层取样抖动。
+
+**重烤基线**（只在专用实例上做；配方 = 先采一份暖态，再以它为基线）：
+```bash
+node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --tag gate-warm      # 第一次采样常拿到"冷态"，丢弃
+node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --from .css-audit/snap/gate-warm<N>.json --write-baseline
+node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                       # 连跑两次应 0 差异
+```
+⚠️ **基线绑定"专用实例 + 该夹具"**：拿它去比"用户的真实数据"必然 6/6 态红，那是预期，不是回归。
+
 ## 环境（260923 实测可用）
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"

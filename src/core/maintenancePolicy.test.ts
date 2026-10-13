@@ -2,14 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   MAINTENANCE_OPS,
   NONE_OPS,
+  PRIORITY_OPS,
   WRITE_OPS,
   classifyOp,
   isMaintenanceOp,
+  isPriorityOp,
   isWriteOp,
   lockDomainOf,
 } from "./maintenancePolicy.js";
 
-const ALL = [...WRITE_OPS, ...MAINTENANCE_OPS, ...NONE_OPS];
+const ALL = [...WRITE_OPS, ...MAINTENANCE_OPS, ...PRIORITY_OPS, ...NONE_OPS];
 
 describe("互斥域判据（F16 红线化）", () => {
   it("每个操作只属于一个类别（表内不重叠）", () => {
@@ -20,8 +22,9 @@ describe("互斥域判据（F16 红线化）", () => {
     // 与 cssLayers 的基线同理：只允许"显式改基线"来变更，防无声漂移。
     expect(WRITE_OPS.length).toBe(29);
     expect(MAINTENANCE_OPS.length).toBe(3);
-    expect(NONE_OPS.length).toBe(38);
-    expect(ALL.length).toBe(70); // = 移动端 bridge 的操作总数（261010 收窄契约面：删死方法 uploadObject）
+    expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
+    expect(NONE_OPS.length).toBe(39); // 261013 +getCloudState（UI 用它给「保存并同步」置灰）
+    expect(ALL.length).toBe(72); // = 移动端 bridge 的操作总数（261010 删死方法 uploadObject；261013 +syncQuickNote / +getCloudState）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {
@@ -70,5 +73,16 @@ describe("互斥域判据（F16 红线化）", () => {
 
   it("I3：维护域里没有「用户当场发起」的操作（轮次级才允许串行等待）", () => {
     expect([...MAINTENANCE_OPS].sort()).toEqual(["ensureTrashNoteAssets", "gcDeepCleanup", "syncNow"]);
+  });
+
+  it("高优先域（261013）：用户当场发起的单条推送既不排在整轮同步后面，也不与彼此并发", () => {
+    // 用户点单：长按小记 → 写完点「保存并同步」→ 桌面端要及时看到。若与 syncNow 同域，
+    // 撞上冷启动/回前台触发的整轮同步就要排队等它跑完（弱网可到分钟级）⇒ 必须另立一域。
+    expect(PRIORITY_OPS).toEqual(["syncQuickNote"]);
+    expect(isPriorityOp("syncQuickNote")).toBe(true);
+    expect(lockDomainOf(classifyOp("syncQuickNote"))).toBe("priority");
+    expect(lockDomainOf(classifyOp("syncQuickNote"))).not.toBe(lockDomainOf(classifyOp("syncNow")));
+    // 它仍然是"取锁"的（不是 none）：连点两下会两颗请求交叉读改写同一份无 CAS 清单。
+    expect(lockDomainOf(classifyOp("syncQuickNote"))).not.toBeNull();
   });
 });

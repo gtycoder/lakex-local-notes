@@ -13,6 +13,37 @@ import { registerPlugin } from "@capacitor/core";
 const QUICK_NOTE_URL = "lakenotes://quick-note";
 
 /**
+ * 本次启动是否由「小记」快捷方式拉起（冷启动 getLaunchUrl 命中）。null = 尚未判定。
+ * 消费者只有 `useAutoSync` 的冷启动那一次（跳过整轮同步，用户 261013 定稿）。
+ */
+let launchCapture: boolean | null = null;
+let launchWaiters: Array<(capture: boolean) => void> = [];
+
+/** 判定本次启动性质（幂等：先到先定）。 */
+function settleLaunch(capture: boolean): void {
+  if (launchCapture !== null) return;
+  launchCapture = capture;
+  const waiters = launchWaiters;
+  launchWaiters = [];
+  for (const waiter of waiters) waiter(capture);
+}
+
+/**
+ * 冷启动「本次是不是小记快捷入口」的判定（**给 useAutoSync 跳过冷启动那次整轮同步**用）。
+ * - 非原生平台立即 false（Web 预览/测试）；
+ * - 已判定过立即返回（**不会因为调用得晚而挂住** —— 这点很关键，冷启动轮询可能先于本调用完成）；
+ * - 尚未判定则等 `readLaunchUrl` 的轮询窗口，**超时按普通启动（false）**，绝不永久挂起。
+ */
+export function whenQuickNoteLaunchResolved(timeoutMs = 3000): Promise<boolean> {
+  if (!isNativePlatform()) return Promise.resolve(false);
+  if (launchCapture !== null) return Promise.resolve(launchCapture);
+  return new Promise<boolean>((resolve) => {
+    const timer = window.setTimeout(() => resolve(false), timeoutMs);
+    launchWaiters.push((capture) => { window.clearTimeout(timer); resolve(capture); });
+  });
+}
+
+/**
  * 是否 Capacitor 原生平台（Android/iOS）。
  *
  * ⚠️ **不要用 `hasNativeBridge()`**：它判的是 `window.lakeNative`，而移动端这个调试契约是在
@@ -84,16 +115,18 @@ export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {
           .then((result) => {
             if (result?.url) {
               launchConsumed = true;
+              // 顺手判定"本次启动性质"（供 useAutoSync 决定要不要跑冷启动那次整轮同步）：非小记深链一律 false。
+              settleLaunch(isQuickNoteShortcutUrl(result.url));
               handle(result.url);
               return;
             }
             attempts += 1;
-            if (attempts >= 10) return; // 约 3s 内没有深链 ⇒ 视为普通启动
+            if (attempts >= 10) { settleLaunch(false); return; } // 约 3s 内没有深链 ⇒ 普通启动
             retryTimer = window.setTimeout(readLaunchUrl, 300);
           })
           .catch(() => {
             attempts += 1;
-            if (attempts >= 10) return;
+            if (attempts >= 10) { settleLaunch(false); return; }
             retryTimer = window.setTimeout(readLaunchUrl, 300);
           });
       };

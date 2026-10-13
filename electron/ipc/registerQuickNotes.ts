@@ -1,5 +1,7 @@
 import { MAX_QUICK_NOTE_ATTACHMENT_BYTES, MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "../quickNotes.js";
 import { convertQuickNoteToLake } from "../quickNoteConversion.js";
+import { pushQuickNoteToS3 } from "../quickNotesSync.js";
+import { canTouchNetwork, cloudStateOf, cloudStateHint } from "../../src/core/cloudState.js";
 import type { Store } from "../store.js";
 import type { IpcRegistrar } from "./registrar.js";
 
@@ -15,7 +17,15 @@ interface SaveQuickNoteInput {
   retainedImageIds?: string[];
 }
 
-export function registerQuickNotesIpc(ipc: IpcRegistrar, quickNotes: QuickNotesStore, store: Store): void {
+export function registerQuickNotesIpc(
+  ipc: IpcRegistrar,
+  quickNotes: QuickNotesStore,
+  store: Store,
+  /** 维护域串行队列（网络操作必须与整轮同步/GC 互斥，但**不得**占用写域 —— F16 红线）。 */
+  enqueueMaintenance: <T>(task: () => Promise<T>) => Promise<T>,
+  /** 高优先域串行队列（用户当场发起的单条推送**不等整轮同步** —— 判据 PRIORITY_OPS）。 */
+  enqueuePriority: <T>(task: () => Promise<T>) => Promise<T>,
+): void {
   ipc.handle("list_quick_notes", () => quickNotes.listQuickNotes());
   ipc.handle("create_quick_note", (input: SaveQuickNoteInput) => quickNotes.createQuickNote(input));
   ipc.handle("update_quick_note", (id: string, input: SaveQuickNoteInput) => quickNotes.updateQuickNote(id, input));
@@ -38,4 +48,29 @@ export function registerQuickNotesIpc(ipc: IpcRegistrar, quickNotes: QuickNotesS
     return quickNotes.stageFile(draftId, input);
   });
   ipc.handle("convert_quick_note", (quickNoteId: string, notebookId: string) => convertQuickNoteToLake(quickNotes, store, quickNoteId, notebookId));
+  /**
+   * 「保存并同步」：只推这一条小记（261013）。
+   * - **高优先域**：用户当场发起，**不等**在途整轮同步（长按小记 → 写完 → 桌面端及时看到 是高频场景）；
+   * - 出网判据单一来源 core/cloudState（AGENTS §3#20）：没配置/关闭云同步 ⇒ 直接抛，零请求；
+   * - 推送成功后往**维护域队尾**排一次**幂等回核**：整轮同步若在"读到本地清单快照"之后才落地，
+   *   会把这一条覆盖掉，回核负责补回来（远端不缺则只多读一次清单）。
+   */
+  ipc.handle("sync_quick_note", async (id: string) => {
+    const settings = store.getS3Settings();
+    if (!settings) throw new Error("请先保存 S3 配置");
+    const state = cloudStateOf(true, store.getSyncSettings());
+    if (!canTouchNetwork(state)) throw new Error(cloudStateHint(state) ?? "云同步已关闭：不会联网");
+    const outcome = await enqueuePriority(() => pushQuickNoteToS3(quickNotes, settings, id));
+    if (outcome.status === "pushed") {
+      void enqueueMaintenance(async () => {
+        try {
+          const latest = store.getS3Settings();
+          if (!latest) return;
+          if (!canTouchNetwork(cloudStateOf(true, store.getSyncSettings()))) return;
+          await pushQuickNoteToS3(quickNotes, latest, id);
+        } catch { /* 安全网失败：下轮整轮同步自愈（远端缺条目 ⇒ decideUpload 走 upload） */ }
+      });
+    }
+    return outcome;
+  });
 }

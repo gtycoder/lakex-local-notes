@@ -8,8 +8,9 @@ import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List,
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
-import { SYNC_AUTO_MODE_OPTIONS, syncIntervalOptions } from "../../core/syncModes";
+import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
 import { writeSyncSettings } from "../syncSettingsStore";
+import { describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyncStatus } from "../syncStatusStore";
 import { bridge } from "../bridge";
 import { MANIFEST_VERSION } from "../../core/syncUtils";
 import { usePanelDrag } from "../usePanelDrag";
@@ -73,6 +74,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
+  /**
+   * 上次同步（设备本地、常驻）——用户 261013 定稿「同步可观测性」：
+   * 自动同步失败以前只走 console.warn，界面上完全看不到；这里把时间/结果/失败原因常驻在设置页。
+   */
+  const [lastSync, setLastSync] = useState<MobileSyncStatus | null>(() => readSyncStatus());
   const [syncWarnings, setSyncWarnings] = useState<SyncWarning[]>([]);
   const [cacheMsg, setCacheMsg] = useState("");
   const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
@@ -153,6 +159,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     setS3Test("测试中…");
     setS3Test(await bridge.testS3Connection());
   }, [saveS3]);
+
+  // 「上次同步」那一行跟随 store 刷新（bridge.syncNow 是唯一写入点）
+  useEffect(() => subscribeSyncStatus(() => setLastSync(readSyncStatus())), []);
 
   const runSync = useCallback(async () => {
     setSyncMsg("同步中…");
@@ -346,7 +355,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   />
                   {syncCfg?.enabled !== false && (
                     <>
-                      <Item itemId="sync-auto-mode" name="自动同步模式" desc="与桌面同一套语义；仅在启用云同步时生效。">
+                      <Item itemId="sync-auto-mode" name="自动同步模式" desc={`${SYNC_OPEN_CLOSE_NOTE}移动端进程可能被系统直接结束，无法在关闭时同步 ⇒ 以「回到前台」代替（冷启动与回到前台各一次）。`}>
                         <PickerSheet
                           label="自动同步模式"
                           value={syncCfg?.autoMode ?? "manual"}
@@ -359,7 +368,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                         />
                       </Item>
                       {syncCfg?.autoMode === "interval" && (
-                        <Item itemId="sync-auto-interval" name="自动同步间隔" desc="按固定间隔自动同步：到点触发一次（离线/未配置时由引擎侧判据拦住，不会出网）。">
+                        <Item itemId="sync-auto-interval" name="自动同步间隔" desc="按固定间隔自动同步：到点触发一次（离线/未配置时由引擎侧判据拦住，不会出网）。App 不在运行时（被切走或被杀）不会再按间隔触发，下次打开或回到前台会自动对齐一次。">
                           <PickerSheet
                             label="自动同步间隔"
                             value={syncCfg?.autoIntervalMinutes ?? 15}
@@ -384,6 +393,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     </div>
                     {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
                     {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
+                    {/* 常驻：上次同步的时间/结果/失败原因（自动同步的失败也在这里看得到；云同步关闭时另加一句说明） */}
+                    <div className="mb-set-item__desc">
+                      上次同步：{lastSync ? describeSyncStatus(lastSync) : "本机还没有同步记录"}
+                      {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
+                    </div>
                   </div>
                   {syncWarnings.length > 0 && (
                     <div className="mb-set-block">

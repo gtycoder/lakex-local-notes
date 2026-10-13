@@ -121,7 +121,7 @@ export interface QuickNotesSyncDbPort {
 
 /** 兼容 Web/Node 的 UUID（移动端 WebView 也提供 crypto.randomUUID；兜底同 syncEngine）。 */
 /** 标记已同步：优先"未变才标"守卫（I2）；端口未实现时退回朴素 markSynced（见接口注释）。 */
-async function markSyncedGuarded(qn: QuickNotesSyncDbPort, id: string, expectedContentHash: string): Promise<void> {
+export async function markSyncedGuarded(qn: QuickNotesSyncDbPort, id: string, expectedContentHash: string): Promise<void> {
   if (typeof qn.markSyncedIfUnchanged === "function") {
     await qn.markSyncedIfUnchanged(id, expectedContentHash);
     return;
@@ -129,7 +129,7 @@ async function markSyncedGuarded(qn: QuickNotesSyncDbPort, id: string, expectedC
   await qn.markSynced(id);
 }
 
-function randomUUID(): string {
+export function randomUUID(): string {
   const c = globalThis.crypto;
   if (c && typeof c.randomUUID === "function") return c.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {

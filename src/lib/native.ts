@@ -143,6 +143,8 @@ export interface LakeNative {
   discardQuickNoteDraft(draftId: string): Promise<void>;
   discardStagedQuickNoteImage(draftId: string, imageId: string): Promise<void>;
   convertQuickNote(quickNoteId: string, notebookId: string): Promise<NoteDocument>;
+  /** 「保存并同步」：只推这一条小记（其余小记在云端原样保留）。 */
+  syncQuickNote(id: string): Promise<import("../core/quickNotePush").QuickNotePushOutcome>;
   listQuickNoteTrash(): Promise<QuickNoteTrashItem[]>;
   restoreQuickNote(id: string): Promise<QuickNoteDocument>;
   purgeQuickNote(id: string): Promise<void>;
@@ -299,6 +301,7 @@ export const native = {
   discardQuickNoteDraft: (draftId: string) => api().discardQuickNoteDraft(draftId),
   discardStagedQuickNoteImage: (draftId: string, imageId: string) => api().discardStagedQuickNoteImage(draftId, imageId),
   convertQuickNote: (quickNoteId: string, notebookId: string) => api().convertQuickNote(quickNoteId, notebookId),
+  syncQuickNote: (id: string) => api().syncQuickNote(id),
   listQuickNoteTrash: () => api().listQuickNoteTrash(),
   restoreQuickNote: (id: string) => api().restoreQuickNote(id),
   purgeQuickNote: (id: string) => api().purgeQuickNote(id),

@@ -22,6 +22,7 @@ import {
   type QuickNotesSyncProgress,
   type QuickNotesSyncResult,
 } from "../src/core/quickNotesSyncEngine.js";
+import { pushQuickNote, type QuickNotePushOutcome } from "../src/core/quickNotePush.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { validateQuickNoteContent } from "../src/core/quickNoteModel.js";
 import type { StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
@@ -127,6 +128,30 @@ export async function syncQuickNotes(
   const result = await syncQuickNotesViaEngine(cfg, s3Store, qnPort, { onProgress: report });
   quickNotes.logScopes.quick.info(`[perf] quick-sync done ${Date.now() - quickStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts})`);
   return result;
+}
+
+/**
+ * 单条小记推送（「保存并同步」）：只把这一条（正文 + 它的图片）推上去，并把它 upsert 进远端清单，
+ * **其余小记在云端逐字段原样保留**（合并语义，见 src/core/quickNotePush.ts 的铁律）。
+ * 不做额外的 test() 连通探测 —— 清单 GET 本身就是连通检查（少一次往返）。
+ */
+export async function pushQuickNoteToS3(
+  quickNotes: QuickNotesStore,
+  settings: S3Settings,
+  id: string,
+): Promise<QuickNotePushOutcome> {
+  validateS3Settings(settings);
+  const remote = new ObjectStore(settings, quickNotes.logScopes);
+  const cfg = {
+    endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket,
+    accessKeyId: settings.accessKeyId, secretAccessKey: settings.secretAccessKey,
+    prefix: settings.prefix ?? "lake-notes",
+  };
+  const s3Store = createS3StoreAdapter(remote, cfg.prefix);
+  const qnPort = createQuickNotesSyncPort(quickNotes);
+  const outcome = await pushQuickNote(cfg, s3Store, qnPort, id);
+  quickNotes.logScopes.quick.info(`[perf] quick-push-single ${id} -> ${outcome.status}`);
+  return outcome;
 }
 
 // ===== 小记 GC：深度清理（与 Lake runDeepCleanup 同规则，作用于 quick-notes/ 子空间） =====

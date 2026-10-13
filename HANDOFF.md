@@ -5,9 +5,9 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接（261012 → 261010）
+## 0. 最新交接（261013 → 261012）
 
-> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261012 / 261010）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
+> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261013 / 261012）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
 > **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
 > 仍缺的移动端文本格式 = **H5/H6、缩进、行高、清除格式、格式刷**（§3 的覆盖缺口表里其余项）。
@@ -15,6 +15,140 @@
 > **下一会话焦点（261012 收尾 → 下一会话，用户定）**：① **移动端文本增强二级面板**（见上）；② **5 项画图插入项解禁**（画板 / 流程图 / UML / 思维导图 / 文本绘图，现为置灰占位；根因与修法见 §3#18）；③ **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；④ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261013 · 收尾批：同步可用性置灰 + 启动就绪信号 + 移动端同步可观测性 + 并发真交错护栏
+
+- **A2「保存并同步」在云同步关闭时置灰 + 给理由**（用户定稿「改回置灰」）：
+  · 桌面：判据在 `App.tsx` 用 cloudState 的 **UI 判据** `isCloudActive(cloudConfigured, cloudEnabled)` → `cloudReady` 经 `DesktopQuickNotes` 透传给工作区；按钮 `disabled={busy || !cloudReady}` + `title`（全局 title→`.ln-tip` 拦截，所以是真提示）。
+  · 移动：`bridge.getCloudState()`（复用 `mobileCloudState()`，登记进 `NONE_OPS`）→ 写作卡 `cloudReady` 状态（挂载读一次 + `subscribeSyncSettings` 跟随设置页改动）；按钮置灰 + **一行可见说明**（`.mobile-qn-hint` —— 移动端没有 hover，光置灰用户不知道为什么）。
+  · 护栏：新增 `src/components/quickNoteSyncGate.test.ts`（两端：判据走 cloudState、按钮按 cloudReady 置灰、置灰必须给理由）。
+- **C7「开启应用对齐一次」改用显式就绪信号，不再猜 3s**（用户定稿）：`useAutoSync(ready)` 由 `MobileApp` 传 `phase === "ready"`（= `bridge.init` + `refreshAll` 之后）驱动那次对齐；
+  旧实现 `setTimeout(…, 3000)` 的问题：快设备白等、慢设备可能在桥没就绪时就触发（会走「未配置/密钥缺失」的假失败路径）。护栏在 `quickNoteCapturePath.test.ts`（断言不再有 3s + 就绪 effect 存在）。
+- **C6 移动端同步可观测性**（用户定稿）：新增 `src/mobile/syncStatusStore.ts`（设备本地、不参与同步；**不塞**两端共用的 `lib/settings.ts`）；
+  **写入点唯一** = `bridge.syncNow()`（成功 / 失败 / 未配置 / 密钥缺失各一处；离线这种"根本没尝试"不写）；设置页「连接与同步」新增**常驻一行**「上次同步：<时间> · 同步成功/失败：<原因>」，云同步关闭时追加一句说明。
+  **它修掉的真问题**：自动同步失败此前只走 `console.warn`（`reportNativeActionError` 只 warn），**界面上完全看不到**。手动同步的 toast 保留（当场反馈），常驻行负责事后自查。
+- **B4 引擎层端到端并发护栏**：新增 `src/core/quickNotePushSyncRace.test.ts`（**真交错**，非等价复现）：把**真实引擎**停在"上传阶段已完成、清单尚未 PUT"的那次 `listDeferredDeletedQuickNotes` 上，窗口内跑**真实 `pushQuickNote`**，再放行引擎落地，断言：
+  ① push 后清单含目标条；② 引擎落地后**目标条从清单消失**（覆盖确实发生）、其余条目含墓碑仍在；③ 回核（再 push 一次）⇒ 目标条回来、其余条目与「引擎落地那份」**逐字节相同**、正文/图片对象都在；另有一条 I2 真交错（推送网络窗口内本地又编辑 ⇒ 不标 synced、新内容不丢）。
+  **证据等级（如实）**：真交错 + **引擎层**端到端（S3 与本地库仍是内存假件，与两个既有 core 测试同款）；**不是**跨进程/真网络 E2E。既有 `quickNotePush.test.ts` 那例「并发防覆盖」是等价复现，两者都在。
+- **验证**：`tsc` ✓ · `vitest` **239 文件 / 1866 例全绿**（跳过 5/16）· `check:core`/`check:mobileui`/`check:bundle` ✓ · `git diff --check` clean · 设备：A2 置灰 + C6 状态行实机核对 · 桌面 `check:stylesnap` **17 态 0 差异 exit 0**（见 B5）。
+- **设备核对（门禁实例 emulator-5556，未配 S3）**：
+  · **A2 置灰 ✓**：capture 动作行三钮 = 取消(first-class, disabled=false) / **保存并同步(disabled=true)** / 保存(disabled=false)，并显示可见说明「云同步已关闭：不会联网。「保存」只存到本机，开启云同步后可再同步。」
+  · **C6 状态行 ✓**：设置 → 同步设置 → 点「立即同步」⇒ 常驻行由「本机还没有同步记录」变为 **「上次同步：13:43 · 同步失败：未配置 S3」**、localStorage 落盘 `ok:false`。
+- **⚠️ 设备核对抓到我实现里的真 bug（已修）**：修复前那一行显示 **「同步成功（未配置 S3）」** —— 因为外层把"正常返回"一律记成成功，而「未配置 S3」「密钥缺失」是**没跑成**的正常返回。
+  修法：成功判据改为"**真的跑了引擎**"（`result.notes !== null`），写入点仍唯一（`bridge.syncNow` 一处 + catch 一处）；护栏同步改为断言该判据。**这条正是"设备级核对"的价值** —— 单测与静态护栏都发现不了。
+
+- **B5 桌面 `check:stylesnap`：装置修好 + 基线整份重烤 ⇒ 门禁**已重新可用（绿）**，代价 = **严格比对覆盖 34 → 17 态**（用户 261013 定："简单处理"）。五层结论：
+  ① **装置自 261012 起一跑就炸**：`snapExpr` 改名漏改调用点（`stylesnap.mjs:339` 仍读 `SNAP`）⇒ `ReferenceError`（**已修**，一行）。
+  ② **基线陈旧六天，归因 = 代码漂移（外壳层），不是数据**（子 agent 实测，**我去掉了最初"夹具换代"的错误归因**）：用与基线同构的合成夹具仍 **42/42 全红**、形态每态 **+19 元素**（settings 组 +20）；
+     夹具配方相对基线唯一改动（`createSheetIn`→`createUsheetIn`）实测最多解释 **±2** 个元素；增量在**所有态**恒定（含无编辑器的 `settings-about`）⇒ 只能是全局外壳。**"陈旧"被 ① 的崩溃盖住了六天。**
+  ③ **真拦路 = 装置抖动**：5 份完整 42 态快照（跨 3 实例）两两对拍 ⇒ **1315 宽态 17/34 翻转**；315 个翻转 key 里 **314 个是「无 id、无 class 的 SVG 图元（rect/g/path）」**，只有 1 个是 `div.list-heading`（`snapdiff` 实测，元素数不变）。
+     之前实测过"烤了也过不了"：第 1 轮差 7 态、第 2 轮差 8 态、交集 6 态 ⇒ exit 1（两轮集合互不相同 = 随机抖动，与本批 UI 无关）。
+  ④ **处理**：17 个抖动 1315 态写进 `check-stylesnap.mjs` 的 **`UNSTABLE_1315`**（照常采集入库、只跳过严格比对，与窄窗态同款），从一份完整快照整份重烤基线，
+     再在**全新实例**（CDP 9255、scheme、冻结合成夹具）自证：**`[gate] 17 态整页计算值 0 差异 … GATE_EXIT=0`**（另有 1 态 `settings-editor:1315:light` 只在一轮出现，被去抖机制按 flaky 排除）。
+     **代价如实**：严格比对 34 → 17 态。**正确修法留给专门一批**：在 `snapExpr` 里剔除「无 id 无 class 的 SVG 图元」能**保住全部 34 态**，但那份表达式**两端共用** ⇒ 必须桌面 + 移动端一起整份重烤（做完就删 `UNSTABLE_1315`）。
+  ⑤ **交付物**：**冻结合成夹具** `~/Library/Caches/lake-notes-css-audit/fixture`（与基线数据态同构，可直接复用；生成器第 0 步"删欢迎笔记"因 `bootstrap()` 只返回 `notes` 而**静默空转**这件事已记进 README）；
+     候选/备份基线在 `.css-audit/baseline-stylesnap-*-261013.json`（gitignored）。判据、三条坑（含 `--states` 不能配 `--write-baseline`）见 `scripts/css-audit/README.md`。
+  ⚠️ **环境坑**：两个 agent **同时**起桌面门禁实例会互相踩（`bind() failed: Address already in use (48)` + 门禁连到别人的实例 ⇒ CDP 超时/元素数莫名），起实例前先 `lsof -nP -iTCP:<port> -sTCP:LISTEN` 查。
+  ⚠️ **顺带记录一条环境坑**：两个 agent **同时**起桌面门禁实例会互相踩（`bind() failed: Address already in use (48)` + 门禁连到别人的实例 ⇒ CDP 超时/元素数莫名），起实例前先 `lsof` 查端口。
+
+### 261013 · 小记「保存并同步」（单条推送，两端）+ 移动端进后台 best-effort 触发
+
+- **用户 261013 点单**：小记写作卡加「保存并同步」，**只把当前这条小记推到 S3**（不管其他小记），两端都要。
+  **按钮形态（用户 261013 第二轮定稿，两端同构）**：**主按钮保持原来的「小记一下 / 保存」不动**，「保存并同步」做成**普通按钮**夹在主按钮与「取消」之间；
+  不再有单独的「仅保存」按钮（主按钮本身就是只写本机）。桌面 pane＝`[小记一下][保存并同步][取消][提示]`、inline＝`[取消][保存并同步][保存]`；移动端＝`[取消][保存并同步][保存]`（主按钮仍 `.mobile-qn-primary`）。
+  **桌面主按钮改为"恒强调色"**（用户 261013 第三轮："桌面端的小记一下应该有颜色吧"）⇒ **260915 的"新建空态＝中性描边、有内容才强调"就此作废**：
+  动作行现在有两个同族描边按钮，主按钮再走中性就分不出主次（移动端本来就是恒实心，两端这下一致了）。
+  **无远端清单时退回一次完整小记同步**并如实提示。
+  **一处有意的偏离（方案说"云同步关闭时按钮禁用"，实现改成"仍可点、点了给明确原因"）**：移动端没有 hover 提示，
+  一个**置灰且不解释**的主按钮比"点了告诉你为什么"更差；两端同行为、不搞两套。出网判据仍在服务端一侧（桌面 IPC / 移动 bridge 都走 `cloudStateOf`+`canTouchNetwork`，UI 不直接读 `enabled`），
+  且**本地保存永远成功**、失败提示写明"已保存到本机 · 同步失败：云同步已关闭…"。若你要置灰 + 说明，两端都得补一个"离线提示位"。
+- **红线：必须"先读远端清单 → 只 upsert 这一条 → 写回"**。小记清单是**单文件覆盖写、没有 CAS**（`quick-notes/manifests/latest.json`），写一份"只含当前小记"的清单 = 向他端声明"小记全集就这一条" ⇒ 他端按未声明处理（墓碑/GC 误删）。其余条目**逐字段原样保留**（护栏 `quickNotePush.test.ts` 的"逐字节不变"那例）。
+  - 内容对象按 contentHash 寻址（`objects/<hash>.qnote`）⇒ 单条 PUT 幂等；已是最新（同 id、同 hash、同图片集）⇒ **不写清单**（不给多端 GC 添噪声）。
+  - 两条**退回完整同步**的路径（不静默降级）：① 云端还没有清单（首次）② 远端是墓碑且本机无恢复标记（墓碑权威，不许复活）。
+  - 记账 `setBaseHash` + `markSyncedGuarded`（I2 守卫）。
+- **落点**：新增 `src/core/quickNotePush.ts`（+7 例护栏）· 桌面 `electron/quickNotesSync.ts` 的 `pushQuickNoteToS3` + IPC `sync_quick_note`（main/preload/native 三处 + `webApiServer` 的 `WEB_METHODS`）+ `QuickNotesWorkspace`（`saveDraft` 改返回 `{ok,id}`——"没改动"路径也要回传**小记 id**，因为编辑草稿 id ≠ 小记 id）· 移动 `bridge.syncQuickNote`（走高优先域 `PRIORITY_OPS`）+ `lakeNativeContract` + `QuickNoteComposer`。
+- **互斥域 = 新立的「高优先域」（用户 261013 第二轮点单，判据在 `src/core/maintenancePolicy.ts` 的 `PRIORITY_OPS`）**：
+  先按我上一轮的方案做成了"入维护域与 `syncNow` 串行"，用户指出**这不行** —— 本功能面对的就是"长按小记 → 写完 → 要让桌面端及时看到"，而长按从桌面图标进入会触发**回前台整轮同步**，排队等它跑完（弱网实测整轮可到分钟级）正好砸在这个高频路径上。
+  ⇒ 另立**第三条队列** `priorityQueue`（移动 `maintenanceLocks.ts` / 桌面 `main.ts` 的 `enqueuePriority`）：**彼此串行、但绝不排在整轮同步后面**。
+  代价是它与整轮同步可并行 → 唯一交叉风险 = 整轮同步拿**旧快照**写清单时覆盖掉我们刚写的条目 ⇒ 用**"推送后回核"**兜底：推送成功后往**维护域队尾**排一次幂等回核（远端不缺该条就只多读一次清单）。两端同款，护栏 `maintenancePolicy.test.ts` + `maintenancePolicyCoverage.test.ts`（`runPriority` 也纳入"取锁类别一致 / 同域不嵌套"检查）。
+- **移动端进后台 best-effort 触发（同批，对齐思源安卓壳）**：`useAutoSync` 在 `appStateChange(isActive=false)` 也补一次（"离开设备前最后一次推送"）；**失败静默、不做任何等待**（WebView 可能随即被冻结/杀掉）；自动触发之间**在途去重**（对齐思源壳侧 `AtomicBoolean syncing`），手动「立即同步」不受影响。
+- **文案如实**：两端「自动同步间隔」行写明"**App 不在运行时不会再按间隔触发**，下次打开或回到前台会对齐一次"——上线的诚实要求。
+- **快捷入口（长按桌面图标「小记」）两条定稿（用户 261013 第五轮）**：
+  · **这次冷启动不跑整轮同步**：`quickNoteShortcut` 暴露 `whenQuickNoteLaunchResolved()`（命中 `lakenotes://quick-note` ⇒ true；其它深链 / 无深链 / 超时 ⇒ false，**绝不永久挂起**），
+    `useAutoSync` 的冷启动那一次先等它 ⇒ 是快捷入口就跳过。理由：写作区本来是秒开的（`captureOpen` 同步置位），但 3s 后的整轮同步跑在 **WebView 主线程**上（读/写清单 JSON、算 hash、遍历条目），正好抢"开始打字"那几秒。
+    **代价（已与用户确认）**：这次进入不拉远端新小记；数据上云靠 ① 点「保存并同步」② 进后台 best-effort ③ 下次普通启动/回前台的对齐。
+  · ~~保存后退出 App~~ **已撤回（用户 261013 第六轮定稿）**：思源是"提交后可继续提交、手动退出"，语雀是"创建后留在小记页" ——
+    两家参考产品都不自动退出，随手记也常常一次记几条 ⇒ **保存后留在小记页**（可接着记下一条），退出交给系统返回/Home。
+    额外好处：不再代劳"离开 App"，那次**进后台 best-effort 同步**因此还在（「保存」的小记也有机会上云）；随之删掉了只为它存在的 `suppressBackgroundSyncOnce()`（避免留死代码）。
+    **口径已裁定（用户 261013，别再提"补一次兜底同步"）**：点主按钮「保存」= 只落本机，**这就是它该有的语义**。
+    我们已经提供了「保存并同步」按钮；**不点它 = 用户不着急同步** —— 这时候再替他偷偷补一次推送是"想当然"（用户原话）。
+    ⇒ **不做任何退出时/隐式的兜底同步**；这条小记交给下次普通启动 / 回前台的正常对齐带走（以及用户自己点「保存并同步」）。
+    **顺带堵掉一处我自己漏掉的隐式同步**：`App.exitApp()` 会让 Android 分发一次**进后台**事件 ⇒ 那条 best-effort 同步会被拉起来、随即随进程被杀（半截请求）。
+    现在退出前调 `suppressBackgroundSyncOnce()`（`useAutoSync` 的一次性开关）忽略紧随其后那次后台触发 ⇒ **快捷入口这条路径只在用户点「保存并同步」时碰 S3**。
+- **入口形态核实（用户 261013 提问，读思源两个仓库核实）—— 结论：我们走的是语雀的路，不是思源的路**：
+  · **思源「闪念速记」是独立的原生轻量模块**：桌面快捷方式**直指** `ShortcutActivity`（`res/xml/shortcuts.xml`：action=VIEW / data="shorthand" / targetClass=…ShortcutActivity），
+    Manifest 里 `launchMode="singleTask"` + **`taskAffinity="org.b3log.siyuan.shorthand"`** ⇒ 跑在**自己的任务栈** ⇒ **返回键退的是这个速记模块**（回 launcher / 原来的应用），**不落进主 App**。
+    这正是"手动退出"的真身：**退的是闪记模块，不是整个 App**。
+  · 它的界面**纯原生、没有任何小记预览/列表**：`activity_shortcut.xml` = 标题 + 「添加到桌面」+ 提交按钮 + 一个全屏 `EditText`，**无 WebView、不挂内核**。
+  · 提交后**清空输入框、界面留着**（源码注释原话："使速记作为常驻速记本存在"）⇒ **可连续提交**；内容**原子写成一个 .md 文件**（`<externalFilesDir>/home/.config/siyuan/shortcuts/shorthands/<ts>.md`，`.tmp`→rename）。
+  · **数据不依赖 App 是否运行**：内核 `model/shortcuts.go` 的 `consumeShorthands()` 由 `AutoConsumeShorthandsJob` **每 3 秒**（仅 mobile 容器，`job/cron.go:54`）捞该目录建/追加文档；启动同步成功后也会消费一次。
+  · **语雀 = 打开整个 App、留在小记页（有列表、能看到已有小记）**；**我们走语雀的路**（长按 `lakenotes://quick-note` → 拉起 MainActivity → 小记 tab + 写作浮层）。
+    ⇒ 上一轮"提交后留在原地、退出交给系统"的定稿**在这条路下正确**；**思源的"手动退出"不能直接类比**（它退的是独立模块，我们退的是整个 App）—— 我上轮把两者并列叙述**不严谨**，此处更正。
+  ⇒ **不学思源那条路**（独立原生 Activity + 极简视图 + 文件桥 + 内核侧消费）：我们的 lakex 跑在 WebView 里，没有"原生 Activity 直接写文件给内核捞"的结构，要走等于另立一条产品线；
+    若将来"零冷启动成本的速度记录"成为明确诉求，再单独立项（当前不做）。
+- **方案 D 定稿并交付（用户 261013 第七轮）：把快速小记做成"假单独模块"**（模仿思源闪念速记，但**不做**独立原生 Activity —— 成本/收益账见上一条）：
+  · **三个决策点（用户拍板）**：① 手动退出后 = **直接退 App 回桌面**（只对快捷入口会话；首页底栏「新建小记」不受影响）；② 「取消」= **丢弃当前草稿并退出**；③ 不同步的抑制范围 = **会话级**（这次从快捷入口进来，整次会话不主动同步；副作用：这次会话里若还编辑了文档，那部分也要等下次普通启动才对上云 —— 本地是真相，不丢）。
+  · **实现**：`MobileApp` 的 capture 分支 —— 保存后不再关界面，而是 `setCaptureNonce(n+1)` **重挂一条新的空小记**（草稿在提交时已清）⇒ 可连续记；新增 `closeCapture()` 统一"手动退出"（系统返回键 + 「取消」都走它）：关界面 → 快捷入口会话 `exitApp()`，否则刷新列表；
+    `useAutoSync` 新增 `isCaptureSession()`（复用 `whenQuickNoteLaunchResolved()`，判定一次）⇒ **入口 / 回前台 / 进后台三处全跳**，只有「保存并同步」走高优先域单条推送。
+  · **护栏**：`quickNoteCapturePath.test.ts` 在原 261010 四条之上新增三条（提交后重挂而不是关闭 / 手动退出统一走 `closeCapture` 且快捷入口会话退 App / capture 会话两处都过判定）；261010 那四条（共用 composer、独立入口在启动门之前、draft、seed）**全部保持**。
+  · **证据等级（如实）**：UX 流程在**专用实例**上做过设备级核对（冷启动走 lakenotes://quick-note → 点进编辑器 → 真实输入 → 点「保存」⇒ **小记 +1 且写作界面仍在**；返回键 ⇒ **topResumedActivity = 桌面**）；
+    **"确实没出网"只有静态护栏 + 代码路径**（门禁实例不配 S3，无法观测真网络；要看真网络得在配了 S3 的机器上试）。
+  · **设备核对暴露的一处体验缺口（待用户定）**：每条提交后编辑器是**重挂的新实例、焦点丢失** ⇒ 连续记要再点一下才继续输入（思源是同一个输入框所以不需要）。可补"提交后自动聚焦"（内核有 focus 命令；编辑器 API 现只有 getBody/getText，要加一个暴露）。
+  · **自动聚焦已补（用户 261013 第八轮点单）**：编辑器 API 暴露 `focus()`（内核官方命令 focus），写作卡在**创建时**（editNote 为空）
+    就绪后**立即 + 150ms 各聚焦一次**（内核"要等一拍"口径）⇒ **快捷 capture 与页面「新建小记」两条路共用同一实现**；提交后重挂的下一条也自动续上焦点。
+    护栏：`quickNoteCapturePath.test.ts` 新增一条（API 暴露 focus / 写作卡自动聚焦 / 补一拍 / 编辑已有小记不抢焦点）。
+  · **最终设备门禁（261013 收尾，专用实例 5 文档夹具）**：`check:mobilesnap` **6 态 0 差异**（含原生键盘改造后两轮复跑）· 22 屏走查 **22/22 ok · 四类探针全 0** · 快捷 capture 键盘 **842→530** ✓。
+    装置口径两处更新：① 夹具从 3 篇文档补到 **5 篇**（走查要 doc-0..doc-4 五行，3 篇时 doc-3/doc-4 会 ERR）；② README 记「走查必须单独冷启动跑」（紧跟快照门禁之后跑会 22/22 ERR，因为 App 停在设置子页）。
+  · **设备实测（专用实例）**：页面路 **焦点+键盘都 OK**（innerHeight 842→530）；**快捷冷启动深链路 = 焦点 OK、键盘不弹**（842→842）——
+    Android 只允许**用户手势**触发软键盘，深链冷启动没有手势（思源的闪念速记是原生 EditText 所以没这个问题）。
+    ⇒ **待用户定**：要不要加一个原生插件方法（InputMethodManager.showSoftInput）来在 capture 打开时主动弹键盘（约 15 行 Kotlin + 插件注册 + TS 封装；**不动版式**）。
+  · **快捷 capture 自动弹键盘（原生补齐，用户 261013 第九轮定）**：WebView 里程序化 focus 不弹软键盘（冷启动无用户手势，AGENTS §7.28）⇒ 新增原生插件 `ShowKeyboardPlugin`（InputMethodManager.showSoftInput）
+    + `src/mobile/nativeKeyboard.ts`；写作卡加 `raiseKeyboard`（**只 capture / 系统分享传**，页面路有手势不传），聚焦后 300ms 请原生弹一次。
+    **设备复核**：普通启动首页无键盘 **842** vs 快捷 capture **530**（键盘已弹 + 焦点在内核编辑器）。护栏：capture 传参 / 写作卡调用 / MainActivity 注册插件（漏注册时 JS 只会 reject）。
+  · **版式差距（用户 261013 提供思源录屏，已逐帧核对）**：思源闪念速记 = **一行标题（左「闪念速记」+ 未固定时「添加到桌面」）+ 右上蓝色主按钮「提交」+ 全屏纯文本输入**，键盘占下半屏；
+    我们 = 顶部内核工具条（九项）+ 底部三连按钮。**建议只对齐版式（加顶部栏），输入区仍用内核富文本**（退成纯文本=方案 B，实测不更快且要重做九项能力）。
+- **未做（明确不做，别再提）**：**「关掉 App 也保证 N 分钟内同步」** —— 同步引擎在 WebView JS 里（依赖 Capacitor SQLite/文件系统与完整应用上下文），App 被杀后没有运行时可言；要做只有把同步引擎**下沉原生层**（= 第二套实现）或 headless runner，属独立立项；**桌面端同样没有后台常驻**（关窗口不退进程时定时器还在，真退出就停）。
+- **验证**：`tsc` ✓ · `vitest` ✓ · `check:core` ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` clean（计数见当轮输出）。
+- **设备级重建 + 设备级验收（用户 261013 第三轮要求"看看效果"，全部已做）**：
+  · 模拟器：`emu-up.sh --no-window` → **emulator-5554**（AVD `lake_mobile`）；装完按 §8 重跑 `emu-cdp.sh`（socket 名带新 PID）。
+  · 安卓包：`android-build.sh --sync --install` → **APK 39,058,148 B / 10:10、`adb install` 输出 `Success`、已 `Starting`**（按 §7 的"静默失败"教训核对了时间戳与 Success，不只看"命令跑完"）。
+  · `check:mobilesnap`：**6 态 0 差异**（写作卡不在这 6 态里，**基线未动**）。
+  · 22 屏设备走查：**22/22 ok**，四类真探针 **escape / clipped / contrast / smallTap 全 0**（`fixedBars` 是**清单型**探针 —— 记录固定定位元素，不是违规；本轮 50 条 = 顶栏/胶囊底栏/dock 等）。
+  · 实机截图确认移动写作卡动作行 = **[取消][保存并同步][保存]**（主按钮仍是实心「保存」），三按钮未溢出、命中区达标（smallTap 0）。
+  · ⚠️ **模拟器必须带窗口**：本批第一次用了 `emu-up.sh --no-window`（无界面，用户看不到）⇒ 已 `adb emu kill` 后用 `emu-up.sh`（**不带** `--no-window`）重启，进程确认无 `-no-window`，App 已启动。以后给用户"看效果"一律带窗口。
+  · 桌面 `dist/` 已重建（`npm run build:web`），dev/打包产物都能看到新按钮。
+- **"没做的"这三条的处理（用户 261013 第四轮点单）**：
+  · **① 桌面 `check:stylesnap`：先修了装置的真 bug，但本轮仍不可判定**。装置缺陷：261012 的 `snapExpr(kernelIdMinLen)` 重构把表达式改名成 `SNAP_EXPR`，**漏改调用点** ⇒ `stylesnap.mjs:339` 仍在读已不存在的 `SNAP`，**自那次起桌面快照装置一跑就 `ReferenceError`**（已修：`SNAP` → `SNAP_EXPR`）。
+    修好后用**隔离实例**（`LAKE_RENDERER=scheme` + `$TMPDIR/lake-snap` + CDP 9231）跑出 **34/42 态差异**，但**差异形态是"每个态都少约 150 个元素"** ⇒ **是数据不同构（我用的是全新空库，基线那份带夹具），不是本次 UI 改动**。⇒ **判不了，也不该据此重烤基线**（重烤会把数据差异烤进基线）。
+    要跑通必须先按 `scripts/css-audit/README.md` 造/复用与基线同构的夹具；跑完实例已按 CDP 端口精确 kill（0 残留）。
+  · **② 并发防覆盖护栏：已补**（core 属性级，`quickNotePush.test.ts` 第 8 例）：复现"整轮同步拿推送前的旧快照落地 ⇒ 把我们刚写的条目覆盖掉"，再跑一次推送（= 回核）断言**条目补回来**且其他条目**逐字节不变**。**仍缺**端到端的真并发实测（真实整轮同步在途时点按钮）——列为真机/后批次项。
+  · **③ "回核只在维护在途时才排"：评估后不做**（据实说明）：门控只能看"推送那一刻队列是否忙"，而**漏掉的恰是最该兜的那一瞬** —— 推送正在进行、整轮同步紧接着启动（它读清单发生在我们 PUT 之前）⇒ 覆盖后没人修。一次清单 GET（几十~几百 ms、后台）换确定性，值。若哪天嫌它费流量，正确做法是给清单加 CAS 或让整轮同步"落地前重读本地条目"，不是收紧这个门控。
+  · **④ 真机复验：无设备**（`adb devices` 只有 emulator-5554）⇒ 仍待真机（与 §8「当前剩余验收」合并）。
+- **待办（本批之后）**：① 桌面 stylesnap 夹具化后重跑（见上）；② 端到端并发实测（整轮同步在途时点「保存并同步」）；③ 真机复验；④ 见上（①讨论项）"快捷入口冷启动是否跳过自动整轮同步" —— **待用户定**。
+
+### 261013 · 桌面+移动端批：自动同步补「开/关应用各一次」（含 interval 档）+ 文案说明
+
+- **用户 261013 定稿**：「如果选择了固定时间同步，也要在开启和关闭的时候同步一下子数据」⇒ 口径 = **只要云同步开着（`autoMode ≠ "manual"`），打开与关闭应用都各同步一次**；两端同一语义，且设置页文案要写明。
+- **裁定的一处边界（用户 261013 选「不要」）**：**「完全手动」不补** —— 保持真正不出网（只有手动同步 / 恢复补拉才联网）。故「完全手动」维持现名与现义，未改。
+- **改动前现状（真差距）**：`interval` 档**只起定时器**、开/关应用都不补 —— 桌面 `electron/main.ts` 的就绪块与 `before-quit` 都写死 `autoMode === "onOpenClose"`；移动端 `useAutoSync` 的前台处理器走 `shouldSyncOnForeground`，也只在 `onOpenClose` 档成立。
+- **落点（判据单一来源 + 两端执行）**：
+  · `src/core/syncModes.ts`：`shouldSyncOnForeground` → **`shouldSyncOnOpenClose`**，判据改为 `enabled && autoMode !== "manual"`；新增**共用文案** `SYNC_OPEN_CLOSE_NOTE`（与 `cloudState.ts` 的 `CLOUD_PRIVACY_NOTICE` 同一做法：文案存 core、无 UI 依赖）；文件头补 261013 语义表。
+  · 桌面 `electron/main.ts`：应用就绪块与 `before-quit` 两处都改走 `shouldSyncOnOpenClose`。**两条判据各守一段**：能不能出网 = `canTouchNetwork(cloudStateOf(...))`，该不该在开/关补一次 = `shouldSyncOnOpenClose(...)`。退出前同步仍有 `QUIT_SYNC_DEADLINE_MS = 60s` 兜底，不会挂死退出。
+  · 移动端 `src/mobile/useAutoSync.ts`：只换判据函数 ⇒ interval 档也走「冷启动就绪 + 回到前台」各一次。**移动端没有 before-quit**（Android 可能直接杀进程）⇒ 不假装能"关闭时同步"，在文案里如实说明以「回到前台」代替。
+  · 文案：桌面 `SettingsPanel` 的「自动同步模式」行加 `desc={SYNC_OPEN_CLOSE_NOTE}`；移动 `SettingsDrawer` 同一行用共用文案 + 一句移动端等价口径。
+- **护栏**：`src/core/syncModes.test.ts` 改为断言「interval / onOpenClose 都补、manual 与关开关都不补」+ 共用文案含三档语义（旧断言 `interval → false` 正是旧口径，已按新语义翻转）。
+- **未做 / 边界**：① 这里的「开启/关闭」= **应用**开/关（沿用 `onOpenClose` 档的既有含义），**不是**拨「启用云同步」开关时立刻同步（开关行文案仍写"重新开启后下次同步会自动补拉"）；② 移动端冷启动那次仍固定等 3s 再判（等桥/引擎就绪），时机未改；③ 桌面 dist/ 未重建（代码批次待用户验收后再构建）。
+- **验证**：`tsc` ✓ · `vitest` ✓（计数见本批运行时输出）；两端设置页文案共用同一常量（grep `SYNC_OPEN_CLOSE_NOTE` 可核）。
 
 ### 261012 · 桌面批：分屏体验修复（宽度重夹 / 浮条遮挡 / 合并标签状态）+ 三路调研（本批）
 
@@ -824,7 +958,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（49 = 47 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
-### 261013 · 移动端「必要项」批：装置四修 + 目录层失效修复（**待用户验收，未提交**）
+### 261013 · 移动端「必要项」批：装置四修 + 目录层失效修复
 
 > 用户点单的落地顺序：**先 §6 必要项 → 再 A**。本批只做 §6；A 未开始，B 不做，D（平板/横屏新布局）留待办。
 
@@ -860,7 +994,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   src/features/editor/splitView.css / 新增 splitGeometry.ts(+test)，时间 18:20–18:26）。**本批未提交** ⇒ 两部分改动现在混在同一工作树里，
   提交前需按文件分开。dist/ 是本批未重建的共享产物（只重建了 dist-mobile/）。
 
-### 261013 · 移动端 A 批（形态对齐语雀）：顶栏 44 / 文字 tab / 胶囊 56 / dock 44 / 行高收敛（**待用户验收，未提交**）
+### 261013 · 移动端 A 批（形态对齐语雀）：顶栏 44 / 文字 tab / 胶囊 56 / dock 44 / 行高收敛
 
 > 承接上一批：用户点单「先 §6 必要项 → 再 A」。本批即 A（**纯形态 + 令牌**，不动 IA、不碰路由与数据）。B 不做、D 留待办。
 
@@ -895,7 +1029,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 - **⚠️ 并发仍在**：桌面会话的 `HANDOFF.md §0` / `PANEL-CONTRACT.md` / `src/App.tsx` / `MultiTabEditor.tsx` / `splitView.css` /
   `splitGeometry.ts(+test)` 仍在同一工作树里；**本批同样未提交**。提交时必须按文件分开。
 
-### 261013 · 移动端 6.1–6.9 收口：内核两族 mount 类实测（不做）+ 引擎几何修复 + 冷启动骨架 + 装置确定化（**待用户验收，未提交**）
+### 261013 · 移动端 6.1–6.9 收口：内核两族 mount 类实测（不做）+ 引擎几何修复 + 冷启动骨架 + 装置确定化
 
 - **6.1 内核 `-mobile` 排版家族（156 / 203 条）⇒ 实测零收益，不做**：这族几乎全部（156/156、201/203）挂在
   `.ne-paragraph-spacing-relax.ne-typography-classic` 上，而我们运行的实例是 `ne-typography-traditional`（设备实测 `.ne-viewer` 类名）

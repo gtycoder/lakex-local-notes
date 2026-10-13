@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isCloudActive } from "./core/cloudState";
 import { LoaderCircle, PanelLeft } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/sidebarHoverMachine";
@@ -640,6 +641,8 @@ export function App() {
           <DesktopQuickNotes
             notebooks={treeNodes}
             visible={desktopWorkspace === "quick-notes"}
+            // 判据用 cloudState 的 **UI 判据** isCloudActive（= 已配置 且 开关打开）；关了开关/没配置都算本地、不出网
+            cloudReady={isCloudActive(cloudConfigured, cloudEnabled)}
             quickNotesRef={quickNotesRef}
             topbarLeading={quickNotesTopBarLeading}
             onDirtyChange={setQuickNotesDirty}

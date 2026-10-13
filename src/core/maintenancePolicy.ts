@@ -26,10 +26,10 @@
  */
 
 /** 操作类别（= 它进哪条队列）。 */
-export type OpClass = "write" | "maintenance" | "none";
+export type OpClass = "write" | "maintenance" | "priority" | "none";
 
 /** 互斥域。null = 不取锁。 */
-export type LockDomain = "write" | "maintenance" | null;
+export type LockDomain = "write" | "maintenance" | "priority" | null;
 
 /**
  * 本地写：必须与网络阶段**并行**（I1），但彼此串行（I3）。
@@ -67,6 +67,21 @@ export const MAINTENANCE_OPS = [
 ] as const;
 
 /**
+ * **高优先域**：用户当场发起、且必须**不等整轮同步**的「把这一条推到云端」操作（261013）。
+ *
+ * 为什么单列一域（既不并进维护域，也不归 none）：
+ *  · 并进维护域 ⇒ 长按小记 → 写完点「保存并同步」，若正好撞上冷启动/回前台触发的整轮同步，**要排队等它跑完**
+ *    （弱网实测整轮可到分钟级）—— 而这正是本功能的高频场景（"记好了要让桌面端及时看到"）；
+ *  · 归 none ⇒ 连自己之间都不串行：连点两下会两颗请求交叉"读 → 改 → 写"同一份**无 CAS 的小记清单**；
+ *  · ⇒ **彼此串行，但绝不排在整轮同步后面**（用户 261013 定稿）。
+ * 它与整轮同步的交叉风险（整轮同步拿旧快照覆盖我们刚写的清单条目）由**推送后回核**兜底：
+ * 调用方在推送结束后往**维护域队尾**排一次幂等回核（见 src/mobile/bridge.ts、electron/ipc/registerQuickNotes.ts）。
+ */
+export const PRIORITY_OPS = [
+  "syncQuickNote",
+] as const;
+
+/**
  * 不需要互斥：只读、只碰文件系统/系统能力，或**委托给已入队的写方法**（委托者无需自己取锁）。
  */
 export const NONE_OPS = [
@@ -77,6 +92,8 @@ export const NONE_OPS = [
   "listOrphanAssets", "listS3GcPending", "getHistorySettings",
   "listTrashed", "listTrashTree", "listNotebookTree", "listDeletedNotesForSync", "readDeletedContent",
   "getSyncSettings", "getS3Settings", "getDiagnostics", "isFolderPurged",
+  // 只读：UI 用它给「保存并同步」置灰（关云同步时）
+  "getCloudState",
   // 委托型写（内部调用已入队的写方法，由被委托方取锁）
   "createNote", "restoreNote", "restoreHistory", "markTombstonesPublished",
   // 设置写入（device_state / 密钥，同步不触碰同表）
@@ -89,13 +106,15 @@ export const NONE_OPS = [
 
 export type WriteOp = (typeof WRITE_OPS)[number];
 export type MaintenanceOp = (typeof MAINTENANCE_OPS)[number];
+export type PriorityOp = (typeof PRIORITY_OPS)[number];
 export type NoneOp = (typeof NONE_OPS)[number];
 /** 移动端 bridge 的全部操作（完整性由 src/mobile/maintenancePolicyCoverage.test.ts 对着真对象卡住）。 */
-export type BridgeOp = WriteOp | MaintenanceOp | NoneOp;
+export type BridgeOp = WriteOp | MaintenanceOp | PriorityOp | NoneOp;
 
 const CLASS_OF = new Map<string, OpClass>();
 for (const op of WRITE_OPS) CLASS_OF.set(op, "write");
 for (const op of MAINTENANCE_OPS) CLASS_OF.set(op, "maintenance");
+for (const op of PRIORITY_OPS) CLASS_OF.set(op, "priority");
 for (const op of NONE_OPS) CLASS_OF.set(op, "none");
 
 /** 判定操作类别；未知操作**抛错**（新增方法必须登记，否则单测先红）。 */
@@ -112,6 +131,7 @@ export function lockDomainOf(cls: OpClass): LockDomain {
   switch (cls) {
     case "write": return "write";
     case "maintenance": return "maintenance";
+    case "priority": return "priority";
     case "none": return null;
   }
 }
@@ -124,4 +144,9 @@ export function isMaintenanceOp(op: string): op is MaintenanceOp {
 /** 该操作是否属于写域（= 本地写，必须不被网络阶段阻塞）。 */
 export function isWriteOp(op: string): op is WriteOp {
   return CLASS_OF.get(op) === "write";
+}
+
+/** 该操作是否属于高优先域（= 用户当场发起、必须不等整轮同步）。 */
+export function isPriorityOp(op: string): op is PriorityOp {
+  return CLASS_OF.get(op) === "priority";
 }

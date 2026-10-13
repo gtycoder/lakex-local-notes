@@ -336,7 +336,7 @@ export default async ({ page, args }) => {
   for (const st of STATES) {
     if (only && !only.includes(st.name)) continue;
     await setupState(page, st);
-    const snap = await page.evaluate(SNAP);
+    const snap = await page.evaluate(SNAP_EXPR);
     out.states[st.name] = snap;
     console.log(`  [snap] ${st.name}: ${snap.n} els`);
     // 每态落盘：采集偶发在收尾卡死（CDP 超时），收尾才写会整轮白跑（2026-10-06 实测一次）。
