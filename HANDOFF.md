@@ -1125,6 +1125,51 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（49 = 47 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
+### 261014(六) · 首页改版：默认小记 / 胶囊重排 / 统一「＋」+ 新建面板 / 长按上滑速记（**待用户验收**）
+
+- **用户点单（四条）**：① 打开默认进**小记** tab；② 底部胶囊里**云同步恒定在最右**，小记的排序 / 知识库的视图**顺势放到云同步左侧**（原本在顶栏右上角）；③ 底部那个「＋」做成**统一加号**，点击后出**新建面板**（新建小记 / 新建文档知识库），**长按上滑快速记小记**（照语雀 App 手感，用户给了录屏）；④ 明确**不做模板**；OCR 识图**有能力才做**；新建文档**要选笔记本**。
+- **OCR 结论 = 不做（没有能力）**：`src/**` 里 `ocr` **零命中**；Android 原生只有 9 个插件（AssetServer / AssetSync / OpenFile / PinShortcut / SecureStore / SharedContent / ShowKeyboard / AwsV4Signer / MainActivity，**无相机与 OCR View**）；Capacitor 只装了 sqlite / app / filesystem；**移动端没有任何 AI 通道**（`electron/ai/*` 是桌面主进程的）。⇒ 按用户口径「没有就不做」，面板里**没有 OCR 格**。
+- **落地**：
+  · 默认 tab：`MobileApp` 初始 route `library` → **`quick`**（快捷 capture 那条本来就落小记）。
+  · 布局（用户 261014 两轮定稿）：**顶栏右上角固定挂两枚图标 = 排序（小记）/ 视图（知识库）+ 云同步**（云同步恒在最右、不随 tab 变），左上补一格等宽空槽 `.mobile-topbar-gap` 让 tab 仍居中；**底部胶囊 = 搜索 | ＋ | AI**（排序/视图与云同步都**不在**胶囊里）。
+  · 「＋」= 统一 `Plus`（不再按 tab 换成「新建知识库」的 FolderPlus）；`src/mobile/ui/CreateSheet.tsx` = 新建面板（两组六项，表面复用 `.mb-sheet`，**不新造弹层**）。
+  · 动作分派（唯一来源 `HomePage.runCreateAction`）：空白小记 → 开写作卡；拍摄/图片 → `ui/pickFile.ts` 取文件 → composer `initialInsert.files` → **内核 `insertFiles`**（与 dock 同一条插入通道）；待办 → `initialInsert.command="taskList"`（内核命令，**不手拼正文**）；空白文档 → **只列已有笔记本**（用户定）再建并进编辑态；知识库 → 既有 `CreateNotebookSheet`。
+  · 长按上滑手势：判定全在纯函数 `src/mobile/ui/createPress.ts`（`CREATE_LONG_PRESS_MS=260` / `CREATE_SLIDE_PX=36` / 轴锁复用 `gestureCore.GESTURE_AXIS_THRESHOLD`）：短按 = 开面板、长按到点浮出「小记」气泡、**上滑过线松手才速记**、浮出后不上滑松手 = **取消**（用户明确"长按容易误触"，所以不做"长按即建"）。CSS 侧 `touch-action:none`（否则上滑被当页面滚动、pointercancel）。
+  · AI 位只**占位**（点击如实提示"尚未接入：已立项"）—— 用户定"先加图标，接入方案另行立项"。
+- **验收（本地全绿）**：`tsc` ✓ · 全库 vitest **253 文件 / 1958 例**（跳过 5/16）✓ · `vite build -c vite.mobile.config.ts` ✓ · `ui-metrics` ✓（移动端字号字面量 46/49 未涨）· `check:core` ✓ · `check:mobileui` ✓ · `check:bundle` exit 0 ✓ · `git diff --check` ✓。新增护栏：`ui/createPress.test.ts`（5 例，手势边界）+ `home/homeCreateFlow.test.ts`（8 例，源码级：默认 tab / 胶囊顺序与云同步最右 / 顶栏不再挂排序视图 / 面板六项且无 OCR 无模板 / 三条动作通道 / capture 路未被动）。CSS 基线按约定上调并写明理由（mobile.css 1208→**1252**、floating.css 250→**284**）。
+  ⚠️ 同批踩坑：测试里的 `code()` 注释剥离器不能用**通用块注释正则** —— 代码里有 `accept="image/*"`，会被它一路吃到下一个 `*/`、静默删掉整段代码，断言随之假失败（与 AGENTS §7.25 探针假阴性同类）。已改成只剥 JSDoc + 整行注释。
+- **设备验收（专用 AVD `lake_gate` / emulator-5556 / CDP 9336；装的 APK 就是本次构建）**：
+  · 功能实测（CDP 真实输入）：默认落小记 ✓ · **顶栏右上角两枚**（排序/视图 + 云同步，云同步最右）✓ · **胶囊三项**（搜索 / ＋ / AI）✓ ·
+    ＋ 短按 → 新建面板六项（无 OCR / 无模板）✓ · 待办 → 内核 `<ne-tli>` 待办列表新小记 ✓ ·
+    **长按浮出「小记」气泡（设备截图在案）→ 上滑松手 → 速记写作卡** ✓ · 空白文档 → 只列已有笔记本 ✓ ·
+    知识库 → 新建知识库面板 ✓ · 知识库 tab 下第 3 格变「切换到书架 / 切换到列表」且能切视图 ✓。
+  · 门禁：重灌夹具（4 小记 / 1 树节点）→ 采暖态 → **重烤 `scripts/mobile-audit/baseline/mobile-snap.json`** → 连跑两次
+    **6 态整页计算值 0 差异** ✓；走查 **23/23 屏 ok、五类探针全 0**（escape / clip / contrast / smallTap / pageOverflowX）✓。
+- **验收装置同步更新（UI 契约变了，装置必须跟着走单一来源）**：
+  · `scripts/mobile-audit/mobile-snap.mjs`：`clickText` 改**真实点按**（＋ 走 pointerdown/up，`el.click()` 对它无效）；
+    两个知识库态与 `home-doc` **自己切回「知识库」tab**（默认 tab 已改成小记，原来靠"默认恰好是知识库"）；
+    「切换到列表」改从**胶囊**取（`.mobile-bottom-bar__item`）。
+  · `scripts/css-audit/mobile-walkthrough.mjs`：视图切换按钮同理改胶囊；`quicknote-editor` 屏改走 **＋ → 空白小记**（短按 = 新建面板）；
+    `goHome()` 把**写作卡开着**也算"未在首页"并可直接点「取消」退出 —— 否则该屏留下的写作卡让下一屏找不到笔记本入口。
+- **本轮装置/环境坑**：`adb shell input tap / swipe` 在本机模拟器上对**两个 App（本应用与语雀）都不生效**（`keyevent` 正常）
+  ⇒ 设备级点按一律走 CDP `Input.dispatchMouseEvent` / `Input.dispatchTouchEvent`（长按上滑必须用 touch 事件才验得出）。
+- **布局第二轮（用户 261014 用标注截图纠正）**：上一版把「排序/视图 + 云同步」放进了胶囊（把"右上角"误读成胶囊最右端）⇒ 已改回**顶栏右上角两枚图标**、胶囊压到三项；
+  骨架同步改成"左 2 槽（设置 + 空槽）/ tab / 右 2 槽"；装置也回到从顶栏取视图按钮。改完重烤基线并复跑：**6 态 0 差异**、走查 **23/23 ok · 探针全 0**。
+- **门禁跑法口径（用户 261014 明确："不用每次小改动都跑门禁"）**：日常改动只跑 HANDOFF §6 的前 5 条（tsc / vitest / 两条 build / ui-metrics 等，≈20s）；
+  **设备门禁只在"动了移动端外壳/布局/手势"时才跑**，且优先**只跑受影响的那几个态/屏**（`check-mobile-snap.mjs --states a,b`、走查第三参传屏名列表），
+  不必 6 态 + 23 屏全量；**但一旦动了外壳几何，必须重烤基线**（否则下次全量门禁必红）。
+- **第三轮（用户 261014：要语雀那种"整块触发"）**：速记手势从「只挂 ＋ 按钮 + 上方气泡」改成**挂在整条胶囊上** ——
+  按住**任意处** ≈260ms，条目淡出、**整块**变成强调色的「小记」（`.mobile-block-quick` 常挂载，靠 `.is-revealed/.is-armed` 过渡）；
+  没长按到点 = **pass**（条目自己的 onClick 照常，短按语义不变）；上滑过线松手 = 速记，不上滑 = 取消。
+  踩到并已记进 **AGENTS §7.30**：容器上 `setPointerCapture` 会把随后的 click 重定向到容器 ⇒ 子按钮 onClick 全失效（"点 ＋ 没反应"），
+  改成 window 级 move/up/cancel 监听 + 长按后吞掉那次 click。
+  设备实测：短按 ＋ → 面板 **6 项** ✓ · 短按 搜索 → 搜索面板 ✓（整块手势不吃条目点击）· **按住胶囊中部（非 ＋）→ 整块变「小记」（截图在案）** ·
+  **按住上滑 → 速记写作卡** ✓；重烤基线后门禁 **0 差异**、走查 **23/23 ok**。
+- **胶囊收窄（用户 261014 追加）**：只剩 3 项 ⇒ 首页那条宽度上限 6 槽 288 → **4 槽（设备实测 192×56、每项 64px，对齐语雀 App 紧凑度）**；
+  第二层工作区那条（4 项）**不跟着缩**（变体类 `.mobile-bottom-bar--home` 只落在首页）；冷启动骨架同步带该类 ⇒ 数据到达不跳。
+  重烤基线后门禁单跑 **6 态 0 差异**、移动端 235 例测试全绿。
+- **未做 / 待验收**：拍摄·图片的系统选择器只做了代码级核对（真机相册/相机路径没在模拟器上走完）；
+  "格子配色要不要照语雀上多色"与 AI 位的最终形态待用户验收。
 ### 261014(五) · 「Aa」面板颜色两行**解耦**（用户报「文字色与背景色串联」）
 
 - **用户报**：工具栏「Aa」里的颜色两行 —— 第一行（A 排）是文字颜色、第二行（色板）是背景颜色，「这俩不冲突也没有关联，现在好像串联到一起去了」。

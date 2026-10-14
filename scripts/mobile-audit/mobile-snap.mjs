@@ -33,9 +33,16 @@ const settle = async (page) => {
   }
 };
 
-const clickText = async (page, sel, text) => page.evaluate(
-  "(function(){var el=[...document.querySelectorAll(" + JSON.stringify(sel) + ")].find(function(e){return ((e.getAttribute('aria-label')||e.title||e.textContent||'')).indexOf(" + JSON.stringify(text) + ")>=0 && e.getBoundingClientRect().width>0;});if(!el)return false;el.click();return true;})()"
-);
+// 261014：改成**真实点按**（与 tapSel/tapByLabel 同口径）—— 首页「＋」按 pointerdown/up 判定，
+// el.click() 对它无效；tab / 设置按钮用真实输入也更接近人手。
+const clickText = async (page, sel, text) => {
+  const p = await page.evaluate("(function(){var el=[...document.querySelectorAll(" + JSON.stringify(sel) + ")].find(function(e){return ((e.getAttribute('aria-label')||e.title||e.textContent||'')).indexOf(" + JSON.stringify(text) + ")>=0 && e.getBoundingClientRect().width>0;});if(!el)return null;var r=el.getBoundingClientRect();if(r.width<=0||r.height<=0)return null;return [Math.round(r.x+r.width/2),Math.round(r.y+r.height/2)];})()");
+  if (!p) return false;
+  await page.send("Input.dispatchMouseEvent", { type: "mousePressed", x: p[0], y: p[1], button: "left", clickCount: 1 });
+  await page.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: p[0], y: p[1], button: "left", clickCount: 1 });
+  await page.sleep(800);
+  return true;
+};
 
 // 书架/列表是**持久化**的 localStorage 偏好 ⇒ 不钉住的话，上一态把视图切了、下一态读到的是另一个视图：
 // 实测 261013 前：按钮文案在「列表」视图下是"切换到书架"，而 home-library-list 找的是"切换到列表"
@@ -70,7 +77,7 @@ const tapSel = async (page, sel, waitMs) => {
   return true;
 };
 
-/** 按 aria-label 精确点按（首页顶栏有两个 .toolbar__button：设置 与 视图切换，取首个会点错）。 */
+/** 按 aria-label 精确点按（首页顶栏有「设置」「排序/视图」「云同步」三枚 ⇒ 取首个会点错，必须按 aria-label）。 */
 const tapByLabel = async (page, sel, label, waitMs) => {
   const p = await page.evaluate("(function(){var el=[].slice.call(document.querySelectorAll(" + JSON.stringify(sel) + ")).find(function(e){return (e.getAttribute('aria-label')||e.title||'')===" + JSON.stringify(label) + ";});if(!el)return null;var r=el.getBoundingClientRect();if(r.width<=0||r.height<=0)return null;return [Math.round(r.x+r.width/2),Math.round(r.y+r.height/2)];})()");
   if (!p) return false;
@@ -90,18 +97,30 @@ export const STATES = [
   //   home-library-list 与 home-library 同一个态（按钮文案随视图变，clickText 找不到"切换到列表"）；
   //   home-doc 从未离开首页（el.click() 在 WebView 里不触发导航）；settings-appearance 一直停在设置根页。
   // 现在各自到达不同屏，且到不了就抛错 —— 装置宁可红，也不要静默地少测 3 个屏。
-  { name: "home-library", view: "shelf", nav: async (page) => { await expectOn(page, "!!document.querySelector('.nb-shelf')", "知识库 · 书架视图"); } },
+  // 261014：默认 tab 改成「小记」⇒ 这两个知识库态必须**自己切回知识库**（此前靠默认 tab 恰好是知识库）。
+  { name: "home-library", view: "shelf", nav: async (page) => {
+    await clickText(page, ".mobile-htab", "知识库");
+    await expectOn(page, "!!document.querySelector('.nb-shelf')", "知识库 · 书架视图");
+  } },
   { name: "home-quicknotes", nav: async (page) => { await clickText(page, ".mobile-htab", "小记"); await expectOn(page, "(function(){var e=document.querySelector('.mobile-htab.active');return !!e && e.textContent.indexOf('小记')>=0;})()", "首页 · 小记 tab"); } },
   { name: "home-library-list", view: "shelf", nav: async (page) => {
-    if (!(await tapByLabel(page, ".toolbar__button", "切换到列表", 800))) throw new Error("home-library-list: 顶栏没有「切换到列表」按钮");
+    await clickText(page, ".mobile-htab", "知识库");
+    if (!(await tapByLabel(page, ".toolbar__button", "切换到列表", 800))) throw new Error("home-library-list: 顶栏右上角没有「切换到列表」按钮");
     await expectOn(page, "!!document.querySelector('.nb-list')", "知识库 · 列表视图");
   } },
   { name: "home-doc", view: "shelf", nav: async (page) => {
+    await clickText(page, ".mobile-htab", "知识库");   // 261014：默认 tab = 小记 ⇒ 知识库卡片要自己切过去
+
     // 261013：「最近文档」卡片这条路在开发库上不可用 —— 实测 6 张全是 parent_id 为空的探针文档，
     // 点开只弹「未找到该文档所属笔记本」（HANDOFF §0 记过这批脏数据）。改走走查装置里已验证的路径：
     // 笔记本卡片 → 工作区 → （必要时）底栏「文档树」→ 点第一行文档。
-    if (!(await tapSel(page, ".nb-shelf-card", 1600)) && !(await tapSel(page, ".nb-row", 1600))) {
-      throw new Error("home-doc: 首页没有笔记本入口（.nb-shelf-card / .nb-row 都没有）");
+    // 261014 装置加固：书架卡偶发"点了但工作区没挂上"（1600ms 不够）⇒ 最多点两次、放宽到 2600ms，仍不行才抛错。
+    let opened = false;
+    for (let i = 0; i < 2 && !opened; i++) {
+      if (!(await tapSel(page, ".nb-shelf-card", 2600)) && !(await tapSel(page, ".nb-row", 2600))) {
+        throw new Error("home-doc: 首页没有笔记本入口（.nb-shelf-card / .nb-row 都没有）");
+      }
+      opened = await page.evaluate("Boolean(document.querySelector('.mobile-workspace'))");
     }
     await expectOn(page, "!!document.querySelector('.mobile-workspace')", "第二层工作区");
     const rowsOpen = "!!document.querySelector('.side-panel--left.on .mb-row')";

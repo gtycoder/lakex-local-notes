@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, Copy, CornerDownRight, RotateCcw, X } from "lucide-react";
+import { Check, Copy, CornerDownRight, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
@@ -405,7 +405,13 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
                 if (t.role === "user") return <div key={i} className="ai-dialog__msg ai-dialog__msg--user">{t.text}</div>;
                 return (
                   <div key={i} className="ai-dialog__msg ai-dialog__msg--assistant">
-                    {t.text ? <AiMessageBody text={t.text} /> : (streaming ? "…" : "")}
+                    {t.text && <AiMessageBody text={t.text} />}
+                    {streaming && !stopped && (
+                      <div className="ai-dialog__progress" role="status" aria-live="polite" aria-atomic="true">
+                        <LoaderCircle className="spin" size={14} aria-hidden="true" />
+                        <span>{t.text.trim() ? "正在生成…" : "正在等待回复…"}</span>
+                      </div>
+                    )}
                     {/* 对话式：**每条** AI 回答各带一个复制（用户 261005），不再只给最后一条 */}
                     {t.text && !streaming && (
                       <div className="ai-dialog__copy-actions">

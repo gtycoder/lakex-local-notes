@@ -6,3 +6,16 @@
 .ai-dialog__lake-badge { font-size: var(--lake-font-size-nano); font-weight: var(--lake-font-weight-semibold); letter-spacing: .1px; }
 /* 复制按钮的 hover 说明：表面复用 kit 的 .ln-tip，这里只补定位（与 .bt-file-tip 同口径）。 */
 .ai-dialog__tip { position: fixed; pointer-events: none; }
+
+/* 请求发出即反馈；沿用全应用的 spin，不另造动效或等待计时器。 */
+.ai-dialog__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+}
+/* 本文件是组件局部无层样式，显式提供减少动态效果的静态替代。 */
+@media (prefers-reduced-motion: reduce) {
+  .ai-dialog__progress .spin { animation: none; }
+}

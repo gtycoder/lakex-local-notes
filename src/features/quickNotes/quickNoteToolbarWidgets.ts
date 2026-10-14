@@ -21,6 +21,10 @@
  * 所以这里按上面那套**实际调用面**做最小实现，而不是改 vendor（AGENTS §18：能不动依赖就不动）。
  */
 
+import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
+import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
+import { pushEmojiRecent, readEmojiRecents } from "../../lib/emojiRecents";
+
 /** 工具条描述符用到的编辑器能力（只声明我们用到的，避免依赖内核类型）。 */
 export interface QuickNoteToolbarEditor {
   execCommand(name: string, ...args: unknown[]): unknown;
@@ -99,12 +103,18 @@ export abstract class QuickNoteToolbarButton {
  * （插入面板的「表情」项同样如此，实测两次）。所以选择器我们自己给，选中后按**内核原意插文本**
  * （`insertAtSelection('text/lake', '<span>😀</span>')`；内核自己也是 `insertText` 后删卡，200896）。
  */
-const QUICK_NOTE_EMOJI = [
-  "😀", "😄", "😁", "😆", "😅", "😂", "🙂", "😉", "😊", "😍", "🤔", "😐",
-  "😴", "😢", "😭", "😡", "👍", "👎", "👏", "🙏", "💪", "🎉", "🔥", "✨",
-  "❤️", "💔", "⭐", "✅", "❌", "⚠️", "📌", "📎", "💡", "🚀", "☕", "🍀",
-  "🌙", "☀️", "⏰", "📅",
-] as const;
+/** 分类 = 最近（**input 桶**，与「设置图标」面板分开记，AGENTS §3#14）+ 内置 8 组。
+ *  数据与「设置图标」面板同源 ⇒ 全仓只有一份表情表（原来这里另存了 40 个，已删）。 */
+function emojiPanelCategories(): Array<{ name: string; emojis: readonly string[] }> {
+  return [
+    { name: "最近", emojis: readEmojiRecents("input") },
+    ...LAKE_EMOJI_GROUPS.map((group) => ({ name: group.name, emojis: group.emojis })),
+  ];
+}
+
+/** 顶部分类条的两个"非表情"按钮：搜索 / 最近（内联 SVG，与移动端图标面板同一套线性图标语言）。 */
+const EMOJI_SEARCH_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+const EMOJI_RECENT_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
 
 let emojiPanel: HTMLElement | null = null;
 /** 面板的监听拆除函数（关面板时调用；显式持有，避免靠"观察 DOM 变化"猜什么时候该拆）。 */
@@ -125,21 +135,109 @@ export function openEmojiPicker(anchor: HTMLElement | null, onPick: (emoji: stri
   panel.className = "quick-note-emoji-panel";
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", "选择表情");
-  for (const emoji of QUICK_NOTE_EMOJI) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "quick-note-emoji-panel__item";
-    button.textContent = emoji;
-    // 保住正文里的选区：按钮在 body 上，不拦 mousedown 的话焦点会移出 contenteditable
-    button.addEventListener("mousedown", (event) => event.preventDefault());
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeQuickNoteEmojiPicker();
-      onPick(emoji);
+
+  const cats = document.createElement("div");
+  cats.className = "quick-note-emoji-panel__cats";
+  cats.setAttribute("role", "tablist");
+  const searchRow = document.createElement("div");
+  searchRow.className = "quick-note-emoji-panel__search";
+  const searchInput = document.createElement("input");
+  searchInput.type = "search";
+  searchInput.placeholder = "搜索表情（如 smile / 名称）";
+  searchRow.appendChild(searchInput);
+  const body = document.createElement("div");
+  body.className = "quick-note-emoji-panel__body";
+  const grid = document.createElement("div");
+  grid.className = "quick-note-emoji-panel__grid";
+  body.appendChild(grid);
+  panel.append(cats, searchRow, body);
+
+  const nameOf = new Map(LAKE_EMOJIS.map((e) => [e.char, e.name]));
+  let active = "最近";
+  let searching = false;
+
+  const takeEmoji = (emoji: string) => {
+    pushEmojiRecent(emoji, "input");
+    closeQuickNoteEmojiPicker();
+    onPick(emoji);
+  };
+
+  /** 空态文案（无内容时才出现；有内容就撤掉，避免和网格抢高度）。 */
+  const renderEmpty = (text: string | null) => {
+    const current = body.querySelector(".quick-note-emoji-panel__empty");
+    if (!text) { current?.remove(); return; }
+    if (current) { current.textContent = text; return; }
+    const empty = document.createElement("div");
+    empty.className = "quick-note-emoji-panel__empty";
+    empty.textContent = text;
+    body.appendChild(empty);
+  };
+
+  const renderGrid = () => {
+    const raw = searchInput.value.trim();
+    const query = raw.toLowerCase();
+    const list = query
+      ? LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(query) || e.char === raw).map((e) => e.char)
+      : (emojiPanelCategories().find((category) => category.name === active)?.emojis ?? []);
+    grid.replaceChildren();
+    for (const emoji of list) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "quick-note-emoji-panel__cell";
+      button.textContent = emoji;
+      button.title = nameOf.get(emoji) ?? emoji;
+      // 保住正文里的选区：按钮在 body 上，不拦 mousedown 的话焦点会移出 contenteditable
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        takeEmoji(emoji);
+      });
+      grid.appendChild(button);
+    }
+    renderEmpty(list.length ? null : query ? "无匹配表情" : active === "最近" ? "用过的表情会出现在这里" : "这个分类还没有内容");
+  };
+
+  const renderCats = () => {
+    cats.replaceChildren();
+    const makeCat = (label: string, content: string, selected: boolean, onClick: () => void) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "quick-note-emoji-panel__cat" + (selected ? " is-active" : "");
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", String(selected));
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); onClick(); });
+      button.innerHTML = content;
+      cats.appendChild(button);
+    };
+    makeCat("搜索", EMOJI_SEARCH_ICON, searching, () => {
+      searching = true;
+      searchRow.classList.add("is-open");
+      searchInput.value = "";
+      renderCats();
+      renderGrid();
+      searchInput.focus();
     });
-    panel.appendChild(button);
-  }
+    for (const category of emojiPanelCategories()) {
+      const isRecent = category.name === "最近";
+      makeCat(category.name, isRecent ? EMOJI_RECENT_ICON : (category.emojis[0] ?? "•"), !searching && active === category.name, () => {
+        searching = false;
+        searchRow.classList.remove("is-open");
+        searchInput.value = "";
+        active = category.name;
+        renderCats();
+        renderGrid();
+      });
+    }
+  };
+
+  searchInput.addEventListener("input", renderGrid);
+  searchInput.addEventListener("mousedown", (event) => event.stopPropagation());
+  renderCats();
+  renderGrid();
   document.body.appendChild(panel);
   emojiPanel = panel;
   // 定位：优先贴在按钮下方，超出视口则上翻/夹住（不做估算高度的花活，直接用真实尺寸）

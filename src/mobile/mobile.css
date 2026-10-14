@@ -47,6 +47,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: var(--lake-font-size-title); line-height: 30px; font-weight: 400; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
+/* 顶栏左侧等宽空槽（261014）：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，
+   tab 才真的居中；冷启动骨架同构（左右各 2 槽），数据到达时原地填充不跳。 */
+.mobile-topbar-gap { flex: 0 0 auto; width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); }
 /* 栏内图标按钮 = 思源 .toolbar__button：48×48、svg 20、按压缩口底色（不做缩放，避免密集栏抖动） */
 .mobile-icon-btn {
   width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); border: none; background: transparent;
@@ -415,12 +418,18 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   display: flex; align-items: center; gap: 0; padding: 0;
   width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-slot) * 6));
   height: var(--mobile-bottom-bar-height);
+  /* 整块手势必需：否则上滑被当页面滚动、中途 pointercancel；长按也不该选到字/弹系统菜单。 */
+  touch-action: none; -webkit-touch-callout: none; user-select: none;
   border: .5px solid var(--lake-border-1);
   border-radius: calc(var(--mobile-bottom-bar-height) / 2);
   background: var(--lake-bg-window);
   box-shadow: var(--lake-shadow-card);
   transition: opacity var(--mobile-duration-panel) var(--mobile-ease-panel), transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
+/* 261014：首页胶囊只剩 3 项（搜索 / ＋ / AI）⇒ **左右收窄**到 4 槽上限（≈192px，对齐语雀 App 的紧凑度；
+   原来是按 6 槽 288px 给的，3 项时每个洞 96px 太空）。第二层工作区那条有 4 项，保持原上限、不跟着缩。 */
+.mobile-bottom-bar--home { width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-slot) * 4)); }
+
 /* 键盘/选区态：整条下滑淡出（思源 .mobile-keyboard--open / .mobile-selection--active） */
 .mobile-bottom-bar--hidden { opacity: 0; pointer-events: none; transform: translate3d(0, 100%, 0); visibility: hidden; }
 
@@ -434,13 +443,29 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   background: transparent; background-clip: content-box; color: var(--lake-text-2);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: color var(--mobile-duration-press) var(--mobile-ease-panel), background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel);
+  transition: color var(--mobile-duration-press) var(--mobile-ease-panel), background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel), opacity var(--mobile-duration-panel) var(--mobile-ease-panel);
 }
 .mobile-bottom-bar__item[disabled] { opacity: .38; cursor: default; }
 .mobile-bottom-bar__item:active:not([disabled]) { color: var(--lake-text-2); background-color: var(--lake-bg-hover); transform: scale(.92); }
 .mobile-bottom-bar__item.active { color: var(--lake-accent); background-color: var(--lake-accent-tint); }
 .mobile-bottom-bar__item:first-child { border-top-left-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-left-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 .mobile-bottom-bar__item:last-child { border-top-right-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-right-radius: calc(var(--mobile-bottom-bar-height) / 2); }
+
+/* ── 首页胶囊的**整块触发 / 整块变化**（261014 用户定稿：要语雀那种整块效果）──────────
+   按住**整条胶囊任意处** ≈260ms → 条目淡出、整块变成「小记」；继续上滑越过触发线松手 = 速记一条小记；
+   不上滑松手 = 取消（长按不误建）；**没长按到点 = 什么都不做**，条目自己的 onClick 照常（短按语义不变）。
+   这里只管视觉，判定全在 ui/createPress.ts（纯函数 + 单测）。 */
+.mobile-block-quick {
+  position: absolute; inset: 0; z-index: 0;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: inherit; background: var(--lake-accent); color: var(--lake-text-on-accent);
+  font-size: var(--lake-font-size-small); line-height: 1;
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--mobile-duration-panel) var(--mobile-ease-out), transform var(--mobile-duration-panel) var(--mobile-ease-out);
+}
+.mobile-bottom-bar.is-revealed .mobile-block-quick { opacity: 1; }
+.mobile-bottom-bar.is-armed .mobile-block-quick { transform: translateY(-4px); }
+.mobile-bottom-bar.is-revealed .mobile-bottom-bar__item { opacity: 0; pointer-events: none; }
 
 /* 计数 = 思源 .toolbar__tabs-count：描边小方框，不是实心圆点 */
 .bottom-bar-count {

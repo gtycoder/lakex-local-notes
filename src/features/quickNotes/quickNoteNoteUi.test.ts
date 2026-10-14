@@ -22,6 +22,17 @@ const RUNTIME_SRC = read("../editor/lakeRuntime.ts");
 const EDITOR_SRC = read("./QuickNoteEditor.tsx");
 
 describe("小记编辑器：文档外观 + 受限格式（只影响小记）", () => {
+  it("桌面展开层必须压过内核 fixed!important，限定于小记面板而非窗口红绿灯区域", () => {
+    const css = stripComments(read("../../styles/app/quick-notes.css"));
+    const fullscreen = css.match(/\.quick-notes-pane \.lake-editor-mount\.ne-ui-fullscreen\s*\{([^}]+)\}/)?.[1];
+    expect(fullscreen).toMatch(/position:\s*absolute\s*!important;/);
+    expect(fullscreen).toContain("inset: 0");
+    expect(fullscreen).toContain("height: auto");
+    expect(fullscreen).not.toMatch(/position:\s*fixed/);
+    expect(css).toMatch(/\.quick-notes-pane\s*\{[^}]*position:\s*relative;/);
+    expect(css).toContain(".quick-notes-pane .ne-ui-exit-fullscreen { position: absolute; top: 6px; right: 6px; }");
+  });
+
   it("小卡片走内核 note 版式（含展开按钮）；列表视图直接文档样式；文档页不受影响", () => {
     // 只有 restrictedFormats 分支才用 note 挂载点；文档编辑器仍是 ne-doc-major-editor
     expect(RUNTIME_SRC).toMatch(/mount\.className = quickNoteUi === "card"/);

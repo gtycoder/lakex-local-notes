@@ -144,6 +144,17 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).toContain("selectionText.trim().length > 0 || hasImages");
   });
 
+  it("等待与流式输出有动态状态反馈，停止即隐藏；减少动态效果仍保留文字", () => {
+    expect(DIALOG).toContain("streaming && !stopped");
+    expect(DIALOG).toContain('role="status" aria-live="polite" aria-atomic="true"');
+    expect(DIALOG).toContain('t.text.trim() ? "正在生成…" : "正在等待回复…"');
+    expect(DIALOG).toContain('<LoaderCircle className="spin" size={14} aria-hidden="true" />');
+    expect(DIALOG).not.toContain('streaming ? "…"');
+    const css = readFileSync(new URL("./aiDialogParts.css", import.meta.url), "utf8");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css).toContain(".ai-dialog__progress .spin { animation: none; }");
+  });
+
   it("生成中「生成/发送」原位变「停止」：走 ai_cancel，且是中性停止、不报红（用户 261008）", () => {
     // 中断入口必须落在发送键那一格（三个入口共用本面板 ⇒ 一处覆盖全部）
     expect(DIALOG).toContain("{busy ? (");

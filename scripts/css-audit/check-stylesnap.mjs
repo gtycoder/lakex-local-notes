@@ -65,21 +65,15 @@ const snapshot = (tag) => {
 // 而 1315 宽度的态全部稳定。处理：**严格比对只覆盖 1315 宽的态**；窄窗态照常采集/入库（基线保留），比对时跳过并点名。
 // TODO：一旦在 stylesnap 的 pin() 里钉死内核原生 TOC 态，删掉此排除、恢复全量严格比对。
 const UNSTABLE = /:(?:560|760):/;
-/** 261013 实测：下列 1315 宽态**跨轮/跨实例不确定**（同一实例连采两轮即翻；5 轮并集 = 17/34 态）。
- *  翻转**恒为 314 个「无 id、无 class 的 SVG 图元（rect/g/path）」的指纹**，元素数不变 ——
- *  315 个翻转 key 里 314 个是这类图元，只有 1 个是 div.list-heading（见下 SNAP 里 snapExpr 的同类排除：内核 u<hex> id）。
- *  证据：.css-audit/snap/{s1,s2,after,after2,base}.json 两两对拍 + snapdiff（本机 load 4–7，疑与图标加载时序有关）。
- *  ⚠️ **正确处理不是继续加名单**，而是在 snapExpr 里直接剔除「无 id 无 class 的 SVG 图元」再整份重烤 ——
- *  但那份表达式两端共用 ⇒ 会同时打红移动端基线，需单独立一批（含移动端重烤）。
- *  在那之前：这些态照常采集入库（基线保留），只跳过严格比对，与窄窗态同一处理。
- *  TODO：做完上面那条就删掉这份名单、恢复全量比对。 */
-const UNSTABLE_1315 = new Set([
-  "plain:1315:dark", "drag:1315:light", "drag:1315:dark", "menus:1315:light", "search:1315:light",
-  "settings:1315:light", "resources:1315:light", "hover-card:1315:light", "outline-open:1315:light",
-  "quicknotes:1315:light", "hover-row:1315:warm", "menus:1315:warm", "search:1315:warm", "rm:1315:light",
-  "rt:1315:light", "board:1315:light", "board:1315:dark",
-]);
-const unstable = (name) => UNSTABLE.test(name) || UNSTABLE_1315.has(name);
+// 261013 第二批观察（**未据此改动，留作下一批的证据项**）：行序归一之后，跨实例（A/B，各 42 态）连**窄窗态**也 0 差异，
+// 说明当初的"窄窗不稳"可能同样是行序/裸图元漂移的产物。要在**两对以上、且时间上有间隔**的样本上都成立才撤这份名单，
+// 撤掉即可恢复 42/42 全量严格比对（届时本注释与 README 对应段落一起删）。
+// 261013：这里原先还有一份 `UNSTABLE_1315`（17 个 1315 宽态跳过严格比对 ⇒ 严格覆盖 34 → 17 态）。
+// 根因已在 snapExpr 里修掉：**无 id、无 class 的 SVG 图元**（rect/path/g/circle）「位置即身份」，
+// 跨轮/跨实例只是 index → hash 的对应关系在换（元素数不变）。实测 5 份完整快照两两对拍：
+// 按 keyed 行比对有 7234 处翻转，改成 (tag, 指纹) 的**排序多重集**后 **41/42 态完全一致**
+// （唯一例外 plain:760:dark 属窄窗名单）⇒ 名单已删除，1315 全量恢复严格比对，且渲染信号不丢。
+const unstable = (name) => UNSTABLE.test(name);
 /** 带了 --states 就是"只验这几个态"：没采的态不在作用域内，不能报成差异
  *  （态自包含之后，改一处界面只需验 1~2 态；见 README「快照重烤的快速路径」）。 */
 const SCOPED = Boolean(STATES);
@@ -138,5 +132,5 @@ if (diffs.size) {
   process.exit(1);
 }
 console.log("[gate] " + (SCOPED ? Object.keys(current.states).length + " 态（--states 指定）" : (names.length - skipped.length) + " 态") + "整页计算值 0 差异（对比 " + path.relative(ROOT, BASELINE) + "）"
-  + (skipped.length ? "；跳过 " + skipped.length + " 态（窄窗 + 261013 实测的抖动 1315 态，见脚本头 UNSTABLE_1315 的 TODO）：" + skipped.join(", ") : "")
+  + (skipped.length ? "；跳过 " + skipped.length + " 态（窄窗态，见脚本头 UNSTABLE 的 TODO）：" + skipped.join(", ") : "")
   + (flaky.length ? "；flaky（仅一轮出现，已重跑排除）：" + flaky.join(", ") : ""));

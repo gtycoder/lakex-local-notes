@@ -81,7 +81,9 @@ const center = (sel) => '(function () { var e = document.querySelector(' + JSON.
 const centerByText = (sel, t, nth) => '(function () { var els = [].slice.call(document.querySelectorAll(' + JSON.stringify(sel) + ')).filter(function (e) { return ((e.getAttribute("aria-label") || e.title || e.textContent || "")).indexOf(' + JSON.stringify(t) + ') >= 0 && e.getBoundingClientRect().width > 0; }); var e = els[' + (nth || 0) + ']; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
 const nthRow = (n) => '(function () { var rows = [].slice.call(document.querySelectorAll(".side-panel--left .ln-row, .side-panel--left .mb-row, .mobile-workspace .ln-row, .mobile-workspace .mb-row")).filter(function (e) { return e.getBoundingClientRect().width > 0; }); var e = rows[' + n + ']; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()';
 async function atHome() {
-  return await pageRef.evaluate('(function () { return Boolean(document.querySelector(".mobile-htab")) && !document.querySelector(".mobile-settings-mask") && !document.querySelector(".mobile-settings-page") && !document.querySelector(".mobile-workspace"); })()');
+  // 261014：**小记写作卡开着也不算"在首页"** —— 顶栏 tab 仍在，若不排除，goHome() 会直接返回、
+  // 后面的 openNotebook() 就找不到笔记本入口（quicknote-editor 这一屏会留下写作卡）。
+  return await pageRef.evaluate('(function () { return Boolean(document.querySelector(".mobile-htab")) && !document.querySelector(".mobile-qn-composer") && !document.querySelector(".mobile-settings-mask") && !document.querySelector(".mobile-settings-page") && !document.querySelector(".mobile-workspace"); })()');
 }
 async function goHome() {
   for (var i = 0; i < 8; i++) {
@@ -96,6 +98,8 @@ async function goHome() {
       ' if (collapse) return { kind: "collapse-tree", pt: center(collapse) };' +
       ' var back = findByAria(BACK);' +
       ' if (back) return { kind: "back", pt: center(back) };' +
+      ' var cancel = [].slice.call(document.querySelectorAll(".mobile-qn-actions button")).filter(function (e) { return e.textContent === String.fromCharCode(0x53d6, 0x6d88) && hit(e); })[0];' +
+      ' if (cancel) return { kind: "composer-cancel", pt: center(cancel) };' +
       ' var sheet = document.querySelector(".mb-scrim--state.is-open, .mb-scrim, .mobile-sheet-mask.on, .mobile-model-mask.on, .mobile-sheet-mask, .mobile-model-mask");' +
       ' if (sheet && sheet.getBoundingClientRect().width > 0 && hit(sheet)) { var sr = sheet.getBoundingClientRect(); return { kind: "sheet-mask", pt: [Math.round(innerWidth / 2), Math.round(sr.top + 24)] }; }' +
       ' var scrim = document.querySelector(".mobile-menu__scrim.is-open, .mobile-menu__scrim, .mb-scrim.is-open");' +
@@ -159,7 +163,11 @@ export default async function run(ctx) {
   add("quicknote-editor", async () => {
     await goHome();
     await tapExpr(centerByText(".mobile-htab", "小记"), "小记 tab", 1500);
-    await tapExpr(centerByText(".mobile-bottom-bar__item", String.fromCharCode(0x65b0, 0x5efa, 0x5c0f, 0x8bb0)), "新建小记", 2000);
+    // 261014：首页「＋」是**统一加号**（aria-label 从「新建小记」改为「新建」），且**短按 = 新建面板** ⇒
+    // 装置跟着走单一来源：不再按 tab 找旧文案、也不再假设"点＋直接进写作卡"。
+    // 这里走用户口径的「正常点击创建小记」：＋ → 空白小记 → 写作卡（长按上滑速记那条由设备探针单独验）。
+    await tapExpr(centerByText(".mobile-bottom-bar__item", String.fromCharCode(0x65b0, 0x5efa)), "新建", 1200);
+    await tapExpr(centerByText(".mb-create__tile", "空白小记"), "空白小记", 2600);
   });
   add("doc-outline", async () => {
     await goHome(); await openDoc(0);

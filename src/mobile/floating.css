@@ -161,3 +161,30 @@
   transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-menusheet__item.is-show > .mb-menusheet__submenu { transform: translateX(-100vw); }
+
+/* ── 新建面板（261014）：首页「＋」短按后的两组格子 ────────────────────────────
+   形态照语雀 App（组标题 + 图标格子），**取值走移动端自身令牌**：只用一个强调色（用户 261012 定），
+   不给每个格子配品牌色。表面仍用 .mb-sheet（浮层唯一来源），不新造弹层。
+   内容 = 空白小记 / 拍摄 / 图片 / 待办 + 空白文档 / 知识库（**无模板、无 OCR**，见 CreateSheet.tsx）。 */
+.mb-sheet--create { padding: var(--mb-page-pad) 0 calc(16px + var(--mobile-bottom-safe-area)); }
+.mb-create + .mb-create { margin-top: 20px; }
+.mb-create__title {
+  margin: 0 0 6px; padding: 0 var(--mb-page-pad);
+  font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-tight);
+  font-weight: 600; color: var(--lake-text-1);
+}
+.mb-create__grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+.mb-create__tile {
+  appearance: none; border: 0; background: transparent;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 8px 4px; min-height: var(--mb-tap-min);
+  color: var(--lake-text-2); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mb-create__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: var(--mb-radius-card);
+  background: var(--lake-bg-block); color: var(--lake-text-1);
+  transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel);
+}
+.mb-create__tile:active .mb-create__icon { background: var(--lake-bg-press); }
+.mb-create__label { font-size: var(--lake-font-size-tiny); line-height: 1; }

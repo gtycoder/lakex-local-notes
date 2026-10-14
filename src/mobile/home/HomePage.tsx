@@ -6,14 +6,18 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash, FolderPlus } from "lucide-react";
+import { CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, Sparkles, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
+import { CREATE_LONG_PRESS_MS, blockPressRelease, createPressArmed, createPressRevealed } from "../ui/createPress";
+import { pickLocalFile } from "../ui/pickFile";
+import { longPressFeedback } from "../ui/haptics";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
@@ -53,10 +57,19 @@ export interface HomePageProps {
   onOpenDrawer: () => void;
   onOpenSearch: () => void;
   onCreateNotebook: () => void;
+  /** 「空白文档」：在用户选中的笔记本下建文档并进编辑态（归属判定复用 MobileApp.createNoteInParent）。 */
+  onCreateNote: (notebookId: string) => void;
   onQuickNotesChanged: () => Promise<void>;
 }
 
-type ComposerState = { mode: "new" } | { mode: "edit"; id: string } | null;
+/**
+ * 写作卡状态。`files` / `command` = 首页**新建面板**带进来的起手内容（拍摄 / 图片 / 待办）：
+ * 正文只能由内核产出，所以这里**不拼 body**，而是挂载后经 `initialInsert` 走内核通道（见 QuickNoteComposer）。
+ */
+type ComposerState =
+  | { mode: "new"; files?: File[]; command?: "taskList" }
+  | { mode: "edit"; id: string }
+  | null;
 
 const VIEW_KEY = "lake-notes-mobile.libraryView";
 
@@ -88,7 +101,7 @@ function fmtRelative(iso: string): string {
 export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
-    onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onQuickNotesChanged,
+    onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onCreateNote, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
@@ -96,6 +109,15 @@ export function HomePage(props: HomePageProps) {
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [quickSort, setQuickSort] = useState<QuickSort>("recent");
+  const [createOpen, setCreateOpen] = useState(false);
+  /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
+  const [docPickOpen, setDocPickOpen] = useState(false);
+  /** 「＋」按压态（语雀手感）：revealed = 长按到点浮出气泡，armed = 已上滑越过触发线。 */
+  const [pressRevealed, setPressRevealed] = useState(false);
+  const [pressArmed, setPressArmed] = useState(false);
+  const pressRef = useRef({ startY: 0, at: 0, revealed: false, timer: 0 });
+  /** 长按过的那一次，随后的 click 要吞掉（否则"长按搜索再松手"会顺带把搜索页打开）。 */
+  const suppressTapRef = useRef(false);
 
   // 离开「小记」tab（未点保存）即取消编辑：切回来是小记列表，不保留编辑框。
   // 覆盖所有离开路径（顶部 tab / 左右横滑 / 父级路由变化）。
@@ -140,6 +162,112 @@ export function HomePage(props: HomePageProps) {
     setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; writeLocalStorage(VIEW_KEY, nv); return nv; });
   };
 
+  /** 新建小记：写作卡只在「小记」tab 里渲染 ⇒ **先切 tab 再开**（顺序反了会被 tab 变化的重置 effect 清掉）。 */
+  const startNewQuickNote = (opts?: { files?: File[]; command?: "taskList" }): void => {
+    if (tab !== "quick") onTabChange("quick");
+    setEditNote(null);
+    setComposer({ mode: "new", ...opts });
+  };
+
+  /** 新建面板的六个动作（唯一分派点；**不做模板、不做 OCR 识图**）。 */
+  const runCreateAction = async (id: CreateActionId): Promise<void> => {
+    setCreateOpen(false);
+    switch (id) {
+      case "blank-quick":
+        startNewQuickNote();
+        return;
+      case "camera": {
+        const file = await pickLocalFile("image/*", "environment");
+        if (file) startNewQuickNote({ files: [file] });
+        return;
+      }
+      case "image": {
+        const file = await pickLocalFile("image/*");
+        if (file) startNewQuickNote({ files: [file] });
+        return;
+      }
+      case "todo":
+        startNewQuickNote({ command: "taskList" });
+        return;
+      case "blank-doc":
+        if (notebooks.length === 0) { showToast("请先新建知识库"); onCreateNotebook(); return; }
+        setDocPickOpen(true);
+        return;
+      case "notebook":
+        onCreateNotebook();
+        return;
+    }
+  };
+
+  /** 「＋」长按计时器：只负责**视觉浮出**（判定在松手时按真实时长重算，见 endPress）。 */
+  const clearPressTimer = (): void => {
+    if (pressRef.current.timer) { window.clearTimeout(pressRef.current.timer); pressRef.current.timer = 0; }
+  };
+  /**
+   * 按压期间把 move/up/cancel 挂在 **window** 上 —— **不要用 setPointerCapture**：
+   * 捕获会把随后的 click 重定向到胶囊（捕获元素）本身，条目自己的 onClick 就再也不触发了（261014 实测踩过）。
+   * 挂 window 既能拿到滑出胶囊后的位移/抬手，又不影响 click 的落点。
+   */
+  const pressDetachRef = useRef<() => void>(() => {});
+  const pressMoveRef = useRef<(clientY: number) => void>(() => {});
+  const pressEndRef = useRef<(pointer: { clientY: number } | null) => void>(() => {});
+  useEffect(() => () => pressDetachRef.current(), []);
+
+  const onPressDown = (e: React.PointerEvent<HTMLElement>): void => {
+    pressRef.current.startY = e.clientY;
+    pressRef.current.at = Date.now();
+    pressRef.current.revealed = false;
+    clearPressTimer();
+    pressRef.current.timer = window.setTimeout(() => {
+      pressRef.current.revealed = true;
+      setPressRevealed(true);
+      longPressFeedback();
+    }, CREATE_LONG_PRESS_MS);
+    pressDetachRef.current();
+    const onMove = (ev: PointerEvent): void => pressMoveRef.current(ev.clientY);
+    const onUp = (ev: PointerEvent): void => pressEndRef.current(ev);
+    const onCancel = (): void => pressEndRef.current(null);
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    pressDetachRef.current = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      pressDetachRef.current = () => {};
+    };
+  };
+  const onPressMove = (clientY: number): void => {
+    if (!pressRef.current.at) return;
+    const armed = createPressArmed(clientY - pressRef.current.startY);
+    setPressArmed((prev) => (prev === armed ? prev : armed));
+  };
+  /**
+   * 松手（**整块触发**：手势挂在整条胶囊上）：
+   *   · 没长按到点 → pass：条目自己的 onClick 照常跑（短按语义完全不变）；
+   *   · 长按 + 上滑过线 → 速记一条小记；
+   *   · 长按但没上滑 → 取消（用户明确"长按容易误触"，不做"长按即建"）。
+   */
+  const endPress = (pointer: { clientY: number } | null): void => {
+    pressDetachRef.current();
+    const p = pressRef.current;
+    clearPressTimer();
+    const elapsed = p.at ? Date.now() - p.at : 0;
+    const dy = pointer ? pointer.clientY - p.startY : 0;
+    const released = pointer ? blockPressRelease({ revealed: createPressRevealed(elapsed), dy }) : "cancel";
+    pressRef.current = { startY: 0, at: 0, revealed: false, timer: 0 };
+    setPressRevealed(false);
+    setPressArmed(false);
+    if (p.revealed) {
+      suppressTapRef.current = true;
+      window.setTimeout(() => { suppressTapRef.current = false; }, 350);
+    }
+    if (released === "quick-note") startNewQuickNote();
+  };
+  // window 监听回调取"最新闭包"（handler 只用 ref + setState，这里刷新引用即可）
+  pressMoveRef.current = onPressMove;
+  pressEndRef.current = endPress;
+
   const deleteQuickNote = async (id: string): Promise<void> => {
     const ok = await confirmMobile({ title: "删除小记？", body: "小记不备份，删除后不可恢复。", confirmText: "删除", danger: true });
     if (!ok) return;
@@ -165,12 +293,20 @@ export function HomePage(props: HomePageProps) {
     <div className="mobile-home">
       <header className="toolbar toolbar--border mobile-topbar">
         <button className="toolbar__button" onClick={onOpenDrawer} aria-label="设置" title="设置"><Settings /></button>
+        {/* 左侧等宽空槽：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，tab 才真的居中
+            （用户 261014 定稿的构图；冷启动骨架同构 5 槽，数据到达原地填充不跳）。 */}
+        <span className="mobile-topbar-gap" aria-hidden="true" />
         <div className="mobile-home-tabs">
           <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
         </div>
-        {tab === "quick" && <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>}
-        {tab === "library" && <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>}
+        {/* 用户 261014 定稿：排序（小记）/ 视图（知识库）+ 云同步**固定挂在顶栏右上角**，云同步恒在最右。 */}
+        {tab === "quick" ? (
+          <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>
+        ) : (
+          <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
+        )}
+        <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </header>
 
       <div key={tab} className="mobile-tab-stage">
@@ -181,6 +317,7 @@ export function HomePage(props: HomePageProps) {
             <Suspense fallback={<div className="mb-empty">正在加载编辑器…</div>}>
               <QuickNoteComposer
                 editNote={editNote}
+                initialInsert={composer.mode === "new" ? { files: composer.files, command: composer.command } : null}
                 onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
                 onCancel={closeComposer}
               />
@@ -235,18 +372,32 @@ export function HomePage(props: HomePageProps) {
       )}
       </div>
 
-      {/* 底部胶囊栏（首页）：搜索 | 新建 | 云同步（仿第二层悬浮栏：纯图标胶囊条）；排序已移到右上角。
-          ⚠️ 小记写作时**让位**：写作卡现在底部挂的是文档编辑那条 dock（用户 261013 定稿），
+      {/* 底部胶囊栏（首页，用户 261014 定稿）：搜索 | ＋ | AI。
+          · 排序 / 视图 与 云同步**都在顶栏右上角**（不在胶囊里）；
+          · 「＋」是**统一加号**（不再按 tab 换成"新建知识库"图标）：短按开新建面板、长按上滑速记；
+          · AI 只占位（用户定：先加图标，接入方案另行立项）。
+          ⚠️ 小记写作时**让位**：写作卡底部挂的是文档编辑那条 dock（用户 261013 定稿），
           两条都贴底会打架（胶囊 z-index 更高会把 dock 盖住）⇒ 编辑会话期间不渲染胶囊。 */}
       {composer === null && (
-      <nav className="mobile-bottom-bar" aria-label="首页操作">
+      /* **整块触发**（261014 用户定稿）：手势挂在整条胶囊上 —— 按住**任意处**约 260ms，整块变成「小记」；
+         继续上滑越过触发线松手 = 速记一条小记；不上滑松手 = 取消。短按不接手势（pass），条目自己的 onClick 照常。 */
+      <nav
+        className={"mobile-bottom-bar mobile-bottom-bar--home" + (pressRevealed ? " is-revealed" : "") + (pressArmed ? " is-armed" : "")}
+        aria-label="首页操作"
+        data-prevent-swipe
+        onPointerDown={onPressDown}
+        onContextMenu={(e) => e.preventDefault()}
+        /* 长按过的那一次，吞掉随后由同一次按压合成的 click。 */
+        onClickCapture={(e) => { if (suppressTapRef.current) { e.preventDefault(); e.stopPropagation(); } }}
+      >
+        {/* 整块变化层（语雀效果）：常挂载，只在 is-revealed 时可见（条件渲染会让变化没有过渡）。 */}
+        <div className="mobile-block-quick" aria-hidden="true">
+          <Feather size={20} />
+          <span className="mobile-block-quick__label">小记</span>
+        </div>
         <button className="mobile-bottom-bar__item" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
-        {tab === "quick" ? (
-          <button className="mobile-bottom-bar__item" onClick={() => { setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记" title="新建小记"><Plus /></button>
-        ) : (
-          <button className="mobile-bottom-bar__item" onClick={onCreateNotebook} aria-label="新建知识库" title="新建知识库"><FolderPlus /></button>
-        )}
-        <button className="mobile-bottom-bar__item" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
+        <button className="mobile-bottom-bar__item" onClick={() => setCreateOpen(true)} aria-label="新建" title="新建" aria-haspopup="dialog" aria-expanded={createOpen}><Plus /></button>
+        <button className="mobile-bottom-bar__item" onClick={() => showToast("AI 助手尚未接入：已立项，接入后这里再定用法")} aria-label="AI 助手" title="AI 助手（未接入）"><Sparkles /></button>
       </nav>
       )}
 
@@ -267,6 +418,17 @@ export function HomePage(props: HomePageProps) {
         items={filterItems}
         onClose={() => setFilterOpen(false)}
         onSelect={onFilterSelect}
+      />
+
+      {/* 新建面板（「＋」短按）：新建小记 / 新建文档知识库（**无模板、无 OCR**） */}
+      <CreateSheet open={createOpen} onClose={() => setCreateOpen(false)} onAction={(id) => void runCreateAction(id)} />
+
+      {/* 「空白文档」选笔记本：只列已有笔记本（用户 261014 定） */}
+      <MobileSheetMenu
+        open={docPickOpen}
+        items={notebooks.map((nb) => ({ id: nb.id, label: nb.title || "未命名知识库", icon: BookMarked }))}
+        onClose={() => setDocPickOpen(false)}
+        onSelect={(it) => { setDocPickOpen(false); onCreateNote(it.id); }}
       />
     </div>
   );

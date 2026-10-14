@@ -30,7 +30,7 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
   });
 
   it("派生消费者一律引用令牌（不再写死几何）", () => {
-    expect(read("styles/chrome.css")).toContain("--lake-dir-peek-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height))");
+    expect(read("styles/chrome.css")).toContain("--lake-dir-peek-top: calc(var(--topbar-height) + 4px)");
     expect(read("styles/app/shell.css")).toContain("--lake-floating-panel-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height) + var(--editor-toolbar-height))");
     expect(read("styles/chrome.css")).toMatch(/\.protyle-breadcrumb\s*\{[^}]*height:\s*var\(--breadcrumb-height\)/);
     expect(read("styles/app/editor.css")).toMatch(/\.ne-ui-toolbar\s*\{\s*height:\s*var\(--editor-toolbar-height\)/);
@@ -39,6 +39,18 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
     expect(read("styles/app/tabs.css")).toMatch(/padding:\s*calc\(\(var\(--topbar-height\)\s*-\s*var\(--tab-item-height\)\)\s*\/\s*2\s*\+\s*2px\)\s*10px\s*calc\(\(var\(--topbar-height\)\s*-\s*var\(--tab-item-height\)\)\s*\/\s*2\s*-\s*2px\)/);
     // 阅读态大纲顶 = 顶栏 + 4 拼接缝 + 面包屑
     expect(read("styles/app/editor.css")).toMatch(/\.ne-viewer-toc-sidebar\s*\{[^}]*top:\s*calc\(var\(--topbar-height\)\s*\+\s*4px\s*\+\s*var\(--breadcrumb-height\)\)/);
+  });
+
+  it("目录浮层从顶栏下缘起，底部仍保留 12px；固定态不受影响", () => {
+    const css = read("styles/chrome.css");
+    const top = css.match(/--lake-dir-peek-top:\s*([^;]+);/);
+    expect(top?.[1]).toBe("calc(var(--topbar-height) + 4px)");
+    expect(css).toContain("--lake-dir-peek-height: calc(100vh - var(--lake-dir-peek-top) - 12px)");
+    const floating = css.match(/\.sidebar\.sidebar-floating,\s*\.sidebar\.sidebar-collapsed\s*\{([^}]+)\}/)?.[1];
+    expect(floating).toContain("top: var(--lake-dir-peek-top)");
+    expect(floating).toContain("height: var(--lake-dir-peek-height)");
+    expect(floating).toContain("bottom: auto");
+    expect(css).not.toMatch(/\.sidebar\.sidebar-docked\s*\{[^}]*--lake-dir-peek/);
   });
 
   it("过期字面值不得回归（112px 曾是大纲回退值）", () => {

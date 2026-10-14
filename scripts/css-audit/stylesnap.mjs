@@ -34,15 +34,25 @@ export const snapExpr = (kernelIdMinLen = 6) => `(() => {
   const els = [...document.querySelectorAll("body *")];
   const seen = new Map();
   const rows = [];
-  const push = (key, parts) => {
+  // 261013：内核 / plait / drawnix 自动生成的 SVG 图元（**无 id、无 class**）「位置即身份」⇒ 跨轮/跨实例指纹抖动。
+  // 实测（5 份完整 42 态快照两两对拍）：翻转恒为同一批 ~314 个这类图元（rect/path/g/circle），**元素数不变**，
+  // 只是 index → hash 的对应关系在换 —— 与上面「内核 u<hex> id 不入 key」属同一类噪声。
+  // 处理：这类图元**不进 keyed 行**，改为收集 (tag, 自身指纹) 的**多重集**，循环后排序再落地：
+  //   位置漂移不再影响结果；图元自身变了（几何/样式）指纹仍会变 ⇒ **信号不丢**（严格优于"整片剔除"）。
+  // 判据：同一批 5 份快照里排序多重集 **41/42 态完全一致**（唯一例外 plain:760:dark 属窄窗 UNSTABLE）。
+  const RAW_SVG = new Set(["svg","g","rect","path","circle","ellipse","line","polyline","polygon","use","defs","symbol","clippath","mask","filter","stop","lineargradient","radialgradient"]);
+  const rawSvg = [];
+  const emit = (key, h) => {
     const n = (seen.get(key) || 0); seen.set(key, n + 1);
-    rows.push([key + "#" + n, hash(parts)]);
+    rows.push([key + "#" + n, h]);
   };
+  const push = (key, sig) => emit(key, hash(sig));
   for (const el of els) {
     const cls = [...el.classList].sort().join(".");
     // 260923：内核给正文文本节点发的 id 形如 u<hex>，**跨 reload 不稳定** ⇒ 不入 key。
     // 不排除的话，同一份代码连拍两份快照会得到"每态恒定 2 条差异 + 2 个新增"，噪声淹没真信号。
     const stableId = /^u[0-9a-f]{${kernelIdMinLen},}$/.test(el.id) ? "" : el.id;
+    const isRawSvg = !stableId && !cls && RAW_SVG.has(el.tagName.toLowerCase());
     const key = el.tagName.toLowerCase() + (stableId ? "$" + stableId : "") + (cls ? "." + cls : "");
     const cs = getComputedStyle(el);
     const parts = [];
@@ -60,8 +70,18 @@ export const snapExpr = (kernelIdMinLen = 6) => `(() => {
       const pr = pcs.width, ph = pcs.height;
       parts.push(pr, ph);
     }
-    push(key, parts.join("\\u0001"));
+    // 分隔符用 fromCharCode(1) 写出（与原先的字面转义等价，但不经过本模板串的转义层）。
+    const sig = parts.join(String.fromCharCode(1));
+    if (isRawSvg) rawSvg.push([el.tagName.toLowerCase(), hash(sig)]);
+    else push(key, sig);
   }
+  // 裸图元按 (tag, 指纹) 排序后落地 ⇒ 与 DOM 顺序无关：同一批图元只是换了位置时，结果逐字节相同。
+  rawSvg.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  for (const [tag, h] of rawSvg) emit("svgraw$" + tag, h);
+  // 261013：**行序**同样跨实例不可复现（内核图标 sprite 的注入顺序不同，实测 459 个 key 换位、集合完全一样）
+  // ⇒ 统一按 key 排序后落地：指纹只回答"有哪些元素、各是什么计算值"，不回答 DOM 顺序
+  //（顺序本身不可复现 ⇒ 本来就不能作为基线）。实测：加这一条后跨实例两轮 **42/42 态**逐字节一致。
+  rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return { n: rows.length, rows };
 })()`;
 

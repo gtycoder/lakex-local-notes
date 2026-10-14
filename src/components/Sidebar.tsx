@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Book, ChevronRight, ChevronsDownUp, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, Pin, Plus, RefreshCw, Search, Trash } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, Pin, Plus, RefreshCw, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
+import { pushEmojiRecent, readEmojiRecents } from "../lib/emojiRecents";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "./treeDrag";
@@ -1044,38 +1045,86 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
   </Dialog>
 );
 
-/** M1.6：文档/分组自定义图标选择器（Lake unicodeEmoji 表情资源 + 分组 + 搜索 + 清除） */
-/** 图标/表情选择浮层（仅本文件的「设置图标」入口用）。 */
+/** M1.6：文档/分组自定义图标选择器 —— **直接复用内核表情面板的类与几何**（`.ne-ui-unicode-emoji-*`）。
+ *  与 noteRefCard 复用 `.ne-link-editor` 同一姿势：内核那套 CSS 已随 vendor 样式进包，我们只接线，
+ *  不重写尺寸/间距/配色；`lakex-default-theme` 负责吃 kernel-theme.css 的 --lakex-editor-* 主题桥
+ *  （浮层 portal 到 body、在编辑器树之外，不加这个类暗/暖色下会取内核浅色字面值）。
+ *  行为对齐内核：内容按分组平铺 + 分组标题，底部 tab 用于跳转与高亮；定位走 usePopoverPosition（禁自夹）。 */
+const EMOJI_COLUMNS = 8; // 内核面板 418px − 左右各 16px 内距 = 386px ⇒ 8 列时格宽 ≈48px（与内核实测一致）
+
 const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
   const [filter, setFilter] = useState("");
-  const [group, setGroup] = useState("全部");
+  const recents = useMemo(() => readEmojiRecents(), []);
+  const [active, setActive] = useState("最近"); // 「最近」常显（用户 261013 定），空的也留着位置
+  const contentRef = useRef<HTMLDivElement>(null);
+  const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y }, width: 418 });
+  const nameOf = useMemo(() => new Map(LAKE_EMOJIS.map((e) => [e.char, e.name])), []);
   const q = filter.trim().toLowerCase();
-  const groupNames = ["全部", ...LAKE_EMOJI_GROUPS.map((g) => g.name)];
-  const list: Array<{ char: string; name?: string }> = q
-    ? LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(q) || e.char === filter.trim()).map((e) => ({ char: e.char, name: e.name }))
-    : group === "全部"
-      ? LAKE_EMOJIS.map((e) => ({ char: e.char, name: e.name }))
-      : (LAKE_EMOJI_GROUPS.find((g) => g.name === group)?.emojis ?? []).map((char) => ({ char }));
-  const left = Math.max(8, Math.min(x, window.innerWidth - 558));
-  const top = Math.max(8, Math.min(y, window.innerHeight - 378));
+  const sections = q
+    ? [{ name: "搜索结果", emojis: LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(q) || e.char === filter.trim()).map((e) => e.char) }]
+    : [
+        // 「最近」**常显**（用户 261013 定：空的也显示，避免"这功能到底有没有"的疑问）；内核对空最近是隐藏的，这里是有意偏离。
+        { name: "最近", emojis: recents },
+        ...LAKE_EMOJI_GROUPS.map((g) => ({ name: g.name, emojis: g.emojis })),
+      ];
+  const jump = (name: string) => {
+    setActive(name);
+    const box = contentRef.current;
+    const label = box?.querySelector<HTMLElement>(`[data-emoji-group="${name}"]`);
+    if (box && label) box.scrollTop = label.offsetTop - box.offsetTop - 4;
+  };
   return (
-    <Popover surfaceClassName="emoji-picker" onDismiss={onClose} style={{ left, top }}>
-        <div className="emoji-picker-search">
-          <Search size={13} />
+    <Popover
+      open
+      onDismiss={onClose}
+      label="设置图标"
+      surfaceRef={surfaceRef}
+      style={style ?? undefined}
+      surfaceClassName="ne-ui-unicode-emoji-panel"
+      className="lakex-default-theme"
+    >
+      <div className="ne-ui-unicode-emoji-panel-header">
+        <div className="ne-ui-unicode-emoji-search">
           <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="搜索表情（如 smile / 名称）" autoFocus />
         </div>
-        <div className="emoji-picker-tabs">
-          {groupNames.map((g) => (
-            <button key={g} className={`emoji-picker-tab${g === group ? " active" : ""}`} onClick={() => setGroup(g)}>{g}</button>
-          ))}
-        </div>
-        <div className="emoji-picker-grid">
-          {list.map((e) => (
-            <button key={(e.name ?? "") + e.char} className="emoji-picker-cell" onClick={() => onPick(e.char)} title={e.name ?? e.char}>{e.char}</button>
-          ))}
-          {list.length === 0 && <div className="emoji-picker-empty">无匹配表情</div>}
-        </div>
-        <button className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
+      </div>
+      <div className="ne-ui-unicode-emoji-panel-content" ref={contentRef}>
+        {sections.map((section) => (
+          <div className="ne-ui-unicode-emoji-group" key={section.name}>
+            <div className="ne-ui-unicode-emoji-label" data-emoji-group={section.name}>{section.name}</div>
+            {section.emojis.length > 0 ? (
+              <div className="ne-ui-unicode-emoji-content" style={{ gridTemplateColumns: `repeat(${EMOJI_COLUMNS}, 1fr)` }}>
+                {section.emojis.map((char, index) => (
+                  <div className="ne-ui-unicode-emoji-item" key={char + index}>
+                    <button type="button" title={nameOf.get(char) ?? char} onClick={() => { pushEmojiRecent(char); onPick(char); }}>
+                      <span>{char}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : section.name === "最近" ? (
+              <div className="emoji-picker-empty">用过的图标会出现在这里</div>
+            ) : null}
+          </div>
+        ))}
+        {sections.every((section) => section.emojis.length === 0) && <div className="emoji-picker-empty">无匹配表情</div>}
+      </div>
+      <div className="ne-ui-unicode-emoji-panel-footer">
+        {!q && (
+          <div className="ne-ui-unicode-emoji-tabs">
+            {sections.map((section) => (
+              <div
+                key={section.name}
+                role="tab"
+                aria-selected={section.name === active}
+                className={`ne-ui-unicode-emoji-tab-item${section.name === active ? " selected" : ""}`}
+                onClick={() => jump(section.name)}
+              >{section.name}</div>
+            ))}
+          </div>
+        )}
+        <button type="button" className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
+      </div>
     </Popover>
   );
 };

@@ -141,37 +141,23 @@
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: var(--lake-font-size-bodyLg); line-height: 1; }
 
-.emoji-picker { position: fixed; z-index: 700; width: 550px; height: 370px; min-width: 440px; min-height: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); resize: both; overflow: hidden; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+/* 图标选择浮层（261013）：面板本体**直接复用内核** `.ne-ui-unicode-emoji-*` —— vendored 样式自带几何与配色，
+ * 见 Sidebar 的 EmojiIconPicker 注释。所以这里只留内核没有的三样：可聚焦按钮外壳复位、横向 tab 行纠偏、「清除图标」行。 */
+.ne-ui-unicode-emoji-item > button { display: flex; padding: 0; border: 0; background: transparent; cursor: pointer; }
 
-.emoji-picker-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+/* 内核把这条写成了 overflow-y（横向 tab 行，显系笔误）⇒ 带「最近」共 9 个 tab 时会横向溢出到面板之外；
+ * 就地补横向滚动（滚动条已由内核自己的 ::-webkit-scrollbar{display:none} 隐藏）。 */
+.ne-ui-unicode-emoji-tabs { overflow-x: auto; }
 
-.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-border-2); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); cursor: pointer; white-space: nowrap; }
+/* 内核的搜索框是它内部的输入组件（自带满宽/边框/内距）；我们渲染的是原生 input ⇒ 自己补齐同样的盒子。 */
+.ne-ui-unicode-emoji-search input { width: 100%; box-sizing: border-box; padding: 6px 10px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-small); outline: none; }
+.ne-ui-unicode-emoji-search input:focus { border-color: var(--lake-accent); }
 
-.emoji-picker-tab:hover { background: var(--lake-bg-hover); }
-
-.emoji-picker-tab.active { background: var(--lake-accent-tint); color: var(--lake-accent-text); font-weight: 600; }
-
-.emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
-
-.emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); color: var(--lake-text-3); }
-
-.emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: var(--lake-font-size-tiny); background: transparent; color: var(--lake-text-1); }
-
-.emoji-picker-search { flex: none; }
-
-.emoji-picker-tabs { flex: none; }
-
-.emoji-picker-clear { flex: none; }
-
-.emoji-picker-grid { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 2px; }
-
-.emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 33px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--lake-font-size-h1); line-height: 1; cursor: pointer; }
-
-.emoji-picker-cell:hover { background: var(--lake-bg-hover); }
-
-.emoji-picker-clear { border: 0; border-radius: var(--lake-radius-sm); padding: 6px; background: var(--lake-border-2); color: var(--lake-text-3); cursor: pointer; font-size: var(--lake-font-size-tiny); }
+.emoji-picker-clear { display: block; width: 100%; margin: 2px 0 8px; border: 0; border-radius: var(--lake-radius-sm); padding: 7px; background: var(--lake-border-2); color: var(--lake-text-3); cursor: pointer; font-size: var(--lake-font-size-tiny); }
 
 .emoji-picker-clear:hover { background: var(--lake-bg-hover); }
+
+.emoji-picker-empty { padding: 24px 16px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 
 /* M2 全文搜索面板（思源 b3-dialog / b3-text-field 令牌风格） */
 .search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }

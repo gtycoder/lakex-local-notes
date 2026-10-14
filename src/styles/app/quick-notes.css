@@ -211,11 +211,22 @@
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
-/* 自带表情选择器（261010）：内核那条路只插空占位卡（点不开面板，实测两次），所以选择器在我们这层。
-   表面沿用浮层令牌（--lake-*）；定位由 JS 按**真实尺寸**夹进视口（同 usePopoverPosition 的口径）。 */
-.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 8px; max-width: min(320px, calc(100vw - 16px)); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
-.quick-note-emoji-panel__item { width: 34px; height: 34px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--lake-font-size-title); line-height: 1; cursor: pointer; }
-.quick-note-emoji-panel__item:hover { background: var(--lake-bg-hover); }
+/* 自带表情选择器（261010 起）——**261013 改成微信样式**（用户定稿：分类放顶部，更适合输入）。
+   为什么自建：内核「表情」只插一张点不开的空占位卡（实测两次）。形态 = 顶部分类条（搜索 / 最近 / 8 组）
+   + 浅灰底大格子 + 空态；表面沿用浮层令牌，定位由 JS 按**真实尺寸**夹进视口（同 usePopoverPosition 口径）。 */
+.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: flex; flex-direction: column; gap: 6px; padding: 8px; width: min(360px, calc(100vw - 16px)); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
+.quick-note-emoji-panel__cats { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.quick-note-emoji-panel__cats::-webkit-scrollbar { display: none; }
+.quick-note-emoji-panel__cat { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-2); font-size: var(--lake-font-size-title); line-height: 1; cursor: pointer; }
+.quick-note-emoji-panel__cat.is-active { background: var(--lake-bg-block); color: var(--lake-text-1); }
+.quick-note-emoji-panel__search { display: none; }
+.quick-note-emoji-panel__search.is-open { display: block; }
+.quick-note-emoji-panel__search input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); outline: none; }
+.quick-note-emoji-panel__body { max-height: 236px; overflow-y: auto; padding: 4px; border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); }
+.quick-note-emoji-panel__grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.quick-note-emoji-panel__cell { display: flex; align-items: center; justify-content: center; height: 34px; padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--lake-font-size-h1); line-height: 1; cursor: pointer; }
+.quick-note-emoji-panel__cell:hover { background: var(--lake-bg-hover); }
+.quick-note-emoji-panel__empty { padding: 20px 8px; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 .quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 8px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
 
@@ -249,7 +260,9 @@
    直接用在我们的窗口里会盖住红绿灯/顶栏/侧栏（用户 260919 报「样式错乱、收起不了」）。
    适配：把它限定在小记面板内绝对定位，外壳与窗口控件始终可见；退出按钮随之改为面板内右上角。 */
 .quick-notes-pane .lake-editor-mount.ne-ui-fullscreen {
-  position: absolute;
+  /* 内核 legacy 的 position:fixed!important 会压过普通 absolute（实测仍 top=0，盖红绿灯）。
+     必须用 important 覆盖该第三方规则；仍限定于桌面小记，不改内核或移动端。 */
+  position: absolute !important;
   inset: 0;
   z-index: 30; /* 低于顶栏标签/侧栏：外壳始终可见 */
   height: auto;

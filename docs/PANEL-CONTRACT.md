@@ -16,7 +16,7 @@
 | 标签胶囊 `.tab-item` | `--tab-item-height`（**与顶栏解耦**） | **28px** | `.tab-bar` 垂直内距 = (顶栏 − 标签)/2 |
 
 **派生（全部由上面算出，禁止再写死数字）**
-- 目录 peek 顶边 `--lake-dir-peek-top` = topbar + 4 + breadcrumb + 6（= **72**）——**有意盖住工具条**（临时层，用完即收）。
+- 目录 peek 顶边 `--lake-dir-peek-top` = **topbar + 4px 拼接缝**（261013 用户定稿）——从可见顶栏下缘浮出，**不依赖面包屑 / 工具条 / 文档类型**；临时盖住面包屑与工具条，用完即收。底部仍距窗口 **12px**（高度 = `100vh - peek-top - 12px`），固定目录不受影响。
 - 浮层顶 / 左缘热区顶 `--lake-floating-panel-top` = topbar + 4 + breadcrumb + toolbar（= **100**）——**不盖工具条**。
 - 阅读态大纲 `.ne-viewer-toc-sidebar` 的 `top` = topbar + 4 + breadcrumb（窗口坐标，= **66**）。
 - 分屏浮动工具条 `.tab-split-controls` 顶边 = **breadcrumb + toolbar + `--lake-space-md`**（相对 `.tab-panels`；
@@ -64,7 +64,7 @@
 ## 6. 已知取舍（别当 bug 反复提）
 
 - 三态（固定 / 悬浮 / 收起）**必须都保留**；悬浮是**临时层**：固定高度、贴底浮卡、**不做高度适配**。
-- 目录 peek 与大纲**刻意不同口径**：peek 从**面包屑下缘**起（盖工具条），大纲从**工具条下缘**起。不要强行统一。
+- 目录 peek 与大纲**刻意不同口径**：peek 从**顶栏下缘（含 4px 拼接缝）**起（盖面包屑与工具条），大纲仍从**工具条下缘**起。不要强行统一；左缘触发热区位置保持不变。
 - 目录树的外部写入通过 `library-changed` 自动刷新；不得再退回只能手动刷新的语义。
 - 全桌面 `!important` ≤ 10，新增必须写明理由（`ui-metrics` 会卡）。
 

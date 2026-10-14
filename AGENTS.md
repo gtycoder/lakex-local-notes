@@ -109,6 +109,19 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 20. **云同步只有一套状态判据（`src/core/cloudState.ts`），桌面与移动端共用**：`cloudStateOf(configured, syncSettings)` → `unconfigured | offline | manual | auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI（顶栏状态灯 / 离线禁用态）的判据。**关闭云同步 = 当作完全没配置 / 离线本地空间**（用户 261006 定稿）：任何路径都不出网 —— 手动同步、回收站恢复与预览的按需补拉、云 GC / 深度清理 / 换机恢复、自动同步与定期对账定时器，全部先过这一关；移动端 `src/mobile/bridge.ts` 用同一份 core 与同一语义。**新增任何联网功能必须挂这个判据**，不许各自去读 `enabled`。恢复红线不变且**不等网络**：恢复立刻生效，缺失资源后台补拉并给明确提示（"正在从 S3 拉取缺失数据…" / "未能下载…" / 离线未尝试）。
     - 判据入口：`canTouchNetwork(cloudStateOf(...))`；离线文案统一走 `cloudStateHint(state)`，不要各写一句。护栏测试：桌面 `electron/syncDualAB.test.ts`（注入会抛错的远端工厂，断言调用次数 0）、移动 `src/mobile/bridgeCloudState.test.ts`（断言引擎未被调用）。
 
+21. **门禁分层：不要为每一次小改都跑全量验收（用户 261014 定；**通用规则**，桌面与移动端各自对应）**：
+    - **第 1 层 · 每次改动都跑（≈20s，这就是"门禁"的正式含义）**：`npx tsc --noEmit` + 相关 `npx vitest run`（全库也就 ≈10–20s）+
+      两条构建（改动要出产物时）+ `git diff --check`；**动了样式再加** `node scripts/ui-metrics.mjs` 与对应侧的层围栏（`src/styles/cssLayers.test.ts` / `src/mobile/mobileLayers.test.ts`）。
+    - **第 2 层 · 视觉 / 设备验收（只在动了那一层时才跑，且只跑受影响的那 1~2 个态 / 屏）**：
+      桌面 = `scripts/css-audit/stylesnap.mjs` + `check-stylesnap.mjs`；移动端 = `npm run check:mobilesnap` + `node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs`。
+      定点示例：桌面色 `node scripts/css-audit/check-stylesnap.mjs --port 9231 --states "resources:1315:light"`；
+      移动端态 `node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --states home-quicknotes`；走查第三个参数传屏名列表。
+      **全量**（桌面 42 态 ≈294s / 移动 6 态 + 23 屏）**只在换夹具、改装置、发版前**跑。
+    - **第 3 层 · 重烤基线**：**一旦动了外壳几何 / 布局 / 构成**（不是文案、不是单点样式），必须重烤一次对应基线
+      （移动端 `check-mobile-snap.mjs --from <warm>.json --write-baseline`；桌面 stylesnap 同法），否则下一次全量必然全红。
+      重烤是"布局真的变了"的**一次性成本**，不是每次小改的成本；**重灌夹具（`gate-fixture.mjs`）之后也必须重烤**。
+    - 顺序恒定：**先本地门禁 → 再定点验收 → 最后才全量**。宁可少跑，也不要为了"看起来稳"把几分钟的装置挂在每次改动后面。
+
 ## 4. 关键机制速览（同步）
 
 - **Manifest V1 重置**：旧数据与远端清零后，Lake manifest 重新使用 `version=1`，但内容 schema 沿用原 v7（folders/墓碑/锁/`kind`/board 保留）。代码只读写 `{1}`；所有端必须一起升级。传输/GC/类型分别见 `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/syncTypes.ts`，编排见 `electron/syncEngineController.ts`。
@@ -310,6 +323,22 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
     写作卡新增 raiseKeyboard prop —— **只有"没有用户手势"的入口传**（快捷 capture / 系统分享），聚焦后 300ms 请原生弹一次；页面路有手势、天然会弹，不传。
     设备复核：普通启动首页（无键盘）innerHeight **842** vs 快捷 capture **530**（键盘已弹、焦点也在内核编辑器里）。
     ⚠️ 探针坑（本轮踩过）：before 取样必须取**无键盘**状态（首页），否则两次都量到 530、会把"已弹"误判成"没弹"。
+
+29. **模拟器上的设备级点按一律走 CDP `Input.dispatch*`，别用 `adb shell input tap/swipe`**（261014 实测，白花过半小时）：
+    本机两台模拟器（5554 语雀 + 本应用、5556 门禁实例）上，`adb shell input tap` / `input swipe` **对两个 App 都不生效**
+    —— 屏幕完全不动、也不报错；而 `keyevent`（HOME/BACK）正常。同一坐标改用 CDP `Input.dispatchMouseEvent`
+    （`mousePressed` + `mouseReleased`）**立刻生效**。⇒ 口诀：**坐标取 `getBoundingClientRect()`（页面 CSS px，别拿设备像素猜）、派发用 CDP**；
+    **手势（长按 / 上滑）必须用 `Input.dispatchTouchEvent` 的 touchStart / touchMove / touchEnd** —— 鼠标事件验不出 pointer 长按。
+    推论（与 §7.22 同源）：出现"设备上手点不出来"的现象，先怀疑**注入方式**，再怀疑产品代码。
+
+30. **在容器上 `setPointerCapture` 会把随后的 `click` 重定向到容器本身 ⇒ 子按钮的 `onClick` 永远不触发**（261014 实测，白花一轮）：
+    给首页胶囊（`<nav>`）挂"整块长按"手势时，我在 `pointerdown` 里写了 `nav.setPointerCapture(e.pointerId)` ——
+    结果"点 ＋ 打开新建面板"**直接失效**：指针被捕获后，`mousedown`/`mouseup`（以及由它们合成的 `click`）**目标都被重定向到捕获元素**，
+    子按钮上的 `onClick` 再也不跑。现象是"点了没反应"，不报错、DOM 也完全正常（最难查的那种）。
+    ⇒ **口径**：**容器级手势不要用指针捕获** —— 在 `pointerdown` 时把 `pointermove`/`pointerup`/`pointercancel` 挂到 **window**
+    （抬手、滑出容器都能收到，且 click 落点不变），`pointerup` 与组件卸载时摘掉。
+    配套两条：① 长按过的那一次要**吞掉随后的 click**（否则"长按搜索再松手"会顺带把搜索页打开）；
+    ② 短按语义**留给条目自己**（手势判定返回 "pass"，不替按钮做决定）。
 
 ## 8. 会话启动指引
 

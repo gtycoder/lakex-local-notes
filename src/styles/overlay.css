@@ -139,7 +139,6 @@
 .quick-notes-sort-menu,
 .quick-note-row-menu,
 .outline-sidebar__level-menu,
-.emoji-picker,
 .ln-menu,
 .ln-popover {
   z-index: var(--lake-z-overlay-menu);

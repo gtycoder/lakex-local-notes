@@ -27,7 +27,11 @@
 .sync-status-history-list { display: grid; gap: 1px; margin: 4px -9px -4px; padding: 2px 0; max-height: 132px; overflow-y: auto; }
 .sync-status-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--lake-border-1); }
 .sync-status-footer-state { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
-.sync-status-actions .b3-button { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; }
+/* 261013：动作行的按钮是**固定区，不可被压缩** —— 同步中 footer 文案会变长（「· 未同步 N 项」），
+ * 按钮作为可收缩的 flex 子项会被挤窄 ⇒ 标签折两行、行盒错乱（设备复现：121px/1 行 → 109px/2 行 → 修后回 1 行）。
+ * 只保留本处专属的 min-height，其余三条与 kit 层 .b3-button 基座同值（kit 层高于本文件的 legacy 层，本来就赢），
+ * 删掉以免同一套盒子在两处各说一遍（AGENTS §3#14 单一来源；本文件声明数因此 -1，护栏只许降）。 */
+.sync-status-actions .b3-button { flex: 0 0 auto; white-space: nowrap; min-height: 30px; }
 
 
 @keyframes lake-status-pulse { 50% { opacity: .42; } }

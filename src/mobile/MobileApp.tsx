@@ -61,7 +61,8 @@ export type Route =
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
 export function MobileApp() {
-  const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
+  /** 冷启动固定落在「小记」（用户 261014 定；快捷 capture 那条本来也落在小记）。 */
+  const [route, setRoute] = useState<Route>({ kind: "home", tab: "quick" });
   /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。 */
   const [captureOpen, setCaptureOpen] = useState(false);
   /** 系统分享带入的初始内容（文本 + 图片）；null = 空白/恢复草稿。 */
@@ -342,6 +343,7 @@ export function MobileApp() {
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
           onCreateNotebook={() => setCreateNbOpen(true)}
+          onCreateNote={(notebookId) => void createNoteInParent(notebookId)}
           onQuickNotesChanged={refreshAll}
         />
       )}
@@ -397,12 +399,15 @@ function MobileHomeSkeleton() {
   return (
     <div className="mobile-app">
       <div className="mobile-home" aria-busy="true">
+        {/* 与真实顶栏同构：左 = 设置 + 等宽空槽，右 = 排序/视图 + 云同步（两枚）⇒ tab 居中、填充不跳。 */}
         <header className="toolbar toolbar--border mobile-topbar">
+          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
           <span className="mb-skel mb-skel--icon" aria-hidden="true" />
           <div className="mobile-home-tabs">
             <span className="mb-skel mb-skel--tab" aria-hidden="true" />
             <span className="mb-skel mb-skel--tab" aria-hidden="true" />
           </div>
+          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
           <span className="mb-skel mb-skel--icon" aria-hidden="true" />
         </header>
         <div className="mobile-tab-stage">
@@ -415,7 +420,8 @@ function MobileHomeSkeleton() {
             </section>
           </div>
         </div>
-        <nav className="mobile-bottom-bar" aria-hidden="true">
+        {/* 骨架的胶囊槽数必须与真实胶囊一致（261014 起 3 项：搜索 / ＋ / AI），否则数据到达时宽度会跳一次。 */}
+        <nav className="mobile-bottom-bar mobile-bottom-bar--home" aria-hidden="true">
           <span className="mb-skel mb-skel--baritem" />
           <span className="mb-skel mb-skel--baritem" />
           <span className="mb-skel mb-skel--baritem" />

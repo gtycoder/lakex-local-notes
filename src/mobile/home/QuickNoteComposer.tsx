@@ -26,6 +26,7 @@ import { subscribeSyncSettings } from "../syncSettingsStore";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
+import { lakeBridge } from "../../features/editor/lakeRuntime";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
 import { EditorDockHost } from "../editor/EditorDockHost";
 // 光标/选区自动跟随滚动：**与文档编辑器同一份实现**（261014 —— 用户：光标必须始终在工具栏上方、
@@ -39,7 +40,7 @@ import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 // 引在**移动端模块**而不是共享的 QuickNoteEditor：共享模块会把这份 CSS 也打进桌面入口，实测 app-css 1.79MB → 3.07MB（超预算）。
 import "@dlient/lakex-doc-react/style.css";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
-import { extractAssetRefs, mimeTypeForFilename } from "../../core/assetNaming.js";
+import { extractAssetRefs, mediaKindOfFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { isQuickNoteImageMime, quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 
@@ -60,6 +61,13 @@ export interface QuickNoteComposerProps {
    * 页面路（点「新建小记」）有手势、键盘本来就弹，不必多此一举。
    */
   raiseKeyboard?: boolean;
+  /**
+   * 首页「新建面板」带进来的**起手内容**（261014）：
+   *   · `files` = 拍摄 / 图片 取到的文件 → 内核就绪后走 **insertFiles**（与 dock 同一条插入通道）；
+   *   · `command` = 待办 → 走内核命令（taskList）。
+   * 正文一律由内核产出，**不在这层拼 body**（docs/LAKE-CONTENT-WRITING.md）。只在新建时有值。
+   */
+  initialInsert?: { files?: File[]; command?: "taskList" } | null;
 }
 
 interface AssetMeta {
@@ -84,7 +92,7 @@ async function readDimensions(bytes: Uint8Array, mimeType: string): Promise<{ wi
   }
 }
 
-export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, raiseKeyboard = false }: QuickNoteComposerProps) {
+export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, raiseKeyboard = false, initialInsert = null }: QuickNoteComposerProps) {
   /** 初始 id：新建时先固定一个；草稿恢复后用**草稿自己的 id**（沿用 ⇒ 图片作用域一致）。 */
   const initialId = useMemo(() => editNote?.id ?? crypto.randomUUID(), [editNote]);
   const [noteId, setNoteId] = useState(initialId);
@@ -96,6 +104,8 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
    * 编辑器就绪后若不重渲染，dock 会一直拿到 null、命令全部静默失效（与 DocumentEditor 同一坑）。
    */
   const [editorInstance, setEditorInstance] = useState<LakeEditorInstance | null>(null);
+  /** 起手内容只消费一次：重挂/重渲染都不再重复插入。 */
+  const pendingInsertRef = useRef(initialInsert);
   /** 保存成功 / 主动取消后不再写草稿。 */
   const committedRef = useRef(false);
   /** 写作卡根（光标跟随滚动的搜索边界：正文滚动容器就在它里面）。 */
@@ -178,6 +188,29 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
     // 放在两次聚焦之后，确保 WebView/编辑器已经拿到焦点再弹。
     if (raiseKeyboard) window.setTimeout(() => showNativeKeyboard(), 300);
   }, [editNote, raiseKeyboard]);
+
+  /**
+   * 起手内容落地（261014）：内核就绪后把「拍摄 / 图片」的文件插进正文、「待办」切成待办列表。
+   * 插入只走 **insertFiles**（与 EditorDockHost 同一条通道）⇒ 与 dock 的文件插入行为完全一致；
+   * 插入会把光标带到卡片后，再要一次焦点，用户接着就能打字。
+   */
+  useEffect(() => {
+    const pending = pendingInsertRef.current;
+    if (!pending || !editorInstance) return;
+    pendingInsertRef.current = null;
+    const renderer = lakeBridge(editorInstance)?.renderer;
+    for (const file of pending.files ?? []) {
+      const kind = mediaKindOfFilename(file.name);
+      const opts = kind ? { category: kind, from: "ui" } : undefined;
+      try { renderer?.execCommand?.("insertFiles" as never, [file], opts as never); } catch { /* 插入失败不阻断写作 */ }
+    }
+    if (pending.command) {
+      try { renderer?.execCommand?.(pending.command as never); } catch { /* 命令失败不阻断写作 */ }
+    }
+    if (pending.files?.length) {
+      window.setTimeout(() => { try { apiRef.current?.focus(); } catch { /* 忽略：内核未就绪 */ } }, 0);
+    }
+  }, [editorInstance]);
 
   const uploadResource = useCallback(
     (request: unknown) =>
