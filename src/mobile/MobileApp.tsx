@@ -344,6 +344,7 @@ export function MobileApp() {
           onOpenSearch={() => setSearchOpen(true)}
           onCreateNotebook={() => setCreateNbOpen(true)}
           onCreateNote={(notebookId) => void createNoteInParent(notebookId)}
+          onTreeChanged={refreshAll}
           onQuickNotesChanged={refreshAll}
         />
       )}

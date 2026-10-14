@@ -12,6 +12,8 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 const WORKSPACE = read("./NotebookWorkspace.tsx");
 const APP = read("../MobileApp.tsx");
 const HOME = read("../home/HomePage.tsx");
+const HOMEPAGE = read("../home/HomePage.tsx");
+const GRID = read("../home/NotebookGrid.tsx");
 
 describe("工作区「更多」菜单（261014）", () => {
   it("不再有「设置」项，也不再有 onOpenSettings 这个死 prop", () => {
@@ -44,18 +46,23 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(WORKSPACE).not.toMatch(/id: "group"[^}]*disabled/);
   });
 
-  it("笔记本这一层也有 ⋮ 菜单与图标（261014）：新建/重命名/设置图标/删除，删除走回收站", () => {
-    // 笔记本行：图标 + ⋮（⋮ 在工具栏里，与行内 ⋮ 同语义）
-    expect(WORKSPACE).toContain('aria-label="笔记本菜单"');
-    const block = WORKSPACE.slice(WORKSPACE.indexOf("{/* 笔记本行的 ⋮ 菜单"), WORKSPACE.indexOf("{/* 更多（思源"));
+  it("笔记本编辑入口 = 首页「知识库」长按卡片（261014 用户最终定稿）", () => {
+    // 抽屉里**不再**有笔记本 ⋮（用户点单去掉），但仍展示笔记本自己的图标（只展示、不可点）
+    expect(WORKSPACE).not.toContain("笔记本菜单");
+    expect(WORKSPACE).not.toContain("notebookMenuOpen");
+    expect(WORKSPACE).toContain('className="mb-tree-icon" aria-hidden="true">{nbIcon ? nbIcon : <Book size={16} />}');
+    // 长按入口在知识库卡片上：NotebookGrid 必须接 onLongPressNotebook（书架卡与列表行都要）
+    expect(GRID).toContain("onLongPressNotebook");
+    expect(GRID.match(/pressProps\(nb\)/g)?.length).toBe(2);
+    // 菜单只有编辑三项 —— **不含**新建文档 / 新建分组（用户明确去掉）
+    const block = HOMEPAGE.slice(HOMEPAGE.indexOf("笔记本编辑菜单"), HOMEPAGE.indexOf("{/* 筛选 / 排序 */}"));
     const labels = [...block.matchAll(/label: "([^"]+)"/g)].map((m) => m[1]);
-    expect(labels).toEqual(["新建文档", "新建分组", "重命名", "设置图标", "删除笔记本"]);
-    // 图标：有自定义表情就展示它，否则默认 Book（与首页笔记本卡同款默认图标）
-    expect(WORKSPACE).toContain("{nbIcon ? nbIcon : <Book size={16} />}");
-    // 图标可点 = 设置图标（桌面 .tree-row-icon 的手势），且命中区走 mb-tap 补足
-    expect(WORKSPACE).toMatch(/className="mb-tree-icon mb-tap" aria-label="设置图标"/);
+    expect(labels).toEqual(["重命名", "设置图标", "删除笔记本"]);
     // 删除笔记本 = 整棵移入回收站（可恢复），不是物理删除
-    expect(WORKSPACE).toMatch(/trashTreeItem\(notebookId, "folder"\)/);
+    expect(HOMEPAGE).toMatch(/trashTreeItem\(nb\.id, "folder"\)/);
+    // 重命名/设置图标仍保留（能力没丢）
+    expect(HOMEPAGE).toMatch(/renameTreeNode\(cur\.id, value\)/);
+    expect(HOMEPAGE).toMatch(/setNodeIcon\(nb\.id, icon\)/);
   });
 
   it("设置入口仍在首页顶栏（功能没有丢）", () => {

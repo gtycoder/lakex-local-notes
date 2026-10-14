@@ -7,6 +7,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book } from "lucide-react";
+import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { EmojiPanel } from "../ui/EmojiPanel";
 import { bridge } from "../bridge";
@@ -22,7 +23,7 @@ import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
-import { longPressFeedback, successFeedback, warnFeedback } from "../ui/haptics";
+import { successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
 import type { LocalNote } from "../noteRepository";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
@@ -79,8 +80,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [createParent, setCreateParent] = useState<string>(notebookId);
   /** 笔记本自己的图标（抽屉首行要展示 + 可点改名图标，桌面同款手势）。 */
   const [nbIcon, setNbIcon] = useState<string | null>(null);
-  /** 笔记本行的 ⋮ 菜单（把行菜单能力扩展到笔记本这一层，用户 261014）。 */
-  const [notebookMenuOpen, setNotebookMenuOpen] = useState(false);
+
   const [navHidden, setNavHidden] = useState(false);
   // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
@@ -110,7 +110,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [iconFor, setIconFor] = useState<{ id: string; title: string } | null>(null);
   const [historyFor, setHistoryFor] = useState<NotebookTreeItem | null>(null);
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
-  const longPressTimer = useRef<number | null>(null);
+  /** 长按目标（hook 只能挂一次 ⇒ 用 ref 传"当前按下的那一行"）。 */
+  const pressedNode = useRef<NotebookTreeItem | null>(null);
   const iconSheetRef = useRef<HTMLDivElement>(null);
   const historySheetRef = useRef<HTMLDivElement>(null);
   useSwipeToClose(iconSheetRef, () => setIconFor(null), !!iconFor);
@@ -290,27 +291,22 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     } catch { showToast("新建失败", { type: "error" }); }
   }, [loadTree]);
 
-  // ---- 目录树长按管理 ----
-  const clearLongPress = () => {
-    if (longPressTimer.current !== null) { window.clearTimeout(longPressTimer.current); longPressTimer.current = null; }
-  };
-  const startLongPress = (e: React.TouchEvent, node: NotebookTreeItem) => {
-    clearLongPress();
-    const touch = e.touches[0];
-    if (!touch) return;
-    const startX = touch.clientX;
-    const startY = touch.clientY;
-    longPressTimer.current = window.setTimeout(() => {
-      longPressTimer.current = null;
-      longPressFeedback();
+  // ---- 目录树长按管理（计时/阈值/反馈 = 共用 hook，见 ui/useLongPress.ts）----
+  /** 长按 = 进入拖拽排序（菜单走行内 ⋯）。移动取消阈值取 0：目录行上一动就是要滚动，不能误判成长按。 */
+  const longPressRows = useLongPress((touch) => {
+    const node = pressedNode.current;
+    if (!node) return;
+    {
+      const startX = touch.clientX;
+      const startY = touch.clientY;
       // 关键：标记拖拽中 → CSS 给面板 touch-action:none，避免 WebView 把纵向手势判给滚动并 touchcancel 掉拖拽
       document.body.classList.add("nb-drag-active");
       // 长按 = 进入拖拽排序（菜单改由行内 ⋯ 触发）：克隆源行做跟手浮层，源行留在原位只降透明度（对齐思源）
       const sourceEl = document.querySelector<HTMLElement>('.side-panel-body [data-node-id="' + node.id + '"]');
       ghostRef.current = sourceEl ? createDragGhost(sourceEl, startX, startY) : null;
       setDrag({ id: node.id, overId: null, position: null, scrollDir: 0 });
-    }, 350);
-  };
+    }
+  }, { moveCancelPx: 0 });
   /** 提交拖拽：同父 → reorderSiblings；跨父/拖入分组 → moveTreeNodeOrdered。 */
   const commitDrag = useCallback(async () => {
     const d = dragRef.current;
@@ -427,17 +423,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     setRenamingId(null);
     if (id && v) { try { await bridge.renameTreeNode(id, v); await loadTree(); } catch { /* 忽略 */ } }
   }, [renamingId, renameValue, loadTree]);
-  /** 删除笔记本 = 整棵移入回收站（回收站里可恢复，与桌面笔记本右键同语义）；删完必须离开工作区。 */
-  const deleteNotebook = useCallback(async () => {
-    const ok = await confirmMobile({ title: "删除笔记本？", body: title, confirmText: "删除", danger: true });
-    if (!ok) return;
-    try {
-      await bridge.trashTreeItem(notebookId, "folder");
-      showToast("已移入回收站");
-      onBack();
-    } catch { showToast("删除失败", { type: "error" }); }
-  }, [notebookId, title, onBack]);
-
   const applyIcon = useCallback(async (icon: string | null) => {
     const n = iconFor; setIconFor(null);
     if (n) { try { await bridge.setNodeIcon(n.id, icon); await loadTree(); } catch { /* 忽略 */ } }
@@ -547,10 +532,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               if (hasChildren) { toggleGroup(it.id); return; }
               if (isNote) { openSidebar(false); void openTab(it.id); }
             }}
-            onTouchStart={(e) => startLongPress(e, it)}
-            onTouchMove={clearLongPress}
-            onTouchEnd={clearLongPress}
-            onTouchCancel={clearLongPress}
+            onTouchStart={(e) => { pressedNode.current = it; longPressRows.onTouchStart(e); }}
+            onTouchMove={longPressRows.onTouchMove}
+            onTouchEnd={longPressRows.onTouchEnd}
+            onTouchCancel={longPressRows.onTouchCancel}
             onContextMenu={(e) => e.preventDefault()}
           >
             {hasChildren ? <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} /> : <span className="mb-chevron-spacer" />}
@@ -691,28 +676,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         }}
       />
 
-      {/* 笔记本行的 ⋮ 菜单（用户 261014：把行菜单能力扩展到笔记本这一层；语义与桌面笔记本右键一致：
-          新建（文档/分组）+ 重命名 + 设置图标 + 删除（整棵入回收站，可恢复））。 */}
-      <MobileSheetMenu
-        open={notebookMenuOpen}
-        items={[
-          { id: "new-note", label: "新建文档", icon: File },
-          { id: "new-group", label: "新建分组", icon: FolderPlus },
-          { id: "rename", label: "重命名", icon: Pencil },
-          { id: "icon", label: "设置图标", icon: SmilePlus },
-          { id: "delete", label: "删除笔记本", icon: Trash, danger: true },
-        ]}
-        onClose={() => setNotebookMenuOpen(false)}
-        onSelect={(it) => {
-          setNotebookMenuOpen(false);
-          if (it.id === "new-note") void createChildDoc(notebookId);
-          else if (it.id === "new-group") void createChildGroup(notebookId);
-          else if (it.id === "rename") { setRenamingId(notebookId); setRenameValue(title); }
-          else if (it.id === "icon") setIconFor({ id: notebookId, title });
-          else if (it.id === "delete") void deleteNotebook();
-        }}
-      />
-
       {/* 更多（思源 #menu）。**不要**再把「搜索」「设置」放回来 —— 用户 261014 点单删掉：
           设置 = 首页左上齿轮（统一入口）；搜索 = 首页底部胶囊（同一份全局搜索 Sheet，且是全库范围、
           不是"笔记本内搜索"）⇒ 工作区里再放一份只是重复。本菜单只留"新建文档 / 切换笔记本 / 编辑本文"。 */}
@@ -738,10 +701,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
           <div className="toolbar__scroll">
             {/* 笔记本自己也是一行（用户 261014）：**图标 + 标题**；图标可点 = 设置图标（桌面 .tree-row-icon 同款手势） */}
-            <span role="button" tabIndex={0} className="mb-tree-icon mb-tap" aria-label="设置图标" title="设置图标"
-              onClick={() => setIconFor({ id: notebookId, title })}>
-              {nbIcon ? nbIcon : <Book size={16} />}
-            </span>
+            <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? nbIcon : <Book size={16} />}</span>
             {renamingId === notebookId ? (
               <input
                 className="mb-input"
@@ -756,8 +716,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <span className="toolbar__text">{title}</span>
             )}
           </div>
-          {/* 笔记本这一层的 ⋮（用户 261014：把行菜单能力扩展到笔记本） */}
-          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => setNotebookMenuOpen(true)} aria-label="笔记本菜单" title="更多"><MoreVertical /></span>
+          {/* 笔记本这一层**不放** ⋮（用户 261014：抽屉里的编辑入口去掉，改到首页「知识库」长按卡片） */}
           {/* 261014 用户点单：目录栏加「新建」（桌面同款清单） */}
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => { setCreateParent(notebookId); setCreateOpen(true); }} aria-label="新建" title="新建"><Plus /></span>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>

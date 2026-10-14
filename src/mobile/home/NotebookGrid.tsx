@@ -5,9 +5,11 @@
  * 排序：**不提供移动端重排**（知识库顺序 = 桌面/同步的 sort_order，见 HANDOFF/AGENTS 同步语义——
  *       移动端不写 sort_order，展示的就是共享目录顺序 = 桌面端顺序）。长按拖动重排已移除，点击直接进入。
  */
+import { useRef } from "react";
 import type { TreeNode } from "../../lib/types";
 import type { LibraryView } from "./HomePage";
 import { Book, ChevronRight } from "lucide-react";
+import { useLongPress } from "../ui/useLongPress";
 
 /** 更新时间（仿语雀：今天/昨天 HH:mm，更早 MM-DD）。 */
 function fmtUpdated(iso: string | undefined): string {
@@ -29,10 +31,51 @@ export interface NotebookGridProps {
   /** 布局：shelf=书架宫格 / list=列表行 */
   view: LibraryView;
   onOpenNotebook: (id: string) => void;
+  /** 长按笔记本（书卡 / 列表行）→ 打开编辑菜单（重命名 / 设置图标 / 删除笔记本）。用户 261014 定：笔记本编辑走这里。 */
+  onLongPressNotebook?: (nb: TreeNode) => void;
+  /** 就地重命名（与目录树行同语义）：正在改的 id + 值 + 回调。 */
+  renamingId?: string | null;
+  renameValue?: string;
+  onRenameChange?: (value: string) => void;
+  onRenameCommit?: () => void;
+  onRenameCancel?: () => void;
 }
 
 export function NotebookGrid(props: NotebookGridProps) {
-  const { notebooks, docCounts, view, onOpenNotebook } = props;
+  const {
+    notebooks, docCounts, view, onOpenNotebook, onLongPressNotebook,
+    renamingId = null, renameValue = "", onRenameChange, onRenameCommit, onRenameCancel,
+  } = props;
+  /** 长按目标是"当前按下的那张卡"（hook 只能挂一次 ⇒ 用 ref 传目标）。 */
+  const pressed = useRef<TreeNode | null>(null);
+  /** 长按过的那一次要吞掉随后的 click（否则长按开菜单的同时又进了笔记本）。 */
+  const suppressClick = useRef(false);
+  const longPress = useLongPress(() => {
+    const nb = pressed.current;
+    if (!nb) return;
+    suppressClick.current = true;
+    window.setTimeout(() => { suppressClick.current = false; }, 400);
+    onLongPressNotebook?.(nb);
+  });
+  const pressProps = (nb: TreeNode) => ({
+    onTouchStart: (e: React.TouchEvent) => { pressed.current = nb; longPress.onTouchStart(e); },
+    onTouchMove: longPress.onTouchMove,
+    onTouchEnd: longPress.onTouchEnd,
+    onTouchCancel: longPress.onTouchCancel,
+  });
+  const openNotebook = (nb: TreeNode) => { if (suppressClick.current) return; onOpenNotebook(nb.id); };
+  /** 就地重命名输入框（两个视图共用同一份，避免两套）。 */
+  const renameInput = (className: string) => (
+    <input
+      className={"mb-input " + className}
+      autoFocus
+      value={renameValue}
+      onChange={(e) => onRenameChange?.(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onBlur={() => onRenameCommit?.()}
+      onKeyDown={(e) => { if (e.key === "Enter") onRenameCommit?.(); if (e.key === "Escape") onRenameCancel?.(); }}
+    />
+  );
 
   if (notebooks.length === 0) return <div className="mb-empty">暂无知识库</div>;
 
@@ -43,13 +86,16 @@ export function NotebookGrid(props: NotebookGridProps) {
         {notebooks.map((nb) => {
           const count = docCounts[nb.id] ?? 0;
           return (
-            <div key={nb.id} className="nb-shelf-card" role="button" tabIndex={0} onClick={() => onOpenNotebook(nb.id)}>
+            <div key={nb.id} className="nb-shelf-card" role="button" tabIndex={0} data-prevent-swipe
+              onClick={() => openNotebook(nb)} {...pressProps(nb)}>
               <div className="nb-shelf-cover">
                 <span className="nb-shelf-glyph">
                   {nb.icon ? <span className="nb-shelf-emoji">{nb.icon}</span> : <Book size={26} strokeWidth={1.75} className="nb-shelf-line" />}
                 </span>
               </div>
-              <div className="nb-shelf-name">{nb.title || "未命名"}</div>
+              {renamingId === nb.id
+                ? renameInput("nb-shelf-name")
+                : <div className="nb-shelf-name">{nb.title || "未命名"}</div>}
               <div className="nb-shelf-count">{count} 篇</div>
             </div>
           );
@@ -66,12 +112,15 @@ export function NotebookGrid(props: NotebookGridProps) {
         const count = docCounts[nb.id] ?? 0;
         const updated = fmtUpdated(nb.updatedAt);
         return (
-          <div key={nb.id} className="nb-row" role="button" tabIndex={0} onClick={() => onOpenNotebook(nb.id)}>
+          <div key={nb.id} className="nb-row" role="button" tabIndex={0} data-prevent-swipe
+            onClick={() => openNotebook(nb)} {...pressProps(nb)}>
             <span className="nb-row__tile">
               {nb.icon ? <span className="nb-row__emoji">{nb.icon}</span> : <Book size={20} strokeWidth={1.9} />}
             </span>
             <span className="nb-row__main">
-              <span className="nb-row__title">{nb.title || "未命名"}</span>
+              {renamingId === nb.id
+                ? renameInput("nb-row__title")
+                : <span className="nb-row__title">{nb.title || "未命名"}</span>}
               <span className="nb-row__sub">{count} 篇{updated ? ` · ${updated}` : ""}</span>
             </span>
             <span className="nb-row__arrow"><ChevronRight size={16} /></span>

@@ -8,7 +8,7 @@
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, Sparkles, Trash } from "lucide-react";
+import { CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Trash, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
@@ -18,6 +18,7 @@ import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
 import { CREATE_LONG_PRESS_MS, blockPressRelease, createPressArmed, createPressRevealed } from "../ui/createPress";
 import { pickLocalFile } from "../ui/pickFile";
 import { longPressFeedback } from "../ui/haptics";
+import { EmojiPanel } from "../ui/EmojiPanel";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
@@ -59,6 +60,8 @@ export interface HomePageProps {
   onCreateNotebook: () => void;
   /** 「空白文档」：在用户选中的笔记本下建文档并进编辑态（归属判定复用 MobileApp.createNoteInParent）。 */
   onCreateNote: (notebookId: string) => void;
+  /** 目录树（笔记本/分组）变了以后刷新数据（重命名 / 设置图标 / 删除笔记本都走它）。 */
+  onTreeChanged: () => Promise<void>;
   onQuickNotesChanged: () => Promise<void>;
 }
 
@@ -101,7 +104,7 @@ function fmtRelative(iso: string): string {
 export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
-    onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onCreateNote, onQuickNotesChanged,
+    onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
@@ -112,6 +115,13 @@ export function HomePage(props: HomePageProps) {
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
   const [docPickOpen, setDocPickOpen] = useState(false);
+  /**
+   * 笔记本的**编辑入口 = 知识库页长按卡片**（用户 261014 定；抽屉里那个 ⋮ 已按同一条点单删掉）。
+   * 菜单只放"编辑"三项：重命名 / 设置图标 / 删除笔记本 —— **不含**新建文档、新建分组（用户明确去掉）。
+   */
+  const [nbMenuFor, setNbMenuFor] = useState<TreeNode | null>(null);
+  const [renamingNb, setRenamingNb] = useState<{ id: string; value: string } | null>(null);
+  const [iconNb, setIconNb] = useState<TreeNode | null>(null);
   /** 「＋」按压态（语雀手感）：revealed = 长按到点浮出气泡，armed = 已上滑越过触发线。 */
   const [pressRevealed, setPressRevealed] = useState(false);
   const [pressArmed, setPressArmed] = useState(false);
@@ -287,6 +297,33 @@ export function HomePage(props: HomePageProps) {
     setQuickSort(item.id as QuickSort);
   };
 
+  /** 笔记本编辑三项（用户 261014：入口 = 知识库页长按；抽屉里那个 ⋮ 已删）。 */
+  const renameNotebook = async (): Promise<void> => {
+    const cur = renamingNb;
+    setRenamingNb(null);
+    const value = cur?.value.trim();
+    if (!cur || !value) return;
+    try { await bridge.renameTreeNode(cur.id, value); await onTreeChanged(); }
+    catch { showToast("重命名失败", { type: "error" }); }
+  };
+  const applyNotebookIcon = async (icon: string | null): Promise<void> => {
+    const nb = iconNb; setIconNb(null);
+    if (!nb) return;
+    try { await bridge.setNodeIcon(nb.id, icon); await onTreeChanged(); }
+    catch { showToast("设置图标失败", { type: "error" }); }
+  };
+  /** 删除笔记本 = 整棵移入回收站（可恢复，与桌面笔记本右键同语义）。 */
+  const deleteNotebook = async (nb: TreeNode): Promise<void> => {
+    const ok = await confirmMobile({
+      title: "删除笔记本？",
+      body: (nb.title || "未命名") + "：连同其中的文档一起移入回收站，可在回收站恢复。",
+      confirmText: "删除", danger: true,
+    });
+    if (!ok) return;
+    try { await bridge.trashTreeItem(nb.id, "folder"); await onTreeChanged(); showToast("已移入回收站"); }
+    catch { showToast("删除失败", { type: "error" }); }
+  };
+
   const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;
 
   return (
@@ -366,6 +403,12 @@ export function HomePage(props: HomePageProps) {
               docCounts={docCounts}
               view={libraryView}
               onOpenNotebook={onOpenNotebook}
+              onLongPressNotebook={(nb) => setNbMenuFor(nb)}
+              renamingId={renamingNb?.id ?? null}
+              renameValue={renamingNb?.value ?? ""}
+              onRenameChange={(value) => setRenamingNb((cur) => (cur ? { ...cur, value } : cur))}
+              onRenameCommit={() => void renameNotebook()}
+              onRenameCancel={() => setRenamingNb(null)}
             />
           </section>
         </div>
@@ -411,6 +454,40 @@ export function HomePage(props: HomePageProps) {
         onClose={() => setQuickMenuFor(null)}
         onSelect={(it) => { const id = quickMenuFor; setQuickMenuFor(null); if (!id) return; if (it.id === "edit") void openEdit(id); else if (it.id === "delete") void deleteQuickNote(id); }}
       />
+
+      {/* 笔记本编辑菜单（**知识库页长按卡片**触发；用户 261014）。只放编辑三项 —— **不含**新建文档 / 新建分组。 */}
+      <MobileSheetMenu
+        open={!!nbMenuFor}
+        items={[
+          { id: "rename", label: "重命名", icon: Pencil },
+          { id: "icon", label: "设置图标", icon: SmilePlus },
+          { id: "delete", label: "删除笔记本", icon: Trash, danger: true },
+        ]}
+        onClose={() => setNbMenuFor(null)}
+        onSelect={(it) => {
+          const nb = nbMenuFor;
+          setNbMenuFor(null);
+          if (!nb) return;
+          if (it.id === "rename") setRenamingNb({ id: nb.id, value: nb.title || "" });
+          else if (it.id === "icon") setIconNb(nb);
+          else if (it.id === "delete") void deleteNotebook(nb);
+        }}
+      />
+
+      {/* 设置图标：与目录树 / 新建知识库共用同一个表情面板（EmojiPanel 是面板的唯一实现） */}
+      {iconNb && (
+        <div className="mb-scrim" data-prevent-swipe onClick={() => setIconNb(null)}>
+          <div className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
+            <div className="mb-sheet__head">
+              <span className="mb-sheet__title">设置图标</span>
+              <button className="mobile-icon-btn" onClick={() => setIconNb(null)} aria-label="关闭"><X size={20} /></button>
+            </div>
+            <div className="mb-sheet__body">
+              <EmojiPanel onPick={(icon) => void applyNotebookIcon(icon)} onClear={() => void applyNotebookIcon(null)} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 筛选 / 排序 */}
       <MobileSheetMenu
