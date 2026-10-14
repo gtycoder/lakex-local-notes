@@ -57,6 +57,22 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
     expect(MULTITAB).not.toContain("切换到垂直");
   });
 
+  it("复合的分屏标签右键 = 分屏专属菜单（取消分屏 / 左右互换），不混入单页语义（261014 用户点单）", () => {
+    // 合并标签自己带 onContextMenu，并打上 split 标记
+    const groupAt = MULTITAB.indexOf('data-split-group="true"');
+    const ctxAt = MULTITAB.indexOf("onContextMenu={(event) => {", groupAt);
+    expect(groupAt).toBeGreaterThan(-1);
+    expect(ctxAt, "合并标签自己带 onContextMenu（右键分屏菜单）").toBeGreaterThan(groupAt);
+    expect(MULTITAB).toContain("split: true");
+    // 菜单在 split 模式下只给两项（取消分屏 / 左右互换），直接 return、不落到单页那套
+    expect(MULTITAB).toMatch(/if \(split\) \{\s*return \(/);
+    expect(MULTITAB).toMatch(/split\.onExit\(\)[\s\S]{0,200}取消分屏/);
+    expect(MULTITAB).toMatch(/split\.onSwap\(\)[\s\S]{0,200}左右互换/);
+    // 两个动作都接在 App 既有回调上（不新造一套分屏开关）
+    expect(MULTITAB).toContain("onExitSplit?.()");
+    expect(MULTITAB).toContain("onSwapSplit?.()");
+  });
+
   it("分屏在标签栏 = 一个合并标签（Edge 式）：点它进分屏、点其它标签不替换", () => {
     // 合并标签：一个 tab-item，两段标题 + 分隔线 + 分组图标 + **一个** ×
     expect(MULTITAB).toContain("tab-split-tab");

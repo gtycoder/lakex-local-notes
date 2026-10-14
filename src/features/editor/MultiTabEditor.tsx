@@ -174,7 +174,7 @@ export function MultiTabEditor({
     []
   );
   const pinned = pinnedNoteIds ?? EMPTY_PINNED;
-  const [tabCtx, setTabCtx] = useState<{ noteId: string; x: number; y: number } | null>(null);
+  const [tabCtx, setTabCtx] = useState<{ noteId: string; x: number; y: number; split?: boolean } | null>(null);
 
   // ---- 分屏（261008）：左右两栏、最多两个、不同文档、临时不持久化 ----
   const panelsRef = useRef<HTMLDivElement>(null);
@@ -451,6 +451,13 @@ export function MultiTabEditor({
                   title={`分屏：${splitLeftTab?.title || "无标题"} ｜ ${splitRightTab?.title || "无标题"}`}
                   aria-label={`分屏组：${splitLeftTab?.title || "无标题"}${splitLeftTab?.deleted ? "（已删除）" : ""} ｜ ${splitRightTab?.title || "无标题"}${splitRightTab?.deleted ? "（已删除）" : ""}`}
                   onClick={() => { if (suppressClickRef.current) return; onActivateSplit?.(); }}
+                  /* 261014 用户点单：复合的二合一标签**右键**给出分屏专属动作（取消分屏 / 左右互换）。
+                     与普通标签的右键菜单（关闭/钉住）分开：这个标签代表**两页**，单页语义在这里不成立。 */
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (splitFirstNote) setTabCtx({ noteId: splitFirstNote, x: event.clientX, y: event.clientY, split: true });
+                  }}
                 >
                   <span className="tab-split-tab__half">
                     {splitLeftTab && pinned.has(splitLeftTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
@@ -684,6 +691,7 @@ export function MultiTabEditor({
         <TabContextMenu
           x={tabCtx.x}
           y={tabCtx.y}
+          split={tabCtx.split ? { onExit: () => onExitSplit?.(), onSwap: () => onSwapSplit?.() } : undefined}
           pinned={pinned.has(tabCtx.noteId)}
           canCloseOthers={tabs.length > 1}
           hasLeft={tabs.findIndex((t) => t.noteId === tabCtx.noteId) > 0}
@@ -828,6 +836,8 @@ function SplitPaneControls({ onExit, onSwap }: { onExit: () => void; onSwap: () 
 interface TabContextMenuProps {
   x: number;
   y: number;
+  /** 复合的分屏标签：只给分屏专属动作（取消分屏 / 左右互换），不混入单页的关闭/钉住语义。 */
+  split?: { onExit: () => void; onSwap: () => void };
   pinned: boolean;
   onTogglePin: () => void;
   onCloseTab: () => void;
@@ -841,9 +851,17 @@ interface TabContextMenuProps {
   onClose: () => void;
 }
 
-const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, canCloseOthers, hasLeft, hasRight, onClose }: TabContextMenuProps) => {
+const TabContextMenu = ({ x, y, split, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, canCloseOthers, hasLeft, hasRight, onClose }: TabContextMenuProps) => {
   // 坐标菜单统一走「先量尺寸、贴底翻上方」的共用定位（不再按 210/280 估算高度夹取）
   const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y } });
+  if (split) {
+    return (
+      <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
+        <button role="menuitem" onClick={() => { split.onExit(); onClose(); }}><X size={15} /><span>取消分屏</span></button>
+        <button role="menuitem" onClick={() => { split.onSwap(); onClose(); }}><ArrowLeftRight size={15} /><span>左右互换</span></button>
+      </Menu>
+    );
+  }
   return (
     <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
       <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
