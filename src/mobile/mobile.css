@@ -567,6 +567,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .side-panel > .toolbar .toolbar__icon > svg { width: 18px; height: 18px; }
 .side-panel > .toolbar .toolbar__text { font-size: 15px; padding-left: 8px; }
 .side-panel > .toolbar { background-color: var(--lake-bg-panel); min-height: 48px; }
+/* 抽屉首行 = 笔记本行（图标 + 标题）：左侧留出与页面内距同档的空间（用户 261014：图标太贴边、顶到抽屉边缘）。
+   只作用在抽屉工具栏的滚动区，其它工具栏不受影响。 */
+.side-panel > .toolbar .toolbar__scroll { padding-left: var(--mb-page-pad); }
 .side-panel > .toolbar .toolbar__text { padding-left: 12px; }
 
 /* ===== B5 第一层（小记 / 知识库）：思源列表语言 + 底部胶囊栏留白 ===== */
