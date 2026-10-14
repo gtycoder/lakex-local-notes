@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { EditorErrorBoundary } from "./EditorErrorBoundary";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, GripVertical, MoreHorizontal, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
@@ -685,7 +685,6 @@ export function MultiTabEditor({
             onCommit={(next) => setSplitLeft(next)}
           />
         )}
-        {splitActive && <SplitPaneControls onExit={() => onExitSplit?.()} onSwap={() => onSwapSplit?.()} />}
       </div>
       {tabCtx && (
         <TabContextMenu
@@ -739,99 +738,6 @@ export function MultiTabEditor({
   );
 }
 
-
-/** 分屏浮动工具条（用户 261008 定稿）：浮在两栏之上、**按住可拖到任意位置**；
- *  内容 = 拖拽把手 + `⋯` 菜单（取消分屏 / 左右互换）+ `×`。位置只存内存（分屏本身临时、不持久化）。 */
-function SplitPaneControls({ onExit, onSwap }: { onExit: () => void; onSwap: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const pillRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLElement | null>(null);
-  const { surfaceRef, style } = usePopoverPosition({ open, anchor: btnRef.current, align: "end" });
-  /** Menu 是 portal 到 body 的：outside-dismiss 必须把浮层表面也算「里面」，否则真实鼠标 pointerdown 会先把菜单关掉、选择被吞。 */
-  const setMenuRef = useCallback((el: HTMLElement | null) => { menuRef.current = el; surfaceRef(el); }, [surfaceRef]);
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest("[data-split-controls]") && !menuRef.current?.contains(target)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  /** 按住工具条（按钮以外）拖动：坐标相对分栏容器、夹在容器内；只写内存。 */
-  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
-    const pill = pillRef.current;
-    const container = pill?.offsetParent as HTMLElement | null;
-    if (!pill || !container) return;
-    event.preventDefault();
-    const pillRect = pill.getBoundingClientRect();
-    const box = container.getBoundingClientRect();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const originLeft = pillRect.left - box.left;
-    const originTop = pillRect.top - box.top;
-    setDragging(true);
-    const onMove = (ev: PointerEvent) => {
-      const maxLeft = Math.max(0, box.width - pillRect.width);
-      const maxTop = Math.max(0, box.height - pillRect.height);
-      const x = Math.max(0, Math.min(originLeft + (ev.clientX - startX), maxLeft));
-      const y = Math.max(0, Math.min(originTop + (ev.clientY - startY), maxTop));
-      setPos({ x, y });
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-      setDragging(false);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-  }, []);
-
-  return (
-    <div
-      ref={pillRef}
-      className={`tab-split-controls${dragging ? " is-dragging" : ""}`}
-      data-split-controls
-      style={pos ? { left: pos.x, top: pos.y, right: "auto" } : undefined}
-      onPointerDown={onPointerDown}
-      title="按住拖动可移到任意位置"
-    >
-      <span className="tab-split-grip" aria-hidden="true"><GripVertical size={14} /></span>
-      <button
-        ref={btnRef}
-        type="button"
-        className="ln-iconbtn ln-iconbtn--compact tab-split-btn"
-        aria-label="分屏选项"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <MoreHorizontal size={15} />
-      </button>
-      <button type="button" className="ln-iconbtn ln-iconbtn--compact tab-split-btn" aria-label="取消分屏" onClick={onExit}>
-        <X size={14} />
-      </button>
-      {open && (
-        <Menu surfaceClassName="context-menu" label="分屏" onDismiss={() => setOpen(false)} surfaceRef={setMenuRef} style={style ?? undefined}>
-          <button role="menuitem" onClick={() => { onExit(); setOpen(false); }}><X size={15} /><span>取消分屏</span></button>
-          <button role="menuitem" onClick={() => { onSwap(); setOpen(false); }}><ArrowLeftRight size={15} /><span>左右互换</span></button>
-        </Menu>
-      )}
-    </div>
-  );
-}
 
 interface TabContextMenuProps {
   x: number;

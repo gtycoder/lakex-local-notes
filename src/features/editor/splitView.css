@@ -8,8 +8,7 @@
 
 .tab-panels.is-split {
   grid-template-columns: minmax(0, var(--split-left, 1fr)) minmax(0, 1fr);
-  /* 只作浮动工具条的定位基准（base 是 static，否则 absolute 会窜到 .document-pane 顶上）。
-     不再放开 overflow：控件**不躲在栏顶**，而是浮在两栏之上、可被拖到任意位置。 */
+  /* 只作分隔条的定位基准（base 是 static，否则 absolute 会窜到 .document-pane 顶上）。 */
   position: relative;
 }
 
@@ -26,50 +25,6 @@
   width: 0;
 }
 
-/* 右栏右上角：细箭头菜单（取消分屏 / 左右互换）+ 关闭。浮在内容之上，尽量不挡正文。 */
-/* 分屏浮动工具条（用户 261008 定稿）：**浮在两栏之上、可拖到任意位置**，不属于任一栏 ⇒
-   不会被任何编辑器自己的工具条盖住；默认停在右栏**工具条下方**（那是最不挡内容的位置）。
-   261012 修：顶边原先只加 `--editor-toolbar-height`，漏了宿主内的**面包屑**（--breadcrumb-height），
-   实测落在工具条带内、盖住焦点栏工具条右端按钮（那枚按钮点不到）；头部栈是「面包屑 + 工具条」，
-   与 PANEL-CONTRACT §1 的垂直几何同源。 */
-.tab-split-controls {
-  position: absolute;
-  top: calc(var(--breadcrumb-height) + var(--editor-toolbar-height) + var(--lake-space-md));
-  right: var(--lake-space-md);
-  z-index: var(--lake-z-editor-sticky);
-  display: flex;
-  align-items: center;
-  gap: var(--lake-space-xxs);
-  padding: var(--lake-space-xxs) var(--lake-space-xs);
-  border-radius: var(--lake-radius-pill);
-  background: var(--lake-bg-panel);
-  border: 1px solid var(--lake-border-1);
-  box-shadow: var(--lake-shadow-popover);
-  cursor: grab;
-}
-
-.tab-split-controls.is-dragging {
-  cursor: grabbing;
-}
-
-/* 拖拽把手：按住它（或工具条空白处）即可把整条拖到别处。 */
-.tab-split-controls .tab-split-grip {
-  display: flex;
-  align-items: center;
-  color: var(--lake-text-4);
-  cursor: inherit;
-}
-
-/* 两枚按钮做成**实心圆**（保留用户 261008 的定稿观感）。
-   `.ln-iconbtn` 负责交互状态（hover/focus/disabled），这里只换「盒子」为实心圆。 */
-.tab-split-controls .tab-split-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--lake-radius-pill);
-  background: var(--lake-bg-block);
-  border: 1px solid var(--lake-border-1);
-}
-
-.tab-split-controls .tab-split-btn:hover {
-  border-color: var(--lake-border-strong);
-}
+/* 分屏动作**只在合并标签的右键菜单里**（261014 用户点单："去掉浮动条吧，彻底清除了"）：
+   这里原先的 `.tab-split-controls` 浮动药丸（把手 + ⋯ + ×，可拖到任意位置）**已整体删除** ——
+   它的 ⋯ 菜单与 × 与右键菜单重复，且浮在正文上挡内容。不要再把它加回来。 */

@@ -78,11 +78,10 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
   "features/attachment/attachment-preview.css": { decls: 82, dupGroups: 0 },   // 260928：+4 = 预览表面与图片 Lightbox 同源（backdrop-filter blur ×2）+ 工具栏浅色化的 border-bottom + macOS 红绿灯让位 .is-mac（合法新增，非覆盖回涨）
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
-  // 261008：文档分屏（.tab-panels.is-split 两列 + data-pane 分列 + 分隔条定位 + 右栏控件 + 分屏标签下划线）——全新文件，合法新增
-  // 261008 续：20 → 23 = 右栏控件由「白药丸」改 Edge 式**贴角圆形按钮**（.tab-split-btn 盒子 + hover 边）
-  // 261008 续：26 → 34 = 放弃「骑线」（与各编辑器自己的工具条冲突）→ 改**可拖的浮动工具条**
-  //   （.tab-split-controls 药丸 + .tab-split-grip 把手 + .is-dragging + 两枚实心圆钮）
-  "features/editor/splitView.css": { decls: 34, dupGroups: 0 },
+  // 261008：文档分屏（.tab-panels.is-split 两列 + data-pane 分列 + 分隔条定位 + 分屏标签下划线）——全新文件，合法新增
+  // 261014：34 → **9** = 浮动工具条（.tab-split-controls 药丸 + .tab-split-grip 把手 + .is-dragging + 两枚实心圆钮）**整体删除**
+  //   （用户："去掉浮动条吧，彻底清除了"）⇒ 基线**调小**（只许降）；分屏动作改走合并标签右键菜单，未新增任何样式
+  "features/editor/splitView.css": { decls: 9, dupGroups: 0 },
   "features/outline/outline.css": { decls: 259, dupGroups: 0 },
   "features/editor/selectionToolbar/selectionToolbar.css": { decls: 230, dupGroups: 0 },   // 261004 续：+7 = AI 弹窗右下角**垂直**拖拽把手 `.ai-dialog__grip`（只改高度）及其 hover；按钮行右侧留出把手位。此前 223：261004：AI 弹窗改为「外壳 max-height + 面板内滚动」——新增 .ai-dialog 纵向 flex + overflow、body 的 flex/min-height/overflow、bar 与 actions 的 flex:none（共 +8），并删掉 .ai-dialog__thread 的 max-height/overflow（-2）⇒ 净 +6。此前 217：260930「格式」父入口（+8）= 当前格式图标 + 颜色同款内核箭头的自写几何（含 width:auto —— 内核把按钮定死 26px，不放开箭头会被挤成 0 宽）+ 菜单项的图标/常规字号标签（内核 .ne-ui-item-content 是 16px/700，不适用）；再 +10 = 「标题1–6」二级菜单（贴行右侧展开 / is-flip 翻左侧 / 箭头格）。此前：+4 = 动作行换行（无遮罩浮层）；+16 = AI 助手对齐云端视觉（面板内边距/分隔/消息气泡/生成提示）；+43 = AI 助手对话框，表面/按钮复用 ln-dialog/ln-btn   // +1 = Lake 颜色面板的 native color input 覆盖整行透明命中层；+2 = __kmenu / __cardpop 各加 width:max-content
   // 260924 续：图片形态改内核卡片工具栏结构 + 云端顺序 ⇒ 删自有 menu/item/row/input/apply（-53），+4 外壳只定位；再 +45 = 图片弹窗（宽高/链接/边距）的 __cardpop 白卡 + 输入/复选/开关行 + 百分比段（均 --lake-* 令牌）；

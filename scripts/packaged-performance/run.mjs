@@ -426,10 +426,11 @@ try {
     enterMs: performance.now() - splitT,
     measurement: await endMeasure(),
     ...(await r.evaluate(
-      `({panes:document.querySelectorAll('[data-pane-visible="true"]').length,controls:!!document.querySelector('.tab-split-controls'),dom:document.querySelectorAll('*').length})`,
+      `({panes:document.querySelectorAll('[data-pane-visible="true"]').length,handle:!!document.querySelector('.ln-split-handle'),dom:document.querySelectorAll('*').length})`,
     )),
   };
-  if (result.split.panes !== 2 || !result.split.controls)
+  // 261014：浮动控制条已删除 ⇒ 两栏态的信号改用分隔条（.ln-split-handle，分屏唯一实现）
+  if (result.split.panes !== 2 || !result.split.handle)
     throw Error("split did not reach two-pane state");
   await screenshot("split");
   await click(`document.querySelector('button[aria-label="分屏"]')`);

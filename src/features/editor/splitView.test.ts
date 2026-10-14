@@ -50,8 +50,12 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
     expect(MULTITAB).toContain("onCommit={(next) => setSplitLeft(next)}");
   });
 
-  it("右栏右上角只有 2 个选项：取消分屏 / 左右互换", () => {
-    expect(MULTITAB).toContain("tab-split-controls");
+  it("浮动工具条已彻底移除；分屏动作只在合并标签的右键菜单里（取消分屏 / 左右互换）", () => {
+    // 261014 用户点单："去掉浮动条吧，彻底清除了" ⇒ 组件与样式都不许再回来
+    expect(MULTITAB).not.toContain("SplitPaneControls");
+    expect(MULTITAB).not.toContain("tab-split-controls");
+    // CSS 里允许在注释中提到它（写明"已删除、别再回来"），但**不许再有任何规则**
+    expect(SPLITCSS).not.toContain(".tab-split-controls {");
     expect(MULTITAB).toContain("取消分屏");
     expect(MULTITAB).toContain("左右互换");
     expect(MULTITAB).not.toContain("切换到垂直");

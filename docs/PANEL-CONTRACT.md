@@ -19,10 +19,9 @@
 - 目录 peek 顶边 `--lake-dir-peek-top` = **topbar + 4px 拼接缝**（261013 用户定稿）——从可见顶栏下缘浮出，**不依赖面包屑 / 工具条 / 文档类型**；临时盖住面包屑与工具条，用完即收。底部仍距窗口 **12px**（高度 = `100vh - peek-top - 12px`），固定目录不受影响。
 - 浮层顶 / 左缘热区顶 `--lake-floating-panel-top` = topbar + 4 + breadcrumb + toolbar（= **100**）——**不盖工具条**。
 - 阅读态大纲 `.ne-viewer-toc-sidebar` 的 `top` = topbar + 4 + breadcrumb（窗口坐标，= **66**）。
-- 分屏浮动工具条 `.tab-split-controls` 顶边 = **breadcrumb + toolbar + `--lake-space-md`**（相对 `.tab-panels`；
-  261012 修：原先只加 `--editor-toolbar-height`，浮条落进工具条带、实测盖住焦点栏工具条最后一枚按钮）。
-  `--lake-editor-top` 在同场景**不可用**：它按**焦点栏**量（`useEditorTopVar`），而分屏焦点栏是表格/多维表/画板时
-  宿主内无面包屑、该变量实测为 **0**。
+- 分屏**没有浮动控制条**（261014 用户点单**彻底删除** `.tab-split-controls`；分屏动作走合并标签的右键菜单，见
+  `docs/HANDOFF.md` §3#21）。注意 `--lake-editor-top` 在分屏场景**不可用**：它按**焦点栏**量（`useEditorTopVar`），
+  而分屏焦点栏是表格/多维表/画板时宿主内无面包屑、该变量实测为 **0**。
 - 编辑区可视顶 `--lake-editor-top`（**相对 `.document-pane`**）= **运行时量测**（`src/hooks/useEditorTopVar.ts`），当前 **64** = 面包屑 + 工具条；工具条隐藏 / 换高 / 切主题自动跟随。**不要**改回写死（这是 260922 用户立规）。
 - 标签胶囊高走**独立令牌** `--tab-item-height`（与顶栏解耦：顶栏收窄不牵动标签）；`.tab-bar` 垂直内距 = (顶栏 − 标签)/2 ⇒ 标签恒居中。`.tab-items` 有 `overflow-y:hidden`，**内距必须由这个差值派生**，写死会裁标签。
 - **macOS 红绿灯**（native，不在 DOM）：位置由主进程从共享常量 `src/lib/layoutMetrics.ts` 的 `TOPBAR_HEIGHT` / `TRAFFIC_LIGHT_DIAMETER` 算出 —— `y = (顶栏 − 12)/2`，使红绿灯中心 = 顶栏中心。**禁止写死 y**（曾因顶栏 38→32 错位 3px）；`layoutMetrics.test.ts` 卡住它与 `base.css` 的 `--topbar-height` 一致。
