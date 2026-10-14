@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, Shapes, Workflow, Network, GitFork, FileCode2, AlignLeft, AlignCenter, AlignRight, Link2 } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
-import { QUICK_TEXT_COLORS, MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID, contrastTextColor, isHexColor } from "../../core/colorPalette";
+import { QUICK_TEXT_COLORS, MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID } from "../../core/colorPalette";
 // 「Aa」面板的取值型命令（字号/对齐/字色/背景色）与链接，全部复用既有单一来源（本文不另造一套）
 // 注：移动端**色板**不再走内核色卡适配器 LakeColorBoard，而是照语雀排布自己画 2×7 圆点格
 //（用户 261012 定稿「色板照抄语雀、不用那么多颜色」）；颜色仍全部取自 core/colorPalette.ts 的内核色阶。
@@ -191,12 +191,11 @@ function useEditorExec(editor: LakeEditorInstance | null) {
 
 export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
   /**
-   * 「Aa」面板内的两个**内联展开**件（用户 261012 定：全套走语雀方式 —— 色板与链接编辑都在面板内展开，
-   * 不弹层、不做二级面板）：
-   *   - colorVariant：下方色板当前在编辑文字色还是背景色（由色卡行末位的方块切换）；
+   * 「Aa」面板内的**内联展开**件（用户 261012 定：全套走语雀方式 —— 都在面板内展开，不弹层、不做二级面板）：
+   *   - 颜色：**两行各自独立**（用户 261014 定）—— 上排 A = 文字色、下面色板 = 背景色，
+   *     不再共用"变体"状态（那样两行会互相回显，用户看到的"串联"）；
    *   - linkOpen：链接编辑行是否展开（复用内核 .ne-link-editor 那套 UI 与共享判定 linkEditor.ts）。
    */
-  const [colorVariant, setColorVariant] = useState<ColorVariant>("text");
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkText, setLinkText] = useState("");
   const [linkSrc, setLinkSrc] = useState("");
@@ -222,7 +221,7 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
 
   // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
   useEffect(() => {
-    if (!panelMode) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); setColorVariant("text"); }
+    if (!panelMode) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); }
   }, [panelMode]);
 
   // 注：原先的「面板⇄输入法硬互斥兜底」已删除——那条规则是"面板占键盘区"时代的补丁
@@ -295,7 +294,7 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
    * 文字色取到正文色 ⇒ clearColor、背景色空/等于当前 ⇒ clearBgColor），"最近使用色"也与桌面共用同一记忆
    * （colorMemory）。空串 = 面板里的「默认/无填充」行 ⇒ 取内核默认色。
    */
-  const pickColor = (raw: string, variant: ColorVariant = colorVariant) => {
+  const pickColor = (raw: string, variant: ColorVariant) => {   // variant 必填：字色/背景色各走各的，别再有隐含默认
     if (!editor) return;
     const value = raw || paletteDefaultValue(editor, variant);
     rememberColor(editor, variant, value);
@@ -453,23 +452,22 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   const alignActive = (value: string) => (activeValues.alignment || "left") === value;
   const textColorActive = (hex: string) => !!activeValues.color && activeValues.color.toLowerCase() === hex.toLowerCase();
   const noTextColor = !activeValues.color;
-  /** 语雀式色板（2 行 × 7 格）的当前态：色块按当前变体（字色/背景色）回显。 */
-  const boardColorActive = (hex: string) => {
-    const cur = (colorVariant === "text" ? activeValues.color : activeValues.bgColor).toLowerCase();
-    return !!cur && cur === hex.toLowerCase();
-  };
-  /** 首格「无填充/默认」的当前态：字色=没有显式字色；背景色=无填充或 transparent。 */
-  const boardClearActive = colorVariant === "text"
-    ? !activeValues.color
-    : (!activeValues.bgColor || activeValues.bgColor === "transparent");
-  /** 色板色块（圆形，照语雀）。 */
+  /**
+   * 色板 = **背景色**（261014 解耦）：过去这一块由 colorVariant 驱动 —— 切到字色时它回显的是字色，
+   * A 排点一下它就跟着标红，用户看到的就是"两行串联"。现在两行各自独立：
+   *   A 排 = 文字色（回显 activeValues.color）；色板 = 背景色（回显 activeValues.bgColor）。
+   */
+  const boardColorActive = (hex: string) => !!activeValues.bgColor && activeValues.bgColor.toLowerCase() === hex.toLowerCase();
+  /** 首格「无填充」的当前态。 */
+  const boardClearActive = !activeValues.bgColor || activeValues.bgColor === "transparent";
+  /** 背景色色块（圆形，照语雀）。 */
   const boardSwatch = (hex: string) => (
     <button
       key={hex}
       className={"med-f-sw" + (boardColorActive(hex) ? " is-on" : "")}
       style={{ background: hex }}
-      onClick={() => pickColor(hex)}
-      aria-label={"颜色 " + hex}
+      onClick={() => pickColor(hex, "bg")}
+      aria-label={"背景色 " + hex}
       title={hex}
     />
   );
@@ -567,30 +565,28 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
                 </div>
               </div>
 
-              {/* 字色：一排 A（默认 + 常用色）+ 末位背景色入口 —— 语雀那排 A 的口径 */}
+              {/* 字色：一排 A（默认 + 常用色）—— **只属于文字色**（261014：与下面背景色板互不影响；
+                  原先末位还有个"背景色入口"用来切色板变体，正是两行串联的根源，已删除）。 */}
               <div className="med-f-row">
-                <div className="med-f-card med-f-colors" data-count={QUICK_TEXT_COLORS.length + 2}>
-                  <button className={"med-f-btn med-f-a" + (noTextColor && colorVariant === "text" ? " med-f-on" : "")} onClick={() => { setColorVariant("text"); pickColor("", "text"); }} aria-label="默认颜色" title="默认颜色">A</button>
+                <div className="med-f-card med-f-colors" data-count={QUICK_TEXT_COLORS.length + 1}>
+                  <button className={"med-f-btn med-f-a" + (noTextColor ? " med-f-on" : "")} onClick={() => pickColor("", "text")} aria-label="默认颜色" title="默认颜色">A</button>
                   {QUICK_TEXT_COLORS.map((c) => (
-                    <button key={c} className={"med-f-btn med-f-a" + (colorVariant === "text" && textColorActive(c) ? " med-f-on" : "")} style={{ color: c }} onClick={() => { setColorVariant("text"); pickColor(c, "text"); }} aria-label={"字色 " + c} title={"字色 " + c}>A</button>
+                    <button key={c} className={"med-f-btn med-f-a" + (textColorActive(c) ? " med-f-on" : "")} style={{ color: c }} onClick={() => pickColor(c, "text")} aria-label={"字色 " + c} title={"字色 " + c}>A</button>
                   ))}
-                  <button className={"med-f-btn med-f-a med-f-bgentry" + (colorVariant === "bg" ? " med-f-on" : "")} onClick={() => setColorVariant("bg")} aria-label="背景色" title="背景色">
-                    <span className="med-f-bgfill" style={isHexColor(activeValues.bgColor) ? { background: activeValues.bgColor, color: contrastTextColor(activeValues.bgColor) } : undefined}>A</span>
-                  </button>
                 </div>
               </div>
 
-              {/* 色板：**内联展开** + **照抄语雀排布**（用户 261012 定稿）—— 2 行 × 7 格：
-                  浅色行首格 = 无填充/默认，其余 6 淡色；第二行 7 实色。颜色全部取内核色阶
+              {/* 背景色板（261014 解耦：**只属于背景色**，与上面那排 A 各管各的）—— 2 行 × 7 格，照语雀排布：
+                  浅色行首格 = 无填充，其余 6 淡色；第二行 7 实色。颜色全部取内核色阶
                   （core/colorPalette.ts 的 MOBILE_BOARD_*，逐色 ΔE 就近映射，不自己造色）。 */}
               <div className="med-f-row">
-                <div className="med-f-card med-f-board" data-variant={colorVariant}>
+                <div className="med-f-card med-f-board">
                   <div className="med-f-board-row">
                     <button
                       className={"med-f-sw med-f-sw--none" + (boardClearActive ? " is-on" : "")}
-                      onClick={() => pickColor("")}
-                      aria-label={colorVariant === "text" ? "默认颜色" : "无填充"}
-                      title={colorVariant === "text" ? "默认颜色" : "无填充"}
+                      onClick={() => pickColor("", "bg")}
+                      aria-label="无填充"
+                      title="无填充"
                     />
                     {MOBILE_BOARD_LIGHT.map(boardSwatch)}
                   </div>

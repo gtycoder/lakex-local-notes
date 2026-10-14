@@ -199,19 +199,9 @@
   box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
 }
 
-/* 字色行：一排 A（默认 + 常用色）+ 末位背景色入口（语雀那排 A 的口径） */
+/* 字色行：一排 A（默认 + 常用色）—— **只属于文字色**（261014 解耦：末位那个"背景色入口"已删除，
+   它当年用来切换色板变体，正是"两行串联"的根源；背景色改由下面那块色板独立负责）。 */
 .med-f-card.med-f-colors .med-f-btn { font-size: 17px; font-weight: 600; }
-.med-f-bgfill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  background: var(--lake-bg-sunken);
-  color: var(--lake-text-2);
-  font-size: 13px;
-}
 
 /* 色板：**照抄语雀排布**（用户 261012 定稿）—— 2 行 × 7 格圆形色块。
    几何取自语雀 Android 1.2.2 设备实测（540px 宽 / density 210 ⇒ 1.3125 px per dp）：
