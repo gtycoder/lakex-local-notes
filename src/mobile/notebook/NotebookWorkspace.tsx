@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Info, Table, Database, PenTool } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book } from "lucide-react";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { EmojiPanel } from "../ui/EmojiPanel";
 import { bridge } from "../bridge";
@@ -77,6 +77,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
    *  `createParent` = 建到哪个节点下：抽屉工具栏的 ＋ = 笔记本根，行内 ＋ = 该行节点（复用同一个面板）。 */
   const [createOpen, setCreateOpen] = useState(false);
   const [createParent, setCreateParent] = useState<string>(notebookId);
+  /** 笔记本自己的图标（抽屉首行要展示 + 可点改名图标，桌面同款手势）。 */
+  const [nbIcon, setNbIcon] = useState<string | null>(null);
+  /** 笔记本行的 ⋮ 菜单（把行菜单能力扩展到笔记本这一层，用户 261014）。 */
+  const [notebookMenuOpen, setNotebookMenuOpen] = useState(false);
   const [navHidden, setNavHidden] = useState(false);
   // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
@@ -102,7 +106,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [iconFor, setIconFor] = useState<NotebookTreeItem | null>(null);
+  /** 设置图标的目标（行/分组/笔记本都走这一个面板；只用到 id）。 */
+  const [iconFor, setIconFor] = useState<{ id: string; title: string } | null>(null);
   const [historyFor, setHistoryFor] = useState<NotebookTreeItem | null>(null);
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
   const longPressTimer = useRef<number | null>(null);
@@ -132,7 +137,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     const [treeArr, nodes] = await Promise.all([bridge.listNotebookTree(notebookId), bridge.listTreeNodes()]);
     setTree(treeArr);
     const nb = nodes.find((n) => n.id === notebookId);
-    if (nb) setTitle(nb.title);
+    if (nb) { setTitle(nb.title); setNbIcon(nb.icon ?? null); }
     return treeArr;
   }, [notebookId]);
 
@@ -422,6 +427,17 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     setRenamingId(null);
     if (id && v) { try { await bridge.renameTreeNode(id, v); await loadTree(); } catch { /* 忽略 */ } }
   }, [renamingId, renameValue, loadTree]);
+  /** 删除笔记本 = 整棵移入回收站（回收站里可恢复，与桌面笔记本右键同语义）；删完必须离开工作区。 */
+  const deleteNotebook = useCallback(async () => {
+    const ok = await confirmMobile({ title: "删除笔记本？", body: title, confirmText: "删除", danger: true });
+    if (!ok) return;
+    try {
+      await bridge.trashTreeItem(notebookId, "folder");
+      showToast("已移入回收站");
+      onBack();
+    } catch { showToast("删除失败", { type: "error" }); }
+  }, [notebookId, title, onBack]);
+
   const applyIcon = useCallback(async (icon: string | null) => {
     const n = iconFor; setIconFor(null);
     if (n) { try { await bridge.setNodeIcon(n.id, icon); await loadTree(); } catch { /* 忽略 */ } }
@@ -675,6 +691,28 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         }}
       />
 
+      {/* 笔记本行的 ⋮ 菜单（用户 261014：把行菜单能力扩展到笔记本这一层；语义与桌面笔记本右键一致：
+          新建（文档/分组）+ 重命名 + 设置图标 + 删除（整棵入回收站，可恢复））。 */}
+      <MobileSheetMenu
+        open={notebookMenuOpen}
+        items={[
+          { id: "new-note", label: "新建文档", icon: File },
+          { id: "new-group", label: "新建分组", icon: FolderPlus },
+          { id: "rename", label: "重命名", icon: Pencil },
+          { id: "icon", label: "设置图标", icon: SmilePlus },
+          { id: "delete", label: "删除笔记本", icon: Trash, danger: true },
+        ]}
+        onClose={() => setNotebookMenuOpen(false)}
+        onSelect={(it) => {
+          setNotebookMenuOpen(false);
+          if (it.id === "new-note") void createChildDoc(notebookId);
+          else if (it.id === "new-group") void createChildGroup(notebookId);
+          else if (it.id === "rename") { setRenamingId(notebookId); setRenameValue(title); }
+          else if (it.id === "icon") setIconFor({ id: notebookId, title });
+          else if (it.id === "delete") void deleteNotebook();
+        }}
+      />
+
       {/* 更多（思源 #menu）。**不要**再把「搜索」「设置」放回来 —— 用户 261014 点单删掉：
           设置 = 首页左上齿轮（统一入口）；搜索 = 首页底部胶囊（同一份全局搜索 Sheet，且是全库范围、
           不是"笔记本内搜索"）⇒ 工作区里再放一份只是重复。本菜单只留"新建文档 / 切换笔记本 / 编辑本文"。 */}
@@ -698,7 +736,28 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <div className={"side-mask" + (sidebarOpen ? " on" : "")} data-panel-mask="left" onClick={() => openSidebar(false)} />
       <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
         <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
-          <div className="toolbar__scroll"><span className="toolbar__text">{title}</span></div>
+          <div className="toolbar__scroll">
+            {/* 笔记本自己也是一行（用户 261014）：**图标 + 标题**；图标可点 = 设置图标（桌面 .tree-row-icon 同款手势） */}
+            <span role="button" tabIndex={0} className="mb-tree-icon mb-tap" aria-label="设置图标" title="设置图标"
+              onClick={() => setIconFor({ id: notebookId, title })}>
+              {nbIcon ? nbIcon : <Book size={16} />}
+            </span>
+            {renamingId === notebookId ? (
+              <input
+                className="mb-input"
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => void applyRename()}
+                onKeyDown={(e) => { if (e.key === "Enter") void applyRename(); if (e.key === "Escape") setRenamingId(null); }}
+              />
+            ) : (
+              <span className="toolbar__text">{title}</span>
+            )}
+          </div>
+          {/* 笔记本这一层的 ⋮（用户 261014：把行菜单能力扩展到笔记本） */}
+          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => setNotebookMenuOpen(true)} aria-label="笔记本菜单" title="更多"><MoreVertical /></span>
           {/* 261014 用户点单：目录栏加「新建」（桌面同款清单） */}
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => { setCreateParent(notebookId); setCreateOpen(true); }} aria-label="新建" title="新建"><Plus /></span>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>

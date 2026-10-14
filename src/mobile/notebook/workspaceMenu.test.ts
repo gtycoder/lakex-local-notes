@@ -44,6 +44,20 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(WORKSPACE).not.toMatch(/id: "group"[^}]*disabled/);
   });
 
+  it("笔记本这一层也有 ⋮ 菜单与图标（261014）：新建/重命名/设置图标/删除，删除走回收站", () => {
+    // 笔记本行：图标 + ⋮（⋮ 在工具栏里，与行内 ⋮ 同语义）
+    expect(WORKSPACE).toContain('aria-label="笔记本菜单"');
+    const block = WORKSPACE.slice(WORKSPACE.indexOf("{/* 笔记本行的 ⋮ 菜单"), WORKSPACE.indexOf("{/* 更多（思源"));
+    const labels = [...block.matchAll(/label: "([^"]+)"/g)].map((m) => m[1]);
+    expect(labels).toEqual(["新建文档", "新建分组", "重命名", "设置图标", "删除笔记本"]);
+    // 图标：有自定义表情就展示它，否则默认 Book（与首页笔记本卡同款默认图标）
+    expect(WORKSPACE).toContain("{nbIcon ? nbIcon : <Book size={16} />}");
+    // 图标可点 = 设置图标（桌面 .tree-row-icon 的手势），且命中区走 mb-tap 补足
+    expect(WORKSPACE).toMatch(/className="mb-tree-icon mb-tap" aria-label="设置图标"/);
+    // 删除笔记本 = 整棵移入回收站（可恢复），不是物理删除
+    expect(WORKSPACE).toMatch(/trashTreeItem\(notebookId, "folder"\)/);
+  });
+
   it("设置入口仍在首页顶栏（功能没有丢）", () => {
     expect(HOME).toContain('aria-label="设置"');
   });
