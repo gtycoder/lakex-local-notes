@@ -540,6 +540,9 @@ export interface LakeEditorPrefs {
  * （`/` 斜杠在本构建**不可靠**：LAKEX-CONTRACT §5.23 早先实测 + 261010 用 keydown/insertText 复测都没唤起面板
  * ⇒ 不能把它当入口。移动端因此暂时插不了表格/代码块/公式/高亮块/分栏/画板，**显示**不受影响。）
  */
+/** 小记卡片工具条（**唯一来源**）：261010 用户定 9 项 → **261014 精简为 7 项**
+ *  （用户："桌面端小记做一下精简，去掉引用，有序列表"）。
+ *  顺序 = 日期 · 表情 · 图片 · 附件 · 待办 · 无序 · 分隔线；字符串条目必须是内核有效 id（无效 id 会被内核静默丢弃）。 */
 export const QUICK_NOTE_TOOLBAR_ITEMS = [
   QuickNoteDateToolbarItem,
   QuickNoteEmojiToolbarItem,
@@ -547,8 +550,6 @@ export const QUICK_NOTE_TOOLBAR_ITEMS = [
   QuickNoteAttachmentToolbarItem,
   "taskList",
   "unorderedList",
-  "orderedList",
-  "quote",
   "hr",
 ] as const;
 

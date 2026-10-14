@@ -10,7 +10,8 @@
  * `getInitUIState/getUIState/onEvent/isReady/on('statechange')/name/disabled`。
  * 细节与行号见 `quickNoteToolbarWidgets.ts` 头注释。
  *
- * **规则**：紧凑工具条 = 用户指定的 9 项（日期·表情·图片·附件·待办·无序·有序·引用·分隔线）；
+ * **规则**：紧凑工具条 = 用户指定的 **7 项**（日期·表情·图片·附件·待办·无序·分隔线）——
+ * 261014 用户精简掉了「引用」与「有序列表」；
  * 字符串条目必须是内核有效 id，无效 id 一个都不许回来（回来 = 又静默消失）。
  * 预览不再有卡片白名单（还原不了的块交给内核只读视图），所以工具条只需满足"内核认得"。
  */
@@ -47,8 +48,8 @@ function fakeEditor(): FakeEditor {
   return { calls, execCommand: (...args: unknown[]) => { calls.push(args); } };
 }
 
-describe("小记卡片工具条（261010：用户指定 9 项）", () => {
-  it("顺序 = 日期 · 表情 · 图片 · 附件 · 待办 · 无序 · 有序 · 引用 · 分隔线", () => {
+describe("小记卡片工具条（261014：用户指定 7 项）", () => {
+  it("顺序 = 日期 · 表情 · 图片 · 附件 · 待办 · 无序 · 分隔线", () => {
     expect(toolbarEntries()).toEqual([
       "QuickNoteDateToolbarItem",
       "QuickNoteEmojiToolbarItem",
@@ -56,8 +57,6 @@ describe("小记卡片工具条（261010：用户指定 9 项）", () => {
       "QuickNoteAttachmentToolbarItem",
       String.raw`"taskList"`,
       String.raw`"unorderedList"`,
-      String.raw`"orderedList"`,
-      String.raw`"quote"`,
       String.raw`"hr"`,
     ]);
   });

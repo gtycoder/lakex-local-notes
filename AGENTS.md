@@ -190,11 +190,12 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
   配套：「+」插入面板 = **内核全量**（261010 删掉 `quickNoteInsertFilter`）——旧的"不能预览展示的就不让插入"已废，
   它正是"移动端没有日期/表情"的真因（内核面板「小工具」里本就有 `/rl` 日历 / `/rq` 日期 / `/bq` 表情）。
   证据与浮层定位见 `docs/LAKEX-CONTRACT.md` §5.28、`docs/MOBILE-TECH-STACK.md` §七。
-- **小记写作卡工具条 = 用户指定的九项**（261010 定稿）：**日期·表情·图片·附件·待办·无序·有序·引用·分隔线**。
+- **小记写作卡工具条 = 用户指定的七项**（261010 定 9 项 → **261014 用户精简**）：**日期·表情·图片·附件·待办·无序·分隔线**
+  （去掉「引用」「有序列表」；唯一来源 `src/features/editor/lakeRuntime.ts` 的 `QUICK_NOTE_TOOLBAR_ITEMS`，顺序由 `quickNoteToolbar.test.ts` 卡住）。
   字符串 id 走内核内置；日期/表情/附件走**自定义工具项类**（`features/quickNotes/quickNoteToolbarWidgets.ts` ——
   内核没导出 `ToolbarUIDescriptor`，按 `Button` 控件的实际调用面自实现）；**移动端不提供「展开」**
   （`fullscreen.enable = isDesktop()`，用户定稿"一行放下、不要展开"）。三个坑（漏 `enable/disable` 整块白屏、
-  `unicodeEmoji` 卡是死占位只能插文本、条目自带 12px 间距 ⇒ 9 项一行要收到 6px）见 `LAKEX-CONTRACT.md` §5.29。
+  `unicodeEmoji` 卡是死占位只能插文本、条目自带 12px 间距 ⇒ 条数一多就得把间距收到 6px 才放得下）见 `LAKEX-CONTRACT.md` §5.29。
 - **内核浮层 portal 到 `body`**（`.ne-overlay-container`）：它们不在我们的组件树里 ⇒ 移动端要覆盖内核浮层
   （尺寸/定位）**必须用 body 级选择器**；移动端入口已加 `body.lake-mobile` 标记（`src/mobile/main.tsx`）。
   实例（插入面板夹进视口）见 §7「移动端验收」第 24 条。

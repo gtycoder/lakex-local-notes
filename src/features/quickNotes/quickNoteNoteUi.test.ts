@@ -52,12 +52,12 @@ describe("小记编辑器：文档外观 + 受限格式（只影响小记）", (
     expect(stripComments(RUNTIME_SRC)).not.toMatch(/filterOption/);
   });
 
-  it("工具栏 = 用户指定的 9 项（内核 agentConfig 整体替换 ⇒ 必须显式给 default）", () => {
+  it("工具栏 = 用户指定的 7 项（内核 agentConfig 整体替换 ⇒ 必须显式给 default）", () => {
     const decl = /QUICK_NOTE_TOOLBAR_ITEMS\s*=\s*\[([\s\S]*?)\]\s*as const;/.exec(RUNTIME_SRC);
     expect(decl, "QUICK_NOTE_TOOLBAR_ITEMS 未找到").toBeTruthy();
     const items = [...(decl?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     // 清单的权威断言在 quickNoteToolbar.test.ts；这里只保证「内置 id 该有的在、禁的不在」（避免两处各维护一份清单）。
-    for (const must of ["image", "taskList", "unorderedList", "orderedList", "quote", "hr"]) {
+    for (const must of ["image", "taskList", "unorderedList", "hr"]) {
       expect(items).toContain(must);
     }
     // 日期/表情/附件 = 自定义工具项类（不是字符串 id —— 字符串形态会被内核静默丢弃）
