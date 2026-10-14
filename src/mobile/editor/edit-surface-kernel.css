@@ -1,0 +1,41 @@
+/* ── 编辑面里「内核按视口/按桌面写死的几何」的收口（261014 P2 单一来源）────────────────────────
+ *
+ * 为什么单独一份：内核会按**视口**或**桌面**把正文容器定高，而移动端的视口会被输入法压缩、面板又不动视口 ⇒
+ * 视口一变内核就重新锚定，正文跟着位移（261014 实测：note 版式的滚动口 clientHeight 260⇄572、首块位移 285px）。
+ * 过去这些覆盖散在 mobile.css（doc 侧）与 quick-notes.css（note 侧）**两份**，成因相同、实现两套 ⇒
+ * 内核一升级就可能只补一边（doc 侧的 max-height 就曾漏掉）。现在：**只有这一个文件允许压内核高度**。
+ *
+ * 宿主契约：编辑面容器挂 `data-mb-edit-host`，并用 `data-mb-kernel="note|doc"` 声明用的是哪套内核版式 ——
+ * 新增编辑面时挂上这两个属性即可继承本文件的所有收口（doc = .mobile-doc-body，note = .mobile-qn-composer）。
+ *
+ * 不变量（由 scripts/mobile-audit/edit-surface-invariants.mjs 卡住）：键盘态 / 面板态 / 收回键盘三态下，
+ * 正文滚动口的 clientHeight·scrollTop 与首块 Y **逐项相同**，且光标始终在工具栏上方。
+ * ⚠️ 这些规则压的是**内核注入的未分层样式**：普通声明压不过 ⇒ 需要 !important（AGENTS §3#14 的例外）。
+ */
+
+/* ① 容器链钉在宿主高度上（内核按视口给 .ne-editor-wrap-content 定高/定上限，两个版式共用） */
+body.lake-mobile [data-mb-edit-host] .ne-editor,
+body.lake-mobile [data-mb-edit-host] .ne-editor-body,
+body.lake-mobile [data-mb-edit-host] .ne-editor-wrap,
+body.lake-mobile [data-mb-edit-host] .ne-editor-wrap-content { height: 100%; min-height: 0; box-sizing: border-box; }
+
+/* ② 解除内核按视口写的 max-height（长内容下那 46px 位移的来源）+ 让滚动口吃满剩余高度 */
+body.lake-mobile [data-mb-edit-host] .ne-editor-wrap-content { max-height: none !important; flex: 1 !important; margin: 0 !important; }
+
+/* ③ note 版式（小记写作卡）：内核给引擎写 min-height: 40vh —— 40vh 跟视口走 ⇒ 换按**稳定外壳高**算 */
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="note"] .quick-note-editor > .lake-editor-mount { flex: 1 1 auto; min-height: 0; height: 100%; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="note"] .ne-engine { min-height: calc(var(--mb-app-h, 100%) * 0.4); }
+
+/* ④ doc 版式（文档编辑器）：内核按桌面写死引擎几何 —— fixed 模式 content 440px、adapt 外层 min-width 500px、
+ *   engine 左右 40px 内距 + min-height:1024px + 底部 90px（手机必然溢出/多出空白）⇒ 全部压回。 */
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-editor-wrap-content,
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-editor-outer-wrap-box,
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-editor-wrap-box,
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-editor-extra-box,
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-editor-box { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-editor-wrap { overflow-x: hidden !important; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-engine { padding-left: 0 !important; padding-right: 0 !important; min-height: 0 !important; padding-bottom: 0 !important; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed:not(.ne-normal-toc):not(.ne-ui-sidebar-visible) .ne-engine > * { max-width: 100% !important; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed .ne-editor-extra-box,
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed .ne-editor-footer-box { max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .lake-editor { padding-left: 14px; padding-right: 14px; }

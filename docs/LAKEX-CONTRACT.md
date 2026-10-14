@@ -1810,6 +1810,9 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
    `mode=insert/panels=1` 只维持了 630ms 就变回 `none/0`）。⇒ 判据放 **pointerdown**、只用当次事件；
    focusin 分支只服务「内核命令后抢焦点」这一件事，且**只写 `inputmode` 属性、不 blur**。
 ② **抑制函数自身要防重入**：blur/focus 会**同步**触发 focusin，若 focusin 分支再调抑制函数 ⇒ 无限递归。
-   用模块级 `inSetback` 标志包住（本仓已加）。
+   用模块级 `inSetback` 标志包住（本仓已加，落点 `src/mobile/editor/useEditSurface.ts` 的 `suppressImeNow`）。
+   P2/P3 之后这三件事（外壳高度 / 面板状态机 / 输入法抑制与焦点守卫）**只有 useEditSurface 一个实现**，
+   几何算术在 `editSurfaceModel.ts`（纯函数 + 单测），内核几何收口在 `edit-surface-kernel.css`（doc/note 共用 marker）；
+   行为由 `scripts/mobile-audit/edit-surface-invariants.mjs` 的四条不变量卡住。
 ③ 收面板要收敛成**一个出口**（`closePanel()`：× / 再点 ＋ / 用户点正文三处共用）：`setPanel(null) → focusEditor()`
    （后者负责清抑制 + 重新聚焦把键盘放回来）→ 等键盘真回来再清占位（§5.36 的口径）。

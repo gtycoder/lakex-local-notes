@@ -223,28 +223,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-doc-body NE-CARD[data-card-name="video"] video,
 .mobile-doc-body .attachment-preview video { background: var(--lake-bg-window); }
 /* （大播放三角优化暂缓：用户后续用多模态模型处理——保留原生 controls） */
-/* 只读/编辑文档左右留白（手机窄屏适配）：Lake 编辑器全宽铺满贴边，加安全留白 */
-.mobile-doc-body .lake-editor { padding-left: 14px; padding-right: 14px; }
-/* 编辑态正文宽度自适应（对齐 viewer 手机形态，不左右滑动/偏移）：
-   Lake 编辑态容器有桌面限宽——fixed 模式 content 440px、adapt 模式外层 min-width 500px +
-   engine 左右 40px padding——手机屏幕全部溢出导致整体偏移。统一压回 100%。 */
-.mobile-doc-body .ne-editor-wrap-content,
-.mobile-doc-body .ne-editor-outer-wrap-box,
-.mobile-doc-body .ne-editor-wrap-box,
-.mobile-doc-body .ne-editor-extra-box,
-.mobile-doc-body .ne-editor-box { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
-.mobile-doc-body .ne-editor-wrap-content { flex: 1 !important; margin: 0 !important; }
-.mobile-doc-body .ne-editor-wrap { overflow-x: hidden !important; }
-/* 261013（6.3）：内核把引擎几何按桌面写死 —— `.ne-layout-mode-fixed .ne-engine` 给 min-height:1024px
-   + `padding:20px 70px 90px 70px !important`。上面只压了左右内距，**min-height 与 90px 底内距仍在**：
-   手机视口（~790）比 1024 矮 ⇒ 短文档下面多出一屏可滚动的空白，再叠加我们的 .mobile-doc-body 让位 = 双份底部空白。
-   为什么必须 !important：那条内核规则**未分层**（vendor CSS 由内核/入口直接注入），而未分层的普通声明压过我们
-   @layer 里的普通声明；只有「分层里的 !important」才强于「未分层的 !important」（CSS Cascade 5 的反转规则，
-   与本文件既有 16 条覆盖同一机制）。min-height 归 0 让引擎随内容长；底部空白由 .mobile-doc-body 统一让位。 */
-.mobile-doc-body .ne-engine { padding-left: 0 !important; padding-right: 0 !important; min-height: 0 !important; padding-bottom: 0 !important; }
-.mobile-doc-body .ne-layout-mode-fixed:not(.ne-normal-toc):not(.ne-ui-sidebar-visible) .ne-engine > * { max-width: 100% !important; }
-.mobile-doc-body .ne-layout-mode-fixed .ne-editor-extra-box,
-.mobile-doc-body .ne-layout-mode-fixed .ne-editor-footer-box { max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; }
 
 /* Drawer */
 

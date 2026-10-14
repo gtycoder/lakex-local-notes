@@ -125,6 +125,14 @@
    另外：**光标跟随**统一走 `useCaretIntoView`（文档与小记同一份；它同时监听 `selectionchange/pointerup/resize`，
    因为浏览器自己的"把光标滚进视口"是**按视口**算的，会把光标停在面板/键盘后面）。
 
+   **落地结构（261014 P1–P3 收口，新增代码按这个分层放）**：
+   `editSurfaceModel.ts`（纯函数算术，带单测）→ `useEditSurface.ts`（**编辑面唯一 owner**：外壳高度 / 面板状态机 /
+   输入法抑制 / 焦点守卫）→ `EditorDock.tsx`（只做渲染 + 命令 + 选区簿记）。
+   内核几何（按视口 or 按桌面写死的高度/上限/限宽）**只有一份收口**：`editor/edit-surface-kernel.css`，
+   宿主契约 = 编辑面容器挂 `data-mb-edit-host` + `data-mb-kernel="note|doc"`（新增编辑面挂上即继承）。
+   **判据装置**：`node scripts/css-audit/drive.mjs <port> scripts/mobile-audit/edit-surface-invariants.mjs` ——
+   两条编辑器各跑 I1 几何恒定 / I2 光标存在 / I3 光标在工具栏上方 / I4 面板不自关·无闪。
+
 ## 六、未结项（登记的债，改前先看）
 
 | 项 | 现状 | 影响 |

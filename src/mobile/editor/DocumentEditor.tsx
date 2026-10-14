@@ -108,7 +108,8 @@ export function DocumentEditor(props: DocumentEditorProps) {
 
   return (
     <>
-      <section className="mobile-doc-body" ref={bodyRef}>
+      {/* data-mb-edit-host / data-mb-kernel：编辑面契约（内核几何收口见 edit-surface-kernel.css） */}
+      <section className="mobile-doc-body" ref={bodyRef} data-mb-edit-host data-mb-kernel="doc">
         <LakeEditor
           noteId={note.id}
           content={content}

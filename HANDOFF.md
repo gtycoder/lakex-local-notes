@@ -18,7 +18,17 @@
 
 ### 261014 · 多维表PoC续作：内存对照与发布回归（尚未正式接入）
 
-- **最新续作（本轮收尾）**：仍仅 `.css-audit/bitable-virtual-poc-261014/source` 副本，主树多维表/core/session/package/lock未变；当前候选看 **`RELEASE-RESULTS.md` / `evidence/candidate-release.patch`**，不要直接套旧candidate-memory.patch或搬整份副本。
+- **最新热区续作（261014，本轮）**：当前候选 **hotspot2**，仍仅`.css-audit/bitable-virtual-poc-261014/source`副本；最新结论看 **`HOTSPOT-RESULTS.md` / `evidence/candidate-hotspot.patch` / `verified-hotspot2-source.json`**。主树bitable/core/session/package/lock未变，不搬整份副本或用旧patch覆盖并发工作。
+- 已验证两处分配收敛：BitableVirtualBody拓扑与内容分离，仅复用key/size/source，位置/高度没变不重建5000行键与索引；内容/选区/回调/前后添加行仍刷新，ID重排增删/高度变化重测。两个Map改直接循环、不产大量map/flatMap二元数组。96次输入采样累计分配普通591→456MiB、填色/查重656→533MiB（约19–23%）；**不是常驻/峰值内存数字**。
+- 关联选择器经已有CellEditor只读标量展示，20行原生input420→20（只留选择checkbox），其他字段仍原控件；默认锁定主表/历史的只读input选字复制不改，可编辑格即使传标志也仍可编辑。10开关/200滚动采样累计分配338→216MiB（约36%）。共享输入视觉，只增flex/居中2声明，CSS围栏1034/0重复。
+- **长尾没稳定解决，不正式接入**：最新简单主表首开0.553s/重开0.215s、滚动p95 33.4ms，48输入p95 39.5ms；但未插桩前/后各3进程、各普通+填色96输入有p95约52–138ms/max450ms，几何优化不等于输入全面改善。另576次trace-only分段总回执p95 54–69ms/max143ms；beforeinput→rAF约20–24ms只到回调，不是像素呈现，不能换短口径宣布达标。Layerize可达101ms/MajorGC79ms，混合布局/分层/GC，不能都归模型/泄漏；Profiler启动约369ms单列。
+- 内存复核：关联选择器正常10开关/160滚动两轮总工作集采样峰约1.39/1.09GiB、关15s堆约62MiB；前轮2.03GiB不作精确归因。完整300滚动/120输入/6重开/8标签复跑，阶段总工作集采样峰 **1.57GiB**、8标签检查点堆240MiB；全关正常15s堆 **115MiB**/行0，后续GC诊断102MiB分列。新建7份数据/全局缓存可解释部分保留增长，未发现新增无界内容/组件缓存；**不承诺4/8GiB/数小时/真实大图无OOM**。工作集共享/驻留波动很大，不挑瞬时464MiB当峰。
+- 门禁：副本 **205文件/1723例通过**（跳过5文件/16例），tsc/check:core/check:bundle/arm64真实包通过；23项包内业务复跑通过，主表24态288几何一致，选择器1315/900×浅深暖6态几何/格值一致、截图差异0/35/0/0/7/0像素不夸称全零。新11回归覆盖拓扑复用失效/实时值与添加行/默认锁定复制/标量安全和只读。
+- 运行副本/owned测试进程已收尾，基准夹具/证据保留；正式数据/真实S3未触碰，未提交/推送。下一轮按已量到的全壳分层/布局与真实输入呈现路径定位；不推倒存储、不恢复否决的目录窗口化、不加自动GC/大堆。
+
+> 以下为前一轮发布回归基线，**最新状态以以上hotspot2和HOTSPOT-RESULTS为准**。
+
+- **前轮发布续作**：仍仅 `.css-audit/bitable-virtual-poc-261014/source` 副本，主树多维表/core/session/package/lock未变；前轮候选看 `RELEASE-RESULTS.md` / `evidence/candidate-release.patch`，不要直接套旧candidate-memory.patch或搬整份副本。
 - 新发现/已修：关联选择器5000×20仍全量挂5000行105000格，两帧就绪3.68/4.28s；共用BitableVirtualBody窗口后20行400格、68.3/62.1ms（鼠标测试含工具等待约0.29s，不混用计时）。完整候选/全局搜索/已选顺序/取消确认/双向镜像保留，选择器列宽改字段模型80–320px；不是零外观变更声明。
 - 几何修正：添加行实际34px而非36px，空投影末列33px（有数据40px）；主表24态/288几何对照均一致，首尾总高度不漂移。6张截图仍有0–153像素小差异，不写零像素差；未重烤门禁基线来藏变化。共用单行控件CSS，视口样式纳入7声明/0重复组围栏。
 - 最后性能包：主表首开0.320s/重开0.209s，25行500格/全模型5000；滚动p95 32.5ms，48输入p95 38.7ms/max63.4ms。**上一确认包输入p95 54.8ms/max402.6ms，前序滚动36.6ms，不能挑最后轮宣称跨场景稳定全达标。**
@@ -107,7 +117,7 @@
   ② **分类条压缩成一屏放得下、不再横向滚动**（用户：横划会被外壳手势抢走 —— 小记里触发"小记/知识库"切 tab，文档里触发大纲抽屉）。
      去掉搜索后是 **9 个分类**，在 412px 上每个 **≈45.8px** ⇒ 既不横滚、又满足 44 命中区（`flex: 1 1 0` + 去掉 gap）。
      另给面板根挂 **`data-prevent-swipe`**：`useHorizontalSwipe` / `usePanelDrag` 本来就排除这类元素 ⇒ 偶发横划不会再被外壳抢走（既有约定，未新造机制）。
-- **状态：未提交**。
+- **状态：已提交** `fed89e3`（移动端那批；桌面部分见「选图标」那条说明）。
 
 ### 261013 · 「选图标」面板两端复用内核表情面板（桌面 + 移动）
 
@@ -149,7 +159,7 @@
   账本随之更新：桌面 `app/quick-notes.css` 521 → **543**、移动 `quick-notes.css` 98 → **153**、`theme/tokens.css` 168 → **170**。
 - **账本**：移动 `kit.css` 441 → **466**、`theme/light.css` 61 → **64**（合法新增，理由写进 `mobileLayers.test.ts`）；桌面 `misc.css` 删旧 14 条规则、`overlay.css` 把 `.emoji-picker` 从表面清单摘掉。
 - **新观测回填**：`docs/LAKEX-CONTRACT.md` **§5.35**（类名族 + 复用姿势 + token 作用域 + 两处内核 CSS 坑 + 设备实测数）。
-- **状态：未提交**。
+- **状态：移动端部分已提交**（`fed89e3`：`EmojiPanel`/`kit.css`/移动 `theme`/`emojiRecents`/`STORAGE-LAYERS`）；**桌面部分仍未提交**（`Sidebar.tsx` 的 EmojiIconPicker、`styles/{overlay,misc,kernel-theme,app/quick-notes}.css`、`quickNoteToolbarWidgets.ts` —— 与桌面会话改动同文件）。
 
 ### 261013 · 云同步浮层「同步设置」按钮折行修复（同步中偶发排布错乱）
 
@@ -913,7 +923,7 @@
       ⇒ **不并入** `.ln-row` / `.ln-input`（审计的"像输入框"是误判）；今后审计再报到这两条，按此结案，别再立项。
     **工具（已入库）**：`scripts/css-audit/audit-lookalike.mjs`（找「像原语却没复用」，260930 命中 29 → 16）、`scripts/css-audit/audit-primitives.mjs`（跨文件规则体重复族，46 → 39）。改完样式重跑对比即可；判定只认这两份数据 + 实机几何，不认「看着像」。
 
-11. **多维表Grid架构重构 / 行虚拟化（AR04 已证瓶颈；261014用户重启调研，方案待确认）**：真实 Electron 压测（scripts/bitable-stress.mjs）——目标 5000×20 打开 **12.42s / 84.8 万 DOM / 395MB 堆 / 首次点选 2.25s**；10000×20 = 24.8s/169 万/1.34GB；20000×50（100 万格）200s 内未渲染完成；50000×50 因**正文 32 MiB 上限**根本无法保存。结论：CPU 热点（AR-F5/F6）已消除，**DOM 全量渲染是瓶颈**，支持 5000 级规模需行虚拟化/渲染策略；立项前先定「5000×20 滚动/编辑目标 + 验收口径」。**用户 261007 确认：长期待办、暂不做。** **261014更新**：用户因正式包5000×20约15秒要求解决，已重新调研DOM虚拟化/Canvas/完整Grid；推荐先替换Grid视口与交互层、保留数据/业务核心，下一步隔离PoC与预算待确认（见最新§0与`.css-audit/bitable-research-261014/RESEARCH.md`）。旧暂缓不是本次新调研的结论。 **DOM隔离PoC已完成（见最新§0）**：首开0.40s/热开0.21s，完整模型5000/只挂25行；滚动/输入p95仍37.5/54.8ms略超预算，11检查与副本1698测试通过但复杂业务回归未完成，正式尚未接入。 **内存续作已验证**：最新PoC单表堆约93MiB vs旧351MiB；8标签总工作集峰1.7–1.8GiB，关闭后15s堆回103MiB；诊断保留堆8次开关后稳定，未发现无界窗口缓存。最新12检查/副本1703例通过，但尾延迟不稳定与复杂业务门禁未齐，详见最新§0和`MEMORY-RESULTS.md`。 **发布回归续作**：关联选择器也窗口化，末包23项检查/1712例与24态几何通过；关联堆237→102MiB，但反复开关滚动总工作集峰2.03GiB，正常关15s堆65MiB/工作集839MiB，4K图源补验通过。仍不正式接入，优先瞬时分配/输入长尾与低配验收，见最新§0和`RELEASE-RESULTS.md`。
+11. **多维表Grid架构重构 / 行虚拟化（AR04 已证瓶颈；261014用户重启调研，方案待确认）**：真实 Electron 压测（scripts/bitable-stress.mjs）——目标 5000×20 打开 **12.42s / 84.8 万 DOM / 395MB 堆 / 首次点选 2.25s**；10000×20 = 24.8s/169 万/1.34GB；20000×50（100 万格）200s 内未渲染完成；50000×50 因**正文 32 MiB 上限**根本无法保存。结论：CPU 热点（AR-F5/F6）已消除，**DOM 全量渲染是瓶颈**，支持 5000 级规模需行虚拟化/渲染策略；立项前先定「5000×20 滚动/编辑目标 + 验收口径」。**用户 261007 确认：长期待办、暂不做。** **261014更新**：用户因正式包5000×20约15秒要求解决，已重新调研DOM虚拟化/Canvas/完整Grid；推荐先替换Grid视口与交互层、保留数据/业务核心，下一步隔离PoC与预算待确认（见最新§0与`.css-audit/bitable-research-261014/RESEARCH.md`）。旧暂缓不是本次新调研的结论。 **DOM隔离PoC已完成（见最新§0）**：首开0.40s/热开0.21s，完整模型5000/只挂25行；滚动/输入p95仍37.5/54.8ms略超预算，11检查与副本1698测试通过但复杂业务回归未完成，正式尚未接入。 **内存续作已验证**：最新PoC单表堆约93MiB vs旧351MiB；8标签总工作集峰1.7–1.8GiB，关闭后15s堆回103MiB；诊断保留堆8次开关后稳定，未发现无界窗口缓存。最新12检查/副本1703例通过，但尾延迟不稳定与复杂业务门禁未齐，详见最新§0和`MEMORY-RESULTS.md`。 **发布回归续作**：关联选择器也窗口化，末包23项检查/1712例与24态几何通过；关联堆237→102MiB，但反复开关滚动总工作集峰2.03GiB，正常关15s堆65MiB/工作集839MiB，4K图源补验通过。仍不正式接入，优先瞬时分配/输入长尾与低配验收，见最新§0和`RELEASE-RESULTS.md`。 **热区最新hotspot2**：拓扑复用/直接Map循环与选择器共享标量展示，采样累计分配输入下降19–23%/选择器36%；205文件1723例+23包检查/24主表态+6选择器态通过。8标签阶段工作集采样峰1.57GiB、正常关15s堆115MiB，GC诊断分列。长序列仍有端到端回执尾部，未稳定达预算、不正式接入，最新交接和`HOTSPOT-RESULTS.md`为准。
 
 12. **非多维表审计遗留（260930 会话决定）**：
     - **F16 安卓整轮网络同步持本地写队列 —— 已实测（261009，用户授权用 dev 前缀 `lake-notes-dev1` 直连 S3）**：结论 **立项** ⇒ **已修复（261010，见 §0 本批）**：写域/维护域分离 + 判据单一来源 + I2 守卫；**弱网实测已收尾（261010）：同步 59.3s 期间写等待 32ms（旧 152.0s），见 §0**。
@@ -1154,6 +1164,29 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（49 = 47 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
+### 261014(四) · P1 重构：编辑面算术抽成纯函数（本批移动端已提交 `fed89e3`）
+
+- **已提交**：移动端那批（编辑体验/表情面板/装置/文档）作为一个提交 `fed89e3` 落 master；**提交态自洽已验**（临时 worktree 按提交内容跑 `tsc` ✓ + `vitest` 242 文件 / 1882 例 ✓）。
+  未含（仍留工作树，属其他会话/批次）：`Sidebar.tsx`+`App.tsx`+`scripts/packaged-performance/`（大目录优化）· `src/features/ai/**` 与桌面样式/装置（`styles/{chrome,components,overlay,app/misc,app/quick-notes,kernel-theme,cssLayers,geometrySources}`、`scripts/css-audit/{stylesnap,check-stylesnap,README,baseline/stylesnap}`）· 桌面表情面板那一半 · 多维表 PoC。
+
+- **P1 落地**：新增 `src/mobile/editor/editSurfaceModel.ts`（纯函数、无 React/DOM）+ `editSurfaceModel.test.ts`（**9 例**）：
+  `bottomOccupation`（面板/键盘互斥占用，含收起过渡）· `shellSurfaceHeight`（外壳高 = 稳定高 − 占用 ⇒ 键盘态与面板态**相等**）·
+  `dockKbOffset`（工具栏底距，含「过渡期跟着视口长、屏幕 Y 恒定」的机制）· `capturePanelHeight`（打开瞬间捕获 + 下限）。
+  `EditorDock` 里那四处内联算术改为调用它们（行为不变，已用设备时间线/逐步骤复跑核对）。
+  **为什么值得**：这四条迁移正是过去反复出 bug 的地方（跳动/塌陷/工具栏掉底/面板自关），现在进 CI —— 不再只能靠设备上人眼看 GIF。
+- **下一步**：P0 设备不变量脚本（编辑面 4 条不变量，作为 P2 的验收闸）→ P2 `useEditSurface` 收口 + 内核几何归一化单点 → P3 拆 EditorDock 大文件。
+- **P0 装置（已落地）**：`scripts/mobile-audit/edit-surface-invariants.mjs` —— 把这次手写的设备检查固化成**可执行不变量**，两条编辑器（小记 / 文档）各跑一遍：
+  **I1 几何恒定**（键盘/面板/收回三态的 kernCh·kernSt·firstY 逐项相同）· **I2 光标存在**（面板态 activeElement 仍是正文、选区在、inputmode=none）·
+  **I3 光标在工具栏上方**（caret.bottom < tb.top）· **I4 不自关/无闪**（点＋后 1.2s 面板仍在；每次开/关 resize ≤1）。
+  用法：`node scripts/css-audit/drive.mjs <port> scripts/mobile-audit/edit-surface-invariants.mjs`。
+  ⚠️ 装置自身的坑（已修）：驱动脚本的场景参数在 `ctx.args`，我一开始读 `process.argv[3]`（= 脚本路径）⇒ 两个场景都没跑却打印 ALL PASS（**假绿**）；现在未选中场景直接 exit 2，且逐条打印取样值（看得见才可信）。
+- **P1 纯函数模型**：`src/mobile/editor/editSurfaceModel.ts` + `editSurfaceModel.test.ts`（**9 例**）：`bottomOccupation` / `shellSurfaceHeight`（键盘态与面板态算出同一个外壳高）/ `dockKbOffset`（过渡期屏幕 Y 恒定）/ `capturePanelHeight`。
+- **P2 收口**：`src/mobile/editor/useEditSurface.ts` 成为**编辑面唯一 owner**（外壳高度 + 面板状态机 + 输入法抑制 + 焦点守卫）；内核几何归一化**合成一份** `src/mobile/editor/edit-surface-kernel.css`（doc/note 共用 `data-mb-edit-host` + `data-mb-kernel` 契约，原先散在 mobile.css / quick-notes.css 两处 ⇒ 内核升级时不会只补一边；`mobileLayers` 已登记新文件）。
+- **P3 拆大文件**：`EditorDock.tsx` **768 → 616 行**（面板状态机与输入法/焦点策略全部移出），dock 只剩渲染 + 命令 + 选区簿记。
+- **验证（P0–P3 全量）**：`tsc` ✓ · `vitest` **250 文件（245 过/5 跳）· 1927 例（1911 过/16 跳）** ✓ · 两条构建 ✓ · `ui-metrics`/`check:core`/`check:mobileui`/`check:bundle`/`git diff --check` ✓；
+  **设备不变量 ALL PASS**（两条编辑器；数字与重构前逐项一致：小记 ch 306·st 735·firstY −642；文档 ch 719·st 0·caret 417–438 < 474）· 设备 `check:mobilesnap` 6 态 0 差异 ✓ · 走查 23/23 · 五类探针全 0 ✓。
+- **状态：P0–P3 未提交**（将作为一次提交落 master；移动端那批已在 `fed89e3`）。
+
 ### 261014(三) · 点 ＋ 后**光标消失** / 点正文**键盘闪烁** / 面板**自己关掉**（用户点单，**待用户验收**）
 
 - **用户报**：① 点 ＋ 之后编辑区**光标消失**；② 再点一下编辑区会**键盘闪烁**；③ 文档偶发"光标跑到下半部分被键盘盖住"；小记与文档都有。
@@ -1182,7 +1215,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   `ui-metrics` ✓ · `check:core` ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` ✓ ·
   设备 `check:mobilesnap` **6 态 0 差异** ✓ · 走查 **23/23 ok · 五类探针全 0** ✓。
 - **口径回填**：`docs/LAKEX-CONTRACT.md` **§5.38**（inputmode=none 收键盘保光标的实测表 + 三条坑：blur 丢光标 / 布尔量误判导致面板自关 / 抑制函数必须防重入）。
-- **状态：未提交**（与在途批次同一工作树；提交时按文件分开）。
+- **状态：已提交**（`fed89e3`，只含移动端那批；桌面/多维表会话的改动未含）。
 
 ### 261014 · 移动端编辑体验：点 ＋/× 编辑区跳动 + 光标必须始终在工具栏上方（用户点单，**待用户验收**）
 
@@ -1233,7 +1266,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   ⑤ hook 顺序护栏扩到 `QuickNoteComposer`（同一批也在那里加了 hook）；
   ⑥ `max-height: none !important` 收窄到真正需要的那个元素（`.ne-editor-wrap-content`）。
 - **已知未做**：横竖屏只做了"重置外壳高"，没有横屏专门验收（D 项，用户定：留待办）。
-- **状态：未提交**（与 261013/261014 在途批次同一工作树；提交时按文件分开）。
+- **状态：已提交**（`fed89e3`，只含移动端那批；桌面/多维表会话的改动未含）。
 
 ### 261014 · 表情面板分类条：末尾动作键（返回 / 清除）+ 行高压缩（用户点单，**待用户验收**）
 
@@ -1260,7 +1293,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   设备 `check:mobilesnap` **6 态 0 差异** ✓ · 走查 **23/23 ok · 五类探针全 0** ✓（门禁夹具仍 5 文档 + 4 小记，无需重烤）。
 - **账本**：`theme/tokens.css` 170 → **171**（+`--mb-emoji-cat-h`）、`kit.css` 509 → **511**（+`.mb-emoji-cats__track` −首格清除格；理由写进 `mobileLayers.test.ts`）；
   移动端字号字面量仍 47。
-- **状态：未提交**（与 261013/261014 在途批次同一工作树；提交时按文件分开）。
+- **状态：已提交**（`fed89e3`，只含移动端那批；桌面/多维表会话的改动未含）。
 
 ### 261014 · 安卓端「插入表情时表情栏闪烁」修复（用户报 → 设备实测 → 已修，**待用户验收**）
 
@@ -1280,7 +1313,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   设备 `check:mobilesnap` **6 态 0 差异**（新构建 + gate 实例 5556）✓ · 设备走查 **22/22 ok · 五类探针全 0** ✓。
 - **数据卫生**：5554 的测量走「新建小记 → 测完取消」；文档路径用 `createNote` 建探针文档、测完 `trashNote`；
   门禁实例（5556）夹具仍为 **5 文档 + 4 小记**（走查未写脏）⇒ **无需重烤基线**。
-- **状态：未提交**（与 261013 在途批次同一工作树；提交时按文件分开）。
+- **状态：已提交**（`fed89e3`，只含移动端那批；桌面/多维表会话的改动未含）。
 
 ### 261013 · 移动端「必要项」批：装置四修 + 目录层失效修复
 

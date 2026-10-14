@@ -322,8 +322,9 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
   // 草稿未读完先不挂内核（避免用空正文建实例、随后又拿不到已恢复的内容）
   if (!draftReady) return <div className="mobile-qn-composer" />;
 
+  // data-mb-edit-host / data-mb-kernel = 编辑面契约标记（内核几何收口见 edit-surface-kernel.css）
   return (
-    <div className="mobile-qn-composer" ref={cardRef}>
+    <div className="mobile-qn-composer" ref={cardRef} data-mb-edit-host data-mb-kernel="note">
       <QuickNoteEditor
         ownerId={noteId}
         initialBody={addAssetAccessToken(initialBody)}

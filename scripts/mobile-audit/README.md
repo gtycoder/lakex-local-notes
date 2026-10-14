@@ -55,6 +55,18 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
 ```
 ⚠️ **基线绑定"专用实例 + 该夹具"**：拿它去比"用户的真实数据"必然 6/6 态红，那是预期，不是回归。
 
+## 编辑面不变量（261014 起，动 dock / 输入法 / 键盘适配时必跑）
+
+```bash
+bash scripts/emu-cdp.sh 9335
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/edit-surface-invariants.mjs          # 两条编辑器都跑
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/edit-surface-invariants.mjs quicknote # 只跑小记
+```
+
+四条不变量（依据 = 261014 修掉的 5 个真缺陷）：**I1 几何恒定**（键盘/面板/收回三态的 kernCh·kernSt·firstY 逐项相同）·
+**I2 光标存在**（面板态 activeElement 仍是正文、选区在、inputmode=none）· **I3 光标在工具栏上方**（caret.bottom < tb.top）·
+**I4 不自关/无闪**（点＋后 1.2s 面板仍在；每次开/关 resize ≤1）。失败即 exit 1 并逐条打印实际取样值。
+
 ## 环境（260923 实测可用）
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"

@@ -15,34 +15,6 @@
    永远不会命中（className 全仓只出现在桌面 JSX），261014 查漏补缺时删掉（死 CSS 口径：字面类名、非内核/词表/动态拼接，
    且已用 `grep className` 确认移动端不渲染）。 */
 
-/* 261014：内核 note 版式给引擎写了 `min-height: 40vh`（vendor lakex-doc.css：.ne-doc-note-editor .ne-note-ui .ne-engine）。
-   **vh 跟着视口走**，而输入法会把 WebView 压矮（842→530）、我们自己画的面板**不会** ⇒
-   「面板 ⇄ 输入法」切换时写作卡高度 **320 → 428**（用户 261014 报的"编辑区跳动"根源）。
-   小记宿主的高度由我们的外壳负责（--mb-app-h − 底部占用，见 viewportShell.ts），引擎不必再按视口撑高：
-   改用**稳定外壳高的 40%**（--mb-app-h 由 EditorDock 写）⇒ 两种状态下恒定。
-   选择器要比内核那条更具体（body.lake-mobile 前缀 = 0-5-0 > 内核 0-3-0），否则会被内核样式盖掉。 */
-body.lake-mobile .quick-note-editor .ne-doc-note-editor .ne-note-ui .ne-engine {
-  min-height: calc(var(--mb-app-h, 100%) * 0.4);
-}
-
-/* 261014：内核 note 版式把正文区按**视口**定高 —— 实测它的滚动口 `.ne-editor-wrap-content` 的
-   clientHeight 在 260（键盘态）⇄ 572（面板态）之间跳，视口一变内核就**重新锚定**：scrollTop 1264 → 978、
-   正文首块位移 ~285px（用户报的"长内容下编辑区还在跳"，就是这一条；短内容看不出来是它没超出一屏）。
-   ⇒ 把内核这条容器链**钉在我们给的高度上**（宿主 `.quick-note-editor` 的高度由外壳保证恒定），
-   内核只按我们给的盒子排版、不再看视口。scoped 到 body.lake-mobile，不影响桌面。 */
-body.lake-mobile .quick-note-editor > .lake-editor-mount { flex: 1 1 auto; min-height: 0; height: 100%; }
-body.lake-mobile .quick-note-editor .ne-editor,
-body.lake-mobile .quick-note-editor .ne-editor-body,
-body.lake-mobile .quick-note-editor .ne-editor-wrap,
-body.lake-mobile .quick-note-editor .ne-editor-wrap-content {
-  height: 100%; min-height: 0; box-sizing: border-box;
-}
-/* ⚠️ **内核给这个滚动口写了按视口算的 max-height**（实测 260.286px = 视口 530 − 270；面板态 572 = 842 − 270）
-   ⇒ 这就是长内容下最后那 46px 位移的来源。它来自内核注入的样式，**普通声明压不过**（我们那条 0-5-1 也没赢）
-   ⇒ 只能 `!important`（「目标是内核/第三方样式」的例外场景，AGENTS §3#14）：
-   这个夹取在移动端本身就是错的 —— 高度已经由我们的外壳（--mb-app-h）给定。
-   自证（设备实测）：解除前 wrap.clientHeight 260 ⇄ 306、正文首块 Y 位移 46px；解除后**三种状态恒 306 / 位移 0**。 */
-body.lake-mobile .quick-note-editor .ne-editor-wrap-content { max-height: none !important; }
 
 /* 261008：字体走令牌（原写死的系统栈不是 MiSans） */
 

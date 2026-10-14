@@ -11,7 +11,7 @@
  * - 底部被占高度（面板/键盘）由**外壳高度**承担（`--mb-app-h` = 稳定外壳高 − 占用，见 viewportShell.ts），
  *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
  */
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, Shapes, Workflow, Network, GitFork, FileCode2, AlignLeft, AlignCenter, AlignRight, Link2 } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
@@ -23,7 +23,8 @@ import { normalTextColor, paletteDefaultValue, persistentColor, rememberColor, t
 import { colorApplyCommand, toFontSize, unwrapValue } from "../../features/editor/selectionToolbar/selectionToolbarModel";
 import { applyTextLink, captureLinkTarget, isValidLink, type LinkEditorTarget } from "../../features/editor/selectionToolbar/linkEditor";
 import { KLinkEditor } from "../../features/editor/selectionToolbar/kernelUiAtoms";
-import { useKeyboard } from "../useKeyboard";
+// 「编辑面」的口径：算术在 editSurfaceModel.ts（纯函数 + CI 单测），owner（外壳高 / 面板状态机 / 输入法 / 焦点守卫）在 useEditSurface.ts
+import { useEditSurface } from "./useEditSurface";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
 import { EmojiPanel } from "../ui/EmojiPanel";
 
@@ -41,34 +42,8 @@ function isEditorNode(node: Node | null): boolean {
   return false;
 }
 
-/** 正文里的可编辑宿主（只取当前可见的，避免动到 keep-alive 隐藏视图）。 */
-function visibleEditables(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>('[contenteditable="true"]')).filter((el) => el.getBoundingClientRect().width > 0);
-}
-
-/**
- * 面板占键盘区：**收起输入法，但保留焦点与光标**（用户 261014：「点了 ＋ 之后编辑区的光标会消失」）。
- *
- * 口径（AVD 设备实测，见 LAKEX-CONTRACT §5.38）：给内核正文宿主加 `inputmode="none"` 再 `blur() → focus()` ⇒
- *   · 输入法收起（innerHeight 530 → 842）；· `document.activeElement` 仍是 `.ne-engine`；
- *   · 选区还在、**光标矩形与位置逐项不变**（不再是"光标消失"）。
- * 撤销（面板收起/要打字）＝ 移除该属性再 `blur() → focus()` ⇒ 键盘回来（842 → 530）。
- *
- * ⚠️ **不要退回"直接 `blur()` 了事"**：那样焦点与光标一起没了（用户看到的"光标消失"），
- *   再点正文又得把键盘弹回来 ⇒ 表现为"键盘闪烁"。这条是本次修复的核心。
- */
-let inSetback = false;          // 重入保护：本函数内部的 blur/focus 会同步触发 focusin，别让它再进来一轮
-function setbackIme(on: boolean): void {
-  if (inSetback) return;
-  inSetback = true;
-  try {
-    for (const el of visibleEditables()) {
-      if (on) el.setAttribute("inputmode", "none");
-      else el.removeAttribute("inputmode");
-      try { el.blur(); el.focus(); } catch { /* 忽略 */ }
-    }
-  } finally { inSetback = false; }
-}
+// 输入法抑制（setbackIme）与焦点守卫已迁到 useEditSurface.ts —— 261014 P2 收口：
+// 「外壳高度 / 输入法抑制 / 焦点守卫」三件事只有那一处实现，本组件只负责面板状态与渲染。
 
 /** 格式命令 → lucide 图标（正文面板用图标而非文字，对齐思源移动端） */
 const COMMAND_ICONS: Record<string, typeof Bold> = {
@@ -215,7 +190,6 @@ function useEditorExec(editor: LakeEditorInstance | null) {
 }
 
 export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
-  const [panelMode, setPanelMode] = useState<PanelMode>(null);
   /**
    * 「Aa」面板内的两个**内联展开**件（用户 261012 定：全套走语雀方式 —— 色板与链接编辑都在面板内展开，
    * 不弹层、不做二级面板）：
@@ -230,153 +204,44 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
 
   /** 面板打开期间的选区快照：命令执行前后都还原，才能连续加粗→倾斜→下划线 */
   const savedRangeRef = useRef<Range | null>(null);
-  /** 收面板的唯一出口（guard 的 pointerdown 也要用；监听只挂一次 ⇒ 走 ref 取最新闭包）。 */
-  const closePanelRef = useRef<() => void>(() => {});
-  /**
-   * focus 守卫的监听只挂一次，要读"当前"面板态 ⇒ 用 ref 镜像（同 closePanelRef 的理由）。
-   * ⚠️ **面板态必须同步写进 ref**：`togglePanel` 收起时是 `setPanel(null) → focusEditor()` 同一个 tick，
-   * 靠 React 渲染同步会漏判（ref 还是旧面板态 ⇒ 守卫把刚 focus 起来的键盘又收掉 ⇒ 收起面板后键盘回不来）。
-   * ⇒ 面板态的所有写入统一走 `setPanel`（唯一写入口），渲染期再对齐一次。
-   */
-  const panelModeRef = useRef<PanelMode>(null);
-  const setPanel = useCallback((mode: PanelMode) => {
-    panelModeRef.current = mode;
-    setPanelMode(mode);
-  }, []);
-  panelModeRef.current = panelMode;
   const dockRef = useRef<HTMLDivElement>(null);
-  const { base, innerHeight, offset, height, keyboardOpen } = useKeyboard();
   /**
-   * 展开面板占住的「键盘区」高度（打开瞬间捕获键盘高度，之后不随键盘动画变；0=已收起）。
-   *
-   * 交互口径（用户 260914 澄清）：**面板覆盖键盘那块区域 = 键盘不显示**，工具栏停在面板上沿不动。
-   * 打开时 blur 收起键盘、面板占住腾出来的区域；收起时 focusEditor 把键盘放回来。
-   * 让这段"键盘⇄面板"的交接看起来自然的是**面板自身的进出场动画**（见 .med-panel-inner）：
-   * 面板背景整个键盘区先铺满（不露空档），内容再从下方滑入 / 滑出，不再出现"瞬间空一块再弹键盘"。
+   * **编辑面 owner**（261014 P2/P3 收口）：外壳高度 + 面板状态机 + 输入法抑制 + 焦点守卫全在 useEditSurface.ts，
+   * 几何算术在 editSurfaceModel.ts（纯函数 + CI 单测）。本组件只剩：渲染 + 命令 + 选区/内联件的簿记。
+   * restoreFocus 走 ref —— focusEditor 定义在早退之后，而 hook 调用必须在早退之前。
    */
-  const [panelHeight, setPanelHeight] = useState(0);
-  /** 关闭过渡期间继续挂载面板（否则键盘上升时会先露出一块空白背景） */
-  const [closing, setClosing] = useState(false);
-  const usable = panelMode || closing
-    ? Math.max(0, Math.round(innerHeight - base + panelHeight), offset)
-    : offset;
-  /** 底部被「输入法 / 面板」占住的高度（两者互斥）：面板开或收起过渡期 = 面板高；否则 = 实际键盘高。
-   *  外壳高度要**减掉**它（见 viewportShell.ts）—— 这样「面板 ⇄ 输入法」切换时内容盒高度不变（= 不跳）。 */
-  const occupation = Math.max(panelMode || closing ? panelHeight : 0, keyboardOpen ? height : 0);
-  /** 面板内容：退场动画期间继续用上一次的模式渲染，否则收起瞬间内容先消失、滑动看不见 */
-  const [renderedPanel, setRenderedPanel] = useState<Exclude<PanelMode, null>>("insert");
-  useEffect(() => {
-    if (panelMode) setRenderedPanel(panelMode);
-  }, [panelMode]);
+  const focusEditorRef = useRef<() => void>(() => {});
+  const surface = useEditSurface({ editing, dockRef, restoreFocus: () => focusEditorRef.current() });
+  const { panelMode, renderedPanel, closing, openPanel, closePanel } = surface;
+  const usable = surface.kbOffset;
+  const keyboardOpen = surface.keyboardOpen;
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
   execRef.current = exec;
   const { states: activeStates, values: activeValues, refresh: refreshActive } = useActiveCommandStates(editor);
-
-  // 退出编辑态时复位
-  useEffect(() => {
-    if (!editing) setPanel(null);
-  }, [editing, setPanel]);
 
   // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
   useEffect(() => {
     if (!panelMode) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); setColorVariant("text"); }
   }, [panelMode]);
 
-  // 用户点击可编辑正文（要打字）→ 立即收起面板、恢复输入法键盘，绝不让「面板展开 + 键盘」同时出现。
-  // 面板项按钮已 onMouseDown preventDefault 不抢焦点，故焦点落回 contenteditable 只可能是用户点了编辑区。
-  useEffect(() => {
-    const isEditor = (node: EventTarget | null) => {
-      const t = node as HTMLElement | null;
-      return !!t && typeof t.closest === "function" && !!t.closest('[contenteditable="true"]');
-    };
-    /**
-     * 用户**手指点正文**（面板开着）= 要打字 ⇒ 收面板 + 把输入法放回来。
-     * ⚠️ 判据必须放在 **pointerdown**，不能放在 focusin：面板期正文一直保持焦点（这是"光标不消失"的前提），
-     * 点它**不会再触发 focusin** ⇒ 靠 focusin 判会漏（261014 实测：面板只能靠 × 关掉）。
-     * 也不能只用一个"上次点过"的布尔量 —— 它会被上一次未消费的点击留下 true，
-     * 然后被**我们自己**抑制输入法时的 blur/focus 触发，表现成"面板开了 ~0.6s 自己关掉"（261014 实测抓到的真凶）。
-     */
-    const onPointerDown = (e: PointerEvent) => {
-      if (!panelModeRef.current || !isEditor(e.target)) return;
-      closePanelRef.current();
-    };
-    /**
-     * 命令内部重新聚焦（面板开着）：**在 focus 的同一个任务里把输入法按住**。
-     * 内核在每条面板命令后会把焦点抢回正文（261014 实测：插一个表情触发两次 focusin），Android 见到可编辑元素
-     * 拿到焦点就弹输入法 ⇒ innerHeight 变小 ⇒ 面板高度（--kb-offset）塌成 0 ⇒ 面板整块消失再回来（"表情栏闪烁"）。
-     * ⚠️ 这里**只写 `inputmode="none"`、绝不 blur**：blur 会把光标一起收掉（用户报的"点 ＋ 后光标消失"）。
-     * 光写属性不会隐藏**已经弹出**的输入法，那一档由 `keyboardOpen` 的 effect 兜底（它是异步的，不在 focus 任务里）。
-     */
-    const onFocusIn = (e: FocusEvent) => {
-      if (inSetback || !panelModeRef.current || !isEditor(e.target)) return;
-      try { (e.target as HTMLElement).setAttribute("inputmode", "none"); } catch { /* 忽略 */ }
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("focusin", onFocusIn);
-    return () => { document.removeEventListener("pointerdown", onPointerDown, true); document.removeEventListener("focusin", onFocusIn); };
-  }, []);
-
   // 注：原先的「面板⇄输入法硬互斥兜底」已删除——那条规则是"面板占键盘区"时代的补丁
   // （键盘被顶回来会把面板压成细条）。新口径下面板挂在工具栏上沿、键盘本就常驻，
   // 内核命令后重聚焦正文只会让键盘保持原样，不再需要 blur 兜底（blur 反而会引出输入法动画）。
 
-  // 把 dock 占用的底部空间暴露给正文容器，让正文底部留白（光标不被工具栏/面板盖住）。
-  // 面板⇄输入法硬互斥兜底（260911 修复，随"面板占键盘区"口径一起保留）：runPanel 执行命令后
-  // Lake 会异步重聚焦正文 → 输入法被顶回，会把占着键盘区的面板压成细条盖住工具栏。
-  // 以实测键盘状态驱动（任何机型/输入法都成立）：只要面板开着而键盘又弹出，立刻再收一次，
-  // 并把面板高度抬到实测键盘高度（打开瞬间的快照在带候选条的真机上会偏小）。
-  useEffect(() => {
-    if (!panelMode || !keyboardOpen) return;
-    setPanelHeight((h) => Math.max(h, height));
-    setbackIme(true);          // 输入法又冒出来 ⇒ 再按住（不 blur：光标要留在正文里）
-  }, [panelMode, keyboardOpen, height]);
-
-  // 外壳高度（.mobile-app 的 height）= 稳定外壳高 − 底部被占高度。
-  // ⚠️ 必须写到 **documentElement**：消费方是各编辑面的滚动容器（.mobile-scroll--with-dock / .mobile-doc-body /
-  //    .mobile-qn-composer-wrap），而 dock 的父元素在小记里是**卡片**、与文档侧的 .mobile-doc-body 是**兄弟**
-  //    —— 写在父元素上这些地方永远读不到（261014 实测：面板一开，写作卡 320→428、整块编辑区跳 108px）。
-  //    隐藏的 keep-alive 视图（display:none ⇒ rect 宽 0）不写，避免把可见实例的值覆盖掉。
-  //  ⚠️ 必须 **useLayoutEffect**（不是 useEffect）：它改的是布局高度，而 vh 系的内核规则（note 版式的 min-height:40vh）
-  //    会在"var 还没写上的那一帧"按**旧视口**算出高度并被内容撑住 → 之后再也缩不回去（261014 实测：
-  //    面板打开后卡片停在 515 而不是 352）。布局副作用要在绘制前落地。
-  useLayoutEffect(() => {
-    if (!editing || !base) return;            // base=0 = 还没量到视口 ⇒ 不写（否则外壳会被写成 0px）
-    const dock = dockRef.current;
-    if (!dock || !dock.getBoundingClientRect().width) return;
-    const root = document.documentElement;
-    const value = `${Math.max(0, Math.round(base - occupation))}px`;
-    root.style.setProperty("--mb-app-h", value);
-    // CAS 清理：只在值仍是我们写的那个时才删（多实例 keep-alive 下不误删别人的）
-    return () => { if (root.style.getPropertyValue("--mb-app-h") === value) root.style.removeProperty("--mb-app-h"); };
-  }, [editing, base, occupation]);
-
-  /** 收起面板的收尾（清占位）。**等输入法真的回来再清** —— 见 togglePanel 的注释。
-   *  ⚠️ 这三个 hook 必须留在**早退之前**（React 要求每次渲染 hook 数量一致；放到 if (!editing) return null; 之后，
-   *  文档从阅读态切编辑态时会「Rendered more hooks than during the previous render」→ 整块面板崩掉、dock 不出现）。 */
-  const closeTimerRef = useRef<number | null>(null);
-  const finishPanelClose = useCallback(() => {
-    if (closeTimerRef.current !== null) { window.clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
-    setClosing(false);
-    setPanelHeight(0);
-  }, []);
-  useEffect(() => {
-    if (!closing || !keyboardOpen) return;
-    const t = window.setTimeout(finishPanelClose, 150);   // 键盘已经上来，再清占位（那一带此时由键盘接管）
-    return () => window.clearTimeout(t);
-  }, [closing, keyboardOpen, finishPanelClose]);
-  useEffect(() => () => { if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current); }, []);
+  // 面板占位 / 收起的时序（含"等键盘真的回来再清占位"）与 --mb-app-h 都由 useEditSurface 负责。
 
   // 编辑态常驻底部工具栏（完成/插入/字体等）；键盘弹出时悬浮在键盘上方。
   if (!editing) return null;
 
   const focusEditor = () => {
-    setbackIme(false);                       // 先清抑制标记（inputmode=none）并重新聚焦 —— 键盘才会回来
+    // 输入法由 useEditSurface 的 restoreIme() 放回（它就在 closePanel 里）；这里只把**焦点**交还正文。
     try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch { /* 忽略 */ }
     try { lakeBridge(editor ?? undefined).renderer?.execCommand?.("focus" as never); } catch { /* 忽略 */ }
   };
-  /** 收起输入法（面板要占键盘区）：**保留焦点与光标**（见 setbackIme 的口径） */
-  const dismissIme = () => setbackIme(true);
+  focusEditorRef.current = focusEditor;
+  /** 收起输入法（面板要占键盘区）：**保留焦点与光标**（口径见 useEditSurface.ts） */
+  const dismissIme = () => surface.suppressIme();
   /** 记下当前选区（Range 克隆在 blur 之后仍可用于还原） */
   const snapshotSelection = () => {
     const sel = document.getSelection();
@@ -390,30 +255,16 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     sel.addRange(r);
   };
 
-  /** 收起面板的**唯一出口**（× / ＋ 再点 / 用户点正文三处共用）：动画 + 放回输入法 + 等键盘真回来再清占位。 */
-  const closePanel = () => {
-    setPanel(null);                                   // ⚠️ 先同步置空 ref 再 focus（见 panelModeRef 注释）
-    setClosing(true);
-    focusEditor();                                    // 键盘与面板动画同时开始（内部会清 inputmode 抑制）
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = window.setTimeout(finishPanelClose, 2500);   // 兜底：键盘没回来也不能永远占着
-  };
-  closePanelRef.current = closePanel;
-
   /**
-   * 展开/收起面板：**面板占住键盘区（键盘不显示）**，工具栏停在面板上沿不动（用户 260914 澄清口径）。
-   * 关键顺序（同原实现）：同一帧挂面板 + 抬起 --kb-offset，**下一帧才 blur** 收键盘 ——
-   * 这样键盘是在已经铺满该区域的面板背后滑走的，不会出现"面板与键盘对撞"的闪烁。
-   * 收起时改为「先动画收面板 + 同时放键盘，动画结束再清 panelHeight」：
-   * 键盘上升期间那一带仍有面板背景兜着，不会先露一块空白再弹键盘（这正是用户说的"不自然"）。
+   * 展开/收起面板（面板占住键盘区；同一帧挂面板、下一帧才收输入法 —— 键盘从铺满的面板背后滑走，不与面板对撞）。
+   * 状态机在 useEditSurface：`closePanel` 是唯一收口（动画 + 放回输入法 + 等键盘真回来再清占位），
+   * `openPanel` 负责"从关到开时捕获键盘区高度 / 面板间切换沿用原高度"。
+   * 这里只补本组件的簿记：切面板前先记选区（面板项命令靠它还回去）。
    */
   const togglePanel = (mode: Exclude<PanelMode, null>) => {
     if (panelMode === mode) { closePanel(); return; }                 // 再点一次 = 关面板并放回键盘
     snapshotSelection();
-    setClosing(false);
-    if (!panelMode) setPanelHeight(Math.max(Math.round(height), 280)); // 只在"从关到开"时捕获键盘高度
-    setPanel(mode);                                                   // insert ↔ font 切换沿用原高度 → 工具栏不抖
-    requestAnimationFrame(() => { if (panelMode || true) dismissIme(); });
+    openPanel(mode);
   };
 
   // 工具栏行内命令（bold/列表/待办）：按钮 onMouseDown preventDefault 不抢焦点 →
@@ -429,11 +280,8 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     refreshActive();
   };
 
-  // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板（不恢复键盘——用户明确要收起）。
-  const dismissKeyboard = () => {
-    setPanel(null);
-    setbackIme(true);          // 收键盘但**保留光标**（与 ＋ 面板同一口径）
-  };
+  // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板 —— **不放回输入法**（hide 档），光标留住。
+  const dismissKeyboard = () => closePanel("hide");
   const showKeyboard = () => { focusEditor(); };
 
   /** 内核日历卡 `currentDate` 形态 = YYYYMMDD 整数（HANDOFF §0(五) 实测）。 */
