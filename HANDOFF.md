@@ -1160,6 +1160,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 - **改后实测**：DCL **119ms** / FCP **556** / 桥就绪 **478** / **真首页 533ms**（≈11.5×）、modulepreload **45 → 12**；
   前 7.3s **无长任务**，预热在 7296ms 以 1903ms 的背景任务出现（A/B：把 requestIdleCallback 变空 ⇒ 长任务消失、首页 798ms，确认它就是预热）。
 - **护栏**：`quickNoteKernelFallback.test.ts` 新增 1 例（内核兜底必须 lazy + 自带内核样式）；AGENTS §7.31 记长期口径。
+- **探针已入库**：`node scripts/mobile-audit/boot-timeline.mjs 9336`（`--no-idle` 做 A/B）；量的是 navigation/paint/longtask + 骨架/桥就绪/真首页三个里程碑。
 - **未做/可选项**：想彻底关预热就删掉那段排期（代价 = 首次开文档/小记多付"内核分包加载+实例化"）；真机数据待补（本机是 AVD）。
 ### 261014(六) · 首页改版：默认小记 / 胶囊重排 / 统一「＋」+ 新建面板 / 长按上滑速记（**待用户验收**）
 

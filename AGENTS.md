@@ -331,7 +331,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
     设备实测：真首页 **6123 → 533ms**、DCL **3943 → 119ms**、modulepreload **45 → 12**（修法 = 改 `lazy()` + Suspense，
     `QuickNoteKernelPreview` 自带内核样式；护栏 `quickNoteKernelFallback.test.ts`）。另两条：冷启动同步 = “就绪后第一段空闲”，
     内核预热 = “就绪 **4s 后**再排空闲”（`requestIdleCallback` 的 timeout 只是**上限**，实测 2.4s 就回调 ⇒ 必须**显式延迟**）。
-    判据 = 设备上量 paint/navigation + longtask，别凭感觉说“快了”。
+    判据 = 设备上量 paint/navigation + longtask，别凭感觉说“快了” —— 探针已入库：`node scripts/mobile-audit/boot-timeline.mjs 9336`（`--no-idle` 可做 A/B）。
 ## 8. 会话启动指引
 
 1. 按 **README → HANDOFF → AGENTS** 阅读（当前状态与真正的待办以 HANDOFF 为准）；**涉及编辑器/lakex 一律按 §2「内核资料检索顺序」走三级检索**（官方 `yuque-developer-docs` → `docs/LAKEX-CONTRACT.md` → `lake-editor-main`/`lake-main` 源码字典），新观测回填 CONTRACT。
