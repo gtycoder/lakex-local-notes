@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { EmojiPanel } from "../ui/EmojiPanel";
@@ -56,13 +56,12 @@ export interface NotebookWorkspaceProps {
   /** 切换到另一个笔记本 */
   onSwitchNotebook: (id: string) => void;
 
-  onCreateNote: () => void;
   /** 当前活动文档变化（MobileApp 的定时快照要用） */
   onActiveNoteChange?: (id: string | null) => void;
 }
 
 export function NotebookWorkspace(props: NotebookWorkspaceProps) {
-  const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onCreateNote, onActiveNoteChange } = props;
+  const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onActiveNoteChange } = props;
   const [title, setTitle] = useState("知识库");
   const [tree, setTree] = useState<NotebookTreeItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
@@ -73,7 +72,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [tabsOpen, setTabsOpen] = useState(false);
   const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   /** 目录抽屉的「新建」菜单（与桌面同一份清单；移动端只有文档/分组能落地，其余置灰）。
    *  `createParent` = 建到哪个节点下：抽屉工具栏的 ＋ = 笔记本根，行内 ＋ = 该行节点（复用同一个面板）。 */
   const [createOpen, setCreateOpen] = useState(false);
@@ -651,7 +649,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => openSidebar(!sidebarOpen)} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => setTabsOpen(true)} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
-        <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => setMoreOpen(true)} aria-label="更多" title="更多"><MoreHorizontal /></button>
+        {/* 261014 用户点单：最后一格「更多」已无意义（编辑在顶栏、新建在抽屉/行内）⇒ 直接把「切换笔记本」做成这一格 */}
+        <button className="mobile-bottom-bar__item" onClick={() => setNotebookSwitchOpen(true)} aria-label="切换笔记本" title={"切换笔记本（当前：" + title + "）"}><ArrowLeftRight /></button>
       </nav>
 
       {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
@@ -673,25 +672,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           // 复用目录树的同一份创建通道（行内 ＋ / 长按菜单同源），不新造第二条；作用域 = 本次打开它的那个节点
           if (it.id === "note") void createChildDoc(createParent);
           else if (it.id === "group") void createChildGroup(createParent);
-        }}
-      />
-
-      {/* 更多（思源 #menu）。**不要**再把「搜索」「设置」放回来 —— 用户 261014 点单删掉：
-          设置 = 首页左上齿轮（统一入口）；搜索 = 首页底部胶囊（同一份全局搜索 Sheet，且是全库范围、
-          不是"笔记本内搜索"）⇒ 工作区里再放一份只是重复。本菜单只留"新建文档 / 切换笔记本 / 编辑本文"。 */}
-      <MobileSheetMenu
-        open={moreOpen}
-        items={[
-          { id: "new-doc", label: "新建文档", icon: FilePlus },
-          { id: "switch-nb", label: "切换笔记本", icon: ArrowLeftRight, note: title },
-          ...(active ? [{ id: "toggle-edit", label: active.editing ? "完成编辑" : "编辑本文", icon: Pencil }] : []),
-        ]}
-        onClose={() => setMoreOpen(false)}
-        onSelect={(it) => {
-          setMoreOpen(false);
-          if (it.id === "toggle-edit") { toggleEdit(); return; }
-          if (it.id === "new-doc") onCreateNote();
-          else if (it.id === "switch-nb") setNotebookSwitchOpen(true);
         }}
       />
 

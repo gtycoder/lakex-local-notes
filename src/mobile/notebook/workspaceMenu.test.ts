@@ -65,6 +65,20 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(HOMEPAGE).toMatch(/setNodeIcon\(nb\.id, icon\)/);
   });
 
+  it("工作区胶囊最后一格 = 切换笔记本（261014：原「更多」已无意义）", () => {
+    expect(WORKSPACE).toContain('aria-label="切换笔记本"');
+    // 胶囊那格「更多」与它的死 prop 都不许回来（编辑在顶栏、新建在抽屉/行内）；
+    // 注意：目录**行**的 ⋯ 仍叫「更多」（那是行菜单），别把断言写宽成整份源码不含"更多"
+    expect(WORKSPACE).not.toContain('aria-label="更多" title="更多"');
+    expect(WORKSPACE).not.toContain("moreOpen");
+    expect(WORKSPACE).not.toContain("onCreateNote");
+    expect(APP).not.toMatch(/<NotebookWorkspace[\s\S]{0,700}onCreateNote/);
+    // 编辑入口仍在顶栏（功能没丢）
+    expect(WORKSPACE).toContain('aria-label={active?.editing ? "完成" : "编辑"}');
+    // 切换笔记本面板仍在
+    expect(WORKSPACE).toContain("open={notebookSwitchOpen}");
+  });
+
   it("设置入口仍在首页顶栏（功能没有丢）", () => {
     expect(HOME).toContain('aria-label="设置"');
   });

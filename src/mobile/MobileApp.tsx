@@ -358,7 +358,6 @@ export function MobileApp() {
           onBack={() => setRoute({ kind: "home", tab: "library" })}
           notebooks={notebooks}
           onSwitchNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
-          onCreateNote={() => void createNoteInParent(route.notebookId)}
           onActiveNoteChange={(id) => { activeIdRef.current = id; }}
         />
         </Suspense>
