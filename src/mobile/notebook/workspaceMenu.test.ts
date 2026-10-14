@@ -28,6 +28,22 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(HOME).toContain('aria-label="搜索"');
   });
 
+  it("目录抽屉「新建」：工具栏（笔记本层）+ 每一行（子项）都有，且清单与桌面同款、不可编辑的类型置灰", () => {
+    // 笔记本层：抽屉工具栏的「新建」
+    expect(WORKSPACE).toContain('aria-label="新建" title="新建"');
+    // 每一行的「新建子项」
+    expect(WORKSPACE).toContain('aria-label="新建子项"');
+    // 清单同款同序（桌面 Sidebar CREATE_CHILD_ITEMS：文档/表格/数据表/画板/分组）
+    const items = [...WORKSPACE.matchAll(/\{ id: "(note|usheet|bitable|board|group)", label: "([^"]+)"/g)].map((m) => m[2]);
+    expect(items).toEqual(["新建文档", "新建表格", "新建数据表", "新建画板", "新建分组"]);
+    // 只有文档/分组可点；其余 disabled 且必须给理由（移动端没有 hover）
+    for (const kind of ["usheet", "bitable", "board"]) {
+      expect(WORKSPACE).toMatch(new RegExp('id: "' + kind + '"[^}]*disabled: true[^}]*note: "移动端暂不支持编辑"'));
+    }
+    expect(WORKSPACE).not.toMatch(/id: "note"[^}]*disabled/);
+    expect(WORKSPACE).not.toMatch(/id: "group"[^}]*disabled/);
+  });
+
   it("设置入口仍在首页顶栏（功能没有丢）", () => {
     expect(HOME).toContain('aria-label="设置"');
   });

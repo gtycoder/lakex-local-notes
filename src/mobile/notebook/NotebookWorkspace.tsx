@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Info } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Info, Table, Database, PenTool } from "lucide-react";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { EmojiPanel } from "../ui/EmojiPanel";
 import { bridge } from "../bridge";
@@ -73,6 +73,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [tabsOpen, setTabsOpen] = useState(false);
   const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** 目录抽屉的「新建」菜单（与桌面同一份清单；移动端只有文档/分组能落地，其余置灰）。
+   *  `createParent` = 建到哪个节点下：抽屉工具栏的 ＋ = 笔记本根，行内 ＋ = 该行节点（复用同一个面板）。 */
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createParent, setCreateParent] = useState<string>(notebookId);
   const [navHidden, setNavHidden] = useState(false);
   // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
@@ -552,6 +556,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                     ⋯ = 右键菜单，＋ = 新建子文档。 */}
                 <span className="nb-tree-actions">
                   <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenuFor(it); }}><MoreVertical size={17} /></span>
+                  {/* 新建子项（用户 261014：**每一行都要有**，不只是笔记本根）——与工具栏 ＋ 共用同一个面板，
+                      只是把作用域换成这一行；桌面同一个语义是"行右键 → 新建文档/分组"。 */}
+                  <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="新建子项" title="新建子项" onClick={(e) => { e.stopPropagation(); setCreateParent(it.id); setCreateOpen(true); }}><Plus size={17} /></span>
                 </span>
               </>
             )}
@@ -646,6 +653,28 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => setMoreOpen(true)} aria-label="更多" title="更多"><MoreHorizontal /></button>
       </nav>
 
+      {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
+          （文档 / 表格 / 数据表 / 画板 / 分组）。移动端只有 **Lake 文档**与**分组**能落地 ——
+          表格/数据表/画板需要各自的编辑器，移动端是只读查看 ⇒ **置灰并写明理由**（没有 hover，必须给一行文字）。
+          不要在移动端偷偷建出"打不开的文档"。 */}
+      <MobileSheetMenu
+        open={createOpen}
+        items={[
+          { id: "note", label: "新建文档", icon: FilePlus },
+          { id: "usheet", label: "新建表格", icon: Table, disabled: true, note: "移动端暂不支持编辑" },
+          { id: "bitable", label: "新建数据表", icon: Database, disabled: true, note: "移动端暂不支持编辑" },
+          { id: "board", label: "新建画板", icon: PenTool, disabled: true, note: "移动端暂不支持编辑" },
+          { id: "group", label: "新建分组", icon: FolderPlus },
+        ]}
+        onClose={() => setCreateOpen(false)}
+        onSelect={(it) => {
+          setCreateOpen(false);
+          // 复用目录树的同一份创建通道（行内 ＋ / 长按菜单同源），不新造第二条；作用域 = 本次打开它的那个节点
+          if (it.id === "note") void createChildDoc(createParent);
+          else if (it.id === "group") void createChildGroup(createParent);
+        }}
+      />
+
       {/* 更多（思源 #menu）。**不要**再把「搜索」「设置」放回来 —— 用户 261014 点单删掉：
           设置 = 首页左上齿轮（统一入口）；搜索 = 首页底部胶囊（同一份全局搜索 Sheet，且是全库范围、
           不是"笔记本内搜索"）⇒ 工作区里再放一份只是重复。本菜单只留"新建文档 / 切换笔记本 / 编辑本文"。 */}
@@ -670,6 +699,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
         <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
           <div className="toolbar__scroll"><span className="toolbar__text">{title}</span></div>
+          {/* 261014 用户点单：目录栏加「新建」（桌面同款清单） */}
+          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => { setCreateParent(notebookId); setCreateOpen(true); }} aria-label="新建" title="新建"><Plus /></span>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
         </div>
         <div className="side-panel-body">
