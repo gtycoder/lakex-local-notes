@@ -99,6 +99,12 @@
   --lake-font-size-title: 18px;  /* 面板/分组标题 */
   --lake-font-size-display: 20px;/* 页面标题 */
   --lake-font-size-h1: 24px;
+  /* 表情面板（261013 微信样式）两档字号：分类条上的图标 / 格子里的大表情。
+   * 261014：分类条末尾新增动作键（输入态=返回 / 选图标态=清除）⇒ 10 格，字号收一档（24→22）。
+   * 行高单独给令牌：视觉压到 36（命中区仍靠 ::after 补到 --mb-tap-min，见 mobile.css 注册表）。 */
+  --mb-emoji-cat-size: 22px;
+  --mb-emoji-cat-h: 36px;
+  --mb-emoji-glyph-size: 28px;
   --lake-font-weight-regular: 400;
   --lake-font-weight-medium: 500;
   --lake-font-weight-semibold: 600;

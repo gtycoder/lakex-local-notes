@@ -167,6 +167,9 @@ export default async function run(ctx) {
   });
   add("doc-note-info", async () => { await goHome(); await openNotebook(); await openTreeMenu(0); await sheetItem("属性"); });
   add("doc-history", async () => { await goHome(); await openNotebook(); await openTreeMenu(0); await sheetItem("历史"); });
+  // 261014 补：目录行 ⋯ →「设置图标」的选图标 sheet（**此前 22 屏没覆盖**，而 261014 恰好在这屏上加了
+  // 分类条末尾动作键 ⇒ 探针必须先看得见它，否则又是"探针全绿但整屏没量过"）。
+  add("notebook-icon-sheet", async () => { await goHome(); await openNotebook(); await openTreeMenu(0); await sheetItem("设置图标"); });
   add("settings", async () => { await openSettings(); });
   ["编辑器", "外观", "历史", "资源管理", "同步设置", "清理缓存", "回收站", "关于"].forEach(function (label) { add("settings-" + label, async () => { await openSettings(); await settingsPage(label); }); });
 

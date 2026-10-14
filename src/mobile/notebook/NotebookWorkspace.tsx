@@ -8,8 +8,8 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Info } from "lucide-react";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
+import { EmojiPanel } from "../ui/EmojiPanel";
 import { bridge } from "../bridge";
-import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { loadSettings } from "../../lib/settings";
 import { selectEvictionIds } from "../../core/tabLimit";
 import { DocumentEditor } from "../editor/DocumentEditor";
@@ -743,12 +743,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <button className="mobile-icon-btn" onClick={() => setIconFor(null)} aria-label="关闭"><X size={20} /></button>
             </div>
             <div className="mb-sheet__body">
-              <div className="mobile-emoji-grid">
-                {LAKE_EMOJIS.map((e) => (
-                  <button key={e.name + e.char} className="mobile-emoji-cell" onClick={() => void applyIcon(e.char)} title={e.name}>{e.char}</button>
-                ))}
-              </div>
-              <button className="mb-btn mb-btn--secondary" onClick={() => void applyIcon(null)}>清除图标</button>
+              <EmojiPanel onPick={(icon) => void applyIcon(icon)} onClear={() => void applyIcon(null)} />
             </div>
           </div>
         </div>

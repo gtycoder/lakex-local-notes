@@ -1,7 +1,7 @@
 /** 新建知识库 Sheet（§5：名称必填；默认图标不落库；自定义 Emoji 一次性提交 CreateNotebookInput）。 */
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Book, X } from "lucide-react";
-import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
+import { EmojiPanel } from "../ui/EmojiPanel";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 
 export interface CreateNotebookSheetProps {
@@ -18,11 +18,7 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 常用表情：取前两组（表情/人物）作为快捷选择
-  const quickEmojis = useMemo(
-    () => (LAKE_EMOJI_GROUPS[0]?.emojis ?? []).slice(0, 24),
-    []
-  );
+
   const sheetRef = useRef<HTMLDivElement>(null);
   useSwipeToClose(sheetRef, () => { if (!saving) onClose(); }, open);
 
@@ -68,12 +64,10 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
           </div>
           {showEmoji && (
             <div className="create-nb-emoji-picker">
-              <div className="create-nb-emoji-grid">
-                {quickEmojis.map((ch) => (
-                  <button key={ch} className={icon === ch ? "create-nb-emoji-btn selected" : "create-nb-emoji-btn"} onClick={() => { setIcon(ch); setShowEmoji(false); }}>{ch}</button>
-                ))}
-              </div>
-              <button className="create-nb-clear-icon" onClick={() => { setIcon(null); setShowEmoji(false); }}><X size={14} />清除自定义图标</button>
+              <EmojiPanel
+                onPick={(ch) => { setIcon(ch); setShowEmoji(false); }}
+                onClear={() => { setIcon(null); setShowEmoji(false); }}
+              />
             </div>
           )}
           {error && <div className="create-nb-error">{error}</div>}

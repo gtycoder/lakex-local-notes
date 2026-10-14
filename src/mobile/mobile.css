@@ -6,7 +6,10 @@
 
 * { box-sizing: border-box; }
 
-html, body, #root { margin: 0; padding: 0; height: 100%; }
+/* 根三件套也用外壳高度：编辑面的百分比/撑满（如写作卡、内核宿主）是**逐级往上解析**的，
+   只钉 .mobile-app 不够 —— 261014 实测：app 已钉 530，但写作卡仍从 320 长到 428（它解析到 body 的 842）。
+   无编辑 dock 时 --mb-app-h 未设置 ⇒ 退回 100%（今天的行为，设置页/首页不受影响）。 */
+html, body, #root { margin: 0; padding: 0; height: var(--mb-app-h, 100%); }
 body { font-family: var(--lake-font-family); background: var(--lake-bg-window); color: var(--lake-text-1); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
 .poc-center { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 15px; color: var(--lake-text-2); }
@@ -29,7 +32,10 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* overflow:hidden 必须加在根容器（动画元素的祖先）上：overflow 只裁子元素，加在自身动画的 .mobile-tab-stage 上无效。
    首页左滑切 tab 的入场动画是 translateX(±24px)，由这里裁掉溢出，右侧就不会露出"被拉伸/拉过头"的边。
    抽屉 .side-panel 是 position:fixed，根容器无 transform，不受裁剪影响。 */
-.mobile-app { display: flex; flex-direction: column; height: 100%; position: relative; overflow: hidden; }
+/* 外壳高度：有编辑 dock 时 = **稳定外壳高 − 底部被占高度**（--mb-app-h 由 EditorDock 写，见 viewportShell.ts）
+   —— 面板与输入法占同一块区域，内容视口恒定（语雀口径）；无 dock 时退回 100%（今天的行为）。
+   261014 实测（改前）：面板一开视口 530→842，写作卡 320→428、整块编辑区跳 108px。 */
+.mobile-app { display: flex; flex-direction: column; height: var(--mb-app-h, 100%); position: relative; overflow: hidden; }
 
 .mobile-topbar {
   display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
@@ -54,9 +60,17 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 首页顶部 tab 主体样式单一来源在下方 .mobile-home-tabs 区块 */
 
 /* 首层 tab 舞台（小记 ↔ 知识库；用户要求去掉切换入场动效，直接切换） */
+/* 261014：首页/小记这一层原先**没有规则**（普通 block、自动高度）⇒ 里面的 `.mobile-tab-stage/.mobile-scroll`（都是 flex:1）
+   在一个 auto 高度的父里退化成"内容多高就多高、永远不滚"（实测 scroller 的 scrollHeight == clientHeight），
+   于是**文字一多，光标就贴着内容一路跑出屏幕**（用户报的"光标不能被工具栏/键盘盖住"在小记上就是这么坏的）。
+   让它像 `.mobile-workspace` 一样撑满外壳（外壳高度已被 --mb-app-h 钉住）⇒ 内层才是真正的滚动容器。 */
+.mobile-home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .mobile-tab-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .mobile-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
+/* 小记写作（261013 重做）：写作时**底部挂的是文档编辑那条 dock**（EditorDockHost），不是首页胶囊栏，
+ *  所以底距改按 dock 的占位算（与 .mobile-doc-body 同一口径），否则动作行会被 dock 压住。 */
+.mobile-scroll--with-dock { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
 .mobile-scroll::-webkit-scrollbar { display: none; }
 /* （261013 A 批：空态统一到 .mb-empty，见 kit.css。） */
 
@@ -64,8 +78,20 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .mobile-qcard:active { background: var(--lake-bg-hover); }
 
-/* 小记 composer */
-.mobile-qn-composer { background: var(--lake-bg-window); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 12px; }
+/* 小记 composer —— 261014：改成**定高 + 内部滚动**（与文档 `.mobile-doc-body` 同一口径）。
+   原先它是普通块、高度由内容决定：文字一多，内容直接溢出到卡片外，浏览器没有可依赖的滚动口
+   ⇒ **光标一路跑出屏幕**（用户报的"光标必须始终在工具栏上方"在小记上就是这么坏的），
+   而且面板一开卡片还会长高（352→664）。现在：卡片 = 滚动区内容盒的高度（外壳已被 --mb-app-h 钉住 ⇒ 两种状态同高），
+   正文（.quick-note-editor）自己滚、底部动作行固定在卡片底部。 */
+.mobile-qn-composer { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; overflow: hidden; background: var(--lake-bg-window); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 12px; }
+.mobile-qn-composer .quick-note-editor { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.mobile-qn-composer .mobile-qn-actions { flex: 0 0 auto; }
+/* ⚠️ **不要再给这里加第二个滚动容器**（261014 实测踩到）：内核 note 版式内部已经有自己的滚动口
+   `.ne-editor-wrap-content { overflow-y: auto }`（实测 st=442 / sh=729 / ch=260）。我先前把 `.quick-note-editor`
+   也设成 `overflow-y:auto` ⇒ **两层滚动打架**：外层 scrollTop 会被"光标跟滚"和浏览器各自改一次，
+   切面板时正文位置来回跳（实测外层 st 0 → 239、sh 318 → 584，首块 Y 位移 46–73px）。
+   口径：**内核的滚动口就让它滚**，我们只负责把它的高度框住（卡片定高 + overflow:hidden）并提供
+   `useCaretIntoView` 去纠偏（它会顺着祖先链找到真正可滚的那一层）。 */
 .mobile-qn-textarea { display: block; width: 100%; min-height: 120px; border: 0; outline: 0; resize: vertical; font-size: 15px; line-height: 1.6; font-family: inherit; color: var(--lake-text-1); background: transparent; }
 .mobile-qn-textarea::placeholder { color: var(--lake-text-3); }
 .mobile-qn-images { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
@@ -187,7 +213,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-done-btn { border: none; background: var(--lake-accent); color: var(--lake-text-on-accent); border-radius: var(--lake-radius-sm); padding: 6px 14px; font-size: 14px; cursor: pointer; }
 /* 底部让位：阅读态底部胶囊栏顶边距视口底 80px（栏高 48 + 离底 32）。实测滚到底时最后一行
    bottom=802 而栏 top=762 —— 40px 让位会让末 1~2 行被栏压住（栏上滑时又复现），改为 80px。 */
-.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding-bottom: calc(80px + var(--mobile-dock-space, 0px) + env(safe-area-inset-bottom, 0px)); }
+.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
 /* 音频/视频卡展示优化：
    1) audio 卡播放器就绪（兜底异步设置）前的 error 状态（"音频文件不能播放"/版权链接）先隐藏，
       避免进入文档/切编辑态时闪现不可用文案——兜底成功后播放器自然替换；
@@ -231,9 +257,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 @keyframes mobile-dropdown-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 /* 目录树节点图标选择器（emoji 网格） */
-.mobile-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 0 16px 12px; }
-.mobile-emoji-cell { border: 0; background: transparent; font-size: 20px; padding: 6px 0; cursor: pointer; border-radius: var(--lake-radius-sm); }
-.mobile-emoji-cell:active { background: var(--lake-bg-window); }
+
 
 .create-nb-row { display: flex; gap: 12px; align-items: center; }
 .create-nb-icon {
@@ -247,11 +271,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-settings-form input::placeholder,
 .mobile-search-input::placeholder { color: var(--lake-text-3); opacity: 1; }
 
+/* 261013：建库/设图标的选图标改用移动端自带面板 mobile/ui/EmojiPanel（微信样式）⇒ 旧的内联网格与"清除自定义图标"规则删除。 */
 .create-nb-emoji-picker { margin-top: 12px; }
-.create-nb-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
-.create-nb-emoji-btn { border: none; background: transparent; font-size: var(--lake-font-size-display); padding: 6px 0; border-radius: var(--lake-radius-sm); cursor: pointer; }
-.create-nb-emoji-btn.selected { background: var(--lake-accent-tint); }
-.create-nb-clear-icon { margin-top: 10px; border: none; background: transparent; color: var(--lake-text-3); font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .create-nb-error { color: var(--lake-status-error); font-size: 13px; margin-top: 10px; }
 .create-nb-submit {
   width: 100%; margin-top: 16px; border: none; border-radius: var(--lake-radius-md); background: var(--lake-accent); color: var(--lake-text-on-accent);
@@ -387,10 +408,15 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
  * 才第一次被报出来的 —— 空回收站时这些按钮根本不存在（说明"探针全绿"还要看数据是否覆盖到了那条路径）。 */
 /* 261013 A 批后：.med-btn / .med-ins-item / .med-f-btn / .med-outline-item / .med-doc-item 已真的做到 44
    ⇒ 从注册表移除（不能"既调大又补足"两套并存）。剩下的是**视觉尺寸被刻意压住**的那批。 */
+/* 261014 追加 `.mb-emoji-cat`（表情面板分类条）：分类条定位为**一屏 8 格 + 横滑**（用户二次定稿，对标微信），
+   每格横向固定 --mb-tap-min(44) ⇒ **横向天然达标、无相邻重叠**；只有视觉高度按用户要求压到 36
+   （--mb-emoji-cat-h）⇒ 由本注册表把命中区补到 44（上下各 4px，正好落在分类条与正文之间的 8px 间隙里，不压正文）。
+   末尾动作键同理（宽就是 44）。 */
 .mb-tap, .toolbar__icon, .mobile-settings-close, .mb-segment__item, .mbt-table-tab, .mbt-link, .minfo-action,
-.med-f-sw, .mobile-trash-action { position: relative; }
+.med-f-sw, .mobile-trash-action, .mb-emoji-cat { position: relative; }
 .mb-tap::after, .toolbar__icon::after, .mobile-settings-close::after, .mb-segment__item::after,
-.mbt-table-tab::after, .mbt-link::after, .minfo-action::after, .med-f-sw::after, .mobile-trash-action::after {
+.mbt-table-tab::after, .mbt-link::after, .minfo-action::after, .med-f-sw::after, .mobile-trash-action::after,
+.mb-emoji-cat::after {
   content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: max(100%, var(--mb-tap-min)); height: max(100%, var(--mb-tap-min));
 }
@@ -840,7 +866,8 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   flex: 1;
   min-height: 0;
   height: 100%;
-  padding: 8px;
+  /* 底部让位给 dock（261013：小记改用文档编辑那条工具栏）——与 .mobile-doc-body 同一口径。 */
+  padding: 8px 8px calc(80px + env(safe-area-inset-bottom, 0px));
 }
 /* 表格只读查看器（kind=usheet，移动端）：占满文档层，Univer 容器铺满。
  * ⚠️ 必须建**层叠上下文**：Univer 内部给 canvas 写了 inline z-index:8，而移动端底栏 z-index:3、

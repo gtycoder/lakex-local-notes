@@ -132,6 +132,11 @@ components:
 **不要**靠调大按钮本身来达标 —— 那会改行密度与面板高度。走查装置会按**算上伪元素后的有效命中区**报 `smallTap`。
 ⚠️ 但**该调大时就得调大**（261013 A：dock 条目 40 → 44、搜索/文档行 40 → 44、设置行 52 → 48）——
 补足注册表只服务「视觉尺寸被刻意压住」的那批；已经真的到 44 的类**必须从注册表移除**，不许"既调大又补足"两套并存。
+**密度不够时的口径 = 「一屏 8 格 + 横滑」，不要靠缩小命中区硬塞**（261014 表情面板分类条，用户二次定稿）：
+分类条先试过"10 格挤一屏"（每格 41px + ::after 补足、相邻命中区重叠约 3px），用户判定**可点目标太多**⇒ 改成
+**一屏 8 格（每格固定 --mb-tap-min=44）+ 横向滚动**（对标微信，它的表情行也是 8 个）；**末尾动作键钉在轨道右侧、不参与滚动**
+（返回/清除必须永远够得着）。横滑安全性靠 `data-prevent-swipe`（面板根已挂，外壳手势本就排除它）——
+**任何"横滑"都必须是这个姿势**：先挂 `data-prevent-swipe`，再让容器自己 `overflow-x: auto`。
 
 ## Elevation & Depth
 
@@ -180,6 +185,9 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 **选择器 = `PickerSheet`（`mb-select--trigger` 触发器 + `mb-sheet--picker` 底部列表、选中项打勾）** ·
 **设置页骨架** `mb-set-group/title/items/section/item(--field)/name/desc/note/ctl/error/block/stats` ·
 **空态 = `mb-empty`（+ `--inset` 变体；261013 A 批把 `.mobile-empty` / `.mb-set-empty` / `.mb-sheet__empty` 三套收敛成一件）** ·
+**表情面板 = `mb-emoji-panel`(`--fill`)/`cats`/`cat`(`--action`)/`body`/`grid`/`cell`/`empty`（微信样式：顶部分类条 + 浅灰底大格子；
+分类条末尾**动作键**`mb-emoji-cat--action` 语义随入口：**输入态（小记/文档 dock）= 返回**（退出表情选择、回「＋」面板）、
+**选图标态（知识库/文档图标）= 清除图标**；「最近」首格那块清除格已于 261014 撤掉 —— 同一动作只留一个入口）** ·
 **首页文字 tab = `.mobile-htab`（选中加粗 + `--lake-text-1`）** ·
 **冷启动骨架 = `.mb-skel`（--icon/--tab/--group/--row/--baritem；结构与首页同构、尺寸同源，填充不跳动；
 `prefers-reduced-motion` 下关掉呼吸）** ·
@@ -200,7 +208,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 ```bash
 npm run check:mobileui     # 独立性 + 层护栏 + 内核样式护栏 + ui-metrics，一条命令
 npm run check:mobilesnap   # 设备级：6 态整页计算值快照（0 差异）
-node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs   # 设备级：22 屏截图 + 五类探针
+node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs   # 设备级：23 屏截图 + 五类探针
 ```
 
 **基线只许降**的账本：桌面样式 import 白名单（现状 4 条：quick-notes + 2 feature CSS + 字体资源）·
@@ -208,7 +216,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 `!important`（现状 **18**，新增须写明理由；都是压「内核行内样式 / 未分层内核 CSS」的必需项 ——
 未分层的普通声明会压过我们 @layer 里的普通声明，只有「分层里的 !important」才强于「未分层的 !important」，
 即 CSS Cascade 5 的 important 层序反转；261013 的 +2 来自压内核桌面引擎几何 `min-height:1024` 与 90px 底内距）·
-移动端 **字号字面量**（现状 **52** = mobile.css 43 + editor-dock.css 9，只许降；由 `ui-metrics.mjs` 卡住，
+移动端 **字号字面量**（现状 **47** = mobile.css 38 + editor-dock.css 9，基线 49、只许降；由 `ui-metrics.mjs` 卡住，
 新增字面量直接 exit 1 —— 桌面是硬 0，移动端先做单调下降）·
 **移动端 CSS 不得再出现桌面类名选择器**（`ln-`/`b3-`/`fn__`/`config-`，`mobileLayers.test.ts` 恒为 0；
 261013 立：P5 之后还留着一批挂在 `.ln-row` 上的规则永不命中 —— 拖拽落点线就是这么静默丢的）。

@@ -894,6 +894,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
   在小记面板里改成 `position:absolute; inset:0; z-index:30`（容器 `.quick-notes-pane` 加 `position:relative`），
   退出按钮 `.ne-ui-exit-fullscreen` 从 `fixed` 改为面板内 `absolute; top/right:6px`
   （与文档侧 `.ne-ui-max-view` 的适配同款，见 `src/styles/app/editor.css`）。
+- **261013 实测修订：上面的 `absolute` 必须带 `!important`。** vendor `src/assets/lakex-doc.css` 的 `.ne-ui-fullscreen` 明确写了 `position:fixed!important`，普通层叠的 absolute 无效（真实 Electron 计算值仍 fixed，mount 顶部 0、退出按钮顶部 6）；`src/styles/app/quick-notes.css` 的现有桌面作用域就地改为 `position:absolute!important`，定位基准回到 `.quick-notes-pane`（窗口顶部 38，= topbar + 4px 拼接缝），底部仍贴面板。属于压过第三方 important 的必要例外，不改 vendor、不另加平台分支；普通小记与移动端不受影响。
 - ⚠️ **小记编辑器必须 `disableVirtualRendering: true`**（260919 用户报「输入一个字整片空白 + 编辑态顶部大空白」）：
   虚拟渲染靠 `scrollNode` 量视口，小记没有 Lake 内部滚动容器、fallback 到 `.document-pane` 会量错 ⇒
   正文被替换成 `.ne-virtual-render-placeholder`（顶部被顶下 190px；一输入触发重渲染就整片变占位）。
@@ -1668,6 +1669,147 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 按 CSS Cascade 5：**普通声明：未分层 > 分层**；**`!important` 声明：分层 > 未分层（层序反转）**。
 所以「分层里的 `!important`」能压未分层的内核 CSS，而分层里的普通声明压不过 —— 这是 `mobile.css` 那 18 条 `!important` 的共同由来。
 
+### 5.35 内核「表情面板」的类契约 + 我方复用姿势（261013；读码 + 桌面/移动设备实测）
+
+**结论：内核表情面板不是导出的组件，但它是一套「类名即契约」的 DOM + 已随内核分发的 CSS ⇒ 可以整体复用。**
+
+**① 它不是公开组件**：`vendor/lakex-doc-react/dist/index.d.ts` 里**没有任何 emoji / picker 导出**；面板是内核内部 React 件
+（props 有 `emojiGroups` / `onEmojiSelect` / `disableRecent` / `disableTabs`；`_renderFooter` 里 `tabs = Object.keys(emojiGroups)`，
+有最近记录时才前置「最近」），只在点击 `unicodeEmoji` 占位卡时才由内核挂出来（§5.29）⇒ **不能 import，但可以照它的 DOM 结构自己渲染**。
+
+**② 类名族（`dist/style.css` 共 21 条规则，已随我们的构建进包）**：
+`.ne-ui-unicode-emoji-panel`（418px / radius 8 / 自带边框 + 投影 + `--lakex-editor-background-foreground` 底）＞
+`-panel-header`（padding 16 16 0，内放 `-search`）· `-panel-content`（**固定高 266px** + `overflow-y:scroll` + padding 0 16）＞
+`-group` ＞ `-label`（caption 色 / 12px）+ `-content`（**只写 `display:grid`，列数由 JS 内联 `repeat(N, 1fr)` 给**）＞
+`-item` ＞ `span`（**32×32 / radius 4 / font-size 26px** / hover 用 `--lakex-editor-background-primary-hover`）；
+`-panel-footer` ＞ `-tabs`（flex / space-between / gap 10）＞ `-tab-item`（26 高 / min-width 40 / **选中 700 字重 + text-color**）。
+
+**③ 复用姿势（与 §5.24 noteRefCard 复用 `.ne-link-editor` 同一套）**：
+浮层 `surfaceClassName="ne-ui-unicode-emoji-panel"` + `className="lakex-default-theme"` —— 后者**必须加**：
+浮层 portal 到 body、已在编辑器树之外，靠它吃 `kernel-theme.css` 的 `--lakex-editor-*` 主题桥；**实测不加时面板背景透明**
+（浅色下 `panelBg=rgba(0,0,0,0)`；加上后 = `rgb(255,255,255)`，深色 = `rgb(30,31,35)`）。
+列数：**桌面 8 列**（418 − 32 内距 = 386 ⇒ 格宽 ≈48，与内核截图一致）。
+⚠️ **移动端最终没有走这条复用路线**（用户 261013 第二轮改口："移动端做成微信样式、分类放顶部，更适合输入"）⇒ 移动端是**自有的微信样式面板**
+（顶部：搜索 / 最近 / 8 组图标按钮 + 选中浅底；正文：`--lake-bg-block` 灰底 + 8 列大格子 51×44 / 表情 28px；底部清除行）—— **不复用内核类，也不需要那 3 个内核 token 桥**（已从 `mobile/theme/light.css` 撤回）。
+⇒ §5.35 的①②③④ 只适用于**桌面**那份；移动端只在"为什么当初不复用内核"这条上与本条相关。
+
+**④ 两处内核 CSS 的坑（在我们这层就地纠偏，不动 vendor）**：
+· `-tabs` 写的是 **`overflow-y: scroll`**（横向 tab 行，显系笔误）⇒ 带「最近」共 9 个 tab 时会**溢出到面板之外**；补 `overflow-x: auto`。
+· 搜索框是内核**内部输入组件**（自带满宽/边框/内距），我们渲染原生 `input` ⇒ 需自己补盒子（宽度/内距/边框/圆角）。
+
+**⑤ 设备实测（261013；隔离桌面实例 + 门禁 AVD + 用户 AVD）**：
+· **桌面**（复用内核面板）：418×266 / 32px 格 / 26px 表情 / 选中 tab `700` / 三主题面板底 `#fff`·`#1e1f23`·`#fff`；
+· **移动**（微信样式）：分类按钮 **44×44**、格子 **51×44** / 表情 **28px** / 正文底 `--lake-bg-block`(`rgb(244,246,248)`) / 分类 10 个（搜索·最近·8 组）横向可滚。
+两端入口：桌面 = 目录树行首**图标本身**（`tree-row-icon`，title「设置图标」）；移动 = 工作区目录树每行右侧 **⋯ →「设置图标」**（文档与分组都有；**笔记本本身只有建库时可设**，建完无入口）。
+
+**⑥ ⚠️ 最大的坑：这些 token 是「编辑器挂载时才注入」的 ⇒ 面板会**间歇性变透明**（261013 用户实拍发现 + 复现 + 已修）**：
+内核把 schema（`.lakex-default-theme{ --lakex-editor-*: … }`）作为 `<style>` **在编辑器初始化时**注入（实测页面里同时存在 HEAD 与编辑器子树两份，**没有编辑器时 tag 数 = 0**）。
+⇒ 那一刻面板的 `background-color: var(--lakex-editor-background-foreground)` **失效**（computed = `rgba(0,0,0,0)`），整块**透明**、底下的树行/正文透出来；
+等有编辑器挂载后又「自己好了」—— 所以是**间歇**的（复现：全新实例刚启动、tag 数 0 时 `panelBg=rgba(0,0,0,0)`；禁用那两份 style 后同样复现）。
+**修法**：在**未分层**的 `src/styles/kernel-theme.css` 里给这个表面**钉住 5 个 token**（`.ne-ui-unicode-emoji-panel.lakex-default-theme{…}`，值走 `--lake-*`）——
+未分层才能在 cascade 里压过内核自己的 0-1-0 普通声明（层序优先于特异性），0-2-0 + 只作用于该浮层 ⇒ 不进编辑器树。
+修后实测：**把内核那两份 style 禁掉，面板依旧实心**（`panelBg=rgb(255,255,255)`，caption = 我们的 `--lake-text-3`）。
+⇒ 通用教训：**凡是我们自己渲染、却依赖内核注入 token 的表面，都要显式钉一份兜底**（`noteRefCard` 那两个浮层同理，只是它们恰好没被发现在无编辑器时打开）。
+
+**⑦ 一处有意偏离内核的行为（用户 261013 定）**：内核的页脚 tab 是 `Object.keys(emojiGroups)`，**只有存在最近记录时才前置「最近」**（`_renderFooter` 里 `!disableRecent && i.length > 0` 才插入）；
+我们两侧面板**始终显示「最近」**（空的也留位置，并给一句「用过的图标会出现在这里」）—— 理由是"面板上看不到就等于没有这个能力"。记录在此，避免下次核对内核行为时误判成我们的 bug。
+
 **⑤ 复查命令（只读）**：`grep -c 'ne-doc-major-editor-mobile' vendor/lakex-doc-react/src/assets/lakex-doc.css` ·
 `grep 'ne-doc-major-editor-mobile' … | grep -c 'ne-typography-classic'` · `sed -n '5095,5100p' …/lakex-doc.css` ·
 `grep -n '^\.ne-doc-major-viewer[ ,{]' …/lakex-doc.css`
+
+### 5.36 面板命令后内核会**抢回焦点** ⇒ 移动端输入法闪出、面板塌陷（261014 设备实测；已在本层收口）
+
+**内核行为（AVD lake_mobile / adjustResize，CDP 事件日志实测）**：在 dock 面板里执行任意一条命令（本例
+`execCommand('insertAtSelection','text/lake','<span>😀</span>')`）后，内核会把焦点抢回正文 `ne-engine`：
+**一次点按触发 2–3 次 `focusin`**（实测 t+145ms、t+254ms、t+4554ms 各一次，中间夹我们自己的 blur）。若此时没有拦住，
+Android 认为"用户要输入"⇒ 输入法弹出（窗口 innerHeight **842 → 530**）。
+
+**我们这层的连锁反应（= 用户看到的"表情栏闪烁"）**：面板高度由 `--kb-offset` 驱动
+（`usable = max(0, innerHeight - base + panelHeight)`，语义 = 面板"接管"键盘让出的区域；`.med-panel{height:var(--kb-offset)}`）⇒
+输入法一弹出，这个值从 **312px 塌到 0px** ⇒ 面板整块消失（实测 `panelH 312 → 1`），等 blur 生效、输入法收起（约 200ms）再恢复。
+原兜底是 `keyboardOpen` 的 effect（`useKeyboard` 报告键盘弹出后再 blur）：实测 **t+1247 才 blur**（`focusout` 时
+innerHeight 已是 530、`win-resize` 已在 t+1310 发生）⇒ **晚约 1s，必闪**。
+
+**收口（单一来源 = `EditorDock` 既有的 focusin 守卫）**：非"用户手指点正文"的聚焦，在**面板开着**时于 focusin 的
+**同一个任务内**立刻 `blurActiveEditable()`（面板态用 ref 镜射——监听只挂一次）；用户点正文 → 仍按原语义收面板。
+护栏 `src/mobile/editor/dockPanelFocusGuard.test.ts`（6 例，自证：改回旧写法 ⇒ 2 例红）。
+
+**⚠️ 与守卫配套的一条硬约束：面板态必须"同步"写进 ref，且只有 `setPanel` 一个写入口。**
+`togglePanel` 收起面板是 `setPanel(null) → focusEditor()` **同一个 tick**（要"键盘与面板动画同时开始"）；若 ref 靠 React 渲染才同步，
+守卫在那一刻读到的还是旧面板态 ⇒ **把刚 focus 起来的键盘又收掉 ⇒ 收起面板后键盘回不来**（本修复自查发现的真回归，已用
+"同步写 ref + 单一写入口"修掉，并用设备实测复核：收起面板后 innerHeight 842 → **530**、焦点回 `ne-engine`、面板 `data-panel=none`）。
+⇒ 以后新增面板态写入点，一律走 `setPanel`。
+
+**修后设备实测（同脚本同入口，两处入口都测)**：
+· 小记写作卡：`focusin` 3 次，每次 **5–20ms 内**被 blur；全程 **0 次 `resize`/`visualViewport.resize`**、
+  innerHeight 恒 **842**、`--kb-offset` 恒 **312px**、`panelH` 恒 312 ⇒ 不闪；
+· 文档编辑器（探针文档，测完已移回收站）：`panelH` 恒 **280** / `--kb-offset` 恒 280px / innerHeight 恒 842 / **0 次 resize**。
+（对照：修前同一脚本测得 `win-resize` 530 → 842、`panelH` 312 → 1 → 312。）
+
+**口径**：面板的语义是"占住键盘区 = 键盘不显示"（用户 260914 定）。任何让正文重新拿到输入焦点的内核行为都必须在这一处被吞掉；
+**不要**去改 `--kb-offset` 的公式 —— 公式本身是对的（键盘真弹出来时面板确实该让位），错的是"让键盘弹出来"这件事发生了。
+
+### 5.37 内核 note 版式的 `min-height: 40vh`：**40vh 跟视口走** ⇒ 移动端"键盘⇄面板"切换时写作卡会长高（261014 设备实测；已收口）
+
+**内核规则（vendor `lakex-doc-react/src/assets/lakex-doc.css:6205`）**：
+``.ne-doc-note-editor .ne-note-ui .ne-engine { min-height: 40vh }`` —— 小记用的 **note 版式**给引擎一个按**视口**算的最小高。
+
+**为什么在移动端会坏事**：Android adjustResize 下**只有输入法会让 WebView 变矮**（实测 842 → 530），
+我们自己画的面板（`.med-panel`，fixed 占键盘区）**不让视口变矮**。于是：
+- 输入法态：40vh = **212px**；面板态：40vh = **337px** ⇒ 小记写作卡 **320 → 428**（用户报的"编辑区跳动"）。
+
+**收口口径（我们这层，不动 vendor）**：把 40vh 换成**稳定外壳高的 40%** ——
+``.quick-note-editor .ne-doc-note-editor .ne-note-ui .ne-engine { min-height: calc(var(--mb-app-h, 100%) * 0.4) }`
+（`--mb-app-h` = 键盘收起时的外壳高 − 当前底部占用，由 `EditorDock` 在 `useLayoutEffect` 里写到 `:root`；
+选择器必须比内核那条更具体：`body.lake-mobile` 前缀 = 0-5-0 > 内核 0-3-0）。
+修后设备实测：两种状态下引擎 min-height 恒 **212px**、写作卡恒高（398），切换不再跳。
+
+**同源教训（一般化）**：凡是**内核写的 vh / dvh / %** 定高，在移动端都可能在"键盘⇄面板"切换中变形。
+判据 = **问它按什么基准算**：按视口算的（vh/dvh）一律要换成按我们的稳定外壳算（`--mb-app-h`）。
+另有同类：`.mb-emoji-body { height: 42vh }`（只在面板态出现，视口恒 842 ⇒ 目前无碍，登记备查）。
+
+**② 内核 note 版式的**滚动口高度与上限**也是按视口算的（261014 深挖到的真凶）**：
+`.ne-editor-wrap-content`（note 版式里**真正滚动的那个元素**，`overflow-y: auto`）实测：
+- `clientHeight` = **260（键盘态 530）⇄ 572（面板态 842）**，`max-height` 计算值 **260.286px ⇄ 572.286px**（≈ 视口高 − 270）；
+- 视口一变内核就**重新锚定**：`scrollTop 1264 → 978`、正文首块位移 **285px** ⇒ 这就是用户报的"长内容下编辑区还在跳"
+  （短内容看不出来：没超出一屏时它不滚）。
+
+**收口（我们这层，CSS 钉住容器链 + 解除上限）**：
+```css
+body.lake-mobile .quick-note-editor > .lake-editor-mount { flex: 1 1 auto; min-height: 0; height: 100%; }
+body.lake-mobile .quick-note-editor .ne-editor,
+body.lake-mobile .quick-note-editor .ne-editor-body,
+body.lake-mobile .quick-note-editor .ne-editor-wrap,
+body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-height: 0; box-sizing: border-box; max-height: none !important; }
+```
+- `max-height` **必须 `!important`**：那条上限来自内核注入的样式，普通声明压不过（我们 0-5-1 也没赢）；
+  这正是「目标是内核/第三方样式」的例外（AGENTS §3#14）——夹取本身在移动端就是错的（高度由外壳 `--mb-app-h` 给定）。
+- **自证（设备实测）**：改前 `wrap.clientHeight 260 ⇄ 306`、首块 Y 位移 46px；改后**键盘态/面板态/收回态三者
+  `clientHeight=306 / scrollTop=1218 / engTop=-1141 / firstBlockY=-1125` 逐项完全相同（位移 0）**。
+- ⚠️ 另一条同批教训：**不要给它再加第二个滚动容器**。我一度把 `.quick-note-editor` 也设成 `overflow-y:auto`，
+  两层滚动打架（外层 st 0 → 239、sh 318 → 584）——内核的滚动口就让它滚，我们只负责框住高度。
+
+### 5.38 移动端「收输入法但**留住光标**」：`inputmode="none"` + blur/focus（261014 设备实测；两轮才收口）
+
+**要解决的问题**：dock 面板要占住键盘区（面板展开时键盘不显示），但**正文的光标必须留着** ——
+用 `blur()` 收输入法会把焦点与光标一起收掉（用户原话："点了 ＋ 之后编辑区的光标会消失"）。
+
+**实测口径（AVD lake_mobile，纯 JS 可做，不需要原生插件）**：给内核正文宿主（`.ne-engine`，即 contenteditable）
+加 `inputmode="none"` 再 `blur() → focus()`：
+
+| 状态 | innerHeight | activeElement | 选区 | 光标矩形 |
+| --- | --- | --- | --- | --- |
+| 聚焦（键盘开） | 530 | `.ne-engine` | 有 | [164,182] |
+| **加 inputmode=none + blur+focus** | **842（键盘收了）** | **`.ne-engine`（焦点还在）** | **有** | **[164,182]（逐项不变）** |
+| 去掉该属性 + blur+focus | 530（键盘回来） | `.ne-engine` | 有 | [164,182] |
+
+**两条必须记住的坑（都踩过，别再犯）**：
+① **不要用布尔量判「用户点了正文」**：面板期正文一直有焦点，点它**不会再触发 focusin**；而那个布尔量会被上一次点击留下 `true`，
+   再被**我们自己**抑制输入法时的 blur/focus 触发 ⇒ 误判 ⇒ **面板开了 ~630ms 自己关掉**（逐帧时间线实测：
+   `mode=insert/panels=1` 只维持了 630ms 就变回 `none/0`）。⇒ 判据放 **pointerdown**、只用当次事件；
+   focusin 分支只服务「内核命令后抢焦点」这一件事，且**只写 `inputmode` 属性、不 blur**。
+② **抑制函数自身要防重入**：blur/focus 会**同步**触发 focusin，若 focusin 分支再调抑制函数 ⇒ 无限递归。
+   用模块级 `inSetback` 标志包住（本仓已加）。
+③ 收面板要收敛成**一个出口**（`closePanel()`：× / 再点 ＋ / 用户点正文三处共用）：`setPanel(null) → focusEditor()`
+   （后者负责清抑制 + 重新聚焦把键盘放回来）→ 等键盘真回来再清占位（§5.36 的口径）。

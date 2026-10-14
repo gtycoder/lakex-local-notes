@@ -76,9 +76,14 @@ export function useCaretIntoView(rootRef: RefObject<HTMLElement | null>, enabled
 
     document.addEventListener("selectionchange", schedule);
     document.addEventListener("pointerup", schedule);
+    // 261014：**视口变化也要复核**（不是只有选区变才需要）。移动端"键盘 ⇄ 面板"切换会让视口 530 ⇄ 842：
+    // 浏览器自己的"把光标滚进视口"是按**视口**算的，会把它停在面板/键盘后面（实测：面板一开光标落到 y=585，
+    // 而面板从 530 起盖住）。这里按**我们自己的容器盒**再纠一次 —— 小记与文档两条路都吃这条。
+    window.addEventListener("resize", schedule);
     return () => {
       document.removeEventListener("selectionchange", schedule);
       document.removeEventListener("pointerup", schedule);
+      window.removeEventListener("resize", schedule);
       if (raf) cancelAnimationFrame(raf);
     };
   }, [rootRef, enabled]);

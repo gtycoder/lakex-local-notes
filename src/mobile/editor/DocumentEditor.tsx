@@ -4,14 +4,13 @@
  * 原单文档页 DocumentPage 已删除——同一文档不允许有两种外壳（260908 UI 审计 A1）。
  * 大纲/文档列表的开关状态由宿主控制（传入 outlineOpen/docListOpen + onToggle*），宿主不传则内部自管。
  */
-import { EditorDock } from "./EditorDock";
+import { EditorDockHost } from "./EditorDockHost";
 import { useCaretIntoView } from "../useCaretIntoView";
 import { showToast } from "../ui/toastBus";
 import "@dlient/lakex-doc-react/style.css";
 import "../../styles/fonts/font-overrides.css"; // 字体接线：须晚于内核 style.css（移动端无 @layer，靠顺序生效）
 import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
-import { lakeBridge } from "../../features/editor/lakeRuntime";
 import { loadSettings } from "../../lib/settings";
 import { useMemo, useRef, useState } from "react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
@@ -19,7 +18,7 @@ import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
-import { mediaKindOfFilename, isSafeShellOpenFilename } from "../../core/assetNaming.js";
+import { isSafeShellOpenFilename } from "../../core/assetNaming.js";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import type { LocalNote } from "../noteRepository";
@@ -67,7 +66,6 @@ export function DocumentEditor(props: DocumentEditorProps) {
     hidePanels, onEditorInstance,
   } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [outlineOpenS, setOutlineOpenS] = useState(false);
   const [docListOpenS, setDocListOpenS] = useState(false);
   const outlineOpen = outlineOpenProp ?? outlineOpenS;
@@ -75,16 +73,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
   const toggleOutline = onToggleOutline ?? (() => setOutlineOpenS((v) => !v));
   const toggleDocList = onToggleDocList ?? (() => setDocListOpenS((v) => !v));
 
-  /** 复用隐藏 file input：`capture` 传 "environment" 时 Android 直接开相机拍照（拍完即当图片插入）。 */
-  const insertFileViaInput = (accept: string, capture?: "environment") => {
-    const input = fileInputRef.current;
-    if (!input) return;
-    input.accept = accept;
-    if (capture) input.setAttribute("capture", capture);
-    else input.removeAttribute("capture");
-    input.value = "";
-    input.click();
-  };
+  // 插入通道（隐藏 file input + insertFiles / table）已抽到 EditorDockHost —— 与小记编辑器共用同一份。
   // 附件能力（移动端注入 LakeEditor）：canonical URL 本地可达（AssetServer），
   // 点击附件卡片直接系统应用打开本地文件（OpenFile 原生插件，跳过 WebView 预览弹窗）
   const attachmentPrefs = useMemo<NonNullable<LakeEditorPrefs["attachment"]>>(() => ({
@@ -108,7 +97,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
 
   const bodyRef = useRef<HTMLElement | null>(null);
   /**
-   * 编辑器实例必须是**状态**而不只是 ref：`EditorDock` 通过 prop 拿它，
+   * 编辑器实例必须是**状态**而不只是 ref：`EditorDockHost` 通过 prop 拿它，
    * 而 ref 变化不会触发重渲染 —— 编辑器就绪后父组件若不重渲染，dock 会一直拿到 null，
    * 于是工具栏 B/列表/待办 与面板里的命令全部静默失效（只有用户打字触发一次重渲染后才"活"过来）。
    * editorRef 仍保留给命令式路径（插入文件/表格/大纲）使用。
@@ -135,20 +124,9 @@ export function DocumentEditor(props: DocumentEditorProps) {
           prefs={{ fontSize: loadSettings().fontSize, showToolbar: !editing, disableVirtualRendering: true, attachment: attachmentPrefs }}
         />
       </section>
-      {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏） */}
-      <EditorDock
-        editor={editorInstance}
-        editing={editing}
-        onInsertImage={() => insertFileViaInput("image/*")}
-        onInsertCamera={() => insertFileViaInput("image/*", "environment")}
-        onInsertAttachment={() => insertFileViaInput("")}
-        onInsertAudio={() => insertFileViaInput("audio/*")}
-        onInsertVideo={() => insertFileViaInput("video/*")}
-        onInsertTable={() => {
-          // lakex 的 table 命令需要 rows/columns 配置（缺省会读 width 报错）；默认 3×3
-          try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never, { rows: 3, columns: 3 }); } catch { /* 忽略 */ }
-        }}
-      />
+      {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏）。
+          插入接线（隐藏 file input + insertFiles / table）在 EditorDockHost 里 —— 与小记编辑器共用同一份。 */}
+      <EditorDockHost editor={editorInstance} editing={editing} />
       {!hidePanels && (
         <>
           <OutlineSheet open={outlineOpen} editor={editorRef.current} onClose={toggleOutline} />
@@ -161,19 +139,6 @@ export function DocumentEditor(props: DocumentEditorProps) {
           />
         </>
       )}
-      <input
-        ref={fileInputRef}
-        type="file"
-        style={{ display: "none" }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          const ed = editorRef.current;
-          if (!file || !ed) return;
-          const kind = mediaKindOfFilename(file.name);
-          const opts = kind ? { category: kind, from: "ui" } : undefined;
-          try { lakeBridge(ed)?.renderer?.execCommand?.("insertFiles" as never, [file], opts as never); } catch { /* 忽略 */ }
-        }}
-      />
     </>
   );
 }

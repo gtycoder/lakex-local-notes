@@ -1,13 +1,14 @@
 /**
  * 移动端小记 composer（新建/编辑共用）——**完整编辑能力**，与桌面共用同一套小记编辑器：
  *
- * - 写作区 = 桌面同款 `QuickNoteEditor`（一个 Lake 内核实例 + 小记工具条：
- *   **日期 / 表情 / 图片 / 附件 / 待办 / 无序 / 有序 / 引用 / 分隔线**（用户 261010 定稿；移动端一行放下、不展开）
- *   —— 条目以 `lakeRuntime.QUICK_NOTE_TOOLBAR_ITEMS` 为单一来源；工具条上**没有**「＋」插入面板入口
- *   （用户 261010 定稿：移动端太突兀）。**其余格式（表格/代码块/公式/高亮块/分栏/画板…）移动端小记暂时插不了**：
- *   `/` 斜杠在本构建**不可靠**（LAKEX-CONTRACT §5.23 早先实测；261010 用 keydown + insertText 两种注入复测仍未唤起）——
- *   显示不受影响（预览走内核兜底）；要插这些格式走桌面写作卡（可展开 → 完整工具条里的面板）——
- *   `disableVirtualRendering` 必须开 —— 小记没有内核内部滚动容器，虚拟渲染会量错视口）；
+ * - **顶部不再有内核工具条**（用户 261013 重做）：移动端小记改用**文档编辑那条 dock**
+ *   （`EditorDockHost` = EditorDock + 插入接线；**复用同一份组件** ⇒ 文档侧以后改了这边自动跟），
+ *   插入能力因此与文档一致：「＋」全量面板（图片/拍照/附件/表格/引用/分割线/代码块/高亮块/状态/音频/视频/
+ *   分栏/折叠/日期/表情/日历/链接/文档引用）+「Aa」字体面板 +「更多」面板。
+ *   ⇒ 早先"移动端小记插不了表格/代码块/公式/分栏/画板"的缺口**就此消掉**；
+ *   **桌面小记不变**，仍用它自己的九项工具条（两端形态不同是有意的：用户 261013 定"安卓端不要和桌面一样"）。
+ * - 写作区 = 桌面同款 `QuickNoteEditor`（一个 Lake 内核实例；`showToolbar:false` 只是关掉内核工具条，
+ *   note 版式与正文排版不变。`disableVirtualRendering` 必须开 —— 小记没有内核内部滚动容器，虚拟渲染会量错视口）；
  * - 附件按类型成卡：内核 file input 交给我们 `uploadResource`，经 `bridge.stageQuickNoteAsset` 落盘
  *   `quick-notes/{id}/`，mp4→视频卡、mp3→音频卡、png→图片卡、其它→附件卡（`installMediaCardCategoryRouter`
  *   由 `QuickNoteEditor` 挂好，与文档侧同一模块）；
@@ -26,6 +27,11 @@ import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort"
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
+import { EditorDockHost } from "../editor/EditorDockHost";
+// 光标/选区自动跟随滚动：**与文档编辑器同一份实现**（261014 —— 用户：光标必须始终在工具栏上方、
+// 不被工具栏/键盘盖住）。小记此前没有这一环，文字一多光标就跑到屏幕外。
+import { useCaretIntoView } from "../useCaretIntoView";
+import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 // 内核样式（ne-* / ne-icon-symbol 的尺寸与配色）**由挂内核的入口自己保证**：
 // 桌面走 styles/index.css 的全局 @import；移动端入口不引它，此前只有 mobile/editor/DocumentEditor 引 ⇒
 // 冷启动后**先**开小记编辑器（另一个内核消费者）时样式缺席：内核图标按原生尺寸铺满 + 内核的原生
@@ -85,8 +91,16 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
   const [initialBody, setInitialBody] = useState(() => (editNote?.body && editNote.body.trim() ? editNote.body : emptyLakeBody(initialId)));
   /** 草稿模式：**等草稿读完再挂内核**（QuickNoteEditor 只在挂载时读 initialBody，晚到会丢正文）。 */
   const [draftReady, setDraftReady] = useState(!draft || Boolean(editNote));
+  /**
+   * 内核实例（**必须是 state**）：`EditorDockHost` 通过 prop 拿它，而 ref 变化不触发重渲染 ——
+   * 编辑器就绪后若不重渲染，dock 会一直拿到 null、命令全部静默失效（与 DocumentEditor 同一坑）。
+   */
+  const [editorInstance, setEditorInstance] = useState<LakeEditorInstance | null>(null);
   /** 保存成功 / 主动取消后不再写草稿。 */
   const committedRef = useRef(false);
+  /** 写作卡根（光标跟随滚动的搜索边界：正文滚动容器就在它里面）。 */
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useCaretIntoView(cardRef, true);
   const [text, setText] = useState(editNote?.text ?? "");
   const [saving, setSaving] = useState(false);
   /** 「保存并同步」的网络阶段（与保存分开：保存是本地写、同步是维护域网络操作）。 */
@@ -309,7 +323,7 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
   if (!draftReady) return <div className="mobile-qn-composer" />;
 
   return (
-    <div className="mobile-qn-composer">
+    <div className="mobile-qn-composer" ref={cardRef}>
       <QuickNoteEditor
         ownerId={noteId}
         initialBody={addAssetAccessToken(initialBody)}
@@ -318,6 +332,10 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
         uploadResource={uploadResource}
         onTextChange={setText}
         onReady={(api) => { apiRef.current = api; if (api) autoFocusIfCreating(); }}
+        /* 顶部不要内核那套九项工具条（用户 261013）：移动端小记改用**文档编辑那条 dock**（EditorDockHost），
+           关掉用的是内核既有开关（showToolbar:false ⇒ disabledPlugins 去掉 toolbar），不是我们另做一套隐藏。 */
+        showToolbar={false}
+        onEditorInstance={setEditorInstance}
       />
       {error && <div className="mobile-qn-error">{error}</div>}
       {/* 置灰必须给理由（移动端没有 hover 提示）：只在这一行说明，不新增样式 */}
@@ -342,6 +360,9 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
           <Check size={15} />{saving ? "保存中…" : "保存"}
         </button>
       </footer>
+      {/* 输入法式底部 dock = **文档编辑器那一份**（EditorDockHost；复用而非照抄，文档侧改了这边自动跟）。
+          顶部不再有内核工具条；插入能力（图片/拍照/附件/表格/表情/日历/…）全部由它提供。 */}
+      <EditorDockHost editor={editorInstance} editing />
     </div>
   );
 }

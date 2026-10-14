@@ -44,6 +44,17 @@ interface QuickNoteEditorProps {
   onTextChange(text: string): void;
   /** 挂载/卸载时交出/收回句柄。 */
   onReady(api: QuickNoteEditorApi | null): void;
+  /**
+   * 是否渲染**内核自带工具条**。默认 true（桌面小记 = 九项工具条）。
+   * 移动端小记传 false：用户 261013 定"顶部不要工具栏，直接复用文档编辑的 dock"——
+   * 与文档编辑器编辑态同一开关（内核 `disabledPlugins` 里去掉 "toolbar"），不是我们另做一套隐藏。
+   */
+  showToolbar?: boolean;
+  /**
+   * 把小记的**内核实例**交给宿主（移动端 dock 要拿它执行命令）。
+   * 与 `DocumentEditor` 的 `onEditorInstance` 同一模式；桌面不传即可（保持不受影响）。
+   */
+  onEditorInstance?(editor: LakeEditorInstance | null): void;
 }
 
 /**
@@ -57,10 +68,10 @@ interface QuickNoteEditorProps {
  * `editor.getDocument("text/plain")` 可能拿不到内容 ⇒ 必须再加 DOM `input` 兜底 + DOM 文本回退，
  * 否则「输入了字但判定为空、点发布没反应」。
  */
-export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = true, uploadResource, onTextChange, onReady }: QuickNoteEditorProps) {
+export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = true, uploadResource, onTextChange, onReady, showToolbar = true, onEditorInstance }: QuickNoteEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const callbacksRef = useRef({ uploadResource, onTextChange, onReady });
-  callbacksRef.current = { uploadResource, onTextChange, onReady };
+  const callbacksRef = useRef({ uploadResource, onTextChange, onReady, onEditorInstance });
+  callbacksRef.current = { uploadResource, onTextChange, onReady, onEditorInstance };
   /**
    * 「见过一次可见状态」的闩：只在**首次可见**后建实例，之后即使工作区被隐藏也不销毁。
    * 不能按当前可见性挂/卸 —— 内核正文只活在实例里，卸载后用陈旧的 `initialBody` 重建会把正在写的内容丢掉。
@@ -98,7 +109,7 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
       // 虚拟渲染靠 `scrollNode` 量视口，而小记编辑器没有 Lake 内部滚动容器，fallback 到 `.document-pane`
       // 会量错 ⇒ 正文被换成 `.ne-virtual-render-placeholder`（顶部留白 100+px、输入触发重渲染后整片变占位）。
       // 移动端早已为此置位（见 QuickNotesWorkspace 前的 HANDOFF §8.8 同款坑）。
-      { disableNativeToc: true, quickNoteUi: ui, disableVirtualRendering: true },
+      { disableNativeToc: true, quickNoteUi: ui, disableVirtualRendering: true, showToolbar },
       (request: unknown) => callbacksRef.current.uploadResource(request),
     );
     // 兜底：DOM 层 input 事件（真实键入必触发）——内核 contentchange 之外的第二条信号。
@@ -117,6 +128,7 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
     // note 工具条注册）都挂在该钩子上。此前"有正文才 setDocument"⇒ 新建空小记时工具条空白、展开按钮不渲染、
     // 键入也不回传（HANDOFF §2.10 三.2 的根因）。空正文用单一来源 emptyLakeBody，与主进程同构。
     editor.setDocument("text/lake", addAssetAccessToken(initialBody || emptyLakeBody(ownerId)));
+    callbacksRef.current.onEditorInstance?.(editor);
     callbacksRef.current.onReady({
       getBody: () => { try { return stripAssetAccessToken(editor.getDocument("text/lake")); } catch { return ""; } },
       getText: readText,
@@ -128,9 +140,10 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
       host.removeEventListener("input", emitText, true);
       detachMediaCardRouter();
       callbacksRef.current.onReady(null);
+      callbacksRef.current.onEditorInstance?.(null);
       try { (editor.destroy ?? editor.destory)?.call(editor); } catch { /* 已销毁 */ }
     };
-  }, [everActive, ownerId, initialBody, ui]);
+  }, [everActive, ownerId, initialBody, ui, showToolbar]);
 
   return <div className="quick-note-editor" ref={hostRef} data-owner={ownerId} />;
 }

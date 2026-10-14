@@ -39,19 +39,19 @@ const FILES = [
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/index.css": { decls: 0, dupGroups: 0 },
   "mobile/theme/base.css": { decls: 3, dupGroups: 0 },
-  "mobile/theme/tokens.css": { decls: 168, dupGroups: 0 }, // P2：+11 = 移动端几何槽（触达/内距/圆角）→ 261013 A 批 +1（--mobile-bottom-bar-slot：胶囊加高后宽度上限不能再由高度推导）
-  "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接
+  "mobile/theme/tokens.css": { decls: 171, dupGroups: 0 }, // 261014：+1 = --mb-emoji-cat-h（分类条末尾加动作键 ⇒ 10 格，行高按要求压到 36；命中区由触达补足注册表补到 --mb-tap-min） // 261013：+2 = 表情面板（微信样式）两档字号令牌 --mb-emoji-cat-size / --mb-emoji-glyph-size（避免在 CSS 里写 px 字面量，移动端字号字面量基线只许降） // P2：+11 = 移动端几何槽（触达/内距/圆角）→ 261013 A 批 +1（--mobile-bottom-bar-slot：胶囊加高后宽度上限不能再由高度推导）
+  "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接（261013 中途为"复用内核表情面板"加过 3 条内核 token 桥，用户改为**微信样式**后已撤回）
   "mobile/theme/dark.css": { decls: 112, dupGroups: 0 }, // +41 编辑器深色桥迁入 → P7b -22 删 --b3-* 过渡桥接
-  "mobile/kit.css": { decls: 441, dupGroups: 0 }, // P2 248 → P4 +113 → P5 +48（勾选）→ P6c +6（内核宿主）→ P7 +17（选择器 PickerSheet）→ 261013 +9（缩进 ×4 + .mb-input 内层 input ×3 + .mb-empty--inset ×1 + .mb-set-section 细线 ×1）；
+  "mobile/kit.css": { decls: 511, dupGroups: 0 }, // 261014：+2 = 表情面板分类条改「一屏 8 格 + 横滑」（用户二次定稿）：新增 .mb-emoji-cats__track（overflow/overscroll/隐藏滚动条）+ .mb-emoji-cat 固定 --mb-tap-min 宽；同时删掉 .mb-emoji-cell--clear（首格清除格撤掉） // P2 248 → P4 +113 → P5 +48（勾选）→ P6c +6（内核宿主）→ P7 +17（选择器 PickerSheet）→ 261013 +9（缩进 ×4 + .mb-input 内层 input ×3 + .mb-empty--inset ×1 + .mb-set-section 细线 ×1）→ 261013 +68（选图标面板最终形态 = **微信样式**：顶部分类条 + 大格子正文 + 清除行；中途"复用内核表情面板"那一版已按用户要求废弃，配套的移动端内核 token 桥也从 theme/light.css 撤回；属移动端自有视觉，非覆盖叠层）；
   // 最后一条 = 浅色窗底转白后，白卡落在白底上会消失 ⇒ 分组边界改由 1px 细线承担（见 MOBILE-DESIGN「The White Rule」）。
   "mobile/floating.css": { decls: 250, dupGroups: 0 }, // P3 建库 → 收尾 -1（删掉未使用的 .mb-sheet--tall）→ 261013 A -5（.mb-sheet__empty 并入 .mb-empty--inset）
   "mobile/features.css": { decls: 142, dupGroups: 0 }, // P6：图片 Lightbox（57→触屏版）+ 附件预览（82→触屏版）
-  "mobile/quick-notes.css": { decls: 98, dupGroups: 0 }, // P6b：自桌面 quick-notes.css 抽取的移动端子集（22 条规则）→ 261013 校准到实测值 98
+  "mobile/quick-notes.css": { decls: 152, dupGroups: 0 }, // 261014 查漏补缺：−9 = 删掉移动端永不命中的桌面外壳规则 `.quick-note-composer .quick-note-editor`（含 `.lake-editor-mount` 那条） // 261014：+1 = 内核 note 版式 `min-height:40vh` 收口；+7 = 把内核按**视口**定高的容器链钉在宿主高度上（`.lake-editor-mount/.ne-editor/.ne-editor-body/.ne-editor-wrap/.ne-editor-wrap-content`）+ 解除内核按视口写的 `max-height`（详见 LAKEX-CONTRACT §5.37②） // 261013：+55 = 自带表情选择器改**微信样式**的移动端那份（顶部分类条 / 浅灰底大格子 / 搜索行 / 空态；触屏尺寸走 --mb-tap-min）  // P6b：自桌面 quick-notes.css 抽取的移动端子集（22 条规则）→ 261013 校准到实测值 98
   "mobile/mobile.css": { decls: 1240, dupGroups: 3 }, // P1 -39 / P2 +4 / P5 +6 → 收尾 -83 → 261013 必要项 -33 → A -13 → 6.3/6.9 +20（冷启动骨架 mb-skel ×5 + 关键帧；引擎几何压回只改既有声明的值）
   // dupGroups 2 → 3：新增的 .mb-skel 在 prefers-reduced-motion 名单里关掉 animation，与主块同名同属性成一组 ——
   // 这是本文件既有的无障碍登记模式（.mobile-htab 等同样处理），不是多层覆盖。
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
-  "mobile/editor/editor-dock.css": { decls: 241, dupGroups: 0 },
+  "mobile/editor/editor-dock.css": { decls: 242, dupGroups: 0 }, // 261013：+1 = 表情面板分类条在 dock 里拉满面板边（当时口径：9 个分类 ≈45.8px、一屏放得下不横滚；261014 已改「一屏 8 格 + 横滑 + 钉住的动作键」，见 kit.css）
 };
 
 /** 扫描 src/mobile 下所有 CSS，确保没有「未登记的野样式文件」。 */

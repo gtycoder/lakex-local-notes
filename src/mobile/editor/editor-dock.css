@@ -99,6 +99,11 @@
   transition: transform 160ms var(--mobile-ease-out), opacity 160ms var(--mobile-ease-out);
 }
 .med-panel[data-open="0"] .med-panel-inner { transform: translateY(100%); opacity: 0; }
+/* 表情面板的**分类条拉满面板边**（宿主 12px 内距在这里归零）。面板主体（网格）仍保持内距。
+ * 261013：9 个分类每个 ≈45.8px ⇒ 一屏放得下、不横滚（当时的口径）。
+ * 261014 二次定稿：**一屏 8 格 + 横滑**（用户："一行 10 个可点目标确实太多"，对标微信）⇒ 每格固定 --mb-tap-min(44)，
+ * 末尾动作键钉在轨道右侧不参与滚动；横滑安全性靠面板根的 data-prevent-swipe（外壳手势本就排除这类元素）。 */
+.med-panel-inner .mb-emoji-panel--fill .mb-emoji-cats { margin-inline: -12px; }
 .med-panel::-webkit-scrollbar, .med-panel-inner::-webkit-scrollbar { display: none; }
 /* 插入面板：对齐语雀移动端——「浅灰底 + 图标 + 文字」条目。
    261010 用户定稿：**每行 3 个**（+ 面板 17 项、更多面板 6 项共用这一套网格）

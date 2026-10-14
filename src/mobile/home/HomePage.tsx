@@ -176,7 +176,8 @@ export function HomePage(props: HomePageProps) {
       <div key={tab} className="mobile-tab-stage">
       {tab === "quick" ? (
         composer !== null ? (
-          <div className="mobile-scroll">
+          /* 写作 = 编辑会话：滚动区给底部 dock 留白（见 .mobile-scroll--with-dock），底栏同时让位。 */
+          <div className="mobile-scroll mobile-scroll--with-dock">
             <Suspense fallback={<div className="mb-empty">正在加载编辑器…</div>}>
               <QuickNoteComposer
                 editNote={editNote}
@@ -234,7 +235,10 @@ export function HomePage(props: HomePageProps) {
       )}
       </div>
 
-      {/* 底部胶囊栏（首页）：搜索 | 新建 | 云同步（仿第二层悬浮栏：纯图标胶囊条）；排序已移到右上角 */}
+      {/* 底部胶囊栏（首页）：搜索 | 新建 | 云同步（仿第二层悬浮栏：纯图标胶囊条）；排序已移到右上角。
+          ⚠️ 小记写作时**让位**：写作卡现在底部挂的是文档编辑那条 dock（用户 261013 定稿），
+          两条都贴底会打架（胶囊 z-index 更高会把 dock 盖住）⇒ 编辑会话期间不渲染胶囊。 */}
+      {composer === null && (
       <nav className="mobile-bottom-bar" aria-label="首页操作">
         <button className="mobile-bottom-bar__item" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
         {tab === "quick" ? (
@@ -244,6 +248,7 @@ export function HomePage(props: HomePageProps) {
         )}
         <button className="mobile-bottom-bar__item" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </nav>
+      )}
 
       {/* 小记「...」菜单 */}
       <MobileSheetMenu

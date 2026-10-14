@@ -16,6 +16,194 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261014 · 多维表PoC续作：内存对照与发布回归（尚未正式接入）
+
+- **最新续作（本轮收尾）**：仍仅 `.css-audit/bitable-virtual-poc-261014/source` 副本，主树多维表/core/session/package/lock未变；当前候选看 **`RELEASE-RESULTS.md` / `evidence/candidate-release.patch`**，不要直接套旧candidate-memory.patch或搬整份副本。
+- 新发现/已修：关联选择器5000×20仍全量挂5000行105000格，两帧就绪3.68/4.28s；共用BitableVirtualBody窗口后20行400格、68.3/62.1ms（鼠标测试含工具等待约0.29s，不混用计时）。完整候选/全局搜索/已选顺序/取消确认/双向镜像保留，选择器列宽改字段模型80–320px；不是零外观变更声明。
+- 几何修正：添加行实际34px而非36px，空投影末列33px（有数据40px）；主表24态/288几何对照均一致，首尾总高度不漂移。6张截图仍有0–153像素小差异，不写零像素差；未重烤门禁基线来藏变化。共用单行控件CSS，视口样式纳入7声明/0重复组围栏。
+- 最后性能包：主表首开0.320s/重开0.209s，25行500格/全模型5000；滚动p95 32.5ms，48输入p95 38.7ms/max63.4ms。**上一确认包输入p95 54.8ms/max402.6ms，前序滚动36.6ms，不能挑最后轮宣称跨场景稳定全达标。**
+- 内存追加：同一个含额外5000×20关联目标的模型，原选择器打开后堆237MiB→新102MiB；10次开关/160长距离滚动后正常关闭15s堆65MiB、DOM109005/监听26916、业务行0。**最后整应用工作集采样峰2.03GiB（前同脚本约1.56GiB），关后约839MiB；65MiB不是应用总内存。** 未加GC/大堆/GPU或安全配置改动，不由16GiB机器承诺4/8GiB无OOM。
+- 图片补验：8个独立4096×4096合成JPEG轮换用于5000行，Grid128px/展开512px缩略，5次原图确解4096px；30滚动后关闭15s堆62.5MiB，业务行/Lightbox归零，总工作集采样峰约1.38GiB。不是5000张独立照片、不是20GB传输/所有图片规模验收。
+- 门禁：副本203文件/1712例通过（跳过5文件/16例），tsc/Vite build/arm64真实包通过，旧12+新11=23项包内检查通过。主树/存储语义未接入，Android设备门禁未跑，不冒充全端验收；仍缺完整配置/浮层/历史导出真实云/低配长时等发布回归。
+- 打包尾项：GitHub zip下载挂起，只终止本轮owned builder PID，临时electronDist使用已安装44.3.0发行目录，未落主树配置；TanStack两包MIT许可已随public资源进最终ASAR。性能包与最终许可包hash分别记录，249个带hash的JS/CSS产物名一致，最终包另验GPU/sandbox/全模型窗口启动，不冒充整轮重测。
+- **接入决定：本轮不正式合入**。下一步先抓瞬时分配/输入长尾调用栈，区分GC、布局、模型重算，并补低内存设备。所有owned测试进程与运行副本已收尾，正式数据/真实S3未触碰；未提交/推送。
+
+
+- 用户要求继续并衡量内存，避免缓存换速度造成内存问题。**仍仅隔离副本**，主树多维表/core/session/package/lock SHA未变，未安装主树依赖/未正式合入。
+- 续作：新memo(BitableViewportCell)只接本格值/局部选区/必要context与原稳定回调，避免别格修改重建所有控件；受控36/44/64/96行高不逐行同步量布局，数字自定义行高保留实际测量（72px回归）；行拖拽取消/隐藏/换表/卸载清document监听/rAF。row cache仍仅viewport+overscan+最多1编辑pin，不留滚过的全表组件。**8个cell/viewport相关测试**含25轮窗口live组件<40、卸载归零。
+- 性能：最后包首开 **0.362s**/重开 **0.227s**，数据5000条/挂25行500格；滚动60步p95 **36.6ms**（此前33ms），输入48次最后p95 **38.7ms**但此前复杂工作流81ms、独立采样46ms，**不挑最好轮宣称稳定全达标**。12项真实包检查通过，新增72px行高；复杂字段完整编辑/统计填色/样式/真实云等仍待发布回归。
+- **正常内存采样**（默认GPU/sandbox真实包，5000文档/2万小附件，200ms采样，确认轮约101s）：原全量Grid单表稳定JS堆 **351MiB**、renderer工作集加载峰 **3.39GiB**；当前PoC稳定堆 **93MiB**、renderer加载峰 **0.97GiB**。工作集可能含共享页，不是独占内存或单表精确增量；renderer vmmap footprint原约2.6GiB/PoC约930MiB，其PartitionAlloc分类兼容警告已在报告说明。
+- 压力场景：300次窗口长距离滚动、120输入、6次开关、8个5000×20大表标签；始终约25行DOM，不同时挂8份全格。8标签总工作集两轮峰 **1.74–1.81GiB**，仍不算轻；当时JS堆约221–309MiB，全部关表正常15s后两轮均约 **103MiB**/gridRows=0、监听约26647（App基线26799）。不能保证4/8GiB设备、大图/数小时使用无OOM。
+- **回收/泄漏诊断单列**：不新增数据，8次开关后每次强制GC，保留堆从baseline59.57MiB到首关61.20、第8关61.86，后几轮稳定，DOM109005/监听26784不累积；只新增7份数据从未开grid的对照保留99.2MiB，8标签关后的保留约102.3，部分增量属数据缓存。**GC只在诊断脚本，绝不加入产品或拿它代替正常占用**。本轮未发现无界新增缓存，不宣称永久无泄漏。
+- 门禁：隔离副本tsc/build/package通过，桌面范围 **202文件/1703例通过**（跳过5/16），不是主树全库/设备发布门禁；主进程private MemoryInfo与JS堆/工作集分别记录。所有owned实例结束、临时测试库清理，正式数据/真实S3未碰。
+- 报告/原始结果/源包hash：`.css-audit/bitable-virtual-poc-261014/MEMORY-RESULTS.md`、`evidence/memory/{before.json,first-poc.json,virtual.json,virtual-initial-round.json,control.json,retained-lifecycle.json}`、`evidence/verified-memory-source.json`；最新候选`evidence/candidate-memory.patch`。后续重点为尾延迟/完整业务样式/低内存真实图片的正式门禁，不用扩大V8堆/自动GC“兜底”。
+
+### 261014 · 多维表 DOM 虚拟化隔离 PoC（加载方向成立，尚未接入主树）
+
+- 用户授权推进上批方案；按“先隔离PoC”执行。当前源码冻结到 `.css-audit/bitable-virtual-poc-261014/source`，依赖 `@tanstack/react-virtual 3.14.19` **只安装副本**。主树 BitableEditor/core/session/package/lock hash保持开工前一致，未提交/未推送。
+- **实现验证**：新BitableVirtualBody以rowItems为入口，把分组头/记录/组内新增/gap/首尾行纳入同一虚拟窗口（overscan6）；保留原字段控件/ID选区/条件/session历史/保存/只读逻辑。屏外焦点先scrollToIndex再等实际DOM；pin最多一条编辑/合成行；只缓存当前窗口，不累积全表组件。拖行按坐标索引+边缘自动滚动，范围仍取完整数据。未做列虚拟化/Canvas/存储协议重做。
+- **真实默认GPU/sandbox包对照**（同5000×20夹具；各包1次首开+1次关闭重开，小样本）：新当前基线 **23.09s/16.79s**（本机这轮比旧15s慢，不作统一性能承诺）；PoC最后 **0.396s/0.210s**，只挂 **25记录行/500格**，模型仍5000条、可到第5000行。表头/首行宽高一致，表总高约2px差值仍需正式样式收敛。
+- **仍未全达标**：连续程序化滚动60步中位27.6ms/p95 **37.5ms**（预算33）；Input.insertText→帧12次中位36.3ms/p95 **54.8ms**（预算50）。装载目标已达，不能宣称性能全部通过，也未擅自合入。后续重点是窗口内单格/选区的重复渲染与复杂字段编辑回归，不再先考虑全系统重做。
+- **11项真实包检查通过**：全数据/有界窗口、键盘从首行走到屏外第31行、第5000行CDP中文合成输入滚出视口后可提交、跨屏5000行复制、100行粘贴及撤销/重做、单格输入采样、拖行自动滚动（720px/r0→索引38，5000 ID唯一）、锁定重载后滚动正文不变、混合5000×20展示/关联/图片地址、64px分组行与折叠/尾部窗口、切标签编辑保留。**边界**：Clipboard为页内隔离端口、中文为CDP合成而非人工候选窗；混合字段主要验展示，不等于全部浮层编辑；复杂跨组拖拽/冻结/完整统计填色/样式/历史/真实S3未验。
+- **测试**：隔离副本桌面范围 **201文件/1698例通过**（跳过5/16）；窗口body3例+IME Enter1例、原bitable/session等保留。jsdom补齐RO unobserve与视口尺寸；两处旧源码形状断言适配leading/trailing，不删语义测试。tsc/build/真实打包通过；不是主树全库/移动/发布门禁。
+- 候选/完整数据/测量定义/未达标项：`.css-audit/bitable-virtual-poc-261014/RESULTS.md`，`evidence/{candidate.patch,before.json,virtual.json,interaction.json,verified-manifest.json}`；真实包在`package-virtual/mac-arm64/`；benchmark.mjs/interaction.mjs可复跑。第三方依赖/PoC代码/测试只留隔离路径；自起进程已结束、测试运行库已清理，正式数据/云端未碰。
+
+### 261014 · 多维表5000×20架构调研（重新评估虚拟化；尚未实施）
+
+- 用户认为5000×20约15秒不可接受，授权调研市面通用技术、逐个对标，可讨论架构重做。**本批只调研/微测，不安装依赖/不改产品正文或同步/不宣称获准正式重做**；历史#11暂缓进入重新评估。
+- 一手源码固定commit对照：Teable=React自有Canvas网格（不是Glide）；NocoDB当前develop=Vue Canvas/InfiniteTable DOM/分页分支，受场景/flag控制；Baserow=Vue DOM视口行列/缓冲；Grist=DOM可见行+koDomScrolly/行高偏移索引。Airtable/飞书只作功能对标，本轮没拿到能核实具体Grid内核的官方实现，**不猜库名/Canvas/WebGL**。
+- 共同原则：数据全集≠渲染全集。当前`rowItems.map × visibleFields.map`全量挂10万格/CellEditor，数字格都是input；现有ID选区/core规则/session历史可保留。Node缓存读/JSON微测（20次，正文1.59MB）读2.54ms/parse3.42ms/stringify2.88ms中位，**非完整Chromium数据处理profile**，不足以直接排除全部数据热区，但不支持为加载此文档推倒SQLite/S3。
+- **推荐**：重构Grid视口+交互架构，保留BitableDoc v1/字段关联/条件求值/非grid视图/useBitableSession/附件S3等业务。第一候选TanStack Virtual驱动DOM（复用既有控件），Canvas Glide为第二候选；AG Grid完整引擎可备选。`focusCell`/拖行等DOM命中改为屏外可寻址；分组头/统计/加号/gap混合高度、屏外选区/粘贴/IME/只读/多标签必须同验，不是简单slice。
+- 版本/许可风险已核：Glide npm稳定6.0.3发布于2024-02-03、main alpha与稳定文档不同，不能盲用alpha或称已停维护；React Data Grid latest7.0.0-beta.61要求React19.2（项目React18），不为网格顺带升级全应用；TanStack Virtual latest3.14.19支持React18。Teable应用AGPL但packages/SDK MIT；NocoDB Sustainable Use不是MIT；Baserow核心/前端与premium/enterprise许可分开；AG Grid Community/Enterprise分开核能力。
+- 建议下一步隔离PoC，先重测目录优化后的当前正式源码（旧14.86s不是最新包精确基线）。5000×20首可操作视口预算：首开≤1.5s/热开≤500ms、输入p95≤50ms、连续滚动帧p95≤33ms，**只是待确认目标，未承诺已达标**。DOM达标优先收口；Canvas只有性能更好且保留功能/维护代价可接受才替换，删除失败路线，不长期双内核。
+- 详细逐项报告/固定源码/版本/许可出处/测量边界：`.css-audit/bitable-research-261014/RESEARCH.md`；原始第三方资料与URL/commit/hash索引在同目录`sources/source-index.json`，不复制进产品仓库。微测`parse-microbenchmark.json`。研究结果未提交/未推送，产品代码未动。
+
+### 261013 · 大目录最小优化正式落地（用户授权；两处产品改动）
+
+- 实现：`App.tsx` 的 `onBlockedSave` 提成 `useCallback([showNotice])`，保持文案/保存失败语义；`Sidebar.tsx` 的原 `div[role=treeitem]` 内容拆成本文件 `memo(TreeRowFace)`，只传本行状态与原回调。递归/筛选/展开/定位逻辑不动，不新增DOM包装/CSS/依赖，不做Set优化/自定义memo比较器/虚拟化。保留了同文件在途图标面板改动。
+- **正式非插桩包对照**（5000文档/20000合成附件，默认GPU/sandbox；每场景12次）：同组中位 **208.5→73.9ms**，跨笔记本 **231.2→74.8ms**；两组修改后均未观察到>50ms长任务。目录DOM数量和行结构/文字/class/几何hash一致。递归结构仍检查全树，不夸称彻底解决。
+- 新增 `src/components/sidebarRendering.test.ts` **9例**：真实公共Sidebar的深层高亮/旧高亮清除、行图标不全量重建、新回调不旧闭包、重命名图标锁、折叠定位、文档不自动展开子项、过滤、刷新增删移动、新建菜单与上游回调护栏。
+- 新增可复跑 `scripts/packaged-performance/sidebar-regression.mjs`（真实packaged+鼠标事件，独立/tmp数据）。**17场景通过**：文档/子项展开语义、跨组跟随、重命名、锁/解锁、筛选清除、新建子文档、跨级拖拽/释放、同级重排、确认删除+恢复刷新、新组刷新、浮出目录、浅/深/暖×1280/680宽窗。恢复/刷新部分走既有IPC，拖拽与菜单走真实点按；无真实S3。
+- **验证**：tsc ✓ · 全库vitest **242文件/1891例**（跳过5/16）✓ · ui-metrics/check:core/check:mobileui ✓ · build:web/check:bundle ✓ · 真实默认GPU包stylesnap **6相关态0差异**（plain浅/深/暖、hover-row、drag、menus；**未重烤**）✓ · diff --check ✓ · detector空报告。桌面dist已重建；候选.app在 `.css-audit/tree-implementation-261013/package-after/mac-arm64/`，未发DMG/未签公证/未提交/未推送。
+- 证据（gitignored）：`.css-audit/tree-implementation-261013/evidence/{before.json,after.json,stylesnap-gate.log,regression/sidebar-regression.json}`及截图/构建日志。测试只改合成库；自起实例已结束，不碰正式数据。
+- 装置踩坑（不是产品缺陷）：隐藏行按钮需真实hover；“新建文档”会打开标题弹窗，要先关闭再拖；重载后不能马上把旧 `__desktopEditor` 当就绪信号。已修驱动后全部复跑通过。
+
+### 261013 · 大目录最小方案 + 隔离实验（现已正式落地，见上）
+
+- 用户要求先出方案，可小范围试验；**主工作树 App/Sidebar 产品代码未修改**，只在 `.css-audit/tree-perf-261013/source` 的冻结副本试验真实默认GPU包。
+- 已证引用根因：每次切标签，5061树行共约10122次重型行面渲染；诊断所有行的onSelect都变化，实际active/context各只影响2行。链 = App内联onBlockedSave → persistTab → openNote → sidebarSelect。
+- **推荐两处**：① App把onBlockedSave变为useCallback（依赖showNotice）；② Sidebar保留递归TreeRow，把原div[role=treeitem]内容拆成本文件memo(TreeRowFace)，只传本行active/context/open/locked/drag/drop等状态与原有回调。不加DOM包装/不改CSS/不做自定义比较器/虚拟化。单做Set保引用、单拆行面或单稳回调均无收益，**展开Set改动不纳入推荐**。
+- 最后真实包对照（每场景12次）：同组中位 **226.6→75.1ms**、p95 **264.1→99.7ms**；跨笔记本中位 **231.6→82.0ms**、p95 **257.3→128.2ms**。重型行面 **10122→4次**；递归结构仍10122次检查、DOM节点104604不减。候选同组0长任务，跨组3个51–75ms长任务，不夸称无卡顿。
+- 已验：active/context唯一、折叠分组从别标签返回自动展开定位；强制排除屏外content-visibility记忆高度差后，行结构/文字/class/几何hash与原包一致。候选副本tsc+**6文件29例**（行面8例与既有保存/淘汰/索引/拖拽相关测试）通过。真实跨级拖拽/过滤/新建/刷新/删除恢复/浮动与窄窗多主题等**未回归，正式落地前必做**。
+- 方案/原始数据/去计数器候选补丁：`.css-audit/tree-perf-261013/evidence/{PLAN.md,candidate.patch,baseline.json,lean-combined.json}`；补丁基于旧冻结源码，**不能覆盖主树在途图标面板改动**，要就地整合。实验进程已结束，未提交/未推送；§3#22已由用户授权正式实现，验收结果见上。
+
+### 261013 · 正式包性能验收（默认 GPU；只测量，不改产品）
+
+- 用户授权做正式包性能验收。冻结当前 HEAD `04a22b3` + 当时工作树（源码/vendor 产物 hash 已保存），由副本构建真实 macOS arm64 `.app`。**不是 dev/scheme 冒充 packaged**：`app.isPackaged=true`、`lake://app`，Electron44.3.0 / Chromium152.0.7977.78 / Node24.20.0；Apple M3 /16GiB / macOS27.0.1。保留默认 GPU / sandbox / contextIsolation，未加 disable-gpu/no-sandbox/实验加速参数。
+- GPU **确实启用**：ANGLE Metal Apple M3 + GraphiteDawnMetal；Code Cache 46 文件约6.4MiB落盘。没有证据需要新增“GPU加速开关”或改 v8CacheOptions/no-store。
+- 固定合成库：**5000文档 /20000附件**（正文约27.6MiB、附件约78.1MiB，每份4KiB），媒体卡字段取自真实内核插入附件的序列化；不是20GB传输。正常已建索引，搜索不纳入本轮。
+- **最后一轮前台确认数据**（小样本，不作跨设备保证）：空应用缓存启动3次中位 **2.10s**（2.06–3.51），同目录保留缓存3次中位 **1.69s**（1.65–1.91）；程序化长文滚动中位16.7ms；保存ack普通约1–2ms、2MB约30ms；四类型首开/长正文/多标签/分屏均已测。完整数值与测量定义看下面报告（例如分屏313ms含250ms驱动等待，不能当纯应用耗时）。
+- **最强热点证据 = 大目录**：同库同对标签，目录展开 **105385 DOM /标签→帧中位241ms/p95 289ms/23长任务**；仅点“全部收起”后 **8480 DOM /26ms/p95 43ms/0长任务**。CPU profile包含React/lucide重建与布局/几何读取。**并未改默认展开语义，也未做已否决的目录窗口化**；最小修法需先定位activeId/context变化是否整树重渲染，列为 §3#22。
+- 多维表 **5000×20** 仍不流畅：探索/确认轮12.7–15.9s，最终 **14.86s**，最大长任务 **3.71s**；该档JS heap约0.47GiB，进程工作集合计约2.15GiB（共享页不能当private footprint）。原 §3#11 行虚拟化暂缓决定保持，不能擅自开工。
+- **同步响应验证**：真实 packaged主进程 + core + S3 SDK，只接127.0.0.1测试服务（每请求1500ms）；整轮 **23.67s /18请求 /5文档增量上传**，全程85次切标签中位 **36.6ms/p95 63.8ms/max248ms**、保存ack **7.4ms**；没有被整轮写锁阻塞。目录已收起；不是七牛真网络/全附件上传验收。
+- 验收结论：**测量完成，不是“上线性能全部通过”**。大目录/大多维表存在真实卡顿；真实云/20GB附件、Windows与低配机、Developer ID签名公证后的首装启动未测。本包未签Developer ID、未公证、未生成或发布DMG。
+- **可复跑装置**：`scripts/packaged-performance/{seed.mjs,make-fixture.py,run.mjs,cdp.mjs,loopback-s3.mjs,README.md}`（默认检查真实.app/隔离数据/端口，run默认清理运行库，进程按owned child退出）。**证据不入库**：`.css-audit/packaged-perf-261013/evidence/REPORT.md` / `results.json` / `source-manifest.json` /截图/CPU profile/日志；冻结包在同目录的 `package/mac-arm64/`，夹具 `/tmp/lake-packaged-perf-fixture-261013`。不要把过程文件变成第二份待办。
+- **门禁如实**：冻结副本tsc与build/package成功；真实package基础/Drawnix烟测exit0；桌面范围vitest **199文件/1684例通过**（跳过5/16）。冻结全库vitest **4文件/5例失败**：4例缺Android原生文件（桌面副本未复制），1例是冻结时移动kit声明466→476超基线；未改移动端/未宣称全库绿。源码冻结后其他会话继续改Sidebar/theme等，**本包结果不覆盖后续改动**。
+
+### 261013 · 安卓端小记重做：去掉顶部工具条、复用文档编辑的 dock（**待用户验收**）
+
+- **用户点单**：安卓端小记不要和桌面一套样式；**顶部不要工具栏**；**直接复用文档编辑的工具栏**（"是复用"——文档侧以后改了这边要跟着变），"更符合移动端输入习惯，也是语雀 App 的方式"。
+- **落地（复用而非照抄）**：
+  · 抽出 `src/mobile/editor/EditorDockHost.tsx` = **EditorDock + 插入接线**（隐藏 `input[type=file]` → 内核 `insertFiles`；表格走 `table` 命令）。
+    **文档编辑器与小记写作卡共用这一份**（`DocumentEditor` 里原有的一份就地接线已删）⇒ 文档侧 dock 的任何变化两端自动一致，不会再漂移。
+  · 小记 `QuickNoteComposer`：新增「内核实例 state」+ 用 `QuickNoteEditor` 新开的 `onEditorInstance` 口拿实例（桌面不传、完全不受影响），底部挂 `<EditorDockHost editor={editorInstance} editing />`。
+    ⚠️ 实例**必须是 state**：ref 变化不触发重渲染 ⇒ dock 会一直拿到 null、命令静默失效（与 `DocumentEditor` 同一个坑，注释里已写明）。
+  · **关掉顶部工具条用的是内核既有开关** `showToolbar:false`（`disabledPlugins` 去掉 `toolbar`，与文档编辑器编辑态同一做法），**不是另做一套隐藏**；note 版式与正文排版不变。
+  · 布局：小记页内联写作时**首页胶囊底栏让位**（两条都贴底会打架，胶囊 z-index 更高会盖住 dock），滚动区改按 dock 占位留白（`.mobile-scroll--with-dock`）；capture 浮层同理（`.mobile-qn-composer-wrap` 底距）。
+- **顺带消掉一条旧缺口**：移动端小记现在与文档**输入能力一致**（「＋」全量面板 18 项 + 「Aa」+「更多」+ 表格/音频/视频/拍照）⇒ 早先记的"移动端小记插不了表格/代码块/公式/分栏/画板"**不再成立**。
+- **两端形态有意不同**：桌面小记仍用它自己的九项工具条（用户只要求改安卓端）。
+- **同批两条用户点单（移动端表情面板）**：
+  ① **去掉「搜索」入口**（用户："这个没啥意义在移动端"）⇒ 移动端面板没有搜索 tab、也没有输入框（`EmojiPanel` 里的 filter/searching 状态一并删除）。
+  ② **分类条压缩成一屏放得下、不再横向滚动**（用户：横划会被外壳手势抢走 —— 小记里触发"小记/知识库"切 tab，文档里触发大纲抽屉）。
+     去掉搜索后是 **9 个分类**，在 412px 上每个 **≈45.8px** ⇒ 既不横滚、又满足 44 命中区（`flex: 1 1 0` + 去掉 gap）。
+     另给面板根挂 **`data-prevent-swipe`**：`useHorizontalSwipe` / `usePanelDrag` 本来就排除这类元素 ⇒ 偶发横划不会再被外壳抢走（既有约定，未新造机制）。
+- **状态：未提交**。
+
+### 261013 · 「选图标」面板两端复用内核表情面板（桌面 + 移动）
+
+- **用户点单**：目录/文档的「设置图标」选择器（图1）能不能复用**内核插入表情那个面板**（图2）的样式；移动端也照桌面重做。
+- **为什么可行（先证后做）**：① 内核那套面板的 21 条 CSS（`.ne-ui-unicode-emoji-*`）**已随 `@dlient/lakex-doc-react/style.css` 进我们的产物** ⇒ 复用不新增样式；
+  ② 面板**不是公开组件**（`dist/index.d.ts` 无 emoji/picker 导出），但**类名即契约**、结构可从 CSS 反推；③ 与 `noteRefCard` 复用 `.ne-link-editor` 同一姿势：
+  `surfaceClassName="ne-ui-unicode-emoji-panel"` + `className="lakex-default-theme"`（**必须**：浮层在编辑器树外，不加则面板背景透明，实测 `rgba(0,0,0,0)`）。
+- **落地**：桌面 `Sidebar.tsx` 的 `EmojiIconPicker` 重写（搜索 + 分组标题 + 8 列 32px 格 + **底部 tab** + 清除行；定位改走 `usePopoverPosition`，**顺手去掉**历史上那处"估算高度自夹"）；
+  移动新增 `src/mobile/ui/EmojiIconPanel.tsx`（移动端自有组件），接进 `NotebookWorkspace` 与 `CreateNotebookSheet` 两个入口；两端共用 `src/lib/emojiRecents.ts`（设备本地「最近使用」，已登记进 STORAGE-LAYERS）。
+- **行为对齐内核**：内容按分组平铺 + 分组标题、底部 tab 跳转/高亮、**有最近记录才出现「最近」**；搜索态隐藏 tab。
+- **移动端最终形态 = 微信样式（用户 261013 第二轮定稿，推翻上面的"复用内核面板"）**：用户看过后说"移动端这个也不行，直接做成微信样式、**分类放顶部**"⇒
+  移动端 `EmojiIconPanel` 改为**自有微信样式**：**顶部**分类条（🔍搜索 · 🕐最近 · 8 组图标按钮，选中给浅底）+ 正文**浅灰底大格子**（8 列 51×44、表情 28px、无边框）+ 底部「清除图标」；
+  **不复用内核类**，配套那 3 条内核 token 桥也从 `mobile/theme/light.css` **撤回**（`mobileLayers` 账本回到 61）。桌面那份仍是内核面板样式（两份视觉不同是用户明确选择，见 LAKEX-CONTRACT §5.35）。
+- **移动端入口在哪（用户问过两次，记下来）**：工作区目录树**每行右侧的 ⋯** → sheet 菜单 →「**设置图标**」（文档与分组都有；移动端没有"点图标即改"的手势）；
+  另一处是**新建知识库** sheet 左侧的图标按钮。⚠️ **笔记本（知识库）本身建完之后没有改图标的入口**（只有建库时能选）——既有缺口，非本次引入；桌面则可以（点目录行首图标本身就改）。
+- **两处内核 CSS 坑就地纠偏**（不碰 vendor）：`-tabs` 被内核写成 `overflow-y`（横向行笔误，9 个 tab 会溢出面板）⇒ 补 `overflow-x: auto`；搜索框是内核内部输入组件，我们渲染原生 input ⇒ 自己补盒子。
+- **验证**：`tsc` ✓ · `vitest` **241 passed / 5 skipped（1897 例，新增 6 例 emojiRecents）** ✓ · `ui-metrics` ✓（移动端字号字面量 49 → **47**）· `check:core` ✓ · `check:mobileui` ✓ · `check:bundle` ✓；
+  **设备**：桌面三主题实拍（418×266 / 32px 格 / 26px 表情 / 选中 tab 700；面板底 `#fff`·`#1e1f23`·`#fff`）+ 移动 AVD 实拍（372 宽 / 命中区 44×44 / 表情盒 32）+ `check:mobilesnap` **6 态 0 差异** + 22 屏走查。
+- **⚠️ 用户实拍抓到一真缺陷（已修）**：**桌面面板会偶发没有背景（透明）** —— 根因是面板底色取 `--lakex-editor-background-foreground`，而那些 token 由**内核在编辑器挂载时注入的 schema `<style>`** 提供；
+  **没有编辑器时 tag 数 0 ⇒ token 缺失 ⇒ `background-color` 失效 ⇒ 整块透明**（复现：全新实例 `panelBg=rgba(0,0,0,0)`；把内核那两份 style 禁掉同样复现）。等有编辑器挂载它又"自己好了"，所以是间歇的。
+  **修法**：在**未分层**的 `styles/kernel-theme.css` 给该表面钉 5 个 token（`.ne-ui-unicode-emoji-panel.lakex-default-theme`，值走 `--lake-*`；未分层 + 0-2-0 才压得过内核的 0-1-0 声明，且不进编辑器树）。
+  修后实测：**禁掉内核 schema，面板依旧实心白底**；`cssLayers` 账本 `kernel-theme.css` 64 → **69**（已写理由）。
+  ⚠️ **通用教训**：我们自己渲染却依赖内核注入 token 的表面（本例、以及 `noteRefCard` 那两个浮层）都要显式兜底 —— 已写进 LAKEX-CONTRACT §5.35 ⑥。
+- **「最近」= 常显（用户 261013 二次定稿，有意偏离内核）**：内核是"有最近记录才前置「最近」"，用户要求**始终显示、空的也留位置**（否则会怀疑这功能到底有没有）⇒
+  tab 与分组恒定存在，为空时给一句「用过的图标会出现在这里」。实测：空态下 tab = 最近/表情/…、选中 = 最近、该分组 0 个格 + 提示；选一个 😀 后填入并落盘 `localStorage["lake-notes-v3.emoji-recents"]=["😀"]`。两端一致。
+- **261013 第三轮（用户点单，移动端 + 第三个选择器）**：
+  ① **「清除」并入「最近」首格**（对照色板里那块"默认/无填充"首格；用户要求），**底部整幅「清除图标」条取消** ⇒ 少一行高度；只在「最近」分类出现（最近是默认且常显 ⇒ 一步可达）。
+  ② **第三个表情选择器也改成微信样式**（`quickNoteToolbarWidgets.ts` 的 `openEmojiPicker`：小记写作卡工具条 + 移动 dock 共用）：顶部分类条（搜索 / 最近 / 8 组）+ 浅灰底大格子 + 空态；
+     表情表由原来写死的 40 个改为**与图标面板同源的 `LAKE_EMOJI_GROUPS`**（全仓不再有第二份表情表），并支持按名称搜索。
+  ③ **「最近」按入口分桶**（AGENTS §3#14）：`icon`（设置图标）/ `input`（输入态）两个 localStorage 键，已登记 STORAGE-LAYERS。
+  ④ 字号不写 px：移动端新增 `--mb-emoji-cat-size` / `--mb-emoji-glyph-size` 两个令牌（字号字面量 51 → **47**，回到基线内）。
+  ⑤ **移动端 dock 的「＋ → 表情」改成"在面板里占满"**（用户 261013：*保持固定高度不要跳动，就和输入法输入面板一样*）：
+     原来它弹的是**锚定浮层**（高度随内容变、盖在插入面板上）；现在新增 `PanelMode = "emoji"`，把表情面板**就地渲染在 `.med-panel` 里**（该容器本就是固定高：`--kb-offset` / ≤60dvh）⇒ 占满展开区、高度不跳、可连续点选（`runPanel` 本来就保持面板打开）。
+     ⇒ 由此**移动端 dock 不再走 `openEmojiPicker`**（那个浮层只剩小记写作卡工具条在用）。
+  ⑥ **面板组件通用化 + 改名**：`mobile/ui/EmojiIconPanel.tsx` → **`mobile/ui/EmojiPanel.tsx`**，props = `{ bucket, onPick, onClear?, fill? }` ——
+     「选图标」（传 `onClear`，最近首位是清除格）与「输入表情」（传 `fill`，撑满宿主）**共用同一份移动端面板**；
+     ⚠️ 改名牵动 `NotebookWorkspace` / `CreateNotebookSheet` / `EditorDock` 三处 import（已同步）。
+  ⑦ **固定高度**（消"跳动"）：图标 sheet 的内容区由 `min/max-height` 区间改成**固定 `height: 42vh`**（切分类不再变 4vh；空态就留白，像输入法）；移动浮层那份同理固定 `40vh`。
+  账本随之更新：桌面 `app/quick-notes.css` 521 → **543**、移动 `quick-notes.css` 98 → **153**、`theme/tokens.css` 168 → **170**。
+- **账本**：移动 `kit.css` 441 → **466**、`theme/light.css` 61 → **64**（合法新增，理由写进 `mobileLayers.test.ts`）；桌面 `misc.css` 删旧 14 条规则、`overlay.css` 把 `.emoji-picker` 从表面清单摘掉。
+- **新观测回填**：`docs/LAKEX-CONTRACT.md` **§5.35**（类名族 + 复用姿势 + token 作用域 + 两处内核 CSS 坑 + 设备实测数）。
+- **状态：未提交**。
+
+### 261013 · 云同步浮层「同步设置」按钮折行修复（同步中偶发排布错乱）
+
+- **用户报**：云同步图标浮层在**同步过程中偶发排布错乱** —— 「同步设置」按钮换行，很快就恢复（没截到图）。
+- **真因（设备级机制复现）**：`.sync-status-actions .b3-button` 是**可收缩的 flex 子项**（没写 `flex` / `white-space`）。同步中 footer 文案会变长
+  （`上次同步 … · 未同步 N 项`）⇒ 行内空间被挤、按钮被压缩、**标签折成两行**（`Range.getClientRects().length` = 2），而基座 `line-height:1` + 固定高 ⇒ 行盒错位；同步一结束文案变短即恢复，与"偶发、很快就好"完全吻合。
+  复现实测：正常 `121px / 1 行` → footer 变长 `109px / 2 行` → 注入修法 `121px / 1 行`。
+- **修法（单一来源，`src/styles/components.css` 一条规则）**：`.sync-status-actions .b3-button { flex: 0 0 auto; white-space: nowrap; min-height: 30px; }`
+  —— 动作行的按钮是**固定区、不可压缩**（§4「浮层列布局的固定区用 `flex: 0 0 auto`」既有口径）；左侧文案本就有 `min-width:0 + ellipsis`，长文案改走省略号。
+  顺带删掉与 kit 层 `.b3-button` 基座**同值的 3 条冗余声明**（`display`/`align-items`/`gap`；kit 层高于本文件的 legacy 层，本来就赢）⇒ 本文件声明数 **-1**（护栏只许降）。
+- **验证**：修后重建 dist 设备实测 —— footer 常见长度与极端长度下按钮均 **121px / 1 行**、动作行高恒定 41px；同浮层统计行（注入 `dd` 超长值 232px）仍 1 行、无溢出 ⇒ **未做投机改动**。
+  ✅ tsc / vitest（含 `cssLayers` 声明数护栏）/ `ui-metrics` / `check:core` / `check:mobileui` 全绿。
+  ⚠️ 该浮层**不在 `check:stylesnap` 的 42 态矩阵内**，视觉门禁覆盖不到它 ⇒ 本条的判据就是上面的设备级前后对比（别以为"门禁绿了"就验过它）。
+- **状态：未提交**（与门禁批次同属本会话；并发会话正在改 `chrome.css`，本批只碰 `components.css`，写域不重叠）。
+
+### 261013 · 门禁批次：`check:stylesnap` 装置根治（抖动归零，严格覆盖 17 → 34 态）+ 门禁分层口径
+
+- **触发**：用户「上一个会话跑了 40 多分钟失败；门禁到底是什么、每次改动都跑很久」。先量化、再根治（不是继续加名单）。
+- **量化（本机实测）**：**强制代码门禁总共 ≈21s** —— `tsc` 5s · `vitest` **8s（244 文件 / 1882 例）** · `vite build` 3s ×2 · `ui-metrics`/`check:core`/`check:mobileui`/`check:bundle`/`git diff --check` 均 ≤1s。
+  **那 40 分钟全部来自设备级视觉门禁 `check:stylesnap`**：单轮 42 态 **≈294s**，且**一有差异就自动重跑第二轮**（≈×2），再加换实例 / 整份重烤 / 多份快照互拍 ⇒ 上一次会话就是这么烧掉的（与用户改动无关的假红）。
+- **真因（离线实证，非猜测）**：5 份完整快照两两对拍 —— keyed 行 **7234 处翻转**，两层：
+  ① 裸 SVG 图元（无 id、无 class 的 rect/path/g/circle）「位置即身份」⇒ index → hash 的对应关系在换（元素数不变）；
+  ② **行序漂移**：内核图标 sprite 注入顺序跨实例不同（实测 **459 个 key 换位、集合完全一样**）。
+- **修法（`scripts/css-audit/stylesnap.mjs` 的 `snapExpr`，两端共用）**：① 裸图元改为 `(tag, 自身指纹)` 的**排序多重集**（信号不丢：图元自身变了指纹仍会变；
+  反向对照已否决 —— "整片剔除"会让每态少 **1444 / 2411** 个元素、把画板 SVG 场景一起丢掉）；② 落地前**按 key 排序**，指纹不再反映 DOM 顺序（顺序跨实例不可复现，本来就不能当基线）。
+  `check-stylesnap.mjs` 的 **`UNSTABLE_1315` 已删除**（不再需要）。
+- **验证**：桌面跨实例两轮（实例 A/B，各 42 态）**0 差异** ⇒ `check:stylesnap` **`GATE_EXIT=0`、34 态严格比对全恢复**（旧 17 态）；
+  移动端 `check:mobilesnap` **两次冷启动复跑 6 态 0 差异**（基线已按同一表达式重烤，表达式两端共用）。
+- **留档**：旧桌面基线 `.css-audit/baseline-stylesnap-261013-UNSTABLE1315-backup.json`；判据链与两条坑写进 `scripts/css-audit/README.md` 坑 C；**门禁分层口径见 §6**。
+- **顺带纠正一条**：上一轮重烤用的 `dist/`（13:34）**比 `src/App.tsx` 还旧** ⇒ 那次基线建在陈旧构建上；本批先 `vite build` 再采（scheme 模式本就要求先构建）。
+- **状态：未提交**（装置/脚本 + 基线改动，按 §1 铁律等用户验收）。
+
+### 261013 · 桌面小记「展开」不再覆盖顶栏 / 红绿灯
+
+- 用户截图复现：小记写作卡右上角展开后，内核工具条跑到窗口顶端，与 macOS 红绿灯重叠。根因是 vendor `.ne-ui-fullscreen{position:fixed!important}` 压过了已有桌面 `position:absolute` 适配，计算值仍 fixed、top=0。
+- 唯一落点 `src/styles/app/quick-notes.css` 的现有 `.quick-notes-pane .lake-editor-mount.ne-ui-fullscreen`：`position:absolute!important`（必要第三方例外，原因就地注释；全桌面 important 9→10、仍达门禁），其余几何 / 层序不改。不改 vendor / 移动端。内核新观测回填 `LAKEX-CONTRACT.md` §5.12，新增 `quickNoteNoteUi` 反向护栏。
+- 真实 Electron 隔离 `/tmp/lake-qn-expand-261013`（CDP 9269）前后对拍：展开层 top **0→38px**，offsetParent 回到小记面板；顶栏 0–34px（含 4px 拼接缝）保留；底边 **820px 不变**，三枚动作按钮整盒几何逐项不变，真实点按退出展开成功。截图 `/tmp/lake-qn-expand-after-261013.png`（页面截图不含 macOS 原生红绿灯，以 mount 不再进入头区验证）。
+- 验证：定向 **4 文件 / 27 例** ✓ · tsc ✓ · vitest **240 文件 / 1875 例**（跳过 5 / 16）✓ · ui-metrics ✓ · build:web + check:bundle ✓ · diff --check ✓。桌面产物已重建；未提交 / 未推送。
+
+### 261013 · 桌面 AI 等待 / 生成动态反馈
+
+- 用户要求：AI 思考或等待输出时给动作，避免静态「…」被误判无响应。三个桌面入口共用 `AiAssistantDialog`，只在该面板改。
+- 请求发出立即显示 `LoaderCircle.spin + 正在等待回复…`；收到非空白正文后改为「正在生成…」，保留流式正文。成功 / 失败后移除；主动停止当场隐藏（不等取消请求返回）。不捏造「真实思考阶段」：当前协议只有正文 delta，没有 reasoning 信号。
+- 无新依赖 / 无等待计时器；复用全应用 spin。状态独立 `role=status / aria-live=polite / aria-atomic=true`，图标装饰性隐藏；`prefers-reduced-motion` 下静止、文字保留。局部 CSS 合法新增 6 声明，cssLayers 账本 8→14、重复组仍 0。
+- 验证：真实 Electron 隔离实例 `/tmp/lake-ai-progress-261013`（CDP 9268），仅 mock 渲染层 AI 端口（不读 Key / 不调用真实模型 / 不消耗额度）驱动实际面板；验证等待 → 转圈矩阵变化 → 输出 → 减少动效 → 完成 / 停止。截图 `/tmp/lake-ai-waiting-261013.png` / `/tmp/lake-ai-streaming-261013.png`。新增组件运行测试 6 例（含空白 delta / 返回失败 / 抛错）。
+- 门禁：tsc ✓ · vitest **240 文件 / 1874 例**（跳过 5 / 16）✓ · ui-metrics ✓ · build:web / check:bundle ✓ · diff --check ✓。桌面产物已重建；未提交 / 未推送。已有目录栏与并发 css-audit / 移动基线改动均保留。
+
+### 261013 · 桌面目录浮层顶边改为顶栏下缘（底部不变）
+
+- 用户定稿：目录浮出从顶栏以下开始，不再从面包屑以下开始；底部保持现状。
+- 唯一落点 `src/styles/chrome.css`：`--lake-dir-peek-top = topbar + 4px 拼接缝`；高度仍 `100vh - peek-top - 12px`。固定目录 / 大纲 / 左缘触发热区 / 浮层层序不改；`docs/PANEL-CONTRACT.md` 与 `geometrySources.test.ts` 同步。
+- 真实 Electron 隔离实例（`/tmp/lake-dir-peek-261013`，CDP 9267）前后对拍：富文本 / 表格 / 多维表的 peek 顶部 **64→38px**、底边 **808px 不变**（820px 窗口，底缝 12px）；固定目录整盒几何与热区顶部逐项不变。截图 `/tmp/lake-dir-peek-after-261013.png`。
+- 验证：tsc ✓ · vitest **239 文件 / 1867 例**（跳过 5 / 16）✓ · 几何/样式/层序定向测试 **4 文件 / 12 例** ✓ · ui-metrics ✓ · build:web + check:bundle ✓ · diff --check ✓。桌面产物已重建；未提交 / 未推送。并发中的 css-audit 脚本与基线改动不属于本批，未触碰。
+
 ### 261013 · 收尾批：同步可用性置灰 + 启动就绪信号 + 移动端同步可观测性 + 并发真交错护栏
 
 - **A2「保存并同步」在云同步关闭时置灰 + 给理由**（用户定稿「改回置灰」）：
@@ -725,7 +913,7 @@
       ⇒ **不并入** `.ln-row` / `.ln-input`（审计的"像输入框"是误判）；今后审计再报到这两条，按此结案，别再立项。
     **工具（已入库）**：`scripts/css-audit/audit-lookalike.mjs`（找「像原语却没复用」，260930 命中 29 → 16）、`scripts/css-audit/audit-primitives.mjs`（跨文件规则体重复族，46 → 39）。改完样式重跑对比即可；判定只认这两份数据 + 实机几何，不认「看着像」。
 
-11. **多维表行虚拟化（AR04 已证瓶颈；用户 260930 决定暂不做，留待后续）**：真实 Electron 压测（scripts/bitable-stress.mjs）——目标 5000×20 打开 **12.42s / 84.8 万 DOM / 395MB 堆 / 首次点选 2.25s**；10000×20 = 24.8s/169 万/1.34GB；20000×50（100 万格）200s 内未渲染完成；50000×50 因**正文 32 MiB 上限**根本无法保存。结论：CPU 热点（AR-F5/F6）已消除，**DOM 全量渲染是瓶颈**，支持 5000 级规模需行虚拟化/渲染策略；立项前先定「5000×20 滚动/编辑目标 + 验收口径」。**用户 261007 确认：长期待办、暂不做。**
+11. **多维表Grid架构重构 / 行虚拟化（AR04 已证瓶颈；261014用户重启调研，方案待确认）**：真实 Electron 压测（scripts/bitable-stress.mjs）——目标 5000×20 打开 **12.42s / 84.8 万 DOM / 395MB 堆 / 首次点选 2.25s**；10000×20 = 24.8s/169 万/1.34GB；20000×50（100 万格）200s 内未渲染完成；50000×50 因**正文 32 MiB 上限**根本无法保存。结论：CPU 热点（AR-F5/F6）已消除，**DOM 全量渲染是瓶颈**，支持 5000 级规模需行虚拟化/渲染策略；立项前先定「5000×20 滚动/编辑目标 + 验收口径」。**用户 261007 确认：长期待办、暂不做。** **261014更新**：用户因正式包5000×20约15秒要求解决，已重新调研DOM虚拟化/Canvas/完整Grid；推荐先替换Grid视口与交互层、保留数据/业务核心，下一步隔离PoC与预算待确认（见最新§0与`.css-audit/bitable-research-261014/RESEARCH.md`）。旧暂缓不是本次新调研的结论。 **DOM隔离PoC已完成（见最新§0）**：首开0.40s/热开0.21s，完整模型5000/只挂25行；滚动/输入p95仍37.5/54.8ms略超预算，11检查与副本1698测试通过但复杂业务回归未完成，正式尚未接入。 **内存续作已验证**：最新PoC单表堆约93MiB vs旧351MiB；8标签总工作集峰1.7–1.8GiB，关闭后15s堆回103MiB；诊断保留堆8次开关后稳定，未发现无界窗口缓存。最新12检查/副本1703例通过，但尾延迟不稳定与复杂业务门禁未齐，详见最新§0和`MEMORY-RESULTS.md`。 **发布回归续作**：关联选择器也窗口化，末包23项检查/1712例与24态几何通过；关联堆237→102MiB，但反复开关滚动总工作集峰2.03GiB，正常关15s堆65MiB/工作集839MiB，4K图源补验通过。仍不正式接入，优先瞬时分配/输入长尾与低配验收，见最新§0和`RELEASE-RESULTS.md`。
 
 12. **非多维表审计遗留（260930 会话决定）**：
     - **F16 安卓整轮网络同步持本地写队列 —— 已实测（261009，用户授权用 dev 前缀 `lake-notes-dev1` 直连 S3）**：结论 **立项** ⇒ **已修复（261010，见 §0 本批）**：写域/维护域分离 + 判据单一来源 + I2 守卫；**弱网实测已收尾（261010）：同步 59.3s 期间写等待 32ms（旧 152.0s），见 §0**。
@@ -832,6 +1020,8 @@
     - **候选状态（261012 用户最终裁定，别再重提）**：① 分屏宽度持久化 ❌ 不做；② 分屏对跨重启恢复 ❌ 不做；③ 合并标签右键菜单 ❌ **不做**（曾实现过，用户裁定后**已彻底回滚删除**）；④ 入口补齐（标签右键「在右侧分屏打开」/ 快捷键）❌ **不做**（同上，已回滚）；⑤ 同文档分屏 ❌ 不做（要动 tab 身份模型）；⑥ 多栏/上下/嵌套 ❌ 不做（无证据；第三方布局库亦已否决）。**理由（用户原话）：「Edge 都没有」**。
     - **分屏期间标签拖拽排序** ✅ **已修（261012，见 §0）**：旧实现分屏即禁用拖拽，且合并标签只占一个槽位会让「拿 DOM 顺序回写」丢页；现在走 `tabOrder.ts` 的「槽位 → 真实顺序」两步，组内两页整块移动。
 
+22. ~~**正式包大目录切标签性能（261013）**~~ **最小优化已落地**（见最新§0）：App稳定保存失败回调 + Sidebar本行内容memo；真实默认GPU包同组209→74ms、跨笔记本231→75ms，结构/几何不变，17场景与6态样式门禁通过。递归仍遍历全树，进一步优化仅按新热点证据立项；**不做目录窗口化**，多维表5000×20沿用#11暂缓决定。
+
 ## 4. 关键坑（长期有效）
 
 ### 同步 / 数据
@@ -911,9 +1101,15 @@
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"      # node 24（别用系统 node 18）
 cd /Users/admin/file/local-lake/lake-notes-electron
-# 门禁（合并前必过）
+# 门禁（合并前必过）—— 261013 实测总共 ≈21s（tsc 5s / vitest 8s / 两条构建各 3s / 其余 ≤1s）
 npx tsc --noEmit && npx vitest run && npx vite build && npx vite build -c vite.mobile.config.ts
-node scripts/ui-metrics.mjs && npm run check:core && git diff --check
+node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && npm run check:bundle && git diff --check
+# 门禁分层（261013 定，避免"每次改动都跑很久"）：上面这 5 条 = 日常/每次改动，就是"门禁"的正式含义。
+#   ② 动了 CSS/UI 要证"视觉中性"时：**只验改到的那 1~2 个态**（秒级，态自包含）——
+#        node scripts/css-audit/drive.mjs 9231 scripts/css-audit/stylesnap.mjs after "resources:1315:light"
+#        node scripts/css-audit/check-stylesnap.mjs --port 9231 --states "resources:1315:light"
+#      完整 42 态（≈294s）只在换夹具 / 改装置 / 发版前跑；跑前先 npx vite build（scheme 模式服务 dist/）。
+#   ③ 设备门禁（移动端 check:mobilesnap 6 态 / 走查 22 屏）只在改动涉及移动端时跑，且只跑专用 AVD lake_gate（5556 / CDP 9336）。
 # 开发（CDP 9222；改主进程/src/core 文件会重启 Electron 并可能命中 GPU 崩溃，见 §4）
 npm run dev                 # = vite --host 127.0.0.1 --port 1421（vite-plugin-electron 拉起 Electron）
 # 压测（opt-in，默认被 npm test 跳过）
@@ -957,6 +1153,134 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > 原「重构输入」三问的答复：① F16 **已按当前架构修复**（写域/维护域分离，见 §0 本批）；② 走查装置**必须接进验收流程**（`check:mobilesnap` + 设备级截图）；
 > ③ `window.lakeNative` **保留并改为从实现派生**（49 = 47 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
+
+### 261014(三) · 点 ＋ 后**光标消失** / 点正文**键盘闪烁** / 面板**自己关掉**（用户点单，**待用户验收**）
+
+- **用户报**：① 点 ＋ 之后编辑区**光标消失**；② 再点一下编辑区会**键盘闪烁**；③ 文档偶发"光标跑到下半部分被键盘盖住"；小记与文档都有。
+- **根因（设备逐帧 + 状态时间线实测，三条）**：
+  ① 收输入法用的是 `blur()` ⇒ **焦点与光标一起没了**（"光标消失"）；要打字得再聚焦一次 ⇒ 表现为闪烁；
+  ② 判断"用户点了正文"用的是**一个布尔量**：它会被上一次点击留下 `true`，再被**我们自己**抑制输入法时的 blur/focus 触发
+     ⇒ 误判成用户点击 ⇒ **面板开了 ~630ms 自己关掉**（时间线实测：`mode=insert/panels=1` 只维持 630ms 就回 `none/0`）；
+  ③ 顺带发现我自己那轮的漏洞：抑制输入法用 blur+focus 会**同步触发 focusin**，focusin 分支又调抑制 ⇒ **无限递归**风险。
+- **改法（全部收口在 `EditorDock`）**：
+  · 收输入法 = `setbackIme(true)`：给正文宿主加 `inputmode="none"` 再 `blur() → focus()` ⇒
+    **键盘收起但焦点/选区/光标矩形逐项保留**（实测 530→842、activeElement 仍是 `.ne-engine`、光标 [130,148] 不变）；
+  · 放回输入法 = `setbackIme(false)`；`setbackIme` 内部有重入保护 `inSetback`；
+  · "用户点正文"判据从 focusin **挪到 pointerdown**（面板期正文一直有焦点、点它不再触发 focusin）+ 只用当次事件；
+  · focusin 分支**只写 `inputmode`、绝不 blur、也不再调 setbackIme**；
+  · 收面板收敛成 `closePanel()` **唯一出口**（× / 再点 ＋ / 点正文三处共用：先 `setPanel(null)` 再 `focusEditor()`）；
+  · ⌨ 按钮（收键盘）同样**保留光标**。
+- **设备实测（逐步骤，两处编辑器）**：
+  · **小记**：键盘开 530/光标[130,148] → **点＋** 842/inputmode=none/**面板 insert**/**光标[130,148]** →
+    **再点＋** 530/**键盘回来**/光标[130,148] → 切表情 → **插一个表情（面板不塌、光标仍 [130,148]）** → 点正文 530/面板关/光标[97,114]（内容变但没消失）。
+  · **文档**（18 行长文）：530/光标[388,410]/工具栏 474 → **点＋ 842/光标[388,410] 不变、仍在工具栏上方** →
+    关闭同样不变 → 点正文下半部 光标[353,374] **仍在工具栏上方（不再被盖）**。
+  · 面板时间线：点 ＋ 后 **37ms 就位并保持**（改前 630ms 后自关）。
+- **护栏**：`dockPanelFocusGuard.test.ts` 重写为 **7 例**（hook 顺序 / 输入法抑制含重入保护 / 光标保留口径 / 面板唯一收口 / setPanel 唯一写入口）；
+  原先单独的 `dockHookOrder.test.ts` **并入**该文件（避免两份读同一源）。
+- **验证**：`tsc` ✓ · `vitest` **249 文件（244 过/5 跳）· 1916 例（1900 过/16 跳）** ✓ · 两条构建 ✓ ·
+  `ui-metrics` ✓ · `check:core` ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` ✓ ·
+  设备 `check:mobilesnap` **6 态 0 差异** ✓ · 走查 **23/23 ok · 五类探针全 0** ✓。
+- **口径回填**：`docs/LAKEX-CONTRACT.md` **§5.38**（inputmode=none 收键盘保光标的实测表 + 三条坑：blur 丢光标 / 布尔量误判导致面板自关 / 抑制函数必须防重入）。
+- **状态：未提交**（与在途批次同一工作树；提交时按文件分开）。
+
+### 261014 · 移动端编辑体验：点 ＋/× 编辑区跳动 + 光标必须始终在工具栏上方（用户点单，**待用户验收**）
+
+- **用户点单**（两条，实为同一根因）：① 点 dock 的 **＋/×** 时**小记与文档的编辑区都会跳**；② **光标必须稳定保持在工具栏上方**、
+  不被工具栏/键盘盖住（对标语雀 App：它的正文区域在「键盘 ⇄ 面板」切换时一动不动）。
+- **根因（四条，逐条设备实测）**：
+  ① **面板不让视口变矮**（adjustResize 只被输入法触发：842→530）⇒ 任何**以视口高为基准**的盒子在切换时都变形（实测写作卡 320→428）。
+  ② 小记页容器链是**自动高度**：`.mobile-home` 根本没规则 ⇒ 里面的 `.mobile-tab-stage/.mobile-scroll`（都是 flex:1）退化成
+     "内容多高就多高、永远不滚"（实测 scroller `scrollHeight == clientHeight`）⇒ **文字一多光标一路跑出屏幕**（实测跑到 y=1080）。
+  ③ 内核 note 版式给引擎写了 **`min-height: 40vh`**（vendor `lakex-doc.css:6205`）——40vh **跟视口走**（输入法态 212 / 面板态 337）。
+  ④ 收起面板时**太早清占位**（固定 220ms）⇒ 键盘还没上来，工具栏掉到屏幕底部再弹回（实测 `toolbarTop 474 → 786 → 474`）。
+- **修法（都是单一来源、无新机制）**：
+  · **稳定外壳高** = 新模块 `src/mobile/viewportShell.ts`（单调取历史最大值 = 键盘收起时的高；方向变化重置）；
+  · `useKeyboard` 的 `base` 改用它（跨实例共享，避开 keep-alive 隐藏实例 / 挂载时键盘正开着的时序坑）；
+  · `EditorDock` 用 **`useLayoutEffect`** 把 `--mb-app-h = 稳定高 − 底部占用`（面板高 或 键盘高）写到 `:root`，
+    `html, body, #root, .mobile-app` 都用它（**必须 layout effect**：写在 paint 之后，vh 系的内核规则会先按旧视口算一次并被内容撑住）；
+  · 编辑面滚动容器**只留工具栏的固定留白（80px）**，删掉 padding 里的 `--mobile-dock-space`（占位改由外壳承担）；
+  · `.mobile-home` 补 `flex:1; min-height:0; display:flex; flex-direction:column`（与 `.mobile-workspace` 同口径）；
+  · 小记写作卡改**定高（`height:100%`）+ 内部滚动**（与 `.mobile-doc-body` 同口径）；
+  · 收起面板改为**等输入法真的回来**（`keyboardOpen`）再清占位，兜底 2500ms；
+  · 小记接上**文档那份** `useCaretIntoView`，并给它加 `resize` 复核（浏览器自己的"把光标滚进视口"是按**视口**算的，
+    面板一开它会停在被面板盖住的位置，实测 y=585）。
+- **设备实测（前后对比，AVD lake_mobile）**：
+  · **小记（短内容）**：写作卡 **320→428（跳）⇒ 恒 398**；连续输入 680 字符时**光标最小间距从 −624（5 次被盖）⇒ +111px、0 次被盖**；工具栏全程恒 474。
+  · **小记（长内容 = 用户点出的关键场景）**：真正滚动的内核滚动口 `.ne-editor-wrap-content` 的
+    `clientHeight` 原为 **260（键盘态）⇄ 572（面板态）**、`scrollTop 1264 → 978`、**正文首块位移 285px**；
+    钉住容器链 + 解除内核按视口写的 `max-height` 后，**键盘态 / 面板态 / 收回态三者
+    `clientHeight=306 / scrollTop=1218 / engTop=-1141 / firstBlockY=-1125` 逐项完全相同 ⇒ 位移 0**。
+  · **文档**：连续输入 **98 行**，光标恒 **417–438**、工具栏恒 **474**（间距 36px、0 次被盖）；点 ＋/× 全程 **0 位移**。
+  · ⚠️ 中途踩到并已修的坑：① 我又给 `.quick-note-editor` 加了第二个滚动容器 ⇒ 两层滚动打架（外层 st 0→239、sh 318→584），已撤；
+    ② `interactive-widget=resizes-visual` 在本 App **无效**（Capacitor 的 adjustResize 在原生层就改了窗口尺寸，实测 ih 仍 530）——
+    这条记在这里，别再当抓手。
+- **顺带修掉一个我自己引入的真崩溃**：为"等键盘回来再清占位"把三个 hook 写到了 `if (!editing) return null;` **之后** ⇒
+  文档**从阅读态切编辑态**时 React 抛 "Rendered more hooks than during the previous render" ⇒ 整块面板崩、**dock 永不出现**
+  （小记那条路 editing 恒 true，所以只有文档炸）。已挪回早退之前；护栏见下（**已并入 `dockPanelFocusGuard.test.ts`**，不再单独一个文件）。
+- **护栏**：`viewportShell.test.ts`（外壳高单调/重置）· `dockPanelFocusGuard.test.ts`（**7 例**：hook 顺序 / 输入法抑制 / 光标保留 / 面板唯一收口 / setPanel 唯一写入口）。
+- **验证**：`tsc` ✓ · `vitest` **250 文件（245 过 / 5 跳）· 1917 例** ✓ · 两条构建 ✓ · `ui-metrics` ✓ · `check:core` ✓ · `check:mobileui` ✓ ·
+  `check:bundle` ✓ · `git diff --check` ✓ · 设备走查 **23/23 ok · 五类探针全 0** ✓（含 `quicknote-editor` 屏）· 设备 `check:mobilesnap` **6 态 0 差异** ✓（**基线已按本次有意的几何变更重烤**：`.mobile-home` 由
+  "自动高度"改成受约束的 flex 列 ⇒ 5/6 态**元素数不变、指纹变**＝纯计算值变化；重烤后连跑两次 0 差异）· 设备走查 **23/23 ok · 五类探针全 0** ✓。
+- **口径回填**：`docs/LAKEX-CONTRACT.md` **§5.37**（内核 `min-height:40vh` 的机制与收口 + 一般化教训："内核按 vh 写的定高在移动端要换基准"）·
+  `docs/MOBILE-TECH-STACK.md` **§五-7**（三条口径：稳定外壳高 / 滚动容器只留工具栏留白 / vh 定高换基准；光标跟随统一走 `useCaretIntoView`）。
+- **快捷入口那条路也验了**（长按桌面图标「小记」深链 `lakenotes://quick-note`，走的是另一个容器 `.mobile-qn-composer-wrap`）：
+  键盘态/面板态/收回态**逐项完全相同**（appH 530 / wrap 530 / 卡片 442 / 内核滚动口 ch 350 · st 521 / 首块 Y −472 / 工具栏 474 / 光标 346–363）。
+- **本轮查漏补缺（用户 261014 要求）**：① 撤掉无效的 `interactive-widget=resizes-visual`（Capacitor 的 adjustResize 在原生层就改窗口，实测无效 ⇒ 不留无效改动，结论留在 LAKEX-CONTRACT §5.37）；
+  ② 修掉**首帧风险**：`useKeyboard` 的 `base` 初值原本是 0，而写 `--mb-app-h` 的是 `useLayoutEffect`（比测量更早跑）⇒ 挂载首帧外壳会变 0px；改为初值取当前视口高 + 写前判空；
+  ③ 删死 CSS `.mb-emoji-search input`（261013 去掉搜索入口后的残留，JSX 已无该元素）；
+  ④ 陈旧文案（"9 个分类 ≈45.8px"）与基线注释同步到"一屏 8 格 + 横滑"；
+  ⑤ hook 顺序护栏扩到 `QuickNoteComposer`（同一批也在那里加了 hook）；
+  ⑥ `max-height: none !important` 收窄到真正需要的那个元素（`.ne-editor-wrap-content`）。
+- **已知未做**：横竖屏只做了"重置外壳高"，没有横屏专门验收（D 项，用户定：留待办）。
+- **状态：未提交**（与 261013/261014 在途批次同一工作树；提交时按文件分开）。
+
+### 261014 · 表情面板分类条：末尾动作键（返回 / 清除）+ 行高压缩（用户点单，**待用户验收**）
+
+- **用户点单**：分类条末尾加一个键 —— 小记/文档**输入态 = 返回**（退出表情选择）；**目录/选图标 = 清除**（去掉图标）；并把分类这一行再压一压。
+- **落地（单一来源 = `mobile/ui/EmojiPanel.tsx`）**：新增 `onBack`；分类条末尾渲染 `.mb-emoji-cat--action`
+  （输入态 = ChevronLeft「返回」→ `EditorDock` 传 `togglePanel("insert")` 回「＋」面板；选图标态 = Ban「清除图标」→ 原 `onClear`）。
+  **「最近」首格那块清除格随之撤掉**（同一动作只留一个入口）；两处 `onClear` 调用点（工作区「设置图标」/ 新建知识库）零改动。
+- **形态（261014 二次定稿，用户：一行 10 个可点目标太多）**：**一屏 8 格 + 横滑**（对标微信，它的表情行也是 8 个）。
+  每格固定 **--mb-tap-min(44)** ⇒ `9 格 × 44 = 396 > 轨道 368` ⇒ 8 格整屏 + 第 9 格露 28px 提示可滑；
+  **末尾动作键钉在轨道右侧、不参与滚动**（返回/清除必须永远够得着）。横滑安全性靠面板根既有的 `data-prevent-swipe`
+  （外壳 `useHorizontalSwipe`/`usePanelDrag` 本就排除它，261013 约定，未新造机制）。
+  另：`--mb-emoji-cat-h: 36`（视觉 44 → 36）、`--mb-emoji-cat-size: 24 → 22`；命中区只差高度 ⇒ 注册表 ::after 竖向补到 44，
+  **不再有横向重叠**（先前的"10 格挤一屏"方案已废弃）。口径已登记进 `MOBILE-DESIGN.md`「The 44 Rule」。
+- **装置补一屏**：走查新增 `notebook-icon-sheet`（目录行 ⋯ →「设置图标」）—— 这一屏**此前 22 屏从未覆盖**，
+  而本次恰好改在它上面（判据＝探针看不见就等于没量过）。
+- **设备实测（5554 新构建）**：轨道 **368 宽 / scrollWidth 396 / 每格 44×36 / 整屏 8 格 / smallTap 0**；
+  **真手指横滑**（CDP touch 序列）⇒ `scrollLeft 0 → 28`、**外壳左右抽屉都没被触发**（`side-panel--left.on` 与大纲均 false）、动作键仍钉在 x=368..412；
+  滑到底后点最后一个分类「符号」⇒ 选中成功（可达）。点「返回」⇒ `data-panel` emoji→insert、＋面板回来；再插表情仍 **0 次 resize**、面板恒 312（不闪）。
+  选图标 sheet：同构（行 376 ⇒ 8 格 + 钉住的「清除图标」）；先选 👕（图标生效、面板关）→ 重开点「清除图标」→ 图标清空（回 Book 图标）、面板关；
+  **全程未创建任何数据**（最后直接关 sheet）。
+- **验证（全绿）**：`tsc` ✓ · `vitest` **248 文件（243 过 / 5 跳）· 1913 例（1897 过 / 16 跳）** ✓
+  （另记一笔：设备门禁并发跑时 `syncEngine.test.ts` 的 D8 曾因机器负载 **5s 超时**，空闲单跑 63 例全过 —— 别误判成回归）·
+  两条构建 ✓ · `ui-metrics` ✓（移动端字号字面量 47 ≤ 49）· `check:core` ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` ✓ ·
+  设备 `check:mobilesnap` **6 态 0 差异** ✓ · 走查 **23/23 ok · 五类探针全 0** ✓（门禁夹具仍 5 文档 + 4 小记，无需重烤）。
+- **账本**：`theme/tokens.css` 170 → **171**（+`--mb-emoji-cat-h`）、`kit.css` 509 → **511**（+`.mb-emoji-cats__track` −首格清除格；理由写进 `mobileLayers.test.ts`）；
+  移动端字号字面量仍 47。
+- **状态：未提交**（与 261013/261014 在途批次同一工作树；提交时按文件分开）。
+
+### 261014 · 安卓端「插入表情时表情栏闪烁」修复（用户报 → 设备实测 → 已修，**待用户验收**）
+
+- **用户报**：安卓端插入表情，表情栏会闪烁，"体验非常的差"（GIF：每次点表情 = 面板消失 + 输入法闪出 + 面板滑回）。
+- **根因（AVD lake_mobile 事件日志实测，非猜测）**：内核在每条面板命令后**抢回正文焦点**（一次点按 2–3 次 `focusin`）⇒
+  Android 弹输入法（innerHeight 842→530）⇒ 面板高度 `--kb-offset`（= `max(0, innerHeight - base + panelHeight)`）
+  从 **312px 塌到 0** ⇒ 面板整块消失再恢复；原兜底（`keyboardOpen` 的 effect）**晚约 1s**（t+1247 才 blur，resize 已发生）。
+- **修法（1 处、无新机制）**：`EditorDock` 既有的 focusin 守卫里，**面板开着时对程序性聚焦同步 blur**（面板态 ref 镜射；
+  ⚠️ 面板态改为**同步写 ref 且只有 `setPanel` 一个写入口** —— 否则收起面板的 `setPanel(null) → focusEditor()` 同一 tick 会漏判、把键盘又收掉，见 LAKEX-CONTRACT §5.36）。
+  落点 `src/mobile/editor/EditorDock.tsx`；**不改** `--kb-offset` 公式（公式是对的，错的是"键盘被弹出"这件事发生了）。
+- **修后设备复核**：小记写作卡 —— focusin 每次 5–20ms 被吞、**0 次 resize**、innerHeight 恒 842、panelH 恒 312；
+  文档编辑器（自建探针文档，测完已 `trashNote`）—— panelH 恒 280、0 次 resize ⇒ **两处入口都不闪**；
+  **顺带复核"收起面板"没被修坏**：点 ＋ 关闭面板后 innerHeight 842 → **530**、焦点回 `ne-engine`、面板 `data-panel=none`（键盘正常回来）。
+- **护栏**：`src/mobile/editor/dockPanelFocusGuard.test.ts`（**6 例**；自证：改回旧写法 / 把 `setPanel` 换回裸 `setPanelMode` ⇒ 2 例变红）。
+- **验证（全绿）**：`tsc` ✓ · `vitest` **248 文件（243 过 / 5 跳）· 1913 例（1897 过 / 16 跳）** ✓ · 两条构建 ✓ · `ui-metrics` ✓（移动端字号字面量 47 ≤ 49）·
+  `check:core` 78 文件 0 违规 ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` ✓ ·
+  设备 `check:mobilesnap` **6 态 0 差异**（新构建 + gate 实例 5556）✓ · 设备走查 **22/22 ok · 五类探针全 0** ✓。
+- **数据卫生**：5554 的测量走「新建小记 → 测完取消」；文档路径用 `createNote` 建探针文档、测完 `trashNote`；
+  门禁实例（5556）夹具仍为 **5 文档 + 4 小记**（走查未写脏）⇒ **无需重烤基线**。
+- **状态：未提交**（与 261013 在途批次同一工作树；提交时按文件分开）。
 
 ### 261013 · 移动端「必要项」批：装置四修 + 目录层失效修复
 

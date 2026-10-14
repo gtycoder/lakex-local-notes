@@ -267,3 +267,35 @@
 .mb-list-item.is-selected { color: var(--lake-accent-text); font-weight: var(--lake-font-weight-medium); }
 .mb-sheet--picker .mb-sheet__body { padding-bottom: calc(8px + var(--mobile-bottom-safe-area)); }
 .mb-sheet--picker .mb-list-item + .mb-list-item { border-top: 1px solid var(--lake-border-2); }
+
+/* ── 表情面板 = **微信样式**（用户 261013 定稿；见 mobile/ui/EmojiPanel.tsx）──────────────────
+ * 顶部分类条（最近 / 8 组 + **末尾动作键**：输入态=返回 / 选图标态=清除图标）、正文大格子（浅灰底、无边框）。
+ * 有意**不复用内核表情面板**：用户明确要"微信那样、更适合输入"。视觉与几何是移动端自有的。
+ * 命中区：分类与格子都是 --mb-tap-min(44)；格子宽度由列数决定（8 列在 380 内容宽下 ≈46px）。 */
+.mb-emoji-panel { display: flex; flex-direction: column; gap: 8px; }
+/* 面板整体带 data-prevent-swipe（属性在 JSX 上）：`useHorizontalSwipe` / `usePanelDrag` 都排除这类元素，
+ * 于是偶发横划不会再被外壳抢去切 tab / 开大纲（既有约定，见 usePanelDrag 的 EXCLUDE）。 */
+.mb-emoji-cats { display: flex; align-items: center; }
+/* 261014 二次定稿（用户）：**一屏 8 格 + 横滑**（对标微信；"10 个可点目标挤一屏确实太多"）。
+ * 轨道外的动作键钉在最右不滚 ⇒ 每格固定 --mb-tap-min(44)，8 格 = 352 装满一屏、第 9 格露一点边提示可滑。
+ * 横划不会被外壳抢走：面板根挂了 data-prevent-swipe，useHorizontalSwipe / usePanelDrag 本就排除这类元素。 */
+.mb-emoji-cats__track {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.mb-emoji-cats__track::-webkit-scrollbar { display: none; }
+.mb-emoji-cat { flex: 0 0 var(--mb-tap-min); width: var(--mb-tap-min); display: flex; align-items: center; justify-content: center; height: var(--mb-emoji-cat-h); padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-2); font-size: var(--mb-emoji-cat-size); line-height: 1; }
+.mb-emoji-cat.is-active { background: var(--lake-bg-block); color: var(--lake-text-1); }
+/* 末尾动作键（261014 用户定）：**输入态=返回上一级**（退出表情选择）/ **选图标态=清除图标**。
+ * **钉在轨道右侧、不参与横滑**（返回/清除必须永远够得着）；宽度就是 --mb-tap-min(44) ⇒ 横向命中区天然达标，
+ * 只有高度(36)靠触达补足注册表补到 44。一条 1px 内阴影做分隔（视觉上与分类区分开；不是色条，不改布局）。 */
+.mb-emoji-cat--action { flex: 0 0 auto; width: var(--mb-tap-min); color: var(--lake-text-3); box-shadow: inset 1px 0 0 var(--lake-border-2); }
+.mb-emoji-body { height: 42vh; overflow-y: auto; padding: 4px; border-radius: var(--lake-radius-md); background: var(--lake-bg-block); }
+/* 输入法式（dock 面板里）：**撑满宿主、高度由面板给定**（.med-panel 已是固定高），内容自己滚 —— 不随分类多少跳动。 */
+.mb-emoji-panel--fill { height: 100%; }
+.mb-emoji-panel--fill .mb-emoji-body { flex: 1 1 auto; min-height: 0; max-height: none; }
+.mb-emoji-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.mb-emoji-cell { display: flex; align-items: center; justify-content: center; height: var(--mb-tap-min); padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--mb-emoji-glyph-size); line-height: 1; }
+.mb-emoji-cell:active { background: var(--lake-bg-hover); }
+.mb-emoji-empty { padding: 24px 16px; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }

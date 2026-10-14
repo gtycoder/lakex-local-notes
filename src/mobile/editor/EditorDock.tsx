@@ -8,9 +8,10 @@
  * 2026-09 修订（对齐 Lake 官方移动工具栏）：
  * - 类别按钮（+ / Aa）展开面板时变成 ×（关闭）并触发触感反馈；
  * - 命令按钮（B/列表/待办 及面板内 mark/block）随光标/选区**实时高亮**（queryCommandState + getSelectionAttrs）；
- * - `--mobile-dock-space` = 当前 --kb-offset（面板/键盘占位）+ 工具栏，正文底部留白始终跟着占位走。
+ * - 底部被占高度（面板/键盘）由**外壳高度**承担（`--mb-app-h` = 稳定外壳高 − 占用，见 viewportShell.ts），
+ *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
  */
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, Shapes, Workflow, Network, GitFork, FileCode2, AlignLeft, AlignCenter, AlignRight, Link2 } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
@@ -24,9 +25,9 @@ import { applyTextLink, captureLinkTarget, isValidLink, type LinkEditorTarget } 
 import { KLinkEditor } from "../../features/editor/selectionToolbar/kernelUiAtoms";
 import { useKeyboard } from "../useKeyboard";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
-import { openEmojiPicker } from "../../features/quickNotes/quickNoteToolbarWidgets";
+import { EmojiPanel } from "../ui/EmojiPanel";
 
-type PanelMode = "insert" | "font" | "more" | null;
+type PanelMode = "insert" | "font" | "more" | "emoji" | null;
 
 /** dock 面板条目的动作；`anchor` = 触发按钮（表情选择器要锚定它）。 */
 type DockAction = (anchor?: HTMLElement | null) => void;
@@ -40,10 +41,33 @@ function isEditorNode(node: Node | null): boolean {
   return false;
 }
 
-/** blur 正文焦点以收起输入法（面板要占键盘区；Lake 命令内部异步重聚焦时也靠它压回）。 */
-function blurActiveEditable(): void {
-  const el = document.activeElement as HTMLElement | null;
-  if (el && typeof el.closest === "function" && el.closest('[contenteditable="true"]')) { try { el.blur(); } catch { /* 忽略 */ } }
+/** 正文里的可编辑宿主（只取当前可见的，避免动到 keep-alive 隐藏视图）。 */
+function visibleEditables(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[contenteditable="true"]')).filter((el) => el.getBoundingClientRect().width > 0);
+}
+
+/**
+ * 面板占键盘区：**收起输入法，但保留焦点与光标**（用户 261014：「点了 ＋ 之后编辑区的光标会消失」）。
+ *
+ * 口径（AVD 设备实测，见 LAKEX-CONTRACT §5.38）：给内核正文宿主加 `inputmode="none"` 再 `blur() → focus()` ⇒
+ *   · 输入法收起（innerHeight 530 → 842）；· `document.activeElement` 仍是 `.ne-engine`；
+ *   · 选区还在、**光标矩形与位置逐项不变**（不再是"光标消失"）。
+ * 撤销（面板收起/要打字）＝ 移除该属性再 `blur() → focus()` ⇒ 键盘回来（842 → 530）。
+ *
+ * ⚠️ **不要退回"直接 `blur()` 了事"**：那样焦点与光标一起没了（用户看到的"光标消失"），
+ *   再点正文又得把键盘弹回来 ⇒ 表现为"键盘闪烁"。这条是本次修复的核心。
+ */
+let inSetback = false;          // 重入保护：本函数内部的 blur/focus 会同步触发 focusin，别让它再进来一轮
+function setbackIme(on: boolean): void {
+  if (inSetback) return;
+  inSetback = true;
+  try {
+    for (const el of visibleEditables()) {
+      if (on) el.setAttribute("inputmode", "none");
+      else el.removeAttribute("inputmode");
+      try { el.blur(); el.focus(); } catch { /* 忽略 */ }
+    }
+  } finally { inSetback = false; }
 }
 
 /** 格式命令 → lucide 图标（正文面板用图标而非文字，对齐思源移动端） */
@@ -206,8 +230,20 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
 
   /** 面板打开期间的选区快照：命令执行前后都还原，才能连续加粗→倾斜→下划线 */
   const savedRangeRef = useRef<Range | null>(null);
-  /** 只有"用户手指点在正文里"才关面板；程序性 focusin（Lake 命令内部重新聚焦）不算 */
-  const userTappedEditorRef = useRef(false);
+  /** 收面板的唯一出口（guard 的 pointerdown 也要用；监听只挂一次 ⇒ 走 ref 取最新闭包）。 */
+  const closePanelRef = useRef<() => void>(() => {});
+  /**
+   * focus 守卫的监听只挂一次，要读"当前"面板态 ⇒ 用 ref 镜像（同 closePanelRef 的理由）。
+   * ⚠️ **面板态必须同步写进 ref**：`togglePanel` 收起时是 `setPanel(null) → focusEditor()` 同一个 tick，
+   * 靠 React 渲染同步会漏判（ref 还是旧面板态 ⇒ 守卫把刚 focus 起来的键盘又收掉 ⇒ 收起面板后键盘回不来）。
+   * ⇒ 面板态的所有写入统一走 `setPanel`（唯一写入口），渲染期再对齐一次。
+   */
+  const panelModeRef = useRef<PanelMode>(null);
+  const setPanel = useCallback((mode: PanelMode) => {
+    panelModeRef.current = mode;
+    setPanelMode(mode);
+  }, []);
+  panelModeRef.current = panelMode;
   const dockRef = useRef<HTMLDivElement>(null);
   const { base, innerHeight, offset, height, keyboardOpen } = useKeyboard();
   /**
@@ -224,6 +260,9 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   const usable = panelMode || closing
     ? Math.max(0, Math.round(innerHeight - base + panelHeight), offset)
     : offset;
+  /** 底部被「输入法 / 面板」占住的高度（两者互斥）：面板开或收起过渡期 = 面板高；否则 = 实际键盘高。
+   *  外壳高度要**减掉**它（见 viewportShell.ts）—— 这样「面板 ⇄ 输入法」切换时内容盒高度不变（= 不跳）。 */
+  const occupation = Math.max(panelMode || closing ? panelHeight : 0, keyboardOpen ? height : 0);
   /** 面板内容：退场动画期间继续用上一次的模式渲染，否则收起瞬间内容先消失、滑动看不见 */
   const [renderedPanel, setRenderedPanel] = useState<Exclude<PanelMode, null>>("insert");
   useEffect(() => {
@@ -236,8 +275,8 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
 
   // 退出编辑态时复位
   useEffect(() => {
-    if (!editing) setPanelMode(null);
-  }, [editing]);
+    if (!editing) setPanel(null);
+  }, [editing, setPanel]);
 
   // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
   useEffect(() => {
@@ -251,12 +290,27 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       const t = node as HTMLElement | null;
       return !!t && typeof t.closest === "function" && !!t.closest('[contenteditable="true"]');
     };
-    const onPointerDown = (e: PointerEvent) => { if (isEditor(e.target)) userTappedEditorRef.current = true; };
+    /**
+     * 用户**手指点正文**（面板开着）= 要打字 ⇒ 收面板 + 把输入法放回来。
+     * ⚠️ 判据必须放在 **pointerdown**，不能放在 focusin：面板期正文一直保持焦点（这是"光标不消失"的前提），
+     * 点它**不会再触发 focusin** ⇒ 靠 focusin 判会漏（261014 实测：面板只能靠 × 关掉）。
+     * 也不能只用一个"上次点过"的布尔量 —— 它会被上一次未消费的点击留下 true，
+     * 然后被**我们自己**抑制输入法时的 blur/focus 触发，表现成"面板开了 ~0.6s 自己关掉"（261014 实测抓到的真凶）。
+     */
+    const onPointerDown = (e: PointerEvent) => {
+      if (!panelModeRef.current || !isEditor(e.target)) return;
+      closePanelRef.current();
+    };
+    /**
+     * 命令内部重新聚焦（面板开着）：**在 focus 的同一个任务里把输入法按住**。
+     * 内核在每条面板命令后会把焦点抢回正文（261014 实测：插一个表情触发两次 focusin），Android 见到可编辑元素
+     * 拿到焦点就弹输入法 ⇒ innerHeight 变小 ⇒ 面板高度（--kb-offset）塌成 0 ⇒ 面板整块消失再回来（"表情栏闪烁"）。
+     * ⚠️ 这里**只写 `inputmode="none"`、绝不 blur**：blur 会把光标一起收掉（用户报的"点 ＋ 后光标消失"）。
+     * 光写属性不会隐藏**已经弹出**的输入法，那一档由 `keyboardOpen` 的 effect 兜底（它是异步的，不在 focus 任务里）。
+     */
     const onFocusIn = (e: FocusEvent) => {
-      if (!isEditor(e.target)) return;
-      if (!userTappedEditorRef.current) return;          // 命令内部重新聚焦 → 面板不关、键盘不再弹
-      userTappedEditorRef.current = false;
-      setPanelMode(null);                                // 用户点了正文 → 收起面板（键盘保持不动）
+      if (inSetback || !panelModeRef.current || !isEditor(e.target)) return;
+      try { (e.target as HTMLElement).setAttribute("inputmode", "none"); } catch { /* 忽略 */ }
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("focusin", onFocusIn);
@@ -275,29 +329,54 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   useEffect(() => {
     if (!panelMode || !keyboardOpen) return;
     setPanelHeight((h) => Math.max(h, height));
-    blurActiveEditable();
+    setbackIme(true);          // 输入法又冒出来 ⇒ 再按住（不 blur：光标要留在正文里）
   }, [panelMode, keyboardOpen, height]);
 
-  // 底部被占 = 当前 --kb-offset（面板=键盘区高；无面板=键盘上移量）+ 工具栏。
-  // 作用域放到 dock 的父容器（.doc-pane / .mobile-document），而非全局 documentElement——避免多 tab 实例互相覆盖。
+  // 外壳高度（.mobile-app 的 height）= 稳定外壳高 − 底部被占高度。
+  // ⚠️ 必须写到 **documentElement**：消费方是各编辑面的滚动容器（.mobile-scroll--with-dock / .mobile-doc-body /
+  //    .mobile-qn-composer-wrap），而 dock 的父元素在小记里是**卡片**、与文档侧的 .mobile-doc-body 是**兄弟**
+  //    —— 写在父元素上这些地方永远读不到（261014 实测：面板一开，写作卡 320→428、整块编辑区跳 108px）。
+  //    隐藏的 keep-alive 视图（display:none ⇒ rect 宽 0）不写，避免把可见实例的值覆盖掉。
+  //  ⚠️ 必须 **useLayoutEffect**（不是 useEffect）：它改的是布局高度，而 vh 系的内核规则（note 版式的 min-height:40vh）
+  //    会在"var 还没写上的那一帧"按**旧视口**算出高度并被内容撑住 → 之后再也缩不回去（261014 实测：
+  //    面板打开后卡片停在 515 而不是 352）。布局副作用要在绘制前落地。
+  useLayoutEffect(() => {
+    if (!editing || !base) return;            // base=0 = 还没量到视口 ⇒ 不写（否则外壳会被写成 0px）
+    const dock = dockRef.current;
+    if (!dock || !dock.getBoundingClientRect().width) return;
+    const root = document.documentElement;
+    const value = `${Math.max(0, Math.round(base - occupation))}px`;
+    root.style.setProperty("--mb-app-h", value);
+    // CAS 清理：只在值仍是我们写的那个时才删（多实例 keep-alive 下不误删别人的）
+    return () => { if (root.style.getPropertyValue("--mb-app-h") === value) root.style.removeProperty("--mb-app-h"); };
+  }, [editing, base, occupation]);
+
+  /** 收起面板的收尾（清占位）。**等输入法真的回来再清** —— 见 togglePanel 的注释。
+   *  ⚠️ 这三个 hook 必须留在**早退之前**（React 要求每次渲染 hook 数量一致；放到 if (!editing) return null; 之后，
+   *  文档从阅读态切编辑态时会「Rendered more hooks than during the previous render」→ 整块面板崩掉、dock 不出现）。 */
+  const closeTimerRef = useRef<number | null>(null);
+  const finishPanelClose = useCallback(() => {
+    if (closeTimerRef.current !== null) { window.clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+    setClosing(false);
+    setPanelHeight(0);
+  }, []);
   useEffect(() => {
-    if (!editing) return;
-    const toolbar = 54; // .med-toolbar 高 48 + 与面板的 6px 间隙
-    const space = Math.round(usable) + toolbar;
-    const root = dockRef.current?.parentElement ?? document.documentElement;
-    root.style.setProperty("--mobile-dock-space", `${space}px`);
-    return () => { root.style.removeProperty("--mobile-dock-space"); };
-  }, [editing, panelMode, usable]);
+    if (!closing || !keyboardOpen) return;
+    const t = window.setTimeout(finishPanelClose, 150);   // 键盘已经上来，再清占位（那一带此时由键盘接管）
+    return () => window.clearTimeout(t);
+  }, [closing, keyboardOpen, finishPanelClose]);
+  useEffect(() => () => { if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current); }, []);
 
   // 编辑态常驻底部工具栏（完成/插入/字体等）；键盘弹出时悬浮在键盘上方。
   if (!editing) return null;
 
   const focusEditor = () => {
+    setbackIme(false);                       // 先清抑制标记（inputmode=none）并重新聚焦 —— 键盘才会回来
     try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch { /* 忽略 */ }
     try { lakeBridge(editor ?? undefined).renderer?.execCommand?.("focus" as never); } catch { /* 忽略 */ }
   };
-  /** 收起输入法（面板要占键盘区）：只 blur 正文里的焦点 */
-  const dismissIme = () => blurActiveEditable();
+  /** 收起输入法（面板要占键盘区）：**保留焦点与光标**（见 setbackIme 的口径） */
+  const dismissIme = () => setbackIme(true);
   /** 记下当前选区（Range 克隆在 blur 之后仍可用于还原） */
   const snapshotSelection = () => {
     const sel = document.getSelection();
@@ -311,6 +390,16 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     sel.addRange(r);
   };
 
+  /** 收起面板的**唯一出口**（× / ＋ 再点 / 用户点正文三处共用）：动画 + 放回输入法 + 等键盘真回来再清占位。 */
+  const closePanel = () => {
+    setPanel(null);                                   // ⚠️ 先同步置空 ref 再 focus（见 panelModeRef 注释）
+    setClosing(true);
+    focusEditor();                                    // 键盘与面板动画同时开始（内部会清 inputmode 抑制）
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(finishPanelClose, 2500);   // 兜底：键盘没回来也不能永远占着
+  };
+  closePanelRef.current = closePanel;
+
   /**
    * 展开/收起面板：**面板占住键盘区（键盘不显示）**，工具栏停在面板上沿不动（用户 260914 澄清口径）。
    * 关键顺序（同原实现）：同一帧挂面板 + 抬起 --kb-offset，**下一帧才 blur** 收键盘 ——
@@ -319,17 +408,11 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
    * 键盘上升期间那一带仍有面板背景兜着，不会先露一块空白再弹键盘（这正是用户说的"不自然"）。
    */
   const togglePanel = (mode: Exclude<PanelMode, null>) => {
-    if (panelMode === mode) {                                         // 再点一次 = 关面板并放回键盘
-      setPanelMode(null);
-      setClosing(true);
-      focusEditor();                                                  // 键盘与面板动画同时开始
-      window.setTimeout(() => { setClosing(false); setPanelHeight(0); }, 220); // 略长于 .med-panel-inner 的 160ms
-      return;
-    }
+    if (panelMode === mode) { closePanel(); return; }                 // 再点一次 = 关面板并放回键盘
     snapshotSelection();
     setClosing(false);
     if (!panelMode) setPanelHeight(Math.max(Math.round(height), 280)); // 只在"从关到开"时捕获键盘高度
-    setPanelMode(mode);                                               // insert ↔ font 切换沿用原高度 → 工具栏不抖
+    setPanel(mode);                                                   // insert ↔ font 切换沿用原高度 → 工具栏不抖
     requestAnimationFrame(() => { if (panelMode || true) dismissIme(); });
   };
 
@@ -348,18 +431,16 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
 
   // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板（不恢复键盘——用户明确要收起）。
   const dismissKeyboard = () => {
-    setPanelMode(null);
-    try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
+    setPanel(null);
+    setbackIme(true);          // 收键盘但**保留光标**（与 ＋ 面板同一口径）
   };
   const showKeyboard = () => { focusEditor(); };
 
   /** 内核日历卡 `currentDate` 形态 = YYYYMMDD 整数（HANDOFF §0(五) 实测）。 */
   const dateStamp = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
-  /** 表情：选中后按内核原意插**文本**（`unicodeEmoji` 卡是死占位，见 LAKEX-CONTRACT §5.29）。 */
-  const pickEmoji = (anchor?: HTMLElement | null) => {
-    snapshotSelection();
-    openEmojiPicker(anchor ?? null, (emoji) => runPanel("insertAtSelection", "text/lake", `<span>${emoji}</span>`));
-  };
+  /** 表情：选中后按内核原意插**文本**（`unicodeEmoji` 卡是死占位，见 LAKEX-CONTRACT §5.29）。
+   *  面板本身在 `.med-panel` 里就地渲染（EmojiPanel fill），所以这里只负责插。 */
+  const insertEmoji = (emoji: string) => runPanel("insertAtSelection", "text/lake", `<span>${emoji}</span>`);
 
   /**
    * 应用颜色：语义**完全复用桌面那一套**（colorApplyCommand = 内核 descriptor 的 onEvent('select')：
@@ -454,7 +535,8 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     ] },
     { key: "widget", items: [
       { label: "日期", Icon: CalendarDays, run: () => runPanel("insertCard", "dateCard", { date: Date.now() }, false) },
-      { label: "表情", Icon: Smile, run: (anchor) => pickEmoji(anchor) },
+      // 表情：**在面板区内展开**（用户 261013：像输入法那样占满展开区、固定高度不跳），不再弹浮层。
+      { label: "表情", Icon: Smile, run: () => togglePanel("emoji") },
       { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
     ] },
     { key: "ref", items: [
@@ -570,7 +652,10 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       {(panelMode || closing) && (
       <div className="med-panel" data-open={panelMode ? "1" : "0"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
         <div className="med-panel-inner">
-          {renderedPanel === "insert" || renderedPanel === "more" ? (
+          {renderedPanel === "emoji" ? (
+            /* 表情：**占满面板区**（输入法式；.med-panel 已是固定高）——不弹浮层、不随内容跳高度。 */
+            <EmojiPanel bucket="input" fill onPick={insertEmoji} onBack={() => togglePanel("insert")} />
+          ) : renderedPanel === "insert" || renderedPanel === "more" ? (
             <>
               {renderedPanel === "insert" ? (
                 /* 「＋」面板：一卡一组（用户 261012 定稿的分组排布；「媒体｜布局」是唯一的双卡行） */
