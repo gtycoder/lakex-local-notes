@@ -96,7 +96,9 @@ for (let i = 0; i < RUNS; i += 1) {
   await resetPage();
   await tapLabel("小记"); await sleep(500);
   await arm("kernel");
-  await tapLabel("新建小记");
+  // 261014：首页「＋」的 aria-label 由「新建小记」改为「新建」（统一加号）⇒ 先开新建面板，再点「空白小记」进写作卡。
+  await tapLabel("新建"); await sleep(800);
+  await tapLabel(String.fromCharCode(0x7a7a, 0x767d, 0x5c0f, 0x8bb0));
   const t0 = Date.now(); let v = null;
   while (Date.now() - t0 < 20000) { v = await readArmed(); if (typeof v === "number") break; await sleep(60); }
   p2.push(typeof v === "number" ? Math.round(v) : null);

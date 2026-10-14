@@ -64,7 +64,10 @@ async function scenarioQuickNote() {
   await sleep(7000);
   for (let i = 0; i < 20; i++) { if (await page.evaluate('Boolean(document.querySelector(".mobile-htab"))')) break; await sleep(1000); }
   await tapQ(".mobile-htab", "小记", 1800);
-  await tapQ(".mobile-bottom-bar__item", "新建小记", 3000);
+  // 261014：首页「＋」的 aria-label 由「新建小记」改为「新建」（统一加号；短按开新建面板）——装置跟着改，别按旧文案找。
+  await tapQ(".mobile-bottom-bar__item", "新建", 3000);
+  await sleep(800);
+  await tapQ(".mb-create__tile", String.fromCharCode(0x7a7a, 0x767d, 0x5c0f, 0x8bb0), 2500);   // 「空白小记」→ 写作卡
   const ed = await page.evaluate('(function(){var e=[].slice.call(document.querySelectorAll(".ne-engine")).filter(function(x){return x.getBoundingClientRect().width>0;})[0];if(!e)return null;var r=e.getBoundingClientRect();return [Math.round(r.x+r.width/2),Math.round(r.y+40)];})()');
   if (ed) { await touch(ed[0], ed[1]); await sleep(1500); }
   await page.send("Input.insertText", { text: Array.from({ length: 30 }, (_, i) => "第 " + (i + 1) + " 行：编辑面不变量探针（长内容）。").join("\n") }).catch(() => {});
