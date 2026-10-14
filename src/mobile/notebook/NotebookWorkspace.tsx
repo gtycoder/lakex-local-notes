@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Info } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Info } from "lucide-react";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { EmojiPanel } from "../ui/EmojiPanel";
 import { bridge } from "../bridge";
@@ -54,15 +54,14 @@ export interface NotebookWorkspaceProps {
   notebooks: TreeNode[];
   /** 切换到另一个笔记本 */
   onSwitchNotebook: (id: string) => void;
-  /** 底部栏「更多」菜单要拉起的第一层浮层（思源：主菜单承担搜索等入口） */
-  onOpenSearch: () => void;
+
   onCreateNote: () => void;
   /** 当前活动文档变化（MobileApp 的定时快照要用） */
   onActiveNoteChange?: (id: string | null) => void;
 }
 
 export function NotebookWorkspace(props: NotebookWorkspaceProps) {
-  const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onOpenSearch, onCreateNote, onActiveNoteChange } = props;
+  const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onCreateNote, onActiveNoteChange } = props;
   const [title, setTitle] = useState("知识库");
   const [tree, setTree] = useState<NotebookTreeItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
@@ -647,14 +646,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => setMoreOpen(true)} aria-label="更多" title="更多"><MoreHorizontal /></button>
       </nav>
 
-      {/* 更多（思源 #menu：主菜单承担搜索等次级入口）。**不要**再把「设置」放回来 —— 用户 261014 点单删掉：
-          首页左上齿轮已经是设置的统一入口，工作区里再放一个只是重复。 */}
+      {/* 更多（思源 #menu）。**不要**再把「搜索」「设置」放回来 —— 用户 261014 点单删掉：
+          设置 = 首页左上齿轮（统一入口）；搜索 = 首页底部胶囊（同一份全局搜索 Sheet，且是全库范围、
+          不是"笔记本内搜索"）⇒ 工作区里再放一份只是重复。本菜单只留"新建文档 / 切换笔记本 / 编辑本文"。 */}
       <MobileSheetMenu
         open={moreOpen}
         items={[
           { id: "new-doc", label: "新建文档", icon: FilePlus },
           { id: "switch-nb", label: "切换笔记本", icon: ArrowLeftRight, note: title },
-          { id: "search", label: "搜索", icon: Search },
           ...(active ? [{ id: "toggle-edit", label: active.editing ? "完成编辑" : "编辑本文", icon: Pencil }] : []),
         ]}
         onClose={() => setMoreOpen(false)}
@@ -663,7 +662,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           if (it.id === "toggle-edit") { toggleEdit(); return; }
           if (it.id === "new-doc") onCreateNote();
           else if (it.id === "switch-nb") setNotebookSwitchOpen(true);
-          else if (it.id === "search") onOpenSearch();
         }}
       />
 
