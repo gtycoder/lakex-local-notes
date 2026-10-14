@@ -115,6 +115,9 @@ export function App() {
     setNotes, setTreeNodes, setSync, setOpenTabs, setDraftEntries, setError, openTabsRef, editorsRef,
   });
 
+  // 稳定保存失败回调：否则 persistTab → openNote → sidebarSelect 每次渲染都换引用，整树行缓存失效。
+  const handleBlockedSave = useCallback(() => showNotice("文档已在回收站中，编辑不会保存；恢复后才能继续写。"), [showNotice]);
+
   const {
     saveStates, setSaveState,
     persistTab, scheduleSave, scheduleDraftJournal,
@@ -126,7 +129,7 @@ export function App() {
     onDraftCleared: handleDraftCleared,
     onError: handleSaveError,
     // 回收站/被 purge 文档被丢弃保存时出声（编辑器此时已只读，这里是最后一道闸）
-    onBlockedSave: () => showNotice("文档已在回收站中，编辑不会保存；恢复后才能继续写。"),
+    onBlockedSave: handleBlockedSave,
     getOpenTab: handleGetOpenTab,
     getEditorCaches: handleGetEditorCaches,
     captureContent: handleCaptureContent,

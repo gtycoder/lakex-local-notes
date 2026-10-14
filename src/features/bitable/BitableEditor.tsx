@@ -21,7 +21,6 @@ import {
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
   BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
-  removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, applySortMode, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
@@ -48,13 +47,15 @@ import { BitableRecordDrawer } from "./BitableRecordDrawer.js";
 import { BitableViewBar } from "./BitableViewBar.js";
 import { bitableAssetUrl, openBitableAttachment } from "./bitableAssetUrl.js";
 import { CalendarConfigPanel, GalleryConfigPanel, KanbanConfigPanel } from "./BitableViewConfigPanels.js";
-import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeGrid, FieldTypeSelect, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
+import { ColorPalette, DatePicker, FieldTypeGrid, FieldTypeSelect, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
 import { BitableFillEditor } from "./BitableFillEditor.js";
 import { BitableFilterEditor } from "./BitableFilterEditor.js";
 import { useBitableSession } from "./useBitableSession";
 import { BitableViewFallback, ViewTypeIcon } from "./bitableViews.js";
 import { BitableAiGenerateDialog, isAiCellEmpty, type AiGenerateMode } from "./BitableAiGenerateDialog.js";
 import { aiCellKey, useAiFieldGeneration } from "./useAiFieldGeneration.js";
+import { BitableVirtualBody, type BitableViewportHandle } from "./BitableVirtualBody";
+import { BitableViewportCell } from "./BitableViewportCell";
 import "./bitableEditor.css";
 
 const DEFAULT_COL_WIDTH = 180;
@@ -237,10 +238,14 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   /** 行右键菜单定位（与其它浮层同源：先量真实尺寸，贴底翻上方，不再靠猜 90/300 的高度）。 */
   const rowMenuPos = usePopoverPosition({ open: Boolean(rowCtx), at: rowCtx ? { x: rowCtx.x, y: rowCtx.y } : null });
   const rootRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<BitableViewportHandle | null>(null);
+  const cancelRowDragRef = useRef<(() => void) | null>(null);
+  const pendingFocusRef = useRef<{ recordId: string; fieldId: string; tableId: string; viewId: string } | null>(null);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
   const [tableSwitchAnchor, setTableSwitchAnchor] = useState<HTMLElement | null>(null);
   const [cellSel, setCellSel] = useState<{ anchor: { recordId: string; fieldId: string }; focus: { recordId: string; fieldId: string } } | null>(null);
   const cellSelectingRef = useRef(false);
+  const selectionPointerRef = useRef<{ x: number; y: number } | null>(null);
   /** 已折叠的分组 key（本机展示态，不进正文）。 */
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [tablesWidth, setTablesWidth] = useState<number>(() => {
@@ -292,7 +297,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
     const match = fillProjection.rowSide.get(recordId);
     return match?.color;
   }, [fillProjection]);
-  const rowIndexById = useMemo(() => new Map(shownRecords.map((r, i) => [r.id, i] as const)), [shownRecords]);
+  const rowIndexById = useMemo(() => {
+    const index = new Map<string, number>();
+    for (let i = 0; i < shownRecords.length; i++) index.set(shownRecords[i].id, i);
+    return index;
+  }, [shownRecords]);
   const columnIndexById = useMemo(() => new Map(visibleFields.map((f, i) => [f.id, i] as const)), [visibleFields]);
   const rowItems = useMemo(() => {
     /** 单级分组：分组头（含本组记录，供按组统计）/「加进本组」/ 组间间隔 / 记录行。 */
@@ -314,6 +323,16 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
     });
     return items;
   }, [shownRecords, activeTable, groupRule, collapsedGroups]);
+  const rowItemKey = useCallback((item: (typeof rowItems)[number]) => item.kind === "record" ? "r:" + item.record.id : item.kind + ":" + item.key, []);
+  const estimateRow = useCallback((item: (typeof rowItems)[number]) => item.kind === "record" ? rowHeightPx(activeView.rowHeight) : item.kind === "gap" ? 20 : item.kind === "groupAdd" ? 32 : 36, [activeView.rowHeight]);
+  const itemIndexByRecordId = useMemo(() => {
+    const index = new Map<string, number>();
+    for (let i = 0; i < rowItems.length; i++) {
+      const item = rowItems[i];
+      if (item.kind === "record") index.set(item.record.id, i);
+    }
+    return index;
+  }, [rowItems]);
   /** 是否**真的渲染出了分组行**（不是「配了分组规则」）：表底 +、表头下的分组间隙、灰色分组底衬
    *  都以它为准 —— 配了分组但字段已删时会回落成未分组，那时两边都不该出现。 */
   const hasGroupRows = useMemo(() => rowItems.some((item) => item.kind === "group"), [rowItems]);
@@ -630,27 +649,51 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
     event.preventDefault();
     event.stopPropagation();
     let over: string | null = null;
+    let pointerY = event.clientY;
+    let frame = 0;
     setRowDragId(recordId);
-    const onMove = (ev: PointerEvent) => {
-      const rows = [...(rootRef.current?.querySelectorAll<HTMLElement>("[data-record-id]") ?? [])];
-      let candidate: string | null = null;
-      for (const row of rows) {
-        const rect = row.getBoundingClientRect();
-        if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) { candidate = row.dataset.recordId ?? null; break; }
-      }
-      over = candidate;
-      setRowDragOverId(candidate);
+    const hitRow = () => {
+      const wrap = rootRef.current?.querySelector<HTMLElement>(".bt-grid-wrap");
+      const rect = wrap?.getBoundingClientRect();
+      const y = rect ? Math.max(rect.top + 40, Math.min(rect.bottom - 30, pointerY)) : pointerY;
+      const itemIndex = viewportRef.current?.rowAt(y);
+      const item = itemIndex == null ? null : rowItems[itemIndex];
+      over = item?.kind === "record" ? item.record.id : null;
+      setRowDragOverId(over);
     };
-    const onUp = () => {
+    const onMove = (ev: PointerEvent) => { pointerY = ev.clientY; hitRow(); };
+    const tick = () => {
+      const wrap = rootRef.current?.querySelector<HTMLElement>(".bt-grid-wrap");
+      if (wrap) {
+        const rect = wrap.getBoundingClientRect();
+        const step = pointerY < rect.top + 45 ? -20 : pointerY > rect.bottom - 45 ? 20 : 0;
+        if (step) { wrap.scrollTop += step; hitRow(); }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    const finish = (commit: boolean) => {
+      cancelAnimationFrame(frame);
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
-      if (over && over !== recordId) reorderRecords(recordId, over);
+      document.removeEventListener("pointercancel", onCancel);
+      cancelRowDragRef.current = null;
+      if (commit && !readOnlyRef.current && over && over !== recordId) reorderRecords(recordId, over);
       setRowDragId(null);
       setRowDragOverId(null);
     };
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
+    cancelRowDragRef.current?.();
+    cancelRowDragRef.current = onCancel;
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
-  }, [reorderRecords]);
+    document.addEventListener("pointercancel", onCancel);
+  }, [reorderRecords, rowItems]);
+  useEffect(() => {
+    if (!visible || readOnly) cancelRowDragRef.current?.();
+    return () => cancelRowDragRef.current?.();
+  }, [visible, readOnly, activeTable.id, activeView.id]);
 
   /** 列宽拖拽（对齐云端：表头右边缘可拖，写回 field.width 持久化）。 */
   const startColumnResize = useCallback((event: ReactPointerEvent<HTMLElement>, fieldId: string, startW: number) => {
@@ -717,6 +760,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   };
 
   const gridStyle = { "--bt-row-h": rowHeightPx(activeView.rowHeight) + "px" } as CSSProperties;
+  // With no data cells, the original trailing column is only the 24px add button + padding/border.
+  const gridTrailingWidth = shownRecords.length > 0 ? 40 : 33;
   const formDefaults = useMemo(() => defaultRecordValues(activeTable), [activeTable]);
 
   const cellRange = useMemo(() => {
@@ -728,6 +773,34 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
     if (r1 < 0 || r2 < 0 || c1 < 0 || c2 < 0) return null;
     return { r0: Math.min(r1, r2), r1: Math.max(r1, r2), c0: Math.min(c1, c2), c1: Math.max(c1, c2) };
   }, [cellSel, shownRecords, visibleFields]);
+  useEffect(() => {
+    if (!visible || readOnly) return;
+    let frame: number | null = null;
+    const move = (event: MouseEvent) => {
+      if (!cellSelectingRef.current) return;
+      selectionPointerRef.current = { x: event.clientX, y: event.clientY };
+      if (frame !== null) return;
+      const tick = () => {
+        if (!cellSelectingRef.current) { frame = null; return; }
+        const point = selectionPointerRef.current;
+        const wrap = rootRef.current?.querySelector<HTMLElement>(".bt-grid-wrap");
+        if (point && wrap) {
+          const rect = wrap.getBoundingClientRect();
+          const speed = point.y < rect.top + 50 ? -20 : point.y > rect.bottom - 50 ? 20 : 0;
+          if (speed) {
+            wrap.scrollTop += speed;
+            const y = Math.max(rect.top + 40, Math.min(rect.bottom - 30, point.y));
+            const td = document.elementFromPoint(point.x, y)?.closest<HTMLElement>("td[data-record-id][data-field-id]");
+            if (td && rootRef.current?.contains(td)) setCellSel(current => current ? { anchor: current.anchor, focus: { recordId: td.dataset.recordId!, fieldId: td.dataset.fieldId! } } : current);
+          }
+        }
+        frame = requestAnimationFrame(tick);
+      };
+      frame = requestAnimationFrame(tick);
+    };
+    document.addEventListener("mousemove", move);
+    return () => { document.removeEventListener("mousemove", move); if (frame !== null) cancelAnimationFrame(frame); };
+  }, [visible, readOnly]);
   /**
    * 底部汇总栏**最左那格**的两套文案（用户 260929）：
    * 默认「共 N 条」；**多选时**改显示这一批的选择量（「选择 x 行」/「选择 x 个单元格」）。
@@ -902,13 +975,31 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
   };
 
   const focusCell = (recordId: string, fieldId: string) => {
-    const td = rootRef.current?.querySelector<HTMLElement>('td[data-record-id="' + recordId + '"][data-field-id="' + fieldId + '"]');
-    const el = td?.querySelector<HTMLElement>("input, textarea, button, [tabindex]");
-    el?.focus();
-    if (el instanceof HTMLInputElement) el.select();
+    const request = { recordId, fieldId, tableId: activeTable.id, viewId: activeView.id };
+    pendingFocusRef.current = request;
+    if (!itemIndexByRecordId.has(recordId)) {
+      const group = rowItems.find(item => item.kind === "group" && item.records.some(record => record.id === recordId));
+      if (group?.kind === "group") setCollapsedGroups(current => { const next = new Set(current); next.delete(group.key); return next; });
+    }
+    else void focusVirtualCell(request);
   };
+  async function focusVirtualCell(request: NonNullable<typeof pendingFocusRef.current>) {
+    const index = itemIndexByRecordId.get(request.recordId);
+    if (index === undefined) return;
+    await viewportRef.current?.ensureRow(index);
+    if (pendingFocusRef.current !== request || interactionRef.current.tableId !== request.tableId || interactionRef.current.viewId !== request.viewId) return;
+    const td = rootRef.current?.querySelector<HTMLElement>(`td[data-record-id="${request.recordId}"][data-field-id="${request.fieldId}"]`);
+    const el = td?.querySelector<HTMLElement>("input, textarea, button, [tabindex]");
+    el?.focus({ preventScroll: true });
+    if (el instanceof HTMLInputElement) el.select();
+    pendingFocusRef.current = null;
+  }
+  useEffect(() => {
+    const request = pendingFocusRef.current;
+    if (request) void focusVirtualCell(request);
+  }, [itemIndexByRecordId]);
   const onGridKeyDown = (event: ReactKeyboardEvent) => {
-    if (readOnly) return;
+    if (readOnly || event.nativeEvent.isComposing) return;
     const td = (event.target as HTMLElement).closest("td[data-record-id]") as HTMLElement | null;
     if (!td) return;
     const recordId = td.dataset.recordId ?? "";
@@ -929,6 +1020,16 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
     else if (event.key === "Escape") (event.target as HTMLElement).blur();
   };
 
+  const selectViewportCell = useCallback((event: React.MouseEvent, recordId: string, fieldId: string) => {
+    if (readOnlyRef.current || event.button !== 0) return;
+    const point = { recordId, fieldId };
+    setCellSel(current => event.shiftKey && current ? { anchor: current.anchor, focus: point } : { anchor: point, focus: point });
+    cellSelectingRef.current = true;
+    selectionPointerRef.current = { x: event.clientX, y: event.clientY };
+  }, []);
+  const extendViewportSelection = useCallback((recordId: string, fieldId: string) => {
+    if (cellSelectingRef.current) setCellSel(current => current ? { anchor: current.anchor, focus: { recordId, fieldId } } : current);
+  }, []);
   const renderRecordRow = (record: BitableRecord, index: number, extraClass = "") => {
     const fillSide = rowSideColor(record.id);
     return (
@@ -949,50 +1050,18 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
             onClick={() => openDrawer(record.id)}><RowExpandIcon /></button>
         </div>
       </td>
-      {visibleFields.map((field) => {
-        const fillBackground = fillBackgroundImage(record.id, field.id);
-        return (
-        <td key={field.id} data-record-id={record.id} data-field-id={field.id}
-          className={"bt-td" + (selectedColumnId === field.id ? " col-selected" : "") + (cellInSelection(record.id, field.id) ? " cell-selected" + selectionEdgeClass(record.id, field.id) : "") + (isDuplicateCell(field, record) ? " in-highlight" : "")}
-          style={{ maxWidth: columnWidth(field), ...(fillBackground ? { backgroundImage: fillBackground } : {}), ...(columnTextColor(field.id) ? { color: columnTextColor(field.id) } : {}) }}
-          onMouseDown={(event) => {
-            if (readOnly || event.button !== 0) return;
-            if (event.shiftKey && cellSel) setCellSel({ anchor: cellSel.anchor, focus: { recordId: record.id, fieldId: field.id } });
-            else setCellSel({ anchor: { recordId: record.id, fieldId: field.id }, focus: { recordId: record.id, fieldId: field.id } });
-            cellSelectingRef.current = true;
-          }}
-          onMouseOver={() => { if (cellSelectingRef.current && cellSel) setCellSel({ anchor: cellSel.anchor, focus: { recordId: record.id, fieldId: field.id } }); }}>
-          <CellEditor
-            field={field}
-            record={record}
-            ctx={displayCtx}
-            value={record.values[field.id]}
-            readOnly={readOnly}
-            aiState={field.type === "ai" ? aiGen.cellStates[aiCellKey(field.id, record.id)] : undefined}
-            onAiGenerate={field.type === "ai" ? () => { void aiGen.generateCell(activeTable.id, record.id, field.id); } : undefined}
-            onAiStop={field.type === "ai" ? () => aiGen.cancelCell(record.id, field.id) : undefined}
-            onChange={(value) => setCellValue(record.id, field.id, value)}
-            onAddOption={(name) => addOption(field.id, name, record.id)}
-            noteId={noteId}
-            onOpenImages={openImages}
-            renderAttachment={(imageOnly) => (
-              <AttachmentCell
-                noteId={noteId}
-                value={record.values[field.id]}
-                readOnly={readOnly}
-                imageOnly={imageOnly}
-                onUpload={(files) => { void uploadFiles(files).then((entries) => appendAttachments(activeTable.id, record.id, field.id, entries)); }}
-                onRemove={(file) => setCellValue(record.id, field.id, removeBitableAttachment(record.values[field.id], file))}
-                onOpen={openAsset}
-                onOpenImages={openImages}
-                onReorder={(files) => setCellValue(record.id, field.id, reorderBitableAttachments(record.values[field.id], files))}
-                onRename={(file, name) => setCellValue(record.id, field.id, renameBitableAttachment(record.values[field.id], file, name))}
-              />
-            )}
-          />
-        </td>
-        );
-      })}
+      {visibleFields.map(field => <BitableViewportCell
+        key={field.id} field={field} maxWidth={columnWidth(field)} value={record.values[field.id]} recordId={record.id} tableId={activeTable.id}
+        record={field.type === "createdTime" || field.type === "updatedTime" ? record : undefined}
+        context={isRelationFieldType(field.type) ? displayCtx : undefined}
+        readOnly={readOnly} noteId={noteId}
+        selected={(selectedColumnId === field.id ? " col-selected" : "") + (cellInSelection(record.id, field.id) ? " cell-selected" + selectionEdgeClass(record.id, field.id) : "")}
+        duplicate={isDuplicateCell(field, record)} background={fillBackgroundImage(record.id, field.id)} color={columnTextColor(field.id)}
+        onSelect={selectViewportCell} onOver={extendViewportSelection} onChange={setCellValue} onAddOption={addOption}
+        uploadFiles={uploadFiles} appendAttachments={appendAttachments} openAsset={openAsset} openImages={openImages}
+        aiState={field.type === "ai" ? aiGen.cellStates[aiCellKey(field.id, record.id)] : undefined}
+        generateCell={aiGen.generateCell} cancelCell={aiGen.cancelCell}
+      />)}
       <td className="bt-td-empty" />
     </tr>
     );
@@ -1199,10 +1268,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
               const hit = (event.target as HTMLElement).closest<HTMLElement>("[data-field-id]");
               if (hit?.dataset.fieldId !== selectedColumnId) setSelectedColumnId(null);
             }}>
-            <table className="bt-grid">
+            <table className="bt-grid bt-grid-windowed" style={{ width: 80 + gridTrailingWidth + visibleFields.reduce((sum, field) => sum + (field.width ?? DEFAULT_COL_WIDTH), 0) }} aria-rowcount={rowItems.length + 3}>
               <colgroup>
                 <col className="bt-col-index" />
                 {visibleFields.map((field) => <col key={field.id} style={{ width: (field.width ?? DEFAULT_COL_WIDTH) + "px" }} />)}
+                <col className="bt-col-empty" style={{ width: gridTrailingWidth }} />
               </colgroup>
               <thead>
                 <tr>
@@ -1251,11 +1321,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {/* 表头与第一个分组之间的间隙（260929 用户：分组之后第一行要和表头分开，表示这是独立的一组）。
-                    云端口径 = 表头下留 20px，且这一段属于**分组底衬**（极浅灰），所以一眼能看出表格从这里开始分组。 */}
-                {hasGroupRows && <tr className="bt-group-head-gap" aria-hidden="true"><td colSpan={visibleFields.length + 2} /></tr>}
-                {rowItems.map((item, itemIndex) => {
+              <BitableVirtualBody key={activeTable.id + ":" + activeView.id}
+                items={rowItems} columns={visibleFields.length + 2} totalRecords={shownRecords.length}
+                getKey={rowItemKey} estimateSize={estimateRow} visible={visible} handleRef={viewportRef}
+                measureRows={typeof activeView.rowHeight === "number"}
+                leading={hasGroupRows ? <tr className="bt-group-head-gap" aria-hidden="true"><td colSpan={visibleFields.length + 2} /></tr> : undefined}
+                renderRow={(item, itemIndex) => {
                   if (item.kind === "group") {
                     /** 首列统计 = 默认「记录总数」（云端口径：只有第一列有默认汇总，其余默认不展示）。 */
                     const headField = visibleFields[0];
@@ -1310,10 +1381,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
                   /** 该组最后一条记录 = 卡片的收口行（与云端一致：卡片 = 分组头 + 记录，加号区在卡外） */
                   const groupTail = rowItems[itemIndex + 1]?.kind === "groupAdd";
                   return renderRecordRow(item.record, rowIndexById.get(item.record.id) ?? 0, "bt-group-body" + (groupTail ? " bt-group-end" : ""));
-                })}
-
-                {/* 已分组时**不再出表底这个 +**（每个分组各有自己的 + 就够了）；未分组/分组字段失效时保留 */}
-                {!hasGroupRows && (
+                }}
+                trailing={!hasGroupRows ? (
                   <tr className="bt-add-row">
                     {/* 同一条口径：表底这个 + 也落在编号列正下方 */}
                     <td className="bt-add-index">
@@ -1321,10 +1390,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
                     </td>
                     <td colSpan={visibleFields.length + 1} />
                   </tr>
-                )}
-                {/* 撑满一屏的占位行：内容不够高时把 tfoot 顶到视图最底部，底部汇总栏才是「常驻」的 */}
-                <tr className="bt-grid-filler" aria-hidden="true"><td colSpan={visibleFields.length + 2} /></tr>
-              </tbody>
+                ) : undefined}
+              />
               {/* T01 列级统计：口径 = 当前视图筛选后的记录（排序不影响），配置存视图、值现算。
                   260929 用户定稿：**常驻**（不按有无配置条件渲染），贴底那条做薄，首格缺省显示总记录数，
                   未配置的列显示 `—` ⇒ 既常驻又不会是一条无信息量的空灰条。 */}

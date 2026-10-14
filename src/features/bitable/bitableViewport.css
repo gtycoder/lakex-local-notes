@@ -1,0 +1,8 @@
+/* Structural spacers represent unmounted rows; no visual/semantic cell or column width contribution. */
+.bt-grid .bt-virtual-spacer > td, .bt-rel-grid .bt-virtual-spacer > td { padding: 0; border: 0; pointer-events: none; }
+.bt-virtual-spacer { overflow-anchor: none; }
+
+/* Virtual windows cannot let offscreen content decide column widths; width comes from the full field model. */
+.bt-grid-windowed, .bt-rel-grid { table-layout: fixed; }
+.bt-grid-windowed .bt-col-index { width: 80px; }
+.bt-grid-windowed .bt-col-empty { width: 40px; }

@@ -11,7 +11,7 @@
  * 可关联范围由字段的**数据范围**决定（`relation.viewId` → `relationCandidateRecords`，单一来源）；
  * 单元格里的 chip 展示仍走 `relationTargetRecords`（已选记录即使被数据范围过滤掉也照常显示）。
  */
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowDownUp, Filter, Lock, Plus, Search, Trash2 } from "lucide-react";
 import {
   applySortMode, applyViewToRecords, bitableAttachments, bitableFieldText, bitableFilterRuleCount, bitableRecordTitle,
@@ -21,6 +21,7 @@ import {
   type BitableSortMode, type BitableSortRule, type BitableView,
 } from "../../core/bitableDoc.js";
 import { Dialog } from "../../components/ui/Overlay.js";
+import { BitableVirtualBody } from "./BitableVirtualBody.js";
 import { BitableFilterEditor } from "./BitableFilterEditor.js";
 import { AttachmentChipList, CellEditor, SelectMenu } from "./bitableCells.js";
 import { openBitableAttachment } from "./bitableAssetUrl.js";
@@ -40,6 +41,12 @@ export interface BitableRelationPickerProps {
 }
 
 type PickerTab = "all" | "selected";
+type PickerRow = { kind: "record"; record: BitableRecord } | { kind: "group"; key: string; label: string; count: number };
+const pickerRowKey = (item: PickerRow) => item.kind === "record" ? "r:" + item.record.id : "g:" + item.key;
+const pickerRowHeight = (item: PickerRow) => item.kind === "record" ? 36 : 32;
+// A virtual window must not let newly mounted values resize the whole table.
+// Honour field widths, retaining the picker's existing 320px content cap.
+const pickerColumnWidth = (field: BitableField) => Math.max(80, Math.min(320, field.width ?? 180));
 
 /**
  * 一格的值渲染：文本类走展示文本；**图片/附件列复用表格那套 `AttachmentChipList`**
@@ -77,6 +84,7 @@ function PickerCellValue({ record, field, ctx, noteId, onOpenImages }: {
       readOnly
       onChange={() => undefined}
       onAddOption={() => undefined}
+      readOnlyScalarDisplay
       record={record}
       ctx={ctx}
       noteId={noteId}
@@ -121,13 +129,18 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
   }, [target, draft, filters, filterOperator]);
 
   const q = query.trim().toLowerCase();
-  const matches = (record: BitableRecord) => !q || ruleFields.some((item) => bitableFieldText(record, item, ctx).toLowerCase().includes(q));
-  const rows = (tab === "all" ? allRows : selectedRows).filter(matches);
+  const rows = useMemo(() => (tab === "all" ? allRows : selectedRows)
+    .filter(record => !q || ruleFields.some(item => bitableFieldText(record, item, ctx).toLowerCase().includes(q))),
+    [tab, allRows, selectedRows, q, ruleFields, ctx]);
   const groupedRows = useMemo(() => {
     const rule = tab === "all" ? scopeView?.groups?.[0] : undefined;
     if (!target || !rule) return [{ key: "", label: "", records: rows }];
     return groupRecords(target, rows, rule);
   }, [target, rows, scopeView, tab]);
+  const rowItems = useMemo(() => groupedRows.flatMap(group => [
+    ...(group.label ? [{ kind: "group" as const, key: group.key, label: group.label, count: group.records.length }] : []),
+    ...group.records.map(record => ({ kind: "record" as const, record })),
+  ]), [groupedRows]);
   const draftSet = new Set(draft);
   const toggle = (recordId: string) => setDraft((prev) => toggleRelationDraft(prev, recordId, allowMultiple));
 
@@ -217,47 +230,48 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
             {!target ? "关联的目标数据表不存在" : tab === "selected" ? "还没有选择记录" : q ? "无匹配记录" : "暂无可关联记录"}
           </p>
         ) : (
-          <table className="bt-rel-grid">
+          <table className="bt-rel-grid" style={{ width: 40 + fields.reduce((sum, field) => sum + pickerColumnWidth(field), 0) }} aria-rowcount={rowItems.length + 1}>
+            <colgroup>
+              <col className="bt-rel-check" />
+              {fields.map(field => <col key={field.id} style={{ width: pickerColumnWidth(field) }} />)}
+            </colgroup>
             <thead>
               <tr>
                 <th className="bt-rel-check" scope="col" />
                 {fields.map((item) => <th key={item.id} scope="col" title={item.name}>{item.name}</th>)}
               </tr>
             </thead>
-            <tbody>
-              {groupedRows.map((group) => (
-                <Fragment key={group.key || "all-records"}>
-                  {group.label && (
-                    <tr className="bt-rel-group-row">
-                      <td colSpan={fields.length + 1}>
-                        <span className="bt-rel-group-label">{group.label}</span>
-                        <span className="bt-rel-group-count">{group.records.length} 条</span>
+            <BitableVirtualBody
+              items={rowItems} getKey={pickerRowKey} estimateSize={pickerRowHeight}
+              columns={fields.length + 1} totalRecords={rows.length} visible handleRef={null}
+              scrollSelector=".bt-rel-body" fillSpace={false}
+              renderRow={(item) => {
+                if (item.kind === "group") return (
+                  <tr className="bt-rel-group-row">
+                    <td colSpan={fields.length + 1}>
+                      <span className="bt-rel-group-label">{item.label}</span>
+                      <span className="bt-rel-group-count">{item.count} 条</span>
+                    </td>
+                  </tr>
+                );
+                const record = item.record;
+                const title = target ? bitableRecordTitle(target, record, ctx) : "";
+                const checked = draftSet.has(record.id);
+                return (
+                  <tr data-record-id={record.id} className={checked ? "is-selected" : ""} onClick={() => toggle(record.id)}>
+                    <td className="bt-rel-check">
+                      <input type="checkbox" checked={checked} aria-label={"选择 " + title}
+                        onClick={(event) => event.stopPropagation()} onChange={() => toggle(record.id)} />
+                    </td>
+                    {fields.map((field) => (
+                      <td key={field.id} title={bitableFieldText(record, field, ctx)}>
+                        <PickerCellValue record={record} field={field} ctx={ctx} noteId={noteId} onOpenImages={onOpenImages} />
                       </td>
-                    </tr>
-                  )}
-                  {group.records.map((record) => {
-                    const title = target ? bitableRecordTitle(target, record, ctx) : "";
-                    const checked = draftSet.has(record.id);
-                    return (
-                      <tr key={record.id} className={checked ? "is-selected" : ""} onClick={() => toggle(record.id)}>
-                        <td className="bt-rel-check">
-                          <input type="checkbox" checked={checked} aria-label={"选择 " + title}
-                            onClick={(event) => event.stopPropagation()} onChange={() => toggle(record.id)} />
-                        </td>
-                        {fields.map((item) => {
-                          const text = bitableFieldText(record, item, ctx);
-                          return (
-                            <td key={item.id} title={text}>
-                              <PickerCellValue record={record} field={item} ctx={ctx} noteId={noteId} onOpenImages={onOpenImages} />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </Fragment>
-              ))}
-            </tbody>
+                    ))}
+                  </tr>
+                );
+              }}
+            />
           </table>
         )}
       </div>

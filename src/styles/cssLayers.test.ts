@@ -29,6 +29,7 @@ const FILES = [
   "components/colorPalette.css",   // 261008：统一选色盘（从多维表 CSS 移出，表格/多维表共用）
   "components/historySnapshotPreview.css",
   "features/bitable/bitableEditor.css",
+  "features/bitable/bitableViewport.css",   // 主表/关联选择器共用的窗口结构，不复制视觉原语
   "features/bitable/bitableViews.css",   // V01：视图层（视图页签/回退提示），按职责从 bitableEditor 分出
   "features/bitable/bitableFieldCells.css",   // T02A：布尔/链接/评分/进度 单元格样式
   "features/bitable/bitableKanbanView.css",   // V02：看板视图样式
@@ -90,7 +91,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/usheet/usheetEditor.css": { decls: 37, dupGroups: 0 },   // 261010：+2 = 底部计算条压到 32px（section 高度 1 条 + slide-tab-bar 的 padding-block 1 条）  // 261009：Univer 表格分包自有容器几何（9）+ 工具栏收起/展开（藏 ribbon-header-menu 1 条 + 右侧切换按钮 24 条，含独立槽位分隔线与 hover/active）——自有几何，不依赖任何表格内核样式
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   // 260929：-30 = 分组样式按职责移出（→ bitableViews.css）+ 表底「添加记录」旧样式删除（改用共用 .bt-add-round）+ 删掉已冗余的 .bt-panel-add 组合规则；实测 1051（重复组 0）
-  "features/bitable/bitableEditor.css": { decls: 1032, dupGroups: 0 },   //  261006 Phase 2.2: +5 = .bt-input 并入字段原语口径（控件静息边 + 圆角令牌 + hover/focus），高度保持 30  // 260930：统一实色卡（70 色 + 最近使用 + 自定义）新增 52 条声明。此前：-63 = 图标钮与菜单项收编 kit；+6 = 列宽/行高；+1 placeholder；+1 select text-align；+8 数据表行操作浮动
+  "features/bitable/bitableViewport.css": { decls: 7, dupGroups: 0 }, // 占位行/模型列宽单一来源
+  "features/bitable/bitableEditor.css": { decls: 1034, dupGroups: 0 }, // 261014：只读标量共享输入几何，新增flex垂直对齐2声明，无重复覆盖   //  261006 Phase 2.2: +5 = .bt-input 并入字段原语口径（控件静息边 + 圆角令牌 + hover/focus），高度保持 30  // 260930：统一实色卡（70 色 + 最近使用 + 自定义）新增 52 条声明。此前：-63 = 图标钮与菜单项收编 kit；+6 = 列宽/行高；+1 placeholder；+1 select text-align；+8 数据表行操作浮动
   // 260928 V01 多视图工作台：视图相关新规则一律进本文件（bitableEditor.css 已顶到基线，只允许变小）
   // 260928 V02：净 +4 = 看板配置面板的说明文案 .bt-panel-note（合法新增，非覆盖回涨）
   // 260928 T01：+4 = 表格底部列统计行贴底常驻（合法新增，非覆盖回涨）

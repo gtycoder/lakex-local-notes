@@ -720,12 +720,17 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
 }
 
 /** 文本单元格：内联编辑 + 右侧「扩大」按钮 → 贴单元格的可拖动/可缩放浮窗展开全文（对齐钉钉式）。 */
-function TextCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
+/** Picker-only scalar presentation avoids input value trackers; edit/locked-grid copy behaviour stays unchanged. */
+function scalarDisplay(text: string) {
+  return <span className="bt-cell-input bt-cell-input--display"><span className="ln-ellipsis">{text}</span></span>;
+}
+function TextCell({ value, readOnly, onChange, readOnlyScalarDisplay }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void; readOnlyScalarDisplay?: boolean }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const text = typeof value === "string" ? value : value == null ? "" : String(value);
   return (
     <div className="bt-text-cell">
-      <input className="bt-cell-input" value={text} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
+      {readOnly && readOnlyScalarDisplay ? scalarDisplay(text) :
+        <input className="bt-cell-input" value={text} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />}
       {!readOnly && (
         <button
           type="button"
@@ -1207,6 +1212,8 @@ function ProgressCell({ field, value, readOnly, onChange }: { field: BitableFiel
 }
 
 export interface CellEditorProps {
+  /** Relation picker has display-only text/numbers, not hundreds of focusable readonly inputs. */
+  readOnlyScalarDisplay?: boolean;
   field: BitableField;
   value: unknown;
   readOnly: boolean;
@@ -1320,14 +1327,15 @@ export function AiFieldCell({ field, value, readOnly, state, onGenerate, onStop,
 }
 
 /** 按字段类型分派单元格编辑器（未知类型只读展示、不清空）。 */
-export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages, aiState, onAiGenerate, onAiStop }: CellEditorProps) {
+export function CellEditor({ field, value, readOnly, readOnlyScalarDisplay, onChange, onAddOption, renderAttachment, record, ctx, noteId, onOpenImages, aiState, onAiGenerate, onAiStop }: CellEditorProps) {
   if (!isKnownFieldType(field.type)) {
     return <span className="bt-cell-unknown ln-ellipsis" title="未知字段类型（只读展示）">{bitableDisplayValue(field, value) || "—"}</span>;
   }
   switch (field.type) {
     case "text":
-      return <TextCell value={value} readOnly={readOnly} onChange={onChange} />;
+      return <TextCell value={value} readOnly={readOnly} onChange={onChange} readOnlyScalarDisplay={readOnlyScalarDisplay} />;
     case "number":
+      if (readOnly && readOnlyScalarDisplay) return scalarDisplay(value == null || value === "" ? "" : String(value));
       return (
         <input
           className="bt-cell-input"

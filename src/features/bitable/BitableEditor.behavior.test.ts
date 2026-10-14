@@ -21,10 +21,13 @@ beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear(); // C（261006）：导航会写设备本地，逐用例清掉免串味
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  // jsdom has no layout; the viewport library needs a nonzero scrollport and row dimensions.
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("bt-grid-wrap") ? 600 : 36; });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(900);
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(() => { act(() => closeImagePreview()); act(() => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { act(() => closeImagePreview()); act(() => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function props(prefix: string, overrides: Partial<BitableEditorProps> = {}): BitableEditorProps {
   return { noteId: prefix, content: body(prefix), visible: true, readOnly: false, onChange: vi.fn(), ...overrides };
 }
@@ -49,6 +52,23 @@ function savedValue(change: ReturnType<typeof vi.fn>, fieldId: string): string {
 }
 
 describe("多维表编辑会话行为", () => {
+  it("空投影保留33px添加列，有数据行时保留40px列", () => {
+    const empty = JSON.parse(body("empty"));
+    empty.tables[0].records = [];
+    act(() => root.render(createElement(BitableEditor, { ...props("empty", { content: JSON.stringify(empty) }), key: "empty" })));
+    expect(host.querySelector<HTMLTableColElement>("col.bt-col-empty")!.style.width).toBe("33px");
+    act(() => root.render(createElement(BitableEditor, { ...props("regular"), key: "regular" })));
+    expect(host.querySelector<HTMLTableColElement>("col.bt-col-empty")!.style.width).toBe("40px");
+  });
+
+  it("中文合成期间 Enter 不跳到另一单元格", () => {
+    act(() => root.render(createElement(BitableEditor, props("a"))));
+    const field = host.querySelector<HTMLInputElement>(".bt-cell-input")!;
+    act(() => field.focus());
+    act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true })));
+    expect(document.activeElement).toBe(field);
+  });
+
   it("有旧选区的隐藏标签不能与活动网格一起粘贴", async () => {
     const onA = vi.fn(), onB = vi.fn();
     const a = props("a", { onChange: onA }), b = props("b", { onChange: onB });

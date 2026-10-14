@@ -11,6 +11,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const EDITOR = readFileSync(new URL("./BitableEditor.tsx", import.meta.url), "utf8");
+const VIEWPORT_CELL = readFileSync(new URL("./BitableViewportCell.tsx", import.meta.url), "utf8");
 const SESSION = readFileSync(new URL("./useBitableSession.ts", import.meta.url), "utf8");
 const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
 const MOBILE_APP = readFileSync(new URL("../../mobile/MobileApp.tsx", import.meta.url), "utf8");
@@ -310,7 +311,7 @@ describe("多维表编辑器护栏", () => {
     expect(MUTATIONS).toMatch(/export function appendBitableAttachments/);
     expect(MUTATIONS).toMatch(/export function addBitableRecord/);
     // 附件回填必须捕获**发起上传时**的表，切表后不再写到「那时的当前表」。
-    expect(EDITOR).toMatch(/appendAttachments\(activeTable\.id, record\.id, field\.id, entries\)/);
+    expect(VIEWPORT_CELL).toMatch(/appendAttachments\(tableId, recordId, field\.id, entries\)/);
     expect(EDITOR).toMatch(/appendAttachments\(activeTable\.id, recordId, fieldId, entries\)/);
     // 组件不再自己做整套视图配置清理（单一来源在 core）。
     expect(EDITOR).not.toMatch(/next\.highlightDuplicateFieldIds = strip\(/);
@@ -477,7 +478,9 @@ describe("多维表编辑器护栏", () => {
   it("关联选择器只读值与历史/回收站共用 CellEditor（同一主表格渲染）", () => {
     expect(PICKER).toMatch(/import \{ AttachmentChipList, CellEditor, SelectMenu \} from "\.\/bitableCells\.js"/);
     expect(PICKER).toMatch(/<CellEditor\s+field=\{field\}\s+value=\{record\.values\[field\.id\]\}\s+readOnly\s+onChange=\{\(\) => undefined\}\s+onAddOption=\{\(\) => undefined\}/);
-    expect(EDITOR).toMatch(/<CellEditor[\s\S]*?value=\{record\.values\[field\.id\]\}[\s\S]*?readOnly=\{readOnly\}/);
+    expect(EDITOR).toMatch(/<BitableViewportCell[\s\S]*?value=\{record\.values\[field\.id\]\}[\s\S]*?readOnly=\{readOnly\}/);
+    const viewportCell = readFileSync(new URL("./BitableViewportCell.tsx", import.meta.url), "utf8");
+    expect(viewportCell).toMatch(/<CellEditor[\s\S]*?value=\{p.value\}[\s\S]*?readOnly=\{p.readOnly\}/);
     const HISTORY = readFileSync(new URL("../../components/HistorySnapshotPreview.tsx", import.meta.url), "utf8");
     const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.url), "utf8");
     expect(HISTORY).toMatch(/<BitableEditor noteId=\{noteId\} content=\{body\} visible readOnly onChange=\{noop\} chrome=\{false\} \/>/);
@@ -545,7 +548,10 @@ describe("多维表编辑器护栏", () => {
     // 真正卡住列的是每个格子的 max-width（按列写行内：宽度来自正文数据，CSS 没法按列取值）。
     expect(EDITOR).toMatch(/const columnWidth = \(field: BitableField\) => \(field\.width \?\? DEFAULT_COL_WIDTH\) \+ "px";/);
     expect(EDITOR).toMatch(/<th key=\{field\.id\}[\s\S]{0,400}?style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
-    expect(EDITOR).toMatch(/style=\{\{ maxWidth: columnWidth\(field\), \.\.\.\(fillBackground[\s\S]{0,120}?columnTextColor\(field\.id\)/);
+    expect(EDITOR).toMatch(/maxWidth=\{columnWidth\(field\)\}/);
+    expect(VIEWPORT_CELL).toContain("maxWidth: p.maxWidth");
+    expect(VIEWPORT_CELL).toContain("backgroundImage: p.background");
+    expect(VIEWPORT_CELL).toContain("color: p.color");
     expect(EDITOR).toMatch(/className="bt-group-stat" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
     expect(EDITOR).toMatch(/className="bt-stat-cell" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
     // 行高**绝对**不被内容撑高：单元格永不换行（实测日期列 80px 时折行 ⇒ 行高 36 → 48），日期/时间单行省略
@@ -707,7 +713,7 @@ describe("多维表编辑器护栏", () => {
     expect(CARDS).toMatch(/function splitImageFiles/);
     expect(CARDS).toMatch(/accept=\{imageOnly \? "image\/\*" : undefined\}/);
     expect(CARDS).toMatch(/case "attachment":\s*\n\s*case "image":/);
-    expect(EDITOR).toMatch(/imageOnly=\{imageOnly\}/);
+    expect(VIEWPORT_CELL).toMatch(/imageOnly=\{imageOnly\}/);
     // 展示名必须是用户原始文件名（uploadResource 只回生成的磁盘名，不能拿它当 name）
     expect(EDITOR).toMatch(/name: file\.name/);
 
@@ -776,7 +782,7 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/dataset\.fieldId !== selectedColumnId/);
     // 已分组时**不再出表底那个 +**（每个分组各有自己的 +）；判定统一走 hasGroupRows（单一来源）
     expect(EDITOR).toMatch(/const hasGroupRows = useMemo\(\(\) => rowItems\.some\(\(item\) => item\.kind === "group"\)/);
-    expect(EDITOR).toMatch(/!hasGroupRows &&/);
+    expect(EDITOR).toMatch(/trailing=\{!hasGroupRows \?/);
     // 分组 + 自己有空间（独立行高）但**不画行线**，也不骑在分组边线上
     expect(VIEWCSS).toMatch(/\.bt-group-add-row td \{[^}]*height: 32px/);
     expect(VIEWCSS).not.toMatch(/translateY\(-50%\)/);
@@ -815,7 +821,7 @@ describe("多维表编辑器护栏", () => {
     expect(CSS).toMatch(/\.bt-tables \{[^}]*background: var\(--lake-bg-subtle\)/);
     expect(CSS).not.toMatch(/\.bt-tables \{[^}]*background: var\(--lake-bg-block\)/);
     // 表头与第一个分组之间的间隙只在**真的渲染出分组**时出现（配了分组但字段已删 → 不回落到未分组）
-    expect(EDITOR).toMatch(/hasGroupRows && <tr className="bt-group-head-gap"/);
+    expect(EDITOR).toMatch(/leading=\{hasGroupRows \? <tr className="bt-group-head-gap"/);
     // ② 卡片收口落在该组最后一条记录上（「加进本组」那一行在卡外，不属于卡片）
     expect(EDITOR).toMatch(/rowItems\[itemIndex \+ 1\]\?\.kind === "groupAdd"/);
     expect(EDITOR).not.toMatch(/className="bt-group-add-row bt-group-end"/);
@@ -976,7 +982,8 @@ describe("多维表编辑器护栏", () => {
     expect(KANBAN).toMatch(/<AttachmentChipList noteId=\{noteId\}/);
     expect(GALLERY).toMatch(/bitableAssetUrl\(noteId, file, GALLERY_COVER_PX\)/);
     // noteId / onOpenImages 从三个入口（表格、记录详情、表单）透传到选择器
-    expect(EDITOR).toMatch(/noteId=\{noteId\}\n\s*onOpenImages=\{openImages\}/);
+    expect(EDITOR).toContain("openImages={openImages}");
+    expect(VIEWPORT_CELL).toContain("onOpenImages={p.openImages}");
     expect(DRAWER).toMatch(/noteId=\{props\.noteId\}\n\s*onOpenImages=\{props\.onOpenImages\}/);
     expect(FORM).toMatch(/noteId=\{props\.noteId\}\n\s*onOpenImages=\{props\.onOpenImages\}/);
   });
@@ -1049,8 +1056,9 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
     expect(CARDS).toContain("onStop?: () => void");
     expect(CARDS).toContain('className="bt-cell-ai-action" title="停止本次生成"');
     // 网格把「停止」接到 hook 的**按格**取消
-    expect(EDITOR).toContain("onAiStop={field.type === \"ai\"");
-    expect(EDITOR).toContain("aiGen.cancelCell(record.id, field.id)");
+    expect(VIEWPORT_CELL).toContain("onAiStop={field.type === \"ai\"");
+    expect(EDITOR).toContain("cancelCell={aiGen.cancelCell}");
+    expect(VIEWPORT_CELL).toContain("p.cancelCell(recordId, field.id)");
     // 按格取消只中止该格这次的 requestId（与整列的 cancelledRef 分开）
     expect(AI_HOOK).toContain("const cancelCell = useCallback((recordId: string, fieldId: string)");
     expect(AI_HOOK).toContain("cellRequestRef");
@@ -1064,7 +1072,7 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
     expect(EDITOR).toMatch(/disabled=\{readOnly\}\s*\n\s*onClick=\{\(\) => \{ setAiGenerateFieldId/);
     expect(EDITOR).toContain("BitableAiGenerateDialog");
     expect(EDITOR).toMatch(/void aiGen\.runBatch\(activeTable\.id, field\.id, ids\)/);
-    expect(EDITOR).toContain("onAiGenerate={field.type === \"ai\"");
+    expect(VIEWPORT_CELL).toContain("onAiGenerate={field.type === \"ai\"");
     expect(EDITOR).toContain("renameAiFieldToken(f, oldName, nextName)");
   });
 

@@ -738,7 +738,6 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
   const children = (props.treeIndex.childrenByParent.get(props.node.id) ?? []).filter((node) => props.treeIndex.visibleIds.has(node.id));
   const expandable = children.length > 0 || props.node.nodeType !== "note";
   const open = props.expanded.has(props.node.id) || Boolean(props.query);
-  const icon = nodeIcon(props.node.nodeType, open, props.node.icon, props.node.kind ?? "doc");
 
   const dropPosition = props.dropTarget?.id === props.node.id ? props.dropTarget.position : null;
   const isDragging = props.draggingId === props.node.id;
@@ -748,11 +747,56 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
   const sameLevelLine = Boolean(dropPosition && dropPosition !== "inside");
 
   return <div className="tree-item">
+    <TreeRowFace
+      node={props.node} open={open} expandable={expandable}
+      active={props.node.id === props.activeId}
+      context={props.node.id === props.contextId && props.editingId !== props.node.id}
+      dragging={isDragging} releasing={props.releasingId === props.node.id}
+      dropParent={isDropParent} sameLevelLine={sameLevelLine} dropPosition={dropPosition}
+      locked={Boolean(props.node.nodeType === "note" && props.node.noteFileId && props.lockedNoteIds.has(props.node.noteFileId))}
+      onPointerDown={props.onPointerDown} onContextMenu={props.onContextMenu}
+      onCreateMenu={props.onCreateMenu} onToggle={props.onToggle} onSelect={props.onSelect}
+      onIconClick={props.onIconClick} onContext={props.onContext}
+      consumeSuppressedClick={props.consumeSuppressedClick}
+    />
+    {open && <div className="tree-children">
+      {props.pendingCreate?.parentId === props.node.id && props.createField(props.depth + 1)}
+      {children.map((child) => <TreeRow key={child.id} {...props} node={child} depth={props.depth + 1} />)}
+    </div>}
+  </div>;
+});
+
+/** 行内容只接本行状态，缓存图标/按钮等重型子树；递归分支仍传播全局状态，不能跳过子孙更新。
+ * 默认浅比较保留 node/回调更新语义，不用会忽略新回调或后代选中的自定义比较器。 */
+interface TreeRowFaceProps {
+  node: TreeNode;
+  open: boolean;
+  expandable: boolean;
+  active: boolean;
+  context: boolean;
+  dragging: boolean;
+  releasing: boolean;
+  dropParent: boolean;
+  sameLevelLine: boolean;
+  dropPosition: DropPosition | null;
+  locked: boolean;
+  onPointerDown: TreeRowProps["onPointerDown"];
+  onContextMenu: TreeRowProps["onContextMenu"];
+  onCreateMenu: TreeRowProps["onCreateMenu"];
+  onToggle: TreeRowProps["onToggle"];
+  onSelect: TreeRowProps["onSelect"];
+  onIconClick: TreeRowProps["onIconClick"];
+  onContext: TreeRowProps["onContext"];
+  consumeSuppressedClick: TreeRowProps["consumeSuppressedClick"];
+}
+const TreeRowFace = memo(function TreeRowFace(props: TreeRowFaceProps) {
+  const icon = nodeIcon(props.node.nodeType, props.open, props.node.icon, props.node.kind ?? "doc");
+  return (
     <div
       role="treeitem"
       tabIndex={0}
       data-tree-node-id={props.node.id}
-      className={`note-row tree-row type-${props.node.nodeType} ${props.node.id === props.activeId ? "active" : ""} ${props.node.id === props.contextId && props.editingId !== props.node.id ? "context" : ""} ${isDragging ? "dragging" : ""} ${props.releasingId === props.node.id ? "releasing" : ""} ${isDropParent ? "drop-parent" : ""} ${sameLevelLine ? `drop-line-${dropPosition}` : ""}`}
+      className={`note-row tree-row type-${props.node.nodeType} ${props.active ? "active" : ""} ${props.context ? "context" : ""} ${props.dragging ? "dragging" : ""} ${props.releasing ? "releasing" : ""} ${props.dropParent ? "drop-parent" : ""} ${props.sameLevelLine ? `drop-line-${props.dropPosition}` : ""}`}
       onClick={() => {
         if (props.consumeSuppressedClick()) return;
         props.onContext(props.node.id);
@@ -766,13 +810,13 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
       onPointerDown={(event) => props.onPointerDown(event, props.node.id)}
       onContextMenu={(event) => props.onContextMenu(event, props.node)}
     >
-      <button type="button" className={`tree-chevron ${open && expandable ? "open" : ""}`} disabled={!expandable} onClick={(event) => { event.stopPropagation(); if (expandable) props.onToggle(props.node.id); }} aria-label={open ? "收起" : "展开"}>{expandable ? <ChevronRight size={14} /> : null}</button>
+      <button type="button" className={`tree-chevron ${props.open && props.expandable ? "open" : ""}`} disabled={!props.expandable} onClick={(event) => { event.stopPropagation(); if (props.expandable) props.onToggle(props.node.id); }} aria-label={props.open ? "收起" : "展开"}>{props.expandable ? <ChevronRight size={14} /> : null}</button>
       <span className="tree-row-icon" title="设置图标" onClick={(event) => { event.stopPropagation(); props.onIconClick?.(props.node, event); }}>{icon}</span>
       <span className="note-row-copy">
         <strong>{props.node.title}</strong>
       </span>
       {/* 锁标识格**每行都在**（未锁时为空）：否则 grid 的行内条目数与列数不一致时，"⋯"会掉到下一行（用户报的换行） */}
-      {props.node.nodeType === "note" && props.node.noteFileId && props.lockedNoteIds.has(props.node.noteFileId)
+      {props.locked
         ? <span className="tree-row-lock" title="已锁定（只读）" aria-label="已锁定"><Lock size={12} /></span>
         : <span className="tree-row-lock" aria-hidden="true" />}
       {/* 行内悬浮动作（对齐思源：⋯ = more-root 弹右键菜单，＋ = new 新建子文档）。
@@ -801,11 +845,7 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
         </button>
       </span>
     </div>
-    {open && <div className="tree-children">
-      {props.pendingCreate?.parentId === props.node.id && props.createField(props.depth + 1)}
-      {children.map((child) => <TreeRow key={child.id} {...props} node={child} depth={props.depth + 1} />)}
-    </div>}
-  </div>;
+  );
 });
 
 function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null, kind?: string) {
