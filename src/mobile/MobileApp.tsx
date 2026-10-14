@@ -358,7 +358,6 @@ export function MobileApp() {
           notebooks={notebooks}
           onSwitchNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onOpenSearch={() => setSearchOpen(true)}
-          onOpenSettings={() => setDrawerOpen(true)}
           onCreateNote={() => void createNoteInParent(route.notebookId)}
           onActiveNoteChange={(id) => { activeIdRef.current = id; }}
         />
