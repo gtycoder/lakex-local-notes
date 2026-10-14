@@ -17,6 +17,9 @@
 import { useEffect, useRef, useState } from "react";
 import { addAssetAccessToken } from "../../lib/assetPort";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../editor/lakeRuntime";
+// 内核样式**自带**（懒入口规矩，见 AGENTS §7.23）：这条路径可能在冷启动时成为**第一个**内核消费者，
+// 而 261014 起它被拆成独立 chunk ⇒ 不能再假定"别人已经引过内核 CSS"。
+import "@dlient/lakex-doc-react/style.css";
 
 /** 视口预挂载余量：提前这么多像素建实例，滚到时已渲染好（避免滚动途中出现白块）。 */
 const PREMOUNT_MARGIN_PX = 400;

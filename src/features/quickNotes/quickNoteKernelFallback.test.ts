@@ -22,6 +22,21 @@ const DATE_CARD = '<card type="inline" name="dateCard" value="data:%7B%22date%22
 const EMOJI_CARD = '<card type="inline" name="unicodeEmoji" value="data:%7B%22emoji%22%3A%22%F0%9F%98%80%22%7D"></card>';
 
 describe("小记预览：快路径 + 内核只读兜底", () => {
+  /**
+   * 261014 冷启动修复的**回归护栏**：内核兜底必须保持**懒加载**。
+   *
+   * 事故链：HomePage → QuickNotePreview → QuickNoteKernelPreview → lakeRuntime 是**静态** import 链，
+   * 而 lakeRuntime 是 6.1MB 的内核 chunk ⇒ 构建会给入口挂 40+ 条 modulepreload，冷启动先拉+解析整个内核。
+   * 设备实测（AVD）：DCL 3943ms / 一个 1821ms 长任务 / 真首页 **6123ms**；改成 lazy 后 DCL 202ms / 真首页 **1447ms**。
+   * 所以：**只要有人把这条 import 改回静态，冷启动就会雪崩** —— 这里钉死。
+   */
+  it("内核只读兜底必须懒加载（静态 import 会把 6.1MB 内核拉进冷启动）", () => {
+    expect(PREVIEW_SRC).toMatch(/const QuickNoteKernelPreview = lazy\(\(\) => import\("\.\/QuickNoteKernelPreview"\)/);
+    expect(PREVIEW_SRC, "不许出现静态 import（那会让入口预载整个内核）").not.toMatch(/^import \{ QuickNoteKernelPreview \}/m);
+    // 懒入口必须自带内核样式（AGENTS §7.23：它可能是冷启动第一个内核消费者）
+    expect(KERNEL_SRC).toContain("@dlient/lakex-doc-react/style.css");
+  });
+
   it("快路径还原不了的块（日期卡/表情卡/表格）→ 触发内核兜底", () => {
     expect(hasUnsupportedNodes(parseQuickNotePreview(`<p><span>今天</span>${DATE_CARD}</p>`))).toBe(true);
     expect(hasUnsupportedNodes(parseQuickNotePreview(`<p>${EMOJI_CARD}</p>`))).toBe(true);

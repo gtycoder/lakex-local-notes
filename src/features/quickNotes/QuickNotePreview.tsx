@@ -9,12 +9,20 @@
  * 自研解析器不可能穷举 ⇒ 只要出现一个还原不了的块，整条卡片改由内核自己渲染
  * （`QuickNoteKernelPreview`）。**格式覆盖度由内核保证，我们不再维护卡片白名单。**
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Paperclip } from "lucide-react";
 import { isQuickNoteImageMime } from "../../core/quickNoteModel";
 import type { QuickNoteImage } from "../../lib/types";
 import { hasUnsupportedNodes, parseQuickNotePreview, type PreviewRun, type QuickNotePreviewNode } from "./quickNotePreviewParser";
-import { QuickNoteKernelPreview } from "./QuickNoteKernelPreview";
+/**
+ * 内核只读兜底 = **懒加载**（261014 冷启动修复）。
+ *
+ * 为什么必须懒：HomePage → QuickNotePreview → QuickNoteKernelPreview → lakeRuntime 是一条**静态**链，
+ * 而 lakeRuntime 是 **6.1MB** 的内核 chunk —— 它一进静态图，构建就会给入口挂上 40+ 条 modulepreload，
+ * 冷启动要**先拉取 + 解析整个内核**才画得出首页（设备实测：DCL 3943ms、一个 1821ms 长任务、真首页 6123ms）。
+ * 而这条兜底只在"快路径还原不了的块"出现时才用得上 ⇒ 没理由让所有人替它付冷启动成本。
+ */
+const QuickNoteKernelPreview = lazy(() => import("./QuickNoteKernelPreview").then((m) => ({ default: m.QuickNoteKernelPreview })));
 
 type Asset = QuickNoteImage & { url?: string };
 
@@ -170,7 +178,9 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
       style={collapsed ? { maxHeight: COLLAPSED_MAX_PX } : undefined}
     >
       {kernelFallback && noteId
-        ? <QuickNoteKernelPreview body={body} noteId={noteId} />
+        ? <Suspense fallback={<Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} />}>
+            <QuickNoteKernelPreview body={body} noteId={noteId} />
+          </Suspense>
         : <Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} />}
     </div>
     {overflowing && <button

@@ -118,9 +118,23 @@ export function useAutoSync(ready = true): void {
     };
   }, []);
 
-  // 「开启应用时对齐一次」：**显式就绪信号**驱动（替代旧的 3s 猜时间）；是否真同步由 handler 内部判据决定。
+  /**
+   * 「开启应用时对齐一次」：**显式就绪信号**驱动（替代旧的 3s 猜时间）；是否真同步由 handler 内部判据决定。
+   *
+   * 261014：就绪信号到了也**不立刻发**，而是等一次空闲（最多 2s 兜底）——
+   * 理由（用户点单）：冷启动要**页面优先**，S3 这类后台工作不能跟首屏渲染/首批交互抢主线程
+   * （实测首页 1447ms 就绪；此刻立刻开一轮同步，网络回调 + 清单 JSON + 写库都压在同一根线程上）。
+   * 语义不变：仍然是"就绪后跑一次"，只是把起点挪到首次空闲；capture 会话判定仍在 handler 里。
+   */
   useEffect(() => {
     if (!ready) return;
-    openHandlerRef.current?.();
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    const fire = () => openHandlerRef.current?.();
+    if (typeof ric === "function") {
+      const id = ric(fire, { timeout: 2000 });
+      return () => { (window as unknown as { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(id); };
+    }
+    const t = window.setTimeout(fire, 800);
+    return () => window.clearTimeout(t);
   }, [ready]);
 }

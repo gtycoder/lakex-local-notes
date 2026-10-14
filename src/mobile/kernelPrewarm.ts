@@ -20,8 +20,16 @@ export function scheduleKernelPrewarm(): void {
   if (scheduled) return;
   scheduled = true;
   const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-  if (typeof ric === "function") ric(() => { void runPrewarm(); }, { timeout: 3000 });
-  else window.setTimeout(() => { void runPrewarm(); }, 1500);
+  /**
+   * 261014 实测（AVD）：内核预览改成懒加载后，入口不再预载内核 ⇒ 这里"点燃"要**现拉 6.1MB + 内核样式 + dock 分包 + 实例化**，
+   * 是一个 **1695ms** 的长任务（A/B 验证：把 requestIdleCallback 变空 ⇒ 长任务完全消失、首页 798ms）。
+   * 而 `requestIdleCallback(cb, {timeout})` 的 timeout 只是**上限** —— 主线程一空它就马上回调，
+   * 实测仍是"就绪后 ~2.4s"砸下来，正好在用户刚开始用的那几秒。
+   * ⇒ 先**延迟 4s**（让首屏 + 首批交互彻底干净），再排进第一段空闲；真开文档时该付的加载成本照付（与不预热时一致）。
+   * 想彻底关掉预热就删掉这个排期 —— 代价 = 首次开文档/小记多花"内核分包加载 + 实例化"那一段。
+   */
+  const start = () => { if (typeof ric === "function") ric(() => { void runPrewarm(); }, { timeout: 2000 }); else void runPrewarm(); };
+  window.setTimeout(start, 4000);
 }
 
 /** 仅供测试/调试：重置排期闩。 */
