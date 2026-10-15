@@ -3,6 +3,7 @@ import { EditorErrorBoundary } from "./EditorErrorBoundary";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
+import { NodeIconGlyph } from "../../components/NodeIconGlyph";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
@@ -461,7 +462,7 @@ export function MultiTabEditor({
                 >
                   <span className="tab-split-tab__half">
                     {splitLeftTab && pinned.has(splitLeftTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
-                    {splitLeftTab?.icon && <span className="tab-custom-icon" aria-hidden="true">{splitLeftTab.icon}</span>}
+                    {splitLeftTab?.icon && <span className="tab-custom-icon" aria-hidden="true"><NodeIconGlyph value={splitLeftTab.icon} /></span>}
                     <span className="tab-title">{splitLeftTab?.title || "无标题"}</span>
                     {splitLeftTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
                     {splitLeftTab?.deleted && <span className="tab-deleted-badge" title="该侧文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
@@ -471,7 +472,7 @@ export function MultiTabEditor({
                     <Columns2 size={12} className="tab-split-tab__glyph" aria-hidden="true" />
                     {splitRightTab && pinned.has(splitRightTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
                     {/* 261012 用户点单：**两半各自带上自己文档的图标**（此前只有左半有，右半丢图标）。 */}
-                    {splitRightTab?.icon && <span className="tab-custom-icon" aria-hidden="true">{splitRightTab.icon}</span>}
+                    {splitRightTab?.icon && <span className="tab-custom-icon" aria-hidden="true"><NodeIconGlyph value={splitRightTab.icon} /></span>}
                     <span className="tab-title">{splitRightTab?.title || "无标题"}</span>
                     {splitRightTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
                     {splitRightTab?.deleted && <span className="tab-deleted-badge" title="该侧文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
@@ -508,7 +509,7 @@ export function MultiTabEditor({
               role="tab"
             >
               {pinned.has(tab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
-              {tab.icon && <span className="tab-custom-icon" aria-hidden="true">{tab.icon}</span>}
+              {tab.icon && <span className="tab-custom-icon" aria-hidden="true"><NodeIconGlyph value={tab.icon} /></span>}
               <span className="tab-title">{tab.title || "无标题"}</span>
               {tab.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
               {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
@@ -562,7 +563,7 @@ export function MultiTabEditor({
                         onClick={() => selectTab(tab.noteId)}
                         title={tab.title || "无标题"}
                       >
-                        <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ?? <File size={15} />}</span>
+                        <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ? <NodeIconGlyph value={tab.icon} /> : <File size={15} />}</span>
                         <span className="tab-switcher-status" aria-hidden="true">{tab.dirty ? "●" : ""}</span>
                         <span className="tab-switcher-title ln-ellipsis">{tab.title || "无标题"}</span>
                         {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}

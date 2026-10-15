@@ -141,21 +141,9 @@
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: var(--lake-font-size-bodyLg); line-height: 1; }
 
-/* 图标选择浮层（261013）：面板本体**直接复用内核** `.ne-ui-unicode-emoji-*` —— vendored 样式自带几何与配色，
- * 见 Sidebar 的 EmojiIconPicker 注释。所以这里只留内核没有的三样：可聚焦按钮外壳复位、横向 tab 行纠偏、「清除图标」行。 */
-.ne-ui-unicode-emoji-item > button { display: flex; padding: 0; border: 0; background: transparent; cursor: pointer; }
-
-/* 内核把这条写成了 overflow-y（横向 tab 行，显系笔误）⇒ 带「最近」共 9 个 tab 时会横向溢出到面板之外；
- * 就地补横向滚动（滚动条已由内核自己的 ::-webkit-scrollbar{display:none} 隐藏）。 */
-.ne-ui-unicode-emoji-tabs { overflow-x: auto; }
-
-/* 内核的搜索框是它内部的输入组件（自带满宽/边框/内距）；我们渲染的是原生 input ⇒ 自己补齐同样的盒子。 */
-.ne-ui-unicode-emoji-search input { width: 100%; box-sizing: border-box; padding: 6px 10px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-small); outline: none; }
-.ne-ui-unicode-emoji-search input:focus { border-color: var(--lake-accent); }
-
-.emoji-picker-clear { display: block; width: 100%; margin: 2px 0 8px; border: 0; border-radius: var(--lake-radius-sm); padding: 7px; background: var(--lake-border-2); color: var(--lake-text-3); cursor: pointer; font-size: var(--lake-font-size-tiny); }
-
-.emoji-picker-clear:hover { background: var(--lake-bg-hover); }
+/* 图标选择浮层（261014 起）：面板本体改**自有类**（components/nodeIcon.css + kit 的 .ln-popover/.ln-input/.ln-tabs）
+ * ⇒ 原先为「借用内核表情面板」而写的三条全局覆盖（.ne-ui-unicode-emoji-item > button / -tabs / -search input）
+ * 一并删除：它们会**同时命中文档里内核自己的表情面板**，正是用户要求消除的互相影响。 */
 
 .emoji-picker-empty { padding: 24px 16px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 

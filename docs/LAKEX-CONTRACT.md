@@ -1669,7 +1669,7 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 按 CSS Cascade 5：**普通声明：未分层 > 分层**；**`!important` 声明：分层 > 未分层（层序反转）**。
 所以「分层里的 `!important`」能压未分层的内核 CSS，而分层里的普通声明压不过 —— 这是 `mobile.css` 那 18 条 `!important` 的共同由来。
 
-### 5.35 内核「表情面板」的类契约 + 我方复用姿势（261013；读码 + 桌面/移动设备实测）
+### 5.35 内核「表情面板」的类契约 + 我方姿势（261013 复用 → **261014 桌面已解耦**；读码 + 设备实测）
 
 **结论：内核表情面板不是导出的组件，但它是一套「类名即契约」的 DOM + 已随内核分发的 CSS ⇒ 可以整体复用。**
 
@@ -1684,25 +1684,36 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 `-item` ＞ `span`（**32×32 / radius 4 / font-size 26px** / hover 用 `--lakex-editor-background-primary-hover`）；
 `-panel-footer` ＞ `-tabs`（flex / space-between / gap 10）＞ `-tab-item`（26 高 / min-width 40 / **选中 700 字重 + text-color**）。
 
-**③ 复用姿势（与 §5.24 noteRefCard 复用 `.ne-link-editor` 同一套）**：
-浮层 `surfaceClassName="ne-ui-unicode-emoji-panel"` + `className="lakex-default-theme"` —— 后者**必须加**：
-浮层 portal 到 body、已在编辑器树之外，靠它吃 `kernel-theme.css` 的 `--lakex-editor-*` 主题桥；**实测不加时面板背景透明**
-（浅色下 `panelBg=rgba(0,0,0,0)`；加上后 = `rgb(255,255,255)`，深色 = `rgb(30,31,35)`）。
+**③ ⚠️ 复用姿势已于 261014 **废弃**（桌面也不再复用内核类；①②仍是内核事实，保留）**：
+261013 桌面那份确实按 §5.24 noteRefCard 的姿势复用过（`surfaceClassName="ne-ui-unicode-emoji-panel"` + `className="lakex-default-theme"`）；
+**261014 用户点单「这两个面板可以分离了，做到互不影响」后解耦**：
+· 根因 = 复用只能靠**全局覆盖**（`.ne-ui-unicode-emoji-item > button` / `-tabs` / `-search input`，写在未分层文件里）
+  与**给该表面钉 5 个 `--lakex-editor-*` token** —— 这两样**同时命中文档里内核自己的表情面板**（内核在正文里用同一套类挂它自己的面板）。
+· 现在（自有面板）：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、类型页签走 kit 的 `.ln-tabs`，
+  两页（表情符号 / 图标）的网格在 `src/components/nodeIcon.css`；**几何沿用原观感**（418 宽 / 内距 16 / 正文固定 266 高 / 8 列 / 32 格）
+  ⇒ 不依赖任何内核 token，三主题一律由 `--lake-*` 决定。上面那 3 条全局覆盖与 5 个 token 已删除。
+· 内核这套类**现在只属于内核自己的面板**（移动端 261013 起也是自有的微信样式面板）⇒ **别再加耦合**。
+· **261015 桌面应用层更新（含第二轮用户截图修订）**：顶部页签栏右侧（`.ln-tabs__action` / `.ln-btn--ghost`）为EyeOff +「移除」，两页共用；底部仅保留表情分组跳转。自定义图标走`NodeIconGlyph`的**飞书参考浅渐变圆角底块 + 白色线性轮廓**，选择器/目录/标签单一来源，八档底色三主题同源；32×32圆角方色板按用户截图排列，显式code保持落库色号独立于展示顺序。隔离Electron `lake://app`实测：表情页418×392 / 图标页418×358，正文仍266高、表情仍26px/1055格；渐变预览与两页移除落库正常。来源：`src/components/{Sidebar.tsx,NodeIconGlyph.tsx,nodeIcon.css}` + `.css-audit/node-icon-soft-261015/results.json`（真实点按/计算值/截图）；旧实色证据在`.css-audit/node-icon-tile-261015/`。未改内核API或样式。
+· **261015第三轮交互**：目录选择器选图标/表情/移除后保持打开，用更新的picker值即时更新选中格；仅点击外部（含其他浮层）/Esc关闭。实现是Sidebar + Overlay既有外点机制，不影响正文内核表情面板；运行时证据`.css-audit/node-icon-stay-261015/results.json`。
+· **261015第六轮应用层定位**：目录图标选择器不再按鼠标点击点定位，改为真实图标元素锚点 + `usePopoverPosition`既有右侧定位，距图标右缘8px。底部/窄窗仍不遮挡锚点；1315×860/760×600/560×600实測相交面积0。色板在采样渐变基础上累计混白约41%。来源`Sidebar.tsx` / `themes/base.css` + `.css-audit/node-icon-anchor-261015/results.json`；不涉及内核改动。
+· **261015第七轮应用层图形尺寸**：`NodeIconGlyph`两类共用1.15em居中槽，图标缩小、表情字号放大。目录两类17.82px / 标签两类14.95px；选择器图标底块23px，表情选择格仍26px字号。来源`NodeIconGlyph.tsx` / `nodeIcon.css` / `themes/base.css` + `.css-audit/node-icon-size-261015/results.json`（真实Electron计算值/截图）；不影响内核表情组件。
+· **261015移动节点能力接入（用户追加定稿）**：移动`ui/NodeIconPicker.tsx`/`NodeIconGlyph.tsx`/`nodeIcon.css`自有实现，40图标/8浅渐变，节点表情页不import输入态`EmojiPanel`、不使用`mb-emoji-*`类。只共享资源表与编解码，最近记录写`icon`桶；文内输入表情组件未改。两端共同初始页判据`nodeIconPickerMode(nodeType)`：笔记本/分组→图标，所有文档类型→表情（不被当前值覆盖）。知识库、目录、标签列表、新建知识库预览都解析短图标值，选后保持打开。专用Android设备实测来源`.css-audit/mobile-node-icons-261015/{results.json,desktop-defaults.json,create-scroll.json,*.png}`；无内核API或正文改动。
+· **261015最新桌面位置修订**：节点选择器真实锚点改为整条`.tree-row`，**贴齐该行左缘，在整行下方8px**（跟随缩进，替代上面的右侧方案）。共用定位`side:"below-fixed"`限制剩余高度，不翻到行上方，内容可滚；其他面板默认定位保留。色板回调深一档（采样版累计混白约30%），两端同档。真实Electron的行名/图标未被面板覆盖、靠底三宽可滚选最后项，来源`.css-audit/node-icon-below-261015/results.json`；仍不涉及内核改动。
 列数：**桌面 8 列**（418 − 32 内距 = 386 ⇒ 格宽 ≈48，与内核截图一致）。
 ⚠️ **移动端最终没有走这条复用路线**（用户 261013 第二轮改口："移动端做成微信样式、分类放顶部，更适合输入"）⇒ 移动端是**自有的微信样式面板**
-（顶部：搜索 / 最近 / 8 组图标按钮 + 选中浅底；正文：`--lake-bg-block` 灰底 + 8 列大格子 51×44 / 表情 28px；底部清除行）—— **不复用内核类，也不需要那 3 个内核 token 桥**（已从 `mobile/theme/light.css` 撤回）。
-⇒ §5.35 的①②③④ 只适用于**桌面**那份；移动端只在"为什么当初不复用内核"这条上与本条相关。
+（261013当时形态：顶部分类按钮 + 选中浅底、正文灰底大格子/表情28px）—— **不复用内核类，也不需要那3个内核token桥**。261015起节点设置使用上面的独立`MobileNodeIconPicker`，文内输入仍使用自己的`EmojiPanel`；两者互不引用。
+⇒ §5.35 的正文分两部分：①② 是**内核事实**（长期有效）；③④⑥ 是**当年的复用姿势**（261014 起作废，留作历史与教训）。
 
-**④ 两处内核 CSS 的坑（在我们这层就地纠偏，不动 vendor）**：
+**④ 两处内核 CSS 的坑（261013 我们曾就地纠偏；261014 解耦后**与我们无关**，仅记录内核事实）**：
 · `-tabs` 写的是 **`overflow-y: scroll`**（横向 tab 行，显系笔误）⇒ 带「最近」共 9 个 tab 时会**溢出到面板之外**；补 `overflow-x: auto`。
 · 搜索框是内核**内部输入组件**（自带满宽/边框/内距），我们渲染原生 `input` ⇒ 需自己补盒子（宽度/内距/边框/圆角）。
 
 **⑤ 设备实测（261013；隔离桌面实例 + 门禁 AVD + 用户 AVD）**：
 · **桌面**（复用内核面板）：418×266 / 32px 格 / 26px 表情 / 选中 tab `700` / 三主题面板底 `#fff`·`#1e1f23`·`#fff`；
 · **移动**（微信样式）：分类按钮 **44×44**、格子 **51×44** / 表情 **28px** / 正文底 `--lake-bg-block`(`rgb(244,246,248)`) / 分类 10 个（搜索·最近·8 组）横向可滚。
-两端入口：桌面 = 目录树行首**图标本身**（`tree-row-icon`，title「设置图标」）；移动 = 工作区目录树每行右侧 **⋯ →「设置图标」**（文档与分组都有；**笔记本本身只有建库时可设**，建完无入口）。
+两端入口：桌面=目录行首图标本身；移动=目录每行**⋯→设置图标**（文档/分组）、首页知识库卡片**长按→设置图标**（笔记本）、新建知识库里的选择图标。移动目录的笔记本图标只展示，编辑入口在首页长按（用户261014定稿）。
 
-**⑥ ⚠️ 最大的坑：这些 token 是「编辑器挂载时才注入」的 ⇒ 面板会**间歇性变透明**（261013 用户实拍发现 + 复现 + 已修）**：
+**⑥（261014 起作废，仅留教训）⚠️ 这些 token 是「编辑器挂载时才注入」的 ⇒ 当年复用内核表面的那份面板会**间歇性变透明**（261013 用户实拍 + 复现 + 已修；解耦后自有面板走 `.ln-popover` + `--lake-bg-panel`，不存在该问题）**：
 内核把 schema（`.lakex-default-theme{ --lakex-editor-*: … }`）作为 `<style>` **在编辑器初始化时**注入（实测页面里同时存在 HEAD 与编辑器子树两份，**没有编辑器时 tag 数 = 0**）。
 ⇒ 那一刻面板的 `background-color: var(--lakex-editor-background-foreground)` **失效**（computed = `rgba(0,0,0,0)`），整块**透明**、底下的树行/正文透出来；
 等有编辑器挂载后又「自己好了」—— 所以是**间歇**的（复现：全新实例刚启动、tag 数 0 时 `panelBg=rgba(0,0,0,0)`；禁用那两份 style 后同样复现）。

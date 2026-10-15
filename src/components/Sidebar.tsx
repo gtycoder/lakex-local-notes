@@ -1,9 +1,11 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Book, ChevronRight, ChevronsDownUp, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, Pin, Plus, RefreshCw, Trash } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, Pin, Plus, RefreshCw, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import { pushEmojiRecent, readEmojiRecents } from "../lib/emojiRecents";
+import { NODE_ICONS, NODE_ICON_TINTS, encodeNodeIcon, nodeIconPickerMode, parseNodeIcon, type NodeIconTintId } from "../lib/nodeIcons";
+import { NodeIconGlyph } from "./NodeIconGlyph";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "./treeDrag";
@@ -86,7 +88,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   /** 目录行「＋」的快捷「新建」菜单（锚在该行按钮上） */
   const [createMenu, setCreateMenu] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
-  const [iconPicker, setIconPicker] = useState<{ node: TreeNode; x: number; y: number } | null>(null);
+  const [iconPicker, setIconPicker] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
   const [createMenuPosition, setCreateMenuPosition] = useState<CreateMenuPosition | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -551,8 +553,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const toggleNode = useCallback((id: string) => setExpanded((current) => toggleSet(current, id)), []);
   const setContextNode = useCallback((id: string) => setContextId(id), []);
   const consumeSuppressedClick = useCallback(() => suppressClickRef.current, []);
-  const setTreeIcon = useCallback((node: TreeNode, event: React.MouseEvent) => {
-    setIconPicker({ node, x: event.clientX, y: event.clientY });
+  const setTreeIcon = useCallback((node: TreeNode, event: React.MouseEvent<HTMLElement>) => {
+    setIconPicker({ node, anchor: event.currentTarget.closest<HTMLElement>(".tree-row") ?? event.currentTarget });
   }, []);
   const cancelRename = useCallback(() => setEditingId(null), []);
   useLayoutEffect(() => {
@@ -699,7 +701,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
-      {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}
+      {iconPicker && <EmojiIconPicker key={iconPicker.node.id} anchor={iconPicker.anchor} nodeType={iconPicker.node.nodeType} value={iconPicker.node.icon ?? null} onPick={(icon) => {
+        props.onSetIcon(iconPicker.node, icon);
+        // 保持面板与当前分类/颜色，立即更新选中格，方便连续试选。
+        setIconPicker((current) => current && { ...current, node: { ...current.node, icon } });
+      }} onClose={() => setIconPicker(null)} />}
       <div className="ln-split-handle sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} onDoubleClick={() => props.onWidthCommit(SIDEBAR_DEFAULT_WIDTH)} />
     </aside>
   );
@@ -730,7 +736,7 @@ interface TreeRowProps {
   onCreateMenu: (event: React.MouseEvent, node: TreeNode) => void;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
-  onIconClick?: (node: TreeNode, event: React.MouseEvent) => void;
+  onIconClick?: (node: TreeNode, event: React.MouseEvent<HTMLElement>) => void;
   /** 已锁定（只读）的文档 id 集（行尾显示小锁） */
   lockedNoteIds: ReadonlySet<string>;
 }
@@ -850,7 +856,7 @@ const TreeRowFace = memo(function TreeRowFace(props: TreeRowFaceProps) {
 });
 
 function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null, kind?: string) {
-  if (customIcon) return <span className="tree-node-custom-icon">{customIcon}</span>;
+  if (customIcon) return <span className="tree-node-custom-icon"><NodeIconGlyph value={customIcon} /></span>;
   if (type === "notebook") return <Book size={16} />;
   if (type === "group") return open ? <FolderOpen size={16} /> : <Folder size={16} />;
   if (kind === "usheet") return <Table size={16} />;
@@ -1045,21 +1051,31 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
   </Dialog>
 );
 
-/** M1.6：文档/分组自定义图标选择器 —— **直接复用内核表情面板的类与几何**（`.ne-ui-unicode-emoji-*`）。
- *  与 noteRefCard 复用 `.ne-link-editor` 同一姿势：内核那套 CSS 已随 vendor 样式进包，我们只接线，
- *  不重写尺寸/间距/配色；`lakex-default-theme` 负责吃 kernel-theme.css 的 --lakex-editor-* 主题桥
- *  （浮层 portal 到 body、在编辑器树之外，不加这个类暗/暖色下会取内核浅色字面值）。
- *  行为对齐内核：内容按分组平铺 + 分组标题，底部 tab 用于跳转与高亮；定位走 usePopoverPosition（禁自夹）。 */
-const EMOJI_COLUMNS = 8; // 内核面板 418px − 左右各 16px 内距 = 386px ⇒ 8 列时格宽 ≈48px（与内核实测一致）
+/** M1.6：目录节点（笔记本/分组/文档）自定义图标选择器 —— **自有面板，不复用内核表情面板的类**（261014）。
+ *
+ *  为什么与内核分离（用户 261014：「这两个面板可以分离了，做到互不影响」）：内核在**文档里**也用同一套
+ *  `.ne-ui-unicode-emoji-*` 渲染它自己的表情面板；我们过去借用那套类 ⇒ 只能靠在未分层文件里写全局覆盖
+ *  （`.ne-ui-unicode-emoji-item > button` / `-search input` / `-tabs`）并给该表面钉 5 个 `--lakex-editor-*`
+ *  token 才立得住，而那些规则**同时命中文档内的内核面板**（互相影响，且内核一升级就可能变样）。
+ *  ⇒ 现在这是**我们自己的一等面板**：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、
+ *  顶部类型页签走 kit 的 `.ln-tabs`，emoji/图标两页的网格与几何由 components/nodeIcon.css 定义。
+ *  几何沿用原观感（418 宽 / 内距 16 / 正文 266 高 / 8 列 / 32 格），定位仍走 usePopoverPosition（禁自夹）。 */
 
-const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
+const EmojiIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { anchor: HTMLElement; nodeType: TreeNodeType; value: string | null; onPick: (icon: string | null) => void; onClose: () => void }) => {
+  // 初始页按节点用途；已保存的色号仍带出，用户在本次打开期间可自由切页。
+  const current = parseNodeIcon(value);
+  const [mode, setMode] = useState(() => nodeIconPickerMode(nodeType));
+  const [tint, setTint] = useState<NodeIconTintId>(current?.kind === "icon" ? current.tint : "blue");
   const [filter, setFilter] = useState("");
   const recents = useMemo(() => readEmojiRecents(), []);
   const [active, setActive] = useState("最近"); // 「最近」常显（用户 261013 定），空的也留着位置
   const contentRef = useRef<HTMLDivElement>(null);
-  const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y }, width: 418 });
+  // 贴齐当前行左缘（跟随层级缩进），放在整行下方，留出图标与名称供搭配预览。
+  const { surfaceRef, style } = usePopoverPosition({ open: true, anchor, side: "below-fixed", gap: 8, margin: 4, width: 418 });
   const nameOf = useMemo(() => new Map(LAKE_EMOJIS.map((e) => [e.char, e.name])), []);
   const q = filter.trim().toLowerCase();
+  const icons = q ? NODE_ICONS.filter((d) => d.label.toLowerCase().includes(q) || d.id.includes(q)) : NODE_ICONS;
+  const currentIconId = current?.kind === "icon" ? current.icon.id : null;
   const sections = q
     ? [{ name: "搜索结果", emojis: LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(q) || e.char === filter.trim()).map((e) => e.char) }]
     : [
@@ -1080,26 +1096,96 @@ const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPi
       label="设置图标"
       surfaceRef={surfaceRef}
       style={style ?? undefined}
-      surfaceClassName="ne-ui-unicode-emoji-panel"
-      className="lakex-default-theme"
+      className="node-icon-picker"
+      closeOnNestedOverlay
     >
-      <div className="ne-ui-unicode-emoji-panel-header">
-        <div className="ne-ui-unicode-emoji-search">
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="搜索表情（如 smile / 名称）" autoFocus />
+      {/* 顶部双 tab：横向页签的唯一来源是 kit 的 .ln-tabs（AGENTS §3#14），视觉全由它承担 */}
+      <div className="ln-tabs node-icon-picker__types">
+        <div className="ln-tabs__track" role="tablist" aria-label="图标类型">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "emoji"}
+            className={"ln-tabs__item" + (mode === "emoji" ? " is-active" : "")}
+            onClick={() => { setMode("emoji"); setFilter(""); }}
+          >表情符号</button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "icon"}
+            className={"ln-tabs__item" + (mode === "icon" ? " is-active" : "")}
+            onClick={() => { setMode("icon"); setFilter(""); }}
+          >图标</button>
         </div>
+        <button
+          type="button"
+          className="ln-btn ln-btn--ghost ln-tabs__action"
+          aria-label="移除图标"
+          onClick={() => onPick(null)}
+        ><EyeOff size={14} aria-hidden="true" /><span>移除</span></button>
       </div>
-      <div className="ne-ui-unicode-emoji-panel-content" ref={contentRef}>
+      <div className="node-icon-picker__search">
+        <span className="ln-input">
+          <input
+            className="ln-input__field"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={mode === "icon" ? "搜索图标（如 书 / 星标）" : "搜索表情（如 smile / 名称）"}
+            autoFocus
+          />
+        </span>
+      </div>
+      <div className="node-icon-picker__body" ref={contentRef}>
+        {mode === "icon" ? (
+          <>
+            <div className="node-icon-picker__label">选择颜色</div>
+            <div className="node-icon-tints">
+              {NODE_ICON_TINTS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  data-tint={t.id}
+                  className={"node-icon-tint" + (t.id === tint ? " is-selected" : "")}
+                  aria-label={t.label}
+                  aria-pressed={t.id === tint}
+                  title={t.label}
+                  onClick={() => setTint(t.id)}
+                />
+              ))}
+            </div>
+            <div className="node-icon-picker__label">选择图标</div>
+            <div className="node-icon-grid">
+              {icons.map((def) => (
+                <button
+                  key={def.id}
+                  type="button"
+                  className={"node-icon-cell" + (def.id === currentIconId ? " is-selected" : "")}
+                  title={def.label}
+                  aria-label={def.label}
+                  aria-pressed={def.id === currentIconId}
+                  onClick={() => onPick(encodeNodeIcon(def.id, tint))}
+                >
+                  <NodeIconGlyph value={encodeNodeIcon(def.id, tint)} />
+                </button>
+              ))}
+            </div>
+            {icons.length === 0 && <div className="emoji-picker-empty">无匹配图标</div>}
+          </>
+        ) : (
+        <>
         {sections.map((section) => (
-          <div className="ne-ui-unicode-emoji-group" key={section.name}>
-            <div className="ne-ui-unicode-emoji-label" data-emoji-group={section.name}>{section.name}</div>
+          <div className="node-icon-picker__group" key={section.name}>
+            <div className="node-icon-picker__label" data-emoji-group={section.name}>{section.name}</div>
             {section.emojis.length > 0 ? (
-              <div className="ne-ui-unicode-emoji-content" style={{ gridTemplateColumns: `repeat(${EMOJI_COLUMNS}, 1fr)` }}>
+              <div className="node-icon-picker__grid">
                 {section.emojis.map((char, index) => (
-                  <div className="ne-ui-unicode-emoji-item" key={char + index}>
-                    <button type="button" title={nameOf.get(char) ?? char} onClick={() => { pushEmojiRecent(char); onPick(char); }}>
-                      <span>{char}</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="node-icon-picker__emoji"
+                    key={char + index}
+                    title={nameOf.get(char) ?? char}
+                    onClick={() => { pushEmojiRecent(char); onPick(char); }}
+                  >{char}</button>
                 ))}
               </div>
             ) : section.name === "最近" ? (
@@ -1108,23 +1194,25 @@ const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPi
           </div>
         ))}
         {sections.every((section) => section.emojis.length === 0) && <div className="emoji-picker-empty">无匹配表情</div>}
+        </>
+        )}
       </div>
-      <div className="ne-ui-unicode-emoji-panel-footer">
-        {!q && (
-          <div className="ne-ui-unicode-emoji-tabs">
+      {!q && mode === "emoji" && (
+        <div className="node-icon-picker__footer">
+          <div className="node-icon-picker__tabs" role="tablist" aria-label="表情分组">
             {sections.map((section) => (
-              <div
+              <button
                 key={section.name}
+                type="button"
                 role="tab"
                 aria-selected={section.name === active}
-                className={`ne-ui-unicode-emoji-tab-item${section.name === active ? " selected" : ""}`}
+                className={"node-icon-picker__tab" + (section.name === active ? " is-active" : "")}
                 onClick={() => jump(section.name)}
-              >{section.name}</div>
+              >{section.name}</button>
             ))}
           </div>
-        )}
-        <button type="button" className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
-      </div>
+        </div>
+      )}
     </Popover>
   );
 };

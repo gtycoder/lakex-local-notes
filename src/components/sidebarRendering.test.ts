@@ -108,6 +108,16 @@ const row = (id: string) =>
 const click = (element: HTMLElement) => act(() => element.click());
 
 describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
+  it("默认资源页按节点类型，不因已保存图标种类改变", () => {
+    render({ nodes: nodes.map((n) => ({ ...n, icon: n.nodeType === "note" ? "i:star:0" : "🍏" })) });
+    const activeType = () => host.querySelector('.ln-tabs__item[aria-selected="true"]')?.textContent;
+    click(row("book").querySelector<HTMLElement>(".tree-row-icon")!);
+    expect(activeType()).toBe("图标");
+    click(row("group").querySelector<HTMLElement>(".tree-row-icon")!);
+    expect(activeType()).toBe("图标");
+    click(row("n2").querySelector<HTMLElement>(".tree-row-icon")!);
+    expect(activeType()).toBe("表情符号");
+  });
   it("切换深层活动文档只重建旧/新行内容，不重建其余图标", () => {
     render();
     rendered.file = 0;
@@ -140,6 +150,23 @@ describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
     expect(row("n2").querySelector('[aria-label="已锁定"]')).not.toBeNull();
     render({ lockedNoteIds: new Set() });
     expect(row("n2").querySelector('[aria-label="已锁定"]')).toBeNull();
+  });
+  it("连续试选图标与移除保持面板，选中格立即跟随最后一次选择", () => {
+    render();
+    click(row("n2").querySelector<HTMLElement>(".tree-row-icon")!);
+    click([...host.querySelectorAll<HTMLButtonElement>(".ln-tabs__item")].find((b) => b.textContent === "图标")!);
+    const icon = (label: string) => host.querySelector<HTMLButtonElement>(`.node-icon-cell[aria-label="${label}"]`)!;
+    click(icon("星标"));
+    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "n2" }), "i:star:0");
+    expect(icon("星标").getAttribute("aria-pressed")).toBe("true");
+    click(icon("心形"));
+    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "n2" }), "i:heart:0");
+    expect(icon("心形").getAttribute("aria-pressed")).toBe("true");
+    expect(icon("星标").getAttribute("aria-pressed")).toBe("false");
+    click(host.querySelector<HTMLButtonElement>('[aria-label="移除图标"]')!);
+    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "n2" }), null);
+    expect(host.querySelectorAll('.node-icon-cell[aria-pressed="true"]')).toHaveLength(0);
+    expect(icon("心形")).not.toBeNull();
   });
   it("折叠祖先后切到另一文档会重新展开并定位", () => {
     render();

@@ -136,15 +136,6 @@
    color 用 inherit：与内核 .ne-engine ::selection 同口径，不把字色一起染蓝。 */
 ::selection { background: var(--lake-select-bg); color: inherit; }
 
-/* 「选图标」浮层复用内核表情面板（`.ne-ui-unicode-emoji-panel`）时，面板自己那套颜色取自 `--lakex-editor-*`，
- * 而那些 token 是内核**在编辑器初始化时注入 schema `<style>`** 才有的 —— 实测：全新实例还没挂载编辑器那一刻，
- * tag 数 0、token 缺失 ⇒ `background-color: var(...)` 失效、**面板整个变透明**（复现：panelBg = rgba(0,0,0,0)）。
- * ⇒ 把面板用到的 5 个 token **钉在我们这个表面上**（未分层 + 0-2-0，才压得过内核自己的 0-1-0 声明；
- * 只作用于该浮层，不进编辑器树）。值一律走 `--lake-*` ⇒ 三主题一致，且与"当时有没有编辑器"解耦。 */
-.ne-ui-unicode-emoji-panel.lakex-default-theme {
-  --lakex-editor-background-foreground: var(--lake-bg-panel);
-  --lakex-editor-text-color: var(--lake-text-1);
-  --lakex-editor-text-caption: var(--lake-text-3);
-  --lakex-editor-background-primary-hover: var(--lake-bg-hover);
-  --lakex-editor-border-primary: var(--lake-border-1);
-}
+/* 261014：这里原有 5 个为「选图标浮层复用内核表情面板」而钉的 --lakex-editor-* token（261013 加），
+ * 随该浮层改为自有面板（.ln-popover + components/nodeIcon.css）一并**删除** —— 面板不再依赖内核 token，
+ * 而钉在 .ne-ui-unicode-emoji-panel 上的那几条会同时影响**文档里内核自己的**表情面板（用户 261014：互不影响）。 */
