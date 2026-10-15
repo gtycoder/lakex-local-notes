@@ -9,7 +9,8 @@ import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
-import { EmojiPanel } from "../ui/EmojiPanel";
+import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
+import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { bridge } from "../bridge";
 import { loadSettings } from "../../lib/settings";
 import { selectEvictionIds } from "../../core/tabLimit";
@@ -105,7 +106,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   /** 设置图标的目标（行/分组/笔记本都走这一个面板；只用到 id）。 */
-  const [iconFor, setIconFor] = useState<{ id: string; title: string } | null>(null);
+  const [iconFor, setIconFor] = useState<NotebookTreeItem | null>(null);
   const [historyFor, setHistoryFor] = useState<NotebookTreeItem | null>(null);
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
   /** 长按目标（hook 只能挂一次 ⇒ 用 ref 传"当前按下的那一行"）。 */
@@ -422,8 +423,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (id && v) { try { await bridge.renameTreeNode(id, v); await loadTree(); } catch { /* 忽略 */ } }
   }, [renamingId, renameValue, loadTree]);
   const applyIcon = useCallback(async (icon: string | null) => {
-    const n = iconFor; setIconFor(null);
-    if (n) { try { await bridge.setNodeIcon(n.id, icon); await loadTree(); } catch { /* 忽略 */ } }
+    const n = iconFor;
+    if (n) {
+      try {
+        await bridge.setNodeIcon(n.id, icon);
+        setIconFor((current) => current?.id === n.id ? { ...current, icon } : current);
+        await loadTree();
+      } catch { showToast("设置图标失败", { type: "error" }); }
+    }
   }, [iconFor, loadTree]);
   const applyDelete = useCallback(async (node: NotebookTreeItem) => {
     const ok = await confirmMobile({
@@ -549,7 +556,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               />
             ) : (
               <>
-                {it.icon ? <span className="mb-tree-icon">{it.icon}</span> : <NodeIcon size={16} className="mb-tree-icon" />}
+                {it.icon ? <span className="mb-tree-icon"><MobileNodeIconGlyph value={it.icon} /></span> : <NodeIcon size={16} className="mb-tree-icon" />}
                 <span className="mb-row__title">{it.title}</span>
                 {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
                     ⋯ = 右键菜单，＋ = 新建子文档。 */}
@@ -681,7 +688,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
           <div className="toolbar__scroll">
             {/* 笔记本自己也是一行（用户 261014）：**图标 + 标题**；图标可点 = 设置图标（桌面 .tree-row-icon 同款手势） */}
-            <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? nbIcon : <Book size={16} />}</span>
+            <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}</span>
             {renamingId === notebookId ? (
               <input
                 className="mb-input"
@@ -722,6 +729,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               {tabs.length === 0 && <div className="mb-empty">暂无打开的文档</div>}
               {tabs.map((t) => (
                 <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => { openTab(t.id); setTabsOpen(false); }}>
+                  {tree.find((node) => node.id === t.id)?.icon && <span className="mb-tree-icon"><MobileNodeIconGlyph value={tree.find((node) => node.id === t.id)?.icon} /></span>}
                   <span className="mb-row__title">{t.title || "无标题"}</span>
                   <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
                 </div>
@@ -768,7 +776,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <button className="mobile-icon-btn" onClick={() => setIconFor(null)} aria-label="关闭"><X size={20} /></button>
             </div>
             <div className="mb-sheet__body">
-              <EmojiPanel onPick={(icon) => void applyIcon(icon)} onClear={() => void applyIcon(null)} />
+              <MobileNodeIconPicker key={iconFor.id} nodeType={iconFor.kind} value={iconFor.icon} onPick={(icon) => void applyIcon(icon)} />
             </div>
           </div>
         </div>

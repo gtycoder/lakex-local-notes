@@ -1,7 +1,8 @@
 /** 新建知识库 Sheet（§5：名称必填；默认图标不落库；自定义 Emoji 一次性提交 CreateNotebookInput）。 */
 import { useRef, useState } from "react";
 import { Book, X } from "lucide-react";
-import { EmojiPanel } from "../ui/EmojiPanel";
+import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
+import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 
 export interface CreateNotebookSheetProps {
@@ -51,7 +52,7 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
         <div className="mb-sheet__body mb-sheet__body--form">
           <div className="create-nb-row">
             <button className="create-nb-icon" onClick={() => setShowEmoji((v) => !v)} aria-label="选择图标">
-              {icon ? <span className="create-nb-emoji">{icon}</span> : <Book size={22} />}
+              {icon ? <span className="create-nb-emoji"><MobileNodeIconGlyph value={icon} /></span> : <Book size={22} />}
             </button>
             <input
               className="create-nb-input"
@@ -64,10 +65,7 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
           </div>
           {showEmoji && (
             <div className="create-nb-emoji-picker">
-              <EmojiPanel
-                onPick={(ch) => { setIcon(ch); setShowEmoji(false); }}
-                onClear={() => { setIcon(null); setShowEmoji(false); }}
-              />
+              <MobileNodeIconPicker nodeType="notebook" value={icon} onPick={setIcon} />
             </div>
           )}
           {error && <div className="create-nb-error">{error}</div>}

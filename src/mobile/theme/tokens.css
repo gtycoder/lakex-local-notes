@@ -15,6 +15,17 @@
   /* 工具栏 AI 入口图标（IconAiTagNew 的绿色渐变） */
   --lake-ai-tag-from: #4cc871;
   --lake-ai-tag-to: #08b66d;
+  /* 节点图标：与桌面本次定稿一致的浅渐变，移动端自行定义，不引桌面主题。 */
+  --lake-node-icon-peach: linear-gradient(135deg, #ffdea5, #ffc9a3 50%, #fcbec7);
+  --lake-node-icon-coral: linear-gradient(135deg, #fcc7a4, #fcb0ad 50%, #fba8c5);
+  --lake-node-icon-rose: linear-gradient(135deg, #f9b0da, #f69fda 50%, #efa4ef);
+  --lake-node-icon-violet: linear-gradient(135deg, #c3bafc, #cbaaf8 50%, #deb5f6);
+  --lake-node-icon-indigo: linear-gradient(135deg, #b8c1f9, #afadf6 50%, #baa9f9);
+  --lake-node-icon-blue: linear-gradient(135deg, #a7beff, #a0b3ff 50%, #b1adfd);
+  --lake-node-icon-teal: linear-gradient(135deg, #95e0d4, #89d6d3 50%, #97dce7);
+  --lake-node-icon-green: linear-gradient(135deg, #a1e0ba, #a5d49a 50%, #bed79c);
+  --mb-node-glyph-size: 1.15em;
+  --mb-node-picker-emoji-size: 28px;
   /* 「文档引用」卡插入面板图标的两套调色板（设计稿 261008；几何在 src/features/editor/noteRefIcon.tsx）。
    * 为什么必须在主题文件里：该图标是 lakex 自定义卡的 <symbol>，内容活在 <use> 的 shadow 树里 ——
    * 选择器打不到、只有「继承」能进去 ⇒ 只能靠这些自定义属性着色（组件里 style={{ fill: var(…) }}）。

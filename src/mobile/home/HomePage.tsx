@@ -18,7 +18,7 @@ import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
 import { CREATE_LONG_PRESS_MS, blockPressRelease, createPressArmed, createPressRevealed } from "../ui/createPress";
 import { pickLocalFile } from "../ui/pickFile";
 import { longPressFeedback } from "../ui/haptics";
-import { EmojiPanel } from "../ui/EmojiPanel";
+import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
@@ -308,9 +308,13 @@ export function HomePage(props: HomePageProps) {
     catch { showToast("重命名失败", { type: "error" }); }
   };
   const applyNotebookIcon = async (icon: string | null): Promise<void> => {
-    const nb = iconNb; setIconNb(null);
+    const nb = iconNb;
     if (!nb) return;
-    try { await bridge.setNodeIcon(nb.id, icon); await onTreeChanged(); }
+    try {
+      await bridge.setNodeIcon(nb.id, icon);
+      setIconNb((current) => current?.id === nb.id ? { ...current, icon } : current);
+      await onTreeChanged();
+    }
     catch { showToast("设置图标失败", { type: "error" }); }
   };
   /** 删除笔记本 = 整棵移入回收站（可恢复，与桌面笔记本右键同语义）。 */
@@ -491,7 +495,7 @@ export function HomePage(props: HomePageProps) {
               <button className="mobile-icon-btn" onClick={() => setIconNb(null)} aria-label="关闭"><X size={20} /></button>
             </div>
             <div className="mb-sheet__body">
-              <EmojiPanel onPick={(icon) => void applyNotebookIcon(icon)} onClear={() => void applyNotebookIcon(null)} />
+              <MobileNodeIconPicker key={iconNb.id} nodeType="notebook" value={iconNb.icon ?? null} onPick={(icon) => void applyNotebookIcon(icon)} />
             </div>
           </div>
         </div>

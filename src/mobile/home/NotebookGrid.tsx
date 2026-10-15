@@ -10,6 +10,7 @@ import type { TreeNode } from "../../lib/types";
 import type { LibraryView } from "./HomePage";
 import { Book, ChevronRight } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
+import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 
 /** 更新时间（仿语雀：今天/昨天 HH:mm，更早 MM-DD）。 */
 function fmtUpdated(iso: string | undefined): string {
@@ -90,7 +91,7 @@ export function NotebookGrid(props: NotebookGridProps) {
               onClick={() => openNotebook(nb)} {...pressProps(nb)}>
               <div className="nb-shelf-cover">
                 <span className="nb-shelf-glyph">
-                  {nb.icon ? <span className="nb-shelf-emoji">{nb.icon}</span> : <Book size={26} strokeWidth={1.75} className="nb-shelf-line" />}
+                  {nb.icon ? <span className="nb-shelf-emoji"><MobileNodeIconGlyph value={nb.icon} /></span> : <Book size={26} strokeWidth={1.75} className="nb-shelf-line" />}
                 </span>
               </div>
               {renamingId === nb.id
@@ -115,7 +116,7 @@ export function NotebookGrid(props: NotebookGridProps) {
           <div key={nb.id} className="nb-row" role="button" tabIndex={0} data-prevent-swipe
             onClick={() => openNotebook(nb)} {...pressProps(nb)}>
             <span className="nb-row__tile">
-              {nb.icon ? <span className="nb-row__emoji">{nb.icon}</span> : <Book size={20} strokeWidth={1.9} />}
+              {nb.icon ? <span className="nb-row__emoji"><MobileNodeIconGlyph value={nb.icon} /></span> : <Book size={20} strokeWidth={1.9} />}
             </span>
             <span className="nb-row__main">
               {renamingId === nb.id

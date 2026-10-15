@@ -27,6 +27,7 @@ const FILES = [
   "mobile/theme/light.css", // 浅色取值
   "mobile/theme/dark.css", // 深色取值
   "mobile/kit.css", // P2：移动端自有原语库 mb-*（唯一来源）
+  "mobile/ui/nodeIcon.css", // 节点图标与选择器；不共享桌面UI样式
   "mobile/floating.css", // P3：浮层原语 mb-sheet / mb-actionsheet / mb-toast / mb-menusheet（P3 接线）
   "mobile/features.css", // P6：图片 Lightbox / 附件预览的移动端外观（结构类名共享）
   "mobile/quick-notes.css", // P6b：小记编辑器宿主与预览（自桌面 quick-notes.css 抽取移动端子集）
@@ -40,7 +41,8 @@ const FILES = [
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/index.css": { decls: 0, dupGroups: 0 },
   "mobile/theme/base.css": { decls: 3, dupGroups: 0 },
-  "mobile/theme/tokens.css": { decls: 171, dupGroups: 0 }, // 261014：+1 = --mb-emoji-cat-h（分类条末尾加动作键 ⇒ 10 格，行高按要求压到 36；命中区由触达补足注册表补到 --mb-tap-min） // 261013：+2 = 表情面板（微信样式）两档字号令牌 --mb-emoji-cat-size / --mb-emoji-glyph-size（避免在 CSS 里写 px 字面量，移动端字号字面量基线只许降） // P2：+11 = 移动端几何槽（触达/内距/圆角）→ 261013 A 批 +1（--mobile-bottom-bar-slot：胶囊加高后宽度上限不能再由高度推导）
+  "mobile/theme/tokens.css": { decls: 181, dupGroups: 0 }, // 261015：+10 节点八档渐变、图形尺度、目录表情字号；此前171，移动端独立令牌
+  "mobile/ui/nodeIcon.css": { decls: 101, dupGroups: 0 }, // 261015 新增移动端节点图形与独立选择器（不复用输入表情）：44触达、可滚动内容、类型/选色/表情分类；合法新增
   "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接（261013 中途为"复用内核表情面板"加过 3 条内核 token 桥，用户改为**微信样式**后已撤回）
   "mobile/theme/dark.css": { decls: 112, dupGroups: 0 }, // +41 编辑器深色桥迁入 → P7b -22 删 --b3-* 过渡桥接
   "mobile/kit.css": { decls: 511, dupGroups: 0 }, // 261014：+2 = 表情面板分类条改「一屏 8 格 + 横滑」（用户二次定稿）：新增 .mb-emoji-cats__track（overflow/overscroll/隐藏滚动条）+ .mb-emoji-cat 固定 --mb-tap-min 宽；同时删掉 .mb-emoji-cell--clear（首格清除格撤掉） // P2 248 → P4 +113 → P5 +48（勾选）→ P6c +6（内核宿主）→ P7 +17（选择器 PickerSheet）→ 261013 +9（缩进 ×4 + .mb-input 内层 input ×3 + .mb-empty--inset ×1 + .mb-set-section 细线 ×1）→ 261013 +68（选图标面板最终形态 = **微信样式**：顶部分类条 + 大格子正文 + 清除行；中途"复用内核表情面板"那一版已按用户要求废弃，配套的移动端内核 token 桥也从 theme/light.css 撤回；属移动端自有视觉，非覆盖叠层）；

@@ -50,7 +50,7 @@ describe("工作区「更多」菜单（261014）", () => {
     // 抽屉里**不再**有笔记本 ⋮（用户点单去掉），但仍展示笔记本自己的图标（只展示、不可点）
     expect(WORKSPACE).not.toContain("笔记本菜单");
     expect(WORKSPACE).not.toContain("notebookMenuOpen");
-    expect(WORKSPACE).toContain('className="mb-tree-icon" aria-hidden="true">{nbIcon ? nbIcon : <Book size={16} />}');
+    expect(WORKSPACE).toContain('className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}');
     // 长按入口在知识库卡片上：NotebookGrid 必须接 onLongPressNotebook（书架卡与列表行都要）
     expect(GRID).toContain("onLongPressNotebook");
     expect(GRID.match(/pressProps\(nb\)/g)?.length).toBe(2);
