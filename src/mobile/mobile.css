@@ -387,17 +387,19 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
  * ⚠️ ::after 会吃掉落在扩展区里的点击 ⇒ 只用在「同级没有更小可点元素」的位置。
  * 261013 追加 `.mobile-trash-action`（回收站行的恢复/彻底删除，28×28）：它是探针修活 + 回收站**有数据**之后
  * 才第一次被报出来的 —— 空回收站时这些按钮根本不存在（说明"探针全绿"还要看数据是否覆盖到了那条路径）。 */
-/* 261013 A 批后：.med-btn / .med-ins-item / .med-f-btn / .med-outline-item / .med-doc-item 已真的做到 44
-   ⇒ 从注册表移除（不能"既调大又补足"两套并存）。剩下的是**视觉尺寸被刻意压住**的那批。 */
+/* 261013 A 批后：.med-btn / .med-ins-item / .med-outline-item / .med-doc-item 已真的做到 44
+   ⇒ 从注册表移除（不能"既调大又补足"两套并存）。剩下的是**视觉尺寸被刻意压住**的那批。
+   261015：`.med-f-btn`（「Aa」面板条目）**回到注册表** —— 用户点单压缩上下间距，视觉高按 44 → 40，
+   命中区由本注册表补回 44（这正是注册表存在的那类：视觉被刻意压住）。 */
 /* 261014 追加 `.mb-emoji-cat`（表情面板分类条）：分类条定位为**一屏 8 格 + 横滑**（用户二次定稿，对标微信），
    每格横向固定 --mb-tap-min(44) ⇒ **横向天然达标、无相邻重叠**；只有视觉高度按用户要求压到 36
    （--mb-emoji-cat-h）⇒ 由本注册表把命中区补到 44（上下各 4px，正好落在分类条与正文之间的 8px 间隙里，不压正文）。
    末尾动作键同理（宽就是 44）。 */
 .mb-tap, .toolbar__icon, .mobile-settings-close, .mb-segment__item, .mbt-table-tab, .mbt-link, .minfo-action,
-.med-f-sw, .mobile-trash-action, .mb-emoji-cat { position: relative; }
+.med-f-sw, .med-f-btn, .mobile-trash-action, .mb-emoji-cat { position: relative; }
 .mb-tap::after, .toolbar__icon::after, .mobile-settings-close::after, .mb-segment__item::after,
-.mbt-table-tab::after, .mbt-link::after, .minfo-action::after, .med-f-sw::after, .mobile-trash-action::after,
-.mb-emoji-cat::after {
+.mbt-table-tab::after, .mbt-link::after, .minfo-action::after, .med-f-sw::after, .med-f-btn::after,
+.mobile-trash-action::after, .mb-emoji-cat::after {
   content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: max(100%, var(--mb-tap-min)); height: max(100%, var(--mb-tap-min));
 }

@@ -67,6 +67,40 @@ node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/edit-surface-invarian
 **I2 光标存在**（面板态 activeElement 仍是正文、选区在、inputmode=none）· **I3 光标在工具栏上方**（caret.bottom < tb.top）·
 **I4 不自关/无闪**（点＋后 1.2s 面板仍在；每次开/关 resize ≤1）。失败即 exit 1 并逐条打印实际取样值。
 
+## 插入面板几何（261015 起，动 dock 面板 / 插入项排布时必跑）
+
+```bash
+bash scripts/emu-cdp.sh 9335
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/insert-panel-geometry.mjs
+```
+
+面板没开时装置会**自己进编辑态**（首页 ＋ → 空白小记）并真实点开「＋」。六条不变量（形态 = 用户 261015 点单的**方块网格**）：
+**G1 单一列宽** · **G2 每行填满（仅末行可不足）** · **G3 溢出可滚 + 滚到底时末行完整可达**（允许上下滑，但绝不允许"滚到底也够不到 / 末行被裁一半"）·
+**G4 零截断** · **G5 命中区 ≥44** · **G6 方块形态**（`flex-direction: column` + 居中 + 有圆角与底色 ⇒ 不是"图标左文字右"的行）。
+失败 exit 1 并逐条打印取样值。
+
+> ⚠️ **快照 6 态与走查 23 屏都不覆盖这个面板** —— 别拿"门禁绿了"代替它。
+>
+> ⚠️ **设备截图裁切必须算状态栏**：页面 CSS `y=0` ↔ 设备 **`y=128`**（本机 1080×2400 / 412×842，dpr 2.625）⇒
+> `ffmpeg crop` 的 y = `CSS_y × 2.625 + 128`。261015 实测：直接按 CSS 值裁会把面板最后一行切掉，**看起来像"产品裁切"，其实是裁切窗口短了 47px**（差点误判）。
+
+## ⌨ 键盘开合（261015 起，动 dock / 输入法 / 外壳高时必跑）
+
+```bash
+bash scripts/emu-cdp.sh 9335
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/keyboard-toggle.mjs
+```
+
+用户报「有键盘时点 ⌨ 能收、没键盘时点 ⌨ 不弹」。装置**状态驱动**（不假设初始有没有键盘：先归一到"键盘弹起"，再跑收/展/收）：
+
+- **K1** 有键盘 + 点 ⌨ ⇒ 收起，且 `inputmode="none"` 且 `activeElement` 仍在正文（**光标留住**）；
+- **K2** 无键盘 + 点 ⌨ ⇒ 弹起，且 **`inputmode` 已摘除**；
+- **K3** 再点 ⇒ 又收起（可反复开合）。
+
+> ⚠️ 两条根因见 `docs/LAKEX-CONTRACT.md` §5.38.1：① 展开前必须 `restoreIme()`；② `viewportShell` 的稳定外壳高
+> 会被 IME 过渡里失真的 `innerHeight` 污染（几何上看不出来）。**改 `viewportShell`/`useKeyboard` 时必须连同
+> `edit-surface-invariants.mjs` 一起跑**（那是它的下游地基）。
+
 ## 环境（260923 实测可用）
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"

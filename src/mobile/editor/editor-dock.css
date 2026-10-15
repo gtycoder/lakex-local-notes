@@ -105,44 +105,49 @@
  * 末尾动作键钉在轨道右侧不参与滚动；横滑安全性靠面板根的 data-prevent-swipe（外壳手势本就排除这类元素）。 */
 .med-panel-inner .mb-emoji-panel--fill .mb-emoji-cats { margin-inline: -12px; }
 .med-panel::-webkit-scrollbar, .med-panel-inner::-webkit-scrollbar { display: none; }
-/* 插入面板：对齐语雀移动端——「浅灰底 + 图标 + 文字」条目。
-   261010 用户定稿：**每行 3 个**（+ 面板 17 项、更多面板 6 项共用这一套网格）
-   ⇒ 6 行 × 40 + 5 × 5 + 上下 16 = 281px（实测键盘区 311 → 一屏放下，不需要滚动）。 */
+/* 插入 / 更多面板：**方块网格**（261015 用户点单：照图1「图标在上、文字在下」的方块样式）。
+   ⚠️ 这是 MOBILE-DESIGN「The White Rule」的**面板级例外** —— 用户 261015 为这个面板明确选了"浅灰底 + 白块"；
+   常驻页面（首页 / 设置 / 文档区）仍按该规则走白底 + 1px 细线，不放宽到别处。 */
+.med-panel[data-kind="insert"], .med-panel[data-kind="more"] { background: var(--lake-bg-block); }
+/* 方块 52 ⇒ 一屏放下（296 ≤ 311）。用户 261015 明确「可以做上下滑动，不一定要局限在这个键盘位置」，
+   所以列宽/块高**按观感定**、内容超出一屏就交给 `.med-panel-inner` 内部滚动（它本就是 overflow-y:auto + overscroll-behavior:contain）。
+   面板自身高度与工具栏位置**不动**：那两处由 JS 的 --kb-offset 驱动，改了会把 261014 修好的「编辑区跳动」再引回来。 */
+.med-panel[data-kind="insert"] .med-panel-inner,
+.med-panel[data-kind="more"] .med-panel-inner,
+.med-panel[data-kind="font"] .med-panel-inner { padding: 6px 12px; }
 .med-ins-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 5px 6px;
-  padding: 8px 12px;
-}
-/* 「＋」面板：**一卡一组**（用户 261012 定稿）—— 组间留白分组，卡内 3 列；
-   「媒体｜布局」那一行是一行两卡（卡内 2 列），条目宽度与相邻行的观感一致。
-   视觉语言与「Aa」面板的 .med-f-card 同一套（卡 = 浅灰圆角面）。 */
-.med-ins-groups { display: flex; flex-direction: column; gap: 5px; padding: 6px 12px; }
-.med-ins-row { display: flex; gap: 5px; min-width: 0; }
-.med-ins-card {
-  flex: 1 1 0;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 4px 6px;
-  padding: 2px;
-  border-radius: 10px;
-  background: var(--lake-bg-panel);
+  padding: 4px 12px;
 }
-.med-ins-row--split .med-ins-card { grid-template-columns: repeat(2, 1fr); }
+/* 方块形态：「更多」面板 = **4 列**（8 项 ⇒ 2 行，正好排满）。列数固定 ⇒ 不再出现"某一行更窄"的双档节奏。 */
+.med-ins-grid--tile {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 0;
+}
+/* 「＋」面板 = **两组（8 + 10）、4 列**（261015 用户指定）：
+   ① 8 项 = 2 行零空洞；② 10 项 = 3 行（末行 2 项）。两组之间 16px（组内行距 6px 的 2.7 倍）⇒ 靠留白分隔、不画线。
+   高度：5 行 × 52 + 组内 3×6 + 组间 16 + 面板内距 12 = 306 ≤ 311（一屏放下）。 */
+.med-ins-groups { display: flex; flex-direction: column; gap: 16px; }
 
 .med-ins-item {
   display: flex;
+  /* 方块形态（261015）：**图标在上、文字在下、居中**（图1 的样式）；高度 = **52**（用户定："先做 52 试试，不用太大"）
+     ⇒ 5 行 × 52 + 4×6 + 面板内距 12 = 296 ≤ 311，一屏放下、不需要滚（面板仍保留内部滚动能力） */
+  flex-direction: column;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  gap: 3px;
   min-width: 0;
-  height: var(--mb-ctl-h);
-  padding: 0 8px;
+  height: 52px;
+  padding: 4px 6px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--lake-bg-panel);
   color: var(--lake-text-1);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--mobile-duration-press) ease;
@@ -150,20 +155,23 @@
 .med-ins-item:active { background: var(--lake-bg-hover); }
 /* 占位（置灰）：移动端暂未支持的能力仍然显示，但不可点（与桌面 disabled 同一口径） */
 .med-ins-item:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
-.med-ins-item svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--lake-text-2); }
+.med-ins-item svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--lake-text-2); }
 .med-ins-label { min-width: 0; font-size: 13px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 「Aa」面板：语雀式的**分组卡片**排布（用户 261012 定稿）。
    口径：一卡一组、一行最多两卡；卡宽按条目数分配 ⇒ 同一行里各条目等宽（语雀那排 B I S U 比列表卡宽就是这个理）。
    色板与链接编辑都在面板内**内联展开**（用户定：全套走语雀方式，不弹层、不做二级面板）。 */
-.med-font-panel { display: flex; flex-direction: column; gap: 8px; }
+/* 261015 用户点单：「压缩上下间距」—— 面板视口只有 311px，原来内容 417px（要滑 106px）。
+   本轮：面板内距 12/14 → 6/6（见下方 data-kind="font" 规则）、行间距 8 → 6、卡内距 3 → 2、条目高 44 → 40（按 44 Rule 走 mobile.css 注册表补足命中区）、
+   色板内距 8 → 6、两行色板间距 11 → 8、色块 37 → 34。 */
+.med-font-panel { display: flex; flex-direction: column; gap: 6px; }
 .med-f-row { display: flex; gap: 6px; align-items: stretch; }
 
 .med-f-card {
   display: flex;
   align-items: stretch;
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   min-width: 0;
   border-radius: 10px;
   background: var(--lake-bg-panel);
@@ -180,13 +188,15 @@
   border: 0;
   background: transparent;
   border-radius: 8px;
-  height: var(--mb-ctl-h);
+  height: 40px;
   font-size: 15px;
+  font-weight: 500;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--lake-text-2);
+  /* 261015：文字/图标由 --lake-text-2 提到 --lake-text-1 —— 面板底色是白，二级灰看着"发虚" */
+  color: var(--lake-text-1);
   gap: 4px;
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--mobile-duration-press) ease;
@@ -207,12 +217,12 @@
    几何取自语雀 Android 1.2.2 设备实测（540px 宽 / density 210 ⇒ 1.3125 px per dp）：
    色块直径 49px≈37dp、列距 68px≈52dp、行距 63px≈48dp（故排间 gap ≈ 11dp）。
    颜色全部来自 core/colorPalette.ts 的内核色阶（MOBILE_BOARD_*），本文件不出现颜色字面量（色块底走内联 style，属数据驱动）。 */
-.med-f-card.med-f-board { display: block; padding: 8px 10px; }
+.med-f-card.med-f-board { display: block; padding: 6px 10px; }
 .med-f-board-row { display: flex; align-items: center; justify-content: space-between; }
-.med-f-board-row + .med-f-board-row { margin-top: 11px; }
+.med-f-board-row + .med-f-board-row { margin-top: 8px; }
 .med-f-sw {
-  width: 37px;
-  height: 37px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
   border-radius: 50%;

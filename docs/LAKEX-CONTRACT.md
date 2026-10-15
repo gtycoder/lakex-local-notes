@@ -1816,3 +1816,29 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
    行为由 `scripts/mobile-audit/edit-surface-invariants.mjs` 的四条不变量卡住。
 ③ 收面板要收敛成**一个出口**（`closePanel()`：× / 再点 ＋ / 用户点正文三处共用）：`setPanel(null) → focusEditor()`
    （后者负责清抑制 + 重新聚焦把键盘放回来）→ 等键盘真回来再清占位（§5.36 的口径）。
+
+### 5.38.1 展开键盘必须先摘 `inputmode`；稳定外壳高会被 IME 过渡的 `innerHeight` 污染（261015 用户报「键盘只能收不能展」）
+
+**现象**：⌨ 按钮「有键盘时点一下能收、没键盘时点一下不弹」（用户报）。两层根因，都在设备上量出来了：
+
+1. **展开路径漏了"摘抑制"**：收键盘走 `suppressImeNow(true)` —— 它给正文宿主写 `inputmode="none"`（这是"留住光标"的关键）。
+   展开时只 `focusEditor()`、**没摘掉该属性** ⇒ 系统认定该宿主不接受软键盘，`focus()` 也不弹
+   （修复前两连点实测：`ih` 仍 842、`inputmode` 仍 `none`、按钮标签仍「展开键盘」）。
+   ⇒ 正确顺序：**先 `restoreIme()`（摘属性 + blur/focus），再聚焦**；再补 `showNativeKeyboard()` 作兜底（程序化 focus 不保证弹）。
+2. **稳定外壳高基准被污染 ⇒ `keyboardOpen` 永久为真**：`viewportShell` 的"单调取历史最大值"会被
+   **IME 过渡里单独失真的 `window.innerHeight`** 记牢（本机反推：基准 **866**，真实稳定值 **842**；
+   由 `--mb-app-h` / `--kb-offset` 两组读数 + `capturePanelHeight` 的下限 280 解出）。一旦记进去就再也降不下来
+   ⇒ `keyboardOpen = shellHeight() − innerHeight > 8` 恒真 ⇒ ⌨ 永远走「收键盘」分支、永远弹不出来。
+   ⚠️ 这个污染**不表现在几何上**：`--mb-app-h = shell − occupation` 里两项互相抵消、恒等于 `innerHeight`
+   （所以界面看不出来，是"点一下没反应"这种纯行为缺陷 —— 只看截图/Stylesnap 是发现不了的）。
+   **修法**：`noteViewport(innerHeight, visualViewport.height)` —— **只在两通道一致（差 ≤8px）时才抬高基准**；
+   两通道在 adjustResize 下恒等、edge-to-edge 下只差键盘高，正好拿来做一致性校验（不引入新机制）。
+   **判据**：`scripts/mobile-audit/keyboard-toggle.mjs`（K1 收+留光标 / K2 弹+摘属性 / K3 可反复开合）
+   **必须与 `edit-surface-invariants.mjs` 联跑**（稳定外壳高是它的地基：I1 三态几何逐项相同）。
+3. **面板开着时 ⌨ 不能走「只收键盘」那条路**（261015 用户报「点了 ＋/T 再点键盘 ⇒ 一块空白」）：
+   `closePanel("hide")` 的设计语义是"**无面板时**只收键盘、留住光标"；面板开着用它 ⇒ 面板虽然关了，
+   但**占位要等 2.5s 兜底才释放、且键盘不回来** ⇒ 用户看到的正是那块空白
+   （实测：点后 0.3s / 1.2s 都还是 `--kb-offset:280px / --mb-app-h:562px / inputmode:none`，直到 3.0s 才复位）。
+   ⇒ **面板开着时 ⌨ 必须走 `closePanel("restore")`**（与 × / 点正文同一条路：关面板 + 放回输入法）。
+   修复后实测：0.3s 内即 `ih 530 / --kb-offset 0 / inputmode null`、面板关闭、工具栏回到键盘上方，**无空白**。
+   判据：`dockPanelFocusGuard.test.ts` 断言该分支为 `closePanel("restore")`，且仓内不再有 `dismissKeyboard`。

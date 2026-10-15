@@ -27,13 +27,14 @@ export function useKeyboard() {
   useEffect(() => {
     const update = () => {
       const ih = window.innerHeight;
+      const vv = window.visualViewport;
+      const vvH = Math.round(vv ? vv.height : ih);
+      const vvTop = vv ? Math.max(0, vv.offsetTop) : 0;
       // base = **跨实例共享**的稳定外壳高（单调取历史最大值 = 键盘收起时的高）——
       // 见 viewportShell.ts：只有输入法会让视口变矮，面板不会，所以这个值才是稳定基准。
-      setBase(noteViewport(ih));
+      // 基准只在「两通道一致」时抬高（261015：IME 过渡里 innerHeight 会单独失真 ⇒ 别让它污染稳定外壳高）
+      setBase(noteViewport(ih, vvH));
       setInnerHeight(ih);
-      const vv = window.visualViewport;
-      const vvH = vv ? vv.height : ih;
-      const vvTop = vv ? Math.max(0, vv.offsetTop) : 0;
       const off = Math.max(0, Math.round(ih - vvH - vvTop));            // edge-to-edge 上移量
       const shrunk = Math.max(0, Math.round(shellHeight() - ih));       // adjustResize 回落（基准 = 稳定外壳高）
       const h = Math.max(off, shrunk);                                  // 键盘实际高度（两模式统一）

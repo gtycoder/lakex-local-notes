@@ -115,7 +115,10 @@ manifest 字段（`src/core/manifestTypes.ts`）：
 - `s3_gc_pending` / `s3_gc_log`（GC 状态与审计）
 - `notes_fts` / `search_index`（派生索引，可重建）
 - `quick_note_*`（小记同步 journal / 转换 / 文件操作）
-- localStorage（桌面+移动）：`lake-notes-v3.dialog-states`、`lake-notes-v3.sidebar-width`、`lake-notes-v3.outline-sidebar-width`、`lake-notes-v3.tab-switcher-width`、`lake-notes-v3.board-views`（画板视图位置 = 平移滚动量 + 缩放；**本机**记忆，见 260926 决定）、`lake-notes-v1.sidebar`、`lake-notes-mobile.tabs.*`、`libraryView`、`lake-notes-v3.emoji-recents` + `lake-notes-v3.emoji-recents.input`（「最近使用」的**两个分桶**：`icon` = 设置图标面板 / `input` = 输入态表情面板；按入口分桶见 AGENTS §3#14；**本机**记忆，261013 加；见 `src/lib/emojiRecents.ts`）、`lake-notes-mobile.s3`（密钥另经 `src/mobile/secretStore.ts` AES-GCM）
+- localStorage（桌面+移动）：`lake-notes-v3.dialog-states`、`lake-notes-v3.sidebar-width`、`lake-notes-v3.outline-sidebar-width`、`lake-notes-v3.tab-switcher-width`、`lake-notes-v3.board-views`（画板视图位置 = 平移滚动量 + 缩放；**本机**记忆，见 260926 决定）、`lake-notes-v1.sidebar`、`lake-notes-mobile.tabs.*`、`libraryView`、`lake-notes-v3.emoji-recents` + `lake-notes-v3.emoji-recents.input`（「最近使用」的**两个分桶**：`icon` = 设置图标面板 / `input` = 输入态表情面板；按入口分桶见 AGENTS §3#14；**本机**记忆，261013 加；见 `src/lib/emojiRecents.ts`）、`lake-notes-mobile.s3`（密钥另经 `src/mobile/secretStore.ts` AES-GCM）、
+  **`lake-notes-v3.quick-notes-sort`**（小记排序偏好：**桌面与移动同一键、同一份四档**（最近/最早 × 更新/创建）；
+  纯展示偏好、只影响本端顺序，**不进 S3 / 不进 manifest**；单一来源 `src/core/quickNoteSort.ts`。
+  261015 用户要求"两端统一 + 仅本地持久化"；旧两值 `updated`/`created` 读到时映射到 `recent`/`createdNew`，用户既有偏好不丢）
 - 移动历史快照表 `note_history`（与桌面同表名，语义一致）
 
 ---

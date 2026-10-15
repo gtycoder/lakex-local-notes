@@ -382,7 +382,7 @@ export const bridge = {
 
   // ---- 小记（Phase B3：本地 CRUD + 列表；同步后置，依赖 quick-notes/ 子空间端口化） ----
 
-  async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>> {
+  async listQuickNotes(): Promise<Array<{ id: string; createdAt: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>> {
     const d = await ensureDb();
     return await quickNotesRepository.listQuickNotes(d);
   },

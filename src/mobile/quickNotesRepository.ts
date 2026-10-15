@@ -22,6 +22,8 @@ export interface QuickNoteImageFile {
 
 export interface QuickNoteListItem {
   id: string;
+  /** 创建时间（ISO）：261015 起列表可按创建时间排序，所以它必须一路带到 UI。 */
+  createdAt: string;
   previewText: string;
   imageCount: number;
   updatedAt: string;
@@ -47,7 +49,7 @@ export interface QuickNoteTrashItem {
 }
 
 export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> {
-  const rows = await d.prepare("SELECT id, preview_text, image_count, updated_at, content FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string; content: string }>;
+  const rows = await d.prepare("SELECT id, created_at, preview_text, image_count, updated_at, content FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; created_at: string; preview_text: string; image_count: number; updated_at: string; content: string }>;
   return rows.map((r) => {
     let firstImage: string | null = null;
     let body = "";
@@ -58,7 +60,7 @@ export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> 
       body = parsed.body ?? "";
       images = parsed.images ?? [];
     } catch { /* 解析失败走纯文本摘要 */ }
-    return { id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at, firstImage, body, images };
+    return { id: r.id, createdAt: r.created_at, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at, firstImage, body, images };
   });
 }
 

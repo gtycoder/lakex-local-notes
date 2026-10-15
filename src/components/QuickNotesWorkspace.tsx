@@ -4,6 +4,10 @@ import { native } from "../lib/native";
 import { writeLocalStorage } from "../lib/localStorageSafe";
 import { createRequestVersion } from "../core/requestVersion";
 import { isQuickNoteImageMime } from "../core/quickNoteModel";
+// 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
+import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../core/quickNoteSort";
+// 本机读写单独一层（core 禁 DOM）：与移动端同一份
+import { readQuickNoteSort, writeQuickNoteSort } from "../lib/quickNoteSortPref";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, ResourceUploadOutput, TreeNode } from "../lib/types";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { uploadLakeResource } from "../features/editor/resourceUpload";
@@ -103,19 +107,8 @@ function indexStamp(iso: string): string {
   return sameDay ? `今天 ${pad(d.getHours())}:${pad(d.getMinutes())}` : `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/**
- * 小记列表的排序口径（用户 260915 要求）。
- * **纯展示偏好：只存本机 localStorage，不进 S3** —— 小记的先后顺序不重要，
- * 各端各按自己的偏好展示即可，不构成跨端冲突（与 Android 端已有的排序同口径）。
- */
-type QuickNoteSort = "updated" | "created";
-const SORT_KEY = "lake-notes-v3.quick-notes-sort";
-const readSortPref = (): QuickNoteSort => {
-  try { return localStorage.getItem(SORT_KEY) === "created" ? "created" : "updated"; } catch { return "updated"; }
-};
-const writeSortPref = (value: QuickNoteSort): void => {
-  writeLocalStorage(SORT_KEY, value);
-};
+// 小记排序口径（用户 260915 要求；261015 与移动端统一为四档）——**纯展示偏好，只存本机 localStorage、不进 S3**；
+// 档位文案、比较器与本机读写全部在 `core/quickNoteSort`（单一来源，移动端用同一份）。
 
 /**
  * 小记的两种版式（对齐语雀云端，用户 260919 定）：
@@ -162,8 +155,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 多选模式与已选集合（仅本机交互状态，不进 S3） */
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
-  /** 排序口径：更新时间 / 创建时间（纯展示偏好，存 localStorage，不参与同步） */
-  const [sortBy, setSortBy] = useState<QuickNoteSort>(() => readSortPref());
+  /** 排序口径：四档（最近更新 / 最早更新 / 最新创建 / 最早创建）——纯展示偏好，本机 localStorage，不参与同步 */
+  const [sortBy, setSortBy] = useState<QuickNoteSort>(() => readQuickNoteSort());
+  /** 排序按钮的提示文案（档位文案与菜单同一份来源）。 */
+  const sortLabel = QUICK_NOTE_SORT_OPTIONS.find((o) => o.id === sortBy)?.label ?? "";
   /** 版式：小记卡（note）/ 列表（list）（纯展示偏好，存 localStorage，不参与同步） */
   const [viewMode, setViewMode] = useState<QuickNotesView>(() => readViewPref());
   const [sortOpen, setSortOpen] = useState(false);
@@ -654,14 +649,11 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     } finally { setSaving(false); }
   }
 
-  /** 排序只影响本端展示顺序（不写库、不进 manifest）。 */
+  /** 排序只影响本端展示顺序（不写库、不进 manifest）；四档比较器在 core/quickNoteSort（与移动端同一份）。 */
   const visibleItems = useMemo(() => {
-    const key = (item: QuickNoteDocument) => (sortBy === "updated" ? item.updatedAt : item.createdAt);
-    // 置顶优先（纯本机偏好），同组内按所选顺序
-    return [...items].sort((a, b) => {
-      const pinDiff = Number(pinned.has(b.id)) - Number(pinned.has(a.id));
-      return pinDiff !== 0 ? pinDiff : key(b).localeCompare(key(a));
-    });
+    const ordered = sortQuickNotes(items, sortBy);
+    // 置顶优先（纯本机偏好），同组内保持所选排序（filter 保序 ⇒ 无需二次比较）
+    return [...ordered.filter((it) => pinned.has(it.id)), ...ordered.filter((it) => !pinned.has(it.id))];
   }, [items, sortBy, pinned]);
 
   /**
@@ -729,7 +721,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         </button>}
         <span className="quick-notes-count">{items.length} 条</span>
         <div className="quick-notes-sort-wrap">
-          <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
+          <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={"排序：" + sortLabel} aria-label="排序"><ArrowUpDown size={16} /></button>
         </div>
       </div>
     </header>
@@ -743,7 +735,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <span className="quick-notes-tools-spacer" />
           <span className="quick-notes-count">{items.length} 条</span>
           <div className="quick-notes-sort-wrap">
-            <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
+            <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={"排序：" + sortLabel} aria-label="排序"><ArrowUpDown size={16} /></button>
           </div>
         </div>
         {/* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作 */}
@@ -776,7 +768,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                   >{selected.has(item.id) && <Check size={13} />}</button>
                   <button className="quick-note-index-main" onClick={() => (selecting ? toggleSelected(item.id) : void startEditing(item))} title={item.content.text?.trim() || "空小记"}>
                     <span className="b3-list-item__text ln-ellipsis">{indexLabel(item)}</span>
-                    <span className="b3-list-item__meta">{indexStamp(item.updatedAt || item.createdAt)}</span>
+                    <span className="b3-list-item__meta">{indexStamp(quickNoteSortTime(item, sortBy))}</span>
                   </button>
                   <span className="quick-note-index-actions">
                     <button className="quick-notes-tool-btn" title="更多" aria-label="更多" aria-haspopup="menu" aria-expanded={rowMenuId === item.id} onClick={(event) => { event.stopPropagation(); toggleRowMenu(event.currentTarget, item.id); }}><MoreHorizontal size={16} /></button>
@@ -840,8 +832,9 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     {pendingDelete && <div className="quick-notes-toast" role="status" aria-live="polite"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
     {/* 排序菜单 / 行内 ⋯ 菜单：标准 <Menu>（portal + 外点/Esc + .quick-notes-*-menu 表面） */}
     <Menu open={sortOpen} onDismiss={() => setSortOpen(false)} surfaceClassName="quick-notes-sort-menu" style={sortMenuPos ?? undefined}>
-      <button role="menuitemradio" aria-checked={sortBy === "updated"} onClick={() => { setSortBy("updated"); writeSortPref("updated"); setSortOpen(false); }}>{sortBy === "updated" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按更新时间</button>
-      <button role="menuitemradio" aria-checked={sortBy === "created"} onClick={() => { setSortBy("created"); writeSortPref("created"); setSortOpen(false); }}>{sortBy === "created" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按创建时间</button>
+      {QUICK_NOTE_SORT_OPTIONS.map((o) => (
+        <button key={o.id} role="menuitemradio" aria-checked={sortBy === o.id} onClick={() => { setSortBy(o.id); writeQuickNoteSort(o.id); setSortOpen(false); }}>{sortBy === o.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{o.label}</button>
+      ))}
     </Menu>
     {rowMenuItem && (
       <Menu onDismiss={() => setRowMenuId(null)} surfaceClassName="quick-note-row-menu" style={rowMenuPos ?? undefined}>

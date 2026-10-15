@@ -1148,6 +1148,97 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（49 = 47 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
+### 261015 · 移动端「＋」插入面板重排（**4 列方块网格** / 单一列宽 / 一屏放下）· **待用户验收**
+
+- **起因**：用户报「＋ 面板排布乱」，并要求"加分组、做适当分隔"。**先取证再改**（CDP 读真实 DOM）：面板视口 **311px** / 内容 346px；
+  旧结构 5 行里混着**两档列宽（3 列行 116.1 与双卡行 84.8）**、末行只 2 项（右 1/3 空）、**组间距 = 行间距 = 5px** ⇒ 没有层级；
+  且 `.med-ins-card` 注释写"浅灰圆角面"、实现却用 `--lake-bg-panel`（浅色下 = `--lake-bg-window` = #fff）⇒ **"卡"从来没画出来过**（真缺陷）。
+- **改法**：`EditorDock.tsx` 把 6 组并成 **4 组（3/6/6/3）** ⇒ 3 列下 **组界=行界、零空洞**；删掉只服务旧双卡行的
+  `INSERT_ROWS` / `.med-ins-row` / `--split`（净 **−11 声明**）；`editor-dock.css` 组间 8px + 1px `--lake-border-2` 细线，
+  并给「＋」面板**单独**收紧 `.med-panel-inner` 内距（12/14 → 6/6，**高度预算必须算它**）。
+  **分隔按 `MOBILE-DESIGN`「The White Rule」用细线、不用灰底衬托白卡**（该规则是用户 261013 定稿 —— 我先写成"灰底 + 白块"、已纠正）。
+- **设备实测**（emulator-5554 = 用户实例；`android-build.sh --sync --install` 后按 **APK 内容哈希 + `lastUpdateTime`** 核对确实换包）：
+  **311 = 311（不再溢出）** · 18 项 / 4 组 / 6 行 `[3,3,3,3,3,3]` · 条目统一 **117×44** · 零截断 · 组间细线在、组内无 ·
+  浅色实拍 + 深色实拍（深色用运行时 `data-theme` 切换，**未改用户设置、已还原**）。
+- **判据已固化**：新装置 `scripts/mobile-audit/insert-panel-geometry.mjs`（G1–G6，**ALL PASS**），注册进 `scripts/mobile-audit/README.md`；
+  ⚠️ **快照 6 态与走查 23 屏都不覆盖这个面板** ⇒ 没有这个探针就等于没量过。
+- **门禁**：tsc ✓ · vitest **255 文件 / 1976 例** ✓ · 双端构建 ✓ · ui-metrics（移动端字号字面量 46 ≤ 49、桌面 `!important` 10/10）✓ ·
+  `check:core` 78-0 ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` clean。**未提交/未推送**（代码批次待用户验收）。
+- **未做/待定**：① 若用户想要**更多分组**：5 组 `{3,3,3,6,3}`（把「文本块」拆成「基础块」+「代码与标注」）或 **6 组 × 3 项**
+  同样能保持零空洞，但「媒体/布局/关联」要重切；② 走查装置尚未覆盖该面板一屏（可补，需 `lake_gate` 实例）。
+- **方法学坑（回填）**：CDP `Page.captureScreenshot` + `clip` 在本机 **dpr 2.625** 下**画面被错误平铺**（每个条目画两遍），
+  差点误判成"DOM 重复渲染" ⇒ 移动端出图一律 `adb exec-out screencap -p`（既有红线，这次再次验证）。
+  再补一条：**截图裁切要算状态栏** —— 页面 CSS `y=0` ↔ 设备 `y=128`，按 CSS 值直接裁会把面板最后一行切掉、看着像"产品裁切"（本轮差点再次误判，已记进 `scripts/mobile-audit/README.md`）。
+- **261015 追加（同日，用户改口径 → 本批最终形态）**：看过候选图后用户点单"改成方块样式（图1）"，随后又定"先做 52，不用太大"、"可以做上下滑动，不一定要局限在这个键盘位置"：
+  · 面板改为 **4 列方块网格**：列宽统一 **93**、方块 **93×52**（图标 22 在上 / 文字 13 在下 / 居中 / 圆角 12）、**浅灰面板底 + 白块**；
+  · **一屏放下**（5 行 × 52 + 4×6 + 面板内距 12 = 296 ≤ 311，**溢出 0**）；内部滚动能力保留（用户已授权，当前尺寸用不上）；
+  · 分组容器 / 卡片 / 细线 / `INSERT_ROWS` **整体退场**（4 列下 18 项做不到"组界=行界"）⇒ 分组只保留在 `INSERT_GROUPS` 的**顺序**里；末行 2 项（用户接受）；
+  · **The White Rule 的面板级例外**（用户为这个面板明确选了"灰底 + 白块"）已写进 `MOBILE-DESIGN.md`；常驻页面不变；
+  · 探针判据同步为 G2「每行填满·仅末行可不足」/ G3「溢出可滚 + 末行完整可达」/ G6「方块形态」⇒ **ALL PASS**（面板 311 = 内容 311；末行底 821 ≤ 面板底 842）；
+  · 证据（设备级、已按正确裁切偏移重出）：`.css-audit/insert-panel-261015/{tile-light.png,tile-dark.png}`。
+- **261015 三改（用户当天第三次点单：分组与顺序）**：`＋` 面板改为**两组各 9 项**（① 拍照 图片 附件 音频 视频 表情 状态 日期 日历；② 表格 引用 分割线 代码块 高亮块 分栏 折叠块 链接 文档引用），列数 **3** ⇒ **9 = 3×3，组内零空洞、组界 = 行界**，格宽 **125**；组间 **16px**（组内行距 6px 的 2.7 倍）**靠留白分隔**（不画线）；「更多」面板仍 4 列（8 项 = 2 行排满）。
+  实测：6 行 `[3,3,3,3,3,3]` / 内容 **364 > 311 ⇒ 溢出 53px 走面板内滚动**（末行「折叠块 / 链接 / 文档引用」需下滑才见；**想一屏放下就把方块降到 44px**）；探针 **ALL PASS**，并新增 **G7 组间分隔（组间 ≥ 组内 2 倍）**；证据 `.css-audit/insert-panel-261015/{regroup-light.png,regroup-dark.png}`。
+  门禁：tsc ✓ · vitest **255 文件 / 1976 例** ✓ · 双端构建 ✓ · ui-metrics（移动端字号字面量 46 ≤ 49）✓ · `check:core` 78-0 ✓ · `check:mobileui` ✓ · `git diff --check` clean。
+- **261015 四改（最终形态，用户定："还是一行 4 个，把日历放到第二组"）**：`＋` = **4 列 / 两组（8 + 10）**（① 拍照 图片 附件 音频 视频 表情 状态 日期；② 表格 引用 分割线 代码块 高亮块 分栏 折叠块 链接 文档引用 日历）
+  ⇒ 5 行 `[4,4,4,4,2]`、格宽 **93**、组间 **16px 留白**分隔（组内行距 6）；① 两行**零空洞**、② 末行 2 项；
+  **高度 306 ≤ 311 ⇒ 一屏放下（溢出 0，不再需要滑）**。探针 **ALL PASS**，并新增 **G8 组界落在行界**（`groupSizes=[8,10]`，8 = 2×4）；证据 `.css-audit/insert-panel-261015/{final-light.png,final-dark.png}`。
+  门禁：tsc ✓ · vitest **255 文件 / 1976 例** ✓ · 双端构建 ✓ · ui-metrics（移动端字号字面量 46 ≤ 49、桌面 `!important` 10/10）✓ · `check:core` 78-0 ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` clean。
+- **261015 五改（用户点单：「Aa」面板压缩上下间距 + 图标凝实）**：面板视口 311px、内容 **417 → 354px（−63；仍需下滑约 43px 才看到最底部「字号」行）**：
+  行间距 8→6 · 卡内距 3→2 · 条目视觉高 **44 → 40**（按 44 Rule **回到触达补足注册表**，命中区由 `::after` 补回 44）· 色板内距 8→6 · 两行色块间距 11→8 · 色块 **37 → 34** · 面板内距 12/14 → 6/6；
+  **图标 17 → 20px**、图标与文字色 `--lake-text-2` → **`--lake-text-1`**（白底上"发虚"的根因 = 尺寸偏小 + 二级灰；**stroke 未动** —— 实测移动端本就是 lucide 默认 2px，比桌面 `svg.lucide{stroke-width:1.75}` 还粗，所以不是描边问题）。
+  实测：`scrollH 417→354` · 行高 50→44 · 色板行 101→88 · 图标 20px · 文字色 `rgb(31,35,41)` · 色块 34px；`＋` 面板探针复跑 **ALL PASS**（零回归）。
+  证据 `.css-audit/aa-panel-261015/{after-light.png,after-dark.png}`；口径（44 Rule 回例）已入 `MOBILE-DESIGN.md`。
+  门禁：tsc ✓ · vitest **255 文件 / 1976 例** ✓ · 双端构建 ✓ · ui-metrics（移动端字号字面量 46 ≤ 49、桌面 `!important` 10/10）✓ · `check:core` 78-0 ✓ · `check:mobileui` ✓ · `git diff --check` clean。
+- **261015 六改（用户点单：「Aa」面板里「列表 ｜ 对齐」两块左右对调）**：`EditorDock.tsx` 该行两张卡交换顺序 ⇒ **对齐在左、列表在右**（两卡 data-count 都是 3 ⇒ 宽度不变，纯顺序改动）；注释同步。
+  实测（设备级截图）：对齐卡 x 在左、列表卡在右；`tsc` ✓ · vitest **255 文件 / 1976 例** ✓ · 「＋」面板探针复跑 **ALL PASS**（零回归）；证据 `.css-audit/aa-panel-261015/swap-light.png`。
+- **261015 七改（用户报 bug：「⌨ 有键盘能收、没键盘点不出来」）** —— **两层根因，都在设备上量出来**：
+  · **① 展开路径漏了"摘抑制"**：收键盘走 `suppressImeNow(true)`（给正文宿主写 `inputmode="none"`，这是"留住光标"的关键），
+    展开时只 `focusEditor()`、**没摘掉该属性** ⇒ 系统认定该宿主不接受软键盘、`focus()` 也不弹（修复前两连点实测：`ih` 仍 842、`inputmode` 仍 none、按钮仍写「展开键盘」）。
+    ⇒ `showKeyboard()` 改成 **先 `restoreIme()` 再 `focusEditor()`**，并补 `showNativeKeyboard()` 作兜底；`onKbToggle` 的无面板分支由 `closePanel("hide")` 改走 `dismissIme()`（避免留下永远为真的 `closing`）。
+  · **② 稳定外壳高被污染 ⇒ `keyboardOpen` 永久为真**：`viewportShell` 的"单调取历史最大值"会被 **IME 过渡里单独失真的 `window.innerHeight`** 记牢
+    （反推：基准 **866**、真实稳定值 **842**；由 `--mb-app-h`/`--kb-offset` 两组读数 + `capturePanelHeight` 下限 280 解出）⇒ `keyboardOpen = shell - ih > 8` 恒真 ⇒ ⌨ 永远走「收键盘」。
+    ⚠️ **这个污染在几何上看不出来**（`--mb-app-h = shell − occupation` 两项互相抵消、恒等于 `ih`）—— 纯行为缺陷，截图/Stylesnap 都发现不了，只有"点一下没反应"能看出来。
+    ⇒ 修法：`noteViewport(innerHeight, visualViewport.height)` —— **只在两通道一致（差 ≤8px）时才抬高基准**（adjustResize 下恒等、edge-to-edge 只差键盘高，正好做校验，不引入新机制）。
+  · **判据**：新装置 `scripts/mobile-audit/keyboard-toggle.mjs`（状态驱动：K1 收+留光标 / K2 弹+摘属性 / K3 可反复开合）⇒ 设备 **ALL PASS**；
+    同时联跑 `edit-surface-invariants.mjs`（基准是它的地基）⇒ **ALL PASS**，数字与 261014 基准逐项一致（ch 306 · st 735 · firstY −642 · caret 363 < tb 474）。
+  · 单测：`viewportShell.test.ts` +3、`dockPanelFocusGuard.test.ts` +1；契约回填 `LAKEX-CONTRACT.md` **§5.38.1**；装置注册进 `scripts/mobile-audit/README.md`。
+  · 门禁：tsc ✓ · vitest **255 文件 / 1980 例** ✓ · 双端构建 ✓ · ui-metrics ✓ · `check:core` 78-0 ✓ · `check:mobileui` ✓ · `git diff --check` clean。
+- **261015 八改（用户报 bug：「点了 ＋ 或 T 展开之后再点键盘 ⇒ 一块空白」）** —— 期望是"点键盘要**连带展开区域一起收起来**"：
+  · **根因**：⌨ 在面板开着时走的是 `closePanel("hide")`（语义 = "**无面板时**只收键盘、留住光标"）⇒ 面板虽然关了，
+    但**占位要等 2.5s 兜底才释放、键盘也不回来** ⇒ 用户看到一块空白（复现实测：点后 0.3s / 1.2s 仍是
+    `--kb-offset:280px / --mb-app-h:562px / inputmode:none`，直到 3.0s 才复位）。
+  · **修法**：面板开着时 ⌨ 改走 `closePanel("restore")`（与 × / 点正文同一条路：关面板 + 放回输入法），并删掉已无人调用的 `dismissKeyboard`。
+  · **修复后实测**：点 ⌨ 后 **0.3s 内**即 `ih 530（键盘回来）/ --kb-offset 0 / inputmode null / 面板无`，工具栏回到键盘上方，1.2s / 3.0s 保持稳定 ⇒ **无空白**。
+  · **三套装置复跑全绿**：`keyboard-toggle.mjs` ALL PASS · `insert-panel-geometry.mjs` ALL PASS（G1–G8）· `edit-surface-invariants.mjs` ALL PASS（ch 306 · st 735 · firstY −642 · caret 363 < tb 474，开/关面板 resize 各 1 次）。
+  · 护栏 `dockPanelFocusGuard.test.ts`：该分支断言为 `closePanel("restore")`，并断言仓内**不再有** `dismissKeyboard`（防止"只收不还"的路子回来）。
+  · 契约回填 `LAKEX-CONTRACT.md` §5.38.1 第 3 条；门禁：tsc ✓ · vitest **255 文件 / 1980 例** ✓ · 双端构建 ✓ · ui-metrics ✓ · `check:core` 78-0 ✓ · `check:mobileui` ✓ · `git diff --check` clean。
+- **261015 九改（用户点单：移动端小记加**创建时间排序**）**：排序面板从 2 档扩到 **4 档** —— 最近更新 / 最早更新 / **最新创建 / 最早创建**。
+  · **字段必须一路带上来**：`quickNotesRepository.listQuickNotes` 的 SELECT + `QuickNoteListItem` 加 `created_at/createdAt`；
+    `bridge.listQuickNotes` 返回类型同步；`MobileApp` 的 state 改用 `HomePage` 导出的 `MobileQuickNote`（**原先这里另写了一份内联类型** ⇒ 加字段时漏改、tsc 当场抓到 —— 这类"同一条链两份类型"是再次踩的坑）。
+  · `HomePage`：`QuickSort` 四值 + `isCreatedSort/isDescSort` 两个纯函数；排序键按当前档取 `createdAt` 或 `updatedAt`。
+  · **卡片日期跟随排序口径**：按创建时间排序时显示**创建时间**（否则"按创建排 + 显示更新时间"看起来像没排序）。这是本批唯一超出字面要求的一处，用户可否决。
+  · 设备实测（emulator-5554）：面板 4 档文案正确；`最新创建` ⇒ DOM 顺序 = createdAt 降序、`最早创建` ⇒ 升序，**与 `listQuickNotes()` 数据逐条一致**（9 条样本）；卡片日期同步显示创建时间。
+  · 门禁（本批文件）：tsc ✓ · 定向 vitest 6 文件 / 48 例 ✓ · 双端构建 ✓ · ui-metrics ✓ · `check:core` 78-0 ✓ · `check:mobileui` ✓ · `git diff --check` clean。
+  · ⚠️ **全库那 1 个失败不属于本批**：`src/mobile/notebook/workspaceMenu.test.ts` 断言 `NotebookWorkspace.tsx` 里的 `mb-tree-icon … {nbIcon ? nbIcon : <Book size={16}/>}`，
+    而**并行会话**正在做移动端图标选择器（新增 `src/mobile/ui/NodeIconPicker*.tsx`、`nodeIcon.css`，改了 `NotebookWorkspace.tsx / NotebookGrid.tsx / CreateNotebookSheet.tsx / theme/tokens.css`）⇒ 那段 markup 已被他们替换。
+    我**未触碰**这些文件；提交/验收时请把两批分开。
+- **261015 十改（用户点单：排序偏好**持久化** + **桌面与移动统一**，都只存本机）**：
+  · **单一来源**：新增 `src/core/quickNoteSort.ts`（四档类型 / 菜单文案 / 比较器 / 旧值归一 —— **纯逻辑、不碰 DOM**）
+    + `src/lib/quickNoteSortPref.ts`（本机读写，两端共用同一个键 `lake-notes-v3.quick-notes-sort`）。
+    ⚠️ 第一版把 `localStorage` 写进了 core，被 `npm run check:core`（core 禁 DOM/electron/node）**当场拦下** —— 分层规矩的用处正在于此。
+  · **桌面**：`QuickNotesWorkspace` 删掉自己那份 `QuickSort`/`SORT_KEY`/`readSortPref`/`writeSortPref`，菜单改由 `QUICK_NOTE_SORT_OPTIONS` 渲染（**2 档 → 4 档**）；
+    **置顶优先级保留**（先置顶、组内沿用所选排序，用 filter 保序）；列表行时间戳跟随排序口径（`quickNoteSortTime`）；排序按钮 title 由档位文案派生。
+  · **移动**：`HomePage` 同样改用共享模块（`useState(() => readQuickNoteSort())` + 选中即 `writeQuickNoteSort`），卡片日期同口径。
+  · **旧值迁移**：桌面 260915 起存的 `updated`/`created` 读到时映射为 `recent`/`createdNew`（都曾按降序）⇒ 用户既有偏好不丢。
+  · **实机验证**：
+    - **移动**（emulator-5554）：面板 4 档 ✓；选「最早创建」⇒ 落盘 `createdOld`、卡片按 createdAt 升序；
+      **`am force-stop` + 重启后仍是 `createdOld`**，顺序与面板「当前」标记都保持 ✓。
+    - **桌面**（隔离 userData + `lake://app` + CDP 9235，⌘2 切小记）：菜单 4 档 ✓；选「最早创建」⇒ 落盘 `createdOld`、按钮 title 变「排序：最早创建」；
+      `Page.reload` 后偏好保持、菜单勾选在「最早创建」✓。实例已按 CDP 端口精确 kill、临时 userData 已删。
+  · **文档/护栏**：`docs/STORAGE-LAYERS.md` §5 的 L3 localStorage 清单**补登**该键（桌面其实早就在用却**漏登记** —— 正是该文档要防的漂移）；
+    新增 `src/core/quickNoteSort.test.ts` **10 例**（四档语义 / 不改入参 / 旧值迁移 / 写读往返 / **两端源码级护栏**：都必须 import 共享模块、且不得再出现那个键字面量）。
+  · 门禁：tsc ✓ · vitest **256 文件 / 1995 例** ✓（唯一失败仍是上面那条并行会话的）· 双端构建 ✓ · `check:core` 79-0 ✓ · `check:mobileui` ✓ · `git diff --check` clean。
+
 ### 261014(八) · 本会话批次收口（移动端入口重组 / 冷启动 / 装置漏改）· **已推送 origin/master**
 
 - **入口重组（用户逐条点单，全部是"别再搬回去"型契约；长期口径已写进 AGENTS §4「移动端入口分工」）**：

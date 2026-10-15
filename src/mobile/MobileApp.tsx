@@ -11,7 +11,7 @@ import type { LocalNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
-import { HomePage } from "./home/HomePage";
+import { HomePage, type MobileQuickNote } from "./home/HomePage";
 import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent, type QuickNoteSeed } from "./sharedContent";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { scheduleKernelPrewarm } from "./kernelPrewarm";
@@ -79,7 +79,9 @@ export function MobileApp() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [quickNotes, setQuickNotes] = useState<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>>([]);
+  // 用 HomePage 导出的 MobileQuickNote：这条链（仓储 → bridge → 列表 → 卡片）字段必须一路一致，
+  //  261015 加 createdAt 时就因为这里另写了一份内联类型而漏改（tsc 当场抓到）。
+  const [quickNotes, setQuickNotes] = useState<MobileQuickNote[]>([]);
 
   const refreshAll = useCallback(async () => {
     const [nodes, ns, qn] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes(), bridge.listQuickNotes()]);

@@ -27,6 +27,8 @@ import { KLinkEditor } from "../../features/editor/selectionToolbar/kernelUiAtom
 import { useEditSurface } from "./useEditSurface";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
 import { EmojiPanel } from "../ui/EmojiPanel";
+// 原生弹键盘兜底（261015）：WebView 里程序化 focus 不保证弹软键盘，点「⌨ 展开键盘」时用它补一次。
+import { showNativeKeyboard } from "../nativeKeyboard";
 
 type PanelMode = "insert" | "font" | "more" | "emoji" | null;
 
@@ -280,8 +282,21 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   };
 
   // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板 —— **不放回输入法**（hide 档），光标留住。
-  const dismissKeyboard = () => closePanel("hide");
-  const showKeyboard = () => { focusEditor(); };
+  // 261015 用户点单：**点 ⌨ 要连带展开区一切收起**（面板关 + 键盘放回来）。
+  //  原先这里走 `closePanel("hide")`（只收键盘、留住光标）—— 面板虽然关了，但它的占位要等 2.5s 兜底才释放，
+  //  且键盘不会回来 ⇒ 用户看到一块**空白**（实测：点后 0.3s/1.2s 都是 `--kb-offset:280px`、`--mb-app-h:562px`、
+  //  `inputmode:none`，直到 3.0s 才复位）。⇒ 改走 `closePanel("restore")`（与 × / 点正文同一条路：关面板 + 放回输入法）。
+  /**
+   * 展开键盘（261015 修：用户报「能收起不能展开」）。
+   * 根因：收键盘走的是 `suppressIme()` —— 它给正文宿主写 `inputmode="none"`（这是"留住光标"的关键），
+   * 展开时**没有摘掉**该属性 ⇒ 系统认定这个宿主不接受软键盘，`focus()` 也不会弹（实测两轮点击后 ih 仍 842、inputmode 仍 none）。
+   * 顺序必须是：**先 restoreIme() 摘属性，再聚焦**；再用原生插件兜一次（程序化 focus 在 WebView 里不保证弹，见 nativeKeyboard.ts）。
+   */
+  const showKeyboard = () => {
+    surface.restoreIme();
+    focusEditor();
+    window.setTimeout(showNativeKeyboard, 300);
+  };
 
   /** 内核日历卡 `currentDate` 形态 = YYYYMMDD 整数（HANDOFF §0(五) 实测）。 */
   const dateStamp = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
@@ -351,17 +366,25 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   };
 
   /**
-   * 「＋」面板的分组排布（用户 261012 定稿：**按功能类型分组、组序与组内序都按使用频率**）。
+   * 「＋」面板的插入项清单（用户 261015 亲自指定顺序与分组）。
    *
-   * 5 组 / **6 行**：图片与文件(1 行) · 文本块(2 行) · 媒体｜布局(1 行，一行两卡) · 小工具(1 行) · 关联(1 行)
-   * ⇒ 行数与改造前的平铺网格**完全相同**，不新增滚动。词汇借内核/语雀的既有分类（布局 / 小工具），不新造概念。
+   * **两组（8 + 10）**：① 拍照 图片 附件 音频 视频 表情 状态 日期；② 表格 引用 分割线 代码块 高亮块 分栏 折叠块 链接 文档引用 日历。
+   * **4 列**下：① 8 项 = 2 行**零空洞**；② 10 项 = 3 行（末行 2 项、2 个空位）。两组之间用更大的间距分隔。
    */
   const INSERT_GROUPS: ReadonlyArray<{ key: string; items: ReadonlyArray<DockItem> }> = [
-    { key: "file", items: [
-      { label: "图片", Icon: ImageIcon, run: () => onInsertImage?.() },
+    // ① 媒体与时间（用户 261015 定：拍照 · 图片 · 附件 · 音频 · 视频 · 表情 · 状态 · 日期 · 日历）
+    { key: "media", items: [
       { label: "拍照", Icon: Camera, run: () => onInsertCamera?.() },
+      { label: "图片", Icon: ImageIcon, run: () => onInsertImage?.() },
       { label: "附件", Icon: Paperclip, run: () => onInsertAttachment?.() },
+      { label: "音频", Icon: Music, run: () => onInsertAudio?.() },
+      { label: "视频", Icon: Video, run: () => onInsertVideo?.() },
+      // 表情：**在面板区内展开**（用户 261013：像输入法那样占满展开区、固定高度不跳），不再弹浮层。
+      { label: "表情", Icon: Smile, run: () => togglePanel("emoji") },
+      { label: "状态", Icon: Tag, run: () => runPanel("insertCard", "label") },
+      { label: "日期", Icon: CalendarDays, run: () => runPanel("insertCard", "dateCard", { date: Date.now() }, false) },
     ] },
+    // ② 剩下的（表格 · 引用 · 分割线 · 代码块 · 高亮块 · 分栏 · 折叠块 · 链接 · 文档引用）
     { key: "block", items: [
       { label: "表格", Icon: Table2, run: () => onInsertTable?.() },
       { label: "引用", Icon: Quote, run: () => runPanel("quote") },
@@ -369,36 +392,15 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       { label: "代码块", Icon: SquareCode, run: () => runPanel("insertCard", "codeblock") },
       // 高亮块：内核里是 `execCommand("alert", type)`（不是 insertCard），落盘为 <blockquote class="lake-alert lake-alert-tips">
       { label: "高亮块", Icon: Highlighter, run: () => runPanel("alert", "tips") },
-      { label: "状态", Icon: Tag, run: () => runPanel("insertCard", "label") },
-    ] },
-    { key: "media", items: [
-      { label: "音频", Icon: Music, run: () => onInsertAudio?.() },
-      { label: "视频", Icon: Video, run: () => onInsertVideo?.() },
-    ] },
-    { key: "layout", items: [
-      // 标签用「分栏」而不是「分栏卡片」：与「媒体」同处一行时每格只有 84px，4 个字会截断（桌面端仍叫分栏卡片）
+      // 标签用「分栏」而不是「分栏卡片」：窄格下 4 个字会被省略号截断（桌面端仍叫分栏卡片）
       { label: "分栏", Icon: Columns2, run: () => runPanel("columns", 2) },
       { label: "折叠块", Icon: FoldVertical, run: () => runPanel("collapse") },
-    ] },
-    { key: "widget", items: [
-      { label: "日期", Icon: CalendarDays, run: () => runPanel("insertCard", "dateCard", { date: Date.now() }, false) },
-      // 表情：**在面板区内展开**（用户 261013：像输入法那样占满展开区、固定高度不跳），不再弹浮层。
-      { label: "表情", Icon: Smile, run: () => togglePanel("emoji") },
-      { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
-    ] },
-    { key: "ref", items: [
       // 链接从「Aa」面板移到这里（用户 261012：链接融合到 + 号里）；点它在本面板内联展开链接编辑行
       { label: "链接", Icon: Link2, run: () => toggleLinkEditor() },
       { label: "文档引用", Icon: FileSymlink, run: () => runPanel("insertCard", "customBlock", { $name: "lake-note-ref", $htmlStr: "", noteId: "", title: "" }, true) },
+      // 日历从第一组挪到这里（用户 261015：「把日历放到第二组」）
+      { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
     ] },
-  ];
-  /** 分组 → 行（一行最多两卡；「媒体｜布局」那一行是唯一的双卡行）。 */
-  const INSERT_ROWS: ReadonlyArray<ReadonlyArray<ReadonlyArray<DockItem>>> = [
-    [INSERT_GROUPS[0].items],
-    [INSERT_GROUPS[1].items],
-    [INSERT_GROUPS[2].items, INSERT_GROUPS[3].items],
-    [INSERT_GROUPS[4].items],
-    [INSERT_GROUPS[5].items],
   ];
   // 「更多」面板：公式可用；5 项画图/绘图是**占位（置灰）**，待逐项解决移动端编辑（画布覆盖层 + 触摸手势）后放开。
   const moreItems: ReadonlyArray<DockItem> = [
@@ -412,7 +414,11 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     ...HISTORY_COMMANDS.map((c) => ({ label: c.label, Icon: COMMAND_ICONS[c.name] ?? Undo, run: () => runPanel(c.name) })),
   ];
   // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）
-  const onKbToggle = () => { if (panelMode) dismissKeyboard(); else if (keyboardOpen) dismissKeyboard(); else showKeyboard(); };
+  // ⌨：三种状态三条路（261015 定）——
+  //   ① 面板开着 ⇒ `closePanel("restore")`：**面板与展开区一起收、键盘放回来**（不留空白；与 × 同一条路）；
+  //   ② 无面板有键盘 ⇒ `dismissIme()`：只收键盘、**留住光标**（不走 closePanel —— 那会把 closing 置真却等不到"键盘回来"）；
+  //   ③ 无面板无键盘 ⇒ `showKeyboard()`：先 restoreIme 摘抑制再聚焦（+ 原生兜底）。
+  const onKbToggle = () => { if (panelMode) closePanel("restore"); else if (keyboardOpen) dismissIme(); else showKeyboard(); };
   const kbLabel = panelMode ? "收起面板" : (keyboardOpen ? "收起键盘" : "展开键盘");
 
   // --kb-offset：无面板 = 键盘上移量（adjustResize 恒 0；edge-to-edge = 键盘高度）；
@@ -439,7 +445,7 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     const Icon = COMMAND_ICONS[c.name];
     return (
       <button key={c.name} className={"med-f-btn" + (isOn(c.name) ? " med-f-on" : "")} onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>
-        {Icon ? <Icon size={17} /> : c.label}
+        {Icon ? <Icon size={20} /> : c.label}
       </button>
     );
   };
@@ -496,26 +502,23 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       {/* 展开面板：占住键盘区（键盘不显示），工具栏停在它上沿；关闭过渡期（closing）继续挂载，
           让键盘上升时那一带仍有面板背景兜着。内容在 .med-panel-inner 里做滑入/滑出。 */}
       {(panelMode || closing) && (
-      <div className="med-panel" data-open={panelMode ? "1" : "0"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
+      <div className="med-panel" data-open={panelMode ? "1" : "0"} data-kind={renderedPanel ?? "none"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
         <div className="med-panel-inner">
           {renderedPanel === "emoji" ? (
             /* 表情：**占满面板区**（输入法式；.med-panel 已是固定高）——不弹浮层、不随内容跳高度。 */
             <EmojiPanel bucket="input" fill onPick={insertEmoji} onBack={() => togglePanel("insert")} />
           ) : renderedPanel === "insert" || renderedPanel === "more" ? (
             <>
+              {/* 「＋」/「更多」共用一套**方块网格**（261015 用户点单：照图1 的方块样式）。
+                  「＋」= **两组各 9 项**（用户指定顺序），每组 3 列 3 行 ⇒ 组内零空洞；两组之间由容器间距分隔。 */}
               {renderedPanel === "insert" ? (
-                /* 「＋」面板：一卡一组（用户 261012 定稿的分组排布；「媒体｜布局」是唯一的双卡行） */
                 <div className="med-ins-groups">
-                  {INSERT_ROWS.map((row, ri) => (
-                    <div className={"med-ins-row" + (row.length > 1 ? " med-ins-row--split" : "")} key={ri}>
-                      {row.map((items, ci) => (
-                        <div className="med-ins-card" key={ci}>{items.map(insBtn)}</div>
-                      ))}
-                    </div>
+                  {INSERT_GROUPS.map((g) => (
+                    <div className="med-ins-grid med-ins-grid--tile" key={g.key}>{g.items.map(insBtn)}</div>
                   ))}
                 </div>
               ) : (
-                <div className="med-ins-grid">{moreItems.map(insBtn)}</div>
+                <div className="med-ins-grid med-ins-grid--tile">{moreItems.map(insBtn)}</div>
               )}
               {/* 链接编辑：**在本面板内联展开**（用户 261012：链接融合到 + 号里）。
                   复用内核 .ne-link-editor 的 UI + 共享判定 linkEditor.ts（与桌面浮栏同一份）。 */}
@@ -542,7 +545,7 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
                 <div className="med-f-card" data-count={STYLE_BLOCKS.length}>
                   {STYLE_BLOCKS.map((b) => (
                     <button key={b.value} className="med-f-btn" onClick={() => runPanel("style", b.value)} aria-label={b.label} title={b.label}>
-                      {b.value === "p" ? <Pilcrow size={17} /> : b.label}
+                      {b.value === "p" ? <Pilcrow size={20} /> : b.label}
                     </button>
                   ))}
                 </div>
@@ -554,15 +557,15 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
                 <div className="med-f-card" data-count={inlineMarks.length}>{inlineMarks.map(cmdBtn)}</div>
               </div>
 
-              {/* 列表 ｜ 对齐（用户 261012：对齐和列表放一行）
+              {/* 对齐 ｜ 列表（用户 261012：两者放一行；**261015 用户点单：左右对调** ⇒ 对齐在左、列表在右）
                   注：「引用 / 分割线」已删（+ 面板已有）、「撤销 / 重做」已移到「更多」面板 */}
               <div className="med-f-row">
-                <div className="med-f-card" data-count={listItems.length}>{listItems.map(cmdBtn)}</div>
                 <div className="med-f-card" data-count={ALIGN_ITEMS.length}>
                   {ALIGN_ITEMS.map(({ value, label, Icon }) => (
-                    <button key={value} className={"med-f-btn" + (alignActive(value) ? " med-f-on" : "")} onClick={() => runPanel("alignment", value)} aria-label={label} title={label}><Icon size={17} /></button>
+                    <button key={value} className={"med-f-btn" + (alignActive(value) ? " med-f-on" : "")} onClick={() => runPanel("alignment", value)} aria-label={label} title={label}><Icon size={20} /></button>
                   ))}
                 </div>
+                <div className="med-f-card" data-count={listItems.length}>{listItems.map(cmdBtn)}</div>
               </div>
 
               {/* 字色：一排 A（默认 + 常用色）—— **只属于文字色**（261014：与下面背景色板互不影响；

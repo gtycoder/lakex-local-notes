@@ -23,6 +23,10 @@ import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
 import { useHorizontalSwipe } from "../useHorizontalSwipe";
+// 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
+import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
+//  本机读写单独一层（core 禁 DOM）：读/写偏好走 lib/quickNoteSortPref（桌面用同一份）
+import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPref";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 
@@ -31,6 +35,8 @@ const QuickNoteComposer = lazy(() => import("./QuickNoteComposer").then((m) => (
 
 export interface MobileQuickNote {
   id: string;
+  /** 创建时间（ISO）：261015 用户点单「加创建时间排序」时一并带上来的。 */
+  createdAt: string;
   previewText: string;
   imageCount: number;
   updatedAt: string;
@@ -42,7 +48,6 @@ export interface MobileQuickNote {
 }
 
 export type LibraryView = "shelf" | "list";
-type QuickSort = "recent" | "oldest";
 
 export interface HomePageProps {
   tab: "quick" | "library";
@@ -111,7 +116,7 @@ export function HomePage(props: HomePageProps) {
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [quickSort, setQuickSort] = useState<QuickSort>("recent");
+  const [quickSort, setQuickSort] = useState<QuickNoteSort>(() => readQuickNoteSort());   // 本机持久化偏好（L3）
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
   const [docPickOpen, setDocPickOpen] = useState(false);
@@ -146,13 +151,8 @@ export function HomePage(props: HomePageProps) {
     return [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 6);
   }, [notes]);
 
-  const sortedQuickNotes = useMemo(() => {
-    const arr = [...quickNotes];
-    arr.sort((a, b) => quickSort === "recent"
-      ? new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      : new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
-    return arr;
-  }, [quickNotes, quickSort]);
+  /** 排序只影响本端展示顺序（不写库、不进 manifest）；比较器在 core/quickNoteSort。 */
+  const sortedQuickNotes = useMemo(() => sortQuickNotes(quickNotes, quickSort), [quickNotes, quickSort]);
 
   const openEdit = async (id: string): Promise<void> => {
     try {
@@ -286,15 +286,16 @@ export function HomePage(props: HomePageProps) {
   };
 
   // 排序（小记专用；知识库顺序 = 共享 sort_order = 桌面端顺序，不做本地排序）
-  const filterItems = useMemo<MobileSheetItem[]>(() => {
-    return [
-      { id: "recent", label: "最近更新", note: quickSort === "recent" ? "当前" : undefined },
-      { id: "oldest", label: "最早更新", note: quickSort === "oldest" ? "当前" : undefined },
-    ];
-  }, [quickSort]);
+  //  261015 用户点单：**加创建时间两档** ⇒ 最近更新 / 最早更新 / 最新创建 / 最早创建。
+  const filterItems = useMemo<MobileSheetItem[]>(
+    () => QUICK_NOTE_SORT_OPTIONS.map((o) => ({ id: o.id, label: o.label, note: quickSort === o.id ? "当前" : undefined })),
+    [quickSort],
+  );
   const onFilterSelect = (item: MobileSheetItem): void => {
     setFilterOpen(false);
-    setQuickSort(item.id as QuickSort);
+    const next = item.id as QuickNoteSort;
+    setQuickSort(next);
+    writeQuickNoteSort(next);          // 本机持久化（L3；见 docs/STORAGE-LAYERS.md §5）
   };
 
   /** 笔记本编辑三项（用户 261014：入口 = 知识库页长按；抽屉里那个 ⋮ 已删）。 */
@@ -367,7 +368,14 @@ export function HomePage(props: HomePageProps) {
             ) : (
               <div className="mobile-quick-cards">
                 {sortedQuickNotes.map((n) => (
-                  <QuickNoteCard key={n.id} note={n} onEdit={() => { void openEdit(n.id); }} onMore={() => setQuickMenuFor(n.id)} />
+                  <QuickNoteCard
+                    key={n.id}
+                    note={n}
+                    // 卡片日期跟随当前排序口径：按创建时间排序时显示创建时间（否则看起来"没排序"）
+                    dateValue={quickNoteSortTime(n, quickSort)}
+                    onEdit={() => { void openEdit(n.id); }}
+                    onMore={() => setQuickMenuFor(n.id)}
+                  />
                 ))}
               </div>
             )}
@@ -474,7 +482,7 @@ export function HomePage(props: HomePageProps) {
         }}
       />
 
-      {/* 设置图标：与目录树 / 新建知识库共用同一个表情面板（EmojiPanel 是面板的唯一实现） */}
+      {/* 节点选择器与目录树 / 新建知识库共用；正文输入表情独立。 */}
       {iconNb && (
         <div className="mb-scrim" data-prevent-swipe onClick={() => setIconNb(null)}>
           <div className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
@@ -512,7 +520,7 @@ export function HomePage(props: HomePageProps) {
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
-function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit: () => void; onMore: () => void }) {
+function QuickNoteCard({ note, dateValue, onEdit, onMore }: { note: MobileQuickNote; dateValue: string; onEdit: () => void; onMore: () => void }) {
   /** 预览用资源（canonical URL + token）：图片卡/附件卡都靠它渲染。 */
   const previewAssets = (note.images ?? []).map((image) => ({
     ...image,
@@ -547,7 +555,7 @@ function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit
           <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
         )}
         <div className="qn-card__meta">
-          <span className="qn-card__date">{fmtDate(note.updatedAt)}</span>
+          <span className="qn-card__date">{fmtDate(dateValue)}</span>
           <button className="qn-card__more mb-tap" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
         </div>
       </div>

@@ -13,9 +13,22 @@
  */
 let shell = 0;
 
-/** 记一次视口高，返回当前的稳定外壳高（只增不减；方向变化时由 resetShellHeight 重置）。 */
-export function noteViewport(innerHeight: number): number {
-  if (innerHeight > shell) shell = innerHeight;
+/**
+ * 记一次视口高，返回当前的稳定外壳高（只增不减；方向变化时由 resetShellHeight 重置）。
+ *
+ * ⚠️ 261015：**只在两个通道一致时才抬高基准**（`innerHeight` 与 `visualViewport.height`）。
+ * 实测（用户报「键盘只能收不能展开」的根因）：IME 过渡里 `window.innerHeight` 会**单独**给出异常值，
+ * 本机把基准记成了 **866**（真实稳定值 842）；而"单调最大值"一旦记进去就再也降不下来
+ * ⇒ `keyboardOpen = shellHeight() - innerHeight > 8` 永久为真 ⇒ ⌨ 按钮永远走"收键盘"分支、弹不出来。
+ * 两个通道在 adjustResize 下恒等、在 edge-to-edge 下只差键盘高，用它做一致性校验正合适（都不涉及新机制）。
+ *
+ * `visualHeight` 省略时按同值处理（单测与老调用点零改动即保持原语义）。
+ */
+export function noteViewport(innerHeight: number, visualHeight: number = innerHeight): number {
+  if (!(innerHeight > 0)) return shell;
+  const trustworthy = Math.abs(innerHeight - visualHeight) <= 8;
+  if (shell === 0) { if (trustworthy) shell = innerHeight; }
+  else if (trustworthy && innerHeight > shell) shell = innerHeight;
   return shell;
 }
 

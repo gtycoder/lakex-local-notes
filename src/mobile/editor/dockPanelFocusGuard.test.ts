@@ -52,6 +52,23 @@ describe("编辑面：单一来源与不变量", () => {
     expect(SURFACE).not.toContain("blurActiveEditable");
   });
 
+  it("「展开键盘」必须先放开输入法抑制，且带原生兜底（261015 用户报「能收不能展」）", () => {
+    const show = handlerBody(DOCK, "showKeyboard");
+    // 断言顺序而不是用正则：模板字符串里写正则会吃掉反斜杠（本轮踩到，改成 indexOf 比较）
+    const atRestore = show.indexOf("restoreIme()");
+    const atFocus = show.indexOf("focusEditor()");
+    expect(atRestore, "必须调 restoreIme()").toBeGreaterThanOrEqual(0);
+    expect(atFocus, "必须调 focusEditor()").toBeGreaterThanOrEqual(0);
+    expect(atRestore, "restoreIme 必须在 focusEditor 之前（先摘 inputmode=none）").toBeLessThan(atFocus);
+    expect(show, "原生兜底：WebView 程序化 focus 不保证弹").toContain("showNativeKeyboard");
+    const toggle = handlerBody(DOCK, "onKbToggle");
+    expect(toggle, "面板开着 ⇒ 收面板**并放回键盘**（restore；用 hide 会留 2.5s 空白 —— 261015 用户报的空白）")
+      .toContain('closePanel("restore")');
+    expect(DOCK, "不该再有只收键盘不还键盘的 ⌨ 路径").not.toContain("dismissKeyboard");
+    expect(toggle, "无面板有键盘 ⇒ 只收键盘（留光标）").toContain("dismissIme()");
+    expect(toggle, "无面板无键盘 ⇒ 展开").toContain("showKeyboard()");
+  });
+
   it("focusin 分支只写 inputmode、不 blur、不再调抑制（否则递归）", () => {
     expect(focusIn).toContain('setAttribute("inputmode", "none")');
     expect(focusIn).not.toContain("blur");
