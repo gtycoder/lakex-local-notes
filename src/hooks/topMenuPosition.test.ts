@@ -8,6 +8,14 @@ function element(rect: Rect) {
 }
 
 describe("top menu positioning", () => {
+  it("禁止翻转时保持整行下方，底部空间不足也不盖住行名", () => {
+    const row = { top: 710, bottom: 740, left: 0, right: 220 };
+    const position = placePopoverPosition(row, { width: 1000, height: 800 }, { width: 418, height: 392 }, 8, { margin: 8, allowFlip: false });
+    expect(position).toEqual({ top: 748, left: 8 });
+    expect(position.top).toBeGreaterThan(row.bottom);
+    // 默认菜单仍沿用原来的向上翻转行为。
+    expect(placePopoverPosition(row, { width: 1000, height: 800 }, { width: 418, height: 392 }, 8).top).toBe(310);
+  });
   it("prefers a visible candidate when the shared ref points at a hidden keep-alive instance", () => {
     const hidden = element({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 });
     const visible = element({ top: 5, bottom: 33, left: 196, right: 226, width: 30, height: 28 });

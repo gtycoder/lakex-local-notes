@@ -254,7 +254,7 @@ components:
 - **Items:** 复用菜单项规格；**整行**高亮（`accent-tint` + `accent-text` + 600），勾选位在**右侧**，标签左对齐。
 
 ### Rows / Menu Items
-- **Shape:** 高 27px（笔记本行 29px）；行圆角 8px、菜单项圆角 6px。
+- **Shape:** 通用行/菜单高27px；**桌面目录行**用14px标题（`--lake-font-size-body`，与内核原生大纲同档）、上下2px内距、左右8px，**实测普通行27px / 笔记本行29px**（笔记本行有独立 `min-height` 下限）。261015 试调过 15px 与 14.5px 均偏大，已回滚到 14px；**目录字号不要再单独抬档**。行圆角8px、菜单项圆角6px。
 - **States:** hover = `surface-hover`；active = `surface-press`；selected = `accent-tint` + `accent-text` + 600；disabled = `.45` 透明。
 
 ### Switch / Checkbox / Radio

@@ -204,6 +204,12 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 ## Components
 
+**节点图标（目录 / 知识库）**：`ui/NodeIconPicker.tsx`与`ui/NodeIconGlyph.tsx`是移动端独立实现，样式只在`ui/nodeIcon.css`。
+40枚lucide线性图标配八档浅渐变圆角底块；图标与emoji共用1.15em居中槽。颜色/字号自行定义在移动端`theme/tokens.css`，不import桌面CSS。
+节点选择器的表情页与文内输入`EmojiPanel`**彻底分离**，只共享资源表与最近记录逻辑，最近使用仍只写`icon`桶。
+类型页初始按`nodeIconPickerMode`：笔记本/分组→图标，文档/表格/数据表→表情。顶部「移除」为图标+文字，44触达；选资源后保持打开，关闭/遮罩/滑动沿用宿主Sheet。
+网格按可用宽度安排列数，每格至少44；新建知识库里的窄内容区可换行与滚动，末行必须完整可达。
+
 原语库 = `src/mobile/kit.css`（`mb-*`）+ `src/mobile/floating.css`。清单：
 
 `mb-btn`（--primary/--secondary/--ghost/--danger、--lg/--sm/--block）· `mb-iconbtn`（--compact）·
@@ -214,9 +220,8 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 **选择器 = `PickerSheet`（`mb-select--trigger` 触发器 + `mb-sheet--picker` 底部列表、选中项打勾）** ·
 **设置页骨架** `mb-set-group/title/items/section/item(--field)/name/desc/note/ctl/error/block/stats` ·
 **空态 = `mb-empty`（+ `--inset` 变体；261013 A 批把 `.mobile-empty` / `.mb-set-empty` / `.mb-sheet__empty` 三套收敛成一件）** ·
-**表情面板 = `mb-emoji-panel`(`--fill`)/`cats`/`cat`(`--action`)/`body`/`grid`/`cell`/`empty`（微信样式：顶部分类条 + 浅灰底大格子；
-分类条末尾**动作键**`mb-emoji-cat--action` 语义随入口：**输入态（小记/文档 dock）= 返回**（退出表情选择、回「＋」面板）、
-**选图标态（知识库/文档图标）= 清除图标**；「最近」首格那块清除格已于 261014 撤掉 —— 同一动作只留一个入口）** ·
+**文内输入表情 = `mb-emoji-panel`(`--fill`)/`cats`/`cat`(`--action`)/`body`/`grid`/`cell`/`empty`（微信样式：顶部分类条 + 浅灰底大格子；
+分类条末尾动作键是「返回」，退出表情选择、回「＋」面板。目录/知识库自定义图标不再使用此组件，见独立节点选择器）** ·
 **首页文字 tab = `.mobile-htab`（选中加粗 + `--lake-text-1`）** ·
 **冷启动骨架 = `.mb-skel`（--icon/--tab/--group/--row/--baritem；结构与首页同构、尺寸同源，填充不跳动；
 `prefers-reduced-motion` 下关掉呼吸）** ·

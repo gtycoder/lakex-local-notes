@@ -10,12 +10,12 @@ export interface UsePopoverPositionOptions {
   /** 固定宽度：首帧就要写进 style，否则量到的是收缩后的宽度。 */
   width?: number;
   align?: "start" | "end";
-  /** 默认在下方；right = 作为点击子菜单贴锚点右侧展开。 */
-  side?: "below" | "right";
+  /** below 可翻转；right 贴右展开；below-fixed 固定在整行下方并限制可见高度。 */
+  side?: "below" | "right" | "below-fixed";
   gap?: number;
   margin?: number;
   /**
-   * 坐标锚点（at）时是否允许「下方放不下就翻到锚点上方」。默认 true（右键菜单等要「至少完整可见」）。
+   * 坐标锚点（at）时是否允许翻到锚点上方。默认 true（元素固定下方用 below-fixed）。
    * 贴选区的 AI 弹窗必须传 false：翻上去会盖住选区（用户 261004 明确禁止）。
    */
   allowFlip?: boolean;
@@ -60,10 +60,12 @@ export function usePopoverPosition({
       : anchor
         ? side === "right"
           ? placePopoverBeside(anchor.getBoundingClientRect(), viewport, size, gap, { margin })
-          : placePopoverPosition(anchor.getBoundingClientRect(), viewport, size, gap, { align, margin })
+          : placePopoverPosition(anchor.getBoundingClientRect(), viewport, size, gap, { align, margin, allowFlip: side !== "below-fixed" })
         : null;
     if (!next) return;
-    setStyle({ left: next.left, top: next.top, width });
+    setStyle({ left: next.left, top: next.top, width,
+      ...(anchor && side === "below-fixed" ? { maxHeight: Math.max(0, viewport.height - next.top - margin) } : {}),
+    });
   }, [anchor, atX, atY, align, side, gap, margin, width, allowFlip]);
 
   useLayoutEffect(() => {
@@ -74,11 +76,13 @@ export function usePopoverPosition({
     const observer = el ? new ResizeObserver(() => place()) : null;
     if (el && observer) observer.observe(el);
     window.addEventListener("resize", place);
+    if (anchor && side === "below-fixed") window.addEventListener("scroll", place, true);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", place);
+      if (anchor && side === "below-fixed") window.removeEventListener("scroll", place, true);
     };
-  }, [open, place]);
+  }, [open, place, anchor, side]);
 
   const surfaceRef = useCallback((el: HTMLElement | null) => { elRef.current = el; }, []);
   const provisional: CSSProperties | null = open ? { left: -9999, top: -9999, width, visibility: "hidden" } : null;

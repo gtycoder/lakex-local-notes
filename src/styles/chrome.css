@@ -545,7 +545,8 @@
   /* 260923：标题色 text-1（近黑）→ text-2（中灰）——与内核原生大纲的普通项同色，
      近黑在 500 字重下显得又重又密，中灰更轻更透气（用户对比原生大纲后要求）。 */
   color: var(--lake-text-2);
-  /* 260923：13px → 14px（--lake-font-size-body），对齐内核原生大纲项的字面（14px/line-height 22px）。 */
+  /* 260923：13px → 14px（--lake-font-size-body），对齐内核原生大纲项的字面（14px/line-height 22px）。
+     261015 试调过 15 / 14.5 两档（用户均判不合适）⇒ 回到 14px。 */
   font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-medium);
   white-space: nowrap;

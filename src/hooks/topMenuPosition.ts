@@ -41,6 +41,8 @@ export interface PopoverPlacementOptions {
   align?: "start" | "end";
   /** 视口四边至少留出的间距（默认 = gap）。 */
   margin?: number;
+  /** false = 保持在锚点下方；调用方需限制面板高度并允许内容滚动。 */
+  allowFlip?: boolean;
 }
 
 /**
@@ -69,7 +71,9 @@ export function placePopoverPosition(
   const maxLeft = Math.max(margin, viewport.width - popover.width - margin);
   const rawLeft = options.align === "end" ? anchor.right - popover.width : anchor.left;
   return {
-    top: Math.round(placeVertical(anchor.top, anchor.bottom, viewport.height, popover.height, gap, margin)),
+    top: Math.round(options.allowFlip === false
+      ? Math.max(margin, anchor.bottom + gap)
+      : placeVertical(anchor.top, anchor.bottom, viewport.height, popover.height, gap, margin)),
     left: Math.round(Math.max(margin, Math.min(rawLeft, maxLeft))),
   };
 }
