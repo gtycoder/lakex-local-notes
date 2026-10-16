@@ -378,8 +378,20 @@ preload 暴露通道: 116       主进程注册通道: 116
 
 **定性**：传输层不同（Node SDK vs Capacitor HTTP），**分成两份是正确的**。
 需确认的是**协议层**（manifest 布局、ETag/条件写、错误分类、并发上限 8）是否也各写了一套。
-**建议**：只做一次**协议对拍**（把两端的 key 生成、并发、重试、错误映射列成表逐项比对），
-**不合并实现**。产出 = `docs/` 下一张对照表（或并入 `SYNC-PROTOCOL.md`）。
+**✅ 已落地（261016）**：对拍表写进 [docs/SYNC-PROTOCOL.md](SYNC-PROTOCOL.md) **§7 S3 传输层：两端对拍**（端口面 + 16 个协议维度逐项判定 + 漂移清单）。
+**不合并实现**（传输栈本就不同），只守协议面等价。对拍结论：
+
+- **硬骨头两端一致** ✅：超时（30s/120s）、重试（3）、连通性检查方式（ListObjectsV2 而非 HeadBucket）、gzip 读（按魔数）、
+  `maxBytes` 语义（解压后判）、prefix 归属、并发上限 8（在 core，单一来源）。
+- **可选端口方法覆盖面不对称不是缺陷**：core 里**没有任何一处**调用 `listObjects`/`deleteMany`/`getObjectToFile`，
+  调用方各在两端自己的编排层（移动 `bridge.ts` / 桌面 `s3Maintenance.ts`）。
+- **真实漂移 4 处（P1）+ 2 处待决策**：D1 `assertSafeKey` 只在桌面（移动端非 ASCII key 可能让 ListObjectsV2 编码不一致 ⇒ GC 漏看）、
+  D4 404 判定两端两套（桌面 `isNoSuchKey` 含 `NotFound`，而桌面注释明确记录七牛/AWS 会返回 `NotFound`）、
+  D6 移动端**两套 client 工厂**且设置不同（测连通 vs 真同步口径不一致）、
+  D2 `forcePathStyle` 移动端**写死 false**（自建 MinIO 用户在移动端用不了 —— 真实功能缺口，不只是观感）；
+  另 D5（移动端 gzip PUT 不带 `Content-Encoding`，当前读侧按魔数兼容 ⇒ 需真云验证再动）、D3/D7 记录。
+- **建议顺序**：D6 先让移动端内部自洽 → D1/D4 共用 core 判据 → D2+D3 一起定产品语义 → D5 走真云。
+  （**本项只产出对照表，未改任何实现**——漂移修复属后续批次。）
 
 ### C2-5 提示/Toast 能力：4 套实现（已定「暂缓」，本轮不重开）
 

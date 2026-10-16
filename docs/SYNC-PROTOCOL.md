@@ -161,6 +161,69 @@ interface ManifestFolder {
 
 ---
 
-## 7. 记录
+## 7. S3 传输层：两端对拍（261016，代码 review 产出）
+
+> 背景：`S3Store` 是 core 的**端口**（`src/core/syncEngineTypes.ts`）。两端各自实现传输层——
+> 桌面 `electron/s3Store.ts`（`ObjectStore`，Node SDK + NodeHttpHandler）经 `electron/syncAdapters.ts` 适配成端口；
+> 移动端 `src/mobile/s3Store.ts` 直接实现端口（AWS SDK + `CapacitorHttpHandler` → Android OkHttp，绕 WebView CORS）。
+> **分成两份实现是正确的**（传输栈不同）；要守的是**协议面等价**。本节 = 那张对拍表 + 已发现的漂移。
+> 判据 = 逐项读码对比（见 `docs/CODE-REVIEW-261015.md` C2-4）。**本节的 P1 项尚未修**，P2 项需真云验证或产品决策。
+
+### 7.1 端口面（core 契约）与两端实现
+
+| 端口方法 | 桌面（adapter → ObjectStore） | 移动端（Capacitor） | 判定 |
+| --- | --- | --- | --- |
+| `getObject` | ✅ `getOptional`（adapter 剥 prefix） | ✅ 直连（端口收含 prefix 的完整 key） | 等价 |
+| `putObject` | ✅ `put`（adapter 剥 prefix） | ✅ | ⚠️ 见 D5 |
+| `putObjectStream?` | ✅ Node Readable + 显式 Content-Length（避开 aws-chunked） | ✅ 原生 `NativeAssetSync.putFile`（字节不过桥） | 各自最优 ✓ |
+| `getObjectToFile?` | ❌ 未实现（走 getObject 字节路径，由 core 校验） | ✅ 原生流式写 + size/sha256 校验 | 可选钩子 ✓ |
+| `listObjects?` | ❌ 未实现（桌面 GC 走 `s3Maintenance` + ObjectStore 直连） | ✅ | ✓ 无 core 调用方 |
+| `deleteMany?` | ❌ 未实现（同上） | ✅ | ✓ 无 core 调用方 |
+
+**可选方法覆盖面不对称不是缺陷**：core 里**没有任何一处**调用这四个可选方法；调用方各在两端自己的编排层
+（移动 `mobile/bridge.ts` 的深度清理；桌面 `electron/s3Maintenance.ts`）。
+
+### 7.2 协议面逐项对拍
+
+| 维度 | 桌面 | 移动端 | 判定 |
+| --- | --- | --- | --- |
+| 超时 | 30s 元数据 / 120s Get·Put（AbortController 中断） | 30s / 120s（`connectTimeout` + `readTimeout`，注释显式对齐桌面常数） | ✅ 一致 |
+| 重试 | `maxAttempts: 3`（显式） | 未设 ⇒ SDK 默认 3 | ✅ 等价（移动端是隐式默认） |
+| 连通性检查 | `ListObjectsV2`（不用 HeadBucket：七牛对存在的桶也 404） | 同 | ✅ 一致 |
+| gzip 读 | 端口内按**魔数** gunzip；`Content-Encoding` 自动解压与原始字节两种响应都兼容 | 同（`DecompressionStream`） | ✅ 一致 |
+| gzip 写 | 压缩 **+ `Content-Encoding: gzip`** | 压缩但**不写该 header** | ⚠️ **D5** |
+| `maxBytes` 语义 | 解压**后**判定（防解压炸弹） | 解压后判定 | ✅ 一致 |
+| prefix 归属 | adapter 剥 prefix（ObjectStore 内部再加） | 端口收完整 key | ✅ 契约一致 |
+| 并发上限 8 | 在 core（`runAssetPool` / `ASSET_TRANSFER_CONCURRENCY`） | 同 | ✅ 单一来源 |
+| 404 判定 | `isNoSuchKey()`：`NoSuchKey` / `NotFound` / message 含 404 | 只判 `$metadata.httpStatusCode === 404` 或 `name === NoSuchKey` | ⚠️ **D4** |
+| key 安全校验 | `assertSafeKey`（get/put/putStream/delete/deleteMany） | **无** | ⚠️ **D1** |
+| endpoint 规范化 | `normalizeEndpoint()`（补 https、去重斜杠） | **无**（原样交 SDK） | ⚠️ **D3** |
+| 配置校验 | `validateS3Settings()`（非空 + 强制 https，localhost 例外） | 只查非空凭证（`assertS3Credentials`） | ⚠️ **D3** |
+| `forcePathStyle` | 取设置（设置页有开关：「自建 MinIO 等需要开启」） | **硬编码 false**；保存时也写死 false | ⚠️ **D2（功能缺口）** |
+| 响应 checksum 绕行 | 未设 `responseChecksumValidation` | `s3Store` 设 `WHEN_REQUIRED`（七牛只回 content-md5 的绕行）；`bridge.createS3Client` **未设** | ⚠️ **D6** |
+| region 缺省 | `region \|\| "cn-east-1"` | 原样（空则由 SDK 决定） | ⚠️ 轻微 D7 |
+
+### 7.3 已发现的漂移与建议（**都还没修**）
+
+| # | 漂移 | 风险 | 建议 | 优先级 |
+| --- | --- | --- | --- | --- |
+| **D1** | `assertSafeKey` 只在桌面执行。该判据的注释写明目的是「防非 ASCII 键导致 ListObjectsV2 编码不一致（fail fast）」 | 移动端若出现非 ASCII key，`listObjects` 可能与写入侧编码不一致 ⇒ GC 看不到对象（漏删/误判） | 移动端口在 get/put/list/deleteMany 前调 core 的 `assertSafeKey`（纯函数、core 已导出） | **P1** |
+| **D4** | 404 判定两端两套：桌面 `isNoSuchKey`（含 `NotFound`），移动端只认 404 状态码 / `NoSuchKey` | 桌面注释**明确记录**"部分操作（AWS/七牛 Kodo）返回 NotFound" ⇒ 移动端可能把"对象缺失"当错误抛出（首次同步判定失败） | 移动端改用 core 的 `isNoSuchKey`（纯函数） | **P1** |
+| **D6** | 移动端有**两套** client 工厂且设置不同：`bridge.createS3Client`（用 `cfg.forcePathStyle`、**无** checksum 绕行）只服务「测连通」；`mobile/s3Store`（硬编码 false、**有**绕行）服务全部同步 | 可能出现「测连通报 Checksum mismatch，真同步却正常」这类难查的不一致；`forcePathStyle` 也会两边不同 | 合并为**一个** client 工厂（移动端内部先自洽，再谈与桌面对齐） | **P1** |
+| **D2** | `forcePathStyle` 移动端写死 false（`s3Store` 与 `SettingsDrawer` 保存路径都写死） | ① 自建 MinIO（需 path-style）用户在移动端**无法使用**；② 与桌面设置不同步，跨设备行为不一致 | 给 `SyncConfig` 加 `forcePathStyle` 字段并透传到 `createCapacitorS3Store`；`SettingsDrawer` 保存时保留用户设置。**注意与 D3 联动**：若同时补 https 强制，会拒掉 http 的 MinIO 内网地址 ⇒ 两者要一起定 | **P2** |
+| **D5** | 移动端 gzip PUT **不带** `Content-Encoding: gzip`（桌面带） | 读侧按魔数识别 ⇒ **当前兼容**；但两端的对象元数据不同（控制台/第三方工具看移动端写的 manifest 是"未知二进制"） | 移动端 gzip 时也设 header。**这是线上写行为的变化 ⇒ 必须先在真云（Tier B）验一次读回路径**，不能凭静态推断改 | **P2** |
+| **D3** | `normalizeEndpoint` / `validateS3Settings` 只在桌面；移动端把用户输入原样交给 SDK | 少了「强制 https（防签名重放）」这一安全项；误写 endpoint 时两端表现不同 | 与 D2 一起决策（https 强制 vs 内网 http MinIO）。**不建议单独补**：会与 D2 冲突 | 记录 |
+| **D7** | region 缺省不同（桌面 `cn-east-1`，移动端空） | 用户没填 region 时行为可能不同 | 移动端也 `cfg.region \|\| "cn-east-1"` | 记录 |
+
+### 7.4 结论
+
+1. **协议面的"硬骨头"两端是一致的**：超时、重试、连通性检查方式、gzip 读、maxBytes 语义、prefix 归属、并发上限 —— 这些都对上了。
+2. 真实缺口集中在**桌面侧那套防御性/规范化工具在移动端缺失**（D1/D3/D4）：core 里都有纯函数，搬过去成本很低。
+3. **D2（forcePathStyle）是一处真实功能缺口**，不是观感问题：MinIO 用户在移动端用不了，且移动端内部还自相矛盾（D6）。
+4. 建议顺序：**先 D6 让移动端内部自洽 → 再 D1/D4（共用 core 判据）→ 最后 D2+D3 一起定产品语义 → D5 走真云验证**。
+
+---
+
+## 8. 记录
 
 本文件新增于 2026-08-21（V5 Phase 0 收尾）；与代码基线 `hardening/sync-correctness` @ `19dcd5d` 一致。

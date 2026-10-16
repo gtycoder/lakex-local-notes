@@ -16,6 +16,30 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(七) · C2-4 S3 传输层两端对拍（**只出对照表，未改实现**）
+
+- **产出**：`docs/SYNC-PROTOCOL.md` 新增 **§7 S3 传输层：两端对拍**（原「记录」顺延为 §8）——
+  端口面表 + **16 个协议维度**逐项判定 + 漂移清单 + 建议顺序。
+- **对拍对象（这是关键澄清）**：不是直接比 `electron/s3Store.ts` 与 `src/mobile/s3Store.ts`。
+  桌面是 `ObjectStore`（Node SDK）经 `electron/syncAdapters.ts` **适配**成 core 的 `S3Store` 端口；
+  移动端**直接实现**同一个端口 ⇒ 要守的是**端口协议面等价**，不是实现相同。
+- **两端一致的部分（硬骨头都对上了）** ✅：超时 30s/120s（移动端注释显式对齐桌面常数）、重试 3、
+  连通性检查用 ListObjectsV2 而非 HeadBucket（两岸注释都写了七牛理由）、gzip 读按魔数、`maxBytes` 解压后判定、
+  prefix 归属（桌面 adapter 剥、移动端收完整 key）、并发上限 8（在 core，单一来源）。
+- **可选端口方法不对称 ≠ 缺陷**：`listObjects`/`deleteMany`/`getObjectToFile` 桌面适配层**都没实现**，
+  但——**core 里没有任何一处调用它们**；调用方各在两端自己的编排层（移动 `bridge.ts` / 桌面 `s3Maintenance.ts`）。已实证。
+- **真实漂移（P1，低风险可立即修）**：
+  · **D1** `assertSafeKey` 只在桌面执行（其注释写明目的是「防非 ASCII 键导致 ListObjectsV2 编码不一致」）⇒ 移动端缺这道 fail fast；
+  · **D4** 404 判定两端两套：桌面 `isNoSuchKey`（含 `NotFound`；注释明确记录"部分操作/七牛会返回 NotFound"），移动端只认 404 状态码或 `NoSuchKey`；
+  · **D6** 移动端有**两套 client 工厂**且设置不同：`bridge.createS3Client`（用 `cfg.forcePathStyle`、**无** checksum 绕行）只服务「测连通」，
+    `mobile/s3Store`（**硬编码 false**、**有**绕行）服务全部同步 ⇒ 「测连通」与「真同步」口径不一致，难查。
+- **真实功能缺口（P2，需产品决策）**：**D2** `forcePathStyle` 移动端写死 false（`s3Store` 与 `SettingsDrawer` 保存路径都写死）
+  ⇒ 自建 MinIO（需 path-style，桌面设置页有开关）在移动端**无法使用**；且与 D3（移动端没有 `validateS3Settings` 的 https 强制）联动——
+  若同时补 https 强制会拒掉内网 http MinIO，两者要一起定。**D5** 移动端 gzip PUT 不带 `Content-Encoding`（读侧按魔数兼容，但要动就得真云验证）。
+- **本项未改任何实现**（用户口径：先出对照表）；漂移修复建议按 D6 → D1/D4 → D2+D3 → D5 的顺序另开批次。
+- **门禁**：纯文档改动 ⇒ 未跑构建/视觉；`git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(六) · 修 `.editor-error` 移动端缺口（C4-5 查出的第一处）
 
 - **用户点单**：「1修」（修掉 C4-5 刚查出的那处缺口）。
