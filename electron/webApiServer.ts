@@ -109,7 +109,6 @@ export const WEB_METHODS: Record<string, string> = {
   saveAssetAs: "save_asset_as",
   revealNoteFile: "reveal_note_file",
   openNoteAssets: "open_note_assets",
-  findInDocument: "find_in_document",
   getS3Settings: "get_s3_settings",
   saveS3Settings: "save_s3_settings",
   testS3Connection: "test_s3_connection",

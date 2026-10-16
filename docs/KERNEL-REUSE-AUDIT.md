@@ -20,7 +20,7 @@
 
 **优先顺序建议**：`B1 字数/统计` → `B6 文本增强补齐项` → `B3/B4/B5 块级命令原生化` → `C1 移动端面板条目改为内核派生` → `C3 卡片浮栏接内核 miniToolbar` → `B2 文档内查找/替换`。
 
-**进度**：**B1 已于 261016 实施并实测通过**（见 §9.1）——字数统一走内核 `wordCount`，两处自研正则收口到单一来源。
+**进度**：**B1 已于 261016 实施并实测通过** ——字数统一走内核 `wordCount`，三处自研正则收口到单一来源；**B2（文档内查找）评估后决定不做**，为它加的宿主入口已整体回滚（内核自带的 ⌘F 查找替换开箱可用）。
 
 **本次顺手发现的 6 处文档/检索口径漂移**见 §8（含 §5.9 的"未用"结论已过期、AGENTS §2⓪ 的图标族关键词不准确）。
 
@@ -166,40 +166,25 @@
 
 **未做（保留）**：编辑器内选区字数 `wordCountSelection`（B5 一起做）；内核 32 MiB 大文档下的 `wordCount` 耗时未单独压测（内核自身在每次 `contentchange` 都这么算，风险与现状同量级）。
 
-#### B2 文档内查找 — ✅ **已实施（261016，桌面）**：内核自带查找替换面板 + 顶栏入口
-- **现状**：`src/components/SearchPanel.tsx` 是**库级**搜索（`native.searchNotes` + FTS 索引），与"文档内查找"不是一回事；而"正文命中的定位"目前是 DOM 启发式（HANDOFF §3#5 已登记）。
-- **内核证据**：§5.9 插件 `search` ⇒ `search`/`replaceText`/`replaceAll`（vendor bundle 另有 `openSearchPanel`）；`vendor/lakex-doc-react/docs/execCommand-reference.md:151-152`；插件 `search` 带 `editor/search-toolbar-descriptor.ts`，且**内核默认工具栏 items 本来就含 `search` / `correction`**（B 组盘点）⇒ 桌面文档的内核固定栏**已经有查找入口**，我们缺的是"移动端 + 自己的入口 + 命中定位走内核"。
-**A 批次实测（261016，隔离 lake://app + CDP）——把"内核有没有"一次问清**：
+#### B2 文档内查找 — ❌ **不做（用户 261016 定）**：内核自带查找已够用，宿主入口已整体回滚
+
+- **现状**：`src/components/SearchPanel.tsx` 是**库级**搜索（`native.searchNotes` + FTS 索引），与"文档内查找"不是一回事；**文档内查找不需要我们做** —— 内核自带。
+- **内核证据**：插件 `search`（`toolbar:'search'`，命令 `search`/`replaceText`/`replaceAll`）自带完整面板 `.ne-ui-search-panel`（查找/替换两个页签、输入框、命中计数、上一个/下一个）；热键由该 descriptor 注册，本构建开着虚拟渲染 ⇒ **⌘F**；该命令族**不在官方 08 文档里**（属"文档没写、bundle 有"）。
+
+**A 批次实测（261016，隔离 `lake://app` + CDP）**
 
 | 结论 | 证据 |
 | --- | --- |
-| 内核**自带完整查找替换面板** `.ne-ui-search-panel`（「查找 / 替换」两个页签、上一个/下一个、命中计数、请输入） | 实测面板 DOM + 截图 |
-| 面板只能被**真实按键**唤起：本构建开着虚拟渲染 ⇒ 热键 **⌘F**（源码 `virtualRendering ? ['cmd','F'] : ⇧⌘F`） | 真实 CDP 按键 → 面板打开 |
-| **合成 KeyboardEvent（untrusted）无效**；内核也**没有导出**打开面板的 API（hotKey 插件未注册 service；从 `renderer._$services[]` 取到 hotKey 管理器后 `triggerHotKey('openSearchPanel')` 返回 undefined、面板不出现） | 三条各自实测 |
-| 热键要求**编辑器自己持有焦点**：焦点在顶栏按钮上时 ⌘F 无反应 | 对照实测（焦点在按钮 vs 在 `.ne-engine`） |
-| `search` / `replaceText` / `replaceAll` 命令的入参是**选区/ranges**（不是关键词）⇒ 可复用单位是"面板"，不是命令 | bundle 读码（`execute(e,t,n)` 里 `t.forEach(range)`） |
+| 内核面板开箱可用：输入关键词即高亮并给 `N/M` 计数 | 实测 + 用户截图（`1/26`） |
+| 只能被**真实按键**唤起：trusted 按键可开；页面内合成 `KeyboardEvent`（untrusted）无效 | 对照实测 |
+| 没有可编程打开口：`hotKey` 插件未注册 service；从 `renderer._$services[]` 取到管理器后 `triggerHotKey('openSearchPanel')` 返回 undefined、面板不出现 | 实测 |
+| 热键要求**编辑器持焦**；`search` 命令入参是**选区/ranges**（不是关键词） | 实测 + 读码 |
 
-**落地（桌面）——入口位置定为「顶栏右上角」**：
-与现有「全文搜索」（库级 FTS，另一个按钮）**并列**，图标用 `FileSearch`、标题「文档内查找（⌘F）」；两者语义不同（库级 vs 文档内），并列比塞进胶囊更清楚（移动端胶囊另有"不许放搜索"的定稿契约）。
+**结论与回滚**：内核查找替换**当前即可用**（⌘F，面板自带宽高亮与计数）⇒ **不做宿主入口**。
+`d62d06e` 里加的"顶栏按钮 + 主进程 trusted ⌘F 注入"（`src/features/editor/kernelFind.ts` · `electron/ipc/registerEditorIpc.ts` · preload/native/webApiServer 三处 · `DesktopTopBar.tsx` · `App.tsx`）**已整体回滚**（见 §9 的 revert 行），代码恢复到 B2 之前的状态。
+⇒ 顶栏恢复原样，**桌面 stylesnap 基线不需要重烤**（此前登记的那条待办随之作废）。
 
-| 文件 | 作用 |
-| --- | --- |
-| `src/features/editor/kernelFind.ts`（新增） | `openKernelFindPanel()`：① 用内核自己的 `execCommand('focus')` 把焦点交还编辑器；② 请主进程注入 trusted ⌘F |
-| `electron/ipc/registerEditorIpc.ts`（新增） | `find_in_document` → `webContents.sendInputEvent({ keyCode: "F", modifiers: ["meta"|"control"] })`；对 Web 传输的 stub event 取窗口带兜底 |
-| `electron/preload.cjs` · `src/lib/native.ts` · `electron/webApiServer.ts` | IPC 三处同步（含 `WEB_METHODS` 一致性护栏） |
-| `src/desktop/DesktopTopBar.tsx` · `src/App.tsx` | `DesktopTopBarFind` 组件 + 接线（`disabled = 无活动文档 或 设置里关了内核工具栏`） |
-
-**踩坑（已修）**：第一版用 `requestAnimationFrame` 让出一拍 ⇒ CDP 依附/隐藏窗口下 rAF 不触发（AGENTS §4 的坑），入口**静默失效**；改成 `setTimeout(0)`。
-
-**实测**（隔离实例，`.css-audit/kernel-find-261016/find-panel.png`）：`BEFORE panel=false` → 点我们的按钮 → `panel=true`、`activeElement=ant-input`、面板文案「查找 替换 查找 0 上一个下一个」；同屏还能看到顶栏三个图标（分屏 / 文档内查找 / 全文搜索）与状态栏「字数 11」（B1 的内核口径）。
-
-**移动端**：内核工具栏在移动端被关（`disabledPlugins:["save","toolbar"]`）⇒ descriptor 不注册、无面板也无热键 ⇒ **本轮不做**（自研一套属"添加项"，且与"移动端输入面只有 dock"的定稿相关，留待讨论）。
-
-**门禁**：`tsc` ✓ · `vitest run` **261 文件 / 2024 例通过**（5 文件 / 16 例跳过）✓ · `git diff --check` ✓。
-
-**契约回填**：`docs/LAKEX-CONTRACT.md` §5.39（内核查找面板的四条实测 + 宿主入口姿势 + rAF 坑）。
-
-**⚠️ 待办（样式基线）**：本批给顶栏右侧**多了一个图标钮** ⇒ 属于 AGENTS §3#21③ 的「外壳构成变化」，桌面 stylesnap 基线**需要重烤一次**才能让全量对拍回绿。因为并行会话正在改样式（`6b07414` / `c3cb2ca`），此时重烤会把对方在途状态一起烤进基线，故**本会话不擅自重烤**，登记在此由你决定时机。
+**移动端不做**：内核工具栏在移动端被关（`disabledPlugins:["save","toolbar"]`）⇒ 无面板也无热键；要在移动端做文档内查找只能自研（属添加项，未立项）。
 
 #### B3 全选：手工 Range vs 内核 `selectAll` / `selectAllDoc`
 - **现状**：块选择走手工 `createRange` + `transformDOMRange`；`selectAllDoc` **0 处使用**。
@@ -347,7 +332,7 @@
 
 **需要裁定**
 1. 移动端「＋」面板条目是否允许改成"内核注册表派生 + 自绘 UI"（C1）？会小幅改变面板内容（跟随内核注册表）。
-2. ~~是否要做**文档内查找/替换**（B2）~~ **桌面已实施（261016）**：入口 = 顶栏右上角（与库级「全文搜索」并列），走内核面板。残留待定：**移动端是否也要**（内核面板在移动端不存在，自研属添加项）。
+2. ~~是否要做**文档内查找/替换**（B2）~~ **用户 261016 定：不做**——内核自带的查找替换（⌘F）已经可用；我加的桌面入口已回滚。移动端同样不做（内核面板在移动端不存在，自研属添加项）。
 3. 卡片/图片浮栏是否收回内核 `miniToolbar`、我们只补内核没有的项（C3）？会动已定稿的浮栏观感 —— **用户 261016 定：先不做，需要讨论**。
 4. 移动端文本增强缺项（B6）是否按"下一会话焦点"全做？—— **用户 261016 定：先不做（属添加项，不着急）**。
 5. ~~字数口径若从"我们正则"改成"内核 `wordCount`"，数字可能变化（B1），是否接受？~~ **已实施（261016）**：数字确实变了（见 §9.1 的前后对比）。展示形态：**用户 261016 定 = 保持现状**（状态栏只显示「字数」，不加并列字符数）。
@@ -404,7 +389,7 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 | 261016 | B1 展示形态（字数 vs 字数+字符数） | ✅ 已定：**保持现状** | 不动 `DesktopStatusBar` | 用户 261016 裁定（见 §6#5） |
 | 261016 | 并行会话边界登记 | ✅ 已登记 | `docs/KERNEL-REUSE-AUDIT.md` §10 | 对方议程 = `docs/CODE-REVIEW-261015.md`（`e154ef9`） |
 | 261016 | **A 批次：内核能力实测**（B2 重点 + B5 + C3/A5 记录） | ✅ 已实测 | 探针临时件（`/tmp`）不入库；结论见 §6「A 批次实测结果」 | 内核查找面板可用但**只认真实按键**；`wordCountSelection` 与全文一致；`search` 入参是 ranges |
-| 261016 | **B2 文档内查找入口（桌面）** | ✅ 已实施 + 运行时实测 | 新增 `src/features/editor/kernelFind.ts` · `electron/ipc/registerEditorIpc.ts`；改 `preload.cjs` / `src/lib/native.ts` / `electron/webApiServer.ts` / `DesktopTopBar.tsx` / `App.tsx` | 门禁 261 文件 2024 例全绿；实测点按钮 → `.ne-ui-search-panel` 打开（截图 `.css-audit/kernel-find-261016/find-panel.png`） |
+| 261016 | B2 文档内查找入口（桌面） | ❌ **已回滚（不做）** | revert `d62d06e`：删除 `kernelFind.ts` / `registerEditorIpc.ts`，还原 preload/native/webApiServer/`DesktopTopBar.tsx`/`App.tsx` | 用户裁定"内核当前查找可用"；代码与 `d62d06e^` 逐字节一致 |
 | 261016 | B2 移动端入口 · C3 · A5 · B4 · B6 | ⏳ 待讨论 / 不做 | — | C3 先不做待讨论；A5、B6 不做；B4 未测 |
 | 261016 | 其余 A/C/D 条目 | ⏳ 待讨论 | — | §3 · §4 的优先级建议 |
 

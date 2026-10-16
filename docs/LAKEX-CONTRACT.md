@@ -1854,23 +1854,22 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
    修复后实测：0.3s 内即 `ih 530 / --kb-offset 0 / inputmode null`、面板关闭、工具栏回到键盘上方，**无空白**。
    判据：`dockPanelFocusGuard.test.ts` 断言该分支为 `closePanel("restore")`，且仓内不再有 `dismissKeyboard`。
 
-### 5.39 内核「查找替换」面板：只有真实按键能唤起 + 宿主入口的正确姿势（261016 实测；桌面已落地）
+### 5.39 内核「查找替换」面板：开箱可用，但只有真实按键能唤起（261016 实测；**宿主入口评估后不做**）
 
-**内核能力**：插件 `search`（`toolbar: 'search'`，命令 `search`/`replaceText`/`replaceAll`）自带完整面板 `.ne-ui-search-panel`
-（「查找 / 替换」两个页签、`请输入` 输入框、命中计数、上一个/下一个）。热键由它的 toolbar descriptor 注册：
-本构建开着虚拟渲染 ⇒ 热键是 **⌘F**（源码 `virtualRendering ? ['cmd','F'] : shift+cmd+F`）。
+**内核能力**：插件 `search`（`toolbar: 'search'`，命令 `search`/`replaceText`/`replaceAll`）自带完整面板 `.ne-ui-search-panel`：
+「查找 / 替换」两个页签、`请输入` 输入框、命中计数（`N/M`）、上一个/下一个；输入即高亮。热键由它的 toolbar descriptor 注册：
+本构建开着虚拟渲染 ⇒ 热键是 **⌘F**（源码 `virtualRendering ? ['cmd','F'] : shift+cmd+F`）。该命令族**不在官方 08 命令列表**里。
 
 **四条实测（隔离 lake://app + CDP，261016）**：
-1. **只有真实按键能唤起**：CDP `Input.dispatchKeyEvent`（trusted）能打开；页面内 `new KeyboardEvent(...)`（untrusted）无效。
+1. **只有真实按键能唤起**：trusted 按键可打开；页面内 `new KeyboardEvent(...)`（untrusted）无效。
 2. **没有可编程的打开口**：`hotKey` 插件自身**未注册 service**（`kO({ pluginName: 'hotKey' })` 无 `service`）；
    `renderer._$services[]` 里能扫到 hotKey 管理器（有 `triggerHotKey`/`getKeyByName`），但 `triggerHotKey('openSearchPanel')` 返回 undefined、面板不出现。
 3. **要求编辑器持有焦点**：焦点在顶栏按钮上时 ⌘F 无反应（要 `.ne-engine` 持有焦点）。
-4. `search`/`replaceText`/`replaceAll` 的入参是**选区/ranges**（`execute(e,t,n)` 里 `t.forEach(range)`），不是关键词 ⇒ 可复用单位是「面板」。
+4. `search`/`replaceText`/`replaceAll` 的入参是**选区/ranges**（`execute(e,t,n)` 里 `t.forEach(range)`），不是关键词 ⇒ 可复用单位是「面板」，不是命令。
 
-**宿主入口的正确姿势**（本项目落地 = `src/features/editor/kernelFind.ts` + `electron/ipc/registerEditorIpc.ts`）：
-① 先用内核自己的 `execCommand('focus')` 把焦点交还编辑器；② 由主进程 `webContents.sendInputEvent({ keyCode: 'F', modifiers: ['meta'|'control'] })` 注入一次 trusted 按键。
-入口位置 = 桌面顶栏右上角（与库级「全文搜索」并列，图标 FileSearch，title「文档内查找（⌘F）」）。
+**结论（用户 261016 定）：宿主不做入口。** 内核查找替换**当前即可用**（⌘F，面板自带高亮与计数），
+为它做"顶栏按钮 + 主进程注入 trusted ⌘F"属于多余（该实现曾提交为 `d62d06e`，已整体回滚）。
+移动端同样不做：工具栏被关（`disabledPlugins:["save","toolbar"]`）⇒ descriptor 不注册、无面板也无热键；要做只能自研。
 
-**踩坑**：第一版在渲染层用 `requestAnimationFrame` 让出一拍 ⇒ **CDP 依附/隐藏窗口下 rAF 不触发**（同 §4 的坑），入口静默失效；改成 `setTimeout(0)`。
-
-**移动端**：工具栏被关（`disabledPlugins:["save","toolbar"]`）⇒ descriptor 不注册、无面板也无热键；要在移动端做文档内查找只能自研（属添加项，未立项）。
+（附录·实现备忘：那次回滚掉的姿势 = 渲染层先 `execCommand('focus')` 再把焦点交给主进程 `webContents.sendInputEvent({ keyCode: 'F', modifiers: ['meta'|'control'] })` 注入 trusted 按键；
+若将来移动端要复用内核面板，这条是唯一可行路径。另注：让出一拍**不要用 `requestAnimationFrame`** —— CDP 依附/隐藏窗口下 rAF 不触发，会静默失效。）

@@ -1,6 +1,6 @@
 /** 桌面顶栏（§20 Phase C 收尾：topBarLeading 与右侧搜索钮从 App.tsx 移出）。
  *  260922 S1+A：工作空间钮内嵌「当前空间」图标（18px 软底），点开合一菜单（空间 + 工作空间）。 */
-import { Check, ChevronDown, Columns2, Feather, FileSearch, Files, Paperclip, Search, Settings, Trash } from "lucide-react";
+import { Check, ChevronDown, Columns2, Feather, Files, Paperclip, Search, Settings, Trash } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type Ref, type RefObject } from "react";
 import { Menu } from "../components/ui/Overlay";
 import { usePopoverPosition } from "../hooks/usePopoverPosition";
@@ -121,29 +121,6 @@ export function DesktopTopBarSearch(props: DesktopTopBarSearchProps) {
     </button>
   );
 }
-export interface DesktopTopBarFindProps {
-  /** 打开当前文档的内核查找替换面板（无可用实例时为安全 no-op）。 */
-  onOpenFind: () => void;
-  disabled?: boolean;
-}
-
-/** 顶栏右侧：**文档内查找**（内核自带的查找替换面板；桌面热键 ⌘F）。
- *  与「全文搜索」（库级 FTS，另一个按钮）是两件事，故并列两个入口、图标与标题都区分开。 */
-export function DesktopTopBarFind(props: DesktopTopBarFindProps) {
-  const { onOpenFind, disabled = false } = props;
-  return (
-    <button
-      className="toolbar__item"
-      disabled={disabled}
-      onClick={() => { onOpenFind(); }}
-      title="文档内查找（⌘F）"
-      aria-label="文档内查找"
-    >
-      <FileSearch size={15} />
-    </button>
-  );
-}
-
 export interface DesktopSplitButtonProps {
   /** 已打开的标签（标题 + 类型图标展示用）。 */
   openTabs: Array<{ noteId: string; title: string; kind?: string }>;

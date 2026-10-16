@@ -44,8 +44,7 @@ import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
-import { DesktopSplitButton, DesktopTopBarFind, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
-import { openKernelFindPanel } from "./features/editor/kernelFind";
+import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
 import { TrashPanel } from "./components/TrashPanel";
 import { AssetsBrowser } from "./components/AssetsBrowser";
 
@@ -528,7 +527,7 @@ export function App() {
   const topBarSearch = (
     <DesktopTopBarSearch onOpenSearch={() => sidebarOpenSearch(search)} />
   );
-  /** 文档页顶栏最右侧：分屏入口 + **文档内查找**（内核面板）+ 全文搜索（库级）。 */
+  /** 文档页顶栏最右侧：分屏入口 + 全文搜索。 */
   const topBarTrailing = (
     <>
       <DesktopSplitButton
@@ -537,10 +536,6 @@ export function App() {
         splitActive={splitPair != null}
         onEnterSplit={enterSplit}
         onExitSplit={exitSplit}
-      />
-      <DesktopTopBarFind
-        disabled={!activeNoteId || !settings.showToolbar}
-        onOpenFind={() => { void openKernelFindPanel(); }}
       />
       {topBarSearch}
     </>
