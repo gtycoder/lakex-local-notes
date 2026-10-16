@@ -1,18 +1,11 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { ChevronRight } from "lucide-react";
 import { OutlineController, type OutlineNode } from "./OutlineController";
+import { escapeId } from "../../lib/cssEscape";
 
 interface OutlineListProps {
   controller: OutlineController;
   onNavigate: (id: string) => void;
-}
-
-function escapeId(id: string): string {
-  try {
-    return CSS.escape(id);
-  } catch {
-    return id.replace(/["\\]/g, "\\$&");
-  }
 }
 
 const INDENT_STEP = 10;

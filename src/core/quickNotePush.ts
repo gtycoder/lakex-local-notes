@@ -32,8 +32,7 @@ import {
   type QuickNotesSyncResult,
 } from "./quickNotesSyncEngine.js";
 import type { S3Store, SyncConfig } from "./syncEngine.js";
-
-const ROOT = "quick-notes";
+import { quickNoteKeys } from "./quickNoteKeys.js";
 
 /** 单条推送的结果。full-sync = 按上文两条路径退回了一次完整小记同步。 */
 export type QuickNotePushOutcome =
@@ -51,9 +50,8 @@ export async function pushQuickNote(
   qn: QuickNotesSyncDbPort,
   id: string,
 ): Promise<QuickNotePushOutcome> {
-  const objectKey = (contentHash: string) => `${cfg.prefix}/${ROOT}/objects/${contentHash}.qnote`;
-  const assetKey = (noteId: string, filename: string) => `${cfg.prefix}/${ROOT}/assets/${noteId}/${filename}`;
-  const manifestKey = `${cfg.prefix}/${ROOT}/manifests/latest.json`;
+  // 小记 key 布局的单一来源（单条推送与整轮同步必须指向同一批对象）
+  const { objectKey, assetKey, manifestKey } = quickNoteKeys(cfg.prefix);
 
   const local = (await qn.listLocalQuickNotes()).find((item) => item.id === id);
   if (!local) return { status: "not-found" };

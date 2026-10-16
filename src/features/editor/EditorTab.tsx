@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ChevronRight, File } from "lucide-react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
+import { escapeId } from "../../lib/cssEscape";
 import {
   createLakeDocument,
   destroyLakeEditor,
@@ -47,14 +48,6 @@ export interface EditorTabProps {
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
   /** 外部改动正文后重载该 tab（附件重命名后主进程改写了正文） */
   onReloadNote?: (noteId: string) => void;
-}
-
-function escapeId(id: string): string {
-  try {
-    return CSS.escape(id);
-  } catch {
-    return id.replace(/["\\]/g, "\\$&");
-  }
 }
 
 /** 跨 remount（外部刷新/冲突重载）保留滚动位置；仅内存态，关闭应用后不保留。 */

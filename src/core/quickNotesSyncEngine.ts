@@ -23,9 +23,9 @@ import { mimeTypeFor } from "./syncUtils.js";
 import type { ManifestItem, QuickNotesManifest } from "./manifestTypes.js";
 import { runAsyncPool, ASSET_TRANSFER_CONCURRENCY } from "./asyncPool.js";
 import type { S3Store, SyncConfig } from "./syncEngine.js";
+import { quickNoteKeys } from "./quickNoteKeys.js";
 
 const MANIFEST_VERSION = 1;
-const ROOT = "quick-notes";
 
 /** 小记清单护栏（W-13）：字节/条目上限防异常清单打爆同步。 */
 export const MAX_QUICK_MANIFEST_BYTES = 10 * 1024 * 1024;
@@ -223,9 +223,8 @@ export async function syncQuickNotesViaEngine(
   const quickStart = Date.now();
   qn.log("[perf] quick-sync start");
 
-  const objectKey = (contentHash: string) => `${cfg.prefix}/${ROOT}/objects/${contentHash}.qnote`;
-  const assetKey = (id: string, filename: string) => `${cfg.prefix}/${ROOT}/assets/${id}/${filename}`;
-  const manifestKey = `${cfg.prefix}/${ROOT}/manifests/latest.json`;
+  // 小记 key 布局的单一来源（与 quickNotePush 的单条推送共用同一批对象）
+  const { objectKey, assetKey, manifestKey } = quickNoteKeys(cfg.prefix);
 
   const rawManifest = await s3.getObject(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
   let remoteManifest: QuickNotesManifest | null = null;

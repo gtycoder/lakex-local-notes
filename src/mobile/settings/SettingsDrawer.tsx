@@ -20,6 +20,7 @@ import { mobileAppInfoPort } from "../appInfoPort";
 import { TrashList } from "./TrashList";
 import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
+import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
 import { CLOUD_PRIVACY_NOTICE } from "../../core/cloudState";
@@ -53,12 +54,6 @@ const MENU_LABEL = (key: Exclude<View, "menu">) => MENU.find((m) => m.key === ke
 
 /** 对齐桌面 registerSync 的 S3_SECRET_MASK：get 不回显明文，保存时掩码则保留旧值。 */
 const S3_SECRET_MASK = "********";
-
-function formatBytes(n: number): string {
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / (1024 * 1024)).toFixed(1) + " MB";
-}
 
 export function SettingsDrawer(props: SettingsDrawerProps) {
   const { open, onClose, onRefresh, onOpenNote } = props;

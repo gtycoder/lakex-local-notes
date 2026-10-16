@@ -93,6 +93,35 @@ node /tmp/rev-accent.mjs     # 文字色是否误用裸 --lake-accent
 
 ---
 
+## B1 进度（261016 · 已完成）
+
+**B1 = 公共函数/方法抽提（零视觉变化）**：改 9 个文件 + 新增 5 个文件；**未改任何 CSS、未改任何 UI 行为**。
+
+| B1 项 | 落地内容 | 验证 |
+| --- | --- | --- |
+| **C1-4 小记 S3 key**（最高价值） | 新建 `src/core/quickNoteKeys.ts` 作**唯一来源**；`quickNotePush.ts` / `quickNotesSyncEngine.ts`（逐字相同的两份内联 key）与 `electron/quickNotesSync.ts`（**第三处**，且重复定义了 `QUICK_NOTES_ROOT` 常量）全部改为引用 | 新 `quickNoteKeys.test.ts`：**字面量**钉死布线格式 + 源码级护栏（禁止再内联拼 key） |
+| **C1-2 `formatBytes`** | 勘察发现三份**并不等价**：同步浮窗是「GB 档 + ≥100 取整」，与设置页「只到 MB + 恒一位小数」是**两个口径** ⇒ **没有强行合并**，而是把同步那份显式化为 `formatBytesCompact()` 收进 `src/lib/formatBytes.ts`（观感逐字节不变）；移动端设置页那份与 canonical **逐字等价** ⇒ 直接复用 | 新 `formatBytes.test.ts` **7 例**，含两个口径的**差异边界**（防止日后被误合并） |
+| **C1-3 `escapeId`** | 三份逐字相同（`EditorTab` / `OutlineList` / `useOutline`）⇒ 收归 `src/lib/cssEscape.ts`；**保住 try/catch 兜底**（node 测试环境没有 `CSS` 全局，裸调用会抛） | 新 `cssEscape.test.ts` **3 例**：委托 `CSS.escape` / 无 `CSS` 时兜底 / `CSS.escape` 抛错时兜底 |
+
+**B1 有意未做（并说明理由）**：
+
+① **C1-1 `nowIso`（7 处）——不做**。它只是 `new Date().toISOString()` 的一行包装，收益仅"少 7 行"，
+   代价却是触碰 7 个文件（其中 `electron/store.ts` 正被并行会话改动）。按 AGENTS §3#17
+   「收益只停在代码更整洁」判定为**过度设计**；若将来时间戳口径真要统一，再单独立项。
+② **C1-3b：另有 7 处直接调用 `CSS.escape`（无兜底）未收编**——那是「用法不同」而非重复定义，
+   收编会改变其失败行为（属加固、不属抽提），单独立项。
+③ **C1-5 / C1-6 / C1-7**（时间格式化、只读单元格、属性清单）不在 B1，见 §7 的 B2 与 §9 待裁决。
+
+**门禁（261016）**：`tsc` ✓ · 全库 vitest **261 文件 / 2024 例通过**（跳过 5 文件 16 例）✓ ·
+两条构建（桌面 + 移动）✓ · `check:core` 81 文件 0 违规 ✓ · `check:mobileui` ✓ · `check:bundle` ✓ ·
+`git diff --check` clean ✓。**B0 护栏在 B1 之后仍停在基线**（移动颜色 28 / accent 36 / 跨文件 298 /
+桌面 `!important` 11，`ui-metrics` exit 0）——即 B1 没有把任何一条存量指标推高。
+
+**并发避让**：本批只提交自己的文件；并行会话的 `docs/KERNEL-REUSE-AUDIT.md` / `src/core/textStats*` /
+`electron/store.ts` 等一律未 add、未提交。
+
+---
+
 ## 2. 议题一：公共函数与方法抽提
 
 ### C1-1 `nowIso` 在 7 个文件里各写一遍 ★低风险
@@ -532,7 +561,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | 批次 | 内容 | 风险 | 可独立验收 |
 | --- | --- | --- | --- |
 | **B0 护栏** ✅ **已完成 261016** | C4-2（ui-metrics 口径统一）· C4-4（跨文件重复棘轮）· C4-3③（移动颜色护栏）· C5-3 判据 | 低 | 是（只加指标与门禁） |
-| **B1 抽提** | C1-2 `formatBytes` · C1-3 `escapeId` · C1-4 **小记 key**（最高价值） · C1-1 `nowIso` | 低 | 是 |
+| **B1 抽提** ✅ **已完成 261016** | C1-2 `formatBytes`（拆成两个显式口径）· C1-3 `escapeId` · C1-4 **小记 key**（最高价值）· C1-1 `nowIso` **判定不做**（§B1 有意未做①） | 低 | 是 |
 | **B2 样式合规** | C4-3（28 处颜色 → 令牌）· C5-3（36 处字色）· C5-1（选中态收编）· C5-2（3 个语义令牌） | **中**（视觉） | 是（6 态 + 走查） |
 | **B3 结构搬迁** | C3-1 `src/mobile` 分目录 · C3-3 `src/lib` 转发壳 | 低（纯移动） | 是 |
 | **B4 契约显式化** | C2-3 Repository 端口 · C2-2 IPC 通道常量表 | 中 | 是 |

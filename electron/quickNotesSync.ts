@@ -26,13 +26,20 @@ import { pushQuickNote, type QuickNotePushOutcome } from "../src/core/quickNoteP
 import { QuickNotesStore } from "./quickNotes.js";
 import { validateQuickNoteContent } from "../src/core/quickNoteModel.js";
 import type { StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
+import {
+  QUICK_NOTES_ROOT,
+  quickNoteAssetKeyRel,
+  quickNoteAssetsPrefixRel,
+  quickNoteManifestKeyRel,
+  quickNoteObjectKeyRel,
+  quickNoteObjectsPrefixRel,
+} from "../src/core/quickNoteKeys.js";
 
 export type { QuickNotesSyncResult, QuickNotesSyncProgress } from "../src/core/quickNotesSyncEngine.js";
 export { parseManifest } from "../src/core/quickNotesSyncEngine.js";
 
-/** 小记独立子空间前缀（同一 bucket 下 `lake-notes/quick-notes/`）。 */
-export const QUICK_NOTES_ROOT = "quick-notes";
-const ROOT = QUICK_NOTES_ROOT;
+/** 小记独立子空间前缀（同一 bucket 下 `lake-notes/quick-notes/`）——**单一来源**在 src/core/quickNoteKeys.ts。 */
+export { QUICK_NOTES_ROOT };
 
 /** 把桌面 QuickNotesStore（node sqlite + .qnote 文件）适配成共享引擎端口。 */
 export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDbPort {
@@ -179,16 +186,16 @@ export interface QuickNotesKeepSet {
  * 墓碑条目也保留引用：删除前内容/图片仍需可恢复（见下方注释）。
  */
 export async function buildQuickNotesKeepSet(remote: ObjectStore): Promise<QuickNotesKeepSet> {
-  const manifestKey = `${ROOT}/manifests/latest.json`;
+  const manifestKey = quickNoteManifestKeyRel();
   const keep = new Set<string>([manifestKey]);
   const raw = await remote.getOptional(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
   if (!raw) return { keep, manifestFound: false, items: 0, commitId: null };
   const manifest = parseManifest(raw);
   for (const item of manifest.items) {
     // deleted 墓碑也保留内容引用：真实 hash 时保护删除前对象（恢复可达）；占位符对象不在云端，加入无害。
-    keep.add(`${ROOT}/objects/${item.contentHash}.qnote`);
+    keep.add(quickNoteObjectKeyRel(item.contentHash));
     // 墓碑携带图片（A）：墓碑条目 assets 引用的删除前图片对象同样保护（恢复时图片完整），不再跳过 deleted
-    for (const asset of item.assets) keep.add(`${ROOT}/assets/${item.id}/${asset.filename}`);
+    for (const asset of item.assets) keep.add(quickNoteAssetKeyRel(item.id, asset.filename));
   }
   return { keep, manifestFound: true, items: manifest.items.length, commitId: manifest.commitId };
 }
@@ -209,8 +216,8 @@ export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, sett
 
   // 与 Lake runDeepCleanup 共用同一 gcRetentionDays 与窗口判定（诊断/对账/清理三者一致），由 main.ts 统一传入。
   const cutoff = gcCutoffMs(Date.now(), gcRetentionDays);
-  const objects = await remote.list(`${ROOT}/objects/`);
-  const assets = await remote.list(`${ROOT}/assets/`);
+  const objects = await remote.list(quickNoteObjectsPrefixRel());
+  const assets = await remote.list(quickNoteAssetsPrefixRel());
   const hits = [...objects, ...assets]
     .filter((item) => !keep.has(item.key))
     .filter((item) => isPastWindow(item.lastModified, cutoff));

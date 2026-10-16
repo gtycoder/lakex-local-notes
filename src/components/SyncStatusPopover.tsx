@@ -4,6 +4,7 @@ import { isCloudActive } from "../core/cloudState.js";
 import type { SyncStatus, SyncStatusInfo, SyncWarning } from "../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../lib/native";
+import { formatBytesCompact } from "../lib/formatBytes";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { chooseVisibleAnchor, clampPopoverPosition } from "../hooks/topMenuPosition";
 import { HoverPopover } from "./ui/Overlay";
@@ -41,15 +42,6 @@ function formatTime(value: string | null): string {
   if (!value) return "暂无记录";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "暂无记录" : date.toLocaleString("zh-CN", { hour12: false });
-}
-
-function formatBytes(value: number | undefined): string {
-  if (!value || value <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit++; }
-  return `${unit === 0 || size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
 }
 
 function formatDuration(ms: number | undefined): string {
@@ -191,11 +183,11 @@ export function SyncStatusPopover({
                 <>
                   <div>
                     <dt>上传</dt>
-                    <dd>{stats.uploaded} 文档 · {stats.foldersUploaded ?? 0} 目录 · {qn?.uploaded ?? 0} 小记 · {formatBytes(stats.uploadedBytes)}</dd>
+                    <dd>{stats.uploaded} 文档 · {stats.foldersUploaded ?? 0} 目录 · {qn?.uploaded ?? 0} 小记 · {formatBytesCompact(stats.uploadedBytes)}</dd>
                   </div>
                   <div>
                     <dt>下载</dt>
-                    <dd>{stats.downloaded} 文档 · {stats.foldersDownloaded ?? 0} 目录 · {qn?.downloaded ?? 0} 小记 · {formatBytes(stats.downloadedBytes)}</dd>
+                    <dd>{stats.downloaded} 文档 · {stats.foldersDownloaded ?? 0} 目录 · {qn?.downloaded ?? 0} 小记 · {formatBytesCompact(stats.downloadedBytes)}</dd>
                   </div>
                   {(stats.trashed ?? 0) > 0 && (
                     <div>

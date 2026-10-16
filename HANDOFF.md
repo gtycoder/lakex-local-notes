@@ -16,6 +16,32 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(二) · B1 公共函数抽提（小记 key / formatBytes / escapeId 收归单一来源）
+
+- **用户点单**：按 `docs/CODE-REVIEW-261015.md` §7 的批次表**直接开工 B1**；并提醒"小心另一个会话的并发改动"。
+- **落地（零视觉变化；改 9 文件 + 新增 5 文件，未动 CSS/UI 行为）**：
+  - **C1-4 小记 S3 key（最高价值）**：新建 `src/core/quickNoteKeys.ts` 作唯一来源。原先同一套布局写在 **3 处**——
+    `quickNotePush.ts`（单条推送）与 `quickNotesSyncEngine.ts`（整轮同步）是**逐字相同的三行内联 key**，
+    `electron/quickNotesSync.ts` 是第三处（且 `QUICK_NOTES_ROOT` 常量在 core 与 electron **各定义了一次**）。
+    风险是实打实的：改布局只改一处 ⇒ 单条推送与整轮同步会指向**不同对象**（重复上传，或他端读不到刚推的那条）。
+    现在三处统一引用；桌面侧按"相对 key"（`ObjectStore` 自套前缀）、core/移动侧按 `quickNoteKeys(prefix)`。
+  - **C1-2 `formatBytes`**：勘察后确认三份**并不等价**——同步浮窗是「GB 档 + ≥100 取整」，与设置页
+    「只到 MB + 恒一位小数」是**两个口径** ⇒ **没有强行合并**（那会改观感），改为把同步那份显式化为
+    `formatBytesCompact()` 收进 `src/lib/formatBytes.ts`；移动端设置页那份与 canonical **逐字等价** ⇒ 直接复用。
+  - **C1-3 `escapeId`**：`EditorTab` / `OutlineList` / `useOutline` 三份逐字相同 ⇒ 收归 `src/lib/cssEscape.ts`，
+    **保住 try/catch 兜底**（node 测试环境无 `CSS` 全局，裸调用会抛）。
+  - **新增护栏**：`quickNoteKeys.test.ts`（字面量钉死布线格式 + 源码级禁止再内联拼 key）·
+    `formatBytes.test.ts`（7 例，钉住两个口径的**差异边界**，防误合并）· `cssEscape.test.ts`（3 例，委托/无 CSS/抛错三条路径）。
+- **有意未做（写明理由，别再提）**：① **C1-1 `nowIso`（7 处）不做**——一行 `new Date().toISOString()` 包装，
+  收益仅"少 7 行"却要动 7 个文件（含并行会话正在改的 `electron/store.ts`），按 AGENTS §3#17 判为过度设计；
+  ② 另有 **7 处直接调 `CSS.escape`（无兜底）**未收编——属"用法不同"而非重复定义，收编是加固不是抽提。
+- **门禁**：`tsc` ✓ · 全库 vitest **261 文件 / 2024 例通过**（跳过 5 文件 16 例）✓ · 桌面与移动两条构建 ✓ ·
+  `check:core` 81 文件 0 违规 ✓ · `check:mobileui` ✓ · `check:bundle` ✓ · `git diff --check` clean ✓。
+  **B0 护栏在 B1 后仍停在基线**（移动颜色 28 / accent 36 / 跨文件 298 / 桌面 `!important` 11，`ui-metrics` exit 0）。
+- **并发避让**：本批只 add 自己的文件；并行会话的 `docs/KERNEL-REUSE-AUDIT.md` / `src/core/textStats*` /
+  `electron/store.ts` 等一律未 add、未提交。
+- **状态**：随本批提交并推送 `origin/master`。
+
 ### 261016 · 代码 review 全面方案 + B0 护栏落地（**review 只出方案；B0 只改护栏脚本，未动产品代码/CSS**）
 
 - **用户点单**：功能开发告一段落，做一次**全面代码 review（前端 + 后端）**，覆盖 5 个方向（公共抽提 / 能力抽象 / 模块划分 / 样式根位置与 `!important` / 样式统一收归令牌）；**只出方案、逐项讨论**，不改代码。并提醒**另有会话在做 lake 内核功能优化**，改动需避让。

@@ -8,14 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { OutlineController, type OutlineEntry } from "./OutlineController";
 import { lakeBridge, resolveScrollNode, type LakeEditorInstance, type LakeKernelBridge } from "../editor/lakeRuntime";
-
-function escapeId(id: string): string {
-  try {
-    return CSS.escape(id);
-  } catch {
-    return id.replace(/["\\]/g, "\\$&");
-  }
-}
+import { escapeId } from "../../lib/cssEscape";
 
 export function useOutline(
   editor: LakeEditorInstance | null,
