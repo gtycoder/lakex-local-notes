@@ -16,6 +16,22 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(十五) · C3-3 `src/lib` 清掉 10 个一行转发壳（**纠正了 review 的一处错判**）
+
+- **背景**：`src/lib` 长期留着 10 个 `export * from "../core/x.js";`（`concurrency` / `docStats` / `keyedAsyncQueue` /
+  `markdownClean` / `quickNoteModel` / `requestVersion` / `retry` / `tabLimit` / `tree` / `treeIndex`）——
+  逻辑搬去 core 后的兼容出口，危害是**同一函数两个合法 import 路径**。
+- **⚠️ 纠正 review 初稿的错判**：初稿写"每份都仍有消费者（quickNoteModel 16 处、tree 9 处），不能直接删"——
+  **那是统计时把 `lib/` 与 `core/` 的引用混在一起数了**。本项用**三种独立方法**复核（路径解析脚本 / 全仓 grep / 逐名 grep，
+  并确认无 vite alias / tsconfig paths 兜底）⇒ **这 10 个壳零引用**。
+- **实际做法比原方案更省**：既然零引用，**不需要**"逐个改调用方"这一步，直接 `git rm` 10 个文件；
+  删除后 `tsc` exit 0、全库 vitest **267 文件 / 2054 例全绿** ⇒ **反证它们确属死文件**。
+- **护栏**：新增 `src/lib/libStructure.test.ts`——`src/lib` 下不得再出现"整个文件只有一行 `export * from '../core/...'`"的壳
+  （要复用的东西直接从 core 引；lib 只放真正属于渲染层/平台适配的模块）。自证：造一个壳 ⇒ 失败；删除 ⇒ 通过。
+- **门禁**：`tsc` exit 0 ✓ · 全库 vitest **267 文件 / 2054 例** ✓ · `check:core` ✓ · `check:mobileui` ✓ ·
+  `ui-metrics` exit 0 ✓ · `git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(十四) · C2-2 IPC 通道三方一致性护栏（**原方案实测不可行，已改法**）
 
 - **原方案**：把通道名抽成 `electron/ipc/channels.ts` 常量表，preload / native / register 都从它引。
