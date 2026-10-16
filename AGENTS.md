@@ -86,6 +86,7 @@ Lake Notes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-
 - **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏**整条不存在**（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`）、块悬浮手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面固定栏 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示、不能输入）。新增移动端输入能力一律走 dock。
 - **移动端有自己的设计与样式层**（`src/mobile/**`，`mb-*` + 移动端 theme）：**不引桌面样式层**，两端 UI 不共享。
 - **目录/知识库节点图标与文内表情输入解耦**：两端各自实现节点选择器与图形；只共享`src/lib/nodeIcons.ts`的目录/编解码与表情数据/最近记录逻辑。移动端节点选择器不得import输入态`EmojiPanel`或使用其`mb-emoji-*`类。**默认资源页**唯一判据`nodeIconPickerMode(nodeType)`：笔记本/分组→图标，所有文档类型→表情；当前保存的资源种类不覆盖这条默认规则。目录图标值仍为≤16字符短串，不改同步字段。
+- **移动端「文档内查找」= 自研一套**（261016 实测定稿）：内核查找面板只随工具栏 `search` descriptor 挂载，而移动端**关掉了工具栏插件** ⇒ 移动端既无面板也无热键。实现 = `src/mobile/editor/MobileFindBar.tsx`（DOM 文本节点扫描 + CSS Custom Highlight API 双高亮 + `n/m`；正文变化自动重扫），**入口 = 工作区顶栏右上角**（工作区胶囊是定稿四格、且不许放搜索）。**桌面不加入口**：内核自带 ⌘F 面板已够用，别再包一层（曾加过、已按用户要求整体回滚）。语义与实测见 `docs/LAKEX-CONTRACT.md` §5.39/§5.40/§5.41。
 - **移动端入口分工（261014 用户逐条定稿，都是"别再搬回去"型契约）**：
   首页胶囊 = **搜索 · ＋ · AI**（整块长按上滑 = 速记；＋ 短按 = 新建面板），排序/视图与云同步在**顶栏右上角**；
   工作区胶囊 = **文档树 · 标签页 · 大纲 · 切换笔记本**（原「更多」已删 —— 编辑在顶栏、新建在抽屉与行内）；
@@ -142,7 +143,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 13. **移动端改动要过设备装置**：`check:mobilesnap`（6 态）+ 走查（`drive.mjs 9336 mobile-walkthrough.mjs`）；**验收一律设备级截图**（CDP 的 `Page.captureScreenshot` 抓不到 GPU canvas）；keep-alive 隐藏视图仍在 DOM ⇒ 导航必须带命中测试。
 14. 快照门禁**依赖设备里的数据**（用户随手记一条小记 ⇒ 该态 +17 元素、假红）⇒ 只在**专用 AVD `lake_gate`**（emulator-5556 / CDP 9336）+ 固定夹具（5 文档 + 4 小记，`scripts/mobile-audit/gate-fixture.mjs`）上跑；**重灌夹具或建过数据 ⇒ 先重烤基线**；`.css-audit/snap/` 的中间快照会被同名 tag 覆盖（别当对拍）。
 15. **懒加载入口若会挂内核，必须自带内核样式**（`@dlient/lakex-doc-react/style.css`）；护栏 `src/mobile/kernelStyleBootstrap.test.ts`。
-16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px 高、内核判定下方放不下会翻到 caret 上方、实测 `top=-558`）：`max-height` + `overflow-y:auto` + 改锚点（内核写的是行内样式，只能 `!important`），落点 `src/mobile/mobile-kit.css`、作用域 `body.lake-mobile`。
+16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px 高、内核判定下方放不下会翻到 caret 上方、实测 `top=-558`）：`max-height` + `overflow-y:auto` + 改锚点（内核写的是行内样式，只能 `!important`），落点 `src/mobile/mobile.css`（261012 P5 起 `mobile-kit.css` 已删，规则整份并过去）、作用域 `body.lake-mobile`。
 17. **程序化 focus 不弹软键盘**（没有用户手势时）：原生 `ShowKeyboardPlugin` + `src/mobile/nativeKeyboard.ts`；只有"没有手势"的入口（快捷 capture / 系统分享）传 `raiseKeyboard`，聚焦后 300ms 请原生弹一次。判据：**innerHeight 收缩 >200px = 键盘弹起**（取样前必须是无键盘态）。
 18. **重依赖（内核/usheet/画板）不许进入口静态图**：`HomePage → QuickNotePreview → QuickNoteKernelPreview → lakeRuntime` 一旦静态 import，构建就给入口挂 40+ 条 `modulepreload`（含 1.25MB 内核 CSS），冷启动先拉 + 解析 6.1MB 内核才画首页（实测真首页 **6123 → 533ms**、DCL 3943 → 119ms；改 `lazy()` + Suspense 后 modulepreload 45 → 12；护栏 `quickNoteKernelFallback.test.ts`）。**后台工作一律排到首屏之后**：冷启动那次同步 = 就绪后第一段空闲；内核预热 = 就绪 **4s 后**再排空闲（`requestIdleCallback` 的 timeout 只是上限，实测 2.4s 就回调 ⇒ 必须显式延迟）。判据探针 `scripts/mobile-audit/boot-timeline.mjs`（`--no-idle` 做 A/B）。
 19. **设备级点按一律走 CDP `Input.dispatch*`**（本机模拟器上 `adb shell input tap/swipe` 对两个 App 都不生效、`keyevent` 正常）：坐标取 `getBoundingClientRect()`（页面 CSS px）；手势（长按/上滑）用 `Input.dispatchTouchEvent`（鼠标事件验不出 pointer 长按）。

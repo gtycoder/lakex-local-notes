@@ -122,7 +122,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
   return (
     <>
       {/* 文档内查找条（移动端；入口 = 工作区顶栏右上角） */}
-      {findOpen && <MobileFindBar root={findRoot} onClose={() => onCloseFind?.()} />}
+      {findOpen && <MobileFindBar root={findRoot} revision={content} onClose={() => onCloseFind?.()} />}
       {/* data-mb-edit-host / data-mb-kernel：编辑面契约（内核几何收口见 edit-surface-kernel.css） */}
       <section className="mobile-doc-body" ref={setBody} data-mb-edit-host data-mb-kernel="doc">
         <LakeEditor

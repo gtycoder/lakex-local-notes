@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMatchOffsets, nextMatchIndex } from "./mobileFind.js";
+import { findMatchOffsets, nextMatchIndex, reconcileMatchIndex } from "./mobileFind.js";
 
 describe("findMatchOffsets（移动端文档内查找的纯匹配）", () => {
   it("中文按字符匹配且非重叠", () => {
@@ -16,6 +16,17 @@ describe("findMatchOffsets（移动端文档内查找的纯匹配）", () => {
     expect(findMatchOffsets("abc", "")).toEqual([]);
     expect(findMatchOffsets("abc", "zzz")).toEqual([]);
     expect(findMatchOffsets("", "a")).toEqual([]);
+  });
+});
+
+describe("reconcileMatchIndex（重扫后调和命中位）", () => {
+  it("无命中 → -1", () => {
+    expect(reconcileMatchIndex(2, 0)).toBe(-1);
+  });
+  it("原位仍有效 → 保持；越界/未开始 → 回到首条", () => {
+    expect(reconcileMatchIndex(2, 5)).toBe(2);
+    expect(reconcileMatchIndex(5, 3)).toBe(0);
+    expect(reconcileMatchIndex(-1, 3)).toBe(0);
   });
 });
 

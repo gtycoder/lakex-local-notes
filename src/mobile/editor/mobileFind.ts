@@ -21,6 +21,15 @@ export function nextMatchIndex(current: number, delta: number, total: number): n
   return (current + delta + total) % total;
 }
 
+/**
+ * 纯函数：**重扫后**调和当前命中位（正文被编辑 / 命中总量变化时用）：
+ * 无命中 → -1；原位仍有效 → 保持（不把用户跳回第一条）；否则回到首条。
+ */
+export function reconcileMatchIndex(current: number, total: number): number {
+  if (total <= 0) return -1;
+  return current >= 0 && current < total ? current : 0;
+}
+
 /** 纯函数：一段文本里的**非重叠**命中起始位（大小写不敏感；中文按字符匹配）。 */
 export function findMatchOffsets(text: string, query: string): number[] {
   if (!text || !query) return [];

@@ -16,6 +16,19 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016 · 内核能力复用批次（B1 字数内核化 · 移动端文档内查找 · A 批次实测）
+
+- **方案与进度总表**：`docs/KERNEL-REUSE-AUDIT.md`（A/B/C/D 四类共 28 条；§6 A 批次实测结果；§8 文档漂移；§9 进度日志；§10 与并行会话边界）。本批**只读码 + 探针 + 少量定点改动**，无大规模重构。
+- **B1 字数统一走内核（`af27bd94`）**：新增 `src/core/textStats.ts`（内核 `DM()` 同语义移植：非 ASCII 按字素、`--` 补 1、余下按空白分词 + `countChars`），桌面状态栏**优先** `queryCommandValue('wordCount')`（`src/hooks/useDocumentStats.ts` + `src/core/docStats.ts`；拿不到内核实例才用正文兜底，内核返回 0 而正文非空时兜底防闪 0），并收口另外两处自研正则（`electron/store.ts`、`src/mobile/bridge.ts`）。
+  **用户可见变化（已定稿）**：字数从"去标签后的字符数（含空格标点）"改为**内核/云端语雀口径**（同夹具 30 → 8）；用户 261016 定：**保持现状**（状态栏不并列字符数）。
+- **移动端「文档内查找」（`8fc55632`）**：内核查找面板在移动端**不存在**（只随工具栏 `search` descriptor 挂载，而移动端关了工具栏插件）⇒ 自研 `src/mobile/editor/MobileFindBar.tsx` + `mobileFind.ts` + `mobile-find.css`：DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇在 DOM）+ **CSS Custom Highlight API 双高亮** + `n/m` + 上/下一个 + 关闭清高亮；正文被编辑**自动重扫**；命中上限 600 显示 `600+`。
+  **入口 = 工作区顶栏右上角**（工作区胶囊是定稿四格、且不许放搜索）。**桌面不加入口**：内核自带 ⌘F 面板已够用；我一度加的桌面入口已按用户要求整体回滚（`ebb70864`）。
+  设备实测（lake_gate / emulator-5554，真实点按 + 真实 `Input.insertText`）：`1/3` → 下一个 `2/3` → 正文再插一处 ⇒ **自动 `1/4`** → 关闭后 `CSS.highlights=0`。
+- **A 批次实测结论**：B5 `wordCountSelection` 可用（选区=全文）；**B8 结案：本构建点击 inline 图片卡不派发 `previewImgs`**（接不接 `envAdapter` 都不发）⇒ DOM 点击 + 正文取图的图片预览是**必需路径**；**B4 结案：不做**（move 族 = 目标侧插入 / 需要内核内部 position / 容器内重排；公开面驱动不了，非卡片块无接口）；C3 先不做待讨论、A5 不做、B6 不着急（用户定）。
+  契约回填：`docs/LAKEX-CONTRACT.md` **§5.39**（查找面板：只认真实按键）/ **§5.40**（previewImgs 不派发）/ **§5.41**（move 族语义 + 宿主不入）。
+- **门禁与装置**：`tsc` ✓ · `vitest` **266 文件 / 2050 例** ✓ · `git diff --check` ✓ · `ui-metrics` ✓ · `check:mobileui` ✓。移动 **6 态快照基线已重烤**（顶栏多一个按钮属构成变化），连跑两次 **0 差异**。
+  ⚠️ **装置新知识**（已写入 `scripts/mobile-audit/README.md`）：`home-doc` 的**指纹 row key 里带文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ `pm clear` + 重灌夹具会换 id，**元素数相同也会红**，必须重烤；只盯元素数会误判成"没变"。
+
 ### 261016(十五) · C3-3 `src/lib` 清掉 10 个一行转发壳（**纠正了 review 的一处错判**）
 
 - **背景**：`src/lib` 长期留着 10 个 `export * from "../core/x.js";`（`concurrency` / `docStats` / `keyedAsyncQueue` /

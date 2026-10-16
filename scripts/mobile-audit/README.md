@@ -54,6 +54,8 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --from .css-audit/sn
 node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                       # 连跑两次应 0 差异
 ```
 ⚠️ **基线绑定"专用实例 + 该夹具"**：拿它去比"用户的真实数据"必然 6/6 态红，那是预期，不是回归。
+⚠️ **261016 实测到的确切成因**：`home-doc` 的指纹 row key 里带**文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ 每次 `pm clear` + 重灌夹具都会生成**新 id**，
+即使元素数完全相同，指纹也会变（本次实测 `1880 → 1880` 但指纹不同，逐行对拍只差这一条）⇒ **重灌夹具后必须重烤**；只盯元素数会误判成"没变"。
 
 ## 编辑面不变量（261014 起，动 dock / 输入法 / 键盘适配时必跑）
 

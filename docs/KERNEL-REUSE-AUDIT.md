@@ -426,6 +426,8 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 | 261016 | B2 文档内查找入口（桌面） | ❌ **已回滚（不做）** | revert `d62d06e`：删除 `kernelFind.ts` / `registerEditorIpc.ts`，还原 preload/native/webApiServer/`DesktopTopBar.tsx`/`App.tsx` | 用户裁定"内核当前查找可用"；代码与 `d62d06e^` 逐字节一致 |
 | 261016 | **B4 移动命令族评估** | ✅ 已评估 ⇒ **不做**（不替换现有摘-插） | 无代码改动（只读码 + 探针） | 语义见 §3.2 B4 记录；`moveImage` 三种 position 形状全抛 `setStart`；契约 §5.41 |
 | 261016 | B2 移动端入口（已完成）· C3 · A5 · B6 | ⏳ C3 待讨论 / A5、B6 不做 | — | C3 先不做待讨论；A5、B6 不做 |
+| 261016 | **收口：查找条查漏补缺** | ✅ 已实施 + 设备复验 | `MobileFindBar.tsx`（正文变化自动重扫 + 命中上限显示 `600+`）· `mobileFind.ts` 新增纯函数 `reconcileMatchIndex` · `mobileFind.test.ts`（7 例）· `DocumentEditor.tsx` 传 `revision` | 设备实测：搜「人类」`1/3` → 正文再插一处 ⇒ **自动 `1/4`**、关闭后 `highlights=0`；门禁 tsc ✓ / vitest **266 文件 2050 例** ✓ / `ui-metrics` ✓ / `check:mobileui` ✓ |
+| 261016 | 移动 6 态基线**重烤**（收口第二次） | ✅ 已重烤 + 连跑两次 0 差异 | `scripts/mobile-audit/baseline/mobile-snap.json`；成因写进 `scripts/mobile-audit/README.md` | 定位到差异行 = `ne-p$<uuid>-body#0`：**指纹 row key 里带文档节点 id** ⇒ 重灌夹具（`pm clear`）必换 id，元素数相同也会红 ⇒ 必须重烤 |
 | 261016 | 其余 A/C/D 条目 | ⏳ 待讨论 | — | §3 · §4 的优先级建议 |
 
 > 口径：**状态**只用三档 —— ⏳ 待讨论 / 🔧 进行中 / ✅ 已实施（+ 实测）。每条实施必须同时写：落地文件、门禁结果、运行时证据；改到内核契约的观测回填 `docs/LAKEX-CONTRACT.md`。
