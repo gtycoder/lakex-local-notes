@@ -1853,3 +1853,24 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
    ⇒ **面板开着时 ⌨ 必须走 `closePanel("restore")`**（与 × / 点正文同一条路：关面板 + 放回输入法）。
    修复后实测：0.3s 内即 `ih 530 / --kb-offset 0 / inputmode null`、面板关闭、工具栏回到键盘上方，**无空白**。
    判据：`dockPanelFocusGuard.test.ts` 断言该分支为 `closePanel("restore")`，且仓内不再有 `dismissKeyboard`。
+
+### 5.39 内核「查找替换」面板：只有真实按键能唤起 + 宿主入口的正确姿势（261016 实测；桌面已落地）
+
+**内核能力**：插件 `search`（`toolbar: 'search'`，命令 `search`/`replaceText`/`replaceAll`）自带完整面板 `.ne-ui-search-panel`
+（「查找 / 替换」两个页签、`请输入` 输入框、命中计数、上一个/下一个）。热键由它的 toolbar descriptor 注册：
+本构建开着虚拟渲染 ⇒ 热键是 **⌘F**（源码 `virtualRendering ? ['cmd','F'] : shift+cmd+F`）。
+
+**四条实测（隔离 lake://app + CDP，261016）**：
+1. **只有真实按键能唤起**：CDP `Input.dispatchKeyEvent`（trusted）能打开；页面内 `new KeyboardEvent(...)`（untrusted）无效。
+2. **没有可编程的打开口**：`hotKey` 插件自身**未注册 service**（`kO({ pluginName: 'hotKey' })` 无 `service`）；
+   `renderer._$services[]` 里能扫到 hotKey 管理器（有 `triggerHotKey`/`getKeyByName`），但 `triggerHotKey('openSearchPanel')` 返回 undefined、面板不出现。
+3. **要求编辑器持有焦点**：焦点在顶栏按钮上时 ⌘F 无反应（要 `.ne-engine` 持有焦点）。
+4. `search`/`replaceText`/`replaceAll` 的入参是**选区/ranges**（`execute(e,t,n)` 里 `t.forEach(range)`），不是关键词 ⇒ 可复用单位是「面板」。
+
+**宿主入口的正确姿势**（本项目落地 = `src/features/editor/kernelFind.ts` + `electron/ipc/registerEditorIpc.ts`）：
+① 先用内核自己的 `execCommand('focus')` 把焦点交还编辑器；② 由主进程 `webContents.sendInputEvent({ keyCode: 'F', modifiers: ['meta'|'control'] })` 注入一次 trusted 按键。
+入口位置 = 桌面顶栏右上角（与库级「全文搜索」并列，图标 FileSearch，title「文档内查找（⌘F）」）。
+
+**踩坑**：第一版在渲染层用 `requestAnimationFrame` 让出一拍 ⇒ **CDP 依附/隐藏窗口下 rAF 不触发**（同 §4 的坑），入口静默失效；改成 `setTimeout(0)`。
+
+**移动端**：工具栏被关（`disabledPlugins:["save","toolbar"]`）⇒ descriptor 不注册、无面板也无热键；要在移动端做文档内查找只能自研（属添加项，未立项）。

@@ -197,6 +197,10 @@
 
 **门禁**：`tsc` ✓ · `vitest run` **261 文件 / 2024 例通过**（5 文件 / 16 例跳过）✓ · `git diff --check` ✓。
 
+**契约回填**：`docs/LAKEX-CONTRACT.md` §5.39（内核查找面板的四条实测 + 宿主入口姿势 + rAF 坑）。
+
+**⚠️ 待办（样式基线）**：本批给顶栏右侧**多了一个图标钮** ⇒ 属于 AGENTS §3#21③ 的「外壳构成变化」，桌面 stylesnap 基线**需要重烤一次**才能让全量对拍回绿。因为并行会话正在改样式（`6b07414` / `c3cb2ca`），此时重烤会把对方在途状态一起烤进基线，故**本会话不擅自重烤**，登记在此由你决定时机。
+
 #### B3 全选：手工 Range vs 内核 `selectAll` / `selectAllDoc`
 - **现状**：块选择走手工 `createRange` + `transformDOMRange`；`selectAllDoc` **0 处使用**。
 - **内核证据**：§5.9 候选 1：`selectAll` 上下文感知（表格单元格/整列/容器 hole 时选上层结构），`selectAllDoc` 整篇。
