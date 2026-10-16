@@ -479,9 +479,21 @@ src/mobile/           MobileApp main（保留入口）
 `nodeIcon.css`、`historySnapshotPreview.css`、`markdown/` 是**原语/组件资产**；`ui/` 才是真原语。
 另外 `src/components → src/features/*` 有 9 处依赖（`editor` 6 + `quickNotes` 3）。
 
-**方案**：拆 `src/components/app/`（屏）与 `src/components/ui/`（原语）——
-但**收益只到「结构更整齐」**，而 AGENTS §3#17 明确把「收益只停在代码更整洁」列为过度设计信号。
-**建议：列为「可做可不做」，等用户裁决**；若做，与 C3-1 同批（都是纯搬迁）以免重复付回归成本。
+**📋 待交接（用户 261016 已批准做，方案已定）**——原本我建议「不做」（收益只到更整齐），用户裁定**要做**。落地方案（4 桶，避免"app/ui 两桶"的歧义）：
+
+| 桶 | 成员（依赖关系自动分类 + 语义校正） |
+| --- | --- |
+| `components/app/` | Sidebar · SettingsPanel · QuickNotesWorkspace · TrashPanel · AssetsBrowser · SearchPanel · NoteInfoDialog · HistoryPanel · HistorySnapshotPreview · DraftRecoveryDialog · SyncStatusPopover · SyncToast · DesktopStatusBar · syncStatusModel |
+| `components/ui/` | 现有 5（Overlay/SplitHandle/SplitPane/Select/NativeTitleTips）+ DialogResizeHandles · settingsPrimitives · ColorPalette · NodeIconGlyph · ExportSubmenuItem · DockFilterBar |
+| `components/hooks/` | useFloatingDialog · useHistorySnapshotViewer |
+| `components/model/` | createMenuPosition · dockFilterModel · documentStatusModel · searchNavigation · settingsSearch · sidebarHoverMachine · sidebarInteraction · treeDrag |
+
+- **分类依据（可复核）**：按「是否依赖 `features/` `core/` `lib/` `hooks/` `desktop/`」自动跑了一遍（12 原语 / 18 应用层），
+  再对"语义上更像原语但依赖了 core/lib"的几个（ColorPalette→core/colorPalette、NodeIconGlyph→lib/nodeIcons）做人工校正。
+- **执行要点（照 B3 的做法）**：`git mv` → **三遍**说明符重写（① import ② 被搬文件自身相对深度 ③ `vi.mock`/`doMock` 等测试替身）→
+  修硬编码路径字面量（`read("...")`/`new URL(...)`/断言模式）与文档引用。**坑见 §11.5**。
+- **验收**：`tsc` exit 0 + 全库 vitest 全绿 + 双端构建 + `git diff --check`；结构护栏可选（若加，照 `mobileStructure.test.ts` 的写法）。
+- **风险**：低（纯搬迁）；但 `src/components` 被 `App.tsx`/`desktop/`/`features/`/`mobile/` 大量引用 ⇒ 说明符改写面比 B3 更大，**建议单独一批**。
 
 ### C3-3 `src/lib/` 有 10 个「一行转发壳」转发 `src/core/` · ✅ **已处理（261016）**
 
@@ -516,10 +528,33 @@ src/mobile/           MobileApp main（保留入口）
 | `src/core/bitableDoc.ts` | 2258 | 139 | 多维表文档模型（序列化/字段/视图/筛选），**高内聚**；拆成「模型 / 序列化 / 迁移」可能值，但它是被测试重度覆盖的单一来源（`bitableDoc.test.ts` 1313 行）⇒ 建议**不动**，除非有具体痛点 |
 | `src/features/bitable/BitableEditor.tsx` | 2075 | 55 | 拆点明确（Grid / 视图 / 配置面板 / 拖拽），但 261014 刚接入行窗口、正在稳定期 ⇒ **建议缓** |
 | `src/features/editor/lakeRuntime.ts` | 1745 | 23 | 内核接线单一来源，**拆分会分散内核知识** ⇒ 按 AGENTS「一个语义一套实现」**不建议拆** |
-| `src/mobile/bridge.ts` | 1095 | 15 | 移动端能力面，**可以按域拆**（notes / tree / quicknotes / assets / sync），但它是 `lakeNativeContract` 的派生源 ⇒ 拆分需同步契约测试。**建议列为可选** |
+| `src/mobile/bridge.ts` | 1095 | 15 | **📋 待交接（用户 261016 已批准拆）**：按域拆（notes / tree / quicknotes / assets / sync）。**注意它不是纯搬迁**（见下方方案），且是 `lakeNativeContract` 的派生源 ⇒ 拆完必须复跑契约测试 |
 | `src/components/Sidebar.tsx` | 1218 | 29 | 261013 刚做过 memo 优化 ⇒ **不要碰**（回归风险 > 收益） |
 
-**结论**：**本轮不建议为「行数」拆文件**。只建议 C3-1/C3-2/C3-3 这类**目录级**重组。
+**结论**：**不为「行数」拆文件**（`bitableDoc` / `BitableEditor` / `lakeRuntime` / `Sidebar` 都**不动**，理由见上表）；
+只做**目录级**重组（C3-1 ✅ / C3-2 📋 / C3-3 ✅）。**唯一例外是 `bridge.ts`**——用户 261016 批准按域拆分，方案如下。
+
+#### C3-5 待交接：`src/mobile/bridge.ts` 按域拆分（**不是纯搬迁**）
+
+```text
+src/mobile/bridge/
+├── context.ts    共享上下文（db 实例 / ensureDb / 各 port / 凭证断言）——**先抽它，其余域只消费**
+├── notes.ts      文档 CRUD + 保存/属性
+├── tree.ts       目录树 / 笔记本 / 图标 / 排序
+├── quickNotes.ts 小记（含 saveQuickNoteWithImages / draft / 转换）
+├── assets.ts     资产读写 / 预览 / 清理
+└── sync.ts       同步触发 / 状态 / S3 设置 / GC
+src/mobile/bridge.ts   ← 只做组合：export const bridge = { ...notes, ...tree, ... }
+```
+
+- **为什么不是纯搬迁**：`bridge` 是一个大对象字面量，方法**闭包共享** `db`/`ensureDb`/各 port。
+  拆域时要么把上下文显式传参、要么用 `context.ts` 暴露同一份单例 —— **属行为保持型重构，有真实回归风险**。
+- **建议顺序（降低风险）**：① 先抽 `context.ts`（纯抽取、无行为变化，可单独提交验证）；
+  ② 再拆**不共享可变状态**的域（`assets` / `sync`）试水；③ 最后拆 `notes`/`tree`/`quickNotes`。
+- **验收（必须）**：① `tsc` + 全库 vitest（含 `lakeNativeContract.test.ts` —— `window.lakeNative` 的方法清单是**从 bridge 派生**的，
+  方法数 49+2 必须不变）；② `npm run check:mobileui`；③ **移动端设备级验收**（`check:mobilesnap` 6 态 + 走查），
+  因为 bridge 是移动端所有能力的入口；④ `scripts/mobile-audit/` 里任一探针（如 `edit-surface-invariants.mjs`）。
+- **风险**：中——比 B3/C3-2 高一个档（动的是运行时代码而非路径）。**若只想拿低风险收益，可只做 ①。**
 
 ---
 
@@ -735,7 +770,8 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B4 契约显式化** ✅ **已完成 261016** | **C2-3 ✅** 能力矩阵 + 对账测试（34 行，见 §C2-3）· **C2-2 ✅** 改为 IPC 通道**三方一致性护栏**（原「抽常量表」实测不可行，见 §C2-2） | 中 | 是 |
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |
-| **B5 待裁决** | C3-2 `components` 拆分 · C3-5 bridge 拆分 · **C1-6 只读单元格共享** · ~~C1-7 属性清单~~ ✅ · ~~是否修 `.editor-error`~~ ✅ | — | — |
+| **B6 待交接（用户已批准做）** | **C3-2** `components` 拆 app/ui/hooks/model（方案见 §C3-2）· **C3-5** `bridge.ts` 按域拆（方案+风险见 §C3-5，**非纯搬迁**） | C3-2 低 / C3-5 中 | C3-5 需**设备级**验收 |
+| **待用户决策** | **C1-6** 只读单元格共享（需设备验收）· **C5-1/C5-2** 选中态收编 + 语义令牌（等 **Q3** 取色）· **C1-5** 时间措辞 · **D2** MinIO 移动端（与 D3 联动）· **D5** gzip ContentEncoding（需真云） | — | — |
 
 ---
 
@@ -763,8 +799,8 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | Q5 | ~~是否加「跨端结构类名漂移护栏」？~~ | ✅ **已落地（261016）**：`src/styles/crossEndClassCoverage.test.ts`（3 判据、零误报自证），当场查出 `.editor-error` 移动端缺口并**当天修掉**（`KNOWN_GAPS` 已清空） | 无需再裁决 |
 | Q6 | C2-3 Repository 端口是否只收「交集」、差集单列成表？ | ✅ **已按此口径落地（261016）**：因两端签名不可统一，改为**能力矩阵数据 + 对账测试**（34 行交集 + DESKTOP_ONLY 差集），零运行时改动、零签名扭曲 | 无需再裁决 |
 | Q7 | C1-6 移动端只读单元格复用桌面只读渲染（共享逻辑、不共享样式）？ | 做（桌面已有 readOnly 分支） | 是否认可边界 |
-| Q8 | C3-1 `src/mobile` 目录重组（46 文件纯搬迁）本轮做不做？ | 做（低风险，独立批次） | 排期 |
-| Q9 | C3-2 `src/components` 拆 `app/` + `ui/`？ | **倾向不做**（收益只到「更整洁」） | 裁决 |
+| Q8 | C3-1 `src/mobile` 目录重组本轮做不做？ | ✅ **已完成（261016）**：76 文件搬迁 + 三遍说明符重写 + 根目录白名单护栏 | 无需再裁决 |
+| Q9 | C3-2 `src/components` 拆 `app/` + `ui/`？ | 📋 **用户 261016 裁定「做」** ⇒ 已写进 §C3-2 的交接方案（4 桶） | 无需再裁决（方案已定，待实施） |
 | Q10 | C1-5 时间格式：桌面与移动列表的时间措辞是否要求一致？ | 先只抽纯函数，不动产品口径 | 产品口径 |
 
 ---
@@ -782,3 +818,91 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 - 同名函数跨文件定义 **147** 组（人工筛出真问题 7 组）
 - 模块依赖：`core → lib` 6 处于**全部 type-only**，无反向运行时依赖
 - CSS 孤儿文件 **0**（73 个全部被 import）
+
+---
+
+## 11. 交接清单（261016 收尾 · **给下一个会话**）
+
+> **一句话状态**：本会话把这次「全面代码 review」**从方案落到了执行**——5 个议题共 **16 项已交付并推送**；
+> 只剩 **2 项已批准待实施**（C3-2 / C3-5，方案已定）与 **5 项待用户决策**。
+> **新会话先从 `HANDOFF.md` §0 的「261016(十七)」读起**（那里是摘要 + 下一步），本文 §11.2/§11.3 是逐项可执行清单。
+
+### 11.1 已完成（全部已推 `origin/master`，**每项单独提交**）
+
+| 批次 | 内容 | 提交（短） |
+| --- | --- | --- |
+| **B0 护栏** | `ui-metrics` 口径统一（入口图 33 → 全部桌面 58）+ 4 条只许降基线（移动颜色 / accent 误用 / 跨文件重复 / 桌面 `!important`） | `e154ef9` |
+| **B1 抽提** | 小记 S3 key 单一来源 `core/quickNoteKeys.ts` · `formatBytesCompact`（两个口径显式化）· `lib/cssEscape.ts` | `1babdd8` `9674f13` |
+| **B2 样式合规** | 第一批（不涉观感）：移动颜色 28→**0** + 13 处过期兜底清零；第二批：**Q2 允许清单** + **Q4 36 处字色→accent-text** | `6b07414` `c3cb2ca` |
+| **C4-5 跨端护栏** | 共享组件「两端都要有样式」护栏；**当场查出并修掉** `.editor-error` 移动端缺口 | `0f63d8d` `25793e9` |
+| **C2-4 S3 对拍** | `docs/SYNC-PROTOCOL.md` §7 两端传输层对照表 + 漂移清单（D1–D7） | `f57e41b` |
+| **P1 漂移修复** | D6 合并移动端 client 工厂 · D1 补 `assertSafeKey` · D4 用 core `isNoSuchKey`（另修一处 tsc） | `9e1c50e` `d3c6a67` `9e172cc` `13628cb` |
+| **C2-3 能力矩阵** | `core/repositoryCapabilities.ts`（34 行交集 + 桌面专属差集）+ 对账测试 | `608165c` |
+| **C1-7 属性清单** | 两端 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts` | `838ea73` |
+| **C1-3b escapeId** | 7 处裸 `CSS.escape` 收编 + 源码级禁令 | `d296de6` |
+| **C2-2 IPC 三方护栏** | 注册侧 ↔ preload ↔ `WEB_METHODS` 三方一致（原「抽常量表」实测不可行） | `91f2c99` |
+| **C3-3 `src/lib` 清壳** | 10 个一行转发壳**实测零引用** ⇒ 删除 + 防回退护栏 | `f9b06c5` |
+| **B3/C3-1 `src/mobile` 重组** | 52 源码 → `data/`(15) `native/`(20) `hooks/`(9) `sync/`(3)，76 文件搬迁 + 三遍说明符重写 + 根目录白名单 | `07d0da68` |
+
+### 11.2 待办：用户已批准、方案已定（**可直接开工**）
+
+1. **C3-2 `src/components` 拆分** → 方案见 **§C3-2**（4 桶：`app/` `ui/` `hooks/` `model/`，成员已列全）。
+   风险低（纯搬迁），但引用面比 B3 更大 ⇒ **单独一批**。验收：`tsc` + 全库 vitest + 双端构建 + `git diff --check`。
+2. **C3-5 `src/mobile/bridge.ts` 按域拆分** → 方案+风险见 **§C3-5**。**注意它不是纯搬迁**（方法闭包共享 `db`/port）。
+   建议顺序：① 先抽 `context.ts`（零行为变化）→ ② 拆 `assets`/`sync` → ③ 拆 `notes`/`tree`/`quickNotes`。
+   验收**必须含**：`lakeNativeContract.test.ts`（`window.lakeNative` 方法数 49+2 不变）+ **移动端设备级**（`check:mobilesnap` 6 态 + 走查）。
+
+### 11.3 待用户决策（**不要擅自做**）
+
+| # | 项 | 卡点 |
+| --- | --- | --- |
+| **Q3** | 是否新增 `--lake-bg-selected` / `--lake-fg-selected` / `--lake-bg-selected-hover`？ | **取色需用户定**（三候选与对比度见 §Q3；推荐 A = `color-mix(tint 88%, accent 12%)`）。**C5-1/C5-2 随之**。 |
+| **D2** | `forcePathStyle` 移动端**写死 false**（自建 MinIO 在移动端用不了） | 需与 **D3**（移动端无 https 强制）**一起定产品语义**（补 https 会拒掉内网 http MinIO）。代码里已留 `TODO(D2)`。 |
+| **D5** | 移动端 gzip PUT 不带 `Content-Encoding` | 当前读侧按魔数兼容；**要改必须真云验证**（Tier B）。 |
+| **C1-6** | 移动端只读单元格复用桌面只读渲染 | 需**设备验收**（改完要重验只读清单：bool/link/星级/进度/关联/时间）。 |
+| **C1-5** | 桌面与移动列表的时间措辞是否统一 | 产品口径（本会话只抽了属性面板的绝对时间，未动列表相对时间）。 |
+
+### 11.4 本会话新增/改动的**护栏**（新会话改动前必看）
+
+| 护栏 | 守什么 |
+| --- | --- |
+| `scripts/ui-metrics.mjs` | 桌面颜色/字号/`!important` 逐条对**允许清单**（`IMPORTANT_ALLOWLIST`）+ 移动颜色 0 + accent 误用 0 + **同一端内**跨文件重复只许降（基线 13） |
+| `src/styles/crossEndClassCoverage.test.ts` | 共享组件发出的结构类名**两端都必须有样式**（防"只补一端"） |
+| `src/styles/cssLayers.test.ts` / `src/mobile/mobileLayers.test.ts` | 逐文件声明数/重复组只许降（既有） |
+| `src/mobile/mobileStructure.test.ts` | `src/mobile` 根目录只留外壳白名单 + 四个桶非空 |
+| `src/lib/libStructure.test.ts` | `src/lib` 不得再出现"一行转发 core"的壳 |
+| `src/lib/cssEscape.test.ts` | 仓内不得再出现裸 `CSS.escape(`（判据只留 `escapeId`） |
+| `src/mobile/native/s3PortGuards.test.ts` | 移动端 S3：工厂唯一 + `assertSafeKey` 校验点 ≥5 + 必须用 core `isNoSuchKey` |
+| `electron/ipc/ipcChannelParity.test.ts` | IPC 通道**三方一致**（注册侧 ↔ preload ↔ `WEB_METHODS`，各 116）+ 无重复注册 |
+| `src/core/repositoryCapabilities.test.ts` | 34 条领域能力的**两端实现在位** + 移动端仓储导出**全部登记** + 桌面专属差集不虚报 |
+| `src/core/noteInfo.test.ts` | 属性清单标签/顺序 + 两个格式化口径 + 两端不得再内联 |
+| `src/core/quickNoteKeys.test.ts` | 小记 key 布线格式钉死 + 三处调用点不得再内联 |
+
+### 11.5 本会话踩的坑（**新会话会重复踩**）
+
+1. **纯搬迁不是「`git mv` 就完事」**：相对路径有**三种形态**，必须分别覆盖 ——
+   ① import 说明符；② **被搬文件自身**所有相对导入的深度（`../core/*` → `../../core/*`）；
+   ③ **测试替身说明符**（`vi.mock`/`doMock`/`unmock`/`importActual`/`importMock`）。
+   另有第四类：**普通字符串字面量**（护栏里的 `read("...")`/`new URL(...)`/**断言模式**）与**文档里的路径引用**。
+   只做 ① 会留下几十个失败（B3 实测：37 → 11 → 0）。
+2. **重写脚本别用「当前磁盘」解析旧路径**：文件已搬走 ⇒ 解析全失败（B3 第一版 0 处改写）。**只查搬迁表**。
+3. **断言/基准里的路径基准随文件移动而变**：`SRC = dirname(import.meta.url) + ".."` 在文件下移一层后从 `src` 变成 `src/mobile`（`s3PortGuards.test.ts` 实测）。
+4. **口径修正要留痕**：本会话改了两处护栏口径（跨文件重复**只算同一端内** 298→13；`!important` 数字上限 → **允许清单**），
+   两处都在文档里写明了「为什么原来的口径是错的」。
+5. **单人工作树 + 并发会话的提交纪律（我犯过两次）**：
+   ① 提交时**只按路径 add 自己的文件**，commit 前看 `git diff --cached --stat` 逐项确认归属；
+   ② **`commit --amend` 绝不要把「他人正在改的共享文件」路径加进 add**（我曾因此把他人的 WIP 提交并推送，导致 master 短暂不可用，随后用 `a6264e4` 撤回）；
+   ③ 与他人共享文件时（如 `mobileLayers.test.ts`）用 `git stash push -- <该文件>` 临时隔离，提交后 `git stash pop` 还原。
+6. **门禁要看退出码**：`tsc && echo OK; vitest …` 的写法会让 tsc 的失败被后续输出淹没（我曾因此提交了一个 tsc 未过的提交，`13628cb` 才修）。
+
+### 11.6 五分钟自检（确认环境仍健康）
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+cd /Users/admin/file/local-lake/lake-notes-electron
+npx tsc --noEmit; echo "tsc exit=$?"                    # 期望 0
+npx vitest run 2>&1 | tail -5                            # 期望 269 文件 / 2057 例 全过
+npx vite build && npx vite build -c vite.mobile.config.ts
+node scripts/ui-metrics.mjs; echo "ui-metrics exit=$?"   # 期望 0
+git status --porcelain                                   # 期望空（干净）
+```
