@@ -23,23 +23,49 @@ async function compressGzip(bytes: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
+/** 移动端唯一的 S3 client 工厂（D6，261016）。
+ *
+ * 背景：原先「测连通」（bridge.createS3Client）与「全部同步」（本文件）各建一套 client，
+ * 且**设置不同**——测连通那份没有 responseChecksumValidation 绕行 ⇒ 会出现
+ * 「测连通报 Checksum mismatch，真同步却正常」这类难查的不一致（见 SYNC-PROTOCOL §7.3 D6）。
+ * 现在两处共用本工厂：传输层分层（Capacitor 原生 HTTP）、checksum 绕行、凭证形态只有一处。
+ * ⚠️ forcePathStyle 仍由调用方给值：同步侧暂固定 false（属 D2，需产品决策 + SyncConfig 扩字段）。 */
+export interface MobileS3ClientOptions {
+  region: string;
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  forcePathStyle: boolean;
+}
+
+export async function createMobileS3Client(opts: MobileS3ClientOptions): Promise<import("@aws-sdk/client-s3").S3Client> {
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  return new S3Client({
+    region: opts.region,
+    endpoint: opts.endpoint,
+    forcePathStyle: opts.forcePathStyle,
+    credentials: { accessKeyId: opts.accessKeyId, secretAccessKey: opts.secretAccessKey },
+    // 七牛 Kodo：GET 请求默认发 x-amz-checksum-mode 但七牛仅返回 content-md5，导致 SDK 校验 mismatch；
+    // 禁用响应严格校验（不触发 SDK 对 body 的 content-md5 比对），避免 "Checksum mismatch"。
+    // 这是**两端共用工厂的真正价值**：以前只有同步路径有这行，测连通路径没有。
+    responseChecksumValidation: "WHEN_REQUIRED",
+    requestHandler: new CapacitorHttpHandler(),
+  });
+}
+
 export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
   let client: Promise<import("@aws-sdk/client-s3").S3Client> | null = null;
   async function getClient() {
     if (!client) {
-      const { S3Client } = await import("@aws-sdk/client-s3");
-      client = Promise.resolve(
-        new S3Client({
-          region: cfg.region,
-          endpoint: cfg.endpoint,
-          forcePathStyle: false,
-          credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
-          // 七牛 Kodo：GET 请求默认发 x-amz-checksum-mode 但七牛仅返回 content-md5，导致 SDK 校验 mismatch；
-          // 禁用响应严格校验（不触发 SDK 对 body 的 content-md5 比对），避免 "Checksum mismatch"
-          responseChecksumValidation: "WHEN_REQUIRED",
-          requestHandler: new CapacitorHttpHandler(),
-        })
-      );
+      client = createMobileS3Client({
+        region: cfg.region,
+        endpoint: cfg.endpoint,
+        accessKeyId: cfg.accessKeyId,
+        secretAccessKey: cfg.secretAccessKey,
+        // TODO(D2)：SyncConfig 目前不带 forcePathStyle ⇒ 这里只能固定 false（自建 MinIO 无法在移动端使用）。
+        // 修它要给 SyncConfig 扩字段并联动 mobile 设置页；与 D3（https 强制）一起决策，见 SYNC-PROTOCOL §7.3。
+        forcePathStyle: false,
+      });
     }
     return client;
   }

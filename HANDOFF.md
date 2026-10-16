@@ -16,6 +16,24 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(八) · P1 漂移修复之一：D6 移动端 S3 client 工厂合并
+
+- **背景**：C2-4 对拍（`docs/SYNC-PROTOCOL.md` §7）查出移动端**内部不自洽**——`bridge.createS3Client`（只服务「测连通」）
+  与 `mobile/s3Store`（服务全部同步）各建一套 client，且**设置不同**：前者**没有**七牛 checksum 绕行。
+  后果 = 「测连通报 Checksum mismatch，真同步却正常」这类难查的不一致。
+- **落地**：`src/mobile/s3Store.ts` 新增并导出**唯一**工厂 `createMobileS3Client(opts)`；
+  `s3Store` 内部与 `bridge.createS3Client` 都改走它 ⇒ 传输分层（Capacitor 原生 HTTP）/checksum 绕行/凭证形态只有一处；
+  checksum 绕行随之上移，测连通路径也拿到它（这正是本项要修的）。`bridge.ts` 顺手删掉不再使用的 `CapacitorHttpHandler` 导入。
+  **缓存语义保持**：`s3Store` 每实例缓存 client（原样），bridge 每次新建（原样）。
+- **未纳入本项**：`forcePathStyle` 的**取值**差异（同步侧仍固定 false）属 **D2**——需给 `SyncConfig` 扩字段 + 与 D3（https 强制）
+  一起做产品决策；代码里已留 `TODO(D2)` 注释指向 SYNC-PROTOCOL §7.3。
+- **护栏**：新增 `src/mobile/s3PortGuards.test.ts`（源码级）：`new S3Client(` 在 src/mobile 下只能**一处**、
+  `responseChecksumValidation:` 只能**一次**、两处调用点都必须走工厂。自证：注入第二处 `new S3Client(` ⇒ 失败；还原 ⇒ 通过。
+  （为什么用源码级：这两个端口在内部动态 import SDK 并 new client，**没有可注入点**，为测试拆注入点属过度设计；
+  判据本身 `assertSafeKey`/`isNoSuchKey` 已在 core 单测覆盖。）
+- **门禁**：`tsc` ✓ · 护栏 2 例 ✓ · 全库 vitest 见本批末次汇总 · `git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(七) · C2-4 S3 传输层两端对拍（**只出对照表，未改实现**）
 
 - **产出**：`docs/SYNC-PROTOCOL.md` 新增 **§7 S3 传输层：两端对拍**（原「记录」顺延为 §8）——

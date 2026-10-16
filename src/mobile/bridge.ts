@@ -26,8 +26,7 @@ import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from ".
 import { maintenanceQueue, priorityQueue, writeLock } from "./maintenanceLocks";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { emptyLakeBody } from "../core/lakeDocForm.js";
-import { createCapacitorS3Store } from "./s3Store";
-import { CapacitorHttpHandler } from "./capacitorHttpHandler";
+import { createCapacitorS3Store, createMobileS3Client } from "./s3Store";
 import { buildAssetFilename, mimeTypeForFilename } from "../core/assetNaming.js";
 import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
@@ -170,16 +169,14 @@ function assertS3Credentials(cfg: S3Settings): void {
 
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
   assertS3Credentials(cfg);
-  // @aws-sdk/client-s3 保持动态（懒加载）；CapacitorHttpHandler 已是静态依赖（s3Store.ts 也静态用），
-  // 这里再动态 import 只会触发 INEFFECTIVE_DYNAMIC_IMPORT，故提到模块顶部静态引入。
-  const { S3Client } = await import("@aws-sdk/client-s3");
-  return new S3Client({
+  // D6（261016）：与全部同步路径共用**同一个**工厂（原先这里自己 new 一套，且缺 checksum 绕行 ⇒
+  // 会出现"测连通报 Checksum mismatch、真同步却正常"）。传输分层/绕行/凭证形态从此只有一处。
+  return createMobileS3Client({
     region: cfg.region,
     endpoint: cfg.endpoint,
+    accessKeyId: cfg.accessKeyId,
+    secretAccessKey: cfg.secretAccessKey,
     forcePathStyle: cfg.forcePathStyle,
-    credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
-    // 请求分层：HTTP 传输走 Capacitor 原生（OkHttp），绕开 WebView CORS（见 capacitorHttpHandler.ts）
-    requestHandler: new CapacitorHttpHandler(),
   });
 }
 

@@ -215,6 +215,14 @@ interface ManifestFolder {
 | **D3** | `normalizeEndpoint` / `validateS3Settings` 只在桌面；移动端把用户输入原样交给 SDK | 少了「强制 https（防签名重放）」这一安全项；误写 endpoint 时两端表现不同 | 与 D2 一起决策（https 强制 vs 内网 http MinIO）。**不建议单独补**：会与 D2 冲突 | 记录 |
 | **D7** | region 缺省不同（桌面 `cn-east-1`，移动端空） | 用户没填 region 时行为可能不同 | 移动端也 `cfg.region \|\| "cn-east-1"` | 记录 |
 
+**修复进度**：
+
+- **D6 ✅ 已修（261016）**：移动端两套 client 工厂合并为 `createMobileS3Client`（`src/mobile/s3Store.ts`）**一处**——
+  checksum 绕行随之上移到工厂，于是「测连通」路径**也**拿到绕行（原先只有同步路径有，正是漂移点）。
+  护栏 = `src/mobile/s3PortGuards.test.ts`（`new S3Client(` 只允许一处；`responseChecksumValidation:` 只允许一次；
+  已自证：注入第二处 ⇒ 失败）。
+- D1 / D4 / D2 / D5 / D3 / D7 仍未修。
+
 ### 7.4 结论
 
 1. **协议面的"硬骨头"两端是一致的**：超时、重试、连通性检查方式、gzip 读、maxBytes 语义、prefix 归属、并发上限 —— 这些都对上了。
