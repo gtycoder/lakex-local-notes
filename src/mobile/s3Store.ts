@@ -6,7 +6,7 @@
  * putObject 按 opts.gzip 压缩。syncEngine 不感知 gzip（core 无 gzip 调用）。
  */
 import type { S3Store, SyncConfig } from "../core/syncEngine.js";
-import { isGzip } from "../core/syncUtils.js";
+import { assertSafeKey, isGzip } from "../core/syncUtils.js";
 import { CapacitorHttpHandler } from "./capacitorHttpHandler";
 import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";
 
@@ -94,6 +94,9 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
 
   const store: S3Store = {
     async getObject(key: string, opts?: { maxBytes?: number }): Promise<Uint8Array | null> {
+      // D1（261016）：与桌面 ObjectStore.getOptional 对齐——键必须过 ASCII 白名单（fail fast）。
+      // 理由（见 core/syncUtils 里 SAFE_KEY_RE 的注释）：非 ASCII 键会让 ListObjectsV2 的编码与写入侧不一致 ⇒ GC 列不到对象。
+      assertSafeKey(key);
       const { GetObjectCommand } = await import("@aws-sdk/client-s3");
       const c = await getClient();
       try {
@@ -114,6 +117,7 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
       }
     },
     async putObject(key: string, body: string | Uint8Array, opts?: { gzip?: boolean }): Promise<void> {
+      assertSafeKey(key); // D1：对齐桌面 ObjectStore.put
       const { PutObjectCommand } = await import("@aws-sdk/client-s3");
       const c = await getClient();
       const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
@@ -135,6 +139,7 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
       return out;
     },
     async deleteMany(keys: string[]): Promise<number> {
+      for (const k of keys) assertSafeKey(k); // D1：对齐桌面 ObjectStore.deleteMany（逐键校验）
       const { DeleteObjectsCommand } = await import("@aws-sdk/client-s3");
       const c = await getClient();
       let deleted = 0;
@@ -152,6 +157,7 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
   // 原生运行时失败也回退到字节路径，保证「有则原生、无则回退」。
   if (nativeAssetSyncSupported()) {
     store.putObjectStream = async (key, _size, open) => {
+      assertSafeKey(key); // D1：对齐桌面 ObjectStore.putStream
       const handle = await open();
       if (handle == null) throw new Error(`本地资产缺失: ${key}`);
       const localKey = typeof handle === "string" ? handle : (handle as { localKey?: string }).localKey;
@@ -174,6 +180,7 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
     // 原生流式下载（字节不过桥）：core 的 downloadNoteAssets 探测到 getObjectToFile + assetFilePath
     // 同时存在才走文件路径；非原生平台不挂载 → 自动回退字节路径。
     store.getObjectToFile = async (key, destPath, opts) => {
+      assertSafeKey(key); // D1：移动端专有方法，同样纳入键校验
       if (!(await ensureNativeAssetSync())) throw new Error("native asset sync unavailable");
       const res = await NativeAssetSync.getFile({
         key,

@@ -45,6 +45,13 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
     expect(/createMobileS3Client\(/.test(read("mobile/s3Store.ts")), "s3Store.ts 必须调用共用工厂").toBe(true);
   });
 
+  it("D1：端口方法必须过 core 的 assertSafeKey（对齐桌面 ObjectStore）", () => {
+    const store = read("mobile/s3Store.ts");
+    expect(/import \{[^}]*assertSafeKey[^}]*\} from "\.\.\/core\/syncUtils\.js"/.test(store), "必须从 core 引 assertSafeKey（单一来源，别在移动端另写一份）").toBe(true);
+    // 校验点 = getObject / putObject / deleteMany / putObjectStream / getObjectToFile
+    expect(count(store, /assertSafeKey\(/g), "校验点少于 5 个：可能有端口方法漏了键校验").toBeGreaterThanOrEqual(5);
+  });
+
   it("D6：七牛 checksum 绕行只允许出现在共用工厂里（一次）", () => {
     const all = mobileSources().map(([, t]) => t).join("\n");
     // 只数**带冒号的声明**（注释里提到这个选项名不算）——本仓踩过"注释被当代码"的坑（AGENTS §7.25）

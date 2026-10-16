@@ -16,6 +16,21 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(九) · P1 漂移修复之二：D1 移动端补 assertSafeKey（键校验两端对齐）
+
+- **背景**：C2-4 对拍（SYNC-PROTOCOL §7.3 D1）查出——桌面 `ObjectStore` 在 get/put/putStream/delete/deleteMany 上
+  都调 `assertSafeKey`（`SAFE_KEY_RE = /^[A-Za-z0-9._/\-]+$/`），而移动端端口**一个都没有**。
+  该判据的注释写明目的：「防非 ASCII 键导致 ListObjectsV2 编码不一致（fail fast）」⇒ 移动端缺这道闸，
+  非 ASCII 键会让 GC 的 list 与写入侧的键编码不一致（列不到对象 ⇒ 漏删/误判）。
+- **落地**：`src/mobile/s3Store.ts` 的 **5 个校验点**统一调用 core 的 `assertSafeKey`：
+  `getObject` / `putObject` / `deleteMany`（逐键）/ `putObjectStream` / `getObjectToFile`；
+  `listObjects` 的 prefix **按桌面同样不校验**（桌面 `list()` 也不校验前缀）——口径逐点对齐，不是"顺手多加"。
+- **护栏**：`src/mobile/s3PortGuards.test.ts` 增 1 例（必须从 core 引 `assertSafeKey`，且校验点 ≥5）。
+- **顺带**：`13628cb9` 修掉了 D6 提交里的一处 tsc 未过（护栏测试的未用导入）——当时的校验命令让 tsc 的失败被
+  vitest 输出盖住；今后 tsc 一律**显式打印退出码**再继续。
+- **门禁**：`tsc` exit 0 ✓ · 护栏 3 例 ✓ · 全库 vitest 见本批汇总 ✓ · `git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(八) · P1 漂移修复之一：D6 移动端 S3 client 工厂合并
 
 - **背景**：C2-4 对拍（`docs/SYNC-PROTOCOL.md` §7）查出移动端**内部不自洽**——`bridge.createS3Client`（只服务「测连通」）

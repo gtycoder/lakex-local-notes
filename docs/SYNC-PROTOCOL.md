@@ -221,7 +221,10 @@ interface ManifestFolder {
   checksum 绕行随之上移到工厂，于是「测连通」路径**也**拿到绕行（原先只有同步路径有，正是漂移点）。
   护栏 = `src/mobile/s3PortGuards.test.ts`（`new S3Client(` 只允许一处；`responseChecksumValidation:` 只允许一次；
   已自证：注入第二处 ⇒ 失败）。
-- D1 / D4 / D2 / D5 / D3 / D7 仍未修。
+- **D1 ✅ 已修（261016）**：移动端端口 5 个校验点（getObject / putObject / deleteMany / putObjectStream / getObjectToFile）
+  统一调用 core 的 `assertSafeKey`（与桌面 `ObjectStore` 的校验点对齐；`listObjects` 的 prefix 按桌面同样不校验）。
+  护栏同 `s3PortGuards.test.ts`。
+- D4 / D2 / D5 / D3 / D7 仍未修。
 
 ### 7.4 结论
 
