@@ -1,0 +1,26 @@
+/* 移动端「文档内查找」条（261016）：自有命名 mb-*，只加容器与命中高亮；
+   输入与图标按钮复用 kit 的 .mb-input / .mb-iconbtn--compact，不另造一套控件。
+   命中高亮走 CSS Custom Highlight API（::highlight），不改正文 DOM。 */
+.mb-find {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--lake-bg-panel);
+  border-bottom: 1px solid var(--lake-border-1);
+}
+.mb-find__count {
+  flex: 0 0 auto;
+  min-width: 44px;
+  text-align: right;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+  font-variant-numeric: tabular-nums;
+}
+::highlight(mb-find) {
+  background-color: var(--lake-accent-tint);
+}
+::highlight(mb-find-active) {
+  background-color: var(--lake-accent);
+  color: var(--lake-text-on-accent);
+}

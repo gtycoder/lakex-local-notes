@@ -180,11 +180,25 @@
 | 没有可编程打开口：`hotKey` 插件未注册 service；从 `renderer._$services[]` 取到管理器后 `triggerHotKey('openSearchPanel')` 返回 undefined、面板不出现 | 实测 |
 | 热键要求**编辑器持焦**；`search` 命令入参是**选区/ranges**（不是关键词） | 实测 + 读码 |
 
-**结论与回滚**：内核查找替换**当前即可用**（⌘F，面板自带宽高亮与计数）⇒ **不做宿主入口**。
-`d62d06e` 里加的"顶栏按钮 + 主进程 trusted ⌘F 注入"（`src/features/editor/kernelFind.ts` · `electron/ipc/registerEditorIpc.ts` · preload/native/webApiServer 三处 · `DesktopTopBar.tsx` · `App.tsx`）**已整体回滚**（见 §9 的 revert 行），代码恢复到 B2 之前的状态。
-⇒ 顶栏恢复原样，**桌面 stylesnap 基线不需要重烤**（此前登记的那条待办随之作废）。
+**桌面：不做宿主入口（用户 261016 定）**。内核查找替换**当前即可用**（⌘F，面板自带高亮与计数）；
+我一度加的"顶栏按钮 + 主进程 trusted ⌘F 注入"（`d62d06e`）**已整体回滚**（见 §9 的 revert 行），顶栏恢复原样、桌面 stylesnap 基线不需要重烤。
 
-**移动端不做**：内核工具栏在移动端被关（`disabledPlugins:["save","toolbar"]`）⇒ 无面板也无热键；要在移动端做文档内查找只能自研（属添加项，未立项）。
+**移动端：已实施（261016）** —— 用户澄清"文档搜索入口"要的是**移动端**。
+内核面板在移动端**根本不存在**：移动端关掉了内核工具栏插件（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`），
+而该面板只随工具栏的 search descriptor 一起挂载 ⇒ 没有面板、也没有热键 ⇒ 只能自研。
+
+| 项 | 落地 |
+| --- | --- |
+| 引擎 | `src/mobile/editor/mobileFind.ts`：DOM 文本节点扫描（**移动端文档开了 `disableVirtualRendering:true` ⇒ 整篇正文都在 DOM 里**）+ CSS Custom Highlight API 双高亮（全部/当前）；`n/m` 计数、环形上一个/下一个；不支持该 API 时降级为只滚动定位 |
+| 界面 | `src/mobile/editor/MobileFindBar.tsx` + `mobile-find.css`（新文件，已登记 `mobileLayers`），控件复用 kit 的 `.mb-input` / `.mb-iconbtn--compact`，只加容器与 `::highlight` 两条 |
+| 入口 | **工作区顶栏右上角**（与「编辑」并列；工作区胶囊是定稿四格、且明令不放搜索）；只在 `kind==="doc"` 可用，切文档自动收起 |
+| 接线 | `DocumentEditor.tsx`（回调 ref 把正文容器以 state 暴露给查找条）+ `NotebookWorkspace.tsx`（顶栏按钮 + 状态 + 传参） |
+
+**设备实测**（AVD lake_gate / emulator-5554，真实点按 + 真实 `Input.insertText`）：
+输入正文后打开查找、搜「人类」⇒ **`1/3`**、`CSS.highlights.size=2`；点「下一个」⇒ **`2/3`**；关闭 ⇒ 查找条消失且 **`highlights=0`**（高亮清干净）。截图 `.css-audit/mobile-find-261016/find-bar.png`。
+**移动 6 态快照门禁**：入口给顶栏加了 1 个按钮 ⇒ 属 AGENTS §3#21③ 的构成变化，按配方**重烤基线**（`--from gate-warm*.json --write-baseline`），冷启动后复跑 **6 态 0 差异**（基线仍是专用实例 + 夹具口径）。
+
+**门禁**：`tsc` ✓ · `vitest run` **262 文件 / 2029 例通过**（5 文件 16 例跳过）✓ · `git diff --check` ✓ · `ui-metrics` ✓ · `check:mobileui` ✓。
 
 #### B3 全选：手工 Range vs 内核 `selectAll` / `selectAllDoc`
 - **现状**：块选择走手工 `createRange` + `transformDOMRange`；`selectAllDoc` **0 处使用**。
@@ -332,7 +346,7 @@
 
 **需要裁定**
 1. 移动端「＋」面板条目是否允许改成"内核注册表派生 + 自绘 UI"（C1）？会小幅改变面板内容（跟随内核注册表）。
-2. ~~是否要做**文档内查找/替换**（B2）~~ **用户 261016 定：不做**——内核自带的查找替换（⌘F）已经可用；我加的桌面入口已回滚。移动端同样不做（内核面板在移动端不存在，自研属添加项）。
+2. ~~是否要做**文档内查找**（B2）~~ **已收口（261016）**：**桌面不做宿主入口**（内核自带 ⌘F 面板可用，我加的入口已回滚）；**移动端已实施**——内核面板在移动端不存在，自研 `MobileFindBar`，入口 = 工作区顶栏右上角。
 3. 卡片/图片浮栏是否收回内核 `miniToolbar`、我们只补内核没有的项（C3）？会动已定稿的浮栏观感 —— **用户 261016 定：先不做，需要讨论**。
 4. 移动端文本增强缺项（B6）是否按"下一会话焦点"全做？—— **用户 261016 定：先不做（属添加项，不着急）**。
 5. ~~字数口径若从"我们正则"改成"内核 `wordCount`"，数字可能变化（B1），是否接受？~~ **已实施（261016）**：数字确实变了（见 §9.1 的前后对比）。展示形态：**用户 261016 定 = 保持现状**（状态栏只显示「字数」，不加并列字符数）。
@@ -389,6 +403,7 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 | 261016 | B1 展示形态（字数 vs 字数+字符数） | ✅ 已定：**保持现状** | 不动 `DesktopStatusBar` | 用户 261016 裁定（见 §6#5） |
 | 261016 | 并行会话边界登记 | ✅ 已登记 | `docs/KERNEL-REUSE-AUDIT.md` §10 | 对方议程 = `docs/CODE-REVIEW-261015.md`（`e154ef9`） |
 | 261016 | **A 批次：内核能力实测**（B2 重点 + B5 + C3/A5 记录） | ✅ 已实测 | 探针临时件（`/tmp`）不入库；结论见 §6「A 批次实测结果」 | 内核查找面板可用但**只认真实按键**；`wordCountSelection` 与全文一致；`search` 入参是 ranges |
+| 261016 | B2 文档内查找（**移动端**） | ✅ 已实施 + 设备实测 + 门禁重烤 | 新增 `src/mobile/editor/{mobileFind.ts,MobileFindBar.tsx,mobile-find.css,mobileFind.test.ts}`；改 `DocumentEditor.tsx` / `NotebookWorkspace.tsx` / `mobileLayers.test.ts` / `scripts/mobile-audit/baseline/mobile-snap.json` | 设备：搜「人类」1/3 → 下一个 2/3，关闭后 highlights=0；6 态门禁重烤后 0 差异；截图 `.css-audit/mobile-find-261016/find-bar.png` |
 | 261016 | B2 文档内查找入口（桌面） | ❌ **已回滚（不做）** | revert `d62d06e`：删除 `kernelFind.ts` / `registerEditorIpc.ts`，还原 preload/native/webApiServer/`DesktopTopBar.tsx`/`App.tsx` | 用户裁定"内核当前查找可用"；代码与 `d62d06e^` 逐字节一致 |
 | 261016 | B2 移动端入口 · C3 · A5 · B4 · B6 | ⏳ 待讨论 / 不做 | — | C3 先不做待讨论；A5、B6 不做；B4 未测 |
 | 261016 | 其余 A/C/D 条目 | ⏳ 待讨论 | — | §3 · §4 的优先级建议 |

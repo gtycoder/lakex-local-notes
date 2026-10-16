@@ -35,6 +35,7 @@ const FILES = [
   "mobile/editor-dark.css", // 编辑器深色组件边界修复（取值 P1 起归 theme/dark.css）
   "mobile/editor/editor-dock.css", // 底部 dock + 面板
   "mobile/editor/edit-surface-kernel.css", // 261014 P2：编辑面里「内核按视口/按桌面写死的几何」的唯一收口（doc/note 共用）
+  "mobile/editor/mobile-find.css", // 261016：移动端文档内查找条（容器 + 命中高亮 ::highlight），控件复用 kit 的 .mb-input/.mb-iconbtn
 ];
 
 /** 基线（只允许变小）。261012 P0 实测。 */
@@ -55,6 +56,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 这是本文件既有的无障碍登记模式（.mobile-htab 等同样处理），不是多层覆盖。
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 228, dupGroups: 0 }, // 261015：「＋/更多」= 方块网格（两组 8+10 × 4 列、组间 16、方块 52、浅灰底）；「Aa」面板压缩上下间距（行距 8→6、卡内距 3→2、条目 44→40 走注册表补足、色板 37→34、内距 12/14→6/6）+ 图标 17→20、文字/图标色 text-2→text-1（+1 = font-weight 500）
+  "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
   "mobile/editor/edit-surface-kernel.css": { decls: 24, dupGroups: 0 }, // 261014 P2：把散在 mobile.css（doc 侧）/ quick-notes.css（note 侧）的内核几何收口**合成一份**（doc/note 共用 data-mb-edit-host 契约） // 261013：+1 = 表情面板分类条在 dock 里拉满面板边（当时口径：9 个分类 ≈45.8px、一屏放得下不横滚；261014 已改「一屏 8 格 + 横滑 + 钉住的动作键」，见 kit.css）
 };
 

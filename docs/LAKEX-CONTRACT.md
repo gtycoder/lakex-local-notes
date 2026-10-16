@@ -1871,5 +1871,9 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
 为它做"顶栏按钮 + 主进程注入 trusted ⌘F"属于多余（该实现曾提交为 `d62d06e`，已整体回滚）。
 移动端同样不做：工具栏被关（`disabledPlugins:["save","toolbar"]`）⇒ descriptor 不注册、无面板也无热键；要做只能自研。
 
+**移动端（261016 已落地）**：移动端关掉了工具栏插件 ⇒ 面板与热键都不存在 ⇒ 宿主自研 `src/mobile/editor/MobileFindBar.tsx`：
+DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇正文在 DOM 里）+ CSS Custom Highlight API 双高亮（全部/当前）+ `n/m` + 上/下一个；
+入口 = **工作区顶栏右上角**（工作区胶囊是定稿四格、不放搜索）。设备实测：搜「人类」`1/3` → 下一个 `2/3` → 关闭后 `CSS.highlights.size=0`；
+移动 6 态快照门禁因顶栏多一个按钮而按配方重烤基线，冷启动后 0 差异。
 （附录·实现备忘：那次回滚掉的姿势 = 渲染层先 `execCommand('focus')` 再把焦点交给主进程 `webContents.sendInputEvent({ keyCode: 'F', modifiers: ['meta'|'control'] })` 注入 trusted 按键；
 若将来移动端要复用内核面板，这条是唯一可行路径。另注：让出一拍**不要用 `requestAnimationFrame`** —— CDP 依附/隐藏窗口下 rAF 不触发，会静默失效。）

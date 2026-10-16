@@ -5,6 +5,7 @@
  * 大纲/文档列表的开关状态由宿主控制（传入 outlineOpen/docListOpen + onToggle*），宿主不传则内部自管。
  */
 import { EditorDockHost } from "./EditorDockHost";
+import { MobileFindBar } from "./MobileFindBar";
 import { useCaretIntoView } from "../useCaretIntoView";
 import { showToast } from "../ui/toastBus";
 import "@dlient/lakex-doc-react/style.css";
@@ -12,7 +13,7 @@ import "../../styles/fonts/font-overrides.css"; // 字体接线：须晚于内�
 import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
 import { loadSettings } from "../../lib/settings";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/lakeRuntime";
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
@@ -57,13 +58,16 @@ export interface DocumentEditorProps {
   hidePanels?: boolean;
   /** 编辑器实例回调（工作区用它给右大纲渲 TOC） */
   onEditorInstance?: (editor: LakeEditorInstance | null) => void;
+  /** 文档内查找条（入口在工作区顶栏右上角） */
+  findOpen?: boolean;
+  onCloseFind?: () => void;
 }
 
 export function DocumentEditor(props: DocumentEditorProps) {
   const {
     note, content, editing, onContentChange, onOpenDocument, documents,
     outlineOpen: outlineOpenProp, onToggleOutline, docListOpen: docListOpenProp, onToggleDocList,
-    hidePanels, onEditorInstance,
+    hidePanels, onEditorInstance, findOpen = false, onCloseFind,
   } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const [outlineOpenS, setOutlineOpenS] = useState(false);
@@ -97,6 +101,15 @@ export function DocumentEditor(props: DocumentEditorProps) {
 
   const bodyRef = useRef<HTMLElement | null>(null);
   /**
+   * 正文容器同时以 state 暴露给查找条：ref 变化不触发重渲染，查找条首帧会拿到 null。
+   * 回调 ref 必须稳定（useCallback），否则每次渲染都会 setState 形成死循环。
+   */
+  const [findRoot, setFindRoot] = useState<HTMLElement | null>(null);
+  const setBody = useCallback((el: HTMLElement | null) => {
+    bodyRef.current = el;
+    setFindRoot(el);
+  }, []);
+  /**
    * 编辑器实例必须是**状态**而不只是 ref：`EditorDockHost` 通过 prop 拿它，
    * 而 ref 变化不会触发重渲染 —— 编辑器就绪后父组件若不重渲染，dock 会一直拿到 null，
    * 于是工具栏 B/列表/待办 与面板里的命令全部静默失效（只有用户打字触发一次重渲染后才"活"过来）。
@@ -108,8 +121,10 @@ export function DocumentEditor(props: DocumentEditorProps) {
 
   return (
     <>
+      {/* 文档内查找条（移动端；入口 = 工作区顶栏右上角） */}
+      {findOpen && <MobileFindBar root={findRoot} onClose={() => onCloseFind?.()} />}
       {/* data-mb-edit-host / data-mb-kernel：编辑面契约（内核几何收口见 edit-surface-kernel.css） */}
-      <section className="mobile-doc-body" ref={bodyRef} data-mb-edit-host data-mb-kernel="doc">
+      <section className="mobile-doc-body" ref={setBody} data-mb-edit-host data-mb-kernel="doc">
         <LakeEditor
           noteId={note.id}
           content={content}

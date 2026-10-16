@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book, Search } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
@@ -71,6 +71,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  /** 文档内查找条：只对 Lake 文档（doc）开放；切文档时自动收起（查找条绑定当前正文）。 */
+  const [findOpen, setFindOpen] = useState(false);
+  useEffect(() => { setFindOpen(false); }, [activeId]);
   const [tabsOpen, setTabsOpen] = useState(false);
   const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
   /** 目录抽屉的「新建」菜单（与桌面同一份清单；移动端只有文档/分组能落地，其余置灰）。
@@ -602,6 +605,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           aria-label={active?.editing ? "完成" : "编辑"}
           title={(active?.kind ?? "doc") !== "doc" ? "该文档类型在移动端只读" : active?.editing ? "完成" : "编辑"}
         >{active?.editing ? <Check /> : <Pencil />}</button>
+        {/* 文档内查找（移动端）：内核查找面板在移动端不存在（工具栏插件被关），
+            故入口收在这里、由 MobileFindBar 做 DOM 内查找；工作区胶囊是定稿四格、不放搜索。 */}
+        <button
+          className={"toolbar__button" + (findOpen ? " toolbar__icon--active" : "")}
+          onClick={() => setFindOpen((v) => !v)}
+          disabled={!active || (active.kind ?? "doc") !== "doc"}
+          aria-label="在文档中查找"
+          title={(active?.kind ?? "doc") !== "doc" ? "该文档类型不支持查找" : "在文档中查找"}
+        ><Search /></button>
         <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </header>
 
@@ -638,6 +650,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               onContentChange={(c, plain) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c, plain); }}
               documents={[]}
               hidePanels
+              findOpen={findOpen && t.id === activeId}
+              onCloseFind={() => setFindOpen(false)}
               onEditorInstance={(ed) => {
                 // DS 复核 A2：卸载时 onEditorReady(noteId, null) —— 必须 delete，不能 set(null)
                 // （否则 closeTab 里 delete 后又会被 set 写回键）。get(activeId) ?? null 已兼容 undefined。
