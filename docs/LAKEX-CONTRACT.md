@@ -1890,5 +1890,15 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 **结论**：本构建点击 inline 图片卡**不会派发真预览事件** ⇒ 宿主自研的 `.ne-image` DOM 点击 + `extractImagesFromContent()`（从正文取图，
 规避 `cardLazyInit` 与虚拟渲染）**是必需路径**，不是"重复实现内核能力"。**不要**按官方口接 `previewImgs` 再把自研预览删掉（会退回"点了没反应"）。
 
-（B4 备忘·同批未完成：`moveCollapse`/`moveColumns`/`moveTable`/`moveImage` 的入参形态无法从 registry 可靠得出——`moveImage(cardId)` 实测抛
-`setStart: parameter 1 is not of type 'Node'`，且 registry 的 ID→类有别名（标着 `moveTable` 的类在设行高）。要做得先造四类卡片夹具，再用 `beforeExecCommand` 钩子观察内核自身的调用。）
+### 5.41 块/容器「移动」命令族的真实语义 + 宿主不入（261016 读码 + 实测）
+
+**语义（读码；注意命令类体在 `Object.defineProperty(Cls,'ID',…)` 之前，按 ID 名往回找类体）**：
+- `moveCollapse/moveColumns/moveTable(targetId, nodes)` = **目标侧插入**：把 `nodes` 插到目标容器/卡片**所在位置**并选中它（保节点 id）；前置是目标类型匹配（collapse/columns/table）。
+- `moveCard(cardId, position)` / `moveImage(cardId, position)`：把卡片移到 position；**`moveImage` 是 `moveCard` 的子类、无自有 execute**；position 是**内核内部对象**。
+- `moveColumn(columnsId, from, to)` = 容器内列重排（越界 false）；`tableRowMoveTo(i)` / `tableColumnMoveTo(i)` = 当前选区所在表格的行/列移动。
+
+**实测（261016，隔离 `lake://app` + CDP）**：`moveImage(cardId, …)` 试了 ① DOM 节点 `{node,offset}`、② `engine.transformDOMRange(range).start`（模型 position）、③ `{start,end}` 三种形状，
+**全部抛 `setStart: parameter 1 is not of type 'Node'`**；`.lake` 序列化逐字节未变、`undo=false` ⇒ 该 position **无法从公开面构造**。
+
+**结论：宿主不入这套命令。** 我们的「摘-插」模型事务覆盖所有块类型，而内核没有"任意块移动"接口（非卡片块完全没有）。
+将来若要做**容器内重排**，直接用 `moveColumn` / `tableRowMoveTo` / `tableColumnMoveTo`（走内核撤销栈、保 id），不要再自研。

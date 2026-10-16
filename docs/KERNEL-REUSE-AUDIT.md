@@ -216,6 +216,25 @@
 - **风险**：中——移动语义/撤销栈表现需逐类型实测（表格、分栏、折叠块各一档）。
 - **验收**：移动后 `.lake` 序列化对比（节点 id 保留）+ ⌘Z 一次撤销回到原位。
 
+**B4 评估记录（261016：读码 + 运行时实测）— 结论：不做（不替换现有实现）**
+
+**七个命令的真实语义**（读码要点：命令类的**类体在 `Object.defineProperty(Cls,'ID',…)` 之前**，要按 ID 名**往回**找类体）：
+
+| 命令 | 语义 | 前置条件 |
+| --- | --- | --- |
+| `moveCollapse(collapseId, nodes)` · `moveColumns(columnsId, nodes)` · `moveTable(tableId, nodes)` | **目标侧插入**：把 `nodes` 插到该容器/卡片**所在位置**，再选中该容器（保节点 id） | 目标类型必须匹配（`nodeName === collapse/columns`、`hasCategory(Table)`） |
+| `moveCard(cardId, position)` · `moveImage(cardId, position)` | 把该卡片移到 `position`；**`moveImage` 是 `moveCard` 的子类、无自有 execute** | 需要**内核内部的 position 对象** |
+| `moveColumn(columnsId, from, to)` | **容器内列重排**（真正的 reorder；越界返回 false） | 目标必须是 columns 节点 |
+| `tableRowMoveTo(i)` · `tableColumnMoveTo(i)` | 把**当前选区所在表格**的行/列移到索引 i（整数校验） | 依赖选区 |
+
+**运行时实测**（隔离 `lake://app` + CDP；文档 = 两段 `<ne-p>` + 一张图片卡）：
+`moveImage(cardId, …)` 依次试了三种位置形状 —— ① DOM 节点 `{node: <ne-p>, offset:0}`；② `ed.engine.transformDOMRange(range).start`（模型 position，实测 `start.node.type === "p"`）；③ 整个 `{start,end}` ⇒
+**三种全部抛 `setStart: parameter 1 is not of type 'Node'`**，且 `.lake` 序列化**逐字节未变**、`undo` 返回 `false`（什么都没发生）⇒ 该 position 是**内核内部类型**（它自己拖拽链路的产物），**无法从公开面构造**。
+
+**为什么不替换**（AGENTS §3#17 三问）：① `moveBlockNative` 覆盖**所有块类型**，内核没有"任意块移动"接口（非卡片块完全没接口）⇒ 换过去只能覆盖子集、还得保留现有实现（两套并存更复杂）；② 能用的两族要么需要内部 position（不可驱动），要么是"容器内重排"而我们**当前没有**这种需求；③ 收益不明确 + 新增对未公开内部结构的依赖 ⇒ **不做**。
+
+**登记为将来选项**（真有需求时直接用，不必自研）：分栏列重排 = `moveColumn(columnsId, from, to)`；表格行列重排 = `tableRowMoveTo(i)` / `tableColumnMoveTo(i)`（都走内核撤销栈、保节点 id）。
+
 #### B5 选区取内容/字数：`getSelectionContent` 已在用，`wordCountSelection` 未用
 - **现状**：`blockHandleMount.ts:47` 已用 `getSelectionContent('text/markdown')`；选区字数未用。
 - **内核证据**：§5.9（**其中"getSelectionContent 未用"一句已过期**，见 §8）。
@@ -360,7 +379,7 @@
 | `search` / `replaceText` / `replaceAll` 入参 | ✅ 读码确认入参是**选区/ranges**（不是关键词）⇒ 复用单位是面板 | 移动端若要查找只能自研（待讨论） |
 | `envAdapter.previewImgs` 是否派发（B8） | ✅ **已实测（261016）：本构建不派发** —— ① 在活动宿主内挂 `editor.on('previewImgs')`，真实点击 64×64 inline 图片卡中心：**事件 0 次**；② 临时接上 `envAdapter.previewImgs` 重建复测：**回调仍 0 次**（内核默认 `allowClickToMaximize: true`，也不是"选项没开"）。临时改动已回滚、残留 0 | **B8 结案**：自研 DOM 点击 + 正文解析预览是**必需**，非重复实现（契约 §5.40） |
 | `miniToolbar`（C3） | ⏳ 未测 —— 用户 261016 定「先不做，需要讨论」，故本轮不投入 | 讨论时再测 |
-| `moveCollapse` / `moveColumns` / `moveTable` / `moveImage`（B4） | ❌ **仍未完成**（诚实结论）：入参形态**无法从 registry 可靠得出** —— `moveImage(cardId)` 实测抛 `setStart: parameter 1 is not of type 'Node'`（第一参不是 cardId）；registry 的 ID→类还有别名（标着 `moveTable` 的类实际在"设行高"） | 要做需先按 `docs/LAKE-CONTENT-WRITING.md` 造折叠块/分栏/表格/图片四类夹具，再用 `beforeEditing/ beforeExecCommand` 钩子观察内核**自己**调用这些命令时的 args；未排期 |
+| `moveCollapse` / `moveColumns` / `moveTable` / `moveImage`（B4） | ✅ **已评估（261016 读码 + 实测）⇒ 不做**：读码定清 7 个命令的真实语义（`move*` 是**目标侧插入**；`moveCard/moveImage` 需要**内核内部 position**；`moveColumn/tableRowMoveTo/tableColumnMoveTo` 是容器内/表格行列重排）；实测 `moveImage` 三种位置形状全抛 `setStart: … not a Node`、`.lake` 未变 | 见 §3.2 B4 评估记录；将来做容器内重排可用 `moveColumn` / `tableRowMoveTo` / `tableColumnMoveTo` |
 | `toc.getContainer`（A5） | ❌ 用户 261016 定：A5 不做 | 关闭 |
 
 ---
@@ -405,7 +424,8 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 | 261016 | **A 批次：内核能力实测**（B2 重点 + B5 + C3/A5 记录） | ✅ 已实测 | 探针临时件（`/tmp`）不入库；结论见 §6「A 批次实测结果」 | 内核查找面板可用但**只认真实按键**；`wordCountSelection` 与全文一致；`search` 入参是 ranges |
 | 261016 | B2 文档内查找（**移动端**） | ✅ 已实施 + 设备实测 + 门禁重烤 | 新增 `src/mobile/editor/{mobileFind.ts,MobileFindBar.tsx,mobile-find.css,mobileFind.test.ts}`；改 `DocumentEditor.tsx` / `NotebookWorkspace.tsx` / `mobileLayers.test.ts` / `scripts/mobile-audit/baseline/mobile-snap.json` | 设备：搜「人类」1/3 → 下一个 2/3，关闭后 highlights=0；6 态门禁重烤后 0 差异；截图 `.css-audit/mobile-find-261016/find-bar.png` |
 | 261016 | B2 文档内查找入口（桌面） | ❌ **已回滚（不做）** | revert `d62d06e`：删除 `kernelFind.ts` / `registerEditorIpc.ts`，还原 preload/native/webApiServer/`DesktopTopBar.tsx`/`App.tsx` | 用户裁定"内核当前查找可用"；代码与 `d62d06e^` 逐字节一致 |
-| 261016 | B2 移动端入口 · C3 · A5 · B4 · B6 | ⏳ 待讨论 / 不做 | — | C3 先不做待讨论；A5、B6 不做；B4 未测 |
+| 261016 | **B4 移动命令族评估** | ✅ 已评估 ⇒ **不做**（不替换现有摘-插） | 无代码改动（只读码 + 探针） | 语义见 §3.2 B4 记录；`moveImage` 三种 position 形状全抛 `setStart`；契约 §5.41 |
+| 261016 | B2 移动端入口（已完成）· C3 · A5 · B6 | ⏳ C3 待讨论 / A5、B6 不做 | — | C3 先不做待讨论；A5、B6 不做 |
 | 261016 | 其余 A/C/D 条目 | ⏳ 待讨论 | — | §3 · §4 的优先级建议 |
 
 > 口径：**状态**只用三档 —— ⏳ 待讨论 / 🔧 进行中 / ✅ 已实施（+ 实测）。每条实施必须同时写：落地文件、门禁结果、运行时证据；改到内核契约的观测回填 `docs/LAKEX-CONTRACT.md`。
