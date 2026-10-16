@@ -96,12 +96,12 @@
 .ln-iconbtn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-iconbtn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-iconbtn:disabled:hover { background: transparent; }
-.ln-iconbtn.is-selected { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.ln-iconbtn.is-selected { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
 .ln-iconbtn--compact { width: var(--lake-ctl-h-sm); height: var(--lake-ctl-h-sm); border-radius: var(--lake-ctl-rad-sm); }
 /* 悬停用**主色淡底**（目录栏那一排按钮的既有观感：中性底「显得没反应」，用户 260914 定过）。
    这是「图标按钮」的第二个正式变体 —— 不要再另起一套类名。 */
-.ln-iconbtn--accent:hover:not(:disabled) { color: var(--lake-accent); background: var(--lake-accent-tint); }
-.ln-iconbtn--accent.is-selected { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.ln-iconbtn--accent:hover:not(:disabled) { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+.ln-iconbtn--accent.is-selected { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
 
 /* ── 00 单行省略（工具类）─────────────────────────────────────
    260930 审计：同一套「装不下就省略号」在 14 处各写了一遍（多维表标题/单元格、移动端、状态栏、页签…）。
@@ -205,7 +205,7 @@
 .ln-menu__item--danger:hover,
 .context-menu > button.danger:hover,
 .context-menu-item.danger:hover { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
-.ln-menu__check { flex: 0 0 auto; width: 16px; color: var(--lake-accent); }
+.ln-menu__check { flex: 0 0 auto; width: 16px; color: var(--lake-accent-text); }
 .ln-menu__label { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
 .ln-menu__hint { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-regular); }
 .ln-menu__sep { height: 1px; margin: 5px 0; background: var(--lake-border-2); }

@@ -16,6 +16,35 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(四) · B2 收口：Q2 决定（!important 允许清单）+ Q4 落地（36 处字色）+ Q3 仅记录
+
+- **用户裁决**：Q3「需要详细考虑，先文档记录」· Q4「可以做」· Q2「你决定，确实有必要用 !important 可以保留，不是一点不能用」。
+- **Q2 落地（本会话定）**：`!important` 红线由「数字 ≤10」改为**逐条有理由的允许清单**——桌面实测 11 条逐条核过都成立
+  （压 JS inline 宽度 / 压内核 inline 高度 / 压 legacy 的 `!important` / reduced-transparency 契约）；「≤10」这个数**已被真实需要越过**，
+  继续挂着只会让门禁失去意义，而"清单化"比数字更硬。
+  · `scripts/ui-metrics.mjs` 新增 `IMPORTANT_ALLOWLIST`（11 条，每条写明"压谁"）；判据 = 总数不超清单长度 **且不得出现清单外的 `!important`**；
+    清单里已找不到的条目会被列出提醒同步删表；移动端走棘轮 **19**（只许降）。
+  · **自证**：注入清单外新增 ⇒ 报 `清单外的 !important: styles/__q2_probe.css .q2-probe {color}` 且 exit 1；移动端 20>19 ⇒ exit 1；清理后 exit 0。
+    过程中护栏当场抓出我把 `tokens.css` 的选择器顺序猜错（实际是 `.create-menu, .context-menu`）——正是它该干的事。
+  · `AGENTS §3#14` 与 §3#21 的口径已同步改写（不再是"≤10"）。
+- **Q4 落地**：**36 处**文字色 `var(--lake-accent)` → `var(--lake-accent-text)`（11 个文件、36 增/36 删），护栏基线 36 → **0**（硬 0）。
+  · 逐行核对：删除行**全部**是"属性恰为 `color` 的 accent"，新增行全部是 accent-text；其中 **35 处为纯令牌替换**，
+    1 处是 `document-status.css` 的**自我兜底** `color: var(--lake-accent, var(--lake-accent))`（同类噪声，一并修掉并补注释）。
+  · **未误伤**：`border-color: var(--lake-accent)` **26→26**、`background: var(--lake-accent)` **29→29** 均不变（属性边界证明）。
+  · **观感**：浅 `#3f5fa0→#33497f` · 深 `#9aabce→#b9c6e2` · 暖 `#d45500→#a8440a`；实测**只有暖色从不达 AA（3.61–4.12）变为达标（5.27–6.01）**，
+    浅/深本就达标（此前"深色会掉到 3:1"是**我的错判**，已按实测纠正）。
+  · 顺带把 `.ln-iconbtn.is-selected` / `.bottom-bar-btn.active` 等**选中态**对齐到 kit 的选中三元组（属 C5-1 的一部分）。
+- **Q3 仅记录（未实施）**：三候选的真实合成值与对比度已固化进 `docs/CODE-REVIEW-261015.md` §Q3
+  （推荐 A = `color-mix(in srgb, var(--lake-accent-tint) 88%, var(--lake-accent) 12%)`，不引入颜色字面量）。
+- **⚠️ 视觉装置未跑（如实登记）**：本轮**未跑** `check:stylesnap` / `check:mobilesnap`（需 CDP + Electron / 专用 AVD；本次 Electron 截图路径在本环境超时）。
+  替代证据 = 纯令牌替换的逐行配对 + 属性边界证明 + 三主题色值表。**正式验收前建议补跑受影响态**（Q4 只改颜色、不涉几何 ⇒ 预期"元素数不变、颜色指纹变化"）。
+- **⚠️ 并发会话的既有失败（非本批引入）**：`electron/webApiServer.test.ts > WEB_METHODS 与 preload.cjs 的 invoke 通道完全一致` 失败——
+  内核会话给 `preload.cjs` 加了 `findInDocument → find_in_document`，但未同步 `electron/webApiServer.ts` 的 `WEB_METHODS`（AGENTS §7.6 的坑）。
+  本批为纯 CSS/脚本改动，不可能影响该断言；按并发边界**未由本会话修改**，留给该会话补。
+- **门禁**：`tsc` ✓ · 全库 vitest **2023 例通过 / 1 例失败（即上面那条并发会话的）** · 双端构建 ✓ · `check:core` 81 文件 0 违规 ✓ ·
+  `check:mobileui` ✓ · `check:bundle` ✓ · `ui-metrics` exit 0 ✓ · `git diff --check` clean ✓。
+- **状态**：随本批提交并推送 `origin/master`（只提交本会话文件）。
+
 ### 261016(三) · B2（第一批：不涉及观感）移动端颜色清零 + Q3/Q4 取色实测
 
 - **用户点单**：先做 B2 里**不涉及观感**的那部分，然后给 Q3/Q4 做可视化。

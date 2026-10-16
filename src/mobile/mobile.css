@@ -100,7 +100,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-qn-images { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
 .mobile-qn-error { color: var(--lake-status-error); font-size: 13px; margin-top: 8px; }
 .mobile-qn-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.mobile-qn-add { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-accent-tint); cursor: pointer; }
+.mobile-qn-add { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--lake-radius-sm); color: var(--lake-accent-text); background: var(--lake-accent-tint); cursor: pointer; }
 .mobile-qn-add input { display: none; }
 .mobile-qn-hint { font-size: 12px; color: var(--lake-text-3); }
 .mobile-qn-spacer { flex: 1; }
@@ -243,7 +243,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .create-nb-row { display: flex; gap: 12px; align-items: center; }
 .create-nb-icon {
   width: 48px; height: 48px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-window);
-  display: flex; align-items: center; justify-content: center; color: var(--lake-accent); cursor: pointer; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; color: var(--lake-accent-text); cursor: pointer; flex: 0 0 auto;
 }
 .create-nb-emoji { font-size: 24px; }
 .create-nb-input { flex: 1; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 12px 14px; font-size: 16px; outline: none; background: var(--lake-bg-window); color: var(--lake-text-1); }
@@ -266,12 +266,12 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-search-main { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; padding: 6px 0; }
 /* .mobile-search-title：截断走 kit 的 .ln-ellipsis（JSX 已挂；移动端同样加载 themes/kit） */
 .mobile-search-snippet { font-size: 12px; color: var(--lake-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mobile-search-snippet mark { background: transparent; color: var(--lake-accent); }
+.mobile-search-snippet mark { background: transparent; color: var(--lake-accent-text); }
 .mobile-search-parent { color: var(--lake-text-3); font-size: 12px; }
 
 /* 设置抽屉 */
 
-.mobile-drawer-tabs button.active { color: var(--lake-accent); border-bottom-color: var(--lake-accent); font-weight: 600; }
+.mobile-drawer-tabs button.active { color: var(--lake-accent-text); border-bottom-color: var(--lake-accent); font-weight: 600; }
 
 .mobile-settings-form input:focus { border-color: var(--lake-accent); }
 
@@ -283,7 +283,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-status-msg { padding: 6px 12px; font-size: 12px; color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: 1px solid var(--lake-border-1); }
 .mobile-trash-title { flex: 1; }   /* 截断走 .ln-ellipsis */
 .mobile-trash-date { color: var(--lake-text-3); font-size: 12px; }
-.mobile-trash-action { border: none; background: transparent; color: var(--lake-accent); cursor: pointer; display: flex; padding: 6px; }
+.mobile-trash-action { border: none; background: transparent; color: var(--lake-accent-text); cursor: pointer; display: flex; padding: 6px; }
 .mobile-trash-danger { color: var(--lake-status-error); }
 
 /* 缓存统计 */
@@ -437,7 +437,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .bottom-bar-btn > svg, .mobile-bottom-bar__item > svg { width: 20px; height: 20px; flex-shrink: 0; }
 .bottom-bar-btn:active { color: var(--lake-text-2); background: var(--lake-bg-hover); transform: scale(.92); }
-.bottom-bar-btn.active { color: var(--lake-accent); background: var(--lake-accent-tint); font-weight: 600; }
+.bottom-bar-btn.active { color: var(--lake-accent-text); background: var(--lake-accent-tint); font-weight: 600; }
 /* 思源 #mobileBottomBar 口径：纯图标项（label 走 aria-label/title），active = 主色 + 轻底 */
 .mobile-bottom-bar__item {
   appearance: none; position: relative; flex: 1 1 0; min-width: 40px; height: var(--mobile-bottom-bar-height);
@@ -449,7 +449,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 }
 .mobile-bottom-bar__item[disabled] { opacity: .38; cursor: default; }
 .mobile-bottom-bar__item:active:not([disabled]) { color: var(--lake-text-2); background-color: var(--lake-bg-hover); transform: scale(.92); }
-.mobile-bottom-bar__item.active { color: var(--lake-accent); background-color: var(--lake-accent-tint); }
+.mobile-bottom-bar__item.active { color: var(--lake-accent-text); background-color: var(--lake-accent-tint); }
 .mobile-bottom-bar__item:first-child { border-top-left-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-left-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 .mobile-bottom-bar__item:last-child { border-top-right-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-right-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 
@@ -599,7 +599,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    标题截断由 kit.css 的 .mb-row__title 承担（原 .ln-row__title 规则自 P5 起永不命中 ⇒ 已删）。 */
 .nb-tree-actions { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
 .nb-tree-action { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; color: var(--lake-text-3); }
-.nb-tree-action:active { background: var(--lake-bg-hover); color: var(--lake-accent); }
+.nb-tree-action:active { background: var(--lake-bg-hover); color: var(--lake-accent-text); }
 
 /* 长按拖拽排序：拖起的行抬起；落点线/拖入分组照搬桌面端专做的那套（ui-polish.css:271-289）
    —— ::before/::after 伪元素画 2px accent 线 + soft 光晕，而不是 box-shadow。 */
@@ -687,7 +687,7 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 }
 .mbt-table-tab.is-active {
   border-color: var(--lake-accent);
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
 }
 .mbt-meta {
   display: flex;
@@ -773,7 +773,7 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   accent-color: var(--lake-accent);
 }
 .mbt-link {
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
   text-decoration: underline;
   word-break: break-all;
 }

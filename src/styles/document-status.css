@@ -26,7 +26,7 @@
 
 .document-statusbar-state.synced-history {  padding: 2px 7px;
   border-radius: 999px;
-  color: var(--lake-accent, var(--lake-accent));
+  color: var(--lake-accent-text);   /* B2/261016：文字色一律 accent-text；原 var(--lake-accent, var(--lake-accent)) 是自我兜底（fallback 与主值同令牌）*/
   background: color-mix(in srgb, var(--lake-accent) 10%, transparent);
 }
 .document-notice-toast {  position: absolute;

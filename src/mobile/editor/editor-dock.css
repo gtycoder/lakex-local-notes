@@ -51,7 +51,7 @@
 .med-btn:active, .med-btn:focus-visible { background: var(--lake-bg-hover); }
 /* 命令生效（B/列表/待办等）：主色文字 + 主色浅底 + 主色描边，突出"光标处正在生效" */
 .med-btn.med-active {
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
   background: var(--lake-accent-tint);
   box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
 }
@@ -59,7 +59,7 @@
    不用实心主色圆钮（工具栏是通栏线性图标，实心大圆块过响且抢焦点）。
    仅"展开态"启用圆角，其余时刻与普通按钮一致，避免工具栏混用两种形状。 */
 .med-btn.med-toggle.med-open {
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
   background: var(--lake-accent-tint);
   box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
   border-radius: calc(var(--mobile-bottom-bar-height) / 2 - 4px);
@@ -204,7 +204,7 @@
 .med-f-btn:active { background: var(--lake-bg-hover); }
 /* 面板内命令生效（加粗/斜体/列表/对齐/字号等）：主色 + 浅底 + 描边（用户 261012：样式先保持我们自己的） */
 .med-f-btn.med-f-on {
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
   background: var(--lake-accent-tint);
   box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
 }
@@ -263,7 +263,7 @@
 .med-outline-item.lv3 { padding-left: 52px; color: var(--lake-text-2); }
 .med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); font-size: 16px; cursor: pointer; color: var(--lake-text-1); -webkit-tap-highlight-color: transparent; }
 .med-doc-item:active { background: var(--lake-bg-hover); }
-.med-doc-item.med-active { color: var(--lake-accent); font-weight: 600; }
+.med-doc-item.med-active { color: var(--lake-accent-text); font-weight: 600; }
 /* .med-doc-item-title：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
 
 /* 降低动效偏好：dock 全部关动画（与 mobile.css 的 reduced-motion 兜底同口径） */

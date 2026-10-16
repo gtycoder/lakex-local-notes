@@ -49,7 +49,7 @@
 .bt-stat:disabled { cursor: default; }
 /* 「添加」统一为云端那颗圆形 + 钮（分组「加进本组」/ 表底「添加记录」/ 表头「新增字段」共用） */
 .bt-add-round { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-text-2); cursor: pointer; }
-.bt-add-round:hover { color: var(--lake-accent); border-color: var(--lake-accent); }
+.bt-add-round:hover { color: var(--lake-accent-text); border-color: var(--lake-accent); }
 .bt-add-round:disabled { cursor: default; color: var(--lake-text-4); }
 /* 「加进本组」：**有自己的一行空间**，但**不画行线**（不要把它嵌到分组边线上：那样又丑又不好点）。
    底色 = 分组底衬（260929 用户：复刻云端——加号区在卡片**之外**的浅灰通道上，卡片只含分组头 + 记录）。 */

@@ -19,7 +19,7 @@
 .bt-link-cell { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
 .bt-link-text { flex: 1 1 auto; padding: 0 8px; font-size: var(--lake-font-size-body); color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
 .bt-link-open { display: inline-flex; align-items: center; border: 0; background: transparent; padding: 2px; color: var(--lake-text-3); cursor: pointer; }
-.bt-link-open:hover { color: var(--lake-accent); }
+.bt-link-open:hover { color: var(--lake-accent-text); }
 
 .bt-rating { display: inline-flex; align-items: center; gap: 1px; }
 /* 空星也是实心（对齐云端语雀）：原先 fill:none + 最浅边框色的空心星几乎看不见。

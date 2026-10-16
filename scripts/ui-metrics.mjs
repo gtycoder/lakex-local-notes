@@ -177,11 +177,50 @@ r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, a
 //   ③ 「文字一律用 --lake-accent-text」与「同一 (选择器,属性) 不得跨文件重复」都没有判据。
 // 基线 = 首次实测存量，**只许降**（清理时同步调小；清理批次见 CODE-REVIEW §7 的 B2）。
 const BASELINE = {
-  desktopImportant: 11,        // 口径修正后实测（入口图口径曾报 10）；AGENTS §3#14 的目标仍是 ≤10 ⇒ B2 收口
-  mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 现在与桌面同为硬 0
-  accentTextMisuse: 36,        // 越界把 --lake-accent 当文字色；目标 0
+  desktopImportant: 11,        // = IMPORTANT_ALLOWLIST.length（见下）；只许降，且不得出现清单外的 !important
+  mobileImportant: 19,         // 移动端 !important 棘轮（主要是 edit-surface-kernel.css 压内核未分层样式）
+  mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 与桌面同为硬 0
+  accentTextMisuse: 0,         // 261016 B2 已清零（原 36）：文字色一律 --lake-accent-text
   crossFileDupGroups: 298,     // 同一 (选择器,属性) 出现在 ≥2 个文件；文件内重复另有 cssLayers/mobileLayers 围栏
 };
+
+// ── !important 允许清单（Q2，261016；用户定："确实有必要用 !important 可以保留，不是一点不能用"）──
+// 规则：**总数不得超过清单长度**，且**不得出现清单外的 !important** —— 数字上限从此变成"逐条有理由"。
+// 唯一允许的例外（AGENTS §3#14）：压内核/第三方写进 element 的 inline style，或压 legacy 层里的 !important。
+// 每条都必须写明"压的是谁"；删掉某条时应同时从本表移除（本脚本会把"清单里但已找不到"的条目列出来提醒）。
+const IMPORTANT_ALLOWLIST = [
+  { file: 'styles/components.css', sel: '.settings-panel-large', prop: 'width', why: '面板宽度由 JS 的 FloatingPanel 以 **inline style** 给出 ⇒ 只有 !important 压得过（P7-e 批量去 important 时误删过一次，宽度当场从 1000 掉到 840）' },
+  { file: 'styles/components.css', sel: '.seg__item', prop: 'border', why: '共享层 .seg__item 与 legacy 的 .b3-button--outline 叠用；@layer 里 !important **反转层序** ⇒ legacy 的 !important 必压 kit 的普通声明（260923 W4 实测结论）' },
+  { file: 'styles/components.css', sel: '.seg__item', prop: 'background', why: '同上（分段控件静息态透明）' },
+  { file: 'styles/components.css', sel: '.seg__item', prop: 'color', why: '同上（静息态 text-2）' },
+  { file: 'styles/components.css', sel: '.seg .seg__item:hover', prop: 'color', why: '同上（hover 态 text-1）' },
+  { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: 'backdrop-filter', why: 'prefers-reduced-transparency 契约：要压所有浮层的毛玻璃，含第三方/内核浮层' },
+  { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: '-webkit-backdrop-filter', why: '同上（-webkit- 前缀）' },
+  { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: 'background', why: '同上（改用不透明面板底）' },
+  { file: 'styles/compat.css', sel: '.fn__none', prop: 'display', why: '思源遗留的隐藏类仍作 JSX/内核钩子用；本条在 legacy 层，被隐藏的元素可能带内核未分层样式 ⇒ 需要 important' },
+  { file: 'styles/app/quick-notes.css', sel: '.quick-notes-pane .lake-editor-mount.ne-ui-fullscreen', prop: 'position', why: '内核 legacy 里有 position:fixed!important（实测仍会盖住红绿灯）' },
+  { file: 'features/usheet/usheetEditor.css', sel: '.usheet-editor section:has([data-u-comp="slide-tab-bar"])', prop: 'height', why: '内核把高度写成 **inline style** style="height: 36px"（实测；非类非变量）' },
+];
+/** 收集一组文件里 !important 声明的条数。 */
+function collectImportantAll(files) {
+  let n = 0;
+  for (const p of files) n += collectImportant(p).length;
+  return n;
+}
+/** 收集某文件里所有带 !important 的声明（选择器 + 属性）。 */
+function collectImportant(file) {
+  const out = [];
+  for (const rule of extractRules(readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''))) {
+    if (!rule.sel) continue;
+    for (const decl of rule.body.split(';')) {
+      if (!/!important/.test(decl)) continue;
+      const idx = decl.indexOf(':');
+      if (idx < 0) continue;
+      out.push({ sel: rule.sel, prop: decl.slice(0, idx).trim() });
+    }
+  }
+  return out;
+}
 
 // ① 桌面非主题颜色字面量（硬目标 0）
 const desktopColorLiterals = d.hex + d.rgb;
@@ -230,9 +269,24 @@ const crossFileDupTop = crossFileDups
   .map(([key, owners]) => [key, owners.size, [...owners]])
   .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
 
+// ⑤ !important：桌面按**允许清单**逐条核对；移动端走棘轮
+const desktopImportantSites = [];
+for (const p of fontScope) for (const site of collectImportant(p)) desktopImportantSites.push({ file: relative(ROOT, p).replace(/^src\//, ''), ...site });
+const key = (s) => s.file + ' || ' + s.sel + ' || ' + s.prop;
+const allowKeys = new Set(IMPORTANT_ALLOWLIST.map(key));
+const foundKeys = new Set(desktopImportantSites.map(key));
+const importantUnknown = desktopImportantSites.filter((s) => !allowKeys.has(key(s)));
+const importantStale = IMPORTANT_ALLOWLIST.filter((s) => !foundKeys.has(key(s)));
+const mobileImportant = collectImportantAll(mobileCss);
+
 r.complianceGuard = {
   desktopColorLiterals,
   desktopImportant: d.imp,
+  desktopImportantSites,
+  importantAllowlist: IMPORTANT_ALLOWLIST,
+  importantUnknown,
+  importantStale,
+  mobileImportant,
   mobileColorLiterals,
   mobileColorTop: mobileColorTop.sort((a, b) => b[1] - a[1]),
   accentTextMisuse,
@@ -245,6 +299,8 @@ r.complianceGuard = {
 
 if (desktopColorLiterals) process.exitCode = 1;
 if (d.imp > BASELINE.desktopImportant) process.exitCode = 1;
+if (importantUnknown.length) process.exitCode = 1;          // 清单外的 !important：直接失败（Q2）
+if (mobileImportant > BASELINE.mobileImportant) process.exitCode = 1;
 if (mobileColorLiterals > BASELINE.mobileColorLiterals) process.exitCode = 1;
 if (accentTextMisuse > BASELINE.accentTextMisuse) process.exitCode = 1;
 if (crossFileDups.length > BASELINE.crossFileDupGroups) process.exitCode = 1;
@@ -276,7 +332,10 @@ else {
   const g = r.complianceGuard;
   console.log('== 合规护栏（B0，261016；基线只许降） ==');
   console.log('  桌面颜色字面量(非主题)', g.desktopColorLiterals, ' / 目标 0');
-  console.log('  桌面 !important        ', g.desktopImportant, ' / 基线', g.baseline.desktopImportant, '（红线目标仍 ≤10 ⇒ B2 收口）');
+  console.log('  桌面 !important        ', g.desktopImportant, ' / 允许清单', g.baseline.desktopImportant, '条（逐条有理由；清单外新增直接失败）');
+  if (g.importantUnknown.length) console.log('     ✗ 清单外的 !important:', g.importantUnknown.map((s) => s.file + ' ' + s.sel + ' {' + s.prop + '}').join('  '));
+  if (g.importantStale.length) console.log('     ⚠ 清单里但已找不到（请同步删表项）:', g.importantStale.map((s) => s.file + ' ' + s.prop).join('  '));
+  console.log('  移动端 !important      ', g.mobileImportant, ' / 基线', g.baseline.mobileImportant, '（只许降）');
   console.log('  移动端颜色字面量(非主题)', g.mobileColorLiterals, ' / 基线', g.baseline.mobileColorLiterals);
   console.log('     top:', g.mobileColorTop.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('  文字色误用裸 accent    ', g.accentTextMisuse, ' / 基线', g.baseline.accentTextMisuse, '（应改 --lake-accent-text）');

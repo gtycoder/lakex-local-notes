@@ -65,7 +65,7 @@
 .document-statusbar-state.saving { color: var(--lake-status-sync); background: var(--lake-status-sync-soft); }
 .document-statusbar-state.conflict, .document-statusbar-state.save-error { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 .document-statusbar-state.local-only { color: var(--lake-text-3); background: var(--lake-bg-block); }
-.document-statusbar-lock { color: var(--lake-accent); }
+.document-statusbar-lock { color: var(--lake-accent-text); }
 .document-statusbar-message { color: var(--lake-text-2); }
 .document-statusbar-state.synced-history { border: 0; font-weight: var(--lake-font-weight-semibold); }
 
@@ -140,7 +140,7 @@
 }
 .top-menu__check {
   margin-left: auto;
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
   flex: 0 0 auto;
 }
 .top-menu--workspace {
@@ -489,7 +489,7 @@
   background: var(--lake-accent-tint);
   border-color: transparent;
 }
-.tab-item.pinned .tab-pin { color: var(--lake-accent); }
+.tab-item.pinned .tab-pin { color: var(--lake-accent-text); }
 .tab-item.pinned .tab-title { font-weight: var(--lake-font-weight-semibold); }
 /* 多标签统一（用户 260923）：未选中 medium(500) / 选中 semibold(600) / 钉住 semibold(600) */
 .tab-item .tab-title { font-weight: var(--lake-font-weight-medium); }
@@ -559,7 +559,7 @@
 .tree-row-icon { color: var(--lake-text-3); }
 /* 已锁定（只读）的目录行小锁：非交互、行尾常驻（不随 hover 消失，锁状态要一直看得见）。 */
 .tree-row-lock { display: inline-flex; align-items: center; color: var(--lake-text-3); }
-.note-row.active .tree-row-icon { color: var(--lake-accent); }
+.note-row.active .tree-row-icon { color: var(--lake-accent-text); }
 .tree-chevron {
   display: inline-flex;
   align-items: center;
@@ -643,7 +643,7 @@
   height: 30px;
   border-radius: var(--lake-radius-sm);
   /* 261006：状态信号从「单侧 3px 色条」改为「图标颜色」。 */
-  color: var(--lake-accent);
+  color: var(--lake-accent-text);
 }
 .sync-toast-icon--ok { color: var(--lake-status-ok); }
 .sync-toast-icon--error { color: var(--lake-status-error); }

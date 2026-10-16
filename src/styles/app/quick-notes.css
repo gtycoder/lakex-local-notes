@@ -35,7 +35,7 @@
 /* 头部小工具（多选 / 排序）：纯图标按钮，hover 才着色 */
 .quick-notes-tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; color: var(--lake-text-3); background: transparent; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.quick-notes-tool-btn:hover:not(:disabled), .quick-notes-tool-btn.is-on { color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
+.quick-notes-tool-btn:hover:not(:disabled), .quick-notes-tool-btn.is-on { color: var(--lake-accent-text); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
 
 .quick-notes-tool-btn:disabled { opacity: .4; cursor: default; }
 
@@ -106,7 +106,7 @@
 /* 顶部「新建小记」（对齐云端图3：绿色羽毛 + 号） */
 .quick-notes-new { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
 .quick-notes-new:hover { background: color-mix(in srgb, var(--lake-accent) 12%, transparent); }
-.quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--lake-accent); }
+.quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--lake-accent-text); }
 .quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
 .quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: var(--lake-font-size-tiny); }
 .quick-notes-index { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
@@ -352,7 +352,7 @@
 .quick-note-composer textarea,
 .quick-note-entry p { color: var(--lake-text-1); }
 .quick-note-entry time { color: var(--lake-text-3); }
-.quick-note-card-actions button:hover { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.quick-note-card-actions button:hover { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
 
 /* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：小记入口 ── */
 /* ---- 跨屏微交互一致性收口（仅渲染层 CSS，不重排布局 / 不动内核） ----

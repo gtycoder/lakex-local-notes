@@ -12,7 +12,7 @@
 .create-menu-wrap { position: relative; }
 
 /* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
-.create-btn:hover, .create-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
+.create-btn:hover, .create-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 
 .create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: 150px; max-width: calc(100vw - 16px); transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
@@ -25,7 +25,7 @@
 .create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); text-overflow: ellipsis; white-space: nowrap; }
 
 /* 261006：左侧外边距并入本处（原 Sidebar 另给 inline marginLeft:8）——值收单一来源。 */
-.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px 8px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-tint); }
+.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px 8px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent-text); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-tint); }
 
 .inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-tiny); }
 
@@ -65,7 +65,7 @@
 
 .tree-row.dragging { cursor: grabbing; }
 
-.tree-chevron:not(:disabled):hover { background: var(--lake-select-bg); color: var(--lake-accent); }
+.tree-chevron:not(:disabled):hover { background: var(--lake-select-bg); color: var(--lake-accent-text); }
 
 /* 与行内操作按钮同一套 hover 着重 */
 .tree-chevron.open { transform: rotate(90deg); }
@@ -102,7 +102,7 @@
 
 .empty-workspace { gap: 6px; }
 
-.empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--lake-radius-xl); color: var(--lake-accent); background: var(--lake-accent-tint); }
+.empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--lake-radius-xl); color: var(--lake-accent-text); background: var(--lake-accent-tint); }
 
 .empty-workspace h2 { margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-bodyLg); font-weight: 600; letter-spacing: -.01em; }
 

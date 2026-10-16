@@ -47,7 +47,7 @@
 .draft-recovery-hint { margin: 0 0 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: 1.55; }
 .draft-recovery-list { max-height: 296px; overflow-y: auto; margin: 0 -6px; }
 .draft-recovery-row .b3-list-item__text { min-width: 0; }
-.draft-recovery-restore:hover { color: var(--lake-accent); }
+.draft-recovery-restore:hover { color: var(--lake-accent-text); }
 .draft-recovery-discard:hover { color: var(--lake-status-error); }
 .draft-recovery-more { margin: 9px 0 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
 
@@ -117,7 +117,7 @@
   background: var(--lake-bg-hover);
   font-weight: 600;
 }
-.settings-nav-item.active svg { color: var(--lake-accent); }
+.settings-nav-item.active svg { color: var(--lake-accent-text); }
 .settings-nav-empty {
   display: block;
   padding: 14px 10px;
