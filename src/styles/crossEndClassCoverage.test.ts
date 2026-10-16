@@ -48,10 +48,8 @@ const SHARED = [
 
 /** 已知缺口（只许减）：登记后只报警告；补上对应端的样式后请删掉该条。 */
 const KNOWN_GAPS: Record<string, string[]> = {
-  // 261016 发现：LakeEditor 在 error 态渲染 .editor-error（桌面 misc.css:8 有规则），
-  // 移动端 TrashPreviewPage 也会挂 LakeEditor，但 mobile CSS 里没有这条 ⇒ 出错时是裸元素。
-  // 修法 = 在 src/mobile/features.css 按移动端令牌补一条（属移动端视觉，需设备验收）。
-  "features/editor/LakeEditor.tsx": ["editor-error"],
+  // 261016 已清空：.editor-error 当天查出当天修（补进 src/mobile/features.css）。
+  // 再出现缺口时**先修**；确实要暂时挂账再加进来（写明修法与原因），并保证只许减。
 };
 
 const FOREIGN = /^(ne-|ant-|lakex-|plait-|univer-|b3-|fn__|drawnix)/;
@@ -109,17 +107,24 @@ describe("跨端共享组件：两端都要有样式（C4-5）", () => {
     const mobileText = cssText(mobileCss);
     const fresh: string[] = [];
     const known: string[] = [];
+    const stillGap = new Set<string>();
     for (const f of SHARED) {
       for (const cls of classTokens(path.join(SRC, f))) {
         const missDesktop = !desktopText.includes("." + cls);
         const missMobile = !mobileText.includes("." + cls);
         if (!missDesktop && !missMobile) continue;
         const line = f + " → ." + cls + (missDesktop ? "（缺桌面）" : "") + (missMobile ? "（缺移动）" : "");
-        if ((KNOWN_GAPS[f] ?? []).includes(cls)) known.push(line);
+        if ((KNOWN_GAPS[f] ?? []).includes(cls)) { known.push(line); stillGap.add(f + "||" + cls); }
         else fresh.push(line);
       }
     }
     if (known.length) console.warn("[C4-5] 已知跨端样式缺口（待补，见 KNOWN_GAPS，只许减）:\n  " + known.join("\n  "));
+    // 修好之后必须把 KNOWN_GAPS 里的表项删掉，否则清单会腐烂成"永久豁免"。
+    const staleKnown = Object.entries(KNOWN_GAPS)
+      .flatMap(([f, list]) => list.map((cls) => f + "||" + cls))
+      .filter((k) => !stillGap.has(k))
+      .map((k) => k.replace("||", " → ."));
+    expect(staleKnown, "以下 KNOWN_GAPS 表项已不再是缺口（样式已补上），请从表里删掉：\n  " + staleKnown.join("\n  ")).toEqual([]);
     expect(fresh, "以下结构类名只在一端有样式（另一端会渲染成裸元素）：\n  " + fresh.join("\n  ")).toEqual([]);
   });
 });

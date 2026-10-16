@@ -181,7 +181,7 @@ const BASELINE = {
   mobileImportant: 19,         // 移动端 !important 棘轮（主要是 edit-surface-kernel.css 压内核未分层样式）
   mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 与桌面同为硬 0
   accentTextMisuse: 0,         // 261016 B2 已清零（原 36）：文字色一律 --lake-accent-text
-  crossFileDupGroups: 298,     // 同一 (选择器,属性) 出现在 ≥2 个文件；文件内重复另有 cssLayers/mobileLayers 围栏
+  crossFileDupGroups: 13,      // **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
 };
 
 // ── !important 允许清单（Q2，261016；用户定："确实有必要用 !important 可以保留，不是一点不能用"）──
@@ -255,18 +255,25 @@ accentTextTop.sort((a, b) => b[1] - a[1]);
 
 // ④ 跨文件重复 (选择器, 属性) —— 「一层层套 CSS」唯一还没有围栏的形态
 //    注意：现有 cssLayers/mobileLayers 的 dupGroups 是**按文件内**统计的，跨文件覆盖看不到。
+// ⚠️ 口径（261016 修正）：只统计**同一端内**的跨文件重复 —— 那才是「一层层套 CSS」。
+// 跨端重复（桌面与移动写同一批结构类名）是**设计允许**的（用户 261012「逻辑共享、外观各端自有」），
+// 而且 C4-5 护栏还**要求**两端都写 ⇒ 把它算进棘轮会让指标失去意义。
+// 实证：修正前共 308 组，其中纯跨端 295 组、同一端内只有 13 组 —— 补 .editor-error 到移动端那 10 条
+// 全是「合法跨端」，却把旧口径的 298 基线顶爆，正是这次修正的起因。
 const dupOwners = new Map();
 for (const p of cssAll) {
   const rel = relative(ROOT, p);
+  const isMobileFile = p.includes('/src/mobile/');
   for (const [sel, prop] of declarationsOf(p)) {
     const key = sel + ' || ' + prop;
-    if (!dupOwners.has(key)) dupOwners.set(key, new Set());
-    dupOwners.get(key).add(rel);
+    if (!dupOwners.has(key)) dupOwners.set(key, { desktop: new Set(), mobile: new Set() });
+    (isMobileFile ? dupOwners.get(key).mobile : dupOwners.get(key).desktop).add(rel);
   }
 }
-const crossFileDups = [...dupOwners.entries()].filter(([, owners]) => owners.size > 1);
-const crossFileDupTop = crossFileDups
-  .map(([key, owners]) => [key, owners.size, [...owners]])
+const sameEndDups = [...dupOwners.entries()].filter(([, e]) => e.desktop.size > 1 || e.mobile.size > 1);
+const crossEndDups = [...dupOwners.entries()].filter(([, e]) => e.desktop.size > 0 && e.mobile.size > 0);
+const crossFileDupTop = sameEndDups
+  .map(([key, e]) => [key, e.desktop.size + e.mobile.size, [...e.desktop, ...e.mobile]])
   .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
 
 // ⑤ !important：桌面按**允许清单**逐条核对；移动端走棘轮
@@ -291,7 +298,8 @@ r.complianceGuard = {
   mobileColorTop: mobileColorTop.sort((a, b) => b[1] - a[1]),
   accentTextMisuse,
   accentTextTop,
-  crossFileDupGroups: crossFileDups.length,
+  crossFileDupGroups: sameEndDups.length,
+  crossEndDupGroups: crossEndDups.length,
   crossFilePairTotal: dupOwners.size,
   crossFileDupTop: crossFileDupTop.slice(0, 10),
   baseline: BASELINE,
@@ -303,7 +311,7 @@ if (importantUnknown.length) process.exitCode = 1;          // 清单外的 !imp
 if (mobileImportant > BASELINE.mobileImportant) process.exitCode = 1;
 if (mobileColorLiterals > BASELINE.mobileColorLiterals) process.exitCode = 1;
 if (accentTextMisuse > BASELINE.accentTextMisuse) process.exitCode = 1;
-if (crossFileDups.length > BASELINE.crossFileDupGroups) process.exitCode = 1;
+if (sameEndDups.length > BASELINE.crossFileDupGroups) process.exitCode = 1;
 if (aliasHits || undefHits) process.exitCode = 1;
 if (fontSizeLiterals) process.exitCode = 1;
 if (mobileFontLiterals > MOBILE_FONT_LITERAL_BASELINE) process.exitCode = 1;

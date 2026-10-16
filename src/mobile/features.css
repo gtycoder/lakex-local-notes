@@ -1,4 +1,4 @@
-/* ── 移动端自有外观：图片 Lightbox 与附件预览（P6，261012）─────────────────────
+/* ── 移动端自有外观：共享组件（图片 Lightbox / 附件预览 / 编辑器出错态）（P6，261012；261016 补 .editor-error）──
  * 口径：**逻辑共享、外观移动端自有**（MOBILE-TECH-STACK §一/§九；用户 261012 定稿）。
  * `ImageLightbox.tsx` / `AttachmentPreview.tsx` 是共享组件（不 fork 逻辑），它们发出的**结构类名**
  * （.image-lightbox* / .attachment-preview*）在这里由**移动端自己定义视觉**；桌面那份仍归桌面
@@ -90,3 +90,16 @@
   color: var(--lake-text-1); font-size: var(--lake-font-size-bodyLg);
 }
 .attachment-preview__hint { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+
+/* ── 编辑器宿主出错态（LakeEditor，共享组件）─────────────────────────────
+ * 261016 C4-5 护栏查出：本类桌面有规则（src/styles/app/misc.css 的 .editor-error），
+ * 移动端此前**没有** ⇒ LakeEditor 渲染 error 态时是**裸元素**（移动端入口 = mobile/trash/TrashPreviewPage）。
+ * 按移动端令牌补齐：几何走 mb 档（页内距/间距/圆角），色走 status-error。
+ * 这是**新增样式**（原来无样式），不是覆盖；移动端观感未经设备验收，登记在 HANDOFF。 */
+.editor-error {
+  display: flex; align-items: center; gap: var(--mb-gap);
+  margin: 16px var(--mb-page-pad); padding: 12px;
+  border: 1px solid var(--lake-status-error-soft); border-radius: var(--mb-radius);
+  color: var(--lake-status-error); background: var(--lake-status-error-soft);
+  font-size: var(--lake-font-size-small);
+}
