@@ -14,6 +14,7 @@ import { emptyUsheetBody } from "../src/core/usheetDoc.js";
 import { emptyBitableBody } from "../src/core/bitableDoc.js";
 import { emptyBoardBody } from "../src/core/boardDoc.js";
 import { searchTextForKind } from "../src/core/noteSearchText.js";
+import { countChars, countWords } from "../src/core/textStats.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -668,8 +669,9 @@ export class Store {
     const { lakePath, assetsDir } = this.getNotePaths(id);
     const sizeBytes = fs.existsSync(lakePath) ? fs.statSync(lakePath).size : 0;
     const plain = this.readNoteCaches(id).plain ?? this.searchTextFor(id, doc.content).plain ?? "";
-    const charCount = plain.replace(/\s+/g, "").length;
-    const wordCount = (plain.match(/[\u4e00-\u9fff]/g)?.length ?? 0) + (plain.match(/[A-Za-z0-9]+/g)?.length ?? 0);
+    // 字数/字符数 = 与内核 wordCount 同语义的单一来源（261016，B1；此前这里另写了一套正则）。
+    const charCount = countChars(plain);
+    const wordCount = countWords(plain);
     const seen = new Set<string>();
     const assets: NoteInfoAsset[] = [];
     for (const card of scanAssetCards(doc.content)) {

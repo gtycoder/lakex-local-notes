@@ -17,6 +17,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
 import { scanAssetCards, fileKindOf } from "../core/fileCard.js";
 import { lakeHtmlToPlain } from "../core/lakeCaches.js";
+import { countChars, countWords } from "../core/textStats.js";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
 import { buildGcKeepSet } from "../core/gcDecisions.js";
 import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
@@ -564,8 +565,9 @@ export const bridge = {
     const row = await d.prepare("SELECT sync_state, is_conflict, updated_at FROM notes WHERE id=?").get(id) as
       { sync_state: string; is_conflict: number; updated_at: string } | undefined;
     const plain = lakeHtmlToPlain(note.content);
-    const charCount = plain.replace(/\s+/g, "").length;
-    const wordCount = (plain.match(/[\u4e00-\u9fff]/g)?.length ?? 0) + (plain.match(/[A-Za-z0-9]+/g)?.length ?? 0);
+    // 字数/字符数 = 与内核 wordCount 同语义的单一来源（261016，B1；此前这里另写了一套正则）。
+    const charCount = countChars(plain);
+    const wordCount = countWords(plain);
     const seen = new Set<string>();
     const assets: Array<{ filename: string; size: number; kind: string }> = [];
     for (const card of scanAssetCards(note.content)) {
