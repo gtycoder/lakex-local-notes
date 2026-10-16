@@ -224,7 +224,11 @@ interface ManifestFolder {
 - **D1 ✅ 已修（261016）**：移动端端口 5 个校验点（getObject / putObject / deleteMany / putObjectStream / getObjectToFile）
   统一调用 core 的 `assertSafeKey`（与桌面 `ObjectStore` 的校验点对齐；`listObjects` 的 prefix 按桌面同样不校验）。
   护栏同 `s3PortGuards.test.ts`。
-- D4 / D2 / D5 / D3 / D7 仍未修。
+- **D4 ✅ 已修（261016）**：移动端 `getObject` 改用 core 的 `isNoSuchKey`（与桌面**同一判据**）——
+  `isNoSuchKey` 认 `NoSuchKey` / `NotFound` / message 含 404，而原先移动端只认 HTTP 404 状态码或 `NoSuchKey`
+  ⇒ 桌面注释明确记录的「部分操作（AWS/七牛 Kodo）返回 NotFound」在移动端会变成**抛错**（首次同步判定失败）。
+  护栏同 `s3PortGuards.test.ts`（并断言不得再自己拼 `httpStatusCode === 404`）。
+- **P1 三项（D6/D1/D4）已全部修完。** 剩下 D2 / D5 需产品决策/真云验证；D3 / D7 记录备查。
 
 ### 7.4 结论
 

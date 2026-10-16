@@ -52,6 +52,14 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
     expect(count(store, /assertSafeKey\(/g), "校验点少于 5 个：可能有端口方法漏了键校验").toBeGreaterThanOrEqual(5);
   });
 
+  it("D4：404 判定必须用 core 的 isNoSuchKey（别在移动端另写一套）", () => {
+    const store = read("mobile/s3Store.ts");
+    expect(/import \{[^}]*isNoSuchKey[^}]*\} from "\.\.\/core\/syncUtils\.js"/.test(store), "必须从 core 引 isNoSuchKey").toBe(true);
+    expect(/isNoSuchKey\(/.test(store), "必须调用它").toBe(true);
+    // 桌面判据还认 NotFound（七牛/AWS 实测会返回）⇒ 自己拼 404 判定会漏
+    expect(/httpStatusCode\s*===\s*404/.test(store), "不得再自己拼 404 判定（见 SYNC-PROTOCOL §7.3 D4）").toBe(false);
+  });
+
   it("D6：七牛 checksum 绕行只允许出现在共用工厂里（一次）", () => {
     const all = mobileSources().map(([, t]) => t).join("\n");
     // 只数**带冒号的声明**（注释里提到这个选项名不算）——本仓踩过"注释被当代码"的坑（AGENTS §7.25）

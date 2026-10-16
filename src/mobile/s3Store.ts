@@ -6,7 +6,7 @@
  * putObject 按 opts.gzip 压缩。syncEngine 不感知 gzip（core 无 gzip 调用）。
  */
 import type { S3Store, SyncConfig } from "../core/syncEngine.js";
-import { assertSafeKey, isGzip } from "../core/syncUtils.js";
+import { assertSafeKey, isGzip, isNoSuchKey } from "../core/syncUtils.js";
 import { CapacitorHttpHandler } from "./capacitorHttpHandler";
 import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";
 
@@ -111,8 +111,11 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
         }
         return bytes;
       } catch (e) {
-        const status = (e as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
-        if (status === 404 || (e as { name?: string }).name === "NoSuchKey") return null;
+        // D4（261016）：改用 core 的 isNoSuchKey（与桌面 ObjectStore.getOptional 同一判据）。
+        // 桌面注释明确记录「缺失对象的错误名随操作/供应商不同：GetObject=NoSuchKey，部分操作（AWS/七牛 Kodo）
+        // 返回 NotFound」——原先这里只认 HTTP 404 状态码 / NoSuchKey ⇒ 移动端可能把"对象缺失"当错误抛出
+        // （首次同步判定失败）。判据只允许有一份，就在 core。
+        if (isNoSuchKey(e)) return null;
         throw e;
       }
     },

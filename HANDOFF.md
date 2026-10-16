@@ -16,6 +16,21 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(十) · P1 漂移修复之三：D4 移动端 404 判定改用 core 的 isNoSuchKey
+
+- **背景**：C2-4 对拍（SYNC-PROTOCOL §7.3 D4）查出 404 判定两端两套：桌面 `isNoSuchKey()` 认
+  `NoSuchKey` / `NotFound` / message 含 404；移动端只认 `$metadata.httpStatusCode === 404` 或 `name === "NoSuchKey"`。
+  而桌面代码注释**明确记录**：「缺失对象的错误名随操作/供应商不同：GetObject=NoSuchKey，部分操作（AWS/七牛 Kodo）返回 NotFound」
+  ⇒ 移动端可能把「对象缺失」当错误**抛出**（首次同步判定失败，而不是返回 null）。
+- **落地**：`src/mobile/s3Store.ts` 的 `getObject` catch 改为 `if (isNoSuchKey(e)) return null;`
+  （从 core 引同一判据，删掉自拼的 404 判定）。**判据只允许有一份，就在 core。**
+- **护栏**：`src/mobile/s3PortGuards.test.ts` 增 1 例：必须从 core 引 `isNoSuchKey` 且调用它，
+  并断言**不得再出现** `httpStatusCode === 404`（防回退）。自证：写回旧判定 ⇒ 失败；还原 ⇒ 通过。
+- **P1（D6/D1/D4）至此全部修完**；剩余 D2（forcePathStyle 移动端写死 false，真实功能缺口）/ D5（gzip ContentEncoding，需真云验证）
+  需产品决策，D3/D7 记录备查 —— 见 SYNC-PROTOCOL §7.3。
+- **门禁**：`tsc` exit 0 ✓ · 护栏 4 例 ✓ · 全库 vitest 264 文件 / 2035 例 ✓ · `git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(九) · P1 漂移修复之二：D1 移动端补 assertSafeKey（键校验两端对齐）
 
 - **背景**：C2-4 对拍（SYNC-PROTOCOL §7.3 D1）查出——桌面 `ObjectStore` 在 get/put/putStream/delete/deleteMany 上
