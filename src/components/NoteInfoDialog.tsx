@@ -15,28 +15,11 @@ import { isMobileEnvironment } from "../features/editor/clipboardHtml";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
 import { useHistorySnapshotViewer } from "./useHistorySnapshotViewer";
 import type { NoteKind } from "../core/noteKind.js";
+import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../core/noteInfo.js";
 
 /** 附件/历史条目的渲染上限（超出提示 +N，避免超大文档一次性渲染成千上万节点）。 */
 const ITEM_LIMIT = 200;
 const THUMB_LIMIT = 24;
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fmtSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let v = bytes; let i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${i === 0 ? v : v.toFixed(1)} ${units[i]}`;
-}
-
-const SYNC_LABEL: Record<string, string> = { local: "未同步", synced: "已同步", conflict: "冲突" };
 
 /** 桌面传 TreeNode 子集；移动端传 { noteFileId: id, title }，与平台解耦。 */
 export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDir, onOpenHistory, onJumpToNode }: {
@@ -151,13 +134,8 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
     onError: () => undefined,
   });
 
-  const cells: Array<[string, string]> = info ? [
-    ["创建", fmtTime(info.createdAt)],
-    ["更新", fmtTime(info.updatedAt)],
-    ["字数", `${info.wordCount} 字 · ${info.charCount} 字符`],
-    ["大小", fmtSize(info.sizeBytes)],
-    ["状态", `${SYNC_LABEL[info.syncState] ?? info.syncState}${info.isConflict ? " · 有冲突副本" : ""}${info.isLocked ? " · 已锁定" : ""}`],
-  ] : [];
+  // 主清单来自 core（两端同一份，见 core/noteInfo.ts）——改「属性显示什么」只改那一处
+  const cells: Array<[string, string]> = info ? noteInfoRows(info) : [];
 
   // Portal 到 body：侧栏/工作区可能形成堆叠上下文，挂到 body 才能保证弹窗在目录之上（与 ContextMenu/DesktopOverlays 同款做法）。
   return (
@@ -218,11 +196,11 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
 
             {/* 第三部分：附件（高度受限，可滚；附件过多不会撑破布局） */}
             <div className="note-info-section">
-              <div className="note-info-section-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {fmtSize(info.assetTotalBytes)}</span></div>
+              <div className="note-info-section-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {formatNoteInfoSize(info.assetTotalBytes)}</span></div>
               {info.assets.length === 0 ? <p className="note-info-empty">无附件</p> : (
                 <div className="note-info-assets">
                   {info.assets.slice(0, ITEM_LIMIT).map((a) => (
-                    <button key={a.filename} className="note-info-asset" onClick={() => openAsset(a.filename)} title={`${a.filename}（${fmtSize(a.size)}）`}>
+                    <button key={a.filename} className="note-info-asset" onClick={() => openAsset(a.filename)} title={`${a.filename}（${formatNoteInfoSize(a.size)}）`}>
                       {thumbs[a.filename]
                         ? <img className="ln-imgfill" src={thumbs[a.filename]} alt={a.filename} loading="lazy" />
                         : <span className="note-info-asset-glyph">{a.kind === "image" ? <ImageIcon size={16} /> : a.kind === "video" || a.kind === "audio" ? <Box size={16} /> : <Paperclip size={16} />}</span>}
@@ -243,7 +221,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                   {info.history.slice(0, ITEM_LIMIT).map((h) => (
                     <li key={h.id}>
                       <button className={"note-info-history-row" + (histPreview?.id === h.id ? " is-active" : "")} onClick={() => toggleHistory(h.id)}>
-                        <Clock size={13} /><span>{fmtTime(h.createdAt)}</span><em>{fmtSize(h.size)}</em>
+                        <Clock size={13} /><span>{formatNoteInfoTime(h.createdAt)}</span><em>{formatNoteInfoSize(h.size)}</em>
                         {info.contentHash !== "" && h.contentHash === info.contentHash && (
                           <span className="badge badge--accent" title="正文与当前已保存版本一致">当前</span>
                         )}

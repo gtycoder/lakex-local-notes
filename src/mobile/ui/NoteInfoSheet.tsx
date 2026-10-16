@@ -13,27 +13,11 @@ import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteInfo } from "../../lib/types";
 import { showToast } from "./toastBus";
+import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core/noteInfo.js";
 
-/** 附件/历史条目的渲染上限（与桌面同口径，避免超大文档一次性渲染过多节点）。 */
+/** 附件/历史条目的渲染上限。**比桌面更小**（桌面 200）：移动端一次渲染过多节点更伤滚动；
+ *  不是"与桌面同口径"——原注释这么写是错的，261016 顺手改正。 */
 const ITEM_LIMIT = 100;
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fmtSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let v = bytes; let i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${i === 0 ? v : v.toFixed(1)} ${units[i]}`;
-}
-
-const SYNC_LABEL: Record<string, string> = { local: "未同步", synced: "已同步", conflict: "冲突" };
 
 export interface NoteInfoSheetProps {
   noteFileId: string | null;
@@ -70,13 +54,8 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
       .catch((reason) => showToast(getNativeErrorMessage(reason)));
   };
 
-  const rows: Array<[string, string]> = info ? [
-    ["创建", fmtTime(info.createdAt)],
-    ["更新", fmtTime(info.updatedAt)],
-    ["字数", `${info.wordCount} 字 · ${info.charCount} 字符`],
-    ["大小", fmtSize(info.sizeBytes)],
-    ["状态", `${SYNC_LABEL[info.syncState] ?? info.syncState}${info.isConflict ? " · 有冲突副本" : ""}${info.isLocked ? " · 已锁定" : ""}`],
-  ] : [];
+  // 主清单来自 core（与桌面同一份，见 core/noteInfo.ts）——两端"属性显示什么"从此不可能漂移
+  const rows: Array<[string, string]> = info ? noteInfoRows(info) : [];
 
   return (
     <div className="mb-scrim" onClick={onClose}>
@@ -110,13 +89,13 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
               )}
 
               <div className="minfo-section">
-                <div className="minfo-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {fmtSize(info.assetTotalBytes)}</span></div>
+                <div className="minfo-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {formatNoteInfoSize(info.assetTotalBytes)}</span></div>
                 {info.assets.length === 0 ? <p className="minfo-empty">无附件</p> : (
                   <ul className="minfo-list">
                     {info.assets.slice(0, ITEM_LIMIT).map((a) => (
                       <li key={a.filename}>
                         <button className="minfo-row" onClick={() => openAsset(a.filename)} title={a.filename}>
-                          <span className="mb-ellipsis">{a.filename}</span><em>{fmtSize(a.size)}</em>
+                          <span className="mb-ellipsis">{a.filename}</span><em>{formatNoteInfoSize(a.size)}</em>
                         </button>
                       </li>
                     ))}
@@ -131,7 +110,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
                 {info.history.length === 0 ? <p className="minfo-empty">暂无历史快照</p> : (
                   <ul className="minfo-list">
                     {info.history.slice(0, ITEM_LIMIT).map((h) => (
-                      <li key={h.id}><div className="minfo-row"><span>{fmtTime(h.createdAt)}</span><em>{fmtSize(h.size)}</em></div></li>
+                      <li key={h.id}><div className="minfo-row"><span>{formatNoteInfoTime(h.createdAt)}</span><em>{formatNoteInfoSize(h.size)}</em></div></li>
                     ))}
                   </ul>
                 )}
