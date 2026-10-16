@@ -16,6 +16,31 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(十一) · C2-3 领域仓储能力矩阵 + 对账测试（**落法与初稿不同，有实测依据**）
+
+- **原方案**：在 `core/ports.ts` 加 `NoteStorePort` / `TreeStorePort`，两端 `satisfies`。
+- **实测后改法**：两端签名**不可直接统一**，硬做就是**扭曲签名**（Q6 明确禁止）——
+  桌面是**一个 `Store` 类**（`createNotebook(title)` / `readNote(id): NoteDocument` / `saveNote(id,title,content,caches?)`）；
+  移动端是**按域拆的模块级函数**（`createNotebook(d, input)` / `readNote(d, id): LocalNote|null`）；
+  移动端复合门面 `bridge` 形状最接近，但返回类型/参数表/名称仍多处不一致。
+  ⇒ 若硬 `satisfies`，要么给两端加适配层（运行时改动），要么改签名（Q6 禁止）。
+- **落地**：`src/core/repositoryCapabilities.ts`（能力矩阵数据）+ `src/core/repositoryCapabilities.test.ts`（对账测试）。
+  · **34 条能力** = 移动端 5 个仓储文件（note/tree/trash/history/notebookTree）的**全部导出函数**，逐条登记
+    「移动实现 ↔ 桌面 `Store` 方法 ↔ 差异说明」；另有 `DESKTOP_ONLY_CAPABILITIES` 把**差集单列成表**（Q6 口径）。
+  · **守 6 件事**：① 移动实现存在；② 桌面方法存在；③ **移动端仓储文件新增函数不登记 ⇒ 红**（真正的漂移检测）；
+    ④ `core` 判据路径存在；⑤ `DESKTOP_ONLY` 不许虚报（必须"桌面有、移动端没有"）；⑥ 交集行数 **34** / 有桌面实现 **28** 钉死。
+  · **不夸大**：这是**存在性对账**，不是编译期约束；"语义是否真一致"仍需读差异说明 + 实机验证。
+    行数断言当场纠正了我"24"的错估（实际 28）。
+- **自证**：① 移动端加未登记函数 ⇒ 失败；② 表里编造桌面方法 ⇒ 失败；③ 把移动端真实有的函数列进 DESKTOP_ONLY ⇒ 失败；恢复 ⇒ 6 例通过。
+- **顺带记下的两端差异（矩阵的"note"列，供后续判断）**：`createNotebook` 参数形态不同（input vs title）、
+  `readNote` 返回类型不同（`LocalNote|null` vs `NoteDocument`）、`saveNote` 参数表不同、
+  多处**改名**（`listNotes`↔`listNoteSummaries`、`trashNote`↔`deleteNote`、`reorderSiblings`↔`reorderTreeNodes`、
+  `restoreTreeItem`↔`restoreTrashItem`、`purgeTreeItem`↔`purgeTrashItem`、`trashTreeItem`↔`deleteTreeNode`、
+  `readHistory`↔`previewHistorySnapshot`、`historyAssetRefs`↔`getCurrentContentRefs`）；
+  判据其实在 core 的两条（`noteGoneState`→`syncDecisions`、`noteWriteState`→`noteSaveDecision`）已在表里标注 `core` 字段。
+- **门禁**：`tsc` exit 0 ✓ · 对账测试 6 例 ✓ · 全库 vitest 见本批汇总 ✓ · `git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(十) · P1 漂移修复之三：D4 移动端 404 判定改用 core 的 isNoSuchKey
 
 - **背景**：C2-4 对拍（SYNC-PROTOCOL §7.3 D4）查出 404 判定两端两套：桌面 `isNoSuchKey()` 认
