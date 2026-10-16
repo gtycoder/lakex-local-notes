@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import { MobileApp } from "./MobileApp";
 import { applyTheme } from "../lib/theme";
 import { loadSettings, subscribeSettings } from "../lib/settings";
-import { applySystemBarTheme } from "./systemBars";
+import { applySystemBarTheme } from "./native/systemBars";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统**（--lake-*），不再用思源调色板。
 // 思源样式层（src/b3/**）已整体删除；移动端自 P5 起连 compat.css 也不再引（P0–P7 独立性批次）——

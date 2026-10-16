@@ -4,9 +4,9 @@
  * 背景：拆开写域/维护域之后，同步的 DB 落地与用户写可以并发（对齐桌面既有语义）。
  * 若用户在某篇文档的"读 → 落地"窗口内编辑了它，直接应用远端版本会丢掉用户刚写的正文。
  * 两端各自的守卫：
- *   · 移动端 `src/mobile/syncDbPort.ts` 的 `flushNoteBatch`（批窗口内 hash 变了 ⇒ 推迟该条）；
+ *   · 移动端 `src/mobile/data/syncDbPort.ts` 的 `flushNoteBatch`（批窗口内 hash 变了 ⇒ 推迟该条）；
  *   · 桌面 `electron/syncAdapters.ts` 的 `beginNoteBatch` 快照 + `applyRemoteNote`（逐条"未变才应用"）。
- * 本文件卡住桌面侧；移动侧由 src/mobile/syncDbPortBatchGuard.test.ts 卡住。**两端语义必须一致**。
+ * 本文件卡住桌面侧；移动侧由 src/mobile/data/syncDbPortBatchGuard.test.ts 卡住。**两端语义必须一致**。
  */
 import { describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";

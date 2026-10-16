@@ -95,5 +95,5 @@ web
 
 ## Accessibility & Inclusion
 
-- 已有专门的无障碍层 `src/styles/a11y.css`（层序最高，含 `prefers-reduced-motion` 契约）；移动端有安全区/系统栏适配（`src/mobile/systemBars.ts`）。
+- 已有专门的无障碍层 `src/styles/a11y.css`（层序最高，含 `prefers-reduced-motion` 契约）；移动端有安全区/系统栏适配（`src/mobile/native/systemBars.ts`）。
 - （推断）未发现产品级的可达性目标（如 WCAG 等级）或特定用户需求的明文约定 —— 记为**开放项**，待用户确认。

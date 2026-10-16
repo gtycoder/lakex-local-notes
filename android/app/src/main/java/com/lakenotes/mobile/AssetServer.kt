@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * 彻底移除 blob 注入/还原逻辑。
  *
  * 实现：ServerSocket + 固定小线程池（纯 I/O 流式，空闲零资源）。目录 = app 私有 Data/note-assets
- * （与桌面 userData/note-assets 同构，src/mobile/assetFs.ts 写入）。
+ * （与桌面 userData/note-assets 同构，src/mobile/native/assetFs.ts 写入）。
  * 进程内共享单例：首个 start() 启动 daemon 线程随进程存活，重复 start 幂等。
  */
 object AssetServer {

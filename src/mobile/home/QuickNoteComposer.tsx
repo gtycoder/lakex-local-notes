@@ -20,9 +20,9 @@ import { Check } from "lucide-react";
 import { bridge } from "../bridge";
 import { successFeedback, warnFeedback } from "../ui/haptics";
 import { showToast } from "../ui/toastBus";
-import { showNativeKeyboard } from "../nativeKeyboard";
+import { showNativeKeyboard } from "../native/nativeKeyboard";
 import { canTouchNetwork } from "../../core/cloudState.js";
-import { subscribeSyncSettings } from "../syncSettingsStore";
+import { subscribeSyncSettings } from "../sync/syncSettingsStore";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
@@ -31,7 +31,7 @@ import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNo
 import { EditorDockHost } from "../editor/EditorDockHost";
 // 光标/选区自动跟随滚动：**与文档编辑器同一份实现**（261014 —— 用户：光标必须始终在工具栏上方、
 // 不被工具栏/键盘盖住）。小记此前没有这一环，文字一多光标就跑到屏幕外。
-import { useCaretIntoView } from "../useCaretIntoView";
+import { useCaretIntoView } from "../hooks/useCaretIntoView";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 // 内核样式（ne-* / ne-icon-symbol 的尺寸与配色）**由挂内核的入口自己保证**：
 // 桌面走 styles/index.css 的全局 @import；移动端入口不引它，此前只有 mobile/editor/DocumentEditor 引 ⇒

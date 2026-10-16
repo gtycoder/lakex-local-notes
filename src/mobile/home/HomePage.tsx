@@ -10,7 +10,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Trash, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
-import type { LocalNoteSummary } from "../noteRepository";
+import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
@@ -22,7 +22,7 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
-import { useHorizontalSwipe } from "../useHorizontalSwipe";
+import { useHorizontalSwipe } from "../hooks/useHorizontalSwipe";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
 //  本机读写单独一层（core 禁 DOM）：读/写偏好走 lib/quickNoteSortPref（桌面用同一份）

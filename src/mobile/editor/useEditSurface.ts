@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { useKeyboard } from "../useKeyboard";
+import { useKeyboard } from "../hooks/useKeyboard";
 import { bottomOccupation, capturePanelHeight, dockKbOffset, shellSurfaceHeight } from "./editSurfaceModel";
 
 export type PanelMode = "insert" | "font" | "more" | "emoji" | null;

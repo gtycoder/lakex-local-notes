@@ -8,10 +8,10 @@
  * - 互斥域：写域 / 维护域分离，判据见 src/core/maintenancePolicy.ts（F16）
  * - 结构：docs/MOBILE-TECH-STACK.md；跨端能力矩阵见该文档
  */
-import { NativeSqliteDb } from "./nativeSqliteDb";
+import { NativeSqliteDb } from "./native/nativeSqliteDb";
 import { writeLocalStorage } from "../lib/localStorageSafe";
-import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
-import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./assetFs";
+import { migrateSnapshotToNativeSqlite } from "./native/nativeSqliteMigration";
+import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./native/assetFs";
 import { isSafeShellOpenFilename } from "../core/assetNaming.js";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
@@ -23,10 +23,10 @@ import { buildGcKeepSet } from "../core/gcDecisions.js";
 import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
 import type { Manifest } from "../core/manifestTypes.js";
 import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from "../core/maintenancePolicy.js";
-import { maintenanceQueue, priorityQueue, writeLock } from "./maintenanceLocks";
+import { maintenanceQueue, priorityQueue, writeLock } from "./sync/maintenanceLocks";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { emptyLakeBody } from "../core/lakeDocForm.js";
-import { createCapacitorS3Store, createMobileS3Client } from "./s3Store";
+import { createCapacitorS3Store, createMobileS3Client } from "./native/s3Store";
 import { buildAssetFilename, mimeTypeForFilename } from "../core/assetNaming.js";
 import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
@@ -37,31 +37,31 @@ import type { SearchResult } from "../core/searchTypes.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { pushQuickNote, type QuickNotePushOutcome } from "../core/quickNotePush.js";
-import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
-import { mobileSecretStore } from "./secretStore.js";
-import { writeSyncStatus } from "./syncStatusStore";
+import { createQuickNotesSyncDbPort } from "./data/quickNotesDbPort.js";
+import { mobileSecretStore } from "./native/secretStore.js";
+import { writeSyncStatus } from "./sync/syncStatusStore";
 
 /** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
 const OpenFile = registerPlugin<{
   open: (opts: { path: string }) => Promise<void>;
   saveAs: (opts: { path: string; name: string; mime?: string }) => Promise<void>;
 }>("OpenFile");
-import { applyMobileSchema } from "./schema.js";
-import * as treeRepository from "./treeRepository.js";
-import * as noteRepository from "./noteRepository.js";
-import { indexNote, reconcileIndex } from "./searchIndex.js";
-import type { LocalNote, LocalNoteSummary } from "./noteRepository.js";
-import * as trashRepository from "./trashRepository.js";
-import * as quickNotesRepository from "./quickNotesRepository.js";
-import { createMobileSyncDbPort } from "./syncDbPort.js";
-import * as historyRepository from "./historyRepository.js";
-import type { HistoryMobileSettings } from "./historyRepository.js";
-import * as orphanAssetRepository from "./orphanAssetRepository.js";
-import * as gcRepository from "./gcRepository.js";
-import * as diagnosticsRepository from "./diagnosticsRepository.js";
-import * as notebookTreeRepository from "./notebookTreeRepository.js";
+import { applyMobileSchema } from "./data/schema.js";
+import * as treeRepository from "./data/treeRepository.js";
+import * as noteRepository from "./data/noteRepository.js";
+import { indexNote, reconcileIndex } from "./data/searchIndex.js";
+import type { LocalNote, LocalNoteSummary } from "./data/noteRepository.js";
+import * as trashRepository from "./data/trashRepository.js";
+import * as quickNotesRepository from "./data/quickNotesRepository.js";
+import { createMobileSyncDbPort } from "./data/syncDbPort.js";
+import * as historyRepository from "./data/historyRepository.js";
+import type { HistoryMobileSettings } from "./data/historyRepository.js";
+import * as orphanAssetRepository from "./data/orphanAssetRepository.js";
+import * as gcRepository from "./data/gcRepository.js";
+import * as diagnosticsRepository from "./data/diagnosticsRepository.js";
+import * as notebookTreeRepository from "./data/notebookTreeRepository.js";
 
-export type { HistoryMobileSettings } from "./historyRepository.js";
+export type { HistoryMobileSettings } from "./data/historyRepository.js";
 
 /** 移动端同步结果（P2-5，GPT 审计）：文档/小记分字段，便于 UI 分别展示进度与失败。 */
 export interface MobileSyncResult {

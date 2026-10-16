@@ -6,15 +6,15 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "./bridge";
-import { resetAssetPerf, snapshotAssetPerf } from "./assetPerf";
-import type { LocalNoteSummary } from "./noteRepository";
+import { resetAssetPerf, snapshotAssetPerf } from "./native/assetPerf";
+import type { LocalNoteSummary } from "./data/noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
-import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent, type QuickNoteSeed } from "./sharedContent";
+import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent, type QuickNoteSeed } from "./native/sharedContent";
 import { sha256Sync } from "../core/sha256Sync.js";
-import { scheduleKernelPrewarm } from "./kernelPrewarm";
+import { scheduleKernelPrewarm } from "./native/kernelPrewarm";
 import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 
@@ -28,19 +28,19 @@ const QuickNoteComposer = lazy(() => import("./home/QuickNoteComposer").then((m)
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
-import { useBackHandler } from "./useBackHandler";
-import { useAutoSync } from "./useAutoSync";
+import { useBackHandler } from "./hooks/useBackHandler";
+import { useAutoSync } from "./hooks/useAutoSync";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
-import { subscribeQuickNoteShortcut } from "./quickNoteShortcut";
+import { subscribeQuickNoteShortcut } from "./native/quickNoteShortcut";
 import { ConfirmHost } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
-import { runNativeSqliteSpike } from "./nativeSqlite";
-import { buildLakeNative } from "./lakeNativeContract";
-import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
+import { runNativeSqliteSpike } from "./native/nativeSqlite";
+import { buildLakeNative } from "./native/lakeNativeContract";
+import { migrateSnapshotToNativeSqlite } from "./native/nativeSqliteMigration";
 import "./mobile.css";
 
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。

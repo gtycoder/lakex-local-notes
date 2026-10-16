@@ -2,7 +2,7 @@
  * 用户可见「协议版本号」字面量扫描（261012 用户要求）。
  *
  * 背景：移动端「关于」页曾经写死 `manifest v4`（V1 重置前的老值），而页面只是把 appInfo 的值渲染出来 ——
- * 真正的错在 appInfoPort 里硬编码了旧版本号。单测 `src/mobile/appInfoPort.test.ts` 钉住了那一个值，
+ * 真正的错在 appInfoPort 里硬编码了旧版本号。单测 `src/mobile/native/appInfoPort.test.ts` 钉住了那一个值，
  * 这条扫描则封住**面**：源码里任何地方再出现「manifest v<数字>」这种写死版本号的文案，直接失败。
  *
  * 判据：去掉注释后，源码（.ts/.tsx）里不得出现 /manifest\s*v\s*\d/i。

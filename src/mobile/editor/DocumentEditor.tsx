@@ -6,7 +6,7 @@
  */
 import { EditorDockHost } from "./EditorDockHost";
 import { MobileFindBar } from "./MobileFindBar";
-import { useCaretIntoView } from "../useCaretIntoView";
+import { useCaretIntoView } from "../hooks/useCaretIntoView";
 import { showToast } from "../ui/toastBus";
 import "@dlient/lakex-doc-react/style.css";
 import "../../styles/fonts/font-overrides.css"; // 字体接线：须晚于内核 style.css（移动端无 @layer，靠顺序生效）
@@ -22,7 +22,7 @@ import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { isSafeShellOpenFilename } from "../../core/assetNaming.js";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
-import type { LocalNote } from "../noteRepository";
+import type { LocalNote } from "../data/noteRepository";
 
 /** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开本地文件。 */
 const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");

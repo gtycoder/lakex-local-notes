@@ -4,22 +4,22 @@ import { sha256Sync } from "../core/sha256Sync.js";
 
 const sqlitePrepareSqls = vi.hoisted(() => [] as string[]);
 
-vi.mock("./persistence", () => ({
+vi.mock("./data/persistence", () => ({
   loadSnapshot: vi.fn(async () => null),
 }));
 
-vi.mock("./nativeSqliteDb.js", async () =>
-  (await import("./nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
+vi.mock("./native/nativeSqliteDb.js", async () =>
+  (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
 );
 
-vi.mock("./nativeSqliteMigration", () => ({
+vi.mock("./native/nativeSqliteMigration", () => ({
   migrateSnapshotToNativeSqlite: vi.fn(async () => ({
     status: "no-snapshot",
     databaseName: "lake-notes-mobile",
   })),
 }));
 
-vi.mock("./assetFs", () => ({
+vi.mock("./native/assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs: vi.fn(async () => null),
   listAssetKeysFs: vi.fn(async () => []),
@@ -51,7 +51,7 @@ vi.mock("../core/quickNotesSyncEngine.js", () => ({
   syncQuickNotesViaEngine: vi.fn(async () => ({ uploaded: 0, downloaded: 0 })),
 }));
 
-vi.mock("./secretStore.js", () => ({
+vi.mock("./native/secretStore.js", () => ({
   mobileSecretStore: {
     read: vi.fn(async (key: string) => (key === "s3.secretAccessKey" ? "secret-key" : null)),
     write: vi.fn(async () => {}),
@@ -60,7 +60,7 @@ vi.mock("./secretStore.js", () => ({
 
 import { bridge } from "./bridge.js";
 import { syncNow as coreSyncNow } from "../core/syncEngine.js";
-import { SqlJsAsyncDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb } from "./data/sqliteDb.js";
 
 const sqlJsPrepare = SqlJsAsyncDb.prototype.prepare;
 SqlJsAsyncDb.prototype.prepare = function prepare(sql: string) {

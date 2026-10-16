@@ -1,21 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("./persistence", () => ({
+vi.mock("./data/persistence", () => ({
   loadSnapshot: vi.fn(async () => null),
 }));
 
-vi.mock("./nativeSqliteDb.js", async () =>
-  (await import("./nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
+vi.mock("./native/nativeSqliteDb.js", async () =>
+  (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
 );
 
-vi.mock("./nativeSqliteMigration", () => ({
+vi.mock("./native/nativeSqliteMigration", () => ({
   migrateSnapshotToNativeSqlite: vi.fn(async () => ({
     status: "no-snapshot",
     databaseName: "lake-notes-mobile",
   })),
 }));
 
-vi.mock("./assetFs", () => ({
+vi.mock("./native/assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs: vi.fn(async () => null),
   listAssetKeysFs: vi.fn(async () => []),
@@ -42,7 +42,7 @@ vi.mock("../core/quickNotesSyncEngine.js", () => ({
   syncQuickNotesViaEngine: vi.fn(async () => ({ uploaded: 0, downloaded: 0 })),
 }));
 
-vi.mock("./secretStore.js", () => ({
+vi.mock("./native/secretStore.js", () => ({
   mobileSecretStore: {
     // 本文件按"已配置 S3"跑（S3 夹具里 ak/sk 齐全）；secret 从 store 读 ⇒ 这里要回真值，
     // 否则 261009 的「密钥缺失」护栏会先返回提示、同步路径根本走不到。
@@ -104,7 +104,7 @@ describe("移动端云同步状态闸门", () => {
   it("密钥缺失 ⇒ 给可执行提示，而不是让请求去报签名错（261009）", async () => {
     // 复现历史缺陷的输入：配置在、但 secret 读不到（曾因 IndexedDB 不跨重启而必然发生）。
     await bridge.saveS3Settings(S3);     // 先"配置好"，再让 secret 读不到（复现历史缺陷的输入）
-    const store = await import("./secretStore.js");
+    const store = await import("./native/secretStore.js");
     const readMock = store.mobileSecretStore.read as unknown as { mockResolvedValue: (v: unknown) => void };
     readMock.mockResolvedValue(null);   // 整个用例期间都读不到（别用 Once：mobileCloudState 会先读一次）
     try {

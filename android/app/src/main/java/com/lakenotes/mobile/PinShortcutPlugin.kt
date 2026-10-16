@@ -25,7 +25,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
  *   - requestPin：发起固定（系统会弹确认框）
  *
  * 固定的快捷方式用**深链**（`lakenotes://quick-note`），与静态快捷方式落到同一条 JS 处理路径
- * （src/mobile/quickNoteShortcut.ts）。
+ * （src/mobile/native/quickNoteShortcut.ts）。
  */
 @CapacitorPlugin(name = "PinShortcut")
 class PinShortcutPlugin : Plugin() {

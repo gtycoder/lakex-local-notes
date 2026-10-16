@@ -4,7 +4,7 @@
  * - 覆盖：空桶首次/下载/上传/冲突归档/墓碑/恢复 LWW/远端对象缺失保留（P1-1）/
  *   清单与正文大小护栏；
  * - 桌面 adapter 行为由 electron/quickNotesSync.test.ts 兜底，移动端口由
- *   src/mobile/quickNotesDbPort.test.ts 兜底，本文件聚焦引擎自身分支。
+ *   src/mobile/data/quickNotesDbPort.test.ts 兜底，本文件聚焦引擎自身分支。
  */
 import { describe, it, expect } from "vitest";
 import crypto from "node:crypto";

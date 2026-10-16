@@ -27,7 +27,7 @@ export interface TreeRepository {
 }
 
 /**
- * 平台安全密钥存储（桌面 safeStorage / 移动 native-SecretStore —— 见 src/mobile/secretStore.ts 头注释的现状与硬约束）。
+ * 平台安全密钥存储（桌面 safeStorage / 移动 native-SecretStore —— 见 src/mobile/native/secretStore.ts 头注释的现状与硬约束）。
  * 平台实现：Electron → safeStorage（Keychain）；Android → Keystore-backed storage；测试 → memory fake。
  * Secret 不进入 SQLite 主表/IndexedDB 普通 kv/manifest/日志。
  */

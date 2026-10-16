@@ -28,7 +28,7 @@ import { useEditSurface } from "./useEditSurface";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
 import { EmojiPanel } from "../ui/EmojiPanel";
 // 原生弹键盘兜底（261015）：WebView 里程序化 focus 不保证弹软键盘，点「⌨ 展开键盘」时用它补一次。
-import { showNativeKeyboard } from "../nativeKeyboard";
+import { showNativeKeyboard } from "../native/nativeKeyboard";
 
 type PanelMode = "insert" | "font" | "more" | "emoji" | null;
 

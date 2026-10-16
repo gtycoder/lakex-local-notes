@@ -12,22 +12,22 @@ const {
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
-vi.mock("./persistence", () => ({
+vi.mock("./data/persistence", () => ({
   loadSnapshot: vi.fn(async () => null),
 }));
 
-vi.mock("./nativeSqliteDb.js", async () =>
-  (await import("./nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
+vi.mock("./native/nativeSqliteDb.js", async () =>
+  (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
 );
 
-vi.mock("./nativeSqliteMigration", () => ({
+vi.mock("./native/nativeSqliteMigration", () => ({
   migrateSnapshotToNativeSqlite: vi.fn(async () => ({
     status: "no-snapshot",
     databaseName: "lake-notes-mobile",
   })),
 }));
 
-vi.mock("./assetFs", () => ({
+vi.mock("./native/assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs,
   listAssetKeysFs,
@@ -89,7 +89,7 @@ describe("mobile startup performance contract", () => {
 
   it("concurrent startup calls initialize the native database once", async () => {
     vi.resetModules();
-    const { migrateSnapshotToNativeSqlite } = await import("./nativeSqliteMigration");
+    const { migrateSnapshotToNativeSqlite } = await import("./native/nativeSqliteMigration");
     const { bridge: freshBridge } = await import("./bridge.js");
     vi.mocked(migrateSnapshotToNativeSqlite).mockClear();
 

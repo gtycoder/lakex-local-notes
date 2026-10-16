@@ -344,7 +344,7 @@ AGENTS §4 已把「小记保存并同步 = 单条推送」列为高危路径（
 | IPC | `electron/ipc/registrar.ts` 单一注册表，**Electron IPC 与 HTTP web 客户端（`webApiServer.ts`）共用同一批 handler** | 设计良好 ✅ |
 | 内核资料检索 | AGENTS §2 三级检索 + vendor pin + `LAKEX-CONTRACT.md` | 已制度化 ✅ |
 | 表格内核触点 | `src/features/usheet/usheetKernelContract.ts` + `univerContract.test.ts` + 运行时探针 | 已制度化 ✅ |
-| 互斥域 | `src/core/maintenancePolicy.ts` + `mobile/maintenanceLocks.ts` | 已有单一判据 ✅ |
+| 互斥域 | `src/core/maintenancePolicy.ts` + `mobile/sync/maintenanceLocks.ts` | 已有单一判据 ✅ |
 | 云同步状态 | `src/core/cloudState.ts`（两端共用） | 已有单一判据 ✅ |
 | 搜索 | `src/core/search/`（桌面/移动共享） | 已共享 ✅ |
 
@@ -415,7 +415,7 @@ codegen/打包步骤，为省几张字面量引入构建复杂度不划算（AGE
   行数断言在编写时当场纠正了我"24"的错估（实际 **28**）—— 这正是这类断言的价值。
 - **自证**：① 移动端加一个未登记函数 ⇒ 失败；② 表里编造不存在的桌面方法 ⇒ 失败；③ 把移动端真实有的函数列进 DESKTOP_ONLY ⇒ 失败；恢复 ⇒ 通过（6 例）。
 
-### C2-4 S3 客户端两端实现（`electron/s3Store.ts` 239 行 / `src/mobile/s3Store.ts` 168 行）
+### C2-4 S3 客户端两端实现（`electron/s3Store.ts` 239 行 / `src/mobile/native/s3Store.ts` 168 行）
 
 **定性**：传输层不同（Node SDK vs Capacitor HTTP），**分成两份是正确的**。
 需确认的是**协议层**（manifest 布局、ETag/条件写、错误分类、并发上限 8）是否也各写了一套。
@@ -443,7 +443,7 @@ AGENTS §3#10 已登记：`.sync-toast` / `.quick-notes-toast` / `.document-noti
 
 ## 4. 议题三：模块划分 / 分层 / 分包
 
-### C3-1 `src/mobile/` 根目录 91 个条目（46 个非测试源码）平铺 ★★最清晰的一项
+### C3-1 `src/mobile/` 根目录平铺 ★★最清晰的一项 · ✅ **已落地（261016）**
 
 **证据**：
 ```
@@ -731,7 +731,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B1 抽提** ✅ **已完成 261016** | C1-2 `formatBytes`（拆成两个显式口径）· C1-3 `escapeId` · C1-4 **小记 key**（最高价值）· C1-1 `nowIso` **判定不做**（§B1 有意未做①） | 低 | 是 |
 | **B2 样式合规** ✅ **261016 两批完成**（第一批：移动颜色 28→0 + 13 处过期兜底；第二批：Q2 允许清单 + Q4 36 处字色→accent-text）／仅剩 Q3 待裁决 | C4-3 ✅ · C5-3 ✅（基线 0）· Q2 ✅（允许清单）· C5-1/C5-2 🔶（选中态收编与语义令牌，随 Q3） | **中**（视觉） | 视觉装置待补跑 |
 | **B3a `src/lib` 清壳** ✅ **已完成 261016** | C3-3：10 个一行转发壳**实测零引用** ⇒ 直接删除（无需改调用点）+ 防回退护栏 `libStructure.test.ts` | 极低 | 是 |
-| **B3 结构搬迁** | C3-1 `src/mobile` 分目录（**等并发会话**） | 低（纯移动） | 是 |
+| **B3 结构搬迁** ✅ **已完成 261016** | C3-1：`src/mobile` 根目录 52 个源码按职责分进 `data/`(15) `native/`(20) `hooks/`(9) `sync/`(3)，**纯搬迁零行为改动**（76 文件 `git mv` + 全仓说明符重写 + 文档路径同步）+ 根目录白名单护栏 `mobileStructure.test.ts` | 低（纯移动） | 是（双端构建 + 2055 例） |
 | **B4 契约显式化** ✅ **已完成 261016** | **C2-3 ✅** 能力矩阵 + 对账测试（34 行，见 §C2-3）· **C2-2 ✅** 改为 IPC 通道**三方一致性护栏**（原「抽常量表」实测不可行，见 §C2-2） | 中 | 是 |
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |

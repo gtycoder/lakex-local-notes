@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from "react";
-import { getTouchAxis } from "../gestureCore";
+import { getTouchAxis } from "../hooks/gestureCore";
 
 /**
  * 浮层右滑关闭/返回（全屏面板支持右滑关闭，子层右滑 = 返回上一层）。

@@ -33,7 +33,7 @@ const SRC = walk("src").filter((f) => /\.(ts|tsx)$/.test(f));
 const SCRIPTS = walk("scripts").filter((f) => /\.(mjs|ts|js)$/.test(f));
 const MOBILE_UI = SRC.filter((f) => f.startsWith("src/mobile/") && f !== "src/mobile/bridge.ts" && !/\.test\./.test(f));
 const SHARED = SRC.filter((f) => !f.startsWith("src/mobile/") && !/\.test\./.test(f));
-const LAKE_NATIVE = read("src/mobile/lakeNativeContract.ts");
+const LAKE_NATIVE = read("src/mobile/native/lakeNativeContract.ts");
 
 /** 解析 bridge 的一级方法名。 */
 function bridgeMethods(): string[] {

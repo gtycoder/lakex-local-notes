@@ -25,10 +25,10 @@ const MOBILE_APP = code(read("../MobileApp.tsx"));
 const COMPOSER = code(read("./QuickNoteComposer.tsx"));
 const HOME = code(read("./HomePage.tsx"));
 const EDITOR = code(read("../../features/quickNotes/QuickNoteEditor.tsx"));
-const AUTO_SYNC = code(read("../useAutoSync.ts"));
+const AUTO_SYNC = code(read("../hooks/useAutoSync.ts"));
 const SETTINGS = code(read("../settings/SettingsDrawer.tsx"));
 const BRIDGE = code(read("../bridge.ts"));
-const SYNC_STATUS = code(read("../syncStatusStore.ts"));
+const SYNC_STATUS = code(read("../sync/syncStatusStore.ts"));
 
 describe("小记 capture 路径（261010 统一为内核卡片）", () => {
   it("capture 与工作台共用同一个内核 composer（第二套轻量框已删除）", () => {
@@ -115,7 +115,7 @@ describe("小记 capture 路径（261010 统一为内核卡片）", () => {
   });
 
   it("capture 会话不主动发起同步（前台 / 后台两处都过 capture 会话判定）", () => {
-    const auto = code(read("../useAutoSync.ts"));
+    const auto = code(read("../hooks/useAutoSync.ts"));
     expect(auto).toMatch(/isCaptureSession/);
     expect((auto.match(/await isCaptureSession\(\)/g) ?? []).length, "前台 + 后台都要判定").toBeGreaterThanOrEqual(2);
     // 用户自己配的「按固定间隔」定时器不在此列（那是他设的节奏，不是我们替他补的动作）

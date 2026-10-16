@@ -35,7 +35,7 @@
 
 | 域 | 实例 | 收什么 | 关键约束 |
 | --- | --- | --- | --- |
-| **写域** | `src/mobile/maintenanceLocks.ts` 的 `writeLock` | 本地写：saveNote / 目录树 CRUD / 小记 / 历史 / 回收站 / 孤儿资产 / GC 账本；**以及同步引擎的 DB 片段**（经 `syncDbPort` 的 `withWriteLock` 短锁） | 可与网络阶段**并行**；同域内串行 |
+| **写域** | `src/mobile/sync/maintenanceLocks.ts` 的 `writeLock` | 本地写：saveNote / 目录树 CRUD / 小记 / 历史 / 回收站 / 孤儿资产 / GC 账本；**以及同步引擎的 DB 片段**（经 `syncDbPort` 的 `withWriteLock` 短锁） | 可与网络阶段**并行**；同域内串行 |
 | **维护域** | 同文件 `maintenanceQueue` | 轮次级网络与维护：`syncNow` / `gcDeepCleanup` / `ensureTrashNoteAssets` | 彼此串行；**禁止持有写域** |
 
 三条不变量：
@@ -50,14 +50,14 @@
 
 - `src/core/maintenancePolicy.test.ts` —— 分类完备 / 域不相交 / 计数基线；
 - `src/mobile/maintenancePolicyCoverage.test.ts` —— 桥方法集合与判据表一致、调用点类别一致、**I3 同域嵌套静态卡死**；
-- `src/mobile/maintenanceLocks.test.ts` —— 维护域被占满时写域仍立刻完成（F16 机制回归，CI 可跑，不必上模拟器）；
-- `src/mobile/syncDbPortBatchGuard.test.ts` —— 批窗口内被本机编辑的笔记不被远端覆盖；
+- `src/mobile/sync/maintenanceLocks.test.ts` —— 维护域被占满时写域仍立刻完成（F16 机制回归，CI 可跑，不必上模拟器）；
+- `src/mobile/data/syncDbPortBatchGuard.test.ts` —— 批窗口内被本机编辑的笔记不被远端覆盖；
 - `electron/maintenanceQueueScope.test.ts` —— 桌面维护队列只包维护操作（反向护栏）。
 
 **弱网实测（261010 已收尾，验收通过）**：`adb emu network delay|speed gprs`（7.0 KB/s ↓ / 3.5 KB/s ↑ / 35–200ms）；
 整轮同步 **59.3s**，**同步中的本地写等待 32ms**（基线写 84ms）⇒ **写等待/同步时长 = 0.001**（旧实现 ≈1.00：152.0s/152.3s）。
 装置：`node scripts/mobile-f16-acceptance.mjs`（会新建 2 篇 `F16 验收 A/B` 探针，按 AGENTS §4 不自动删）。
-计时入口 = `window.lakeNative.syncNow()` / 本地写 + 页内 `performance.now()`。**回归门禁**为 CI 可跑的 `mobile/maintenanceLocks.test.ts`（不必上模拟器）。
+计时入口 = `window.lakeNative.syncNow()` / 本地写 + 页内 `performance.now()`。**回归门禁**为 CI 可跑的 `mobile/sync/maintenanceLocks.test.ts`（不必上模拟器）。
 
 ## 三、跨端能力矩阵（单一来源）
 
@@ -65,7 +65,7 @@
 | --- | --- | --- | --- |
 | 桌面 IPC | **121** | `electron/preload.cjs` | 桌面渲染层的能力面 |
 | 移动实现本体 | **70** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 互斥域判据按此表登记（261010 收窄：删死方法 `uploadObject`，71→70） |
-| 移动调试契约 | **49** + 2 | `window.lakeNative`（`src/mobile/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口；+2 = `runNativeSqliteSpike` / `migrateSnapshotToNativeSqlite` |
+| 移动调试契约 | **49** + 2 | `window.lakeNative`（`src/mobile/native/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口；+2 = `runNativeSqliteSpike` / `migrateSnapshotToNativeSqlite` |
 | 移动性能探针 | 2 | `window.__lakePerf`（reset / snapshot） | 资产传输耗时观测 |
 
 ### 契约面「归属」分类（261010：`bridge` 不再是「70 个方法没人知道谁在用」）
@@ -94,7 +94,7 @@
 - 当前 Lake Manifest 为 **V1**（260928 重置），所有端必须一起升级。
 - 资源存在性按远端清单差集；下载按实扫 size+sha256 复用本地文件。
 - `note_history` 仍需补齐 `refs_json`/`protected_until`，纳入真机验收。
-- **secret 不落 WebView 存储**：Android Keystore 保管密钥（`SecureStorePlugin.kt` + `src/mobile/keystoreSecretStore.ts`），
+- **secret 不落 WebView 存储**：Android Keystore 保管密钥（`SecureStorePlugin.kt` + `src/mobile/native/keystoreSecretStore.ts`），
   密文进应用私有 SharedPreferences；`localStorageSecretStore` 只在 Web/vitest 作后端，并负责把历史值迁移过去。
   设备验证（261010）：冷启动后 `skLen 40`、连通 OK、`localStorage` 里已无 secret。
   背景：同一台 AVD 实测 localStorage 跨重启仍在、**IndexedDB 重启后被重建为空**；固定派生密钥的 WebCrypto 方案只是"混淆"不是硬件级保护。

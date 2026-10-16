@@ -165,7 +165,7 @@ interface ManifestFolder {
 
 > 背景：`S3Store` 是 core 的**端口**（`src/core/syncEngineTypes.ts`）。两端各自实现传输层——
 > 桌面 `electron/s3Store.ts`（`ObjectStore`，Node SDK + NodeHttpHandler）经 `electron/syncAdapters.ts` 适配成端口；
-> 移动端 `src/mobile/s3Store.ts` 直接实现端口（AWS SDK + `CapacitorHttpHandler` → Android OkHttp，绕 WebView CORS）。
+> 移动端 `src/mobile/native/s3Store.ts` 直接实现端口（AWS SDK + `CapacitorHttpHandler` → Android OkHttp，绕 WebView CORS）。
 > **分成两份实现是正确的**（传输栈不同）；要守的是**协议面等价**。本节 = 那张对拍表 + 已发现的漂移。
 > 判据 = 逐项读码对比（见 `docs/CODE-REVIEW-261015.md` C2-4）。**本节的 P1 项尚未修**，P2 项需真云验证或产品决策。
 
@@ -217,9 +217,9 @@ interface ManifestFolder {
 
 **修复进度**：
 
-- **D6 ✅ 已修（261016）**：移动端两套 client 工厂合并为 `createMobileS3Client`（`src/mobile/s3Store.ts`）**一处**——
+- **D6 ✅ 已修（261016）**：移动端两套 client 工厂合并为 `createMobileS3Client`（`src/mobile/native/s3Store.ts`）**一处**——
   checksum 绕行随之上移到工厂，于是「测连通」路径**也**拿到绕行（原先只有同步路径有，正是漂移点）。
-  护栏 = `src/mobile/s3PortGuards.test.ts`（`new S3Client(` 只允许一处；`responseChecksumValidation:` 只允许一次；
+  护栏 = `src/mobile/native/s3PortGuards.test.ts`（`new S3Client(` 只允许一处；`responseChecksumValidation:` 只允许一次；
   已自证：注入第二处 ⇒ 失败）。
 - **D1 ✅ 已修（261016）**：移动端端口 5 个校验点（getObject / putObject / deleteMany / putObjectStream / getObjectToFile）
   统一调用 core 的 `assertSafeKey`（与桌面 `ObjectStore` 的校验点对齐；`listObjects` 的 prefix 按桌面同样不校验）。

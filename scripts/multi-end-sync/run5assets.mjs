@@ -2,7 +2,7 @@
 //   - 上传：在模拟器 E 上注入图片并上传，测移动端 assetFs 读 + base64 编码 + HTTP PUT。
 //   - 下载：在桌面 D1 的 note-assets/{id}/ 直接落真实字节（桌面流式上传，无 base64），同步后在 E 下载，
 //           测移动端 HTTP GET + base64 解码 + assetFs 写盘。
-// 依赖移动端 __lakePerf（见 src/mobile/assetPerf.ts）。运行前 D1/E 均已配置同一 PREFIX。
+// 依赖移动端 __lakePerf（见 src/mobile/native/assetPerf.ts）。运行前 D1/E 均已配置同一 PREFIX。
 import { connect } from './cdpclient.mjs';
 import fs from 'node:fs';
 import path from 'node:path';

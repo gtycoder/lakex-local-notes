@@ -25,7 +25,7 @@ import javax.crypto.spec.GCMParameterSpec
  *   · 密文（`base64(iv):base64(ciphertext)`，AES-256-GCM）落 **应用私有 SharedPreferences**；
  *   · 解锁/使用由系统负责，应用不接触裸密钥。
  *
- * 接口与 core 的 `SecretStore` 端口一对一（get/set/remove），JS 侧见 src/mobile/keystoreSecretStore.ts。
+ * 接口与 core 的 `SecretStore` 端口一对一（get/set/remove），JS 侧见 src/mobile/native/keystoreSecretStore.ts。
  * 失败语义：解密失败（换锁屏 / 恢复出厂 / 数据损坏）⇒ **清掉该键并返回空**，让用户重填 ——
  * 对齐桌面 safeStorage 密钥丢失的语义（绝不返回错误密钥去签名）。
  */

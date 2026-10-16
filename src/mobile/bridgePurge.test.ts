@@ -2,22 +2,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../core/treeBehaviorContract.js";
 import { defineResourceBehaviorContract, type ResourceBehaviorAdapter } from "../core/resourceBehaviorContract.js";
 
-vi.mock("./persistence", () => ({
+vi.mock("./data/persistence", () => ({
   loadSnapshot: vi.fn(async () => null),
 }));
 
-vi.mock("./nativeSqliteDb.js", async () =>
-  (await import("./nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
+vi.mock("./native/nativeSqliteDb.js", async () =>
+  (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
 );
 
-vi.mock("./nativeSqliteMigration", () => ({
+vi.mock("./native/nativeSqliteMigration", () => ({
   migrateSnapshotToNativeSqlite: vi.fn(async () => ({
     status: "no-snapshot",
     databaseName: "lake-notes-mobile",
   })),
 }));
 
-vi.mock("./assetFs", () => ({
+vi.mock("./native/assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs: vi.fn(async () => null),
   listAssetKeysFs: vi.fn(async () => []),

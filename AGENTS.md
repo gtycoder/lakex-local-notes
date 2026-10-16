@@ -75,8 +75,8 @@ Lake Notes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-
 - 小记独立前缀 `quick-notes/` + 独立库 `quick-notes/metadata.sqlite3`。
 - **编辑器「本机视图」= 设备本地**（用户定稿）：当前工作表/缩放/选区/滚动/折叠/画板视口 **不进正文、不标脏、不进 S3**；表格列宽行高隐藏冻结、多维表视图配置仍属文档数据。`onDirty` 只在正文真变时触发。
 - **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`lake-notes-v3.bitable-nav.<noteId>`）。**不要**把导航写回正文（纯导航会触发一次 S3 上传）。
-- **互斥域**（判据单一来源 `src/core/maintenancePolicy.ts`；移动端 `mobile/maintenanceLocks.ts`）：**写域**（本地写 + 同步引擎的 DB 片段）／**维护域**（syncNow / GC / 资产补拉）／**高优先域**（用户当场发起、不得排在整轮同步后面的 `syncQuickNote`，判据 `PRIORITY_OPS`）。三条不变量：**I1** 网络往返不得持有写域；**I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash），不靠全局互斥；**I3** 同域串行、**禁止同域嵌套**（`KeyedAsyncQueue` 无重入 ⇒ 自锁）。护栏：`electron/maintenanceQueueScope.test.ts`、`src/mobile/maintenancePolicyCoverage.test.ts`。
-- **同步要"看得见"**：移动端把「上次同步（时间/结果/失败原因）」落盘并**常驻设置页**（`mobile/syncStatusStore.ts`，设备本地；**写入点唯一** = `bridge.syncNow()`；"离线没尝试"不写）；桌面有 `SyncStatusPopover`。
+- **互斥域**（判据单一来源 `src/core/maintenancePolicy.ts`；移动端 `mobile/sync/maintenanceLocks.ts`）：**写域**（本地写 + 同步引擎的 DB 片段）／**维护域**（syncNow / GC / 资产补拉）／**高优先域**（用户当场发起、不得排在整轮同步后面的 `syncQuickNote`，判据 `PRIORITY_OPS`）。三条不变量：**I1** 网络往返不得持有写域；**I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash），不靠全局互斥；**I3** 同域串行、**禁止同域嵌套**（`KeyedAsyncQueue` 无重入 ⇒ 自锁）。护栏：`electron/maintenanceQueueScope.test.ts`、`src/mobile/maintenancePolicyCoverage.test.ts`。
+- **同步要"看得见"**：移动端把「上次同步（时间/结果/失败原因）」落盘并**常驻设置页**（`mobile/sync/syncStatusStore.ts`，设备本地；**写入点唯一** = `bridge.syncNow()`；"离线没尝试"不写）；桌面有 `SyncStatusPopover`。
 - **开/关应用各同步一次**（只要 `autoMode !== "manual"`；`manual` 不补，保持真正不出网）：桌面 = 就绪 + `before-quit`（`QUIT_SYNC_DEADLINE_MS=60s` 兜底）；移动端 = 就绪（显式信号：`phase` 离开 booting）+ 回前台 + **进后台 best-effort（失败静默、不做等待）**，自动触发之间在途去重。判据单一来源 `core/syncModes.ts` 的 `shouldSyncOnOpenClose()`；文案 `SYNC_OPEN_CLOSE_NOTE`。**能不能出网仍另走 `canTouchNetwork()`，两条判据别合并**。
   **两个例外（用户定稿）**：① 长按桌面图标「小记」的快捷入口 = **「假单独模块」**：这次会话**不主动发起任何同步**（入口/回前台/进后台全跳，只有点「保存并同步」出网；用户自己配的间隔定时器不在此列），提交后不进列表、停在写作界面可连续记，手动退出 = 直接退 App 回桌面。② **点「保存」而不点「保存并同步」= 用户不着急** ⇒ **不得**替他补一次隐式推送（"这种情况下做什么同步，不能想当然"）。
 - **小记「保存并同步」= 单条推送**（唯一来源 `src/core/quickNotePush.ts` 的 `pushQuickNote`；桌面 IPC `sync_quick_note`、移动 `bridge.syncQuickNote` 走高优先域 + 推送后回核）：**必须先读远端清单、只 upsert 这一条、其余条目逐字段原样保留**（清单是单文件覆盖写、**没有 CAS**，覆盖式重建 ⇒ 他端按未声明处理、墓碑/GC 误删）。两条**退回完整同步**的路径（都不静默降级）：云端还没有清单；该条在远端是墓碑且本机无恢复标记（墓碑权威，不许复活）。记账 `setBaseHash` + `markSyncedGuarded`。UI：主按钮**保持原来的「保存 / 小记一下」**，「保存并同步」是**普通按钮**夹在中间；云同步关闭时**置灰 + 给理由**（移动端要有一行可见说明，没有 hover）。护栏 `src/components/quickNoteSyncGate.test.ts`。
@@ -105,7 +105,7 @@ Lake Notes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-
 | 日志 | 上面两个目录下的 `logs/lake-notes.log` |
 | 只读检查 DB | `workspace-default/metadata.sqlite3`（小记 `workspace-default/quick-notes/metadata.sqlite3`） |
 
-- **移动端 S3 密钥不落 WebView 存储**：走 Android Keystore（`android/**/SecureStorePlugin.kt` + `src/mobile/keystoreSecretStore.ts`），密文在应用私有 SharedPreferences；`localStorageSecretStore` 只是 web/vitest 后端与历史值迁移来源。
+- **移动端 S3 密钥不落 WebView 存储**：走 Android Keystore（`android/**/SecureStorePlugin.kt` + `src/mobile/native/keystoreSecretStore.ts`），密文在应用私有 SharedPreferences；`localStorageSecretStore` 只是 web/vitest 后端与历史值迁移来源。
 
 ## 6. 关键命令
 
@@ -144,7 +144,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 14. 快照门禁**依赖设备里的数据**（用户随手记一条小记 ⇒ 该态 +17 元素、假红）⇒ 只在**专用 AVD `lake_gate`**（emulator-5556 / CDP 9336）+ 固定夹具（5 文档 + 4 小记，`scripts/mobile-audit/gate-fixture.mjs`）上跑；**重灌夹具或建过数据 ⇒ 先重烤基线**；`.css-audit/snap/` 的中间快照会被同名 tag 覆盖（别当对拍）。
 15. **懒加载入口若会挂内核，必须自带内核样式**（`@dlient/lakex-doc-react/style.css`）；护栏 `src/mobile/kernelStyleBootstrap.test.ts`。
 16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px 高、内核判定下方放不下会翻到 caret 上方、实测 `top=-558`）：`max-height` + `overflow-y:auto` + 改锚点（内核写的是行内样式，只能 `!important`），落点 `src/mobile/mobile.css`（261012 P5 起 `mobile-kit.css` 已删，规则整份并过去）、作用域 `body.lake-mobile`。
-17. **程序化 focus 不弹软键盘**（没有用户手势时）：原生 `ShowKeyboardPlugin` + `src/mobile/nativeKeyboard.ts`；只有"没有手势"的入口（快捷 capture / 系统分享）传 `raiseKeyboard`，聚焦后 300ms 请原生弹一次。判据：**innerHeight 收缩 >200px = 键盘弹起**（取样前必须是无键盘态）。
+17. **程序化 focus 不弹软键盘**（没有用户手势时）：原生 `ShowKeyboardPlugin` + `src/mobile/native/nativeKeyboard.ts`；只有"没有手势"的入口（快捷 capture / 系统分享）传 `raiseKeyboard`，聚焦后 300ms 请原生弹一次。判据：**innerHeight 收缩 >200px = 键盘弹起**（取样前必须是无键盘态）。
 18. **重依赖（内核/usheet/画板）不许进入口静态图**：`HomePage → QuickNotePreview → QuickNoteKernelPreview → lakeRuntime` 一旦静态 import，构建就给入口挂 40+ 条 `modulepreload`（含 1.25MB 内核 CSS），冷启动先拉 + 解析 6.1MB 内核才画首页（实测真首页 **6123 → 533ms**、DCL 3943 → 119ms；改 `lazy()` + Suspense 后 modulepreload 45 → 12；护栏 `quickNoteKernelFallback.test.ts`）。**后台工作一律排到首屏之后**：冷启动那次同步 = 就绪后第一段空闲；内核预热 = 就绪 **4s 后**再排空闲（`requestIdleCallback` 的 timeout 只是上限，实测 2.4s 就回调 ⇒ 必须显式延迟）。判据探针 `scripts/mobile-audit/boot-timeline.mjs`（`--no-idle` 做 A/B）。
 19. **设备级点按一律走 CDP `Input.dispatch*`**（本机模拟器上 `adb shell input tap/swipe` 对两个 App 都不生效、`keyevent` 正常）：坐标取 `getBoundingClientRect()`（页面 CSS px）；手势（长按/上滑）用 `Input.dispatchTouchEvent`（鼠标事件验不出 pointer 长按）。
 20. **容器级手势别用 `setPointerCapture`**：捕获会把 `mousedown/mouseup` 与合成的 `click` **目标重定向到捕获元素** ⇒ 子按钮 `onClick` 全失效（现象 = "点了没反应"，不报错、DOM 正常）。改挂 **window** 的 move/up/cancel 并在抬手/卸载时摘掉；长按过的那一次要**吞掉随后的 click**，短按语义留给条目自己。

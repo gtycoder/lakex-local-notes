@@ -64,7 +64,7 @@ export function autoSyncIntervalMs(
 /**
  * 「开启/关闭应用」时该不该补一次同步。
  *   桌面 = 应用就绪（ready）+ 退出前（before-quit）；移动端 = 冷启动就绪 + 回到前台
- *   （Android 上"退出前同步"不可靠，见 src/mobile/useAutoSync.ts）。
+ *   （Android 上"退出前同步"不可靠，见 src/mobile/hooks/useAutoSync.ts）。
  * 判据（261013 扩口径）：开关打开 + **autoMode ≠ "manual"** ⇒ interval 与 onOpenClose 两档都补；
  * 「完全手动」不补 —— 用户 261013 定：那一档保持不自动出网。
  */

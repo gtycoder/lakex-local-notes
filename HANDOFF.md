@@ -29,6 +29,28 @@
 - **门禁与装置**：`tsc` ✓ · `vitest` **266 文件 / 2050 例** ✓ · `git diff --check` ✓ · `ui-metrics` ✓ · `check:mobileui` ✓。移动 **6 态快照基线已重烤**（顶栏多一个按钮属构成变化），连跑两次 **0 差异**。
   ⚠️ **装置新知识**（已写入 `scripts/mobile-audit/README.md`）：`home-doc` 的**指纹 row key 里带文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ `pm clear` + 重灌夹具会换 id，**元素数相同也会红**，必须重烤；只盯元素数会误判成"没变"。
 
+### 261016(十六) · B3/C3-1 `src/mobile` 目录重组（52 源码 → data/native/hooks/sync）
+
+- **用户点单**：并发会话收工后做 B3（此前唯一阻塞 = 对方在改 `src/mobile`）。
+- **落点**（纯搬迁，**零行为改动**，不改任何文件名/导出名）：
+  · `data/`（15）= 仓储 9 + `schema`/`sqliteDb`/`persistence` + `syncDbPort`/`quickNotesDbPort`/`searchIndex`；
+  · `native/`（20）= 原生/平台适配（`nativeSqlite*` / `nativeKeyboard` / `nativeAssetSync` / `keystoreSecretStore` / `secretStore` / `assetFs` / `assetWrites` / `assetPerf` / `capacitorHttpHandler` / `s3Store` / `sharedContent` / `systemBars` / `appInfoPort` / `cachePort` / `quickNoteShortcut` / `lakeNativeContract` / `kernelPrewarm`）；
+  · `hooks/`（9）= `use*` 7 + `viewportShell` + `gestureCore`；`sync/`（3）= `syncSettingsStore`/`syncStatusStore`/`maintenanceLocks`；
+  · 根目录只留**应用外壳/入口**：`main.tsx` / `MobileApp.tsx` / `bridge.ts` / `testSetup.ts` / `wasm-url.d.ts`（+ 横切护栏测试）。
+- **做法**：`git mv` **76 个文件**（源码 + 同名测试；主体明确的孤儿测试也跟着走）→ 脚本重写全仓说明符 → 再补三遍：
+  ① 指向被搬文件的 import（60 处）；② **被搬文件自身所有相对导入的深度**（`../core/*` → `../../core/*`，63+11 处）；
+  ③ **测试替身说明符**（`vi.mock`/`doMock`/`unmock`/`importActual`/`importMock`，20 处）；
+  最后修**硬编码路径字面量**（护栏测试的 `read("...")`/`new URL(...)` 与断言模式 ~12 处，含 3 个 android `.kt` 与 `scripts/` 的注释）与文档里的路径引用（19 文件 / 52 行）。
+- **踩坑（值得记）**：① 重写脚本第一版用**当前磁盘**解析旧路径 ⇒ 文件已搬走、解析全失败（0 处改写）；正确做法是"只查搬迁表"。
+  ② `s3PortGuards.test.ts` 的 `SRC = dirname(import.meta.url)+".."` 在文件下移一层后从 `src` 变成 `src/mobile` ⇒ 基准要改 `../..`。
+  **教训：纯搬迁不是"`git mv` 就完事"——相对路径有三种形态（import 说明符 / 测试替身 / 普通字符串字面量），必须分别覆盖。**
+- **护栏**：新增 `src/mobile/mobileStructure.test.ts` —— ① 根目录源码必须在外壳白名单内（新增根级源码 ⇒ 失败，提示放桶里或登记）；
+  ② 四个桶必须存在且非空。自证：往根目录塞一个 `.ts` ⇒ 失败；删除 ⇒ 通过。
+- **门禁**：`tsc` exit 0 ✓ · 全库 vitest **269 文件 / 2057 例 0 失败** ✓ · **双端构建** ✓ · `check:core` ✓ ·
+  `check:mobileui` ✓ · `ui-metrics` exit 0 ✓ · `check:bundle` ✓ · `git diff --check` clean ✓。
+  **未跑设备/视觉装置**：纯文件搬迁、无样式与几何改动 ⇒ 按 AGENTS §3#21 分层口径不触发。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(十五) · C3-3 `src/lib` 清掉 10 个一行转发壳（**纠正了 review 的一处错判**）
 
 - **背景**：`src/lib` 长期留着 10 个 `export * from "../core/x.js";`（`concurrency` / `docStats` / `keyedAsyncQueue` /
@@ -126,9 +148,9 @@
   `NoSuchKey` / `NotFound` / message 含 404；移动端只认 `$metadata.httpStatusCode === 404` 或 `name === "NoSuchKey"`。
   而桌面代码注释**明确记录**：「缺失对象的错误名随操作/供应商不同：GetObject=NoSuchKey，部分操作（AWS/七牛 Kodo）返回 NotFound」
   ⇒ 移动端可能把「对象缺失」当错误**抛出**（首次同步判定失败，而不是返回 null）。
-- **落地**：`src/mobile/s3Store.ts` 的 `getObject` catch 改为 `if (isNoSuchKey(e)) return null;`
+- **落地**：`src/mobile/native/s3Store.ts` 的 `getObject` catch 改为 `if (isNoSuchKey(e)) return null;`
   （从 core 引同一判据，删掉自拼的 404 判定）。**判据只允许有一份，就在 core。**
-- **护栏**：`src/mobile/s3PortGuards.test.ts` 增 1 例：必须从 core 引 `isNoSuchKey` 且调用它，
+- **护栏**：`src/mobile/native/s3PortGuards.test.ts` 增 1 例：必须从 core 引 `isNoSuchKey` 且调用它，
   并断言**不得再出现** `httpStatusCode === 404`（防回退）。自证：写回旧判定 ⇒ 失败；还原 ⇒ 通过。
 - **P1（D6/D1/D4）至此全部修完**；剩余 D2（forcePathStyle 移动端写死 false，真实功能缺口）/ D5（gzip ContentEncoding，需真云验证）
   需产品决策，D3/D7 记录备查 —— 见 SYNC-PROTOCOL §7.3。
@@ -141,10 +163,10 @@
   都调 `assertSafeKey`（`SAFE_KEY_RE = /^[A-Za-z0-9._/\-]+$/`），而移动端端口**一个都没有**。
   该判据的注释写明目的：「防非 ASCII 键导致 ListObjectsV2 编码不一致（fail fast）」⇒ 移动端缺这道闸，
   非 ASCII 键会让 GC 的 list 与写入侧的键编码不一致（列不到对象 ⇒ 漏删/误判）。
-- **落地**：`src/mobile/s3Store.ts` 的 **5 个校验点**统一调用 core 的 `assertSafeKey`：
+- **落地**：`src/mobile/native/s3Store.ts` 的 **5 个校验点**统一调用 core 的 `assertSafeKey`：
   `getObject` / `putObject` / `deleteMany`（逐键）/ `putObjectStream` / `getObjectToFile`；
   `listObjects` 的 prefix **按桌面同样不校验**（桌面 `list()` 也不校验前缀）——口径逐点对齐，不是"顺手多加"。
-- **护栏**：`src/mobile/s3PortGuards.test.ts` 增 1 例（必须从 core 引 `assertSafeKey`，且校验点 ≥5）。
+- **护栏**：`src/mobile/native/s3PortGuards.test.ts` 增 1 例（必须从 core 引 `assertSafeKey`，且校验点 ≥5）。
 - **顺带**：`13628cb9` 修掉了 D6 提交里的一处 tsc 未过（护栏测试的未用导入）——当时的校验命令让 tsc 的失败被
   vitest 输出盖住；今后 tsc 一律**显式打印退出码**再继续。
 - **门禁**：`tsc` exit 0 ✓ · 护栏 3 例 ✓ · 全库 vitest 见本批汇总 ✓ · `git diff --check` clean ✓。
@@ -155,13 +177,13 @@
 - **背景**：C2-4 对拍（`docs/SYNC-PROTOCOL.md` §7）查出移动端**内部不自洽**——`bridge.createS3Client`（只服务「测连通」）
   与 `mobile/s3Store`（服务全部同步）各建一套 client，且**设置不同**：前者**没有**七牛 checksum 绕行。
   后果 = 「测连通报 Checksum mismatch，真同步却正常」这类难查的不一致。
-- **落地**：`src/mobile/s3Store.ts` 新增并导出**唯一**工厂 `createMobileS3Client(opts)`；
+- **落地**：`src/mobile/native/s3Store.ts` 新增并导出**唯一**工厂 `createMobileS3Client(opts)`；
   `s3Store` 内部与 `bridge.createS3Client` 都改走它 ⇒ 传输分层（Capacitor 原生 HTTP）/checksum 绕行/凭证形态只有一处；
   checksum 绕行随之上移，测连通路径也拿到它（这正是本项要修的）。`bridge.ts` 顺手删掉不再使用的 `CapacitorHttpHandler` 导入。
   **缓存语义保持**：`s3Store` 每实例缓存 client（原样），bridge 每次新建（原样）。
 - **未纳入本项**：`forcePathStyle` 的**取值**差异（同步侧仍固定 false）属 **D2**——需给 `SyncConfig` 扩字段 + 与 D3（https 强制）
   一起做产品决策；代码里已留 `TODO(D2)` 注释指向 SYNC-PROTOCOL §7.3。
-- **护栏**：新增 `src/mobile/s3PortGuards.test.ts`（源码级）：`new S3Client(` 在 src/mobile 下只能**一处**、
+- **护栏**：新增 `src/mobile/native/s3PortGuards.test.ts`（源码级）：`new S3Client(` 在 src/mobile 下只能**一处**、
   `responseChecksumValidation:` 只能**一次**、两处调用点都必须走工厂。自证：注入第二处 `new S3Client(` ⇒ 失败；还原 ⇒ 通过。
   （为什么用源码级：这两个端口在内部动态 import SDK 并 new client，**没有可注入点**，为测试拆注入点属过度设计；
   判据本身 `assertSafeKey`/`isNoSuchKey` 已在 core 单测覆盖。）
@@ -172,7 +194,7 @@
 
 - **产出**：`docs/SYNC-PROTOCOL.md` 新增 **§7 S3 传输层：两端对拍**（原「记录」顺延为 §8）——
   端口面表 + **16 个协议维度**逐项判定 + 漂移清单 + 建议顺序。
-- **对拍对象（这是关键澄清）**：不是直接比 `electron/s3Store.ts` 与 `src/mobile/s3Store.ts`。
+- **对拍对象（这是关键澄清）**：不是直接比 `electron/s3Store.ts` 与 `src/mobile/native/s3Store.ts`。
   桌面是 `ObjectStore`（Node SDK）经 `electron/syncAdapters.ts` **适配**成 core 的 `S3Store` 端口；
   移动端**直接实现**同一个端口 ⇒ 要守的是**端口协议面等价**，不是实现相同。
 - **两端一致的部分（硬骨头都对上了）** ✅：超时 30s/120s（移动端注释显式对齐桌面常数）、重试 3、
@@ -552,7 +574,7 @@
   · 护栏：新增 `src/components/quickNoteSyncGate.test.ts`（两端：判据走 cloudState、按钮按 cloudReady 置灰、置灰必须给理由）。
 - **C7「开启应用对齐一次」改用显式就绪信号，不再猜 3s**（用户定稿）：`useAutoSync(ready)` 由 `MobileApp` 传 `phase === "ready"`（= `bridge.init` + `refreshAll` 之后）驱动那次对齐；
   旧实现 `setTimeout(…, 3000)` 的问题：快设备白等、慢设备可能在桥没就绪时就触发（会走「未配置/密钥缺失」的假失败路径）。护栏在 `quickNoteCapturePath.test.ts`（断言不再有 3s + 就绪 effect 存在）。
-- **C6 移动端同步可观测性**（用户定稿）：新增 `src/mobile/syncStatusStore.ts`（设备本地、不参与同步；**不塞**两端共用的 `lib/settings.ts`）；
+- **C6 移动端同步可观测性**（用户定稿）：新增 `src/mobile/sync/syncStatusStore.ts`（设备本地、不参与同步；**不塞**两端共用的 `lib/settings.ts`）；
   **写入点唯一** = `bridge.syncNow()`（成功 / 失败 / 未配置 / 密钥缺失各一处；离线这种"根本没尝试"不写）；设置页「连接与同步」新增**常驻一行**「上次同步：<时间> · 同步成功/失败：<原因>」，云同步关闭时追加一句说明。
   **它修掉的真问题**：自动同步失败此前只走 `console.warn`（`reportNativeActionError` 只 warn），**界面上完全看不到**。手动同步的 toast 保留（当场反馈），常驻行负责事后自查。
 - **B4 引擎层端到端并发护栏**：新增 `src/core/quickNotePushSyncRace.test.ts`（**真交错**，非等价复现）：把**真实引擎**停在"上传阶段已完成、清单尚未 PUT"的那次 `listDeferredDeletedQuickNotes` 上，窗口内跑**真实 `pushQuickNote`**，再放行引擎落地，断言：
@@ -641,7 +663,7 @@
     Android 只允许**用户手势**触发软键盘，深链冷启动没有手势（思源的闪念速记是原生 EditText 所以没这个问题）。
     ⇒ **待用户定**：要不要加一个原生插件方法（InputMethodManager.showSoftInput）来在 capture 打开时主动弹键盘（约 15 行 Kotlin + 插件注册 + TS 封装；**不动版式**）。
   · **快捷 capture 自动弹键盘（原生补齐，用户 261013 第九轮定）**：WebView 里程序化 focus 不弹软键盘（冷启动无用户手势，AGENTS §7.28）⇒ 新增原生插件 `ShowKeyboardPlugin`（InputMethodManager.showSoftInput）
-    + `src/mobile/nativeKeyboard.ts`；写作卡加 `raiseKeyboard`（**只 capture / 系统分享传**，页面路有手势不传），聚焦后 300ms 请原生弹一次。
+    + `src/mobile/native/nativeKeyboard.ts`；写作卡加 `raiseKeyboard`（**只 capture / 系统分享传**，页面路有手势不传），聚焦后 300ms 请原生弹一次。
     **设备复核**：普通启动首页无键盘 **842** vs 快捷 capture **530**（键盘已弹 + 焦点在内核编辑器）。护栏：capture 传参 / 写作卡调用 / MainActivity 注册插件（漏注册时 JS 只会 reject）。
   · **版式差距（用户 261013 提供思源录屏，已逐帧核对）**：思源闪念速记 = **一行标题（左「闪念速记」+ 未固定时「添加到桌面」）+ 右上蓝色主按钮「提交」+ 全屏纯文本输入**，键盘占下半屏；
     我们 = 顶部内核工具条（九项）+ 底部三连按钮。**建议只对齐版式（加顶部栏），输入区仍用内核富文本**（退成纯文本=方案 B，实测不更快且要重做九项能力）。
@@ -672,7 +694,7 @@
 - **落点（判据单一来源 + 两端执行）**：
   · `src/core/syncModes.ts`：`shouldSyncOnForeground` → **`shouldSyncOnOpenClose`**，判据改为 `enabled && autoMode !== "manual"`；新增**共用文案** `SYNC_OPEN_CLOSE_NOTE`（与 `cloudState.ts` 的 `CLOUD_PRIVACY_NOTICE` 同一做法：文案存 core、无 UI 依赖）；文件头补 261013 语义表。
   · 桌面 `electron/main.ts`：应用就绪块与 `before-quit` 两处都改走 `shouldSyncOnOpenClose`。**两条判据各守一段**：能不能出网 = `canTouchNetwork(cloudStateOf(...))`，该不该在开/关补一次 = `shouldSyncOnOpenClose(...)`。退出前同步仍有 `QUIT_SYNC_DEADLINE_MS = 60s` 兜底，不会挂死退出。
-  · 移动端 `src/mobile/useAutoSync.ts`：只换判据函数 ⇒ interval 档也走「冷启动就绪 + 回到前台」各一次。**移动端没有 before-quit**（Android 可能直接杀进程）⇒ 不假装能"关闭时同步"，在文案里如实说明以「回到前台」代替。
+  · 移动端 `src/mobile/hooks/useAutoSync.ts`：只换判据函数 ⇒ interval 档也走「冷启动就绪 + 回到前台」各一次。**移动端没有 before-quit**（Android 可能直接杀进程）⇒ 不假装能"关闭时同步"，在文案里如实说明以「回到前台」代替。
   · 文案：桌面 `SettingsPanel` 的「自动同步模式」行加 `desc={SYNC_OPEN_CLOSE_NOTE}`；移动 `SettingsDrawer` 同一行用共用文案 + 一句移动端等价口径。
 - **护栏**：`src/core/syncModes.test.ts` 改为断言「interval / onOpenClose 都补、manual 与关开关都不补」+ 共用文案含三档语义（旧断言 `interval → false` 正是旧口径，已按新语义翻转）。
 - **未做 / 边界**：① 这里的「开启/关闭」= **应用**开/关（沿用 `onOpenClose` 档的既有含义），**不是**拨「启用云同步」开关时立刻同步（开关行文案仍写"重新开启后下次同步会自动补拉"）；② 移动端冷启动那次仍固定等 3s 再判（等桥/引擎就绪），时机未改；③ 桌面 dist/ 未重建（代码批次待用户验收后再构建）。
@@ -1059,7 +1081,7 @@
 - **F16 已修**。根因比"锁粒度"更准：**本地写被并进了维护队列** —— 桌面 `enqueueMaintenance` 只有 **3** 个调用点（整轮同步/备份/GC 对账），
   移动端却有 **31** 个（其中 25+ 是纯本地写）。做法：
   · 判据单一来源 `src/core/maintenancePolicy.ts`（71 个桥操作全量登记：write **30** / maintenance **3** / none **38**）；
-  · 两条队列 `src/mobile/maintenanceLocks.ts`（写域 / 维护域），`bridge.ts` 改 `runWrite(op,…)` / `runMaintenance(op,…)`（**带类别校验**，写错当场抛）；
+  · 两条队列 `src/mobile/sync/maintenanceLocks.ts`（写域 / 维护域），`bridge.ts` 改 `runWrite(op,…)` / `runMaintenance(op,…)`（**带类别校验**，写错当场抛）；
   · 同步侧「DB 片段短锁」`syncDbPort` 的 `withWriteLock`（一次端口调用进出各一次，**网络往返不持写域**）；
   · `restoreTreeItem` 恢复不再等网络（原本被全局队列串在同步后面）。
 - **I2 守卫补齐**（拆域的前置条件，否则丢编辑）：引擎优先用 `markSyncedIfUnchanged`（小记新增实现，移动端；对齐 Lake 侧 V5 §5.2）；
@@ -1068,8 +1090,8 @@
   `window.lakeNative` 改为**从实现派生**（`lakeNativeContract.ts`：49 = 47 bridge + 2 附带；此前手写 49 个包装、无护栏）；
   `ports.ts` 6 处悬空《移动端方案 §x》引用清除；`bridge.ts` 头注释 "POC / manifest v4" 改成事实（Manifest **V1**）；`POCNote*` → `LocalNote*`。
 - **新增 7 道护栏**：`core/maintenancePolicy.test.ts` · `mobile/maintenancePolicyCoverage.test.ts`（含 **I3 同域嵌套静态卡死**）·
-  `mobile/maintenanceLocks.test.ts`（**F16 机制回归，CI 可跑不必上模拟器**）· `mobile/syncDbPortBatchGuard.test.ts` ·
-  `mobile/mobileCspSingleSource.test.ts` · `mobile/lakeNativeContract.test.ts` · `electron/maintenanceQueueScope.test.ts`（桌面反向护栏）。
+  `mobile/sync/maintenanceLocks.test.ts`（**F16 机制回归，CI 可跑不必上模拟器**）· `mobile/data/syncDbPortBatchGuard.test.ts` ·
+  `mobile/mobileCspSingleSource.test.ts` · `mobile/native/lakeNativeContract.test.ts` · `electron/maintenanceQueueScope.test.ts`（桌面反向护栏）。
 - **规格与契约**：`docs/MOBILE-TECH-STACK.md` 重写为正式架构规格（三层边界 + **每层用哪种复用方式** + 互斥域 + 能力矩阵 121/71/49 + 运行时硬约束 + 未结项）；
   `LAKEX-CONTRACT.md` 新增 **§5.27**（`envAdapter` 官方 7 个口全量 + 我方覆盖率 **1/7**；桌面外链其实靠**壳层** `setWindowOpenHandler`→`shell.openExternal` 接管；`longPressCard` 取证待办）。
 - **门禁**：tsc ✓ · vitest **227 文件 / 1778 用例** ✓ · check:core 76-0 ✓ · ui-metrics ✓ · check:bundle ✓ · 双端构建 ✓ · `git diff --check` ✓。
@@ -1211,13 +1233,13 @@
 7c. ~~移动端 SecretStore 不跨重启 ⇒ S3 密钥丢失~~ **已修（261009）**：
    - **根因（实测澄清过一版）**：不是"整个 WebView 存储都不持久"——同批实验里 **localStorage 跨重启仍在**，而 **IndexedDB 被重建为空**
      （重启后探针库的 `onupgradeneeded` 再次触发；磁盘上 `app_webview/Default/IndexedDB/http_localhost_0.indexeddb.leveldb` 还在）。
-     旧实现（`src/mobile/secretStore.ts`）把密文放 IndexedDB ⇒ 重启后 `getS3Settings().secretAccessKey` 长度 0，
+     旧实现（`src/mobile/native/secretStore.ts`）把密文放 IndexedDB ⇒ 重启后 `getS3Settings().secretAccessKey` 长度 0，
      所有 S3 操作报 `The request signature we calculated does not match the signature you provided`。
    - **修法（保留原设计的降级语义，只换持久层）**：密文改存 **localStorage**（键 `lake-notes-mobile.secret.*`，仍是 WebCrypto AES-GCM 密文、**不是明文**）；
      并在 `read` 时**一次性兼容迁移**旧 IDB 值（读到就搬进 localStorage 并清旧条目）。
    - **顺带治理报错**：`bridge.ts` 在建 S3 客户端处加 `assertS3Credentials()`（单一来源，同步/测连通/上传三条路径共用）：
      密钥缺失时给「请到「设置 → 同步设置」重新填写 Access Key / Secret Key」，不再让请求去报签名错。
-   - **护栏**：新增 `src/mobile/secretStore.test.ts`（4 例：往返、**落盘是密文**、**模拟重启仍可读**、缺失/删除返回 null）；
+   - **护栏**：新增 `src/mobile/native/secretStore.test.ts`（4 例：往返、**落盘是密文**、**模拟重启仍可读**、缺失/删除返回 null）；
      `bridgeCloudState.test.ts` 增 1 例（密钥缺失 ⇒ 提示 + 不发请求）。两个既有测试的 `secretStore` mock 改成"已配置 S3"的真值语义。
    - **设备验收（AVD，决定性场景）**：保存 → 当场 `skLen 40` / 连通 OK → `am force-stop` 重启 → **`skLen 40` / 连通 OK / 同步成功**（原来必报签名错的场景）；
      空密钥档实测两条路径都回「S3 密钥缺失…请到「设置 → 同步设置」重新填写」且**不发请求**；落盘的 localStorage 值不含明文。
@@ -1742,7 +1764,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   ③ 内核 note 版式给引擎写了 **`min-height: 40vh`**（vendor `lakex-doc.css:6205`）——40vh **跟视口走**（输入法态 212 / 面板态 337）。
   ④ 收起面板时**太早清占位**（固定 220ms）⇒ 键盘还没上来，工具栏掉到屏幕底部再弹回（实测 `toolbarTop 474 → 786 → 474`）。
 - **修法（都是单一来源、无新机制）**：
-  · **稳定外壳高** = 新模块 `src/mobile/viewportShell.ts`（单调取历史最大值 = 键盘收起时的高；方向变化重置）；
+  · **稳定外壳高** = 新模块 `src/mobile/hooks/viewportShell.ts`（单调取历史最大值 = 键盘收起时的高；方向变化重置）；
   · `useKeyboard` 的 `base` 改用它（跨实例共享，避开 keep-alive 隐藏实例 / 挂载时键盘正开着的时序坑）；
   · `EditorDock` 用 **`useLayoutEffect`** 把 `--mb-app-h = 稳定高 − 底部占用`（面板高 或 键盘高）写到 `:root`，
     `html, body, #root, .mobile-app` 都用它（**必须 layout effect**：写在 paint 之后，vh 系的内核规则会先按旧视口算一次并被内容撑住）；
@@ -1954,7 +1976,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > 每屏探针（越界 / 截断 / 对比度 / 小点击目标 / 整页横向溢出）全绿；`check:mobilesnap` **6 态 0 差异**。
 > **未覆盖 / 边界（有理由，不是漏）**：① **缩略图** —— 模拟器上没有带图的小记或图片字段数据，且 png/jpg/jpeg 的边界已在本节记录；
 > 要看图得先造带图数据（下轮或真机）。② **大纲左滑手势**的运行期驱动没做：门控逻辑（`swipeTargetSide` + `canOpen`）
-> 已有单测 `src/mobile/gestureCore.test.ts` 明确断言「表格/多维表/画板没有大纲 ⇒ 左滑作废」；本轮在设备上又量到**同一个 `outlineAvailable` 判据的两侧**：文档（无标题文档）底栏「大纲」`disabled=false`、画板与表格 `disabled=true`。运行期用 CDP touch 驱动左滑没做成——壳是 keep-alive（隐藏视图元素仍在 DOM、rect 为 0），我的导航在"从文档回首页"这一步反复选到不可见元素；由于门控已有单测 + 状态侧实测，判定为**价值重叠、不再投入**（真要驱动得先给 walkthrough 的 goHome 加命中测试版可见性判据，那是装置改进、不是产品验证）。
+> 已有单测 `src/mobile/hooks/gestureCore.test.ts` 明确断言「表格/多维表/画板没有大纲 ⇒ 左滑作废」；本轮在设备上又量到**同一个 `outlineAvailable` 判据的两侧**：文档（无标题文档）底栏「大纲」`disabled=false`、画板与表格 `disabled=true`。运行期用 CDP touch 驱动左滑没做成——壳是 keep-alive（隐藏视图元素仍在 DOM、rect 为 0），我的导航在"从文档回首页"这一步反复选到不可见元素；由于门控已有单测 + 状态侧实测，判定为**价值重叠、不再投入**（真要驱动得先给 walkthrough 的 goHome 加命中测试版可见性判据，那是装置改进、不是产品验证）。
 > ③ 真机项（图片 / 附件、键盘安全区、同步后图片加载）仍待真机，与本节「当前剩余验收」合并。
 
 - 正式端：Capacitor Android，包名 `com.lakenotes.mobile`；定位为完整端，桌面红线同样适用。
