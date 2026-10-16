@@ -11,7 +11,7 @@
  * 没有可注入点（为测试而拆注入点属过度设计）。源码级护栏只保证"接线在、且没有走回头路"，
  * 判据本身（assertSafeKey / isNoSuchKey）已在 core 的单测里覆盖。
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
