@@ -1877,3 +1877,18 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 移动 6 态快照门禁因顶栏多一个按钮而按配方重烤基线，冷启动后 0 差异。
 （附录·实现备忘：那次回滚掉的姿势 = 渲染层先 `execCommand('focus')` 再把焦点交给主进程 `webContents.sendInputEvent({ keyCode: 'F', modifiers: ['meta'|'control'] })` 注入 trusted 按键；
 若将来移动端要复用内核面板，这条是唯一可行路径。另注：让出一拍**不要用 `requestAnimationFrame`** —— CDP 依附/隐藏窗口下 rAF 不触发，会静默失效。）
+
+### 5.40 图片放大预览：本构建**不派发** `envAdapter.previewImgs`（261016 实测；B8 结案）
+
+**内核侧静态事实**：`envAdapter.previewImgs(imgs, index)` 是官方适配口，内核把它当**编辑器事件**转发
+（bundle @1482481：`editor.on('previewImgs', (e,n) => t.previewImgs(e,n))`）；图片卡选项默认 `allowClickToMaximize: true`（bundle @5865257）。
+
+**两条实测（隔离 `lake://app` + CDP）**：
+1. 在活动宿主内挂 `editor.on('previewImgs')`，对 inline 图片卡（64×64 真图，鼠标落在其中心）真实点击 ⇒ **事件 0 次**。
+2. 临时给 `createOpenEditor` 补上 `envAdapter.previewImgs` 并重建后复测 ⇒ **仍然 0 次**（回调与事件都没有）。临时改动已回滚、源码与产物残留检查均为 0。
+
+**结论**：本构建点击 inline 图片卡**不会派发真预览事件** ⇒ 宿主自研的 `.ne-image` DOM 点击 + `extractImagesFromContent()`（从正文取图，
+规避 `cardLazyInit` 与虚拟渲染）**是必需路径**，不是"重复实现内核能力"。**不要**按官方口接 `previewImgs` 再把自研预览删掉（会退回"点了没反应"）。
+
+（B4 备忘·同批未完成：`moveCollapse`/`moveColumns`/`moveTable`/`moveImage` 的入参形态无法从 registry 可靠得出——`moveImage(cardId)` 实测抛
+`setStart: parameter 1 is not of type 'Node'`，且 registry 的 ID→类有别名（标着 `moveTable` 的类在设行高）。要做得先造四类卡片夹具，再用 `beforeExecCommand` 钩子观察内核自身的调用。）

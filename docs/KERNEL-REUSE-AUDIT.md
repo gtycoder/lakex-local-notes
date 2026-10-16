@@ -358,9 +358,9 @@
 | `wordCount` / `wordCountSelection` | ✅ 可用且一致（`selectAllDoc` 后选区 11 = 全文 11，并在 B1 里接了状态栏） | 已完成 |
 | 内核查找面板 / ⌘F / 合成事件 | ✅ 面板可用；**只有真实按键能唤起**；合成事件与 `triggerHotKey` 均无效 | 桌面已做入口（B2） |
 | `search` / `replaceText` / `replaceAll` 入参 | ✅ 读码确认入参是**选区/ranges**（不是关键词）⇒ 复用单位是面板 | 移动端若要查找只能自研（待讨论） |
-| `envAdapter.previewImgs` 是否派发 | ⏳ **未测**：要判定必须临时在 `lakeRuntime` 加一次 `envAdapter` 才能观察；按「不改代码即可做」的口径本轮跳过 | 需要时单独立项 1 次探针 |
+| `envAdapter.previewImgs` 是否派发（B8） | ✅ **已实测（261016）：本构建不派发** —— ① 在活动宿主内挂 `editor.on('previewImgs')`，真实点击 64×64 inline 图片卡中心：**事件 0 次**；② 临时接上 `envAdapter.previewImgs` 重建复测：**回调仍 0 次**（内核默认 `allowClickToMaximize: true`，也不是"选项没开"）。临时改动已回滚、残留 0 | **B8 结案**：自研 DOM 点击 + 正文解析预览是**必需**，非重复实现（契约 §5.40） |
 | `miniToolbar`（C3） | ⏳ 未测 —— 用户 261016 定「先不做，需要讨论」，故本轮不投入 | 讨论时再测 |
-| `moveCollapse` / `moveColumns` / `moveTable` / `moveImage`（B4） | ⏳ 未测：需先有折叠块/分栏/表格/图片四类夹具与入参形态 | 若做 B4 先补探针 |
+| `moveCollapse` / `moveColumns` / `moveTable` / `moveImage`（B4） | ❌ **仍未完成**（诚实结论）：入参形态**无法从 registry 可靠得出** —— `moveImage(cardId)` 实测抛 `setStart: parameter 1 is not of type 'Node'`（第一参不是 cardId）；registry 的 ID→类还有别名（标着 `moveTable` 的类实际在"设行高"） | 要做需先按 `docs/LAKE-CONTENT-WRITING.md` 造折叠块/分栏/表格/图片四类夹具，再用 `beforeEditing/ beforeExecCommand` 钩子观察内核**自己**调用这些命令时的 args；未排期 |
 | `toc.getContainer`（A5） | ❌ 用户 261016 定：A5 不做 | 关闭 |
 
 ---
@@ -388,7 +388,7 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 
 1. **`docs/LAKEX-CONTRACT.md` §5.9 的"候选原生化改造"里，`getSelectionContent` 标着"未用"——已过期**：`src/features/editor/blockHandleMount.ts:47` 在用（块菜单取 Markdown）。
 2. **`HANDOFF.md` §0 的 261015 节写着"未提交/未推送"**，但仓库实况是：该批已提交 `fc87325`，与 `origin/master` 0 ahead / 0 behind、工作树干净。
-3. **`§5.27` 的 `previewImgs` 标"✅ 已实现"需要写清边界**：我们的代码里**没有传 `envAdapter.previewImgs`**（全仓无 `envAdapter:` 选项），图片放大是 `attachImagePreviewClick` 的 DOM 点击 + `extractImagesFromContent` 正文解析兜底，原因是本构建 `allowClickToMaximize` 无效（`src/features/editor/LakeEditor.tsx:107`）。⇒ 建议改成"行为等价、非适配口实现"，并把"本构建 `previewImgs` 是否真的不派发"列为待实测（§6）。
+3. **（261016 已结案）`§5.27` 的 `previewImgs` 标"✅ 已实现"需要写清边界**：我们的代码里**没有传 `envAdapter.previewImgs`**（全仓无 `envAdapter:` 选项），图片放大是 `attachImagePreviewClick` 的 DOM 点击 + `extractImagesFromContent` 正文解析兜底，原因是本构建 `allowClickToMaximize` 无效（`src/features/editor/LakeEditor.tsx:107`）。⇒ 建议改成"行为等价、非适配口实现"，该待实测**已结案（261016）**：本构建点击 inline 图片卡确实**不派发**（接不接 envAdapter 都不发），详见契约 **§5.40** 与本文件 B8。
 4. **字数统计存在两套自研口径**（`src/core/docStats.ts:21` 与 `src/mobile/bridge.ts:568`）：即使不接内核 `wordCount`，这两处也该收口到单一来源。
 5. **`AGENTS.md` §2⓪ 的检索提示"图标族 `ne-t-*`"不准确**：vendor 侧 `ne-t-*` 只在 wrapper 自己的 sprite（`src/components/lakex/icon.tsx`，共 8 个：`ne-t-link`、`ne-t-image-crop/reset/rotation/size/style/title`、`ne-t-batch-apply`），**不是内核工具栏图标族**；内核内置图标名是 `editor-main-*`（≈74 个，JS 内联，`style.css` 里 0 条），工具栏类名族是 `ne-ui-toolbar-*`（36 条）、卡片族 `ne-card-*`（210 条）。建议把 AGENTS §2⓪ 的检索关键词改成 `editor-main-*` / `ne-ui-toolbar-*` / `ne-card-*`。
 6. **`"insert-panel"` 在 bundle 里 0 命中**：真实标识符是 `quickInput` / `slash` / `cardSelect` + 命令 `insertSlash`（检索时别用"insert panel"当关键词）。
