@@ -366,7 +366,19 @@ preload 暴露通道: 116       主进程注册通道: 116
 **方案（保守，二选一）**：
 - **A（轻）**：把通道名抽成 `electron/ipc/channels.ts` 常量表，preload/native/register 都从它引 ⇒ 拼写漂移不可能。
 - **B（重，不建议）**：从注册表反推 preload 桥。
-**建议 A**；B 会动 preload 的 CJS/asarUnpack 边界（AGENTS §7.10），风险不成比例。
+**❌ 方案 A 实测不可行（261016 取证后改法）**：`electron/preload.cjs` 是**原生 CJS**——`package.json` 的
+files/asarUnpack **直接列该文件、不进 Vite 构建**，它无法 import TS 常量表；要让它消费常量表就得引入
+codegen/打包步骤，为省几张字面量引入构建复杂度不划算（AGENTS §3#17）。B 同样不动（会动 preload 边界）。
+
+**✅ 改成的做法（零运行时改动，补上真正的缺口）**：新增 `electron/ipc/ipcChannelParity.test.ts`——
+把**三方一致**变成判据：① 注册侧（`electron/ipc/register*.ts` 的 `handle/handleEvent`）↔
+② 暴露侧（`preload.cjs` 的 `invoke`）↔ ③ HTTP 侧（`webApiServer.ts` 的 `WEB_METHODS`）。
+
+- **为什么这才是真缺口**：原先只有 `webApiServer.test.ts` 钉了 **②↔③**；**①↔② 与 ①↔③ 无人守**。
+  后果：只在 preload 暴露却忘了注册 ⇒ 运行时才报 "No handler registered"（用户点下去才知道）；只注册不暴露 ⇒ 死通道。
+  **261016 真实发生过同类事故**：并发会话给 preload 加了 `find_in_document` 却漏了 `WEB_METHODS`，被 ②↔③ 抓住 —— 当时 ①↔② 仍然无人守。
+- **实测基线**：注册侧 116 = preload 116 = WEB_METHODS 116，**当前完全一致**（含无重复注册）；规模已钉死。
+- **自证**：只在 preload 加一个通道 ⇒ 2 例失败；只在注册侧加 ⇒ 3 例失败；还原 ⇒ 通过。
 
 ### C2-3 领域仓储（Repository）能力面缺一个显式契约 ★★本轮最值得讨论的一项
 
@@ -716,7 +728,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B1 抽提** ✅ **已完成 261016** | C1-2 `formatBytes`（拆成两个显式口径）· C1-3 `escapeId` · C1-4 **小记 key**（最高价值）· C1-1 `nowIso` **判定不做**（§B1 有意未做①） | 低 | 是 |
 | **B2 样式合规** ✅ **261016 两批完成**（第一批：移动颜色 28→0 + 13 处过期兜底；第二批：Q2 允许清单 + Q4 36 处字色→accent-text）／仅剩 Q3 待裁决 | C4-3 ✅ · C5-3 ✅（基线 0）· Q2 ✅（允许清单）· C5-1/C5-2 🔶（选中态收编与语义令牌，随 Q3） | **中**（视觉） | 视觉装置待补跑 |
 | **B3 结构搬迁** | C3-1 `src/mobile` 分目录 · C3-3 `src/lib` 转发壳 | 低（纯移动） | 是 |
-| **B4 契约显式化** 🔶 | **C2-3 ✅ 已完成 261016**（能力矩阵 + 对账测试，34 行；见 §C2-3）· C2-2 IPC 通道常量表（**未做**：并发会话正在改 IPC，避让） | 中 | 是 |
+| **B4 契约显式化** ✅ **已完成 261016** | **C2-3 ✅** 能力矩阵 + 对账测试（34 行，见 §C2-3）· **C2-2 ✅** 改为 IPC 通道**三方一致性护栏**（原「抽常量表」实测不可行，见 §C2-2） | 中 | 是 |
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |
 | **B5 待裁决** | C3-2 `components` 拆分 · C3-5 bridge 拆分 · **C1-6 只读单元格共享** · ~~C1-7 属性清单~~ ✅ · ~~是否修 `.editor-error`~~ ✅ | — | — |

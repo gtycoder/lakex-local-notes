@@ -16,6 +16,23 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(十四) · C2-2 IPC 通道三方一致性护栏（**原方案实测不可行，已改法**）
+
+- **原方案**：把通道名抽成 `electron/ipc/channels.ts` 常量表，preload / native / register 都从它引。
+- **实测不可行**：`electron/preload.cjs` 是**原生 CJS**——`package.json` 的 files/asarUnpack **直接列该文件、不进 Vite 构建**，
+  它无法 import TS 常量表；要让它消费常量表就得引入 codegen/打包步骤，为省几张字面量引入构建复杂度不划算（AGENTS §3#17）。
+  （方案 B「从注册表反推 preload 桥」同样要动 preload 的 CJS/asarUnpack 边界，不动。）
+- **改成的做法（零运行时改动）**：新增 `electron/ipc/ipcChannelParity.test.ts`，把**三方一致**变成判据：
+  ① 注册侧（`electron/ipc/register*.ts` 的 `handle`/`handleEvent`）↔ ② 暴露侧（`preload.cjs` 的 `invoke`）↔
+  ③ HTTP 侧（`webApiServer.ts` 的 `WEB_METHODS`）；另含"通道被重复注册"检查与规模钉死（116/116/116）。
+- **为什么这才是真缺口**：原先只有 `webApiServer.test.ts` 钉了 **②↔③**，**①↔② 与 ①↔③ 无人守**。
+  后果：只在 preload 暴露却忘了注册 ⇒ 运行时报 "No handler registered for ..."（用户点下去才知道）；只注册不暴露 ⇒ 死通道。
+  **261016 真实发生过同类事故**：并发会话给 preload 加了 `find_in_document` 却漏了 `WEB_METHODS`，被 ②↔③ 抓住 —— 当时 ①↔② 仍无人守。
+- **实测基线**：注册侧 116 = preload 116 = WEB_METHODS 116，当前完全一致（含无重复注册）。
+- **自证**：只在 preload 加一个通道 ⇒ 2 例失败；只在注册侧加 ⇒ 3 例失败；还原 ⇒ 通过（3 例）。
+- **门禁**：`tsc` exit 0 ✓ · 3 例 ✓ · 全库 vitest 见汇总 ✓ · `git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(十三) · C1-3b 把 7 处裸 CSS.escape 收编进 escapeId（判据只留一份）
 
 - **背景**：B1 建 `src/lib/cssEscape.ts` 的 `escapeId`（带兜底）时发现仓内另有 **7 处直接调 `CSS.escape`**（无兜底），
