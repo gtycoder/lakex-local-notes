@@ -178,7 +178,7 @@ r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, a
 // 基线 = 首次实测存量，**只许降**（清理时同步调小；清理批次见 CODE-REVIEW §7 的 B2）。
 const BASELINE = {
   desktopImportant: 11,        // 口径修正后实测（入口图口径曾报 10）；AGENTS §3#14 的目标仍是 ≤10 ⇒ B2 收口
-  mobileColorLiterals: 28,     // src/mobile/mobile.css 存量（移动端 theme/** 才是颜色字面量的合法归属）
+  mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 现在与桌面同为硬 0
   accentTextMisuse: 36,        // 越界把 --lake-accent 当文字色；目标 0
   crossFileDupGroups: 298,     // 同一 (选择器,属性) 出现在 ≥2 个文件；文件内重复另有 cssLayers/mobileLayers 围栏
 };
