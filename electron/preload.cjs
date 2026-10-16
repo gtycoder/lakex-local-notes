@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   saveAssetAs: (noteId, filename, suggestedName) => invoke("save_asset_as", noteId, filename, suggestedName),
   revealNoteFile: (id) => invoke("reveal_note_file", id),
   openNoteAssets: (id) => invoke("open_note_assets", id),
+  findInDocument: () => invoke("find_in_document"),
   getS3Settings: () => invoke("get_s3_settings"),
   saveS3Settings: (settings) => invoke("save_s3_settings", settings),
   testS3Connection: () => invoke("test_s3_connection"),

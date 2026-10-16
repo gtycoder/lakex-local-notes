@@ -166,13 +166,36 @@
 
 **未做（保留）**：编辑器内选区字数 `wordCountSelection`（B5 一起做）；内核 32 MiB 大文档下的 `wordCount` 耗时未单独压测（内核自身在每次 `contentchange` 都这么算，风险与现状同量级）。
 
-#### B2 文档内查找/替换：内核有 `search` / `replaceText` / `replaceAll`，我们完全没做
+#### B2 文档内查找 — ✅ **已实施（261016，桌面）**：内核自带查找替换面板 + 顶栏入口
 - **现状**：`src/components/SearchPanel.tsx` 是**库级**搜索（`native.searchNotes` + FTS 索引），与"文档内查找"不是一回事；而"正文命中的定位"目前是 DOM 启发式（HANDOFF §3#5 已登记）。
 - **内核证据**：§5.9 插件 `search` ⇒ `search`/`replaceText`/`replaceAll`（vendor bundle 另有 `openSearchPanel`）；`vendor/lakex-doc-react/docs/execCommand-reference.md:151-152`；插件 `search` 带 `editor/search-toolbar-descriptor.ts`，且**内核默认工具栏 items 本来就含 `search` / `correction`**（B 组盘点）⇒ 桌面文档的内核固定栏**已经有查找入口**，我们缺的是"移动端 + 自己的入口 + 命中定位走内核"。
-- **判定**：类型 1/2（内核有能力，我们没有；且我们用 DOM 启发式补位）。
-- **建议**：先做**实测探针**（在隔离实例里调 `execCommand('search', …)` / `replaceAll`，看入参形态与是否自带高亮/滚动），再决定：① 桌面直接用内核查找入口；② 移动端在文档内提供"查找"（与库级搜索分开）。
-- **代价/风险**：中。`search` **不在官方 08 文档里**（"文档没写、bundle 有"），入参只能读码 + 实测；`queryCommandEnabled` 不可当门（§5.32 ⑤）。
-- **验收**：探针记录 + 命中定位正确性（跨块、虚拟渲染屏外块）。
+**A 批次实测（261016，隔离 lake://app + CDP）——把"内核有没有"一次问清**：
+
+| 结论 | 证据 |
+| --- | --- |
+| 内核**自带完整查找替换面板** `.ne-ui-search-panel`（「查找 / 替换」两个页签、上一个/下一个、命中计数、请输入） | 实测面板 DOM + 截图 |
+| 面板只能被**真实按键**唤起：本构建开着虚拟渲染 ⇒ 热键 **⌘F**（源码 `virtualRendering ? ['cmd','F'] : ⇧⌘F`） | 真实 CDP 按键 → 面板打开 |
+| **合成 KeyboardEvent（untrusted）无效**；内核也**没有导出**打开面板的 API（hotKey 插件未注册 service；从 `renderer._$services[]` 取到 hotKey 管理器后 `triggerHotKey('openSearchPanel')` 返回 undefined、面板不出现） | 三条各自实测 |
+| 热键要求**编辑器自己持有焦点**：焦点在顶栏按钮上时 ⌘F 无反应 | 对照实测（焦点在按钮 vs 在 `.ne-engine`） |
+| `search` / `replaceText` / `replaceAll` 命令的入参是**选区/ranges**（不是关键词）⇒ 可复用单位是"面板"，不是命令 | bundle 读码（`execute(e,t,n)` 里 `t.forEach(range)`） |
+
+**落地（桌面）——入口位置定为「顶栏右上角」**：
+与现有「全文搜索」（库级 FTS，另一个按钮）**并列**，图标用 `FileSearch`、标题「文档内查找（⌘F）」；两者语义不同（库级 vs 文档内），并列比塞进胶囊更清楚（移动端胶囊另有"不许放搜索"的定稿契约）。
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/features/editor/kernelFind.ts`（新增） | `openKernelFindPanel()`：① 用内核自己的 `execCommand('focus')` 把焦点交还编辑器；② 请主进程注入 trusted ⌘F |
+| `electron/ipc/registerEditorIpc.ts`（新增） | `find_in_document` → `webContents.sendInputEvent({ keyCode: "F", modifiers: ["meta"|"control"] })`；对 Web 传输的 stub event 取窗口带兜底 |
+| `electron/preload.cjs` · `src/lib/native.ts` · `electron/webApiServer.ts` | IPC 三处同步（含 `WEB_METHODS` 一致性护栏） |
+| `src/desktop/DesktopTopBar.tsx` · `src/App.tsx` | `DesktopTopBarFind` 组件 + 接线（`disabled = 无活动文档 或 设置里关了内核工具栏`） |
+
+**踩坑（已修）**：第一版用 `requestAnimationFrame` 让出一拍 ⇒ CDP 依附/隐藏窗口下 rAF 不触发（AGENTS §4 的坑），入口**静默失效**；改成 `setTimeout(0)`。
+
+**实测**（隔离实例，`.css-audit/kernel-find-261016/find-panel.png`）：`BEFORE panel=false` → 点我们的按钮 → `panel=true`、`activeElement=ant-input`、面板文案「查找 替换 查找 0 上一个下一个」；同屏还能看到顶栏三个图标（分屏 / 文档内查找 / 全文搜索）与状态栏「字数 11」（B1 的内核口径）。
+
+**移动端**：内核工具栏在移动端被关（`disabledPlugins:["save","toolbar"]`）⇒ descriptor 不注册、无面板也无热键 ⇒ **本轮不做**（自研一套属"添加项"，且与"移动端输入面只有 dock"的定稿相关，留待讨论）。
+
+**门禁**：`tsc` ✓ · `vitest run` **261 文件 / 2024 例通过**（5 文件 / 16 例跳过）✓ · `git diff --check` ✓。
 
 #### B3 全选：手工 Range vs 内核 `selectAll` / `selectAllDoc`
 - **现状**：块选择走手工 `createRange` + `transformDOMRange`；`selectAllDoc` **0 处使用**。
@@ -320,18 +343,22 @@
 
 **需要裁定**
 1. 移动端「＋」面板条目是否允许改成"内核注册表派生 + 自绘 UI"（C1）？会小幅改变面板内容（跟随内核注册表）。
-2. 是否要做**文档内查找/替换**（B2，桌面 + 移动）？内核有命令、官方文档没写。
-3. 卡片/图片浮栏是否收回内核 `miniToolbar`、我们只补内核没有的项（C3）？会动已定稿的浮栏观感。
-4. 移动端文本增强缺项（B6）是否按"下一会话焦点"全做？
+2. ~~是否要做**文档内查找/替换**（B2）~~ **桌面已实施（261016）**：入口 = 顶栏右上角（与库级「全文搜索」并列），走内核面板。残留待定：**移动端是否也要**（内核面板在移动端不存在，自研属添加项）。
+3. 卡片/图片浮栏是否收回内核 `miniToolbar`、我们只补内核没有的项（C3）？会动已定稿的浮栏观感 —— **用户 261016 定：先不做，需要讨论**。
+4. 移动端文本增强缺项（B6）是否按"下一会话焦点"全做？—— **用户 261016 定：先不做（属添加项，不着急）**。
 5. ~~字数口径若从"我们正则"改成"内核 `wordCount`"，数字可能变化（B1），是否接受？~~ **已实施（261016）**：数字确实变了（见 §9.1 的前后对比）。展示形态：**用户 261016 定 = 保持现状**（状态栏只显示「字数」，不加并列字符数）。
 
-**需要先实测（不改代码即可做）**
-- `wordCount` / `wordCountSelection` 的语义与性能（B1/B5）。
-- `search` / `replaceText` / `replaceAll` 的入参形态与是否自带高亮/滚动（B2）。
-- `moveCollapse` / `moveColumns` / `moveTable` / `moveImage` 的撤销栈行为（B4）。
-- `envAdapter.previewImgs` 在本构建是否真的不派发（`allowClickToMaximize` 失效的边界，见 §8 漂移 3）。
-- `miniToolbar` 在本构建的可用性与 `disabledItems` 行为（C3）。
-- `toc.getContainer` 能否替代全局 `querySelector('.ne-toc-sidebar')`（A5）。
+**A 批次实测结果（261016；探针为临时件，不入库）**
+
+| 项 | 结果 | 后续 |
+| --- | --- | --- |
+| `wordCount` / `wordCountSelection` | ✅ 可用且一致（`selectAllDoc` 后选区 11 = 全文 11，并在 B1 里接了状态栏） | 已完成 |
+| 内核查找面板 / ⌘F / 合成事件 | ✅ 面板可用；**只有真实按键能唤起**；合成事件与 `triggerHotKey` 均无效 | 桌面已做入口（B2） |
+| `search` / `replaceText` / `replaceAll` 入参 | ✅ 读码确认入参是**选区/ranges**（不是关键词）⇒ 复用单位是面板 | 移动端若要查找只能自研（待讨论） |
+| `envAdapter.previewImgs` 是否派发 | ⏳ **未测**：要判定必须临时在 `lakeRuntime` 加一次 `envAdapter` 才能观察；按「不改代码即可做」的口径本轮跳过 | 需要时单独立项 1 次探针 |
+| `miniToolbar`（C3） | ⏳ 未测 —— 用户 261016 定「先不做，需要讨论」，故本轮不投入 | 讨论时再测 |
+| `moveCollapse` / `moveColumns` / `moveTable` / `moveImage`（B4） | ⏳ 未测：需先有折叠块/分栏/表格/图片四类夹具与入参形态 | 若做 B4 先补探针 |
+| `toc.getContainer`（A5） | ❌ 用户 261016 定：A5 不做 | 关闭 |
 
 ---
 
@@ -372,7 +399,10 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 | 261016 | **B1 字数统计统一走内核** | ✅ 已实施 + 运行时实测 | `src/core/textStats.ts`（新增）· `src/core/docStats.ts` · `src/hooks/useDocumentStats.ts` · `electron/store.ts` · `src/mobile/bridge.ts` | 门禁：tsc ✓ / 258 文件 2010 例 ✓ / `git diff --check` ✓；探针：内核 8 = 移植 8 = 状态栏 8（见 §3.2 B1 实施记录） |
 | 261016 | B1 展示形态（字数 vs 字数+字符数） | ✅ 已定：**保持现状** | 不动 `DesktopStatusBar` | 用户 261016 裁定（见 §6#5） |
 | 261016 | 并行会话边界登记 | ✅ 已登记 | `docs/KERNEL-REUSE-AUDIT.md` §10 | 对方议程 = `docs/CODE-REVIEW-261015.md`（`e154ef9`） |
-| 261016 | 其余 A/B/C/D 条目 | ⏳ 待讨论 | — | §3 · §4 的优先级建议 |
+| 261016 | **A 批次：内核能力实测**（B2 重点 + B5 + C3/A5 记录） | ✅ 已实测 | 探针临时件（`/tmp`）不入库；结论见 §6「A 批次实测结果」 | 内核查找面板可用但**只认真实按键**；`wordCountSelection` 与全文一致；`search` 入参是 ranges |
+| 261016 | **B2 文档内查找入口（桌面）** | ✅ 已实施 + 运行时实测 | 新增 `src/features/editor/kernelFind.ts` · `electron/ipc/registerEditorIpc.ts`；改 `preload.cjs` / `src/lib/native.ts` / `electron/webApiServer.ts` / `DesktopTopBar.tsx` / `App.tsx` | 门禁 261 文件 2024 例全绿；实测点按钮 → `.ne-ui-search-panel` 打开（截图 `.css-audit/kernel-find-261016/find-panel.png`） |
+| 261016 | B2 移动端入口 · C3 · A5 · B4 · B6 | ⏳ 待讨论 / 不做 | — | C3 先不做待讨论；A5、B6 不做；B4 未测 |
+| 261016 | 其余 A/C/D 条目 | ⏳ 待讨论 | — | §3 · §4 的优先级建议 |
 
 > 口径：**状态**只用三档 —— ⏳ 待讨论 / 🔧 进行中 / ✅ 已实施（+ 实测）。每条实施必须同时写：落地文件、门禁结果、运行时证据；改到内核契约的观测回填 `docs/LAKEX-CONTRACT.md`。
 

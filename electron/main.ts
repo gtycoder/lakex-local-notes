@@ -28,6 +28,7 @@ import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 import { registerLogIpc } from "./ipc/registerLogIpc.js";
 import { registerAiIpc } from "./ipc/registerAi.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
+import { registerEditorIpc } from "./ipc/registerEditorIpc.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
@@ -442,6 +443,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance, enqueuePriority);
   registerLogIpc(ipc);
   registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
+  registerEditorIpc(ipc);
   return ipc.registry;
 }
 

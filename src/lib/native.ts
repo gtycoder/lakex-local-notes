@@ -119,6 +119,8 @@ export interface LakeNative {
   revealNoteFile(id: string): Promise<{ ok: boolean }>;
   /** 打开笔记的附件文件夹 */
   openNoteAssets(id: string): Promise<{ ok: boolean; error?: string }>;
+  /** 打开内核「查找替换」面板：主进程注入 trusted ⌘F/Ctrl+F（详见 electron/ipc/registerEditorIpc.ts）。 */
+  findInDocument(): Promise<{ ok: boolean }>;
   copyAssetPath(noteId: string, filename: string): Promise<string>;
   /** 复制图片到系统剪贴板 */
   copyAssetImage(noteId: string, filename: string): Promise<{ ok: boolean }>;
@@ -281,6 +283,7 @@ export const native = {
   showAttachmentInFolder: (noteId: string, filename: string) => api().showAttachmentInFolder(noteId, filename),
   revealNoteFile: (id: string) => api().revealNoteFile(id),
   openNoteAssets: (id: string) => api().openNoteAssets(id),
+  findInDocument: () => api().findInDocument(),
   copyAssetPath: (noteId: string, filename: string) => api().copyAssetPath(noteId, filename),
   copyAssetImage: (noteId: string, filename: string) => api().copyAssetImage(noteId, filename),
   saveAssetAs: (noteId: string, filename: string, suggestedName?: string) => api().saveAssetAs(noteId, filename, suggestedName),
