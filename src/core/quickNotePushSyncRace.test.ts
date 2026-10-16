@@ -32,12 +32,12 @@ import {
   type QuickNotesSyncDbPort,
 } from "./quickNotesSyncEngine.js";
 import { sha256Sync } from "./sha256Sync.js";
+import { quickNoteKeys } from "./quickNoteKeys.js";
 
 const cfg: SyncConfig = { endpoint: "https://s3.test", region: "test", bucket: "b", accessKeyId: "ak", secretAccessKey: "sk", prefix: "lake" };
-const ROOT = "quick-notes";
-const manifestKey = `${cfg.prefix}/${ROOT}/manifests/latest.json`;
-const objectKey = (contentHash: string) => `${cfg.prefix}/${ROOT}/objects/${contentHash}.qnote`;
-const assetKey = (id: string, filename: string) => `${cfg.prefix}/${ROOT}/assets/${id}/${filename}`;
+// key 布局取自单一来源：本测试只关心**并发语义**，不重复声明布线；
+// 布线格式由 quickNoteKeys.test.ts 用字面量钉死，另有 quickNotePush/quickNotesSyncEngine 两个测试硬编字面量兜底。
+const { manifestKey, objectKey, assetKey } = quickNoteKeys(cfg.prefix);
 const bytesOf = (text: string) => new TextEncoder().encode(text);
 const FIXED_AT = "2026-10-13T00:00:00.000Z";
 const TARGET = "note-target";

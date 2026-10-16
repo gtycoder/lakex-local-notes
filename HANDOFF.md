@@ -19,12 +19,13 @@
 ### 261016(二) · B1 公共函数抽提（小记 key / formatBytes / escapeId 收归单一来源）
 
 - **用户点单**：按 `docs/CODE-REVIEW-261015.md` §7 的批次表**直接开工 B1**；并提醒"小心另一个会话的并发改动"。
-- **落地（零视觉变化；改 9 文件 + 新增 5 文件，未动 CSS/UI 行为）**：
+- **落地（零视觉变化；改 10 文件 + 新增 5 文件，未动 CSS/UI 行为）**：
   - **C1-4 小记 S3 key（最高价值）**：新建 `src/core/quickNoteKeys.ts` 作唯一来源。原先同一套布局写在 **3 处**——
     `quickNotePush.ts`（单条推送）与 `quickNotesSyncEngine.ts`（整轮同步）是**逐字相同的三行内联 key**，
     `electron/quickNotesSync.ts` 是第三处（且 `QUICK_NOTES_ROOT` 常量在 core 与 electron **各定义了一次**）。
     风险是实打实的：改布局只改一处 ⇒ 单条推送与整轮同步会指向**不同对象**（重复上传，或他端读不到刚推的那条）。
     现在三处统一引用；桌面侧按"相对 key"（`ObjectStore` 自套前缀）、core/移动侧按 `quickNoteKeys(prefix)`。
+    连 `quickNotePushSyncRace.test.ts` 里的手写副本也一并收编 ⇒ **全仓（含测试）已无手写布局**（`grep` 可验）。
   - **C1-2 `formatBytes`**：勘察后确认三份**并不等价**——同步浮窗是「GB 档 + ≥100 取整」，与设置页
     「只到 MB + 恒一位小数」是**两个口径** ⇒ **没有强行合并**（那会改观感），改为把同步那份显式化为
     `formatBytesCompact()` 收进 `src/lib/formatBytes.ts`；移动端设置页那份与 canonical **逐字等价** ⇒ 直接复用。

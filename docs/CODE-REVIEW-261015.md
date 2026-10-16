@@ -95,11 +95,11 @@ node /tmp/rev-accent.mjs     # 文字色是否误用裸 --lake-accent
 
 ## B1 进度（261016 · 已完成）
 
-**B1 = 公共函数/方法抽提（零视觉变化）**：改 9 个文件 + 新增 5 个文件；**未改任何 CSS、未改任何 UI 行为**。
+**B1 = 公共函数/方法抽提（零视觉变化）**：改 10 个文件 + 新增 5 个文件；**未改任何 CSS、未改任何 UI 行为**。
 
 | B1 项 | 落地内容 | 验证 |
 | --- | --- | --- |
-| **C1-4 小记 S3 key**（最高价值） | 新建 `src/core/quickNoteKeys.ts` 作**唯一来源**；`quickNotePush.ts` / `quickNotesSyncEngine.ts`（逐字相同的两份内联 key）与 `electron/quickNotesSync.ts`（**第三处**，且重复定义了 `QUICK_NOTES_ROOT` 常量）全部改为引用 | 新 `quickNoteKeys.test.ts`：**字面量**钉死布线格式 + 源码级护栏（禁止再内联拼 key） |
+| **C1-4 小记 S3 key**（最高价值） | 新建 `src/core/quickNoteKeys.ts` 作**唯一来源**；`quickNotePush.ts` / `quickNotesSyncEngine.ts`（逐字相同的两份内联 key）与 `electron/quickNotesSync.ts`（**第三处**，且重复定义了 `QUICK_NOTES_ROOT` 常量）全部改为引用；连 `quickNotePushSyncRace.test.ts` 里的手写副本也一并收编 ⇒ **全仓（含测试）已无手写布局** | 新 `quickNoteKeys.test.ts`：**字面量**钉死布线格式 + 源码级护栏（禁止再内联拼 key） |
 | **C1-2 `formatBytes`** | 勘察发现三份**并不等价**：同步浮窗是「GB 档 + ≥100 取整」，与设置页「只到 MB + 恒一位小数」是**两个口径** ⇒ **没有强行合并**，而是把同步那份显式化为 `formatBytesCompact()` 收进 `src/lib/formatBytes.ts`（观感逐字节不变）；移动端设置页那份与 canonical **逐字等价** ⇒ 直接复用 | 新 `formatBytes.test.ts` **7 例**，含两个口径的**差异边界**（防止日后被误合并） |
 | **C1-3 `escapeId`** | 三份逐字相同（`EditorTab` / `OutlineList` / `useOutline`）⇒ 收归 `src/lib/cssEscape.ts`；**保住 try/catch 兜底**（node 测试环境没有 `CSS` 全局，裸调用会抛） | 新 `cssEscape.test.ts` **3 例**：委托 `CSS.escape` / 无 `CSS` 时兜底 / `CSS.escape` 抛错时兜底 |
 
