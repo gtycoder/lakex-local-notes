@@ -14,6 +14,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, FolderOpen, Image as ImageIcon, Paperclip, RefreshCw, Trash } from "lucide-react";
+import { escapeId } from "../lib/cssEscape";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { formatBytes } from "../lib/formatBytes";
@@ -217,7 +218,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
     if (!next) return;
     const key = keyOf(next);
     setFocus(key);
-    listRef.current?.querySelector<HTMLElement>(`[data-asset-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: "nearest" });
+    listRef.current?.querySelector<HTMLElement>(`[data-asset-key="${escapeId(key)}"]`)?.scrollIntoView({ block: "nearest" });
   };
 
   const copyPath = async (item: RemovedAsset) => {

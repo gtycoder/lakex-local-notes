@@ -16,6 +16,22 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261016(十三) · C1-3b 把 7 处裸 CSS.escape 收编进 escapeId（判据只留一份）
+
+- **背景**：B1 建 `src/lib/cssEscape.ts` 的 `escapeId`（带兜底）时发现仓内另有 **7 处直接调 `CSS.escape`**（无兜底），
+  当时判定"用法不同、属加固不属抽提"而单独立项。本项把它做完。
+- **7 处实测**：`MultiTabEditor:395` · `EditorTab:551/735`（原本各自 try/catch）· `Sidebar:260/433` ·
+  `AssetsBrowser:220` · `desktopDerivedState:54`；全部改用 `escapeId`，并给 4 个文件补 import。
+- **收益**：① 判据只留一份（不会再出现"某处忘了兜底"）；② 去掉一条**静默降级**路径——原先 `CSS.escape` 不可用时
+  选择器构建会抛，被 `try/catch` 吞成"找不到元素"（表现为滚动定位/高亮静默失效），现在退回属性选择器转义。
+  `CSS.escape` 正常时行为**逐字不变**（`escapeId` 直接委托它）。
+- **护栏**：`src/lib/cssEscape.test.ts` 增源码级 1 例——扫描 src 下自有源码（排除 helper 自身与测试），
+  出现 `CSS.escape(` 即失败。自证：往 `desktopDerivedState.ts` 注入一处 ⇒ 失败；还原 ⇒ 通过（4 例）。
+  同时把 `cssEscape.ts` 里"另有若干处未收编"的过期注释改写成现状。
+- **门禁**：`tsc` exit 0 ✓ · 全库 vitest **266 文件 / 2051 例** ✓ · `check:core` ✓ · `check:mobileui` ✓ ·
+  `ui-metrics` exit 0 ✓ · `git diff --check` clean ✓。
+- **状态**：随本项单独提交并推送 `origin/master`。
+
 ### 261016(十二) · C1-7 文档属性清单收归 core（两端同一份）
 
 - **背景**：桌面 `components/NoteInfoDialog`（Dialog）与移动端 `mobile/ui/NoteInfoSheet`（底部抽屉）形态差异是**有意的**

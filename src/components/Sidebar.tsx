@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, Pin, Plus, RefreshCw, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
+import { escapeId } from "../lib/cssEscape";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import { pushEmojiRecent, readEmojiRecents } from "../lib/emojiRecents";
 import { NODE_ICONS, NODE_ICON_TINTS, encodeNodeIcon, nodeIconPickerMode, parseNodeIcon, type NodeIconTintId } from "../lib/nodeIcons";
@@ -257,7 +258,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       if (!drag.moved) {
         if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= 5) return;
         drag.moved = true;
-        const sourceEl = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(drag.id)}"]`);
+        const sourceEl = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${escapeId(drag.id)}"]`);
         ghostRef.current = sourceEl ? createDragGhost(sourceEl, event.clientX, event.clientY) : null;
       }
       pointerRef.current = { x: event.clientX, y: event.clientY };
@@ -430,7 +431,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
    *  面包屑挤进 tab 行（user 260917 报）。 */
   const scrollRowIntoView = useCallback((id: string): boolean => {
     const list = treeRef.current;
-    const row = list?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
+    const row = list?.querySelector<HTMLElement>(`[data-tree-node-id="${escapeId(id)}"]`);
     if (!list || !row) return false;
     const listRect = list.getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();

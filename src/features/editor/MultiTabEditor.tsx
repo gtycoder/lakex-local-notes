@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { EditorErrorBoundary } from "./EditorErrorBoundary";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { escapeId } from "../../lib/cssEscape";
 import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
 import { NodeIconGlyph } from "../../components/NodeIconGlyph";
@@ -392,7 +393,7 @@ export function MultiTabEditor({
   useEffect(() => {
     const strip = tabItemsRef.current;
     if (!strip) return;
-    const activeTab = strip.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(activeNoteId ?? "")}"]`)
+    const activeTab = strip.querySelector<HTMLElement>(`[data-note-id="${escapeId(activeNoteId ?? "")}"]`)
       ?? (splitActive ? strip.querySelector<HTMLElement>("[data-split-group]") : null);
     activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [activeNoteId, tabs.length, splitActive]);

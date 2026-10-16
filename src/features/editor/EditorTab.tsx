@@ -548,7 +548,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         // 位置门永不打开，旧层一路拖到 1200ms 超时才换，换上去时位置还是错的）。
         const anchorEl = (): HTMLElement | null => {
           const current = mount.querySelector<HTMLElement>(":scope > .lake-editor-mount:not(.is-outgoing)");
-          try { return current?.querySelector<HTMLElement>(`[id="${CSS.escape(anchorId)}"]`) ?? null; } catch { return null; }
+          try { return current?.querySelector<HTMLElement>(`[id="${escapeId(anchorId)}"]`) ?? null; } catch { return null; }
         };
         // 对齐目标：优先「切换前那个块在外壳里的屏幕偏移」（两态文字停在屏幕同一处）；没有偏移
         // 记录（老路径/取不到）才退回「在新滚动盒里居中」。
@@ -732,7 +732,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         const anchorId = scrollAnchorRef.current;
         if (!anchorId) return true;   // 无锚点（空文档等）：没有位置需要恢复
         let el: HTMLElement | null = null;
-        try { el = newMount?.querySelector<HTMLElement>(`[id="${CSS.escape(anchorId)}"]`) ?? null; } catch { el = null; }
+        try { el = newMount?.querySelector<HTMLElement>(`[id="${escapeId(anchorId)}"]`) ?? null; } catch { el = null; }
         const scroller = resolveScrollNode(host);
         if (!el || !scroller) return false;
         const er = el.getBoundingClientRect();

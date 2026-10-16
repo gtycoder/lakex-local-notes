@@ -108,8 +108,10 @@ node /tmp/rev-accent.mjs     # 文字色是否误用裸 --lake-accent
 ① **C1-1 `nowIso`（7 处）——不做**。它只是 `new Date().toISOString()` 的一行包装，收益仅"少 7 行"，
    代价却是触碰 7 个文件（其中 `electron/store.ts` 正被并行会话改动）。按 AGENTS §3#17
    「收益只停在代码更整洁」判定为**过度设计**；若将来时间戳口径真要统一，再单独立项。
-② **C1-3b：另有 7 处直接调用 `CSS.escape`（无兜底）未收编**——那是「用法不同」而非重复定义，
-   收编会改变其失败行为（属加固、不属抽提），单独立项。
+② ~~**C1-3b：另有 7 处直接调用 `CSS.escape`（无兜底）未收编**~~ **✅ 已收编（261016）**：
+   实测 7 处 = `MultiTabEditor:395` · `EditorTab:551/735` · `Sidebar:260/433` · `AssetsBrowser:220` · `desktopDerivedState:54`，
+   全部改用 B1 建的 `lib/cssEscape.ts` 的 `escapeId`（补 4 个文件的 import）。**判据从此只留一份**；
+   新增源码级护栏（`cssEscape.test.ts`）禁止仓内再出现裸 `CSS.escape(`（helper 自身除外），自证会咬人。
 ③ **C1-5 / C1-6 / C1-7**（时间格式化、只读单元格、属性清单）不在 B1，见 §7 的 B2 与 §9 待裁决。
 
 **门禁（261016）**：`tsc` ✓ · 全库 vitest **261 文件 / 2024 例通过**（跳过 5 文件 16 例）✓ ·

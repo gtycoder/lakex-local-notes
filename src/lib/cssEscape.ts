@@ -7,8 +7,9 @@
  * （`"` 与 `\`）——调用点全部是 `[attr="…"]` 形态，够用且不会误伤。
  *
  * 原先这段 try/catch 在 `EditorTab` / `OutlineList` / `useOutline` 里各写了一份（逐字相同）。
- * 注意：仓内另有若干处**直接**调用 `CSS.escape`（无兜底），那是「用法不同」而非重复定义，
- * 未在本批收编（见 docs/CODE-REVIEW-261015.md C1-3）。
+ * 原先仓内另有 7 处**直接**调用 `CSS.escape`（无兜底，散在 MultiTabEditor/EditorTab/Sidebar/AssetsBrowser/
+ * desktopDerivedState）；**已于 261016 全部收编到本函数**（C1-3b），并由 `cssEscape.test.ts` 的源码级护栏
+ * 禁止再有裸调用 —— 判据只留一份。
  */
 export function escapeId(id: string): string {
   try {

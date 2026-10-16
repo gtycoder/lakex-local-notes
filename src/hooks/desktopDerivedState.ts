@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { activeEditorHost } from "../features/editor/activeEditor";
 import { clearScrollMemory } from "../features/editor/EditorTab";
+import { escapeId } from "../lib/cssEscape";
 import { resolveScrollNode } from "../features/editor/lakeRuntime";
 import type { TabInfo } from "../features/editor/MultiTabEditor";
 import type { OutlineMode } from "../features/outline/OutlineController";
@@ -51,7 +52,7 @@ export function deriveDesktopView(input: DesktopViewInput) {
   const scrollActiveEditorToTop = () => {
     if (!activeNoteId) return;
     clearScrollMemory(activeNoteId);
-    const activeHost = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${CSS.escape(activeNoteId)}"]`);
+    const activeHost = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${escapeId(activeNoteId)}"]`);
     // 正常路径按 activeNoteId 定位；多标签切换/懒加载的瞬间如果属性还未回流，
     // 再兜底处理**当前显示中**的编辑器，避免点击后仍停留在旧滚动位置。
     // ⚠️ 兜底判据用显式信号 data-active（activeEditorHost），**不要**再用 display/几何猜可见：
