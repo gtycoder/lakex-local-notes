@@ -21,8 +21,8 @@ const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "
 const MUTATIONS = readFileSync(new URL("../../core/bitableMutations.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
 // 261008：统一选色盘（组件 + 样式）移到了共用位置，逐条断言跟着改指向
-const SHARED_PALETTE = readFileSync(new URL("../../components/ColorPalette.tsx", import.meta.url), "utf8");
-const PALETTE_CSS = readFileSync(new URL("../../components/colorPalette.css", import.meta.url), "utf8");
+const SHARED_PALETTE = readFileSync(new URL("../../components/ui/ColorPalette.tsx", import.meta.url), "utf8");
+const PALETTE_CSS = readFileSync(new URL("../../components/ui/colorPalette.css", import.meta.url), "utf8");
 const PICKER = readFileSync(new URL("./BitableRelationPicker.tsx", import.meta.url), "utf8");
 const FILTER_EDITOR = readFileSync(new URL("./BitableFilterEditor.tsx", import.meta.url), "utf8");
 const FILTER_CSS = readFileSync(new URL("./bitableFilterEditor.css", import.meta.url), "utf8");
@@ -482,7 +482,7 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/<BitableViewportCell[\s\S]*?value=\{record\.values\[field\.id\]\}[\s\S]*?readOnly=\{readOnly\}/);
     const viewportCell = readFileSync(new URL("./BitableViewportCell.tsx", import.meta.url), "utf8");
     expect(viewportCell).toMatch(/<CellEditor[\s\S]*?value=\{p.value\}[\s\S]*?readOnly=\{p.readOnly\}/);
-    const HISTORY = readFileSync(new URL("../../components/HistorySnapshotPreview.tsx", import.meta.url), "utf8");
+    const HISTORY = readFileSync(new URL("../../components/app/HistorySnapshotPreview.tsx", import.meta.url), "utf8");
     const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.url), "utf8");
     expect(HISTORY).toMatch(/<BitableEditor noteId=\{noteId\} content=\{body\} visible readOnly onChange=\{noop\} chrome=\{false\} \/>/);
     expect(TABS).toMatch(/tab\.kind === "bitable"[\s\S]*?readOnly=\{\(lockedNoteIds\?\.has\(tab\.noteId\) \?\? false\) \|\| tab\.deleted === true\}/);
@@ -1039,7 +1039,7 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
   it("表正文一律 body；表头与内容**同级**、展开面板正文大半档（261008 用户口径）", () => {
     const ED = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8");
     const FIELD_CELLS = readFileSync(new URL("./bitableFieldCells.css", import.meta.url), "utf8");
-    const MARKDOWN = readFileSync(new URL("../../components/markdown/markdown.css", import.meta.url), "utf8");
+    const MARKDOWN = readFileSync(new URL("../../components/ui/markdown/markdown.css", import.meta.url), "utf8");
     const EXPAND = readFileSync(new URL("./bitableExpandPreview.css", import.meta.url), "utf8");
     // 单元格内容：文本 / 选项 chip / 附件名 / 关联回退 / 系统时间 全部同号
     expect(ED).toMatch(/\.bt-cell-input \{[^}]*font-size: var\(--lake-font-size-body\)/);
@@ -1109,8 +1109,8 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
 });
 
 describe("Markdown 字段与展开浮窗护栏（261004）", () => {
-  const MD = readFileSync(new URL("../../components/markdown/MarkdownView.tsx", import.meta.url), "utf8");
-  const MD_CSS = readFileSync(new URL("../../components/markdown/markdown.css", import.meta.url), "utf8");
+  const MD = readFileSync(new URL("../../components/ui/markdown/MarkdownView.tsx", import.meta.url), "utf8");
+  const MD_CSS = readFileSync(new URL("../../components/ui/markdown/markdown.css", import.meta.url), "utf8");
 
   it("字段类型注册 + 单元格分派 + 图标", () => {
     expect(DOC).toContain('| "ai" | "markdown"');

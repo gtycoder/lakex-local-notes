@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
-import { fontSizeOptions, type AppSettings } from "../lib/settings";
-import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../core/aiProviders";
-import { Select } from "./ui/Select";
-import { canTouchNetwork, cloudStateHint, cloudStateOf, CLOUD_PRIVACY_NOTICE } from "../core/cloudState.js";
+import { fontSizeOptions, type AppSettings } from "../../lib/settings";
+import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../../core/aiProviders";
+import { Select } from "../ui/Select";
+import { canTouchNetwork, cloudStateHint, cloudStateOf, CLOUD_PRIVACY_NOTICE } from "../../core/cloudState";
 
 /** 把归类后的中文错误贴到对应字段：Key 类 → apiKey；端点/模型类 → baseUrl+model；其余整条。 */
 function fieldErrorFor(message: string, retryable?: boolean): Record<string, string> {
@@ -15,18 +15,18 @@ function fieldErrorFor(message: string, retryable?: boolean): Record<string, str
   if (/模型不存在|Base URL/.test(message)) return { baseUrl: message, model: message };
   return message ? { all: message } : {};
 }
-import { LAKE_THEMES } from "../lib/themes";
-import { native } from "../lib/native";
-import type { DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
-import type { GcDiagnostics } from "../core/gcDiagnostics";
-import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
-import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../core/syncModes";
-import { useFloatingDialog } from "./useFloatingDialog";
-import { DialogResizeHandles } from "./DialogResizeHandles";
-import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
-import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
-import { formatBytes } from "../lib/formatBytes";
-import { formatDateTime } from "../core/dateFormat";
+import { LAKE_THEMES } from "../../lib/themes";
+import { native } from "../../lib/native";
+import type { DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../../lib/types";
+import type { GcDiagnostics } from "../../core/gcDiagnostics";
+import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../../core/gcPolicy";
+import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../../core/syncModes";
+import { useFloatingDialog } from "../hooks/useFloatingDialog";
+import { DialogResizeHandles } from "../ui/DialogResizeHandles";
+import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "../model/settingsSearch";
+import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
+import { formatBytes } from "../../lib/formatBytes";
+import { formatDateTime } from "../../core/dateFormat";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "trash" | "browser" | "logs" | "about";
 
@@ -49,7 +49,7 @@ const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "",
 /** 让浏览器先把 data URL 解码好再上屏：<img> 换 src 的那一帧若未解码完会画空白（闪烁的另一半来源）。 */
 
 
-import { Group, Section, Item, Field, Block, Switch, Shortcut, Seg, NumField, TextField } from "./settingsPrimitives";
+import { Group, Section, Item, Field, Block, Switch, Shortcut, Seg, NumField, TextField } from "../ui/settingsPrimitives";
 
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged, cloudConfigured = false, cloudEnabled = false }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
@@ -202,7 +202,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const cloudState = cloudStateOf(cloudConfigured, syncCfg && { enabled: cloudEnabled, autoMode: syncCfg.autoMode });
   const cloudOffline = !canTouchNetwork(cloudState);
   const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
-  const [sysInfo, setSysInfo] = useState<import("../lib/types").SystemInfo | null>(null);
+  const [sysInfo, setSysInfo] = useState<import("../../lib/types").SystemInfo | null>(null);
   const [pendingHit, setPendingHit] = useState<string | null>(null);
   const [diagMsg, setDiagMsg] = useState<string | null>(null);
 
@@ -348,7 +348,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     }
   }, [itemHits, category]);
 
-  const revealFolder = (kind: import("../lib/types").DataFolderKind) => {
+  const revealFolder = (kind: import("../../lib/types").DataFolderKind) => {
     void native.revealDataFolder(kind).then((r) => setDiagMsg(r.ok ? `已在 Finder 中显示：${r.path}` : `目录尚不存在：${r.path}`)).catch((e) => setDiagMsg(getNativeErrorMessage(e)));
   };
 

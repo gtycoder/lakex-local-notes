@@ -1,4 +1,4 @@
-import type { SettingsCategory } from "./SettingsPanel";
+import type { SettingsCategory } from "../app/SettingsPanel";
 
 export interface SettingsNavSearchItem {
   id: SettingsCategory;

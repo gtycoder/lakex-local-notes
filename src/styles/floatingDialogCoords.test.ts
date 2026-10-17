@@ -1,7 +1,7 @@
 /**
  * 浮动弹窗坐标系门禁（260926）。
  *
- * 设置 / 回收站 / 历史三个浮窗用 `src/components/useFloatingDialog.ts` 拖动与缩放，那套逻辑按
+ * 设置 / 回收站 / 历史三个浮窗用 `src/components/hooks/useFloatingDialog.ts` 拖动与缩放，那套逻辑按
  * **视口绝对坐标**读写：读 `getBoundingClientRect()`、写 `style.left/top`。成立的前提是这三个面板
  * 保持 `.floating-dialog` 的 `position: fixed`。
  *
@@ -41,7 +41,7 @@ describe("浮动弹窗坐标系（拖拽浮窗必须保持 fixed）", () => {
   });
 
   it("拖动/缩放按视口绝对坐标读写，且窗口缩小能把浮窗拉回可见区", () => {
-    const hook = read("components/useFloatingDialog.ts");
+    const hook = read("components/hooks/useFloatingDialog.ts");
     expect(hook).toContain("panel.getBoundingClientRect()");
     expect(hook).toMatch(/panel\.style\.left = `\$\{nextX\}px`;/);
     expect(hook).toMatch(/x: Math\.round\(rect\.left\), y: Math\.round\(rect\.top\)/);

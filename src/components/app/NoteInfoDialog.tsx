@@ -6,16 +6,16 @@
  * 动作复用 native.*；父级路径可点击跳转目录。
  */
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Dialog } from "./ui/Overlay";
+import { Dialog } from "../ui/Overlay";
 import { Box, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
-import { native } from "../lib/native";
-import { getNativeErrorMessage } from "../lib/nativeErrors";
-import type { NoteInfo } from "../lib/types";
-import { isMobileEnvironment } from "../features/editor/clipboardHtml";
+import { native } from "../../lib/native";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import type { NoteInfo } from "../../lib/types";
+import { isMobileEnvironment } from "../../features/editor/clipboardHtml";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
-import { useHistorySnapshotViewer } from "./useHistorySnapshotViewer";
-import type { NoteKind } from "../core/noteKind.js";
-import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../core/noteInfo.js";
+import { useHistorySnapshotViewer } from "../hooks/useHistorySnapshotViewer";
+import type { NoteKind } from "../../core/noteKind";
+import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core/noteInfo.js";
 
 /** 附件/历史条目的渲染上限（超出提示 +N，避免超大文档一次性渲染成千上万节点）。 */
 const ITEM_LIMIT = 200;

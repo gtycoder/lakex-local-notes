@@ -8,8 +8,8 @@
  * 只在三种情况销毁重建：宿主 DOM 换了（切到非 doc 预览再切回来）、换了文档、组件卸载。
  */
 import { useEffect, useRef } from "react";
-import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance, type LakeEditorPrefs } from "../features/editor/lakeRuntime";
-import { addAssetAccessToken } from "../lib/assetPort";
+import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance, type LakeEditorPrefs } from "../../features/editor/lakeRuntime";
+import { addAssetAccessToken } from "../../lib/assetPort";
 
 export interface UseHistorySnapshotViewerOptions {
   hostRef: React.RefObject<HTMLElement | null>;

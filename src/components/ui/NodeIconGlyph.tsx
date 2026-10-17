@@ -1,5 +1,5 @@
 import { CircleHelp } from "lucide-react";
-import { parseNodeIcon } from "../lib/nodeIcons";
+import { parseNodeIcon } from "../../lib/nodeIcons";
 import "./nodeIcon.css";
 
 /**

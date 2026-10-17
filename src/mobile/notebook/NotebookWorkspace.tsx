@@ -18,7 +18,7 @@ import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { usePanelDrag, type PanelSide } from "../hooks/usePanelDrag";
-import { computeDropPosition, createDragGhost, moveDragGhost, removeDragGhost, type DragGhost } from "../../components/treeDrag";
+import { computeDropPosition, createDragGhost, moveDragGhost, removeDragGhost, type DragGhost } from "../../components/model/treeDrag";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { confirmMobile } from "../ui/ConfirmDialog";

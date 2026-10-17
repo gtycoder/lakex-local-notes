@@ -7,11 +7,11 @@
  */
 import { type ReactNode, useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
-import { COLOR_BOARD_GROUPS, contrastTextColor } from "../core/colorPalette.js";
-import { optionColorHex } from "../core/bitableDoc.js";
-import { writeLocalStorage } from "../lib/localStorageSafe.js";
-import { Popover as OverlayPopover } from "./ui/Overlay";
-import { usePopoverPosition } from "../hooks/usePopoverPosition";
+import { COLOR_BOARD_GROUPS, contrastTextColor } from "../../core/colorPalette";
+import { optionColorHex } from "../../core/bitableDoc";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { Popover as OverlayPopover } from "./Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import "./colorPalette.css";
 
 /** 锚点是否位于某个对话框/抽屉表面内（决定嵌套浮层是否抬到对话框之上）。 */

@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { ResizeDirection } from "./useFloatingDialog";
+import type { ResizeDirection } from "../hooks/useFloatingDialog";
 
 const DIRECTIONS: ResizeDirection[] = ["r", "l", "t", "d", "rd", "rt", "ld", "lt"];
 

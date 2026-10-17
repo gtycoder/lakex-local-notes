@@ -26,9 +26,9 @@ const FILES = [
   "features/editor/selectionToolbar/selectionToolbar.css",
   "features/editor/splitView.css",   // 261008：文档分屏布局（两列 grid + 分隔条定位 + 右栏控件）
   "features/usheet/usheetEditor.css",   // 261009：Univer 表格（kind=usheet）编辑器容器（分包自有样式）
-  "components/colorPalette.css",   // 261008：统一选色盘（从多维表 CSS 移出，表格/多维表共用）
-  "components/nodeIcon.css",   // 目录节点图标：彩色底块 + 线性轮廓、选择器色板/网格
-  "components/historySnapshotPreview.css",
+  "components/ui/colorPalette.css",   // 261008：统一选色盘（从多维表 CSS 移出，表格/多维表共用）
+  "components/ui/nodeIcon.css",   // 目录节点图标：彩色底块 + 线性轮廓、选择器色板/网格
+  "components/app/historySnapshotPreview.css",
   "features/bitable/bitableEditor.css",
   "features/bitable/bitableViewport.css",   // 主表/关联选择器共用的窗口结构，不复制视觉原语
   "features/bitable/bitableViews.css",   // V01：视图层（视图页签/回退提示），按职责从 bitableEditor 分出
@@ -44,7 +44,7 @@ const FILES = [
   "features/bitable/bitableExpandPreview.css",   // 261008：展开预览正文（MD/AI 字段）比表正文大半档
   "features/editor/noteRefCard.css",   // 261008：「文档引用」自定义卡（R2）本卡特有布局
   "features/editor/noteRefCardActions.css",   // 261008：引用卡的动条浮层 + 编辑浮层（几何全部复用内核 .ne-card-toolbar / .ne-link-editor）
-  "components/markdown/markdown.css",
+  "components/ui/markdown/markdown.css",
   "features/ai/aiDialogParts.css",   // 261005：AI 助手弹窗内局部布局（预设提示词行 + 复制动作行）   // 261005：Markdown 轻量子集渲染（从 bitable 提出，bitable 与 AI 面板共用）   // 261004：Markdown / AI 字段（单元格预览 + 展开浮窗 + 预览排版）
   "features/bitable/bitableFilterEditor.css",   // 260930：筛选条件树（远端 lake 风格 + 可复用）
   "features/bitable/bitableFillRules.css",   // 260930：条件填色配置与表格投影
@@ -69,12 +69,12 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   //   shell.css +3 = 目录/大纲筛选行高度动画改 grid-template-rows（.dock-filter-row 的 display/grid-template-rows/min-width
   //   与 .dock-filter-row__inner 的 min-height）。两处都是合法新增（非覆盖回涨）。
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
-  "components/nodeIcon.css": { decls: 107, dupGroups: 0 },   // 261015：+3 行下方空间不足时整面滚动/不穿透、子项保留高度；此前两类共用居中槽
-  "components/colorPalette.css": { decls: 77, dupGroups: 0 },   // 261008：统一选色盘（15 条 .bt-color-* + .bt-popover + @keyframes，从多维表 CSS 原样移出）
+  "components/ui/nodeIcon.css": { decls: 107, dupGroups: 0 },   // 261015：+3 行下方空间不足时整面滚动/不穿透、子项保留高度；此前两类共用居中槽
+  "components/ui/colorPalette.css": { decls: 77, dupGroups: 0 },   // 261008：统一选色盘（15 条 .bt-color-* + .bt-popover + @keyframes，从多维表 CSS 原样移出）
   "styles/feature.css": { decls: 266, dupGroups: 0 },   // 261006：+141 = 设置·资源改成「未引用资源浏览器」（.asset-browser 双栏版面：筛选/列表/预览台/批量条/5 类预览舞台/两个弹窗宽度；行与空态复用 kit 的 .ln-row / .ln-empty）——全是新增版面、无覆盖既有声明，且桌面专属作用域 .settings-panel  // 260930 设置页重做：+30 = 分组内容由「灰底块」改「一叠白卡」（.config-section 表面/标题条 + 行统一 padding/border）+ 新增表单行 .config-item--field（标题在左、控件在右单行）+ 字段级错误 .config-item__error/.config-note（此前 .settings-hint 无定义）+ 名称行对齐徽章；全是新增盒子/间隔，不覆盖既有声明，且桌面专属作用域 .settings-panel（移动端不加载本层）。此前：视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
   "styles/kit.css": { decls: 646, dupGroups: 0 },   //  261017 Q3: +4 = 选中态语义令牌迁移（.ln-row/.ln-menu__item/.ln-btn--secondary.is-selected:hover + .ln-iconbtn(.is-selected/:hover) 两处 hover 档）  |  261017: +7 = .ln-tip--wide（长内容 hover 预览宽版；同 .ln-tip 表面，只加宽/限高/内滚）  |  261006 Phase 2.2: -40 = 删除零调用的死原语 .ln-card*（设置页走 .config-*、多维表走 .bt-*）与 .ln-toast*（同步/撤销/底部提示各有既有实现），并把分段控件轨道改下沉底、页签静息态退到 text-3  //  261006 Phase 2.2: +2 = .native-title-tip 表面（全局 title 拦截器，见 components/ui/NativeTitleTips.tsx）  //  261006 Phase 2.2: +48 = 新增 checkbox/radio 自绘原语（桌面 .app-shell 作用域，排除内核正文待办框）；勾选用边框旋转绘制，不引入颜色字面量  //  261006 Phase 2.2: +4 = 原为 +4；随后修「块状药丸/文字右移」再 +10（列表改 flex 列、选项 100% 宽、勾选位改右侧绝对定位、展开/聚焦统一为柔光环） 新增下拉弹层样式 .ln-select__list (min-width/max-height/overflow) + .ln-select__item (white-space)，取代原生 select 的系统弹层；选项复用 .ln-menu__item  // 260930 大统一：+14 = 单行省略工具类 .ln-ellipsis(--grow) + 图标按钮主色变体 .ln-iconbtn--accent + 菜单项选中态；并把 overlay.css 的 legacy 菜单项选择器（.top-menu > button 等 5 个）**收编进本文件的 .ln-menu__item 单一规则**（那边对应减少，见基线注释）     // 260929：横向页签原语按用户选定的「墨线 + 计数徽标」重建（基座取自 components.css 的 legacy 墨线 + 补回 min-width/cursor，新增 .ln-tabs__count；随后回收站/历史/表单全部迁入、删掉过渡的 .ln-tabs--seg 变体 ⇒ 558 → 593 → 577）。原记录 —— P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线
   "styles/chrome.css": { decls: 517, dupGroups: 0 },   // 261009：+3 = usheet 状态栏上移到 Univer 底栏正上方（[data-doc-kind="usheet"] 的 bottom/height/min-height）   // 261008：+10 = 分屏合并标签（两段标题 + 分隔线 + 分组图标；一个标签 = 分屏组）     // 261006：+1 = 回收站成页 pane 的 padding-top 归位（顶栏 fixed + workspace 上缝 ⇒ 基类又算了一遍顶栏）     // 260930 续：+3 = 目录行「已锁定」小锁 .tree-row-lock（非交互、行尾常驻）   // 260930 大统一：-39 = 目录栏图标钮（.dock-icon-btn 6 条规则）与目录行动作钮（.tree-row-action 3 条）的视觉声明收编到 kit 的 .ln-iconbtn(--compact/--accent),  // 260929 续：+2 = 多维表状态栏改为**贴着底栏上沿停靠**（[data-doc-kind="bitable"] 再补 height/min-height 22px，与 sheet 同口径）⇒ 底栏不被状态栏压住。260929：+1 = 多维表文档状态栏上移让位底部常驻汇总栏（[data-doc-kind="bitable"] 的 bottom，与 sheet 同层变体）。P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）；260926 续：+1 = 本地空间指示 .workspace-local（未配置云同步时尾段显示本地图标）；+3 = 表格文档状态栏并入 sheet 底部统计行（[data-doc-kind="sheet"] 的 bottom/height/min-height——高度基线在本层，同层就地加变体，合法新增非覆盖回涨）
-  "styles/kernel-theme.css": { decls: 64, dupGroups: 0 },  // 261014：−5 = 该浮层改**自有面板**（.ln-popover + components/nodeIcon.css）⇒ 261013 为它钉的 5 个 --lakex-editor-* token 全部撤掉（那些声明会同时影响文档里内核自己的表情面板，用户要求互不影响）  // 261013：+5 = 「选图标」浮层复用内核表情面板 ⇒ 给该表面钉 5 个内核 token（--lakex-editor-background-foreground/-text-color/-text-caption/-background-primary-hover/-border-primary）。为什么必须有：这些 token 是内核**挂载编辑器时注入 schema `<style>`** 才有的，实测无编辑器时 tag 数 0、token 缺失 ⇒ 面板 `background-color` 失效、**整块变透明**；钉在未分层本文件 + 0-2-0 才压得过内核自己的 0-1-0 声明，且只作用于该浮层。  // 260930 续：+1 = `.lake-editor-mount.lake-ai-sel-hidden{--lakex-editor-selection:transparent}`（AI 面板打开时屏蔽原生选区色，自绘高亮零闪烁；必须放未分层本文件才压得过上面那条，见文件内注释）。此前：删除「有背景文字单独 ::selection」无效特判后扫描仍为 61；选区改由半透明 --lake-select-bg 承载。260928：+1 = ④「内核品牌绿」例外（固定工具栏加号单独钉回 --lake-kernel-brand-green；浅/深分别走 Lake 原生 schema）—— 刻意的不统一，合法新增非覆盖回涨；原记录 —— 260926：内核 lakex --lakex-editor-* 集中映射（未分层）；60 = ①dark+warm 共用 43 + ②dark 反相 9 + ③light accent 8
+  "styles/kernel-theme.css": { decls: 64, dupGroups: 0 },  // 261014：−5 = 该浮层改**自有面板**（.ln-popover + components/ui/nodeIcon.css）⇒ 261013 为它钉的 5 个 --lakex-editor-* token 全部撤掉（那些声明会同时影响文档里内核自己的表情面板，用户要求互不影响）  // 261013：+5 = 「选图标」浮层复用内核表情面板 ⇒ 给该表面钉 5 个内核 token（--lakex-editor-background-foreground/-text-color/-text-caption/-background-primary-hover/-border-primary）。为什么必须有：这些 token 是内核**挂载编辑器时注入 schema `<style>`** 才有的，实测无编辑器时 tag 数 0、token 缺失 ⇒ 面板 `background-color` 失效、**整块变透明**；钉在未分层本文件 + 0-2-0 才压得过内核自己的 0-1-0 声明，且只作用于该浮层。  // 260930 续：+1 = `.lake-editor-mount.lake-ai-sel-hidden{--lakex-editor-selection:transparent}`（AI 面板打开时屏蔽原生选区色，自绘高亮零闪烁；必须放未分层本文件才压得过上面那条，见文件内注释）。此前：删除「有背景文字单独 ::selection」无效特判后扫描仍为 61；选区改由半透明 --lake-select-bg 承载。260928：+1 = ④「内核品牌绿」例外（固定工具栏加号单独钉回 --lake-kernel-brand-green；浅/深分别走 Lake 原生 schema）—— 刻意的不统一，合法新增非覆盖回涨；原记录 —— 260926：内核 lakex --lakex-editor-* 集中映射（未分层）；60 = ①dark+warm 共用 43 + ②dark 反相 9 + ③light accent 8
   "styles/overlay.css": { decls: 127, dupGroups: 0 },   // 260930 设置页收口：+2 = 面板型标题栏 .settings-panel-large .settings-header（常规 40px + 对称内边距，标题/关闭钮居中）——从 components.css 按职责并到 .floating-dialog-header 旁边（那边 -2），同一处来源、非覆盖叠层。此前：260930 大统一：-29 = 菜单项规格（.top-menu > button / .context-menu > button / .context-menu-item / .context-menu-submenu > button / .create-menu > button）**整段收编进 kit.css 的 .ln-menu__item 单一规则**（那边 +14）  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一；+3 = 多维表收编 .ln-overlay-surface--raised（对话框内嵌套下拉抬层）+ .ln-scrim--right（记录详情侧边抽屉），合法新增非覆盖回涨——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
   "styles/compat.css": { decls: 217, dupGroups: 0 },  // 260928：+10 = 内核卡片错误兜底块 .ne-card-error-fallback（把 lakeRuntime 里违反 #14 的内联样式收成类，双端共用）；260923：-4 = .tab-item 盒收编到 app/tabs.css；260926：+4 = 补上 .config-block__actions 布局（该 JSX 类此前无任何定义）；+3 = 复位 <button>.b3-list-item 浏览器默认边框/底色/居中（历史快照行等，合法新增非覆盖回涨）
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
@@ -123,7 +123,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
   "features/bitable/bitableFileIcon.css": { decls: 25, dupGroups: 0 },
   "features/bitable/bitableAiField.css": { decls: 32, dupGroups: 0 },   // 261004-b：-11 = 说明文字/包裹层归位到既有 .bt-field-label-text 与直排结构（删 prompt-wrap / warn / dialog-note / dialog-summary），字号/间距/圆角全量化令牌；@keyframes 不计数
-  "features/bitable/bitableMarkdown.css": { decls: 17, dupGroups: 0 },   // 261005：Markdown 预览排版移到共用 components/markdown/markdown.css（60 → 17，只余本域单元格/展开面板样式）,   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
+  "features/bitable/bitableMarkdown.css": { decls: 17, dupGroups: 0 },   // 261005：Markdown 预览排版移到共用 components/ui/markdown/markdown.css（60 → 17，只余本域单元格/展开面板样式）,   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
   "features/bitable/bitableExpandPreview.css": { decls: 1, dupGroups: 0 },
   "features/editor/noteRefCard.css": { decls: 28, dupGroups: 0 },   // 261008 新建：文档引用卡（布局复用 kit，只补本卡排版）
   "features/editor/noteRefCardActions.css": { decls: 1, dupGroups: 0 },   // 261008 三改：动作条/编辑浮层的几何全部复用内核 .ne-card-toolbar / .ne-link-editor + kit 控件 ⇒ 只剩「链接」只读输入框的 cursor 提示（7 → 1）
@@ -133,8 +133,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableCalendarView.css": { decls: 75, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
   "features/board/boardEditor.css": { decls: 17, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）；261006：+5 = 左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 3 条 + label 定位 1 条 + 注入触发器居中 1 条）
-  "components/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
-  "components/markdown/markdown.css": { decls: 43, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
+  "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
+  "components/ui/markdown/markdown.css": { decls: 43, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
   "features/ai/aiDialogParts.css": { decls: 14, dupGroups: 0 },   // 261013 用户要求 AI 等待反馈：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。
   "styles/dialog.css": { decls: 204, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 94, dupGroups: 2 },   // 260930：+17 = 状态栏锁标识改可点（button 形态 + hover/focus）+ 解锁浮层内容类   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）

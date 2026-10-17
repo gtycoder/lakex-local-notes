@@ -169,7 +169,7 @@
 
 #### B2 文档内查找 — ❌ **不做（用户 261016 定）**：内核自带查找已够用，宿主入口已整体回滚
 
-- **现状**：`src/components/SearchPanel.tsx` 是**库级**搜索（`native.searchNotes` + FTS 索引），与"文档内查找"不是一回事；**文档内查找不需要我们做** —— 内核自带。
+- **现状**：`src/components/app/SearchPanel.tsx` 是**库级**搜索（`native.searchNotes` + FTS 索引），与"文档内查找"不是一回事；**文档内查找不需要我们做** —— 内核自带。
 - **内核证据**：插件 `search`（`toolbar:'search'`，命令 `search`/`replaceText`/`replaceAll`）自带完整面板 `.ne-ui-search-panel`（查找/替换两个页签、输入框、命中计数、上一个/下一个）；热键由该 descriptor 注册，本构建开着虚拟渲染 ⇒ **⌘F**；该命令族**不在官方 08 文档里**（属"文档没写、bundle 有"）。
 
 **A 批次实测（261016，隔离 `lake://app` + CDP）**
@@ -289,7 +289,7 @@
   - **附带修复 B（261017，用户报「打字快了能撤销、慢一点撤销不了」）**：**输入法组合中（候选未上屏）**时内核 history 里还没有这一笔，点撤销/重做**完全无反应**（设备实测：组合态连点 3 次撤销文字不动；组合提交后再撤即正常）。已修：dock 的 `runInline` 在命令执行前检测 `compositionstart/end`，组合中先 `blur→focus` 触发提交、等一拍再执行命令。设备实测：组合 `nihao` → 点撤销 → **一次即清空**；组合 `abc` → 点加粗 → 文本正常提交保留；普通输入撤销/重做均正常。护栏：`dockPanelFocusGuard.test.ts` 新增 1 例。
 
 #### B7 导出：内核无 export 命令 ⇒ 应走 `getDocument(type)`
-- **现状**：`src/components/ExportSubmenuItem.tsx`（markdown/html/pdf）；落地实现需按只读范围核对（本次未展开 electron 侧）。
+- **现状**：`src/components/ui/ExportSubmenuItem.tsx`（markdown/html/pdf）；落地实现需按只读范围核对（本次未展开 electron 侧）。
 - **内核证据**：yuque-re 总账：**无 export 命令**；官方 07 `getDocument(type)` 支持 `text/markdown|text/html|text/plain|json`。
 - **判定**：类型 4（应确保导出**走内核序列化**，而不是自研 HTML/MD 转换）。
 - **建议**：核对现有导出路径；若存在自研转换，替换为 `getDocument`。
@@ -313,7 +313,7 @@
 - **✅ 结案（261017）：保持现状**。官方核对结论：**06 配置上传 / 63 附件 / 67 音频 / 68 视频** 全部只有各卡 `createUploadPromise` / `accept` / `uploadFileURL` 等配置，**没有**"按扩展名自动选 category"的入口；内核分发靠 `readData("Files", files, {category})` ⇒ 宿主侧 `beforeExecCommand` 改写是**唯一**可行桥接（现实现已带完整机制注释）。不改代码。
 
 #### B10 导出占位：usheet 的 CSV/Excel、board 的 PNG/SVG（**非内核复用、功能缺口，只登记**）
-- **现状**：`src/components/ExportSubmenuItem.tsx:55-68` 两类导出是 `Placeholder`（`disabled` + title「开发中」）；doc 的 markdown/html/pdf 与 bitable 的 csv/zip 已实现。
+- **现状**：`src/components/ui/ExportSubmenuItem.tsx:55-68` 两类导出是 `Placeholder`（`disabled` + title「开发中」）；doc 的 markdown/html/pdf 与 bitable 的 csv/zip 已实现。
 - **判定**：不属于"内核已有能力而我们自研"，而是**功能未做**；且落点在 `src/components/`（另一会话的 CODE-REVIEW 写域）。
 - **建议**：**本审计只登记、不动手**；要做时按文档类型逐项立产品需求（usheet 取数走 Univer 序列化、board 走 Drawnix 导出），并单独立项。
 - **验收（将来）**：导出产物可打开、与原文档数据一致。

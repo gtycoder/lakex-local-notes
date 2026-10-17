@@ -84,7 +84,7 @@ describe("文档状态栏落位（按文档类型）", () => {
   const read = (rel: string) => readFileSync(path.join(SRC, rel), "utf8");
 
   it("状态栏暴露 data-doc-kind（按类型定位的唯一钩子）", () => {
-    expect(read("components/DesktopStatusBar.tsx")).toContain("data-doc-kind={docKind}");
+    expect(read("components/app/DesktopStatusBar.tsx")).toContain("data-doc-kind={docKind}");
   });
 
   it("表格：状态栏停在 Univer 计算条正上方（底距 = 实测变量，默认 37px）", () => {

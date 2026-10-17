@@ -1,6 +1,6 @@
 import { History, RotateCcw, Trash, X } from "lucide-react";
-import type { DraftJournalEntry } from "../lib/types";
-import { Dialog } from "./ui/Overlay";
+import type { DraftJournalEntry } from "../../lib/types";
+import { Dialog } from "../ui/Overlay";
 
 export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: {
   entries: DraftJournalEntry[];

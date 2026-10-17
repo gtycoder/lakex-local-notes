@@ -137,5 +137,5 @@
 ::selection { background: var(--lake-select-bg); color: inherit; }
 
 /* 261014：这里原有 5 个为「选图标浮层复用内核表情面板」而钉的 --lakex-editor-* token（261013 加），
- * 随该浮层改为自有面板（.ln-popover + components/nodeIcon.css）一并**删除** —— 面板不再依赖内核 token，
+ * 随该浮层改为自有面板（.ln-popover + components/ui/nodeIcon.css）一并**删除** —— 面板不再依赖内核 token，
  * 而钉在 .ne-ui-unicode-emoji-panel 上的那几条会同时影响**文档里内核自己的**表情面板（用户 261014：互不影响）。 */

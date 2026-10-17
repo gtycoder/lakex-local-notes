@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { Search } from "lucide-react";
-import { initialDockFilterState, isFilterActive, stepDockFilter, type DockFilterEvent } from "./dockFilterModel";
+import { initialDockFilterState, isFilterActive, stepDockFilter, type DockFilterEvent } from "../model/dockFilterModel";
 
 export interface DockFilter {
   value: string;

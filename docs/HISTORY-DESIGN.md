@@ -221,8 +221,8 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
 
 ## 9. UI（历史面板，两个 tab）
 
-- 入口：文档右键菜单 → "历史版本"（`src/components/Sidebar.tsx` ContextMenu 加项）。
-- 组件：`src/components/HistoryPanel.tsx`（仿 `TrashPanel.tsx` 毛玻璃弹层）。
+- 入口：文档右键菜单 → "历史版本"（`src/components/app/Sidebar.tsx` ContextMenu 加项）。
+- 组件：`src/components/app/HistoryPanel.tsx`（仿 `TrashPanel.tsx` 毛玻璃弹层）。
   - **Tab 1 文档历史**：快照列表（时间/大小/引用数）、点击预览（Viewer 渲染 .lake 或解压文本）、"恢复此版本"、"创建快照"、"删除此快照"。
   - **Tab 2 文档孤儿文件**：孤儿列表（文件名/大小/是否被历史保护）、单个清理/全部清理。
   - **顺序**：默认 Tab 1；删快照后刷新孤儿（§5）。

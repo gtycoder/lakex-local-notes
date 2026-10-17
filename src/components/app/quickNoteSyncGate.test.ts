@@ -14,7 +14,7 @@ const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*
 
 describe("「保存并同步」可用性门禁（云同步关闭 ⇒ 置灰 + 理由）", () => {
   it("桌面：App 用 cloudState 的 UI 判据，工作区按钮按 cloudReady 置灰", () => {
-    const app = code(read("../App.tsx"));
+    const app = code(read("../../App.tsx"));
     const ws = code(read("./QuickNotesWorkspace.tsx"));
     expect(app, "判据走 cloudState 的 UI 判据（没配置/关了开关都算本地）").toMatch(/isCloudActive\(cloudConfigured, cloudEnabled\)/);
     expect(app).toMatch(/cloudReady=\{/);
@@ -23,8 +23,8 @@ describe("「保存并同步」可用性门禁（云同步关闭 ⇒ 置灰 + �
   });
 
   it("移动：写作卡按 getCloudState 置灰 + 给一行可见说明（移动端没有 hover）", () => {
-    const composer = code(read("../mobile/home/QuickNoteComposer.tsx"));
-    const bridge = code(read("../mobile/bridge.ts"));
+    const composer = code(read("../../mobile/home/QuickNoteComposer.tsx"));
+    const bridge = code(read("../../mobile/bridge.ts"));
     expect(bridge, "bridge 应暴露云状态（复用 mobileCloudState 单一判据）").toMatch(/async getCloudState\(\)/);
     expect(composer).toMatch(/bridge\.getCloudState\(\)/);
     expect(composer).toMatch(/canTouchNetwork\(state\)/);

@@ -25,7 +25,7 @@ describe("条目级设置搜索", () => {
   });
 
   it("注册表与 SettingsPanel 的 itemId 不漂移（改名/删行必须同步这里）", () => {
-    const src = fs.readFileSync(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
+    const src = fs.readFileSync(new URL("../app/SettingsPanel.tsx", import.meta.url), "utf8");
     const inJsx = new Set([...src.matchAll(/itemId="([^"]+)"/g)].map((m) => m[1]));
     const inRegistry = new Set(SETTING_ITEMS.map((item) => item.id));
     expect([...inRegistry].filter((id) => !inJsx.has(id))).toEqual([]);

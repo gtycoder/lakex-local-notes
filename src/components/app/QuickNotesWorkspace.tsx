@@ -1,23 +1,23 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, Check, FilePlus, Feather, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, StickyNote, Trash, X } from "lucide-react";
-import { native } from "../lib/native";
-import { writeLocalStorage } from "../lib/localStorageSafe";
-import { createRequestVersion } from "../core/requestVersion";
-import { isQuickNoteImageMime } from "../core/quickNoteModel";
-import { formatListTime } from "../core/dateFormat";
+import { native } from "../../lib/native";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { createRequestVersion } from "../../core/requestVersion";
+import { isQuickNoteImageMime } from "../../core/quickNoteModel";
+import { formatListTime } from "../../core/dateFormat";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
-import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../core/quickNoteSort";
+import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
 // 本机读写单独一层（core 禁 DOM）：与移动端同一份
-import { readQuickNoteSort, writeQuickNoteSort } from "../lib/quickNoteSortPref";
-import type { NoteDocument, QuickNoteDocument, QuickNoteImage, ResourceUploadOutput, TreeNode } from "../lib/types";
-import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
-import { uploadLakeResource } from "../features/editor/resourceUpload";
-import { QuickNoteEditor, type QuickNoteEditorApi } from "../features/quickNotes/QuickNoteEditor";
-import { QuickNotePreview } from "../features/quickNotes/QuickNotePreview";
-import { toggleTaskInBody } from "../features/quickNotes/quickNotePreviewParser";
-import { openImagePreview } from "../features/editor/imagePreview";
-import { clampPopoverPosition } from "../hooks/topMenuPosition";
-import { Dialog, Menu } from "./ui/Overlay";
+import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPref";
+import type { NoteDocument, QuickNoteDocument, QuickNoteImage, ResourceUploadOutput, TreeNode } from "../../lib/types";
+import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
+import { uploadLakeResource } from "../../features/editor/resourceUpload";
+import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
+import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
+import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
+import { openImagePreview } from "../../features/editor/imagePreview";
+import { clampPopoverPosition } from "../../hooks/topMenuPosition";
+import { Dialog, Menu } from "../ui/Overlay";
 
 interface DraftImage {
   image: QuickNoteImage;

@@ -70,7 +70,7 @@ describe("文档属性共享清单（C1-7）", () => {
   });
 
   it("两端组件都从 core 取清单，且不得再自己写一份（源码级护栏）", () => {
-    for (const rel of ["src/components/NoteInfoDialog.tsx", "src/mobile/ui/NoteInfoSheet.tsx"]) {
+    for (const rel of ["src/components/app/NoteInfoDialog.tsx", "src/mobile/ui/NoteInfoSheet.tsx"]) {
       const src = read(rel);
       expect(/from "\.\.(\/\.\.)?\/core\/noteInfo\.js"/.test(src), rel + " 必须从 core/noteInfo 取清单").toBe(true);
       expect(/noteInfoRows\(/.test(src), rel + " 必须调用 noteInfoRows").toBe(true);

@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { replaceTreeNode } from "../desktop/desktopTypes";
-import type { ExportFormat } from "../components/ExportSubmenuItem";
+import type { ExportFormat } from "../components/ui/ExportSubmenuItem";
 import type { TreeNode } from "../lib/types";
 
 export interface UseNoteActionsOptions {

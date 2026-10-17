@@ -49,7 +49,7 @@
 | --- | --- |
 | 移动端入口 import 的桌面样式层 | **10 个**：`themes/`×4、`tokens.css`、`compat.css`、`kit.css`、`components.css`、`dialog.css`、`app/quick-notes.css`、`features/{image-lightbox,attachment-preview}.css` |
 | 移动端 tsx 里的桌面类名 | `.ln-*` **56 处 / 10 文件**；`.b3-*`·`fn__*` **8 处 / 3 文件** |
-| 移动端 import 的桌面模块 | **69 条**：`lib/`(13 文件)、`features/`(21 模块)、`components/`(2：`treeDrag`/`settingsPrimitives`) |
+| 移动端 import 的桌面模块 | **69 条**：`lib/`(13 文件)、`features/`(21 模块)、`components/`(2：`model/treeDrag`/`ui/settingsPrimitives`) |
 | 桌面样式里的移动端分支（反向耦合） | **19 行 / 2 文件**（`kit.css` 18 行 checkbox/radio 的 `:is(.app-shell,.mobile-app)` + `tokens.css` 1 条注释） |
 | 移动端自有 CSS 体量 | `mobile.css` 348 + `editor-dock.css` 57 + `mobile-kit.css` 40 ≈ **445 条规则**（桌面 ~2100） |
 
@@ -92,7 +92,7 @@
   `editor/lakeRuntime` · `editor/editorCommands` · `editor/clipboardHtml` · `editor/noteRef` · `editor/resourceUpload` ·
   `attachment/attachmentPreviewController` · `usheet/univerTheme` · `usheet/usheetKernelContract` ·
   `editor/selectionToolbar/{colorMemory,selectionToolbarModel,linkEditor,kernelUiAtoms}` · `quickNotes/quickNoteToolbarWidgets` ·
-  `components/treeDrag` · `components/settingsPrimitives` · `lib/**`
+  `components/model/treeDrag` · `components/ui/settingsPrimitives` · `lib/**`
 - **UI 组件（必须变体化，**不要复制组件**）**：
 
 | 组件 | 逻辑部分 | 样式分叉方案 |

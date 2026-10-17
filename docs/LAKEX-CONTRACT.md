@@ -908,7 +908,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
   `DEFAULT_TOOLBAR_ITEMS` / mount 类名分支 / `customOptions` 的 note 三件套 / `ensureNoteFileIcon()`。
 - `src/features/quickNotes/QuickNoteEditor.tsx`：`{ disableNativeToc:true, quickNoteUi: ui, disableVirtualRendering:true }`
   + 无条件 `setDocument` + **首次可见后才建实例**（`active` 闩，见 §5.12.1）。
-- `src/components/QuickNotesWorkspace.tsx`：版式切换（`VIEW_KEY`）+ 列表索引 + 附件上传分流（`stageQuickNoteFile`）
+- `src/components/app/QuickNotesWorkspace.tsx`：版式切换（`VIEW_KEY`）+ 列表索引 + 附件上传分流（`stageQuickNoteFile`）
   + 卡片交给 `QuickNotePreview`（自研只读渲染，零内核实例）+ 保存前 `hasPendingMediaCard()` 等待
   + 编辑器句柄按草稿 id 存（`draftEditorsRef`）。
 - `src/features/quickNotes/quickNotePreviewParser.ts`（只读解析）+ `QuickNotePreview.tsx`（渲染）+ 同名测试（fixture 取自内核真实输出）。
@@ -1694,10 +1694,10 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 · 根因 = 复用只能靠**全局覆盖**（`.ne-ui-unicode-emoji-item > button` / `-tabs` / `-search input`，写在未分层文件里）
   与**给该表面钉 5 个 `--lakex-editor-*` token** —— 这两样**同时命中文档里内核自己的表情面板**（内核在正文里用同一套类挂它自己的面板）。
 · 现在（自有面板）：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、类型页签走 kit 的 `.ln-tabs`，
-  两页（表情符号 / 图标）的网格在 `src/components/nodeIcon.css`；**几何沿用原观感**（418 宽 / 内距 16 / 正文固定 266 高 / 8 列 / 32 格）
+  两页（表情符号 / 图标）的网格在 `src/components/ui/nodeIcon.css`；**几何沿用原观感**（418 宽 / 内距 16 / 正文固定 266 高 / 8 列 / 32 格）
   ⇒ 不依赖任何内核 token，三主题一律由 `--lake-*` 决定。上面那 3 条全局覆盖与 5 个 token 已删除。
 · 内核这套类**现在只属于内核自己的面板**（移动端 261013 起也是自有的微信样式面板）⇒ **别再加耦合**。
-· **261015 桌面应用层更新（含第二轮用户截图修订）**：顶部页签栏右侧（`.ln-tabs__action` / `.ln-btn--ghost`）为EyeOff +「移除」，两页共用；底部仅保留表情分组跳转。自定义图标走`NodeIconGlyph`的**飞书参考浅渐变圆角底块 + 白色线性轮廓**，选择器/目录/标签单一来源，八档底色三主题同源；32×32圆角方色板按用户截图排列，显式code保持落库色号独立于展示顺序。隔离Electron `lake://app`实测：表情页418×392 / 图标页418×358，正文仍266高、表情仍26px/1055格；渐变预览与两页移除落库正常。来源：`src/components/{Sidebar.tsx,NodeIconGlyph.tsx,nodeIcon.css}` + `.css-audit/node-icon-soft-261015/results.json`（真实点按/计算值/截图）；旧实色证据在`.css-audit/node-icon-tile-261015/`。未改内核API或样式。
+· **261015 桌面应用层更新（含第二轮用户截图修订）**：顶部页签栏右侧（`.ln-tabs__action` / `.ln-btn--ghost`）为EyeOff +「移除」，两页共用；底部仅保留表情分组跳转。自定义图标走`NodeIconGlyph`的**飞书参考浅渐变圆角底块 + 白色线性轮廓**，选择器/目录/标签单一来源，八档底色三主题同源；32×32圆角方色板按用户截图排列，显式code保持落库色号独立于展示顺序。隔离Electron `lake://app`实测：表情页418×392 / 图标页418×358，正文仍266高、表情仍26px/1055格；渐变预览与两页移除落库正常。来源：`src/components/{app/Sidebar.tsx,ui/NodeIconGlyph.tsx,ui/nodeIcon.css}` + `.css-audit/node-icon-soft-261015/results.json`（真实点按/计算值/截图）；旧实色证据在`.css-audit/node-icon-tile-261015/`。未改内核API或样式。
 · **261015第三轮交互**：目录选择器选图标/表情/移除后保持打开，用更新的picker值即时更新选中格；仅点击外部（含其他浮层）/Esc关闭。实现是Sidebar + Overlay既有外点机制，不影响正文内核表情面板；运行时证据`.css-audit/node-icon-stay-261015/results.json`。
 · **261015第六轮应用层定位**：目录图标选择器不再按鼠标点击点定位，改为真实图标元素锚点 + `usePopoverPosition`既有右侧定位，距图标右缘8px。底部/窄窗仍不遮挡锚点；1315×860/760×600/560×600实測相交面积0。色板在采样渐变基础上累计混白约41%。来源`Sidebar.tsx` / `themes/base.css` + `.css-audit/node-icon-anchor-261015/results.json`；不涉及内核改动。
 · **261015第七轮应用层图形尺寸**：`NodeIconGlyph`两类共用1.15em居中槽，图标缩小、表情字号放大。目录两类17.82px / 标签两类14.95px；选择器图标底块23px，表情选择格仍26px字号。来源`NodeIconGlyph.tsx` / `nodeIcon.css` / `themes/base.css` + `.css-audit/node-icon-size-261015/results.json`（真实Electron计算值/截图）；不影响内核表情组件。

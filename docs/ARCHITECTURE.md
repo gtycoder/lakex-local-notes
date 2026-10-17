@@ -43,7 +43,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 | `electron/quickNotesSync.ts` | 小记 Manifest v1 同步（独立 prefix、tombstone、冲突副本、转换等待保护） |
 | `electron/preload.cjs` | **原生 CJS**（不走 Vite），暴露 lakeNative；打包版需 asarUnpack |
 | `src/App.tsx` | 主应用（多 Tab、资料库/小记工作台切换、侧边栏、状态栏、同步面板入口） |
-| `src/components/QuickNotesWorkspace.tsx` | 小记时间线、新建/原地编辑、图片选择/粘贴/拖放、删除 Undo、转换弹窗 |
+| `src/components/app/QuickNotesWorkspace.tsx` | 小记时间线、新建/原地编辑、图片选择/粘贴/拖放、删除 Undo、转换弹窗 |
 | `src/main.tsx` | React 入口：**顶部**调用 `installPasteInterceptor()` |
 | `src/lib/native.ts` | 前端 IPC 封装 + 类型（`window.lakeNative`） |
 | `src/lib/types.ts` | 共享类型（S3Settings/SyncResult/SyncProgress/SyncStatusInfo/OrphanAsset 等） |
@@ -51,7 +51,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 | `src/features/editor/BoardCard.tsx` | Drawnix 画板卡片（+ `src/vendor/drawnix*.css`） |
 | `src/features/editor/resourceUpload.ts` | 图片/附件上传管线（WebP→PNG、base64、远程下载） |
 | `src/features/editor/clipboardHtml.ts` | 粘贴拦截升级（知乎懒加载 SVG→真实 URL）+ 复制清洗（空行/零宽字符） |
-| `src/components/SyncPanel.tsx` | S3 配置 + 进度条 + 最近同步结果 + **孤儿资源清理区块** |
+| `src/components/app/SettingsPanel.tsx` | S3 配置 + 进度条 + 最近同步结果 + **孤儿资源清理区块** |
 | `index.html` | `<script src="./vendor/lakex-doc/codemirror.js">` + KITCHEN_URL（**必须相对路径**） |
 | `public/vendor/cdn/` | Lake 编辑器 35 个 CDN 资源本地镜像 |
 | `public/vendor/lakex-doc/` | codemirror/katex/字体/图标（最早 vendor 的） |

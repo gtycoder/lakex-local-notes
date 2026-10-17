@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TreeNode } from "../lib/types";
+import type { TreeNode } from "../../lib/types";
 
 const rendered = vi.hoisted(() => ({ file: 0 }));
 vi.mock("lucide-react", async (original) => {
@@ -18,7 +18,7 @@ vi.mock("lucide-react", async (original) => {
   };
 });
 // Floating positioning is unrelated to row memoization; test the public Sidebar, not private exports.
-vi.mock("./ui/Overlay", () => ({
+vi.mock("../ui/Overlay", () => ({
   Menu: ({ children }: { children: ReactNode }) =>
     createElement("div", { role: "menu" }, children),
   Popover: ({ children }: { children: ReactNode }) => children,

@@ -234,8 +234,8 @@ node /tmp/rev-accent.mjs     # 文字色是否误用裸 --lake-accent
 
 ### C1-2 `formatBytes` 已有共享实现，仍有 2 处本地重写 ★低风险
 
-**证据**：`src/lib/formatBytes.ts` 存在且被 `components/SettingsPanel.tsx:28`、`components/AssetsBrowser.tsx:19` 正确引用；
-但 `src/components/SyncStatusPopover.tsx:46` 与 `src/mobile/settings/SettingsDrawer.tsx:57` 各自又写了一份。
+**证据**：`src/lib/formatBytes.ts` 存在且被 `components/app/SettingsPanel.tsx:28`、`components/app/AssetsBrowser.tsx:19` 正确引用；
+但 `src/components/app/SyncStatusPopover.tsx:46` 与 `src/mobile/settings/SettingsDrawer.tsx:57` 各自又写了一份。
 
 **定性**：**明确的 DRY 违规**——同一进程内有 3 套实现，显示口径可能不一致（如小数位/单位阈值）。
 
@@ -268,8 +268,8 @@ AGENTS §4 已把「小记保存并同步 = 单条推送」列为高危路径（
 
 ### C1-5 日期/时间格式化散落 20+ 处，各写各的
 
-**证据**：`pad = (n) => String(n).padStart(2,"0")` 在 `components/QuickNotesWorkspace.tsx:104/961`、
-`components/SettingsPanel.tsx:51`、`components/NoteInfoDialog.tsx:27`、`mobile/ui/NoteInfoSheet.tsx:24`、
+**证据**：`pad = (n) => String(n).padStart(2,"0")` 在 `components/app/QuickNotesWorkspace.tsx:104/961`、
+`components/app/SettingsPanel.tsx:51`、`components/app/NoteInfoDialog.tsx:27`、`mobile/ui/NoteInfoSheet.tsx:24`、
 `electron/quickNoteConversion.ts:33` 各写一遍；另有 `mobile/home/HomePage.tsx:93-105` 与 `mobile/home/NotebookGrid.tsx:20-24`
 各自内联「MM-DD HH:mm」；`src/lib/formatTime.ts` 已存在但只服务一处。
 
@@ -301,7 +301,7 @@ AGENTS §4 已把「小记保存并同步 = 单条推送」列为高危路径（
 
 ### C1-7 `NoteInfoDialog` 与 `NoteInfoSheet` 是同功能两端实现
 
-**证据**：`src/components/NoteInfoDialog.tsx`（268 行）vs `src/mobile/ui/NoteInfoSheet.tsx`（147 行），
+**证据**：`src/components/app/NoteInfoDialog.tsx`（268 行）vs `src/mobile/ui/NoteInfoSheet.tsx`（147 行），
 共享同名私有辅助 `fmtTime` / `fmtSize` / `rect` / `openAsset` / `copyId`（见 `rev-dup` 输出）。
 
 **定性**：**形态差异是有意的**（Dialog vs Sheet，用户 261012 定稿移动端交互形态可重做），
@@ -326,7 +326,7 @@ AGENTS §4 已把「小记保存并同步 = 单条推送」列为高危路径（
 
 ### 已定稿、**不要**抽的（写入 §8 防重开）
 
-- `src/components/settingsPrimitives.tsx`（143）与 `src/mobile/ui/settingsPrimitives.tsx`（139）：
+- `src/components/ui/settingsPrimitives.tsx`（143）与 `src/mobile/ui/settingsPrimitives.tsx`（139）：
   两端**有意 fork**，只共享 `settingsSearch.ts` 的设置项语义（文件头注释与 `MOBILE-TECH-UI-REDESIGN` 口径已写明，用户 261012 定）。
 - 桌面/移动的 S3 store、repository 实现：见 C2-3 讨论，但**合并实现**不在本轮。
 
@@ -472,7 +472,7 @@ src/mobile/           MobileApp main（保留入口）
 **判据**：`tsc` + 全库 vitest + `check:mobilesnap` 6 态 0 差异 + 移动构建。
 ⚠️ **不要顺手改任何文件名/导出名**（纯搬迁，便于 review）。
 
-### C3-2 `src/components/` 混装「应用屏」与「通用原语」
+### C3-2 `src/components/` 混装「应用屏」与「通用原语」 · ✅ **已完成（261017，见 HANDOFF 261017(八)）**
 
 **证据**：31 个文件里 `Sidebar.tsx(1218)`、`SettingsPanel.tsx(1055)`、`QuickNotesWorkspace.tsx(987)`、`TrashPanel.tsx`、
 `AssetsBrowser.tsx`、`SearchPanel.tsx` 是**应用屏**；`settingsPrimitives.tsx`、`colorPalette.css`、
@@ -529,7 +529,7 @@ src/mobile/           MobileApp main（保留入口）
 | `src/features/bitable/BitableEditor.tsx` | 2075 | 55 | 拆点明确（Grid / 视图 / 配置面板 / 拖拽），但 261014 刚接入行窗口、正在稳定期 ⇒ **建议缓** |
 | `src/features/editor/lakeRuntime.ts` | 1745 | 23 | 内核接线单一来源，**拆分会分散内核知识** ⇒ 按 AGENTS「一个语义一套实现」**不建议拆** |
 | `src/mobile/bridge.ts` | 1095 | 15 | **📋 待交接（用户 261016 已批准拆）**：按域拆（notes / tree / quicknotes / assets / sync）。**注意它不是纯搬迁**（见下方方案），且是 `lakeNativeContract` 的派生源 ⇒ 拆完必须复跑契约测试 |
-| `src/components/Sidebar.tsx` | 1218 | 29 | 261013 刚做过 memo 优化 ⇒ **不要碰**（回归风险 > 收益） |
+| `src/components/app/Sidebar.tsx` | 1218 | 29 | 261013 刚做过 memo 优化 ⇒ **不要碰**（回归风险 > 收益） |
 
 **结论**：**不为「行数」拆文件**（`bitableDoc` / `BitableEditor` / `lakeRuntime` / `Sidebar` 都**不动**，理由见上表）；
 只做**目录级**重组（C3-1 ✅ / C3-2 📋 / C3-3 ✅）。**唯一例外是 `bridge.ts`**——用户 261016 批准按域拆分，方案如下。
@@ -598,7 +598,7 @@ const fontSizeLiterals = … fontScope … // ← 字号却用「全部桌面 CS
 ```
 - 桌面 CSS 共 **58 个**（73 − 14 移动 − 1 vendor）；`desktopGraph` 只有 **33 个**（就是输出里那个「样式文件 33」）。
 - **不在图里的 25 个**包括 `features/bitable/*.css`(15) · `features/usheet/usheetEditor.css` ·
-  `components/nodeIcon.css` · `components/colorPalette.css` · `components/markdown/markdown.css` ·
+  `components/ui/nodeIcon.css` · `components/ui/colorPalette.css` · `components/ui/markdown/markdown.css` ·
   `features/board/boardEditor.css` · `features/editor/noteRefCard*.css` 等（**组件直接 import，不走 index.css**）。
 - **口径差实证**：官方输出「桌面 `!important` 10 / 目标 ≤10」，而真实桌面是 **11**——
   漏掉的正是 `features/usheet/usheetEditor.css:82`。**该文件自己的注释已经发现这件事**。
@@ -770,7 +770,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B4 契约显式化** ✅ **已完成 261016** | **C2-3 ✅** 能力矩阵 + 对账测试（34 行，见 §C2-3）· **C2-2 ✅** 改为 IPC 通道**三方一致性护栏**（原「抽常量表」实测不可行，见 §C2-2） | 中 | 是 |
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |
-| **B6 待交接（用户已批准做）** | **C3-2** `components` 拆 app/ui/hooks/model（方案见 §C3-2）· **C3-5** `bridge.ts` 按域拆（方案+风险见 §C3-5，**非纯搬迁**） | C3-2 低 / C3-5 中 | C3-5 需**设备级**验收 |
+| **B6 待交接（用户已批准做）** | **C3-2** ✅ 已完成（261017：4 桶纯搬迁，见 HANDOFF 261017(八)）· **C3-5** `bridge.ts` 按域拆（方案+风险见 §C3-5，**非纯搬迁**） | C3-5 中 | C3-5 需**设备级**验收 |
 | **待用户决策** | **C1-6** 只读单元格共享（需设备验收）· **C5-1/C5-2** ✅ 已落地（261017 Q3=A，语义令牌 + 选中+hover）· **C1-5** ✅ 已裁定 **B** 并落地（261017：列表措辞统一，详见 §9 Q10）· **D2** MinIO 移动端（与 D3 联动）· **D5** gzip ContentEncoding（需真云） | — | — |
 
 ---
@@ -800,7 +800,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | Q6 | C2-3 Repository 端口是否只收「交集」、差集单列成表？ | ✅ **已按此口径落地（261016）**：因两端签名不可统一，改为**能力矩阵数据 + 对账测试**（34 行交集 + DESKTOP_ONLY 差集），零运行时改动、零签名扭曲 | 无需再裁决 |
 | Q7 | C1-6 移动端只读单元格复用桌面只读渲染（共享逻辑、不共享样式）？ | 做（桌面已有 readOnly 分支） | 是否认可边界 |
 | Q8 | C3-1 `src/mobile` 目录重组本轮做不做？ | ✅ **已完成（261016）**：76 文件搬迁 + 三遍说明符重写 + 根目录白名单护栏 | 无需再裁决 |
-| Q9 | C3-2 `src/components` 拆 `app/` + `ui/`？ | 📋 **用户 261016 裁定「做」** ⇒ 已写进 §C3-2 的交接方案（4 桶） | 无需再裁决（方案已定，待实施） |
+| Q9 | C3-2 `src/components` 拆 `app/` + `ui/`？ | ✅ **已完成（261017）**：4 桶 `app/ui/hooks/model`（含测试与 CSS；markdown 并入 ui/markdown） | 已落地，见 HANDOFF 261017(八) |
 | Q10 | C1-5 时间格式：桌面与移动列表的时间措辞是否要求一致？ | **已裁定（261017）= B 加强版**：列表统一 `今天/昨天 HH:mm → 本周X → 上周X → 本月D日 → 上月D日 → 其余默认 YYYY-MM-DD`（去掉「今年更早」；卡片带 HH:mm，周一为周起点）；详情/历史/回收站/同步用固定绝对 `YYYY-MM-DD HH:mm[:ss]` | ✅ 已落地（核心 `formatListTime`；C1-5 结案） |
 
 ---
@@ -824,7 +824,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 ## 11. 交接清单（261016 收尾 · **给下一个会话**）
 
 > **一句话状态**：本会话把这次「全面代码 review」**从方案落到了执行**——5 个议题共 **16 项已交付并推送**；
-> 只剩 **2 项已批准待实施**（C3-2 / C3-5，方案已定）与 **5 项待用户决策**；另有 **3 项低优先遗留**（C4-1 / C5-4 / 桌面基线重烤，见 §11.7）。
+> 只剩 **1 项已批准待实施**（C3-5；C3-2 ✅ 已完成 261017）与 **5 项待用户决策**；另有 **3 项低优先遗留**（C4-1 / C5-4 / 桌面基线重烤，见 §11.7）。
 > **新会话先从 `HANDOFF.md` §0 的「261016(十七)」读起**（那里是摘要 + 下一步），本文 §11.2/§11.3 是逐项可执行清单。
 
 ### 11.1 已完成（全部已推 `origin/master`，**每项单独提交**）
@@ -846,7 +846,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 
 ### 11.2 待办：用户已批准、方案已定（**可直接开工**）
 
-1. **C3-2 `src/components` 拆分** → 方案见 **§C3-2**（4 桶：`app/` `ui/` `hooks/` `model/`，成员已列全）。
+1. ~~**C3-2 `src/components` 拆分**~~ ✅ **已完成（261017，见 HANDOFF 261017(八)）**：4 桶 `app/` `ui/` `hooks/` `model/`，纯搬迁 + 结构护栏 `componentsStructure.test.ts`。
    风险低（纯搬迁），但引用面比 B3 更大 ⇒ **单独一批**。验收：`tsc` + 全库 vitest + 双端构建 + `git diff --check`。
 2. **C3-5 `src/mobile/bridge.ts` 按域拆分** → 方案+风险见 **§C3-5**。**注意它不是纯搬迁**（方法闭包共享 `db`/port）。
    建议顺序：① 先抽 `context.ts`（零行为变化）→ ② 拆 `assets`/`sync` → ③ 拆 `notes`/`tree`/`quickNotes`。

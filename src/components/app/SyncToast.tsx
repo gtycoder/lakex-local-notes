@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { Check, CloudOff, LoaderCircle, TriangleAlert, X } from "lucide-react";
-import type { SyncProgress } from "../lib/types";
+import type { SyncProgress } from "../../lib/types";
 
 /** 同步状态小悬浮窗（思源观感：小卡片 + 主色进度条 + 自动消失）。
  * 不再使用带按钮的大弹窗：点击顶栏云按钮后直接开始同步，这里只展示状态。 */

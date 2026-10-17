@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorCode, getNativeErrorMessage } from "../lib/nativeErrors";
-import type { SettingsCategory } from "../components/SettingsPanel";
-import type { SyncToastData } from "../components/SyncToast";
+import type { SettingsCategory } from "../components/app/SettingsPanel";
+import type { SyncToastData } from "../components/app/SyncToast";
 import type { SyncStatus } from "../lib/types";
 import type { NoticeState } from "../desktop/desktopTypes";
 import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../core/cloudState.js";

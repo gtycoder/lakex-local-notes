@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Dialog } from "./ui/Overlay";
+import { Dialog } from "../ui/Overlay";
 import { ChevronRight, Folder, File, RotateCcw, Trash, X } from "lucide-react";
-import { native } from "../lib/native";
-import { createRequestVersion } from "../core/requestVersion";
-import { useFloatingDialog } from "./useFloatingDialog";
-import { DialogResizeHandles } from "./DialogResizeHandles";
-import { SplitPane } from "./ui/SplitPane";
-import { getNativeErrorMessage } from "../lib/nativeErrors";
-import { reportNativeActionError } from "../lib/nativeErrors";
-import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
-import { addAssetAccessToken } from "../lib/assetPort";
-import { trashDaysUntilPurge, type TrashItem } from "../core/trashPolicy";
-import { formatDateTime } from "../lib/formatTime";
-import { cloudStateHint } from "../core/cloudState.js";
+import { native } from "../../lib/native";
+import { createRequestVersion } from "../../core/requestVersion";
+import { useFloatingDialog } from "../hooks/useFloatingDialog";
+import { DialogResizeHandles } from "../ui/DialogResizeHandles";
+import { SplitPane } from "../ui/SplitPane";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { reportNativeActionError } from "../../lib/nativeErrors";
+import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { addAssetAccessToken } from "../../lib/assetPort";
+import { trashDaysUntilPurge, type TrashItem } from "../../core/trashPolicy";
+import { formatDateTime } from "../../lib/formatTime";
+import { cloudStateHint } from "../../core/cloudState";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
-import type { NoteKind } from "../core/noteKind.js";
+import type { NoteKind } from "../../core/noteKind";
 
 /** 组树：根 = parentId 为回收站笔记本或父不在列表内（旧数据/孤儿兜底）。 */
 function buildTrashTree(items: TrashItem[]): TrashItem[] {

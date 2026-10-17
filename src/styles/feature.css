@@ -21,7 +21,7 @@ pre {
 }
 
 /* ── 设置面板版式（P5-d）─────────────────────────────────────────────
- * 类名是共享原语（src/components/settingsPrimitives.tsx，移动端 SettingsDrawer 也用），
+ * 类名是共享原语（src/components/ui/settingsPrimitives.tsx，移动端 SettingsDrawer 也用），
  * 所以**不改类名、也不动共享文件**：规格写在桌面专属的 feature 层并限定 .settings-panel 作用域
  * ⇒ 移动端不加载本层（它只 import styles/components.css 等），天然不受影响。
  * 规格来源：设计 COMPONENTS.md 15 表单行（卡 = --lake-bg-block / radius 10；行 ≥44px；

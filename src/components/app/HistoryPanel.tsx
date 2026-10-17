@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Dialog } from "./ui/Overlay";
+import { Dialog } from "../ui/Overlay";
 import { Camera, Clock, File, History, RotateCcw, Trash, X } from "lucide-react";
-import { native } from "../lib/native";
-import { createRequestVersion } from "../core/requestVersion";
-import { useFloatingDialog } from "./useFloatingDialog";
-import { DialogResizeHandles } from "./DialogResizeHandles";
-import { SplitPane } from "./ui/SplitPane";
-import { getNativeErrorMessage } from "../lib/nativeErrors";
-import { useHistorySnapshotViewer } from "./useHistorySnapshotViewer";
+import { native } from "../../lib/native";
+import { createRequestVersion } from "../../core/requestVersion";
+import { useFloatingDialog } from "../hooks/useFloatingDialog";
+import { DialogResizeHandles } from "../ui/DialogResizeHandles";
+import { SplitPane } from "../ui/SplitPane";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { useHistorySnapshotViewer } from "../hooks/useHistorySnapshotViewer";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
-import type { NoteKind } from "../core/noteKind.js";
-import { formatDateTime } from "../lib/formatTime";
+import type { NoteKind } from "../../core/noteKind";
+import { formatDateTime } from "../../lib/formatTime";
 
 export interface HistoryItem {
   id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
@@ -22,9 +22,9 @@ export interface HistoryItem {
  * ⇒ 第一次点快照不再等分包加载（第二次起本来就有缓存）。
  */
 function prefetchPreviewChunk(kind: NoteKind): void {
-  if (kind === "usheet") void import("../features/usheet/UniverSheetEditor");
-  else if (kind === "bitable") void import("../features/bitable/BitableEditor");
-  else if (kind === "board") void import("../features/board/BoardEditor");
+  if (kind === "usheet") void import("../../features/usheet/UniverSheetEditor");
+  else if (kind === "bitable") void import("../../features/bitable/BitableEditor");
+  else if (kind === "board") void import("../../features/board/BoardEditor");
 }
 export interface NoteOrphan {
   filename: string; size: number; mimeType: string; protectedByHistory: boolean;

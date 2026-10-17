@@ -15,7 +15,7 @@ const SRC = readFileSync(new URL("./HistorySnapshotPreview.tsx", import.meta.url
 
 describe("历史快照只读编辑器预览", () => {
   it("三个编辑器都懒加载（不额外增加首屏体积）", () => {
-    for (const mod of ["../features/usheet/UniverSheetEditor", "../features/bitable/BitableEditor", "../features/board/BoardEditor"]) {
+    for (const mod of ["../../features/usheet/UniverSheetEditor", "../../features/bitable/BitableEditor", "../../features/board/BoardEditor"]) {
       expect(SRC).toContain(`import("${mod}")`);
     }
     expect((SRC.match(/lazy\(\(\) => import\(/g) ?? []).length).toBe(3);
@@ -43,8 +43,8 @@ describe("历史快照只读编辑器预览", () => {
   it("预览里隐藏编辑器外壳（只读预览不要「半个编辑器」的观感）", () => {
     expect(SRC).toContain("showToolbar={false}");
     expect(SRC).toContain("chrome={false}");
-    const usheet = readFileSync(new URL("../features/usheet/UniverSheetEditor.tsx", import.meta.url), "utf8");
-    const bitable = readFileSync(new URL("../features/bitable/BitableEditor.tsx", import.meta.url), "utf8");
+    const usheet = readFileSync(new URL("../../features/usheet/UniverSheetEditor.tsx", import.meta.url), "utf8");
+    const bitable = readFileSync(new URL("../../features/bitable/BitableEditor.tsx", import.meta.url), "utf8");
     expect(usheet).toMatch(/showToolbar\?: boolean;/);
     expect(usheet).toContain("toolbar: showToolbar");
     expect(bitable).toMatch(/chrome\?: boolean;/);
@@ -63,7 +63,7 @@ describe("历史快照只读编辑器预览", () => {
  */
 describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
   const PANEL = readFileSync(new URL("./HistoryPanel.tsx", import.meta.url), "utf8");
-  const HOOK = readFileSync(new URL("./useHistorySnapshotViewer.ts", import.meta.url), "utf8");
+  const HOOK = readFileSync(new URL("../hooks/useHistorySnapshotViewer.ts", import.meta.url), "utf8");
 
   it("doc 快照 viewer 同实例复用（切快照只 setDocument）", () => {
     // 只在没有实例时创建；已有实例（同一宿主 + 同一文档）继续用
@@ -78,7 +78,7 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
 
   it("打开面板即预热预览分包（用历史列表里的 kind）", () => {
     expect(PANEL).toContain("function prefetchPreviewChunk(kind: NoteKind)");
-    expect(PANEL).toMatch(/import\("\.\.\/features\/usheet\/UniverSheetEditor"\)/);
+    expect(PANEL).toMatch(/import\("\.\.\/\.\.\/features\/usheet\/UniverSheetEditor"\)/);
     expect(PANEL).toMatch(/prefetchPreviewChunk\(nextHistory\[0\]\?\.kind \?\? "doc"\)/);
   });
 

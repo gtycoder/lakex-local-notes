@@ -9,7 +9,7 @@ import type { OutlineMode } from "../features/outline/OutlineController";
 import { cleanLakeMarkdown } from "../core/markdownClean";
 import { stripAssetAccessToken } from "../lib/assetPort";
 import type { NoteDocument, NoteSummary, TreeNode } from "../lib/types";
-import type { SidebarMode } from "../components/Sidebar";
+import type { SidebarMode } from "../components/app/Sidebar";
 
 export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 

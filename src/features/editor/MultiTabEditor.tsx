@@ -4,7 +4,7 @@ import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { escapeId } from "../../lib/cssEscape";
 import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
-import { NodeIconGlyph } from "../../components/NodeIconGlyph";
+import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";

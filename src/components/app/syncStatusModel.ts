@@ -1,4 +1,4 @@
-import type { SyncStatus } from "../lib/types";
+import type { SyncStatus } from "../../lib/types";
 
 export interface SyncStatusModelInput {
   sync: SyncStatus;

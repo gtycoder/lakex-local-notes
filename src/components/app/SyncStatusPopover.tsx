@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
-import { isCloudActive } from "../core/cloudState.js";
-import type { SyncStatus, SyncStatusInfo, SyncWarning } from "../lib/types";
+import { isCloudActive } from "../../core/cloudState";
+import type { SyncStatus, SyncStatusInfo, SyncWarning } from "../../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
-import { native } from "../lib/native";
-import { formatBytesCompact } from "../lib/formatBytes";
-import { formatDateTime } from "../core/dateFormat";
-import { reportNativeActionError } from "../lib/nativeErrors";
-import { chooseVisibleAnchor, clampPopoverPosition } from "../hooks/topMenuPosition";
-import { HoverPopover } from "./ui/Overlay";
+import { native } from "../../lib/native";
+import { formatBytesCompact } from "../../lib/formatBytes";
+import { formatDateTime } from "../../core/dateFormat";
+import { reportNativeActionError } from "../../lib/nativeErrors";
+import { chooseVisibleAnchor, clampPopoverPosition } from "../../hooks/topMenuPosition";
+import { HoverPopover } from "../ui/Overlay";
 
 export interface SyncStatusPopoverProps {
   buttonRef?: RefObject<HTMLButtonElement>;

@@ -1,21 +1,21 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, Pin, Plus, RefreshCw, Trash } from "lucide-react";
-import { DockFilterRow, useDockFilter } from "./DockFilterBar";
-import { LAKE_EMOJIS } from "../lib/lakeEmojis";
-import { escapeId } from "../lib/cssEscape";
-import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
-import { pushEmojiRecent, readEmojiRecents } from "../lib/emojiRecents";
-import { NODE_ICONS, NODE_ICON_TINTS, encodeNodeIcon, nodeIconPickerMode, parseNodeIcon, type NodeIconTintId } from "../lib/nodeIcons";
-import { NodeIconGlyph } from "./NodeIconGlyph";
-import type { TreeNode, TreeNodeType } from "../lib/types";
-import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
-import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "./treeDrag";
+import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
+import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
+import { escapeId } from "../../lib/cssEscape";
+import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
+import { pushEmojiRecent, readEmojiRecents } from "../../lib/emojiRecents";
+import { NODE_ICONS, NODE_ICON_TINTS, encodeNodeIcon, nodeIconPickerMode, parseNodeIcon, type NodeIconTintId } from "../../lib/nodeIcons";
+import { NodeIconGlyph } from "../ui/NodeIconGlyph";
+import type { TreeNode, TreeNodeType } from "../../lib/types";
+import { buildTreeIndex, type TreeIndex } from "../../core/treeIndex";
+import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "../model/treeDrag";
 import { Database, PenTool, Table } from "lucide-react";
-import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
-import { ExportSubmenuItem, type ExportFormat } from "./ExportSubmenuItem";
-import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
-import { Dialog, Menu, Popover, Submenu } from "./ui/Overlay";
-import { usePopoverPosition } from "../hooks/usePopoverPosition";
+import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createMenuPosition";
+import { ExportSubmenuItem, type ExportFormat } from "../ui/ExportSubmenuItem";
+import { SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
+import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 
 type CreateKind = "notebook" | "group" | "note" | "usheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
@@ -1059,7 +1059,7 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
  *  （`.ne-ui-unicode-emoji-item > button` / `-search input` / `-tabs`）并给该表面钉 5 个 `--lakex-editor-*`
  *  token 才立得住，而那些规则**同时命中文档内的内核面板**（互相影响，且内核一升级就可能变样）。
  *  ⇒ 现在这是**我们自己的一等面板**：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、
- *  顶部类型页签走 kit 的 `.ln-tabs`，emoji/图标两页的网格与几何由 components/nodeIcon.css 定义。
+ *  顶部类型页签走 kit 的 `.ln-tabs`，emoji/图标两页的网格与几何由 components/ui/nodeIcon.css 定义。
  *  几何沿用原观感（418 宽 / 内距 16 / 正文 266 高 / 8 列 / 32 格），定位仍走 usePopoverPosition（禁自夹）。 */
 
 const EmojiIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { anchor: HTMLElement; nodeType: TreeNodeType; value: string | null; onPick: (icon: string | null) => void; onClose: () => void }) => {

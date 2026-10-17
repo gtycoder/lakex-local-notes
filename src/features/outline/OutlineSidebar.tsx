@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronsDownUp, ChevronsUpDown, Filter, Focus, Pin } from "lucide-react";
 import { ExpandLevelIcon } from "./ExpandLevelIcon";
-import { DockFilterRow, useDockFilter } from "../../components/DockFilterBar";
+import { DockFilterRow, useDockFilter } from "../../components/ui/DockFilterBar";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { OutlineMinimap } from "./OutlineMinimap";

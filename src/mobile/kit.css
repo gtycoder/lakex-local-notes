@@ -153,7 +153,7 @@
 
 /* ── 设置页骨架（mb-set-*，P4）────────────────────────────────────────────
  * 移动端自建（不再用桌面 .config-* / .b3-label）；契约不变：每个可搜索行带 data-set-id，
- * 供两端共用的 src/components/settingsSearch.ts 定位（漂移有单测卡住）。
+ * 供两端共用的 src/components/model/settingsSearch.ts 定位（漂移有单测卡住）。
  * 几何：分组 =「灰底上的标题 + 一张白卡」；行 ≥48（两行 56）；页内距 16；圆角 12。
  * 对比度：说明/空态一律用 --lake-text-3（AA），**不用 text-4** —— 走查实测 .config-empty 在灰卡上只有 2.86。 */
 .mb-set-group { display: flex; flex-direction: column; gap: 8px; margin: 0 0 20px; }

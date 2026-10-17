@@ -2,7 +2,7 @@
  * 桌面小记工作区装配（§20 Phase B：从 src/App.tsx 拆出）。
  */
 import type { ReactNode, Ref, RefObject } from "react";
-import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "../components/QuickNotesWorkspace";
+import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "../components/app/QuickNotesWorkspace";
 import type { TreeNode } from "../lib/types";
 
 export interface DesktopQuickNotesProps {

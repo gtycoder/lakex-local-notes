@@ -3,7 +3,7 @@ import { createNoteReloadGuard } from "../core/requestVersion";
 import { loadSettings, type AppSettings } from "../lib/settings";
 import type { DraftJournalEntry, NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
-import type { QuickNotesWorkspaceHandle } from "../components/QuickNotesWorkspace";
+import type { QuickNotesWorkspaceHandle } from "../components/app/QuickNotesWorkspace";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 
 /** App 的文档/同步/设置数据状态与全局 ref（从 App.tsx 抽出，逐字搬移，纯状态容器）。 */

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const SRC = readFileSync(new URL("./DesktopStatusBar.tsx", import.meta.url), "utf8");
-const CSS = readFileSync(new URL("../styles/document-status.css", import.meta.url), "utf8");
+const CSS = readFileSync(new URL("../../styles/document-status.css", import.meta.url), "utf8");
 
 /**
  * 260930 用户：状态栏「已锁定」做成可点解锁（方案 B：点开小浮层再确认）。

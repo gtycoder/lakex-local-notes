@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
-const WORKSPACE_SRC = read("../../components/QuickNotesWorkspace.tsx");
+const WORKSPACE_SRC = read("../../components/app/QuickNotesWorkspace.tsx");
 const EDITOR_SRC = read("./QuickNoteEditor.tsx");
 const RUNTIME_SRC = read("../editor/lakeRuntime.ts");
 const PREVIEW_SRC = read("./QuickNotePreview.tsx");
@@ -38,7 +38,7 @@ describe("小记版式切换（列表 / 小记）", () => {
     expect(WORKSPACE_SRC).toMatch(/ui="full"/);
     expect(EDITOR_SRC).toMatch(/quickNoteUi: ui/);
     // 时间戳口径对齐云端：今天 = 「今天 HH:MM」，其余 = 「MM-DD」；原子格式化走 core/dateFormat 单一来源（C1-5）
-    expect(WORKSPACE_SRC).toContain('from "../core/dateFormat"');
+    expect(WORKSPACE_SRC).toContain('from "../../core/dateFormat"');
     expect(WORKSPACE_SRC).toContain("formatListTime(new Date(iso), new Date())");
     expect(WORKSPACE_SRC).toContain("formatListTime(new Date(item.updatedAt || item.createdAt), new Date(), true)");
     expect(WORKSPACE_SRC).not.toMatch(/padStart\(2/);

@@ -1,4 +1,4 @@
-import { MarkdownView } from "../../components/markdown/MarkdownView";
+import { MarkdownView } from "../../components/ui/markdown/MarkdownView";
 
 /**
  * AI 回答正文的**唯一渲染入口**（261005 预留的**可替换接口**）。

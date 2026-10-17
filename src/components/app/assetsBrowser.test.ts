@@ -4,10 +4,10 @@ import { assetDisplayUrl, assetKindBucket, assetPreviewKind } from "./AssetsBrow
 
 const SRC = readFileSync(new URL("./AssetsBrowser.tsx", import.meta.url), "utf8");
 const PANEL = readFileSync(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
-const CSS = readFileSync(new URL("../styles/feature.css", import.meta.url), "utf8");
-const CHROME = readFileSync(new URL("../styles/chrome.css", import.meta.url), "utf8");
-const APP = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
-const SCROLL = readFileSync(new URL("../styles/app/settings.css", import.meta.url), "utf8");
+const CSS = readFileSync(new URL("../../styles/feature.css", import.meta.url), "utf8");
+const CHROME = readFileSync(new URL("../../styles/chrome.css", import.meta.url), "utf8");
+const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
+const SCROLL = readFileSync(new URL("../../styles/app/settings.css", import.meta.url), "utf8");
 
 /**
  * 资源空间（用户 261006：从设置里提出来、与回收站同级，套回收站版式）结构护栏：

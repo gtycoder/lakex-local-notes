@@ -7,7 +7,7 @@
  * 这里把三类 JSON 正文派生为**纯数据模型**：不碰 DOM、不挂编辑器、不加载任何大分包
  * （对比：挂 readOnly 编辑器要付 Univer ≈数 MB / Drawnix ≈511KB 的分包与 canvas 语义）。
  * 与搜索索引同一口径：复用各领域既有的 parse* / displayValue，不另写解析。
- * 渲染由 `src/components/HistorySnapshotPreview.tsx` 负责（桌面历史面板与单据属性弹窗共用）。
+ * 渲染由 `src/components/app/HistorySnapshotPreview.tsx` 负责（桌面历史面板与单据属性弹窗共用）。
  */
 import { boardToSearchText, parseBoardBody } from "./boardDoc.js";
 import { bitableFieldText, parseBitableBody } from "./bitableDoc.js";

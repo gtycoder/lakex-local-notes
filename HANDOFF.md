@@ -16,6 +16,16 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(八) · C3-2 `src/components` 拆 4 桶（纯搬迁）
+
+- **落地**：`src/components` 根目录 31 文件 → **`app/`(14) · `ui/`(16) · `hooks/`(2) · `model/`(16)**（含测试/CSS；`markdown/` 并入 `ui/markdown/`）。`git mv` 保历史 + 全仓说明符重写 **216 处**（含 `import()` / `vi.mock` / `new URL(..., import.meta.url)`）；`App.tsx` / `desktop/` / `features/` / `mobile/` 的引用全部改到新路径。
+- **新增护栏**：[componentsStructure.test.ts](lake-notes-electron/src/components/model/componentsStructure.test.ts) —— 根目录只允许 4 个桶、每桶非空、桶内不再嵌套同名桶。
+- **口径修正**：`mobileIndependence.test.ts` 的允许清单 `../../components/treeDrag` → `../../components/model/treeDrag`（纯决策件，仍在白名单）。
+- **⚠️ 踩坑（本次真踩）**：一次性 codemod 里把 `String.replace` 回调的第 4 个参数当 `post` 用了 —— 对 3 组正则它其实是 **match offset**，导致 51 个文件的 import 尾部被追加 2~6 位数字（`"path"123`），tsc 报 `; expected`。已用「引号后数字」清理自证通过；**以后写批量 replace 一律按正则分组数对齐回调签名（或命名组）**。
+- **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓（含新结构护栏 2 例）· 桌面/移动双构建 ✓ · `ui-metrics` 0 ✓ · `git diff --check` 0。纯搬迁、零视觉变化（CSS 内容与 import 顺序未改，未跑 stylesnap）。
+- **文档**：AGENTS / DESIGN / ARCHITECTURE / LAKEX-CONTRACT / MOBILE-* / CODE-REVIEW 的 `components/*` 路径已批量改到新桶；`src/styles/cssLayers.test.ts` 的 FILES/BASELINE 键同步。
+- **状态**：待提交。
+
 ### 261017(七) · C1-5 第二步（Q10 = B 加强版）：列表时间措辞统一
 
 - **用户定稿（261017）**：Q10 选 **B 加强版**——列表时间统一为 **今天 → 昨天 → 本周X → 上周X → 本月D日 → 上月D日 → 其余默认 `YYYY-MM-DD`**；"其他跨年了就默认就行"。**261017 二次调整：去掉「今年更早」分类**（其余含今年更早/跨年都走默认绝对）。
@@ -1330,7 +1340,7 @@
 
 ## 3. 待办与已知问题（上线后 backlog）
 
-> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-2 / C3-5 已批准待实施** + **5 项待用户决策**（Q3 选中态取色 / C1-6 只读单元格 / C1-5 时间措辞 / D2 MinIO / D5 gzip）。
+> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-5 已批准待实施**（**C3-2 ✅ 261017 已完成**）+ **3 项待用户决策**（C1-6 只读单元格 / D2 MinIO / D5 gzip；Q3 与 C1-5 已结案）。
 > **261017 复核补充的 3 项低优先遗留**（详见 review §11.7）：① **C4-1** 两处 `!important`「验证后删」已被 Q2 允许清单收编 ⇒ 是否还要验证删除待裁；② **C5-4** 同名令牌取值差异表未建（自动生成即可）；③ **桌面 `stylesnap` 基线**已按 261017 全量重烤（旧基线在 261014 后未更新且实测不可复现，见 §0）。
 
 > 多维表专项已收口；以下是专项之外真正保留的低优先项。

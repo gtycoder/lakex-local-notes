@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { SyncToastData } from "../components/SyncToast";
+import type { SyncToastData } from "../components/app/SyncToast";
 
 /**
  * 同步反馈壳（V5 Phase 4）：同步 toast 状态 + 自动消失计时。

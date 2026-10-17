@@ -8,7 +8,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
-import { Popover, isInsideDialog } from "../../components/ColorPalette.js";
+import { Popover, isInsideDialog } from "../../components/ui/ColorPalette";
 import { BitableRelationPicker } from "./BitableRelationPicker.js";
 import { ArrowLeftRight, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Sparkles, SquareCheck, Star, Tags, TextQuote, Type, X } from "lucide-react";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
@@ -21,7 +21,7 @@ import "./bitableFieldCells.css";
 import "./bitableAiField.css";
 import "./bitableMarkdown.css";
 import "./bitableExpandPreview.css";
-import { MarkdownView, markdownToPlainText } from "../../components/markdown/MarkdownView";
+import { MarkdownView, markdownToPlainText } from "../../components/ui/markdown/MarkdownView";
 import { native } from "../../lib/native.js";
 import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import type { CSSProperties } from "react";
@@ -953,7 +953,7 @@ export function MarkdownCell({ field, value, readOnly, onChange, onRegenerate }:
 
 
 /** 261008：统一选色盘 + 锚定浮层原语移到了共用组件；这里 re-export 保持既有调用点不变。 */
-export { ColorPalette, Popover } from "../../components/ColorPalette.js";
+export { ColorPalette, Popover } from "../../components/ui/ColorPalette";
 
 /** 通用下拉（替代原生 select，避免系统蓝高亮；对齐云端圆角浮层 + 勾选）。 */
 export function SelectMenu({ value, options, disabled, onChange, placeholder }: {

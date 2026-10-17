@@ -6,7 +6,7 @@ import { planTabReload } from "../core/planTabReload";
 import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDigest, NoteSummary, SyncStatus, TreeNode } from "../lib/types";
 import type { NoticeState, OpenTab } from "../desktop/desktopTypes";
-import type { QuickNotesWorkspaceHandle } from "../components/QuickNotesWorkspace";
+import type { QuickNotesWorkspaceHandle } from "../components/app/QuickNotesWorkspace";
 
 export interface UseSyncProgressOptions {
   setSync: Dispatch<SetStateAction<SyncStatus>>;

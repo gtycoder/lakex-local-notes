@@ -8,7 +8,7 @@ import type { OutlineMode } from "../features/outline/OutlineController";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "../features/outline/outlineInteraction";
 import { treeNodePath, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
 import type { NoteSummary, TreeNode } from "../lib/types";
-import type { SidebarMode } from "../components/Sidebar";
+import type { SidebarMode } from "../components/app/Sidebar";
 
 export interface DesktopViewInput {
   activeNoteId: string | null;

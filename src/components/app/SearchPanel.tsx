@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Dialog } from "./ui/Overlay";
+import { Dialog } from "../ui/Overlay";
 import { File, Search, X } from "lucide-react";
-import { native } from "../lib/native";
-import { createRequestVersion } from "../core/requestVersion";
-import { initialSearchIndex, nextSearchIndex } from "./searchNavigation";
+import { native } from "../../lib/native";
+import { createRequestVersion } from "../../core/requestVersion";
+import { initialSearchIndex, nextSearchIndex } from "../model/searchNavigation";
 
 interface SearchResult {
   id: string;

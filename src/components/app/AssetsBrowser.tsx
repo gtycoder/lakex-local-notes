@@ -14,17 +14,17 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, FolderOpen, Image as ImageIcon, Paperclip, RefreshCw, Trash } from "lucide-react";
-import { escapeId } from "../lib/cssEscape";
-import { native } from "../lib/native";
-import { getNativeErrorMessage } from "../lib/nativeErrors";
-import { formatBytes } from "../lib/formatBytes";
-import { localAssetHttpUrl, withAssetWidth } from "../core/assetUrl.js";
-import { ASSET_PORT, withAssetAccessToken } from "../lib/assetPort";
-import { fileKindOf, type AssetFileKind } from "../core/assetNaming.js";
-import { FileKindIcon } from "../features/bitable/FileKindIcon";
-import { Dialog } from "./ui/Overlay";
-import { SplitPane } from "./ui/SplitPane";
-import { Select } from "./ui/Select";
+import { escapeId } from "../../lib/cssEscape";
+import { native } from "../../lib/native";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { formatBytes } from "../../lib/formatBytes";
+import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
+import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
+import { fileKindOf, type AssetFileKind } from "../../core/assetNaming";
+import { FileKindIcon } from "../../features/bitable/FileKindIcon";
+import { Dialog } from "../ui/Overlay";
+import { SplitPane } from "../ui/SplitPane";
+import { Select } from "../ui/Select";
 
 /** 全局「被移除资源」条目（与主进程 listRemovedAssets 的返回一致）。 */
 export interface RemovedAsset {

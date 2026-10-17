@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { writeLocalStorage } from "../lib/localStorageSafe";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
 
 interface DialogSize {
   w: number;

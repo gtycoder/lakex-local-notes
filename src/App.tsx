@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isCloudActive } from "./core/cloudState";
 import { LoaderCircle, PanelLeft } from "lucide-react";
-import { Sidebar } from "./components/Sidebar";
-import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/sidebarHoverMachine";
+import { Sidebar } from "./components/app/Sidebar";
+import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/model/sidebarHoverMachine";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
-import { DesktopStatusBar } from "./components/DesktopStatusBar";
-import { getDocumentStatus } from "./components/documentStatusModel";
+import { DesktopStatusBar } from "./components/app/DesktopStatusBar";
+import { getDocumentStatus } from "./components/model/documentStatusModel";
 import { clearScrollMemory } from "./features/editor/EditorTab";
 import { setNoteRefHost } from "./features/editor/noteRef";
 import { TablePasteGuardDialog } from "./features/editor/TablePasteGuardDialog";
@@ -36,7 +36,7 @@ import { NativeTitleTips } from "./components/ui/NativeTitleTips";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import type { TreeNode } from "./lib/types";
-import { NoteInfoDialog } from "./components/NoteInfoDialog";
+import { NoteInfoDialog } from "./components/app/NoteInfoDialog";
 import { saveSettings } from "./lib/settings";
 import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, treeNodePath } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
@@ -45,8 +45,8 @@ import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
-import { TrashPanel } from "./components/TrashPanel";
-import { AssetsBrowser } from "./components/AssetsBrowser";
+import { TrashPanel } from "./components/app/TrashPanel";
+import { AssetsBrowser } from "./components/app/AssetsBrowser";
 
 export function App() {
   const {
@@ -407,7 +407,7 @@ export function App() {
     }, EDGE_HANDLE_DWELL_MS);
   }, [cancelEdgePreview, showSidebarPreview]);
   useEffect(() => () => cancelEdgePreview(), [cancelEdgePreview]);
-  // W5：把手相位机（纯决策在 ./components/sidebarHoverMachine；相位从 DOM/定时器真实来源读取，不额外持有 state）
+  // W5：把手相位机（纯决策在 ./components/model/sidebarHoverMachine；相位从 DOM/定时器真实来源读取，不额外持有 state）
   const edgeHandleShown = useCallback(() => Boolean(edgeHotzoneRef.current?.classList.contains("is-active")), []);
   const edgeDwellArmed = useCallback(() => edgePreviewTimer.current !== null, []);
   const applyEdgeEffects = useCallback((effects: HoverEffect[], clientY: number) => {

@@ -1,6 +1,6 @@
 # PANEL-CONTRACT.md — 桌面左右面板的几何 / 交互契约（单一来源，260923）
 
-> **为什么有这份文件**：目录栏（`src/components/Sidebar.tsx`）与增强大纲（`src/features/outline/OutlineSidebar.tsx`）
+> **为什么有这份文件**：目录栏（`src/components/app/Sidebar.tsx`）与增强大纲（`src/features/outline/OutlineSidebar.tsx`）
 > 在 260922 那一批里**各自把同一类坑修了一遍**（顶边取法 / 层序 / 悬停缝 / 宽度默认值）。文档化是防漂移最便宜的一招。
 > **定位**：只写「跨侧不变量 + 取舍理由」，不复制实现。数值只认**令牌 / 常量**；代码里出现字面量时以本文件为准。
 > 与 `AGENTS.md §3 #14`（UI 改动落点：找根位置、别套覆盖）配合使用。

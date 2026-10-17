@@ -4,7 +4,7 @@ import { Check, ChevronDown, Columns2, Feather, Files, Paperclip, Search, Settin
 import { useCallback, useEffect, useRef, useState, type Ref, type RefObject } from "react";
 import { Menu } from "../components/ui/Overlay";
 import { usePopoverPosition } from "../hooks/usePopoverPosition";
-import { SyncStatusPopover } from "../components/SyncStatusPopover";
+import { SyncStatusPopover } from "../components/app/SyncStatusPopover";
 import type { DesktopWorkspace } from "./desktopTypes";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
 

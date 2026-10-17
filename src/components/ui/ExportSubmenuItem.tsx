@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { Submenu } from "./ui/Overlay";
+import { Submenu } from "./Overlay";
 
 /** 已实现的文档导出格式（仅 doc 文档可用）。 */
 export type DocExportFormat = "markdown" | "html" | "pdf";

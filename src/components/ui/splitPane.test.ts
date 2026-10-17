@@ -6,10 +6,10 @@ const HANDLE = readFileSync(new URL("./SplitHandle.tsx", import.meta.url), "utf8
 const KIT = readFileSync(new URL("../../styles/kit.css", import.meta.url), "utf8");
 const MISC = readFileSync(new URL("../../styles/app/misc.css", import.meta.url), "utf8");
 const PANELS = readFileSync(new URL("../../styles/app/panels.css", import.meta.url), "utf8");
-const SIDEBAR = readFileSync(new URL("../Sidebar.tsx", import.meta.url), "utf8");
-const TRASH = readFileSync(new URL("../TrashPanel.tsx", import.meta.url), "utf8");
-const HISTORY = readFileSync(new URL("../HistoryPanel.tsx", import.meta.url), "utf8");
-const ASSETS = readFileSync(new URL("../AssetsBrowser.tsx", import.meta.url), "utf8");
+const SIDEBAR = readFileSync(new URL("../app/Sidebar.tsx", import.meta.url), "utf8");
+const TRASH = readFileSync(new URL("../app/TrashPanel.tsx", import.meta.url), "utf8");
+const HISTORY = readFileSync(new URL("../app/HistoryPanel.tsx", import.meta.url), "utf8");
+const ASSETS = readFileSync(new URL("../app/AssetsBrowser.tsx", import.meta.url), "utf8");
 const MULTITAB = readFileSync(new URL("../../features/editor/MultiTabEditor.tsx", import.meta.url), "utf8");
 
 /**

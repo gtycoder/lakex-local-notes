@@ -9,11 +9,11 @@ import { writeLocalStorage } from "../lib/localStorageSafe";
 import type { RefObject } from "react";
 import type { OutlineMode } from "../features/outline/OutlineController";
 import { getOutlineTabsVersion, subscribeOutlineTabs } from "../features/outline/registry";
-import type { SidebarMode } from "../components/Sidebar";
-import type { SettingsCategory } from "../components/SettingsPanel";
+import type { SidebarMode } from "../components/app/Sidebar";
+import type { SettingsCategory } from "../components/app/SettingsPanel";
 import type { TreeNode } from "../lib/types";
 import { initialOutlineMode, initialOutlineSidebarWidth, initialSidebarMode, initialSidebarWidth, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_HOVER_HIDE_DELAY_MS, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type DesktopWorkspace, type NoticeState } from "./desktopTypes";
-import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "../components/sidebarInteraction";
+import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "../components/model/sidebarInteraction";
 
 /** 窄窗断点：与 `styles.css` 的 `@media (max-width: 760px)` **严格一致**（改一处必须改另一处）。
  *  窄窗下目录栏/大纲一律以浮层呈现，不再占一列——用户 260915 定稿（"窄窗不能出现固定目录栏"）。 */

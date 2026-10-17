@@ -1,5 +1,5 @@
 /**
- * 移动端「文档属性」底部抽屉 —— 桌面 `components/NoteInfoDialog` 的移动端对应物。
+ * 移动端「文档属性」底部抽屉 —— 桌面 `components/app/NoteInfoDialog` 的移动端对应物。
  *
  * 为什么单独做（261009）：桌面那个弹窗会经 `HistorySnapshotPreview` 懒加载**桌面**编辑器
  * （`UniverSheetEditor` / `BitableEditor` / `BoardEditor`）⇒ 既把桌面实现打进移动端包，

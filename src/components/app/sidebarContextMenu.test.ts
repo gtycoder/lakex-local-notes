@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const SRC = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
-const APP = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
-const SHELL = readFileSync(new URL("../desktop/useDesktopShell.ts", import.meta.url), "utf8");
+const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
+const SHELL = readFileSync(new URL("../../desktop/useDesktopShell.ts", import.meta.url), "utf8");
 
 /**
  * 260930 目录栏右键菜单优化（用户口径）：

@@ -13,15 +13,15 @@
  *  3. 解析不了 / 编辑器加载失败 ⇒ 退化成**结构化摘要**（`snapshotPreview` 的模型），不留空白。
  */
 import { Component, Suspense, lazy, useMemo, type ErrorInfo, type ReactNode } from "react";
-import { snapshotPreview, type SnapshotPreviewBlock } from "../core/historyPreview.js";
-import { isMobileEnvironment } from "../features/editor/clipboardHtml";
-import type { NoteKind } from "../core/noteKind.js";
+import { snapshotPreview, type SnapshotPreviewBlock } from "../../core/historyPreview";
+import { isMobileEnvironment } from "../../features/editor/clipboardHtml";
+import type { NoteKind } from "../../core/noteKind";
 import "./historySnapshotPreview.css";
 
 /** 与 MultiTabEditor 同款懒加载：预览与正式编辑共用同一份分包，不额外增加首屏体积。 */
-const BitableEditor = lazy(() => import("../features/bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
-const BoardEditor = lazy(() => import("../features/board/BoardEditor").then((m) => ({ default: m.BoardEditor })));
-const UniverSheetEditor = lazy(() => import("../features/usheet/UniverSheetEditor").then((m) => ({ default: m.UniverSheetEditor })));
+const BitableEditor = lazy(() => import("../../features/bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
+const BoardEditor = lazy(() => import("../../features/board/BoardEditor").then((m) => ({ default: m.BoardEditor })));
+const UniverSheetEditor = lazy(() => import("../../features/usheet/UniverSheetEditor").then((m) => ({ default: m.UniverSheetEditor })));
 
 export interface HistorySnapshotPreviewProps {
   kind: NoteKind;

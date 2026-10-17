@@ -234,9 +234,9 @@
 | `mobile-kit.css` 的定位 | 头注释自述"组件外观的单一来源仍是 `styles/kit.css`，这里只做移动端**必要覆盖**" ⇒ 移动端被建成**桌面样式之上的一层覆盖**（AGENTS §3#14 禁止的"层压层"，在双端之间放大了一版） |
 
 **移动端引用的桌面 UI 件（③ 类，重构要拆）**：
-`components/settingsPrimitives`（设置页 Group/Item/Seg/Block/NumField/Switch）·
+`components/ui/settingsPrimitives`（设置页 Group/Item/Seg/Block/NumField/Switch）·
 `features/quickNotes/{QuickNoteEditor,QuickNotePreview}`（含 `quickNoteToolbarWidgets` 的表情选择器）·
-`features/bitable/FileKindIcon`（文件类型图标）· `components/treeDrag`（拖拽逻辑与 DOM 混合）·
+`features/bitable/FileKindIcon`（文件类型图标）· `components/model/treeDrag`（拖拽逻辑与 DOM 混合）·
 `features/editor/selectionToolbar/kernelUiAtoms`（`KLinkEditor`：渲染的是**内核** UI，属 ① 与 ③ 的边界件）。
 
 **移动端引用的逻辑（② 类，保留）**：

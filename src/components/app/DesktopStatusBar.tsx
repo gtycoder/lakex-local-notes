@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, History, LoaderCircle, Lock, Save, Upload, WifiOff } from "lucide-react";
-import type { DocumentStatusModel } from "./documentStatusModel";
-import { Popover } from "./ui/Overlay";
-import { usePopoverPosition } from "../hooks/usePopoverPosition";
+import type { DocumentStatusModel } from "../model/documentStatusModel";
+import { Popover } from "../ui/Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 
 export interface StatusBarNotice {
   text: string;

@@ -141,7 +141,7 @@
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: var(--lake-font-size-bodyLg); line-height: 1; }
 
-/* 图标选择浮层（261014 起）：面板本体改**自有类**（components/nodeIcon.css + kit 的 .ln-popover/.ln-input/.ln-tabs）
+/* 图标选择浮层（261014 起）：面板本体改**自有类**（components/ui/nodeIcon.css + kit 的 .ln-popover/.ln-input/.ln-tabs）
  * ⇒ 原先为「借用内核表情面板」而写的三条全局覆盖（.ne-ui-unicode-emoji-item > button / -tabs / -search input）
  * 一并删除：它们会**同时命中文档里内核自己的表情面板**，正是用户要求消除的互相影响。 */
 
