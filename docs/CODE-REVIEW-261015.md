@@ -773,7 +773,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |
 | **B6 待交接（用户已批准做）** | **C3-2** ✅（261017：4 桶纯搬迁）· **C3-5** ✅（261017：6 域拆分，bridge 只做组合，设备门禁 0 差异） | — | 均已完成 |
-| **待用户决策** | **D2** MinIO 移动端（与 D3 联动）· **D5** gzip ContentEncoding（需真云）· C1-6 ✅ / C5-1/C5-2 ✅ / C1-5 ✅ 已落地 | — | — |
+| **待用户决策** | **无**（D2 ✅ 261017 定稿不做；D5 ✅ 261017 真云验证并修；C1-6/C5-1/C5-2/C1-5 均已落地） | — | — |
 
 ---
 
@@ -826,7 +826,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 ## 11. 交接清单（261016 收尾 · **给下一个会话**）
 
 > **一句话状态**：本会话把这次「全面代码 review」**从方案落到了执行**——5 个议题共 **16 项已交付并推送**；
-> **C3-2 / C3-5 / C1-6 ✅ 已完成（261017）；C4-1/C5-4 ✅ 结案**；**只剩 2 项待用户决策**（D2 MinIO / D5 gzip 真云）。
+> **C3-2 / C3-5 / C1-6 ✅；D2/D5 ✅；C4-1/C5-4 ✅** —— 261017 代码 review 全部结案，无待决策项（D3/D7 仅记录备查）。
 > **新会话先从 `HANDOFF.md` §0 的「261016(十七)」读起**（那里是摘要 + 下一步），本文 §11.2/§11.3 是逐项可执行清单。
 
 ### 11.1 已完成（全部已推 `origin/master`，**每项单独提交**）
@@ -858,8 +858,8 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | # | 项 | 卡点 |
 | --- | --- | --- |
 | **Q3** | 是否新增 `--lake-bg-selected` / `--lake-fg-selected` / `--lake-bg-selected-hover`？ | **取色需用户定**（三候选与对比度见 §Q3；推荐 A = `color-mix(tint 88%, accent 12%)`）。**C5-1/C5-2 随之**。 |
-| **D2** | `forcePathStyle` 移动端**写死 false**（自建 MinIO 在移动端用不了） | 需与 **D3**（移动端无 https 强制）**一起定产品语义**（补 https 会拒掉内网 http MinIO）。代码里已留 `TODO(D2)`。 |
-| **D5** | 移动端 gzip PUT 不带 `Content-Encoding` | 当前读侧按魔数兼容；**要改必须真云验证**（Tier B）。 |
+| **D2** | `forcePathStyle` 移动端写死 false | ✅ **261017 用户定稿：不做**。移动端只支持虚拟托管（阿里云 OSS 官方仅虚拟托管；腾讯云 COS 2024+ 新桶不支持 path-style；AWS/七牛同理）；自建 MinIO 与 D3 一起另立项。 |
+| **D5** | 移动端 gzip PUT 不带 `Content-Encoding` | ✅ **261017 已修 + 真云验证**（七牛 `local-lake-hebei` / `lake-notes-dev1`）：带 header 存回 `ContentEncoding=gzip`；移动端已补，D5 护栏已加。 |
 | **C1-6** | 移动端只读单元格复用桌面只读渲染 | ✅ **261017 已落地并设备验收**：`core/bitableReadOnly.ts` 纯语义；lake_gate 实测 bool=[true,false] disabled、link href/target、stars=[4,2]、bars=60%/0%、relation=[目标A,目标B,目标B]。 |
 | **C1-5** | 桌面与移动列表的时间措辞是否统一 | ✅ **已裁定并落地（261017，Q10=B）**：列表相对口径统一（今天/昨天/本周/上周/本月/上月/今年，跨年绝对）；绝对/细节时间固定 `YYYY-MM-DD HH:mm[:ss]`。见 HANDOFF 261017(七)。 |
 

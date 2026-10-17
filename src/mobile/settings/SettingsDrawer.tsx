@@ -143,6 +143,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const saveS3 = useCallback(async () => {
     const prev = await bridge.getS3Settings().catch((error) => { reportNativeActionError("保存前读取 S3 设置", error); return null; });
     const secret = sk === S3_SECRET_MASK ? (prev?.secretAccessKey ?? "") : sk;
+    // D2 261017 定稿：移动端只支持虚拟托管（阿里云/腾讯云/AWS/七牛）；自建 MinIO 的 path-style 不在支持范围。
     const cfg: S3Settings = { endpoint, region, bucket, prefix, accessKeyId: ak, secretAccessKey: secret, forcePathStyle: false };
     await bridge.saveS3Settings(cfg);
     setS3(cfg);

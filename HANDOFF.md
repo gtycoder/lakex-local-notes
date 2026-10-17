@@ -16,6 +16,20 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(十三) · D2 结案（不做 path-style）+ D5 真云验证并修复
+
+- **D2 产品定稿（用户 261017）**：移动端**只支持虚拟托管风格的 S3 兼容服务**。理由（官方口径）：
+  阿里云 OSS 仅支持虚拟托管（path-style 会被拒绝）；腾讯云 COS 2024-01-01 后新建桶不支持 path-style；AWS S3 / 七牛 Kodo 也用虚拟托管。因此不做 `forcePathStyle` 开关、不扩 `SyncConfig`：自建 MinIO/路径风格 + http 内网端点与 **D3 一起**另立项。
+  代码：`s3Store.ts` 的 `forcePathStyle:false` 从 TODO 改成**有意约束**注释；`SettingsDrawer` 保存处同步注释。
+- **D5 真云验证 + 修复**：用用户提供的七牛桶 `local-lake-hebei` / prefix `lake-notes-dev1` 实测（AWS SDK v3，验完即删）：
+  - gzip 体**不带** header → 读回 `ContentEncoding=null`、字节是 gzip 魔数；
+  - gzip 体**带** `Content-Encoding: gzip` → 读回 `ContentEncoding=gzip`、GET 返回压缩字节（SDK 不解压）；
+  - 读侧按魔数解压的兼容路径仍成立；对象列表/删除/清理到 0 均正常。
+  修复：移动端 `putObject` 的 gzip 分支补 `ContentEncoding: "gzip"`（+ `ContentType: application/json`，与桌面一致）；`s3PortGuards.test.ts` 新增 D5 护栏（移动端/桌面端都必须带 header）。
+- **文档**：`docs/SYNC-PROTOCOL.md` 的 D2/D5 行、§7.3 结论、P1 进展全部回填；CODE-REVIEW §9/§11 标记结案。
+- **门禁**：tsc 0 · 全库 vitest（含新增 D5 例）· 双端构建 · ui-metrics · diff-check；D5 变更只影响对象元数据，不跑视觉门禁。
+- **状态**：待提交。
+
 ### 261017(十二) · C1-6 多维表只读单元格共享（Q7：共享逻辑、不共享样式）
 
 - **新模块** [bitableReadOnly.ts](lake-notes-electron/src/core/bitableReadOnly.ts)：只依赖 core/bitableDoc 的纯函数，零 React/DOM —— `readOnlyAttachments`（file/name/image）、`readOnlyOptions`（按存储顺序）、`readOnlyBoolean`、`readOnlyLink`（仅 http(s) 给 href）、`readOnlyRating`（0..5 clamp）、`readOnlyProgress`（0..100 clamp）、`readOnlyRelation`（target/invalid/chips）。样式仍由两端各自类名提供，**不共享桌面 CSS**。
@@ -1381,7 +1395,7 @@
 
 ## 3. 待办与已知问题（上线后 backlog）
 
-> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-2 / C3-5 ✅ 261017 已完成**（bridge 1095→31 行，6 个域文件）· **C1-6 ✅ 已落地并设备验收** · **C4-1 ✅ 结案（维持受控例外）** + **只剩 2 项待用户决策**（D2 MinIO / D5 gzip；Q3 / C1-5 / C1-6 已结案）。
+> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**：**全部结案（261017）**——C3-2 / C3-5 / C1-6 / C4-1 / C5-4 / Q3 / C1-5 均完成；D2 定稿不做（移动端只支持虚拟托管）、D5 真云验证后已修；无待决策项（D3/D7 仅记录）。
 > **261017 复核补充的 3 项低优先遗留**（详见 review §11.7）：① **C4-1** 两处 `!important`「验证后删」已被 Q2 允许清单收编 ⇒ 是否还要验证删除待裁；② **C5-4** 同名令牌取值差异表未建（自动生成即可）；③ **桌面 `stylesnap` 基线**已按 261017 全量重烤（旧基线在 261014 后未更新且实测不可复现，见 §0）。
 
 > 多维表专项已收口；以下是专项之外真正保留的低优先项。

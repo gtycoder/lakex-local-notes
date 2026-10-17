@@ -49,6 +49,13 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
     expect(/createMobileS3Client\(/.test(read("mobile/native/s3Store.ts")), "s3Store.ts 必须调用共用工厂").toBe(true);
   });
 
+  it("D5：移动端 gzip PUT 必须带 Content-Encoding（与桌面一致）", () => {
+    const mobile = read("mobile/native/s3Store.ts");
+    const desktop = readFileSync(path.join(SRC, "..", "electron/s3Store.ts"), "utf8");
+    expect(mobile, "移动端 gzip 分支必须设置 ContentEncoding").toMatch(/ContentEncoding:\s*"gzip"/);
+    expect(desktop, "桌面端仍必须设置 Content-Encoding").toMatch(/command\.ContentEncoding\s*=\s*"gzip"/);
+  });
+
   it("D1：端口方法必须过 core 的 assertSafeKey（对齐桌面 ObjectStore）", () => {
     const store = read("mobile/native/s3Store.ts");
     expect(/import \{[^}]*assertSafeKey[^}]*\} from "\.\.\/\.\.\/core\/syncUtils\.js"/.test(store), "必须从 core 引 assertSafeKey（单一来源，别在移动端另写一份）").toBe(true);

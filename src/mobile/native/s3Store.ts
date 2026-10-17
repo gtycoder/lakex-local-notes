@@ -29,7 +29,9 @@ async function compressGzip(bytes: Uint8Array): Promise<Uint8Array> {
  * 且**设置不同**——测连通那份没有 responseChecksumValidation 绕行 ⇒ 会出现
  * 「测连通报 Checksum mismatch，真同步却正常」这类难查的不一致（见 SYNC-PROTOCOL §7.3 D6）。
  * 现在两处共用本工厂：传输层分层（Capacitor 原生 HTTP）、checksum 绕行、凭证形态只有一处。
- * ⚠️ forcePathStyle 仍由调用方给值：同步侧暂固定 false（属 D2，需产品决策 + SyncConfig 扩字段）。 */
+ * ⚠️ D2（261017 定稿）：移动端**只支持虚拟托管风格（forcePathStyle=false）**——
+ * 阿里云 OSS / 腾讯云 COS（2024+ 新桶）/ AWS / 七牛均要求或推荐虚拟托管；自建 MinIO/路径风格不在移动端支持范围。
+ * 桌面端仍保留开关（不受此约束）。若未来要做，必须 D2（SyncConfig 扩字段+设置页）与 D3（允许 http 内网端点）一起。 */
 export interface MobileS3ClientOptions {
   region: string;
   endpoint: string;
@@ -62,8 +64,8 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
         endpoint: cfg.endpoint,
         accessKeyId: cfg.accessKeyId,
         secretAccessKey: cfg.secretAccessKey,
-        // TODO(D2)：SyncConfig 目前不带 forcePathStyle ⇒ 这里只能固定 false（自建 MinIO 无法在移动端使用）。
-        // 修它要给 SyncConfig 扩字段并联动 mobile 设置页；与 D3（https 强制）一起决策，见 SYNC-PROTOCOL §7.3。
+        // D2 261017 定稿：移动端有意只支持虚拟托管（阿里云/腾讯云/AWS/七牛）；自建 MinIO 不在支持范围。
+        // 不扩 SyncConfig、不加开关，避免与 D3（移动端未强制 https）产生半套语义。桌面端仍有开关。
         forcePathStyle: false,
       });
     }
@@ -125,7 +127,14 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
       const c = await getClient();
       const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
       const out = opts?.gzip ? await compressGzip(bytes) : bytes;
-      await c.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: out }));
+      await c.send(new PutObjectCommand({
+        Bucket: cfg.bucket,
+        Key: key,
+        Body: out,
+        // D5（261017 真云验证后修）：桌面端一直带 ContentEncoding；移动端补上后
+        // manifest 在控制台/S3 工具里不再显示为"未知二进制"，读侧仍保留 gzip 魔数兼容。
+        ...(opts?.gzip ? { ContentEncoding: "gzip" as const, ContentType: "application/json" } : {}),
+      }));
     },
     async listObjects(prefix: string): Promise<Array<{ key: string; lastModified: string; size: number }>> {
       const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
