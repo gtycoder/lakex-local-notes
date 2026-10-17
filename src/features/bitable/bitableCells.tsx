@@ -24,6 +24,7 @@ import "./bitableExpandPreview.css";
 import { MarkdownView, markdownToPlainText } from "../../components/ui/markdown/MarkdownView";
 import { native } from "../../lib/native.js";
 import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
+import { readOnlyBoolean, readOnlyLink, readOnlyProgress, readOnlyRating } from "../../core/bitableReadOnly.js";
 import type { CSSProperties } from "react";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
@@ -1067,7 +1068,7 @@ export function DatePicker({ value, readOnly, onChange }: { value: unknown; read
 function BooleanCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
   return (
     <label className="bt-bool-cell">
-      <input type="checkbox" checked={value === true} disabled={readOnly} aria-label="布尔值"
+      <input type="checkbox" checked={readOnlyBoolean(value) === true} disabled={readOnly} aria-label="布尔值"
         onChange={(event) => onChange(event.target.checked)} />
     </label>
   );
@@ -1082,10 +1083,10 @@ function BooleanCell({ value, readOnly, onChange }: { value: unknown; readOnly: 
  * 叠成「两层边框」（用户 260929 报的就是这个）；另外空值时会一直显示 `https://` 占位，看着像输入框而不像值。
  */
 function LinkCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
-  const text = typeof value === "string" ? value : "";
+  const { text, href: openHref } = readOnlyLink(value);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
-  const openable = /^https?:\/\//i.test(text.trim());
+  const openable = openHref !== null;
   const commit = () => { onChange(draft.trim()); setEditing(false); };
   if (editing && !readOnly) {
     return (
@@ -1138,7 +1139,7 @@ export function StatCell({ field, records, stat, readOnly, onPick }: {
 
 /** 评分：固定 5 星；再点当前星级 = 清零（对齐云端）。 */
 function RatingCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
-  const current = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(BITABLE_RATING_MAX, Math.round(value))) : 0;
+  const current = readOnlyRating(value);
   return (
     <span className="bt-rating" role="radiogroup" aria-label="评分">
       {Array.from({ length: BITABLE_RATING_MAX }, (_, index) => (
@@ -1156,8 +1157,7 @@ function RatingCell({ value, readOnly, onChange }: { value: unknown; readOnly: b
  *  鼠标/触摸 = 拖动跟手；键盘 = ←/↓ −1、→/↑ +1、PageUp/Down ±10、Home/End 两端、Delete/Backspace 清空。
  *  颜色取字段配置，缺省主题强调色。 */
 function ProgressCell({ field, value, readOnly, onChange }: { field: BitableField; value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
-  const raw = typeof value === "number" ? value : Number(value);
-  const pct = Number.isFinite(raw) ? Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(raw))) : 0;
+  const pct = readOnlyProgress(value);
   const color = typeof field.progressColor === "string" ? field.progressColor : undefined;
   const trackRef = useRef<HTMLSpanElement | null>(null);
   const style = { "--bt-progress": pct + "%", ...(color ? { "--bt-progress-color": color } : {}) } as CSSProperties;

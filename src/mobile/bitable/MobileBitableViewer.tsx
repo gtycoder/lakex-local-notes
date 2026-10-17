@@ -14,12 +14,9 @@ import { FileKindIcon } from "../../features/bitable/FileKindIcon.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
-  BITABLE_PROGRESS_MAX,
   BITABLE_RATING_MAX,
-  bitableAttachments,
   bitableFillBackgroundTokens,
   bitableFieldText,
-  bitableRecordTitle,
   buildBitableFillProjection,
   isAttachmentLikeField,
   isImplementedViewType,
@@ -28,15 +25,20 @@ import {
   optionChipStyle,
   orderedTableFields,
   parseBitableBody,
-  relationRecordIds,
-  relationTargetRecords,
-  relationTargetTable,
   viewTypeLabel,
   type BitableDisplayContext,
   type BitableField,
   type BitableRecord,
 } from "../../core/bitableDoc.js";
-import { extOf, isImageExtension } from "../../core/assetNaming.js";
+import {
+  readOnlyAttachments,
+  readOnlyBoolean,
+  readOnlyLink,
+  readOnlyOptions,
+  readOnlyProgress,
+  readOnlyRating,
+  readOnlyRelation,
+} from "../../core/bitableReadOnly.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { native } from "../../lib/native";
@@ -61,7 +63,7 @@ function EmptyCell() {
  *   触屏**没有 hover**，名称不能像桌面那样收进气泡，所以图标后面仍带文件名（图标给类型、名字给内容）。
  */
 function AttachmentCell({ noteId, value, imageOnly }: { noteId: string; value: unknown; imageOnly: boolean }) {
-  const attachments = bitableAttachments(value);
+  const attachments = readOnlyAttachments(value);
   if (attachments.length === 0) return <EmptyCell />;
   const openWithSystem = (file: string) => {
     void native.openAttachment(noteId, file).catch((error: unknown) => {
@@ -70,8 +72,8 @@ function AttachmentCell({ noteId, value, imageOnly }: { noteId: string; value: u
   };
   return (
     <span className="mbt-attachments">
-      {attachments.map(({ file, name }) => (
-        imageOnly && isImageExtension(extOf(file))
+      {attachments.map(({ file, name, image }) => (
+        imageOnly && image
           ? <img
               key={file}
               className="mbt-attachment"
@@ -93,10 +95,7 @@ function AttachmentCell({ noteId, value, imageOnly }: { noteId: string; value: u
 
 /** 单选/多选：选项色块（与桌面同一 optionChipStyle）。 */
 function OptionChips({ field, value }: { field: BitableField; value: unknown }) {
-  const ids = Array.isArray(value) ? (value as unknown[]) : [value];
-  const options = ids
-    .map((id) => (field.options ?? []).find((option) => option.id === id))
-    .filter((option): option is NonNullable<typeof option> => !!option);
+  const options = readOnlyOptions(field, value);
   if (options.length === 0) return <EmptyCell />;
   return (
     <>
@@ -110,7 +109,7 @@ function OptionChips({ field, value }: { field: BitableField; value: unknown }) 
 /** 只读评分：固定 5 星（选中星走主题金，空星走中性灰）。 */
 function RatingCell({ value }: { value: unknown }) {
   if (typeof value !== "number" || !Number.isFinite(value)) return <EmptyCell />;
-  const stars = Math.max(0, Math.min(BITABLE_RATING_MAX, Math.round(value)));
+  const stars = readOnlyRating(value);
   return (
     <span className="mbt-rating" role="img" aria-label={stars + " 星"}>
       {Array.from({ length: BITABLE_RATING_MAX }, (_, index) => (
@@ -123,7 +122,7 @@ function RatingCell({ value }: { value: unknown }) {
 /** 只读进度：条 + 百分比（宽度是数据驱动，走内联 style，同选项色块先例）。 */
 function ProgressCell({ value }: { value: unknown }) {
   if (typeof value !== "number" || !Number.isFinite(value)) return <EmptyCell />;
-  const pct = Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(value)));
+  const pct = readOnlyProgress(value);
   return (
     <span className="mbt-progress">
       <span className="mbt-progress-track"><span className="mbt-progress-bar" style={{ width: pct + "%" }} /></span>
@@ -134,25 +133,23 @@ function ProgressCell({ value }: { value: unknown }) {
 
 /** 只读链接：http(s) 走系统浏览器（`<a target="_blank">`，Capacitor 对外部 origin 走 Intent），其余当文本。 */
 function LinkCell({ value }: { value: unknown }) {
-  const text = typeof value === "string" ? value.trim() : "";
-  if (!text) return <EmptyCell />;
-  return /^https?:\/\//i.test(text)
-    ? <a className="mbt-link" href={text} target="_blank" rel="noopener noreferrer">{text}</a>
-    : <span>{text}</span>;
+  const link = readOnlyLink(value);
+  if (!link.text) return <EmptyCell />;
+  return link.href
+    ? <a className="mbt-link" href={link.href} target="_blank" rel="noopener noreferrer">{link.text}</a>
+    : <span>{link.text}</span>;
 }
 
 /** 只读关联：目标记录主字段 chip；目标表/记录失效时给失效文案（与桌面同一 core 口径）。 */
 function RelationCell({ ctx, field, value }: { ctx: BitableDisplayContext; field: BitableField; value: unknown }) {
-  if (relationRecordIds(value).length === 0) return <EmptyCell />;
-  const target = relationTargetTable(ctx, field);
-  const records = relationTargetRecords(ctx, field, value);
-  if (!target || records.length === 0) return <span className="mbt-cell-empty">关联已失效</span>;
+  const relation = readOnlyRelation(ctx, field, value);
+  if (relation.invalid) return <span className="mbt-cell-empty">关联已失效</span>;
+  if (relation.chips.length === 0) return <EmptyCell />;
   return (
     <span className="mbt-relation">
-      {records.map((record) => {
-        const label = bitableRecordTitle(target, record, ctx);
-        return <span key={record.id} className="mbt-relation-chip" title={label}>{label}</span>;
-      })}
+      {relation.chips.map((chip) => (
+        <span key={chip.id} className="mbt-relation-chip" title={chip.label}>{chip.label}</span>
+      ))}
     </span>
   );
 }
@@ -162,7 +159,10 @@ function FieldValue({ noteId, ctx, field, record }: { noteId: string; ctx: Bitab
   const value = record.values[field.id];
   if (isAttachmentLikeField(field.type)) return <AttachmentCell noteId={noteId} value={value} imageOnly={field.type === "image"} />;
   if (field.type === "select" || field.type === "multiSelect") return <OptionChips field={field} value={value} />;
-  if (field.type === "boolean") return typeof value === "boolean" ? <input className="mbt-bool" type="checkbox" checked={value} disabled aria-label="布尔值" /> : <EmptyCell />;
+  if (field.type === "boolean") {
+    const checked = readOnlyBoolean(value);
+    return checked === null ? <EmptyCell /> : <input className="mbt-bool" type="checkbox" checked={checked} disabled aria-label="布尔值" />;
+  }
   if (field.type === "link") return <LinkCell value={value} />;
   if (field.type === "rating") return <RatingCell value={value} />;
   if (field.type === "progress") return <ProgressCell value={value} />;

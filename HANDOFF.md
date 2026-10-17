@@ -16,6 +16,16 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(十二) · C1-6 多维表只读单元格共享（Q7：共享逻辑、不共享样式）
+
+- **新模块** [bitableReadOnly.ts](lake-notes-electron/src/core/bitableReadOnly.ts)：只依赖 core/bitableDoc 的纯函数，零 React/DOM —— `readOnlyAttachments`（file/name/image）、`readOnlyOptions`（按存储顺序）、`readOnlyBoolean`、`readOnlyLink`（仅 http(s) 给 href）、`readOnlyRating`（0..5 clamp）、`readOnlyProgress`（0..100 clamp）、`readOnlyRelation`（target/invalid/chips）。样式仍由两端各自类名提供，**不共享桌面 CSS**。
+- **移动端**：`MobileBitableViewer` 的 Attachment/Option/Boolean/Link/Rating/Progress/Relation 全部改用共享语义，删掉本地 clamp/解析实现。
+- **桌面端**：`bitableCells.tsx` 的 Rating/Progress/Link/Boolean 改用同一组 helper（交互态逻辑未动）。
+- **护栏**：`bitableReadOnly.test.ts` 6 例（布尔/链接/评分进度 clamp/选项顺序/附件图片标记/关联失效）+ 源码级「两端都必须 import 且移动端不得再自写 clamp/关联解析」。
+- **设备验收**（lake_gate + 自建全字段多维表）：`bool=[true,false] disabled`、`link href=https://example.com target=_blank`、`stars=[4,2]`、`bars=60%/0%`、`relation=[目标A,目标B,目标B]`、无失效误报；截图 `.css-audit/c1-6-261017/bitable-readonly.png`（gitignored）。验完已删自建文档、复核 6 态快照 **0 差异**。
+- **门禁**：tsc 0 · vitest **276 文件 / 2096 例** ✓ · 双端构建 ✓ · ui-metrics 0 · diff-check 0。
+- **状态**：待提交。
+
 ### 261017(十一) · C3-5 第③步：抽 notes / quickNotes / tree 域，bridge 只做组合
 
 - **最终结构**（合计 1030 行，原 bridge 1095 行）：
@@ -1371,7 +1381,7 @@
 
 ## 3. 待办与已知问题（上线后 backlog）
 
-> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-2 / C3-5 ✅ 261017 已完成**（bridge 1095→31 行，6 个域文件）· **C4-1 ✅ 261017 结案（维持受控例外）** + **3 项待用户决策**（C1-6 只读单元格 / D2 MinIO / D5 gzip；Q3 与 C1-5 已结案）。
+> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-2 / C3-5 ✅ 261017 已完成**（bridge 1095→31 行，6 个域文件）· **C1-6 ✅ 已落地并设备验收** · **C4-1 ✅ 结案（维持受控例外）** + **只剩 2 项待用户决策**（D2 MinIO / D5 gzip；Q3 / C1-5 / C1-6 已结案）。
 > **261017 复核补充的 3 项低优先遗留**（详见 review §11.7）：① **C4-1** 两处 `!important`「验证后删」已被 Q2 允许清单收编 ⇒ 是否还要验证删除待裁；② **C5-4** 同名令牌取值差异表未建（自动生成即可）；③ **桌面 `stylesnap` 基线**已按 261017 全量重烤（旧基线在 261014 后未更新且实测不可复现，见 §0）。
 
 > 多维表专项已收口；以下是专项之外真正保留的低优先项。

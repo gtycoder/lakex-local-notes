@@ -282,7 +282,7 @@ AGENTS §4 已把「小记保存并同步 = 单条推送」列为高危路径（
 只在 §9 议题里问用户「两端列表时间措辞是否要一致」。
 **验收**：抽完对拍现有快照（桌面 stylesnap 相关态 + 移动 6 态）+ 时间显示逐字符断言。
 
-### C1-6 移动端多维表只读单元格重写了桌面已有的只读形态 ★★值得做
+### C1-6 移动端多维表只读单元格重写了桌面已有的只读形态 ★★值得做 · ✅ **已完成（261017）**
 
 **证据**：`src/mobile/bitable/MobileBitableViewer.tsx`（272 行）里重写
 `AttachmentCell:63` / `RatingCell:111` / `ProgressCell:124` / `LinkCell:136` / `RelationCell:145`；
@@ -298,6 +298,8 @@ AGENTS §4 已把「小记保存并同步 = 单条推送」列为高危路径（
 见 `src/mobile/features.css` 头部注释）。
 **验收**：移动端只读清单（bool 禁用复选、link href/target、5 星、进度百分比、关联 chip、时间到分钟）逐项设备复跑
 （HANDOFF §8「多维表只读」既有判据）；`check:mobilesnap` 6 态 0 差异。
+
+**✅ 实际做法（261017）**：新增 [bitableReadOnly.ts](lake-notes-electron/src/core/bitableReadOnly.ts)（`readOnlyAttachments/Options/Boolean/Link/Rating/Progress/Relation`，零 React/DOM，clamp/href/失效判定单一来源）；移动端 `MobileBitableViewer` 全部改用，桌面 `bitableCells.tsx` 的 Rating/Progress/Link/Boolean 也改用（交互态不动）。护栏 `bitableReadOnly.test.ts` 6 例 + 两端源码级守卫。设备验收（lake_gate + 自建全字段表）：bool=[true,false] disabled、link href/target 正确、stars=[4,2]、bars=60%/0%、relation=[目标A,目标B,目标B]；`.css-audit/c1-6-261017/bitable-readonly.png`。
 
 ### C1-7 `NoteInfoDialog` 与 `NoteInfoSheet` 是同功能两端实现
 
@@ -771,7 +773,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |
 | **B6 待交接（用户已批准做）** | **C3-2** ✅（261017：4 桶纯搬迁）· **C3-5** ✅（261017：6 域拆分，bridge 只做组合，设备门禁 0 差异） | — | 均已完成 |
-| **待用户决策** | **C1-6** 只读单元格共享（需设备验收）· **C5-1/C5-2** ✅ 已落地（261017 Q3=A，语义令牌 + 选中+hover）· **C1-5** ✅ 已裁定 **B** 并落地（261017：列表措辞统一，详见 §9 Q10）· **D2** MinIO 移动端（与 D3 联动）· **D5** gzip ContentEncoding（需真云） | — | — |
+| **待用户决策** | **D2** MinIO 移动端（与 D3 联动）· **D5** gzip ContentEncoding（需真云）· C1-6 ✅ / C5-1/C5-2 ✅ / C1-5 ✅ 已落地 | — | — |
 
 ---
 
@@ -798,7 +800,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | Q4 | 36 处字色是否换成 `--lake-accent-text`？ | ✅ **已实施（261016 用户批准）**：36 处全换、基线 36 → **0**；实测**只有暖色从不达 AA 变达标**（浅/深本就达标，只变观感）。视觉装置未跑，已在 §B2 第二批如实登记 | 无需再裁决；正式验收前建议补跑受影响态 |
 | Q5 | ~~是否加「跨端结构类名漂移护栏」？~~ | ✅ **已落地（261016）**：`src/styles/crossEndClassCoverage.test.ts`（3 判据、零误报自证），当场查出 `.editor-error` 移动端缺口并**当天修掉**（`KNOWN_GAPS` 已清空） | 无需再裁决 |
 | Q6 | C2-3 Repository 端口是否只收「交集」、差集单列成表？ | ✅ **已按此口径落地（261016）**：因两端签名不可统一，改为**能力矩阵数据 + 对账测试**（34 行交集 + DESKTOP_ONLY 差集），零运行时改动、零签名扭曲 | 无需再裁决 |
-| Q7 | C1-6 移动端只读单元格复用桌面只读渲染（共享逻辑、不共享样式）？ | 做（桌面已有 readOnly 分支） | 是否认可边界 |
+| Q7 | C1-6 移动端只读单元格复用桌面只读渲染（共享逻辑、不共享样式）？ | ✅ **已做（261017）**：抽 `core/bitableReadOnly.ts` 纯语义，两端各自渲染 | 已落地 |
 | Q8 | C3-1 `src/mobile` 目录重组本轮做不做？ | ✅ **已完成（261016）**：76 文件搬迁 + 三遍说明符重写 + 根目录白名单护栏 | 无需再裁决 |
 | Q9 | C3-2 `src/components` 拆 `app/` + `ui/`？ | ✅ **已完成（261017）**：4 桶 `app/ui/hooks/model`（含测试与 CSS；markdown 并入 ui/markdown） | 已落地，见 HANDOFF 261017(八) |
 | Q10 | C1-5 时间格式：桌面与移动列表的时间措辞是否要求一致？ | **已裁定（261017）= B 加强版**：列表统一 `今天/昨天 HH:mm → 本周X → 上周X → 本月D日 → 上月D日 → 其余默认 YYYY-MM-DD`（去掉「今年更早」；卡片带 HH:mm，周一为周起点）；详情/历史/回收站/同步用固定绝对 `YYYY-MM-DD HH:mm[:ss]` | ✅ 已落地（核心 `formatListTime`；C1-5 结案） |
@@ -824,7 +826,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 ## 11. 交接清单（261016 收尾 · **给下一个会话**）
 
 > **一句话状态**：本会话把这次「全面代码 review」**从方案落到了执行**——5 个议题共 **16 项已交付并推送**；
-> **C3-2 / C3-5 ✅ 已完成（261017）**；**3 项待用户决策**（C1-6 / D2 / D5）；另有低优先遗留（C4-1 / C5-4，见 §11.7）。
+> **C3-2 / C3-5 / C1-6 ✅ 已完成（261017）；C4-1/C5-4 ✅ 结案**；**只剩 2 项待用户决策**（D2 MinIO / D5 gzip 真云）。
 > **新会话先从 `HANDOFF.md` §0 的「261016(十七)」读起**（那里是摘要 + 下一步），本文 §11.2/§11.3 是逐项可执行清单。
 
 ### 11.1 已完成（全部已推 `origin/master`，**每项单独提交**）
@@ -858,7 +860,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **Q3** | 是否新增 `--lake-bg-selected` / `--lake-fg-selected` / `--lake-bg-selected-hover`？ | **取色需用户定**（三候选与对比度见 §Q3；推荐 A = `color-mix(tint 88%, accent 12%)`）。**C5-1/C5-2 随之**。 |
 | **D2** | `forcePathStyle` 移动端**写死 false**（自建 MinIO 在移动端用不了） | 需与 **D3**（移动端无 https 强制）**一起定产品语义**（补 https 会拒掉内网 http MinIO）。代码里已留 `TODO(D2)`。 |
 | **D5** | 移动端 gzip PUT 不带 `Content-Encoding` | 当前读侧按魔数兼容；**要改必须真云验证**（Tier B）。 |
-| **C1-6** | 移动端只读单元格复用桌面只读渲染 | 需**设备验收**（改完要重验只读清单：bool/link/星级/进度/关联/时间）。 |
+| **C1-6** | 移动端只读单元格复用桌面只读渲染 | ✅ **261017 已落地并设备验收**：`core/bitableReadOnly.ts` 纯语义；lake_gate 实测 bool=[true,false] disabled、link href/target、stars=[4,2]、bars=60%/0%、relation=[目标A,目标B,目标B]。 |
 | **C1-5** | 桌面与移动列表的时间措辞是否统一 | ✅ **已裁定并落地（261017，Q10=B）**：列表相对口径统一（今天/昨天/本周/上周/本月/上月/今年，跨年绝对）；绝对/细节时间固定 `YYYY-MM-DD HH:mm[:ss]`。见 HANDOFF 261017(七)。 |
 
 ### 11.4 本会话新增/改动的**护栏**（新会话改动前必看）
