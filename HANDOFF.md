@@ -16,6 +16,21 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(七) · C1-5 第二步（Q10 = B 加强版）：列表时间措辞统一
+
+- **用户定稿（261017）**：Q10 选 **B 加强版**——列表时间统一为 **今天 → 昨天 → 本周X → 上周X → 本月D日 → 上月D日 → M月D日 → 跨年默认**；"其他跨年了就默认就行"。
+- **具体口径（唯一来源 = [core/dateFormat.ts](lake-notes-electron/src/core/dateFormat.ts) 的 `formatListTime`）**：
+  - 优先级：今天 → 昨天 → 本周（周一为周起点）→ 上周 → 本月 → 上月 → 今年 → 跨年；**年初的"上周"不会被跨年吞掉**。
+  - 今天/昨天：`今天 HH:mm` / `昨天 HH:mm`（紧凑列表也带时刻）。
+  - 本周/上周：`本周X` / `上周X`（紧凑列表不带时刻；卡片 `withClock` 追加 ` HH:mm`）。
+  - 本月/上月：`本月D日` / `上月D日`；今年更早：`M月D日`；跨年：`YYYY-MM-DD`（卡片带 ` HH:mm`）。
+- **落点**：桌面小记列表（补"昨天"与本周/上周/本月/上月/今年）· 桌面小记卡片（`withClock`）· 移动小记卡片（原 `MM-DD HH:mm` 改为同口径）· 移动最近文档卡 · 移动知识库列表。**详情/属性/回收站/历史/同步状态保持绝对**：`lib/formatTime.ts` 由 `toLocaleString` 改为固定 `YYYY-MM-DD HH:mm[:ss]`（原实现随系统区域变化，英文机会成 `10/17/2026, 6:40 PM`），桌面同步浮层与移动同步状态行同步收口。
+- **测试**：`dateFormat.test.ts` 9 例（8 个分类 + 年初跨年边界 + 非法日期）；`quickNotesView.test.ts` 源码护栏改为「必须 import core/dateFormat + 不得再出现 padStart(2」。
+- **门禁**：tsc 0 · vitest **273 文件 / 2085 例** ✓ · ui-metrics 0 ✓ · diff-check 0。
+- **视觉**：桌面 `check-stylesnap --states "quicknotes:1315:light,quicknotes:1315:warm"` **0 差异**；移动设备截图确认首页小记卡显示 `今天 18:49`（`.css-audit/time-wording/mobile-home-quicknotes.png`，gitignored）。
+- **⚠️ 移动快照门禁暂不判/未重烤**：本次新建了专用 AVD `lake_gate` 并重灌夹具 ⇒ `home-doc` 的 row key 带新文档 id（README 已知：`pm clear`+重灌必须重烤）；同时工作树里有**并行会话在途的移动端改动**（`EditorDock` / `OutlineSheet` / `editor-dock.css` 等），此时重烤会把别人的 WIP 烤进基线 ⇒ 刻意不烤。等并行会话收尾后，在同一 `lake_gate` 实例上重烤 6 态再复跑。
+- **状态**：待提交（9 文件 + 2 文档；并行会话在途文件未纳入）。
+
 ### 261017(六) · C5-4 同名令牌差异表 + C1-5 第一步（时间格式化单一来源）
 
 - **C5-4（review §C5-4）**：新增只读脚本 [token-parity.mjs](lake-notes-electron/scripts/token-parity.mjs)（`--md` 输出表；不是门禁）；审计结果 **177 个同名令牌完全一致 / 10 个有意不同 / 桌面独有 2 / 移动独有 0**；差异表与逐条意图登记到 [MOBILE-DESKTOP-DECOUPLING.md §7](lake-notes-electron/docs/MOBILE-DESKTOP-DECOUPLING.md)。脚本内 `INTENT` 表：未来新增差异会显示「待确认（新增差异）」。

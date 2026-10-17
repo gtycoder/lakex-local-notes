@@ -4,7 +4,7 @@ import { native } from "../lib/native";
 import { writeLocalStorage } from "../lib/localStorageSafe";
 import { createRequestVersion } from "../core/requestVersion";
 import { isQuickNoteImageMime } from "../core/quickNoteModel";
-import { formatHm, formatMd, formatMdHm, sameLocalDay } from "../core/dateFormat";
+import { formatListTime } from "../core/dateFormat";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../core/quickNoteSort";
 // 本机读写单独一层（core 禁 DOM）：与移动端同一份
@@ -101,9 +101,7 @@ const indexLabel = (item: QuickNoteDocument): string => {
 
 /** 列表版式的时间戳（对齐云端）：今天 = 「今天 HH:MM」，其余 = 「MM-DD」。 */
 function indexStamp(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  return sameLocalDay(d, now) ? `今天 ${formatHm(d)}` : formatMd(d);
+  return formatListTime(new Date(iso), new Date());
 }
 
 // 小记排序口径（用户 260915 要求；261015 与移动端统一为四档）——**纯展示偏好，只存本机 localStorage、不进 S3**；
@@ -955,7 +953,7 @@ function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect
   const assets = item.content.images.filter((asset): asset is QuickNoteImage & { url: string } => Boolean(asset.url));
   const imagesOnly = assets.filter((asset) => isQuickNoteImageMime(asset.mimeType));
   // 仿语雀：时间戳在卡片顶部（"更新于 08-04 14:16"），正文/图片在下
-  const stamp = formatMdHm(new Date(item.updatedAt || item.createdAt));
+  const stamp = formatListTime(new Date(item.updatedAt || item.createdAt), new Date(), true);
   return <article
     className={`quick-note-entry${item.isConflict ? " conflict" : ""}${selecting ? " selecting" : ""}${checked ? " is-checked" : ""}`}
     onDoubleClick={selecting ? undefined : onEdit}

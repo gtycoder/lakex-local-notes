@@ -5,6 +5,7 @@ import type { SyncStatus, SyncStatusInfo, SyncWarning } from "../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../lib/native";
 import { formatBytesCompact } from "../lib/formatBytes";
+import { formatDateTime } from "../core/dateFormat";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { chooseVisibleAnchor, clampPopoverPosition } from "../hooks/topMenuPosition";
 import { HoverPopover } from "./ui/Overlay";
@@ -41,7 +42,7 @@ function CloudCheckIcon({ size = 14 }: { size?: number }) {
 function formatTime(value: string | null): string {
   if (!value) return "暂无记录";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "暂无记录" : date.toLocaleString("zh-CN", { hour12: false });
+  return Number.isNaN(date.getTime()) ? "暂无记录" : formatDateTime(date);
 }
 
 function formatDuration(ms: number | undefined): string {

@@ -28,7 +28,7 @@ import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickN
 //  本机读写单独一层（core 禁 DOM）：读/写偏好走 lib/quickNoteSortPref（桌面用同一份）
 import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPref";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
-import { formatHm, formatMd, formatMdHm, sameLocalDay } from "../../core/dateFormat";
+import { formatListTime } from "../../core/dateFormat";
 import { withAssetAccessToken } from "../../lib/assetPort";
 
 /** 完整小记编辑器（内含 Lake 内核）：**按需加载**——首屏/小记都不需要内核。 */
@@ -91,19 +91,14 @@ const VIEW_KEY = "lake-notes-mobile.libraryView";
 const COVER_THUMB_PX = 1024;
 
 function fmtDate(iso: string): string {
-  try { return formatMdHm(new Date(iso)); }
+  try { return formatListTime(new Date(iso), new Date(), true); }
   catch { return iso; }
 }
 
-/** 相对时间（仿语雀：今天/昨天 HH:mm，更早显示 MM-DD）——措辞策略留在本入口，只复用原子格式化。 */
+/** 列表时间措辞统一走 core/dateFormat.formatListTime（Q10/B）。 */
 function fmtRelative(iso: string): string {
-  try {
-    const d = new Date(iso); const now = new Date();
-    if (sameLocalDay(d, now)) return `今天 ${formatHm(d)}`;
-    const y = new Date(now); y.setDate(now.getDate() - 1);
-    if (sameLocalDay(d, y)) return `昨天 ${formatHm(d)}`;
-    return formatMd(d);
-  } catch { return ""; }
+  try { return formatListTime(new Date(iso), new Date()); }
+  catch { return ""; }
 }
 
 export function HomePage(props: HomePageProps) {

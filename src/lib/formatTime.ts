@@ -1,13 +1,14 @@
 /**
- * 列表行里的「日期 + 时间」格式（单一来源）。
+ * 细节/绝对时间（回收站、历史版本、同步状态）：固定 `YYYY-MM-DD HH:mm`（历史可带秒）。
  *
- * 默认**到分钟**：秒在列表里是噪声，而且会把行内时间挤到换行/省略号（用户 261006 报回收站看不到时间）。
- * 需要秒的场合（历史快照，同一分钟内可能有多份）显式传 `true`。
+ * 261017（C1-5/Q10）：从 toLocaleString 改为 core/dateFormat 单一来源 —— 原实现在不同系统
+ * 会显示成 2026/8/4、含秒、或 10/17/2026 6:40 PM，与其它入口不一致。
+ * **列表时间措辞**不在这里：见 `core/dateFormat.formatListTime`（今天/昨天/本周/上周/本月/上月/今年）。
  */
+import { formatDateTime as formatDateTimeCore } from "../core/dateFormat";
+
 export function formatDateTime(value: string | number | Date, withSeconds = false): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, withSeconds
-    ? { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }
-    : { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTimeCore(date, withSeconds);
 }

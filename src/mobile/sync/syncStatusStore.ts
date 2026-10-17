@@ -11,6 +11,7 @@
  * 读取点：设置页「连接与同步」区块的那一行。
  */
 import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { formatDateTime } from "../../core/dateFormat";
 
 export interface MobileSyncStatus {
   /** 本次尝试的时间（ISO）。 */
@@ -57,11 +58,8 @@ export function subscribeSyncStatus(listener: () => void): () => void {
 export function describeSyncStatus(status: MobileSyncStatus): string {
   const at = new Date(status.at);
   const valid = !Number.isNaN(at.getTime());
-  const now = new Date();
-  const sameDay = valid && at.getFullYear() === now.getFullYear() && at.getMonth() === now.getMonth() && at.getDate() === now.getDate();
-  const time = valid
-    ? (sameDay ? "" : `${at.getMonth() + 1}月${at.getDate()}日 `) + `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`
-    : status.at;
+  // 261017（Q10/B）：状态行属「细节时间」⇒ 固定绝对口径，不再用「10月16日」这种局部格式。
+  const time = valid ? formatDateTime(at) : status.at;
   if (status.ok) return `${time} · 同步成功${status.message ? `（${status.message}）` : ""}`;
   return `${time} · 同步失败：${status.message}`;
 }
