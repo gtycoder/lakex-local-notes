@@ -257,6 +257,13 @@ components:
 - **Shape:** 通用行/菜单高27px；**桌面目录行**用14px标题（`--lake-font-size-body`，与内核原生大纲同档）、上下2px内距、左右8px，**实测普通行27px / 笔记本行29px**（笔记本行有独立 `min-height` 下限）。261015 试调过 15px 与 14.5px 均偏大，已回滚到 14px；**目录字号不要再单独抬档**。行圆角8px、菜单项圆角6px。
 - **States:** hover = `surface-hover`；active = `surface-press`；selected = `accent-tint` + `accent-text` + 600；disabled = `.45` 透明。
 
+### Selection & Hover Surfaces（261017 用户定稿）
+
+- **文字选中背景** = `--lake-select-bg`：主题无关**中性灰**（浅底合成 ≈ `#d9dadc`、深底 ≈ `#3f4144`），不随主题/主色变。
+- **内容选区边框**（表格 / 多维表单元格、画板选中框）= **主题主色 `--lake-accent`**（暖色主题下就是橙色边框，这是有意的）。
+- **hover 内容预览**（附件/图片名、长文本 / Markdown / AI 字段的整段内容）= 单一 `.ln-tip` 表面（`--lake-tooltip-*`，主题无关）；长内容自动用 `.ln-tip--wide`（≤460px、≤50vh、内部滚动）。
+- 不要把三者互相替代：**中性色只给文字选区背景；主题色只给内容选区边框**。
+
 ### Switch / Checkbox / Radio
 - **Style:** 开关 32×19（胶囊，选中主色实心）；勾选件自绘 15×15（圆角 6，radio 为圆），静息边 `control-border`、选中主色实心、勾选符号用**边框旋转**绘制。
 

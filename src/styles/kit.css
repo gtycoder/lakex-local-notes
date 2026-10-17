@@ -367,6 +367,17 @@
   z-index: var(--lake-z-tooltip);
 }
 .ln-tip__hint { margin-left: 6px; opacity: .72; }
+/* 长内容 hover 预览（Markdown / AI 字段 / 长文本的 title 预览）：同一固定表面，仅加宽 + 内部滚动。
+   261017：普通的 .ln-tip 是 260px 窄条，整段内容会被挤成一条竖长条（用户截图）。 */
+.ln-tip--wide {
+  max-width: 460px;
+  max-height: 50vh;
+  overflow: auto;
+  padding: 6px 10px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* 261006 Phase 2.2：全局 title 拦截器的表面（见 components/ui/NativeTitleTips.tsx）。
    定位由 JS 实测后写 left/top，这里只锁「固定定位 + 不拦鼠标 + 顶层序」。 */
 .native-title-tip { position: fixed; pointer-events: none; }

@@ -339,6 +339,8 @@
    会连成"网格纹"，比原来的整块灰底更花）。四边各存一个自定义属性，最后合成**一条** box-shadow ——
    box-shadow 是同一个属性，靠多条规则叠加是加不上的，只能这样按边拼。 */
 .bt-grid .bt-td.cell-selected { box-shadow: var(--bt-sel-t, 0 0 transparent), var(--bt-sel-b, 0 0 transparent), var(--bt-sel-l, 0 0 transparent), var(--bt-sel-r, 0 0 transparent); }
+/* 261017 用户定稿：**表格内容选区的边框用主题色**（暖色主题下就是橙框，这是有意的）；
+   不要把这里的 --lake-accent 改成 --lake-select-* —— 中性色只用于「文字选中背景」。 */
 .bt-grid .bt-td.sel-top { --bt-sel-t: inset 0 2px 0 0 var(--lake-accent); }
 .bt-grid .bt-td.sel-bottom { --bt-sel-b: inset 0 -2px 0 0 var(--lake-accent); }
 .bt-grid .bt-td.sel-left { --bt-sel-l: inset 2px 0 0 0 var(--lake-accent); }

@@ -47,6 +47,8 @@ export function NativeTitleTips() {
 
     const show = (anchor: Element, text: string) => {
       tip.textContent = text;
+      // 261017：长内容（Markdown/AI 字段/长文本的 title 预览）用宽版表面（同材质，只加宽 + 内部滚动）。
+      tip.classList.toggle("ln-tip--wide", text.length > 80 || text.includes("\n"));
       tip.style.display = "block";
       tip.style.left = "0px";
       tip.style.top = "0px";
