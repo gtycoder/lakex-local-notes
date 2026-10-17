@@ -140,20 +140,32 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     }).catch((error) => reportNativeActionError("读取 S3 设置", error));
   }, [open]);
 
-  const saveS3 = useCallback(async () => {
+  const saveS3 = useCallback(async (): Promise<boolean> => {
     const prev = await bridge.getS3Settings().catch((error) => { reportNativeActionError("保存前读取 S3 设置", error); return null; });
     const secret = sk === S3_SECRET_MASK ? (prev?.secretAccessKey ?? "") : sk;
     // D2 261017 定稿：移动端只支持虚拟托管（阿里云/腾讯云/AWS/七牛）；自建 MinIO 的 path-style 不在支持范围。
     const cfg: S3Settings = { endpoint, region, bucket, prefix, accessKeyId: ak, secretAccessKey: secret, forcePathStyle: false };
-    await bridge.saveS3Settings(cfg);
-    setS3(cfg);
-    setS3Test("已保存");
+    try {
+      // D3/D7：桥内会做 normalizeEndpoint + validateS3Settings + region 缺省；失败在这里给可见原因。
+      await bridge.saveS3Settings(cfg);
+      const saved = await bridge.getS3Settings();
+      if (saved) { setS3(saved); setEndpoint(saved.endpoint); setRegion(saved.region); }
+      setS3Test("已保存");
+      return true;
+    } catch (error) {
+      setS3Test("保存失败: " + (error as Error).message);
+      return false;
+    }
   }, [endpoint, region, bucket, prefix, ak, sk]);
 
   const testS3 = useCallback(async () => {
-    await saveS3();
+    if (!(await saveS3())) return;
     setS3Test("测试中…");
-    setS3Test(await bridge.testS3Connection());
+    try {
+      setS3Test(await bridge.testS3Connection());
+    } catch (error) {
+      setS3Test("测试失败: " + (error as Error).message);
+    }
   }, [saveS3]);
 
   // 「上次同步」那一行跟随 store 刷新（bridge.syncNow 是唯一写入点）

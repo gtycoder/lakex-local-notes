@@ -2,7 +2,7 @@ import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listAssetKeysFs } from "../native/assetFs";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncReport } from "../../core/syncEngine.js";
 import { buildGcKeepSet } from "../../core/gcDecisions.js";
-import { parseLakeManifest, objectKey } from "../../core/syncUtils.js";
+import { normalizeEndpoint, parseLakeManifest, objectKey, validateS3Settings } from "../../core/syncUtils.js";
 import type { Manifest } from "../../core/manifestTypes.js";
 import { maintenanceQueue } from "../sync/maintenanceLocks";
 import type { QuickNotesSyncResult } from "../../core/quickNotesSyncEngine.js";
@@ -155,16 +155,33 @@ export const syncDomain = {
         delete parsed.secretAccessKey;
         writeLocalStorage(S3_STORAGE_KEY, JSON.stringify(parsed));
       }
-      return { ...parsed, prefix: parsed.prefix ?? DEFAULT_S3_PREFIX, secretAccessKey: secret } as S3Settings;
+      // D3/D7（261017）：旧数据/手填值在读取时也走同一套规范化（补 https、region 缺省），
+      // 保证「设置页显示」「测连通」「真同步」三处看到的是同一个 endpoint/region。
+      return {
+        ...parsed,
+        endpoint: normalizeEndpoint(parsed.endpoint ?? ""),
+        region: parsed.region?.trim() || "cn-east-1",
+        prefix: parsed.prefix ?? DEFAULT_S3_PREFIX,
+        secretAccessKey: secret,
+      } as S3Settings;
     } catch {
       return null;
     }
   },
 
   async saveS3Settings(cfg: S3Settings): Promise<void> {
+    // D3/D7（261017）：落库前与桌面同源规范化 + 校验（补 https/去尾斜杠、region 缺省、强制 https）。
+    // 移动端只支持虚拟托管公有云（D2 定稿），因此强制 https 不会误伤自建 MinIO。
+    const next: S3Settings = {
+      ...cfg,
+      endpoint: normalizeEndpoint(cfg.endpoint),
+      region: cfg.region.trim() || "cn-east-1",
+      forcePathStyle: false,
+    };
+    validateS3Settings(next);
     // P2-8（GPT 审计）：secret 加密存储失败必须让保存整体失败（否则 UI 显示已保存但同步密钥缺失）
-    await mobileSecretStore.write("s3.secretAccessKey", cfg.secretAccessKey);
-    const { secretAccessKey: _s, ...rest } = cfg;
+    await mobileSecretStore.write("s3.secretAccessKey", next.secretAccessKey);
+    const { secretAccessKey: _s, ...rest } = next;
     writeLocalStorage(S3_STORAGE_KEY, JSON.stringify(rest));
   },
 

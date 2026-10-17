@@ -197,11 +197,11 @@ interface ManifestFolder {
 | 并发上限 8 | 在 core（`runAssetPool` / `ASSET_TRANSFER_CONCURRENCY`） | 同 | ✅ 单一来源 |
 | 404 判定 | `isNoSuchKey()`：`NoSuchKey` / `NotFound` / message 含 404 | 只判 `$metadata.httpStatusCode === 404` 或 `name === NoSuchKey` | ⚠️ **D4** |
 | key 安全校验 | `assertSafeKey`（get/put/putStream/delete/deleteMany） | **无** | ⚠️ **D1** |
-| endpoint 规范化 | `normalizeEndpoint()`（补 https、去重斜杠） | **无**（原样交 SDK） | ⚠️ **D3** |
-| 配置校验 | `validateS3Settings()`（非空 + 强制 https，localhost 例外） | 只查非空凭证（`assertS3Credentials`） | ⚠️ **D3** |
+| endpoint 规范化 | `normalizeEndpoint()`（补 https、去重斜杠） | ✅ 与桌面同源（client 工厂 + 保存/读取都规范化） | ✅ D3 已修（261017） |
+| 配置校验 | `validateS3Settings()`（非空 + 强制 https，localhost 例外） | ✅ 与桌面同源（保存时校验，失败给可见提示） | ✅ D3 已修（261017） |
 | `forcePathStyle` | 取设置（设置页有开关：「自建 MinIO 等需要开启」） | **有意固定 false**：只支持虚拟托管（阿里云 OSS/腾讯云 COS/AWS/七牛）；自建 MinIO 不在移动端支持范围 | ✅ D2 结案（261017，产品口径） |
 | 响应 checksum 绕行 | 未设 `responseChecksumValidation` | `s3Store` 设 `WHEN_REQUIRED`（七牛只回 content-md5 的绕行）；`bridge.createS3Client` **未设** | ⚠️ **D6** |
-| region 缺省 | `region \|\| "cn-east-1"` | 原样（空则由 SDK 决定） | ⚠️ 轻微 D7 |
+| region 缺省 | `region \|\| "cn-east-1"` | ✅ `region?.trim() \|\| "cn-east-1"`（client / native 配置 / 保存读取一致） | ✅ D7 已修（261017） |
 
 ### 7.3 已发现的漂移与建议（**都还没修**）
 
@@ -212,8 +212,8 @@ interface ManifestFolder {
 | **D6** | 移动端有**两套** client 工厂且设置不同：`bridge.createS3Client`（用 `cfg.forcePathStyle`、**无** checksum 绕行）只服务「测连通」；`mobile/s3Store`（硬编码 false、**有**绕行）服务全部同步 | 可能出现「测连通报 Checksum mismatch，真同步却正常」这类难查的不一致；`forcePathStyle` 也会两边不同 | 合并为**一个** client 工厂（移动端内部先自洽，再谈与桌面对齐） | **P1** |
 | **D2** | `forcePathStyle` 移动端写死 false | 自建 MinIO（path-style）无法在移动端使用；主流公有云不受影响 | ✅ **261017 用户定稿：不做**。支持范围 = 虚拟托管风格（阿里云 OSS 官方仅支持虚拟托管；腾讯云 COS 2024+ 新桶不支持 path-style；AWS/七牛同理）。移动端固定 false 写成有意约束；桌面端保留开关。自建 MinIO 等需要 path-style + http 的场景与 D3 一起另立项 | ✅ |
 | **D5** | 移动端 gzip PUT **不带** `Content-Encoding: gzip`（桌面带） | 读侧按魔数识别 ⇒ 当前兼容；但对象元数据两端不同（控制台/第三方工具看移动端 manifest 是"未知二进制"） | ✅ **261017 已修 + 真云验证**：七牛 `local-lake-hebei` / prefix `lake-notes-dev1` 实测——gzip 体（不带 header）存回 `ContentEncoding=null`；带 `Content-Encoding: gzip` 存回 `ContentEncoding=gzip`，Get 回压缩字节（SDK 不解压），读侧魔数兼容仍成立。移动端 gzip 分支补 header；`s3PortGuards` 加 D5 护栏 | ✅ |
-| **D3** | `normalizeEndpoint` / `validateS3Settings` 只在桌面；移动端把用户输入原样交给 SDK | 少了「强制 https（防签名重放）」这一安全项；误写 endpoint 时两端表现不同 | 与 D2 一起决策（https 强制 vs 内网 http MinIO）。**不建议单独补**：会与 D2 冲突 | 记录 |
-| **D7** | region 缺省不同（桌面 `cn-east-1`，移动端空） | 用户没填 region 时行为可能不同 | 移动端也 `cfg.region \|\| "cn-east-1"` | 记录 |
+| **D3** | `normalizeEndpoint` / `validateS3Settings` 只在桌面 | 误写 endpoint 两端表现不同；移动端不强制 https（签名重放风险） | ✅ **261017 已修**：D2 定稿不做 MinIO 后冲突消失；移动端 client 工厂/保存/读取统一走 core 规范化 + 保存时校验（强制 https），错误在设置页可见。护栏：`s3PortGuards` D3/D7 | ✅ |
+| **D7** | region 缺省不同（桌面 `cn-east-1`，移动端空） | 用户没填 region 时行为可能不同 | ✅ **261017 已修**：移动端 client/native 配置/保存读取统一 `region?.trim() \|\| "cn-east-1"` | ✅ |
 
 **修复进度**：
 
@@ -228,14 +228,14 @@ interface ManifestFolder {
   `isNoSuchKey` 认 `NoSuchKey` / `NotFound` / message 含 404，而原先移动端只认 HTTP 404 状态码或 `NoSuchKey`
   ⇒ 桌面注释明确记录的「部分操作（AWS/七牛 Kodo）返回 NotFound」在移动端会变成**抛错**（首次同步判定失败）。
   护栏同 `s3PortGuards.test.ts`（并断言不得再自己拼 `httpStatusCode === 404`）。
-- **P1 三项（D6/D1/D4）+ D2/D5 均已处理（261017）**：D2 产品定稿不做（只支持虚拟托管），D5 真云验证后补 `Content-Encoding`。D3 / D7 记录备查。
+- **P1 三项（D6/D1/D4）+ D2/D5/D3/D7 均已处理（261017）**：D2 定稿不做 path-style；D5 真云验证补 header；D3/D7 与桌面同源规范化/缺省。**§7.3 全部清零。**
 
 ### 7.4 结论
 
 1. **协议面的"硬骨头"两端是一致的**：超时、重试、连通性检查方式、gzip 读、maxBytes 语义、prefix 归属、并发上限 —— 这些都对上了。
-2. 真实缺口集中在**桌面侧那套防御性/规范化工具在移动端缺失**（D1/D3/D4）：core 里都有纯函数，搬过去成本很低。
+2. ~~真实缺口集中在桌面侧防御性/规范化工具在移动端缺失（D1/D3/D4）~~ 261017 全部补齐（core 纯函数复用）；D3/D7 同步收口。
 3. ~~**D2（forcePathStyle）是一处真实功能缺口**~~ 261017 产品定稿：移动端只支持虚拟托管，不做 path-style；桌面端仍支持 MinIO。
-4. ~~建议顺序~~ 已全部走完：D6 → D1/D4 → D2/D5（261017）；D3/D7 仍为记录项。
+4. ~~建议顺序~~ 已全部走完：D6 → D1/D4 → D2/D5 → D3/D7（261017）。§7.3 无遗留。
 
 ---
 

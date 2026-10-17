@@ -56,6 +56,15 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
     expect(desktop, "桌面端仍必须设置 Content-Encoding").toMatch(/command\.ContentEncoding\s*=\s*"gzip"/);
   });
 
+  it("D3/D7：移动端复用 endpoint 规范化/校验，region 与桌面同缺省", () => {
+    const sync = read("mobile/bridge/sync.ts");
+    expect(sync, "保存前必须 normalizeEndpoint").toMatch(/normalizeEndpoint\(/);
+    expect(sync, "保存前必须 validateS3Settings（强制 https）").toMatch(/validateS3Settings\(/);
+    const store = read("mobile/native/s3Store.ts");
+    expect(store, "client 工厂必须 normalizeEndpoint").toMatch(/normalizeEndpoint\(opts\.endpoint\)/);
+    expect(store, "client 工厂 region 缺省必须 cn-east-1").toMatch(/opts\.region\?\.trim\(\)\s*\|\|\s*"cn-east-1"/);
+  });
+
   it("D1：端口方法必须过 core 的 assertSafeKey（对齐桌面 ObjectStore）", () => {
     const store = read("mobile/native/s3Store.ts");
     expect(/import \{[^}]*assertSafeKey[^}]*\} from "\.\.\/\.\.\/core\/syncUtils\.js"/.test(store), "必须从 core 引 assertSafeKey（单一来源，别在移动端另写一份）").toBe(true);

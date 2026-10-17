@@ -6,7 +6,7 @@
  * putObject 按 opts.gzip 压缩。syncEngine 不感知 gzip（core 无 gzip 调用）。
  */
 import type { S3Store, SyncConfig } from "../../core/syncEngine.js";
-import { assertSafeKey, isGzip, isNoSuchKey } from "../../core/syncUtils.js";
+import { assertSafeKey, isGzip, isNoSuchKey, normalizeEndpoint } from "../../core/syncUtils.js";
 import { CapacitorHttpHandler } from "./capacitorHttpHandler";
 import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";
 
@@ -43,8 +43,10 @@ export interface MobileS3ClientOptions {
 export async function createMobileS3Client(opts: MobileS3ClientOptions): Promise<import("@aws-sdk/client-s3").S3Client> {
   const { S3Client } = await import("@aws-sdk/client-s3");
   return new S3Client({
-    region: opts.region,
-    endpoint: opts.endpoint,
+    // D7（261017）：与桌面一致，region 缺省用 cn-east-1（空串在 SDK 里行为不稳定）。
+    region: opts.region?.trim() || "cn-east-1",
+    // D3（261017）：与桌面同一份 normalizeEndpoint（补 https / 去尾斜杠 / 修重复协议）。
+    endpoint: normalizeEndpoint(opts.endpoint),
     forcePathStyle: opts.forcePathStyle,
     credentials: { accessKeyId: opts.accessKeyId, secretAccessKey: opts.secretAccessKey },
     // 七牛 Kodo：GET 请求默认发 x-amz-checksum-mode 但七牛仅返回 content-md5，导致 SDK 校验 mismatch；
@@ -83,8 +85,8 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
     if (!nativeAssetSyncSupported()) return false;
     if (!nativeConfig) {
       nativeConfig = NativeAssetSync.configure({
-        endpoint: cfg.endpoint,
-        region: cfg.region,
+        endpoint: normalizeEndpoint(cfg.endpoint),
+        region: cfg.region?.trim() || "cn-east-1",
         bucket: cfg.bucket,
         accessKeyId: cfg.accessKeyId,
         secretAccessKey: cfg.secretAccessKey,
