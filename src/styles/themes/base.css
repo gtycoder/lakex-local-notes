@@ -124,6 +124,15 @@
   --lake-scrollbar-radius: 999px;
   --lake-focus-ring-width: 2px;
   --lake-focus-ring-offset: 0px;
+  /* 滚动边缘渐隐（261017 B）：7 档非线性 alpha 采样（对齐 y≈x^1.5），只用于
+     .ln-scroll-fade 的 mask-image —— 是遮罩采样、不是主题色，不随主题分叉。 */
+  --lake-scroll-fade-05: rgba(0, 0, 0, .051);
+  --lake-scroll-fade-15: rgba(0, 0, 0, .149);
+  --lake-scroll-fade-30: rgba(0, 0, 0, .302);
+  --lake-scroll-fade-50: rgba(0, 0, 0, .502);
+  --lake-scroll-fade-70: rgba(0, 0, 0, .702);
+  --lake-scroll-fade-85: rgba(0, 0, 0, .851);
+  --lake-scroll-fade-100: rgba(0, 0, 0, 1);
 
   /* ── 控件令牌（261006 Phase 2：共用原语的唯一来源）────────────────────────
    * 一套控件只允许有这四个尺寸/状态来源；kit 的每个原语都引用它们，

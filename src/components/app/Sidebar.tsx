@@ -16,6 +16,7 @@ import { ExportSubmenuItem, type ExportFormat } from "../ui/ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
 import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { useScrollFade } from "../../hooks/useScrollFade";
 
 type CreateKind = "notebook" | "group" | "note" | "usheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
@@ -96,6 +97,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<HTMLElement>(null);
+  // 261017 B：目录树的上下边缘渐隐（长目录滚动时只柔化被裁的一侧）
+  useScrollFade(treeRef);
   const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
   const ghostRef = useRef<DragGhost | null>(null);
   const pointerRef = useRef({ x: 0, y: 0 });

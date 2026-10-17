@@ -17,6 +17,7 @@ import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
 import { openImagePreview } from "../../features/editor/imagePreview";
 import { clampPopoverPosition } from "../../hooks/topMenuPosition";
+import { useScrollFade } from "../../hooks/useScrollFade";
 import { Dialog, Menu } from "../ui/Overlay";
 
 interface DraftImage {
@@ -186,6 +187,9 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const listVersionRef = useRef(createRequestVersion());
   // 撤销窗口内「尚未落盘删除」的小记 id：外部刷新（如同步完成）不得让它重新出现。
   const pendingDeleteIdRef = useRef<string | null>(null);
+  /** 列表视图的左列索引（261017 B：滚动边缘渐隐） */
+  const indexListRef = useRef<HTMLDivElement | null>(null);
+  useScrollFade(indexListRef, viewMode);
 
   const activeIsEditing = editingDraft !== null;
   // 「有未保存改动」= 新建草稿有内容，或编辑中的草稿与载入基线不同（不再拿"有没有内容"当脏判据）
@@ -749,7 +753,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <button className="quick-notes-tool-btn" title="转为正式文档" aria-label="转为正式文档" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}><FilePlus size={16} /></button>
           <button className="quick-notes-tool-btn quick-notes-tool-btn--danger" title="批量删除" aria-label="批量删除" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}><Trash size={16} /></button>
         </div>}
-        <div className="quick-notes-index b3-list b3-list--background">
+        <div className="quick-notes-index b3-list b3-list--background" ref={indexListRef}>
           {loading
             ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div>
             : items.length === 0

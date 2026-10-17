@@ -7,11 +7,38 @@
  *
  * 拖拽落在 window 上（pointerdown 起、pointerup/cancel 收）：pointer capture 在合成鼠标/无活动指针时
  * 会抛错并中止拖拽，window 监听没有这个前提，两者叠加更稳。
+ *
+ * 261017 B：**4px 死区**（对齐 open-claude-ui 的指针微抖死区）——按下后移动不足 4px 不进入拖拽，
+ * 松手也不落盘；越过阈值时把起点重定到当前点，避免"一进入就跳 4px"。双击复位不受影响。
  */
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 
 const STEP = 16;
 const STEP_LARGE = 64;
+/** 指针微抖死区：小于它不进入拖拽（只按下不移动 = 不落盘）。 */
+export const DRAG_DEAD_PX = 4;
+
+export interface SplitDragState {
+  pointerId: number;
+  startX: number;
+  startWidth: number;
+  current: number;
+  engaged: boolean;
+}
+
+/**
+ * 拖拽的一步（纯函数，便于单测）：
+ * - 未 engaged 且位移 < 4px：原样返回（不预览、不落盘）；
+ * - 刚越过死区：把起点重定到当前指针，宽度保持按下时的值（不跳 4px）；
+ * - 已 engaged：宽度 = 按下宽度 + 越过死区后的位移。
+ */
+export function nextSplitDrag(state: SplitDragState, clientX: number): SplitDragState {
+  if (!state.engaged) {
+    if (Math.abs(clientX - state.startX) < DRAG_DEAD_PX) return state;
+    return { ...state, engaged: true, startX: clientX };
+  }
+  return { ...state, current: state.startWidth + (clientX - state.startX) };
+}
 
 export interface SplitHandleProps {
   /** 分隔条的可访问名（如「调整资源列表宽度」）。 */
@@ -37,7 +64,7 @@ export function SplitHandle({
   ariaLabel, minWidth = 240, maxWidth = 960, minRight = 240,
   containerRef, width, measureLeft, onPreview, onCommit, onResizingChange,
 }: SplitHandleProps) {
-  const dragRef = useRef<{ pointerId: number; startX: number; startWidth: number; current: number } | null>(null);
+  const dragRef = useRef<SplitDragState | null>(null);
 
   const clamp = (w: number, containerWidth: number) => {
     const upper = Math.min(maxWidth, containerWidth > 0 ? containerWidth - minRight : maxWidth);
@@ -52,12 +79,16 @@ export function SplitHandle({
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch { /* 合成鼠标/无活动指针：不依赖 capture，下面走 window 监听 */ }
     const start = leftWidth();
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: start, current: start };
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: start, current: start, engaged: false };
     onResizingChange?.(true);
     const onMove = (ev: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      const next = clamp(drag.startWidth + (ev.clientX - drag.startX), containerRef.current?.getBoundingClientRect().width ?? 0);
+      const step = nextSplitDrag(drag, ev.clientX);
+      drag.engaged = step.engaged;
+      drag.startX = step.startX;
+      if (!step.engaged) return; // 死区内：不预览、不落盘
+      const next = clamp(step.current, containerRef.current?.getBoundingClientRect().width ?? 0);
       drag.current = next;
       onPreview(next);
     };
@@ -68,7 +99,7 @@ export function SplitHandle({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       onResizingChange?.(false);
-      if (drag) onCommit(drag.current);
+      if (drag?.engaged) onCommit(drag.current); // 仅点击不移动 ⇒ 不落盘
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);

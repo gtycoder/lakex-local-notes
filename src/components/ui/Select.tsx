@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { Menu } from "./Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { useScrollFade } from "../../hooks/useScrollFade";
 
 /**
  * 下拉原语（261006 Phase 2.2）。
@@ -36,6 +37,8 @@ export function Select({ value, options, onChange, label, className, disabled, m
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // 261017 B：弹层列表的上下边缘渐隐（只在真有内容被裁的一侧出现）
+  useScrollFade(listRef, open);
   const current = options.find((o) => o.value === value);
 
   const anchor = triggerRef.current;
