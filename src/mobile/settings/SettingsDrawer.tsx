@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash, TriangleAlert } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
@@ -380,6 +380,19 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="mb-set-group">
                 <div className="mb-set-title"><Cloud size={16} />同步设置（七牛 S3）</div>
                 <div className="mb-set-items">
+                  <div className="mb-s3-notice" role="note">
+                    <div className="mb-s3-notice__title">第三方 S3 服务说明</div>
+                    <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
+                    <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
+                    <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
+                    <ul>
+                      <li>接口调用频率、带宽等技术限制；</li>
+                      <li>存储空间、流量、请求次数等计费项目；</li>
+                      <li>服务条款、可用性保障与数据安全责任。</li>
+                    </ul>
+                    <p className="mb-s3-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
+                    <p className="mb-s3-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
+                  </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Endpoint</div></div>
                     <div className="mb-set-item__ctl"><input className="mb-input" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>

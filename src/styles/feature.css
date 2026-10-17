@@ -228,3 +228,14 @@ pre {
 .asset-browser-confirm { width: min(460px, 92vw); }
 .asset-browser-confirm__list { margin: 0 0 8px; padding-left: 18px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .asset-browser-confirm__note { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+
+/* S3 第三方服务说明（261017，用户要求对齐思源 S3 设置页的提醒样式）：
+   浅底 + 1px 边 + 标题 + 条款清单 + 免责声明；只在设置页 S3 分组顶部出现。 */
+.settings-panel .s3-service-notice { display: flex; flex-direction: column; gap: 6px; margin: 14px 16px 4px; padding: 12px 14px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+.settings-panel .s3-service-notice__title { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
+.settings-panel .s3-service-notice p { margin: 0; }
+.settings-panel .s3-service-notice ul { margin: 0; padding-left: 18px; }
+.settings-panel .s3-service-notice li { margin-top: 2px; }
+.settings-panel .s3-service-notice__warn { display: flex; align-items: flex-start; gap: 6px; color: var(--lake-status-pending); font-weight: var(--lake-font-weight-medium); }
+.settings-panel .s3-service-notice__warn svg { flex: 0 0 auto; margin-top: 1px; }
+.settings-panel .s3-service-notice__disclaimer { color: var(--lake-text-3); }
