@@ -16,6 +16,16 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(十) · C3-5 第②步：抽 assets / sync 域（行为保持）
+
+- **②a assets**（commit a47a21c3）：`bridge/assets.ts`（96 行）—— `readAssetPreview` / `openAttachment` / `saveAssetAs` / 孤儿资源列表/删除/清理 / `uploadResource`；bridge 用 `...assetsDomain` 组合。
+- **②b sync**（本批）：`bridge/sync.ts`（344 行）—— 云状态/下载已声明资产/单条推送/推送后回核 4 个 helper + GC 账本 / 同步设置 / S3 设置 / 测连通 / 深度 GC / 诊断 / `syncNow` / 墓碑调试只读方法；bridge 用 `...syncDomain` 组合。
+- **bridge.ts 857 → 540 行**；`context.ts` 122 行；域文件总 440 行。跨域调用已消除：sync/ assets 域内方法直接调本域 helper（`syncDomain.getS3Settings`），bridge 只 import 4 个供剩余方法用的 helper（`mobileCloudState` / `downloadDeclaredAssetsFor` / `pushSingleQuickNote` / `scheduleQuickNoteVerify`）。
+- **护栏更新**：`lakeNativeContract` / `contractSurface` / `maintenancePolicyCoverage` 的解析器改为「bridge 方法 + 域模块展开方法/方法体」；`s3PortGuards` 改为检查 sync 域调 `createS3Client`、bridge 不再直接建 client；`quickNoteCapturePath` / `quickNotePushSyncRace` 的源码护栏读 bridge+sync 两份。
+- **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · 双端构建 ✓ · ui-metrics 0 · diff-check 0；**移动设备门禁**（lake_gate + 固定夹具）：`check:mobilesnap` **6 态 0 差异**；运行时 smoke：`window.lakeNative` **51 个键**，`getCloudState/syncNow/getS3Settings/uploadResource` 均为 function。
+- **剩余 ③**：`notes` / `tree` / `quickNotes` 三域；跨域调用（`bridge.saveNote` / `bridge.restoreTreeItem`）需先加 `context` 后置绑定的 `getBridge()`，再拆。
+- **状态**：待提交。
+
 ### 261017(九) · C3-5 第①步：抽 `src/mobile/bridge/context.ts`（零行为变化）
 
 - **动机**：C3-5 按风险分三步。第①步只把**域无关上下文**从 bridge.ts 抽出来，给后续域拆分做准备。
@@ -1350,7 +1360,7 @@
 
 ## 3. 待办与已知问题（上线后 backlog）
 
-> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-5 已批准待实施**（**C3-2 ✅ 261017 已完成**）+ **3 项待用户决策**（C1-6 只读单元格 / D2 MinIO / D5 gzip；Q3 与 C1-5 已结案）。
+> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-5 第②步已完成（assets/sync 域），第③步 notes/tree/quickNotes 待做**（**C3-2 ✅ 261017 已完成**）+ **3 项待用户决策**（C1-6 只读单元格 / D2 MinIO / D5 gzip；Q3 与 C1-5 已结案）。
 > **261017 复核补充的 3 项低优先遗留**（详见 review §11.7）：① **C4-1** 两处 `!important`「验证后删」已被 Q2 允许清单收编 ⇒ 是否还要验证删除待裁；② **C5-4** 同名令牌取值差异表未建（自动生成即可）；③ **桌面 `stylesnap` 基线**已按 261017 全量重烤（旧基线在 261014 后未更新且实测不可复现，见 §0）。
 
 > 多维表专项已收口；以下是专项之外真正保留的低优先项。

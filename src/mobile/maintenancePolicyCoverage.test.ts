@@ -19,6 +19,7 @@ const BRIDGE_FILE = "src/mobile/bridge.ts";
 /** 域模块（C3-5）：bridge 用 `...xxxDomain` 展开，方法体也要一起扫（取锁点可能在域文件里）。 */
 const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
   { file: "src/mobile/bridge/assets.ts", exportName: "assetsDomain" },
+  { file: "src/mobile/bridge/sync.ts", exportName: "syncDomain" },
 ];
 
 interface Method { name: string; file: string; from: number; to: number }

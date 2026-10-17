@@ -303,7 +303,7 @@ describe("小记「保存并同步」并发安全（真实引擎 × 真实单条
 
   it("（可选）接线护栏：桌面 / 移动都在推送成功后把幂等回核排在维护域队尾", () => {
     const repoRoot = process.cwd();
-    const mobile = readFileSync(path.join(repoRoot, "src/mobile/bridge.ts"), "utf8");
+    const mobile = readFileSync(path.join(repoRoot, "src/mobile/bridge.ts"), "utf8") + readFileSync(path.join(repoRoot, "src/mobile/bridge/sync.ts"), "utf8");
     const desktop = readFileSync(path.join(repoRoot, "electron/ipc/registerQuickNotes.ts"), "utf8");
 
     // 移动端：syncQuickNote 成功后调 scheduleQuickNoteVerify；后者取 maintenance 锁再重推

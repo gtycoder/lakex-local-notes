@@ -44,7 +44,8 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
     const context = read("mobile/bridge/context.ts");
     expect(/new S3Client\(/.test(bridge), "bridge.ts 不得再自建 client").toBe(false);
     expect(/createMobileS3Client\(/.test(context), "bridge/context.ts 必须调用共用工厂（C3-5 第①步后客户端工厂在这里）").toBe(true);
-    expect(/createS3Client\(/.test(bridge), "bridge.ts 的 S3 客户端只能经 context 的 createS3Client").toBe(true);
+    expect(/createS3Client\(/.test(read("mobile/bridge/sync.ts")), "sync 域的 S3 客户端只能经 context 的 createS3Client").toBe(true);
+    expect(/createS3Client\(/.test(bridge), "bridge 组合层不再直接建 client").toBe(false);
     expect(/createMobileS3Client\(/.test(read("mobile/native/s3Store.ts")), "s3Store.ts 必须调用共用工厂").toBe(true);
   });
 

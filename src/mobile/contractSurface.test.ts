@@ -38,6 +38,7 @@ const LAKE_NATIVE = read("src/mobile/native/lakeNativeContract.ts");
 /** 域模块（C3-5）：bridge 用 `...xxxDomain` 展开，方法名需从域文件里一起解析。 */
 const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
   { file: "src/mobile/bridge/assets.ts", exportName: "assetsDomain" },
+  { file: "src/mobile/bridge/sync.ts", exportName: "syncDomain" },
 ];
 
 function objectMethodNames(source: string, exportName: string): string[] {
