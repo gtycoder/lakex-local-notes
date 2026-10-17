@@ -528,13 +528,13 @@ src/mobile/           MobileApp main（保留入口）
 | `src/core/bitableDoc.ts` | 2258 | 139 | 多维表文档模型（序列化/字段/视图/筛选），**高内聚**；拆成「模型 / 序列化 / 迁移」可能值，但它是被测试重度覆盖的单一来源（`bitableDoc.test.ts` 1313 行）⇒ 建议**不动**，除非有具体痛点 |
 | `src/features/bitable/BitableEditor.tsx` | 2075 | 55 | 拆点明确（Grid / 视图 / 配置面板 / 拖拽），但 261014 刚接入行窗口、正在稳定期 ⇒ **建议缓** |
 | `src/features/editor/lakeRuntime.ts` | 1745 | 23 | 内核接线单一来源，**拆分会分散内核知识** ⇒ 按 AGENTS「一个语义一套实现」**不建议拆** |
-| `src/mobile/bridge.ts` | 540（原 1095） | 15 | **🟡 第①②步已完成（261017）**：`context.ts` / `assets.ts` / `sync.ts` 已抽；③ `notes`/`tree`/`quickNotes` 待做。**不是纯搬迁**，且是 `lakeNativeContract` 派生源 ⇒ 拆完必须复跑契约测试 |
+| `src/mobile/bridge.ts` | **31（原 1095）** | 15 | **✅ 已完成（261017）**：拆成 `context/assets/sync/notes/quickNotes/tree` 6 域，bridge 只做组合 + `init`；结构护栏 `bridgeStructure.test.ts`。契约测试/设备门禁已复跑 |
 | `src/components/app/Sidebar.tsx` | 1218 | 29 | 261013 刚做过 memo 优化 ⇒ **不要碰**（回归风险 > 收益） |
 
 **结论**：**不为「行数」拆文件**（`bitableDoc` / `BitableEditor` / `lakeRuntime` / `Sidebar` 都**不动**，理由见上表）；
 只做**目录级**重组（C3-1 ✅ / C3-2 📋 / C3-3 ✅）。**唯一例外是 `bridge.ts`**——用户 261016 批准按域拆分，方案如下。
 
-#### C3-5 待交接：`src/mobile/bridge.ts` 按域拆分（**不是纯搬迁**）· 🟡 **第①②步已完成（261017）**
+#### C3-5 待交接：`src/mobile/bridge.ts` 按域拆分（**不是纯搬迁**）· ✅ **已完成（261017，三步骤）**
 
 ```text
 src/mobile/bridge/
@@ -770,7 +770,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B4 契约显式化** ✅ **已完成 261016** | **C2-3 ✅** 能力矩阵 + 对账测试（34 行，见 §C2-3）· **C2-2 ✅** 改为 IPC 通道**三方一致性护栏**（原「抽常量表」实测不可行，见 §C2-2） | 中 | 是 |
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |
-| **B6 待交接（用户已批准做）** | **C3-2** ✅ 已完成（261017：4 桶纯搬迁，见 HANDOFF 261017(八)）· **C3-5** `bridge.ts` 按域拆（方案+风险见 §C3-5，**非纯搬迁**） | C3-5 中 | C3-5 需**设备级**验收 |
+| **B6 待交接（用户已批准做）** | **C3-2** ✅（261017：4 桶纯搬迁）· **C3-5** ✅（261017：6 域拆分，bridge 只做组合，设备门禁 0 差异） | — | 均已完成 |
 | **待用户决策** | **C1-6** 只读单元格共享（需设备验收）· **C5-1/C5-2** ✅ 已落地（261017 Q3=A，语义令牌 + 选中+hover）· **C1-5** ✅ 已裁定 **B** 并落地（261017：列表措辞统一，详见 §9 Q10）· **D2** MinIO 移动端（与 D3 联动）· **D5** gzip ContentEncoding（需真云） | — | — |
 
 ---
@@ -824,7 +824,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 ## 11. 交接清单（261016 收尾 · **给下一个会话**）
 
 > **一句话状态**：本会话把这次「全面代码 review」**从方案落到了执行**——5 个议题共 **16 项已交付并推送**；
-> **C3-2 ✅ 已完成（261017）**；**C3-5 第①②步 ✅（context/assets/sync），③ notes/tree/quickNotes 待做**；**5 项待用户决策**；另有 **3 项低优先遗留**（C4-1 / C5-4 / 桌面基线重烤，见 §11.7）。
+> **C3-2 / C3-5 ✅ 已完成（261017）**；**3 项待用户决策**（C1-6 / D2 / D5）；另有低优先遗留（C4-1 / C5-4，见 §11.7）。
 > **新会话先从 `HANDOFF.md` §0 的「261016(十七)」读起**（那里是摘要 + 下一步），本文 §11.2/§11.3 是逐项可执行清单。
 
 ### 11.1 已完成（全部已推 `origin/master`，**每项单独提交**）
@@ -848,8 +848,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 
 1. ~~**C3-2 `src/components` 拆分**~~ ✅ **已完成（261017，见 HANDOFF 261017(八)）**：4 桶 `app/` `ui/` `hooks/` `model/`，纯搬迁 + 结构护栏 `componentsStructure.test.ts`。
    风险低（纯搬迁），但引用面比 B3 更大 ⇒ **单独一批**。验收：`tsc` + 全库 vitest + 双端构建 + `git diff --check`。
-2. **C3-5 `src/mobile/bridge.ts` 按域拆分** → 🟡 **第①②步已完成（261017，见 HANDOFF 261017(九)(十)）**：`context.ts` / `assets.ts` / `sync.ts` 已抽出，bridge 540 行；设备门禁 6 态 0 差异。
-   剩余：③ `notes`/`tree`/`quickNotes`；**不是纯搬迁**（方法闭包共享 `db`/port），需先做跨域注入（`getBridge()` 或显式 ctx）。
+2. **C3-5 `src/mobile/bridge.ts` 按域拆分** → ✅ **已完成（261017，见 HANDOFF 261017(九)(十)(十一)）**：bridge 1095→31 行，6 个域文件（context/assets/sync/notes/quickNotes/tree），结构护栏 + 契约测试 + 设备门禁（6 态 0 差异）全绿。
    验收**必须含**：`lakeNativeContract.test.ts`（`window.lakeNative` 方法数 49+2 不变）+ **移动端设备级**（`check:mobilesnap` 6 态 + 走查）。
 
 ### 11.3 待用户决策（**不要擅自做**）

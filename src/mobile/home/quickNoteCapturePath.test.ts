@@ -27,7 +27,7 @@ const HOME = code(read("./HomePage.tsx"));
 const EDITOR = code(read("../../features/quickNotes/QuickNoteEditor.tsx"));
 const AUTO_SYNC = code(read("../hooks/useAutoSync.ts"));
 const SETTINGS = code(read("../settings/SettingsDrawer.tsx"));
-const BRIDGE = code(read("../bridge.ts")) + code(read("../bridge/sync.ts"));
+const BRIDGE = ["bridge.ts", "bridge/sync.ts", "bridge/notes.ts", "bridge/quickNotes.ts", "bridge/tree.ts"].map((f) => code(read("../" + f))).join("\n");
 const SYNC_STATUS = code(read("../sync/syncStatusStore.ts"));
 
 describe("小记 capture 路径（261010 统一为内核卡片）", () => {

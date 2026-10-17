@@ -20,6 +20,9 @@ const read = (p: string): string => readFileSync(path.join(process.cwd(), p), "u
 const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
   { file: "src/mobile/bridge/assets.ts", exportName: "assetsDomain" },
   { file: "src/mobile/bridge/sync.ts", exportName: "syncDomain" },
+  { file: "src/mobile/bridge/notes.ts", exportName: "notesDomain" },
+  { file: "src/mobile/bridge/quickNotes.ts", exportName: "quickNotesDomain" },
+  { file: "src/mobile/bridge/tree.ts", exportName: "treeDomain" },
 ];
 
 function objectMethodNames(source: string, exportName: string): string[] {

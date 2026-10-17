@@ -16,6 +16,17 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(十一) · C3-5 第③步：抽 notes / quickNotes / tree 域，bridge 只做组合
+
+- **最终结构**（合计 1030 行，原 bridge 1095 行）：
+  - [bridge.ts](lake-notes-electron/src/mobile/bridge.ts) **31 行**——只 import 6 个域并展开 + `init()`；
+  - `bridge/context.ts` 122 · `bridge/assets.ts` 96 · `bridge/sync.ts` 344 · `bridge/notes.ts` 233 · `bridge/quickNotes.ts` 134 · `bridge/tree.ts` 70。
+- **跨域调用**只剩 notes 内部 3 处（`restoreHistory/createNote → notesDomain.saveNote`、`restoreNote → notesDomain.restoreTreeItem`），全部是**同域自引用**，无需 getBridge 注入；其余域之间零直接调用。
+- **新增结构护栏** [bridgeStructure.test.ts](lake-notes-electron/src/mobile/bridge/bridgeStructure.test.ts)：bridge.ts 除 `init` 外不得再定义方法；6 个域文件必须存在且被展开。
+- **护栏更新**：三份契约/互斥域解析器的 `DOMAIN_MODULES` 补齐 notes/quickNotes/tree；`quickNoteCapturePath` / `quickNotePushSyncRace` / `quickNoteSyncGate` 的源码护栏改为读「bridge + 对应域」。
+- **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · 双端构建 ✓ · ui-metrics 0 · diff-check 0；**lake_gate 设备门禁 `check:mobilesnap` 6 态 0 差异**；运行时 smoke：`window.lakeNative` **51 键**，`listTreeNodes/listNotes/listQuickNotes/getCloudState` 均 function。
+- **状态**：待提交（C3-5 三步骤全部完成）。
+
 ### 261017(十) · C3-5 第②步：抽 assets / sync 域（行为保持）
 
 - **②a assets**（commit a47a21c3）：`bridge/assets.ts`（96 行）—— `readAssetPreview` / `openAttachment` / `saveAssetAs` / 孤儿资源列表/删除/清理 / `uploadResource`；bridge 用 `...assetsDomain` 组合。
@@ -1360,7 +1371,7 @@
 
 ## 3. 待办与已知问题（上线后 backlog）
 
-> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-5 第②步已完成（assets/sync 域），第③步 notes/tree/quickNotes 待做**（**C3-2 ✅ 261017 已完成**）+ **3 项待用户决策**（C1-6 只读单元格 / D2 MinIO / D5 gzip；Q3 与 C1-5 已结案）。
+> **261016 代码 review 的待办**见 `docs/CODE-REVIEW-261015.md` **§11 交接清单**（已交付 16 项含提交号）：**C3-2 / C3-5 ✅ 261017 已完成**（bridge 1095→31 行，6 个域文件）+ **3 项待用户决策**（C1-6 只读单元格 / D2 MinIO / D5 gzip；Q3 与 C1-5 已结案）。
 > **261017 复核补充的 3 项低优先遗留**（详见 review §11.7）：① **C4-1** 两处 `!important`「验证后删」已被 Q2 允许清单收编 ⇒ 是否还要验证删除待裁；② **C5-4** 同名令牌取值差异表未建（自动生成即可）；③ **桌面 `stylesnap` 基线**已按 261017 全量重烤（旧基线在 261014 后未更新且实测不可复现，见 §0）。
 
 > 多维表专项已收口；以下是专项之外真正保留的低优先项。
