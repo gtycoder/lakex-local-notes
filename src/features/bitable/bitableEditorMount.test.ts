@@ -40,6 +40,7 @@ const DRAWER = readFileSync(new URL("./BitableRecordDrawer.tsx", import.meta.url
 const BAR = readFileSync(new URL("./BitableViewBar.tsx", import.meta.url), "utf8");
 const VIEWS = readFileSync(new URL("./bitableViews.tsx", import.meta.url), "utf8");
 const VIEWCSS = readFileSync(new URL("./bitableViews.css", import.meta.url), "utf8");
+const VIEWPORT_CSS = readFileSync(new URL("./bitableViewport.css", import.meta.url), "utf8");
 const KANBAN = readFileSync(new URL("./BitableKanbanView.tsx", import.meta.url), "utf8");
 const GALLERY = readFileSync(new URL("./BitableGalleryView.tsx", import.meta.url), "utf8");
 const CALENDAR = readFileSync(new URL("./BitableCalendarView.tsx", import.meta.url), "utf8");
@@ -554,6 +555,11 @@ describe("多维表编辑器护栏", () => {
     expect(VIEWPORT_CELL).toContain("color: p.color");
     expect(EDITOR).toMatch(/className="bt-group-stat" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
     expect(EDITOR).toMatch(/className="bt-stat-cell" style=\{\{ maxWidth: columnWidth\(field\) \}\}/);
+    // 261017：fixed 布局下**表宽必须 max(100%, 内容宽)、末列必须 auto**，否则多余宽度会被等比摊给所有列
+    // （新建单字段表时复选框列/新建行被拉宽、末列吃不掉剩余）。详见 bitableViewport.css 注释。
+    expect(EDITOR).toContain('max(100%, ${80 + gridTrailingWidth');
+    expect(EDITOR).toContain('<col className="bt-col-empty" />');
+    expect(VIEWPORT_CSS).not.toMatch(/\.bt-col-empty\s*\{[^}]*width:/);
     // 行高**绝对**不被内容撑高：单元格永不换行（实测日期列 80px 时折行 ⇒ 行高 36 → 48），日期/时间单行省略
     expect(CSS).toMatch(/\.bt-grid th, \.bt-grid td \{[^}]*white-space: nowrap/);
     // 260930 大统一：日期/时间文案的截断走 kit 的 .ln-ellipsis（JSX 挂在那个 <span> 上），

@@ -5,4 +5,5 @@
 /* Virtual windows cannot let offscreen content decide column widths; width comes from the full field model. */
 .bt-grid-windowed, .bt-rel-grid { table-layout: fixed; }
 .bt-grid-windowed .bt-col-index { width: 80px; }
-.bt-grid-windowed .bt-col-empty { width: 40px; }
+/* 末列（新增字段 +）**不给宽度**：fixed 布局下只有 auto 列会吸收「表宽 − 其余列」的剩余空间；
+   给它固定 40px 会让浏览器把剩余空间按比例摊给所有列（复选框列被拉宽）。表宽本身由 TSX 的 max(100%, 内容宽) 保证。 */

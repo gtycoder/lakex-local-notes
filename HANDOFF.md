@@ -16,6 +16,16 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(二) · 多维表列宽回归修复（复选框列被拉宽 / 新建行缺边框）
+
+- **用户报**（截图）：新建的**单字段多维表**里，复选框/编号列被拉得很宽、新建行左右很长、编号列右侧**缺边框**（与选中色无关）。
+- **根因（261014 行窗口引入）**：`bitableViewport.css` 给 `.bt-grid-windowed` 加了 `table-layout: fixed`，但表宽仍是**固定 px**、且 `.bt-grid` 有 `min-width: 100%` ⇒ 固定布局把「表宽 − 列宽和」的剩余**按比例摊给所有列**（实测窗口 864：80/180/40 → **230/518/115**）。编号格 `.bt-td-index` 是 `display:flex`（非 table-cell），只画自己 80px 的框 ⇒ 被摊宽的列里那 150px **没有单元覆盖、没有边框**。
+- **修法（2 文件 + 2 护栏）**：① 表宽改成 **`max(100%, 80 + 末列 33/40 + Σ字段宽)`**（[BitableEditor.tsx](lake-notes-electron/src/features/bitable/BitableEditor.tsx#L1271)）；② 末尾 `<col class="bt-col-empty">` **不再给宽度**，由 fixed 布局的 auto 列吸收剩余（[bitableViewport.css](lake-notes-electron/src/features/bitable/bitableViewport.css)）。表宽 ≥ 窗口时末列自动回到 33/40，不改变原有横向滚动。
+- **实测（隔离实例 + 合成夹具，`合成·多维表`，窗口 864）**：修前 `230 / 518 / 115`（复选框列宽、编号格右侧无边框）；修后 **`80 / 180 / 604`**，边框连续、末尾 + 与添加行正常。截图 `.css-audit/bitable-width-261017/{before,after}.png`（gitignored）。
+- **护栏**：`BitableEditor.behavior.test.ts` 断言表宽 `max(100%, 293px/300px)` + 末列无行内宽；`bitableEditorMount.test.ts` 源码级断言（表宽 max、末列 auto、`bitableViewport.css` 不得给 `.bt-col-empty` 固定宽）。
+- **门禁**：tsc 0 · vitest **269 文件 / 2057 例** ✓ · `ui-metrics` 0 ✓ · `git diff --check` 0。
+- **状态**：已提交（只含多维表 4 文件 + 2 文档；并行会话的 `editorCommands` / 移动 dock 等改动未纳入）。
+
 ### 261017 · 文档/门禁清账（ui-metrics 文案 + 桌面 stylesnap 基线重烤）
 
 - **背景**：上会话（代码 review）遗留的两项「文档/门禁」清账。**并行会话**正在做内核能力审计（`KERNEL-REUSE-AUDIT.md` / `LAKEX-CONTRACT.md` / `AGENTS.md`）——本批**未触碰**这些文件。

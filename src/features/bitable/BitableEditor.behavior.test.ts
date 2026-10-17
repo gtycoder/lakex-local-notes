@@ -52,13 +52,17 @@ function savedValue(change: ReturnType<typeof vi.fn>, fieldId: string): string {
 }
 
 describe("多维表编辑会话行为", () => {
-  it("空投影保留33px添加列，有数据行时保留40px列", () => {
+  it("表宽 = max(100%, 内容宽)，末列 auto 吸收剩余（fixed 布局不再把复选框列等比拉宽）", () => {
+    // 261017 回归：table-layout:fixed + 固定表宽 + min-width:100% 时，浏览器会把多余宽度**按比例摊给所有列**
+    // （新建单字段表：复选框列 80 → 426、文本列 180 → 959；用户实测）。修法 = 表宽 max(100%, 内容宽) + 末列不给宽度。
     const empty = JSON.parse(body("empty"));
     empty.tables[0].records = [];
     act(() => root.render(createElement(BitableEditor, { ...props("empty", { content: JSON.stringify(empty) }), key: "empty" })));
-    expect(host.querySelector<HTMLTableColElement>("col.bt-col-empty")!.style.width).toBe("33px");
+    expect(host.querySelector<HTMLTableElement>("table.bt-grid")!.style.width).toBe("max(100%, 293px)");
+    expect(host.querySelector<HTMLTableColElement>("col.bt-col-empty")!.getAttribute("style")).toBeNull();
     act(() => root.render(createElement(BitableEditor, { ...props("regular"), key: "regular" })));
-    expect(host.querySelector<HTMLTableColElement>("col.bt-col-empty")!.style.width).toBe("40px");
+    expect(host.querySelector<HTMLTableElement>("table.bt-grid")!.style.width).toBe("max(100%, 300px)");
+    expect(host.querySelector<HTMLTableColElement>("col.bt-col-empty")!.getAttribute("style")).toBeNull();
   });
 
   it("中文合成期间 Enter 不跳到另一单元格", () => {

@@ -1268,11 +1268,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
               const hit = (event.target as HTMLElement).closest<HTMLElement>("[data-field-id]");
               if (hit?.dataset.fieldId !== selectedColumnId) setSelectedColumnId(null);
             }}>
-            <table className="bt-grid bt-grid-windowed" style={{ width: 80 + gridTrailingWidth + visibleFields.reduce((sum, field) => sum + (field.width ?? DEFAULT_COL_WIDTH), 0) }} aria-rowcount={rowItems.length + 3}>
+            {/* ⚠️ 表宽必须是 max(100%, 内容宽)：table-layout:fixed 下若只写固定宽 + min-width:100%，浏览器会把多出来的宽度**按比例摊给所有列**（261017 用户实测：新建单字段表时复选框列被拉宽到几百 px、末列也不吃剩余）⇒ 只有「末列 auto」才能吸收剩余。 */}
+            <table className="bt-grid bt-grid-windowed" style={{ width: `max(100%, ${80 + gridTrailingWidth + visibleFields.reduce((sum, field) => sum + (field.width ?? DEFAULT_COL_WIDTH), 0)}px)` }} aria-rowcount={rowItems.length + 3}>
               <colgroup>
                 <col className="bt-col-index" />
                 {visibleFields.map((field) => <col key={field.id} style={{ width: (field.width ?? DEFAULT_COL_WIDTH) + "px" }} />)}
-                <col className="bt-col-empty" style={{ width: gridTrailingWidth }} />
+                <col className="bt-col-empty" />
               </colgroup>
               <thead>
                 <tr>
