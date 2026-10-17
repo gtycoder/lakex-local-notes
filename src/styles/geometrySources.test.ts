@@ -56,4 +56,15 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
   it("过期字面值不得回归（112px 曾是大纲回退值）", () => {
     expect(read("features/outline/outline.css")).not.toContain("112px");
   });
+
+  it("固定目录高度 = 网格区 − margin，不溢出窗口（261017 修）", () => {
+    const css = read("styles/app/shell.css");
+    // height:100% + 上下 margin ⇒ 比可用高度高 38px，窗口变矮时目录最后几行滚到底也看不到。
+    const docked = (css.match(/\.sidebar\.sidebar-docked\s*\{([^}]+)\}/)?.[1] ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(docked).toContain("height: auto");
+    expect(docked).not.toMatch(/height:\s*100%/);
+    expect(docked).toContain("align-self: stretch");
+    // 底边距 0：stretch 扣掉上边距后正好贴窗口底（与修复前观感一致）。
+    expect(css.replace(/\s+/g, " ")).toContain("margin: calc(var(--topbar-height) + 4px) 4px 0 0;");
+  });
 });
