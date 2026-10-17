@@ -16,6 +16,16 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(九) · C3-5 第①步：抽 `src/mobile/bridge/context.ts`（零行为变化）
+
+- **动机**：C3-5 按风险分三步。第①步只把**域无关上下文**从 bridge.ts 抽出来，给后续域拆分做准备。
+- **新文件** [context.ts](lake-notes-electron/src/mobile/bridge/context.ts)（122 行）：DB 单例/初始化（`db`/`ensureDb`/迁移+索引对账）、运行期资源缓存（`assets`）、互斥域包装（`runWrite/runMaintenance/runPriority` + `assertOpClass`）、S3 客户端工厂（`assertS3Credentials/createS3Client`）、同步设置读取（`readSyncSettings` + 三个默认常量）、`dbPort` 与字节上限断言。
+- **bridge.ts 1095 → 948 行**；方法体**一行未改**，只改 import 来源。仍留在 bridge 的跨域 helper：`mobileCloudState` / `downloadDeclaredAssetsFor` / `pushSingleQuickNote` / `scheduleQuickNoteVerify`（它们要 `bridge.getS3Settings()`，先不引入循环依赖）。
+- **护栏更新**：`src/mobile/native/s3PortGuards.test.ts` 的 D6 检查从「bridge.ts 调共用工厂」改为「context.ts 调工厂 + bridge 只经 createS3Client」；`contractSurface.test.ts` 49+2 方法面不变。
+- **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · `contractSurface` / `maintenancePolicyCoverage` / `s3PortGuards` 全绿 · 桌面/移动双构建 ✓ · ui-metrics 0 · diff-check 0。纯抽取、无行为变化（未跑设备门禁；②③改运行时代码时才跑）。
+- **剩余**：② `assets`/`sync` 域 → ③ `notes`/`tree`/`quickNotes` 域。跨域调用（`bridge.getS3Settings` 等）需先定注入方式（推荐 `context` 内 `getBridge()` 后置绑定，避免 ESM 循环）。
+- **状态**：待提交。
+
 ### 261017(八) · C3-2 `src/components` 拆 4 桶（纯搬迁）
 
 - **落地**：`src/components` 根目录 31 文件 → **`app/`(14) · `ui/`(16) · `hooks/`(2) · `model/`(16)**（含测试/CSS；`markdown/` 并入 `ui/markdown/`）。`git mv` 保历史 + 全仓说明符重写 **216 处**（含 `import()` / `vi.mock` / `new URL(..., import.meta.url)`）；`App.tsx` / `desktop/` / `features/` / `mobile/` 的引用全部改到新路径。

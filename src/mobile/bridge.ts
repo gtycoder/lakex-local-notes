@@ -8,29 +8,24 @@
  * - 互斥域：写域 / 维护域分离，判据见 src/core/maintenancePolicy.ts（F16）
  * - 结构：docs/MOBILE-TECH-STACK.md；跨端能力矩阵见该文档
  */
-import { NativeSqliteDb } from "./native/nativeSqliteDb";
 import { writeLocalStorage } from "../lib/localStorageSafe";
-import { migrateSnapshotToNativeSqlite } from "./native/nativeSqliteMigration";
-import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./native/assetFs";
+import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./native/assetFs";
 import { isSafeShellOpenFilename } from "../core/assetNaming.js";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
 import { scanAssetCards, fileKindOf } from "../core/fileCard.js";
 import { lakeHtmlToPlain } from "../core/lakeCaches.js";
 import { countChars, countWords } from "../core/textStats.js";
-import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
+import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncReport } from "../core/syncEngine.js";
 import { buildGcKeepSet } from "../core/gcDecisions.js";
 import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
 import type { Manifest } from "../core/manifestTypes.js";
-import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from "../core/maintenancePolicy.js";
-import { maintenanceQueue, priorityQueue, writeLock } from "./sync/maintenanceLocks";
+import { maintenanceQueue } from "./sync/maintenanceLocks";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { emptyLakeBody } from "../core/lakeDocForm.js";
-import { createCapacitorS3Store, createMobileS3Client } from "./native/s3Store";
+import { createCapacitorS3Store } from "./native/s3Store";
 import { buildAssetFilename, mimeTypeForFilename } from "../core/assetNaming.js";
-import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
-import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../core/storeLimits.js";
 import type { S3Settings, SyncSettings, TreeNode } from "../lib/types";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "../core/cloudState.js";
 import type { SearchResult } from "../core/searchTypes.js";
@@ -46,20 +41,19 @@ const OpenFile = registerPlugin<{
   open: (opts: { path: string }) => Promise<void>;
   saveAs: (opts: { path: string; name: string; mime?: string }) => Promise<void>;
 }>("OpenFile");
-import { applyMobileSchema } from "./data/schema.js";
 import * as treeRepository from "./data/treeRepository.js";
 import * as noteRepository from "./data/noteRepository.js";
 import { indexNote, reconcileIndex } from "./data/searchIndex.js";
 import type { LocalNote, LocalNoteSummary } from "./data/noteRepository.js";
 import * as trashRepository from "./data/trashRepository.js";
 import * as quickNotesRepository from "./data/quickNotesRepository.js";
-import { createMobileSyncDbPort } from "./data/syncDbPort.js";
 import * as historyRepository from "./data/historyRepository.js";
 import type { HistoryMobileSettings } from "./data/historyRepository.js";
 import * as orphanAssetRepository from "./data/orphanAssetRepository.js";
 import * as gcRepository from "./data/gcRepository.js";
 import * as diagnosticsRepository from "./data/diagnosticsRepository.js";
 import * as notebookTreeRepository from "./data/notebookTreeRepository.js";
+import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, assets, ensureDb, dbPort, assertResourceBytes, assertS3Credentials, createS3Client, runWrite, runMaintenance, runPriority } from "./bridge/context";
 
 export type { HistoryMobileSettings } from "./data/historyRepository.js";
 
@@ -72,122 +66,11 @@ export interface MobileSyncResult {
   indexMs?: number;
 }
 
-/** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "lake-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
-const DEFAULT_S3_PREFIX = "lake-notes";
-
-const S3_STORAGE_KEY = "lake-notes-mobile.s3";
-/** 云同步开关 / 自动同步节奏（与桌面 SyncSettings 同形）。关闭 = 纯离线本地空间（用户 261006 定稿）。 */
-const SYNC_STORAGE_KEY = "lake-notes-mobile.sync";
-const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
-
-function readSyncSettings(): SyncSettings {
-  try {
-    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_SYNC_SETTINGS };
-    const parsed = JSON.parse(raw) as Partial<SyncSettings>;
-    return {
-      enabled: parsed.enabled !== false,
-      autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" ? parsed.autoMode : "manual",
-      autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" ? parsed.autoIntervalMinutes : 15,
-    };
-  } catch {
-    return { ...DEFAULT_SYNC_SETTINGS };
-  }
-}
-
 /** 云端状态（单一判据，与桌面同源 src/core/cloudState）：没配置 或 关闭云同步 ⇒ 一律不出网。 */
 async function mobileCloudState(): Promise<CloudState> {
   const cfg = await bridge.getS3Settings();
   return cloudStateOf(Boolean(cfg), readSyncSettings());
 }
-/* 初始 Lake 正文与桌面同一来源：src/core/lakeDocForm.ts（勿在此手拼正文）。 */
-
-let db: NativeSqliteDb | null = null;
-let dbInitialization: Promise<NativeSqliteDb> | null = null;
-/** 运行期资源缓存（新上传/同步中使用）；持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
-const assets = new Map<string, Uint8Array>();
-/**
- * 互斥域（判据单一来源：src/core/maintenancePolicy.ts —— F16 的红线化）。
- *
- * 旧实现把「整轮同步（含全部网络往返）」与「所有本地写」塞进**同一条** key 固定为 "main" 的队列，
- * 于是弱网下用户保存要等整轮同步（实测 152.0s；基线写 32ms）。现按判据分两条：
- *  - 写域 writeLock：本地写（saveNote / 目录 / 小记 / 历史 / 回收站 / GC 账本）——**不被网络阻塞**；
- *  - 维护域 maintenanceQueue：轮次级网络与维护（syncNow / gcDeepCleanup / ensureTrashNoteAssets）——彼此串行。
- *
- * I3：两条队列都无重入 ⇒ **禁止同域嵌套**（由 src/mobile/maintenancePolicyCoverage.test.ts 静态卡住）。
- * I2：跨网络窗口的「读 → 标记已同步」靠"未变才标"守卫，不靠全局互斥
- *     （Lake 侧既有 markSyncedIfUnchanged；小记侧守卫见 quickNotesSyncEngine）。
- */
-// 两个域的实际实例见 ./maintenanceLocks（同步侧的 DB 片段短锁也取同一实例）。
-
-function assertResourceBytes(bytes: Uint8Array): void {
-  if (sniffImageFormat(bytes) != null) {
-    if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
-      throw new Error("图片为空或超过 25 MiB");
-    }
-    const dimensions = readImageDimensions(bytes);
-    if (dimensions && dimensions.width * dimensions.height > MAX_IMAGE_PIXELS) {
-      throw new Error(`图片尺寸过大（${dimensions.width}x${dimensions.height}），上限 ${MAX_IMAGE_PIXELS} 像素`);
-    }
-    return;
-  }
-  if (bytes.length === 0) throw new Error("附件为空");
-  if (bytes.length > MAX_ATTACHMENT_BYTES) {
-    throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
-  }
-}
-
-async function initializeDb(): Promise<NativeSqliteDb> {
-  const migration = await migrateSnapshotToNativeSqlite();
-  const openedDb = await NativeSqliteDb.open(migration.databaseName);
-  await applyMobileSchema(openedDb);
-  db = openedDb;
-  // 搜索索引对账：首次建索引 / 修复跨会话漂移（失败不阻断启动）。
-  try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
-  return openedDb;
-}
-
-async function ensureDb(): Promise<NativeSqliteDb> {
-  if (db) return db;
-  dbInitialization ??= initializeDb().catch((error: unknown) => {
-    dbInitialization = null;
-    throw error;
-  });
-  return dbInitialization;
-}
-
-/** S3 配置齐全性检查（261009）：密钥缺失时给**可执行**的提示。
- *  背景：移动端 SecretStore 曾用 IndexedDB（重启即丢，见 secretStore.ts 头注释），密钥读回为空时
- *  请求会用空密钥签名，用户看到的是 "The request signature we calculated does not match..." 这种无从下手的报错。
- *  放在这里（所有 S3 客户端的唯一入口）⇒ 同步 / 测连通 / 上传三条路径统一受益。 */
-function assertS3Credentials(cfg: S3Settings): void {
-  if (!cfg.bucket) throw new Error("S3 未配置 Bucket：请到「设置 → 同步设置」填写并保存");
-  if (!cfg.accessKeyId || !cfg.secretAccessKey) {
-    throw new Error("S3 密钥缺失（本机未保存或已被清除）：请到「设置 → 同步设置」重新填写 Access Key / Secret Key");
-  }
-}
-
-async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
-  assertS3Credentials(cfg);
-  // D6（261016）：与全部同步路径共用**同一个**工厂（原先这里自己 new 一套，且缺 checksum 绕行 ⇒
-  // 会出现"测连通报 Checksum mismatch、真同步却正常"）。传输分层/绕行/凭证形态从此只有一处。
-  return createMobileS3Client({
-    region: cfg.region,
-    endpoint: cfg.endpoint,
-    accessKeyId: cfg.accessKeyId,
-    secretAccessKey: cfg.secretAccessKey,
-    forcePathStyle: cfg.forcePathStyle,
-  });
-}
-
-const dbPort: SyncDbPort = createMobileSyncDbPort(() => db!, {
-  assets,
-  saveAssetFile: saveAssetBytesFs,
-  loadAssetFile: loadAssetBytesFs,
-  removeAssetFile: removeAssetBytesFs,
-  listNoteAssetKeys: listNoteAssetKeysFs,
-});
-
 /** 下载这些笔记的已声明资产（best-effort）；失败不阻断调用方（恢复/预览红线）。
  * @param onlyMissing true = 只补本地缺失的资源（预览用）；false = 强拉全量（恢复用） */
 async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false): Promise<void> {
@@ -220,35 +103,6 @@ async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false)
   } catch (e) {
     console.warn("[asset] 资源下载失败（保留调用方，资源下次同步补拉）", e);
   }
-}
-
-/** 判据校验：调用点声明的类别必须与 src/core/maintenancePolicy.ts 的表一致（写错当场抛，不静默降级）。 */
-function assertOpClass(op: string, expected: "write" | "maintenance" | "priority"): void {
-  const actual = classifyOp(op);
-  if (actual !== expected) {
-    throw new Error("桥操作 " + op + " 被判据登记为 " + actual + "，但这里按 " + expected + " 入队（改其一必须同时改另一处）");
-  }
-}
-
-/** 入**写域**：本地写。可与网络阶段并行，同域内串行。 */
-function runWrite<T>(op: WriteOp, operation: () => T | Promise<T>): Promise<T> {
-  assertOpClass(op, "write");
-  return writeLock.run("write", async () => await operation());
-}
-
-/** 入**维护域**：轮次级网络/维护操作。禁止在其中持有写域（I1）。 */
-function runMaintenance<T>(op: MaintenanceOp, operation: () => T | Promise<T>): Promise<T> {
-  assertOpClass(op, "maintenance");
-  return maintenanceQueue.run("maintenance", async () => await operation());
-}
-
-/**
- * 入**高优先域**：用户当场发起、且必须不等整轮同步的操作（判据 PRIORITY_OPS）。
- * 与维护域是两条独立队列 ⇒ 长按小记「保存并同步」不会被在途的整轮同步堵住（用户 261013 点单）。
- */
-function runPriority<T>(op: PriorityOp, operation: () => T | Promise<T>): Promise<T> {
-  assertOpClass(op, "priority");
-  return priorityQueue.run("priority", async () => await operation());
 }
 
 /** 单条推送的一次尝试（高优先域与"推送后回核"共用；云状态判据在调用方）。 */
