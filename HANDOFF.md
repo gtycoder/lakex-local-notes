@@ -16,6 +16,29 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(四) · 画板默认工具 = 选择工具（261017 用户要求）
+
+- **用户定稿**：画板选中框颜色**不动**（Drawnix 有自己的逻辑，不同级）；只做一个优化：**进入画板默认选中「选择工具」**（不要手型/上次绘图工具）。
+- **落地**：vendor 适配层 [DrawnixBoardCore.tsx](lake-notes-electron/vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.tsx#L1273) 给 `<Drawnix initialToolState={{ pointer: PlaitPointerType.selection }}>`；独立画板与文档内嵌画板卡共用该适配层 ⇒ 都生效。`Drawnix` 的 `initialToolState` 只在挂载时合并，不覆盖用户本次会话里后续切换的工具。
+- **护栏**：`boardEditorMount.test.ts` 源码级断言该 prop 存在。
+- **实测（隔离实例 + 合成夹具）**：打开 `合成·画板` ⇒ `.plait-board-container` 的类为 **`pointer-selection`**（重建前是 `pointer-hand`）。
+- **⚠️ 踩坑（vendor 工作流）**：改 `vendor/lakex-doc-react/src/**` 后**必须** `npm run build:vendor`（产物入库）；本次第一轮只改 src 就启动 ⇒ 应用仍用旧 dist，实测还是 `pointer-hand`，重建后才对。本次提交同时包含 vendor dist 的新旧 chunk 换名（`DrawnixBoardCore-*.js/.cjs`）。
+- **边界**：画板选中框仍是 Drawnix 自带蓝 `#6698ff`（用户 261017 明确「画板不同级、不用动」）；内核正文原生 title 也明确不动。
+- **状态**：待提交（vendor src + dist 重建产物 + 护栏；并行会话在途文件未纳入）。
+
+### 261017(三) · 内容选中口径：文字选区中性灰 / 表格选区边框保留主题色 / hover 长预览宽版
+
+- **用户定稿（261017）**：① **文字选中背景不能是主题色**；② **表格（内容）选区的边框用主题色**（暖色下橙框是有意的）；③ "hover 弹窗"= **内容 hover 预览**（附件/图片名、长文本/MD/AI 整段内容），不是选区工具条/菜单浮层。
+- **落地（8 文件）**：
+  - `--lake-select-bg` 由 `rgba(63,95,160,.16)`（主色系蓝）改为**主题无关中性灰 `rgba(128,130,134,.38)`**（桌面 [themes/base.css](lake-notes-electron/src/styles/themes/base.css#L166) + 移动 [mobile/theme/tokens.css](lake-notes-electron/src/mobile/theme/tokens.css#L179)，一套值跨主题）；影响全局 `::selection`（文档正文 / 输入框 / 多维表文字）、内核选区令牌、AI 自绘高亮、树箭头 hover 底色。
+  - 表格/多维表单元格选区环**继续用 `--lake-accent`**（[bitableEditor.css](lake-notes-electron/src/features/bitable/bitableEditor.css#L341) 加注释锁定，防以后被"内容选中去主题色"误改）。
+  - `.ln-tip` 新增 **`--wide`** 变体（≤460px / max-height 50vh / 内滚 / pre-wrap）；[NativeTitleTips.tsx](lake-notes-electron/src/components/ui/NativeTitleTips.tsx) 对 **>80 字或含换行**的 `title` 自动启用 ⇒ 长内容预览不再被挤成 260px 竖条，短提示不变。表面仍只用 `--lake-tooltip-bg/fg`（主题无关）。
+- **实测（隔离实例 + 合成夹具）**：多维表文字选中背景 = 中性灰；单元格选区环浅色=墨蓝 / 暖色=橙；长 title 预览实测 `460×127`、class `ln-tip--wide`。证据 `.css-audit/selection-261017/`（gitignored）。
+- **护栏/基线**：`cssLayers` 的 kit.css 声明基线 **635 → 642**（+7 = `.ln-tip--wide`，一次性新增原语变体，已写理由）。
+- **门禁**：tsc 0 · vitest **270 文件 / 2065 例** ✓ · ui-metrics 0 ✓ · diff-check 0（全库跑时并行会话在途文件未纳入本批提交）。
+- **边界**：内核正文内的原生 `title` 仍被 `NativeTitleTips` 跳过（系统 tooltip），未动；夹具里没有真实 MD/AI 字段，长预览用 title 探针实测（同一路径）。
+- **状态**：待提交（含上述 6 文件；并行会话在途改动未纳入）。
+
 ### 261017(二) · 多维表列宽回归修复（复选框列被拉宽 / 新建行缺边框）
 
 - **用户报**（截图）：新建的**单字段多维表**里，复选框/编号列被拉得很宽、新建行左右很长、编号列右侧**缺边框**（与选中色无关）。

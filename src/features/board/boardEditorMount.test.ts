@@ -37,6 +37,11 @@ describe("画板编辑器护栏", () => {
     expect(EDITOR.slice(start, end)).toContain("if (readOnlyRef.current) return;");
   });
 
+  it("进画板默认选择工具（261017 用户要求）", () => {
+    const CORE = readFileSync(new URL("../../../vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.tsx", import.meta.url), "utf8");
+    expect(CORE).toContain("initialToolState={{ pointer: PlaitPointerType.selection }}");
+  });
+
   it("BoardEditor 不引用 Lake 内核（独立画板 = 零内核实例）", () => {
     expect(EDITOR).not.toMatch(/from "\.\.\/editor\/EditorTab"/);
     expect(EDITOR).not.toMatch(/lakeRuntime|createLakeDocument|EditorTab/);
