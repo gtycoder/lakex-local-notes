@@ -1,6 +1,6 @@
 # 内核能力复用综合检查（261015）— 逐条方案清单
 
-> **状态**：只读审计 + 方案。**本次未修改任何产品代码**，只新增本文档。
+> **状态**：只读审计 + 方案 + 结案登记。**本次未修改任何产品代码**，只新增本文档；261017 完成一轮**结案/回填**（见 §0 当前状态、§3 各条结案行、§9）。
 > **目的**：找出「内核已经有能力，我们却自己实现 / 没接 / 需要自己拼」的地方，逐条列出并讨论，方向 = **能复用内核就复用内核，尤其 Lake 文档功能**；桌面端与移动端都查。
 > **用法**：每条按「现状 → 内核证据 → 判定 → 建议方案 → 代价/风险 → 验收」写；讨论时直接点编号（如 `B1`）。
 
@@ -18,11 +18,12 @@
 | **C 类** | 可用**组合调度内核多能力**替换我们自己的实现 | 5 | 第二批；其中 2 条需要你裁定 |
 | **D 类** | 内核**确实没有**（或官方要求使用方自实现） | 8 | **登记为"不再立项"**，避免反复讨论 |
 
-**优先顺序建议**：`B1 字数/统计` → `B6 文本增强补齐项` → `B3/B4/B5 块级命令原生化` → `C1 移动端面板条目改为内核派生` → `C3 卡片浮栏接内核 miniToolbar` → `B2 文档内查找/替换`。
+**当前状态（261017 结案后）**：B 类 9 条 —— **B1 已实施**、**B2 移动端已实施 / 桌面不做**、**B3/B5 结案不做**、**B7 结案已满足**、**B4/B8 已结案不做**、**B6 已定"不着急"**、**B9 结案保持现状**；C 类 5 条 —— **C1 用户明确不做**、**C3 已结案（命题不成立：块卡片浮栏是内核原生在跑；图片浮栏内核本构建不可用）**、**C5 保持现状**；**C2（浮栏/固定栏状态判据盘点）已于 261017 盘点后结案：已一致、无缺口**（逐项表见 §3.3）。新增 **B10**（导出占位，非内核复用、只登记）。
+⇒ **本审计的代码级待办已归零**，剩余只有"用户推迟项（B6 / C3）"与"新登记的功能缺口（B10）"。
 
-**进度**：**B1 已于 261016 实施并实测通过** ——字数统一走内核 `wordCount`，三处自研正则收口到单一来源；**B2（文档内查找）评估后决定不做**，为它加的宿主入口已整体回滚（内核自带的 ⌘F 查找替换开箱可用）。
+**进度**：**B1 已于 261016 实施并实测通过** —— 字数统一走内核 `wordCount`，三处自研正则收口到单一来源；**B2（文档内查找）**桌面评估后不做（宿主入口已回滚，内核 ⌘F 可用）、移动端已实施 `MobileFindBar`。
 
-**本次顺手发现的 6 处文档/检索口径漂移**见 §8（含 §5.9 的"未用"结论已过期、AGENTS §2⓪ 的图标族关键词不准确）。
+**文档/检索口径漂移**见 §8：261017 已回填 3 条（§5.9 的 `getSelectionContent`、AGENTS §2⓪ 的图标族/检索词），另 3 条已自然解决。
 
 ---
 
@@ -207,6 +208,7 @@
 - **建议**：把"把光标放进目标块 → `execCommand('selectAll')`"用于块选择；`selectAllDoc` 用在"整篇操作"（如导出、AI 全文）。
 - **风险**：低；但"仅选中节点本身（非内容）"内核没有对应命令，那部分仍需手工 range（§5.9 已写明）。
 - **验收**：`blockMenuNative.test.ts` / 真实端手动多块选择。
+- **❌ 结案（261017，用户定不做）**：核对全仓 —— `selectAll` 仅 1 处（`CardContextMenu.tsx:106` 卡片菜单）、`selectAllDoc` **0 处**；无消费方、手工 Range 无缺陷证据 ⇒ 按 AGENTS §3#17 不做，不引入"两套全选并存"。
 
 #### B4 容器/块移动：统一"摘节点→插入" vs 内核移动族
 - **现状**：`moveBlockNative` 对非卡片块统一"摘节点 → 落点插入"；`moveCollapse`/`moveColumns`/`moveColumn`/`moveTable`/`moveImage` **0 处使用**。
@@ -240,6 +242,7 @@
 - **内核证据**：§5.9（**其中"getSelectionContent 未用"一句已过期**，见 §8）。
 - **判定**：类型 4（小项）。
 - **建议**：并入 B1 一起做（选区字数 = `wordCountSelection`）。
+- **❌ 结案（261017，用户定不做）**：全仓无"选区字数"UI（字数只有状态栏/属性面板的**全文**口径），`wordCountSelection` **0 使用**；真要选区计数属**产品新功能**（另立项），不属"内核复用"。
 
 #### B6 移动端文本增强缺项：内核命令齐全，我们没接（**覆盖缺口表**）
 - **现状**（`docs/MOBILE-TECH-STACK.md` §八 编辑缺口 + 本次代码核对）：
@@ -259,12 +262,40 @@
 - **风险**：低-中；移动端`queryCommandValue` 时序（§5.32 ④⑤）已有结论，照抄即可。
 - **验收**：设备实测每项落盘形态（参照 §5.32 的表格口径）+ `edit-surface-invariants.mjs`。
 
+**实施记录（261017，用户点单布局；真机已验证）**
+
+- **Aa 面板**：样式行 5 → **7**（H5/H6，`STYLE_BLOCKS`）；行内标记行 5 → **6**（新增「清除格式」）；一级面板统一 `--lake-bg-block` 灰底 + 白卡（与「＋」「更多」同款）。
+- **「更多」面板 = 分行白卡 + 每项文字说明**（261017 三改用户点单）：① 公式 · 上标 · 下标 · 格式刷（图标 + 文字）② 首行缩进 · 减少缩进 · 增加缩进（图标 + 文字）③ **行高**（行首「行高」标签 + 6 个数值 1 / 1.15 / 1.5 / 2 / 2.5 / 3，取自内核 `lineHeight` 取值域）④ 画图占位 5 项（**纯文字** + 置灰）。格式刷激活后**自动收面板 + 放回输入法**（两步模式）。
+- **主工具栏**（261017 二改/三改/四改）：**加粗放回原位**（Aa 之后、列表之前）；**撤销 / 重做在更多之后**；中间 8 个按钮**保持原尺寸/间距（各 49px）、在横滑区内左右滑动**（393 工具栏 / 344 滚动区 / 392 内容 ⇒ 可滚 48px；`data-prevent-swipe` 防外壳抢手势）；**键盘键固定在最右端不参与滚动**（用户 261017 定，右侧间隙 0）。
+- 落点：`EditorDock.tsx`（`LINE_HEIGHT_VALUES` / `moreRows` / `rowBtn` / `inlineMarks` / `runPanelAndClose`）· `editor-dock.css`（一级面板灰底 + `.med-f-btn:disabled`）· `STYLE_BLOCKS` · `mobileLayers` 基线 228→230。
+- **设备实测（真机：小米 2109119BC / HyperOS V816 / Android 14，CDP 真点按 + 属性 diff）**：
+
+  | 命令 | 结果 | 落盘证据 |
+  | --- | --- | --- |
+  | style h5 / h6 | ✅ | 块标签 → `ne-h5` / `ne-h6` |
+  | 加粗 | ✅ | `ne-text` 加 `ne-bold` |
+  | 清除格式 | ✅ | `ne-bold` 被移除（块级样式保留） |
+  | 上标 / 下标 | ✅ | `ne-sup` / `ne-sub` 互斥（加 sub 同时移除 sup） |
+  | 增加 / 减少缩进 | ✅ | 块加 / 移除 `ne-indent` |
+  | 首行缩进 | ✅ | 块加 `ne-text-indent` |
+  | 行高 1.5 | ✅ | 块加 `ne-line-height="1.5"` |
+  | 格式刷 | ✅（模式激活） | 点后**面板自动收起**；取格式后的目标点击未在探针内验证 |
+
+  - 面板结构（二改后实测）：Aa = 6 行（样式行 7 项 / 行内 6 项 / 对齐+列表 / 字色 / 背景色 2 行 / 字号 8 档）；「更多」= **4 行白卡**（4 / 3 / 6 / 5 项，零截断，底色同为 `rgb(244,246,248)`）；主工具栏 = 插入 / 字体 / 列表 / 待办 / 更多 / 撤销 / 重做 / 键盘（**8 × 49px，overflow 0**，无「加粗」）。
+  - 追加实测：工具栏「撤销 / 重做」可用 —— 加粗 ⇒ 撤销移除 `ne-bold` ⇒ 重做恢复；「更多」行式按钮仍驱动同一批命令（行高 → `ne-line-height`、首行缩进 → `ne-text-indent`、上标 → `ne-sup`）。
+  - **三改/四改实测**：横滑区内 = 插入 / 字体 / **加粗** / 列表 / 待办 / 更多 / 撤销 / 重做（8×49px，`overflowX:auto`、`touch-action:pan-x`、`data-prevent-swipe`，可滚 48px 且「重做」可达）；**键盘键固定在右端**（滚动前后 x 均为 344、右侧间隙 0）；「更多」4 行 —— 公式/上标/下标/格式刷（图标+文字）、首行缩进/减少缩进/增加缩进（图标+文字）、行高（标签 + 数值 6 格）、画板/流程图/UML 图/思维导图/文本绘图（纯文字、置灰）；**零截断**、底色 `rgb(244,246,248)`。
+  - **未做**：`typography` / `paragraphSpacing`（语义未文档化、桌面也未暴露，按 §3#17 不立项）。
+  - **附带修复 A（261017，验证 B6 时发现）**：移动端**文档编辑器**实例没有 `.renderer`，而 dock 的命令执行只走 `editor.renderer.execCommand` ⇒ 文档里加粗/撤销/重做/插表格/附件/大纲展开**全部静默 no-op**（小记实例有 `.renderer`，所以那边正常）。已抽 `src/mobile/editor/execCommand.ts` 的 `execEditorCommand`（`renderer.execCommand → editor.execCommand` 回退）作为**唯一命令入口**，替换 6 处调用点；新增 6 例单测（含**源码级禁令**：`src/mobile` 不得再写 `renderer?.execCommand`）。
+  - **附带修复 B（261017，用户报「打字快了能撤销、慢一点撤销不了」）**：**输入法组合中（候选未上屏）**时内核 history 里还没有这一笔，点撤销/重做**完全无反应**（设备实测：组合态连点 3 次撤销文字不动；组合提交后再撤即正常）。已修：dock 的 `runInline` 在命令执行前检测 `compositionstart/end`，组合中先 `blur→focus` 触发提交、等一拍再执行命令。设备实测：组合 `nihao` → 点撤销 → **一次即清空**；组合 `abc` → 点加粗 → 文本正常提交保留；普通输入撤销/重做均正常。护栏：`dockPanelFocusGuard.test.ts` 新增 1 例。
+
 #### B7 导出：内核无 export 命令 ⇒ 应走 `getDocument(type)`
 - **现状**：`src/components/ExportSubmenuItem.tsx`（markdown/html/pdf）；落地实现需按只读范围核对（本次未展开 electron 侧）。
 - **内核证据**：yuque-re 总账：**无 export 命令**；官方 07 `getDocument(type)` 支持 `text/markdown|text/html|text/plain|json`。
 - **判定**：类型 4（应确保导出**走内核序列化**，而不是自研 HTML/MD 转换）。
 - **建议**：核对现有导出路径；若存在自研转换，替换为 `getDocument`。
 - **验收**：导出产物与内核 `getDocument` 输出逐字节对比。
+- **✅ 结案（261017）：已满足，无需改代码**。证据：保存时缓存由内核序列化生成 —— `getDocument("text/markdown")` + `cleanLakeMarkdown`、`getDocument("text/plain")`（`src/hooks/useDesktopHandlers.ts:49-50`、`src/desktop/desktopTypes.ts:90-91`）；导出在主进程读该缓存（`electron/noteExport.ts` 的 `readNoteCaches`），HTML 只做 `mdToHtml` 包装（主进程没有内核实例，这是正确架构）。
+  **附带发现（另行登记为 B10）**：usheet 的 CSV/Excel 与 board 的 PNG/SVG 导出仍是 `disabled` 占位 —— 这是**功能缺口**，不属"内核复用"。
 
 #### B8 `envAdapter` 官方适配口整体未接线（6/7 口缺失，1 口为行为等价）
 - **现状**：全仓没有传 `envAdapter` 选项；图片放大预览是 `attachImagePreviewClick`（DOM 点击）+ `extractImagesFromContent`（正文解析兜底）；外链靠 Electron/Capacitor 壳层。
@@ -279,6 +310,13 @@
 - **判定**：类型 3（可能可以用官方配置替代"拦截改写"）；**也可能官方就是没给自动识别** ⇒ 需读码确认。
 - **建议**：先查内核是否有扩展名→category 的官方入口；没有就保持并补注释（现状已有注释）。
 - **风险**：低（不改也行）。
+- **✅ 结案（261017）：保持现状**。官方核对结论：**06 配置上传 / 63 附件 / 67 音频 / 68 视频** 全部只有各卡 `createUploadPromise` / `accept` / `uploadFileURL` 等配置，**没有**"按扩展名自动选 category"的入口；内核分发靠 `readData("Files", files, {category})` ⇒ 宿主侧 `beforeExecCommand` 改写是**唯一**可行桥接（现实现已带完整机制注释）。不改代码。
+
+#### B10 导出占位：usheet 的 CSV/Excel、board 的 PNG/SVG（**非内核复用、功能缺口，只登记**）
+- **现状**：`src/components/ExportSubmenuItem.tsx:55-68` 两类导出是 `Placeholder`（`disabled` + title「开发中」）；doc 的 markdown/html/pdf 与 bitable 的 csv/zip 已实现。
+- **判定**：不属于"内核已有能力而我们自研"，而是**功能未做**；且落点在 `src/components/`（另一会话的 CODE-REVIEW 写域）。
+- **建议**：**本审计只登记、不动手**；要做时按文档类型逐项立产品需求（usheet 取数走 Univer 序列化、board 走 Drawnix 导出），并单独立项。
+- **验收（将来）**：导出产物可打开、与原文档数据一致。
 
 ---
 
@@ -291,6 +329,7 @@
 - **建议**：面板条目的"存在/名称/分组"从内核注册表派生（**显式排除**：第三方服务组、移动端不打算给的项目），命令执行仍按现表。好处：内核升级新增卡片时面板自动跟上，避免"内核有、我们面板没有"。
 - **风险**：中——派生会引入"内核配置里的隐藏项"（如 `custom-text-to-diagram`）需要排除清单；组名有重名坑（`group-files` 同时是"程序员"和"小工具"，§5.23 提醒只能按 `title` 找）。
 - **验收**：`insert-panel-geometry.mjs`（G1–G6）+ 条目集合与内核注册表的对拍脚本。
+- **❌ 结案（261017，用户明确不做）**：① 现有排布（两组 8+10 / 4 列 / 顺序 / 末行 2 项）是用户 261015 **亲自定了四轮**的产物，派生化会直接改动它；② 收益仅"内核新增卡时面板自动出现"，**无观测到的痛点**；③ 18 项里拍照/图片/附件/表情/状态/日期/文档引用都是自定义 helper，派生后仍需"内核 item → 我们的 action"映射 + 排除清单，复杂度不低。⇒ 按 AGENTS §3#17 不做。
 
 #### C2 浮动栏与固定栏共用内核状态/记忆
 - **现状**：active 判定走 `queryCommandValue`（内核），颜色记忆走 `IToolbarEditorService`（内核）——**已经是对的**。
@@ -298,6 +337,22 @@
 - **判定**：类型 3（已部分落地）。
 - **建议**：把"还有哪些状态是我们自己算的"列一遍（如段落样式`style`、字号`fontsize`、对齐`alignment` 是否全走内核查询），只补差额；**不新增**并行判据。
 - **验收**：切换选区时固定栏与浮栏高亮一致（§5.10 七的"晚一拍"口径）。
+- **✅ 结案（261017，只读盘点）：已一致，无缺口**。逐项判据来源：
+
+  | 状态 | 来源 | 自算？ |
+  | --- | --- | --- |
+  | 段落样式 / 字号 / 对齐 / 字色 / 底色 | 浮栏 `queryCommandValue`（`style` / `fontsize`(false) / `alignment` / `color` / `bgColor`） | 否 |
+  | 加粗 / 斜体 / 下划线 / 中划线 | `queryCommandValue` + `isMarkActive` | 否 |
+  | 行内代码 | `queryCommandState('code')`（Executed=1 / Unavailable=-1，内核 descriptor） | 否 |
+  | 列表 / 待办 / 引用 active | `queryCommandState`（内核 CommandState 数值） | 否 |
+  | 按钮 disabled | `queryCommandEnabled` / `state === -1`（按各自 descriptor） | 否 |
+  | 颜色记忆（上次色） | 内核 `IToolbarEditorService._descriptorDefines[color|bgColor].pluginContext`（`colorMemory.ts`；无内核上下文时才本地兜底） | 否 |
+  | 图片卡状态（原尺寸 / 当前宽 / 旋转 / 样式 / 链接 / 标题 / 边距 / 链接打开方式） | 内核卡实例 `cardData` getters（`imageCardOps.ts`） | 否 |
+  | 图片块级对齐 | 读内核渲染的 `[ne-alignment]` DOM 属性 | **是（唯一例外）**：卡片选中态没有文字选区，`queryCommandValue('alignment')` 不可用 ⇒ 读内核自己写的属性，语义等价 |
+  | 浮框显隐 / 定位 / AI 自绘高亮几何 | DOM Range/Rect（内核无查询口） | 必然（非格式状态） |
+  | 自定义工具项（小记 日期/表情/附件） | 只有 `disabled` 生命周期，无格式态 | 不适用 |
+
+  ⇒ **没有"我们自己算的格式状态"**；唯一非 query API 的图片对齐读的是内核渲染属性。**不做代码改动**（用户 261017 已同意盘点即结案）。
 
 #### C3 卡片/容器浮栏：接内核 `miniToolbar`，我们只补内核没有的项
 - **现状**：`CardContextMenu.tsx`（自绘卡片右键菜单，含"全选"等）+ 图片浮栏（`SelectionToolbar` 的 `renderImage`，已在用 `updateImageData`/`deleteCard`）。
@@ -306,6 +361,13 @@
 - **建议**：图片/卡片上的"复制/删除/复制链接/剪切/间距/全屏/宽度"改用内核 inner 浮栏，我们只保留内核没有的项（如 AI、批量应用）；用 `registerFilterMiniToolbarItems` 隐藏不要的项。
 - **风险**：中——涉及已有视觉与交互（用户已定稿图片浮栏），**改前需你确认**；且 hidden window 下 rAF 合并刷新会失效（§5.10 七的坑）。
 - **验收**：图片/卡片浮栏逐项实拍 + `selectionToolbar.wiring.test.ts`。
+- **✅ 结案（261017，用户定结案）：命题不成立 / 已在使用**。取证（读码 + vendor/wrapper 配置）：
+  - **块卡片/容器**：内核 miniToolbar **本来就在跑**（hover 触发；`ne-card` / `ne-table-hole` / `ne-alert-hole` / `ne-container-hole`）；`lakeRuntime.ts` 的 `setupCardToolbarHoverBridge` 只是修"鼠标移向浮栏被 mouseleave 提前关闭"的可用性 bug ⇒ 是**在用**的证据，不是替代实现。我方未配 `disabledItems`/filter（全仓 0 命中）。
+  - **inline 图片**：本构建原生 cardToolbar 的 **focus 通路是空桩**（vendor `plugin/imageToolbar/index.ts` 注释：`getToolbarControllerConfig` 返回 undefined，只有 mouseenter 渲染）；wrapper `configs/image.ts` 因此显式设 `showMiniToolbarWhen:"never"` + `miniToolbar:[]`，并另写 `ImageToolbar.tsx`（945 行）——**但它只挂在 `LakexEditor.tsx:226`，而我们直接 `Doc.createOpenEditor`（`lakeRuntime.ts:741`）⇒ 在产品里从不运行**（AGENTS §2⓪ 的坑）⇒ 图片用内核浮栏**不可行**。
+  - **我们自研的图片浮栏**（`SelectionToolbar.renderImage`，用户 260924 定稿）**观感/几何全复用内核类** `.ne-card-toolbar*` / `.ne-ui-card-toolbar-divider`（`SelectionToolbar.tsx:876-895`），能力全走内核命令（`updateImageData` / `deleteCard` / `setCro` / `cardBatchApply`）⇒ 不存在"另造一套视觉"。
+  - **右键菜单** `CardContextMenu` = 宿主文件操作（打开/显示位置/另存为/重命名/复制路径/图片/剪切），内核没有；仅"剪切/复制"与内核浮栏语义相邻但不同（系统剪贴板 vs 文档结构）。
+  - **唯一残留**：内核浮栏内置项未按卡片类型过滤（`comment` / `maximize` / `widthMode` 对部分卡片可能无意义）——**未实测、无用户反馈/缺陷证据**，按 AGENTS §3#17 不立项。
+  ⇒ **不改代码**。
 
 #### C4 块菜单块级动作原生化
 - **现状**：`blockHandleMount.ts` 已挂 vendor `BlockHoverHandle`（因为 `createOpenEditor` 不自动挂），菜单动作要求走内核命令（文件头已写安全边界）。
@@ -339,13 +401,15 @@
 
 ---
 
-## 4. 建议的讨论顺序（按收益/风险）
+## 4. 当前待办（261017 更新）
 
-1. **第一批（低风险、可量化、纯收益）**：`B1` 字数统计、`B6` 移动端文本增强补齐项。
-2. **第二批（小改动、要走内核命令）**：`B3+B4+B5+C4`（块选择/容器移动/选区内容，一起做一次）。
-3. **第三批（结构性，需要你裁定）**：`C1` 移动面板条目派生、`C3` 卡片浮栏接 `miniToolbar`、`B2` 文档内查找/替换。
-4. **第四批（保持 + 登记）**：`A1–A6`、`D1–D8`（只回填契约，不改代码）。
-5. **顺带**：`B7` 导出核对、`B9` 媒体路由读码确认、`B8` envAdapter 探针。
+> 原"建议顺序"已随结案重写；逐条状态看 §3 的结案行与 §9。
+
+1. **无未处理项**（C2 已盘点结案）。
+2. **已实施、待用户验收**：`B6` 移动端文本增强缺项（261017：H5/H6 + 清除格式 + 「更多」7 项 + 行高 6 档 + 一级面板灰底；真机逐项实测通过）。
+3. **只登记、不动手**：`B10` 导出占位（非内核复用、功能缺口）。
+4. **保持 + 契约已回填**：`A1–A6`、`D1–D8`。
+5. **已结案**：`B1`（实施）· `B2`（移动实施/桌面不做）· `B3/B5`（不做）· `B4`（不做）· `B7`（已满足）· `B8`（不做）· `B9`（保持）· `C1`（不做）· `C2`（已一致）· `C5`（保持）。
 
 ---
 
@@ -364,10 +428,10 @@
 ## 6. 需要你裁定 / 需要先实测的问题
 
 **需要裁定**
-1. 移动端「＋」面板条目是否允许改成"内核注册表派生 + 自绘 UI"（C1）？会小幅改变面板内容（跟随内核注册表）。
+1. ~~移动端「＋」面板条目是否允许改成"内核注册表派生 + 自绘 UI"（C1）？~~ **已裁定（261017）：不做**（用户明确不想做；理由见 §3.3 C1 结案行）。
 2. ~~是否要做**文档内查找**（B2）~~ **已收口（261016）**：**桌面不做宿主入口**（内核自带 ⌘F 面板可用，我加的入口已回滚）；**移动端已实施**——内核面板在移动端不存在，自研 `MobileFindBar`，入口 = 工作区顶栏右上角。
-3. 卡片/图片浮栏是否收回内核 `miniToolbar`、我们只补内核没有的项（C3）？会动已定稿的浮栏观感 —— **用户 261016 定：先不做，需要讨论**。
-4. 移动端文本增强缺项（B6）是否按"下一会话焦点"全做？—— **用户 261016 定：先不做（属添加项，不着急）**。
+3. 卡片/图片浮栏是否收回内核 `miniToolbar`、我们只补内核没有的项（C3）？会动已定稿的浮栏观感 —— **用户 261016 定：先不做，需要讨论**。**✅ 结案（261017，用户定结案）**：命题不成立/已在使用，证据见 §3.3 C3 结案行；不改代码。
+4. 移动端文本增强缺项（B6）是否按"下一会话焦点"全做？—— **用户 261016 定：先不做（属添加项，不着急）**。**（261017 重申：不着急，不排期）**
 5. ~~字数口径若从"我们正则"改成"内核 `wordCount`"，数字可能变化（B1），是否接受？~~ **已实施（261016）**：数字确实变了（见 §9.1 的前后对比）。展示形态：**用户 261016 定 = 保持现状**（状态栏只显示「字数」，不加并列字符数）。
 
 **A 批次实测结果（261016；探针为临时件，不入库）**
@@ -405,12 +469,12 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 
 ## 8. 本次顺手发现的文档漂移（建议回填）
 
-1. **`docs/LAKEX-CONTRACT.md` §5.9 的"候选原生化改造"里，`getSelectionContent` 标着"未用"——已过期**：`src/features/editor/blockHandleMount.ts:47` 在用（块菜单取 Markdown）。
+1. **`docs/LAKEX-CONTRACT.md` §5.9 的"候选原生化改造"里，`getSelectionContent` 标着"未用"——已过期**：`src/features/editor/blockHandleMount.ts:47` 在用（块菜单取 Markdown）。**✅ 已回填（261017）**：§5.9 该行已改为「均已用」。
 2. **`HANDOFF.md` §0 的 261015 节写着"未提交/未推送"**，但仓库实况是：该批已提交 `fc87325`，与 `origin/master` 0 ahead / 0 behind、工作树干净。
 3. **（261016 已结案）`§5.27` 的 `previewImgs` 标"✅ 已实现"需要写清边界**：我们的代码里**没有传 `envAdapter.previewImgs`**（全仓无 `envAdapter:` 选项），图片放大是 `attachImagePreviewClick` 的 DOM 点击 + `extractImagesFromContent` 正文解析兜底，原因是本构建 `allowClickToMaximize` 无效（`src/features/editor/LakeEditor.tsx:107`）。⇒ 建议改成"行为等价、非适配口实现"，该待实测**已结案（261016）**：本构建点击 inline 图片卡确实**不派发**（接不接 envAdapter 都不发），详见契约 **§5.40** 与本文件 B8。
 4. **字数统计存在两套自研口径**（`src/core/docStats.ts:21` 与 `src/mobile/bridge.ts:568`）：即使不接内核 `wordCount`，这两处也该收口到单一来源。
-5. **`AGENTS.md` §2⓪ 的检索提示"图标族 `ne-t-*`"不准确**：vendor 侧 `ne-t-*` 只在 wrapper 自己的 sprite（`src/components/lakex/icon.tsx`，共 8 个：`ne-t-link`、`ne-t-image-crop/reset/rotation/size/style/title`、`ne-t-batch-apply`），**不是内核工具栏图标族**；内核内置图标名是 `editor-main-*`（≈74 个，JS 内联，`style.css` 里 0 条），工具栏类名族是 `ne-ui-toolbar-*`（36 条）、卡片族 `ne-card-*`（210 条）。建议把 AGENTS §2⓪ 的检索关键词改成 `editor-main-*` / `ne-ui-toolbar-*` / `ne-card-*`。
-6. **`"insert-panel"` 在 bundle 里 0 命中**：真实标识符是 `quickInput` / `slash` / `cardSelect` + 命令 `insertSlash`（检索时别用"insert panel"当关键词）。
+5. **`AGENTS.md` §2⓪ 的检索提示"图标族 `ne-t-*`"不准确**：vendor 侧 `ne-t-*` 只在 wrapper 自己的 sprite（`src/components/lakex/icon.tsx`，共 8 个：`ne-t-link`、`ne-t-image-crop/reset/rotation/size/style/title`、`ne-t-batch-apply`），**不是内核工具栏图标族**；内核内置图标名是 `editor-main-*`（≈74 个，JS 内联，`style.css` 里 0 条），工具栏类名族是 `ne-ui-toolbar-*`（36 条）、卡片族 `ne-card-*`（210 条）。**✅ 已回填（261017）**：AGENTS §2⓪ 已改成 `editor-main-*` / `ne-ui-toolbar-*` / `ne-card-*`。
+6. **`"insert-panel"` 在 bundle 里 0 命中**：真实标识符是 `quickInput` / `slash` / `cardSelect` + 命令 `insertSlash`（检索时别用"insert panel"当关键词）。**✅ 已回填（261017）**：已补进 AGENTS §2⓪ 的检索提示。
 
 ---
 
@@ -429,6 +493,18 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 | 261016 | **收口：查找条查漏补缺** | ✅ 已实施 + 设备复验 | `MobileFindBar.tsx`（正文变化自动重扫 + 命中上限显示 `600+`）· `mobileFind.ts` 新增纯函数 `reconcileMatchIndex` · `mobileFind.test.ts`（7 例）· `DocumentEditor.tsx` 传 `revision` | 设备实测：搜「人类」`1/3` → 正文再插一处 ⇒ **自动 `1/4`**、关闭后 `highlights=0`；门禁 tsc ✓ / vitest **266 文件 2050 例** ✓ / `ui-metrics` ✓ / `check:mobileui` ✓ |
 | 261016 | 移动 6 态基线**重烤**（收口第二次） | ✅ 已重烤 + 连跑两次 0 差异 | `scripts/mobile-audit/baseline/mobile-snap.json`；成因写进 `scripts/mobile-audit/README.md` | 定位到差异行 = `ne-p$<uuid>-body#0`：**指纹 row key 里带文档节点 id** ⇒ 重灌夹具（`pm clear`）必换 id，元素数相同也会红 ⇒ 必须重烤 |
 | 261016 | 其余 A/C/D 条目 | ⏳ 待讨论 | — | §3 · §4 的优先级建议 |
+| 261017 | **B3 全选原生化** | ❌ 结案：用户定不做 | 无代码改动 | `selectAll` 仅卡片菜单 1 处（`CardContextMenu.tsx:106`）、`selectAllDoc` 0 处；无消费方/无缺陷证据 |
+| 261017 | **B5 选区字数** | ❌ 结案：用户定不做 | 无代码改动 | 全仓无选区字数 UI，`wordCountSelection` 0 使用；属产品新功能 |
+| 261017 | **B7 导出核对** | ✅ 结案：已满足 | 无代码改动 | 缓存由内核 `getDocument("text/markdown"/"text/plain")` 生成（`useDesktopHandlers.ts:49-50`），导出读缓存 |
+| 261017 | **B9 媒体路由核对** | ✅ 结案：保持现状 | 无代码改动 | 官方 06/63/67/68 无扩展名→category 入口；`beforeExecCommand` 是唯一宿主侧桥接 |
+| 261017 | **C1 移动面板派生** | ❌ 结案：用户明确不做 | 无代码改动 | 排布由用户 261015 定稿；无观测痛点；派生仍需逐项 action 映射 + 排除清单 |
+| 261017 | **B10 导出占位（新登记）** | ⏳ 只登记（非内核复用） | 无代码改动 | usheet CSV/Excel、board PNG/SVG 为 `disabled` 占位（`ExportSubmenuItem.tsx:55-68`） |
+| 261017 | **移动端文档命令静默失效修复**（验证 B6 时发现） | ✅ 修复 + 单测 | 新增 `src/mobile/editor/execCommand.ts`（唯一入口）+ 替换 EditorDock / EditorDockHost / QuickNoteComposer / OutlineSheet 6 处调用点 | 根因：文档编辑器实例无 `.renderer` ⇒ dock 命令全部 no-op；回退 `editor.execCommand`；`execCommand.test.ts` 5 例 + 1 例源码级禁令，全库 vitest 270 文件 / 2063 例 |
+| 261017 | **输入法组合中撤销无效修复**（用户报「慢打不能撤销」） | ✅ 修复 + 设备实测 | `EditorDock.tsx` 的 `runInline`：组合中先 `blur→focus` 提交 composition 再执行命令；护栏 `dockPanelFocusGuard.test.ts` +1 | 设备实测：组合态 `nihao` → 撤销 → 一次清空（修复前连点 3 次无反应）；普通输入撤销/重做正常 |
+| 261017 | **契约回填** | ✅ 完成 | `docs/LAKEX-CONTRACT.md` §5.9 · `AGENTS.md` §2⓪ | 见 §8 的「✅ 已回填（261017）」标注 |
+| 261017 | **C2 固定栏/浮栏状态判据盘点** | ✅ 结案：已一致，无缺口 | 无代码改动 | 逐项表见 §3.3 C2；唯一例外 = 图片块级对齐读内核 `ne-alignment` DOM 属性（卡片选中无文字选区，query 不可用） |
+| 261017 | **C3 卡片/容器浮栏接 `miniToolbar`** | ❌ 结案：命题不成立/已在使用 | 无代码改动 | 块卡片浮栏 = 内核原生在跑（`setupCardToolbarHoverBridge` 是可用性补丁）；inline 图片原生 focus 通路空桩 + wrapper 已 `never` ⇒ 不可行；我方图片浮栏复用 `.ne-card-toolbar*` 类 + 内核命令 |
+| 261017 | **B6 移动端文本增强缺项** | ✅ 已实施 + 真机逐项实测 | `EditorDock.tsx`（H5/H6 · 清除格式 · 上标/下标 · 首行缩进 · 缩进 · 格式刷 · 行高 6 档 · 灰底）· `editor-dock.css` · `STYLE_BLOCKS` · `mobileLayers` 基线 228→237 · `MOBILE-DESIGN.md` | 真机（小米 2109119BC / Android 14）属性 diff：`ne-h5/h6`、`ne-bold`、`ne-sup/ne-sub`、`ne-indent`、`ne-text-indent`、`ne-line-height`；格式刷激活后面板自动收起；面板 7 样式项 / 6 行内项 / 更多 20 项、底色一致 |
 
 > 口径：**状态**只用三档 —— ⏳ 待讨论 / 🔧 进行中 / ✅ 已实施（+ 实测）。每条实施必须同时写：落地文件、门禁结果、运行时证据；改到内核契约的观测回填 `docs/LAKEX-CONTRACT.md`。
 
@@ -451,3 +527,5 @@ sed -n '1,40p' vendor/lakex-doc-react/docs/execCommand-reference.md
 3. `src/core/textStats.ts` 是本会话新建的**字数/字符数唯一来源**（B1）：并行会话做"公共方法抽提"时请把它当既有来源，**不要另建第二份**；同类语义（去标签、纯文本统计）如需抽提，落点应指向它。
 4. 只读探针放 `/tmp` 或新增独立脚本，不改既有脚本；证据与结论回填本文件 §9 与 `docs/LAKEX-CONTRACT.md`。
 5. 提交前先 `git status` 看对方是否有在途改动；`git add` **只加自己这次动过的文件**（本会话已有一次 push 顺带带上对方 `e154ef9` 的记录）。
+
+> **261017 本会话边界**：只做本文档范围内的结案登记 + §8 回填；**未碰** `HANDOFF.md` / `scripts/ui-metrics.mjs` / 样式层 / `src/components`（另一会话正在做 CODE-REVIEW 整改）。

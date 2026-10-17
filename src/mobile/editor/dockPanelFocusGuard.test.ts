@@ -125,6 +125,17 @@ describe("编辑面：单一来源与不变量", () => {
     expect(DOCK).not.toContain("setPanelHeight");
   });
 
+  it("工具栏命令前提交输入法组合（261017 用户报「打字慢了撤销没反应」）", () => {
+    // 组合中（候选未上屏）时内核 history 还没这一笔 ⇒ 撤销/重做会静默无效；必须先 blur→focus 提交
+    expect(DOCK).toContain('addEventListener("compositionstart"');
+    expect(DOCK).toContain('addEventListener("compositionend"');
+    const run = handlerBody(DOCK, "runInline");
+    expect(run).toContain("composingRef.current");
+    expect(run).toContain("blur()");
+    expect(run).toContain("focus()");
+    expect(run, "提交后要等一拍再执行（compositionend 才进得去 history）").toContain("setTimeout");
+  });
+
   it("hook 必须在早退之前（文档从阅读态切编辑态会崩）", () => {
     // ⚠️ 早退位置必须用"独占一行"的正则来找：源码注释里也提到过这行字，indexOf 会命中注释 ⇒ 假红。
     const dockAt = /\n\s*if \(!editing\) return null;/.exec(DOCK)?.index ?? -1;

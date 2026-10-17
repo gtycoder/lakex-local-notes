@@ -26,7 +26,7 @@ describe("editorCommands registry", () => {
   });
 
   it("style blocks are p/h1..h4", () => {
-    expect(STYLE_BLOCKS.map((b) => b.value)).toEqual(["p", "h1", "h2", "h3", "h4"]);
+    expect(STYLE_BLOCKS.map((b) => b.value)).toEqual(["p", "h1", "h2", "h3", "h4", "h5", "h6"]);
   });
 
   it("group filter returns only that group", () => {

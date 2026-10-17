@@ -556,23 +556,25 @@ txn.commit();
 
 命令式注册（**不在**上表，走 `registerCommand({…})`）：`alert`、`alertDelete`、`alertType`、`alertMove` ⇒ 合计 **151**。
 
+**261017 B6 实测（移动端 dock 接入，真机 CDP）**：`style(h5/h6)` / `clearFormat` / `sup` / `sub` / `indent` / `outdent` / `firstIndent` / `lineHeight` 均可用；引擎标记 = `ne-h5|ne-h6`、`ne-bold`、`ne-sup`/`ne-sub`（**互斥**）、`ne-indent`、`ne-text-indent`、`ne-line-height`。`lineHeight` 取值域 = **`[1, 1.15, 1.5, 2, 2.5, 3]`**（bundle `Ik.values`）；`paintFormat` 是**两步模式**（激活后去点目标）。
+
 **块编辑相关命令 → 我们现状**：
 
 | 我们的动作 | 内核命令 | 现状 |
 |---|---|---|
 | 删除块 / 剪切 | `delete`, `deleteByRange`, `deleteToBlockEnd` | ⚠️ `deleteByRange` **只删内容**（根级整块会在原位补空段落，见 §5.8.5）；整块删除改走**模型事务** `job.removeChild` + 选区复位（`removeBlockNodesNative`），`deleteByRange` 仅兜底 |
 | 复制/剪切到剪贴板 | `copy`, `cut`, `paste` | ✅ 已用 |
-| 取块内容 | `getNodeContent`, `getSelectionContent` | ✅ `getNodeContent` 已用；`getSelectionContent` **未用** |
+| 取块内容 | `getNodeContent`, `getSelectionContent` | ✅ 均已用：`getSelectionContent` 用于块菜单取 Markdown（`blockHandleMount.ts:47`；261017 纠正原「未用」结论） |
 | 插入/替换块 | `insertAtSelection`, `insertAtPosition` | ✅ 已用 |
 | 「转化为」容器/卡片 | **无** convert 命令；= `getNodeContent` + `insertAtSelection` | ✅ 已用（`convertBlockPreservingContent`） |
 | 卡片移动 | `moveCard`（+`cardValue`/`setCardValue`/`insertCard`/`insertCardAfter`/`focusCard`/`deleteCard`） | ✅ `moveCard` 已用 |
 | 容器/表格移动 | `moveCollapse`, `moveColumns`, `moveColumn`, `moveTable`, `moveImage` | ⚠️ **未用**：`moveBlockNative` 对非卡片块统一「摘节点 → 落点插入」（260918 起为节点级删除，见 §5.8.5） |
-| 全选 | `selectAll`（上下文感知）, `selectAllDoc` | ⚠️ **未用**：目前手工 `createRange` + `transformDOMRange` + `selection` |
+| 全选 | `selectAll`（上下文感知）, `selectAllDoc` | ⚠️ **未用**（261017 审计 B3 结案：不做——手工 Range 无缺陷证据、无消费方）；`selectAll` 仅卡片菜单 1 处在用 |
 | 选区内写入模型 | `selection` | ✅ 已用 |
 | 缩进 | `indent`/`outdent`/`canIndent`/`firstIndent` | ✅ 已用 |
 | 行内样式 / 列表 / 引用 | `bold`/`italic`/…, `unorderedList`/`orderedList`/`taskList`, `quote`, `plainText`, `hr` | ✅ 已用 |
 | ⚠️ `code`（行内代码）的**状态判据** | **`queryCommandState('code')`**（Executed=1 / Unavailable=-1），**不是** `queryCommandValue('code')` | ✅ 已用（261003 修） |
-| 选区字数 / 空判 | `wordCount`/`wordCountSelection`, `isEmpty` | ⚠️ **未用** |
+| 选区字数 / 空判 | `wordCount`/`wordCountSelection`, `isEmpty` | ✅ `wordCount` 已接（B1 状态栏/属性）；`wordCountSelection` **未用**（261017 审计 B5 结案：无选区字数 UI，不做） |
 | 批量卡片应用 | `cardBatchApply` | ⚠️ 语义**待实测**：当前只查到 `getValue` = `getNodesByName(name).some(isConnected)`（工具栏 enable 判定） |
 
 **两条容易踩空推断**：
@@ -582,7 +584,9 @@ txn.commit();
 **候选原生化改造（未做，按用户「能走内核就走内核」原则登记）**：
 1. `selectBlockInEditor`/`selectNodeInEditor`：把光标放进目标块后可直接 `execCommand('selectAll')`（上下文感知、容器 hole 自动选对层级）；仅「选中节点本身（非内容）」无对应命令，仍需手工 range。
 2. 容器重排优先用 `moveCollapse`/`moveColumns`/`moveColumn`/`moveTable`/`moveImage`，而非统一「读-插-删」（更省且保内部节点 id）。
-3. 选区取内容/字数改用 `getSelectionContent`/`wordCountSelection`。
+3. ~~选区取内容/字数改用 `getSelectionContent`/`wordCountSelection`~~ **已核（261017）**：`getSelectionContent` 已在用；`wordCountSelection` 无消费方、审计 B5 结案不做。
+
+> **261017 复核**：本清单 1/2/3 已由 `docs/KERNEL-REUSE-AUDIT.md` 的 B3/B4/B5 逐条核过，结论**均为不做**（理由见该文档 §3.2）。
 
 **枚举脚本（可复现）**：
 

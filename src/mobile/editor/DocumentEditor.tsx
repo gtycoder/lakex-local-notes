@@ -5,6 +5,7 @@
  * 大纲/文档列表的开关状态由宿主控制（传入 outlineOpen/docListOpen + onToggle*），宿主不传则内部自管。
  */
 import { EditorDockHost } from "./EditorDockHost";
+import { DOC_LIMITS } from "./snapshotUndoModel";
 import { MobileFindBar } from "./MobileFindBar";
 import { useCaretIntoView } from "../hooks/useCaretIntoView";
 import { showToast } from "../ui/toastBus";
@@ -142,7 +143,9 @@ export function DocumentEditor(props: DocumentEditorProps) {
       </section>
       {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏）。
           插入接线（隐藏 file input + insertFiles / table）在 EditorDockHost 里 —— 与小记编辑器共用同一份。 */}
-      <EditorDockHost editor={editorInstance} editing={editing} />
+      {/* 文档也用前端快照栈：kernel history 会把连续输入合并成一帧（"一次撤一段、再撤没有"），
+          用户 261017 要求文档也能逐步撤销；DOC_LIMITS 更保守（25 条 / 4M 字符）。 */}
+      <EditorDockHost editor={editorInstance} editing={editing} undoBackend="snapshot" undoLimits={DOC_LIMITS} />
       {!hidePanels && (
         <>
           <OutlineSheet open={outlineOpen} editor={editorRef.current} onClose={toggleOutline} />

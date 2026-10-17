@@ -17,7 +17,7 @@ Lake Notes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-
 - **长期焦点**：同步/存储热路径的性能与健壮性、移动端编辑收口、可维护性（安全/IPC/资源服务/渲染层职责/测试覆盖/拆大文件）。**待办只在 HANDOFF §3**。
 - 先修 Critical/Warning；**不在没有测试护栏的情况下做大规模架构重写**。
 - **内核（lakex）资料检索顺序**（凡涉及内核 API/配置/命令必走）：
-  ⓪ 先翻 vendored 源码树 `vendor/lakex-doc-react/src/**` ——**按「能力」搜**（类名族 `ne-card-toolbar`、图标族 `ne-t-*`），别只盯运行时 bundle。⚠️ 包里大量成品组件只挂在 vendor 的 `LakexEditor` 入口上，而我们是直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）⇒ **那些组件在我们的产品里从不运行**。
+  ⓪ 先翻 vendored 源码树 `vendor/lakex-doc-react/src/**` ——**按「能力」搜**（类名族 `ne-card-toolbar` / `ne-ui-toolbar-*` / `ne-card-*`；图标名 `editor-main-*`，**不是** `ne-t-*`；检索「插入面板」用 `quickInput` / `slash` / `cardSelect` / `insertSlash`，`"insert-panel"` 在 bundle 里 0 命中），别只盯运行时 bundle。⚠️ 包里大量成品组件只挂在 vendor 的 `LakexEditor` 入口上，而我们是直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）⇒ **那些组件在我们的产品里从不运行**。
   ① **官方出处优先** `/Users/admin/file/local-lake/yuque-developer-docs/`（编号主题：47 通用配置 / 07 API与事件 / 08 命令列表 / 48 适配器 / 65 大纲 …）：**先确认官方有没有这个能力与语义**，有就走官方途径，别反编译猜用法、别写私有 hack。
   ② **本项目契约** `docs/LAKEX-CONTRACT.md`（已核实行为 + 调试速查）：**新观测必须回填此处**，别只留在 HANDOFF 或代码注释。
   ③ **源码字典对照** `lake-editor-main/`（第三方 VSCode 插件）与 `lake-main/`（lakejs 社区版，**序列化方言已分叉、结论不可套用**）。

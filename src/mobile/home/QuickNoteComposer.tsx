@@ -26,7 +26,7 @@ import { subscribeSyncSettings } from "../sync/syncSettingsStore";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
-import { lakeBridge } from "../../features/editor/lakeRuntime";
+import { execEditorCommand } from "../editor/execCommand";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
 import { EditorDockHost } from "../editor/EditorDockHost";
 // 光标/选区自动跟随滚动：**与文档编辑器同一份实现**（261014 —— 用户：光标必须始终在工具栏上方、
@@ -198,14 +198,13 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
     const pending = pendingInsertRef.current;
     if (!pending || !editorInstance) return;
     pendingInsertRef.current = null;
-    const renderer = lakeBridge(editorInstance)?.renderer;
     for (const file of pending.files ?? []) {
       const kind = mediaKindOfFilename(file.name);
       const opts = kind ? { category: kind, from: "ui" } : undefined;
-      try { renderer?.execCommand?.("insertFiles" as never, [file], opts as never); } catch { /* 插入失败不阻断写作 */ }
+      try { execEditorCommand(editorInstance, "insertFiles", [file], opts); } catch { /* 插入失败不阻断写作 */ }
     }
     if (pending.command) {
-      try { renderer?.execCommand?.(pending.command as never); } catch { /* 命令失败不阻断写作 */ }
+      try { execEditorCommand(editorInstance, pending.command); } catch { /* 命令失败不阻断写作 */ }
     }
     if (pending.files?.length) {
       window.setTimeout(() => { try { apiRef.current?.focus(); } catch { /* 忽略：内核未就绪 */ } }, 0);
@@ -396,7 +395,8 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel, draft = false, 
       </footer>
       {/* 输入法式底部 dock = **文档编辑器那一份**（EditorDockHost；复用而非照抄，文档侧改了这边自动跟）。
           顶部不再有内核工具条；插入能力（图片/拍照/附件/表格/表情/日历/…）全部由它提供。 */}
-      <EditorDockHost editor={editorInstance} editing />
+      {/* undoBackend="snapshot"：小记用内核 note-mini，键入不进 kernel history ⇒ 走前端快照栈（思源 LocalUndo 式）。 */}
+      <EditorDockHost editor={editorInstance} editing undoBackend="snapshot" />
     </div>
   );
 }

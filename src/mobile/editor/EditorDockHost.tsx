@@ -10,15 +10,19 @@
  */
 import { useRef } from "react";
 import { EditorDock } from "./EditorDock";
-import { lakeBridge } from "../../features/editor/lakeRuntime";
+import { execEditorCommand } from "./execCommand";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { mediaKindOfFilename } from "../../core/assetNaming.js";
 
-export function EditorDockHost({ editor, editing }: {
+export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLimits }: {
   /** 内核实例（宿主用 state 持有，就绪后必须触发一次重渲染，否则 dock 一直拿到 null）。 */
   editor: LakeEditorInstance | null;
   /** 编辑态才渲染 dock。 */
   editing: boolean;
+  /** 撤销后端；小记/文档都传 "snapshot"（逐段撤销 + 光标还原）。 */
+  undoBackend?: "kernel" | "snapshot";
+  /** snapshot 后端的容量上限（文档更保守）。 */
+  undoLimits?: import("./snapshotUndoModel").StackLimits;
 }) {
   const editorRef = useRef<LakeEditorInstance | null>(null);
   editorRef.current = editor;
@@ -40,6 +44,8 @@ export function EditorDockHost({ editor, editing }: {
       <EditorDock
         editor={editor}
         editing={editing}
+        undoBackend={undoBackend}
+        undoLimits={undoLimits}
         onInsertImage={() => insertFileViaInput("image/*")}
         onInsertCamera={() => insertFileViaInput("image/*", "environment")}
         onInsertAttachment={() => insertFileViaInput("")}
@@ -47,7 +53,7 @@ export function EditorDockHost({ editor, editing }: {
         onInsertVideo={() => insertFileViaInput("video/*")}
         onInsertTable={() => {
           // lakex 的 table 命令需要 rows/columns 配置（缺省会读 width 报错）；默认 3×3
-          try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never, { rows: 3, columns: 3 }); } catch { /* 忽略 */ }
+          try { execEditorCommand(editorRef.current, "table", { rows: 3, columns: 3 }); } catch { /* 忽略 */ }
         }}
       />
       <input
@@ -60,7 +66,7 @@ export function EditorDockHost({ editor, editing }: {
           if (!file || !ed) return;
           const kind = mediaKindOfFilename(file.name);
           const opts = kind ? { category: kind, from: "ui" } : undefined;
-          try { lakeBridge(ed)?.renderer?.execCommand?.("insertFiles" as never, [file], opts as never); } catch { /* 忽略 */ }
+          try { execEditorCommand(ed, "insertFiles", [file], opts); } catch { /* 忽略 */ }
         }}
       />
     </>

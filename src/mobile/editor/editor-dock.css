@@ -27,13 +27,26 @@
   height: var(--mobile-bottom-bar-height);
   display: flex;
   align-items: center;
-  justify-content: space-around;
   overflow: hidden;
 }
-.med-btn {
-  flex: 1 1 0;
+/* 工具栏中间按钮的**横滑区**（261017 用户点单：B 放回后 9 个按钮放不下，按钮尺寸/间距保持原样）。
+   键盘键不在这里 —— 它是固定尾键（.med-btn--kb），永远可见。 */
+.med-toolbar-scroll {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 56px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.med-toolbar-scroll::-webkit-scrollbar { display: none; }
+/* 固定尾键：不参与横滑、宽度与其它工具按钮一致 */
+.med-btn--kb { flex: 0 0 49px; }
+.med-btn {
+  flex: 0 0 49px;
+  width: 49px;
   height: var(--mb-ctl-h);
   border: none;
   background: transparent;
@@ -49,6 +62,8 @@
 }
 .med-btn > svg { width: 20px; height: 20px; }
 .med-btn:active, .med-btn:focus-visible { background: var(--lake-bg-hover); }
+/* 不可用态（撤销/重做无历史）：与面板置灰同一口径，点了也不静默执行 */
+.med-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 /* 命令生效（B/列表/待办等）：主色文字 + 主色浅底 + 主色描边，突出"光标处正在生效" */
 .med-btn.med-active {
   color: var(--lake-accent-text);
@@ -108,7 +123,9 @@
 /* 插入 / 更多面板：**方块网格**（261015 用户点单：照图1「图标在上、文字在下」的方块样式）。
    ⚠️ 这是 MOBILE-DESIGN「The White Rule」的**面板级例外** —— 用户 261015 为这个面板明确选了"浅灰底 + 白块"；
    常驻页面（首页 / 设置 / 文档区）仍按该规则走白底 + 1px 细线，不放宽到别处。 */
-.med-panel[data-kind="insert"], .med-panel[data-kind="more"] { background: var(--lake-bg-block); }
+/* 一级面板统一灰底（261017 用户点单：Aa 也要和「＋」一样的浅灰底 + 白块）。
+   插入 / 更多 / Aa 三个一级面板共用同一表面；表情面板（二级，占满面板区）不在此列。 */
+.med-panel[data-kind="insert"], .med-panel[data-kind="more"], .med-panel[data-kind="font"] { background: var(--lake-bg-block); }
 /* 方块 52 ⇒ 一屏放下（296 ≤ 311）。用户 261015 明确「可以做上下滑动，不一定要局限在这个键盘位置」，
    所以列宽/块高**按观感定**、内容超出一屏就交给 `.med-panel-inner` 内部滚动（它本就是 overflow-y:auto + overscroll-behavior:contain）。
    面板自身高度与工具栏位置**不动**：那两处由 JS 的 --kb-offset 驱动，改了会把 261014 修好的「编辑区跳动」再引回来。 */
@@ -156,6 +173,7 @@
 /* 占位（置灰）：移动端暂未支持的能力仍然显示，但不可点（与桌面 disabled 同一口径） */
 .med-ins-item:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .med-ins-item svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--lake-text-2); }
+
 .med-ins-label { min-width: 0; font-size: 13px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 「Aa」面板：语雀式的**分组卡片**排布（用户 261012 定稿）。
@@ -199,9 +217,16 @@
   color: var(--lake-text-1);
   gap: 4px;
   -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
   transition: background-color var(--mobile-duration-press) ease;
 }
 .med-f-btn:active { background: var(--lake-bg-hover); }
+/* 「更多」面板里的画图占位：与插入面板的置灰同一口径 */
+.med-f-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+/* 「更多」面板的行内文字（261017 用户点单：每项要有文字说明） */
+.med-f-label { min-width: 0; font-size: 13px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.med-f-glyph { font-size: 15px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.med-f-rowlabel { display: inline-flex; align-items: center; flex: 0 0 auto; padding: 0 4px 0 10px; font-size: 13px; color: var(--lake-text-3); }
 /* 面板内命令生效（加粗/斜体/列表/对齐/字号等）：主色 + 浅底 + 描边（用户 261012：样式先保持我们自己的） */
 .med-f-btn.med-f-on {
   color: var(--lake-accent-text);

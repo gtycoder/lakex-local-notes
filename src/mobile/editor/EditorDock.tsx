@@ -12,9 +12,12 @@
  *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, Shapes, Workflow, Network, GitFork, FileCode2, AlignLeft, AlignCenter, AlignRight, Link2 } from "lucide-react";
-import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
-import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
+import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
+import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { execEditorCommand } from "./execCommand";
+import { useSnapshotUndo } from "./useSnapshotUndo";
+import type { StackLimits } from "./snapshotUndoModel";
+import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
 import { QUICK_TEXT_COLORS, MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID } from "../../core/colorPalette";
 // 「Aa」面板的取值型命令（字号/对齐/字色/背景色）与链接，全部复用既有单一来源（本文不另造一套）
 // 注：移动端**色板**不再走内核色卡适配器 LakeColorBoard，而是照语雀排布自己画 2×7 圆点格
@@ -34,8 +37,12 @@ type PanelMode = "insert" | "font" | "more" | "emoji" | null;
 
 /** dock 面板条目的动作；`anchor` = 触发按钮（表情选择器要锚定它）。 */
 type DockAction = (anchor?: HTMLElement | null) => void;
-/** 面板条目形状（`+ ` /「更多」两个网格共用，保证几何与置灰态单一来源）。 */
-type DockItem = { label: string; Icon: typeof ImageIcon; run?: DockAction; disabled?: boolean };
+/** 面板条目形状（`+ ` /「更多」两个网格共用，保证几何与置灰态单一来源）。
+ *  `glyph` = 用数字/字形代替图标（B6：行高 6 档没有专属图标，直接显示 1 / 1.15 / …） */
+type DockItem = { label: string; Icon?: typeof ImageIcon; glyph?: string; run?: DockAction; disabled?: boolean };
+
+/** 行高档位：**直接取内核 lineHeight 命令的取值域**（bundle `Ik.values = [1, 1.15, 1.5, 2, 2.5, 3]`）。 */
+const LINE_HEIGHT_VALUES = [1, 1.15, 1.5, 2, 2.5, 3] as const;
 
 /** 选区/焦点节点是否属于编辑器正文（面板命令只认正文选区） */
 function isEditorNode(node: Node | null): boolean {
@@ -53,6 +60,8 @@ const COMMAND_ICONS: Record<string, typeof Bold> = {
   bold: Bold, italic: Italic, underline: Underline, strikethrough: Strikethrough, code: Code,
   quote: Quote, unorderedList: List, orderedList: ListOrdered, taskList: ListTodo,
   hr: Minus, undo: Undo, redo: Redo,
+  // B6（261017）：清除格式放进行内标记行（与 B/I/U/S/行内代码同一行）
+  clearFormat: Eraser,
 };
 
 /** 移动端「Aa」面板的字号档（用户 261012：**做成一行、只留常用、掐头去尾**）。
@@ -69,6 +78,8 @@ const ALIGN_ITEMS: ReadonlyArray<{ value: "left" | "center" | "right"; label: st
 
 /** 需要监测实时状态（生效高亮）的命令 */
 const STATE_COMMANDS = ["bold", "italic", "underline", "code", "quote", "unorderedList", "orderedList", "taskList", "undo", "redo"] as const;
+/** 需要监测「可用态」（按钮置灰）的命令：历史命令用 queryCommandEnabled，不是 state/active。 */
+const ENABLED_COMMANDS = ["undo", "redo"] as const;
 
 /** 行内标记命令：生效检测走 DOM 计算样式（lakex 的 queryCommandState 对 mark 恒返回 -1，不可靠）。 */
 const MARK_NAMES = new Set(["bold", "italic", "underline", "code"]);
@@ -98,6 +109,20 @@ function activeMarkFromDom(name: string): boolean {
  * - 行内标记（bold/italic/underline/code）→ DOM 计算样式（可靠，见 activeMarkFromDom）；
  * - 块级/历史（quote/列表/待办/undo/redo）→ lakex renderer.queryCommandState（返回 1= 生效，-1= 不确定）；
  * 均做了安全访问，查不到即视为未生效（不误点亮）。 */
+function isCommandEnabled(editor: LakeEditorInstance | null, name: string): boolean {
+  if (!editor) return false;
+  const ed = editor as unknown as {
+    queryCommandEnabled?: (n: string) => unknown;
+    renderer?: { queryCommandEnabled?: (n: string) => unknown };
+  };
+  try {
+    const v = ed.queryCommandEnabled?.(name) ?? ed.renderer?.queryCommandEnabled?.(name);
+    return v === true;
+  } catch {
+    return false;
+  }
+}
+
 function isCommandActive(editor: LakeEditorInstance | null, name: string): boolean {
   if (MARK_NAMES.has(name)) return activeMarkFromDom(name);
   if (!editor) return false;
@@ -131,6 +156,7 @@ function valueText(editor: LakeEditorInstance, name: string): string {
 /** 光标/选区变化时刷新各命令生效状态（selectionchange + 命令执行后主动 refresh）。 */
 function useActiveCommandStates(editor: LakeEditorInstance | null) {
   const [states, setStates] = useState<Record<string, boolean>>({});
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const [values, setValues] = useState<SelectionValues>(EMPTY_VALUES);
   const editorRef = useRef(editor);
   editorRef.current = editor;
@@ -140,6 +166,9 @@ function useActiveCommandStates(editor: LakeEditorInstance | null) {
     const next: Record<string, boolean> = {};
     for (const name of STATE_COMMANDS) next[name] = isCommandActive(ed, name);
     setStates((prev) => (STATE_COMMANDS.some((k) => prev[k] !== next[k]) ? next : prev));
+    const nextEnabled: Record<string, boolean> = {};
+    for (const name of ENABLED_COMMANDS) nextEnabled[name] = isCommandEnabled(ed, name);
+    setEnabled((prev) => (ENABLED_COMMANDS.some((k) => prev[k] !== nextEnabled[k]) ? nextEnabled : prev));
     // 字号必须带第二参 false 才是「生效字号」（不带第二参时正文返回 null，与桌面固定栏同源）；
     // ⚠️ 内核把字号序列化成 lake-fontsize-N（N = px × 0.75，不是 px）⇒ **不许解析 class**，只能读 queryCommandValue。
     const nextValues: SelectionValues = {
@@ -157,13 +186,17 @@ function useActiveCommandStates(editor: LakeEditorInstance | null) {
   }, [refresh]);
   // editor 就绪/切换时刷新一次（selectionchange 不会为首次光标触发）
   useEffect(() => { if (editor) refresh(); }, [editor, refresh]);
-  return { states, values, refresh };
+  return { states, enabled, values, refresh };
 }
 
 export interface EditorDockProps {
   editor: LakeEditorInstance | null;
   /** 编辑态才渲染 */
   editing: boolean;
+  /** 撤销后端：`kernel` = 内核 history；`snapshot` = 前端快照栈（小记与文档都走它：逐段撤销 + 光标还原）。 */
+  undoBackend?: "kernel" | "snapshot";
+  /** snapshot 后端的容量上限（文档用更保守的 DOC_LIMITS）。 */
+  undoLimits?: StackLimits;
   /** 退出编辑态（工具栏“完成”） */
   /** 触发图片插入（选文件 → 上传 → 插入 Lake） */
   onInsertImage?: () => void;
@@ -179,19 +212,15 @@ export interface EditorDockProps {
   onInsertCamera?: () => void;
 }
 
-/** 执行 Lake 命令（renderer 通道；editor 未就绪静默）。
+/** 执行 Lake 命令（**统一走 execEditorCommand**：renderer 缺失时回退实例 execCommand，
+ *  文档编辑器就是这种形态；editor 未就绪静默）。
  *  ⚠️ **必须回传内核返回值**：链接的「这条不行就换另一条」判定靠它（linkEditor.ts），
  *  吞掉返回值会退化成"两条都算成功" = 静默 no-op。 */
 function useEditorExec(editor: LakeEditorInstance | null) {
-  return (cmd: string, ...args: unknown[]) => {
-    try {
-      const renderer = lakeBridge(editor ?? undefined).renderer;
-      return renderer?.execCommand?.(cmd as never, ...args);
-    } catch { return undefined; /* 命令失败不阻断 */ }
-  };
+  return (cmd: string, ...args: unknown[]) => execEditorCommand(editor, cmd, ...args);
 }
 
-export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
+export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
   /**
    * 「Aa」面板内的**内联展开**件（用户 261012 定：全套走语雀方式 —— 都在面板内展开，不弹层、不做二级面板）：
    *   - 颜色：**两行各自独立**（用户 261014 定）—— 上排 A = 文字色、下面色板 = 背景色，
@@ -205,6 +234,12 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
 
   /** 面板打开期间的选区快照：命令执行前后都还原，才能连续加粗→倾斜→下划线 */
   const savedRangeRef = useRef<Range | null>(null);
+  /**
+   * 输入法**组合中**（候选未上屏）：内核 history 还没有这一笔，此时点撤销/重做会完全无反应
+   * —— 用户 261017 报「打字快了能撤、慢一点撤不了」的根因（实测：composing 时连点 3 次撤销都不动）。
+   * 处理：执行工具栏命令前先 blur→focus 触发 compositionend 提交，再执行命令。
+   */
+  const composingRef = useRef(false);
   const dockRef = useRef<HTMLDivElement>(null);
   /**
    * **编辑面 owner**（261014 P2/P3 收口）：外壳高度 + 面板状态机 + 输入法抑制 + 焦点守卫全在 useEditSurface.ts，
@@ -219,7 +254,21 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
   execRef.current = exec;
-  const { states: activeStates, values: activeValues, refresh: refreshActive } = useActiveCommandStates(editor);
+  const { states: activeStates, enabled: commandEnabled, values: activeValues, refresh: refreshActive } = useActiveCommandStates(editor);
+  /** 前端兜底撤销栈（思源 LocalUndo 式）：仅小记等 kernel history 不可用的编辑器启用。 */
+  const snapshotUndo = useSnapshotUndo(editor, undoBackend === "snapshot", undoLimits);
+
+  // 输入法组合态跟踪（document 捕获阶段：软键盘的 composition 事件都冒泡到这里）
+  useEffect(() => {
+    const onStart = () => { composingRef.current = true; };
+    const onEnd = () => { composingRef.current = false; };
+    document.addEventListener("compositionstart", onStart, true);
+    document.addEventListener("compositionend", onEnd, true);
+    return () => {
+      document.removeEventListener("compositionstart", onStart, true);
+      document.removeEventListener("compositionend", onEnd, true);
+    };
+  }, []);
 
   // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
   useEffect(() => {
@@ -238,7 +287,7 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   const focusEditor = () => {
     // 输入法由 useEditSurface 的 restoreIme() 放回（它就在 closePanel 里）；这里只把**焦点**交还正文。
     try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch { /* 忽略 */ }
-    try { lakeBridge(editor ?? undefined).renderer?.execCommand?.("focus" as never); } catch { /* 忽略 */ }
+    try { execRef.current("focus"); } catch { /* 忽略 */ }
   };
   focusEditorRef.current = focusEditor;
   /** 收起输入法（面板要占键盘区）：**保留焦点与光标**（口径见 useEditSurface.ts） */
@@ -268,9 +317,27 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     openPanel(mode);
   };
 
-  // 工具栏行内命令（bold/列表/待办）：按钮 onMouseDown preventDefault 不抢焦点 →
+  // 工具栏行内命令（bold/列表/待办/撤销/重做）：按钮 onMouseDown preventDefault 不抢焦点 →
   // 焦点/选区留在正文，命令作用在正确位置，键盘不收；执行后再记一次选区，供面板连续使用。
-  const runInline = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); snapshotSelection(); refreshActive(); };
+  // ⚠️ 输入法组合中先提交（blur→focus → compositionend）：否则 history 里没有这一笔，撤销/重做会静默无效。
+  const runInline = (cmd: string, ...args: unknown[]) => {
+    if (composingRef.current) {
+      const active = document.activeElement as HTMLElement | null;
+      try { active?.blur(); } catch { /* 忽略 */ }
+      composingRef.current = false;
+      // 等一拍让内核收到 compositionend 并记账，再执行命令并交还焦点
+      window.setTimeout(() => {
+        try { active?.focus(); } catch { /* 忽略 */ }
+        exec(cmd, ...args);
+        snapshotSelection();
+        refreshActive();
+      }, 60);
+      return;
+    }
+    exec(cmd, ...args);
+    snapshotSelection();
+    refreshActive();
+  };
   // 面板项命令：**还原选区 → 执行 → 再记选区 → 面板保持打开**（加粗后还能接着点倾斜/下划线）。
   // dismissIme：面板占着键盘区，命令后内核会异步重聚焦正文把键盘顶回来，必须再收一次（260911 修过）。
   const runPanel = (cmd: string, ...args: unknown[]) => {
@@ -279,6 +346,14 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
     snapshotSelection();
     dismissIme();
     refreshActive();
+  };
+  /** 同 runPanel，但执行后**收起面板并放回输入法** —— 用于「格式刷」这类需要下一步去点正文两步命令（B6）。 */
+  const runPanelAndClose = (cmd: string, ...args: unknown[]) => {
+    restoreSelection();
+    exec(cmd, ...args);
+    snapshotSelection();
+    refreshActive();
+    closePanel();
   };
 
   // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板 —— **不放回输入法**（hide 档），光标留住。
@@ -402,16 +477,32 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
     ] },
   ];
-  // 「更多」面板：公式可用；5 项画图/绘图是**占位（置灰）**，待逐项解决移动端编辑（画布覆盖层 + 触摸手势）后放开。
-  const moreItems: ReadonlyArray<DockItem> = [
-    { label: "公式", Icon: Sigma, run: () => runPanel("insertCard", "math", null, true) },
-    { label: "画板", Icon: Shapes, disabled: true },
-    { label: "流程图", Icon: Workflow, disabled: true },
-    { label: "UML 图", Icon: Network, disabled: true },
-    { label: "思维导图", Icon: GitFork, disabled: true },
-    { label: "文本绘图", Icon: FileCode2, disabled: true },
-    // 撤销/重做从「Aa」面板移到这里（用户 261012：放更多里去）
-    ...HISTORY_COMMANDS.map((c) => ({ label: c.label, Icon: COMMAND_ICONS[c.name] ?? Undo, run: () => runPanel(c.name) })),
+  // 「更多」面板：**按行分组**（261017 二改用户点单）——公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行。
+  // 文本增强命令全部走内核 `renderer.execCommand`；行高档位 = 内核 `lineHeight` 的取值域（[1, 1.15, 1.5, 2, 2.5, 3]）。
+  // ⚠️ 撤销/重做已移到**主工具栏**（261017：工具栏最右、更多之后、键盘之前），不再在本面板。
+  const moreRows: ReadonlyArray<{ key: string; label?: string; items: ReadonlyArray<DockItem> }> = [
+    { key: "inline", items: [
+      { label: "公式", Icon: Sigma, run: () => runPanel("insertCard", "math", null, true) },
+      { label: "上标", Icon: Superscript, run: () => runPanel("sup") },
+      { label: "下标", Icon: Subscript, run: () => runPanel("sub") },
+      // 格式刷是「取格式 → 点目标」的两步模式：**激活后必须收面板、放回输入法**，否则用户无法点目标
+      { label: "格式刷", Icon: Paintbrush, run: () => runPanelAndClose("paintFormat") },
+    ] },
+    { key: "indent", items: [
+      { label: "首行缩进", Icon: ArrowRightFromLine, run: () => runPanel("firstIndent") },
+      { label: "减少缩进", Icon: IndentDecrease, run: () => runPanel("outdent") },
+      { label: "增加缩进", Icon: IndentIncrease, run: () => runPanel("indent") },
+    ] },
+    // 行高：行首给「行高」标签（用户 261017：第三行需要知道是行高），6 个档位只显示数值。
+    { key: "line-height", label: "行高", items: LINE_HEIGHT_VALUES.map((v) => ({ label: "行高", glyph: String(v), run: () => runPanel("lineHeight", v) })) },
+    // 画图占位：图标太抽象 ⇒ **纯文字**（用户 261017），置灰但写清是什么。
+    { key: "drawing", items: [
+      { label: "画板", disabled: true },
+      { label: "流程图", disabled: true },
+      { label: "UML 图", disabled: true },
+      { label: "思维导图", disabled: true },
+      { label: "文本绘图", disabled: true },
+    ] },
   ];
   // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）
   // ⌨：三种状态三条路（261015 定）——
@@ -425,7 +516,7 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   // 面板开 = 面板占住的键盘区高度（键盘收起过程中 innerHeight 530→842 时它同步长出来，
   // 工具栏屏幕 Y 恒定、面板"接管"键盘腾出的位置 —— HANDOFF §8.3 原始结论）。
   const isOn = (name: string) => !!activeStates[name];
-  /** 「＋ / 更多」面板的插入条目（图标 + 文字）——两个面板共用一套渲染。 */
+  /** 「＋」面板的插入条目（方块：图标 + 文字）。 */
   const insBtn = ({ label, Icon, run, disabled }: DockItem) => (
     <button
       key={label}
@@ -435,8 +526,21 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
       title={disabled ? label + "（移动端暂未支持）" : undefined}
       onClick={run ? (e) => run(e.currentTarget) : undefined}
     >
-      <Icon size={22} />
+      {Icon ? <Icon size={22} /> : null}
       <span className="med-ins-label">{label}</span>
+    </button>
+  );
+  /** 「更多」面板的行条目：图标 + 文字 / 数值（行高档）/ 纯文字（画图占位）；几何与「Aa」面板同款。 */
+  const rowBtn = ({ label, Icon, glyph, run, disabled }: DockItem) => (
+    <button
+      key={label + (glyph ?? "")}
+      className="med-f-btn"
+      aria-label={glyph ? label + " " + glyph : label}
+      disabled={!!disabled}
+      title={disabled ? label + "（移动端暂未支持）" : label}
+      onClick={run ? (e) => run(e.currentTarget) : undefined}
+    >
+      {glyph ? <span className="med-f-glyph">{glyph}</span> : Icon ? (<><Icon size={18} /><span className="med-f-label">{label}</span></>) : <span className="med-f-label">{label}</span>}
     </button>
   );
 
@@ -451,7 +555,8 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   };
   // 「一卡一组、一行最多两卡」的分组（用户 261012 定：照语雀那样拆开排布）
   // 行内标记：加粗/斜体/下划线/删除线/**行内代码**（用户 261012：行内代码恢复，就放在这一行）
-  const inlineMarks = MARK_COMMANDS;
+  // B6（261017 用户点单）：行内标记行 = B / I / U / S / 行内代码 + **清除格式**
+  const inlineMarks = [...MARK_COMMANDS, { name: "clearFormat", label: "清除格式", group: "mark" as const }];
   // 列表：与「对齐」同处一行（用户 261012：对齐和列表放一行）
   const listItems = BLOCK_INSERT_COMMANDS.filter((c) => c.name === "unorderedList" || c.name === "orderedList" || c.name === "taskList");
   /** 取值型高亮：对齐（内核默认返回空串 = 左对齐）、字色（空串 = 正文色）、背景色。 */
@@ -483,20 +588,38 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
   return (
     <div ref={dockRef} className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${Math.round(usable)}px` } as import("react").CSSProperties}>
       {/* 主工具栏（悬浮输入法上方）；对齐 Lake 官方：类别(+/Aa)展开即变 ×，命令按钮实时高亮 */}
-      <div className="med-toolbar" onMouseDown={(e) => e.preventDefault()}>
-        <button className={plusCls} onClick={() => togglePanel("insert")} aria-label="插入">
-          {panelMode === "insert" ? <X size={20} /> : <Plus size={21} />}
-        </button>
-        <button className={aaCls} onClick={() => togglePanel("font")} aria-label="字体">
-          {panelMode === "font" ? <X size={20} /> : <Type size={20} />}
-        </button>
-        <button className={"med-btn" + (isOn("bold") ? " med-active" : "")} onClick={() => runInline("bold")} aria-label="加粗"><Bold size={19} /></button>
-        <button className={"med-btn" + (isOn("unorderedList") ? " med-active" : "")} onClick={() => runInline("unorderedList" as never)} aria-label="列表"><List size={20} /></button>
-        <button className={"med-btn" + (isOn("taskList") ? " med-active" : "")} onClick={() => runInline("taskList" as never)} aria-label="待办"><ListTodo size={20} /></button>
-        <button className={"med-btn med-toggle" + (panelMode === "more" ? " med-open" : "")} onClick={() => togglePanel("more")} aria-label="更多">
-          {panelMode === "more" ? <X size={20} /> : <MoreHorizontal size={20} />}
-        </button>
-        <button className="med-btn" onClick={onKbToggle} aria-label={kbLabel}><Keyboard size={19} /></button>
+      <div className="med-toolbar" data-prevent-swipe onMouseDown={(e) => e.preventDefault()}>
+        {/* 中间按钮可左右滑动；键盘键**固定在最右**（261017 用户点单 B 方案） */}
+        <div className="med-toolbar-scroll">
+          <button className={plusCls} onClick={() => togglePanel("insert")} aria-label="插入">
+            {panelMode === "insert" ? <X size={20} /> : <Plus size={21} />}
+          </button>
+          <button className={aaCls} onClick={() => togglePanel("font")} aria-label="字体">
+            {panelMode === "font" ? <X size={20} /> : <Type size={20} />}
+          </button>
+          <button className={"med-btn" + (isOn("bold") ? " med-active" : "")} onClick={() => runInline("bold")} aria-label="加粗"><Bold size={19} /></button>
+          <button className={"med-btn" + (isOn("unorderedList") ? " med-active" : "")} onClick={() => runInline("unorderedList" as never)} aria-label="列表"><List size={20} /></button>
+          <button className={"med-btn" + (isOn("taskList") ? " med-active" : "")} onClick={() => runInline("taskList" as never)} aria-label="待办"><ListTodo size={20} /></button>
+          <button className={"med-btn med-toggle" + (panelMode === "more" ? " med-open" : "")} onClick={() => togglePanel("more")} aria-label="更多">
+            {panelMode === "more" ? <X size={20} /> : <MoreHorizontal size={20} />}
+          </button>
+          {/* 撤销 / 重做（261017 用户点单：从「更多」面板移到主工具栏，键盘之前）。
+              后端二选一：文档 = 内核 history（可用态走 queryCommandEnabled，不可用置灰）；
+              小记 = 前端快照栈（note-mini 键入不进内核 history，见 useSnapshotUndo 头注释）。 */}
+          <button
+            className="med-btn"
+            disabled={undoBackend === "snapshot" ? !snapshotUndo.canUndo : !commandEnabled.undo}
+            onClick={() => (undoBackend === "snapshot" ? snapshotUndo.undo() : runInline("undo"))}
+            aria-label="撤销"
+          ><Undo size={19} /></button>
+          <button
+            className="med-btn"
+            disabled={undoBackend === "snapshot" ? !snapshotUndo.canRedo : !commandEnabled.redo}
+            onClick={() => (undoBackend === "snapshot" ? snapshotUndo.redo() : runInline("redo"))}
+            aria-label="重做"
+          ><Redo size={19} /></button>
+        </div>
+        <button className="med-btn med-btn--kb" onClick={onKbToggle} aria-label={kbLabel}><Keyboard size={19} /></button>
       </div>
 
       {/* 展开面板：占住键盘区（键盘不显示），工具栏停在它上沿；关闭过渡期（closing）继续挂载，
@@ -509,8 +632,8 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
             <EmojiPanel bucket="input" fill onPick={insertEmoji} onBack={() => togglePanel("insert")} />
           ) : renderedPanel === "insert" || renderedPanel === "more" ? (
             <>
-              {/* 「＋」/「更多」共用一套**方块网格**（261015 用户点单：照图1 的方块样式）。
-                  「＋」= **两组各 9 项**（用户指定顺序），每组 3 列 3 行 ⇒ 组内零空洞；两组之间由容器间距分隔。 */}
+              {/* 「＋」= **方块网格**（261015 用户点单：照图1 的方块样式；两组 8+10、3 列）。
+                  「更多」= **分行白卡**（261017 二改用户点单：公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行）。 */}
               {renderedPanel === "insert" ? (
                 <div className="med-ins-groups">
                   {INSERT_GROUPS.map((g) => (
@@ -518,7 +641,16 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
                   ))}
                 </div>
               ) : (
-                <div className="med-ins-grid med-ins-grid--tile">{moreItems.map(insBtn)}</div>
+                <div className="med-font-panel">
+                  {moreRows.map((row) => (
+                    <div className="med-f-row" key={row.key}>
+                      <div className="med-f-card" data-count={row.items.length}>
+                        {row.label ? <span className="med-f-rowlabel">{row.label}</span> : null}
+                        {row.items.map(rowBtn)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
               {/* 链接编辑：**在本面板内联展开**（用户 261012：链接融合到 + 号里）。
                   复用内核 .ne-link-editor 的 UI + 共享判定 linkEditor.ts（与桌面浮栏同一份）。 */}
@@ -558,7 +690,7 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onI
               </div>
 
               {/* 对齐 ｜ 列表（用户 261012：两者放一行；**261015 用户点单：左右对调** ⇒ 对齐在左、列表在右）
-                  注：「引用 / 分割线」已删（+ 面板已有）、「撤销 / 重做」已移到「更多」面板 */}
+                  注：「引用 / 分割线」已删（+ 面板已有）、「撤销 / 重做」已移到**主工具栏**（261017） */}
               <div className="med-f-row">
                 <div className="med-f-card" data-count={ALIGN_ITEMS.length}>
                   {ALIGN_ITEMS.map(({ value, label, Icon }) => (

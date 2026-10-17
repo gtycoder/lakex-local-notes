@@ -32,6 +32,9 @@ export const STYLE_BLOCKS: { value: string; label: string }[] = [
   { value: "h2", label: "H2" },
   { value: "h3", label: "H3" },
   { value: "h4", label: "H4" },
+  // B6（261017 用户点单）：H5/H6 接入移动端「Aa」面板（内核 style 命令本来就有 h5/h6，见 PARAGRAPH_STYLES）。
+  { value: "h5", label: "H5" },
+  { value: "h6", label: "H6" },
 ];
 
 /** 浮动工具栏「段落样式」（260924 续 用户口径）：

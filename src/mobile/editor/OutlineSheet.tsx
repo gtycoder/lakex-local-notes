@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import { lakeBridge, resolveScrollNode, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { execEditorCommand } from "./execCommand";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 
 interface TocEntry {
@@ -60,7 +61,7 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
   const jump = (id: string) => {
     try {
       const renderer = lakeBridge(editor ?? undefined).renderer;
-      renderer?.execCommand?.("headingUnfold" as never, id);
+      execEditorCommand(editor, "headingUnfold", id);
       renderer?.scrollByNodeId?.(id);
     } catch { /* 跳转失败不阻断 */ }
     // DOM 校正（对齐桌面 handleOutlineNavigate）：viewer/懒卡片下 scrollByNodeId 可能不精确，按节点位置兜底滚动

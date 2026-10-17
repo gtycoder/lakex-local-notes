@@ -260,6 +260,29 @@
 - **令牌名沿用 `--lake-*`（共享词表），取值由移动端 `src/mobile/theme/**` 定义** —— 护栏卡的是「移动端不得 import 桌面 `themes/**`」，而不是「不许出现 `--lake-*`」。
 - 本节的 ③ 类"不得共享"**不追溯**已完成的合理共享（如内核样式），只约束后续新增与本次重构。
 
+## 十、撤销 / 重做后端（261017 定稿）
+
+> 起因：用户报「手机撤销点了没反应 / 文档不能多次撤销」。方案对标思源（`siyuan-android-main` 只是安卓壳，
+> 撤销逻辑在 Web 包：`siyuan-master/app/src/protyle/undo/*` + `app/src/mobile/util/keyboardToolbar.ts`）。
+
+**两个后端，按编辑器类型切换**（`EditorDock` 的 `undoBackend`）：
+
+| 后端 | 用于 | 实现 | 按钮判据 |
+| --- | --- | --- | --- |
+| `kernel` | 保留（默认，当前两端都未启用） | lakex `history` + `undo/redo` 命令；执行前先提交 IME 组合 | `queryCommandEnabled('undo'/'redo')`，不可用**置灰** |
+| `snapshot` | **文档 + 小记**（261017 用户定） | `src/mobile/editor/useSnapshotUndo.ts` + `snapshotUndoModel.ts`（思源 `LocalUndo` 式前端栈） | 栈的 `canUndo/canRedo` |
+
+**为什么小记必须用 snapshot**：note-mini 编辑器里**键入不进 kernel history**（设备实测 `canUndo=false`；改成文档版式 / 不传 `quickNoteUi` 结果相同），只有格式化命令进历史 ⇒ 输入撤销无从谈起。snapshot 按「输入停顿 450ms」记 `text/lake` 快照（条数 40 + 总字符 8M 双上限），撤销/重做 = `setDocument` 恢复。
+
+**两条硬约束**：① 恢复快照会触发 contentchange ⇒ 必须用 applying 标记忽略（否则自己给自己压栈）；② 内容相同不压栈（组合输入期间 contentchange 会重复触发）。护栏：`snapshotUndoModel.test.ts`（纯逻辑 6 例）+ `execCommand.test.ts`（命令入口唯一性）。
+
+**光标还原（两层，缺一不可）**：
+1. **内核模型选区**（权威）：`setDocument` 会把内核选区重置到文档开头 ⇒ 只改 DOM 时“看得见的光标在编辑点、但下一个输入仍按模型选区插入到开头”（用户 261017 两次报同一现象）。快照因此同时记录 `document.selection.toJSON()`，恢复时用内核 job 的 `setSelectionFromJson` + `commitJob` + `repaintSelection` 放回模型选区（`src/mobile/editor/kernelSelection.ts`）。
+2. **DOM 光标 + 滚动**：`{blockId, offset}` 记录 + 重试 4 次找回可见光标，并保存/还原 `.ne-editor-wrap` 滚动位置。
+设备实测：小记 `abc → 撤销 → ab → 输入 Z = abZ`；文档 `abc → 撤销 → ab → 输入 Z = abZ`（修复前两者都是 `Zab`/`Z…`）。
+
+**容量**：小记 `DEFAULT_LIMITS`（40 条 / 8M 字符）；文档 `DOC_LIMITS`（25 条 / 4M 字符，快照序列化更贵）。**重做按钮在横滑区末位**，默认在屏外，滑一下可见（261017 用户已接受该布局）。
+
 ## 验证
 
 ```bash

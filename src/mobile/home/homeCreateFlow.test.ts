@@ -96,8 +96,9 @@ describe("首页新建流（261014）", () => {
     expect(HOME).toMatch(/pickLocalFile\("image\/\*"\)/);
     expect(HOME).toMatch(/command: "taskList"/);
     expect(HOME).toMatch(/initialInsert=\{composer\.mode === "new"/);
-    expect(COMPOSER).toMatch(/execCommand\?\.\("insertFiles"/);
-    expect(COMPOSER).toMatch(/execCommand\?\.\(pending\.command/);
+    // 261017：统一走 execEditorCommand（renderer 缺失时回退实例 execCommand，文档编辑器就是这种形态）
+    expect(COMPOSER).toMatch(/execEditorCommand\(editorInstance, "insertFiles"/);
+    expect(COMPOSER).toMatch(/execEditorCommand\(editorInstance, pending\.command\)/);
     expect(HOME).toMatch(/onCreateNote\(it\.id\)/);
     expect(HOME).toMatch(/notebooks\.map/);
   });
