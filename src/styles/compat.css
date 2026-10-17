@@ -187,13 +187,14 @@
   box-shadow: var(--lake-shadow-dialog);
 }
 
-/* 侧栏卡片几何（原 b3/layout.css：docked 形态的 margin 制造顶部 4px 缝 + 左右 4px，且抑制边框/阴影） */
+/* 侧栏卡片几何（原 b3/layout.css：抑制边框/阴影的材质部分）。
+ * margin 已收单到 styles/app/shell.css 的 .sidebar.sidebar-docked —— 这里再写一份会因 legacy 层内
+ * 本文件加载更晚而压掉那边的值（261017 修侧栏溢出时就这么踩到：bottom 仍是 4px）。 */
 .sidebar.sidebar-docked {
   background: var(--lake-bg-panel);
   border: 0;
   box-shadow: none;
   border-radius: var(--lake-radius-md);
-  margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
 }
 .sidebar.sidebar-floating {
   position: fixed;

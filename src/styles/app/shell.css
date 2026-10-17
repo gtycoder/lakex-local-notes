@@ -201,7 +201,10 @@
 }
 
 .sidebar.sidebar-docked {
-  height: 100%;
+  /* 261017 修复（HANDOFF「已知候选」第一条落地）：height:100% 取的是**网格容器**高度，
+     而侧栏在第 2 行（顶栏下）且还有上下 margin ⇒ 比可用高度高 38px，底部被窗口裁掉；
+     窗口变矮时 .note-list 最后几行滚到底也看不到。改用 stretch：高度 = 网格区 − margin。 */
+  height: auto;
   width: auto;
   margin-bottom: 0;
   max-width: none;
@@ -300,7 +303,8 @@
 @media (min-width: 761px) {
   /* 壳层连续材质（.app-shell/.activity-rail/.sidebar）已搬到共用作用域 */
   .sidebar.sidebar-docked {
-    margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
+    /* 底边距为 0：高度由 stretch 扣掉上边距后正好到底，保持修复前「侧栏贴窗口底」的观感。 */
+    margin: calc(var(--topbar-height) + 4px) 4px 0 0;
   }
   /* .workspace / .document-pane / .multi-tab-editor 材质已搬到共用作用域 */
   /* 大纲材质与它的搭档（面板白卡）已搬到共用作用域（见上方「大纲栏的壳层材质」） */
