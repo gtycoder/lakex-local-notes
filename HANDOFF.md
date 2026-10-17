@@ -9,12 +9,24 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261017 / 261016）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
+> **261017 最新基线**：代码 review（CODE-REVIEW-261015）**全部结案**；HEAD 见 git log（261017 收尾）；门禁 276 文件 / 2097 例；C3-2 / C3-5 / C1-6 / D2 / D5 均已完成。
+>
 > **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
 > 仍缺的移动端文本格式 = **H5/H6、缩进、行高、清除格式、格式刷**（§3 的覆盖缺口表里其余项）。
 >
 > **下一会话焦点（261012 收尾 → 下一会话，用户定）**：① **移动端文本增强二级面板**（见上）；② **5 项画图插入项解禁**（画板 / 流程图 / UML / 思维导图 / 文本绘图，现为置灰占位；根因与修法见 §3#18）；③ **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；④ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261017(十四) · 收尾审查（全量改动复核 + 安全清理）
+
+- **复核范围**：C3-2 四桶搬迁 / C3-5 六域拆分 / C1-5 时间措辞 / C1-6 只读共享 / D2/D5 / 移动基线重烤 / 全部文档回填。
+- **全量门禁**（最终一次）：tsc 0 · vitest **276 文件 / 2097 例** ✓ · 桌面+移动双构建 ✓ · ui-metrics 0 · check:core/check:mobileui/check:bundle ✓ · diff-check 0。
+- **发现并修复的安全项（重要）**：`scripts/verify/qiniu-stream-head-verify.mjs` 曾把七牛 **AK/SK 硬编码在 tracked 文件**里（历史版本已进 git 历史）。
+  已改为 `QN_AK/QN_SK` 环境变量、缺失即退出；工作树已 grep 确认无明文密钥。⚠️ 由于旧 key 仍在 git 历史，**建议用户轮换该测试 key**；如需彻底清史用 git filter-repo（破坏性，未擅自执行）。
+- **文档查漏**：HANDOFF 的 8 处「待提交」改为已提交、C3-2 后的旧 `components/*` 路径、D2 的旧 TODO 全部更新；CODE-REVIEW §11.3 从「待用户决策」改为「已裁决记录」，Q3/D2/D5/C1-5/C1-6 均标结案；§0 加 261017 最新基线。
+- **未发现功能缺口**：桥 51 键/契约面、C1-6 设备实测、D5 真云读回、列表时间单测、C3-2 结构护栏均绿。
+- **状态**：收尾提交（见 git log）。
 
 ### 261017(十三) · D2 结案（不做 path-style）+ D5 真云验证并修复
 
@@ -28,7 +40,7 @@
   修复：移动端 `putObject` 的 gzip 分支补 `ContentEncoding: "gzip"`（+ `ContentType: application/json`，与桌面一致）；`s3PortGuards.test.ts` 新增 D5 护栏（移动端/桌面端都必须带 header）。
 - **文档**：`docs/SYNC-PROTOCOL.md` 的 D2/D5 行、§7.3 结论、P1 进展全部回填；CODE-REVIEW §9/§11 标记结案。
 - **门禁**：tsc 0 · 全库 vitest（含新增 D5 例）· 双端构建 · ui-metrics · diff-check；D5 变更只影响对象元数据，不跑视觉门禁。
-- **状态**：待提交。
+- **状态**：已提交（261017，见 git log）。
 
 ### 261017(十二) · C1-6 多维表只读单元格共享（Q7：共享逻辑、不共享样式）
 
@@ -38,7 +50,7 @@
 - **护栏**：`bitableReadOnly.test.ts` 6 例（布尔/链接/评分进度 clamp/选项顺序/附件图片标记/关联失效）+ 源码级「两端都必须 import 且移动端不得再自写 clamp/关联解析」。
 - **设备验收**（lake_gate + 自建全字段多维表）：`bool=[true,false] disabled`、`link href=https://example.com target=_blank`、`stars=[4,2]`、`bars=60%/0%`、`relation=[目标A,目标B,目标B]`、无失效误报；截图 `.css-audit/c1-6-261017/bitable-readonly.png`（gitignored）。验完已删自建文档、复核 6 态快照 **0 差异**。
 - **门禁**：tsc 0 · vitest **276 文件 / 2096 例** ✓ · 双端构建 ✓ · ui-metrics 0 · diff-check 0。
-- **状态**：待提交。
+- **状态**：已提交（261017，见 git log）。
 
 ### 261017(十一) · C3-5 第③步：抽 notes / quickNotes / tree 域，bridge 只做组合
 
@@ -49,7 +61,7 @@
 - **新增结构护栏** [bridgeStructure.test.ts](lake-notes-electron/src/mobile/bridge/bridgeStructure.test.ts)：bridge.ts 除 `init` 外不得再定义方法；6 个域文件必须存在且被展开。
 - **护栏更新**：三份契约/互斥域解析器的 `DOMAIN_MODULES` 补齐 notes/quickNotes/tree；`quickNoteCapturePath` / `quickNotePushSyncRace` / `quickNoteSyncGate` 的源码护栏改为读「bridge + 对应域」。
 - **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · 双端构建 ✓ · ui-metrics 0 · diff-check 0；**lake_gate 设备门禁 `check:mobilesnap` 6 态 0 差异**；运行时 smoke：`window.lakeNative` **51 键**，`listTreeNodes/listNotes/listQuickNotes/getCloudState` 均 function。
-- **状态**：待提交（C3-5 三步骤全部完成）。
+- **状态**：已提交（261017，见 git log）（C3-5 三步骤全部完成）。
 
 ### 261017(十) · C3-5 第②步：抽 assets / sync 域（行为保持）
 
@@ -59,7 +71,7 @@
 - **护栏更新**：`lakeNativeContract` / `contractSurface` / `maintenancePolicyCoverage` 的解析器改为「bridge 方法 + 域模块展开方法/方法体」；`s3PortGuards` 改为检查 sync 域调 `createS3Client`、bridge 不再直接建 client；`quickNoteCapturePath` / `quickNotePushSyncRace` 的源码护栏读 bridge+sync 两份。
 - **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · 双端构建 ✓ · ui-metrics 0 · diff-check 0；**移动设备门禁**（lake_gate + 固定夹具）：`check:mobilesnap` **6 态 0 差异**；运行时 smoke：`window.lakeNative` **51 个键**，`getCloudState/syncNow/getS3Settings/uploadResource` 均为 function。
 - **剩余 ③**：`notes` / `tree` / `quickNotes` 三域；跨域调用（`bridge.saveNote` / `bridge.restoreTreeItem`）需先加 `context` 后置绑定的 `getBridge()`，再拆。
-- **状态**：待提交。
+- **状态**：已提交（261017，见 git log）。
 
 ### 261017(九) · C3-5 第①步：抽 `src/mobile/bridge/context.ts`（零行为变化）
 
@@ -69,17 +81,17 @@
 - **护栏更新**：`src/mobile/native/s3PortGuards.test.ts` 的 D6 检查从「bridge.ts 调共用工厂」改为「context.ts 调工厂 + bridge 只经 createS3Client」；`contractSurface.test.ts` 49+2 方法面不变。
 - **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · `contractSurface` / `maintenancePolicyCoverage` / `s3PortGuards` 全绿 · 桌面/移动双构建 ✓ · ui-metrics 0 · diff-check 0。纯抽取、无行为变化（未跑设备门禁；②③改运行时代码时才跑）。
 - **剩余**：② `assets`/`sync` 域 → ③ `notes`/`tree`/`quickNotes` 域。跨域调用（`bridge.getS3Settings` 等）需先定注入方式（推荐 `context` 内 `getBridge()` 后置绑定，避免 ESM 循环）。
-- **状态**：待提交。
+- **状态**：已提交（261017，见 git log）。
 
 ### 261017(八) · C3-2 `src/components` 拆 4 桶（纯搬迁）
 
 - **落地**：`src/components` 根目录 31 文件 → **`app/`(14) · `ui/`(16) · `hooks/`(2) · `model/`(16)**（含测试/CSS；`markdown/` 并入 `ui/markdown/`）。`git mv` 保历史 + 全仓说明符重写 **216 处**（含 `import()` / `vi.mock` / `new URL(..., import.meta.url)`）；`App.tsx` / `desktop/` / `features/` / `mobile/` 的引用全部改到新路径。
 - **新增护栏**：[componentsStructure.test.ts](lake-notes-electron/src/components/model/componentsStructure.test.ts) —— 根目录只允许 4 个桶、每桶非空、桶内不再嵌套同名桶。
-- **口径修正**：`mobileIndependence.test.ts` 的允许清单 `../../components/treeDrag` → `../../components/model/treeDrag`（纯决策件，仍在白名单）。
+- **口径修正**：`mobileIndependence.test.ts` 的允许清单 `../../components/model/treeDrag` → `../../components/model/treeDrag`（纯决策件，仍在白名单）。
 - **⚠️ 踩坑（本次真踩）**：一次性 codemod 里把 `String.replace` 回调的第 4 个参数当 `post` 用了 —— 对 3 组正则它其实是 **match offset**，导致 51 个文件的 import 尾部被追加 2~6 位数字（`"path"123`），tsc 报 `; expected`。已用「引号后数字」清理自证通过；**以后写批量 replace 一律按正则分组数对齐回调签名（或命名组）**。
 - **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓（含新结构护栏 2 例）· 桌面/移动双构建 ✓ · `ui-metrics` 0 ✓ · `git diff --check` 0。纯搬迁、零视觉变化（CSS 内容与 import 顺序未改，未跑 stylesnap）。
 - **文档**：AGENTS / DESIGN / ARCHITECTURE / LAKEX-CONTRACT / MOBILE-* / CODE-REVIEW 的 `components/*` 路径已批量改到新桶；`src/styles/cssLayers.test.ts` 的 FILES/BASELINE 键同步。
-- **状态**：待提交。
+- **状态**：已提交（261017，见 git log）。
 
 ### 261017(七) · C1-5 第二步（Q10 = B 加强版）：列表时间措辞统一
 
@@ -94,7 +106,7 @@
 - **门禁**：tsc 0 · vitest **273 文件 / 2085 例** ✓ · ui-metrics 0 ✓ · diff-check 0。
 - **视觉**：桌面 `check-stylesnap --states "quicknotes:1315:light,quicknotes:1315:warm"` **0 差异**；移动设备截图确认首页小记卡显示 `今天 18:49`（`.css-audit/time-wording/mobile-home-quicknotes.png`，gitignored）。
 - **移动快照门禁（261017 已重烤并复跑）**：新建 `lake_gate` AVD 后按 README 暖态配方重烤 6 态（`scripts/mobile-audit/baseline/mobile-snap.json`）；复跑 **6 态 0 差异**。基线绑定「该实例 + 该夹具」，换实例/重灌夹具仍需重烤。
-- **状态**：待提交（9 文件 + 2 文档；并行会话在途文件未纳入）。
+- **状态**：已提交（261017，见 git log）（9 文件 + 2 文档；并行会话在途文件未纳入）。
 
 ### 261017(六) · C5-4 同名令牌差异表 + C1-5 第一步（时间格式化单一来源）
 
@@ -104,7 +116,7 @@
   - 输出逐字符不变（单测覆盖补零/边界/同日）；`quickNotesView.test.ts` 的旧断言（夹带 pad 实现）改为「必须 import core/dateFormat + 不得再出现 padStart(2」。
 - **未做**：Q10「两端列表时间措辞是否统一」仍待产品决策（本批刻意只抽纯函数，不动措辞）；`lib/formatTime.ts`（toLocaleString）与移动同步状态（中文月日）属不同口径，未合并。
 - **门禁**：tsc 0 · vitest **273 文件 / 2079 例** ✓ · ui-metrics 0 ✓ · diff-check 0。
-- **状态**：待提交（脚本 + 文档 + 9 处代码；并行会话在途文件未纳入）。
+- **状态**：已提交（261017，见 git log）（脚本 + 文档 + 9 处代码；并行会话在途文件未纳入）。
 
 ### 261017(五) · Q3 选中态语义令牌 + 选中+hover（裸 .active 收编第一刀）
 
@@ -275,7 +287,7 @@
 
 ### 261016(十二) · C1-7 文档属性清单收归 core（两端同一份）
 
-- **背景**：桌面 `components/NoteInfoDialog`（Dialog）与移动端 `mobile/ui/NoteInfoSheet`（底部抽屉）形态差异是**有意的**
+- **背景**：桌面 `components/app/NoteInfoDialog`（Dialog）与移动端 `mobile/ui/NoteInfoSheet`（底部抽屉）形态差异是**有意的**
   （用户 261012），但**「属性要显示什么」这份清单**与两个格式化函数被逐字写了两遍。
 - **落地**：新建 `src/core/noteInfo.ts`：`noteInfoRows(info)`（5 行主清单）+ `formatNoteInfoTime` + `formatNoteInfoSize` + `SYNC_STATE_LABEL`；
   两端组件改为只负责渲染与交互（桌面 `cells`、移动端 `rows` 都直接调 `noteInfoRows`）。
@@ -355,7 +367,7 @@
   checksum 绕行随之上移，测连通路径也拿到它（这正是本项要修的）。`bridge.ts` 顺手删掉不再使用的 `CapacitorHttpHandler` 导入。
   **缓存语义保持**：`s3Store` 每实例缓存 client（原样），bridge 每次新建（原样）。
 - **未纳入本项**：`forcePathStyle` 的**取值**差异（同步侧仍固定 false）属 **D2**——需给 `SyncConfig` 扩字段 + 与 D3（https 强制）
-  一起做产品决策；代码里已留 `TODO(D2)` 注释指向 SYNC-PROTOCOL §7.3。
+  一起做产品决策；261017 已定稿**不做 path-style**（移动端只支持虚拟托管），详见 SYNC-PROTOCOL §7.3。
 - **护栏**：新增 `src/mobile/native/s3PortGuards.test.ts`（源码级）：`new S3Client(` 在 src/mobile 下只能**一处**、
   `responseChecksumValidation:` 只能**一次**、两处调用点都必须走工厂。自证：注入第二处 `new S3Client(` ⇒ 失败；还原 ⇒ 通过。
   （为什么用源码级：这两个端口在内部动态 import SDK 并 new client，**没有可注入点**，为测试拆注入点属过度设计；
@@ -553,9 +565,9 @@
 - **用户点单**：目录的「设置图标」在**表情符号**之外增加类目**图标**（"增加一些给笔记本使用的图标，文档之类的也可以使用"）；参考飞书/钉钉的图标选择器（**彩色图标 + 选色行**）。**只做桌面**（用户明确"先不动移动端"）；**表情符号那一页不动**。
 - **值方言（不动库表、不动同步协议）**：`tree_nodes.icon` 一直是一个 **≤16 字符的字符串**（表情符号就是它的历史值）⇒ 新类目只扩展值的方言：`i:<短id>:<色号0-7>`（例 `i:zap:5`）。**短 id 是硬要求**（lucide 长名如 `graduation-cap` 编码后 18>16 ⇒ 两端 `assertNodeIcon` 直接抛"无效的图标"）；`src/lib/nodeIcons.ts` 内置 **40 个图标 + 8 档色**，单测逐条断言编码 ≤16。历史 emoji 值原样走 emoji 分支 ⇒ **旧数据观感零变化**。
 - **渲染形态**：本批最初为彩色线性字形；**261015 用户要求增加底色后，已改为彩色圆角底块 + 白色线性轮廓**，选择器/目录/标签共用图形，详见上节。旧「不着底块」取舍不再是当前方案。
-- **面板与内核解耦（用户："这两个面板可以分离了，做到互不影响"）**：过去「选图标」浮层**借用内核**的 `.ne-ui-unicode-emoji-*` 类 ⇒ 只能靠在未分层文件写**全局覆盖**（`-item > button` / `-tabs` / `-search input`）并给该表面**钉 5 个 `--lakex-editor-*` token**，而这些规则**同时命中文档里内核自己的表情面板**。现在它是一等自有面板：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、类型页签走 kit 的 `.ln-tabs`（横向页签唯一来源），两页网格在 `src/components/nodeIcon.css`；那 3 条全局覆盖与 5 个 token **全部删除**。契约回填：`docs/LAKEX-CONTRACT.md` **§5.35**（标题与 ③④⑥ 已标注作废/教训）。
-- **实现位置**：`src/lib/nodeIcons.ts`（目录 + 编解码 + 默认页规则 + 单测）· `src/components/NodeIconGlyph.tsx` + `nodeIcon.css`（图形与面板）· `Sidebar.tsx`的`EmojiIconPicker`（顶部双tab/右上移除/选色/图标网格；emoji分组跳转在底部）· `MultiTabEditor.tsx`的4处`tab.icon`统一走图形组件。**当前打开按节点类型默认页，已保存色号仍带出**（最初按当前值决定页的方案已被用户改定）。移动端组件与实测见上节。
-- **门禁**：`tsc` ✓ · 全库 vitest **255 文件 / 1974 例** ✓ · `ui-metrics`（非主题颜色 0 / 字号字面量 0 / `!important` 10 / 未定义 token 0）✓ · `check:core`/`check:mobileui`/`check:bundle` ✓ · 两条构建 ✓ · `git diff --check` ✓ · `cssLayers`：新增 `components/nodeIcon.css`（104），`kernel-theme.css` 69→**64**、`app/misc.css` 顺手按实测收紧到 **113**。
+- **面板与内核解耦（用户："这两个面板可以分离了，做到互不影响"）**：过去「选图标」浮层**借用内核**的 `.ne-ui-unicode-emoji-*` 类 ⇒ 只能靠在未分层文件写**全局覆盖**（`-item > button` / `-tabs` / `-search input`）并给该表面**钉 5 个 `--lakex-editor-*` token**，而这些规则**同时命中文档里内核自己的表情面板**。现在它是一等自有面板：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、类型页签走 kit 的 `.ln-tabs`（横向页签唯一来源），两页网格在 `src/components/ui/nodeIcon.css`；那 3 条全局覆盖与 5 个 token **全部删除**。契约回填：`docs/LAKEX-CONTRACT.md` **§5.35**（标题与 ③④⑥ 已标注作废/教训）。
+- **实现位置**：`src/lib/nodeIcons.ts`（目录 + 编解码 + 默认页规则 + 单测）· `src/components/ui/NodeIconGlyph.tsx` + `nodeIcon.css`（图形与面板）· `Sidebar.tsx`的`EmojiIconPicker`（顶部双tab/右上移除/选色/图标网格；emoji分组跳转在底部）· `MultiTabEditor.tsx`的4处`tab.icon`统一走图形组件。**当前打开按节点类型默认页，已保存色号仍带出**（最初按当前值决定页的方案已被用户改定）。移动端组件与实测见上节。
+- **门禁**：`tsc` ✓ · 全库 vitest **255 文件 / 1974 例** ✓ · `ui-metrics`（非主题颜色 0 / 字号字面量 0 / `!important` 10 / 未定义 token 0）✓ · `check:core`/`check:mobileui`/`check:bundle` ✓ · 两条构建 ✓ · `git diff --check` ✓ · `cssLayers`：新增 `components/ui/nodeIcon.css`（104），`kernel-theme.css` 69→**64**、`app/misc.css` 顺手按实测收紧到 **113**。
 - **261014旧版设备实测**（隔离 userData + `lake://app` + CDP；证据 `.css-audit/icon-picker-261014/`，gitignored）：面板 = `.ln-overlay-surface.ln-popover.node-icon-picker`、**全页无内核面板类**、418×401、正文 266 高、40 图标 / 8 色；表情页 **9 组 / 1055 格 / 26px 字形**（原观感未变）；点「紫 + 闪电」落库 `i:zap:7` ⇒ 目录行与标签页都渲染彩色字形（tab 那枚 `i:rocket:3` = 绿 / 13.6px）；深色主题取 `#b39cf0`、面板底 = `--lake-bg-panel` `rgb(30,31,35)`（**不再依赖内核 token**）。最新底块形态与尺寸见261015节。
 - **未做 / 待跟进**：① ~~移动端新图标编码显示成原始串~~ **261015已接入自有选择器/图形，详见上节**。② 图标集是**数据表**（40个，可加/换/调色）；③ 钉钉那套实心图标资源未引入（仍用lucide、描边1.75）。
 
@@ -597,7 +609,7 @@
 
 - 实现：`App.tsx` 的 `onBlockedSave` 提成 `useCallback([showNotice])`，保持文案/保存失败语义；`Sidebar.tsx` 的原 `div[role=treeitem]` 内容拆成本文件 `memo(TreeRowFace)`，只传本行状态与原回调。递归/筛选/展开/定位逻辑不动，不新增DOM包装/CSS/依赖，不做Set优化/自定义memo比较器/虚拟化。保留了同文件在途图标面板改动。
 - **正式非插桩包对照**（5000文档/20000合成附件，默认GPU/sandbox；每场景12次）：同组中位 **208.5→73.9ms**，跨笔记本 **231.2→74.8ms**；两组修改后均未观察到>50ms长任务。目录DOM数量和行结构/文字/class/几何hash一致。递归结构仍检查全树，不夸称彻底解决。
-- 新增 `src/components/sidebarRendering.test.ts` **9例**：真实公共Sidebar的深层高亮/旧高亮清除、行图标不全量重建、新回调不旧闭包、重命名图标锁、折叠定位、文档不自动展开子项、过滤、刷新增删移动、新建菜单与上游回调护栏。
+- 新增 `src/components/app/sidebarRendering.test.ts` **9例**：真实公共Sidebar的深层高亮/旧高亮清除、行图标不全量重建、新回调不旧闭包、重命名图标锁、折叠定位、文档不自动展开子项、过滤、刷新增删移动、新建菜单与上游回调护栏。
 - 新增可复跑 `scripts/packaged-performance/sidebar-regression.mjs`（真实packaged+鼠标事件，独立/tmp数据）。**17场景通过**：文档/子项展开语义、跨组跟随、重命名、锁/解锁、筛选清除、新建子文档、跨级拖拽/释放、同级重排、确认删除+恢复刷新、新组刷新、浮出目录、浅/深/暖×1280/680宽窗。恢复/刷新部分走既有IPC，拖拽与菜单走真实点按；无真实S3。
 - **验证**：tsc ✓ · 全库vitest **242文件/1891例**（跳过5/16）✓ · ui-metrics/check:core/check:mobileui ✓ · build:web/check:bundle ✓ · 真实默认GPU包stylesnap **6相关态0差异**（plain浅/深/暖、hover-row、drag、menus；**未重烤**）✓ · diff --check ✓ · detector空报告。桌面dist已重建；候选.app在 `.css-audit/tree-implementation-261013/package-after/mac-arm64/`，未发DMG/未签公证/未提交/未推送。
 - 证据（gitignored）：`.css-audit/tree-implementation-261013/evidence/{before.json,after.json,stylesnap-gate.log,regression/sidebar-regression.json}`及截图/构建日志。测试只改合成库；自起实例已结束，不碰正式数据。
@@ -744,7 +756,7 @@
 - **A2「保存并同步」在云同步关闭时置灰 + 给理由**（用户定稿「改回置灰」）：
   · 桌面：判据在 `App.tsx` 用 cloudState 的 **UI 判据** `isCloudActive(cloudConfigured, cloudEnabled)` → `cloudReady` 经 `DesktopQuickNotes` 透传给工作区；按钮 `disabled={busy || !cloudReady}` + `title`（全局 title→`.ln-tip` 拦截，所以是真提示）。
   · 移动：`bridge.getCloudState()`（复用 `mobileCloudState()`，登记进 `NONE_OPS`）→ 写作卡 `cloudReady` 状态（挂载读一次 + `subscribeSyncSettings` 跟随设置页改动）；按钮置灰 + **一行可见说明**（`.mobile-qn-hint` —— 移动端没有 hover，光置灰用户不知道为什么）。
-  · 护栏：新增 `src/components/quickNoteSyncGate.test.ts`（两端：判据走 cloudState、按钮按 cloudReady 置灰、置灰必须给理由）。
+  · 护栏：新增 `src/components/app/quickNoteSyncGate.test.ts`（两端：判据走 cloudState、按钮按 cloudReady 置灰、置灰必须给理由）。
 - **C7「开启应用对齐一次」改用显式就绪信号，不再猜 3s**（用户定稿）：`useAutoSync(ready)` 由 `MobileApp` 传 `phase === "ready"`（= `bridge.init` + `refreshAll` 之后）驱动那次对齐；
   旧实现 `setTimeout(…, 3000)` 的问题：快设备白等、慢设备可能在桥没就绪时就触发（会走「未配置/密钥缺失」的假失败路径）。护栏在 `quickNoteCapturePath.test.ts`（断言不再有 3s + 就绪 effect 存在）。
 - **C6 移动端同步可观测性**（用户定稿）：新增 `src/mobile/sync/syncStatusStore.ts`（设备本地、不参与同步；**不塞**两端共用的 `lib/settings.ts`）；
@@ -914,7 +926,7 @@
   · 首页态冷/暖取样差 29 元素（基线必须 `--from` 暖态写）· 走查选择器在类名改名后失配 ·
   **CSS 注释里写了星号+斜杠导致移动端构建静默失败**（`| tail` 吞退出码 ⇒ 那几轮设备验证打在旧包上，已重跑更正）。
 - **仍需后续（按 §3 登记）**：① 待办 #20 桌面端摆脱 `b3-*`/`fn__*` 类名契约（含 AGPL 署名红线，**不动署名**）；
-  ② `components/treeDrag` 仍是移动端唯一冻结的共享「逻辑+DOM」件；③ Lightbox / 附件预览缺设备级探针
+  ② `components/model/treeDrag` 仍是移动端唯一冻结的共享「逻辑+DOM」件；③ Lightbox / 附件预览缺设备级探针
   （22 屏走查不打开这两个浮层，目前是"按规则搬迁 + 触屏几何"级证据）。
 
 ### 261012 · 移动端 UI 独立化 P0–P2（本批；用户授权全做 P0–P7，进行中）
@@ -994,7 +1006,7 @@
   **APK 时间戳**或 install 的 `Success`，不能只看"命令跑完了"。
 - **登记为本批之后的小额遗留（不影响 P0–P7 结论，按 §3 续做）**：① 死 CSS 清理（旧 `mobile-sheet*/toast*/dialog*/menu*`
   与部分 `mobile-settings-*` 已无 JSX 施加 ⇒ 交 `scripts/css-audit/audit-dead-css.mjs` 扫 + 删后对拍探针 0 差异）；
-  ② `components/treeDrag` 仍是移动端唯一冻结的共享「逻辑+DOM」件（要按「逻辑上收 + 移动端自有 DOM」改造，护栏允许清单里只剩它一条）；
+  ② `components/model/treeDrag` 仍是移动端唯一冻结的共享「逻辑+DOM」件（要按「逻辑上收 + 移动端自有 DOM」改造，护栏允许清单里只剩它一条）；
   ③ 小记预览的 `.ln-ellipsis` 桥接（组件改发 `.mb-ellipsis` 后可删）；④ Lightbox / 附件预览缺设备级探针（走查不打开这两个浮层）。
 - **未做（下一轮继续）**：
   P4 设置页样板屏（顺带清 SettingsDrawer 的 109 处 + `.config-empty` 对比度 2.86 不达 AA）· P5 逐屏迁移（首页/工作区/
@@ -1359,7 +1371,7 @@
 - **三处移动端真问题（用户现场反馈，均已修）**：
   ① **层序被内核打穿**：Univer 给 canvas 写了 inline `z-index:8`，而移动端底栏 `z-index:3`、侧滑抽屉 `z-index:7` ⇒ 画布盖住二者（实测底栏按钮 `elementFromPoint` 全命中 CANVAS）→ 给 `.mobile-usheet` 建层叠上下文（`position:relative; z-index:0; isolation:isolate`）。
   ② **只读仍拉起输入法**：Univer 内部 `div[contenteditable]`（`#__editor___INTERNAL_EDITOR__DOCS_NORMAL`）自己抢焦点（实测 `mInputShown=true`）→ 只读查看器加**焦点闸门**（容器内 `[contenteditable]` 一律 blur）。
-  ③ **跨端污染**：移动端借桌面 `components/NoteInfoDialog` → `HistorySnapshotPreview` → 懒加载**桌面** `UniverSheetEditor`/`BitableEditor`/`BoardEditor` ⇒ 桌面编辑器被打进移动端包、且移动端打开表格历史快照会挂**桌面**编辑器 → 新增 `src/mobile/ui/NoteInfoSheet.tsx`（移动端自有「文档属性」抽屉）替代；桌面 `NoteInfoDialog` 未动；`HistorySnapshotPreview` 另加移动端提示护栏（纵深防御）；护栏见 `mobileLazyChunks.test.ts`。
+  ③ **跨端污染**：移动端借桌面 `components/app/NoteInfoDialog` → `HistorySnapshotPreview` → 懒加载**桌面** `UniverSheetEditor`/`BitableEditor`/`BoardEditor` ⇒ 桌面编辑器被打进移动端包、且移动端打开表格历史快照会挂**桌面**编辑器 → 新增 `src/mobile/ui/NoteInfoSheet.tsx`（移动端自有「文档属性」抽屉）替代；桌面 `NoteInfoDialog` 未动；`HistorySnapshotPreview` 另加移动端提示护栏（纵深防御）；护栏见 `mobileLazyChunks.test.ts`。
 - **移动端「文档属性」按手机口径重排**：内容自带左右 16px 内边距（`.mobile-sheet-body` 本身是 0 内距）、信息**一行一项**（标签左/值右）、章节 1px 分隔线、空态紧凑左对齐（原误用为"整屏空"设计的 `.mobile-sheet-empty`）。实机几何：sheet 412×553、`.minfo` padding-left 16px、行宽 380。
 - **移动端残留审计（专项，全清）**：源码 / kind 取值 / CSS / `doc_kind` schema / Android 原生层 / 产物 / 快照脚本 —— 无 `fortune`/`luckysheet`/`MobileSheetViewer`/`.mst-*`/旧 `sheet` kind；重建后 `dist-mobile` 里的**桌面编辑器 chunk 与桌面专属标识全部消失**（只剩 `MobileUsheetViewer`）。
 - **未覆盖（后续/真机验收补）**：触摸滚动与双指缩放、软键盘弹出后的布局、移动端表格里的图片加载、真机；另有**首帧短暂空白**（画完即正常，未量化绘制耗时）。

@@ -2,8 +2,8 @@
  * 移动端桥的**上下文**（C3-5 第①步：从 bridge.ts 纯抽取，零行为变化）。
  *
  * 这里只放「域无关」的东西：DB 单例/初始化、资源字节缓存、互斥域队列包装、S3 客户端工厂、
- * 同步设置读取。域方法（notes/tree/quickNotes/assets/sync）仍在 bridge.ts 组合；
- * 需要"查云端状态/推送回核"这类跨域动作的 helper 留在 bridge.ts，避免循环依赖。
+ * 同步设置读取。域方法在 assets/sync/notes/quickNotes/tree 五个文件里；bridge.ts 只负责组合。
+ * 域之间的少量 helper（mobileCloudState 等）由 sync 域导出给 bridge/quickNotes 复用。
  */
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 import { migrateSnapshotToNativeSqlite } from "../native/nativeSqliteMigration";

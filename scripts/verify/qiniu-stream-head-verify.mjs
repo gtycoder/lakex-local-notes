@@ -1,4 +1,7 @@
 // 七牛 Kodo S3 兼容性实测：HeadObject + 流式 PutObject（显式 Content-Length）
+//
+// 凭据**不得写进仓库**（历史版本曾硬编码，已清理；旧 key 在 git 历史里，建议轮换）。
+// 用法：QN_AK=... QN_SK=... node scripts/verify/qiniu-stream-head-verify.mjs
 import fs from "node:fs";
 import { S3Client, HeadObjectCommand, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
@@ -7,10 +10,15 @@ const cfg = {
   region: "cn-north-1",
   bucket: "local-lake-hebei",
   prefix: "ab-test-verify/verify-stream-head",
-  accessKeyId: "***REMOVED***",
-  secretAccessKey: "***REMOVED***",
+  accessKeyId: process.env.QN_AK ?? "",
+  secretAccessKey: process.env.QN_SK ?? "",
   forcePathStyle: false,
 };
+
+if (!cfg.accessKeyId || !cfg.secretAccessKey) {
+  console.error("缺少 QN_AK / QN_SK 环境变量（不要把密钥写进仓库）");
+  process.exit(2);
+}
 
 const client = new S3Client({
   region: cfg.region,

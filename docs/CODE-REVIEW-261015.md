@@ -428,13 +428,11 @@ codegen/打包步骤，为省几张字面量引入构建复杂度不划算（AGE
   `maxBytes` 语义（解压后判）、prefix 归属、并发上限 8（在 core，单一来源）。
 - **可选端口方法覆盖面不对称不是缺陷**：core 里**没有任何一处**调用 `listObjects`/`deleteMany`/`getObjectToFile`，
   调用方各在两端自己的编排层（移动 `bridge.ts` / 桌面 `s3Maintenance.ts`）。
-- **真实漂移 4 处（P1）+ 2 处待决策**：D1 `assertSafeKey` 只在桌面（移动端非 ASCII key 可能让 ListObjectsV2 编码不一致 ⇒ GC 漏看）、
-  D4 404 判定两端两套（桌面 `isNoSuchKey` 含 `NotFound`，而桌面注释明确记录七牛/AWS 会返回 `NotFound`）、
-  D6 移动端**两套 client 工厂**且设置不同（测连通 vs 真同步口径不一致）、
-  D2 `forcePathStyle` 移动端**写死 false**（自建 MinIO 用户在移动端用不了 —— 真实功能缺口，不只是观感）；
-  另 D5（移动端 gzip PUT 不带 `Content-Encoding`，当前读侧按魔数兼容 ⇒ 需真云验证再动）、D3/D7 记录。
-- **建议顺序**：D6 先让移动端内部自洽 → D1/D4 共用 core 判据 → D2+D3 一起定产品语义 → D5 走真云。
-  （**本项只产出对照表，未改任何实现**——漂移修复属后续批次。）
+- **真实漂移 4 处（P1）+ 2 处后续项**：D1 `assertSafeKey` 只在桌面、D4 404 判定两端两套、D6 移动端**两套 client 工厂**、
+  D2 `forcePathStyle` 移动端写死 false；另 D5 移动端 gzip PUT 不带 `Content-Encoding`。
+  **✅ 261017 全部处理**：D1/D4/D6 已修；D2 定稿不做（移动端只支持虚拟托管，自建 MinIO 与 D3 另立项）；
+  D5 真云验证后移动端补 header（见 HANDOFF 261017(十三)、SYNC-PROTOCOL §7.3）。D3/D7 仍为记录项。
+- **建议顺序（已走完）**：D6 自洽 → D1/D4 共用判据 → D2/D5（261017）。
 
 ### C2-5 提示/Toast 能力：4 套实现（已定「暂缓」，本轮不重开）
 
@@ -773,7 +771,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | **B5a 跨端契约** ✅ **已完成 261016** | C4-5 跨端共享组件的**样式覆盖护栏**（3 判据 + 零误报自证；顺带查出 `.editor-error` 缺口） | 低（纯测试） | 是 |
 | **B5b 文档属性收口** ✅ **已完成 261016** | C1-7 `NoteInfoDialog`/`NoteInfoSheet` 的清单与格式化收归 `core/noteInfo.ts`（两端窗体形态不动） | 低（纯逻辑搬迁） | 是 |
 | **B6 待交接（用户已批准做）** | **C3-2** ✅（261017：4 桶纯搬迁）· **C3-5** ✅（261017：6 域拆分，bridge 只做组合，设备门禁 0 差异） | — | 均已完成 |
-| **待用户决策** | **无**（D2 ✅ 261017 定稿不做；D5 ✅ 261017 真云验证并修；C1-6/C5-1/C5-2/C1-5 均已落地） | — | — |
+| **决策状态** | **无待决策**（D2 ✅ 261017 定稿不做；D5 ✅ 261017 真云验证并修；C1-6/C5-1/C5-2/C1-5 均已落地） | — | — |
 
 ---
 
@@ -853,15 +851,15 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 2. **C3-5 `src/mobile/bridge.ts` 按域拆分** → ✅ **已完成（261017，见 HANDOFF 261017(九)(十)(十一)）**：bridge 1095→31 行，6 个域文件（context/assets/sync/notes/quickNotes/tree），结构护栏 + 契约测试 + 设备门禁（6 态 0 差异）全绿。
    验收**必须含**：`lakeNativeContract.test.ts`（`window.lakeNative` 方法数 49+2 不变）+ **移动端设备级**（`check:mobilesnap` 6 态 + 走查）。
 
-### 11.3 待用户决策（**不要擅自做**）
+### 11.3 已裁决记录（261017 全部结案；保留当时的选项与口径）
 
 | # | 项 | 卡点 |
 | --- | --- | --- |
-| **Q3** | 是否新增 `--lake-bg-selected` / `--lake-fg-selected` / `--lake-bg-selected-hover`？ | **取色需用户定**（三候选与对比度见 §Q3；推荐 A = `color-mix(tint 88%, accent 12%)`）。**C5-1/C5-2 随之**。 |
+| **Q3** | 是否新增 `--lake-bg-selected` / `--lake-fg-selected` / `--lake-bg-selected-hover`？ | ✅ **261017 裁定 A 并落地**：`color-mix(tint 88%, accent 12%)`；C5-1/C5-2 随之完成。 |
 | **D2** | `forcePathStyle` 移动端写死 false | ✅ **261017 用户定稿：不做**。移动端只支持虚拟托管（阿里云 OSS 官方仅虚拟托管；腾讯云 COS 2024+ 新桶不支持 path-style；AWS/七牛同理）；自建 MinIO 与 D3 一起另立项。 |
 | **D5** | 移动端 gzip PUT 不带 `Content-Encoding` | ✅ **261017 已修 + 真云验证**（七牛 `local-lake-hebei` / `lake-notes-dev1`）：带 header 存回 `ContentEncoding=gzip`；移动端已补，D5 护栏已加。 |
 | **C1-6** | 移动端只读单元格复用桌面只读渲染 | ✅ **261017 已落地并设备验收**：`core/bitableReadOnly.ts` 纯语义；lake_gate 实测 bool=[true,false] disabled、link href/target、stars=[4,2]、bars=60%/0%、relation=[目标A,目标B,目标B]。 |
-| **C1-5** | 桌面与移动列表的时间措辞是否统一 | ✅ **已裁定并落地（261017，Q10=B）**：列表相对口径统一（今天/昨天/本周/上周/本月/上月/今年，跨年绝对）；绝对/细节时间固定 `YYYY-MM-DD HH:mm[:ss]`。见 HANDOFF 261017(七)。 |
+| **C1-5** | 桌面与移动列表的时间措辞是否统一 | ✅ **已裁定并落地（261017，Q10=B）**：列表统一 今天/昨天/本周/上周/本月/上月，其余默认绝对；绝对/细节时间固定 `YYYY-MM-DD HH:mm[:ss]`。见 HANDOFF 261017(七)。 |
 
 ### 11.4 本会话新增/改动的**护栏**（新会话改动前必看）
 
