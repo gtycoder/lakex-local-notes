@@ -16,11 +16,16 @@ import {
 
 const read = (p: string): string => readFileSync(path.join(process.cwd(), p), "utf8");
 
-/** 解析 src/mobile/bridge.ts 的一级方法名。 */
-function bridgeMethodNames(): string[] {
-  const lines = read("src/mobile/bridge.ts").split("\n");
-  const start = lines.findIndex((l) => /^export const bridge = \{$/.test(l));
+/** 域模块（C3-5）：bridge 用 `...xxxDomain` 展开，方法名需从域文件里一起解析。 */
+const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
+  { file: "src/mobile/bridge/assets.ts", exportName: "assetsDomain" },
+];
+
+function objectMethodNames(source: string, exportName: string): string[] {
+  const lines = source.split("\n");
+  const start = lines.findIndex((l) => new RegExp("^export const " + exportName + " = \\{$").test(l));
   const names: string[] = [];
+  if (start < 0) return names;
   let depth = 0;
   for (let i = start; i < lines.length; i += 1) {
     const line = lines[i];
@@ -29,6 +34,16 @@ function bridgeMethodNames(): string[] {
     if (hit && depth === 1) names.push(hit[1]);
     depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
     if (depth <= 0) break;
+  }
+  return names;
+}
+
+/** 解析 src/mobile/bridge.ts 的一级方法名 + 域模块展开的方法名。 */
+function bridgeMethodNames(): string[] {
+  const source = read("src/mobile/bridge.ts");
+  const names = objectMethodNames(source, "bridge");
+  for (const mod of DOMAIN_MODULES) {
+    if (source.includes("..." + mod.exportName)) names.push(...objectMethodNames(read(mod.file), mod.exportName));
   }
   return names;
 }

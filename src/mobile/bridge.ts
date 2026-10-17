@@ -9,10 +9,7 @@
  * - 结构：docs/MOBILE-TECH-STACK.md；跨端能力矩阵见该文档
  */
 import { writeLocalStorage } from "../lib/localStorageSafe";
-import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./native/assetFs";
-import { isSafeShellOpenFilename } from "../core/assetNaming.js";
-import { Filesystem, Directory } from "@capacitor/filesystem";
-import { registerPlugin } from "@capacitor/core";
+import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs } from "./native/assetFs";
 import { scanAssetCards, fileKindOf } from "../core/fileCard.js";
 import { lakeHtmlToPlain } from "../core/lakeCaches.js";
 import { countChars, countWords } from "../core/textStats.js";
@@ -36,11 +33,6 @@ import { createQuickNotesSyncDbPort } from "./data/quickNotesDbPort.js";
 import { mobileSecretStore } from "./native/secretStore.js";
 import { writeSyncStatus } from "./sync/syncStatusStore";
 
-/** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
-const OpenFile = registerPlugin<{
-  open: (opts: { path: string }) => Promise<void>;
-  saveAs: (opts: { path: string; name: string; mime?: string }) => Promise<void>;
-}>("OpenFile");
 import * as treeRepository from "./data/treeRepository.js";
 import * as noteRepository from "./data/noteRepository.js";
 import { indexNote, reconcileIndex } from "./data/searchIndex.js";
@@ -49,11 +41,11 @@ import * as trashRepository from "./data/trashRepository.js";
 import * as quickNotesRepository from "./data/quickNotesRepository.js";
 import * as historyRepository from "./data/historyRepository.js";
 import type { HistoryMobileSettings } from "./data/historyRepository.js";
-import * as orphanAssetRepository from "./data/orphanAssetRepository.js";
 import * as gcRepository from "./data/gcRepository.js";
 import * as diagnosticsRepository from "./data/diagnosticsRepository.js";
 import * as notebookTreeRepository from "./data/notebookTreeRepository.js";
-import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, assets, ensureDb, dbPort, assertResourceBytes, assertS3Credentials, createS3Client, runWrite, runMaintenance, runPriority } from "./bridge/context";
+import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, assets, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance, runPriority } from "./bridge/context";
+import { assetsDomain } from "./bridge/assets";
 
 export type { HistoryMobileSettings } from "./data/historyRepository.js";
 
@@ -143,6 +135,7 @@ function scheduleQuickNoteVerify(id: string): void {
 }
 
 export const bridge = {
+  ...assetsDomain,
   async init(): Promise<void> {
     await ensureDb();
     // 资源显示走 AssetServer（Filesystem 文件直读，无需预加载/迁移）。
@@ -467,41 +460,12 @@ export const bridge = {
   },
 
   /** 本地资源预览（仅图片返回 dataUrl）。 */
-  async readAssetPreview(noteId: string, filename: string) {
-    const mimeType = mimeTypeForFilename(filename);
-    if (!mimeType.startsWith("image/")) return { filename, mimeType, supported: false };
-    const bytes = await loadAssetBytesFs(`${noteId}/${filename}`);
-    if (!bytes || bytes.length > 32 * 1024 * 1024) return { filename, mimeType, supported: false };
-    return { filename, mimeType, supported: true, dataUrl: `data:${mimeType};base64,${bytesToBase64(bytes)}` };
-  },
-
   /** 历史快照预览（返回 HTML，供属性面板内联渲染）。 */
   async previewHistorySnapshot(historyId: number) {
     const d = await ensureDb();
     const h = await historyRepository.readHistory(d, historyId);
     if (!h) return null;
     return { plain: lakeHtmlToPlain(h.content), html: h.content, createdAt: "", contentHash: "" };
-  },
-
-  /** 系统默认应用打开本地附件（OpenFile 原生插件）。 */
-  async openAttachment(noteId: string, filename: string) {
-    // 与桌面 open_attachment 对齐：禁止 shell/ACTION_VIEW 打开可执行类附件
-    if (!isSafeShellOpenFilename(filename)) {
-      throw new Error("该附件类型不允许用系统应用打开（疑似可执行文件）");
-    }
-    const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
-    await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
-    return { ok: true };
-  },
-
-  /**
-   * 另存为到用户可见区域：图片 → 相册（MediaStore），其它附件 → SAF 系统“保存到”面板。
-   * 私有 Data 目录里的文件用户看不到，这是把它转出去的唯一合规路径。
-   */
-  async saveAssetAs(noteId: string, filename: string, name?: string) {
-    const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
-    await OpenFile.saveAs({ path: uri.uri.replace(/^file:\/\//, ""), name: name || filename });
-    return { ok: true };
   },
 
   /** 恢复历史快照：对齐桌面端——先给当前正文留档（可反悔），再把快照正文+标题写回（sync_state=local → 下轮同步上传覆盖远端）。 */
@@ -550,34 +514,6 @@ export const bridge = {
       const d = await ensureDb();
       const mobileDb = d;
       return await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
-    });
-  },
-
-  /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
-  async listOrphanAssets(): Promise<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string; detectedAt: string }>> {
-    const d = await ensureDb();
-    return await orphanAssetRepository.listOrphanAssets(d);
-  },
-
-  /** 删除单个孤儿资源（本地文件 + 登记）。 */
-  async deleteOrphanAsset(id: number): Promise<void> {
-    await runWrite("deleteOrphanAsset", async () => {
-      const d = await ensureDb();
-      await orphanAssetRepository.deleteOrphanAsset(d, id, {
-        assets,
-        removeAssetFile: removeAssetBytesFs,
-      });
-    });
-  },
-
-  /** 清理全部孤儿资源（本地文件 + 登记）。 */
-  async cleanOrphanAssets(): Promise<void> {
-    await runWrite("cleanOrphanAssets", async () => {
-      const d = await ensureDb();
-      await orphanAssetRepository.cleanOrphanAssets(d, {
-        assets,
-        removeAssetFile: removeAssetBytesFs,
-      });
     });
   },
 
@@ -751,33 +687,6 @@ export const bridge = {
     }
   },
 
-
-  /** D8+：图片/附件上传（Lake 编辑器粘贴/插入调用）。本地落盘 + 返回 canonical URL（本地 AssetServer 服务）。
-   * 附件（非图片）同样走本路径：任意字节落盘 + 保留原扩展名（与桌面 assetNaming 命名一致）。 */
-  async uploadResource(
-    input: { bytes: Uint8Array; filename: string },
-    noteId: string
-  ): Promise<{ url: string; resourceRef: string; filename: string; mimeType: string; size: number }> {
-    const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes as unknown as ArrayLike<number>);
-    assertResourceBytes(bytes);
-    // 与桌面一致的资产文件名（共享 buildAssetFilename：{13ts}_{8hex}.{ext}，extractAssetRefs 正则匹配）
-    const name = buildAssetFilename(input.filename);
-    // 本地存储（内存 + Filesystem 持久化，AssetServer 读取显示）
-    // P1-8（GPT 审计）：必须等待 Filesystem 落盘成功再返回，否则"正文保存成功但图片重启后丢失"
-    const key = noteId + "/" + name;
-    assets.set(key, bytes);
-    try {
-      await saveAssetBytesFs(key, bytes);
-    } catch (e) {
-      assets.delete(key);
-      throw new Error("图片落盘失败: " + (e as Error).message);
-    }
-    const mimeType = mimeTypeForFilename(name);
-    const url = localAssetHttpUrl(noteId, name);
-    // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
-    const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
-    return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };
-  },
 
   /** 云端 GC（对齐桌面 runDeepCleanup）：删「未被 latest/prev 链清单/历史快照引用 ∧ 双锚窗口（创建 + 待回收标记）已过」的 objects/assets。 */
   async gcDeepCleanup(): Promise<{ candidateCount: number; deletedCount: number; keys: string[] }> {

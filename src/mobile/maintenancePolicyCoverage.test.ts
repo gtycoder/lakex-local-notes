@@ -15,30 +15,43 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAINTENANCE_OPS, NONE_OPS, PRIORITY_OPS, WRITE_OPS, classifyOp } from "../core/maintenancePolicy.js";
 
-const SOURCE = readFileSync(path.join(process.cwd(), "src/mobile/bridge.ts"), "utf8");
-const LINES = SOURCE.split("\n");
+const BRIDGE_FILE = "src/mobile/bridge.ts";
+/** 域模块（C3-5）：bridge 用 `...xxxDomain` 展开，方法体也要一起扫（取锁点可能在域文件里）。 */
+const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
+  { file: "src/mobile/bridge/assets.ts", exportName: "assetsDomain" },
+];
 
-interface Method { name: string; from: number; to: number }
+interface Method { name: string; file: string; from: number; to: number }
 
-/** 解析 export const bridge = { ... } 的一级方法及其行范围（1-based）。 */
-function parseBridgeMethods(): Method[] {
-  const start = LINES.findIndex((l) => /^export const bridge = \{$/.test(l));
+/** 解析 `export const xxx = { ... }` 的一级方法及其行范围（1-based）。 */
+function parseObjectMethods(file: string, exportName: string): Method[] {
+  const lines = readFileSync(path.join(process.cwd(), file), "utf8").split("\n");
+  const start = lines.findIndex((l) => new RegExp("^export const " + exportName + " = \\{$").test(l));
   const out: Method[] = [];
+  if (start < 0) return out;
   let depth = 0;
-  for (let i = start; i < LINES.length; i += 1) {
-    const line = LINES[i];
+  for (let i = start; i < lines.length; i += 1) {
+    const line = lines[i];
     if (i === start) { depth = 1; continue; }
     const hit = /^  (?:async )?([a-zA-Z_$][a-zA-Z0-9_$]*)\(/.exec(line);
-    if (hit && depth === 1) out.push({ name: hit[1], from: i + 1, to: -1 });
+    if (hit && depth === 1) out.push({ name: hit[1], file, from: i + 1, to: -1 });
     depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
     if (depth <= 0) break;
   }
-  out.forEach((m, i) => { m.to = i + 1 < out.length ? out[i + 1].from : LINES.length; });
+  out.forEach((m, i) => { m.to = i + 1 < out.length ? out[i + 1].from : lines.length + 1; });
   return out;
 }
 
-const METHODS = parseBridgeMethods();
-const bodyOf = (m: Method): string => LINES.slice(m.from - 1, m.to - 1).join("\n");
+const bridgeSource = readFileSync(path.join(process.cwd(), BRIDGE_FILE), "utf8");
+const METHODS: Method[] = parseObjectMethods(BRIDGE_FILE, "bridge");
+for (const mod of DOMAIN_MODULES) {
+  if (bridgeSource.includes("..." + mod.exportName)) METHODS.push(...parseObjectMethods(mod.file, mod.exportName));
+}
+
+const bodyOf = (m: Method): string => {
+  const lines = readFileSync(path.join(process.cwd(), m.file), "utf8").split("\n");
+  return lines.slice(m.from - 1, m.to - 1).join("\n");
+};
 
 /** 取方法体里的取锁调用点：runWrite("op" / runMaintenance("op" / runPriority("op"。 */
 function lockSites(body: string): Array<{ fn: "runWrite" | "runMaintenance" | "runPriority"; op: string }> {
