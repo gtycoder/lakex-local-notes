@@ -2,143 +2,143 @@
  "states": {
   "plain:1315:light": {
    "n": 2351,
-   "hash": "qn2ljr"
+   "hash": "37kmxg"
   },
   "plain:760:light": {
    "n": 2315,
-   "hash": "uasp7i"
+   "hash": "lquhoj"
   },
   "plain:1315:dark": {
    "n": 2351,
-   "hash": "1h9e6a2"
+   "hash": "bv6ewi"
   },
   "plain:760:dark": {
    "n": 2315,
-   "hash": "ubqg0h"
+   "hash": "1twyxqq"
   },
   "drag:1315:light": {
    "n": 2353,
-   "hash": "1l9k91z"
+   "hash": "u81iac"
   },
   "drag:1315:dark": {
    "n": 2353,
-   "hash": "10mlluy"
+   "hash": "1e965aq"
   },
   "outline-docked:760:light": {
    "n": 2315,
-   "hash": "uasp7i"
+   "hash": "lquhoj"
   },
   "hover-row:1315:light": {
    "n": 2351,
-   "hash": "2efpch"
+   "hash": "1yp0eq7"
   },
   "hover-tab:1315:light": {
    "n": 2351,
-   "hash": "5uqscf"
+   "hash": "1m5edcs"
   },
   "hover-rail:760:light": {
    "n": 2315,
-   "hash": "a2yxfq"
+   "hash": "4cq4h4"
   },
   "menus:1315:light": {
    "n": 2401,
-   "hash": "vlneg8"
+   "hash": "4nch8r"
   },
   "note-info:1315:light": {
    "n": 2411,
-   "hash": "q6fm7p"
+   "hash": "oofo6"
   },
   "search:1315:light": {
    "n": 2369,
-   "hash": "190zr4i"
+   "hash": "vu21dd"
   },
   "settings:1315:light": {
    "n": 2480,
-   "hash": "1hdtjhn"
+   "hash": "1d0o7u0"
   },
   "settings-editor:1315:light": {
    "n": 2516,
-   "hash": "1g7w8fg"
+   "hash": "ku84oy"
   },
   "settings-data:1315:light": {
    "n": 2514,
-   "hash": "1nz939a"
+   "hash": "uv2o8t"
   },
   "settings-trash:1315:light": {
    "n": 2465,
-   "hash": "1yzzwq3"
+   "hash": "121ongo"
   },
   "resources:1315:light": {
    "n": 2389,
-   "hash": "7sfwdi"
+   "hash": "bttjwq"
   },
   "settings-about:1315:light": {
    "n": 2626,
-   "hash": "oogord"
+   "hash": "1mkghlm"
   },
   "search-empty:1315:light": {
    "n": 2369,
-   "hash": "190zr4i"
+   "hash": "vu21dd"
   },
   "focus-create:1315:light": {
    "n": 2357,
-   "hash": "u5xnnv"
+   "hash": "188fg08"
   },
   "hover-card:1315:light": {
    "n": 2351,
-   "hash": "qn2ljr"
+   "hash": "37kmxg"
   },
   "outline-open:1315:light": {
    "n": 2358,
-   "hash": "vztapg"
+   "hash": "iikifv"
   },
   "quicknotes:1315:light": {
    "n": 2351,
-   "hash": "qn2ljr"
+   "hash": "37kmxg"
   },
   "plain:560:light": {
    "n": 2279,
-   "hash": "b3ftn9"
+   "hash": "1jgrf8o"
   },
   "plain:560:dark": {
    "n": 2279,
-   "hash": "1yos9xb"
+   "hash": "1vam6cc"
   },
   "settings:1315:dark": {
    "n": 2514,
-   "hash": "ara8yd"
+   "hash": "1had2gd"
   },
   "plain:1315:warm": {
    "n": 2351,
-   "hash": "1ve7x0m"
+   "hash": "nwvs2w"
   },
   "plain:560:warm": {
    "n": 2279,
-   "hash": "x158e0"
+   "hash": "bolzqp"
   },
   "hover-row:1315:warm": {
    "n": 2351,
-   "hash": "10ilpkh"
+   "hash": "1vqkqzm"
   },
   "menus:1315:warm": {
    "n": 2401,
-   "hash": "teregj"
+   "hash": "8tulod"
   },
   "search:1315:warm": {
    "n": 2369,
-   "hash": "ze751g"
+   "hash": "8e6ive"
   },
   "settings:1315:warm": {
    "n": 2514,
-   "hash": "1nfbat1"
+   "hash": "liged7"
   },
   "quicknotes:1315:warm": {
    "n": 2351,
-   "hash": "1ve7x0m"
+   "hash": "nwvs2w"
   },
   "outline-open:1315:warm": {
    "n": 2358,
-   "hash": "8532qf"
+   "hash": "lv073s"
   },
   "rm:1315:light": {
    "n": 2351,
@@ -158,15 +158,15 @@
   },
   "rt:1315:light": {
    "n": 2351,
-   "hash": "qn2ljr"
+   "hash": "37kmxg"
   },
   "board:1315:light": {
    "n": 2409,
-   "hash": "7xvfqg"
+   "hash": "1w73d8r"
   },
   "board:1315:dark": {
    "n": 2409,
-   "hash": "1htkt3s"
+   "hash": "ffmyzk"
   }
  }
 }

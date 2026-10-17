@@ -857,15 +857,10 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   transform: scale(.96);
 }
 
-/* 浮层入场统一淡入+极短位移。注意：.floating-dialog 故意不在此列——
- * 它靠 transform: translate(-50%,-50%) 居中，而 lake-pop-in 的 keyframes 只写
- * translateY/scale，会在动画期间覆盖掉居中偏移，导致弹窗"从右下飞入再弹回中心"。
- * 浮窗入场改用 styles.css 的 floating-dialog-enter（保留 translate(-50%,-50%)）。 */
-.context-menu,
-.tab-switcher-menu,
-.sync-status-popover {
-  animation: lake-pop-in var(--lake-motion-fast) var(--lake-ease-standard);
-}
+/* 浮层入场已收编到 overlay 层：菜单/气泡一律由 .ln-overlay-surface 的 animation 起播
+ * （261017 A 批，单一来源）。这里不再按表面类另写 lake-pop-in。
+ * 注意 .floating-dialog 仍走自己的 floating-dialog-enter —— 它靠 translate(-50%,-50%) 居中，
+ * 位移类 keyframes 会在入场期吃掉居中偏移（见 app/misc.css）。 */
 
 .tree-row:active,
 .note-row:active {
