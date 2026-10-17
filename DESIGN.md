@@ -228,6 +228,29 @@ components:
 
 **The One Declaration Rule.** 一个面要么靠 1px 边，要么靠阴影，不要「细边 + 大软阴影」同时上（那是幽灵卡片）。
 
+## Motion
+
+**动效只表达状态变化，不做装饰。**（261017 A 批；数值唯一来源 = `src/styles/themes/base.css` 的 `--lake-motion-*` / `--lake-ease-*`。）
+
+### Duration Tokens
+- `--lake-motion-instant` **80ms**：按压回弹、焦点环显隐（必须跟手）。
+- `--lake-motion-fast` **130ms**：hover / 颜色 / 边框 / 大小面板入场（**默认档**）。
+- `--lake-motion-panel` **190ms**：对话框、抽屉、菜单表面入场。
+- `--lake-motion-slow` **240ms**：大面板收起/展开（大纲）。
+
+### Curves
+- `--lake-ease-standard`：默认（悬停、颜色、位移）。
+- `--lake-ease-emphasized`：浮层/对话框入场。
+- `--lake-ease-exit`：保留给未来的出场相位（当前未使用）。
+- `--lake-ease-overshoot`：**只给有实体的控件回弹**（开关滑块、按压），不用于颜色。
+
+### Rules
+1. **状态切换用 `transition`，挂载出现用 `animation`**；只动 `opacity / transform / color / background / border-color / box-shadow`，**不动布局属性**（width/height/top/left/margin/padding）。
+2. **浮层入场只做 "in"**：菜单/气泡挂在 `.ln-overlay-surface` 原语上、挂载帧起播（定位 hook 的落位在首帧绘制前完成）；**不要用 rAF/相位门控**（隐藏窗口里 rAF 不触发会把菜单卡成不可见）。出场相位暂不做（要改 Overlay 常驻，另立项）。
+3. **按压反馈只放在 kit 原语上**（`.ln-btn` / `.ln-iconbtn` 的 `transform`），不在业务组件里另写一套。
+4. **一个交互语义只有一档时长**：同一类元素不只换曲线、不各写毫秒值；新动效先找既有令牌。
+5. **reduced-motion 由 a11y 层统一兜底**（`animation-duration: 1ms` + 位移过渡白名单），组件不写自己的 reduce 分支。
+
 ## Shapes
 
 形体语言是**克制的小圆角**：控件 8px（紧凑件 6px），浮层表面 10px，对话框 14px，胶囊只用于开关与徽标。
@@ -283,6 +306,7 @@ components:
 - **Do** 用表面价值（三级）表达层级，用 1px 边或阴影二选一。
 - **Do** 让主色只出现在焦点 / 选中 / 主操作 / 链接上。
 - **Do** 交互状态六态齐全：default / hover / active / focus-visible / selected / disabled。
+- **Do** 动效走 `--lake-motion-*` / `--lake-ease-*` 令牌：状态切换用 transition、挂载出现用 animation，只动 opacity/transform（见「Motion」）。
 
 ### Don't:
 - **Don't** 在组件里写内联 `style={{…}}` 表达静态视觉（动态几何例外：实测坐标、数据驱动颜色）。

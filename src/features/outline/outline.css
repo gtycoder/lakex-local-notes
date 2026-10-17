@@ -186,7 +186,7 @@
   box-shadow: none;
   opacity: 1;
   transform: translateX(0);
-  transition: opacity 260ms var(--shell-ease), transform 260ms var(--shell-ease), visibility 260ms, box-shadow 260ms ease-out, border-radius 260ms var(--shell-ease);
+  transition: opacity var(--lake-motion-slow) var(--shell-ease), transform var(--lake-motion-slow) var(--shell-ease), visibility var(--lake-motion-slow), box-shadow var(--lake-motion-slow) ease-out, border-radius var(--lake-motion-slow) var(--shell-ease);
 }
 
 /* 收起：悬停整条 rail 后才以浮层方式预览，不挤压正文。 */

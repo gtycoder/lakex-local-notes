@@ -27,8 +27,11 @@
   transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
     border-color var(--lake-motion-fast) var(--lake-ease-standard),
     color var(--lake-motion-fast) var(--lake-ease-standard),
-    opacity var(--lake-motion-fast) var(--lake-ease-standard);
+    opacity var(--lake-motion-fast) var(--lake-ease-standard),
+    transform var(--lake-motion-instant) var(--lake-ease-standard);
 }
+/* 261017 A 批：按压物理 = 半像素下沉 + 轻微收缩（只动 transform，不触发布局）。 */
+.ln-btn:active:not(:disabled) { transform: translateY(.5px) scale(.98); }
 .ln-btn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-btn:disabled:hover { background: transparent; }
@@ -90,10 +93,11 @@
   background: transparent;
   cursor: pointer;
   transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
-    color var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard);
+    color var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard),
+    transform var(--lake-motion-instant) var(--lake-ease-standard);
 }
 .ln-iconbtn:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.ln-iconbtn:active { background: var(--lake-bg-press); }
+.ln-iconbtn:active:not(:disabled) { background: var(--lake-bg-press); transform: scale(.94); }
 .ln-iconbtn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-iconbtn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-iconbtn:disabled:hover { background: transparent; }
@@ -133,7 +137,13 @@
 }
 .ln-row__icon { flex: 0 0 auto; color: var(--lake-text-3); }
 .ln-row__title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
-.ln-row__actions { display: flex; flex: 0 0 auto; gap: 2px; opacity: 0; }
+.ln-row__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
+}
 .ln-row:hover { background: var(--lake-bg-hover); }
 .ln-row:hover .ln-row__actions, .ln-row:focus-within .ln-row__actions, .ln-row.is-selected .ln-row__actions { opacity: 1; }
 .ln-row:active { background: var(--lake-bg-press); }
@@ -285,6 +295,9 @@
   font-family: inherit;
   font-size: var(--lake-font-size-small);
   cursor: pointer;
+  transition: border-color var(--lake-motion-fast) var(--lake-ease-standard),
+    box-shadow var(--lake-motion-fast) var(--lake-ease-standard),
+    background-color var(--lake-motion-fast) var(--lake-ease-standard);
 }
 .ln-select:hover { border-color: var(--lake-border-strong); }
 /* 261006：字段类控件的「聚焦/展开」统一成同一套信号 —— 主色边 + 2px 柔光环（与 .ln-input:focus-within 一致），
@@ -325,7 +338,8 @@
   border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-knob);
-  transition: transform var(--lake-motion-fast) var(--lake-ease-standard);
+  /* 261017 A 批：滑块位移用 overshoot（实体回弹），不再是线性缓动。 */
+  transition: transform var(--lake-motion-fast) var(--lake-ease-overshoot);
 }
 .ln-switch:hover { border-color: var(--lake-border-strong); }
 /* 261006：按压反馈改用 transform（scale），不再动画 width（布局属性动画会造成 thrash）。 */
@@ -355,6 +369,7 @@
 .ln-tag--pending { background: var(--lake-status-pending-soft); color: var(--lake-status-pending); }
 .ln-tag--ok { background: var(--lake-status-ok-soft); color: var(--lake-status-ok); }
 .ln-tag--error { background: var(--lake-status-error-soft); color: var(--lake-status-error); }
+.ln-tag--hoverable { transition: background-color var(--lake-motion-fast) var(--lake-ease-standard); }
 .ln-tag--hoverable:hover { background: var(--lake-bg-hover); }
 
 /* ── 11 卡片 ─────────────────────────────────────────────────
@@ -437,7 +452,15 @@
 
 /* ── 15 表单行 ─────────────────────────────────────────────── */
 .ln-form { border-radius: var(--lake-radius-md); background: var(--lake-bg-block); padding: 10px 12px; }
-.ln-form__row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 0; border-radius: var(--lake-radius-sm); }
+.ln-form__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 0;
+  border-radius: var(--lake-radius-sm);
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
 .ln-form__row + .ln-form__row { border-top: 1px solid var(--lake-border-2); }
 .ln-form__row:hover { background: var(--lake-bg-hover); }
 .ln-form__row:active { background: var(--lake-bg-press); }
@@ -456,6 +479,8 @@
   padding: var(--lake-space-xs) var(--lake-space-sm);
   border-radius: var(--lake-ctl-rad);
   color: var(--lake-text-1);
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
+    color var(--lake-motion-fast) var(--lake-ease-standard);
 }
 .ln-row2:hover { background: var(--lake-bg-hover); }
 .ln-row2.b3-list-item--focus { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
@@ -488,6 +513,7 @@
   padding: 0;
   border: 0;
   background: transparent;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard);
   /* 261006 Phase 2.2 重绘：静息态退到 text-3 —— 原先用 text-2 太深，一排页签看起来「个个都是当前项」；
      退一档后，选中项的主色 + 墨线才真正跳出来。 */
   color: var(--lake-text-3);

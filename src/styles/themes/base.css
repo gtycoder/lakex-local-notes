@@ -64,6 +64,10 @@
   --lake-ease-standard: cubic-bezier(.2,.8,.24,1);
   --lake-ease-exit: cubic-bezier(.4,0,1,1);
   --lake-ease-emphasized: cubic-bezier(.2,.9,.2,1);
+  /* 261017 A 批：唯一一条「过冲」曲线。只允许用在**有实体的控件**的位移/缩放上
+     （开关滑块、按压回弹），不要用于颜色过渡（色值过冲会脏）。数值参考
+     open-claude-ui（MIT, Caho1）的 overshoot 配方；令牌仍是本仓唯一来源。 */
+  --lake-ease-overshoot: cubic-bezier(.34, 1.3, .64, 1);
   /* 层级 */
   --lake-z-base: 0;
   --lake-z-sticky: 10;
