@@ -177,6 +177,10 @@
   /* 文本选中背景：**主题无关中性灰**（用户 261017 定稿：文字选中背景不能是主题色）。
    * 内容选区边框仍用主题主色 --lake-accent；本令牌只负责文字选区/选中背景。 */
   --lake-select-bg: rgba(128,130,134,.38);
+  /* 261017 选中态语义别名（与桌面同口径；移动端 light/dark 两套主题自动取值）。 */
+  --lake-bg-selected: var(--lake-accent-tint);
+  --lake-fg-selected: var(--lake-accent-text);
+  --lake-bg-selected-hover: color-mix(in srgb, var(--lake-accent-tint) 88%, var(--lake-accent));
   /* hover 气泡（名称/说明）：用户 261006 要求「都改用选中色」。气泡盖在内容上需不透明，
    * 取上面的合成实色 #d8dde8 + 深字（原为主题无关的深蓝 #3f4868 / 近白字）。 */
   --lake-tooltip-bg: #d8dde8;

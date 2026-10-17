@@ -437,7 +437,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .bottom-bar-btn > svg, .mobile-bottom-bar__item > svg { width: 20px; height: 20px; flex-shrink: 0; }
 .bottom-bar-btn:active { color: var(--lake-text-2); background: var(--lake-bg-hover); transform: scale(.92); }
-.bottom-bar-btn.active { color: var(--lake-accent-text); background: var(--lake-accent-tint); font-weight: 600; }
+.bottom-bar-btn.active { color: var(--lake-fg-selected); background: var(--lake-bg-selected); font-weight: 600; }
 /* 思源 #mobileBottomBar 口径：纯图标项（label 走 aria-label/title），active = 主色 + 轻底 */
 .mobile-bottom-bar__item {
   appearance: none; position: relative; flex: 1 1 0; min-width: 40px; height: var(--mobile-bottom-bar-height);
@@ -449,7 +449,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 }
 .mobile-bottom-bar__item[disabled] { opacity: .38; cursor: default; }
 .mobile-bottom-bar__item:active:not([disabled]) { color: var(--lake-text-2); background-color: var(--lake-bg-hover); transform: scale(.92); }
-.mobile-bottom-bar__item.active { color: var(--lake-accent-text); background-color: var(--lake-accent-tint); }
+.mobile-bottom-bar__item.active { color: var(--lake-fg-selected); background-color: var(--lake-bg-selected); }
 .mobile-bottom-bar__item:first-child { border-top-left-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-left-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 .mobile-bottom-bar__item:last-child { border-top-right-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-right-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 
@@ -521,7 +521,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md);
   background: var(--lake-bg-window); cursor: pointer;
 }
-.mobile-model-body .mb-row.is-selected { border-color: var(--lake-accent); background: var(--lake-accent-tint); }
+.mobile-model-body .mb-row.is-selected { border-color: var(--lake-accent); background: var(--lake-bg-selected); }
 .mobile-model-body .mb-row__title { flex: 1; min-width: 0; }
 .mobile-model-body .mb-row__action { border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
 .model-add { margin: 12px 20px 0; width: calc(100% - 40px); }
@@ -687,7 +687,7 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 }
 .mbt-table-tab.is-active {
   border-color: var(--lake-accent);
-  color: var(--lake-accent-text);
+  color: var(--lake-fg-selected);
 }
 .mbt-meta {
   display: flex;

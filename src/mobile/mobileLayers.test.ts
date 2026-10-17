@@ -42,7 +42,7 @@ const FILES = [
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/index.css": { decls: 0, dupGroups: 0 },
   "mobile/theme/base.css": { decls: 3, dupGroups: 0 },
-  "mobile/theme/tokens.css": { decls: 189, dupGroups: 0 }, // 261016 B2：+8 = 收编 mobile.css 的颜色字面量（知识库 6 档装饰调色板 --mb-nb-accent-1..6 / 纸卡投影 --mb-shadow-paper / 遮罩前景 --mb-on-scrim），**取值原样搬入、逐字节不变**（合法新增，非覆盖回涨）。此前 261015：+10 节点八档渐变、图形尺度、目录表情字号；171，移动端独立令牌
+  "mobile/theme/tokens.css": { decls: 192, dupGroups: 0 }, // 261017 Q3：+3 = 选中态语义令牌（--lake-bg-selected / --lake-fg-selected / --lake-bg-selected-hover；与桌面同口径）  |  261016 B2：+8 = 收编 mobile.css 的颜色字面量（知识库 6 档装饰调色板 --mb-nb-accent-1..6 / 纸卡投影 --mb-shadow-paper / 遮罩前景 --mb-on-scrim），**取值原样搬入、逐字节不变**（合法新增，非覆盖回涨）。此前 261015：+10 节点八档渐变、图形尺度、目录表情字号；171，移动端独立令牌
   "mobile/ui/nodeIcon.css": { decls: 101, dupGroups: 0 }, // 261015 新增移动端节点图形与独立选择器（不复用输入表情）：44触达、可滚动内容、类型/选色/表情分类；合法新增
   "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接（261013 中途为"复用内核表情面板"加过 3 条内核 token 桥，用户改为**微信样式**后已撤回）
   "mobile/theme/dark.css": { decls: 112, dupGroups: 0 }, // +41 编辑器深色桥迁入 → P7b -22 删 --b3-* 过渡桥接

@@ -38,7 +38,8 @@
 .ln-btn--secondary { border-color: var(--lake-border-1); }
 .ln-btn--secondary:hover { background: var(--lake-bg-hover); }
 .ln-btn--secondary:active { background: var(--lake-bg-press); }
-.ln-btn--secondary.is-selected { color: var(--lake-accent-text); background: var(--lake-accent-tint); border-color: var(--lake-accent); font-weight: var(--lake-font-weight-semibold); }
+.ln-btn--secondary.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); border-color: var(--lake-accent); font-weight: var(--lake-font-weight-semibold); }
+.ln-btn--secondary.is-selected:hover { background: var(--lake-bg-selected-hover); }
 .ln-btn--ghost:hover { background: var(--lake-bg-hover); }
 .ln-btn--ghost:active { background: var(--lake-bg-press); }
 .ln-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 40%, transparent); }
@@ -96,12 +97,14 @@
 .ln-iconbtn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-iconbtn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-iconbtn:disabled:hover { background: transparent; }
-.ln-iconbtn.is-selected { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+.ln-iconbtn.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
+.ln-iconbtn.is-selected:hover:not(:disabled) { background: var(--lake-bg-selected-hover); }
 .ln-iconbtn--compact { width: var(--lake-ctl-h-sm); height: var(--lake-ctl-h-sm); border-radius: var(--lake-ctl-rad-sm); }
 /* 悬停用**主色淡底**（目录栏那一排按钮的既有观感：中性底「显得没反应」，用户 260914 定过）。
    这是「图标按钮」的第二个正式变体 —— 不要再另起一套类名。 */
 .ln-iconbtn--accent:hover:not(:disabled) { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
-.ln-iconbtn--accent.is-selected { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+.ln-iconbtn--accent.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
+.ln-iconbtn--accent.is-selected:hover:not(:disabled) { background: var(--lake-bg-selected-hover); }
 
 /* ── 00 单行省略（工具类）─────────────────────────────────────
    260930 审计：同一套「装不下就省略号」在 14 处各写了一遍（多维表标题/单元格、移动端、状态栏、页签…）。
@@ -145,7 +148,11 @@
 .context-menu > button:hover,
 .context-menu-item:hover,
 .context-menu-submenu > button:hover:not(:disabled),
-.create-menu > button:hover:not(:disabled) { color: var(--lake-accent-text); background: var(--lake-accent-tint); font-weight: var(--lake-font-weight-semibold); }
+.create-menu > button:hover:not(:disabled) { color: var(--lake-fg-selected); background: var(--lake-bg-selected); font-weight: var(--lake-font-weight-semibold); }
+/* 261017 Q3：选中项再 hover 时给专用档（原先「选中行 hover 无反馈」；普通 hover 仍走 --lake-bg-hover）。 */
+.ln-row.is-selected:hover,
+.tab-switcher-item.active:hover,
+.ln-menu__item.is-selected:hover { background: var(--lake-bg-selected-hover); }
 .ln-row.is-disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-row--notebook { min-height: calc(var(--lake-ctl-h) + 2px); }
 .ln-row__indent { flex: 0 0 auto; }
@@ -491,7 +498,7 @@
 .ln-tabs__item:hover { color: var(--lake-text-1); }
 .ln-tabs__item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
 .ln-tabs__item.is-active {
-  color: var(--lake-accent-text);
+  color: var(--lake-fg-selected);
   font-weight: var(--lake-font-weight-semibold);
 }
 .ln-tabs__item.is-active::after {
@@ -517,7 +524,7 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.ln-tabs__item.is-active .ln-tabs__count { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.ln-tabs__item.is-active .ln-tabs__count { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .ln-tabs__action { height: var(--lake-ctl-h-sm); }
 
 .ln-toolbar { gap: var(--lake-space-md); padding: var(--lake-space-sm) var(--lake-space-xl) 0; }

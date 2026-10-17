@@ -308,8 +308,8 @@
 
 /* 目录栏 📌（固定/悬浮） */
 .dock-icon-btn.pin-btn.is-active {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
+  color: var(--lake-fg-selected);
+  background: var(--lake-bg-selected);
 }
 
 /* 资源整页空间：与 .trash-space-pane 同构（不是 floating-dialog） */
@@ -540,7 +540,8 @@
 .tree-row.type-notebook { margin-top: 1px; }
 .note-row:hover { background: var(--lake-bg-hover); }
 .note-row:active { background: var(--lake-bg-press); filter: none; }
-.note-row.active { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+.note-row.active { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
+.note-row.active:hover { background: var(--lake-bg-selected-hover); }
 .note-row-copy strong {
   /* 260923：标题色 text-1（近黑）→ text-2（中灰）——与内核原生大纲的普通项同色，
      近黑在 500 字重下显得又重又密，中灰更轻更透气（用户对比原生大纲后要求）。 */
@@ -559,7 +560,7 @@
 .tree-row-icon { color: var(--lake-text-3); }
 /* 已锁定（只读）的目录行小锁：非交互、行尾常驻（不随 hover 消失，锁状态要一直看得见）。 */
 .tree-row-lock { display: inline-flex; align-items: center; color: var(--lake-text-3); }
-.note-row.active .tree-row-icon { color: var(--lake-accent-text); }
+.note-row.active .tree-row-icon { color: var(--lake-fg-selected); }
 .tree-chevron {
   display: inline-flex;
   align-items: center;

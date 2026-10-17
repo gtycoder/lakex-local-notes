@@ -164,6 +164,11 @@
    * ⚠️ 只用于「文字选区/选中背景」；**内容选区的边框**（表格单元格、画板选中框）继续用 --lake-accent（主题色）。
    * 半透明中性灰在浅底/深底都可读（浅底合成 ≈ #d9dadc；深底 ≈ #3f4144），所以一套值跨主题。 */
   --lake-select-bg: rgba(128,130,134,.38);
+  /* 261017 选中态语义别名（Q3）：前两个 = 既有取值（零观感，只收口语义）；hover 档用 color-mix
+   * 自动跟随三套主题（浅 #d9e0ef / 深 #3d424e / 暖 #fadfcc），不新增颜色字面量。 */
+  --lake-bg-selected: var(--lake-accent-tint);
+  --lake-fg-selected: var(--lake-accent-text);
+  --lake-bg-selected-hover: color-mix(in srgb, var(--lake-accent-tint) 88%, var(--lake-accent));
   /* hover 气泡（名称/说明）：用户 261006 要求「都改用选中色」。气泡盖在内容上需不透明，
    * 取上面的合成实色 #d8dde8 + 深字（原为主题无关的深蓝 #3f4868 / 近白字）。 */
   --lake-tooltip-bg: #d8dde8;

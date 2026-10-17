@@ -16,6 +16,20 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(五) · Q3 选中态语义令牌 + 选中+hover（裸 .active 收编第一刀）
+
+- **口径（用户 261017 定，Q3 = A）**：UI 选中继续用主题色，但只经 3 个语义令牌；**不重命名 JSX 类名**（避免结构性大改），只把颜色与选中+hover 收口到单一来源。内容选中另有口径（见 261017(三)），互不替代。
+- **令牌**（桌面 [themes/base.css](lake-notes-electron/src/styles/themes/base.css) + 移动 [mobile/theme/tokens.css](lake-notes-electron/src/mobile/theme/tokens.css)）：
+  `--lake-bg-selected: var(--lake-accent-tint)` · `--lake-fg-selected: var(--lake-accent-text)` · `--lake-bg-selected-hover: color-mix(in srgb, var(--lake-accent-tint) 88%, var(--lake-accent))`（实测浅 #d9e0ef / 深 #3d424e / 暖 #fadfcc）。
+- **落点**：kit 三元组（`.ln-row` / 菜单项 / 页签切换器 / 设置左导航）· `.ln-btn--secondary.is-selected` · `.ln-iconbtn(.is-selected|--accent.is-selected)` · `.ln-tabs__item.is-active` 及其计数 · chrome `.note-row.active` + `.tree-row-icon` + `.pin-btn.is-active` · 多维表 `.bt-table-item.active` / `.bt-tool-btn.is-active` · 移动 `.mb-row.is-selected` / `.mb-list-item.is-selected` / `.mobile-model-body .mb-row.is-selected` / `.bottom-bar-btn.active` / `.mobile-bottom-bar__item.active` / `.mbt-table-tab.is-active`。
+- **选中 + hover（新增状态，解决「选中后 hover 无反馈」）**：`.ln-row.is-selected:hover` / `.tab-switcher-item.active:hover` / `.ln-menu__item.is-selected:hover` / `.ln-iconbtn(.is-selected|--accent.is-selected):hover` / `.ln-btn--secondary.is-selected:hover` / `.note-row.active:hover` → `--lake-bg-selected-hover`；页签/分段**不加上底色**（仍是文字 + 下划线 / raised）。
+- **实测**：选中目录行 + 鼠标悬停 ⇒ `background-color = color(srgb 0.85098 0.879843 0.938039)`（= #d9e0ef，候选 A）、字色 accent-text；截图 `.css-audit/q3-261017/selected-row-hover.png`（gitignored）。
+- **护栏**：新增 [selectionTokens.test.ts](lake-notes-electron/src/styles/selectionTokens.test.ts)（5 例：两端令牌定义 / 桌面语义迁移 / hover 档 / 移动端 / 内容选区边框仍是 accent，防「内容选中去主题色」误伤）。
+- **基线**：`cssLayers` kit **642 → 646**（+4 = 选中+hover 规则）；`mobileLayers` tokens **189 → 192**（+3 令牌）。
+- **视觉门禁**：旧基线只有 **2 态**差异（`hover-row:1315:light` / `:warm`，正是选中+hover 生效）⇒ 全量重烤：两个全新实例 **42/42 逐字节一致**；live gate **34 态严格 0 差异**（8 窄窗态按既有 UNSTABLE 跳过）。
+- **未做（登记）**：裸 `.active` 只做颜色令牌化、未重命名 JSX 类名；settings 左导航仍是「`bg-hover` 灰」现状（未改观感）；页签/分段保留自身选中语义。
+- **状态**：已提交（本批；并行会话在途文件、以及 `mobileLayers.test.ts` 里它们的 hunk 均未纳入）。
+
 ### 261017(四) · 画板默认工具 = 选择工具（261017 用户要求）
 
 - **用户定稿**：画板选中框颜色**不动**（Drawnix 有自己的逻辑，不同级）；只做一个优化：**进入画板默认选中「选择工具」**（不要手型/上次绘图工具）。
@@ -24,7 +38,7 @@
 - **实测（隔离实例 + 合成夹具）**：打开 `合成·画板` ⇒ `.plait-board-container` 的类为 **`pointer-selection`**（重建前是 `pointer-hand`）。
 - **⚠️ 踩坑（vendor 工作流）**：改 `vendor/lakex-doc-react/src/**` 后**必须** `npm run build:vendor`（产物入库）；本次第一轮只改 src 就启动 ⇒ 应用仍用旧 dist，实测还是 `pointer-hand`，重建后才对。本次提交同时包含 vendor dist 的新旧 chunk 换名（`DrawnixBoardCore-*.js/.cjs`）。
 - **边界**：画板选中框仍是 Drawnix 自带蓝 `#6698ff`（用户 261017 明确「画板不同级、不用动」）；内核正文原生 title 也明确不动。
-- **状态**：待提交（vendor src + dist 重建产物 + 护栏；并行会话在途文件未纳入）。
+- **状态**：已提交 `46ea1212`（并行会话在途文件未纳入）。
 
 ### 261017(三) · 内容选中口径：文字选区中性灰 / 表格选区边框保留主题色 / hover 长预览宽版
 
@@ -37,7 +51,7 @@
 - **护栏/基线**：`cssLayers` 的 kit.css 声明基线 **635 → 642**（+7 = `.ln-tip--wide`，一次性新增原语变体，已写理由）。
 - **门禁**：tsc 0 · vitest **270 文件 / 2065 例** ✓ · ui-metrics 0 ✓ · diff-check 0（全库跑时并行会话在途文件未纳入本批提交）。
 - **边界**：内核正文内的原生 `title` 仍被 `NativeTitleTips` 跳过（系统 tooltip），未动；夹具里没有真实 MD/AI 字段，长预览用 title 探针实测（同一路径）。
-- **状态**：待提交（含上述 6 文件；并行会话在途改动未纳入）。
+- **状态**：已提交 `f0970e02`（并行会话在途改动未纳入）。
 
 ### 261017(二) · 多维表列宽回归修复（复选框列被拉宽 / 新建行缺边框）
 

@@ -262,6 +262,7 @@ components:
 - **文字选中背景** = `--lake-select-bg`：主题无关**中性灰**（浅底合成 ≈ `#d9dadc`、深底 ≈ `#3f4144`），不随主题/主色变。
 - **内容选区边框**（表格 / 多维表单元格、画板选中框）= **主题主色 `--lake-accent`**（暖色主题下就是橙色边框，这是有意的）。
 - **hover 内容预览**（附件/图片名、长文本 / Markdown / AI 字段的整段内容）= 单一 `.ln-tip` 表面（`--lake-tooltip-*`，主题无关）；长内容自动用 `.ln-tip--wide`（≤460px、≤50vh、内部滚动）。
+- **UI 选中**（目录行 / 页签 / 菜单 / 图标钮 / 胶囊）= 只经 3 个语义令牌：`--lake-bg-selected`（底）、`--lake-fg-selected`（字）、`--lake-bg-selected-hover`（选中 + hover，`color-mix(tint 88%, accent 12%)`）；主题色仍生效，但不再散写 `accent-tint`/`accent-text`。
 - 不要把三者互相替代：**中性色只给文字选区背景；主题色只给内容选区边框**。
 
 ### Switch / Checkbox / Radio

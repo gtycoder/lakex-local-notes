@@ -63,7 +63,7 @@
 }
 
 .bt-table-item:hover { background: var(--lake-bg-hover); }
-.bt-table-item.active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.bt-table-item.active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .bt-table-item.dragging { opacity: .5; }
 
 .bt-grip { color: var(--lake-text-3); flex: 0 0 auto; }
@@ -127,7 +127,7 @@
 }
 
 .bt-tool-btn:hover { background: var(--lake-bg-hover); }
-.bt-tool-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.bt-tool-btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .bt-toolbar-spacer { flex: 1; }
 .bt-badge { background: var(--lake-accent); color: var(--lake-text-on-accent); border-radius: 8px; font-size: var(--lake-font-size-micro); padding: 0 5px; }
 
