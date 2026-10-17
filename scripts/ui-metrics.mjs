@@ -324,7 +324,7 @@ else {
   console.log('     top:', r.b3TopTen.map(([f, n]) => f + ':' + n).join('  ') || '（无）');
   console.log('  颜色字面量(非主题)  ', 'hex=' + r.desktop.colorHex, 'rgb=' + r.desktop.colorRgb, ' / 目标 0');
   console.log('     top:', r.colorTopTen.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
-  console.log('  !important          ', r.desktop.important, ' / 目标 ≤10');
+  console.log('  !important          ', r.desktop.important, ' / 允许清单', r.complianceGuard.baseline.desktopImportant, '条（逐条有理由；清单外新增直接失败）');
   console.log('  字号字面量(非令牌)  ', r.fontGuard.fontSizeLiterals, ' / 目标 0');
   console.log('     top:', r.fontGuard.fontSizeTop.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('  入口 b3 import 行数 ', r.entryB3ImportLines, ' / 目标 0');
