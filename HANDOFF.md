@@ -9,7 +9,7 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261017 / 261016）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **261017 最新基线**：代码 review（CODE-REVIEW-261015）**全部结案**；HEAD 见 git log（261017 收尾）；门禁 276 文件 / 2098 例；C3-2 / C3-5 / C1-6 / D2 / D3 / D5 / D7 均已完成。
+> **261017 最新基线**：代码 review（CODE-REVIEW-261015）**全部结案**；HEAD 见 git log（261017 收尾）；门禁 276 文件 / 2098 例（新增 §0(十七) 后为 279 文件 / 2121 例）；C3-2 / C3-5 / C1-6 / D2 / D3 / D5 / D7 均已完成；**S3 配置导入导出（文件为主 + 迁移码备用）已实现，待验收，见 §0(十七)**。
 > **⚠️ 261017 历史已重写**：旧 AK/SK 已从 git 历史清除（filter-repo）；旧 commit hash 全部失效，旧克隆/缓存请重新拉取。
 >
 > **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
@@ -18,6 +18,19 @@
 > **下一会话焦点（261012 收尾 → 下一会话，用户定）**：① **移动端文本增强二级面板**（见上）；② **5 项画图插入项解禁**（画板 / 流程图 / UML / 思维导图 / 文本绘图，现为置灰占位；根因与修法见 §3#18）；③ **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；④ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261017(十七) · S3 配置导入导出（文件为主；桌面 → 手机）· **待用户验收**
+
+- **需求（用户 261017）**：桌面端已有一份可用 S3 配置，导出一份到手机导入，省去安卓端逐项手填；做法参考思源「导入 / 导出 S3 同步配置」。
+- **口径（用户二次定稿）**：**导出一个文件**——桌面写 `.json` 配置文件，发送到手机后手机选文件导入；迁移码降级为**备用**（手机「导出迁移码」→ 桌面「粘贴迁移码…」）。其余同思源：一键导出、导入覆盖本机 S3 配置（**同步策略不动**）。
+- **单一来源** [s3ConfigTransfer.ts](lake-notes-electron/src/core/s3ConfigTransfer.ts)：迁移码 `LNS3.1.<base64url(iv||AES-GCM 密文)>`；文件 = 外层 JSON 元数据 + 内层迁移码（`encode/decodeS3ConfigTransferFile`，兼容直接放迁移码的 `.txt`）；AES-GCM 带认证；**固定种子只是防误读 / 防随手转发的封装，不是安全边界**（文件头写明；怀疑泄露请轮换 S3 密钥）。导出拒绝无 Secret / 非法配置；导入规范化 endpoint、region 缺省、强制 https，`forcePathStyle` 原样返回由端侧决定。
+- **桌面**：IPC `export_s3_config_file` / `import_s3_config_file`（**主进程**弹系统保存/选择框 + 加密封装/解码/落库，渲染层不接触明文 Secret，延续 W-14）；保留 `import_s3_config` 作粘贴备用。主进程文件工具 [s3ConfigTransferFile.ts](lake-notes-electron/electron/s3ConfigTransferFile.ts)（0600 落盘、64KB 上限）；粘贴弹窗 [S3ConfigImportDialog.tsx](lake-notes-electron/src/components/app/S3ConfigImportDialog.tsx)（标准 `<Dialog>`）；S3 设置「配置迁移」Block = 导出到文件… / 从文件导入… / 粘贴迁移码…；IPC 三方一致性基线 118 → **119**（删 export_s3_config、加两个文件通道）。
+- **移动**：同步设置「配置迁移」= **从文件导入**（`pickLocalFile` → core 解码 → `bridge.saveS3Settings` 同一路径；强制 `forcePathStyle:false`（D2）并在提示里说明）+ **导出迁移码**（备用；桌面粘贴导入）。多行输入修饰 `.mb-input--multiline`（kit 基线 511 → 517）。
+- **测试 / 门禁**：core 12 例（往返 / 文件包装 / 兼容 .txt / 防泄漏 / 篡改 / 空 / 超长 / 非法配置 / 规范化 / 文件名 / 摘要）+ electron 文件助手 3 例；tsc 0 · 全库 vitest **280 文件 / 2127 例** ✓ · 双端构建 ✓ · ui-metrics 0（字号字面量 49/49）· core / mobileui / bundle / diff ✓ · cssLayers dialog 204→238、mobileLayers kit 517、settingsSearch 同步登记。
+- **实测**：桌面隔离实例（scheme + CDP 9234）真实 UI：点「导出到文件…」弹出系统保存框，保存得到 **585B / 0600 / 无明文**的 `.json`；先把桶改成探针值，再点「从文件导入…」选中该文件 ⇒ 落库与表单都恢复为文件里的配置、状态栏提示正确。`lake_gate` 模拟器（5556 / CDP 9336）：真实文件选择器（CDP 注入 App 私有目录文件）导入成功，6 个字段回填、toast「S3 配置已导入」、Path-style 提示；「导出迁移码」仍可用且码内无明文。
+  ⚠️ **遗留 / 环境问题**：该 AVD 上 `am force-stop` / 重启后 `localStorage` 只剩 `libraryView` —— 直接 `localStorage.setItem` 探针同样丢，**与本批无关**（既有 S3 手填保存 / 主题 / 排序同受影响），判断为该 `lake_gate` 实例的 WebView localStorage / leveldb 复现性问题；**冷启动持久化需真机复验**。
+  该实例已重装 debug 包并留下探针 S3 配置 ⇒ **跑移动快照门前按 README 重灌夹具**。
+- **状态**：已提交（`feat/s3-config-transfer` 分支，**待用户验收**；未合并 master、未推送）。
 
 ### 261017(十六) · Git 历史重写（清除旧 AK/SK）
 

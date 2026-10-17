@@ -73,3 +73,13 @@
   .note-info-section-title { flex-wrap: wrap; }
   
 }
+
+/* S3 配置迁移码弹窗（261017）：只定尺寸与多行输入外观；表面/头/体/按钮都复用 .ln-dialog 与 .ln-btn 原语。 */
+.s3-transfer-dialog { width: min(560px, calc(100vw - 32px)); height: auto; max-height: min(78vh, 640px); }
+.s3-transfer-dialog__hint { margin: 0 0 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+.s3-transfer-dialog__code { width: 100%; min-height: 116px; max-height: 38vh; resize: vertical; padding: 8px 10px; border: 1px solid var(--lake-ctl-border); border-radius: var(--lake-ctl-rad); background: var(--lake-bg-canvas); color: var(--lake-text-1); font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-micro); line-height: var(--lake-line-height-normal); overflow-wrap: anywhere; }
+.s3-transfer-dialog__code:focus-visible { outline: none; border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
+.s3-transfer-dialog__msg { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.s3-transfer-dialog__error { margin-top: 8px; color: var(--lake-status-error); font-size: var(--lake-font-size-micro); }
+.s3-transfer-dialog__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.s3-transfer-dialog__spacer { flex: 1 1 auto; }

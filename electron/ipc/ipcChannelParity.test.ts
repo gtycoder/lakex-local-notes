@@ -83,8 +83,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
   });
 
   it("规模钉死（防止无声增删通道）", () => {
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(116);
-    expect(preloadChannels().size).toBe(116);
-    expect(Object.keys(WEB_METHODS).length).toBe(116);
+    // 261017：+2 = export_s3_config_file / import_s3_config_file（S3 配置文件）；另保留 import_s3_config（迁移码备用）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(119);
+    expect(preloadChannels().size).toBe(119);
+    expect(Object.keys(WEB_METHODS).length).toBe(119);
   });
 });

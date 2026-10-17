@@ -136,7 +136,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
   "components/ui/markdown/markdown.css": { decls: 43, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
   "features/ai/aiDialogParts.css": { decls: 14, dupGroups: 0 },   // 261013 用户要求 AI 等待反馈：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。
-  "styles/dialog.css": { decls: 204, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
+  "styles/dialog.css": { decls: 238, dupGroups: 8 },   // 261017：+34 = S3 配置迁移弹窗（尺寸 + 多行迁移码输入/提示/错误/动作行；表面与按钮全部复用 .ln-dialog / .ln-btn，无覆盖）  |  +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 94, dupGroups: 2 },   // 260930：+17 = 状态栏锁标识改可点（button 形态 + hover/focus）+ 解锁浮层内容类   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）
   "styles/components.css": { decls: 365, dupGroups: 1 },   // 260930：-2 = .settings-panel-large .settings-header（其 padding 早已被 overlay 层的 .floating-dialog-header 压死）按职责并到 overlay.css 单一来源。此前 260929：-45 = .ln-tabs* 页签整套收编到 kit 层单一来源（那边同时 +33）；260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in；260926 续：+4 = .sync-status-local-note
   "styles/tokens.css": { decls: 6, dupGroups: 0 },   // 260923 审计：按实测收紧（隔离/桥接规则拆走后基线一直是 83，围栏形同虚设）

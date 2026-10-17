@@ -103,6 +103,9 @@
   flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: inherit;
   font: inherit; padding: 0; outline: none;
 }
+/* 多行输入（S3 配置迁移码，261017）：纵向拉伸 + 等宽小字，滚动交给 textarea 自己。 */
+.mb-input--multiline { align-items: stretch; padding: 10px 12px; }
+.mb-input--multiline > textarea { min-height: 96px; resize: vertical; font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
 .mb-select { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: var(--mb-ctl-h); padding: 0 12px; border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 
 /* ── 标签（.mb-tag）─────────────────────────────────────────────────── */

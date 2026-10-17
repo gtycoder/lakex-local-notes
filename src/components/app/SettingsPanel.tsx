@@ -25,6 +25,7 @@ import { useFloatingDialog } from "../hooks/useFloatingDialog";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "../model/settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
+import { S3ConfigImportDialog } from "./S3ConfigImportDialog";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
 
@@ -79,6 +80,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
   /** 本次会话内 S3 连接测试是否通过：通过后才允许开启云同步；改动任一 S3 字段即失效。 */
   const [s3Verified, setS3Verified] = useState(false);
+  /** S3 配置文件迁移：粘贴迁移码弹窗（备用路径）。 */
+  const [s3ImportOpen, setS3ImportOpen] = useState(false);
   // AI：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）。
   // 采用**草稿式**：编辑不落盘，先「拉模型 / 测试」验证草稿，通过（或用户选择仍要保存）才写回。
   const [aiView, setAiView] = useState<AiSettingsView | null>(null);
@@ -435,6 +438,35 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       setS3Verified(true);
     } catch (e) { setS3Verified(false); setSyncMsg(getNativeErrorMessage(e)); }
   };
+  /** 导出到文件：系统保存框 + 加密封装都在主进程（渲染层不接触明文 Secret）。 */
+  const exportS3ConfigFile = async () => {
+    setSyncMsg(null);
+    try {
+      const result = await native.exportS3ConfigFile();
+      if (result.canceled) return;
+      setSyncMsg(result.path ? `已导出 S3 配置：${result.path}` : "S3 配置已导出");
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+  };
+  /** 从文件导入：系统选择框 + 解码/校验/落库都在主进程；成功后就地刷新表单。 */
+  const importS3ConfigFile = async () => {
+    setSyncMsg(null);
+    try {
+      const result = await native.importS3ConfigFile();
+      if (result.canceled) return;
+      const saved = await native.getS3Settings();
+      if (saved) { setS3(saved); onS3SettingsChanged?.(saved); }
+      setS3Verified(false);
+      setSyncMsg("S3 配置已从文件导入，请点「测试连接」确认后再使用云同步");
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+  };
+  /** 备用：粘贴手机端导出的迁移码。 */
+  const importS3Config = async (code: string): Promise<void> => {
+    await native.importS3Config(code);
+    const saved = await native.getS3Settings();
+    if (saved) { setS3(saved); onS3SettingsChanged?.(saved); }
+    setS3Verified(false);
+    setSyncMsg("S3 配置已导入，请点「测试连接」确认后再使用云同步");
+  };
 
   const saveSyncCfg = async (patch: Partial<SyncSettings>) => {
     if (!syncCfg || syncCfgBusy) return;
@@ -695,6 +727,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <div className="config-block__actions">
                       <button className="b3-button b3-button--outline" onClick={() => void testS3()}>测试连接</button>
                       <button className="b3-button" onClick={() => void saveS3()}>保存配置</button>
+                    </div>
+                  </Block>
+                  <Block itemId="s3-transfer" name="配置迁移" desc="桌面端导出 .json 配置文件，发送到手机后在「同步设置 → 配置迁移 → 从文件导入」选择该文件，省去逐项手填。只含 S3 配置，不含同步策略；导入会覆盖本机 S3 配置。文件含密钥（已加密封装），请只在自己的设备间传递。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
+                      <button className="b3-button" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
+                      <button className="b3-button b3-button--outline" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
                     </div>
                   </Block>
                 </Group>
@@ -1043,6 +1082,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
         </div>
         {(syncMsg ?? diagMsg) && <p className="settings-statusbar">{syncMsg ?? diagMsg}</p>}
         <DialogResizeHandles onResize={floating.startResize} />
+        {s3ImportOpen && (
+          <S3ConfigImportDialog
+            onClose={() => setS3ImportOpen(false)}
+            onImport={importS3Config}
+          />
+        )}
       </div>
     </div>
   );

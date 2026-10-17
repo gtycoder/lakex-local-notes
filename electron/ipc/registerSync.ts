@@ -1,4 +1,5 @@
-import type { IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, type IpcMainInvokeEvent } from "electron";
+import path from "node:path";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
 import { runDeepCleanup, runGcReconcile } from "../s3Maintenance.js";
@@ -8,6 +9,8 @@ import { runGcDiagnostics } from "../syncGc.js";
 import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../../src/core/cloudState.js";
+import { decodeS3ConfigTransfer, s3ConfigTransferFileName, summarizeS3Settings } from "../../src/core/s3ConfigTransfer.js";
+import { readS3ConfigFile, writeS3ConfigFile } from "../s3ConfigTransferFile.js";
 import { IpcInputError } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 
@@ -82,6 +85,41 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
       next.secretAccessKey = store.getS3Settings()?.secretAccessKey ?? "";
     }
     store.saveS3Settings(next);
+  });
+  /**
+   * S3 配置迁移（对应思源「导入 / 导出 S3 配置」）：
+   * - **文件**是主路径：对话框、加密封装、解码都在主进程，渲染层拿不到明文 Secret（延续 W-14）。
+   * - **粘贴迁移码**保留为备用（手机端「导出迁移码」→ 桌面粘贴导入）。
+   */
+  const s3TransferWindow = () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  ipc.handle("export_s3_config_file", async () => {
+    const settings = store.getS3Settings();
+    if (!settings) throw new AppError("NotConfigured", "本机还没有保存 S3 配置，请先填写并保存");
+    const result = await dialog.showSaveDialog(s3TransferWindow(), {
+      title: "导出 S3 配置",
+      defaultPath: path.join(app.getPath("downloads"), s3ConfigTransferFileName()),
+      filters: [{ name: "Lake S3 配置", extensions: ["json"] }],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    await writeS3ConfigFile(result.filePath, settings);
+    return { ok: true, path: result.filePath };
+  });
+  ipc.handle("import_s3_config_file", async () => {
+    const result = await dialog.showOpenDialog(s3TransferWindow(), {
+      title: "导入 S3 配置",
+      properties: ["openFile"],
+      filters: [{ name: "Lake S3 配置", extensions: ["json", "txt"] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, canceled: true };
+    const settings = await readS3ConfigFile(result.filePaths[0]);
+    store.saveS3Settings(settings);
+    return { ok: true, summary: summarizeS3Settings(settings) };
+  });
+  ipc.handle("import_s3_config", async (code: unknown) => {
+    if (typeof code !== "string" || code.length > 16 * 1024) throw new IpcInputError("S3 迁移码格式无效");
+    const settings = await decodeS3ConfigTransfer(code);
+    store.saveS3Settings(settings);
+    return { summary: summarizeS3Settings(settings) };
   });
   ipc.handle("test_s3_connection", () => testConnection(store));
   ipc.handle("get_s3_gc_settings", () => store.getS3GcSettings());
