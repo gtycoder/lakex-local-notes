@@ -17,6 +17,7 @@
  * 按 B1 的结论：**不同口径不合并**，但同一口径只能有一份实现。
  */
 import type { NoteInfo } from "../lib/types.js";
+import { formatDateTime } from "./dateFormat.js";
 
 /** 同步状态 → 文案（两端共用；未知状态原样回显）。 */
 export const SYNC_STATE_LABEL: Record<string, string> = { local: "未同步", synced: "已同步", conflict: "冲突" };
@@ -26,8 +27,7 @@ export function formatNoteInfoTime(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDateTime(d);
 }
 
 /** 属性面板的体积：B / KB / MB / GB；B 档不带小数，其余保留 1 位。 */

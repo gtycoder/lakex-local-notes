@@ -16,6 +16,16 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261017(六) · C5-4 同名令牌差异表 + C1-5 第一步（时间格式化单一来源）
+
+- **C5-4（review §C5-4）**：新增只读脚本 [token-parity.mjs](lake-notes-electron/scripts/token-parity.mjs)（`--md` 输出表；不是门禁）；审计结果 **177 个同名令牌完全一致 / 10 个有意不同 / 桌面独有 2 / 移动独有 0**；差异表与逐条意图登记到 [MOBILE-DESKTOP-DECOUPLING.md §7](lake-notes-electron/docs/MOBILE-DESKTOP-DECOUPLING.md)。脚本内 `INTENT` 表：未来新增差异会显示「待确认（新增差异）」。
+- **C1-5 第一步（review §C1-5）**：新增 [core/dateFormat.ts](lake-notes-electron/src/core/dateFormat.ts)（`formatHm / formatMd / formatMdHm / formatYmd / formatDateTime / sameLocalDay`；纯本地、无 locale 副作用）+ `dateFormat.test.ts` 3 例；收编 8 处重复：
+  - 小记列表/卡片（QuickNotesWorkspace，去掉 2 处 pad）· 设置页（SettingsPanel，删本地 formatDateTime）· 移动首页/知识库（HomePage/NotebookGrid：只换原子格式化，**今天/昨天措辞策略仍留各自入口**）· 小记转正式笔记标题（electron/quickNoteConversion）· 属性面板（core/noteInfo）· 多维表本地日期/时间（core/bitableDoc）· 日历格（bitableCells）。
+  - 输出逐字符不变（单测覆盖补零/边界/同日）；`quickNotesView.test.ts` 的旧断言（夹带 pad 实现）改为「必须 import core/dateFormat + 不得再出现 padStart(2」。
+- **未做**：Q10「两端列表时间措辞是否统一」仍待产品决策（本批刻意只抽纯函数，不动措辞）；`lib/formatTime.ts`（toLocaleString）与移动同步状态（中文月日）属不同口径，未合并。
+- **门禁**：tsc 0 · vitest **273 文件 / 2079 例** ✓ · ui-metrics 0 ✓ · diff-check 0。
+- **状态**：待提交（脚本 + 文档 + 9 处代码；并行会话在途文件未纳入）。
+
 ### 261017(五) · Q3 选中态语义令牌 + 选中+hover（裸 .active 收编第一刀）
 
 - **口径（用户 261017 定，Q3 = A）**：UI 选中继续用主题色，但只经 3 个语义令牌；**不重命名 JSX 类名**（避免结构性大改），只把颜色与选中+hover 收口到单一来源。内容选中另有口径（见 261017(三)），互不替代。

@@ -11,17 +11,17 @@ import type { LibraryView } from "./HomePage";
 import { Book, ChevronRight } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
+import { formatHm, formatMd, sameLocalDay } from "../../core/dateFormat";
 
 /** 更新时间（仿语雀：今天/昨天 HH:mm，更早 MM-DD）。 */
 function fmtUpdated(iso: string | undefined): string {
   try {
     if (!iso) return "";
     const d = new Date(iso); const now = new Date();
-    const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
+    if (sameLocalDay(d, now)) return `今天 ${formatHm(d)}`;
     const y = new Date(now); y.setDate(now.getDate() - 1);
-    if (d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
-    return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (sameLocalDay(d, y)) return `昨天 ${formatHm(d)}`;
+    return formatMd(d);
   } catch { return ""; }
 }
 

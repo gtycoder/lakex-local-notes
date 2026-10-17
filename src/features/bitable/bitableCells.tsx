@@ -1033,7 +1033,7 @@ export function DatePicker({ value, readOnly, onChange }: { value: unknown; read
   const cells: Array<number | null> = [];
   for (let i = 0; i < startWeekday; i += 1) cells.push(null);
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
-  const fmt = (d: number) => year + "-" + String(month + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+  const fmt = (d: number) => localDateString(new Date(year, month, d));
   const pickToday = () => { onChange(localDateString(new Date())); setOpen(false); };
   return (
     <div className="bt-date-cell">

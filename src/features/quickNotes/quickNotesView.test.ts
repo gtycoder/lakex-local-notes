@@ -37,8 +37,11 @@ describe("小记版式切换（列表 / 小记）", () => {
     expect(WORKSPACE_SRC).not.toMatch(/editorMode=/);
     expect(WORKSPACE_SRC).toMatch(/ui="full"/);
     expect(EDITOR_SRC).toMatch(/quickNoteUi: ui/);
-    // 时间戳口径对齐云端：今天 = 「今天 HH:MM」，其余 = 「MM-DD」
-    expect(WORKSPACE_SRC).toMatch(/今天 \$\{pad\(d\.getHours\(\)\)\}/);
+    // 时间戳口径对齐云端：今天 = 「今天 HH:MM」，其余 = 「MM-DD」；原子格式化走 core/dateFormat 单一来源（C1-5）
+    expect(WORKSPACE_SRC).toContain('from "../core/dateFormat"');
+    expect(WORKSPACE_SRC).toContain("sameLocalDay(d, now) ? `今天 ${formatHm(d)}` : formatMd(d)");
+    expect(WORKSPACE_SRC).toContain("formatMdHm(new Date(item.updatedAt || item.createdAt))");
+    expect(WORKSPACE_SRC).not.toMatch(/padStart\(2/);
   });
 });
 

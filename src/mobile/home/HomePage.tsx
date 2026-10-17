@@ -28,6 +28,7 @@ import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickN
 //  本机读写单独一层（core 禁 DOM）：读/写偏好走 lib/quickNoteSortPref（桌面用同一份）
 import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPref";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
+import { formatHm, formatMd, formatMdHm, sameLocalDay } from "../../core/dateFormat";
 import { withAssetAccessToken } from "../../lib/assetPort";
 
 /** 完整小记编辑器（内含 Lake 内核）：**按需加载**——首屏/小记都不需要内核。 */
@@ -90,19 +91,18 @@ const VIEW_KEY = "lake-notes-mobile.libraryView";
 const COVER_THUMB_PX = 1024;
 
 function fmtDate(iso: string): string {
-  try { const d = new Date(iso); return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
+  try { return formatMdHm(new Date(iso)); }
   catch { return iso; }
 }
 
-/** 相对时间（仿语雀：今天/昨天 HH:mm，更早显示 MM-DD）。 */
+/** 相对时间（仿语雀：今天/昨天 HH:mm，更早显示 MM-DD）——措辞策略留在本入口，只复用原子格式化。 */
 function fmtRelative(iso: string): string {
   try {
     const d = new Date(iso); const now = new Date();
-    const hm = `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-    if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
+    if (sameLocalDay(d, now)) return `今天 ${formatHm(d)}`;
     const y = new Date(now); y.setDate(now.getDate() - 1);
-    if (d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
-    return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    if (sameLocalDay(d, y)) return `昨天 ${formatHm(d)}`;
+    return formatMd(d);
   } catch { return ""; }
 }
 

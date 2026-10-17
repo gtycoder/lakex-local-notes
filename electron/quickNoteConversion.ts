@@ -5,6 +5,7 @@ import { type ImportedNoteAsset, Store } from "./store.js";
 import { type QuickNoteDocument, QuickNotesStore } from "./quickNotes.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { rewriteQuickNoteAssetScope } from "../src/core/quickNoteModel.js";
+import { formatDateTime } from "../src/core/dateFormat.js";
 
 /**
  * 小记 → Lake 的单向映射（v2：**搬运**而不是序列化）。
@@ -29,10 +30,7 @@ export function quickNoteToLakeContent(targetNoteId: string, source: QuickNoteDo
 function titleForQuickNote(source: QuickNoteDocument): string {
   // 小记不隐式把首行升级为正式标题；转入 Lake 后由用户在正式编辑器中补充主题。
   // 不用 locale 字符串，避免不同系统显示成 2026/8/4、含秒数或使用不同分隔符。
-  const date = new Date(source.createdAt);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const formatted = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  return `未命名文档 · ${formatted}`;
+  return `未命名文档 · ${formatDateTime(new Date(source.createdAt))}`;
 }
 
 /**

@@ -26,6 +26,7 @@ import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { formatBytes } from "../lib/formatBytes";
+import { formatDateTime } from "../core/dateFormat";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "trash" | "browser" | "logs" | "about";
 
@@ -44,13 +45,6 @@ interface SettingsPanelProps {
 }
 
 const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lake-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
-
-/** 2026-09-03 08:12 形式的本地短时间。 */
-function formatDateTime(ms: number): string {
-  const d = new Date(ms);
-  const pad = (x: number) => String(x).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 /** 让浏览器先把 data URL 解码好再上屏：<img> 换 src 的那一帧若未解码完会画空白（闪烁的另一半来源）。 */
 
@@ -641,7 +635,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <div className="config-stats">
                       <span>快照 <strong>{stats ? stats.snapshotCount : "—"}</strong> 份</span>
                       <span>{stats ? formatBytes(stats.totalBytes) : "统计中…"}</span>
-                      {lastCleanup && <span>上次清理 {formatDateTime(Date.parse(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</span>}
+                      {lastCleanup && <span>上次清理 {formatDateTime(new Date(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</span>}
                     </div>
                     <div className="config-block__actions">
                       <button className="b3-button b3-button--outline" onClick={() => void runCleanup()} disabled={histBusy}><Trash size={14} /> {histBusy ? "清理中…" : "立即清理"}</button>
@@ -679,7 +673,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           {health.treeDanglingParent.length > 0 && <div className="checks__row checks__row--error">✗ {health.treeDanglingParent.length} 个节点的父目录不存在（侧栏与回收站都看不到它）：{health.treeDanglingParent.slice(0, 3).map((t) => `${t.title}→${t.parentId}`).join("、")}</div>}
                           </>
                         )}
-                        <div className="checks__row">生成于 {formatDateTime(Date.parse(health.checkedAt))}。</div>
+                        <div className="checks__row">生成于 {formatDateTime(new Date(health.checkedAt))}。</div>
                       </div>
                     )}
                   </Block>
@@ -729,7 +723,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <div className="config-stats">
                       <span>待回收键 <strong>{gcPending}</strong> 个</span>
                       <span>可删 <strong>{gcSummary.due}</strong></span>
-                      <span>窗口内 <strong>{gcSummary.inWindow}</strong>{gcSummary.earliest !== null ? " · 最早 " + formatDateTime(gcSummary.earliest) + " 到期" : ""}</span>
+                      <span>窗口内 <strong>{gcSummary.inWindow}</strong>{gcSummary.earliest !== null ? " · 最早 " + formatDateTime(new Date(gcSummary.earliest)) + " 到期" : ""}</span>
                       {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
                     </div>
                     <div className="config-block__actions">
@@ -743,7 +737,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                         <span>云端占用 {gcDiag.cloud.objects} 个对象 / {formatBytes(gcDiag.cloud.bytes)}</span>
                         <span>正文 {diagNs("objects")?.cloudObjects ?? 0} · 资源 {diagNs("assets")?.cloudObjects ?? 0} · 清单 {diagNs("manifests")?.cloudObjects ?? 0} · 小记 {diagNs("quick-notes")?.cloudObjects ?? 0}</span>
                         <span>未引用 {gcDiag.cloud.unreferenced} · 已到期 {gcDiag.cloud.due} · 窗口内 {gcDiag.cloud.inWindow}</span>
-                        <span>统计生成于 {formatDateTime(Date.parse(gcDiag.generatedAt))}</span>
+                        <span>统计生成于 {formatDateTime(new Date(gcDiag.generatedAt))}</span>
                       </div>
                     )}
                   </Block>

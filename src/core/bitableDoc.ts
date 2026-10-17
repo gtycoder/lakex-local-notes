@@ -14,6 +14,7 @@
  * 边界：本文件属 src/core（禁平台/第三方依赖），故不 import 任何 UI/Electron 模块；只依赖同层 core。
  */
 import { extOf, isAssetFilename, isImageExtension } from "./assetNaming.js";
+import { formatDateTime as formatDateTimeCore, formatYmd } from "./dateFormat.js";
 import { contrastTextColor, DEFAULT_LIGHT_COLORS, isHexColor } from "./colorPalette.js";
 import type { AiChatMessage, AiContentPart } from "./aiProviders.js";
 
@@ -1280,14 +1281,14 @@ export function defaultRecordValues(table: BitableTable, at: string = nowIso()):
 export function localDateString(at: string | number | Date): string {
   const d = at instanceof Date ? at : new Date(at);
   if (Number.isNaN(d.getTime())) return "";
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return formatYmd(d);
 }
 
 /** ISO 时间戳 → 本地 `YYYY-MM-DD HH:mm`（系统时间字段展示口径，绝不走 UTC）。 */
 export function localDateTimeString(at: string | number | Date): string {
   const d = at instanceof Date ? at : new Date(at);
   if (Number.isNaN(d.getTime())) return "";
-  return localDateString(d) + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  return formatDateTimeCore(d);
 }
 
 /**
