@@ -48,7 +48,7 @@
 - **测试**：`dateFormat.test.ts` 9 例（8 个分类 + 年初跨年边界 + 非法日期）；`quickNotesView.test.ts` 源码护栏改为「必须 import core/dateFormat + 不得再出现 padStart(2」。
 - **门禁**：tsc 0 · vitest **273 文件 / 2085 例** ✓ · ui-metrics 0 ✓ · diff-check 0。
 - **视觉**：桌面 `check-stylesnap --states "quicknotes:1315:light,quicknotes:1315:warm"` **0 差异**；移动设备截图确认首页小记卡显示 `今天 18:49`（`.css-audit/time-wording/mobile-home-quicknotes.png`，gitignored）。
-- **⚠️ 移动快照门禁暂不判/未重烤**：本次新建了专用 AVD `lake_gate` 并重灌夹具 ⇒ `home-doc` 的 row key 带新文档 id（README 已知：`pm clear`+重灌必须重烤）；同时工作树里有**并行会话在途的移动端改动**（`EditorDock` / `OutlineSheet` / `editor-dock.css` 等），此时重烤会把别人的 WIP 烤进基线 ⇒ 刻意不烤。等并行会话收尾后，在同一 `lake_gate` 实例上重烤 6 态再复跑。
+- **移动快照门禁（261017 已重烤并复跑）**：新建 `lake_gate` AVD 后按 README 暖态配方重烤 6 态（`scripts/mobile-audit/baseline/mobile-snap.json`）；复跑 **6 态 0 差异**。基线绑定「该实例 + 该夹具」，换实例/重灌夹具仍需重烤。
 - **状态**：待提交（9 文件 + 2 文档；并行会话在途文件未纳入）。
 
 ### 261017(六) · C5-4 同名令牌差异表 + C1-5 第一步（时间格式化单一来源）
