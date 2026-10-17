@@ -56,9 +56,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * 列表时间措辞（Q10/B，261017 用户定稿）——**单一来源**。
  *
- * 今天 HH:mm / 昨天 HH:mm / 本周X / 上周X / 本月D日 / 上月D日 / M月D日 / 跨年默认 YYYY-MM-DD。
+ * 今天 HH:mm / 昨天 HH:mm / 本周X / 上周X / 本月D日 / 上月D日 / 其余默认 YYYY-MM-DD。
  * `withClock`：卡片/需要时刻的地方带 HH:mm；紧凑列表不带（今天/昨天例外，始终带 HH:mm）。
- * 优先级 = 今天 → 昨天 → 本周 → 上周 → 本月 → 上月 → 今年 → 跨年（年初的"上周"不会被跨年吞掉）。
+ * 优先级 = 今天 → 昨天 → 本周 → 上周 → 本月 → 上月 → 默认绝对（跨年/今年更早都走默认；年初的"上周"不会被默认吞掉）。
+ * 261017 用户调整：**去掉「今年更早」分类**（原 M月D日），统一回默认 YYYY-MM-DD。
  * 非法日期返回 ""（调用方自己决定占位）。
  */
 export function formatListTime(date: Date, now: Date = new Date(), withClock = false): string {
@@ -80,6 +81,5 @@ export function formatListTime(date: Date, now: Date = new Date(), withClock = f
   if (date.getFullYear() === prevMonth.getFullYear() && date.getMonth() === prevMonth.getMonth()) {
     return "上月" + date.getDate() + "日" + clock;
   }
-  if (date.getFullYear() === now.getFullYear()) return date.getMonth() + 1 + "月" + date.getDate() + "日" + clock;
   return formatYmd(date) + clock;
 }

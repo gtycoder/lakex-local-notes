@@ -28,7 +28,7 @@ describe("dateFormat（C1-5 纯格式化单一来源）", () => {
   });
 });
 
-describe("formatListTime（Q10/B：今天/昨天/本周/上周/本月/上月/今年/跨年）", () => {
+describe("formatListTime（Q10/B：今天/昨天/本周/上周/本月/上月/其余默认绝对）", () => {
   // 2026-10-17 是周六；本周一 = 10-12，上周一 = 10-05。
   const now = at(2026, 10, 17, 18, 40);
 
@@ -44,12 +44,12 @@ describe("formatListTime（Q10/B：今天/昨天/本周/上周/本月/上月/今
     expect(formatListTime(at(2026, 10, 9, 9, 0), now, true)).toBe("上周五 09:00");
   });
 
-  it("本月D日 / 上月D日 / 今年M月D日", () => {
+  it("本月D日 / 上月D日；其余（含今年更早）默认 YYYY-MM-DD", () => {
     expect(formatListTime(at(2026, 10, 1, 8, 12), now)).toBe("本月1日");
     expect(formatListTime(at(2026, 10, 1, 8, 12), now, true)).toBe("本月1日 08:12");
     expect(formatListTime(at(2026, 9, 28, 8, 12), now)).toBe("上月28日");
-    expect(formatListTime(at(2026, 3, 5, 8, 12), now)).toBe("3月5日");
-    expect(formatListTime(at(2026, 3, 5, 8, 12), now, true)).toBe("3月5日 08:12");
+    expect(formatListTime(at(2026, 3, 5, 8, 12), now)).toBe("2026-03-05");
+    expect(formatListTime(at(2026, 3, 5, 8, 12), now, true)).toBe("2026-03-05 08:12");
   });
 
   it("跨年默认 YYYY-MM-DD（withClock 带 HH:mm）", () => {
