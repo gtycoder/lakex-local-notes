@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash, TriangleAlert } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
@@ -19,11 +19,13 @@ import { mobileCachePort } from "../native/cachePort";
 import { mobileAppInfoPort } from "../native/appInfoPort";
 import { TrashList } from "./TrashList";
 import { showToast } from "../ui/toastBus";
+import { pickLocalFile } from "../ui/pickFile";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
 import { CLOUD_PRIVACY_NOTICE } from "../../core/cloudState";
+import { decodeS3ConfigTransferFile, encodeS3ConfigTransfer } from "../../core/s3ConfigTransfer";
 import type { S3Settings, SyncSettings, SyncWarning } from "../../lib/types";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
@@ -127,6 +129,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [ak, setAk] = useState(s3?.accessKeyId ?? "");
   // Secret 不显示明文（§6.2）：初始与回显都用掩码；未修改时保存保留旧值
   const [sk, setSk] = useState(S3_SECRET_MASK);
+  /** S3 配置迁移：主路径从文件导入；「导出迁移码」保留为备用（桌面可粘贴导入）。 */
+  const [s3Export, setS3Export] = useState<{ code: string; msg: string } | null>(null);
+  const transferRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -167,6 +172,60 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       setS3Test("测试失败: " + (error as Error).message);
     }
   }, [saveS3]);
+
+  /** 导出迁移码：在 App 内取已保存配置（Secret 从 Keystore 读出）→ 共享编码器封装。 */
+  const openS3Export = useCallback(async () => {
+    setS3Test("");
+    try {
+      const cfg = await bridge.getS3Settings();
+      if (!cfg || !cfg.secretAccessKey.trim()) { setS3Test("本机还没有可导出的 S3 配置（Secret Key 为空）"); return; }
+      const code = await encodeS3ConfigTransfer(cfg);
+      let msg = "迁移码已生成：点「复制迁移码」后发送到另一台设备。";
+      try {
+        await navigator.clipboard.writeText(code);
+        msg = "已复制到剪贴板（含密钥，请只发给自己）。";
+      } catch { /* 剪贴板不可用：面板里可长按全选复制 */ }
+      setS3Export({ code, msg });
+    } catch (error) {
+      setS3Test("导出失败: " + getNativeErrorMessage(error));
+    }
+  }, []);
+
+  const copyS3Transfer = useCallback(async () => {
+    if (!s3Export) return;
+    try {
+      await navigator.clipboard.writeText(s3Export.code);
+      setS3Export({ ...s3Export, msg: "迁移码已复制到剪贴板" });
+    } catch {
+      transferRef.current?.focus();
+      transferRef.current?.select();
+      setS3Export({ ...s3Export, msg: "无法写入剪贴板：已全选，请长按复制" });
+    }
+  }, [s3Export]);
+
+  /** 从文件导入：读 .json（或迁移码 .txt）→ core 解码 → 强制虚拟托管（D2）→ 走与手填保存同一条桥路径。 */
+  const importS3ConfigFromFile = useCallback(async () => {
+    setS3Test("");
+    try {
+      const file = await pickLocalFile(".json,.txt,application/json,text/plain");
+      if (!file) return;
+      if (file.size > 64 * 1024) { setS3Test("导入失败: 文件过大，不像是 S3 配置文件"); return; }
+      const text = await file.text();
+      const imported = await decodeS3ConfigTransferFile(text);
+      const pathStyleNote = imported.forcePathStyle ? "（该配置为 Path-style，移动端只支持虚拟托管，已按虚拟托管保存）" : "";
+      await bridge.saveS3Settings({ ...imported, forcePathStyle: false });
+      const saved = await bridge.getS3Settings();
+      if (saved) {
+        setS3(saved);
+        setEndpoint(saved.endpoint); setRegion(saved.region); setBucket(saved.bucket);
+        setPrefix(saved.prefix); setAk(saved.accessKeyId); setSk(S3_SECRET_MASK);
+      }
+      setS3Test("S3 配置已从文件导入，请点「测试连接」确认" + pathStyleNote);
+      showToast("S3 配置已导入");
+    } catch (error) {
+      setS3Test("导入失败: " + getNativeErrorMessage(error));
+    }
+  }, []);
 
   // 「上次同步」那一行跟随 store 刷新（bridge.syncNow 是唯一写入点）
   useEffect(() => subscribeSyncStatus(() => setLastSync(readSyncStatus())), []);
@@ -321,6 +380,19 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="mb-set-group">
                 <div className="mb-set-title"><Cloud size={16} />同步设置（七牛 S3）</div>
                 <div className="mb-set-items">
+                  <div className="mb-s3-notice" role="note">
+                    <div className="mb-s3-notice__title">第三方 S3 服务说明</div>
+                    <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
+                    <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
+                    <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
+                    <ul>
+                      <li>接口调用频率、带宽等技术限制；</li>
+                      <li>存储空间、流量、请求次数等计费项目；</li>
+                      <li>服务条款、可用性保障与数据安全责任。</li>
+                    </ul>
+                    <p className="mb-s3-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
+                    <p className="mb-s3-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
+                  </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Endpoint</div></div>
                     <div className="mb-set-item__ctl"><input className="mb-input" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>
@@ -345,8 +417,36 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     <div className="mb-set-item__main"><div className="mb-set-name">Secret Key</div></div>
                     <div className="mb-set-item__ctl"><input className="mb-input" type="password" value={sk} onChange={(e) => setSk(e.target.value)} /></div>
                   </div>
+                  <Block itemId="s3-transfer" name="配置迁移" desc="桌面端「设置 → 云端与同步 → S3 对象存储 → 配置迁移 → 导出到文件…」生成 .json 文件，发送到手机后在这里选择该文件导入，省去逐项手填。文件含 S3 密钥（已加密封装），请只在自己的设备间传递。">
+                    <div className="mb-set-block__actions">
+                      <button className="mb-btn mb-btn--secondary" onClick={() => void importS3ConfigFromFile()}>从文件导入</button>
+                      <button className="mb-btn mb-btn--secondary" onClick={() => void openS3Export()}>导出迁移码</button>
+                    </div>
+                  </Block>
                 </div>
               </div>
+              {s3Export && (
+                <div className="mb-set-group">
+                  <div className="mb-set-title"><Cloud size={16} />导出配置迁移码</div>
+                  <div className="mb-set-items">
+                    <div className="mb-set-item">
+                      <div className="mb-set-item__main">
+                        <div className="mb-input mb-input--multiline">
+                          <textarea ref={transferRef} rows={6} readOnly spellCheck={false} value={s3Export.code} />
+                        </div>
+                        <div className="mb-set-item__desc">迁移码含 S3 密钥（已加密封装）；用于在桌面端「粘贴迁移码…」导入。请只在自己的设备间传递，别发群或公开。</div>
+                        {s3Export.msg && <div className="mb-set-item__desc">{s3Export.msg}</div>}
+                      </div>
+                    </div>
+                    <div className="mb-set-block">
+                      <div className="mb-set-block__actions">
+                        <button className="mb-btn mb-btn--primary" onClick={() => void copyS3Transfer()}>复制迁移码</button>
+                        <button className="mb-btn mb-btn--ghost" onClick={() => setS3Export(null)}>关闭</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="mb-set-group">
                 <div className="mb-set-title"><RefreshCw size={16} />连接与同步</div>
                 <div className="mb-set-items">

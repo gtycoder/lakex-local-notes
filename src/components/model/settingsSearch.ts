@@ -66,6 +66,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "s3-prefix", category: "sync", label: "对象前缀", keywords: "前缀 prefix 目录" },
   { id: "s3-path-style", category: "sync", label: "使用 Path-style URL", keywords: "path style 路径风格 minio" },
   { id: "s3-connection", category: "sync", label: "连接", keywords: "测试连接 保存配置 连通" },
+  { id: "s3-transfer", category: "sync", label: "配置迁移", keywords: "导入 导出 迁移 换机 手机 安卓 配置文件 迁移码 S3 配置 密钥" },
   { id: "gc-status", category: "sync", label: "回收状态", keywords: "GC 回收 对账 深度清理 待回收 未引用" },
   { id: "gc-retention-days", category: "sync", label: "回收窗口（天）", keywords: "回收窗口 保护期 天数 retention" },
   { id: "gc-interval-hours", category: "sync", label: "自动对账周期（小时）", keywords: "自动对账 周期 小时 清理频率" },

@@ -2,6 +2,7 @@ import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJourn
 import type { TrashItem } from "../core/trashPolicy";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
+import type { S3TransferSummary } from "../core/s3ConfigTransfer";
 
 /** 小记 staging 入参：桌面传 `Uint8Array`（IPC 结构化克隆），移动端走 HTTP JSON 传 `number[]`。 */
 export interface QuickNoteStageInput {
@@ -126,6 +127,12 @@ export interface LakeNative {
   saveAssetAs(noteId: string, filename: string, suggestedName?: string): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
+  /** 导出 S3 配置文件（主进程弹保存框 + 加密封装；渲染层不接触明文 Secret）。 */
+  exportS3ConfigFile(): Promise<{ ok: boolean; canceled?: boolean; path?: string }>;
+  /** 导入 S3 配置文件（主进程弹选择框 + 解码/校验/落库；返回脱敏摘要）。 */
+  importS3ConfigFile(): Promise<{ ok: boolean; canceled?: boolean; summary?: S3TransferSummary }>;
+  /** 备用：导入 S3 配置迁移码（手机端「导出迁移码」→ 桌面粘贴）。 */
+  importS3Config(code: string): Promise<{ summary: S3TransferSummary }>;
   testS3Connection(): Promise<string>;
   getSyncSettings(): Promise<SyncSettings>;
   saveSyncSettings(settings: SyncSettings): Promise<SyncSettings & { alignWarning?: string }>;
@@ -286,6 +293,9 @@ export const native = {
   saveAssetAs: (noteId: string, filename: string, suggestedName?: string) => api().saveAssetAs(noteId, filename, suggestedName),
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
+  exportS3ConfigFile: () => api().exportS3ConfigFile(),
+  importS3ConfigFile: () => api().importS3ConfigFile(),
+  importS3Config: (code: string) => api().importS3Config(code),
   testS3Connection: () => api().testS3Connection(),
   getSyncSettings: () => api().getSyncSettings(),
   saveSyncSettings: (settings: SyncSettings) => api().saveSyncSettings(settings),

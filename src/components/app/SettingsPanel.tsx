@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, TriangleAlert, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../../core/aiProviders";
@@ -25,6 +25,7 @@ import { useFloatingDialog } from "../hooks/useFloatingDialog";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "../model/settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
+import { S3ConfigImportDialog } from "./S3ConfigImportDialog";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
 
@@ -79,6 +80,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
   /** 本次会话内 S3 连接测试是否通过：通过后才允许开启云同步；改动任一 S3 字段即失效。 */
   const [s3Verified, setS3Verified] = useState(false);
+  /** S3 配置文件迁移：粘贴迁移码弹窗（备用路径）。 */
+  const [s3ImportOpen, setS3ImportOpen] = useState(false);
   // AI：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）。
   // 采用**草稿式**：编辑不落盘，先「拉模型 / 测试」验证草稿，通过（或用户选择仍要保存）才写回。
   const [aiView, setAiView] = useState<AiSettingsView | null>(null);
@@ -435,6 +438,35 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       setS3Verified(true);
     } catch (e) { setS3Verified(false); setSyncMsg(getNativeErrorMessage(e)); }
   };
+  /** 导出到文件：系统保存框 + 加密封装都在主进程（渲染层不接触明文 Secret）。 */
+  const exportS3ConfigFile = async () => {
+    setSyncMsg(null);
+    try {
+      const result = await native.exportS3ConfigFile();
+      if (result.canceled) return;
+      setSyncMsg(result.path ? `已导出 S3 配置：${result.path}` : "S3 配置已导出");
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+  };
+  /** 从文件导入：系统选择框 + 解码/校验/落库都在主进程；成功后就地刷新表单。 */
+  const importS3ConfigFile = async () => {
+    setSyncMsg(null);
+    try {
+      const result = await native.importS3ConfigFile();
+      if (result.canceled) return;
+      const saved = await native.getS3Settings();
+      if (saved) { setS3(saved); onS3SettingsChanged?.(saved); }
+      setS3Verified(false);
+      setSyncMsg("S3 配置已从文件导入，请点「测试连接」确认后再使用云同步");
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+  };
+  /** 备用：粘贴手机端导出的迁移码。 */
+  const importS3Config = async (code: string): Promise<void> => {
+    await native.importS3Config(code);
+    const saved = await native.getS3Settings();
+    if (saved) { setS3(saved); onS3SettingsChanged?.(saved); }
+    setS3Verified(false);
+    setSyncMsg("S3 配置已导入，请点「测试连接」确认后再使用云同步");
+  };
 
   const saveSyncCfg = async (patch: Partial<SyncSettings>) => {
     if (!syncCfg || syncCfgBusy) return;
@@ -684,6 +716,19 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "sync" && (
               <>
                 <Group title="S3 对象存储" icon={<Cloud size={16} />}>
+                  <div className="s3-service-notice" role="note">
+                    <div className="s3-service-notice__title">第三方 S3 服务说明</div>
+                    <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
+                    <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
+                    <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
+                    <ul>
+                      <li>接口调用频率、带宽等技术限制；</li>
+                      <li>存储空间、流量、请求次数等计费项目；</li>
+                      <li>服务条款、可用性保障与数据安全责任。</li>
+                    </ul>
+                    <p className="s3-service-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
+                    <p className="s3-service-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
+                  </div>
                   <Field itemId="s3-endpoint" name="Endpoint" desc="七牛 Kodo 形如 https://s3.cn-north-1.qiniucs.com。"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
                   <Field itemId="s3-access-key" name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} /></Field>
                   <Field itemId="s3-secret-key" name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
@@ -695,6 +740,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <div className="config-block__actions">
                       <button className="b3-button b3-button--outline" onClick={() => void testS3()}>测试连接</button>
                       <button className="b3-button" onClick={() => void saveS3()}>保存配置</button>
+                    </div>
+                  </Block>
+                  <Block itemId="s3-transfer" name="配置迁移" desc="桌面端导出 .json 配置文件，发送到手机后在「同步设置 → 配置迁移 → 从文件导入」选择该文件，省去逐项手填。只含 S3 配置，不含同步策略；导入会覆盖本机 S3 配置。文件含密钥（已加密封装），请只在自己的设备间传递。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
+                      <button className="b3-button" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
+                      <button className="b3-button b3-button--outline" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
                     </div>
                   </Block>
                 </Group>
@@ -1043,6 +1095,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
         </div>
         {(syncMsg ?? diagMsg) && <p className="settings-statusbar">{syncMsg ?? diagMsg}</p>}
         <DialogResizeHandles onResize={floating.startResize} />
+        {s3ImportOpen && (
+          <S3ConfigImportDialog
+            onClose={() => setS3ImportOpen(false)}
+            onImport={importS3Config}
+          />
+        )}
       </div>
     </div>
   );

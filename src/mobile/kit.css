@@ -103,6 +103,9 @@
   flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: inherit;
   font: inherit; padding: 0; outline: none;
 }
+/* 多行输入（S3 配置迁移码，261017）：纵向拉伸 + 等宽小字，滚动交给 textarea 自己。 */
+.mb-input--multiline { align-items: stretch; padding: 10px 12px; }
+.mb-input--multiline > textarea { min-height: 96px; resize: vertical; font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
 .mb-select { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: var(--mb-ctl-h); padding: 0 12px; border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 
 /* ── 标签（.mb-tag）─────────────────────────────────────────────────── */
@@ -177,6 +180,15 @@
 .mb-set-item__note { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); line-height: var(--lake-line-height-normal); }
 .mb-set-item__ctl { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
 .mb-set-item__error { flex: 1 1 100%; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
+/* S3 第三方服务说明（261017）：对齐思源 S3 设置页提醒块；移动端独立样式层，不引桌面 CSS。 */
+.mb-s3-notice { display: flex; flex-direction: column; gap: 6px; padding: 12px var(--mb-page-pad); border: 1px solid var(--lake-border-2); border-radius: var(--mb-radius); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+.mb-s3-notice__title { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
+.mb-s3-notice p { margin: 0; }
+.mb-s3-notice ul { margin: 0; padding-left: 18px; }
+.mb-s3-notice li { margin-top: 2px; }
+.mb-s3-notice__warn { display: flex; align-items: flex-start; gap: 6px; color: var(--lake-status-pending); font-weight: var(--lake-font-weight-medium); }
+.mb-s3-notice__warn svg { flex: 0 0 auto; margin-top: 1px; }
+.mb-s3-notice__disclaimer { color: var(--lake-text-3); }
 .mb-set-block { display: flex; flex-direction: column; gap: 8px; padding: 12px var(--mb-page-pad); border-top: 1px solid var(--lake-border-2); }
 .mb-set-section > .mb-set-block:first-child { border-top: 0; }
 .mb-set-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
