@@ -9,7 +9,7 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261017 / 261016）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **261017 最新基线**：代码 review（CODE-REVIEW-261015）**全部结案**；HEAD 见 git log（261017 收尾）；门禁 276 文件 / 2098 例（新增 §0(十七) 后为 279 文件 / 2121 例）；C3-2 / C3-5 / C1-6 / D2 / D3 / D5 / D7 均已完成；**S3 配置导入导出（文件为主 + 迁移码备用）已实现，待验收，见 §0(十七)**。
+> **261017 最新基线**：代码 review（CODE-REVIEW-261015）**全部结案**；HEAD 见 git log（261017 收尾）；门禁 276 文件 / 2098 例（新增 §0(十七) 后为 280 文件 / 2128 例）；C3-2 / C3-5 / C1-6 / D2 / D3 / D5 / D7 均已完成；**S3 配置导入导出（文件为主 + 迁移码备用）已实现，待验收，见 §0(十七)**。
 > **⚠️ 261017 历史已重写**：旧 AK/SK 已从 git 历史清除（filter-repo）；旧 commit hash 全部失效，旧克隆/缓存请重新拉取。
 >
 > **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
@@ -30,8 +30,8 @@
 - **实测**：桌面隔离实例（scheme + CDP 9234）真实 UI：点「导出到文件…」弹出系统保存框，保存得到 **585B / 0600 / 无明文**的 `.json`；先把桶改成探针值，再点「从文件导入…」选中该文件 ⇒ 落库与表单都恢复为文件里的配置、状态栏提示正确。`lake_gate` 模拟器（5556 / CDP 9336）：真实文件选择器（CDP 注入 App 私有目录文件）导入成功，6 个字段回填、toast「S3 配置已导入」、Path-style 提示；「导出迁移码」仍可用且码内无明文。
   ⚠️ **遗留 / 环境问题**：该 AVD 上 `am force-stop` / 重启后 `localStorage` 只剩 `libraryView` —— 直接 `localStorage.setItem` 探针同样丢，**与本批无关**（既有 S3 手填保存 / 主题 / 排序同受影响），判断为该 `lake_gate` 实例的 WebView localStorage / leveldb 复现性问题；**冷启动持久化需真机复验**。
   该实例已重装 debug 包并留下探针 S3 配置 ⇒ **跑移动快照门前按 README 重灌夹具**。
-- **同日追加（用户点单）**：S3 设置页顶部新增「**第三方 S3 服务说明**」（对齐思源：浅底提醒块 + 标题 + 计费/技术限制/条款清单 + 免责声明），并按用户要求加一句**着重提醒**：笔记正文/附件按原样上传、云端不加密，务必确认桶为私有且未开放公开读（amber 文字 + `TriangleAlert` 图标）。桌面 `.s3-service-notice`（[feature.css](lake-notes-electron/src/styles/feature.css) +22，基线 266→288）、移动 `.mb-s3-notice`（[kit.css](lake-notes-electron/src/mobile/kit.css) +22，基线 517→539）；两端各自样式层、不共享。设备实测：桌面设置页与 `lake_gate` 设置页均显示完整说明 + 3 条清单 + 着重提醒；证据 `.css-audit/s3-transfer-261017/notice-{desktop,mobile}.png`。门禁同批全绿（280 文件 / 2127 例）。
-- **状态**：已提交（`feat/s3-config-transfer` 分支，**待用户验收**；未合并 master、未推送）。
+- **同日追加（用户点单）**：S3 设置页顶部新增「**第三方 S3 服务说明**」（对齐思源：浅底提醒块 + 标题 + 计费/技术限制/条款清单 + 免责声明），并按用户要求加一句**着重提醒**：笔记正文/附件按原样上传、云端不加密，务必确认桶为私有且未开放公开读（amber 文字 + `TriangleAlert` 图标）。桌面 `.s3-service-notice`（[feature.css](lake-notes-electron/src/styles/feature.css) +22，基线 266→288）、移动 `.mb-s3-notice`（[kit.css](lake-notes-electron/src/mobile/kit.css) +22，基线 517→539）；两端各自样式层、不共享。设备实测：桌面设置页与 `lake_gate` 设置页均显示完整说明 + 3 条清单 + 着重提醒；证据 `.css-audit/s3-transfer-261017/notice-{desktop,mobile}.png`。门禁同批全绿（合并后 280 文件 / 2128 例）。
+- **状态**：已合并 master 并推送 `origin/master`（merge commit `d3e17f74`；同批带上 261017 B 批 + 固定目录高度修复）；本地 `feat/s3-config-transfer` 分支保留。
 
 ### 261017(十六) · Git 历史重写（清除旧 AK/SK）
 
