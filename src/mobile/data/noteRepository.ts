@@ -4,8 +4,17 @@ import { indexNote, removeNoteFromIndex, searchNotes as searchNotesIndexed } fro
 import type { SearchResult } from "../../core/searchTypes.js";
 import { hasNoteSaveChanges } from "../../core/noteSaveDecision.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
+import type { NoteKind } from "../../core/noteKind.js";
 import { loadAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
 import type { MobileDb } from "./sqliteDb";
+import { deleteNoteBodies, readNoteBody, writeNoteBody } from "./noteBodies.js";
+
+/**
+ * 移动端笔记仓储。
+ *
+ * 261019 起正文不再存 SQLite：notes 行只有元数据 + content_hash + 派生 text_cache；
+ * 正文读写在 native/bodyStore（文件，路径与桌面同构，见 core/noteBodyPaths.ts）。
+ */
 
 export interface LocalNote {
   id: string;
@@ -14,7 +23,7 @@ export interface LocalNote {
   updatedAt: string;
   parentId: string | null;
   /** v6/v7 文档类型（缺省 doc）。非 doc 类型移动端只读占位，**不得**交给 Lake 编辑器（会写坏正文）。 */
-  kind: "doc" | "usheet" | "bitable" | "board";
+  kind: NoteKind;
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
@@ -25,14 +34,14 @@ export interface LocalNoteSummary {
   parentId: string | null;
 }
 
-function normalizeDocKind(value: unknown): "doc" | "usheet" | "bitable" | "board" {
+function normalizeDocKind(value: unknown): NoteKind {
   // 表格（kind=usheet）：移动端按「非 doc 只读占位」处理，**绝不**交给 Lake 编辑器。
   // 已废弃的旧 kind：不做迁移 / 兼容（AGENTS §3#7），直接回退 doc。
   return value === "usheet" || value === "bitable" || value === "board" ? value : "doc";
 }
 
-function rowToNote(r: Record<string, unknown>): LocalNote {
-  return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null, kind: normalizeDocKind(r.doc_kind) };
+function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
+  return { id: String(r.id), title: String(r.title), content, updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null, kind: normalizeDocKind(r.doc_kind) };
 }
 
 function rowToNoteSummary(r: Record<string, unknown>): LocalNoteSummary {
@@ -50,11 +59,15 @@ function mimeOf(filename: string): string {
   return map[ext] ?? "application/octet-stream";
 }
 
-/** 历史快照引用的资源文件名集合（被历史引用的资源不孤儿，避免清理后历史恢复裂图）。 */
+/** 历史快照引用的资源文件名集合（来自 note_history.refs_json，不读快照正文）。 */
 async function getHistoryRefs(d: MobileDb, noteId: string): Promise<Set<string>> {
   const refs = new Set<string>();
-  const rows = await d.prepare("SELECT content FROM note_history WHERE note_id=?").all(noteId) as Array<{ content: string }>;
-  for (const r of rows) for (const f of extractAssetRefs(r.content)) refs.add(f);
+  const rows = await d.prepare("SELECT refs_json FROM note_history WHERE note_id=?").all(noteId) as Array<{ refs_json: string }>;
+  for (const row of rows) {
+    try {
+      for (const filename of JSON.parse(row.refs_json) as string[]) refs.add(filename);
+    } catch { /* 单条坏账不影响其它快照 */ }
+  }
   return refs;
 }
 
@@ -94,8 +107,16 @@ export async function listNotes(d: MobileDb): Promise<LocalNoteSummary[]> {
 }
 
 export async function readNote(d: MobileDb, id: string): Promise<LocalNote | null> {
-  const row = await d.prepare("SELECT id, title, content, updated_at, parent_id, doc_kind FROM notes WHERE id = ?").get(id);
-  return row ? rowToNote(row) : null;
+  const row = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind FROM notes WHERE id = ?").get(id);
+  if (!row) return null;
+  const kind = normalizeDocKind(row.doc_kind);
+  const content = await readNoteBody(kind, id);
+  if (content == null) {
+    // 行在、正文文件缺失（外部删除/写盘失败）：按"打不开"处理，绝不返回空正文让编辑器覆盖。
+    console.warn("[mobile] 正文文件缺失，拒绝打开:", id, kind);
+    return null;
+  }
+  return rowToNote(row, content);
 }
 
 /** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16）。 */
@@ -136,10 +157,21 @@ export async function createNote(
 ): Promise<void> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
-  const bodyPlain = plain ?? searchTextForKind("doc", content).plain ?? "";
-  await d.prepare(
-    "INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state, text_cache) VALUES (?,?,?,?,?,?,'local',?)"
-  ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain);
+  // 先写正文文件、再提交 DB（对齐桌面 NoteContentRepository：DB 不应声称正文已存在）。
+  await writeNoteBody("doc", id, content);
+  try {
+    const kind: NoteKind = "doc";
+    const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
+    await d.prepare(
+      "INSERT INTO notes (id, title, parent_id, updated_at, content_hash, sync_state, text_cache, doc_kind) VALUES (?,?,?,?,?,'local',?,?)"
+    ).run(id, safeTitle, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, kind);
+  } catch (error) {
+    // 只有"DB 里确实没有这一行"才清理刚写的正文：INSERT 失败也可能来自 id 已存在（并发/调用方误用），
+    // 这时删正文会毁掉既有笔记。
+    const exists = await d.prepare("SELECT 1 FROM notes WHERE id=?").get(id);
+    if (!exists) await deleteNoteBodies(id).catch(() => undefined);
+    throw error;
+  }
   await detectOrphans(d, id, content, assets);
   await indexNote(d, id);
 }
@@ -158,25 +190,30 @@ export async function saveNote(
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
-  const existing = await d.prepare("SELECT title, content, doc_kind, trashed_at, sync_state FROM notes WHERE id=?").get(id) as
-    | { title: string; content: string; doc_kind?: string | null; trashed_at: string | null; sync_state: string | null }
+  const existing = await d.prepare("SELECT title, doc_kind, trashed_at, sync_state FROM notes WHERE id=?").get(id) as
+    | { title: string; doc_kind?: string | null; trashed_at: string | null; sync_state: string | null }
     | undefined;
   if (!existing) throw new Error("笔记不存在，不能保存（新建请走 createNote）");
   if (existing.trashed_at != null || existing.sync_state === "purged") {
     throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
   }
-  if (!hasNoteSaveChanges(existing, { title: safeTitle, content })) return false;
+  const kind = normalizeDocKind(existing.doc_kind);
+  const previous = await readNoteBody(kind, id);
+  if (previous != null && !hasNoteSaveChanges({ title: existing.title, content: previous }, { title: safeTitle, content })) return false;
   // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省按 **kind** 派生（usheet/bitable/board 的正文是 JSON，
   // 直接 lakeHtmlToPlain 会把 JSON 碎片写进 text_cache ⇒ 搜索索引与摘要全脏）。口径见 src/core/noteSearchText.ts。
-  const kind = normalizeDocKind(existing.doc_kind);
   const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
 
-  // 写边界二次守卫：检查与写入之间若状态变为 trash/purge，UPDATE 不命中 → 抛错，绝不静默写脏。
+  await writeNoteBody(kind, id, content);
+  // 写边界二次守卫：检查与写入之间若状态变为 trash/purge，UPDATE 不命中 → 回滚正文并抛错，绝不静默写脏。
   const changed = (await d.prepare(
-    `UPDATE notes SET title=?, content=?, parent_id=?, updated_at=?, content_hash=?, sync_state='local', text_cache=?
+    `UPDATE notes SET title=?, parent_id=?, updated_at=?, content_hash=?, sync_state='local', text_cache=?
      WHERE id=? AND trashed_at IS NULL AND sync_state != 'purged'`
-  ).run(safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, id)).changes;
-  if (changed === 0) throw new Error("笔记状态已变化（回收站/已删除），保存被拒绝");
+  ).run(safeTitle, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, id)).changes;
+  if (changed === 0) {
+    if (previous != null) await writeNoteBody(kind, id, previous).catch(() => undefined);
+    throw new Error("笔记状态已变化（回收站/已删除），保存被拒绝");
+  }
   await detectOrphans(d, id, content, assets);
   await indexNote(d, id);
   return true;
@@ -189,6 +226,12 @@ export async function trashNote(d: MobileDb, id: string): Promise<void> {
 }
 
 export async function listTrashed(d: MobileDb): Promise<LocalNote[]> {
-  const rows = await d.prepare("SELECT id, title, content, updated_at FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all();
-  return rows.map(rowToNote);
+  const rows = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all() as Array<Record<string, unknown>>;
+  const notes: LocalNote[] = [];
+  for (const row of rows) {
+    const kind = normalizeDocKind(row.doc_kind);
+    const content = await readNoteBody(kind, String(row.id));
+    notes.push(rowToNote(row, content ?? ""));
+  }
+  return notes;
 }

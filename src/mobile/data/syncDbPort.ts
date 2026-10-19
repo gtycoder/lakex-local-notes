@@ -9,6 +9,9 @@ import { createHistorySnapshot as insertHistorySnapshot } from "./historyReposit
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync";
 import { withWriteLock } from "../sync/maintenanceLocks";
 import type { MobileDb } from "./sqliteDb.js";
+import { readNoteBody, writeNoteBody } from "./noteBodies.js";
+import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
+import { searchTextForKind } from "../../core/noteSearchText.js";
 
 export interface MobileSyncDbPortDeps {
   assets: Map<string, Uint8Array>;
@@ -18,9 +21,13 @@ export interface MobileSyncDbPortDeps {
   listNoteAssetKeys: (noteId: string) => Promise<string[]>;
 }
 
-function rowToLocal(r: Record<string, unknown>) {
+function noteKindOf(r: Record<string, unknown>): NoteKind {
+  return normalizeNoteKind(r.doc_kind ?? r.kind);
+}
+
+function rowToLocal(r: Record<string, unknown>, content: string) {
   return {
-    id: String(r.id), title: String(r.title), content: String(r.content),
+    id: String(r.id), title: String(r.title), content,
     updatedAt: String(r.updated_at), syncState: String(r.sync_state),
     trashedAt: r.trashed_at ? String(r.trashed_at) : null,
     restorePendingAt: r.restore_pending_at ? String(r.restore_pending_at) : null,
@@ -31,13 +38,13 @@ function rowToLocal(r: Record<string, unknown>) {
     icon: r.icon ? String(r.icon) : null,
     isConflict: !!r.is_conflict,
     // TS 会在推断的返回类型里放宽字面量 → 显式标注联合类型（否则外层 SyncDbPort 不兼容）
-    kind: (r.doc_kind === "usheet" ? "usheet" : r.doc_kind === "bitable" ? "bitable" : r.doc_kind === "board" ? "board" : "doc") as "doc" | "usheet" | "bitable" | "board",
+    kind: noteKindOf(r),
   };
 }
 
 function rowToLocalMetadata(r: Record<string, unknown>) {
   return {
-    ...rowToLocal({ ...r, content: "" }),
+    ...rowToLocal(r, ""),
     contentHash: r.content_hash ? String(r.content_hash) : undefined,
   };
 }
@@ -46,31 +53,45 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   // 窗口级批量写（保守版）：批内 applyRemoteNote / setSyncBase / recordDeclaredAssets 的语句入队，
   // flushNoteBatch 用 executeSet 一次下发（原生一次桥往返 + 单事务）——移动端逐条写的桥开销是同步大头。
   // 批量失败回退逐条重放，保持与逐条写等价的提交/报错点。
-  const NOTE_UPSERT_SQL = `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at, doc_kind)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
+  // 正文不进 DB（261019）：rows 只写元数据 + hash + 派生 text_cache；正文文件由 applyRemoteNote/flush 先落盘。
+  const NOTE_UPSERT_SQL = `INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at, doc_kind, text_cache)
+     VALUES (?,?,?,?,?,?,'synced',?,?,?,?,?,?,NULL,?,?)
+     ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id,
        sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
-       sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind`;
+       sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind, text_cache=excluded.text_cache`;
   const SYNCBASE_UPSERT_SQL = "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at) VALUES (?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at";
   const SYNCBASE_LAST_UPLOADED_SQL = "UPDATE sync_base SET last_uploaded_hash=? WHERE note_id=?";
   const DECLARED_ASSET_SQL = "INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?) ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash";
   let batch: Array<{ statement: string; values: unknown[] }> | null = null;
+  /** 批窗口内待落盘的远端正文（文件写在 flush 时做：先过 I2 守卫，避免"文件已覆盖、DB 却推迟应用"）。 */
+  let batchNotes: Array<{ note: Parameters<SyncDbPort["applyRemoteNote"]>[0]; content: string }> | null = null;
   /** 批开始时的 (note id → content_hash)：用于识别"批窗口内被本机编辑过"的条目（I2 的下载方向）。 */
   let batchHashes: Map<string, string> | null = null;
   const queue = (statement: string, values: unknown[]): boolean => { if (!batch) return false; batch.push({ statement, values }); return true; };
   // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：全新导入的回收站条目
   // （L339 分支）靠它恢复原父——硬编码 NULL 会让「安卓首次同步拉到他端已删笔记 → 恢复」后 parent 卡在
   // TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
-  const noteUpsertValues = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): unknown[] => [note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "usheet" || note.kind === "bitable" || note.kind === "board" ? note.kind : "doc"];
+  const noteUpsertValues = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], textCache: string): unknown[] => [
+    note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.contentHash,
+    note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null,
+    note.trashedAt ?? null, note.deletedFromParentId ?? null, normalizeNoteKind(note.kind), textCache,
+  ];
+  const textCacheOf = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): string =>
+    searchTextForKind(normalizeNoteKind(note.kind), content).plain ?? "";
+  /** 正文先落文件、再写元数据（顺序对齐桌面 importRemoteNote：rename 故障不留下"DB 已 synced、正文不存在"）。 */
   const applyRemoteNoteNow = async (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): Promise<void> => {
+    await writeNoteBody(normalizeNoteKind(note.kind), note.id, content);
     const d = getDb();
-    await d.prepare(NOTE_UPSERT_SQL).run(...noteUpsertValues(note, content));
+    await d.prepare(NOTE_UPSERT_SQL).run(...noteUpsertValues(note, textCacheOf(note, content)));
   };
   const port: SyncDbPort = {
     async getNote(id) {
       const d = getDb();
-      const row = await d.prepare("SELECT id, title, content, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, doc_kind FROM notes WHERE id = ?").get(id);
-      return row ? rowToLocal(row) : null;
+      const row = await d.prepare("SELECT id, title, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash, doc_kind FROM notes WHERE id = ?").get(id);
+      if (!row) return null;
+      const kind = noteKindOf(row);
+      const content = (await readNoteBody(kind, id)) ?? "";
+      return rowToLocal(row, content);
     },
     async getAllNotes() {
       const d = getDb();
@@ -107,11 +128,13 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       return rows.map((r) => ({ filename: String(r.filename), size: Number(r.size), hash: String(r.hash) }));
     },
     async applyRemoteNote(note, content) {
-      if (queue(NOTE_UPSERT_SQL, noteUpsertValues(note, content))) return;
+      // 批窗口内先暂存（不落盘）：flush 时再过 I2 守卫，避免"文件已覆盖、DB 却推迟应用"。
+      if (batch && batchNotes) { batchNotes.push({ note, content }); return; }
       await applyRemoteNoteNow(note, content);
     },
     async beginNoteBatch() {
       batch = [];
+      batchNotes = [];
       // I2（下载方向）：批窗口（beginNoteBatch→flushNoteBatch）**跨网络取内容**，本机编辑可以插进来。
       // 记下批开始时的 content_hash；窗口内被改过的笔记不应用远端版本，留给下一轮走引擎正常的
       // 冲突流程（含被覆盖方历史留档）——避免"远端覆盖静默丢掉用户刚写的正文"。
@@ -120,30 +143,42 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       batchHashes = new Map(rows.map((r) => [String(r.id), String(r.content_hash ?? "")]));
     },
     async flushNoteBatch() {
-      const items = batch;
+      const items = batch ?? [];
+      const pending = batchNotes ?? [];
       const snapshot = batchHashes;
       batch = null;
+      batchNotes = null;
       batchHashes = null;
-      if (!items || items.length === 0) return;
+      if (items.length === 0 && pending.length === 0) return;
       const d = getDb();
-      // "未变才应用"：批窗口内被本机改过的笔记，推迟远端应用（下一轮走正常冲突流程）。
-      let toWrite = items;
+      // "未变才应用"：批窗口内被本机改过的笔记，推迟远端应用（文件也不写；下一轮走正常冲突流程）。
+      let accepted = pending;
+      const deferredIds = new Set<string>();
       if (snapshot) {
         const rows = await d.prepare("SELECT id, content_hash FROM notes").all() as Array<{ id: string; content_hash: string | null }>;
         const current = new Map(rows.map((r) => [String(r.id), String(r.content_hash ?? "")]));
-        const deferred: string[] = [];
-        toWrite = items.filter((s) => {
-          const id = String(s.values[0]);
-          const before = snapshot.get(id);
-          const now = current.get(id);
-          if (before !== undefined && now !== undefined && before !== now) { deferred.push(id); return false; }
+        accepted = pending.filter(({ note }) => {
+          const before = snapshot.get(note.id);
+          const now = current.get(note.id);
+          if (before !== undefined && now !== undefined && before !== now) { deferredIds.add(note.id); return false; }
           return true;
         });
-        if (deferred.length > 0) {
-          console.info(`[mobile-sync] 批窗口内本机已编辑，推迟远端应用 ${deferred.length} 条（下一轮按冲突流程处理）`);
+        if (deferredIds.size > 0) {
+          console.info(`[mobile-sync] 批窗口内本机已编辑，推迟远端应用 ${deferredIds.size} 条（下一轮按冲突流程处理）`);
         }
       }
-      if (toWrite.length === 0) return;
+      // 同一批里为该笔记排队的 sync_base / declared_assets 也必须一起丢弃：
+      // 否则"正文没应用、基线却被推到远端 hash"，下一轮会把本机编辑误判成已同步。
+      const keptItems = deferredIds.size === 0
+        ? items
+        : items.filter((s) => !deferredIds.has(String(s.values[0])));
+      if (accepted.length === 0 && keptItems.length === 0) return;
+      // 正文先落文件（顺序对齐桌面 importRemoteNote），再把元数据并入同一批 SQL。
+      const noteStatements = accepted.map(({ note, content }) => ({
+        statement: NOTE_UPSERT_SQL,
+        values: noteUpsertValues(note, textCacheOf(note, content)),
+      }));
+      const toWrite = [...noteStatements, ...keptItems];
       try {
         if (typeof d.executeSet === "function") {
           await d.executeSet(toWrite);
@@ -155,15 +190,22 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
         for (const s of toWrite) await d.prepare(s.statement).run(...s.values);
       }
     },
-    async applyRemoteTrash(id, content, title, trashedAt, deletedFromParentId, parentId, sortOrder) {
+    async applyRemoteTrash(id, content, title, trashedAt, deletedFromParentId, parentId, sortOrder, kind) {
       const d = getDb();
+      const existing = await d.prepare("SELECT doc_kind FROM notes WHERE id=?").get(id) as { doc_kind?: string | null } | undefined;
+      const noteKind = normalizeNoteKind(kind ?? existing?.doc_kind);
+      // 先内容后标志（墓碑携带删除前内容；本地恢复可拿到删除方最新编辑版）。
+      await writeNoteBody(noteKind, id, content);
+      const contentHash = sha256Sync(new TextEncoder().encode(content));
+      const textCache = searchTextForKind(noteKind, content).plain ?? "";
       await d.prepare(
-        `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, trashed_at, deleted_from_parent_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?)
-         ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
-           sort_order=excluded.sort_order, updated_at=excluded.updated_at, sync_state=excluded.sync_state,
-           trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id`
-      ).run(id, title, content, parentId, sortOrder, trashedAt, "", "synced", trashedAt, deletedFromParentId);
+        `INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, sync_state, trashed_at, deleted_from_parent_id, doc_kind, text_cache)
+         VALUES (?,?,?,?,?,?,'synced',?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id,
+           sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
+           sync_state=excluded.sync_state, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id,
+           doc_kind=excluded.doc_kind, text_cache=excluded.text_cache`
+      ).run(id, title, parentId, sortOrder, trashedAt, contentHash, trashedAt, deletedFromParentId, noteKind, textCache);
     },
     async localTrashNote(id) {
       const d = getDb();
@@ -228,8 +270,9 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     },
     async readDeletedContent(id: string): Promise<string | null> {
       const d = getDb();
-      const row = await d.prepare("SELECT content FROM notes WHERE id=?").get(id) as { content: string } | undefined;
-      return row ? String(row.content) : null;
+      const row = await d.prepare("SELECT doc_kind FROM notes WHERE id=?").get(id) as { doc_kind?: string | null } | undefined;
+      if (!row) return null;
+      return readNoteBody(noteKindOf(row), id);
     },
     async markTombstonesPublished(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
@@ -263,10 +306,12 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     },
     async markSyncedIfUnchanged(id, expectedContentHash, metaAt, lastUploadedHash) {
       const d = getDb();
-      const row = await d.prepare("SELECT content FROM notes WHERE id=?").get(id);
+      const row = await d.prepare("SELECT doc_kind FROM notes WHERE id=?").get(id) as { doc_kind?: string | null } | undefined;
       if (!row) return;
-      // 同步期间内容被编辑则不标 synced，等下一轮重传。
-      const currentHash = sha256Sync(new TextEncoder().encode(String(row.content)));
+      // 同步期间内容被编辑则不标 synced，等下一轮重传（判据 = 正文文件实算 hash）。
+      const body = await readNoteBody(noteKindOf(row), id);
+      if (body == null) return;
+      const currentHash = sha256Sync(new TextEncoder().encode(body));
       if (currentHash !== expectedContentHash) return;
       await d.prepare("UPDATE notes SET sync_state='synced', content_hash=?, restore_pending_at=NULL WHERE id=?").run(expectedContentHash, id);
       await d.prepare(

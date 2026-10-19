@@ -43,7 +43,7 @@
    │  ├─ metadata.sqlite3              # 小记独立库
    │  ├─ assets/{quickNoteId}/{file}   # 小记图片                    L1（quick-notes/）
    │  └─ staging/{draftId}/{file}      # 未保存草稿图片              L3
-   ├─ history/{noteId}/*.lake.gz        # 历史快照（note_history.file_path）L3
+   ├─ history/{noteId}/*.body.gz        # 历史快照（note_history.file_path）L3（261019 前为 *.lake.gz，旧文件按 file_path 仍可读）
    ├─ draft-journal/                    # 草稿恢复日志                L3
    └─ .s3-restore-seed.json             # A2 云恢复临时凭据 seed（0600，重启即删）L3
 （云恢复时旧工作区被隔离为 ../workspace-pre-restore-<ts>/）
@@ -70,12 +70,26 @@
 App 沙盒 `com.lakenotes.mobile`；`Directory.Data` = `/data/data/com.lakenotes.mobile/files`。
 
 ```
-files/note-assets/{noteId}/{filename}    # 附件（bridge.ts:474）        L1（assets/）
-databases/lake-notes-mobile              # 主库（Capacitor SQLite, WAL）
-# 笔记正文存库 notes.content 列（不落 .lake）；小记与主库同库
+files/
+├─ notes/{noteId}.lake                   # 文档正文（kind=doc）        L1（文件）
+├─ usheets/{noteId}.usheet.json          # 表格正文（kind=usheet）
+├─ bitables/{noteId}.bitable.json        # 多维表正文（kind=bitable）
+├─ boards/{noteId}.board.json            # 画板正文（kind=board）
+├─ quick-notes/
+│  ├─ items/{quickNoteId}.qnote          # 小记正文                   L1（文件）
+│  └─ assets/{quickNoteId}/{filename}    # 小记图片（261019 起与桌面同构）
+├─ note-assets/{noteId}/{filename}       # 文档附件/图片               L1（assets/）
+├─ history/{noteId}/*.body.gz            # 历史快照（gzip 文件）        L3（本地）
+├─ draft-journal/{id}.json               # 未提交草稿（纯本机）         L3
+databases/lake-notes-mobile              # 主库（Capacitor SQLite, WAL；只存元数据/账本/派生缓存）
 ```
 
-> 两端形态差异：桌面正文在文件 + 小记独立库/独立前缀；移动正文在库 + 小记同库、图片纯文件。**分层归属一致。**
+> **261019 起移动端正文与桌面同构**：正文/小记/历史全部落文件（相对路径由 `src/core/noteBodyPaths.ts` 单一来源给出），
+> 物理读写由原生 **BodyStore** 插件完成（临时文件 + fsync + rename 原子写；快照 gzip 在原生做）。
+> SQLite 只保留元数据、`content_hash`、同步账本与**派生** `text_cache` / FTS 索引——与桌面的分层归属一致。
+>
+> 两端仍有的差异（非正文归属）：桌面小记使用**独立数据库** `quick-notes/metadata.sqlite3`，移动端小记与主库同库（沿用既有 qn_* 表）；
+> 移动端旧库（正文在 `notes.content`）升级时**整库重置一次**（开发阶段数据可删，用户 261019 定稿，不做逐篇迁移）。
 
 ---
 
@@ -93,7 +107,7 @@ databases/lake-notes-mobile              # 主库（Capacitor SQLite, WAL）
 ```
 
 manifest 字段（`src/core/manifestTypes.ts`）：
-- `ManifestNote`：id/title/parentId/**sortOrder**/updatedAt/contentHash/isConflict/isLocked/lockedAt/**icon**/**kind**（doc|sheet|bitable|board，缺省 doc 不写）/assets[]/墓碑
+- `ManifestNote`：id/title/parentId/**sortOrder**/updatedAt/contentHash/isConflict/isLocked/lockedAt/**icon**/**kind**（doc|usheet|bitable|board，缺省 doc 不写）/assets[]/墓碑
 - `ManifestFolder`：id/title/parentId/**sortOrder**/nodeType/**icon**/updatedAt/墓碑
 
 ---
@@ -114,8 +128,9 @@ manifest 字段（`src/core/manifestTypes.ts`）：
 - `orphan_assets`（未引用资源）
 - `s3_gc_pending` / `s3_gc_log`（GC 状态与审计）
 - `notes_fts` / `search_index`（派生索引，可重建）
+- `notes.md_cache` / `notes.text_cache`（正文派生缓存：doc=Markdown/纯文本，usheet/bitable/board=按 kind 派生的纯文本；可重建，**不是正文真相**）
 - `quick_note_*`（小记同步 journal / 转换 / 文件操作）
-- localStorage（桌面+移动）：`lake-notes-v3.dialog-states`、`lake-notes-v3.sidebar-width`、`lake-notes-v3.outline-sidebar-width`、`lake-notes-v3.tab-switcher-width`、`lake-notes-v3.board-views`（画板视图位置 = 平移滚动量 + 缩放；**本机**记忆，见 260926 决定）、`lake-notes-v1.sidebar`、`lake-notes-mobile.tabs.*`、`libraryView`、`lake-notes-v3.emoji-recents` + `lake-notes-v3.emoji-recents.input`（「最近使用」的**两个分桶**：`icon` = 设置图标面板 / `input` = 输入态表情面板；按入口分桶见 AGENTS §3#14；**本机**记忆，261013 加；见 `src/lib/emojiRecents.ts`）、`lake-notes-mobile.s3`（密钥另经 `src/mobile/native/secretStore.ts` AES-GCM）、
+- localStorage（桌面+移动）：`lake-notes-v3.dialog-states`、`lake-notes-v3.sidebar-width`、`lake-notes-v3.outline-sidebar-width`、`lake-notes-v3.tab-switcher-width`、`lake-notes-v3.board-views`（画板视图位置 = 平移滚动量 + 缩放；**本机**记忆，见 260926 决定）、`lake-notes-v3.bitable-nav.<noteId>` / `lake-notes-v3.bitable-tables-width` / `lake-notes-v3.bitable-tables-collapsed` / `lake-notes-v3.bitable-drawer-width` / `lake-notes-v3.bitable-expand-size`（多维表**设备本地**导航与面板几何：导航恒不写正文、切表/切视图不标脏；261019 补登）、`lake-notes-v1.sidebar`、`lake-notes-mobile.tabs.*`、`libraryView`、`lake-notes-v3.emoji-recents` + `lake-notes-v3.emoji-recents.input`（「最近使用」的**两个分桶**：`icon` = 设置图标面板 / `input` = 输入态表情面板；按入口分桶见 AGENTS §3#14；**本机**记忆，261013 加；见 `src/lib/emojiRecents.ts`）、`lake-notes-mobile.s3`（密钥另经 `src/mobile/native/secretStore.ts` AES-GCM）、
   **`lake-notes-v3.quick-notes-sort`**（小记排序偏好：**桌面与移动同一键、同一份四档**（最近/最早 × 更新/创建）；
   纯展示偏好、只影响本端顺序，**不进 S3 / 不进 manifest**；单一来源 `src/core/quickNoteSort.ts`。
   261015 用户要求"两端统一 + 仅本地持久化"；旧两值 `updated`/`created` 读到时映射到 `recent`/`createdNew`，用户既有偏好不丢）

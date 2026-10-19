@@ -40,10 +40,12 @@ describe("mobile noteRepository 保存写边界（审计 F06）", () => {
     await createNote(db, "t1", "标题", "<p>trash-original</p>", null, new Map());
     await trashNote(db, "t1");
     expect(await noteWriteState(db, "t1")).toBe("gone");
-    const before = await db.prepare("SELECT content, sync_state, trashed_at FROM notes WHERE id=?").get("t1");
+    const before = await db.prepare("SELECT sync_state, trashed_at FROM notes WHERE id=?").get("t1");
     await expect(saveNote(db, "t1", "标题", "<p>late-save</p>", null, new Map())).rejects.toThrow();
-    const after = await db.prepare("SELECT content, sync_state, trashed_at FROM notes WHERE id=?").get("t1");
+    const after = await db.prepare("SELECT sync_state, trashed_at FROM notes WHERE id=?").get("t1");
     expect(after).toEqual(before);
+    // 261019：正文在文件里，晚到保存不得覆盖它。
+    expect((await readNote(db, "t1"))!.content).toBe("<p>trash-original</p>");
     await db.close();
   });
 
@@ -52,8 +54,9 @@ describe("mobile noteRepository 保存写边界（审计 F06）", () => {
     await createNote(db, "p1", "标题", "<p>purged-original</p>", null, new Map());
     await db.prepare("UPDATE notes SET trashed_at=?, sync_state='purged' WHERE id=?").run("2026-09-30T00:00:00.000Z", "p1");
     await expect(saveNote(db, "p1", "标题", "<p>late</p>", null, new Map())).rejects.toThrow();
-    const row = await db.prepare("SELECT content, sync_state FROM notes WHERE id=?").get("p1");
-    expect(row).toMatchObject({ content: "<p>purged-original</p>", sync_state: "purged" });
+    const row = await db.prepare("SELECT sync_state FROM notes WHERE id=?").get("p1");
+    expect(row).toMatchObject({ sync_state: "purged" });
+    expect((await readNote(db, "p1"))!.content).toBe("<p>purged-original</p>");
     await db.close();
   });
 

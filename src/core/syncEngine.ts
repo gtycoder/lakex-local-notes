@@ -435,7 +435,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           report.downloadedBytes += contentBytes.length;
           trashContent = decodeText(contentBytes);
         }
-        await db.applyRemoteTrash(rn.id, trashContent, rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
+        await db.applyRemoteTrash(rn.id, trashContent, rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder, rn.kind);
         await recordDeclaredAssetsOnly(db, rn.id, rn.assets);
         report.appliedRemote++;
         // UI 移入回收站计数：仅"本次新入回收站"（本地原先不在回收站）才计；已在回收站的重复应用不计

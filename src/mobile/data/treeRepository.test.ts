@@ -17,10 +17,11 @@ async function setup() {
   const insertFolder = "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,sync_state) VALUES (?,?,?,?,?,?,?,?)";
   raw.prepare(insertFolder).run("nb1", "本1", null, 10, "notebook", null, T0, "synced");
   raw.prepare(insertFolder).run("nb2", "本2", null, 11, "notebook", null, T0, "synced");
-  const insertNote = "INSERT INTO notes (id,title,parent_id,sort_order,content,updated_at,sync_state,is_conflict) VALUES (?,?,?,?,?,?,?,0)";
-  raw.prepare(insertNote).run("n1", "文档1", "nb1", 0, "<p>1</p>", T0, "synced");
-  raw.prepare(insertNote).run("n2", "文档2", "nb1", 1, "<p>2</p>", T0, "synced");
-  raw.prepare(insertNote).run("n3", "文档3", "nb2", 0, "<p>3</p>", T0, "synced");
+  // 261019：正文不再在 notes 表（文件由 noteBodies 读写）；目录操作只关心元数据。
+  const insertNote = "INSERT INTO notes (id,title,parent_id,sort_order,updated_at,sync_state,is_conflict) VALUES (?,?,?,?,?,?,0)";
+  raw.prepare(insertNote).run("n1", "文档1", "nb1", 0, T0, "synced");
+  raw.prepare(insertNote).run("n2", "文档2", "nb1", 1, T0, "synced");
+  raw.prepare(insertNote).run("n3", "文档3", "nb2", 0, T0, "synced");
   return { raw, db };
 }
 

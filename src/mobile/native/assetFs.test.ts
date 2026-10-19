@@ -43,7 +43,7 @@ describe("mobile asset filesystem", () => {
         return {
           files: [
             { name: "note-1", type: "directory" },
-            { name: "quick-notes", type: "directory" },
+            { name: "quick-notes", type: "directory" }, // 旧布局残留：不再作为小记资源根
             { name: "stray-file", type: "file" },
           ],
         };
@@ -51,10 +51,10 @@ describe("mobile asset filesystem", () => {
       if (path === "note-assets/note-1") {
         return { files: [{ name: "document.png", type: "file" }] };
       }
-      if (path === "note-assets/quick-notes") {
+      if (path === "quick-notes/assets") {
         return { files: [{ name: "quick-note-1", type: "directory" }] };
       }
-      if (path === "note-assets/quick-notes/quick-note-1") {
+      if (path === "quick-notes/assets/quick-note-1") {
         return { files: [{ name: "snapshot.png", type: "file" }] };
       }
       throw new Error("unexpected path: " + path);
@@ -70,7 +70,7 @@ describe("mobile asset filesystem", () => {
     const bytes = new Uint8Array([1, 2, 3]);
     await saveAssetBytesFs("quick-notes/note-1/image.png", bytes);
     expect(writeFile).toHaveBeenCalledWith({
-      path: "note-assets/quick-notes/note-1/image.png",
+      path: "quick-notes/assets/note-1/image.png",
       data: expect.any(String),
       directory: "DATA",
       recursive: true,

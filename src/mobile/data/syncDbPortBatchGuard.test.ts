@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { createMobileSyncDbPort } from "./syncDbPort";
 import type { MobileDb } from "./sqliteDb.js";
+import { readNoteBody } from "./noteBodies.js";
 
 interface Row { content: string; content_hash: string; sync_state: string }
 
@@ -54,6 +55,9 @@ describe("批窗口守卫：本机编辑不被远端静默覆盖", () => {
 
     await port.beginNoteBatch!();
     await port.applyRemoteNote(remoteNote("n1", "h-remote"), "远端新");
+    // 引擎在 apply 之后会立刻把该条基线记账塞进同一批；推迟时必须一起丢弃
+    // （否则"正文没应用、基线却被推到远端 hash"，下一轮本机编辑会被误判成已同步）。
+    await port.setSyncBase("n1", "h-remote", "2026-10-10T00:00:00.000Z", null);
     // 批窗口内用户写了新内容（saveNote 会同时更新 content_hash 与 sync_state）
     rows.set("n1", { content: "本机新", content_hash: "h-local-new", sync_state: "local" });
     await port.flushNoteBatch!();
@@ -72,6 +76,28 @@ describe("批窗口守卫：本机编辑不被远端静默覆盖", () => {
 
     expect(executed).toHaveLength(1);
     expect(String(executed[0].values[0])).toBe("n1");
+  });
+
+  it("远端正文先落文件（doc），元数据只写 hash/缓存（261019 文件化）", async () => {
+    const rows = new Map<string, Row>([["n1", { content: "", content_hash: "h-old", sync_state: "synced" }]]);
+    const { db } = fakeDb(rows);
+    const port = createMobileSyncDbPort(() => db, assetFs);
+
+    await port.applyRemoteNote(remoteNote("n1", "h-remote"), "<p>远端正文FILE</p>");
+
+    expect(await readNoteBody("doc", "n1")).toBe("<p>远端正文FILE</p>");
+  });
+
+  it("远端墓碑按 kind 落文件（bitable），不走 doc 路径", async () => {
+    const rows = new Map<string, Row>();
+    const { db } = fakeDb(rows);
+    const port = createMobileSyncDbPort(() => db, assetFs);
+    const body = JSON.stringify({ kind: "bitable", version: 1, activeTableId: "t1", tables: [] });
+
+    await port.applyRemoteTrash("b1", body, "多维表", "2026-10-10T00:00:00.000Z", null, "trash", 0, "bitable");
+
+    expect(await readNoteBody("bitable", "b1")).toBe(body);
+    expect(await readNoteBody("doc", "b1")).toBeNull();
   });
 
   it("仅推迟被改动的那条，同批其它笔记照常应用", async () => {

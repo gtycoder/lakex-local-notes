@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { indexNote, reconcileIndex, searchNotes, RECONCILE_BATCH_SIZE } from "./searchIndex.js";
 import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
+import { writeNoteBody } from "./noteBodies.js";
+import { normalizeNoteKind } from "../../core/noteKind.js";
 
 /** better-sqlite3 上的异步 MobileDb 适配器：用生产同款 FTS5(unicode61) 验证移动端搜索逻辑。 */
 function adapt(raw: Database.Database): MobileDb {
@@ -33,7 +35,7 @@ function adapt(raw: Database.Database): MobileDb {
 function makeRawDb(): Database.Database {
   const raw = new Database(":memory:");
   raw.exec([
-    "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, text_cache TEXT, trashed_at TEXT, doc_kind TEXT NOT NULL DEFAULT 'doc');",
+    "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, text_cache TEXT, trashed_at TEXT, doc_kind TEXT NOT NULL DEFAULT 'doc');",
     "CREATE TABLE folders (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT);",
     "CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, tokenize='unicode61');",
     "CREATE TABLE search_index (note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, title TEXT NOT NULL, raw_hash TEXT, title_hash TEXT NOT NULL, body_hash TEXT NOT NULL, indexed_at TEXT NOT NULL);",
@@ -78,8 +80,10 @@ function adaptWithExecuteSet(raw: Database.Database, capture: ExecCapture): Mobi
 }
 
 async function addNote(d: MobileDb, id: string, title: string, content: string, parentId: string | null = "nb", updatedAt = "2026-01-01T00:00:00Z", docKind = "doc"): Promise<void> {
-  await d.prepare("INSERT INTO notes (id,title,content,parent_id,updated_at,content_hash,trashed_at,doc_kind) VALUES (?,?,?,?,?,?,NULL,?)")
-    .run(id, title, content, parentId, updatedAt, sha256Sync(new TextEncoder().encode(content)), docKind);
+  // 261019：正文在文件（BodyStore 测试内存后端），DB 只存元数据 + hash。
+  await writeNoteBody(normalizeNoteKind(docKind), id, content);
+  await d.prepare("INSERT INTO notes (id,title,parent_id,updated_at,content_hash,trashed_at,doc_kind) VALUES (?,?,?,?,?,NULL,?)")
+    .run(id, title, parentId, updatedAt, sha256Sync(new TextEncoder().encode(content)), docKind);
 }
 
 describe("mobile searchIndex（better-sqlite3 FTS5 验证）", () => {
@@ -140,7 +144,8 @@ describe("mobile searchIndex（better-sqlite3 FTS5 验证）", () => {
     await addNote(d, "n1", "标题", "<p>第一版正文</p>");
     await indexNote(d, "n1");
     expect((await searchNotes(d, "第一版")).length).toBe(1);
-    await d.prepare("UPDATE notes SET content=?, content_hash=? WHERE id=?").run("<p>第二版正文</p>", sha256Sync(new TextEncoder().encode("<p>第二版正文</p>")), "n1");
+    await writeNoteBody("doc", "n1", "<p>第二版正文</p>");
+    await d.prepare("UPDATE notes SET content_hash=? WHERE id=?").run(sha256Sync(new TextEncoder().encode("<p>第二版正文</p>")), "n1");
     await reconcileIndex(d);
     expect((await searchNotes(d, "第一版")).length).toBe(0);
     expect((await searchNotes(d, "第二版")).length).toBe(1);

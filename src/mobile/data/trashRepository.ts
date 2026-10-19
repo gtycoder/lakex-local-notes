@@ -1,5 +1,6 @@
 import { sqlParameterBatches } from "../../core/sqlParameterBatch.js";
 import type { MobileDb } from "./sqliteDb";
+import { deleteNoteBodies, deleteHistorySnapshot } from "./noteBodies.js";
 
 interface ParentedNode {
   id: string;
@@ -142,6 +143,13 @@ export async function restoreTreeItem(
 }
 
 export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "note"): Promise<void> {
+  /** 事务外删除的正文/历史文件（事务内只删 DB 行；文件删除幂等、失败不阻断）。 */
+  const purgedNoteIds: string[] = [];
+  const historyFiles: string[] = [];
+  const collectHistory = async (noteId: string): Promise<void> => {
+    const rows = await d.prepare("SELECT file_path FROM note_history WHERE note_id=?").all(noteId) as Array<{ file_path: string }>;
+    for (const row of rows) historyFiles.push(row.file_path);
+  };
   await d.transaction(async () => {
     const now = new Date().toISOString();
     const writeTombstone = d.prepare(
@@ -150,6 +158,8 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     if (kind === "note") {
       const row = await d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE id=?").get(id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
       if (row) await writeTombstone.run(row.id, row.title, row.parent_id, row.sort_order, row.updated_at, now, "note", now);
+      await collectHistory(id);
+      purgedNoteIds.push(id);
       await d.prepare("DELETE FROM notes WHERE id=?").run(id);
       await d.prepare("DELETE FROM sync_base WHERE note_id=?").run(id);
       await d.prepare("DELETE FROM note_history WHERE note_id=?").run(id);
@@ -170,9 +180,14 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     }
     for (const n of noteIds) {
       await writeTombstone.run(n.id, n.title, n.parent_id, n.sort_order, n.updated_at, now, "note", now);
+      await collectHistory(n.id);
+      purgedNoteIds.push(n.id);
       await d.prepare("DELETE FROM notes WHERE id=?").run(n.id);
       await d.prepare("DELETE FROM sync_base WHERE note_id=?").run(n.id);
       await d.prepare("DELETE FROM note_history WHERE note_id=?").run(n.id);
     }
   });
+  // 文件删除放在事务外：失败只留孤儿文件，不影响"已彻底删除"的 DB 判定。
+  for (const noteId of purgedNoteIds) await deleteNoteBodies(noteId).catch(() => undefined);
+  for (const filePath of historyFiles) await deleteHistorySnapshot(filePath).catch(() => undefined);
 }

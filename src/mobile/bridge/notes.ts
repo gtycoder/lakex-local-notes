@@ -9,6 +9,7 @@ import { emptyLakeBody } from "../../core/lakeDocForm.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 
 import * as noteRepository from "../data/noteRepository.js";
+import { noteBodyPath } from "../data/noteBodies.js";
 import type { LocalNote, LocalNoteSummary } from "../data/noteRepository.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
@@ -102,7 +103,7 @@ export const notesDomain = {
       syncState: row?.sync_state ?? "local",
       isConflict: Boolean(row?.is_conflict),
       isLocked: false,
-      lakePath: "(移动端：正文存于本地数据库)",
+      lakePath: noteBodyPath(note.kind, note.id),
       assetsDir: `note-assets/${id}`,
       sizeBytes: new TextEncoder().encode(note.content).length,
       charCount,

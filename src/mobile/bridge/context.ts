@@ -8,7 +8,8 @@
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 import { migrateSnapshotToNativeSqlite } from "../native/nativeSqliteMigration";
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
-import { applyMobileSchema } from "../data/schema";
+import { applyMobileSchema, hasLegacyBodySchema } from "../data/schema";
+import { Directory, Filesystem } from "@capacitor/filesystem";
 import { reconcileIndex } from "../data/searchIndex";
 import { createMobileSyncDbPort } from "../data/syncDbPort";
 import { sniffImageFormat, readImageDimensions } from "../../core/imageUtils.js";
@@ -60,10 +61,26 @@ export function assertResourceBytes(bytes: Uint8Array): void {
   if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
 }
 
+/**
+ * 旧存储（正文在 SQLite）升级到文件正文时，把上一代数据目录一起清掉：
+ * 本阶段按用户定稿「开发阶段数据可删」做一次性重置，不做逐篇迁移。
+ * 目录列表与桌面布局对应；旧小记图片还可能在 note-assets/quick-notes 下，整棵 note-assets 一并清。
+ */
+async function resetLegacyBodyFiles(): Promise<void> {
+  const dirs = ["notes", "usheets", "bitables", "boards", "quick-notes", "history", "draft-journal", "note-assets"];
+  for (const path of dirs) {
+    try {
+      await Filesystem.rmdir({ path, directory: Directory.Data, recursive: true });
+    } catch { /* 不存在 / Web 预览无文件系统：忽略 */ }
+  }
+}
+
 export async function initializeDb(): Promise<NativeSqliteDb> {
   const migration = await migrateSnapshotToNativeSqlite();
   const openedDb = await NativeSqliteDb.open(migration.databaseName);
+  const legacyBodySchema = await hasLegacyBodySchema(openedDb);
   await applyMobileSchema(openedDb);
+  if (legacyBodySchema) await resetLegacyBodyFiles();
   db = openedDb;
   try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
   return openedDb;

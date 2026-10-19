@@ -1,7 +1,6 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { sha256Sync } from "../../core/sha256Sync.js";
-import { applyMobileSchema } from "./schema.js";
+import { applyMobileSchema, hasLegacyBodySchema } from "./schema.js";
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
@@ -9,7 +8,7 @@ vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
 }));
 
 describe("mobile schema", () => {
-  it("backfills missing note content hashes", async () => {
+  it("261019：旧库（正文在 SQLite）识别后整库重置，新 schema 不再有 content 列", async () => {
     const db = await SqlJsDb.open();
     db.exec(`CREATE TABLE notes (
       id TEXT PRIMARY KEY,
@@ -19,13 +18,16 @@ describe("mobile schema", () => {
     )`);
     db.prepare("INSERT INTO notes(id,title,content,updated_at) VALUES(?,?,?,?)")
       .run("note-1", "Title", "<p>body</p>", "2026-01-01T00:00:00.000Z");
+    const mobile = new SqlJsAsyncDb(db);
+    expect(await hasLegacyBodySchema(mobile)).toBe(true);
 
-    await applyMobileSchema(new SqlJsAsyncDb(db));
+    await applyMobileSchema(mobile);
 
-    const row = db.prepare("SELECT content_hash FROM notes WHERE id=?").get("note-1") as {
-      content_hash: string;
-    };
-    expect(row.content_hash).toBe(sha256Sync(new TextEncoder().encode("<p>body</p>")));
+    const columns = db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).not.toContain("content");
+    // 开发阶段数据可丢（用户定稿）：旧正文不迁移。
+    expect(db.prepare("SELECT 1 FROM notes WHERE id=?").get("note-1")).toBeUndefined();
+    expect(await hasLegacyBodySchema(mobile)).toBe(false);
   });
 
   it("does not revive a deleted seed notebook on reapplication", async () => {

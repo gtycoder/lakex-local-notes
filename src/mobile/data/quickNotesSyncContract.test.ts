@@ -13,6 +13,7 @@ import {
 import { previewQuickNote } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import type { QuickNotesAssetFsDeps } from "./quickNotesDbPort.js";
+import { readQuickNoteBody, writeQuickNoteBody } from "./noteBodies.js";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
   default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm"),
@@ -42,7 +43,6 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
     preview_text TEXT NOT NULL,
     image_count INTEGER NOT NULL DEFAULT 0,
     content_hash TEXT NOT NULL,
-    content TEXT NOT NULL,
     sync_state TEXT NOT NULL DEFAULT 'local',
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
@@ -51,55 +51,57 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
   await applyQuickNotesSyncSchema(mobileDb);
   const assets = makeAssetDeps();
 
-  const insert = (id: string, text: string) => {
+  const insert = async (id: string, text: string) => {
     const now = new Date().toISOString();
     const content = contractQuickNoteContent(text);
     const contentHash = sha256Sync(new TextEncoder().encode(content));
+    // 261019：正文落 .qnote 文件；DB 只存元数据 + hash。
+    await writeQuickNoteBody(id, content);
     db.prepare(
       `INSERT INTO quick_notes (
         id, created_at, updated_at, preview_text, image_count,
-        content_hash, content, sync_state, is_conflict
-      ) VALUES (?,?,?,?,?,?,?,'local',0)`,
-    ).run(id, now, now, previewQuickNote(text, 0), 0, contentHash, content);
+        content_hash, sync_state, is_conflict
+      ) VALUES (?,?,?,?,?,?,'local',0)`,
+    ).run(id, now, now, previewQuickNote(text, 0), 0, contentHash);
     return { id, contentHash };
   };
 
   return {
     port: createQuickNotesSyncDbPort(mobileDb, assets),
-    create(text) {
-      return insert(crypto.randomUUID(), text);
+    async create(text) {
+      return await insert(crypto.randomUUID(), text);
     },
-    edit(id, text) {
+    async edit(id, text) {
       const now = new Date().toISOString();
       const content = contractQuickNoteContent(text);
       const contentHash = sha256Sync(new TextEncoder().encode(content));
+      await writeQuickNoteBody(id, content);
       db.prepare(
-        `UPDATE quick_notes SET updated_at=?, preview_text=?, content_hash=?, content=?, sync_state='local'
+        `UPDATE quick_notes SET updated_at=?, preview_text=?, content_hash=?, sync_state='local'
          WHERE id=?`,
-      ).run(now, previewQuickNote(text, 0), contentHash, content, id);
+      ).run(now, previewQuickNote(text, 0), contentHash, id);
     },
-    text(id) {
-      const row = db.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as
-        | { content: string }
-        | undefined;
+    async text(id) {
+      const row = db.prepare("SELECT id FROM quick_notes WHERE id=?").get(id);
       if (!row) return null;
-      return (JSON.parse(row.content) as { text: string }).text;
+      const body = await readQuickNoteBody(id);
+      return body == null ? null : (JSON.parse(body) as { text: string }).text;
     },
-    activeIds() {
+    async activeIds() {
       return (
         db.prepare("SELECT id FROM quick_notes WHERE deleted_at IS NULL").all() as Array<{
           id: string;
         }>
       ).map((row) => row.id);
     },
-    deletedIds() {
+    async deletedIds() {
       return (
         db.prepare("SELECT id FROM quick_notes WHERE deleted_at IS NOT NULL").all() as Array<{
           id: string;
         }>
       ).map((row) => row.id);
     },
-    restore(id) {
+    async restore(id) {
       const now = new Date().toISOString();
       db.prepare(
         `UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=?

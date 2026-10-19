@@ -16,6 +16,7 @@ import type { StoredQuickNoteContent } from "../../core/quickNoteModel.js";
 import type { QuickNoteSyncItemImage, QuickNotesSyncDbPort } from "../../core/quickNotesSyncEngine.js";
 import type { MobileDb } from "./sqliteDb.js";
 import { stageAssetWrites } from "../native/assetWrites.js";
+import { deleteQuickNoteBody, readQuickNoteBody, writeQuickNoteBody } from "./noteBodies.js";
 
 /** 小记图片文件访问依赖（注入：bridge 用 Capacitor Filesystem + 内存 assets Map；测试用内存实现）。
  * 键 = "quick-notes/{quickNoteId}/{filename}"（与 Lake 资源的 note-assets/{noteId}/{file} 同构）。 */
@@ -28,6 +29,15 @@ export interface QuickNotesAssetFsDeps {
   loadAssetFile(key: string): Promise<Uint8Array | null>;
   /** 删除文件（幂等）。 */
   removeAssetFile(key: string): Promise<void>;
+  /** 正文文件读写（可选注入；缺省走全局 BodyStore。多设备测试各注入一份独立实现）。 */
+  bodyFs?: QuickNotesBodyFs;
+}
+
+/** 小记正文文件的最小依赖（BodyStore 的测试替身/生产全局实现）。 */
+export interface QuickNotesBodyFs {
+  read(id: string): Promise<string | null>;
+  write(id: string, text: string): Promise<number>;
+  remove(id: string): Promise<void>;
 }
 
 const quickNoteAssetKey = (id: string, filename: string): string => "quick-notes/" + id + "/" + filename;
@@ -50,13 +60,21 @@ export async function applyQuickNotesSyncSchema(d: MobileDb): Promise<void> {
 /** 端口实现：注入已打开的小记库 + 资产文件依赖，供 syncQuickNotesViaEngine 使用。 */
 export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAssetFsDeps): QuickNotesSyncDbPort {
   const { assetBytes, saveAssetFile, loadAssetFile, removeAssetFile } = assetFs;
+  // 正文文件端口：生产 = 全局 BodyStore；测试可注入每设备独立实现（避免多设备共用内存 Map 串正文）。
+  const bodyFs: QuickNotesBodyFs = assetFs.bodyFs ?? {
+    read: readQuickNoteBody,
+    write: writeQuickNoteBody,
+    remove: deleteQuickNoteBody,
+  };
   return {
     async listLocalQuickNotes() {
-      const rows = await d.prepare("SELECT id, created_at, updated_at, content_hash, sync_state, is_conflict, content FROM quick_notes WHERE deleted_at IS NULL").all() as Array<Record<string, unknown>>;
-      return rows.map((r) => {
+      const rows = await d.prepare("SELECT id, created_at, updated_at, content_hash, sync_state, is_conflict FROM quick_notes WHERE deleted_at IS NULL").all() as Array<Record<string, unknown>>;
+      return Promise.all(rows.map(async (r) => {
         let images: QuickNoteSyncItemImage[] = [];
         try {
-          const parsed = JSON.parse(String(r.content)) as StoredQuickNoteContent;
+          const text = await bodyFs.read(String(r.id));
+          if (text == null) throw new Error("正文文件缺失");
+          const parsed = JSON.parse(text) as StoredQuickNoteContent;
           images = parsed.images.map(({ id, filename, mimeType, width, height, size, hash }) => ({ id, filename, mimeType, width, height, size, hash }));
         } catch (reason) {
           // P2-3（GPT 审计）：内容损坏不得静默当无图继续进 manifest——对齐桌面 readStoredContent 抛错
@@ -71,11 +89,11 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
           isConflict: !!r.is_conflict,
           images,
         };
-      });
+      }));
     },
     async readContent(id) {
-      const row = await d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
-      return row ? new TextEncoder().encode(row.content) : null;
+      const text = await bodyFs.read(id);
+      return text == null ? null : new TextEncoder().encode(text);
     },
     async readAsset(id, filename) {
       // 纯文件为准（无 BLOB）：内存层优先，文件兜底（对齐 Lake readLocalAsset 模式）
@@ -105,16 +123,21 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
         remove: removeAssetFile,
       });
 
-      // 对齐桌面 importRemoteQuickNote：保留清单时间戳（LWW 依据）、冲突标记、直接置 synced（引擎收尾再记账）
+      // 正文先落文件（与图片同一原子边界：任一失败回滚本次文件写入），再提交 DB。
+      const previousBody = await bodyFs.read(item.id);
       try {
+        await bodyFs.write(item.id, text);
         await d.transaction(async () => {
           await d.prepare(
-            "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync) " +
-            "VALUES (?,?,?,?,?,?,?, 'synced', ?, NULL, 1) " +
-            "ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at, updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, restore_pending_at=NULL, deleted_at=NULL, ready_to_sync=1"
-          ).run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, text, item.isConflict ? 1 : 0);
+            "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync) " +
+            "VALUES (?,?,?,?,?,?, 'synced', ?, NULL, 1) " +
+            "ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at, updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, restore_pending_at=NULL, deleted_at=NULL, ready_to_sync=1"
+          ).run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, item.isConflict ? 1 : 0);
         });
       } catch (error) {
+        // DB 失败 ⇒ 正文文件回滚到应用前版本（没有旧版本则删掉本次新写的），避免"文件新、DB 旧"。
+        if (previousBody == null) await bodyFs.remove(item.id).catch(() => undefined);
+        else await bodyFs.write(item.id, previousBody).catch(() => undefined);
         await rollbackAssets();
         throw error;
       }
@@ -122,16 +145,22 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
     },
     async applyTombstoneContent(id, content) {
       const contentHash = sha256Sync(content);
-      await d.transaction(async () => {
-        await d.prepare("UPDATE quick_notes SET content=?, content_hash=? WHERE id=?").run(new TextDecoder().decode(content), contentHash, id);
-      });
+      const previousBody = await bodyFs.read(id);
+      try {
+        await bodyFs.write(id, new TextDecoder().decode(content));
+        await d.prepare("UPDATE quick_notes SET content_hash=? WHERE id=?").run(contentHash, id);
+      } catch (error) {
+        if (previousBody == null) await bodyFs.remove(id).catch(() => undefined);
+        else await bodyFs.write(id, previousBody).catch(() => undefined);
+        throw error;
+      }
     },
     async listDeletedQuickNoteAssets(id) {
-      // 墓碑携带图片（A）：读软删保留的 content 列解析删除前图片元数据；行缺失/解析失败 → []
-      const row = await d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
-      if (!row) return [];
+      // 墓碑携带图片（A）：读软删保留的 .qnote 文件解析删除前图片元数据；文件缺失/解析失败 → []
+      const text = await bodyFs.read(id);
+      if (text == null) return [];
       try {
-        const parsed = JSON.parse(row.content) as StoredQuickNoteContent;
+        const parsed = JSON.parse(text) as StoredQuickNoteContent;
         return parsed.images.map(({ id: imageId, filename, mimeType, width, height, size, hash }) => ({ id: imageId, filename, mimeType, width, height, size, hash }));
       } catch { return []; }
     },
@@ -150,14 +179,16 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
       await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
     },
     async archiveLocalQuickNoteToTrash(id) {
-      const row = await d.prepare("SELECT created_at, preview_text, image_count, content_hash, content FROM quick_notes WHERE id=?").get(id) as { created_at: string; preview_text: string; image_count: number; content_hash: string; content: string } | undefined;
+      const row = await d.prepare("SELECT created_at, preview_text, image_count, content_hash FROM quick_notes WHERE id=?").get(id) as { created_at: string; preview_text: string; image_count: number; content_hash: string } | undefined;
       if (!row) return;
+      const bodyText = await bodyFs.read(id);
+      if (bodyText == null) return;
 
       const newId = crypto.randomUUID();
       const now = new Date().toISOString();
       let parsed: StoredQuickNoteContent | null = null;
       try {
-        parsed = JSON.parse(row.content) as StoredQuickNoteContent;
+        parsed = JSON.parse(bodyText) as StoredQuickNoteContent;
       } catch { /* 内容解析失败：图片文件保持旧 id（归档回收站仍可读） */ }
 
       const imageWrites: Array<{ key: string; bytes: Uint8Array }> = [];
@@ -173,11 +204,14 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
         : async () => {};
 
       try {
+        await bodyFs.write(newId, bodyText);
         await d.transaction(async () => {
           // ready_to_sync=0：纯本地归档，不向云端发布删除记录（其他端从未持有该 id，防幽灵墓碑，对齐桌面 archiveLocalToTrash）
-          await d.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, deleted_at, ready_to_sync) VALUES (?,?,?,?,?,?,?, 'local', 0, NULL, ?, 0)").run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, row.content, now);
+          await d.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, deleted_at, ready_to_sync) VALUES (?,?,?,?,?,?,'local',0,NULL,?,0)").run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, now);
         });
       } catch (error) {
+        // 归档行没提交 ⇒ 新 id 的正文文件也不能留下（否则是一个"打不开的孤儿小记"）。
+        await bodyFs.remove(newId).catch(() => undefined);
         await rollbackAssets();
         throw error;
       }
@@ -251,9 +285,11 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
     async markSyncedIfUnchanged(id, expectedContentHash) {
       // I2（见 core/maintenancePolicy）：同步期间内容被编辑 ⇒ 不标 synced，保持 local 下轮重传。
       // 判据是**实算内容 hash**（与 content_hash 列同源：sha256Sync(序列化字节)），不读可能陈旧的列。
-      const row = await d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content?: unknown } | undefined;
+      const row = await d.prepare("SELECT id FROM quick_notes WHERE id=?").get(id);
       if (!row) return;
-      const currentHash = sha256Sync(new TextEncoder().encode(String(row.content)));
+      const body = await bodyFs.read(id);
+      if (body == null) return;
+      const currentHash = sha256Sync(new TextEncoder().encode(body));
       if (currentHash !== expectedContentHash) return;
       await d.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
     },

@@ -22,7 +22,7 @@ function makeDevice(name: string): QuickNotesContractDevice {
   const store = new QuickNotesStore(path.join(root, name));
   return {
     port: createQuickNotesSyncPort(store),
-    create(text) {
+    async create(text) {
       const note = store.createQuickNote({
         text,
         draftId: crypto.randomUUID(),
@@ -30,7 +30,7 @@ function makeDevice(name: string): QuickNotesContractDevice {
       });
       return { id: note.id, contentHash: note.contentHash };
     },
-    edit(id, text) {
+    async edit(id, text) {
       store.updateQuickNote(id, {
         text,
         draftId: crypto.randomUUID(),
@@ -38,20 +38,20 @@ function makeDevice(name: string): QuickNotesContractDevice {
         retainedImageIds: [],
       });
     },
-    text(id) {
+    async text(id) {
       try {
         return store.readQuickNote(id).content.text;
       } catch {
         return null;
       }
     },
-    activeIds() {
+    async activeIds() {
       return store.listQuickNotes().map((note) => note.id);
     },
-    deletedIds() {
+    async deletedIds() {
       return store.listQuickNoteTrash().map((note) => note.id);
     },
-    restore(id) {
+    async restore(id) {
       store.restoreQuickNote(id);
     },
   };

@@ -7,9 +7,12 @@
  */
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { isSafePathSegment } from "../../core/storeUtils.js";
+import { quickNoteAssetRelativePath } from "../../core/noteBodyPaths.js";
 import { assetPerf, recordPerf } from "./assetPerf";
 
 const ROOT = "note-assets";
+/** 小记图片：与桌面同构（quick-notes/assets/{id}/{filename}），URL/同步键仍是 quick-notes/{id}/{file}。 */
+const QUICK_ROOT = "quick-notes/assets";
 
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -30,6 +33,11 @@ export function bytesToBase64(bytes: Uint8Array): string {
 function requireAssetPath(key: string): string {
   const segments = key.split("/");
   if (segments.length < 2 || !segments.every(isSafePathSegment)) throw new Error(`非法资产键: ${key}`);
+  // 小记资源键 quick-notes/{id}/{file} → 物理落在 quick-notes/assets/{id}/{file}（路径规则来自 core 单一来源）。
+  if (segments[0] === "quick-notes") {
+    if (segments.length !== 3) throw new Error(`非法资产键: ${key}`);
+    return quickNoteAssetRelativePath(segments[1], segments[2]);
+  }
   return [ROOT, ...segments].join("/");
 }
 
@@ -128,7 +136,7 @@ export async function listNoteAssetKeysFs(noteId: string): Promise<string[]> {
 export async function listQuickNoteAssetKeysFs(quickNoteId: string): Promise<string[]> {
   if (!isSafePathSegment(quickNoteId)) return [];
   try {
-    const dir = await Filesystem.readdir({ path: `${ROOT}/quick-notes/${quickNoteId}`, directory: Directory.Data });
+    const dir = await Filesystem.readdir({ path: `${QUICK_ROOT}/${quickNoteId}`, directory: Directory.Data });
     return dir.files
       .filter((f) => f.type === "file" && isSafePathSegment(f.name))
       .map((f) => `quick-notes/${quickNoteId}/${f.name}`);
@@ -143,23 +151,21 @@ export async function listAssetKeysFs(): Promise<string[]> {
   let entries: Array<{ name: string; type?: string }> = [];
   try {
     const root = await Filesystem.readdir({ path: ROOT, directory: Directory.Data });
-    entries = root.files.filter((f) => f.type === "directory" && isSafePathSegment(f.name));
+    // 旧版本的 quick-notes 曾放在 note-assets/quick-notes/ 下；新布局在 quick-notes/assets（见上）。
+    entries = root.files.filter((f) => f.type === "directory" && f.name !== "quick-notes" && isSafePathSegment(f.name));
   } catch {
-    return keys;
+    entries = [];
   }
   for (const entry of entries) {
-    if (entry.name === "quick-notes") {
-      try {
-        const quickRoot = await Filesystem.readdir({ path: `${ROOT}/quick-notes`, directory: Directory.Data });
-        for (const quickNote of quickRoot.files.filter((f) => f.type === "directory" && isSafePathSegment(f.name))) {
-          keys.push(...await listQuickNoteAssetKeysFs(quickNote.name));
-        }
-      } catch {
-        // 小记根目录损坏时跳过
-      }
-    } else {
-      keys.push(...await listNoteAssetKeysFs(entry.name));
+    keys.push(...await listNoteAssetKeysFs(entry.name));
+  }
+  try {
+    const quickRoot = await Filesystem.readdir({ path: QUICK_ROOT, directory: Directory.Data });
+    for (const quickNote of quickRoot.files.filter((f) => f.type === "directory" && isSafePathSegment(f.name))) {
+      keys.push(...await listQuickNoteAssetKeysFs(quickNote.name));
     }
+  } catch {
+    // 小记资源目录不存在/损坏时跳过
   }
   return keys;
 }

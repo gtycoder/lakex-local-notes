@@ -91,8 +91,9 @@ export interface SyncDbPort {
   beginNoteBatch?(): Promise<void>;
   flushNoteBatch?(): Promise<void>;
   applyRemoteNote(note: ManifestNote, content: string): Promise<void>;
-  /** 远端墓碑应用：先拉内容再标记回收站（先内容、后标志；保留可恢复） */
-  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): Promise<void>;
+  /** 远端墓碑应用：先拉内容再标记回收站（先内容、后标志；保留可恢复）。
+   * kind 用于正文落盘路径（261019 移动端正文文件化；桌面实现可忽略——它从本地行取 kind）。 */
+  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number, kind?: "doc" | "usheet" | "bitable" | "board"): Promise<void>;
   /** 本地软删（入回收站）：保留内容，sync_state=local */
   localTrashNote(id: string): Promise<void>;
   /** 本地恢复：移出回收站 + restore_pending_at（同步时 local-wins 上传 active 覆盖墓碑） */

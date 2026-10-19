@@ -12,14 +12,18 @@ import {
 } from "../core/quickNoteModel.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 
+/**
+ * 契约设备（261019 起异步：移动端正文落文件，create/edit/text 都要等 IO）。
+ * 桌面/移动两端实现同一契约，断言逐字一致。
+ */
 export interface QuickNotesContractDevice {
   readonly port: QuickNotesSyncDbPort;
-  create(text: string): { id: string; contentHash: string };
-  edit(id: string, text: string): void;
-  text(id: string): string | null;
-  activeIds(): string[];
-  deletedIds(): string[];
-  restore(id: string): void;
+  create(text: string): Promise<{ id: string; contentHash: string }>;
+  edit(id: string, text: string): Promise<void>;
+  text(id: string): Promise<string | null>;
+  activeIds(): Promise<string[]>;
+  deletedIds(): Promise<string[]>;
+  restore(id: string): Promise<void>;
 }
 
 const contractConfig: SyncConfig = {
@@ -59,7 +63,7 @@ export async function runQuickNotesRoundTripContract(
   peer: QuickNotesContractDevice,
 ): Promise<void> {
   const s3 = createContractS3();
-  const note = author.create("contract v1");
+  const note = await author.create("contract v1");
 
   const upload = await sync(author, s3);
   expect(upload.uploaded).toBe(1);
@@ -67,7 +71,7 @@ export async function runQuickNotesRoundTripContract(
   expect(readManifest(s3).items[0]?.deleted).not.toBe(true);
 
   await sync(peer, s3);
-  expect(peer.text(note.id)).toBe("contract v1");
+  expect(await peer.text(note.id)).toBe("contract v1");
 
   author.port.deleteLocalQuickNote(note.id);
   await sync(author, s3);
@@ -75,18 +79,18 @@ export async function runQuickNotesRoundTripContract(
   expect(readManifest(s3).items[0]?.deleted).toBe(true);
 
   await sync(peer, s3);
-  expect(peer.activeIds()).not.toContain(note.id);
+  expect(await peer.activeIds()).not.toContain(note.id);
 
   await new Promise((resolve) => setTimeout(resolve, 10));
-  peer.restore(note.id);
+  await peer.restore(note.id);
   await sync(peer, s3);
   expect(readManifest(s3).items[0]?.id).toBe(note.id);
   expect(readManifest(s3).items[0]?.deleted).not.toBe(true);
 
   await sync(author, s3);
-  expect(author.activeIds()).toContain(note.id);
-  expect(author.text(note.id)).toBe("contract v1");
-  expect(author.deletedIds()).not.toContain(note.id);
+  expect(await author.activeIds()).toContain(note.id);
+  expect(await author.text(note.id)).toBe("contract v1");
+  expect(await author.deletedIds()).not.toContain(note.id);
 }
 
 export async function runQuickNotesConflictContract(
@@ -94,19 +98,19 @@ export async function runQuickNotesConflictContract(
   peer: QuickNotesContractDevice,
 ): Promise<void> {
   const s3 = createContractS3();
-  const note = peer.create("conflict v1");
+  const note = await peer.create("conflict v1");
   await sync(peer, s3);
   await sync(author, s3);
 
-  author.edit(note.id, "author local edit");
-  peer.edit(note.id, "peer remote edit");
+  await author.edit(note.id, "author local edit");
+  await peer.edit(note.id, "peer remote edit");
   await sync(peer, s3);
 
   const result = await sync(author, s3);
   expect(result.conflicts).toBe(1);
-  expect(author.text(note.id)).toBe("peer remote edit");
+  expect(await author.text(note.id)).toBe("peer remote edit");
 
-  const archivedIds = author.deletedIds();
+  const archivedIds = await author.deletedIds();
   expect(archivedIds).toHaveLength(1);
   expect(archivedIds[0]).not.toBe(note.id);
   expect(readManifest(s3).items.map((item) => item.id)).not.toContain(archivedIds[0]);
@@ -115,7 +119,7 @@ export async function runQuickNotesConflictContract(
 export async function runQuickNotesRemoteImportRollbackContract(
   device: QuickNotesContractDevice,
 ): Promise<void> {
-  const local = device.create("local body");
+  const local = await device.create("local body");
   const imageBytes = new Uint8Array([1, 2, 3]);
   const image = {
     id: "contract-image",
@@ -145,8 +149,8 @@ export async function runQuickNotesRemoteImportRollbackContract(
   await expect(
     (async () => device.port.applyRemoteQuickNote(item, bytes, []))(),
   ).rejects.toThrow();
-  expect(device.text(local.id)).toBe("local body");
-  expect(device.activeIds()).toEqual([local.id]);
+  expect(await device.text(local.id)).toBe("local body");
+  expect(await device.activeIds()).toEqual([local.id]);
 }
 
 export function contractQuickNoteContent(text: string): string {

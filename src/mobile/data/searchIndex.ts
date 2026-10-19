@@ -4,6 +4,7 @@ import { normalizeNoteKind } from "../../core/noteKind.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 import type { MobileDb } from "./sqliteDb.js";
+import { readNoteBody } from "./noteBodies.js";
 
 function hashText(text: string): string {
   return sha256Sync(new TextEncoder().encode(text));
@@ -18,11 +19,22 @@ async function hasSearchIndex(d: MobileDb): Promise<boolean> {
 interface NoteRow {
   id: string;
   title: string;
-  content: string;
   content_hash: string | null;
   text_cache: string | null;
   /** v6/v7 文档类型：非 doc 的正文是内部 JSON，不能喂 Lake 解析器（见 noteSearchText）。 */
   doc_kind?: string | null;
+}
+
+/**
+ * 行的纯文本：优先派生缓存 text_cache；缺失时读正文文件现算（与桌面 derivePlainText 同口径）。
+ * 正文文件缺失 → 空文本（索引为空，但绝不把 row 当成有正文）。
+ */
+async function plainForRow(row: NoteRow): Promise<string> {
+  if (row.text_cache != null) return row.text_cache;
+  const kind = normalizeNoteKind(row.doc_kind);
+  const content = await readNoteBody(kind, row.id).catch(() => null);
+  if (content == null) return "";
+  return searchTextForKind(kind, content).plain ?? "";
 }
 
 interface LedgerRow {
@@ -69,9 +81,9 @@ async function flushIndexStatements(d: MobileDb, statements: IndexStatement[]): 
 
 async function writeIndexRow(d: MobileDb, row: NoteRow, prev: LedgerRow | undefined): Promise<void> {
   const title = row.title ?? "";
-  // 优先编辑器写入的纯文本缓存（与桌面同源）；缺失时**按 kind 派生**（usheet/bitable/board 是 JSON 正文，
-  // 直接 lakeHtmlToPlain 会把 JSON 碎片塞进索引 —— 与桌面 Store.searchTextFor 口径统一）。
-  const plain = row.text_cache ?? searchTextForKind(normalizeNoteKind(row.doc_kind), row.content ?? "").plain ?? "";
+  // 优先编辑器写入的纯文本缓存（与桌面同源）；缺失时读正文文件按 kind 派生
+  // （usheet/bitable/board 是 JSON 正文，直接 lakeHtmlToPlain 会把 JSON 碎片塞进索引）。
+  const plain = await plainForRow(row);
   const titleHash = hashText(title);
   const bodyHash = hashText(plain);
   if (prev && prev.title_hash === titleHash && prev.body_hash === bodyHash) {
@@ -96,7 +108,7 @@ async function writeIndexRow(d: MobileDb, row: NoteRow, prev: LedgerRow | undefi
 /** 单条索引（保存后调用）：按内容 hash 短路，未变不写。 */
 export async function indexNote(d: MobileDb, noteId: string): Promise<void> {
   if (!(await hasSearchIndex(d))) return;
-  const row = await d.prepare("SELECT id, title, content, content_hash, text_cache, doc_kind FROM notes WHERE id=?").get(noteId) as NoteRow | undefined;
+  const row = await d.prepare("SELECT id, title, content_hash, text_cache, doc_kind FROM notes WHERE id=?").get(noteId) as NoteRow | undefined;
   if (!row) return;
   const prev = await d.prepare("SELECT fts_rowid, title_hash, body_hash FROM search_index WHERE note_id=?").get(noteId) as LedgerRow | undefined;
   await writeIndexRow(d, row, prev);
@@ -131,7 +143,7 @@ export async function reconcileIndex(d: MobileDb): Promise<void> {
     await flushIndexStatements(d, deletes);
   }
   const changed = await d.prepare(
-    "SELECT n.id AS id, n.title AS title, n.content AS content, n.content_hash AS content_hash, n.text_cache AS text_cache, n.doc_kind AS doc_kind " +
+    "SELECT n.id AS id, n.title AS title, n.content_hash AS content_hash, n.text_cache AS text_cache, n.doc_kind AS doc_kind " +
     "FROM notes n LEFT JOIN search_index si ON si.note_id = n.id " +
     "WHERE n.trashed_at IS NULL AND (si.note_id IS NULL OR si.title != n.title OR si.raw_hash IS NULL OR si.raw_hash != n.content_hash)"
   ).all() as unknown as NoteRow[];
@@ -151,8 +163,8 @@ export async function reconcileIndex(d: MobileDb): Promise<void> {
     for (const row of chunk) {
       const prev = prevByNote.get(row.id);
       const title = row.title ?? "";
-      // 与单条路径同口径：优先 text_cache，缺失则按 kind 派生（见 writeIndexRow）。
-      const plain = row.text_cache ?? searchTextForKind(normalizeNoteKind(row.doc_kind), row.content ?? "").plain ?? "";
+      // 与单条路径同口径：优先 text_cache，缺失则读正文文件按 kind 派生（见 plainForRow）。
+      const plain = await plainForRow(row);
       const titleHash = hashText(title);
       const bodyHash = hashText(plain);
       if (prev && prev.title_hash === titleHash && prev.body_hash === bodyHash) {
@@ -184,7 +196,7 @@ export async function searchNotes(d: MobileDb, query: string, limit = 50): Promi
   const titlePrefix = escapeLike(normalized) + "%";
   const titleContains = "%" + escapeLike(normalized) + "%";
   const rows = await d.prepare(
-    "SELECT si.note_id AS note_id, n.title AS title, n.content AS content, n.text_cache AS text_cache, n.doc_kind AS doc_kind, n.updated_at AS updated_at, f.title AS parent_title, " +
+    "SELECT si.note_id AS note_id, n.title AS title, n.text_cache AS text_cache, n.doc_kind AS doc_kind, n.updated_at AS updated_at, f.title AS parent_title, " +
     "CASE WHEN n.title = ? THEN 0 WHEN n.title LIKE ? ESCAPE '\\' THEN 1 WHEN n.title LIKE ? ESCAPE '\\' THEN 2 ELSE 3 END AS title_match " +
     "FROM notes_fts " +
     "JOIN search_index si ON si.fts_rowid = notes_fts.rowid " +
@@ -193,11 +205,16 @@ export async function searchNotes(d: MobileDb, query: string, limit = 50): Promi
     "WHERE notes_fts MATCH ? AND n.trashed_at IS NULL " +
     "ORDER BY title_match, bm25(notes_fts, 10.0, 1.0), n.updated_at DESC LIMIT ?"
   ).all(normalized, titlePrefix, titleContains, match, limit) as Array<Record<string, unknown>>;
-  return rows.map((row) => {
+  return Promise.all(rows.map(async (row) => {
     const title = String(row.title ?? "");
-    const plain = row.text_cache != null
-      ? String(row.text_cache)
-      : searchTextForKind(normalizeNoteKind(row.doc_kind), String(row.content ?? "")).plain ?? "";
+    const kind = normalizeNoteKind(row.doc_kind);
+    let plain: string;
+    if (row.text_cache != null) {
+      plain = String(row.text_cache);
+    } else {
+      const content = await readNoteBody(kind, String(row.note_id)).catch(() => null);
+      plain = content == null ? "" : (searchTextForKind(kind, content).plain ?? "");
+    }
     const fromTitle = Number(row.title_match ?? 3) < 3;
     const titleSnippet = fromTitle ? buildSnippet(title, normalized) : "";
     const bodySnippet = buildSnippet(plain, normalized);
@@ -209,5 +226,5 @@ export async function searchNotes(d: MobileDb, query: string, limit = 50): Promi
       updatedAt: String(row.updated_at ?? ""),
       parentTitle: row.parent_title ? String(row.parent_title) : null,
     } as SearchResult;
-  });
+  }));
 }

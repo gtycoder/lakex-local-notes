@@ -1,6 +1,46 @@
-import { sha256Sync } from "../../core/sha256Sync.js";
 import { applyQuickNotesSyncSchema } from "./quickNotesDbPort.js";
 import type { MobileDb } from "./sqliteDb.js";
+
+/**
+ * 移动端 SQLite schema。
+ *
+ * 261019 存储架构对齐桌面：**正文不再进 SQLite**（文档正文/小记正文/历史快照都是文件，见
+ * src/core/noteBodyPaths.ts + native/bodyStore.ts），DB 只存元数据、hash、同步账本与**派生**文本缓存。
+ *
+ * 本阶段的存量数据策略（用户 261019 定稿）：开发数据可丢 ⇒ 检测到旧 schema（带 content 列）时
+ * **整库用户数据重置一次**，不做逐行迁移；正文文件的旧目录（note-assets/quick-notes 等）由
+ * bridge/context 的 resetLegacyBodyFiles() 清理。
+ */
+
+/** 旧库（正文在 SQLite）的识别：notes / quick_notes / note_history 任一还有 content 列。 */
+export async function hasLegacyBodySchema(db: MobileDb): Promise<boolean> {
+  for (const table of ["notes", "quick_notes", "note_history"]) {
+    const columns = (await db.prepare(`PRAGMA table_info(${table})`).all()) as Array<{ name: string }>;
+    if (columns.some((column) => column.name === "content")) return true;
+  }
+  return false;
+}
+
+/** 重置用户数据表（正文迁文件后不再有 content；旧正文直接丢弃，不迁移）。 */
+async function dropLegacyUserTables(db: MobileDb): Promise<void> {
+  const tables = [
+    "notes_fts",
+    "search_index",
+    "notes",
+    "folders",
+    "sync_base",
+    "declared_assets",
+    "deleted_notes",
+    "note_history",
+    "orphan_assets",
+    "s3_gc_pending",
+    "s3_gc_log",
+    "device_state",
+    "quick_notes",
+    "quick_note_deleted",
+  ];
+  for (const table of tables) await db.exec(`DROP TABLE IF EXISTS ${table}`);
+}
 
 /** Apply idempotent mobile schema migrations and first-run seed data. */
 export async function applyMobileSchema(db: MobileDb): Promise<void> {
@@ -10,10 +50,11 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
     // Older databases or constrained environments may not support the pragma.
   }
 
+  if (await hasLegacyBodySchema(db)) await dropLegacyUserTables(db);
+
   await db.exec(`CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
-    content TEXT NOT NULL,
     parent_id TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
@@ -66,16 +107,6 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
     "indexed_at TEXT NOT NULL)"
   );
   await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
-
-  const missingHashes = await db.prepare(
-    "SELECT id, content FROM notes WHERE content_hash IS NULL",
-  ).all() as Array<{ id: string; content: string }>;
-  for (const row of missingHashes) {
-    await db.prepare("UPDATE notes SET content_hash=? WHERE id=?").run(
-      sha256Sync(new TextEncoder().encode(row.content)),
-      row.id,
-    );
-  }
 
   await db.exec(`CREATE TABLE IF NOT EXISTS sync_base (
     note_id TEXT PRIMARY KEY,
@@ -144,7 +175,6 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
     preview_text TEXT NOT NULL,
     image_count INTEGER NOT NULL DEFAULT 0,
     content_hash TEXT NOT NULL,
-    content TEXT NOT NULL,
     sync_state TEXT NOT NULL DEFAULT 'local',
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
@@ -165,16 +195,21 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
     ).run();
   }
 
+  // 历史快照：正文是 history/{noteId}/*.body.gz（gzip 文件），DB 只存路径/hash/引用账。
+  // title 是移动端历史列表展示用的元数据（桌面列表不展示标题，但保留这一列不影响正文归属）。
   await db.exec(`CREATE TABLE IF NOT EXISTS note_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     note_id TEXT NOT NULL,
-    content TEXT NOT NULL,
+    file_path TEXT NOT NULL,
     content_hash TEXT NOT NULL,
     title TEXT NOT NULL,
-    parent_id TEXT,
-    sort_order INTEGER NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    refs_json TEXT NOT NULL DEFAULT '[]',
+    ref_count INTEGER NOT NULL DEFAULT 0,
+    protected_until TEXT
   )`);
+  await db.exec("CREATE INDEX IF NOT EXISTS idx_note_history_note ON note_history(note_id, created_at DESC)");
   await db.exec(`CREATE TABLE IF NOT EXISTS orphan_assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     note_id TEXT NOT NULL,

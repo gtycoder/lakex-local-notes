@@ -156,11 +156,21 @@ object AssetServer {
                     return
                 }
 
-                val root = File(appContext.filesDir, "note-assets")
-                val file = File(root, rel)
+                // 物理目录与桌面布局对齐：
+                //   /quick-notes/{id}/{file}          → quick-notes/assets/{id}/{file}
+                //   /quick-notes/staging/{draft}/{f}  → quick-notes/staging/{draft}/{f}
+                //   /{noteId}/{file}                  → note-assets/{noteId}/{file}
+                val (root, relativeUnderRoot) = when {
+                    rel.startsWith("quick-notes/staging/") ->
+                        File(appContext.filesDir, "quick-notes") to rel.removePrefix("quick-notes/")
+                    rel.startsWith("quick-notes/") ->
+                        File(appContext.filesDir, "quick-notes/assets") to rel.removePrefix("quick-notes/")
+                    else -> File(appContext.filesDir, "note-assets") to rel
+                }
+                val file = File(root, relativeUnderRoot)
                 val rootCanonical = root.canonicalPath
                 val fileCanonical = file.canonicalPath
-                // 目录穿越防护：解析后的路径必须位于 note-assets 下
+                // 目录穿越防护：解析后的路径必须位于对应根目录下
                 if (!fileCanonical.startsWith(rootCanonical + File.separator)) {
                     writeError(out, 403, "forbidden")
                     return
