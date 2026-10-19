@@ -32,7 +32,7 @@ export interface ExportSubmenuItemProps {
  */
 export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPaths, onClose }: ExportSubmenuItemProps) {
   const run = (action: () => void) => () => { action(); onClose(); };
-  const type = kind === "usheet" ? "sheet" : kind === "bitable" || kind === "board" ? kind : "doc";
+  const type = kind === "usheet" ? "sheet" : kind === "bitable" || kind === "board" || kind === "ink" ? kind : "doc";
 
   return (
     <Submenu label={<><Download size={15} /><span>导出</span></>}>
@@ -61,6 +61,12 @@ export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPath
         <>
           <button role="menuitem" onClick={run(() => onExportAs("png"))}>导出为 PNG</button>
           <button role="menuitem" onClick={run(() => onExportAs("svg"))}>导出为 SVG</button>
+        </>
+      )}
+      {type === "ink" && (
+        <>
+          <button role="menuitem" disabled title="开发中">PNG 导出（开发中）</button>
+          <button role="menuitem" disabled title="开发中">PDF 导出（开发中）</button>
         </>
       )}
       <div className="context-menu-sep" />

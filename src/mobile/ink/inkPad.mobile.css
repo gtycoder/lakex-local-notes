@@ -1,0 +1,11 @@
+.ink-pad--mobile .ink-toolbar { padding: 5px 8px; }
+.ink-pad--mobile .ink-tool,
+.ink-pad--mobile .ink-width,
+.ink-pad--mobile .ink-pages button,
+.ink-pad--mobile .ink-backgrounds button { min-width: 36px; height: 36px; padding: 0 7px; }
+.ink-pad--mobile .ink-toolbar__sep { height: 20px; margin: 0 2px; }
+.ink-pad--mobile .ink-page-stage { padding: 8px; }
+.ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); max-height: 100%; aspect-ratio: 794 / 1123; }
+.ink-pad--mobile .ink-footer { flex-wrap: wrap; padding: 4px 8px; }
+.ink-pad--mobile .ink-pages span { font-size: var(--lake-font-size-micro); }
+.ink-pad--mobile .ink-backgrounds button { font-size: var(--lake-font-size-micro); }

@@ -12,7 +12,7 @@ export interface StatusBarNotice {
 export interface DesktopStatusBarProps {
   showDocumentStats: boolean;
   /** 当前文档类型（v6）：非 doc 时「字数/图片」口径不适用（正文不是 Lake 文本），改为显示类型标签。 */
-  docKind?: "doc" | "usheet" | "bitable" | "board";
+  docKind?: "doc" | "usheet" | "bitable" | "board" | "ink";
   wordCount: number;
   imageCount: number;
   notice: StatusBarNotice | null;

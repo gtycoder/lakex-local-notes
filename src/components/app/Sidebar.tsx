@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, Pin, Plus, RefreshCw, Trash } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { escapeId } from "../../lib/cssEscape";
@@ -21,7 +21,7 @@ import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { useScrollFade } from "../../hooks/useScrollFade";
 
-type CreateKind = "notebook" | "group" | "note" | "usheet" | "bitable" | "board";
+type CreateKind = "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink";
 type DropPosition = "before" | "inside" | "after";
 export type SidebarMode = "docked" | "floating" | "collapsed";
 
@@ -513,7 +513,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   }, [props.revealNodeId, props.onRevealConsumed]);
 
   /** 在 node 下创建子项（单一来源：右键菜单「新建」子菜单 + 目录行「＋」快捷菜单共用）。 */
-  const createChild = (node: TreeNode | null, kind: "group" | "note" | "usheet" | "bitable" | "board") => {
+  const createChild = (node: TreeNode | null, kind: "group" | "note" | "usheet" | "bitable" | "board" | "ink") => {
     if (!node) return;
     // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档/表格）。
     const parentId = node.id;
@@ -527,7 +527,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setContextMenu(null);
     setCreateMenu(null);
   };
-  const menuNewChild = (kind: "group" | "note" | "usheet" | "bitable" | "board") => createChild(contextNode, kind);
+  const menuNewChild = (kind: "group" | "note" | "usheet" | "bitable" | "board" | "ink") => createChild(contextNode, kind);
 
 
   const menuRename = () => {
@@ -869,6 +869,7 @@ function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null,
   if (kind === "usheet") return <Table size={16} />;
   if (kind === "bitable") return <Database size={16} />;
   if (kind === "board") return <PenTool size={16} />;
+  if (kind === "ink") return <PenLine size={16} />;
   return <File size={16} />;
 }
 
@@ -913,7 +914,7 @@ interface ContextMenuProps {
   node: TreeNode;
   x: number;
   y: number;
-  onNewChild: (kind: "group" | "note" | "usheet" | "bitable" | "board") => void;
+  onNewChild: (kind: "group" | "note" | "usheet" | "bitable" | "board" | "ink") => void;
   onRename: () => void;
   onDelete: () => void;
   onCopyMarkdown: () => void;
@@ -966,6 +967,7 @@ const CREATE_CHILD_ITEMS: ReadonlyArray<{ kind: CreateChildKind; label: string; 
   { kind: "usheet", label: "新建表格", icon: <Table size={15} /> },
   { kind: "bitable", label: "新建数据表", icon: <Database size={15} /> },
   { kind: "board", label: "新建画板", icon: <PenTool size={15} /> },
+  { kind: "ink", label: "新建手写板", icon: <PenLine size={15} /> },
   { kind: "group", label: "新建分组", icon: <FolderPlus size={15} /> },
 ];
 

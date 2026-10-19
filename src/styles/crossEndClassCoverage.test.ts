@@ -44,6 +44,7 @@ const SHARED = [
   "features/editor/LakeEditor.tsx",              // 编辑器宿主：出错态 .editor-error
   "features/quickNotes/QuickNoteEditor.tsx",     // 小记写作区宿主：.quick-note-editor
   "features/quickNotes/QuickNotePreview.tsx",    // 小记只读预览：mobile/quick-notes.css
+  "features/ink/InkPad.tsx",                    // 手写板共享控制器：外观分别由 inkPad.desktop.css / mobile/ink 提供
 ];
 
 /** 已知缺口（只许减）：登记后只报警告；补上对应端的样式后请删掉该条。 */

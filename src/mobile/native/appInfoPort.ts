@@ -5,7 +5,7 @@
 import type { AppInfo, AppInfoPort } from "../../core/ports.js";
 import { MANIFEST_VERSION } from "../../core/syncUtils.js";
 
-/** 同步协议版本 —— **单一来源** = core 的 MANIFEST_VERSION（260928 起重置为 V1，代码只读写 {1}）。
+/** 同步协议版本 —— **单一来源** = core 的 MANIFEST_VERSION（V2 新增 kind=ink；V1 仅用于读取旧清单升级）。
  * 不要再写字面量：这里曾经硬编码 "4"（V1 重置前的老值），「关于」页因此显示成 manifest v4。 */
 const PROTOCOL_VERSION = String(MANIFEST_VERSION);
 

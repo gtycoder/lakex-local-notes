@@ -18,6 +18,8 @@ const UniverSheetEditor = lazy(() => import("../usheet/UniverSheetEditor").then(
 const BitableEditor = lazy(() => import("../bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
 /** 画板编辑器（Drawnix/Plait 引擎，懒加载）：只在真的打开画板文档时才进分包（≈511KB gzip）。 */
 const BoardEditor = lazy(() => import("../board/BoardEditor").then((m) => ({ default: m.BoardEditor })));
+/** 手写板编辑器（共享 InkPad + perfect-freehand，懒加载）。 */
+const DesktopInkPad = lazy(() => import("../ink/DesktopInkPad").then((m) => ({ default: m.DesktopInkPad })));
 import type { LakeEditorPrefs } from "./lakeRuntime";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
@@ -34,7 +36,7 @@ export interface TabInfo {
   /** 远端已删除（软删/墓碑/purge）：tab 显示"已删除"标记，正文保留供复制/恢复。 */
   deleted?: boolean;
   /** v6/v7 文档类型（doc | usheet | bitable | board；缺省 doc）。 */
-  kind?: "doc" | "usheet" | "bitable" | "board";
+  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
 interface MultiTabEditorProps {
@@ -645,6 +647,16 @@ export function MultiTabEditor({
                 visible={visible && paneVisible(tab.noteId)}
                 focused={tab.noteId === activeNoteId}
                 pane={paneOf(tab.noteId)}
+                readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
+                onChange={(content) => handleChange(tab.noteId, content)}
+                onDirty={() => handleChange(tab.noteId)}
+                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
+              />
+            </EditorErrorBoundary>
+          ) : tab.kind === "ink" ? (
+            <EditorErrorBoundary key={"ink-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+              <DesktopInkPad
+                content={tab.content}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}

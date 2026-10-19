@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   createUsheetIn: (parentId, title) => invoke("create_usheet_in", parentId, title),
   createBitableIn: (parentId, title) => invoke("create_bitable_in", parentId, title),
   createBoardIn: (parentId, title) => invoke("create_board_in", parentId, title),
+  createInkIn: (parentId, title) => invoke("create_ink_in", parentId, title),
   moveTreeNode: (id, parentId, sortOrder) => invoke("move_tree_node", id, parentId, sortOrder),
   moveTreeNodeOrdered: (id, parentId, orderedIds) => invoke("move_tree_node_ordered", id, parentId, orderedIds),
   reorderTreeNodes: (parentId, orderedIds) => invoke("reorder_tree_nodes", parentId, orderedIds),

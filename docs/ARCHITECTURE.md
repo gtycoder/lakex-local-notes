@@ -85,6 +85,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 ├── usheets/{noteId}.usheet.json      # 表格正文（kind=usheet，Univer IWorkbookData）
 ├── bitables/{noteId}.bitable.json    # 多维表正文（kind=bitable，自研 v1 record JSON）
 ├── boards/{noteId}.board.json        # 画板正文（kind=board，Drawnix/Plait 场景）
+├── inks/{noteId}.ink.json            # 手写板正文（kind=ink，矢量墨迹 JSON）
 ├── history/{noteId}/*.body.gz        # 历史快照（L3，本地；旧 *.lake.gz 按 file_path 仍可读）
 ├── note-assets/
 │   └── {noteId}/

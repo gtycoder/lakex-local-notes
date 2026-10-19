@@ -49,6 +49,8 @@ const FILES = [
   "features/bitable/bitableFilterEditor.css",   // 260930：筛选条件树（远端 lake 风格 + 可复用）
   "features/bitable/bitableFillRules.css",   // 260930：条件填色配置与表格投影
   "features/board/boardEditor.css",
+  "features/ink/inkPad.shared.css",
+  "features/ink/inkPad.desktop.css",
   "styles/dialog.css", "styles/document-status.css",   "styles/components.css",   "styles/tokens.css",   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   "styles/kit.css",       // P4 起：自有组件库（14 件）
   "styles/chrome.css",    // P5 起：应用外壳（活动栏/目录栏头部/状态栏 …）
@@ -132,7 +134,9 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260928 V04 日历视图：月网格 / 日程 chip / 今天与跨月态（全部合法新增）
   "features/bitable/bitableCalendarView.css": { decls: 75, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
-  "features/board/boardEditor.css": { decls: 17, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）；261006：+5 = 左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 3 条 + label 定位 1 条 + 注入触发器居中 1 条）
+  "features/board/boardEditor.css": { decls: 17, dupGroups: 0 },
+  "features/ink/inkPad.shared.css": { decls: 100, dupGroups: 0 },
+  "features/ink/inkPad.desktop.css": { decls: 10, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）；261006：+5 = 左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 3 条 + label 定位 1 条 + 注入触发器居中 1 条）
   "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
   "components/ui/markdown/markdown.css": { decls: 43, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
   "features/ai/aiDialogParts.css": { decls: 14, dupGroups: 0 },   // 261013 用户要求 AI 等待反馈：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。

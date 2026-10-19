@@ -1,4 +1,5 @@
 import { rowToLocalState } from "../src/core/syncDecisions.js";
+import { normalizeNoteKind } from "../src/core/noteKind.js";
 import { AppError } from "../src/core/storeErrors.js";
 import type { DbLike, DbLikeStatement } from "./dbLike.js";
 
@@ -12,7 +13,7 @@ export interface NoteSummary {
   isConflict: boolean;
   isLocked?: boolean;
   /** v6/v7 文档类型（缺省 doc；渲染层据此选择编辑器）。 */
-  kind?: "doc" | "usheet" | "bitable" | "board";
+  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
   lockedAt?: string | null;
 }
 
@@ -30,7 +31,7 @@ export interface TreeNode {
   isConflict: boolean;
   icon: string | null;
   /** 文档类型（doc | usheet | bitable | board；缺省 doc）。 */
-  kind?: "doc" | "usheet" | "bitable" | "board";
+  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
 export interface SyncNote {
@@ -48,7 +49,7 @@ export interface SyncNote {
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
   /** v6/v7 文档类型（listNotesForSync/getNoteForSync 提供；缺省 doc）。 */
-  kind?: "doc" | "usheet" | "bitable" | "board";
+  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
 export interface SyncFolder {
@@ -145,7 +146,7 @@ export class NoteQueries {
       isLocked: !!row.is_locked,
       lockedAt: row.locked_at ?? null,
       // v6/v7 文档类型（渲染层据此选择编辑器；缺省 doc）
-      kind: (row.kind === "usheet" ? "usheet" : row.kind === "bitable" ? "bitable" : row.kind === "board" ? "board" : "doc") as "doc" | "usheet" | "bitable" | "board",
+      kind: normalizeNoteKind(row.kind),
     };
   }
 
@@ -164,7 +165,7 @@ export class NoteQueries {
       isConflict: !!row.is_conflict,
       icon: row.icon ?? null,
       // v6/v7：渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
-      kind: (row.note_kind === "usheet" ? "usheet" : row.note_kind === "bitable" ? "bitable" : row.note_kind === "board" ? "board" : "doc") as "doc" | "usheet" | "bitable" | "board",
+      kind: normalizeNoteKind(row.note_kind),
     };
   }
 

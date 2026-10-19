@@ -37,7 +37,7 @@ export interface LocalNoteSummary {
 function normalizeDocKind(value: unknown): NoteKind {
   // 表格（kind=usheet）：移动端按「非 doc 只读占位」处理，**绝不**交给 Lake 编辑器。
   // 已废弃的旧 kind：不做迁移 / 兼容（AGENTS §3#7），直接回退 doc。
-  return value === "usheet" || value === "bitable" || value === "board" ? value : "doc";
+  return value === "usheet" || value === "bitable" || value === "board" || value === "ink" ? value : "doc";
 }
 
 function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
@@ -154,13 +154,13 @@ export async function createNote(
   parentId: string | null,
   assets: Map<string, Uint8Array>,
   plain?: string,
+  kind: NoteKind = "doc",
 ): Promise<void> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
   // 先写正文文件、再提交 DB（对齐桌面 NoteContentRepository：DB 不应声称正文已存在）。
-  await writeNoteBody("doc", id, content);
+  await writeNoteBody(kind, id, content);
   try {
-    const kind: NoteKind = "doc";
     const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
     await d.prepare(
       "INSERT INTO notes (id, title, parent_id, updated_at, content_hash, sync_state, text_cache, doc_kind) VALUES (?,?,?,?,?,'local',?,?)"

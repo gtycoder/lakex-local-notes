@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book, Search, Star } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
@@ -34,6 +34,8 @@ import { MobileBoardViewer } from "../board/MobileBoardViewer";
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
 /** 表格（usheet）：与桌面同一套 Univer 内核的**只读**查看器（Univer 运行时随之按需加载）。 */
 const MobileUsheetViewer = lazy(() => import("../usheet/MobileUsheetViewer").then((m) => ({ default: m.MobileUsheetViewer })));
+/** 手写板：共享 InkPad + perfect-freehand，按需分包。 */
+const MobileInkPad = lazy(() => import("../ink/MobileInkPad").then((m) => ({ default: m.MobileInkPad })));
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
 export interface NotebookTreeItem {
   id: string;
@@ -46,7 +48,7 @@ export interface NotebookTreeItem {
 import type { TreeNode } from "../../lib/types";
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
-interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "usheet" | "bitable" | "board"; }
+interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "usheet" | "bitable" | "board" | "ink"; }
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -379,6 +381,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     } catch { showToast("新建失败", { type: "error" }); }
   }, [loadTree, openTab]);
 
+  /** 行内 ＋ → 新建手写板（kind=ink）。 */
+  const createChildInk = useCallback(async (parentId: string) => {
+    try {
+      const n = await bridge.createInk("无标题手写板", parentId);
+      await loadTree();
+      await openTab(n.id);
+    } catch { showToast("新建手写板失败", { type: "error" }); }
+  }, [loadTree, openTab]);
+
   /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点。 */
   const createChildGroup = useCallback(async (parentId: string) => {
     try {
@@ -702,9 +713,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <button
           className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
           onClick={toggleEdit}
-          disabled={!active || (active.kind ?? "doc") !== "doc"}
+          disabled={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "ink")}
           aria-label={active?.editing ? "完成" : "编辑"}
-          title={(active?.kind ?? "doc") !== "doc" ? "该文档类型在移动端只读" : active?.editing ? "完成" : "编辑"}
+          title={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "ink") ? "该文档类型在移动端只读" : active?.editing ? "完成" : "编辑"}
         >{active?.editing ? <Check /> : <Pencil />}</button>
         {/* 文档内查找（移动端）：内核查找面板在移动端不存在（工具栏插件被关），
             故入口收在这里、由 MobileFindBar 做 DOM 内查找；工作区胶囊是定稿四格、不放搜索。 */}
@@ -743,6 +754,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             {t.kind === "board" ? (
               // 画板：移动端只读查看（同一套 Drawnix 引擎，绝不给 Lake 编辑器；也不保存）
               <MobileBoardViewer content={t.content} active={t.id === activeId} />
+            ) : t.kind === "ink" ? (
+              <Suspense fallback={<div className="mb-empty">正在加载手写板…</div>}>
+                <MobileInkPad
+                  content={t.content}
+                  readOnly={!t.editing}
+                  onChange={(c) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
+                />
+              </Suspense>
             ) : t.kind === "bitable" ? (
               // 多维表：移动端只读视图（同一份 core 数据模型求值，绝不写库）
               <Suspense fallback={<div className="mb-empty">正在加载多维表…</div>}>
@@ -810,6 +829,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           { id: "usheet", label: "新建表格", icon: Table, disabled: true, note: "移动端暂不支持编辑" },
           { id: "bitable", label: "新建数据表", icon: Database, disabled: true, note: "移动端暂不支持编辑" },
           { id: "board", label: "新建画板", icon: PenTool, disabled: true, note: "移动端暂不支持编辑" },
+          { id: "ink", label: "新建手写板", icon: PenLine },
           { id: "group", label: "新建分组", icon: FolderPlus },
         ]}
         onClose={() => setCreateOpen(false)}
@@ -817,6 +837,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           setCreateOpen(false);
           // 复用目录树的同一份创建通道（行内 ＋ / 长按菜单同源），不新造第二条；作用域 = 本次打开它的那个节点
           if (it.id === "note") void createChildDoc(createParent);
+          else if (it.id === "ink") void createChildInk(createParent);
           else if (it.id === "group") void createChildGroup(createParent);
         }}
       />

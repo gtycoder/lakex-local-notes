@@ -1,0 +1,35 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const KIND = read("../../core/noteKind.ts");
+const PATHS = read("../../core/noteBodyPaths.ts");
+const SYNC = read("../../core/syncUtils.ts");
+const STORE = read("../../../electron/store.ts");
+const IPC = read("../../../electron/ipc/registerNotes.ts");
+const DESKTOP = read("../editor/MultiTabEditor.tsx");
+const MOBILE = read("../../mobile/notebook/NotebookWorkspace.tsx");
+const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
+
+describe("手写板 POC 端到端接线", () => {
+  it("kind=ink 已进入 NoteKind / 正文路径", () => {
+    expect(KIND).toContain('"ink"');
+    expect(PATHS).toContain('ink: "inks"');
+    expect(PATHS).toContain('ink: ".ink.json"');
+  });
+
+  it("Manifest 升级到 V2，并保留 V1 读取升级路径", () => {
+    expect(SYNC).toContain("MANIFEST_VERSION = 2");
+    expect(SYNC).toContain("new Set([1, 2])");
+  });
+
+  it("桌面创建、IPC、路由与移动端创建/路由均已接通", () => {
+    expect(STORE).toContain("createInkIn(");
+    expect(IPC).toContain('ipc.handle("create_ink_in"');
+    expect(DESKTOP).toContain('tab.kind === "ink"');
+    expect(DESKTOP).toContain("DesktopInkPad");
+    expect(MOBILE_BRIDGE).toContain("async createInk(");
+    expect(MOBILE).toContain('t.kind === "ink"');
+    expect(MOBILE).toContain("MobileInkPad");
+  });
+});
