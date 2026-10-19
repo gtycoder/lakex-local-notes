@@ -582,8 +582,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
     const groups = tree.filter((x) => x.kind === "group" && x.id !== node.id);
     return [
-      { id: "new-note", label: "新建文档", icon: File },
-      { id: "new-group", label: "新建分组", icon: FolderPlus },
+      // 261019 用户点单：**菜单里不再放「新建文档 / 新建分组」** —— 行内 ＋（新建子项）与抽屉工具栏「新建」
+      // 已经提供同一份创建清单，菜单只保留「对这一行本身的动作」，不再重复创建入口。
       ...(node.kind === "note" ? [
         { id: "rename", label: "重命名", icon: Pencil },
       ] : [{ id: "rename", label: "重命名", icon: Pencil }]),
@@ -612,8 +612,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     setMenuFor(null);
     if (!node) return;
     const root = path[0]?.id;
-    if (root === "new-note") { void createChildDoc(node.id); return; }
-    if (root === "new-group") { void createChildGroup(node.id); return; }
     if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
     if (root === "rename") { setRenamingId(node.id); setRenameValue(node.title); return; }
     if (root === "icon") { setIconFor(node); return; }

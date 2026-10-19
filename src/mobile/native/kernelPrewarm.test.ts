@@ -42,6 +42,6 @@ describe("内核预热（只点燃、不保留实例）", () => {
 
   it("只在启动就绪后排期", () => {
     // 261019：与"小记分包预取"合并进同一个 ready effect（预热仍是独立的 4s 排期）
-    expect(APP).toMatch(/if \(phase !== "ready"\) return;\s*\n\s*scheduleKernelPrewarm\(\);/);
+    expect(APP).toMatch(/if \(phase !== "ready"\) return;[\s\S]{0,260}if \(captureLaunchedRef\.current\) return;[\s\S]{0,160}scheduleKernelPrewarm\(\);/);
   });
 });

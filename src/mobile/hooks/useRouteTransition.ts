@@ -29,6 +29,12 @@ export interface RouteTransition {
   mounted: boolean;
   /** 是否处于"工作区已展开"位移状态（push 完 = true；pop 开始 = false）。 */
   open: boolean;
+  /**
+   * 入场位移**播完**（open 后再等一个转场时长）为 true；出场开始立刻变 false。
+   * 消费方给工作区层挂 `is-settled` ⇒ **撤掉 transform / will-change**，让 position:fixed 的包含块
+   * 从 layer 盒回到视口（否则编辑 dock 的面板会被钉在 `--mb-app-h` 下沿 = 键盘上方，261019 用户报）。
+   */
+  settled: boolean;
   /** 返回首页：先播出场，结束（240ms / reduced-motion 0ms）后回调 `onClosed` 并卸载工作区。 */
   close: () => void;
   homeRef: RefObject<HTMLDivElement>;
@@ -38,6 +44,7 @@ export interface RouteTransition {
 export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): RouteTransition {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
+  const [settled, setSettled] = useState(false);
   const homeRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef(0);
@@ -55,6 +62,15 @@ export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): 
     const raf = requestAnimationFrame(() => setOpen(true));
     return () => cancelAnimationFrame(raf);
   }, [mounted, routeKind]);
+
+  // 入场位移播完 ⇒ settled（出场开始立刻失效）。转场期间 transform 让 fixed 以 layer 为包含块；
+  // settled 后撤掉它，fixed 才回到**视口** —— 否则编辑 dock 的面板会被钉在 --mb-app-h 下沿（键盘上方），
+  // 下方留一片空白（261019 用户报「工具栏展开跑到键盘上边」）。多等 50ms 覆盖 transition 的收尾帧。
+  useEffect(() => {
+    if (!open) { setSettled(false); return; }
+    const t = window.setTimeout(() => setSettled(true), routeTransitionMs(prefersReducedMotion()) + 50);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
   const close = useCallback(() => {
     if (closingRef.current) return;
@@ -80,5 +96,5 @@ export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): 
     if (wsRef.current) wsRef.current.toggleAttribute("inert", homeActive);
   }, [routeKind, mounted]);
 
-  return { mounted, open, close, homeRef, wsRef };
+  return { mounted, open, settled, close, homeRef, wsRef };
 }

@@ -9,7 +9,7 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节保留最新批次（261019 / 261017）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **261019 最新基线**：移动端 5 个批次已提交并推送 master（`ae757584`）—— 首页原生横向分页 / 路由转场+按压反馈 / 阅读动效+骨架 / 知识库「常用」+删除最近文档 / 小记加载壳+性能+返回键+关闭全部+偶发空白修复；门禁 **289 文件 / 2158 例**。前一条 261017：代码 review 全部结案、S3 配置导入导出已实现待验收（见 §0(十七)）。
+> **261019 最新基线**：移动端批次已推送 master —— `ae757584`（主页分页 / 转场+按压 / 动效+骨架 / 常用 / 小记加载壳等 5 批）+ **本轮收口 `§0(六)～(十一)`**（目录菜单去重 + 属性适配 / 转场落定修 fixed 包含块 / 收面板→键盘动效 / ⌨ 双态图标 / capture 预热收口 / native hint 原型已回退）；**提交树门禁 290 文件 / 2164 例**（条目里 291–293 是并行会话在途用例的工作区口径）。前一条 261017：代码 review 全部结案、S3 配置导入导出已实现待验收（见 §0(十七)）。
 > **⚠️ 261017 历史已重写**：旧 AK/SK 已从 git 历史清除（filter-repo）；旧 commit hash 全部失效，旧克隆/缓存请重新拉取。
 >
 > **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
@@ -18,6 +18,88 @@
 > **下一会话焦点（261012 收尾 → 下一会话，用户定）**：① **移动端文本增强二级面板**（见上）；② **5 项画图插入项解禁**（画板 / 流程图 / UML / 思维导图 / 文本绘图，现为置灰占位；根因与修法见 §3#18）；③ **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；④ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261019(十二) · 桌面导出补齐：表格 CSV / 表格 Excel / 画板 PNG·SVG / Word · **未提交（待用户验收）**
+
+- **用户点单**：把导出占位补齐，顺序 = usheet CSV → 画板菜单接线 → usheet Excel → Word。
+- **① usheet CSV（活动工作表）**：core [usheetCsv.ts](lake-notes-electron/src/core/usheetCsv.ts)（BOM+CRLF、显示值 `m`→原始值 `v`、只导有效区域、超限报错）；主进程 `NoteExport.exportUsheetCsv`；新增 IPC `export_table_csv` **按 kind 分派**（bitable 活动数据表 / usheet 工作表）⇒ 渲染层只认一个「导出为 CSV」。
+  - 活动工作表属**本机视图**（不进正文/不写 S3）：新增 [usheetActiveSheet.ts](lake-notes-electron/src/features/usheet/usheetActiveSheet.ts) 内存登记表，`UniverSheetEditor` 挂载时登记 getter；文档没打开时后端回退 `sheetOrder[0]`，提示里写明导的是哪张。
+  - 空工作表 / 空表格**明确报错**，不产出空文件。
+- **② 画板 PNG/SVG**：不另写画布渲染，复用画板内已有 Drawnix 导出（`lakex-drawnix` 的 `saveAsPng/saveAsSvg`，CSP 已放行 data:）。新增 [boardExport.ts](lake-notes-electron/src/features/board/boardExport.ts) 登记表：`BoardEditor` 挂载时登记触发器，菜单动作点开 vendor 导出菜单再点目标格式。**画板没打开 ⇒ 明确提示先打开**；文件落**系统下载目录**（画板工具栏本来就是这种行为）。
+  - 坑：等待用 **setTimeout 而非 rAF** —— 隐藏窗口（CDP 依附/最小化）rAF 不触发会把导出 promise 永久挂住。
+- **③ usheet Excel**：core [xlsx.ts](lake-notes-electron/src/core/xlsx.ts) 手写极简 OOXML（复用 `zipArchive` 的 store ZIP，**不加 xlsx 依赖**）：多工作表 / inlineStr / 数值·布尔原生 / 公式 `<f>`+缓存值 / 表名去重与 31 字符上限；行列上限显式报错。IPC `export_usheet_xlsx`。
+- **④ Word（docx）**：core [docx.ts](lake-notes-electron/src/core/docx.ts) 手写极简 OOXML：H1–H6 / 列表（numbering）/ 引用 / 代码块 / 分隔线 / 基础表格 / 粗斜删除线·行内代码 / 外部链接 / 图片（主进程读本地资产，webp 等用 sharp 转 png，≤600px 宽）。走既有 `export_note`，`NOT_IMPLEMENTED` 已清空。图片缺失计入 skipped 并提示；远程图降级为「[图片] alt」。
+- **已知边界（如实记录）**：Excel 不搬运数字格式/样式（百分比/日期仍是原始值）；Word 不搬运行内 HTML/复杂嵌套/表格样式/页眉页脚（文本不丢，结构降级）；画板导出落下载目录且需画板已打开。
+- **门禁**：新增/相关 vitest **10 文件 55 例** ✓ · 双端构建 ✓ · ui-metrics ✓ · check:core **91 文件 0 违规** ✓ · check:mobileui ✓ · check:bundle ✓ · `git diff --check` ✓；tsc 本批文件 0 错（全库当时被并行会话在途改动染红）· 全库 **305 文件 / 2219 例，4 例失败**（均来自并行会话：quickNotesDbPort ×1 / quickNotesSyncContract ×2 / boardEditorMount ×1）。
+- **IPC 基线**：`ipcChannelParity` 119 → **121**（`export_table_csv` / `export_usheet_xlsx`）。
+- **未做**：真实 UI 点按验收（系统目录框无法在自动化里点）；真机打开 Word/Excel 校验；本批代码与文档**均未提交**（与并行会话改动混在同一工作树，提交时需按文件/hunk 分开）。
+- **相关文件**：`electron/{noteExport,store,export,preload.cjs,ipc/registerNotes,webApiServer}.ts` · `src/lib/native.ts` · `src/hooks/useNoteActions.ts` · `src/components/ui/ExportSubmenuItem.tsx`(+test) · `src/features/{board/boardExport,usheet/usheetActiveSheet}.ts` · `src/core/{usheetCsv,xlsx,docx,ooxml}.ts`。
+
+### 261019(十一) · 快捷 capture「同步 native hint」原型：实测只提前 ~0.1s，**已回退**（无代码变更）
+
+- **做法（已实现、已设备 A/B、已回退）**：MainActivity 在 `super.onCreate` 后注入 `lakeLaunch.getUrl()`（与 `lakeAssetToken` 同一 `addJavascriptInterface` 模式），入口第一条 import 同步读它 → 命中就立刻 `import` composer 分包、React 首帧直接进 capture；插件接口缺失时退回原轮询。
+- **实测（force-stop + deep link，3 次）**：composer/kernel chunk 的 `startTime` 只从 **DCL+14~64ms** 提前到 **DCL−12~−166ms**（约 0.1–0.16s；空闲机一次仅 **−12ms**），端到端可输入时间无可测改善。原因：**入口 chunk 的加载/求值本身就是 DCL 前的大头**，而 dynamic import 只能在入口模块求值到那条语句时才发起；hint 再早也快不过"入口还没跑"。
+- **结论**：收益与复杂度不匹配（native 接口 + 入口 boot 模块 + 双路径 fallback + 测试），按 AGENTS §3#17 **回退**；源码已恢复原样（`MainActivity.kt` / `quickNoteShortcut.ts` / `main.tsx` / `MobileApp.tsx` / 测试均无本批残留）。
+- **保留**：仍是 §0(十) 的「capture 会话跳过 4s 预热」（避免写作时再跑一次 1.7s 内核加载）。
+- **若还要继续**：需要把判定/预取放到**入口 chunk 之外** —— ① index.html 独立小脚本按已知 chunk URL `modulepreload`（要处理 hash 注入）；② 原生预取 kernel chunk/预创建 WebView。属另一个量级，先立证据再动。
+- **门禁**：**提交树单独验证通过** —— tsc 0 · vitest **290 文件 / 2164 例** ✓ · ui-metrics / core / mobileui ✓。⚠️ **工作区**因并行会话在途暂不可跑（tsc 报 `syncDbPort.ts`；gradle 因 `BodyStorePlugin`/`AssetServer` BUILD FAILED）；5554 上现装的仍是**含本次原型 hint** 的构建（源码已回退，下次成功构建即恢复）。
+
+### 261019(十) · 长按图标「小记」快捷入口：响应速度实测与收口（**不立项大改**）· **待用户验收**
+
+- **问题（用户问）**：长按桌面图标快捷创建小记，还有没有优化响应速度的空间。
+- **实测（emulator-5554 冷启动：`am force-stop` + `am start -W -a VIEW -d lakenotes://quick-note`；AVD 空闲时）**：
+  - Activity 首次显示 **TotalTime 503ms**；
+  - WebView 页内：DCL **208ms** · composer 挂载 **576ms** · 正文可输入 **677ms**（分包与 lakeRuntime 就位后，内核实例化只占 ~100ms）；
+  - 点击→可输入（含观测端 CDP 连接开销）≈ **1.1s**。
+  - 负载高时（并行会话跑构建，host load ~6.9）：Activity 3–5s、页内到 composer 4–10s —— **不是 capture 业务路径慢，而是整机/WebView/内核 chunk 冷加载被放大**（慢机上 lakeRuntime chunk fetch+eval 实测 0.6–1.7s）。
+- **试过并回退（无实测收益）**：入口第一条 import 做「最早 capture 判定 + composer 分包预取」（同步 `Capacitor.Plugins.App.getLaunchUrl`；插件代理未就绪时入口并行 dynamic import `@capacitor/app`）。资源时间线显示 composer/kernel chunk 的 `startTime` 改造前后都 ≈ **DCL+25ms**（现有 effect 本来就立即预取），**关键路径没有前移** ⇒ 按 AGENTS §3#17 回退，不留无证据的启动期复杂度。
+- **保留一项（真实、低成本）**：capture 会话在 `phase="ready"` 后**跳过内核/小记分包预热**（`captureLaunchedRef` 判定）。否则就绪 4s 后的预热会在用户正在写作时再跑一次 6.1MB 内核加载+实例化（实测 ~1.7s 长任务）打断输入。
+- **结论 / 剩余空间**：capture 业务路径已接近地板（页内启动 0.2s + composer/内核 0.5s，输入 677ms）。再快只能动 native：① WebView 预创建/预加载；② 把 launch intent 作为**同步 hint** 在 WebView 加载前传给 JS（用于提前拉 kernel chunk）；③ 原生 capture 面。空闲机估算 ≤100–200ms、慢机 0.5–1s，但改动面/风险都大 —— **本轮不做，等用户定**。
+- **门禁**：tsc 0 · vitest **293 文件 / 2171 例**（含并行会话在途用例）· 双端构建 ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓。
+- **状态**：未提交/未推送（待用户验收）。
+
+### 261019(九) · dock ⌨ 按钮改**双态图标**（收起 / 展开一眼可分）· **待用户验收**
+
+- **需求（用户点单）**：最右侧 ⌨ 同时承担"收起 / 展开"两种动作、却一直是同一个键盘图标 ⇒ 分不出当前会收还是展。用户给了两个参照（思源「键盘+斜线」/ 语雀「键盘+向下标志」），让我们定。
+- **定稿**：键盘**展开中** ⇒ **`KeyboardOff`（键盘+斜线，思源同款）** + title/aria「收起键盘」；键盘**收起** ⇒ `Keyboard` + 「展开键盘」；面板展开态仍是「收起面板」且图标保持 `Keyboard`（此时键盘本就是收起的，动作是"关面板 + 放回键盘"，用 KeyboardOff 会被读成"再收一次"）。
+- **改法**：[EditorDock.tsx](lake-notes-electron/src/mobile/editor/EditorDock.tsx) 的 `.med-btn--kb` 内按 `keyboardOpen` 二选一；`aria-label` / `title` 继续用既有 `kbLabel`（三态文案不变）。
+- **设备验收（emulator-5554）**：键盘展开（ih 530）实测 `svg.lucide-keyboard-off` + label「收起键盘」；点一下收起（ih 842）⇒ `svg.lucide-keyboard` +「展开键盘」；再点展开 ⇒ 回到 `keyboard-off`。实拍裁图 `.css-audit/mobile-props-261019/{kb-icon-open,kb-icon-closed}.png`。
+- **门禁**：tsc 0 · vitest **292 文件 / 2167 例**（本批 +1 例）· 双端构建 ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓。
+- **护栏**：`dockPanelFocusGuard.test.ts` 增 1 例（KeyboardOff 映射 + aria-label/title）。
+- **状态**：未提交/未推送（待用户验收）。
+
+### 261019(八) · 收面板→键盘的闪烁优化（面板内容保持到被键盘盖住）· **待用户验收**
+
+- **现象（用户报，附录屏）**：二级工具栏（Aa / ＋）收起转键盘输入时「有点闪烁、不够丝滑」；反向（键盘→面板）观感尚可。
+- **取证（设备逐帧，不靠观感）**：`screenrecord` + 30fps 拆帧实测（emulator-5554 / 412×842）：旧实现在点 × 后**立刻**播 `.med-panel-inner` 滑出+淡出（160ms），而输入法真正上来要 ~300ms–1.3s（负载高时更久）⇒ 键盘还在升、面板先变成一块**空白面板**（实测空块约 200ms），随后视口才收缩、键盘盖上来。**不是原生窗口白条**：给 `html/body/#root/.mobile-app` 注红底后该区域仍是面板色 ⇒ 空块来自面板内容的提前退场。
+- **修法**：`useEditSurface` 新增 `closingHold` —— restore 档（× / 点正文 / ⌨）收起时**面板内容保持原样**（`data-open=1`，不播滑出/淡出；`data-closing=1` 只关掉 pointer-events），键盘从面板上方滑上来把它盖住；`keyboardOpen`（视口收缩）后 150ms 再卸载。输入法迟迟不来（硬件键盘 / 焦点失败）时 **1800ms** 放行滑出（2.5s 兜底仍负责最终卸载）。
+- **设备验收**：逐帧 DOM 采样（rAF）—— 收起全过程 `data-open` 保持 `1`、`.med-panel-inner` transform 恒为 identity / opacity 1，直到 `keyboardOpen` 后 150ms 才卸载（实测 t=831ms 视口 530、t≈970ms 卸载）；面板高度与工具栏位置全程不动（56px 工具条 474–530）。实拍：键盘上升时面板内容仍在、被键盘逐行盖住（`.css-audit/mobile-props-261019/{dock-hold-mid,dock-hold-end}.png`）。
+- **护栏**：`dockPanelFocusGuard.test.ts` 新增 1 例（closingHold 置位/失效 + data-open/data-closing + pointer-events 规则）；`mobileLayers` editor-dock.css 257 → **258**。
+- **门禁**：tsc 0 · vitest **292 文件 / 2166 例**（含并行会话在途用例）· 双端构建 ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓。
+- **未改（有意）**：反向（键盘→面板）没动 —— 用户说「看着还行」；要做逐帧对齐得接原生 IME 控制器，单独立项。
+- **状态**：未提交/未推送（待用户验收）。工作区仍有并行会话未提交改动（`mobile/{bitable,board,usheet}` viewer preset、`usePanelDrag`/手势等）—— 验收与提交必须分开。
+
+### 261019(七) · 修「工具栏展开跑到键盘上边」：路由层 transform 把 fixed 包含块改成 layer · **待用户验收**
+
+- **现象（用户报 + 截图）**：文档编辑态点「Aa」/「＋」，面板停在键盘上方（实测面板 **282–562**），下面空 280px；正常应**覆盖键盘让出的区域**（面板 562–842）。
+- **根因（设备实测）**：261019 的路由转场给 `.mobile-route-layer` 加了**常驻** `transform`（+ `will-change: transform`）⇒ `position: fixed` 的包含块从**视口**变成 layer 盒，而 layer 高度 = `--mb-app-h` = 稳定外壳高 − 键盘/面板占用（面板态实测 562，视口 842）。于是 dock 的 `.med-panel`（bottom:0; height:--kb-offset）与 `.med-toolbar`（bottom:--kb-offset）整体上移一个键盘高。**为什么此前没抓到**：面板装置（insert-panel-geometry 等）跑的是小记/首页层（无 transform），只有文档工作区层复现。
+- **修法（最小）**：入场动画播完给工作区层挂 `is-settled` ⇒ `transform:none; will-change:auto`。`useRouteTransition` 新增 `settled`（240ms + 50ms 后置位；出场开始即失效），`MobileApp` 按 `wsSettled` 加类。**入场/出场期间仍保留 transform**（转场与抽屉裁切都依赖它）；出场时 `.is-open` 移除 ⇒ 自动回到 `translateX(100%)` 播出场。
+- **设备验收（emulator-5554 / 412×842）**：面板 `rect=[0,562,412,280]`（bottom=842）· 工具栏 `[0,506,412,56]`（bottom=562）· `layer.transform:none` + `is-settled` 生效。入场实测 80ms 时 `matrix(…,412)`（动画在播），700ms 后 `none`（落定撤掉）。实拍 `.css-audit/mobile-props-261019/dock-fixed.png`（gitignore）。
+- **护栏**：`useRouteTransition.test.ts` 新增 1 例（settled 置位/失效 + CSS 撤 transform + MobileApp 类名）；`mobileLayers` mobile.css 1340 → **1342**（+2，写明 fixed 包含块回视口）。
+- **门禁**：tsc 0 · vitest **291 文件 / 2164 例**（含并行会话在途用例；本批 +1 例 / +2 声明）· 双端构建 ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓。
+- **状态**：未提交/未推送（代码批次待用户验收）。⚠️ 工作区同时存在**并行会话**的未提交改动（`mobile/{bitable,board,usheet}` 只读查看器 preset：`mobileUniverPreset.ts` 等）—— 验收与提交时必须分开，别混作一批。
+
+### 261019(六) · 移动端两处点单：目录行菜单去重复「新建」+ 文档属性适配手机 · **待用户验收**
+
+- **需求（用户点单，附设备截图）**：① 目录行 ⋮ 菜单移除「新建文档 / 新建分组」（行内 ＋ 已有同一份新建清单）；② 属性页面要适配手机。
+- **① 改法**：[NotebookWorkspace.tsx](lake-notes-electron/src/mobile/notebook/NotebookWorkspace.tsx) 的 `treeMenuItems` 删掉 `new-note` / `new-group` 两项与 `onTreeMenuSelect` 的对应分支；创建通道不变（行内「新建子项」＋抽屉工具栏「新建」→ 同一份 5 项清单：文档/分组可建、表格/数据表/画板仍置灰）。菜单只剩「对这一行本身的动作」：重命名 / 设置图标 / 设为常用 / 移动到… / 历史版本 / 属性 / 移入回收站。
+- **② 根因（设备实测，不靠目测）**：`NoteInfoSheet` 内容区 `.minfo` **没有横向内距** ⇒ 实测 `dt.left=0 / dd.right=412 / 操作按钮右缘≈412`，标签与数值/按钮全贴屏幕边，观感像"被裁掉"。修法：`.minfo { padding: 0 var(--mb-page-pad) }`（16px，与 sheet 头部同档）；行密度/字号/分区线不动（分区线随内容一起内缩）。
+- **设备验收（emulator-5554 / 412×842）**：行 ⋮ 实测 **9 项 → 7 项**（新建两项消失、其余逐项一致）；属性页实测 `padding: 0px 16px`、`dt.left=16`、`dd.right=396`、`docScrollW=412`（无横向溢出）。实拍（before/after/菜单）见 `.css-audit/mobile-props-261019/`（gitignore，不入库）。
+- **护栏**：`workspaceMenu.test.ts` 增「行 ⋮ 不再有新建」；新增 `ui/noteInfoSheet.test.ts`（内距必须用 `--mb-page-pad` + 清单必须来自 `core/noteInfo`）；`mobileLayers` mobile.css 1339 → **1340**（+1，写明是补缺失内距）。
+- **门禁**：tsc 0 · vitest **290 文件 / 2161 例** ✓（+1 文件 / +3 例）· 双端构建 ✓ · ui-metrics ✓ · check:core ✓ · check:mobileui ✓ · check:bundle ✓ · `git diff --check` ✓。
+- **AGENTS 合同同步**：§4「移动端入口分工」的行 ⋮ 清单改为「重命名/设置图标/设为常用/移动到…/历史/属性/删除」，并注明新建统一走 ＋。
+- **未跑**：`check:mobilesnap` 6 态 —— 本次改的两个面都**不在 6 态覆盖内**，按 AGENTS §3#21② 只做定点设备验证。
+- **状态**：**未提交 / 未推送**（代码批次待用户验收）。
 
 ### 261019(五) · 小记编辑器冷启动「正在加载编辑器…」闪一下（含长按新建小记）· **待用户验收**
 

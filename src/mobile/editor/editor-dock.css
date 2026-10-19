@@ -82,6 +82,8 @@
 .med-btn.med-aa { font-weight: 700; font-size: var(--lake-font-size-title); }
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
+/* 收起过渡期（restore：键盘从面板上方滑上来）面板内容保持可见，但不再接受点击（见 EditorDock 注释）。 */
+.med-panel[data-closing="1"] { pointer-events: none; }
 .med-panel {
   /* 展开面板：**占住输入法键盘区（键盘不显示）**，工具栏停在它上沿不动（用户 260914 澄清）。
      高度 = --kb-offset（键盘区/键盘上移量，由 EditorDock 实时算），背景不透明，

@@ -65,6 +65,19 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(HOMEPAGE).toMatch(/setNodeIcon\(nb\.id, icon\)/);
   });
 
+  it("目录行 ⋮ 菜单不再放「新建文档 / 新建分组」（261019 用户点单：新建统一走 ＋）", () => {
+    const block = WORKSPACE.slice(WORKSPACE.indexOf("const treeMenuItems"), WORKSPACE.indexOf("const onTreeMenuSelect"));
+    expect(block).not.toContain('id: "new-note"');
+    expect(block).not.toContain('id: "new-group"');
+    // 新建能力没丢：行内 ＋（新建子项）与抽屉工具栏「新建」都还在，且共用同一份 5 项清单
+    expect(WORKSPACE).toContain('aria-label="新建子项"');
+    expect(WORKSPACE).toContain('aria-label="新建" title="新建"');
+    // 菜单只保留「对这一行本身的动作」
+    for (const label of ["重命名", "设置图标", "移动到…", "移入回收站"]) {
+      expect(block).toContain(label);
+    }
+  });
+
   it("工作区胶囊最后一格 = 切换笔记本（261014：原「更多」已无意义）", () => {
     expect(WORKSPACE).toContain('aria-label="切换笔记本"');
     // 胶囊那格「更多」与它的死 prop 都不许回来（编辑在顶栏、新建在抽屉/行内）；

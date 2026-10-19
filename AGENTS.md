@@ -84,7 +84,7 @@ Lake Notes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-
 - **小记预览 = 快路径 + 内核只读兜底**：自研解析器（`src/features/quickNotes/quickNotePreviewParser.ts`）只画纯文字/列表/媒体（**零内核实例**，冷开不受影响）；出现它还原不了的块（表格/代码块/公式/画板/思维导图/日历/日期/表情…）⇒ **整条卡片交给内核只读视图**（`QuickNoteKernelPreview`，`createLakeDocument(host,"viewer",…)` + `IntersectionObserver` 只挂视口内）。判据 = 解析器自己的 `unsupported` 节点（`hasUnsupportedNodes`），**不另立清单**。⇒ 格式覆盖度由内核保证；「+」插入面板 = 内核全量。
 - **小记写作卡工具条 = 用户指定七项**：日期·表情·图片·附件·待办·无序·分隔线（精简掉引用/有序）。唯一来源 `src/features/editor/lakeRuntime.ts` 的 `QUICK_NOTE_TOOLBAR_ITEMS`，顺序由 `quickNoteToolbar.test.ts` 卡住。字符串 id 必须内核有效（**无效 id 会被静默丢弃**）；日期/表情/附件走**自定义工具项类**（`features/quickNotes/quickNoteToolbarWidgets.ts`）；**移动端不提供「展开」**。
 - **内核浮层 portal 到 `body`**（`.ne-overlay-container`）⇒ 移动端要覆盖内核浮层**必须用 body 级选择器**（入口已加 `body.lake-mobile`）。
-- **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏**整条不存在**（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`）、块悬浮手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面固定栏 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示、不能输入）。新增移动端输入能力一律走 dock。
+- **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏**整条不存在**（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`）、块悬浮手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面固定栏 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示、不能输入）。新增移动端输入能力一律走 dock。**收面板→键盘（restore 档）必须让面板内容保持到被键盘盖住**（`closingHold`；提前播滑出/淡出 = 键盘还在升、面板先空一块，261019 用户报「闪烁」）。
 - **移动端有自己的设计与样式层**（`src/mobile/**`，`mb-*` + 移动端 theme）：**不引桌面样式层**，两端 UI 不共享。
 - **目录/知识库节点图标与文内表情输入解耦**：两端各自实现节点选择器与图形；只共享`src/lib/nodeIcons.ts`的目录/编解码与表情数据/最近记录逻辑。移动端节点选择器不得import输入态`EmojiPanel`或使用其`mb-emoji-*`类。**默认资源页**唯一判据`nodeIconPickerMode(nodeType)`：笔记本/分组→图标，所有文档类型→表情；当前保存的资源种类不覆盖这条默认规则。目录图标值仍为≤16字符短串，不改同步字段。
 - **移动端「文档内查找」= 自研一套**（261016 实测定稿）：内核查找面板只随工具栏 `search` descriptor 挂载，而移动端**关掉了工具栏插件** ⇒ 移动端既无面板也无热键。实现 = `src/mobile/editor/MobileFindBar.tsx`（DOM 文本节点扫描 + CSS Custom Highlight API 双高亮 + `n/m`；正文变化自动重扫），**入口 = 工作区顶栏右上角**（工作区胶囊是定稿四格、且不许放搜索）。**桌面不加入口**：内核自带 ⌘F 面板已够用，别再包一层（曾加过、已按用户要求整体回滚）。语义与实测见 `docs/LAKEX-CONTRACT.md` §5.39/§5.40/§5.41。
@@ -92,7 +92,7 @@ Lake Notes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-
   首页胶囊 = **搜索 · ＋ · AI**（整块长按上滑 = 速记；＋ 短按 = 新建面板），排序/视图与云同步在**顶栏右上角**；
   工作区胶囊 = **文档树 · 标签页 · 大纲 · 切换笔记本**（原「更多」已删 —— 编辑在顶栏、新建在抽屉与行内）；
   工作区菜单里**不许再放搜索 / 设置**（设置 = 首页齿轮；搜索 = 首页胶囊，且是全库范围而非"笔记本内搜索"）；
-  目录抽屉 = 笔记本行（**只展示图标 + ＋，不放 ⋮**）+ 每一行 `[⋮][＋]`（行 ⋮ = 新建文档/新建分组/重命名/设置图标/移动到…/历史/属性/删除）；
+  目录抽屉 = 笔记本行（**只展示图标 + ＋，不放 ⋮**）+ 每一行 `[⋮][＋]`（**新建统一走 ＋ / 抽屉工具栏「新建」**；行 ⋮ = 重命名/设置图标/设为常用/移动到…/历史/属性/删除 —— 261019 用户点单去掉「新建文档 / 新建分组」）；
   **笔记本的编辑入口 = 首页「知识库」长按卡片**（重命名 / 设置图标 / 删除笔记本；**不含**新建文档·新建分组，用户明确去掉）；
   长按唯一实现 = `src/mobile/ui/useLongPress.ts`（卡片 10px 取消；目录行 `moveCancelPx:0`），**别再写第二份计时器**。
 
@@ -149,6 +149,9 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 18. **重依赖（内核/usheet/画板）不许进入口静态图**：`HomePage → QuickNotePreview → QuickNoteKernelPreview → lakeRuntime` 一旦静态 import，构建就给入口挂 40+ 条 `modulepreload`（含 1.25MB 内核 CSS），冷启动先拉 + 解析 6.1MB 内核才画首页（实测真首页 **6123 → 533ms**、DCL 3943 → 119ms；改 `lazy()` + Suspense 后 modulepreload 45 → 12；护栏 `quickNoteKernelFallback.test.ts`）。**后台工作一律排到首屏之后**：冷启动那次同步 = 就绪后第一段空闲；内核预热 = 就绪 **4s 后**再排空闲（`requestIdleCallback` 的 timeout 只是上限，实测 2.4s 就回调 ⇒ 必须显式延迟）。判据探针 `scripts/mobile-audit/boot-timeline.mjs`（`--no-idle` 做 A/B）。
 19. **设备级点按一律走 CDP `Input.dispatch*`**（本机模拟器上 `adb shell input tap/swipe` 对两个 App 都不生效、`keyevent` 正常）：坐标取 `getBoundingClientRect()`（页面 CSS px）；手势（长按/上滑）用 `Input.dispatchTouchEvent`（鼠标事件验不出 pointer 长按）。
 20. **容器级手势别用 `setPointerCapture`**：捕获会把 `mousedown/mouseup` 与合成的 `click` **目标重定向到捕获元素** ⇒ 子按钮 `onClick` 全失效（现象 = "点了没反应"，不报错、DOM 正常）。改挂 **window** 的 move/up/cancel 并在抬手/卸载时摘掉；长按过的那一次要**吞掉随后的 click**，短按语义留给条目自己。
+
+### 壳层 / 渲染
+- **`transform` / `will-change: transform` 的祖先会把 `position: fixed` 的包含块改成它自己**（261019 踩到）：路由转场层常驻 transform ⇒ 编辑 dock 的 `.med-panel` / `.med-toolbar` 按 layer 盒（高度 = `--mb-app-h`，面板态只有 562）贴底，面板展开停在键盘上方、下方留空白。**转场播完必须撤掉 transform + will-change**（`is-settled`，见 `useRouteTransition`）；新增会位移的壳层时先确认它没有依赖视口的 fixed 子元素。
 
 ### 装置 / 探针
 21. **写进"引号字符串"的正则，反斜杠会被 JS 吃掉 ⇒ 探针静默失效**（曾静默 3 个月）：一律写**双反斜杠**（`\\(`），改完**必须用一条已知会命中的样本自证**（不能只看"跑通了、结果是 0"）。

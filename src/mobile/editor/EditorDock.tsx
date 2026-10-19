@@ -12,7 +12,7 @@
  *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
+import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { execEditorCommand } from "./execCommand";
 import { useSnapshotUndo } from "./useSnapshotUndo";
@@ -248,7 +248,7 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
    */
   const focusEditorRef = useRef<() => void>(() => {});
   const surface = useEditSurface({ editing, dockRef, restoreFocus: () => focusEditorRef.current() });
-  const { panelMode, renderedPanel, closing, openPanel, closePanel } = surface;
+  const { panelMode, renderedPanel, closing, closingHold, openPanel, closePanel } = surface;
   const usable = surface.kbOffset;
   const keyboardOpen = surface.keyboardOpen;
   const exec = useEditorExec(editor);
@@ -619,13 +619,19 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
             aria-label="重做"
           ><Redo size={19} /></button>
         </div>
-        <button className="med-btn med-btn--kb" onClick={onKbToggle} aria-label={kbLabel}><Keyboard size={19} /></button>
+        {/* ⌨ 两个状态两个图标（261019 用户点单）：键盘展开时 = **收起**（KeyboardOff，思源同款"键盘+斜线"）；
+            键盘收起时 = **展开**（Keyboard）。仅靠同一个键盘图标时用户分不出当前是收还是展。 */}
+        <button className="med-btn med-btn--kb" onClick={onKbToggle} aria-label={kbLabel} title={kbLabel}>
+          {keyboardOpen ? <KeyboardOff size={19} /> : <Keyboard size={19} />}
+        </button>
       </div>
 
-      {/* 展开面板：占住键盘区（键盘不显示），工具栏停在它上沿；关闭过渡期（closing）继续挂载，
-          让键盘上升时那一带仍有面板背景兜着。内容在 .med-panel-inner 里做滑入/滑出。 */}
+      {/* 展开面板：占住键盘区（键盘不显示），工具栏停在它上沿；关闭过渡期（closing）继续挂载。
+          261019(八) 用户报「收面板→键盘 闪烁」：restore 档不能提前播滑出/淡出 —— 键盘是**从面板上方滑上来**的，
+          面板内容保持可见（closingHold）直到被键盘盖住；否则键盘还在上升、面板先变成一块空白（实测约 200ms 空块）。
+          只有输入法迟迟不来时才放行滑出（useEditSurface 的 1800ms 兜底）。 */}
       {(panelMode || closing) && (
-      <div className="med-panel" data-open={panelMode ? "1" : "0"} data-kind={renderedPanel ?? "none"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
+      <div className="med-panel" data-open={panelMode || closingHold ? "1" : "0"} data-closing={closing ? "1" : undefined} data-kind={renderedPanel ?? "none"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
         <div className="med-panel-inner">
           {renderedPanel === "emoji" ? (
             /* 表情：**占满面板区**（输入法式；.med-panel 已是固定高）——不弹浮层、不随内容跳高度。 */

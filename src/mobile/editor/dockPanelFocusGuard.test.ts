@@ -136,6 +136,25 @@ describe("编辑面：单一来源与不变量", () => {
     expect(run, "提交后要等一拍再执行（compositionend 才进得去 history）").toContain("setTimeout");
   });
 
+  it("收面板→键盘：面板内容保持可见到被键盘盖住（261019 用户报「闪烁、不丝滑」）", () => {
+    // 键盘是从面板上方滑上来的；提前播 .med-panel-inner 滑出/淡出 ⇒ 键盘还在升、面板先变空白块（设备实测 ~200ms）
+    expect(SURFACE).toContain("closingHold");
+    expect(closePanel).toContain('setClosingHold(mode === "restore")');
+    expect(SURFACE, "输入法迟迟不来时要放行滑出（1800ms），不能一直静止").toContain("setTimeout(() => setClosingHold(false), 1800)");
+    expect(DOCK).toContain('panelMode || closingHold ? "1" : "0"');
+    expect(DOCK).toContain('data-closing={closing ? "1" : undefined}');
+    expect(read("src/mobile/editor/editor-dock.css")).toContain('.med-panel[data-closing="1"] { pointer-events: none; }');
+  });
+
+  it("⌨ 按钮两个状态两个图标（261019 用户点单：收起/展开要一眼可分）", () => {
+    expect(DOCK).toContain("KeyboardOff");
+    // 键盘展开 ⇒ 动作是收起 ⇒ KeyboardOff；键盘收起 ⇒ 动作是展开 ⇒ Keyboard
+    expect(DOCK).toMatch(/keyboardOpen \? <KeyboardOff size=\{19\} \/> : <Keyboard size=\{19\} \/>/);
+    // aria-label / title 必须继续给当前动作（收起面板 / 收起键盘 / 展开键盘）
+    expect(DOCK).toContain("aria-label={kbLabel}");
+    expect(DOCK).toContain("title={kbLabel}");
+  });
+
   it("hook 必须在早退之前（文档从阅读态切编辑态会崩）", () => {
     // ⚠️ 早退位置必须用"独占一行"的正则来找：源码注释里也提到过这行字，indexOf 会命中注释 ⇒ 假红。
     const dockAt = /\n\s*if \(!editing\) return null;/.exec(DOCK)?.index ?? -1;

@@ -52,6 +52,12 @@ export interface EditSurfaceApi {
   openPanel: (mode: Exclude<PanelMode, null>) => void;
   /** 收起面板的**唯一出口**：restore = 放回输入法（× / 用户点正文）；hide = 只收键盘但留住光标（⌨ 按钮）。 */
   closePanel: (mode?: "restore" | "hide") => void;
+  /**
+   * 收起过渡期是否**保持面板内容原样**（不播滑出/淡出）。
+   * 261019(八)：restore 档必须为 true —— 键盘是**从面板上方滑上来的**，面板内容保持可见直到被键盘盖住；
+   * 提前淡出 = 键盘还在上升、面板先变成一块空白（用户报「闪烁、不丝滑」）。
+   */
+  closingHold: boolean;
   // 几何 / 输入法
   occupation: number;
   kbOffset: number;
@@ -76,6 +82,7 @@ export function useEditSurface(opts: {
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [panelHeight, setPanelHeight] = useState(0);
   const [closing, setClosing] = useState(false);            // 收起过渡：面板已关但占位还没让出（键盘接管前兜着）
+  const [closingHold, setClosingHold] = useState(false);    // 收起过渡期面板内容保持可见（键盘从它上面滑过去；见接口注释）
   const [renderedPanel, setRenderedPanel] = useState<Exclude<PanelMode, null>>("insert");
   /** ⚠️ 面板态必须**同步**写进 ref（守卫/收起在同一 tick 读它）；所有写入统一走 setPanel。 */
   const panelModeRef = useRef<PanelMode>(null);
@@ -86,6 +93,7 @@ export function useEditSurface(opts: {
     if (closeTimerRef.current !== null) { window.clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
     setClosing(false);
     setPanelHeight(0);
+    setClosingHold(false);
   }, []);
   const restoreFocusRef = useRef(restoreFocus);
   restoreFocusRef.current = restoreFocus;
@@ -103,6 +111,14 @@ export function useEditSurface(opts: {
     const t = window.setTimeout(finishPanelClose, 150);
     return () => window.clearTimeout(t);
   }, [closing, keyboardOpen, finishPanelClose]);
+  // restore 档：面板内容**保持到被键盘盖住**（261019(八)）。若输入法迟迟不来（硬件键盘 / 焦点失败），
+  // 1800ms 后放行滑出 —— 实测输入法真正显示/视口收缩可能要 1s+（模拟器负载高时），
+  // 太短会让面板在键盘还在上升时先滑走（= 用户报的那次闪烁）；2.5s 兜底仍负责最终卸载。
+  useEffect(() => {
+    if (!closing || !closingHold || keyboardOpen) return;
+    const t = window.setTimeout(() => setClosingHold(false), 1800);
+    return () => window.clearTimeout(t);
+  }, [closing, closingHold, keyboardOpen]);
   useEffect(() => () => { if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current); }, []);
 
   const suppressIme = useCallback(() => suppressImeNow(true), []);
@@ -119,6 +135,7 @@ export function useEditSurface(opts: {
   const closePanel = useCallback((mode: "restore" | "hide" = "restore") => {
     setPanel(null);                                   // 先同步置空 ref（守卫读它）
     setClosing(true);
+    setClosingHold(mode === "restore");               // restore = 键盘从面板上方滑上来 ⇒ 内容保持到被盖住
     if (mode === "restore") { restoreIme(); restoreFocusRef.current(); }   // ×/点正文：把键盘放回来
     else suppressIme();                                                    // ⌨：只收键盘、光标留住
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
@@ -170,5 +187,5 @@ export function useEditSurface(opts: {
     };
   }, []);
 
-  return { panelMode, renderedPanel, closing, panelHeight, openPanel, closePanel, occupation, kbOffset, keyboardOpen, keyboardHeight, suppressIme, restoreIme };
+  return { panelMode, renderedPanel, closing, closingHold, panelHeight, openPanel, closePanel, occupation, kbOffset, keyboardOpen, keyboardHeight, suppressIme, restoreIme };
 }

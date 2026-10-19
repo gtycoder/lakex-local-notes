@@ -72,6 +72,7 @@ export function MobileApp() {
   const {
     mounted: wsMounted,
     open: wsOpen,
+    settled: wsSettled,
     close: closeWorkspace,
     homeRef: routeHomeRef,
     wsRef: routeWsRef,
@@ -236,6 +237,9 @@ export function MobileApp() {
   // 只点燃不保留实例（见 kernelPrewarm.ts 头注释：内核有模块级单例，不做实例池/移交）。
   useEffect(() => {
     if (phase !== "ready") return;
+    // 快捷 capture 会话：composer 分包已在（写作卡就是内核卡片）、内核实例已由它创建 ⇒ 不再额外预热，
+    // 否则就绪 4s 后会再跑一次 6.1MB 内核加载+实例化（实测 ~1.7s 长任务）来打断正在写作的用户。
+    if (captureLaunchedRef.current) return;
     scheduleKernelPrewarm();
     // 小记编辑器分包提前预取（只拉分包/不实例化）：冷启动后很快点「编辑/新建小记」不再闪加载页
     scheduleComposerPrewarm();
@@ -372,7 +376,7 @@ export function MobileApp() {
         />
       </div>
       {route.kind === "notebook" && wsMounted && (
-        <div className="mobile-route-layer mobile-route-layer--workspace" ref={routeWsRef}>
+        <div className={"mobile-route-layer mobile-route-layer--workspace" + (wsSettled ? " is-settled" : "")} ref={routeWsRef}>
         <Suspense fallback={
           <div className="mobile-route-skeleton" aria-busy="true" aria-label="正在打开">
             <span className="mb-skel mb-route-skeleton__title" />

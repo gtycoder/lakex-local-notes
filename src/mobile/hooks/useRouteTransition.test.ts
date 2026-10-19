@@ -33,6 +33,14 @@ describe("路由转场（261019，对齐语雀 push）", () => {
     expect(HOOK).toContain("aria-hidden");
   });
 
+  it("入场播完撤掉 transform（fixed 包含块回到视口；261019 用户报面板停在键盘上方）", () => {
+    expect(HOOK).toContain("setSettled(true)");
+    expect(HOOK).toContain("setSettled(false)");
+    expect(HOOK).toMatch(/routeTransitionMs\(prefersReducedMotion\(\)\) \+ 50/);
+    expect(APP).toContain('wsSettled ? " is-settled" : ""');
+    expect(CSS).toMatch(/\.mobile-route-stage\.is-open \.mobile-route-layer--workspace\.is-settled \{\s*transform:\s*none;\s*will-change:\s*auto;/);
+  });
+
   it("CSS：新页 100%→0、旧页 25% 视差、240ms 令牌、reduced-motion 关闭", () => {
     expect(CSS).toMatch(/\.mobile-route-stage\s*\{[^}]*overflow:\s*hidden/);
     expect(CSS).toMatch(/\.mobile-route-layer\s*\{[^}]*transition:\s*transform var\(--lake-motion-slow\)/);

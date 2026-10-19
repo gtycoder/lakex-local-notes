@@ -939,6 +939,10 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   height: 100%;
   width: 100%;
 }
+/* 文档属性（NoteInfoSheet）内容区：与 sheet 头部同一档页面内距。
+   261019 用户报「属性页面不适配手机」：此前 .minfo 没有横向内距 ⇒ 标签贴左、数值与按钮贴右，
+   看起来像被裁掉（实测 dt.left=0 / dd.right=412，整块贴屏幕边）。这里只补内距，行密度不动。 */
+.minfo { padding: 0 var(--mb-page-pad); }
 .minfo-rows { margin: 0; }
 .minfo-rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 34px; padding: 5px 0; font-size: var(--lake-font-size-small); }
 .minfo-rows dt { flex: none; color: var(--lake-text-3); }
@@ -980,6 +984,12 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 @media (prefers-reduced-motion: reduce) { .mobile-route-layer { transition: none; } }
 .mobile-route-stage.is-open .mobile-route-layer--home { transform: translateX(-25%); }
 .mobile-route-stage.is-open .mobile-route-layer--workspace { transform: translateX(0); }
+/* 261019(七) 修复：入场播完**撤掉工作区层的 transform / will-change** —— 这两者都会把 position:fixed
+   的包含块从「视口」改成 layer 盒，而 layer 盒高度 = --mb-app-h（面板期 = 稳定外壳高 − 键盘/面板占用，
+   实测 562）。于是编辑 dock 的 .med-toolbar / .med-panel 被钉在 562（键盘上方）、下方留 280 空白
+   （用户报「工具栏展开跑到键盘上边」）。settled 后层不再位移 ⇒ 撤掉；进场/出场仍保留 transform
+   （转场与抽屉裁切都依赖它），关闭时 is-open 移除即恢复 translateX(100%) 播出场。 */
+.mobile-route-stage.is-open .mobile-route-layer--workspace.is-settled { transform: none; will-change: auto; }
 
 /* ===== 按压反馈统一（261019，对齐思源：80ms 过渡 + 轻缩放）=====
  * 底色/颜色过渡走 --mobile-duration-press（80ms）；只有紧凑条目加 scale(.98)，
