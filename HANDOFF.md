@@ -5,11 +5,11 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接（261017 → 261016）
+## 0. 最新交接（261019 → 261017）
 
-> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节只保留最新 1–2 批（261017 / 261016）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
+> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节保留最新批次（261019 / 261017）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **261017 最新基线**：代码 review（CODE-REVIEW-261015）**全部结案**；HEAD 见 git log（261017 收尾）；门禁 276 文件 / 2098 例（新增 §0(十七) 后为 280 文件 / 2128 例）；C3-2 / C3-5 / C1-6 / D2 / D3 / D5 / D7 均已完成；**S3 配置导入导出（文件为主 + 迁移码备用）已实现，待验收，见 §0(十七)**。
+> **261019 最新基线**：移动端 5 个批次已提交并推送 master（`ae757584`）—— 首页原生横向分页 / 路由转场+按压反馈 / 阅读动效+骨架 / 知识库「常用」+删除最近文档 / 小记加载壳+性能+返回键+关闭全部+偶发空白修复；门禁 **289 文件 / 2158 例**。前一条 261017：代码 review 全部结案、S3 配置导入导出已实现待验收（见 §0(十七)）。
 > **⚠️ 261017 历史已重写**：旧 AK/SK 已从 git 历史清除（filter-repo）；旧 commit hash 全部失效，旧克隆/缓存请重新拉取。
 >
 > **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
@@ -18,6 +18,162 @@
 > **下一会话焦点（261012 收尾 → 下一会话，用户定）**：① **移动端文本增强二级面板**（见上）；② **5 项画图插入项解禁**（画板 / 流程图 / UML / 思维导图 / 文本绘图，现为置灰占位；根因与修法见 §3#18）；③ **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；④ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261019(五) · 小记编辑器冷启动「正在加载编辑器…」闪一下（含长按新建小记）· **待用户验收**
+
+- **现象（用户报）**：每次新打开 App，点「编辑小记」（长按新建小记同一条路）都会先闪一个「正在加载编辑器…」页，很快消失。
+- **根因**：`QuickNoteComposer` 一直走 `React.lazy` 懒加载；冷启动没预取 ⇒ Suspense fallback。**而且即使分包已预取，
+  React.lazy 首次渲染仍会抛一次 fallback**（实测仍有 4 帧 / 43–89ms）⇒ 光预取消不掉这一下。
+- **修法**：
+  1. 新增自研加载壳 [quickNoteComposerLazy.tsx](lake-notes-electron/src/mobile/home/quickNoteComposerLazy.tsx)：模块级缓存 + 订阅通知；
+     **预取完成 ⇒ 同一帧同步渲染（零 fallback）**；没赶上则先画写作卡骨架、模块到即替换（不再走 Suspense）。HomePage 与 capture 两处共用。
+  2. `scheduleComposerPrewarm()`：bridge 就绪 effect 里**立即排空闲**预取分包（只 import、不实例化内核；内核预热仍是 4s 独立排期，不合并）。
+  3. 兜底从「正在加载编辑器…」文字页改为 `.mb-composer-skeleton`（写作卡骨架，复用 `mb-skel`）。
+- **实测（AVD，三次）**：就绪后 500ms / 1000ms / 2000ms 再点开写作卡，**fallback（骨架）帧均为 0**；打开耗时 0.38–0.98s，
+  差异来自"内核首次实例化是否已被 4s 预热覆盖"（分包加载已不在关键路径上）。
+- **护栏**：新增 `composerPrewarm.test.ts`；`kernelPrewarm` / `quickNoteCapturePath` / `sharedContent` / `mobileLazyChunks` 的断言同步到新加载壳
+  （仍钉住"分包只走动态 import、内核不进入口 chunk"）。
+- **门禁**：tsc 0 · vitest **287 文件 / 2153 例** ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓；
+  快照因分包/样式预取时机变化改了 `home-doc` 指纹（元素数不变）⇒ **重烤基线**；随后返回键修复又因**重灌夹具产生新文档 id**
+  （`home-doc` 指纹里带文档节点 id，README 已记录）再次重烤，冷启动两次 6 态 0 差异 ✓。
+- **偶发空白修复（同日用户报「从常用进文档偶发一片空白」，重启后无法复现）**：定位到并发恢复 + LRU 淘汰的竞态——
+  `openTab` 里淘汰判据传的是**刚加入的那条 tab 的 id**（`activeNoteId: id`），而恢复历史标签是并发的：用户点开的目标文档先落地后，
+  随后到达的历史标签可能把它当成 LRU **淘汰掉** ⇒ `activeId` 还在、tab 已没了 ⇒ 正文空白/只剩骨架（能否触发取决于历史标签数量与读取完成顺序，
+  所以是偶发）。修：① 淘汰一律保护 `activeIdRef`（当前活动页），不是刚加入的那条；② 自愈——活动页既不在 tabs、也没有在途读取时落到第一个标签；
+  ③ `pendingIdsRef` 记录在途读取，供自愈判断。护栏 `lazyPaneMount.test.ts` 增 1 例。
+  设备复现（给「个人笔记」预置 8 个历史标签，再点常用里的第 9 篇）：修复后 active 正常落在目标文档（多维表内容可见）、panes 稳定 8、无空白。
+- **标签页「关闭全部」（同日用户点单）**：标签页抽屉标题右侧新增「关闭全部」按钮（有标签时才显示，位置在 × 左侧）。
+  点击：清空 tabs、丢弃所有编辑器句柄（防泄漏）、活动页置空、关闭抽屉；localStorage 标签保持随之写为 `[]`。
+  另加 `tabEpochRef` 代际守卫——在途 `readNote` 回来时代际不一致就丢弃，避免"关了又被异步加回来"。
+  设备实测：8 个标签 ⇒ 关闭全部 ⇒ `panes 0` / 空态 / 抽屉关 / 键 `[]`；随后从目录重开一篇 ⇒ `panes 1` 且正文正常。
+  护栏 `closeAllTabs.test.ts`（3 例）；`mobile.css` +12（按钮基样式 + 按压态）；快照 6 态 0 差异。
+- **返回键修复（同日用户报）**：小记写作/编辑中按 Android 返回键会**直接退 App**。修：HomePage 在 composer 非空时往统一返回栈
+  `pushBackHandler` 注册处理器 ⇒ 返回先**关闭写作卡**（与「取消」同语义），效果卸载时自动摘除；排序/「...」/新建面板等浮层仍在上层先消费。
+  设备实测：编辑中按返回 ⇒ composer 关闭、回首页、App 仍在（mCurrentFocus 仍是本应用）。护栏 `composerBack.test.ts`。
+- **仍存在的耗时（如实记录）**：内核**首次实例化**那段仍在（未预热时 0.6–1s；4s 预热后 62–73ms）。想再快只能把内核预热提前，
+  但实测那是一次 ~1.7s 长任务、会砸在首屏交互上（见 `kernelPrewarm.ts` 头注释），本批**没有**动它。
+- **状态**：已提交并推送 origin/master（ae757584）。
+
+### 261019(四) · 移动端知识库改版：**常用**分组（仅设备本地）+ 删除「最近文档」· **待用户验收**
+
+- **用户点单（4 条）**：① 知识库页顶部固定「常用」分组，带三角可收起/展开，展开用与"最近"相同的卡片、多个靠**左右滑动**；② 删除最近访问、手机端**不存**该记录；③ 目录行菜单加「设为常用」；④ **仅手机端**、不同步、不触发 S3、桌面零改动。
+- **实现**：
+  - 新增 [favorites.ts](lake-notes-electron/src/mobile/data/favorites.ts)：本机 `localStorage`（`lake-notes-mobile.favorites` / `.favoritesOpen`）+ 同端内存事件；**不 import bridge / S3 / 同步模块** ⇒ 不触网、不进 manifest、桌面不感知。
+  - [HomePage.tsx](lake-notes-electron/src/mobile/home/HomePage.tsx)：删除「最近文档」（`recentNotes` 派生 + JSX 整体移除），顶部新增「常用」：标题 + 三角按钮（`aria-expanded`，本机持久化展开态），展开为横排纸卡（复用 `.doc-card`，容器 `.home-card-row` 横向滚动）；**没有常用时整个分组不渲染**；卡片只展示仍存在于库里的文档。
+  - [NotebookWorkspace.tsx](lake-notes-electron/src/mobile/notebook/NotebookWorkspace.tsx)：目录行 ⋮ 菜单在「设置图标」之后新增 **「设为常用 / 取消常用」**（Star 图标，**只对文档行**，分组没有），点击写本地 + toast；首页通过事件即时刷新。
+  - 顺带把 `.home-recent` 类名改为 `.home-card-row`（彻底告别"最近"语义）。
+- **「最近访问」存储核查**：手机端**从未持久化**最近访问记录（原「最近文档」= 按 `updatedAt` 现算，不写库）；唯一沾边的本机持久化是**标签页保持**（`lake-notes-mobile.tabs.<notebookId>`，记录打开过哪些 tab），属另一功能，本批未动。
+- **设备验收（lake_mobile / 5554）**：目录菜单「设为常用」两条 ⇒ 首页「常用」2 卡；收起（卡片 0 / aria-expanded=false / 键=0）→ 展开恢复（键=1）；**重启后仍在**；注入 6 个真实文档 id 验证横滑（`scrollWidth 524 > clientWidth 412`，scrollLeft 112）；首页已无「最近文档」；已收藏文档的菜单显示「取消常用」。
+- **用户复验（同日）报「从常用进入文档会闪一下，退出也会」**：CDP screencast 逐帧定位到根因 —— 路由层自身带 transform，
+  而工作区左右抽屉是 `position:fixed + translateX(±100%)`（fixed 因此以 layer 为包含块）；**layer 在 push/pop 整体位移时，
+  off-canvas 的文档树抽屉会探进视口**（实测 push 到 layer x=58 时整块文档树可见，还带着「暂无文档，点右上新建」空态）⇒ 就是那一下"闪"。
+  修法：`.mobile-route-layer { overflow: hidden }`（按 layer 边界裁切）；抽屉正常展开时在 layer 内，不受影响。
+  复测同一流程 screencast：不再出现抽屉/空态帧；文档树仍可正常打开（x=0 / 宽 354）、文档正常加载。
+- **性能追加（用户点单"只优先挂当前文档、其余标签后台加载"）**：
+  - 工作区恢复历史标签时**只挂当前页的正文分量**（`mountedIds`）：历史标签先只读数据/登记、不激活，切到它时才挂（挂过就 keep-alive）；
+  - 恢复顺序改成"**当前文档的 readNote 先发**"，别被其它历史标签的读取拖在队头；
+  - `openNote` 改为**先起转场、再后台 refreshAll**（原先 `await refreshAll()` 挡在 `setRoute` 前 ⇒ 实测点击到 push 多等 ~700ms，观感像"点了没反应"）；
+  - 活动页未挂载期间继续显示骨架（避免 tab 已就绪但正文未挂载时露出空白）。
+  - 设备实测（同一台 5554）：改成初始只挂 **1** 个编辑器（原来恢复 8 个标签会同时起 8 个内核/Univer 实例）；骨架从 ~1s 缩到 **~150–300ms**，点击到内容约 **0.5s**（冷启动首次仍受工作区分包加载影响）。
+  - 护栏：新增 `lazyPaneMount.test.ts` 3 例（挂载集合/渲染条件、历史标签不激活且活动页先读、活动页补挂载与回收）。
+- **门禁**：tsc 0 · vitest **286 文件 / 2150 例** ✓（新增 `favorites.test.ts` 5 例 + `lazyPaneMount.test.ts` 3 例）· ui-metrics / core / mobileui / bundle / diff-check ✓；
+  `mobile.css` 基线 1305→**1316**（+10 = `.home-section__toggle`；+1 = 路由层裁切）；快照基线**重烤**（「最近文档」删除 ⇒ 每态 **-29 元素**；layer 裁切 + 正文懒挂载另改 `home-doc` 指纹、元素数不变），冷启动两次 6 态 0 差异 ✓。
+- **状态**：已提交并推送 origin/master（ae757584）。
+
+### 261019(三) · 移动端阅读动效：顶栏/底栏自动收起 + 转场骨架/正文淡入 · **待用户验收**
+
+- **需求（用户点单下一批）**：① 思源式「阅读时顶栏/底栏自动收起」；② 语雀式「转场骨架 + 内容淡入」（先测白闪）。
+- **② 白闪实测结论**：正文是异步 `bridge.readNote` 读回；**旧文档会一直保留到新内容就绪**（切 tab 不会先白屏再蹦字）。
+  真正会露出空白的两个窗口：**(a) 首次进入工作区**（工作区按需分包，Suspense 兜底原为「加载中…」文字）；**(b) 点到尚未读回的文档**（active 已切、tab 还没进 tabs）。
+  ⇒ 两处都改成**文档骨架**（复用 `.mb-skel` 呼吸），并给刚读回的那一页加 **150ms 正文淡入**（`.doc-pane--fresh`，260ms 后清标记；切回旧 tab 不重播）。
+- **① 实现**：
+  - 新增 [scrollChrome.ts](lake-notes-electron/src/mobile/notebook/scrollChrome.ts)（纯函数判据，单一来源）：顶部 ≤24px 一律展开；**向下累计 ≥24 收起**；**向上累计 ≥12 展开**（回翻更灵敏）；反向滚动清零。
+  - [NotebookWorkspace.tsx](lake-notes-electron/src/mobile/notebook/NotebookWorkspace.tsx)：用**捕获**监听 `.mobile-doc-body` 的滚动（scroll 不冒泡），**只对 kind=doc 且非编辑态**生效；
+    顶栏加 `.mobile-topbar--auto-hidden`（高度 44→0 + margin/padding/border/opacity 过渡 150ms ⇒ 正文自然上移，不改 position），底部胶囊复用既有 `--hidden`；`aria-hidden` 同步；
+    **切文档 / 进出编辑 / 打开任意浮层（目录、标签、大纲、切换笔记本）→ 复位展开**（要操作时导航必须在）。
+  - **删掉旧的 8px 阈值 `navHidden` 监听**（上一版只藏胶囊、无顶栏、阈值过灵）——避免两套判据并存。
+- **设备验收（lake_mobile / 5554）**：注入长内容造滚动（仅测试用，已清理）——
+  下滚 120 ⇒ 顶栏高度 **44→0**、胶囊 `--hidden`、`aria-hidden=true`、正文高度 **790→842**（回收空间）；上滚 40 ⇒ **立即恢复**；回到顶部恢复；
+  **编辑态下滚动不收**（顶栏恒 44，胶囊由既有编辑态逻辑隐藏）。
+- **门禁**：tsc 0 · vitest **284 文件 / 2142 例** ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓；
+  新增 `scrollChrome.test.ts` 4 例（判据 + 接线 + CSS + 骨架/淡入）；`mobileLayers` mobile.css 1272→**1305**、dupGroups 4→**6**（reduced-motion 登记模式，已写理由）；
+  快照基线**重烤**（元素数不变、指纹变化），冷启动连跑**两次 6 态 0 差异** ✓。
+- **状态**：已提交并推送 origin/master（ae757584）。
+
+### 261019(二) · 移动端动效：首页↔工作区**路由转场** + 按压反馈统一（对齐语雀/思源）· **待用户验收**
+
+- **需求**：用户要求先实际体验语雀 / 思源 App，找可借鉴的动效，确认后「都做」= P0 页面转场 + P2 按压反馈。
+- **取证**：
+  - 语雀（真机操作 + 录屏逐帧）：列表点开文档 = **新页自右滑入 + 旧页 25% 视差**，帧时间 1.11s → 1.29s ⇒ **≈200ms**，到位前内容是骨架、随后淡入；返回反向。
+  - 思源（真机操作 + 源码 `_mobile.scss`）：顶/底栏滚动收起用 `translate3d(0, var(--mobile-bar-translate-y),0)` + `opacity` + `will-change`；
+    底栏条目 `:active { transform: scale(.92) }`、80ms ease；抽屉/弹层 150ms `cubic-bezier(0,0,.2,1)`（我们已是 150ms 口径，**不动**）。
+- **落地**：
+  - 新增 [useRouteTransition.ts](lake-notes-electron/src/mobile/hooks/useRouteTransition.ts)（状态机 + 单一来源）：工作区**按需挂载**、出场播完才卸载；
+    首页层**常驻**（页栈语义 ⇒ 返回时列表滚动/数据都在）；非活动层 `inert` + `aria-hidden`；`prefers-reduced-motion` 下等待 0ms。
+  - `MobileApp`：路由区改两层 `.mobile-route-stage / .mobile-route-layer`；返回统一走 `closeWorkspace`（**顶部返回按钮与 Android 硬件返回键同一条路**）。
+  - [mobile.css](lake-notes-electron/src/mobile/mobile.css)：新页 `translateX(100%)→0`、旧页 `0→-25%`，240ms = `--lake-motion-slow` + `--lake-ease-standard`；
+    reduced-motion 关闭位移。按压反馈统一：底色/颜色过渡 80ms（`--mobile-duration-press`）+ **紧凑条目** `scale(.98)`（整行列表只做底色，整行缩放不采用）。
+  - 护栏 [useRouteTransition.test.ts](lake-notes-electron/src/mobile/hooks/useRouteTransition.test.ts) 4 例（时长/0ms、MobileApp 接线、hook 语义、CSS 位移与降级）；
+    `mobileLayers` mobile.css 基线 1253 → **1270**（+17；dupGroups 3 → 4 = `.mobile-route-layer` 在 reduced-motion 里关 transition，沿用 `.mb-skel` 的无障碍登记模式）。
+- **设备验收（lake_mobile / 5554）**：push 后首页层 `matrix(...,-103,0)`（= 25%×412）+ `inert=true`；返回（点按 / 硬件键）出场播完层数 2→1、首页 transform 复位；
+  写作卡仍在首页层内（`inHome=true`）且 tab 横滑锁定不回归；设置抽屉 / 新建面板 / 返回键均正常。
+- **设备快照门禁（已重烤）**：首页常驻 ⇒ `home-doc` 1880 → **2019**（+139 = 首页被盖住但仍在 DOM），其余态 +2（路由两层）；
+  重烤 `scripts/mobile-audit/baseline/mobile-snap.json`，冷启动连跑 **两次 6 态 0 差异** ✓。
+- **门禁**：tsc 0 · vitest **282 文件 / 2136 例** ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓。
+- **用户复验（同日）抓出两处问题，已在同批修掉**：
+  1. **多维表页面透出首页卡片**：工作区层原本透明，而首页层常驻在它下面 ⇒ 表格/多维表页面内部的透明容器
+     （`.mobile-bitable` / `.mbt-grid-wrap` / `TABLE` 都是透明底）把首页卡片透出来。修：
+     `.mobile-route-layer--workspace { background: var(--lake-bg-canvas) }`（与多维表/表格 canvas 同一令牌，暗色主题同源）。
+  2. **表格页底部重叠**：Univer 自带底部工具条（工作表标签 / 缩放 / 求和，**实测 36px**）贴着屏幕底，
+     工作区胶囊把「Sheet1」压住。修：`active.kind === "usheet"` 时给胶囊加 `.mobile-bottom-bar--above-sheet`，
+     `bottom` 增加令牌 `--mobile-sheet-bar-h: 36px`（不写魔法数字）；实测胶囊 y 718–774、Univer 底栏自 806 起（32px 间隙）。
+  - 护栏：新增 `sheetBottomBar.test.ts` 2 例 + `useRouteTransition.test.ts` 补「工作区层必须不透明」断言；
+    基线 `tokens` 192→**193**、`mobile.css` 1270→**1272**；快照基线因 `home-doc` 指纹变化（元素数不变）**再次重烤**并冷启动两次 0 差异。
+- **未做（有意）**：语雀式"转场时先画骨架再淡入"（P1，需先测我们打开文档是否有可感知白闪）；思源式顶/底栏滚动收起（P1，涉及 dock/键盘互斥，另立项）。
+- **状态**：已提交并推送 origin/master（ae757584）。
+
+### 261019 · 移动端首页切换改**原生横向分页**（对齐语雀；含写作中误滑丢草稿修复）· **待用户验收**
+
+- **同一轮解决两件事**：① 用户报「写小记时不小心左右滑了一下就切 tab」（写作卡被清 = 草稿丢失）；② 用户给语雀 App 录屏，要求「切换太硬，模仿一下」。
+- **取证**：
+  - 录屏（1220×2656 / 24.3fps / 11.4s）逐帧：两页**并排整体横移**（不是单页淡入/瞬切），约 0.6–0.7s 平滑落位；
+  - 语雀 APK（`assets/index.jsbundle`，Hermes）字符串含 `react-native-tab-view` / `react-native-pager-view` / `swipeEnabled` / `onPageSelected`
+    ⇒ 形态 = **原生 ViewPager2 跟手分页**（手指拖动跟手、松手吸附）。
+  - 旧实现 = 自研 document 级 `touchstart/move` + 60px 阈值**到点即切**（无跟手、无吸附）= "太硬"；且切 tab 会触发父级 `useEffect([tab])` 清掉 composer。
+    实测中招点不是正文（`contenteditable` 本就被排除），是**写作卡正文下沿到按钮之间的空白区**（100+px，y≈289–393）。
+- **实现**：
+  - `HomePage.tsx`：舞台改**两页常驻**的横向滚动容器（`.mobile-tab-pane` ×2），不再按 tab 条件渲染、不再 `key={tab}`；
+    `scrollend`（+120ms 去抖兜底）把页码回写成 tab；tab 变化 → `scrollTo(smooth)`；宽度变化（ResizeObserver）立即重对齐；
+    非活动页 `inert`；`prefers-reduced-motion` 下改为 `auto`。
+  - 新增 [tabPager.ts](lake-notes-electron/src/mobile/home/tabPager.ts)（纯函数：`tabIndex / tabAt / pagerScrollLeft / settledIndex`，四舍五入 + 夹紧）——
+    判据单一来源，DOM 交互只在 HomePage。
+  - [mobile.css](lake-notes-electron/src/mobile/mobile.css)：`.mobile-tab-stage` = `overflow-x:auto` + `scroll-snap-type:x mandatory` + `overscroll-behavior-x:contain`；
+    `.mobile-tab-pane` = 100% 宽 + `scroll-snap-align:start` + `scroll-snap-stop:always`。
+  - **删除** 上午那版 `useHorizontalSwipe`（已被分页取代；`data-prevent-swipe` 仍服务抽屉手势 / 弹层右滑关闭）。
+- **三个实测坑（修法均已验证）**：
+  1. **ResizeObserver 不能每次 tab 变化重新 `new/observe`**：observe 会立刻回调一次，紧跟 smooth 之后执行 `auto` 对齐 ⇒ 点 tab **瞬跳**（实测 scrollLeft 直接 412→0）。改为独立 effect 只挂一次。
+  2. **`.mobile-scroll` 的两轴 `overscroll-behavior: contain` 会吃掉横向手势链**：内层竖滚容器把"向左翻页"吃掉（实测负向手势完全不翻页、无 scroll 事件）。
+     改为**只收纵向** `overscroll-behavior-y: contain`（纵向语义不变；舞台自己 `-x: contain` 防浏览器返回手势）。
+  3. **写作锁不能只写舞台 `touch-action`**：touch-action 只按"最近滚动容器"取交集，内层 `.mobile-scroll` 才是最近容器 ⇒ 横向手势照样链上去翻页
+     （实测锁定时左滑仍切走 + composer 被清）。锁定态 = 舞台 `overflow-x:hidden` **+ 内层 `.mobile-scroll` 也 `touch-action:pan-y`**。
+- **用户复验反馈（261019 二次）**：「动效有了，但顶部切换有点慢，会瞬时出现"页面已经是小记、标签着重的还是知识库"」。
+  修法（同一批内收口）：**① 回写时机从 `scrollend` 改为"滚动过半即回写"**（标签始终跟多数可见页，不再等吸附结束）；
+  **② 程序化滚动期间压住回写**（`programmaticRef`：点 tab / 宽度重对齐的动画开头 `scrollLeft` 仍靠近旧页，
+  实测会把标签弹回旧页再跳回来）；**③ 触摸期间不做程序化对齐**（`interactingRef`，避免跟手指抢滚动）。
+  实测：点 tab 标签**立即**正确且全程不回弹；手势翻页（右滑）在手势结束前标签已切到目的小记。
+- **设备验收（lake_mobile / 5554 / 412×842；原生滚动用 `Input.synthesizeScrollGesture`）**：
+  - 左滑 260px ⇒ 412 / 知识库；右滑 260 ⇒ 0 / 小记；**短滑 120/160/200px（未过半、无惯性）⇒ 吸附回原页**；过半 260 ⇒ 翻页；
+  - 点顶部「知识库」⇒ scrollLeft 平滑曲线 `0→1→7→19→38→64→96→134→175→218`（≈300ms），不再瞬跳；
+  - 页面纵向滚动正常；两页 `inert` 正确切换；
+  - **写作中**：`locked=true`（overflow-x hidden / pan-y），左滑、右滑都留在「小记」、composer 仍在（修复前：左滑 = 切走 + 草稿被清）；点「取消」后横滑恢复翻页。
+- **设备快照门禁（已重烤）**：两页常驻 ⇒ 首页/设置态构成变化（home-library 1791→**1843**、home-quicknotes 1800→**1843**、home-library-list 1767→**1819**、
+  home-doc 1880、settings 1878→**1921**、settings-appearance 1827→**1870**）⇒ 按 §3#21③ **重烤基线**（`scripts/mobile-audit/baseline/mobile-snap.json`），
+  冷启动连跑 **两次 6 态 0 差异** ✓。（`lake_gate` / 5556 / CDP 9336；夹具 5 文档 + 4 小记。）
+- **门禁**：tsc 0 · vitest **281 文件 / 2132 例** ✓（tabPager 3 例 + 首页分页护栏 1 例替换原横滑断言）· 双端构建 ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓ ·
+  `mobileLayers` mobile.css 基线 1235→**1253**（+18，分页交互形态新增，已写明理由）。
+- **装置知识（已入库）**：`scripts/mobile-audit/README.md` 新增「原生滚动 / 横向分页的 CDP 验证」——
+  `Input.dispatchTouchEvent` 只到 JS、不驱动原生滚动；原生滚动用 `Input.synthesizeScrollGesture`（复核"未过半吸附"要 `preventFling:true`）。
+- **状态**：已提交并推送 origin/master（ae757584）。
 
 ### 261017(十七) · S3 配置导入导出（文件为主；桌面 → 手机）· **待用户验收**
 

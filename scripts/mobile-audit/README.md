@@ -103,6 +103,22 @@ node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/keyboard-toggle.mjs
 > 会被 IME 过渡里失真的 `innerHeight` 污染（几何上看不出来）。**改 `viewportShell`/`useKeyboard` 时必须连同
 > `edit-surface-invariants.mjs` 一起跑**（那是它的下游地基）。
 
+## 原生滚动 / 横向分页的 CDP 验证（261019 实测）
+
+动首页横向分页（小记 ↔ 知识库）、或任何"靠浏览器原生滚动"的交互时，验收姿势不一样：
+
+- **`Input.dispatchTouchEvent` 只把事件送进 JS**（自研 touch 手势能测到），**不驱动浏览器原生滚动** —— 页面 `scrollLeft` 恒 0，别据此判"没生效"。
+- 原生滚动/分页用 **`Input.synthesizeScrollGesture`**（`gestureSourceType:"touch"`）：
+  `xDistance` 正 = 往**上一页/左**滚，负 = 往**下一页/右**滚；`yDistance` 负 = 向下滚。
+- 带惯性（`preventFling:false`）时"短距离高速滑"也会翻页 ⇒ **复核"未过半吸附回原页"必须用 `preventFling:true`**
+  （实测 120/160/200px 吸附回、260px 翻页；`preventFling:false` 时 120px 也会翻）。
+- ⚠️ **手势被吃掉的两类原因**（本轮都实测踩到）：
+  1. 内层滚动容器的**两轴** `overscroll-behavior: contain` 会掐断横向滚动链 ⇒ 只写 `overscroll-behavior-y: contain`；
+  2. `touch-action` 只取"**最近滚动容器**"的交集 —— 在远处祖先写 `pan-y` 挡不住内层把横向手势链上去；
+     要锁横滑就锁**最近容器**（或直接 `overflow-x: hidden`）。
+- 模拟器上 **`adb shell input tap/swipe` 与 `sendevent` 对本 App 都无效**（只有 CDP `Input.dispatch*` 有用）；
+  原生滚动的"跟手"性质属于浏览器默认行为，验证到"容器可滚 + 吸附 + 页码回写"即可，别硬造手势。
+
 ## 环境（260923 实测可用）
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
