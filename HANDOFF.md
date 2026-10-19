@@ -9,7 +9,7 @@
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节保留最新批次（261019 / 261017）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
-> **261019 最新基线**：移动端批次已推送 master —— `ae757584`（主页分页 / 转场+按压 / 动效+骨架 / 常用 / 小记加载壳等 5 批）+ **本轮收口 `§0(六)～(十一)`**（目录菜单去重 + 属性适配 / 转场落定修 fixed 包含块 / 收面板→键盘动效 / ⌨ 双态图标 / capture 预热收口 / native hint 原型已回退）；**提交树门禁 290 文件 / 2164 例**（条目里 291–293 是并行会话在途用例的工作区口径）。前一条 261017：代码 review 全部结案、S3 配置导入导出已实现待验收（见 §0(十七)）。
+> **261019 最新基线**：移动端批次已推送 master —— `ae757584`（主页分页 / 转场+按压 / 动效+骨架 / 常用 / 小记加载壳等 5 批）+ **本轮收口 `§0(六)～(十一)`**（目录菜单去重 + 属性适配 / 转场落定修 fixed 包含块 / 收面板→键盘动效 / ⌨ 双态图标 / capture 预热收口 / native hint 原型已回退）；**提交树门禁 290 文件 / 2164 例**（条目里 291–293 是并行会话在途用例的工作区口径）。随后 **`ef7888fa`（多维表/存储 review）+ `a33bc093`（移动端正文文件化）已推 master**；提交树 **305 文件 / 2224 例（16 skip）**。前一条 261017：代码 review 全部结案、S3 配置导入导出已实现待验收（见 §0(十七)）。
 > **⚠️ 261017 历史已重写**：旧 AK/SK 已从 git 历史清除（filter-repo）；旧 commit hash 全部失效，旧克隆/缓存请重新拉取。
 >
 > **在途（未完成）**：~~移动端文本增强面板（字号 / 字色 / 背景色 / 对齐 / 链接）~~ **已完成（261012 移动端批，见下）**；
@@ -19,6 +19,24 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261019(十三) · 多维表/存储 review 修复（桌面）· 已提交 `ef7888fa`、已推送
+
+- **P1 真 bug**：渲染层对没有 Lake 实例的文档也传 `caches={markdown:null,plain:null}` ⇒ `Store.saveNote` 直接采用，把 `text_cache` / FTS 正文清空（多维表/表格/画板保存后记录正文搜不到）。修：**非 doc 一律按 kind 派生缓存**；护栏 `store.test.ts`（渲染层真实 caches 形态 + 搜索命中）。
+- **P2 数据安全**：多维表正文解析失败（文件损坏 / 版本不兼容）此前静默显示默认空表，继续编辑会覆盖原文。修：挂载时判定 ⇒ **只读 + `.tab-gone-banner` 横幅**（复用既有原语）+ 全部写入口关闭；护栏行为用例。
+- **历史快照命名**：新快照 `.lake.gz` → **`.body.gz`**（所有 kind 都是正文原文 gzip；旧文件仍按 `note_history.file_path` 读取，不迁移/不改名）；HISTORY-DESIGN / S3-GC / STORAGE-LAYERS / ARCHITECTURE 同步。
+- **文档核对**：S3 正文键 `objects/{noteId}-{contentHash}.lake`；本地目录补 `usheets/bitables/boards/history`；L3 补登 5 个 `bitable-*` localStorage 键与 `notes.md_cache/text_cache` 派生口径；kind 列表 `sheet` → `usheet`。
+- 门禁：tsc 0 · 全库 vitest · ui-metrics / check:core / check:mobileui · 双端构建。
+
+### 261019(十四) · 移动端正文文件化（与桌面同构：BodyStore + gzip 历史 + 小记/草稿）· 已提交 `a33bc093`、已推送
+
+- **口径（用户 261019 定稿）**：开发阶段数据可删；文档 / 小记 / 历史 / 草稿全部落文件，SQLite 只留元数据、hash、同步账本与**派生**缓存；旧库（`notes.content`）检测后**整库重置一次**，不做逐篇迁移。
+- **原生 BodyStore**（`BodyStorePlugin.kt`）：原子写（tmp+fsync+rename）、UTF-8 读写、删除 + 空目录 prune、**原生 gzip 快照**、路径防穿越；MainActivity 注册。TS `bodyStore.ts` 原生/内存双后端——**浏览器预览（mobile-preview）是内存，刷新即丢，只用于看 UI**。
+- **目录与桌面同构**（`src/core/noteBodyPaths.ts` 单一来源）：`notes/ usheets/ bitables/ boards/ quick-notes/items/ quick-notes/assets/ note-assets/ history/*.body.gz draft-journal/`；AssetServer 与 assetFs 把 URL `/quick-notes/{id}/{file}` 映射到 `quick-notes/assets`。
+- **数据层**：noteRepository / syncDbPort（正文先文件后 DB；批窗口守卫前移到写文件前，**并同步丢弃被推迟笔记的 sync_base 语句**；墓碑透传 kind）/ searchIndex（text_cache 优先、缺失读文件）/ historyRepository（gz + refs_json + protected_until，清理尊重保护窗口）/ quickNotesRepository（`.qnote` + draft 文件 + 旧稿清理）/ quickNotesDbPort（可注入 bodyFs；失败回滚正文）/ trash purge 删除正文与历史文件。
+- **设备验收（新 AVD `lake_body` / emulator-5558，独立于并行会话）**：文档/小记/图片/历史 gz（magic **1f 8b**）落盘；SQLite 三表**无 content 列**；大正文 2.75MB 保存 ~1.2s；软删保留正文、purge 删除正文+历史；重启持久化；**旧库加回 content 列 → 重启自动重置**（列消失/数据清零/旧文件清空）；capture 草稿 `draft-journal/*.json` + 杀进程重启自动恢复。
+- **设备测试中发现并修**：`purgeQuickNote` 直接删未进回收站的小记会撞 `deleted_at NOT NULL`（SQL 加 COALESCE 兜底）。**遗留观感**：小记 purge 后 `quick-notes/assets/{id}/` 空目录残留（BodyStore 会 prune 正文目录，图片走 Filesystem 不 prune）。
+- **未做**：真机复验；与真实 S3 的双端同步设备对拍（未用用户云配置，避免误同步/GC）。`MOBILE-TECH-STACK` 本批**未动**（并行会话有在途改动）；正文文件化口径已写进 `AGENTS §4` 与 `docs/STORAGE-LAYERS.md`，等并行批次落地后再补该规格文档。
+- 门禁：tsc 0 · 全库 vitest **305 文件 / 2224 例（300 通过 / 16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle ✓ · Android `assembleDebug` + APK ✓。
 ### 261019(十二) · 桌面导出补齐：表格 CSV / 表格 Excel / 画板 PNG·SVG / Word · **未提交（待用户验收）**
 
 - **用户点单**：把导出占位补齐，顺序 = usheet CSV → 画板菜单接线 → usheet Excel → Word。
