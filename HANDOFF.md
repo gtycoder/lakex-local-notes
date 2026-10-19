@@ -37,7 +37,7 @@
 - **设备测试中发现并修**：`purgeQuickNote` 直接删未进回收站的小记会撞 `deleted_at NOT NULL`（SQL 加 COALESCE 兜底）。**遗留观感**：小记 purge 后 `quick-notes/assets/{id}/` 空目录残留（BodyStore 会 prune 正文目录，图片走 Filesystem 不 prune）。
 - **未做**：真机复验；与真实 S3 的双端同步设备对拍（未用用户云配置，避免误同步/GC）。`MOBILE-TECH-STACK` 本批**未动**（并行会话有在途改动）；正文文件化口径已写进 `AGENTS §4` 与 `docs/STORAGE-LAYERS.md`，等并行批次落地后再补该规格文档。
 - 门禁：tsc 0 · 全库 vitest **305 文件 / 2224 例（300 通过 / 16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle ✓ · Android `assembleDebug` + APK ✓。
-### 261019(十二) · 桌面导出补齐：表格 CSV / 表格 Excel / 画板 PNG·SVG / Word · **未提交（待用户验收）**
+### 261019(十二) · 桌面导出补齐：表格 CSV / 表格 Excel / 画板 PNG·SVG / Word · **已提交 `f6390745`、已推送（用户 261019 验收通过）**
 
 - **用户点单**：把导出占位补齐，顺序 = usheet CSV → 画板菜单接线 → usheet Excel → Word。
 - **① usheet CSV（活动工作表）**：core [usheetCsv.ts](lake-notes-electron/src/core/usheetCsv.ts)（BOM+CRLF、显示值 `m`→原始值 `v`、只导有效区域、超限报错）；主进程 `NoteExport.exportUsheetCsv`；新增 IPC `export_table_csv` **按 kind 分派**（bitable 活动数据表 / usheet 工作表）⇒ 渲染层只认一个「导出为 CSV」。
@@ -45,13 +45,15 @@
   - 空工作表 / 空表格**明确报错**，不产出空文件。
 - **② 画板 PNG/SVG**：不另写画布渲染，复用画板内已有 Drawnix 导出（`lakex-drawnix` 的 `saveAsPng/saveAsSvg`，CSP 已放行 data:）。新增 [boardExport.ts](lake-notes-electron/src/features/board/boardExport.ts) 登记表：`BoardEditor` 挂载时登记触发器，菜单动作点开 vendor 导出菜单再点目标格式。**画板没打开 ⇒ 明确提示先打开**；文件落**系统下载目录**（画板工具栏本来就是这种行为）。
   - 坑：等待用 **setTimeout 而非 rAF** —— 隐藏窗口（CDP 依附/最小化）rAF 不触发会把导出 promise 永久挂住。
-- **③ usheet Excel**：core [xlsx.ts](lake-notes-electron/src/core/xlsx.ts) 手写极简 OOXML（复用 `zipArchive` 的 store ZIP，**不加 xlsx 依赖**）：多工作表 / inlineStr / 数值·布尔原生 / 公式 `<f>`+缓存值 / 表名去重与 31 字符上限；行列上限显式报错。IPC `export_usheet_xlsx`。
+- **③ usheet Excel（261019 晚升级：改用 `write-excel-file@4.1.1`，用户确认「接受 oneCellAnchor + 补数字格式/列宽/合并/冻结 + 样式扩展」）**：core [usheetExcel.ts](lake-notes-electron/src/core/usheetExcel.ts) 只做 Univer 快照 → 中立模型（值/公式/数字格式/粗斜下划线删除线/字号/字色/底色/对齐/换行/行高/列宽/合并/冻结/隐藏表照常导出/富文本 `p` 文字/图片引用与锚点），主进程 [usheetXlsxExport.ts](lake-notes-electron/electron/usheetXlsxExport.ts) 解析资产字节（webp 等 sharp 转 png）并调库写 xlsx。**图片两种形态都接**：单元格内图片取 `cell.p.drawings`（锚到本格、尺寸 `docTransform.size`），浮动图片取 `SHEET_DRAWING_PLUGIN`（`sheetTransform.from` + 像素偏移 + `transform` 宽高）；缺失/外链/不支持格式计入 skipped，不阻断导出。依赖只进主进程（`dependencies` 精确锁 4.1.1，+fflate 共 2 个包），core 保持零依赖；旧手写 `xlsx.ts` 已删除（单一实现）。IPC 仍为 `export_usheet_xlsx`，结果新增 `imageCount/skipped`。
 - **④ Word（docx）**：core [docx.ts](lake-notes-electron/src/core/docx.ts) 手写极简 OOXML：H1–H6 / 列表（numbering）/ 引用 / 代码块 / 分隔线 / 基础表格 / 粗斜删除线·行内代码 / 外部链接 / 图片（主进程读本地资产，webp 等用 sharp 转 png，≤600px 宽）。走既有 `export_note`，`NOT_IMPLEMENTED` 已清空。图片缺失计入 skipped 并提示；远程图降级为「[图片] alt」。
-- **已知边界（如实记录）**：Excel 不搬运数字格式/样式（百分比/日期仍是原始值）；Word 不搬运行内 HTML/复杂嵌套/表格样式/页眉页脚（文本不丢，结构降级）；画板导出落下载目录且需画板已打开。
-- **门禁**：新增/相关 vitest **10 文件 55 例** ✓ · 双端构建 ✓ · ui-metrics ✓ · check:core **91 文件 0 违规** ✓ · check:mobileui ✓ · check:bundle ✓ · `git diff --check` ✓；tsc 本批文件 0 错（全库当时被并行会话在途改动染红）· 全库 **305 文件 / 2219 例，4 例失败**（均来自并行会话：quickNotesDbPort ×1 / quickNotesSyncContract ×2 / boardEditorMount ×1）。
+- **已知边界（如实记录）**：Excel 图片为 **oneCellAnchor**（不随列宽缩放）、隐藏工作表/隐藏行列统一导出为可见（库无 API）、公式只写 `<f>` 无缓存值（Excel/WPS 打开重算）、边框与字体族本批不搬运；Word 不搬运行内 HTML/复杂嵌套/表格样式/页眉页脚（文本不丢，结构降级）；画板导出落下载目录且需画板已打开。
+- **门禁**：tsc 0 · 全库 vitest **306 文件 / 2229 例（301 通过 / 5 skip 文件；16 skip 例）全绿** ✓ · 双端构建 ✓ · `dist-electron/main.js` 以 `import "write-excel-file/node"` 外置（主进程 external 从 dependencies 派生）✓ · ui-metrics ✓ · check:core **91 文件 0 违规** ✓ · check:mobileui ✓ · check:bundle ✓ · `git diff --check` ✓。新增测试：核心模型 7 例 + Store 级 xlsx 2 例（真实 zip 解包断言 media/drawing/numFmt/merge/pane/col/公式）。
 - **IPC 基线**：`ipcChannelParity` 119 → **121**（`export_table_csv` / `export_usheet_xlsx`）。
-- **未做**：真实 UI 点按验收（系统目录框无法在自动化里点）；真机打开 Word/Excel 校验；本批代码与文档**均未提交**（与并行会话改动混在同一工作树，提交时需按文件/hunk 分开）。
-- **相关文件**：`electron/{noteExport,store,export,preload.cjs,ipc/registerNotes,webApiServer}.ts` · `src/lib/native.ts` · `src/hooks/useNoteActions.ts` · `src/components/ui/ExportSubmenuItem.tsx`(+test) · `src/features/{board/boardExport,usheet/usheetActiveSheet}.ts` · `src/core/{usheetCsv,xlsx,docx,ooxml}.ts`。
+- **review 补漏（提交前自查）**：CSV 补富文本 `cell.p` 纯文本（与 Excel 共用 `usheetDoc.usheetCellRichText`）；Word 有序列表**每段独立 numId + startOverride**（否则第二段接着上段编号）、表格补 `<w:tblGrid>`（缺了 Word 会报“需要修复”）；Excel 内联 `data:image/webp` 也走 sharp 转 png（原先只转文件）。补测试：CSV 富文本、Word 双有序列表/tblGrid、Excel 三图（含 data URL）。
+- **验收**：用户已用 **Excel + WPS** 打开导出样例（数字格式/粗体底色/列宽/合并/冻结/公式/两张图片）确认无误；真实 UI 点按（系统目录框）未自动化。
+- **未做**：真实 UI 点按验收（系统目录框无法在自动化里点）；Word 真机打开仍建议抽查；边框/字体族未搬运（下一批）。本批已提交 `f6390745`（代码/测试/依赖），HANDOFF 单独一笔 docs commit。
+- **相关文件**：`electron/{noteExport,store,usheetXlsxExport,export,preload.cjs,ipc/registerNotes,webApiServer}.ts` · `src/lib/native.ts` · `src/hooks/useNoteActions.ts` · `src/components/ui/ExportSubmenuItem.tsx`(+test) · `src/features/{board/boardExport,usheet/usheetActiveSheet}.ts` · `src/core/{usheetCsv,usheetExcel,docx,ooxml}.ts` · `package.json`（+write-excel-file 4.1.1）/ `package-lock.json`。
 
 ### 261019(十一) · 快捷 capture「同步 native hint」原型：实测只提前 ~0.1s，**已回退**（无代码变更）
 
