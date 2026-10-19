@@ -402,6 +402,17 @@ describe("目录树操作", () => {
     expect((store as any).searchTextFor(bitable.id, bitable.content).plain).toContain("数据表");
   });
 
+  it("261019 review：多维表保存沿渲染层传来的 caches={null,null} 时，缓存仍按 kind 派生（搜索不丢正文）", () => {
+    const bitable = store.createBitableIn(null, "客户表");
+    const doc = JSON.parse(bitable.content);
+    const primaryFieldId = doc.tables[0].fields[0].id;
+    doc.tables[0].records[0].values[primaryFieldId] = "客户甲唯一词";
+    // 渲染层在没有 Lake 实例（多维表/表格/画板）时正是这个形态；旧实现把它当权威缓存 ⇒ text_cache/FTS 正文被清空
+    store.saveNote(bitable.id, bitable.title, JSON.stringify(doc), { markdown: null, plain: null });
+    expect(store.readNoteCaches(bitable.id).plain).toContain("客户甲唯一词");
+    expect(store.searchNotes("客户甲唯一词").some((hit) => hit.id === bitable.id)).toBe(true);
+  });
+
   it("新建画板：kind=board、正文落 boards/{id}.board.json、空白画布 + 不写卡片专用字段", () => {
     const board = store.createBoardIn(null, "无标题画板");
     const bodyPath = (store as any).notePath(board.id);
@@ -762,6 +773,8 @@ describe("文档历史（快照，纯本地）", () => {
     const list = store.listNoteHistory(id);
     expect(list.length).toBe(1);
     expect(list[0].refCount).toBe(1);
+    // 261019：快照正文含 JSON 类文档（usheet/bitable/board），扩展名用中性的 .body.gz（旧 *.lake.gz 仍按 file_path 可读）
+    expect(list[0].filePath.endsWith(".body.gz")).toBe(true);
     // refs_json 记录图片
     expect(JSON.parse((store as any).db.prepare("SELECT refs_json FROM note_history WHERE id=?").get(list[0].id).refs_json)).toContain("1786123456789_abc12345.png");
     // 同内容再快照 → 24h 防抖跳过
@@ -922,6 +935,7 @@ describe("文档历史（快照，纯本地）", () => {
     const oldContent = "<p>旧版本</p>";
     const oldHash = crypto.createHash("sha256").update(oldContent).digest("hex");
     const gz = zlib.gzipSync(oldContent, { level: 6 });
+    // 261019：故意用旧扩展名，验证历史遗留 *.lake.gz 仍按 file_path 参与清理（新快照是 *.body.gz）
     const oldPath = `history/${id}/2020-01-01-00-00-00-${oldHash.slice(0, 16)}.lake.gz`;
     fs.mkdirSync(path.dirname(path.join(dir, oldPath)), { recursive: true });
     fs.writeFileSync(path.join(dir, oldPath), gz);

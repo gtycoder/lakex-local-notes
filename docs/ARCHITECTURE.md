@@ -82,6 +82,10 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 ├── metadata.sqlite3          # Lake 主数据库（WAL 模式）
 ├── notes/
 │   └── {noteId}.lake         # Lake 文档（含 http://127.0.0.1:19876/{noteId}/{filename} 引用）
+├── usheets/{noteId}.usheet.json      # 表格正文（kind=usheet，Univer IWorkbookData）
+├── bitables/{noteId}.bitable.json    # 多维表正文（kind=bitable，自研 v1 record JSON）
+├── boards/{noteId}.board.json        # 画板正文（kind=board，Drawnix/Plait 场景）
+├── history/{noteId}/*.body.gz        # 历史快照（L3，本地；旧 *.lake.gz 按 file_path 仍可读）
 ├── note-assets/
 │   └── {noteId}/
 │       └── {timestamp}_{random8}.{png|jpg|webp|...}
@@ -120,7 +124,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 
 ```text
 lake-notes/
-├── objects/{contentHash}.lake        # 文档内容（内容寻址）
+├── objects/{noteId}-{contentHash}.lake   # 文档内容（内容寻址；四种 kind 共用，扩展名沿用 .lake）
 ├── assets/{noteId}/{filename}        # 资源（跳过 orphan_assets）
 ├── manifests/
 │   ├── latest.json                   # Lake 当前清单（Manifest V1，260928 重置）

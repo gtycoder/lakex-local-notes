@@ -49,7 +49,7 @@
 ```text
 {workspace}/history/
 ├── {noteId}/
-│   ├── {timestamp}-{contentHash}.lake.gz    # 快照正文（gzip）
+│   ├── {timestamp}-{contentHash}.body.gz    # 快照正文（正文原文 gzip；doc=HTML / usheet·bitable·board=JSON）
 │   └── ...（多份快照）
 └── {noteId2}/...
 ```
@@ -63,7 +63,7 @@
 CREATE TABLE IF NOT EXISTS note_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   note_id TEXT NOT NULL,
-  file_path TEXT NOT NULL,          -- history/{noteId}/{ts}-{hash}.lake.gz
+  file_path TEXT NOT NULL,          -- history/{noteId}/{ts}-{hash}.body.gz（旧 *.lake.gz 仍可读）
   content_hash TEXT NOT NULL,       -- 快照正文 hash（去重）
   created_at TEXT NOT NULL,         -- ISO 时间
   size INTEGER NOT NULL,            -- gzip 后字节
@@ -170,7 +170,7 @@ function extractAssetRefs(content: string): Set<string> {
 ```ts
 // 快照
 createHistorySnapshot(noteId: string, content?: string): void
-  // 读 notes/{noteId}.lake（或传入 content）→ 提取 refs → gzip 存 history/{noteId}/{ts}-{hash}.lake.gz
+  // 读正文（或传入 content）→ 提取 refs → gzip 存 history/{noteId}/{ts}-{hash}.body.gz（旧 *.lake.gz 仍按 file_path 读）
   // 写 note_history（hash 去重：同 hash 跳过）→ 记录 refs_json + ref_count
   // 写后：惰性清理（cleanupHistory 检查该文档超限）
 

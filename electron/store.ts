@@ -9,6 +9,7 @@ import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
+import { noteBodyCandidatePaths, noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import type { AiSettings } from "../src/core/aiProviders.js";
 import { emptyUsheetBody } from "../src/core/usheetDoc.js";
 import { emptyBitableBody } from "../src/core/bitableDoc.js";
@@ -311,10 +312,8 @@ export class Store {
     if (!isSafePathSegment(id)) {
       throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     }
-    if (kind === "usheet") return path.join(this.root, "usheets", `${id}.usheet.json`);
-    if (kind === "bitable") return path.join(this.root, "bitables", `${id}.bitable.json`);
-    if (kind === "board") return path.join(this.root, "boards", `${id}.board.json`);
-    return path.join(this.root, "notes", `${id}.lake`);
+    // 路径规则是两端共享的单一来源（src/core/noteBodyPaths.ts）：移动端落 App 私有 Data 目录下的同名相对路径。
+    return path.join(this.root, noteBodyRelativePath(kind, id));
   }
 
   /**
@@ -330,11 +329,10 @@ export class Store {
 
   /** 该类型是否有独立正文目录（用于「未登记残留」清理时逐个候选路径尝试）。 */
   private candidateBodyPaths(id: string): string[] {
-    const kinds: NoteKind[] = ["doc", "usheet", "bitable", "board"];
-    return kinds.map((kind) => this.bodyPathFor(id, kind));
+    return noteBodyCandidatePaths(id).map((relative) => path.join(this.root, relative));
   }
 
-  /** 正文 → 搜索/缓存文本（按类型分派：doc 走 Lake HTML 解析，usheet 走单元格抽取，bitable v1 只索引标题）。 */
+  /** 正文 → 搜索/缓存文本（按类型分派：doc 走 Lake HTML 解析，usheet 走单元格抽取，bitable 走「表名 + 字段展示值」，board 走形状文字）。 */
   private searchTextFor(id: string, content: string): { markdown: string | null; plain: string | null } {
     const kind = this.kindOf(id);
     // 口径与移动端共用同一来源（src/core/noteSearchText.ts）
@@ -555,9 +553,11 @@ export class Store {
   }
 
   saveNote(id: string, title: string, content: string, caches?: NoteCacheInput): NoteDocument {
-    // 非文档类型的正文不是 Lake HTML：缓存由主进程按类型派生；doc 仍沿用渲染层从内核带来的缓存（不改旧行为）
+    // 非文档类型的正文不是 Lake HTML：缓存**只能**由主进程按类型派生；doc 仍沿用渲染层从内核带来的缓存（不改旧行为）。
+    // 261019 review 实测：渲染层在没有 Lake 实例时也会传 { markdown:null, plain:null }（而非 undefined），
+    // 若直接采用会把 text_cache / FTS 正文清空 ⇒ 多维表/表格/画板保存后正文搜不到。故非 doc 一律忽略入参。
     const kind = this.kindOf(id);
-    this.noteContent.save(id, title, content, caches ?? (kind === "doc" ? undefined : this.searchTextFor(id, content)));
+    this.noteContent.save(id, title, content, kind === "doc" ? caches : this.searchTextFor(id, content));
     // P1-2a：免回读——正文即入参 content（刚写入的同一字符串），不再 readFileSync 全文重读 +
     // IPC 全文回传；轻量 SELECT 只取元数据（无文件 IO）。副作用修正：保存不再误写
     // last_opened_note_id（那是「打开」语义，保存非活动文档不应改「最后打开」记录）。
@@ -753,6 +753,33 @@ export class Store {
   /** D01：导出多维表活动数据表为 CSV（UTF-8 BOM + CRLF，Excel 通用）。 */
   exportBitableCsv(id: string, baseDir?: string): { exportPath: string; rowCount: number; size: number } {
     return this.noteExport.exportBitableCsv(id, baseDir);
+  }
+
+  /** 文档（doc）：导出 Word（.docx，图片内嵌）。 */
+  exportDocxNote(id: string, baseDir?: string): Promise<{ exportPath: string; imageCount: number; skipped: number; size: number }> {
+    return this.noteExport.exportDocxNote(id, baseDir);
+  }
+
+  /** 表格（usheet）：导出指定 / 第一张工作表为 CSV。 */
+  exportUsheetCsv(id: string, baseDir?: string, sheetId?: string): { exportPath: string; rowCount: number; sheetName: string; size: number } {
+    return this.noteExport.exportUsheetCsv(id, baseDir, sheetId);
+  }
+
+  /** 表格（usheet）：导出全部工作表为 Excel（.xlsx）。 */
+  exportUsheetXlsx(id: string, baseDir?: string): { exportPath: string; rowCount: number; sheetCount: number; size: number } {
+    return this.noteExport.exportUsheetXlsx(id, baseDir);
+  }
+
+  /**
+   * 表格类统一 CSV 入口（多维表 = 活动数据表 / 表格 = 指定工作表）：
+   * 渲染层只认「导出为 CSV」，不必再自己判 kind、也不会把表格文档打到多维表导出上。
+   */
+  exportTableCsv(id: string, baseDir?: string, sheetId?: string): { exportPath: string; rowCount: number; size: number; sheetName?: string } {
+    const kind = this.kindOf(id);
+    if (kind === "bitable") return this.noteExport.exportBitableCsv(id, baseDir);
+    if (kind === "usheet") return this.noteExport.exportUsheetCsv(id, baseDir, sheetId);
+    if (!kind) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    throw new AppError("InvalidInput", "该文档不是表格或多维表，无法导出 CSV");
   }
 
   /** D01 续：导出多维表活动数据表为 ZIP（CSV + 附件/图片文件）。 */

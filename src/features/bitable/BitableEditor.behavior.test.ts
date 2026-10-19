@@ -192,6 +192,19 @@ describe("多维表编辑会话行为", () => {
     } finally { document.removeEventListener("keydown", blocked, true); }
   });
 
+  it("正文无法解析：只读兜底 + 警告横幅，不把默认空表写回正文（261019 review）", () => {
+    const change = vi.fn();
+    act(() => root.render(createElement(BitableEditor, { ...props("bad", { content: "{ 不是 JSON", onChange: change }), key: "bad" })));
+    const banner = host.querySelector("[data-bitable-parse-error]");
+    expect(banner?.getAttribute("role")).toBe("status");
+    expect(banner?.textContent).toContain("无法解析");
+    expect(host.querySelector<HTMLButtonElement>(".bt-add-record")!.disabled).toBe(true);
+    // 只读态下即使触发快捷键/卸载（flush）也不得产生保存
+    shortcut("z");
+    act(() => root.render(null));
+    expect(change).not.toHaveBeenCalled();
+  });
+
   it("网格选区用行列索引命中：单击一格四边齐全（AR-F5）", () => {
     act(() => root.render(createElement(BitableEditor, props("a"))));
     selectCell(host);

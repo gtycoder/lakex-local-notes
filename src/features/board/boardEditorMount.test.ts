@@ -122,7 +122,9 @@ describe("画板编辑器护栏", () => {
 
   it("kind=board 端到端接线：noteKind / 正文目录 / 搜索文本 / 主进程新建", () => {
     expect(KINDS).toMatch(/"board"/);
-    expect(STORE).toMatch(/path\.join\(this\.root, "boards", `\$\{id\}\.board\.json`\)/);
+    // 261019：正文路径规则抽到 core 单一来源（桌面 workspace 与移动端 App Data 同构）。
+    expect(STORE).toMatch(/noteBodyRelativePath/);
+    expect(readFileSync(new URL("../../core/noteBodyPaths.ts", import.meta.url), "utf8")).toMatch(/boards/);
     // 搜索文本按 kind 分派：主进程只认 searchTextForKind，具体解析器在共享的 noteSearchText.ts
     // （260928 清掉 store.ts 里已成为死引用的 boardToSearchText/sheetToSearchText/bitableToSearchText）
     expect(STORE).toMatch(/searchTextForKind/);

@@ -12,7 +12,7 @@
 
 > ⚠️ **别把两个「历史」混起来**（261012 用户核对时问到，此处补一条名词区分）：
 > · `manifests/{commitId}.json` = **清单的版本链**（在云端，保留 3 代）—— 用来做 GC 对账与回滚保护，**不是**文档历史；
-> · `history/{noteId}/*.lake.gz` + `note_history` 表 = **文档历史快照**，属 **L3 纯本机**（判据见 `docs/STORAGE-LAYERS.md`
+> · `history/{noteId}/*.body.gz`（261019 前为 `*.lake.gz`）+ `note_history` 表 = **文档历史快照**，属 **L3 纯本机**（判据见 `docs/STORAGE-LAYERS.md`
 >   §分层表与 FAQ）—— **不上传、不进 manifest**，每端独立；
 > · 它与 S3 的唯一关系是本节 §2 第 4 条：**本机**历史引用到的资产（那些字节本就在 S3 上，属文档资产）
 >   在 GC 时被 **best-effort 保护** —— 方向是「别删我引用的」，不是「把我的历史传上去」。

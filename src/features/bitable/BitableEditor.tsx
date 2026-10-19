@@ -16,7 +16,7 @@ import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import {
   ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Copy, Eye, EyeOff, FileUp, GripVertical, ListFilter,
-  Download, Lock, LockOpen, MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Sparkles, Trash2, X,
+  Download, Lock, LockOpen, MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Sparkles, Trash2, TriangleAlert, X,
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
@@ -176,7 +176,14 @@ export interface BitableEditorProps {
   pane?: "left" | "right" | null;
 }
 
-export function BitableEditor({ noteId, content, visible, readOnly, locked = false, focused, pane, onChange, onPreserveDraft, onDirty, onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
+export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp, locked = false, focused, pane, onChange, onPreserveDraft, onDirty, onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
+  /**
+   * 正文无法解析（文件损坏 / 版本不兼容）⇒ **只读兜底 + 横幅**，绝不把它当成"空表"让人继续写。
+   * 261019 review：旧行为 parse 失败会静默换默认表，用户一编辑就覆盖原文（历史/S3 之外没有副本）。
+   * 只在挂载时判定一次：只读态下正文不会被本组件改写，重载走 reloadKey 重新挂载。
+   */
+  const [bodyUnreadable] = useState(() => parseBitableBody(content) === null);
+  const readOnly = readOnlyProp || bodyUnreadable;
   const { doc, docRef, updateDoc, navigateDoc, beginGesture, endGesture, undoEdit, redoEdit } = useBitableSession(
     () => initialDoc(content, chrome ? noteId : null), { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
   );
@@ -1118,6 +1125,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, locked = fal
       )}
 
       <div className="bt-main">
+        {bodyUnreadable && (
+          <div className="tab-gone-banner" role="status" data-bitable-parse-error>
+            <TriangleAlert size={14} aria-hidden="true" />
+            <span>多维表正文无法解析（文件损坏或版本不兼容）：已锁定为只读，不会覆盖原文。请从「历史版本」或云端备份恢复。</span>
+          </div>
+        )}
         {chrome && (
           <BitableViewBar
             views={activeTable.views}
