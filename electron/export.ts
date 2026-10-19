@@ -41,8 +41,8 @@ export interface ExportResult {
   size: number;
 }
 
-/** 已注册但尚未实现的格式 */
-const NOT_IMPLEMENTED = new Set<ExportFormat>(["docx"]);
+/** 已注册但尚未实现的格式（当前为空：markdown / html / pdf / docx 均已实现） */
+const NOT_IMPLEMENTED = new Set<ExportFormat>();
 
 export async function exportNote(store: Store, id: string, format: ExportFormat, baseDir?: string): Promise<ExportResult> {
   if (NOT_IMPLEMENTED.has(format)) {
@@ -55,6 +55,10 @@ export async function exportNote(store: Store, id: string, format: ExportFormat,
     }
     case "html": {
       const r = store.exportHtmlNote(id, baseDir);
+      return { format, exportPath: r.exportPath, imageCount: r.imageCount, skipped: r.skipped, size: r.size };
+    }
+    case "docx": {
+      const r = await store.exportDocxNote(id, baseDir);
       return { format, exportPath: r.exportPath, imageCount: r.imageCount, skipped: r.skipped, size: r.size };
     }
     case "pdf": {

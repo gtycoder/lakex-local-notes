@@ -22,10 +22,15 @@ describe("导出菜单按文档类型拆分", () => {
     expect(SRC).toMatch(/onExportAs\("csv"\)/);
     expect(SRC).toMatch(/onExportAs\("zip"\)/);
     expect(SRC).toMatch(/导出为压缩包（含附件）/);
-    // sheet / board：占位（开发中）
-    expect(SRC).toMatch(/导出为 CSV（开发中）/);
-    expect(SRC).toMatch(/导出为 Excel（开发中）/);
-    expect(SRC).toMatch(/导出为 PNG（开发中）/);
-    expect(SRC).toMatch(/导出为 SVG（开发中）/);
+    // sheet：CSV 已实现（活动工作表）；Excel 仍是占位
+    expect(SRC).toMatch(/onExportAs\("csv"\)/);
+    expect(SRC).toMatch(/onExportAs\("xlsx"\)/);
+    expect(SRC).toMatch(/onExportAs\("docx"\)/);
+    expect(SRC).not.toMatch(/导出为 Word（开发中）/);
+    // board：PNG / SVG 已接线（复用画板内导出）
+    expect(SRC).toMatch(/onExportAs\("png"\)/);
+    expect(SRC).toMatch(/onExportAs\("svg"\)/);
+    expect(SRC).not.toMatch(/导出为 PNG（开发中）/);
+    expect(SRC).not.toMatch(/导出为 SVG（开发中）/);
   });
 });

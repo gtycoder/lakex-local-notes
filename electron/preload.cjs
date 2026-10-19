@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   exportNote: (id, format, baseDir) => invoke("export_note", id, format, baseDir),
   exportBitableCsv: (id, baseDir) => invoke("export_bitable_csv", id, baseDir),
   exportBitableZip: (id, baseDir) => invoke("export_bitable_zip", id, baseDir),
+  exportTableCsv: (id, baseDir, sheetId) => invoke("export_table_csv", id, baseDir, sheetId),
+  exportUsheetXlsx: (id, baseDir) => invoke("export_usheet_xlsx", id, baseDir),
   pickImportCsv: () => invoke("pick_import_csv"),
   pickBackupDir: () => invoke("pick_backup_dir"),
   runWorkspaceBackup: (dir) => invoke("run_workspace_backup", dir),

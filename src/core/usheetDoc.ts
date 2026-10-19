@@ -102,6 +102,19 @@ export function usheetToBody(workbook: UsheetWorkbook): string {
   return JSON.stringify({ kind: USHEET_DOC_KIND, version: USHEET_DOC_VERSION, workbook } satisfies UsheetDoc);
 }
 
+/** 富文本单元格（cell.p）的纯文本：去掉段落/表格/绘图等控制标记，保留换行。CSV / Excel / 搜索共用。 */
+export function usheetCellRichText(cell: UsheetCell | null | undefined): string {
+  if (!isRecord(cell)) return "";
+  const p = (cell as { p?: unknown }).p;
+  if (!isRecord(p)) return "";
+  const body = p.body;
+  if (!isRecord(body) || typeof body.dataStream !== "string") return "";
+  return body.dataStream
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0009\u000b-\u001f]/g, "")
+    .trim();
+}
+
 /** 画板块的判据：Univer 的图片 drawing 一定带这几个字段之一（避免误伤普通对象的 `source`）。 */
 const DRAWING_MARKERS = ["drawingType", "imageSourceType", "drawingId"] as const;
 

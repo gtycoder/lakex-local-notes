@@ -26,6 +26,7 @@ import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
 import { imageFilesFromClipboard, isPureImageClipboard, pasteImageTarget } from "./usheetImagePaste";
+import { registerUsheetActiveSheet } from "./usheetActiveSheet";
 import {
   UNIVER_COMMAND_IDS,
   UNIVER_CONTEXT_MENU_INSERT_PATH,
@@ -311,6 +312,21 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       const canonicalBody = usheetToBody(canonical);
       lastBodyRef.current = canonicalBody;
       instanceRef.current = { ...created, last: canonicalBody };
+      // 导出 CSV 要知道「用户正看着哪张工作表」（本机视图：不写正文、不进 S3）。
+      // 只登记可编辑的实例：历史快照预览也是 usheet，但它的工作表选择不属于当前文档。
+      if (!readOnlyRef.current) {
+        disposables.push({
+          dispose: registerUsheetActiveSheet(noteId, () => {
+            const state = instanceRef.current;
+            if (!state) return null;
+            try {
+              return (state.book as unknown as { getActiveSheet: () => { getSheetId: () => string } }).getActiveSheet().getSheetId();
+            } catch {
+              return null;
+            }
+          }),
+        });
+      }
       disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => scheduleFlush()));
       // 插图入口换成「先上传成资产、再插入资产 URL」——从源头消灭 blob（Univer 默认走 URL.createObjectURL）。
       const commandService = univer.__getInjector().get(ICommandService) as unknown as {

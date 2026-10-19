@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import sharp from "sharp";
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { isSafePathSegment, sanitizeFileName } from "../src/core/storeUtils.js";
@@ -9,6 +10,11 @@ import { mimeTypeForFilename } from "../src/core/assetNaming.js";
 import { ASSET_PORT } from "./assetServer.js";
 import { bitableAttachments, parseBitableBody } from "../src/core/bitableDoc.js";
 import { bitableTableCsv, csvFileNameFor } from "../src/core/bitableCsv.js";
+import { parseUsheetBody } from "../src/core/usheetDoc.js";
+import { usheetSheetCsv } from "../src/core/usheetCsv.js";
+import { buildUsheetXlsx } from "./usheetXlsxExport.js";
+import { collectMarkdownImageSources, markdownToDocx, type DocxImage } from "../src/core/docx.js";
+import { parseLocalAssetUrl } from "../src/core/assetUrl.js";
 import { ZipWriter } from "../src/core/zipArchive.js";
 
 /** 同名附件归档时的去重后缀：a.pdf → a (2).pdf。 */
@@ -90,6 +96,100 @@ export class NoteExport {
     const exportPath = this.uniqueExportFile(base, stem, "csv");
     fs.writeFileSync(exportPath, csv, "utf8");
     return { exportPath, rowCount: table.records.length, size: csv.length };
+  }
+
+  /**
+   * 文档（doc）：导出 Word（.docx）。
+   * 图片：本地资产读盘；webp 等 Word 不稳的格式用 sharp 转 png；图片尺寸用于按比例缩到 ≤600px 宽。
+   * 解析/转换失败的图片不阻断导出，计入 skipped（结果提示里明说）。
+   */
+  async exportDocxNote(id: string, baseDir?: string): Promise<{ exportPath: string; imageCount: number; skipped: number; size: number }> {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    this.assertDocKind(id);
+    const caches = this.ctx.readNoteCaches(id);
+    const markdown = caches.markdown ?? "";
+    if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
+    const images = new Map<string, DocxImage>();
+    for (const src of collectMarkdownImageSources(markdown)) {
+      const ref = parseLocalAssetUrl(src);
+      if (!ref || ref.space !== "note" || ref.staging) continue;
+      if (!isSafePathSegment(ref.noteId) || !isSafePathSegment(ref.filename)) continue;
+      const file = path.join(this.ctx.noteAssetsDir, ref.noteId, ref.filename);
+      try {
+        if (!fs.existsSync(file)) continue;
+        const ext = path.extname(ref.filename).toLowerCase();
+        if (ext === ".png" || ext === ".jpg" || ext === ".jpeg" || ext === ".gif") {
+          const meta = await sharp(file).metadata();
+          if (!meta.width || !meta.height) continue;
+          images.set(src, {
+            bytes: new Uint8Array(fs.readFileSync(file)),
+            extension: ext === ".png" ? "png" : ext === ".gif" ? "gif" : "jpeg",
+            width: meta.width,
+            height: meta.height,
+          });
+        } else {
+          const converted = await sharp(file).png().toBuffer({ resolveWithObject: true });
+          images.set(src, { bytes: new Uint8Array(converted.data), extension: "png", width: converted.info.width, height: converted.info.height });
+        }
+      } catch {
+        // 单张图失败：跳过（result.skipped 会计数并提示），不影响整篇导出。
+      }
+    }
+    const result = markdownToDocx(markdown, (src) => images.get(src) ?? null);
+    const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    const title = sanitizeFileName(titleRow?.title ?? "未命名");
+    const base = baseDir ?? this.defaultExportBase();
+    fs.mkdirSync(base, { recursive: true });
+    const exportPath = this.uniqueExportFile(base, title, "docx");
+    fs.writeFileSync(exportPath, Buffer.from(result.bytes));
+    return { exportPath, imageCount: result.imageCount, skipped: result.skippedImages, size: result.bytes.byteLength };
+  }
+
+  /**
+   * 表格（usheet）：导出某一张工作表为 CSV（UTF-8 BOM + CRLF，Excel 通用）。
+   * 工作表选择：渲染层给了活动 sheetId 就用它，否则回退 sheetOrder 第一张（结果带表名，UI 会明确导的是哪张）。
+   * 空工作表**明确报错**，不产出一个空文件让用户以为成功。
+   */
+  exportUsheetCsv(id: string, baseDir?: string, sheetId?: string): { exportPath: string; rowCount: number; sheetName: string; size: number } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const row = this.ctx.db.prepare("SELECT title, kind FROM notes WHERE id=?").get(id) as { title?: string; kind?: string | null } | undefined;
+    if ((row?.kind ?? "doc") !== "usheet") throw new AppError("InvalidInput", "该文档不是表格，无法导出 CSV");
+    const bodyPath = this.ctx.notePathFor(id);
+    if (!fs.existsSync(bodyPath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    const doc = parseUsheetBody(fs.readFileSync(bodyPath, "utf8"));
+    if (!doc) throw new AppError("InvalidInput", "表格正文为空或无法解析，无可导出的数据");
+    const result = usheetSheetCsv(doc.workbook, sheetId);
+    if (!result.csv) throw new AppError("InvalidInput", `工作表「${result.sheetName}」为空，没有可导出的数据`);
+    const title = sanitizeFileName(row?.title ?? "未命名");
+    const base = baseDir ?? this.defaultExportBase();
+    fs.mkdirSync(base, { recursive: true });
+    const stem = `${title} - ${sanitizeFileName(result.sheetName)}`;
+    const exportPath = this.uniqueExportFile(base, stem, "csv");
+    fs.writeFileSync(exportPath, result.csv, "utf8");
+    return { exportPath, rowCount: result.rowCount, sheetName: result.sheetName, size: result.csv.length };
+  }
+
+  /**
+   * 表格（usheet）：导出全部工作表为 Excel（.xlsx，多工作表 + 图片内嵌）。
+   * 语义映射在 core/usheetExcel.ts；写库在 electron/usheetXlsxExport.ts（write-excel-file）。
+   * 所有工作表都为空 ⇒ 明确报错，不产出空工作簿。
+   */
+  async exportUsheetXlsx(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; sheetCount: number; imageCount: number; skipped: number; size: number }> {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const row = this.ctx.db.prepare("SELECT title, kind FROM notes WHERE id=?").get(id) as { title?: string; kind?: string | null } | undefined;
+    if ((row?.kind ?? "doc") !== "usheet") throw new AppError("InvalidInput", "该文档不是表格，无法导出 Excel");
+    const bodyPath = this.ctx.notePathFor(id);
+    if (!fs.existsSync(bodyPath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    const doc = parseUsheetBody(fs.readFileSync(bodyPath, "utf8"));
+    if (!doc) throw new AppError("InvalidInput", "表格正文为空或无法解析，无可导出的数据");
+    const result = await buildUsheetXlsx(doc.workbook, { noteId: id, assetsDir: this.ctx.noteAssetsDir });
+    if (result.cellCount === 0 && result.imageCount === 0) throw new AppError("InvalidInput", "表格内容为空，没有可导出的数据");
+    const title = sanitizeFileName(row?.title ?? "未命名");
+    const base = baseDir ?? this.defaultExportBase();
+    fs.mkdirSync(base, { recursive: true });
+    const exportPath = this.uniqueExportFile(base, title, "xlsx");
+    fs.writeFileSync(exportPath, Buffer.from(result.bytes));
+    return { exportPath, rowCount: result.rowCount, sheetCount: result.sheetCount, imageCount: result.imageCount, skipped: result.skipped, size: result.bytes.byteLength };
   }
 
   /**

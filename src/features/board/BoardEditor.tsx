@@ -22,6 +22,7 @@ import { parseLocalAssetUrl } from "../../core/assetUrl";
 import { boardToBody, parseBoardBody, type BoardDoc, type BoardViewport } from "../../core/boardDoc.js";
 import { collectBoardAssetUrls, collectInlineImageUrls, replaceInlineImageUrls } from "./boardImageAssets.js";
 import { readBoardView, writeBoardView } from "./boardViewStore.js";
+import { registerBoardExport, triggerBoardExport } from "./boardExport";
 
 /** 自动保存防抖：画布每次操作都会回调，必须合并（与 sheet/bitable 同口径）。 */
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -110,6 +111,11 @@ export function BoardEditor({ noteId, content, visible, readOnly, focused, pane,
   const viewportRef = useRef<BoardViewport | null>(initial.viewport);
   /** 宿主根节点：用来找画布内核的滚动容器（平移位置就在它的 scrollLeft/Top 上）。 */
   const hostRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 统一导出菜单的 PNG / SVG 转给画板内已有的 Drawnix 导出（不在宿主层另写一份画布渲染）。
+   * 只登记已挂载的画板；从目录树导出未打开的画板时注册表里没有 ⇒ 菜单给"先打开画板"的提示。
+   */
+  useEffect(() => registerBoardExport(noteId, (format) => triggerBoardExport(hostRef.current, format)), [noteId]);
   /**
    * 记下了滚动位置时必须"贴好位置再显示"——否则会先按默认视口画一帧再跳到记下的位置
    * （用户 260926 报「切换会有跳动」）。没有记过位置（首次打开）就不需要这一层。

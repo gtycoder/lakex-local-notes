@@ -91,6 +91,18 @@ export function registerNotesIpc(
     }
     return exportBitableCsv(store, id, baseDir ?? undefined);
   });
+  ipc.handle("export_table_csv", (id: string, baseDir?: string, sheetId?: string) => {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+      throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
+    }
+    return store.exportTableCsv(id, baseDir ?? undefined, typeof sheetId === "string" && sheetId.length > 0 ? sheetId : undefined);
+  });
+  ipc.handle("export_usheet_xlsx", (id: string, baseDir?: string) => {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+      throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
+    }
+    return store.exportUsheetXlsx(id, baseDir ?? undefined);
+  });
   ipc.handle("export_bitable_zip", (id: string, baseDir?: string) => {
     if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");

@@ -44,6 +44,8 @@ export const WEB_METHODS: Record<string, string> = {
   exportNote: "export_note",
   exportBitableCsv: "export_bitable_csv",
   exportBitableZip: "export_bitable_zip",
+  exportTableCsv: "export_table_csv",
+  exportUsheetXlsx: "export_usheet_xlsx",
   pickImportCsv: "pick_import_csv",
   pickBackupDir: "pick_backup_dir",
   runWorkspaceBackup: "run_workspace_backup",

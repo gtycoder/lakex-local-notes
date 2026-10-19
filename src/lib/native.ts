@@ -48,6 +48,10 @@ export interface LakeNative {
   exportBitableCsv(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; size: number }>;
   /** 多维表：导出活动数据表为 ZIP（CSV + 附件/图片文件） */
   exportBitableZip(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; fileCount: number; skipped: number; size: number }>;
+  /** 表格类：导出 CSV（多维表 = 活动数据表；表格 = 指定 / 第一张工作表） */
+  exportTableCsv(id: string, baseDir?: string, sheetId?: string): Promise<{ exportPath: string; rowCount: number; size: number; sheetName?: string }>;
+  /** 表格：导出全部工作表为 Excel（.xlsx，图片内嵌） */
+  exportUsheetXlsx(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; sheetCount: number; imageCount: number; skipped: number; size: number }>;
   /** 多维表：系统选择框选一个 CSV 文件并读取文本（导入用；取消返回 null） */
   pickImportCsv(): Promise<{ name: string; content: string } | null>;
   pickBackupDir(): Promise<string | null>;
@@ -236,6 +240,8 @@ export const native = {
   exportNote: (id: string, format: "markdown" | "html" | "pdf" | "docx", baseDir?: string) => api().exportNote(id, format, baseDir),
   exportBitableCsv: (id: string, baseDir?: string) => api().exportBitableCsv(id, baseDir),
   exportBitableZip: (id: string, baseDir?: string) => api().exportBitableZip(id, baseDir),
+  exportTableCsv: (id: string, baseDir?: string, sheetId?: string) => api().exportTableCsv(id, baseDir, sheetId),
+  exportUsheetXlsx: (id: string, baseDir?: string) => api().exportUsheetXlsx(id, baseDir),
   pickImportCsv: () => api().pickImportCsv(),
   pickBackupDir: () => api().pickBackupDir(),
   runWorkspaceBackup: (dir: string) => api().runWorkspaceBackup(dir),

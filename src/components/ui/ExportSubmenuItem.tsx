@@ -2,10 +2,10 @@ import { Download } from "lucide-react";
 import { Submenu } from "./Overlay";
 
 /** 已实现的文档导出格式（仅 doc 文档可用）。 */
-export type DocExportFormat = "markdown" | "html" | "pdf";
+export type DocExportFormat = "markdown" | "html" | "pdf" | "docx";
 /**
- * 导出动作格式全集：doc 用 markdown/html/pdf；
- * bitable 用 csv / zip（已实现）；usheet 的 csv/xlsx、board 的 png/svg 目前是**占位**（disabled，逻辑后续补）。
+ * 导出动作格式全集：doc 用 markdown/html/pdf/docx；
+ * bitable 用 csv / zip；usheet 用 csv / xlsx；board 用 png / svg（全部已实现）。
  */
 export type ExportFormat = DocExportFormat | "csv" | "zip" | "xlsx" | "png" | "svg";
 
@@ -18,19 +18,14 @@ export interface ExportSubmenuItemProps {
   onClose: () => void;
 }
 
-/** 占位菜单项：可见但不可点，明确标注「开发中」，不误导为已支持。 */
-function Placeholder({ label }: { label: string }) {
-  return <button role="menuitem" disabled title="开发中">{label}</button>;
-}
-
 /**
  * 「导出」二级菜单行（目录树右键 + 文档右上角 ⋯ 共用同一份动作）。
  *
  * **按文档类型给各自的菜单，不混用**（用户 260930 明确）：
- * - doc：Markdown 资料包 / Markdown 文本（复制）/ HTML / PDF / 资料路径（**已彻底移除「导出为原生 Lake」**）；
- * - usheet：CSV / Excel —— 占位（disabled，待补逻辑）；
+ * - doc：Markdown 资料包 / Markdown 文本（复制）/ HTML / Word / PDF / 资料路径（**已彻底移除「导出为原生 Lake」**）；
+ * - usheet：CSV（活动工作表）/ Excel（全部工作表）；
  * - bitable：CSV（活动数据表）；
- * - board：PNG / SVG —— 占位（disabled，待补逻辑）。
+ * - board：PNG / SVG（已接线：复用画板内 Drawnix 导出；画板需已打开）。
  * 「导出资料路径（本机 AI）」是与格式无关的本地路径工具，各类型都保留。
  *
  * 视觉/交互/定位全部交给标准原语 `<Submenu>`；本组件只提供行文案与菜单项。
@@ -46,14 +41,14 @@ export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPath
           <button role="menuitem" onClick={run(() => onExportAs("markdown"))}>导出为 Markdown 资料包</button>
           <button role="menuitem" onClick={run(onCopyMarkdown)}>导出为 Markdown 文本（复制）</button>
           <button role="menuitem" onClick={run(() => onExportAs("html"))}>导出为 HTML</button>
-          <button role="menuitem" disabled title="开发中">导出为 Word（开发中）</button>
+          <button role="menuitem" onClick={run(() => onExportAs("docx"))}>导出为 Word</button>
           <button role="menuitem" onClick={run(() => onExportAs("pdf"))}>导出为 PDF（图片内嵌）</button>
         </>
       )}
       {type === "sheet" && (
         <>
-          <Placeholder label="导出为 CSV（开发中）" />
-          <Placeholder label="导出为 Excel（开发中）" />
+          <button role="menuitem" onClick={run(() => onExportAs("csv"))}>导出为 CSV</button>
+          <button role="menuitem" onClick={run(() => onExportAs("xlsx"))}>导出为 Excel</button>
         </>
       )}
       {type === "bitable" && (
@@ -64,8 +59,8 @@ export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPath
       )}
       {type === "board" && (
         <>
-          <Placeholder label="导出为 PNG（开发中）" />
-          <Placeholder label="导出为 SVG（开发中）" />
+          <button role="menuitem" onClick={run(() => onExportAs("png"))}>导出为 PNG</button>
+          <button role="menuitem" onClick={run(() => onExportAs("svg"))}>导出为 SVG</button>
         </>
       )}
       <div className="context-menu-sep" />

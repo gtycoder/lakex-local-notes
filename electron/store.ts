@@ -765,8 +765,8 @@ export class Store {
     return this.noteExport.exportUsheetCsv(id, baseDir, sheetId);
   }
 
-  /** 表格（usheet）：导出全部工作表为 Excel（.xlsx）。 */
-  exportUsheetXlsx(id: string, baseDir?: string): { exportPath: string; rowCount: number; sheetCount: number; size: number } {
+  /** 表格（usheet）：导出全部工作表为 Excel（.xlsx，图片内嵌）。 */
+  exportUsheetXlsx(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; sheetCount: number; imageCount: number; skipped: number; size: number }> {
     return this.noteExport.exportUsheetXlsx(id, baseDir);
   }
 

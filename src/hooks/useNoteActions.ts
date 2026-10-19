@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { native } from "../lib/native";
+import { usheetActiveSheetId } from "../features/usheet/usheetActiveSheet";
+import { exportBoardImage } from "../features/board/boardExport";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { replaceTreeNode } from "../desktop/desktopTypes";
 import type { ExportFormat } from "../components/ui/ExportSubmenuItem";
@@ -29,20 +31,37 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
 
   /**
    * M1：收口导出（按 noteId）——右键「导出」子菜单统一入口。
-   * doc：markdown/html/pdf；bitable：csv / zip（活动数据表）；sheet 的 csv/xlsx、board 的 png/svg 仍是占位（不从这里调用）。
+   * doc：markdown/html/pdf；bitable：csv / zip（活动数据表）；usheet：csv（活动工作表）/ xlsx（全部工作表）；board：png/svg（画板内导出）。
    * 原生 Lake 导出已按用户要求**彻底移除**。
    */
   const exportNoteById = useCallback(async (noteId: string | null, format: ExportFormat) => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
+    // 画板 PNG/SVG：转给画板内已有的导出（走浏览器下载，不需要系统目录框）。
+    // 必须放在 nativeDialog 守卫之前：浏览器端这条路径本来就能用。
+    if (format === "png" || format === "svg") {
+      const ok = await exportBoardImage(noteId, format);
+      showNotice(ok
+        ? `已导出 ${format.toUpperCase()}（系统下载目录）`
+        : "请先打开画板再导出（画板工具栏里也有「导出 SVG / PNG」）");
+      return;
+    }
     // 浏览器端：导出靠系统目录选择框（宿主专属），暂不支持 —— 明确提示，不弹桌面弹窗
     if (!native.capabilities.nativeDialog) { showNotice("浏览器端暂不支持导出（请在桌面端操作）"); return; }
-    if (format === "xlsx" || format === "png" || format === "svg") { showNotice("该导出格式尚在开发中"); return; }
     try {
       const dir = await native.pickExportDir();
       if (!dir) return; // 用户取消
       if (format === "csv") {
-        const result = await native.exportBitableCsv(noteId, dir);
-        showNotice(`已导出 CSV：${result.exportPath}（${result.rowCount} 条记录）`);
+        // 表格类统一入口：多维表 = 活动数据表；表格 = 当前打开的工作表（没打开 ⇒ 后端回退第一张并在提示里写明表名）。
+        const result = await native.exportTableCsv(noteId, dir, usheetActiveSheetId(noteId) ?? undefined);
+        showNotice(result.sheetName
+          ? `已导出 CSV：${result.exportPath}（工作表「${result.sheetName}」，${result.rowCount} 行）`
+          : `已导出 CSV：${result.exportPath}（${result.rowCount} 条记录）`);
+        return;
+      }
+      if (format === "xlsx") {
+        const result = await native.exportUsheetXlsx(noteId, dir);
+        const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
+        showNotice(`已导出 Excel：${result.exportPath}（${result.sheetCount} 个工作表，${result.rowCount} 行，${result.imageCount} 张图片内嵌${skippedText}）`);
         return;
       }
       if (format === "zip") {
@@ -57,6 +76,8 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
         showNotice(`已导出 Markdown 资料包到 ${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
       } else if (format === "html") {
         showNotice(`已导出 HTML：${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
+      } else if (format === "docx") {
+        showNotice(`已导出 Word：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       } else {
         showNotice(`已导出 PDF：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       }
