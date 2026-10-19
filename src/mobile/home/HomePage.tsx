@@ -2,13 +2,14 @@
  * 第一层（首页）：小记 / 知识库 两个 tab。
  * 布局（对齐 Yuque 官方移动端首层）：
  * - 小记 → 卡片（图在上/文在下/日期+更多「...」）；
- * - 知识库 → 「最近文档」横向卡 + 笔记本书架（3:4 彩面书卡，右上角切换 书架↔列表）；
+ * - 知识库 → 「常用」分组（顶部固定、可收起；横向卡，左右滑动找）+ 笔记本书架（3:4 彩面书卡，右上角切换 书架↔列表）；
+ *   「最近文档」已按用户 261019 点单整体删除（手机端不存最近访问记录，也不展示）；
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Trash, X } from "lucide-react";
+import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Trash, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
@@ -22,7 +23,7 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
-import { useHorizontalSwipe } from "../hooks/useHorizontalSwipe";
+import { HOME_TABS, pagerScrollLeft, settledIndex, tabAt, tabIndex } from "./tabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
 //  本机读写单独一层（core 禁 DOM）：读/写偏好走 lib/quickNoteSortPref（桌面用同一份）
@@ -30,9 +31,11 @@ import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPr
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
 import { formatListTime } from "../../core/dateFormat";
 import { withAssetAccessToken } from "../../lib/assetPort";
+import { pushBackHandler } from "../ui/backStack";
+import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesOpen } from "../data/favorites";
+import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 
-/** 完整小记编辑器（内含 Lake 内核）：**按需加载**——首屏/小记都不需要内核。 */
-const QuickNoteComposer = lazy(() => import("./QuickNoteComposer").then((m) => ({ default: m.QuickNoteComposer })));
+// 完整小记编辑器（内含 Lake 内核）：**按需加载**，加载壳见 ./quickNoteComposerLazy（预取过则同步渲染、零 fallback）。
 
 export interface MobileQuickNote {
   id: string;
@@ -53,7 +56,7 @@ export type LibraryView = "shelf" | "list";
 export interface HomePageProps {
   tab: "quick" | "library";
   notebooks: TreeNode[];
-  /** 全部笔记（「最近文档」用，按 updatedAt 取最近 N 条） */
+  /** 全部笔记（解析「常用」文档的标题/时间用） */
   notes: LocalNoteSummary[];
   quickNotes: MobileQuickNote[];
   /** 笔记本 → 文档数 */
@@ -135,16 +138,130 @@ export function HomePage(props: HomePageProps) {
     if (tab !== "quick") { setComposer(null); setEditNote(null); }
   }, [tab]);
 
-  // 左右横滑切换小记 ↔ 知识库（左滑→知识库，右滑→小记）
-  useHorizontalSwipe((dir) => {
-    if (dir === "left" && tab === "quick") onTabChange("library");
-    else if (dir === "right" && tab === "library") onTabChange("quick");
-  });
+  /**
+   * 首层 tab = **横向分页**（261019 用户点单，对齐语雀 App）：
+   * 两页常驻在同一个原生横向滚动容器里 ⇒ 手指跟手拖动、松手由 `scroll-snap` 吸附，
+   * 等价于语雀 RN 侧的 `react-native-pager-view`。这里只负责：
+   * ① tab → 滚动位置对齐（点 tab / 路由变化 / 横竖屏宽度变化）；② 滚动结束把页码回写成 tab；
+   * ③ 非活动页 inert；④ 写作会话中锁横滑（否则父级 [tab] effect 会清掉草稿）。
+   */
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const quickPaneRef = useRef<HTMLElement | null>(null);
+  const libraryPaneRef = useRef<HTMLElement | null>(null);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const onTabChangeRef = useRef(onTabChange);
+  onTabChangeRef.current = onTabChange;
+  const tabIndexNow = tabIndex(tab);
+  const tabIndexRef = useRef(tabIndexNow);
+  tabIndexRef.current = tabIndexNow;
+  /** 手指正按在分页上（touchstart..touchend）：此时只让原生滚动驱动，不做程序化对齐（否则会跟手指抢）。 */
+  const interactingRef = useRef(false);
+  /** 这次 tab 变化是"滚动过半"自己回写的 ⇒ 不要再程序化滚一次（否则会打断惯性/吸附）。 */
+  const commitByScrollRef = useRef(false);
+  /** 正在做程序化滚动（点 tab / 宽度重对齐）：期间的 scroll 事件不代表用户意图，不能回写 tab。 */
+  const programmaticRef = useRef(false);
+  const programmaticTimerRef = useRef(0);
 
-  // 「最近文档」= 最近更新的 N 条笔记（代理；如需"最近打开"后续再加 last_opened_at 追踪）
-  const recentNotes = useMemo(() => {
-    return [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 6);
-  }, [notes]);
+  /** 把分页滚到当前 tab 对应的那页；宽度未量到/已对齐时不动。 */
+  const alignStage = (behavior: ScrollBehavior): void => {
+    const el = stageRef.current;
+    if (!el || interactingRef.current) return;
+    const target = pagerScrollLeft(tabIndexRef.current, el.clientWidth, HOME_TABS.length);
+    if (Math.abs(el.scrollLeft - target) <= 1) return;
+    // 程序化滚动期间产生的 scroll 事件不是用户意图：先压住回写，滚动结束/超时再放开。
+    programmaticRef.current = true;
+    window.clearTimeout(programmaticTimerRef.current);
+    programmaticTimerRef.current = window.setTimeout(() => { programmaticRef.current = false; }, 600);
+    el.scrollTo({ left: target, behavior });
+  };
+
+  // ① tab → 滚动位置：点顶部 tab / 父级改路由时把分页滚过去（动效按 reduced-motion 降级）。
+  //    ⚠️ ResizeObserver **必须单独挂一次**：若在这里 new/observe，每次 tab 变化都会触发一次
+  //    "初始回调" → 紧跟在本 effect 的 smooth 之后再来一次 auto，把动画当场取消（实测点击 tab 瞬跳）。
+  useEffect(() => {
+    // 这是滚动回写造成的 tab 变化：内容自己已经滚到位/正在滚，不能再发一次程序化滚动（会打断惯性）。
+    if (commitByScrollRef.current) { commitByScrollRef.current = false; return; }
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    alignStage(reduce ? "auto" : "smooth");
+  }, [tabIndexNow]);
+
+  // ①b 宽度变化（横竖屏 / 窗口变化）：立即重新对齐，否则会停在半页。高度变化（键盘）不动横向位置。
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => alignStage("auto"));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // ② 滚动 → tab：**过半就回写**（不等到 scrollend）。
+  //    原因（261019 用户实测反馈）：若只在滚动结束回写，吸附动画期间/刚到位时会短暂出现
+  //    "内容已经是小记、顶部还着重知识库" 的错位；过半回写让标签始终跟着"当前多数可见页"。
+  //    只写"与当前 tab 不同"的情况，避免自触发循环；监听只挂一次（用 ref 读最新值）。
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const commit = (): void => {
+      if (programmaticRef.current) return;
+      const w = el.clientWidth;
+      if (!w) return;
+      const next = tabAt(settledIndex(el.scrollLeft, w, HOME_TABS.length), HOME_TABS.length);
+      if (next !== tabRef.current) {
+        commitByScrollRef.current = true;
+        onTabChangeRef.current(next);
+      }
+    };
+    const onTouchStart = (): void => {
+      interactingRef.current = true;
+      // 用户接管：程序化滚动（含动画）作废，之后按真实滚动回写。
+      programmaticRef.current = false;
+      window.clearTimeout(programmaticTimerRef.current);
+    };
+    const onTouchEnd = (): void => { interactingRef.current = false; };
+    const onScrollEnd = (): void => {
+      programmaticRef.current = false;
+      window.clearTimeout(programmaticTimerRef.current);
+      commit();
+    };
+    el.addEventListener("scroll", commit, { passive: true });
+    el.addEventListener("scrollend", onScrollEnd);
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    return () => {
+      window.clearTimeout(programmaticTimerRef.current);
+      el.removeEventListener("scroll", commit);
+      el.removeEventListener("scrollend", onScrollEnd);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, []);
+
+  // ③ 非活动页 inert：两页都在 DOM 里，不能让读屏/焦点摸到屏幕外那页。
+  useEffect(() => {
+    quickPaneRef.current?.toggleAttribute("inert", tab !== "quick");
+    libraryPaneRef.current?.toggleAttribute("inert", tab !== "library");
+  }, [tab]);
+
+  // ④ 写作/编辑小记时锁横向分页：切走会清掉写作卡（= 丢草稿）。CSS 侧只留纵向滚动（touch-action: pan-y）。
+  useEffect(() => {
+    if (composer === null || tab !== "quick") return;
+    stageRef.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [composer, tab]);
+
+  // 「常用」= 设备本地收藏（工作区目录菜单「设为常用」写入；不同步、不进 S3）
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readFavoriteIds());
+  const [favoriteOpen, setFavoriteOpen] = useState<boolean>(() => readFavoritesOpen());
+  useEffect(() => subscribeFavorites(() => setFavoriteIds(readFavoriteIds())), []);
+  const favoriteNotes = useMemo(
+    () => favoriteIds.map((id) => notes.find((n) => n.id === id)).filter((n): n is LocalNoteSummary => !!n),
+    [favoriteIds, notes],
+  );
+  const toggleFavoriteOpen = (): void => {
+    setFavoriteOpen((v) => { const next = !v; writeFavoritesOpen(next); return next; });
+  };
 
   /** 排序只影响本端展示顺序（不写库、不进 manifest）；比较器在 core/quickNoteSort。 */
   const sortedQuickNotes = useMemo(() => sortQuickNotes(quickNotes, quickSort), [quickNotes, quickSort]);
@@ -158,6 +275,14 @@ export function HomePage(props: HomePageProps) {
     } catch { /* 读取失败忽略 */ }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
+
+  // Android 返回键：写作/编辑小记中**先退出编辑**（与「取消」同语义），不能直接退 App。
+  // 走统一返回栈，浮层（排序/「...」菜单等）打开时它们在上层、仍先消费。
+  useEffect(() => {
+    if (composer === null) return;
+    return pushBackHandler(() => { closeComposer(); return true; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composer]);
   const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
     try { const r = await bridge.syncNow(); const w = r.notes?.warnings?.length ?? 0; showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : "")); }
@@ -346,19 +471,22 @@ export function HomePage(props: HomePageProps) {
         <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </header>
 
-      <div key={tab} className="mobile-tab-stage">
-      {tab === "quick" ? (
-        composer !== null ? (
+      <div
+        ref={stageRef}
+        className={"mobile-tab-stage" + (composer !== null ? " mobile-tab-stage--locked" : "")}
+        aria-label="首页内容"
+      >
+        {/* 两页**常驻**：手指拖动时两页同时可见（语雀 pager 同形态）；非活动页由 effect 挂 inert。 */}
+        <section ref={quickPaneRef} className="mobile-tab-pane">
+        {composer !== null ? (
           /* 写作 = 编辑会话：滚动区给底部 dock 留白（见 .mobile-scroll--with-dock），底栏同时让位。 */
           <div className="mobile-scroll mobile-scroll--with-dock">
-            <Suspense fallback={<div className="mb-empty">正在加载编辑器…</div>}>
-              <QuickNoteComposer
-                editNote={editNote}
-                initialInsert={composer.mode === "new" ? { files: composer.files, command: composer.command } : null}
-                onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
-                onCancel={closeComposer}
-              />
-            </Suspense>
+            <QuickNoteComposerLazy
+              editNote={editNote}
+              initialInsert={composer.mode === "new" ? { files: composer.files, command: composer.command } : null}
+              onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
+              onCancel={closeComposer}
+            />
           </div>
         ) : (
           <div className="mobile-scroll">
@@ -379,25 +507,38 @@ export function HomePage(props: HomePageProps) {
               </div>
             )}
           </div>
-        )
-      ) : (
+        )}
+        </section>
+        <section ref={libraryPaneRef} className="mobile-tab-pane">
         <div className="mobile-scroll mobile-library">
-          {libraryView === "shelf" && recentNotes.length > 0 && (
-            <section className="home-section">
+          {/* 「常用」分组（261019 用户点单）：固定在最上方，三角可收起/展开；卡片样式与首页文档卡一致，
+              多个常用靠**横向滑动**浏览。内容只来自设备本地收藏（工作区目录菜单「设为常用」）。 */}
+          {libraryView === "shelf" && favoriteNotes.length > 0 && (
+            <section className="home-section home-favorite">
               <div className="home-section__head">
-                <span className="home-section__title">最近文档</span>
+                <button
+                  className="home-section__toggle"
+                  onClick={toggleFavoriteOpen}
+                  aria-expanded={favoriteOpen}
+                  aria-label={favoriteOpen ? "收起常用" : "展开常用"}
+                >
+                  <span className="home-section__title">常用</span>
+                  {favoriteOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
               </div>
-              <div className="home-recent">
-                {recentNotes.map((r) => (
-                  <button key={r.id} className="doc-card" onClick={() => onOpenNote(r.id)} aria-label={r.title || "文档"}>
-                    <span className="doc-card__paper" aria-hidden="true">
-                      <span className="doc-card__lines" />
-                    </span>
-                    <span className="doc-card__name">{r.title || "无标题"}</span>
-                    <span className="doc-card__date">{fmtRelative(r.updatedAt)}</span>
-                  </button>
-                ))}
-              </div>
+              {favoriteOpen && (
+                <div className="home-card-row">
+                  {favoriteNotes.map((r) => (
+                    <button key={r.id} className="doc-card" onClick={() => onOpenNote(r.id)} aria-label={r.title || "文档"}>
+                      <span className="doc-card__paper" aria-hidden="true">
+                        <span className="doc-card__lines" />
+                      </span>
+                      <span className="doc-card__name">{r.title || "无标题"}</span>
+                      <span className="doc-card__date">{fmtRelative(r.updatedAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </section>
           )}
           {/* key=view：切换书架/列表时重挂载，重放入场动效 */}
@@ -419,7 +560,7 @@ export function HomePage(props: HomePageProps) {
             />
           </section>
         </div>
-      )}
+        </section>
       </div>
 
       {/* 底部胶囊栏（首页，用户 261014 定稿）：搜索 | ＋ | AI。

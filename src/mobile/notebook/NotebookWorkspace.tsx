@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book, Search } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
@@ -27,6 +27,8 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../hooks/useAutoSave";
 import type { LocalNote } from "../data/noteRepository";
+import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
+import { isFavorite, toggleFavorite } from "../data/favorites";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
 /** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -83,7 +85,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   /** 笔记本自己的图标（抽屉首行要展示 + 可点改名图标，桌面同款手势）。 */
   const [nbIcon, setNbIcon] = useState<string | null>(null);
 
-  const [navHidden, setNavHidden] = useState(false);
   // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
   const openOutline = useCallback((v: boolean) => { setOutlineOpen(v); if (v) { setSidebarOpen(false); setTabsOpen(false); } }, []);
@@ -122,6 +123,66 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const active = tabs.find((t) => t.id === activeId) ?? null;
   /** 大纲只属于 Lake 文档：表格 / 多维表 / 画板没有大纲（与顶栏「编辑」按钮同一口径）。 */
   const outlineAvailable = !!active && (active.kind ?? "doc") === "doc";
+  /**
+   * 阅读态「顶栏 / 底栏自动收起」（261019，对齐思源 .mobile-chrome--hidden 手感）：
+   * 判据在 ./scrollChrome（纯函数），这里只接 DOM：只认当前活动 .mobile-doc-body 的滚动，且只在
+   * kind=doc 且非编辑态生效（编辑态有 dock/键盘，不能动）。切文档 / 进出编辑 / 打开任意浮层 → 复位展开。
+   */
+  const [chrome, setChrome] = useState<ChromeScrollState>({ hidden: false, acc: 0 });
+  const chromeRef = useRef(chrome);
+  chromeRef.current = chrome;
+  const bodyRef = useRef<HTMLElement | null>(null);
+  const activeMetaRef = useRef({ kind: "doc" as string, editing: false });
+  activeMetaRef.current = { kind: active?.kind ?? "doc", editing: !!active?.editing };
+  const chromeHiddenNow = chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc";
+  const showChrome = useCallback(() => {
+    if (chromeRef.current.hidden || chromeRef.current.acc) setChrome({ hidden: false, acc: 0 });
+  }, []);
+  // 切文档 / 进出编辑 / 打开浮层：导航必须回来（否则用户要操作时看不见入口）
+  useEffect(() => { setChrome({ hidden: false, acc: 0 }); }, [activeId]);
+  useEffect(() => { if (active?.editing) setChrome({ hidden: false, acc: 0 }); }, [active?.editing]);
+  useEffect(() => {
+    if (sidebarOpen || outlineOpen || tabsOpen || notebookSwitchOpen) showChrome();
+  }, [sidebarOpen, outlineOpen, tabsOpen, notebookSwitchOpen, showChrome]);
+
+  // 滚动监听：scroll 事件不冒泡，用**捕获**在正文容器上拿；只有 .mobile-doc-body（文字阅读）参与。
+  const lastScrollRef = useRef(0);
+  useEffect(() => { lastScrollRef.current = 0; }, [activeId]);
+  useEffect(() => {
+    const root = bodyRef.current;
+    if (!root) return;
+    const onScroll = (e: Event): void => {
+      const el = e.target as HTMLElement | null;
+      if (!el || !el.classList?.contains("mobile-doc-body")) return;
+      const meta = activeMetaRef.current;
+      if (meta.kind !== "doc" || meta.editing) return;
+      const top = el.scrollTop;
+      const dy = top - lastScrollRef.current;
+      lastScrollRef.current = top;
+      const cur = chromeRef.current;
+      const next = chromeAfterScroll(cur, top, dy);
+      if (next.hidden !== cur.hidden || next.acc !== cur.acc) setChrome(next);
+    };
+    root.addEventListener("scroll", onScroll, true);
+    return () => root.removeEventListener("scroll", onScroll, true);
+  }, []);
+
+  /** 刚打开（异步读回）的 tab：给正文一次淡入，避免内容"蹦"出来。 */
+  const [freshId, setFreshId] = useState<string | null>(null);
+  /**
+   * 哪些 tab 的**正文分量已挂载**（261019 优化）：恢复历史标签时只挂当前这一页，
+   * 其余标签只登记数据、等切到它时再挂（一上来就挂 8 个内核编辑器 ≈ 1s 骨架白屏）。
+   * 一旦挂过就保持（keep-alive），与原来的多 tab 行为一致。
+   */
+  const [mountedIds, setMountedIds] = useState<Set<string>>(() => new Set());
+  /** 最新 activeId（openTab 的 elision 判据要用"当前活动页"，不能用刚加入的那个 id）。 */
+  const activeIdRef = useRef<string | null>(activeId);
+  activeIdRef.current = activeId;
+  /** 正在读正文的 tab（自愈：活动页从未进 tabs 时不要永远停在骨架）。 */
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  /** 标签代际：`关闭全部` 递增；在途 readNote 回来时代际不一致就丢弃（否则关了又被异步加回来）。 */
+  const tabEpochRef = useRef(0);
+
 
   // 跟手开合抽屉（思源 touch.ts 口径：内容区任意横滑、面板跟手、释放按 1/3 屏宽提交）
   usePanelDrag({
@@ -147,7 +208,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   useEffect(() => { void loadTree(); }, [loadTree]);
 
   // 初次进入（仅一次）：
-  //  - 显式指定了要打开的文档（首页「最近文档」/搜索/新建）→ 优先开它并置为活动标签（修"点最近文档直达不了"）；
+  //  - 显式指定了要打开的文档（首页/搜索/新建）→ 优先开它并置为活动标签（修"从首页点文档直达不了"）；
   //    其余上次已存的标签（不含它）补开，不覆盖它的激活态；
   //  - 否则恢复上次打开的标签（本地持久化）；
   //  - 否则开树中第一个。
@@ -157,11 +218,19 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     try { saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]") as string[]; } catch { saved = []; }
     if (initialNoteId) {
       autoOpenedRef.current = true;
-      saved.filter((id) => id !== initialNoteId).forEach((id) => void openTab(id));
+      // 先把当前文档的读取发出去（其它历史标签排后面，避免它的 readNote 被队头拖慢）
       void openTab(initialNoteId);
+      saved.filter((id) => id !== initialNoteId).forEach((id) => void openTab(id, false));
       return;
     }
-    if (saved.length > 0) { autoOpenedRef.current = true; saved.forEach((id) => void openTab(id)); return; }
+    if (saved.length > 0) {
+      autoOpenedRef.current = true;
+      // 只让最后一个历史标签成为活动页，其余只登记（避免一上来挂载全部编辑器）；
+      // 活动页的读取排在第一个，别被其它历史标签拖慢
+      void openTab(saved[saved.length - 1], true);
+      saved.slice(0, -1).forEach((id) => void openTab(id, false));
+      return;
+    }
     const first = findFirstNote(tree);
     if (first) { autoOpenedRef.current = true; void openTab(first.id); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,28 +241,45 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     writeLocalStorage(TABS_KEY, JSON.stringify(tabs.map((t) => t.id)));
   }, [tabs, TABS_KEY]);
 
-  const openTab = useCallback((id: string) => {
-    setActiveId(id);
+  const openTab = useCallback((id: string, activate = true) => {
+    if (activate) setActiveId(id);
     // 已打开：仅刷新 LRU 时间戳，不重读正文（keep-alive）
     setTabs((prev) => prev.some((t) => t.id === id) ? prev.map((t) => (t.id === id ? { ...t, lastAccessedAt: Date.now() } : t)) : prev);
     if (tabs.some((t) => t.id === id)) return;
+    pendingIdsRef.current.add(id);
+    const epoch = tabEpochRef.current;
     void bridge.readNote(id).then((n) => {
       if (!n) return;
+      if (epoch !== tabEpochRef.current) return; // 期间执行过「关闭全部」⇒ 丢弃这次读回
+      // 正文就绪 ⇒ 给这一页一次淡入（240ms 后清标记，避免切回旧 tab 又播一次）
+      setFreshId(id);
+      window.setTimeout(() => setFreshId((cur) => (cur === id ? null : cur)), 260);
       setTabs((prev) => {
         if (prev.some((t) => t.id === id)) return prev;
         const added = [...prev, { id, title: n.title, content: n.content, editing: pendingEditRef.current, lastAccessedAt: Date.now(), kind: n.kind }];
         pendingEditRef.current = false;
-        const evicted = selectEvictionIds(added.map((t) => ({ noteId: t.id, lastAccessedAt: t.lastAccessedAt })), { limit: loadSettings().maxOpenTabs, activeNoteId: id, pinnedNoteIds: new Set() });
+        // ⚠️ 淘汰时保护的是**当前活动页**（activeIdRef），不是"刚加入的这一条"：
+        // 恢复历史标签是并发的，若传 id，先加入的"用户点开的目标文档"可能被后来者当成 LRU 淘汰 ⇒ 偶发空白。
+        const evicted = selectEvictionIds(added.map((t) => ({ noteId: t.id, lastAccessedAt: t.lastAccessedAt })), { limit: loadSettings().maxOpenTabs, activeNoteId: activeIdRef.current ?? id, pinnedNoteIds: new Set() });
         if (evicted.length === 0) return added;
         const evictedSet = new Set(evicted);
         // LRU 驱逐同样要丢编辑器句柄（与 closeTab 对称）
         for (const ev of evicted) editorsRef.current.delete(ev);
         return added.filter((t) => !evictedSet.has(t.id));
       });
-    }).catch((reason) => showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" }));
+    }).catch((reason) => showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" }))
+      .finally(() => { pendingIdsRef.current.delete(id); });
   }, [tabs]);
 
-  // 已进入工作区后又被指定文档（新建 / 首页「最近文档」/ 搜索）：组件 key 是 notebookId，
+  /** 自愈：活动页既不在 tabs、也没有在途读取（例如目标文档读回空/失败）⇒ 落到第一个标签，避免一直空白/骨架。 */
+  useEffect(() => {
+    if (!activeId || tabs.length === 0) return;
+    if (tabs.some((t) => t.id === activeId)) return;
+    if (pendingIdsRef.current.has(activeId)) return;
+    setActiveId(tabs[0].id);
+  }, [activeId, tabs]);
+
+  // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
   // 否则会"文档建好了但界面不跳转"。
   const handledInitialRef = useRef<string | null>(initialNoteId ?? null);
@@ -203,6 +289,32 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     pendingEditRef.current = initialMode === "editor";
     void openTab(initialNoteId);
   }, [initialNoteId, initialMode, openTab]);
+
+  /** 活动 tab 必须挂载正文；切到未挂载的旧 tab 时在这一刻才挂（数据早已在 tabs 里）。 */
+  useEffect(() => {
+    if (!active) return;
+    setMountedIds((prev) => (prev.has(active.id) ? prev : new Set(prev).add(active.id)));
+  }, [active?.id]);
+
+  /** tab 被关闭 / LRU 驱逐后，同步丢掉挂载标记（避免 Set 只增不减）。 */
+  useEffect(() => {
+    const ids = new Set(tabs.map((t) => t.id));
+    setMountedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) { if (ids.has(id)) next.add(id); else changed = true; }
+      return changed ? next : prev;
+    });
+  }, [tabs]);
+
+  /** 关闭全部标签（与单个关闭同语义：直接清空；编辑器句柄同步丢弃防泄漏）。 */
+  const closeAllTabs = useCallback(() => {
+    tabEpochRef.current += 1;
+    editorsRef.current.clear();
+    setTabs([]);
+    setActiveId(null);
+    setTabsOpen(false);
+  }, []);
 
   const closeTab = useCallback((id: string) => {
     const idx = tabs.findIndex((t) => t.id === id);
@@ -242,23 +354,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content, plain) => {
     await bridge.saveNote(id, title, content, null, plain);
   });
-
-  // 阅读态：文档下滑 → 底栏隐藏；上滑 → 弹出（思源设计，修"阅读时底部悬浮框消失后不再出现"）
-  useEffect(() => {
-    if (active?.editing) { setNavHidden(false); return; }
-    const scroller = document.querySelector<HTMLElement>(".doc-pane.active .mobile-doc-body");
-    if (!scroller) return;
-    setNavHidden(false);
-    let last = scroller.scrollTop;
-    const onScroll = () => {
-      const cur = scroller.scrollTop;
-      if (cur - last > 8) setNavHidden(true);
-      else if (last - cur > 8) setNavHidden(false);
-      last = cur;
-    };
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => scroller.removeEventListener("scroll", onScroll);
-  }, [activeId, active?.editing, tabs.length]);
 
   const toggleEdit = useCallback(async () => {
     if (!active) return;
@@ -493,6 +588,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         { id: "rename", label: "重命名", icon: Pencil },
       ] : [{ id: "rename", label: "重命名", icon: Pencil }]),
       { id: "icon", label: "设置图标", icon: SmilePlus },
+      // 「常用」：只对文档开放（分组/笔记本没有卡片入口）；仅本机，不同步（用户 261019 点单）
+      ...(node.kind === "note" ? [
+        { id: "favorite", label: isFavorite(node.id) ? "取消常用" : "设为常用", icon: Star },
+      ] : []),
       {
         id: "move", label: "移动到…", icon: Move,
         children: [
@@ -518,6 +617,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
     if (root === "rename") { setRenamingId(node.id); setRenameValue(node.title); return; }
     if (root === "icon") { setIconFor(node); return; }
+    if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已设为常用" : "已取消常用"); return; }
     if (root === "history") { void openHistory(node); return; }
     if (root === "info") { setInfoFor(node); return; }
     if (root === "delete") { void applyDelete(node); }
@@ -581,7 +681,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   return (
     <div className="mobile-workspace">
       {/* 顶部栏（思源 #mobileTopBar：.toolbar--border + .toolbar__title 左对齐 + 右侧同步状态） */}
-      <header className="toolbar toolbar--border mobile-topbar">
+      <header
+        className={"toolbar toolbar--border mobile-topbar" + (chromeHiddenNow ? " mobile-topbar--auto-hidden" : "")}
+        aria-hidden={chromeHiddenNow ? "true" : "false"}
+      >
         <button className="toolbar__button" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
         <input
           className={"toolbar__title" + (active?.editing ? "" : " toolbar__title--readonly")}
@@ -618,11 +721,26 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       </header>
 
       {/* 文档层（正文） */}
-      <section className="mobile-workspace-body">
-        {tabs.length === 0 ? (
-          <div className="mb-empty">暂无打开的文档，点左目录或底部打开</div>
+      <section className="mobile-workspace-body" ref={bodyRef}>
+        {/* 正在异步读回（刚点开、还没进 tabs）时先画骨架：避免转场落位后先闪一块空白再蹦出正文。 */}
+        {!active || !mountedIds.has(active.id) ? (
+          activeId ? (
+            <div className="mb-doc-skeleton" aria-busy="true" aria-label="正在打开文档">
+              <span className="mb-skel mb-doc-skeleton__title" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line mb-doc-skeleton__line--short" />
+            </div>
+          ) : (
+            <div className="mb-empty">暂无打开的文档，点左目录或底部打开</div>
+          )
         ) : tabs.map((t) => (
-          <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "")}>
+          <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "") + (t.id === freshId ? " doc-pane--fresh" : "")}>
+            {/* 未挂载的 keep-alive tab 只占位、不起编辑器（首次切到它时才挂载，见 mountedIds） */}
+            {!mountedIds.has(t.id) ? null : (
+            <>
             {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
             {t.kind === "board" ? (
               // 画板：移动端只读查看（同一套 Drawnix 引擎，绝不给 Lake 编辑器；也不保存）
@@ -660,13 +778,22 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               }}
             />
             )}
+            </>
+            )}
           </div>
         ))}
       </section>
 
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
           编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。 */}
-      <nav className={"mobile-bottom-bar" + ((active?.editing || navHidden) ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={(active?.editing || navHidden) ? "true" : "false"}>
+      <nav
+        className={"mobile-bottom-bar"
+          + ((active?.editing || chromeHiddenNow) ? " mobile-bottom-bar--hidden" : "")
+          // 表格（usheet）页底部有自己的 Univer 工具条（工作表标签/缩放/求和）⇒ 胶囊上移让位（261019）
+          + (active?.kind === "usheet" ? " mobile-bottom-bar--above-sheet" : "")}
+        data-prevent-swipe
+        aria-hidden={(active?.editing || chromeHiddenNow) ? "true" : "false"}
+      >
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => openSidebar(!sidebarOpen)} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => setTabsOpen(true)} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
@@ -737,6 +864,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           <div className="mobile-model" onClick={(e) => e.stopPropagation()}>
             <div className="toolbar toolbar--border mobile-model-head">
               <span className="toolbar__text">标签页</span>
+              {tabs.length > 0 && (
+                <button className="mobile-model-closeall" onClick={closeAllTabs} aria-label="关闭全部标签页">关闭全部</button>
+              )}
               <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => setTabsOpen(false)} aria-label="关闭"><X /></span>
             </div>
             <div className="mobile-model-body">

@@ -1,0 +1,84 @@
+/**
+ * 移动端路由转场（首页 ↔ 工作区）的**状态机 + 单一来源**（261019，对齐语雀 push）。
+ *
+ * 形态：新页自右滑入（100%→0），旧页左移 25% 做视差；返回反向。
+ * CSS 实现在 `mobile.css` 的 `.mobile-route-stage / .mobile-route-layer`；时长 = `--lake-motion-slow`(240ms)。
+ * 工作区层 = **按需挂载、播完出场才卸载**；首页层常驻（页栈语义）⇒ 返回时列表滚动位置与数据都在。
+ */
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+
+/** 与 `--lake-motion-slow`（240ms）一致；护栏 `useRouteTransition.test.ts` 会钉住。 */
+export const ROUTE_TRANSITION_MS = 240;
+
+/** 返回首页的等待时长：reduced-motion 下不需要等待动画（直接切）。 */
+export function routeTransitionMs(reduceMotion: boolean): number {
+  return reduceMotion ? 0 : ROUTE_TRANSITION_MS;
+}
+
+/** 系统是否要求减少动效（移动端 a11y 口径；测试环境无 window 时按 false）。 */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+type RouteKind = "home" | "notebook";
+
+export interface RouteTransition {
+  /** 工作区层是否在 DOM 里（出场动画播完才变 false）。 */
+  mounted: boolean;
+  /** 是否处于"工作区已展开"位移状态（push 完 = true；pop 开始 = false）。 */
+  open: boolean;
+  /** 返回首页：先播出场，结束（240ms / reduced-motion 0ms）后回调 `onClosed` 并卸载工作区。 */
+  close: () => void;
+  homeRef: RefObject<HTMLDivElement>;
+  wsRef: RefObject<HTMLDivElement>;
+}
+
+export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): RouteTransition {
+  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
+  const homeRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef(0);
+  const closingRef = useRef(false);
+  const onClosedRef = useRef(onClosed);
+  onClosedRef.current = onClosed;
+
+  // 进入工作区先挂载（此时层在 translateX(100%)），下一帧再播放位移动画
+  useEffect(() => {
+    if (routeKind === "notebook") setMounted(true);
+  }, [routeKind]);
+
+  useEffect(() => {
+    if (!mounted || routeKind !== "notebook" || closingRef.current) return;
+    const raf = requestAnimationFrame(() => setOpen(true));
+    return () => cancelAnimationFrame(raf);
+  }, [mounted, routeKind]);
+
+  const close = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setOpen(false);
+    closeTimerRef.current = window.setTimeout(() => {
+      onClosedRef.current();
+      setMounted(false);
+      closingRef.current = false;
+    }, routeTransitionMs(prefersReducedMotion()));
+  }, []);
+
+  // 卸载时清掉未完成的转场定时器
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
+
+  // 非活动层 inert + aria-hidden：首页挂载着但工作区在上面时，焦点/读屏不能摸到下层
+  useEffect(() => {
+    const homeActive = routeKind === "home";
+    if (homeRef.current) {
+      homeRef.current.toggleAttribute("inert", !homeActive);
+      homeRef.current.setAttribute("aria-hidden", String(!homeActive));
+    }
+    if (wsRef.current) wsRef.current.toggleAttribute("inert", homeActive);
+  }, [routeKind, mounted]);
+
+  return { mounted, open, close, homeRef, wsRef };
+}

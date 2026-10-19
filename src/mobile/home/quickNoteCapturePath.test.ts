@@ -24,6 +24,7 @@ const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*
 const MOBILE_APP = code(read("../MobileApp.tsx"));
 const COMPOSER = code(read("./QuickNoteComposer.tsx"));
 const HOME = code(read("./HomePage.tsx"));
+const COMPOSER_LAZY = code(read("./quickNoteComposerLazy.tsx"));
 const EDITOR = code(read("../../features/quickNotes/QuickNoteEditor.tsx"));
 const AUTO_SYNC = code(read("../hooks/useAutoSync.ts"));
 const SETTINGS = code(read("../settings/SettingsDrawer.tsx"));
@@ -33,10 +34,11 @@ const SYNC_STATUS = code(read("../sync/syncStatusStore.ts"));
 describe("小记 capture 路径（261010 统一为内核卡片）", () => {
   it("capture 与工作台共用同一个内核 composer（第二套轻量框已删除）", () => {
     expect(existsSync(new URL("./QuickNoteFlashComposer.tsx", import.meta.url)), "轻量框组件应已删除（统一后只留一套）").toBe(false);
-    expect(MOBILE_APP).toMatch(/import\("\.\/home\/QuickNoteComposer"\)/);
-    expect(MOBILE_APP).toMatch(/<QuickNoteComposer/);
+    // 261019 起走自研加载壳（预取过则同步渲染、零 fallback）；分包动态 import 收在壳里
+    expect(COMPOSER_LAZY).toMatch(/import\("\.\/QuickNoteComposer"\)/);
+    expect(MOBILE_APP).toMatch(/<QuickNoteComposerLazy/);
     expect(MOBILE_APP).not.toContain("QuickNoteFlashComposer");
-    expect(HOME).toMatch(/<QuickNoteComposer/);
+    expect(HOME).toMatch(/<QuickNoteComposerLazy/);
   });
 
   it("capture 仍是独立入口，且在启动门之前渲染（不等 bridge.init/refreshAll）", () => {
@@ -49,7 +51,7 @@ describe("小记 capture 路径（261010 统一为内核卡片）", () => {
   });
 
   it("capture 传 draft（草稿恢复 + 防抖落库 + 保存/取消清除，含富内容 body）", () => {
-    expect(MOBILE_APP).toMatch(/<QuickNoteComposer[\s\S]{0,200}draft/);
+    expect(MOBILE_APP).toMatch(/<QuickNoteComposerLazy[\s\S]{0,200}draft/);
     expect(COMPOSER).toMatch(/bridge\.getQuickNoteDraft\(/);
     expect(COMPOSER).toMatch(/bridge\.saveQuickNoteDraft\(/);
     expect(COMPOSER).toMatch(/bridge\.clearQuickNoteDraft\(/);

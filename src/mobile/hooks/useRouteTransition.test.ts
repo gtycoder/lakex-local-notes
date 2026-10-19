@@ -1,0 +1,48 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { ROUTE_TRANSITION_MS, routeTransitionMs } from "./useRouteTransition";
+
+const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
+const APP = read("../MobileApp.tsx").replace(/\/\*\*[\s\S]*?\*\//g, "");
+const CSS = read("../mobile.css");
+const HOOK = read("./useRouteTransition.ts").replace(/\/\*\*[\s\S]*?\*\//g, "");
+
+describe("路由转场（261019，对齐语雀 push）", () => {
+  it("时长单一来源 = 240ms（= --lake-motion-slow），reduced-motion 下 0", () => {
+    expect(ROUTE_TRANSITION_MS).toBe(240);
+    expect(routeTransitionMs(false)).toBe(240);
+    expect(routeTransitionMs(true)).toBe(0);
+  });
+
+  it("MobileApp 走状态机 hook：两层 + 首页常驻 + 返回统一 close", () => {
+    expect(APP).toContain("useRouteTransition(route.kind");
+    expect(APP).toContain("mobile-route-stage");
+    expect(APP).toContain("mobile-route-layer--home");
+    expect(APP).toContain("mobile-route-layer--workspace");
+    expect(APP).toMatch(/onBack=\{closeWorkspace\}/);
+    expect(APP).toMatch(/onBackFromNotebook: closeWorkspace/);
+    // 首页不再"按路由条件渲染"（常驻 = 页栈语义，返回时滚动/数据都在）
+    expect(APP).not.toMatch(/route\.kind === "home" && \(\s*<HomePage/);
+  });
+
+  it("hook：挂载后下一帧才播放入场；出场播完才卸载；非活动层 inert", () => {
+    expect(HOOK).toContain("requestAnimationFrame(() => setOpen(true))");
+    expect(HOOK).toMatch(/routeTransitionMs\(prefersReducedMotion\(\)\)/);
+    expect(HOOK).toContain("setMounted(false)");
+    expect(HOOK).toMatch(/toggleAttribute\("inert"/);
+    expect(HOOK).toContain("aria-hidden");
+  });
+
+  it("CSS：新页 100%→0、旧页 25% 视差、240ms 令牌、reduced-motion 关闭", () => {
+    expect(CSS).toMatch(/\.mobile-route-stage\s*\{[^}]*overflow:\s*hidden/);
+    expect(CSS).toMatch(/\.mobile-route-layer\s*\{[^}]*transition:\s*transform var\(--lake-motion-slow\)/);
+    expect(CSS).toMatch(/\.mobile-route-layer--workspace\s*\{[^}]*transform:\s*translateX\(100%\)/);
+    // 工作区层必须不透明（否则首页常驻层会从表格/多维表的透明容器里透出来，261019 实测）
+    expect(CSS).toMatch(/\.mobile-route-layer--workspace\s*\{[^}]*background:\s*var\(--lake-bg-canvas\)/);
+    // 转场层必须按自身边界裁切：工作区的 off-canvas 抽屉是 fixed + translateX(±100%)，layer 位移时
+    // 会"探进"视口（261019 用户报"从常用进入/退出闪一下"的根因，实测 push 到 x=58 时文档树可见）
+    expect(CSS).toMatch(/\.mobile-route-layer\s*\{[^}]*overflow:\s*hidden/);
+    expect(CSS).toMatch(/\.mobile-route-stage\.is-open \.mobile-route-layer--home\s*\{\s*transform:\s*translateX\(-25%\)/);
+    expect(CSS).toMatch(/prefers-reduced-motion[\s\S]{0,160}\.mobile-route-layer\s*\{\s*transition:\s*none/);
+  });
+});

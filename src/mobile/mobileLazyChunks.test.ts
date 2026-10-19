@@ -23,7 +23,8 @@ const staticImport = (src: string, name: string) =>
 describe("移动端入口不静态引入 Lake 内核", () => {
   it("三条内核承载路径都走 lazy 动态边界", () => {
     expect(read("./MobileApp.tsx")).toMatch(/lazy\(\(\) => import\("\.\/notebook\/NotebookWorkspace"\)/);
-    expect(read("./home/HomePage.tsx")).toMatch(/lazy\(\(\) => import\("\.\/QuickNoteComposer"\)/);
+    // 261019 起用自研加载壳（不用 React.lazy；预取过可同步渲染、零 fallback）
+    expect(read("./home/quickNoteComposerLazy.tsx")).toMatch(/import\("\.\/QuickNoteComposer"\)/);
     expect(read("./settings/SettingsDrawer.tsx")).toMatch(/lazy\(\(\) => import\("\.\.\/trash\/TrashPreviewPage"\)/);
   });
 

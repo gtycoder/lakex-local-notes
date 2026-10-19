@@ -12,6 +12,7 @@
  * 失败一律吞掉：预热只是优化，绝不能影响功能。
  */
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
+import { loadQuickNoteComposer } from "../home/quickNoteComposerLazy";
 
 /** 会话内只排一次（多次挂载/重渲不重复点火）。 */
 let scheduled = false;
@@ -35,12 +36,36 @@ export function scheduleKernelPrewarm(): void {
 /** 仅供测试/调试：重置排期闩。 */
 export function resetKernelPrewarmForTest(): void { scheduled = false; }
 
+/**
+ * 小记编辑器分包**提前预取**（261019）：只 `import`、不实例化内核。
+ * 冷启动后用户很快点「编辑小记」/「新建小记」时，QuickNoteComposer 的懒加载兜底（"正在加载编辑器…"）
+ * 就是这里在现拉分包；提前在首屏空闲时把分包（含内核 chunk 与内核样式）拉好，打开时只剩实例化那一段。
+ * 与内核预热分开排期：预热仍延到 4s（实例化贵、会抢首屏），这里就绪后直接排空闲（纯拉取/求值，实测约几十 ms）。
+ */
+let composerScheduled = false;
+
+export function scheduleComposerPrewarm(): void {
+  if (composerScheduled) return;
+  composerScheduled = true;
+  const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+  const start = (): void => {
+    if (typeof ric === "function") ric(() => { void loadQuickNoteComposer().catch(() => undefined); }, { timeout: 1500 });
+    else void loadQuickNoteComposer().catch(() => undefined);
+  };
+  // 就绪 effect 本身在首屏绘制之后才跑；分包只"拉取+求值"（实测 ~30ms），直接排空闲即可。
+  // 内核预热（要实例化，贵）仍是 4s 后的独立排期，不合并。
+  start();
+}
+
+/** 仅供测试/调试：重置小记分包预取排期闩。 */
+export function resetComposerPrewarmForTest(): void { composerScheduled = false; }
+
 export async function runKernelPrewarmNow(): Promise<"ok" | "failed"> {
   let mount: HTMLElement | null = null;
   try {
     // ① 预取 capture 用到的懒加载分包（**实测打开时还在现拉**：QuickNoteComposer.js 4ms / style.js 4ms /
     //    style.css 16ms / 字体 4ms ⇒ 这一段在关键路径上）。只 import 模块、不建实例。
-    void import("../home/QuickNoteComposer").catch(() => undefined);
+    void loadQuickNoteComposer().catch(() => undefined);
     const { createLakeDocument, destroyLakeEditor } = await import("../../features/editor/lakeRuntime");
     mount = document.createElement("div");
     mount.setAttribute("aria-hidden", "true");

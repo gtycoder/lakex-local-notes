@@ -14,7 +14,8 @@ import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
 import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent, type QuickNoteSeed } from "./native/sharedContent";
 import { sha256Sync } from "../core/sha256Sync.js";
-import { scheduleKernelPrewarm } from "./native/kernelPrewarm";
+import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelPrewarm";
+import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
 import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 
@@ -24,11 +25,12 @@ import { localAssetHttpUrl } from "../core/assetUrl.js";
  * 此前 capture 走不挂内核的 `QuickNoteFlashComposer`（秒开但不可展开、无富编辑），已按用户 261010 决定统一并删除。
  * 懒加载保持入口 chunk 不含内核。
  */
-const QuickNoteComposer = lazy(() => import("./home/QuickNoteComposer").then((m) => ({ default: m.QuickNoteComposer })));
+// 小记编辑器 = 按需加载壳（预取过则同步渲染；未预取先骨架）——见 home/quickNoteComposerLazy.tsx
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./hooks/useBackHandler";
+import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
@@ -63,6 +65,17 @@ export type Route =
 export function MobileApp() {
   /** 冷启动固定落在「小记」（用户 261014 定；快捷 capture 那条本来也落在小记）。 */
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "quick" });
+  /**
+   * 路由转场（261019，对齐语雀 push；状态机见 hooks/useRouteTransition）：
+   * 工作区按需挂载、播完出场才卸载；首页层常驻（页栈语义）⇒ 返回时列表滚动位置与数据都在。
+   */
+  const {
+    mounted: wsMounted,
+    open: wsOpen,
+    close: closeWorkspace,
+    homeRef: routeHomeRef,
+    wsRef: routeWsRef,
+  } = useRouteTransition(route.kind, () => setRoute({ kind: "home", tab: "library" }));
   /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。 */
   const [captureOpen, setCaptureOpen] = useState(false);
   /** 系统分享带入的初始内容（文本 + 图片）；null = 空白/恢复草稿。 */
@@ -221,9 +234,16 @@ export function MobileApp() {
 
   // 内核预热（261010）：bridge 就绪后**空闲**点燃一次内核 —— 本次会话首次打开文档/小记卡片从 334–928ms 降到热态量级。
   // 只点燃不保留实例（见 kernelPrewarm.ts 头注释：内核有模块级单例，不做实例池/移交）。
-  useEffect(() => { if (phase === "ready") scheduleKernelPrewarm(); }, [phase]);
+  useEffect(() => {
+    if (phase !== "ready") return;
+    scheduleKernelPrewarm();
+    // 小记编辑器分包提前预取（只拉分包/不实例化）：冷启动后很快点「编辑/新建小记」不再闪加载页
+    scheduleComposerPrewarm();
+  }, [phase]);
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
+  /** 首页常驻渲染：工作区打开期间它只是被盖住（inert），tab 值取当前 home 路由或回退「知识库」（返回落点）。 */
+  const homeTab = route.kind === "home" ? route.tab : "library";
   // 笔记本 → 直接文档数（首页列表行 .counter；与 listNotebookTree 的归属口径一致：parent 为笔记本）
   const docCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -239,7 +259,7 @@ export function MobileApp() {
     searchOpen,
     captureOpen,
     onCloseCapture: closeCapture,
-    onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
+    onBackFromNotebook: closeWorkspace,
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
     onAppExit: () => {
@@ -267,8 +287,9 @@ export function MobileApp() {
       cur = parentOfNote.get(cur) ?? null;
     }
     if (!notebookId) { showToast("未找到该文档所属笔记本（可在数据体检中修复）", { type: "error" }); return; }
-    await refreshAll();
+    // 先起转场：首页列表的 refreshAll 不必挡在路由前面（实测会把 push 延迟 ~700ms，观感像"点了没反应"）。
     setRoute({ kind: "notebook", notebookId, initialNoteId: id, initialMode: mode });
+    void refreshAll().catch(() => undefined);
   }, [notes, treeNodes, refreshAll]);
 
   /** 「文档引用」卡（内核自定义卡）在移动端也要能选目标文档：注册宿主（与桌面 App.tsx 同一接口）。
@@ -301,18 +322,16 @@ export function MobileApp() {
       <div className="mobile-app">
         <div className="mobile-qn-composer-wrap">
           {seedReady ? (
-            <Suspense fallback={<div className="mobile-qn-composer" />}>
-              <QuickNoteComposer
-                key={captureNonce}
-                draft
-                raiseKeyboard
-                // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
-                // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
-                // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。
-                onSaved={async () => { setCaptureNonce((n) => n + 1); setCaptureSeed(null); }}
-                onCancel={closeCapture}
-              />
-            </Suspense>
+            <QuickNoteComposerLazy
+              key={captureNonce}
+              draft
+              raiseKeyboard
+              // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
+              // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
+              // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。
+              onSaved={async () => { setCaptureNonce((n) => n + 1); setCaptureSeed(null); }}
+              onCancel={closeCapture}
+            />
           ) : (
             <div className="mobile-qn-composer" />
           )}
@@ -332,9 +351,11 @@ export function MobileApp() {
         onRefresh={refreshAll}
         onOpenNote={(id) => void openNote(id, "viewer")}
       />
-      {route.kind === "home" && (
+      {/* 路由层（261019）：首页常驻 + 工作区按需挂载；push/pop 只动 transform（见 mobile.css） */}
+      <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "")} aria-label="页面">
+      <div className="mobile-route-layer mobile-route-layer--home" ref={routeHomeRef}>
         <HomePage
-          tab={route.tab}
+          tab={homeTab}
           notebooks={notebooks}
           notes={notes}
           quickNotes={quickNotes}
@@ -349,21 +370,31 @@ export function MobileApp() {
           onTreeChanged={refreshAll}
           onQuickNotesChanged={refreshAll}
         />
-      )}
-      {route.kind === "notebook" && (
-        <Suspense fallback={<div className="poc-center">加载中…</div>}>
+      </div>
+      {route.kind === "notebook" && wsMounted && (
+        <div className="mobile-route-layer mobile-route-layer--workspace" ref={routeWsRef}>
+        <Suspense fallback={
+          <div className="mobile-route-skeleton" aria-busy="true" aria-label="正在打开">
+            <span className="mb-skel mb-route-skeleton__title" />
+            <span className="mb-skel mb-route-skeleton__line" />
+            <span className="mb-skel mb-route-skeleton__line" />
+            <span className="mb-skel mb-route-skeleton__line" />
+          </div>
+        }>
         <NotebookWorkspace
           key={route.notebookId}
           notebookId={route.notebookId}
           initialNoteId={route.initialNoteId ?? null}
           initialMode={route.initialMode}
-          onBack={() => setRoute({ kind: "home", tab: "library" })}
+          onBack={closeWorkspace}
           notebooks={notebooks}
           onSwitchNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onActiveNoteChange={(id) => { activeIdRef.current = id; }}
         />
         </Suspense>
+        </div>
       )}
+      </div>
       <CreateNotebookSheet
         open={createNbOpen}
         onClose={() => setCreateNbOpen(false)}

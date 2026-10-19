@@ -19,7 +19,7 @@ import { pushEmojiRecent, readEmojiRecents, type EmojiRecentBucket } from "../..
  * · **不要搜索**（用户："移动端没啥意义"）⇒ 没有搜索入口，也没有输入框；
  * · **分类条一屏放得下、不横向滚动**（用户：左划会被外壳手势抢走 —— 小记切 tab / 文档开大纲）；
  *   （261014 起 = 9 个分类 + 末尾动作键，每格 ≈41px ⇒ 命中区由触达补足注册表补到 44）；另挂 `data-prevent-swipe`，
- *   让偶发的横划不落到 `useHorizontalSwipe` / `usePanelDrag` 上（它们本就排除该属性的元素）。
+ *   让偶发的横划不落到 `usePanelDrag` / 弹层右滑关闭上（它们本就排除该属性的元素）。
  *
  * 视觉与几何是移动端自有的（MOBILE-TECH-STACK §九）；「最近」**按入口分桶**（AGENTS §3#14）。
  */
@@ -57,7 +57,7 @@ export function EmojiPanel({ bucket = "icon", onPick, onClear, onBack, fill = fa
     <div className={"mb-emoji-panel" + (fill ? " mb-emoji-panel--fill" : "")} data-prevent-swipe>
       <div className="mb-emoji-cats">
         {/* 分类轨道：**横滑**（用户 261014 二次定稿 —— 10 个可点目标挤一屏确实太多；微信也是一行 8 个）。
-            横滑安全性：面板根已挂 `data-prevent-swipe`，外壳的 `useHorizontalSwipe` / `usePanelDrag` 本就排除这类元素
+            横滑安全性：面板根已挂 `data-prevent-swipe`，外壳的 `usePanelDrag` / 弹层右滑关闭本就排除这类元素
             ⇒ 拖这条轨道只滚它自己，不会切 tab / 开大纲（261013 立的既有约定，未新造机制）。 */}
         <div className="mb-emoji-cats__track" role="tablist" aria-label="表情分类">
           <button

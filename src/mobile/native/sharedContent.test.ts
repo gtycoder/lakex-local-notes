@@ -36,7 +36,7 @@ describe("系统分享接入（ACTION_SEND）", () => {
     // 261010：seed 不再走 prop，而是先落成草稿（图片落盘 + body 合成），再由 composer 恢复
     expect(app).toMatch(/sharedContentToSeed/);
     expect(app).toMatch(/saveQuickNoteDraft\(\{ id, text: captureSeed\.text, body, images \}\)/);
-    expect(app).toMatch(/<QuickNoteComposer[\s\S]{0,200}draft/);
+    expect(app).toMatch(/<QuickNoteComposerLazy[\s\S]{0,200}draft/);
     const share = read("./sharedContent.ts");
     expect(share).toMatch(/Directory\.Data/);
     expect(share).toMatch(/registerPlugin<SharedContentPluginApi>\("SharedContent"\)/);

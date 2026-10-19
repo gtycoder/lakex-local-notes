@@ -1,6 +1,6 @@
 /**
  * 移动端手势公共核心（对齐思源 mobile/util/touchGesture.ts + touch.ts 的判定口径）。
- * 只放纯函数/常量，供 usePanelDrag / useHorizontalSwipe / 弹层右滑关闭共用，避免各写一套轴锁。
+ * 只放纯函数/常量，供 usePanelDrag / 弹层右滑关闭共用，避免各写一套轴锁。
  */
 export type TouchAxis = "x" | "y";
 /** 抽屉侧：左 = 目录（设置页也复用它），右 = 大纲。 */

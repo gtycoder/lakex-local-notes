@@ -30,6 +30,7 @@ const SHEET = code(read("../ui/CreateSheet.tsx"));
 const COMPOSER = code(read("./QuickNoteComposer.tsx"));
 const MOBILE_APP = code(read("../MobileApp.tsx"));
 const PRESS = code(read("../ui/createPress.ts"));
+const CSS = code(read("../mobile.css"));
 
 describe("首页新建流（261014）", () => {
   it("冷启动默认进「小记」", () => {
@@ -114,6 +115,32 @@ describe("首页新建流（261014）", () => {
     expect(HOME).toMatch(/blockPressRelease\(\{ revealed: createPressRevealed\(elapsed\), dy \}\)/);
     expect(HOME).toMatch(/CREATE_LONG_PRESS_MS/);
     expect(PRESS).toMatch(/export function blockPressRelease/);
+  });
+
+  it("小记 ↔ 知识库 = 原生横向分页（跟手 + 松手吸附；写作会话锁横滑）", () => {
+    // 两页常驻在同一个横向滚动容器里（手指拖动时两页同时可见）——不是"按 tab 条件渲染 + 手写横滑"
+    expect((HOME.match(/className="mobile-tab-pane"/g) || []).length).toBe(2);
+    expect(HOME).not.toContain("useHorizontalSwipe");
+    expect(HOME).not.toMatch(/key=\{tab\}/);
+    // 分页判据 = 纯函数单一来源（home/tabPager），HomePage 只做接线
+    expect(HOME).toMatch(/settledIndex\(el\.scrollLeft/);
+    expect(HOME).toMatch(/pagerScrollLeft\(tabIndexRef\.current/);
+    // 标签跟随：**过半即回写**（不能等 scrollend，否则会短暂"页是新的、标签还是旧的"）+ 触摸期间不做程序化对齐
+    expect(HOME).toContain('addEventListener("scroll", commit');
+    expect(HOME).toContain("interactingRef.current = true");
+    expect(HOME).toMatch(/alignStage[\s\S]{0,120}interactingRef\.current\) return/);
+    // 程序化滚动（点 tab / 宽度重对齐）期间的 scroll 事件不能回写 tab，否则动画开头会把标签弹回旧页
+    expect(HOME).toContain("programmaticRef.current = true");
+    expect(HOME).toMatch(/if \(programmaticRef\.current\) return/);
+    // 写作/编辑小记期间锁横滑（否则父级 [tab] effect 清掉写作卡 = 丢草稿）
+    expect(HOME).toMatch(/composer !== null \? " mobile-tab-stage--locked" : ""/);
+    // 舞台 = 原生横向滚动 + 吸附；锁定态只留纵向滚动
+    expect(CSS).toMatch(/\.mobile-tab-stage\s*\{[^}]*overflow-x:\s*auto/);
+    expect(CSS).toMatch(/scroll-snap-type:\s*x mandatory/);
+    expect(CSS).toMatch(/\.mobile-tab-pane\s*\{[^}]*scroll-snap-align:\s*start/);
+    // 锁定必须"双保险"：舞台收掉横向滚动（内层竖滚的 hand-off 会绕过 touch-action）+ 内层也只留 pan-y
+    expect(CSS).toMatch(/\.mobile-tab-stage--locked\s*\{[^}]*overflow-x:\s*hidden/);
+    expect(CSS).toMatch(/\.mobile-tab-stage--locked \.mobile-scroll\s*\{[^}]*touch-action:\s*pan-y/);
   });
 
   it("桌面图标快捷 capture 那条路没被动（仍是独立入口）", () => {

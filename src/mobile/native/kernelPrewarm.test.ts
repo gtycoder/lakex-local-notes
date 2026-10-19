@@ -23,7 +23,7 @@ describe("内核预热（只点燃、不保留实例）", () => {
   });
 
   it("顺带预取 capture 的懒加载分包（打开时不再现拉 composer/style/字体）", () => {
-    expect(PREWARM).toMatch(/import\("\.\.\/home\/QuickNoteComposer"\)/);
+    expect(PREWARM).toMatch(/loadQuickNoteComposer\(\)/);
   });
 
   it("必须走 destroyLakeEditor 释放（只 editor.destroy() 不够）", () => {
@@ -41,6 +41,7 @@ describe("内核预热（只点燃、不保留实例）", () => {
   });
 
   it("只在启动就绪后排期", () => {
-    expect(APP).toMatch(/if \(phase === "ready"\) scheduleKernelPrewarm\(\)/);
+    // 261019：与"小记分包预取"合并进同一个 ready effect（预热仍是独立的 4s 排期）
+    expect(APP).toMatch(/if \(phase !== "ready"\) return;\s*\n\s*scheduleKernelPrewarm\(\);/);
   });
 });

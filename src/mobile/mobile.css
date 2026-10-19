@@ -29,8 +29,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .poc-error { color: var(--lake-status-error); }
 
 /* ===== Phase 1 产品壳样式（MobileApp） ===== */
-/* overflow:hidden 必须加在根容器（动画元素的祖先）上：overflow 只裁子元素，加在自身动画的 .mobile-tab-stage 上无效。
-   首页左滑切 tab 的入场动画是 translateX(±24px)，由这里裁掉溢出，右侧就不会露出"被拉伸/拉过头"的边。
+/* overflow:hidden 加在根容器上：横向分页时相邻页会落在自身滚动容器之外，这里做最终裁剪兜底
+   （分页容器自己也有 overflow-x，见下方 .mobile-tab-stage）。
    抽屉 .side-panel 是 position:fixed，根容器无 transform，不受裁剪影响。 */
 /* 外壳高度：有编辑 dock 时 = **稳定外壳高 − 底部被占高度**（--mb-app-h 由 EditorDock 写，见 viewportShell.ts）
    —— 面板与输入法占同一块区域，内容视口恒定（语雀口径）；无 dock 时退回 100%（今天的行为）。
@@ -44,6 +44,17 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   height: var(--mobile-topbar-height); background: var(--lake-bg-window);
   border-bottom: .5px solid var(--lake-bg-block);
   position: sticky; top: 0; z-index: var(--mobile-z-topbar);
+  /* 阅读时自动收起（261019，对齐思源）：收起靠高度/外边距过渡，正文自然上移（不改 position，避免重排错位）。 */
+  overflow: hidden;
+  transition: height var(--mobile-duration-panel) var(--mobile-ease-panel),
+    margin-top var(--mobile-duration-panel) var(--mobile-ease-panel),
+    padding-top var(--mobile-duration-panel) var(--mobile-ease-panel),
+    border-bottom-width var(--mobile-duration-panel) var(--mobile-ease-panel),
+    opacity var(--mobile-duration-panel) var(--mobile-ease-panel);
+}
+/* 阅读态顶栏收起：高度归零 + 淡出；由 NotebookWorkspace 的 chrome 判据控制（见 notebook/scrollChrome.ts）。 */
+.mobile-topbar--auto-hidden {
+  height: 0; min-height: 0; margin-top: 0; padding-top: 0; border-bottom-width: 0; opacity: 0; pointer-events: none;
 }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: var(--lake-font-size-title); line-height: 30px; font-weight: 400; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
@@ -62,15 +73,40 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 /* 首页顶部 tab 主体样式单一来源在下方 .mobile-home-tabs 区块 */
 
-/* 首层 tab 舞台（小记 ↔ 知识库；用户要求去掉切换入场动效，直接切换） */
 /* 261014：首页/小记这一层原先**没有规则**（普通 block、自动高度）⇒ 里面的 `.mobile-tab-stage/.mobile-scroll`（都是 flex:1）
    在一个 auto 高度的父里退化成"内容多高就多高、永远不滚"（实测 scroller 的 scrollHeight == clientHeight），
    于是**文字一多，光标就贴着内容一路跑出屏幕**（用户报的"光标不能被工具栏/键盘盖住"在小记上就是这么坏的）。
    让它像 `.mobile-workspace` 一样撑满外壳（外壳高度已被 --mb-app-h 钉住）⇒ 内层才是真正的滚动容器。 */
 .mobile-home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.mobile-tab-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-.mobile-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
+/* 首层 tab（小记 ↔ 知识库）= **原生横向分页**（261019 用户点单，对齐语雀 App）：
+   两页并排放在同一个横向滚动容器里 ⇒ 手指跟手拖动、松手由 scroll-snap 吸附，
+   与语雀 RN 侧的 `react-native-pager-view` 同一形态；tab↔页码的取整判据在 home/tabPager.ts。
+   不写自研 touch 判定：轴锁交给浏览器（纵向滚内层、横向翻页）。 */
+.mobile-tab-stage {
+  flex: 1; min-height: 0; display: flex; flex-direction: row;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.mobile-tab-stage::-webkit-scrollbar { display: none; }
+/* 写作/编辑小记期间锁横滑（切走 = 父级 [tab] effect 清掉写作卡 = 丢草稿）：只留纵向滚动。
+   ⚠️ **必须同时收掉自愈的横向滚动**（overflow-x:hidden）：touch-action 只按"最近的滚动容器"取交集，
+   内层 .mobile-scroll 才是那个"最近容器" ⇒ 只在舞台写 pan-y 时，内层竖滚仍会把横向手势链上去（261019 实测会翻页）。
+   锁定时舞台本来就在第 0 页（composer 只在「小记」开），不存在丢滚动位置的代价。 */
+.mobile-tab-stage--locked { overflow-x: hidden; touch-action: pan-y; }
+.mobile-tab-stage--locked .mobile-tab-pane,
+.mobile-tab-stage--locked .mobile-scroll { touch-action: pan-y; }
+.mobile-tab-pane {
+  flex: 0 0 100%; width: 100%; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  scroll-snap-align: start; scroll-snap-stop: always;
+}
+
+/* ⚠️ 只收纵向 overscroll（`overscroll-behavior-y`），**不能写两轴的 `contain`**：
+   否则首层横向分页的"手指左滑 → 翻到下一页"会被内层竖滚容器吃掉（261019 实测：
+   contain 时负向手势完全不翻页；改成 -y 后正常，纵向回弹语义不变）。 */
+.mobile-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
 /* 小记写作（261013 重做）：写作时**底部挂的是文档编辑那条 dock**（EditorDockHost），不是首页胶囊栏，
  *  所以底距改按 dock 的占位算（与 .mobile-doc-body 同一口径），否则动作行会被 dock 压住。 */
 .mobile-scroll--with-dock { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
@@ -136,10 +172,12 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .home-section--list .home-section__head { padding: 12px 16px 6px; }
 .home-section__head { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 16px 6px; }
 .home-section__title { font-size: 15px; font-weight: 600; color: var(--lake-text-1); }
+/* 「常用」分组标题 = 收起/展开按钮（三角在标题右侧）；261019 用户点单。 */
+.home-section__toggle { display: inline-flex; align-items: center; gap: 2px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
-/* —— 最近文档：仿语雀纸卡（纸张纹理 + 回形针 + 标题/时间） —— */
-.home-recent { display: flex; gap: 12px; overflow-x: auto; padding: 10px 16px 14px; scrollbar-width: none; }
-.home-recent::-webkit-scrollbar { display: none; }
+/* —— 横排文档卡（「常用」分组；此前也用于"最近文档"，后者 261019 已删）：仿语雀纸卡（纸纹 + 标题/时间） —— */
+.home-card-row { display: flex; gap: 12px; overflow-x: auto; padding: 10px 16px 14px; scrollbar-width: none; }
+.home-card-row::-webkit-scrollbar { display: none; }
 .doc-card { flex: 0 0 72px; width: 72px; display: flex; flex-direction: column; gap: 6px; padding: 0; border: none; background: transparent; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .doc-card__paper { position: relative; aspect-ratio: 3 / 3.9; border-radius: 6px; background: var(--lake-bg-window); border: 1px solid var(--lake-border-1); box-shadow: var(--mb-shadow-paper); overflow: hidden; transition: transform var(--mobile-duration-press) var(--mobile-ease-panel), box-shadow var(--mobile-duration-press) var(--mobile-ease-panel); }
 .doc-card:active .doc-card__paper { transform: scale(.96); box-shadow: var(--mb-shadow-paper); }
@@ -314,6 +352,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   .bottom-bar-btn, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
   .mobile-fab:active, .bottom-bar-btn:active { transform: none; }
   .mb-skel { animation: none; }
+  .mobile-topbar { transition: none; }
+  .doc-pane--fresh .mobile-doc-body { animation: none; }
   .side-panel.side-panel, .side-mask.side-mask { transition: none; }
 }
 
@@ -434,6 +474,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 /* 键盘/选区态：整条下滑淡出（思源 .mobile-keyboard--open / .mobile-selection--active） */
 .mobile-bottom-bar--hidden { opacity: 0; pointer-events: none; transform: translate3d(0, 100%, 0); visibility: hidden; }
+/* 表格页：Univer 自带底部工具条（工作表标签 / 缩放 / 求和，实测 36px）贴着屏幕底 ⇒ 胶囊整体上移让位，
+   否则胶囊会盖住工作表标签（261019 用户截图）。高度走令牌，不写魔法数字。 */
+.mobile-bottom-bar--above-sheet { bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--mobile-sheet-bar-h)); }
 
 .bottom-bar-btn > svg, .mobile-bottom-bar__item > svg { width: 20px; height: 20px; flex-shrink: 0; }
 .bottom-bar-btn:active { color: var(--lake-text-2); background: var(--lake-bg-hover); transform: scale(.92); }
@@ -511,6 +554,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-model-mask { position: fixed; inset: 0; z-index: var(--mobile-z-model-mask); background: var(--mobile-mask); display: flex; align-items: flex-end; }
 .mobile-model { width: 100%; max-width: 480px; margin: 0 auto; max-height: 80%; display: flex; flex-direction: column; background: var(--lake-bg-window, var(--lake-bg-window)); border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0; overflow: hidden; scrollbar-width: none; animation: mobile-sheet-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
 .mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: var(--mobile-topbar-height); padding: 8px 8px 8px 16px; border-bottom: .5px solid var(--lake-bg-block); }
+/* 标签页抽屉：标题右侧「关闭全部」（放在 × 左边；ml-auto 把它顶到右侧） */
+.mobile-model-closeall { margin-left: auto; margin-right: 4px; padding: 6px 8px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-small); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mobile-model-closeall:active { background: var(--lake-bg-hover); color: var(--lake-text-2); }
 
 .mobile-model-body { overflow-y: auto; padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
 /* 全屏标签页列表的行是 .mb-row（P5 起）；原先这批 .ln-row 规则失效 ⇒ 标签页退化成无边框的裸行。
@@ -909,3 +955,59 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 body.lake-mobile .ne-ui-search-card-menu { max-height: calc(100vh - 200px); }
 body.lake-mobile .ne-ui-card-menu-content { max-height: calc(100vh - 200px); overflow-y: auto; }
 body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120px !important; bottom: auto !important; }
+
+/* ===== 首页 ↔ 工作区 路由转场（261019，对齐语雀 push） =====
+ * 形态：新页自右滑入（100%→0），旧页左移 25% 做视差；返回反向。
+ * 只动 transform（合成层，不触发布局）；240ms = --lake-motion-slow（与 DESIGN 动效口径同一套令牌）。
+ * 首页层在进入工作区后**保持挂载**（页栈语义）：返回时列表滚动位置与数据都在，不需要重建。
+ * 注意：位移层都是 absolute inset:0 的 flex 列，内部页面照旧用 flex:1 撑满。 */
+.mobile-route-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.mobile-route-layer {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  transition: transform var(--lake-motion-slow) var(--lake-ease-standard);
+  will-change: transform;
+  /* **必须按 layer 自身裁切**（261019 用户报"从常用进入/退出闪一下"的根因）：
+     工作区里的左右抽屉是 position:fixed + translateX(±100%)，而 layer 自带 transform ⇒ fixed 以 layer
+     为包含块；layer 在转场中整体位移时，off-canvas 的抽屉会"探进"视口（实测 push 到 x=58 时整块
+     文档树可见、还带着空态文案）。overflow:hidden 按 layer 边界裁掉；抽屉正常展开（在 layer 内）不受影响。 */
+  overflow: hidden;
+}
+/* 工作区层必须**不透明**：首页层常驻在它下面（translateX(-25%)），而表格 / 多维表页面内部有大量透明容器
+   （.mobile-bitable / .mbt-grid-wrap / TABLE 都是透明底）——不铺底就会透出首页卡片（261019 用户截图实测）。
+   底色用 --lake-bg-canvas（与多维表/表格 canvas 同一令牌；文字页自己的 .mobile-doc-body 会再铺 --lake-bg-window）。 */
+.mobile-route-layer--workspace { transform: translateX(100%); z-index: 1; background: var(--lake-bg-canvas); }
+/* reduced-motion：转场直接到位（不播位移）；关闭等待也由 JS 侧降为 0ms（见 useRouteTransition）。 */
+@media (prefers-reduced-motion: reduce) { .mobile-route-layer { transition: none; } }
+.mobile-route-stage.is-open .mobile-route-layer--home { transform: translateX(-25%); }
+.mobile-route-stage.is-open .mobile-route-layer--workspace { transform: translateX(0); }
+
+/* ===== 按压反馈统一（261019，对齐思源：80ms 过渡 + 轻缩放）=====
+ * 底色/颜色过渡走 --mobile-duration-press（80ms）；只有紧凑条目加 scale(.98)，
+ * 整行列表（目录行/设置行）只做底色过渡 —— 整行缩放会显得"抖"，不采用。 */
+.mb-row, .mb-list-item, .nb-row, .mobile-doc-row, .mobile-settings-row, .mobile-drawer-item,
+.mb-menusheet__item, .mb-actionsheet__item, .mb-actionsheet__cancel,
+.med-btn, .med-ins-item, .med-f-btn, .med-outline-item, .med-doc-item {
+  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease;
+}
+.mb-menusheet__item:active, .mb-actionsheet__item:active, .mb-actionsheet__cancel:active,
+.med-btn:active, .med-ins-item:active, .med-f-btn:active, .med-outline-item:active, .med-doc-item:active {
+  transform: scale(.98);
+}
+
+/* ===== 文档骨架 / 正文淡入（261019，对齐语雀「转场先骨架、内容再淡入」） =====
+ * 触发点只有两处：① 工作区首次挂载时的 Suspense 兜底；② 点了文档但正文还在异步读回（active 尚未进 tabs）。
+ * 骨架复用 .mb-skel 的呼吸；正文淡入只给"刚读回的那一页"（.doc-pane--fresh，260ms 后清标记），切回旧 tab 不重播。 */
+.mobile-route-skeleton { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 0; }
+/* 小记编辑器懒加载兜底 = 写作卡骨架（261019）：不再显示"正在加载编辑器…"文字页 */
+.mb-composer-skeleton { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px 12px; }
+.mb-composer-skeleton__title { width: 38%; height: 20px; }
+.mb-composer-skeleton__line { width: 100%; height: 13px; }
+.mb-composer-skeleton__line--short { width: 58%; }
+.mobile-route-skeleton__title { width: 44%; height: 22px; }
+.mobile-route-skeleton__line { width: 100%; height: 14px; }
+.mb-doc-skeleton { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.mb-doc-skeleton__title { width: 42%; height: 24px; }
+.mb-doc-skeleton__line { width: 100%; height: 14px; }
+.mb-doc-skeleton__line--short { width: 62%; }
+@keyframes mb-doc-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.doc-pane--fresh .mobile-doc-body { animation: mb-doc-fade var(--mobile-duration-panel) var(--mobile-ease-panel); }

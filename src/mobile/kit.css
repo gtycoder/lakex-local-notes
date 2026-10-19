@@ -285,12 +285,13 @@
  * 有意**不复用内核表情面板**：用户明确要"微信那样、更适合输入"。视觉与几何是移动端自有的。
  * 命中区：分类与格子都是 --mb-tap-min(44)；格子宽度由列数决定（8 列在 380 内容宽下 ≈46px）。 */
 .mb-emoji-panel { display: flex; flex-direction: column; gap: 8px; }
-/* 面板整体带 data-prevent-swipe（属性在 JSX 上）：`useHorizontalSwipe` / `usePanelDrag` 都排除这类元素，
- * 于是偶发横划不会再被外壳抢去切 tab / 开大纲（既有约定，见 usePanelDrag 的 EXCLUDE）。 */
+/* 面板整体带 data-prevent-swipe（属性在 JSX 上）：抽屉手势 `usePanelDrag` 与弹层右滑关闭都排除这类元素，
+ * 于是偶发横划不会再被外壳抢去开抽屉（既有约定，见 usePanelDrag 的 EXCLUDE）。
+ * 首页「小记 ↔ 知识库」横向分页是舞台自己的滚动容器，面板/浮层不在舞台内 ⇒ 天然不会被翻页。 */
 .mb-emoji-cats { display: flex; align-items: center; }
 /* 261014 二次定稿（用户）：**一屏 8 格 + 横滑**（对标微信；"10 个可点目标挤一屏确实太多"）。
  * 轨道外的动作键钉在最右不滚 ⇒ 每格固定 --mb-tap-min(44)，8 格 = 352 装满一屏、第 9 格露一点边提示可滑。
- * 横划不会被外壳抢走：面板根挂了 data-prevent-swipe，useHorizontalSwipe / usePanelDrag 本就排除这类元素。 */
+ * 横划不会被外壳抢走：面板根挂了 data-prevent-swipe，usePanelDrag / 弹层右滑关闭本就排除这类元素。 */
 .mb-emoji-cats__track {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center;
   overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
