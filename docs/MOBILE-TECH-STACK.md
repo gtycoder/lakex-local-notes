@@ -64,8 +64,8 @@
 | 面 | 数量 | 载体 | 说明 |
 | --- | --- | --- | --- |
 | 桌面 IPC | **121** | `electron/preload.cjs` | 桌面渲染层的能力面 |
-| 移动实现本体 | **70** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 互斥域判据按此表登记（261010 收窄：删死方法 `uploadObject`，71→70） |
-| 移动调试契约 | **49** + 2 | `window.lakeNative`（`src/mobile/native/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口；+2 = `runNativeSqliteSpike` / `migrateSnapshotToNativeSqlite` |
+| 移动实现本体 | **71** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 互斥域判据按此表登记（261020 +createBitable；261010 收窄：删死方法 `uploadObject`，71→70） |
+| 移动调试契约 | **50** + 2 | `window.lakeNative`（`src/mobile/native/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口（261020 +createBitable 供造数/验收）；+2 = `runNativeSqliteSpike` / `migrateSnapshotToNativeSqlite` |
 | 移动性能探针 | 2 | `window.__lakePerf`（reset / snapshot） | 资产传输耗时观测 |
 
 ### 契约面「归属」分类（261010：`bridge` 不再是「70 个方法没人知道谁在用」）
@@ -75,7 +75,7 @@
 
 | 类 | 数量 | 判据 | 含义 |
 | --- | --- | --- | --- |
-| **T1 移动端 UI 直接调** | **49** | `src/mobile/**`（非测试）出现 `bridge.X(` | 移动端自己的界面在用 |
+| **T1 移动端 UI 直接调** | **50** | `src/mobile/**`（非测试）出现 `bridge.X(` | 移动端自己的界面在用（261020 +createBitable） |
 | **T2 共享契约** | **9** | 共享代码（非 mobile、非测试）出现 `native.X(` | 两端都跑的组件会调 ⇒ 移动端**必须实现**。成员：`createQuickNote` `getNoteInfo` `readAssetPreview` `previewHistorySnapshot` `openAttachment` `saveAssetAs` `cleanupHistory` `listS3GcPending` `uploadResource` |
 | **T3 自动化 / 调试契约** | **5** | `scripts/**` 出现 `.X(` 或登记在 `lakeNativeContract.ts` | 供 e2e 脚本与真机手工调试。成员：`saveQuickNote` `saveQuickNoteWithImages` `trashNote` `restoreNote` `listTrashed` |
 | **T4 测试观测/播种口**（显式登记，只许变小） | **7** | 三类都没有，但写在 `contractSurface.test.ts` 的 `TEST_SEAM` | **去向已定（261010）**：生产走 `gcRepository` 直调与 `dbPort`，这几个只是再暴露一份；现存单测借它**播种+观测**验证真实行为（GC 分批删除 / 维护队列写 / 墓碑发布 / folder 防复活）⇒ **保留并登记，不许增长** |
@@ -86,7 +86,8 @@
 ⚠️ 判据是**静态扫描**（`bridge.X(` / `native.X(` / 脚本 `.X(`），**别名调用会漏判** —— 本轮就漏过一个
 （`scripts/e2e-f06-android.mjs` 用 `api.listTrashed()`，差点把在用的方法判成死方法）。**删除前必须人工复核全部引用形式，别只信扫描。**
 
-移动端**只读**范围（不写正文、不进 S3 正文）：表格（usheet，Univer 只读）/ 多维表 / 画板。doc 交给 Lake 编辑器。
+移动端**已无"整类只读"的文档类型**：doc 交给 Lake 编辑器，表格（usheet，§五#9）、画板（board，§五#9 附）、
+多维表（bitable，§五#10，261020 起）都已接入移动编辑。**这不等于与桌面功能等齐** —— 各类型的功能缺口见 §五#9/#10 与 §八。
 
 ## 四、数据与同步约束
 
@@ -94,6 +95,12 @@
 - 当前 Lake Manifest 为 **V1**（260928 重置），所有端必须一起升级。
 - 资源存在性按远端清单差集；下载按实扫 size+sha256 复用本地文件。
 - `note_history` 仍需补齐 `refs_json`/`protected_until`，纳入真机验收。
+- **保存正文不改树归属**（261020 实测 bug 修复）：`noteRepository.saveNote` 的 UPDATE 用 `parent_id=COALESCE(?, parent_id)`。
+  自动保存 / 「完成」只关心正文、不传 parentId，旧实现直接写 `parent_id=?` ⇒ 每保存一次就把文档从笔记本里摘出来
+  （parent_id 变 NULL：目录里找不到、笔记本计数下降）。**显式移动必须走 `moveTreeNodeOrdered`**（那才是树操作）。
+  回归护栏 `bridgeTree.test.ts`「保存不改树归属」。
+- **返回首页要刷新列表**（261020）：首页是 keep-alive 常驻层，`MobileApp` 在 route 从 notebook → home 时补一次
+  `refreshAll()`（否则在工作区新建/编辑后回首页，笔记本计数与「最近文档」还是旧值 —— 用户报的「计数不涨」）。
 - **secret 不落 WebView 存储**：Android Keystore 保管密钥（`SecureStorePlugin.kt` + `src/mobile/native/keystoreSecretStore.ts`），
   密文进应用私有 SharedPreferences；`localStorageSecretStore` 只在 Web/vitest 作后端，并负责把历史值迁移过去。
   设备验证（261010）：冷启动后 `skLen 40`、连通 OK、`localStorage` 里已无 secret。
@@ -107,7 +114,7 @@
 2. **CDP 的 `Page.captureScreenshot` 抓不到 GPU canvas 层**：usheet 网格在页面截图里整片空白，而同屏 `canvas.toDataURL()` 完整、
    `adb exec-out screencap -p` 正常 ⇒ 移动端验收**一律设备级截图**，否则误报「表格空白」。
 3. **keep-alive 的隐藏视图仍在 DOM**：自动化导航与可见性判据必须带命中测试（`elementFromPoint`），只查 `querySelector` 会点到不可见元素。
-4. **可编程入口 = `window.lakeNative`（49 方法）+ `window.__lakePerf`**：自动化验收（含 F16 计时）全靠它；
+4. **可编程入口 = `window.lakeNative`（50 方法）+ `window.__lakePerf`**：自动化验收（含 F16 计时）全靠它；
    换架构也必须保留等价入口（否则验收退回手工）。
 5. **弱网可复现**：模拟器 `-netdelay gprs -netspeed gprs`（≈80kbps / 500ms RTT）。
 6. **一个内核消费者必须自带宽样式**：内核 CSS 目前由消费者模块 import（桌面 `styles/index.css`、移动 `editor/DocumentEditor.tsx`、
@@ -132,6 +139,75 @@
    宿主契约 = 编辑面容器挂 `data-mb-edit-host` + `data-mb-kernel="note|doc"`（新增编辑面挂上即继承）。
    **判据装置**：`node scripts/css-audit/drive.mjs <port> scripts/mobile-audit/edit-surface-invariants.mjs` ——
    两条编辑器各跑 I1 几何恒定 / I2 光标存在 / I3 光标在工具栏上方 / I4 面板不自关·无闪。
+8. **移动端 Univer 必须用移动 UI 插件族**（261019 实测定稿）：`UniverSheetsCorePreset` 自带的是桌面
+   `UniverUIPlugin` / `UniverSheetsUIPlugin`，其 selection service 会把单指横拖当成多选范围（实测选成
+   B12:D12），既不会滚动也不符合触屏习惯；必须成套替换为 `UniverMobileUIPlugin` +
+   `UniverSheetsMobileUIPlugin` + docs/numfmt/formula/drawing 的 mobile UI 插件（见
+   `src/mobile/usheet/mobileUniverPreset.ts`）。移动版语义 = 单指拖动滚动、点按选一个单元格、拖选区控制点扩选。
+   移动 Workbench footer 保留（编辑面/工作表标签需要）；阅读态用 `.mobile-usheet.is-readonly` 隐去浮动按钮，顶部工作表标签栏保留但隐藏「＋」。
+   **编辑态的两颗官方浮动钮要校位**：`bottom-14` 会被视觉视口推到容器下沿（实测只露出半颗、点按落到网格），
+   用 `transform: translateY(-40px)` 整体上移；顶栏已有插入/格式后，再隐藏「打开表格工具」圆钮，只留「键盘」，
+   完整官方动作面板从顶栏「••• → 更多表格工具」打开（`display:none` 的按钮仍可被程序 click）。
+   **凡是可横向拖动的自有内容（表格/多维表/画板）必须挂 `data-prevent-swipe`**：外壳 `usePanelDrag` 在
+   `touchstart` 阶段按 `closest()` 排除，绝不能让内容横滑被外层拉成目录/大纲抽屉；命中目标可能是 **SVGElement**，
+   所以排除判据必须用 `Element`，不能只认 `HTMLElement`。设备验收：AVD `lake_gate` 上表格左右拖从 A–D → D–G、
+   右拖回 A–D，抽屉均不出现；多维表左拖 scrollLeft 0 → 346、右拖不拉抽屉；画板右拖画布平移且抽屉不出现。
+9. **移动端 usheet 编辑（261019 P1 第二刀：语雀式编辑面 + 新建）**：
+   - **新建**：目录「新建 → 新建表格」已解禁；`bridge.createUsheet()` 用共享的 `emptyUsheetBody()`（50×16）落
+     `doc_kind=usheet`，建完直接进编辑态。（当时数据表/画板仍未接移动编辑器；261020 起数据表解禁，见 §五#10。）
+   - **顶栏**：不使用 Univer 桌面 Ribbon（会把横拖判成扩选）；自绘一条常驻工具条，按钮全部走 facade：
+     插入（行/列/合并）、撤销/重做、粗/斜/下划线/删除线、文字格式面板（对齐/字体色/填充色/清除）、更多（删行/删列/
+     官方动作面板）。右侧绿点 = 自动保存状态。工具条不挂 `pointerdown preventDefault`（Android WebView 会连 click 一起吞）。
+   - **公式栏**：移动 UI 插件不渲染内置 formula-bar，自绘 `地址 + 显示值` 条（编辑态显示，随选区/命令刷新）。
+   - **手势**：内容区 `data-prevent-swipe` + `Element` 命中；单指横拖只滚动画布，不拉目录抽屉（设备实测 A–D ↔ D–G）。
+   - **保存**：`Event.CommandExecuted` 600ms 防抖写回；点「完成」、关标签、返回首页用 `onCapture` 同步取
+     `book.save()` 的最新 workbook。阅读态 `setEditable(false)` 且不显示工具条/公式栏。
+   - **独立画板（kind=board）**：目录「新建画板」已解禁；`bridge.createBoard()` 用 `emptyBoardBody()` 落
+     `boards/{id}.board.json`，建完直接进编辑态。`MobileBoardViewer` 支持 `editing`：编辑态 `readOnly=false` 并恢复
+     Drawnix 工具条（`.mobile-board-viewer.is-editing .draw-toolbar`），800ms 防抖 + `onCapture` 与 usheet 共用
+     `liveBodyCapturesRef`；完成/关标签/返回首页都会同步取最新 body。
+   - **画板视口记忆（261020 P1）**：缩放/平移是**本机 UI 状态**（`features/board/boardViewStore`，localStorage L3，
+     与桌面同一份存储）；**不进正文、不标脏、不进 S3**。打开时：有记忆 ⇒ `fitOnInit=false` 并喂 `plaitViewport`（缩放），
+     平移 = **滚动画布容器**（盯 `.viewport-container`，滚动合并 200ms + 松手立即落盘）；无记忆才自适应内容。
+     设备验收：把画布滚到 800/499.8 → 重启 App 重开仍为 800/499.8，且 `boards/*.board.json` 逐字节未变。
+   - **画板内联图片走资产管线（261020 P1）**：与桌面共用 `features/board/boardImageAssets` 的纯函数，移动端只注入两个能力 ——
+     读回 `native.readAssetPreview`（资产 URL → data URL，内存口径；引擎导出/预览不吃跨源 CORS）、
+     上传 `bridge.uploadResource`（data URL → `note-assets/{noteId}/`，磁盘口径 = canonical 资产 URL）。
+     **提升在途不保存**（否则会把 `data:image` 写进正文）；单张失败保持内联（不丢图），完成后自动补一次保存。
+     设备验收：种入内联 PNG → 进编辑态 ⇒ 正文变为 `http://127.0.0.1:19876/{noteId}/<磁盘名>.png` 且资产文件落盘；
+     再切两次编辑态 ⇒ 资产文件仍 1 个、正文不变（不重复上传）；重开后引擎里是 `data:image`（hydrate 生效）。
+   - **已知**：移动端 `purgeTreeItem` 不清理 `note-assets/`（正文/历史会删；本机图片目录残留，等孤儿资源清理或手动删），
+     261020 验收时已顺手清理测试残留。
+   - **父节点兜底（261020 用户报「新建后目录不出现」）**：`createParent` 空串时回退 `notebookId`；
+     `bridge.createNote/createUsheet/createBoard` 把空白 parentId 视为缺失并走 `defaultNotebookId()`。
+     `noteRepository.createNote` 已支持 `kind` 参数，避免再建出 `parent_id=''` 的孤儿。
+   - 设备实测：新建表格/画板即编辑；表格双击公式栏、粗体/插入行落盘；画板矩形工具可绘制并落盘
+     `boards/{id}.board.json`；横滑不拉抽屉；官方动作面板可从「•••」打开。
+   - ⚠️ 仍待后续：CardResizer 触控调高、复制粘贴/公式库的移动专有交互。
+     **画板剩余**：AI 徽标（**移动端还没有 AI 通道** —— 首页「AI 助手」仍是"尚未接入"提示，接画板 AI 要先立 AI 通道项目）。
+
+10. **移动端多维表编辑（261020 P0：新建 + 查看/编辑 + 字段与记录基础增删改）**：
+    - **新建**：目录「新建 → 新建数据表」已解禁；`bridge.createBitable()` 用 core `emptyBitableBody()`
+      （1 文本列 + 3 条空记录），`doc_kind=bitable`，建完直接进编辑态（与表格/画板同一条创建通道 + 空父兜底）。
+    - **编辑形态（用户 261020 确认）**：**点单元格 → 打开该记录的底部面板**逐字段编辑（不是原地把格子变输入框）。
+      理由：触屏 + IME 下原地输入要处理滚动/键盘/格尺寸，且单选/多选/日期/评分/进度在触屏上都需要弹层（飞书/语雀移动端同族做法）。
+      **布尔值快路径**：网格里单击直接切换，不弹面板。
+    - **字段**：顶部「字段」面板 = 重命名 / 删除（确认框 + 说明全视图配置一并清除；只剩一列时拒绝）/ 新增（P0 九种类型：
+      文本·数字·日期·单选·多选·复选框·链接·评分·进度）。单选/多选可在记录面板里新建选项（同名复用、新建即选中）。
+    - **记录**：表尾「＋ 新增记录」（建完即开面板）；记录面板底部「删除记录」（确认）。**无撤销**（与桌面删记录同语义）。
+    - **只读字段**：附件 / 图片 / 关联 / 系统时间 / AI / Markdown 在移动端只读并**写明理由**（不提供"建得出来但改不了"的字段入口）。
+    - **正文语义**：与桌面同一份 core 写入纯函数（`core/bitableMutations`）；序列化恒写 canonical 导航（第一表 / 第一视图）
+      ⇒ 切数据表/视图是**设备本地 UI 状态**，不写正文、不落盘、不进 S3。**bitable 正文 JSON 绝不给 Lake 编辑器**。
+      导航的读写/应用是**单一来源** `features/bitable/bitableNavStore.ts`（桌面 `BitableEditor` 与移动端共用；
+      localStorage 键 `lake-notes-v3.bitable-nav.<noteId>`），切表只写导航、重开回到上次那张表。
+    - **行窗口**：记录全集留在模型里，只限制挂载行（100 条/页 + 显式「加载更多」；不静默裁剪）。真实虚拟滚动视设备表现再定（P1）。
+    - **已知边界（P1 清单）**：复制/剪切/粘贴、公式库、数字格式、排序/筛选/分组、填充柄、附件/关联编辑、撤销重做、
+      视图切换与视图配置、真实虚拟滚动。`docs/BITABLE-VIEWPORT.md` 的桌面行窗口契约不因本条改动。
+    - 护栏：`mobile/bitable/mobileBitableEdit.test.ts`（canonical / 字段与记录写入 / 窗口 / 取值口径）、
+      `mobileBitableViewer.test.ts`（编辑态部件 + 100/120 分页 + 阅读态不出现编辑件）、
+      `mobileBitableRecordSheet.test.ts`（按字段类型给对控件 + 不可编辑字段给理由）、
+      `workspaceMenu.test.ts`（五类创建项全部可点、数据表建完进编辑态）、`bridgeTree.test.ts`（createBitable 落库/树/空父兜底）。
+
 
 ## 六、未结项（登记的债，改前先看）
 
@@ -202,7 +278,7 @@
 | 文本格式 | H5/H6、字号、字色、背景色、对齐、缩进、行高、清除格式、格式刷、链接 |
 | 插入项 | 分栏卡片、折叠块、画板、流程图、UML 图、思维导图、公式、文本绘图、日历、日期、表情、文档引用 |
 | 块级操作 | 整块复制/剪切/删除、转化为其它块、拖拽移动、整块/多块选中、添加间距、全屏/宽度 |
-| 文档类型 | 表格文档(usheet) / 多维表(bitable) / 画板(board) 在移动端是**只读查看器**，不能编辑 |
+| 文档类型 | 表格(usheet) / 画板(board) / 多维表(bitable) 均已接入移动编辑（261020 起多维表可编辑；缺口见 §五#10 P1 清单） |
 
 **待确认（1 项，不要当结论用）**：某篇内容以 `<h1>` 开头、缺 `-body` 段落的文档，出现过「标题栏是该篇、正文却是空折叠块」；
 同内容补 `-body` 段后移动端正常，桌面渲染该篇一直正常，设备 DB 内容完好（**无数据损坏**）。
