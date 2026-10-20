@@ -45,6 +45,14 @@ export interface NotebookTreeItem {
 }
 import type { TreeNode } from "../../lib/types";
 
+/** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
+const CREATE_MENU_KINDS: Record<string, "doc" | "usheet" | "bitable" | "board"> = {
+  note: "doc",
+  usheet: "usheet",
+  bitable: "bitable",
+  board: "board",
+};
+
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
 interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "usheet" | "bitable" | "board"; }
 
@@ -89,6 +97,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
   const openOutline = useCallback((v: boolean) => { setOutlineOpen(v); if (v) { setSidebarOpen(false); setTabsOpen(false); } }, []);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
+  /** 实例内正文（usheet / board）的同步 capture：完成/关标签前现取最新 body，绕过防抖。 */
+  const liveBodyCapturesRef = useRef<Map<string, () => string | null>>(new Map());
   const autoOpenedRef = useRef(false);
   const pendingEditRef = useRef(initialMode === "editor");
   // 标签保持：本地记录上次打开的标签（按笔记本隔离）
@@ -307,23 +317,49 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     });
   }, [tabs]);
 
+  // 自动保存：编辑态内容变化防抖 1s 落盘
+  const { schedule: scheduleAutoSave, flush: flushAutoSave, cancel: cancelAutoSave } = useAutoSave(async (id, title, content, plain) => {
+    await bridge.saveNote(id, title, content, null, plain);
+  });
+
+  /** 关闭前现取 usheet/board 最新正文并立即排保存；关标签不能吃掉最后一段防抖窗口。 */
+  const captureAndSaveTab = useCallback((tab: TabState) => {
+    const captured = liveBodyCapturesRef.current.get(tab.id)?.();
+    if (captured && captured !== tab.content) {
+      scheduleAutoSave(tab.id, tab.title, captured);
+      flushAutoSave(tab.id);
+    }
+    liveBodyCapturesRef.current.delete(tab.id);
+  }, [flushAutoSave, scheduleAutoSave]);
+
   /** 关闭全部标签（与单个关闭同语义：直接清空；编辑器句柄同步丢弃防泄漏）。 */
   const closeAllTabs = useCallback(() => {
+    tabs.forEach((t) => captureAndSaveTab(t));
+    flushAutoSave();
     tabEpochRef.current += 1;
     editorsRef.current.clear();
     setTabs([]);
     setActiveId(null);
     setTabsOpen(false);
-  }, []);
+  }, [tabs, captureAndSaveTab, flushAutoSave]);
 
   const closeTab = useCallback((id: string) => {
     const idx = tabs.findIndex((t) => t.id === id);
+    const closing = tabs[idx];
+    if (closing) captureAndSaveTab(closing);
     const next = tabs.filter((t) => t.id !== id);
     setTabs(next);
     // keep-alive 编辑器实例句柄：关闭 tab 必须同步丢弃，否则 Map 只增不删 → 泄漏
     editorsRef.current.delete(id);
     if (activeId === id) setActiveId(next.length ? next[Math.min(idx, next.length - 1)].id : null);
-  }, [tabs, activeId]);
+  }, [tabs, activeId, captureAndSaveTab]);
+
+  /** 返回首页：先同步 capture usheet + flush 文档保存，再交给路由转场。 */
+  const handleBack = useCallback(() => {
+    tabs.forEach((t) => captureAndSaveTab(t));
+    flushAutoSave();
+    onBack();
+  }, [tabs, captureAndSaveTab, flushAutoSave, onBack]);
 
   const toggleGroup = (id: string) => {
     setExpanded((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -350,43 +386,53 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 活动文档上报（MobileApp 的定时自动快照按当前文档留档）
   useEffect(() => { onActiveNoteChange?.(activeId); }, [activeId, onActiveNoteChange]);
 
-  // 自动保存：编辑态内容变化防抖 1s 落盘
-  const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content, plain) => {
-    await bridge.saveNote(id, title, content, null, plain);
-  });
-
   const toggleEdit = useCallback(async () => {
     if (!active) return;
+    // usheet / board 的正文在实例里；完成时同步 capture，不能只读父级 state（可能还在防抖窗口内）。
+    const captured = active.kind === "usheet" || active.kind === "board"
+      ? liveBodyCapturesRef.current.get(active.id)?.() ?? null
+      : null;
+    const nextContent = captured ?? active.content;
     if (active.editing) {
-      flushAutoSave();
+      cancelAutoSave(active.id); // 旧 timer 里的 content 可能落后于 captured
       try {
-        await bridge.saveNote(active.id, active.title, active.content);
+        await bridge.saveNote(active.id, active.title, nextContent);
       } catch (reason) {
         showToast("保存失败：" + getNativeErrorMessage(reason), { type: "error" });
         return;
       }
       successFeedback(); // 只有真正落盘后才提示完成
     }
-    setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, editing: !t.editing } : t)));
-  }, [active, flushAutoSave]);
+    setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, content: nextContent, editing: !t.editing } : t)));
+  }, [active, cancelAutoSave]);
 
-  /** 行内 ＋ → 新建文档：在该节点下建子文档（对齐思源 .mb-iconbtn mb-row__action[data-type=new]）。 */
-  const createChildDoc = useCallback(async (parentId: string) => {
+  /**
+   * 行内 ＋ / 抽屉「新建」→ 建子节点（同一条创建管线：建库 → 刷新目录 → 收抽屉 → 打开标签）。
+   * 文档建完停在阅读态（与首页新建文档一致）；表格/数据表/画板建完直接进编辑态。
+   * createParent 理论上总是当前节点；空串兜底回当前笔记本，避免建出 parent_id="" 的孤儿。
+   */
+  const createChildDocument = useCallback(async (kind: "doc" | "usheet" | "bitable" | "board", parentId: string) => {
     try {
-      const n = await bridge.createNote("无标题文档", parentId);
+      const pid = parentId || notebookId;
+      const n = kind === "doc" ? await bridge.createNote("无标题文档", pid)
+        : kind === "usheet" ? await bridge.createUsheet("无标题表格", pid)
+          : kind === "bitable" ? await bridge.createBitable("无标题数据表", pid)
+            : await bridge.createBoard("无标题画板", pid);
       await loadTree();
+      setSidebarOpen(false);
+      if (kind !== "doc") pendingEditRef.current = true;
       await openTab(n.id);
     } catch { showToast("新建失败", { type: "error" }); }
-  }, [loadTree, openTab]);
+  }, [loadTree, openTab, notebookId]);
 
   /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点。 */
   const createChildGroup = useCallback(async (parentId: string) => {
     try {
-      await bridge.createGroup(parentId, "新建分组");
+      await bridge.createGroup(parentId || notebookId, "新建分组");
       await loadTree();
-      setExpanded((prev) => new Set(prev).add(parentId));
+      setExpanded((prev) => new Set(prev).add(parentId || notebookId));
     } catch { showToast("新建失败", { type: "error" }); }
-  }, [loadTree]);
+  }, [loadTree, notebookId]);
 
   // ---- 目录树长按管理（计时/阈值/反馈 = 共用 hook，见 ui/useLongPress.ts）----
   /** 长按 = 进入拖拽排序（菜单走行内 ⋯）。移动取消阈值取 0：目录行上一动就是要滚动，不能误判成长按。 */
@@ -683,7 +729,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         className={"toolbar toolbar--border mobile-topbar" + (chromeHiddenNow ? " mobile-topbar--auto-hidden" : "")}
         aria-hidden={chromeHiddenNow ? "true" : "false"}
       >
-        <button className="toolbar__button" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <button className="toolbar__button" onClick={handleBack} aria-label="返回"><ArrowLeft /></button>
         <input
           className={"toolbar__title" + (active?.editing ? "" : " toolbar__title--readonly")}
           value={active?.title ?? title}
@@ -698,13 +744,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
           }}
         />
-        {/* 只有 doc 可编辑：表格 / 多维表 / 画板在移动端都是只读查看器（usheet / bitable / board 各一个） */}
+        {/* doc / 表格 / 数据表 / 画板都可编辑（261020 起数据表不再只读；各自一个专用 viewer/editor）。 */}
         <button
           className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
           onClick={toggleEdit}
-          disabled={!active || (active.kind ?? "doc") !== "doc"}
+          disabled={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board")}
           aria-label={active?.editing ? "完成" : "编辑"}
-          title={(active?.kind ?? "doc") !== "doc" ? "该文档类型在移动端只读" : active?.editing ? "完成" : "编辑"}
+          title={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board")
+            ? "该文档类型在移动端只读"
+            : active.editing ? "完成" : "编辑"}
         >{active?.editing ? <Check /> : <Pencil />}</button>
         {/* 文档内查找（移动端）：内核查找面板在移动端不存在（工具栏插件被关），
             故入口收在这里、由 MobileFindBar 做 DOM 内查找；工作区胶囊是定稿四格、不放搜索。 */}
@@ -742,16 +790,51 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
             {t.kind === "board" ? (
               // 画板：移动端只读查看（同一套 Drawnix 引擎，绝不给 Lake 编辑器；也不保存）
-              <MobileBoardViewer content={t.content} active={t.id === activeId} />
+              <MobileBoardViewer
+                noteId={t.id}
+                content={t.content}
+                active={t.id === activeId}
+                editing={t.editing}
+                onChange={(c) => {
+                  setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x)));
+                  if (t.editing) scheduleAutoSave(t.id, t.title, c);
+                }}
+                onCapture={(capture) => {
+                  if (capture) liveBodyCapturesRef.current.set(t.id, capture);
+                  else liveBodyCapturesRef.current.delete(t.id);
+                }}
+              />
             ) : t.kind === "bitable" ? (
-              // 多维表：移动端只读视图（同一份 core 数据模型求值，绝不写库）
+              // 多维表：移动端查看/编辑（同一份 core 数据模型与写入纯函数；正文 JSON 绝不给 Lake 编辑器）。
+              // 只有当前活动页可编辑：切走后自动收起记录/字段面板，回来再恢复编辑态。
               <Suspense fallback={<div className="mb-empty">正在加载多维表…</div>}>
-                <MobileBitableViewer noteId={t.id} content={t.content} />
+                <MobileBitableViewer
+                  noteId={t.id}
+                  content={t.content}
+                  editing={t.editing && t.id === activeId}
+                  onChange={(c) => {
+                    setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x)));
+                    if (t.editing) scheduleAutoSave(t.id, t.title, c);
+                  }}
+                />
               </Suspense>
             ) : t.kind === "usheet" ? (
               // 表格：移动端只读呈现（同一套 Univer 内核；只读、不保存，正文 JSON 绝不喂 Lake 编辑器）
               <Suspense fallback={<div className="mb-empty">正在加载表格…</div>}>
-                <MobileUsheetViewer noteId={t.id} content={t.content} active={t.id === activeId} />
+                <MobileUsheetViewer
+                  noteId={t.id}
+                  content={t.content}
+                  active={t.id === activeId}
+                  editing={t.editing}
+                  onChange={(c) => {
+                    setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x)));
+                    if (t.editing) scheduleAutoSave(t.id, t.title, c);
+                  }}
+                  onCapture={(capture) => {
+                    if (capture) liveBodyCapturesRef.current.set(t.id, capture);
+                    else liveBodyCapturesRef.current.delete(t.id);
+                  }}
+                />
               </Suspense>
             ) : t.kind !== "doc" ? (
               // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
@@ -800,23 +883,23 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       </nav>
 
       {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
-          （文档 / 表格 / 数据表 / 画板 / 分组）。移动端只有 **Lake 文档**与**分组**能落地 ——
-          表格/数据表/画板需要各自的编辑器，移动端是只读查看 ⇒ **置灰并写明理由**（没有 hover，必须给一行文字）。
-          不要在移动端偷偷建出"打不开的文档"。 */}
+          （文档 / 表格 / 数据表 / 画板 / 分组）。261020 起四类文档都有移动端编辑器（可直接新建并进入编辑），
+          分组走目录树创建。不要在移动端建出"打不开的文档"。 */}
       <MobileSheetMenu
         open={createOpen}
         items={[
           { id: "note", label: "新建文档", icon: FilePlus },
-          { id: "usheet", label: "新建表格", icon: Table, disabled: true, note: "移动端暂不支持编辑" },
-          { id: "bitable", label: "新建数据表", icon: Database, disabled: true, note: "移动端暂不支持编辑" },
-          { id: "board", label: "新建画板", icon: PenTool, disabled: true, note: "移动端暂不支持编辑" },
+          { id: "usheet", label: "新建表格", icon: Table },
+          { id: "bitable", label: "新建数据表", icon: Database },
+          { id: "board", label: "新建画板", icon: PenTool },
           { id: "group", label: "新建分组", icon: FolderPlus },
         ]}
         onClose={() => setCreateOpen(false)}
         onSelect={(it) => {
           setCreateOpen(false);
-          // 复用目录树的同一份创建通道（行内 ＋ / 长按菜单同源），不新造第二条；作用域 = 本次打开它的那个节点
-          if (it.id === "note") void createChildDoc(createParent);
+          // 复用目录树的同一份创建通道（行内 ＋ / 抽屉「新建」同源），不新造第二条；作用域 = 本次打开它的那个节点
+          const kind = CREATE_MENU_KINDS[it.id];
+          if (kind) void createChildDocument(kind, createParent);
           else if (it.id === "group") void createChildGroup(createParent);
         }}
       />

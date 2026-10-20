@@ -279,6 +279,57 @@ export function duplicateBitableField(tables: readonly BitableTable[], tableId: 
   });
 }
 
+/** 记录 id 集合归一化：空集合 / 全不存在 → 返回原 doc（不产生空写入）。 */
+function existingRecordIds(table: BitableTable, ids: readonly string[]): Set<string> {
+  const want = new Set(ids);
+  return new Set(table.records.filter((r) => want.has(r.id)).map((r) => r.id));
+}
+
+/**
+ * 追加一个字段（移动端字段面板 / 后续桌面共用；261020）。字段由调用方用 `createBitableField` 造好，
+ * 这里只做「表存在 + id 不重复 + 追加到末尾」（桌面 addField 同一行为）。返回原引用表示无变化。
+ */
+export function addBitableField(doc: BitableDoc, tableId: string, field: BitableField): BitableDoc {
+  const table = doc.tables.find((t) => t.id === tableId);
+  if (!table || table.fields.some((f) => f.id === field.id)) return doc;
+  return { ...doc, tables: doc.tables.map((t) => (t.id !== tableId ? t : { ...t, fields: [...t.fields, field] })) };
+}
+
+/**
+ * 字段重命名（单一来源，261020）：空名 / 未变化 / 字段不存在 → 原引用；
+ * 同表 AI 字段命令里的 `{{旧名}}` 跟随改写（与桌面 updateField 同一口径，见 renameAiFieldToken）。
+ */
+export function renameBitableField(doc: BitableDoc, tableId: string, fieldId: string, name: string): BitableDoc {
+  const table = doc.tables.find((t) => t.id === tableId);
+  const before = table?.fields.find((f) => f.id === fieldId);
+  if (!table || !before) return doc;
+  const nextName = name.trim();
+  if (!nextName || nextName === before.name) return doc;
+  const fields = table.fields.map((f) => (f.id === fieldId ? { ...f, name: nextName } : f));
+  return {
+    ...doc,
+    tables: doc.tables.map((t) => (t.id !== tableId ? t : {
+      ...t,
+      fields: fields.map((f) => renameAiFieldToken(f, before.name, nextName)),
+    })),
+  };
+}
+
+/**
+ * 删除记录（一条或多条；261020 从桌面 `records.filter` 上收）。不存在的 id 忽略；
+ * 记录集合无变化 → 原引用（不产生空写入 / 空撤销步）。
+ */
+export function deleteBitableRecords(doc: BitableDoc, tableId: string, recordIds: readonly string[]): BitableDoc {
+  const table = doc.tables.find((t) => t.id === tableId);
+  if (!table || recordIds.length === 0) return doc;
+  const drop = existingRecordIds(table, recordIds);
+  if (drop.size === 0) return doc;
+  return {
+    ...doc,
+    tables: doc.tables.map((t) => (t.id !== tableId ? t : { ...t, records: t.records.filter((r) => !drop.has(r.id)) })),
+  };
+}
+
 /**
  * 字段**类型变更**后清掉不再成立的视图引用（AR-F7 续；只清配置、不迁移记录值）：
  * 看板分组字段要求单选、画册封面要求附件类、日历开始/结束要求日期、日历颜色要求单选。

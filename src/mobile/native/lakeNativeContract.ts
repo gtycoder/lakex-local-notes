@@ -23,7 +23,7 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
   "getQuickNoteImage", "listQuickNoteTrash", "restoreQuickNote", "purgeQuickNote", "syncQuickNote",
   "getCloudState",
   "listTrashTree", "getS3Settings", "saveS3Settings",
-  "createNote", "saveNote", "trashNote", "restoreNote", "listTrashed",
+  "createNote", "createBitable", "saveNote", "trashNote", "restoreNote", "listTrashed",
   "restoreTreeItem", "purgeTreeItem",
   "createGroup", "renameTreeNode", "setNodeIcon", "reorderSiblings", "moveTreeNodeOrdered", "createNotebook",
   "searchNotes",

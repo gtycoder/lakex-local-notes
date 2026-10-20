@@ -60,7 +60,9 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
     };
 
     const stop = () => { side = null; axis = null; dragging = false; };
-    const targetOf = (e: TouchEvent): HTMLElement | null => (e.target instanceof HTMLElement ? e.target : null);
+    // 画板/表格的命中目标可能是 SVGElement（画布本身是 svg）——不能只认 HTMLElement，
+    // 否则 `data-prevent-swipe` 的 closest() 会被跳过，右滑仍会拉开目录抽屉。
+    const targetOf = (e: TouchEvent): Element | null => (e.target instanceof Element ? e.target : null);
 
     const onStart = (e: TouchEvent) => {
       cancelled = false;

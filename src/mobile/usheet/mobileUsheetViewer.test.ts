@@ -1,9 +1,10 @@
 /**
- * 移动端表格查看器（kind=usheet，只读）挂载护栏。
+ * 移动端表格查看/编辑器（kind=usheet）挂载护栏。
  *
  * jsdom + mock 掉 Univer 运行时（真 canvas 在桌面/模拟器实测）：只验「宿主这一层」的行为：
  * - 未活动过的 tab 不建实例（隐藏态量成 0 尺寸，canvas 引擎渲不出来）；
- * - 实例以 **只读** 挂载（`setEditable(false)`）、**不挂工具条/公式栏**、**不保存不写库**；
+ * - 阅读态 `setEditable(false)`；编辑态 `setEditable(true)`，通过 capture 读取最新正文；
+ * - 不挂桌面工具条/公式栏；
  * - 喂给内核的是正文里的 workbook（usheet 正文绝不交给 Lake 编辑器）；
  * - 图片 source 走本机 AssetServer canonical URL。
  */
@@ -27,17 +28,23 @@ vi.mock("@univerjs/presets", () => ({
     return {
       univer: { dispose: () => { calls.disposed += 1; }, __getInjector: () => ({ get: () => null }) },
       univerAPI: {
-        createWorkbook: () => ({ setEditable: (v: boolean) => { calls.editable.push(v); } }),
+        createWorkbook: () => ({
+          setEditable: (v: boolean) => { calls.editable.push(v); },
+          save: () => ({ id: "workbook", sheetOrder: ["s1"], sheets: { s1: { id: "s1", name: "Sheet1", rowCount: 5, columnCount: 3, cellData: {} } } }),
+        }),
         setTheme: () => undefined,
+        getActiveWorkbook: () => null,
+        addEvent: () => ({ dispose: () => undefined }),
+        Event: { CommandExecuted: "command-executed" },
       },
     };
     void options;
   },
 }));
-vi.mock("@univerjs/preset-sheets-core", () => ({
-  UniverSheetsCorePreset: (cfg: Record<string, unknown>) => { calls.core = cfg; calls.container = String(cfg.container); return { cfg }; },
+vi.mock("./mobileUniverPreset", () => ({
+  createMobileSheetsCorePreset: (cfg: Record<string, unknown>) => { calls.core = cfg; calls.container = String(cfg.container); return { plugins: [] }; },
+  createMobileSheetsDrawingPreset: () => ({ plugins: [] }),
 }));
-vi.mock("@univerjs/preset-sheets-drawing", () => ({ UniverSheetsDrawingPreset: () => ({}) }));
 vi.mock("@univerjs/preset-sheets-core/locales/zh-CN", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-drawing/locales/zh-CN", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-core/lib/index.css", () => ({}));
@@ -55,19 +62,25 @@ const BODY = JSON.stringify({
 Object.defineProperty(window.HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 320 });
 window.requestAnimationFrame = ((cb: FrameRequestCallback) => { cb(0); return 0; }) as typeof window.requestAnimationFrame;
 
-async function mount(active: boolean) {
+async function mount(active: boolean, editing = false, opts: { onChange?: (c: string) => void; onCapture?: (c: (() => string | null) | null) => void } = {}) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   const { act } = await import("react");
-  await act(async () => { root.render(createElement(MobileUsheetViewer, { noteId: "n1", content: BODY, active })); });
+  await act(async () => {
+    root.render(createElement(MobileUsheetViewer, {
+      noteId: "n1", content: BODY, active, editing,
+      onChange: opts.onChange ?? (() => undefined),
+      onCapture: opts.onCapture,
+    }));
+  });
   for (let i = 0; i < 8; i += 1) {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }
   return { root, host };
 }
 
-describe("移动端表格查看器（只读）", () => {
+describe("移动端表格查看/编辑器", () => {
   it("未活动的 tab 不建 Univer 实例", async () => {
     calls.created = 0; calls.editable.length = 0;
     const { root } = await mount(false);
@@ -75,16 +88,39 @@ describe("移动端表格查看器（只读）", () => {
     root.unmount();
   });
 
-  it("活动 tab：只读挂载 + 不挂工具条/公式栏 + 容器 id 正确", async () => {
+  it("阅读态挂载 + 不挂桌面工具条 + 保留移动编辑面 + 容器 id 正确", async () => {
     calls.created = 0; calls.editable.length = 0; calls.core = null;
     const { root, host } = await mount(true);
     const core = (calls.core ?? {}) as Record<string, unknown>;
     expect(calls.created).toBe(1);
-    expect(calls.editable).toEqual([false]);            // setEditable(false)：移动端只读
+    expect(calls.editable).toEqual([false]);            // 阅读态 setEditable(false)
     expect(core.toolbar).toBe(false);                   // 不挂工具条
-    expect(core.formulaBar).toBe(false);                // 不挂公式栏
+    expect(core.formulaBar).toBe(true);                 // 移动编辑面/公式栏注册仍在，阅读态由 setEditable(false) 关闭编辑
     expect(calls.container).toBe("mobile-usheet-n1");
     expect(host.querySelector(".mobile-usheet")).toBeTruthy();
+    expect(host.querySelector(".mobile-usheet")?.hasAttribute("data-prevent-swipe")).toBe(true);
+    expect(host.querySelector(".mobile-usheet-toolbar")).toBeNull();
+    expect(host.querySelector(".mobile-usheet-formula")).toBeNull();
+    root.unmount();
+  });
+
+  it("编辑态挂载：setEditable(true)，并注册同步 capture", async () => {
+    calls.created = 0; calls.editable.length = 0;
+    let capture: (() => string | null) | null = null;
+    const { root, host } = await mount(true, true, { onCapture: (c) => { capture = c; } });
+    expect(calls.created).toBe(1);
+    expect(calls.editable).toEqual([true]);
+    expect(typeof capture).toBe("function");
+    const toolbar = host.querySelector(".mobile-usheet-toolbar");
+    expect(toolbar).toBeTruthy();
+    expect(toolbar?.getAttribute("aria-label")).toBe("表格工具");
+    expect(toolbar?.hasAttribute("data-prevent-swipe")).toBe(true);
+    for (const label of ["插入", "撤销", "重做", "加粗", "文字格式", "更多表格操作"]) {
+      expect(toolbar?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
+    }
+    const formula = host.querySelector(".mobile-usheet-formula");
+    expect(formula).toBeTruthy();
+    expect(formula?.textContent).toContain("A1");
     root.unmount();
   });
 

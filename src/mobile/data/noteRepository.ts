@@ -154,13 +154,13 @@ export async function createNote(
   parentId: string | null,
   assets: Map<string, Uint8Array>,
   plain?: string,
+  kind: NoteKind = "doc",
 ): Promise<void> {
   const now = new Date().toISOString();
-  const safeTitle = title.trim() ? title.trim() : "无标题文档";
+  const safeTitle = title.trim() ? title.trim() : (kind === "usheet" ? "无标题表格" : "无标题文档");
   // 先写正文文件、再提交 DB（对齐桌面 NoteContentRepository：DB 不应声称正文已存在）。
-  await writeNoteBody("doc", id, content);
+  await writeNoteBody(kind, id, content);
   try {
-    const kind: NoteKind = "doc";
     const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
     await d.prepare(
       "INSERT INTO notes (id, title, parent_id, updated_at, content_hash, sync_state, text_cache, doc_kind) VALUES (?,?,?,?,?,'local',?,?)"
@@ -206,8 +206,12 @@ export async function saveNote(
 
   await writeNoteBody(kind, id, content);
   // 写边界二次守卫：检查与写入之间若状态变为 trash/purge，UPDATE 不命中 → 回滚正文并抛错，绝不静默写脏。
+  // 保存正文**不是树操作**：父节点为空时保留原归属（COALESCE）。
+  // 261020 实测 bug：移动端自动保存 / 「完成」都不传 parentId（它们只关心正文），旧实现直接写
+  // parent_id=? ⇒ 每次保存把文档从笔记本里摘出来（parent_id 变 NULL），表现为「编辑一下计数就少一篇、
+  // 目录里也找不到」。显式移动必须走 moveTreeNodeOrdered（那才是树操作）。
   const changed = (await d.prepare(
-    `UPDATE notes SET title=?, parent_id=?, updated_at=?, content_hash=?, sync_state='local', text_cache=?
+    `UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), updated_at=?, content_hash=?, sync_state='local', text_cache=?
      WHERE id=? AND trashed_at IS NULL AND sync_state != 'purged'`
   ).run(safeTitle, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, id)).changes;
   if (changed === 0) {

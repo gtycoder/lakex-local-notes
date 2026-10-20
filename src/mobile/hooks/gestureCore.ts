@@ -29,7 +29,7 @@ const HSCROLL_CONTENT = ".ne-table-wrap, .ne-table-hole, .ne-codeblock, .ne-code
  * 手势落点是否处于“可横向滚动”的内容里（对齐思源 isHorizontalScrollable）：
  * 命中且该内容在滑动方向仍可继续滚动 → 交给原生横向滚动，不触发抽屉。dx = currentX - startX。
  */
-export function isHorizontalScrollable(target: HTMLElement | null, dx: number): boolean {
+export function isHorizontalScrollable(target: Element | null, dx: number): boolean {
   if (!target || typeof target.closest !== "function") return false;
   const element = target.closest<HTMLElement>(HSCROLL_CONTENT);
   if (!element || element.scrollWidth <= element.clientWidth + 1) return false;

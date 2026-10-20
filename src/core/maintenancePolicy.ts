@@ -95,7 +95,7 @@ export const NONE_OPS = [
   // 只读：UI 用它给「保存并同步」置灰（关云同步时）
   "getCloudState",
   // 委托型写（内部调用已入队的写方法，由被委托方取锁）
-  "createNote", "restoreNote", "restoreHistory", "markTombstonesPublished",
+  "createNote", "createUsheet", "createBoard", "createBitable", "restoreNote", "restoreHistory", "markTombstonesPublished",
   // 设置写入（device_state / 密钥，同步不触碰同表）
   "saveSyncSettings", "saveS3Settings",
   // 单发网络（见 MAINTENANCE_OPS 注释）

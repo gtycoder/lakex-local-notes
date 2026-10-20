@@ -18,6 +18,7 @@ import { execEditorCommand } from "./execCommand";
 import { useSnapshotUndo } from "./useSnapshotUndo";
 import type { StackLimits } from "./snapshotUndoModel";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
+import { cardValueFromBoardDoc, createBoardDoc, type BoardPreset } from "../../core/boardDoc";
 import { QUICK_TEXT_COLORS, MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID } from "../../core/colorPalette";
 // 「Aa」面板的取值型命令（字号/对齐/字色/背景色）与链接，全部复用既有单一来源（本文不另造一套）
 // 注：移动端**色板**不再走内核色卡适配器 LakeColorBoard，而是照语雀排布自己画 2×7 圆点格
@@ -477,6 +478,30 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
     ] },
   ];
+  /** 文档内画板族插入：内核 insertCard 的返回值就是新卡 id；随后用官方的 focusCard 把选区落到卡上。
+   *  先 restoreSelection 保证在当前光标处插入；面板走 hide 档（收起但不放回输入法），否则画板一插入就会拉起键盘。 */
+  const insertBoardCard = (cardName: string, preset: BoardPreset) => {
+    restoreSelection();
+    const value = {
+      $name: cardName,
+      $htmlStr: "",
+      ...cardValueFromBoardDoc(createBoardDoc(preset)),
+      cardHeight: 560,
+    };
+    // custom-card 插件的正式入口 = 插一张 customBlock，卡值里的 $name 指向注册名；
+    // 直接 insertCard('drawing-board', …) 不会命中 customBlock 插件（实测 no-op）。
+    const cardId = exec("insertCard", "customBlock", value, true);
+    snapshotSelection();
+    refreshActive();
+    closePanel("hide");
+    if (typeof cardId === "string" && cardId) {
+      window.setTimeout(() => {
+        exec("focusCard", cardId);
+        refreshActive();
+      }, 80);
+    }
+  };
+
   // 「更多」面板：**按行分组**（261017 二改用户点单）——公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行。
   // 文本增强命令全部走内核 `renderer.execCommand`；行高档位 = 内核 `lineHeight` 的取值域（[1, 1.15, 1.5, 2, 2.5, 3]）。
   // ⚠️ 撤销/重做已移到**主工具栏**（261017：工具栏最右、更多之后、键盘之前），不再在本面板。
@@ -495,12 +520,13 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     ] },
     // 行高：行首给「行高」标签（用户 261017：第三行需要知道是行高），6 个档位只显示数值。
     { key: "line-height", label: "行高", items: LINE_HEIGHT_VALUES.map((v) => ({ label: "行高", glyph: String(v), run: () => runPanel("lineHeight", v) })) },
-    // 画图占位：图标太抽象 ⇒ **纯文字**（用户 261017），置灰但写清是什么。
+    // 画图族：纯文字（用户 261017）；Drawnix 四类共用同一画板内核，261019 P0 解禁。
+    // 文本绘图仍单独评估（不是同一套 Drawnix 场景），先保持置灰，不在本批偷偷放出一个未验收入口。
     { key: "drawing", items: [
-      { label: "画板", disabled: true },
-      { label: "流程图", disabled: true },
-      { label: "UML 图", disabled: true },
-      { label: "思维导图", disabled: true },
+      { label: "画板", run: () => insertBoardCard("drawing-board", "drawing") },
+      { label: "流程图", run: () => insertBoardCard("flowchart-board", "flowchart") },
+      { label: "UML 图", run: () => insertBoardCard("uml-board", "uml") },
+      { label: "思维导图", run: () => insertBoardCard("drawing-mindmap-board", "mindmap") },
       { label: "文本绘图", disabled: true },
     ] },
   ];

@@ -132,15 +132,30 @@ describe("画板编辑器护栏", () => {
     expect(STORE).toMatch(/createBoardIn\(/);
   });
 
-  it("移动端：kind=board 走进只读画板查看器（绝不挂 Lake 编辑器、不保存）", () => {
+  it("移动端：kind=board 走画板查看/编辑器（阅读只读、编辑可写；绝不挂 Lake 编辑器）", () => {
     // 路由：board 分支必须在「非 doc 占位」之前，否则画板会被挡成占位
     expect(MOBILE_WORKSPACE).toMatch(/t\.kind === "board" \? \(/);
-    expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer content=\{t\.content\}/);
-    // 查看器：只读 + 自适应 + 懒加载同一份引擎分包；不碰 Lake 编辑器/保存
-    expect(MOBILE_VIEWER).toMatch(/readOnly/);
-    expect(MOBILE_VIEWER).toMatch(/fitOnInit/);
+    // 261020 P1：视口记忆按笔记 id 索引 ⇒ 宿主必须把 noteId 传给查看器（参数顺序不钉死）
+    expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer[\s\S]{0,240}noteId=\{t\.id\}/);
+    expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer[\s\S]{0,240}editing=\{t\.editing\}/);
+    // 查看器：editing 切换 readOnly + 无记忆才自适应 + 懒加载同一份引擎分包；正文永远不交给 Lake 编辑器
+    expect(MOBILE_VIEWER).toMatch(/readOnly=\{!editing\}/);
+    expect(MOBILE_VIEWER).toMatch(/fitOnInit=\{fitOnInit\}/);
+    expect(MOBILE_VIEWER).toMatch(/onCapture/);
     expect(MOBILE_VIEWER).toMatch(/loadDrawnixBoardCore/);
     expect(MOBILE_VIEWER).not.toMatch(/DocumentEditor|LakeEditor|lakeRuntime|saveNote/);
+    // 视口（缩放/平移）= 本机记忆（L3 localStorage）：不进正文、不标脏
+    expect(MOBILE_VIEWER).toMatch(/readBoardView/);
+    expect(MOBILE_VIEWER).toMatch(/writeBoardView/);
+    expect(MOBILE_VIEWER).toMatch(/onViewportPersist/);
+  });
+
+  it("移动端画板也走同一条资产管线（只注入读回/上传，不另写一套）", () => {
+    expect(MOBILE_VIEWER).toMatch(/boardInlinePromotionMapping/);
+    expect(MOBILE_VIEWER).toMatch(/boardAssetHydrationMapping/);
+    expect(MOBILE_VIEWER).toMatch(/readAssetPreview/);
+    // 提升在途不保存（否则 data:image 会进正文）
+    expect(MOBILE_VIEWER).toMatch(/promoteInflightRef/);
   });
 
   it("画板图片走资产管线：内联 data URL 提升为 note-assets 文件 + canonical URL", () => {

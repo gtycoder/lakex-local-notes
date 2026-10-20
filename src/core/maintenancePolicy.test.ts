@@ -23,8 +23,8 @@ describe("互斥域判据（F16 红线化）", () => {
     expect(WRITE_OPS.length).toBe(29);
     expect(MAINTENANCE_OPS.length).toBe(3);
     expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
-    expect(NONE_OPS.length).toBe(39); // 261013 +getCloudState（UI 用它给「保存并同步」置灰）
-    expect(ALL.length).toBe(72); // = 移动端 bridge 的操作总数（261010 删死方法 uploadObject；261013 +syncQuickNote / +getCloudState）
+    expect(NONE_OPS.length).toBe(42); // 261020 +createBoard/+createBitable // 261019 +createUsheet（委托型写：内部调 saveNote 由写域取锁） // 261013 +getCloudState（UI 用它给「保存并同步」置灰）
+    expect(ALL.length).toBe(75); // = 移动端 bridge 的操作总数（261020 +createBoard/+createBitable；261019 +createUsheet；261010 删死方法 uploadObject；261013 +syncQuickNote / +getCloudState）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {
@@ -55,7 +55,7 @@ describe("互斥域判据（F16 红线化）", () => {
 
   it("委托型写自身不取锁（由被委托方取锁，避免同域嵌套自锁）", () => {
     // createNote → saveNote；restoreNote → restoreTreeItem；restoreHistory → saveNote
-    for (const op of ["createNote", "restoreNote", "restoreHistory"]) {
+    for (const op of ["createNote", "createUsheet", "createBoard", "createBitable", "restoreNote", "restoreHistory"]) {
       expect(classifyOp(op)).toBe("none");
     }
   });

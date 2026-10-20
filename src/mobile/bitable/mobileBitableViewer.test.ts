@@ -55,6 +55,8 @@ const render = (content: string) => renderToStaticMarkup(createElement(MobileBit
 describe("MobileBitableViewer 只读单元", () => {
   it("布尔/链接/评分/进度/关联都渲染只读控件（不是裸文本）", () => {
     const html = render(body);
+    // 横向可滚动内容必须自己接管横滑，不能让外壳把右划手势拉成左侧目录抽屉。
+    expect(html).toContain("data-prevent-swipe");
     expect(html).toContain('class="mbt-bool"');
     expect(html).toContain('type="checkbox"');
     expect(html).toContain('href="https://example.com/x"');
@@ -132,6 +134,48 @@ describe("MobileBitableViewer 只读单元", () => {
     // 每个图标类名形如 `lucide ... bt-file-icon bt-file-icon--pdf` ⇒ 用 `--` 形态计数（每个图标一次）
     expect((html.match(/bt-file-icon--/g) ?? []).length).toBe(2);
     expect((html.match(/class="mbt-attachment"/g) ?? []).length).toBe(1);
+  });
+
+  it("编辑态：网格可点、有「字段」入口与「新增记录」，且不再标只读", () => {
+    const html = renderToStaticMarkup(createElement(MobileBitableViewer, { noteId: "n1", content: body, editing: true, onChange: () => {} }));
+    expect(html).toContain("mobile-bitable is-editing");
+    expect(html).toContain("mbt-toolbar");
+    expect(html).toContain('aria-label="字段管理"');
+    expect(html).toContain("mbt-cell-btn");
+    expect(html).toContain('aria-label="新增记录"');
+    expect(html).toContain("编辑中");
+    expect(html).not.toContain(">只读<");
+  });
+
+  it("阅读态不出现编辑部件（默认 props 渲染结果与旧只读视图一致）", () => {
+    const html = render(body);
+    expect(html).not.toContain("is-editing");
+    expect(html).not.toContain("mbt-cell-btn");
+    expect(html).not.toContain('aria-label="新增记录"');
+    expect(html).toContain(">只读<");
+  });
+
+  it("记录超过一页时给「加载更多」（完整模型不裁剪，只限制挂载行）", () => {
+    const many = JSON.stringify({
+      kind: "bitable",
+      version: 1,
+      activeTableId: "t1",
+      tables: [{
+        id: "t1",
+        name: "大表",
+        activeViewId: "v1",
+        views: [{ id: "v1", name: "表格视图", type: "grid", rowHeight: "low" }],
+        fields: [{ id: "f", name: "文本", type: "text" }],
+        records: Array.from({ length: 120 }, (_, index) => ({
+          id: "r" + index, createdAt: ts, updatedAt: ts, values: { f: "值" + index },
+        })),
+      }],
+    });
+    const html = renderToStaticMarkup(createElement(MobileBitableViewer, { noteId: "n1", content: many, editing: true, onChange: () => {} }));
+    expect(html).toContain("120 条记录");
+    expect(html).toContain("加载更多（已显示 100 / 120 条）");
+    // 首屏只挂 100 行（窗口），不是把 120 行全渲染
+    expect((html.match(/aria-label="文本"/g) ?? []).length).toBe(100);
   });
 
   it("条件填色在移动端只读表格复用桌面投影（背景 + 行侧）", () => {

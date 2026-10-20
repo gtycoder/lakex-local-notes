@@ -29,7 +29,8 @@ import {
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
-import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField, duplicateBitableField, renameAiFieldToken, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
+import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField, deleteBitableRecords, duplicateBitableField, renameAiFieldToken, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
+import { applyBitableNav, readBitableNav, writeBitableNav } from "./bitableNavStore.js";
 import { parseCsv, defaultCsvMapping, importCsvRows, type CsvColumnMapping, type CsvImportResult } from "../../core/bitableCsv.js";
 import { StatCell } from "./bitableCells";
 import { BitableCsvImportDialog } from "./BitableCsvImportDialog.js";
@@ -91,29 +92,9 @@ function RowExpandIcon({ size = 15 }: { size?: number }) {
 }
 
 /**
- * 设备本地导航（用户 261006 选 C）：切数据表 / 切视图只写这里（localStorage，按 noteId），**不进正文、不同步**。
- * 正文侧由 `useBitableSession` 恒写默认导航（见 serializeBody）⇒ 换台设备各记各的、也不会把导航带上 S3。
+ * 设备本地导航（用户 261006 选 C）：切数据表 / 切视图只写 localStorage（按 noteId），**不进正文、不同步**。
+ * 单一来源 = `bitableNavStore.ts`（桌面与移动端共用）；正文侧由 `useBitableSession` 恒写默认导航。
  */
-const NAV_KEY_PREFIX = "lake-notes-v3.bitable-nav.";
-interface BitableNav { tableId?: string; viewIds?: Record<string, string>; }
-function readBitableNav(noteId: string): BitableNav {
-  try {
-    const raw = localStorage.getItem(NAV_KEY_PREFIX + noteId);
-    const parsed = raw ? (JSON.parse(raw) as BitableNav) : null;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch { return {}; }
-}
-function applyBitableNav(doc: BitableDoc, nav: BitableNav): BitableDoc {
-  const tables = doc.tables.map((table) => {
-    const viewId = nav.viewIds?.[table.id];
-    return viewId && table.views.some((view) => view.id === viewId) ? { ...table, activeViewId: viewId } : table;
-  });
-  const wanted = nav.tableId;
-  const activeTableId = wanted && tables.some((t) => t.id === wanted) ? wanted
-    : tables.some((t) => t.id === doc.activeTableId) ? doc.activeTableId
-    : tables[0]?.id ?? "";
-  return { ...doc, tables, activeTableId };
-}
 function initialDoc(content: string, navNoteId: string | null): BitableDoc {
   const parsed = parseBitableBody(content);
   if (!parsed) {
@@ -193,7 +174,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     if (!chrome) return; // 历史快照预览不写，免得把真实文档的导航覆盖成快照里的
     const viewIds: Record<string, string> = {};
     for (const table of doc.tables) viewIds[table.id] = table.activeViewId;
-    writeLocalStorage(NAV_KEY_PREFIX + noteId, JSON.stringify({ tableId: doc.activeTableId, viewIds }));
+    writeBitableNav(noteId, { tableId: doc.activeTableId, viewIds });
   }, [chrome, noteId, navSig]);
 
   const readOnlyRef = useRef(readOnly);
@@ -642,10 +623,12 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
   }, [csvImport, activeTable.id, updateDoc]);
   const deleteRecords = useCallback((ids: string[]) => {
     const set = new Set(ids);
-    patchActiveTable((table) => ({ ...table, records: table.records.filter((r) => !set.has(r.id)) }));
+    // 261020：删记录上收 core 单一来源（移动端多维表编辑用同一函数）。
+    const tableId = docRef.current.activeTableId;
+    updateDoc((prev) => deleteBitableRecords(prev, tableId, ids));
     setSelectedRecordIds(new Set());
     setDrawerRecordId((current) => (current && set.has(current) ? null : current));
-  }, [patchActiveTable]);
+  }, [updateDoc]);
   const reorderRecords = useCallback((fromId: string, toId: string) => {
     patchActiveTable((table) => ({ ...table, records: moveItem(table.records, fromId, toId, (r) => r.id) }));
   }, [patchActiveTable]);

@@ -102,6 +102,109 @@ describe("mobile 目录树（文档套文档）", () => {
     const nodes = await bridge.listTreeNodes();
     expect(nodes.find((n) => n.id === nb.id)?.icon).toBe("📁");      // notebook 图标
   });
+
+  it("createUsheet 落 kind=usheet 且正文是共享的 50×16 空表快照", async () => {
+    const nb = await bridge.createNotebook({ title: "新建表格本", icon: null });
+    const sheet = await bridge.createUsheet("无标题表格", nb.id);
+    expect(sheet.kind).toBe("usheet");
+    expect(sheet.parentId).toBe(nb.id);
+
+    const read = await bridge.readNote(sheet.id);
+    expect(read?.kind).toBe("usheet");
+    expect(read?.parentId).toBe(nb.id);
+    const body = JSON.parse(read?.content ?? "{}") as { kind?: string; version?: number; workbook?: { sheets?: Record<string, { rowCount?: number; columnCount?: number }> } };
+    expect(body.kind).toBe("usheet");
+    expect(body.version).toBe(1);
+    expect(body.workbook?.sheets?.s1).toMatchObject({ rowCount: 50, columnCount: 16 });
+
+    const tree = await bridge.listNotebookTree(nb.id);
+    expect(tree.find((t) => t.id === sheet.id)?.title).toBe("无标题表格");
+
+    // 空串父节点必须兜底到真实笔记本，不能建出 parent_id="" 的孤儿表格
+    const fallback = await bridge.createUsheet("空父兜底表格", "   ");
+    expect(fallback.parentId).toBeTruthy();
+    expect(fallback.parentId).not.toBe("");
+  });
+});
+
+describe("mobile 新建画板", () => {
+  it("createBoard 落 kind=board、正文是空场景，并出现在目录树里", async () => {
+    const nb = await bridge.createNotebook({ title: "新建画板本", icon: null });
+    const board = await bridge.createBoard("无标题画板", nb.id);
+    expect(board.kind).toBe("board");
+    expect(board.parentId).toBe(nb.id);
+
+    const read = await bridge.readNote(board.id);
+    expect(read?.kind).toBe("board");
+    expect(read?.parentId).toBe(nb.id);
+    const body = JSON.parse(read?.content ?? "{}") as { kind?: string; version?: number; elements?: unknown[] };
+    expect(body.kind).toBe("board");
+    expect(body.version).toBe(1);
+    expect(body.elements).toEqual([]);
+
+    const tree = await bridge.listNotebookTree(nb.id);
+    expect(tree.find((t) => t.id === board.id)?.title).toBe("无标题画板");
+
+    const fallback = await bridge.createBoard("空父兜底画板", " ");
+    expect(fallback.parentId).toBeTruthy();
+    expect(fallback.parentId).not.toBe("");
+  });
+});
+
+describe("mobile 新建数据表", () => {
+  it("createBitable 落 kind=bitable、正文是 core 默认表（1 文本列 + 3 空记录），并出现在目录树里", async () => {
+    const nb = await bridge.createNotebook({ title: "新建数据表本", icon: null });
+    const bitable = await bridge.createBitable("无标题数据表", nb.id);
+    expect(bitable.kind).toBe("bitable");
+    expect(bitable.parentId).toBe(nb.id);
+
+    const read = await bridge.readNote(bitable.id);
+    expect(read?.kind).toBe("bitable");
+    expect(read?.parentId).toBe(nb.id);
+    const body = JSON.parse(read?.content ?? "{}") as {
+      kind?: string; version?: number; activeTableId?: string;
+      tables?: Array<{ id: string; fields?: Array<{ id: string; type: string }>; records?: unknown[]; views?: Array<{ id: string }> }>;
+    };
+    expect(body.kind).toBe("bitable");
+    expect(body.version).toBe(1);
+    // 新建数据表的产品默认：只有 1 列文本 + 3 行空记录（core createDefaultBitableTable 口径）
+    expect(body.tables?.length).toBe(1);
+    expect(body.tables?.[0].fields?.map((field) => field.type)).toEqual(["text"]);
+    expect(body.tables?.[0].records?.length).toBe(3);
+    expect(body.activeTableId).toBe(body.tables?.[0].id);
+
+    const tree = await bridge.listNotebookTree(nb.id);
+    expect(tree.find((t) => t.id === bitable.id)?.title).toBe("无标题数据表");
+
+    // 空串父节点必须兜底到真实笔记本，不能建出 parent_id="" 的孤儿数据表
+    const fallback = await bridge.createBitable("空父兜底数据表", "   ");
+    expect(fallback.parentId).toBeTruthy();
+    expect(fallback.parentId).not.toBe("");
+  });
+});
+
+describe("mobile 保存不改树归属（261020 实测 bug）", () => {
+  it("saveNote 不传 parentId 时保留原父节点（自动保存/完成不会把文档摘出笔记本）", async () => {
+    const nb = await bridge.createNotebook({ title: "保存归属本", icon: null });
+    const note = await bridge.createNote("归属文档", nb.id);
+    expect(note.parentId).toBe(nb.id);
+
+    // 模拟移动端自动保存：只传标题/正文（历史实现会把 parent_id 写成 NULL）
+    await bridge.saveNote(note.id, "归属文档", "<p>改一下</p>");
+    const after = (await bridge.listNotes()).find((n) => n.id === note.id);
+    expect(after?.parentId).toBe(nb.id);
+    expect((await bridge.listNotebookTree(nb.id)).some((t) => t.id === note.id)).toBe(true);
+
+    // 数据表同一条写边界
+    const bitable = await bridge.createBitable("归属数据表", nb.id);
+    await bridge.saveNote(bitable.id, "归属数据表", bitable.content);
+    expect((await bridge.listNotes()).find((n) => n.id === bitable.id)?.parentId).toBe(nb.id);
+
+    // 显式移动仍能改父节点（树操作不受 COALESCE 影响）
+    const group = await bridge.createGroup(nb.id, "归属分组");
+    await bridge.moveTreeNodeOrdered(note.id, group.id, [note.id]);
+    expect((await bridge.listNotes()).find((n) => n.id === note.id)?.parentId).toBe(group.id);
+  });
 });
 
 describe("mobile 目录重命名", () => {

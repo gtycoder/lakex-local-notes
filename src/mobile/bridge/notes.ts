@@ -6,6 +6,10 @@ import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
 import { countChars, countWords } from "../../core/textStats.js";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
+import { emptyUsheetBody } from "../../core/usheetDoc.js";
+import { emptyBoardBody } from "../../core/boardDoc.js";
+import { emptyBitableBody } from "../../core/bitableDoc.js";
+import type { NoteKind } from "../../core/noteKind.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 
 import * as noteRepository from "../data/noteRepository.js";
@@ -38,14 +42,14 @@ export const notesDomain = {
     return await noteRepository.searchNotes(d, query);
   },
 
-  async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string): Promise<void> {
+  async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string, kind: NoteKind = "doc"): Promise<void> {
     return runWrite("saveNote", async () => {
       const d = await ensureDb();
       const state = await noteRepository.noteWriteState(d, id);
       if (state === "gone") throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
       if (state === "missing") {
         if (await noteRepository.isTombstoned(d, id)) throw new Error("笔记已被彻底删除，保存被拒绝");
-        await noteRepository.createNote(d, id, title, content, parentId, assets, plain);
+        await noteRepository.createNote(d, id, title, content, parentId, assets, plain, kind);
         return;
       }
       await noteRepository.saveNote(d, id, title, content, parentId, assets, plain);
@@ -168,10 +172,40 @@ export const notesDomain = {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     // 无父新建 → 兜底父笔记本（存在的笔记本；无则自动创建"未分类"）
-    const pid = parentId ?? await dbPort.defaultNotebookId();
+    const pid = parentId?.trim() ? parentId : await dbPort.defaultNotebookId();
     const content = emptyLakeBody(id);
     await notesDomain.saveNote(id, title, content, pid);
     return { id, title, content, updatedAt: now, parentId: pid, kind: "doc" };
+  },
+
+  /** 新建表格（kind=usheet）：正文 = 移动端/桌面共享的空表快照（50×16），随后进入移动表格编辑器。 */
+  async createUsheet(title: string, parentId: string | null = null): Promise<LocalNote> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const pid = parentId?.trim() ? parentId : await dbPort.defaultNotebookId();
+    const content = emptyUsheetBody();
+    await notesDomain.saveNote(id, title, content, pid, undefined, "usheet");
+    return { id, title, content, updatedAt: now, parentId: pid, kind: "usheet" };
+  },
+
+  /** 新建画板（kind=board）：正文 = 空 Drawnix 场景，随后进入移动画板编辑器。 */
+  async createBoard(title: string, parentId: string | null = null): Promise<LocalNote> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const pid = parentId?.trim() ? parentId : await dbPort.defaultNotebookId();
+    const content = emptyBoardBody();
+    await notesDomain.saveNote(id, title, content, pid, undefined, "board");
+    return { id, title, content, updatedAt: now, parentId: pid, kind: "board" };
+  },
+
+  /** 新建数据表（kind=bitable）：正文 = core 的产品默认（1 文本列 + 3 条空记录），随后进入移动多维表编辑器。 */
+  async createBitable(title: string, parentId: string | null = null): Promise<LocalNote> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const pid = parentId?.trim() ? parentId : await dbPort.defaultNotebookId();
+    const content = emptyBitableBody();
+    await notesDomain.saveNote(id, title, content, pid, undefined, "bitable");
+    return { id, title, content, updatedAt: now, parentId: pid, kind: "bitable" };
   },
 
   async trashNote(id: string): Promise<void> {

@@ -30,7 +30,7 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(HOME).toContain('aria-label="搜索"');
   });
 
-  it("目录抽屉「新建」：工具栏（笔记本层）+ 每一行（子项）都有，且清单与桌面同款、不可编辑的类型置灰", () => {
+  it("目录抽屉「新建」：工具栏（笔记本层）+ 每一行（子项）都有，清单与桌面同款，四类文档都能新建", () => {
     // 笔记本层：抽屉工具栏的「新建」
     expect(WORKSPACE).toContain('aria-label="新建" title="新建"');
     // 每一行的「新建子项」
@@ -38,12 +38,26 @@ describe("工作区「更多」菜单（261014）", () => {
     // 清单同款同序（桌面 Sidebar CREATE_CHILD_ITEMS：文档/表格/数据表/画板/分组）
     const items = [...WORKSPACE.matchAll(/\{ id: "(note|usheet|bitable|board|group)", label: "([^"]+)"/g)].map((m) => m[2]);
     expect(items).toEqual(["新建文档", "新建表格", "新建数据表", "新建画板", "新建分组"]);
-    // 只有文档/分组可点；其余 disabled 且必须给理由（移动端没有 hover）
-    for (const kind of ["usheet", "bitable", "board"]) {
-      expect(WORKSPACE).toMatch(new RegExp('id: "' + kind + '"[^}]*disabled: true[^}]*note: "移动端暂不支持编辑"'));
+    // 261020：数据表已有移动编辑器 ⇒ 五类创建项全部可点，不再有"建得出来但打不开"的置灰项
+    for (const kind of ["note", "usheet", "bitable", "board", "group"]) {
+      expect(WORKSPACE).not.toMatch(new RegExp('id: "' + kind + '"[^}]*disabled'));
     }
-    expect(WORKSPACE).not.toMatch(/id: "note"[^}]*disabled/);
-    expect(WORKSPACE).not.toMatch(/id: "group"[^}]*disabled/);
+    // 单一创建通道：建库（按 kind 分派）→ 刷新目录 → 收抽屉 → 打开标签；清单 id → kind 只有一份映射
+    expect(WORKSPACE).toContain("const CREATE_MENU_KINDS");
+    for (const [id, kind] of [["note", "doc"], ["usheet", "usheet"], ["bitable", "bitable"], ["board", "board"]]) {
+      expect(WORKSPACE).toMatch(new RegExp(id + ': "' + kind + '"'));
+    }
+    expect(WORKSPACE).toMatch(/const pid = parentId \|\| notebookId;/);
+    expect(WORKSPACE).toContain('bridge.createNote("无标题文档", pid)');
+    expect(WORKSPACE).toContain('bridge.createUsheet("无标题表格", pid)');
+    expect(WORKSPACE).toContain('bridge.createBitable("无标题数据表", pid)');
+    expect(WORKSPACE).toContain('bridge.createBoard("无标题画板", pid)');
+    // 新建后关掉目录抽屉：否则编辑器在抽屉后面打开（设备实测）
+    expect(WORKSPACE).toMatch(/await bridge\.createBoard\("无标题画板", pid\);\n\s*await loadTree\(\);\n\s*setSidebarOpen\(false\);/);
+    // 三类新文档建完都直接进编辑态（文档停在阅读态）
+    expect(WORKSPACE).toMatch(/if \(kind !== "doc"\) pendingEditRef\.current = true;/);
+    // 菜单只把 note/usheet/bitable/board 交给创建通道，group 走分组创建
+    expect(WORKSPACE).toMatch(/const kind = CREATE_MENU_KINDS\[it\.id\];/);
   });
 
   it("笔记本编辑入口 = 首页「知识库」长按卡片（261014 用户最终定稿）", () => {

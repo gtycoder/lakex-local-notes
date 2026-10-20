@@ -104,6 +104,18 @@ export function MobileApp() {
     setQuickNotes(qn);
   }, []);
 
+  /**
+   * 从工作区回到首页时刷新列表（261020 实测）：首页是 keep-alive 常驻层，`refreshAll` 只在冷启动与
+   * 首页自身操作时跑 ⇒ 在工作区新建/编辑后返回，笔记本计数与「最近文档」还是旧的（用户报的「计数不涨」）。
+   * 只刷数据、不挡转场（与打开文档那条 refreshAll 同一姿势）。
+   */
+  const prevRouteKindRef = useRef<Route["kind"] | null>(null);
+  useEffect(() => {
+    const prev = prevRouteKindRef.current;
+    prevRouteKindRef.current = route.kind;
+    if (prev === "notebook" && route.kind === "home") void refreshAll().catch(() => undefined);
+  }, [route.kind, refreshAll]);
+
   useEffect(() => {
     (async () => {
       try {

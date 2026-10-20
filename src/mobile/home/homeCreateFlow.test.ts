@@ -33,6 +33,13 @@ const PRESS = code(read("../ui/createPress.ts"));
 const CSS = code(read("../mobile.css"));
 
 describe("首页新建流（261014）", () => {
+  it("从工作区回到首页会刷新列表（261020：新建/编辑后笔记本计数不能停在旧值）", () => {
+    // 首页是 keep-alive 常驻层：只在冷启动 refreshAll 的话，回首页后计数/最近文档是旧的。
+    expect(MOBILE_APP).toContain("prevRouteKindRef");
+    expect(MOBILE_APP).toMatch(/prev === "notebook" && route\.kind === "home"/);
+    expect(MOBILE_APP).toMatch(/route\.kind === "home"\) void refreshAll\(\)/);
+  });
+
   it("冷启动默认进「小记」", () => {
     expect(MOBILE_APP).toMatch(/useState<Route>\(\{ kind: "home", tab: "quick" \}\)/);
   });

@@ -12,6 +12,7 @@
  * 之后声明（`extractAssetRefs` 是全文本正则，能命中 JSON 里的文件名）、云端差集同步、
  * GC 保护、孤儿清理、他端按需下载、移动端 AssetServer 渲染**全部复用现成能力**，无需按 kind 分支。
  */
+import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl";
 
 /** 引擎产出的内联图片形态（`FileReader.readAsDataURL` → `data:image/png;base64,…`）。 */
 const INLINE_IMAGE_DATA_URL_RE = /^data:image\/[a-z0-9.+-]+;base64,/i;
@@ -95,4 +96,111 @@ export function collectBoardAssetUrls(node: unknown, noteId: string, out: Set<st
   }
   return out;
 }
-import { parseLocalAssetUrl } from "../../core/assetUrl";
+/** 移动端 / 桌面读回资产字节的最小接口（`native.readAssetPreview` 同形）。 */
+export interface BoardAssetPreviewLike {
+  supported: boolean;
+  dataUrl?: string;
+}
+
+/** 图片 MIME → 落盘扩展名（`buildAssetFilename` 只认原文扩展名）。 */
+const IMAGE_MIME_EXTENSION: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/svg+xml": "svg",
+  "image/bmp": "bmp",
+  "image/avif": "avif",
+  "image/heic": "heic",
+  "image/tiff": "tiff",
+};
+
+export interface InlineImageBytes {
+  mime: string;
+  bytes: Uint8Array;
+  /** 目标落盘扩展名（未知类型按 png 兜底，不阻断上传） */
+  extension: string;
+}
+
+/** 把内联图片 data URL 解成字节（提升上传用）；非图片/非 base64/解码失败 → null（保持内联，绝不清空）。 */
+export function decodeInlineImageDataUrl(value: unknown): InlineImageBytes | null {
+  if (typeof value !== "string") return null;
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i.exec(value.trim());
+  if (!match) return null;
+  const mime = match[1].toLowerCase();
+  const rawExt = mime.slice("image/".length).split("+")[0].replace(/[^a-z0-9]/g, "");
+  const extension = IMAGE_MIME_EXTENSION[mime] ?? (rawExt || "png");
+  try {
+    const binary = atob(match[2]);
+    if (!binary) return null;
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return { mime, bytes, extension };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 画板图片管线的**两端映射**（纯逻辑，读写能力由调用方注入；桌面/移动共用同一口径）。
+ *
+ * - `boardAssetHydrationMapping`：打开时把**本笔记的资产 URL**换回 data URL（内存口径），
+ *   并把 dataURL → 资产URL 反向登记，保证下次保存写回同一个资产 URL（不重复上传、不改 hash）。
+ *   读不到就跳过（保持资产 URL 渲染）。
+ * - `boardInlinePromotionMapping`：保存前把**内联 data URL**提升为资产文件（`note-assets/{noteId}/`），
+ *   单张失败跳过（保持内联形态，不丢图）。
+ */
+export async function boardAssetHydrationMapping(
+  elements: unknown[],
+  noteId: string,
+  read: (noteId: string, filename: string) => Promise<BoardAssetPreviewLike>,
+): Promise<Map<string, string>> {
+  const mapping = new Map<string, string>();
+  const assetUrls = collectBoardAssetUrls(elements, noteId);
+  for (const assetUrl of assetUrls) {
+    const ref = parseLocalAssetUrl(assetUrl);
+    if (!ref || ref.space !== "note" || ref.staging) continue;
+    try {
+      const preview = await read(ref.noteId, ref.filename);
+      if (preview.supported && preview.dataUrl) mapping.set(assetUrl, preview.dataUrl);
+    } catch {
+      // 读回失败：保持资产 URL 渲染即可，不影响打开
+    }
+  }
+  return mapping;
+}
+
+/**
+ * 上传回执的最小形状：**优先用 `url`**（两端上传通道都回 canonical URL，磁盘名在 URL 末段）；
+ * 只有 `filename` 时按 `noteId` 拼 canonical URL（`filename` 必须是**磁盘名**，不是展示名）。
+ */
+export interface BoardImageUploadLike {
+  url?: string;
+  filename?: string;
+}
+
+export async function boardInlinePromotionMapping(
+  elements: unknown[],
+  noteId: string,
+  upload: (input: { bytes: Uint8Array; filename: string }) => Promise<BoardImageUploadLike>,
+  /** 已在内存里有映射（hydrate 反向登记）的 data URL 不再重复上传。 */
+  known: ReadonlyMap<string, string> = new Map(),
+): Promise<Map<string, string>> {
+  const mapping = new Map<string, string>();
+  for (const dataUrl of collectInlineImageUrls(elements)) {
+    if (known.has(dataUrl)) continue;
+    const decoded = decodeInlineImageDataUrl(dataUrl);
+    if (!decoded) continue;
+    try {
+      const uploaded = await upload({ bytes: decoded.bytes, filename: "board-image." + decoded.extension });
+      // ⚠️ 移动端 bridge.uploadResource 的 `filename` 是**展示名**（用户原始名），磁盘名只在 `url` 末段；
+      // 只认 url，避免把展示名当路径写进正文（否则图片 404）。
+      const assetUrl = uploaded?.url ?? (uploaded?.filename ? localAssetHttpUrl(noteId, uploaded.filename) : null);
+      if (assetUrl) mapping.set(dataUrl, assetUrl);
+    } catch {
+      // 单张失败：保持内联形态，下次变更再试
+    }
+  }
+  return mapping;
+}
