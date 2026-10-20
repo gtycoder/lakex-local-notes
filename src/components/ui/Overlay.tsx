@@ -90,6 +90,9 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
   }, [open, onDismiss, overlayId]);
 
   // 外点关闭（menu / popover；dialog 由遮罩 mousedown 关闭）
+  // ⚠️ 必须监听 **capture** 阶段：富文本内核与 Univer 表格都会在自己的子树里
+  //    `stopPropagation()` 掉 mousedown（实测：点表格画布时 document 的冒泡监听收不到，
+  //    浮层就一直不关；点目录/外壳能关）。capture 先于它们执行，才拿得到这次点击。
   useEffect(() => {
     if (!open || kind === "dialog" || kind === "drawer") return;
     const onDown = (e: MouseEvent) => {
@@ -103,8 +106,8 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
         onDismiss();
       }
     };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
   }, [open, kind, onDismiss, ignoreOutside, closeOnNestedOverlay]);
 
   // dialog：首焦点 + 滚动锁 + 关闭后恢复焦点
