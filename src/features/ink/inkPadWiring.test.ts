@@ -13,6 +13,7 @@ const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
 const INK_PAD = read("./InkPad.tsx");
 const DESKTOP_INK = read("./DesktopInkPad.tsx");
 const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
+const PAGE_STRIP = read("./InkPageStrip.tsx");
 const TABS_CSS = read("../../styles/app/tabs.css");
 
 describe("手写板 POC 端到端接线", () => {
@@ -41,6 +42,15 @@ describe("手写板 POC 端到端接线", () => {
     expect(INK_PAD).toContain('aria-label="恢复为适应页面"');
     expect(INK_PAD).toContain("fitSize.width * zoom");
     expect(INK_PAD).toContain("fitSize.height * zoom");
+  });
+
+  it("页面管理：缩略图、前移/后移、删除页二次确认", () => {
+    expect(INK_PAD).toContain("InkPageStrip");
+    expect(PAGE_STRIP).toContain("aria-label=\"页面管理\"");
+    expect(PAGE_STRIP).toContain("页前移");
+    expect(PAGE_STRIP).toContain("页后移");
+    expect(PAGE_STRIP).toContain("确认删除");
+    expect(PAGE_STRIP).toContain("onConfirmDelete");
   });
 
   it("静态笔迹层 memo 化，避免正在书写时重渲染全部历史路径", () => {

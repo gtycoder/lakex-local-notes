@@ -63,7 +63,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 258, dupGroups: 0 }, // 261019(八)：+1 = 收起过渡期面板内容保持可见时不再接受点击（.med-panel[data-closing="1"]）。 // 261017 撤销后端：`.med-btn:disabled` 置灰 +2（255 → 257）。261015：「＋」= 方块网格（两组 8+10 × 4 列、组间 16、方块 52、浅灰底）；「Aa」面板压缩上下间距（行距 8→6、卡内距 3→2、条目 44→40 走注册表补足、色板 37→34、内距 12/14→6/6）+ 图标 17→20、文字/图标色 text-2→text-1。261017（B6）：一级面板统一灰底（selector 加 data-kind=font，声明数不变）；「更多」改行式白卡 + 每项文字说明 + 工具栏中间横滑/键盘固定尾键（删 `.med-ins-glyph` -9、补 `.med-f-btn:disabled` +2 / 行内文字与行标签/不换行 +21 / 工具栏横滑区 + `.med-btn--kb` +5）⇒ 237 → 255
   "mobile/ink/inkPad.mobile.css": { decls: 23, dupGroups: 0 },
-  "mobile/ink/inkPad.shared.css": { decls: 106, dupGroups: 0 }, // 手写板 POC：移动端只覆盖工具栏尺寸、页面适配和 footer 换行；通用结构与桌面共用 inkPad.shared.css。
+  "mobile/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 }, // 手写板 POC：移动端只覆盖工具栏尺寸、页面适配和 footer 换行；通用结构与桌面共用 inkPad.shared.css。
   "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
   "mobile/editor/edit-surface-kernel.css": { decls: 24, dupGroups: 0 }, // 261014 P2：把散在 mobile.css（doc 侧）/ quick-notes.css（note 侧）的内核几何收口**合成一份**（doc/note 共用 data-mb-edit-host 契约） // 261013：+1 = 表情面板分类条在 dock 里拉满面板边（当时口径：9 个分类 ≈45.8px、一屏放得下不横滚；261014 已改「一屏 8 格 + 横滑 + 钉住的动作键」，见 kit.css）
 };

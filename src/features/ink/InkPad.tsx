@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronLeft, ChevronRight, Eraser, Highlighter, Minus, Pen, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser, Highlighter, LayoutGrid, Minus, Pen, Plus, Redo2, Undo2 } from "lucide-react";
 import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
 import {
   createInkPage,
@@ -13,6 +13,7 @@ import {
   type InkTool,
 } from "../../core/inkDoc.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
+import InkPageStrip from "./InkPageStrip.js";
 
 export type InkPadMode = InkTool | "eraser";
 
@@ -95,6 +96,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [penWidth, setPenWidth] = useState<number>(WIDTHS[1]);
   const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
   const [zoom, setZoom] = useState(1);
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
   const [activeStroke, setActiveStroke] = useState<InkStroke | null>(null);
@@ -233,14 +236,44 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     commit({ ...docRef.current, pages: [...docRef.current.pages, nextPage], activePageId: nextPage.id });
   }, [commit, readOnly]);
 
-  const deletePage = useCallback(() => {
+  const selectPage = useCallback((id: string) => {
     const current = docRef.current;
-    if (!current || readOnly || current.pages.length <= 1) return;
-    const removeIndex = current.pages.findIndex((item) => item.id === current.activePageId);
-    const pages = current.pages.filter((item) => item.id !== current.activePageId);
-    const activePageId = pages[Math.max(0, removeIndex - 1)]?.id ?? pages[0]?.id;
-    commit({ ...current, pages, activePageId });
+    if (!current || !current.pages.some((item) => item.id === id)) return;
+    const updated = { ...current, activePageId: id };
+    docRef.current = updated;
+    setDoc(updated);
+  }, []);
+
+  const movePage = useCallback((id: string, delta: -1 | 1) => {
+    const current = docRef.current;
+    if (!current || readOnly) return;
+    const index = current.pages.findIndex((item) => item.id === id);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= current.pages.length) return;
+    const pages = [...current.pages];
+    const [moved] = pages.splice(index, 1);
+    pages.splice(target, 0, moved);
+    commit({ ...current, pages });
   }, [commit, readOnly]);
+
+  const requestDeletePage = useCallback((id: string) => {
+    if (readOnly) return;
+    setPendingDeletePageId(id);
+  }, [readOnly]);
+
+  const confirmDeletePage = useCallback(() => {
+    const current = docRef.current;
+    const id = pendingDeletePageId;
+    if (!current || !id || readOnly || current.pages.length <= 1) return;
+    const index = current.pages.findIndex((item) => item.id === id);
+    if (index < 0) { setPendingDeletePageId(null); return; }
+    const pages = current.pages.filter((item) => item.id !== id);
+    const activePageId = current.activePageId === id
+      ? pages[Math.max(0, index - 1)]?.id ?? pages[0]?.id
+      : current.activePageId;
+    setPendingDeletePageId(null);
+    commit({ ...current, pages, activePageId });
+  }, [commit, pendingDeletePageId, readOnly]);
 
   const switchPage = useCallback((delta: number) => {
     const current = docRef.current;
@@ -248,10 +281,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     const index = current.pages.findIndex((item) => item.id === current.activePageId);
     const next = current.pages[Math.max(0, Math.min(current.pages.length - 1, index + delta))];
     if (!next || next.id === current.activePageId) return;
-    const updated = { ...current, activePageId: next.id };
-    docRef.current = updated;
-    setDoc(updated);
-  }, []);
+    selectPage(next.id);
+  }, [selectPage]);
 
   const setBackground = useCallback((background: InkBackground) => {
     const current = docRef.current;
@@ -440,6 +471,21 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
         )}
       </div>
 
+      {pagesOpen && (
+        <InkPageStrip
+          pages={doc.pages}
+          activePageId={doc.activePageId}
+          pendingDeleteId={pendingDeletePageId}
+          onSelect={selectPage}
+          onMove={movePage}
+          onAdd={addPage}
+          onRequestDelete={requestDeletePage}
+          onConfirmDelete={confirmDeletePage}
+          onCancelDelete={() => setPendingDeletePageId(null)}
+          onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
+        />
+      )}
+
       <div className="ink-page-stage" ref={stageRef}>
         <div
           className="ink-page-frame"
@@ -477,7 +523,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
           <button onClick={() => switchPage(1)} disabled={readOnly || pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
           <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
-          <button onClick={deletePage} disabled={readOnly || doc.pages.length <= 1} aria-label="删除当前页"><Trash2 size={16} /></button>
+          <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
         </div>
         <div className="ink-footer__right">
           <div className="ink-backgrounds">
