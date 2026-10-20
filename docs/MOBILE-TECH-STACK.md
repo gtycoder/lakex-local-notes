@@ -131,6 +131,11 @@
       见 `docs/LAKEX-CONTRACT.md` §5.37）；新增编辑面/面板时按这条自查。
    另外：**光标跟随**统一走 `useCaretIntoView`（文档与小记同一份；它同时监听 `selectionchange/pointerup/resize`，
    因为浏览器自己的"把光标滚进视口"是**按视口**算的，会把光标停在面板/键盘后面）。
+  ④ **route / shell 层不得常驻 `transform` / `will-change: transform`**（261020 实测）：这两者都会把
+  `position:fixed` 的包含块从「视口」改成该层盒子（**即使 transform 是 none**），而层高 = `--mb-app-h`（面板期 530）
+  ⇒ 编辑 dock 的 `.med-panel` / `.med-toolbar` 被钉在 530 下沿、下方空出一整块键盘区（小记写作卡「Aa」二级面板
+  整体上移、内容被裁，用户报「改一次移动端就乱一次」）。转场只在 `.is-animating` 期间挂 will-change、落定即撤；
+  新增任何层都先按 I5 验（下条）。
 
    **落地结构（261014 P1–P3 收口，新增代码按这个分层放）**：
    `editSurfaceModel.ts`（纯函数算术，带单测）→ `useEditSurface.ts`（**编辑面唯一 owner**：外壳高度 / 面板状态机 /
@@ -138,7 +143,8 @@
    内核几何（按视口 or 按桌面写死的高度/上限/限宽）**只有一份收口**：`editor/edit-surface-kernel.css`，
    宿主契约 = 编辑面容器挂 `data-mb-edit-host` + `data-mb-kernel="note|doc"`（新增编辑面挂上即继承）。
    **判据装置**：`node scripts/css-audit/drive.mjs <port> scripts/mobile-audit/edit-surface-invariants.mjs` ——
-   两条编辑器各跑 I1 几何恒定 / I2 光标存在 / I3 光标在工具栏上方 / I4 面板不自关·无闪。
+   两条编辑器各跑 I1 几何恒定 / I2 光标存在 / I3 光标在工具栏上方 / I4 面板不自关·无闪 /
+  I5 面板贴视口底（`panel.bottom === innerHeight` 且 `toolbar.bottom === panel.top`）。
 8. **移动端 Univer 必须用移动 UI 插件族**（261019 实测定稿）：`UniverSheetsCorePreset` 自带的是桌面
    `UniverUIPlugin` / `UniverSheetsUIPlugin`，其 selection service 会把单指横拖当成多选范围（实测选成
    B12:D12），既不会滚动也不符合触屏习惯；必须成套替换为 `UniverMobileUIPlugin` +

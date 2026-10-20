@@ -1206,7 +1206,10 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 .mobile-route-layer {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   transition: transform var(--lake-motion-slow) var(--lake-ease-standard);
-  will-change: transform;
+  /* ⚠️ 这里**不写**常驻 will-change:transform（261020 修复）：它本身就会把 position:fixed 的包含块
+     从「视口」改成 layer 盒（即使 transform 是 none）。常驻 ⇒ 编辑 dock 的 .med-panel/.med-toolbar
+     以 --mb-app-h 为下沿：小记写作卡展开「Aa / ＋」二级面板时整体上移一个键盘高、下方空一片
+     （用户 261020 报「二级展开又乱了」）。只在转场期间挂（见 .is-animating）。 */
   /* **必须按 layer 自身裁切**（261019 用户报"从常用进入/退出闪一下"的根因）：
      工作区里的左右抽屉是 position:fixed + translateX(±100%)，而 layer 自带 transform ⇒ fixed 以 layer
      为包含块；layer 在转场中整体位移时，off-canvas 的抽屉会"探进"视口（实测 push 到 x=58 时整块
@@ -1221,6 +1224,9 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 @media (prefers-reduced-motion: reduce) { .mobile-route-layer { transition: none; } }
 .mobile-route-stage.is-open .mobile-route-layer--home { transform: translateX(-25%); }
 .mobile-route-stage.is-open .mobile-route-layer--workspace { transform: translateX(0); }
+/* will-change 只限**转场期间**（261020）：位移结束即撤，避免常驻会改变 fixed 包含块（见上方 layer 注释）。
+   进/出场都在位移，所以两层一起挂；settled 后再由 .is-settled 兜底清一次。 */
+.mobile-route-stage.is-animating .mobile-route-layer { will-change: transform; }
 /* 261019(七) 修复：入场播完**撤掉工作区层的 transform / will-change** —— 这两者都会把 position:fixed
    的包含块从「视口」改成 layer 盒，而 layer 盒高度 = --mb-app-h（面板期 = 稳定外壳高 − 键盘/面板占用，
    实测 562）。于是编辑 dock 的 .med-toolbar / .med-panel 被钉在 562（键盘上方）、下方留 280 空白

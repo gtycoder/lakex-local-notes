@@ -65,9 +65,11 @@ node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/edit-surface-invarian
 node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/edit-surface-invariants.mjs quicknote # 只跑小记
 ```
 
-四条不变量（依据 = 261014 修掉的 5 个真缺陷）：**I1 几何恒定**（键盘/面板/收回三态的 kernCh·kernSt·firstY 逐项相同）·
-**I2 光标存在**（面板态 activeElement 仍是正文、选区在、inputmode=none）· **I3 光标在工具栏上方**（caret.bottom < tb.top）·
-**I4 不自关/无闪**（点＋后 1.2s 面板仍在；每次开/关 resize ≤1）。失败即 exit 1 并逐条打印实际取样值。
+五条不变量（依据 = 261014 修掉的 5 个真缺陷 + 261020 面板错位回归）：**I1 几何恒定**（键盘/面板/收回三态的
+kernCh·kernSt·firstY 逐项相同）· **I2 光标存在**（面板态 activeElement 仍是正文、选区在、inputmode=none）·
+**I3 光标在工具栏上方**（caret.bottom < tb.top）· **I4 不自关/无闪**（点＋后 1.2s 面板仍在；每次开/关 resize ≤1）·
+**I5 面板贴视口底**（面板打开时 `panel.bottom === innerHeight` 且 `toolbar.bottom === panel.top`；任何把 fixed
+包含块变成 layer 盒的改动——常驻 transform/will-change——都会让它红）。失败即 exit 1 并逐条打印实际取样值。
 
 ## 插入面板几何（261015 起，动 dock 面板 / 插入项排布时必跑）
 

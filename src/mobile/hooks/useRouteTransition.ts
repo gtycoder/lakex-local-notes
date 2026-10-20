@@ -35,6 +35,12 @@ export interface RouteTransition {
    * 从 layer 盒回到视口（否则编辑 dock 的面板会被钉在 `--mb-app-h` 下沿 = 键盘上方，261019 用户报）。
    */
   settled: boolean;
+  /**
+   * 转场位移是否**正在进行**（push/pop 都算，含 reduced-motion 的极短窗口）。
+   * 只有它为 true 时才给层挂 `will-change:transform`（见 mobile.css 的 `.is-animating`）——
+   * 常驻 will-change 本身就会把 position:fixed 的包含块改成 layer 盒，导致编辑面板错位（261020）。
+   */
+  animating: boolean;
   /** 返回首页：先播出场，结束（240ms / reduced-motion 0ms）后回调 `onClosed` 并卸载工作区。 */
   close: () => void;
   homeRef: RefObject<HTMLDivElement>;
@@ -45,6 +51,7 @@ export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): 
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState(false);
+  const [animating, setAnimating] = useState(false);
   const homeRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef(0);
@@ -59,7 +66,8 @@ export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): 
 
   useEffect(() => {
     if (!mounted || routeKind !== "notebook" || closingRef.current) return;
-    const raf = requestAnimationFrame(() => setOpen(true));
+    // 与 open 同一次 render 开 will-change：否则首帧已经位移、下一帧才提升层，白丢一帧。
+    const raf = requestAnimationFrame(() => { setAnimating(true); setOpen(true); });
     return () => cancelAnimationFrame(raf);
   }, [mounted, routeKind]);
 
@@ -68,7 +76,7 @@ export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): 
   // 下方留一片空白（261019 用户报「工具栏展开跑到键盘上边」）。多等 50ms 覆盖 transition 的收尾帧。
   useEffect(() => {
     if (!open) { setSettled(false); return; }
-    const t = window.setTimeout(() => setSettled(true), routeTransitionMs(prefersReducedMotion()) + 50);
+    const t = window.setTimeout(() => { setSettled(true); setAnimating(false); }, routeTransitionMs(prefersReducedMotion()) + 50);
     return () => window.clearTimeout(t);
   }, [open]);
 
@@ -76,9 +84,11 @@ export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): 
     if (closingRef.current) return;
     closingRef.current = true;
     setOpen(false);
+    setAnimating(true);                       // 出场也要位移 ⇒ 转场期间才挂 will-change
     closeTimerRef.current = window.setTimeout(() => {
       onClosedRef.current();
       setMounted(false);
+      setAnimating(false);
       closingRef.current = false;
     }, routeTransitionMs(prefersReducedMotion()));
   }, []);
@@ -96,5 +106,5 @@ export function useRouteTransition(routeKind: RouteKind, onClosed: () => void): 
     if (wsRef.current) wsRef.current.toggleAttribute("inert", homeActive);
   }, [routeKind, mounted]);
 
-  return { mounted, open, settled, close, homeRef, wsRef };
+  return { mounted, open, settled, animating, close, homeRef, wsRef };
 }

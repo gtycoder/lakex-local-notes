@@ -73,6 +73,7 @@ export function MobileApp() {
     mounted: wsMounted,
     open: wsOpen,
     settled: wsSettled,
+    animating: routeAnimating,
     close: closeWorkspace,
     homeRef: routeHomeRef,
     wsRef: routeWsRef,
@@ -368,7 +369,7 @@ export function MobileApp() {
         onOpenNote={(id) => void openNote(id, "viewer")}
       />
       {/* 路由层（261019）：首页常驻 + 工作区按需挂载；push/pop 只动 transform（见 mobile.css） */}
-      <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "")} aria-label="页面">
+      <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "") + (routeAnimating ? " is-animating" : "")} aria-label="页面">
       <div className="mobile-route-layer mobile-route-layer--home" ref={routeHomeRef}>
         <HomePage
           tab={homeTab}
