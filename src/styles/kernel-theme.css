@@ -134,7 +134,10 @@
    写在未分层的本文件 ⇒ 未分层普通声明压过 legacy 层的它，不需要 !important 也不需要堆特异性；
    内核那些 !important 的「卡片/表格用自绘选区、原生选区透明」规则仍然照常胜出（important 恒压 normal）。
    color 用 inherit：与内核 .ne-engine ::selection 同口径，不把字色一起染蓝。 */
-::selection { background: var(--lake-select-bg); color: inherit; }
+/* 必须带 :root 提高一级特异性：dev 下 Vite 会把内核 antd 的
+ * `::selection{background:#1890ff}` 作为后注入的 style 排在后面；裸选择器同优先级会按顺序被它盖掉。
+ * 生产构建顺序不同，所以只在 dev 复现。内核自己的 !important 选区规则仍照常优先。 */
+:root ::selection { background: var(--lake-select-bg); color: inherit; }
 
 /* 261014：这里原有 5 个为「选图标浮层复用内核表情面板」而钉的 --lakex-editor-* token（261013 加），
  * 随该浮层改为自有面板（.ln-popover + components/ui/nodeIcon.css）一并**删除** —— 面板不再依赖内核 token，

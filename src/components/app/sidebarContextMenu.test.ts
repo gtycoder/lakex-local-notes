@@ -42,6 +42,14 @@ describe("目录栏右键菜单", () => {
     expect(APP).toContain("onSidebarHold={holdSidebarExpanded}");
   });
 
+  it("重命名弹窗允许接受默认名/原名称，只有空名不能确认", () => {
+    const start = SRC.indexOf("function TreeRenameDialog");
+    const dialog = SRC.slice(start, SRC.indexOf("type CreateChildKind", start));
+    expect(dialog).toContain("const canConfirm = trimmed.length > 0;");
+    expect(dialog).not.toContain("trimmed !== initial.trim()");
+    expect(dialog).toContain('disabled={!canConfirm}');
+  });
+
   it("右键菜单不再有「打开文件位置」及其接线", () => {
     const start = SRC.indexOf("const ContextMenu =");
     const end = SRC.indexOf("interface ConfirmDeleteProps");

@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const BASE = read("./themes/base.css");
 const KIT = read("./kit.css");
+const KERNEL = read("./kernel-theme.css");
 const CHROME = read("./chrome.css");
 const BITABLE = read("../features/bitable/bitableEditor.css");
 const M_TOKENS = read("../mobile/theme/tokens.css");
@@ -43,6 +44,11 @@ describe("选中态语义令牌（261017 Q3）", () => {
     expect(KIT).toMatch(/\.ln-iconbtn\.is-selected:hover:not\(:disabled\) \{ background: var\(--lake-bg-selected-hover\); \}/);
     expect(KIT).toMatch(/\.ln-btn--secondary\.is-selected:hover \{ background: var\(--lake-bg-selected-hover\); \}/);
     expect(CHROME).toMatch(/\.note-row\.active:hover \{ background: var\(--lake-bg-selected-hover\); \}/);
+  });
+
+  it("输入框与全局文字选区都落到主题无关中性灰令牌", () => {
+    expect(KIT).toMatch(/\.ln-input::selection, \.ln-input__field::selection \{ background: var\(--lake-select-bg\); \}/);
+    expect(KERNEL).toMatch(/:root ::selection \{ background: var\(--lake-select-bg\); color: inherit; \}/);
   });
 
   it("移动端选中面同样只经语义令牌（无 hover 档）", () => {

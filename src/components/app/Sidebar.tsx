@@ -933,7 +933,9 @@ function TreeRenameDialog({ initial, onCancel, onConfirm }: { initial: string; o
   const [value, setValue] = useState(initial);
   const inputRef = useRef<HTMLInputElement>(null);
   const trimmed = value.trim();
-  const canConfirm = trimmed.length > 0 && trimmed !== initial.trim();
+  // 新建文档会先落默认标题再打开本弹窗；接受默认名也必须能确认。
+  // 非空是唯一门槛：改成同名是无副作用的确认，不应把按钮置灰。
+  const canConfirm = trimmed.length > 0;
   return (
     <Dialog open onDismiss={onCancel} label="重命名" className="rename-dialog" initialFocus={inputRef}>
       <div className="ln-dialog__head"><span className="ln-dialog__title">重命名</span></div>
