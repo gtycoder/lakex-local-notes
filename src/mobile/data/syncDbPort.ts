@@ -174,6 +174,11 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
         : items.filter((s) => !deferredIds.has(String(s.values[0])));
       if (accepted.length === 0 && keptItems.length === 0) return;
       // 正文先落文件（顺序对齐桌面 importRemoteNote），再把元数据并入同一批 SQL。
+      // 不能只在批外 applyRemoteNoteNow 写文件：下载引擎的批窗口会把正文暂存在 batchNotes，
+      // 若 flush 只提交 DB 行，会留下「content_hash 已 synced、正文文件不存在」的坏状态。
+      for (const { note, content } of accepted) {
+        await writeNoteBody(normalizeNoteKind(note.kind), note.id, content);
+      }
       const noteStatements = accepted.map(({ note, content }) => ({
         statement: NOTE_UPSERT_SQL,
         values: noteUpsertValues(note, textCacheOf(note, content)),

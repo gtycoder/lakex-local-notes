@@ -20,11 +20,11 @@ describe("互斥域判据（F16 红线化）", () => {
 
   it("计数基线：改动分类表必须是有意的（改这里 = 改架构判据）", () => {
     // 与 cssLayers 的基线同理：只允许"显式改基线"来变更，防无声漂移。
-    expect(WRITE_OPS.length).toBe(29);
+    expect(WRITE_OPS.length).toBe(30);
     expect(MAINTENANCE_OPS.length).toBe(3);
     expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
     expect(NONE_OPS.length).toBe(39); // 261013 +getCloudState（UI 用它给「保存并同步」置灰）
-    expect(ALL.length).toBe(72); // = 移动端 bridge 的操作总数（261010 删死方法 uploadObject；261013 +syncQuickNote / +getCloudState）
+    expect(ALL.length).toBe(73); // = 移动端 bridge 的操作总数（261010 删死方法 uploadObject；261013 +syncQuickNote / +getCloudState）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

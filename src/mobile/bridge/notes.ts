@@ -6,6 +6,7 @@ import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
 import { countChars, countWords } from "../../core/textStats.js";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
+import { emptyInkBody } from "../../core/inkDoc.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 
 import * as noteRepository from "../data/noteRepository.js";
@@ -173,6 +174,18 @@ export const notesDomain = {
     await notesDomain.saveNote(id, title, content, pid);
     return { id, title, content, updatedAt: now, parentId: pid, kind: "doc" };
   },
+  async createInk(title: string, parentId: string | null = null): Promise<LocalNote> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const pid = parentId ?? await dbPort.defaultNotebookId();
+    const content = emptyInkBody();
+    await runWrite("createInk", async () => {
+      const d = await ensureDb();
+      await noteRepository.createNote(d, id, title, content, pid, new Map(), undefined, "ink");
+    });
+    return { id, title, content, updatedAt: now, parentId: pid, kind: "ink" };
+  },
+
 
   async trashNote(id: string): Promise<void> {
     return runWrite("trashNote", async () => {

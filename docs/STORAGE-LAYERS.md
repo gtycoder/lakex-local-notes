@@ -38,6 +38,7 @@
    ├─ usheets/{noteId}.usheet.json       # 表格正文（kind=usheet，Univer v1）L1（对象）
    ├─ bitables/{noteId}.bitable.json     # 多维表正文（kind=bitable，自研 v1）L1（对象）
    ├─ boards/{noteId}.board.json         # 画板正文（kind=board，Drawnix/Plait 场景）L1（对象）
+   ├─ inks/{noteId}.ink.json            # 手写板正文（kind=ink，矢量墨迹 JSON）L1（对象）
    ├─ note-assets/{noteId}/{filename}   # 附件/图片                    L1（assets/）
    ├─ quick-notes/
    │  ├─ metadata.sqlite3              # 小记独立库
@@ -60,6 +61,7 @@
 >
 > **多维表文档（`kind="bitable"`，260920 实现 v1）**：正文落 `bitables/{noteId}.bitable.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
 > 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/STORAGE-LAYERS.md`。
+> **手写板文档（`kind="ink"`，261020 正式 v1）**：正文落 `inks/{noteId}.ink.json`，格式 = `{kind:"ink",version:1,pages[],activePageId}`；页面为固定 A4 逻辑尺寸，笔迹只存矢量点和压力，**不存 PNG**。详见 `docs/INK-PAD.md`。
 > **画板文档（`kind="board"`，260920 引入）**：正文落 `boards/{noteId}.board.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
 > 正文格式 = **Drawnix/Plait 场景 JSON**（`{kind:"board",version:1,engine:"drawnix",preset,elements[],viewport?}`）；`elements` 就是文档内画板卡的 `plaitValue`，两者可无损互搬。
 > **不挂 Lake 内核**（编辑器直接挂 `DrawnixBoardCore`，零内核实例）；**不写卡片专用的 `previewImage`/`cardHeight`**（那张整幅 PNG 实测占带画板文档体积 90%+）。

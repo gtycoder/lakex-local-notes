@@ -25,6 +25,10 @@ describe("状态栏锁定标识", () => {
     expect(fixed).not.toContain("onClick");
   });
 
+  it("非 doc 类型标签覆盖手写板，不能把 ink 误显示成画板", () => {
+    expect(SRC).toContain('docKind === "board" ? "画板" : "手写板"');
+  });
+
   it("CSS：只有 button.document-statusbar-lock 开 pointer-events；stats/state 未变", () => {
     expect(CSS).toMatch(/button\.document-statusbar-lock\s*\{[^}]*pointer-events: auto/);
     // 容器仍穿透，且没有给 stats/state 加动作

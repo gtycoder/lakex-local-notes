@@ -22,6 +22,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(SharedContentPlugin::class.java)
         registerPlugin(AssetSyncPlugin::class.java)
         registerPlugin(BodyStorePlugin::class.java)
+        registerPlugin(StylusInputPlugin::class.java)
         registerPlugin(SecureStorePlugin::class.java)
         // 主动弹软键盘：WebView 程序化 focus 不弹键盘（深链冷启动没有用户手势），见 ShowKeyboardPlugin 头注释
         registerPlugin(ShowKeyboardPlugin::class.java)

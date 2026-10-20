@@ -18,7 +18,7 @@ export interface LocalNoteState {
   updatedAt: string; syncState?: string; isConflict: boolean;
   isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
   trashedAt?: string | null; deletedFromParentId?: string | null;
-  /** v6：文档类型（缺省 doc）。 */
+  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: NoteKind;
 }
 

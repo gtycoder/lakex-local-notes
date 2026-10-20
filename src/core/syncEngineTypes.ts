@@ -77,8 +77,8 @@ export interface LocalNoteRow {
   contentHash?: string;
   /** 删除前父目录（回收站条目恢复位置；软删上传必须用它而非删除后的 parentId=TRASH）。 */
   deletedFromParentId?: string | null;
-  /** v6：文档类型（缺省 doc）。 */
-  kind?: "doc" | "usheet" | "bitable" | "board";
+  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
+  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
 export interface SyncDbPort {
@@ -93,7 +93,7 @@ export interface SyncDbPort {
   applyRemoteNote(note: ManifestNote, content: string): Promise<void>;
   /** 远端墓碑应用：先拉内容再标记回收站（先内容、后标志；保留可恢复）。
    * kind 用于正文落盘路径（261019 移动端正文文件化；桌面实现可忽略——它从本地行取 kind）。 */
-  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number, kind?: "doc" | "usheet" | "bitable" | "board"): Promise<void>;
+  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number, kind?: "doc" | "usheet" | "bitable" | "board" | "ink"): Promise<void>;
   /** 本地软删（入回收站）：保留内容，sync_state=local */
   localTrashNote(id: string): Promise<void>;
   /** 本地恢复：移出回收站 + restore_pending_at（同步时 local-wins 上传 active 覆盖墓碑） */

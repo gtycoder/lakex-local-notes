@@ -8,9 +8,9 @@ import { MANIFEST_VERSION } from "../../core/syncUtils.js";
 import { mobileAppInfoPort } from "./appInfoPort";
 
 describe("移动端 AppInfo 的协议版本", () => {
-  it("protocolVersion 来自 core 的 MANIFEST_VERSION（当前 = 1，不是历史值 4）", async () => {
+  it("protocolVersion 来自 core 的 MANIFEST_VERSION（当前 = 2（新增 kind=ink），不是历史值 4）", async () => {
     const info = await mobileAppInfoPort.getAppInfo();
     expect(info.protocolVersion).toBe(String(MANIFEST_VERSION));
-    expect(MANIFEST_VERSION).toBe(1);
+    expect(MANIFEST_VERSION).toBe(2);
   });
 });

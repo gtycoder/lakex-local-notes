@@ -6,7 +6,7 @@
 ## 1. 对象与 Manifest
 - Lake 正文：`objects/{noteId}-{contentHash}.lake`（内容寻址）。
 - Lake 资产：`assets/{noteId}/{filename}`（文件名不可变，内容用 size+sha256 校验）。
-- Lake Manifest：`version=1`（260928 重置，内容 schema 沿用原 v7），`manifests/latest.json` 指向当前 commit。
+- Lake Manifest：`version=2`（V1 可读用于升级；V2 正式支持 `kind="ink"`），`manifests/latest.json` 指向当前 commit。
 - 历史 commit：`manifests/{commitId}.json`；保留 `MANIFEST_CHAIN_KEEP=3` 条 `prevCommitId` 链。
 - 小记独立空间：`quick-notes/objects/*`、`quick-notes/assets/*`、`quick-notes/manifests/*`。
 
