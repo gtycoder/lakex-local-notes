@@ -19,6 +19,37 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261020(四) · 小记写作卡「Aa / ＋」二级展开错位（路由层常驻 will-change 改了 fixed 包含块）· **已提交 `295ef7b1`、已推送 master**
+
+- **现象（用户报）**：小记写作卡里展开 Aa（文本增强）后，面板整体上移一个键盘高、下方空一片，工具栏也被写作卡盖住；
+  用户原话「只要改移动端就会给我弄乱一次」。设备截图：`.css-audit/mobile-props-261020/before-panel-up.png`。
+- **根因（同机 A/B 实测，不是猜）**：`.mobile-route-layer` **常驻** `will-change: transform`。它**即使 transform:none**
+  也会把 `position:fixed` 的包含块从「视口」改成 layer 盒，而 layer 高 = `--mb-app-h`（面板期 842−312=530）⇒
+  `.med-panel` / `.med-toolbar` 被钉在 530 下沿（实测面板 218–530、工具栏 162–218、下方 312px 空白）。
+  261019(七) 只给**工作区层**补了 `is-settled`；**首页层（小记写作卡所在）从来没撤** ⇒ 一动壳层就复现。
+- **决定性验证**：CDP 把 layer 的 will-change 临时改 `auto` ⇒ 面板立即回 **530–842**、工具栏 **474–530**（其余不变）；
+  改回 `transform` 立刻复现。
+- **修法（单一来源，最小）**：
+  - `src/mobile/mobile.css`：layer 去掉常驻 will-change，只在 `.mobile-route-stage.is-animating` 期间挂
+    （转场仍走合成层；落定后两层 `will-change:auto`）。
+  - `src/mobile/hooks/useRouteTransition.ts`：新增 `animating` —— push 在 `requestAnimationFrame` 里与 `setOpen`
+    **同一次 render** 置位（不白丢首帧），settled 后撤；pop 在 `close()` 置位、卸载时撤。
+  - `src/mobile/MobileApp.tsx`：stage 挂 `is-animating`。
+- **护栏**：
+  - `useRouteTransition.test.ts`：layer base 规则不得含 will-change / 只在 `.is-animating` 期间挂 / animating 置位与撤位
+    （断言取"行首 base 规则本体"，避免把 `.is-animating` 那条选选择器后缀误判）。
+  - `scripts/mobile-audit/edit-surface-invariants.mjs`：新增 **I5 面板贴视口底**（`panel.bottom===innerHeight`、
+    `toolbar.bottom===panel.top`），小记 + 文档两条路径都跑；装置对本条**与原因解耦**（任何让 fixed 包含块变成
+    layer 盒的改动都会红）。`scripts/mobile-audit/README.md` 同步五条。
+- **设备验收（emulator-5554，新包已装）**：小记 Aa 面板 280（未弹键盘）/312（键盘态）两档都贴底；关面板→键盘回
+  （ih 530）；「＋」插入面板同；文档编辑态同；路由 push/pop 期间 `is-animating`+will-change，700ms 后 `auto`/
+  `is-settled`；全量不变量装置 **exit 0**（I1–I5 全绿）。after 截图 `.css-audit/mobile-props-261020/after-panel-anchored.png`。
+- **门禁**：tsc 0 · vitest **316 文件 / 2303 例（16 skip）**（含并行会话在途 2 例）· ui-metrics / check:core /
+  check:mobileui / check:bundle / `git diff --check` ✓ · Android `assembleDebug` ✓（APK 40,122,324 B）。
+- **长期纪律（已写入 `docs/MOBILE-TECH-STACK.md` §五#7④）**：**任何 route / shell 层都不得常驻
+  `transform` / `will-change: transform`** —— 它们是 `position:fixed` 的包含块陷阱；动画期间挂、落定撤；新增层先按 I5 验。
+- **状态**：已提交并推送 origin/master（`295ef7b1`；用户 261020 验收后授权推送）。
+
 ### 261020 · 图标体系重做 + 表情面板（中文搜索/排布）+ 浮层外点 + 附件图标与压缩包打开 · 已提交、已推送
 
 - **目录图标（用户点单，三轮收口）**：笔记本/分组改用**语雀知识库那套 17 个彩色插画**（值方言 `n:<id>`，整串 ≤16 字符，同步字段不变）；**旧「40 个 lucide 线性图标 + 8 档浅渐变底板 + `i:<id>:<色号>` 编码」整体删除**（只保留识别：旧值画中性图形、不回显原始串、不迁移）。**语雀品牌 logo 图标已移除**（用户 261020：涉及 logo 不能用）。文档/表格/多维表/画板**只有表情**、无「图标」类目；笔记本/分组保留「表情符号 ｜ 图标」两页（默认图标，维持第一版结构）。
