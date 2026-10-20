@@ -64,7 +64,7 @@
 | 面 | 数量 | 载体 | 说明 |
 | --- | --- | --- | --- |
 | 桌面 IPC | **121** | `electron/preload.cjs` | 桌面渲染层的能力面 |
-| 移动实现本体 | **71** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 互斥域判据按此表登记（261020 +createBitable；261010 收窄：删死方法 `uploadObject`，71→70） |
+| 移动实现本体 | **76** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 互斥域判据按此表登记（261020 移动端批 +createBitable；ink 批 +createInk 等；261010 收窄：删死方法 `uploadObject`） |
 | 移动调试契约 | **50** + 2 | `window.lakeNative`（`src/mobile/native/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口（261020 +createBitable 供造数/验收）；+2 = `runNativeSqliteSpike` / `migrateSnapshotToNativeSqlite` |
 | 移动性能探针 | 2 | `window.__lakePerf`（reset / snapshot） | 资产传输耗时观测 |
 
@@ -158,6 +158,12 @@
    - **顶栏**：不使用 Univer 桌面 Ribbon（会把横拖判成扩选）；自绘一条常驻工具条，按钮全部走 facade：
      插入（行/列/合并）、撤销/重做、粗/斜/下划线/删除线、文字格式面板（对齐/字体色/填充色/清除）、更多（删行/删列/
      官方动作面板）。右侧绿点 = 自动保存状态。工具条不挂 `pointerdown preventDefault`（Android WebView 会连 click 一起吞）。
+   - **布局动作（261020 P1 第一批）**：「更多」面板新增三组 —— **冻结窗格**（冻结至当前行 / 至当前列 / 取消冻结）、
+     **行高**（+8 / -8 / 自动行高）、**列宽**（+24 / -24）。实现全部走 Univer facade（`setFrozenRows/Columns`、
+     `cancelFreeze`、`get/setRowHeight`、`autoFitRow`、`get/setColumnWidth`），纯逻辑在
+     `src/mobile/usheet/usheetLayoutActions.ts`（单一来源 + 单测；行高/列宽有下限 16/32，Univer facade 没有"自动列宽"）。
+     设备实测：冻结至当前行 ⇒ 正文 `freeze.ySplit=5`；行高 +8 ⇒ `rowData[4].h=32`；列宽 +24 ⇒ `columnData[1].w=112`；
+     自动行高置 `ia:1`；取消冻结 ⇒ `xSplit/ySplit=0`。
    - **公式栏**：移动 UI 插件不渲染内置 formula-bar，自绘 `地址 + 显示值` 条（编辑态显示，随选区/命令刷新）。
    - **手势**：内容区 `data-prevent-swipe` + `Element` 命中；单指横拖只滚动画布，不拉目录抽屉（设备实测 A–D ↔ D–G）。
    - **保存**：`Event.CommandExecuted` 600ms 防抖写回；点「完成」、关标签、返回首页用 `onCapture` 同步取

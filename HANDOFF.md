@@ -2025,7 +2025,25 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（261020 起 52 = 50 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
-### 261020(二) · 移动端多维表编辑 P0（本会话）· **待用户验收 / 未提交**
+### 261020(三) · 表格（usheet）P1 第一批：布局动作 · **分支 `feat/mobile-usheet-p1`，未合入 master**
+
+> 前置：master 已含 origin/master 合并（ink 手写板 v1 等）与本会话 261020 移动端批次（`eff2cae1`）。
+> 本批在**干净分支**上做，按用户要求「合并推送 master 之后再推进 P1」。
+
+- **交付**：表格「更多」面板新增三组布局动作 —— **冻结窗格**（冻结至当前行 / 至当前列 / 取消冻结）、
+  **行高**（+8 / -8 / 自动行高）、**列宽**（+24 / -24）。全部走 Univer facade
+  （`setFrozenRows/Columns` / `cancelFreeze` / `get,setRowHeight` / `autoFitRow` / `get,setColumnWidth`）。
+- **架构**：动作清单与实现收敛到 `src/mobile/usheet/usheetLayoutActions.ts`（单一来源、可单测；
+  组件只做菜单分派）；行高/列宽有下限（16/32），Univer facade **没有"自动列宽"**（只做 ± 步进）。
+- **设备验收（emulator-5554）**：新建空白表格 → 冻结至当前行 ⇒ 正文 `freeze.ySplit=5`；
+  行高 +8 ⇒ `rowData[4].h=32`；列宽 +24 ⇒ `columnData[1].w=112`；自动行高 ⇒ `rowData[4].ia=1`；
+  取消冻结 ⇒ `xSplit/ySplit=0`。测试表格已 purge，`测试笔记本` 回到 4 篇。
+- **门禁**：tsc 0 · 全库 vitest **314 文件 / 2294 例** · 双端构建 · ui-metrics/check:core/check:mobileui · diff-check。
+- **未做（下一刀）**：复制/剪切/粘贴、公式库、**数字格式**（facade 无 `setNumberFormat`，需走 numfmt 命令）、
+  **排序/筛选**（facade 无 API）、填充柄与批量操作、CardResizer 触控调高、行高列宽"记住上次"。
+- **状态**：未合入 master；已推送分支（见 `git log`）。
+
+### 261020(二) · 移动端多维表编辑 P0（本会话）· **已合并 master（261020 批）**
 
 > 上一批（表格/画板收口）仍待验收，见下方「261020」；本批接的是它列的 **P0：多维表移动端编辑**。
 
@@ -2132,7 +2150,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 **画板 AI 徽标**（阻塞：移动端还没有 AI 通道，首页「AI 助手」仍是"尚未接入"）；
 表格（usheet）与画板剩余的 P1 见下方「261020」原清单。**未提交、未推送，等用户验收。**
 
-### 261020 · 移动端表格/画板收口（本会话）· **待用户验收 / 下一会话从这里接**
+### 261020 · 移动端表格/画板收口（本会话）· **已合并推送 master（c65b889e / afe9d3f9）**
 
 > **接手提示**：先读 README → HANDOFF → AGENTS；本批只动移动端表格/画板，不要回退其他并行会话的
 > Sidebar / NodeIcon / 导出 / 存储改动。工作树是**多会话共用**的，禁止 `git add -A`、`git checkout -- .`。
