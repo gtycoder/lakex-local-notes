@@ -124,14 +124,14 @@ describe("移动端表格查看/编辑器", () => {
     root.unmount();
   });
 
-  it("「更多」菜单具备布局动作入口（261020 P1：冻结窗格 / 行高 / 列宽）", async () => {
+  it("「更多」菜单具备布局与数字格式入口（261020 P1：冻结窗格 / 行高 / 列宽 / 数字格式）", async () => {
     const { root, host } = await mount(true, true);
     const { act } = await import("react");
     const more = host.querySelector<HTMLButtonElement>('.mobile-usheet-toolbar button[aria-label="更多表格操作"]');
     expect(more).toBeTruthy();
     await act(async () => { more!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     const text = host.textContent ?? "";
-    for (const label of ["冻结窗格", "冻结至当前行", "冻结至当前列", "取消冻结", "行高", "自动行高（按内容）", "列宽", "加宽（+" + 24 + "px）"]) {
+    for (const label of ["冻结窗格", "冻结至当前行", "冻结至当前列", "取消冻结", "行高", "自动行高（按内容）", "列宽", "加宽（+" + 24 + "px）", "数字格式", "常规（清除格式）", "百分比", "货币（¥）", "日期时间"]) {
       expect(text).toContain(label);
     }
     root.unmount();

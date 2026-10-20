@@ -25,8 +25,10 @@ import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBo
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
 import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP, USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
+import { USHEET_NUMFMT_IDS, USHEET_NUMFMT_OPTIONS, applyUsheetNumberFormat } from "./usheetNumfmt";
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -307,6 +309,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       { id: "col-width-up", label: "加宽（+" + COLUMN_WIDTH_STEP + "px）" },
       { id: "col-width-down", label: "收窄（-" + COLUMN_WIDTH_STEP + "px）" },
     ] },
+    // 数字格式（261020 P1 第二批）：选项表与调用在 usheetNumfmt（单一来源）
+    { id: "numfmt", label: "数字格式", children: USHEET_NUMFMT_OPTIONS.map((option) => ({ id: option.id, label: option.label })) },
     { id: "delete-row", label: "删除当前行", danger: true },
     { id: "delete-col", label: "删除当前列", danger: true },
     { id: "more-tools", label: "更多表格工具", note: "插入 / 样式 / 操作" },
@@ -350,6 +354,13 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     // 布局类（冻结 / 行高 / 列宽）：动作清单与实现都在 usheetLayoutActions（单一来源，可单测）
     else if (USHEET_LAYOUT_ACTIONS.has(id)) {
       withActiveRange((range, sheet) => { applyUsheetLayoutAction(id, range, sheet); });
+    }
+    // 数字格式：运行时若没装 numfmt mixin 要明确提示（不静默失败）
+    else if (USHEET_NUMFMT_IDS.has(id)) {
+      withActiveRange((range) => {
+        const applied = applyUsheetNumberFormat(range as unknown as { setNumberFormat?: (pattern: string) => unknown }, id);
+        if (!applied) showToast("当前表格内核不支持数字格式", { type: "error" });
+      });
     }
   };
 
