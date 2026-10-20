@@ -3,6 +3,7 @@ import { buildLakeImageCardValue, lakeEmptyParagraph, lakeImageCardParagraph, la
 import { sniffImageFormat, type ImageDimensions, type ImageFormat } from "./imageUtils.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
+import { normalizeQuickNoteTags, QuickNoteTagError } from "./quickNoteTags.js";
 import type { QuickNoteImage } from "./types.js";
 
 /** v2 起小记正文是**内核形态的 Lake 正文**（`body`），`text` 退化为派生镜像（预览/搜索/移动端降级）。 */
@@ -49,6 +50,8 @@ export interface StoredQuickNoteContent {
    * 需要"当图片渲染"的地方用 `isQuickNoteImageMime(mimeType)` 过滤（缩略图、图片网格）。
    */
   images: StoredQuickNoteImage[];
+  /** 小记标签；旧内容缺失时按空数组读取。顺序 = 最近添加在前。 */
+  tags: string[];
 }
 
 export class QuickNoteModelError extends Error {
@@ -61,13 +64,23 @@ export class QuickNoteModelError extends Error {
 }
 
 /** Model-level validation for text/image content; no database, filesystem, or Electron access. */
-export function normalizeQuickNoteContent(text: string, body: string, images: StoredQuickNoteImage[]): StoredQuickNoteContent {
+export function normalizeQuickNoteContent(
+  text: string,
+  body: string,
+  images: StoredQuickNoteImage[],
+  tags: unknown = [],
+): StoredQuickNoteContent {
   if (typeof text !== "string") throw new QuickNoteModelError("小记正文必须是文本");
   if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (typeof body !== "string") throw new QuickNoteModelError("小记正文格式无效");
   if (body.length > MAX_QUICK_NOTE_BODY_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (!text.trim() && images.length === 0) throw new QuickNoteModelError("请至少记录文字、一张图片或一个附件");
-  return { version: QUICK_NOTE_VERSION, text, body, images };
+  let normalizedTags: string[];
+  try { normalizedTags = normalizeQuickNoteTags(tags); }
+  catch (error) {
+    throw new QuickNoteModelError(error instanceof QuickNoteTagError ? error.message : "小记标签格式无效");
+  }
+  return { version: QUICK_NOTE_VERSION, text, body, images, tags: normalizedTags };
 }
 
 /**
@@ -177,7 +190,7 @@ export function validateQuickNoteContent(raw: unknown): StoredQuickNoteContent {
   }
   const seen = new Set<string>();
   const images = value.images.map((image) => validateQuickNoteImage(image, seen));
-  return normalizeQuickNoteContent(value.text, value.body, images);
+  return normalizeQuickNoteContent(value.text, value.body, images, value.tags);
 }
 
 export function parseQuickNoteContent(json: string): unknown {
@@ -187,6 +200,14 @@ export function parseQuickNoteContent(json: string): unknown {
 /** Stable JSON representation used for local hashes and sync content objects. */
 export function serializeQuickNoteContent(content: StoredQuickNoteContent): string {
   return `${JSON.stringify(content, null, 2)}\n`;
+}
+
+/** 仅比较正文/资源；标签单独变化时不刷新小记时间。 */
+export function sameQuickNoteExceptTags(
+  a: Pick<StoredQuickNoteContent, "text" | "body" | "images">,
+  b: Pick<StoredQuickNoteContent, "text" | "body" | "images">,
+): boolean {
+  return a.text === b.text && a.body === b.body && JSON.stringify(a.images) === JSON.stringify(b.images);
 }
 
 export function previewQuickNote(text: string, imageCount: number): string {

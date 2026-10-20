@@ -25,7 +25,7 @@ const image = {
 
 describe("quickNoteModel", () => {
   it("normalizes valid content and rejects empty/oversized text", () => {
-    expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 2, text: " hello ", body: "<p><br></p>", images: [] });
+    expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 2, text: " hello ", body: "<p><br></p>", images: [], tags: [] });
     expect(() => normalizeQuickNoteContent("", "<p><br></p>", [])).toThrow("请至少记录文字、一张图片或一个附件");
     expect(() => normalizeQuickNoteContent("x".repeat(MAX_QUICK_NOTE_TEXT_LENGTH + 1), "", [])).toThrow("小记正文过长");
   });
@@ -42,12 +42,20 @@ describe("quickNoteModel", () => {
   });
 
   it("round-trips canonical JSON without runtime URLs", () => {
-    const content = normalizeQuickNoteContent("hello", "<p><br></p>", [image]);
+    const content = normalizeQuickNoteContent("hello", "<p><br></p>", [image], [" 灵感 ", "待办", "灵感"]);
     const encoded = serializeQuickNoteContent(content);
     const parsed = validateQuickNoteContent(parseQuickNoteContent(encoded));
     expect(parsed).toEqual(content);
+    expect(parsed.tags).toEqual(["灵感", "待办"]);
     expect(encoded).toContain('"version": 2');
+    expect(encoded).toContain('"tags": [');
     expect(encoded).not.toContain("url");
+  });
+
+  it("旧内容没有 tags 时按空数组读取；非法标签拒绝", () => {
+    expect(validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [] }).tags).toEqual([]);
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [], tags: ["无标签"] })).toThrow("筛选状态");
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [], tags: "bad" })).toThrow("标签格式无效");
   });
 
   it("creates stable previews for text, images, and empty content", () => {

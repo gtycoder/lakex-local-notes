@@ -18,6 +18,7 @@ import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelP
 import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
 import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
+import { buildQuickNoteTagIndex } from "../core/quickNoteTags.js";
 
 /**
  * 小记写作区（懒加载）：261010 起 **深链/长按那条 capture 路径与工作台共用同一个内核卡片**
@@ -99,6 +100,7 @@ export function MobileApp() {
   // 用 HomePage 导出的 MobileQuickNote：这条链（仓储 → bridge → 列表 → 卡片）字段必须一路一致，
   //  261015 加 createdAt 时就因为这里另写了一份内联类型而漏改（tsc 当场抓到）。
   const [quickNotes, setQuickNotes] = useState<MobileQuickNote[]>([]);
+  const quickTagOptions = useMemo(() => buildQuickNoteTagIndex(quickNotes, (note) => note.tags).tags, [quickNotes]);
 
   const refreshAll = useCallback(async () => {
     const [nodes, ns, qn] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes(), bridge.listQuickNotes()]);
@@ -346,6 +348,7 @@ export function MobileApp() {
               key={captureNonce}
               draft
               raiseKeyboard
+              tagOptions={quickTagOptions}
               // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
               // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
               // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。

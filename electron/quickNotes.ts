@@ -19,6 +19,7 @@ import {
   previewQuickNote,
   quickNoteBodyFromTextAndImages,
   rewriteQuickNoteAssetScope,
+  sameQuickNoteExceptTags,
   serializeQuickNoteContent,
   validateQuickNoteContent,
   validateQuickNoteImageBytes,
@@ -284,10 +285,17 @@ export class QuickNotesStore {
 
   updateQuickNote(id: string, input: SaveQuickNoteInput): QuickNoteDocument {
     const previous = this.readRow(id);
-    return this.saveQuickNoteInternal(id, input, previous.created_at, nowIso(), true);
+    return this.saveQuickNoteInternal(id, input, previous.created_at, nowIso(), true, previous.updated_at);
   }
 
-  private saveQuickNoteInternal(id: string, input: SaveQuickNoteInput, createdAt: string, updatedAt: string, updating: boolean): QuickNoteDocument {
+  private saveQuickNoteInternal(
+    id: string,
+    input: SaveQuickNoteInput,
+    createdAt: string,
+    updatedAt: string,
+    updating: boolean,
+    previousUpdatedAt?: string,
+  ): QuickNoteDocument {
     if (!input || typeof input.text !== "string" || typeof input.draftId !== "string" || !Array.isArray(input.stagedImageIds)) {
       throw new AppError("InvalidInput", "小记保存参数无效");
     }
@@ -331,7 +339,10 @@ export class QuickNotesStore {
           makeId,
         );
     const body = rewriteQuickNoteAssetScope(rawBody, `/quick-notes/staging/${input.draftId}/`, `/quick-notes/${id}/`);
-    const content = toStoreValidation(() => normalizeQuickNoteContent(input.text, body, allImages));
+    const content = toStoreValidation(() => normalizeQuickNoteContent(input.text, body, allImages, input.tags));
+    const effectiveUpdatedAt = oldContent && previousUpdatedAt && sameQuickNoteExceptTags(oldContent, content)
+      ? previousUpdatedAt
+      : updatedAt;
     const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
     const contentHash = hash(encoded);
     const targetAssets = this.assetDirFor(id);
@@ -354,11 +365,11 @@ export class QuickNotesStore {
     const tx = this.db.transaction(() => {
       if (updating) {
         this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state='local',is_conflict=0 WHERE id=?")
-          .run(updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, id);
+          .run(effectiveUpdatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, id);
         this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
       } else {
         this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'local', 0)")
-          .run(id, createdAt, updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash);
+          .run(id, createdAt, effectiveUpdatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash);
       }
       const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
       for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);

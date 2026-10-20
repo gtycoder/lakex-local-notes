@@ -20,6 +20,8 @@ const PREVIEW_SRC = read("./QuickNotePreview.tsx");
 const MODEL_SRC = read("../../core/quickNoteModel.ts");
 const UPLOAD_SRC = read("../editor/resourceUpload.ts");
 const MAIN_SRC = read("../../../electron/quickNotes.ts");
+const MOBILE_HOME_SRC = read("../../mobile/home/HomePage.tsx");
+const MOBILE_COMPOSER_SRC = read("../../mobile/home/QuickNoteComposer.tsx");
 
 describe("小记版式切换（列表 / 小记）", () => {
   it("版式是纯展示偏好：存 localStorage，不进设置/同步", () => {
@@ -160,5 +162,30 @@ describe("小记附件（内核 file 卡）", () => {
     expect(WORKSPACE_SRC).toMatch(/if \(isEditing\) settleAfterSave\(draft/);
     // 取消：列表视图原地重开该条（一次提交），不再先清空再等默认选中
     expect(WORKSPACE_SRC).toMatch(/if \(viewMode === "list" && item\) \{ setEditingDraft\(draftOf\(item\)\); return; \}/);
+  });
+});
+
+describe("小记标签（随 .qnote 同步，无独立目录表）", () => {
+  it("两端都从有效小记派生候选标签，并在写作区支持选择/创建", () => {
+    expect(WORKSPACE_SRC).toContain("buildQuickNoteTagIndex(items");
+    expect(WORKSPACE_SRC).toContain("tagOptions={tagIndex.tags}");
+    expect(WORKSPACE_SRC).toContain("<QuickNoteTagPicker");
+    expect(MOBILE_HOME_SRC).toContain("buildQuickNoteTagIndex(quickNotes");
+    expect(MOBILE_HOME_SRC).toContain("tagOptions={quickTagIndex.tags}");
+    expect(MOBILE_COMPOSER_SRC).toContain("<MobileQuickNoteTagSheet");
+  });
+
+  it("卡片显示标签，筛选只影响当前列表；标签写回 .qnote 内容", () => {
+    expect(WORKSPACE_SRC).toContain("item.content.tags");
+    expect(WORKSPACE_SRC).toContain("filterQuickNotesByTag(items");
+    expect(MOBILE_HOME_SRC).toContain("filterQuickNotesByTag(quickNotes");
+    expect(WORKSPACE_SRC).toMatch(/native\.updateQuickNote\(noteId,[\s\S]{0,260}tags,/);
+    expect(MOBILE_COMPOSER_SRC).toMatch(/saveQuickNoteContent\(noteId, \{ text: plain, body, images, tags \}\)/);
+  });
+
+  it("切换标签筛选前先保存并退出正在编辑的小记，避免筛掉卡片时丢未保存内容", () => {
+    expect(WORKSPACE_SRC).toMatch(/async function changeTagFilter\(next: QuickNoteTagFilter\)/);
+    expect(WORKSPACE_SRC).toMatch(/if \(dirty && !\(await saveBeforeSwitch\(\)\)\) return;/);
+    expect(WORKSPACE_SRC).toMatch(/setEditingId\(null\);\s*setEditingDraft\(null\);/);
   });
 });

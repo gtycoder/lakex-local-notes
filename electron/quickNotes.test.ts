@@ -47,6 +47,31 @@ describe("QuickNotesStore", () => {
     expect(quickNotes.listQuickNotes().map((item) => item.id)).toContain(saved.id);
   });
 
+  it("标签随 .qnote 往返；仅改标签不刷新 updatedAt", async () => {
+    const saved = quickNotes.createQuickNote({
+      text: "带标签",
+      body: "<p><br></p>",
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      tags: [" 灵感 ", "待办", "灵感"],
+    });
+    expect(saved.content.tags).toEqual(["灵感", "待办"]);
+    expect(quickNotes.readQuickNote(saved.id).content.tags).toEqual(["灵感", "待办"]);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const updated = quickNotes.updateQuickNote(saved.id, {
+      text: "带标签",
+      body: "<p><br></p>",
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      retainedImageIds: [],
+      tags: ["待办", "收件箱"],
+    });
+    expect(updated.content.tags).toEqual(["待办", "收件箱"]);
+    expect(updated.updatedAt).toBe(saved.updatedAt);
+    expect(updated.contentHash).not.toBe(saved.contentHash);
+  });
+
   it("暂存图片保存后移动到独立 assets，并清理整个 staging 草稿目录", async () => {
     const draftId = crypto.randomUUID();
     const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "clip.png" });

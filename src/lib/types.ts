@@ -310,6 +310,8 @@ export interface QuickNoteContent {
   /** v2：内核形态正文（Lake HTML）。桌面编辑态由内核产出，其它入口由 text 合成。 */
   body: string;
   images: QuickNoteImage[];
+  /** 小记标签；随正文一起同步。 */
+  tags: string[];
 }
 
 export interface QuickNoteSummary {
@@ -334,6 +336,8 @@ export interface SaveQuickNoteInput {
   draftId: string;
   stagedImageIds: string[];
   retainedImageIds?: string[];
+  /** 标签名（顺序 = 最近添加在前）；缺省按空数组。 */
+  tags?: string[];
 }
 
 /** 关于页：主进程 get_system_info 的返回（只读概览）。 */

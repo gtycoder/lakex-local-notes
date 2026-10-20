@@ -50,6 +50,7 @@ export interface QuickNoteDto {
   updatedAt: string;
   text: string;
   images: QuickNoteImageDto[];
+  tags: string[];
   syncState: "local" | "synced" | "conflict";
   isConflict: boolean;
 }
@@ -106,6 +107,8 @@ export interface SaveQuickNoteInputDto {
   retainedImageIds?: string[];
   /** staging 会话 id（桌面必填，isSafeSegment 校验非空）。 */
   draftId: string;
+  /** 标签名（顺序 = 最近添加在前）。 */
+  tags?: string[];
 }
 
 export interface QuickNoteService {

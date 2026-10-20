@@ -13,7 +13,7 @@ import { mobileCloudState, pushSingleQuickNote, scheduleQuickNoteVerify } from "
 
 
 export const quickNotesDomain = {
-  async listQuickNotes(): Promise<Array<{ id: string; createdAt: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>> {
+  async listQuickNotes(): Promise<Array<{ id: string; createdAt: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null; body: string; images: StoredQuickNoteImage[]; tags: string[] }>> {
     const d = await ensureDb();
     return await quickNotesRepository.listQuickNotes(d);
   },
@@ -42,15 +42,15 @@ export const quickNotesDomain = {
     });
   },
 
-  async getQuickNoteDraft(): Promise<{ id: string; text: string; body?: string; images: StoredQuickNoteImage[]; updatedAt: string } | null> {
+  async getQuickNoteDraft(): Promise<{ id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tags?: string[]; updatedAt: string } | null> {
     const d = await ensureDb();
     return await quickNotesRepository.readQuickNoteDraft(d);
   },
 
-  async saveQuickNoteDraft(draft: { id: string; text: string; body?: string; images?: StoredQuickNoteImage[] }): Promise<void> {
+  async saveQuickNoteDraft(draft: { id: string; text: string; body?: string; images?: StoredQuickNoteImage[]; tags?: string[] }): Promise<void> {
     return runWrite("saveQuickNoteDraft", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, body: draft.body, images: draft.images ?? [], updatedAt: new Date().toISOString() });
+      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, body: draft.body, images: draft.images ?? [], tags: draft.tags ?? [], updatedAt: new Date().toISOString() });
     });
   },
 
@@ -75,7 +75,7 @@ export const quickNotesDomain = {
     };
   },
 
-  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[] }): Promise<string> {
+  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[]; tags?: string[] }): Promise<string> {
     return runWrite("saveQuickNoteContent", async () => {
       const d = await ensureDb();
       return await quickNotesRepository.saveQuickNoteContent(d, id, payload);

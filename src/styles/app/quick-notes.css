@@ -181,33 +181,10 @@
    编辑态不渲染卡片预览/勾选框，退出定位上下文不影响别的东西。 */
 .quick-note-entry.editing { position: static; }
 
-/* 左侧发布行（仿语雀）：[小记一下] + 快捷键提示；右侧仅留「取消」。
-   仿语雀的发布键是中性描边胶囊（不是主色实心）——写作区才是主角，按钮退一档更安静。
-   选择器带父级是为了压过 b3 的 .b3-button（styles.css 早于 b3/components.css 加载）。 */
-.quick-note-composer-actions .quick-note-publish {
-  border: 1px solid var(--lake-border-1); background: var(--lake-bg-panel); color: var(--lake-text-1);
-}
-
-.quick-note-composer-actions .quick-note-publish:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
-
-/* 有内容（或编辑既有小记）→ 同一个强调样式：主色实心（用户 260915：两种按钮强调保持一致） */
-.quick-note-composer-actions .quick-note-publish.is-emphasized {
-  border-color: transparent; background: var(--lake-accent); color: var(--lake-text-on-accent);
-}
-
-.quick-note-composer-actions .quick-note-publish.is-emphasized:hover { background: color-mix(in srgb, var(--lake-accent) 88%, var(--lake-accent-ink)); color: var(--lake-text-on-accent); }
-
 .quick-note-publish-hint + .quick-note-publish-hint-sub { border-left: 1px solid color-mix(in srgb, var(--lake-text-1) 14%, transparent); padding-left: 10px; }
 
-/* 「取消」= 与主按钮同组的次级描边按钮（选择器带父级是为了压过 b3 的 .b3-button 边框）。 */
-.quick-note-composer-actions .quick-note-discard {
-  border: 1px solid var(--lake-border-1); background: var(--lake-bg-panel); color: var(--lake-text-1);
-  transition: background var(--lake-motion-fast) var(--lake-ease-standard);
-}
-
-.quick-note-composer-actions .quick-note-discard:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
-
-.quick-note-composer-actions .b3-button, .quick-note-composer-actions .b3-button--cancel, .quick-note-convert-dialog .b3-button--cancel { min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: var(--lake-font-size-tiny); }
+/* 动作行直接复用 kit 的 ln-btn 三档（primary / secondary / ghost）；这里只收紧小记的密度。 */
+.quick-note-composer-actions .ln-btn, .quick-note-convert-dialog .b3-button--cancel { height: 28px; min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: var(--lake-font-size-tiny); }
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
@@ -376,3 +353,83 @@
 .quick-note-entry.editing:active {
   transform: none;
 }
+
+/* ── 小记标签（261020）────────────────────────────────────────
+ * 标签只存在于 `.qnote`；筛选条与选择器的候选集合从有效小记现算。
+ * 同一视觉语义只有一份：卡片 chip、写作 chip、筛选 chip 全走 `.quick-note-tag`。 */
+.quick-notes-tagbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 0 10px;
+  padding: 0 30px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.quick-notes-tagbar::-webkit-scrollbar { display: none; }
+.quick-note-tag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 180px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-xs);
+  background: var(--lake-bg-panel);
+  font: inherit;
+  font-size: var(--lake-font-size-tiny);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.quick-note-tag:hover { background: var(--lake-bg-hover); }
+.quick-note-tag.is-selected { border-color: var(--lake-accent); background: var(--lake-bg-selected); }
+.quick-note-tag.is-selectable { cursor: pointer; }
+.quick-note-tag.is-editable { cursor: default; padding-right: 4px; }
+.quick-note-tag__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+.quick-note-tag.is-editable > button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-2xs);
+  background: transparent;
+  cursor: pointer;
+}
+.quick-note-tag.is-editable > button:hover { background: var(--lake-bg-press); }
+.quick-note-tag:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.quick-note-tag-add {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--lake-ctl-border);
+  border-radius: var(--lake-radius-xs);
+  background: transparent;
+  font: inherit;
+  font-size: var(--lake-font-size-tiny);
+  cursor: pointer;
+}
+.quick-note-tag-add:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.quick-note-tag-add:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.quick-note-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; min-height: 24px; }
+.quick-note-card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.quick-note-tag-picker { display: flex; flex-direction: column; gap: 6px; width: 320px; padding: 10px; }
+.quick-note-tag-picker__head { display: flex; align-items: center; gap: 6px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
+.quick-note-tag-picker__input { width: 100%; }
+.quick-note-tag-picker__error { color: var(--lake-status-error); font-size: var(--lake-font-size-micro); }
+.quick-note-tag-picker__create, .quick-note-tag-picker__item { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; height: 28px; padding: 0 7px; border: 0; border-radius: var(--lake-radius-2xs); background: transparent; font: inherit; font-size: var(--lake-font-size-small); text-align: left; cursor: pointer; }
+.quick-note-tag-picker__create:hover, .quick-note-tag-picker__item:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.quick-note-tag-picker__item:disabled { cursor: default; }
+.quick-note-tag-picker__item > span:first-child { flex: 1 1 auto; }
+.quick-note-tag-picker__count { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; }
+.quick-note-tag-picker__section { margin-top: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.quick-note-tag-picker__list { display: flex; flex-direction: column; gap: 1px; max-height: 220px; overflow-y: auto; }
+.quick-note-tag-picker__empty { padding: 8px 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }

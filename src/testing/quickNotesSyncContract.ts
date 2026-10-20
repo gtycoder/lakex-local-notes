@@ -135,6 +135,7 @@ export async function runQuickNotesRemoteImportRollbackContract(
     text: "remote body",
     body: "<p><br></p>",
     images: [image],
+    tags: [],
   });
   const bytes = new TextEncoder().encode(content);
   const item: ManifestItem = {

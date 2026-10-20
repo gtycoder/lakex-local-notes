@@ -57,7 +57,7 @@ describe("小记 capture 路径（261010 统一为内核卡片）", () => {
     expect(COMPOSER).toMatch(/bridge\.clearQuickNoteDraft\(/);
     // 草稿存内核原样正文：否则恢复时会丢待办/列表/分割线
     expect(COMPOSER).toMatch(/stripAssetAccessToken\(apiRef\.current\?\.getBody\(\)/);
-    expect(COMPOSER).toMatch(/saveQuickNoteDraft\(\{ id: noteId, text, body \}\)/);
+    expect(COMPOSER).toMatch(/saveQuickNoteDraft\(\{ id: noteId, text, body, tags \}\)/);
   });
 
   it("系统分享带入不被丢：seed 先落成草稿，再由 composer 恢复", () => {

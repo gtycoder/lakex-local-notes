@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Check, FilePlus, Feather, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, StickyNote, Trash, X } from "lucide-react";
+import { ArrowUpDown, Check, FilePlus, Feather, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, StickyNote, Tag, Trash, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { createRequestVersion } from "../../core/requestVersion";
@@ -15,6 +15,15 @@ import { uploadLakeResource } from "../../features/editor/resourceUpload";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
+import { QuickNoteTagPicker } from "../../features/quickNotes/QuickNoteTagPicker";
+import {
+  addQuickNoteTag,
+  buildQuickNoteTagIndex,
+  filterQuickNotesByTag,
+  removeQuickNoteTag,
+  type QuickNoteTagFilter,
+  type QuickNoteTagSummary,
+} from "../../core/quickNoteTags";
 import { openImagePreview } from "../../features/editor/imagePreview";
 import { clampPopoverPosition } from "../../hooks/topMenuPosition";
 import { useScrollFade } from "../../hooks/useScrollFade";
@@ -32,12 +41,13 @@ interface DraftState {
   /** 内核形态正文（编辑器产出；保存写入 `.qnote.body`）。 */
   body: string;
   images: DraftImage[];
+  tags: string[];
   /**
    * 载入时的基线（**判定"有没有改过"用**）。
    * 曾经用 `hasDraftContent()` 判脏 ⇒ 只要编辑一条已有小记（它本来就有内容）就永远是"脏"的，
    * 于是切来切去总弹「是否放弃编辑」，还会把没改动的正文重写一遍（连带触发 S3）。用户 260919 报。
    */
-  baseline: { text: string; body: string; imageCount: number };
+  baseline: { text: string; body: string; imageCount: number; tags: string[] };
 }
 
 export interface QuickNotesWorkspaceHandle {
@@ -60,7 +70,7 @@ interface QuickNotesWorkspaceProps {
   cloudReady?: boolean;
 }
 
-const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", body: "", images: [], baseline: { text: "", body: "", imageCount: 0 } });
+const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", body: "", images: [], tags: [], baseline: { text: "", body: "", imageCount: 0, tags: [] } });
 
 /** 用一条已保存小记开一份编辑草稿（基线 = 载入内容，用于"改没改过"判定）。 */
 const draftOf = (item: QuickNoteDocument): DraftState => ({
@@ -68,7 +78,8 @@ const draftOf = (item: QuickNoteDocument): DraftState => ({
   text: item.content.text,
   body: item.content.body,
   images: item.content.images.map((image) => ({ image, source: "saved" as const })),
-  baseline: { text: item.content.text, body: item.content.body, imageCount: item.content.images.length },
+  tags: [...item.content.tags],
+  baseline: { text: item.content.text, body: item.content.body, imageCount: item.content.images.length, tags: [...item.content.tags] },
 });
 const hasDraftContent = (draft: DraftState) => draft.text.trim().length > 0 || draft.images.length > 0;
 /**
@@ -78,7 +89,9 @@ const hasDraftContent = (draft: DraftState) => draft.text.trim().length > 0 || d
  */
 const normalizeMirror = (text: string) => text.replace(/[\uFEFF\u200B]/g, "").trim();
 const isDraftDirty = (draft: DraftState) =>
-  normalizeMirror(draft.text) !== normalizeMirror(draft.baseline.text) || draft.images.length !== draft.baseline.imageCount;
+  normalizeMirror(draft.text) !== normalizeMirror(draft.baseline.text)
+  || draft.images.length !== draft.baseline.imageCount
+  || draft.tags.join("\u0000") !== draft.baseline.tags.join("\u0000");
 
 /**
  * 正文里是否还有「上传中」的媒体卡。内核的卡片值把状态写在 `status` 字段（`data:` + encodeURIComponent，
@@ -165,6 +178,9 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 行内「⋯」菜单（列表视图，对齐云端图2）：记录当前展开的是哪一条。 */
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [rowMenuPos, setRowMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [rowMenuAnchor, setRowMenuAnchor] = useState<HTMLElement | null>(null);
+  const [tagPickerFor, setTagPickerFor] = useState<{ noteId: string; anchor: HTMLElement } | null>(null);
+  const [tagFilter, setTagFilter] = useState<QuickNoteTagFilter>({ kind: "all" });
   /** 轻提示（标签暂固定全部等）。 */
   const [viewHint, setViewHint] = useState<string | null>(null);
   /** 置顶集合（纯本机偏好，不进 S3）。 */
@@ -366,9 +382,11 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       //    （否则"点开编辑 → 切到别的"都会平白触发一次 S3 上传）。以**正文**为准比较（比文本镜像可靠），
       //    另外把新增/删除的资源数量算进去。命中直接退出编辑态、不发任何 IPC。
       if (isEditing) {
-        const unchanged = body === draft.baseline.body && draft.images.length === draft.baseline.imageCount;
+        const unchanged = body === draft.baseline.body
+          && draft.images.length === draft.baseline.imageCount
+          && draft.tags.join("\u0000") === draft.baseline.tags.join("\u0000");
         // 没改动 = 不写库，但**小记 id 仍要回传**：「保存并同步」要能推一条"之前只是没同步"的小记（编辑草稿 id ≠ 小记 id，见 draftOf）。
-        if (unchanged) { settleAfterSave(draft, { text, body, images: draft.images }); return { ok: true, id: editingId }; }
+        if (unchanged) { settleAfterSave(draft, { text, body, images: draft.images, tags: draft.tags }); return { ok: true, id: editingId }; }
       }
       const assets = draftAssets(draft);
       const stagedAssets = assets.filter((item) => item.source === "staged");
@@ -391,14 +409,14 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       const stagedImageIds = referenced.filter((item) => item.source === "staged").map((item) => item.image.id);
       const retainedImageIds = referenced.filter((item) => item.source === "saved").map((item) => item.image.id);
       const saved = isEditing && editingId
-        ? await native.updateQuickNote(editingId, { text, body, draftId: draft.id, stagedImageIds, retainedImageIds })
-        : await native.createQuickNote({ text, body, draftId: draft.id, stagedImageIds });
+        ? await native.updateQuickNote(editingId, { text, body, draftId: draft.id, stagedImageIds, retainedImageIds, tags: draft.tags })
+        : await native.createQuickNote({ text, body, draftId: draft.id, stagedImageIds, tags: draft.tags });
       listVersionRef.current.invalidate();
       setItems((current) => {
         const without = current.filter((item) => item.id !== saved.id);
         return [saved, ...without].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       });
-      if (isEditing) settleAfterSave(draft, { text, body, images: saved.content.images.map((image) => ({ image, source: "saved" as const })) });
+      if (isEditing) settleAfterSave(draft, { text, body, images: saved.content.images.map((image) => ({ image, source: "saved" as const })), tags: saved.content.tags });
       else if (createDraft.id === draft.id) setCreateDraft(newDraft());
       return { ok: true, id: saved.id };
     } catch (reason) { setError(`保存小记失败：${getNativeErrorMessage(reason)}`); return { ok: false, id: null }; }
@@ -553,7 +571,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
    *
    * 其他视图（分块视图的卡片编辑）：照旧关掉编辑态，回到卡片列表。
    */
-  function settleAfterSave(draft: DraftState, values: { text: string; body: string; images: DraftImage[] }) {
+  function settleAfterSave(draft: DraftState, values: { text: string; body: string; images: DraftImage[]; tags: string[] }) {
     // 判据用草稿身份（`editingDraft`）而不是笔记 id：列表视图里"正在编辑的是这份草稿"才原地留存。
     if (viewMode === "list" && editingDraft?.id === draft.id) {
       stagedAssetsRef.current.delete(draft.id);
@@ -562,7 +580,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
             ...current,
             text: values.text,
             images: values.images,
-            baseline: { text: values.text, body: values.body, imageCount: values.images.length },
+            tags: values.tags,
+            baseline: { text: values.text, body: values.body, imageCount: values.images.length, tags: values.tags },
           }
         : current);
       return;
@@ -650,12 +669,24 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     } finally { setSaving(false); }
   }
 
+  const tagIndex = useMemo(
+    () => buildQuickNoteTagIndex(items, (item) => item.content.tags),
+    [items],
+  );
+
+  useEffect(() => {
+    if (tagFilter.kind === "tag" && !tagIndex.tags.some((tag) => tag.name === tagFilter.name)) {
+      setTagFilter({ kind: "all" });
+    }
+  }, [tagFilter, tagIndex.tags]);
+
   /** 排序只影响本端展示顺序（不写库、不进 manifest）；四档比较器在 core/quickNoteSort（与移动端同一份）。 */
   const visibleItems = useMemo(() => {
-    const ordered = sortQuickNotes(items, sortBy);
+    const filtered = filterQuickNotesByTag(items, tagFilter, (item) => item.content.tags);
+    const ordered = sortQuickNotes(filtered, sortBy);
     // 置顶优先（纯本机偏好），同组内保持所选排序（filter 保序 ⇒ 无需二次比较）
     return [...ordered.filter((it) => pinned.has(it.id)), ...ordered.filter((it) => !pinned.has(it.id))];
-  }, [items, sortBy, pinned]);
+  }, [items, sortBy, pinned, tagFilter]);
 
   /**
    * 列表页默认选中第一条（用户 260919）：进列表视图 / 首次加载时，若没有正在编辑的小记，
@@ -679,12 +710,42 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   };
   /** 行内 ⋯ 菜单：同上。 */
   const toggleRowMenu = (button: HTMLElement, id: string) => {
-    if (rowMenuId === id) { setRowMenuId(null); return; }
+    if (rowMenuId === id) { setRowMenuId(null); setRowMenuAnchor(null); return; }
     const rect = button.getBoundingClientRect();
-    setRowMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 150, height: 180 }, 6));
+    setRowMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 150, height: 216 }, 6));
+    setRowMenuAnchor(button);
     setRowMenuId(id);
   };
   const rowMenuItem = rowMenuId ? items.find((item) => item.id === rowMenuId) ?? null : null;
+
+  /** 切标签筛选前先收住正在编辑的小记：筛掉的卡片会卸载，不能把未保存正文一起带走。 */
+  async function changeTagFilter(next: QuickNoteTagFilter): Promise<void> {
+    if (editingDraft) {
+      if (dirty && !(await saveBeforeSwitch())) return;
+      setEditingId(null);
+      setEditingDraft(null);
+    }
+    setTagFilter(next);
+  }
+
+  async function applyNoteTags(noteId: string, tags: string[]): Promise<void> {
+    const item = items.find((candidate) => candidate.id === noteId);
+    if (!item) return;
+    try {
+      const saved = await native.updateQuickNote(noteId, {
+        text: item.content.text,
+        body: item.content.body,
+        draftId: crypto.randomUUID(),
+        stagedImageIds: [],
+        retainedImageIds: item.content.images.map((asset) => asset.id),
+        tags,
+      });
+      listVersionRef.current.invalidate();
+      setItems((current) => current.map((candidate) => (candidate.id === noteId ? saved : candidate)));
+    } catch (reason) {
+      setError(`更新标签失败：${getNativeErrorMessage(reason)}`);
+    }
+  }
 
   // 左右两栏（对齐云端语雀小记）：左＝常驻写作面板 + 发布行，右＝小记卡片流（各自独立滚动）。
   return <section className="quick-notes-pane" aria-label="小记">
@@ -728,6 +789,27 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     </header>
     {viewHint && <div className="quick-notes-hint" role="status">{viewHint}</div>}
     {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
+    {items.length > 0 && tagIndex.tags.length > 0 && (
+      <div className="quick-notes-tagbar" role="group" aria-label="按标签筛选小记">
+        <button className={"quick-note-tag" + (tagFilter.kind === "all" ? " is-selected" : "")} onClick={() => void changeTagFilter({ kind: "all" })}>
+          <span>全部</span><span className="quick-note-tag__count">{items.length}</span>
+        </button>
+        {tagIndex.tags.map((tag) => (
+          <button
+            key={tag.name}
+            className={"quick-note-tag" + (tagFilter.kind === "tag" && tagFilter.name === tag.name ? " is-selected" : "")}
+            onClick={() => void changeTagFilter(tagFilter.kind === "tag" && tagFilter.name === tag.name ? { kind: "all" } : { kind: "tag", name: tag.name })}
+          >
+            <span className="ln-ellipsis">{tag.name}</span><span className="quick-note-tag__count">{tag.count}</span>
+          </button>
+        ))}
+        {tagIndex.untaggedCount > 0 && (
+          <button className={"quick-note-tag" + (tagFilter.kind === "untagged" ? " is-selected" : "")} onClick={() => void changeTagFilter(tagFilter.kind === "untagged" ? { kind: "all" } : { kind: "untagged" })}>
+            <span>无标签</span><span className="quick-note-tag__count">{tagIndex.untaggedCount}</span>
+          </button>
+        )}
+      </div>
+    )}
     {viewMode === "list" ? <div className="quick-notes-split quick-notes-split--list">
       {/* 列表视图（对齐云端 https://www.yuque.com/dashboard/notes）：左＝索引列表（批量条 + 行⋯菜单），
           右＝编辑器。功能都复用分块视图里已有的动作（编辑/转为正式笔记/删除/多选），这里只是把 UI 补上。 */}
@@ -783,14 +865,18 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           ? <QuickNoteComposer
               draft={editingDraft} variant="inline" ui="full" active={visible} saving={saving && activeIsEditing} syncing={syncing && activeIsEditing} cloudReady={cloudReady}
               uploadResource={quickNoteUploader(editingDraft.id)}
+              tagOptions={tagIndex.tags}
               onTextChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
+              onTagsChange={(tags) => setEditingDraft((current) => current ? { ...current, tags } : current)}
               onEditorReady={(api) => handleEditorReady(editingDraft.id, api)}
               onSave={() => void saveDraft(editingDraft)} onSaveAndSync={() => void saveDraftAndSync(editingDraft)} onCancel={() => void cancelDraft(editingDraft)}
             />
           : <QuickNoteComposer
               draft={createDraft} variant="pane" ui="full" active={visible} saving={saving && !activeIsEditing} syncing={syncing && !activeIsEditing} cloudReady={cloudReady}
               uploadResource={quickNoteUploader(createDraft.id)}
+              tagOptions={tagIndex.tags}
               onTextChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
+              onTagsChange={(tags) => setCreateDraft((current) => ({ ...current, tags }))}
               onEditorReady={(api) => handleEditorReady(createDraft.id, api)}
               onSave={() => void saveDraft(createDraft)} onSaveAndSync={() => void saveDraftAndSync(createDraft)} onCancel={() => void cancelDraft(createDraft)}
             />}
@@ -805,7 +891,9 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           syncing={syncing && !activeIsEditing}
           cloudReady={cloudReady}
           uploadResource={quickNoteUploader(createDraft.id)}
+          tagOptions={tagIndex.tags}
           onTextChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
+          onTagsChange={(tags) => setCreateDraft((current) => ({ ...current, tags }))}
           onEditorReady={(api) => handleEditorReady(createDraft.id, api)}
           onSave={() => void saveDraft(createDraft)}
           onSaveAndSync={() => void saveDraftAndSync(createDraft)}
@@ -820,11 +908,13 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
               ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
                   draft={editingDraft} variant="inline" active={visible} saving={saving && activeIsEditing} syncing={syncing && activeIsEditing} cloudReady={cloudReady}
                   uploadResource={quickNoteUploader(editingDraft.id)}
+                  tagOptions={tagIndex.tags}
                   onTextChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
+                  onTagsChange={(tags) => setEditingDraft((current) => current ? { ...current, tags } : current)}
                   onEditorReady={(api) => handleEditorReady(editingDraft.id, api)}
                   onSave={() => void saveDraft(editingDraft)} onSaveAndSync={() => void saveDraftAndSync(editingDraft)} onCancel={() => void cancelDraft(editingDraft)}
                 /></article>
-              : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} selecting={selecting} checked={selected.has(item.id)} onToggleSelect={() => toggleSelected(item.id)} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItems([item])} onToggleTask={(checkboxIndex, checked) => void togglePreviewTask(item.id, checkboxIndex, checked)} />)
+              : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} selecting={selecting} checked={selected.has(item.id)} onToggleSelect={() => toggleSelected(item.id)} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItems([item])} onAddTag={(anchor) => setTagPickerFor({ noteId: item.id, anchor })} onFilterTag={(name) => void changeTagFilter({ kind: "tag", name })} onToggleTask={(checkboxIndex, checked) => void togglePreviewTask(item.id, checkboxIndex, checked)} />)
           }
         </div>
       </div>
@@ -838,14 +928,27 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       ))}
     </Menu>
     {rowMenuItem && (
-      <Menu onDismiss={() => setRowMenuId(null)} surfaceClassName="quick-note-row-menu" style={rowMenuPos ?? undefined}>
+      <Menu onDismiss={() => { setRowMenuId(null); setRowMenuAnchor(null); }} surfaceClassName="quick-note-row-menu" style={rowMenuPos ?? undefined}>
         <button role="menuitem" onClick={() => { setRowMenuId(null); togglePin(rowMenuItem.id); }}>{pinned.has(rowMenuItem.id) ? "取消置顶" : "置顶"}</button>
         <button role="menuitem" onClick={() => { setRowMenuId(null); void startEditing(rowMenuItem); }}>编辑</button>
+        <button role="menuitem" onClick={() => { const anchor = rowMenuAnchor; setRowMenuId(null); if (anchor) setTagPickerFor({ noteId: rowMenuItem.id, anchor }); }}>添加标签</button>
         <button role="menuitem" onClick={() => { setRowMenuId(null); void copyNoteText(rowMenuItem); }}>复制文本</button>
         <button role="menuitem" onClick={() => { setRowMenuId(null); setConvertItems([rowMenuItem]); }}>转为正式笔记</button>
         <button role="menuitem" className="quick-notes-link--danger" onClick={() => { setRowMenuId(null); scheduleDelete(rowMenuItem); }} disabled={pendingDelete !== null}>删除</button>
       </Menu>
     )}
+    {tagPickerFor && (() => {
+      const target = items.find((item) => item.id === tagPickerFor.noteId);
+      return target ? (
+        <QuickNoteTagPicker
+          anchor={tagPickerFor.anchor}
+          options={tagIndex.tags}
+          selected={target.content.tags}
+          onAdd={(tag) => { void applyNoteTags(target.id, addQuickNoteTag(target.content.tags, tag)); }}
+          onClose={() => setTagPickerFor(null)}
+        />
+      ) : null;
+    })()}
     {convertItems && convertItems.length > 0 && (
       <Dialog onDismiss={() => { if (!saving) setConvertItems(null); }} label={convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"} className="quick-note-convert-dialog">
         <div className="ln-dialog__body">
@@ -877,7 +980,10 @@ interface ComposerProps {
   cloudReady: boolean;
   /** 图片上传落盘（写进该草稿的 staging 空间）。 */
   uploadResource(request: unknown): Promise<ResourceUploadOutput>;
+  /** 已有标签选项（从全部有效小记派生）。 */
+  tagOptions: QuickNoteTagSummary[];
   onTextChange(text: string): void;
+  onTagsChange(tags: string[]): void;
   onEditorReady(api: QuickNoteEditorApi | null): void;
   /** 只保存到本机（原有语义）。 */
   onSave(): void;
@@ -886,7 +992,8 @@ interface ComposerProps {
   onCancel(): void;
 }
 
-function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "card", active = true, uploadResource, onTextChange, onEditorReady, onSave, onSaveAndSync, onCancel }: ComposerProps) {
+function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "card", active = true, uploadResource, tagOptions, onTextChange, onTagsChange, onEditorReady, onSave, onSaveAndSync, onCancel }: ComposerProps) {
+  const [tagPickerAnchor, setTagPickerAnchor] = useState<HTMLElement | null>(null);
   /** ⌘/Ctrl + Enter 触发主按钮（发布/保存）：编辑器可能吞键，故挂捕获阶段兜底。 */
   function publishOnShortcut(event: React.KeyboardEvent<HTMLDivElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); onSave(); }
@@ -900,14 +1007,14 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
    * （主按钮 +「保存并同步」），主按钮再走中性就分不出主次了。
    */
   const primary = (
-    <button className="b3-button quick-note-publish is-emphasized" disabled={busy} onClick={onSave}>
+    <button className="ln-btn ln-btn--primary quick-note-publish" disabled={busy} onClick={onSave}>
       {saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}
     </button>
   );
   /** 「保存并同步」= **普通按钮**（不强调，与「取消」同族的中性描边），夹在主按钮与取消之间（用户 261013 定稿）。 */
   const saveAndSync = (
     <button
-      className="b3-button quick-note-publish"
+      className="ln-btn ln-btn--secondary quick-note-publish"
       disabled={busy || !cloudReady}
       title={cloudReady ? undefined : "云同步已关闭：不会联网。可先「保存」到本机，开启云同步后再同步。"}
       aria-label={cloudReady ? "保存并同步" : "保存并同步（云同步已关闭，不可用）"}
@@ -916,7 +1023,7 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
       {syncing ? <LoaderCircle className="spin" size={15} /> : null}{syncing ? "同步中" : "保存并同步"}
     </button>
   );
-  const cancel = <button className="b3-button quick-note-discard" disabled={busy} onClick={onCancel}>取消</button>;
+  const cancel = <button className="ln-btn ln-btn--ghost quick-note-discard" disabled={busy} onClick={onCancel}>取消</button>;
   return <>
     <div className="quick-note-composer" onKeyDownCapture={publishOnShortcut}>
       {/* 写作区 = 一个 Lake 内核实例（编辑时挂、离开即销毁）；图片直接拖入或粘贴 */}
@@ -929,6 +1036,20 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
         onTextChange={onTextChange}
         onReady={onEditorReady}
       />
+    </div>
+    <div className="quick-note-tags">
+      <button
+        type="button"
+        className="quick-note-tag-add"
+        disabled={busy}
+        onClick={(event) => setTagPickerAnchor(event.currentTarget)}
+      ><Plus size={12} /><span>添加标签</span></button>
+      {draft.tags.map((tag) => (
+        <span className="quick-note-tag is-editable" key={tag}>
+          <span className="ln-ellipsis">{tag}</span>
+          <button type="button" aria-label={`移除标签 ${tag}`} disabled={busy} onClick={() => onTagsChange(removeQuickNoteTag(draft.tags, tag))}><X size={11} /></button>
+        </span>
+      ))}
     </div>
     <div className={`quick-note-composer-actions quick-note-composer-actions--${variant}`}>
       {variant === "pane" ? <>
@@ -945,12 +1066,22 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
         {primary}
       </>}
     </div>
+    {tagPickerAnchor && (
+      <QuickNoteTagPicker
+        anchor={tagPickerAnchor}
+        options={tagOptions}
+        selected={draft.tags}
+        onAdd={(tag) => onTagsChange(addQuickNoteTag(draft.tags, tag))}
+        onClose={() => setTagPickerAnchor(null)}
+      />
+    )}
   </>;
 }
 
-function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect, onEdit, onDelete, onConvert, onToggleTask }: {
+function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect, onEdit, onDelete, onConvert, onAddTag, onFilterTag, onToggleTask }: {
   item: QuickNoteDocument; deletePending: boolean; selecting: boolean; checked: boolean;
   onToggleSelect(): void; onEdit(): void; onDelete(): void; onConvert(): void;
+  onAddTag(anchor: HTMLElement): void; onFilterTag(name: string): void;
   onToggleTask(checkboxIndex: number, checked: boolean): void;
 }) {
   /** 资源清单（带 url）：预览里的媒体卡按文件名到这里取真实资源。 */
@@ -969,7 +1100,7 @@ function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect
       role="checkbox" aria-checked={checked} aria-label={checked ? "取消选择" : "选择这篇小记"}
       onClick={(event) => { event.stopPropagation(); onToggleSelect(); }}
     >{checked && <Check size={13} />}</button>
-    <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
+    <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={(event) => { event.stopPropagation(); onAddTag(event.currentTarget); }} title="添加标签"><Tag size={15} /></button><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
     {/* 卡片预览 = 自研只读渲染（零内核实例）：白名单块按真实结构显示（列表/待办/引用/标题/行内格式），
         媒体卡按正文顺序就地渲染；白名单外的块显示占位。解析不出内容时回落到纯文本镜像。 */}
     <QuickNotePreview
@@ -980,5 +1111,14 @@ function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect
       onImageClick={(image) => openImagePreview(imagesOnly.map((it) => ({ src: it.url })), imagesOnly.findIndex((it) => it.id === image.id))}
       onToggleTask={onToggleTask}
     />
+    {item.content.tags.length > 0 && (
+      <div className="quick-note-card-tags">
+        {item.content.tags.map((tag) => (
+          <button type="button" className="quick-note-tag is-selectable" key={tag} onClick={(event) => { event.stopPropagation(); onFilterTag(tag); }} title={`筛选标签：${tag}`}>
+            <span className="ln-ellipsis">{tag}</span>
+          </button>
+        ))}
+      </div>
+    )}
   </article>;
 }

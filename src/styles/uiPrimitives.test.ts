@@ -70,6 +70,15 @@ describe("UI 原语门禁", () => {
     for (const t of band) expect(val(t), t + " 须高于 topbar").toBeGreaterThan(topbar);
     for (let i = 1; i < band.length; i++) expect(val(band[i]), band[i]).toBeGreaterThan(val(band[i - 1]));
   });
+
+  it("按钮语义色与标签输入原语不被内核未分层 button/input 重置吃掉", () => {
+    const kernel = readFileSync(path.join(SRC, "styles/kernel-theme.css"), "utf8");
+    expect(kernel).toContain(".ln-btn--primary { color: var(--lake-text-on-accent); }");
+    expect(kernel).toContain(".b3-button:not(.quick-note-publish):not(.quick-note-discard) { color: var(--lake-text-on-accent); }");
+    const tagPicker = readFileSync(path.join(SRC, "features/quickNotes/QuickNoteTagPicker.tsx"), "utf8");
+    expect(tagPicker).toContain('className="ln-input quick-note-tag-picker__input"');
+    expect(tagPicker).toContain('className="ln-input__field"');
+  });
 });
 
 /**

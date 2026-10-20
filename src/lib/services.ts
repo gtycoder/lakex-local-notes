@@ -43,11 +43,11 @@ function treeNodeToDto(node: {
 
 function quickNoteToDto(item: {
   id: string; createdAt: string; updatedAt: string; syncState: string; isConflict: boolean;
-  content: { text: string; images: Array<{ id: string; filename: string; mimeType: string; width: number | null; height: number | null; size: number }> };
+  content: { text: string; images: Array<{ id: string; filename: string; mimeType: string; width: number | null; height: number | null; size: number }>; tags: string[] };
 }): QuickNoteDto {
   return {
     id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
-    text: item.content.text, images: item.content.images,
+    text: item.content.text, images: item.content.images, tags: item.content.tags,
     syncState: item.syncState as QuickNoteDto["syncState"], isConflict: item.isConflict,
   };
 }
@@ -87,9 +87,9 @@ export function createNativeServices(api: LakeNative): AppServices {
     quickNotes: {
       list: () => api.listQuickNotes().then((items) => items.map(quickNoteToDto)),
       create: (input) =>
-        api.createQuickNote({ text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds }).then(quickNoteToDto),
+        api.createQuickNote({ text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, tags: input.tags }).then(quickNoteToDto),
       update: (id, input) =>
-        api.updateQuickNote(id, { text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, retainedImageIds: input.retainedImageIds }).then(quickNoteToDto),
+        api.updateQuickNote(id, { text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, retainedImageIds: input.retainedImageIds, tags: input.tags }).then(quickNoteToDto),
       delete: (id) => api.deleteQuickNote(id),
     },
     trash: {

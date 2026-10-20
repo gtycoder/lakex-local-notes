@@ -324,7 +324,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
       size: imageBytes.length,
       hash: sha256Sync(imageBytes),
     };
-    const content = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "远端正文", images: [image] });
+    const content = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "远端正文", images: [image], tags: [] });
     const bytes = new TextEncoder().encode(content);
     const item: ManifestItem = {
       id: created.id,
@@ -384,7 +384,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
       size: imageBytes.length,
       hash: sha256Sync(imageBytes),
     };
-    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "冲突本地版", images: [image] });
+    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "冲突本地版", images: [image], tags: [] });
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await deviceBodies.get(d)!.write(id, serialized);
@@ -450,7 +450,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const aDeps = makeAssetFsDeps();
     const imgBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3, 4]);
     const img = { id: "img-1", filename: "a.png", mimeType: "image/png", width: 10, height: 10, size: imgBytes.length, hash: sha256Sync(imgBytes) };
-    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "带图", images: [img] });
+    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "带图", images: [img], tags: [] });
     const hash = sha256Sync(new TextEncoder().encode(serialized));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -488,7 +488,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const aDeps = makeAssetFsDeps();
     const imgBytes = new Uint8Array([9, 8, 7, 6, 5]);
     const img = { id: "img-t", filename: "t.png", mimeType: "image/png", width: 3, height: 3, size: imgBytes.length, hash: sha256Sync(imgBytes) };
-    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "待删带图", images: [img] });
+    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "待删带图", images: [img], tags: [] });
     const hash = sha256Sync(new TextEncoder().encode(serialized));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();

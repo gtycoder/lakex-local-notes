@@ -71,7 +71,7 @@ describe("createNativeServices（DTO 字段映射）", () => {
         {
           id: "q1", createdAt: "c", updatedAt: "u", previewText: "", imageCount: 1, contentHash: "h".repeat(64),
           syncState: "synced", isConflict: false,
-          content: { version: 2, text: "小记正文", body: "<p><br></p>", images: [{ id: "img-1", filename: "a.png", mimeType: "image/png", width: 10, height: 20, size: 5, hash: "f".repeat(64) }] },
+          content: { version: 2, text: "小记正文", body: "<p><br></p>", images: [{ id: "img-1", filename: "a.png", mimeType: "image/png", width: 10, height: 20, size: 5, hash: "f".repeat(64) }], tags: [] },
         },
       ],
     });
@@ -86,11 +86,11 @@ describe("createNativeServices（DTO 字段映射）", () => {
     const api = fakeNative({
       createQuickNote: async (input) => {
         captured.push({ input, id: "q-new" });
-        return { id: "q-new", createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 2, text: input.text, body: "<p><br></p>", images: [] } };
+        return { id: "q-new", createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 2, text: input.text, body: "<p><br></p>", images: [], tags: [] } };
       },
       updateQuickNote: async (id, input) => {
         captured.push({ input, id });
-        return { id, createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 2, text: input.text, body: "<p><br></p>", images: [] } };
+        return { id, createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 2, text: input.text, body: "<p><br></p>", images: [], tags: [] } };
       },
     });
     const { quickNotes } = createNativeServices(api);
