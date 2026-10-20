@@ -99,7 +99,7 @@ describe("移动端表格查看/编辑器", () => {
     expect(calls.container).toBe("mobile-usheet-n1");
     expect(host.querySelector(".mobile-usheet")).toBeTruthy();
     expect(host.querySelector(".mobile-usheet")?.hasAttribute("data-prevent-swipe")).toBe(true);
-    expect(host.querySelector(".mobile-usheet-toolbar")).toBeNull();
+    expect(host.querySelector(".mb-usheet-toolbar")).toBeNull();
     expect(host.querySelector(".mobile-usheet-formula")).toBeNull();
     root.unmount();
   });
@@ -111,11 +111,11 @@ describe("移动端表格查看/编辑器", () => {
     expect(calls.created).toBe(1);
     expect(calls.editable).toEqual([true]);
     expect(typeof capture).toBe("function");
-    const toolbar = host.querySelector(".mobile-usheet-toolbar");
+    const toolbar = host.querySelector(".mb-usheet-toolbar");
     expect(toolbar).toBeTruthy();
     expect(toolbar?.getAttribute("aria-label")).toBe("表格工具");
     expect(toolbar?.hasAttribute("data-prevent-swipe")).toBe(true);
-    for (const label of ["插入", "撤销", "重做", "加粗", "文字格式", "更多表格操作"]) {
+    for (const label of ["插入", "撤销", "重做", "数字格式", "更多表格操作"]) {
       expect(toolbar?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
     const formula = host.querySelector(".mobile-usheet-formula");
@@ -124,16 +124,44 @@ describe("移动端表格查看/编辑器", () => {
     root.unmount();
   });
 
-  it("「更多」菜单具备布局与数字格式入口（261020 P1：冻结窗格 / 行高 / 列宽 / 数字格式）", async () => {
+  it("「更多」锚定卡 = 七行图标网格 + 我们的第八行；不支持的项置灰；子菜单卡内下钻", async () => {
     const { root, host } = await mount(true, true);
     const { act } = await import("react");
-    const more = host.querySelector<HTMLButtonElement>('.mobile-usheet-toolbar button[aria-label="更多表格操作"]');
+    const more = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="更多表格操作"]');
     expect(more).toBeTruthy();
     await act(async () => { more!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-    const text = host.textContent ?? "";
-    for (const label of ["冻结窗格", "冻结至当前行", "冻结至当前列", "取消冻结", "行高", "自动行高（按内容）", "列宽", "加宽（+" + 24 + "px）", "数字格式", "常规（清除格式）", "百分比", "货币（¥）", "日期时间", "常用公式", "求和 SUM", "平均值 AVERAGE", "最大值 MAX"]) {
-      expect(text).toContain(label);
+    const card = host.querySelector(".mb-usheet-morecard");
+    expect(card).toBeTruthy();
+    expect(card!.querySelectorAll(".mb-usheet-morecard__row").length).toBe(8);
+    for (const label of ["加粗", "斜体", "删除线", "下划线", "字体颜色", "填充颜色", "水平对齐", "合并选中单元格", "公式", "冻结窗格", "行高", "列宽", "删除当前行", "删除当前列", "更多表格工具"]) {
+      expect(card!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
+    expect(card!.querySelector<HTMLButtonElement>('button[aria-label^="边框"]')?.disabled).toBe(true);
+    const freeze = card!.querySelector<HTMLButtonElement>('button[aria-label="冻结窗格"]');
+    expect(freeze).toBeTruthy();
+    await act(async () => { freeze!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    for (const label of ["冻结至当前行", "冻结至当前列", "取消冻结"]) expect(host.textContent ?? "").toContain(label);
+    root.unmount();
+  });
+
+  it("「数字格式」一级按钮打开锚定卡（不是底部 Sheet）：常规 / 百分比 / 日期时间 可选", async () => {
+    const { root, host } = await mount(true, true);
+    const { act } = await import("react");
+    const numfmt = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="数字格式"]');
+    expect(numfmt).toBeTruthy();
+    await act(async () => { numfmt!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(host.querySelector(".mb-usheet-popcard")).toBeTruthy();
+    for (const label of ["常规（清除格式）", "百分比", "日期时间"]) expect(host.textContent ?? "").toContain(label);
+    root.unmount();
+  });
+
+  it("「插入」按钮保留我们自己的插行列/合并能力（语雀 App 没有）", async () => {
+    const { root, host } = await mount(true, true);
+    const { act } = await import("react");
+    const insert = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="插入"]');
+    expect(insert).toBeTruthy();
+    await act(async () => { insert!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    for (const label of ["在上方插入行", "在下方插入行", "在左侧插入列", "在右侧插入列", "合并选中单元格"]) expect(host.textContent ?? "").toContain(label);
     root.unmount();
   });
 

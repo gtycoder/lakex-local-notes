@@ -1,0 +1,164 @@
+/**
+ * 移动端表格 chrome（261021 P1）：对齐语雀 App 1.2.2 的工具条 + 锚定卡片。
+ * 语雀实测见 docs/MOBILE-USHEET-YUQUE-PARITY.md §2.1 / §2.3 / §4；颜色只用移动端令牌。
+ * 旧版底部 Sheet（.mb-sheet）不再用于表格工具。
+ */
+.mb-usheet-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 6px;
+  border-top: 1px solid var(--lake-border-1);
+  border-bottom: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-window);
+  color: var(--lake-text-1);
+}
+.mb-usheet-toolbar__scroll {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.mb-usheet-toolbar__scroll::-webkit-scrollbar { display: none; }
+.mb-usheet-toolbar__group {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 3px;
+}
+.mb-usheet-toolbar__group + .mb-usheet-toolbar__group { border-left: 1px solid var(--lake-border-1); }
+.mb-usheet-btn {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 32px;
+  min-width: 34px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-micro);
+  line-height: 32px;
+  transition: background-color var(--mobile-duration-press) ease;
+}
+.mb-usheet-btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-btn--text { width: 55px; justify-content: space-between; }
+.mb-usheet-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--lake-status-ok);
+  color: var(--lake-text-on-accent);
+}
+.mb-usheet-popcard {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--lake-bg-window);
+  border: 1px solid var(--lake-border-1);
+  border-radius: 8px;
+  box-shadow: var(--mb-usheet-card-shadow);
+  color: var(--lake-text-1);
+}
+.mb-usheet-popcard__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mb-usheet-popcard__back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--lake-border-1);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-micro);
+  text-align: left;
+}
+.mb-usheet-popcard__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  text-align: left;
+}
+.mb-usheet-popcard__row:active { background: var(--lake-bg-hover); }
+.mb-usheet-popcard__row.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-popcard__row.is-danger { color: var(--lake-status-error); }
+.mb-usheet-popcard__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mb-usheet-popcard__note {
+  flex: none;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-nano);
+}
+.mb-usheet-popcard__chev { flex: none; color: var(--lake-text-3); }
+
+/* ⋯ 卡：语雀七行图标网格（+ 我们自己的第八行）。 */
+.mb-usheet-morecard { padding: 4px 0; }
+.mb-usheet-morecard__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 39px;
+  padding: 0 6px;
+}
+.mb-usheet-morecard__btn {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lake-text-1);
+}
+.mb-usheet-morecard__btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-morecard__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-morecard__btn.is-danger { color: var(--lake-status-error); }
+.mb-usheet-morecard__btn:disabled { opacity: .25; }
+.mb-usheet-morecard__text { font-size: var(--lake-font-size-micro); line-height: 1; }
+.mb-usheet-popcard__header {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-nano);
+}
+.mb-usheet-popcard__icon { flex: none; display: inline-flex; color: var(--lake-text-2); }

@@ -10,26 +10,76 @@
  * 分包、首次可见才挂载、图片 URL、主题跟随的约束与只读版保持一致。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Bold, ChevronDown, Italic, MoreHorizontal, Plus,
-  Redo2, Strikethrough, Type, Underline, Undo2,
-} from "lucide-react";
-import { createUniver, LocaleType, mergeLocales, type FUniver } from "@univerjs/presets";
+import { ChevronDown, MoreHorizontal, Plus, Redo2, Undo2 } from "lucide-react";
+import { createUniver, DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY, LocaleType, mergeLocales, type FUniver } from "@univerjs/presets";
+import { DocSelectionRenderService, IRenderManagerService } from "@univerjs/preset-sheets-core";
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
 import { buildUniverTheme } from "../../features/usheet/univerTheme";
+import { editorCaretPoint } from "../../features/usheet/usheetCellEdit";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody } from "../../core/usheetDoc.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
-import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { SheetPopCard } from "./SheetPopCard";
+import { SheetMoreCard } from "./SheetMoreCard";
+import {
+  SHEET_CARD_META,
+  SHEET_TOOLBAR_GROUPS,
+  buildInsertMenu,
+  buildMoreRows,
+  buildNumfmtMenu,
+  numfmtLabelOf,
+  type SheetCardId,
+} from "./usheetChromeModel";
 import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
-import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP, USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
-import { USHEET_NUMFMT_IDS, USHEET_NUMFMT_OPTIONS, applyUsheetNumberFormat } from "./usheetNumfmt";
-import { USHEET_QUICK_FORMULAS, USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
+import "./usheet-chrome.css";
+import { USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
+import { USHEET_NUMFMT_IDS, applyUsheetNumberFormat } from "./usheetNumfmt";
+import { USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
+
+/**
+ * 移动端公式栏的点击落点（261021）：Univer 的移动公式栏把输入面做成 canvas + 隐藏 contenteditable，
+ * 并且 FormulaEditor 显式传了 `disableSelectionOnClick: true` ⇒ 点文字中间不会更新选区，光标只能停在末尾。
+ * 这里在 pointerup 后按点击坐标调用文档渲染单元的 setCursorManually，恢复「点哪落哪」。
+ * 只作用在公式栏编辑器内（不碰表格 canvas / 按钮），失败静默退回原行为。
+ */
+function placeFormulaBarCaret(
+  state: { univer: { dispose: () => void } },
+  clientX: number,
+  clientY: number,
+): void {
+  try {
+    const univer = state.univer as unknown as { __getInjector?: () => { get: (token: unknown) => unknown } };
+    const injector = univer.__getInjector?.();
+    const renderManager = injector?.get(IRenderManagerService) as
+      | { getRenderUnitById: (id: string) => unknown }
+      | undefined;
+    const renderUnit = renderManager?.getRenderUnitById(DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY) as
+      | { with: (token: unknown) => unknown }
+      | undefined;
+    const selection = renderUnit?.with(DocSelectionRenderService) as
+      | {
+          focus: () => void;
+          setCursorManually: (x: number, y: number, a: boolean, b: boolean, o: { strict: boolean }) => void;
+        }
+      | undefined;
+    const editorEl = document.querySelector<HTMLElement>(
+      '[data-u-comp="mobile-formula-bar"] [data-u-comp="formula-editor"]',
+    );
+    const rect = editorEl?.getBoundingClientRect();
+    if (!selection || !editorEl || !rect || rect.width <= 0 || rect.height <= 0) return;
+    const canvas = editorEl.querySelector<HTMLCanvasElement>("canvas");
+    const cssWidth = Number.parseFloat(canvas?.style.width ?? "") || rect.width;
+    const cssHeight = Number.parseFloat(canvas?.style.height ?? "") || rect.height;
+    const point = editorCaretPoint(clientX, clientY, rect, cssWidth, cssHeight);
+    selection.focus();
+    selection.setCursorManually(point.x, point.y, true, true, { strict: false });
+  } catch { /* 内核结构变化时静默退回 */ }
+}
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -75,10 +125,12 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   captureCallbackRef.current = onCapture;
 
   /** 顶部工具条弹出的原生面板：插入 / 文字格式 / 更多。 */
-  const [menu, setMenu] = useState<"insert" | "format" | "more" | null>(null);
+  /** 当前打开的锚定卡片（null = 无）；anchor = 触发按钮（卡片锚在它下方）。 */
+  const [openCard, setOpenCard] = useState<SheetCardId | null>(null);
+  const [cardAnchor, setCardAnchor] = useState<HTMLElement | null>(null);
   /** 当前选区文字状态（只用于工具条按钮高亮，选区变化时刷新）。 */
-  const [cellFmt, setCellFmt] = useState<{ bold: boolean; italic: boolean; underline: boolean; strike: boolean; align: "left" | "center" | "normal" | "general" }>({
-    bold: false, italic: false, underline: false, strike: false, align: "general",
+  const [cellFmt, setCellFmt] = useState<{ bold: boolean; italic: boolean; underline: boolean; strike: boolean; align: "left" | "center" | "normal" | "general"; numfmt: string }>({
+    bold: false, italic: false, underline: false, strike: false, align: "general", numfmt: "",
   });
   /** 语雀式公式栏：当前选区地址 + 显示值（移动 UI 插件不渲染内置公式栏）。 */
   const [cellInfo, setCellInfo] = useState({ address: "A1", value: "" });
@@ -117,15 +169,17 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       if (!range) return;
       const style = range.getCellStyleData() as { bl?: number; it?: number; ul?: { s?: number }; st?: { s?: number } } | null;
       const align = range.getHorizontalAlignment();
+      const numfmt = (range as unknown as { getNumberFormat?: () => string | undefined }).getNumberFormat?.() ?? "";
       const nextFmt = {
         bold: style?.bl === 1,
         italic: style?.it === 1,
         underline: style?.ul?.s === 1,
         strike: style?.st?.s === 1,
         align: (align === "left" || align === "center" || align === "normal" ? align : "general") as "left" | "center" | "normal" | "general",
+        numfmt,
       };
       setCellFmt((prev) => prev.bold === nextFmt.bold && prev.italic === nextFmt.italic && prev.underline === nextFmt.underline
-        && prev.strike === nextFmt.strike && prev.align === nextFmt.align ? prev : nextFmt);
+        && prev.strike === nextFmt.strike && prev.align === nextFmt.align && prev.numfmt === nextFmt.numfmt ? prev : nextFmt);
       const address = range.getA1Notation();
       const value = range.getDisplayValue() ?? "";
       setCellInfo((prev) => prev.address === address && prev.value === value ? prev : { address, value });
@@ -175,6 +229,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     const workbook = parseUsheetBody(content)?.workbook ?? emptyUsheetWorkbook();
     mapUsheetImageSources(workbook, (src) => usheetImageSrc(src, noteId));
     let created: { univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook } | null = null;
+    let onPointerUp: ((event: PointerEvent) => void) | null = null;
     const disposables: Array<{ dispose: () => void }> = [];
     try {
       const { univer, univerAPI } = createUniver({
@@ -194,7 +249,20 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
       disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => { scheduleFlush(); refreshCellFmt(); }));
-      host.addEventListener("pointerup", refreshCellFmt);
+      // 点按底部公式栏文字 = 落光标（移动公式栏默认 disableSelectionOnClick，见 placeFormulaBarCaret）。
+      onPointerUp = (event: PointerEvent) => {
+        refreshCellFmt();
+        if (!editingRef.current) return;
+        const target = event.target as HTMLElement | null;
+        if (!target?.closest?.('[data-u-comp="mobile-formula-bar"]')) return;
+        if (!target.closest('[data-u-comp="formula-editor"]')) return;
+        const state = instanceRef.current;
+        if (!state) return;
+        const clientX = event.clientX;
+        const clientY = event.clientY;
+        window.requestAnimationFrame(() => placeFormulaBarCaret(state, clientX, clientY));
+      };
+      host.addEventListener("pointerup", onPointerUp);
       refreshCellFmt();
     } catch (error) {
       console.error("移动端表格挂载失败", error);
@@ -208,7 +276,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       capture();
       for (const item of disposables) { try { item.dispose(); } catch { /* ignore */ } }
       observer.disconnect();
-      host.removeEventListener("pointerup", refreshCellFmt);
+      if (onPointerUp) host.removeEventListener("pointerup", onPointerUp);
       try { created?.univer.dispose(); } catch { /* ignore */ }
       instanceRef.current = null;
       captureCallbackRef.current?.(null);
@@ -229,7 +297,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
 
   // 切走 tab / 退出编辑：弹出层不能留在别的页面上。
   useEffect(() => {
-    if (!editing || !active) setMenu(null);
+    if (editing && active) return;
+    setOpenCard(null);
+    setCardAnchor(null);
   }, [editing, active]);
 
   // 切走 tab 时落一次；不要求关掉编辑态（编辑态可随 tab 保留）。
@@ -272,56 +342,30 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }
   };
 
-  const C = { red: "#e5484d", orange: "#f76b15", yellow: "#ffb224", green: "#30a46c", blue: "#0091ff", purple: "#8e4ec6", gray: "#8b8d98", black: "#11181c" };
-  const colorChildren = (prefix: string): MobileSheetItem[] => Object.entries(C).map(([name, value]) => ({ id: prefix + value, label: name === "black" ? "黑色" : name === "gray" ? "灰色" : name === "red" ? "红色" : name === "orange" ? "橙色" : name === "yellow" ? "黄色" : name === "green" ? "绿色" : name === "blue" ? "蓝色" : "紫色", note: value }));
+  // 卡片内容全部来自 usheetChromeModel（单一来源）；组件只按 id 分派动作。
+  const insertItems = buildInsertMenu();
+  const numfmtItems = buildNumfmtMenu(cellFmt.numfmt);
+  const moreRows = buildMoreRows({
+    bold: cellFmt.bold,
+    italic: cellFmt.italic,
+    underline: cellFmt.underline,
+    strike: cellFmt.strike,
+    align: cellFmt.align,
+    numfmt: cellFmt.numfmt,
+  });
 
-  const insertMenu: MobileSheetItem[] = [
-    { id: "row-above", label: "在上方插入行" },
-    { id: "row-below", label: "在下方插入行" },
-    { id: "col-left", label: "在左侧插入列" },
-    { id: "col-right", label: "在右侧插入列" },
-    { id: "merge", label: "合并选中单元格" },
-  ];
-  const formatMenu: MobileSheetItem[] = [
-    { id: "bold", label: "加粗", note: cellFmt.bold ? "已开启" : undefined },
-    { id: "italic", label: "斜体", note: cellFmt.italic ? "已开启" : undefined },
-    { id: "underline", label: "下划线", note: cellFmt.underline ? "已开启" : undefined },
-    { id: "strike", label: "删除线", note: cellFmt.strike ? "已开启" : undefined },
-    { id: "align-left", label: "左对齐", note: cellFmt.align === "left" ? "当前" : undefined },
-    { id: "align-center", label: "居中对齐", note: cellFmt.align === "center" ? "当前" : undefined },
-    { id: "align-right", label: "右对齐", note: cellFmt.align === "normal" ? "当前" : undefined },
-    { id: "font-color", label: "字体颜色", children: colorChildren("font-") },
-    { id: "fill-color", label: "填充颜色", children: colorChildren("fill-") },
-    { id: "clear-text", label: "清除文字格式" },
-  ];
-  const moreMenu: MobileSheetItem[] = [
-    // 261020 P1：冻结 / 行高 / 列宽（布局类动作，README 的「冻结窗格 + 行高列宽调优」两项）
-    { id: "freeze", label: "冻结窗格", note: "行列冻结", children: [
-      { id: "freeze-row", label: "冻结至当前行" },
-      { id: "freeze-col", label: "冻结至当前列" },
-      { id: "freeze-none", label: "取消冻结" },
-    ] },
-    { id: "row-height", label: "行高", children: [
-      { id: "row-height-up", label: "增高（+" + ROW_HEIGHT_STEP + "px）" },
-      { id: "row-height-down", label: "降低（-" + ROW_HEIGHT_STEP + "px）" },
-      { id: "row-height-auto", label: "自动行高（按内容）" },
-    ] },
-    { id: "col-width", label: "列宽", children: [
-      { id: "col-width-up", label: "加宽（+" + COLUMN_WIDTH_STEP + "px）" },
-      { id: "col-width-down", label: "收窄（-" + COLUMN_WIDTH_STEP + "px）" },
-    ] },
-    // 数字格式（261020 P1 第二批）：选项表与调用在 usheetNumfmt（单一来源）
-    { id: "numfmt", label: "数字格式", children: USHEET_NUMFMT_OPTIONS.map((option) => ({ id: option.id, label: option.label })) },
-    // 常用公式（261020 P1 第四批）：单格 + 上方连续数值 → 一键写 =FN(区域)
-    { id: "quickformula", label: "常用公式", note: "统计上方连续数值", children: USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label })) },
-    { id: "delete-row", label: "删除当前行", danger: true },
-    { id: "delete-col", label: "删除当前列", danger: true },
-    { id: "more-tools", label: "更多表格工具", note: "插入 / 样式 / 操作" },
-  ];
+  const closeCard = () => { setOpenCard(null); setCardAnchor(null); };
+  const toggleCard = (card: SheetCardId, el: HTMLElement) => {
+    if (openCard === card) { closeCard(); return; }
+    setOpenCard(card);
+    setCardAnchor(el);
+  };
+  const handleCardSelect = (id: string) => {
+    closeCard();
+    onMenuSelect(id);
+  };
 
-  const onMenuSelect = (item: MobileSheetItem) => {
-    const id = item.id;
-    setMenu(null);
+  const onMenuSelect = (id: string) => {
     if (id === "row-above") withActiveRange((range, sheet) => sheet.insertRowsBefore(range.getRow(), 1));
     else if (id === "row-below") withActiveRange((range, sheet) => sheet.insertRowsAfter(range.getRow(), 1));
     else if (id === "col-left") withActiveRange((range, sheet) => sheet.insertColumnsBefore(range.getColumn(), 1));
@@ -378,23 +422,54 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }
   };
 
+  // 退出编辑态时收起卡片（避免卡片挂在阅读态上）。
   return (
     <div className={"mobile-usheet" + (editing ? " is-editing" : " is-readonly")} ref={hostRef} data-prevent-swipe>
       {editing && (
-        <div className="mobile-usheet-toolbar" data-prevent-swipe role="toolbar" aria-label="表格工具">
-          <div className="mobile-usheet-toolbar__scroll">
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="插入" title="插入" onClick={() => setMenu("insert")}><Plus size={19} /><ChevronDown size={11} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="撤销" title="撤销" onClick={() => runHistory("undo")}><Undo2 size={19} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="重做" title="重做" onClick={() => runHistory("redo")}><Redo2 size={19} /></button>
-            <span className="mobile-usheet-toolbar__sep" />
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.bold ? " is-active" : "")} aria-label="加粗" title="加粗" onClick={() => onMenuSelect({ id: "bold", label: "加粗" })}><Bold size={18} /></button>
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.italic ? " is-active" : "")} aria-label="斜体" title="斜体" onClick={() => onMenuSelect({ id: "italic", label: "斜体" })}><Italic size={18} /></button>
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.underline ? " is-active" : "")} aria-label="下划线" title="下划线" onClick={() => onMenuSelect({ id: "underline", label: "下划线" })}><Underline size={18} /></button>
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.strike ? " is-active" : "")} aria-label="删除线" title="删除线" onClick={() => onMenuSelect({ id: "strike", label: "删除线" })}><Strikethrough size={18} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="文字格式" title="文字格式" onClick={() => setMenu("format")}><Type size={19} /><ChevronDown size={11} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="更多表格操作" title="更多表格操作" onClick={() => setMenu("more")}><MoreHorizontal size={19} /></button>
+        <div className="mb-usheet-toolbar" data-prevent-swipe role="toolbar" aria-label="表格工具">
+          <div className="mb-usheet-toolbar__scroll">
+            {SHEET_TOOLBAR_GROUPS.map((group, groupIndex) => (
+              <div className="mb-usheet-toolbar__group" key={groupIndex}>
+                {group.map((item) => {
+                  if (item.id === "insert") {
+                    return (
+                      <button key={item.id} type="button" className="mb-usheet-btn" aria-label="插入" title="插入"
+                        onClick={(event) => toggleCard("insert", event.currentTarget)}>
+                        <span className="mb-usheet-add"><Plus size={13} /></span>
+                      </button>
+                    );
+                  }
+                  if (item.id === "undo" || item.id === "redo") {
+                    return (
+                      <button key={item.id} type="button" className="mb-usheet-btn" aria-label={item.label} title={item.label}
+                        onClick={() => runHistory(item.id === "undo" ? "undo" : "redo")}>
+                        {item.id === "undo" ? <Undo2 size={18} /> : <Redo2 size={18} />}
+                      </button>
+                    );
+                  }
+                  if (item.id === "numfmt") {
+                    return (
+                      <button key={item.id} type="button"
+                        className={"mb-usheet-btn mb-usheet-btn--text" + (openCard === "numfmt" ? " is-active" : "")}
+                        aria-label={item.label} title={item.label}
+                        onClick={(event) => toggleCard("numfmt", event.currentTarget)}>
+                        <span>{numfmtLabelOf(cellFmt.numfmt)}</span>
+                        <ChevronDown size={12} />
+                      </button>
+                    );
+                  }
+                  return (
+                    <button key={item.id} type="button"
+                      className={"mb-usheet-btn" + (openCard === "more" ? " is-active" : "")}
+                      aria-label={item.label} title={item.label}
+                      onClick={(event) => toggleCard("more", event.currentTarget)}>
+                      <MoreHorizontal size={18} />
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
-          <span className="mobile-usheet-toolbar__saved" aria-label="自动保存已开启" title="自动保存已开启"><i /></span>
         </div>
       )}
       {editing && (
@@ -404,9 +479,28 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         </div>
       )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
-      <MobileSheetMenu open={menu === "insert"} items={insertMenu} onClose={() => setMenu(null)} onSelect={onMenuSelect} />
-      <MobileSheetMenu open={menu === "format"} items={formatMenu} onClose={() => setMenu(null)} onSelect={onMenuSelect} />
-      <MobileSheetMenu open={menu === "more"} items={moreMenu} onClose={() => setMenu(null)} onSelect={onMenuSelect} />
+      {editing && openCard === "more" && (
+        <SheetMoreCard
+          host={hostRef.current}
+          anchor={cardAnchor}
+          width={SHEET_CARD_META.more.width}
+          ariaLabel={SHEET_CARD_META.more.ariaLabel}
+          rows={moreRows}
+          onSelect={handleCardSelect}
+          onClose={closeCard}
+        />
+      )}
+      {editing && (openCard === "insert" || openCard === "numfmt") && (
+        <SheetPopCard
+          host={hostRef.current}
+          anchor={cardAnchor}
+          width={SHEET_CARD_META[openCard].width}
+          ariaLabel={SHEET_CARD_META[openCard].ariaLabel}
+          items={openCard === "insert" ? insertItems : numfmtItems}
+          onSelect={handleCardSelect}
+          onClose={closeCard}
+        />
+      )}
     </div>
   );
 }

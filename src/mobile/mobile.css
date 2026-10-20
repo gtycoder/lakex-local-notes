@@ -1078,62 +1078,8 @@ button.mbt-option {
    编辑态保留「键盘」与「打开表格工具」两个圆钮 —— 后者 = 官方底部动作面板（插入/样式/操作）。 */
 .mobile-usheet.is-readonly .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 { display: none; }
 
-/* ===== 表格编辑顶栏（261019 用户点单：对齐语雀 App 的常驻工具栏）=====
- * 为什么不用 Univer 自带桌面 Ribbon：桌面 UI 插件的选区渲染会把单指横拖判成扩选（表格滑不动）。
- * 这里只做一层**动作条**：所有按钮都走 facade API，内核仍是移动 UI 插件族（滚动/公式栏/工作表栏不变）。
- * 按钮 mousedown 一律 preventDefault：点格式时不让单元格编辑器失焦，键盘不会被收起。
- * 横向可滚动，但整条 data-prevent-swipe ⇒ 不会把右侧目录抽屉拉出来。 */
-.mobile-usheet-toolbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 44px;
-  padding: 0 6px 0 4px;
-  border-bottom: 1px solid var(--lake-border-1);
-  background: var(--lake-bg-window);
-  color: var(--lake-text-1);
-}
-.mobile-usheet-toolbar__scroll {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-.mobile-usheet-toolbar__scroll::-webkit-scrollbar { display: none; }
-.mobile-usheet-toolbar__btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  flex: none;
-  min-width: 36px;
-  height: 34px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--lake-text-1);
-  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
-}
-.mobile-usheet-toolbar__btn:active { background: var(--lake-bg-hover); transform: scale(.96); }
-.mobile-usheet-toolbar__btn.is-active { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
-.mobile-usheet-toolbar__sep { flex: none; width: 1px; height: 20px; margin: 0 3px; background: var(--lake-border-1); }
-.mobile-usheet-toolbar__saved {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 100%;
-}
-.mobile-usheet-toolbar__saved i { width: 7px; height: 7px; border-radius: 50%; background: var(--lake-status-ok); }
+/* 表格编辑顶栏 / 锚定卡片已迁到 src/mobile/usheet/usheet-chrome.css（261021 P1）。
+ * 移动端样式不许跨端共享，表格 chrome 跟随 usheet 组件走单独文件。 */
 /* Univer 移动 Workbench 的两颗浮动圆钮：默认 bottom-14 仍被视觉视口偏移推到容器下沿（实测只露出半颗，
  * 点击区落在网格上）。用 transform 整体上移 40px（transform 同时移动命中区），两颗完整可点。 */
 .mobile-usheet.is-editing .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 {
@@ -1150,18 +1096,18 @@ button.mbt-option {
   flex: none;
   display: flex;
   align-items: stretch;
-  height: 32px;
+  height: 21px;
   border-bottom: 1px solid var(--lake-border-1);
   background: var(--lake-bg-window);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-micro);
 }
 .mobile-usheet-formula__ref {
   flex: none;
   display: flex;
   align-items: center;
-  width: 76px;
-  padding: 0 10px;
-  border-right: 1px solid var(--lake-border-1);
+  justify-content: center;
+  width: 40px;
+  padding-left: 8px;
   color: var(--lake-text-2);
   font-variant-numeric: tabular-nums;
 }
@@ -1170,7 +1116,7 @@ button.mbt-option {
   min-width: 0;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 8px 0 16px;
   overflow: hidden;
   color: var(--lake-text-1);
   text-overflow: ellipsis;

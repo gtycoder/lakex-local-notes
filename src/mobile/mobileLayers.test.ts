@@ -39,13 +39,14 @@ const FILES = [
   "mobile/ink/inkPad.shared.css", // 手写板两端共享的结构类名，移动端独立复制
   "mobile/editor/edit-surface-kernel.css", // 261014 P2：编辑面里「内核按视口/按桌面写死的几何」的唯一收口（doc/note 共用）
   "mobile/editor/mobile-find.css", // 261016：移动端文档内查找条（容器 + 命中高亮 ::highlight），控件复用 kit 的 .mb-input/.mb-iconbtn
+  "mobile/usheet/usheet-chrome.css", // 261021 P1：表格 Yuque 式工具条 + 锚定卡片（从 mobile.css 迁出并重写）
 ];
 
 /** 基线（只允许变小）。261012 P0 实测。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/theme/index.css": { decls: 0, dupGroups: 0 },
   "mobile/theme/base.css": { decls: 3, dupGroups: 0 },
-  "mobile/theme/tokens.css": { decls: 185, dupGroups: 0 }, // 261020：−8 = 删除 --lake-node-icon-* 八档浅渐变（旧线性图标的底板已整体删除，令牌随之退场）；261019：+1 = --mobile-sheet-bar-h（表格页 Univer 底部工具条实测高度 36px，胶囊让位用）. // 261017 Q3：+3 = 选中态语义令牌（--lake-bg-selected / --lake-fg-selected / --lake-bg-selected-hover；与桌面同口径）  |  261016 B2：+8 = 收编 mobile.css 的颜色字面量（知识库 6 档装饰调色板 --mb-nb-accent-1..6 / 纸卡投影 --mb-shadow-paper / 遮罩前景 --mb-on-scrim），**取值原样搬入、逐字节不变**（合法新增，非覆盖回涨）。此前 261015：+10 节点八档渐变、图形尺度、目录表情字号；171，移动端独立令牌
+  "mobile/theme/tokens.css": { decls: 186, dupGroups: 0 }, // 261021：+1 = --mb-usheet-card-shadow（表格锚定卡片阴影，对齐语雀 0 2px 10px rgba(0,0,0,.12)） // 261020：−8 = 删除 --lake-node-icon-* 八档浅渐变（旧线性图标的底板已整体删除，令牌随之退场）；261019：+1 = --mobile-sheet-bar-h（表格页 Univer 底部工具条实测高度 36px，胶囊让位用）. // 261017 Q3：+3 = 选中态语义令牌（--lake-bg-selected / --lake-fg-selected / --lake-bg-selected-hover；与桌面同口径）  |  261016 B2：+8 = 收编 mobile.css 的颜色字面量（知识库 6 档装饰调色板 --mb-nb-accent-1..6 / 纸卡投影 --mb-shadow-paper / 遮罩前景 --mb-on-scrim），**取值原样搬入、逐字节不变**（合法新增，非覆盖回涨）。此前 261015：+10 节点八档渐变、图形尺度、目录表情字号；171，移动端独立令牌
   "mobile/ui/nodeIcon.css": { decls: 86, dupGroups: 0 }, // 261020：101 → 86（−15）= 删掉旧 40 图标/色板/类型页签（−29），再加回容器的「表情符号｜图标」两页签 + 6 列插画网格（+14）；最终只剩表情页与插画网格
   "mobile/theme/light.css": { decls: 61, dupGroups: 0 }, // P7b：-22 = 删掉已无人消费的 --b3-* 过渡桥接（261013 中途为"复用内核表情面板"加过 3 条内核 token 桥，用户改为**微信样式**后已撤回）
   "mobile/theme/dark.css": { decls: 112, dupGroups: 0 }, // +41 编辑器深色桥迁入 → P7b -22 删 --b3-* 过渡桥接
@@ -67,6 +68,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/ink/inkPad.mobile.css": { decls: 23, dupGroups: 0 },
   "mobile/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 }, // 手写板：移动端只覆盖工具栏尺寸、页面适配和 footer 换行；通用结构与桌面共用 inkPad.shared.css。
   "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
+  "mobile/usheet/usheet-chrome.css": { decls: 137, dupGroups: 0 }, // 261021 P1：工具条（40px/34×32/分组线/绿色+）+ 锚定卡片；P2：⋯ 七行图标网格（39 行/34×32 按钮/置灰）+ 数字格式分类标题 + 插入卡图标
   "mobile/editor/edit-surface-kernel.css": { decls: 24, dupGroups: 0 }, // 261014 P2：把散在 mobile.css（doc 侧）/ quick-notes.css（note 侧）的内核几何收口**合成一份**（doc/note 共用 data-mb-edit-host 契约） // 261013：+1 = 表情面板分类条在 dock 里拉满面板边（当时口径：9 个分类 ≈45.8px、一屏放得下不横滚；261014 已改「一屏 8 格 + 横滑 + 钉住的动作键」，见 kit.css）
 };
 

@@ -49,6 +49,10 @@ export const UNIVER_FEATURE_NAMES = [
   "setCursorManually",
   "DocSelectionRenderService",
   "DOCS_NORMAL_EDITOR_UNIT_ID_KEY",
+  /** 移动公式栏（261021）：点按底部公式栏后按坐标落光标 —— 公式栏编辑器 unit + render unit 查询。 */
+  "DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY",
+  "IRenderManagerService",
+  "getRenderUnitById",
   /** 等待编辑态建立；编辑器内部双击选词由画布 id 区分，不靠这个判据。 */
   "isCellEditing",
 ] as const;
