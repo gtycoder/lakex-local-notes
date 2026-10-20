@@ -32,6 +32,16 @@ describe("工作区正文懒挂载（261019）", () => {
     // 自愈：活动页不在 tabs 且没有在途读取 ⇒ 落到第一个标签，避免永远骨架/空白
     expect(WS).toMatch(/pendingIdsRef\.current\.has\(activeId\)/);
     expect(WS).toMatch(/setActiveId\(tabs\[0\]\.id\)/);
-    expect(WS).toMatch(/finally\(\(\) => \{ pendingIdsRef\.current\.delete\(id\); \}\)/);
+    expect(WS).toMatch(/finally\(\(\) => \{ pendingIdsRef\.current\.delete\(id\); setReadTick\(\(t\) => t \+ 1\); \}\)/);
+  });
+});
+
+describe("活动页悬空自愈（261021）", () => {
+  it("恢复的历史标签读回空/失败后必须退出骨架（无标签时收回 activeId）", () => {
+    // 读回空/失败不会新增 tab；pendingIdsRef 是 ref，必须靠 readTick 触发重渲染让自愈判据重跑
+    expect(WS).toMatch(/setReadTick\(\(t\) => t \+ 1\)/);
+    expect(WS).toMatch(/\}, \[activeId, tabs, readTick\]\)/);
+    // 没有标签时不能因 tabs.length === 0 提前 return（旧实现会永远停在 mb-doc-skeleton）
+    expect(WS).toContain("if (activeId && !pendingIdsRef.current.has(activeId)) setActiveId(null);");
   });
 });

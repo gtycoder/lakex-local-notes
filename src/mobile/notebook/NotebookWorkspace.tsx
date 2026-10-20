@@ -193,6 +193,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   activeIdRef.current = activeId;
   /** 正在读正文的 tab（自愈：活动页从未进 tabs 时不要永远停在骨架）。 */
   const pendingIdsRef = useRef<Set<string>>(new Set());
+  /** 读取完成计数：pendingIdsRef 是 ref，删掉待读标记本身不会触发重渲染；靠它让自愈判据重跑一次。 */
+  const [readTick, setReadTick] = useState(0);
   /** 标签代际：`关闭全部` 递增；在途 readNote 回来时代际不一致就丢弃（否则关了又被异步加回来）。 */
   const tabEpochRef = useRef(0);
 
@@ -281,16 +283,21 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         return added.filter((t) => !evictedSet.has(t.id));
       });
     }).catch((reason) => showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" }))
-      .finally(() => { pendingIdsRef.current.delete(id); });
+      .finally(() => { pendingIdsRef.current.delete(id); setReadTick((t) => t + 1); });
   }, [tabs]);
 
-  /** 自愈：活动页既不在 tabs、也没有在途读取（例如目标文档读回空/失败）⇒ 落到第一个标签，避免一直空白/骨架。 */
+  /** 自愈：活动页既不在 tabs、也没有在途读取（例如目标文档读回空/失败）⇒ 落到第一个标签，避免一直空白/骨架。
+   *  261021：没有标签时必须把 activeId 收回 null —— 否则「恢复的历史标签已被删除」会永远停在 mb-doc-skeleton
+   *  （骨架的呼吸动画看起来像在一直加载，实际没有任何在途读取/网络请求）。 */
   useEffect(() => {
-    if (!activeId || tabs.length === 0) return;
-    if (tabs.some((t) => t.id === activeId)) return;
-    if (pendingIdsRef.current.has(activeId)) return;
+    if (tabs.length === 0) {
+      if (activeId && !pendingIdsRef.current.has(activeId)) setActiveId(null);
+      return;
+    }
+    if (activeId && tabs.some((t) => t.id === activeId)) return;
+    if (activeId && pendingIdsRef.current.has(activeId)) return;
     setActiveId(tabs[0].id);
-  }, [activeId, tabs]);
+  }, [activeId, tabs, readTick]);
 
   // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
