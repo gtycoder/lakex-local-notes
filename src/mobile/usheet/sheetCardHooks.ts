@@ -7,23 +7,35 @@ import { useEffect, useLayoutEffect, useState, type CSSProperties } from "react"
 
 const EDGE = 6;
 
-export function useAnchoredCardStyle(host: HTMLElement | null, anchor: HTMLElement | null, width: number): CSSProperties {
+export function useAnchoredCardStyle(
+  host: HTMLElement | null,
+  anchor: HTMLElement | null,
+  width: number,
+  placement: "below" | "above" = "below",
+): CSSProperties {
   const [style, setStyle] = useState<CSSProperties>({ top: 0, left: EDGE, width });
   useLayoutEffect(() => {
     const place = () => {
       const hostRect = host?.getBoundingClientRect();
       const anchorRect = anchor?.getBoundingClientRect();
       if (!hostRect || !anchorRect) return;
-      const top = Math.round(anchorRect.bottom - hostRect.top + 2);
       const maxLeft = Math.max(EDGE, hostRect.width - width - EDGE);
       const left = Math.min(Math.max(EDGE, Math.round(anchorRect.left - hostRect.left)), maxLeft);
+      if (placement === "above") {
+        // 底栏触发的卡片向上展开（贴住按钮上沿），maxHeight = 按钮上沿到宿主顶部。
+        const anchorTop = Math.round(anchorRect.top - hostRect.top);
+        const bottom = Math.round(hostRect.height - anchorTop + 2);
+        setStyle({ bottom, left, width, maxHeight: Math.max(120, anchorTop - 8) });
+        return;
+      }
+      const top = Math.round(anchorRect.bottom - hostRect.top + 2);
       const maxHeight = Math.max(160, Math.round(hostRect.height - top - 8));
       setStyle({ top, left, width, maxHeight });
     };
     place();
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);
-  }, [host, anchor, width]);
+  }, [host, anchor, width, placement]);
   return style;
 }
 

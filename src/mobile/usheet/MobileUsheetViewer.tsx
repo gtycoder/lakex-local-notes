@@ -25,6 +25,8 @@ import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { SheetPopCard } from "./SheetPopCard";
 import { SheetMoreCard } from "./SheetMoreCard";
+import { MobileSheetFooter, type MobileSheetTab } from "./MobileSheetFooter";
+import { MobileSheetReadingBar } from "./MobileSheetReadingBar";
 import {
   SHEET_CARD_META,
   SHEET_TOOLBAR_GROUPS,
@@ -134,6 +136,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   });
   /** 语雀式公式栏：当前选区地址 + 显示值（移动 UI 插件不渲染内置公式栏）。 */
   const [cellInfo, setCellInfo] = useState({ address: "A1", value: "" });
+  /** 底栏：工作表页签 / 当前表 / 缩放；实例创建后由 facade 刷新。 */
+  const [sheets, setSheets] = useState<MobileSheetTab[]>([]);
+  const [activeSheetId, setActiveSheetId] = useState("");
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const [sheetListAnchor, setSheetListAnchor] = useState<HTMLElement | null>(null);
 
   /** 同步取最新正文；只有真的变更才通知外层。 */
   const capture = useCallback((): string | null => {
@@ -185,6 +192,42 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       setCellInfo((prev) => prev.address === address && prev.value === value ? prev : { address, value });
     } catch { /* 选区内没有可读样式时保持原状态 */ }
   }, []);
+
+  /** 刷新底栏（工作表页签/当前表）。与 refreshCellFmt 分开：CommandExecuted 时两者都要刷。 */
+  const refreshSheetChrome = useCallback(() => {
+    const workbook = instanceRef.current?.univerAPI.getActiveWorkbook();
+    if (!workbook) return;
+    try {
+      const next = workbook.getSheets().map((sheet) => ({ id: sheet.getSheetId(), name: sheet.getSheetName() }));
+      setSheets((prev) => (prev.length === next.length && prev.every((item, index) => item.id === next[index].id && item.name === next[index].name) ? prev : next));
+      setActiveSheetId(workbook.getActiveSheet()?.getSheetId() ?? "");
+    } catch { /* 实例销毁中忽略 */ }
+  }, []);
+
+  /** 切工作表（底栏页签 / 工作表列表）；只动视图与当前表，不写正文。 */
+  const selectSheet = (sheetId: string) => {
+    const workbook = instanceRef.current?.univerAPI.getActiveWorkbook();
+    if (!workbook) return;
+    try {
+      workbook.setActiveSheet(sheetId);
+      refreshSheetChrome();
+      refreshCellFmt();
+    } catch (error) {
+      console.warn("[mobile-usheet] 切换工作表失败", error);
+    }
+  };
+
+  /** 缩放：走 Univer 官方 ChangeZoomRatioCommand（与内核底部缩放同一命令），只改本机视图。 */
+  const zoomBy = (delta: number) => {
+    const state = instanceRef.current;
+    if (!state) return;
+    try {
+      void state.univerAPI.executeCommand("sheet.command.change-zoom-ratio", { delta });
+      setZoomPercent((prev) => Math.min(400, Math.max(10, Math.round(prev + delta * 100))));
+    } catch (error) {
+      console.warn("[mobile-usheet] 缩放失败", error);
+    }
+  };
 
   /** 所有工具条动作都走同一个入口：拿当前 workbook / sheet / range，执行后刷新按钮态。 */
   const withActiveRange = useCallback((fn: (range: FRange, sheet: FWorksheet, workbook: FWorkbook) => void) => {
@@ -248,7 +291,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       const last = usheetToBody(book.save() as never);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
-      disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => { scheduleFlush(); refreshCellFmt(); }));
+      disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => { scheduleFlush(); refreshCellFmt(); refreshSheetChrome(); }));
       // 点按底部公式栏文字 = 落光标（移动公式栏默认 disableSelectionOnClick，见 placeFormulaBarCaret）。
       onPointerUp = (event: PointerEvent) => {
         refreshCellFmt();
@@ -264,6 +307,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       };
       host.addEventListener("pointerup", onPointerUp);
       refreshCellFmt();
+      refreshSheetChrome();
     } catch (error) {
       console.error("移动端表格挂载失败", error);
     }
@@ -281,7 +325,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       instanceRef.current = null;
       captureCallbackRef.current?.(null);
     };
-  }, [ready, noteId, scheduleFlush, refreshCellFmt]);
+  }, [ready, noteId, scheduleFlush, refreshCellFmt, refreshSheetChrome]);
 
   // 编辑/阅读切换；从编辑切回阅读时同步落一次，避免防抖窗口内点“完成”丢最后修改。
   useEffect(() => {
@@ -478,7 +522,30 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           <span className="mobile-usheet-formula__value">{cellInfo.value}</span>
         </div>
       )}
+      {!editing && ready && <MobileSheetReadingBar />}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
+      {ready && (
+        <MobileSheetFooter
+          sheets={sheets}
+          activeId={activeSheetId}
+          zoom={zoomPercent}
+          onSelect={selectSheet}
+          onZoom={zoomBy}
+          onOpenList={(anchor) => setSheetListAnchor(anchor)}
+        />
+      )}
+      {ready && sheetListAnchor && (
+        <SheetPopCard
+          host={hostRef.current}
+          anchor={sheetListAnchor}
+          placement="above"
+          width={172}
+          ariaLabel="工作表列表"
+          items={sheets.map((sheet) => ({ id: sheet.id, label: sheet.name, note: sheet.id === activeSheetId ? "当前" : undefined }))}
+          onSelect={(id) => { setSheetListAnchor(null); selectSheet(id); }}
+          onClose={() => setSheetListAnchor(null)}
+        />
+      )}
       {editing && openCard === "more" && (
         <SheetMoreCard
           host={hostRef.current}

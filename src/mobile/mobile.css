@@ -1074,22 +1074,17 @@ button.mbt-option {
   min-height: 0;
   width: 100%;
 }
-/* 移动 Workbench footer 的两个浮动按钮：阅读态全部藏掉（编辑入口在工作区顶栏）；
-   编辑态保留「键盘」与「打开表格工具」两个圆钮 —— 后者 = 官方底部动作面板（插入/样式/操作）。 */
-.mobile-usheet.is-readonly .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 { display: none; }
-
-/* 表格编辑顶栏 / 锚定卡片已迁到 src/mobile/usheet/usheet-chrome.css（261021 P1）。
- * 移动端样式不许跨端共享，表格 chrome 跟随 usheet 组件走单独文件。 */
-/* Univer 移动 Workbench 的两颗浮动圆钮：默认 bottom-14 仍被视觉视口偏移推到容器下沿（实测只露出半颗，
- * 点击区落在网格上）。用 transform 整体上移 40px（transform 同时移动命中区），两颗完整可点。 */
-.mobile-usheet.is-editing .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 {
-  transform: translateY(-40px);
+/* 表格 chrome 已整体自绘（261021 P3）：Univer 自带工作表页签栏 / footer / 浮动圆钮全部隐藏，
+ * 工作表切换与缩放改走底栏 MobileSheetFooter（页签 + 工作表列表 + 缩放）。 */
+.mobile-usheet header.univer-w-screen {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
 }
-/* 顶栏已经有插入/格式；底栏只留「键盘」一颗，避免和语雀式顶栏重复。
- * 官方完整动作面板（图片/样式/操作）仍可从顶栏「••• → 更多表格工具」打开。 */
-.mobile-usheet.is-editing .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 > button[aria-label="打开表格工具"] {
-  display: none;
-}
+.mobile-usheet footer.univer-shrink-0 { display: none; }
+.mobile-usheet .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 { display: none; }
 
 /* 公式栏（语雀编辑态同款）：左侧选区地址，右侧显示值；不参与横滑手势（data-prevent-swipe）。 */
 .mobile-usheet-formula {

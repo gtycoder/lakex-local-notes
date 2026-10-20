@@ -162,3 +162,104 @@
   font-size: var(--lake-font-size-nano);
 }
 .mb-usheet-popcard__icon { flex: none; display: inline-flex; color: var(--lake-text-2); }
+
+/* 底栏（261021 P3）：语雀 .lake-sheet-footer 32px / 上边框 / 页签横滑 / 右侧缩放。 */
+.mb-usheet-footer {
+  position: relative;
+  z-index: 10;
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  border-top: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-window);
+  color: var(--lake-text-2);
+}
+.mb-usheet-footer__list {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--lake-border-1);
+  background: transparent;
+  color: var(--lake-text-2);
+}
+.mb-usheet-footer__list:active { background: var(--lake-bg-hover); }
+.mb-usheet-footer__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.mb-usheet-footer__tabs::-webkit-scrollbar { display: none; }
+.mb-usheet-footer__tab {
+  appearance: none;
+  flex: none;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid var(--lake-border-1);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-micro);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.mb-usheet-footer__tab.is-active { color: var(--lake-fg-selected); }
+.mb-usheet-footer__zoom {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.mb-usheet-footer__zoom-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-2);
+}
+.mb-usheet-footer__zoom-btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-footer__zoom-value {
+  width: 45px;
+  text-align: center;
+  font-size: var(--lake-font-size-micro);
+  color: var(--lake-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 阅读态轻工具条（语雀 5 项）：无公式栏，工具条贴工作区顶栏。 */
+.mb-usheet-readingbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-window);
+}
+.mb-usheet-readingbar__btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lake-text-1);
+}
+.mb-usheet-readingbar__btn:disabled { opacity: .25; }

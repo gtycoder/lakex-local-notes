@@ -6,7 +6,7 @@ import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
 import { countChars, countWords } from "../../core/textStats.js";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
-import { emptyUsheetBody } from "../../core/usheetDoc.js";
+import { emptyMobileUsheetBody } from "../usheet/mobileSheetGrid.js";
 import { emptyBoardBody } from "../../core/boardDoc.js";
 import { emptyBitableBody } from "../../core/bitableDoc.js";
 import { emptyInkBody } from "../../core/inkDoc.js";
@@ -196,7 +196,7 @@ export const notesDomain = {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const pid = parentId?.trim() ? parentId : await dbPort.defaultNotebookId();
-    const content = emptyUsheetBody();
+    const content = emptyMobileUsheetBody();
     await notesDomain.saveNote(id, title, content, pid, undefined, "usheet");
     return { id, title, content, updatedAt: now, parentId: pid, kind: "usheet" };
   },

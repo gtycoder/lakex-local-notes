@@ -101,6 +101,8 @@ describe("移动端表格查看/编辑器", () => {
     expect(host.querySelector(".mobile-usheet")?.hasAttribute("data-prevent-swipe")).toBe(true);
     expect(host.querySelector(".mb-usheet-toolbar")).toBeNull();
     expect(host.querySelector(".mobile-usheet-formula")).toBeNull();
+    expect(host.querySelector(".mb-usheet-readingbar")).toBeTruthy();
+    expect(host.querySelector(".mb-usheet-footer")).toBeTruthy();
     root.unmount();
   });
 
@@ -121,6 +123,8 @@ describe("移动端表格查看/编辑器", () => {
     const formula = host.querySelector(".mobile-usheet-formula");
     expect(formula).toBeTruthy();
     expect(formula?.textContent).toContain("A1");
+    expect(host.querySelector(".mb-usheet-footer")).toBeTruthy();
+    expect(host.querySelector(".mb-usheet-readingbar")).toBeNull();
     root.unmount();
   });
 

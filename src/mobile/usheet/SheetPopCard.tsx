@@ -19,14 +19,16 @@ export interface SheetPopCardProps {
   anchor: HTMLElement | null;
   width: number;
   ariaLabel: string;
+  /** 默认在按钮下方展开；底栏（工作表列表）用上方。 */
+  placement?: "below" | "above";
   items: SheetMenuItem[];
   onSelect: (id: string) => void;
   onClose: () => void;
 }
 
-export function SheetPopCard({ host, anchor, width, ariaLabel, items, onSelect, onClose }: SheetPopCardProps) {
+export function SheetPopCard({ host, anchor, width, ariaLabel, placement = "below", items, onSelect, onClose }: SheetPopCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const style = useAnchoredCardStyle(host, anchor, width);
+  const style = useAnchoredCardStyle(host, anchor, width, placement);
   /** 子菜单路径：空 = 根；点击带 children 的行会 push 一层（卡片内下钻，不叠第二张卡）。 */
   const [path, setPath] = useState<SheetMenuItem[]>([]);
   useCardDismiss(cardRef, anchor, onClose);

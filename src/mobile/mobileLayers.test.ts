@@ -68,7 +68,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/ink/inkPad.mobile.css": { decls: 23, dupGroups: 0 },
   "mobile/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 }, // 手写板：移动端只覆盖工具栏尺寸、页面适配和 footer 换行；通用结构与桌面共用 inkPad.shared.css。
   "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
-  "mobile/usheet/usheet-chrome.css": { decls: 137, dupGroups: 0 }, // 261021 P1：工具条（40px/34×32/分组线/绿色+）+ 锚定卡片；P2：⋯ 七行图标网格（39 行/34×32 按钮/置灰）+ 数字格式分类标题 + 插入卡图标
+  "mobile/usheet/usheet-chrome.css": { decls: 216, dupGroups: 0 }, // 261021 P1：工具条（40px/34×32/分组线/绿色+）+ 锚定卡片；P2：⋯ 七行图标网格/数字格式分类/插入卡图标；P3：自绘底栏 32（页签/缩放/置顶）+ 阅读态 5 项轻工具条
   "mobile/editor/edit-surface-kernel.css": { decls: 24, dupGroups: 0 }, // 261014 P2：把散在 mobile.css（doc 侧）/ quick-notes.css（note 侧）的内核几何收口**合成一份**（doc/note 共用 data-mb-edit-host 契约） // 261013：+1 = 表情面板分类条在 dock 里拉满面板边（当时口径：9 个分类 ≈45.8px、一屏放得下不横滚；261014 已改「一屏 8 格 + 横滑 + 钉住的动作键」，见 kit.css）
 };
 
