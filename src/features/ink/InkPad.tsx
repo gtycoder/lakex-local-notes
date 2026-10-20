@@ -13,6 +13,8 @@ import {
   type InkTool,
 } from "../../core/inkDoc.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
+import { pushBoundedHistory } from "./history.js";
+import { InkPaper } from "./InkPaper.js";
 import InkPageStrip from "./InkPageStrip.js";
 
 export type InkPadMode = InkTool | "eraser";
@@ -30,7 +32,6 @@ export interface InkPadProps {
 }
 
 const SAVE_DEBOUNCE_MS = 500;
-const UNDO_LIMIT = 60;
 const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -88,9 +89,10 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
 });
 
 export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture }: InkPadProps) {
-  const initialDoc = useMemo(() => parseInkBody(content), [content]);
-  const [doc, setDoc] = useState<InkDoc | null>(initialDoc);
-  const docRef = useRef<InkDoc | null>(initialDoc);
+  // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
+  // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
+  const [doc, setDoc] = useState<InkDoc | null>(() => parseInkBody(content));
+  const docRef = useRef<InkDoc | null>(doc);
   const [mode, setMode] = useState<InkPadMode>("pen");
   const [color, setColor] = useState(COLORS[0]);
   const [penWidth, setPenWidth] = useState<number>(WIDTHS[1]);
@@ -102,9 +104,11 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
   const [activeStroke, setActiveStroke] = useState<InkStroke | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const undoRef = useRef<string[]>([]);
   const redoRef = useRef<string[]>([]);
   const saveTimerRef = useRef<number | null>(null);
+  const pendingSaveBodyRef = useRef<string | null>(null);
   const activePointerRef = useRef<{ id: number; type: string } | null>(null);
   const penDownRef = useRef(false);
   const activeStrokeRef = useRef<InkStroke | null>(null);
@@ -154,66 +158,89 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const zoomIn = useCallback(() => setZoom((value) => Math.min(ZOOM_MAX, Math.round((value + ZOOM_STEP) * 100) / 100)), []);
   const zoomOut = useCallback(() => setZoom((value) => Math.max(ZOOM_MIN, Math.round((value - ZOOM_STEP) * 100) / 100)), []);
 
+  const serializeDoc = useCallback((value: InkDoc): string | null => {
+    try {
+      const body = inkToBody(value);
+      setSaveError(null);
+      return body;
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "手写板正文无法保存");
+      return null;
+    }
+  }, []);
+
+  const scheduleSaveBody = useCallback((body: string) => {
+    onDirtyRef.current?.();
+    pendingSaveBodyRef.current = body;
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      const pending = pendingSaveBodyRef.current;
+      pendingSaveBodyRef.current = null;
+      if (pending !== null) onChangeRef.current?.(pending);
+    }, SAVE_DEBOUNCE_MS);
+  }, []);
+
   const flushSave = useCallback(() => {
+    const hadPending = saveTimerRef.current !== null;
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    const current = docRef.current;
-    if (current) onChangeRef.current?.(inkToBody(current));
-  }, []);
-
-  const scheduleSave = useCallback(() => {
-    onDirtyRef.current?.();
-    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      const current = docRef.current;
-      if (current) onChangeRef.current?.(inkToBody(current));
-    }, SAVE_DEBOUNCE_MS);
+    const pending = pendingSaveBodyRef.current;
+    pendingSaveBodyRef.current = null;
+    if (hadPending && pending !== null) onChangeRef.current?.(pending);
   }, []);
 
   const commit = useCallback((next: InkDoc, pushHistory = true) => {
     if (readOnly || !docRef.current) return;
+    const nextBody = serializeDoc(next);
+    if (nextBody === null) return;
     if (pushHistory) {
-      undoRef.current.push(inkToBody(docRef.current));
-      if (undoRef.current.length > UNDO_LIMIT) undoRef.current.shift();
+      pushBoundedHistory(undoRef.current, inkToBody(docRef.current));
       redoRef.current = [];
     }
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
-    scheduleSave();
-  }, [readOnly, scheduleSave]);
+    scheduleSaveBody(nextBody);
+  }, [readOnly, scheduleSaveBody, serializeDoc]);
 
   const undo = useCallback(() => {
-    const previous = undoRef.current.pop();
+    const previous = undoRef.current[undoRef.current.length - 1];
     if (!previous || !docRef.current) return;
-    redoRef.current.push(inkToBody(docRef.current));
     const next = parseInkBody(previous);
     if (!next) return;
+    const nextBody = serializeDoc(next);
+    if (nextBody === null) return;
+    undoRef.current.pop();
+    pushBoundedHistory(redoRef.current, inkToBody(docRef.current));
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
-    scheduleSave();
-  }, [scheduleSave]);
+    scheduleSaveBody(nextBody);
+  }, [scheduleSaveBody, serializeDoc]);
 
   const redo = useCallback(() => {
-    const nextBody = redoRef.current.pop();
-    if (!nextBody || !docRef.current) return;
-    undoRef.current.push(inkToBody(docRef.current));
-    const next = parseInkBody(nextBody);
+    const serialized = redoRef.current[redoRef.current.length - 1];
+    if (!serialized || !docRef.current) return;
+    const next = parseInkBody(serialized);
     if (!next) return;
+    const nextBody = serializeDoc(next);
+    if (nextBody === null) return;
+    redoRef.current.pop();
+    pushBoundedHistory(undoRef.current, inkToBody(docRef.current));
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
-    scheduleSave();
-  }, [scheduleSave]);
+    scheduleSaveBody(nextBody);
+  }, [scheduleSaveBody, serializeDoc]);
 
   useEffect(() => {
     onEditorCaptureRef.current?.(() => {
       const current = docRef.current;
-      return current ? inkToBody(current) : null;
+      if (!current) return null;
+      try { return inkToBody(current); } catch { return null; }
     });
     return () => {
       onEditorCaptureRef.current?.(null);
@@ -242,7 +269,11 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     const updated = { ...current, activePageId: id };
     docRef.current = updated;
     setDoc(updated);
-  }, []);
+    if (!readOnly) {
+      const body = serializeDoc(updated);
+      if (body !== null) scheduleSaveBody(body);
+    }
+  }, [readOnly, scheduleSaveBody, serializeDoc]);
 
   const movePage = useCallback((id: string, delta: -1 | 1) => {
     const current = docRef.current;
@@ -379,17 +410,17 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       eraseBeforeRef.current = null;
       erasedIdsRef.current = new Set();
       if (before && current && erased) {
-        undoRef.current.push(inkToBody(before));
-        if (undoRef.current.length > UNDO_LIMIT) undoRef.current.shift();
+        pushBoundedHistory(undoRef.current, inkToBody(before));
         redoRef.current = [];
         setHistoryVersion((value) => value + 1);
-        scheduleSave();
+        const body = serializeDoc(current);
+        if (body !== null) scheduleSaveBody(body);
       }
     } else {
       finishStroke();
     }
     if (event.pointerType === "pen") penDownRef.current = false;
-  }, [finishStroke, mode, scheduleSave]);
+  }, [finishStroke, mode, scheduleSaveBody, serializeDoc]);
 
   const cancelPointer = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (activePointerRef.current?.id !== event.pointerId) return;
@@ -471,6 +502,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
         )}
       </div>
 
+      {saveError && <div className="ink-invalid-banner" role="alert">{saveError}；本次修改未写入。</div>}
+
       {pagesOpen && (
         <InkPageStrip
           pages={doc.pages}
@@ -503,7 +536,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             onLostPointerCapture={cancelPointer}
             aria-label={`手写板第 ${pageIndex + 1} 页`}
           >
-            <rect x="0" y="0" width={page.width} height={page.height} fill="transparent" />
+            <InkPaper width={page.width} height={page.height} background={page.background} />
             <StaticStrokeLayer strokes={renderedStrokes} />
             {activeStroke && activePath && (
               <path

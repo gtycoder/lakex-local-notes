@@ -530,7 +530,7 @@ export class Store {
       }
       throw error;
     }
-    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, content };
+    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, kind, content };
   }
 
   /** conversion journal 崩溃恢复使用：仅删除没有元数据登记的目标残留。 */

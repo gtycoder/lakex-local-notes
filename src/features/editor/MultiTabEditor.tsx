@@ -35,7 +35,7 @@ export interface TabInfo {
   reloadKey?: number;
   /** 远端已删除（软删/墓碑/purge）：tab 显示"已删除"标记，正文保留供复制/恢复。 */
   deleted?: boolean;
-  /** v6/v7 文档类型（doc | usheet | bitable | board；缺省 doc）。 */
+  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { boardToBody, createBoardDoc, emptyBoardBody } from "./boardDoc.js";
 import { bitablesToBody, createBitableRecord, createDefaultBitableTable } from "./bitableDoc.js";
 import { usheetToBody } from "./usheetDoc.js";
+import { createInkDoc, inkToBody } from "./inkDoc.js";
 import { snapshotPreview } from "./historyPreview.js";
 
 /**
@@ -61,6 +62,17 @@ describe("历史快照结构化预览", () => {
     const body = text && text.type === "text" ? text.text : "";
     expect(body).toContain("开始");
     expect(body).toContain("结束");
+  });
+
+  it("手写板：只给页面/笔迹/采样点统计，明确不解析手写文字", () => {
+    const blocks = snapshotPreview("ink", inkToBody(createInkDoc()));
+    const facts = blocks.find((b) => b.type === "facts");
+    expect(facts && facts.type === "facts" ? facts.items : []).toEqual([
+      ["页面", "1 页"],
+      ["笔迹", "0 条"],
+      ["采样点", "0 个"],
+    ]);
+    expect(JSON.stringify(blocks)).toContain("未接入手写文字识别");
   });
 
   it("兜底：坏正文/非本类型正文都给「无法解析」提示，绝不渲染成误导性的空内容", () => {

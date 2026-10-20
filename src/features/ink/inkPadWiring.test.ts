@@ -12,6 +12,7 @@ const MOBILE = read("../../mobile/notebook/NotebookWorkspace.tsx");
 const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
 const INK_PAD = read("./InkPad.tsx");
 const DESKTOP_INK = read("./DesktopInkPad.tsx");
+const INK_PAPER = read("./InkPaper.tsx");
 const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
 const PAGE_STRIP = read("./InkPageStrip.tsx");
 const TABS_CSS = read("../../styles/app/tabs.css");
@@ -56,6 +57,12 @@ describe("手写板正式端到端接线", () => {
   it("静态笔迹层 memo 化，避免正在书写时重渲染全部历史路径", () => {
     expect(INK_PAD).toContain("const StaticStrokeLayer = memo(");
     expect(INK_PAD).toContain("<StaticStrokeLayer strokes={renderedStrokes} />");
+  });
+
+  it("纸张底纹使用 SVG 逻辑坐标，缩放页面时密度不漂移", () => {
+    expect(INK_PAD).toContain("InkPaper");
+    expect(INK_PAPER).toContain("patternUnits=\"userSpaceOnUse\"");
+    expect(INK_PAPER).toContain("width={width}");
   });
 
   it("桌面创建、IPC、路由与移动端创建/路由均已接通", () => {

@@ -44,6 +44,15 @@ describe("手写板正文（kind=ink）", () => {
     expect(parseInkBody(inkToBody(doc))).toBeNull();
   });
 
+  it("重复笔迹 ID 拒绝导入，避免 React key 与整笔橡皮命中歧义", () => {
+    const doc = createInkDoc();
+    doc.pages[0].strokes.push(
+      { id: "dup", tool: "pen", color: "#000", width: 2, points: [{ x: 1, y: 1, pressure: 0.5 }] },
+      { id: "dup", tool: "pen", color: "#000", width: 2, points: [{ x: 2, y: 2, pressure: 0.5 }] },
+    );
+    expect(parseInkBody(inkToBody(doc))).toBeNull();
+  });
+
   it("手写正文当前不进入全文搜索", () => {
     expect(inkToSearchText(emptyInkBody())).toBe("");
   });

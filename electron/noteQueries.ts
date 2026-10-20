@@ -12,7 +12,7 @@ export interface NoteSummary {
   syncState: string;
   isConflict: boolean;
   isLocked?: boolean;
-  /** v6/v7 文档类型（缺省 doc；渲染层据此选择编辑器）。 */
+  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
   lockedAt?: string | null;
 }
@@ -48,7 +48,7 @@ export interface SyncNote {
   icon?: string | null;
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
-  /** v6/v7 文档类型（listNotesForSync/getNoteForSync 提供；缺省 doc）。 */
+  /** 文档类型（listNotesForSync/getNoteForSync 提供；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
@@ -90,7 +90,7 @@ export interface TreeNodeRow {
   sync_state: string;
   is_conflict: number;
   icon: string | null;
-  /** LEFT JOIN notes 带来的文档类型（v6）；非 note 节点为 undefined。 */
+  /** LEFT JOIN notes 带来的文档类型；非 note 节点为 undefined。 */
   note_kind?: string | null;
 }
 
@@ -145,7 +145,7 @@ export class NoteQueries {
       isConflict: !!row.is_conflict,
       isLocked: !!row.is_locked,
       lockedAt: row.locked_at ?? null,
-      // v6/v7 文档类型（渲染层据此选择编辑器；缺省 doc）
+      // 文档类型（渲染层据此选择编辑器；缺省 doc）
       kind: normalizeNoteKind(row.kind),
     };
   }
@@ -164,7 +164,7 @@ export class NoteQueries {
       syncState: row.sync_state,
       isConflict: !!row.is_conflict,
       icon: row.icon ?? null,
-      // v6/v7：渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
+      // 渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
       kind: normalizeNoteKind(row.note_kind),
     };
   }

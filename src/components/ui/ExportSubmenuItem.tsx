@@ -5,12 +5,12 @@ import { Submenu } from "./Overlay";
 export type DocExportFormat = "markdown" | "html" | "pdf" | "docx";
 /**
  * 导出动作格式全集：doc 用 markdown/html/pdf/docx；
- * bitable 用 csv / zip；usheet 用 csv / xlsx；board 用 png / svg（全部已实现）。
+ * bitable 用 csv / zip；usheet 用 csv / xlsx；board 用 png / svg（已实现）；ink 的导出尚未实现。
  */
 export type ExportFormat = DocExportFormat | "csv" | "zip" | "xlsx" | "png" | "svg";
 
 export interface ExportSubmenuItemProps {
-  /** 文档类型：doc / usheet / bitable / board（未知按 doc 处理）。 */
+  /** 文档类型：doc / usheet / bitable / board / ink（未知按 doc 处理）。 */
   kind: string;
   onExportAs: (format: ExportFormat) => void;
   onCopyMarkdown: () => void;
@@ -26,6 +26,7 @@ export interface ExportSubmenuItemProps {
  * - usheet：CSV（活动工作表）/ Excel（全部工作表）；
  * - bitable：CSV（活动数据表）；
  * - board：PNG / SVG（已接线：复用画板内 Drawnix 导出；画板需已打开）。
+ * - ink：PNG / PDF 暂为禁用占位，正式 v1 不提供导出。
  * 「导出资料路径（本机 AI）」是与格式无关的本地路径工具，各类型都保留。
  *
  * 视觉/交互/定位全部交给标准原语 `<Submenu>`；本组件只提供行文案与菜单项。

@@ -8,7 +8,7 @@ export interface NoteSummary {
   isConflict: boolean;
   isLocked?: boolean;
   lockedAt?: string | null;
-  /** v6/v7 文档类型（doc | usheet | bitable | board；缺省 doc）。渲染层据此选择编辑器。 */
+  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。渲染层据此选择编辑器。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
@@ -75,7 +75,7 @@ export interface TreeNode {
   icon?: string | null;
   description?: string | null;
   summary?: string | null;
-  /** v6/v7 文档类型（doc | usheet | bitable | board；缺省 doc）：宿主据此对非 doc 隐藏导出/大纲等。 */
+  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此对非 doc 隐藏导出/大纲等。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 

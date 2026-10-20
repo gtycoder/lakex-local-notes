@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, Plus, Trash2, X } from "lucide-react";
 import type { InkPage } from "../../core/inkDoc.js";
+import { InkPaper } from "./InkPaper.js";
 
 export interface InkPageStripProps {
   pages: InkPage[];
@@ -17,6 +18,7 @@ export interface InkPageStripProps {
 function PageThumb({ page }: { page: InkPage }) {
   return (
     <svg viewBox={`0 0 ${page.width} ${page.height}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <InkPaper width={page.width} height={page.height} background={page.background} />
       {page.strokes.map((stroke) => (
         <polyline
           key={stroke.id}

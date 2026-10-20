@@ -170,24 +170,6 @@
   color: var(--lake-text-2);
 }
 
-.ink-page-frame[data-background="lined"],
-.ink-page-thumb__paper[data-background="lined"] {
-  background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--lake-border-1) 31px 32px);
-}
-
-.ink-page-frame[data-background="grid"],
-.ink-page-thumb__paper[data-background="grid"] {
-  background-image:
-    repeating-linear-gradient(to bottom, transparent 0 31px, var(--lake-border-1) 31px 32px),
-    repeating-linear-gradient(to right, transparent 0 31px, var(--lake-border-1) 31px 32px);
-}
-
-.ink-page-frame[data-background="dot"],
-.ink-page-thumb__paper[data-background="dot"] {
-  background-image: radial-gradient(circle, var(--lake-border-strong) 1px, transparent 1.4px);
-  background-size: 16px 16px;
-}
-
 .ink-page-strip {
   position: relative;
   display: flex;

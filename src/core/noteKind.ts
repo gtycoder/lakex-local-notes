@@ -16,6 +16,3 @@ export const NOTE_KINDS: readonly NoteKind[] = ["doc", "usheet", "bitable", "boa
 export function normalizeNoteKind(value: unknown): NoteKind {
   return value === "usheet" || value === "bitable" || value === "board" || value === "ink" ? value : "doc";
 }
-
-/** 画板文档（kind="board"）：正文是 Drawnix/Plait 场景 JSON（boards/{id}.board.json）。 */
-/** 手写板文档（kind="ink"）：正文是矢量墨迹 JSON（inks/{id}.ink.json）。 */

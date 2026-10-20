@@ -164,11 +164,16 @@ export function parseInkBody(content: string | null | undefined): InkDoc | null 
   if (!Array.isArray(record.pages) || record.pages.length === 0 || record.pages.length > MAX_PAGES) return null;
   const pages: InkPage[] = [];
   const ids = new Set<string>();
+  const strokeIds = new Set<string>();
   let totalStrokes = 0;
   let totalPoints = 0;
   for (const rawPage of record.pages) {
     const page = normalizePage(rawPage);
     if (!page || ids.has(page.id)) return null;
+    for (const stroke of page.strokes) {
+      if (strokeIds.has(stroke.id)) return null;
+      strokeIds.add(stroke.id);
+    }
     totalStrokes += page.strokes.length;
     totalPoints += page.strokes.reduce((sum, stroke) => sum + stroke.points.length, 0);
     if (totalStrokes > MAX_TOTAL_STROKES || totalPoints > MAX_TOTAL_POINTS) return null;
@@ -183,32 +188,50 @@ export function parseInkBody(content: string | null | undefined): InkDoc | null 
 
 /** 稳定字段顺序，便于 hash / diff / S3 对象复用。 */
 export function inkToBody(doc: InkDoc): string {
-  const pages = doc.pages.map((page) => ({
-    id: page.id,
-    width: page.width,
-    height: page.height,
-    background: page.background,
-    strokes: page.strokes.map((stroke) => ({
-      id: stroke.id,
-      tool: stroke.tool,
-      color: stroke.color,
-      width: stroke.width,
-      points: stroke.points.map((point) => {
-        const out: Record<string, number> = { x: point.x, y: point.y, pressure: point.pressure };
-        if (point.t !== undefined) out.t = point.t;
-        return out;
+  if (doc.pages.length === 0 || doc.pages.length > MAX_PAGES) throw new Error("手写板页数超出上限");
+  let totalStrokes = 0;
+  let totalPoints = 0;
+  const pages = doc.pages.map((page) => {
+    if (page.strokes.length > MAX_STROKES_PER_PAGE) throw new Error("单页笔迹数量超出上限");
+    return {
+      id: page.id,
+      width: page.width,
+      height: page.height,
+      background: page.background,
+      strokes: page.strokes.map((stroke) => {
+        if (stroke.points.length > MAX_POINTS_PER_STROKE) throw new Error("单条笔迹采样点超出上限");
+        return {
+          id: stroke.id,
+          tool: stroke.tool,
+          color: stroke.color,
+          width: stroke.width,
+          points: stroke.points.map((point) => {
+            const out: Record<string, number> = { x: point.x, y: point.y, pressure: point.pressure };
+            if (point.t !== undefined) out.t = point.t;
+            return out;
+          }),
+        };
       }),
-    })),
-  }));
+    };
+  });
   const activePageId = doc.activePageId && pages.some((page) => page.id === doc.activePageId)
     ? doc.activePageId
     : pages[0]?.id;
-  return JSON.stringify({
+  for (const page of pages) {
+    totalStrokes += page.strokes.length;
+    totalPoints += page.strokes.reduce((sum, stroke) => sum + stroke.points.length, 0);
+  }
+  if (totalStrokes > MAX_TOTAL_STROKES || totalPoints > MAX_TOTAL_POINTS) {
+    throw new Error("手写板笔迹或采样点超出上限");
+  }
+  const body = JSON.stringify({
     kind: INK_DOC_KIND,
     version: INK_DOC_VERSION,
     pages,
     ...(activePageId ? { activePageId } : {}),
   });
+  if (body.length > MAX_INK_BODY_CHARS) throw new Error("手写板正文超过 16 MiB 上限");
+  return body;
 }
 
 export function emptyInkBody(): string {

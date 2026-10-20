@@ -39,7 +39,7 @@ export interface DesktopOverlaysProps {
   focusMode: boolean;
   onToggleFocusMode: () => void;
   activeNoteId: string | null;
-  /** 当前活动文档类型（v6）；导出菜单按类型区分（doc/usheet/bitable/board），不再只对 doc 显示。 */
+  /** 当前活动文档类型；导出菜单按类型区分（doc/usheet/bitable/board/ink），不再只对 doc 显示。 */
   activeKind: "doc" | "usheet" | "bitable" | "board" | "ink";
   lockedNoteIds: ReadonlySet<string>;
   onToggleNoteLock: () => void;

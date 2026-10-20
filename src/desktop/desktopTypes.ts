@@ -40,7 +40,7 @@ export interface OpenTab {
   deleted?: boolean;
   /** 上次同步后记录的轻量状态摘要（title+updatedAt），用于跳过未变化的全量重载。 */
   lastDigest?: { title: string; updatedAt: string } | null;
-  /** v6/v7 文档类型（doc | usheet | bitable | board；缺省 doc）：宿主据此选择编辑器。 */
+  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此选择编辑器。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
