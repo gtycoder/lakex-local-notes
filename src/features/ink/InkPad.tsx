@@ -124,7 +124,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const pageHeight = page?.height ?? 0;
 
   useLayoutEffect(() => {
-    if (variant !== "desktop" || pageWidth <= 0 || pageHeight <= 0) return;
+    if (pageWidth <= 0 || pageHeight <= 0) return;
     const stage = stageRef.current;
     if (!stage) return;
     const update = () => {
@@ -145,7 +145,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     const observer = new ResizeObserver(update);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [pageHeight, pageWidth, variant]);
+  }, [pageHeight, pageWidth]);
   const canUndo = historyVersion >= 0 && undoRef.current.length > 0;
   const canRedo = historyVersion >= 0 && redoRef.current.length > 0;
   const zoomIn = useCallback(() => setZoom((value) => Math.min(ZOOM_MAX, Math.round((value + ZOOM_STEP) * 100) / 100)), []);
@@ -444,9 +444,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
         <div
           className="ink-page-frame"
           data-background={page.background}
-          style={variant === "desktop" && fitSize
-            ? ({ width: fitSize.width * zoom, height: fitSize.height * zoom } as CSSProperties)
-            : undefined}
+          style={fitSize ? ({ width: fitSize.width * zoom, height: fitSize.height * zoom } as CSSProperties) : undefined}
         >
           <svg
             className="ink-page-svg"
@@ -487,6 +485,13 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
               <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly}>{item.label}</button>
             ))}
           </div>
+          {variant === "mobile" && (
+            <div className="ink-zoom" role="group" aria-label="缩放">
+              <button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="缩小"><Minus size={16} /></button>
+              <button className="ink-zoom__value" onClick={() => setZoom(1)} title="恢复为适应页面" aria-label="恢复为适应页面">{Math.round(zoom * 100)}%</button>
+              <button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="放大"><Plus size={16} /></button>
+            </div>
+          )}
         </div>
       </div>
       {readOnly && <div className="ink-readonly-hint">只读</div>}

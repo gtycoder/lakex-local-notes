@@ -218,8 +218,8 @@ describe("syncEngine（共享编排）", () => {
 
   // 260925 多端实测回归：上传条目手工枚举字段时漏了 kind ⇒ manifest 不含 kind ⇒
   // 他端把 usheet/bitable/board 当 doc 导入（正文落到 notes/*.lake，打开即毁）。这里卡住上传侧透传。
-  it("kind 透传：非 doc（usheet/bitable/board）上传条目带 kind", async () => {
-    for (const kind of ["usheet", "bitable", "board"] as const) {
+  it("kind 透传：非 doc（usheet/bitable/board/ink）上传条目带 kind", async () => {
+    for (const kind of ["usheet", "bitable", "board", "ink"] as const) {
       const s3 = new MemS3();
       const db = new MemDb();
       db.notes.set("n1", row({ id: "n1", kind }));
