@@ -1,282 +1,265 @@
 /**
- * 移动端表格（usheet）chrome 样式（261020 P1）。
- *
- * 口径（用户 261020 定稿）：不照抄语雀视觉，采用我们自己的令牌与 lucide 图标；
- * 但保留语雀被验证过的交互语法（分级、当前值回显、薄公式栏、页签/缩放常驻）。
- *
- * 单一来源：二级面板的卡片/按钮/色板原语**直接复用文档 dock 的 .med-f-***
- * （editor-dock.css，mobile/main.tsx 全局引入）；本文件只负责表格自己的外壳
- * （公式栏 / dock 条 / 面板外壳 / 页签缩放栏 / 阅读轻工具条）与 Univer 自带 UI 的收口。
+ * 移动端表格 chrome（261021 P1）：对齐语雀 App 1.2.2 的工具条 + 锚定卡片。
+ * 语雀实测见 docs/MOBILE-USHEET-YUQUE-PARITY.md §2.1 / §2.3 / §4；颜色只用移动端令牌。
+ * 旧版底部 Sheet（.mb-sheet）不再用于表格工具。
  */
-.mobile-usheet {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-  z-index: 0;
-  isolation: isolate;
-  background: var(--lake-bg-panel);
-}
-/* 网格区：Univer 只占这里；chrome（公式栏/底栏/dock）在流内，键盘弹出时整块收缩，dock 自然贴在键盘上方。 */
-.ush-editor {
-  flex: 1 1 0;
-  min-height: 0;
-  position: relative;
-  overflow: hidden;
-}
-.ush-editor .mobile-usheet-root {
-  height: 100%;
-  width: 100%;
-}
-/* Univer 自带的移动 header（顶部 Sheet1 页签条 40px）/ footer / 浮动按钮一律不显示：
-   页签与缩放由我们的底栏承担（261020 P1）。
-   ⚠️ header 必须**保留为 grid item 并把高度压成 0**，不能 display:none —— 实测 display:none 会让
-   Univer 内部 grid（grid-rows-[auto_1fr]）的那一行不再参与，画布容器高度变 0（整片空白）。 */
-.mobile-usheet .ush-editor header.univer-w-screen {
-  height: 0;
-  min-height: 0;
-  padding: 0;
-  overflow: hidden;
-}
-.mobile-usheet footer.univer-shrink-0 {
-  display: none;
-}
-.mobile-usheet .ush-editor .univer-absolute.univer-bottom-14.univer-right-4 {
-  display: none;
-}
-
-/* ── 公式栏（顶部常驻，21px）────────────────────────────────────── */
-.ush-formula {
-  flex: 0 0 21px;
-  height: 21px;
+.mb-usheet-toolbar {
+  flex: none;
   display: flex;
   align-items: center;
-  background: var(--lake-bg-panel);
+  height: 40px;
+  padding: 0 6px;
+  border-top: 1px solid var(--lake-border-1);
   border-bottom: 1px solid var(--lake-border-1);
-  font-size: var(--lake-font-size-tiny);
+  background: var(--lake-bg-window);
   color: var(--lake-text-1);
 }
-.ush-formula__ref {
-  flex: 0 0 40px;
-  padding-left: 8px;
-  text-align: center;
-  line-height: 19px;
-  color: var(--lake-text-2);
-  overflow: hidden;
-  white-space: nowrap;
-}
-.ush-formula__value {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding-left: 16px;
-  white-space: pre;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── 一级 dock（与文档 dock 同尺寸：49×44 / 图标 20 / 固定 ⌨ 尾键）── */
-.ush-dock {
-  flex: 0 0 var(--mobile-bottom-bar-height);
-  height: var(--mobile-bottom-bar-height);
+.mb-usheet-toolbar__scroll {
   display: flex;
   align-items: center;
-  background: var(--lake-bg-window);
-  border-top: 1px solid var(--lake-border-2);
-}
-.ush-dock__scroll {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  align-items: center;
+  height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  touch-action: pan-x;
 }
-.ush-dock__scroll::-webkit-scrollbar { display: none; }
-.ush-dock__btn {
-  flex: 0 0 49px;
-  width: 49px;
-  height: var(--mb-ctl-h);
+.mb-usheet-toolbar__scroll::-webkit-scrollbar { display: none; }
+.mb-usheet-toolbar__group {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 3px;
+}
+.mb-usheet-toolbar__group + .mb-usheet-toolbar__group { border-left: 1px solid var(--lake-border-1); }
+.mb-usheet-btn {
+  appearance: none;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
+  height: 32px;
+  min-width: 34px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-micro);
+  line-height: 32px;
+  transition: background-color var(--mobile-duration-press) ease;
+}
+.mb-usheet-btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-btn--text { width: 55px; justify-content: space-between; }
+.mb-usheet-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--lake-status-ok);
+  color: var(--lake-text-on-accent);
+}
+.mb-usheet-popcard {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--lake-bg-window);
+  border: 1px solid var(--lake-border-1);
+  border-radius: 8px;
+  box-shadow: var(--mb-usheet-card-shadow);
+  color: var(--lake-text-1);
+}
+.mb-usheet-popcard__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mb-usheet-popcard__back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 34px;
+  padding: 0 10px;
   border: 0;
-  border-radius: var(--lake-radius-sm);
+  border-bottom: 1px solid var(--lake-border-1);
   background: transparent;
   color: var(--lake-text-2);
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
+  font-size: var(--lake-font-size-micro);
+  text-align: left;
 }
-.ush-dock__btn:active { background: var(--lake-bg-hover); }
-.ush-dock__btn:disabled { opacity: var(--lake-disabled-opacity); }
-.ush-dock__btn.is-active {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
-  box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
-  border-radius: calc(var(--mobile-bottom-bar-height) / 2 - 4px);
+.mb-usheet-popcard__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  text-align: left;
 }
-.ush-dock__btn--kb {
-  flex: 0 0 49px;
-  border-left: 1px solid var(--lake-border-2);
-  border-radius: 0;
-}
-.ush-dock__text {
-  font-size: var(--lake-font-size-title);
-  font-weight: 700;
-  line-height: 1;
-}
-.ush-dock__text--numfmt {
-  /* 3 个汉字（百分比）在移动端 small=14px 下要 42px，按钮只有 49 ⇒ 用 tiny + 46 上限，不省略 */
-  font-size: var(--lake-font-size-tiny);
-  font-weight: 500;
-  max-width: 46px;
+.mb-usheet-popcard__row:active { background: var(--lake-bg-hover); }
+.mb-usheet-popcard__row.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-popcard__row.is-danger { color: var(--lake-status-error); }
+.mb-usheet-popcard__label {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* ── 二级面板外壳（口径照文档 .med-panel / .med-panel-inner）──────
- * 面板**固定占键盘区高度**（高度由 JS 按捕获的键盘高写进 style）：内容多了在内部滚、少了下方留白，
- * 工具栏位置与内容视口恒定 —— 这是文档编辑工具条的逻辑（用户 261020 点单，原先是内容撑高）。 */
-.ush-panel {
-  flex: 0 0 auto;
-  overflow: hidden;
-  background: var(--lake-bg-block);
-  border-top: 1px solid var(--lake-border-2);
-  max-height: 60dvh;
-}
-.ush-panel[data-closing="1"] { pointer-events: none; }   /* 退场期不再接受点击（与文档 dock 同口径） */
-.ush-panel__inner {
-  height: 100%;
-  box-sizing: border-box;
-  padding: 6px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-  /* 进场 = 挂载动画；退场 = data-open 0 的 transition（内容保持到键盘盖住，见 closingHold） */
-  animation: ush-panel-in 160ms var(--mobile-ease-out) both;
-  transform: translateY(0);
-  opacity: 1;
-  transition: transform 160ms var(--mobile-ease-out), opacity 160ms var(--mobile-ease-out);
-}
-.ush-panel[data-open="0"] .ush-panel__inner { transform: translateY(100%); opacity: 0; }
-.ush-panel__inner::-webkit-scrollbar { display: none; }
-@keyframes ush-panel-in {
-  from { transform: translateY(100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-.ush-panel__label {
-  padding: 0 2px;
+.mb-usheet-popcard__note {
+  flex: none;
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-micro);
-  font-weight: var(--lake-font-weight-medium);
-  line-height: var(--lake-line-height-normal);
+  font-size: var(--lake-font-size-nano);
 }
+.mb-usheet-popcard__chev { flex: none; color: var(--lake-text-3); }
 
-/* ── 底栏（页签 + 缩放，32px，编辑态）──────────────────────────── */
-.ush-footer {
-  flex: 0 0 32px;
-  height: 32px;
+/* ⋯ 卡：语雀七行图标网格（+ 我们自己的第八行）。 */
+.mb-usheet-morecard { padding: 4px 0; }
+.mb-usheet-morecard__row {
   display: flex;
   align-items: center;
-  background: var(--lake-bg-panel);
-  border-top: 1px solid var(--lake-border-1);
-  font-size: var(--lake-font-size-tiny);
-  color: var(--lake-text-2);
+  gap: 2px;
+  height: 39px;
+  padding: 0 6px;
 }
-.ush-sheetmenu {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  color: var(--lake-text-3);
-}
-.ush-sheetmenu:active { background: var(--lake-bg-hover); }
-.ush-tabs {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.ush-tabs::-webkit-scrollbar { display: none; }
-.ush-tab {
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 0 16px;
+.mb-usheet-morecard__btn {
+  appearance: none;
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lake-text-1);
+}
+.mb-usheet-morecard__btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-morecard__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-morecard__btn.is-danger { color: var(--lake-status-error); }
+.mb-usheet-morecard__btn:disabled { opacity: .25; }
+.mb-usheet-morecard__text { font-size: var(--lake-font-size-micro); line-height: 1; }
+.mb-usheet-popcard__header {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-nano);
+}
+.mb-usheet-popcard__icon { flex: none; display: inline-flex; color: var(--lake-text-2); }
+
+/* 底栏（261021 P3）：语雀 .lake-sheet-footer 32px / 上边框 / 页签横滑 / 右侧缩放。 */
+.mb-usheet-footer {
+  position: relative;
+  z-index: 10;
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  border-top: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-window);
+  color: var(--lake-text-2);
+}
+.mb-usheet-footer__list {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 0;
   border-right: 1px solid var(--lake-border-1);
   background: transparent;
   color: var(--lake-text-2);
-  font-family: inherit;
-  font-size: var(--lake-font-size-tiny);
+}
+.mb-usheet-footer__list:active { background: var(--lake-bg-hover); }
+.mb-usheet-footer__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.mb-usheet-footer__tabs::-webkit-scrollbar { display: none; }
+.mb-usheet-footer__tab {
+  appearance: none;
+  flex: none;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid var(--lake-border-1);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-micro);
   font-weight: 500;
   white-space: nowrap;
 }
-.ush-tab.is-active { color: var(--lake-accent-text); }
-.ush-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; padding-right: 8px; }
-.ush-zoom__btn {
-  width: 24px;
-  height: 25px;
+.mb-usheet-footer__tab.is-active { color: var(--lake-fg-selected); }
+.mb-usheet-footer__zoom {
+  flex: none;
   display: flex;
   align-items: center;
+}
+.mb-usheet-footer__zoom-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 25px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--lake-text-2);
 }
-.ush-zoom__ratio {
-  min-width: 44px;
-  height: 25px;
-  border: 0;
-  background: transparent;
-  color: var(--lake-text-1);
-  font-family: inherit;
-  font-size: var(--lake-font-size-body);
-  line-height: 24px;
+.mb-usheet-footer__zoom-btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-footer__zoom-value {
+  width: 45px;
+  text-align: center;
+  font-size: var(--lake-font-size-micro);
+  color: var(--lake-text-2);
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 阅读态轻工具条（40px，先保留一条看观感）────────────────── */
-.ush-reading-bar {
-  flex: 0 0 40px;
+/* 阅读态轻工具条（语雀 5 项）：无公式栏，工具条贴工作区顶栏。 */
+.mb-usheet-readingbar {
+  flex: none;
+  display: flex;
+  align-items: center;
   height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
   padding: 0 6px;
+  border-bottom: 1px solid var(--lake-border-1);
   background: var(--lake-bg-window);
-  border-bottom: 1px solid var(--lake-border-2);
 }
-.ush-reading-bar__sheet {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 32px;
-  display: flex;
+.mb-usheet-readingbar__btn {
+  appearance: none;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--lake-radius-sm);
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
   background: transparent;
   color: var(--lake-text-1);
-  font-family: inherit;
-  font-size: var(--lake-font-size-small);
-  text-align: left;
 }
-.ush-reading-bar__sheet:active { background: var(--lake-bg-hover); }
+.mb-usheet-readingbar__btn:disabled { opacity: .25; }

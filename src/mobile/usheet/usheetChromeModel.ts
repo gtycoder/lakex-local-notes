@@ -1,112 +1,190 @@
 /**
- * 移动端表格 chrome 的**单一来源**（261020 设计定稿：仿文档 dock 的交互语言，不照抄语雀视觉）。
+ * 移动端表格 chrome 的**单一来源**（261021：对齐语雀 App 工具条）。
  *
- * 设计口径（用户 261020 定稿）：
- * - 一级 dock（与文档/小记同一套）：`＋ 插入 · Aa 文字格式 · B 加粗 · 常规(数字格式) · ⋯ 更多 · ↶ 撤销 · ↷ 重做 · ⌨`；
- *   撤销/重做**留在主条**；「数字格式」按钮显示当前格式文字（常规/百分比…）。
- * - 二级全部走**底部面板**（复用文档 dock 的 `.med-f-*` 卡片/按钮原语），不新造顶部下拉卡。
- * - `Aa` 面板只保留**文字样式**（字号 / B I U S / 对齐 / 字色 / 底色 / 清除格式）；
- *   冻结、行高列宽、常用公式、工作表放 `⋯` 面板。
- * - 顶部公式栏（21px）常驻；底部 32px 页签/缩放栏常驻；阅读态保留一条轻工具条（先做缩放/工作表入口）。
+ * 这里只放「有哪些按钮/分组/卡片项」与纯查询函数；组件负责渲染，动作仍由 MobileUsheetViewer 按 id 分派。
+ * 语雀实测见 docs/MOBILE-USHEET-YUQUE-PARITY.md §2.1（40px 工具条 / 34×32 按钮 / #fafafa / 分组竖线）、
+ * §2.3（⋯ 七行图标面板）、§2.4（插入卡）、§2.5（数字格式卡）。
  */
-import { MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID, QUICK_TEXT_COLORS } from "../../core/colorPalette";
-import { USHEET_NUMFMT_OPTIONS, type UsheetNumfmtOption } from "./usheetNumfmt";
-import { USHEET_QUICK_FORMULAS } from "./usheetFormulaQuick";
 import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP } from "./usheetLayoutActions";
+import { USHEET_NUMFMT_OPTIONS } from "./usheetNumfmt";
+import { USHEET_QUICK_FORMULAS } from "./usheetFormulaQuick";
 
-export type UsheetPanelId = "insert" | "font" | "numfmt" | "more";
+/** 一级工具条按钮 id（与 MobileUsheetViewer 的动作分派对齐）。 */
+export type SheetToolbarItemId = "insert" | "undo" | "redo" | "numfmt" | "more";
 
-export interface UsheetDockItem {
+export interface SheetToolbarItem {
+  id: SheetToolbarItemId;
+  label: string;
+}
+
+/** 一级工具条的分组（顺序 = 语雀的组序；未支持项先不放，避免死按钮）。 */
+export const SHEET_TOOLBAR_GROUPS: readonly (readonly SheetToolbarItem[])[] = [
+  [{ id: "insert", label: "插入" }],
+  [{ id: "undo", label: "撤销" }, { id: "redo", label: "重做" }],
+  [{ id: "numfmt", label: "数字格式" }],
+  [{ id: "more", label: "更多表格操作" }],
+];
+
+/** 锚定卡片 id 与几何（P2 起按语雀：⋯ 卡 206 宽、插入卡 216 宽、数字格式卡 136 宽）。 */
+export type SheetCardId = "insert" | "numfmt" | "more";
+
+export const SHEET_CARD_META: Record<SheetCardId, { width: number; ariaLabel: string }> = {
+  insert: { width: 216, ariaLabel: "插入" },
+  numfmt: { width: 168, ariaLabel: "数字格式" },
+  more: { width: 232, ariaLabel: "更多表格操作" },
+};
+
+/** 卡片里的列表行（插入卡 / 数字格式卡 / ⋯ 的子菜单）。 */
+export interface SheetMenuItem {
   id: string;
   label: string;
-  kind: "panel" | "action";
-  panel?: UsheetPanelId;
-  /** 文字型按钮（Aa / 常规）；无 = 图标按钮。 */
+  note?: string;
+  danger?: boolean;
+  active?: boolean;
+  /** 非点击的分组标题（数字格式卡的分类）。 */
+  header?: boolean;
+  /** 图标名（由 SheetPopCard / SheetMoreCard 映射到 lucide）。 */
+  icon?: string;
+  children?: SheetMenuItem[];
+}
+
+/** 「插入」卡：**保留我们自己的插行列/合并能力**（语雀 App 的 + 是插入数据，没有插行列）。 */
+export function buildInsertMenu(): SheetMenuItem[] {
+  return [
+    { id: "row-above", label: "在上方插入行", icon: "row-above" },
+    { id: "row-below", label: "在下方插入行", icon: "row-below" },
+    { id: "col-left", label: "在左侧插入列", icon: "col-left" },
+    { id: "col-right", label: "在右侧插入列", icon: "col-right" },
+    { id: "merge", label: "合并选中单元格", icon: "merge" },
+  ];
+}
+
+const COLOR_NAMES: Array<[string, string]> = [
+  ["#e5484d", "红色"], ["#f76b15", "橙色"], ["#ffb224", "黄色"], ["#30a46c", "绿色"],
+  ["#0091ff", "蓝色"], ["#8e4ec6", "紫色"], ["#8b8d98", "灰色"], ["#11181c", "黑色"],
+];
+
+export function buildColorMenu(prefix: "font-" | "fill-"): SheetMenuItem[] {
+  return COLOR_NAMES.map(([value, label]) => ({ id: prefix + value, label }));
+}
+
+export interface SheetCellFormatLite {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strike: boolean;
+  /** Univer 的右对齐在 facade 里读出来是 "normal"（历史坑），两种都接。 */
+  align: "left" | "center" | "right" | "normal" | "general";
+  numfmt: string;
+}
+
+/** ⋯ 卡的一颗图标按钮（语雀七行面板的一格）。 */
+export interface SheetMoreButton {
+  id: string;
+  label: string;
+  icon: string;
+  /** 文字型按钮（语雀「字号 12px」那种）；有 text 时不画图标。 */
   text?: string;
-  action?: "bold" | "undo" | "redo";
+  disabled?: boolean;
+  active?: boolean;
+  danger?: boolean;
+  children?: SheetMenuItem[];
 }
 
-/** 一级 dock（顺序即界面顺序；⌨ 是组件里的固定尾键，不在此表）。 */
-export const USHEET_DOCK: readonly UsheetDockItem[] = [
-  { id: "insert", label: "插入", kind: "panel", panel: "insert" },
-  { id: "font", label: "文字格式", kind: "panel", panel: "font", text: "Aa" },
-  { id: "bold", label: "加粗", kind: "action", action: "bold" },
-  { id: "numfmt", label: "数字格式", kind: "panel", panel: "numfmt", text: "常规" },
-  { id: "more", label: "更多", kind: "panel", panel: "more" },
-  { id: "undo", label: "撤销", kind: "action", action: "undo" },
-  { id: "redo", label: "重做", kind: "action", action: "redo" },
-] as const;
+export type SheetMoreRow = SheetMoreButton[];
 
-/** 字号档位（与表格单元格实际可用字号一致；不与文档正文档位混用）。 */
-export const USHEET_FONT_SIZES: readonly number[] = [12, 13, 14, 16, 18, 20, 24, 28, 32] as const;
+const ALIGN_MENU: SheetMenuItem[] = [
+  { id: "align-left", label: "左对齐" },
+  { id: "align-center", label: "居中对齐" },
+  { id: "align-right", label: "右对齐" },
+];
 
-/** 字色（与文档 dock「字色」同一份语雀口径色板）。 */
-export const USHEET_TEXT_COLORS = QUICK_TEXT_COLORS;
-/** 底色：浅色行（语雀 2×7 的第一行）+ 无填充格由 UI 侧画。 */
-export const USHEET_FILL_COLORS = MOBILE_BOARD_LIGHT;
-/** 实色行（备用；底色面板第二行，与文档底色面板同构）。 */
-export const USHEET_FILL_SOLID = MOBILE_BOARD_SOLID;
+const FREEZE_MENU: SheetMenuItem[] = [
+  { id: "freeze-row", label: "冻结至当前行" },
+  { id: "freeze-col", label: "冻结至当前列" },
+  { id: "freeze-none", label: "取消冻结" },
+];
 
-export interface UsheetActionItem {
-  id: string;
-  label: string;
-}
-export interface UsheetPanelGroup {
-  label: string;
-  items: readonly UsheetActionItem[];
-}
-
-/** ＋ 插入面板（只放我们支持的能力；图片等未接的能力不出现）。 */
-export const USHEET_INSERT_GROUPS: readonly UsheetPanelGroup[] = [
-  { label: "行", items: [{ id: "row-above", label: "在上方插入行" }, { id: "row-below", label: "在下方插入行" }] },
-  { label: "列", items: [{ id: "col-left", label: "在左侧插入列" }, { id: "col-right", label: "在右侧插入列" }] },
-  { label: "单元格", items: [{ id: "merge", label: "合并选中单元格" }] },
-] as const;
-
-/** ⋯ 更多面板：布局（冻结/行高/列宽）+ 常用公式（工作表操作走底栏 ≡）。 */
-export const USHEET_MORE_GROUPS: readonly UsheetPanelGroup[] = [
-  {
-    label: "冻结窗格",
-    items: [{ id: "freeze-row", label: "冻结至当前行" }, { id: "freeze-col", label: "冻结至当前列" }, { id: "freeze-none", label: "取消冻结" }],
-  },
-  {
-    label: "行高",
-    items: [
-      { id: "row-height-up", label: "增高 +" + ROW_HEIGHT_STEP },
-      { id: "row-height-down", label: "降低 −" + ROW_HEIGHT_STEP },
-      { id: "row-height-auto", label: "自动行高" },
+/**
+ * ⋯ 卡 = 语雀的七行图标网格 + 第八行「我们自己的布局/删除/更多工具」。
+ * 语雀有、我们没接的能力**保留位置并置灰**（不删项破坏版式）；置灰按钮在卡片里禁用，长按/标题有说明。
+ */
+export function buildMoreRows(fmt: SheetCellFormatLite): SheetMoreRow[] {
+  return [
+    [
+      { id: "decimal-down", label: "减少小数位（暂不支持）", icon: "minus", disabled: true },
+      { id: "decimal-up", label: "增加小数位（暂不支持）", icon: "plus", disabled: true },
     ],
-  },
-  {
-    label: "列宽",
-    items: [{ id: "col-width-up", label: "加宽 +" + COLUMN_WIDTH_STEP }, { id: "col-width-down", label: "收窄 −" + COLUMN_WIDTH_STEP }],
-  },
-  { label: "常用公式", items: USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label })) },
-] as const;
-
-/** 数字格式面板选项（单一来源沿用 usheetNumfmt）。 */
-export const USHEET_NUMFMT_ITEMS: readonly UsheetNumfmtOption[] = USHEET_NUMFMT_OPTIONS;
-
-/** 把当前 range 的 number format pattern 映射成按钮文字（认不出就沿用「常规」）。 */
-export function numfmtLabelOf(pattern: string | undefined | null): string {
-  const normalized = (pattern ?? "").trim();
-  if (!normalized) return "常规";
-  const hit = USHEET_NUMFMT_OPTIONS.find((option) => option.pattern === normalized);
-  // dock 按钮宽 43px：去掉括号说明（如「货币（¥）」→「货币」），认不出就显示「自定义」
-  return hit ? hit.label.replace(/（[^）]*）/g, "") : "自定义";
+    [
+      { id: "font-size", label: "字号（暂不支持）", icon: "type", text: "12px", disabled: true },
+      { id: "bold", label: "加粗", icon: "bold", active: fmt.bold },
+      { id: "italic", label: "斜体", icon: "italic", active: fmt.italic },
+      { id: "strike", label: "删除线", icon: "strike", active: fmt.strike },
+      { id: "underline", label: "下划线", icon: "underline", active: fmt.underline },
+    ],
+    [
+      { id: "font-color", label: "字体颜色", icon: "baseline", children: buildColorMenu("font-") },
+      { id: "fill-color", label: "填充颜色", icon: "paintbucket", children: buildColorMenu("fill-") },
+      { id: "border", label: "边框（暂不支持）", icon: "grid", disabled: true },
+    ],
+    [
+      { id: "align", label: "水平对齐", icon: "align-left", children: ALIGN_MENU },
+      { id: "valign", label: "垂直对齐（暂不支持）", icon: "align-vertical", disabled: true },
+      { id: "wrap", label: "换行（暂不支持）", icon: "wrap", disabled: true },
+      { id: "merge", label: "合并选中单元格", icon: "merge" },
+    ],
+    [
+      { id: "filter", label: "筛选（暂不支持）", icon: "filter", disabled: true },
+      { id: "sort", label: "排序（暂不支持）", icon: "sort", disabled: true },
+      { id: "conditional", label: "条件格式（暂不支持）", icon: "table", disabled: true },
+    ],
+    [
+      { id: "link", label: "链接（暂不支持）", icon: "link", disabled: true },
+      { id: "select", label: "选择（暂不支持）", icon: "select", disabled: true },
+      { id: "chart", label: "图表（暂不支持）", icon: "chart", disabled: true },
+      { id: "formula", label: "公式", icon: "sigma", children: USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label })) },
+    ],
+    [
+      { id: "freeze", label: "冻结窗格", icon: "freeze", children: FREEZE_MENU },
+      { id: "protect", label: "保护（暂不支持）", icon: "lock", disabled: true },
+      { id: "find", label: "查找替换（暂不支持）", icon: "search", disabled: true },
+    ],
+    [
+      { id: "row-height", label: "行高", icon: "row-height", children: [
+        { id: "row-height-up", label: "增高（+" + ROW_HEIGHT_STEP + "px）" },
+        { id: "row-height-down", label: "降低（-" + ROW_HEIGHT_STEP + "px）" },
+        { id: "row-height-auto", label: "自动行高（按内容）" },
+      ] },
+      { id: "col-width", label: "列宽", icon: "col-width", children: [
+        { id: "col-width-up", label: "加宽（+" + COLUMN_WIDTH_STEP + "px）" },
+        { id: "col-width-down", label: "收窄（-" + COLUMN_WIDTH_STEP + "px）" },
+      ] },
+      { id: "delete-row", label: "删除当前行", icon: "rows", danger: true },
+      { id: "delete-col", label: "删除当前列", icon: "columns", danger: true },
+      { id: "more-tools", label: "更多表格工具", icon: "wrench" },
+    ],
+  ];
 }
 
-/** 面板的「对齐」回显：Univer 的 get 返回 left / center / normal（=右对齐）/ general，
- *  而 setter 只收 left / center / normal（`right` 不被接受）⇒ 读出时统一映射成 UI 的 right，
- *  写入时仍按内核取值（见 MobileUsheetViewer.runAction）。 */
-export function alignOf(raw: string | null | undefined): "left" | "center" | "right" | "general" {
-  if (raw === "normal") return "right";
-  return raw === "left" || raw === "center" ? raw : "general";
+/** 数字格式卡的当前档位显示（默认「常规」）。 */
+export function numfmtLabelOf(pattern: string): string {
+  const found = USHEET_NUMFMT_OPTIONS.find((option) => option.pattern === (pattern || ""));
+  return found ? found.label.replace(/（.*）$/, "") : "常规";
 }
 
-/** 下划线 / 删除线的内核表示在不同版本里可能是 `{ s: 1 }` 也可能就是 `1` ⇒ 两种形状都认。 */
-export function lineFlagOf(value: unknown): boolean {
-  if (typeof value === "number") return value === 1;
-  if (value && typeof value === "object") return (value as { s?: number }).s === 1;
-  return false;
+/** 数字格式卡（入口 = 一级「常规▾」；按语雀的类别分组，不支持的完整清单先不摆）。 */
+export function buildNumfmtMenu(currentPattern: string): SheetMenuItem[] {
+  const group = (header: string, ids: string[]): SheetMenuItem[] => [
+    { id: "header-" + header, label: header, header: true },
+    ...USHEET_NUMFMT_OPTIONS.filter((option) => ids.includes(option.id)).map((option) => ({
+      id: option.id,
+      label: option.label,
+      note: option.pattern === (currentPattern || "") ? "当前" : undefined,
+    })),
+  ];
+  return [
+    ...group("常规", ["numfmt-general", "numfmt-text"]),
+    ...group("数值", ["numfmt-number", "numfmt-integer", "numfmt-percent", "numfmt-currency"]),
+    ...group("日期时间", ["numfmt-date", "numfmt-time", "numfmt-datetime"]),
+  ];
 }

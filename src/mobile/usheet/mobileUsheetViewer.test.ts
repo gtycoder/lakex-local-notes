@@ -114,13 +114,12 @@ describe("移动端表格查看/编辑器", () => {
     expect(core.toolbar).toBe(false);                   // 不挂内核工具条
     expect(core.formulaBar).toBe(true);                 // 公式栏注册仍在（由我们自绘）
     expect(calls.container).toBe("mobile-usheet-n1");
-    const shell = host.querySelector(".mobile-usheet");
-    expect(shell).toBeTruthy();
-    expect(shell?.hasAttribute("data-prevent-swipe")).toBe(true);
-    expect(host.querySelector(".ush-formula")).toBeTruthy();       // 顶部薄公式栏常驻
-    expect(host.querySelector(".ush-reading-bar")).toBeTruthy();   // 阅读态轻工具条（261020 定稿）
-    expect(host.querySelector(".ush-dock")).toBeNull();            // 阅读态没有 dock
-    expect(host.querySelector(".ush-footer")).toBeNull();          // 页签/缩放只在编辑态
+    expect(host.querySelector(".mobile-usheet")).toBeTruthy();
+    expect(host.querySelector(".mobile-usheet")?.hasAttribute("data-prevent-swipe")).toBe(true);
+    expect(host.querySelector(".mb-usheet-toolbar")).toBeNull();
+    expect(host.querySelector(".mobile-usheet-formula")).toBeNull();
+    expect(host.querySelector(".mb-usheet-readingbar")).toBeTruthy();
+    expect(host.querySelector(".mb-usheet-footer")).toBeTruthy();
     root.unmount();
   });
 
@@ -131,66 +130,59 @@ describe("移动端表格查看/编辑器", () => {
     expect(calls.created).toBe(1);
     expect(calls.editable).toEqual([true]);
     expect(typeof capture).toBe("function");
-    const dock = host.querySelector(".ush-dock");
-    expect(dock).toBeTruthy();
-    expect(dock?.getAttribute("aria-label")).toBe("表格工具");
-    for (const label of ["插入", "文字格式", "加粗", "数字格式", "更多", "撤销", "重做", "展开键盘"]) {
-      expect(dock?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
+    const toolbar = host.querySelector(".mb-usheet-toolbar");
+    expect(toolbar).toBeTruthy();
+    expect(toolbar?.getAttribute("aria-label")).toBe("表格工具");
+    expect(toolbar?.hasAttribute("data-prevent-swipe")).toBe(true);
+    for (const label of ["插入", "撤销", "重做", "数字格式", "更多表格操作"]) {
+      expect(toolbar?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
-    // 撤销/重做留在主条；数字格式按钮显示当前格式文字（默认「常规」）
-    expect(dock?.textContent).toContain("常规");
-    expect(host.querySelector(".ush-formula")).toBeTruthy();
-    expect(host.querySelector(".ush-footer")).toBeTruthy();
-    expect(host.querySelector(".ush-reading-bar")).toBeNull();
+    const formula = host.querySelector(".mobile-usheet-formula");
+    expect(formula).toBeTruthy();
+    expect(formula?.textContent).toContain("A1");
+    expect(host.querySelector(".mb-usheet-footer")).toBeTruthy();
+    expect(host.querySelector(".mb-usheet-readingbar")).toBeNull();
     root.unmount();
   });
 
-  it("二级面板：文字格式 / 数字格式 / 插入 / 更多 从底部 dock 展开（不是顶部下拉卡）", async () => {
+  it("「更多」锚定卡 = 七行图标网格 + 我们的第八行；不支持的项置灰；子菜单卡内下钻", async () => {
     const { root, host } = await mount(true, true);
     const { act } = await import("react");
-    const clickDock = async (label: string) => {
-      const btn = host.querySelector<HTMLButtonElement>('.ush-dock button[aria-label="' + label + '"]');
-      expect(btn, label).toBeTruthy();
-      await act(async () => { btn!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-    };
-    await clickDock("文字格式");
-    let text = host.textContent ?? "";
-    expect(text).toContain("字号");
-    // 字色 / 底色两行不写标签（用户 261020：与文档 Aa 面板一致，去掉这两处说明）
-    expect(text).not.toContain("文字颜色");
-    expect(text).not.toContain("背景色");
-    expect(host.querySelectorAll(".ush-panel .med-f-a").length).toBeGreaterThan(1);
-    expect(host.querySelectorAll(".ush-panel .med-f-sw").length).toBeGreaterThan(1);
-    // 行内标记与清除格式是图标钮：可访问名走 aria-label（与文档 Aa 面板同一套 lucide 图标）
-    for (const label of ["加粗", "斜体", "下划线", "删除线", "清除文字格式"]) {
-      expect(host.querySelector('.ush-panel button[aria-label="' + label + '"]'), label).toBeTruthy();
+    const more = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="更多表格操作"]');
+    expect(more).toBeTruthy();
+    await act(async () => { more!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    const card = host.querySelector(".mb-usheet-morecard");
+    expect(card).toBeTruthy();
+    expect(card!.querySelectorAll(".mb-usheet-morecard__row").length).toBe(8);
+    for (const label of ["加粗", "斜体", "删除线", "下划线", "字体颜色", "填充颜色", "水平对齐", "合并选中单元格", "公式", "冻结窗格", "行高", "列宽", "删除当前行", "删除当前列", "更多表格工具"]) {
+      expect(card!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
-    // 面板外壳按文档口径：**定高**（= 捕获的键盘区高度；无键盘时用 floor 280）+ 内容在内部滚动
-    const panelEl = host.querySelector(".ush-panel") as HTMLElement;
-    expect(panelEl.style.height).toBe("280px");
-    expect(panelEl.querySelector(".ush-panel__inner")).toBeTruthy();
-    // 展开的类别键变 ×（文档 dock 同款）：Aa 文字消失，再点一次 = 关面板并放回键盘
-    expect(host.querySelector('.ush-dock button[aria-label="文字格式"]')?.textContent ?? "").not.toContain("Aa");
-    // 逐行同序：行内标记 → 对齐 → 字色 → 底色 → **字号（最底，与文档 Aa 面板一致）**
-    const rows = [...host.querySelectorAll(".ush-panel .med-f-row")];
-    expect(rows.at(-1)?.querySelector(".med-f-sizes"), "字号必须是最底部那一行").toBeTruthy();
-    expect(rows.at(-1)?.querySelectorAll(".med-f-btn").length).toBe(9);
-    await clickDock("文字格式");            // 再点一次 = ×（收起）：**内容先留着**（键盘从面板上方滑上来）
-    const closingPanel = host.querySelector(".ush-panel");
-    expect(closingPanel).toBeTruthy();
-    expect(closingPanel?.getAttribute("data-closing")).toBe("1");
-    expect(host.querySelector('.ush-dock button[aria-label="文字格式"]')?.getAttribute("aria-pressed")).toBe("false");
-    await clickDock("数字格式");
-    text = host.textContent ?? "";
-    for (const label of ["常规", "文本", "百分比", "货币（¥）", "日期时间", "小数位"]) expect(text).toContain(label);
-    await clickDock("数字格式");
-    await clickDock("插入");
-    text = host.textContent ?? "";
-    for (const label of ["在上方插入行", "在下方插入行", "在左侧插入列", "在右侧插入列", "合并选中单元格"]) expect(text).toContain(label);
-    await clickDock("插入");
-    await clickDock("更多");
-    text = host.textContent ?? "";
-    for (const label of ["冻结窗格", "冻结至当前行", "冻结至当前列", "取消冻结", "行高", "自动行高", "列宽", "常用公式", "求和 SUM"]) expect(text).toContain(label);
+    expect(card!.querySelector<HTMLButtonElement>('button[aria-label^="边框"]')?.disabled).toBe(true);
+    const freeze = card!.querySelector<HTMLButtonElement>('button[aria-label="冻结窗格"]');
+    expect(freeze).toBeTruthy();
+    await act(async () => { freeze!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    for (const label of ["冻结至当前行", "冻结至当前列", "取消冻结"]) expect(host.textContent ?? "").toContain(label);
+    root.unmount();
+  });
+
+  it("「数字格式」一级按钮打开锚定卡（不是底部 Sheet）：常规 / 百分比 / 日期时间 可选", async () => {
+    const { root, host } = await mount(true, true);
+    const { act } = await import("react");
+    const numfmt = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="数字格式"]');
+    expect(numfmt).toBeTruthy();
+    await act(async () => { numfmt!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(host.querySelector(".mb-usheet-popcard")).toBeTruthy();
+    for (const label of ["常规（清除格式）", "百分比", "日期时间"]) expect(host.textContent ?? "").toContain(label);
+    root.unmount();
+  });
+
+  it("「插入」按钮保留我们自己的插行列/合并能力（语雀 App 没有）", async () => {
+    const { root, host } = await mount(true, true);
+    const { act } = await import("react");
+    const insert = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="插入"]');
+    expect(insert).toBeTruthy();
+    await act(async () => { insert!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    for (const label of ["在上方插入行", "在下方插入行", "在左侧插入列", "在右侧插入列", "合并选中单元格"]) expect(host.textContent ?? "").toContain(label);
     root.unmount();
   });
 
