@@ -1,5 +1,5 @@
 ---
-name: Lake Notes Mobile
+name: LocalLakeNotes
 description: 本地优先的 Lake 编辑器笔记应用（Android 端）——自有设计语言，仿语雀形态 + 本项目色阶
 colors:
   accent: "#3f5fa0"
@@ -51,7 +51,7 @@ components:
   toast: { rounded: "{rounded.card}", surface: "{colors.surface-panel}" }
 ---
 
-# Design System: Lake Notes Mobile
+# Design System: LocalLakeNotes
 
 ## Overview
 

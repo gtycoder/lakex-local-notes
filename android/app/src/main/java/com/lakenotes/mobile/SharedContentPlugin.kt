@@ -14,7 +14,7 @@ import java.io.FileOutputStream
 import java.util.UUID
 
 /**
- * 系统「分享 → Lake Notes」入口（ACTION_SEND）。
+ * 系统「分享 → LocalLakeNotes」入口（ACTION_SEND）。
  *
  * 原生只做接住：文本原样交给 JS；图片/文件复制到 `filesDir/shared-inbox/<name>`
  * （JS 用 `capacitor/filesystem` 的 Directory.Data 读取），随后 JS 打开「小记」框预填。

@@ -7,7 +7,7 @@ import { Cdp, wait, waitFor, stats } from "./cdp.mjs";
 import { loopbackS3 } from "./loopback-s3.mjs";
 const appPath = path.resolve(
   process.env.LAKE_PERF_APP ||
-    "release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes",
+    "release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes",
 );
 const fixture = path.resolve(
   process.env.LAKE_PERF_FIXTURE || "/tmp/lake-packaged-perf-fixture-261013",

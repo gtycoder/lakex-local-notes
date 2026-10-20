@@ -359,7 +359,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (!sysInfo) return;
     const st = sysInfo.storage;
     const lines = [
-      `Lake Notes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`,
+      `LocalLakeNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`,
       `Electron ${sysInfo.runtime.electron} · Chromium ${sysInfo.runtime.chromium} · Node ${sysInfo.runtime.node} · ${sysInfo.runtime.platform}/${sysInfo.runtime.arch}`,
       `依赖：${Object.entries(sysInfo.deps).map(([k, v]) => `${k}@${v}`).join(", ")}`,
       `数据目录：${st.root}`,
@@ -848,7 +848,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
             {category === "browser" && (
               <Group title="浏览器端" icon={<Globe size={16} />}>
-                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 Lake Notes（与桌面端同一份本地数据）。仅监听 127.0.0.1，不做局域网伺服、不允许其它设备访问。开关即时生效、无需重启；应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webBusy} onChange={(checked) => void setWeb(checked)} />
+                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LocalLakeNotes（与桌面端同一份本地数据）。仅监听 127.0.0.1，不做局域网伺服、不允许其它设备访问。开关即时生效、无需重启；应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webBusy} onChange={(checked) => void setWeb(checked)} />
                 <Block name="这是什么" desc="浏览器端不是「伺服」：不对外开放、不监听局域网。它只是把桌面端这一份本地库（同一个数据库、同一批文件）通过回环地址 http://127.0.0.1:19880/ 交给本机浏览器，数据不经过网络。打开开关后，用 Chrome 等浏览器打开该地址即可。" />
                 <Block name="现状" desc="读写与本机同一份数据；同步进度/待办计数走 SSE 实时推送；图片「另存为」走浏览器下载、附件在新标签打开。导出/整库备份等需要系统目录框的操作仍请在桌面端使用。此开关不落盘（每次启动应用都从关闭开始）。" />
                 {webStatus?.enabled && (
@@ -1012,7 +1012,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 {sysInfo && (
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
-                      <Block itemId="about-app" name={`Lake Notes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
+                      <Block itemId="about-app" name={`LocalLakeNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
                       <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
                     </Group>
 

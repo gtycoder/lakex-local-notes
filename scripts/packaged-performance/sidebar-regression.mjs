@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { Cdp, wait, waitFor } from "./cdp.mjs";
 const app = path.resolve(
   process.env.LAKE_PERF_APP ||
-    "release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes",
+    "release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes",
 );
 if (!fs.existsSync(app) || !app.includes(".app/Contents/MacOS/"))
   throw Error("real .app required");

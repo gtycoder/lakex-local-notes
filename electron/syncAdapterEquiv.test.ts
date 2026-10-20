@@ -18,7 +18,7 @@ import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 
 const decode = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
 const hashOf = (s: string) => sha256Sync(new TextEncoder().encode(s));
-const WELCOME_CONTENT = `<h1 id="welcome" class="ne-h1">欢迎来到 Lake Notes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
+const WELCOME_CONTENT = `<h1 id="welcome" class="ne-h1">欢迎来到 LocalLakeNotes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
 
 const S3_CFG: S3Settings = {
   endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "test-bucket",
@@ -156,7 +156,7 @@ describe("Step 5 adapter 等价（桌面 Store + adapter + syncEngine vs 桌面 
   it("场景A：首次上传", async () => {
     await assertAdapterEquiv({
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 Lake Notes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "local" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "local" },
         { id: "n1", title: "笔记1", content: "<p>content-1</p>", parentId: "notebook-personal", sortOrder: 0, syncState: "local" },
       ],
     });
@@ -166,10 +166,10 @@ describe("Step 5 adapter 等价（桌面 Store + adapter + syncEngine vs 桌面 
     const h = hashOf("<p>remote-content</p>");
     await assertAdapterEquiv({
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 Lake Notes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 Lake Notes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "r1", title: "远端笔记", parentId: "notebook-personal", sortOrder: 1, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isLocked: true, lockedAt: "2026-01-02T00:00:00.000Z", icon: "star" },
       ],
       remoteFolders: [{ id: "notebook-personal", title: "个人笔记", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],
@@ -181,11 +181,11 @@ describe("Step 5 adapter 等价（桌面 Store + adapter + syncEngine vs 桌面 
     const h = hashOf("<p>content</p>");
     await assertAdapterEquiv({
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 Lake Notes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
         { id: "n1", title: "将被删", content: "<p>content</p>", parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 Lake Notes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "n1", title: "将被删", parentId: TRASH_NOTEBOOK_ID, sortOrder: 1, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, trashedAt: "2026-01-02T00:00:00.000Z", deletedFromParentId: "notebook-personal" },
       ],
       remoteFolders: [{ id: "notebook-personal", title: "个人笔记", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],
@@ -197,11 +197,11 @@ describe("Step 5 adapter 等价（桌面 Store + adapter + syncEngine vs 桌面 
     const h = hashOf("<p>purge-content</p>");
     await assertAdapterEquiv({
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 Lake Notes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
         { id: "p1", title: "将被永久删除", content: "<p>purge-content</p>", parentId: "notebook-personal", sortOrder: 1, syncState: "synced" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 Lake Notes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "p1", title: "将被永久删除", parentId: TRASH_NOTEBOOK_ID, sortOrder: 1, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
       ],
       remoteFolders: [{ id: "notebook-personal", title: "个人笔记", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],

@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { spawn } from "node:child_process";
 
 if (process.platform !== "darwin") { console.log("service crash smoke skipped: macOS only"); process.exit(0); }
-const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes");
+const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes");
 const port = Number(process.env.LAKE_CDP_PORT || 9341);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "lake-service-crash-smoke-"));

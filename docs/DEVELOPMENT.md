@@ -44,9 +44,9 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" node node_modules/vite/bin/vi
 ./node_modules/.bin/electron-builder --mac
 ```
 产物输出到 `release/`（已在 .gitignore）：
-- `release/Lake Notes-0.1.0-arm64.dmg`（约 158MB）
-- `release/Lake Notes-0.1.0-arm64-mac.zip` + 两个 `.blockmap`
-- `release/mac-arm64/Lake Notes.app`（未打包的应用）
+- `release/LocalLakeNotes-0.1.0-arm64.dmg`（约 158MB）
+- `release/LocalLakeNotes-0.1.0-arm64-mac.zip` + 两个 `.blockmap`
+- `release/mac-arm64/LocalLakeNotes.app`（未打包的应用）
 
 **打包版注意事项**：
 - 未签名/未公证：首次打开需右键 → 打开（或系统设置 → 隐私与安全性）
@@ -56,7 +56,7 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" node node_modules/vite/bin/vi
 - **打包版测试隔离**（避免打开正式数据）：任意模式都支持 `LAKE_USER_DATA` 覆盖，例如：
   ```bash
   LAKE_USER_DATA="$HOME/Library/Application Support/lake-notes-test" \
-    "release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes"
+    "release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes"
   ```
   不设 `LAKE_USER_DATA` 时打包版才走正式数据路径。
 

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Lake Notes Mobile</string>
-    <string name="title_activity_main">Lake Notes Mobile</string>
+    <string name="app_name">LocalLakeNotes</string>
+    <string name="title_activity_main">LocalLakeNotes</string>
     <string name="package_name">com.lakenotes.mobile</string>
     <string name="custom_url_scheme">com.lakenotes.mobile</string>
     <string name="shortcut_quick_note_short">新建小记</string>

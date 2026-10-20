@@ -165,9 +165,9 @@ export class SchemaInit {
       const content = WELCOME_NOTE_BODY;
       const tx = this.ctx.db.transaction(() => {
         this.ctx.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
-          .run(id, "欢迎来到 Lake Notes", parent, sortOrder, updatedAt);
+          .run(id, "欢迎来到 LocalLakeNotes", parent, sortOrder, updatedAt);
         this.ctx.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
-          .run(id, this.ctx.workspaceId, parent, "欢迎来到 Lake Notes", id, sortOrder, updatedAt, updatedAt);
+          .run(id, this.ctx.workspaceId, parent, "欢迎来到 LocalLakeNotes", id, sortOrder, updatedAt, updatedAt);
         this.ctx.atomicWrite(this.ctx.notePathFor(id), content);
       });
       tx();

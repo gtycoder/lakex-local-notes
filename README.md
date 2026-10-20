@@ -1,4 +1,4 @@
-# Lake Notes（Electron）
+# LocalLakeNotes（Electron）
 
 本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目总览入口；会话交接的唯一文档是** **`HANDOFF.md`。**
 

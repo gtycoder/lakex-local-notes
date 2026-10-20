@@ -65,7 +65,7 @@ web
 
 ## Brand Commitments
 
-- 名称：Lake Notes（桌面）/ Lake Notes Mobile（Android）；应用 id `com.lakenotes.electron` / `com.lakenotes.mobile`。
+- 名称：LocalLakeNotes（桌面）/ LocalLakeNotes（Android）；应用 id `com.lakenotes.electron` / `com.lakenotes.mobile`。
 - 界面语言：简体中文（`<html lang="zh-CN">`）。
 - 气质：务实、工程师导向、自觉拒绝炫技；明确不弹「正在加载」之类的 toast（README 核心理念）。
 - 现有资源：`build/icon.icns`、`build/icon.png`。

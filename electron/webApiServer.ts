@@ -588,7 +588,7 @@ export function createWebServerController(opts: WebApiServerOptions): WebServerC
             if (server === s) server = null;
             try { s.close(); } catch { /* 未监听，close 可忽略 */ }
             const detail = (error as NodeJS.ErrnoException).code === "EADDRINUSE"
-              ? `端口 ${port} 已被占用：可能是另一个 Lake Notes 实例或其它程序在用。`
+              ? `端口 ${port} 已被占用：可能是另一个 LocalLakeNotes 实例或其它程序在用。`
               : `浏览器端服务启动失败：${error.message}`;
             reject(new Error(detail));
           };

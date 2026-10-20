@@ -45,8 +45,8 @@ describe("S3 配置迁移码", () => {
 
   it("贴错内容 / 明文 JSON / 空串都给明确原因", async () => {
     await expect(decodeS3ConfigTransfer("")).rejects.toThrow(/请先粘贴/);
-    await expect(decodeS3ConfigTransfer("随便一段文字")).rejects.toThrow(/不是 Lake Notes 的 S3 迁移码/);
-    await expect(decodeS3ConfigTransfer(JSON.stringify(SETTINGS))).rejects.toThrow(/不是 Lake Notes 的 S3 迁移码/);
+    await expect(decodeS3ConfigTransfer("随便一段文字")).rejects.toThrow(/不是 LocalLakeNotes 的 S3 迁移码/);
+    await expect(decodeS3ConfigTransfer(JSON.stringify(SETTINGS))).rejects.toThrow(/不是 LocalLakeNotes 的 S3 迁移码/);
     await expect(decodeS3ConfigTransfer(S3_TRANSFER_PREFIX + "AAAA")).rejects.toThrow(/无效或已损坏/);
   });
 
@@ -81,13 +81,13 @@ describe("S3 配置迁移码", () => {
     const code = await encodeS3ConfigTransfer(SETTINGS);
     await expect(decodeS3ConfigTransferFile(code)).resolves.toEqual(SETTINGS);
     await expect(decodeS3ConfigTransferFile("")).rejects.toThrow(/空/);
-    await expect(decodeS3ConfigTransferFile("{}")).rejects.toThrow(/不是 Lake Notes 的 S3 配置文件/);
+    await expect(decodeS3ConfigTransferFile("{}")).rejects.toThrow(/不是 LocalLakeNotes 的 S3 配置文件/);
     await expect(decodeS3ConfigTransferFile(JSON.stringify({ app: "lake-notes", kind: "s3-config", version: 2, payload: "x" }))).rejects.toThrow(/版本不受支持/);
     const file = await encodeS3ConfigTransferFile(SETTINGS);
     const payloadIndex = file.indexOf(S3_TRANSFER_PREFIX);
     const tamperAt = payloadIndex + S3_TRANSFER_PREFIX.length + 10;
     const tamperedFile = file.slice(0, tamperAt) + (file[tamperAt] === "A" ? "B" : "A") + file.slice(tamperAt + 1);
-    await expect(decodeS3ConfigTransferFile(tamperedFile)).rejects.toThrow(/无效或已损坏|不是 Lake Notes/);
+    await expect(decodeS3ConfigTransferFile(tamperedFile)).rejects.toThrow(/无效或已损坏|不是 LocalLakeNotes/);
   });
 
   it("导出文件名带本地时间戳且是 .json", () => {

@@ -279,7 +279,7 @@ function createBootWindow() {
     frame: false,
     resizable: false,
     movable: true,
-    title: "Lake Notes",
+    title: "LocalLakeNotes",
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#f3f4f6",
     webPreferences: {
       sandbox: true,

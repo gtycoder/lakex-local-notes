@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.lakenotes.mobile',
-  appName: 'Lake Notes Mobile',
+  appName: 'LocalLakeNotes',
   webDir: 'dist-mobile',
   // 页面 scheme 用 http（与桌面一致，加载 http://127.0.0.1 资源无混合内容）。
   // Capacitor 默认 https://localhost 会让 <audio>/<video> 加载本地资源被 WebView

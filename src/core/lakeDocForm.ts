@@ -20,7 +20,7 @@ export function emptyLakeBody(noteId: string): string {
 
 /** 首启欢迎笔记正文。固定 id：全设备一致，S3 同步不会产生重复。 */
 export const WELCOME_NOTE_BODY =
-  `<h1 id="welcome" class="ne-h1">欢迎来到 Lake Notes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
+  `<h1 id="welcome" class="ne-h1">欢迎来到 LocalLakeNotes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
 
 /** Lake 正文里文本节点的最小转义（与内核写入时一致）。 */
 export function escapeLakeHtml(value: string): string {

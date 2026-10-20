@@ -72,6 +72,14 @@
 - **资源/代码**：`electron/boot.html`、`public/brand/*`、`src/styles/brand-launch.css`、`src/mobile/brand-launch.css`、两端 `BrandLaunchMark`；打包 `files` 已纳入 `electron/boot.html`。
 - **门禁（暂存区隔离 worktree）**：tsc 0 · vitest **316 文件 / 2303 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:bundle ✓ · `git diff --check` ✓。
 
+### 261020(七) · 产品名暂定 LocalLakeNotes + 桌面/Android 图标换 14A · 已提交
+
+- **产品名**：用户暂定 `LocalLakeNotes`（L/L/N 大写）。已更新 `package.json.productName`、桌面/移动页面标题、Capacitor `appName`、Android `app_name/title_activity_main`、设置/关于/欢迎文档/S3 配置错误文案与打包脚本路径。**内部 appId、`com.lakenotes.*`、数据库/S3 标记不改**，避免破坏数据身份。
+- **桌面图标**：`build/icon.png` 与 `build/icon.icns` 由 14A Paper Finch 重新生成；鸟形在 256 图标坐标上 `translate(2 -20)`，在圆角底框中水平/垂直居中。macOS 打包产物名为 `LocalLakeNotes.app`，包内 `icon.icns` hash 与 `build/icon.icns` 一致。
+- **Android 图标**：legacy `ic_launcher.png`（48/72/96/144/192）与 `ic_launcher_round.png` 全部换 14A；adaptive foreground `ic_launcher_foreground.png`（108/162/216/324/432）换透明鸟形，adaptive background 改 `#F0FBF5`；`drawable(-v24)` 的旧默认机器人/青绿网格也同步替换。原生 splash 已是 14A。
+- **门禁**：tsc 0 · 全量 vitest **320 文件 / 2327 例（16 skip）** · Android `assembleDebug` ✓ · 桌面/移动构建 ✓ · `git diff --check` ✓。打包 `build.files` 已补回 `electron/boot.html`（并行提交曾带掉），包内 `electron/boot.html` + `dist/brand/*` 已确认存在。
+- **注意**：macOS Dock 可能缓存旧图标；重新打包后退出旧 App，必要时移除 Dock 固定项再重新添加。完整 `electron-builder --mac dir` 第二次重跑在 packaging 阶段卡住，已终止；已有本地包名/资源/图标路径验证，最终发布时重新执行打包即可。
+
 ### 261020 · 图标体系重做 + 表情面板（中文搜索/排布）+ 浮层外点 + 附件图标与压缩包打开 · 已提交、已推送
 
 - **目录图标（用户点单，三轮收口）**：笔记本/分组改用**语雀知识库那套 17 个彩色插画**（值方言 `n:<id>`，整串 ≤16 字符，同步字段不变）；**旧「40 个 lucide 线性图标 + 8 档浅渐变底板 + `i:<id>:<色号>` 编码」整体删除**（只保留识别：旧值画中性图形、不回显原始串、不迁移）。**语雀品牌 logo 图标已移除**（用户 261020：涉及 logo 不能用）。文档/表格/多维表/画板**只有表情**、无「图标」类目；笔记本/分组保留「表情符号 ｜ 图标」两页（默认图标，维持第一版结构）。

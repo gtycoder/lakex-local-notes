@@ -1,4 +1,4 @@
-# Lake Notes Electron — 项目记忆（AGENTS.md）
+# LocalLakeNotes Electron — 项目记忆（AGENTS.md）
 
 > 本项目的**长期记忆**，每次会话自动加载。接手顺序 **README → HANDOFF → AGENTS**：README 看概览，HANDOFF 看当前状态/待办/坑，本文看长期红线与机制。
 > **本文只写长期内容**：分支名、commit、测试计数、当前焦点等易过期事实一律进 `HANDOFF.md`。
@@ -6,7 +6,7 @@
 
 ## 1. 项目是什么
 
-Lake Notes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
+LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
 
 - 目录 `/Users/admin/file/local-lake/lake-notes-electron`；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
 - Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）

@@ -48,7 +48,7 @@ describe("ports 共享接口（Phase 0A）", () => {
 
   it("AppInfoPort 接口方法签名齐全（编译期校验）", () => {
     const port: AppInfoPort = {
-      getAppInfo: async () => ({ name: "Lake Notes", version: "0.1.0", build: "1", protocolVersion: "4", platform: "test" }),
+      getAppInfo: async () => ({ name: "LocalLakeNotes", version: "0.1.0", build: "1", protocolVersion: "4", platform: "test" }),
     };
     expect(typeof port.getAppInfo).toBe("function");
   });

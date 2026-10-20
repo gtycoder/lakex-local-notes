@@ -88,11 +88,12 @@
   },
   "build": {
     "appId": "com.lakenotes.electron",
-    "productName": "Lake Notes",
+    "productName": "LocalLakeNotes",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
       "electron/preload.cjs",
+      "electron/boot.html",
       "!**/*.map",
       "!node_modules/better-sqlite3/deps/**",
       "!node_modules/better-sqlite3/build/Release/obj/**"

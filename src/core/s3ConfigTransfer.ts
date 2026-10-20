@@ -188,11 +188,11 @@ export async function decodeS3ConfigTransferFile(text: string): Promise<S3Settin
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    throw new Error("不是 Lake Notes 的 S3 配置文件");
+    throw new Error("不是 LocalLakeNotes 的 S3 配置文件");
   }
-  if (!parsed || typeof parsed !== "object") throw new Error("不是 Lake Notes 的 S3 配置文件");
+  if (!parsed || typeof parsed !== "object") throw new Error("不是 LocalLakeNotes 的 S3 配置文件");
   const file = parsed as Partial<S3TransferFile>;
-  if (file.app !== "lake-notes" || file.kind !== "s3-config") throw new Error("不是 Lake Notes 的 S3 配置文件");
+  if (file.app !== "lake-notes" || file.kind !== "s3-config") throw new Error("不是 LocalLakeNotes 的 S3 配置文件");
   if (file.version !== 1) throw new Error("S3 配置文件版本不受支持（请先升级应用）");
   if (typeof file.payload !== "string") throw new Error("S3 配置文件缺少载荷");
   return decodeS3ConfigTransfer(file.payload);
@@ -207,7 +207,7 @@ export async function decodeS3ConfigTransfer(code: string): Promise<S3Settings> 
   if (!compact) throw new Error("请先粘贴 S3 迁移码");
   if (compact.length > MAX_CODE_CHARS) throw new Error("S3 迁移码过长，不像是有效内容");
   if (!compact.startsWith(S3_TRANSFER_PREFIX)) {
-    throw new Error("不是 Lake Notes 的 S3 迁移码（应以 LNS3.1. 开头）");
+    throw new Error("不是 LocalLakeNotes 的 S3 迁移码（应以 LNS3.1. 开头）");
   }
   const packed = decodeBase64UrlOrThrow(compact.slice(S3_TRANSFER_PREFIX.length));
   if (packed.length < IV_BYTES + TAG_BYTES) throw new Error("S3 迁移码无效或已损坏（可能复制不完整）");
@@ -229,7 +229,7 @@ export async function decodeS3ConfigTransfer(code: string): Promise<S3Settings> 
   }
   if (!payload || typeof payload !== "object") throw new Error("S3 迁移码内容无法解析");
   const raw = payload as Partial<S3TransferPayload>;
-  if (raw.app !== "lake-notes" || raw.kind !== "s3-config") throw new Error("S3 迁移码来源不是 Lake Notes");
+  if (raw.app !== "lake-notes" || raw.kind !== "s3-config") throw new Error("S3 迁移码来源不是 LocalLakeNotes");
   if (raw.v !== 1) throw new Error("S3 迁移码版本不受支持（请先升级应用）");
 
   const strings: Array<keyof Pick<S3TransferPayload, "endpoint" | "region" | "bucket" | "prefix" | "accessKeyId" | "secretAccessKey">> = [

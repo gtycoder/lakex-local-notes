@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes");
+const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes");
 const port = Number(process.env.LAKE_CDP_PORT || 9333);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 // 受限/沙箱环境（如 agent 宿主的 seatbelt）里 Chromium 自身 sandbox 会初始化失败，
