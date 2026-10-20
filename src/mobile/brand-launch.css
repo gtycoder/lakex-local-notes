@@ -1,0 +1,18 @@
+/* 14A Paper Finch 启动动画（移动端）。启动态覆盖骨架，数据就绪后随骨架一起卸载。 */
+.mb-launch-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--mobile-z-dialog);
+  display: grid;
+  place-items: center;
+  background: var(--lake-bg-window);
+}
+.mb-launch { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.mb-launch__anim { display: block; width: 96px; height: 96px; }
+.mb-launch__poster { display: none; width: 96px; height: 96px; }
+.mb-launch__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-launch__anim { display: none; }
+  .mb-launch__poster { display: block; }
+}

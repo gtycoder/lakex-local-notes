@@ -27,6 +27,7 @@ export function useBootstrap({
   setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote,
 }: UseBootstrapOptions) {
   useEffect(() => {
+    // 启动速度优先：不加人为最短展示；桌面 boot 窗口负责遮住真实加载时间。
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch((error) => reportNativeActionError("启动读取", error));

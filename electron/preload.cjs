@@ -24,6 +24,7 @@ const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args).catch(
 });
 
 contextBridge.exposeInMainWorld("lakeNative", {
+  rendererReady: () => ipcRenderer.send("renderer-ready"),
   assetPort: Number(process.env.LAKE_ASSET_PORT) || 19876,
   assetToken: process.env.LAKE_ASSET_TOKEN ?? "",
   bootstrap: () => invoke("bootstrap_workspace"),

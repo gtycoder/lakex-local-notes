@@ -15,6 +15,7 @@
 @import "./kit.css" layer(kit);
 @import "./chrome.css" layer(shell);   /* 应用外壳（P5 逐屏迁移） */
 @import "./feature.css" layer(feature);
+@import "./brand-launch.css" layer(feature);
 @import "./overlay.css" layer(overlay);   /* 浮层（P5-c：对话框 / 菜单 / 气泡） */
 @import "./kernel-theme.css";             /* 内核 lakex 主题变量集中映射（**故意不 layer**：未分层才压得过内核注入的未分层 schema <style>） */
 @import "../features/editor/selectionToolbar/selectionToolbar.css" layer(overlay);   /* 编辑态浮动工具栏（选区气泡） */

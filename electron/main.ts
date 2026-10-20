@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, dialog, screen, session, shell, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, nativeTheme, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -35,6 +35,9 @@ import { registerAppSchemePrivileges, serveAppDist } from "./appProtocol.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+
+/** 启动遮罩窗口：在主进程初始化 + 渲染层加载期间先显示 logo，避免主窗口白屏。 */
+let bootWindow: BrowserWindow | null = null;
 
 // userData 隔离（必须在 app ready 前设置）：
 // - dev 默认 lake-notes-dev（空库+种子），打包版默认 lake-notes-electron（正式数据）；
@@ -258,7 +261,53 @@ function registerAssetTokenRedirect() {
 }
 
 
+/**
+ * 思源式 boot 窗口：主进程一启动就显示本地 HTML（内嵌 APNG），
+ * 主窗口保持 show:false，等渲染层首帧信号后再显示并销毁 boot 窗口。
+ */
+function createBootWindow() {
+  if (bootWindow && !bootWindow.isDestroyed()) return;
+  const windowStatePath = path.join(app.getPath("userData"), "window-state.json");
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const restored = clampWindowState(readWindowState(windowStatePath), workArea);
+  const boot = new BrowserWindow({
+    x: restored.x,
+    y: restored.y,
+    width: restored.width,
+    height: restored.height,
+    show: false,
+    frame: false,
+    resizable: false,
+    movable: true,
+    title: "Lake Notes",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#f3f4f6",
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  bootWindow = boot;
+  if (restored.maximized) boot.maximize();
+  if (restored.fullscreen) boot.setFullScreen(true);
+  boot.once("ready-to-show", () => {
+    if (boot.isDestroyed()) return;
+    boot.show();
+    log.app.info("[boot] splash shown");
+  });
+  boot.on("closed", () => {
+    if (bootWindow === boot) bootWindow = null;
+  });
+  void boot.loadFile(path.join(__dirname, "../electron/boot.html")).catch((error) => {
+    log.app.warn(`[boot] splash load failed: ${(error as Error).message}`);
+    if (!boot.isDestroyed()) boot.destroy();
+    if (bootWindow === boot) bootWindow = null;
+  });
+}
+
 async function createWindow() {
+  // macOS 关窗后从 Dock 重开时也要先有 boot 窗口，否则主窗口会隐藏到 renderer-ready 才出现。
+  if (!bootWindow || bootWindow.isDestroyed()) createBootWindow();
   const windowStatePath = path.join(app.getPath("userData"), "window-state.json");
   const workArea = screen.getPrimaryDisplay().workArea;
   const restored = clampWindowState(readWindowState(windowStatePath), workArea);
@@ -269,6 +318,7 @@ async function createWindow() {
     height: restored.height,
     minWidth: 560,
     minHeight: 480,
+    show: false,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     // 红绿灯垂直居中到「可见头区」中心：y + 直径/2 = (TOPBAR_HEIGHT + TOPBAR_SEAM)/2。
     // **别再把 y 写成常数**：曾因顶栏 38→32 而红绿灯没跟、中心错位 3px（用户 260923 报）。
@@ -288,6 +338,30 @@ async function createWindow() {
       // → PDF viewer 空白（实测）。plugins: true 启用 Chromium PDF viewer。
       plugins: true,
     },
+  });
+
+  let mainWindowRevealed = false;
+  let bootFallback: NodeJS.Timeout | null = null;
+  const revealMainWindow = (reason: string) => {
+    if (mainWindowRevealed || win.isDestroyed()) return;
+    mainWindowRevealed = true;
+    if (bootFallback) { clearTimeout(bootFallback); bootFallback = null; }
+    if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
+    bootWindow = null;
+    win.show();
+    win.focus();
+    log.app.info(`[boot] main window shown (${reason})`);
+  };
+  const onRendererReady = (event: IpcMainEvent) => {
+    if (event.sender.id === win.webContents.id) revealMainWindow("renderer-ready");
+  };
+  ipcMain.on("renderer-ready", onRendererReady);
+  bootFallback = setTimeout(() => revealMainWindow("fallback-timeout"), 8_000);
+  win.once("closed", () => {
+    if (bootFallback) { clearTimeout(bootFallback); bootFallback = null; }
+    ipcMain.removeListener("renderer-ready", onRendererReady);
+    if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
+    bootWindow = null;
   });
 
   const persistWindowState = () => {
@@ -473,6 +547,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     initLogger();
+    createBootWindow();
     log.app.info("app ready: initLogger done");
     store = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
     const integrity = store.checkIntegrity();

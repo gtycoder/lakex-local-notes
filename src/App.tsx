@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isCloudActive } from "./core/cloudState";
-import { LoaderCircle, PanelLeft } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { Sidebar } from "./components/app/Sidebar";
 import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/model/sidebarHoverMachine";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
@@ -45,6 +45,7 @@ import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
+import { BrandLaunchMark } from "./components/app/BrandLaunchMark";
 import { TrashPanel } from "./components/app/TrashPanel";
 import { AssetsBrowser } from "./components/app/AssetsBrowser";
 
@@ -111,6 +112,22 @@ export function App() {
   // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
   // pending 计数刷新已收敛为主进程 IPC 层事件广播（思源模式）：pending-summary-changed 单点订阅，
   // 渲染层不再需要各操作点手动触发（历史上 10+ 处手动刷新屡有遗漏）。
+  // boot 窗口：等 workspace（或启动错误）已经渲染到主窗口后再显示，避免主窗口先露白/重复播 splash。
+  useEffect(() => {
+    if (!workspace && !error) return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => {
+        const bridge = (window as unknown as { lakeNative?: { rendererReady?: () => void } }).lakeNative;
+        bridge?.rendererReady?.();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      if (second) cancelAnimationFrame(second);
+    };
+  }, [workspace, error]);
+
   const { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent, handleCaptureReady } = useSavePipelineGlue({
     setNotes, setTreeNodes, setSync, setOpenTabs, setDraftEntries, setError, openTabsRef, editorsRef,
   });
@@ -465,7 +482,7 @@ export function App() {
   // 跟踪当前文档是否为空大纲；切换标签时清除豁免、重新评估。
 
   /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态经 manifest v3 同步） */
-  if (!workspace) return <main className="loading-screen"><LoaderCircle className="spin" /><span>正在打开本地知识库</span>{error && <small>{error}</small>}</main>;
+  if (!workspace) return <main className="loading-screen"><BrandLaunchMark label="正在打开本地知识库" />{error && <small>{error}</small>}</main>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const {

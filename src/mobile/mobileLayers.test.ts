@@ -32,6 +32,7 @@ const FILES = [
   "mobile/features.css", // P6：图片 Lightbox / 附件预览的移动端外观（结构类名共享）
   "mobile/quick-notes.css", // P6b：小记编辑器宿主与预览（自桌面 quick-notes.css 抽取移动端子集）
   "mobile/mobile.css", // 外壳（首页/工作区/设置/抽屉/toast/小记）
+  "mobile/brand-launch.css", // 261020：14A Paper Finch 启动动画（移动端）
   "mobile/editor-dark.css", // 编辑器深色组件边界修复（取值 P1 起归 theme/dark.css）
   "mobile/editor/editor-dock.css", // 底部 dock + 面板
   "mobile/ink/inkPad.mobile.css", // 手写板移动端布局
@@ -60,6 +61,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/mobile.css": { decls: 1504, dupGroups: 6 }, // 261020 多维表移动端编辑：+76 = 编辑态部件（单元格按钮 24 / 新增记录与加载更多整行 34 / 记录与字段面板控件排版 18：选项 chips 选中环、评分按钮、进度滑杆、字段新增表单）。属**新增交互形态**，不是覆盖叠层。 // 261020 画板编辑：+4 = .mobile-board-viewer 层叠上下文（position/z-index/isolation）+ 编辑态恢复 .draw-toolbar。 // 261019 usheet 语雀式编辑面：+80 = 顶部常驻工具条（44px/横向滚动/按压态）+ 自绘公式栏（地址/显示值）+ 两颗官方浮动钮上移/隐藏「打开表格工具」。属**新增交互形态**，不是覆盖叠层。 // 261019(七)：+2 = 转场落定后撤掉工作区层的 transform/will-change（fixed 包含块回视口，修「工具栏展开停在键盘上方」）。 // 261019：+1 = 文档属性内容区横向内距（.minfo 用 --mb-page-pad；用户报「属性页不适配手机」，实测 dt.left=0/dd.right=412 贴边）——属**修复缺失的内距**，不是覆盖叠层。 // 261019：+12 = 标签页抽屉「关闭全部」按钮（基样式 10 + 按压态 2）。 // 261019 第五批：+11 = 小记编辑器懒加载兜底改为写作卡骨架（.mb-composer-skeleton 容器 + 标题/行/短行）。 // 261019 第四批：+10 = 「常用」分组标题按钮 .home-section__toggle（收起/展开三角）；「最近文档」已删（其容器复用给常用，声明数不变）。 // 261019 第三批：+1 = 表格页胶囊上移；同批工作区层补不透明底（+1，已计入）。 // 261019 第二批：+17 = 路由转场（stage/layer/视差/reduced-motion 共 14）+ 按压反馈统一（transition 1 + scale 1）。// 261019：+18 = 首层 tab 改**原生横向分页**（用户点单对齐语雀 pager）：.mobile-tab-stage 由 1 条规则（4 声明）扩为横向滚动容器（10）+ 隐藏滚动条（1）+ 写作锁横滑（overflow-x/touch-action 2 + 内层竖滚容器 pan-y 1）+ 新增 .mobile-tab-pane（8）；属**新增交互形态**，不是覆盖叠层。// 261014：+1 = 抽屉工具栏图标左内距（笔记本行图标太贴边）；此前 +1 = 首页胶囊收窄变体 .mobile-bottom-bar--home（只剩 3 项 ⇒ 上限 6 槽 288 → 4 槽 ≈192，对齐语雀紧凑度；工作区那条 4 项不动） // 261014：整块触发改版净 **-19**（删掉「气泡族」.mobile-create-press/.mobile-create-quick，换成整块层 .mobile-block-quick + 胶囊本体的 touch-action/user-select + 条目过渡补 opacity）；基线随之**调小**（只许降） // P1 -39 / P2 +4 / P5 +6 → 收尾 -83 → 261013 必要项 -33 → A -13 → 6.3/6.9 +20（冷启动骨架 mb-skel ×5 + 关键帧；引擎几何压回只改既有声明的值）
   // dupGroups 2 → 3：新增的 .mb-skel 在 prefers-reduced-motion 名单里关掉 animation，与主块同名同属性成一组 ——
   // 这是本文件既有的无障碍登记模式（.mobile-htab 等同样处理），不是多层覆盖。
+  "mobile/brand-launch.css": { decls: 20, dupGroups: 2 },   // 261020 新文件：启动覆盖层/标记/动画/静态兜底；2 个重复组 = prefers-reduced-motion 对 anim/poster 的 display 切换
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 258, dupGroups: 0 }, // 261019(八)：+1 = 收起过渡期面板内容保持可见时不再接受点击（.med-panel[data-closing="1"]）。 // 261017 撤销后端：`.med-btn:disabled` 置灰 +2（255 → 257）。261015：「＋」= 方块网格（两组 8+10 × 4 列、组间 16、方块 52、浅灰底）；「Aa」面板压缩上下间距（行距 8→6、卡内距 3→2、条目 44→40 走注册表补足、色板 37→34、内距 12/14→6/6）+ 图标 17→20、文字/图标色 text-2→text-1。261017（B6）：一级面板统一灰底（selector 加 data-kind=font，声明数不变）；「更多」改行式白卡 + 每项文字说明 + 工具栏中间横滑/键盘固定尾键（删 `.med-ins-glyph` -9、补 `.med-f-btn:disabled` +2 / 行内文字与行标签/不换行 +21 / 工具栏横滑区 + `.med-btn--kb` +5）⇒ 237 → 255
   "mobile/ink/inkPad.mobile.css": { decls: 23, dupGroups: 0 },

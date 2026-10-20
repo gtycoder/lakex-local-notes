@@ -50,6 +50,15 @@
   `transform` / `will-change: transform`** —— 它们是 `position:fixed` 的包含块陷阱；动画期间挂、落定撤；新增层先按 I5 验。
 - **状态**：已提交并推送 origin/master（`295ef7b1`；用户 261020 验收后授权推送）。
 
+### 261020(六) · 桌面启动改为思源式 boot 窗口 + 14A 折纸加载 · 已提交
+
+- **问题**：logo 原先在 React loading screen 里，主窗口先显示空 `index.html` ⇒ dev/打包都可能先白屏再出 logo。
+- **修法**：主进程 `app.whenReady()` 立即创建本地 `electron/boot.html`（内嵌 128px APNG）；主窗口 `show:false`，React 在 `workspace`/启动错误渲染后发 `renderer-ready`，主进程再显示主窗口并销毁 boot 窗口。macOS 关窗后从 Dock 重开也会先重建 boot 窗口。
+- **启动耗时**：boot 窗口在 app ready 后约 0.1s 出现；去掉此前 700ms 人为最短展示后，隔离空库实测热启动约 **1.1s**、冷启动约 **1.85s**。剩余耗时主要是 6.9MB 入口 bundle + workspace bootstrap，不是动画。
+- **Android**：`android/app/src/main/res/drawable*/splash.png` 全量换成 14A 静态标识；移动端 WebView 启动覆盖层继续用 128 loop APNG，同样不加人为最短展示。
+- **资源/代码**：`electron/boot.html`、`public/brand/*`、`src/styles/brand-launch.css`、`src/mobile/brand-launch.css`、两端 `BrandLaunchMark`；打包 `files` 已纳入 `electron/boot.html`。
+- **门禁（暂存区隔离 worktree）**：tsc 0 · vitest **316 文件 / 2303 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:bundle ✓ · `git diff --check` ✓。
+
 ### 261020 · 图标体系重做 + 表情面板（中文搜索/排布）+ 浮层外点 + 附件图标与压缩包打开 · 已提交、已推送
 
 - **目录图标（用户点单，三轮收口）**：笔记本/分组改用**语雀知识库那套 17 个彩色插画**（值方言 `n:<id>`，整串 ≤16 字符，同步字段不变）；**旧「40 个 lucide 线性图标 + 8 档浅渐变底板 + `i:<id>:<色号>` 编码」整体删除**（只保留识别：旧值画中性图形、不回显原始串、不迁移）。**语雀品牌 logo 图标已移除**（用户 261020：涉及 logo 不能用）。文档/表格/多维表/画板**只有表情**、无「图标」类目；笔记本/分组保留「表情符号 ｜ 图标」两页（默认图标，维持第一版结构）。

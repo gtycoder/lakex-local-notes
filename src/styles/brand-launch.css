@@ -1,0 +1,10 @@
+/* 14A Paper Finch 启动动画（桌面）。尺寸只影响展示，不改 APNG 文件本身。 */
+.brand-launch { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.brand-launch__anim { display: block; width: 128px; height: 128px; }
+.brand-launch__poster { display: none; width: 128px; height: 128px; }
+.brand-launch__label { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-launch__anim { display: none; }
+  .brand-launch__poster { display: block; }
+}

@@ -35,6 +35,7 @@ import { useAutoSync } from "./hooks/useAutoSync";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
+import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
 import { subscribeQuickNoteShortcut } from "./native/quickNoteShortcut";
 import { ConfirmHost } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
@@ -44,6 +45,7 @@ import { runNativeSqliteSpike } from "./native/nativeSqlite";
 import { buildLakeNative } from "./native/lakeNativeContract";
 import { migrateSnapshotToNativeSqlite } from "./native/nativeSqliteMigration";
 import "./mobile.css";
+import "./brand-launch.css";
 
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
@@ -118,6 +120,7 @@ export function MobileApp() {
   }, [route.kind, refreshAll]);
 
   useEffect(() => {
+    // 启动速度优先：不加人为最短展示；native splash + WebView overlay 只覆盖真实加载时间。
     (async () => {
       try {
         await bridge.init();
@@ -474,6 +477,9 @@ function MobileHomeSkeleton() {
           <span className="mb-skel mb-skel--baritem" />
           <span className="mb-skel mb-skel--baritem" />
         </nav>
+      </div>
+      <div className="mb-launch-overlay">
+        <MobileBrandLaunchMark label="正在打开本地知识库" />
       </div>
     </div>
   );
