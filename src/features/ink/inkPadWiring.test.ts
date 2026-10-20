@@ -10,6 +10,10 @@ const IPC = read("../../../electron/ipc/registerNotes.ts");
 const DESKTOP = read("../editor/MultiTabEditor.tsx");
 const MOBILE = read("../../mobile/notebook/NotebookWorkspace.tsx");
 const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
+const INK_PAD = read("./InkPad.tsx");
+const DESKTOP_INK = read("./DesktopInkPad.tsx");
+const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
+const TABS_CSS = read("../../styles/app/tabs.css");
 
 describe("手写板 POC 端到端接线", () => {
   it("kind=ink 已进入 NoteKind / 正文路径", () => {
@@ -21,6 +25,14 @@ describe("手写板 POC 端到端接线", () => {
   it("Manifest 升级到 V2，并保留 V1 读取升级路径", () => {
     expect(SYNC).toContain("MANIFEST_VERSION = 2");
     expect(SYNC).toContain("new Set([1, 2])");
+  });
+
+  it("桌面手写板与其它标签占用同一格，并遵守 data-active 隐藏契约", () => {
+    expect(INK_PAD).toContain('data-active={active ? "true" : undefined}');
+    expect(INK_PAD).toContain('data-pane-visible={paneVisible ? "true" : undefined}');
+    expect(DESKTOP_INK).toContain("paneVisible={visible}");
+    expect(DESKTOP_INK_CSS).toContain("grid-area: 1 / 1");
+    expect(TABS_CSS).toContain(".ink-pad--desktop");
   });
 
   it("桌面创建、IPC、路由与移动端创建/路由均已接通", () => {

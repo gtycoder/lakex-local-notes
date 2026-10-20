@@ -657,6 +657,9 @@ export function MultiTabEditor({
             <EditorErrorBoundary key={"ink-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <DesktopInkPad
                 content={tab.content}
+                visible={visible && paneVisible(tab.noteId)}
+                focused={tab.noteId === activeNoteId}
+                pane={paneOf(tab.noteId)}
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}

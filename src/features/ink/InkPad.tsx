@@ -20,6 +20,9 @@ export interface InkPadProps {
   content: string;
   readOnly?: boolean;
   variant: "desktop" | "mobile";
+  active?: boolean;
+  paneVisible?: boolean;
+  pane?: "left" | "right" | null;
   onChange?: (content: string) => void;
   onDirty?: () => void;
   onEditorCapture?: (capture: (() => string | null) | null) => void;
@@ -56,7 +59,7 @@ function replacePage(doc: InkDoc, page: InkPage): InkDoc {
   return { ...doc, pages: doc.pages.map((item) => (item.id === page.id ? page : item)) };
 }
 
-export function InkPad({ content, readOnly = false, variant, onChange, onDirty, onEditorCapture }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture }: InkPadProps) {
   const initialDoc = useMemo(() => parseInkBody(content), [content]);
   const [doc, setDoc] = useState<InkDoc | null>(initialDoc);
   const docRef = useRef<InkDoc | null>(initialDoc);
@@ -324,7 +327,14 @@ export function InkPad({ content, readOnly = false, variant, onChange, onDirty, 
   }
 
   return (
-    <div className={"ink-pad ink-pad--" + variant} data-readonly={readOnly ? "true" : undefined} data-prevent-swipe>
+    <div
+      className={"ink-pad ink-pad--" + variant}
+      data-readonly={readOnly ? "true" : undefined}
+      data-prevent-swipe
+      data-active={active ? "true" : undefined}
+      data-pane-visible={paneVisible ? "true" : undefined}
+      data-pane={pane ?? undefined}
+    >
       <div className="ink-toolbar" role="toolbar" aria-label="手写工具">
         <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔" disabled={readOnly}><Pen size={16} /></button>
         <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔" disabled={readOnly}><Highlighter size={16} /></button>
