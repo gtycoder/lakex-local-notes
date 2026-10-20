@@ -758,6 +758,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <Suspense fallback={<div className="mb-empty">正在加载手写板…</div>}>
                 <MobileInkPad
                   content={t.content}
+                  active={t.id === activeId}
                   readOnly={!t.editing}
                   onChange={(c) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
                 />
