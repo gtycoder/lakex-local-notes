@@ -37,6 +37,7 @@
 - **移动端手写**：Android 编辑态经 `StylusInputPlugin` 关闭系统手写接管，离开后恢复，避免系统手写板抢 Pointer Events。
 - **真云验证**：隔离 S3 前缀下确认桌面 A→B、桌面→Android、Android 编辑→桌面回读；`kind=ink`、页数/笔迹数一致，正文逐字节相同；删除传播与 Android 恢复也通过。
 - **同步真 bug 修复**：① 移动端 gzip manifest 不能声明 `application/json`（CapacitorHttp Android 会走文本分支导致 `SignatureDoesNotMatch`），改用 `application/octet-stream` + `Content-Encoding: gzip`；② `flushNoteBatch` 原先只提交 DB 行、未落正文文件，会产生 `content_hash=synced` 但正文缺失；现先写文件再提交元数据，并有批窗口回归用例。
+- **正式 review 收口**：纸张线条/网格/点阵移入 SVG 逻辑坐标（缩放时密度不再漂移）；撤销栈增加 24 MiB 总字符预算；序列化与解析共用页数/笔迹/采样点/16 MiB 上限，重复页面/笔迹 ID 拒绝导入；页面切换会保存 `activePageId`；`flushSave` 只在确有 pending 时提交，避免只读/未编辑卸载产生虚假 dirty。另修状态栏把 ink 误标成“画板”、历史快照把 ink JSON 误喂给画板预览器、桌面创建接口漏回 `kind`，并抽出统一的建笔记开 tab 流程与核心 `normalizeNoteKind`。
 - **待办**：合并前 `fetch + rebase origin/master`，重跑全量门禁；真实 Android 手写笔设备验收压感/掌托/延迟；再交用户验收决定合并。iPad 仍只保留 Web 兼容，无 iOS 工程。
 
 ### 261019(十三) · 多维表/存储 review 修复（桌面）· 已提交 `ef7888fa`、已推送
