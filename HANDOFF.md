@@ -2025,7 +2025,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（261020 起 52 = 50 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
-### 261020(三) · 表格（usheet）P1：布局动作 + 数字格式 · **已合入并推送 master（`fc6d3a77` / `0a7c2990` / 数字格式见 `git log`）**
+### 261020(三) · 表格（usheet）P1：布局动作 + 数字格式 + 常用公式 · **已合入并推送 master（见 `git log`：`fc6d3a77` / `0a7c2990` / `0462df6b`）**
 
 > 前置：master 已含 origin/master 合并（ink 手写板 v1 等）与本会话 261020 移动端批次（`eff2cae1`）。
 > 本批在**干净分支**上做，按用户要求「合并推送 master 之后再推进 P1」。
@@ -2050,9 +2050,20 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   正文 pattern `0.00%`（渲染链路与落盘都正常）。测试表格已 purge，`测试笔记本` 回到 4 篇。
 - **门禁**：tsc 0 · 全库 vitest **315 文件 / 2296 例** · 双端构建 · ui-metrics/check:core/check:mobileui · diff-check。
 
-- **未做（下一刀）**：复制/剪切/粘贴、公式库/函数选择、**排序/筛选**（当前 Univer 预设**没有** sort/filter 插件，
-  只有 numfmt；要做需另装 `@univerjs/sheets-sort`/`sheets-filter` 或自研）、填充柄与批量操作、CardResizer 触控调高、
-  行高列宽"记住上次"。
+#### 追加：常用公式快捷插入（P1 第四批，已入 master）
+
+- **语义（对齐 Excel/Sheets 的 Σ）**：选中**一个单元格** →「更多 → 常用公式 → 求和/平均值/计数/最大值/最小值」，
+  在它**上方同一列**自动找**连续数值块**，向该格写入 `=SUM(A1:A3)` 这一类完整公式（不覆盖既有数据、不猜语义）。
+- **架构**：`src/mobile/usheet/usheetFormulaQuick.ts`（选项表 + 列名 A1 记法 + 纯计划函数，可单测）；
+  条件不满足（多格选区 / 上方无连续数值 / 第一行）一律 **toast 明说**，不写盘。
+- **设备验收（emulator-5554）**：A1=10/A2=20/A3=30，选中 A4 → 求和 ⇒ 公式栏显示 **60**、正文
+  `A4 = {f:"=SUM(A1:A3)", v:60, t:2}`；选中 A7（上方为空）⇒ toast「这个单元格上方没有可统计的连续数值」。
+  测试表格已 purge，`测试笔记本` 回到 4 篇。
+- **门禁**：tsc 0 · 全库 vitest **316 文件 / 2301 例** · 双端构建 · ui-metrics/check:core/check:mobileui · diff-check。
+
+- **未做（下一刀）**：**排序/筛选**（当前 Univer 预设**没有** sort/filter 插件，只有 numfmt；要做需另装
+  `@univerjs/sheets-sort`/`sheets-filter` 或自研）、填充柄与批量操作、CardResizer 触控调高、行高列宽"记住上次"；
+  公式库的**完整版**（按类别浏览 + 参数提示）与「先选区域再插公式」没做（移动端选区易误拖，先只做单格 Σ 语义）。
 - **剪贴板三键：试过并回退（261020，有设备证据）**：用 `univerAPI.executeCommand` 派发
   `sheet.command.copy/cut/paste`（与桌面快捷键同一条内核命令）—— 实测命令返回 true、**无报错也无效果**
   （A1 复制 → C3 粘贴后正文 C3 仍是原值），说明这套命令依赖内核自己的剪贴板 data 通道，移动 WebView 里

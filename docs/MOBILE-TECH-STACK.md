@@ -170,6 +170,10 @@
      调用前先判 `typeof range.setNumberFormat === "function"`，**缺失时明确 toast 提示、不静默 no-op**。
      设备实测：B1=1.5 选「数字」⇒ 正文 `styles[..].n.pattern="#,##0.00"` 且格 `s` 指向它；B3=21.5 选「百分比」⇒
      公式栏显示值实测 **`2150.00%`**、正文 pattern `0.00%`（Univer numfmt 渲染链路正常）。
+   - **常用公式（261020 P1 第四批）**：「更多 → 常用公式」= 求和 / 平均值 / 计数 / 最大值 / 最小值；
+     语义对齐 Excel Σ：**单格**为写入目标，自动取**上方同列连续数值块**生成 `=SUM(A1:A3)` 完整公式
+     （选项表 + A1 记法 + 计划函数单一来源 `src/mobile/usheet/usheetFormulaQuick.ts`）。多格选区 / 上方无数值 /
+     第一行一律 toast 明说，不写盘、不覆盖。设备实测：A4 写 `=SUM(A1:A3)` ⇒ 公式栏 60、正文 `{f,v:60,t:2}`。
    - **剪贴板：未做（试过并回退）**：`sheet.command.copy/cut/paste` 经 `executeCommand` 派发时返回 true 但**无效果**
      （依赖内核自己的剪贴板 data 通道，移动 WebView 拿不到原生 copy/paste 事件）；要支持需接 Android ClipboardManager
      + 内核可编程剪贴板服务（单独立项）。**不要**放一排点了没反应的按钮。
