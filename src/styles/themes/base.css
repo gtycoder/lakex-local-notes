@@ -21,16 +21,7 @@
   --lake-note-ref-icon-accent: #73adff;        /* 高亮短线（蓝） */
   --lake-note-ref-icon-link: #20ba77;          /* 链接勾（绿） */
   --lake-note-ref-icon-knockout: #ffffff;      /* 链接前的挖空描边（= 底框色） */
-  /* 目录节点图标浅色预制底色（261015 用户提供飞书色板）：先混白18%，再混白15%（累计约30%；缩小图形后回调深一档）。
-   * 内容标识三主题同色，白色线性轮廓保留；不再沿用旧深色实底的 ≥3:1 对比度结论。 */
-  --lake-node-icon-peach: linear-gradient(135deg, #ffdea5, #ffc9a3 50%, #fcbec7);
-  --lake-node-icon-coral: linear-gradient(135deg, #fcc7a4, #fcb0ad 50%, #fba8c5);
-  --lake-node-icon-rose: linear-gradient(135deg, #f9b0da, #f69fda 50%, #efa4ef);
-  --lake-node-icon-violet: linear-gradient(135deg, #c3bafc, #cbaaf8 50%, #deb5f6);
-  --lake-node-icon-indigo: linear-gradient(135deg, #b8c1f9, #afadf6 50%, #baa9f9);
-  --lake-node-icon-blue: linear-gradient(135deg, #a7beff, #a0b3ff 50%, #b1adfd);
-  --lake-node-icon-teal: linear-gradient(135deg, #95e0d4, #89d6d3 50%, #97dce7);
-  --lake-node-icon-green: linear-gradient(135deg, #a1e0ba, #a5d49a 50%, #bed79c);
+
   /* 选择器里表情格的字号（原为内核面板的 26px 字面量；自有面板后收成令牌，字号字面量护栏才为 0）。 */
   --lake-emoji-glyph-size: 26px;
   --lake-node-glyph-size: 1.15em; /* 节点图标底块与表情字号共用尺度，跟随目录/标签宿主字号。 */

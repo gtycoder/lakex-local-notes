@@ -1,21 +1,29 @@
 import { useMemo, useState } from "react";
 import { Clock, EyeOff } from "lucide-react";
 import type { TreeNodeType } from "../../lib/types";
-import { NODE_ICONS, NODE_ICON_TINTS, encodeNodeIcon, nodeIconPickerMode, parseNodeIcon, type NodeIconTintId } from "../../lib/nodeIcons";
+import { nodeIconPickerMode, parseNodeIcon } from "../../lib/nodeIcons";
+import { NOTEBOOK_ICONS, encodeNotebookIcon } from "../../lib/notebookIcons";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
 import { pushEmojiRecent, readEmojiRecents } from "../../lib/emojiRecents";
 import { MobileNodeIconGlyph } from "./NodeIconGlyph";
 
-/** 目录/知识库自有选择器；只共享资源数据，不复用正文输入表情的组件/类名。 */
+/** 目录/知识库自有选择器（261020 精简：容器（笔记本/分组）→ 语雀彩色插画；所有文档类型 → 表情）。
+ *
+ * 两层含义都写在这里，不再有「图标 / 表情符号」类型页签：
+ *   · 面板里**只有一类资源**，页签没有可切换的目标（用户 261020：「只保留表情符号用就行」「笔记本和分组就用新做的这个」）。
+ *   · 旧的 40 个线性图标 + 8 档色板已整体删除，`i:` 方言只保留识别（画中性图形）。
+ */
 export function MobileNodeIconPicker({ nodeType, value, onPick }: {
   nodeType: TreeNodeType;
   value: string | null;
   onPick: (value: string | null) => void;
 }) {
   const current = parseNodeIcon(value);
-  const [mode, setMode] = useState(() => nodeIconPickerMode(nodeType));
-  const [tint, setTint] = useState<NodeIconTintId>(current?.kind === "icon" ? current.tint : "blue");
+  // 容器（笔记本/分组）两类资源都能选 ⇒ 保留「表情符号 ｜ 图标」两页；文档类型只有表情，没有页签。
+  const isContainer = nodeType !== "note";
+  const [mode, setMode] = useState<"icon" | "emoji">(() => nodeIconPickerMode(nodeType));
+  const currentNotebookId = current?.kind === "notebook" ? current.icon.id : null;
   const [recent, setRecent] = useState(() => readEmojiRecents("icon"));
   const [category, setCategory] = useState("最近");
   const names = useMemo(() => new Map(LAKE_EMOJIS.map((emoji) => [emoji.char, emoji.name])), []);
@@ -28,18 +36,33 @@ export function MobileNodeIconPicker({ nodeType, value, onPick }: {
   return (
     <div className="mb-node-picker" data-prevent-swipe>
       <div className="mb-node-picker__head">
-        <div className="mb-node-picker__tabs" role="tablist" aria-label="图标类型">
-          {(["emoji", "icon"] as const).map((tab) => (
-            <button key={tab} type="button" role="tab" aria-selected={mode === tab}
-              className={"mobile-htab" + (mode === tab ? " active" : "")} onClick={() => setMode(tab)}
-            >{tab === "emoji" ? "表情符号" : "图标"}</button>
-          ))}
-        </div>
+        {isContainer ? (
+          <div className="mb-node-picker__tabs" role="tablist" aria-label="图标类型">
+            <button type="button" role="tab" aria-selected={mode === "emoji"}
+              className={"mobile-htab" + (mode === "emoji" ? " active" : "")} onClick={() => setMode("emoji")}>表情符号</button>
+            <button type="button" role="tab" aria-selected={mode === "icon"}
+              className={"mobile-htab" + (mode === "icon" ? " active" : "")} onClick={() => setMode("icon")}>图标</button>
+          </div>
+        ) : (
+          <span className="mb-node-picker__title">表情符号</span>
+        )}
         <button type="button" className="mb-btn mb-btn--ghost" aria-label="移除图标" onClick={() => onPick(null)}>
           <EyeOff size={18} aria-hidden="true" /><span>移除</span>
         </button>
       </div>
-      {mode === "emoji" ? (
+      {mode === "icon" ? (
+        <div className="mb-node-picker__body mb-node-picker__body--icons">
+          <div className="mb-node-picker__grid mb-node-picker__grid--notebook" aria-label="选择笔记本图标">
+            {NOTEBOOK_ICONS.map((icon) => {
+              const selected = icon.id === currentNotebookId;
+              return <button key={icon.id} type="button" className={"mb-node-picker__cell mb-node-picker__cell--notebook" + (selected ? " is-selected" : "")}
+                aria-label={icon.label} aria-pressed={selected} onClick={() => onPick(encodeNotebookIcon(icon.id))}>
+                <MobileNodeIconGlyph value={encodeNotebookIcon(icon.id)} />
+              </button>;
+            })}
+          </div>
+        </div>
+      ) : (
         <div className="mb-node-picker__emoji-page">
           <div className="mb-node-picker__categories" role="tablist" aria-label="表情分类">
             <button type="button" role="tab" aria-selected={category === "最近"} aria-label="最近"
@@ -58,29 +81,7 @@ export function MobileNodeIconPicker({ nodeType, value, onPick }: {
                   aria-label={names.get(char) ?? char} onClick={() => pickEmoji(char)}>{char}</button>
               ))}
             </div>
-            {emojis.length === 0 && <div className="mb-node-picker__empty">用过的图标会出现在这里</div>}
-          </div>
-        </div>
-      ) : (
-        <div className="mb-node-picker__body">
-          <div className="mb-node-picker__label">选择颜色</div>
-          <div className="mb-node-picker__grid" aria-label="选择颜色">
-            {NODE_ICON_TINTS.map((color) => (
-              <button key={color.id} type="button" className="mb-node-picker__cell" data-tint={color.id}
-                aria-label={color.label} aria-pressed={tint === color.id} onClick={() => setTint(color.id)}>
-                <span className={"mb-node-picker__swatch" + (tint === color.id ? " is-selected" : "")} />
-              </button>
-            ))}
-          </div>
-          <div className="mb-node-picker__label">选择图标</div>
-          <div className="mb-node-picker__grid" aria-label="选择图标">
-            {NODE_ICONS.map((icon) => {
-              const selected = current?.kind === "icon" && current.icon.id === icon.id;
-              return <button key={icon.id} type="button" className={"mb-node-picker__cell" + (selected ? " is-selected" : "")}
-                aria-label={icon.label} aria-pressed={selected} onClick={() => onPick(encodeNodeIcon(icon.id, tint))}>
-                <MobileNodeIconGlyph value={encodeNodeIcon(icon.id, tint)} />
-              </button>;
-            })}
+            {emojis.length === 0 && <div className="mb-node-picker__empty">用过的表情会出现在这里</div>}
           </div>
         </div>
       )}

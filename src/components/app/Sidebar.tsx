@@ -5,7 +5,10 @@ import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { escapeId } from "../../lib/cssEscape";
 import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
 import { pushEmojiRecent, readEmojiRecents } from "../../lib/emojiRecents";
-import { NODE_ICONS, NODE_ICON_TINTS, encodeNodeIcon, nodeIconPickerMode, parseNodeIcon, type NodeIconTintId } from "../../lib/nodeIcons";
+import { nodeIconPickerMode, parseNodeIcon } from "../../lib/nodeIcons";
+import { NOTEBOOK_ICONS, encodeNotebookIcon } from "../../lib/notebookIcons";
+import { emojiZhKeywords } from "../../lib/emojiZhKeywords";
+import { filterEmojiChars } from "../../lib/emojiSearch";
 import { NodeIconGlyph } from "../ui/NodeIconGlyph";
 import type { TreeNode, TreeNodeType } from "../../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../../core/treeIndex";
@@ -1064,24 +1067,31 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
  *  ⇒ 现在这是**我们自己的一等面板**：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、
  *  顶部类型页签走 kit 的 `.ln-tabs`，emoji/图标两页的网格与几何由 components/ui/nodeIcon.css 定义。
  *  几何沿用原观感（418 宽 / 内距 16 / 正文 266 高 / 8 列 / 32 格），定位仍走 usePopoverPosition（禁自夹）。 */
-
+/** 目录节点图标选择器（261020 精简）：**容器（笔记本/分组）→ 语雀那套彩色插画；所有文档类型 → 表情符号**。
+ *
+ * 旧实现有两页页签（表情符号 / 图标），图标页是 40 个 lucide 线性图标 + 8 档浅渐变底块。用户 261020 判定观感不好，
+ * 要求「彻底清除原来的图标这一块的逻辑」，并且「文档/表格等内容不再展示图标类目、只保留表情符号；笔记本和分组用新的这套」。
+ * 因此现在**没有类型页签**：每类节点只有一类资源，面板顶部只留标题与「移除」。
+ *
+ * 表面仍是 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`，几何由 components/ui/nodeIcon.css 定义（禁自夹）。 */
 const EmojiIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { anchor: HTMLElement; nodeType: TreeNodeType; value: string | null; onPick: (icon: string | null) => void; onClose: () => void }) => {
-  // 初始页按节点用途；已保存的色号仍带出，用户在本次打开期间可自由切页。
   const current = parseNodeIcon(value);
-  const [mode, setMode] = useState(() => nodeIconPickerMode(nodeType));
-  const [tint, setTint] = useState<NodeIconTintId>(current?.kind === "icon" ? current.tint : "blue");
+  // 容器（笔记本/分组）两类资源都能选 ⇒ 保留「表情符号 ｜ 图标」两页；文档类型只有表情，没有页签。
+  const isContainer = nodeType !== "note";
+  const [mode, setMode] = useState<"icon" | "emoji">(() => nodeIconPickerMode(nodeType));
+  const currentNotebookId = current?.kind === "notebook" ? current.icon.id : null;
   const [filter, setFilter] = useState("");
   const recents = useMemo(() => readEmojiRecents(), []);
   const [active, setActive] = useState("最近"); // 「最近」常显（用户 261013 定），空的也留着位置
   const contentRef = useRef<HTMLDivElement>(null);
   // 贴齐当前行左缘（跟随层级缩进），放在整行下方，留出图标与名称供搭配预览。
   const { surfaceRef, style } = usePopoverPosition({ open: true, anchor, side: "below-fixed", gap: 8, margin: 4, width: 418 });
-  const nameOf = useMemo(() => new Map(LAKE_EMOJIS.map((e) => [e.char, e.name])), []);
+  // 悬停提示文案：优先中文短名（CLDR 取第一个词），没有中文就回英文短名。
+  const nameOf = useMemo(() => new Map(LAKE_EMOJIS.map((e) => [e.char, emojiZhKeywords(e.char).split(" ")[0] || e.name])), []);
   const q = filter.trim().toLowerCase();
-  const icons = q ? NODE_ICONS.filter((d) => d.label.toLowerCase().includes(q) || d.id.includes(q)) : NODE_ICONS;
-  const currentIconId = current?.kind === "icon" ? current.icon.id : null;
   const sections = q
-    ? [{ name: "搜索结果", emojis: LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(q) || e.char === filter.trim()).map((e) => e.char) }]
+    // 搜索三路（单一判据见 lib/emojiSearch.ts）：英文短名、CLDR 中文关键词、粘贴一个表情精确命中。
+    ? [{ name: "搜索结果", emojis: filterEmojiChars(filter) }]
     : [
         // 「最近」**常显**（用户 261013 定：空的也显示，避免"这功能到底有没有"的疑问）；内核对空最近是隐藏的，这里是有意偏离。
         { name: "最近", emojis: recents },
@@ -1103,78 +1113,72 @@ const EmojiIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { anchor:
       className="node-icon-picker"
       closeOnNestedOverlay
     >
-      {/* 顶部双 tab：横向页签的唯一来源是 kit 的 .ln-tabs（AGENTS §3#14），视觉全由它承担 */}
-      <div className="ln-tabs node-icon-picker__types">
-        <div className="ln-tabs__track" role="tablist" aria-label="图标类型">
+      {isContainer ? (
+        <div className="ln-tabs node-icon-picker__types">
+          <div className="ln-tabs__track" role="tablist" aria-label="图标类型">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "emoji"}
+              className={"ln-tabs__item" + (mode === "emoji" ? " is-active" : "")}
+              onClick={() => { setMode("emoji"); setFilter(""); }}
+            >表情符号</button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "icon"}
+              className={"ln-tabs__item" + (mode === "icon" ? " is-active" : "")}
+              onClick={() => { setMode("icon"); setFilter(""); }}
+            >图标</button>
+          </div>
           <button
             type="button"
-            role="tab"
-            aria-selected={mode === "emoji"}
-            className={"ln-tabs__item" + (mode === "emoji" ? " is-active" : "")}
-            onClick={() => { setMode("emoji"); setFilter(""); }}
-          >表情符号</button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "icon"}
-            className={"ln-tabs__item" + (mode === "icon" ? " is-active" : "")}
-            onClick={() => { setMode("icon"); setFilter(""); }}
-          >图标</button>
+            className="ln-btn ln-btn--ghost ln-tabs__action"
+            aria-label="移除图标"
+            onClick={() => onPick(null)}
+          ><EyeOff size={14} aria-hidden="true" /><span>移除</span></button>
         </div>
-        <button
-          type="button"
-          className="ln-btn ln-btn--ghost ln-tabs__action"
-          aria-label="移除图标"
-          onClick={() => onPick(null)}
-        ><EyeOff size={14} aria-hidden="true" /><span>移除</span></button>
-      </div>
-      <div className="node-icon-picker__search">
-        <span className="ln-input">
-          <input
-            className="ln-input__field"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder={mode === "icon" ? "搜索图标（如 书 / 星标）" : "搜索表情（如 smile / 名称）"}
-            autoFocus
-          />
-        </span>
-      </div>
-      <div className="node-icon-picker__body" ref={contentRef}>
+      ) : (
+        <div className="node-icon-picker__head">
+          <span className="node-icon-picker__title">表情符号</span>
+          <button
+            type="button"
+            className="ln-btn ln-btn--ghost"
+            aria-label="移除图标"
+            onClick={() => onPick(null)}
+          ><EyeOff size={14} aria-hidden="true" /><span>移除</span></button>
+        </div>
+      )}
+      {mode === "emoji" && (
+        <div className="node-icon-picker__search">
+          <span className="ln-input">
+            <input
+              className="ln-input__field"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="搜索表情（中文或英文，如 房子 / house）"
+              autoFocus
+            />
+          </span>
+        </div>
+      )}
+      <div className={"node-icon-picker__body" + (mode === "icon" ? " node-icon-picker__body--icons" : "")} ref={contentRef}>
         {mode === "icon" ? (
-          <>
-            <div className="node-icon-picker__label">选择颜色</div>
-            <div className="node-icon-tints">
-              {NODE_ICON_TINTS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  data-tint={t.id}
-                  className={"node-icon-tint" + (t.id === tint ? " is-selected" : "")}
-                  aria-label={t.label}
-                  aria-pressed={t.id === tint}
-                  title={t.label}
-                  onClick={() => setTint(t.id)}
-                />
-              ))}
-            </div>
-            <div className="node-icon-picker__label">选择图标</div>
-            <div className="node-icon-grid">
-              {icons.map((def) => (
-                <button
-                  key={def.id}
-                  type="button"
-                  className={"node-icon-cell" + (def.id === currentIconId ? " is-selected" : "")}
-                  title={def.label}
-                  aria-label={def.label}
-                  aria-pressed={def.id === currentIconId}
-                  onClick={() => onPick(encodeNodeIcon(def.id, tint))}
-                >
-                  <NodeIconGlyph value={encodeNodeIcon(def.id, tint)} />
-                </button>
-              ))}
-            </div>
-            {icons.length === 0 && <div className="emoji-picker-empty">无匹配图标</div>}
-          </>
+          <div className="node-icon-grid" aria-label="选择笔记本图标">
+            {NOTEBOOK_ICONS.map((def) => (
+              <button
+                key={def.id}
+                type="button"
+                className={"node-icon-cell" + (def.id === currentNotebookId ? " is-selected" : "")}
+                title={def.label}
+                aria-label={def.label}
+                aria-pressed={def.id === currentNotebookId}
+                onClick={() => onPick(encodeNotebookIcon(def.id))}
+              >
+                <NodeIconGlyph value={encodeNotebookIcon(def.id)} />
+              </button>
+            ))}
+          </div>
         ) : (
         <>
         {sections.map((section) => (
@@ -1193,15 +1197,15 @@ const EmojiIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { anchor:
                 ))}
               </div>
             ) : section.name === "最近" ? (
-              <div className="emoji-picker-empty">用过的图标会出现在这里</div>
+              <div className="node-icon-picker__empty">用过的表情会出现在这里</div>
             ) : null}
           </div>
         ))}
-        {sections.every((section) => section.emojis.length === 0) && <div className="emoji-picker-empty">无匹配表情</div>}
+        {sections.every((section) => section.emojis.length === 0) && <div className="node-icon-picker__empty">无匹配表情</div>}
         </>
         )}
       </div>
-      {!q && mode === "emoji" && (
+      {mode === "emoji" && !q && (
         <div className="node-icon-picker__footer">
           <div className="node-icon-picker__tabs" role="tablist" aria-label="表情分组">
             {sections.map((section) => (

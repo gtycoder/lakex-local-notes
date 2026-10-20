@@ -145,7 +145,6 @@
  * ⇒ 原先为「借用内核表情面板」而写的三条全局覆盖（.ne-ui-unicode-emoji-item > button / -tabs / -search input）
  * 一并删除：它们会**同时命中文档里内核自己的表情面板**，正是用户要求消除的互相影响。 */
 
-.emoji-picker-empty { padding: 24px 16px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 
 /* M2 全文搜索面板（思源 b3-dialog / b3-text-field 令牌风格） */
 .search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }

@@ -108,15 +108,23 @@ const row = (id: string) =>
 const click = (element: HTMLElement) => act(() => element.click());
 
 describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
-  it("默认资源页按节点类型，不因已保存图标种类改变", () => {
+  it("容器两页（默认图标）、文档只有表情；已保存的图标种类不改变默认页", () => {
     render({ nodes: nodes.map((n) => ({ ...n, icon: n.nodeType === "note" ? "i:star:0" : "🍏" })) });
-    const activeType = () => host.querySelector('.ln-tabs__item[aria-selected="true"]')?.textContent;
+    const activeTab = () => host.querySelector('.ln-tabs__item[aria-selected="true"]')?.textContent;
     click(row("book").querySelector<HTMLElement>(".tree-row-icon")!);
-    expect(activeType()).toBe("图标");
+    expect(activeTab()).toBe("图标");
+    expect(host.querySelector('[aria-label="选择笔记本图标"]')).not.toBeNull();
+    click(host.querySelector<HTMLButtonElement>('.ln-tabs__item[role="tab"]:not([aria-selected="true"])')!);
+    expect(host.querySelector(".node-icon-picker__grid")).not.toBeNull();
     click(row("group").querySelector<HTMLElement>(".tree-row-icon")!);
-    expect(activeType()).toBe("图标");
+    expect(activeTab()).toBe("图标");
     click(row("n2").querySelector<HTMLElement>(".tree-row-icon")!);
-    expect(activeType()).toBe("表情符号");
+    // 文档类型：没有类型页签，只有表情
+    expect(host.querySelector('[role="tablist"][aria-label="图标类型"]')).toBeNull();
+    expect(host.querySelector(".node-icon-picker__grid")).not.toBeNull();
+    expect(host.querySelector('[aria-label="选择笔记本图标"]')).toBeNull();
+    // 旧 i: 值（本层已删除）只画中性图形，绝不回显原始串
+    expect(host.textContent).not.toContain("i:star:0");
   });
   it("切换深层活动文档只重建旧/新行内容，不重建其余图标", () => {
     render();
@@ -151,22 +159,37 @@ describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
     render({ lockedNoteIds: new Set() });
     expect(row("n2").querySelector('[aria-label="已锁定"]')).toBeNull();
   });
-  it("连续试选图标与移除保持面板，选中格立即跟随最后一次选择", () => {
+  it("表情搜索支持中文关键词（房 → 房子），英文短名照旧", () => {
     render();
-    click(row("n2").querySelector<HTMLElement>(".tree-row-icon")!);
-    click([...host.querySelectorAll<HTMLButtonElement>(".ln-tabs__item")].find((b) => b.textContent === "图标")!);
+    click(row("book").querySelector<HTMLElement>(".tree-row-icon")!);
+    click([...host.querySelectorAll<HTMLButtonElement>('.ln-tabs__item[role="tab"]')].find((b) => b.textContent === "表情符号")!);
+    const input = host.querySelector<HTMLInputElement>(".node-icon-picker__search input")!;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const search = (text: string) => act(() => { setter.call(input, text); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    const results = () => [...host.querySelectorAll(".node-icon-picker__emoji")].map((e) => e.textContent);
+    search("房");
+    expect(results()).toContain("🏠");
+    search("house");
+    expect(results()).toContain("🏠");
+    expect(results()).not.toContain("🍎");
+  });
+
+  it("笔记本连续试选插画与移除保持面板，选中格立即跟随最后一次选择", () => {
+    render();
+    click(row("book").querySelector<HTMLElement>(".tree-row-icon")!);
     const icon = (label: string) => host.querySelector<HTMLButtonElement>(`.node-icon-cell[aria-label="${label}"]`)!;
-    click(icon("星标"));
-    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "n2" }), "i:star:0");
-    expect(icon("星标").getAttribute("aria-pressed")).toBe("true");
-    click(icon("心形"));
-    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "n2" }), "i:heart:0");
-    expect(icon("心形").getAttribute("aria-pressed")).toBe("true");
-    expect(icon("星标").getAttribute("aria-pressed")).toBe("false");
+    expect(host.querySelectorAll(".node-icon-cell")).toHaveLength(17);
+    click(icon("表格"));
+    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "book" }), "n:sheet");
+    expect(icon("表格").getAttribute("aria-pressed")).toBe("true");
+    click(icon("部门"));
+    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "book" }), "n:dept");
+    expect(icon("部门").getAttribute("aria-pressed")).toBe("true");
+    expect(icon("表格").getAttribute("aria-pressed")).toBe("false");
     click(host.querySelector<HTMLButtonElement>('[aria-label="移除图标"]')!);
-    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "n2" }), null);
+    expect(props.onSetIcon).toHaveBeenLastCalledWith(expect.objectContaining({ id: "book" }), null);
     expect(host.querySelectorAll('.node-icon-cell[aria-pressed="true"]')).toHaveLength(0);
-    expect(icon("心形")).not.toBeNull();
+    expect(icon("部门")).not.toBeNull();
   });
   it("折叠祖先后切到另一文档会重新展开并定位", () => {
     render();

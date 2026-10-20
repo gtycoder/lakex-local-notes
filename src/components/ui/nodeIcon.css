@@ -1,104 +1,48 @@
-/* 目录节点「图标」类目的图形与选择器面板（261014）。见 src/lib/nodeIcons.ts 与
-   components/Sidebar.tsx 的 EmojiIconPicker。**这个面板是我们自有的**，不复用内核在文档里那套
-   `.ne-ui-unicode-emoji-*`（用户 261014：两个面板分离、互不影响）；两页（表情符号 / 图标）共用这里的
-   网格与几何。颜色一律走 themes/base.css 的 --lake-node-icon-*。 */
+/* 目录节点图标与选择器（261020 精简）：只剩两套资源 ——
+   · 笔记本 / 分组 = 语雀那套 18 个彩色插画（notebookIcons.tsx，自带配色、无底块）；
+   · 所有文档类型 = 表情符号。
+   旧的 40 个线性图标 + 8 档色板与「类型页签」已整体删除（用户点单「彻底清除」）。
+   面板是我们自有的（不复用内核在文档里那套 .ne-ui-unicode-emoji-*）；表面由 Overlay 的 .ln-popover 提供。 */
 
-/* ── 一、图形：两类共用1.15em居中槽（目录约18px / 标签约15px）；缩小底块、放大表情字形── */
+/* ── 一、图形：表情与插画共用同一个居中槽（目录约 18px / 标签约 15px） ── */
 .node-icon-glyph { display: inline-flex; align-items: center; justify-content: center; flex: none; width: var(--lake-node-glyph-size); height: var(--lake-node-glyph-size); border-radius: var(--lake-radius-2xs); }
-.node-icon-glyph > svg { display: block; width: .85em; height: .85em; }
+.node-icon-glyph > svg { display: block; width: 100%; height: 100%; }
 .node-icon-glyph__emoji { font-size: var(--lake-node-glyph-size); line-height: 1; }
 .node-icon-glyph--unknown { color: var(--lake-text-3); }
 
-/* 颜色只声明一次（--node-icon-tint），两处消费：图形底块 / 选色按钮 */
-.node-icon-glyph[data-tint="blue"], .node-icon-picker [data-tint="blue"] { --node-icon-tint: var(--lake-node-icon-blue); }
-.node-icon-glyph[data-tint="indigo"], .node-icon-picker [data-tint="indigo"] { --node-icon-tint: var(--lake-node-icon-indigo); }
-.node-icon-glyph[data-tint="teal"], .node-icon-picker [data-tint="teal"] { --node-icon-tint: var(--lake-node-icon-teal); }
-.node-icon-glyph[data-tint="green"], .node-icon-picker [data-tint="green"] { --node-icon-tint: var(--lake-node-icon-green); }
-.node-icon-glyph[data-tint="peach"], .node-icon-picker [data-tint="peach"] { --node-icon-tint: var(--lake-node-icon-peach); }
-.node-icon-glyph[data-tint="coral"], .node-icon-picker [data-tint="coral"] { --node-icon-tint: var(--lake-node-icon-coral); }
-.node-icon-glyph[data-tint="rose"], .node-icon-picker [data-tint="rose"] { --node-icon-tint: var(--lake-node-icon-rose); }
-.node-icon-glyph[data-tint="violet"], .node-icon-picker [data-tint="violet"] { --node-icon-tint: var(--lake-node-icon-violet); }
-.node-icon-glyph[data-tint] { background: var(--node-icon-tint); color: var(--lake-text-on-accent); }
-
-/* ── 二、面板骨架：表面由 Overlay 的 .ln-popover 提供，这里只给纵向排布与三段内距。
-      几何沿用原观感（内距 16 / 正文 266 高），面板宽度由 usePopoverPosition 给（418）。 ── */
+/* ── 二、面板骨架：几何沿用原观感（内距 16 / 正文 266 高 / 面板宽 418 由 usePopoverPosition 给） ── */
 .node-icon-picker { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
 .node-icon-picker > * { flex-shrink: 0; }
 .node-icon-picker__types .ln-tabs__item { height: 38px; }
 .node-icon-picker__types .ln-tabs__action { align-self: center; }
-.node-icon-picker__search { padding: var(--lake-space-xl) var(--lake-space-xl) var(--lake-space-md); }
-.node-icon-picker__body { height: 266px; padding: 0 var(--lake-space-xl); overflow-y: auto; }
+.node-icon-picker__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl) var(--lake-space-md); }
+.node-icon-picker__title { font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
+.node-icon-picker__search { padding: 0 var(--lake-space-xl) var(--lake-space-md); }
+/* 面板正文：内容多就封顶 266 并滚动；搜索命中很少时按内容收缩（不留一大块空白） */
+.node-icon-picker__body { max-height: 266px; padding: 0 var(--lake-space-xl); overflow-y: auto; }
+.node-icon-picker__body--icons { max-height: none; padding-bottom: var(--lake-space-xl); }
 .node-icon-picker__footer { padding: 0 var(--lake-space-md); }
 
-/* ── 三、分节标题与两页共用的网格（8 列；表情格 32px 与内核原观感一致） ── */
-.node-icon-picker__label { margin: var(--lake-space-sm) 0; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
-.node-icon-picker__grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); }
-.node-icon-picker__emoji {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--lake-radius-2xs);
-  background: transparent;
-  font-size: var(--lake-emoji-glyph-size);
-  line-height: 1;
-  cursor: pointer;
-}
+/* ── 三、表情页：8 列，格 32px（与内核原观感一致） ── */
+.node-icon-picker__label { margin: var(--lake-space-md) 0 var(--lake-space-xs); font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
+.node-icon-picker__empty { padding: var(--lake-space-sm) 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+/* 9 列 × 正方形格：格宽由面板宽决定，格高用 aspect-ratio 跟住，避免出现「横向很空、纵向挨着」的拉伸网格 */
+.node-icon-picker__grid { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); }
+.node-icon-picker__emoji { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; padding: 0; border: 0; border-radius: var(--lake-radius-xs); background: transparent; font-size: var(--lake-emoji-glyph-size); line-height: 1; cursor: pointer; }
 .node-icon-picker__emoji:hover { background: var(--lake-bg-hover); }
 .node-icon-picker__emoji:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
 
-/* ── 四、选色行（飞书截图的8档浅渐变，方形色块与最终图标底块同形）── */
-.node-icon-tints { display: flex; gap: var(--lake-space-lg); padding: var(--lake-space-xs) 0 var(--lake-space-sm); }
-.node-icon-tint {
-  width: 32px;
-  height: 32px;
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: var(--lake-radius-xs);
-  background: var(--node-icon-tint);
-  cursor: pointer;
-}
-.node-icon-tint.is-selected { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: 2px; }
-.node-icon-tint:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: 2px; }
-
-/* ── 五、图标网格（8 列 × 5 行；23px 底块，复用同一个 NodeIconGlyph）── */
-.node-icon-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); }
-.node-icon-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--lake-radius-xs);
-  background: transparent;
-  font-size: var(--lake-font-size-display);
-  cursor: pointer;
-}
+/* ── 四、笔记本插画网格：6 列 × 3 行，28px 图形、44px 格（一屏放下，不需要滚动） ── */
+.node-icon-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.node-icon-cell { display: flex; align-items: center; justify-content: center; height: 44px; padding: 0; border: 0; border-radius: var(--lake-radius-xs); background: transparent; cursor: pointer; }
 .node-icon-cell:hover { background: var(--lake-bg-hover); }
 .node-icon-cell:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
 .node-icon-cell.is-selected { background: var(--lake-bg-block); }
+.node-icon-cell .node-icon-glyph { width: 28px; height: 28px; }
 
-/* ── 六、表情分组跳转行（底部；保留内核原观感的 40px 小页签，但换我们自己的类）── */
+/* ── 五、表情分组跳转行（底部；40px 小页签） ── */
 .node-icon-picker__tabs { display: flex; gap: var(--lake-space-xxs); margin: var(--lake-space-xs) 0; overflow-x: auto; scrollbar-width: none; }
 .node-icon-picker__tabs::-webkit-scrollbar { display: none; }
-.node-icon-picker__tab {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  height: 26px;
-  padding: 0 var(--lake-space-md);
-  border: 0;
-  border-radius: var(--lake-radius-xs);
-  background: transparent;
-  color: var(--lake-text-3);
-  font-size: var(--lake-font-size-tiny);
-  cursor: pointer;
-}
+.node-icon-picker__tab { flex: 1 1 0; display: flex; align-items: center; justify-content: center; min-width: 0; height: 26px; padding: 0 var(--lake-space-xxs); border: 0; border-radius: var(--lake-radius-xs); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); cursor: pointer; }
 .node-icon-picker__tab:hover { background: var(--lake-bg-hover); }
 .node-icon-picker__tab.is-active { color: var(--lake-text-1); font-weight: var(--lake-font-weight-semibold); }
