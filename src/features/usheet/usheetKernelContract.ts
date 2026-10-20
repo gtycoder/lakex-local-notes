@@ -43,6 +43,14 @@ export const UNIVER_CONFIG_KEYS = ["sheets-ui.config", "addSheetButtonConfig", "
 export const UNIVER_FEATURE_NAMES = [
   /** 剪贴板图片钩子：无条件返回浮动图命令；且 sheets-ui 的 _executePaste 是"所有钩子 mutations 串起来执行" ⇒ 只能在 DOM 层拦。 */
   "onPasteFiles",
+  /** 双击落光标：原生 dblclick 后轮询 isCellEditing，等编辑器画布就绪，再走文档渲染单元的
+   *  DocSelectionRenderService.setCursorManually()（Univer facade 未暴露点击落点）。
+   *  失效表现 = 双击仍全选单元格内容，或光标不跟随点击位置。 */
+  "setCursorManually",
+  "DocSelectionRenderService",
+  "DOCS_NORMAL_EDITOR_UNIT_ID_KEY",
+  /** 等待编辑态建立；编辑器内部双击选词由画布 id 区分，不靠这个判据。 */
+  "isCellEditing",
 ] as const;
 
 /** 「开始」页签里我们**不用**的内核工具项（走公开 MenuManager 的 updateMenuConfig({hidden:true}) 隐藏）。

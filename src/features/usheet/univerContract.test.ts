@@ -35,6 +35,7 @@ const UNIVER_PACKAGES = [
   "@univerjs/sheets-numfmt",
   "@univerjs/core",
   "@univerjs/ui",
+  "@univerjs/docs-ui",
   "@univerjs/engine-render",
   "@univerjs/design",
 ];

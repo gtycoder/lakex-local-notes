@@ -10,13 +10,13 @@
  *   maxOpenTabs 限制，默认 8 ⇒ 上界约 +100MB；隐藏态无空转：3s 内 rAF 调用 0）。
  * - **主题**：`--lake-*` → Univer Theme，跟随 `data-theme`（MutationObserver）。
  * - **自动保存**：订阅 `Event.CommandExecuted` 防抖 + 正文 diff，只有真的变了才 `onChange`（选区/滚动不落盘）。
- * - **只读**：`setEditable(false)`；`disableAutoFocus` 避免一打开就拉软键盘（移动端实测坑）。
+ * - **只读**：`setEditable(false)`。桌面端保留 Univer 的自动聚焦，单击单元格后可直接键入。
  * - **图片**：注册 drawing preset（单元格图 + 浮动图都由 Univer 原生支持）。
  * - 正文 = `usheets/{id}.usheet.json`（Univer IWorkbookData 快照），见 `core/usheetDoc.ts`。
  */
 import { useEffect, useRef, useState } from "react";
-import { createUniver, LocaleType, mergeLocales, ICommandService, CommandType, type FUniver } from "@univerjs/presets";
-import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
+import { createUniver, LocaleType, mergeLocales, ICommandService, CommandType, DOCS_NORMAL_EDITOR_UNIT_ID_KEY, type FUniver } from "@univerjs/presets";
+import { DocSelectionRenderService, UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
@@ -24,6 +24,7 @@ import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
 import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
+import { editorCaretPoint, shouldPlaceCaretAfterDoubleClick } from "./usheetCellEdit";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
 import { imageFilesFromClipboard, isPureImageClipboard, pasteImageTarget } from "./usheetImagePaste";
 import { registerUsheetActiveSheet } from "./usheetActiveSheet";
@@ -47,8 +48,15 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 /** 工具栏「收起 / 展开」偏好（设备本地；遵 AGENTS §4，不进正文 / S3 / 历史）。 */
 const RIBBON_COLLAPSED_KEY = "lake-notes-v3.usheet.ribbon-collapsed";
 
-/** 只用到 Univer workbook 的这两个方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
-type UniverBook = { save: () => unknown; setEditable: (value: boolean) => unknown };
+/** 只声明本文件用到的 FWorkbook 方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
+type UniverBook = {
+  save: () => unknown;
+  setEditable: (value: boolean) => unknown;
+  /** 双击后等待编辑态建立；Univer 1.0.3 的 FWorkbook facade 提供。 */
+  isCellEditing?: () => boolean;
+};
+
+type UniverCore = ReturnType<typeof createUniver>["univer"];
 
 /** 内联图（刚插入的 base64 / 本地文件产生的 blob URL）：必须在保存前提升为资产。 */
 const INLINE_SOURCE_RE = /^(data:image\/|blob:)/i;
@@ -206,7 +214,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       return next;
     });
   };
-  const instanceRef = useRef<{ univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook; last: string } | null>(null);
+  const instanceRef = useRef<{ univer: UniverCore; univerAPI: FUniver; book: UniverBook; last: string } | null>(null);
   const timerRef = useRef<number | null>(null);
   const changeRef = useRef(onChange); changeRef.current = onChange;
   const dirtyRef = useRef(onDirty); dirtyRef.current = onDirty;
@@ -279,7 +287,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     applyFontPolicy(workbook, lakeFontFamily());
     // 打开：正文里的 filename → 资产服务器 URL（Univer 直接把 source 当图渲染）。
     mapUsheetImageSources(workbook, (src) => renderSource(src, noteId));
-    let created: { univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook } | null = null;
+    let created: { univer: UniverCore; univerAPI: FUniver; book: UniverBook } | null = null;
     const disposables: Array<{ dispose: () => void }> = [];
     try {
       const { univer, univerAPI } = createUniver({
@@ -289,7 +297,6 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         presets: [
           UniverSheetsCorePreset({
             container: "univer-sheet-" + noteId,
-            disableAutoFocus: true,
             toolbar: showToolbar,
             formulaBar: showToolbar,
             // 字体策略（非工具栏工程）：字体表收窄成唯一一项 = 应用字体令牌 MiSans。
@@ -328,6 +335,84 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         });
       }
       disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => scheduleFlush()));
+
+      // 双击单元格只打开编辑器时，Univer 1.0.3 默认会全选单元格内容；Excel 语义是光标落在
+      // 双击位置。宿主只负责把原始点击点记下来，等编辑器和文档渲染单元就绪后调用
+      // DocSelectionRenderService.setCursorManually（Univer facade 没有公开的落点 API）。
+      // 编辑器内二次双击是选词，必须保留内核行为；用画布 id 区分主画布与编辑器画布。
+      let caretGeneration = 0;
+      const caretTimers = new Set<number>();
+      const clearCaretTimers = () => {
+        caretTimers.forEach((timer) => window.clearTimeout(timer));
+        caretTimers.clear();
+      };
+      const scheduleCaretAttempt = (generation: number, attempt: number, x: number, y: number) => {
+        const delays = [0, 16, 50, 120, 250];
+        if (attempt >= delays.length) return;
+        const run = () => {
+          if (generation !== caretGeneration) return;
+          const state = instanceRef.current;
+          if (!state) return;
+          try {
+            // 编辑态还没建立时继续等；列头/行头双击永远不会进入编辑，重试自然耗尽。
+            if (state.book.isCellEditing?.() === false) {
+              scheduleCaretAttempt(generation, attempt + 1, x, y);
+              return;
+            }
+            const renderManager = state.univer.__getInjector().get(IRenderManagerService);
+            const editorRender = renderManager.getRenderUnitById(DOCS_NORMAL_EDITOR_UNIT_ID_KEY);
+            if (!editorRender) {
+              scheduleCaretAttempt(generation, attempt + 1, x, y);
+              return;
+            }
+            const canvas = editorRender.engine.getCanvasElement();
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) {
+              scheduleCaretAttempt(generation, attempt + 1, x, y);
+              return;
+            }
+            const cssWidth = Number.parseFloat(canvas.style.width) || rect.width;
+            const cssHeight = Number.parseFloat(canvas.style.height) || rect.height;
+            const point = editorCaretPoint(x, y, rect, cssWidth, cssHeight);
+            editorRender.with(DocSelectionRenderService).setCursorManually(point.x, point.y, true, true, { strict: false });
+            clearCaretTimers();
+          } catch (error) {
+            if (attempt + 1 >= delays.length) console.warn("[usheet] 双击落光标失败", error);
+            else scheduleCaretAttempt(generation, attempt + 1, x, y);
+          }
+        };
+        const wait = delays[attempt];
+        if (wait === 0) run();
+        else {
+          const timer = window.setTimeout(() => {
+            caretTimers.delete(timer);
+            run();
+          }, wait);
+          caretTimers.add(timer);
+        }
+      };
+      const onDoubleClick = (event: MouseEvent) => {
+        if (readOnlyRef.current || event.button !== 0) return;
+        const state = instanceRef.current;
+        if (!state) return;
+        const target = event.target;
+        const canvas = target instanceof Element
+          ? target.closest<HTMLCanvasElement>('canvas[data-u-comp="render-canvas"]')
+          : null;
+        if (!shouldPlaceCaretAfterDoubleClick(canvas?.id)) return;
+        caretGeneration += 1;
+        clearCaretTimers();
+        scheduleCaretAttempt(caretGeneration, 0, event.clientX, event.clientY);
+      };
+      hostRef.current?.addEventListener("dblclick", onDoubleClick, true);
+      disposables.push({
+        dispose: () => {
+          caretGeneration += 1;
+          clearCaretTimers();
+          hostRef.current?.removeEventListener("dblclick", onDoubleClick, true);
+        },
+      });
+
       // 插图入口换成「先上传成资产、再插入资产 URL」——从源头消灭 blob（Univer 默认走 URL.createObjectURL）。
       const commandService = univer.__getInjector().get(ICommandService) as unknown as {
         registerCommand: (command: { id: string; type: CommandType; handler: () => Promise<boolean> }) => { dispose: () => void };
