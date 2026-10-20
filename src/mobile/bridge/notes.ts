@@ -6,7 +6,7 @@ import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
 import { countChars, countWords } from "../../core/textStats.js";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
-import { emptyUsheetBody } from "../../core/usheetDoc.js";
+import { emptyMobileUsheetBody } from "../usheet/mobileSheetGrid.js";
 import { emptyBoardBody } from "../../core/boardDoc.js";
 import { emptyBitableBody } from "../../core/bitableDoc.js";
 import { emptyInkBody } from "../../core/inkDoc.js";
@@ -191,12 +191,13 @@ export const notesDomain = {
   },
 
 
-  /** 新建表格（kind=usheet）：正文 = 移动端/桌面共享的空表快照（50×16），随后进入移动表格编辑器。 */
+  /** 新建表格（kind=usheet）：正文 = 空表快照（50×16）+ **移动端网格**（24/120/40/24，单一来源 mobileSheetGrid），
+   *  随后进入移动表格编辑器。桌面新建表仍走 core 的 88 口径（用户 261020 定：桌面保持原样）。 */
   async createUsheet(title: string, parentId: string | null = null): Promise<LocalNote> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const pid = parentId?.trim() ? parentId : await dbPort.defaultNotebookId();
-    const content = emptyUsheetBody();
+    const content = emptyMobileUsheetBody();
     await notesDomain.saveNote(id, title, content, pid, undefined, "usheet");
     return { id, title, content, updatedAt: now, parentId: pid, kind: "usheet" };
   },

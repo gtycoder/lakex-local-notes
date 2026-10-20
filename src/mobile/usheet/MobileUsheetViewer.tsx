@@ -1,25 +1,25 @@
 /**
- * 移动端表格查看/编辑器（kind=usheet）。
+ * 移动端表格查看/编辑器（kind=usheet）—— chrome 已按 261020 设计定稿重做。
  *
- * 与桌面 `src/features/usheet/UniverSheetEditor.tsx` 同一套 Univer 内核。移动端有两种状态：
- * - 阅读态：`setEditable(false)`，不拉起输入法；浏览器焦点落到内部编辑器时直接 blur。
- * - 编辑态：`setEditable(true)`，单元格编辑/粘贴/公式都交给列移动 UI 插件；自动保存走父级
- *   `useAutoSave`（800ms 合并命令），“完成”时通过 onCapture 再同步取一次最新正文，避免最后编辑丢失。
+ * 与桌面 UniverSheetEditor 同一套 Univer 内核；本组件只负责 Univer <-> JSON 与"我们的 chrome"：
+ * - 顶部 21px 公式栏（地址 + 显示值）常驻；
+ * - 底部 32px 页签/缩放栏（编辑态）+ 56px dock（与文档/小记同一套尺寸与交互）；
+ * - 二级动作全部走底部面板（复用文档 dock 的 med-f-* 原语），见 UsheetChrome；
+ * - 阅读态：公式栏 + 一条 40px 轻工具条（工作表入口 + 缩放），不显示 dock；
+ * - Univer 自带的移动 footer / 浮动按钮由 CSS 隐藏（页签与缩放由我们接管）。
  *
- * 正文仍是内部 JSON（`core/usheetDoc.ts`），绝不喂给 Lake 编辑器；本组件只负责 Univer ↔ JSON。
- * 分包、首次可见才挂载、图片 URL、主题跟随的约束与只读版保持一致。
+ * 正文仍是内部 JSON（core/usheetDoc.ts），绝不喂给 Lake 编辑器；自动保存/捕获管线不变。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Bold, ChevronDown, Italic, MoreHorizontal, Plus,
-  Redo2, Strikethrough, Type, Underline, Undo2,
-} from "lucide-react";
-import { createUniver, LocaleType, mergeLocales, type FUniver } from "@univerjs/presets";
+import { createUniver, IUndoRedoService, LocaleType, mergeLocales, type FUniver } from "@univerjs/presets";
+// IUndoRedoService 从 @univerjs/presets 转发（它 `export * from "@univerjs/core"`）⇒ 不新增依赖、不直连 core 包。
+// 用途：dock 的撤销/重做置灰（facade 只给 undo()/redo()，没有可用态查询）。
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
+import "./usheet-chrome.css";
 import { buildUniverTheme } from "../../features/usheet/univerTheme";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody } from "../../core/usheetDoc.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
@@ -27,9 +27,13 @@ import { withAssetAccessToken } from "../../lib/assetPort";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
-import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP, USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
-import { USHEET_NUMFMT_IDS, USHEET_NUMFMT_OPTIONS, applyUsheetNumberFormat } from "./usheetNumfmt";
-import { USHEET_QUICK_FORMULAS, USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
+import { USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
+import { USHEET_NUMFMT_IDS, applyUsheetNumberFormat } from "./usheetNumfmt";
+import { USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
+import { UsheetDock, UsheetFooter, UsheetFormulaBar, UsheetPanel, UsheetReadingBar, type UsheetSheetTab } from "./UsheetChrome";
+import { alignOf, lineFlagOf, numfmtLabelOf, type UsheetPanelId } from "./usheetChromeModel";
+import { MOBILE_USHEET_GRID } from "./mobileSheetGrid";
+import { capturePanelHeight } from "../editor/editSurfaceModel";
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -41,7 +45,23 @@ type UniverBook = {
   setEditable: (value: boolean) => unknown;
 };
 
-/** 正文里的图片 source（资产 filename）→ 本机 AssetServer canonical URL（带 token）；已是 URL 的原样。 */
+/** createUniver 返回的 Univer 实例：只用它的注入器问「这个工作簿还能不能撤销/重做」。
+ *  注入器的 get 带泛型重载，这里只按 unknown 收窄（内部再用一次断言）。 */
+type UniverCore = {
+  dispose: () => void;
+  __getInjector?: () => unknown;
+};
+
+/** IUndoRedoService 的最小形状（只读状态，不碰 undo 栈本身）。 */
+type HistoryService = { getUndoRedoStatus: (unitId: string) => { undos: number; redos: number } };
+
+/** sheets-ui facade 给 FWorkbook 追加的编辑态入口（facade 类型不在这里合并 ⇒ 按需收窄）。 */
+type EditableWorkbook = {
+  startEditing?: () => boolean;
+  endEditingAsync?: (save?: boolean) => Promise<boolean>;
+};
+
+/** 正文里的图片 source（资产 filename）-> 本机 AssetServer canonical URL（带 token）；已是 URL 的原样。 */
 export function usheetImageSrc(src: string, noteId: string): string {
   if (HAS_SCHEME_RE.test(src)) return src;
   return withAssetAccessToken(localAssetHttpUrl(noteId, src));
@@ -60,12 +80,28 @@ export interface MobileUsheetViewerProps {
   onCapture?: (capture: (() => string | null) | null) => void;
 }
 
+interface CellFmt {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strike: boolean;
+  align: "left" | "center" | "right" | "general";
+  fontSize: number | null;
+  numfmt: string;
+}
+
+const EMPTY_FMT: CellFmt = { bold: false, italic: false, underline: false, strike: false, align: "general", fontSize: null, numfmt: "" };
+
+/** 数字格式 mixin（@univerjs/sheets-numfmt 在运行时给 FRange 追加；类型面按需断言）。 */
+type NumfmtRange = FRange & { setNumberFormat?: (pattern: string) => unknown; getNumberFormat?: () => string };
+
 export function MobileUsheetViewer({ noteId, content, active, editing, onChange, onCapture }: MobileUsheetViewerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const [everActive, setEverActive] = useState(active);
   const [ready, setReady] = useState(false);
   const containerId = "mobile-usheet-" + noteId;
-  const instanceRef = useRef<{ univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook; last: string } | null>(null);
+  const instanceRef = useRef<{ univer: UniverCore; univerAPI: FUniver; book: UniverBook; last: string } | null>(null);
   const timerRef = useRef<number | null>(null);
   const editingRef = useRef(editing);
   editingRef.current = editing;
@@ -74,14 +110,51 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const captureCallbackRef = useRef(onCapture);
   captureCallbackRef.current = onCapture;
 
-  /** 顶部工具条弹出的原生面板：插入 / 文字格式 / 更多。 */
-  const [menu, setMenu] = useState<"insert" | "format" | "more" | null>(null);
-  /** 当前选区文字状态（只用于工具条按钮高亮，选区变化时刷新）。 */
-  const [cellFmt, setCellFmt] = useState<{ bold: boolean; italic: boolean; underline: boolean; strike: boolean; align: "left" | "center" | "normal" | "general" }>({
-    bold: false, italic: false, underline: false, strike: false, align: "general",
-  });
-  /** 语雀式公式栏：当前选区地址 + 显示值（移动 UI 插件不渲染内置公式栏）。 */
+  /** 当前打开的二级面板（同一 dock 按钮再点 = 关闭）。 */
+  const [panel, setPanel] = useState<UsheetPanelId | null>(null);
+  /** 当前选区状态（dock 高亮 + 公式栏 + 面板回显）。 */
+  const [cellFmt, setCellFmt] = useState<CellFmt>(EMPTY_FMT);
+  /** 公式栏：当前选区地址 + 显示值。 */
   const [cellInfo, setCellInfo] = useState({ address: "A1", value: "" });
+  /** 底部页签 / 当前工作表 / 缩放（页码与缩放都是本机 UI 状态）。 */
+  const [sheets, setSheets] = useState<UsheetSheetTab[]>([]);
+  const [activeSheetId, setActiveSheetId] = useState<string | null>(null);
+  const [zoomRatio, setZoomRatio] = useState(1);
+  const [sheetMenuOpen, setSheetMenuOpen] = useState(false);
+  /** 软键盘态（innerHeight 收缩 >200px = 键盘弹起；AGENTS §7.17 的判据，取样基准 = 见过的最大视口高）。 */
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  /** 撤销/重做可用态（来自内核 IUndoRedoService；服务不可用时保持可用，不锁死按钮）。 */
+  const [history, setHistory] = useState({ canUndo: true, canRedo: true });
+  /** 面板占位高度 = **键盘区高度**（与文档编辑同口径：打开面板时捕获、之后不再随内容变）。
+   *  内容多了在面板内滚，内容少了下方留白 —— 工具栏位置与内容视口恒定（用户 261020 点单）。 */
+  const [panelHeight, setPanelHeight] = useState(0);
+  /** 收起过渡：面板已关但**先别卸载**（键盘从它上面滑上来；restore 档内容保持到被盖住，见文档 dock 同款逻辑）。 */
+  const [closing, setClosing] = useState(false);
+  const [closingHold, setClosingHold] = useState(false);
+  const [renderedPanel, setRenderedPanel] = useState<UsheetPanelId>("font");
+  const keyboardHeightRef = useRef(0);
+  const closingTimerRef = useRef<number | null>(null);
+  const baseHeightRef = useRef(0);
+
+  // 键盘态判据：只认视口收缩（focus 在宿主内 ≠ 键盘开着 —— 实测关闭后 Univer 会把焦点留在编辑器 div，
+  // 用"焦点是否在宿主内"判断会让 ⌨ 永远只走「收起」分支、再也弹不出来）。
+  useEffect(() => {
+    const update = () => {
+      const height = window.innerHeight;
+      baseHeightRef.current = Math.max(baseHeightRef.current, height);
+      const shrink = baseHeightRef.current - height;
+      const open = shrink > 200;
+      if (open) keyboardHeightRef.current = Math.max(keyboardHeightRef.current, shrink);
+      setKeyboardOpen(open);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, []);
 
   /** 同步取最新正文；只有真的变更才通知外层。 */
   const capture = useCallback((): string | null => {
@@ -108,31 +181,70 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }, AUTOSAVE_DEBOUNCE_MS);
   }, [capture]);
 
-  /** 读当前选区样式（Univer facade 的 IStyleData：bl/it/ul/st + 对齐）。 */
+  /** 从 workbook 同步页签列表 + 当前活动表（facade 的 getSheets/setActiveSheet）。 */
+  const refreshSheets = useCallback(() => {
+    const state = instanceRef.current;
+    if (!state) return;
+    try {
+      const workbook = state.univerAPI.getActiveWorkbook();
+      if (!workbook) return;
+      const list = workbook.getSheets().map((sheet) => ({ id: sheet.getSheetId(), name: sheet.getSheetName() }));
+      const currentId = workbook.getActiveSheet()?.getSheetId() ?? null;
+      setSheets((prev) => (prev.length === list.length && prev.every((item, index) => item.id === list[index].id && item.name === list[index].name) ? prev : list));
+      setActiveSheetId((prev) => (prev === currentId ? prev : currentId));
+    } catch { /* 实例尚未就绪时忽略 */ }
+  }, []);
+
+  /** 问内核「这个工作簿还能不能撤销/重做」，驱动 dock 两枚按钮的置灰。 */
+  const refreshHistory = useCallback(() => {
+    const state = instanceRef.current;
+    if (!state) return;
+    try {
+      const injector = state.univer.__getInjector?.() as { get: (token: unknown) => unknown } | undefined;
+      const service = injector?.get(IUndoRedoService) as HistoryService | null | undefined;
+      const unitId = state.univerAPI.getActiveWorkbook()?.getId();
+      if (!service || typeof service.getUndoRedoStatus !== "function" || !unitId) {
+        // 服务缺席（内核裁剪/升级改名）时退回旧口径：按钮保持可用，避免把功能锁死
+        setHistory((prev) => (prev.canUndo && prev.canRedo ? prev : { canUndo: true, canRedo: true }));
+        return;
+      }
+      const status = service.getUndoRedoStatus(unitId);
+      const next = { canUndo: (status?.undos ?? 0) > 0, canRedo: (status?.redos ?? 0) > 0 };
+      setHistory((prev) => (prev.canUndo === next.canUndo && prev.canRedo === next.canRedo ? prev : next));
+    } catch { /* 读状态失败不影响编辑 */ }
+  }, []);
+
+  /** 读当前选区样式 + 公式栏信息（选区变化 / 命令后刷新）。 */
   const refreshCellFmt = useCallback(() => {
     const state = instanceRef.current;
     if (!state) return;
     try {
-      const range = state.univerAPI.getActiveWorkbook()?.getActiveRange();
+      const range = state.univerAPI.getActiveWorkbook()?.getActiveRange() as NumfmtRange | undefined;
       if (!range) return;
       const style = range.getCellStyleData() as { bl?: number; it?: number; ul?: { s?: number }; st?: { s?: number } } | null;
       const align = range.getHorizontalAlignment();
-      const nextFmt = {
+      const rawFontSize = range.getFontSize();
+      const fontSize = typeof rawFontSize === "number" ? rawFontSize : null;
+      let numfmt = "";
+      try { numfmt = typeof range.getNumberFormat === "function" ? (range.getNumberFormat() ?? "") : ""; } catch { numfmt = ""; }
+      const next: CellFmt = {
         bold: style?.bl === 1,
         italic: style?.it === 1,
-        underline: style?.ul?.s === 1,
-        strike: style?.st?.s === 1,
-        align: (align === "left" || align === "center" || align === "normal" ? align : "general") as "left" | "center" | "normal" | "general",
+        underline: lineFlagOf(style?.ul),
+        strike: lineFlagOf(style?.st),
+        align: alignOf(align),
+        fontSize,
+        numfmt,
       };
-      setCellFmt((prev) => prev.bold === nextFmt.bold && prev.italic === nextFmt.italic && prev.underline === nextFmt.underline
-        && prev.strike === nextFmt.strike && prev.align === nextFmt.align ? prev : nextFmt);
+      setCellFmt((prev) => (prev.bold === next.bold && prev.italic === next.italic && prev.underline === next.underline
+        && prev.strike === next.strike && prev.align === next.align && prev.fontSize === next.fontSize && prev.numfmt === next.numfmt ? prev : next));
       const address = range.getA1Notation();
       const value = range.getDisplayValue() ?? "";
-      setCellInfo((prev) => prev.address === address && prev.value === value ? prev : { address, value });
+      setCellInfo((prev) => (prev.address === address && prev.value === value ? prev : { address, value }));
     } catch { /* 选区内没有可读样式时保持原状态 */ }
   }, []);
 
-  /** 所有工具条动作都走同一个入口：拿当前 workbook / sheet / range，执行后刷新按钮态。 */
+  /** 所有工具条/面板动作都走同一个入口：拿当前 workbook / sheet / range，执行后刷新按钮态。 */
   const withActiveRange = useCallback((fn: (range: FRange, sheet: FWorksheet, workbook: FWorkbook) => void) => {
     const state = instanceRef.current;
     if (!state) return;
@@ -153,10 +265,10 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (active) setEverActive(true);
   }, [active]);
 
-  // 首次可见 + 容器有高度后才挂载（隐藏容器 0 尺寸 ⇒ canvas 引擎渲不出来）
+  // 首次可见 + 网格容器有高度后才挂载（隐藏容器 0 尺寸 => canvas 引擎渲不出来）
   useEffect(() => {
     if (!everActive || ready || !active) return;
-    const host = hostRef.current;
+    const host = editorRef.current;
     if (!host) return;
     let raf = 0;
     const measure = () => {
@@ -170,11 +282,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   // 一个 tab 一个实例；只读/编辑通过 setEditable 切换，不重建实例。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const host = hostRef.current;
+    const host = editorRef.current;
     if (!ready || !host) return;
     const workbook = parseUsheetBody(content)?.workbook ?? emptyUsheetWorkbook();
     mapUsheetImageSources(workbook, (src) => usheetImageSrc(src, noteId));
-    let created: { univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook } | null = null;
+    let created: { univer: UniverCore; univerAPI: FUniver; book: UniverBook } | null = null;
     const disposables: Array<{ dispose: () => void }> = [];
     try {
       const { univer, univerAPI } = createUniver({
@@ -182,8 +294,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
         theme: buildUniverTheme() as never,
         presets: [
-          // 只读与编辑都使用移动 UI 插件族（单指横滑 = 滚动画布）；公式栏/工作表栏/缩放保留，
-          // 顶部的自有工具条由本组件渲染（Yuque 式常驻操作栏），官方底部动作面板仍可从浮动按钮打开。
+          // 只读与编辑都使用移动 UI 插件族（单指横滑 = 滚动画布）；Univer 自带 toolbar/footer 由我们接管
+          // （toolbar:false；footer 的 DOM 在 usheet-chrome.css 里隐藏）。
           createMobileSheetsCorePreset({ container: containerId, disableAutoFocus: true, toolbar: false, formulaBar: true }),
           createMobileSheetsDrawingPreset(),
         ],
@@ -193,9 +305,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       const last = usheetToBody(book.save() as never);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
-      disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => { scheduleFlush(); refreshCellFmt(); }));
+      disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => { scheduleFlush(); refreshCellFmt(); refreshSheets(); refreshHistory(); }));
       host.addEventListener("pointerup", refreshCellFmt);
       refreshCellFmt();
+      refreshSheets();
+      refreshHistory();
     } catch (error) {
       console.error("移动端表格挂载失败", error);
     }
@@ -213,7 +327,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       instanceRef.current = null;
       captureCallbackRef.current?.(null);
     };
-  }, [ready, noteId, scheduleFlush, refreshCellFmt]);
+  }, [ready, noteId, scheduleFlush, refreshCellFmt, refreshSheets, refreshHistory]);
 
   // 编辑/阅读切换；从编辑切回阅读时同步落一次，避免防抖窗口内点“完成”丢最后修改。
   useEffect(() => {
@@ -227,9 +341,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }
   }, [editing, capture]);
 
-  // 切走 tab / 退出编辑：弹出层不能留在别的页面上。
+  // 退出编辑 / 切走 tab：面板与工作表菜单不能留在别的页面上（收起过渡也一并收掉）。
   useEffect(() => {
-    if (!editing || !active) setMenu(null);
+    if (!editing || !active) { setPanel(null); setSheetMenuOpen(false); setClosing(false); setClosingHold(false); }
   }, [editing, active]);
 
   // 切走 tab 时落一次；不要求关掉编辑态（编辑态可随 tab 保留）。
@@ -243,7 +357,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     return () => captureCallbackRef.current?.(null);
   }, [capture]);
 
-  // 阅读态挡焦点：Univer 内部 `div[contenteditable]` 会自己拿焦点并拉起输入法。
+  // 阅读态挡焦点：Univer 内部 div[contenteditable] 会自己拿焦点并拉起输入法。
   useEffect(() => {
     if (!ready || editing) return;
     const host = hostRef.current;
@@ -258,70 +372,213 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     return () => host.removeEventListener("focusin", block);
   }, [ready, editing]);
 
+  /** 进入单元格编辑（= 弹键盘）。优先走 sheets-ui facade 的 startEditing()；老内核没有该 API 时退回
+   *  代点 Univer 隐藏的「开始编辑」浮动钮。 */
+  const startCellEdit = useCallback(() => {
+    try {
+      const workbook = instanceRef.current?.univerAPI.getActiveWorkbook() as unknown as EditableWorkbook | null | undefined;
+      if (workbook?.startEditing?.()) return;
+    } catch { /* 退回隐藏钮 */ }
+    hostRef.current?.querySelector<HTMLButtonElement>('button[aria-label="开始编辑（选区切换到编辑器）"]')?.click();
+  }, []);
 
-  // ---- Yuque 式常驻工具条（261019 用户点单）----
-  // 只在编辑态显示；阅读态保持干净（编辑入口仍在工作区顶栏）。
+  /** 结束单元格编辑（= 收键盘并提交）。**不能只 blur**：blur 后 Univer 仍停在编辑态、
+   *  移动 footer 变成「取消/确定/公式」，再也找不到「开始编辑」入口 ⇒ ⌨ / × 都弹不回键盘（261020 实测）。 */
+  const endCellEdit = useCallback(() => {
+    try {
+      const workbook = instanceRef.current?.univerAPI.getActiveWorkbook() as unknown as EditableWorkbook | null | undefined;
+      void workbook?.endEditingAsync?.(true);
+    } catch { /* ignore */ }
+    const activeEl = document.activeElement as HTMLElement | null;
+    if (activeEl && activeEl !== document.body && hostRef.current?.contains(activeEl)) activeEl.blur();
+  }, []);
+
+  /** 退场期继续用上一次的面板渲染（否则一关就"啪"地少一块）。 */
+  useEffect(() => { if (panel) setRenderedPanel(panel); }, [panel]);
+
+  /** 清掉过渡占位（键盘已接管 / 兜底到点）。 */
+  const finishPanelClose = useCallback(() => {
+    if (closingTimerRef.current !== null) { window.clearTimeout(closingTimerRef.current); closingTimerRef.current = null; }
+    setClosing(false);
+    setClosingHold(false);
+  }, []);
+  useEffect(() => () => { if (closingTimerRef.current !== null) window.clearTimeout(closingTimerRef.current); }, []);
+
+  /**
+   * 收起面板的**唯一出口**（对齐文档 dock 的 closePanel 两档语义）：
+   * · restore：× ⇒ 面板让位、把键盘放回来（继续输入）；
+   * · hide：⌨ / 点网格 ⇒ 只收面板，不主动拉键盘。
+   * 两档都先进 closing：内容先留着，等输入法真的回来再卸载（否则键盘还在上升、面板先空一块 = 闪烁）。
+   */
+  const closePanel = useCallback((mode: "restore" | "hide" = "restore") => {
+    if (!panel) return;
+    setPanel(null);
+    setClosing(true);
+    setClosingHold(mode === "restore");          // restore = 键盘从面板上方滑上来 ⇒ 内容保持到被盖住
+    if (mode === "restore") startCellEdit();
+    if (closingTimerRef.current !== null) window.clearTimeout(closingTimerRef.current);
+    closingTimerRef.current = window.setTimeout(finishPanelClose, 2500);   // 兜底：键盘不来也不能永远占着
+  }, [panel, startCellEdit, finishPanelClose]);
+
+  // **等输入法真的回来**再清占位（固定延时会在键盘还没上来时先让出区域 ⇒ 面板先跳变）。
+  useEffect(() => {
+    if (!closing || !keyboardOpen) return;
+    const t = window.setTimeout(finishPanelClose, 150);
+    return () => window.clearTimeout(t);
+  }, [closing, keyboardOpen, finishPanelClose]);
+  // restore 档迟迟等不到键盘（硬件键盘 / 焦点失败）⇒ 1800ms 后放行内容滑出（与文档 dock 同口径）
+  useEffect(() => {
+    if (!closing || !closingHold || keyboardOpen) return;
+    const t = window.setTimeout(() => setClosingHold(false), 1800);
+    return () => window.clearTimeout(t);
+  }, [closing, closingHold, keyboardOpen]);
+
+  /** 打开/切换面板：捕获键盘区高度（只从"关→开"时捕获），并把键盘收走让位。 */
+  const openPanel = useCallback((next: UsheetPanelId) => {
+    if (panel === next) { closePanel("restore"); return; }   // 同一个按钮（此时已是 ×）= 关面板 + 放回键盘
+    setClosing(false);                                       // 退场中又点开：撤掉过渡，直接进新面板
+    setClosingHold(false);
+    setPanelHeight((height) => Math.max(height, capturePanelHeight(keyboardHeightRef.current)));
+    setPanel(next);
+    endCellEdit();                                           // 面板占键盘区：结束格内编辑（键盘随之收起）
+  }, [panel, closePanel, endCellEdit]);
+
+  const toggleKeyboard = useCallback(() => {
+    if (panel) { closePanel("hide"); return; }
+    // 键盘开着 => 收起；键盘没开 => 进入单元格编辑（Univer 的「开始编辑」浮动钮是唯一入口）。
+    // 判据用视口收缩，不用焦点：关闭键盘后焦点仍留在 Univer 的编辑面里，用焦点判断会卡在「只能收」。
+    if (keyboardOpen) { endCellEdit(); return; }
+    startCellEdit();
+  }, [panel, keyboardOpen, closePanel, endCellEdit, startCellEdit]);
+
+  // 面板开着时点网格 = 要操作表格 ⇒ 收面板（hide 档：不替用户拉键盘，正常选中/编辑照常进行）。
+  useEffect(() => {
+    if (!editing || !panel) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || target.closest(".ush-panel, .ush-dock, .ush-footer")) return;
+      if (!target.closest(".ush-editor")) return;
+      closePanel("hide");
+    };
+    host.addEventListener("pointerdown", onDown, true);
+    return () => host.removeEventListener("pointerdown", onDown, true);
+  }, [editing, panel, closePanel]);
+
   const runHistory = (kind: "undo" | "redo") => {
     const workbook = instanceRef.current?.univerAPI.getActiveWorkbook();
     if (!workbook) return;
     try {
       if (kind === "undo") workbook.undo(); else workbook.redo();
       refreshCellFmt();
+      refreshSheets();
+      refreshHistory();
     } catch (error) {
       console.warn("[mobile-usheet] 撤销/重做失败", error);
     }
   };
 
-  const C = { red: "#e5484d", orange: "#f76b15", yellow: "#ffb224", green: "#30a46c", blue: "#0091ff", purple: "#8e4ec6", gray: "#8b8d98", black: "#11181c" };
-  const colorChildren = (prefix: string): MobileSheetItem[] => Object.entries(C).map(([name, value]) => ({ id: prefix + value, label: name === "black" ? "黑色" : name === "gray" ? "灰色" : name === "red" ? "红色" : name === "orange" ? "橙色" : name === "yellow" ? "黄色" : name === "green" ? "绿色" : name === "blue" ? "蓝色" : "紫色", note: value }));
+  const changeZoom = (delta: number) => {
+    const state = instanceRef.current;
+    if (!state) return;
+    const next = delta === 0 ? 1 : Math.max(0.5, Math.min(2, Math.round((zoomRatio + delta) * 10) / 10));
+    try {
+      void state.univerAPI.executeCommand("sheet.command.change-zoom-ratio", { delta: delta === 0 ? 0 : next - zoomRatio });
+      setZoomRatio(next);
+    } catch { /* 缩放是纯 UI，不可用时保持原值 */ }
+  };
 
-  const insertMenu: MobileSheetItem[] = [
-    { id: "row-above", label: "在上方插入行" },
-    { id: "row-below", label: "在下方插入行" },
-    { id: "col-left", label: "在左侧插入列" },
-    { id: "col-right", label: "在右侧插入列" },
-    { id: "merge", label: "合并选中单元格" },
-  ];
-  const formatMenu: MobileSheetItem[] = [
-    { id: "bold", label: "加粗", note: cellFmt.bold ? "已开启" : undefined },
-    { id: "italic", label: "斜体", note: cellFmt.italic ? "已开启" : undefined },
-    { id: "underline", label: "下划线", note: cellFmt.underline ? "已开启" : undefined },
-    { id: "strike", label: "删除线", note: cellFmt.strike ? "已开启" : undefined },
-    { id: "align-left", label: "左对齐", note: cellFmt.align === "left" ? "当前" : undefined },
-    { id: "align-center", label: "居中对齐", note: cellFmt.align === "center" ? "当前" : undefined },
-    { id: "align-right", label: "右对齐", note: cellFmt.align === "normal" ? "当前" : undefined },
-    { id: "font-color", label: "字体颜色", children: colorChildren("font-") },
-    { id: "fill-color", label: "填充颜色", children: colorChildren("fill-") },
-    { id: "clear-text", label: "清除文字格式" },
-  ];
-  const moreMenu: MobileSheetItem[] = [
-    // 261020 P1：冻结 / 行高 / 列宽（布局类动作，README 的「冻结窗格 + 行高列宽调优」两项）
-    { id: "freeze", label: "冻结窗格", note: "行列冻结", children: [
-      { id: "freeze-row", label: "冻结至当前行" },
-      { id: "freeze-col", label: "冻结至当前列" },
-      { id: "freeze-none", label: "取消冻结" },
-    ] },
-    { id: "row-height", label: "行高", children: [
-      { id: "row-height-up", label: "增高（+" + ROW_HEIGHT_STEP + "px）" },
-      { id: "row-height-down", label: "降低（-" + ROW_HEIGHT_STEP + "px）" },
-      { id: "row-height-auto", label: "自动行高（按内容）" },
-    ] },
-    { id: "col-width", label: "列宽", children: [
-      { id: "col-width-up", label: "加宽（+" + COLUMN_WIDTH_STEP + "px）" },
-      { id: "col-width-down", label: "收窄（-" + COLUMN_WIDTH_STEP + "px）" },
-    ] },
-    // 数字格式（261020 P1 第二批）：选项表与调用在 usheetNumfmt（单一来源）
-    { id: "numfmt", label: "数字格式", children: USHEET_NUMFMT_OPTIONS.map((option) => ({ id: option.id, label: option.label })) },
-    // 常用公式（261020 P1 第四批）：单格 + 上方连续数值 → 一键写 =FN(区域)
-    { id: "quickformula", label: "常用公式", note: "统计上方连续数值", children: USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label })) },
-    { id: "delete-row", label: "删除当前行", danger: true },
-    { id: "delete-col", label: "删除当前列", danger: true },
-    { id: "more-tools", label: "更多表格工具", note: "插入 / 样式 / 操作" },
-  ];
+  const selectSheet = (sheetId: string) => {
+    const state = instanceRef.current;
+    if (!state) return;
+    try {
+      const workbook = state.univerAPI.getActiveWorkbook();
+      if (!workbook) return;
+      workbook.setActiveSheet(sheetId);
+      setSheetMenuOpen(false);
+      refreshSheets();
+      refreshCellFmt();
+    } catch (error) {
+      console.warn("[mobile-usheet] 切换工作表失败", error);
+    }
+  };
 
-  const onMenuSelect = (item: MobileSheetItem) => {
-    const id = item.id;
-    setMenu(null);
+  const addSheet = () => {
+    const state = instanceRef.current;
+    if (!state) return;
+    try {
+      const workbook = state.univerAPI.getActiveWorkbook();
+      if (!workbook) return;
+      const prefix = "Sheet";
+      let index = workbook.getSheets().length + 1;
+      while (workbook.getSheetByName(prefix + index)) index += 1;
+      // 同一篇表格里所有工作表共用移动端网格（否则「＋新建工作表」会按内核默认 88 宽出来，和第一张不一致）
+      workbook.insertSheet(prefix + index, { sheet: { ...MOBILE_USHEET_GRID } });
+      setSheetMenuOpen(false);
+      refreshSheets();
+      refreshCellFmt();
+    } catch (error) {
+      showToast("新建工作表失败", { type: "error" });
+      console.warn("[mobile-usheet] 新建工作表失败", error);
+    }
+  };
+
+  /** 面板/dock 的统一动作入口（id 与 usheetChromeModel 清单一致）。 */
+  const runAction = (id: string) => {
+    // 数字格式（numfmt mixin）：单一来源在 usheetNumfmt
+    if (USHEET_NUMFMT_IDS.has(id)) {
+      withActiveRange((range) => {
+        const applied = applyUsheetNumberFormat(range as unknown as { setNumberFormat?: (pattern: string) => unknown }, id);
+        if (!applied) showToast("当前表格内核不支持数字格式", { type: "error" });
+      });
+      return;
+    }
+    // 小数位（内核 numfmt 命令）
+    if (id === "decimal-inc" || id === "decimal-dec") {
+      const state = instanceRef.current;
+      if (!state) return;
+      const cmd = id === "decimal-inc" ? "sheet.command.numfmt.add.decimal.command" : "sheet.command.numfmt.subtract.decimal.command";
+      try {
+        void state.univerAPI.executeCommand(cmd, {});
+        scheduleFlush();
+        refreshCellFmt();
+      } catch { showToast("小数位调整失败", { type: "error" }); }
+      return;
+    }
+    // 常用公式（单格 + 上方连续数值）
+    if (USHEET_QUICK_FORMULA_IDS.has(id)) {
+      withActiveRange((range, sheet) => {
+        const single = range.getRow() === range.getLastRow() && range.getColumn() === range.getLastColumn();
+        if (!single) { showToast("请先只选中一个单元格（公式要写在这个格里）", { type: "error" }); return; }
+        const plan = planUsheetQuickFormula(id, { row: range.getRow(), col: range.getColumn() },
+          (row, col) => sheet.getRange(row, col).getValue());
+        if (!plan) { showToast("这个单元格上方没有可统计的连续数值", { type: "error" }); return; }
+        sheet.getRange(plan.targetRow, plan.targetColumn).setFormula(plan.formula);
+      });
+      return;
+    }
+    // 布局动作（冻结 / 行高 / 列宽）
+    if (USHEET_LAYOUT_ACTIONS.has(id)) {
+      withActiveRange((range, sheet) => { applyUsheetLayoutAction(id, range, sheet); });
+      return;
+    }
+    // 字号
+    if (id.startsWith("fontsize-")) {
+      const size = Number(id.slice("fontsize-".length));
+      if (Number.isFinite(size)) withActiveRange((range) => range.setFontSize(size));
+      return;
+    }
+    // 颜色 / 底纹 / 清除格式（facade 的类型只收 string；"默认/无填充"在运行时传 null）
+    const applyColor = (range: FRange, kind: "font" | "fill", color: string | null) => {
+      if (kind === "font") (range.setFontColor as unknown as (value: string | null) => FRange)(color);
+      else (range.setBackgroundColor as unknown as (value: string | null) => FRange)(color);
+    };
+    if (id === "font-default") { withActiveRange((range) => applyColor(range, "font", null)); return; }
+    if (id.startsWith("font-")) { withActiveRange((range) => applyColor(range, "font", id.slice("font-".length))); return; }
+    if (id === "fill-none") { withActiveRange((range) => applyColor(range, "fill", null)); return; }
+    if (id.startsWith("fill-")) { withActiveRange((range) => applyColor(range, "fill", id.slice("fill-".length))); return; }
+
     if (id === "row-above") withActiveRange((range, sheet) => sheet.insertRowsBefore(range.getRow(), 1));
     else if (id === "row-below") withActiveRange((range, sheet) => sheet.insertRowsAfter(range.getRow(), 1));
     else if (id === "col-left") withActiveRange((range, sheet) => sheet.insertColumnsBefore(range.getColumn(), 1));
@@ -346,67 +603,82 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     else if (id === "align-left") withActiveRange((range) => range.setHorizontalAlignment("left"));
     else if (id === "align-center") withActiveRange((range) => range.setHorizontalAlignment("center"));
     else if (id === "align-right") withActiveRange((range) => range.setHorizontalAlignment("normal"));
-    else if (id.startsWith("font-")) withActiveRange((range) => range.setFontColor(id.slice("font-".length)));
-    else if (id.startsWith("fill-")) withActiveRange((range) => range.setBackgroundColor(id.slice("fill-".length)));
-    else if (id === "clear-text") withActiveRange((range) => {
-      range.setFontWeight(null).setFontStyle(null).setFontLine(null).setFontColor(null);
-    });
-    else if (id === "delete-row") withActiveRange((range, sheet) => { sheet.deleteRow(range.getRow()); });
-    else if (id === "delete-col") withActiveRange((range, sheet) => { sheet.deleteColumn(range.getColumn()); });
-    else if (id === "more-tools") hostRef.current?.querySelector<HTMLButtonElement>('button[aria-label="打开表格工具"]')?.click();
-    // 布局类（冻结 / 行高 / 列宽）：动作清单与实现都在 usheetLayoutActions（单一来源，可单测）
-    else if (USHEET_LAYOUT_ACTIONS.has(id)) {
-      withActiveRange((range, sheet) => { applyUsheetLayoutAction(id, range, sheet); });
-    }
-    // 常用公式：只认「单个单元格 + 上方连续数值」，条件不满足就明说，绝不乱写
-    else if (USHEET_QUICK_FORMULA_IDS.has(id)) {
-      withActiveRange((range, sheet) => {
-        const single = range.getRow() === range.getLastRow() && range.getColumn() === range.getLastColumn();
-        if (!single) { showToast("请先只选中一个单元格（公式要写在这个格里）", { type: "error" }); return; }
-        const plan = planUsheetQuickFormula(id, { row: range.getRow(), col: range.getColumn() },
-          (row, col) => sheet.getRange(row, col).getValue());
-        if (!plan) { showToast("这个单元格上方没有可统计的连续数值", { type: "error" }); return; }
-        sheet.getRange(plan.targetRow, plan.targetColumn).setFormula(plan.formula);
-      });
-    }
-    // 数字格式：运行时若没装 numfmt mixin 要明确提示（不静默失败）
-    else if (USHEET_NUMFMT_IDS.has(id)) {
-      withActiveRange((range) => {
-        const applied = applyUsheetNumberFormat(range as unknown as { setNumberFormat?: (pattern: string) => unknown }, id);
-        if (!applied) showToast("当前表格内核不支持数字格式", { type: "error" });
-      });
-    }
+    else if (id === "clear-text") withActiveRange((range) => { range.clearFormat(); });
   };
+
+  const sheetMenuItems: MobileSheetItem[] = [
+    ...sheets.map((sheet) => ({ id: "sheet-" + sheet.id, label: sheet.name, note: sheet.id === activeSheetId ? "当前" : undefined })),
+    { id: "sheet-add", label: "新建工作表" },
+  ];
+
+  const activeSheet = sheets.find((sheet) => sheet.id === activeSheetId);
 
   return (
     <div className={"mobile-usheet" + (editing ? " is-editing" : " is-readonly")} ref={hostRef} data-prevent-swipe>
+      <UsheetFormulaBar address={cellInfo.address} value={cellInfo.value} />
+      {!editing && (
+        <UsheetReadingBar
+          sheetName={activeSheet?.name ?? "Sheet1"}
+          zoomRatio={zoomRatio}
+          onOpenSheetMenu={() => setSheetMenuOpen(true)}
+          onZoom={changeZoom}
+        />
+      )}
+      <div className="ush-editor" ref={editorRef}>
+        {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
+      </div>
       {editing && (
-        <div className="mobile-usheet-toolbar" data-prevent-swipe role="toolbar" aria-label="表格工具">
-          <div className="mobile-usheet-toolbar__scroll">
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="插入" title="插入" onClick={() => setMenu("insert")}><Plus size={19} /><ChevronDown size={11} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="撤销" title="撤销" onClick={() => runHistory("undo")}><Undo2 size={19} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="重做" title="重做" onClick={() => runHistory("redo")}><Redo2 size={19} /></button>
-            <span className="mobile-usheet-toolbar__sep" />
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.bold ? " is-active" : "")} aria-label="加粗" title="加粗" onClick={() => onMenuSelect({ id: "bold", label: "加粗" })}><Bold size={18} /></button>
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.italic ? " is-active" : "")} aria-label="斜体" title="斜体" onClick={() => onMenuSelect({ id: "italic", label: "斜体" })}><Italic size={18} /></button>
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.underline ? " is-active" : "")} aria-label="下划线" title="下划线" onClick={() => onMenuSelect({ id: "underline", label: "下划线" })}><Underline size={18} /></button>
-            <button type="button" className={"mobile-usheet-toolbar__btn" + (cellFmt.strike ? " is-active" : "")} aria-label="删除线" title="删除线" onClick={() => onMenuSelect({ id: "strike", label: "删除线" })}><Strikethrough size={18} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="文字格式" title="文字格式" onClick={() => setMenu("format")}><Type size={19} /><ChevronDown size={11} /></button>
-            <button type="button" className="mobile-usheet-toolbar__btn" aria-label="更多表格操作" title="更多表格操作" onClick={() => setMenu("more")}><MoreHorizontal size={19} /></button>
-          </div>
-          <span className="mobile-usheet-toolbar__saved" aria-label="自动保存已开启" title="自动保存已开启"><i /></span>
-        </div>
+        <UsheetFooter
+          sheets={sheets}
+          activeSheetId={activeSheetId}
+          zoomRatio={zoomRatio}
+          onSelectSheet={selectSheet}
+          onOpenSheetMenu={() => setSheetMenuOpen(true)}
+          onZoom={changeZoom}
+        />
       )}
       {editing && (
-        <div className="mobile-usheet-formula" data-prevent-swipe aria-label="公式栏">
-          <span className="mobile-usheet-formula__ref">{cellInfo.address}</span>
-          <span className="mobile-usheet-formula__value">{cellInfo.value}</span>
-        </div>
+        <UsheetDock
+          activePanel={panel}
+          keyboardOpen={keyboardOpen}
+          boldActive={cellFmt.bold}
+          numfmtLabel={numfmtLabelOf(cellFmt.numfmt)}
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
+          onPanel={openPanel}
+          onBold={() => runAction("bold")}
+          onUndo={() => runHistory("undo")}
+          onRedo={() => runHistory("redo")}
+          onKeyboard={toggleKeyboard}
+        />
       )}
-      {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
-      <MobileSheetMenu open={menu === "insert"} items={insertMenu} onClose={() => setMenu(null)} onSelect={onMenuSelect} />
-      <MobileSheetMenu open={menu === "format"} items={formatMenu} onClose={() => setMenu(null)} onSelect={onMenuSelect} />
-      <MobileSheetMenu open={menu === "more"} items={moreMenu} onClose={() => setMenu(null)} onSelect={onMenuSelect} />
+      {/* 二级面板在 dock **之后**：与文档编辑一致 —— 面板向下占住键盘区、dock 停在面板上沿，
+          而不是把 dock 顶到屏幕最底、面板压在上面（用户 261020 报）。 */}
+      {editing && (panel || closing) && (
+        <UsheetPanel
+          panel={renderedPanel}
+          height={panelHeight}
+          open={!!panel || closingHold}
+          closing={closing}
+          boldActive={cellFmt.bold}
+          italicActive={cellFmt.italic}
+          underlineActive={cellFmt.underline}
+          strikeActive={cellFmt.strike}
+          align={cellFmt.align}
+          fontSize={cellFmt.fontSize}
+          numfmtPattern={cellFmt.numfmt}
+          onAction={runAction}
+        />
+      )}
+      <MobileSheetMenu
+        open={sheetMenuOpen}
+        items={sheetMenuItems}
+        onClose={() => setSheetMenuOpen(false)}
+        onSelect={(item) => {
+          if (item.id === "sheet-add") { addSheet(); return; }
+          if (item.id.startsWith("sheet-")) selectSheet(item.id.slice("sheet-".length));
+        }}
+      />
     </div>
   );
 }

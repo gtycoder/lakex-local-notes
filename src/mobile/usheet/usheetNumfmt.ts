@@ -17,9 +17,10 @@ export interface UsheetNumfmtOption {
 
 /** 移动端「数字格式」菜单项（顺序即菜单顺序；第一条是清空/常规）。 */
 export const USHEET_NUMFMT_OPTIONS: readonly UsheetNumfmtOption[] = [
-  { id: "numfmt-general", label: "常规（清除格式）", pattern: "" },
+  // 标签保持 2–4 字（面板一行 5 格，412 宽下长标签会被省略号吃掉；口径细节看 pattern，不靠标签）
+  { id: "numfmt-general", label: "常规", pattern: "" },
   { id: "numfmt-text", label: "文本", pattern: "@" },
-  { id: "numfmt-number", label: "数字（两位小数）", pattern: "#,##0.00" },
+  { id: "numfmt-number", label: "数字", pattern: "#,##0.00" },
   { id: "numfmt-integer", label: "整数", pattern: "#,##0" },
   { id: "numfmt-percent", label: "百分比", pattern: "0.00%" },
   { id: "numfmt-currency", label: "货币（¥）", pattern: "¥#,##0.00" },

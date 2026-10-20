@@ -9,7 +9,9 @@ describe("usheet 数字格式", () => {
     expect(USHEET_NUMFMT_OPTIONS.map((option) => option.id)).toEqual([...USHEET_NUMFMT_IDS]);
     expect(new Set(USHEET_NUMFMT_OPTIONS.map((option) => option.id)).size).toBe(USHEET_NUMFMT_OPTIONS.length);
     expect(new Set(USHEET_NUMFMT_OPTIONS.map((option) => option.pattern)).size).toBe(USHEET_NUMFMT_OPTIONS.length);
-    expect(USHEET_NUMFMT_OPTIONS[0]).toEqual({ id: "numfmt-general", label: "常规（清除格式）", pattern: "" });
+    expect(USHEET_NUMFMT_OPTIONS[0]).toEqual({ id: "numfmt-general", label: "常规", pattern: "" });
+    // 面板一行 5 格（412 宽）：标签必须 ≤4 字，否则被省略号吃掉（实测「常规（清除格式）」→「常规（清…」）
+    for (const option of USHEET_NUMFMT_OPTIONS) expect([...option.label].length).toBeLessThanOrEqual(5);
     const byId = new Map(USHEET_NUMFMT_OPTIONS.map((option) => [option.id, option.pattern]));
     expect(byId.get("numfmt-text")).toBe("@");
     expect(byId.get("numfmt-number")).toBe("#,##0.00");

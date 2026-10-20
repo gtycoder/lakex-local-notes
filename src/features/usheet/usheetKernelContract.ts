@@ -43,6 +43,10 @@ export const UNIVER_CONFIG_KEYS = ["sheets-ui.config", "addSheetButtonConfig", "
 export const UNIVER_FEATURE_NAMES = [
   /** 剪贴板图片钩子：无条件返回浮动图命令；且 sheets-ui 的 _executePaste 是"所有钩子 mutations 串起来执行" ⇒ 只能在 DOM 层拦。 */
   "onPasteFiles",
+  /** 撤销栈计数（IUndoRedoService.getUndoRedoStatus；令牌从 @univerjs/presets 转发拿，不直连 core 包）：
+   *  移动端 dock 的撤销/重做置灰靠它（facade 只有 undo()/redo()，没有可用态查询）。
+   *  失效表现 = 两枚按钮退回常亮（不报错、不锁死，见 MobileUsheetViewer.refreshHistory 的兜底）。 */
+  "getUndoRedoStatus",
   /** 双击落光标：原生 dblclick 后轮询 isCellEditing，等编辑器画布就绪，再走文档渲染单元的
    *  DocSelectionRenderService.setCursorManually()（Univer facade 未暴露点击落点）。
    *  失效表现 = 双击仍全选单元格内容，或光标不跟随点击位置。 */

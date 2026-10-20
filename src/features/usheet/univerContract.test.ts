@@ -104,6 +104,10 @@ describe("Univer 内核触点仍存在（升级护栏②）", () => {
       ["insertCellImageAsync", "insertCellImageAsync"],
       ["setRowCount", "setRowCount"],
       ["AddImageIcon", "AddImageIcon"],
+      // 移动端表格的「面板 ⇄ 键盘」切换靠这对 facade：面板打开要**结束格内编辑**（只 blur 会让内核停在
+      // 编辑态、footer 变成取消/确定/公式，再也弹不回键盘）；× 再用 startEditing 把键盘放回来。
+      ["startEditing", "startEditing"],
+      ["endEditingAsync", "endEditingAsync"],
     ] as Array<[string, string]>,
   ];
 

@@ -1,0 +1,282 @@
+/**
+ * 移动端表格（usheet）chrome 样式（261020 P1）。
+ *
+ * 口径（用户 261020 定稿）：不照抄语雀视觉，采用我们自己的令牌与 lucide 图标；
+ * 但保留语雀被验证过的交互语法（分级、当前值回显、薄公式栏、页签/缩放常驻）。
+ *
+ * 单一来源：二级面板的卡片/按钮/色板原语**直接复用文档 dock 的 .med-f-***
+ * （editor-dock.css，mobile/main.tsx 全局引入）；本文件只负责表格自己的外壳
+ * （公式栏 / dock 条 / 面板外壳 / 页签缩放栏 / 阅读轻工具条）与 Univer 自带 UI 的收口。
+ */
+.mobile-usheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  background: var(--lake-bg-panel);
+}
+/* 网格区：Univer 只占这里；chrome（公式栏/底栏/dock）在流内，键盘弹出时整块收缩，dock 自然贴在键盘上方。 */
+.ush-editor {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.ush-editor .mobile-usheet-root {
+  height: 100%;
+  width: 100%;
+}
+/* Univer 自带的移动 header（顶部 Sheet1 页签条 40px）/ footer / 浮动按钮一律不显示：
+   页签与缩放由我们的底栏承担（261020 P1）。
+   ⚠️ header 必须**保留为 grid item 并把高度压成 0**，不能 display:none —— 实测 display:none 会让
+   Univer 内部 grid（grid-rows-[auto_1fr]）的那一行不再参与，画布容器高度变 0（整片空白）。 */
+.mobile-usheet .ush-editor header.univer-w-screen {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.mobile-usheet footer.univer-shrink-0 {
+  display: none;
+}
+.mobile-usheet .ush-editor .univer-absolute.univer-bottom-14.univer-right-4 {
+  display: none;
+}
+
+/* ── 公式栏（顶部常驻，21px）────────────────────────────────────── */
+.ush-formula {
+  flex: 0 0 21px;
+  height: 21px;
+  display: flex;
+  align-items: center;
+  background: var(--lake-bg-panel);
+  border-bottom: 1px solid var(--lake-border-1);
+  font-size: var(--lake-font-size-tiny);
+  color: var(--lake-text-1);
+}
+.ush-formula__ref {
+  flex: 0 0 40px;
+  padding-left: 8px;
+  text-align: center;
+  line-height: 19px;
+  color: var(--lake-text-2);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ush-formula__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 16px;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 一级 dock（与文档 dock 同尺寸：49×44 / 图标 20 / 固定 ⌨ 尾键）── */
+.ush-dock {
+  flex: 0 0 var(--mobile-bottom-bar-height);
+  height: var(--mobile-bottom-bar-height);
+  display: flex;
+  align-items: center;
+  background: var(--lake-bg-window);
+  border-top: 1px solid var(--lake-border-2);
+}
+.ush-dock__scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.ush-dock__scroll::-webkit-scrollbar { display: none; }
+.ush-dock__btn {
+  flex: 0 0 49px;
+  width: 49px;
+  height: var(--mb-ctl-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-2);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
+}
+.ush-dock__btn:active { background: var(--lake-bg-hover); }
+.ush-dock__btn:disabled { opacity: var(--lake-disabled-opacity); }
+.ush-dock__btn.is-active {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+  box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
+  border-radius: calc(var(--mobile-bottom-bar-height) / 2 - 4px);
+}
+.ush-dock__btn--kb {
+  flex: 0 0 49px;
+  border-left: 1px solid var(--lake-border-2);
+  border-radius: 0;
+}
+.ush-dock__text {
+  font-size: var(--lake-font-size-title);
+  font-weight: 700;
+  line-height: 1;
+}
+.ush-dock__text--numfmt {
+  /* 3 个汉字（百分比）在移动端 small=14px 下要 42px，按钮只有 49 ⇒ 用 tiny + 46 上限，不省略 */
+  font-size: var(--lake-font-size-tiny);
+  font-weight: 500;
+  max-width: 46px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 二级面板外壳（口径照文档 .med-panel / .med-panel-inner）──────
+ * 面板**固定占键盘区高度**（高度由 JS 按捕获的键盘高写进 style）：内容多了在内部滚、少了下方留白，
+ * 工具栏位置与内容视口恒定 —— 这是文档编辑工具条的逻辑（用户 261020 点单，原先是内容撑高）。 */
+.ush-panel {
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: var(--lake-bg-block);
+  border-top: 1px solid var(--lake-border-2);
+  max-height: 60dvh;
+}
+.ush-panel[data-closing="1"] { pointer-events: none; }   /* 退场期不再接受点击（与文档 dock 同口径） */
+.ush-panel__inner {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  /* 进场 = 挂载动画；退场 = data-open 0 的 transition（内容保持到键盘盖住，见 closingHold） */
+  animation: ush-panel-in 160ms var(--mobile-ease-out) both;
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform 160ms var(--mobile-ease-out), opacity 160ms var(--mobile-ease-out);
+}
+.ush-panel[data-open="0"] .ush-panel__inner { transform: translateY(100%); opacity: 0; }
+.ush-panel__inner::-webkit-scrollbar { display: none; }
+@keyframes ush-panel-in {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.ush-panel__label {
+  padding: 0 2px;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-micro);
+  font-weight: var(--lake-font-weight-medium);
+  line-height: var(--lake-line-height-normal);
+}
+
+/* ── 底栏（页签 + 缩放，32px，编辑态）──────────────────────────── */
+.ush-footer {
+  flex: 0 0 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  background: var(--lake-bg-panel);
+  border-top: 1px solid var(--lake-border-1);
+  font-size: var(--lake-font-size-tiny);
+  color: var(--lake-text-2);
+}
+.ush-sheetmenu {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-3);
+}
+.ush-sheetmenu:active { background: var(--lake-bg-hover); }
+.ush-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ush-tabs::-webkit-scrollbar { display: none; }
+.ush-tab {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-right: 1px solid var(--lake-border-1);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-family: inherit;
+  font-size: var(--lake-font-size-tiny);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ush-tab.is-active { color: var(--lake-accent-text); }
+.ush-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; padding-right: 8px; }
+.ush-zoom__btn {
+  width: 24px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-2);
+}
+.ush-zoom__ratio {
+  min-width: 44px;
+  height: 25px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-family: inherit;
+  font-size: var(--lake-font-size-body);
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 阅读态轻工具条（40px，先保留一条看观感）────────────────── */
+.ush-reading-bar {
+  flex: 0 0 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  background: var(--lake-bg-window);
+  border-bottom: 1px solid var(--lake-border-2);
+}
+.ush-reading-bar__sheet {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-1);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  text-align: left;
+}
+.ush-reading-bar__sheet:active { background: var(--lake-bg-hover); }
