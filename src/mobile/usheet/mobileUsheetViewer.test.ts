@@ -131,7 +131,7 @@ describe("移动端表格查看/编辑器", () => {
     expect(more).toBeTruthy();
     await act(async () => { more!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     const text = host.textContent ?? "";
-    for (const label of ["冻结窗格", "冻结至当前行", "冻结至当前列", "取消冻结", "行高", "自动行高（按内容）", "列宽", "加宽（+" + 24 + "px）", "数字格式", "常规（清除格式）", "百分比", "货币（¥）", "日期时间"]) {
+    for (const label of ["冻结窗格", "冻结至当前行", "冻结至当前列", "取消冻结", "行高", "自动行高（按内容）", "列宽", "加宽（+" + 24 + "px）", "数字格式", "常规（清除格式）", "百分比", "货币（¥）", "日期时间", "常用公式", "求和 SUM", "平均值 AVERAGE", "最大值 MAX"]) {
       expect(text).toContain(label);
     }
     root.unmount();

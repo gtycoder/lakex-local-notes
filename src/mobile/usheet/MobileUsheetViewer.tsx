@@ -29,6 +29,7 @@ import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
 import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP, USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
 import { USHEET_NUMFMT_IDS, USHEET_NUMFMT_OPTIONS, applyUsheetNumberFormat } from "./usheetNumfmt";
+import { USHEET_QUICK_FORMULAS, USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -311,6 +312,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     ] },
     // 数字格式（261020 P1 第二批）：选项表与调用在 usheetNumfmt（单一来源）
     { id: "numfmt", label: "数字格式", children: USHEET_NUMFMT_OPTIONS.map((option) => ({ id: option.id, label: option.label })) },
+    // 常用公式（261020 P1 第四批）：单格 + 上方连续数值 → 一键写 =FN(区域)
+    { id: "quickformula", label: "常用公式", note: "统计上方连续数值", children: USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label })) },
     { id: "delete-row", label: "删除当前行", danger: true },
     { id: "delete-col", label: "删除当前列", danger: true },
     { id: "more-tools", label: "更多表格工具", note: "插入 / 样式 / 操作" },
@@ -354,6 +357,17 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     // 布局类（冻结 / 行高 / 列宽）：动作清单与实现都在 usheetLayoutActions（单一来源，可单测）
     else if (USHEET_LAYOUT_ACTIONS.has(id)) {
       withActiveRange((range, sheet) => { applyUsheetLayoutAction(id, range, sheet); });
+    }
+    // 常用公式：只认「单个单元格 + 上方连续数值」，条件不满足就明说，绝不乱写
+    else if (USHEET_QUICK_FORMULA_IDS.has(id)) {
+      withActiveRange((range, sheet) => {
+        const single = range.getRow() === range.getLastRow() && range.getColumn() === range.getLastColumn();
+        if (!single) { showToast("请先只选中一个单元格（公式要写在这个格里）", { type: "error" }); return; }
+        const plan = planUsheetQuickFormula(id, { row: range.getRow(), col: range.getColumn() },
+          (row, col) => sheet.getRange(row, col).getValue());
+        if (!plan) { showToast("这个单元格上方没有可统计的连续数值", { type: "error" }); return; }
+        sheet.getRange(plan.targetRow, plan.targetColumn).setFormula(plan.formula);
+      });
     }
     // 数字格式：运行时若没装 numfmt mixin 要明确提示（不静默失败）
     else if (USHEET_NUMFMT_IDS.has(id)) {
