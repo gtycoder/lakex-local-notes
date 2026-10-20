@@ -121,7 +121,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableFormView.css": { decls: 27, dupGroups: 0 },   // 260929：表单双模页签改 kit 原语后 -3（原 .seg 容器改由原语给几何，只留居中一条）
   "features/bitable/bitableRelationPicker.css": { decls: 145, dupGroups: 0 },   // 260930：+7 = 筛选编辑器在关联选择器里的内联布局（根编辑器/视图基线行）；此前 138：+30 = 关联选择器视图基线（只读筛选/排序行 + 视图分组表头/标签/计数）；此前 108：-7 = 选择器整表**复用**表格那套附件渲染（`AttachmentChipList`）
   // 260930：附件「文档类型」图标（用户：附件不展示名称/预览，直接展示类型）——11 个类型色 + 单元格小图标命中区 + 展开面板大图标 + hover 名称气泡（表面走 kit 的 .ln-tip，定位走 usePopoverPosition）；260930 后续：-14 = 撤掉「图标 + 文件名」形态（用户「看板视图不展示名称了」），+4 = `.bt-card-files`（看板/画册卡片共用的附件行容器，单一来源）
-  "features/bitable/bitableFileIcon.css": { decls: 25, dupGroups: 0 },
+  "features/bitable/bitableFileIcon.css": { decls: 34, dupGroups: 0 },   // 261020：+9 = 大尺寸附件的「类型色纸页 + 扩展名」徽章（页身 currentColor / 折角 / 文字三个面各 1–3 条；颜色全部走 --lake-file-* 与 --lake-text-on-accent，文件内仍无颜色字面量）
   "features/bitable/bitableAiField.css": { decls: 32, dupGroups: 0 },   // 261004-b：-11 = 说明文字/包裹层归位到既有 .bt-field-label-text 与直排结构（删 prompt-wrap / warn / dialog-note / dialog-summary），字号/间距/圆角全量化令牌；@keyframes 不计数
   "features/bitable/bitableMarkdown.css": { decls: 17, dupGroups: 0 },   // 261005：Markdown 预览排版移到共用 components/ui/markdown/markdown.css（60 → 17，只余本域单元格/展开面板样式）,   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
   "features/bitable/bitableExpandPreview.css": { decls: 1, dupGroups: 0 },

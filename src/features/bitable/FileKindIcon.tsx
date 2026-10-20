@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { fileKindOf, type AssetFileKind } from "../../core/assetNaming.js";
+import { FILE_BADGE_MIN_SIZE, FileBadgeIcon } from "./FileBadgeIcon.js";
 import "./bitableFileIcon.css";
 
 /** 类型 → 图标。`text` 与 `pdf` 同用文件页图标（靠颜色区分：灰 vs 红），其余各用专属字形。 */
@@ -28,9 +29,16 @@ const KIND_ICON: Record<AssetFileKind, LucideIcon> = {
   file: File,
 };
 
-/** 颜色按类型走 `--lake-file-*` 令牌（定义在 `styles/themes/*`）；`aria-hidden` 由外层带名称的控件负责。 */
+/** 颜色按类型走 `--lake-file-*` 令牌（定义在 `styles/themes/*`）；`aria-hidden` 由外层带名称的控件负责。
+ *
+ * 261020 起按**尺寸**分两种画法（用户点单「大尺寸能看出扩展名」）：
+ * · ≥ 28px（多维表附件卡片 46px / 预览台）⇒ 类型色纸页 + 扩展名文字（FileBadgeIcon）；
+ * · < 28px（表格芯片 18px 等）⇒ 仍是线性图标：这个尺寸里印字必然糊，形状+类型色才可辨。
+ */
 export function FileKindIcon({ name, size = 18, className = "" }: { name: string; size?: number; className?: string }) {
   const kind = fileKindOf(name);
+  const cls = "bt-file-icon bt-file-icon--" + kind + (className ? " " + className : "");
+  if (size >= FILE_BADGE_MIN_SIZE) return <FileBadgeIcon name={name} size={size} className={cls} />;
   const Icon = KIND_ICON[kind];
-  return <Icon size={size} className={"bt-file-icon bt-file-icon--" + kind + (className ? " " + className : "")} aria-hidden="true" />;
+  return <Icon size={size} className={cls} aria-hidden="true" />;
 }

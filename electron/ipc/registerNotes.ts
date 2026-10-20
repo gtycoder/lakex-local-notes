@@ -17,6 +17,7 @@ import {
 } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 import { ensureTrashNoteAssets } from "../syncEngineController.js";
+import { prepareAttachmentOpen } from "../attachmentOpen.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
 
 /** 多维表 CSV 导入文件大小上限（本地优先、量级有限，防一次性读入超大文件）。 */
@@ -211,7 +212,7 @@ export function registerNotesIpc(
   ipc.handle("read_asset_preview", (noteId: string, filename: string) => store.readAssetPreview(noteId, filename));
   /** 附件操作（桌面本地优先：文件本来就在磁盘）：用系统默认应用打开 / 在文件夹中显示。
    * 路径安全：noteId + filename 双段校验（isSafePathSegment），只允许 note-assets 目录内。 */
-  ipc.handle("open_attachment", (noteId: string, filename: string) => {
+  ipc.handle("open_attachment", async (noteId: string, filename: string) => {
     assertAttachmentSegments(noteId, filename);
     // 同步/导入附件名不可信：禁止 shell 打开可执行类（.command/.exe/.bat…）；未知扩展名 fail-closed
     if (!isSafeShellOpenFilename(filename)) {
@@ -219,7 +220,17 @@ export function registerNotesIpc(
     }
     const full = store.noteAssetsPathFor(noteId) ? path.join(store.noteAssetsPathFor(noteId), filename) : "";
     if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
-    return shell.openPath(full).then((err) => (err ? { ok: false, error: err } : { ok: true }));
+    // 压缩包不能直接交给系统：macOS 归档工具会**解压到压缩包同目录**（= 往 note-assets 里堆目录，
+    // 那些目录不进 assets 表、也不进孤儿 GC ⇒ 永远清不掉）。先挪到临时目录再打开，见 core/attachmentOpen。
+    const plan = await prepareAttachmentOpen({ noteId, filename, fullPath: full }, app.getPath("temp"), {
+      removeDir: (target) => fs.rmSync(target, { recursive: true, force: true }),
+      makeDir: (target) => { fs.mkdirSync(target, { recursive: true }); },
+      link: (from, to) => fs.linkSync(from, to),
+      copy: async (from, to) => { await fs.promises.copyFile(from, to); },
+    });
+    return shell.openPath(plan.openPath).then((err) =>
+      err ? { ok: false, error: err, mode: plan.mode } : { ok: true, mode: plan.mode },
+    );
   });
   ipc.handle("show_attachment_in_folder", (noteId: string, filename: string) => {
     assertAttachmentSegments(noteId, filename);

@@ -27,6 +27,13 @@
 .bt-attach-card-kind { display: flex; align-items: center; justify-content: center; }
 .bt-attach-card-kind .bt-file-icon { width: 46px; height: 46px; }
 
+/* 大尺寸（≥28px）：类型色纸页 + 扩展名文字（261020）。
+   页身用 currentColor 继承 .bt-file-icon--<kind> 的类型色；折角与文字用 --lake-text-on-accent。 */
+.bt-file-badge { display: block; flex: 0 0 auto; overflow: visible; }
+.bt-file-badge__page { fill: currentColor; }
+.bt-file-badge__fold { fill: var(--lake-text-on-accent); opacity: .35; }
+.bt-file-badge__label { fill: var(--lake-text-on-accent); font-family: var(--lake-font-family); font-weight: var(--lake-font-weight-bold); }
+
 /* 卡片（看板 / 画册）里附件值的行容器：内容就是表格那套 .bt-attachment-chip（单一来源）。
    卡片能换行 ⇒ 允许 wrap（不像表格格子里必须一行裁切）；名字统一靠 hover 气泡看（用户 260930：
    「看板视图不展示名称了，直接图标或者缩略图吧」）。 */
