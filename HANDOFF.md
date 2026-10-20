@@ -2127,47 +2127,26 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（261020 起 52 = 50 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
-### 261020(五) · 移动端表格 chrome 重做（**方案 A：底部 dock**）· 已过设备验收并**推送 master**
+### 261021(三) · 移动端表格 chrome 路线切换：Yuque 式顶栏 + 锚定卡片 + 自绘底栏（**P1-P3 已合入 master**）
 
-- **用户定稿**（两个原型里选 A）：不照抄语雀顶部条，改用我们文档端已磨合的编辑语言 —— 顶部只留 **21px 薄公式栏**，
-  底部 **32px 页签/缩放栏 + 56px dock**，二级能力全部走**底部面板**。逐条：① 撤销/重做**留在主条**；
-  ② 「常规」用**文字**回显当前数字格式；③ Aa 面板**只留文字样式**（字号 / B I U S + 清除格式 / 对齐 / 字色 / 底色）；
-  ④ ＋ 插入面板**都做但只放支持的**（插入行/列、合并）；⑤ 阅读态**先保留一条 40px 轻工具条**（工作表 + 缩放）。
-  **追加定稿（同日第二轮）**：⑥ **网格默认只在移动端生效**（B 方案，桌面保持原样，见下）；⑦ 二级面板要**向下占键盘区**展开、
-  dock 停在面板上沿（与文档编辑一致，原先做成了 panel 压在 dock 上方）；⑧ Aa 面板**去掉「文字颜色 / 背景色」两行说明**；⑨ 撤销/重做**跟随撤销栈置灰**；⑩ Aa 面板**字号挪到最底**（逐行同序：行内标记 → 对齐 → 字色 → 底色 → 字号）；
-  ⑪ **面板定高 = 捕获的键盘区高度**（内容多则内部滚、少则留白；`capturePanelHeight` 与文档 dock 同一份算术），
-  实测键盘 312 ⇒ 面板 top 530 / h 312；⑫ 展开的类别键（＋/Aa/常规/⋯）**变 ×** 且高亮，再点一次 = 关面板 + 放回键盘；
-  点网格 / ⌨ = 只关面板、不拉键盘；⑬ **面板开/关必须走 facade**（`endEditingAsync(true)` / `startEditing()`）——
-  只 blur 会让内核停在编辑态、移动 footer 变成「取消/确定/公式」，「开始编辑」按钮消失 ⇒ ⌨/× 再也弹不回键盘（设备实测）；
-  两个符号已登记 `univerContract.test.ts` 的 facade 清单；
-  ⑭ **收起过渡（closingHold）**：面板关闭先进 `closing`（期间不接点击），restore 档内容保持到键盘真的上来，
-  键盘回 150ms / 迟迟不来 1800ms / 兜底 2500ms 再卸载；退场沿用 `renderedPanel` —— 与文档 dock 同口径（实测无空白帧）。
-  规格与实测全量落在 **`docs/MOBILE-SHEET-PARITY.md` §14**（原研究文档升格为产品文档）。
-- **落地（单一来源）**：`usheetChromeModel.ts`（清单唯一来源：dock 顺序/字号档/色板/插入·更多分组/数字格式）·
-  `UsheetChrome.tsx`（公式栏 / dock / 面板 / 页签栏 / 阅读条，只渲染）· `usheet-chrome.css`（190 声明）·
-  `MobileUsheetViewer.tsx`（动作入口走 Univer facade：底色/字色/字号/B I U S/对齐/合并/插入行列/冻结/行高列宽/数字格式/常用公式/缩放/工作表）。
-  **面板原语不复制**：直接用 `editor-dock.css` 的 `.med-f-*`（`mobile/main.tsx` 全局引入）；旧自绘顶栏与 `mobile.css` 里 121 行表格样式整体删除。
-- **设备验收（本批起用**专属 AVD `lake_sheet` / 5562 / CDP 9338**，不再占 `lake_gate`；新包，像素级）**：行 24 / 列 120 / 行头 40 / 列头 24（截图像素量化 63 device=24 CSS、316 device=120.4 CSS）；
-  公式栏 21、dock 8×49×44、页签栏 32 均 DOM 实测；面板四项与动作链（底色 / 数字格式 0.25→25.00% / 撤销重做 / 缩放 110% / 新建工作表 / 阅读态 / 键盘 842↔530）全部生效；
-  force-stop 重启后单元格值/格式/底色/工作表结构全部还原。
-- **网格默认（B 方案，用户 261020 定）**：`core/usheetDoc.ts` **保持桌面口径**（列宽 88、不写行头/列头）；移动端新建表走
-  `src/mobile/usheet/mobileSheetGrid.ts` 的 `emptyMobileUsheetBody()`（24/120/40/24），「＋新建工作表」也把同一份
-  `MOBILE_USHEET_GRID` 传给 `insertSheet`（否则新页签按内核默认 88 出来）。网格写进正文后跟着文档走 ⇒ 手机上建的表在桌面打开也是这套。
-  护栏 `mobileSheetGrid.test.ts`（core 保持 88 / 移动端 24·120·40·24 / 覆盖所有工作表且不动 cellData）。
-- **撤销/重做置灰**：`IUndoRedoService.getUndoRedoStatus`（令牌从 `@univerjs/presets` 转发拿，不新增依赖、不直连 core 包），
-  `__getInjector()` 读 `undos/redos`；服务缺席时退回常亮（不锁死）。触点登记 `UNIVER_FEATURE_NAMES.getUndoRedoStatus`。
-  设备实测三态：新建空表两键灰 → 填一次底色「撤销」亮 → 撤销后「撤销」灰「重做」亮。
-- **代码 review 补的 3 处**：① **对齐回显**：Univer `getHorizontalAlignment()` 的右对齐是 `normal`（setter 也只收 left/center/normal）
-  ⇒ 读出时必须映射成 UI 的 `right`，否则「右对齐」永远不高亮（`alignOf` + 单测）；② 下划线/删除线在部分内核版本是裸 `1` 而非 `{s:1}`
-  ⇒ `lineFlagOf` 两种形状都认；③ 删掉未使用的 `USHEET_READING_ACTIONS` 死代码。
-- **本批修掉的两个真 bug**：① 面板 9 项一行 ⇒ 中文标签被省略号吃掉（数字格式改 5+4、常用公式 3+2，标签压到 ≤4 字，护栏加了长度断言）；
-  ② **⌨ 收起后弹不回来**（原判据「焦点是否在宿主内」，而关键盘后 Univer 会把焦点留在编辑器 div）⇒ 改**视口收缩 >200px** 判据（AGENTS §7.17）+ 双态图标（Keyboard/KeyboardOff）。
-- **面板位置（用户 261020 报）**：DOM 顺序改为 footer → dock → **panel** ⇒ 面板向下占键盘区、dock 停在面板上沿；
-  实测 footer.bottom=452 / dock 452–508 / panel 508–842（视口底）。
-- **门禁（提交树）**：tsc 0 · vitest **320 文件 / 2325 例（16 skip）** · ui-metrics（移动端字号字面量回基线）· check:core 93-0 · check:mobileui · check:bundle（app-css 1.79MB）· 双构建 · `git diff --check` ✓。
-- **残留（如实）**：数字格式/字号在混选时回显「常规」· 筛选/排序/条件格式/数据验证/保护/查找替换 = P2（要补插件，
-  走 `USHEET-UPGRADE.md`）· 阅读态轻工具条只做工作表+缩放 · 桌面新建表仍是 88/24 的旧口径（与移动端移动端新建的 120 不同，
-  这是 B 方案的有意结果；同一份文档跨端看到的一致）。
+- **用户 261021 定稿**：放弃 261020 的「底部 dock」路线，改成复刻语雀 App —— 顶部 **40px 工具栏**（插入 | 撤销 重做 | 常规▾ | ⋯）、**21px 公式栏**、自绘 **32px 底栏**；二级菜单全部用**锚定卡片**（不再底部 Sheet/面板）。
+- **落地（单一来源）**：`usheetChromeModel.ts`（工具条分组 / ⋯ 七行图标 / 插入卡 / 数字格式分类）· `SheetPopCard.tsx` + `SheetMoreCard.tsx`（锚定卡：无遮罩、外点关闭、卡内下钻）· `SheetIcon.tsx` · `MobileSheetFooter.tsx`（工作表列表/页签/缩放）· `MobileSheetReadingBar.tsx`（阅读态 5 项，暂置灰）· `MobileUsheetViewer.tsx`（动作全走 Univer facade；公式栏 pointerup → `setCursorManually` 落光标）。
+- **旧路线已删**：`UsheetChrome.tsx`（底部 dock）与 `docs/MOBILE-SHEET-PARITY.md`；`mobile.css` 恢复表格宿主几何并隐藏 Univer 自带 header/footer/浮动钮；移动端新建表网格仍 24/120/40/24（旧文档不迁移）。
+- **设备实测**：工具条 40 / 按钮 34×32 / 公式栏 21 / 底栏 32；卡片锚在按钮下方、底栏工作表列表卡在上方；双击单元格进编辑（键盘 842→530）；缩放 100→110%；阅读态 5 项 + 底栏。
+- **合并说明**：master 已有 261021 小记搜索/标签等更新，本次只覆盖移动端表格 chrome 路线，其余更新保留；`getUndoRedoStatus` 等旧触点保留（不影响新工具条）。
+
+**P4 / P5 待办（下一步，按优先级）**
+
+**P4（视觉/交互收口，纯 chrome）**
+1. **网格视觉对拍**：移动端专用 Univer 主题覆盖（表头 `#f4f5f5` / 当前行列头 `#e7e9e8` / 网格线 `#e5e5e5` / 选区填充 `#eefbfb` + 2px `#2f8ef4`）；只改移动端，桌面不动。
+2. **二级选择器视觉**：颜色板改色块/圆点、对齐改图标行；冻结/公式保持行式；字号/边框继续置灰。
+3. **保存态**：方案 A（推荐）自动保存加「保存中/已保存」轻指示，不改同步语义；方案 B 显式保存按钮 —— **待用户拍板**。
+4. **阅读态**：5 项目前全置灰（内核无读态动作，筛选/排序/冻结/查找待 P5）；「目录/编辑」浮动胶囊是否做 —— **待用户拍板**（当前编辑入口仍用工作区顶栏）。
+5. **暗色主题 + 设备全量对拍**：编辑 / 阅读 / 键盘 / 多表 / 新表网格 / 工作表切换。
+
+**P5（能力补齐，逐项确认 Univer facade/command 后接）**
+- `保存按钮 / 格式刷 / 清除格式 / 小数位 / 边框 / 筛选 / 排序 / 保护 / 查找替换`。
+- 多工作表切换真实设备点测（当前只有单表，页签切换/缩放已接线但未实际多表点过）。
 
 ### 261020(三) · 表格（usheet）P1：布局动作 + 数字格式 + 常用公式 · **已合入并推送 master（见 `git log`：`fc6d3a77` / `0a7c2990` / `0462df6b`）**
 

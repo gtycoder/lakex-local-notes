@@ -16,41 +16,24 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 
-const calls: {
-  created: number; disposed: number; editable: boolean[]; core: Record<string, unknown> | null; container: string | null;
-  /** 内核撤销栈状态（IUndoRedoService 的替身）：dock 两枚按钮按它置灰。 */
-  history: { undos: number; redos: number };
-} = { created: 0, disposed: 0, editable: [], core: null, container: null, history: { undos: 0, redos: 0 } };
+const calls: { created: number; disposed: number; editable: boolean[]; core: Record<string, unknown> | null; container: string | null } =
+  { created: 0, disposed: 0, editable: [], core: null, container: null };
 
 vi.mock("@univerjs/presets", () => ({
   LocaleType: { ZH_CN: "zh-CN" },
-  // 组件从 presets 转发处拿注入令牌（真实内核里它来自 @univerjs/core）；测试只要是一个稳定对象即可
-  IUndoRedoService: { name: "IUndoRedoService" },
   mergeLocales: (...m: unknown[]) => Object.assign({}, ...m),
   defaultTheme: { primary: {}, gray: {}, blue: {}, red: {}, green: {}, orange: {} },
   createUniver: (options: Record<string, unknown>) => {
     calls.created += 1;
-    const workbook = {
-      getId: () => "workbook",
-      getSheets: () => [] as unknown[],
-      getActiveSheet: () => null,
-      getActiveRange: () => null,
-      undo: () => undefined,
-      redo: () => undefined,
-    };
     return {
-      univer: {
-        dispose: () => { calls.disposed += 1; },
-        // 注入器只回我们关心的那一个服务；令牌是 mock 里的稳定对象
-        __getInjector: () => ({ get: () => ({ getUndoRedoStatus: () => ({ ...calls.history }) }) }),
-      },
+      univer: { dispose: () => { calls.disposed += 1; }, __getInjector: () => ({ get: () => null }) },
       univerAPI: {
         createWorkbook: () => ({
           setEditable: (v: boolean) => { calls.editable.push(v); },
           save: () => ({ id: "workbook", sheetOrder: ["s1"], sheets: { s1: { id: "s1", name: "Sheet1", rowCount: 5, columnCount: 3, cellData: {} } } }),
         }),
         setTheme: () => undefined,
-        getActiveWorkbook: () => workbook,
+        getActiveWorkbook: () => null,
         addEvent: () => ({ dispose: () => undefined }),
         Event: { CommandExecuted: "command-executed" },
       },
@@ -105,14 +88,14 @@ describe("移动端表格查看/编辑器", () => {
     root.unmount();
   });
 
-  it("阅读态挂载：无 dock、保留 21px 公式栏与一条轻工具条、容器 id 正确", async () => {
+  it("阅读态挂载 + 不挂桌面工具条 + 保留移动编辑面 + 容器 id 正确", async () => {
     calls.created = 0; calls.editable.length = 0; calls.core = null;
     const { root, host } = await mount(true);
     const core = (calls.core ?? {}) as Record<string, unknown>;
     expect(calls.created).toBe(1);
     expect(calls.editable).toEqual([false]);            // 阅读态 setEditable(false)
-    expect(core.toolbar).toBe(false);                   // 不挂内核工具条
-    expect(core.formulaBar).toBe(true);                 // 公式栏注册仍在（由我们自绘）
+    expect(core.toolbar).toBe(false);                   // 不挂工具条
+    expect(core.formulaBar).toBe(true);                 // 移动编辑面/公式栏注册仍在，阅读态由 setEditable(false) 关闭编辑
     expect(calls.container).toBe("mobile-usheet-n1");
     expect(host.querySelector(".mobile-usheet")).toBeTruthy();
     expect(host.querySelector(".mobile-usheet")?.hasAttribute("data-prevent-swipe")).toBe(true);
@@ -123,7 +106,7 @@ describe("移动端表格查看/编辑器", () => {
     root.unmount();
   });
 
-  it("编辑态挂载：dock 八项 + 公式栏 + 页签/缩放栏；setEditable(true) 且注册同步 capture", async () => {
+  it("编辑态挂载：setEditable(true)，并注册同步 capture", async () => {
     calls.created = 0; calls.editable.length = 0;
     let capture: (() => string | null) | null = null;
     const { root, host } = await mount(true, true, { onCapture: (c) => { capture = c; } });
@@ -172,7 +155,7 @@ describe("移动端表格查看/编辑器", () => {
     expect(numfmt).toBeTruthy();
     await act(async () => { numfmt!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     expect(host.querySelector(".mb-usheet-popcard")).toBeTruthy();
-    for (const label of ["常规（清除格式）", "百分比", "日期时间"]) expect(host.textContent ?? "").toContain(label);
+    for (const label of ["常规", "百分比", "日期时间"]) expect(host.textContent ?? "").toContain(label);
     root.unmount();
   });
 
@@ -184,38 +167,6 @@ describe("移动端表格查看/编辑器", () => {
     await act(async () => { insert!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     for (const label of ["在上方插入行", "在下方插入行", "在左侧插入列", "在右侧插入列", "合并选中单元格"]) expect(host.textContent ?? "").toContain(label);
     root.unmount();
-  });
-
-  it("收起过渡：restore 档内容先留着；键盘不来 1.8s 后滑出、2.5s 兜底卸载", async () => {
-    const { root, host } = await mount(true, true);
-    const { act } = await import("react");
-    const btn = host.querySelector<HTMLButtonElement>('.ush-dock button[aria-label="文字格式"]');
-    await act(async () => { btn!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-    expect(host.querySelector(".ush-panel")).toBeTruthy();       // 展开
-    await act(async () => { btn!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-    expect(host.querySelector(".ush-panel")?.getAttribute("data-open")).toBe("1");   // 收起过渡：内容保持
-    // 用真实计时（计时器在点击那一步就已排上，事后再开 fake timers 抓不到）
-    await act(async () => { await new Promise((r) => setTimeout(r, 1900)); });   // 1800ms 兜底放行滑出
-    expect(host.querySelector(".ush-panel")?.getAttribute("data-open")).toBe("0");
-    await act(async () => { await new Promise((r) => setTimeout(r, 700)); });    // 2500ms 兜底卸载
-    expect(host.querySelector(".ush-panel")).toBeNull();
-    root.unmount();
-  });
-
-  it("撤销/重做按钮跟随内核撤销栈：空栈置灰，有历史才亮（不假装能撤销）", async () => {
-    calls.history = { undos: 0, redos: 0 };
-    const a = await mount(true, true);
-    const undoA = a.host.querySelector<HTMLButtonElement>('.ush-dock button[aria-label="撤销"]');
-    const redoA = a.host.querySelector<HTMLButtonElement>('.ush-dock button[aria-label="重做"]');
-    expect(undoA?.disabled).toBe(true);
-    expect(redoA?.disabled).toBe(true);
-    a.root.unmount();
-
-    calls.history = { undos: 2, redos: 1 };
-    const b = await mount(true, true);
-    expect(b.host.querySelector<HTMLButtonElement>('.ush-dock button[aria-label="撤销"]')?.disabled).toBe(false);
-    expect(b.host.querySelector<HTMLButtonElement>('.ush-dock button[aria-label="重做"]')?.disabled).toBe(false);
-    b.root.unmount();
   });
 
   it("图片 source：资产 filename 走本机 AssetServer canonical URL；http/data 原样", () => {

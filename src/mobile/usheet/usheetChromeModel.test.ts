@@ -45,7 +45,7 @@ describe("移动端表格 chrome 模型（261021：对齐语雀工具条）", ()
     expect(numfmtLabelOf("")).toBe("常规");
     expect(numfmtLabelOf("#,##0.00")).toBe("数字");
     const items = buildNumfmtMenu("#,##0.00");
-    expect(items.filter((item) => item.header).map((item) => item.label)).toEqual(["常规", "数值", "日期时间"]);
+    expect(items.filter((item) => item.header).map((item) => item.label)).toEqual(["通用", "数值", "日期时间"]);
     expect(items.find((item) => item.id === "numfmt-number")?.note).toBe("当前");
     expect(items.length).toBe(12);
     expect(SHEET_CARD_META.more.width).toBe(232);

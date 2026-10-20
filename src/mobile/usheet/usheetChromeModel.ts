@@ -183,7 +183,7 @@ export function buildNumfmtMenu(currentPattern: string): SheetMenuItem[] {
     })),
   ];
   return [
-    ...group("常规", ["numfmt-general", "numfmt-text"]),
+    ...group("通用", ["numfmt-general", "numfmt-text"]),
     ...group("数值", ["numfmt-number", "numfmt-integer", "numfmt-percent", "numfmt-currency"]),
     ...group("日期时间", ["numfmt-date", "numfmt-time", "numfmt-datetime"]),
   ];
