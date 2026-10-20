@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronLeft, ChevronRight, Eraser, Highlighter, Minus, Pen, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
 import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
 import {
@@ -61,6 +61,30 @@ function pointFromClient(clientX: number, clientY: number, pointerType: string, 
 function replacePage(doc: InkDoc, page: InkPage): InkDoc {
   return { ...doc, pages: doc.pages.map((item) => (item.id === page.id ? page : item)) };
 }
+
+interface RenderedStrokePath {
+  id: string;
+  d: string;
+  color: string;
+  highlighter: boolean;
+}
+
+/** 静态笔迹层：只在页面内容变化时重渲染；正在书写时不会 reconcile 全部历史路径。 */
+const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes: RenderedStrokePath[] }) {
+  return (
+    <>
+      {strokes.map((stroke) => (
+        <path
+          key={stroke.id}
+          d={stroke.d}
+          fill={stroke.color}
+          opacity={stroke.highlighter ? 0.3 : 1}
+          style={stroke.highlighter ? { mixBlendMode: "multiply" } : undefined}
+        />
+      ))}
+    </>
+  );
+});
 
 export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture }: InkPadProps) {
   const initialDoc = useMemo(() => parseInkBody(content), [content]);
@@ -347,9 +371,14 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   }, []);
 
   const activePath = useMemo(() => activeStroke ? strokeToSvgPath(activeStroke, false) : null, [activeStroke]);
-  const renderedStrokes = useMemo(() => {
+  const renderedStrokes = useMemo<RenderedStrokePath[]>(() => {
     if (!page) return [];
-    return page.strokes.map((stroke) => ({ stroke, d: strokeToSvgPath(stroke, true) }));
+    return page.strokes.map((stroke) => ({
+      id: stroke.id,
+      d: strokeToSvgPath(stroke, true),
+      color: stroke.color,
+      highlighter: stroke.tool === "highlighter",
+    }));
   }, [page]);
 
   if (!doc || !page) {
@@ -431,15 +460,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             aria-label={`手写板第 ${pageIndex + 1} 页`}
           >
             <rect x="0" y="0" width={page.width} height={page.height} fill="transparent" />
-            {renderedStrokes.map(({ stroke, d }) => (
-              <path
-                key={stroke.id}
-                d={d}
-                fill={stroke.color}
-                opacity={stroke.tool === "highlighter" ? 0.3 : 1}
-                style={stroke.tool === "highlighter" ? { mixBlendMode: "multiply" } : undefined}
-              />
-            ))}
+            <StaticStrokeLayer strokes={renderedStrokes} />
             {activeStroke && activePath && (
               <path
                 d={activePath}

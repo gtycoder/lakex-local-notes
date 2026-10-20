@@ -8,6 +8,7 @@ export const INK_DOC_KIND = "ink" as const;
 export const INK_DOC_VERSION = 1 as const;
 export const INK_PAGE_WIDTH = 794;
 export const INK_PAGE_HEIGHT = 1123;
+export const MAX_INK_BODY_CHARS = 16 * 1024 * 1024;
 
 export const INK_BACKGROUNDS = ["blank", "lined", "grid", "dot"] as const;
 export type InkBackground = (typeof INK_BACKGROUNDS)[number];
@@ -53,6 +54,8 @@ const MAX_PAGE_HEIGHT = 8192;
 const MAX_STROKES_PER_PAGE = 20000;
 const MAX_POINTS_PER_STROKE = 50000;
 const MAX_PAGES = 1000;
+const MAX_TOTAL_STROKES = 100000;
+const MAX_TOTAL_POINTS = 300000;
 
 function finiteNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -148,7 +151,7 @@ export function createInkPage(id: string, background: InkBackground = "blank"): 
 
 /** 正文 → InkDoc。严格校验：坏正文返回 null，编辑器必须只读，不得用默认空文档覆盖原文。 */
 export function parseInkBody(content: string | null | undefined): InkDoc | null {
-  if (!content) return null;
+  if (!content || content.length > MAX_INK_BODY_CHARS) return null;
   let raw: unknown;
   try {
     raw = JSON.parse(content);
@@ -161,9 +164,14 @@ export function parseInkBody(content: string | null | undefined): InkDoc | null 
   if (!Array.isArray(record.pages) || record.pages.length === 0 || record.pages.length > MAX_PAGES) return null;
   const pages: InkPage[] = [];
   const ids = new Set<string>();
+  let totalStrokes = 0;
+  let totalPoints = 0;
   for (const rawPage of record.pages) {
     const page = normalizePage(rawPage);
     if (!page || ids.has(page.id)) return null;
+    totalStrokes += page.strokes.length;
+    totalPoints += page.strokes.reduce((sum, stroke) => sum + stroke.points.length, 0);
+    if (totalStrokes > MAX_TOTAL_STROKES || totalPoints > MAX_TOTAL_POINTS) return null;
     ids.add(page.id);
     pages.push(page);
   }

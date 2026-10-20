@@ -43,6 +43,11 @@ describe("手写板 POC 端到端接线", () => {
     expect(INK_PAD).toContain("fitSize.height * zoom");
   });
 
+  it("静态笔迹层 memo 化，避免正在书写时重渲染全部历史路径", () => {
+    expect(INK_PAD).toContain("const StaticStrokeLayer = memo(");
+    expect(INK_PAD).toContain("<StaticStrokeLayer strokes={renderedStrokes} />");
+  });
+
   it("桌面创建、IPC、路由与移动端创建/路由均已接通", () => {
     expect(STORE).toContain("createInkIn(");
     expect(IPC).toContain('ipc.handle("create_ink_in"');
