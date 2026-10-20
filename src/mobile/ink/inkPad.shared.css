@@ -27,8 +27,10 @@
 
 .ink-tool,
 .ink-width,
+.ink-color,
 .ink-pages button,
 .ink-backgrounds button {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -67,6 +69,7 @@
 .ink-color {
   width: 20px;
   height: 20px;
+  flex: 0 0 20px;
   padding: 0;
   border: 2px solid transparent;
   border-radius: var(--lake-radius-pill);

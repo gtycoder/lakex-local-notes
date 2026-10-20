@@ -1,4 +1,5 @@
 .ink-pad--mobile .ink-toolbar { padding: 5px 8px; }
+.ink-pad--mobile .ink-color { width: 32px; height: 32px; flex-basis: 32px; }
 .ink-pad--mobile .ink-tool,
 .ink-pad--mobile .ink-width,
 .ink-pad--mobile .ink-pages button,

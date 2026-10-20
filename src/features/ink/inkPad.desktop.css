@@ -1,4 +1,13 @@
-.ink-pad--desktop .ink-toolbar { padding: 6px 8px; }
+.ink-pad--desktop .ink-toolbar {
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  align-self: center;
+  margin: 8px auto 0;
+  padding: 6px 8px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  box-shadow: var(--lake-shadow-card);
+}
 .ink-pad--desktop .ink-tool,
 .ink-pad--desktop .ink-width,
 .ink-pad--desktop .ink-pages button,
