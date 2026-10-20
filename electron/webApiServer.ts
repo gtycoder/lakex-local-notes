@@ -71,6 +71,7 @@ export const WEB_METHODS: Record<string, string> = {
   createUsheetIn: "create_usheet_in",
   createBitableIn: "create_bitable_in",
   createBoardIn: "create_board_in",
+  createInkIn: "create_ink_in",
   moveTreeNode: "move_tree_node",
   moveTreeNodeOrdered: "move_tree_node_ordered",
   reorderTreeNodes: "reorder_tree_nodes",

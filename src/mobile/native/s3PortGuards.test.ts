@@ -53,6 +53,8 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
     const mobile = read("mobile/native/s3Store.ts");
     const desktop = readFileSync(path.join(SRC, "..", "electron/s3Store.ts"), "utf8");
     expect(mobile, "移动端 gzip 分支必须设置 ContentEncoding").toMatch(/ContentEncoding:\s*"gzip"/);
+    expect(mobile, "移动端 gzip 正文必须按二进制发送").toMatch(/ContentType:\s*"application\/octet-stream"/);
+    expect(mobile, "移动端二进制 gzip 不得声明 application/json（CapacitorHttp 会改走文本正文）").not.toMatch(/ContentType:\s*"application\/json"/);
     expect(desktop, "桌面端仍必须设置 Content-Encoding").toMatch(/command\.ContentEncoding\s*=\s*"gzip"/);
   });
 

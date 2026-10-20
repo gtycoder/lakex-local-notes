@@ -91,11 +91,13 @@ describe("buildUploadEntry（v4 编码）", () => {
     expect(entry.icon).toBeNull();
   });
 
-  it("kind 传播（v6 usheet/bitable + v7 board）：非 doc 才写字段，doc 保持键缺席", () => {
+  it("kind 传播（usheet/bitable/board/ink）：非 doc 才写字段，doc 保持键缺席", () => {
     const board = buildUploadEntry({ note: mkLocal({ kind: "board" }), contentHash: "b".repeat(64), assets: [] });
     expect(board.kind).toBe("board");
     const usheet = buildUploadEntry({ note: mkLocal({ kind: "usheet" }), contentHash: "b".repeat(64), assets: [] });
     expect(usheet.kind).toBe("usheet");
+    const ink = buildUploadEntry({ note: mkLocal({ kind: "ink" }), contentHash: "b".repeat(64), assets: [] });
+    expect(ink.kind).toBe("ink");
     // 键缺席 = doc（纯文档库的清单条目保持逐字节不变）
     const docEntry = buildUploadEntry({ note: mkLocal({ kind: "doc" }), contentHash: "b".repeat(64), assets: [] });
     expect("kind" in docEntry).toBe(false);
@@ -171,7 +173,7 @@ describe("rowToLocalState", () => {
     });
   });
 
-  it("v6/v7 kind 归一：usheet/bitable/board 原样保留，旧 sheet/未知值回退 doc", () => {
+  it("kind 归一：usheet/bitable/board/ink 原样保留，未知值回退 doc", () => {
     const kindOf = (raw: string | null) => rowToLocalState({
       id: "n1", title: "t", parent_id: null, sort_order: 0, updated_at: T0, sync_state: "local",
       is_conflict: 0, is_locked: 0, locked_at: null, icon: null, trashed_at: null, deleted_from_parent_id: null,
@@ -181,6 +183,7 @@ describe("rowToLocalState", () => {
     expect(kindOf("usheet")).toBe("usheet");
     expect(kindOf("legacy-kind")).toBe("doc");   // 未知 / 已废弃 kind：不做迁移 / 兼容（AGENTS §3#7），一律回退 doc
     expect(kindOf("bitable")).toBe("bitable");
+    expect(kindOf("ink")).toBe("ink");
     expect(kindOf("gantt")).toBe("doc");
     expect(kindOf(null)).toBe("doc");
   });

@@ -43,7 +43,7 @@ export const WRITE_OPS = [
   "deleteQuickNote", "restoreQuickNote", "purgeQuickNote",
   "saveQuickNoteDraft", "clearQuickNoteDraft",
   // 正文
-  "saveNote",
+  "saveNote", "createInk",
   // 历史快照
   "deleteHistory", "saveHistorySettings", "snapshotNote", "cleanupHistory",
   // 孤儿资产

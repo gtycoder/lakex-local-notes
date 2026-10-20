@@ -15,8 +15,8 @@ export interface ManifestNote {
   lockedAt?: string | null;
   /** 文档自定义图标（可选字段，旧清单无此字段时本地保持原样） */
   icon?: string | null;
-  /** v6：文档类型（doc | sheet | bitable）。缺省/缺失 = doc（兼容旧清单与旧端）。
-   * 只写非 doc 值，使纯文档库的清单保持逐字节不变。 */
+  /** 文档类型（doc | usheet | bitable | board | ink）。字段自历史清单 v6 引入；
+   * 当前 Manifest V2 正式支持 ink。缺省/缺失 = doc，只写非 doc 值。 */
   kind?: NoteKind;
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean;

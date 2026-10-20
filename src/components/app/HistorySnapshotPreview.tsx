@@ -1,5 +1,5 @@
 /**
- * 历史快照预览（kind = usheet / bitable / board）。
+ * 历史快照预览（kind = usheet / bitable / board；ink 只显示结构化统计）。
  *
  * doc 的快照走只读 Lake viewer（调用方分支，本组件不处理）。
  * 非 doc 的正文是内部 JSON，**图片只有编辑器认识**（表格单元格图片按 filename 拼资产 URL、多维表附件
@@ -103,8 +103,9 @@ class PreviewErrorBoundary extends Component<{ fallback: ReactNode; children: Re
 export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: HistorySnapshotPreviewProps) {
   const blocks = useMemo(() => snapshotPreview(kind, body), [kind, body]);
   const facts = blocks.filter((b): b is Extract<SnapshotPreviewBlock, { type: "facts" }> => b.type === "facts");
-  // 只有 facts 之外的块才说明"正文解析不了"（模型对坏正文只产出一条 empty/hint）
-  const parseable = kind === "doc" ? false : !(blocks.length === 1 && blocks[0].type === "empty");
+  // 只有 facts 之外的块才说明"正文解析不了"（模型对坏正文只产出一条 empty/hint）。
+  // doc 由只读 Lake viewer 渲染；ink 当前没有只读画布预览，直接使用结构化统计。
+  const parseable = kind === "doc" || kind === "ink" ? false : !(blocks.length === 1 && blocks[0].type === "empty");
   const noop = useMemo(() => () => undefined, []);
 
   if (!parseable) {
@@ -138,8 +139,11 @@ export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: Histo
               <UniverSheetEditor noteId={noteId} content={body} visible readOnly onChange={noop} showToolbar={false} />
             ) : kind === "bitable" ? (
               <BitableEditor noteId={noteId} content={body} visible readOnly onChange={noop} chrome={false} />
-            ) : (
+            ) : kind === "board" ? (
               <BoardEditor noteId={noteId} content={body} visible readOnly onChange={noop} />
+            ) : (
+              // 未知/非编辑器型 kind 必须 fail-closed，不能把 JSON 误喂给画板。
+              <StructuredBlocks blocks={blocks} />
             )}
           </Suspense>
         </PreviewErrorBoundary>

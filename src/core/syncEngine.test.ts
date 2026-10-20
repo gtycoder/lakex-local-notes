@@ -211,15 +211,15 @@ describe("syncEngine（共享编排）", () => {
     const manifestBytes = await s3.getObject("p/manifests/latest.json");
     expect(manifestBytes).not.toBeNull();
     const manifest = JSON.parse(decode(manifestBytes!));
-    expect(manifest.version).toBe(1);   // 260928：协议重置为 V1，内容 schema 不变
+    expect(manifest.version).toBe(2);   // 260928：协议重置为 V1，内容 schema 不变
     expect(manifest.notes[0].id).toBe("n1");
     expect(db.notes.get("n1")!.syncState).toBe("synced");
   });
 
   // 260925 多端实测回归：上传条目手工枚举字段时漏了 kind ⇒ manifest 不含 kind ⇒
   // 他端把 usheet/bitable/board 当 doc 导入（正文落到 notes/*.lake，打开即毁）。这里卡住上传侧透传。
-  it("kind 透传：非 doc（usheet/bitable/board）上传条目带 kind", async () => {
-    for (const kind of ["usheet", "bitable", "board"] as const) {
+  it("kind 透传：非 doc（usheet/bitable/board/ink）上传条目带 kind", async () => {
+    for (const kind of ["usheet", "bitable", "board", "ink"] as const) {
       const s3 = new MemS3();
       const db = new MemDb();
       db.notes.set("n1", row({ id: "n1", kind }));
@@ -689,7 +689,7 @@ describe("syncEngine（共享编排）", () => {
     const r = await syncNow(CFG, s3, db);
     expect(r.published).toBe(true);
     const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
-    expect(manifest.version).toBe(1);
+    expect(manifest.version).toBe(2);
     const entry = manifest.folders.find((f: any) => f.id === "nb1");
     expect(entry).toBeDefined();
     expect(entry.deleted).toBe(true);

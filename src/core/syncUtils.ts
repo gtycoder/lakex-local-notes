@@ -22,12 +22,11 @@ export interface S3Settings {
 
 // ===== Manifest 版本 =====
 /**
- * 260928 协议重置：远端与本地数据全部清空后，新协议重新使用 V1 编号；
- * manifest **内容仍使用原 v7 schema**（folders/墓碑/锁/kind 全部保留）。
- * 这不是旧 V1 兼容模式：代码只读写新 V1，所有端必须同时升级。
+ * Manifest 版本 2：在 V1 schema 上新增 `kind="ink"`（手写板）。
+ * V1 仍可读（用于已有云端清单升级），但新端写出 V2；旧端不得继续写入该空间。
  */
-export const MANIFEST_VERSION = 1;
-const READABLE_MANIFEST_VERSIONS = new Set([1]);
+export const MANIFEST_VERSION = 2;
+const READABLE_MANIFEST_VERSIONS = new Set([1, 2]);
 export const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
 export const MAX_MANIFEST_NOTES = 200_000;
 export const MAX_MANIFEST_FOLDERS = 50_000;

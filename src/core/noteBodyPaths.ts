@@ -15,6 +15,7 @@ export const NOTE_BODY_DIR: Record<NoteKind, string> = {
   usheet: "usheets",
   bitable: "bitables",
   board: "boards",
+  ink: "inks",
 };
 
 /** 各 kind 的正文扩展名。doc 是 Lake 标记文本，其余是内部 JSON。 */
@@ -23,6 +24,7 @@ export const NOTE_BODY_EXT: Record<NoteKind, string> = {
   usheet: ".usheet.json",
   bitable: ".bitable.json",
   board: ".board.json",
+  ink: ".ink.json",
 };
 
 /** 文档正文相对路径：notes/{id}.lake / bitables/{id}.bitable.json … */
@@ -31,7 +33,7 @@ export function noteBodyRelativePath(kind: NoteKind, id: string): string {
   return NOTE_BODY_DIR[kind] + "/" + id + NOTE_BODY_EXT[kind];
 }
 
-/** 同一 id 的四种候选正文路径（正文缺失清理 / kind 变更时逐个尝试；与桌面 candidateBodyPaths 同口径）。 */
+/** 同一 id 的全部候选正文路径（正文缺失清理 / kind 变更时逐个尝试；与桌面 candidateBodyPaths 同口径）。 */
 export function noteBodyCandidatePaths(id: string): string[] {
   if (!isSafePathSegment(id)) throw new Error("无效的笔记 ID: " + id);
   return NOTE_KINDS.map((kind) => noteBodyRelativePath(kind, id));

@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, Book, Search, Star } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
@@ -34,6 +34,8 @@ import { MobileBoardViewer } from "../board/MobileBoardViewer";
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
 /** 表格（usheet）：与桌面同一套 Univer 内核的**只读**查看器（Univer 运行时随之按需加载）。 */
 const MobileUsheetViewer = lazy(() => import("../usheet/MobileUsheetViewer").then((m) => ({ default: m.MobileUsheetViewer })));
+/** 手写板：共享 InkPad + perfect-freehand，按需分包。 */
+const MobileInkPad = lazy(() => import("../ink/MobileInkPad").then((m) => ({ default: m.MobileInkPad })));
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
 export interface NotebookTreeItem {
   id: string;
@@ -46,15 +48,16 @@ export interface NotebookTreeItem {
 import type { TreeNode } from "../../lib/types";
 
 /** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
-const CREATE_MENU_KINDS: Record<string, "doc" | "usheet" | "bitable" | "board"> = {
+const CREATE_MENU_KINDS: Record<string, "doc" | "usheet" | "bitable" | "board" | "ink"> = {
   note: "doc",
   usheet: "usheet",
   bitable: "bitable",
   board: "board",
+  ink: "ink",
 };
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
-interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "usheet" | "bitable" | "board"; }
+interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "usheet" | "bitable" | "board" | "ink"; }
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -408,19 +411,21 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   /**
    * 行内 ＋ / 抽屉「新建」→ 建子节点（同一条创建管线：建库 → 刷新目录 → 收抽屉 → 打开标签）。
-   * 文档建完停在阅读态（与首页新建文档一致）；表格/数据表/画板建完直接进编辑态。
+   * 文档/手写板建完停在阅读态；表格/数据表/画板建完直接进编辑态。
    * createParent 理论上总是当前节点；空串兜底回当前笔记本，避免建出 parent_id="" 的孤儿。
    */
-  const createChildDocument = useCallback(async (kind: "doc" | "usheet" | "bitable" | "board", parentId: string) => {
+  const createChildDocument = useCallback(async (kind: "doc" | "usheet" | "bitable" | "board" | "ink", parentId: string) => {
     try {
       const pid = parentId || notebookId;
       const n = kind === "doc" ? await bridge.createNote("无标题文档", pid)
         : kind === "usheet" ? await bridge.createUsheet("无标题表格", pid)
           : kind === "bitable" ? await bridge.createBitable("无标题数据表", pid)
-            : await bridge.createBoard("无标题画板", pid);
+            : kind === "board" ? await bridge.createBoard("无标题画板", pid)
+              : await bridge.createInk("无标题手写板", pid);
       await loadTree();
       setSidebarOpen(false);
-      if (kind !== "doc") pendingEditRef.current = true;
+      // 手写板沿用 remote ink 批的行为：建完停在阅读态（与文档一致），需要时再点顶栏「编辑」
+      if (kind === "usheet" || kind === "bitable" || kind === "board") pendingEditRef.current = true;
       await openTab(n.id);
     } catch { showToast("新建失败", { type: "error" }); }
   }, [loadTree, openTab, notebookId]);
@@ -744,13 +749,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
           }}
         />
-        {/* doc / 表格 / 数据表 / 画板都可编辑（261020 起数据表不再只读；各自一个专用 viewer/editor）。 */}
+        {/* doc / 表格 / 数据表 / 画板 / 手写板都可编辑（261020 起数据表不再只读；各自一个专用 viewer/editor）。 */}
         <button
           className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
           onClick={toggleEdit}
-          disabled={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board")}
+          disabled={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")}
           aria-label={active?.editing ? "完成" : "编辑"}
-          title={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board")
+          title={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")
             ? "该文档类型在移动端只读"
             : active.editing ? "完成" : "编辑"}
         >{active?.editing ? <Check /> : <Pencil />}</button>
@@ -804,6 +809,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   else liveBodyCapturesRef.current.delete(t.id);
                 }}
               />
+            ) : t.kind === "ink" ? (
+              <Suspense fallback={<div className="mb-empty">正在加载手写板…</div>}>
+                <MobileInkPad
+                  content={t.content}
+                  active={t.id === activeId}
+                  readOnly={!t.editing}
+                  onChange={(c) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
+                />
+              </Suspense>
             ) : t.kind === "bitable" ? (
               // 多维表：移动端查看/编辑（同一份 core 数据模型与写入纯函数；正文 JSON 绝不给 Lake 编辑器）。
               // 只有当前活动页可编辑：切走后自动收起记录/字段面板，回来再恢复编辑态。
@@ -892,6 +906,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           { id: "usheet", label: "新建表格", icon: Table },
           { id: "bitable", label: "新建数据表", icon: Database },
           { id: "board", label: "新建画板", icon: PenTool },
+          { id: "ink", label: "新建手写板", icon: PenLine },
           { id: "group", label: "新建分组", icon: FolderPlus },
         ]}
         onClose={() => setCreateOpen(false)}

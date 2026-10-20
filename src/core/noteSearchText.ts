@@ -8,6 +8,7 @@
  */
 import { bitableToSearchText } from "./bitableDoc.js";
 import { boardToSearchText } from "./boardDoc.js";
+import { inkToSearchText } from "./inkDoc.js";
 import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
 import type { NoteKind } from "./noteKind.js";
 import { usheetToSearchText } from "./usheetDoc.js";
@@ -25,5 +26,6 @@ export function searchTextForKind(kind: NoteKind, content: string | null | undef
   if (kind === "usheet") return { markdown: null, plain: usheetToSearchText(body) };
   if (kind === "bitable") return { markdown: null, plain: bitableToSearchText(body) };
   if (kind === "board") return { markdown: null, plain: boardToSearchText(body) };
+  if (kind === "ink") return { markdown: null, plain: inkToSearchText(body) };
   return { markdown: lakeHtmlToMarkdown(body), plain: lakeHtmlToPlain(body) };
 }

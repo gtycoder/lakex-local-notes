@@ -20,11 +20,13 @@ describe("互斥域判据（F16 红线化）", () => {
 
   it("计数基线：改动分类表必须是有意的（改这里 = 改架构判据）", () => {
     // 与 cssLayers 的基线同理：只允许"显式改基线"来变更，防无声漂移。
-    expect(WRITE_OPS.length).toBe(29);
+    expect(WRITE_OPS.length).toBe(30);
     expect(MAINTENANCE_OPS.length).toBe(3);
     expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
-    expect(NONE_OPS.length).toBe(42); // 261020 +createBoard/+createBitable // 261019 +createUsheet（委托型写：内部调 saveNote 由写域取锁） // 261013 +getCloudState（UI 用它给「保存并同步」置灰）
-    expect(ALL.length).toBe(75); // = 移动端 bridge 的操作总数（261020 +createBoard/+createBitable；261019 +createUsheet；261010 删死方法 uploadObject；261013 +syncQuickNote / +getCloudState）
+    // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
+    // 另含 remote ink 批的写操作（WRITE_OPS 30）
+    expect(NONE_OPS.length).toBe(42);
+    expect(ALL.length).toBe(76); // 30 写 + 3 维护 + 1 高优 + 42 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

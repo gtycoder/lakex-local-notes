@@ -37,7 +37,8 @@ describe("历史快照只读编辑器预览", () => {
   it("失败/坏正文退回结构化摘要（不留空白、不炸弹窗）", () => {
     expect(SRC).toContain("class PreviewErrorBoundary");
     expect(SRC).toMatch(/fallback=\{<StructuredBlocks blocks=\{blocks\} \/>\}/);
-    expect(SRC).toMatch(/const parseable = kind === "doc" \? false : !\(blocks\.length === 1 && blocks\[0\]\.type === "empty"\)/);
+    expect(SRC).toMatch(/const parseable = kind === "doc" \|\| kind === "ink" \? false : !\(blocks\.length === 1 && blocks\[0\]\.type === "empty"\)/);
+    expect(SRC).toMatch(/kind === "board" \? \([\s\S]*?<BoardEditor[\s\S]*?\) : \([\s\S]*?<StructuredBlocks blocks=\{blocks\} \/>/);
   });
 
   it("预览里隐藏编辑器外壳（只读预览不要「半个编辑器」的观感）", () => {

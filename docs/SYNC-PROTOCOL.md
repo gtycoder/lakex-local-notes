@@ -1,12 +1,13 @@
-# SYNC-PROTOCOL.md — Lake Notes 同步协议（重置 V1）
+# SYNC-PROTOCOL.md — Lake Notes 同步协议（Manifest V2）
 
-> 日期：2026-08-21 ｜ 配套：`docs/ARCHITECTURE.md`（架构总览，Manifest 版本说明以此为准）
+> 日期：2026-10-20 ｜ 配套：`docs/ARCHITECTURE.md`（架构总览，Manifest 版本说明以此为准）
 > 本文件定义 Lake Notes 的 S3 同步协议：Manifest 结构、对象布局、冲突语义、协议边界。
 > 基线：代码 `electron/syncEngineController.ts` / `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/quickNotesSync.ts`，实测与文档一致。
 
-> **260928 协议重置**：远端与本地旧数据全部清空后，Lake 清单重新使用 **V1 编号**，但**内容 schema 沿用原 v7
-> （folders/墓碑/锁/prevCommitId/kind/board 全部保留）**。代码只读写新 V1，不兼容旧 V1 结构；
-> 所有会访问同一 S3 前缀的客户端必须同时升级。小记独立 manifest 的 V1 不受影响。
+> **261020 Manifest V2**：在当前结构上正式加入 `kind="ink"`（手写板）。代码写入 `version=2`，同时可读取 V1
+> 并升级；所有会访问同一 S3 前缀的客户端必须一起升级。小记独立 Manifest 仍为 V1，不受影响。
+>
+> **260928 历史**：远端与本地旧数据清空后曾重置为 V1 编号，内容 schema 沿用当时的 v7。该段只用于解释旧清单来历。
 
 ---
 
@@ -46,22 +47,22 @@ quick-notes/assets/{quickNoteId}/{filename}  小记资源
 
 ---
 
-> **表格文档（`kind="usheet"`）复用同一条正文对象管线**（正文=内容寻址 JSON）。
-> 清单已升 **v6**：每条 note 多一个可选 `kind?: "doc" | "usheet" | "bitable"`（缺省 doc，**只有非 doc 才写**；纯文档库的清单条目逐字节不变）。旧端读到 v6 会**显式拒绝同步**（刻意安全闸）。
-> 表格正文格式 = **v1 Univer IWorkbookData 快照**（`{kind:"usheet",version:1,workbook:{…}}`）；本地 `usheets/{id}.usheet.json` → S3 `objects/{id}-{hash}.lake`。详见 `docs/STORAGE-LAYERS.md`。
-> **补充（表格图片，无协议变更）**：表格 drawing 的 `source` 存**资产 filename**（不再内联 base64），文件按既有
-> `note-assets/{noteId}/{filename}` 走同步；`manifest.assets` 声明照旧（**磁盘实扫**，正文不需要额外声明），**版本号不变、协议零改动**。见 `docs/STORAGE-LAYERS.md`。
+> **正文类型统一走同一条内容寻址管线**。`kind` 是可选字段，缺省 = `doc`；当前支持
+> `doc | usheet | bitable | board | ink`，只有非 `doc` 值才写入清单。
 >
-> **260920 补充：画板文档（`kind="board"`）走同一条管线**，清单独占 **v7**（`kind` 多一个取值 `board`）。
-> **为什么加个取值也要升版本**：旧端 `normalizeNoteKind` 对未知取值一律回退 `doc` ⇒ v6 端读 v7 清单会把画板 JSON 当 Lake 文档导入并保存 = 毁正文；
-> 该历史升级策略已被 260928 的 V1 重置取代：当前只读写新 V1。
-> 画板正文 = Drawnix/Plait 场景 JSON（`{kind:"board",version:1,engine:"drawnix",preset,elements[],viewport?}`）；本地 `boards/{id}.board.json` → S3 `objects/{id}-{hash}.lake`。详见 `docs/STORAGE-LAYERS.md`。
+> - 表格（`usheet`）：Univer IWorkbookData 快照；本地 `usheets/{id}.usheet.json`。
+> - 多维表（`bitable`）：record-based JSON；本地 `bitables/{id}.bitable.json`。
+> - 画板（`board`）：Drawnix/Plait 场景 JSON；本地 `boards/{id}.board.json`。
+> - 手写板（`ink`）：矢量笔迹 JSON；本地 `inks/{id}.ink.json`，见 `docs/INK-PAD.md`。
+>
+> `kind` 字段最早在历史清单 v6 引入、画板在 v7 加入；260928 重置后编号回到 V1，261020 升到 V2 增加 `ink`。
+> 这些历史编号只说明字段来源，不代表当前仍兼容旧结构。
 
-## 3. Manifest V1 schema（260928 重置；内容沿用原 v7）
+## 3. Manifest V2 schema
 
 ```ts
 interface Manifest {
-  version: number;          // 1（260928 重置；字段内容沿用原 v7）
+  version: number;          // 2（读取端兼容 V1 并升级）
   workspaceId: string;      // "default"
   commitId: string;         // uuid
   prevCommitId: string | null;
@@ -76,6 +77,7 @@ interface ManifestNote {
   isLocked?: boolean; lockedAt?: string | null;   // v3 锁元数据（独立于正文哈希，按 lockedAt LWW）
   icon?: string | null;                            // 可选字段：旧清单无此字段时本地保持原样
   assets: { filename: string; size: number; hash: string }[];
+  kind?: "doc" | "usheet" | "bitable" | "board" | "ink"; // 缺省 doc
   deleted?: boolean; deletedAt?: string;
   trashedAt?: string | null; deletedFromParentId?: string | null;  // 回收站条目
 }

@@ -14,6 +14,7 @@ import type { AiSettings } from "../src/core/aiProviders.js";
 import { emptyUsheetBody } from "../src/core/usheetDoc.js";
 import { emptyBitableBody } from "../src/core/bitableDoc.js";
 import { emptyBoardBody } from "../src/core/boardDoc.js";
+import { emptyInkBody } from "../src/core/inkDoc.js";
 import { searchTextForKind } from "../src/core/noteSearchText.js";
 import { countChars, countWords } from "../src/core/textStats.js";
 import { SearchRepository } from "./searchRepository.js";
@@ -152,6 +153,7 @@ export class Store {
     fs.mkdirSync(path.join(root, "usheets"), { recursive: true });
     fs.mkdirSync(path.join(root, "bitables"), { recursive: true });
     fs.mkdirSync(path.join(root, "boards"), { recursive: true });
+    fs.mkdirSync(path.join(root, "inks"), { recursive: true });
     fs.mkdirSync(this.noteAssetsDir, { recursive: true });
     this.db = new Database(path.join(root, "metadata.sqlite3"));
     this.db.pragma("journal_mode = WAL");
@@ -340,6 +342,7 @@ export class Store {
   }
 
   private atomicWrite(filePath: string, data: string) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const tmp = `${filePath}.tmp-${process.pid}`;
     fs.writeFileSync(tmp, data, "utf8");
     fs.renameSync(tmp, filePath);
@@ -450,6 +453,12 @@ export class Store {
     return this.createNoteInWithContent(parentId, title, emptyBoardBody(), [], id, "bottom", "board");
   }
 
+  /** 新建手写板文档（kind="ink"）：正文是矢量墨迹 JSON（inks/{id}.ink.json）。 */
+  createInkIn(parentId: string | null, title: string): NoteDocument {
+    const id = uuid();
+    return this.createNoteInWithContent(parentId, title, emptyInkBody(), [], id, "bottom", "ink");
+  }
+
   /**
    * 在指定目录的顶部创建正式笔记。它是目录排序的底层通用能力：未来普通“新建文档”
    * 也可选择 top / bottom；小记转换仅是第一个使用者。
@@ -521,7 +530,7 @@ export class Store {
       }
       throw error;
     }
-    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, content };
+    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, kind, content };
   }
 
   /** conversion journal 崩溃恢复使用：仅删除没有元数据登记的目标残留。 */

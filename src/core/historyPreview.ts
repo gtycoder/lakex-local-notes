@@ -10,6 +10,7 @@
  * 渲染由 `src/components/app/HistorySnapshotPreview.tsx` 负责（桌面历史面板与单据属性弹窗共用）。
  */
 import { boardToSearchText, parseBoardBody } from "./boardDoc.js";
+import { parseInkBody } from "./inkDoc.js";
 import { bitableFieldText, parseBitableBody } from "./bitableDoc.js";
 import type { NoteKind } from "./noteKind.js";
 import { parseUsheetBody } from "./usheetDoc.js";
@@ -37,6 +38,7 @@ export function snapshotPreview(kind: NoteKind, body: string): SnapshotPreviewBl
   if (kind === "usheet") return usheetPreview(body);
   if (kind === "bitable") return bitablePreview(body);
   if (kind === "board") return boardPreview(body);
+  if (kind === "ink") return inkPreview(body);
   // doc：正文是 Lake HTML，走只读 viewer 渲染，不需要结构化模型
   return [{ type: "empty", text: "这份快照的正文用文档预览查看。" }];
 }
@@ -79,6 +81,19 @@ function bitablePreview(body: string): SnapshotPreviewBlock[] {
     });
   }
   return blocks;
+}
+
+
+/** 手写板（kind=ink）：页面/笔迹/点数 + 明确提示当前不解析手写文字。 */
+function inkPreview(body: string): SnapshotPreviewBlock[] {
+  const doc = parseInkBody(body);
+  if (!doc) return [{ type: "empty", text: "无法解析这份手写板快照（可能是较早或损坏的格式）。" }];
+  const strokes = doc.pages.reduce((sum, page) => sum + page.strokes.length, 0);
+  const points = doc.pages.reduce((sum, page) => sum + page.strokes.reduce((n, stroke) => n + stroke.points.length, 0), 0);
+  return [
+    { type: "facts", items: [["页面", `${doc.pages.length} 页`], ["笔迹", `${strokes} 条`], ["采样点", `${points} 个`]] },
+    { type: "empty", text: "手写板正文是矢量墨迹；当前未接入手写文字识别，因此此处只显示结构化统计。" },
+  ];
 }
 
 /** 画板（kind=board）：元素/连线数量 + 场景里的全部文字（不渲染画布）。 */

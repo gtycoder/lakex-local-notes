@@ -9,6 +9,7 @@ import { emptyLakeBody } from "../../core/lakeDocForm.js";
 import { emptyUsheetBody } from "../../core/usheetDoc.js";
 import { emptyBoardBody } from "../../core/boardDoc.js";
 import { emptyBitableBody } from "../../core/bitableDoc.js";
+import { emptyInkBody } from "../../core/inkDoc.js";
 import type { NoteKind } from "../../core/noteKind.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 
@@ -177,6 +178,18 @@ export const notesDomain = {
     await notesDomain.saveNote(id, title, content, pid);
     return { id, title, content, updatedAt: now, parentId: pid, kind: "doc" };
   },
+  async createInk(title: string, parentId: string | null = null): Promise<LocalNote> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const pid = parentId ?? await dbPort.defaultNotebookId();
+    const content = emptyInkBody();
+    await runWrite("createInk", async () => {
+      const d = await ensureDb();
+      await noteRepository.createNote(d, id, title, content, pid, new Map(), undefined, "ink");
+    });
+    return { id, title, content, updatedAt: now, parentId: pid, kind: "ink" };
+  },
+
 
   /** 新建表格（kind=usheet）：正文 = 移动端/桌面共享的空表快照（50×16），随后进入移动表格编辑器。 */
   async createUsheet(title: string, parentId: string | null = null): Promise<LocalNote> {

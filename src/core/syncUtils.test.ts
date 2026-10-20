@@ -102,8 +102,8 @@ describe("validateManifest 抛错行为", () => {
     expect(() => validateManifest(m, { maxNotes: 100, maxFolders: 100 })).toThrow("folders 非数组");
   });
   // 260925：v7 新增 board 时硬编码白名单漏更新 ⇒ 含画板清单读不回。这里卡住所有已知 kind。
-  it("已知 kind（doc/usheet/bitable/board）放行", () => {
-    for (const kind of ["doc", "usheet", "bitable", "board"] as const) {
+  it("已知 kind（doc/usheet/bitable/board/ink）放行", () => {
+    for (const kind of ["doc", "usheet", "bitable", "board", "ink"] as const) {
       const m = makeValidManifest() as { notes: Array<Record<string, unknown>> };
       m.notes[0].kind = kind;
       expect(() => validateManifest(m, { maxNotes: 100, maxFolders: 100 }), kind).not.toThrow();

@@ -427,6 +427,15 @@ describe("目录树操作", () => {
     expect((store as any).searchTextFor(board.id, board.content).plain).toBe("");
   });
 
+  it("新建手写板：返回值带 kind=ink，正文落 inks/{id}.ink.json 且可严格读回", () => {
+    const ink = store.createInkIn(null, "无标题手写板");
+    expect(ink.kind).toBe("ink");
+    const bodyPath = (store as any).notePath(ink.id);
+    expect(bodyPath).toContain(path.join("inks", ink.id + ".ink.json"));
+    expect(JSON.parse(fs.readFileSync(bodyPath, "utf8"))).toMatchObject({ kind: "ink", version: 1 });
+    expect(store.readNote(ink.id).kind).toBe("ink");
+  });
+
   it("元数据写操作回传的节点必须保留 kind（rename/setNodeIcon/move）—— 否则画板/表格图标退化成文档图标", () => {
     // 回归：readTreeNode 曾只 SELECT tree_nodes（缺 note_kind）⇒ mapTreeNode 把 kind 兜底成 doc，
     // 渲染层 replaceTreeNode(返回值) 会把 correct 的 board/usheet/bitable 换成 File 图标，直到下次 listTreeNodes 刷新。

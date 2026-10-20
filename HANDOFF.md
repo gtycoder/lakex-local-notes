@@ -5,9 +5,9 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接（261019 → 261017）
+## 0. 最新交接（261020 → 261017）
 
-> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节保留最新批次（261019 / 261017）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
+> 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节保留最新批次（261020 / 261019 / 261017）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
 > **261019 最新基线**：移动端批次已推送 master —— `ae757584`（主页分页 / 转场+按压 / 动效+骨架 / 常用 / 小记加载壳等 5 批）+ **本轮收口 `§0(六)～(十一)`**（目录菜单去重 + 属性适配 / 转场落定修 fixed 包含块 / 收面板→键盘动效 / ⌨ 双态图标 / capture 预热收口 / native hint 原型已回退）；**提交树门禁 290 文件 / 2164 例**（条目里 291–293 是并行会话在途用例的工作区口径）。随后 **`ef7888fa`（多维表/存储 review）+ `a33bc093`（移动端正文文件化）已推 master**；提交树 **305 文件 / 2224 例（16 skip）**。前一条 261017：代码 review 全部结案、S3 配置导入导出已实现待验收（见 §0(十七)）。
 > **⚠️ 261017 历史已重写**：旧 AK/SK 已从 git 历史清除（filter-repo）；旧 commit hash 全部失效，旧克隆/缓存请重新拉取。
@@ -28,6 +28,19 @@
 - **压缩包打开（真 bug）**：macOS 归档工具会把 zip **解压到压缩包同目录** ⇒ 目录堆进 `note-assets/{noteId}/`；它不在 `assets` 表（**不会上传 S3、不进 manifest**），也不进孤儿 GC（`detectOrphans` 只登记 `isFile()`）⇒ 永远清不掉。改：压缩包先**硬链接**（跨卷回落**异步**复制）到 `$TMPDIR/lake-open-attachments/{noteId}/` 再交给系统打开，每次打开先清该笔记上次产物。护栏 `core/attachmentOpen.test.ts` + `electron/attachmentOpen.test.ts`（6 例）。
 - **门禁（提交树）**：`tsc` 0 · vitest 全绿 · `ui-metrics` / `check:core`（92 文件 0 违规）/ `check:mobileui` / `check:bundle` · 双端构建 · `git diff --check` ✓。
 - **未做（如实记录）**：移动端表情面板仍**没有搜索框**（只有分类）；大尺寸徽章只在 ≥28px 生效；此前 macOS 里手工解压留在 `note-assets` 的残留目录需手工删（是否加"只报告不删"的体检项待定）。
+
+### 261020(二) · 手写板正式 v1（桌面 + Android）· 已合并 master
+
+- **工作树/分支**：`lake-notes-electron-worktrees/ink-pad-poc` / `feat/ink-pad-poc`；已合并 master（`308c6788`）。
+- **产品决策**：手写板是亮点而非主编辑器；正式 v1 统一采用 Web Pointer Events + SVG + `perfect-freehand`，不接 Jetpack Ink / PencilKit / OCR。独立文档见 `docs/INK-PAD.md`。
+- **能力**：`kind="ink"`；多页 A4；画笔/高亮/整笔橡皮；撤销重做；空白/横线/网格/点阵；50%–300% 缩放；页面缩略图、排序、删除确认；桌面/Android 自动保存、历史、回收站、搜索类型分派、S3 同步。
+- **移动端手写**：Android 编辑态经 `StylusInputPlugin` 关闭系统手写接管，离开后恢复，避免系统手写板抢 Pointer Events。
+- **真云验证**：隔离 S3 前缀下确认桌面 A→B、桌面→Android、Android 编辑→桌面回读；`kind=ink`、页数/笔迹数一致，正文逐字节相同；删除传播与 Android 恢复也通过。
+- **同步真 bug 修复**：① 移动端 gzip manifest 不能声明 `application/json`（CapacitorHttp Android 会走文本分支导致 `SignatureDoesNotMatch`），改用 `application/octet-stream` + `Content-Encoding: gzip`；② `flushNoteBatch` 原先只提交 DB 行、未落正文文件，会产生 `content_hash=synced` 但正文缺失；现先写文件再提交元数据，并有批窗口回归用例。
+- **正式 review 收口**：纸张线条/网格/点阵移入 SVG 逻辑坐标（缩放时密度不再漂移）；撤销栈增加 24 MiB 总字符预算；序列化与解析共用页数/笔迹/采样点/16 MiB 上限，重复页面/笔迹 ID 拒绝导入；页面切换会保存 `activePageId`；`flushSave` 只在确有 pending 时提交，避免只读/未编辑卸载产生虚假 dirty。另修状态栏把 ink 误标成“画板”、历史快照把 ink JSON 误喂给画板预览器、桌面创建接口漏回 `kind`，并抽出统一的建笔记开 tab 流程与核心 `normalizeNoteKind`。
+- **门禁（合并后）**：tsc 0 · vitest **307 通过文件 / 5 skip；2247 例通过 / 16 skip** · 桌面/Android 构建 · ui-metrics / check:core（93 文件 0 违规）/ check:mobileui / check:bundle · `git diff --check` 全绿。
+- **剩余验收**：真实 Android 手写笔设备验收压感/掌托/延迟。iPad 仍只保留 Web 兼容，无 iOS 工程。
+
 ### 261019(十三) · 多维表/存储 review 修复（桌面）· 已提交 `ef7888fa`、已推送
 
 - **P1 真 bug**：渲染层对没有 Lake 实例的文档也传 `caches={markdown:null,plain:null}` ⇒ `Store.saveNote` 直接采用，把 `text_cache` / FTS 正文清空（多维表/表格/画板保存后记录正文搜不到）。修：**非 doc 一律按 kind 派生缓存**；护栏 `store.test.ts`（渲染层真实 caches 形态 + 搜索命中）。

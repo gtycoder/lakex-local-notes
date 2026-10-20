@@ -56,47 +56,22 @@ export function useNoteLifecycle({
     scheduleSave(noteId, content);
   }, [bumpRevision, setOpenTabs, openTabsRef, scheduleDraftJournal, scheduleSave]);
 
-  async function createNoteIn(parentId: string | null) {
-    const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
-    setNotes((items) => [...items, summaryOf(note)]);
-    setTreeNodes(await native.listTreeNodes());
-    {
-      resetRevision(note.id, 0);
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "doc" };
-      const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
-      setOpenTabs((tabs) => {
-        const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-        // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
-        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
-      });
-      if (evictedIds.length > 0) {
-        setPinnedNoteIds((prev) => {
-          const next = new Set(prev);
-          for (const ev of evictedIds) next.delete(ev);
-          return next.size === prev.size ? prev : next;
-        });
-        showNotice(`已自动关闭最旧的标签（上限 ${settingsMaxOpenTabs}）`);
-      }
-      setActiveNoteId(note.id);
-      setPendingRenameId(note.id);
-    }
-  }
-
-  async function createNote() {
-    const notebookId = treeNodes.find((node) => node.nodeType === "notebook")?.id ?? null;
-    await createNoteIn(notebookId);
-  }
-
-  /** 新建表格文档（kind=usheet）：正文是 Univer IWorkbookData 快照 JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createUsheetIn(parentId: string | null) {
-    const note = await native.createUsheetIn(parentId, "无标题表格");
+  async function openCreatedNote(note: Awaited<ReturnType<typeof native.createNote>>, kind: OpenTab["kind"]) {
     setNotes((items) => [...items, summaryOf(note)]);
     setTreeNodes(await native.listTreeNodes());
     resetRevision(note.id, 0);
-    const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "usheet" };
+    const newTab: OpenTab = {
+      noteId: note.id,
+      title: note.title,
+      content: note.content,
+      dirty: false,
+      lastAccessedAt: Date.now(),
+      kind,
+    };
     const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
     setOpenTabs((tabs) => {
-      const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
+      const base = tabs.some((tab) => tab.noteId === note.id) ? tabs : [...tabs, newTab];
+      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
       return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
     });
     if (evictedIds.length > 0) {
@@ -111,54 +86,34 @@ export function useNoteLifecycle({
     setPendingRenameId(note.id);
   }
 
+  async function createNoteIn(parentId: string | null) {
+    const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
+    await openCreatedNote(note, "doc");
+  }
+
+  async function createNote() {
+    const notebookId = treeNodes.find((node) => node.nodeType === "notebook")?.id ?? null;
+    await createNoteIn(notebookId);
+  }
+
+  /** 新建表格文档（kind=usheet）：正文是 Univer IWorkbookData 快照 JSON；与文档同流程（进树、开 tab、可重命名）。 */
+  async function createUsheetIn(parentId: string | null) {
+    await openCreatedNote(await native.createUsheetIn(parentId, "无标题表格"), "usheet");
+  }
+
   /** 新建多维表文档（kind=bitable）：正文是自研 record-based JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createBitableIn(parentId: string | null) {
-    const note = await native.createBitableIn(parentId, "无标题数据表");
-    setNotes((items) => [...items, summaryOf(note)]);
-    setTreeNodes(await native.listTreeNodes());
-    resetRevision(note.id, 0);
-    const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "bitable" };
-    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
-    setOpenTabs((tabs) => {
-      const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
-    });
-    if (evictedIds.length > 0) {
-      setPinnedNoteIds((prev) => {
-        const next = new Set(prev);
-        for (const ev of evictedIds) next.delete(ev);
-        return next.size === prev.size ? prev : next;
-      });
-      showNotice("已自动关闭最旧的标签（上限 " + settingsMaxOpenTabs + "）");
-    }
-    setActiveNoteId(note.id);
-    setPendingRenameId(note.id);
+    await openCreatedNote(await native.createBitableIn(parentId, "无标题数据表"), "bitable");
   }
 
   /** 新建画板文档（kind=board）：正文是 Drawnix/Plait 场景 JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createBoardIn(parentId: string | null) {
-    const note = await native.createBoardIn(parentId, "无标题画板");
-    setNotes((items) => [...items, summaryOf(note)]);
-    setTreeNodes(await native.listTreeNodes());
-    resetRevision(note.id, 0);
-    const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "board" };
-    const { evictedIds, failedIds } = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
-    setOpenTabs((tabs) => {
-      const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-      // 审计 F01：保存失败的标签受保护，不因封顶被顺手淘汰。
-      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
-    });
-    if (evictedIds.length > 0) {
-      setPinnedNoteIds((prev) => {
-        const next = new Set(prev);
-        for (const ev of evictedIds) next.delete(ev);
-        return next.size === prev.size ? prev : next;
-      });
-      showNotice("已自动关闭最旧的标签（上限 " + settingsMaxOpenTabs + "）");
-    }
-    setActiveNoteId(note.id);
-    setPendingRenameId(note.id);
+    await openCreatedNote(await native.createBoardIn(parentId, "无标题画板"), "board");
+  }
+
+  /** 新建手写板文档（kind=ink）：正文是矢量墨迹 JSON；与文档同流程（进树、开 tab、可重命名）。 */
+  async function createInkIn(parentId: string | null) {
+    await openCreatedNote(await native.createInkIn(parentId, "无标题手写板"), "ink");
   }
 
   async function deleteTreeNode(id: string) {
@@ -185,5 +140,5 @@ export function useNoteLifecycle({
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
-  return { handleContentChange, createNoteIn, createNote, createUsheetIn, createBitableIn, createBoardIn, deleteTreeNode };
+  return { handleContentChange, createNoteIn, createNote, createUsheetIn, createBitableIn, createBoardIn, createInkIn, deleteTreeNode };
 }
