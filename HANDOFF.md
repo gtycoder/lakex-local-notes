@@ -2053,6 +2053,11 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 - **未做（下一刀）**：复制/剪切/粘贴、公式库/函数选择、**排序/筛选**（当前 Univer 预设**没有** sort/filter 插件，
   只有 numfmt；要做需另装 `@univerjs/sheets-sort`/`sheets-filter` 或自研）、填充柄与批量操作、CardResizer 触控调高、
   行高列宽"记住上次"。
+- **剪贴板三键：试过并回退（261020，有设备证据）**：用 `univerAPI.executeCommand` 派发
+  `sheet.command.copy/cut/paste`（与桌面快捷键同一条内核命令）—— 实测命令返回 true、**无报错也无效果**
+  （A1 复制 → C3 粘贴后正文 C3 仍是原值），说明这套命令依赖内核自己的剪贴板 data 通道，移动 WebView 里
+  拿不到原生 copy/paste 事件 ⇒ **不放假按钮，已整体回退**（不进代码）。要支持需接原生剪贴板桥
+  （Android ClipboardManager + 内核可编程剪贴板服务），单独立项。
 - **状态**：已合入并推送 master；远程分支 `feat/mobile-usheet-p1` 已删除（用户要求不再开新分支）。
 
 ### 261020(二) · 移动端多维表编辑 P0（本会话）· **已合并 master（261020 批）**
