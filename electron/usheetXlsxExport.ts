@@ -9,7 +9,8 @@
  * 已知边界（用户 261019 确认接受）：
  * - 图片用 oneCellAnchor：位置/尺寸按导出时快照固定，不随 Excel 列宽缩放；
  * - 隐藏工作表 / 隐藏行列没有库 API，统一导出为可见；hidden 状态丢失；
- * - 公式只写 <f>（无缓存值），Excel/WPS 打开时重算。
+ * - 公式只写 <f>（无缓存值），Excel/WPS 打开时重算；
+ * - 边框只搬四边（对角线不支持）；字体族不搬运（用户 261020 明确不需要）。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -139,6 +140,21 @@ function toLibCell(cell: UsheetExcelCell): CellObject {
     if (style.verticalAlign) out.alignVertical = style.verticalAlign;
     if (style.wrap) out.wrap = true;
     if (style.height) out.height = style.height;
+    const border = style.border;
+    if (border) {
+      const same = border.top && border.bottom && border.left && border.right
+        && border.top.style === border.bottom.style && border.top.style === border.left.style && border.top.style === border.right.style
+        && border.top.color === border.bottom.color && border.top.color === border.left.color && border.top.color === border.right.color;
+      if (same) {
+        out.borderStyle = border.top!.style;
+        if (border.top!.color) out.borderColor = border.top!.color;
+      } else {
+        if (border.top) { out.topBorderStyle = border.top.style; if (border.top.color) out.topBorderColor = border.top.color; }
+        if (border.bottom) { out.bottomBorderStyle = border.bottom.style; if (border.bottom.color) out.bottomBorderColor = border.bottom.color; }
+        if (border.left) { out.leftBorderStyle = border.left.style; if (border.left.color) out.leftBorderColor = border.left.color; }
+        if (border.right) { out.rightBorderStyle = border.right.style; if (border.right.color) out.rightBorderColor = border.right.color; }
+      }
+    }
   }
   return out;
 }

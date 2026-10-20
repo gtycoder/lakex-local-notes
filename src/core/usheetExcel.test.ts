@@ -24,6 +24,15 @@ function workbook(): UsheetWorkbook {
       pct: { n: { pattern: "0.00%" } },
       date: { n: { pattern: "yyyy-mm-dd" } },
       wrap: { ht: 2, vt: 2, tb: 3 },
+      bordered: {
+        bd: {
+          t: { s: 1, cl: { rgb: "#333333" } },
+          b: { s: 1, cl: { rgb: "#333333" } },
+          l: { s: 8, cl: { rgb: "#ff0000" } },
+          r: { s: 1, cl: { rgb: "#333333" } },
+          tl_br: { s: 4, cl: { rgb: "#333333" } },
+        },
+      },
     },
     sheets: {
       s1: {
@@ -34,7 +43,7 @@ function workbook(): UsheetWorkbook {
         defaultColumnWidth: 88,
         defaultRowHeight: 24,
         cellData: {
-          "0": { "0": { v: "姓名", s: "bold" }, "1": { v: "比例", s: "wrap" } },
+          "0": { "0": { v: "姓名", s: "bold" }, "1": { v: "比例", s: "wrap" }, "2": { v: "边框", s: "bordered" } },
           "1": { "0": { v: "小明" }, "1": { v: 0.95, s: "pct" }, "2": { v: 46000, s: "date" }, "5": { f: "=B2*2" } },
           "2": { "0": richCell("图表说明", "1700000000000_abcd1234.png") },
         },
@@ -80,13 +89,27 @@ describe("usheet → Excel 导出模型", () => {
     expect(sheet.rows[1][2]?.format).toBe("yyyy-mm-dd");
     expect(sheet.rows[1][5]?.formula).toBe("B2*2");
     expect(sheet.rows[2][0]?.value).toBe("图表说明");
-    expect(model.cellCount).toBe(8); // 主表 7 + 隐藏表 1
+    expect(model.cellCount).toBe(9); // 主表 8 + 隐藏表 1
   });
 
   it("样式：粗体 / 字号 / 字色 / 底色 / 对齐 / 换行 / 行高", () => {
     const sheet = buildUsheetExcelModel(workbook()).sheets[0];
     expect(sheet.rows[0][0]?.style).toMatchObject({ bold: true, fontSize: 14, textColor: "#FF0000", backgroundColor: "#EEF2FA", height: 27 });
     expect(sheet.rows[0][1]?.style).toMatchObject({ align: "center", verticalAlign: "center", wrap: true });
+  });
+
+  it("边框：四边 style/color 映射；NONE / 对角线不画", () => {
+    const sheet = buildUsheetExcelModel(workbook()).sheets[0];
+    expect(sheet.rows[0][2]?.style?.border).toEqual({
+      top: { style: "thin", color: "#333333" },
+      bottom: { style: "thin", color: "#333333" },
+      left: { style: "medium", color: "#FF0000" },
+      right: { style: "thin", color: "#333333" },
+    });
+    const none = workbook();
+    none.styles = { none: { bd: { t: { s: 0, cl: { rgb: "#000000" } }, l: { s: 99 } } } };
+    none.sheets!.s1.cellData = { "0": { "0": { v: "x", s: "none" } } };
+    expect(buildUsheetExcelModel(none).sheets[0].rows[0][0]?.style?.border).toBeUndefined();
   });
 
   it("合并（行列）/ 冻结 / 列宽 / 网格线", () => {

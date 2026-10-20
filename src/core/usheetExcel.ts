@@ -5,7 +5,7 @@
  * 真正写 .xlsx 交给主进程的 write-excel-file（依赖只进主进程，core 保持零依赖）。
  *
  * 覆盖：值 / 公式（不带前导 =）/ 数字格式（原样透传 Excel format code）/ 粗斜下划线删除线 /
- *       字号 / 字色 / 底色 / 水平·垂直对齐 / 换行 / 行高 / 列宽 / 合并（行列都支持）/ 冻结 /
+ *       字号 / 字色 / 底色 / 单元格边框（四边，含线型与颜色）/ 水平·垂直对齐 / 换行 / 行高 / 列宽 / 合并（行列都支持）/ 冻结 /
  *       隐藏工作表（照常导出为可见）/ 富文本单元格文字 / 浮动图片 + 单元格内图片的引用与锚点。
  *
  * 图片只产出「引用 + 位置 + 尺寸」；字节由主进程读资产（webp 等转 png）后交给写库。
@@ -14,6 +14,23 @@ import { usheetCellRichText, type UsheetCell, type UsheetWorkbook, type UsheetWo
 
 export const USHEET_EXCEL_MAX_ROWS = 1048576;
 export const USHEET_EXCEL_MAX_COLUMNS = 16384;
+
+/** 与 write-excel-file 的 BorderStyle 同一组字面量（避免主进程再映射一次）。 */
+export type UsheetExcelBorderStyle =
+  | "thin" | "hair" | "dotted" | "dashed" | "dashDot" | "dashDotDot" | "double"
+  | "medium" | "mediumDashed" | "mediumDashDot" | "mediumDashDotDot" | "slantDashDot" | "thick";
+
+export interface UsheetExcelBorderSide {
+  style: UsheetExcelBorderStyle;
+  color?: string;
+}
+
+export interface UsheetExcelBorder {
+  top?: UsheetExcelBorderSide;
+  bottom?: UsheetExcelBorderSide;
+  left?: UsheetExcelBorderSide;
+  right?: UsheetExcelBorderSide;
+}
 
 export interface UsheetExcelCellStyle {
   bold?: boolean;
@@ -26,6 +43,7 @@ export interface UsheetExcelCellStyle {
   align?: "left" | "center" | "right";
   verticalAlign?: "top" | "center" | "bottom";
   wrap?: boolean;
+  border?: UsheetExcelBorder;
   /** 行高（pt），只挂在行内首个有内容/样式的格子上 */
   height?: number;
 }
@@ -144,6 +162,37 @@ function isOn(value: unknown): boolean {
   return value === 1 || value === true;
 }
 
+/** Univer BorderStyleTypes → 库的 BorderStyle 字面量；NONE/未知返回 undefined（不画边）。 */
+const BORDER_STYLE_BY_ENUM: Record<number, UsheetExcelBorderStyle> = {
+  1: "thin", 2: "hair", 3: "dotted", 4: "dashed", 5: "dashDot", 6: "dashDotDot",
+  7: "double", 8: "medium", 9: "mediumDashed", 10: "mediumDashDot",
+  11: "mediumDashDotDot", 12: "slantDashDot", 13: "thick",
+};
+
+function borderSideFrom(value: unknown): UsheetExcelBorderSide | undefined {
+  if (!isRecord(value)) return undefined;
+  const style = typeof value.s === "number" ? BORDER_STYLE_BY_ENUM[value.s] : undefined;
+  if (!style) return undefined;
+  const color = usheetColorHex(isRecord(value.cl) ? value.cl.rgb : undefined);
+  return color ? { style, color } : { style };
+}
+
+/** 只搬四边；对角线（tl_br / bl_tr …）不支持，忽略。 */
+function borderFrom(style: Record<string, unknown>): UsheetExcelBorder | undefined {
+  const bd = style.bd;
+  if (!isRecord(bd)) return undefined;
+  const border: UsheetExcelBorder = {};
+  const top = borderSideFrom(bd.t);
+  const bottom = borderSideFrom(bd.b);
+  const left = borderSideFrom(bd.l);
+  const right = borderSideFrom(bd.r);
+  if (top) border.top = top;
+  if (bottom) border.bottom = bottom;
+  if (left) border.left = left;
+  if (right) border.right = right;
+  return Object.keys(border).length > 0 ? border : undefined;
+}
+
 /** Univer style → 导出样式（数字格式单独走 format）。只映射有值且库支持的字段。 */
 export function usheetStyleFrom(style: Record<string, unknown> | null): UsheetExcelCellStyle | undefined {
   if (!style) return undefined;
@@ -167,6 +216,8 @@ export function usheetStyleFrom(style: Record<string, unknown> | null): UsheetEx
   else if (style.vt === 2) out.verticalAlign = "center";
   else if (style.vt === 3) out.verticalAlign = "bottom";
   if (style.tb === 3) out.wrap = true;
+  const border = borderFrom(style);
+  if (border) out.border = border;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

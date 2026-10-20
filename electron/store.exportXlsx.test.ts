@@ -91,7 +91,17 @@ describe("usheet → Excel（write-excel-file）", () => {
       id: "wb",
       sheetOrder: ["s1"],
       styles: {
-        bold: { bl: 1, fs: 14, bg: { rgb: "#eef2fa" } },
+        bold: {
+          bl: 1,
+          fs: 14,
+          bg: { rgb: "#eef2fa" },
+          bd: {
+            t: { s: 1, cl: { rgb: "#333333" } },
+            b: { s: 1, cl: { rgb: "#333333" } },
+            l: { s: 8, cl: { rgb: "#ff0000" } },
+            r: { s: 1, cl: { rgb: "#333333" } },
+          },
+        },
         pct: { n: { pattern: "0.00%" } },
       },
       sheets: {
@@ -127,6 +137,9 @@ describe("usheet → Excel（write-excel-file）", () => {
     const styles = text(files, "xl/styles.xml");
     expect(styles).toContain("0.00%");
     expect(styles).toContain("<b/>");
+    expect(styles).toContain('applyBorder="1"');
+    expect(styles).toContain('<left style="medium"');
+    expect(styles).toContain('<right style="thin"');
   });
 
   it("图片：单元格内图 + 浮动图（含 webp→png）；缺失图片计入 skipped", async () => {
