@@ -1,22 +1,45 @@
-# 手写板 POC（kind=ink）
+# 手写板（kind=ink）
 
-> 分支：`feat/ink-pad-poc`。目标：用**通用 Web 技术**验证桌面与 Android 共用的手写板，不接 Jetpack Ink / PencilKit。
+> 状态：**正式功能 v1**。桌面 Electron 与 Android Capacitor 共用一套纯 Web 实现；不接 Jetpack Ink / PencilKit，也未接 OCR。
+>
+> 技术选型原则：手写板是产品亮点而非主编辑器。优先复用 Web Pointer Events、SVG 与成熟的开源轮廓算法，避免为不同平台维护三套原生墨迹引擎。
 
-## 技术路线
+## 1. 支持范围
 
-- 墨迹轮廓：`perfect-freehand@1.2.3`（MIT）。
-- 输入：Pointer Events；触控笔有压力时用真实压力，鼠标/手指用速度模拟压力。
-- 存储：矢量点 JSON，正文落 `inks/{noteId}.ink.json`；PNG 不作为正文。
-- 页面：A4 固定尺寸（794 × 1123），多页数据结构；POC 默认单页，可新增/切换/删除页。
-- 工具：画笔、高亮笔、整笔橡皮、撤销/重做、纸张背景（空白/横线/网格/点阵）。
-- 页面管理：缩略图、点选切换、前移/后移、删除页二次确认。
-- 桌面/移动缩放：50%–300%，25% 步进；页面始终按 A4 比例缩放，点击百分比恢复适配；缩放后画布可滚动。桌面控件在顶部工具栏，移动控件在编辑态底部页面栏。
-- 正文上限：16MiB；全文档最多 10 万条笔迹 / 30 万个采样点。
-- 静态笔迹层 memo 化：正在书写时只更新活动笔迹层，不重新 reconcile 历史路径。
-- 跨端：桌面 Electron 与 Android Capacitor 共用 `InkPad` 控制器与数据模型；两端各自持有样式层。
-- iPad：当前无 iOS 端；实现保持纯 Web + Pointer Events，后续可直接运行在 WKWebView。
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| Electron 桌面 | 正式支持 | 鼠标、触控板、数位板；压力可用时使用真实压力 |
+| Android | 正式支持 | 手指/触控笔；编辑态关闭系统手写接管，退出后恢复 |
+| iPad / iOS | 兼容预留 | 当前无 iOS 工程；代码不依赖 Electron，可直接跑在 WKWebView。真正上线时再评估 PencilKit |
 
-## 数据契约
+v1 包含：画笔、高亮笔、整笔橡皮、撤销/重做、多页 A4、页面缩略图与排序、删除页二次确认、四种纸张、桌面/移动缩放、自动保存、历史、回收站、搜索类型分派和 S3 跨端同步。
+
+v1 不包含：OCR/手写转文字、套索、局部像素橡皮、导出 PNG/PDF、原生 Ink API。
+
+## 2. 技术路线
+
+- 墨迹轮廓：`perfect-freehand@1.2.3`（MIT）。输入是矢量采样点，输出闭合轮廓路径。
+- 渲染：SVG。静态笔迹层 memo 化，书写中的活动笔迹单独更新，不重复 reconcile 全部历史路径。
+- 输入：Pointer Events。触控笔有压力时使用 `event.pressure`；鼠标/手指使用 0.5 的模拟压力。
+- 页面：A4 固定逻辑尺寸 **794 × 1123**，等比适配容器；缩放范围 50%–300%，步进 25%。
+- 正文：UTF-8 矢量点 JSON，不把 PNG 当正文，也不依赖画布位图作为唯一数据源。
+- 跨端：`InkPad` 控制器、数据模型、解析与边界校验全在共享层；桌面和移动端只维护各自样式层。
+- Android 手写接管：编辑态调用 `StylusInput` 原生插件关闭 `View.setAutoHandwritingEnabled(false)`；离开手写板或退出编辑后恢复，避免系统手写板抢走笔事件。
+
+## 3. 代码入口
+
+| 位置 | 职责 |
+|---|---|
+| `src/core/inkDoc.ts` | 数据模型、严格解析、序列化、容量上限 |
+| `src/features/ink/InkPad.tsx` | 双端共享控制器：工具、页面、缩放、输入、撤销/重做、自动保存 |
+| `src/features/ink/inkGeometry.ts` | perfect-freehand 轮廓与 SVG path |
+| `src/features/ink/InkPageStrip.tsx` | 页面缩略图、排序、删除确认 |
+| `src/features/ink/DesktopInkPad.tsx` | 桌面标签页接线 |
+| `src/mobile/ink/MobileInkPad.tsx` | Android 接线与系统手写开关 |
+| `src/core/noteBodyPaths.ts` | `inks/{noteId}.ink.json` 单一路径来源 |
+| `android/.../StylusInputPlugin.kt` | 编辑态系统手写接管开关 |
+
+## 4. 数据契约
 
 ```json
 {
@@ -43,42 +66,34 @@
 }
 ```
 
-- `InkDoc` 严格解析；坏正文返回 `null`，编辑器只读保护，不得用空文档覆盖。
-- 手写正文当前不进入全文搜索（OCR 未接入）；标题仍按 `notes.title` 搜索。
-- 历史快照按结构化摘要展示页面/笔迹/采样点数量。
+- `background`: `blank | lined | grid | dot`。
+- `tool`: `pen | highlighter`；橡皮不写入笔迹数据，直接删除命中的整条笔迹。
+- `InkDoc` 严格解析；损坏正文返回 `null`，编辑器进入只读保护，不允许用空文档覆盖。
+- 单份正文上限 **16MiB**；全文档最多 **10 万条笔迹 / 30 万个采样点**。
+- 手写正文暂不进入全文搜索（无 OCR）；标题仍按 `notes.title` 搜索。
+- 历史快照按页面/笔迹/采样点数量生成结构化预览，不尝试识别文字。
 
-## S3 / 同步
+## 5. 存储与同步
 
-- `NoteKind` 新增 `"ink"`。
-- `MANIFEST_VERSION` 升到 **2**；V1 仍可读取用于已有云端清单升级。
-- 正文仍走内容寻址对象与现有 Manifest V1 schema；`kind` 随 manifest note 透传。
-- 旧端不得继续写同一空间；所有端需一起升级后才能识别 `ink`。
+- `NoteKind` 包含 `"ink"`；本地正文路径为 `inks/{noteId}.ink.json`。
+- S3 仍复用内容寻址正文对象：`objects/{noteId}-{contentHash}.lake`。
+- Manifest 当前版本为 **V2**。V2 相对 V1 的协议变化是正式支持 `kind="ink"`；读取端仍可读取 V1 清单用于升级。
+- `kind` 随 manifest note 透传；旧端不得继续写包含 `ink` 的同一同步空间，所有访问该前缀的客户端必须一起升级。
+- 移动端 gzip manifest 的 `Content-Type` 必须是 `application/octet-stream`、`Content-Encoding: gzip`。不能声明 `application/json`：CapacitorHttp Android 会优先走 JSON 文本分支，把 gzip 字节错误地当文本发送，最终表现为 `SignatureDoesNotMatch`。
+- 移动端下载批窗口在 `flushNoteBatch` 时必须先写正文文件，再提交 `notes` 元数据；只写 DB 行会留下 `content_hash=synced` 但正文文件不存在的坏状态。
 
-## 当前 POC 已实现
+## 6. 验收记录
 
-- 桌面：新建手写板、打开、编辑、自动保存、历史/回收站/搜索索引类型分派。
-- Android：新建手写板、打开编辑、自动保存；复用 Web InkPad。
-- 桌面 IPC：`create_ink_in`（register / preload / Web API 三方一致性）。
-- 移动 bridge：`createInk`。
-- 单测：正文往返/坏数据拒绝、几何路径、整笔橡皮、路由与 IPC 接线。
-- 运行级验证（隔离 Electron，CDP）：
-  - `createInkIn` 返回 `kind="ink"`，正文落盘并可读回；
-  - InkPad 挂载，画笔拖动新增 1 条 11 点笔迹；
-  - 撤销后 DOM/正文为 0 条，重做后恢复 1 条。
+- 桌面 A → 桌面 B：真实 S3 隔离前缀上传/下载成功，`kind=ink`、页数、笔迹数一致。
+- 桌面 B → Android：Android 下载后正文与桌面逐字节相同。
+- Android 编辑 → 上传 → 桌面读取：新增笔迹跨端到达，正文逐字节相同。
+- Android 回收站收到桌面删除传播；Android 恢复后桌面重新看到 active 条目，正文保持不变。
+- 测试样本：2 页，第一页 34/35 条笔迹，第二页 2 条探针笔迹。
+- 门禁：TypeScript、全量 Vitest、桌面构建、Android 构建、UI 指标、bundle 预算、`git diff --check`。
 
-## 已跑门禁
+## 7. 已知限制与后续
 
-- `npx tsc --noEmit`：0 错误。
-- `npx vitest run`：301 文件通过 / 5 skip，2216 例通过 / 16 skip。
-- `npx vite build`：桌面构建通过。
-- `npx vite build -c vite.mobile.config.ts`：移动构建通过。
-- `node scripts/ui-metrics.mjs`、`check:core`、`check:mobileui`、`check:bundle`：通过。
-- `git diff --check`：通过。
-
-## 未做 / 后续
-
-- 真机 Android 手写笔验收（压力、掌托、延迟）——POC 目前只验证了 Web 指针与桌面鼠标路径。
-- 真实 S3 上传/下载 roundtrip（需要隔离测试桶与凭证；本次未触碰正式 S3）。
-- OCR / 手写转文字、套索选择、局部像素橡皮、导出 PNG/PDF。
-- 压感曲线校准与 120Hz 设备性能专项。
-- iPad 仅保留 Web 兼容性，尚未创建 iOS 工程，也未接 PencilKit。
+- 尚未在真实 Android 手写笔设备上完成延迟、压感曲线、掌托和大文档专项验收；模拟器只验证了 Pointer Events 与跨端数据链路。
+- OCR、手写转文字、套索选择、局部像素橡皮、PNG/PDF 导出未实现。
+- iPad 仅保留纯 Web 兼容性，未创建 iOS 工程，也未接 PencilKit；如果将来要追求硬件级低延迟，再单独评估原生后端与数据桥接，不提前增加抽象。
+- 手写板不是主打编辑能力；除非有明确产品价值，不因平台原生 Ink API 的吸引力而拆散当前共享实现。

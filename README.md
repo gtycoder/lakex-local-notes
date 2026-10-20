@@ -81,6 +81,7 @@ origin  git@gitee.com:gtycoder/local-lake.git
 | docs/DEVELOPMENT.md                          | 环境要求、开发/构建/打包命令、测试、依赖版本、提交历史                                    | 动手前读         |
 | docs/SYNC-PROTOCOL.md · docs/S3-GC-DESIGN.md | 同步协议 / GC 与保留链（**改同步、GC 前必读**，配合 AGENTS §3 原则 11\~13）           | 动同步必读        |
 | docs/STORAGE-LAYERS.md                       | 存储分层与「设备本地」契约（**新增持久化前必读**：哪些进 S3 / 哪些仅本地、三处同改规则）              | 加持久化前读       |
+| docs/INK-PAD.md                              | 手写板正式功能：数据契约、输入/渲染、存储与跨端同步边界                                  | 写相关功能前读      |
 | docs/ARCHITECTURE.md                         | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制                                 | 改代码前读        |
 | docs/TROUBLESHOOTING.md                      | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑）                        | 遇坑查          |
 | docs/PANEL-CONTRACT.md · docs/UI-PRIMITIVES-PHASE1-260926.md | 面板几何/层序契约、浮层原语规范 | 改 UI/外壳前读 |

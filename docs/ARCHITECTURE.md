@@ -16,7 +16,7 @@ Electron 主进程 (electron/main.ts)
 │     ├── /quick-notes/staging/{draftId}/{filename}   → 未保存草稿图片
 │     ├── /{noteId}/{filename}?base64=1               → Lake 图片 data URI（复制到微信用）
 │     └── /vendor/cdn/<path>                           → Lake 编辑器 CDN 资源本地镜像
-├── syncEngineController (electron/syncEngineController.ts)：Lake Manifest V1 同步编排
+├── syncEngineController (electron/syncEngineController.ts)：Lake Manifest V2 同步编排
 ├── s3Store (electron/s3Store.ts)：S3 传输客户端与连接检查
 ├── s3Maintenance (electron/s3Maintenance.ts)：Lake GC / deep cleanup / manifest prune
 ├── quickNotesSync (electron/quickNotesSync.ts)：小记 Manifest v1 的独立 S3 同步
@@ -36,7 +36,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 | `electron/quickNotes.ts` | 小记独立 SQLite、`.qnote`、图片 staging/保存/删除、转换 journal 与崩溃恢复 |
 | `electron/quickNoteConversion.ts` | 小记纯文本/图片 → Lake 段落/inline image card；复制资源并协调 journal |
 | `electron/assetServer.ts` | Lake 与小记隔离的本地图片服务器 + webp→png（sharp）+ `/vendor/cdn` 静态路由 |
-| `electron/syncEngineController.ts` | Lake Manifest V1 同步编排、桌面进度/记账/purge 收尾 |
+| `electron/syncEngineController.ts` | Lake Manifest V2 同步编排、桌面进度/记账/purge 收尾 |
 | `electron/s3Store.ts` | 七牛 Kodo / S3 传输客户端与连接检查 |
 | `electron/s3Maintenance.ts` | Lake GC keep 集、差集对账、深度清理、旧 manifest 裁剪 |
 | `electron/syncTypes.ts` | 桌面同步进度/结果/warning 类型 |
@@ -49,6 +49,9 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 | `src/lib/types.ts` | 共享类型（S3Settings/SyncResult/SyncProgress/SyncStatusInfo/OrphanAsset 等） |
 | `src/features/editor/lakeRuntime.ts` | Lake 编辑器创建；`deepMerge` 深合并；**虚拟渲染/TOC 跟随/卡片水合/表格工具栏 hover 桥**（详见 HANDOFF §4 坑清单） |
 | `src/features/editor/BoardCard.tsx` | Drawnix 画板卡片（+ `src/vendor/drawnix*.css`） |
+| `src/core/inkDoc.ts` | 手写板正文模型、严格解析、容量上限与序列化 |
+| `src/features/ink/InkPad.tsx` | 桌面/Android 共享手写板控制器（Pointer Events + SVG + perfect-freehand） |
+| `src/mobile/ink/MobileInkPad.tsx` | Android 手写板接线与系统手写接管开关 |
 | `src/features/editor/resourceUpload.ts` | 图片/附件上传管线（WebP→PNG、base64、远程下载） |
 | `src/features/editor/clipboardHtml.ts` | 粘贴拦截升级（知乎懒加载 SVG→真实 URL）+ 复制清洗（空行/零宽字符） |
 | `src/components/app/SettingsPanel.tsx` | S3 配置 + 进度条 + 最近同步结果 + **孤儿资源清理区块** |
@@ -125,10 +128,10 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 
 ```text
 lake-notes/
-├── objects/{noteId}-{contentHash}.lake   # 文档内容（内容寻址；四种 kind 共用，扩展名沿用 .lake）
+├── objects/{noteId}-{contentHash}.lake   # 文档内容（内容寻址；五种 kind 共用，扩展名沿用 .lake）
 ├── assets/{noteId}/{filename}        # 资源（跳过 orphan_assets）
 ├── manifests/
-│   ├── latest.json                   # Lake 当前清单（Manifest V1，260928 重置）
+│   ├── latest.json                   # Lake 当前清单（Manifest V2；V1 可读用于升级）
 │   └── {commitId}.json               # Lake 历史快照
 └── quick-notes/                      # 小记独立 Manifest v1 / 对象 / 图片
     ├── objects/{contentHash}.qnote
@@ -151,7 +154,7 @@ Path-style:  ✅ 勾选
 
 ## 五、S3 同步机制（syncEngineController + s3Store + s3Maintenance）
 
-- **Manifest**：`version=1`（260928 重置，字段沿用原 v7）、`workspaceId="default"`、notes[]/folders[]（含 kind/墓碑/锁/资产声明）
+- **Manifest**：`version=2`（V1 可读用于升级；V2 正式支持 `kind="ink"`）、`workspaceId="default"`、notes[]/folders[]（含 kind/墓碑/锁/资产声明）
 - **增量**：contentHash（sha256 of .lake）比对，本地 = 远端则只 setBaseHash
 - **下载**：远端有本地缺/不同 → 下载 objects/{hash}.lake + assets；本地已删除（墓碑）优先，不重拉
 - **冲突**：本地编辑被远端覆盖 → 强制写历史快照并作为 `supersededNotes` 提示，不做冲突副本
@@ -162,7 +165,7 @@ Path-style:  ✅ 勾选
 
 ### 小记同步（electron/quickNotesSync.ts）
 
-- **完全独立**：不读取、不修改 Lake Manifest V1；所有对象只在 `{prefix}/quick-notes/` 下。
+- **完全独立**：不读取、不修改 Lake Manifest V2；所有对象只在 `{prefix}/quick-notes/` 下。
 - **顺序**：主进程先完成 Lake `syncNow()`，再执行小记同步；小记失败作为 `result.quickNotes.error` 返回，不能否定 Lake 的成功。
 - **转换 tombstone**：Lake 目标文档成功进入同步周期前，源小记 tombstone 保持 `ready_to_sync=0`；同步既不上传删除标记，也不会重新下载源小记或从远端 Manifest 漏掉原条目。
 - **校验**：Manifest、路径段、`.qnote` hash、图片大小与 hash 都必须通过；同时修改时创建可见的小记冲突副本。

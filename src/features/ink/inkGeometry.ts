@@ -1,7 +1,7 @@
 import { getStroke } from "perfect-freehand";
 import type { InkPoint, InkStroke } from "../../core/inkDoc.js";
 
-/** perfect-freehand 输出的是轮廓多边形；这里用直线段闭合为 SVG path（POC 足够，后续可换二次曲线）。 */
+/** perfect-freehand 输出的是轮廓多边形；这里用直线段闭合为 SVG path。 */
 export function outlineToSvgPath(points: number[][]): string {
   if (points.length === 0) return "";
   const first = points[0];

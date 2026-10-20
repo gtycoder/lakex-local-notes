@@ -16,7 +16,7 @@ const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
 const PAGE_STRIP = read("./InkPageStrip.tsx");
 const TABS_CSS = read("../../styles/app/tabs.css");
 
-describe("手写板 POC 端到端接线", () => {
+describe("手写板正式端到端接线", () => {
   it("kind=ink 已进入 NoteKind / 正文路径", () => {
     expect(KIND).toContain('"ink"');
     expect(PATHS).toContain('ink: "inks"');

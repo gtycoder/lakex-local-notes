@@ -49,7 +49,7 @@ web
 
 ## Capabilities and Constraints
 
-已实现能力：笔记本树、富文本编辑（Lake 内核：标题/列表/待办/引用/表格/代码块/公式/分栏/折叠块等）、多维表（bitable）、表格（sheet）、画板（Drawnix）、小记（独立时间线，可转正式笔记）、AI 助手（文本/图片/PDF 多模态；选区浮动栏 + 顶栏 + 块菜单三个入口）、大纲、历史快照、回收站、附件/图片管理、S3 同步 + GC。
+已实现能力：笔记本树、富文本编辑（Lake 内核：标题/列表/待办/引用/表格/代码块/公式/分栏/折叠块等）、多维表（bitable）、表格（sheet）、画板（Drawnix）、手写板（矢量墨迹与多页 A4）、小记（独立时间线，可转正式笔记）、AI 助手（文本/图片/PDF 多模态；选区浮动栏 + 顶栏 + 块菜单三个入口）、大纲、历史快照、回收站、附件/图片管理、S3 同步 + GC。
 
 技术栈（由现有代码回答，不再单列 ## Stack）：Electron 44 + React 18 + TypeScript 5.9 + better-sqlite3 13（N-API）+ vendored 的 `@dlient/lakex-doc-react`（内核 v1.99.0，已 pin）+ Drawnix 画板 + sharp + @aws-sdk/client-s3；移动端 Vite + Capacitor。准确版本以 `package.json` 为准。
 
@@ -61,7 +61,7 @@ web
 - 自有设计系统（硬约束）：颜色/圆角/间距/字号/动效只用 `--lake-*` 令牌（主题即数据，颜色字面量只准出现在 `src/styles/themes/`）；组件走 `src/styles/kit.css` 的 `ln-*` 原语；浮层一律走 `src/components/ui/Overlay.tsx`；禁止内联样式与新增 `!important`（上限 ≤10 且每条须写明理由）；层序用 CSS `@layer` 而非特异性取胜。
 - 「同一个交互语义，全仓只能有一套视觉与几何」；改动必须改在单一来源，禁止层层覆盖。
 - 编辑器内核（lakex）已 vendored 并 pin，禁止随意升级。
-- 术语：Lake = 正式笔记；小记 = 临时时间线（独立数据空间）；笔记本 = 树容器；多维表/表格/画板/小记是不同的编辑器类型。（推断：需长期保留的中文术语集）
+- 术语：Lake = 正式笔记；小记 = 临时时间线（独立数据空间）；笔记本 = 树容器；多维表/表格/画板/手写板/小记是不同的编辑器类型。（推断：需长期保留的中文术语集）
 
 ## Brand Commitments
 
