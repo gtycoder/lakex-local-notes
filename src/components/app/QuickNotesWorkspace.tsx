@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Check, FilePlus, Feather, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, StickyNote, Tag, Trash, X } from "lucide-react";
+import { ArrowUpDown, Check, ChevronDown, FilePlus, Feather, Filter, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, Search, StickyNote, Tag, Trash, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { escapeId } from "../../lib/cssEscape";
 import { createRequestVersion } from "../../core/requestVersion";
 import { isQuickNoteImageMime } from "../../core/quickNoteModel";
 import { formatListTime } from "../../core/dateFormat";
@@ -24,6 +25,12 @@ import {
   type QuickNoteTagFilter,
   type QuickNoteTagSummary,
 } from "../../core/quickNoteTags";
+import {
+  QUICK_NOTE_TYPE_OPTIONS,
+  filterQuickNotesByType,
+  type QuickNoteTypeFilter,
+} from "../../core/quickNoteTypeFilter";
+import { filterQuickNotesByQuery } from "../../core/quickNoteSearch";
 import { openImagePreview } from "../../features/editor/imagePreview";
 import { clampPopoverPosition } from "../../hooks/topMenuPosition";
 import { useScrollFade } from "../../hooks/useScrollFade";
@@ -55,6 +62,8 @@ export interface QuickNotesWorkspaceHandle {
   confirmLeave(): Promise<boolean>;
   /** 同步完成后刷新小记列表。 */
   refresh(): Promise<void>;
+  /** 全局搜索命中一条小记：只定位/高亮并滚到视口，不自动进编辑态。 */
+  revealNote(id: string): Promise<void>;
 }
 
 interface QuickNotesWorkspaceProps {
@@ -175,12 +184,25 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const [sortOpen, setSortOpen] = useState(false);
   /** 排序菜单定位（标准 <Menu> 走 portal，需内联 left/top）。 */
   const [sortMenuPos, setSortMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterMenuPos, setFilterMenuPos] = useState<{ top: number; left: number } | null>(null);
+  /** 列表视图的标签筛选下拉（对齐语雀：标签收进「标签 ▾」，不再平铺）。 */
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
+  const [tagMenuPos, setTagMenuPos] = useState<{ top: number; left: number } | null>(null);
+  /** 列表视图：搜索（点击放大镜展开）与 ⋯ 菜单（类型/排序/批量操作）。 */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreMenuPos, setMoreMenuPos] = useState<{ top: number; left: number } | null>(null);
   /** 行内「⋯」菜单（列表视图，对齐云端图2）：记录当前展开的是哪一条。 */
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [rowMenuPos, setRowMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [rowMenuAnchor, setRowMenuAnchor] = useState<HTMLElement | null>(null);
   const [tagPickerFor, setTagPickerFor] = useState<{ noteId: string; anchor: HTMLElement } | null>(null);
   const [tagFilter, setTagFilter] = useState<QuickNoteTagFilter>({ kind: "all" });
+  /** 类型筛选：菜单默认「小记」= 全部（对齐语雀 dashboard/notes 的默认勾选）。 */
+  const [typeFilter, setTypeFilter] = useState<QuickNoteTypeFilter>("all");
   /** 轻提示（标签暂固定全部等）。 */
   const [viewHint, setViewHint] = useState<string | null>(null);
   /** 置顶集合（纯本机偏好，不进 S3）。 */
@@ -205,28 +227,33 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const pendingDeleteIdRef = useRef<string | null>(null);
   /** 列表视图的左列索引（261017 B：滚动边缘渐隐） */
   const indexListRef = useRef<HTMLDivElement | null>(null);
+  /** 全局搜索跳转：等目标卡片渲染后滚到视口（工作区从隐藏变为可见时再试）。 */
+  const [revealNoteId, setRevealNoteId] = useState<string | null>(null);
   useScrollFade(indexListRef, viewMode);
 
   const activeIsEditing = editingDraft !== null;
   // 「有未保存改动」= 新建草稿有内容，或编辑中的草稿与载入基线不同（不再拿"有没有内容"当脏判据）
   const dirty = isDraftDirty(createDraft) || (editingDraft !== null && isDraftDirty(editingDraft));
 
-  async function refreshItems(showLoading = false) {
+  async function refreshItems(showLoading = false): Promise<QuickNoteDocument[]> {
     const version = listVersionRef.current.next();
     if (showLoading) setLoading(true);
+    let result: QuickNoteDocument[] = [];
     try {
       const nextItems = await native.listQuickNotes();
       if (listVersionRef.current.isCurrent(version)) {
         // 乐观删除尚未到期落盘时，同步完成等外部刷新会把该小记重新拉回列表 → 表现为「删不掉」。
         // 刷新结果里过滤掉撤销窗口内的那条，保持它与 UI 一致（到期由定时器真正删除；撤销则重新显示）。
         const pendingId = pendingDeleteIdRef.current;
-        setItems(pendingId ? nextItems.filter((item) => item.id !== pendingId) : nextItems);
+        result = pendingId ? nextItems.filter((item) => item.id !== pendingId) : nextItems;
+        setItems(result);
       }
     } catch (reason) {
       if (listVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(reason));
     } finally {
       if (listVersionRef.current.isCurrent(version) && showLoading) setLoading(false);
     }
+    return result;
   }
 
   useEffect(() => {
@@ -251,9 +278,27 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
 
   useEffect(() => { pendingDeleteIdRef.current = pendingDelete?.id ?? null; }, [pendingDelete]);
 
+  /** 全局搜索命中：只**定位并高亮**，不自动进编辑态（用户 261021 点单）。 */
+  async function revealNote(id: string): Promise<void> {
+    const target = items.find((item) => item.id === id) ?? (await refreshItems()).find((item) => item.id === id);
+    if (!target) {
+      setError("这条小记已不存在（可能已被删除或转换）");
+      return;
+    }
+    setTagFilter({ kind: "all" });
+    setTypeFilter("all");
+    setSearchOpen(false);
+    setSearchInput("");
+    setSearchQuery("");
+    setRevealNoteId(id);
+  }
+
   useImperativeHandle(ref, () => ({
     async refresh() {
       await refreshItems();
+    },
+    async revealNote(id: string) {
+      await revealNote(id);
     },
     async confirmLeave() {
       // 离开小记页同样"默认保存"（用户 260919）：没改动时不写库；保存失败则留在原地。
@@ -526,6 +571,14 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   function switchView(next: QuickNotesView) {
     setViewMode(next);
     writeViewPref(next);
+    // 版式切换时收起所有浮层（列表视图的标签下拉/页头筛选/排序）
+    setTagMenuOpen(false);
+    setFilterOpen(false);
+    setSortOpen(false);
+    setMoreOpen(false);
+    setSearchOpen(false);
+    setSearchInput("");
+    setSearchQuery("");
   }
 
   /** 复制小记纯文本（云端的「复制链接」在本地语义下换成复制文本；小记没有可分享链接）。 */
@@ -683,10 +736,28 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 排序只影响本端展示顺序（不写库、不进 manifest）；四档比较器在 core/quickNoteSort（与移动端同一份）。 */
   const visibleItems = useMemo(() => {
     const filtered = filterQuickNotesByTag(items, tagFilter, (item) => item.content.tags);
-    const ordered = sortQuickNotes(filtered, sortBy);
+    // 类型筛选是标签筛选之后的 AND 过滤（小记 / 图片 / 附件）；分类只认资源清单，见 core/quickNoteTypeFilter
+    const typed = filterQuickNotesByType(filtered, typeFilter);
+    const ordered = sortQuickNotes(typed, sortBy);
     // 置顶优先（纯本机偏好），同组内保持所选排序（filter 保序 ⇒ 无需二次比较）
     return [...ordered.filter((it) => pinned.has(it.id)), ...ordered.filter((it) => !pinned.has(it.id))];
-  }, [items, sortBy, pinned, tagFilter]);
+  }, [items, sortBy, pinned, tagFilter, typeFilter]);
+  /** 列表视图的本地搜索（Enter/清空才改 query；卡片视图不参与）。 */
+  const listItems = useMemo(() => filterQuickNotesByQuery(visibleItems, searchQuery), [visibleItems, searchQuery]);
+
+
+  /** 全局搜索跳转后：等目标卡片/索引行渲染出来，滚到视口并短暂高亮（不进编辑态）。 */
+  useEffect(() => {
+    if (!visible || !revealNoteId) return;
+    let timer: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(`[data-quick-note-id="${escapeId(revealNoteId)}"]`);
+      if (!target) return;
+      target.scrollIntoView({ block: "nearest" });
+      timer = window.setTimeout(() => setRevealNoteId((current) => current === revealNoteId ? null : current), 1600);
+    });
+    return () => { window.cancelAnimationFrame(frame); if (timer !== undefined) window.clearTimeout(timer); };
+  }, [visible, revealNoteId, viewMode, items]);
 
   /**
    * 列表页默认选中第一条（用户 260919）：进列表视图 / 首次加载时，若没有正在编辑的小记，
@@ -701,6 +772,18 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, viewMode, loading, activeIsEditing, visibleItems.length]);
 
+  /** 类型筛选：与标签筛选同一套「切筛选前先收住正在编辑的小记」口径，避免筛掉卡片时丢未保存正文。 */
+  async function changeTypeFilter(next: QuickNoteTypeFilter): Promise<void> {
+    if (editingDraft) {
+      if (dirty && !(await saveBeforeSwitch())) return;
+      setEditingId(null);
+      setEditingDraft(null);
+    }
+    // 语雀语义：类型筛选与标签筛选不叠加 —— 任何类型切换都清空标签筛选，标签条由 renderTagBar 隐藏。
+    setTagFilter({ kind: "all" });
+    setTypeFilter(next);
+  }
+
   /** 排序菜单：标准 <Menu> 走 portal，按触发按钮实测矩形定位。 */
   const toggleSortMenu = (button: HTMLElement) => {
     if (sortOpen) { setSortOpen(false); return; }
@@ -708,6 +791,52 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     setSortMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 140, height: 84 }, 6));
     setSortOpen(true);
   };
+  /** 打开列表搜索：先按同一口径收住正在编辑的小记，避免搜索把未保存卡片筛掉。 */
+  async function openSearch(): Promise<void> {
+    if (editingDraft) {
+      if (dirty && !(await saveBeforeSwitch())) return;
+      setEditingId(null);
+      setEditingDraft(null);
+    }
+    setSearchOpen(true);
+    setSearchInput(searchQuery);
+  }
+
+  function closeSearch(): void {
+    setSearchOpen(false);
+    setSearchInput("");
+    setSearchQuery("");
+  }
+
+  function toggleSearch(): void {
+    if (searchOpen) closeSearch();
+    else void openSearch();
+  }
+
+  /** ⋯ 菜单（列表视图）：对齐语雀，把类型/排序/批量操作收进这里。 */
+  const toggleMoreMenu = (button: HTMLElement) => {
+    if (moreOpen) { setMoreOpen(false); return; }
+    const rect = button.getBoundingClientRect();
+    setMoreMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 200, height: 360 }, 6));
+    setMoreOpen(true);
+  };
+
+  /** 列表视图标签筛选下拉：与排序/类型菜单共用同一个 <Menu> 表面。 */
+  const toggleTagMenu = (button: HTMLElement) => {
+    if (tagMenuOpen) { setTagMenuOpen(false); return; }
+    const rect = button.getBoundingClientRect();
+    setTagMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 220, height: 320 }, 6));
+    setTagMenuOpen(true);
+  };
+
+  /** 类型筛选菜单：与排序菜单共用同一个 <Menu> 表面，位置按触发按钮实测矩形夹进视口。 */
+  const toggleFilterMenu = (button: HTMLElement) => {
+    if (filterOpen) { setFilterOpen(false); return; }
+    const rect = button.getBoundingClientRect();
+    setFilterMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 160, height: 170 }, 6));
+    setFilterOpen(true);
+  };
+
   /** 行内 ⋯ 菜单：同上。 */
   const toggleRowMenu = (button: HTMLElement, id: string) => {
     if (rowMenuId === id) { setRowMenuId(null); setRowMenuAnchor(null); return; }
@@ -747,29 +876,84 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     }
   }
 
+  /** 列表搜索输入（列表视图的索引头、卡片视图的右栏上方共用）。 */
+  function renderSearchInput() {
+    return (
+      <div className="quick-notes-index-search">
+        <Search size={14} />
+        <input
+          autoFocus value={searchInput} placeholder="搜索小记" aria-label="搜索小记"
+          onChange={(event) => setSearchInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") { event.preventDefault(); setSearchQuery(searchInput.trim()); }
+            if (event.key === "Escape") { event.preventDefault(); closeSearch(); }
+          }}
+        />
+        {searchInput && <button type="button" className="quick-notes-index-search__clear" aria-label="清空搜索" onClick={() => { setSearchInput(""); setSearchQuery(""); }}><X size={13} /></button>}
+      </div>
+    );
+  }
+
+  /** 标签筛选条：两套版式共用一份；放在**右侧列表列**（对齐语雀），不再占据左侧写作区。 */
+  function renderTagBar() {
+    // 对齐语雀：类型筛选（图片/附件）生效时标签条隐藏；切回「小记」后标签筛选已被清空。
+    if (typeFilter !== "all" || items.length === 0 || tagIndex.tags.length === 0) return null;
+    return (
+      <div className="quick-notes-tagbar" role="group" aria-label="按标签筛选小记">
+        {tagIndex.tags.map((tag) => (
+          <button
+            key={tag.name}
+            className={"quick-note-tag" + (tagFilter.kind === "tag" && tagFilter.name === tag.name ? " is-selected" : "")}
+            onClick={() => void changeTagFilter(tagFilter.kind === "tag" && tagFilter.name === tag.name ? { kind: "all" } : { kind: "tag", name: tag.name })}
+          >
+            <span className="ln-ellipsis">{tag.name}</span><span className="quick-note-tag__count">({tag.count})</span>
+          </button>
+        ))}
+        {tagIndex.untaggedCount > 0 && (
+          <button className={"quick-note-tag" + (tagFilter.kind === "untagged" ? " is-selected" : "")} onClick={() => void changeTagFilter(tagFilter.kind === "untagged" ? { kind: "all" } : { kind: "untagged" })}>
+            <span>无标签</span><span className="quick-note-tag__count">({tagIndex.untaggedCount})</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  /** 标题 + 版式切换（卡片视图页头与列表视图左栏头共用）。 */
+  const titleSwitch = (
+    <div className="quick-notes-title">
+      <h1>小记</h1>
+      {/* 版式切换（对齐云端：标题右侧的分段控件；左侧=列表视图，右侧=小记卡视图） */}
+      <div className="seg quick-notes-view-switch" role="group" aria-label="小记版式">
+        <button
+          className={"b3-button b3-button--outline seg__item" + (viewMode === "list" ? " is-active" : "")}
+          aria-pressed={viewMode === "list"} title="列表视图" aria-label="列表视图"
+          onClick={() => switchView("list")}
+        ><LayoutList size={14} /></button>
+        <button
+          className={"b3-button b3-button--outline seg__item" + (viewMode === "note" ? " is-active" : "")}
+          aria-pressed={viewMode === "note"} title="小记视图" aria-label="小记视图"
+          onClick={() => switchView("note")}
+        ><StickyNote size={14} /></button>
+      </div>
+    </div>
+  );
+  const newNoteButton = (
+    <button className="quick-notes-new" title="新建小记" aria-label="新建小记" onClick={() => void startNewDraft()}>
+      <span className="quick-notes-new__icon"><Feather size={14} /><Plus size={9} /></span>
+    </button>
+  );
+  const notices = <>
+    {viewHint && <div className="quick-notes-hint" role="status">{viewHint}</div>}
+    {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
+  </>;
+
   // 左右两栏（对齐云端语雀小记）：左＝常驻写作面板 + 发布行，右＝小记卡片流（各自独立滚动）。
   return <section className="quick-notes-pane" aria-label="小记">
-    <header className="quick-notes-header">
-      <div className="quick-notes-title">
-        <h1>小记</h1>
-        {/* 版式切换（对齐云端：标题右侧的分段控件；左侧=列表视图，右侧=小记卡视图） */}
-        <div className="seg quick-notes-view-switch" role="group" aria-label="小记版式">
-          <button
-            className={"b3-button b3-button--outline seg__item" + (viewMode === "list" ? " is-active" : "")}
-            aria-pressed={viewMode === "list"} title="列表视图" aria-label="列表视图"
-            onClick={() => switchView("list")}
-          ><LayoutList size={14} /></button>
-          <button
-            className={"b3-button b3-button--outline seg__item" + (viewMode === "note" ? " is-active" : "")}
-            aria-pressed={viewMode === "note"} title="小记视图" aria-label="小记视图"
-            onClick={() => switchView("note")}
-          ><StickyNote size={14} /></button>
-        </div>
-      </div>
+    {viewMode === "note" && <header className="quick-notes-header">
+      {titleSwitch}
       <div className="quick-notes-header-tools">
-        {/* 多选工具左对齐（与卡片勾选框同列），「N 条 / 排序」始终保留在右侧 —— 两块同时可见。
-            列表视图有自己那条批量条（对齐云端），这里不再重复渲染。 */}
-        {selecting && viewMode === "note" && <>
+        {/* 多选工具左对齐（与卡片勾选框同列），「N 条 / 排序」始终保留在右侧 —— 两块同时可见。 */}
+        {selecting && <>
           <button className={"qn-check" + (selected.size > 0 && selected.size === items.length ? " is-on" : "")} role="checkbox" aria-checked={selected.size > 0 && selected.size === items.length} aria-label="全选" onClick={() => setSelected(selected.size === items.length ? new Set() : new Set(items.map((item) => item.id)))}>{selected.size > 0 && selected.size === items.length && <Check size={13} />}</button>
           <span className="quick-notes-select-info">共选择了 {selected.size} 篇小记</span>
           <span className="quick-notes-tools-divider" />
@@ -778,48 +962,39 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <button className="quick-notes-link quick-notes-link--danger" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}>批量删除</button>
         </>}
         <span className="quick-notes-tools-spacer" />
-        {viewMode === "list" && <button className="quick-notes-new" title="新建小记" aria-label="新建小记" onClick={() => void startNewDraft()}>
-          <span className="quick-notes-new__icon"><Feather size={14} /><Plus size={9} /></span>
-        </button>}
         <span className="quick-notes-count">{items.length} 条</span>
+        <button className={"quick-notes-tool-btn" + (searchOpen ? " is-on" : "")} onClick={toggleSearch} title="搜索小记" aria-label="搜索小记"><Search size={16} /></button>
+        <button className={"quick-notes-tool-btn" + (typeFilter !== "all" ? " is-on" : "")} onClick={(event) => toggleFilterMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={filterOpen} title={"筛选：" + (QUICK_NOTE_TYPE_OPTIONS.find((option) => option.id === typeFilter)?.label ?? "小记")} aria-label="筛选小记"><Filter size={16} /></button>
         <div className="quick-notes-sort-wrap">
           <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={"排序：" + sortLabel} aria-label="排序"><ArrowUpDown size={16} /></button>
         </div>
       </div>
-    </header>
-    {viewHint && <div className="quick-notes-hint" role="status">{viewHint}</div>}
-    {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
-    {items.length > 0 && tagIndex.tags.length > 0 && (
-      <div className="quick-notes-tagbar" role="group" aria-label="按标签筛选小记">
-        <button className={"quick-note-tag" + (tagFilter.kind === "all" ? " is-selected" : "")} onClick={() => void changeTagFilter({ kind: "all" })}>
-          <span>全部</span><span className="quick-note-tag__count">{items.length}</span>
-        </button>
-        {tagIndex.tags.map((tag) => (
-          <button
-            key={tag.name}
-            className={"quick-note-tag" + (tagFilter.kind === "tag" && tagFilter.name === tag.name ? " is-selected" : "")}
-            onClick={() => void changeTagFilter(tagFilter.kind === "tag" && tagFilter.name === tag.name ? { kind: "all" } : { kind: "tag", name: tag.name })}
-          >
-            <span className="ln-ellipsis">{tag.name}</span><span className="quick-note-tag__count">{tag.count}</span>
-          </button>
-        ))}
-        {tagIndex.untaggedCount > 0 && (
-          <button className={"quick-note-tag" + (tagFilter.kind === "untagged" ? " is-selected" : "")} onClick={() => void changeTagFilter(tagFilter.kind === "untagged" ? { kind: "all" } : { kind: "untagged" })}>
-            <span>无标签</span><span className="quick-note-tag__count">{tagIndex.untaggedCount}</span>
-          </button>
-        )}
-      </div>
-    )}
+    </header>}
+    {viewMode === "note" && notices}
     {viewMode === "list" ? <div className="quick-notes-split quick-notes-split--list">
       {/* 列表视图（对齐云端 https://www.yuque.com/dashboard/notes）：左＝索引列表（批量条 + 行⋯菜单），
           右＝编辑器。功能都复用分块视图里已有的动作（编辑/转为正式笔记/删除/多选），这里只是把 UI 补上。 */}
       <div className="quick-notes-index-wrap">
+        <div className="quick-notes-list-head">
+          {titleSwitch}
+          {newNoteButton}
+        </div>
+        {notices}
         <div className="quick-notes-index-tools">
-          <span className="quick-notes-tools-spacer" />
-          <span className="quick-notes-count">{items.length} 条</span>
-          <div className="quick-notes-sort-wrap">
-            <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={"排序：" + sortLabel} aria-label="排序"><ArrowUpDown size={16} /></button>
-          </div>
+          {searchOpen ? renderSearchInput() : <>
+            {items.length > 0 && typeFilter === "all" && (
+              <button
+                className={"quick-notes-tag-filter-btn" + (tagFilter.kind !== "all" ? " is-on" : "")}
+                onClick={(event) => toggleTagMenu(event.currentTarget)}
+                aria-haspopup="menu" aria-expanded={tagMenuOpen}
+                title={"标签筛选" + (tagFilter.kind === "all" ? "" : "：" + (tagFilter.kind === "untagged" ? "无标签" : tagFilter.name))}
+                aria-label="标签筛选"
+              ><Tag size={14} /><span>{tagFilter.kind === "all" ? "标签" : tagFilter.kind === "untagged" ? "无标签" : tagFilter.name}</span><ChevronDown size={14} /></button>
+            )}
+            <span className="quick-notes-tools-spacer" />
+            <button className="quick-notes-tool-btn" onClick={() => void openSearch()} title="搜索小记" aria-label="搜索小记"><Search size={16} /></button>
+          </>}
+          <button className="quick-notes-tool-btn" onClick={(event) => toggleMoreMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={moreOpen} title="更多" aria-label="更多"><MoreHorizontal size={16} /></button>
         </div>
         {/* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作 */}
         {selecting && <div className="quick-notes-batch">
@@ -840,9 +1015,12 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
             ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div>
             : items.length === 0
               ? <div className="ln-empty ln-empty--idle"><Feather size={24} /><span>还没有小记</span></div>
-              : visibleItems.map((item) => <div
+              : listItems.length === 0
+                ? <div className="ln-empty ln-empty--idle"><Filter size={28} /><strong>未能找到相关小记</strong><span>{searchQuery ? "换个关键词再试。" : "切换筛选条件后再试。"}</span></div>
+                : listItems.map((item) => <div
                   key={item.id}
-                  className={"quick-note-index-row b3-list-item" + (selecting ? " is-selecting" : "") + (!selecting && editingId === item.id ? " b3-list-item--focus" : "") + (selected.has(item.id) ? " is-checked" : "")}
+                  data-quick-note-id={item.id}
+                  className={"quick-note-index-row b3-list-item" + (selecting ? " is-selecting" : "") + (!selecting && editingId === item.id ? " b3-list-item--focus" : "") + (selected.has(item.id) ? " is-checked" : "") + (revealNoteId === item.id ? " is-revealed" : "")}
                 >
                   <button
                     className={"qn-check quick-note-index-check" + (selected.has(item.id) ? " is-on" : "")}
@@ -901,11 +1079,15 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         />
       </div>
       <div className={"quick-notes-list" + (selecting ? " selecting" : "")}>
+        {searchOpen && <div className="quick-notes-list-search">{renderSearchInput()}</div>}
+        {renderTagBar()}
         <div className="quick-notes-timeline" aria-live="polite">
           {loading ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div> : items.length === 0
             ? <div className="ln-empty ln-empty--idle"><Feather size={24} /><strong>还没有小记</strong><span>从左侧写下第一条临时记录。</span></div>
-            : visibleItems.map((item) => editingId === item.id && editingDraft
-              ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
+            : listItems.length === 0
+              ? <div className="ln-empty ln-empty--idle"><Filter size={28} /><strong>未能找到相关小记</strong><span>{searchQuery ? "换个关键词再试。" : "切换筛选条件后再试。"}</span></div>
+              : listItems.map((item) => editingId === item.id && editingDraft
+              ? <article className={"quick-note-entry editing" + (revealNoteId === item.id ? " is-revealed" : "")} key={item.id} data-quick-note-id={item.id}><QuickNoteComposer
                   draft={editingDraft} variant="inline" active={visible} saving={saving && activeIsEditing} syncing={syncing && activeIsEditing} cloudReady={cloudReady}
                   uploadResource={quickNoteUploader(editingDraft.id)}
                   tagOptions={tagIndex.tags}
@@ -914,7 +1096,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                   onEditorReady={(api) => handleEditorReady(editingDraft.id, api)}
                   onSave={() => void saveDraft(editingDraft)} onSaveAndSync={() => void saveDraftAndSync(editingDraft)} onCancel={() => void cancelDraft(editingDraft)}
                 /></article>
-              : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} selecting={selecting} checked={selected.has(item.id)} onToggleSelect={() => toggleSelected(item.id)} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItems([item])} onAddTag={(anchor) => setTagPickerFor({ noteId: item.id, anchor })} onFilterTag={(name) => void changeTagFilter({ kind: "tag", name })} onToggleTask={(checkboxIndex, checked) => void togglePreviewTask(item.id, checkboxIndex, checked)} />)
+              : <QuickNoteCard key={item.id} item={item} revealed={revealNoteId === item.id} deletePending={pendingDelete !== null} selecting={selecting} checked={selected.has(item.id)} onToggleSelect={() => toggleSelected(item.id)} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItems([item])} onAddTag={(anchor) => setTagPickerFor({ noteId: item.id, anchor })} onFilterTag={(name) => void changeTagFilter({ kind: "tag", name })} onToggleTask={(checkboxIndex, checked) => void togglePreviewTask(item.id, checkboxIndex, checked)} />)
           }
         </div>
       </div>
@@ -926,6 +1108,42 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       {QUICK_NOTE_SORT_OPTIONS.map((o) => (
         <button key={o.id} role="menuitemradio" aria-checked={sortBy === o.id} onClick={() => { setSortBy(o.id); writeQuickNoteSort(o.id); setSortOpen(false); }}>{sortBy === o.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{o.label}</button>
       ))}
+    </Menu>
+    {/* 列表视图标签筛选：收起为「标签 ▾」，不再把全部标签平铺在窄索引列里 */}
+    <Menu open={tagMenuOpen} onDismiss={() => setTagMenuOpen(false)} surfaceClassName="quick-notes-sort-menu quick-notes-tag-filter-menu" style={tagMenuPos ?? undefined}>
+      <button role="menuitemradio" aria-checked={tagFilter.kind === "all"} onClick={() => { setTagMenuOpen(false); void changeTagFilter({ kind: "all" }); }}>{tagFilter.kind === "all" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}全部</button>
+      <span className="quick-notes-filter-menu__sep" role="separator" />
+      {tagIndex.tags.map((tag) => (
+        <button key={tag.name} role="menuitemradio" aria-checked={tagFilter.kind === "tag" && tagFilter.name === tag.name} onClick={() => { setTagMenuOpen(false); void changeTagFilter({ kind: "tag", name: tag.name }); }}>
+          {tagFilter.kind === "tag" && tagFilter.name === tag.name ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}
+          <span className="ln-ellipsis">{tag.name}</span><span className="quick-notes-tag-filter-menu__count">({tag.count})</span>
+        </button>
+      ))}
+      {tagIndex.untaggedCount > 0 && (
+        <button role="menuitemradio" aria-checked={tagFilter.kind === "untagged"} onClick={() => { setTagMenuOpen(false); void changeTagFilter({ kind: "untagged" }); }}>{tagFilter.kind === "untagged" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}无标签<span className="quick-notes-tag-filter-menu__count">({tagIndex.untaggedCount})</span></button>
+      )}
+    </Menu>
+    {/* 列表视图 ⋯：类型 / 排序 / 批量操作（对齐语雀把这三件收进 ⋯） */}
+    <Menu open={moreOpen} onDismiss={() => setMoreOpen(false)} surfaceClassName="quick-notes-sort-menu quick-notes-more-menu" style={moreMenuPos ?? undefined}>
+      <span className="quick-notes-menu-section">类型</span>
+      {QUICK_NOTE_TYPE_OPTIONS.map((option) => (
+        <button key={option.id} role="menuitemradio" aria-checked={typeFilter === option.id} onClick={() => { setMoreOpen(false); void changeTypeFilter(option.id); }}>{typeFilter === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
+      ))}
+      <span className="quick-notes-filter-menu__sep" role="separator" />
+      <span className="quick-notes-menu-section">排序</span>
+      {QUICK_NOTE_SORT_OPTIONS.map((option) => (
+        <button key={option.id} role="menuitemradio" aria-checked={sortBy === option.id} onClick={() => { setSortBy(option.id); writeQuickNoteSort(option.id); setMoreOpen(false); }}>{sortBy === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
+      ))}
+      <span className="quick-notes-filter-menu__sep" role="separator" />
+      <button role="menuitem" onClick={() => { setMoreOpen(false); setSelecting(true); }}>批量操作</button>
+    </Menu>
+    {/* 类型筛选（对齐语雀 dashboard/notes）：小记 / 图片 / 附件；批量操作单独一档 */}
+    <Menu open={filterOpen} onDismiss={() => setFilterOpen(false)} surfaceClassName="quick-notes-sort-menu quick-notes-filter-menu" style={filterMenuPos ?? undefined}>
+      {QUICK_NOTE_TYPE_OPTIONS.map((option) => (
+        <button key={option.id} role="menuitemradio" aria-checked={typeFilter === option.id} onClick={() => { setFilterOpen(false); void changeTypeFilter(option.id); }}>{typeFilter === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
+      ))}
+      <span className="quick-notes-filter-menu__sep" role="separator" />
+      <button role="menuitem" onClick={() => { setFilterOpen(false); setSelecting(true); }}>批量操作</button>
     </Menu>
     {rowMenuItem && (
       <Menu onDismiss={() => { setRowMenuId(null); setRowMenuAnchor(null); }} surfaceClassName="quick-note-row-menu" style={rowMenuPos ?? undefined}>
@@ -1057,8 +1275,6 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
         {primary}
         {saveAndSync}
         {cancel}
-        <span className="quick-note-publish-hint">按 ⌘ Enter 发布</span>
-        <span className="quick-note-publish-hint-sub">可拖入或粘贴图片</span>
       </> : <>
         {/* 编辑既有小记：整组靠右下（对齐对话框底栏惯例：次级在左、主按钮在右），不再分居两角 */}
         {cancel}
@@ -1078,8 +1294,8 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
   </>;
 }
 
-function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect, onEdit, onDelete, onConvert, onAddTag, onFilterTag, onToggleTask }: {
-  item: QuickNoteDocument; deletePending: boolean; selecting: boolean; checked: boolean;
+function QuickNoteCard({ item, revealed, deletePending, selecting, checked, onToggleSelect, onEdit, onDelete, onConvert, onAddTag, onFilterTag, onToggleTask }: {
+  item: QuickNoteDocument; revealed: boolean; deletePending: boolean; selecting: boolean; checked: boolean;
   onToggleSelect(): void; onEdit(): void; onDelete(): void; onConvert(): void;
   onAddTag(anchor: HTMLElement): void; onFilterTag(name: string): void;
   onToggleTask(checkboxIndex: number, checked: boolean): void;
@@ -1090,7 +1306,8 @@ function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect
   // 仿语雀：时间戳在卡片顶部（"更新于 08-04 14:16"），正文/图片在下
   const stamp = formatListTime(new Date(item.updatedAt || item.createdAt), new Date(), true);
   return <article
-    className={`quick-note-entry${item.isConflict ? " conflict" : ""}${selecting ? " selecting" : ""}${checked ? " is-checked" : ""}`}
+    data-quick-note-id={item.id}
+    className={`quick-note-entry${item.isConflict ? " conflict" : ""}${selecting ? " selecting" : ""}${checked ? " is-checked" : ""}${revealed ? " is-revealed" : ""}`}
     onDoubleClick={selecting ? undefined : onEdit}
     onClick={selecting ? onToggleSelect : undefined}
   >

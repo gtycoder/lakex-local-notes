@@ -180,6 +180,18 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
     restore_pending_at TEXT
   )`);
   await applyQuickNotesSyncSchema(db);
+  // 小记独立 FTS（与文档 notes_fts 分开；quick_notes 不在 notes 表，不能共用 join）。
+  try { await db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS quick_notes_fts USING fts5(body, tags, tokenize='unicode61')"); } catch { /* FTS5 unavailable */ }
+  await db.exec(
+    "CREATE TABLE IF NOT EXISTS quick_notes_search_index (" +
+    "quick_note_id TEXT PRIMARY KEY, " +
+    "fts_rowid INTEGER NOT NULL, " +
+    "content_hash TEXT NOT NULL, " +
+    "text_cache TEXT NOT NULL, " +
+    "tags TEXT NOT NULL, " +
+    "indexed_at TEXT NOT NULL)"
+  );
+  await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_notes_search_rowid ON quick_notes_search_index(fts_rowid)");
 
   const seeded = await db.prepare(
     "SELECT value FROM device_state WHERE key='seed_initialized'",

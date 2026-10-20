@@ -23,6 +23,7 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
+import { escapeId } from "../../lib/cssEscape";
 import { HOME_TABS, pagerScrollLeft, settledIndex, tabAt, tabIndex } from "./tabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
@@ -80,6 +81,9 @@ export interface HomePageProps {
   /** 目录树（笔记本/分组）变了以后刷新数据（重命名 / 设置图标 / 删除笔记本都走它）。 */
   onTreeChanged: () => Promise<void>;
   onQuickNotesChanged: () => Promise<void>;
+  /** 全局搜索命中小记：首页常驻组件接力定位/高亮该条（不自动进编辑态）。 */
+  pendingQuickNoteId?: string | null;
+  onPendingQuickNoteConsumed?: () => void;
 }
 
 /**
@@ -116,9 +120,11 @@ export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
     onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged,
+    pendingQuickNoteId, onPendingQuickNoteConsumed,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[]; tags: string[] } | null>(null);
+  const [revealedQuickNoteId, setRevealedQuickNoteId] = useState<string | null>(null);
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [tagSheetFor, setTagSheetFor] = useState<string | null>(null);
@@ -298,6 +304,27 @@ export function HomePage(props: HomePageProps) {
     } catch { /* 读取失败忽略 */ }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
+
+  // 全局搜索命中「小记」：HomePage 常驻 ⇒ 清标签筛选、滚到卡片并短暂高亮，**不自动进编辑**。
+  // 注意：高亮计时器必须独立于 pending 清理，否则 pending 变 null 时 cleanup 会把计时器一起清掉、高亮永不消失。
+  useEffect(() => {
+    if (!pendingQuickNoteId) return;
+    setQuickTagFilter({ kind: "all" });
+    setRevealedQuickNoteId(pendingQuickNoteId);
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`[data-quick-note-id="${escapeId(pendingQuickNoteId)}"]`)?.scrollIntoView({ block: "nearest" });
+      // 清 pending 会触发本 effect cleanup；放在 rAF 里，避免滚动还没发生就被取消。
+      onPendingQuickNoteConsumed?.();
+    });
+    return () => window.cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingQuickNoteId]);
+
+  useEffect(() => {
+    if (!revealedQuickNoteId) return;
+    const timer = window.setTimeout(() => setRevealedQuickNoteId(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [revealedQuickNoteId]);
 
   // Android 返回键：写作/编辑小记中**先退出编辑**（与「取消」同语义），不能直接退 App。
   // 走统一返回栈，浮层（排序/「...」菜单等）打开时它们在上层、仍先消费。
@@ -559,6 +586,7 @@ export function HomePage(props: HomePageProps) {
                   <QuickNoteCard
                     key={n.id}
                     note={n}
+                    revealed={revealedQuickNoteId === n.id}
                     // 卡片日期跟随当前排序口径：按创建时间排序时显示创建时间（否则看起来"没排序"）
                     dateValue={quickNoteSortTime(n, quickSort)}
                     onEdit={() => { void openEdit(n.id); }}
@@ -736,7 +764,7 @@ export function HomePage(props: HomePageProps) {
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
-function QuickNoteCard({ note, dateValue, onEdit, onMore, onFilterTag }: { note: MobileQuickNote; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (name: string) => void }) {
+function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (name: string) => void }) {
   /** 预览用资源（canonical URL + token）：图片卡/附件卡都靠它渲染。 */
   const previewAssets = (note.images ?? []).map((image) => ({
     ...image,
@@ -749,7 +777,7 @@ function QuickNoteCard({ note, dateValue, onEdit, onMore, onFilterTag }: { note:
       )
     : null;
   return (
-    <div className="qn-card" role="button" tabIndex={0} onClick={onEdit}>
+    <div className={"qn-card" + (revealed ? " is-revealed" : "")} data-quick-note-id={note.id} role="button" tabIndex={0} onClick={onEdit}>
       {thumbUrl && (
         <div className="qn-card__cover">
           <img className="qn-card__img" src={thumbUrl} alt="" loading="lazy" />

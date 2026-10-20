@@ -50,6 +50,10 @@
 
 .quick-notes-menu-gap { width: 14px; }
 
+/* 类型筛选菜单：复用排序菜单表面，只补一条分隔线与选中项强调色（对齐语雀的绿色勾选语义）。 */
+.quick-notes-filter-menu__sep { height: 1px; margin: 4px 0; background: var(--lake-border-2); }
+.quick-notes-filter-menu button[aria-checked="true"] { color: var(--lake-accent-text); }
+
 /* 多选：勾选框（仿语雀：绿色实心方块 + 白勾） */
 .qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); color: var(--lake-text-on-accent); background: var(--lake-bg-panel); transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
 
@@ -72,23 +76,44 @@
 .quick-notes-compose { display: flex; flex-direction: column; min-width: 0; overflow-y: auto; padding: 0 8px 8px 0; }
 
 /* 写作区四周各收一点（用户 260915）：外留 6px 空隙 + 内边距降一档，高度也略降 */
-.quick-notes-compose .quick-note-composer { flex: 1; min-height: 300px; margin: 4px 0 6px 2px; }
+/* 写作卡：不再拉满整列（用户 261021 点单「整体缩小一点、下边留一点空白」）；高度按视口给档，
+   长内容在卡内滚（编辑器自身 overflow:auto），卡片与动作行之间留白。 */
+.quick-notes-compose .quick-note-composer { flex: 0 0 auto; height: clamp(300px, calc(100% - 180px), 560px); min-height: 0; margin: 4px 0 6px 2px; }
 
 /* 勾选框固定槽位（勾选框在卡片外侧，与语雀一致）：常驻 30px，不再随多选态伸缩 */
-.quick-notes-list { display: flex; flex-direction: column; min-width: 0; overflow-y: auto; padding-left: 30px; }
+.quick-notes-list { --quick-notes-gutter: 30px; display: flex; flex-direction: column; min-width: 0; overflow: hidden; padding-left: var(--quick-notes-gutter); }
 
 /* 列表版式（对齐云端）：左＝索引列表（窄列），右＝全尺寸编辑器（各自独立滚动） */
 .quick-notes-split--list { grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 14px; }
 .quick-notes-index-wrap { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 标签行（对齐云端）：左侧「标签 ▾」，右侧条数/排序 */
+/* 列表视图左栏头：标题/版式切换/新建小记（对齐语雀：新建在左，右侧编辑区从顶部开始） */
+.quick-notes-list-head { display: flex; align-items: center; gap: 8px; min-height: 31px; margin-bottom: 12px; }
 .quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 1px solid var(--lake-border-2); margin-bottom: 6px; }
+.quick-notes-tag-filter-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 8px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-2); background: transparent; font: inherit; font-size: var(--lake-font-size-small); cursor: pointer; }
+.quick-notes-tag-filter-btn:hover { background: var(--lake-bg-hover); }
+.quick-notes-tag-filter-btn.is-on { color: var(--lake-accent-text); background: var(--lake-bg-selected); }
+.quick-notes-tag-filter-menu { min-width: 220px; max-height: 320px; overflow-y: auto; }
+.quick-notes-tag-filter-menu button > .ln-ellipsis { flex: 1 1 auto; min-width: 0; }
+.quick-notes-tag-filter-menu__count { margin-left: auto; color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+/* 列表视图搜索：放大镜点击后替换「标签」位（对齐语雀）；Enter 过滤、× 清空、Esc 收起 */
+.quick-notes-index-search { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); }
+.quick-notes-list-search { flex: 0 0 auto; margin-bottom: 10px; }
+.quick-notes-index-search:focus-within { border-color: var(--lake-accent); }
+.quick-notes-index-search > svg { flex: 0 0 auto; color: var(--lake-text-3); }
+.quick-notes-index-search input { flex: 1 1 auto; min-width: 0; border: 0; outline: none; color: var(--lake-text-1); background: transparent; font: inherit; font-size: var(--lake-font-size-small); }
+.quick-notes-index-search__clear { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-3); background: transparent; cursor: pointer; }
+.quick-notes-index-search__clear:hover { background: var(--lake-bg-hover); }
+/* 列表视图 ⋯ 菜单：类型 / 排序 / 批量操作 */
+.quick-notes-more-menu { min-width: 200px; max-height: 360px; overflow-y: auto; }
+.quick-notes-menu-section { padding: 4px 8px 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-notes-batch { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
 .quick-notes-tool-btn--danger { color: var(--lake-status-error); }
 /* 行内「⋯」与复选框：默认隐藏，hover/选中/菜单展开时显形（对齐云端） */
 .quick-note-index-row { position: relative; display: flex; align-items: center; gap: 4px; padding-right: 4px; }
 .quick-note-index-check { flex: 0 0 auto; opacity: 0; }
 .quick-note-index-row:hover .quick-note-index-check,
-.quick-note-index-row.b3-list-item--focus .quick-note-index-check,
+.quick-note-index-row:focus-within .quick-note-index-check,
 .quick-note-index-row.is-selecting .quick-note-index-check,
 .quick-note-index-row.is-checked .quick-note-index-check { opacity: 1; }
 .quick-note-index-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 6px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -97,7 +122,7 @@
 .quick-note-index-main .b3-list-item__meta { flex: 0 0 auto; white-space: nowrap; }
 .quick-note-index-actions { position: relative; flex: 0 0 auto; display: flex; align-items: center; opacity: 0; }
 .quick-note-index-row:hover .quick-note-index-actions,
-.quick-note-index-row.b3-list-item--focus .quick-note-index-actions { opacity: 1; }
+.quick-note-index-row:focus-within .quick-note-index-actions { opacity: 1; }
 /* 表面/定位/层序由标准 <Menu> 提供；这里只留内容尺寸。 */
 .quick-note-row-menu { display: grid; gap: 1px; min-width: 132px; padding: 4px; }
 .quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-small); text-align: left; cursor: pointer; }
@@ -116,7 +141,9 @@
 .quick-notes-detail .quick-note-composer { border: 0; border-radius: 0; padding: 0; }
 .quick-notes-detail .quick-note-composer { flex: 1; min-height: 320px; }
 
-.quick-notes-list .quick-notes-timeline { flex: 1; }
+/* 卡片左侧 30px 是勾选框槽位；timeline 自己滚动后必须把这条槽位包进滚动容器，
+   否则 overflow 会把 left:-30px 的 .quick-note-select 裁掉（261021 用户报「批量态没了」）。 */
+.quick-notes-list .quick-notes-timeline { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin-left: calc(-1 * var(--quick-notes-gutter)); padding-left: var(--quick-notes-gutter); }
 
 .quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent-text); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 
@@ -133,10 +160,8 @@
 
 .quick-note-composer .quick-note-editor > .lake-editor-mount { flex: 1; min-height: 200px; }
 
-/* 261009 B1：窄窗（1000px 档）下写作区分栏只有 ~346px，而这一行要装「小记一下 / 取消 / 按 ⌘ Enter 发布 /
-   可拖入或粘贴图片」≈340px ⇒ 默认 nowrap + 可收缩会把标签在按钮内折成两行、第二行被行盒裁掉（实测按钮 70×40、
-   行高 28 且文字可见被切）。改成"整组不收缩 + 放不下就换行"：容器宽度由分栏决定（36%），换行比按断点隐藏提示更稳。
-   子项 nowrap 是必需的：允许在按钮内部折行才是这条缺陷的成因。 */
+/* 261009 B1：窄窗（1000px 档）下写作区分栏只有 ~346px，动作行三个按钮也要防挤压 ⇒
+   "整组不收缩 + 放不下就换行"（子项 nowrap 是必需的：允许按钮内部折行才是这条缺陷的成因）。 */
 .quick-note-composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; row-gap: 4px; margin-top: 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 .quick-note-composer-actions > * { flex: 0 0 auto; white-space: nowrap; }
@@ -168,9 +193,6 @@
   max-width: min(520px, calc(100% - 240px)); box-shadow: var(--lake-shadow-card);
 }
 
-.quick-notes-compose:has(.ne-ui-fullscreen) .quick-note-publish-hint,
-.quick-notes-compose:has(.ne-ui-fullscreen) .quick-note-publish-hint-sub { display: none; }
-
 /* 分块视图的**编辑态卡片**自身不做定位上下文（不是只在展开时）：内核的展开层 `.ne-ui-fullscreen`
    是 `position:absolute; inset:0`，按最近的定位祖先定位 —— 卡片若仍是 `position:relative`，
    展开就只覆盖**卡片那一小块**（实测 793×274，工具条被挤成溢出、页脚压正文，用户 260920 截图 3）。
@@ -180,8 +202,6 @@
    （合成 `.click()` 因为不经过命中测试反而正常）。常驻后容器尺寸全程稳定。
    编辑态不渲染卡片预览/勾选框，退出定位上下文不影响别的东西。 */
 .quick-note-entry.editing { position: static; }
-
-.quick-note-publish-hint + .quick-note-publish-hint-sub { border-left: 1px solid color-mix(in srgb, var(--lake-text-1) 14%, transparent); padding-left: 10px; }
 
 /* 动作行直接复用 kit 的 ln-btn 三档（primary / secondary / ghost）；这里只收紧小记的密度。 */
 .quick-note-composer-actions .ln-btn, .quick-note-convert-dialog .b3-button--cancel { height: 28px; min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: var(--lake-font-size-tiny); }
@@ -255,7 +275,7 @@
 
 .quick-note-entry.selecting .quick-note-card-actions { display: none; }
 
-.quick-note-select { position: absolute; left: -30px; top: 13px; opacity: 0; transition: opacity var(--lake-motion-fast) var(--lake-ease-standard); }
+.quick-note-select { position: absolute; left: calc(-1 * var(--quick-notes-gutter, 30px)); top: 13px; opacity: 0; transition: opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
 /* 勾选框默认藏在左侧槽位里，hover / 键盘聚焦 / 已选 / 多选态才显形。
    注意它落在卡片盒子之外：只写 "卡片 hover" 会在鼠标移向勾选框时（指针已离开卡片）闪没，
@@ -269,7 +289,9 @@
 .quick-note-entry.is-checked .quick-note-select,
 .quick-notes-list.selecting .quick-note-select { opacity: 1; }
 
-.quick-note-entry.editing { padding: 0; overflow: hidden; }
+/* overflow:clip 与 hidden 一样裁圆角，但不会把 grid item 的内容高度塌成 min-size 0
+   （261021 全局搜索跳转时暴露：编辑卡在 timeline 里高度 2px、内容被裁）。 */
+.quick-note-entry.editing { padding: 0; overflow: clip; }
 
 .quick-note-entry.editing .quick-note-composer { border: 0; border-radius: 0; box-shadow: none; }
 
@@ -317,7 +339,7 @@
   .quick-notes-tool-btn { width: 26px; height: 26px; }
   .quick-notes-split { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .quick-note-composer { min-height: 150px; }
-  .quick-notes-list { padding-left: 22px; }
+  .quick-notes-list { --quick-notes-gutter: 22px; }
 }
 
 /* ── P7-c 归并：原 src/styles/quick-notes.css 的内容并入此处（两者在 legacy 层内原本相邻，
@@ -359,11 +381,12 @@
  * 同一视觉语义只有一份：卡片 chip、写作 chip、筛选 chip 全走 `.quick-note-tag`。 */
 .quick-notes-tagbar {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   min-width: 0;
   margin: 0 0 10px;
-  padding: 0 30px;
+  padding: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -386,10 +409,13 @@
   cursor: pointer;
 }
 .quick-note-tag:hover { background: var(--lake-bg-hover); }
-.quick-note-tag.is-selected { border-color: var(--lake-accent); background: var(--lake-bg-selected); }
+/* 右侧筛选条上的标签 chip：对齐语雀的 30px 档（不动卡片内的同语义 chip，那里更紧凑）。 */
+.quick-notes-tagbar .quick-note-tag { height: 30px; gap: 0; font-size: var(--lake-font-size-body); }
+.quick-note-tag.is-selected { border-color: var(--lake-accent); color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
+.quick-note-tag.is-selected .quick-note-tag__count { color: inherit; }
 .quick-note-tag.is-selectable { cursor: pointer; }
 .quick-note-tag.is-editable { cursor: default; padding-right: 4px; }
-.quick-note-tag__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+.quick-note-tag__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; margin-left: 4px; }
 .quick-note-tag.is-editable > button {
   display: grid;
   place-items: center;
@@ -421,6 +447,9 @@
 .quick-note-tag-add:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .quick-note-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; min-height: 24px; }
 .quick-note-card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+/* 全局搜索定位：短暂高亮目标卡片/行（只定位，不进编辑态） */
+.quick-note-entry.is-revealed { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-accent-tint); }
+.quick-note-index-row.is-revealed { background: var(--lake-bg-selected); }
 .quick-note-tag-picker { display: flex; flex-direction: column; gap: 6px; width: 320px; padding: 10px; }
 .quick-note-tag-picker__head { display: flex; align-items: center; gap: 6px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
 .quick-note-tag-picker__input { width: 100%; }

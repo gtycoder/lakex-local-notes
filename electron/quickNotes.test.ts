@@ -489,3 +489,38 @@ describe("R9：recoverConversions 崩溃恢复（V5 §4，四组状态×目标�
     expect(fs.readFileSync(itemPath).toString()).toBe(originalBody.toString()); // 未破坏
   });
 });
+describe("小记全文搜索（独立 FTS）", () => {
+  it("正文与标签都能命中，更新后旧词失效、新词生效", () => {
+    const saved = quickNotes.createQuickNote({ text: "今天写搜索索引\n第二行", draftId: crypto.randomUUID(), stagedImageIds: [], tags: ["灵感"] });
+    const hits = quickNotes.search("搜索");
+    expect(hits.map((hit) => hit.id)).toEqual([saved.id]);
+    expect(hits[0].kind).toBe("quick-note");
+    expect(hits[0].title).toContain("今天写搜索索引");
+    expect(hits[0].snippet).toContain("<mark>");
+    expect(quickNotes.search("灵感").map((hit) => hit.id)).toEqual([saved.id]);
+
+    quickNotes.updateQuickNote(saved.id, { text: "改成完全不同的内容", draftId: crypto.randomUUID(), stagedImageIds: [], tags: [] });
+    expect(quickNotes.search("搜索")).toEqual([]);
+    expect(quickNotes.search("不同").map((hit) => hit.id)).toEqual([saved.id]);
+  });
+
+  it("保存/删除都会维护索引；重建索引可从 .qnote 文件恢复", () => {
+    const keep = quickNotes.createQuickNote({ text: "保留的小记", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const drop = quickNotes.createQuickNote({ text: "删除的小记", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    expect(quickNotes.search("小记").length).toBe(2);
+    quickNotes.deleteQuickNote(drop.id);
+    expect(quickNotes.search("删除")).toEqual([]);
+    quickNotes.rebuildSearchIndex();
+    expect(quickNotes.search("保留").map((hit) => hit.id)).toEqual([keep.id]);
+    expect(quickNotes.search("删除")).toEqual([]);
+  });
+
+  it("空查询/无索引时返回空；标签命中也能生成结果", () => {
+    expect(quickNotes.search("   ")).toEqual([]);
+    expect(quickNotes.search("不存在的词")).toEqual([]);
+    const saved = quickNotes.createQuickNote({ text: "只有标签能命中", draftId: crypto.randomUUID(), stagedImageIds: [], tags: ["项目A"] });
+    const hit = quickNotes.search("项目A")[0];
+    expect(hit.id).toBe(saved.id);
+    expect(hit.matchType).toBe("body");
+  });
+});

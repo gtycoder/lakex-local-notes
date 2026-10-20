@@ -1,6 +1,7 @@
 import { extractAssetRefs, extOf } from "../../core/assetNaming.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
 import { indexNote, removeNoteFromIndex, searchNotes as searchNotesIndexed } from "./searchIndex.js";
+import { searchQuickNotes } from "./quickNotesSearch.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 import { hasNoteSaveChanges } from "../../core/noteSaveDecision.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
@@ -121,7 +122,10 @@ export async function noteGoneState(d: MobileDb, id: string): Promise<{ parentId
 
 /** 全文搜索：FTS5 + unicode61，与桌面同分词/查询/摘要（src/core/search）。 */
 export async function searchNotes(d: MobileDb, query: string): Promise<SearchResult[]> {
-  return searchNotesIndexed(d, query);
+  // 全局搜索 = 文档 + 小记（文档在前、小记在后；小记最多 20 条）。顺序执行，避免同一连接上的索引对账与搜索交叉。
+  const notes = await searchNotesIndexed(d, query);
+  const quickNotes = await searchQuickNotes(d, query, 20);
+  return [...notes, ...quickNotes];
 }
 
 /** 写入边界判定（审计 F06）：missing = 无行；gone = 已在回收站（trashed_at）或被 purge（sync_state='purged'）。 */

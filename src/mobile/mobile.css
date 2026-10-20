@@ -153,6 +153,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-quick-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
 .qn-card { display: flex; flex-direction: column; background: var(--lake-bg-window); border: 1px solid var(--lake-border-1); border-radius: 12px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform var(--mobile-duration-press) var(--mobile-ease-panel); }
 .qn-card:active { transform: scale(.99); }
+.qn-card.is-revealed { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-accent-tint); }
 .qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--lake-bg-window); }
 .qn-card__img { max-width: 100%; max-height: 210px; width: auto; height: auto; object-fit: contain; border-radius: 8px; display: block; }
 .qn-card__count { position: absolute; top: 10px; right: 10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--lake-radius-pill); background: var(--lake-scrim); color: var(--mb-on-scrim); font-size: 11px; line-height: 18px; text-align: center; }

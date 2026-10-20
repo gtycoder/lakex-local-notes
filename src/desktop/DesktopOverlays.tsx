@@ -60,6 +60,7 @@ export interface DesktopOverlaysProps {
   searchPanelOpen: boolean;
   searchPanelQuery: string;
   onOpenNoteFromSearch: (id: string, query: string) => void;
+  onOpenQuickNoteFromSearch: (id: string) => void;
   onCloseSearch: () => void;
 
   trashOpen: boolean;
@@ -98,7 +99,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
     focusMode, onToggleFocusMode, activeNoteId, activeKind, lockedNoteIds, onToggleNoteLock, onOpenAiAssistant,
     onExportAs, onCopyMarkdown, onCopyPaths, onCloseTopMenu,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
-    searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onCloseSearch,
+    searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onOpenQuickNoteFromSearch, onCloseSearch,
     trashOpen, onCloseTrash, onTrashChanged, onTrashRestored, trashEmbed = false,
     historyOpen, historyNoteId, onCloseHistory, onHistoryRestored,
     syncToast, syncAnchorRect, onCloseSyncToast,
@@ -158,7 +159,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
         </Menu>
       )}
       <DraftRecoveryDialog entries={draftEntries} onRestore={onRestoreDraft} onDiscard={onDiscardDraft} onClose={onCloseDrafts} />
-      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={onOpenNoteFromSearch} onClose={onCloseSearch} />
+      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={onOpenNoteFromSearch} onOpenQuickNote={onOpenQuickNoteFromSearch} onClose={onCloseSearch} />
       {/* 弹窗形态：仅当非 embed 空间仍需浮层时；空间成页在 App 工作区渲染 */}
       {!trashEmbed && (
         <TrashPanel open={trashOpen} onClose={onCloseTrash} onChanged={onTrashChanged} onRestored={onTrashRestored} />

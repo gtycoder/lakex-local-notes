@@ -97,6 +97,8 @@ export function MobileApp() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  /** 全局搜索命中「小记」后待首页打开的 id（首页常驻，交给 HomePage 的 effect 接力）。 */
+  const [pendingQuickNoteId, setPendingQuickNoteId] = useState<string | null>(null);
   // 用 HomePage 导出的 MobileQuickNote：这条链（仓储 → bridge → 列表 → 卡片）字段必须一路一致，
   //  261015 加 createdAt 时就因为这里另写了一份内联类型而漏改（tsc 当场抓到）。
   const [quickNotes, setQuickNotes] = useState<MobileQuickNote[]>([]);
@@ -314,6 +316,13 @@ export function MobileApp() {
     void refreshAll().catch(() => undefined);
   }, [notes, treeNodes, refreshAll]);
 
+  /** 全局搜索命中「小记」：回首页小记 tab，交给 HomePage 定位/高亮（不自动进编辑态）。 */
+  const openQuickNoteFromSearch = useCallback((id: string) => {
+    setSearchOpen(false);
+    setRoute({ kind: "home", tab: "quick" });
+    setPendingQuickNoteId(id);
+  }, []);
+
   /** 「文档引用」卡（内核自定义卡）在移动端也要能选目标文档：注册宿主（与桌面 App.tsx 同一接口）。
    *  移动端摘要只有 id/title/parentId/updatedAt ⇒ 补默认 sortOrder/syncState/isConflict；
    *  成功态判定仍靠 parentId（回收站）兜底，不读 lake 正文。 */
@@ -386,6 +395,8 @@ export function MobileApp() {
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onOpenNote={(id) => void openNote(id, "viewer")}
+          pendingQuickNoteId={pendingQuickNoteId}
+          onPendingQuickNoteConsumed={() => setPendingQuickNoteId(null)}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
           onCreateNotebook={() => setCreateNbOpen(true)}
@@ -434,6 +445,7 @@ export function MobileApp() {
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         onOpenNote={(id) => void openNote(id, "viewer")}
+        onOpenQuickNote={openQuickNoteFromSearch}
       />
       <Toasts />
       <ConfirmHost />

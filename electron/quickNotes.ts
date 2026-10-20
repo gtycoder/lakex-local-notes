@@ -29,6 +29,8 @@ import {
 } from "./quickNoteModel.js";
 import type { QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, SaveQuickNoteInput } from "./quickNoteTypes.js";
 import { QuickNotesQueries, type QuickNoteConversionRow, type QuickNoteDeletedRow, type QuickNoteRow } from "./quickNotesQueries.js";
+import { buildMatchExpression, buildSnippet, segmentToIndexText } from "../src/core/search/index.js";
+import type { SearchResult } from "../src/core/searchTypes.js";
 
 export { QUICK_NOTE_VERSION, MAX_QUICK_NOTE_TEXT_LENGTH } from "./quickNoteModel.js";
 export type { QuickNoteContent, QuickNoteConversion, QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, QuickNoteSummary, SaveQuickNoteInput } from "./quickNoteTypes.js";
@@ -41,6 +43,11 @@ const SAVE_BODY_FILE = "content.qnote";
 const SAVE_META_FILE = "meta.json";
 
 function nowIso(): string { return new Date().toISOString(); }
+
+/** 小记没有 title 字段：搜索标题取纯文本首行（截断防超长）。 */
+function firstSearchLine(text: string): string {
+  return text.split(/\r?\n/).map((line) => line.trim()).find(Boolean)?.slice(0, 120) ?? "";
+}
 function uuid(): string { return crypto.randomUUID(); }
 function hash(bytes: Buffer | string): string { return crypto.createHash("sha256").update(bytes).digest("hex"); }
 
@@ -79,13 +86,14 @@ export class QuickNotesStore {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.migrate();
-    this.recoverStagedSaves();
-    this.recoverImports();
     this.queries = new QuickNotesQueries({
       db: this.db,
       itemPath: (id) => this.itemPath(id),
       imageUrl: (noteId, filename) => this.quickImageUrl(noteId, filename),
     });
+    this.recoverStagedSaves();
+    this.recoverImports();
+    this.ensureSearchIndex();
   }
 
   /** A1 一致性 DB 快照：VACUUM INTO 单文件（无 WAL 依赖、可独立打开）。目标必须不存在。 */
@@ -155,6 +163,19 @@ export class QuickNotesStore {
         error_message TEXT
       );
     `);
+    // V5 Phase 6：小记独立全文索引（与文档 notes_fts 分开，避免跨库 / tree_nodes join）。
+    // body/tags 都由 src/core/search 的分词器预分词；ledger 保留 text_cache 供 buildSnippet。
+    this.db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS quick_notes_fts USING fts5(body, tags, tokenize='unicode61')");
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS quick_notes_search_index (" +
+      "quick_note_id TEXT PRIMARY KEY, " +
+      "fts_rowid INTEGER NOT NULL, " +
+      "text_hash TEXT NOT NULL, " +
+      "text_cache TEXT NOT NULL, " +
+      "tags TEXT NOT NULL, " +
+      "indexed_at TEXT NOT NULL)"
+    );
+    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_notes_search_rowid ON quick_notes_search_index(fts_rowid)");
     const deletedCols = this.db.prepare("PRAGMA table_info(quick_note_deleted)").all() as Array<{ name: string }>;
     if (!deletedCols.some((c) => c.name === "purged_at")) {
       this.db.exec("ALTER TABLE quick_note_deleted ADD COLUMN purged_at TEXT");
@@ -223,6 +244,116 @@ export class QuickNotesStore {
 
   readQuickNote(id: string): QuickNoteDocument {
     return this.queries.read(id);
+  }
+
+  // ---- 小记全文搜索（独立 FTS，不混入文档 notes_fts） ----
+
+  search(query: string, limit = 20): Array<SearchResult & { kind: "quick-note" }> {
+    const normalized = query.trim();
+    if (!normalized) return [];
+    const match = buildMatchExpression(normalized);
+    if (!match) return [];
+    const rows = this.db.prepare(
+      "SELECT q.id AS id, q.preview_text AS preview_text, q.updated_at AS updated_at, i.text_cache AS text_cache, i.tags AS tags " +
+      "FROM quick_notes_fts f " +
+      "JOIN quick_notes_search_index i ON i.fts_rowid = f.rowid " +
+      "JOIN quick_notes q ON q.id = i.quick_note_id " +
+      "WHERE quick_notes_fts MATCH ? " +
+      "ORDER BY bm25(quick_notes_fts, 1.0, 0.5), q.updated_at DESC LIMIT ?"
+    ).all(match, Math.max(1, limit)) as Array<{ id: string; preview_text: string; updated_at: string; text_cache: string; tags: string }>;
+    return rows.map((row) => {
+      const title = row.preview_text.trim() || firstSearchLine(row.text_cache) || "小记";
+      const snippet = buildSnippet(row.text_cache, normalized) || buildSnippet(row.tags, normalized) || firstSearchLine(row.text_cache);
+      return {
+        id: row.id,
+        title,
+        snippet,
+        matchType: "body" as const,
+        updatedAt: row.updated_at,
+        parentTitle: null,
+        kind: "quick-note" as const,
+      };
+    });
+  }
+
+  /** 设置页「重建索引」/启动对账用：只重建小记自己的 FTS。 */
+  rebuildSearchIndex(): void {
+    const docs = this.listQuickNotes();
+    const tx = this.db.transaction(() => {
+      this.db.exec("DELETE FROM quick_notes_fts");
+      this.db.exec("DELETE FROM quick_notes_search_index");
+      const insertFts = this.db.prepare("INSERT INTO quick_notes_fts(rowid, body, tags) VALUES(?,?,?)");
+      const insertLedger = this.db.prepare(
+        "INSERT INTO quick_notes_search_index(quick_note_id, fts_rowid, text_hash, text_cache, tags, indexed_at) VALUES(?,?,?,?,?,?)"
+      );
+      const now = nowIso();
+      let rowid = 0;
+      for (const doc of docs) {
+        rowid += 1;
+        const text = doc.content.text ?? "";
+        const tags = doc.content.tags.join(" ");
+        insertFts.run(rowid, segmentToIndexText(text), segmentToIndexText(tags));
+        insertLedger.run(doc.id, rowid, hash(text + "\0" + tags), text, tags, now);
+      }
+    });
+    tx();
+  }
+
+  /** 启动对账：账本条数不等于活跃小记数就重建（正常启动 2 次 COUNT；坏文件/读失败不得阻断启动）。 */
+  ensureSearchIndex(): void {
+    try {
+      const active = this.countQuickNotes();
+      const indexed = (this.db.prepare("SELECT COUNT(*) AS c FROM quick_notes_search_index").get() as { c: number }).c;
+      if (active !== indexed) this.rebuildSearchIndex();
+    } catch (error) {
+      console.warn("[quick][search] 启动对账失败（搜索索引暂不可用，可在设置重建）: " + String(error));
+    }
+  }
+
+  /** 内容落盘后增量更新；hash 未变直接短路。 */
+  private upsertSearchIndex(id: string, text: string, tags: readonly string[]): void {
+    const textCache = text ?? "";
+    const tagsText = tags.join(" ");
+    const textHash = hash(textCache + "\0" + tagsText);
+    const prev = this.db.prepare("SELECT fts_rowid, text_hash FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as
+      { fts_rowid: number; text_hash: string } | undefined;
+    if (prev && prev.text_hash === textHash) return;
+    const rowid = prev?.fts_rowid ?? ((this.db.prepare("SELECT IFNULL(MAX(fts_rowid), 0) AS m FROM quick_notes_search_index").get() as { m: number }).m + 1);
+    const tx = this.db.transaction(() => {
+      if (prev) this.db.prepare("DELETE FROM quick_notes_fts WHERE rowid=?").run(rowid);
+      this.db.prepare("INSERT INTO quick_notes_fts(rowid, body, tags) VALUES(?,?,?)").run(rowid, segmentToIndexText(textCache), segmentToIndexText(tagsText));
+      this.db.prepare(
+        "INSERT INTO quick_notes_search_index(quick_note_id, fts_rowid, text_hash, text_cache, tags, indexed_at) VALUES(?,?,?,?,?,?) " +
+        "ON CONFLICT(quick_note_id) DO UPDATE SET fts_rowid=excluded.fts_rowid, text_hash=excluded.text_hash, text_cache=excluded.text_cache, tags=excluded.tags, indexed_at=excluded.indexed_at"
+      ).run(id, rowid, textHash, textCache, tagsText, nowIso());
+    });
+    tx();
+  }
+
+  /** 删除/彻底删除/转换后清索引。 */
+  private removeSearchIndex(ids: readonly string[]): void {
+    if (ids.length === 0) return;
+    const getRowid = this.db.prepare("SELECT fts_rowid FROM quick_notes_search_index WHERE quick_note_id=?");
+    const delFts = this.db.prepare("DELETE FROM quick_notes_fts WHERE rowid=?");
+    const delLedger = this.db.prepare("DELETE FROM quick_notes_search_index WHERE quick_note_id=?");
+    const tx = this.db.transaction(() => {
+      for (const id of ids) {
+        const row = getRowid.get(id) as { fts_rowid: number } | undefined;
+        if (row) delFts.run(row.fts_rowid);
+        delLedger.run(id);
+      }
+    });
+    tx();
+  }
+
+  /** promote 之后从落盘内容补索引（save / recovery / import 共用；失败只影响搜索，不阻断保存）。 */
+  private reindexFromDisk(id: string): void {
+    try {
+      const content = this.readStoredContent(id);
+      this.upsertSearchIndex(id, content.text, content.tags);
+    } catch (error) {
+      console.warn("[quick][search] 索引更新失败（启动重建可修复）: " + id + " " + String(error));
+    }
   }
 
   async stageImage(draftId: string, input: QuickNoteImageInput): Promise<QuickNoteImage> {
@@ -403,6 +534,7 @@ export class QuickNotesStore {
     else if (!fs.existsSync(bodyDst)) {
       throw new AppError("Internal", `staging 缺少正文文件: ${stagingDir}`);
     }
+    this.reindexFromDisk(id);
   }
 
   /** V5 §5.3 启动恢复：扫描 staging 残留，按 DB content_hash 判定（先提交为确定 → 只补做不撤销）。
@@ -528,6 +660,7 @@ export class QuickNotesStore {
       this.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
     });
     tx();
+    this.reindexFromDisk(id);
     return this.readQuickNote(id);
   }
 
@@ -549,6 +682,7 @@ export class QuickNotesStore {
     const tomb = this.db.prepare("SELECT * FROM quick_note_deleted WHERE id=?").get(id) as QuickNoteDeletedRow | undefined;
     if (!tomb) throw new AppError("NotFound", "小记不在回收站");
     this.db.prepare("UPDATE quick_note_deleted SET purged_at=?,ready_to_sync=1 WHERE id=?").run(nowIso(), id);
+    this.removeSearchIndex([id]);
     try { fs.rmSync(this.itemPath(id), { force: true }); } catch { /* best effort */ }
     try { fs.rmSync(this.assetDirFor(id), { force: true, recursive: true }); } catch { /* best effort */ }
   }
@@ -564,6 +698,7 @@ export class QuickNotesStore {
       this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(row.id);
     });
     tx();
+    this.removeSearchIndex([row.id]);
     if (!keepFiles) {
       try { fs.rmSync(this.itemPath(row.id), { force: true }); } catch { /* tombstone remains authoritative */ }
       try { fs.rmSync(this.assetDirFor(row.id), { force: true, recursive: true }); } catch { /* tombstone remains authoritative */ }
@@ -737,6 +872,7 @@ export class QuickNotesStore {
       throw error;
     }
     this.promoteImport(temporary, itemPath, assetDir, oldAssetsBackup, journalId, now);
+    this.reindexFromDisk(item.id);
   }
 
   /** V5 §5.4 promote：正文 rename 原子；目录替换带幂等判断。 */
@@ -779,6 +915,7 @@ export class QuickNotesStore {
           const oldBackup = row.old_assets_path ?? `${assetDir}.bak-recover`;
           if (!temporary) throw new Error("staging_key 缺失");
           this.promoteImport(temporary, this.itemPath(row.quick_note_id), assetDir, oldBackup, row.id, nowIso());
+          this.reindexFromDisk(row.quick_note_id);
         } else if (row.state === "files_promoted") {
           if (row.old_assets_path) { try { fs.rmSync(row.old_assets_path, { force: true, recursive: true }); } catch { /* best effort */ } }
           if (temporary) { try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ } }

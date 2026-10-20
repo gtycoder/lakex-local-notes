@@ -4,6 +4,7 @@ import path from "node:path";
 import sharp from "sharp";
 import type { DraftJournal } from "../draftJournal.js";
 import { Store } from "../store.js";
+import type { QuickNotesStore } from "../quickNotes.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
 import { isSafePathSegment, isSafeShellOpenFilename, sanitizeFileName } from "../../src/core/storeUtils.js";
 import { exportBitableCsv, exportBitableZip, exportNote, type ExportFormat } from "../export.js";
@@ -31,6 +32,7 @@ interface ResourceUploadInput {
 export function registerNotesIpc(
   ipc: IpcRegistrar,
   store: Store,
+  quickNotes: QuickNotesStore,
   drafts: DraftJournal,
   workspaceRoot: string,
   backupDatabases: (targetRoot: string) => void,
@@ -163,10 +165,20 @@ export function registerNotesIpc(
   ipc.handle("set_node_icon", (id: string, icon: unknown) => store.setNodeIcon(id, assertIcon(icon)));
   ipc.handle("search_notes", (query: unknown, limit?: unknown) => {
     if (typeof query !== "string") throw new IpcInputError("搜索词格式无效");
-    return store.searchNotes(query, clampSearchLimit(limit));
+    const capped = clampSearchLimit(limit);
+    // 文档在前、小记在后（SearchPanel 按 kind 分组）；小记最多 20 条，避免挤掉文档结果。
+    const notes = store.searchNotes(query, capped);
+    let quick: ReturnType<QuickNotesStore["search"]> = [];
+    try { quick = quickNotes.search(query, Math.min(20, capped)); }
+    catch { /* 小记索引异常不得拖垮文档搜索；设置页可重建 */ }
+    return [...notes, ...quick];
   });
   // 手动重建全文索引（异常/换分词器后修复用；正常启动走增量对账）。
-  ipc.handle("rebuild_search_index", () => { store.rebuildSearchIndex(); return true; });
+  ipc.handle("rebuild_search_index", () => {
+    store.rebuildSearchIndex();
+    quickNotes.rebuildSearchIndex();
+    return true;
+  });
   ipc.handle("delete_note", (id: string) => store.deleteNote(id));
   ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   ipc.handle("list_tree_nodes", () => store.listTreeNodes());

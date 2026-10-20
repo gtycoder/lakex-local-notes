@@ -59,7 +59,7 @@ export interface LakeNative {
   prepareCloudRestore(): Promise<{ quarantinePath: string }>;
   confirmRelaunch(): Promise<boolean>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
-  searchNotes(query: string, limit?: number): Promise<Array<{ id: string; title: string; snippet: string; matchType: "title" | "body"; updatedAt?: string; parentTitle?: string | null }>>;
+  searchNotes(query: string, limit?: number): Promise<Array<{ id: string; kind?: "note" | "quick-note"; title: string; snippet: string; matchType: "title" | "body"; updatedAt?: string; parentTitle?: string | null }>>;
   rebuildSearchIndex(): Promise<boolean>;
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;

@@ -9,10 +9,11 @@ export interface SearchSheetProps {
   open: boolean;
   onClose: () => void;
   onOpenNote: (id: string) => void;
+  onOpenQuickNote: (id: string) => void;
 }
 
 export function SearchSheet(props: SearchSheetProps) {
-  const { open, onClose, onOpenNote } = props;
+  const { open, onClose, onOpenNote, onOpenQuickNote } = props;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -59,7 +60,7 @@ export function SearchSheet(props: SearchSheetProps) {
             <Search size={17} />
             <input
               className="mobile-search-input"
-              placeholder="搜索文档"
+              placeholder="搜索文档和小记"
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -69,13 +70,14 @@ export function SearchSheet(props: SearchSheetProps) {
           {searching && <div className="mb-empty">搜索中…</div>}
           {!searching && query.trim() && results.length === 0 && <div className="mb-empty">无匹配结果</div>}
           {results.map((r) => (
-            <div key={r.id} className="mobile-doc-row" onClick={() => { onOpenNote(r.id); onClose(); }}>
+            <div key={`${r.kind ?? "note"}:${r.id}`} className="mobile-doc-row" onClick={() => { if (r.kind === "quick-note") onOpenQuickNote(r.id); else onOpenNote(r.id); onClose(); }}>
               <span className="mobile-search-main">
-                <span className="mobile-search-title mb-ellipsis">{r.title}</span>
+                <span className="mobile-search-title mb-ellipsis">{r.title || (r.kind === "quick-note" ? "小记" : "")}</span>
                 {/* snippet 由 buildSnippet 全量转义、只含 <mark>（W-10；同桌面 SearchPanel） */}
                 {r.snippet && <span className="mobile-search-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />}
               </span>
-              {r.parentTitle && <span className="mobile-search-parent">{r.parentTitle}</span>}
+              {r.kind === "quick-note" && <span className="mobile-search-parent">小记</span>}
+              {r.kind !== "quick-note" && r.parentTitle && <span className="mobile-search-parent">{r.parentTitle}</span>}
             </div>
           ))}
           </div>

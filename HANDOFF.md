@@ -5,7 +5,7 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接（261020 → 261017）
+## 0. 最新交接（261021 → 261017）
 
 > 写给完全没有上下文的新会话。接手顺序 **README → HANDOFF → AGENTS**。**本节保留最新批次（261020 / 261019 / 261017）**；更早的 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。文中提到的「专项文档」= 已删除的 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。**真正的待办看 §3，长期坑看 §4，移动端看 §8。**
 >
@@ -18,6 +18,47 @@
 > **下一会话焦点（261012 收尾 → 下一会话，用户定）**：① **移动端文本增强二级面板**（见上）；② **5 项画图插入项解禁**（画板 / 流程图 / UML / 思维导图 / 文本绘图，现为置灰占位；根因与修法见 §3#18）；③ **页面详细测试 + 优化细节**（逐页走查、查漏补缺）；④ 若继续表格，取 `docs/USHEET-UPGRADE.md` §7 的中期项。表格性能（含 5000 行档）已收口，**别再优化包装层**（实测见下面 261010 节）。
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
+
+### 261021(三) · Android 小记搜索（全局搜索合并小记）· **待用户验收**
+
+- **用户口径**：承接桌面的「小记搜索」，安卓端也能搜到小记。
+- **数据层**：移动端 schema 新增 `quick_notes_fts(body, tags)` + `quick_notes_search_index`（与文档 `notes_fts` 分开）；`quickNotesSearch.ts` 每次搜索先按 `content_hash` 对账（只对新增/变更/删除行读 `.qnote`），再走 FTS；FTS5 不可用时降级内存过滤。
+- **全局搜索**：`noteRepository.searchNotes` = 文档 + 小记（文档在前、小记≤20）；SearchSheet 增加小记徽标、占位符「搜索文档和小记」。
+- **跳转**：点小记结果 → 回首页小记 tab、清标签筛选、滚到卡片并短暂高亮 **1.6s**；**不自动打开编辑器**（与桌面 261021 口径一致）。
+- **未做**：Android 首页没有单独的「只搜小记」内联搜索条（移动端只有底部全局搜索入口）；如需要页面内筛选再单独立项。
+- **文件**：`src/mobile/data/quickNotesSearch.ts`(+test) · `src/mobile/data/schema.ts` · `src/mobile/data/noteRepository.ts` · `src/mobile/settings/SearchSheet.tsx` · `src/mobile/MobileApp.tsx` · `src/mobile/home/HomePage.tsx` · `src/mobile/mobile.css` · `src/mobile/mobileLayers.test.ts` · `src/mobile/quickNotesSearchWiring.test.ts`。
+- **门禁**：tsc 0 · 全库 vitest **325 文件 / 2354 通过（16 skip）** · 移动端 vite build ✓ · check:mobileui / check:core / `git diff --check` ✓ · mobileLayers mobile.css 1412→1414。
+- **状态**：未提交 / 未推送，待用户验收。
+
+### 261021(二) · 小记搜索：页面内只搜小记 + 全局搜索合并小记 · **待用户验收**
+
+- **用户口径**：小记页面只搜小记；全局搜索（⌘K）连带小记一起搜。
+- **数据层（小记独立 FTS）**：`QuickNotesStore` 在 `quick-notes/metadata.sqlite3` 新增 `quick_notes_fts(body, tags)` + `quick_notes_search_index`（hash 短路、text_cache/tags 供摘要），复用 `src/core/search/` 的分词 / `buildMatchExpression` / `buildSnippet`。写路径 `promoteStagedSave` / `importRemoteQuickNote` / recovery / `restoreQuickNote` 自动 reindex；delete/purge/conversion 自动 remove；启动 `ensureSearchIndex()` 按条数对账，设置页「重建索引」同时重建文档 + 小记。
+- **全局合并**：IPC `search_notes` = 文档结果 + 小记结果（文档在前、小记在后，小记 ≤20 条）；`SearchResult.kind?: "note" | "quick-note"`。`SearchPanel` 增加「小记」分组标题、StickyNote 图标、小记徽标；小记结果走 `onOpenQuickNote` → App 切到小记工作区 → `QuickNotesWorkspace.revealNote(id)`（清筛选/搜索、滚动到目标并**短暂高亮**，**不自动进编辑态**——用户 261021 点单修正）。
+- **小记页搜索**：列表视图保留内联搜索；卡片视图页头新增放大镜，输入条在右栏顶部；两处共用 `filterQuickNotesByQuery`，只查已加载小记的正文/预览/标签，**不会**搜文档。
+- **顺带修复**：全局搜索跳转后，卡片视图 inline 编辑卡在 grid 里因 `overflow:hidden` 塌成 2px、正文被裁 ⇒ 改 `overflow: clip`（裁圆角但不把 grid item 高度压成 min-size 0）。
+- **未做（明确）**：Android `SearchSheet` 仍只搜文档（下一批，数据层可复用）；全局索引只含小记正文+标签，不含图片/附件内容。
+- **文件**：`electron/quickNotes.ts`(+test) · `electron/ipc/registerNotes.ts` · `electron/main.ts` · `src/core/searchTypes.ts` · `src/components/app/SearchPanel.tsx`(+test) · `src/desktop/DesktopOverlays.tsx` · `src/App.tsx` · `src/components/app/QuickNotesWorkspace.tsx` · `src/lib/native.ts` · `src/styles/components.css` · `src/styles/app/quick-notes.css` · `src/styles/cssLayers.test.ts` · `docs/QUICK-NOTES-SPEC.md`。
+- **门禁**：tsc 0 · 全库 vitest **323 文件 / 2349 通过（16 skip）** · ui-metrics / check:core / check:bundle / `git diff --check` ✓ · CSS 基线 quick-notes 726 / components 367。**未跑桌面 stylesnap 全量**（有意改 UI）。
+- **取证**：`.css-audit/quicknotes-search-261021/{global-search,card-search,revealed-no-edit,opened-from-search}.png`（opened-from-search 是「旧行为」截图，保留作对照；现行为见 revealed-no-edit：只高亮不编辑）。
+- **状态**：未提交 / 未推送，待用户验收。
+
+### 261021(一) · 桌面小记页对齐语雀（类型筛选 / 标签条右移 / 写作卡缩高）· **待用户验收**
+
+- **用户点单**（附四张截图）：① 写作卡（图1红框）整体缩小、下边留白；② 标签筛选条从左侧移到右侧，不占写作区；③ 整体复刻 https://www.yuque.com/dashboard/notes；④ 加类型筛选（图片等）。
+- **布局**：写作卡高度改为 `clamp(300px, calc(100% - 180px), 560px)`（不再 `flex:1` 拉满左列），长内容卡内滚动，下方留白；其余版式/列表视图不变。
+- **标签条**：从页头通栏移到右侧列表列（卡片视图=右栏列表上方；列表视图=索引列顶部）。对齐语雀：**去掉「全部」chip**（再点已选 chip 取消）、计数改 `测试111 (1)` 括号格式、chip 30px/14px（只作用于筛选条；卡片内 chip 仍紧凑）；类型筛选生效时整条隐藏。
+- **类型筛选（新）**：右侧头部漏斗按钮 + 菜单，菜单项 **小记 / 图片 / 附件** + 分隔线 + **批量操作**（复用既有多选态）；默认勾「小记」。判据在 core `quickNoteTypeFilter.ts`：只认 `content.images` 的 MIME（图片白名单 vs 非图片附件），不解析正文；图片/附件可重叠。
+- **互斥语义（对齐语雀实测）**：类型筛选与标签筛选不叠加 —— 任何类型切换都清空标签筛选并隐藏标签条；切回「小记」回到全量。
+- **空态**：筛选无结果 = `未能找到相关小记 / 切换筛选条件后再试。`（对齐语雀文案）。
+- **发布行精简（261021 用户点单）**：去掉「按 ⌘ Enter 发布」「可拖入或粘贴图片」两条说明，写作卡动作行只留「小记一下 / 保存并同步 / 取消」；对应两条 CSS（fullscreen 隐藏提示 / 提示分隔线）一并删除。
+- **列表视图对齐语雀（261021 追加）**：列表视图不再有整行页头 —— **左栏顶部 = 标题 / 版式切换 / 新建小记**（新建从页头右侧移到左栏，紧跟版式切换），**右栏编辑区从内容顶部开始**（编辑工具栏与左栏头同高对齐）。左栏下方才是**三件套 [标签 ▾] [搜索] [⋯]**，不再平铺标签 chip、不再显示「N 条/排序」。`标签 ▾` = 垂直菜单（全部 / 各标签带 `(n)` / 无标签；选中后 trigger 显示标签名；类型筛选生效时隐藏）。搜索 = 点击放大镜替换标签位为输入框（Enter 过滤、× 清空、Esc 收起；core `quickNoteSearch.ts` 只查纯文本/预览/标签）。`⋯` = 类型（小记/图片/附件）+ 排序（现有四档）+ 批量操作。卡片视图仍是页头条数/筛选/排序 + 右侧平铺标签（语雀卡片视图同款）。切换版式会收起所有浮层。
+- **回归修复（用户验收发现）**：timeline 改成滚动容器后，卡片左侧 `left:-30px` 的批量勾选框被 `overflow:auto` 裁掉 ⇒「批量态没了」。修法 = 槽位宽度单一来源 `--quick-notes-gutter`，timeline 用负 margin + 同值 padding 把槽位包进滚动容器；勾选框 left 同步用该变量（窄窗 22px 也不裁）。护栏 `quickNotesView.test.ts` 新增「批量勾选框槽位」。
+- **未做（明确）**：书签 / 来自微信 / 来自插件 / 分享中 / 已归档（本产品无对应数据源，不放入死选项）；标签下拉未做「标签管理」；写作卡内标签/按钮位置未改（按图1红框只缩卡）；移动端未动。
+- **文件**：`src/components/app/QuickNotesWorkspace.tsx` · `src/core/quickNoteTypeFilter.ts`(+test) · `src/core/quickNoteSearch.ts`(+test) · `src/styles/app/quick-notes.css` · `src/styles/cssLayers.test.ts`（当前基线 676→726，含 261021(二) 搜索定位高亮新增；本批 UI 部分 +48）· `src/features/quickNotes/quickNotesView.test.ts` · `docs/QUICK-NOTES-SPEC.md`。
+- **门禁（当前工作树）**：tsc 0 · 全库 vitest **323 文件 / 2349 通过（16 skip）** · ui-metrics / check:core / check:bundle / `git diff --check` ✓。**未跑桌面 stylesnap 全量/重烤**（本轮是有意改视觉）；验收后再按受影响态重烤基线。
+- **状态**：未提交 / 未推送，待用户验收。**工作树另有并行会话的 `src/mobile/notebook/*` 改动，不是本批。**
+- **取证**：`.css-audit/yuque-quicknotes-262021/SPEC.md` + 41 张截图；列表视图 `list-view/SPEC.md` + 30 张截图（EDGE 只读，session 已 stop）。
 
 ### 261020(五) · 小记标签 v1（桌面 + Android）+ 桌面按钮语义色收口 · **待用户验收**
 
@@ -1796,7 +1837,7 @@
 2. ~~**画板 AI 助手**~~ **已完成（261003）**：接的就是内核 `ai.generate` 钩子，转主进程既有 AI 通道（Key 不出主进程、不新增 IPC），只读不给入口。见 git 历史。仍不做的是**文内文本绘图卡片**（`TextToDiagram`，内核那支绿色徽标无注入点）。
 3. ~~**UI 低优先：设计词表继续裁剪**~~ **已完成（261007）**：全仓零引用令牌 17 → 裁掉 **5 个被取代的 `--lake-media-*`**（`surface`/`btn`/`btn-hover`/`on-faint`/`on-dim`，消费者实际用 `scrim`/`toolbar`/`on`/`on-soft`/`-hover-2`）；其余 12 个按口径保留（尺度 ramp：`space-giant`/`motion-instant`/`motion-slow`/`ease-emphasized`/`ease-exit`/`font-weight-bold`；层序阶梯：`z-base`/`z-sticky` + 被护栏/文档引用的 `z-block-handle`/`z-overlay-lightbox`/`z-scrim`/`z-toast`）。口径见 AGENTS §3#14 与 `themes/base.css`。画板 `Wt` 已修复（`6b901bb`）；目录树窗口化不做。
 4. **移动端剩余**：真机验收、数据导出/导入、粘贴与资源 URL、长文档大纲跳转；详细步骤见 §8。
-5. ~~**搜索整体重构**~~ **已完成**（`984ccbc` 统一 FTS5+unicode61+CJK 单字预分词+增量账本、`d5ed6c0` 移动端纯文本源+拉丁前缀+多命中定位、`4fea72b` 设置页重建索引、`820305b` 标题-only upsert 保正文索引）：桌面/移动共享 `src/core/search/`。**剩余为可选增强（非缺陷）**：移动端索引源改 `getDocument("text/plain")`；拉丁子串检索（加 3-gram 列）；小记搜索（二期）；命中定位仍是 DOM 启发式（lakex 无公开查找 API）。
+5. ~~**搜索整体重构**~~ **已完成**（`984ccbc` 统一 FTS5+unicode61+CJK 单字预分词+增量账本、`d5ed6c0` 移动端纯文本源+拉丁前缀+多命中定位、`4fea72b` 设置页重建索引、`820305b` 标题-only upsert 保正文索引）：桌面/移动共享 `src/core/search/`。**剩余为可选增强（非缺陷）**：移动端索引源改 `getDocument("text/plain")`；拉丁子串检索（加 3-gram 列）；~~小记搜索（二期）~~ **已接入（261021）**：桌面小记页本地筛选 + 桌面全局独立 FTS；**Android 全局 SearchSheet 也已合并小记**（独立 FTS + 按需对账，点击只定位高亮）；移动端首页暂无单独内联小记搜索条；命中定位仍是 DOM 启发式（lakex 无公开查找 API）。
 6. **历史快照恢复为新文档**：用户已明确先不做；恢复入口仍只覆盖当前文档，恢复前自动留档。
 7c. ~~移动端 SecretStore 不跨重启 ⇒ S3 密钥丢失~~ **已修（261009）**：
    - **根因（实测澄清过一版）**：不是"整个 WebView 存储都不持久"——同批实验里 **localStorage 跨重启仍在**，而 **IndexedDB 被重建为空**

@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Dialog } from "../ui/Overlay";
-import { File, Search, X } from "lucide-react";
+import { File, Search, StickyNote, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { createRequestVersion } from "../../core/requestVersion";
 import { initialSearchIndex, nextSearchIndex } from "../model/searchNavigation";
 
 interface SearchResult {
   id: string;
+  kind?: "note" | "quick-note";
   title: string;
   snippet: string;
   matchType: "title" | "body";
@@ -20,10 +21,11 @@ function formatUpdatedAt(value?: string): string {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
-export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
+export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, onClose }: {
   open: boolean;
   initialQuery: string;
   onOpenNote: (id: string, query: string) => void;
+  onOpenQuickNote: (id: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState(initialQuery);
@@ -76,12 +78,17 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
   }, [query, open]);
 
   if (!open) return null;
+  const openResult = (result: SearchResult) => {
+    if (result.kind === "quick-note") onOpenQuickNote(result.id);
+    else onOpenNote(result.id, result.matchType === "body" ? query.trim() : "");
+    onClose();
+  };
   const openActive = () => {
     const result = results[activeIndex];
     if (!result) return;
-    onOpenNote(result.id, result.matchType === "body" ? query.trim() : "");
-    onClose();
+    openResult(result);
   };
+  const firstQuickIndex = results.findIndex((result) => result.kind === "quick-note");
 
   return (
     <Dialog open onDismiss={onClose} label="搜索标题和正文" surfaceClassName="search-panel search-command-panel" scrimClassName="ln-scrim--top" initialFocus={inputRef}>
@@ -97,38 +104,40 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
               if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((index) => nextSearchIndex(index < 0 ? 0 : index, -1, results.length)); return; }
               if (event.key === "Enter") { event.preventDefault(); openActive(); }
             }}
-            placeholder="搜索标题和正文（⌘K）"
+            placeholder="搜索标题、正文和小记（⌘K）"
             aria-describedby="search-panel-help"
           />
           {searching && <span className="search-panel-spinner" aria-label="搜索中" />}
           <button className="search-panel-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭搜索"><X size={15} /></button>
         </div>
-        <div id="search-panel-help" className="search-panel-help">标题优先 · 正文命中后自动定位 · ↑↓ 选择 · Enter 打开</div>
+        <div id="search-panel-help" className="search-panel-help">文档标题优先 · 小记按更新时间 · ↑↓ 选择 · Enter 打开</div>
         <div className="search-panel-results b3-list b3-list--background" role="listbox" aria-label="搜索结果">
           {results.length === 0 && query.trim() && !searching && (
-            <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题或正文关键词</span></div>
+            <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题、正文或小记关键词</span></div>
           )}
           {!query.trim() && (
-            <div className="ln-empty ln-empty--idle"><Search size={18} /><small>只搜索文档，不含小记</small></div>
+            <div className="ln-empty ln-empty--idle"><Search size={18} /><small>搜索文档与小记</small></div>
           )}
           {results.map((result, index) => (
-            <button
-              key={result.id}
-              className={`b3-list-item ln-row2${index === activeIndex ? " b3-list-item--focus" : ""}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              onMouseEnter={() => setActiveIndex(index)}
-              onClick={() => { setActiveIndex(index); onOpenNote(result.id, result.matchType === "body" ? query.trim() : ""); onClose(); }}
-            >
-              <span className="b3-list-item__graphic"><File size={14} /></span>
-              <span className="b3-list-item__text ln-row2__main ln-ellipsis">
-                <span className="ln-row2__title">{result.title || "无标题"}</span>
-                {/* snippet 由 buildSnippet 全量 HTML 转义、只含 <mark>（W-10：不需要 dompurify，见 snippet.test.ts） */}
-                {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: result.snippet }} />}
-                <span className="ln-row2__meta">{result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? ` · ${formatUpdatedAt(result.updatedAt)}` : ""}</span>
-              </span>
-              <span className={`badge ${result.matchType === "body" ? "badge--accent" : "badge--muted"}`}>{result.matchType === "body" ? "正文" : "标题"}</span>
-            </button>
+            <Fragment key={`${result.kind ?? "note"}:${result.id}`}>
+              {index === firstQuickIndex && firstQuickIndex > 0 && <div className="search-panel-section">小记</div>}
+              <button
+                className={`b3-list-item ln-row2${index === activeIndex ? " b3-list-item--focus" : ""}`}
+                role="option"
+                aria-selected={index === activeIndex}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => { setActiveIndex(index); openResult(result); }}
+              >
+                <span className="b3-list-item__graphic">{result.kind === "quick-note" ? <StickyNote size={14} /> : <File size={14} />}</span>
+                <span className="b3-list-item__text ln-row2__main ln-ellipsis">
+                  <span className="ln-row2__title">{result.title || (result.kind === "quick-note" ? "小记" : "无标题")}</span>
+                  {/* snippet 由 buildSnippet 全量 HTML 转义、只含 <mark>（W-10：不需要 dompurify，见 snippet.test.ts） */}
+                  {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: result.snippet }} />}
+                  <span className="ln-row2__meta">{result.kind === "quick-note" ? "小记" : result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? ` · ${formatUpdatedAt(result.updatedAt)}` : ""}</span>
+                </span>
+                <span className={`badge ${result.kind === "quick-note" || result.matchType === "body" ? "badge--accent" : "badge--muted"}`}>{result.kind === "quick-note" ? "小记" : result.matchType === "body" ? "正文" : "标题"}</span>
+              </button>
+            </Fragment>
           ))}
         </div>
     </Dialog>

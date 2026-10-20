@@ -189,3 +189,77 @@ describe("小记标签（随 .qnote 同步，无独立目录表）", () => {
     expect(WORKSPACE_SRC).toMatch(/setEditingId\(null\);\s*setEditingDraft\(null\);/);
   });
 });
+describe("小记类型筛选（261021，对齐语雀 dashboard/notes）", () => {
+  it("类型筛选菜单与标签筛选共用一套清筛选/收编辑口径", () => {
+    expect(WORKSPACE_SRC).toContain("QUICK_NOTE_TYPE_OPTIONS");
+    expect(WORKSPACE_SRC).toContain("filterQuickNotesByType(filtered, typeFilter)");
+    expect(WORKSPACE_SRC).toMatch(/async function changeTypeFilter\(next: QuickNoteTypeFilter\)/);
+    // 语雀语义：类型筛选与标签筛选互斥（切类型清标签；类型非「小记」时标签条不渲染）
+    expect(WORKSPACE_SRC).toMatch(/setTagFilter\(\{ kind: "all" \}\);\s*setTypeFilter\(next\);/);
+    expect(WORKSPACE_SRC).toMatch(/if \(typeFilter !== "all" \|\| items\.length === 0 \|\| tagIndex\.tags\.length === 0\) return null;/);
+  });
+
+  it("卡片视图标签条渲染在右侧列表列；列表视图收进「标签 ▾」下拉", () => {
+    // 卡片视图右栏仍用平铺标签条（Yuque 卡片视图同款）；列表视图的窄索引列不再平铺
+    expect(WORKSPACE_SRC.match(/\{renderTagBar\(\)\}/g)?.length).toBe(1);
+    expect(WORKSPACE_SRC).not.toMatch(/items\.length > 0 && tagIndex\.tags\.length > 0/);
+    expect(WORKSPACE_SRC).toContain("quick-notes-tag-filter-btn");
+    expect(WORKSPACE_SRC).toContain('aria-label="标签筛选"');
+    expect(WORKSPACE_SRC).toContain("quick-notes-tag-filter-menu");
+  });
+
+  it("筛选菜单：默认勾「小记」，并保留批量操作入口（复用既有多选态）", () => {
+    expect(WORKSPACE_SRC).toContain("role=\"menuitemradio\" aria-checked={typeFilter === option.id}");
+    expect(WORKSPACE_SRC).toMatch(/setSelecting\(true\)[^}]*批量操作|批量操作/);
+    expect(WORKSPACE_SRC).toContain("未能找到相关小记");
+  });
+});
+describe("批量勾选框槽位（261021 回归）", () => {
+  it("timeline 成为滚动容器后，left:-gutter 的勾选框不能被 overflow 裁掉", () => {
+    const css = read("../../styles/app/quick-notes.css");
+    // 槽位宽度单一来源：卡片左侧 = --quick-notes-gutter；timeline 用负 margin + 同值 padding 把槽位包进滚动容器
+    expect(css).toMatch(/\.quick-notes-list \{[^}]*--quick-notes-gutter: 30px/);
+    expect(css).toMatch(/\.quick-notes-list \.quick-notes-timeline[^{]*\{[^}]*margin-left: calc\(-1 \* var\(--quick-notes-gutter\)\)[^}]*padding-left: var\(--quick-notes-gutter\)/);
+    expect(css).toMatch(/\.quick-note-select \{[^}]*left: calc\(-1 \* var\(--quick-notes-gutter, 30px\)\)/);
+    // 勾选框仍是卡片左侧槽位（不是塞进卡片内容里）
+    expect(css).toMatch(/\.quick-notes-list\.selecting \.quick-note-select \{ opacity: 1; \}/);
+  });
+});
+describe("列表视图三件套（261021，对齐语雀 list view）", () => {
+  it("左侧头部 = 标签 ▾ / 搜索 / ⋯；N 条与排序只留在卡片视图", () => {
+    expect(WORKSPACE_SRC).toContain("quick-notes-index-tools");
+    expect(WORKSPACE_SRC).toContain('title="搜索小记" aria-label="搜索小记"');
+    expect(WORKSPACE_SRC).toContain('title="更多" aria-label="更多"');
+    expect(WORKSPACE_SRC).toContain("quick-notes-more-menu");
+    expect(WORKSPACE_SRC).toContain("quick-notes-menu-section");
+    // 列表视图标题/版式切换/新建小记在左栏头；条数/类型筛选/排序只在卡片视图页头
+    expect(WORKSPACE_SRC).toContain("quick-notes-list-head");
+    expect(WORKSPACE_SRC).toMatch(/viewMode === "note" && <header className="quick-notes-header">/);
+    expect(WORKSPACE_SRC).toMatch(/setSortBy\(option\.id\); writeQuickNoteSort\(option\.id\);/);
+  });
+
+  it("搜索：输入框只在列表视图；Enter 应用 / Esc 收起；查询走 core 纯函数", () => {
+    expect(WORKSPACE_SRC).toContain("filterQuickNotesByQuery(visibleItems, searchQuery)");
+    expect(WORKSPACE_SRC).toMatch(/event\.key === "Enter"[^}]*setSearchQuery\(searchInput\.trim\(\)\)/);
+    expect(WORKSPACE_SRC).toMatch(/event\.key === "Escape"[^}]*closeSearch\(\)/);
+    expect(WORKSPACE_SRC).toContain("quick-notes-index-search__clear");
+  });
+});
+describe("小记搜索入口（261021）", () => {
+  it("卡片视图也有小记内本地搜索；列表视图与卡片视图共用查询", () => {
+    expect(WORKSPACE_SRC).toContain("quick-notes-list-search");
+    expect(WORKSPACE_SRC).toContain("filterQuickNotesByQuery(visibleItems, searchQuery)");
+    expect(WORKSPACE_SRC).toContain("listItems.map");
+    expect(WORKSPACE_SRC).toContain("toggleSearch");
+  });
+
+  it("全局搜索命中后只定位/高亮，不自动进编辑态", () => {
+    expect(WORKSPACE_SRC).toMatch(/async function revealNote\(id: string\): Promise<void>/);
+    expect(WORKSPACE_SRC).toContain("data-quick-note-id={item.id}");
+    expect(WORKSPACE_SRC).toContain("setRevealNoteId");
+    // 定位函数里不得调用 startEditing（用户 261021 点单：搜索进来不要自动编辑）
+    expect(WORKSPACE_SRC).toMatch(/async function revealNote[\s\S]{0,700}setRevealNoteId\(id\);/);
+    expect(WORKSPACE_SRC).not.toMatch(/async function revealNote[\s\S]{0,700}startEditing\(/);
+    expect(WORKSPACE_SRC).toContain("is-revealed");
+  });
+});

@@ -493,7 +493,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
   }, afterInvoke);
 
-  registerNotesIpc(ipc, store, drafts, workspaceRoot(), (targetRoot) => {
+  registerNotesIpc(ipc, store, quickNotes, drafts, workspaceRoot(), (targetRoot) => {
     // A1 一致性快照：主库 + 小记库各经其连接 VACUUM INTO（单文件、可独立打开）
     const mainTarget = path.join(targetRoot, "metadata.sqlite3");
     store.backupDatabaseTo(mainTarget);

@@ -240,6 +240,13 @@
   background: var(--lake-accent-tint);
 }
 
+/* 全局搜索结果分组（文档 / 小记） */
+.search-panel-section {
+  padding: 8px 10px 4px;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-micro);
+}
+
 /* 单行省略：vendored 的 text-clamp 混入只给了 overflow，长文件名会把 meta/操作挤出列宽 */
 
 /* 内嵌预览（历史快照 / 孤儿文件）：右列整体可滚，图片不越界 */

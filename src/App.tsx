@@ -183,6 +183,12 @@ export function App() {
     setSaveState,
   });
 
+  /** 全局搜索命中「小记」：切到小记工作区并定位/高亮该条（不进编辑态；结果 id 不在 tree_nodes，不能走 openNote）。 */
+  const openQuickNoteFromSearch = useCallback(async (id: string) => {
+    await switchDesktopWorkspace("quick-notes");
+    await quickNotesRef.current?.revealNote(id);
+  }, [switchDesktopWorkspace, quickNotesRef]);
+
   // 「文档引用」卡片的宿主注入（R2，261008）：自定义卡由**内核自己的 React 树**渲染，拿不到我们的
   // context/props ⇒ 把「文档清单 + 打开文档」注册到模块级注册表（与 imagePreview 同一姿势）。
   // 依赖 notes/openNote：每次 notes 变化都重注册，卡片读到的永远是最新快照。
@@ -756,6 +762,7 @@ export function App() {
         searchPanelOpen={searchPanelOpen}
         searchPanelQuery={searchPanelQuery}
         onOpenNoteFromSearch={(id, query) => void openNote(id, query)}
+        onOpenQuickNoteFromSearch={(id) => void openQuickNoteFromSearch(id)}
         onCloseSearch={() => setSearchPanelOpen(false)}
         trashOpen={desktopWorkspace === "trash"}
         trashEmbed
