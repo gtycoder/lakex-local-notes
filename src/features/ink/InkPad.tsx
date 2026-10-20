@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronLeft, ChevronRight, Eraser, Highlighter, Pen, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { ChevronLeft, ChevronRight, Eraser, Highlighter, Minus, Pen, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
 import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
 import {
   createInkPage,
@@ -30,6 +30,9 @@ export interface InkPadProps {
 
 const SAVE_DEBOUNCE_MS = 500;
 const UNDO_LIMIT = 60;
+const ZOOM_STEP = 0.25;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
 const COLORS = [COLOR_BOARD_GROUPS[0][1], ...QUICK_TEXT_COLORS] as const;
 const WIDTHS = [1.5, 2.5, 4, 6] as const;
 const BACKGROUNDS: ReadonlyArray<{ value: InkBackground; label: string }> = [
@@ -67,6 +70,9 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [color, setColor] = useState(COLORS[0]);
   const [penWidth, setPenWidth] = useState<number>(WIDTHS[1]);
   const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
+  const [zoom, setZoom] = useState(1);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
   const [activeStroke, setActiveStroke] = useState<InkStroke | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const undoRef = useRef<string[]>([]);
@@ -90,8 +96,36 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     return doc.pages.find((item) => item.id === doc.activePageId) ?? doc.pages[0] ?? null;
   }, [doc]);
   const pageIndex = doc && page ? doc.pages.findIndex((item) => item.id === page.id) : -1;
+  const pageWidth = page?.width ?? 0;
+  const pageHeight = page?.height ?? 0;
+
+  useLayoutEffect(() => {
+    if (variant !== "desktop" || pageWidth <= 0 || pageHeight <= 0) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const update = () => {
+      const style = getComputedStyle(stage);
+      const padX = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+      const padY = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
+      const availWidth = Math.max(1, stage.clientWidth - padX);
+      const availHeight = Math.max(1, stage.clientHeight - padY);
+      const ratio = pageWidth / pageHeight;
+      const height = Math.min(availHeight, availWidth / ratio);
+      setFitSize((previous) => {
+        const width = height * ratio;
+        if (previous && Math.abs(previous.width - width) < 0.5 && Math.abs(previous.height - height) < 0.5) return previous;
+        return { width, height };
+      });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [pageHeight, pageWidth, variant]);
   const canUndo = historyVersion >= 0 && undoRef.current.length > 0;
   const canRedo = historyVersion >= 0 && redoRef.current.length > 0;
+  const zoomIn = useCallback(() => setZoom((value) => Math.min(ZOOM_MAX, Math.round((value + ZOOM_STEP) * 100) / 100)), []);
+  const zoomOut = useCallback(() => setZoom((value) => Math.max(ZOOM_MIN, Math.round((value - ZOOM_STEP) * 100) / 100)), []);
 
   const flushSave = useCallback(() => {
     if (saveTimerRef.current !== null) {
@@ -365,10 +399,26 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
         <span className="ink-toolbar__sep" />
         <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
         <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={readOnly || !canRedo}><Redo2 size={16} /></button>
+        {variant === "desktop" && (
+          <>
+            <span className="ink-toolbar__sep" />
+            <div className="ink-zoom" role="group" aria-label="缩放">
+              <button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="缩小"><Minus size={16} /></button>
+              <button className="ink-zoom__value" onClick={() => setZoom(1)} title="恢复为适应页面" aria-label="恢复为适应页面">{Math.round(zoom * 100)}%</button>
+              <button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="放大"><Plus size={16} /></button>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="ink-page-stage">
-        <div className="ink-page-frame" data-background={page.background}>
+      <div className="ink-page-stage" ref={stageRef}>
+        <div
+          className="ink-page-frame"
+          data-background={page.background}
+          style={variant === "desktop" && fitSize
+            ? ({ width: fitSize.width * zoom, height: fitSize.height * zoom } as CSSProperties)
+            : undefined}
+        >
           <svg
             className="ink-page-svg"
             viewBox={`0 0 ${page.width} ${page.height}`}
@@ -410,10 +460,12 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
           <button onClick={deletePage} disabled={readOnly || doc.pages.length <= 1} aria-label="删除当前页"><Trash2 size={16} /></button>
         </div>
-        <div className="ink-backgrounds">
-          {BACKGROUNDS.map((item) => (
-            <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly}>{item.label}</button>
-          ))}
+        <div className="ink-footer__right">
+          <div className="ink-backgrounds">
+            {BACKGROUNDS.map((item) => (
+              <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly}>{item.label}</button>
+            ))}
+          </div>
         </div>
       </div>
       {readOnly && <div className="ink-readonly-hint">只读</div>}

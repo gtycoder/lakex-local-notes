@@ -35,6 +35,14 @@ describe("手写板 POC 端到端接线", () => {
     expect(TABS_CSS).toContain(".ink-pad--desktop");
   });
 
+  it("桌面缩放保持页面比例，并提供放大/缩小/恢复适配控件", () => {
+    expect(INK_PAD).toContain('aria-label="放大"');
+    expect(INK_PAD).toContain('aria-label="缩小"');
+    expect(INK_PAD).toContain('aria-label="恢复为适应页面"');
+    expect(INK_PAD).toContain("fitSize.width * zoom");
+    expect(INK_PAD).toContain("fitSize.height * zoom");
+  });
+
   it("桌面创建、IPC、路由与移动端创建/路由均已接通", () => {
     expect(STORE).toContain("createInkIn(");
     expect(IPC).toContain('ipc.handle("create_ink_in"');

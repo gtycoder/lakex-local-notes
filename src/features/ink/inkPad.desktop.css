@@ -18,6 +18,6 @@
 .ink-pad--desktop .ink-width,
 .ink-pad--desktop .ink-pages button,
 .ink-pad--desktop .ink-backgrounds button { min-width: 27px; height: 27px; }
-.ink-pad--desktop .ink-page-stage { padding: 16px; overflow: auto; }
-.ink-pad--desktop .ink-page-frame { height: min(100%, calc(100dvh - 156px)); max-width: 100%; aspect-ratio: 794 / 1123; box-shadow: var(--lake-shadow-card); }
+.ink-pad--desktop .ink-page-stage { padding: 16px; overflow: auto; align-items: safe center; justify-content: safe center; }
+.ink-pad--desktop .ink-page-frame { height: min(100%, calc(100dvh - 156px)); aspect-ratio: 794 / 1123; box-shadow: var(--lake-shadow-card); }
 .ink-pad--desktop .ink-footer { padding: 5px 8px; }

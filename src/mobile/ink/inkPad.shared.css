@@ -29,7 +29,8 @@
 .ink-width,
 .ink-color,
 .ink-pages button,
-.ink-backgrounds button {
+.ink-backgrounds button,
+.ink-zoom button {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -46,7 +47,8 @@
 .ink-tool:hover,
 .ink-width:hover,
 .ink-pages button:hover,
-.ink-backgrounds button:hover {
+.ink-backgrounds button:hover,
+.ink-zoom button:hover {
   background: var(--lake-bg-hover);
 }
 
@@ -127,11 +129,17 @@
 }
 
 .ink-pages,
-.ink-backgrounds {
+.ink-backgrounds,
+.ink-footer__right,
+.ink-zoom {
   display: flex;
   align-items: center;
   gap: 2px;
 }
+
+.ink-footer__right { gap: 12px; }
+.ink-zoom { gap: 2px; }
+.ink-zoom__value { min-width: 44px; font-variant-numeric: tabular-nums; }
 
 .ink-pages span {
   min-width: 72px;
