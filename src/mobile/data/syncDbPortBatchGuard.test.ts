@@ -76,6 +76,7 @@ describe("批窗口守卫：本机编辑不被远端静默覆盖", () => {
 
     expect(executed).toHaveLength(1);
     expect(String(executed[0].values[0])).toBe("n1");
+    expect(await readNoteBody("doc", "n1"), "flush 必须把批内暂存的正文先落文件，不能只写 DB 行").toBe("远端新");
   });
 
   it("远端正文先落文件（doc），元数据只写 hash/缓存（261019 文件化）", async () => {

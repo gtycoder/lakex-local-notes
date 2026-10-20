@@ -135,7 +135,10 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
         Body: out,
         // D5（261017 真云验证后修）：桌面端一直带 ContentEncoding；移动端补上后
         // manifest 在控制台/S3 工具里不再显示为"未知二进制"，读侧仍保留 gzip 魔数兼容。
-        ...(opts?.gzip ? { ContentEncoding: "gzip" as const, ContentType: "application/json" } : {}),
+        // ⚠️ 不能声明 application/json：CapacitorHttp Android 会优先于 dataType=file
+        // 走 JSON 文本分支，把 gzip 字节的 base64 文本当正文发送，导致 SigV4 校验失败。
+        // 与桌面的 ObjectStore.put 一致使用 application/octet-stream；gzip 由 ContentEncoding 表达。
+        ...(opts?.gzip ? { ContentEncoding: "gzip" as const, ContentType: "application/octet-stream" } : {}),
       }));
     },
     async listObjects(prefix: string): Promise<Array<{ key: string; lastModified: string; size: number }>> {
