@@ -26,6 +26,7 @@ import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
+import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP, USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -291,6 +292,21 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     { id: "clear-text", label: "清除文字格式" },
   ];
   const moreMenu: MobileSheetItem[] = [
+    // 261020 P1：冻结 / 行高 / 列宽（布局类动作，README 的「冻结窗格 + 行高列宽调优」两项）
+    { id: "freeze", label: "冻结窗格", note: "行列冻结", children: [
+      { id: "freeze-row", label: "冻结至当前行" },
+      { id: "freeze-col", label: "冻结至当前列" },
+      { id: "freeze-none", label: "取消冻结" },
+    ] },
+    { id: "row-height", label: "行高", children: [
+      { id: "row-height-up", label: "增高（+" + ROW_HEIGHT_STEP + "px）" },
+      { id: "row-height-down", label: "降低（-" + ROW_HEIGHT_STEP + "px）" },
+      { id: "row-height-auto", label: "自动行高（按内容）" },
+    ] },
+    { id: "col-width", label: "列宽", children: [
+      { id: "col-width-up", label: "加宽（+" + COLUMN_WIDTH_STEP + "px）" },
+      { id: "col-width-down", label: "收窄（-" + COLUMN_WIDTH_STEP + "px）" },
+    ] },
     { id: "delete-row", label: "删除当前行", danger: true },
     { id: "delete-col", label: "删除当前列", danger: true },
     { id: "more-tools", label: "更多表格工具", note: "插入 / 样式 / 操作" },
@@ -331,6 +347,10 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     else if (id === "delete-row") withActiveRange((range, sheet) => { sheet.deleteRow(range.getRow()); });
     else if (id === "delete-col") withActiveRange((range, sheet) => { sheet.deleteColumn(range.getColumn()); });
     else if (id === "more-tools") hostRef.current?.querySelector<HTMLButtonElement>('button[aria-label="打开表格工具"]')?.click();
+    // 布局类（冻结 / 行高 / 列宽）：动作清单与实现都在 usheetLayoutActions（单一来源，可单测）
+    else if (USHEET_LAYOUT_ACTIONS.has(id)) {
+      withActiveRange((range, sheet) => { applyUsheetLayoutAction(id, range, sheet); });
+    }
   };
 
   return (
