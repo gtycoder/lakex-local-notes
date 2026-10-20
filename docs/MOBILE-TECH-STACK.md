@@ -164,6 +164,12 @@
      `src/mobile/usheet/usheetLayoutActions.ts`（单一来源 + 单测；行高/列宽有下限 16/32，Univer facade 没有"自动列宽"）。
      设备实测：冻结至当前行 ⇒ 正文 `freeze.ySplit=5`；行高 +8 ⇒ `rowData[4].h=32`；列宽 +24 ⇒ `columnData[1].w=112`；
      自动行高置 `ia:1`；取消冻结 ⇒ `xSplit/ySplit=0`。
+   - **数字格式（261020 P1 第二批）**：「更多 → 数字格式」= 常规（清除）/ 文本 / 数字（两位小数）/ 整数 / 百分比 / 货币（¥）/
+     日期 / 时间 / 日期时间，共 9 档（选项表单一来源 `src/mobile/usheet/usheetNumfmt.ts`）。运行时能力来自
+     `@univerjs/sheets-numfmt` 给 `FRange` 追加的 `setNumberFormat(pattern)`（facade mixin）：
+     调用前先判 `typeof range.setNumberFormat === "function"`，**缺失时明确 toast 提示、不静默 no-op**。
+     设备实测：B1=1.5 选「数字」⇒ 正文 `styles[..].n.pattern="#,##0.00"` 且格 `s` 指向它；B3=21.5 选「百分比」⇒
+     公式栏显示值实测 **`2150.00%`**、正文 pattern `0.00%`（Univer numfmt 渲染链路正常）。
    - **公式栏**：移动 UI 插件不渲染内置 formula-bar，自绘 `地址 + 显示值` 条（编辑态显示，随选区/命令刷新）。
    - **手势**：内容区 `data-prevent-swipe` + `Element` 命中；单指横拖只滚动画布，不拉目录抽屉（设备实测 A–D ↔ D–G）。
    - **保存**：`Event.CommandExecuted` 600ms 防抖写回；点「完成」、关标签、返回首页用 `onCapture` 同步取

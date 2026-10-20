@@ -2025,7 +2025,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > ③ `window.lakeNative` **保留并改为从实现派生**（261020 起 52 = 50 bridge + 2 附带，护栏 `lakeNativeContract.test.ts`）。
 > 移动端规格与硬约束现在只在 docs/MOBILE-TECH-STACK.md（含「每层用哪种复用方式」判据、互斥域、能力矩阵、未结项）。
 
-### 261020(三) · 表格（usheet）P1 第一批：布局动作 · **分支 `feat/mobile-usheet-p1`，未合入 master**
+### 261020(三) · 表格（usheet）P1：布局动作 + 数字格式 · **已合入并推送 master（`fc6d3a77` / `0a7c2990` / 数字格式见 `git log`）**
 
 > 前置：master 已含 origin/master 合并（ink 手写板 v1 等）与本会话 261020 移动端批次（`eff2cae1`）。
 > 本批在**干净分支**上做，按用户要求「合并推送 master 之后再推进 P1」。
@@ -2039,9 +2039,21 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   行高 +8 ⇒ `rowData[4].h=32`；列宽 +24 ⇒ `columnData[1].w=112`；自动行高 ⇒ `rowData[4].ia=1`；
   取消冻结 ⇒ `xSplit/ySplit=0`。测试表格已 purge，`测试笔记本` 回到 4 篇。
 - **门禁**：tsc 0 · 全库 vitest **314 文件 / 2294 例** · 双端构建 · ui-metrics/check:core/check:mobileui · diff-check。
-- **未做（下一刀）**：复制/剪切/粘贴、公式库、**数字格式**（facade 无 `setNumberFormat`，需走 numfmt 命令）、
-  **排序/筛选**（facade 无 API）、填充柄与批量操作、CardResizer 触控调高、行高列宽"记住上次"。
-- **状态**：未合入 master；已推送分支（见 `git log`）。
+#### 追加：数字格式（P1 第二批，同批已入 master）
+
+- **交付**：「更多 → 数字格式」9 档：常规（清除）/ 文本 / 数字（两位小数）/ 整数 / 百分比 / 货币（¥）/ 日期 / 时间 / 日期时间。
+- **架构**：选项表与注入式调用收敛到 `src/mobile/usheet/usheetNumfmt.ts`（单一来源、可单测）。能力来自
+  `@univerjs/sheets-numfmt` 给 `FRange` 追加的 `setNumberFormat(pattern)`（facade mixin）：
+  调用前判 `typeof setNumberFormat === "function"`，**缺失时明确 toast、不静默 no-op**。
+- **设备验收（emulator-5554）**：种入数值网格后，B1=1.5 选「数字」⇒ 正文
+  `styles[...].n.pattern="#,##0.00"` 且格 `s` 指向该样式；B3=21.5 选「百分比」⇒ **公式栏显示值实测 `2150.00%`**、
+  正文 pattern `0.00%`（渲染链路与落盘都正常）。测试表格已 purge，`测试笔记本` 回到 4 篇。
+- **门禁**：tsc 0 · 全库 vitest **315 文件 / 2296 例** · 双端构建 · ui-metrics/check:core/check:mobileui · diff-check。
+
+- **未做（下一刀）**：复制/剪切/粘贴、公式库/函数选择、**排序/筛选**（当前 Univer 预设**没有** sort/filter 插件，
+  只有 numfmt；要做需另装 `@univerjs/sheets-sort`/`sheets-filter` 或自研）、填充柄与批量操作、CardResizer 触控调高、
+  行高列宽"记住上次"。
+- **状态**：已合入并推送 master；远程分支 `feat/mobile-usheet-p1` 已删除（用户要求不再开新分支）。
 
 ### 261020(二) · 移动端多维表编辑 P0（本会话）· **已合并 master（261020 批）**
 
