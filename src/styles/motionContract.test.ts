@@ -70,4 +70,12 @@ describe("动效契约", () => {
     expect(a11y).toContain("animation-duration: 1ms");
     expect(existsSync(path.resolve(HERE, "../lib/uiTokens.ts"))).toBe(false);
   });
+
+  it("设置/历史/回收站浮窗入场时长走 --lake-motion-panel（不再裸 180ms）", () => {
+    // 261022 D2：settings.css 的 .floating-dialog 入场原本写死 180ms，偏离 190ms 的 panel 档；
+    // 动效时长只有 --lake-motion-* 一套来源（§3#14），这里把那一行钉回令牌，禁止再散回裸值。
+    const settings = stripComments(read("app/settings.css"));
+    expect(settings).toMatch(/animation:\s*floating-dialog-enter\s+var\(--lake-motion-panel\)\s+var\(--ease-out\);/);
+    expect(settings).not.toMatch(/animation:\s*floating-dialog-enter\s+\d+(?:\.\d+)?m?s/);
+  });
 });

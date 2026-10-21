@@ -11,6 +11,7 @@ const TRASH = readFileSync(new URL("../app/TrashPanel.tsx", import.meta.url), "u
 const HISTORY = readFileSync(new URL("../app/HistoryPanel.tsx", import.meta.url), "utf8");
 const ASSETS = readFileSync(new URL("../app/AssetsBrowser.tsx", import.meta.url), "utf8");
 const MULTITAB = readFileSync(new URL("../../features/editor/MultiTabEditor.tsx", import.meta.url), "utf8");
+const OUTLINE = readFileSync(new URL("../../features/outline/OutlineSidebar.tsx", import.meta.url), "utf8");
 
 /**
  * 左右分栏（可拖动）结构护栏（用户 261006：回收站 / 历史版本 / 资源 三处都要能左右拖；261008 文档分屏复用）。
@@ -31,12 +32,12 @@ describe("左右分栏（可拖动）", () => {
     expect(KIT).toContain(".ln-split-handle {");
     expect(KIT).toContain(".ln-split-handle::before {");   // 命中带
     expect(KIT).toContain(".ln-split-handle::after {");    // 药丸
-    expect(HANDLE).toContain('className="ln-split-handle"');
+    expect(HANDLE).toContain("ln-split-handle ${className}"); // 基础视觉类 + 站点定位类
     expect(HANDLE).toContain('role="separator"');
     expect(SRC).toContain("<SplitHandle");
     expect(SRC).not.toContain('className="ln-split-handle"');   // SplitPane 不再自己写一份
     expect(MULTITAB).toContain("<SplitHandle");                   // 文档分屏复用同一实现
-    expect(SIDEBAR).toContain('className="ln-split-handle sidebar-resize-handle desktop-only"');
+    expect(SIDEBAR).toContain('className="sidebar-resize-handle desktop-only"'); // 只叠加侧栏定位类
     // 侧栏那份旧实现里不该再留光标/药丸（已并入 kit 唯一实现），只留它自己的定位
     expect(MISC).not.toContain("cursor: col-resize");
     expect(MISC).not.toContain(".sidebar-resize-handle::after");   // 药丸已搬走
@@ -63,5 +64,36 @@ describe("左右分栏（可拖动）", () => {
     expect(HANDLE).toContain("export function nextSplitDrag");
     expect(HANDLE).toContain("if (!step.engaged) return;");
     expect(HANDLE).toContain("if (drag?.engaged) onCommit(drag.current);");
+  });
+
+  it("资料库侧栏 / 大纲栏的 resize 也走 SplitHandle，不再各写一套 pointer 实现（261022 D1）", () => {
+    expect(SIDEBAR).toContain("<SplitHandle");
+    expect(OUTLINE).toContain("<SplitHandle");
+    // 视觉基线仍来自 kit，站点只叠加自己的定位类（CSS 不动）
+    expect(SIDEBAR).toContain('className="sidebar-resize-handle desktop-only"');
+    expect(OUTLINE).toContain('className="outline-sidebar__resize-handle"');
+    // 第二套 pointer resize 痕迹必须消失
+    for (const site of [SIDEBAR, OUTLINE]) {
+      expect(site).not.toContain("handleResizePointerDown");
+      expect(site).not.toContain("handleResizePointerMove");
+      expect(site).not.toContain("handleResizeKeyDown");
+      expect(site).not.toContain("finishResize");
+      expect(site).not.toContain("resizeRef");
+      expect(site).not.toContain("setPointerCapture");
+      expect(site).not.toContain("releasePointerCapture");
+    }
+    // 两边差异全部用可选 props 表达，不复制交互
+    expect(SIDEBAR).toContain("softClamp={softClampWidth}");
+    expect(SIDEBAR).toContain("keyStep={8}");
+    expect(SIDEBAR).toContain("keyStepLarge={24}");
+    expect(SIDEBAR).toContain("SIDEBAR_DEFAULT_WIDTH");
+    expect(OUTLINE).toContain("invert");
+    expect(OUTLINE).toContain("stopPropagation");
+    expect(OUTLINE).toContain("softClamp={softClampWidth}");
+    expect(OUTLINE).toContain("OUTLINE_SIDEBAR_DEFAULT_WIDTH");
+    expect(OUTLINE).toContain("onDragEnd={handleSplitDragEnd}");
+    // 橡皮筋与方向都收口在唯一原语里
+    expect(HANDLE).toContain("export function rubberBandWidth");
+    expect(HANDLE).toContain("invert = false");
   });
 });

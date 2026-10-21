@@ -19,6 +19,22 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261021(六) · CSS 层收尾：A/B 核验 + C/D（依赖准入 / 三处漂移收口）· **分支 `feat/desktop-vendor-css-layer`（未合并 master，工作于 261022 凌晨）**
+
+- **承接**：上一会话留下分支 `feat/desktop-vendor-css-layer`（worktree `.../vendor-css-layer`）与两笔 A/B 提交 `a804df67` / `f4e981fa`；本会话先 `git merge master`（master `7f378130` → 合并提交 `0d0d8e5a`；唯一冲突 = HANDOFF，两边条目都保留），再在合并后基线上做 C/D。
+- **A/B 核验（两笔提交完整）**：4 个护栏测试 20 例通过（cssLayers / quickNoteKernelFallback / cssLayerScan / vendorCssLayer）；旧产物自证仍在 —— **master `7f378130` 构建**仍产 `QuickNoteKernelPreview-*.css`（1,280,726B、0 个 @layer、antd banner），**本分支构建**该 chunk CSS 消失、内核 CSS 只在 `index-*.css` 的层内；`audit-vendor-css.mjs` 对分支 5 个产物 CSS 全 OK。
+- **C（依赖准入）**：AGENTS §3 新增 `22. 依赖准入（261021 调研定稿）`：新依赖四问（已验证痛点 / 第二套样式·令牌·preflight / 体积·离线·许可·打包 / 退出成本与护栏）+ 禁 Tailwind/preflight + headless（Radix）只作未来新复杂控件的实现细节且包一层自有 API + 六候选裁决（Lucide 维持；shadcn/ui、Motion、dnd-kit、react-resizable-panels、Zustand 不引，逐条一句理由；Zustand 标未取证）+ 未取证项翻案先补证据。AGENTS 38,985B（<64KB）。
+- **D1（分栏分隔条唯一实现）**：Sidebar / OutlineSidebar 手写 pointer resize 全部删除，统一渲染 `SplitHandle`；原语新增可选 props `className / invert / softClamp / keyStep / keyStepLarge / stopPropagation / onDragEnd`，`containerRef`/`measureLeft` 改可选，`rubberBandWidth` 成为 0.16 橡皮筋唯一实现。护栏：扩 `splitPane.test.ts`（两站点 `<SplitHandle`、无 `handleResize*`/`resizeRef`/`setPointerCapture`）+ `splitHandle.test.ts`（invert / 死区 / 橡皮筋）。
+  - **有意行为变化**：侧栏/大纲统一获得 4px 死区（只点击不拖动不再落盘）；大纲键盘不再先调一次 `onWidthChange`（终态相同）；大纲把手 `tabIndex` 固定 0（collapsed 时 content `visibility:hidden`，实际不可聚焦）。
+- **D2（手势/动效单一来源）**：新增 `src/lib/longPressTimer.ts` 作为长按计时唯一实现（参数 ms/moveCancelPx/feedback/target，含 click 吞消费）；`features/editor/longPress.ts` 只做原生 touch 接线（450ms/10px、不震动、保留吞 click 与解绑），`mobile/ui/useLongPress.ts` 只做 React 接线（350ms/10px + 震动，**新增卸载 dispose** —— 旧实现卸载后仍会到点回调一次，属清理修复）；`settings.css` 浮窗入场 `180ms` → `var(--lake-motion-panel)`（190ms）。护栏：`src/lib/longPressTimer.test.ts`（13 例 + 静态断言两消费者同源、不再各自 `setTimeout`）与 `motionContract.test.ts`（禁裸时长）。
+- **门禁（合并 master 后、C/D 落地后的最终一次）**：tsc 0 · 全库 vitest **337 文件 / 2448 通过（16 skip）** · 双端构建 ✓ · ui-metrics 0/基线内 · check:core ✓ · check:mobileui ✓ · check:bundle（含新审计）✓ · `git diff --check` ✓。
+- **视觉对拍**：
+  - 桌面（合成夹具 + 隔离实例 scheme/CDP 9231/独立 userData，**master `7f378130` 构建 vs 本分支构建**）：`plain:1315:light` 2370 els、`settings:1315:light` 2499 els、`outline-open:1315:light` 2377 els，**逐态 0 差异**（snapdiff：0 态 / 0 条指纹差异）。
+  - 移动端 `home-quicknotes`：本分支 APK 与 master APK（同一 AVD `lake_gate`、同一数据）快照 **1768 els、逐字节相同** ⇒ D1/D2 对移动端零影响。`check:mobilesnap` 报的 1816→1768 是**基线陈旧**（master 同样 1768，见待办 24）。
+  - 交互抽查（CDP）：侧栏拖拽 300→372 预览并提交落盘、键盘 ArrowRight +8 / Shift+ArrowRight +24、双击复位 224；大纲（临时 `outlineEnhance=true`）左缘拖动 300→372、键盘 ArrowLeft +8（invert 方向正确）。
+- **待办（顺带发现，未处理）**：① 桌面 `stylesnap` 基线陈旧（见 261021(五) 条目）；② **移动端 `mobile-snap` 基线同样陈旧**：master 构建即 1816→1768（−48），与本批无关；合并后用整份 6 态重烤（**别用 `--states` 覆盖基线**）。
+- **状态**：分支 `feat/desktop-vendor-css-layer`（`0d0d8e5a` 之后 + C/D 提交），**未合并 master、未推送**；主树 `lake-notes-electron` 未触碰。
+
 ### 261022(二) · 长按小记入口零等待启动（capture 无 logo / 普通启动保留 logo）· **已提交 `c21d3adc`、已推送 master**
 
 - **用户口径**：视觉连续后仍觉得慢；**不加遮罩、不延长任何等待**；capture 不展示 logo、普通启动保留 logo；参考思源「双入口」。
@@ -2122,7 +2138,8 @@
 
 22. ~~**正式包大目录切标签性能（261013）**~~ **最小优化已落地**（见最新§0）：App稳定保存失败回调 + Sidebar本行内容memo；真实默认GPU包同组209→74ms、跨笔记本231→75ms，结构/几何不变，17场景与6态样式门禁通过。递归仍遍历全树，进一步优化仅按新热点证据立项；**不做目录窗口化**，多维表5000×20按#11已正式接入主树。
 
-23. **桌面 stylesnap 基线陈旧（261021 发现）**：`scripts/css-audit/baseline/stylesnap.json` 是 261018 烤的，之后 261019–261021 批次让**每态 +19 元素**（HEAD 构建 2370 vs 基线 2351，恒定增量 ⇒ 全局外壳改动，不是夹具/数据）。与本批无关，但会让定点/全量 stylesnap 一直报假差异。**处理**：在 master 上跑整份 42 态并核对第二轮一致后 `--write-baseline`（**别用 `--states` 覆盖**，会静默毁掉其余态；口径见 `scripts/css-audit/README.md`「陈旧基线」）。
+23. **移动端 mobile-snap 基线陈旧（261022 发现）**：本分支 APK 与 master `7f378130` APK 在同一台 AVD `lake_gate` + 同一数据上采 `home-quicknotes` 均为 **1768 els 且逐字节相同**，而基线是 **1816 els / 5fq1ij**（−48 元素 ⇒ 设备夹具或 261020–261022 批次造成的基线陈旧，**与本批无关**）。门禁会一直假红。**处理**：在合并后的 master 上用整份 6 态重烤（`--from <warm>.json --write-baseline`，**别用 `--states` 覆盖**，会静默毁掉其余态；口径同 README「陈旧基线」）。
+24. **桌面 stylesnap 基线陈旧（261021 发现）**：`scripts/css-audit/baseline/stylesnap.json` 是 261018 烤的，之后 261019–261021 批次让**每态 +19 元素**（HEAD 构建 2370 vs 基线 2351，恒定增量 ⇒ 全局外壳改动，不是夹具/数据）。与本批无关，但会让定点/全量 stylesnap 一直报假差异。**处理**：在 master 上跑整份 42 态并核对第二轮一致后 `--write-baseline`（**别用 `--states` 覆盖**，会静默毁掉其余态；口径见 `scripts/css-audit/README.md`「陈旧基线」）。
 16. **移动端表格 chrome P4/P5（261021 路线切换后；细化见 §8 261021(三)）**：
     **P4（视觉/交互收口，纯 chrome）**：① 网格视觉对拍（移动端专用 Univer 主题覆盖：表头 #f4f5f5 / 当前行列头 #e7e9e8 / 网格线 #e5e5e5 / 选区填充 #eefbfb + 2px #2f8ef4；桌面不动）；
     ② 二级选择器视觉（颜色板、对齐图标行；冻结/公式行式；字号/边框继续置灰）；③ 保存态方案 A 自动保存「保存中/已保存」轻指示（方案 B 显式保存按钮待拍板）；

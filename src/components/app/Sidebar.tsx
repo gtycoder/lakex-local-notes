@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
@@ -18,6 +18,7 @@ import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createM
 import { ExportSubmenuItem, type ExportFormat } from "../ui/ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
 import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
+import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { useScrollFade } from "../../hooks/useScrollFade";
 
@@ -106,7 +107,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const ghostRef = useRef<DragGhost | null>(null);
   const pointerRef = useRef({ x: 0, y: 0 });
   const dropTargetRef = useRef<{ id: string; position: DropPosition } | null>(null);
-  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
+  // 拖拽生命周期只用来决定 `onPreviewLeave` 的时序（拖拽中右缘跟着指针走，不能当"移出"处理）。
+  const splitDraggingRef = useRef(false);
   const suppressClickRef = useRef(false);
   const prevNodeIds = useRef<Set<string>>(new Set());
   const query = props.search.trim().toLocaleLowerCase();
@@ -145,48 +147,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     };
   }, [menuOpen, updateCreateMenuPosition]);
 
-  const rubberBandWidth = (width: number) => {
-    if (width < props.minWidth) return props.minWidth - (props.minWidth - width) * 0.16;
-    if (width > props.maxWidth) return props.maxWidth + (width - props.maxWidth) * 0.16;
-    return width;
-  };
+  const softClampWidth = useCallback(
+    (next: number) => rubberBandWidth(next, props.minWidth, props.maxWidth),
+    [props.minWidth, props.maxWidth],
+  );
 
-  const handleResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: props.width, currentWidth: props.width };
-    props.onResizeActiveChange(true);
-  };
+  const handleSplitResizingChange = useCallback((active: boolean) => {
+    splitDraggingRef.current = active;
+    props.onResizeActiveChange(active);
+  }, [props.onResizeActiveChange]);
 
-  const handleResizePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = resizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    const next = rubberBandWidth(resize.startWidth + event.clientX - resize.startX);
-    resize.currentWidth = next;
-    props.onWidthChange(next);
-  };
-
-  const finishResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = resizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    resizeRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    props.onResizeActiveChange(false);
-    props.onWidthCommit(resize.currentWidth);
-  };
-
-  const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    let next = props.width;
-    const step = event.shiftKey ? 24 : 8;
-    if (event.key === "ArrowLeft") next -= step;
-    else if (event.key === "ArrowRight") next += step;
-    else if (event.key === "Home") next = props.minWidth;
-    else if (event.key === "End") next = props.maxWidth;
-    else return;
-    event.preventDefault();
-    props.onWidthCommit(next);
-  };
+  const commitSplitWidth = useCallback((next: number | null) => {
+    props.onWidthCommit(next ?? SIDEBAR_DEFAULT_WIDTH);
+  }, [props.onWidthCommit]);
 
   useEffect(() => {
     // 只自动展开新出现的容器节点（笔记本/分组），不碰已有节点的展开状态
@@ -662,7 +635,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         // The panel's right edge moves with the pointer during resize. React
         // can therefore report a leave even though the user is still dragging
         // the handle; let the resize lifecycle decide when the preview closes.
-        if (!resizeRef.current) props.onPreviewLeave();
+        if (!splitDraggingRef.current) props.onPreviewLeave();
       }}
     >
       {/* 目录栏头部：左侧「目录」标题 + 右侧操作图标（与大纲栏 header 同一层视觉），筛选改为点击展开。 */}
@@ -713,7 +686,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         // 保持面板与当前分类/颜色，立即更新选中格，方便连续试选。
         setIconPicker((current) => current && { ...current, node: { ...current.node, icon } });
       }} onClose={() => setIconPicker(null)} />}
-      <div className="ln-split-handle sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} onDoubleClick={() => props.onWidthCommit(SIDEBAR_DEFAULT_WIDTH)} />
+      <SplitHandle
+        className="sidebar-resize-handle desktop-only"
+        ariaLabel="调整资料库宽度"
+        minWidth={props.minWidth}
+        maxWidth={props.maxWidth}
+        width={props.width}
+        softClamp={softClampWidth}
+        keyStep={8}
+        keyStepLarge={24}
+        onPreview={props.onWidthChange}
+        onCommit={commitSplitWidth}
+        onResizingChange={handleSplitResizingChange}
+      />
     </aside>
   );
 });

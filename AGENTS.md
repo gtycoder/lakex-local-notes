@@ -63,6 +63,18 @@ LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + bet
     ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
     ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤一次基线**（`--from <warm>.json --write-baseline`），否则下次全量必红；这是一次性成本。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
+22. **依赖准入（261021 调研定稿）**：新依赖**四问缺一不引入**（先过 §3#17「拒绝迎合式找需求」）——
+    ① 解决的是**已验证痛点**吗（有复现/实测证据，不是"更优雅/以后可能"）？② 会否引入**第二套样式/令牌/preflight**（撞 14）？
+    ③ 体积/离线/许可/打包成本算过吗（Electron 主进程 external、移动 bundle、离线可用）？④ 退出成本与**护栏**（现有门禁能否覆盖、删得掉、删除计划）？
+    - **禁止第二样式范式**：不引 Tailwind（preflight 是元素级 reset，会打 1.25MB 内核 CSS 与 Univer DOM；组件把颜色/字号写进 className 会让 `ui-metrics` 与 `cssLayers.test.ts` 失效）。设计系统唯一来源仍是 `--lake-*` 令牌 + `kit.css` 的 `ln-*` + `Overlay`/`usePopoverPosition`（`src/hooks/usePopoverPosition.ts`）。
+    - **headless 库（如 Radix）是唯一例外**：仅在**未来新复杂控件**（combobox/日期）确需明确 a11y 能力时引入，必须包一层自有 API/CSS（页面不直接 import 库组件），**不替换**现有浮层/选择器/`SplitHandle`。
+    - **Lucide 维持**（80+ 文件、唯一图标源；保持 devDependencies —— 移到 dependencies 会牵动主进程 external 派生）。
+    - **shadcn/ui（Nova/Tailwind）不引**：preflight 打穿内核/第三方；语义变量要再映射 `--lake-*`（warm 无 preset）；27/13/8px 规格与默认档错位；copy-in 后仍需逐类覆盖；桌面会出现 ln-*/Tailwind/mb-* 三套视觉。
+    - **Motion 不引**：撞 DESIGN 动效规则——禁 rAF 门控（隐藏窗口 rAF 不触发会把菜单卡成不可见）、JS initial opacity 绕过 a11y reduced-motion、layout 动画留 transform 祖先破坏 `position:fixed` 包含块（§7 已踩）；完整包实测 28.4KB gzip。
+    - **dnd-kit 不引**：4 个拖拽都带领域语义（分屏槽位、树 before/inside/after+父子约束、看板=写单选值、移动端长按与滚动共存）；Touch 要求 `touch-action:manipulation`，与「先长按再禁滚动」相悖；`DragOverlay` 会替换定稿的克隆浮层+FLIP；16.7KB gzip，真收益（键盘重排/自动滚动）自研约 50 行更便宜。
+    - **react-resizable-panels 不引**：只做容器内 pane，不覆盖浮动 8 向；`SplitHandle` 的 4px 死区/键盘/双击复位 3 处都有护栏测试锁死，替换收益≈0。
+    - **Zustand 不引（本轮未深挖，标注未取证）**：现状 = controller + `useSyncExternalStore` + IPC 仓储，无实证跨层状态痛点；数据真相在 SQLite/文件与主进程，换库不减少跨进程复杂度，只会多一套状态范式；未来单域试点必须先给痛点证据。
+    - **来源与翻案**：261021 两路只读调研（UI 层 / 交互层）+ 复核；未取证项（Zustand 深度盘点、Motion 隐藏窗口实测、dnd-kit 真机触摸/IME、rr-panels min+gzip）翻案前先补证据，不每轮重新调研。
 
 ## 4. 关键机制速览
 

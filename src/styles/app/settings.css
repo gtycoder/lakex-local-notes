@@ -46,7 +46,7 @@
   /* P5-c：原 `border: 1px solid var(--floating-dialog-border)` 已删 ——
    * 表面（1px --lake-border-1 + radius-lg + dialog 阴影）单一来源 = src/styles/overlay.css。 */
   box-shadow: var(--floating-dialog-shadow);
-  animation: floating-dialog-enter 180ms var(--ease-out);
+  animation: floating-dialog-enter var(--lake-motion-panel) var(--ease-out);
 }
 
 .floating-dialog-header {

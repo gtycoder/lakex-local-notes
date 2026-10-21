@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronsDownUp, ChevronsUpDown, Filter, Focus, Pin } from "lucide-react";
 import { ExpandLevelIcon } from "./ExpandLevelIcon";
 import { DockFilterRow, useDockFilter } from "../../components/ui/DockFilterBar";
@@ -10,6 +10,7 @@ import { OUTLINE_HOVER_HIDE_DELAY_MS } from "./outlineInteraction";
 import { OUTLINE_SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
 import { clampPopoverPosition } from "../../hooks/topMenuPosition";
 import { Menu } from "../../components/ui/Overlay";
+import { rubberBandWidth, SplitHandle } from "../../components/ui/SplitHandle";
 
 function noopSubscribe(): () => void {
   return () => {};
@@ -68,7 +69,8 @@ export function OutlineSidebar({
   const hideHoverTimerRef = useRef<number | null>(null);
   const [levelMenuPos, setLevelMenuPos] = useState<{ top: number; left: number } | null>(null);
   const asideRef = useRef<HTMLElement>(null);
-  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
+  // 拖拽生命周期只用来挡住"悬停预览关闭"（拖拽中指针会暂时离开 aside）。
+  const splitDraggingRef = useRef(false);
   void version;
   void controllerVersion;
 
@@ -108,7 +110,7 @@ export function OutlineSidebar({
     hideHoverTimerRef.current = null;
   };
   const scheduleHoverHide = () => {
-    if (mode !== "collapsed" || resizeRef.current || hideHoverTimerRef.current !== null) return;
+    if (mode !== "collapsed" || splitDraggingRef.current || hideHoverTimerRef.current !== null) return;
     // 面板是 rail 的视觉溢出区域，不属于 aside 的 layout box；延迟隐藏让
     // pointer 从触发 rail 移入大纲内容时不会先触发 aside pointerleave 把面板卸掉。
     hideHoverTimerRef.current = window.setTimeout(() => {
@@ -146,65 +148,26 @@ export function OutlineSidebar({
     return () => window.removeEventListener("pointermove", onPointerMove, true);
   }, [mode, railHovered]);
 
-  const rubberBandWidth = (nextWidth: number) => {
-    if (nextWidth < minWidth) return minWidth - (minWidth - nextWidth) * 0.16;
-    if (nextWidth > maxWidth) return maxWidth + (nextWidth - maxWidth) * 0.16;
-    return nextWidth;
+  const softClampWidth = (next: number) => rubberBandWidth(next, minWidth, maxWidth);
+
+  const handleSplitResizingChange = (active: boolean) => {
+    splitDraggingRef.current = active;
+    onResizeActiveChange(active);
   };
 
-  const handleResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    // 与左侧资料库一致：固定态和悬停预览态都可直接拖动面板左边缘。
-    // 收起且未悬停时内容/把手不可命中，因此不会误触。
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: width, currentWidth: width };
-    onResizeActiveChange(true);
+  const commitSplitWidth = (next: number | null) => {
+    onWidthCommit(next ?? OUTLINE_SIDEBAR_DEFAULT_WIDTH);
   };
 
-  const handleResizePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = resizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    // 右侧面板的拖拽边在左：向左拖动变宽，向右拖动变窄。
-    const next = rubberBandWidth(resize.startWidth + resize.startX - event.clientX);
-    resize.currentWidth = next;
-    onWidthChange(next);
+  // 拖拽监听挂在 window 上（SplitHandle），指针可能已离开 aside；松手后按真实落点
+  // 决定是否关掉悬停预览，避免松在编辑器时悬浮面板一直停留。
+  const handleSplitDragEnd = ({ clientX, clientY }: { clientX: number; clientY: number }) => {
+    if (mode !== "collapsed") return;
+    window.requestAnimationFrame(() => {
+      const target = document.elementFromPoint(clientX, clientY);
+      if (!asideRef.current?.contains(target)) setRailHovered(false);
+    });
   };
-
-  const finishResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = resizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    const { clientX, clientY } = event;
-    resizeRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    onResizeActiveChange(false);
-    onWidthCommit(resize.currentWidth);
-
-    // 拖拽时 pointer capture 会让指针暂时离开 aside；在此之前不能关闭预览。
-    // 松手后再根据真实落点同步，避免松在编辑器时悬浮面板一直停留。
-    if (mode === "collapsed") {
-      window.requestAnimationFrame(() => {
-        const target = document.elementFromPoint(clientX, clientY);
-        if (!asideRef.current?.contains(target)) setRailHovered(false);
-      });
-    }
-  };
-
-  const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    let next = width;
-    const step = event.shiftKey ? 24 : 8;
-    if (event.key === "ArrowLeft") next += step;
-    else if (event.key === "ArrowRight") next -= step;
-    else if (event.key === "Home") next = minWidth;
-    else if (event.key === "End") next = maxWidth;
-    else return;
-    event.preventDefault();
-    const clamped = Math.min(maxWidth, Math.max(minWidth, next));
-    onWidthChange(clamped);
-    onWidthCommit(clamped);
-  };
-
 
   const handleOutlineButtonClick = () => {
     if (mode === "collapsed") onPin();
@@ -306,21 +269,21 @@ export function OutlineSidebar({
         ) : (
           <div className="outline-panel__empty">暂无大纲</div>
         )}
-        <div
+        <SplitHandle
           className="outline-sidebar__resize-handle"
-          role="separator"
-          aria-label="调整大纲宽度"
-          aria-orientation="vertical"
-          aria-valuemin={minWidth}
-          aria-valuemax={maxWidth}
-          aria-valuenow={Math.round(width)}
-          tabIndex={mode === "docked" || railHovered ? 0 : -1}
-          onPointerDown={handleResizePointerDown}
-          onPointerMove={handleResizePointerMove}
-          onPointerUp={finishResize}
-          onPointerCancel={finishResize}
-          onKeyDown={handleResizeKeyDown}
-          onDoubleClick={() => onWidthCommit(OUTLINE_SIDEBAR_DEFAULT_WIDTH)}
+          ariaLabel="调整大纲宽度"
+          invert
+          stopPropagation
+          minWidth={minWidth}
+          maxWidth={maxWidth}
+          width={width}
+          softClamp={softClampWidth}
+          keyStep={8}
+          keyStepLarge={24}
+          onPreview={onWidthChange}
+          onCommit={commitSplitWidth}
+          onResizingChange={handleSplitResizingChange}
+          onDragEnd={handleSplitDragEnd}
         />
       </div>
     </aside>
