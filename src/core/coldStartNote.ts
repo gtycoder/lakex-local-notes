@@ -6,9 +6,14 @@
  * 因此：上次打开的若是 Lake 文档 → 直接落它；否则落最近更新的 Lake 文档；再否则最近更新的多维表；
  * 都没有才退回"上次打开/最近更新"的那个（宁可慢也不让用户找不到上次的文档）。
  */
-import type { NoteSummary } from "../lib/types";
+/** 只取冷启动落点判断需要的字段（不 import lib/types：src/core 不允许依赖 lib/渲染层类型，护栏 check:core）。 */
+export interface ColdStartNoteCandidate {
+  id: string;
+  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  updatedAt: string;
+}
 
-type ColdStartNote = Pick<NoteSummary, "id" | "kind" | "updatedAt">;
+type ColdStartNote = ColdStartNoteCandidate;
 
 export function chooseColdStartNoteId(
   notes: readonly ColdStartNote[],
