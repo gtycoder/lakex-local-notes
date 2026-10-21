@@ -112,6 +112,19 @@ export function App() {
   // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
   // pending 计数刷新已收敛为主进程 IPC 层事件广播（思源模式）：pending-summary-changed 单点订阅，
   // 渲染层不再需要各操作点手动触发（历史上 10+ 处手动刷新屡有遗漏）。
+  // 表格内核 = 一个 ≈6.8MB 的懒加载 chunk（Univer 全量 preset）：首开才拉 ⇒ 空白/灰底 → 表格（用户 261022
+  // 报「打开表格先变白再变灰再出现表格，感觉卡」）。就绪后**空闲预取**，把下载 + 解析挪到点击之前；
+  // 真正首开仍可能有实例初始化的几百 ms（那是内核 init，不是下载）。失败静默：非表格用户不为它付可见代价。
+  useEffect(() => {
+    if (!workspace) return;
+    const prewarm = (): void => { void import("./features/usheet/UniverSheetEditor").catch(() => undefined); };
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(prewarm, { timeout: 8000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(prewarm, 4000);
+    return () => window.clearTimeout(handle);
+  }, [workspace]);
   // boot 窗口：等 workspace（或启动错误）已经渲染到主窗口后再显示，避免主窗口先露白/重复播 splash。
   useEffect(() => {
     if (!workspace && !error) return;

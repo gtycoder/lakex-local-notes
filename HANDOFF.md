@@ -35,6 +35,10 @@
 - **桌面验收（隔离实例 `$TMPDIR/lake-accept-p5` / CDP 9237）**：新建表格 → ribbon 出现「数据」页签；工具栏实测 `data-u-command="sheet.command.smart-toggle-filter"` + `aria-label="排序"`。
 - **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle ✓ · diff-check ✓ · **内核探针 9/12 通过、3 条 advisory、exit 0**（新增第 6 条「排序/筛选入口出现在数据页签」PASS）。`mobile/usheet/usheet-chrome.css` 基线 216 → **221**（+5 = 小数位按钮）。
 - **两条必须记住的后果**（详见 `docs/USHEET-UPGRADE.md` §4.4）：① 筛选是 plugin resource，**首次保存会多一条空壳**（一次 hash 变化/一次上传）；② `resources` 是覆盖写 ⇒ **两端都得装 filter 数据插件**、且注册顺序一致，否则一端保存会静默抹掉筛选/造成假冲突。
+- **打开表格「先白再灰再出现，感觉卡」（用户 261022）· 已优化（待复验）**：
+  - 实测：表格编辑器是**单个 6.85MB 懒加载 chunk**（`UniverSheetEditor-*.js`，Univer 全量 preset），首开才拉 ⇒ 点击后空白/灰底 → 板面；隔离实例（`--disable-gpu`）里从点击到第二块画布 = 769ms。
+  - 修法：`src/App.tsx` 在 workspace 就绪后**空闲预取**该 chunk（`requestIdleCallback(timeout: 8000)`，失败静默）⇒ 网络确认首开前已拉 `UniverSheetEditor-*.js` + `*.css`；复测点击到画布 **769ms → 585ms**（软件渲染；真机 GPU 更快）。
+  - 剩余：实例 `createUniver`（全量 preset）初始化本身仍是几百 ms，属内核启动成本；若还要再快，只能做「隐藏预热实例」或裁 preset（需单独立项）。
 - **桌面表格排序弹窗卡死（用户 261022 报「排序弹窗无法点击、会导致整个 app 卡死」）· 已修（待复验）**：
   - 复现：隔离实例（`$TMPDIR/lake-sortfix` / CDP 9237）建表贴数据 → 数据页签 → 排序 → 「自定义排序」→ 对话框出现后**整窗点不动**；`sample` 实测渲染进程 **120% CPU**、CDP 也不响应（真死循环，不是遮罩挡点击）。
   - 根因：261009 的 Univer 补丁把 floating 层 portal 容器挂进**实例宿主**（当初为防黄叹号逃出标签宿主）⇒ 设计系统 **Dialog（含遮罩）也被 portal 进宿主**，与宿主 `overflow:hidden` + fixed 遮罩组合触发 measure/reflow 死循环。把容器放回 `document.body`（内核原行为）后同一对话框可正常点击、停留 6s+ 无卡死。
