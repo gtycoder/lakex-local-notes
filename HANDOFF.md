@@ -33,7 +33,7 @@
   - 移动端 `home-quicknotes`：本分支 APK 与 master APK（同一 AVD `lake_gate`、同一数据）快照 **1768 els、逐字节相同** ⇒ D1/D2 对移动端零影响。`check:mobilesnap` 报的 1816→1768 是**基线陈旧**（master 同样 1768，见待办 23）。
   - 交互抽查（CDP）：侧栏拖拽 300→372 预览并提交落盘、键盘 ArrowRight +8 / Shift+ArrowRight +24、双击复位 224；大纲（临时 `outlineEnhance=true`）左缘拖动 300→372、键盘 ArrowLeft +8（invert 方向正确）。
 - **待办（顺带发现，未处理）**：① 桌面 `stylesnap` 基线陈旧（见 261021(五) 条目）；② **移动端 `mobile-snap` 基线同样陈旧**：master 构建即 1816→1768（−48），与本批无关；合并后用整份 6 态重烤（**别用 `--states` 覆盖基线**）。
-- **合并**：`feat/desktop-vendor-css-layer` 以 **FF** 合入 `master`（`master` = `98e9278e`，含 `0d0d8e5a` 的 master 合并 + A/B + C/D）；合并后在主树重跑门禁全绿（tsc 0 · 337 文件 / 2448 例 · 双端构建 · ui-metrics / check:core / check:mobileui / check:bundle / `git diff --check` ✓）。**origin/master 未推送**。
+- **合并**：`feat/desktop-vendor-css-layer` 以 **FF** 合入 `master`（`master` = `98e9278e`，含 `0d0d8e5a` 的 master 合并 + A/B + C/D）；合并后在主树重跑门禁全绿（tsc 0 · 337 文件 / 2448 例 · 双端构建 · ui-metrics / check:core / check:mobileui / check:bundle / `git diff --check` ✓）。**已推送 `origin/master`（`2845c8bf`）**。
 - **状态**：已合并 master；worktree `.../vendor-css-layer` 已删除、`feat/desktop-vendor-css-layer` 已删（合入即删，符合 AGENTS §1）；对拍快照保留在 `.css-audit/snap/vendor-css-layer-261021/`。主树 `lake-notes-electron` 只多出本批改动。
 
 ### 261022(二) · 长按小记入口零等待启动（capture 无 logo / 普通启动保留 logo）· **已提交 `c21d3adc`、已推送 master**
