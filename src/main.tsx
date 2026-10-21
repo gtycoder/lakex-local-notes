@@ -13,6 +13,10 @@ applyTheme(loadSettings().theme);
 // 开发期字体试用切换器（P3：试用后定默认；不进设置项、不落盘、仅 dev）
 if (import.meta.env.DEV) void import("./lib/fontTrial").then((m) => m.installFontTrial());
 
+// 开发期「未分层全局 CSS」探针（261021）：第三方 CSS 若绕过 @layer 进文档，控制台立刻可见；
+// 判据与产物审计共用 src/lib/cssLayerScan.ts。e2e 可调 window.__cssLayerProbe() 取命中。
+if (import.meta.env.DEV) void import("./lib/cssLayerProbe").then((m) => m.installCssLayerProbe());
+
 // 必须在编辑器创建前安装：拦截粘贴时对 text/html 的读取（原生 paste 的 DataTransfer 只读）
 installPasteInterceptor();
 

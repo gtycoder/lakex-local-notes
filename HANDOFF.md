@@ -35,7 +35,22 @@
 - **验证**：HMR 后 dev 页面已无未分层内核表、body 字体回 MiSans；同结构合成节点实测 × 回到右上（header 1–999、× 955–979、`margin-left:864px`）；
   产物只剩 `index-*.css` 内含内核 CSS（在 @layer 内），`QuickNoteKernelPreview-*.css` 已消失。
 - **门禁**：tsc 0 · 全库 vitest **326 文件 / 2355 通过（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle（含新审计）✓ · `git diff --check` ✓。
-- **状态**：未提交，待用户验收。
+- **状态**：已提交 `a804df67`（分支 `feat/desktop-vendor-css-layer`，**未合并 master**）；主树已还原（并行安卓会话在途，别在主树里验这批）。
+
+### 261021(五) · 结构护栏：第三方 CSS 自动入 @layer vendor + dev 运行时探针 · **分支 `feat/desktop-vendor-css-layer`（未合并）**
+
+> 承接 261021(四)：用户点单"1（结构性根治）+ 2（运行时探针）"，并明确**开分支做**（主树还有安卓编辑会话在途）。
+> 工作树 = `/Users/admin/file/local-lake/lake-notes-electron-worktrees/vendor-css-layer`，分支基于 master + (四) 的提交。
+
+- **① 第三方 CSS 自动入层（构建兜底）**：新增 `scripts/vendorCssLayer.ts`（Vite 插件，`enforce:"pre"`）——凡 **JS import 的第三方 CSS**（`node_modules/`、`vendor/`）自动包 `@layer vendor { … }`；`src/styles/index.css` 层序改为 **`@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y`**（vendor 最底）。两个刻意例外：内核 CSS 保持 `layer(legacy)`（视觉基线在该层、由入口 CSS `@import` 引入；插件按路径跳过）；`src/**` 自有 CSS 不动（作用域类名 + 层围栏管）。
+  - 实测（构建产物）：`UniverSheetEditor-*.css` 现在以 `@layer vendor{` 开头；内核 CSS 仍只在 `index-*.css` 的 `legacy` 层内（无嵌套重复层，脚本核对）。
+- **② dev 运行时探针**：`src/lib/cssLayerProbe.ts`（仅 `import.meta.env.DEV`，见 `src/main.tsx`）——启动后 + 懒 chunk 注入后扫 `document.styleSheets` 里的 `<style>` 文本，命中「未分层 + 裸标签 + reset」即 `console.warn` 并给修法；`window.__cssLayerProbe()` 返回命中列表（空 = 干净），供 e2e/手工断言。
+- **③ 判据单一来源**：`src/lib/cssLayerScan.ts`；产物审计脚本由 Node 24 直接 import 该 `.ts`（类型擦除运行），dev 探针同一实现。
+- **护栏**：`src/lib/cssLayerScan.test.ts`（7 例：分层忽略 / antd 现场形态 / 有 class 的 button 不算 / 声明型 @layer / keyframes / @media）× `src/lib/vendorCssLayer.test.ts`（4 例：node_modules 包层、内核跳过、src 不动、已分层不重复包）。
+- **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 通过（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle（含审计）✓ · `git diff --check` ✓。
+- **视觉对拍（A/B，非全量）**：合成夹具 + 隔离实例（scheme / CDP 9231 / 独立 userData），`plain:1315:light` + `settings:1315:light` 两态：**HEAD 构建 vs 本分支构建逐态 0 差异**（snapdiff 0 态有差）。Univer 编辑面不在现成态集里；静态核对：分层 CSS **无任何 `.univer-*` 选择器**与 vendor 层竞争（只有我们 unlayered 的 `usheetEditor.css` 覆盖它，语义不变）⇒ 预期中性；验收时开一张表格看一眼即可。
+- **顺带发现（与本批无关，登记为待办）**：`scripts/css-audit/baseline/stylesnap.json`（261018 烤）在 261019–261021 批次后**每态 +19 元素**（HEAD 构建同样 2370 vs 基线 2351）⇒ 基线陈旧；合并后应在 master 用**整份 42 态**重烤（按 README「陈旧基线」判据，别用 `--states` 覆盖）。
+- **状态**：分支 `feat/desktop-vendor-css-layer`，**未合并 master**；主树（`lake-notes-electron`）只有并行安卓会话的在途改动（本批未触碰）。
 
 ### 261021(三) · Android 小记搜索（全局搜索合并小记）· **待用户验收**
 
@@ -2013,6 +2028,7 @@
 
 22. ~~**正式包大目录切标签性能（261013）**~~ **最小优化已落地**（见最新§0）：App稳定保存失败回调 + Sidebar本行内容memo；真实默认GPU包同组209→74ms、跨笔记本231→75ms，结构/几何不变，17场景与6态样式门禁通过。递归仍遍历全树，进一步优化仅按新热点证据立项；**不做目录窗口化**，多维表5000×20按#11已正式接入主树。
 
+23. **桌面 stylesnap 基线陈旧（261021 发现）**：`scripts/css-audit/baseline/stylesnap.json` 是 261018 烤的，之后 261019–261021 批次让**每态 +19 元素**（HEAD 构建 2370 vs 基线 2351，恒定增量 ⇒ 全局外壳改动，不是夹具/数据）。与本批无关，但会让定点/全量 stylesnap 一直报假差异。**处理**：在 master 上跑整份 42 态并核对第二轮一致后 `--write-baseline`（**别用 `--states` 覆盖**，会静默毁掉其余态；口径见 `scripts/css-audit/README.md`「陈旧基线」）。
 16. **移动端表格 chrome P4/P5（261021 路线切换后；细化见 §8 261021(三)）**：
     **P4（视觉/交互收口，纯 chrome）**：① 网格视觉对拍（移动端专用 Univer 主题覆盖：表头 #f4f5f5 / 当前行列头 #e7e9e8 / 网格线 #e5e5e5 / 选区填充 #eefbfb + 2px #2f8ef4；桌面不动）；
     ② 二级选择器视觉（颜色板、对齐图标行；冻结/公式行式；字号/边框继续置灰）；③ 保存态方案 A 自动保存「保存中/已保存」轻指示（方案 B 显式保存按钮待拍板）；

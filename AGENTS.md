@@ -44,7 +44,7 @@ LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + bet
 14. **桌面 UI = 自有设计系统**（规格在 `DESIGN.md` + `.impeccable/design.json`）：
     - **令牌是唯一来源**：颜色/圆角/间距/字号/动效只用 `--lake-*`，定义在 `src/styles/themes/*`；**颜色字面量只允许出现在 themes/**。字号一律 `--lake-font-size-*`（离档值向上取档；要整体抬一档就改 `themes/base.css` 的令牌值）。
     - **同一个交互语义，全仓只能有一套视觉与几何**：改前先 grep 复用；一旦又写一套（新类名/近似几何/另一套间距）**先合并到单一来源**。权威单一来源：行/菜单/图标钮/输入/页签/省略 = `kit.css` 的 `ln-*`（`.ln-row.is-selected` · `.ln-menu__item` · `.ln-iconbtn` · `.ln-tabs`（横向页签唯一）· `.ln-input__field` · `.ln-ellipsis` · `.ln-imgfill` · `.ln-tip`）；浮层表面 = `components/ui/Overlay.tsx` 的 `.ln-dialog/.ln-menu/.ln-popover`（**不要手写 createPortal**）；浮层定位 = `usePopoverPosition` + `topMenuPosition.placeVertical`（**禁止估算高度自己夹**）；分栏分隔条 = `components/ui/SplitHandle.tsx`；附件/图片展示 = `AttachmentChipList` + `FileKindIcon`/`fileKindOf()`；表格与多维表「添加」= `.bt-add-round`；Markdown = `components/ui/markdown/MarkdownView.tsx`；AI 正文 = `features/ai/AiMessageBody.tsx`、AI 结果落库 = `selectionToolbar/aiResultOps.ts`、AI 附件解析 = `electron/ai/aiContentResolver.ts`（跨 IPC 只传 `{noteId,filename}` 引用，字节只在主进程）、AI 消息块模型 = `core/aiProviders.ts`；应用内选色 = `core/colorPalette.ts`（最近使用按入口分桶；Lake 编辑器走 `LakeColorBoard` 适配器）。**判定数据只认** `scripts/css-audit/audit-lookalike.mjs` 与 `audit-primitives.mjs` + 实机几何。**两条已结案、别再立项**：面包屑链接 `.protyle-breadcrumb__item` 与小记列表行的主区按钮 `.quick-note-index-main` 都是**行内可点击文本条目**，**不并入** `.ln-row`/`.ln-input`。
-    - **层序即优先级**：`@layer legacy, tokens, reset, kit, shell, feature, overlay, a11y`；新样式写进对应层即可压过旧样式，**不靠特异性/!important 取胜**。`!important` **桌面守 11 条允许清单**（`scripts/ui-metrics.mjs` 的 `IMPORTANT_ALLOWLIST`，逐条写明"压谁"；清单外新增直接失败、只许降；移动端 19 条棘轮）。**不是"一点不能用"**（用户 261016 定）：唯一例外仍是"要压内核/第三方写进 element 的 inline style"或"要压 legacy 的 `!important`"，且必须写理由。
+    - **层序即优先级**：`@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y`；新样式写进对应层即可压过旧样式，**不靠特异性/!important 取胜**。**`vendor` 层由构建自动填充**（`scripts/vendorCssLayer.ts` 把 JS import 的第三方 CSS 包进该层，排最底），**不要手写规则进 vendor**。`!important` **桌面守 11 条允许清单**（`scripts/ui-metrics.mjs` 的 `IMPORTANT_ALLOWLIST`，逐条写明"压谁"；清单外新增直接失败、只许降；移动端 19 条棘轮）。**不是"一点不能用"**（用户 261016 定）：唯一例外仍是"要压内核/第三方写进 element 的 inline style"或"要压 legacy 的 `!important`"，且必须写理由。
     - **改落点**：找到根位置**就地改**，禁止一层层套覆盖；组件里不写 `style={{}}`；不要用 emoji/系统字形当图标（图标只有 lucide，描边 1.75）。
     - **两条护栏**（改样式必跑）：`src/styles/cssLayers.test.ts`（逐文件声明数/重复组只许降）+ `node scripts/ui-metrics.mjs`（b3 引用 0 / 非主题颜色 0 / 字号字面量 0 / !important 逐条对允许清单 / 文字色误用裸 accent 0 / 跨文件重复组只许降 / 入口 b3 import 0）。
     - **文字色阶口径**：`--lake-text-*` 按「实际会铺到的最浅/最深表面」标定（text-3 浅/暖 `#5f6874`、深 `#9398a1`；text-4 是**有意的 3:1 档，不要提亮**）。**文字一律用 `--lake-accent-text`**；`--lake-accent` 只做图形/边框/焦点环/底纹。
@@ -121,6 +121,7 @@ node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && n
 # 起 Electron：env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9222 .
 # 多端：LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 …（启动前临时给 vite.config.ts 的 electron 入口加 onstart: () => {}，结束必须还原）
 node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对象查看
+# dev 控制台：window.__cssLayerProbe() 取「未分层全局 CSS」命中（空数组 = 干净）；命中会自动 console.warn
 ```
 
 ## 7. 踩坑记录
@@ -153,7 +154,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 20. **容器级手势别用 `setPointerCapture`**：捕获会把 `mousedown/mouseup` 与合成的 `click` **目标重定向到捕获元素** ⇒ 子按钮 `onClick` 全失效（现象 = "点了没反应"，不报错、DOM 正常）。改挂 **window** 的 move/up/cancel 并在抬手/卸载时摘掉；长按过的那一次要**吞掉随后的 click**，短按语义留给条目自己。
 
 ### 壳层 / 渲染
-- **JS import 的 CSS 一定未分层**（261021）：我们的设计系统靠 `@layer legacy, tokens, kit, shell, feature, overlay, a11y` 取胜，但**未分层普通声明压过所有分层声明**（与特异性无关）。所以：第三方/全局 CSS 只能由 `styles/index.css` 以 `layer(...)` 引入；组件/懒 chunk 只许 import 自己作用域内的 CSS，且**内部不得出现裸标签选择器**（`body` / `button` / `input` / `*` …）—— 否则一旦进包就是"一行 import 改全站"。判定：源码侧 `cssLayers.test.ts`，产物侧 `scripts/css-audit/audit-vendor-css.mjs`。
+- **JS import 的 CSS 一定未分层**（261021）：设计系统靠 `@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y` 取胜，但**未分层普通声明压过所有分层声明**（与特异性无关）。三层防线：① **构建兜底** `scripts/vendorCssLayer.ts`（Vite 插件）把 JS import 的第三方 CSS 自动包进 `@layer vendor`（最底层；内核 CSS 例外，保持入口的 `layer(legacy)`）；② **dev 运行时探针** `src/lib/cssLayerProbe.ts`（仅 DEV，命中 console.warn；`window.__cssLayerProbe()` 取命中）；③ **产物审计** `scripts/css-audit/audit-vendor-css.mjs`（挂 `check:bundle`）+ 源码侧 `cssLayers.test.ts`。组件/懒 chunk 仍只许 import 自己作用域内的 CSS，且**内部不得出现裸标签选择器**（`body`/`button`/`input`/`*`…）。判据实现单一来源 = `src/lib/cssLayerScan.ts`。
 - **`transform` / `will-change: transform` 的祖先会把 `position: fixed` 的包含块改成它自己**（261019 踩到）：路由转场层常驻 transform ⇒ 编辑 dock 的 `.med-panel` / `.med-toolbar` 按 layer 盒（高度 = `--mb-app-h`，面板态只有 562）贴底，面板展开停在键盘上方、下方留空白。**转场播完必须撤掉 transform + will-change**（`is-settled`，见 `useRouteTransition`）；新增会位移的壳层时先确认它没有依赖视口的 fixed 子元素。
 
 ### 装置 / 探针

@@ -10,59 +10,17 @@
  * 判据（只认构建产物，不认源码怎么写；源码侧另有 src/styles/cssLayers.test.ts）：
  *   ① dist/assets/*.css 里出现「未分层 + 裸标签选择器 + reset 类属性」的规则；
  *   ② 内核 antd banner 出现在一个完全没有 @layer 的 CSS 文件里。
+ * 扫描实现与 dev 运行时探针共用 src/lib/cssLayerScan.ts（Node 24 直接 import .ts）——
+ * 判据只写一份，避免"产物守得住、dev 探针却是另一套口径"。
  * 用法：node scripts/css-audit/audit-vendor-css.mjs（npm run check:bundle 已串联）
  */
 import fs from "node:fs";
 import path from "node:path";
+import { scanUnlayeredGlobalRules as scanUnlayeredGlobal } from "../../src/lib/cssLayerScan.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const ASSETS = path.join(ROOT, "dist", "assets");
 
-const RESET_TAGS = new Set([
-  "html", "body", "*", "button", "input", "select", "optgroup", "textarea",
-  "h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "dl", "dt", "dd", "li",
-  "a", "img", "table", "thead", "tbody", "tr", "td", "th", "form", "label",
-  "fieldset", "legend", "hr", "pre", "code", "blockquote", "figure", "figcaption",
-]);
-const RESET_PROPS = /(?:^|;)\s*(?:margin(?:-\w+)?|padding(?:-\w+)?|font(?:-\w+)?|line-height|box-sizing|color)\s*:/i;
-
-/** 逐规则扫描：返回「未分层 + 裸标签选择器 + reset 属性」的命中。 */
-function scanUnlayeredGlobal(raw) {
-  const css = raw.replace(/\/\*[\s\S]*?\*\//g, "");
-  const hits = [];
-  let buf = "";
-  const stack = [];
-  for (let i = 0; i < css.length; i += 1) {
-    const ch = css[i];
-    if (ch === "{") {
-      // 声明型 at-rule（@layer a,b; / @import …;）会以 ";" 收尾，取最后一个分号之后才是选择器
-      const prelude = buf.slice(buf.lastIndexOf(";") + 1).trim().replace(/\s+/g, " ");
-      buf = "";
-      const inLayer = stack.some((f) => f.kind === "layer");
-      if (/^@layer\b/i.test(prelude)) stack.push({ kind: "layer" });
-      else if (prelude.startsWith("@")) stack.push({ kind: "at" });
-      else stack.push({ kind: "rule", sel: prelude, inLayer, body: "" });
-      continue;
-    }
-    if (ch === "}") {
-      const frame = stack.pop();
-      if (frame && frame.kind === "rule" && !frame.inLayer && RESET_PROPS.test(frame.body)) {
-        for (const rawSel of frame.sel.split(",")) {
-          const sel = rawSel.trim();
-          if (!sel || sel.startsWith(":root") || sel.includes("%")) continue;
-          const head = sel.split(/[\s>+~]+/)[0];
-          if (RESET_TAGS.has(head)) hits.push(sel.replace(/\s+/g, " ").slice(0, 120));
-        }
-      }
-      buf = "";
-      continue;
-    }
-    const top = stack[stack.length - 1];
-    if (top && top.kind === "rule") top.body += ch;
-    else buf += ch;
-  }
-  return hits;
-}
 
 if (!fs.existsSync(ASSETS)) {
   console.error("[audit-vendor-css] dist/assets 不存在 —— 先跑一次 npx vite build（本检查只认构建产物）");

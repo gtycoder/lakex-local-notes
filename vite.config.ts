@@ -3,6 +3,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron";
 import { lakexAlipayLocal, lakexGwUrlLocalPostcss } from "./scripts/lakexLocalize";
+import { vendorCssLayerPlugin } from "./scripts/vendorCssLayer";
 
 /** V5 §5.6 全本地化：lakex 编辑器 CSS/JS 内 gw.alipayobjects.com 资源（字体/图标 SVG/动态加载脚本）
  * 已本地镜像：public/vendor/lakex/alipay/（字体/图标）+ vendor/cdn/（katex/CodeMirror，复用现有本地）。
@@ -36,6 +37,8 @@ function isMainProcessExternal(id: string): boolean {
 export default defineConfig({
   plugins: [
     lakexAlipayLocal({ csp: (mode) => (mode === "development" ? DEV_CSP : PROD_CSP), name: "lakex-alipay-local" }),
+    // 第三方 JS import 的 CSS 自动入 @layer vendor（261021 架构护栏；见 scripts/vendorCssLayer.ts）
+    vendorCssLayerPlugin(),
     react(),
     electron([
       {
