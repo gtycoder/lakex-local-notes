@@ -5,6 +5,7 @@ import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import type { NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { DraftJournalEntry } from "../lib/types";
+import { chooseColdStartNoteId } from "../core/coldStartNote.js";
 
 export interface UseBootstrapOptions {
   setWorkspace: Dispatch<SetStateAction<WorkspaceSnapshot | null>>;
@@ -45,7 +46,8 @@ export function useBootstrap({
         void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch((error) => reportNativeActionError("删除孤儿草稿", error))));
       }).catch((error) => reportNativeActionError("启动读取", error));
       setTreeNodes(await native.listTreeNodes());
-      const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
+      // 冷启动落点：Lake 文档优先、其次多维表（用户 261022 定）——别把首开成本高的表格/画板钉在启动交互上。
+      const id = chooseColdStartNoteId(snapshot.notes, snapshot.lastOpenedNoteId);
       if (id) {
         const opened = await openNote(id);
         if (!opened) {

@@ -44,6 +44,19 @@
     `.usheet-editor div:has(> [data-u-comp="workbench-skeleton-content"]) { display: none; }` 隐藏（只作用 usheet 宿主）；
     层围栏基线 `usheetEditor.css` 37 → 38。实例复测：点击后 ~374ms 直接看到**完整表格**（此前该时刻是灰遮罩骨架）。
   - 剩余：实例 `createUniver`（全量 preset）初始化本身仍是几百 ms，属内核启动成本；若还要再快，只能做「隐藏预热实例」或裁 preset（需单独立项）。
+- **冷启动落点改为「Lake 文档优先、其次多维表」（用户 261022 定）**：`useBootstrap` 不再直接打开 `lastOpenedNoteId`，
+  改由 `src/core/coldStartNote.ts` 的 `chooseColdStartNoteId()` 决定：上次是 Lake 文档 → 直接落它；否则落最近更新的 Lake 文档；
+  再否则最近更新的多维表；都没有才退回上次打开/最近更新（宁可慢也不让用户找不到文档）。**不把首开成本高的表格/画板钉在启动交互上**。
+  单测 `coldStartNote.test.ts` 5 例。
+- **表格「隐藏预热画布」尝试（261022 #1）· 结论：不可行，已回退**：
+  - 思路：空闲时先建好 Univer 实例（隐藏容器）→ 首次打开把容器搬进真实宿主 + resize。
+  - 实测：① 不挂 workbook 时 Univer **不创建 render unit/canvas**（搬过去也永远空白）；② 挂占位 workbook 让 canvas 先建出来，
+    采用时 `disposeUnit` 占位再建真实 workbook ⇒ 出现「先显示真实表、~1s 后又被空表盖掉」的错乱，且点击→画布反而从 ~374ms 变成 ~1035ms（更慢）。
+  - 原因：render unit / canvas 与 workbook 生命周期绑定，跨实例搬 DOM 在当前 Univer 1.0.3 架构里没有稳定支撑点。**不要重复这条路**；
+    要再压首开只能走"关标签后 LRU 保留实例"或上游能力。
+  - 保留：把 createUniver 配置抽成 `features/usheet/usheetUniverFactory.ts`（编辑器单一入口）、`lakeFontFamily` 抽到 `usheetFont.ts`（无行为变化）。
+- **表格打开 CPU profile（261022 #2）**：`Profiler` 采样 2747 帧（250µs）—— idle 1821、program 158、`getBoundingClientRect` 66，
+  其余为 canvas `drawImage/setTransform` 与 Univer 内部（`_positionInput`/`_buildMenuSchema`）。**没有应用侧热点**，React 挂载不是瓶颈 ⇒ #2 不做改动。
 - **桌面表格排序弹窗卡死（用户 261022 报「排序弹窗无法点击、会导致整个 app 卡死」）· 已修（待复验）**：
   - 复现：隔离实例（`$TMPDIR/lake-sortfix` / CDP 9237）建表贴数据 → 数据页签 → 排序 → 「自定义排序」→ 对话框出现后**整窗点不动**；`sample` 实测渲染进程 **120% CPU**、CDP 也不响应（真死循环，不是遮罩挡点击）。
   - 根因：261009 的 Univer 补丁把 floating 层 portal 容器挂进**实例宿主**（当初为防黄叹号逃出标签宿主）⇒ 设计系统 **Dialog（含遮罩）也被 portal 进宿主**，与宿主 `overflow:hidden` + fixed 遮罩组合触发 measure/reflow 死循环。把容器放回 `document.body`（内核原行为）后同一对话框可正常点击、停留 6s+ 无卡死。
