@@ -229,6 +229,35 @@ export function MultiTabEditor({
   }, [splitActive, splitPair]);
   /** 本标签是否显示：分屏组激活时两栏都显示（右栏非焦点由 data-pane-visible 放行）；否则只有焦点标签。 */
   const paneVisible = useCallback((noteId: string) => (splitActive && splitPair ? paneOf(noteId) != null : noteId === activeNoteId), [splitActive, splitPair, paneOf, activeNoteId]);
+  /**
+   * 内核 floating 层（表格黄叹号 / 菜单 / 对话框）被补丁 portal 到 `document.body`。
+   * 为什么在 body：放在实例宿主里会让「自定义排序」对话框进入 measure/reflow 死循环（渲染进程 100%+ CPU、
+   * 整窗点不动，用户 261022 报）。放回 body 的代价 = 261009 的「黄叹号逃出标签宿主」会回来 ⇒
+   * 这里按**当前可见标签**把其它实例的浮层收起（补丁给容器打了 `data-lake-owner="univer-sheet-<noteId>"`）。
+   * 新浮层可能在任意时刻被创建 ⇒ 用 MutationObserver 兜底，而不是只在切 tab 时算一次。
+   */
+  useEffect(() => {
+    const visibleOwners = new Set<string>();
+    const addOwner = (noteId: string | null | undefined): void => {
+      if (noteId) visibleOwners.add("univer-sheet-" + noteId);
+    };
+    addOwner(activeNoteId);
+    if (splitActive && splitPair) {
+      addOwner(splitPair.left);
+      addOwner(splitPair.right);
+    }
+    const syncFloating = (): void => {
+      for (const el of document.querySelectorAll<HTMLElement>("[data-lake-univer-floating]")) {
+        const owner = el.dataset.lakeOwner ?? "";
+        // 没有 owner（理论上只在实例尚未拿到 id 时出现）时保持可见，避免把正常浮层藏掉。
+        el.style.display = owner && !visibleOwners.has(owner) ? "none" : "";
+      }
+    };
+    syncFloating();
+    const observer = new MutationObserver(syncFloating);
+    observer.observe(document.body, { childList: true });
+    return () => observer.disconnect();
+  }, [activeNoteId, splitActive, splitPair]);
   const measureSplitLeft = useCallback(() => {
     const first = panelsRef.current?.querySelector<HTMLElement>('[data-pane="left"]');
     return first ? first.getBoundingClientRect().width : 320;

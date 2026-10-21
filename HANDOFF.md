@@ -35,6 +35,12 @@
 - **桌面验收（隔离实例 `$TMPDIR/lake-accept-p5` / CDP 9237）**：新建表格 → ribbon 出现「数据」页签；工具栏实测 `data-u-command="sheet.command.smart-toggle-filter"` + `aria-label="排序"`。
 - **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle ✓ · diff-check ✓ · **内核探针 9/12 通过、3 条 advisory、exit 0**（新增第 6 条「排序/筛选入口出现在数据页签」PASS）。`mobile/usheet/usheet-chrome.css` 基线 216 → **221**（+5 = 小数位按钮）。
 - **两条必须记住的后果**（详见 `docs/USHEET-UPGRADE.md` §4.4）：① 筛选是 plugin resource，**首次保存会多一条空壳**（一次 hash 变化/一次上传）；② `resources` 是覆盖写 ⇒ **两端都得装 filter 数据插件**、且注册顺序一致，否则一端保存会静默抹掉筛选/造成假冲突。
+- **桌面表格排序弹窗卡死（用户 261022 报「排序弹窗无法点击、会导致整个 app 卡死」）· 已修（待复验）**：
+  - 复现：隔离实例（`$TMPDIR/lake-sortfix` / CDP 9237）建表贴数据 → 数据页签 → 排序 → 「自定义排序」→ 对话框出现后**整窗点不动**；`sample` 实测渲染进程 **120% CPU**、CDP 也不响应（真死循环，不是遮罩挡点击）。
+  - 根因：261009 的 Univer 补丁把 floating 层 portal 容器挂进**实例宿主**（当初为防黄叹号逃出标签宿主）⇒ 设计系统 **Dialog（含遮罩）也被 portal 进宿主**，与宿主 `overflow:hidden` + fixed 遮罩组合触发 measure/reflow 死循环。把容器放回 `document.body`（内核原行为）后同一对话框可正常点击、停留 6s+ 无卡死。
+  - 修法：`patches/@univerjs+ui+1.0.3.patch` 改为**容器仍挂 `document.body`** + 打 `data-lake-univer-floating` / `data-lake-owner="univer-sheet-<noteId>"` 两个标记；应用侧 `src/features/editor/MultiTabEditor.tsx` 按**当前可见标签**把其它实例的容器 `display:none`（MutationObserver 兜底新容器）⇒ 261009 的黄叹号仍然不会逃逸。
+  - 同批更新：`usheetKernelContract.ts` 的 `UNIVER_PATCH_HOOKS`（契约改成 body + owner）、`univerContract.test.ts` 护栏③（禁 `mountContainer.appendChild(portalContainer)`、要求 owner + 应用侧按 owner 收起）、`scripts/usheet-kernel-probes.mjs` 两条探针（容器在 body 且带 owner；切走后 `display:none`）、`docs/USHEET-UPGRADE.md` §4.7。
+  - 设备/实例验证：自定义排序 → 提醒对话框 → 确认 → 「所选区域仅有一行，无法排序」提示全程可点、无卡死；切到其他标签后 `[data-lake-univer-floating]` 实测 `display:none`（宽度 0）。
 - **冷启动慢（用户 261021 报「感觉加了启动比以前慢」）· 已定位并修（待复验）**：**不是动画强制播放**（代码无最短展示，overlay 只等 `phase=ready`）。加了临时埋点后实测冷启动（页面时钟）：
   - 首次安装后：effect-start 2.34s → migrate +0.57s → SQLite open +1.12s → **schema +2.60s** → reconcile +0.09s → refreshAll +0.07s ≈ **6.8s** 才真首页；
   - 根因：`applyMobileSchema` 是 **30+ 条独立 SQL**，每条走一次 Capacitor 桥往返（设备实测单次约 68ms）⇒ **每次冷启动都重放建表/索引**，固定多花 ~2.4s。

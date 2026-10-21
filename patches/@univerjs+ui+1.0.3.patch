@@ -1,31 +1,33 @@
 diff --git a/node_modules/@univerjs/ui/lib/es/index.js b/node_modules/@univerjs/ui/lib/es/index.js
-index 9d289eb..15ba24e 100644
+index 9d289eb..6e9029e 100644
 --- a/node_modules/@univerjs/ui/lib/es/index.js
 +++ b/node_modules/@univerjs/ui/lib/es/index.js
-@@ -6768,9 +6768,12 @@ function DesktopWorkbenchContent(props) {
+@@ -6768,9 +6768,14 @@ function DesktopWorkbenchContent(props) {
  	const direction = useObservable(localeService.direction$, localeService.getDirection());
  	const portalContainer = useMemo(() => document.createElement("div"), []);
  	useEffect(() => {
--		document.body.appendChild(portalContainer);
-+		// [Lake Notes patch] floating 容器必须留在实例宿主内：body 级 portal 会逃出标签宿主，
-+		// keep-alive 的 visibility/opacity 隐藏对它无效、切文档后浮层残留。见 patches/@univerjs+ui+1.0.3.patch
++		// [Lake Notes patch] floating 容器留在 document.body（= 内核原行为）：挂回实例宿主会让
++		// 设计系统 Dialog/菜单与宿主 overflow:hidden 组合触发 measure/reflow 死循环（261022 排序对话框）。
++		// 改由 marker + owner 标记，应用侧（MultiTabEditor）按可见标签收起 ⇒ 黄叹号仍不会逃出标签宿主。
 +		portalContainer.setAttribute("data-lake-univer-floating", "");
-+		mountContainer.appendChild(portalContainer);
++		portalContainer.setAttribute("data-lake-owner", mountContainer.id || "");
+ 		document.body.appendChild(portalContainer);
  		return () => {
 -			document.body.removeChild(portalContainer);
 +			portalContainer.remove();
  		};
  	}, [mountContainer, portalContainer]);
  	useEffect(() => {
-@@ -25618,9 +25621,12 @@ function MobileWorkbench(props) {
+@@ -25618,9 +25623,14 @@ function MobileWorkbench(props) {
  		};
  	}, [themeService.currentTheme$, themeSwitcherService]);
  	useEffect(() => {
--		document.body.appendChild(portalContainer);
-+		// [Lake Notes patch] floating 容器必须留在实例宿主内：body 级 portal 会逃出标签宿主，
-+		// keep-alive 的 visibility/opacity 隐藏对它无效、切文档后浮层残留。见 patches/@univerjs+ui+1.0.3.patch
++		// [Lake Notes patch] floating 容器留在 document.body（= 内核原行为）：挂回实例宿主会让
++		// 设计系统 Dialog/菜单与宿主 overflow:hidden 组合触发 measure/reflow 死循环（261022 排序对话框）。
++		// 改由 marker + owner 标记，应用侧（MultiTabEditor）按可见标签收起 ⇒ 黄叹号仍不会逃出标签宿主。
 +		portalContainer.setAttribute("data-lake-univer-floating", "");
-+		mountContainer.appendChild(portalContainer);
++		portalContainer.setAttribute("data-lake-owner", mountContainer.id || "");
+ 		document.body.appendChild(portalContainer);
  		return () => {
 -			document.body.removeChild(portalContainer);
 +			portalContainer.remove();

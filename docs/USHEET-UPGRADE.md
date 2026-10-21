@@ -171,7 +171,7 @@ node scripts/check-bundle-budget.mjs
 
 | 改了什么 | 为什么 | 失效表现 | 谁守它 |
 | --- | --- | --- | --- |
-| `DesktopWorkbenchContent` / `MobileWorkbench` 里 floating 层的 portal 容器：`document.body.appendChild(portalContainer)` → `mountContainer.appendChild(portalContainer)`；卸载 `document.body.removeChild(...)` → `portalContainer.remove()`；并加 `data-lake-univer-floating` 标记 | 内核把 floating 层（`CanvasPopup`：cell popup、**CellAlert 警告徽标（黄叹号）**、下拉/日期/颜色/选区浮层）**无条件挂到 `document.body`** ⇒ 它不在标签宿主里：我们 keep-alive 的 `opacity/visibility` 隐藏对它无效，而内核自己"看不见就隐藏"的判据读的是**画布 rect**（`visibility:hidden` 的元素 rect 仍有效）⇒ 切文档后浮层残留、层级高于内容（用户 261009 报：黄叹号盖住一切、切文档也盖不住） | `document.body` 下重新出现该容器 ⇒ 浮层又能逃出标签宿主 | `univerContract.test.ts`（护栏③：补丁形态）+ `scripts/usheet-kernel-probes.mjs`（容器在宿主内 / 切走后不可见） |
+| `DesktopWorkbenchContent` / `MobileWorkbench` 里 floating 层的 portal 容器：仍 `document.body.appendChild(portalContainer)`（= 内核原行为），但补 `data-lake-univer-floating` + `data-lake-owner="<mountContainer.id>"` 两个标记；卸载 `document.body.removeChild(...)` → `portalContainer.remove()` | 261009：floating 容器在 body ⇒ keep-alive 的 `opacity/visibility` 隐藏对它无效 ⇒ 黄叹号切文档后残留（曾把容器挂进实例宿主修掉）。**261022 翻案（用户报「排序弹窗点不动、整个 app 卡死」）**：挂进宿主后设计系统 Dialog 也被 portal 进宿主，`overflow:hidden` 宿主 + fixed 遮罩让「自定义排序」进入 measure/reflow 死循环（渲染进程 100%+ CPU）。⇒ 容器回 body（对话框/菜单不再死循环），改由**应用侧** `MultiTabEditor` 按当前可见标签把其它实例容器 `display:none`（MutationObserver 兜底），黄叹号仍不逃逸 | ① 产物里重新出现 `mountContainer.appendChild(portalContainer)` ⇒ 死循环回归；② 没有 `data-lake-owner` 或应用侧没按 owner 收起 ⇒ 261009 黄叹号逃逸回归 | `univerContract.test.ts`（护栏③：补丁形态 + `MultiTabEditor` 按 owner 收起）+ `scripts/usheet-kernel-probes.mjs`（容器在 body 且带 owner / 切走后 `display:none`） |
 
 - **只改 `lib/es/index.js`**（`module` / `exports.import` 入口，app / 移动端 / vitest 都走它）；`lib/cjs` 未改（当前没有 CJS 消费者）。
 - **重生成**：改完 node_modules 后执行 `npx patch-package @univerjs/ui --patch-dir patches`，然后跑探针 + 全量门禁。
@@ -195,12 +195,11 @@ node scripts/check-bundle-budget.mjs
 | 事件/钩子语义变化 ⇒ 粘贴落点变 | 探针第 5 条会红 | 复读 §5.25 重新定位收口点 |
 | 出现两份 `@univerjs/*` | `univerContract.test.ts` 会红 | 对齐版本 / 检查 lockfile |
 | 新版本要求新的 peer 或 polyfill | 构建期报错 | 按 release notes 补 |
-| **我们的 Univer 补丁被升级冲掉**（floating 层又逃出标签宿主） | 护栏③（静态）+ 探针（容器在不在宿主内、切走后可不可见） | 重生成补丁（`npx patch-package @univerjs/ui --patch-dir patches`）或按上游实现删补丁，见 §4.7 |
+| **我们的 Univer 补丁被升级冲掉**（容器被挂回宿主 ⇒ 对话框死循环；或 owner 收起失效 ⇒ 黄叹号逃逸） | 护栏③（静态）+ 探针（容器在 body 且带 owner、切走后 `display:none`） | 重生成补丁（`npx patch-package @univerjs/ui --patch-dir patches`）或按上游实现删补丁，见 §4.7 |
 
 ## 7. 路线图
 
-**已完成（261009 追加）**：内核 floating 层收口 —— `patches/@univerjs+ui+1.0.3.patch` 把 floating 容器挂回实例宿主
-（切文档后黄叹号 / CellAlert / 下拉等浮层不再残留）；配套静态护栏③ + 探针两条（§4.7）。
+**已完成（261009 追加，261022 修订）**：内核 floating 层收口 —— `patches/@univerjs+ui+1.0.3.patch` 给容器加 `data-lake-univer-floating` + `data-lake-owner`，容器**留在 `document.body`**，应用侧（`MultiTabEditor`）按当前可见标签收起其它实例的浮层（切文档后黄叹号 / CellAlert / 下拉等浮层不再残留；**不要挂回实例宿主**——261022 排序对话框死循环）；配套静态护栏③ + 探针两条（§4.7）。
 
 **已完成（261010 批次）**：默认尺寸单一来源（50×16）；挂载失败可见提示；版本精确锁 + 静态护栏；
 运行时探针入库；触点集中到一个文件；粘贴图片默认单元格图；右键「插入单元格图片」；计算条 30px + 状态栏跟随。

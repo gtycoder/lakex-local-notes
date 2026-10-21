@@ -139,33 +139,36 @@ export const USHEET_FOOTER_CONFIG = {
 /**
  * 我们对内核打的补丁（`patches/@univerjs+ui+1.0.3.patch`）——**改行为的最小改动**，不是依赖侧清理。
  *
- * 为什么必须改：内核把 floating 层的 portal 容器**无条件挂到 `document.body`**
- * （`@univerjs/ui` 的 `DesktopWorkbenchContent` / `MobileWorkbench`）。该容器承载
- * `CanvasPopup`（cell popup、**CellAlert 警告徽标（黄叹号）**、下拉/日期/颜色/选区浮层），
- * 因为挂在 body ⇒ **不在标签宿主里**：
- *  ① 我们 keep-alive 的隐藏（`styles/app/tabs.css` 的 `opacity/visibility`，且**刻意保留布局尺寸**）
- *     对它无效；
- *  ② 内核自己"看不见就隐藏"的判据读的是**画布 rect**（`visibility:hidden` 的元素 rect 仍有效）⇒
- *     它认为自己还在屏幕上，继续渲染。
- * 表现（用户 261009 报）：表格里的黄叹号浮在最上层、切到别的文档也盖不住（CellAlert 随选区常驻，
- * 不像下拉那样瞬态，所以只有它长期可见）。
+ * 历史（261009）：内核把 floating 层的 portal 容器**无条件挂到 `document.body`**，该容器承载
+ * `CanvasPopup`（cell popup、**CellAlert 黄叹号**、下拉/日期/颜色/选区浮层）。当时为了不让黄叹号
+ * 逃出标签宿主，我们把容器改挂到实例自己的 mountContainer。
  *
- * 补丁做三件事：把容器改挂到实例自己的 mountContainer（`#univer-sheet-<noteId>`）、打
- * `data-lake-univer-floating` 标记供运行时探针定位、卸载改用 `remove()`（不再假定父节点是 body）。
+ * 261022 翻案（用户报「排序弹窗点不动、整个 app 卡死」）：容器挂进实例宿主后，**设计系统 Dialog
+ * 也被 portal 进宿主**，`overflow:hidden` 宿主 + fixed 遮罩让「自定义排序」进入 measure/reflow
+ * 死循环（渲染进程 100%+ CPU ⇒ 整窗点不动）。因此改为：**容器仍挂 `document.body`**
+ * （= 内核原始行为，对话框/菜单不再死循环），再用两条守住 261009：
+ *  ① 补丁给容器打 `data-lake-univer-floating` + `data-lake-owner="univer-sheet-<noteId>"`；
+ *  ② 应用侧 `MultiTabEditor` 按**当前可见标签**把其它实例的容器 `display:none`
+ *     （新容器由 MutationObserver 兜底）。卸载仍用 `remove()`（不假定父节点是 body）。
  *
- * 失效表现：`document.body` 下重新出现内核 floating 容器 ⇒ 浮层又能逃出标签宿主。
- * 守它的两处：`univerContract.test.ts`（静态：补丁形态在不在）与 `scripts/usheet-kernel-probes.mjs`
- * （运行时：容器在不在宿主内 + 切走后是否不可见）。升级动作见 `docs/USHEET-UPGRADE.md` §4.7。
+ * 失效表现：① 产物里重新出现 `mountContainer.appendChild(portalContainer)` ⇒ 对话框死循环回归；
+ * ② 产物里没有 `data-lake-owner` / 应用侧没按 owner 收起 ⇒ 261009 的黄叹号逃逸回归。
+ * 守它的两处：`univerContract.test.ts`（静态）与 `scripts/usheet-kernel-probes.mjs`（运行时）。
+ * 升级动作见 `docs/USHEET-UPGRADE.md` §4.7。
  */
 export const UNIVER_PATCH_HOOKS = {
   /** 补丁文件（仓库内的唯一 Univer 补丁；缺它 = 换机/CI 拿不到修复）。 */
   patchFile: "patches/@univerjs+ui+1.0.3.patch",
-  /** 补丁后**必须存在**：floating 容器挂在实例容器里。 */
-  mountedInHost: "mountContainer.appendChild(portalContainer)",
+  /** 补丁后**必须存在**：容器挂 body（= 内核原行为；挂宿主会让对话框死循环）。 */
+  mountedAtBody: "document.body.appendChild(portalContainer)",
+  /** 补丁后**必须存在**：容器带 owner 标记，应用侧据此按可见标签收起。 */
+  floatingOwner: "data-lake-owner",
   /** 补丁后**必须存在**：卸载用 remove()，不假定父节点是 body。 */
   removedSafely: "portalContainer.remove()",
   /** 补丁加的运行时标记（探针靠它定位容器）。 */
   floatingMarker: "data-lake-univer-floating",
-  /** 补丁要根治的原始写法：**必须不存在**，否则补丁没生效。 */
-  legacyBodyMount: "document.body.appendChild(portalContainer)",
+  /** 已废弃的宿主挂载写法：**必须不存在**，否则 261022 的对话框死循环回归。 */
+  legacyHostMount: "mountContainer.appendChild(portalContainer)",
+  /** 应用侧收起浮层的落点（静态护栏：这段代码必须还在）。 */
+  visibilitySyncFile: "src/features/editor/MultiTabEditor.tsx",
 } as const;

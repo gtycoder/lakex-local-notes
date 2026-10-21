@@ -134,16 +134,22 @@ describe("Univer 补丁仍生效（升级护栏③）", () => {
     ).toBe(true);
   });
 
-  it("floating 容器挂在实例宿主内（@univerjs/ui 补丁没被升级冲掉）", () => {
-    // 补丁前：内核把 floating 层 portal 到 document.body ⇒ 逃出标签宿主，切文档后浮层残留
-    // （用户 261009 报的表格黄叹号，见 usheetKernelContract.ts 的 UNIVER_PATCH_HOOKS 注释）。
+  it("floating 容器挂 body + owner，应用侧按可见标签收起（261022 修对话框死循环）", () => {
+    // 261009：为让黄叹号不逃出标签宿主，曾把 floating 容器挂进实例宿主；
+    // 261022 用户报「排序弹窗点不动、整个 app 卡死」= 设计系统 Dialog 也被 portal 进宿主，
+    // 自定义排序面板进入 measure/reflow 死循环。现契约：容器回 body（对话框不再死循环）
+    // + owner 标记 + 应用侧按当前可见标签收起（黄叹号仍不会逃逸）。
     expect(
-      BUNDLE.includes(UNIVER_PATCH_HOOKS.legacyBodyMount),
-      `@univerjs/ui 又出现「${UNIVER_PATCH_HOOKS.legacyBodyMount}」⇒ 补丁没应用` +
+      BUNDLE.includes(UNIVER_PATCH_HOOKS.legacyHostMount),
+      `@univerjs/ui 又出现「${UNIVER_PATCH_HOOKS.legacyHostMount}」⇒ 261022 的对话框死循环会回归` +
         `（本机安装失败时 patch-package 不会以非零码退出，务必按 ${UNIVER_PATCH_HOOKS.patchFile} / docs/USHEET-UPGRADE.md §4.7 重生成）`,
     ).toBe(false);
-    for (const needle of [UNIVER_PATCH_HOOKS.mountedInHost, UNIVER_PATCH_HOOKS.removedSafely, UNIVER_PATCH_HOOKS.floatingMarker]) {
+    for (const needle of [UNIVER_PATCH_HOOKS.mountedAtBody, UNIVER_PATCH_HOOKS.removedSafely, UNIVER_PATCH_HOOKS.floatingMarker, UNIVER_PATCH_HOOKS.floatingOwner]) {
       expect(BUNDLE.includes(needle), `补丁形态缺失：${needle}`).toBe(true);
+    }
+    const syncSource = readFileSync(`${ROOT}/${UNIVER_PATCH_HOOKS.visibilitySyncFile}`, "utf8");
+    for (const marker of [UNIVER_PATCH_HOOKS.floatingMarker, UNIVER_PATCH_HOOKS.floatingOwner]) {
+      expect(syncSource.includes(marker), `应用侧没按 ${marker} 收起浮层 ⇒ 261009 的黄叹号逃逸会回归`).toBe(true);
     }
   });
 });
