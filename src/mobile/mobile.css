@@ -1085,39 +1085,16 @@ button.mbt-option {
   overflow: hidden;
 }
 .mobile-usheet footer.univer-shrink-0 { display: none; }
+/* 261021 P5 设备实测（用户 261021 报「打字不能看」）：内核的**移动公式栏 = 编辑态输入面**也挂在同一个 <footer> 里。
+ * P3 把 footer 整条隐藏 ⇒ 打字进了隐藏编辑器，屏幕上完全看不到，只有提交后才出现在格子里。
+ * 规则：footer 只在「编辑态」或「查找条存在」时放行；footer 内只显示公式栏/查找条，其余 Univer 部件仍隐藏。 */
+.mobile-usheet footer.univer-shrink-0:has([data-u-comp="mobile-find-replace-bar"]),
+.mobile-usheet.is-editing footer.univer-shrink-0:has([data-u-comp="mobile-formula-bar"]) { display: block; }
+.mobile-usheet footer.univer-shrink-0 > :not([data-u-comp="mobile-formula-bar"]):not([data-u-comp="mobile-find-replace-bar"]) { display: none; }
 .mobile-usheet .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 { display: none; }
 
-/* 公式栏（语雀编辑态同款）：左侧选区地址，右侧显示值；不参与横滑手势（data-prevent-swipe）。 */
-.mobile-usheet-formula {
-  flex: none;
-  display: flex;
-  align-items: stretch;
-  height: 21px;
-  border-bottom: 1px solid var(--lake-border-1);
-  background: var(--lake-bg-window);
-  font-size: var(--lake-font-size-micro);
-}
-.mobile-usheet-formula__ref {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  padding-left: 8px;
-  color: var(--lake-text-2);
-  font-variant-numeric: tabular-nums;
-}
-.mobile-usheet-formula__value {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 16px;
-  overflow: hidden;
-  color: var(--lake-text-1);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* 261021 P5：顶部只读公式栏已删（用户定稿"顶部那条和底部输入栏重复"）。
+ * 编辑态输入面 = 内核移动公式栏（挂在 footer 里，见上方例外规则）；阅读态不再显示地址/显示值。 */
 /* 文档属性（NoteInfoSheet）内容区：与 sheet 头部同一档页面内距。
    261019 用户报「属性页面不适配手机」：此前 .minfo 没有横向内距 ⇒ 标签贴左、数值与按钮贴右，
    看起来像被裁掉（实测 dt.left=0 / dd.right=412，整块贴屏幕边）。这里只补内距，行密度不动。 */

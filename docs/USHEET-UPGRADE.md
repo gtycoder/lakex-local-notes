@@ -22,6 +22,9 @@
 | `@univerjs/sheets-sort-ui` | 1.0.3（**精确锁**） | 排序 **UI**：桌面 = `UniverSheetsSortUIPlugin`（ribbon「数据」页签）/ 移动 = `UniverSheetsSortMobileUIPlugin` |
 | `@univerjs/sheets-filter` | 1.0.3（**精确锁**） | 筛选**数据层**（`sheet.command.set-filter-range` / `set-filter-criteria` / `remove-sheet-filter`） |
 | `@univerjs/sheets-filter-ui` | 1.0.3（**精确锁**） | 筛选 **UI**：桌面 = `UniverSheetsFilterUIPlugin`（ribbon + 列头下拉）/ 移动 = `UniverSheetsFilterMobileUIPlugin`（筛选抽屉） |
+| `@univerjs/find-replace` | 1.0.3（**精确锁**） | 查找替换**基础层**（服务 + 桌面 dialog / 移动 bar）；移动端直接 import `UniverFindReplaceMobileUIPlugin` ⇒ 必须显式声明（别只靠 preset 传递依赖） |
+| `@univerjs/sheets-find-replace` | 1.0.3（**精确锁**） | 查找替换**表格适配器**（`SheetsFindReplaceController` / `sheet.command.replace` / 快捷键 provider）。**缺它插件能启动、菜单也在，但搜不到任何单元格**；移动端用 `UniverSheetsFindReplaceMobileUIPlugin`（依赖 `UniverFindReplaceMobileUIPlugin` + `UniverSheetsMobileUIPlugin`） |
+| `@univerjs/preset-sheets-find-replace` | 1.0.3（**精确锁**） | 把上面两者组合的 preset（**桌面**直接用 `UniverSheetsFindReplacePreset()`，含桌面 dialog + Ctrl/Cmd+F）；移动端不用 preset、只装两个 Mobile 变体插件 |
 
 - **engine-render 为什么要显式声明**：它被 presets 传递依赖；如果解析出**两份副本**，
   `injector.get(IRenderManagerService)` 会拿到另一个 token 的实例 ⇒ 重排**静默失效**（画布不跟手）。
@@ -99,6 +102,13 @@ node scripts/check-bundle-budget.mjs
 | `sheet.command.sort-range` | **排序实现命令**（无参的 `-asc`/`-desc` 是 sort-ui 的 UI 包装，会弹"是否扩展选区"对话框 ⇒ 我们不用） | 排序点了没反应或弹桌面对话框 |
 | `sheet.command.set-filter-range` / `set-filter-criteria` / `remove-sheet-filter` | 筛选数据层（`smart-toggle-filter` = 无参切换） | 筛选范围建不起来 / 跨端筛选状态不一致 |
 | `sheet.operation.open-filter-panel` | 打开筛选面板（参数 `{unitId,subUnitId,col}`，**要求 filter 已存在**） | 移动端「筛选」只建范围、面板不弹（261021 踩过） |
+| `ui.operation.open-find-dialog` / `open-replace-dialog` / `close-find-dialog` | 查找替换入口（**operation**）；移动端用它打开官方 `MobileFindReplaceBar` | ⋯ 卡「查找替换」/读态「查找」点了没反应 |
+| `sheet.command.replace` | sheets 适配器的「替换一格」（替换会写 cellData） | 只能查不能替 |
+
+> 快捷键：`OpenFindDialogShortcutItem` 的 binding = `KeyCode.F | MetaKeys.CTRL_COMMAND`（mac 另给 `MAC_CTRL`），
+> **preconditions = `FIND_REPLACE_AVAILABLE` + `!EDITOR_ACTIVATED`** ⇒ 焦点在表格网格里才生效（点中网格后 Cmd/Ctrl+F 实测可开）。
+> `FIND_REPLACE_AVAILABLE` 由 **sheets 适配器**注册的 provider 决定 —— 所以缺 `@univerjs/sheets-find-replace` 时快捷键也永远不会触发
+> （＝第 5 条"只装基础层"坑的第二个表现）。
 
 ### 4.2 菜单与配置
 | 符号 | 用途 | 失效表现 |
@@ -109,7 +119,13 @@ node scripts/check-bundle-budget.mjs
 | `sheet.menu.paste`、`sheet.command.set-range-font-family`、`sheet.command.numfmt.set.{percent,currency}`、`base-ui.operation.toggle-shortcut-panel` | 「开始」页签里隐藏的 5 项（⚠️ 只藏该位置专属 id） | 多余工具又出现 / 右键粘贴被误伤 |
 | `ribbon.data` / `ribbon.data.organization` | 排序/筛选**自动**挂进「数据」页签（`order`：筛选 2 / 排序 3）；**我们不自建菜单** | 整条排序/筛选能力静默消失（探针会红） |
 
-### 4.3 DOM 钩子与 CSS 覆盖（`features/usheet/usheetEditor.css`）
+### 4.3 DOM 钩子与 CSS 覆盖（`features/usheet/usheetEditor.css`；移动端另有 `src/mobile/mobile.css`）
+> ⚠️ **移动公式栏（编辑态输入面）与移动查找条都挂在 Univer 自己的 `<footer>` 里**（261021 P5 设备实测：
+> `mobile-formula-bar → footer.univer-shrink-0`、`mobile-find-replace-bar → footer.univer-shrink-0`）。P3 起我们把整条
+> footer 隐藏（自绘底栏）⇒ ① 查找条以 `w/h=0` 挂在 DOM（"看起来没打开"）；② **打字进隐藏编辑器、屏幕无回显**
+> （用户报「打字不能看」）。现在的**唯一例外**在 `src/mobile/mobile.css`：
+> ``.mobile-usheet footer.univer-shrink-0:has(find 条), .mobile-usheet.is-editing footer.univer-shrink-0:has(公式栏) { display: block; }``
+> + ``footer > :not(公式栏):not(find 条) { display: none; }``。升级后若移动查找"打不开"或"打字不可见"，先排查这两条。
 | 钩子/规则 | 用途 | 失效表现 |
 | --- | --- | --- |
 | `[data-u-comp="ribbon-toolbar"]` | 「收起/展开」按钮定位（实测写 `--usheet-ribbon-toggle-top`）+ 右侧让位 `padding-right: 50px` | 按钮错位 / 「更多」与按钮重叠 |
@@ -117,6 +133,7 @@ node scripts/check-bundle-budget.mjs
 | `section:has([data-u-comp="slide-tab-bar"])` | **覆盖内核写进 element 的 inline `height:36px`** → 压到 30px（唯一 `!important`，理由写在规则处） | 计算条回到 36px、状态栏缝变 8px（探针第 2 条会红） |
 | `[data-u-comp="slide-tab-bar"]` 的 `padding-block: 1px` | 让 28px 标签装进 30px | 标签被压扁 |
 | `[data-u-comp="defined-name"]` / `render-canvas` / `sheet-bar-append-button` | 探针用（就绪判定 / 网格画布 / 「＋」） | 探针失败（不影响产品） |
+| `find-replace-dialog` / `mobile-find-replace-bar` / `mobile-find-replace-settings` | 桌面查找对话框 / 移动查找条与设置 | 查找入口点了没反应（移动端还要看下一条 CSS 例外） |
 | `sort-panel-item-handler` / `sheets-filter-panel` | 桌面排序面板 / 筛选面板（探针定位） | 探针失败（不影响产品） |
 | `mobile-sheets-filter-drawer`（内含 `mobile-sheets-filter-by-values` / `-by-conditions`） | 移动端筛选抽屉（值/颜色/条件/清除筛选） | 移动端筛选面板不出现（261021 设备实测） |
 

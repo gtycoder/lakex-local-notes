@@ -15,6 +15,8 @@ export interface MobileSheetReadingBarProps {
   /** 不可用时的理由（移动端没有 hover，用 title + 点击 toast）。 */
   filterDisabledReason?: string;
   onFilter?: () => void;
+  /** 查找（只读浏览/跳转，不写正文；find-replace 的移动 bar）。 */
+  onSearch?: () => void;
 }
 
 const DISABLED_REASON: Record<string, string> = {
@@ -24,7 +26,7 @@ const DISABLED_REASON: Record<string, string> = {
   search: "查找替换：待接入",
 };
 
-export function MobileSheetReadingBar({ filterEnabled = false, filterActive = false, filterDisabledReason, onFilter }: MobileSheetReadingBarProps) {
+export function MobileSheetReadingBar({ filterEnabled = false, filterActive = false, filterDisabledReason, onFilter, onSearch }: MobileSheetReadingBarProps) {
   const items = [
     { id: "view", label: "视图", Icon: LayoutGrid },
     { id: "filter", label: "筛选", Icon: Filter },
@@ -47,6 +49,22 @@ export function MobileSheetReadingBar({ filterEnabled = false, filterActive = fa
               title={enabled ? "筛选（只对本机生效，不写正文）" : filterDisabledReason ?? "筛选不可用"}
               disabled={!enabled}
               onClick={onFilter}
+            >
+              <Icon size={18} />
+            </button>
+          );
+        }
+        if (id === "search") {
+          const searchEnabled = Boolean(onSearch);
+          return (
+            <button
+              key={id}
+              type="button"
+              className="mb-usheet-readingbar__btn"
+              aria-label={label}
+              title={searchEnabled ? "查找（只读浏览，不写正文）" : DISABLED_REASON.search}
+              disabled={!searchEnabled}
+              onClick={onSearch}
             >
               <Icon size={18} />
             </button>

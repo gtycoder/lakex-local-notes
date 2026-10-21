@@ -28,6 +28,13 @@ export const UNIVER_COMMAND_IDS = {
   sortRangeCustom: "sheet.command.sort-range-custom",
   /** 筛选（261021 P5，`@univerjs/sheets-filter`）：smart-toggle = 按当前选区建/撤筛选范围并开面板；
    *  criteria 写入 worksheet 快照（filterModel）⇒ 这是**文档数据**，两端必须同版本。 */
+  /** 查找替换（261021 P5）：open 是 **operation**；移动端用它打开官方 mobile bar。
+   *  失效表现 = ⋯ 卡「查找替换」/读态「查找」点了没反应。 */
+  openFindDialog: "ui.operation.open-find-dialog",
+  openReplaceDialog: "ui.operation.open-replace-dialog",
+  closeFindDialog: "ui.operation.close-find-dialog",
+  /** sheets 适配器的「替换一格」（替换会写 cellData；桌面 Ctrl+H 与移动共用）。 */
+  sheetReplace: "sheet.command.replace",
   smartToggleFilter: "sheet.command.smart-toggle-filter",
   setFilterCriteria: "sheet.command.set-filter-criteria",
   removeSheetFilter: "sheet.command.remove-sheet-filter",
@@ -76,6 +83,12 @@ export const UNIVER_FEATURE_NAMES = [
    *  失效表现 = 筛选结果不随文档保存/跨端同步。 */
   "SheetsFilterService",
   "SHEET_FILTER_SNAPSHOT_ID",
+  /** 查找替换（261021 P5）：基础层 = find-replace（`@univerjs/find-replace`），
+   *  表格适配 = sheets-find-replace（`SheetsFindReplaceController` / `SheetReplaceCommand`）。
+   *  失效表现 = 查找面板能开但搜不到单元格 / 替换不生效。 */
+  "FindReplaceService",
+  "IFindReplaceService",
+  "SheetsFindReplaceController",
 ] as const;
 
 /** 「开始」页签里我们**不用**的内核工具项（走公开 MenuManager 的 updateMenuConfig({hidden:true}) 隐藏）。
@@ -100,6 +113,9 @@ export const UNIVER_DOM_HOOKS = [
   "sort-panel-item-handler", // 排序面板（261021 P5）：探针判定"排序面板已弹出/已收起"
   "sheets-filter-panel", // 桌面筛选面板（261021 P5）：探针判定面板容器 + 几何
   "mobile-sheets-filter-drawer", // 移动端筛选抽屉（261021 P5 设备实测）：筛选/按值/按颜色/按条件/清除筛选
+  "mobile-find-replace-bar", // 移动端查找条（261021 P5 设备验收靠它判定"查找面板打开了"）
+  "mobile-find-replace-settings", // 移动端查找设置（区分大小写/按公式等）
+  "find-replace-dialog", // 桌面查找对话框（Ctrl/Cmd+F）
   "mobile-sheets-filter-by-values", // 移动端筛选抽屉内的「按值」页签
   "mobile-sheets-filter-by-conditions", // 移动端筛选抽屉内的「按条件」页签
 ] as const;

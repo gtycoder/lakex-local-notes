@@ -22,15 +22,16 @@ function mount(props: Parameters<typeof MobileSheetReadingBar>[0]) {
 }
 
 describe("阅读态工具条（读态筛选 = 本机视图）", () => {
-  it("可用时只点亮「筛选」（不写正文），其余四项恒置灰且带理由", () => {
-    const { host, root } = mount({ filterEnabled: true, onFilter: () => undefined });
+  it("可用时点亮「筛选 + 查找」（都不写正文），其余三项恒置灰且带理由", () => {
+    const { host, root } = mount({ filterEnabled: true, onFilter: () => undefined, onSearch: () => undefined });
     const buttons = [...host.querySelectorAll<HTMLButtonElement>(".mb-usheet-readingbar__btn")];
     expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["视图", "筛选", "排序", "冻结", "查找"]);
-    expect(buttons.filter((b) => !b.disabled).map((b) => b.getAttribute("aria-label"))).toEqual(["筛选"]);
-    for (const label of ["视图", "排序", "冻结", "查找"]) {
+    expect(buttons.filter((b) => !b.disabled).map((b) => b.getAttribute("aria-label"))).toEqual(["筛选", "查找"]);
+    for (const label of ["视图", "排序", "冻结"]) {
       expect(buttons.find((b) => b.getAttribute("aria-label") === label)!.title).not.toBe("");
     }
     expect(buttons[1].title).toContain("不写正文");
+    expect(buttons[4].title).toContain("不写正文");
     act(() => root.unmount());
     host.remove();
   });

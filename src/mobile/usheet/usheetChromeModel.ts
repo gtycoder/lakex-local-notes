@@ -168,8 +168,8 @@ export function buildMoreRows(fmt: SheetCellFormatLite): SheetMoreRow[] {
     [
       { id: "freeze", label: "冻结窗格", icon: "freeze", children: FREEZE_MENU },
       { id: "protect", label: "保护（暂不支持）", icon: "lock", disabled: true },
-      // 查找替换：包已装、接线后两端 UI 都不出来（261021 记录，待单独排查），先保持置灰，不留死按钮。
-      { id: "find", label: "查找替换（待接入）", icon: "search", disabled: true },
+      // 261021 P5：查找替换（sheets 适配器 + 基础层；入口派发 ui.operation.open-find-dialog）。
+      { id: "find", label: "查找替换", icon: "search" },
     ],
     [
       { id: "row-height", label: "行高", icon: "row-height", children: [

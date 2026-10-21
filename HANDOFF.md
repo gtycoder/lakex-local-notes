@@ -35,6 +35,18 @@
 - **桌面验收（隔离实例 `$TMPDIR/lake-accept-p5` / CDP 9237）**：新建表格 → ribbon 出现「数据」页签；工具栏实测 `data-u-command="sheet.command.smart-toggle-filter"` + `aria-label="排序"`。
 - **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle ✓ · diff-check ✓ · **内核探针 9/12 通过、3 条 advisory、exit 0**（新增第 6 条「排序/筛选入口出现在数据页签」PASS）。`mobile/usheet/usheet-chrome.css` 基线 216 → **221**（+5 = 小数位按钮）。
 - **两条必须记住的后果**（详见 `docs/USHEET-UPGRADE.md` §4.4）：① 筛选是 plugin resource，**首次保存会多一条空壳**（一次 hash 变化/一次上传）；② `resources` 是覆盖写 ⇒ **两端都得装 filter 数据插件**、且注册顺序一致，否则一端保存会静默抹掉筛选/造成假冲突。
+- **冷启动慢（用户 261021 报「感觉加了启动比以前慢」）· 已定位并修（待复验）**：**不是动画强制播放**（代码无最短展示，overlay 只等 `phase=ready`）。加了临时埋点后实测冷启动（页面时钟）：
+  - 首次安装后：effect-start 2.34s → migrate +0.57s → SQLite open +1.12s → **schema +2.60s** → reconcile +0.09s → refreshAll +0.07s ≈ **6.8s** 才真首页；
+  - 根因：`applyMobileSchema` 是 **30+ 条独立 SQL**，每条走一次 Capacitor 桥往返（设备实测单次约 68ms）⇒ **每次冷启动都重放建表/索引**，固定多花 ~2.4s。
+  - 修法（`data/schema.ts` + `bridge/context.ts`）：新增 **`MOBILE_SCHEMA_VERSION` + `PRAGMA user_version` 快路径** —— 版本已到就整段跳过；顺带修了 sql.js 测试端 `pragma()` 返回 undefined 的问题（旧实现让版本恒为 0，且 prepare 不释放会锁库）。**改表/索引时记得 +1 版本号**。
+  - **批量下发（用户 261021 点单「批量 SQL 才是正解」）**：`applyMobileSchema` 拆两阶段 —— ① 不依赖读状态的底表建表（含旧库 DROP）→ ② 需要 `PRAGMA table_info`/`sqlite_master`/种子的条件语句 + 小记 schema 增量；每阶段一次 `executeSet`（单事务、一次桥往返），写侧从 **28 次往返降到 2 次**。`applyQuickNotesSyncSchema` 拆出 `buildQuickNotesSyncSchemaStatements()` 供批量复用；无 `executeSet` 的测试端（sql.js）与"批内有可选语句失败"（如无 FTS5）自动退逐条兜底。单测 `schema.test.ts` 卡住"2 次 executeSet + exec 只剩版本号"。
+  - 复测：第二次冷启动 `schema` **2436ms → 131ms**，整机 ready **≈6.6s → ≈2.6s**；升级后**首次**全量 DDL（v3 点位实测）**2436ms → 185ms**（两批 executeSet + 版本号）。
+  - 剩余成本（稳态）：WebView 冷加载到 effect ~1.2s（debug 包/系统 WebView 启动，非我们的 JS）、`NativeSqliteDb.open` ~0.74s、`migrateSnapshot` ~0.23s、reconcile 0.15s、refreshAll 0.12s。**下一步若要再快，只能动这几个**（open 属 Capacitor 插件首次初始化，migrate 可加存储标记跳过）。
+- **回归修复（用户 261021 报「打字不能看」）· 已修，待复验**：**内核的移动公式栏 = 编辑态输入面，挂在 `footer.univer-shrink-0` 里**；P3 起我们把 footer 整条 `display:none`（自绘底栏），P5 查找的 footer 例外又把其余子项显式 `display:none` ⇒ 打字进了**隐藏编辑器**，屏幕上没有任何回显，只有提交后才出现在格子里。
+  - 修法（`src/mobile/mobile.css`）：footer 只在「**编辑态且有公式栏**」或「**有查找条**」时 `display:block`；footer 内**只放行** `[data-u-comp="mobile-formula-bar"]` / `[data-u-comp="mobile-find-replace-bar"]`，工作表页签条等继续隐藏。
+  - **设备实测**：编辑单元格时键盘上方出现内核底部公式栏（`× ✓ ƒx <内容>`），打字**实时可见**；点「取消」后 A15 仍是 `Eeeeee`（正文未变）。
+  - **顶部只读公式栏已删（用户 261021 定稿：与底部输入栏重复）**：`MobileUsheetViewer` 去掉 `.mobile-usheet-formula` 渲染与 `cellInfo` 状态，`mobile.css` 删对应 3 组规则；编辑态输入面**只保留内核移动公式栏**（阅读态不再显示地址/显示值）。
+  - 排查提醒（我这次自己踩了）：**CDP `Page.captureScreenshot` 抓不到 GPU canvas**，用它截图会得到"画布整片空白"的假象；移动端截图一律 `adb exec-out screencap -p`（AGENTS §7#13/TECH-STACK §五#2）。
 - **P4-1 网格视觉（移动端专用主题）· 已完成**：新增 `mobile/usheet/mobileUniverTheme.ts`（在共用 `buildUniverTheme()` 上做**最小覆盖**，桌面那份不动），`MobileUsheetViewer` 两处 theme 改用它。
   - **键位来自设备 A/B 染色实测**（把 `--lake-bg-subtle`/`--lake-border-1`/`--lake-accent` 临时染成纯红/纯蓝/纯黄逐像素采样，已还原）：表头底 = `gray.50`；当前行列头 = `mix(gray.50, primary.500, 7%)`；网格线 = `mix(gray.200, gray.900, 7%)`（engine-render）；选区边框 = `primary.600`。
   - 覆盖值：`gray.50 = #f4f5f5`、`gray.200 = #f4f4f3`（解 7% 混色方程得 243.9 ⇒ 网格线正好 #e5e5e5）、`primary.500/600 = #2f8ef4`。
@@ -54,11 +66,11 @@
   - **实现口径**：读态筛选只活在 Univer 运行时（`SHEET_FILTER_PLUGIN` plugin resource）；**所有落盘路径之前**（`capture()` 第一行 / 切回编辑态 / 卸载）用 `syncExecuteCommand("sheet.command.remove-sheet-filter")` 同步摘除 ⇒ `book.save()` 与打开时逐字节一致，不标脏、不进 S3。
   - **安全边界**：文档**本身已带筛选**时读态入口置灰并给理由（"这篇表格已有保存的筛选，回编辑态调整"）——否则"还原"会删掉文档数据。
   - **验证**：单测 `usheetReadFilter.test.ts`（无/空壳/真实筛选、坏正文）；`mobileSheetReadingBar.test.ts` 3 例（只点亮筛选、置灰理由、点击回调）；**设备实测**：该测试表带已存筛选 ⇒ 读态筛选按钮 `disabled=true` 且 title 正确（护栏路径生效）。**启用路径的端到端（新表 → 读态筛选 → 正文不变）还没跑**：现有测试表本身带筛选，需要新建一张干净表再验。
-  - **排查记录（已回退，别再重复踩）**：① 两个插件 `pluginName` 都是 `UNIVER_FIND_REPLACE_PLUGIN` 且都注册 `IFindReplaceService` ⇒ 同装会冲突，已改成"每端只装各自变体"仍无效；② 桌面 Ctrl+F / Cmd+F（聚焦网格后）都没有 `find-replace-dialog`，移动端 ⋯ 卡与读态查找都没有 `mobile-find-replace-bar`；③ 启动期 console 里**没有** find/replace 相关报错（只有既有的"DB Connection already exists"与 Capacitor 重复注册告警）；④ 构建产物里确认两包代码都在（desktop `UniverSheetEditor-*.js` / mobile `MobileUsheetViewer-*.js`）。⇒ 结论：**不是接线笔误，是插件注册/挂载路径没对上**；下一步要对照 Univer 官方 demo 的 find-replace 注册方式（可能要放进 preset 的 `plugins` 配置或需要 `UniverUIPlugin` 的 menu/shortcut 配置配合）。**本批已把入口恢复为置灰占位、包已卸载**，不留死按钮。
+  - **两个坑（都实测踩过，写死在这里）**：① **只装 `@univerjs/find-replace` 是不够的** —— 它只是跨产品基础层（服务 + 桌面 dialog / 移动 bar），**表格还需要 `@univerjs/sheets-find-replace` 适配器**，否则插件能启动、菜单也能出现，但**搜不到任何单元格**（第一次尝试就栽在这，表现为"UI 都不出来"）；② **移动查找条挂在 Univer 自己的 `<footer>` 里**，而 P3 起我们把整条 footer 隐藏了 ⇒ 条子存在于 DOM 但宽高为 0（看起来没打开）。修复 = `src/mobile/mobile.css` 里 `.mobile-usheet footer.univer-shrink-0:has([data-u-comp="mobile-find-replace-bar"]) { display: block; }` + footer 内其余子项继续 `display:none`（当时基线 1457 → 1459；261021 删顶部只读公式栏后为 **1435**）。桌面快捷键 **Ctrl/Cmd+F 实测可用**：Univer 的快捷键带 precondition（`FIND_REPLACE_AVAILABLE` + `!EDITOR_ACTIVATED`，即**焦点必须在表格网格**），点中网格后 Cmd+F / Ctrl+F 都能打开 `find-replace-dialog`；之前判成"未绑定"是测试点错了 canvas（命中公式栏 27px 高的那个，不是 1054×645 的网格）。
 - **保护 / 查找替换 的现状（下一步）**：
   - **P4-4 阅读态 5 项**：仍置灰。原因不是"没接线"——筛选/排序/冻结都要**写文档数据**（筛选条件进 `SHEET_FILTER_PLUGIN`、冻结进 `freeze`），读态不该写；要看读态筛选得先定"只读视图"的产品语义。
   - **保护**：`@univerjs/sheets` / `sheets-ui` 里**已有**保护命令（`sheet.command.add-range-protection*` 等，无需新依赖），但 261008 已把它登记为「需先立产品语义」（本地单用户场景下"保护"意味着什么没定）⇒ 本轮不动。
-  - **查找替换（261021 尝试过、已回退，待排查）**：`@univerjs/find-replace@1.0.3` **确实自带移动端变体**（`UniverFindReplaceMobileUIPlugin` + `MobileFindReplaceBar`；依赖只有 core/design/engine-render/icons/ui，无新传递依赖）。本轮按 playbook 装包并接线（桌面 `UniverFindReplacePlugin` / 移动只装移动变体；⋯ 卡与读态「查找」派发 `ui.operation.open-find-dialog`），**结果两端都出不来 UI**：
+  - **查找替换 · 已完成（261021 P5，双端）**：`@univerjs/preset-sheets-find-replace@1.0.3`（内含基础层 `@univerjs/find-replace` + **表格适配器** `@univerjs/sheets-find-replace`）。桌面 = `UniverSheetsFindReplacePreset()`（ribbon「数据」页签出现「查找替换」，对话框 `find-replace-dialog`）；移动 = **Mobile 变体** `UniverFindReplaceMobileUIPlugin` + `UniverSheetsFindReplaceMobileUIPlugin`，入口 = ⋯ 卡「查找替换」与读态「查找」（只读浏览，不写正文）。**设备实测**：读态查找打开 `mobile-find-replace-bar`（412×52），输入「测试」→ 命中 1/1、下一个匹配可用；编辑态 ⋯ → 查找替换同样打开（412×52）。**桌面实测**：数据页签「查找替换」→ `find-replace-dialog` 打开（含 查找/替换/高级查找）。
 - **未做（下一刀）**：P4-4 阅读态语义 · 保护（等产品语义）· 查找替换（自研 vs 装包待拍板）· 多格选区填充色取证。
 - **状态**：**未提交 / 未推送，待用户验收**（工作树仅本批改动）。
 - **证据**：`.css-audit/p5-261021/`（移动工具条 / 小数位 / 筛选 / 排序菜单 / 桌面数据页签；gitignore）。

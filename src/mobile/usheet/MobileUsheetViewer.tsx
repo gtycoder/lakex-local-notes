@@ -11,17 +11,22 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Eraser, MoreHorizontal, Paintbrush, Plus, Redo2, Undo2 } from "lucide-react";
-import { createUniver, DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY, LocaleType, mergeLocales, type FUniver } from "@univerjs/presets";
+import { createUniver, DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY, LocaleType, mergeLocales, type FUniver, type IPresetPlugin } from "@univerjs/presets";
 import { DocSelectionRenderService, IRenderManagerService } from "@univerjs/preset-sheets-core";
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
 import sortZhCN from "@univerjs/sheets-sort-ui/locale/zh-CN";
 import filterZhCN from "@univerjs/sheets-filter-ui/locale/zh-CN";
+import findZhCN from "@univerjs/preset-sheets-find-replace/locales/zh-CN";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
 import "@univerjs/sheets-sort-ui/lib/index.css";
 import "@univerjs/sheets-filter-ui/lib/index.css";
+import "@univerjs/preset-sheets-find-replace/lib/index.css";
+import { UniverFindReplaceMobileUIPlugin } from "@univerjs/find-replace";
+import { UniverSheetsFindReplaceMobileUIPlugin } from "@univerjs/sheets-find-replace";
+import "@univerjs/sheets-find-replace/facade";
 import { buildMobileUniverTheme } from "./mobileUniverTheme";
 import { editorCaretPoint } from "../../features/usheet/usheetCellEdit";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody } from "../../core/usheetDoc.js";
@@ -143,8 +148,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const [cellFmt, setCellFmt] = useState<{ bold: boolean; italic: boolean; underline: boolean; strike: boolean; align: "left" | "center" | "normal" | "general"; numfmt: string }>({
     bold: false, italic: false, underline: false, strike: false, align: "general", numfmt: "",
   });
-  /** 语雀式公式栏：当前选区地址 + 显示值（移动 UI 插件不渲染内置公式栏）。 */
-  const [cellInfo, setCellInfo] = useState({ address: "A1", value: "" });
   /** 底栏：工作表页签 / 当前表 / 缩放；实例创建后由 facade 刷新。 */
   const [sheets, setSheets] = useState<MobileSheetTab[]>([]);
   const [activeSheetId, setActiveSheetId] = useState("");
@@ -206,9 +209,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       };
       setCellFmt((prev) => prev.bold === nextFmt.bold && prev.italic === nextFmt.italic && prev.underline === nextFmt.underline
         && prev.strike === nextFmt.strike && prev.align === nextFmt.align && prev.numfmt === nextFmt.numfmt ? prev : nextFmt);
-      const address = range.getA1Notation();
-      const value = range.getDisplayValue() ?? "";
-      setCellInfo((prev) => prev.address === address && prev.value === value ? prev : { address, value });
     } catch { /* 选区内没有可读样式时保持原状态 */ }
   }, []);
 
@@ -412,6 +412,18 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     })();
   }, [readFilterAvailable, sheetAccessor]);
 
+  /**
+   * 打开查找替换：**编辑态**用 open-replace-dialog（移动 bar 才会展开替换行；改写走内核命令
+   * 并触发 CommandExecuted ⇒ scheduleFlush ⇒ capture 落正文）；**阅读态**只开 find-only，
+   * 绝不展开替换行（读态语义 = 只浏览/跳转、不写正文，与读态筛选同一口径）。
+   */
+  const openFindDialog = useCallback(() => {
+    const state = instanceRef.current;
+    if (!state) return;
+    const commandId = editing ? "ui.operation.open-replace-dialog" : "ui.operation.open-find-dialog";
+    void state.univerAPI.executeCommand(commandId);
+  }, [editing]);
+
   useEffect(() => {
     if (active) setEverActive(true);
   }, [active]);
@@ -444,7 +456,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
         locales: {
-          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never),
+          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never),
         },
         // 移动端专用画布主题：共用主题 + 语雀对齐覆盖（桌面那份不动，见 mobileUniverTheme.ts）。
         theme: buildMobileUniverTheme() as never,
@@ -455,6 +467,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           createMobileSheetsDrawingPreset(),
           // 261021 P5：排序 / 筛选（数据插件双端一致；UI 取移动变体，入口是我们自己画的 ⋯ 卡）。
           { plugins: createMobileSortFilterPlugins() },
+          // 261021 P5：查找替换 —— 移动端只装移动变体（sheets 适配器也取 Mobile 版，依赖 UniverSheetsMobileUIPlugin）。
+          { plugins: [[UniverFindReplaceMobileUIPlugin], [UniverSheetsFindReplaceMobileUIPlugin]] as unknown as IPresetPlugin[] },
         ],
       });
       const book = univerAPI.createWorkbook(workbook as never) as unknown as UniverBook;
@@ -617,6 +631,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     else if (id === "align-right") withActiveRange((range) => range.setHorizontalAlignment("normal"));
     else if (id.startsWith("font-")) withActiveRange((range) => range.setFontColor(id.slice("font-".length)));
     else if (id.startsWith("fill-")) withActiveRange((range) => range.setBackgroundColor(id.slice("fill-".length)));
+    // 261021 P5：查找替换（官方 mobile bar；sheets 适配器已在 preset 里，这里只派发操作）。
+    else if (id === "find") openFindDialog();
     // 261021 P5：边框（FRange.setBorder；线型从 univerAPI.Enum 取，不写死数字）。
     else if (USHEET_BORDER_IDS.has(id)) {
       withActiveRange((range) => {
@@ -742,18 +758,13 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           </div>
         </div>
       )}
-      {editing && (
-        <div className="mobile-usheet-formula" data-prevent-swipe aria-label="公式栏">
-          <span className="mobile-usheet-formula__ref">{cellInfo.address}</span>
-          <span className="mobile-usheet-formula__value">{cellInfo.value}</span>
-        </div>
-      )}
       {!editing && ready && (
         <MobileSheetReadingBar
           filterEnabled={readFilterAvailable.enabled}
           filterDisabledReason={readFilterAvailable.reason}
           filterActive={readFilterActive}
           onFilter={applyReadFilter}
+          onSearch={openFindDialog}
         />
       )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}

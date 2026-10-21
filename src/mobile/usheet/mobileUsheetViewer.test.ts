@@ -120,9 +120,8 @@ describe("移动端表格查看/编辑器", () => {
     for (const label of ["插入", "撤销", "重做", "数字格式", "更多表格操作"]) {
       expect(toolbar?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
-    const formula = host.querySelector(".mobile-usheet-formula");
-    expect(formula).toBeTruthy();
-    expect(formula?.textContent).toContain("A1");
+    // 261021 P5：顶部只读公式栏已删（用户定稿：与内核底部输入栏重复）；编辑态输入面 = 内核移动公式栏。
+    expect(host.querySelector(".mobile-usheet-formula")).toBeNull();
     expect(host.querySelector(".mb-usheet-footer")).toBeTruthy();
     expect(host.querySelector(".mb-usheet-readingbar")).toBeNull();
     root.unmount();

@@ -43,6 +43,10 @@ const UNIVER_PACKAGES = [
   "@univerjs/sheets-sort-ui",
   "@univerjs/sheets-filter",
   "@univerjs/sheets-filter-ui",
+  // 261021 P5：查找替换（基础层 + sheets 适配器 + preset 组合包）
+  "@univerjs/find-replace",
+  "@univerjs/sheets-find-replace",
+  "@univerjs/preset-sheets-find-replace",
 ];
 
 /** 把实装内核的 ESM 产物拼起来（index.js + facade.js），供"符号还在不在"的静态核对。 */

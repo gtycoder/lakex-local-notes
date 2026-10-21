@@ -43,8 +43,8 @@ describe("移动端表格 chrome 模型（261021：对齐语雀工具条）", ()
     ]);
     // 261021 P5：筛选/排序已接（不再是置灰占位）；排序用我们自己的子菜单。
     expect(byId.get("filter")?.disabled).toBeUndefined();
-    // 查找替换：包已装但 UI 接不上（待排查）⇒ 仍是置灰占位，不放死按钮。
-    expect(byId.get("find")?.disabled).toBe(true);
+    // 261021 P5：查找替换已接（基础层 + sheets 适配器；移动端用官方 mobile bar）。
+    expect(byId.get("find")?.disabled).toBeUndefined();
     expect(byId.get("sort")?.children?.map((item) => item.id)).toEqual(["sort-asc", "sort-desc"]);
     // 小数位按语雀分工：增已提到一级，「减」留在 ⋯ 卡第一行且现在可用。
     expect(rows[0].map((button) => button.id)).toEqual(["decimal-down"]);

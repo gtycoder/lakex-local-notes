@@ -21,10 +21,13 @@ import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
 import sortZhCN from "@univerjs/sheets-sort-ui/locale/zh-CN";
+import findZhCN from "@univerjs/preset-sheets-find-replace/locales/zh-CN";
 import filterZhCN from "@univerjs/sheets-filter-ui/locale/zh-CN";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
 import "@univerjs/sheets-sort-ui/lib/index.css";
+import "@univerjs/preset-sheets-find-replace/lib/index.css";
+import { UniverSheetsFindReplacePreset } from "@univerjs/preset-sheets-find-replace";
 import "@univerjs/sheets-filter-ui/lib/index.css";
 import { createDesktopSortFilterPlugins } from "./univerSortFilter";
 import { buildUniverTheme } from "./univerTheme";
@@ -298,7 +301,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
         locales: {
-          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never),
+          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never),
         },
         theme: buildUniverTheme() as never,
         presets: [
@@ -316,6 +319,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
           UniverSheetsDrawingPreset(),
           // 261021 P5：排序 / 筛选（Univer 独立可选包，不在 preset-sheets-core 里）。
           { plugins: createDesktopSortFilterPlugins() },
+          // 261021 P5：查找替换（sheets 适配器 + 基础层；preset 包已把两者组合好）。
+          UniverSheetsFindReplacePreset(),
         ],
       });
       const book = univerAPI.createWorkbook(workbook as never);
