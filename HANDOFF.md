@@ -19,6 +19,50 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261021(四) · 移动端表格 P4/P5 第一批：一级工具条补三项 + 排序/筛选**双端**接入 · **待用户验收**
+
+> 用户定稿：① **保存不在工具条重复**（顶栏 ✓ = 手动保存并退出编辑）；② 小数位一级按钮**点一下 = +1 位**，减少放 ⋯ 卡；③ **A/B 都做**，且排序/筛选**桌面端也要**（"这个很常用"）。
+
+- **P4/P5 一级工具条（移动端）**：`＋ ｜ 撤销 重做 格式刷 清除格式 ｜ 常规▾ ｜ .00 ｜ ⋯`（语雀 §2.1 组序，去掉保存位；≈370/412px）。
+  - 清除格式 = `fRange.clearFormat()`；小数位 = 新纯函数 `mobile/usheet/usheetDecimals.ts`（±1 位，文本/日期明确提示、到边界提示）；格式刷 = `sheet.command.set-once-format-painter`，激活态由 `sheet.operation.set-format-painter` 回填（不自建状态）。
+  - ⋯ 卡瘦身：小数位「增」移出，「减」留第一行（对齐语雀 §2.3）；筛选/排序**点亮**。
+- **排序/筛选（双端）**：新增 4 个依赖（**全 1.0.3 精确锁**）`@univerjs/sheets-{sort,sort-ui,filter,filter-ui}`。
+  - 桌面：`features/usheet/univerSortFilter.ts` 接桌面 UI 变体 ⇒ ribbon **自动出现「数据」页签**（筛选 order2 / 排序 order3，另右键「数据」组），无需自建菜单。
+  - 移动端：`mobile/usheet/mobileSortFilter.ts` 接**移动 UI 变体**（`UniverSheetsSortMobileUIPlugin` / `UniverSheetsFilterMobileUIPlugin`，依赖的正是 `UniverSheetsMobileUIPlugin`）；入口是我们自绘的 ⋯ 卡。
+  - **排序不用无参的 `sort-range-asc/desc`**（sort-ui 的 UI 包装会弹"是否扩展选区/仅有一行"的**桌面对话框**，设备实测踩到）⇒ 新增 `mobile/usheet/usheetSortPlan.ts` 自己算数据区（单格/单列 ⇒ 锚列连续块 + 列方向扩到已用列；表头只认「首行文本 + 下面全数值」一个信号），再派发数据层 `sheet.command.sort-range`（`range/orderRules/hasTitle` 显式给全）。
+  - **筛选**：先 `set-filter-range`（已存在时返回 false 属正常）再 `sheet.operation.open-filter-panel`（否则只建范围、面板不弹——设备实测踩到）。
+- **设备验收（emulator-5554，新 APK 40,486,186 B）**：工具条 8 颗/5 组；小数位真落盘（B3 新增 `{n:{pattern:"#,##0.0"}}`）；清除格式移除样式；格式刷 `is-active`；**降序排序整行换位**（A4/A5 交换、B5 的 `Tttttt` 跟着走到 B4）；**筛选抽屉弹出**（`data-u-comp="mobile-sheets-filter-drawer"`：筛选/按值/按颜色/按条件/清除筛选），正文 `resources` 出现 `SHEET_FILTER_PLUGIN`（`ref:{startRow:2,startColumn:0,endRow:4,endColumn:1}`）。
+- **桌面验收（隔离实例 `$TMPDIR/lake-accept-p5` / CDP 9237）**：新建表格 → ribbon 出现「数据」页签；工具栏实测 `data-u-command="sheet.command.smart-toggle-filter"` + `aria-label="排序"`。
+- **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle ✓ · diff-check ✓ · **内核探针 9/12 通过、3 条 advisory、exit 0**（新增第 6 条「排序/筛选入口出现在数据页签」PASS）。`mobile/usheet/usheet-chrome.css` 基线 216 → **221**（+5 = 小数位按钮）。
+- **两条必须记住的后果**（详见 `docs/USHEET-UPGRADE.md` §4.4）：① 筛选是 plugin resource，**首次保存会多一条空壳**（一次 hash 变化/一次上传）；② `resources` 是覆盖写 ⇒ **两端都得装 filter 数据插件**、且注册顺序一致，否则一端保存会静默抹掉筛选/造成假冲突。
+- **P4-1 网格视觉（移动端专用主题）· 已完成**：新增 `mobile/usheet/mobileUniverTheme.ts`（在共用 `buildUniverTheme()` 上做**最小覆盖**，桌面那份不动），`MobileUsheetViewer` 两处 theme 改用它。
+  - **键位来自设备 A/B 染色实测**（把 `--lake-bg-subtle`/`--lake-border-1`/`--lake-accent` 临时染成纯红/纯蓝/纯黄逐像素采样，已还原）：表头底 = `gray.50`；当前行列头 = `mix(gray.50, primary.500, 7%)`；网格线 = `mix(gray.200, gray.900, 7%)`（engine-render）；选区边框 = `primary.600`。
+  - 覆盖值：`gray.50 = #f4f5f5`、`gray.200 = #f4f4f3`（解 7% 混色方程得 243.9 ⇒ 网格线正好 #e5e5e5）、`primary.500/600 = #2f8ef4`。
+  - **设备实测（emulator-5554 逐像素）**：表头 `#f4f5f5` ✓、网格线 `#e5e5e5` ✓、选区边框 `#2f8ef4` ✓（3 设备像素 = 2px 环）。
+  - **已知结构性偏差**：当前行列头实测 `#e6eef5`（语雀目标 `#e7e9e8`）—— 内核这档是 7% 主色混色，主色是选区蓝就必然带蓝调；要中性灰只能把主色改成灰（会牺牲选区蓝）。**待用户拍板**，默认保持选区蓝。
+  - **未验证**：多格选区的填充色（单格选区不填充；触摸拖选在本机 CDP 上没生效）。
+  - 测试：`mobileUniverTheme.test.ts` 4 例（覆盖表 / 7% 混色对拍 #e5e5e5 / 不突变入参 / 单一来源）。
+- **P4-2 二级选择器视觉 · 已完成**：新增 `mobile/usheet/SheetMenuBody.tsx`（**单一来源**：列表 / 圆点色板 / 图标行三种形态），`SheetPopCard` 与 `SheetMoreCard` 都改成用它 + 同一套下钻路径栈。
+  - 字色 / 填充色 → **4×2 圆点色板**（色值来自 `buildColorMenu()` 的 `swatch` 字段，属数据驱动颜色，不写死视觉）；水平对齐 → **图标行**（左/中/右，lucide）；冻结 / 公式仍走列表行；字号 / 边框继续置灰。
+  - **设备实测（emulator-5554）**：字体颜色弹出 8 个圆点（`getComputedStyle` 取到真实色 `rgb(229,72,77)` 等）；水平对齐弹出 3 个图标按钮（左对齐/居中对齐/右对齐）。
+  - 门禁：`mobile-layers` 基线 `usheet-chrome.css` 221 → **250**（+29 = 色板 12 / 图标行 17，理由已写在基线行）；`usheetChromeModel.test.ts` 增 6 条断言（childLayout / swatch 合法性 / 图标存在）。
+- **P5 边框 · 已完成**：新增 `mobile/usheet/usheetBorders.ts`（选项表 + 注入式 `applyUsheetBorder`），⋯ 卡「边框」从置灰占位变成**可用子菜单 8 项**（全部框线 / 外边框 / 内部框线 / 上 / 下 / 左 / 右 / 无框线）。
+  - 内核能力 = `FRange.setBorder(type, style, color)`；`type` 是 `BorderType` 字符串值，`style` 从 `univerAPI.Enum.BorderStyleTypes.THIN` 取（**不写死数字**），颜色 `#c8ccd2` 属**文档内容色**（与 COLOR_NAMES 同口径，不写在 CSS 里）。
+  - **设备实测（emulator-5554）**：⋯ → 边框 → 8 项齐全；点「全部框线」⇒ 正文新增样式 `{bd:{t,r,b,l:{s:1,cl:{rgb:"#c8ccd2"}}}}` 且落在活动格（R0C0）。
+  - 测试：`usheetBorders.test.ts` 3 例（枚举合法性 / 注入式调用 / 缺 facade 明确 false）+ `usheetChromeModel` / viewer 行为用例已同步（边框不再置灰、下钻 8 项）。
+- **P4-4 读态筛选 = 本机视图 · 已实现（用户 261021 定稿：只对当前设备生效、绝不写正文）**：`MobileSheetReadingBar` 只点亮「筛选」（其余四项置灰并带原因），新增 `mobile/usheet/usheetReadFilter.ts`（判据单一来源）。
+  - **实现口径**：读态筛选只活在 Univer 运行时（`SHEET_FILTER_PLUGIN` plugin resource）；**所有落盘路径之前**（`capture()` 第一行 / 切回编辑态 / 卸载）用 `syncExecuteCommand("sheet.command.remove-sheet-filter")` 同步摘除 ⇒ `book.save()` 与打开时逐字节一致，不标脏、不进 S3。
+  - **安全边界**：文档**本身已带筛选**时读态入口置灰并给理由（"这篇表格已有保存的筛选，回编辑态调整"）——否则"还原"会删掉文档数据。
+  - **验证**：单测 `usheetReadFilter.test.ts`（无/空壳/真实筛选、坏正文）；`mobileSheetReadingBar.test.ts` 3 例（只点亮筛选、置灰理由、点击回调）；**设备实测**：该测试表带已存筛选 ⇒ 读态筛选按钮 `disabled=true` 且 title 正确（护栏路径生效）。**启用路径的端到端（新表 → 读态筛选 → 正文不变）还没跑**：现有测试表本身带筛选，需要新建一张干净表再验。
+  - **排查记录（已回退，别再重复踩）**：① 两个插件 `pluginName` 都是 `UNIVER_FIND_REPLACE_PLUGIN` 且都注册 `IFindReplaceService` ⇒ 同装会冲突，已改成"每端只装各自变体"仍无效；② 桌面 Ctrl+F / Cmd+F（聚焦网格后）都没有 `find-replace-dialog`，移动端 ⋯ 卡与读态查找都没有 `mobile-find-replace-bar`；③ 启动期 console 里**没有** find/replace 相关报错（只有既有的"DB Connection already exists"与 Capacitor 重复注册告警）；④ 构建产物里确认两包代码都在（desktop `UniverSheetEditor-*.js` / mobile `MobileUsheetViewer-*.js`）。⇒ 结论：**不是接线笔误，是插件注册/挂载路径没对上**；下一步要对照 Univer 官方 demo 的 find-replace 注册方式（可能要放进 preset 的 `plugins` 配置或需要 `UniverUIPlugin` 的 menu/shortcut 配置配合）。**本批已把入口恢复为置灰占位、包已卸载**，不留死按钮。
+- **保护 / 查找替换 的现状（下一步）**：
+  - **P4-4 阅读态 5 项**：仍置灰。原因不是"没接线"——筛选/排序/冻结都要**写文档数据**（筛选条件进 `SHEET_FILTER_PLUGIN`、冻结进 `freeze`），读态不该写；要看读态筛选得先定"只读视图"的产品语义。
+  - **保护**：`@univerjs/sheets` / `sheets-ui` 里**已有**保护命令（`sheet.command.add-range-protection*` 等，无需新依赖），但 261008 已把它登记为「需先立产品语义」（本地单用户场景下"保护"意味着什么没定）⇒ 本轮不动。
+  - **查找替换（261021 尝试过、已回退，待排查）**：`@univerjs/find-replace@1.0.3` **确实自带移动端变体**（`UniverFindReplaceMobileUIPlugin` + `MobileFindReplaceBar`；依赖只有 core/design/engine-render/icons/ui，无新传递依赖）。本轮按 playbook 装包并接线（桌面 `UniverFindReplacePlugin` / 移动只装移动变体；⋯ 卡与读态「查找」派发 `ui.operation.open-find-dialog`），**结果两端都出不来 UI**：
+- **未做（下一刀）**：P4-4 阅读态语义 · 保护（等产品语义）· 查找替换（自研 vs 装包待拍板）· 多格选区填充色取证。
+- **状态**：**未提交 / 未推送，待用户验收**（工作树仅本批改动）。
+- **证据**：`.css-audit/p5-261021/`（移动工具条 / 小数位 / 筛选 / 排序菜单 / 桌面数据页签；gitignore）。
+
 ### 261021(三) · Android 小记搜索（全局搜索合并小记）· **待用户验收**
 
 - **用户口径**：承接桌面的「小记搜索」，安卓端也能搜到小记。
