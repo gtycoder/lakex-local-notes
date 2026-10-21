@@ -15,15 +15,12 @@
  * - 正文 = `usheets/{id}.usheet.json`（Univer IWorkbookData 快照），见 `core/usheetDoc.ts`。
  */
 import { useEffect, useRef, useState } from "react";
-import { createUniver, LocaleType, mergeLocales, ICommandService, CommandType, DOCS_NORMAL_EDITOR_UNIT_ID_KEY, type FUniver } from "@univerjs/presets";
-import { DocSelectionRenderService, UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
-import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
-import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
-import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
-import "@univerjs/preset-sheets-core/lib/index.css";
-import "@univerjs/preset-sheets-drawing/lib/index.css";
+import { ICommandService, CommandType, DOCS_NORMAL_EDITOR_UNIT_ID_KEY, type FUniver } from "@univerjs/presets";
+import { DocSelectionRenderService } from "@univerjs/preset-sheets-core";
 import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
+import { createUsheetUniver, type UsheetUniverCore } from "./usheetUniverFactory";
+import { lakeFontFamily } from "./usheetFont";
 import { editorCaretPoint, shouldPlaceCaretAfterDoubleClick } from "./usheetCellEdit";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
 import { imageFilesFromClipboard, isPureImageClipboard, pasteImageTarget } from "./usheetImagePaste";
@@ -31,7 +28,6 @@ import { registerUsheetActiveSheet } from "./usheetActiveSheet";
 import {
   UNIVER_COMMAND_IDS,
   UNIVER_CONTEXT_MENU_INSERT_PATH,
-  USHEET_FOOTER_CONFIG,
   USHEET_HIDDEN_TOOLBAR_ITEMS,
 } from "./usheetKernelContract";
 import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
@@ -56,7 +52,7 @@ type UniverBook = {
   isCellEditing?: () => boolean;
 };
 
-type UniverCore = ReturnType<typeof createUniver>["univer"];
+type UniverCore = UsheetUniverCore;
 
 /** 内联图（刚插入的 base64 / 本地文件产生的 blob URL）：必须在保存前提升为资产。 */
 const INLINE_SOURCE_RE = /^(data:image\/|blob:)/i;
@@ -108,12 +104,6 @@ function resizeUniverRender(instance: unknown): void {
     }
     if (resized === 0) renderManager?.defaultEngine?.resize?.();
   } catch { /* 重排失败不影响收起动作本身 */ }
-}
-
-/** 应用字体令牌（`--lake-font-family`，即 MiSans 栈）；表格一律用它，**禁止自定义字体**。 */
-function lakeFontFamily(): string {
-  const value = getComputedStyle(document.documentElement).getPropertyValue("--lake-font-family").trim();
-  return value && !value.includes("var(") ? value : "MiSans, sans-serif";
 }
 
 /** 把 workbook 的默认样式与所有命名样式的 ff 钉到应用字体（打开、落盘、canonical 各过一遍）。 */
@@ -290,25 +280,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     let created: { univer: UniverCore; univerAPI: FUniver; book: UniverBook } | null = null;
     const disposables: Array<{ dispose: () => void }> = [];
     try {
-      const { univer, univerAPI } = createUniver({
-        locale: LocaleType.ZH_CN,
-        locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
-        theme: buildUniverTheme() as never,
-        presets: [
-          UniverSheetsCorePreset({
-            container: "univer-sheet-" + noteId,
-            toolbar: showToolbar,
-            formulaBar: showToolbar,
-            // 字体策略（非工具栏工程）：字体表收窄成唯一一项 = 应用字体令牌 MiSans。
-            customFontFamily: { override: true, list: [{ value: lakeFontFamily(), label: "MiSans" }] },
-            // 工作表标签「＋」新建的工作表默认 50 行 × 16 列（用户 261010）。内核默认是 1000×20，
-            // 只有这个入口能配（footer.addSheetButtonConfig），所以显式给全 footer 的四个开关避免覆盖掉默认值。
-            // ⚠️ 两处口径必须一致：空表在 src/core/usheetDoc.ts 的 emptyUsheetWorkbook（同一组 50×16）。
-            footer: USHEET_FOOTER_CONFIG,
-          }),
-          UniverSheetsDrawingPreset(),
-        ],
-      });
+      const { univer, univerAPI } = createUsheetUniver({ container: "univer-sheet-" + noteId, toolbar: showToolbar, formulaBar: showToolbar });
       const book = univerAPI.createWorkbook(workbook as never);
       book.setEditable(!readOnlyRef.current);
       created = { univer, univerAPI, book };

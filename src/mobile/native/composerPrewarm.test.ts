@@ -32,7 +32,9 @@ describe("小记编辑器分包预取（261019）", () => {
     expect(HOME).not.toContain("QuickNoteComposer = lazy");
     expect(HOME).not.toContain("正在加载编辑器…");
     const LAZY = read("../home/quickNoteComposerLazy.tsx");
-    expect(LAZY).toContain("mb-composer-skeleton");
+    const SKELETON = read("../home/QuickNoteComposerSkeleton.tsx");
+    expect(LAZY).toContain("QuickNoteComposerSkeleton");
+    expect(SKELETON).toContain("mb-composer-skeleton");
     expect(CSS).toMatch(/\.mb-composer-skeleton\s*\{[^}]*display:\s*flex/);
   });
 });

@@ -175,10 +175,10 @@ const PASTE_ONCE = (b64, two) => "(async function () { var b64 = " + JSON.string
   record("计算条压到 30px（CSS 覆盖内核行内 height 仍生效）", bar.sectionH === 30 && bar.tabH === 28, JSON.stringify(bar));
   record("状态栏让位变量已实测写入（--usheet-status-bottom）", Boolean(bar.statusVar), JSON.stringify({ statusBottom: bar.statusBottom, statusVar: bar.statusVar }));
 
-  // 2b) 内核 floating 层（CanvasPopup：cell popup / **CellAlert 黄叹号** / 下拉 / 日期 / 颜色 / 选区）必须在**我们的标签宿主内**。
-  //     补丁前它挂在 document.body（patches/@univerjs+ui+1.0.3.patch）⇒ keep-alive 的隐藏对它无效、切文档后浮层残留（用户 261009 报）。
-  const floatLayer = await evaluate("(function () { var el = document.querySelector('[data-lake-univer-floating]'); if (!el) return { found: false }; var host = document.querySelector('.usheet-editor'); return { found: true, inHost: Boolean(host && host.contains(el)), inUniverRoot: Boolean(el.closest('.usheet-univer-root')), atBody: el.parentElement === document.body, visibility: getComputedStyle(el).visibility }; })()");
-  record("内核 floating 容器在表格宿主内（@univerjs/ui 补丁生效）", floatLayer.found && floatLayer.inHost && floatLayer.inUniverRoot && !floatLayer.atBody, JSON.stringify(floatLayer));
+  // 2b) 内核 floating 层（CanvasPopup：cell popup / **CellAlert 黄叹号** / 下拉 / 日期 / 颜色 / 选区）挂在 document.body，
+  //     由补丁打 data-lake-owner，应用侧（MultiTabEditor）按可见标签收起（261022：挂宿主会让排序对话框死循环）。
+  const floatLayer = await evaluate("(function () { var el = document.querySelector('[data-lake-univer-floating]'); if (!el) return { found: false }; return { found: true, atBody: el.parentElement === document.body, owner: el.getAttribute('data-lake-owner'), display: getComputedStyle(el).display }; })()");
+  record("内核 floating 容器挂 body 且带 owner（@univerjs/ui 补丁契约）", floatLayer.found && floatLayer.atBody && Boolean(floatLayer.owner), JSON.stringify(floatLayer));
 
   // 3) 工作表标签「＋」→ footer 配置的 50×16
   await clickInPage('[data-u-comp="sheet-bar-append-button"]');
@@ -186,6 +186,17 @@ const PASTE_ONCE = (b64, two) => "(async function () { var b64 = " + JSON.string
   const s2 = sheetSummary(noteId);
   const added = s2.sheets.find((x) => x.indexOf("Sheet1") !== 0);
   record("工作表「＋」= 50 行 × 16 列（preset footer 配置）", Boolean(added) && added.indexOf(":50x16") > 0, JSON.stringify(s2));
+
+  // 3b) 261021 P5：排序 / 筛选（Univer 独立可选包）的**入口必须出现在「数据」页签**。
+  //     两个能力由 sort-ui / filter-ui 的 ribbon schema 自动注册（我们不自建菜单），
+  //     这里锁"插件清单还在、schema 还挂得上、页签还出得来"——失效表现 = 桌面端整条能力静默消失。
+  await evaluate("(function () { var tabs = [...document.querySelectorAll('[data-u-comp=ribbon-header-menu] *')]; var data = tabs.find(function (e) { return e.children.length === 0 && (e.textContent || '').trim() === '数据'; }); if (data) data.click(); return Boolean(data); })()");
+  await wait(800);
+  const sortFilter = await evaluate("(function () { var q = function (sel) { return Boolean(document.querySelector(sel)); }; return { tab: q('[data-u-comp=ribbon-toolbar]'), filter: q('[data-u-command=\"sheet.command.smart-toggle-filter\"]'), sort: q('[aria-label=\"排序\"]') || q('[data-u-command=\"sheet.command.sort-range-asc\"]') }; })()");
+  record("排序 / 筛选入口出现在「数据」页签（独立包已接）", sortFilter.tab && sortFilter.filter && sortFilter.sort, JSON.stringify(sortFilter));
+  // 切回「开始」页签，避免影响后面的粘贴/右键探针。
+  await evaluate("(function () { var tabs = [...document.querySelectorAll('[data-u-comp=ribbon-header-menu] *')]; var start = tabs.find(function (e) { return e.children.length === 0 && (e.textContent || '').trim() === '开始'; }); if (start) start.click(); return Boolean(start); })()");
+  await wait(500);
 
   // 4) 单图粘贴 → 单元格图片
   //    ⚠️ 上一步「＋」把活动表切到了新工作表，而**新表没有活动单元格** ⇒ 按我们的落点规则会回退浮动图。
@@ -243,9 +254,9 @@ const PASTE_ONCE = (b64, two) => "(async function () { var b64 = " + JSON.string
     await wait(1500);
     // 切走期间：floating 层必须随宿主一起不可见（补丁前它在 body、恒可见 ⇒ 黄叹号盖住别的文档，用户 261009 报）。
     // 若这一步没能真正切走（合成点击偶发），记为提示项、不影响退出码。
-    const awayFloat = await evaluate("(function () { var host = document.querySelector('.usheet-editor'); var el = document.querySelector('[data-lake-univer-floating]'); return { hostActive: host ? host.getAttribute('data-active') : null, elExists: Boolean(el), visibility: el ? getComputedStyle(el).visibility : null }; })()");
+    const awayFloat = await evaluate("(function () { var host = document.querySelector('.usheet-editor'); var el = document.querySelector('[data-lake-univer-floating]'); return { hostActive: host ? host.getAttribute('data-active') : null, elExists: Boolean(el), display: el ? getComputedStyle(el).display : null }; })()");
     const awayInactive = awayFloat.hostActive !== "true";
-    const awayHidden = awayFloat.elExists ? awayFloat.visibility === "hidden" : true;
+    const awayHidden = awayFloat.elExists ? awayFloat.display === "none" : true;
     record("切走后 floating 层不可见（黄叹号不再残留）", awayInactive && awayHidden, JSON.stringify(awayFloat), !awayInactive);
     await evaluate("(function () { var t = [...document.querySelectorAll('.tab-bar [data-note-id]')].find(function (e) { return e.getAttribute('data-note-id') === " + JSON.stringify(noteId) + "; }); if (t) t.click(); return true; })()");
     await wait(1500);

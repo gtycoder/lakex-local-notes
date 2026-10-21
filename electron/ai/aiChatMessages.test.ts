@@ -15,6 +15,18 @@ describe("assertMessages：保留最近 N 条", () => {
     expect(out[out.length - 1].content).toBe("m49"); // 最新的还在
   });
 
+  it("超限时保住首条 system（261021 P0：系统提示词不能被「保留最近」裁掉）", () => {
+    const raw = [
+      { role: "system", content: "sys" },
+      ...Array.from({ length: 49 }, (_, i) => ({ role: "user", content: "m" + i })),
+    ];
+    const out = assertMessages(raw);
+    expect(out).toHaveLength(AI_MAX_MESSAGES);
+    expect(out[0]).toEqual({ role: "system", content: "sys" });
+    expect(out[1].content).toBe("m10");
+    expect(out[out.length - 1].content).toBe("m48");
+  });
+
   it("不超过上限时全量保留", () => {
     expect(assertMessages([{ role: "user", content: "a" }, { role: "assistant", content: "b" }]))
       .toEqual([{ role: "user", content: "a" }, { role: "assistant", content: "b" }]);

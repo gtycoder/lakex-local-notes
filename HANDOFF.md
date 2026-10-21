@@ -19,6 +19,100 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022(二) · 长按小记入口零等待启动（capture 无 logo / 普通启动保留 logo）· **已提交 `c21d3adc`、已推送 master**
+
+- **用户口径**：视觉连续后仍觉得慢；**不加遮罩、不延长任何等待**；capture 不展示 logo、普通启动保留 logo；参考思源「双入口」。
+- **入口分离**：新增 `activity-alias .QuickNoteAlias`（target = MainActivity，theme = `AppTheme.NoActionBarLaunchNoLogo`）：Android 12+ 用 `windowSplashScreenBackground` + 透明图标（无 logo/动画），旧版本用纯色 `windowBackground`；普通启动主题保留 `@drawable/splash` / `@mipmap/ic_launcher`。快捷方式 `targetClass` 改为 alias；`lakenotes://quick-note` 的 VIEW filter 只留在 alias，MainActivity 保留 launcher / 分享入口。两者是**同一个 MainActivity/WebView/数据**，不复制第二套 App。
+- **零等待首帧路由**：MainActivity 注入 `lakeLaunchUrl` JS 接口；`main.tsx` 在 `createRoot` 前同步读，`MobileApp initialCapture` ⇒ React 首帧直接进 capture，不再先画首页骨架再整树切换。`subscribeQuickNoteShortcut` 支持 `skipColdRead`（冷启动不重复轮询 `getLaunchUrl`），并用触发时刻去重，避免 appUrlOpen 二次触发 `setCaptureNonce` 重挂写作卡。
+- **纯色底（不盖图）**：Capacitor `backgroundColor`、`mobile.html` 内联 `html,body{background:#ededf1}`、Android `launch_background` 纯色；splash 退场到 WebView 首帧不露白。
+- **骨架/过渡**：`QuickNoteComposerSkeleton` 独立成文件，与真实写作卡同构（正文/标签/底部动作行）；模块已到、内核未就绪的窗口期用同一份骨架盖住白卡（就绪即揭，不是启动遮罩）；capture 卡片 120ms 淡入（`prefers-reduced-motion` 关闭）。
+- **设备实测（emulator-5554）**：普通启动截帧 s01–s04 有 logo；alias 启动 s02–s03 纯色无 logo → s04–s07 骨架 → s08+ 写作卡+键盘；热启动 alias 复用现有 MainActivity 并打开 capture；`cmd shortcut get-shortcuts` 实测 intent `cmp=com.lakenotes.mobile/.QuickNoteAlias`；首帧采样 `home:false / overlay:false / composer:true / skel:true`。
+- **门禁**：tsc 0 · vitest **334 文件 / 2415 通过（16 skip）** · ui-metrics 0 · check:mobileui ✓ · 双端构建 ✓ · diff-check ✓。
+- **文件**：Manifest / values(-v31)/styles / shortcuts / MainActivity / capacitor.config / mobile.html / MobileApp / main.tsx / quickNoteShortcut / QuickNoteComposer / QuickNoteComposerSkeleton / quickNoteComposerLazy / mobile.css + capture/prewarm/mobile-layers 测试。
+
+### 261021(四) · 移动端表格 P4/P5 第一批：一级工具条补三项 + 排序/筛选**双端**接入 · **待用户验收**
+
+> 用户定稿：① **保存不在工具条重复**（顶栏 ✓ = 手动保存并退出编辑）；② 小数位一级按钮**点一下 = +1 位**，减少放 ⋯ 卡；③ **A/B 都做**，且排序/筛选**桌面端也要**（"这个很常用"）。
+
+- **P4/P5 一级工具条（移动端）**：`＋ ｜ 撤销 重做 格式刷 清除格式 ｜ 常规▾ ｜ .00 ｜ ⋯`（语雀 §2.1 组序，去掉保存位；≈370/412px）。
+  - 清除格式 = `fRange.clearFormat()`；小数位 = 新纯函数 `mobile/usheet/usheetDecimals.ts`（±1 位，文本/日期明确提示、到边界提示）；格式刷 = `sheet.command.set-once-format-painter`，激活态由 `sheet.operation.set-format-painter` 回填（不自建状态）。
+  - ⋯ 卡瘦身：小数位「增」移出，「减」留第一行（对齐语雀 §2.3）；筛选/排序**点亮**。
+- **排序/筛选（双端）**：新增 4 个依赖（**全 1.0.3 精确锁**）`@univerjs/sheets-{sort,sort-ui,filter,filter-ui}`。
+  - 桌面：`features/usheet/univerSortFilter.ts` 接桌面 UI 变体 ⇒ ribbon **自动出现「数据」页签**（筛选 order2 / 排序 order3，另右键「数据」组），无需自建菜单。
+  - 移动端：`mobile/usheet/mobileSortFilter.ts` 接**移动 UI 变体**（`UniverSheetsSortMobileUIPlugin` / `UniverSheetsFilterMobileUIPlugin`，依赖的正是 `UniverSheetsMobileUIPlugin`）；入口是我们自绘的 ⋯ 卡。
+  - **排序不用无参的 `sort-range-asc/desc`**（sort-ui 的 UI 包装会弹"是否扩展选区/仅有一行"的**桌面对话框**，设备实测踩到）⇒ 新增 `mobile/usheet/usheetSortPlan.ts` 自己算数据区（单格/单列 ⇒ 锚列连续块 + 列方向扩到已用列；表头只认「首行文本 + 下面全数值」一个信号），再派发数据层 `sheet.command.sort-range`（`range/orderRules/hasTitle` 显式给全）。
+  - **筛选**：先 `set-filter-range`（已存在时返回 false 属正常）再 `sheet.operation.open-filter-panel`（否则只建范围、面板不弹——设备实测踩到）。
+- **设备验收（emulator-5554，新 APK 40,486,186 B）**：工具条 8 颗/5 组；小数位真落盘（B3 新增 `{n:{pattern:"#,##0.0"}}`）；清除格式移除样式；格式刷 `is-active`；**降序排序整行换位**（A4/A5 交换、B5 的 `Tttttt` 跟着走到 B4）；**筛选抽屉弹出**（`data-u-comp="mobile-sheets-filter-drawer"`：筛选/按值/按颜色/按条件/清除筛选），正文 `resources` 出现 `SHEET_FILTER_PLUGIN`（`ref:{startRow:2,startColumn:0,endRow:4,endColumn:1}`）。
+- **桌面验收（隔离实例 `$TMPDIR/lake-accept-p5` / CDP 9237）**：新建表格 → ribbon 出现「数据」页签；工具栏实测 `data-u-command="sheet.command.smart-toggle-filter"` + `aria-label="排序"`。
+- **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle ✓ · diff-check ✓ · **内核探针 9/12 通过、3 条 advisory、exit 0**（新增第 6 条「排序/筛选入口出现在数据页签」PASS）。`mobile/usheet/usheet-chrome.css` 基线 216 → **221**（+5 = 小数位按钮）。
+- **两条必须记住的后果**（详见 `docs/USHEET-UPGRADE.md` §4.4）：① 筛选是 plugin resource，**首次保存会多一条空壳**（一次 hash 变化/一次上传）；② `resources` 是覆盖写 ⇒ **两端都得装 filter 数据插件**、且注册顺序一致，否则一端保存会静默抹掉筛选/造成假冲突。
+- **打开表格「先白再灰再出现，感觉卡」（用户 261022）· 已优化（待复验）**：
+  - 实测：表格编辑器是**单个 6.85MB 懒加载 chunk**（`UniverSheetEditor-*.js`，Univer 全量 preset），首开才拉 ⇒ 点击后空白/灰底 → 板面；隔离实例（`--disable-gpu`）里从点击到第二块画布 = 769ms。
+  - 修法：`src/App.tsx` 在 workspace 就绪后**空闲预取**该 chunk（`requestIdleCallback(timeout: 8000)`，失败静默）⇒ 网络确认首开前已拉 `UniverSheetEditor-*.js` + `*.css`；复测点击到画布 **769ms → 585ms**（软件渲染；真机 GPU 更快）。
+  - 补丁 2（261022，灰遮罩）：用户又说"主要就是灰色遮罩感觉慢"。查清灰遮罩 = **Univer 自带的 WorkbenchSkeleton**
+    （`[data-u-comp="workbench-skeleton-content"]`，灰底 `gray-50` + shimmer），生命周期 `Ready` 前**盖在内容上**。
+    我们实例创建只要 44ms，这层骨架纯属多余 ⇒ `features/usheet/usheetEditor.css` 用
+    `.usheet-editor div:has(> [data-u-comp="workbench-skeleton-content"]) { display: none; }` 隐藏（只作用 usheet 宿主）；
+    层围栏基线 `usheetEditor.css` 37 → 38。实例复测：点击后 ~374ms 直接看到**完整表格**（此前该时刻是灰遮罩骨架）。
+  - 剩余：实例 `createUniver`（全量 preset）初始化本身仍是几百 ms，属内核启动成本；若还要再快，只能做「隐藏预热实例」或裁 preset（需单独立项）。
+- **冷启动落点改为「Lake 文档优先、其次多维表」（用户 261022 定）**：`useBootstrap` 不再直接打开 `lastOpenedNoteId`，
+  改由 `src/core/coldStartNote.ts` 的 `chooseColdStartNoteId()` 决定：上次是 Lake 文档 → 直接落它；否则落最近更新的 Lake 文档；
+  再否则最近更新的多维表；都没有才退回上次打开/最近更新（宁可慢也不让用户找不到文档）。**不把首开成本高的表格/画板钉在启动交互上**。
+  单测 `coldStartNote.test.ts` 5 例。
+- **表格「隐藏预热画布」尝试（261022 #1）· 结论：不可行，已回退**：
+  - 思路：空闲时先建好 Univer 实例（隐藏容器）→ 首次打开把容器搬进真实宿主 + resize。
+  - 实测：① 不挂 workbook 时 Univer **不创建 render unit/canvas**（搬过去也永远空白）；② 挂占位 workbook 让 canvas 先建出来，
+    采用时 `disposeUnit` 占位再建真实 workbook ⇒ 出现「先显示真实表、~1s 后又被空表盖掉」的错乱，且点击→画布反而从 ~374ms 变成 ~1035ms（更慢）。
+  - 原因：render unit / canvas 与 workbook 生命周期绑定，跨实例搬 DOM 在当前 Univer 1.0.3 架构里没有稳定支撑点。**不要重复这条路**；
+    要再压首开只能走"关标签后 LRU 保留实例"或上游能力。
+  - 保留：把 createUniver 配置抽成 `features/usheet/usheetUniverFactory.ts`（编辑器单一入口）、`lakeFontFamily` 抽到 `usheetFont.ts`（无行为变化）。
+- **表格打开 CPU profile（261022 #2）**：`Profiler` 采样 2747 帧（250µs）—— idle 1821、program 158、`getBoundingClientRect` 66，
+  其余为 canvas `drawImage/setTransform` 与 Univer 内部（`_positionInput`/`_buildMenuSchema`）。**没有应用侧热点**，React 挂载不是瓶颈 ⇒ #2 不做改动。
+- **桌面表格排序弹窗卡死（用户 261022 报「排序弹窗无法点击、会导致整个 app 卡死」）· 已修（待复验）**：
+  - 复现：隔离实例（`$TMPDIR/lake-sortfix` / CDP 9237）建表贴数据 → 数据页签 → 排序 → 「自定义排序」→ 对话框出现后**整窗点不动**；`sample` 实测渲染进程 **120% CPU**、CDP 也不响应（真死循环，不是遮罩挡点击）。
+  - 根因：261009 的 Univer 补丁把 floating 层 portal 容器挂进**实例宿主**（当初为防黄叹号逃出标签宿主）⇒ 设计系统 **Dialog（含遮罩）也被 portal 进宿主**，与宿主 `overflow:hidden` + fixed 遮罩组合触发 measure/reflow 死循环。把容器放回 `document.body`（内核原行为）后同一对话框可正常点击、停留 6s+ 无卡死。
+  - 修法：`patches/@univerjs+ui+1.0.3.patch` 改为**容器仍挂 `document.body`** + 打 `data-lake-univer-floating` / `data-lake-owner="univer-sheet-<noteId>"` 两个标记；应用侧 `src/features/editor/MultiTabEditor.tsx` 按**当前可见标签**把其它实例的容器 `display:none`（MutationObserver 兜底新容器）⇒ 261009 的黄叹号仍然不会逃逸。
+  - 同批更新：`usheetKernelContract.ts` 的 `UNIVER_PATCH_HOOKS`（契约改成 body + owner）、`univerContract.test.ts` 护栏③（禁 `mountContainer.appendChild(portalContainer)`、要求 owner + 应用侧按 owner 收起）、`scripts/usheet-kernel-probes.mjs` 两条探针（容器在 body 且带 owner；切走后 `display:none`）、`docs/USHEET-UPGRADE.md` §4.7。
+  - 设备/实例验证：自定义排序 → 提醒对话框 → 确认 → 「所选区域仅有一行，无法排序」提示全程可点、无卡死；切到其他标签后 `[data-lake-univer-floating]` 实测 `display:none`（宽度 0）。
+- **冷启动慢（用户 261021 报「感觉加了启动比以前慢」）· 已定位并修（待复验）**：**不是动画强制播放**（代码无最短展示，overlay 只等 `phase=ready`）。加了临时埋点后实测冷启动（页面时钟）：
+  - 首次安装后：effect-start 2.34s → migrate +0.57s → SQLite open +1.12s → **schema +2.60s** → reconcile +0.09s → refreshAll +0.07s ≈ **6.8s** 才真首页；
+  - 根因：`applyMobileSchema` 是 **30+ 条独立 SQL**，每条走一次 Capacitor 桥往返（设备实测单次约 68ms）⇒ **每次冷启动都重放建表/索引**，固定多花 ~2.4s。
+  - 修法（`data/schema.ts` + `bridge/context.ts`）：新增 **`MOBILE_SCHEMA_VERSION` + `PRAGMA user_version` 快路径** —— 版本已到就整段跳过；顺带修了 sql.js 测试端 `pragma()` 返回 undefined 的问题（旧实现让版本恒为 0，且 prepare 不释放会锁库）。**改表/索引时记得 +1 版本号**。
+  - **批量下发（用户 261021 点单「批量 SQL 才是正解」）**：`applyMobileSchema` 拆两阶段 —— ① 不依赖读状态的底表建表（含旧库 DROP）→ ② 需要 `PRAGMA table_info`/`sqlite_master`/种子的条件语句 + 小记 schema 增量；每阶段一次 `executeSet`（单事务、一次桥往返），写侧从 **28 次往返降到 2 次**。`applyQuickNotesSyncSchema` 拆出 `buildQuickNotesSyncSchemaStatements()` 供批量复用；无 `executeSet` 的测试端（sql.js）与"批内有可选语句失败"（如无 FTS5）自动退逐条兜底。单测 `schema.test.ts` 卡住"2 次 executeSet + exec 只剩版本号"。
+  - 复测：第二次冷启动 `schema` **2436ms → 131ms**，整机 ready **≈6.6s → ≈2.6s**；升级后**首次**全量 DDL（v3 点位实测）**2436ms → 185ms**（两批 executeSet + 版本号）。
+  - 剩余成本（稳态）：WebView 冷加载到 effect ~1.2s（debug 包/系统 WebView 启动，非我们的 JS）、`NativeSqliteDb.open` ~0.74s、`migrateSnapshot` ~0.23s、reconcile 0.15s、refreshAll 0.12s。**下一步若要再快，只能动这几个**（open 属 Capacitor 插件首次初始化，migrate 可加存储标记跳过）。
+- **回归修复（用户 261021 报「打字不能看」）· 已修，待复验**：**内核的移动公式栏 = 编辑态输入面，挂在 `footer.univer-shrink-0` 里**；P3 起我们把 footer 整条 `display:none`（自绘底栏），P5 查找的 footer 例外又把其余子项显式 `display:none` ⇒ 打字进了**隐藏编辑器**，屏幕上没有任何回显，只有提交后才出现在格子里。
+  - 修法（`src/mobile/mobile.css`）：footer 只在「**编辑态且有公式栏**」或「**有查找条**」时 `display:block`；footer 内**只放行** `[data-u-comp="mobile-formula-bar"]` / `[data-u-comp="mobile-find-replace-bar"]`，工作表页签条等继续隐藏。
+  - **设备实测**：编辑单元格时键盘上方出现内核底部公式栏（`× ✓ ƒx <内容>`），打字**实时可见**；点「取消」后 A15 仍是 `Eeeeee`（正文未变）。
+  - **顶部只读公式栏已删（用户 261021 定稿：与底部输入栏重复）**：`MobileUsheetViewer` 去掉 `.mobile-usheet-formula` 渲染与 `cellInfo` 状态，`mobile.css` 删对应 3 组规则；编辑态输入面**只保留内核移动公式栏**（阅读态不再显示地址/显示值）。
+  - 排查提醒（我这次自己踩了）：**CDP `Page.captureScreenshot` 抓不到 GPU canvas**，用它截图会得到"画布整片空白"的假象；移动端截图一律 `adb exec-out screencap -p`（AGENTS §7#13/TECH-STACK §五#2）。
+- **P4-1 网格视觉（移动端专用主题）· 已完成**：新增 `mobile/usheet/mobileUniverTheme.ts`（在共用 `buildUniverTheme()` 上做**最小覆盖**，桌面那份不动），`MobileUsheetViewer` 两处 theme 改用它。
+  - **键位来自设备 A/B 染色实测**（把 `--lake-bg-subtle`/`--lake-border-1`/`--lake-accent` 临时染成纯红/纯蓝/纯黄逐像素采样，已还原）：表头底 = `gray.50`；当前行列头 = `mix(gray.50, primary.500, 7%)`；网格线 = `mix(gray.200, gray.900, 7%)`（engine-render）；选区边框 = `primary.600`。
+  - 覆盖值：`gray.50 = #f4f5f5`、`gray.200 = #f4f4f3`（解 7% 混色方程得 243.9 ⇒ 网格线正好 #e5e5e5）、`primary.500/600 = #2f8ef4`。
+  - **设备实测（emulator-5554 逐像素）**：表头 `#f4f5f5` ✓、网格线 `#e5e5e5` ✓、选区边框 `#2f8ef4` ✓（3 设备像素 = 2px 环）。
+  - **已知结构性偏差**：当前行列头实测 `#e6eef5`（语雀目标 `#e7e9e8`）—— 内核这档是 7% 主色混色，主色是选区蓝就必然带蓝调；要中性灰只能把主色改成灰（会牺牲选区蓝）。**待用户拍板**，默认保持选区蓝。
+  - **未验证**：多格选区的填充色（单格选区不填充；触摸拖选在本机 CDP 上没生效）。
+  - 测试：`mobileUniverTheme.test.ts` 4 例（覆盖表 / 7% 混色对拍 #e5e5e5 / 不突变入参 / 单一来源）。
+- **P4-2 二级选择器视觉 · 已完成**：新增 `mobile/usheet/SheetMenuBody.tsx`（**单一来源**：列表 / 圆点色板 / 图标行三种形态），`SheetPopCard` 与 `SheetMoreCard` 都改成用它 + 同一套下钻路径栈。
+  - 字色 / 填充色 → **4×2 圆点色板**（色值来自 `buildColorMenu()` 的 `swatch` 字段，属数据驱动颜色，不写死视觉）；水平对齐 → **图标行**（左/中/右，lucide）；冻结 / 公式仍走列表行；字号 / 边框继续置灰。
+  - **设备实测（emulator-5554）**：字体颜色弹出 8 个圆点（`getComputedStyle` 取到真实色 `rgb(229,72,77)` 等）；水平对齐弹出 3 个图标按钮（左对齐/居中对齐/右对齐）。
+  - 门禁：`mobile-layers` 基线 `usheet-chrome.css` 221 → **250**（+29 = 色板 12 / 图标行 17，理由已写在基线行）；`usheetChromeModel.test.ts` 增 6 条断言（childLayout / swatch 合法性 / 图标存在）。
+- **P5 边框 · 已完成**：新增 `mobile/usheet/usheetBorders.ts`（选项表 + 注入式 `applyUsheetBorder`），⋯ 卡「边框」从置灰占位变成**可用子菜单 8 项**（全部框线 / 外边框 / 内部框线 / 上 / 下 / 左 / 右 / 无框线）。
+  - 内核能力 = `FRange.setBorder(type, style, color)`；`type` 是 `BorderType` 字符串值，`style` 从 `univerAPI.Enum.BorderStyleTypes.THIN` 取（**不写死数字**），颜色 `#c8ccd2` 属**文档内容色**（与 COLOR_NAMES 同口径，不写在 CSS 里）。
+  - **设备实测（emulator-5554）**：⋯ → 边框 → 8 项齐全；点「全部框线」⇒ 正文新增样式 `{bd:{t,r,b,l:{s:1,cl:{rgb:"#c8ccd2"}}}}` 且落在活动格（R0C0）。
+  - 测试：`usheetBorders.test.ts` 3 例（枚举合法性 / 注入式调用 / 缺 facade 明确 false）+ `usheetChromeModel` / viewer 行为用例已同步（边框不再置灰、下钻 8 项）。
+- **P4-4 读态筛选 = 本机视图 · 已实现（用户 261021 定稿：只对当前设备生效、绝不写正文）**：`MobileSheetReadingBar` 只点亮「筛选」（其余四项置灰并带原因），新增 `mobile/usheet/usheetReadFilter.ts`（判据单一来源）。
+  - **实现口径**：读态筛选只活在 Univer 运行时（`SHEET_FILTER_PLUGIN` plugin resource）；**所有落盘路径之前**（`capture()` 第一行 / 切回编辑态 / 卸载）用 `syncExecuteCommand("sheet.command.remove-sheet-filter")` 同步摘除 ⇒ `book.save()` 与打开时逐字节一致，不标脏、不进 S3。
+  - **安全边界**：文档**本身已带筛选**时读态入口置灰并给理由（"这篇表格已有保存的筛选，回编辑态调整"）——否则"还原"会删掉文档数据。
+  - **验证**：单测 `usheetReadFilter.test.ts`（无/空壳/真实筛选、坏正文）；`mobileSheetReadingBar.test.ts` 3 例（只点亮筛选、置灰理由、点击回调）；**设备实测**：该测试表带已存筛选 ⇒ 读态筛选按钮 `disabled=true` 且 title 正确（护栏路径生效）。**启用路径的端到端（新表 → 读态筛选 → 正文不变）还没跑**：现有测试表本身带筛选，需要新建一张干净表再验。
+  - **两个坑（都实测踩过，写死在这里）**：① **只装 `@univerjs/find-replace` 是不够的** —— 它只是跨产品基础层（服务 + 桌面 dialog / 移动 bar），**表格还需要 `@univerjs/sheets-find-replace` 适配器**，否则插件能启动、菜单也能出现，但**搜不到任何单元格**（第一次尝试就栽在这，表现为"UI 都不出来"）；② **移动查找条挂在 Univer 自己的 `<footer>` 里**，而 P3 起我们把整条 footer 隐藏了 ⇒ 条子存在于 DOM 但宽高为 0（看起来没打开）。修复 = `src/mobile/mobile.css` 里 `.mobile-usheet footer.univer-shrink-0:has([data-u-comp="mobile-find-replace-bar"]) { display: block; }` + footer 内其余子项继续 `display:none`（当时基线 1457 → 1459；261021 删顶部只读公式栏后为 **1435**）。桌面快捷键 **Ctrl/Cmd+F 实测可用**：Univer 的快捷键带 precondition（`FIND_REPLACE_AVAILABLE` + `!EDITOR_ACTIVATED`，即**焦点必须在表格网格**），点中网格后 Cmd+F / Ctrl+F 都能打开 `find-replace-dialog`；之前判成"未绑定"是测试点错了 canvas（命中公式栏 27px 高的那个，不是 1054×645 的网格）。
+- **保护 / 查找替换 的现状（下一步）**：
+  - **P4-4 阅读态 5 项**：仍置灰。原因不是"没接线"——筛选/排序/冻结都要**写文档数据**（筛选条件进 `SHEET_FILTER_PLUGIN`、冻结进 `freeze`），读态不该写；要看读态筛选得先定"只读视图"的产品语义。
+  - **保护**：`@univerjs/sheets` / `sheets-ui` 里**已有**保护命令（`sheet.command.add-range-protection*` 等，无需新依赖），但 261008 已把它登记为「需先立产品语义」（本地单用户场景下"保护"意味着什么没定）⇒ 本轮不动。
+  - **查找替换 · 已完成（261021 P5，双端）**：`@univerjs/preset-sheets-find-replace@1.0.3`（内含基础层 `@univerjs/find-replace` + **表格适配器** `@univerjs/sheets-find-replace`）。桌面 = `UniverSheetsFindReplacePreset()`（ribbon「数据」页签出现「查找替换」，对话框 `find-replace-dialog`）；移动 = **Mobile 变体** `UniverFindReplaceMobileUIPlugin` + `UniverSheetsFindReplaceMobileUIPlugin`，入口 = ⋯ 卡「查找替换」与读态「查找」（只读浏览，不写正文）。**设备实测**：读态查找打开 `mobile-find-replace-bar`（412×52），输入「测试」→ 命中 1/1、下一个匹配可用；编辑态 ⋯ → 查找替换同样打开（412×52）。**桌面实测**：数据页签「查找替换」→ `find-replace-dialog` 打开（含 查找/替换/高级查找）。
+- **未做（下一刀）**：P4-4 阅读态语义 · 保护（等产品语义）· 查找替换（自研 vs 装包待拍板）· 多格选区填充色取证。
+- **状态**：**未提交 / 未推送，待用户验收**（工作树仅本批改动）。
+- **证据**：`.css-audit/p5-261021/`（移动工具条 / 小数位 / 筛选 / 排序菜单 / 桌面数据页签；gitignore）。
 ### 261021(四) · 未分层内核 CSS 压过整个设计系统（设置面板 × 错位 + 全站字体漂移）· **已修，待用户验收**
 
 - **用户报**：设置页「偏好设置」的关闭 × 跑到标题右边（截图），问"是不是原语改了"。

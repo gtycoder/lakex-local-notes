@@ -23,7 +23,7 @@ LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + bet
   ③ **源码字典对照** `lake-editor-main/`（第三方 VSCode 插件）与 `lake-main/`（lakejs 社区版，**序列化方言已分叉、结论不可套用**）。
   **最终仲裁 = vendor bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js` + 运行时实测**（冲突时以实测为准）。
 - **内核已 vendored 并 pin（v1.99.0），不要随意升级**；必须改行为时按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 最小改。
-- **表格 = 第三方 Univer**（`@univerjs/*` 全部精确锁版本）：动之前先读 `src/features/usheet/usheetKernelContract.ts`（每处触点写了失效表现）；**升级只走 `docs/USHEET-UPGRADE.md` 的 playbook**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 npm update**。对 Univer 只有**一处**补丁 `patches/@univerjs+ui+1.0.3.patch`（内核把 floating 层 portal 无条件挂 body ⇒ 逃出标签宿主）；**除它之外不要再给依赖打 patch**。
+- **表格 = 第三方 Univer**（`@univerjs/*` 全部精确锁版本）：动之前先读 `src/features/usheet/usheetKernelContract.ts`（每处触点写了失效表现）；**升级只走 `docs/USHEET-UPGRADE.md` 的 playbook**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 npm update**。对 Univer 只有**一处**补丁 `patches/@univerjs+ui+1.0.3.patch`（floating 容器留 `document.body` + `data-lake-owner`，应用侧按可见标签收起；**不要挂回实例宿主**——261022 排序对话框死循环）；**除它之外不要再给依赖打 patch**。
 - **多维表 Grid / 关联选择器的行窗口**：动视口或屏外交互前读 `docs/BITABLE-VIEWPORT.md` —— 记录全集不裁剪，主表/选择器共用一套有界行窗口；缓存不留滚过的全格；编辑/IME/选区/粘贴/统计/填色/搜索必须按完整模型验证，**只读与保存/历史协议不因性能改动放宽**。
 - **文档分工（防漂移）**：`README` 概览（不维护进度/计数）· `HANDOFF` 唯一交接 · `AGENTS` 长期红线。**已完成的研究/计划/spike/审计直接删**（git 可查），不建 archive 目录。
 
@@ -86,6 +86,7 @@ LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + bet
 - **内核浮层 portal 到 `body`**（`.ne-overlay-container`）⇒ 移动端要覆盖内核浮层**必须用 body 级选择器**（入口已加 `body.lake-mobile`）。
 - **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏**整条不存在**（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`）、块悬浮手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面固定栏 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示、不能输入）。新增移动端输入能力一律走 dock。**收面板→键盘（restore 档）必须让面板内容保持到被键盘盖住**（`closingHold`；提前播滑出/淡出 = 键盘还在升、面板先空一块，261019 用户报「闪烁」）。
 - **移动端正文 = 文件（261019 与桌面同构）**：正文/小记/历史/草稿落 App 私有 Data（相对路径单一来源 `src/core/noteBodyPaths.ts`，原生 `BodyStorePlugin` 原子写 + gzip 快照）；**SQLite 只存元数据/hash/同步账本/派生 text_cache+FTS**。旧库 `notes.content` 升级时**整库重置一次**（§3#7），**不要**为 content 列写兼容读取；浏览器预览的正文是内存（刷新即丢），真机/模拟器才是文件。
+- **移动端 SQLite schema = 版本门 + 批量 DDL**（261021，冷启动 DDL 2.4s → 185ms）：`applyMobileSchema` 先读 `PRAGMA user_version`（`MOBILE_SCHEMA_VERSION`，`src/mobile/data/schema.ts`），版本已到就整段跳过；首次把 DDL 拆两批走 `executeSet`（底表一批 / 条件语句一批）。**改表/索引必须 +1 版本号**；新增 DDL 只加到 `baseSchemaStatements`（不依赖读状态）或 `collectSchemaStatements`（依赖读状态），**不要再回到逐条 `db.exec`**（原生端一条 = 一次桥往返，实测 ~68ms）。
 - **移动端有自己的设计与样式层**（`src/mobile/**`，`mb-*` + 移动端 theme）：**不引桌面样式层**，两端 UI 不共享。
 - **目录/知识库节点图标与文内表情输入解耦**：两端各自实现节点选择器与图形；只共享`src/lib/nodeIcons.ts`的目录/编解码与表情数据/最近记录逻辑。移动端节点选择器不得import输入态`EmojiPanel`或使用其`mb-emoji-*`类。**默认资源页**唯一判据`nodeIconPickerMode(nodeType)`：笔记本/分组→图标，所有文档类型→表情；当前保存的资源种类不覆盖这条默认规则。目录图标值仍为≤16字符短串，不改同步字段。
 - **移动端「文档内查找」= 自研一套**（261016 实测定稿）：内核查找面板只随工具栏 `search` descriptor 挂载，而移动端**关掉了工具栏插件** ⇒ 移动端既无面板也无热键。实现 = `src/mobile/editor/MobileFindBar.tsx`（DOM 文本节点扫描 + CSS Custom Highlight API 双高亮 + `n/m`；正文变化自动重扫），**入口 = 工作区顶栏右上角**（工作区胶囊是定稿四格、且不许放搜索）。**桌面不加入口**：内核自带 ⌘F 面板已够用，别再包一层（曾加过、已按用户要求整体回滚）。语义与实测见 `docs/LAKEX-CONTRACT.md` §5.39/§5.40/§5.41。
@@ -130,6 +131,8 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 1. vite dev server 会被会话回收 ⇒ 必须长驻 tty；单实例锁按 userData 隔离（资源端口 A=19876 / B=19877）。
 2. **杀 Electron 只按唯一 CDP 端口定位**（`pgrep -f "remote-debugging-port=92xx"`）；`pkill -f Electron` / `killall` 会误伤 SiYuan/VSCode，**也会打断 DSH 宿主自己**。
 3. **在 DSH 里起本仓 Electron 必须 `env -u ELECTRON_RUN_AS_NODE`**（宿主注入了 `ELECTRON_RUN_AS_NODE=1`，否则以纯 Node 启动、报 `bad option: --disable-gpu`）；改本仓代码不影响 DSH，但**别动 DSH 安装目录**。
+   同样因为「子进程按 PATH 找可执行文件」：**本机 `git` 要用 `/usr/bin/git`**（`/usr/local/bin/git` 是坏的，Bad CPU type）；
+   patch-package 重建补丁时必须 `PATH=/usr/bin:$PATH`（261022 踩到：`spawnSync git Unknown system error -86`）。
 
 ### 同步 / 数据 / 构建
 4. 同步完成必须广播 `sync-progress`（否则 tab / 状态栏 / 小记不刷新）；`markSynced` 要同时改 `tree_nodes.sync_state`。

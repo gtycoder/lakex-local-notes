@@ -1,8 +1,8 @@
 /** 表格 chrome 的内核无关图标（lucide，描边 1.75；语雀自有 sprite 不能照搬，只按语义映射）。 */
 import {
-  AlignLeft, AlignVerticalJustifyCenter, ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine,
-  ArrowUpDown, ArrowUpToLine, Baseline, Bold, ChartColumn, Columns3, Filter, Grid2x2, Italic,
-  Link2, Lock, Merge, Minus, PaintBucket, Plus, Rows3, Search, Sigma, Snowflake,
+  AlignCenter, AlignLeft, AlignRight, AlignVerticalJustifyCenter, ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine,
+  ArrowUpDown, ArrowUpToLine, Baseline, Bold, ChartColumn, Columns3, Eraser, Filter, Grid2x2, Italic,
+  Link2, Lock, Merge, Minus, PaintBucket, Paintbrush, Plus, Rows3, Search, Sigma, Snowflake,
   SquareDashedMousePointer, Strikethrough, Table2, Type, Underline, UnfoldHorizontal,
   UnfoldVertical, WrapText, Wrench,
 } from "lucide-react";
@@ -10,12 +10,14 @@ import {
 const ICONS = {
   minus: Minus, plus: Plus, type: Type, bold: Bold, italic: Italic, strike: Strikethrough,
   underline: Underline, baseline: Baseline, paintbucket: PaintBucket, grid: Grid2x2,
-  "align-left": AlignLeft, "align-vertical": AlignVerticalJustifyCenter, wrap: WrapText,
+  "align-left": AlignLeft, "align-center": AlignCenter, "align-right": AlignRight, "align-vertical": AlignVerticalJustifyCenter, wrap: WrapText,
   merge: Merge, filter: Filter, sort: ArrowUpDown, table: Table2, link: Link2,
   select: SquareDashedMousePointer, chart: ChartColumn, sigma: Sigma, freeze: Snowflake,
   lock: Lock, search: Search, "row-height": UnfoldVertical, "col-width": UnfoldHorizontal,
   rows: Rows3, columns: Columns3, wrench: Wrench, "row-above": ArrowUpToLine,
   "row-below": ArrowDownToLine, "col-left": ArrowLeftToLine, "col-right": ArrowRightToLine,
+  // 261021 P4：一级工具条新增两项（语雀 toolbar-formatPainter / toolbar-clearStyle）
+  "format-painter": Paintbrush, "clear-style": Eraser,
 } as const;
 
 export type SheetIconName = keyof typeof ICONS;

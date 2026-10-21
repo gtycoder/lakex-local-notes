@@ -42,6 +42,17 @@ function normalizeParts(raw: unknown, role: AiChatMessage["role"]): AiContentPar
 }
 
 /**
+ * 超限时保留最近 N 条；**首条 system 必须保住**（261021 P0：系统提示词固定在首条，
+ * 不能被「保留最近」裁掉，否则长对话会忽然丢失规则）。
+ */
+function capMessages(raw: unknown[]): unknown[] {
+  if (raw.length <= AI_MAX_MESSAGES) return raw;
+  const first = raw[0] as { role?: unknown } | null;
+  const hasLeadingSystem = Boolean(first && typeof first === "object" && first.role === "system");
+  return hasLeadingSystem ? [raw[0], ...raw.slice(-(AI_MAX_MESSAGES - 1))] : raw.slice(-AI_MAX_MESSAGES);
+}
+
+/**
  * 校验并裁剪消息，**保留最近 `AI_MAX_MESSAGES` 条**（261005：超限时丢更早的上下文，当前这轮一定在）。
  * 纯文本消息保持 `content: string`（兼容既有调用方）；含附件时才用内容块数组。
  */
@@ -51,7 +62,7 @@ export function assertMessages(raw: unknown): AiChatMessage[] {
   let total = 0;
   let images = 0;
   let documents = 0;
-  for (const item of raw.slice(-AI_MAX_MESSAGES)) {
+  for (const item of capMessages(raw)) {
     const m = (item ?? {}) as { role?: unknown; content?: unknown };
     const role: AiChatMessage["role"] = m.role === "system" || m.role === "assistant" ? m.role : "user";
     const isString = typeof m.content === "string";

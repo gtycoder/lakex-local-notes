@@ -71,16 +71,35 @@ export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean 
 }
 
 /**
+ * 冷启动首帧 hint（261022）：Android 原生在 WebView 注入本次 launch intent 的 data URL，
+ * 同步读取、不等插件 ⇒ React 首帧就能决定进 capture，不再先画首页骨架再切。
+ * 非原生/未注入时返回空串，调用方回落到原来的 getLaunchUrl 轮询。
+ */
+export function readLaunchUrlHint(): string {
+  try {
+    const bridge = (window as unknown as { lakeLaunchUrl?: { getUrl?: () => string } }).lakeLaunchUrl;
+    return bridge?.getUrl?.() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * 订阅「小记」快捷方式。返回取消订阅函数。
  * `onTrigger` 可能被调用多次（冷启动补读 + appUrlOpen），调用方自行幂等。
  */
-export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {
+export function subscribeQuickNoteShortcut(onTrigger: () => void, options: { skipColdRead?: boolean } = {}): () => void {
   if (!isNativePlatform()) return () => undefined;
+  // 261022：冷启动 URL 已由原生同步 hint 在首帧前处理 ⇒ 本次不重复轮询 getLaunchUrl，
+  // 否则同一次点击会被再触发一次（setCaptureNonce 重挂写作卡 = 闪一下/丢焦点）。
+  if (options.skipColdRead) settleLaunch(true);
   let disposed = false;
   /** 冷启动轮询是否已拿到 launch url（拿到就停；不影响之后的热启动 appUrlOpen）。 */
   let launchConsumed = false;
-  /** 上一次触发时刻：只对"同一次点击被两条路径各触发一次"做短去重，**不能永久去重**。 */
-  let lastTriggerAt = 0;
+  /** 上一次触发时刻：只对"同一次点击被两条路径各触发一次"做短去重，**不能永久去重**。
+   *  skipColdRead 时把 hint 时刻记为已触发：电容插件的 appUrlOpen 若把同一次冷启动再送一次，
+   *  会被 DEDUP_MS 挡掉（否则 setCaptureNonce 会重挂写作卡 = 闪一下/丢焦点）。 */
+  let lastTriggerAt = options.skipColdRead ? Date.now() : 0;
   let retryTimer: number | null = null;
   let listener: { remove(): void } | null = null;
   /** 冷启动的双触发窗口：getLaunchUrl 与 appUrlOpen 通常在同一两秒内各来一次。 */
@@ -130,7 +149,7 @@ export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {
             retryTimer = window.setTimeout(readLaunchUrl, 300);
           });
       };
-      readLaunchUrl();
+      if (!options.skipColdRead) readLaunchUrl();
 
       // 热启动 / 已在后台：onNewIntent ⇒ appUrlOpen
       const l = await App.addListener("appUrlOpen", (event) => handle(event?.url));

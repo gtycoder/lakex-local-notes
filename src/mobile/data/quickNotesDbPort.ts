@@ -42,19 +42,31 @@ export interface QuickNotesBodyFs {
 
 const quickNoteAssetKey = (id: string, filename: string): string => "quick-notes/" + id + "/" + filename;
 
-/** P2 同步端口所需的 schema 增量（幂等应用：列缺失才 ALTER，表缺失才 CREATE）。 */
-export async function applyQuickNotesSyncSchema(d: MobileDb): Promise<void> {
+/**
+ * P2 同步端口所需的 schema 增量（幂等：列缺失才 ALTER，表缺失才 CREATE）。
+ *
+ * 返回**语句清单**而不是直接执行：移动端原生 SQLite 每条语句都是一次 JS↔原生桥往返
+ * （实测 ~68ms），启动时由 `data/schema.ts` 用 `executeSet` 把整批 DDL 合成**一次**下发。
+ */
+export async function buildQuickNotesSyncSchemaStatements(d: MobileDb): Promise<string[]> {
+  const statements: string[] = [];
   const qCols = ((await d.prepare("PRAGMA table_info(quick_notes)").all()) as Array<{ name: string }>).map((c) => c.name);
-  if (!qCols.includes("deleted_at")) await d.exec("ALTER TABLE quick_notes ADD COLUMN deleted_at TEXT");
-  if (!qCols.includes("base_hash")) await d.exec("ALTER TABLE quick_notes ADD COLUMN base_hash TEXT");
+  if (!qCols.includes("deleted_at")) statements.push("ALTER TABLE quick_notes ADD COLUMN deleted_at TEXT");
+  if (!qCols.includes("base_hash")) statements.push("ALTER TABLE quick_notes ADD COLUMN base_hash TEXT");
   // ready_to_sync：0 = 纯本地归档（冲突归档新 id，不向云端发布删除记录，防幽灵墓碑，对齐桌面）；1 = 可同步的删除墓碑
-  if (!qCols.includes("ready_to_sync")) await d.exec("ALTER TABLE quick_notes ADD COLUMN ready_to_sync INTEGER NOT NULL DEFAULT 1");
-  await d.exec(`CREATE TABLE IF NOT EXISTS quick_note_deleted (
+  if (!qCols.includes("ready_to_sync")) statements.push("ALTER TABLE quick_notes ADD COLUMN ready_to_sync INTEGER NOT NULL DEFAULT 1");
+  statements.push(`CREATE TABLE IF NOT EXISTS quick_note_deleted (
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT NOT NULL
   )`);
+  return statements;
+}
+
+/** 兼容入口（单测/旧调用）：逐条执行；启动路径请走 build + 批量下发。 */
+export async function applyQuickNotesSyncSchema(d: MobileDb): Promise<void> {
+  for (const statement of await buildQuickNotesSyncSchemaStatements(d)) await d.exec(statement);
 }
 
 /** 端口实现：注入已打开的小记库 + 资产文件依赖，供 syncQuickNotesViaEngine 使用。 */

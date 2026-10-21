@@ -3,7 +3,8 @@
 # 详见 vendor/lakex-doc-react/LOCAL-CHANGES.md。
 vendor/lakex-doc-react/dist/* whitespace=-trailing-space
 
-# 同理：patches/** 是 patch-package 生成的补丁，其内容逐字节对应上面的压缩 bundle ——
-# 「行内容恰为一个空格」是内核文件的**真实字节**，不是可清理的缩进（清掉补丁就打不上）。
-# 261008 起（表格编辑框 vt 对齐补丁重建时实测）纳入同一口径。
-patches/*.patch whitespace=-trailing-space
+# 同理：patches/** 是 patch-package 生成的补丁，其内容逐字节对应内核文件 ——
+# 行首「空格 + tab」（diff 上下文标记 + 内核缩进）与「行内容恰为一个空格」都是**真实字节**，
+# 不是可清理的缩进（清掉补丁就打不上）。⇒ 整个 patch 文件关闭空白检查（含 space-before-tab）。
+# 261008 起（表格编辑框 vt 对齐补丁重建时实测）纳入同一口径；261022 起扩到全部空白规则。
+patches/*.patch -whitespace

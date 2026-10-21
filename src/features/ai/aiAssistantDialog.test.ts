@@ -169,3 +169,55 @@ describe("AI 弹窗定位护栏（261004）", () => {
   });
 
 });
+/**
+ * 261021 P0：提示词层收口（system + 原文定界）的接线护栏。
+ * 纯函数行为见 aiPrompts.test.ts；这里只锁「弹窗确实走了单一来源、没有退回裸拼」。
+ */
+describe("AI 提示词接线（261021 P0）", () => {
+  it("首轮内容走 buildAiUserContent，发送时前置 withAiSystemMessage（历史不存 system）", () => {
+    expect(DIALOG).toContain("const firstPrompt = buildAiUserContent(instruction, selectionText, documentText);");
+    expect(DIALOG).toContain("withAiSystemMessage(messages, { imageOnly })");
+    expect(DIALOG).toContain("runAiChat(reqId, wireMessages, appendAssistant)");
+    // 旧的「指令 + 两个换行 + 裸选区」已删除（防注入靠定界符 + 系统提示词）
+    expect(DIALOG).not.toContain('instruction.trim() + "\\n\\n" + selectionText');
+    expect(DIALOG).not.toContain("const firstPrompt = selectionText.trim() ?");
+  });
+
+  it("图片-only 仍走图片预设/图片系统提示词（imageOnly 判据只有一处）", () => {
+    expect(DIALOG).toContain("const imageOnly = hasImages && !selectionText.trim() && !includeDocument;");
+    expect(DIALOG).toContain("const presets = imageOnly ? AI_IMAGE_PRESETS : AI_PROMPT_PRESETS;");
+  });
+});
+
+/**
+ * 261021 P1：附加「当前文档全文」的接线护栏。
+ * 数据/截断纯函数见 aiPrompts.test.ts；这里锁「按需读缓存、默认关、开聊后锁定、全文不回写」。
+ */
+describe("AI 文档全文上下文接线（261021 P1）", () => {
+  it("noteId 从入口传入；开关默认关，点击才读本地缓存", () => {
+    expect(DIALOG).toContain("noteId?: string;");
+    expect(DIALOG).toContain("const [includeDocument, setIncludeDocument] = useState(false);");
+    expect(DIALOG).toContain("native.readNoteCaches(noteId)");
+    expect(DIALOG).toContain("buildAiDocumentContext(await native.readNoteCaches(noteId))");
+    // 空缓存/读取失败都给可见原因，不静默降级
+    expect(DIALOG).toContain("该文档还没有文本缓存，请先打开并保存一次");
+    expect(DIALOG).toContain("读取文档缓存失败，本次不附加全文");
+  });
+
+  it("开聊后锁定上下文；全文结果不自动插入/替换选区", () => {
+    expect(DIALOG).toContain("const docLocked = turns.length > 0;");
+    expect(DIALOG).toContain("setConversationDocMode(includeDocument)");
+    expect(DIALOG).toContain("lastOutput && onInsertAfter && !conversationDocMode");
+    expect(DIALOG).toContain("lastOutput && onReplace && !conversationDocMode");
+    expect(DIALOG).toContain("全文模式的结果不自动回写，请复制使用");
+  });
+
+  it("开关行复用 kit 的 .ln-switch，且带 aria-checked / 可见说明", () => {
+    expect(DIALOG).toContain('className="ln-switch"');
+    expect(DIALOG).toContain('role="switch"');
+    expect(DIALOG).toContain('aria-checked={includeDocument}');
+    expect(DIALOG).toContain("附加当前文档全文");
+    expect(DIALOG).toContain("开启后，发送时会把已保存的整篇正文发给 AI 供应商");
+    expect(DIALOG).toContain("docContext.truncated");
+  });
+});

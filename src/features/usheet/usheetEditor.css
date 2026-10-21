@@ -17,6 +17,12 @@
   width: 100%;
 }
 
+/* 261022：Univer 自带的 WorkbenchSkeleton（灰底 + shimmer 块）在生命周期 Ready 前**盖在内容上**，
+ * 而我们的实例 40ms 内就建好（createUniver 22ms + createWorkbook 22ms）——这层灰遮罩反而像"加载很慢"
+ * （用户 261022 报「主要就是这个灰色的遮罩感觉很慢」）。隐藏它、直接露出底层内容：表格首帧前是白底，
+ * 比灰块闪一下更不刺眼。只作用于 usheet 宿主，不影响其他 Univer 用法/其他文档类型。 */
+.usheet-editor div:has(> [data-u-comp="workbench-skeleton-content"]) { display: none; }
+
 /* 工具栏「收起 / 展开」（261009）：
  * 收起 = 只藏掉页签行（ribbon-header-menu），保留工具行；工具仍跟随**选中的大分类**（不合并各分类）。
  * 纵向位置不写死：由 syncRibbonToggleTop 量出工具行 top 写进 --usheet-ribbon-toggle-top（收起 / 展开自动跟随）。

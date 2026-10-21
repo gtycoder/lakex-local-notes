@@ -4,12 +4,13 @@ import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
+import { native } from "../../lib/native";
 import { aiMessageText, type AiAssetRef, type AiChatMessage } from "../../core/aiProviders";
 import { activeEditorMount } from "../editor/activeEditor";
 import { AiMessageBody } from "./AiMessageBody";
 import { copyMarkdownAsLake, type LakePayloadKernel } from "./aiLakeClipboard";
 import { editorInstanceAt } from "../editor/editorRegistry";
-import { AI_IMAGE_PRESETS, AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, AI_PROMPT_PRESETS, type AiPromptPreset } from "./aiPrompts";
+import { AI_IMAGE_PRESETS, AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, AI_PROMPT_PRESETS, buildAiDocumentContext, buildAiUserContent, withAiSystemMessage, type AiDocumentContext, type AiPromptPreset } from "./aiPrompts";
 import "./aiDialogParts.css";
 
 /**
@@ -85,8 +86,11 @@ function useCopyTip() {
   return { surface, show, hide };
 }
 
-export function AiAssistantDialog({ open, selectionText, attachments, onClose, onReplace, onInsertAfter, anchor, at, scroller, container }: {
-  open: boolean; selectionText: string; onClose: () => void;
+export function AiAssistantDialog({ open, selectionText, noteId, attachments, onClose, onReplace, onInsertAfter, anchor, at, scroller, container }: {
+  open: boolean; selectionText: string;
+  /** 当前文档 id（P1：用于按需读取本地全文；缺省 = 该入口没有文档上下文）。 */
+  noteId?: string;
+  onClose: () => void;
   /** 多模态上下文（图片浮栏「AI」/ 选区含图）：随首轮 user 消息作为 image 块发送。 */
   attachments?: AiAssetRef[];
   /** 贴靠的锚点元素（浮动工具栏的 AI 按钮）——给了就悬浮在它下方，无遮罩、不压暗文档。 */
@@ -120,6 +124,13 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
   const [copied, setCopied] = useState<{ index: number; mode: "plain" | "lake" } | null>(null);
   /** 首轮预设（有选区才显示）：点它只填词、不发送；手动改字退回「自定义」。 */
   const [presetId, setPresetId] = useState<string>(AI_PROMPT_CUSTOM_ID);
+  /** P1：当前文档全文上下文（默认关；只在用户打开开关时读一次本地缓存，不预读）。 */
+  const [includeDocument, setIncludeDocument] = useState(false);
+  const [docContext, setDocContext] = useState<AiDocumentContext | null>(null);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
+  /** 本次对话是否从「全文」起头：一旦开聊就锁死（历史里已含全文），且结果不自动回写。 */
+  const [conversationDocMode, setConversationDocMode] = useState(false);
   const copyTimerRef = useRef<number | null>(null);
   /** hover 说明气泡（两个复制按钮共用；无延时）。 */
   const copyTip = useCopyTip();
@@ -134,20 +145,43 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
     if (copyTimerRef.current !== null) { window.clearTimeout(copyTimerRef.current); copyTimerRef.current = null; }
     setCopied(null);
     setPresetId(AI_PROMPT_CUSTOM_ID);
-  }, [open, selectionText]);
+    setIncludeDocument(false); setDocContext(null); setDocBusy(false); setDocError(null); setConversationDocMode(false);
+  }, [open, selectionText, noteId]);
 
   // 卸载时清掉「已复制」定时器（避免对已卸载组件 setState）。
   useEffect(() => () => { if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current); }, []);
 
   // 无预设：进来就是自定义提问；选区只作为**上下文**附在后面（不在面板里回显原文，对齐云端）。
-  const firstPrompt = selectionText.trim() ? instruction.trim() + "\n\n" + selectionText : instruction.trim();
+  // 261021 P0：原文用定界符包住（buildAiUserContent）；system 提示词在发送时前置（withAiSystemMessage）。
+  // 261021 P1：开了「附加当前文档全文」时，以全文为处理对象（优先于选区；结果不回写）。
+  const documentText = includeDocument ? docContext?.text : undefined;
+  const firstPrompt = buildAiUserContent(instruction, selectionText, documentText);
   const lastOutput = [...turns].reverse().find((t) => t.role === "assistant")?.text ?? "";
   const canSendFirst = Boolean(instruction.trim());
   /** 图片上下文：有图时首轮把图片作为 image 块一起发出；没有文字选区时改出图片预设。 */
   const hasImages = (attachments?.length ?? 0) > 0;
-  const presets = hasImages && !selectionText.trim() ? AI_IMAGE_PRESETS : AI_PROMPT_PRESETS;
+  // 全文模式下即使只有图片，也走文字 system（它才是解释「全文块」规则的那份）。
+  const imageOnly = hasImages && !selectionText.trim() && !includeDocument;
+  const presets = imageOnly ? AI_IMAGE_PRESETS : AI_PROMPT_PRESETS;
   // 当前生效的输入（首轮=提问，之后=追问）——叉号「清除内容」与自增高都以它为准。
   const activeValue = turns.length === 0 ? instruction : followUp;
+  /** 开聊后锁死上下文：历史里已经含全文/选区，再切会造成语义漂移。 */
+  const docLocked = turns.length > 0;
+  const docHint = docBusy
+    ? "正在读取文档缓存…"
+    : docError
+      ? docError
+      : includeDocument && docContext
+        ? "已附加 " + docContext.chars.toLocaleString("zh-CN") + " 字符" +
+          (docContext.truncated
+            ? "（已保存版本，超上限已截断）"
+            : docContext.wordCount != null
+              ? "（约 " + docContext.wordCount.toLocaleString("zh-CN") + " 字，已保存版本）"
+              : "（已保存版本）") +
+          (docLocked ? " · 本次对话已固定" : "")
+        : docLocked
+          ? "本次对话未附加全文；关闭面板重开可切换"
+          : "开启后，发送时会把已保存的整篇正文发给 AI 供应商";
 
   // 长文本框自增高：随回车换行/内容变多而变高，到 --max-height 后由 textarea 自己滚动。
   useEffect(() => {
@@ -189,8 +223,10 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
     stoppedRef.current = false; setStopped(false);
     const reqId = newAiRequestId();
     reqRef.current = reqId;
+    // system 提示词只在**线上消息**里前置，不写进 historyRef ⇒ 追问/重新生成不会重复叠加。
+    const wireMessages = withAiSystemMessage(messages, { imageOnly });
     try {
-      const res = await runAiChat(reqId, messages, appendAssistant);
+      const res = await runAiChat(reqId, wireMessages, appendAssistant);
       if (stoppedRef.current) {
         // 主动停止 ≠ 出错：半截回答**不写进 history**（不把它当完整上下文再发），但留在面板里可复制/插入；
         // 一个字都没生成时把那个空气泡收掉（否则留下一个空边框块）。
@@ -210,9 +246,11 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
     }
   };
 
-  /** first=true 用预设+选区起头；first=false 用追问，带上历史。 */
+  /** first=true 用预设+选区/全文起头；first=false 用追问，带上历史。 */
   const run = async (first: boolean) => {
     if (busy) return;
+    // 只有首轮能切换上下文；一旦开聊就按首轮模式锁定（结果回写权限也据此判断）。
+    if (first) setConversationDocMode(includeDocument);
     const content = first ? firstPrompt : followUp.trim();
     if (!content) { setError("请先写要让 AI 做什么"); return; }
     const base = first ? [] : historyRef.current;
@@ -247,6 +285,23 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
     });
     await send(messages);
   };
+  /** 开关「当前文档全文」：首次开启时才读本地缓存；空/失败都给明确原因（不静默）。 */
+  const toggleDocument = async () => {
+    if (!noteId || docBusy || docLocked) return;
+    if (includeDocument) { setIncludeDocument(false); return; }
+    if (docContext) { setIncludeDocument(true); setDocError(null); return; }
+    setDocBusy(true); setDocError(null);
+    try {
+      const next = buildAiDocumentContext(await native.readNoteCaches(noteId));
+      if (!next) { setDocError("该文档还没有文本缓存，请先打开并保存一次"); return; }
+      setDocContext(next); setIncludeDocument(true);
+    } catch {
+      setDocError("读取文档缓存失败，本次不附加全文");
+    } finally {
+      setDocBusy(false);
+    }
+  };
+
   /** 停止生成：立刻中止主进程那一次请求（流断在这里），并记「主动停止」而非报错（用户 261008）。 */
   const stop = () => {
     if (!reqRef.current) return;
@@ -448,6 +503,7 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
               })}
             </div>
             {lastOutput && <div className="ai-dialog__note">内容由 AI 生成，请自行核对</div>}
+            {lastOutput && conversationDocMode && <div className="ai-dialog__note">全文模式的结果不自动回写，请复制使用</div>}
           </>
         )}
         {error && <div className="ai-dialog__error">{error}</div>}
@@ -479,6 +535,16 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
           </span>
         </div>
       )}
+      {/* 261021 P1：附加当前文档全文（默认关）。只有该入口带 noteId 时出现；开聊后锁定。 */}
+      {noteId && (
+        <div className="ai-dialog__doc">
+          <button type="button" role="switch" aria-checked={includeDocument} aria-label="附加当前文档全文" className="ln-switch" disabled={docBusy || docLocked} onClick={() => void toggleDocument()}>
+            <span className="ln-switch__knob" />
+          </button>
+          <span className="ai-dialog__doc-label">附加当前文档全文</span>
+          <span className="ai-dialog__doc-hint">{docHint}</span>
+        </div>
+      )}
       <div className="ln-dialog__actions">
         {/* 生成中 = 「生成/发送」**原位**变「停止」（用户 261008）：中断入口就落在发送键那一格，
             不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
@@ -491,11 +557,12 @@ export function AiAssistantDialog({ open, selectionText, attachments, onClose, o
         )}
         {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
         {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「生成 + 关闭」。 */}
-        {lastOutput && onInsertAfter && (
+        {/* 全文模式的处理对象是整篇：结果不往选区写（避免"整篇改写覆盖一段"，用户 261021 P1）。 */}
+        {lastOutput && onInsertAfter && !conversationDocMode && (
           <button type="button" className="ln-btn" onClick={() => { onInsertAfter(lastOutput); onClose(); }}><CornerDownRight size={12} /> 插入到选区后</button>
         )}
         {/* 260930 真机验证：打开前捕获内核模型选区、回写前用 selection 命令设回，非折叠即**替换**（⌘Z 可撤销）。 */}
-        {lastOutput && onReplace && <button type="button" className="ln-btn" onClick={() => { onReplace(lastOutput); onClose(); }}><Check size={12} /> 替换选区</button>}
+        {lastOutput && onReplace && !conversationDocMode && <button type="button" className="ln-btn" onClick={() => { onReplace(lastOutput); onClose(); }}><Check size={12} /> 替换选区</button>}
         <button type="button" className="ln-btn" onClick={onClose}><X size={12} /> 关闭</button>
       </div>
       {/* 右下角拖拽把手：只改高度（用户 261004：左右不动）。 */}

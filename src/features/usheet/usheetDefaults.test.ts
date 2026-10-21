@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { emptyUsheetWorkbook } from "../../core/usheetDoc";
 
 const EDITOR = readFileSync(new URL("./UniverSheetEditor.tsx", import.meta.url), "utf8");
+// 261022：createUniver 配置抽到唯一入口 usheetUniverFactory.ts ⇒ footer 配置断言落在工厂里。
+const FACTORY = readFileSync(new URL("./usheetUniverFactory.ts", import.meta.url), "utf8");
 const CONTRACT = readFileSync(new URL("./usheetKernelContract.ts", import.meta.url), "utf8");
 
 describe("新建表格 / 工作表的默认尺寸（用户 261010：默认 50 行 × 16 列）", () => {
@@ -21,7 +23,9 @@ describe("新建表格 / 工作表的默认尺寸（用户 261010：默认 50 �
     for (const key of ["sheetBar: true", "statisticBar: true", "menus: true", "zoomSlider: true"]) {
       expect(CONTRACT).toContain(key);
     }
-    // 编辑器必须引用这份配置（而不是自己再写一份）
-    expect(EDITOR).toContain("footer: USHEET_FOOTER_CONFIG");
+    // 唯一创建入口必须引用这份配置（而不是自己再写一份）；编辑器只允许走这个入口。
+    expect(FACTORY).toContain("footer: USHEET_FOOTER_CONFIG");
+    expect(EDITOR).toContain("createUsheetUniver(");
+    expect(EDITOR).not.toContain("UniverSheetsCorePreset(");
   });
 });

@@ -8,7 +8,12 @@
          ⚠️ 不要在这里手写策略 —— 第二份副本必然与构建脚本漂移（261010 收口前的实际状态）。
          注入正确性由 src/mobile/mobileCspSingleSource.test.ts 卡住。 -->
     <meta http-equiv="Content-Security-Policy" content="%MOBILE_CSP%" />
+    <meta name="theme-color" content="#ededf1" />
     <title>LocalLakeNotes</title>
+    <!-- 261022：首帧纯色底（与原生 splash 同色）。不是图片/遮罩，只避免 WebView 首帧前的白闪。 -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #ededf1; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

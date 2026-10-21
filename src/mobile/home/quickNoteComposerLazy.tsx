@@ -11,6 +11,7 @@
  */
 import { useEffect, useState, type ComponentType } from "react";
 import type { QuickNoteComposerProps } from "./QuickNoteComposer";
+import { QuickNoteComposerSkeleton } from "./QuickNoteComposerSkeleton";
 
 type ComposerComponent = ComponentType<QuickNoteComposerProps>;
 
@@ -45,18 +46,7 @@ export function subscribeQuickNoteComposer(fn: () => void): () => void {
   return () => { listeners.delete(fn); };
 }
 
-/** 写作卡位置上的兜底骨架（与正式写作卡同一处；不再是"正在加载编辑器"文字页）。 */
-export function QuickNoteComposerSkeleton() {
-  return (
-    <div className="mb-composer-skeleton" aria-busy="true" aria-label="正在加载编辑器">
-      <span className="mb-skel mb-composer-skeleton__title" />
-      <span className="mb-skel mb-composer-skeleton__line" />
-      <span className="mb-skel mb-composer-skeleton__line" />
-      <span className="mb-skel mb-composer-skeleton__line" />
-      <span className="mb-skel mb-composer-skeleton__line mb-composer-skeleton__line--short" />
-    </div>
-  );
-}
+
 
 /** 写作卡懒加载壳：预取过就同步渲染；没预取就先骨架、模块到了自动替换。 */
 export function QuickNoteComposerLazy(props: QuickNoteComposerProps) {

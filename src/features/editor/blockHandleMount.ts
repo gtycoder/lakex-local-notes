@@ -51,7 +51,7 @@ function readBlockSelection(editor: unknown, blockElement: HTMLElement): string 
 }
 
 /** 手柄宿主：跟随应用主题（data-theme）切换 dark 配色，避免深色下用浅色手柄；并承载块菜单的 AI 面板。 */
-function BlockHandleHost(props: { container: HTMLElement; editor: LakeEditorInstance }) {
+function BlockHandleHost(props: { container: HTMLElement; editor: LakeEditorInstance; noteId?: string }) {
   const [dark, setDark] = useState(isDarkTheme);
   /** 块菜单「AI 助手」打开时的上下文：覆盖块的文本 + 模型选区 + 落点。 */
   const [ai, setAi] = useState<{ text: string; range: CapturedModelRange | null; at: { x: number; y: number } } | null>(null);
@@ -93,6 +93,7 @@ function BlockHandleHost(props: { container: HTMLElement; editor: LakeEditorInst
       ? createElement(AiAssistantDialog, {
         open: true,
         selectionText: ai.text,
+        noteId: props.noteId,
         at: ai.at,
         scroller: props.container.querySelector<HTMLElement>(".ne-editor-wrap"),
         container: props.container,
@@ -114,12 +115,14 @@ export function mountBlockHoverHandle(
   hostParent: HTMLElement,
   container: HTMLElement,
   editor: LakeEditorInstance,
+  /** 当前文档 id（AI 面板 P1：按需读取本地全文）。 */
+  noteId?: string,
 ): () => void {
   const host = document.createElement("div");
   host.className = "lake-block-handle-host";
   hostParent.appendChild(host);
   const root = createRoot(host);
-  root.render(createElement(BlockHandleHost, { container, editor }));
+  root.render(createElement(BlockHandleHost, { container, editor, noteId }));
   return () => {
     try {
       root.unmount();

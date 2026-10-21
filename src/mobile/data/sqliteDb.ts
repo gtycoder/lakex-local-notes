@@ -130,8 +130,15 @@ export class SqlJsDb implements DbLike {
     return wrapped;
   }
 
+  /**
+   * 与生产端 `NativeSqliteDb.pragma()`（= Capacitor query，返回行数组）对齐：返回**查询结果行**。
+   * 261021：旧实现直接返回 `exec` 的 undefined ⇒ `PRAGMA user_version` 读回来恒为 0，
+   * schema 版本快路径在测试里永远不生效（且 prepare 不释放会锁库，见 schema.readMobileSchemaVersion 注释）。
+   */
   pragma(source: string): unknown {
-    return this.db.exec(source);
+    // sql.js 的 Database#exec 会自己释放语句，且返回 [{columns, values}]；转换成与生产端一致的**行数组**。
+    const result = this.db.exec(source) as Array<{ columns: string[]; values: unknown[][] }>;
+    return result.flatMap((set) => set.values.map((row) => Object.fromEntries(set.columns.map((column, index) => [column, row[index]]))));
   }
 
   exec(sql: string): void {

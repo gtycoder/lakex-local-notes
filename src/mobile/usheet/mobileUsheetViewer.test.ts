@@ -120,9 +120,8 @@ describe("移动端表格查看/编辑器", () => {
     for (const label of ["插入", "撤销", "重做", "数字格式", "更多表格操作"]) {
       expect(toolbar?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
-    const formula = host.querySelector(".mobile-usheet-formula");
-    expect(formula).toBeTruthy();
-    expect(formula?.textContent).toContain("A1");
+    // 261021 P5：顶部只读公式栏已删（用户定稿：与内核底部输入栏重复）；编辑态输入面 = 内核移动公式栏。
+    expect(host.querySelector(".mobile-usheet-formula")).toBeNull();
     expect(host.querySelector(".mb-usheet-footer")).toBeTruthy();
     expect(host.querySelector(".mb-usheet-readingbar")).toBeNull();
     root.unmount();
@@ -140,11 +139,21 @@ describe("移动端表格查看/编辑器", () => {
     for (const label of ["加粗", "斜体", "删除线", "下划线", "字体颜色", "填充颜色", "水平对齐", "合并选中单元格", "公式", "冻结窗格", "行高", "列宽", "删除当前行", "删除当前列", "更多表格工具"]) {
       expect(card!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
-    expect(card!.querySelector<HTMLButtonElement>('button[aria-label^="边框"]')?.disabled).toBe(true);
+    // 261021 P5：边框已接（不再是「暂不支持」占位）。
+    const border = card!.querySelector<HTMLButtonElement>('button[aria-label="边框"]');
+    expect(border).toBeTruthy();
+    expect(border!.disabled).toBe(false);
     const freeze = card!.querySelector<HTMLButtonElement>('button[aria-label="冻结窗格"]');
     expect(freeze).toBeTruthy();
     await act(async () => { freeze!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     for (const label of ["冻结至当前行", "冻结至当前列", "取消冻结"]) expect(host.textContent ?? "").toContain(label);
+    // 返回 → 下钻边框：8 种框线都在卡片内（P5）
+    await act(async () => { host.querySelector<HTMLButtonElement>(".mb-usheet-popcard__back")!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    // 返回后行按钮是**新节点**（React 重渲染），必须重新取，否则派发到已卸载节点上（踩过）。
+    const borderRow = host.querySelector<HTMLButtonElement>('.mb-usheet-morecard button[aria-label="边框"]');
+    expect(borderRow).toBeTruthy();
+    await act(async () => { borderRow!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    for (const label of ["全部框线", "外边框", "内部框线", "上边框", "下边框", "左边框", "右边框", "无框线"]) expect(host.textContent ?? "").toContain(label);
     root.unmount();
   });
 

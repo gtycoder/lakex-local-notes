@@ -21,6 +21,23 @@ export const UNIVER_COMMAND_IDS = {
   /** 我们自己注册的命令（不是内核的）。 */
   ourInsertFloatImage: "usheet.insert-float-image",
   ourInsertCellImage: "usheet.insert-cell-image",
+  /** 排序（261021 P5，`@univerjs/sheets-sort-ui`）：**无参**，排的是**当前选区**；`-ext` = 扩展到整块数据区。
+   *  失效表现 = 移动端 ⋯ 卡「升序/降序」点了没反应，或只排了选中那一格。 */
+  sortRangeAsc: "sheet.command.sort-range-asc",
+  sortRangeDesc: "sheet.command.sort-range-desc",
+  sortRangeCustom: "sheet.command.sort-range-custom",
+  /** 筛选（261021 P5，`@univerjs/sheets-filter`）：smart-toggle = 按当前选区建/撤筛选范围并开面板；
+   *  criteria 写入 worksheet 快照（filterModel）⇒ 这是**文档数据**，两端必须同版本。 */
+  /** 查找替换（261021 P5）：open 是 **operation**；移动端用它打开官方 mobile bar。
+   *  失效表现 = ⋯ 卡「查找替换」/读态「查找」点了没反应。 */
+  openFindDialog: "ui.operation.open-find-dialog",
+  openReplaceDialog: "ui.operation.open-replace-dialog",
+  closeFindDialog: "ui.operation.close-find-dialog",
+  /** sheets 适配器的「替换一格」（替换会写 cellData；桌面 Ctrl+H 与移动共用）。 */
+  sheetReplace: "sheet.command.replace",
+  smartToggleFilter: "sheet.command.smart-toggle-filter",
+  setFilterCriteria: "sheet.command.set-filter-criteria",
+  removeSheetFilter: "sheet.command.remove-sheet-filter",
 } as const;
 
 /** 单元格右键菜单：菜单位置 → 分组 →「插入」子菜单（facade 的 appendTo 逐段 merge，元素是**单个 key**，
@@ -59,6 +76,19 @@ export const UNIVER_FEATURE_NAMES = [
   "getRenderUnitById",
   /** 等待编辑态建立；编辑器内部双击选词由画布 id 区分，不靠这个判据。 */
   "isCellEditing",
+  /** 排序服务（261021 P5）：**命令无参**，排序对象 = 当前选区；所以 ⋯ 卡入口必须先有选区，
+   *  失败返回 false（我们据此 toast，不静默）。失效表现 = 排序按钮恒提示「当前选区不能排序」。 */
+  "SheetsSortUIService",
+  /** 筛选服务（261021 P5）：筛选条件落在 worksheet 快照里（`SHEET_FILTER_SNAPSHOT_ID`）；
+   *  失效表现 = 筛选结果不随文档保存/跨端同步。 */
+  "SheetsFilterService",
+  "SHEET_FILTER_SNAPSHOT_ID",
+  /** 查找替换（261021 P5）：基础层 = find-replace（`@univerjs/find-replace`），
+   *  表格适配 = sheets-find-replace（`SheetsFindReplaceController` / `SheetReplaceCommand`）。
+   *  失效表现 = 查找面板能开但搜不到单元格 / 替换不生效。 */
+  "FindReplaceService",
+  "IFindReplaceService",
+  "SheetsFindReplaceController",
 ] as const;
 
 /** 「开始」页签里我们**不用**的内核工具项（走公开 MenuManager 的 updateMenuConfig({hidden:true}) 隐藏）。
@@ -80,6 +110,14 @@ export const UNIVER_DOM_HOOKS = [
   "render-canvas",         // 探针脚本里定位网格画布
   "defined-name",          // 探针脚本里判断"网格就绪"
   "sheet-bar-append-button", // 探针脚本里点「＋」
+  "sort-panel-item-handler", // 排序面板（261021 P5）：探针判定"排序面板已弹出/已收起"
+  "sheets-filter-panel", // 桌面筛选面板（261021 P5）：探针判定面板容器 + 几何
+  "mobile-sheets-filter-drawer", // 移动端筛选抽屉（261021 P5 设备实测）：筛选/按值/按颜色/按条件/清除筛选
+  "mobile-find-replace-bar", // 移动端查找条（261021 P5 设备验收靠它判定"查找面板打开了"）
+  "mobile-find-replace-settings", // 移动端查找设置（区分大小写/按公式等）
+  "find-replace-dialog", // 桌面查找对话框（Ctrl/Cmd+F）
+  "mobile-sheets-filter-by-values", // 移动端筛选抽屉内的「按值」页签
+  "mobile-sheets-filter-by-conditions", // 移动端筛选抽屉内的「按条件」页签
 ] as const;
 
 /**
@@ -101,33 +139,36 @@ export const USHEET_FOOTER_CONFIG = {
 /**
  * 我们对内核打的补丁（`patches/@univerjs+ui+1.0.3.patch`）——**改行为的最小改动**，不是依赖侧清理。
  *
- * 为什么必须改：内核把 floating 层的 portal 容器**无条件挂到 `document.body`**
- * （`@univerjs/ui` 的 `DesktopWorkbenchContent` / `MobileWorkbench`）。该容器承载
- * `CanvasPopup`（cell popup、**CellAlert 警告徽标（黄叹号）**、下拉/日期/颜色/选区浮层），
- * 因为挂在 body ⇒ **不在标签宿主里**：
- *  ① 我们 keep-alive 的隐藏（`styles/app/tabs.css` 的 `opacity/visibility`，且**刻意保留布局尺寸**）
- *     对它无效；
- *  ② 内核自己"看不见就隐藏"的判据读的是**画布 rect**（`visibility:hidden` 的元素 rect 仍有效）⇒
- *     它认为自己还在屏幕上，继续渲染。
- * 表现（用户 261009 报）：表格里的黄叹号浮在最上层、切到别的文档也盖不住（CellAlert 随选区常驻，
- * 不像下拉那样瞬态，所以只有它长期可见）。
+ * 历史（261009）：内核把 floating 层的 portal 容器**无条件挂到 `document.body`**，该容器承载
+ * `CanvasPopup`（cell popup、**CellAlert 黄叹号**、下拉/日期/颜色/选区浮层）。当时为了不让黄叹号
+ * 逃出标签宿主，我们把容器改挂到实例自己的 mountContainer。
  *
- * 补丁做三件事：把容器改挂到实例自己的 mountContainer（`#univer-sheet-<noteId>`）、打
- * `data-lake-univer-floating` 标记供运行时探针定位、卸载改用 `remove()`（不再假定父节点是 body）。
+ * 261022 翻案（用户报「排序弹窗点不动、整个 app 卡死」）：容器挂进实例宿主后，**设计系统 Dialog
+ * 也被 portal 进宿主**，`overflow:hidden` 宿主 + fixed 遮罩让「自定义排序」进入 measure/reflow
+ * 死循环（渲染进程 100%+ CPU ⇒ 整窗点不动）。因此改为：**容器仍挂 `document.body`**
+ * （= 内核原始行为，对话框/菜单不再死循环），再用两条守住 261009：
+ *  ① 补丁给容器打 `data-lake-univer-floating` + `data-lake-owner="univer-sheet-<noteId>"`；
+ *  ② 应用侧 `MultiTabEditor` 按**当前可见标签**把其它实例的容器 `display:none`
+ *     （新容器由 MutationObserver 兜底）。卸载仍用 `remove()`（不假定父节点是 body）。
  *
- * 失效表现：`document.body` 下重新出现内核 floating 容器 ⇒ 浮层又能逃出标签宿主。
- * 守它的两处：`univerContract.test.ts`（静态：补丁形态在不在）与 `scripts/usheet-kernel-probes.mjs`
- * （运行时：容器在不在宿主内 + 切走后是否不可见）。升级动作见 `docs/USHEET-UPGRADE.md` §4.7。
+ * 失效表现：① 产物里重新出现 `mountContainer.appendChild(portalContainer)` ⇒ 对话框死循环回归；
+ * ② 产物里没有 `data-lake-owner` / 应用侧没按 owner 收起 ⇒ 261009 的黄叹号逃逸回归。
+ * 守它的两处：`univerContract.test.ts`（静态）与 `scripts/usheet-kernel-probes.mjs`（运行时）。
+ * 升级动作见 `docs/USHEET-UPGRADE.md` §4.7。
  */
 export const UNIVER_PATCH_HOOKS = {
   /** 补丁文件（仓库内的唯一 Univer 补丁；缺它 = 换机/CI 拿不到修复）。 */
   patchFile: "patches/@univerjs+ui+1.0.3.patch",
-  /** 补丁后**必须存在**：floating 容器挂在实例容器里。 */
-  mountedInHost: "mountContainer.appendChild(portalContainer)",
+  /** 补丁后**必须存在**：容器挂 body（= 内核原行为；挂宿主会让对话框死循环）。 */
+  mountedAtBody: "document.body.appendChild(portalContainer)",
+  /** 补丁后**必须存在**：容器带 owner 标记，应用侧据此按可见标签收起。 */
+  floatingOwner: "data-lake-owner",
   /** 补丁后**必须存在**：卸载用 remove()，不假定父节点是 body。 */
   removedSafely: "portalContainer.remove()",
   /** 补丁加的运行时标记（探针靠它定位容器）。 */
   floatingMarker: "data-lake-univer-floating",
-  /** 补丁要根治的原始写法：**必须不存在**，否则补丁没生效。 */
-  legacyBodyMount: "document.body.appendChild(portalContainer)",
+  /** 已废弃的宿主挂载写法：**必须不存在**，否则 261022 的对话框死循环回归。 */
+  legacyHostMount: "mountContainer.appendChild(portalContainer)",
+  /** 应用侧收起浮层的落点（静态护栏：这段代码必须还在）。 */
+  visibilitySyncFile: "src/features/editor/MultiTabEditor.tsx",
 } as const;

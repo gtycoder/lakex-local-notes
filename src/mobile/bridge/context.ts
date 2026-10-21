@@ -8,7 +8,7 @@
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 import { migrateSnapshotToNativeSqlite } from "../native/nativeSqliteMigration";
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
-import { applyMobileSchema, hasLegacyBodySchema } from "../data/schema";
+import { MOBILE_SCHEMA_VERSION, applyMobileSchema, hasLegacyBodySchema, readMobileSchemaVersion } from "../data/schema";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { reconcileIndex } from "../data/searchIndex";
 import { createMobileSyncDbPort } from "../data/syncDbPort";
@@ -78,8 +78,10 @@ async function resetLegacyBodyFiles(): Promise<void> {
 export async function initializeDb(): Promise<NativeSqliteDb> {
   const migration = await migrateSnapshotToNativeSqlite();
   const openedDb = await NativeSqliteDb.open(migration.databaseName);
-  const legacyBodySchema = await hasLegacyBodySchema(openedDb);
-  await applyMobileSchema(openedDb);
+  // 快路径（261021）：schema 版本已到 ⇒ 跳过旧库探测（3 次 PRAGMA）与整库重置判定。
+  const schemaVersion = await readMobileSchemaVersion(openedDb);
+  const legacyBodySchema = schemaVersion >= MOBILE_SCHEMA_VERSION ? false : await hasLegacyBodySchema(openedDb);
+  await applyMobileSchema(openedDb, { legacyBodySchema });
   if (legacyBodySchema) await resetLegacyBodyFiles();
   db = openedDb;
   try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
