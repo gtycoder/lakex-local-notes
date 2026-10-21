@@ -19,7 +19,7 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
-### 261021(六) · CSS 层收尾：A/B 核验 + C/D（依赖准入 / 三处漂移收口）· **分支 `feat/desktop-vendor-css-layer`（未合并 master，工作于 261022 凌晨）**
+### 261021(六) · CSS 层收尾：A/B 核验 + C/D（依赖准入 / 三处漂移收口）· **已合并 master `98e9278e`（工作于 261022 凌晨）**
 
 - **承接**：上一会话留下分支 `feat/desktop-vendor-css-layer`（worktree `.../vendor-css-layer`）与两笔 A/B 提交 `a804df67` / `f4e981fa`；本会话先 `git merge master`（master `7f378130` → 合并提交 `0d0d8e5a`；唯一冲突 = HANDOFF，两边条目都保留），再在合并后基线上做 C/D。
 - **A/B 核验（两笔提交完整）**：4 个护栏测试 20 例通过（cssLayers / quickNoteKernelFallback / cssLayerScan / vendorCssLayer）；旧产物自证仍在 —— **master `7f378130` 构建**仍产 `QuickNoteKernelPreview-*.css`（1,280,726B、0 个 @layer、antd banner），**本分支构建**该 chunk CSS 消失、内核 CSS 只在 `index-*.css` 的层内；`audit-vendor-css.mjs` 对分支 5 个产物 CSS 全 OK。
@@ -30,10 +30,11 @@
 - **门禁（合并 master 后、C/D 落地后的最终一次）**：tsc 0 · 全库 vitest **337 文件 / 2448 通过（16 skip）** · 双端构建 ✓ · ui-metrics 0/基线内 · check:core ✓ · check:mobileui ✓ · check:bundle（含新审计）✓ · `git diff --check` ✓。
 - **视觉对拍**：
   - 桌面（合成夹具 + 隔离实例 scheme/CDP 9231/独立 userData，**master `7f378130` 构建 vs 本分支构建**）：`plain:1315:light` 2370 els、`settings:1315:light` 2499 els、`outline-open:1315:light` 2377 els，**逐态 0 差异**（snapdiff：0 态 / 0 条指纹差异）。
-  - 移动端 `home-quicknotes`：本分支 APK 与 master APK（同一 AVD `lake_gate`、同一数据）快照 **1768 els、逐字节相同** ⇒ D1/D2 对移动端零影响。`check:mobilesnap` 报的 1816→1768 是**基线陈旧**（master 同样 1768，见待办 24）。
+  - 移动端 `home-quicknotes`：本分支 APK 与 master APK（同一 AVD `lake_gate`、同一数据）快照 **1768 els、逐字节相同** ⇒ D1/D2 对移动端零影响。`check:mobilesnap` 报的 1816→1768 是**基线陈旧**（master 同样 1768，见待办 23）。
   - 交互抽查（CDP）：侧栏拖拽 300→372 预览并提交落盘、键盘 ArrowRight +8 / Shift+ArrowRight +24、双击复位 224；大纲（临时 `outlineEnhance=true`）左缘拖动 300→372、键盘 ArrowLeft +8（invert 方向正确）。
 - **待办（顺带发现，未处理）**：① 桌面 `stylesnap` 基线陈旧（见 261021(五) 条目）；② **移动端 `mobile-snap` 基线同样陈旧**：master 构建即 1816→1768（−48），与本批无关；合并后用整份 6 态重烤（**别用 `--states` 覆盖基线**）。
-- **状态**：分支 `feat/desktop-vendor-css-layer`（`0d0d8e5a` 之后 + C/D 提交），**未合并 master、未推送**；主树 `lake-notes-electron` 未触碰。
+- **合并**：`feat/desktop-vendor-css-layer` 以 **FF** 合入 `master`（`master` = `98e9278e`，含 `0d0d8e5a` 的 master 合并 + A/B + C/D）；合并后在主树重跑门禁全绿（tsc 0 · 337 文件 / 2448 例 · 双端构建 · ui-metrics / check:core / check:mobileui / check:bundle / `git diff --check` ✓）。**origin/master 未推送**。
+- **状态**：已合并 master；worktree `.../vendor-css-layer` 已删除、`feat/desktop-vendor-css-layer` 已删（合入即删，符合 AGENTS §1）；对拍快照保留在 `.css-audit/snap/vendor-css-layer-261021/`。主树 `lake-notes-electron` 只多出本批改动。
 
 ### 261022(二) · 长按小记入口零等待启动（capture 无 logo / 普通启动保留 logo）· **已提交 `c21d3adc`、已推送 master**
 
@@ -145,9 +146,9 @@
 - **验证**：HMR 后 dev 页面已无未分层内核表、body 字体回 MiSans；同结构合成节点实测 × 回到右上（header 1–999、× 955–979、`margin-left:864px`）；
   产物只剩 `index-*.css` 内含内核 CSS（在 @layer 内），`QuickNoteKernelPreview-*.css` 已消失。
 - **门禁**：tsc 0 · 全库 vitest **326 文件 / 2355 通过（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle（含新审计）✓ · `git diff --check` ✓。
-- **状态**：已提交 `a804df67`（分支 `feat/desktop-vendor-css-layer`，**未合并 master**）；主树已还原（并行安卓会话在途，别在主树里验这批）。
+- **状态**：已提交 `a804df67`，随后经 `feat/desktop-vendor-css-layer` 合入 master（`98e9278e`）；主树已还原（并行安卓会话在途，别在主树里验这批）。
 
-### 261021(五) · 结构护栏：第三方 CSS 自动入 @layer vendor + dev 运行时探针 · **分支 `feat/desktop-vendor-css-layer`（未合并）**
+### 261021(五) · 结构护栏：第三方 CSS 自动入 @layer vendor + dev 运行时探针 · **已合并 master `98e9278e`**
 
 > 承接 261021(四)：用户点单"1（结构性根治）+ 2（运行时探针）"，并明确**开分支做**（主树还有安卓编辑会话在途）。
 > 工作树 = `/Users/admin/file/local-lake/lake-notes-electron-worktrees/vendor-css-layer`，分支基于 master + (四) 的提交。
@@ -160,7 +161,7 @@
 - **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 通过（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle（含审计）✓ · `git diff --check` ✓。
 - **视觉对拍（A/B，非全量）**：合成夹具 + 隔离实例（scheme / CDP 9231 / 独立 userData），`plain:1315:light` + `settings:1315:light` 两态：**HEAD 构建 vs 本分支构建逐态 0 差异**（snapdiff 0 态有差）。Univer 编辑面不在现成态集里；静态核对：分层 CSS **无任何 `.univer-*` 选择器**与 vendor 层竞争（只有我们 unlayered 的 `usheetEditor.css` 覆盖它，语义不变）⇒ 预期中性；验收时开一张表格看一眼即可。
 - **顺带发现（与本批无关，登记为待办）**：`scripts/css-audit/baseline/stylesnap.json`（261018 烤）在 261019–261021 批次后**每态 +19 元素**（HEAD 构建同样 2370 vs 基线 2351）⇒ 基线陈旧；合并后应在 master 用**整份 42 态**重烤（按 README「陈旧基线」判据，别用 `--states` 覆盖）。
-- **状态**：分支 `feat/desktop-vendor-css-layer`，**未合并 master**；主树（`lake-notes-electron`）只有并行安卓会话的在途改动（本批未触碰）。
+- **状态**：已合并 master（`98e9278e`）；主树（`lake-notes-electron`）本批未触碰，合并由该分支 FF 完成。
 
 ### 261021(三) · Android 小记搜索（全局搜索合并小记）· **待用户验收**
 
