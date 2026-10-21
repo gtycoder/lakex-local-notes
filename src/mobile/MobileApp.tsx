@@ -65,7 +65,7 @@ export type Route =
   | { kind: "home"; tab: "quick" | "library" }
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
-export function MobileApp() {
+export function MobileApp({ initialCapture = false }: { initialCapture?: boolean } = {}) {
   /** 冷启动固定落在「小记」（用户 261014 定；快捷 capture 那条本来也落在小记）。 */
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "quick" });
   /**
@@ -81,8 +81,9 @@ export function MobileApp() {
     homeRef: routeHomeRef,
     wsRef: routeWsRef,
   } = useRouteTransition(route.kind, () => setRoute({ kind: "home", tab: "library" }));
-  /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。 */
-  const [captureOpen, setCaptureOpen] = useState(false);
+  /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。
+   *  261022：冷启动由原生同步 hint 在首帧前给出判定 ⇒ 首帧直接进 capture，不再先画首页骨架。 */
+  const [captureOpen, setCaptureOpen] = useState(initialCapture);
   /** 系统分享带入的初始内容（文本 + 图片）；null = 空白/恢复草稿。 */
   const [captureSeed, setCaptureSeed] = useState<QuickNoteSeed | null>(null);
   /** 每次打开「小记」框递增：作为 key 强制重挂载，保证 seed/草稿各自生效。 */
@@ -170,7 +171,7 @@ export function MobileApp() {
    *  ① **手动退出时直接退 App 回桌面**（"假单独模块"，模仿思源的闪念速记；首页底栏「新建小记」那条不受影响）；
    *  ② 这次会话**不主动发起同步**（见 `useAutoSync` 的 capture 会话判定：入口 / 回前台 / 进后台三处都跳过）。
    */
-  const captureLaunchedRef = useRef(false);
+  const captureLaunchedRef = useRef(initialCapture);
 
   /**
    * 手动退出 capture（系统返回键 / 「取消」按钮）：关界面 + 按需刷新小记列表；
@@ -191,7 +192,7 @@ export function MobileApp() {
     setCaptureSeed(null);
     setCaptureNonce((n) => n + 1);
     setCaptureOpen(true);
-  }), []);
+  }, { skipColdRead: initialCapture }), [initialCapture]);
 
   // 系统分享（ACTION_SEND）→ 打开「小记」框并预填：冷启动读一次性内容，热启动订阅 "shared"。
   useEffect(() => {

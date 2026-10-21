@@ -25,11 +25,19 @@ const MOBILE_APP = code(read("../MobileApp.tsx"));
 const COMPOSER = code(read("./QuickNoteComposer.tsx"));
 const HOME = code(read("./HomePage.tsx"));
 const COMPOSER_LAZY = code(read("./quickNoteComposerLazy.tsx"));
+const COMPOSER_SKELETON = code(read("./QuickNoteComposerSkeleton.tsx"));
 const EDITOR = code(read("../../features/quickNotes/QuickNoteEditor.tsx"));
 const AUTO_SYNC = code(read("../hooks/useAutoSync.ts"));
 const SETTINGS = code(read("../settings/SettingsDrawer.tsx"));
 const BRIDGE = ["bridge.ts", "bridge/sync.ts", "bridge/notes.ts", "bridge/quickNotes.ts", "bridge/tree.ts"].map((f) => code(read("../" + f))).join("\n");
 const SYNC_STATUS = code(read("../sync/syncStatusStore.ts"));
+const SHORTCUT = code(read("../native/quickNoteShortcut.ts"));
+const MAIN = code(read("../main.tsx"));
+const MAIN_ACTIVITY = read("../../../android/app/src/main/java/com/lakenotes/mobile/MainActivity.kt");
+const MANIFEST = read("../../../android/app/src/main/AndroidManifest.xml");
+const SHORTCUTS = read("../../../android/app/src/main/res/xml/shortcuts.xml");
+const ANDROID_STYLES = read("../../../android/app/src/main/res/values/styles.xml");
+const ANDROID_STYLES_V31 = read("../../../android/app/src/main/res/values-v31/styles.xml");
 
 describe("小记 capture 路径（261010 统一为内核卡片）", () => {
   it("capture 与工作台共用同一个内核 composer（第二套轻量框已删除）", () => {
@@ -122,5 +130,49 @@ describe("小记 capture 路径（261010 统一为内核卡片）", () => {
     expect((auto.match(/await isCaptureSession\(\)/g) ?? []).length, "前台 + 后台都要判定").toBeGreaterThanOrEqual(2);
     // 用户自己配的「按固定间隔」定时器不在此列（那是他设的节奏，不是我们替他补的动作）
     expect(auto).toMatch(/setInterval/);
+  });
+});
+
+/**
+ * 261022：保持速度的启动修法（用户定稿，不加遮罩/不延长等待）。
+ * 关键 = 冷启动首帧前同步判定 capture（不画首页骨架）+ 纯色底（不露白）+ 同构骨架。
+ */
+describe("capture 首帧（261022，零等待）", () => {
+  it("原生同步 hint 在首帧前决定 capture；订阅跳过冷读，避免重复触发重挂写作卡", () => {
+    expect(SHORTCUT).toContain("lakeLaunchUrl");
+    expect(SHORTCUT).toContain("skipColdRead");
+    expect(MAIN).toContain("readLaunchUrlHint()");
+    expect(MAIN).toContain("<MobileApp initialCapture={initialCapture} />");
+    expect(MOBILE_APP).toContain("initialCapture");
+    expect(MOBILE_APP).toContain("useState(initialCapture)");
+    expect(MOBILE_APP).toMatch(/skipColdRead:\s*initialCapture/);
+    expect(MAIN_ACTIVITY).toContain("lakeLaunchUrl");
+  });
+
+  it("首帧纯色底：不盖图、不延迟", () => {
+    const HTML = read("../../../mobile.html");
+    expect(HTML).toContain("background: #ededf1");
+    expect(HTML).not.toContain("boot-screen");
+  });
+
+  it("入口分离（对齐思源的「普通启动带 logo / 速记不带」思路）：capture 走 alias 的独立主题", () => {
+    expect(MANIFEST).toContain('android:name=".QuickNoteAlias"');
+    expect(MANIFEST).toContain('android:theme="@style/AppTheme.NoActionBarLaunchNoLogo"');
+    // lakenotes://quick-note 只由 alias 接；MainActivity 保留普通 launcher / 分享入口
+    expect((MANIFEST.match(/android:host="quick-note"/g) ?? [])).toHaveLength(1);
+    expect(SHORTCUTS).toContain('android:targetClass="com.lakenotes.mobile.QuickNoteAlias"');
+    expect(ANDROID_STYLES).toContain("AppTheme.NoActionBarLaunchNoLogo");
+    expect(ANDROID_STYLES_V31).toContain('<item name="windowSplashScreenAnimatedIcon">@drawable/launch_splash_none</item>');
+    expect(ANDROID_STYLES_V31).toContain('<item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>');
+  });
+
+  it("写作卡骨架与真实卡片同构（正文/标签/动作行），内核就绪前盖住白卡", () => {
+    expect(COMPOSER_SKELETON).toContain("mobile-qn-composer mb-composer-skeleton");
+    expect(COMPOSER_SKELETON).toContain("mb-composer-skeleton__actions");
+    expect(COMPOSER_SKELETON).toContain("mb-composer-skeleton--bare");
+    // 模块已到、内核未就绪的窗口期：同一份骨架盖住卡片（不是启动遮罩，就绪即揭）
+    expect(COMPOSER).toContain("mb-composer-skel-cover");
+    expect(COMPOSER).toContain("QuickNoteComposerSkeleton bare");
+    expect(COMPOSER).toContain('data-capture={draft ? "1" : undefined}');
   });
 });

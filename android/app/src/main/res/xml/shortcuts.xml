@@ -13,7 +13,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.lakenotes.mobile"
-            android:targetClass="com.lakenotes.mobile.MainActivity"
+            android:targetClass="com.lakenotes.mobile.QuickNoteAlias"
             android:data="lakenotes://quick-note" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>

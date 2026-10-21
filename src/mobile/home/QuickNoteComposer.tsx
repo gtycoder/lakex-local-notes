@@ -28,6 +28,7 @@ import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
 import { execEditorCommand } from "../editor/execCommand";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
+import { QuickNoteComposerSkeleton } from "./QuickNoteComposerSkeleton";
 import { EditorDockHost } from "../editor/EditorDockHost";
 // 光标/选区自动跟随滚动：**与文档编辑器同一份实现**（261014 —— 用户：光标必须始终在工具栏上方、
 // 不被工具栏/键盘盖住）。小记此前没有这一环，文字一多光标就跑到屏幕外。
@@ -108,6 +109,8 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
    * 编辑器就绪后若不重渲染，dock 会一直拿到 null、命令全部静默失效（与 DocumentEditor 同一坑）。
    */
   const [editorInstance, setEditorInstance] = useState<LakeEditorInstance | null>(null);
+  /** 内核实例是否已就绪：就绪前用同构骨架盖住卡片（否则模块到达后到内核就绪前是一张白卡）。 */
+  const [editorReady, setEditorReady] = useState(false);
   /** 起手内容只消费一次：重挂/重渲染都不再重复插入。 */
   const pendingInsertRef = useRef(initialInsert);
   /** 保存成功 / 主动取消后不再写草稿。 */
@@ -359,11 +362,11 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
   }, []);
 
   // 草稿未读完先不挂内核（避免用空正文建实例、随后又拿不到已恢复的内容）
-  if (!draftReady) return <div className="mobile-qn-composer" />;
+  if (!draftReady) return <QuickNoteComposerSkeleton />;
 
   // data-mb-edit-host / data-mb-kernel = 编辑面契约标记（内核几何收口见 edit-surface-kernel.css）
   return (
-    <div className="mobile-qn-composer" ref={cardRef} data-mb-edit-host data-mb-kernel="note">
+    <div className="mobile-qn-composer" ref={cardRef} data-mb-edit-host data-mb-kernel="note" data-capture={draft ? "1" : undefined}>
       <QuickNoteEditor
         ownerId={noteId}
         initialBody={addAssetAccessToken(initialBody)}
@@ -371,7 +374,12 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
         active
         uploadResource={uploadResource}
         onTextChange={setText}
-        onReady={(api) => { apiRef.current = api; if (api) autoFocusIfCreating(); }}
+        onReady={(api) => {
+          apiRef.current = api;
+          if (!api) return;
+          setEditorReady(true);
+          autoFocusIfCreating();
+        }}
         /* 顶部不要内核那套九项工具条（用户 261013）：移动端小记改用**文档编辑那条 dock**（EditorDockHost），
            关掉用的是内核既有开关（showToolbar:false ⇒ disabledPlugins 去掉 toolbar），不是我们另做一套隐藏。 */
         showToolbar={false}
@@ -417,6 +425,12 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
           顶部不再有内核工具条；插入能力（图片/拍照/附件/表格/表情/日历/…）全部由它提供。 */}
       {/* undoBackend="snapshot"：小记用内核 note-mini，键入不进 kernel history ⇒ 走前端快照栈（思源 LocalUndo 式）。 */}
       <EditorDockHost editor={editorInstance} editing undoBackend="snapshot" />
+      {/* 261022：模块已到、内核未就绪的窗口期用同一份骨架盖住（不是启动遮罩；就绪即同帧揭掉）。 */}
+      {!editorReady && (
+        <div className="mb-composer-skel-cover">
+          <QuickNoteComposerSkeleton bare />
+        </div>
+      )}
       <MobileQuickNoteTagSheet
         open={tagSheetOpen}
         options={tagOptions}

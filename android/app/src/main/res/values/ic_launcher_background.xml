@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#F0FBF5</color>
+    <!-- 261022：与原生 splash 同色，splash 退场到 WebView 首帧之间不露白（纯色，不盖图）。 -->
+    <color name="launch_background">#EDEDF1</color>
 </resources>

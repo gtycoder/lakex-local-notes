@@ -23,14 +23,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 深链：lakenotes://quick-note（长按图标的「小记」快捷方式走这里；@capacitor/app 读取） -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="lakenotes" android:host="quick-note" />
-            </intent-filter>
-
             <!-- 系统分享 → LocalLakeNotes（文本 / 图片）：@capacitor 的 SharedContentPlugin 接住后再打开「小记」框 -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -49,6 +41,22 @@
                 android:resource="@xml/shortcuts" />
 
         </activity>
+
+        <!-- 261022：长按图标的「新建小记」走 alias（不同 splash 主题：纯色、无 logo），
+             但目标仍是同一个 MainActivity（同一 WebView/内核/数据），不复制第二套 App。
+             普通启动保持在 MainActivity 的带 logo 启动页上。 -->
+        <activity-alias
+            android:name=".QuickNoteAlias"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:theme="@style/AppTheme.NoActionBarLaunchNoLogo">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="lakenotes" android:host="quick-note" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"

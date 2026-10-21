@@ -31,6 +31,12 @@ class MainActivity : BridgeActivity() {
         // Lake 原生渲染图片/附件，替代移动端 blob 注入方案（与桌面端资源服务器语义一致）。
         val assetToken = AssetServer.start(this)
         val bridge = getBridge()
+        // 261022：冷启动首帧 hint —— 本次 intent 的 data URL 同步可读，
+        // React 首帧前就能判定「长按图标新建小记」，不再先画首页骨架再整树切换。
+        // 不依赖 AssetServer（它失败时也要能判定），只要有 WebView 就注入。
+        bridge?.webView?.let { webView ->
+            webView.addJavascriptInterface(LaunchUrlInterface(intent?.data?.toString()), "lakeLaunchUrl")
+        }
         if (assetToken != null && bridge != null && bridge.webView != null) {
             bridge.webView.addJavascriptInterface(AssetTokenInterface(assetToken), "lakeAssetToken")
             // 系统栏跟随 App 主题：渲染层 applyTheme 时通过 lakeSystemBars.setDark(...) 告知。
@@ -87,5 +93,11 @@ class MainActivity : BridgeActivity() {
     private class AssetTokenInterface(private val token: String) {
         @JavascriptInterface
         fun getToken(): String = token
+    }
+
+    /** 仅本应用 WebView 可读的冷启动 URL（非敏感）：用于首帧决定进 capture 还是首页。 */
+    private class LaunchUrlInterface(private val url: String?) {
+        @JavascriptInterface
+        fun getUrl(): String = url ?: ""
     }
 }
