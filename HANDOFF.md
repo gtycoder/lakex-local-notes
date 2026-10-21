@@ -19,6 +19,17 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022(二) · 长按小记入口零等待启动（capture 无 logo / 普通启动保留 logo）· **已提交 `c21d3adc`、已推送 master**
+
+- **用户口径**：视觉连续后仍觉得慢；**不加遮罩、不延长任何等待**；capture 不展示 logo、普通启动保留 logo；参考思源「双入口」。
+- **入口分离**：新增 `activity-alias .QuickNoteAlias`（target = MainActivity，theme = `AppTheme.NoActionBarLaunchNoLogo`）：Android 12+ 用 `windowSplashScreenBackground` + 透明图标（无 logo/动画），旧版本用纯色 `windowBackground`；普通启动主题保留 `@drawable/splash` / `@mipmap/ic_launcher`。快捷方式 `targetClass` 改为 alias；`lakenotes://quick-note` 的 VIEW filter 只留在 alias，MainActivity 保留 launcher / 分享入口。两者是**同一个 MainActivity/WebView/数据**，不复制第二套 App。
+- **零等待首帧路由**：MainActivity 注入 `lakeLaunchUrl` JS 接口；`main.tsx` 在 `createRoot` 前同步读，`MobileApp initialCapture` ⇒ React 首帧直接进 capture，不再先画首页骨架再整树切换。`subscribeQuickNoteShortcut` 支持 `skipColdRead`（冷启动不重复轮询 `getLaunchUrl`），并用触发时刻去重，避免 appUrlOpen 二次触发 `setCaptureNonce` 重挂写作卡。
+- **纯色底（不盖图）**：Capacitor `backgroundColor`、`mobile.html` 内联 `html,body{background:#ededf1}`、Android `launch_background` 纯色；splash 退场到 WebView 首帧不露白。
+- **骨架/过渡**：`QuickNoteComposerSkeleton` 独立成文件，与真实写作卡同构（正文/标签/底部动作行）；模块已到、内核未就绪的窗口期用同一份骨架盖住白卡（就绪即揭，不是启动遮罩）；capture 卡片 120ms 淡入（`prefers-reduced-motion` 关闭）。
+- **设备实测（emulator-5554）**：普通启动截帧 s01–s04 有 logo；alias 启动 s02–s03 纯色无 logo → s04–s07 骨架 → s08+ 写作卡+键盘；热启动 alias 复用现有 MainActivity 并打开 capture；`cmd shortcut get-shortcuts` 实测 intent `cmp=com.lakenotes.mobile/.QuickNoteAlias`；首帧采样 `home:false / overlay:false / composer:true / skel:true`。
+- **门禁**：tsc 0 · vitest **334 文件 / 2415 通过（16 skip）** · ui-metrics 0 · check:mobileui ✓ · 双端构建 ✓ · diff-check ✓。
+- **文件**：Manifest / values(-v31)/styles / shortcuts / MainActivity / capacitor.config / mobile.html / MobileApp / main.tsx / quickNoteShortcut / QuickNoteComposer / QuickNoteComposerSkeleton / quickNoteComposerLazy / mobile.css + capture/prewarm/mobile-layers 测试。
+
 ### 261021(四) · 移动端表格 P4/P5 第一批：一级工具条补三项 + 排序/筛选**双端**接入 · **待用户验收**
 
 > 用户定稿：① **保存不在工具条重复**（顶栏 ✓ = 手动保存并退出编辑）；② 小数位一级按钮**点一下 = +1 位**，减少放 ⋯ 卡；③ **A/B 都做**，且排序/筛选**桌面端也要**（"这个很常用"）。
