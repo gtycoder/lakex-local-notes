@@ -38,6 +38,11 @@ const UNIVER_PACKAGES = [
   "@univerjs/docs-ui",
   "@univerjs/engine-render",
   "@univerjs/design",
+  // 261021 P5：排序 / 筛选（数据插件双端、UI 插件仅桌面；移动端自绘入口）
+  "@univerjs/sheets-sort",
+  "@univerjs/sheets-sort-ui",
+  "@univerjs/sheets-filter",
+  "@univerjs/sheets-filter-ui",
 ];
 
 /** 把实装内核的 ESM 产物拼起来（index.js + facade.js），供"符号还在不在"的静态核对。 */

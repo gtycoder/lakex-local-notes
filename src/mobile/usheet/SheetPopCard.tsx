@@ -5,11 +5,13 @@
  * 这个原语负责「定位 + 外部关闭 + 子菜单下钻 + 分组标题」，内容由 usheetChromeModel 决定；
  * 卡片渲染在 .mobile-usheet 内部（position:absolute），不 portal、不用 fixed，
  * 避免路由层 transform 把 fixed 包含块改掉的历史坑。
+ *
+ * 261021 P4-2：主体渲染抽到 `SheetMenuBody`（列表 / 圆点色板 / 图标行三种形态共用一份）。
  */
 import { useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { SheetIcon } from "./SheetIcon";
+import { ChevronLeft } from "lucide-react";
 import { useAnchoredCardStyle, useCardDismiss } from "./sheetCardHooks";
+import { SheetMenuBody } from "./SheetMenuBody";
 import type { SheetMenuItem } from "./usheetChromeModel";
 
 export interface SheetPopCardProps {
@@ -33,8 +35,9 @@ export function SheetPopCard({ host, anchor, width, ariaLabel, placement = "belo
   const [path, setPath] = useState<SheetMenuItem[]>([]);
   useCardDismiss(cardRef, anchor, onClose);
 
-  const current = path.length > 0 ? path[path.length - 1].children ?? [] : items;
-  const title = path.length > 0 ? path[path.length - 1].label : null;
+  const parent = path.length > 0 ? path[path.length - 1] : null;
+  const current = parent ? parent.children ?? [] : items;
+  const title = parent ? parent.label : null;
 
   return (
     <div className="mb-usheet-popcard" ref={cardRef} role="menu" aria-label={ariaLabel} style={style} data-prevent-swipe>
@@ -45,27 +48,12 @@ export function SheetPopCard({ host, anchor, width, ariaLabel, placement = "belo
         </button>
       )}
       <div className="mb-usheet-popcard__scroll">
-        {current.map((item) => (
-          item.header ? (
-            <div key={item.id} className="mb-usheet-popcard__header">{item.label}</div>
-          ) : (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              className={"mb-usheet-popcard__row" + (item.danger ? " is-danger" : "") + (item.active ? " is-active" : "")}
-              onClick={() => {
-                if (item.children?.length) setPath((prev) => [...prev, item]);
-                else onSelect(item.id);
-              }}
-            >
-              {item.icon && <span className="mb-usheet-popcard__icon"><SheetIcon name={item.icon} size={16} /></span>}
-              <span className="mb-usheet-popcard__label">{item.label}</span>
-              {item.note && <span className="mb-usheet-popcard__note">{item.note}</span>}
-              {item.children?.length ? <ChevronRight size={14} className="mb-usheet-popcard__chev" /> : null}
-            </button>
-          )
-        ))}
+        <SheetMenuBody
+          items={current}
+          layout={parent?.childLayout ?? "list"}
+          onSelect={onSelect}
+          onDrill={(item) => setPath((prev) => [...prev, item])}
+        />
       </div>
     </div>
   );

@@ -187,6 +187,17 @@ const PASTE_ONCE = (b64, two) => "(async function () { var b64 = " + JSON.string
   const added = s2.sheets.find((x) => x.indexOf("Sheet1") !== 0);
   record("工作表「＋」= 50 行 × 16 列（preset footer 配置）", Boolean(added) && added.indexOf(":50x16") > 0, JSON.stringify(s2));
 
+  // 3b) 261021 P5：排序 / 筛选（Univer 独立可选包）的**入口必须出现在「数据」页签**。
+  //     两个能力由 sort-ui / filter-ui 的 ribbon schema 自动注册（我们不自建菜单），
+  //     这里锁"插件清单还在、schema 还挂得上、页签还出得来"——失效表现 = 桌面端整条能力静默消失。
+  await evaluate("(function () { var tabs = [...document.querySelectorAll('[data-u-comp=ribbon-header-menu] *')]; var data = tabs.find(function (e) { return e.children.length === 0 && (e.textContent || '').trim() === '数据'; }); if (data) data.click(); return Boolean(data); })()");
+  await wait(800);
+  const sortFilter = await evaluate("(function () { var q = function (sel) { return Boolean(document.querySelector(sel)); }; return { tab: q('[data-u-comp=ribbon-toolbar]'), filter: q('[data-u-command=\"sheet.command.smart-toggle-filter\"]'), sort: q('[aria-label=\"排序\"]') || q('[data-u-command=\"sheet.command.sort-range-asc\"]') }; })()");
+  record("排序 / 筛选入口出现在「数据」页签（独立包已接）", sortFilter.tab && sortFilter.filter && sortFilter.sort, JSON.stringify(sortFilter));
+  // 切回「开始」页签，避免影响后面的粘贴/右键探针。
+  await evaluate("(function () { var tabs = [...document.querySelectorAll('[data-u-comp=ribbon-header-menu] *')]; var start = tabs.find(function (e) { return e.children.length === 0 && (e.textContent || '').trim() === '开始'; }); if (start) start.click(); return Boolean(start); })()");
+  await wait(500);
+
   // 4) 单图粘贴 → 单元格图片
   //    ⚠️ 上一步「＋」把活动表切到了新工作表，而**新表没有活动单元格** ⇒ 按我们的落点规则会回退浮动图。
   //    所以先切回第一个工作表，再用真左键点网格建立选区（这一步等价于真实用户"点一下格子再粘贴"）。

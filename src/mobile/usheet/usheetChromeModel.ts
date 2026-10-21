@@ -8,20 +8,31 @@
 import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP } from "./usheetLayoutActions";
 import { USHEET_NUMFMT_OPTIONS } from "./usheetNumfmt";
 import { USHEET_QUICK_FORMULAS } from "./usheetFormulaQuick";
+import { USHEET_BORDER_OPTIONS } from "./usheetBorders";
 
 /** 一级工具条按钮 id（与 MobileUsheetViewer 的动作分派对齐）。 */
-export type SheetToolbarItemId = "insert" | "undo" | "redo" | "numfmt" | "more";
+export type SheetToolbarItemId =
+  | "insert" | "undo" | "redo" | "format-painter" | "clear-style" | "numfmt" | "decimals" | "more";
 
 export interface SheetToolbarItem {
   id: SheetToolbarItemId;
   label: string;
 }
 
-/** 一级工具条的分组（顺序 = 语雀的组序；未支持项先不放，避免死按钮）。 */
+/**
+ * 一级工具条的分组（顺序 = 语雀 §2.1 的组序；未支持项不放，避免死按钮）。
+ *
+ * 261021 用户定稿（对齐语雀 App，去掉「保存」位）：
+ * `+ | 撤销 重做 格式刷 清除格式 | 常规▾ | 小数位 | ⋯`
+ * —— 保存/退出编辑由工作区顶栏的 ✓ 承担，**工具条不再重复**（用户 261021：「做在工具条里不是多余了吗」）。
+ * 一级只放**已经实现**的能力：语雀有而我们没实现过的项继续留在 ⋯ 卡里置灰。
+ */
 export const SHEET_TOOLBAR_GROUPS: readonly (readonly SheetToolbarItem[])[] = [
   [{ id: "insert", label: "插入" }],
-  [{ id: "undo", label: "撤销" }, { id: "redo", label: "重做" }],
+  [{ id: "undo", label: "撤销" }, { id: "redo", label: "重做" },
+    { id: "format-painter", label: "格式刷" }, { id: "clear-style", label: "清除格式" }],
   [{ id: "numfmt", label: "数字格式" }],
+  [{ id: "decimals", label: "增加小数位" }],
   [{ id: "more", label: "更多表格操作" }],
 ];
 
@@ -45,6 +56,10 @@ export interface SheetMenuItem {
   header?: boolean;
   /** 图标名（由 SheetPopCard / SheetMoreCard 映射到 lucide）。 */
   icon?: string;
+  /** 颜色色块的十六进制值（261021 P4-2）：有它就把子菜单渲染成**圆点色板**，不是文字行。 */
+  swatch?: string;
+  /** 子菜单的版式（261021 P4-2）：色板 / 图标行 / 普通列表（默认）。 */
+  childLayout?: "list" | "swatch" | "icons";
   children?: SheetMenuItem[];
 }
 
@@ -65,7 +80,7 @@ const COLOR_NAMES: Array<[string, string]> = [
 ];
 
 export function buildColorMenu(prefix: "font-" | "fill-"): SheetMenuItem[] {
-  return COLOR_NAMES.map(([value, label]) => ({ id: prefix + value, label }));
+  return COLOR_NAMES.map(([value, label]) => ({ id: prefix + value, label, swatch: value }));
 }
 
 export interface SheetCellFormatLite {
@@ -88,15 +103,18 @@ export interface SheetMoreButton {
   disabled?: boolean;
   active?: boolean;
   danger?: boolean;
+  /** 子菜单版式（261021 P4-2）：色板 / 图标行 / 普通列表。 */
+  childLayout?: "list" | "swatch" | "icons";
   children?: SheetMenuItem[];
 }
 
 export type SheetMoreRow = SheetMoreButton[];
 
+/** 水平对齐：语雀是**图标行**（不是文字行）⇒ childLayout: "icons"。 */
 const ALIGN_MENU: SheetMenuItem[] = [
-  { id: "align-left", label: "左对齐" },
-  { id: "align-center", label: "居中对齐" },
-  { id: "align-right", label: "右对齐" },
+  { id: "align-left", label: "左对齐", icon: "align-left" },
+  { id: "align-center", label: "居中对齐", icon: "align-center" },
+  { id: "align-right", label: "右对齐", icon: "align-right" },
 ];
 
 const FREEZE_MENU: SheetMenuItem[] = [
@@ -111,10 +129,8 @@ const FREEZE_MENU: SheetMenuItem[] = [
  */
 export function buildMoreRows(fmt: SheetCellFormatLite): SheetMoreRow[] {
   return [
-    [
-      { id: "decimal-down", label: "减少小数位（暂不支持）", icon: "minus", disabled: true },
-      { id: "decimal-up", label: "增加小数位（暂不支持）", icon: "plus", disabled: true },
-    ],
+    // 语雀 ⋯ 卡第一行只有「小数位−」；「增」已提到一级常驻栏（见 SHEET_TOOLBAR_GROUPS）。
+    [{ id: "decimal-down", label: "减少小数位", icon: "minus" }],
     [
       { id: "font-size", label: "字号（暂不支持）", icon: "type", text: "12px", disabled: true },
       { id: "bold", label: "加粗", icon: "bold", active: fmt.bold },
@@ -123,19 +139,24 @@ export function buildMoreRows(fmt: SheetCellFormatLite): SheetMoreRow[] {
       { id: "underline", label: "下划线", icon: "underline", active: fmt.underline },
     ],
     [
-      { id: "font-color", label: "字体颜色", icon: "baseline", children: buildColorMenu("font-") },
-      { id: "fill-color", label: "填充颜色", icon: "paintbucket", children: buildColorMenu("fill-") },
-      { id: "border", label: "边框（暂不支持）", icon: "grid", disabled: true },
+      { id: "font-color", label: "字体颜色", icon: "baseline", childLayout: "swatch", children: buildColorMenu("font-") },
+      { id: "fill-color", label: "填充颜色", icon: "paintbucket", childLayout: "swatch", children: buildColorMenu("fill-") },
+      // 261021 P5：边框已接（FRange.setBorder；线型固定 THIN、颜色在 usheetBorders 里）。
+      { id: "border", label: "边框", icon: "grid", children: USHEET_BORDER_OPTIONS.map((option) => ({ id: option.id, label: option.label })) },
     ],
     [
-      { id: "align", label: "水平对齐", icon: "align-left", children: ALIGN_MENU },
+      { id: "align", label: "水平对齐", icon: "align-left", childLayout: "icons", children: ALIGN_MENU },
       { id: "valign", label: "垂直对齐（暂不支持）", icon: "align-vertical", disabled: true },
       { id: "wrap", label: "换行（暂不支持）", icon: "wrap", disabled: true },
       { id: "merge", label: "合并选中单元格", icon: "merge" },
     ],
     [
-      { id: "filter", label: "筛选（暂不支持）", icon: "filter", disabled: true },
-      { id: "sort", label: "排序（暂不支持）", icon: "sort", disabled: true },
+      // 261021 P5：筛选/排序已接（Univer 独立包 1.0.3）。排序走我们自己的子菜单，筛选开内核的移动筛选面板。
+      { id: "filter", label: "筛选", icon: "filter" },
+      { id: "sort", label: "排序", icon: "sort", children: [
+        { id: "sort-asc", label: "升序（按当前列）" },
+        { id: "sort-desc", label: "降序（按当前列）" },
+      ] },
       { id: "conditional", label: "条件格式（暂不支持）", icon: "table", disabled: true },
     ],
     [
@@ -147,7 +168,8 @@ export function buildMoreRows(fmt: SheetCellFormatLite): SheetMoreRow[] {
     [
       { id: "freeze", label: "冻结窗格", icon: "freeze", children: FREEZE_MENU },
       { id: "protect", label: "保护（暂不支持）", icon: "lock", disabled: true },
-      { id: "find", label: "查找替换（暂不支持）", icon: "search", disabled: true },
+      // 查找替换：包已装、接线后两端 UI 都不出来（261021 记录，待单独排查），先保持置灰，不留死按钮。
+      { id: "find", label: "查找替换（待接入）", icon: "search", disabled: true },
     ],
     [
       { id: "row-height", label: "行高", icon: "row-height", children: [

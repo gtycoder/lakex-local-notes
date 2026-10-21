@@ -20,8 +20,13 @@ import { DocSelectionRenderService, UniverSheetsCorePreset } from "@univerjs/pre
 import { UniverSheetsDrawingPreset } from "@univerjs/preset-sheets-drawing";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
+import sortZhCN from "@univerjs/sheets-sort-ui/locale/zh-CN";
+import filterZhCN from "@univerjs/sheets-filter-ui/locale/zh-CN";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
+import "@univerjs/sheets-sort-ui/lib/index.css";
+import "@univerjs/sheets-filter-ui/lib/index.css";
+import { createDesktopSortFilterPlugins } from "./univerSortFilter";
 import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
 import { editorCaretPoint, shouldPlaceCaretAfterDoubleClick } from "./usheetCellEdit";
@@ -292,7 +297,9 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     try {
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
-        locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
+        locales: {
+          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never),
+        },
         theme: buildUniverTheme() as never,
         presets: [
           UniverSheetsCorePreset({
@@ -307,6 +314,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
             footer: USHEET_FOOTER_CONFIG,
           }),
           UniverSheetsDrawingPreset(),
+          // 261021 P5：排序 / 筛选（Univer 独立可选包，不在 preset-sheets-core 里）。
+          { plugins: createDesktopSortFilterPlugins() },
         ],
       });
       const book = univerAPI.createWorkbook(workbook as never);

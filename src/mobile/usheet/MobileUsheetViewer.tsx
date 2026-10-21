@@ -9,16 +9,20 @@
  * 正文仍是内部 JSON（`core/usheetDoc.ts`），绝不喂给 Lake 编辑器；本组件只负责 Univer ↔ JSON。
  * 分包、首次可见才挂载、图片 URL、主题跟随的约束与只读版保持一致。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, MoreHorizontal, Plus, Redo2, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Eraser, MoreHorizontal, Paintbrush, Plus, Redo2, Undo2 } from "lucide-react";
 import { createUniver, DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY, LocaleType, mergeLocales, type FUniver } from "@univerjs/presets";
 import { DocSelectionRenderService, IRenderManagerService } from "@univerjs/preset-sheets-core";
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
+import sortZhCN from "@univerjs/sheets-sort-ui/locale/zh-CN";
+import filterZhCN from "@univerjs/sheets-filter-ui/locale/zh-CN";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
-import { buildUniverTheme } from "../../features/usheet/univerTheme";
+import "@univerjs/sheets-sort-ui/lib/index.css";
+import "@univerjs/sheets-filter-ui/lib/index.css";
+import { buildMobileUniverTheme } from "./mobileUniverTheme";
 import { editorCaretPoint } from "../../features/usheet/usheetCellEdit";
 import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody } from "../../core/usheetDoc.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
@@ -38,10 +42,15 @@ import {
 } from "./usheetChromeModel";
 import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
+import { createMobileSortFilterPlugins } from "./mobileSortFilter";
 import "./usheet-chrome.css";
 import { USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
 import { USHEET_NUMFMT_IDS, applyUsheetNumberFormat } from "./usheetNumfmt";
 import { USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
+import { decimalStepMessage, stepNumberFormatDecimals } from "./usheetDecimals";
+import { USHEET_BORDER_IDS, applyUsheetBorder } from "./usheetBorders";
+import { readFilterAvailability } from "./usheetReadFilter";
+import { blockFailureMessage, planSortRange, resolveSheetBlock, type SortFilterSheet } from "./usheetSortPlan";
 
 /**
  * 移动端公式栏的点击落点（261021）：Univer 的移动公式栏把输入面做成 canvas + 隐藏 contenteditable，
@@ -141,9 +150,19 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const [activeSheetId, setActiveSheetId] = useState("");
   const [zoomPercent, setZoomPercent] = useState(100);
   const [sheetListAnchor, setSheetListAnchor] = useState<HTMLElement | null>(null);
+  /** 格式刷激活态（0=off / 1=一次性 / 2=连续）；只用于按钮高亮，真实状态由内核 SetFormatPainterOperation 回填。 */
+  const [painterStatus, setPainterStatus] = useState(0);
+  /** 读态本机筛选（261021 定稿：只对本机生效、绝不写正文）——激活态 + 还原钩子。 */
+  const [readFilterActive, setReadFilterActive] = useState(false);
+  const readFilterRef = useRef(false);
+  /** capture 定义在前、还原实现在后，用 ref 解耦（capture 必须**先还原再取正文**）。 */
+  const restoreReadFilterRef = useRef<() => void>(() => undefined);
+  const readFilterAvailable = useMemo(() => readFilterAvailability(content), [content]);
 
   /** 同步取最新正文；只有真的变更才通知外层。 */
   const capture = useCallback((): string | null => {
+    // 读态本机筛选绝不落盘：先把运行时筛选摘掉，再取正文（见 usheetReadFilter.ts）。
+    restoreReadFilterRef.current();
     const state = instanceRef.current;
     if (!state) return null;
     try {
@@ -246,6 +265,153 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }
   }, [refreshCellFmt]);
 
+  /** 小数位 ±1：走 numfmt mixin（缺失/不支持时明确提示，不静默失败）。 */
+  const stepDecimals = useCallback((delta: 1 | -1) => {
+    withActiveRange((range) => {
+      const target = range as unknown as {
+        getNumberFormat?: () => string | undefined;
+        setNumberFormat?: (pattern: string) => unknown;
+      };
+      if (typeof target.setNumberFormat !== "function") {
+        showToast("当前表格内核不支持数字格式", { type: "error" });
+        return;
+      }
+      const step = stepNumberFormatDecimals(target.getNumberFormat?.() ?? "", delta);
+      if (!step.ok) {
+        showToast(decimalStepMessage(step.reason), { type: "error" });
+        return;
+      }
+      target.setNumberFormat(step.pattern);
+    });
+  }, [withActiveRange]);
+
+  /** 格式刷：一次性模式（语雀 toolbar-formatPainter 的语义）；内核会自己按 operation 回填激活态。 */
+  const toggleFormatPainter = useCallback(() => {
+    const state = instanceRef.current;
+    if (!state) return;
+    void state.univerAPI.executeCommand("sheet.command.set-once-format-painter");
+    refreshCellFmt();
+  }, [refreshCellFmt]);
+
+  /** 排序/筛选共用的「数据块」读取口（只读值，不改任何东西）。 */
+  const sheetAccessor = useCallback((sheet: FWorksheet): SortFilterSheet => ({
+    maxRows: sheet.getMaxRows(),
+    maxColumns: sheet.getMaxColumns(),
+    getValue: (row, column) => sheet.getRange(row, column).getValue(),
+  }), []);
+
+  /** 排序：自己算数据区 + 数据层命令 `sheet.command.sort-range`
+   *  （不用 `sort-range-asc` 那类 UI 包装命令：它会弹内核的桌面对话框，移动端实测不可接受）。 */
+  const runSheetSort = useCallback((direction: "asc" | "desc") => {
+    const state = instanceRef.current;
+    if (!state) return;
+    const workbook = state.univerAPI.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    const range = workbook?.getActiveRange();
+    if (!workbook || !sheet || !range) return;
+    const resolved = planSortRange(
+      { startRow: range.getRow(), endRow: range.getLastRow(), startColumn: range.getColumn(), endColumn: range.getLastColumn() },
+      sheetAccessor(sheet),
+      direction,
+    );
+    if (!resolved.ok) {
+      showToast(blockFailureMessage(resolved.reason), { type: "error" });
+      return;
+    }
+    void state.univerAPI.executeCommand("sheet.command.sort-range", {
+      unitId: workbook.getId(),
+      subUnitId: sheet.getSheetId(),
+      range: resolved.plan.range,
+      orderRules: resolved.plan.orderRules,
+      hasTitle: resolved.plan.hasTitle,
+    }).then((ok) => {
+      if (!ok) showToast("排序失败：这个区域无法排序", { type: "error" });
+    });
+  }, [sheetAccessor]);
+
+  /** 筛选：按数据块建筛选范围（已存在时命令返回 false 属正常），再开内核的**移动**筛选面板。 */
+  const openSheetFilter = useCallback(() => {
+    const state = instanceRef.current;
+    if (!state) return;
+    const workbook = state.univerAPI.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    const range = workbook?.getActiveRange();
+    if (!workbook || !sheet || !range) return;
+    const resolved = resolveSheetBlock(
+      { startRow: range.getRow(), endRow: range.getLastRow(), startColumn: range.getColumn(), endColumn: range.getLastColumn() },
+      sheetAccessor(sheet),
+    );
+    if (!resolved.ok) {
+      showToast(blockFailureMessage(resolved.reason), { type: "error" });
+      return;
+    }
+    const { block } = resolved;
+    const unitId = workbook.getId();
+    const subUnitId = sheet.getSheetId();
+    const column = range.getColumn();
+    void (async () => {
+      await state.univerAPI.executeCommand("sheet.command.set-filter-range", {
+        unitId,
+        subUnitId,
+        range: { startRow: block.startRow, startColumn: block.startColumn, endRow: block.endRow, endColumn: block.endColumn },
+      });
+      const opened = await state.univerAPI.executeCommand("sheet.operation.open-filter-panel", { unitId, subUnitId, col: column });
+      if (!opened) showToast("筛选面板打不开：这个区域可能不足两行", { type: "error" });
+    })();
+  }, [sheetAccessor]);
+
+  /** 摘掉读态本机筛选：**同步**命令，必须在任何 capture / 切编辑态之前完成。 */
+  const restoreReadFilter = useCallback(() => {
+    if (!readFilterRef.current) return;
+    readFilterRef.current = false;
+    setReadFilterActive(false);
+    const state = instanceRef.current;
+    const workbook = state?.univerAPI.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    if (!state || !workbook || !sheet) return;
+    try {
+      state.univerAPI.syncExecuteCommand("sheet.command.remove-sheet-filter", { unitId: workbook.getId(), subUnitId: sheet.getSheetId() });
+    } catch { /* 实例销毁中忽略：此时正文也不再落盘 */ }
+  }, []);
+  restoreReadFilterRef.current = restoreReadFilter;
+
+  /** 读态筛选（本机视图）：条件只活在运行时，落盘前由 restoreReadFilter 摘掉。 */
+  const applyReadFilter = useCallback(() => {
+    const state = instanceRef.current;
+    if (!state) return;
+    if (!readFilterAvailable.enabled) {
+      showToast(readFilterAvailable.reason ?? "读态筛选不可用", { type: "error" });
+      return;
+    }
+    const workbook = state.univerAPI.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    const range = workbook?.getActiveRange();
+    if (!workbook || !sheet || !range) return;
+    const resolved = resolveSheetBlock(
+      { startRow: range.getRow(), endRow: range.getLastRow(), startColumn: range.getColumn(), endColumn: range.getLastColumn() },
+      sheetAccessor(sheet),
+    );
+    if (!resolved.ok) {
+      showToast(blockFailureMessage(resolved.reason), { type: "error" });
+      return;
+    }
+    const { block } = resolved;
+    const unitId = workbook.getId();
+    const subUnitId = sheet.getSheetId();
+    const column = range.getColumn();
+    readFilterRef.current = true;
+    setReadFilterActive(true);
+    void (async () => {
+      await state.univerAPI.executeCommand("sheet.command.set-filter-range", {
+        unitId,
+        subUnitId,
+        range: { startRow: block.startRow, startColumn: block.startColumn, endRow: block.endRow, endColumn: block.endColumn },
+      });
+      const opened = await state.univerAPI.executeCommand("sheet.operation.open-filter-panel", { unitId, subUnitId, col: column });
+      if (!opened) showToast("筛选面板打不开：这个区域可能不足两行", { type: "error" });
+    })();
+  }, [readFilterAvailable, sheetAccessor]);
+
   useEffect(() => {
     if (active) setEverActive(true);
   }, [active]);
@@ -277,13 +443,18 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     try {
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
-        locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never) },
-        theme: buildUniverTheme() as never,
+        locales: {
+          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never),
+        },
+        // 移动端专用画布主题：共用主题 + 语雀对齐覆盖（桌面那份不动，见 mobileUniverTheme.ts）。
+        theme: buildMobileUniverTheme() as never,
         presets: [
           // 只读与编辑都使用移动 UI 插件族（单指横滑 = 滚动画布）；公式栏/工作表栏/缩放保留，
           // 顶部的自有工具条由本组件渲染（Yuque 式常驻操作栏），官方底部动作面板仍可从浮动按钮打开。
           createMobileSheetsCorePreset({ container: containerId, disableAutoFocus: true, toolbar: false, formulaBar: true }),
           createMobileSheetsDrawingPreset(),
+          // 261021 P5：排序 / 筛选（数据插件双端一致；UI 取移动变体，入口是我们自己画的 ⋯ 卡）。
+          { plugins: createMobileSortFilterPlugins() },
         ],
       });
       const book = univerAPI.createWorkbook(workbook as never) as unknown as UniverBook;
@@ -291,7 +462,15 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       const last = usheetToBody(book.save() as never);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
-      disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => { scheduleFlush(); refreshCellFmt(); refreshSheetChrome(); }));
+      disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
+        // 格式刷状态由内核 operation 回填（点目标套用后会自动回 0）——不靠前端猜，也不自建第二套状态。
+        if (event?.id === "sheet.operation.set-format-painter") {
+          setPainterStatus((event.params as { status?: number } | undefined)?.status ?? 0);
+        }
+        scheduleFlush();
+        refreshCellFmt();
+        refreshSheetChrome();
+      }));
       // 点按底部公式栏文字 = 落光标（移动公式栏默认 disableSelectionOnClick，见 placeFormulaBarCaret）。
       onPointerUp = (event: PointerEvent) => {
         refreshCellFmt();
@@ -312,7 +491,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       console.error("移动端表格挂载失败", error);
     }
     const observer = new MutationObserver(() => {
-      try { created?.univerAPI.setTheme(buildUniverTheme() as never); } catch { /* ignore */ }
+      try { created?.univerAPI.setTheme(buildMobileUniverTheme() as never); } catch { /* ignore */ }
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => {
@@ -330,6 +509,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   // 编辑/阅读切换；从编辑切回阅读时同步落一次，避免防抖窗口内点“完成”丢最后修改。
   useEffect(() => {
     const state = instanceRef.current;
+    // 读态本机筛选绝不能被"切回编辑态"带走：先还原，再切换可编辑性。
+    if (editing) restoreReadFilter();
     if (state) {
       try { state.book.setEditable(editing); } catch { /* ignore */ }
     }
@@ -337,7 +518,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
       capture();
     }
-  }, [editing, capture]);
+  }, [editing, capture, restoreReadFilter]);
 
   // 切走 tab / 退出编辑：弹出层不能留在别的页面上。
   useEffect(() => {
@@ -436,6 +617,22 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     else if (id === "align-right") withActiveRange((range) => range.setHorizontalAlignment("normal"));
     else if (id.startsWith("font-")) withActiveRange((range) => range.setFontColor(id.slice("font-".length)));
     else if (id.startsWith("fill-")) withActiveRange((range) => range.setBackgroundColor(id.slice("fill-".length)));
+    // 261021 P5：边框（FRange.setBorder；线型从 univerAPI.Enum 取，不写死数字）。
+    else if (USHEET_BORDER_IDS.has(id)) {
+      withActiveRange((range) => {
+        const style = instanceRef.current?.univerAPI.Enum.BorderStyleTypes.THIN;
+        const applied = applyUsheetBorder(range as unknown as { setBorder?: (type: string, style: number, color?: string) => unknown }, id, style ?? 1);
+        if (!applied) showToast("当前表格内核不支持边框", { type: "error" });
+      });
+    }
+    // 261021 P5：排序 / 筛选（Univer 独立包）。数据区由 usheetSortPlan 判定，失败一律 toast，不静默。
+    else if (id === "sort-asc") runSheetSort("asc");
+    else if (id === "sort-desc") runSheetSort("desc");
+    else if (id === "filter") openSheetFilter();
+    // 261021 P4：一级「格式刷 / 清除格式 / 小数位」三项（语雀同级位；保存位按用户定稿不重复）
+    else if (id === "clear-style") withActiveRange((range) => { range.clearFormat(); });
+    else if (id === "decimals") stepDecimals(1);
+    else if (id === "decimal-down") stepDecimals(-1);
     else if (id === "clear-text") withActiveRange((range) => {
       range.setFontWeight(null).setFontStyle(null).setFontLine(null).setFontColor(null);
     });
@@ -491,6 +688,35 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
                       </button>
                     );
                   }
+                  if (item.id === "format-painter") {
+                    return (
+                      <button key={item.id} type="button"
+                        className={"mb-usheet-btn" + (painterStatus !== 0 ? " is-active" : "")}
+                        aria-label={item.label} title={item.label} aria-pressed={painterStatus !== 0}
+                        onClick={toggleFormatPainter}>
+                        <Paintbrush size={18} strokeWidth={1.75} />
+                      </button>
+                    );
+                  }
+                  if (item.id === "clear-style") {
+                    return (
+                      <button key={item.id} type="button" className="mb-usheet-btn"
+                        aria-label={item.label} title={item.label}
+                        onClick={() => onMenuSelect("clear-style")}>
+                        <Eraser size={18} strokeWidth={1.75} />
+                      </button>
+                    );
+                  }
+                  if (item.id === "decimals") {
+                    return (
+                      <button key={item.id} type="button" className="mb-usheet-btn mb-usheet-btn--numdot"
+                        aria-label={item.label} title={item.label}
+                        onClick={() => onMenuSelect("decimals")}>
+                        <span>.00</span>
+                        <Plus size={11} strokeWidth={2} />
+                      </button>
+                    );
+                  }
                   if (item.id === "numfmt") {
                     return (
                       <button key={item.id} type="button"
@@ -522,7 +748,14 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           <span className="mobile-usheet-formula__value">{cellInfo.value}</span>
         </div>
       )}
-      {!editing && ready && <MobileSheetReadingBar />}
+      {!editing && ready && (
+        <MobileSheetReadingBar
+          filterEnabled={readFilterAvailable.enabled}
+          filterDisabledReason={readFilterAvailable.reason}
+          filterActive={readFilterActive}
+          onFilter={applyReadFilter}
+        />
+      )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
       {ready && (
         <MobileSheetFooter

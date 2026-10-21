@@ -53,6 +53,9 @@
 .mb-usheet-btn:active { background: var(--lake-bg-hover); }
 .mb-usheet-btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .mb-usheet-btn--text { width: 55px; justify-content: space-between; }
+/* 语雀 toolbar-decimal-inc：文字「.00」+ 小加号（一级只有「增」，减在 ⋯ 卡第一行）。 */
+.mb-usheet-btn--numdot { min-width: 40px; gap: 1px; }
+.mb-usheet-btn--numdot > span { font-size: var(--lake-font-size-micro); line-height: 1; letter-spacing: .5px; }
 .mb-usheet-add {
   display: inline-flex;
   align-items: center;
@@ -124,6 +127,44 @@
   font-size: var(--lake-font-size-nano);
 }
 .mb-usheet-popcard__chev { flex: none; color: var(--lake-text-3); }
+
+/* 261021 P4-2：二级选择器形态 —— 圆点色板 / 图标行（语雀同款；颜色来自数据，不写死）。 */
+.mb-usheet-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  justify-items: center;
+  padding: 10px 12px;
+}
+.mb-usheet-swatch {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--lake-border-1);
+  padding: 0;
+}
+.mb-usheet-swatch.is-active { box-shadow: 0 0 0 2px var(--lake-accent); }
+.mb-usheet-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+}
+.mb-usheet-icons__btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lake-text-1);
+}
+.mb-usheet-icons__btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-icons__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 
 /* ⋯ 卡：语雀七行图标网格（+ 我们自己的第八行）。 */
 .mb-usheet-morecard { padding: 4px 0; }

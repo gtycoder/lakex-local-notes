@@ -21,6 +21,16 @@ export const UNIVER_COMMAND_IDS = {
   /** 我们自己注册的命令（不是内核的）。 */
   ourInsertFloatImage: "usheet.insert-float-image",
   ourInsertCellImage: "usheet.insert-cell-image",
+  /** 排序（261021 P5，`@univerjs/sheets-sort-ui`）：**无参**，排的是**当前选区**；`-ext` = 扩展到整块数据区。
+   *  失效表现 = 移动端 ⋯ 卡「升序/降序」点了没反应，或只排了选中那一格。 */
+  sortRangeAsc: "sheet.command.sort-range-asc",
+  sortRangeDesc: "sheet.command.sort-range-desc",
+  sortRangeCustom: "sheet.command.sort-range-custom",
+  /** 筛选（261021 P5，`@univerjs/sheets-filter`）：smart-toggle = 按当前选区建/撤筛选范围并开面板；
+   *  criteria 写入 worksheet 快照（filterModel）⇒ 这是**文档数据**，两端必须同版本。 */
+  smartToggleFilter: "sheet.command.smart-toggle-filter",
+  setFilterCriteria: "sheet.command.set-filter-criteria",
+  removeSheetFilter: "sheet.command.remove-sheet-filter",
 } as const;
 
 /** 单元格右键菜单：菜单位置 → 分组 →「插入」子菜单（facade 的 appendTo 逐段 merge，元素是**单个 key**，
@@ -59,6 +69,13 @@ export const UNIVER_FEATURE_NAMES = [
   "getRenderUnitById",
   /** 等待编辑态建立；编辑器内部双击选词由画布 id 区分，不靠这个判据。 */
   "isCellEditing",
+  /** 排序服务（261021 P5）：**命令无参**，排序对象 = 当前选区；所以 ⋯ 卡入口必须先有选区，
+   *  失败返回 false（我们据此 toast，不静默）。失效表现 = 排序按钮恒提示「当前选区不能排序」。 */
+  "SheetsSortUIService",
+  /** 筛选服务（261021 P5）：筛选条件落在 worksheet 快照里（`SHEET_FILTER_SNAPSHOT_ID`）；
+   *  失效表现 = 筛选结果不随文档保存/跨端同步。 */
+  "SheetsFilterService",
+  "SHEET_FILTER_SNAPSHOT_ID",
 ] as const;
 
 /** 「开始」页签里我们**不用**的内核工具项（走公开 MenuManager 的 updateMenuConfig({hidden:true}) 隐藏）。
@@ -80,6 +97,11 @@ export const UNIVER_DOM_HOOKS = [
   "render-canvas",         // 探针脚本里定位网格画布
   "defined-name",          // 探针脚本里判断"网格就绪"
   "sheet-bar-append-button", // 探针脚本里点「＋」
+  "sort-panel-item-handler", // 排序面板（261021 P5）：探针判定"排序面板已弹出/已收起"
+  "sheets-filter-panel", // 桌面筛选面板（261021 P5）：探针判定面板容器 + 几何
+  "mobile-sheets-filter-drawer", // 移动端筛选抽屉（261021 P5 设备实测）：筛选/按值/按颜色/按条件/清除筛选
+  "mobile-sheets-filter-by-values", // 移动端筛选抽屉内的「按值」页签
+  "mobile-sheets-filter-by-conditions", // 移动端筛选抽屉内的「按条件」页签
 ] as const;
 
 /**
