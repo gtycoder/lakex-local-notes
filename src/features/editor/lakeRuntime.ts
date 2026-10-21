@@ -1049,7 +1049,7 @@ export function createLakeDocument(
   }
   // 块悬浮手柄 + 块操作菜单（桌面编辑态 opt-in；见 blockHandleMount 的安全边界说明）
   if (mode === "editor" && prefs?.blockHandle) {
-    const disposeHandle = mountBlockHoverHandle(element, mount, editor);
+    const disposeHandle = mountBlockHoverHandle(element, mount, editor, noteId);
     const prevDispose = (editor as any).__disposeExtras;
     (editor as any).__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
@@ -1058,7 +1058,7 @@ export function createLakeDocument(
   }
   // 浮动工具栏（桌面编辑态 opt-in）：选中文字/图片时在选区上方弹出浮框。
   if (mode === "editor" && prefs?.floatingToolbar) {
-    const disposeSelectionToolbar = mountSelectionToolbar(element, mount, editor);
+    const disposeSelectionToolbar = mountSelectionToolbar(element, mount, editor, noteId);
     const prevDispose = (editor as any).__disposeExtras;
     (editor as any).__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }

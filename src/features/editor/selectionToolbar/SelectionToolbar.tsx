@@ -182,8 +182,10 @@ function CardMenuItem({ label, icon, selected, onClick }: { label: string; icon?
   );
 }
 
-export function SelectionToolbar({ editor, container }: {
+export function SelectionToolbar({ editor, container, noteId }: {
   editor: LakeEditorInstance; container: HTMLElement;
+  /** 当前文档 id（AI 面板 P1：按需读取本地全文）。 */
+  noteId?: string;
 }) {
   const [menu, setMenu] = useState<string | null>(null);
   /** AI 助手（P0）：点按钮时先冻结浮栏并抓住选区文本，再开对话框。 */
@@ -630,6 +632,7 @@ export function SelectionToolbar({ editor, container }: {
       // 本编辑器挂载点：AI 面板的文字栏几何直接量自己（不再全局猜「哪个 mount 可见」）。
       container={container}
       selectionText={aiSelectionRef.current}
+      noteId={noteId}
       attachments={aiAttachmentsRef.current}
       onClose={closeAi}
       onInsertAfter={(text) => {

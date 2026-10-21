@@ -789,6 +789,7 @@ export function App() {
       <AiAssistantDialog
         open={aiAssistantOpen}
         selectionText=""
+        noteId={activeNoteId ?? undefined}
         onClose={() => setAiAssistantOpen(false)}
       />
       {/* 大表格粘贴护栏（A+B，261008）：超阈值不粘进文档，改为明确提示 + 一键「存为表格文档」 */}

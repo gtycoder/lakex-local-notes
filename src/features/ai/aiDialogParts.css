@@ -1,6 +1,13 @@
 /* AI 助手弹窗内的局部布局（261005）：首轮预设提示词行 + 每条回答的复制动作行。
    按钮/分段都复用 kit 原语，这里只补间距与对齐。 */
 .ai-dialog__presets { margin: 0 8px 6px; }
+/* 261021 P0：预设从 4 条扩到 7 条；窄窗（面板最小 360）一行放不下时换行。
+   仍是 kit 的 .ln-segment 原语，只放开它在本处的换行与高度，不改单行几何。 */
+.ai-dialog__presets .ln-segment { flex-wrap: wrap; height: auto; }
+/* 261021 P1：当前文档全文开关行（默认关；开启后整篇会随请求发给 AI 供应商，开聊后锁定）。 */
+.ai-dialog__doc { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-sm); margin: 0 8px 6px; }
+.ai-dialog__doc-label { color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.ai-dialog__doc-hint { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .ai-dialog__copy-actions { display: inline-flex; gap: 2px; }
 /* 「复制为 Lake」的图标 = lake 四个字母（用户 261005：不用代码块图标）。 */
 .ai-dialog__lake-badge { font-size: var(--lake-font-size-nano); font-weight: var(--lake-font-weight-semibold); letter-spacing: .1px; }

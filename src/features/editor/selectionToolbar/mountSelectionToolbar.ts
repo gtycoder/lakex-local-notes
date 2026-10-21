@@ -11,6 +11,8 @@ export function mountSelectionToolbar(
   hostParent: HTMLElement,
   container: HTMLElement,
   editor: LakeEditorInstance,
+  /** 当前文档 id（AI 面板 P1：按需读取本地全文）。 */
+  noteId?: string,
 ): () => void {
   const host = document.createElement("div");
   host.className = "lake-selection-toolbar-host";
@@ -21,7 +23,7 @@ export function mountSelectionToolbar(
   const scroller = container.querySelector<HTMLElement>(".ne-editor-wrap");
   (scroller ?? hostParent).appendChild(host);
   const root = createRoot(host);
-  root.render(createElement(SelectionToolbar, { editor, container }));
+  root.render(createElement(SelectionToolbar, { editor, container, noteId }));
   return () => {
     try { root.unmount(); } catch { /* 编辑器销毁路径不应抛错 */ }
     host.remove();
