@@ -38,6 +38,11 @@
 - **打开表格「先白再灰再出现，感觉卡」（用户 261022）· 已优化（待复验）**：
   - 实测：表格编辑器是**单个 6.85MB 懒加载 chunk**（`UniverSheetEditor-*.js`，Univer 全量 preset），首开才拉 ⇒ 点击后空白/灰底 → 板面；隔离实例（`--disable-gpu`）里从点击到第二块画布 = 769ms。
   - 修法：`src/App.tsx` 在 workspace 就绪后**空闲预取**该 chunk（`requestIdleCallback(timeout: 8000)`，失败静默）⇒ 网络确认首开前已拉 `UniverSheetEditor-*.js` + `*.css`；复测点击到画布 **769ms → 585ms**（软件渲染；真机 GPU 更快）。
+  - 补丁 2（261022，灰遮罩）：用户又说"主要就是灰色遮罩感觉慢"。查清灰遮罩 = **Univer 自带的 WorkbenchSkeleton**
+    （`[data-u-comp="workbench-skeleton-content"]`，灰底 `gray-50` + shimmer），生命周期 `Ready` 前**盖在内容上**。
+    我们实例创建只要 44ms，这层骨架纯属多余 ⇒ `features/usheet/usheetEditor.css` 用
+    `.usheet-editor div:has(> [data-u-comp="workbench-skeleton-content"]) { display: none; }` 隐藏（只作用 usheet 宿主）；
+    层围栏基线 `usheetEditor.css` 37 → 38。实例复测：点击后 ~374ms 直接看到**完整表格**（此前该时刻是灰遮罩骨架）。
   - 剩余：实例 `createUniver`（全量 preset）初始化本身仍是几百 ms，属内核启动成本；若还要再快，只能做「隐藏预热实例」或裁 preset（需单独立项）。
 - **桌面表格排序弹窗卡死（用户 261022 报「排序弹窗无法点击、会导致整个 app 卡死」）· 已修（待复验）**：
   - 复现：隔离实例（`$TMPDIR/lake-sortfix` / CDP 9237）建表贴数据 → 数据页签 → 排序 → 「自定义排序」→ 对话框出现后**整窗点不动**；`sample` 实测渲染进程 **120% CPU**、CDP 也不响应（真死循环，不是遮罩挡点击）。
