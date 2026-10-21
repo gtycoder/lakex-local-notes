@@ -19,6 +19,24 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261021(四) · 未分层内核 CSS 压过整个设计系统（设置面板 × 错位 + 全站字体漂移）· **已修，待用户验收**
+
+- **用户报**：设置页「偏好设置」的关闭 × 跑到标题右边（截图），问"是不是原语改了"。
+- **结论：原语没改**（`.settings-panel-large .ln-close{margin-left:auto}` 自 260904 起未动、规则仍匹配）。真因是**级联层失效**：
+  `QuickNoteKernelPreview`（小记内核兜底懒 chunk，261014 起）JS `import "@dlient/lakex-doc-react/style.css"`；
+  JS import 的 CSS **无法分层**，构建成独立 chunk CSS（原 `dist/assets/QuickNoteKernelPreview-*.css`，以 antd v4.24.13 开头、0 个 @layer）。
+  **未分层普通声明压过所有 @layer 规则**（与特异性无关）⇒ antd base 的 `body{font-family}` 把全站字体从 MiSans 换成系统栈、
+  `input,button,…{margin:0}` 把 × 的 `margin-left:auto` 归零 ⇒ × 停在标题后。生产包同病（chunk CSS 同样未分层）。
+- **现场实测（dev CDP 9222）**：面板 998px、× x=159；临时 `disabled` 那条未分层表 ⇒ x=999、`margin-left` 840px、body 字体回 MiSans；恢复即复原。
+  排除内核/Univer 子树后 **159 个按钮/输入框全部被它改写**（字体族、输入框字号 14→12、字色 text-3→text-1 等）。
+- **触发条件**：小记卡片走过内核兜底（含表格/代码块/公式等）后 chunk 才加载 ⇒ **本次会话剩余时间**全站被压；重启且不打开这类小记时正常。
+- **修法（用户 261021 点单方案 A，最小根修）**：删掉懒入口那行 JS import（桌面入口 `src/styles/index.css` 已 `@import … layer(legacy)`，dev 实测该表在 legacy 层内）；旧护栏「懒入口必须自带内核样式」**反转**为「桌面不许 JS import 内核 CSS」（`quickNoteKernelFallback.test.ts`）；`cssLayers.test.ts` 新增「vendor 内核 CSS 只能经入口分层引入」；
+  新增产物护栏 `scripts/css-audit/audit-vendor-css.mjs` 并串进 `npm run check:bundle`（扫 dist：未分层裸标签 reset / 整份未分层 antd banner ⇒ exit 1；对旧产物自证过会红）。AGENTS §7#15 改为"移动端规则，桌面禁止照抄" + §7 壳层新增级联条目。
+- **验证**：HMR 后 dev 页面已无未分层内核表、body 字体回 MiSans；同结构合成节点实测 × 回到右上（header 1–999、× 955–979、`margin-left:864px`）；
+  产物只剩 `index-*.css` 内含内核 CSS（在 @layer 内），`QuickNoteKernelPreview-*.css` 已消失。
+- **门禁**：tsc 0 · 全库 vitest **326 文件 / 2355 通过（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle（含新审计）✓ · `git diff --check` ✓。
+- **状态**：未提交，待用户验收。
+
 ### 261021(三) · Android 小记搜索（全局搜索合并小记）· **待用户验收**
 
 - **用户口径**：承接桌面的「小记搜索」，安卓端也能搜到小记。
@@ -28,7 +46,7 @@
 - **未做**：Android 首页没有单独的「只搜小记」内联搜索条（移动端只有底部全局搜索入口）；如需要页面内筛选再单独立项。
 - **文件**：`src/mobile/data/quickNotesSearch.ts`(+test) · `src/mobile/data/schema.ts` · `src/mobile/data/noteRepository.ts` · `src/mobile/settings/SearchSheet.tsx` · `src/mobile/MobileApp.tsx` · `src/mobile/home/HomePage.tsx` · `src/mobile/mobile.css` · `src/mobile/mobileLayers.test.ts` · `src/mobile/quickNotesSearchWiring.test.ts`。
 - **门禁**：tsc 0 · 全库 vitest **325 文件 / 2354 通过（16 skip）** · 移动端 vite build ✓ · check:mobileui / check:core / `git diff --check` ✓ · mobileLayers mobile.css 1412→1414。
-- **状态**：未提交 / 未推送，待用户验收。
+- **状态**：已提交 `303c53c0`（2026-10-21 02:45）并已推送 master，待用户验收。
 
 ### 261021(二) · 小记搜索：页面内只搜小记 + 全局搜索合并小记 · **待用户验收**
 
@@ -41,7 +59,7 @@
 - **文件**：`electron/quickNotes.ts`(+test) · `electron/ipc/registerNotes.ts` · `electron/main.ts` · `src/core/searchTypes.ts` · `src/components/app/SearchPanel.tsx`(+test) · `src/desktop/DesktopOverlays.tsx` · `src/App.tsx` · `src/components/app/QuickNotesWorkspace.tsx` · `src/lib/native.ts` · `src/styles/components.css` · `src/styles/app/quick-notes.css` · `src/styles/cssLayers.test.ts` · `docs/QUICK-NOTES-SPEC.md`。
 - **门禁**：tsc 0 · 全库 vitest **323 文件 / 2349 通过（16 skip）** · ui-metrics / check:core / check:bundle / `git diff --check` ✓ · CSS 基线 quick-notes 726 / components 367。**未跑桌面 stylesnap 全量**（有意改 UI）。
 - **取证**：`.css-audit/quicknotes-search-261021/{global-search,card-search,revealed-no-edit,opened-from-search}.png`（opened-from-search 是「旧行为」截图，保留作对照；现行为见 revealed-no-edit：只高亮不编辑）。
-- **状态**：未提交 / 未推送，待用户验收。
+- **状态**：已提交 `303c53c0`（2026-10-21 02:45）并已推送 master，待用户验收。
 
 ### 261021(一) · 桌面小记页对齐语雀（类型筛选 / 标签条右移 / 写作卡缩高）· **待用户验收**
 
@@ -57,7 +75,7 @@
 - **未做（明确）**：书签 / 来自微信 / 来自插件 / 分享中 / 已归档（本产品无对应数据源，不放入死选项）；标签下拉未做「标签管理」；写作卡内标签/按钮位置未改（按图1红框只缩卡）；移动端未动。
 - **文件**：`src/components/app/QuickNotesWorkspace.tsx` · `src/core/quickNoteTypeFilter.ts`(+test) · `src/core/quickNoteSearch.ts`(+test) · `src/styles/app/quick-notes.css` · `src/styles/cssLayers.test.ts`（当前基线 676→726，含 261021(二) 搜索定位高亮新增；本批 UI 部分 +48）· `src/features/quickNotes/quickNotesView.test.ts` · `docs/QUICK-NOTES-SPEC.md`。
 - **门禁（当前工作树）**：tsc 0 · 全库 vitest **323 文件 / 2349 通过（16 skip）** · ui-metrics / check:core / check:bundle / `git diff --check` ✓。**未跑桌面 stylesnap 全量/重烤**（本轮是有意改视觉）；验收后再按受影响态重烤基线。
-- **状态**：未提交 / 未推送，待用户验收。**工作树另有并行会话的 `src/mobile/notebook/*` 改动，不是本批。**
+- **状态**：已提交 `303c53c0`（2026-10-21 02:45）并已推送 master，待用户验收。
 - **取证**：`.css-audit/yuque-quicknotes-262021/SPEC.md` + 41 张截图；列表视图 `list-view/SPEC.md` + 30 张截图（EDGE 只读，session 已 stop）。
 
 ### 261020(五) · 小记标签 v1（桌面 + Android）+ 桌面按钮语义色收口 · **待用户验收**
@@ -2015,6 +2033,7 @@
 - **Manifest V1 重置不是兼容模式**：只读写 `{1}`，所有端一起升级；旧 `sync.ts` 已删除。
 
 ### 渲染 / UI
+- **JS import 的 CSS 一定未分层**（261021）：`@layer` 只对 CSS 内部的 `@import … layer(x)` / `@layer` 块生效；组件/懒 chunk 的 `import "x.css"` 产出的 chunk CSS 是**未分层**的，而未分层普通声明压过**所有**分层声明。⇒ 第三方/全局 CSS（内核、Univer）只能由 `styles/index.css` 以 `layer(...)` 引入；组件自己的 CSS 不得含裸标签选择器（`body`/`button`/`*`…）。261021 实测：小记兜底 chunk 自带内核 CSS ⇒ 设置面板 × 偏离右上、全站字体变系统栈（159 个控件被改写）。护栏：`src/styles/cssLayers.test.ts` + `scripts/css-audit/audit-vendor-css.mjs`（check:bundle）。
 - 浮层列布局的固定区用 `flex: 0 0 auto`，否则内容会被列表盖住。
 - **表格行里的长文本会撑开 `table-layout: auto` 的列宽**（260929 实测）：多维表分组头是 `<tr>`，长分组值把**表头首列撑到 482px**、记录行仍 80px ⇒ thead/tbody 列错位（用户报的「错位」）。表格里要放"不该影响列宽"的内容，把它**移出流**（`.bt-group-inner` 绝对定位 `inset: 0`），列宽只交给表头/记录行决定；别用 flex/nowrap 直接写在 `<td>` 里。
 - **浮层定位禁止用估算高度**（260929）：统一走 `src/hooks/usePopoverPosition.ts`（量真实尺寸 → 下方优先、贴底翻上方 → 夹进视口），垂直口径是 `topMenuPosition.ts` 的 `placeVertical`。历史多处按猜测高度夹 `innerHeight - N`（48/90/300…），贴底就被裁且不翻转；`Overlay` 原语只吃调用方给的 `style`，定位责任在调用点，**新增浮层必须走该 hook**。

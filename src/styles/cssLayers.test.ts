@@ -9,7 +9,7 @@
  *   · 减少（清理）随时允许 —— 那正是我们想要的方向。
  * 基线数字来自 260915 清理后的实测值；清理得更多时，顺手把基线调小即可。
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -242,5 +242,43 @@ describe("CSS 多层覆盖围栏", () => {
       if (emptyAtRules) shells.push(`${rel}: 空 @media/@supports 块 ${emptyAtRules} 个`);
     }
     expect(shells, `以下文件留下空壳规则（260915 清理时留过一次，260916 已清除）：\n  ${shells.join("\n  ")}`).toEqual([]);
+  });
+
+  /**
+   * 261021 事故护栏：vendor / 全局 CSS 只能经**入口**以 `layer(...)` 引入。
+   *
+   * 事故链：QuickNoteKernelPreview（懒 chunk）JS import 了 `@dlient/lakex-doc-react/style.css`。
+   * JS import 出来的 CSS **无法带 @layer** ⇒ 该表以未分层身份落进文档，而未分层普通声明
+   * 压过**所有**分层声明 ⇒ antd base 的 `body{font-family}` / `button{margin:0}` 把设置面板 ×
+   * 顶离右上角、全站 UI 字体变系统栈（实测 159 个按钮/输入框被改写；dev 与 prod 的 chunk CSS 同病）。
+   *
+   * 钉两条：① 入口必须保留 `@import … layer(legacy)`（唯一允许的引入方式）；
+   *         ② 桌面源码（src/mobile 除外：移动端没有 @layer）不许再 JS import 它。
+   * 产物侧另有 scripts/css-audit/audit-vendor-css.mjs（挂在 npm run check:bundle）。
+   */
+  it("vendor 内核 CSS 只能经入口分层引入（JS import 会变成未分层，压过整个设计系统）", () => {
+    const entry = readFileSync(path.join(SRC, "styles/index.css"), "utf8");
+    expect(entry, "内核 CSS 必须由入口以 layer(legacy) 引入").toContain(
+      '@import "@dlient/lakex-doc-react/style.css" layer(legacy);',
+    );
+
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const ent of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          if (ent.name === "mobile" || ent.name === "node_modules" || ent.name === "vendor") continue;
+          walk(full);
+        } else if (/\.(tsx?|jsx?)$/.test(ent.name)) {
+          const src = readFileSync(full, "utf8");
+          if (/^\s*import\s+["']@dlient\/lakex-doc-react\/style\.css["']/m.test(src)) offenders.push(path.relative(SRC, full));
+        }
+      }
+    };
+    walk(SRC);
+    expect(
+      offenders,
+      `以下桌面模块 JS import 了内核 CSS（会以未分层身份压过 @layer）：\n  ${offenders.join("\n  ")}`,
+    ).toEqual([]);
   });
 });

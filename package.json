@@ -16,7 +16,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:ui": "node scripts/e2e-electron-smoke.mjs",
-    "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "check:bundle": "node scripts/check-bundle-budget.mjs && node scripts/css-audit/audit-vendor-css.mjs",
     "check:core": "node scripts/check-core-boundaries.mjs",
     "check:stylesnap": "node scripts/css-audit/check-stylesnap.mjs",
     "check:mobilesnap": "node scripts/mobile-audit/check-mobile-snap.mjs",

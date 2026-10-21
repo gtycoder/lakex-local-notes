@@ -17,9 +17,11 @@
 import { useEffect, useRef, useState } from "react";
 import { addAssetAccessToken } from "../../lib/assetPort";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../editor/lakeRuntime";
-// 内核样式**自带**（懒入口规矩，见 AGENTS §7.23）：这条路径可能在冷启动时成为**第一个**内核消费者，
-// 而 261014 起它被拆成独立 chunk ⇒ 不能再假定"别人已经引过内核 CSS"。
-import "@dlient/lakex-doc-react/style.css";
+// ⚠️ 不要在这里 JS import 内核样式（261021 事故）：桌面入口 src/styles/index.css 已用
+// `@import "@dlient/lakex-doc-react/style.css" layer(legacy)` 引入；JS import 出来的样式表**无法分层**，
+// 会以未分层身份落进文档，而未分层普通声明压过**全部** @layer 规则
+// （实测：antd base 的 body 字体 + button{margin:0} 让设置面板 × 偏离右上、全站 UI 字体变系统栈）。
+// 护栏：src/styles/cssLayers.test.ts「vendor 内核 CSS 只能经入口分层引入」。
 
 /** 视口预挂载余量：提前这么多像素建实例，滚到时已渲染好（避免滚动途中出现白块）。 */
 const PREMOUNT_MARGIN_PX = 400;

@@ -144,7 +144,8 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 ### 移动端
 13. **移动端改动要过设备装置**：`check:mobilesnap`（6 态）+ 走查（`drive.mjs 9336 mobile-walkthrough.mjs`）；**验收一律设备级截图**（CDP 的 `Page.captureScreenshot` 抓不到 GPU canvas）；keep-alive 隐藏视图仍在 DOM ⇒ 导航必须带命中测试。
 14. 快照门禁**依赖设备里的数据**（用户随手记一条小记 ⇒ 该态 +17 元素、假红）⇒ 只在**专用 AVD `lake_gate`**（emulator-5556 / CDP 9336）+ 固定夹具（5 文档 + 4 小记，`scripts/mobile-audit/gate-fixture.mjs`）上跑；**重灌夹具或建过数据 ⇒ 先重烤基线**；`.css-audit/snap/` 的中间快照会被同名 tag 覆盖（别当对拍）。
-15. **懒加载入口若会挂内核，必须自带内核样式**（`@dlient/lakex-doc-react/style.css`）；护栏 `src/mobile/kernelStyleBootstrap.test.ts`。
+15. **移动端**懒加载入口若会挂内核，必须自带内核样式（`@dlient/lakex-doc-react/style.css`）；护栏 `src/mobile/kernelStyleBootstrap.test.ts`。
+    ⚠️ **桌面禁止照抄这条**（261021 事故）：桌面样式全在 `@layer` 里，而 **JS import 出来的 CSS 无法分层** ⇒ 未分层普通声明压过所有层序；桌面入口 `src/styles/index.css` 已用 `@import "@dlient/lakex-doc-react/style.css" layer(legacy)` 引入，懒 chunk 再 import 一份 = 把 antd base（`body{font-family}` / `button{margin:0}`）以未分层身份塞进来，实测让设置面板 × 偏离右上、全站字体变系统栈。护栏：`src/styles/cssLayers.test.ts` + `scripts/css-audit/audit-vendor-css.mjs`（挂在 `check:bundle`）。
 16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px 高、内核判定下方放不下会翻到 caret 上方、实测 `top=-558`）：`max-height` + `overflow-y:auto` + 改锚点（内核写的是行内样式，只能 `!important`），落点 `src/mobile/mobile.css`（261012 P5 起 `mobile-kit.css` 已删，规则整份并过去）、作用域 `body.lake-mobile`。
 17. **程序化 focus 不弹软键盘**（没有用户手势时）：原生 `ShowKeyboardPlugin` + `src/mobile/native/nativeKeyboard.ts`；只有"没有手势"的入口（快捷 capture / 系统分享）传 `raiseKeyboard`，聚焦后 300ms 请原生弹一次。判据：**innerHeight 收缩 >200px = 键盘弹起**（取样前必须是无键盘态）。
 18. **重依赖（内核/usheet/画板）不许进入口静态图**：`HomePage → QuickNotePreview → QuickNoteKernelPreview → lakeRuntime` 一旦静态 import，构建就给入口挂 40+ 条 `modulepreload`（含 1.25MB 内核 CSS），冷启动先拉 + 解析 6.1MB 内核才画首页（实测真首页 **6123 → 533ms**、DCL 3943 → 119ms；改 `lazy()` + Suspense 后 modulepreload 45 → 12；护栏 `quickNoteKernelFallback.test.ts`）。**后台工作一律排到首屏之后**：冷启动那次同步 = 就绪后第一段空闲；内核预热 = 就绪 **4s 后**再排空闲（`requestIdleCallback` 的 timeout 只是上限，实测 2.4s 就回调 ⇒ 必须显式延迟）。判据探针 `scripts/mobile-audit/boot-timeline.mjs`（`--no-idle` 做 A/B）。
@@ -152,6 +153,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 20. **容器级手势别用 `setPointerCapture`**：捕获会把 `mousedown/mouseup` 与合成的 `click` **目标重定向到捕获元素** ⇒ 子按钮 `onClick` 全失效（现象 = "点了没反应"，不报错、DOM 正常）。改挂 **window** 的 move/up/cancel 并在抬手/卸载时摘掉；长按过的那一次要**吞掉随后的 click**，短按语义留给条目自己。
 
 ### 壳层 / 渲染
+- **JS import 的 CSS 一定未分层**（261021）：我们的设计系统靠 `@layer legacy, tokens, kit, shell, feature, overlay, a11y` 取胜，但**未分层普通声明压过所有分层声明**（与特异性无关）。所以：第三方/全局 CSS 只能由 `styles/index.css` 以 `layer(...)` 引入；组件/懒 chunk 只许 import 自己作用域内的 CSS，且**内部不得出现裸标签选择器**（`body` / `button` / `input` / `*` …）—— 否则一旦进包就是"一行 import 改全站"。判定：源码侧 `cssLayers.test.ts`，产物侧 `scripts/css-audit/audit-vendor-css.mjs`。
 - **`transform` / `will-change: transform` 的祖先会把 `position: fixed` 的包含块改成它自己**（261019 踩到）：路由转场层常驻 transform ⇒ 编辑 dock 的 `.med-panel` / `.med-toolbar` 按 layer 盒（高度 = `--mb-app-h`，面板态只有 562）贴底，面板展开停在键盘上方、下方留空白。**转场播完必须撤掉 transform + will-change**（`is-settled`，见 `useRouteTransition`）；新增会位移的壳层时先确认它没有依赖视口的 fixed 子元素。
 
 ### 装置 / 探针

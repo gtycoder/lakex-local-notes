@@ -33,8 +33,14 @@ describe("小记预览：快路径 + 内核只读兜底", () => {
   it("内核只读兜底必须懒加载（静态 import 会把 6.1MB 内核拉进冷启动）", () => {
     expect(PREVIEW_SRC).toMatch(/const QuickNoteKernelPreview = lazy\(\(\) => import\("\.\/QuickNoteKernelPreview"\)/);
     expect(PREVIEW_SRC, "不许出现静态 import（那会让入口预载整个内核）").not.toMatch(/^import \{ QuickNoteKernelPreview \}/m);
-    // 懒入口必须自带内核样式（AGENTS §7.23：它可能是冷启动第一个内核消费者）
-    expect(KERNEL_SRC).toContain("@dlient/lakex-doc-react/style.css");
+    // ⚠️ 反向护栏（261021 事故）：桌面**不许**由懒入口自带内核 CSS。
+    // 桌面入口 styles/index.css 已 `@import … layer(legacy)`；JS import 无法分层 ⇒ 未分层样式会压过
+    // 全部 @layer 规则（实测：antd base 把设置面板 × 的 margin-left:auto 归零、全站字体变系统栈）。
+    // 单源校验在 src/styles/cssLayers.test.ts；产物侧在 scripts/css-audit/audit-vendor-css.mjs。
+    expect(
+      KERNEL_SRC,
+      "不要 JS import 内核样式（未分层会压过整个 @layer 设计系统）",
+    ).not.toMatch(/^\s*import\s+["']@dlient\/lakex-doc-react\/style\.css["']/m);
   });
 
   it("快路径还原不了的块（日期卡/表情卡/表格）→ 触发内核兜底", () => {
