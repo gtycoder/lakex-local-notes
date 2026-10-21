@@ -175,6 +175,8 @@ node scripts/check-bundle-budget.mjs
 
 - **只改 `lib/es/index.js`**（`module` / `exports.import` 入口，app / 移动端 / vitest 都走它）；`lib/cjs` 未改（当前没有 CJS 消费者）。
 - **重生成**：改完 node_modules 后执行 `npx patch-package @univerjs/ui --patch-dir patches`，然后跑探针 + 全量门禁。
+  ⚠️ 本机 `/usr/local/bin/git` 是坏的（Bad CPU type）⇒ 必须 `PATH=/usr/bin:$PATH npx patch-package …`，
+  否则 patch-package 在 `git init` 处报 `spawnSync git Unknown system error -86`。
 - **升级时它会怎样**（patch-package 8.0.1 实测行为）：
   1. 这段代码上下文没变 → 补丁自动应用成功，只多一条 version-mismatch 警告（默认不阻塞）⇒ 仍要用上面的命令**重生成补丁**（版本号与内容一起更新）后提交。
   2. 上下文变了（上游重构这段，或上游自己把挂载点修了）→ 补丁应用失败；⚠️ **本机非 CI 时 patch-package 故意不以非零码退出**（`dist/index.js` 注释 "don't want to exit(1) on postinstall locally"），安装照过、应用带着**未打补丁**的状态继续跑 ⇒ 靠护栏③变红发现（CI / `NODE_ENV=production` 才会让安装直接失败）。此时二选一：把这 2 行改动**前移**到新版本，或按上游实现**删掉补丁**（探针继续守行为）。

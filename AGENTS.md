@@ -130,6 +130,8 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 1. vite dev server 会被会话回收 ⇒ 必须长驻 tty；单实例锁按 userData 隔离（资源端口 A=19876 / B=19877）。
 2. **杀 Electron 只按唯一 CDP 端口定位**（`pgrep -f "remote-debugging-port=92xx"`）；`pkill -f Electron` / `killall` 会误伤 SiYuan/VSCode，**也会打断 DSH 宿主自己**。
 3. **在 DSH 里起本仓 Electron 必须 `env -u ELECTRON_RUN_AS_NODE`**（宿主注入了 `ELECTRON_RUN_AS_NODE=1`，否则以纯 Node 启动、报 `bad option: --disable-gpu`）；改本仓代码不影响 DSH，但**别动 DSH 安装目录**。
+   同样因为「子进程按 PATH 找可执行文件」：**本机 `git` 要用 `/usr/bin/git`**（`/usr/local/bin/git` 是坏的，Bad CPU type）；
+   patch-package 重建补丁时必须 `PATH=/usr/bin:$PATH`（261022 踩到：`spawnSync git Unknown system error -86`）。
 
 ### 同步 / 数据 / 构建
 4. 同步完成必须广播 `sync-progress`（否则 tab / 状态栏 / 小记不刷新）；`markSynced` 要同时改 `tree_nodes.sync_state`。

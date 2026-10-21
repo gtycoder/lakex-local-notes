@@ -106,8 +106,6 @@ function resizeUniverRender(instance: unknown): void {
   } catch { /* 重排失败不影响收起动作本身 */ }
 }
 
-
-
 /** 把 workbook 的默认样式与所有命名样式的 ff 钉到应用字体（打开、落盘、canonical 各过一遍）。 */
 function applyFontPolicy(workbook: UsheetWorkbook, fontStack: string): void {
   const wb = workbook as unknown as { defaultStyle?: unknown; styles?: Record<string, unknown> };
