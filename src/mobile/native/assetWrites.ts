@@ -5,6 +5,8 @@ export interface AssetWrite {
 
 export interface AssetWriteDeps {
   memory: Map<string, Uint8Array>;
+  /** 读取持久层现状；回滚不能仅凭内存层推断磁盘前态。 */
+  read(key: string): Promise<Uint8Array | null>;
   save(key: string, bytes: Uint8Array): Promise<void>;
   remove(key: string): Promise<void>;
 }
@@ -50,7 +52,8 @@ export async function stageAssetWrites(
   const placements: AssetPlacement[] = [];
   try {
     for (const write of writes) {
-      const previous = deps.memory.get(write.key) ?? null;
+      // 内存未加载不代表磁盘不存在：覆盖前必须读取真实持久层，否则回滚会误删仍被引用的旧文件。
+      const previous = deps.memory.get(write.key) ?? await deps.read(write.key);
       deps.memory.set(write.key, write.bytes);
       placements.push({ key: write.key, previous });
       await deps.save(write.key, write.bytes);

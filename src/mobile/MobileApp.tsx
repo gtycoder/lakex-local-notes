@@ -44,7 +44,6 @@ import { reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
 import { runNativeSqliteSpike } from "./native/nativeSqlite";
 import { buildLakeNative } from "./native/lakeNativeContract";
-import { migrateSnapshotToNativeSqlite } from "./native/nativeSqliteMigration";
 import "./mobile.css";
 import "./brand-launch.css";
 
@@ -136,7 +135,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         // 实现从 bridge / 附加入口**派生**（名字清单单一来源见 ./lakeNativeContract）。
         (window as unknown as Record<string, unknown>).lakeNative = buildLakeNative({
           bridge: bridge as unknown as Record<string, unknown>,
-          extra: { runNativeSqliteSpike, migrateSnapshotToNativeSqlite },
+          extra: { runNativeSqliteSpike },
         });
         // 资产传输性能观测（CDP 诊断：__lakePerf.reset() / __lakePerf.snapshot()）。
         (window as unknown as Record<string, unknown>).__lakePerf = {

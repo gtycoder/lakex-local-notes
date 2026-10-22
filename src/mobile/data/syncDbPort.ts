@@ -378,7 +378,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       // 文件写入失败必须向上抛并回滚内存层，避免本端 manifest 漏声明后触发跨端 GC。
       await stageAssetWrites(
         [{ key, bytes }],
-        { memory: deps.assets, save: deps.saveAssetFile, remove: deps.removeAssetFile },
+        { memory: deps.assets, read: deps.loadAssetFile, save: deps.saveAssetFile, remove: deps.removeAssetFile },
       );
     },
     async listLocalAssets(noteId) {

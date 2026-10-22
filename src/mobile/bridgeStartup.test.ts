@@ -12,21 +12,9 @@ const {
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
-vi.mock("./data/persistence", () => ({
-  loadSnapshot: vi.fn(async () => null),
-}));
-
 vi.mock("./native/nativeSqliteDb.js", async () =>
   (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
 );
-
-vi.mock("./native/nativeSqliteMigration", () => ({
-  DEFAULT_MOBILE_DATABASE: "lake-notes-mobile",
-  migrateSnapshotToNativeSqlite: vi.fn(async () => ({
-    status: "no-snapshot",
-    databaseName: "lake-notes-mobile",
-  })),
-}));
 
 vi.mock("./native/assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
@@ -90,9 +78,9 @@ describe("mobile startup performance contract", () => {
 
   it("concurrent startup calls initialize the native database once", async () => {
     vi.resetModules();
-    const { migrateSnapshotToNativeSqlite } = await import("./native/nativeSqliteMigration");
+    const { NativeSqliteDb } = await import("./native/nativeSqliteDb");
+    const open = vi.spyOn(NativeSqliteDb, "open");
     const { bridge: freshBridge } = await import("./bridge.js");
-    vi.mocked(migrateSnapshotToNativeSqlite).mockClear();
 
     await Promise.all([
       freshBridge.init(),
@@ -100,26 +88,6 @@ describe("mobile startup performance contract", () => {
       freshBridge.listNotes(),
     ]);
 
-    expect(migrateSnapshotToNativeSqlite).toHaveBeenCalledTimes(1);
-  });
-
-  it("SQLite migration marker skips the old snapshot probe on steady-state startup", async () => {
-    const values = new Map<string, string>([["lake-notes-mobile.native-sqlite-migration.v1", "1"]]);
-    (globalThis as unknown as { localStorage: Storage }).localStorage = {
-      get length() { return values.size; },
-      clear: () => values.clear(),
-      getItem: (key: string) => values.get(key) ?? null,
-      key: (index: number) => [...values.keys()][index] ?? null,
-      removeItem: (key: string) => { values.delete(key); },
-      setItem: (key: string, value: string) => { values.set(key, value); },
-    } as Storage;
-    vi.resetModules();
-    const { migrateSnapshotToNativeSqlite } = await import("./native/nativeSqliteMigration");
-    const { bridge: freshBridge } = await import("./bridge.js");
-    vi.mocked(migrateSnapshotToNativeSqlite).mockClear();
-
-    await freshBridge.init();
-
-    expect(migrateSnapshotToNativeSqlite).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
   });
 });

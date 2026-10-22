@@ -7,9 +7,7 @@ import type { MobileDb } from "./sqliteDb.js";
  * 261019 存储架构对齐桌面：**正文不再进 SQLite**（文档正文/小记正文/历史快照都是文件，见
  * src/core/noteBodyPaths.ts + native/bodyStore.ts），DB 只存元数据、hash、同步账本与**派生**文本缓存。
  *
- * 本阶段的存量数据策略（用户 261019 定稿）：开发数据可丢 ⇒ 检测到旧 schema（带 content 列）时
- * **整库用户数据重置一次**，不做逐行迁移；正文文件的旧目录（note-assets/quick-notes 等）由
- * bridge/context 的 resetLegacyBodyFiles() 清理。
+ * 261022 起旧设备迁移窗口已关闭：不再识别/重置旧 SQLite 正文 schema，也不再扫描旧正文目录。
  *
  * 261021 冷启动（用户点单"批量 SQL 才是正解"）：这段 DDL 有 28 条，逐条 `exec` 在原生 SQLite 上是
  * **每条一次桥往返**（实测 ~68ms）⇒ 首次启动 2.4s。现在：
@@ -52,33 +50,6 @@ export async function readMobileSchemaVersion(db: MobileDb): Promise<number> {
   }
 }
 
-/** 旧库（正文在 SQLite）的识别：notes / quick_notes / note_history 任一还有 content 列。 */
-export async function hasLegacyBodySchema(db: MobileDb): Promise<boolean> {
-  for (const table of ["notes", "quick_notes", "note_history"]) {
-    const columns = (await db.prepare(`PRAGMA table_info(${table})`).all()) as Array<{ name: string }>;
-    if (columns.some((column) => column.name === "content")) return true;
-  }
-  return false;
-}
-
-/** 重置用户数据表（正文迁文件后不再有 content；旧正文直接丢弃，不迁移）。 */
-const LEGACY_USER_TABLES = [
-  "notes_fts",
-  "search_index",
-  "notes",
-  "folders",
-  "sync_base",
-  "declared_assets",
-  "deleted_notes",
-  "note_history",
-  "orphan_assets",
-  "s3_gc_pending",
-  "s3_gc_log",
-  "device_state",
-  "quick_notes",
-  "quick_note_deleted",
-];
-
 /** 单条 schema 语句；`optional` = 环境不支持时（如 sql.js 无 FTS5）可忽略。 */
 export interface SchemaStatement {
   statement: string;
@@ -86,14 +57,10 @@ export interface SchemaStatement {
   optional?: boolean;
 }
 
-/** 第一阶段：不依赖任何读操作的建表（旧库重置时先 DROP）。必须覆盖第二阶段所有 ALTER 的目标表。 */
-export function baseSchemaStatements(legacyBodySchema: boolean): SchemaStatement[] {
+/** 第一阶段：不依赖任何读操作的建表。必须覆盖第二阶段所有 ALTER 的目标表。 */
+export function baseSchemaStatements(): SchemaStatement[] {
   const statements: SchemaStatement[] = [];
   const push = (statement: string): void => { statements.push({ statement }); };
-
-  if (legacyBodySchema) {
-    for (const table of LEGACY_USER_TABLES) push(`DROP TABLE IF EXISTS ${table}`);
-  }
 
   push(`CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,
@@ -328,10 +295,7 @@ async function execSchemaStatements(db: MobileDb, statements: SchemaStatement[])
 }
 
 /** Apply idempotent mobile schema migrations and first-run seed data. */
-export async function applyMobileSchema(
-  db: MobileDb,
-  options: { legacyBodySchema?: boolean } = {},
-): Promise<void> {
+export async function applyMobileSchema(db: MobileDb): Promise<void> {
   // 快路径（261021）：版本已到 ⇒ 建表/加列/索引全部跳过（冷启动省 ~2.4s）。
   if ((await readMobileSchemaVersion(db)) >= MOBILE_SCHEMA_VERSION) return;
 
@@ -340,9 +304,8 @@ export async function applyMobileSchema(
   } catch {
     // Older databases or constrained environments may not support the pragma.
   }
-  const legacyBodySchema = options.legacyBodySchema ?? (await hasLegacyBodySchema(db));
   // 两批 = 两次桥往返：先底表（条件读必须先有表），再条件语句 + 种子。
-  await execSchemaStatements(db, baseSchemaStatements(legacyBodySchema));
+  await execSchemaStatements(db, baseSchemaStatements());
   await execSchemaStatements(db, await collectSchemaStatements(db));
   // 全部 DDL 成功后才写版本（失败下次仍会重放，幂等）。
   await db.exec(`PRAGMA user_version = ${MOBILE_SCHEMA_VERSION}`);

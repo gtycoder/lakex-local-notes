@@ -1,20 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("./data/persistence", () => ({
-  loadSnapshot: vi.fn(async () => null),
-}));
-
 vi.mock("./native/nativeSqliteDb.js", async () =>
   (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
 );
-
-vi.mock("./native/nativeSqliteMigration", () => ({
-  DEFAULT_MOBILE_DATABASE: "lake-notes-mobile",
-  migrateSnapshotToNativeSqlite: vi.fn(async () => ({
-    status: "no-snapshot",
-    databaseName: "lake-notes-mobile",
-  })),
-}));
 
 vi.mock("./native/assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),

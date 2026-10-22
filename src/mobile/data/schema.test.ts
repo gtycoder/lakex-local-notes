@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { MOBILE_SCHEMA_VERSION, applyMobileSchema, hasLegacyBodySchema, readMobileSchemaVersion } from "./schema.js";
+import { MOBILE_SCHEMA_VERSION, applyMobileSchema, readMobileSchemaVersion } from "./schema.js";
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
@@ -8,26 +8,14 @@ vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
 }));
 
 describe("mobile schema", () => {
-  it("261019：旧库（正文在 SQLite）识别后整库重置，新 schema 不再有 content 列", async () => {
+  it("新 schema 为文件正文结构，不再有 content 列", async () => {
     const db = await SqlJsDb.open();
-    db.exec(`CREATE TABLE notes (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )`);
-    db.prepare("INSERT INTO notes(id,title,content,updated_at) VALUES(?,?,?,?)")
-      .run("note-1", "Title", "<p>body</p>", "2026-01-01T00:00:00.000Z");
     const mobile = new SqlJsAsyncDb(db);
-    expect(await hasLegacyBodySchema(mobile)).toBe(true);
-
     await applyMobileSchema(mobile);
 
     const columns = db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>;
     expect(columns.map((column) => column.name)).not.toContain("content");
-    // 开发阶段数据可丢（用户定稿）：旧正文不迁移。
-    expect(db.prepare("SELECT 1 FROM notes WHERE id=?").get("note-1")).toBeUndefined();
-    expect(await hasLegacyBodySchema(mobile)).toBe(false);
+    expect(await readMobileSchemaVersion(mobile)).toBe(MOBILE_SCHEMA_VERSION);
   });
 
   it("261021：版本已到 ⇒ 第二次应用整体跳过（冷启动省 ~2.4s 的建表往返）", async () => {

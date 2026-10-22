@@ -8,6 +8,7 @@ describe("stageAssetWrites", () => {
     const remove = vi.fn(async () => {});
     const deps = {
       memory,
+      read: vi.fn(async () => null),
       save: vi.fn(async () => {
         throw new Error("disk full");
       }),
@@ -29,7 +30,7 @@ describe("stageAssetWrites", () => {
     const save = vi.fn(async (_key: string, bytes: Uint8Array) => {
       if (bytes === next) throw new Error("write failed");
     });
-    const deps = { memory, save, remove: vi.fn(async () => {}) };
+    const deps = { memory, read: vi.fn(async () => null), save, remove: vi.fn(async () => {}) };
 
     await expect(
       stageAssetWrites([{ key: "note/image.png", bytes: next }], deps),
@@ -38,5 +39,26 @@ describe("stageAssetWrites", () => {
     expect(memory.get("note/image.png")).toBe(previous);
     expect(save).toHaveBeenNthCalledWith(1, "note/image.png", next);
     expect(save).toHaveBeenNthCalledWith(2, "note/image.png", previous);
+  });
+
+  it("memory 未加载但磁盘已有旧文件时，回滚恢复磁盘旧字节而不是删除", async () => {
+    const diskPrevious = new Uint8Array([7, 8, 9]);
+    const next = new Uint8Array([4, 5, 6]);
+    const memory = new Map<string, Uint8Array>();
+    const save = vi.fn(async (_key: string, bytes: Uint8Array) => {
+      if (bytes === next) throw new Error("write failed");
+    });
+    const remove = vi.fn(async () => {});
+
+    await expect(stageAssetWrites([{ key: "note/disk.png", bytes: next }], {
+      memory,
+      read: vi.fn(async () => diskPrevious),
+      save,
+      remove,
+    })).rejects.toThrow("write failed");
+
+    expect(memory.get("note/disk.png")).toBe(diskPrevious);
+    expect(save).toHaveBeenNthCalledWith(2, "note/disk.png", diskPrevious);
+    expect(remove).not.toHaveBeenCalled();
   });
 });

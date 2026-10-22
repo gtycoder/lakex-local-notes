@@ -31,7 +31,7 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
 
 /** 非 bridge 的调试入口（sqlite 迁移/压测辅助）。 */
 export const LAKE_NATIVE_EXTRA_METHODS = [
-  "runNativeSqliteSpike", "migrateSnapshotToNativeSqlite",
+  "runNativeSqliteSpike",
 ] as const;
 
 export const LAKE_NATIVE_METHODS = [...LAKE_NATIVE_BRIDGE_METHODS, ...LAKE_NATIVE_EXTRA_METHODS] as const;

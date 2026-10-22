@@ -2,7 +2,7 @@
  * 移动端 SecretStore 的**降级**实现：WebCrypto AES-GCM 加密 + **localStorage 存密文**。
  *
  * ⚠️ 生产路径不是这个文件：原生端用 Android Keystore（./keystoreSecretStore.ts + SecureStorePlugin.kt），
- * 本文件只在 Web/vitest 下作为后端，并在**首次读取时把旧值迁移**到 Keystore（见下方组合层）。
+ * 本文件只在 Web/vitest 下作为后端；生产原生端始终直接使用 Android Keystore。
  *
  * 为什么不是 IndexedDB（261009 实测，改了后端）：在 Capacitor 的 Android WebView 里，
  * **IndexedDB 不跨 App 重启**——同会话写读正常、磁盘上 `app_webview/Default/IndexedDB/http_localhost_0.indexeddb.leveldb`
@@ -20,27 +20,8 @@ import { keystoreAvailable, keystoreSecretStore } from "./keystoreSecretStore";
 
 /** localStorage 键前缀（密文；格式 ivB64:dataB64）。 */
 const LS_PREFIX = "lake-notes-mobile.secret.";
-/** 旧实现（IndexedDB）留下的库：只在 read 时兜底迁移一次，不再写入。 */
-const LEGACY_DB = "lake-notes-mobile.secrets";
-const LEGACY_STORE = "secrets";
 /** 密钥固定派生：同一安装内稳定（换机/重装后无法解密旧值，提示重新填写——对齐桌面 safeStorage 密钥丢失语义）。 */
 const KEY_MATERIAL = "lake-notes-mobile.secret-key.v1";
-const SECRET_MIGRATION_MARKER_PREFIX = "lake-notes-mobile.secret-migrated.";
-
-function secretMigrationMarker(key: string): string {
-  return SECRET_MIGRATION_MARKER_PREFIX + key;
-}
-
-function isSecretMigrationDone(key: string, migrated: Set<string>): boolean {
-  if (migrated.has(key)) return true;
-  try { return localStorage.getItem(secretMigrationMarker(key)) === "1"; }
-  catch { return false; }
-}
-
-function markSecretMigrationDone(key: string, migrated: Set<string>): void {
-  migrated.add(key);
-  try { localStorage.setItem(secretMigrationMarker(key), "1"); } catch { /* 标不上只会多跑一次幂等迁移 */ }
-}
 
 let keyPromise: Promise<CryptoKey> | null = null;
 
@@ -73,48 +54,6 @@ async function decrypt(raw: string): Promise<string | null> {
   return new TextDecoder().decode(plain);
 }
 
-/** 旧 IndexedDB 值兜底读取（环境不支持 IndexedDB 或库不存在 → null）。 */
-function readLegacy(key: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    try {
-      if (typeof indexedDB === "undefined") return resolve(null);
-      const req = indexedDB.open(LEGACY_DB, 1);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(LEGACY_STORE)) db.createObjectStore(LEGACY_STORE);
-      };
-      req.onerror = () => resolve(null);
-      req.onsuccess = () => {
-        try {
-          const db = req.result;
-          if (!db.objectStoreNames.contains(LEGACY_STORE)) return resolve(null);
-          const get = db.transaction(LEGACY_STORE, "readonly").objectStore(LEGACY_STORE).get(key);
-          get.onsuccess = () => resolve(typeof get.result === "string" ? get.result : null);
-          get.onerror = () => resolve(null);
-        } catch {
-          resolve(null);
-        }
-      };
-    } catch {
-      resolve(null);
-    }
-  });
-}
-
-/** 迁移成功后清掉旧 IDB 条目（清不掉也不影响：值已在 localStorage）。 */
-function removeLegacy(key: string): void {
-  try {
-    if (typeof indexedDB === "undefined") return;
-    const req = indexedDB.open(LEGACY_DB, 1);
-    req.onsuccess = () => {
-      try {
-        const db = req.result;
-        if (db.objectStoreNames.contains(LEGACY_STORE)) db.transaction(LEGACY_STORE, "readwrite").objectStore(LEGACY_STORE).delete(key);
-      } catch { /* ignore */ }
-    };
-  } catch { /* ignore */ }
-}
-
 export const localStorageSecretStore: SecretStore = {
   async read(key) {
     try {
@@ -134,88 +73,7 @@ export const localStorageSecretStore: SecretStore = {
   },
 };
 
-/** 仅在一次性迁移窗口使用：承接 IndexedDB / localStorage 两代旧密文。 */
-const legacySecretStore: SecretStore = {
-  async read(key) {
-    const current = await localStorageSecretStore.read(key);
-    if (current != null) return current;
-    try {
-      const legacy = await readLegacy(key);
-      if (!legacy) return null;
-      const plain = await decrypt(legacy);
-      if (plain == null) return null;
-      try { localStorage.setItem(LS_PREFIX + key, legacy); removeLegacy(key); } catch { /* 本次仍可返回旧值 */ }
-      return plain;
-    } catch { return null; }
-  },
-  write: (key, value) => localStorageSecretStore.write(key, value),
-  async remove(key) {
-    await localStorageSecretStore.remove(key);
-    removeLegacy(key);
-  },
-};
-
-/**
- * 组合层：优先用 native（Keystore）；native 没有该键时，从 legacy（localStorage 密文）读一次并**迁移**过去，
- * 迁移成功后清掉旧值（此后 secret 不再留在 WebView 存储里）。
- * 写/删只走 native —— 这正是"正解"，降级件仅用于承接历史值。
- */
-export function createMigratingSecretStore(native: SecretStore, legacy: SecretStore, options: {
-  isDone?: (key: string) => boolean;
-  markDone?: (key: string) => void;
-  cleanLegacyOnWrite?: boolean;
-} = {}): SecretStore {
-  /** 已做过旧副本清理的键（一次性；避免每次读都去碰 IndexedDB 兜底）。 */
-  const legacyCleaned = new Set<string>();
-  return {
-    async read(key) {
-      if (options.isDone?.(key)) return native.read(key);
-      const fromNative = await native.read(key);
-      if (fromNative != null) {
-        // 一次性清理残留旧副本：早期版本的迁移**只在 native 为空时**清 legacy，
-        // native 已有值（例如上一次启动已迁过）时旧密文会一直留在 WebView 存储里 —— 实测踩到（261010）。
-        if (!legacyCleaned.has(key)) {
-          legacyCleaned.add(key);
-          try { await legacy.remove(key); } catch { /* 清不掉不影响本次读取 */ }
-        }
-        options.markDone?.(key);
-        return fromNative;
-      }
-      const old = await legacy.read(key);
-      if (old == null) { options.markDone?.(key); return null; }
-      try {
-        await native.write(key, old);
-        await legacy.remove(key);
-        options.markDone?.(key);
-      } catch {
-        // 迁移失败：本次仍返回旧值（别让用户当场丢掉密钥），下次读再试
-      }
-      return old;
-    },
-    async write(key, value) {
-      await native.write(key, value);
-      if (options.cleanLegacyOnWrite !== false) {
-        try { await legacy.remove(key); } catch { /* ignore */ }
-      }
-      options.markDone?.(key);
-    },
-    async remove(key) {
-      await native.remove(key);
-      await legacy.remove(key);   // 双清：避免旧值残留又被迁移回来
-      options.markDone?.(key);
-    },
-  };
-}
-
-/** 生产入口：原生可用 → Keystore（+ 迁移）；否则 → localStorage 降级件（Web/vitest）。 */
-const secretMigrationDone = new Set<string>();
+/** 生产入口：原生可用 → Keystore；否则 → localStorage 降级件（Web/vitest）。 */
 export const mobileSecretStore: SecretStore = keystoreAvailable()
-  ? createMigratingSecretStore(keystoreSecretStore, legacySecretStore, {
-    isDone: (key) => isSecretMigrationDone(key, secretMigrationDone),
-    markDone: (key) => markSecretMigrationDone(key, secretMigrationDone),
-  })
-  : createMigratingSecretStore(localStorageSecretStore, legacySecretStore, {
-    isDone: (key) => isSecretMigrationDone(key, secretMigrationDone),
-    markDone: (key) => markSecretMigrationDone(key, secretMigrationDone),
-    cleanLegacyOnWrite: false,
-  });
+  ? keystoreSecretStore
+  : localStorageSecretStore;

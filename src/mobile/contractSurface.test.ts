@@ -122,9 +122,8 @@ describe("契约面归属（bridge 每个方法都要有主）", () => {
     };
     const declared = [...arrayOf("LAKE_NATIVE_BRIDGE_METHODS"), ...arrayOf("LAKE_NATIVE_EXTRA_METHODS")];
     expect(declared.length).toBeGreaterThan(40);
-    // 附加入口（runNativeSqliteSpike / migrateSnapshotToNativeSqlite）在 LAKE_NATIVE_EXTRA_METHODS
-    // 里单独登记，本就不该是 bridge 方法 ⇒ 从子集断言里排除。
-    const extras = ["runNativeSqliteSpike", "migrateSnapshotToNativeSqlite"];
+    // 附加入口（runNativeSqliteSpike）在 LAKE_NATIVE_EXTRA_METHODS 里单独登记，本就不该是 bridge 方法。
+    const extras = ["runNativeSqliteSpike"];
     const missing = declared.filter((n) => !methods.includes(n) && !extras.includes(n));
     expect(missing, "lakeNative 声明了 bridge 上不存在的方法").toEqual([]);
   });

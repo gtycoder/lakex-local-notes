@@ -134,6 +134,7 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
       }));
       const rollbackAssets = await stageAssetWrites(imageWrites, {
         memory: assetBytes,
+        read: loadAssetFile,
         save: saveAssetFile,
         remove: removeAssetFile,
       });
@@ -187,7 +188,7 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
           key: quickNoteAssetKey(id, asset.metadata.filename),
           bytes: asset.bytes,
         })),
-        { memory: assetBytes, save: saveAssetFile, remove: removeAssetFile },
+        { memory: assetBytes, read: loadAssetFile, save: saveAssetFile, remove: removeAssetFile },
       );
     },
     async deleteLocalQuickNote(id) {
@@ -215,7 +216,7 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
         }
       }
       const rollbackAssets = imageWrites.length > 0
-        ? await stageAssetWrites(imageWrites, { memory: assetBytes, save: saveAssetFile, remove: removeAssetFile })
+        ? await stageAssetWrites(imageWrites, { memory: assetBytes, read: loadAssetFile, save: saveAssetFile, remove: removeAssetFile })
         : async () => {};
 
       try {

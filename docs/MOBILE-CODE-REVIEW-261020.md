@@ -5,9 +5,9 @@
 > 结论：当前功能面已经相当完整，主要问题不是“功能没写”，而是**数据读取模型、保存生命周期、编辑面状态机**三处逐渐累积了互相补偿的防线。继续逐个补 guard 会越来越安全表象化；应删除重复防线，并重做一个核心板块。
 
 > **261022 实施状态（代码已落，待用户验收；尚未提交）**
-> - 已完成：P0-1 可等待保存/单飞队列/硬件返回与进后台保存屏障；P0-2 GC 全段维护锁 + 云状态门控；P1-1 子树递归 CTE；P1-2 小记轻量投影 + 可见正文 12 条 LRU + 变量高度虚拟列表；P1-3 最小索引 + 回收站/目录/历史/小记元数据的 executeSet 批量写；P1-4 标签页显式打开参数 + 占位懒读正文；P1-5 编辑面单一 owner + 每实例 IME 重入 + transitionend/watchdog 退场；P1-6 结构化命令结果 + 用户触发失败可见；P1-7 原生流式 PUT fail-fast；P1-8 canonical path 围栏；P1-9 小记写入核心统一并统一清墓碑；P1-10 分享流式限长 + 可见错误；P1-11 多维表记录 draft + 投影 memo；P2-1 数字设置 draft+commit；P2-2 属性统计按 kind 派生；P2-3 Secret/SQLite legacy 迁移已收敛为一次性版本门控。
-> - 验证：全库 vitest 347 文件 / 2475 例（16 skip）；Android JVM 21 例；TypeScript、双端构建、ui-metrics、check:core、check:mobileui、check:bundle 均通过；APK 安装/启动烟测通过，设备 DB 已升到 schema v3，小记列表元数据回填标记与 4 条真实小记均核验；工作区恢复只挂活动页，切到第二篇后才新增第二个 pane；字体面板关闭时先保持 keyboard hold，随后 watchdog 释放占位并从 `--mb-app-h:562px` 恢复为 `842px`；临时 32 条小记时只挂载 11 张卡片，清理后恢复 4 条。
-> - 未完成：下一版本删除 P2-3 已完成使命的旧迁移实现，以及 P2/P3 其余项。
+> - 已完成：P0-1 可等待保存/单飞队列/硬件返回与进后台保存屏障；P0-2 GC 全段维护锁 + 云状态门控；P1-1 子树递归 CTE；P1-2 小记轻量投影 + 可见正文 12 条 LRU + 变量高度虚拟列表；P1-3 最小索引 + 回收站/目录/历史/小记元数据的 executeSet 批量写；P1-4 标签页显式打开参数 + 占位懒读正文；P1-5 编辑面单一 owner + 每实例 IME 重入 + transitionend/watchdog 退场；P1-6 结构化命令结果 + 用户触发失败可见；P1-7 原生流式 PUT fail-fast；P1-8 canonical path 围栏；P1-9 小记写入核心统一并统一清墓碑；P1-10 分享流式限长 + 可见错误；P1-11 多维表记录 draft + 投影 memo；P2-1 数字设置 draft+commit；P2-2 属性统计按 kind 派生；P2-3 旧 Secret/SQLite/正文目录迁移代码已删除；P2-4 资产覆盖回滚读取真实磁盘前态。
+> - 验证：移动端 vitest 94 文件 / 432 例与 quickNotes 60 例通过；Android JVM 21 例；TypeScript、双端构建、ui-metrics、check:core、check:mobileui、check:bundle 均通过；APK 安装/启动烟测通过，设备 DB 已升到 schema v3，小记列表元数据回填标记与 4 条真实小记均核验；工作区恢复只挂活动页，切到第二篇后才新增第二个 pane；字体面板关闭时先保持 keyboard hold，随后 watchdog 释放占位并从 `--mb-app-h:562px` 恢复为 `842px`；临时 32 条小记时只挂载 11 张卡片，清理后恢复 4 条。
+> - 未完成：P2-5/P2-6/P3 其余项。
 
 ---
 
@@ -380,7 +380,7 @@
 
 ### P2-3 Secret/SQLite legacy 迁移层过多，属于可删除的过渡债务
 
-> **261022 实施状态**：已进入一次性迁移版本。SecretStore 使用 per-key 持久标记，完成后只读 Keystore；SQLite 快照迁移与旧正文目录重置都有独立一次性标记。稳态启动不再进入 IndexedDB / localStorage 旧密钥迁移链。旧迁移实现本身保留到下一版本删除，确保现有安装至少经过一次迁移窗口。
+> **261022 实施状态：已完成删除**。SecretStore 现在只走 Keystore（生产）或 localStorage（Web/vitest）；IndexedDB 密钥读取、旧 SQLite 快照迁移、旧正文目录扫描全部删除。用户确认不再有新设备需要承接。
 
 **证据**
 
@@ -401,6 +401,8 @@
 ---
 
 ### P2-4 `stageAssetWrites` 的回滚只理解内存层，不理解磁盘既有文件
+
+> **261022 实施状态：已完成**。`AssetWriteDeps` 新增 `read(key)`，覆盖写之前读取真实磁盘前态；回滚时恢复旧字节，只有此前确实不存在才删除。桌面/移动同步与小记资产写入点均已接线。
 
 **证据**
 
