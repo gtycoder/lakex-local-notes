@@ -8,6 +8,7 @@
  * - notes.ts    文档/历史/回收站
  * - quickNotes.ts 小记
  * - tree.ts     目录树/笔记本/图标/排序
+ * - home.ts     首页只读投影
  */
 import { ensureDb } from "./bridge/context";
 import { assetsDomain } from "./bridge/assets";
@@ -15,6 +16,7 @@ import { syncDomain } from "./bridge/sync";
 import { notesDomain } from "./bridge/notes";
 import { quickNotesDomain } from "./bridge/quickNotes";
 import { treeDomain } from "./bridge/tree";
+import { homeDomain } from "./bridge/home";
 import { backfillQuickNoteListMetadata } from "./data/quickNotesRepository";
 
 export type { HistoryMobileSettings } from "./data/historyRepository.js";
@@ -25,6 +27,7 @@ export const bridge = {
   ...notesDomain,
   ...quickNotesDomain,
   ...treeDomain,
+  ...homeDomain,
   async init(): Promise<void> {
     const d = await ensureDb();
     // 一次性把旧小记的标签/首图元数据回填到 SQLite；失败不阻断 App，下次启动重试。

@@ -86,7 +86,7 @@ export const PRIORITY_OPS = [
  */
 export const NONE_OPS = [
   // 启动 / 只读
-  "init", "listTreeNodes", "listNotes", "readNote", "noteGoneState", "searchNotes",
+  "init", "getHomeSnapshot", "listTreeNodes", "listNotes", "readNote", "noteGoneState", "searchNotes",
   "listQuickNotes", "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "listOrphanAssets", "listS3GcPending", "getHistorySettings",

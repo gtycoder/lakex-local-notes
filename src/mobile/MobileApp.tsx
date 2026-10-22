@@ -107,10 +107,10 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const quickTagOptions = useMemo(() => buildQuickNoteTagIndex(quickNotes, (note) => note.tags).tags, [quickNotes]);
 
   const refreshAll = useCallback(async () => {
-    const [nodes, ns, qn] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes(), bridge.listQuickNotes()]);
-    setTreeNodes(nodes);
-    setNotes(ns);
-    setQuickNotes(qn);
+    const snapshot = await bridge.getHomeSnapshot();
+    setTreeNodes(snapshot.treeNodes);
+    setNotes(snapshot.notes);
+    setQuickNotes(snapshot.quickNotes);
   }, []);
 
   /**
