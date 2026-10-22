@@ -45,11 +45,12 @@ export function useQuickNoteDetailCache(
       if (!full) return;
       const next = new Map(detailsRef.current);
       next.delete(id);
+      const images = Array.isArray(full.content.images) ? full.content.images : [];
       next.set(id, {
-        body: full.content.body,
-        images: full.content.images,
-        tags: full.content.tags,
-        firstImage: full.content.images[0]?.filename ?? null,
+        body: typeof full.content.body === "string" ? full.content.body : "",
+        images,
+        tags: Array.isArray(full.content.tags) ? full.content.tags : [],
+        firstImage: images[0]?.filename ?? null,
         updatedAt: full.updatedAt,
       });
       while (next.size > limit) {

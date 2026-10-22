@@ -128,4 +128,15 @@ describe("useQuickNoteDetailCache", () => {
     expect(readDetail).toHaveBeenCalledTimes(2);
     expect(cache.details.has("a")).toBe(true);
   });
+
+  it("历史正文缺 tags/images 时规范为空数组，不用 undefined 覆盖列表 metadata", async () => {
+    render({
+      notes: [{ id: "a", updatedAt: "2026-10-22T00:00:00.000Z", tags: ["列表标签"] }],
+      readDetail: async () => ({ content: { body: "<p>a</p>" } as never, updatedAt: "2026-10-22T00:00:00.000Z" }),
+    });
+    await act(async () => { await cache.loadDetail("a"); });
+    expect(cache.details.get("a")?.tags).toEqual([]);
+    expect(cache.details.get("a")?.images).toEqual([]);
+    expect(cache.details.get("a")?.firstImage).toBeNull();
+  });
 });
