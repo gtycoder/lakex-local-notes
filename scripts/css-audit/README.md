@@ -25,7 +25,7 @@ node scripts/css-audit/audit-primitives.mjs         # 跨文件规则体重复�
 node scripts/css-audit/audit-dead-css.mjs           # 死 CSS：类名在全仓产品代码里零引用（--all 连被排除的也打印）
 ```
 
-判定与口径见 `docs/AGENTS.md` §3#14「样式统一」与 `docs/HANDOFF.md` §3 第 10 条（含已暂缓项与接手姿势）。
+判定与口径见 `AGENTS.md` §3#14「样式统一」与 `docs/HANDOFF.md` §3 第 10 条（含已暂缓项与接手姿势）。
 
 ## 常用流程
 

@@ -171,7 +171,7 @@ for (const p of cssAll) {
 r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, aliasTop, undefTop };
 
 // ── 合规护栏（B0，261016）：把「红线」变成可执行判据（基线只许降）──────────────
-// 背景：代码 review（docs/AGENTS.md）发现三条红线只有文字规定、没有机器判据：
+// 背景：代码 review（AGENTS.md）发现三条红线只有文字规定、没有机器判据：
 //   ① 桌面「非主题颜色字面量 0」此前只报告、不判失败；
 //   ② 移动端颜色字面量**完全没有统计**（scripts/check-mobile-ui.mjs 头注释却声称已含）；
 //   ③ 「文字一律用 --lake-accent-text」与「同一 (选择器,属性) 不得跨文件重复」都没有判据。

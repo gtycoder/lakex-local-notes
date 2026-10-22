@@ -125,5 +125,6 @@
       "electron/preload.cjs"
     ],
     "icon": "build/icon.png"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

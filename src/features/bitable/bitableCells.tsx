@@ -1,7 +1,7 @@
 /**
  * 多维表单元格与浮层控件（v1）。
  *
- * 设计约束（docs/AGENTS.md §3 #14）：视觉走 --lake-* 令牌 + 本目录 bitableEditor.css，
+ * 设计约束（AGENTS.md §3 #14）：视觉走 --lake-* 令牌 + 本目录 bitableEditor.css，
  * 组件里**不写静态内联样式**；仅浮层定位这类动态坐标用 inline style（与 Sidebar 右键菜单同做法）。
  * 单元格值按 fieldId 存，编辑通过 onChange(value) 回传，由 BitableEditor 统一写 doc。
  */

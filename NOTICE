@@ -1,0 +1,21 @@
+Local Lakex Notes — 第三方组件与许可说明
+
+本项目自有代码以 AGPL-3.0-only 授权（见 LICENSE）。
+
+一、不作为 AGPL 授权范围再分发的第三方组件
+- 语雀 Lakex 编辑器内核：闭源第三方产物，经 @dlient/lakex-doc-react（MIT 包装层）引入并
+  vendored 在 vendor/lakex-doc-react/。该内核不属于本项目版权，不能由本项目按 AGPL 再授权。
+  该目录的公开再分发可能受语雀服务条款/授权限制；如需公开仓库，请先移除该目录并改为
+  构建时从外部获取，或先取得权利人许可。
+- 思源笔记（SiYuan）样式与交互参考：AGPL-3.0；本项目仅在兼容层与设计系统中保留署名与
+  对应声明（见 src/styles/compat.css 文件头、应用内「关于」页）。
+
+二、其它第三方
+- Univer：Apache-2.0（@univerjs/* 1.0.3，精确锁）
+- Drawnix / plait：见 vendor/lakex-drawnix* 包内许可
+- Lucide：ISC
+- MiSans：小米 MiSans 字体许可
+- JetBrains Mono：SIL OFL 1.1
+
+三、免责声明
+本项目与语雀、蚂蚁集团无关，非官方项目；不保证任何服务、数据安全或兼容性。

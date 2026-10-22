@@ -141,7 +141,7 @@ npm run check:mobileui
 npm run check:bundle
 ```
 
-视觉与移动端设备门禁按改动范围定点跑（完整口径见 `docs/HANDOFF.md` §3#21、`docs/AGENTS.md` §3#21）。
+视觉与移动端设备门禁按改动范围定点跑（完整口径见 `docs/HANDOFF.md` §3#21、`AGENTS.md` §3#21）。
 
 ## 构建
 
@@ -175,7 +175,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | 文档 | 内容 |
 | --- | --- |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | **唯一交接文档**：当前状态 / 待办 / 踩坑 |
-| [docs/AGENTS.md](docs/AGENTS.md) | **长期红线与机制**（会话启动必读） |
+| [AGENTS.md](AGENTS.md) | **长期红线与机制**（会话启动必读） |
 | [docs/PRODUCT.md](docs/PRODUCT.md) · [docs/DESIGN.md](docs/DESIGN.md) | 产品定位 / 设计系统（令牌、层序、组件规范） |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 进程结构、关键文件、数据流 |
 | [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/S3-GC-DESIGN.md](docs/S3-GC-DESIGN.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议 / GC / 存储分层 |
@@ -193,7 +193,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 
 ## 许可与致谢
 
-- 本项目源代码**暂未声明开源许可证**（如需开源请先补 LICENSE）
+- 本项目自有代码采用 **AGPL-3.0-only**（见根目录 `LICENSE`）；第三方组件与例外见 `NOTICE`
 - 语雀 Lakex 编辑器内核为闭源第三方产物（vendored，已 pin），本项目仅作本地集成，不构成对语雀代码的分发
 - 部分界面版式与主题令牌参考自 **SiYuan（思源笔记，AGPL-3.0）**；相关规则收编在 `src/styles/compat.css` / `kit.css`，署名保留在应用设置页「关于」与文件头
 - 表格：[Univer](https://github.com/dream-num/univer)（Apache-2.0，1.0.3 精确锁）
