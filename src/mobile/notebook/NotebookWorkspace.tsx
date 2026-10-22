@@ -18,7 +18,6 @@ import { usePanelDrag, type PanelSide } from "../hooks/usePanelDrag";
 import { computeDropPosition, createDragGhost, moveDragGhost, removeDragGhost, type DragGhost } from "../../components/model/treeDrag";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
-import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "../ui/haptics";
@@ -29,6 +28,7 @@ import { isFavorite, toggleFavorite } from "../data/favorites";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
 import { notebookTabsStorageKey, useNotebookTabs, type NotebookTab } from "./useNotebookTabs";
 import { useNotebookTreeData, type NotebookTreeItem } from "./useNotebookTreeData";
+import { useNotebookTreeActions } from "./useNotebookTreeActions";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 /** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -131,8 +131,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const autoOpenedRef = useRef(false);
   const closingRef = useRef(false);
 
-  // 目录树长按管理：思源 sheet 菜单 / 内联重命名 / 图标 / 移动（菜单子层）/ 删除（确认框）
-  const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
   /** 长按拖拽排序（思源口径）：长按进入拖拽，跟手位移 + 落点（前/后/内），松手重排或移入分组。 */
   const [drag, setDrag] = useState<{
     id: string;
@@ -143,19 +141,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const dragRef = useRef<typeof drag>(null);
   dragRef.current = drag;
   const ghostRef = useRef<DragGhost | null>(null);
-  const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  /** 设置图标的目标（行/分组/笔记本都走这一个面板；只用到 id）。 */
-  const [iconFor, setIconFor] = useState<NotebookTreeItem | null>(null);
-  const [historyFor, setHistoryFor] = useState<NotebookTreeItem | null>(null);
-  const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
   /** 长按目标（hook 只能挂一次 ⇒ 用 ref 传"当前按下的那一行"）。 */
   const pressedNode = useRef<NotebookTreeItem | null>(null);
   const iconSheetRef = useRef<HTMLDivElement>(null);
   const historySheetRef = useRef<HTMLDivElement>(null);
-  useSwipeToClose(iconSheetRef, () => setIconFor(null), !!iconFor);
-  useSwipeToClose(historySheetRef, () => setHistoryFor(null), !!historyFor);
 
   /** 大纲只属于 Lake 文档：表格 / 多维表 / 画板没有大纲（与顶栏「编辑」按钮同一口径）。 */
   const outlineAvailable = !!active && (active.kind ?? "doc") === "doc";
@@ -315,6 +304,31 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const discardTab = useCallback((id: string) => {
     removeTab(id);
   }, [removeTab]);
+
+  const {
+    menuFor,
+    setMenuFor,
+    infoFor,
+    setInfoFor,
+    renamingId,
+    setRenamingId,
+    renameValue,
+    setRenameValue,
+    iconFor,
+    setIconFor,
+    historyFor,
+    setHistoryFor,
+    historyList,
+    applyRename,
+    applyIcon,
+    applyDelete,
+    applyMove,
+    openHistory,
+    restoreHistory: applyRestoreHistory,
+    deleteHistory,
+  } = useNotebookTreeActions({ tree, loadTree, discardTab });
+  useSwipeToClose(iconSheetRef, () => setIconFor(null), !!iconFor);
+  useSwipeToClose(historySheetRef, () => setHistoryFor(null), !!historyFor);
 
   /** 返回首页：等待所有正文与文档保存落盘后才交给路由转场；失败留在当前界面。 */
   const handleBack = useCallback(async () => {
@@ -551,69 +565,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 组件卸载时清掉可能残留的拖拽浮层
   useEffect(() => () => { removeDragGhost(ghostRef.current); ghostRef.current = null; }, []);
-
-  const applyRename = useCallback(async () => {
-    const id = renamingId; const v = renameValue.trim();
-    setRenamingId(null);
-    if (id && v) { try { await bridge.renameTreeNode(id, v); await loadTree(); } catch { /* 忽略 */ } }
-  }, [renamingId, renameValue, loadTree]);
-  const applyIcon = useCallback(async (icon: string | null) => {
-    const n = iconFor;
-    if (n) {
-      try {
-        await bridge.setNodeIcon(n.id, icon);
-        setIconFor((current) => current?.id === n.id ? { ...current, icon } : current);
-        await loadTree();
-      } catch { showToast("设置图标失败", { type: "error" }); }
-    }
-  }, [iconFor, loadTree]);
-  const applyDelete = useCallback(async (node: NotebookTreeItem) => {
-    const ok = await confirmMobile({
-      title: node.kind === "note" ? "移入回收站？" : "删除分组？",
-      body: node.title || "无标题",
-      confirmText: "删除",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await bridge.trashTreeItem(node.id, node.kind === "note" ? "note" : "folder");
-      await loadTree();
-      // 已打开的标签必须一起关掉：否则回收站文档仍留在 tab 里可继续编辑（AGENTS §3 #16）
-      if (node.kind === "note") discardTab(node.id);
-      showToast("已移入回收站");
-    } catch { showToast("删除失败", { type: "error" }); }
-  }, [loadTree, discardTab]);
-  const applyMove = useCallback(async (n: NotebookTreeItem, targetParentId: string) => {
-    if (!n || n.parentId === targetParentId || n.id === targetParentId) return;
-    try {
-      const siblings = tree.filter((x) => x.parentId === targetParentId && x.id !== n.id).map((x) => x.id);
-      await bridge.moveTreeNodeOrdered(n.id, targetParentId, [...siblings, n.id]);
-      await loadTree();
-      showToast("已移动");
-    } catch { showToast("移动失败", { type: "error" }); }
-  }, [tree, loadTree]);
-
-
-  const openHistory = useCallback(async (node: NotebookTreeItem) => {
-    setHistoryFor(node);
-    try { setHistoryList(await bridge.listNoteHistory(node.id)); } catch { setHistoryList([]); }
-  }, []);
-  const applyRestoreHistory = useCallback(async (id: number) => {
-    const ok = await confirmMobile({ title: "恢复此版本？", body: "将用该历史版本覆盖当前正文（当前正文会先自动留档）。", confirmText: "恢复", danger: true });
-    if (!ok) return;
-    try {
-      await bridge.restoreHistory(id);
-      setHistoryFor(null);
-      await loadTree();
-      showToast("已恢复历史版本");
-    } catch { showToast("恢复失败", { type: "error" }); }
-  }, [loadTree]);
-  const deleteHistory = useCallback(async (historyId: number) => {
-    try {
-      await bridge.deleteHistory(historyId);
-      setHistoryList((prev) => prev.filter((h) => h.id !== historyId));
-    } catch { /* 忽略 */ }
-  }, []);
 
   /** 目录树长按菜单（思源 .b3-menu--sheet 口径）：移动到… 用子层下钻，删除走危险项 + 确认框 */
   const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
