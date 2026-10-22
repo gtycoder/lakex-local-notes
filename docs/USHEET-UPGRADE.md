@@ -93,7 +93,13 @@ node scripts/check-bundle-budget.mjs
 
 ## 4. 触点清单（升级时逐条核对；=`usheetKernelContract.ts`）
 
+> **261022 新增的可选包**（全部 1.0.3 精确锁）：`preset-sheets-hyper-link`（超链接）、`preset-sheets-note`（备注，仅桌面）、`sheets-crosshair-highlight`（十字高亮，桌面/移动两份 UI 插件）。
+
 ### 4.1 命令
+
+> 261022 新增：`sheet.operation.insert-hyper-link` / `-toolbar`（超链接）、
+> `sheet.operation.enable|disable|toggle-crosshair-highlight`（十字高亮）、`sheet.command.toggle-note-popup`（备注）。
+> **失效表现**：桌面「插入链接」/移动端 ⋯「链接」无反应；十字高亮默认不亮、⋯「十字高亮」无效；右键备注入口消失。
 | 符号 | 用途 | 失效表现 |
 | --- | --- | --- |
 | `sheet.command.insert-float-image` | 内核图片粘贴钩子的目标命令；也是"多图/无选区"的兜底路径 | 多图粘贴什么都不发生 |
@@ -233,13 +239,13 @@ node scripts/check-bundle-budget.mjs
 
 | 能力 | 包 | 现状 |
 | --- | --- | --- |
-| 超链接（插入/编辑/跳转） | `@univerjs/preset-sheets-hyper-link` | 无入口（桌面「插入」页签只有图片；移动端「链接」置灰） |
-| 单元格备注 / 批注 | `@univerjs/preset-sheets-note` | 无入口 |
+| 超链接（插入/编辑/跳转） | `@univerjs/preset-sheets-hyper-link` | ✅ **261022 已接**：桌面「插入 → 插入链接」；移动端 ⋯「链接」（移动 UI 变体）。urlHandler → `window.open`，主进程 setWindowOpenHandler 转系统浏览器 |
+| 单元格备注 / 批注 | `@univerjs/preset-sheets-note` | ✅ **261022 已接（仅桌面）**：装上 preset 后由内核提供入口；移动端 1.0.3 无移动 UI 变体，暂不接 |
 | 评论（threaded） | `@univerjs/preset-sheets-thread-comment` | 无入口；单人场景价值一般 |
 | 结构化表格（Excel「套用表格格式」） | `@univerjs/preset-sheets-table` | 无入口；语义要先定（避免与「表格文档」混淆） |
 | 条件格式 | `@univerjs/preset-sheets-conditional-formatting` | 无入口（用户 261022：**不急，可做可不做**） |
 | 数据验证 | `@univerjs/preset-sheets-data-validation` | 无入口（同上） |
-| 行列十字高亮 | `@univerjs/sheets-crosshair-highlight` | 无入口（阅读辅助，可选） |
+| 行列十字高亮 | `@univerjs/sheets-crosshair-highlight` | ✅ **261022 已接**：桌面「视图」页签内核开关 + 移动端 ⋯「十字高亮」；**打开默认开启**（`enableUsheetCrosshair`）；纯视图 op，不写正文。⚠️ 1.0.3 的 crosshair 包无 zh 词条，已在两端补 `sheets-crosshair-highlight.button.tooltip=十字高亮` |
 
 ### B. 已内置、只是没入口（主要是移动端）
 

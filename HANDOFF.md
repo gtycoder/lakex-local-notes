@@ -19,6 +19,17 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · 表格 P1（超链接 / 单元格备注）+ 十字高亮（用户点单）· **已提交 `212aa4f5`**
+
+- **依赖**：新增 3 个 Univer 1.0.3 精确锁包（`preset-sheets-hyper-link`、`preset-sheets-note`、`sheets-crosshair-highlight`）+ 2 个直接依赖（`sheets-hyper-link` / `-ui`，移动端要直接引移动 UI 插件）⇒ 全部 1.0.3，`univerContract` 护栏同步扩包列表。
+- **桌面**（`usheetUniverFactory` 单一入口）：超链接 preset（`urlHandler.navigateToOtherWebsite → window.open`，主进程 `setWindowOpenHandler` 已转系统浏览器）+ 备注 preset + 十字高亮插件；locale/CSS 一并引入。实测「插入」页签出现 **插入链接**；十字高亮打开表格默认开启（徽标/行高亮截图），「视图」页签出现内核开关（图标型，hover 提示「十字高亮」）。
+- **移动端**：超链接用**移动 UI 变体**（`UniverSheetsHyperLinkMobileUIPlugin`，弹层是移动版），入口 = ⋯ 卡「链接」；十字高亮用移动插件 + ⋯「十字高亮」toggle（默认开启）；备注在内核 1.0.3 无移动 UI 变体 ⇒ 移动端暂不接（已记录）。
+- **一处内核缺词条**：`sheets-crosshair-highlight` 1.0.3 没有 zh-CN 词条 ⇒ 菜单按钮无文字/tooltip。已在两端 `mergeLocales` 补 `sheets-crosshair-highlight.button.tooltip=十字高亮`。
+- **契约/护栏**：`usheetKernelContract.ts` 增超链接/十字高亮/备注命令 + crosshair 配置键 + 移动菜单 id；`univerContract.test.ts` 扩包；`usheetChromeModel.test` / `mobileUniverPreset.test` 增断言（链接可用、十字高亮存在、移动 UI 替换生效）。
+- **未做（明确）**：备注移动端、`sheets-thread-comment`（评论）、选择性粘贴/保护行列的移动端入口（命令已有，需产品语义/后续批次）。
+- **验证**：隔离 scheme 实例（合成夹具）实测插入链接 / 十字高亮视觉；单测 12 例通过。⚠️ 全库 `tsc` 暂被并行移动端会话的在途 WIP（`src/mobile/settings/SettingsDrawer.tsx` 未用 import）挡住，与本批无关。
+- **状态**：已提交 `212aa4f5`（代码 + 依赖）；APK 已重打并装到 emulator-5562（44,298,474 B，App 启动正常）；**表格内新增入口的设备级点按验收待做**（需要一台带表格数据的 AVD）。
+
 ### 261022 · 表格能力差距盘点（对比 Excel / 未被接的 Univer 1.0.3 包）· **仅文档**
 
 - **方法**：核对 npm 上 `@univerjs/*@1.0.3` 的可用包 + 隔离实例实测桌面 ribbon / 右键菜单 + 移动端自绘 chrome 的置灰项。详见 `docs/USHEET-UPGRADE.md §8`。
