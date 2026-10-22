@@ -53,11 +53,13 @@ describe("syncScrollFade", () => {
 describe("接线与令牌", () => {
   const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
-  it("样式：三个接入点共用 7 档遮罩 + 两侧只在 data-fade 时出现", () => {
+  it("样式：两个接入点共用 7 档遮罩 + 两侧只在 data-fade 时出现（目录树不渐隐）", () => {
     const kit = read("../styles/kit.css");
-    expect(kit).toContain(".ln-select__list,\n.note-list.tree-list,\n.quick-notes-index {");
+    expect(kit).toContain(".ln-select__list,\n.quick-notes-index {");
     expect(kit).toContain("mask-image: linear-gradient(to bottom");
-    expect(kit).toContain('.note-list.tree-list[data-fade-top="1"]');
+    // 选择器组里不能再出现目录树（注释里提到它不算）
+    expect(kit).not.toContain(".note-list.tree-list,");
+    expect(kit).not.toContain(".note-list.tree-list[");
     expect(kit).toContain('.quick-notes-index[data-fade-bottom="1"]');
     expect(kit).toContain("--ln-fade-top: 28px");
     expect(kit).toContain("--ln-fade-bottom: 28px");
@@ -72,15 +74,16 @@ describe("接线与令牌", () => {
     }
   });
 
-  it("三个列表都接上了 hook + 类名，且不在滚动回调里用 rAF（隐藏窗口不触发）", () => {
+  it("两个列表都接上了 hook + 类名，目录树已摘除，且不在滚动回调里用 rAF（隐藏窗口不触发）", () => {
     const hook = read("./useScrollFade.ts");
     expect(hook).not.toContain("requestAnimationFrame");
     expect(read("../components/ui/Select.tsx")).toContain("useScrollFade(listRef, open)");
-    expect(read("../components/app/Sidebar.tsx")).toContain("useScrollFade(treeRef)");
     expect(read("../components/app/QuickNotesWorkspace.tsx")).toContain("useScrollFade(indexListRef, viewMode)");
+    // 261022 用户点单：目录栏上下边缘不再模糊（摘掉 hook 与选择器，别加回）
+    expect(read("../components/app/Sidebar.tsx")).not.toContain("useScrollFade");
+    expect(read("../components/app/Sidebar.tsx")).not.toContain("ln-scroll-fade");
     // 类名会进 stylesnap 的 key ⇒ 刻意不加工具类，样式靠上面的选择器组
     expect(read("../components/ui/Select.tsx")).not.toContain("ln-scroll-fade");
-    expect(read("../components/app/Sidebar.tsx")).not.toContain("ln-scroll-fade");
     expect(read("../components/app/QuickNotesWorkspace.tsx")).not.toContain("ln-scroll-fade");
   });
 });

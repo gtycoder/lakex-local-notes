@@ -252,7 +252,8 @@ components:
 5. **reduced-motion 由 a11y 层统一兜底**（`animation-duration: 1ms` + 位移过渡白名单），组件不写自己的 reduce 分支。
 
 ### Scroll Edges
-- 长列表的滚动边缘用 **7 档非线性 alpha 遮罩**（28px）：目录树 / 小记列表 / 下拉弹层三个接入点共用 kit 的同一组选择器；由 `useScrollFade` 只在**真有内容被裁**的一侧打 `data-fade-top/bottom`，到顶/到底归零。
+- 长列表的滚动边缘用 **7 档非线性 alpha 遮罩**（28px）：小记列表 / 下拉弹层两个接入点共用 kit 的同一组选择器；由 `useScrollFade` 只在**真有内容被裁**的一侧打 `data-fade-top/bottom`，到顶/到底归零。
+- **目录树不渐隐**（261022 用户点单）：目录要一眼看清首/末行，所以 `.note-list.tree-list` 从上面这组选择器里摘掉，`Sidebar` 也不再挂 `useScrollFade`。**不要再加回**。
 - 禁止用静态渐变把首/末行常驻压暗；mask 只裁视觉，不改变滚动、命中区与布局。
 - 采样色是 `--lake-scroll-fade-*`（themes/base.css，遮罩专用、不随主题分叉），组件里不写颜色。
 
