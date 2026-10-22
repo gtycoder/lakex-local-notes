@@ -12,6 +12,14 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261022 · 最终定稿：三个仓库同内容（vendored 公开）+ GitHub Actions 打包发布
+
+- **用户定稿（261022 晚）**：不再区分“公开镜像不含内核”。**Gitee private / Gitee public / GitHub public 三个仓库内容完全一致**，内核以 vendored 形式随仓库与构建产物公开分发（未取得语雀授权，风险自担，声明见 `NOTICE`；权利人要求即移除）。
+- **仓库管理**：一个本地仓 + `publish` remote（private + Gitee public + GitHub public 三个 pushurl），`git push publish master --tags` 一次推三处；不再使用 export 脚本（已删）。
+- **打包**：`.github/workflows/release.yml` —— tag `v*` 触发；macOS（`macos-15`，未签名 dmg/zip）+ Android（`ubuntu-24.04`，debug apk）构建，产物发 GitHub Release；若配置 `GITEE_TOKEN` secret 则同时通过 Gitee API 上传到 Gitee 发行版。
+- **前提**：GitHub 仓库待建；建好后加 remote 推同一提交再打 tag 验证 CI；Gitee 公开仓已改为同内容（含内核）。
+- **风险**：公开仓/Release 含内核源文件与二进制 = 最高暴露形态；`NOTICE` 仅声明态度，不改变法律风险。
+
 ### 261022 · 双仓落地：私有开发仓（vendored）+ 公开镜像（导出）· **已提交**（hash 以 `git log` 为准）
 
 - **用户定稿**：Gitee 两个仓 —— `local-lakex-notes-private`（private，唯一真源，内核 vendored 入库）→ 导出 → `local-lakex-notes`（public，不含内核）；后续再加 GitHub 公开远程（同一镜像）。无私有 npm registry，故**公开仓继续用 `setup:lakex` 私有归档恢复**（变体 1），不做 npm 依赖。

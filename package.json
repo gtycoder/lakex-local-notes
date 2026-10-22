@@ -33,7 +33,6 @@
     "preinstall": "node scripts/setup-lakex-private.mjs",
     "setup:lakex": "node scripts/setup-lakex-private.mjs",
     "backup:lakex": "node scripts/setup-lakex-private.mjs --backup",
-    "export:public": "node scripts/export-public.mjs",
     "postinstall": "install-electron && patch-package --patch-dir vendor/lakex-doc-react/patches && patch-package --patch-dir patches",
     "build:vendor": "npm --prefix vendor/lakex-doc-react run build",
     "build:web": "vite build",

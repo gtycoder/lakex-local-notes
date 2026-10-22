@@ -16,8 +16,7 @@ test-node-abi
 .impeccable/questions/
 .impeccable/live/
 
-# 私有开发仓：内核产物以 vendored 形式入库（公开镜像由 scripts/export-public.mjs 生成，不含内核）
-# 恢复/备份：npm run setup:lakex / npm run backup:lakex
+# 内核产物随仓库 vendored（不再忽略）；.lakex-private* 只忽略本机归档路径/临时文件
 .lakex-private*
 
 # Local development credentials (never commit real values)

@@ -2,7 +2,7 @@
 
 **本地优先的语雀 Lakex 编辑器笔记应用（非官方）**：桌面 macOS + Android，本地是唯一真相，S3 只做多端镜像。
 
-> 使用语雀的 Lakex 编辑器内核（本地私有引入、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场；该闭源内核**不随公开仓库分发**（公开镜像的源码与 git 历史均不含内核）。
+> 使用语雀的 Lakex 编辑器内核（本地私有引入、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场；该闭源内核以 **vendored** 形式随本仓库公开分发（未经语雀/蚂蚁授权，风险自担，见 `NOTICE`）。
 
 ## 项目简介
 
@@ -94,9 +94,7 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 - **Node.js 24**（必须；低版本 Vite 8 会失败）
 - npm、macOS（桌面端）、Android SDK + JDK 21（移动端）
 - macOS 打包建议 Xcode Command Line Tools
-- 语雀闭源 Lakex 内核的**私有归档**（首次安装/构建前恢复；见下节）
-
-> ⚠️ **公开镜像**不含闭源内核：`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/` 都不进入公开源码树与 git 历史（私有开发仓以 vendored 形式保留）。拿不到私有归档时，`npm install` 会在 `preinstall` 明确报错。
+> ⚠️ 本仓库**包含**语雀闭源 Lakex 内核（`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`，vendored）。本项目**未取得**语雀/蚂蚁的授权，公开分发属自担风险；如权利人提出要求，将停止分发并移除相关资源。详见 `NOTICE`。
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
@@ -105,33 +103,14 @@ node -v   # v24.x
 
 ## 安装依赖
 
-**公开镜像**不含语雀闭源 Lakex 内核（`@dlient/lakex-doc-react` 里打包的 `@alipay/lakex-doc` v1.99.0）。首次安装：
+本仓库已包含语雀闭源 Lakex 内核（vendored 在 `vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`），直接安装即可：
 
 ```bash
 cd <repo>
-
-# 1) 指向私有归档（tgz 或解包目录；根布局 = 仓库根，见 scripts/setup-lakex-private.mjs）
-export LAKEX_PRIVATE_TARBALL=/path/to/lakex-private.tar.gz
-# 或：在仓库根写 .lakex-private.source（一行路径，已被 .gitignore 忽略）
-
-# 2) 恢复内核产物
-npm run setup:lakex
-
-# 3) 安装依赖
 npm install
 ```
 
-`npm run setup:lakex` 会恢复三处私有产物：
-
-| 路径 | 作用 |
-| --- | --- |
-| `vendor/lakex-doc-react/` | 包装层 + 内核 bundle + patches |
-| `public/vendor/lakex-doc/kitchen-iconfont.js` | 页面 `KITCHEN_URL` 图标字体 |
-| `public/vendor/lakex/` | 内核本地化的字体/图标（`scripts/lakexLocalize.ts` 的目标） |
-
-维护者可用 `npm run backup:lakex` 重新生成私有归档（默认写到仓库外 `../private/lakex-private-<stamp>.tar.gz`，并生成 `.json` 元数据）。
-
-> 归档、`vendor/`、`public/vendor/lakex*` 都**禁止**提交、上传或打进公开 release。
+维护者可用 `npm run backup:lakex` 把三处内核产物导出为仓库外归档（默认 `../private/lakex-private-<stamp>.tar.gz` + `.json` 元数据），用于备份或换机恢复；`npm run setup:lakex` 可从该归档恢复。
 
 ## 本地开发
 
@@ -192,7 +171,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 ## 打包与发布
 
 - 推荐用 **GitHub Releases** 分发：发版时打 tag（如 `v0.1.0`），附 macOS `.dmg/.zip`、Android `.apk` 与 `SHA256SUMS.txt`
-- ⚠️ 构建产物**包含闭源 Lakex 内核**（本仓库不提供，别人也无法独立构建出等价产物）；公开分发二进制前请先确认你对内核的分发授权
+- ⚠️ 构建产物**包含闭源 Lakex 内核**（仓库已 vendored）；公开分发（Release 附件）前请确认你接受相应风险，详见 `NOTICE`
 - 各系统包必须在对应平台生成（macOS 包需 macOS；Windows/Linux 目前未配置打包 target）
 - 发布流程与签名/公证前置条件见 `docs/RELEASE.md`
 - 不提供自动更新；下载后手动替换
@@ -221,7 +200,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 ## 许可与致谢
 
 - 本项目自有代码采用 **AGPL-3.0-only**（见根目录 `LICENSE`）；第三方组件与例外见 `NOTICE`
-- 语雀 Lakex 编辑器内核为闭源第三方产物，**不随公开仓库分发**（公开镜像的源码与 git 历史均不含内核，构建需本地私有引入）；本项目仅作本地集成，不构成对语雀代码的分发，也不能由本项目按 AGPL 再授权
+- 语雀 Lakex 编辑器内核为闭源第三方产物，**以 vendored 形式包含在本仓库中**；该内核不属于本项目版权，不能由本项目按 AGPL 再授权。本项目未取得语雀/蚂蚁的授权，公开分发风险由分发者承担；权利人要求时将移除相关资源（见 `NOTICE`）
 - 部分界面版式与主题令牌参考自 **SiYuan（思源笔记，AGPL-3.0）**；相关规则收编在 `src/styles/compat.css` / `kit.css`，署名保留在应用设置页「关于」与文件头
 - 表格：[Univer](https://github.com/dream-num/univer)（Apache-2.0，1.0.3 精确锁）
 - 画板：[Drawnix](https://github.com/plait-board/drawnix)

@@ -5,8 +5,7 @@
 > **什么时候看本文件**：只要会话涉及 lakex 编辑器——遇到内核报错、命令点了没反应（no-op）、DOM/CSS 不对、
 > 要新加编辑器能力、要改 `src/features/editor/**` ——先查本文件，再动手。
 > ⚠️ **分发边界（261022）**：内核产物（`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`）
-> **不随公开仓库分发**，公开镜像的源码树与 git 历史均不含内核（私有开发仓 vendored 保留）。下文所有路径/源码引用都指**本地恢复后的工作区**：
-> 先 `npm run setup:lakex`（见 README「安装依赖」），否则这些路径不存在。
+> **以 vendored 形式随本仓库提供**（未取得语雀授权，风险自担，见 `NOTICE`）。下文所有路径/源码引用都指本工作区。
 
 ---
 
