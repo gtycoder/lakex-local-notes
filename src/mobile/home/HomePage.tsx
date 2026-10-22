@@ -7,8 +7,9 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Tag, Trash, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
@@ -70,6 +71,7 @@ interface QuickNoteDetail {
 }
 
 const QUICK_NOTE_DETAIL_CACHE_LIMIT = 12;
+const QUICK_NOTE_VIRTUAL_THRESHOLD = 24;
 
 export type LibraryView = "shelf" | "list";
 
@@ -222,6 +224,8 @@ export function HomePage(props: HomePageProps) {
    */
   const stageRef = useRef<HTMLDivElement | null>(null);
   const quickPaneRef = useRef<HTMLElement | null>(null);
+  const quickScrollRef = useRef<HTMLDivElement | null>(null);
+  const quickCardsRef = useRef<HTMLDivElement | null>(null);
   const libraryPaneRef = useRef<HTMLElement | null>(null);
   const tabRef = useRef(tab);
   tabRef.current = tab;
@@ -359,6 +363,44 @@ export function HomePage(props: HomePageProps) {
     return sortQuickNotes(filtered, quickSort);
   }, [displayedQuickNotes, quickSort, quickTagFilter]);
 
+  const quickVirtualEnabled = tab === "quick" && composer === null && sortedQuickNotes.length > QUICK_NOTE_VIRTUAL_THRESHOLD;
+  const [quickScrollMargin, setQuickScrollMargin] = useState(0);
+  const [quickScrollElement, setQuickScrollElement] = useState<HTMLDivElement | null>(null);
+  const setQuickScrollNode = useCallback((node: HTMLDivElement | null) => {
+    quickScrollRef.current = node;
+    setQuickScrollElement(node);
+  }, []);
+  const getQuickScrollElement = useCallback(() => quickScrollElement, [quickScrollElement]);
+  const getQuickItemKey = useCallback((index: number) => sortedQuickNotes[index]?.id ?? index, [sortedQuickNotes]);
+  const quickVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    count: quickVirtualEnabled ? sortedQuickNotes.length : 0,
+    getScrollElement: getQuickScrollElement,
+    estimateSize: () => 168,
+    getItemKey: getQuickItemKey,
+    overscan: 6,
+    initialRect: { width: 390, height: 800 },
+    scrollMargin: quickScrollMargin,
+    scrollPaddingStart: quickScrollMargin,
+    enabled: quickVirtualEnabled,
+  });
+  useLayoutEffect(() => {
+    if (!quickVirtualEnabled) return;
+    const update = () => {
+      const scroller = quickScrollRef.current;
+      const cards = quickCardsRef.current;
+      if (!scroller || !cards) return;
+      setQuickScrollMargin(cards.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop);
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(update);
+    if (quickScrollRef.current) ro.observe(quickScrollRef.current);
+    return () => ro.disconnect();
+  }, [quickVirtualEnabled, sortedQuickNotes.length, quickTagIndex.tags.length]);
+  useLayoutEffect(() => {
+    if (quickVirtualEnabled) quickVirtualizer.measure();
+  }, [quickVirtualEnabled, sortedQuickNotes, quickVirtualizer]);
+
   const openEdit = async (id: string): Promise<void> => {
     try {
       const full = await bridge.readQuickNote(id);
@@ -375,14 +417,21 @@ export function HomePage(props: HomePageProps) {
     if (!pendingQuickNoteId) return;
     setQuickTagFilter({ kind: "all" });
     setRevealedQuickNoteId(pendingQuickNoteId);
+    const index = displayedQuickNotes.findIndex((note) => note.id === pendingQuickNoteId);
+    if (quickVirtualEnabled && index >= 0) quickVirtualizer.scrollToIndex(index, { align: "center" });
+    let second = 0;
     const frame = window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(`[data-quick-note-id="${escapeId(pendingQuickNoteId)}"]`)?.scrollIntoView({ block: "nearest" });
-      // 清 pending 会触发本 effect cleanup；放在 rAF 里，避免滚动还没发生就被取消。
-      onPendingQuickNoteConsumed?.();
+      second = window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(`[data-quick-note-id="${escapeId(pendingQuickNoteId)}"]`)?.scrollIntoView({ block: "nearest" });
+        // 清 pending 会触发本 effect cleanup；等虚拟行真正挂载后再消费标记。
+        onPendingQuickNoteConsumed?.();
+      });
     });
-    return () => window.cancelAnimationFrame(frame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingQuickNoteId]);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (second) window.cancelAnimationFrame(second);
+    };
+  }, [displayedQuickNotes, onPendingQuickNoteConsumed, pendingQuickNoteId, quickVirtualEnabled, quickVirtualizer]);
 
   useEffect(() => {
     if (!revealedQuickNoteId) return;
@@ -581,6 +630,19 @@ export function HomePage(props: HomePageProps) {
 
   const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;
 
+  const renderQuickNoteCard = (note: MobileQuickNote) => (
+    <QuickNoteCard
+      key={note.id}
+      note={note}
+      revealed={revealedQuickNoteId === note.id}
+      onRequestDetail={loadQuickNoteDetail}
+      dateValue={quickNoteSortTime(note, quickSort)}
+      onEdit={() => { void openEdit(note.id); }}
+      onMore={() => setQuickMenuFor(note.id)}
+      onFilterTag={(name) => setQuickTagFilter({ kind: "tag", name })}
+    />
+  );
+
   return (
     <div className="mobile-home">
       <header className="toolbar toolbar--border mobile-topbar">
@@ -620,7 +682,7 @@ export function HomePage(props: HomePageProps) {
             />
           </div>
         ) : (
-          <div className="mobile-scroll">
+          <div ref={setQuickScrollNode} className="mobile-scroll">
             {quickTagIndex.tags.length > 0 && (
               <div className="qn-tag-filter-bar" role="group" aria-label="按标签筛选小记">
                 <button className={"qn-tag" + (quickTagFilter.kind === "all" ? " is-selected" : "")} onClick={() => setQuickTagFilter({ kind: "all" })}>
@@ -644,21 +706,30 @@ export function HomePage(props: HomePageProps) {
             )}
             {sortedQuickNotes.length === 0 ? (
               <div className="mb-empty">{quickTagFilter.kind === "all" ? "暂无小记" : "该筛选下暂无小记"}</div>
+            ) : quickVirtualEnabled ? (
+              <div
+                ref={quickCardsRef}
+                className="mobile-quick-cards"
+                style={{ display: "block", position: "relative", height: Math.max(0, quickVirtualizer.getTotalSize() - quickScrollMargin), padding: 0 }}
+              >
+                {quickVirtualizer.getVirtualItems().map((item) => {
+                  const note = sortedQuickNotes[item.index];
+                  if (!note) return null;
+                  return (
+                    <div
+                      key={item.key}
+                      ref={quickVirtualizer.measureElement}
+                      data-index={item.index}
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "6px 14px", transform: `translateY(${item.start - quickScrollMargin}px)` }}
+                    >
+                      {renderQuickNoteCard(note)}
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
-              <div className="mobile-quick-cards">
-                {sortedQuickNotes.map((n) => (
-                  <QuickNoteCard
-                    key={n.id}
-                    note={n}
-                    revealed={revealedQuickNoteId === n.id}
-                    onRequestDetail={loadQuickNoteDetail}
-                    // 卡片日期跟随当前排序口径：按创建时间排序时显示创建时间（否则看起来"没排序"）
-                    dateValue={quickNoteSortTime(n, quickSort)}
-                    onEdit={() => { void openEdit(n.id); }}
-                    onMore={() => setQuickMenuFor(n.id)}
-                    onFilterTag={(name) => setQuickTagFilter({ kind: "tag", name })}
-                  />
-                ))}
+              <div ref={quickCardsRef} className="mobile-quick-cards">
+                {sortedQuickNotes.map(renderQuickNoteCard)}
               </div>
             )}
           </div>
