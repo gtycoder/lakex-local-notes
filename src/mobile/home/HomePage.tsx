@@ -28,9 +28,7 @@ import { bridge } from "../bridge";
 import { escapeId } from "../../lib/cssEscape";
 import { HOME_TABS, pagerScrollLeft, settledIndex, tabAt, tabIndex } from "./tabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
-import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
-//  本机读写单独一层（core 禁 DOM）：读/写偏好走 lib/quickNoteSortPref（桌面用同一份）
-import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPref";
+import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
 import { formatListTime } from "../../core/dateFormat";
 import { withAssetAccessToken } from "../../lib/assetPort";
@@ -39,12 +37,8 @@ import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesO
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
-import {
-  addQuickNoteTag,
-  buildQuickNoteTagIndex,
-  filterQuickNotesByTag,
-  type QuickNoteTagFilter,
-} from "../../core/quickNoteTags";
+import { useQuickNoteListModel } from "./useQuickNoteListModel";
+import { addQuickNoteTag } from "../../core/quickNoteTags";
 
 // 完整小记编辑器（内含 Lake 内核）：**按需加载**，加载壳见 ./quickNoteComposerLazy（预取过则同步渲染、零 fallback）。
 
@@ -133,9 +127,7 @@ export function HomePage(props: HomePageProps) {
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [tagSheetFor, setTagSheetFor] = useState<string | null>(null);
-  const [quickTagFilter, setQuickTagFilter] = useState<QuickNoteTagFilter>({ kind: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
-  const [quickSort, setQuickSort] = useState<QuickNoteSort>(() => readQuickNoteSort());   // 本机持久化偏好（L3）
   const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
@@ -287,26 +279,16 @@ export function HomePage(props: HomePageProps) {
     setFavoriteOpen((v) => { const next = !v; writeFavoritesOpen(next); return next; });
   };
 
-  const displayedQuickNotes = useMemo(() => quickNotes.map((note) => {
-    const detail = quickNoteDetails.get(note.id);
-    return detail ? { ...note, body: detail.body, images: detail.images, tags: detail.tags, firstImage: detail.firstImage ?? note.firstImage } : note;
-  }), [quickNotes, quickNoteDetails]);
-
-  const quickTagIndex = useMemo(
-    () => buildQuickNoteTagIndex(displayedQuickNotes, (note) => note.tags),
-    [displayedQuickNotes],
-  );
-  useEffect(() => {
-    if (quickTagFilter.kind === "tag" && !quickTagIndex.tags.some((tag) => tag.name === quickTagFilter.name)) {
-      setQuickTagFilter({ kind: "all" });
-    }
-  }, [quickTagFilter, quickTagIndex.tags]);
-
-  /** 排序只影响本端展示顺序（不写库、不进 manifest）；比较器在 core/quickNoteSort。 */
-  const sortedQuickNotes = useMemo(() => {
-    const filtered = filterQuickNotesByTag(displayedQuickNotes, quickTagFilter, (note) => note.tags);
-    return sortQuickNotes(filtered, quickSort);
-  }, [displayedQuickNotes, quickSort, quickTagFilter]);
+  const {
+    displayedQuickNotes,
+    quickTagIndex,
+    quickTagFilter,
+    setQuickTagFilter,
+    quickSort,
+    setQuickSort,
+    quickSortOptions,
+    sortedQuickNotes,
+  } = useQuickNoteListModel(quickNotes, quickNoteDetails);
 
   const quickVirtualEnabled = tab === "quick" && composer === null && sortedQuickNotes.length > QUICK_NOTE_VIRTUAL_THRESHOLD;
   const [quickScrollMargin, setQuickScrollMargin] = useState(0);
@@ -532,14 +514,13 @@ export function HomePage(props: HomePageProps) {
   // 排序（小记专用；知识库顺序 = 共享 sort_order = 桌面端顺序，不做本地排序）
   //  261015 用户点单：**加创建时间两档** ⇒ 最近更新 / 最早更新 / 最新创建 / 最早创建。
   const filterItems = useMemo<MobileSheetItem[]>(
-    () => QUICK_NOTE_SORT_OPTIONS.map((o) => ({ id: o.id, label: o.label, note: quickSort === o.id ? "当前" : undefined })),
-    [quickSort],
+    () => quickSortOptions.map((o) => ({ id: o.id, label: o.label, note: quickSort === o.id ? "当前" : undefined })),
+    [quickSort, quickSortOptions],
   );
   const onFilterSelect = (item: MobileSheetItem): void => {
     setFilterOpen(false);
     const next = item.id as QuickNoteSort;
     setQuickSort(next);
-    writeQuickNoteSort(next);          // 本机持久化（L3；见 docs/STORAGE-LAYERS.md §5）
   };
 
   /** 笔记本编辑三项（用户 261014：入口 = 知识库页长按；抽屉里那个 ⋮ 已删）。 */
