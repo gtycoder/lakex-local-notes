@@ -71,30 +71,6 @@
   --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.45);
 
 
-  /* ---- 过渡桥接：思源 --b3-* → 新令牌（P7 删思源层时一并移除） ---- */
-  --b3-body-background: var(--lake-bg-window);
-  --b3-theme-background: var(--lake-bg-panel);
-  --b3-theme-background-light: var(--lake-bg-block);
-  --b3-theme-surface: var(--lake-bg-block);
-  --b3-theme-surface-light: var(--lake-bg-panel);
-  --b3-theme-surface-lighter: var(--lake-border-2);
-  --b3-border-color: var(--lake-border-1);
-  --b3-theme-on-background: var(--lake-text-1);
-  --b3-theme-on-surface: var(--lake-text-3);
-  --b3-theme-on-surface-light: var(--lake-text-4);
-  --b3-theme-primary: var(--lake-accent);
-  --b3-theme-primary-light: var(--lake-select-bg);
-  --b3-theme-primary-lighter: var(--lake-accent-tint);
-  --b3-theme-primary-lightest: var(--lake-accent-tint);
-  --b3-theme-error: var(--lake-status-error);
-  --b3-dialog-shadow: var(--lake-shadow-popover);
-  --b3-mask-background: var(--lake-scrim);
-  --b3-list-hover: var(--lake-bg-hover);
-  --b3-scroll-color: var(--lake-scrollbar-thumb);
-  --b3-border-radius: var(--lake-radius-sm);
-  --b3-font-family: var(--lake-font-family);
-  --b3-font-family-code: var(--lake-font-family-mono);
-
   /* ---- 过渡桥接：lakex 编辑器外围（设计 MIGRATION §3 批准的变量映射；选区色刻意不动） ---- */
   --lakex-editor-background: var(--lake-bg-canvas);
   --lakex-editor-background-primary: var(--lake-bg-block);
