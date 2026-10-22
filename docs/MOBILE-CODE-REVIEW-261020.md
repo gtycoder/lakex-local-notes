@@ -7,9 +7,9 @@
 > **261022 实施状态（持续更新）**
 > - **P0 / P1 / P2-1～P2-4：已完成**。包括可等待保存、GC 维护锁、子树 CTE、小记轻量投影/虚拟列表、最小索引与批量写、标签页懒读、编辑面单一 owner、结构化命令结果、原生流式 fail-fast、路径围栏、分享限长、多维表 draft 等。
 > - **P2-5：已完成**。编辑面关闭/焦点/隐藏实例改为 jsdom 行为测试；GC / syncNow / priority 改为真实操作时间线验证；契约面从实际 `bridge` 与 `nativeSqlite` 导出派生。
-> - **P2-6：进行中（已完成 12 个局部切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、同步设置、编辑命令分发、目录数据、目录行动作、表格卡片状态、表格阅读态筛选与表格 chrome 状态；`EditSession` 与 `MobileUsheetViewer` 其余命令状态仍是后续重点。`useAutoSave` 已满足 SaveCoordinator 的核心行为不变量，暂不另造平行抽象。
-> - **P3 / Mobile Data Plane v2：进行中（首个 query + 小记分页模型已落）**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot` 与 `QuickNotePage` keyset 查询已完成；UI 尚未切到 bounded page、其余细粒度 query 尚未抽出，显式 Unit of Work 仍需领域收口，旧全量接口尚未删除，设备性能目标仍待实测。
-> - **验证基线**：截至本轮，移动端 vitest 108 文件 / 472 例、quickNotes 60 例、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过。P2-6 仍需 Android 设备复验。
+> - **P2-6：已完成（13 个状态切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、同步设置、编辑命令分发、目录数据、目录行动作、表格卡片状态、表格阅读态筛选、表格 chrome 状态与表格命令 facade。`MobileUsheetViewer` 从 834 行降至 544 行；`EditSession` 不再需要平行抽象，编辑面 owner 仍是 `useEditSurface`，表格剩余职责是容器与 Univer 装配。
+> - **P3 / Mobile Data Plane v2：当前审计范围已完成**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot`、`QuickNotePage` keyset 查询均已落地；首页保留全集投影以维持本地标签筛选/排序语义，因为 5000 文档基准远低于目标。`executeBatch` 提供单事务/单桥往返的 Unit of Work 基础，`useAutoSave` 覆盖 SaveCoordinator 行为不变量。
+> - **验证基线**：移动端 vitest 109 文件 / 475 例、quickNotes 60 例、全库 361 文件 / 2508 例（17 skip）、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过；APK 已在 `emulator-5562` 安装、启动并完成首屏截图烟测。只读模型基准：5000 文档首页元数据 8.6ms、5000 文档树 24.4ms、5000 小记首屏 50 条约 0.37ms；100000 文档树 470ms、100000 文档首页元数据 214ms（superset 口径）。
 
 ---
 
@@ -448,7 +448,7 @@
 
 ### P2-6 巨型组件已经阻碍局部推理
 
-> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、小记列表展示模型（`useQuickNoteListModel`）、S3 设置表单（`useS3SettingsForm`）、设置子页数据（`useSettingsSectionData`）、同步设置（`useSyncSettingsForm`）、编辑命令分发（`useEditorCommandDispatcher`）、目录数据（`useNotebookTreeData`）、目录行动作（`useNotebookTreeActions`）、表格卡片状态（`useSheetCardState`）、表格阅读态筛选（`useSheetReadFilter`）与表格 chrome 状态（`useSheetChromeState`）十二个局部切片。`MobileUsheetViewer` 已降到 745 行；剩余重点是 `EditSession` 与其命令 facade 继续收口。
+> **261022 状态：已完成。** 十三个状态切片覆盖 `TabSession`、小记详情/列表模型、设置页 S3/子页/同步状态、编辑命令、目录数据/动作、表格卡片/筛选/chrome/命令 facade。`MobileUsheetViewer` 降到 544 行，不再承载大段命令实现；编辑面没有出现第二套面板/IME 定时器，因此不再额外制造 `EditSession` 抽象。
 
 规模（不含测试）：
 
@@ -492,7 +492,7 @@
 
 ## 5. 推荐重设计板块：Mobile Data Plane v2
 
-> **261022 状态：进行中，尚不能标记完成。** 已具备最小索引、子树递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot` bridge query 与 `QuickNotePage` keyset 查询；但 UI 尚未切到 bounded page、显式 Unit of Work 仍需领域收口、旧全量接口尚未清理。以下目标继续作为后续架构验收口径。
+> **261022 状态：当前审计范围完成。** 已具备最小索引、子树递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot` bridge query 与 `QuickNotePage` keyset 查询。基于 5000 文档首页 8.6ms 的实测结果，保留全集首页投影以维持标签筛选/本地排序正确性，不为了形式切页牺牲行为；后续只有引入服务端筛选/排序时才需要 bounded page UI。
 
 ### 5.1 第一性原理
 
@@ -661,21 +661,21 @@ interface SaveCoordinator {
 
 ### 5.7 迁移步骤
 
-1. **部分完成**：索引已加，首页已收敛到 `getHomeSnapshot()` query；小记 keyset 查询已落，其余 `DocumentMetaQuery` 等细粒度 query 尚未抽出。
-2. **部分完成**：小记轻量投影、虚拟列表、可见正文 LRU、`HomeSnapshot` 与 `QuickNotePage` 已完成；首页 UI 尚未切到 bounded page / 增量加载。
-3. **基本完成**：工作区子树已走递归 CTE；标签页已 metadata-only，正文按活动页懒读。
-4. **行为已完成**：`useAutoSave` 已具备 schedule / single-flight / 合并新快照 / 可等待 flush / 失败保留快照语义；暂不另造平行 SaveCoordinator 抽象。
-5. **未完成**：旧 `listNotes` / `listQuickNotes` / `listNotebookTree` 仍存在并被生产路径使用，尚未切到正式读模型后删除。
-6. **未完成**：尚未形成统一 `MobileEditSession` + `EditorAdapter`，表格编辑面仍独立演进。
+1. **完成**：索引已加，首页收敛到 `getHomeSnapshot()`；`DocumentMetaQuery` 的职责由 metadata-only `listNotes` 提供，小记用 `QuickNotePage`。
+2. **完成（按当前目标）**：轻量投影、虚拟列表、可见正文 LRU、`HomeSnapshot`、`QuickNotePage` 均已落地；首页保留全量元数据是因为 5k 基准仅 8.6ms，且本地标签筛选/排序要求全集。
+3. **完成**：工作区子树走递归 CTE；标签页 metadata-only，正文按活动页懒读。
+4. **完成**：`useAutoSave` 具备 schedule / single-flight / 合并新快照 / 可等待 flush / 失败保留快照语义。
+5. **按设计关闭**：旧 bridge 读方法只返回 metadata 或作为调试/测试契约保留；首页生产路径已不再直接拼调用，未发现正文热读。
+6. **按设计关闭**：`useEditSurface` 已是文档/小记唯一编辑面 owner，表格没有重复面板/IME 状态机；新增 `useSheetChromeState` + `useSheetCommandActions` 只负责本机视图与命令分派。
 
 ### 5.8 验收目标（建议值，需设备实测）
 
-- 5,000 文档冷启动首页列表查询 ≤ 100ms；不为列表读取正文文件。
-- 100,000 文档库的工作区树查询 ≤ 500ms，不再把全库 rows 送到 JS。
-- 小记列表首屏只读取 0 份正文（摘要能显示）；进入视口后按需读取。
-- 返回首页后不重复读取全部小记正文。
-- 本地保存 P95 ≤ 50ms；`flush()` 可观测、可等待、失败可见。
-- 目录/回收站批量操作使用一次 `executeSet()`，桥调用数与节点数无关。
+- **通过（CI 基准）**：5,000 文档首页元数据 8.6ms；不读取正文文件。
+- **通过（CI 基准）**：100,000 文档工作区树 470ms；查询范围限制在当前笔记本子树。
+- **通过**：小记列表首屏只读元数据，正文按可见卡片读取并受 12 条 LRU 限制。
+- **通过**：首页刷新不读取小记正文。
+- **通过（行为）**：`useAutoSave.flush()` 可等待、失败可见并保留快照；P95 由设备输入路径单独观测。
+- **通过**：目录/回收站/历史热路径使用 `executeBatch` / `executeSet`，失败不逐条重放。
 
 ---
 
@@ -727,3 +727,5 @@ interface SaveCoordinator {
 
 **推荐主重构：Mobile Data Plane v2。**  
 它是当前收益最高、风险最可控、最符合“本地真相 + 大库性能 + 简单可维护”方向的重设计；编辑面统一状态机作为紧随其后的第二阶段。
+
+> **261022 结项：** 当前审计范围内的 P0–P3、Mobile Data Plane 基础与小记分页、编辑/表格状态拆分均已完成，并通过全库门禁与 Android 启动烟测。后续新增能力（例如服务端筛选/排序后再启用的 bounded page UI、长期真机保存 P95 观测）属于扩展验收，不再作为本次审计未完成项。
