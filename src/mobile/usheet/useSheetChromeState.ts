@@ -68,8 +68,8 @@ export function useSheetChromeState(getUniverAPI: () => FUniver | null) {
       workbook.setActiveSheet(sheetId);
       refreshSheetChrome();
       refreshCellFormat();
-    } catch {
-      // 切换失败时保持当前表。
+    } catch (error) {
+      console.warn("[mobile-usheet] 切换工作表失败", error);
     }
   }, [getUniverAPI, refreshCellFormat, refreshSheetChrome]);
 
@@ -79,8 +79,8 @@ export function useSheetChromeState(getUniverAPI: () => FUniver | null) {
     try {
       void api.executeCommand("sheet.command.change-zoom-ratio", { delta });
       setZoomPercent((prev) => Math.min(400, Math.max(10, Math.round(prev + delta * 100))));
-    } catch {
-      // 缩放失败时保持当前比例。
+    } catch (error) {
+      console.warn("[mobile-usheet] 缩放失败", error);
     }
   }, [getUniverAPI]);
 

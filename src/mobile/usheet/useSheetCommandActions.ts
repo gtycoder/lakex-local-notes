@@ -34,8 +34,8 @@ export function useSheetCommandActions(opts: {
       if (!sheet || !range) return;
       fn(range, sheet, workbook);
       refreshCellFormat();
-    } catch {
-      // 当前选区/实例不可用时保持界面，不静默改写其它单元格。
+    } catch (error) {
+      console.warn("[mobile-usheet] 工具条动作失败", error);
     }
   }, [getUniverAPI, refreshCellFormat]);
 
@@ -131,8 +131,8 @@ export function useSheetCommandActions(opts: {
       if (kind === "undo") workbook.undo();
       else workbook.redo();
       refreshCellFormat();
-    } catch {
-      // 撤销栈不可用时保持当前内容。
+    } catch (error) {
+      console.warn("[mobile-usheet] 撤销/重做失败", error);
     }
   }, [getUniverAPI, refreshCellFormat]);
 
