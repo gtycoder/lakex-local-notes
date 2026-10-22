@@ -25,3 +25,8 @@ test-node-abi
 .env.*
 !.env.example
 prototype/
+
+# 公开镜像：闭源内核不入库（由私有开发仓导出；本地恢复见 README）
+vendor/lakex-doc-react/
+public/vendor/lakex/
+public/vendor/lakex-doc/
