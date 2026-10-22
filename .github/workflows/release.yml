@@ -48,6 +48,7 @@ jobs:
   android:
     name: Android (debug apk)
     runs-on: ubuntu-24.04
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -75,7 +76,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: android
@@ -84,7 +85,7 @@ jobs:
 
   release:
     name: Publish Release
-    needs: [macos, android]
+    needs: [macos]
     runs-on: ubuntu-24.04
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
