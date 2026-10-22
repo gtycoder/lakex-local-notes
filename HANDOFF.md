@@ -19,6 +19,14 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · 桌面目录树去掉上下边缘渐隐（用户点单）· **已提交 `2a298e48`（未推送）**
+
+- **用户口径（截图）**：目录栏顶部（F16 探针 44）与底部（移动表格）两处「模糊」去掉。实为 261017 B 的「滚动边缘渐隐」：`.note-list.tree-list` 是 7 档 alpha 遮罩（28px）的三个接入点之一，目录滚到中间时上下两侧被柔化。
+- **改法（根位置，最小）**：① `Sidebar.tsx` 摘掉 `useScrollFade(treeRef)` 与 import（目录树不再打 `data-fade-top/bottom`）；② `kit.css` 的 14b 选择器组只剩 `.ln-select__list` / `.quick-notes-index`（**下拉弹层、小记列表的渐隐保留**）；③ 注释与 `useScrollFade.test.ts` 反转断言（目录树不得再出现 hook/选择器）；④ `DESIGN.md`「Scroll Edges」记录「目录树不渐隐，别加回」。
+- **门禁**：tsc 0 · 全库 vitest **337 文件 / 2448 通过（16 skip）** · `ui-metrics` 0（跨文件重复 12 ≤ 基线 13）· `git diff --check` ✓。mask 不进快照 PROPS ⇒ 不涉及 stylesnap 基线（基线本身仍陈旧，见 §3#24）。
+- **dev 实测（用户正在运行的 1421/9222 实例，HMR 已生效）**：`getComputedStyle(nav.note-list.tree-list).maskImage === "none"`、`data-fade-*` 已无；目录滚到中段（scrollTop 2039 / scrollHeight 3138）时首末行**不再变淡**，截图 `.css-audit/rebuild-261022/sidebar-no-fade.png`。
+- **状态**：已提交 `2a298e48`（**仅本地 master，未推送**；等用户验收）；桌面 dmg/zip/app 已按本改动重新打包。
+
 ### 261021(六) · CSS 层收尾：A/B 核验 + C/D（依赖准入 / 三处漂移收口）· **已合并 master `98e9278e`（工作于 261022 凌晨）**
 
 - **承接**：上一会话留下分支 `feat/desktop-vendor-css-layer`（worktree `.../vendor-css-layer`）与两笔 A/B 提交 `a804df67` / `f4e981fa`；本会话先 `git merge master`（master `7f378130` → 合并提交 `0d0d8e5a`；唯一冲突 = HANDOFF，两边条目都保留），再在合并后基线上做 C/D。
