@@ -19,14 +19,18 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
-### 261022 · 分屏两栏之间加常驻分隔线（用户点单）· **已提交 `f34607d5`（未推送）**
+### 261022 · 分屏两栏之间加常驻分隔线（用户点单）· **已提交 `f34607d5` + `98f33dd5`（未推送）**
 
 - **用户口径**：分屏左右两篇文档背景一样、贴在一起「融合到一起」；要求中间有一条竖线做分隔。
-- **改法（分屏专属，最小）**：`src/features/editor/splitView.css` 给 `.tab-panels.is-split > .ln-split-handle` 加 `border-left: 1px solid var(--lake-border-1)` —— 手柄本来就是 `width:0`，加边框后只占 1px；不改 DOM、不加伪元素、不动 kit 原语（侧栏/大纲把手不画线）。悬浮/拖拽的 2px 主色药丸不变。
-- **护栏**：`splitPane.test.ts` 新增断言（分屏手柄必须有发丝线；kit 原语不得出现 border-left）；`cssLayers` 基线 `splitView.css` 9 → **10**（+1 即该声明）。
-- **门禁**：tsc 0 · 相关 10 例 + 全库通过 · ui-metrics 0 · `git diff --check` ✓。
-- **实测（隔离实例 CDP 9232 + dev 数据副本，用完已销毁）**：`.tab-panels.is-split` 生效，手柄实测 `x=752 / h=782 / border-left=1px rgb(230,232,236)`，正好压在两栏交界（左栏 224+528=752，右栏从 752 起）；截图 `.css-audit/rebuild-261022/split-divider.png`。
-- **状态**：已提交 `f34607d5`（仅本地 master，未推送）。
+- **最终改法（分屏专属，最小）**：`src/features/editor/splitView.css` 给 `.tab-panels.is-split > [data-pane="right"]` 加 `border-left: 1px solid var(--lake-border-1)`。**线画在右栏的盒子上，不画在分隔手柄上**。
+- **为什么不在手柄上（用户 261022 第二轮报「工具栏这一块缺了一块」，已实测定位）**：内核工具条 `.ne-ui` 是 `position:sticky` + `z-index: var(--lake-z-editor-sticky)=150` + 白底，正好在工具条那一行把 1px 手柄边框盖住 ⇒ 缺口高度 = 工具条高。画在栏的 border 上时，栏内所有子元素都排在 border 右侧 ⇒ 面包屑 / 工具条 / 表格 / 画板各类型都不断线（不必抬 z-index 去和内核叠层打架）。
+- **护栏**：`splitPane.test.ts` 断言分隔线在右栏规则里、且禁止画回手柄（kit 原语也不得出现 border-left）；`cssLayers` 基线 `splitView.css` 9 → **10**（+1 即该声明）。
+- **门禁**：tsc 0 · 全库 vitest **345 文件 / 2470 例** · ui-metrics 0 · `git diff --check` ✓。
+- **实测（隔离实例 CDP 9232/9233 + dev 数据副本，用完已销毁）**：
+  - 布局：右栏 `x=752 / w=528`、`border-left = 1px solid rgb(230,232,236)`，与左栏 224+528=752 完全对齐；
+  - 像素级：截图逐像素扫分隔线列，**工具条区 0 行缺口、整个栏高 0 行缺口**；
+  - 截图 `.css-audit/rebuild-261022/split-divider.png`（全窗）、`split-divider-continuous.png`（分隔线放大，贯穿面包屑/工具条）。
+- **状态**：已提交 `f34607d5`（首版手柄线）+ `98f33dd5`（改右栏 border，修工具条缺口）（仅本地 master，未推送）。
 
 ### 261022 · 思源残留清理第一批（桌面 §3#20 的第一刀）· **已提交 `0d90b845`（未推送）**
 
