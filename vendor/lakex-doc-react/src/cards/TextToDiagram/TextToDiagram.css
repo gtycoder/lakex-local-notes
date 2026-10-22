@@ -1,0 +1,259 @@
+/* ════════════════════════════════════════════════════════
+   TextToDiagram — Light Mode（默认）
+   ════════════════════════════════════════════════════════ */
+.text-to-diagram {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.text-to-diagram.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  border: none;
+  z-index: 9999;
+}
+
+/* ── 工具栏 ── */
+.text-to-diagram-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e8e8e8;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.text-to-diagram-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+}
+
+.text-to-diagram-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.text-to-diagram-toolbar select,
+.text-to-diagram-toolbar button {
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.text-to-diagram-toolbar select {
+  padding-right: 20px;
+}
+
+.text-to-diagram-toolbar button:hover {
+  background: #f0f0f0;
+}
+
+.text-to-diagram-toolbar button.active {
+  background: #e6f7ff;
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+/* ── 面板布局 ── */
+.text-to-diagram-panels {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.text-to-diagram-editor-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e8e8e8;
+}
+
+.text-to-diagram-editor-panel:last-child {
+  border-right: none;
+}
+
+.text-to-diagram-preview-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+}
+
+/* ── 代码编辑器 ── */
+.text-to-diagram-editor-wrapper {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.text-to-diagram-line-numbers {
+  width: 40px;
+  flex-shrink: 0;
+  background: #fafafa;
+  border-right: 1px solid #e8e8e8;
+  padding: 8px 6px;
+  text-align: right;
+  font-size: 12px;
+  line-height: 20px;
+  color: #999;
+  overflow: hidden;
+  user-select: none;
+}
+
+.text-to-diagram-code {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 8px 12px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  color: #333;
+  background: #fff;
+  white-space: pre;
+  overflow: auto;
+}
+
+/* ── SVG 预览 ── */
+.text-to-diagram-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+}
+
+.text-to-diagram-preview svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  background: #fff;
+}
+
+/* ── 状态提示 ── */
+.text-to-diagram-empty,
+.text-to-diagram-error,
+.text-to-diagram-loading {
+  padding: 24px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.text-to-diagram-empty {
+  color: #999;
+}
+
+.text-to-diagram-error {
+  color: #cf1322;
+}
+
+.text-to-diagram-loading {
+  color: #666;
+}
+
+/* ════════════════════════════════════════════════════════
+   TextToDiagram — Dark Mode
+   ════════════════════════════════════════════════════════ */
+.text-to-diagram.dark {
+  background: #1e1e1e;
+  border-color: #3c3c3c;
+}
+
+/* 工具栏 */
+.text-to-diagram.dark .text-to-diagram-toolbar {
+  background: #252526;
+  border-bottom-color: #3c3c3c;
+}
+
+.text-to-diagram.dark .text-to-diagram-title {
+  color: #e0e0e0;
+}
+
+.text-to-diagram.dark .text-to-diagram-toolbar select,
+.text-to-diagram.dark .text-to-diagram-toolbar button {
+  background: #333333;
+  border-color: #555555;
+  color: #e0e0e0;
+}
+
+.text-to-diagram.dark .text-to-diagram-toolbar button:hover {
+  background: #3c3c3c;
+}
+
+.text-to-diagram.dark .text-to-diagram-toolbar button.active {
+  background: #1a3a4a;
+  border-color: #0e639c;
+  color: #4ec9b0;
+}
+
+.text-to-diagram.dark .text-to-diagram-toolbar select option {
+  background: #333333;
+  color: #e0e0e0;
+}
+
+/* 编辑器面板 */
+.text-to-diagram.dark .text-to-diagram-editor-panel {
+  border-right-color: #3c3c3c;
+}
+
+.text-to-diagram.dark .text-to-diagram-line-numbers {
+  background: #252526;
+  border-right-color: #3c3c3c;
+  color: #858585;
+}
+
+.text-to-diagram.dark .text-to-diagram-code {
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+/* 预览面板 */
+.text-to-diagram.dark .text-to-diagram-preview-panel {
+  background: #1e1e1e;
+}
+
+.text-to-diagram.dark .text-to-diagram-preview svg {
+  background: transparent;
+}
+
+/* 状态提示 */
+.text-to-diagram.dark .text-to-diagram-empty {
+  color: #858585;
+}
+
+.text-to-diagram.dark .text-to-diagram-error {
+  color: #f48771;
+}
+
+.text-to-diagram.dark .text-to-diagram-loading {
+  color: #cccccc;
+}
+

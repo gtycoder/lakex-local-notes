@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 63.1 (92452) - https://sketch.com -->
+    <title>编组 7备份 7</title>
+    <desc>Created with Sketch.</desc>
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-1">
+            <stop stop-color="#00DEFF" offset="0%"></stop>
+            <stop stop-color="#00A2FA" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="关联语雀卡片" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="新建-第三方服务" transform="translate(-641.000000, -342.000000)">
+            <g id="编组-19" transform="translate(621.000000, 296.000000)">
+                <g id="编组" transform="translate(20.000000, 46.000000)">
+                    <g id="编组-7备份-7">
+                        <rect id="矩形" fill="#F5F5F5" x="0" y="0" width="24" height="24" rx="2.5"></rect>
+                        <g id="编组-6" transform="translate(4.000000, 4.000000)">
+                            <path d="M8,16 C12.418278,16 16,12.418278 16,8 C16,3.581722 12.418278,0 8,0 C3.581722,0 0,3.581722 0,8 C0,12.418278 3.581722,16 8,16 Z M8,13.5652174 C4.92641531,13.5652174 2.43478261,11.0735847 2.43478261,8 C2.43478261,4.92641531 4.92641531,2.43478261 8,2.43478261 C11.0735847,2.43478261 13.5652174,4.92641531 13.5652174,8 C13.5652174,11.0735847 11.0735847,13.5652174 8,13.5652174 Z" id="椭圆形" fill="url(#linearGradient-1)" fill-rule="nonzero"></path>
+                            <g id="编组-2" transform="translate(5.217391, 3.478261)">
+                                <rect id="矩形" fill="#FF5180" transform="translate(3.205861, 6.010426) rotate(45.000000) translate(-3.205861, -6.010426) " x="2.02794353" y="2.81322181" width="2.35583485" height="6.39440888" rx="1.17791743"></rect>
+                                <rect id="矩形" fill="#FF5180" transform="translate(3.197204, 3.197204) scale(1, -1) rotate(45.000000) translate(-3.197204, -3.197204) " x="2.01928702" y="0" width="2.35583485" height="6.39440888" rx="1.17791743"></rect>
+                                <path d="M5.2390373,3.57176868 L5.45796938,3.79214258 C5.74675624,4.08092944 5.85424554,4.48236015 5.78043729,4.8550013 C5.73108114,5.06071156 5.62670776,5.25540624 5.4666259,5.41548811 L5.28080544,5.60383527 C4.82289903,5.91133633 4.19688757,5.86271437 3.79214258,5.45796938 L3.79214258,5.45796938 L2.9423168,4.60765729 L3.8007991,3.74966131 C4.19087691,3.3595835 4.78647523,3.30028596 5.2390373,3.57176868 Z" id="形状结合" fill="#E02B4D"></path>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

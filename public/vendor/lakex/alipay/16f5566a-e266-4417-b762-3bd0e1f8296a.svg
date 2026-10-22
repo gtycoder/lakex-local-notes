@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="12px" height="10px" viewBox="0 0 12 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 62 (91390) - https://sketch.com -->
+    <title>路径</title>
+    <desc>Created with Sketch.</desc>
+    <g id="页面-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="基础日程创建、查看、修改、内容展示" transform="translate(-1203.000000, -649.000000)" fill="#595959" fill-rule="nonzero">
+            <g id="5.DataDisplay/7.Popover/2.Box/Right" transform="translate(1182.000000, 627.000000)">
+                <g id="check" transform="translate(20.000000, 20.000000)">
+                    <path d="M12.46875,2.59765625 L11.5130859,2.59765625 C11.3791016,2.59765625 11.2519531,2.65917969 11.1699219,2.76445312 L5.53300781,9.90527344 L2.83007812,6.48046875 C2.74667969,6.37519531 2.62089844,6.31367188 2.48691406,6.31367188 L1.53125,6.31367188 C1.43964844,6.31367188 1.3890625,6.41894531 1.44511719,6.49003906 L5.18984375,11.2341797 C5.36484375,11.4556641 5.70117188,11.4556641 5.87753906,11.2341797 L12.5548828,2.77265625 C12.6109375,2.70292969 12.5603516,2.59765625 12.46875,2.59765625 Z" id="路径"></path>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

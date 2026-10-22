@@ -1,0 +1,35 @@
+diff --git a/node_modules/@xiangfa/mindmap/dist/esm/MindMap2.js b/node_modules/@xiangfa/mindmap/dist/esm/MindMap2.js
+index 41d8caa..ffd92d3 100644
+--- a/node_modules/@xiangfa/mindmap/dist/esm/MindMap2.js
++++ b/node_modules/@xiangfa/mindmap/dist/esm/MindMap2.js
+@@ -22,7 +22,7 @@ function we(e, t) {
+ 	let n = URL.createObjectURL(e), r = document.createElement("a");
+ 	r.href = n, r.download = t, document.body.appendChild(r), r.click(), document.body.removeChild(r), URL.revokeObjectURL(n);
+ }
+-var Te = d(function({ data: d, markdown: f, defaultDirection: Te = "both", theme: Ee = "auto", locale: De, messages: Oe, readonly: v = !1, toolbar: y = !0, ai: ke, selectedNodeId: Ae, onSelectedNodeChange: je, searchQuery: Me, activeTags: Ne, onSearchChange: Pe, onActiveTagsChange: Fe, onDataChange: Ie, onEvent: Le, plugins: Re, textEditor: ze }, Be) {
++var Te = d(function({ data: d, markdown: f, defaultDirection: Te = "both", theme: Ee = "auto", locale: De, messages: Oe, readonly: v = !1, toolbar: y = !0, ai: ke, selectedNodeId: Ae, onSelectedNodeChange: je, searchQuery: Me, activeTags: Ne, onSearchChange: Pe, onActiveTagsChange: Fe, onDataChange: Ie, onEvent: Le, plugins: Re, textEditor: ze, disableAutoFit: __disableAutoFit = !1 }, Be) {
+ 	let Ve = h(null), He = h(null), b = Re && Re.length > 0 ? Re : void 0, [Ue] = g(() => r(d, f, b)), [x, We] = g(() => d ? u(d) : Ue ? Ue.roots : [{
+ 		id: "md-0",
+ 		text: "Root"
+@@ -178,7 +178,7 @@ var Te = d(function({ data: d, markdown: f, defaultDirection: Te = "both", theme
+ 		}
+ 	}), [an, on] = g(!1);
+ 	m(() => {
+-		if (Wt || X) return;
++		if (Wt || X || (__disableAutoFit && an)) return;
+ 		let e = Nt();
+ 		e ? an ? (jt(e.zoom), kt({
+ 			x: e.panX,
+diff --git a/node_modules/@xiangfa/mindmap/dist/types.d.ts b/node_modules/@xiangfa/mindmap/dist/types.d.ts
+index 430640d..f8dcd75 100644
+--- a/node_modules/@xiangfa/mindmap/dist/types.d.ts
++++ b/node_modules/@xiangfa/mindmap/dist/types.d.ts
+@@ -156,6 +156,8 @@ export interface MindMapProps {
+     markdown?: string;
+     defaultDirection?: LayoutDirection;
+     theme?: ThemeMode;
++    /** 设为 true 时：仅在首次挂载时自动适配整图，之后节点增删/编辑提交导致数据变化不再自动重适配（避免双击编辑时视图被缩放跳动）。默认 false（保持库原行为）。 */
++    disableAutoFit?: boolean;
+     locale?: string;
+     messages?: Partial<import('./utils/i18n').MindMapMessages>;
+     readonly?: boolean;

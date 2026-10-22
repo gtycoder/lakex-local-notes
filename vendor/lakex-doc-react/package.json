@@ -1,0 +1,90 @@
+{
+  "name": "@dlient/lakex-doc-react",
+  "version": "0.1.3",
+  "description": "React wrapper for the **lakex (YuQue) document editor**, packaged as a standalone,publishable npm component.",
+  "keywords": [
+    "lakex",
+    "yuque",
+    "editor",
+    "react",
+    "rich-text",
+    "mindmap",
+    "card"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs.js",
+  "module": "./dist/index.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.cjs.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "patches",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json && node scripts/postbuild.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "examples": "vite --config examples/vite.config.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "lakex-drawnix": "^0.1.0",
+    "lakex-drawnix-react-board": "^0.1.0",
+    "lakex-drawnix-react-text": "^0.1.0",
+    "@plait/common": "^0.93.1",
+    "@plait/core": "^0.93.1",
+    "@plait/draw": "^0.93.1",
+    "@plait/mind": "^0.93.1",
+    "@plait/text-plugins": "^0.93.1",
+    "@plantuml/core": "^1.2026.6",
+    "@viz-js/viz": "^3.28.0",
+    "@xiangfa/mindmap": "0.7.1",
+    "classnames": "^2.5.1",
+    "flowchart.ts": "^3.0.1",
+    "mermaid": "^11.16.0",
+    "patch-package": "^8.0.0",
+    "roughjs": "^4.6.6",
+    "slate": "^0.116.0",
+    "slate-dom": "^0.116.0",
+    "slate-history": "^0.115.0",
+    "slate-react": "^0.116.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^6.0.3",
+    "prettier": "^3.9.6",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  },
+  "resolutions": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "overrides": {
+    "@xiangfa/mindmap": {
+      "react": "18.3.1",
+      "react-dom": "18.3.1"
+    },
+    "@speajus/mermaid-to-svg": {
+      "react": "18.3.1",
+      "react-dom": "18.3.1"
+    }
+  }
+}

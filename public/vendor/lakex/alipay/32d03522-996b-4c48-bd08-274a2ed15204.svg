@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>小记-checkbox</title>
+    <defs>
+        <rect id="path-1" x="0" y="7.10542736e-14" width="20" height="20"></rect>
+    </defs>
+    <g id="小记-checkbox" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <mask id="mask-2" fill="white">
+            <use xlink:href="#path-1"></use>
+        </mask>
+        <g id="蒙版"></g>
+        <rect id="矩形" stroke="#595959" stroke-width="1.5625" fill-opacity="0.1" fill="#E6F7FF" mask="url(#mask-2)" x="2.96875" y="2.96875" width="14.0625" height="14.0625" rx="2.5"></rect>
+        <polyline id="路径-4" stroke="#595959" stroke-width="1.5625" stroke-linecap="round" stroke-linejoin="round" mask="url(#mask-2)" points="6.640625 9.9265122 8.93026571 12.1875 13.359375 7.8125"></polyline>
+    </g>
+</svg>

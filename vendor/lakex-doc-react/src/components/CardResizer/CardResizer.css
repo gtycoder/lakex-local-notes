@@ -1,0 +1,42 @@
+/* src/editor/components/CardResizer/CardResizer.css
+ * 复刻 Lakex 框架 lakex-doc.css 中 .ne-card-resizer / .ne-card-resizer-trigger 的样式。
+ */
+
+.ne-card-resizer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 12px;
+  z-index: 10;
+  cursor: row-resize;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ne-card-resizer-trigger {
+  width: 56px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--lakex-editor-border-secondary, #d9d9d9);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* 根节点：用 border-box，让选中态的 1px 边框内缩，不撑高整体布局 */
+.ne-card-resizer-root {
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* 选中态：显示卡片边框 */
+.ne-card-resizer-root.selected {
+  border: 1px solid var(--lakex-editor-card-border-selected, #4c8dff);
+}
+
+/* 选中态或鼠标进入底部命中区时，常显/临时显示拖动条横条 */
+.ne-card-resizer-root.selected .ne-card-resizer-trigger,
+.ne-card-resizer:hover .ne-card-resizer-trigger {
+  opacity: 1;
+}
