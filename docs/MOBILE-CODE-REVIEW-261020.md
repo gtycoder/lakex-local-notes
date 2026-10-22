@@ -4,10 +4,12 @@
 > 方式：只读静态审查。未运行测试、构建或设备验收，因此文中性能结论是代码级推断，不是设备实测。
 > 结论：当前功能面已经相当完整，主要问题不是“功能没写”，而是**数据读取模型、保存生命周期、编辑面状态机**三处逐渐累积了互相补偿的防线。继续逐个补 guard 会越来越安全表象化；应删除重复防线，并重做一个核心板块。
 
-> **261022 实施状态（代码已落，待用户验收；尚未提交）**
-> - 已完成：P0-1 可等待保存/单飞队列/硬件返回与进后台保存屏障；P0-2 GC 全段维护锁 + 云状态门控；P1-1 子树递归 CTE；P1-2 小记轻量投影 + 可见正文 12 条 LRU + 变量高度虚拟列表；P1-3 最小索引 + 回收站/目录/历史/小记元数据的 executeSet 批量写；P1-4 标签页显式打开参数 + 占位懒读正文；P1-5 编辑面单一 owner + 每实例 IME 重入 + transitionend/watchdog 退场；P1-6 结构化命令结果 + 用户触发失败可见；P1-7 原生流式 PUT fail-fast；P1-8 canonical path 围栏；P1-9 小记写入核心统一并统一清墓碑；P1-10 分享流式限长 + 可见错误；P1-11 多维表记录 draft + 投影 memo；P2-1 数字设置 draft+commit；P2-2 属性统计按 kind 派生；P2-3 旧 Secret/SQLite/正文目录迁移代码已删除；P2-4 资产覆盖回滚读取真实磁盘前态。
-> - 验证：移动端 vitest 94 文件 / 432 例与 quickNotes 60 例通过；Android JVM 21 例；TypeScript、双端构建、ui-metrics、check:core、check:mobileui、check:bundle 均通过；APK 安装/启动烟测通过，设备 DB 已升到 schema v3，小记列表元数据回填标记与 4 条真实小记均核验；工作区恢复只挂活动页，切到第二篇后才新增第二个 pane；字体面板关闭时先保持 keyboard hold，随后 watchdog 释放占位并从 `--mb-app-h:562px` 恢复为 `842px`；临时 32 条小记时只挂载 11 张卡片，清理后恢复 4 条。
-> - 未完成：P2-5/P2-6/P3 其余项。
+> **261022 实施状态（持续更新）**
+> - **P0 / P1 / P2-1～P2-4：已完成**。包括可等待保存、GC 维护锁、子树 CTE、小记轻量投影/虚拟列表、最小索引与批量写、标签页懒读、编辑面单一 owner、结构化命令结果、原生流式 fail-fast、路径围栏、分享限长、多维表 draft 等。
+> - **P2-5：已完成**。编辑面关闭/焦点/隐藏实例改为 jsdom 行为测试；GC / syncNow / priority 改为真实操作时间线验证；契约面从实际 `bridge` 与 `nativeSqlite` 导出派生。
+> - **P2-6：进行中（已完成 4 个局部切片）**。已抽 `TabSession`、小记详情缓存、S3 设置表单、编辑命令分发；`SaveCoordinator`、`TreeView`、其余 `SettingsForm`、`EditSession` 与 `MobileUsheetViewer` 尚未拆完。
+> - **P3 / Mobile Data Plane v2：进行中（基础能力部分完成）**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读已落；正式 `HomeSnapshot` / `QuickNotePage` / query API、显式 Unit of Work、SaveCoordinator 抽象、旧全量读接口删除和设备性能目标仍未完成。
+> - **验证基线**：截至本轮，移动端 vitest 99 文件 / 441 例、quickNotes 60 例、全库 351 文件 / 2474 例（16 skip）、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过。P2-6 当前切片仍需用户验收与 Android 设备复验。
 
 ---
 
@@ -423,6 +425,8 @@
 
 ### P2-5 护栏测试过度绑定实现形状，且会制造假安全感
 
+> **261022 状态：已完成。** 已新增 `useEditSurface.test.ts`，把关闭占位、transitionend/watchdog、外壳高度恢复和隐藏实例隔离改为行为测试；`syncGc.test.ts` 用真实操作时间线验证 GC / syncNow / priority；静态扫描仅保留为登记与调用点报告。
+
 **证据**
 
 - `src/mobile/editor/dockPanelFocusGuard.test.ts:139-155` 直接断言源码里存在 `1800ms`、`closingHold`、特定 CSS 字符串。
@@ -443,6 +447,8 @@
 ---
 
 ### P2-6 巨型组件已经阻碍局部推理
+
+> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、S3 设置表单（`useS3SettingsForm`）和编辑命令分发（`useEditorCommandDispatcher`）四个局部切片。剩余重点是 `SaveCoordinator`、`TreeView`、`SettingsDrawer` 其余资源/历史/诊断状态、`EditSession` 与 `MobileUsheetViewer`。
 
 规模（不含测试）：
 
@@ -485,6 +491,8 @@
 ---
 
 ## 5. 推荐重设计板块：Mobile Data Plane v2
+
+> **261022 状态：进行中，尚不能标记完成。** 已具备最小索引、子树递归 CTE、小记轻量投影/虚拟列表和标签页正文懒读；但正式移动端读模型、分页 query API、显式 Unit of Work、统一 SaveCoordinator 与旧全量接口清理仍未落地。以下目标继续作为后续架构验收口径。
 
 ### 5.1 第一性原理
 
@@ -653,12 +661,12 @@ interface SaveCoordinator {
 
 ### 5.7 迁移步骤
 
-1. **只加索引和 query API**，复现当前行为，不切 UI。
-2. 首页改 `HomeSnapshot`；小记改 `QuickNotePage` + 视口懒正文。
-3. 工作区改递归 CTE；标签页改 metadata-only，正文激活时读。
-4. 引入 SaveCoordinator，替换 `useAutoSave` 的 void flush。
-5. 删除旧 `listQuickNotes` 全量 body、`listNotebookTree` 全表扫描、旧 bridge 只读方法。
-6. 页面稳定后再统一 EditSession，删除表格重复状态机和三套定时器。
+1. **部分完成**：索引已加；正式 query API 尚未抽出，当前 UI 仍直接调 bridge 查询。
+2. **部分完成**：小记轻量投影、虚拟列表与可见正文 LRU 已完成；`HomeSnapshot` / `QuickNotePage` 与 keyset 分页仍未完成。
+3. **基本完成**：工作区子树已走递归 CTE；标签页已 metadata-only，正文按活动页懒读。
+4. **行为部分完成**：`useAutoSave.flush()` 已可等待且调用方会 await；显式 SaveCoordinator 抽象尚未建立。
+5. **未完成**：旧 `listNotes` / `listQuickNotes` / `listNotebookTree` 仍存在并被生产路径使用，尚未切到正式读模型后删除。
+6. **未完成**：尚未形成统一 `MobileEditSession` + `EditorAdapter`，表格编辑面仍独立演进。
 
 ### 5.8 验收目标（建议值，需设备实测）
 
