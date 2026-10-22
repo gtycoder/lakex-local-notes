@@ -19,14 +19,13 @@ import { mobileCachePort } from "../native/cachePort";
 import { mobileAppInfoPort } from "../native/appInfoPort";
 import { TrashList } from "./TrashList";
 import { showToast } from "../ui/toastBus";
-import { pickLocalFile } from "../ui/pickFile";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
 import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
-import { decodeS3ConfigTransferFile, encodeS3ConfigTransfer } from "../../core/s3ConfigTransfer";
-import type { S3Settings, SyncSettings, SyncWarning } from "../../lib/types";
+import type { SyncSettings, SyncWarning } from "../../lib/types";
+import { useS3SettingsForm } from "./useS3SettingsForm";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -54,9 +53,6 @@ const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] 
 
 const MENU_LABEL = (key: Exclude<View, "menu">) => MENU.find((m) => m.key === key)?.label ?? "";
 
-/** 对齐桌面 registerSync 的 S3_SECRET_MASK：get 不回显明文，保存时掩码则保留旧值。 */
-const S3_SECRET_MASK = "********";
-
 export function SettingsDrawer(props: SettingsDrawerProps) {
   const { open, onClose, onRefresh, onOpenNote } = props;
   const [view, setView] = useState<View>("menu");
@@ -66,7 +62,20 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [pinMsg, setPinMsg] = useState("");
   useEffect(() => { void probePinShortcut().then(setPinState); }, []);  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
   const [listKey, setListKey] = useState(0);
-  const [s3, setS3] = useState<S3Settings | null>(null);
+  const {
+    settings: s3,
+    form: s3Form,
+    updateForm: updateS3Form,
+    testText: s3Test,
+    exportState: s3Export,
+    transferRef,
+    save: saveS3,
+    testConnection: testS3,
+    openExport: openS3Export,
+    copyExport: copyS3Transfer,
+    importFromFile: importS3ConfigFromFile,
+    closeExport: closeS3Export,
+  } = useS3SettingsForm(open);
   /** 云同步开关（与桌面同语义：关闭 = 纯离线本地空间，任何路径都不出网） */
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const cloudState = cloudStateOf(Boolean(s3), syncCfg);
@@ -75,7 +84,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     : cloudState === "unconfigured"
       ? "未配置云同步：按纯本地空间处理，不能清理云端。"
       : "云同步已关闭：按纯本地空间处理，不能清理云端。";
-  const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
   /**
    * 上次同步（设备本地、常驻）——用户 261013 定稿「同步可观测性」：
@@ -127,111 +135,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     void mobileCachePort.getCacheSummary().then(setCacheSummary).catch((error) => reportNativeActionError("读取缓存统计", error));
   }, [open, view]);
 
-  // S3 表单：复用共享 S3Settings（prefix 参与透传）
-  const [endpoint, setEndpoint] = useState(s3?.endpoint ?? "https://s3.cn-north-1.qiniucs.com");
-  const [region, setRegion] = useState(s3?.region ?? "cn-north-1");
-  const [bucket, setBucket] = useState(s3?.bucket ?? "");
-  const [prefix, setPrefix] = useState(s3?.prefix ?? "lake-notes");
-  const [ak, setAk] = useState(s3?.accessKeyId ?? "");
-  // Secret 不显示明文（§6.2）：初始与回显都用掩码；未修改时保存保留旧值
-  const [sk, setSk] = useState(S3_SECRET_MASK);
-  /** S3 配置迁移：主路径从文件导入；「导出迁移码」保留为备用（桌面可粘贴导入）。 */
-  const [s3Export, setS3Export] = useState<{ code: string; msg: string } | null>(null);
-  const transferRef = useRef<HTMLTextAreaElement | null>(null);
-
   useEffect(() => {
     if (!open) return;
     setSyncCfg(bridge.getSyncSettings());
-    void bridge.getS3Settings().then((cfg) => {
-      setS3(cfg);
-      if (cfg) {
-        setEndpoint(cfg.endpoint); setRegion(cfg.region); setBucket(cfg.bucket);
-        setPrefix(cfg.prefix); setAk(cfg.accessKeyId); setSk(S3_SECRET_MASK);
-      }
-    }).catch((error) => reportNativeActionError("读取 S3 设置", error));
   }, [open]);
-
-  const saveS3 = useCallback(async (): Promise<boolean> => {
-    const prev = await bridge.getS3Settings().catch((error) => { reportNativeActionError("保存前读取 S3 设置", error); return null; });
-    const secret = sk === S3_SECRET_MASK ? (prev?.secretAccessKey ?? "") : sk;
-    // D2 261017 定稿：移动端只支持虚拟托管（阿里云/腾讯云/AWS/七牛）；自建 MinIO 的 path-style 不在支持范围。
-    const cfg: S3Settings = { endpoint, region, bucket, prefix, accessKeyId: ak, secretAccessKey: secret, forcePathStyle: false };
-    try {
-      // D3/D7：桥内会做 normalizeEndpoint + validateS3Settings + region 缺省；失败在这里给可见原因。
-      await bridge.saveS3Settings(cfg);
-      const saved = await bridge.getS3Settings();
-      if (saved) { setS3(saved); setEndpoint(saved.endpoint); setRegion(saved.region); }
-      setS3Test("已保存");
-      return true;
-    } catch (error) {
-      setS3Test("保存失败: " + (error as Error).message);
-      return false;
-    }
-  }, [endpoint, region, bucket, prefix, ak, sk]);
-
-  const testS3 = useCallback(async () => {
-    if (!(await saveS3())) return;
-    setS3Test("测试中…");
-    try {
-      setS3Test(await bridge.testS3Connection());
-    } catch (error) {
-      setS3Test("测试失败: " + (error as Error).message);
-    }
-  }, [saveS3]);
-
-  /** 导出迁移码：在 App 内取已保存配置（Secret 从 Keystore 读出）→ 共享编码器封装。 */
-  const openS3Export = useCallback(async () => {
-    setS3Test("");
-    try {
-      const cfg = await bridge.getS3Settings();
-      if (!cfg || !cfg.secretAccessKey.trim()) { setS3Test("本机还没有可导出的 S3 配置（Secret Key 为空）"); return; }
-      const code = await encodeS3ConfigTransfer(cfg);
-      let msg = "迁移码已生成：点「复制迁移码」后发送到另一台设备。";
-      try {
-        await navigator.clipboard.writeText(code);
-        msg = "已复制到剪贴板（含密钥，请只发给自己）。";
-      } catch { /* 剪贴板不可用：面板里可长按全选复制 */ }
-      setS3Export({ code, msg });
-    } catch (error) {
-      setS3Test("导出失败: " + getNativeErrorMessage(error));
-    }
-  }, []);
-
-  const copyS3Transfer = useCallback(async () => {
-    if (!s3Export) return;
-    try {
-      await navigator.clipboard.writeText(s3Export.code);
-      setS3Export({ ...s3Export, msg: "迁移码已复制到剪贴板" });
-    } catch {
-      transferRef.current?.focus();
-      transferRef.current?.select();
-      setS3Export({ ...s3Export, msg: "无法写入剪贴板：已全选，请长按复制" });
-    }
-  }, [s3Export]);
-
-  /** 从文件导入：读 .json（或迁移码 .txt）→ core 解码 → 强制虚拟托管（D2）→ 走与手填保存同一条桥路径。 */
-  const importS3ConfigFromFile = useCallback(async () => {
-    setS3Test("");
-    try {
-      const file = await pickLocalFile(".json,.txt,application/json,text/plain");
-      if (!file) return;
-      if (file.size > 64 * 1024) { setS3Test("导入失败: 文件过大，不像是 S3 配置文件"); return; }
-      const text = await file.text();
-      const imported = await decodeS3ConfigTransferFile(text);
-      const pathStyleNote = imported.forcePathStyle ? "（该配置为 Path-style，移动端只支持虚拟托管，已按虚拟托管保存）" : "";
-      await bridge.saveS3Settings({ ...imported, forcePathStyle: false });
-      const saved = await bridge.getS3Settings();
-      if (saved) {
-        setS3(saved);
-        setEndpoint(saved.endpoint); setRegion(saved.region); setBucket(saved.bucket);
-        setPrefix(saved.prefix); setAk(saved.accessKeyId); setSk(S3_SECRET_MASK);
-      }
-      setS3Test("S3 配置已从文件导入，请点「测试连接」确认" + pathStyleNote);
-      showToast("S3 配置已导入");
-    } catch (error) {
-      setS3Test("导入失败: " + getNativeErrorMessage(error));
-    }
-  }, []);
 
   // 「上次同步」那一行跟随 store 刷新（bridge.syncNow 是唯一写入点）
   useEffect(() => subscribeSyncStatus(() => setLastSync(readSyncStatus())), []);
@@ -401,27 +308,27 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Endpoint</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.endpoint} onChange={(e) => updateS3Form({ endpoint: e.target.value })} /></div>
                   </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Region</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={region} onChange={(e) => setRegion(e.target.value)} /></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.region} onChange={(e) => updateS3Form({ region: e.target.value })} /></div>
                   </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Bucket</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={bucket} onChange={(e) => setBucket(e.target.value)} /></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.bucket} onChange={(e) => updateS3Form({ bucket: e.target.value })} /></div>
                   </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Object prefix</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={prefix} onChange={(e) => setPrefix(e.target.value)} /></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.prefix} onChange={(e) => updateS3Form({ prefix: e.target.value })} /></div>
                   </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Access Key</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={ak} onChange={(e) => setAk(e.target.value)} /></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.accessKeyId} onChange={(e) => updateS3Form({ accessKeyId: e.target.value })} /></div>
                   </div>
                   <div className="mb-set-item">
                     <div className="mb-set-item__main"><div className="mb-set-name">Secret Key</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" type="password" value={sk} onChange={(e) => setSk(e.target.value)} /></div>
+                    <div className="mb-set-item__ctl"><input className="mb-input" type="password" value={s3Form.secretAccessKey} onChange={(e) => updateS3Form({ secretAccessKey: e.target.value })} /></div>
                   </div>
                   <Block itemId="s3-transfer" name="配置迁移" desc="桌面端「设置 → 云端与同步 → S3 对象存储 → 配置迁移 → 导出到文件…」生成 .json 文件，发送到手机后在这里选择该文件导入，省去逐项手填。文件含 S3 密钥（已加密封装），请只在自己的设备间传递。">
                     <div className="mb-set-block__actions">
@@ -447,7 +354,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     <div className="mb-set-block">
                       <div className="mb-set-block__actions">
                         <button className="mb-btn mb-btn--primary" onClick={() => void copyS3Transfer()}>复制迁移码</button>
-                        <button className="mb-btn mb-btn--ghost" onClick={() => setS3Export(null)}>关闭</button>
+                        <button className="mb-btn mb-btn--ghost" onClick={closeS3Export}>关闭</button>
                       </div>
                     </div>
                   </div>
