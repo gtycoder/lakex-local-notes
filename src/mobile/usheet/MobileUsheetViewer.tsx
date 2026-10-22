@@ -47,7 +47,6 @@ import {
   buildMoreRows,
   buildNumfmtMenu,
   numfmtLabelOf,
-  type SheetCardId,
 } from "./usheetChromeModel";
 import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
@@ -62,6 +61,7 @@ import { decimalStepMessage, stepNumberFormatDecimals } from "./usheetDecimals";
 import { USHEET_BORDER_IDS, applyUsheetBorder } from "./usheetBorders";
 import { readFilterAvailability } from "./usheetReadFilter";
 import { blockFailureMessage, planSortRange, resolveSheetBlock, type SortFilterSheet } from "./usheetSortPlan";
+import { useSheetCardState } from "./useSheetCardState";
 
 /**
  * 移动端公式栏的点击落点（261021）：Univer 的移动公式栏把输入面做成 canvas + 隐藏 contenteditable，
@@ -148,8 +148,15 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
 
   /** 顶部工具条弹出的原生面板：插入 / 文字格式 / 更多。 */
   /** 当前打开的锚定卡片（null = 无）；anchor = 触发按钮（卡片锚在它下方）。 */
-  const [openCard, setOpenCard] = useState<SheetCardId | null>(null);
-  const [cardAnchor, setCardAnchor] = useState<HTMLElement | null>(null);
+  const {
+    openCard,
+    cardAnchor,
+    sheetListAnchor,
+    closeCard,
+    toggleCard,
+    openSheetList,
+    closeSheetList,
+  } = useSheetCardState({ active, editing });
   /** 当前选区文字状态（只用于工具条按钮高亮，选区变化时刷新）。 */
   const [cellFmt, setCellFmt] = useState<{ bold: boolean; italic: boolean; underline: boolean; strike: boolean; align: "left" | "center" | "normal" | "general"; numfmt: string }>({
     bold: false, italic: false, underline: false, strike: false, align: "general", numfmt: "",
@@ -158,7 +165,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const [sheets, setSheets] = useState<MobileSheetTab[]>([]);
   const [activeSheetId, setActiveSheetId] = useState("");
   const [zoomPercent, setZoomPercent] = useState(100);
-  const [sheetListAnchor, setSheetListAnchor] = useState<HTMLElement | null>(null);
   /** 格式刷激活态（0=off / 1=一次性 / 2=连续）；只用于按钮高亮，真实状态由内核 SetFormatPainterOperation 回填。 */
   const [painterStatus, setPainterStatus] = useState(0);
   /** 读态本机筛选（261021 定稿：只对本机生效、绝不写正文）——激活态 + 还原钩子。 */
@@ -546,13 +552,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }
   }, [editing, capture, restoreReadFilter]);
 
-  // 切走 tab / 退出编辑：弹出层不能留在别的页面上。
-  useEffect(() => {
-    if (editing && active) return;
-    setOpenCard(null);
-    setCardAnchor(null);
-  }, [editing, active]);
-
   // 切走 tab 时落一次；不要求关掉编辑态（编辑态可随 tab 保留）。
   useEffect(() => {
     if (!active) capture();
@@ -605,12 +604,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     numfmt: cellFmt.numfmt,
   });
 
-  const closeCard = () => { setOpenCard(null); setCardAnchor(null); };
-  const toggleCard = (card: SheetCardId, el: HTMLElement) => {
-    if (openCard === card) { closeCard(); return; }
-    setOpenCard(card);
-    setCardAnchor(el);
-  };
   const handleCardSelect = (id: string) => {
     closeCard();
     onMenuSelect(id);
@@ -790,7 +783,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           zoom={zoomPercent}
           onSelect={selectSheet}
           onZoom={zoomBy}
-          onOpenList={(anchor) => setSheetListAnchor(anchor)}
+          onOpenList={openSheetList}
         />
       )}
       {ready && sheetListAnchor && (
@@ -801,8 +794,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           width={172}
           ariaLabel="工作表列表"
           items={sheets.map((sheet) => ({ id: sheet.id, label: sheet.name, note: sheet.id === activeSheetId ? "当前" : undefined }))}
-          onSelect={(id) => { setSheetListAnchor(null); selectSheet(id); }}
-          onClose={() => setSheetListAnchor(null)}
+          onSelect={(id) => { closeSheetList(); selectSheet(id); }}
+          onClose={closeSheetList}
         />
       )}
       {editing && openCard === "more" && (
