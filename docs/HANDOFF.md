@@ -12,6 +12,15 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261022 · 双仓落地：私有开发仓（vendored）+ 公开镜像（导出）· **已提交**（hash 以 `git log` 为准）
+
+- **用户定稿**：Gitee 两个仓 —— `local-lakex-notes-private`（private，唯一真源，内核 vendored 入库）→ 导出 → `local-lakex-notes`（public，不含内核）；后续再加 GitHub 公开远程（同一镜像）。无私有 npm registry，故**公开仓继续用 `setup:lakex` 私有归档恢复**（变体 1），不做 npm 依赖。
+- **导出机制**：`scripts/export-public.mjs`（`npm run export:public [-- --push]`）复制私有仓全部跟踪文件，排除 `vendor/lakex-doc-react/`、`public/vendor/lakex*/`、`docs/PRIVATE-REPO.md`、本脚本自身；公开仓 `.gitignore` 自动追加内核忽略块、`package.json` 去掉 `export:public`；自检公开仓无内核路径；提交信息 `chore(public): sync from private@<hash>`。
+- **私有仓**：`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/` 已 `git add` 入库（私有历史）；公开仓保持零内核。
+- **约定**：公开仓只读镜像，改动回流私有仓；内核永不推公开 remote；私有仓继续保留仓库外 `../private/lakex-private-*.tar.gz` 备份。
+- **命令**：`npm run export:public -- --push`（公开仓 clone 在 `../lake-notes-electron-public`，可用 `LAKE_PUBLIC_REPO` 覆盖）。
+- **门禁**：导出后公开仓 `git ls-files` 无内核路径；私有仓 tsc 0 · vitest 全量 · `git diff --check`。
+
 ### 261022 · 闭源内核移出公开仓库（为 public 仓库准备）· **已提交**（hash 以 `git log` 为准）
 
 - **用户定稿**：仓库要 public，但闭源 lakex 内核不公开；**本地留一份私有备份**（"万一语雀要求下架/追责，确保自己还能用"）。README / NOTICE / AGENTS 已按此改口径。

@@ -2,7 +2,7 @@
 
 **本地优先的语雀 Lakex 编辑器笔记应用（非官方）**：桌面 macOS + Android，本地是唯一真相，S3 只做多端镜像。
 
-> 使用语雀的 Lakex 编辑器内核（本地私有引入、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场；该闭源内核**不随本仓库分发**（源码与 git 历史均已移除）。
+> 使用语雀的 Lakex 编辑器内核（本地私有引入、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场；该闭源内核**不随公开仓库分发**（公开镜像的源码与 git 历史均不含内核）。
 
 ## 项目简介
 
@@ -96,7 +96,7 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 - macOS 打包建议 Xcode Command Line Tools
 - 语雀闭源 Lakex 内核的**私有归档**（首次安装/构建前恢复；见下节）
 
-> ⚠️ 本仓库**不含**闭源内核：`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/` 都已从源码树和 git 历史移除。拿不到私有归档时，`npm install` 会在 `preinstall` 明确报错。
+> ⚠️ **公开镜像**不含闭源内核：`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/` 都不进入公开源码树与 git 历史（私有开发仓以 vendored 形式保留）。拿不到私有归档时，`npm install` 会在 `preinstall` 明确报错。
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
@@ -105,7 +105,7 @@ node -v   # v24.x
 
 ## 安装依赖
 
-本仓库**不含**语雀闭源 Lakex 内核（`@dlient/lakex-doc-react` 里打包的 `@alipay/lakex-doc` v1.99.0）。首次安装：
+**公开镜像**不含语雀闭源 Lakex 内核（`@dlient/lakex-doc-react` 里打包的 `@alipay/lakex-doc` v1.99.0）。首次安装：
 
 ```bash
 cd <repo>
@@ -221,7 +221,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 ## 许可与致谢
 
 - 本项目自有代码采用 **AGPL-3.0-only**（见根目录 `LICENSE`）；第三方组件与例外见 `NOTICE`
-- 语雀 Lakex 编辑器内核为闭源第三方产物，**不随本仓库分发**（源码与 git 历史均已移除，构建需本地私有引入）；本项目仅作本地集成，不构成对语雀代码的分发，也不能由本项目按 AGPL 再授权
+- 语雀 Lakex 编辑器内核为闭源第三方产物，**不随公开仓库分发**（公开镜像的源码与 git 历史均不含内核，构建需本地私有引入）；本项目仅作本地集成，不构成对语雀代码的分发，也不能由本项目按 AGPL 再授权
 - 部分界面版式与主题令牌参考自 **SiYuan（思源笔记，AGPL-3.0）**；相关规则收编在 `src/styles/compat.css` / `kit.css`，署名保留在应用设置页「关于」与文件头
 - 表格：[Univer](https://github.com/dream-num/univer)（Apache-2.0，1.0.3 精确锁）
 - 画板：[Drawnix](https://github.com/plait-board/drawnix)
