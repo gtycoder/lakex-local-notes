@@ -19,6 +19,21 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · 桌面端彻底摆脱思源类名契约（§3#20 结案）· **已提交 `e4aa2b38`（代码）+ `b5bbd89a`（基线）**
+
+- **范围**：桌面 16 文件 / 27 个类名（TSX 227 处）+ compat/kit/components/feature/quick-notes/dialog/kernel-theme 里的对应规则；移动端零改动。
+- **改名映射（一次性、保持层序与声明原样）**：
+  - 列表族：`.b3-list` → `.ln-list-panel`、`--background` → `ln-list-panel--background`；`.b3-list-item*` → `.ln-list-item*`（text/graphic/meta/action/action--warning/--focus/--hide-action/__toggle）。
+  - 版式/工具：`.b3-label*` → `.ln-label*`；`fn__space/size200/flex-center/kbd/ellipsis` → `.ln-spacer/.ln-w-200/.ln-flex-center/.ln-kbd/.ln-ellipsis-block`；`fn__none`（零使用）删除。
+  - 控件：`.b3-button` → `ln-btn ln-btn--primary`、`--outline` → `ln-btn--secondary`、`--cancel` → `ln-btn--ghost`（原 `:not(.quick-note-*)` 链已过期，整段删除；小记按钮早已迁到 ln-btn）；`.ft__error` 组合 → 新增 `.ln-btn--danger-text`（只染文字 + 保留二次描边 hover 的浅红底）；`.b3-text-field` → `.ln-text-field`；`.b3-select`/`.b3-switch` 规则**整段删除**（TSX 已零使用；开关早已是 `.ln-switch`）。
+  - 级联修复：kernel-theme（未分层）的 4 条 `button.b3-button…` 改为 ln-btn 变体；quick-notes/components 里按旧类名的组合选择器同步改名。
+- **验证**：
+  - 门禁：tsc 0 · 全库 vitest **348 文件 / 2462 例**（含并行移动端新增用例）· ui-metrics 0 · core/mobileui/bundle ✓ · `git diff --check` ✓（kit/compat 声明数下降，未抬基线）。
+  - **42 态整页计算值对照**（rename 前 `prerename-261022.json` vs 后 `postA.json`）：**元素数逐态相同**；差异只有迁移按钮的 2 类计算值 —— `justify-content`（b3 基座显式 center → ln-btn 默认 normal；按钮都是内容自适应宽度，无布局差异）与 `transition`（ln-btn 多按压/不透明度两项，属有意统一）。每个态固定 12 个常驻按钮 + 面板内按钮数，与差异条数吻合。
+  - `stylesnap` 基线已按改名后重烤（42 态两轮一致）。
+- **合规**：AGPL-3.0 署名保留 —— 设置页「关于 → 思源笔记 SiYuan」文案已从「见 src/b3/siyuan/」更正为「规则已收编到 compat.css/kit.css」，compat.css 文件头补署名说明。
+- **判据达成**：全仓产品代码 `grep -rn "b3-\|fn__"` 仅剩历史注释/许可说明（字体的 `U+95b3-95b4` unicode-range 属误报）。
+
 ### 261022 · 桌面 stylesnap 基线重烤（§3#24 结案）· **已提交 `ba6d5a8d`**
 
 - **背景**：基线是 261018 烤的，261019–261021 批次后每态 +19 元素 ⇒ 定点/全量 stylesnap 一直假红（§3#24）。
@@ -2153,7 +2168,7 @@
     - **关键决策已定**：类名前缀 **`mb-*`**（不用 `md-*`：与 `.md-preview` 撞族）· 令牌名沿用 `--lake-*` 但**取值由移动端 `src/mobile/theme/**` 定义** · **只有 `+` 号用绿 `#00B96B`**，其余强调色走主题色（**对语雀的显式偏离项**）· 深色做、暖色暂不做。
     - **起点 = P0 立护栏**（`mobileIndependence.test.ts` + `mobileLayers.test.ts`，**允许红、基线只许降**）。
     - **参考仓**：`/Users/admin/file/local-lake/yuque-re/`（语雀逆向证据仓，**取值与交互形态参考**，非布局基准；产物**不要**复制进本仓库）。
-20. **桌面端彻底摆脱思源类名契约（用户 261012 登记为待办；移动端已完成，桌面未做）**：
+20. ~~**桌面端彻底摆脱思源类名契约（用户 261012 登记为待办；移动端已完成，桌面未做）**~~ ✅ **已完成（261022）**：桌面 16 文件 / 27 个类名全部改走自有 `ln-*`（按钮/输入/开关迁 kit 原语，列表/标签/工具类在 compat.css）；全仓产品代码 `.b3-*`/`fn__*` 只剩历史注释与许可说明；AGPL-3.0 署名保留（设置页「关于」+ compat 文件头）。`stylesnap` 基线已重烤、`ui-metrics`/`cssLayers` 门禁通过。以下为原始登记与判据（保留作背景）：
     - **背景**：用户核对「不是已经没有思源的事了吗」。核查结论（261012，已有实测）：**运行期零思源代码/资源**
       （`src/b3/**` 已整体删除、无任何 import 指向 `siyuan-master`）；移动端 P5 起连桌面的 `compat.css` 也不引，
       移动端里 `--b3-*` 定义与 `.b3-*`/`fn__*` 类名均为 **0**（P7b 顺带删掉了移动端 theme 里那 44 条已无人消费的

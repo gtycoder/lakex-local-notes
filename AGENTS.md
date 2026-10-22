@@ -49,7 +49,7 @@ LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + bet
     - **两条护栏**（改样式必跑）：`src/styles/cssLayers.test.ts`（逐文件声明数/重复组只许降）+ `node scripts/ui-metrics.mjs`（b3 引用 0 / 非主题颜色 0 / 字号字面量 0 / !important 逐条对允许清单 / 文字色误用裸 accent 0 / 跨文件重复组只许降 / 入口 b3 import 0）。
     - **文字色阶口径**：`--lake-text-*` 按「实际会铺到的最浅/最深表面」标定（text-3 浅/暖 `#5f6874`、深 `#9398a1`；text-4 是**有意的 3:1 档，不要提亮**）。**文字一律用 `--lake-accent-text`**；`--lake-accent` 只做图形/边框/焦点环/底纹。
     - **死 CSS 判定**（`scripts/css-audit/audit-dead-css.mjs`，报告非门禁）：判"没人用"必须排除 ① 内核/第三方命名空间（`ne- ant- lakex- plait- univer- b3- fn__`）② 动态拼接类名（**串中间的拼接也要算**）③ 设计词表（`kit.css` / `themes/` / `fonts/` / `kernel-theme.css` / `compat.css`）。只删「确认无人施加」的规则块，删完跑走查对拍（截图与探针应逐项不变）。
-    - **思源层已整体移除**：`src/b3/**` 已删；仅 `.b3-*`/`fn__*` 类名作 JSX 契约保留（承重规则在 `src/styles/compat.css`）。**不要再引入 `src/b3/*`**。
+    - **思源层与类名契约都已清零（261022）**：`src/b3/**` 已删；桌面产品代码里的 `.b3-*`/`fn__*` 类名也已全部改为自有 `ln-*`（按钮/输入/开关走 kit 原语，列表/版式在 `src/styles/compat.css`）。**不要再引入 `src/b3/*` 或思源类名**；AGPL-3.0 署名保留在设置页「关于」与 `compat.css` 文件头。
     - **设置页**骨架 `.config-*` 由 `compat.css` 定义；**每加/改一行必须同步 `settingsSearch.ts` 的 `SETTING_ITEMS`**（护栏 `settingsSearch.test.ts`）。
     - **碰内核的细节**：内核用 `focus()` 聚焦普通 `div[tabindex]` 时要补我们自己的 `:focus-visible` 环；碰到库里的**模块级单例**（缓存/标志位）时判据必须**限定在本实例容器内**（`.contains(document.activeElement)`），多实例挂载会串台。
 15. **"已彻底删除"的判定必须永久**：`deleted_notes.purged_at` 只是"待删前缀"的工作标记（前缀删完就清空）——folder 看 `node_type='folder'` 墓碑、note 看其墓碑。purge **无条件**写墓碑（`notes` 行缺失就从 `tree_nodes` 兜底），漏写 ⇒ 云端永不下架、必然复活。
