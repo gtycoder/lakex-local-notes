@@ -38,6 +38,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesOpen } from "../data/favorites";
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
+import { useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import {
   addQuickNoteTag,
   buildQuickNoteTagIndex,
@@ -62,15 +63,6 @@ export interface MobileQuickNote {
   tags: string[];
 }
 
-interface QuickNoteDetail {
-  body: string;
-  images: StoredQuickNoteImage[];
-  tags: string[];
-  firstImage: string | null;
-  updatedAt: string;
-}
-
-const QUICK_NOTE_DETAIL_CACHE_LIMIT = 12;
 const QUICK_NOTE_VIRTUAL_THRESHOLD = 24;
 
 export type LibraryView = "shelf" | "list";
@@ -144,10 +136,7 @@ export function HomePage(props: HomePageProps) {
   const [quickTagFilter, setQuickTagFilter] = useState<QuickNoteTagFilter>({ kind: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [quickSort, setQuickSort] = useState<QuickNoteSort>(() => readQuickNoteSort());   // 本机持久化偏好（L3）
-  /** 列表只带轻量元数据；正文/图片按卡片可见性读取，最多保留 12 条详情。 */
-  const [quickNoteDetails, setQuickNoteDetails] = useState<Map<string, QuickNoteDetail>>(() => new Map());
-  const quickNoteDetailsRef = useRef<Map<string, QuickNoteDetail>>(new Map());
-  const quickNoteLoadsRef = useRef<Set<string>>(new Set());
+  const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
   const [docPickOpen, setDocPickOpen] = useState(false);
@@ -164,50 +153,6 @@ export function HomePage(props: HomePageProps) {
   const pressRef = useRef({ startY: 0, at: 0, revealed: false, timer: 0 });
   /** 长按过的那一次，随后的 click 要吞掉（否则"长按搜索再松手"会顺带把搜索页打开）。 */
   const suppressTapRef = useRef(false);
-
-  const loadQuickNoteDetail = useCallback(async (id: string): Promise<void> => {
-    if (quickNoteDetailsRef.current.has(id) || quickNoteLoadsRef.current.has(id)) return;
-    quickNoteLoadsRef.current.add(id);
-    try {
-      const full = await bridge.readQuickNote(id);
-      if (!full) return;
-      const next = new Map(quickNoteDetailsRef.current);
-      next.delete(id);
-      next.set(id, {
-        body: full.content.body,
-        images: full.content.images,
-        tags: full.content.tags,
-        firstImage: full.content.images[0]?.filename ?? null,
-        updatedAt: full.updatedAt,
-      });
-      while (next.size > QUICK_NOTE_DETAIL_CACHE_LIMIT) {
-        const oldest = next.keys().next().value as string | undefined;
-        if (!oldest) break;
-        next.delete(oldest);
-      }
-      quickNoteDetailsRef.current = next;
-      setQuickNoteDetails(next);
-    } catch { /* 单条正文读取失败：卡片保留轻量摘要 */ }
-    finally { quickNoteLoadsRef.current.delete(id); }
-  }, []);
-
-  // 列表刷新后丢弃已过期正文详情；标签变化但 updatedAt 不变时也要失效。
-  useEffect(() => {
-    const base = new Map(quickNotes.map((note) => [note.id, note] as const));
-    const next = new Map(quickNoteDetailsRef.current);
-    let changed = false;
-    for (const [id, detail] of next) {
-      const note = base.get(id);
-      if (!note || note.updatedAt !== detail.updatedAt || note.tags.join("\u0000") !== detail.tags.join("\u0000")) {
-        next.delete(id);
-        changed = true;
-      }
-    }
-    if (changed) {
-      quickNoteDetailsRef.current = next;
-      setQuickNoteDetails(next);
-    }
-  }, [quickNotes]);
 
   // 离开「小记」tab（未点保存）即取消编辑：切回来是小记列表，不保留编辑框。
   // 覆盖所有离开路径（顶部 tab / 左右横滑 / 父级路由变化）。
