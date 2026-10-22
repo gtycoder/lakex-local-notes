@@ -22,6 +22,9 @@
 - 分屏**没有浮动控制条**（261014 用户点单**彻底删除** `.tab-split-controls`；分屏动作走合并标签的右键菜单，见
   `docs/HANDOFF.md` §3#21）。注意 `--lake-editor-top` 在分屏场景**不可用**：它按**焦点栏**量（`useEditorTopVar`），
   而分屏焦点栏是表格/多维表/画板时宿主内无面包屑、该变量实测为 **0**。
+- 分屏两栏之间**常驻 1px 发丝线**（261022 用户点单：两篇文档背景相同会「融成一篇」）：由 `splitView.css` 给**分屏专属**的
+  `.ln-split-handle` 加 `border-left: 1px solid var(--lake-border-1)`（手柄 `width:0` ⇒ 只占 1px）。侧栏/大纲的把手共用 kit
+  原语但**不画线**；悬浮/拖拽时 kit 的 2px 主色药丸照旧叠在中间。
 - 编辑区可视顶 `--lake-editor-top`（**相对 `.document-pane`**）= **运行时量测**（`src/hooks/useEditorTopVar.ts`），当前 **64** = 面包屑 + 工具条；工具条隐藏 / 换高 / 切主题自动跟随。**不要**改回写死（这是 260922 用户立规）。
 - 标签胶囊高走**独立令牌** `--tab-item-height`（与顶栏解耦：顶栏收窄不牵动标签）；`.tab-bar` 垂直内距 = (顶栏 − 标签)/2 ⇒ 标签恒居中。`.tab-items` 有 `overflow-y:hidden`，**内距必须由这个差值派生**，写死会裁标签。
 - **macOS 红绿灯**（native，不在 DOM）：位置由主进程从共享常量 `src/lib/layoutMetrics.ts` 的 `TOPBAR_HEIGHT` / `TRAFFIC_LIGHT_DIAMETER` 算出 —— `y = (顶栏 − 12)/2`，使红绿灯中心 = 顶栏中心。**禁止写死 y**（曾因顶栏 38→32 错位 3px）；`layoutMetrics.test.ts` 卡住它与 `base.css` 的 `--topbar-height` 一致。
