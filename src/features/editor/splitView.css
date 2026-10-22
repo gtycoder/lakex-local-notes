@@ -13,21 +13,24 @@
 }
 
 .tab-panels.is-split > [data-pane="left"] { grid-column: 1; }
-.tab-panels.is-split > [data-pane="right"] { grid-column: 2; }
+
+/* 261022 用户点单：两篇文档背景相同、贴在一起会「融成一篇」⇒ 两栏之间一条**常驻 1px 发丝线**。
+   画在**右栏的 border-left**、不画在分隔手柄上：手柄上的线会被内核 sticky 工具条
+   （ne-ui，z-index 150、白底）在工具条那一行整段盖掉（实测缺口 = 工具条高）。
+   画在栏的盒子上时，栏内所有子元素都排在 border 右侧 ⇒ 面包屑/工具条/表格/画板各类型都不断线。 */
+.tab-panels.is-split > [data-pane="right"] {
+  grid-column: 2;
+  border-left: 1px solid var(--lake-border-1);
+}
 
 /* 分隔条：绝对定位在两列交界处（左栏顶边由 --split-left 给；没拖过时它等于 1fr，量出来再写）。
-   命中带/药丸视觉仍由 kit 的 .ln-split-handle 唯一提供，这里给位置 + 分屏专属的常驻分隔线。
-
-   261022 用户点单：两篇文档背景相同、贴在一起会「融成一篇」⇒ 加一条**常驻 1px 发丝线**。
-   用手柄自身的 border-left 画（width:0 ⇒ 只占 1px，不改 DOM、不加伪元素）；
-   悬浮/拖拽时 kit 的 2px 主色药丸照旧叠在中间，两者不冲突。 */
+   命中带/药丸视觉仍由 kit 的 .ln-split-handle 唯一提供，这里只给位置（分隔线在右栏的 border 上）。 */
 .tab-panels.is-split > .ln-split-handle {
   position: absolute;
   top: 0;
   bottom: 0;
   left: var(--split-left, 50%);
   width: 0;
-  border-left: 1px solid var(--lake-border-1);
 }
 
 /* 分屏动作**只在合并标签的右键菜单里**（261014 用户点单："去掉浮动条吧，彻底清除了"）：
