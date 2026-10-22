@@ -35,7 +35,8 @@ export function resolveMirroredCdnRedirect(
     if (url.hostname !== "gw.alipayobjects.com") return null;
 
     // 保持百分号编码，与落盘的镜像路径一致；拒绝目录穿越及空片段。
-    const relativePath = url.pathname.replace(/^\/+/, "");
+    // Windows 文件名不允许 `*` ⇒ 落盘镜像把 `*` 统一替换为 `_`（见 public/vendor/cdn/mdn/**）。
+    const relativePath = url.pathname.replace(/^\/+/, "").replaceAll("*", "_");
     if (!relativePath || relativePath.split("/").some((segment) => !segment || segment === "." || segment === ".." || segment.includes("\\"))) {
       return null;
     }

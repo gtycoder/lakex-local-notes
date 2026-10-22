@@ -27,6 +27,15 @@ describe("resolveMirroredCdnRedirect", () => {
     )).toBeNull();
   });
 
+  it("maps '*' in the URL to '_' on disk (Windows 文件名不允许 *)", () => {
+    const withStar = (relativePath: string) => relativePath === "mdn/prod_resou/afts/img/A_abc";
+    expect(resolveMirroredCdnRedirect(
+      "https://gw.alipayobjects.com/mdn/prod_resou/afts/img/A*abc",
+      19876,
+      withStar,
+    )).toBe("http://127.0.0.1:19876/vendor/cdn/mdn/prod_resou/afts/img/A_abc");
+  });
+
   it("does not redirect another CDN host or an unsafe/missing path", () => {
     expect(resolveMirroredCdnRedirect("https://cdn.nlark.com/yuque/0/a.png", 19876, lookup)).toBeNull();
     expect(resolveMirroredCdnRedirect("https://gw.alipayobjects.com/zos/unknown/a.png", 19876, lookup)).toBeNull();
