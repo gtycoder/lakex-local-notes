@@ -1,5 +1,7 @@
 # Local Lakex Notes
 
+[![Release](https://img.shields.io/github/v/release/gtycoder/local-lakex-notes?label=release&color=2ea44f)](https://github.com/gtycoder/local-lakex-notes/releases)
+
 **本地优先的语雀 Lakex 编辑器笔记应用（非官方）**：桌面 macOS + Android，本地是唯一真相，S3 只做多端镜像。
 
 > 使用语雀的 Lakex 编辑器内核（本地私有引入、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场；该闭源内核以 **vendored** 形式随本仓库公开分发（未经语雀/蚂蚁授权，风险自担，见 `NOTICE`）。
@@ -170,11 +172,11 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 
 ## 打包与发布
 
-- 推荐用 **GitHub Releases** 分发：发版时打 tag（如 `v0.1.0`），附 macOS `.dmg/.zip`、Android `.apk` 与 `SHA256SUMS.txt`
+- 推荐用 **GitHub Actions** 发版：打 tag（如 `v0.1.2`）后自动构建并发布 macOS `.dmg/.zip`、Windows `.exe`、Android `.apk` 到 GitHub Releases；配置 `GITEE_TOKEN` 后同步上传 Gitee 发行版
+- 也可本地打包：`npx vite build && npx electron-builder --mac`（Windows 包建议交给 CI 的 `windows-latest`；Linux target 尚未配置）
 - ⚠️ 构建产物**包含闭源 Lakex 内核**（仓库已 vendored）；公开分发（Release 附件）前请确认你接受相应风险，详见 `NOTICE`
-- 各系统包必须在对应平台生成（macOS 包需 macOS；Windows/Linux 目前未配置打包 target）
-- 发布流程与签名/公证前置条件见 `docs/RELEASE.md`
-- 不提供自动更新；下载后手动替换
+- 当前为**未签名**构建：macOS 首次打开需右键 → 打开；Windows 会弹 SmartScreen，需「更多信息 → 仍要运行」
+- 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；不提供自动更新，下载后手动替换
 
 ## 文档
 

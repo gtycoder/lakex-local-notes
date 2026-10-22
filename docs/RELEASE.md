@@ -119,7 +119,8 @@ codesign -dv --verbose=4 "release/mac-arm64/LocalLakexNotes.app"
 ## 六、当前进度（2026-08-03）
 
 - [x] 应用图标（`build/icon.icns`，程序化设计：湖蓝 + 文档页 + 波浪）
-- [x] electron-builder 配置（appId `com.locallakexnotes.desktop`、mac target dmg+zip、icon）
+- [x] electron-builder 配置（appId `com.locallakexnotes.desktop`、mac target dmg+zip、win target nsis、icon）
+- [x] GitHub Actions 发版（macOS dmg/zip + Windows exe + Android apk → GitHub Release）
 - [ ] 用户注册 Apple Developer Program（一.1）
 - [ ] 生成 Developer ID Application 证书（一.2）
 - [ ] 准备公证凭据（一.4）
@@ -127,3 +128,61 @@ codesign -dv --verbose=4 "release/mac-arm64/LocalLakexNotes.app"
 - [ ] spctl / stapler 验证通过（四）
 
 > 备注：签名与公证依赖你的 Apple 账号与钥匙串，无法自动化代做；项目侧已全部就绪。
+
+---
+
+## 七、GitHub Actions 发版指南（含 Windows / Gitee 同步 / 未签名说明）
+
+> 日常发版推荐走 Actions；本地打包只用于调试或需要 Apple 签名/公证时。
+
+### 1. 触发方式
+- **推 tag（推荐）**：`v*` 触发 `.github/workflows/release.yml`
+- **手动**：GitHub → Actions → Release → Run workflow，输入已存在的 tag
+
+### 2. 构建矩阵
+
+| Job | Runner | 产物 |
+| --- | --- | --- |
+| macOS | `macos-15` | `*.dmg` / `*.zip`（未签名） |
+| Windows | `windows-latest` | NSIS 安装包 `*.exe`（未签名） |
+| Android | `ubuntu-24.04` | `app-debug.apk`（debug 签名） |
+| Publish | `ubuntu-24.04` | GitHub Release；配置 `GITEE_TOKEN` 时同步 Gitee 发行版 |
+
+### 3. 发版步骤
+
+```bash
+cd lake-notes-electron
+
+# 1) 版本号必须与 tag 一致（electron-builder 产物名取自 package.json）
+npm version patch --no-git-tag-version   # 或手动改 package.json
+git commit -am "chore: release v0.1.2"
+git tag v0.1.2
+
+# 2) 推代码与 tag（tag 才触发构建）
+git push publish master v0.1.2      # Gitee private + public
+git push github master v0.1.2       # GitHub（master→main），触发 Actions
+```
+
+### 4. Gitee 发行版同步（可选）
+
+- GitHub 仓库 → Settings → Secrets and variables → Actions → 新建 `GITEE_TOKEN`
+  （Gitee 私人令牌，勾选 `projects` 权限）
+- 配置后 Publish job 会调 Gitee API 创建发行版并上传产物
+- ⚠️ Gitee 单附件有大小限制（通常 100MB 级）；dmg/zip 约 180MB 可能超限，
+  超限时只同步 apk，或把大文件放对象存储并在发行版里给链接
+
+### 5. 未签名说明
+
+- **macOS**：CI 里 `CSC_IDENTITY_AUTO_DISCOVERY=false`，产物未签名/未公证；
+  首次打开需 右键 → 打开
+- **Windows**：未签名，SmartScreen 提示「Windows 已保护你的电脑」→ 更多信息 → 仍要运行
+- **Android**：`assembleDebug` 用 debug keystore，仅测试用；正式发布需 release keystore
+- 要正式分发：按本文一~三节配置 Apple 签名/公证，并在 CI 中加对应 secrets
+
+### 6. 已知坑
+
+- **tag 发布后不可移动**：Release 一旦创建，GitHub 会拒绝改 tag ⇒ 发错就 bump 版本号发新 tag
+- Android CI 曾因 `maven.aliyun.com` 对 `j2objc-annotations:1.3` 返回 502 失败 ⇒
+  workflow 在 CI 内移除 aliyun 镜像；本地构建仍走镜像加速
+- Windows 首次构建若失败，看 `windows` job 日志（常见：better-sqlite3 原生编译、
+  electron-builder 下载 winCodeSign）
