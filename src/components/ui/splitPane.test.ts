@@ -12,6 +12,7 @@ const HISTORY = readFileSync(new URL("../app/HistoryPanel.tsx", import.meta.url)
 const ASSETS = readFileSync(new URL("../app/AssetsBrowser.tsx", import.meta.url), "utf8");
 const MULTITAB = readFileSync(new URL("../../features/editor/MultiTabEditor.tsx", import.meta.url), "utf8");
 const OUTLINE = readFileSync(new URL("../../features/outline/OutlineSidebar.tsx", import.meta.url), "utf8");
+const SPLITVIEW = readFileSync(new URL("../../features/editor/splitView.css", import.meta.url), "utf8");
 
 /**
  * 左右分栏（可拖动）结构护栏（用户 261006：回收站 / 历史版本 / 资源 三处都要能左右拖；261008 文档分屏复用）。
@@ -53,6 +54,12 @@ describe("左右分栏（可拖动）", () => {
     expect(SRC).toContain("ResizeObserver");              // 容器变窄时夹回合法区间
     expect(PANELS).toContain("flex: 0 0 var(--split-left, 320px)");
     expect(PANELS).toContain(".history-split > .ln-split-handle { position: relative; flex: 0 0 0; width: 0; }");
+  });
+
+  it("分屏两栏之间有常驻 1px 发丝线（261022 用户点单：两篇文档不再「融成一篇」）", () => {
+    expect(SPLITVIEW).toMatch(/\.tab-panels\.is-split > \.ln-split-handle \{\n(?:.*\n)*?  border-left: 1px solid var\(--lake-border-1\);/);
+    // 分隔线只属于分屏；侧栏/大纲的把手共用 kit 原语，不画线
+    expect(KIT).not.toMatch(/\.ln-split-handle \{[\s\S]*border-left/);
   });
 
   it("破坏性按钮只有一种长相：.ft__error 自带透明底（漏写 --outline 也不再是实心块）", () => {

@@ -7,7 +7,7 @@ const EDGE_EPSILON = 1;
  * 261017 B：滚动边缘渐隐的状态同步（纯函数，便于单测）。
  *
  * 只读滚动几何 → 写 data-fade-top / data-fade-bottom（"1"/"0"）；样式在 kit 的 14b 选择器组
- * （.ln-select__list / .note-list.tree-list / .quick-notes-index）。
+ * （.ln-select__list / .quick-notes-index；目录树 261022 按用户要求不渐隐）。
  * 为什么不用 rAF：隐藏窗口里 rAF 不触发（HANDOFF 环境坑），滚动后的边缘态会滞后；
  * 这里只读三个数字，直接在事件里算的代价可以忽略。
  */

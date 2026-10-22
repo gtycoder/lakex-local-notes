@@ -19,6 +19,32 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · 分屏两栏之间加常驻分隔线（用户点单）· **已提交 `f34607d5`（未推送）**
+
+- **用户口径**：分屏左右两篇文档背景一样、贴在一起「融合到一起」；要求中间有一条竖线做分隔。
+- **改法（分屏专属，最小）**：`src/features/editor/splitView.css` 给 `.tab-panels.is-split > .ln-split-handle` 加 `border-left: 1px solid var(--lake-border-1)` —— 手柄本来就是 `width:0`，加边框后只占 1px；不改 DOM、不加伪元素、不动 kit 原语（侧栏/大纲把手不画线）。悬浮/拖拽的 2px 主色药丸不变。
+- **护栏**：`splitPane.test.ts` 新增断言（分屏手柄必须有发丝线；kit 原语不得出现 border-left）；`cssLayers` 基线 `splitView.css` 9 → **10**（+1 即该声明）。
+- **门禁**：tsc 0 · 相关 10 例 + 全库通过 · ui-metrics 0 · `git diff --check` ✓。
+- **实测（隔离实例 CDP 9232 + dev 数据副本，用完已销毁）**：`.tab-panels.is-split` 生效，手柄实测 `x=752 / h=782 / border-left=1px rgb(230,232,236)`，正好压在两栏交界（左栏 224+528=752，右栏从 752 起）；截图 `.css-audit/rebuild-261022/split-divider.png`。
+- **状态**：已提交 `f34607d5`（仅本地 master，未推送）。
+
+### 261022 · 思源残留清理第一批（桌面 §3#20 的第一刀）· **已提交 `0d90b845`（未推送）**
+
+- **目标（§3#20）**：桌面 JSX 仍把 `.b3-*` / `fn__*` 当类名契约在用；终态 = 全仓 `grep b3-\|fn__` 只剩「许可署名 + 历史说明」两类注释。
+- **只读盘点（261022，桌面，排除 src/mobile）**：TS/TSX **21 文件 / 25 个类名 / 227 处**；CSS 侧 `compat.css` 39 条规则、`kit.css` 30 条规则行（.b3-button/-text-field/-select/-switch/-list-item 族）、`components.css` 3 条。**`var(--b3-*)` 全仓引用 = 0** ⇒ themes 里 22×3 条 `--b3-*` 过渡令牌是死值。死规则（TSX 零使用、动态拼接已排查）：`.b3-menu*` 8 / `.b3-snackbar*` 4 / `.b3-dialog` / `.b3-list-item--selected` / `.fn__flex-1`。
+- **本批（零视觉变化）**：删 66 条 `--b3-*` 令牌 + 15 条死规则（compat.css −62 行；仍保留 b3-list/label/switch 与 fn__* 工具类），compat.css 头注释同步。
+- **门禁**：tsc 0 · vitest **345 文件 / 2465 例**（含并行移动端会话新增用例）· ui-metrics 0 · cssLayers / uiPrimitives ✓ · `git diff --check` ✓。
+- **未做（下一批，等依赖升级合入）**：① JSX 重命名（16 文件 / 27 类名）→ kit 原语；② compat 剩 25 条、kit 30 条规则行、components 3 条随类名一起迁；③ **stylesnap 的 key 含 class 列表** ⇒ 改名会让 42 态基线整份失效，改名后必须整份重烤，不能拿「0 diff」证视觉中性（改用截图 + 计算值抽查）；④ 许可：README 要求移植样式留 NOTICE / 关于页署名，本仓当前**没有 NOTICE 文件**，改名后要确认署名仍在（或补 NOTICE）。
+- **状态**：已提交 `0d90b845`（仅本地 master，未推送）。
+
+### 261022 · 桌面目录树去掉上下边缘渐隐（用户点单）· **已提交 `2a298e48`（未推送）**
+
+- **用户口径（截图）**：目录栏顶部（F16 探针 44）与底部（移动表格）两处「模糊」去掉。实为 261017 B 的「滚动边缘渐隐」：`.note-list.tree-list` 是 7 档 alpha 遮罩（28px）的三个接入点之一，目录滚到中间时上下两侧被柔化。
+- **改法（根位置，最小）**：① `Sidebar.tsx` 摘掉 `useScrollFade(treeRef)` 与 import（目录树不再打 `data-fade-top/bottom`）；② `kit.css` 的 14b 选择器组只剩 `.ln-select__list` / `.quick-notes-index`（**下拉弹层、小记列表的渐隐保留**）；③ 注释与 `useScrollFade.test.ts` 反转断言（目录树不得再出现 hook/选择器）；④ `DESIGN.md`「Scroll Edges」记录「目录树不渐隐，别加回」。
+- **门禁**：tsc 0 · 全库 vitest **337 文件 / 2448 通过（16 skip）** · `ui-metrics` 0（跨文件重复 12 ≤ 基线 13）· `git diff --check` ✓。mask 不进快照 PROPS ⇒ 不涉及 stylesnap 基线（基线本身仍陈旧，见 §3#24）。
+- **dev 实测（用户正在运行的 1421/9222 实例，HMR 已生效）**：`getComputedStyle(nav.note-list.tree-list).maskImage === "none"`、`data-fade-*` 已无；目录滚到中段（scrollTop 2039 / scrollHeight 3138）时首末行**不再变淡**，截图 `.css-audit/rebuild-261022/sidebar-no-fade.png`。
+- **状态**：已提交 `2a298e48`（**仅本地 master，未推送**；等用户验收）；桌面 dmg/zip/app 已按本改动重新打包。
+
 ### 261021(六) · CSS 层收尾：A/B 核验 + C/D（依赖准入 / 三处漂移收口）· **已合并 master `98e9278e`（工作于 261022 凌晨）**
 
 - **承接**：上一会话留下分支 `feat/desktop-vendor-css-layer`（worktree `.../vendor-css-layer`）与两笔 A/B 提交 `a804df67` / `f4e981fa`；本会话先 `git merge master`（master `7f378130` → 合并提交 `0d0d8e5a`；唯一冲突 = HANDOFF，两边条目都保留），再在合并后基线上做 C/D。

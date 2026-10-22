@@ -456,11 +456,11 @@
  * 只在「确实还有内容被裁」的一侧显示：useScrollFade 打 data-fade-top/bottom；
  * 到顶/到底自动归零，所以静止时不会把首/末行文字的边缘压暗。
  * mask 只裁视觉，不改变滚动、命中区与布局。
- * 接入点**只认这三个选择器**（新增列表把它加进来，不要在组件里另写一份 mask）：
- * 下拉弹层 / 目录树 / 小记列表。用选择器而不是给 DOM 加工具类 —— 类名进 stylesnap 的 key，
- * 加一个类会让 42 态基线整份失效；mask 不进快照 PROPS，所以这条路径是零基线成本的。 */
+ * 接入点**只认这两个选择器**（新增列表把它加进来，不要在组件里另写一份 mask）：
+ * 下拉弹层 / 小记列表。用选择器而不是给 DOM 加工具类 —— 类名进 stylesnap 的 key，
+ * 加一个类会让 42 态基线整份失效；mask 不进快照 PROPS，所以这条路径是零基线成本的。
+ * 目录树（.note-list.tree-list）261022 按用户要求**不再渐隐**：目录需要一眼看清首/末行，别加回。 */
 .ln-select__list,
-.note-list.tree-list,
 .quick-notes-index {
   --ln-fade-top: 0px;
   --ln-fade-bottom: 0px;
@@ -483,10 +483,8 @@
     transparent);
 }
 .ln-select__list[data-fade-top="1"],
-.note-list.tree-list[data-fade-top="1"],
 .quick-notes-index[data-fade-top="1"] { --ln-fade-top: 28px; }
 .ln-select__list[data-fade-bottom="1"],
-.note-list.tree-list[data-fade-bottom="1"],
 .quick-notes-index[data-fade-bottom="1"] { --ln-fade-bottom: 28px; }
 
 /* ── 15 表单行 ─────────────────────────────────────────────── */
