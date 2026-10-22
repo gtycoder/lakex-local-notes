@@ -9,7 +9,7 @@
  * 正文仍是内部 JSON（`core/usheetDoc.ts`），绝不喂给 Lake 编辑器；本组件只负责 Univer ↔ JSON。
  * 分包、首次可见才挂载、图片 URL、主题跟随的约束与只读版保持一致。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Eraser, MoreHorizontal, Paintbrush, Plus, Redo2, Undo2 } from "lucide-react";
 import { createUniver, DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY, LocaleType, mergeLocales, type FUniver, type IPresetPlugin } from "@univerjs/presets";
 import { DocSelectionRenderService, IRenderManagerService } from "@univerjs/preset-sheets-core";
@@ -59,9 +59,9 @@ import { USHEET_NUMFMT_IDS, applyUsheetNumberFormat } from "./usheetNumfmt";
 import { USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
 import { decimalStepMessage, stepNumberFormatDecimals } from "./usheetDecimals";
 import { USHEET_BORDER_IDS, applyUsheetBorder } from "./usheetBorders";
-import { readFilterAvailability } from "./usheetReadFilter";
 import { blockFailureMessage, planSortRange, resolveSheetBlock, type SortFilterSheet } from "./usheetSortPlan";
 import { useSheetCardState } from "./useSheetCardState";
+import { useSheetReadFilter, type SheetReadFilterTarget } from "./useSheetReadFilter";
 
 /**
  * 移动端公式栏的点击落点（261021）：Univer 的移动公式栏把输入面做成 canvas + 隐藏 contenteditable，
@@ -167,17 +167,45 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const [zoomPercent, setZoomPercent] = useState(100);
   /** 格式刷激活态（0=off / 1=一次性 / 2=连续）；只用于按钮高亮，真实状态由内核 SetFormatPainterOperation 回填。 */
   const [painterStatus, setPainterStatus] = useState(0);
-  /** 读态本机筛选（261021 定稿：只对本机生效、绝不写正文）——激活态 + 还原钩子。 */
-  const [readFilterActive, setReadFilterActive] = useState(false);
-  const readFilterRef = useRef(false);
-  /** capture 定义在前、还原实现在后，用 ref 解耦（capture 必须**先还原再取正文**）。 */
-  const restoreReadFilterRef = useRef<() => void>(() => undefined);
-  const readFilterAvailable = useMemo(() => readFilterAvailability(content), [content]);
+  /** 排序/筛选共用的「数据块」读取口（只读值，不改任何东西）。 */
+  const sheetAccessor = useCallback((sheet: FWorksheet): SortFilterSheet => ({
+    maxRows: sheet.getMaxRows(),
+    maxColumns: sheet.getMaxColumns(),
+    getValue: (row, column) => sheet.getRange(row, column).getValue(),
+  }), []);
+  const getReadFilterTarget = useCallback((): { ok: true; target: SheetReadFilterTarget } | { ok: false; reason?: string } => {
+    const state = instanceRef.current;
+    const workbook = state?.univerAPI.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    const range = workbook?.getActiveRange();
+    if (!state || !workbook || !sheet || !range) return { ok: false };
+    const resolved = resolveSheetBlock(
+      { startRow: range.getRow(), endRow: range.getLastRow(), startColumn: range.getColumn(), endColumn: range.getLastColumn() },
+      sheetAccessor(sheet),
+    );
+    if (!resolved.ok) return { ok: false, reason: blockFailureMessage(resolved.reason) };
+    return {
+      ok: true,
+      target: {
+        api: state.univerAPI as unknown as SheetReadFilterTarget["api"],
+        unitId: workbook.getId(),
+        subUnitId: sheet.getSheetId(),
+        column: range.getColumn(),
+        block: resolved.block,
+      },
+    };
+  }, [sheetAccessor]);
+  const {
+    active: readFilterActive,
+    availability: readFilterAvailable,
+    apply: applyReadFilter,
+    restore: restoreReadFilter,
+  } = useSheetReadFilter({ content, getTarget: getReadFilterTarget });
 
   /** 同步取最新正文；只有真的变更才通知外层。 */
   const capture = useCallback((): string | null => {
     // 读态本机筛选绝不落盘：先把运行时筛选摘掉，再取正文（见 usheetReadFilter.ts）。
-    restoreReadFilterRef.current();
+    restoreReadFilter();
     const state = instanceRef.current;
     if (!state) return null;
     try {
@@ -190,7 +218,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     } catch {
       return null;
     }
-  }, []);
+  }, [restoreReadFilter]);
 
   const scheduleFlush = useCallback(() => {
     if (!editingRef.current) return;
@@ -305,13 +333,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     refreshCellFmt();
   }, [refreshCellFmt]);
 
-  /** 排序/筛选共用的「数据块」读取口（只读值，不改任何东西）。 */
-  const sheetAccessor = useCallback((sheet: FWorksheet): SortFilterSheet => ({
-    maxRows: sheet.getMaxRows(),
-    maxColumns: sheet.getMaxColumns(),
-    getValue: (row, column) => sheet.getRange(row, column).getValue(),
-  }), []);
-
   /** 排序：自己算数据区 + 数据层命令 `sheet.command.sort-range`
    *  （不用 `sort-range-asc` 那类 UI 包装命令：它会弹内核的桌面对话框，移动端实测不可接受）。 */
   const runSheetSort = useCallback((direction: "asc" | "desc") => {
@@ -371,58 +392,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       if (!opened) showToast("筛选面板打不开：这个区域可能不足两行", { type: "error" });
     })();
   }, [sheetAccessor]);
-
-  /** 摘掉读态本机筛选：**同步**命令，必须在任何 capture / 切编辑态之前完成。 */
-  const restoreReadFilter = useCallback(() => {
-    if (!readFilterRef.current) return;
-    readFilterRef.current = false;
-    setReadFilterActive(false);
-    const state = instanceRef.current;
-    const workbook = state?.univerAPI.getActiveWorkbook();
-    const sheet = workbook?.getActiveSheet();
-    if (!state || !workbook || !sheet) return;
-    try {
-      state.univerAPI.syncExecuteCommand("sheet.command.remove-sheet-filter", { unitId: workbook.getId(), subUnitId: sheet.getSheetId() });
-    } catch { /* 实例销毁中忽略：此时正文也不再落盘 */ }
-  }, []);
-  restoreReadFilterRef.current = restoreReadFilter;
-
-  /** 读态筛选（本机视图）：条件只活在运行时，落盘前由 restoreReadFilter 摘掉。 */
-  const applyReadFilter = useCallback(() => {
-    const state = instanceRef.current;
-    if (!state) return;
-    if (!readFilterAvailable.enabled) {
-      showToast(readFilterAvailable.reason ?? "读态筛选不可用", { type: "error" });
-      return;
-    }
-    const workbook = state.univerAPI.getActiveWorkbook();
-    const sheet = workbook?.getActiveSheet();
-    const range = workbook?.getActiveRange();
-    if (!workbook || !sheet || !range) return;
-    const resolved = resolveSheetBlock(
-      { startRow: range.getRow(), endRow: range.getLastRow(), startColumn: range.getColumn(), endColumn: range.getLastColumn() },
-      sheetAccessor(sheet),
-    );
-    if (!resolved.ok) {
-      showToast(blockFailureMessage(resolved.reason), { type: "error" });
-      return;
-    }
-    const { block } = resolved;
-    const unitId = workbook.getId();
-    const subUnitId = sheet.getSheetId();
-    const column = range.getColumn();
-    readFilterRef.current = true;
-    setReadFilterActive(true);
-    void (async () => {
-      await state.univerAPI.executeCommand("sheet.command.set-filter-range", {
-        unitId,
-        subUnitId,
-        range: { startRow: block.startRow, startColumn: block.startColumn, endRow: block.endRow, endColumn: block.endColumn },
-      });
-      const opened = await state.univerAPI.executeCommand("sheet.operation.open-filter-panel", { unitId, subUnitId, col: column });
-      if (!opened) showToast("筛选面板打不开：这个区域可能不足两行", { type: "error" });
-    })();
-  }, [readFilterAvailable, sheetAccessor]);
 
   /**
    * 打开查找替换：**编辑态**用 open-replace-dialog（移动 bar 才会展开替换行；改写走内核命令
