@@ -7,9 +7,9 @@
 > **261022 实施状态（持续更新）**
 > - **P0 / P1 / P2-1～P2-4：已完成**。包括可等待保存、GC 维护锁、子树 CTE、小记轻量投影/虚拟列表、最小索引与批量写、标签页懒读、编辑面单一 owner、结构化命令结果、原生流式 fail-fast、路径围栏、分享限长、多维表 draft 等。
 > - **P2-5：已完成**。编辑面关闭/焦点/隐藏实例改为 jsdom 行为测试；GC / syncNow / priority 改为真实操作时间线验证；契约面从实际 `bridge` 与 `nativeSqlite` 导出派生。
-> - **P2-6：进行中（已完成 4 个局部切片）**。已抽 `TabSession`、小记详情缓存、S3 设置表单、编辑命令分发；`SaveCoordinator`、`TreeView`、其余 `SettingsForm`、`EditSession` 与 `MobileUsheetViewer` 尚未拆完。
+> - **P2-6：进行中（已完成 6 个局部切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、编辑命令分发；`SaveCoordinator`、`TreeView`、`EditSession` 与 `MobileUsheetViewer` 尚未拆完。
 > - **P3 / Mobile Data Plane v2：进行中（基础能力部分完成）**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读已落；正式 `HomeSnapshot` / `QuickNotePage` / query API、显式 Unit of Work、SaveCoordinator 抽象、旧全量读接口删除和设备性能目标仍未完成。
-> - **验证基线**：截至本轮，移动端 vitest 99 文件 / 441 例、quickNotes 60 例、全库 351 文件 / 2474 例（16 skip）、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过。P2-6 当前切片仍需用户验收与 Android 设备复验。
+> - **验证基线**：本批定点测试、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过；排除并行会话在途修改的 `mobileUsheetViewer.test.ts` 后，移动端 100 文件 / 441 例通过。该表格测试当前因 mock 缺少并行新增导出而失败，不属于 P2-6 本批文件。P2-6 仍需 Android 设备复验。
 
 ---
 
@@ -448,7 +448,7 @@
 
 ### P2-6 巨型组件已经阻碍局部推理
 
-> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、S3 设置表单（`useS3SettingsForm`）和编辑命令分发（`useEditorCommandDispatcher`）四个局部切片。剩余重点是 `SaveCoordinator`、`TreeView`、`SettingsDrawer` 其余资源/历史/诊断状态、`EditSession` 与 `MobileUsheetViewer`。
+> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、小记列表展示模型（`useQuickNoteListModel`）、S3 设置表单（`useS3SettingsForm`）、设置子页数据（`useSettingsSectionData`）和编辑命令分发（`useEditorCommandDispatcher`）六个局部切片。剩余重点是 `SaveCoordinator`、`TreeView`、`EditSession` 与 `MobileUsheetViewer`。
 
 规模（不含测试）：
 
