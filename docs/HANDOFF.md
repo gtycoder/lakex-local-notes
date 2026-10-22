@@ -19,6 +19,14 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · 仓库清理 + 交接文档迁入 docs/ + GitHub README 重写
+
+- **清理**：删除合并后的 worktree（`deps-261022` / `ink-pad-poc`，合计约 3.2GB）与对应本地/远程分支；删除旧 `release/`（904MB，且是改名前的旧包）；`git gc` 后 `.git` 约 57MB。
+- **文档迁移**：`HANDOFF.md` / `PRODUCT.md` / `DESIGN.md` / `AGENTS.md` 全部移入 `docs/`；根目录保留 `AGENTS.md` 入口 stub（自动加载后指向 `docs/AGENTS.md`）。全仓引用（README、docs 互相引用、scripts、src 注释、`.impeccable` 相对路径）已同步。
+- **README 重写**：按 GitHub 项目首页结构组织 —— 项目简介 / 当前能力 / 技术栈 / 目录结构 / 数据与存储 / 环境要求 / 安装与本地开发 / 测试与门禁 / 构建 / 打包与发布 / 文档索引 / 数据与隐私 / 许可与致谢 / 免责声明。
+- **验证**：tsc 0 · vitest **361 文件 / 2509 通过（17 skip）** · `git diff --check` ✓。
+- **未做/注意**：GitHub 仓库仍需用户创建（`local-lakex-notes`）后加 remote 推送；旧 `release/` 已删，需要时重新打包；邮箱重写备份 `/tmp/lln-pre-email-rewrite.bundle` 仍保留，确认后可删。
+
 ### 261022 · Git 身份与历史邮箱标准化（个人项目）
 
 - **当前身份（仅本仓库 `.git/config`）**：`gtycoder <46844878+gtycoder@users.noreply.github.com>`（GitHub noreply；id 46844878 取自 `api.github.com/users/gtycoder`）。**全局 `~/.gitconfig` 仍是公司身份** `gaotianyu01 <gaotianyu01@kanzhun.com>`，公司项目不受影响。

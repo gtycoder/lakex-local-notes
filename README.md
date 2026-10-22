@@ -1,92 +1,207 @@
-# LocalLakexNotes（Electron）
+# Local Lakex Notes
 
-本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目总览入口；会话交接的唯一文档是** **`HANDOFF.md`。**
+**本地优先的语雀 Lakex 编辑器笔记应用（非官方）**：桌面 macOS + Android，本地是唯一真相，S3 只做多端镜像。
 
-> 给完全没有上下文的后续会话：按 **README → HANDOFF → AGENTS** 阅读。README 提供项目概览；
-> HANDOFF 记录当前状态/真正的待办/踩坑；AGENTS 是长期红线/机制/坑。之后按需读下面的开发/架构文档。
-> **HANDOFF 只保留最新 §0 + 当前基线/待办/坑**；历史 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。
-> **当前主开发分支是** **`master`**（= Gitee 远程默认分支，已验证 `ls-remote --symref`；本地与远端同步）。
+> 使用语雀的 Lakex 编辑器内核（vendored、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场。
 
-***
+## 项目简介
 
-## 设计先决条件（所有开发 / 审计 / 重构的前置约束）
+Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格、多维表、画板、小记全部保存在本地（SQLite + 文件），S3（七牛 Kodo / S3 兼容）只用于多端备份与同步。不存在账号体系、团队协作或云端依赖；没有网络也能完整写作与检索。
 
-> 用户定稿（260909）。任何功能开发、代码审计、重构与性能决策都必须以本节为前提：
-> **不为超出这些条件的场景做设计**（过度设计）；改动与本节冲突时先与用户讨论，不擅自变更语义。
-> 与 `AGENTS.md` 冲突时：红线/机制以 AGENTS 为准，**量级与场景假设以本节为准**。
+- 桌面端：Electron 44 + React 18，macOS 优先
+- 移动端：Vite + Capacitor，Android 为正式端之一
+- 编辑器：语雀 Lakex（富文本）、Univer（表格）、自研多维表、Drawnix（画板）、手写板
+- 同步：本地优先 + 墓碑权威（删除压编辑）+ 先拉后推；冲突不合并，被覆盖方留历史快照
 
-1. **本地优先 + 云端备份**：本地是唯一真相，S3 只是镜像/备份；云端绝不反噬本地。
-2. **个人笔记、多端无并发**：单用户多设备轮换使用；不存在多设备同时编辑同一文档的对抗场景。
-3. **先提交者为真、不解决冲突**：冲突时先提交者视为正确，被覆盖方的编辑以历史快照（`createHistorySnapshot`）归档留档，不做冲突合并。
-4. **回收站是"有笔记本行为的系统容器"**：软删 = 移入回收站笔记本；墓碑权威、删除压编辑；恢复是唯一显式例外（`restore_pending_at` → local-wins）。
-5. **数据量级基线：5000 文档 / 2万附件**（全库含附件 \~20GB，单文档可达数 MB）：性能、分批、内存与 SQL 参数预算均按此量级核算；AGENTS §1 的 10 万/100 万压测基线仅作长期参考，不作为设计前提。
-6. **搜索单独立项**：搜索功能（FTS 索引/短词/增量等）将整体统一重构，常规审计与重构不含搜索优化项。
+## 当前能力
 
-## 一、项目概览
+**编辑与文档**
+- 笔记本 / 分组 / 文档树，支持拖拽排序与移动层级
+- Lakex 富文本：标题、列表、待办、引用、代码块、公式、分栏、折叠块、图片、附件、文档引用
+- 表格（Univer）：公式库、数字格式、边框、合并、对齐、换行、冻结、排序、筛选、查找替换、超链接、单元格备注、十字高亮
+- 多维表（自研）：表格 / 看板视图、字段类型、筛选、排序、搜索、附件与正文详情
+- 画板（Drawnix）与手写板（多页 A4、笔迹/高亮/橡皮、撤销重做）
+- 小记：独立时间线、标签、预览快路径 + 内核只读兜底、转正式文档、单条「保存并同步」
+- 大纲、历史快照、回收站（软删 + 墓碑 + 恢复标记）、附件与图片管理、全文搜索（FTS5）
+- AI 助手：选区浮层 / 顶栏 / 块菜单入口，文本与图片、PDF 文本解析（Key 只在主进程）
 
-- **名称**：仓库 / npm 包 = `local-lakex-notes`；产品显示名 = `LocalLakexNotes`；**本地目录名暂仍为 `lake-notes-electron`**（改名会牵动 worktree，另行处理）。
-- **身份标识**：桌面 appId `com.locallakexnotes.desktop`、Android `com.locallakexnotes.mobile`；S3 迁移码前缀 `LLN1.`；私有协议 `locallakexnotes://app`；深链 `locallakexnotes://quick-note`。
+**同步与存储**
+- 本地优先：SQLite + 文件是唯一真相，S3 只是镜像
+- 墓碑权威：删除必须传播到所有设备；恢复是唯一显式例外
+- 冲突先提交者为真，被覆盖方自动留历史快照，不做合并
+- 资产按远端清单差集同步，禁止逐对象探测；并发上限 8
+- S3 配置可在桌面导出、手机导入（加密迁移码 `LLN1.`，仅作备用）
 
-- **形态**：Electron 44 桌面应用 + Capacitor 安卓端（正式端）。
+**界面与工程**
+- 自有设计系统：`--lake-*` 令牌、`ln-*` 原语、CSS `@layer` 层序、WCAG 对比度门禁
+- 桌面 / 移动端两套独立 UI 层，共享 `src/core` 领域逻辑
+- 全库 vitest + 类型检查 + UI/样式/构建门禁
 
-## 二、核心设计理念（仿思源笔记资源管理）
+## 技术栈
 
-1. 图片/附件按笔记分目录存储（`note-assets/{noteId}/`），文档与资源分离
-2. 不做图片去重（冗余存储可接受）
-3. 用 S3 做备份/同步（参照思源的 S3 同步思路）
-4. 复制到第三方（微信）时图片能正常显示（webp→png 转换）
-5. 本地资源完全离线可用（Lake 编辑器 CDN 依赖全量本地镜像）
-6. **不弹"正在加载"之类的 toast**
+- 桌面：Electron 44.9、React 18.3、TypeScript 5.9、Vite 8、better-sqlite3 13
+- 移动：Capacitor 8（Android）、Vite、原生 Kotlin 插件（文件 / 安全存储 / 快捷键 / 分享）
+- 编辑器：`@dlient/lakex-doc-react`（vendored，v1.99.0）、`@univerjs/*` 1.0.3（精确锁）、Drawnix、perfect-freehand
+- 同步：`@aws-sdk/client-s3`、七牛 Kodo（S3 兼容）
+- 其它：sharp（图片转换）、unpdf（PDF 文本）、write-excel-file（Excel 导出）
 
-## 三、技术栈
+## 目录结构
 
-Electron 44.3 + React 18.3 + TypeScript 5.9 + better-sqlite3 13（N-API，无需 rebuild）+ Lake 编辑器
-（`@dlient/lakex-doc-react` 上游源码 vendor（产物入库），内核 v1.99.0，已 pin、勿随意升级）+ Drawnix 画板（`lakex-drawnix@0.1.0`）+
-sharp（图片转换）+ @aws-sdk/client-s3；移动端 = Vite + Capacitor（安卓）。准确版本以 `package.json` 为准。
-
-## 四、仓库与分支
-
-**本地仓库**：`/Users/admin/file/local-lake/lake-notes-electron`（独立 git 仓库）
-**当前分支**：`master`（主开发分支 = Gitee 默认分支）
-**远程**：
-
+```text
+.
+├── electron/                 # 主进程：窗口/协议/IPC/S3/同步编排/AI/资源服务
+├── src/
+│   ├── core/                 # 两端共享的领域逻辑（禁止 node: 导入）
+│   ├── components/           # 桌面 React 组件
+│   ├── features/             # 编辑器、表格、多维表、画板、小记、AI…
+│   ├── desktop/              # 桌面外壳
+│   ├── mobile/               # Android / Capacitor 端（mb-* 独立 UI 层）
+│   ├── hooks/ · lib/ · styles/
+│   └── ...
+├── android/                  # Capacitor Android 工程（Kotlin 插件）
+├── vendor/lakex-doc-react/   # vendored 的 Lakex 编辑器（已 pin，勿随意升级）
+├── scripts/                  # 构建、门禁、e2e、样式/移动端审计、同步工具
+├── docs/                     # 交接与规格（见下方「文档」）
+└── build/ · public/          # 图标、启动资源、字体
 ```
-origin  git@gitee.com:gtycoder/local-lake.git
+
+## 数据与存储
+
+**应用标识**
+
+- 桌面 appId：`com.locallakexnotes.desktop`
+- Android applicationId / 包名：`com.locallakexnotes.mobile`
+
+**本地数据目录**
+
+| 用途 | 路径 |
+| --- | --- |
+| 开发数据 | `~/Library/Application Support/local-lakex-notes-dev` |
+| 正式数据 | `~/Library/Application Support/local-lakex-notes` |
+| 日志 | 对应数据目录下 `logs/local-lakex-notes.log` |
+| Android 数据 | 应用私有目录（SQLite + 正文文件） |
+
+> ⚠️ 正式数据目录只属于你本人；开发/测试请用 `LAKE_USER_DATA` 覆盖到独立目录，**不要触碰正式数据**。
+
+**S3 同步**
+
+- 对象前缀默认 `local-lakex-notes`；清单为单文件 manifest，资产按清单声明的差集同步
+- 同步顺序：先拉远端（带冲突判定）→ 再推合并后的本地
+- 关闭云同步 = 完全没配置（任何路径不出网）
+
+## 环境要求
+
+- **Node.js 24**（必须；低版本 Vite 8 会失败）
+- npm、macOS（桌面端）、Android SDK + JDK 21（移动端）
+- macOS 打包建议 Xcode Command Line Tools
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+node -v   # v24.x
 ```
 
-- Gitee `master` = 当前主干；Gitee `main` = 旧 Tauri（trui）版，保留未动
-- SSH key 已在 Gitee 可用（`git ls-remote` / `git push` 走 SSH 均通过）；HTTPS 备援地址
-  `https://gitee.com/gtycoder/local-lake.git`（macOS 钥匙串亦缓存凭据）
+## 安装依赖
 
-**推送**：`git push origin master`
+```bash
+cd <repo>
+npm install
+```
 
-**在途 worktree / 本地分支清理现状**：属易过期事实，**以 `HANDOFF.md` §0 为准**（本文不维护）；开工前先跑 `git worktree list` + `git status` 核对。
+## 本地开发
 
-**分支策略**：所有功能分支合入后删除；历史分支不重新启用，需要时从 git 历史或远端归档查看。
+```bash
+npm run dev          # Vite(1421) + Electron（CDP 9222）
+```
 
-## 五、参考仓库（只读，勿修改）
+- 本地资源服务：`http://127.0.0.1:19876`
+- 移动端浏览器预览（仅 UI / 纯 DOM 逻辑，原生桥降级）：
 
-| 仓库                                                   | 用途                                                                |
-| ---------------------------------------------------- | ----------------------------------------------------------------- |
-| `/Users/admin/file/local-lake/yuque-developer-docs/` | 语雀开发者文档本地副本（**lakex 内核官方出处 / 检索第一顺位**，见 `AGENTS.md` §2）：`47 - 通用配置`、`08 - 命令列表`、`65 - 大纲（toc)` 等 |
-| `/Users/admin/file/local-lake/siyuan-master/`        | 思源笔记 v3.8.0（**AGPL-3.0**，移植样式需留 NOTICE）：S3 同步/dejavu、资源管理、UI 视觉基准 |
-| `/Users/admin/file/local-lake/lake-main/`            | lakejs 开源社区版内核（MIT）：**当"机制字典"读源码**，不是我们实际运行的 lakex 内核             |
-| `/Users/admin/file/local-lake/lake-editor-main/`     | 第三方 VSCode yuque-editor 插件（参考价值低）                                 |
-| `/Users/admin/file/local-lake/yuque-re/`            | **语雀逆向资料仓（证据仓，不是源码）**：安卓 RN/资源还原、web 文档编辑器·小记·多维表的运行时实测。**先读该目录的 `USAGE.md`**（查询器 `tools/qy.py`）；结论只作旁证，仲裁仍是 `AGENTS.md` §2 的三级检索 + 运行时实测 |
+```bash
+bash scripts/mobile-preview.sh          # http://127.0.0.1:1422/preview.html
+```
 
-## 六、文档索引
+Android 模拟器调试见 `docs/DEVELOPMENT.md` 与 `docs/MOBILE-TECH-STACK.md`；设备级截图必须用 `adb exec-out screencap -p`。
 
-| 文档                                           | 内容                                                              | 新会话优先级       |
-| -------------------------------------------- | --------------------------------------------------------------- | ------------ |
-| **HANDOFF.md**                               | 唯一交接文档（当前状态/待办/坑）；只保留最新 §0，历史在 git                            | **交接首读**    |
-| **docs/CODEX-GUIDE.md**                      | Codex 自主开发指南（Playwright 驱动真实 Electron/Computer Use/浏览器）         | **动手前必读**    |
-| docs/LAKEX-CONTRACT.md                       | 闭源 lakex 内核行为契约 + 调试速查表（会话知识库，编辑器相关先查）                          | 编辑器先读        |
-| docs/DEVELOPMENT.md                          | 环境要求、开发/构建/打包命令、测试、依赖版本、提交历史                                    | 动手前读         |
-| docs/SYNC-PROTOCOL.md · docs/S3-GC-DESIGN.md | 同步协议 / GC 与保留链（**改同步、GC 前必读**，配合 AGENTS §3 原则 11\~13）           | 动同步必读        |
-| docs/STORAGE-LAYERS.md                       | 存储分层与「设备本地」契约（**新增持久化前必读**：哪些进 S3 / 哪些仅本地、三处同改规则）              | 加持久化前读       |
-| docs/INK-PAD.md                              | 手写板正式功能：数据契约、输入/渲染、存储与跨端同步边界                                  | 写相关功能前读      |
-| docs/ARCHITECTURE.md                         | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制                                 | 改代码前读        |
-| docs/TROUBLESHOOTING.md                      | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑）                        | 遇坑查          |
-| docs/PANEL-CONTRACT.md · docs/UI-PRIMITIVES-PHASE1-260926.md | 面板几何/层序契约、浮层原语规范 | 改 UI/外壳前读 |
-| docs/RELEASE.md · docs/SYNC-RELIABILITY-VERIFY.md | 打包发布与同步可靠性验收 | 发布前读 |
+## 测试与门禁
 
+每次改动至少跑（约 20s）：
+
+```bash
+npx tsc --noEmit
+npx vitest run
+git diff --check
+```
+
+样式 / 构建门禁：
+
+```bash
+node scripts/ui-metrics.mjs
+npm run check:core
+npm run check:mobileui
+npm run check:bundle
+```
+
+视觉与移动端设备门禁按改动范围定点跑（完整口径见 `docs/HANDOFF.md` §3#21、`docs/AGENTS.md` §3#21）。
+
+## 构建
+
+### 桌面（macOS）
+
+```bash
+npx vite build
+./node_modules/.bin/electron-builder --mac   # release/*.dmg / *.zip / *.app
+```
+
+当前为**未签名、未公证**的本地构建；分发给他人需 Apple Developer 签名 + 公证（见 `docs/RELEASE.md`）。
+
+### Android
+
+```bash
+bash scripts/android-build.sh --sync           # 构建 debug APK
+bash scripts/android-build.sh --sync --install # 构建并安装到已连接设备
+```
+
+当前只产出 **debug 签名**的 APK；正式发布需要 release keystore 与 `assembleRelease`（尚未配置）。
+
+## 打包与发布
+
+- 推荐用 **GitHub Releases** 分发：发版时打 tag（如 `v0.1.0`），附 macOS `.dmg/.zip`、Android `.apk` 与 `SHA256SUMS.txt`
+- 各系统包必须在对应平台生成（macOS 包需 macOS；Windows/Linux 目前未配置打包 target）
+- 发布流程与签名/公证前置条件见 `docs/RELEASE.md`
+- 不提供自动更新；下载后手动替换
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | **唯一交接文档**：当前状态 / 待办 / 踩坑 |
+| [docs/AGENTS.md](docs/AGENTS.md) | **长期红线与机制**（会话启动必读） |
+| [docs/PRODUCT.md](docs/PRODUCT.md) · [docs/DESIGN.md](docs/DESIGN.md) | 产品定位 / 设计系统（令牌、层序、组件规范） |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 进程结构、关键文件、数据流 |
+| [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/S3-GC-DESIGN.md](docs/S3-GC-DESIGN.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议 / GC / 存储分层 |
+| [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
+| [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
+| [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](docs/CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 环境/命令 / CDP 驱动指南 / 排错 |
+
+## 数据与隐私
+
+- 无账号、无云端登录；数据默认只在本机
+- S3 凭证保存在本机（桌面 safeStorage / Android Keystore），不会写入正文或日志
+- 迁移码内层加密仅用于防误读，**不是安全边界**；不要外传
+- 仓库内不含任何真实笔记数据或密钥
+
+## 许可与致谢
+
+- 本项目源代码**暂未声明开源许可证**（如需开源请先补 LICENSE）
+- 语雀 Lakex 编辑器内核为闭源第三方产物（vendored，已 pin），本项目仅作本地集成，不构成对语雀代码的分发
+- 部分界面版式与主题令牌参考自 **SiYuan（思源笔记，AGPL-3.0）**；相关规则收编在 `src/styles/compat.css` / `kit.css`，署名保留在应用设置页「关于」与文件头
+- 表格：[Univer](https://github.com/dream-num/univer)（Apache-2.0，1.0.3 精确锁）
+- 画板：[Drawnix](https://github.com/plait-board/drawnix)
+- 图标：[Lucide](https://lucide.dev)（ISC）
+- 字体：MiSans（小米，MiSans 字体许可）· JetBrains Mono（SIL OFL 1.1）
+- 参考：语雀 Lakex 编辑器官方文档（`yuque-developer-docs`）
+
+## 免责声明
+
+本项目是个人使用的非官方工具，与语雀 / 蚂蚁集团无关；不提供任何服务可用性、数据安全或兼容性保证。使用前请自行备份重要数据。

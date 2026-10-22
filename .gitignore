@@ -12,7 +12,7 @@ test-node-abi
 .css-audit/
 
 # Impeccable 的**运行时产物**（决策页的题目与作答状态、live 模式的会话）——过程数据，不入库。
-# 注意：DESIGN.md 的机器可读层 .impeccable/design.json 与 .impeccable/critique/ 的快照是**要入库**的。
+# 注意：docs/DESIGN.md 的机器可读层 .impeccable/design.json 与 .impeccable/critique/ 的快照是**要入库**的。
 .impeccable/questions/
 .impeccable/live/
 
