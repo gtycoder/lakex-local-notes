@@ -19,6 +19,15 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · Git 身份与历史邮箱标准化（个人项目）
+
+- **当前身份（仅本仓库 `.git/config`）**：`gtycoder <46844878+gtycoder@users.noreply.github.com>`（GitHub noreply；id 46844878 取自 `api.github.com/users/gtycoder`）。**全局 `~/.gitconfig` 仍是公司身份** `gaotianyu01 <gaotianyu01@kanzhun.com>`，公司项目不受影响。
+- **历史重写**：用 `git filter-repo --mailmap` 把全部 `gaotianyu01@kanzhun.com` 的 author/committer 改为 `gtycoder <1162895623@qq.com>`（1768 条）；agent 身份（`codex@local` / `agent@local` / `dsh@local`）保持不变。**所有旧 commit hash 失效**（同 261017 那次重写），文档里旧 hash 只作历史记录、`git show` 已不可达。
+- **已强推 Gitee**：`master 806d9311`、`chore/deps-261022 47c62a43`、`feat/ink-pad-poc 33376f7f`（`main` 旧 Tauri 分支未动）；两个 worktree 已随重写更新到新 commit。
+- **回滚包**：`/tmp/lln-pre-email-rewrite.bundle`（重写前 `--all` 备份，58MB）；确认无误后可删。
+- **后果/注意**：其它克隆/会话必须 `git fetch --force` 后 reset 或重新 clone；GitHub 仓库尚未创建，之后直接推新历史即可（若之前推过旧历史则需 force-push）。
+- **其它项目如何分开**（本次未改全局）：单仓库可 `git config user.email ...`；按目录用 `~/.gitconfig` 的 `includeIf "gitdir:~/file/local-lake/"` → 个人配置、`includeIf "gitdir:~/公司目录/"` → 公司配置。
+
 ### 261022 · 品牌/身份标准化：local-lakex-notes（全量改名，无存量）· **已提交**
 
 - **用户定稿**：项目名 `local-lakex-notes`（GitHub 空间同名，用户自行创建）；本地无存量数据 ⇒ **连同包名 / appId / 数据库与存储键全部标准化**，不做旧值兼容。
