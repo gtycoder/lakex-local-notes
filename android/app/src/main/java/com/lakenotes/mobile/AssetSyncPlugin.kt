@@ -19,6 +19,16 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+/** `localKey` 只能落在 filesDir/note-assets 的 canonical 子树内；拒绝绝对路径、.. 与软链逃逸。 */
+internal fun resolveLocalAssetFile(filesRoot: File, localKey: String): File {
+    require(localKey.isNotBlank() && !File(localKey).isAbsolute) { "invalid localKey: $localKey" }
+    val root = File(filesRoot, "note-assets").canonicalFile
+    val target = File(root, localKey).canonicalFile
+    val rootPrefix = root.path + File.separator
+    require(target.path.startsWith(rootPrefix)) { "invalid localKey: $localKey" }
+    return target
+}
+
 /**
  * 原生资产同步插件：S3 流式 GET/PUT + 本地文件读写，字节不过 WebView 桥。
  *
@@ -264,7 +274,7 @@ class AssetSyncPlugin : Plugin() {
         return conn
     }
 
-    private fun localAssetFile(localKey: String): File = File(File(getContext().filesDir, "note-assets"), localKey)
+    private fun localAssetFile(localKey: String): File = resolveLocalAssetFile(getContext().filesDir, localKey)
 
     private fun sha256File(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")

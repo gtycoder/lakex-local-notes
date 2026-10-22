@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { execEditorCommand } from "./execCommand";
+import { editorCommandFailureMessage, execEditorCommand, execEditorCommandResult } from "./execCommand";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 
 function fake(parts: Record<string, unknown>): LakeEditorInstance {
@@ -48,6 +48,19 @@ describe("execEditorCommand", () => {
     expect(execEditorCommand(null, "bold")).toBeUndefined();
     expect(execEditorCommand(fake({}), "bold")).toBeUndefined();
   });
+
+  it("结构化结果区分未就绪、不支持、真实异常，并保留链接返回值", () => {
+    expect(execEditorCommandResult(null, "bold")).toEqual({ ok: false, reason: "editor-unavailable" });
+    const unavailable = execEditorCommandResult(fake({}), "bold");
+    expect(unavailable).toEqual({ ok: false, reason: "command-unavailable" });
+    if (!unavailable.ok) expect(editorCommandFailureMessage("bold", unavailable)).toContain("不支持");
+
+    const failed = execEditorCommandResult(fake({ execCommand: () => { throw new Error("render exploded"); } }), "table");
+    expect(failed).toMatchObject({ ok: false, reason: "command-failed", error: expect.objectContaining({ message: "render exploded" }) });
+    if (!failed.ok) expect(editorCommandFailureMessage("table", failed)).toContain("table");
+
+    expect(execEditorCommandResult(fake({ execCommand: () => false }), "link")).toEqual({ ok: true, value: false });
+  });
 });
 
 /**
@@ -71,5 +84,18 @@ describe("移动端命令入口唯一性（源码级）", () => {
       .filter((p) => !p.endsWith("execCommand.ts") && !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"))
       .filter((p) => readFileSync(p, "utf8").includes("renderer?.execCommand"));
     expect(offenders.map((p) => path.relative(ROOT, p))).toEqual([]);
+  });
+
+  it("用户触发的 dock / 插入命令走结构化结果并上报失败", () => {
+    const dock = readFileSync(path.join(ROOT, "editor/EditorDock.tsx"), "utf8");
+    const host = readFileSync(path.join(ROOT, "editor/EditorDockHost.tsx"), "utf8");
+    const composer = readFileSync(path.join(ROOT, "home/QuickNoteComposer.tsx"), "utf8");
+    for (const source of [dock, host, composer]) {
+      expect(source).toContain("execEditorCommandResult");
+      expect(source).toContain("editorCommandFailureMessage");
+      expect(source).toContain("showToast");
+    }
+    expect(host).not.toMatch(/try \{ execEditorCommand/);
+    expect(composer).not.toMatch(/try \{ execEditorCommand/);
   });
 });

@@ -1,5 +1,5 @@
 import { sqlParameterBatches } from "../../core/sqlParameterBatch.js";
-import type { MobileDb } from "./sqliteDb";
+import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
 import { deleteNoteBodies, deleteHistorySnapshot } from "./noteBodies.js";
 
 interface ParentedNode {
@@ -63,18 +63,26 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     const folderIdList = Array.from(subtree.folderIds);
     if (folderIdList.length === 0) return;
 
+    const statements: MobileBatchStatement[] = [];
     const noteRows: Array<{ id: string }> = [];
     for (const batch of sqlParameterBatches(folderIdList)) {
       const ph = batch.map(() => "?").join(",");
-      await d.prepare("UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL").run(now, now, ...batch);
+      statements.push({
+        statement: "UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL",
+        values: [now, now, ...batch],
+      });
     }
     for (const batch of sqlParameterBatches(Array.from(subtree.allIds))) {
       const ph = batch.map(() => "?").join(",");
       noteRows.push(...await d.prepare("SELECT id FROM notes WHERE parent_id IN (" + ph + ") AND trashed_at IS NULL").all(...batch) as Array<{ id: string }>);
     }
     for (const n of noteRows) {
-      await d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL, updated_at=? WHERE id=?").run(now, now, n.id);
+      statements.push({
+        statement: "UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL, updated_at=? WHERE id=?",
+        values: [now, now, n.id],
+      });
     }
+    await executeBatchInTransaction(d, statements);
   });
 }
 
@@ -126,19 +134,23 @@ export async function restoreTreeItem(
 
   await d.transaction(async () => {
     const now = new Date().toISOString();
+    const statements: MobileBatchStatement[] = [];
     for (const fid of folderIds) {
       // folder 同理：远端学到的 folder 删除（applyRemoteFolderDelete）标 trashed 但根行 parent 可能不变；
       // COALESCE 兼容两种表示（UI 软删 parent 未动 → 保持；远端学来 → deleted_from_parent_id 为原父）。
-      await d.prepare(
-        "UPDATE folders SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?"
-      ).run(now, fid);
+      statements.push({
+        statement: "UPDATE folders SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?",
+        values: [now, fid],
+      });
     }
     for (const nid of restoreNoteIds) {
       // 子树内 notes：applyRemoteFolderDelete 会把子笔记 parent 移到 TRASH 容器 → 恢复时一并移回原父
-      await d.prepare(
-        "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?"
-      ).run(now, now, nid);
+      statements.push({
+        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?",
+        values: [now, now, nid],
+      });
     }
+    await executeBatchInTransaction(d, statements);
   });
 }
 
@@ -152,17 +164,22 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
   };
   await d.transaction(async () => {
     const now = new Date().toISOString();
-    const writeTombstone = d.prepare(
-      "INSERT OR REPLACE INTO deleted_notes (id, title, parent_id, sort_order, updated_at, deleted_at, node_type, purged_at) VALUES (?,?,?,?,?,?,?,?)"
-    );
+    const statements: MobileBatchStatement[] = [];
+    const tombstone = (id: string, title: string, parentId: string | null, sortOrder: number, updatedAt: string, nodeType: "note" | "folder"): void => {
+      statements.push({
+        statement: "INSERT OR REPLACE INTO deleted_notes (id, title, parent_id, sort_order, updated_at, deleted_at, node_type, purged_at) VALUES (?,?,?,?,?,?,?,?)",
+        values: [id, title, parentId, sortOrder, updatedAt, now, nodeType, now],
+      });
+    };
     if (kind === "note") {
       const row = await d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE id=?").get(id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-      if (row) await writeTombstone.run(row.id, row.title, row.parent_id, row.sort_order, row.updated_at, now, "note", now);
+      if (row) tombstone(row.id, row.title, row.parent_id, row.sort_order, row.updated_at, "note");
       await collectHistory(id);
       purgedNoteIds.push(id);
-      await d.prepare("DELETE FROM notes WHERE id=?").run(id);
-      await d.prepare("DELETE FROM sync_base WHERE note_id=?").run(id);
-      await d.prepare("DELETE FROM note_history WHERE note_id=?").run(id);
+      statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [id] });
+      statements.push({ statement: "DELETE FROM sync_base WHERE note_id=?", values: [id] });
+      statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [id] });
+      await executeBatchInTransaction(d, statements);
       return;
     }
 
@@ -171,21 +188,22 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     const subtree = collectSubtree(allFolders, allNotes, id);
     for (const fid of subtree.folderIds) {
       const f = await d.prepare("SELECT title, parent_id, sort_order, updated_at FROM folders WHERE id=?").get(fid) as { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-      if (f) await writeTombstone.run(fid, f.title, f.parent_id, f.sort_order, f.updated_at, now, "folder", now);
-      await d.prepare("DELETE FROM folders WHERE id=?").run(fid);
+      if (f) tombstone(fid, f.title, f.parent_id, f.sort_order, f.updated_at, "folder");
+      statements.push({ statement: "DELETE FROM folders WHERE id=?", values: [fid] });
     }
     const noteIds: Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }> = [];
     for (const batch of sqlParameterBatches(Array.from(subtree.noteIds))) {
       noteIds.push(...await d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE id IN (" + batch.map(() => "?").join(",") + ")").all(...batch) as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }>);
     }
     for (const n of noteIds) {
-      await writeTombstone.run(n.id, n.title, n.parent_id, n.sort_order, n.updated_at, now, "note", now);
+      tombstone(n.id, n.title, n.parent_id, n.sort_order, n.updated_at, "note");
       await collectHistory(n.id);
       purgedNoteIds.push(n.id);
-      await d.prepare("DELETE FROM notes WHERE id=?").run(n.id);
-      await d.prepare("DELETE FROM sync_base WHERE note_id=?").run(n.id);
-      await d.prepare("DELETE FROM note_history WHERE note_id=?").run(n.id);
+      statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [n.id] });
+      statements.push({ statement: "DELETE FROM sync_base WHERE note_id=?", values: [n.id] });
+      statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [n.id] });
     }
+    await executeBatchInTransaction(d, statements);
   });
   // 文件删除放在事务外：失败只留孤儿文件，不影响"已彻底删除"的 DB 判定。
   for (const noteId of purgedNoteIds) await deleteNoteBodies(noteId).catch(() => undefined);

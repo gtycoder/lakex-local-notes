@@ -15,11 +15,15 @@ describe("工作区正文懒挂载（261019）", () => {
     expect(WS).toMatch(/!active \|\| !mountedIds\.has\(active\.id\)/);
   });
 
-  it("恢复历史标签时不激活（只登记），活动页先读且单独 open", () => {
-    expect(WS).toMatch(/const openTab = useCallback\(\(id: string, activate = true\)/);
-    // 当前文档的读取排在历史标签之前（别被队头拖慢）
-    expect(WS).toMatch(/void openTab\(initialNoteId\);\s*\n\s*saved\.filter\(\(id\) => id !== initialNoteId\)\.forEach\(\(id\) => void openTab\(id, false\)\)/);
-    expect(WS).toMatch(/void openTab\(saved\[saved\.length - 1\], true\);\s*\n\s*saved\.slice\(0, -1\)\.forEach\(\(id\) => void openTab\(id, false\)\)/);
+  it("恢复历史标签只建占位，活动页才读正文；编辑态由显式参数传入", () => {
+    expect(WS).toMatch(/const openTab = useCallback\(\(id: string, options: OpenTabOptions = \{\}\): Promise<void>/);
+    expect(WS).toContain("load: false");
+    expect(WS).toMatch(/void openTab\(initialNoteId, \{ enterEditor: initialMode === "editor" \}\);/);
+    expect(WS).toMatch(/saved\.filter\(\(id\) => id !== initialNoteId\)\.forEach\(\(id\) => void openTab\(id, \{ activate: false, load: false \}\)\)/);
+    expect(WS).toMatch(/void openTab\(saved\[saved\.length - 1\], \{ activate: true \}\);/);
+    expect(WS).toMatch(/saved\.slice\(0, -1\)\.forEach\(\(id\) => void openTab\(id, \{ activate: false, load: false \}\)\)/);
+    expect(WS).not.toContain("pendingEditRef");
+    expect(WS).toMatch(/enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board"/);
   });
 
   it("活动页变化时补挂载；tab 关闭/驱逐时回收标记", () => {
@@ -27,12 +31,13 @@ describe("工作区正文懒挂载（261019）", () => {
     expect(WS).toMatch(/const ids = new Set\(tabs\.map\(\(t\) => t\.id\)\)/);
   });
 
-  it("并发恢复时淘汰要保护**当前活动页**，不是刚加入的那一条（261019 偶发空白根因）", () => {
-    expect(WS).toMatch(/activeNoteId: activeIdRef\.current \?\? id/);
+  it("并发恢复时淘汰保护当前活动页；占位正文由活动页统一懒读", () => {
+    expect(WS).toMatch(/activeNoteId: activeIdRef\.current/);
+    expect(WS).toMatch(/if \(!active \|\| active\.loaded\) return;\s*\n\s*void loadTabBody\(active\.id, tabEpochRef\.current\)/);
     // 自愈：活动页不在 tabs 且没有在途读取 ⇒ 落到第一个标签，避免永远骨架/空白
     expect(WS).toMatch(/pendingIdsRef\.current\.has\(activeId\)/);
     expect(WS).toMatch(/setActiveId\(tabs\[0\]\.id\)/);
-    expect(WS).toMatch(/finally\(\(\) => \{ pendingIdsRef\.current\.delete\(id\); setReadTick\(\(t\) => t \+ 1\); \}\)/);
+    expect(WS).toMatch(/pendingIdsRef\.current\.delete\(id\);\s*\n\s*setReadTick\(\(t\) => t \+ 1\);/);
   });
 });
 

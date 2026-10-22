@@ -9,7 +9,7 @@
  * 结构：Group > (title + Section > 行…)；行 = Item / Field / Block / Switch / Shortcut；
  *       控件 = TextField / NumField（.mb-input 内嵌 input）；Seg（.mb-segment）。
  */
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, isValidElement, useEffect, useState, type ReactNode } from "react";
 
 export function Group({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
   return (
@@ -113,8 +113,19 @@ export function Seg({ ariaLabel, children }: { ariaLabel: string; children: Reac
   return <div className="mb-segment" role="group" aria-label={ariaLabel}>{children}</div>;
 }
 
-/** 数字设置项：保留「空值回退默认 + 下限钳制」语义。 */
+/** 数字设置项：编辑期间只改 draft，失焦/Enter 才统一校验并提交；0 是合法值。 */
 export function NumField({ label, value, min, max, floor, fallback, onSave }: { label: string; value: number; min: number; max: number; floor: number; fallback: number; onSave: (n: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => { setDraft(String(value)); }, [value]);
+
+  const commit = (): void => {
+    const text = draft.trim();
+    const parsed = text === "" ? fallback : Number(text);
+    const next = Number.isFinite(parsed) ? Math.min(max, Math.max(floor, parsed)) : fallback;
+    setDraft(String(next));
+    if (next !== value) onSave(next);
+  };
+
   return (
     <span className="mb-input mb-input--num">
       <input
@@ -122,8 +133,13 @@ export function NumField({ label, value, min, max, floor, fallback, onSave }: { 
         aria-label={label}
         min={min}
         max={max}
-        value={value}
-        onChange={(e) => onSave(Math.max(floor, Number(e.target.value) || fallback))}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") { e.preventDefault(); setDraft(String(value)); }
+        }}
       />
     </span>
   );

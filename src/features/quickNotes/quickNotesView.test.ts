@@ -170,7 +170,7 @@ describe("小记标签（随 .qnote 同步，无独立目录表）", () => {
     expect(WORKSPACE_SRC).toContain("buildQuickNoteTagIndex(items");
     expect(WORKSPACE_SRC).toContain("tagOptions={tagIndex.tags}");
     expect(WORKSPACE_SRC).toContain("<QuickNoteTagPicker");
-    expect(MOBILE_HOME_SRC).toContain("buildQuickNoteTagIndex(quickNotes");
+    expect(MOBILE_HOME_SRC).toContain("buildQuickNoteTagIndex(displayedQuickNotes");
     expect(MOBILE_HOME_SRC).toContain("tagOptions={quickTagIndex.tags}");
     expect(MOBILE_COMPOSER_SRC).toContain("<MobileQuickNoteTagSheet");
   });
@@ -178,7 +178,7 @@ describe("小记标签（随 .qnote 同步，无独立目录表）", () => {
   it("卡片显示标签，筛选只影响当前列表；标签写回 .qnote 内容", () => {
     expect(WORKSPACE_SRC).toContain("item.content.tags");
     expect(WORKSPACE_SRC).toContain("filterQuickNotesByTag(items");
-    expect(MOBILE_HOME_SRC).toContain("filterQuickNotesByTag(quickNotes");
+    expect(MOBILE_HOME_SRC).toContain("filterQuickNotesByTag(displayedQuickNotes");
     expect(WORKSPACE_SRC).toMatch(/native\.updateQuickNote\(noteId,[\s\S]{0,260}tags,/);
     expect(MOBILE_COMPOSER_SRC).toMatch(/saveQuickNoteContent\(noteId, \{ text: plain, body, images, tags \}\)/);
   });

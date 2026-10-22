@@ -74,12 +74,6 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
     return client;
   }
 
-  async function putBytes(key: string, bytes: Uint8Array): Promise<void> {
-    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
-    const c = await getClient();
-    await c.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: bytes }));
-  }
-
   let nativeConfig: Promise<boolean> | null = null;
   async function ensureNativeAssetSync(): Promise<boolean> {
     if (!nativeAssetSyncSupported()) return false;
@@ -170,28 +164,17 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
   };
 
   // 原生资产流式上传（字节不过桥）：core 的 scanLocalAssets 探测到 putObjectStream +
-  // SyncDbPort.openLocalAssetStream 同时存在才走流式；非原生平台不挂载 → 自动回退字节路径。
-  // 原生运行时失败也回退到字节路径，保证「有则原生、无则回退」。
+  // SyncDbPort.openLocalAssetStream 同时存在才走流式；非原生平台不挂载 → 自动走字节路径。
+  // Android 正式端一旦挂载就必须走原生流式：失败直接抛给同步重试/错误提示，禁止静默重读大对象走 JS/base64。
   if (nativeAssetSyncSupported()) {
     store.putObjectStream = async (key, _size, open) => {
       assertSafeKey(key); // D1：对齐桌面 ObjectStore.putStream
       const handle = await open();
       if (handle == null) throw new Error(`本地资产缺失: ${key}`);
       const localKey = typeof handle === "string" ? handle : (handle as { localKey?: string }).localKey;
-      const read = typeof handle === "object" && handle !== null && typeof (handle as { read?: unknown }).read === "function"
-        ? (handle as { read: () => Promise<Uint8Array | null> }).read
-        : null;
-      if (localKey && (await ensureNativeAssetSync())) {
-        try {
-          await NativeAssetSync.putFile({ key, localKey });
-          return;
-        } catch {
-          // 原生 PUT 失败 → 回退字节路径（下面读取字节重传）
-        }
-      }
-      const bytes = read ? await read() : null;
-      if (!bytes) throw new Error(`本地资产读取失败: ${key}`);
-      await putBytes(key, bytes);
+      if (!localKey) throw new Error(`本地资产流式句柄缺少 localKey: ${key}`);
+      if (!(await ensureNativeAssetSync())) throw new Error("native asset sync unavailable");
+      await NativeAssetSync.putFile({ key, localKey });
     };
 
     // 原生流式下载（字节不过桥）：core 的 downloadNoteAssets 探测到 getObjectToFile + assetFilePath

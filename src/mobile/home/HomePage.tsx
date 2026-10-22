@@ -7,13 +7,14 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Tag, Trash, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
+import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
 import { CREATE_LONG_PRESS_MS, blockPressRelease, createPressArmed, createPressRevealed } from "../ui/createPress";
@@ -56,9 +57,19 @@ export interface MobileQuickNote {
   firstImage: string | null;
   /** 内核形态正文：有它就用桌面同一套只读预览渲染（富文本/卡片/待办），没有则回退纯文本摘要。 */
   body?: string;
-  images?: Array<import("../../core/quickNoteModel.js").StoredQuickNoteImage>;
+  images?: StoredQuickNoteImage[];
   tags: string[];
 }
+
+interface QuickNoteDetail {
+  body: string;
+  images: StoredQuickNoteImage[];
+  tags: string[];
+  firstImage: string | null;
+  updatedAt: string;
+}
+
+const QUICK_NOTE_DETAIL_CACHE_LIMIT = 12;
 
 export type LibraryView = "shelf" | "list";
 
@@ -131,6 +142,10 @@ export function HomePage(props: HomePageProps) {
   const [quickTagFilter, setQuickTagFilter] = useState<QuickNoteTagFilter>({ kind: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [quickSort, setQuickSort] = useState<QuickNoteSort>(() => readQuickNoteSort());   // 本机持久化偏好（L3）
+  /** 列表只带轻量元数据；正文/图片按卡片可见性读取，最多保留 12 条详情。 */
+  const [quickNoteDetails, setQuickNoteDetails] = useState<Map<string, QuickNoteDetail>>(() => new Map());
+  const quickNoteDetailsRef = useRef<Map<string, QuickNoteDetail>>(new Map());
+  const quickNoteLoadsRef = useRef<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
   const [docPickOpen, setDocPickOpen] = useState(false);
@@ -147,6 +162,50 @@ export function HomePage(props: HomePageProps) {
   const pressRef = useRef({ startY: 0, at: 0, revealed: false, timer: 0 });
   /** 长按过的那一次，随后的 click 要吞掉（否则"长按搜索再松手"会顺带把搜索页打开）。 */
   const suppressTapRef = useRef(false);
+
+  const loadQuickNoteDetail = useCallback(async (id: string): Promise<void> => {
+    if (quickNoteDetailsRef.current.has(id) || quickNoteLoadsRef.current.has(id)) return;
+    quickNoteLoadsRef.current.add(id);
+    try {
+      const full = await bridge.readQuickNote(id);
+      if (!full) return;
+      const next = new Map(quickNoteDetailsRef.current);
+      next.delete(id);
+      next.set(id, {
+        body: full.content.body,
+        images: full.content.images,
+        tags: full.content.tags,
+        firstImage: full.content.images[0]?.filename ?? null,
+        updatedAt: full.updatedAt,
+      });
+      while (next.size > QUICK_NOTE_DETAIL_CACHE_LIMIT) {
+        const oldest = next.keys().next().value as string | undefined;
+        if (!oldest) break;
+        next.delete(oldest);
+      }
+      quickNoteDetailsRef.current = next;
+      setQuickNoteDetails(next);
+    } catch { /* 单条正文读取失败：卡片保留轻量摘要 */ }
+    finally { quickNoteLoadsRef.current.delete(id); }
+  }, []);
+
+  // 列表刷新后丢弃已过期正文详情；标签变化但 updatedAt 不变时也要失效。
+  useEffect(() => {
+    const base = new Map(quickNotes.map((note) => [note.id, note] as const));
+    const next = new Map(quickNoteDetailsRef.current);
+    let changed = false;
+    for (const [id, detail] of next) {
+      const note = base.get(id);
+      if (!note || note.updatedAt !== detail.updatedAt || note.tags.join("\u0000") !== detail.tags.join("\u0000")) {
+        next.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      quickNoteDetailsRef.current = next;
+      setQuickNoteDetails(next);
+    }
+  }, [quickNotes]);
 
   // 离开「小记」tab（未点保存）即取消编辑：切回来是小记列表，不保留编辑框。
   // 覆盖所有离开路径（顶部 tab / 左右横滑 / 父级路由变化）。
@@ -279,9 +338,14 @@ export function HomePage(props: HomePageProps) {
     setFavoriteOpen((v) => { const next = !v; writeFavoritesOpen(next); return next; });
   };
 
+  const displayedQuickNotes = useMemo(() => quickNotes.map((note) => {
+    const detail = quickNoteDetails.get(note.id);
+    return detail ? { ...note, body: detail.body, images: detail.images, tags: detail.tags, firstImage: detail.firstImage ?? note.firstImage } : note;
+  }), [quickNotes, quickNoteDetails]);
+
   const quickTagIndex = useMemo(
-    () => buildQuickNoteTagIndex(quickNotes, (note) => note.tags),
-    [quickNotes],
+    () => buildQuickNoteTagIndex(displayedQuickNotes, (note) => note.tags),
+    [displayedQuickNotes],
   );
   useEffect(() => {
     if (quickTagFilter.kind === "tag" && !quickTagIndex.tags.some((tag) => tag.name === quickTagFilter.name)) {
@@ -291,9 +355,9 @@ export function HomePage(props: HomePageProps) {
 
   /** 排序只影响本端展示顺序（不写库、不进 manifest）；比较器在 core/quickNoteSort。 */
   const sortedQuickNotes = useMemo(() => {
-    const filtered = filterQuickNotesByTag(quickNotes, quickTagFilter, (note) => note.tags);
+    const filtered = filterQuickNotesByTag(displayedQuickNotes, quickTagFilter, (note) => note.tags);
     return sortQuickNotes(filtered, quickSort);
-  }, [quickNotes, quickSort, quickTagFilter]);
+  }, [displayedQuickNotes, quickSort, quickTagFilter]);
 
   const openEdit = async (id: string): Promise<void> => {
     try {
@@ -587,6 +651,7 @@ export function HomePage(props: HomePageProps) {
                     key={n.id}
                     note={n}
                     revealed={revealedQuickNoteId === n.id}
+                    onRequestDetail={loadQuickNoteDetail}
                     // 卡片日期跟随当前排序口径：按创建时间排序时显示创建时间（否则看起来"没排序"）
                     dateValue={quickNoteSortTime(n, quickSort)}
                     onEdit={() => { void openEdit(n.id); }}
@@ -764,7 +829,23 @@ export function HomePage(props: HomePageProps) {
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
-function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (name: string) => void }) {
+function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (name: string) => void; onRequestDetail: (id: string) => void }) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (note.body || typeof IntersectionObserver === "undefined") return;
+    const node = cardRef.current;
+    if (!node) return;
+    let requested = false;
+    const observer = new IntersectionObserver((entries) => {
+      if (requested || !entries.some((entry) => entry.isIntersecting)) return;
+      requested = true;
+      onRequestDetail(note.id);
+      observer.disconnect();
+    }, { rootMargin: "320px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [note.id, note.body, onRequestDetail]);
+
   /** 预览用资源（canonical URL + token）：图片卡/附件卡都靠它渲染。 */
   const previewAssets = (note.images ?? []).map((image) => ({
     ...image,
@@ -777,7 +858,7 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag 
       )
     : null;
   return (
-    <div className={"qn-card" + (revealed ? " is-revealed" : "")} data-quick-note-id={note.id} role="button" tabIndex={0} onClick={onEdit}>
+    <div ref={cardRef} className={"qn-card" + (revealed ? " is-revealed" : "")} data-quick-note-id={note.id} role="button" tabIndex={0} onClick={onEdit}>
       {thumbUrl && (
         <div className="qn-card__cover">
           <img className="qn-card__img" src={thumbUrl} alt="" loading="lazy" />

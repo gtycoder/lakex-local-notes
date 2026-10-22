@@ -3,7 +3,7 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { selectHistoryDrops } from "../../core/storeUtils.js";
 import { normalizeNoteKind } from "../../core/noteKind.js";
 import { historySnapshotRelativePath } from "../../core/noteBodyPaths.js";
-import type { MobileDb } from "./sqliteDb";
+import { executeBatch, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
 import { readNoteBody, readHistorySnapshot, writeHistorySnapshot, deleteHistorySnapshot } from "./noteBodies.js";
 
 /**
@@ -179,6 +179,7 @@ export async function snapshotNote(d: MobileDb, noteId: string): Promise<void> {
 export async function cleanupHistory(d: MobileDb, settings: HistoryMobileSettings): Promise<{ deleted: number }> {
   const noteIds = await d.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
   let deleted = 0;
+  const statements: MobileBatchStatement[] = [];
   for (const { note_id } of noteIds) {
     const rows = await d.prepare("SELECT id, file_path, created_at, protected_until FROM note_history WHERE note_id=? ORDER BY created_at ASC").all(note_id) as Array<{
       id: number;
@@ -191,7 +192,7 @@ export async function cleanupHistory(d: MobileDb, settings: HistoryMobileSetting
     // 到期保护回归普通保留策略（对齐桌面）。
     for (const row of rows) {
       if (row.protected_until != null && row.protected_until <= nowIso) {
-        await d.prepare("UPDATE note_history SET protected_until=NULL WHERE id=?").run(row.id);
+        statements.push({ statement: "UPDATE note_history SET protected_until=NULL WHERE id=?", values: [row.id] });
         row.protected_until = null;
       }
     }
@@ -204,8 +205,10 @@ export async function cleanupHistory(d: MobileDb, settings: HistoryMobileSetting
       // 冲突归档保护窗口内是"被覆盖方唯一可恢复副本"，即使命中保留策略也不自动删（对齐桌面 B3）。
       if (row.protected_until != null && row.protected_until > nowIso) continue;
       try { await deleteHistorySnapshot(row.file_path); } catch { /* 文件已缺失不阻断删行 */ }
-      deleted += (await d.prepare("DELETE FROM note_history WHERE id=?").run(row.id)).changes;
+      statements.push({ statement: "DELETE FROM note_history WHERE id=?", values: [row.id] });
+      deleted += 1;
     }
   }
+  await executeBatch(d, statements);
   return { deleted };
 }

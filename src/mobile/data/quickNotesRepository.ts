@@ -44,9 +44,7 @@ export interface QuickNoteListItem {
   imageCount: number;
   updatedAt: string;
   firstImage: string | null;
-  /** 内核形态正文 + 资源清单：供卡片用桌面同一套只读预览渲染。 */
-  body: string;
-  images: StoredQuickNoteImage[];
+  /** 列表投影只带轻量元数据；正文/图片清单由可见卡片按需 readQuickNote。 */
   tags: string[];
 }
 
@@ -81,28 +79,67 @@ async function readBodyContent(id: string): Promise<StoredQuickNoteContent | nul
   }
 }
 
+function parseTagsJson(raw: unknown): string[] {
+  try {
+    const parsed = JSON.parse(String(raw ?? "[]")) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> {
-  const rows = await d.prepare("SELECT id, created_at, preview_text, image_count, updated_at FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{
+  const rows = await d.prepare(
+    "SELECT id, created_at, preview_text, image_count, updated_at, first_image, tags_json FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC, id DESC",
+  ).all() as Array<{
     id: string;
     created_at: string;
     preview_text: string;
     image_count: number;
     updated_at: string;
+    first_image: string | null;
+    tags_json: string;
   }>;
-  return Promise.all(rows.map(async (row) => {
-    const parsed = await readBodyContent(String(row.id));
-    return {
-      id: String(row.id),
-      createdAt: String(row.created_at),
-      previewText: String(row.preview_text),
-      imageCount: Number(row.image_count),
-      updatedAt: String(row.updated_at),
-      firstImage: parsed?.images?.[0]?.filename ?? null,
-      body: parsed?.body ?? "",
-      images: parsed?.images ?? [],
-      tags: parsed?.tags ?? [],
-    };
+  return rows.map((row) => ({
+    id: String(row.id),
+    createdAt: String(row.created_at),
+    previewText: String(row.preview_text),
+    imageCount: Number(row.image_count),
+    updatedAt: String(row.updated_at),
+    firstImage: row.first_image ? String(row.first_image) : null,
+    tags: parseTagsJson(row.tags_json),
   }));
+}
+
+/**
+ * 一次性把旧行的列表标签/首图元数据从 .qnote 回填进 SQLite。
+ * 启动迁移路径调用；完成后写 device_state 标记，首页后续只读轻量行，不再批量读正文。
+ */
+export async function backfillQuickNoteListMetadata(d: MobileDb): Promise<void> {
+  const done = await d.prepare("SELECT value FROM device_state WHERE key='quick_note_list_metadata_v1'").get() as { value?: string } | undefined;
+  if (done?.value === "1") return;
+  const rows = await d.prepare("SELECT id FROM quick_notes WHERE list_metadata_version<1").all() as Array<{ id: string }>;
+  const statements: Array<{ statement: string; values: unknown[] }> = [];
+  for (const row of rows) {
+    const id = String(row.id);
+    const content = await readBodyContent(id).catch(() => null);
+    statements.push({
+      statement: "UPDATE quick_notes SET tags_json=?, first_image=?, list_metadata_version=1 WHERE id=?",
+      values: [JSON.stringify(content?.tags ?? []), content?.images?.[0]?.filename ?? null, id],
+    });
+  }
+  if (statements.length > 0) {
+    if (d.executeSet) {
+      for (let i = 0; i < statements.length; i += 200) await d.executeSet(statements.slice(i, i + 200));
+    } else {
+      await d.transaction(async () => {
+        for (const item of statements) await d.prepare(item.statement).run(...item.values);
+      });
+    }
+  }
+  await d.prepare(
+    "INSERT INTO device_state(key,value) VALUES('quick_note_list_metadata_v1','1') ON CONFLICT(key) DO UPDATE SET value='1'",
+  ).run();
 }
 
 export async function readQuickNote(d: MobileDb, id: string): Promise<QuickNoteReadResult | null> {
@@ -117,6 +154,45 @@ export async function readQuickNote(d: MobileDb, id: string): Promise<QuickNoteR
   return { id: String(row.id), content, previewText: String(row.preview_text), updatedAt: String(row.updated_at) };
 }
 
+async function readQuickNoteWriteBase(id: string): Promise<{ raw: string | null; parsed: StoredQuickNoteContent | null }> {
+  const raw = await readQuickNoteBody(id);
+  try { return { raw, parsed: raw == null ? null : JSON.parse(raw) as StoredQuickNoteContent }; }
+  catch { return { raw, parsed: null }; }
+}
+
+/** 小记写入唯一核心：正文文件先落盘，DB 事务 upsert + 清墓碑；DB 失败恢复正文。 */
+async function persistQuickNoteContent(
+  d: MobileDb,
+  id: string,
+  draft: { text: string; body: string; images: StoredQuickNoteImage[]; tags?: readonly string[] },
+  previous: { raw: string | null; parsed: StoredQuickNoteContent | null },
+): Promise<void> {
+  const now = new Date().toISOString();
+  const content = normalizeQuickNoteContent(draft.text, draft.body, draft.images, draft.tags ?? previous.parsed?.tags ?? []);
+  const serialized = serializeQuickNoteContent(content);
+  const contentHash = sha256Sync(new TextEncoder().encode(serialized));
+  const preview = previewQuickNote(content.text, content.images.length);
+  const previousRow = await d.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(id) as { updated_at: string } | undefined;
+  const effectiveUpdatedAt = previous.parsed && previousRow && sameQuickNoteExceptTags(previous.parsed, content)
+    ? previousRow.updated_at
+    : now;
+  await writeQuickNoteBody(id, serialized);
+  try {
+    await d.transaction(async () => {
+      await d.prepare(
+        `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync, tags_json, first_image, list_metadata_version)
+         VALUES (?,?,?,?,?,?,'local',0,NULL,1,?,?,1)
+         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1, tags_json=excluded.tags_json, first_image=excluded.first_image, list_metadata_version=1`
+      ).run(id, now, effectiveUpdatedAt, preview, content.images.length, contentHash, JSON.stringify(content.tags), content.images[0]?.filename ?? null);
+      // 活跃写入统一清删除墓碑，避免“活跃行 + 墓碑”二义性。
+      await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
+    });
+  } catch (error) {
+    await restoreQuickNoteBody(id, previous.raw);
+    throw error;
+  }
+}
+
 export async function saveQuickNote(
   d: MobileDb,
   id: string,
@@ -124,38 +200,13 @@ export async function saveQuickNote(
   images: StoredQuickNoteImage[] = [],
   tags?: readonly string[],
 ): Promise<string> {
-  const now = new Date().toISOString();
   // 正文（body）口径：移动端只有纯文本编辑器，合成 body 会把桌面端排版的富内容（标题/列表/引用/表格/卡片）
   // 压成纯段落。所以 —— 若**纯文本没变**（用户只是打开又保存、或只调整了图片顺序），沿用原有 body，不压平。
-  const previousRaw = await readQuickNoteBody(id);
-  let previous: StoredQuickNoteContent | null = null;
-  try { previous = previousRaw == null ? null : JSON.parse(previousRaw) as StoredQuickNoteContent; } catch { previous = null; }
+  const previous = await readQuickNoteWriteBase(id);
   let preservedBody = "";
-  if (previous && previous.text === text && typeof previous.body === "string" && previous.body) preservedBody = previous.body;
+  if (previous.parsed && previous.parsed.text === text && typeof previous.parsed.body === "string" && previous.parsed.body) preservedBody = previous.parsed.body;
   const body = preservedBody || quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID());
-  const content = normalizeQuickNoteContent(text, body, images, tags ?? previous?.tags ?? []);
-  const serialized = serializeQuickNoteContent(content);
-  const contentHash = sha256Sync(new TextEncoder().encode(serialized));
-  const preview = previewQuickNote(text, images.length);
-  const previousRow = await d.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(id) as { updated_at: string } | undefined;
-  const effectiveUpdatedAt = previous && previousRow && sameQuickNoteExceptTags(previous, content)
-    ? previousRow.updated_at
-    : now;
-  // 先正文文件、后 DB（DB 不声称正文已存在）；DB 失败要把正文恢复到写前版本。
-  await writeQuickNoteBody(id, serialized);
-  try {
-    await d.transaction(async () => {
-      await d.prepare(
-        `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync)
-         VALUES (?,?,?,?,?,?,'local',0,NULL,1)
-         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1`
-      ).run(id, now, effectiveUpdatedAt, preview, images.length, contentHash);
-      await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
-    });
-  } catch (error) {
-    await restoreQuickNoteBody(id, previousRaw);
-    throw error;
-  }
+  await persistQuickNoteContent(d, id, { text, body, images, tags }, previous);
   return id;
 }
 
@@ -177,18 +228,7 @@ export async function saveQuickNoteWithImages(
     return { ...image, mimeType: format.mimeType };
   });
   const { images, files: imageFilesWithKey } = buildQuickNoteImageFiles(validatedImageFiles);
-  const now = new Date().toISOString();
-  const previousRaw = await readQuickNoteBody(id);
-  let previous: StoredQuickNoteContent | null = null;
-  try { previous = previousRaw == null ? null : JSON.parse(previousRaw) as StoredQuickNoteContent; } catch { previous = null; }
-  const content = normalizeQuickNoteContent(text, quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID()), images, tags ?? previous?.tags ?? []);
-  const serialized = serializeQuickNoteContent(content);
-  const contentHash = sha256Sync(new TextEncoder().encode(serialized));
-  const preview = previewQuickNote(text, images.length);
-  const previousRow = await d.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(id) as { updated_at: string } | undefined;
-  const effectiveUpdatedAt = previous && previousRow && sameQuickNoteExceptTags(previous, content)
-    ? previousRow.updated_at
-    : now;
+  const previous = await readQuickNoteWriteBase(id);
 
   // 先落盘图片文件（纯文件为准，完全不用 BLOB；落盘失败抛错——文件是唯一真相，不能静默降级）。
   // 不做旧文件清理：与文档资源一致（每次上传生成唯一新文件，旧文件由 GC/孤儿清理回收；冗余是设计理念）。
@@ -197,19 +237,8 @@ export async function saveQuickNoteWithImages(
     deps.assets.set(key, f.bytes);
     await deps.saveAssetFile(key, f.bytes);
   }
-  await writeQuickNoteBody(id, serialized);
-  try {
-    await d.transaction(async () => {
-      await d.prepare(
-        "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync) " +
-        "VALUES (?,?,?,?,?,?,'local',0,NULL,1) " +
-        "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1"
-      ).run(id, now, effectiveUpdatedAt, preview, images.length, contentHash);
-    });
-  } catch (error) {
-    await restoreQuickNoteBody(id, previousRaw);
-    throw error;
-  }
+  const body = quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID());
+  await persistQuickNoteContent(d, id, { text, body, images, tags }, previous);
   return id;
 }
 
@@ -223,32 +252,8 @@ export async function saveQuickNoteContent(
   id: string,
   payload: { text: string; body: string; images: StoredQuickNoteImage[]; tags?: readonly string[] },
 ): Promise<string> {
-  const now = new Date().toISOString();
-  const previousRaw = await readQuickNoteBody(id);
-  let previous: StoredQuickNoteContent | null = null;
-  try { previous = previousRaw == null ? null : JSON.parse(previousRaw) as StoredQuickNoteContent; } catch { previous = null; }
-  const content = normalizeQuickNoteContent(payload.text, payload.body, payload.images, payload.tags ?? previous?.tags ?? []);
-  const serialized = serializeQuickNoteContent(content);
-  const contentHash = sha256Sync(new TextEncoder().encode(serialized));
-  const preview = previewQuickNote(content.text, content.images.length);
-  const previousRow = await d.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(id) as { updated_at: string } | undefined;
-  const effectiveUpdatedAt = previous && previousRow && sameQuickNoteExceptTags(previous, content)
-    ? previousRow.updated_at
-    : now;
-  await writeQuickNoteBody(id, serialized);
-  try {
-    await d.transaction(async () => {
-      await d.prepare(
-        `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync)
-         VALUES (?,?,?,?,?,?,'local',0,NULL,1)
-         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1`
-      ).run(id, now, effectiveUpdatedAt, preview, content.images.length, contentHash);
-      await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
-    });
-  } catch (error) {
-    await restoreQuickNoteBody(id, previousRaw);
-    throw error;
-  }
+  const previous = await readQuickNoteWriteBase(id);
+  await persistQuickNoteContent(d, id, payload, previous);
   return id;
 }
 

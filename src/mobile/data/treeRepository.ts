@@ -1,4 +1,4 @@
-import type { MobileDb } from "./sqliteDb";
+import { executeBatch, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
 import type { TreeNode, TreeNodeType } from "../../lib/types";
 import {
   assertMoveTarget,
@@ -159,20 +159,15 @@ export async function moveTreeNodeOrdered(d: MobileDb, id: string, parentId: str
   const now = new Date().toISOString();
   const folderIds = new Set(folderRows.map((r) => r.id));
   const movedInFolders = folderIds.has(id);
-  await d.transaction(async () => {
-    if (movedInFolders) {
-      await d.prepare("UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
-    } else {
-      await d.prepare("UPDATE notes SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
-    }
-    for (const [index, childId] of orderedIds.entries()) {
-      if (folderIds.has(childId)) {
-        await d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
-      } else {
-        await d.prepare("UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
-      }
-    }
-  });
+  const statements: MobileBatchStatement[] = [movedInFolders
+    ? { statement: "UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?", values: [parentId, now, id] }
+    : { statement: "UPDATE notes SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?", values: [parentId, now, id] }];
+  for (const [index, childId] of orderedIds.entries()) {
+    statements.push(folderIds.has(childId)
+      ? { statement: "UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?", values: [index, now, childId] }
+      : { statement: "UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?", values: [index, now, childId] });
+  }
+  await executeBatch(d, statements);
   if (movedInFolders) {
     const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
     return folderRowToTreeNode(row, { parentId, updatedAt: now });
@@ -195,13 +190,7 @@ export async function reorderSiblings(d: MobileDb, parentId: string | null, orde
   } else if (orderedIds.length > 0) {
     throw new Error("重排列表包含不属于该父节点的节点");
   }
-  await d.transaction(async () => {
-    for (const [index, childId] of orderedIds.entries()) {
-      if (folderIds.has(childId)) {
-        await d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
-      } else {
-        await d.prepare("UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
-      }
-    }
-  });
+  await executeBatch(d, orderedIds.map((childId, index) => folderIds.has(childId)
+    ? { statement: "UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL", values: [index, now, childId] }
+    : { statement: "UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL", values: [index, now, childId] }));
 }

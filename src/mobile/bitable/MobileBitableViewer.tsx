@@ -12,7 +12,7 @@
  * - 正文序列化恒写 canonical 导航（第一表/第一视图），切表不落盘、不进 S3；
  * - 绝不把 bitable 正文喂给 Lake 编辑器；保存由父级 useAutoSave → bridge.saveNote 走同一条写边界。
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Columns3, Plus } from "lucide-react";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
@@ -263,12 +263,12 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     return <div className="mb-empty">这张多维表还没有数据表。</div>;
   }
   const view = table.views.find((item) => item.id === table.activeViewId) ?? table.views[0];
-  const fields = orderedTableFields(table, view);
-  const records = applyViewToRecords(table, view);
-  const fillProjection = buildBitableFillProjection(table, view, records);
+  const fields = useMemo(() => orderedTableFields(table, view), [table, view]);
+  const records = useMemo(() => applyViewToRecords(table, view), [table, view]);
+  const fillProjection = useMemo(() => buildBitableFillProjection(table, view, records), [table, view, records]);
   /** 关联字段展示需要同一文档的 tables（桌面同一条 core 口径）。 */
-  const displayCtx: BitableDisplayContext = { tables: doc.tables };
-  const windowed = recordWindow(records, visibleCount);
+  const displayCtx: BitableDisplayContext = useMemo(() => ({ tables: doc.tables }), [doc.tables]);
+  const windowed = useMemo(() => recordWindow(records, visibleCount), [records, visibleCount]);
   const sheetRecord = recordId ? table.records.find((item) => item.id === recordId) ?? null : null;
 
   /** 点单元格：布尔直接翻转（快路径），其余打开该记录的底部面板。 */

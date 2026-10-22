@@ -42,6 +42,31 @@ export interface MobileDb {
   close(): Promise<void>;
 }
 
+export interface MobileBatchStatement {
+  statement: string;
+  values: unknown[];
+}
+
+/** 一个用户动作 = 一个事务/一次桥往返；executeSet 失败直接抛，不逐条重放造成部分成功。 */
+export async function executeBatch(d: MobileDb, statements: MobileBatchStatement[]): Promise<void> {
+  if (statements.length === 0) return;
+  if (d.executeSet) {
+    await d.executeSet(statements);
+    return;
+  }
+  await d.transaction(async () => executeBatchInTransaction(d, statements));
+}
+
+/** 已在事务内时使用：有 executeSet 走单次下发，否则逐条执行（绝不再开嵌套事务）。 */
+export async function executeBatchInTransaction(d: MobileDb, statements: MobileBatchStatement[]): Promise<void> {
+  if (statements.length === 0) return;
+  if (d.executeSet) {
+    await d.executeSet(statements);
+    return;
+  }
+  for (const item of statements) await d.prepare(item.statement).run(...item.values);
+}
+
 let SQL: SqlJsStatic | null = null;
 
 async function initSqlJsModule(): Promise<SqlJsStatic> {

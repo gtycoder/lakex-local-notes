@@ -93,6 +93,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<LocalNoteSummary[]>([]);
   const activeIdRef = useRef<string | null>(null);
+  /** 工作区注册的可等待返回动作；硬件返回键必须走它，不能直接卸载工作区。 */
+  const workspaceBackRef = useRef<(() => Promise<void>) | null>(null);
   const [phase, setPhase] = useState<"booting" | "ready">("booting");
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -200,6 +202,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     void (async () => {
       const content = await consumeSharedContent();
       if (!alive || !content) return;
+      if (content.imageError) showToast(content.imageError, { type: "error" });
       const seed = await sharedContentToSeed(content);
       if (alive && seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
     })();
@@ -207,6 +210,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   }, []);
   useEffect(() => subscribeSharedContent((content) => {
     void (async () => {
+      if (content.imageError) showToast(content.imageError, { type: "error" });
       const seed = await sharedContentToSeed(content);
       if (seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
     })();
@@ -276,6 +280,16 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     return m;
   }, [notes]);
 
+  const requestWorkspaceBack = useCallback(() => {
+    const handler = workspaceBackRef.current;
+    if (handler) void handler();
+    else closeWorkspace();
+  }, [closeWorkspace]);
+
+  const registerWorkspaceBack = useCallback((handler: (() => Promise<void>) | null) => {
+    workspaceBackRef.current = handler;
+  }, []);
+
   // B1：Android 返回键（浮层返回栈 → Sheet→Drawer→笔记本→首页→系统；编辑态由工作区自己注册）
   useBackHandler({
     route,
@@ -284,7 +298,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     searchOpen,
     captureOpen,
     onCloseCapture: closeCapture,
-    onBackFromNotebook: closeWorkspace,
+    onBackFromNotebook: requestWorkspaceBack,
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
     onAppExit: () => {
@@ -425,6 +439,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           notebooks={notebooks}
           onSwitchNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onActiveNoteChange={(id) => { activeIdRef.current = id; }}
+          onRegisterBackHandler={registerWorkspaceBack}
         />
         </Suspense>
         </div>

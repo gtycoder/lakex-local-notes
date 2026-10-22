@@ -22,7 +22,7 @@ describe("路由转场（261019，对齐语雀 push）", () => {
     expect(APP).toContain("mobile-route-layer--home");
     expect(APP).toContain("mobile-route-layer--workspace");
     expect(APP).toMatch(/onBack=\{closeWorkspace\}/);
-    expect(APP).toMatch(/onBackFromNotebook: closeWorkspace/);
+    expect(APP).toMatch(/onBackFromNotebook: requestWorkspaceBack/);
     // 首页不再"按路由条件渲染"（常驻 = 页栈语义，返回时滚动/数据都在）
     expect(APP).not.toMatch(/route\.kind === "home" && \(\s*<HomePage/);
   });

@@ -104,9 +104,9 @@ describe("首页新建流（261014）", () => {
     expect(HOME).toMatch(/pickLocalFile\("image\/\*"\)/);
     expect(HOME).toMatch(/command: "taskList"/);
     expect(HOME).toMatch(/initialInsert=\{composer\.mode === "new"/);
-    // 261017：统一走 execEditorCommand（renderer 缺失时回退实例 execCommand，文档编辑器就是这种形态）
-    expect(COMPOSER).toMatch(/execEditorCommand\(editorInstance, "insertFiles"/);
-    expect(COMPOSER).toMatch(/execEditorCommand\(editorInstance, pending\.command\)/);
+    // 261017/261022：统一走结构化命令入口（renderer 缺失时回退实例 execCommand，失败可见）
+    expect(COMPOSER).toMatch(/execEditorCommandResult\(editorInstance, "insertFiles"/);
+    expect(COMPOSER).toMatch(/execEditorCommandResult\(editorInstance, pending\.command\)/);
     expect(HOME).toMatch(/onCreateNote\(it\.id\)/);
     expect(HOME).toMatch(/notebooks\.map/);
   });

@@ -66,7 +66,10 @@ describe("mobile schema", () => {
     const allStatements = sets.flat().map((item) => item.statement);
     expect(allStatements.some((sql) => sql.startsWith("CREATE TABLE IF NOT EXISTS notes"))).toBe(true);
     expect(allStatements.some((sql) => sql.includes("ALTER TABLE notes ADD COLUMN text_cache"))).toBe(true);
+    expect(allStatements).toContain("ALTER TABLE quick_notes ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'");
     expect(allStatements.some((sql) => sql.includes("INSERT OR IGNORE INTO folders"))).toBe(true);
+    expect(allStatements).toContain("CREATE INDEX IF NOT EXISTS idx_notes_active_parent_sort ON notes(parent_id, sort_order) WHERE trashed_at IS NULL");
+    expect(allStatements).toContain("CREATE INDEX IF NOT EXISTS idx_quick_notes_active_updated ON quick_notes(updated_at DESC, id DESC) WHERE deleted_at IS NULL");
   });
 
   it("does not revive a deleted seed notebook on reapplication", async () => {

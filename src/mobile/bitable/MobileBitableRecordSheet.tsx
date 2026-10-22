@@ -41,33 +41,57 @@ export interface MobileBitableRecordSheetProps {
   onClose: () => void;
 }
 
-function TextControl({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+function DraftInputControl({ value, onChange, numeric = false }: { value: unknown; onChange: (value: unknown) => void; numeric?: boolean }) {
+  const initial = textInputValue(value);
+  const [draft, setDraft] = useState(initial);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const draftRef = useRef(draft);
+  const committedRef = useRef(initial);
+  draftRef.current = draft;
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(textInputValue(value));
+  }, [value]);
+
+  const commit = (): void => {
+    if (draftRef.current === committedRef.current) return;
+    committedRef.current = draftRef.current;
+    onChange(draftRef.current);
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (document.activeElement === inputRef.current) commit();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  });
+
   return (
     <label className="mb-input">
       <input
-        value={textInputValue(value)}
-        inputMode="text"
+        ref={inputRef}
+        value={draft}
+        inputMode={numeric ? "decimal" : "text"}
+        type={numeric ? "text" : undefined}
         autoComplete="off"
-        onChange={(event) => onChange(event.target.value)}
-        aria-label="文本值"
+        onChange={(event) => setDraft(numeric ? event.target.value.replace(/[^0-9.\-]/g, "") : event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") { event.preventDefault(); setDraft(textInputValue(value)); }
+        }}
+        aria-label={numeric ? "数字值" : "文本值"}
       />
     </label>
   );
 }
 
+function TextControl({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+  return <DraftInputControl value={value} onChange={onChange} />;
+}
+
 function NumberControl({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
-  return (
-    <label className="mb-input">
-      <input
-        value={textInputValue(value)}
-        type="text"
-        inputMode="decimal"
-        autoComplete="off"
-        onChange={(event) => onChange(event.target.value.replace(/[^0-9.\-]/g, ""))}
-        aria-label="数字值"
-      />
-    </label>
-  );
+  return <DraftInputControl value={value} onChange={onChange} numeric />;
 }
 
 /** 日期：走系统日期选择器（WebView 原生 date 控件，触屏上比自绘月历更稳）。正文仍是 YYYY-MM-DD。 */

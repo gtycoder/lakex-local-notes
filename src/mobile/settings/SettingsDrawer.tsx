@@ -24,7 +24,7 @@ import { getNativeErrorMessage, reportNativeActionError } from "../../lib/native
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
-import { CLOUD_PRIVACY_NOTICE } from "../../core/cloudState";
+import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
 import { decodeS3ConfigTransferFile, encodeS3ConfigTransfer } from "../../core/s3ConfigTransfer";
 import type { S3Settings, SyncSettings, SyncWarning } from "../../lib/types";
 
@@ -69,6 +69,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [s3, setS3] = useState<S3Settings | null>(null);
   /** 云同步开关（与桌面同语义：关闭 = 纯离线本地空间，任何路径都不出网） */
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
+  const cloudState = cloudStateOf(Boolean(s3), syncCfg);
+  const cloudBlockReason = canTouchNetwork(cloudState)
+    ? null
+    : cloudState === "unconfigured"
+      ? "未配置云同步：按纯本地空间处理，不能清理云端。"
+      : "云同步已关闭：按纯本地空间处理，不能清理云端。";
   const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
   /**
@@ -361,8 +367,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).catch((error) => { setOrphans([]); reportNativeActionError("清理孤儿资源", error); }).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
               </Block>
               <Block itemId="resources-gc" name="云端未引用对象" desc="删除云端未被任何清单/历史快照引用且超过 7 天的对象（对齐桌面深度清理）。">
-                <button className="mb-btn mb-btn--primary" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch((error) => { setGcMsg("清理失败：" + getNativeErrorMessage(error)); reportNativeActionError("云端清理", error); }).finally(() => setOrphanBusy(false)); }}>清理云端</button>
-                {gcMsg && <div className="mb-form__desc">{gcMsg}</div>}
+                <button className="mb-btn mb-btn--primary" disabled={orphanBusy || !canTouchNetwork(cloudState)} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch((error) => { setGcMsg("清理失败：" + getNativeErrorMessage(error)); reportNativeActionError("云端清理", error); }).finally(() => setOrphanBusy(false)); }}>清理云端</button>
+                {(gcMsg || cloudBlockReason) && <div className="mb-form__desc">{gcMsg || cloudBlockReason}</div>}
               </Block>
               {orphans.length === 0 && <div className="mb-empty mb-empty--inset">暂无冗余资源</div>}
               {orphans.map((o) => (

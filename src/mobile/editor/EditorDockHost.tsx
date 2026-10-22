@@ -10,7 +10,8 @@
  */
 import { useRef } from "react";
 import { EditorDock } from "./EditorDock";
-import { execEditorCommand } from "./execCommand";
+import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
+import { showToast } from "../ui/toastBus";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { mediaKindOfFilename } from "../../core/assetNaming.js";
 
@@ -27,6 +28,10 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
   const editorRef = useRef<LakeEditorInstance | null>(null);
   editorRef.current = editor;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const runCommand = (command: string, ...args: unknown[]): void => {
+    const result = execEditorCommandResult(editorRef.current, command, ...args);
+    if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage(command, result), { type: "error" });
+  };
 
   /** 复用隐藏 file input：`capture` 传 "environment" 时 Android 直接开相机拍照（拍完即当图片插入）。 */
   const insertFileViaInput = (accept: string, capture?: "environment") => {
@@ -53,7 +58,7 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
         onInsertVideo={() => insertFileViaInput("video/*")}
         onInsertTable={() => {
           // lakex 的 table 命令需要 rows/columns 配置（缺省会读 width 报错）；默认 3×3
-          try { execEditorCommand(editorRef.current, "table", { rows: 3, columns: 3 }); } catch { /* 忽略 */ }
+          runCommand("table", { rows: 3, columns: 3 });
         }}
       />
       <input
@@ -66,7 +71,8 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
           if (!file || !ed) return;
           const kind = mediaKindOfFilename(file.name);
           const opts = kind ? { category: kind, from: "ui" } : undefined;
-          try { execEditorCommand(ed, "insertFiles", [file], opts); } catch { /* 忽略 */ }
+          const result = execEditorCommandResult(ed, "insertFiles", [file], opts);
+          if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage("insertFiles", result), { type: "error" });
         }}
       />
     </>

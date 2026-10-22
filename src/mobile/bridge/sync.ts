@@ -199,53 +199,54 @@ export const syncDomain = {
   },
 
   async gcDeepCleanup(): Promise<{ candidateCount: number; deletedCount: number; keys: string[] }> {
-    const cfg = await syncDomain.getS3Settings();
-    if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
-    const syncCfg: SyncConfig = { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix };
-    const s3Store = createCapacitorS3Store(syncCfg);
-    if (!s3Store.listObjects || !s3Store.deleteMany) return { candidateCount: 0, deletedCount: 0, keys: [] };
-    const latestBytes = await s3Store.getObject(`${syncCfg.prefix}/manifests/latest.json`, { maxBytes: 20 * 1024 * 1024 });
-    if (!latestBytes) return { candidateCount: 0, deletedCount: 0, keys: [] }; // 无清单 → 不 GC（安全）
-    let manifest;
-    try { manifest = parseLakeManifest(latestBytes); } catch { return { candidateCount: 0, deletedCount: 0, keys: [] }; } // 清单损坏 → 不 GC
-    // prev 链引用保护（最多 3 层，对齐桌面 MANIFEST_CHAIN_KEEP）
-    const prevManifests: Manifest[] = [];
-    let prev = manifest.prevCommitId;
-    let chain = 0;
-    while (prev && chain < 3) {
-      const pb = await s3Store.getObject(`${syncCfg.prefix}/manifests/${prev}.json`, { maxBytes: 20 * 1024 * 1024 });
-      if (!pb) break;
-      try { const pm = parseLakeManifest(pb); prevManifests.push(pm); prev = pm.prevCommitId; } catch { break; }
-      chain += 1;
-    }
-    const d = await ensureDb();
-    const mobileDb = d;
-    const keep = buildGcKeepSet({
-      manifest,
-      extraManifests: prevManifests,
-      prefix: syncCfg.prefix,
-      historyRefs: await historyRepository.historyAssetRefs(mobileDb),
-    });
-    const pendingByKey = new Map((await syncDomain.listS3GcPending()).map((p) => [p.key, p.markedAt] as const));
-    const all = [...(await s3Store.listObjects(`${syncCfg.prefix}/objects/`)), ...(await s3Store.listObjects(`${syncCfg.prefix}/assets/`))];
-    const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天窗口
-    const toDelete: string[] = [];
-    for (const o of all) {
-      if (keep.has(o.key)) continue;
-      if (new Date(o.lastModified).getTime() > cutoff) continue; // 创建不足窗口 → 保护
-      const marked = pendingByKey.get(o.key);
-      if (marked && new Date(marked).getTime() > cutoff) continue; // 本机待回收标记但窗口未过 → 保护
-      toDelete.push(o.key);
-    }
-    const keys = toDelete;
-    const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
-    if (keys.length > 0) {
-      await runMaintenance("gcDeepCleanup", async () => {
-        const mobileDb = d;
-        for (const key of keys) await gcRepository.recordS3GcLog(mobileDb, "delete", key, "deep-clean", true);
+    // 快路径：关闭云同步/未配置时连维护队列都不排队、零网络请求；入锁后再判一次，防止等待期间状态变化。
+    if (!canTouchNetwork(await mobileCloudState())) return { candidateCount: 0, deletedCount: 0, keys: [] };
+    return runMaintenance("gcDeepCleanup", async () => {
+      if (!canTouchNetwork(await mobileCloudState())) return { candidateCount: 0, deletedCount: 0, keys: [] };
+      const cfg = await syncDomain.getS3Settings();
+      if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
+      assertS3Credentials(cfg);
+      const syncCfg: SyncConfig = { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix };
+      const s3Store = createCapacitorS3Store(syncCfg);
+      if (!s3Store.listObjects || !s3Store.deleteMany) return { candidateCount: 0, deletedCount: 0, keys: [] };
+      // 从读清单到删对象、写 GC 日志，全段都在维护域内，禁止与 syncNow 交错。
+      const latestBytes = await s3Store.getObject(`${syncCfg.prefix}/manifests/latest.json`, { maxBytes: 20 * 1024 * 1024 });
+      if (!latestBytes) return { candidateCount: 0, deletedCount: 0, keys: [] }; // 无清单 → 不 GC（安全）
+      let manifest;
+      try { manifest = parseLakeManifest(latestBytes); } catch { return { candidateCount: 0, deletedCount: 0, keys: [] }; } // 清单损坏 → 不 GC
+      // prev 链引用保护（最多 3 层，对齐桌面 MANIFEST_CHAIN_KEEP）
+      const prevManifests: Manifest[] = [];
+      let prev = manifest.prevCommitId;
+      let chain = 0;
+      while (prev && chain < 3) {
+        const pb = await s3Store.getObject(`${syncCfg.prefix}/manifests/${prev}.json`, { maxBytes: 20 * 1024 * 1024 });
+        if (!pb) break;
+        try { const pm = parseLakeManifest(pb); prevManifests.push(pm); prev = pm.prevCommitId; } catch { break; }
+        chain += 1;
+      }
+      const d = await ensureDb();
+      const keep = buildGcKeepSet({
+        manifest,
+        extraManifests: prevManifests,
+        prefix: syncCfg.prefix,
+        historyRefs: await historyRepository.historyAssetRefs(d),
       });
-    }
-    return { candidateCount: all.length, deletedCount, keys };
+      const pendingByKey = new Map((await syncDomain.listS3GcPending()).map((p) => [p.key, p.markedAt] as const));
+      const all = [...(await s3Store.listObjects(`${syncCfg.prefix}/objects/`)), ...(await s3Store.listObjects(`${syncCfg.prefix}/assets/`))];
+      const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天窗口
+      const toDelete: string[] = [];
+      for (const o of all) {
+        if (keep.has(o.key)) continue;
+        if (new Date(o.lastModified).getTime() > cutoff) continue; // 创建不足窗口 → 保护
+        const marked = pendingByKey.get(o.key);
+        if (marked && new Date(marked).getTime() > cutoff) continue; // 本机待回收标记但窗口未过 → 保护
+        toDelete.push(o.key);
+      }
+      const keys = toDelete;
+      const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
+      for (const key of keys) await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true);
+      return { candidateCount: all.length, deletedCount, keys };
+    });
   },
 
   async getDiagnostics(): Promise<diagnosticsRepository.MobileDiagnostics> {

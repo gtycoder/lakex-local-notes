@@ -26,7 +26,7 @@ import { subscribeSyncSettings } from "../sync/syncSettingsStore";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
-import { execEditorCommand } from "../editor/execCommand";
+import { editorCommandFailureMessage, execEditorCommandResult } from "../editor/execCommand";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
 import { QuickNoteComposerSkeleton } from "./QuickNoteComposerSkeleton";
 import { EditorDockHost } from "../editor/EditorDockHost";
@@ -211,10 +211,12 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
     for (const file of pending.files ?? []) {
       const kind = mediaKindOfFilename(file.name);
       const opts = kind ? { category: kind, from: "ui" } : undefined;
-      try { execEditorCommand(editorInstance, "insertFiles", [file], opts); } catch { /* 插入失败不阻断写作 */ }
+      const result = execEditorCommandResult(editorInstance, "insertFiles", [file], opts);
+      if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage("insertFiles", result), { type: "error" });
     }
     if (pending.command) {
-      try { execEditorCommand(editorInstance, pending.command); } catch { /* 命令失败不阻断写作 */ }
+      const result = execEditorCommandResult(editorInstance, pending.command);
+      if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage(pending.command, result), { type: "error" });
     }
     if (pending.files?.length) {
       window.setTimeout(() => { try { apiRef.current?.focus(); } catch { /* 忽略：内核未就绪 */ } }, 0);

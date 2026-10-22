@@ -13,21 +13,49 @@ import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 
 type Exec = (name: string, ...args: unknown[]) => unknown;
 
+export type EditorCommandFailureReason = "editor-unavailable" | "command-unavailable" | "command-failed";
+
+export type EditorCommandResult =
+  | { ok: true; value: unknown }
+  | { ok: false; reason: EditorCommandFailureReason; error?: Error };
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}
+
+export function execEditorCommandResult(
+  editor: LakeEditorInstance | null | undefined,
+  command: string,
+  ...args: unknown[]
+): EditorCommandResult {
+  if (!editor) return { ok: false, reason: "editor-unavailable" };
+  let failure: Error | null = null;
+  const renderer = (editor as unknown as { renderer?: { execCommand?: Exec } }).renderer;
+  if (renderer && typeof renderer.execCommand === "function") {
+    try { return { ok: true, value: renderer.execCommand(command, ...args) }; }
+    catch (error) { failure = asError(error); }
+  }
+  const direct = (editor as unknown as { execCommand?: Exec }).execCommand;
+  if (typeof direct === "function") {
+    try { return { ok: true, value: direct.call(editor, command, ...args) }; }
+    catch (error) { failure = asError(error); }
+  }
+  return failure
+    ? { ok: false, reason: "command-failed", error: failure }
+    : { ok: false, reason: "command-unavailable" };
+}
+
+export function editorCommandFailureMessage(command: string, result: Extract<EditorCommandResult, { ok: false }>): string {
+  if (result.reason === "editor-unavailable") return "编辑器尚未就绪，请稍后重试";
+  if (result.reason === "command-unavailable") return `当前编辑器不支持该操作（${command}）`;
+  return `操作失败（${command}）：${result.error?.message || "未知错误"}`;
+}
+
 export function execEditorCommand(
   editor: LakeEditorInstance | null | undefined,
   command: string,
   ...args: unknown[]
 ): unknown {
-  if (!editor) return undefined;
-  try {
-    const renderer = (editor as unknown as { renderer?: { execCommand?: Exec } }).renderer;
-    if (renderer && typeof renderer.execCommand === "function") {
-      return renderer.execCommand(command, ...args);
-    }
-  } catch { /* 落到实例直调 */ }
-  try {
-    const direct = (editor as unknown as { execCommand?: Exec }).execCommand;
-    if (typeof direct === "function") return direct.call(editor, command, ...args);
-  } catch { /* 命令失败不阻断 */ }
-  return undefined;
+  const result = execEditorCommandResult(editor, command, ...args);
+  return result.ok ? result.value : undefined;
 }

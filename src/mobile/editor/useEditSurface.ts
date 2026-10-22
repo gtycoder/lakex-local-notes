@@ -23,23 +23,17 @@ function visibleEditables(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>('[contenteditable="true"]')).filter((el) => el.getBoundingClientRect().width > 0);
 }
 
-let inSetback = false;          // 重入保护：本函数内部的 blur/focus 会同步触发 focusin，别让它再进来一轮
-
 /**
  * 收/放输入法但**保留焦点与光标**（用户 261014：「点了 ＋ 之后编辑区的光标会消失」）。
  * 实测：加 inputmode="none" 再 blur() → focus() ⇒ 键盘收起（842）但 activeElement、选区、光标矩形逐项不变；
  * 移除该属性再 blur/focus ⇒ 键盘回来（530）。⚠️ 不要退回「blur() 了事」——焦点与光标会一起没。
  */
-export function suppressImeNow(on: boolean): void {
-  if (inSetback) return;
-  inSetback = true;
-  try {
-    for (const el of visibleEditables()) {
-      if (on) el.setAttribute("inputmode", "none");
-      else el.removeAttribute("inputmode");
-      try { el.blur(); el.focus(); } catch { /* 忽略 */ }
-    }
-  } finally { inSetback = false; }
+function applyImeSuppression(on: boolean): void {
+  for (const el of visibleEditables()) {
+    if (on) el.setAttribute("inputmode", "none");
+    else el.removeAttribute("inputmode");
+    try { el.blur(); el.focus(); } catch { /* 忽略 */ }
+  }
 }
 
 export interface EditSurfaceApi {
@@ -58,6 +52,8 @@ export interface EditSurfaceApi {
    * 提前淡出 = 键盘还在上升、面板先变成一块空白（用户报「闪烁、不丝滑」）。
    */
   closingHold: boolean;
+  /** `.med-panel-inner` 的退场 transition 结束：非 hold 档可立即释放占位。 */
+  onPanelTransitionEnd: () => void;
   // 几何 / 输入法
   occupation: number;
   kbOffset: number;
@@ -77,6 +73,8 @@ export function useEditSurface(opts: {
   const { editing, dockRef, restoreFocus } = opts;
   const { base, innerHeight, offset, height, keyboardOpen } = useKeyboard();
   const keyboardHeight = height;
+  /** 每个编辑面自己的 blur/focus 重入标记，不再用全应用共享布尔量。 */
+  const imeMutationRef = useRef(false);
 
   // ── 面板状态机 ─────────────────────────────────────────────────────────────
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
@@ -108,8 +106,8 @@ export function useEditSurface(opts: {
   // **等输入法真的回来**再清占位：固定延时会在键盘还没上来时先让出区域 ⇒ 工具栏掉到屏幕底部再弹回来。
   useEffect(() => {
     if (!closing || !keyboardOpen) return;
-    const t = window.setTimeout(finishPanelClose, 150);
-    return () => window.clearTimeout(t);
+    const raf = window.requestAnimationFrame(finishPanelClose);
+    return () => window.cancelAnimationFrame(raf);
   }, [closing, keyboardOpen, finishPanelClose]);
   // restore 档：面板内容**保持到被键盘盖住**（261019(八)）。若输入法迟迟不来（硬件键盘 / 焦点失败），
   // 1800ms 后放行滑出 —— 实测输入法真正显示/视口收缩可能要 1s+（模拟器负载高时），
@@ -121,8 +119,14 @@ export function useEditSurface(opts: {
   }, [closing, closingHold, keyboardOpen]);
   useEffect(() => () => { if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current); }, []);
 
-  const suppressIme = useCallback(() => suppressImeNow(true), []);
-  const restoreIme = useCallback(() => suppressImeNow(false), []);
+  const setImeSuppressed = useCallback((on: boolean) => {
+    if (imeMutationRef.current) return;
+    imeMutationRef.current = true;
+    try { applyImeSuppression(on); }
+    finally { imeMutationRef.current = false; }
+  }, []);
+  const suppressIme = useCallback(() => setImeSuppressed(true), [setImeSuppressed]);
+  const restoreIme = useCallback(() => setImeSuppressed(false), [setImeSuppressed]);
 
   const openPanel = useCallback((mode: Exclude<PanelMode, null>) => {
     setClosing(false);
@@ -141,6 +145,10 @@ export function useEditSurface(opts: {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = window.setTimeout(finishPanelClose, 2500);     // 兜底：键盘没回来也不能永远占着
   }, [setPanel, restoreIme, suppressIme, finishPanelClose]);
+
+  const onPanelTransitionEnd = useCallback(() => {
+    if (closing && !closingHold) finishPanelClose();
+  }, [closing, closingHold, finishPanelClose]);
 
   // ── 几何 ───────────────────────────────────────────────────────────────────
   const occupation = bottomOccupation({ panelOpen: !!panelMode, closing, panelHeight, keyboardOpen, keyboardHeight });
@@ -162,6 +170,7 @@ export function useEditSurface(opts: {
   const closePanelRef = useRef(closePanel);
   closePanelRef.current = closePanel;
   useEffect(() => {
+    const surfaceVisible = () => !!dockRef.current?.getBoundingClientRect().width;
     const isEditor = (node: EventTarget | null) => {
       const t = node as HTMLElement | null;
       return !!t && typeof t.closest === "function" && !!t.closest('[contenteditable="true"]');
@@ -171,12 +180,12 @@ export function useEditSurface(opts: {
     //  点它不会再触发 focusin；也不能用「上次点过」的布尔量（会被上一次点击留下 true，再被我们自己抑制
     //  输入法时的 blur/focus 触发 ⇒ 误判 ⇒ 面板开了 ~0.6s 自己关掉，261014 实测）。
     const onPointerDown = (e: PointerEvent) => {
-      if (!panelModeRef.current || !isEditor(e.target)) return;
+      if (!surfaceVisible() || !panelModeRef.current || !isEditor(e.target)) return;
       closePanelRef.current();
     };
     // 内核命令后把焦点抢回正文：**只写 inputmode、绝不 blur**（blur 会把光标一起收掉），也不再调抑制函数（会递归）。
     const onFocusIn = (e: FocusEvent) => {
-      if (inSetback || !panelModeRef.current || !isEditor(e.target)) return;
+      if (imeMutationRef.current || !surfaceVisible() || !panelModeRef.current || !isEditor(e.target)) return;
       try { (e.target as HTMLElement).setAttribute("inputmode", "none"); } catch { /* 忽略 */ }
     };
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -185,7 +194,7 @@ export function useEditSurface(opts: {
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("focusin", onFocusIn);
     };
-  }, []);
+  }, [dockRef]);
 
-  return { panelMode, renderedPanel, closing, closingHold, panelHeight, openPanel, closePanel, occupation, kbOffset, keyboardOpen, keyboardHeight, suppressIme, restoreIme };
+  return { panelMode, renderedPanel, closing, closingHold, panelHeight, openPanel, closePanel, onPanelTransitionEnd, occupation, kbOffset, keyboardOpen, keyboardHeight, suppressIme, restoreIme };
 }

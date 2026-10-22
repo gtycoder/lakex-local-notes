@@ -11,7 +11,28 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
+
+internal class SharedContentTooLargeException(maxBytes: Long) :
+    Exception("分享的图片超过 ${maxBytes / 1024 / 1024} MiB，未导入")
+
+/** 边读边计数，超过上限立刻停止；调用方负责删除临时文件。 */
+internal fun copyStreamToFile(input: InputStream, output: OutputStream, maxBytes: Long): Long {
+    val buf = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val n = input.read(buf)
+        if (n < 0) break
+        total += n
+        if (total > maxBytes) throw SharedContentTooLargeException(maxBytes)
+        output.write(buf, 0, n)
+    }
+    return total
+}
+
+private data class InboxCopy(val filename: String? = null, val error: String? = null)
 
 /**
  * 系统「分享 → LocalLakeNotes」入口（ACTION_SEND）。
@@ -27,6 +48,7 @@ class SharedContentPlugin : Plugin() {
     /** 已处理的分享 URI + 复制出的文件名：load 与 onNewIntent 可能对同一次分享各触发一次，用它去重。 */
     private var lastUri: String? = null
     private var lastImageFilename: String? = null
+    private var lastImageError: String? = null
 
     override fun load() {
         readIntent(getActivity().intent)
@@ -41,6 +63,7 @@ class SharedContentPlugin : Plugin() {
             pending = null
             lastUri = null
             lastImageFilename = null
+            lastImageError = null
         }
     }
 
@@ -57,44 +80,41 @@ class SharedContentPlugin : Plugin() {
         }
         if (uri != null) {
             val mime = intent.type
-            val name: String? = if (uri.toString() == lastUri && lastImageFilename != null) {
-                lastImageFilename // 同一次分享被两条路径触发：复用已复制的文件，不再复制
+            val copied: InboxCopy = if (uri.toString() == lastUri && (lastImageFilename != null || lastImageError != null)) {
+                InboxCopy(lastImageFilename, lastImageError) // 同一次分享被两条路径触发：复用结果，不再复制
             } else {
                 copyToInbox(uri, mime).also {
-                    if (it != null) {
-                        lastUri = uri.toString()
-                        lastImageFilename = it
-                    }
+                    lastUri = uri.toString()
+                    lastImageFilename = it.filename
+                    lastImageError = it.error
                 }
             }
-            if (name != null) {
-                out.put("imageFilename", name)
+            if (copied.filename != null) {
+                out.put("imageFilename", copied.filename)
                 out.put("mimeType", mime ?: "application/octet-stream")
             }
+            if (copied.error != null) out.put("imageError", copied.error)
         }
         if (out.length() > 0) pending = out
     }
 
-    private fun copyToInbox(uri: Uri, mime: String?): String? {
+    private fun copyToInbox(uri: Uri, mime: String?): InboxCopy {
+        val dir = File(getContext().filesDir, INBOX)
+        val out = File(dir, UUID.randomUUID().toString().replace("-", "") + extensionFor(mime))
+        val partial = File(dir, out.name + ".part")
         return try {
-            val dir = File(getContext().filesDir, INBOX)
-            if (!dir.exists() && !dir.mkdirs()) return null
-            val out = File(dir, UUID.randomUUID().toString().replace("-", "") + extensionFor(mime))
+            if (!dir.exists() && !dir.mkdirs()) throw IllegalStateException("cannot create shared inbox")
             getContext().contentResolver.openInputStream(uri).use { input ->
-                if (input == null) return null
-                FileOutputStream(out).use { os ->
-                    val buf = ByteArray(64 * 1024)
-                    var n = input.read(buf)
-                    while (n > 0) {
-                        os.write(buf, 0, n)
-                        n = input.read(buf)
-                    }
-                }
+                if (input == null) throw IllegalStateException("cannot open shared content")
+                FileOutputStream(partial).use { os -> copyStreamToFile(input, os, MAX_INBOX_BYTES) }
             }
-            out.name
+            if (!partial.renameTo(out)) throw IllegalStateException("cannot finalize shared content")
+            InboxCopy(filename = out.name)
         } catch (e: Exception) {
             Log.w("SharedContentPlugin", "copyToInbox failed", e)
-            null
+            partial.delete()
+            out.delete()
+            InboxCopy(error = if (e is SharedContentTooLargeException) e.message else "读取分享文件失败，未导入")
         }
     }
 
@@ -115,10 +135,13 @@ class SharedContentPlugin : Plugin() {
         pending = null
         lastUri = null
         lastImageFilename = null
+        lastImageError = null
         call.resolve(result ?: JSObject())
     }
 
     private companion object {
         const val INBOX = "shared-inbox"
+        /** 与共享图片协议上限 MAX_IMAGE_BYTES 对齐（Kotlin 无法直接引用 TS 常量）。 */
+        const val MAX_INBOX_BYTES = 25L * 1024 * 1024
     }
 }

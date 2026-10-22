@@ -19,6 +19,8 @@ export interface SharedContent {
   text?: string;
   imageFilename?: string;
   mimeType?: string;
+  /** 原生流式读取/大小校验失败时的可见原因（只带文本时也可能出现）。 */
+  imageError?: string;
 }
 
 interface SharedContentPluginApi {
@@ -62,7 +64,7 @@ export async function consumeSharedContent(): Promise<SharedContent | null> {
   if (!isNativePlatform()) return null;
   try {
     const content = await SharedContent.consume();
-    return content && (content.text || content.imageFilename) ? content : null;
+    return content && (content.text || content.imageFilename || content.imageError) ? content : null;
   } catch {
     return null;
   }

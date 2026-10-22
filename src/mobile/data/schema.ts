@@ -29,7 +29,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 1;
+export const MOBILE_SCHEMA_VERSION = 3;
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -143,7 +143,10 @@ export function baseSchemaStatements(legacyBodySchema: boolean): SchemaStatement
     content_hash TEXT NOT NULL,
     sync_state TEXT NOT NULL DEFAULT 'local',
     is_conflict INTEGER NOT NULL DEFAULT 0,
-    restore_pending_at TEXT
+    restore_pending_at TEXT,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    first_image TEXT,
+    list_metadata_version INTEGER NOT NULL DEFAULT 0
   )`);
   push(`CREATE TABLE IF NOT EXISTS sync_base (
     note_id TEXT PRIMARY KEY,
@@ -263,6 +266,11 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   }
 
   for (const statement of await buildQuickNotesSyncSchemaStatements(db)) push(statement);
+  // 列表/树/小记时间线的最小索引集合（261022 代码 review P1-3）；列必须在上面的 ALTER 之后建索引。
+  push("CREATE INDEX IF NOT EXISTS idx_notes_active_parent_sort ON notes(parent_id, sort_order) WHERE trashed_at IS NULL");
+  push("CREATE INDEX IF NOT EXISTS idx_notes_active_updated ON notes(updated_at DESC) WHERE trashed_at IS NULL");
+  push("CREATE INDEX IF NOT EXISTS idx_folders_active_parent_sort ON folders(parent_id, sort_order) WHERE trashed_at IS NULL");
+  push("CREATE INDEX IF NOT EXISTS idx_quick_notes_active_updated ON quick_notes(updated_at DESC, id DESC) WHERE deleted_at IS NULL");
   // 小记独立 FTS（与文档 notes_fts 分开；quick_notes 不在 notes 表，不能共用 join）。
   push("CREATE VIRTUAL TABLE IF NOT EXISTS quick_notes_fts USING fts5(body, tags, tokenize='unicode61')", { optional: true });
   push(

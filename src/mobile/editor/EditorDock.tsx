@@ -14,7 +14,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
-import { execEditorCommand } from "./execCommand";
+import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
+import { showToast } from "../ui/toastBus";
 import { useSnapshotUndo } from "./useSnapshotUndo";
 import type { StackLimits } from "./snapshotUndoModel";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
@@ -213,12 +214,16 @@ export interface EditorDockProps {
   onInsertCamera?: () => void;
 }
 
-/** 执行 Lake 命令（**统一走 execEditorCommand**：renderer 缺失时回退实例 execCommand，
+/** 执行 Lake 命令（**统一走 execEditorCommandResult**：renderer 缺失时回退实例 execCommand，
  *  文档编辑器就是这种形态；editor 未就绪静默）。
  *  ⚠️ **必须回传内核返回值**：链接的「这条不行就换另一条」判定靠它（linkEditor.ts），
  *  吞掉返回值会退化成"两条都算成功" = 静默 no-op。 */
 function useEditorExec(editor: LakeEditorInstance | null) {
-  return (cmd: string, ...args: unknown[]) => execEditorCommand(editor, cmd, ...args);
+  return (cmd: string, ...args: unknown[]) => {
+    const result = execEditorCommandResult(editor, cmd, ...args);
+    if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage(cmd, result), { type: "error" });
+    return result.ok ? result.value : undefined;
+  };
 }
 
 export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
@@ -658,7 +663,7 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
           只有输入法迟迟不来时才放行滑出（useEditSurface 的 1800ms 兜底）。 */}
       {(panelMode || closing) && (
       <div className="med-panel" data-open={panelMode || closingHold ? "1" : "0"} data-closing={closing ? "1" : undefined} data-kind={renderedPanel ?? "none"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
-        <div className="med-panel-inner">
+        <div className="med-panel-inner" onTransitionEnd={(event) => { if (event.target === event.currentTarget) surface.onPanelTransitionEnd(); }}>
           {renderedPanel === "emoji" ? (
             /* 表情：**占满面板区**（输入法式；.med-panel 已是固定高）——不弹浮层、不随内容跳高度。 */
             <EmojiPanel bucket="input" fill onPick={insertEmoji} onBack={() => togglePanel("insert")} />

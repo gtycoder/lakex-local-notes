@@ -74,6 +74,12 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
     expect(count(store, /assertSafeKey\(/g), "校验点少于 5 个：可能有端口方法漏了键校验").toBeGreaterThanOrEqual(5);
   });
 
+  it("Android 原生流式 PUT 失败必须 fail-fast，不得静默回退 JS 字节路径", () => {
+    const store = read("mobile/native/s3Store.ts");
+    expect(store).toMatch(/await NativeAssetSync\.putFile\(\{ key, localKey \}\);/);
+    expect(store).not.toMatch(/NativeAssetSync\.putFile[\s\S]{0,180}catch\s*\{/);
+  });
+
   it("D4：404 判定必须用 core 的 isNoSuchKey（别在移动端另写一套）", () => {
     const store = read("mobile/native/s3Store.ts");
     expect(/import \{[^}]*isNoSuchKey[^}]*\} from "\.\.\/\.\.\/core\/syncUtils\.js"/.test(store), "必须从 core 引 isNoSuchKey").toBe(true);

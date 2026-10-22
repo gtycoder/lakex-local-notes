@@ -22,6 +22,7 @@ const DOCK = read("src/mobile/editor/EditorDock.tsx");
 const SURFACE = read("src/mobile/editor/useEditSurface.ts");
 const MODEL = read("src/mobile/editor/editSurfaceModel.ts");
 const COMPOSER = read("src/mobile/home/QuickNoteComposer.tsx");
+const USHEET = read("src/mobile/usheet/MobileUsheetViewer.tsx");
 
 const HOOK_CALL = /\buse(?:State|Ref|Effect|LayoutEffect|Callback|Memo|Context)\s*\(/g;
 function handlerBody(src: string, name: string): string {
@@ -40,7 +41,7 @@ function handlerBody(src: string, name: string): string {
 describe("编辑面：单一来源与不变量", () => {
   const focusIn = handlerBody(SURFACE, "onFocusIn");
   const pointerDown = handlerBody(SURFACE, "onPointerDown");
-  const suppress = SURFACE.slice(SURFACE.indexOf("export function suppressImeNow"), SURFACE.indexOf("export function suppressImeNow") + 700);
+  const suppress = SURFACE.slice(SURFACE.indexOf("function applyImeSuppression"), SURFACE.indexOf("export function useEditSurface"));
   const closePanel = handlerBody(SURFACE, "closePanel");   // P3 后收面板的唯一出口在编辑面 hook 里
 
   it("输入法抑制 = inputmode 抑制 + blur/focus + 重入保护（唯一的收键盘口径）", () => {
@@ -48,8 +49,10 @@ describe("编辑面：单一来源与不变量", () => {
     expect(suppress).toContain("removeAttribute");
     expect(suppress).toContain("blur()");
     expect(suppress).toContain("focus()");
-    expect(suppress).toContain("inSetback");
+    expect(SURFACE).toContain("imeMutationRef");
+    expect(SURFACE).not.toContain("let inSetback");
     expect(SURFACE).not.toContain("blurActiveEditable");
+    expect(suppress).toContain("applyImeSuppression");
   });
 
   it("「展开键盘」必须先放开输入法抑制，且带原生兜底（261015 用户报「能收不能展」）", () => {
@@ -76,10 +79,24 @@ describe("编辑面：单一来源与不变量", () => {
   });
 
   it("「用户点正文」判据在 pointerdown（面板开着 + 点在正文）⇒ 通知调用方收面板", () => {
+    expect(pointerDown).toContain("surfaceVisible()");
     expect(pointerDown).toContain("panelModeRef.current");
     expect(pointerDown).toContain("isEditor(");
     expect(pointerDown).toContain("closePanelRef.current()");   // 面板开着时点正文 = 收面板（唯一出口）
     expect(pointerDown).not.toMatch(/userTapped/i);
+  });
+
+  it("退场由 transitionend 驱动，最终只保留 watchdog；隐藏实例不抢事件", () => {
+    expect(SURFACE).toContain("onPanelTransitionEnd");
+    expect(DOCK).toContain("onTransitionEnd");
+    expect(focusIn).toContain("surfaceVisible()");
+    expect(SURFACE).toContain("requestAnimationFrame(finishPanelClose)");
+  });
+
+  it("表格锚定卡片不再复制底部面板/输入法状态机", () => {
+    for (const token of ["closingHold", "renderedPanel", "panelHeight", "inSetback"]) {
+      expect(USHEET, `MobileUsheetViewer 不应再持有 ${token}`).not.toContain(token);
+    }
   });
 
   it("焦点守卫只有一处实现：dock 自己不再挂 focusin/pointerdown 监听", () => {
