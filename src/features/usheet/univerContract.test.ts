@@ -49,7 +49,6 @@ const UNIVER_PACKAGES = [
   "@univerjs/preset-sheets-find-replace",
   // 261022 P1：超链接 / 单元格备注（preset + 基础层 + UI 层）
   "@univerjs/preset-sheets-hyper-link",
-  "@univerjs/sheets-hyper-link",
   "@univerjs/sheets-hyper-link-ui",
   "@univerjs/preset-sheets-note",
   "@univerjs/sheets-note",

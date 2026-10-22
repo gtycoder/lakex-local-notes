@@ -25,8 +25,9 @@ describe("互斥域判据（F16 红线化）", () => {
     expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
     // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
     // 另含 remote ink 批的写操作（WRITE_OPS 30）
-    expect(NONE_OPS.length).toBe(42);
-    expect(ALL.length).toBe(76); // 30 写 + 3 维护 + 1 高优 + 42 none
+    // 261022 移动端批：+getHomeSnapshot（首页快照只读接口，落 none）
+    expect(NONE_OPS.length).toBe(43);
+    expect(ALL.length).toBe(77); // 30 写 + 3 维护 + 1 高优 + 43 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

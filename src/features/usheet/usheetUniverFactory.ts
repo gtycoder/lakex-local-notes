@@ -25,7 +25,6 @@ import { UniverSheetsNotePreset } from "@univerjs/preset-sheets-note";
 import noteZhCN from "@univerjs/preset-sheets-note/locales/zh-CN";
 import "@univerjs/preset-sheets-note/lib/index.css";
 import { UniverSheetsCrosshairHighlightPlugin } from "@univerjs/sheets-crosshair-highlight";
-import { CROSSHAIR_LOCALE_ZH } from "./usheetCrosshair";
 import crosshairZhCN from "@univerjs/sheets-crosshair-highlight/locale/zh-CN";
 import "@univerjs/sheets-crosshair-highlight/lib/index.css";
 import "@univerjs/sheets-filter-ui/lib/index.css";
@@ -49,7 +48,7 @@ export function createUsheetUniver({ container, toolbar, formulaBar }: CreateUsh
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.ZH_CN,
     locales: {
-      [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never, hyperLinkZhCN as never, noteZhCN as never, crosshairZhCN as never, CROSSHAIR_LOCALE_ZH as never),
+      [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never, hyperLinkZhCN as never, noteZhCN as never, crosshairZhCN as never),
     },
     theme: buildUniverTheme() as never,
     presets: [

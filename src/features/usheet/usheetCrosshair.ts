@@ -20,8 +20,3 @@ export function enableUsheetCrosshair(api: FUniver): boolean {
     return false;
   }
 }
-
-/** 内核 1.0.3 的 crosshair 包没有 zh-CN 词条 ⇒ 菜单项无 title/tooltip（实测只有图标）。这里补两条。 */
-export const CROSSHAIR_LOCALE_ZH = {
-  "sheets-crosshair-highlight.button.tooltip": "十字高亮",
-} as const;

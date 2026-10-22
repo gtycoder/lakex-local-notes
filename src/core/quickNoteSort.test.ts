@@ -104,13 +104,15 @@ describe("小记排序：两端同一份（源码级护栏）", () => {
   const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
   it("桌面与移动都从 core/quickNoteSort 引入，且没有第二份存储键", () => {
     const mobile = read("src/mobile/home/HomePage.tsx");
+    // 261022 移动端重构：排序偏好的读写移到 useQuickNoteListModel（仍是同一份 lib/quickNoteSortPref）
+    const mobileModel = read("src/mobile/home/useQuickNoteListModel.ts");
     const desktop = read("src/components/app/QuickNotesWorkspace.tsx");
     expect(mobile, "移动端用共享档位（语义）").toContain('from "../../core/quickNoteSort"');
     expect(desktop, "桌面端用共享档位（语义）").toContain('from "../../core/quickNoteSort"');
-    expect(mobile, "移动端用共享本机读写").toContain('from "../../lib/quickNoteSortPref"');
+    expect(mobileModel, "移动端用共享本机读写").toContain('from "../../lib/quickNoteSortPref"');
     expect(desktop, "桌面端用共享本机读写").toContain('from "../../lib/quickNoteSortPref"');
-    expect(mobile + desktop, "存储键只能出现在共享模块里").not.toContain('"' + QUICK_NOTE_SORT_KEY + '"');
-    expect(mobile + desktop, "排序比较器不能各写一套").not.toContain("localeCompare(key(a))");
+    expect(mobile + mobileModel + desktop, "存储键只能出现在共享模块里").not.toContain('"' + QUICK_NOTE_SORT_KEY + '"');
+    expect(mobile + mobileModel + desktop, "排序比较器不能各写一套").not.toContain("localeCompare(key(a))");
   });
 
   it("档位类型就是共享类型（移动端不再自定义 QuickSort）", () => {

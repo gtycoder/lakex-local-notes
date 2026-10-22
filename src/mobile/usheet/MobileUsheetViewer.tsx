@@ -38,7 +38,7 @@ import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { SheetPopCard } from "./SheetPopCard";
 import { SheetMoreCard } from "./SheetMoreCard";
-import { MobileSheetFooter, type MobileSheetTab } from "./MobileSheetFooter";
+import { MobileSheetFooter } from "./MobileSheetFooter";
 import { MobileSheetReadingBar } from "./MobileSheetReadingBar";
 import {
   SHEET_CARD_META,
@@ -51,7 +51,8 @@ import {
 import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
 import { UniverSheetsCrosshairHighlightMobileUIPlugin } from "@univerjs/sheets-crosshair-highlight";
-import { CROSSHAIR_LOCALE_ZH, enableUsheetCrosshair, USHEET_CROSSHAIR_COMMANDS } from "../../features/usheet/usheetCrosshair";
+import { enableUsheetCrosshair, USHEET_CROSSHAIR_COMMANDS } from "../../features/usheet/usheetCrosshair";
+import { UniverSheetsNotePlugin } from "@univerjs/sheets-note";
 import { createMobileSortFilterPlugins } from "./mobileSortFilter";
 import "./usheet-chrome.css";
 import { USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
@@ -62,6 +63,7 @@ import { USHEET_BORDER_IDS, applyUsheetBorder } from "./usheetBorders";
 import { blockFailureMessage, planSortRange, resolveSheetBlock, type SortFilterSheet } from "./usheetSortPlan";
 import { useSheetCardState } from "./useSheetCardState";
 import { useSheetReadFilter, type SheetReadFilterTarget } from "./useSheetReadFilter";
+import { useSheetChromeState } from "./useSheetChromeState";
 
 /**
  * 移动端公式栏的点击落点（261021）：Univer 的移动公式栏把输入面做成 canvas + 隐藏 contenteditable，
@@ -145,6 +147,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   changeRef.current = onChange;
   const captureCallbackRef = useRef(onCapture);
   captureCallbackRef.current = onCapture;
+  const getUniverAPI = useCallback(() => instanceRef.current?.univerAPI ?? null, []);
 
   /** 顶部工具条弹出的原生面板：插入 / 文字格式 / 更多。 */
   /** 当前打开的锚定卡片（null = 无）；anchor = 触发按钮（卡片锚在它下方）。 */
@@ -157,16 +160,18 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     openSheetList,
     closeSheetList,
   } = useSheetCardState({ active, editing });
-  /** 当前选区文字状态（只用于工具条按钮高亮，选区变化时刷新）。 */
-  const [cellFmt, setCellFmt] = useState<{ bold: boolean; italic: boolean; underline: boolean; strike: boolean; align: "left" | "center" | "normal" | "general"; numfmt: string }>({
-    bold: false, italic: false, underline: false, strike: false, align: "general", numfmt: "",
-  });
-  /** 底栏：工作表页签 / 当前表 / 缩放；实例创建后由 facade 刷新。 */
-  const [sheets, setSheets] = useState<MobileSheetTab[]>([]);
-  const [activeSheetId, setActiveSheetId] = useState("");
-  const [zoomPercent, setZoomPercent] = useState(100);
-  /** 格式刷激活态（0=off / 1=一次性 / 2=连续）；只用于按钮高亮，真实状态由内核 SetFormatPainterOperation 回填。 */
-  const [painterStatus, setPainterStatus] = useState(0);
+  const {
+    cellFormat: cellFmt,
+    sheets,
+    activeSheetId,
+    zoomPercent,
+    painterStatus,
+    setPainterStatus,
+    refreshCellFormat: refreshCellFmt,
+    refreshSheetChrome,
+    selectSheet,
+    zoomBy,
+  } = useSheetChromeState(getUniverAPI);
   /** 排序/筛选共用的「数据块」读取口（只读值，不改任何东西）。 */
   const sheetAccessor = useCallback((sheet: FWorksheet): SortFilterSheet => ({
     maxRows: sheet.getMaxRows(),
@@ -228,65 +233,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       capture();
     }, AUTOSAVE_DEBOUNCE_MS);
   }, [capture]);
-
-  /** 读当前选区样式（Univer facade 的 IStyleData：bl/it/ul/st + 对齐）。 */
-  const refreshCellFmt = useCallback(() => {
-    const state = instanceRef.current;
-    if (!state) return;
-    try {
-      const range = state.univerAPI.getActiveWorkbook()?.getActiveRange();
-      if (!range) return;
-      const style = range.getCellStyleData() as { bl?: number; it?: number; ul?: { s?: number }; st?: { s?: number } } | null;
-      const align = range.getHorizontalAlignment();
-      const numfmt = (range as unknown as { getNumberFormat?: () => string | undefined }).getNumberFormat?.() ?? "";
-      const nextFmt = {
-        bold: style?.bl === 1,
-        italic: style?.it === 1,
-        underline: style?.ul?.s === 1,
-        strike: style?.st?.s === 1,
-        align: (align === "left" || align === "center" || align === "normal" ? align : "general") as "left" | "center" | "normal" | "general",
-        numfmt,
-      };
-      setCellFmt((prev) => prev.bold === nextFmt.bold && prev.italic === nextFmt.italic && prev.underline === nextFmt.underline
-        && prev.strike === nextFmt.strike && prev.align === nextFmt.align && prev.numfmt === nextFmt.numfmt ? prev : nextFmt);
-    } catch { /* 选区内没有可读样式时保持原状态 */ }
-  }, []);
-
-  /** 刷新底栏（工作表页签/当前表）。与 refreshCellFmt 分开：CommandExecuted 时两者都要刷。 */
-  const refreshSheetChrome = useCallback(() => {
-    const workbook = instanceRef.current?.univerAPI.getActiveWorkbook();
-    if (!workbook) return;
-    try {
-      const next = workbook.getSheets().map((sheet) => ({ id: sheet.getSheetId(), name: sheet.getSheetName() }));
-      setSheets((prev) => (prev.length === next.length && prev.every((item, index) => item.id === next[index].id && item.name === next[index].name) ? prev : next));
-      setActiveSheetId(workbook.getActiveSheet()?.getSheetId() ?? "");
-    } catch { /* 实例销毁中忽略 */ }
-  }, []);
-
-  /** 切工作表（底栏页签 / 工作表列表）；只动视图与当前表，不写正文。 */
-  const selectSheet = (sheetId: string) => {
-    const workbook = instanceRef.current?.univerAPI.getActiveWorkbook();
-    if (!workbook) return;
-    try {
-      workbook.setActiveSheet(sheetId);
-      refreshSheetChrome();
-      refreshCellFmt();
-    } catch (error) {
-      console.warn("[mobile-usheet] 切换工作表失败", error);
-    }
-  };
-
-  /** 缩放：走 Univer 官方 ChangeZoomRatioCommand（与内核底部缩放同一命令），只改本机视图。 */
-  const zoomBy = (delta: number) => {
-    const state = instanceRef.current;
-    if (!state) return;
-    try {
-      void state.univerAPI.executeCommand("sheet.command.change-zoom-ratio", { delta });
-      setZoomPercent((prev) => Math.min(400, Math.max(10, Math.round(prev + delta * 100))));
-    } catch (error) {
-      console.warn("[mobile-usheet] 缩放失败", error);
-    }
-  };
 
   /** 所有工具条动作都走同一个入口：拿当前 workbook / sheet / range，执行后刷新按钮态。 */
   const withActiveRange = useCallback((fn: (range: FRange, sheet: FWorksheet, workbook: FWorkbook) => void) => {
@@ -437,7 +383,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
         locales: {
-          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never, hyperLinkZhCN as never, crosshairZhCN as never, CROSSHAIR_LOCALE_ZH as never),
+          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never, hyperLinkZhCN as never, crosshairZhCN as never),
         },
         // 移动端专用画布主题：共用主题 + 语雀对齐覆盖（桌面那份不动，见 mobileUniverTheme.ts）。
         theme: buildMobileUniverTheme() as never,
@@ -452,6 +398,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           { plugins: [[UniverFindReplaceMobileUIPlugin], [UniverSheetsFindReplaceMobileUIPlugin]] as unknown as IPresetPlugin[] },
           // 261022 P1：超链接（移动 UI 变体；链接点击 → window.open，由系统浏览器接管）。
           createMobileSheetsHyperLinkPreset({ urlHandler: { navigateToOtherWebsite: (url) => { window.open(url, "_blank", "noopener"); } } }),
+          // 备注（桌面专属 UI）：移动端**必须**装数据插件，否则保存时会把桌面写入的 note plugin resource 丢掉。
+          // 顺序与桌面保持一致（hyperlink → note → crosshair），避免两端 resources 数组顺序不同造成假冲突。
+          { plugins: [UniverSheetsNotePlugin] as unknown as IPresetPlugin[] },
           // 261022：十字高亮（移动插件；默认开启见下方 enableUsheetCrosshair）。
           { plugins: [UniverSheetsCrosshairHighlightMobileUIPlugin] as unknown as IPresetPlugin[] },
         ],
