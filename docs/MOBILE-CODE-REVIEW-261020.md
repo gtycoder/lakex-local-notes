@@ -7,9 +7,9 @@
 > **261022 实施状态（持续更新）**
 > - **P0 / P1 / P2-1～P2-4：已完成**。包括可等待保存、GC 维护锁、子树 CTE、小记轻量投影/虚拟列表、最小索引与批量写、标签页懒读、编辑面单一 owner、结构化命令结果、原生流式 fail-fast、路径围栏、分享限长、多维表 draft 等。
 > - **P2-5：已完成**。编辑面关闭/焦点/隐藏实例改为 jsdom 行为测试；GC / syncNow / priority 改为真实操作时间线验证；契约面从实际 `bridge` 与 `nativeSqlite` 导出派生。
-> - **P2-6：进行中（已完成 9 个局部切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、同步设置、编辑命令分发、目录数据与目录行动作；`SaveCoordinator`、`EditSession` 与 `MobileUsheetViewer` 仍是后续重点。
-> - **P3 / Mobile Data Plane v2：进行中（基础能力与首个 query 已落）**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读和 `HomeSnapshot` bridge query 已完成；`QuickNotePage` / keyset 分页、显式 Unit of Work、SaveCoordinator 抽象、旧全量读接口清理和设备性能目标仍未完成。
-> - **验证基线**：截至本轮，移动端 vitest 105 文件 / 462 例、quickNotes 60 例、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过。P2-6 仍需 Android 设备复验。
+> - **P2-6：进行中（已完成 10 个局部切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、同步设置、编辑命令分发、目录数据、目录行动作与表格卡片状态；`EditSession` 与 `MobileUsheetViewer` 其余命令状态仍是后续重点。`useAutoSave` 已满足 SaveCoordinator 的核心行为不变量，暂不另造平行抽象。
+> - **P3 / Mobile Data Plane v2：进行中（首个 query + 小记分页模型已落）**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot` 与 `QuickNotePage` keyset 查询已完成；UI 尚未切到 bounded page、其余细粒度 query 尚未抽出，显式 Unit of Work 仍需领域收口，旧全量接口尚未删除，设备性能目标仍待实测。
+> - **验证基线**：截至本轮，移动端 vitest 106 文件 / 466 例、quickNotes 60 例、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过。P2-6 仍需 Android 设备复验。
 
 ---
 
@@ -448,7 +448,7 @@
 
 ### P2-6 巨型组件已经阻碍局部推理
 
-> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、小记列表展示模型（`useQuickNoteListModel`）、S3 设置表单（`useS3SettingsForm`）、设置子页数据（`useSettingsSectionData`）、同步设置（`useSyncSettingsForm`）、编辑命令分发（`useEditorCommandDispatcher`）、目录数据（`useNotebookTreeData`）与目录行动作（`useNotebookTreeActions`）九个局部切片。剩余重点是 `SaveCoordinator`、`EditSession` 与 `MobileUsheetViewer`。
+> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、小记列表展示模型（`useQuickNoteListModel`）、S3 设置表单（`useS3SettingsForm`）、设置子页数据（`useSettingsSectionData`）、同步设置（`useSyncSettingsForm`）、编辑命令分发（`useEditorCommandDispatcher`）、目录数据（`useNotebookTreeData`）、目录行动作（`useNotebookTreeActions`）与表格卡片状态（`useSheetCardState`）十个局部切片。剩余重点是 `EditSession` 与 `MobileUsheetViewer` 其余命令状态；`useAutoSave` 已覆盖 SaveCoordinator 的核心行为。
 
 规模（不含测试）：
 
@@ -492,7 +492,7 @@
 
 ## 5. 推荐重设计板块：Mobile Data Plane v2
 
-> **261022 状态：进行中，尚不能标记完成。** 已具备最小索引、子树递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读和 `HomeSnapshot` bridge query；但 `QuickNotePage` 分页 query、显式 Unit of Work、统一 SaveCoordinator 与旧全量接口清理仍未落地。以下目标继续作为后续架构验收口径。
+> **261022 状态：进行中，尚不能标记完成。** 已具备最小索引、子树递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot` bridge query 与 `QuickNotePage` keyset 查询；但 UI 尚未切到 bounded page、显式 Unit of Work 仍需领域收口、旧全量接口尚未清理。以下目标继续作为后续架构验收口径。
 
 ### 5.1 第一性原理
 
@@ -661,10 +661,10 @@ interface SaveCoordinator {
 
 ### 5.7 迁移步骤
 
-1. **部分完成**：索引已加，首页已收敛到 `getHomeSnapshot()` query；`QuickNotePage` / keyset 分页及其余细粒度 query 尚未抽出。
-2. **部分完成**：小记轻量投影、虚拟列表、可见正文 LRU 与 `HomeSnapshot` 已完成；`QuickNotePage` 与 keyset 分页仍未完成。
+1. **部分完成**：索引已加，首页已收敛到 `getHomeSnapshot()` query；小记 keyset 查询已落，其余 `DocumentMetaQuery` 等细粒度 query 尚未抽出。
+2. **部分完成**：小记轻量投影、虚拟列表、可见正文 LRU、`HomeSnapshot` 与 `QuickNotePage` 已完成；首页 UI 尚未切到 bounded page / 增量加载。
 3. **基本完成**：工作区子树已走递归 CTE；标签页已 metadata-only，正文按活动页懒读。
-4. **行为部分完成**：`useAutoSave.flush()` 已可等待且调用方会 await；显式 SaveCoordinator 抽象尚未建立。
+4. **行为已完成**：`useAutoSave` 已具备 schedule / single-flight / 合并新快照 / 可等待 flush / 失败保留快照语义；暂不另造平行 SaveCoordinator 抽象。
 5. **未完成**：旧 `listNotes` / `listQuickNotes` / `listNotebookTree` 仍存在并被生产路径使用，尚未切到正式读模型后删除。
 6. **未完成**：尚未形成统一 `MobileEditSession` + `EditorAdapter`，表格编辑面仍独立演进。
 
