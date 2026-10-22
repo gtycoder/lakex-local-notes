@@ -29,6 +29,7 @@ const COMPOSER_SKELETON = code(read("./QuickNoteComposerSkeleton.tsx"));
 const EDITOR = code(read("../../features/quickNotes/QuickNoteEditor.tsx"));
 const AUTO_SYNC = code(read("../hooks/useAutoSync.ts"));
 const SETTINGS = code(read("../settings/SettingsDrawer.tsx"));
+const SYNC_FORM = code(read("../settings/useSyncSettingsForm.ts"));
 const BRIDGE = ["bridge.ts", "bridge/sync.ts", "bridge/notes.ts", "bridge/quickNotes.ts", "bridge/tree.ts"].map((f) => code(read("../" + f))).join("\n");
 const SYNC_STATUS = code(read("../sync/syncStatusStore.ts"));
 const SHORTCUT = code(read("../native/quickNoteShortcut.ts"));
@@ -120,8 +121,9 @@ describe("小记 capture 路径（261010 统一为内核卡片）", () => {
     expect(SYNC_STATUS, "状态 store 要落盘 + 可订阅").toMatch(/writeLocalStorage\(KEY/);
     expect(BRIDGE, "写入点唯一 = bridge.syncNow；ok 按「真的跑了引擎」判（notes 非 null）").toMatch(/writeSyncStatus\(\{ at: new Date\(\)\.toISOString\(\), ok: result\.notes !== null/);
     expect(BRIDGE, "失败也要记（此前只有 console.warn，界面上看不到）").toMatch(/ok: false/);
-    expect(SETTINGS, "设置页常驻显示这一行").toMatch(/describeSyncStatus\(lastSync\)/);
-    expect(SETTINGS, "跟随 store 刷新").toMatch(/subscribeSyncStatus\(/);
+    expect(SETTINGS, "设置页常驻显示这一行").toContain("lastSyncText");
+    expect(SYNC_FORM, "同步状态文本走共享描述器").toMatch(/describeSyncStatus\(lastSync\)/);
+    expect(SYNC_FORM, "跟随 store 刷新").toMatch(/subscribeSyncStatus\(/);
   });
 
   it("capture 会话不主动发起同步（前台 / 后台两处都过 capture 会话判定）", () => {

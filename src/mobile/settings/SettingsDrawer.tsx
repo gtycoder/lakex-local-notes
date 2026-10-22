@@ -3,24 +3,21 @@
  * P4（261012）：版式原语已换成 src/mobile/ui/settingsPrimitives（mb-set-*），data-set-id 契约不变
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash, TriangleAlert } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
-import { writeSyncSettings } from "../sync/syncSettingsStore";
-import { describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyncStatus } from "../sync/syncStatusStore";
-import { bridge } from "../bridge";
 import { MANIFEST_VERSION } from "../../core/syncUtils";
 import { usePanelDrag } from "../hooks/usePanelDrag";
 import { TrashList } from "./TrashList";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
 import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
-import type { SyncSettings, SyncWarning } from "../../lib/types";
 import { useS3SettingsForm } from "./useS3SettingsForm";
 import { useSettingsSectionData } from "./useSettingsSectionData";
+import { useSyncSettingsForm } from "./useSyncSettingsForm";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -92,42 +89,22 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     aboutOpen: open && view === "about",
   });
   /** 云同步开关（与桌面同语义：关闭 = 纯离线本地空间，任何路径都不出网） */
-  const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
+  const {
+    syncSettings: syncCfg,
+    updateSyncSettings,
+    syncMsg,
+    warnings: syncWarnings,
+    lastSyncText,
+    runSync,
+  } = useSyncSettingsForm(open, onRefresh);
   const cloudState = cloudStateOf(Boolean(s3), syncCfg);
   const cloudBlockReason = canTouchNetwork(cloudState)
     ? null
     : cloudState === "unconfigured"
       ? "未配置云同步：按纯本地空间处理，不能清理云端。"
       : "云同步已关闭：按纯本地空间处理，不能清理云端。";
-  const [syncMsg, setSyncMsg] = useState("");
-  /**
-   * 上次同步（设备本地、常驻）——用户 261013 定稿「同步可观测性」：
-   * 自动同步失败以前只走 console.warn，界面上完全看不到；这里把时间/结果/失败原因常驻在设置页。
-   */
-  const [lastSync, setLastSync] = useState<MobileSyncStatus | null>(() => readSyncStatus());
-  const [syncWarnings, setSyncWarnings] = useState<SyncWarning[]>([]);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
-
-  useEffect(() => {
-    if (!open) return;
-    setSyncCfg(bridge.getSyncSettings());
-  }, [open]);
-
-  // 「上次同步」那一行跟随 store 刷新（bridge.syncNow 是唯一写入点）
-  useEffect(() => subscribeSyncStatus(() => setLastSync(readSyncStatus())), []);
-
-  const runSync = useCallback(async () => {
-    setSyncMsg("同步中…");
-    try {
-      const result = await bridge.syncNow();
-      setSyncMsg(result.message);
-      setSyncWarnings(result.notes?.warnings ?? []);
-      await onRefresh();
-    } catch (e) {
-      setSyncMsg("同步失败: " + (e as Error).message);
-    }
-  }, [onRefresh]);
 
 
   const pageRef = useRef<HTMLDivElement>(null);
@@ -333,9 +310,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     note={<><span className="mb-tag mb-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
                     checked={syncCfg?.enabled !== false}
                     onChange={(next) => {
-                      const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "manual" as const, autoIntervalMinutes: 15 }), enabled: next };
-                      setSyncCfg(value);
-                      writeSyncSettings(value); // 单一写入口：同步策略改了 → 自动同步定时器立刻重挂（useAutoSync）
+                      // 单一写入口：同步策略改了 → 自动同步定时器立刻重挂（useAutoSync）
+                      updateSyncSettings({ enabled: next });
                     }}
                   />
                   {syncCfg?.enabled !== false && (
@@ -346,9 +322,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                           value={syncCfg?.autoMode ?? "manual"}
                           options={SYNC_AUTO_MODE_OPTIONS}
                           onChange={(v) => {
-                            const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 }), autoMode: v };
-                            setSyncCfg(value);
-                            writeSyncSettings(value);
+                            updateSyncSettings({ autoMode: v });
                           }}
                         />
                       </Item>
@@ -359,9 +333,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                             value={syncCfg?.autoIntervalMinutes ?? 15}
                             options={syncIntervalOptions(syncCfg?.autoIntervalMinutes ?? 15).map((m) => ({ value: m, label: m + " 分钟" }))}
                             onChange={(v) => {
-                              const value: SyncSettings = { ...(syncCfg ?? { enabled: true, autoMode: "interval", autoIntervalMinutes: 15 }), autoIntervalMinutes: v };
-                              setSyncCfg(value);
-                              writeSyncSettings(value);
+                              updateSyncSettings({ autoIntervalMinutes: v });
                             }}
                           />
                         </Item>
@@ -380,7 +352,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
                     {/* 常驻：上次同步的时间/结果/失败原因（自动同步的失败也在这里看得到；云同步关闭时另加一句说明） */}
                     <div className="mb-set-item__desc">
-                      上次同步：{lastSync ? describeSyncStatus(lastSync) : "本机还没有同步记录"}
+                      上次同步：{lastSyncText}
                       {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
                     </div>
                   </div>
