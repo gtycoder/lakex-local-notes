@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Eraser, MoreHorizontal, Paintbrush, Plus, Redo2, Undo2 } from "lucide-react";
 import { createUniver, DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY, LocaleType, mergeLocales, type FUniver, type IPresetPlugin } from "@univerjs/presets";
 import { DocSelectionRenderService, IRenderManagerService } from "@univerjs/preset-sheets-core";
-import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade";
+import type { FWorksheet } from "@univerjs/sheets/facade";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
 import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
 import sortZhCN from "@univerjs/sheets-sort-ui/locale/zh-CN";
@@ -48,22 +48,17 @@ import {
   buildNumfmtMenu,
   numfmtLabelOf,
 } from "./usheetChromeModel";
-import { showToast } from "../ui/toastBus";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
 import { UniverSheetsCrosshairHighlightMobileUIPlugin } from "@univerjs/sheets-crosshair-highlight";
-import { enableUsheetCrosshair, USHEET_CROSSHAIR_COMMANDS } from "../../features/usheet/usheetCrosshair";
+import { enableUsheetCrosshair } from "../../features/usheet/usheetCrosshair";
 import { UniverSheetsNotePlugin } from "@univerjs/sheets-note";
 import { createMobileSortFilterPlugins } from "./mobileSortFilter";
 import "./usheet-chrome.css";
-import { USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
-import { USHEET_NUMFMT_IDS, applyUsheetNumberFormat } from "./usheetNumfmt";
-import { USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
-import { decimalStepMessage, stepNumberFormatDecimals } from "./usheetDecimals";
-import { USHEET_BORDER_IDS, applyUsheetBorder } from "./usheetBorders";
-import { blockFailureMessage, planSortRange, resolveSheetBlock, type SortFilterSheet } from "./usheetSortPlan";
+import { blockFailureMessage, resolveSheetBlock, type SortFilterSheet } from "./usheetSortPlan";
 import { useSheetCardState } from "./useSheetCardState";
 import { useSheetReadFilter, type SheetReadFilterTarget } from "./useSheetReadFilter";
 import { useSheetChromeState } from "./useSheetChromeState";
+import { useSheetCommandActions } from "./useSheetCommandActions";
 
 /**
  * 移动端公式栏的点击落点（261021）：Univer 的移动公式栏把输入面做成 canvas + 隐藏 contenteditable，
@@ -172,6 +167,18 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     selectSheet,
     zoomBy,
   } = useSheetChromeState(getUniverAPI);
+  const getHost = useCallback(() => hostRef.current, []);
+  const {
+    toggleFormatPainter,
+    openFindDialog,
+    runHistory,
+    dispatchMenu,
+  } = useSheetCommandActions({
+    editing,
+    getUniverAPI,
+    getHost,
+    refreshCellFormat: refreshCellFmt,
+  });
   /** 排序/筛选共用的「数据块」读取口（只读值，不改任何东西）。 */
   const sheetAccessor = useCallback((sheet: FWorksheet): SortFilterSheet => ({
     maxRows: sheet.getMaxRows(),
@@ -233,123 +240,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       capture();
     }, AUTOSAVE_DEBOUNCE_MS);
   }, [capture]);
-
-  /** 所有工具条动作都走同一个入口：拿当前 workbook / sheet / range，执行后刷新按钮态。 */
-  const withActiveRange = useCallback((fn: (range: FRange, sheet: FWorksheet, workbook: FWorkbook) => void) => {
-    const state = instanceRef.current;
-    if (!state) return;
-    try {
-      const workbook = state.univerAPI.getActiveWorkbook();
-      if (!workbook) return;
-      const sheet = workbook.getActiveSheet();
-      const range = workbook.getActiveRange();
-      if (!sheet || !range) return;
-      fn(range, sheet, workbook);
-      refreshCellFmt();
-    } catch (error) {
-      console.warn("[mobile-usheet] 工具条动作失败", error);
-    }
-  }, [refreshCellFmt]);
-
-  /** 小数位 ±1：走 numfmt mixin（缺失/不支持时明确提示，不静默失败）。 */
-  const stepDecimals = useCallback((delta: 1 | -1) => {
-    withActiveRange((range) => {
-      const target = range as unknown as {
-        getNumberFormat?: () => string | undefined;
-        setNumberFormat?: (pattern: string) => unknown;
-      };
-      if (typeof target.setNumberFormat !== "function") {
-        showToast("当前表格内核不支持数字格式", { type: "error" });
-        return;
-      }
-      const step = stepNumberFormatDecimals(target.getNumberFormat?.() ?? "", delta);
-      if (!step.ok) {
-        showToast(decimalStepMessage(step.reason), { type: "error" });
-        return;
-      }
-      target.setNumberFormat(step.pattern);
-    });
-  }, [withActiveRange]);
-
-  /** 格式刷：一次性模式（语雀 toolbar-formatPainter 的语义）；内核会自己按 operation 回填激活态。 */
-  const toggleFormatPainter = useCallback(() => {
-    const state = instanceRef.current;
-    if (!state) return;
-    void state.univerAPI.executeCommand("sheet.command.set-once-format-painter");
-    refreshCellFmt();
-  }, [refreshCellFmt]);
-
-  /** 排序：自己算数据区 + 数据层命令 `sheet.command.sort-range`
-   *  （不用 `sort-range-asc` 那类 UI 包装命令：它会弹内核的桌面对话框，移动端实测不可接受）。 */
-  const runSheetSort = useCallback((direction: "asc" | "desc") => {
-    const state = instanceRef.current;
-    if (!state) return;
-    const workbook = state.univerAPI.getActiveWorkbook();
-    const sheet = workbook?.getActiveSheet();
-    const range = workbook?.getActiveRange();
-    if (!workbook || !sheet || !range) return;
-    const resolved = planSortRange(
-      { startRow: range.getRow(), endRow: range.getLastRow(), startColumn: range.getColumn(), endColumn: range.getLastColumn() },
-      sheetAccessor(sheet),
-      direction,
-    );
-    if (!resolved.ok) {
-      showToast(blockFailureMessage(resolved.reason), { type: "error" });
-      return;
-    }
-    void state.univerAPI.executeCommand("sheet.command.sort-range", {
-      unitId: workbook.getId(),
-      subUnitId: sheet.getSheetId(),
-      range: resolved.plan.range,
-      orderRules: resolved.plan.orderRules,
-      hasTitle: resolved.plan.hasTitle,
-    }).then((ok) => {
-      if (!ok) showToast("排序失败：这个区域无法排序", { type: "error" });
-    });
-  }, [sheetAccessor]);
-
-  /** 筛选：按数据块建筛选范围（已存在时命令返回 false 属正常），再开内核的**移动**筛选面板。 */
-  const openSheetFilter = useCallback(() => {
-    const state = instanceRef.current;
-    if (!state) return;
-    const workbook = state.univerAPI.getActiveWorkbook();
-    const sheet = workbook?.getActiveSheet();
-    const range = workbook?.getActiveRange();
-    if (!workbook || !sheet || !range) return;
-    const resolved = resolveSheetBlock(
-      { startRow: range.getRow(), endRow: range.getLastRow(), startColumn: range.getColumn(), endColumn: range.getLastColumn() },
-      sheetAccessor(sheet),
-    );
-    if (!resolved.ok) {
-      showToast(blockFailureMessage(resolved.reason), { type: "error" });
-      return;
-    }
-    const { block } = resolved;
-    const unitId = workbook.getId();
-    const subUnitId = sheet.getSheetId();
-    const column = range.getColumn();
-    void (async () => {
-      await state.univerAPI.executeCommand("sheet.command.set-filter-range", {
-        unitId,
-        subUnitId,
-        range: { startRow: block.startRow, startColumn: block.startColumn, endRow: block.endRow, endColumn: block.endColumn },
-      });
-      const opened = await state.univerAPI.executeCommand("sheet.operation.open-filter-panel", { unitId, subUnitId, col: column });
-      if (!opened) showToast("筛选面板打不开：这个区域可能不足两行", { type: "error" });
-    })();
-  }, [sheetAccessor]);
-
-  /**
-   * 打开查找替换：**编辑态**用 open-replace-dialog（移动 bar 才会展开替换行；改写走内核命令
-   * 并触发 CommandExecuted ⇒ scheduleFlush ⇒ capture 落正文）；**阅读态**只开 find-only，
-   * 绝不展开替换行（读态语义 = 只浏览/跳转、不写正文，与读态筛选同一口径）。
-   */
-  const openFindDialog = useCallback(() => {
-    const state = instanceRef.current;
-    if (!state) return;
-    const commandId = editing ? "ui.operation.open-replace-dialog" : "ui.operation.open-find-dialog";
-    void state.univerAPI.executeCommand(commandId);
-  }, [editing]);
 
   useEffect(() => {
     if (active) setEverActive(true);
@@ -497,19 +387,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   }, [ready, editing]);
 
 
-  // ---- Yuque 式常驻工具条（261019 用户点单）----
-  // 只在编辑态显示；阅读态保持干净（编辑入口仍在工作区顶栏）。
-  const runHistory = (kind: "undo" | "redo") => {
-    const workbook = instanceRef.current?.univerAPI.getActiveWorkbook();
-    if (!workbook) return;
-    try {
-      if (kind === "undo") workbook.undo(); else workbook.redo();
-      refreshCellFmt();
-    } catch (error) {
-      console.warn("[mobile-usheet] 撤销/重做失败", error);
-    }
-  };
-
   // 卡片内容全部来自 usheetChromeModel（单一来源）；组件只按 id 分派动作。
   const insertItems = buildInsertMenu();
   const numfmtItems = buildNumfmtMenu(cellFmt.numfmt);
@@ -524,85 +401,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
 
   const handleCardSelect = (id: string) => {
     closeCard();
-    onMenuSelect(id);
-  };
-
-  const onMenuSelect = (id: string) => {
-    if (id === "row-above") withActiveRange((range, sheet) => sheet.insertRowsBefore(range.getRow(), 1));
-    else if (id === "row-below") withActiveRange((range, sheet) => sheet.insertRowsAfter(range.getRow(), 1));
-    else if (id === "col-left") withActiveRange((range, sheet) => sheet.insertColumnsBefore(range.getColumn(), 1));
-    else if (id === "col-right") withActiveRange((range, sheet) => sheet.insertColumnsAfter(range.getColumn(), 1));
-    else if (id === "merge") withActiveRange((range) => range.merge({ defaultMerge: true }));
-    else if (id === "bold") withActiveRange((range) => {
-      const style = range.getCellStyleData() as { bl?: number } | null;
-      range.setFontWeight(style?.bl === 1 ? "normal" : "bold");
-    });
-    else if (id === "italic") withActiveRange((range) => {
-      const style = range.getCellStyleData() as { it?: number } | null;
-      range.setFontStyle(style?.it === 1 ? "normal" : "italic");
-    });
-    else if (id === "underline") withActiveRange((range) => {
-      const style = range.getCellStyleData() as { ul?: { s?: number } } | null;
-      range.setFontLine(style?.ul?.s === 1 ? "none" : "underline");
-    });
-    else if (id === "strike") withActiveRange((range) => {
-      const style = range.getCellStyleData() as { st?: { s?: number } } | null;
-      range.setFontLine(style?.st?.s === 1 ? "none" : "line-through");
-    });
-    else if (id === "align-left") withActiveRange((range) => range.setHorizontalAlignment("left"));
-    else if (id === "align-center") withActiveRange((range) => range.setHorizontalAlignment("center"));
-    else if (id === "align-right") withActiveRange((range) => range.setHorizontalAlignment("normal"));
-    else if (id.startsWith("font-")) withActiveRange((range) => range.setFontColor(id.slice("font-".length)));
-    else if (id.startsWith("fill-")) withActiveRange((range) => range.setBackgroundColor(id.slice("fill-".length)));
-    // 261021 P5：查找替换（官方 mobile bar；sheets 适配器已在 preset 里，这里只派发操作）。
-    else if (id === "find") openFindDialog();
-    // 261021 P5：边框（FRange.setBorder；线型从 univerAPI.Enum 取，不写死数字）。
-    else if (USHEET_BORDER_IDS.has(id)) {
-      withActiveRange((range) => {
-        const style = instanceRef.current?.univerAPI.Enum.BorderStyleTypes.THIN;
-        const applied = applyUsheetBorder(range as unknown as { setBorder?: (type: string, style: number, color?: string) => unknown }, id, style ?? 1);
-        if (!applied) showToast("当前表格内核不支持边框", { type: "error" });
-      });
-    }
-    // 261021 P5：排序 / 筛选（Univer 独立包）。数据区由 usheetSortPlan 判定，失败一律 toast，不静默。
-    else if (id === "sort-asc") runSheetSort("asc");
-    else if (id === "sort-desc") runSheetSort("desc");
-    else if (id === "filter") openSheetFilter();
-    // 261022 P1：超链接 / 十字高亮（内核 1.0.3 独立包；链接走移动版弹层，高亮是纯视图 operation）。
-    else if (id === "link") { void instanceRef.current?.univerAPI.executeCommand("sheet.operation.insert-hyper-link"); }
-    else if (id === "crosshair") { instanceRef.current?.univerAPI.executeCommand(USHEET_CROSSHAIR_COMMANDS.toggle); }
-    // 261021 P4：一级「格式刷 / 清除格式 / 小数位」三项（语雀同级位；保存位按用户定稿不重复）
-    else if (id === "clear-style") withActiveRange((range) => { range.clearFormat(); });
-    else if (id === "decimals") stepDecimals(1);
-    else if (id === "decimal-down") stepDecimals(-1);
-    else if (id === "clear-text") withActiveRange((range) => {
-      range.setFontWeight(null).setFontStyle(null).setFontLine(null).setFontColor(null);
-    });
-    else if (id === "delete-row") withActiveRange((range, sheet) => { sheet.deleteRow(range.getRow()); });
-    else if (id === "delete-col") withActiveRange((range, sheet) => { sheet.deleteColumn(range.getColumn()); });
-    else if (id === "more-tools") hostRef.current?.querySelector<HTMLButtonElement>('button[aria-label="打开表格工具"]')?.click();
-    // 布局类（冻结 / 行高 / 列宽）：动作清单与实现都在 usheetLayoutActions（单一来源，可单测）
-    else if (USHEET_LAYOUT_ACTIONS.has(id)) {
-      withActiveRange((range, sheet) => { applyUsheetLayoutAction(id, range, sheet); });
-    }
-    // 常用公式：只认「单个单元格 + 上方连续数值」，条件不满足就明说，绝不乱写
-    else if (USHEET_QUICK_FORMULA_IDS.has(id)) {
-      withActiveRange((range, sheet) => {
-        const single = range.getRow() === range.getLastRow() && range.getColumn() === range.getLastColumn();
-        if (!single) { showToast("请先只选中一个单元格（公式要写在这个格里）", { type: "error" }); return; }
-        const plan = planUsheetQuickFormula(id, { row: range.getRow(), col: range.getColumn() },
-          (row, col) => sheet.getRange(row, col).getValue());
-        if (!plan) { showToast("这个单元格上方没有可统计的连续数值", { type: "error" }); return; }
-        sheet.getRange(plan.targetRow, plan.targetColumn).setFormula(plan.formula);
-      });
-    }
-    // 数字格式：运行时若没装 numfmt mixin 要明确提示（不静默失败）
-    else if (USHEET_NUMFMT_IDS.has(id)) {
-      withActiveRange((range) => {
-        const applied = applyUsheetNumberFormat(range as unknown as { setNumberFormat?: (pattern: string) => unknown }, id);
-        if (!applied) showToast("当前表格内核不支持数字格式", { type: "error" });
-      });
-    }
+    dispatchMenu(id);
   };
 
   // 退出编辑态时收起卡片（避免卡片挂在阅读态上）。
@@ -644,7 +443,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
                     return (
                       <button key={item.id} type="button" className="mb-usheet-btn"
                         aria-label={item.label} title={item.label}
-                        onClick={() => onMenuSelect("clear-style")}>
+                        onClick={() => dispatchMenu("clear-style")}>
                         <Eraser size={18} strokeWidth={1.75} />
                       </button>
                     );
@@ -653,7 +452,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
                     return (
                       <button key={item.id} type="button" className="mb-usheet-btn mb-usheet-btn--numdot"
                         aria-label={item.label} title={item.label}
-                        onClick={() => onMenuSelect("decimals")}>
+                        onClick={() => dispatchMenu("decimals")}>
                         <span>.00</span>
                         <Plus size={11} strokeWidth={2} />
                       </button>
