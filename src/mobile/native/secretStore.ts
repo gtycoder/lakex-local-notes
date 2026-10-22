@@ -25,6 +25,22 @@ const LEGACY_DB = "lake-notes-mobile.secrets";
 const LEGACY_STORE = "secrets";
 /** 密钥固定派生：同一安装内稳定（换机/重装后无法解密旧值，提示重新填写——对齐桌面 safeStorage 密钥丢失语义）。 */
 const KEY_MATERIAL = "lake-notes-mobile.secret-key.v1";
+const SECRET_MIGRATION_MARKER_PREFIX = "lake-notes-mobile.secret-migrated.";
+
+function secretMigrationMarker(key: string): string {
+  return SECRET_MIGRATION_MARKER_PREFIX + key;
+}
+
+function isSecretMigrationDone(key: string, migrated: Set<string>): boolean {
+  if (migrated.has(key)) return true;
+  try { return localStorage.getItem(secretMigrationMarker(key)) === "1"; }
+  catch { return false; }
+}
+
+function markSecretMigrationDone(key: string, migrated: Set<string>): void {
+  migrated.add(key);
+  try { localStorage.setItem(secretMigrationMarker(key), "1"); } catch { /* 标不上只会多跑一次幂等迁移 */ }
+}
 
 let keyPromise: Promise<CryptoKey> | null = null;
 
@@ -103,14 +119,7 @@ export const localStorageSecretStore: SecretStore = {
   async read(key) {
     try {
       const raw = localStorage.getItem(LS_PREFIX + key);
-      if (raw) return await decrypt(raw);
-      // 旧值迁移（仅一次）：早期版本把密文放 IndexedDB，读到时搬到 localStorage。
-      const legacy = await readLegacy(key);
-      if (!legacy) return null;
-      const plain = await decrypt(legacy);
-      if (plain == null) return null;
-      try { localStorage.setItem(LS_PREFIX + key, legacy); removeLegacy(key); } catch { /* 迁移失败就本次直接用 */ }
-      return plain;
+      return raw ? await decrypt(raw) : null;
     } catch {
       // 密钥丢失/格式损坏：返回 null，提示重新填写（对齐桌面 decrypt 失败返回空串语义）
       return null;
@@ -122,6 +131,26 @@ export const localStorageSecretStore: SecretStore = {
   },
   async remove(key) {
     try { localStorage.removeItem(LS_PREFIX + key); } catch { /* ignore */ }
+  },
+};
+
+/** 仅在一次性迁移窗口使用：承接 IndexedDB / localStorage 两代旧密文。 */
+const legacySecretStore: SecretStore = {
+  async read(key) {
+    const current = await localStorageSecretStore.read(key);
+    if (current != null) return current;
+    try {
+      const legacy = await readLegacy(key);
+      if (!legacy) return null;
+      const plain = await decrypt(legacy);
+      if (plain == null) return null;
+      try { localStorage.setItem(LS_PREFIX + key, legacy); removeLegacy(key); } catch { /* 本次仍可返回旧值 */ }
+      return plain;
+    } catch { return null; }
+  },
+  write: (key, value) => localStorageSecretStore.write(key, value),
+  async remove(key) {
+    await localStorageSecretStore.remove(key);
     removeLegacy(key);
   },
 };
@@ -131,11 +160,16 @@ export const localStorageSecretStore: SecretStore = {
  * 迁移成功后清掉旧值（此后 secret 不再留在 WebView 存储里）。
  * 写/删只走 native —— 这正是"正解"，降级件仅用于承接历史值。
  */
-export function createMigratingSecretStore(native: SecretStore, legacy: SecretStore): SecretStore {
+export function createMigratingSecretStore(native: SecretStore, legacy: SecretStore, options: {
+  isDone?: (key: string) => boolean;
+  markDone?: (key: string) => void;
+  cleanLegacyOnWrite?: boolean;
+} = {}): SecretStore {
   /** 已做过旧副本清理的键（一次性；避免每次读都去碰 IndexedDB 兜底）。 */
   const legacyCleaned = new Set<string>();
   return {
     async read(key) {
+      if (options.isDone?.(key)) return native.read(key);
       const fromNative = await native.read(key);
       if (fromNative != null) {
         // 一次性清理残留旧副本：早期版本的迁移**只在 native 为空时**清 legacy，
@@ -144,27 +178,44 @@ export function createMigratingSecretStore(native: SecretStore, legacy: SecretSt
           legacyCleaned.add(key);
           try { await legacy.remove(key); } catch { /* 清不掉不影响本次读取 */ }
         }
+        options.markDone?.(key);
         return fromNative;
       }
       const old = await legacy.read(key);
-      if (old == null) return null;
+      if (old == null) { options.markDone?.(key); return null; }
       try {
         await native.write(key, old);
         await legacy.remove(key);
+        options.markDone?.(key);
       } catch {
         // 迁移失败：本次仍返回旧值（别让用户当场丢掉密钥），下次读再试
       }
       return old;
     },
-    write: (key, value) => native.write(key, value),
+    async write(key, value) {
+      await native.write(key, value);
+      if (options.cleanLegacyOnWrite !== false) {
+        try { await legacy.remove(key); } catch { /* ignore */ }
+      }
+      options.markDone?.(key);
+    },
     async remove(key) {
       await native.remove(key);
       await legacy.remove(key);   // 双清：避免旧值残留又被迁移回来
+      options.markDone?.(key);
     },
   };
 }
 
 /** 生产入口：原生可用 → Keystore（+ 迁移）；否则 → localStorage 降级件（Web/vitest）。 */
+const secretMigrationDone = new Set<string>();
 export const mobileSecretStore: SecretStore = keystoreAvailable()
-  ? createMigratingSecretStore(keystoreSecretStore, localStorageSecretStore)
-  : localStorageSecretStore;
+  ? createMigratingSecretStore(keystoreSecretStore, legacySecretStore, {
+    isDone: (key) => isSecretMigrationDone(key, secretMigrationDone),
+    markDone: (key) => markSecretMigrationDone(key, secretMigrationDone),
+  })
+  : createMigratingSecretStore(localStorageSecretStore, legacySecretStore, {
+    isDone: (key) => isSecretMigrationDone(key, secretMigrationDone),
+    markDone: (key) => markSecretMigrationDone(key, secretMigrationDone),
+    cleanLegacyOnWrite: false,
+  });

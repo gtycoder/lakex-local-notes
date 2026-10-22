@@ -12,6 +12,8 @@ export interface NativeSqliteMigrationResult {
   quickNoteCount?: number;
 }
 
+export const DEFAULT_MOBILE_DATABASE = "lake-notes-mobile";
+
 function firstRow(rows: unknown[]): Record<string, unknown> {
   return (rows[0] ?? {}) as Record<string, unknown>;
 }
@@ -32,7 +34,7 @@ async function countRows(database: string, table: string): Promise<number> {
 }
 
 export async function migrateSnapshotToNativeSqlite(
-  database = "lake-notes-mobile",
+  database = DEFAULT_MOBILE_DATABASE,
 ): Promise<NativeSqliteMigrationResult> {
   const nativeExists = await CapacitorSQLite.isDatabase({ database });
   if (nativeExists.result) {

@@ -11,6 +11,7 @@ vi.mock("./native/nativeSqliteDb.js", async () =>
 );
 
 vi.mock("./native/nativeSqliteMigration", () => ({
+  DEFAULT_MOBILE_DATABASE: "lake-notes-mobile",
   migrateSnapshotToNativeSqlite: vi.fn(async () => ({
     status: "no-snapshot",
     databaseName: "lake-notes-mobile",

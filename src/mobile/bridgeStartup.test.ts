@@ -21,6 +21,7 @@ vi.mock("./native/nativeSqliteDb.js", async () =>
 );
 
 vi.mock("./native/nativeSqliteMigration", () => ({
+  DEFAULT_MOBILE_DATABASE: "lake-notes-mobile",
   migrateSnapshotToNativeSqlite: vi.fn(async () => ({
     status: "no-snapshot",
     databaseName: "lake-notes-mobile",
@@ -100,5 +101,25 @@ describe("mobile startup performance contract", () => {
     ]);
 
     expect(migrateSnapshotToNativeSqlite).toHaveBeenCalledTimes(1);
+  });
+
+  it("SQLite migration marker skips the old snapshot probe on steady-state startup", async () => {
+    const values = new Map<string, string>([["lake-notes-mobile.native-sqlite-migration.v1", "1"]]);
+    (globalThis as unknown as { localStorage: Storage }).localStorage = {
+      get length() { return values.size; },
+      clear: () => values.clear(),
+      getItem: (key: string) => values.get(key) ?? null,
+      key: (index: number) => [...values.keys()][index] ?? null,
+      removeItem: (key: string) => { values.delete(key); },
+      setItem: (key: string, value: string) => { values.set(key, value); },
+    } as Storage;
+    vi.resetModules();
+    const { migrateSnapshotToNativeSqlite } = await import("./native/nativeSqliteMigration");
+    const { bridge: freshBridge } = await import("./bridge.js");
+    vi.mocked(migrateSnapshotToNativeSqlite).mockClear();
+
+    await freshBridge.init();
+
+    expect(migrateSnapshotToNativeSqlite).not.toHaveBeenCalled();
   });
 });

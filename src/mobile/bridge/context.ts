@@ -6,7 +6,7 @@
  * 域之间的少量 helper（mobileCloudState 等）由 sync 域导出给 bridge/quickNotes 复用。
  */
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
-import { migrateSnapshotToNativeSqlite } from "../native/nativeSqliteMigration";
+import { DEFAULT_MOBILE_DATABASE, migrateSnapshotToNativeSqlite } from "../native/nativeSqliteMigration";
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
 import { MOBILE_SCHEMA_VERSION, applyMobileSchema, hasLegacyBodySchema, readMobileSchemaVersion } from "../data/schema";
 import { Directory, Filesystem } from "@capacitor/filesystem";
@@ -27,6 +27,28 @@ export const S3_STORAGE_KEY = "lake-notes-mobile.s3";
 /** 云同步开关 / 自动同步节奏（与桌面 SyncSettings 同形）。关闭 = 纯离线本地空间（用户 261006 定稿）。 */
 export const SYNC_STORAGE_KEY = "lake-notes-mobile.sync";
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
+const NATIVE_SQLITE_MIGRATION_MARKER = "lake-notes-mobile.native-sqlite-migration.v1";
+const LEGACY_BODY_RESET_MARKER = "lake-notes-mobile.legacy-body-reset.v1";
+
+function hasNativeSqliteMigrationMarker(): boolean {
+  try { return localStorage.getItem(NATIVE_SQLITE_MIGRATION_MARKER) === "1"; }
+  catch { return false; }
+}
+
+function markNativeSqliteMigrationDone(): void {
+  try { localStorage.setItem(NATIVE_SQLITE_MIGRATION_MARKER, "1"); }
+  catch { /* 写不上只会多跑一次 isDatabase 幂等探测 */ }
+}
+
+function hasLegacyBodyResetMarker(): boolean {
+  try { return localStorage.getItem(LEGACY_BODY_RESET_MARKER) === "1"; }
+  catch { return false; }
+}
+
+function markLegacyBodyResetDone(): void {
+  try { localStorage.setItem(LEGACY_BODY_RESET_MARKER, "1"); }
+  catch { /* 写不上只会多跑一次幂等目录清理 */ }
+}
 
 export function readSyncSettings(): SyncSettings {
   try {
@@ -76,13 +98,20 @@ async function resetLegacyBodyFiles(): Promise<void> {
 }
 
 export async function initializeDb(): Promise<NativeSqliteDb> {
-  const migration = await migrateSnapshotToNativeSqlite();
+  const migrationDone = hasNativeSqliteMigrationMarker();
+  const migration = migrationDone
+    ? { status: "already-native" as const, databaseName: DEFAULT_MOBILE_DATABASE }
+    : await migrateSnapshotToNativeSqlite();
   const openedDb = await NativeSqliteDb.open(migration.databaseName);
+  if (!migrationDone) markNativeSqliteMigrationDone();
   // 快路径（261021）：schema 版本已到 ⇒ 跳过旧库探测（3 次 PRAGMA）与整库重置判定。
   const schemaVersion = await readMobileSchemaVersion(openedDb);
   const legacyBodySchema = schemaVersion >= MOBILE_SCHEMA_VERSION ? false : await hasLegacyBodySchema(openedDb);
   await applyMobileSchema(openedDb, { legacyBodySchema });
-  if (legacyBodySchema) await resetLegacyBodyFiles();
+  if (legacyBodySchema && !hasLegacyBodyResetMarker()) {
+    await resetLegacyBodyFiles();
+    markLegacyBodyResetDone();
+  }
   db = openedDb;
   try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
   return openedDb;

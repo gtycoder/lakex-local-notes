@@ -91,6 +91,18 @@ describe("Keystore 迁移层（createMigratingSecretStore）", () => {
     expect(await store.read("k3")).toBe("must-survive");
     expect(await localStorageSecretStore.read("k3")).toBe("must-survive");  // 旧值保留，下次再迁
   });
+
+  it("迁移标记完成后只读 native，不再进入旧存储", async () => {
+    const { createMigratingSecretStore } = await import("./secretStore");
+    const native = memoryNative({ k: "fresh" });
+    const legacyRead = vi.fn(async () => "legacy");
+    const store = createMigratingSecretStore(native.api, { read: legacyRead, write: async () => {}, remove: async () => {} }, {
+      isDone: () => true,
+      markDone: () => {},
+    });
+    expect(await store.read("k")).toBe("fresh");
+    expect(legacyRead).not.toHaveBeenCalled();
+  });
 });
 
 describe("mobileSecretStore（密文进 localStorage，跨重启可用）", () => {
