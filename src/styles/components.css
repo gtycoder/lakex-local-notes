@@ -31,7 +31,7 @@
  * 按钮作为可收缩的 flex 子项会被挤窄 ⇒ 标签折两行、行盒错乱（设备复现：121px/1 行 → 109px/2 行 → 修后回 1 行）。
  * 只保留本处专属的 min-height，其余三条与 kit 层 .b3-button 基座同值（kit 层高于本文件的 legacy 层，本来就赢），
  * 删掉以免同一套盒子在两处各说一遍（AGENTS §3#14 单一来源；本文件声明数因此 -1，护栏只许降）。 */
-.sync-status-actions .b3-button { flex: 0 0 auto; white-space: nowrap; min-height: 30px; }
+.sync-status-actions .ln-btn { flex: 0 0 auto; white-space: nowrap; min-height: 30px; }
 
 
 @keyframes lake-status-pulse { 50% { opacity: .42; } }
@@ -39,25 +39,25 @@
 .search-command-panel { width: min(680px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 96px)); }
 
 
-.sync-status-history-list .b3-list-item { margin: 0 4px; font-size: var(--lake-font-size-micro); line-height: 24px; min-height: 24px; }
+.sync-status-history-list .ln-list-item { margin: 0 4px; font-size: var(--lake-font-size-micro); line-height: 24px; min-height: 24px; }
 
-/* 草稿恢复框：表面/头体走浮层通用件 .ln-dialog，行复用思源 .b3-list-item（与回收站/历史同一套密度与 hover 语言）。
+/* 草稿恢复框：表面/头体走浮层通用件 .ln-dialog，行复用思源 .ln-list-item（与回收站/历史同一套密度与 hover 语言）。
    这里只留间距与危险操作的着色。 */
 .draft-recovery-dialog { width: min(520px, calc(100vw - 32px)); }
 .draft-recovery-hint { margin: 0 0 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: 1.55; }
 .draft-recovery-list { max-height: 296px; overflow-y: auto; margin: 0 -6px; }
-.draft-recovery-row .b3-list-item__text { min-width: 0; }
+.draft-recovery-row .ln-list-item__text { min-width: 0; }
 .draft-recovery-restore:hover { color: var(--lake-accent-text); }
 .draft-recovery-discard:hover { color: var(--lake-status-error); }
 .draft-recovery-more { margin: 9px 0 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
 
 /* ══ 设置面板与浮层：自有设计系统版式（分组卡片 + 行 + 列表 + hover 图标操作）══
- * 组件类名沿用思源（.b3-*；AGPL-3.0 署名见设置页「关于」），本体规则已收编到 compat.css / kit.css，
+ * 组件类名已全部改为自有 ln-*（261022）；部分视觉源自思源（AGPL-3.0，署名见设置页「关于」），规则在 compat.css / kit.css，
  * 这里只补三类东西：
  *   ① 设置弹窗骨架（左导航 / 右内容 / 底部状态条）
  *   ② 浮层通用件（页签、工具条、两行列表、徽章、空态、关闭按钮）
  *   ③ 思源没有对应物的本地小件（分段按钮、体检结果、日志过滤框）
- * 一律走 --b3-* / --lake-* 令牌，不写死颜色，深浅主题自动跟随。 */
+ * 一律走 --lake-* 令牌，不写死颜色，深浅主题自动跟随。 */
 
 /* ---------- ① 设置弹窗骨架 ---------- */
 /* ⚠️ P7-e：这里的 !important 是**必需**的 —— 面板宽度由 JS 的 FloatingPanel 以 **inline style** 给出，
@@ -139,7 +139,7 @@
   font-size: var(--lake-font-size-micro);
 }
 .settings-nav-hit { min-height: 26px; font-size: var(--lake-font-size-tiny); }
-.settings-nav-hit .b3-list-item__meta { font-size: var(--lake-font-size-nano); }
+.settings-nav-hit .ln-list-item__meta { font-size: var(--lake-font-size-nano); }
 .settings-panel-large .settings-content {
   flex: 1 1 auto;
   min-width: 0;
@@ -256,7 +256,7 @@
 .history-preview-image { flex: 1 1 auto; min-height: 0; width: auto; max-width: 100%; max-height: 100%; object-fit: contain; align-self: center; animation: ln-preview-fade-in var(--lake-motion-panel) var(--lake-ease-standard); }
 .history-preview-image.is-loading { opacity: .55; transition: opacity var(--lake-motion-fast) ease-out; }
 
-/* 两行列表行（回收站 / 文档历史）：沿用思源 .b3-list-item 的密度与 hover 语言 */
+/* 两行列表行（回收站 / 文档历史）：沿用思源 .ln-list-item 的密度与 hover 语言 */
 .ln-row2__main {display: grid;}
 .ln-row2__title {  overflow: hidden;
   text-overflow: ellipsis;
@@ -266,13 +266,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.b3-list-item__toggle.is-empty { visibility: hidden; }
+.ln-list-item__toggle.is-empty { visibility: hidden; }
 /* 思源的 __action 是 span；这里要能真的按下去，故复位成按钮 */
-button.b3-list-item__action { border: 0; background: transparent; font: inherit; cursor: pointer; }
-button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
+button.ln-list-item__action { border: 0; background: transparent; font: inherit; cursor: pointer; }
+button.ln-list-item__action:disabled { opacity: .45; cursor: default; }
 /* 键盘可达：行内任一控件获得焦点时显示操作（思源只有 :hover） */
-.b3-list-item--hide-action:focus-within > .b3-list-item__action,
-.b3-list-item--hide-action:focus-within > .fn__space { display: flex; }
+.ln-list-item--hide-action:focus-within > .ln-list-item__action,
+.ln-list-item--hide-action:focus-within > .ln-spacer { display: flex; }
 
 /* 状态徽章 */
 .badge {
@@ -359,7 +359,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .kv__v { color: var(--lake-text-1); font-family: var(--lake-font-family-mono); font-variant-numeric: tabular-nums; text-align: right; }
 
 /* 路径行：完整路径要看得见（思源默认把 desc 单行裁掉，路径被裁就没意义了） */
-.config-item.item--path .b3-label__text { word-break: break-all; }
+.config-item.item--path .ln-label__text { word-break: break-all; }
 
 /* 长文本输入（S3 Endpoint 等）：思源默认 200px 放不下 URL */
 .logs__filter { flex: 1 1 auto; min-width: 120px; }

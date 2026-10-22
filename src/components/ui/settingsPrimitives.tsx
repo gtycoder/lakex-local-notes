@@ -1,7 +1,7 @@
 /**
  * 设置页版式原语（桌面/移动端共用，精仿思源）。
- * 类名沿用思源（.b3-label / .b3-text-field / .b3-select / .b3-switch / .b3-button / .b3-list-item），
- * 定义已随 W2 删源收编到 src/styles/compat.css（骨架）与 src/styles/kit.css（规格），值走 --lake-*。
+ * 类名全部是自有 ln-* 原语（.ln-label / .ln-text-field / .ln-list-item / .ln-btn / .ln-switch），
+ * 定义在 src/styles/compat.css（版式骨架）与 src/styles/kit.css（控件规格），值走 --lake-*。
  * 从 SettingsPanel 抽出：桌面 SettingsPanel 与移动 SettingsDrawer 共用同一套版式原语。
  */
 import { Children, isValidElement, type ReactNode } from "react";
@@ -34,12 +34,12 @@ export function Section({ title, children }: { title?: string; children: ReactNo
 /** 标准行：左侧标题+说明，右侧控件（不拉伸）。 */
 export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; children?: ReactNode }) {
   return (
-    <div className={"b3-label config-item" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
+    <div className={"ln-label config-item" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
-        {desc && <div className="b3-label__text">{desc}</div>}
+        {desc && <div className="ln-label__text">{desc}</div>}
       </div>
-      {children && (<><span className="fn__space" /><div className="config-item__ctl">{children}</div></>)}
+      {children && (<><span className="ln-spacer" /><div className="config-item__ctl">{children}</div></>)}
     </div>
   );
 }
@@ -48,10 +48,10 @@ export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: stri
  *  error = 该字段的校验/连接错误，自动折到下一行整宽（走 .config-item__error）。 */
 export function Field({ itemId, name, desc, pathDesc, error, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; error?: ReactNode; children?: ReactNode }) {
   return (
-    <div className={"b3-label config-item config-item--field" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
+    <div className={"ln-label config-item config-item--field" + (pathDesc ? " item--path" : "")} data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
-        {desc && <div className="b3-label__text">{desc}</div>}
+        {desc && <div className="ln-label__text">{desc}</div>}
       </div>
       {children && <div className="config-item__ctl">{children}</div>}
       {error && <div className="config-item__error">{error}</div>}
@@ -64,7 +64,7 @@ export function Block({ itemId, name, desc, children }: { itemId?: string; name?
   return (
     <div className="config-block" data-set-id={itemId}>
       {name && <div className="config-block__name">{name}</div>}
-      {desc && <div className="b3-label__text">{desc}</div>}
+      {desc && <div className="ln-label__text">{desc}</div>}
       {children}
     </div>
   );
@@ -75,20 +75,20 @@ export function Block({ itemId, name, desc, children }: { itemId?: string; name?
  *  用于"开启前必须知道"的说明（例：云同步的隐私数据提示：不加密上传 + 请确认桶为私有）。 */
 export function Switch({ itemId, name, desc, note, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; note?: ReactNode; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <div className="b3-label config-item" data-set-id={itemId}>
+    <div className="ln-label config-item" data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
-        {desc && <div className="b3-label__text">{desc}</div>}
+        {desc && <div className="ln-label__text">{desc}</div>}
         {note && <div className="config-note">{note}</div>}
       </div>
-      <span className="fn__space" />
+      <span className="ln-spacer" />
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         aria-label={name}
         disabled={disabled}
-        className="ln-switch fn__flex-center"
+        className="ln-switch ln-flex-center"
         onClick={() => onChange(!checked)}
       >
         <span className="ln-switch__knob" />
@@ -100,10 +100,10 @@ export function Switch({ itemId, name, desc, note, checked, disabled, onChange }
 /** 快捷键行：说明在左，键位在右。 */
 export function Shortcut({ itemId, name, keys }: { itemId?: string; name: string; keys: string }) {
   return (
-    <div className="b3-label config-item" data-set-id={itemId}>
+    <div className="ln-label config-item" data-set-id={itemId}>
       <div className="config-item__main"><div className="config-name">{name}</div></div>
-      <span className="fn__space" />
-      <div className="config-item__ctl"><kbd className="fn__kbd">{keys}</kbd></div>
+      <span className="ln-spacer" />
+      <div className="config-item__ctl"><kbd className="ln-kbd">{keys}</kbd></div>
     </div>
   );
 }
@@ -117,7 +117,7 @@ export function Seg({ ariaLabel, children }: { ariaLabel: string; children: Reac
 export function NumField({ label, value, min, max, floor, fallback, onSave }: { label: string; value: number; min: number; max: number; floor: number; fallback: number; onSave: (n: number) => void }) {
   return (
     <input
-      className="b3-text-field fn__size200"
+      className="ln-text-field ln-w-200"
       type="number"
       aria-label={label}
       min={min}
@@ -132,7 +132,7 @@ export function NumField({ label, value, min, max, floor, fallback, onSave }: { 
 export function TextField({ label, value, onSave, type = "text", placeholder }: { label: string; value: string; onSave: (v: string) => void; type?: "text" | "password"; placeholder?: string }) {
   return (
     <input
-      className="b3-text-field"
+      className="ln-text-field"
       type={type}
       aria-label={label}
       value={value}

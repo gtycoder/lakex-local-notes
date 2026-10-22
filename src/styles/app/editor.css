@@ -3,7 +3,7 @@
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。 */
 
 /* 编辑器正文不单独设字体：vendor style.css 的内置栈会让拉丁字符命中苹方（观感像云端 Web 而非
-   原生应用），统一由全局 --b3-font-family 覆盖（macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI，
+   原生应用），统一由全局 --lake-font-family 覆盖（macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI，
    见 styles/app/base.css 顶部），此处不再重复声明。 */
 
 /* 正文左内距：内核默认只给 40px，而块手柄簇需要 54px（命中区 34 + 标题折叠钮 20）⇒

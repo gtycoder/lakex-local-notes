@@ -925,12 +925,12 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       {/* 版式切换（对齐云端：标题右侧的分段控件；左侧=列表视图，右侧=小记卡视图） */}
       <div className="seg quick-notes-view-switch" role="group" aria-label="小记版式">
         <button
-          className={"b3-button b3-button--outline seg__item" + (viewMode === "list" ? " is-active" : "")}
+          className={"ln-btn ln-btn--secondary seg__item" + (viewMode === "list" ? " is-active" : "")}
           aria-pressed={viewMode === "list"} title="列表视图" aria-label="列表视图"
           onClick={() => switchView("list")}
         ><LayoutList size={14} /></button>
         <button
-          className={"b3-button b3-button--outline seg__item" + (viewMode === "note" ? " is-active" : "")}
+          className={"ln-btn ln-btn--secondary seg__item" + (viewMode === "note" ? " is-active" : "")}
           aria-pressed={viewMode === "note"} title="小记视图" aria-label="小记视图"
           onClick={() => switchView("note")}
         ><StickyNote size={14} /></button>
@@ -1010,7 +1010,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <button className="quick-notes-tool-btn" title="转为正式文档" aria-label="转为正式文档" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}><FilePlus size={16} /></button>
           <button className="quick-notes-tool-btn quick-notes-tool-btn--danger" title="批量删除" aria-label="批量删除" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}><Trash size={16} /></button>
         </div>}
-        <div className="quick-notes-index b3-list b3-list--background" ref={indexListRef}>
+        <div className="quick-notes-index ln-list-panel ln-list-panel--background" ref={indexListRef}>
           {loading
             ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div>
             : items.length === 0
@@ -1020,7 +1020,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                 : listItems.map((item) => <div
                   key={item.id}
                   data-quick-note-id={item.id}
-                  className={"quick-note-index-row b3-list-item" + (selecting ? " is-selecting" : "") + (!selecting && editingId === item.id ? " b3-list-item--focus" : "") + (selected.has(item.id) ? " is-checked" : "") + (revealNoteId === item.id ? " is-revealed" : "")}
+                  className={"quick-note-index-row ln-list-item" + (selecting ? " is-selecting" : "") + (!selecting && editingId === item.id ? " ln-list-item--focus" : "") + (selected.has(item.id) ? " is-checked" : "") + (revealNoteId === item.id ? " is-revealed" : "")}
                 >
                   <button
                     className={"qn-check quick-note-index-check" + (selected.has(item.id) ? " is-on" : "")}
@@ -1028,8 +1028,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                     onClick={(event) => { event.stopPropagation(); toggleSelected(item.id); }}
                   >{selected.has(item.id) && <Check size={13} />}</button>
                   <button className="quick-note-index-main" onClick={() => (selecting ? toggleSelected(item.id) : void startEditing(item))} title={item.content.text?.trim() || "空小记"}>
-                    <span className="b3-list-item__text ln-ellipsis">{indexLabel(item)}</span>
-                    <span className="b3-list-item__meta">{indexStamp(quickNoteSortTime(item, sortBy))}</span>
+                    <span className="ln-list-item__text ln-ellipsis">{indexLabel(item)}</span>
+                    <span className="ln-list-item__meta">{indexStamp(quickNoteSortTime(item, sortBy))}</span>
                   </button>
                   <span className="quick-note-index-actions">
                     <button className="quick-notes-tool-btn" title="更多" aria-label="更多" aria-haspopup="menu" aria-expanded={rowMenuId === item.id} onClick={(event) => { event.stopPropagation(); toggleRowMenu(event.currentTarget, item.id); }}><MoreHorizontal size={16} /></button>
@@ -1172,11 +1172,11 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         <div className="ln-dialog__body">
           <h3>{convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"}</h3>
           <p>选择一个笔记本。{convertItems.length > 1 ? `${convertItems.length} 篇小记将依次插入该笔记本的最顶部；` : "新文档将插入其中的最顶部；"}转化完成后，小记将从时间线移除。</p>
-          <div className="quick-note-notebook-list b3-list b3-list--background">
-            {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus size={14} /></span><span className="b3-list-item__text ln-ellipsis">{notebook.title}</span></button>)}
+          <div className="quick-note-notebook-list ln-list-panel ln-list-panel--background">
+            {notebooks.map((notebook) => <button key={notebook.id} className="ln-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="ln-list-item__graphic"><FilePlus size={14} /></span><span className="ln-list-item__text ln-ellipsis">{notebook.title}</span></button>)}
             {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
           </div>
-          <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
+          <footer><button className="ln-btn ln-btn--ghost" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
         </div>
       </Dialog>
     )}

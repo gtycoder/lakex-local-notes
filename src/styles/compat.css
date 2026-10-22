@@ -1,13 +1,14 @@
 /* 兼容层（P7-b 建立；260923 W2 起**双端共用**）：把原先由 src/b3/*.css 与 src/b3/siyuan.scss 提供的
  * 规则收编到我们自己的文件里，值一律走 --lake-*。原 b3 文件已随 W2 整体删除。
+ * 这些规则源自 SiYuan（AGPL-3.0）；署名见设置页「关于 → 思源笔记 SiYuan」。
  * 桌面在 src/styles/index.css 以 layer(legacy) 原位置导入。
  * ⚠️ 移动端**不引本文件**（261012 P5 起）：移动端自有 mb-* 原语，DOM 里零 .b3-* / fn__* 类名。
  *
  * 两部分：
  *  A. 承重的壳层几何：原先借住在 b3/layout.css（标签栏 fixed 定位/尺寸、活动轨 padding-top、页签 margin 等）
- *  B. 思源组件类复刻：桌面 TSX 仍在用的 .b3-list-item / .b3-label / .b3-switch 基础件 / fn__* 工具类
- *     （值一律走 --lake-* 令牌）。261022 已删除 TSX 零使用的 .b3-menu* / .b3-snackbar* / .b3-dialog /
- *     .b3-list-item--selected / fn__flex-1 规则，并删除 themes 里的 66 条 --b3-* 过渡令牌。
+ *  B. 组件版式（原思源类名已全部改名，261022）：.ln-list-item / .ln-label 与 ln-* 工具类
+ *     （值一律走 --lake-* 令牌）。261022 清掉全部思源类名：先删死规则/66 条 --b3-* 令牌，
+ *     再把 list/label/工具类改名 ln-*、按钮/输入迁到 kit 原语；本文件只留自有 ln-* 版式骨架。
  */
 
 /* ══ A. 承重壳层几何（原 b3/layout.css） ══════════════════════════════ */
@@ -54,12 +55,11 @@
 /* 工具类（原 _function.scss）。261005 起 keep-alive 的非活动标签不再用它隐藏（改走 tabs.css 的
    :is(...):not([data-active]) → opacity+visibility，保留布局尺寸），现在只用于一次性元素
    （如表格编辑器的隐藏 file input）。 */
-.fn__none { display: none  !important; }
-.fn__space { width: 8px; display: inline-block; flex-shrink: 0; }
-.fn__size200 { width: 200px; }
-.fn__flex-center { align-self: center; }
-.fn__ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fn__kbd {
+.ln-spacer { width: 8px; display: inline-block; flex-shrink: 0; }
+.ln-w-200 { width: 200px; }
+.ln-flex-center { align-self: center; }
+.ln-ellipsis-block { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ln-kbd {
   padding: 2px 4px;
   border: 1px solid var(--lake-border-2);
   border-radius: var(--lake-radius-xs);
@@ -68,12 +68,11 @@
   font: 75% var(--lake-font-family-mono);
   line-height: 1;
 }
-.ft__error { color: var(--lake-status-error); }
 
 /* 列表与列表项（回收站 / 历史 / 小记索引共用） */
-.b3-list { display: flex; flex-direction: column; }
-.b3-list--background .b3-list-item { border-radius: var(--lake-radius-sm); }
-.b3-list-item {
+.ln-list-panel { display: flex; flex-direction: column; }
+.ln-list-panel--background .ln-list-item { border-radius: var(--lake-radius-sm); }
+.ln-list-item {
   position: relative;
   display: flex;
   align-items: center;
@@ -84,15 +83,15 @@
   color: var(--lake-text-1);
   line-height: 20px;
 }
-/* `.b3-list-item` 常被渲染成 <button>（同步历史快照、搜索结果等）：复位浏览器默认按钮边框/底色/居中。
+/* `.ln-list-item` 常被渲染成 <button>（同步历史快照、搜索结果等）：复位浏览器默认按钮边框/底色/居中。
    用 :where(button) 与基础类保持同特异性，下方状态类（:hover/--focus/--selected）继续按顺序覆盖；div 行不受影响。 */
-:where(button).b3-list-item { border: 0; background: transparent; text-align: left; }
-.b3-list-item:hover { background: var(--lake-bg-hover); }
-.b3-list-item--focus { background: var(--lake-accent-tint); }
-.b3-list-item__text { flex: 1 1 auto; }
-.b3-list-item__graphic { flex: 0 0 auto; display: inline-flex; align-items: center; }
-.b3-list-item__meta { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
-.b3-list-item__action {
+:where(button).ln-list-item { border: 0; background: transparent; text-align: left; }
+.ln-list-item:hover { background: var(--lake-bg-hover); }
+.ln-list-item--focus { background: var(--lake-accent-tint); }
+.ln-list-item__text { flex: 1 1 auto; }
+.ln-list-item__graphic { flex: 0 0 auto; display: inline-flex; align-items: center; }
+.ln-list-item__meta { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.ln-list-item__action {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -102,34 +101,20 @@
   border-radius: var(--lake-radius-xs);
   color: var(--lake-text-3);
 }
-.b3-list-item__action:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.b3-list-item__action--warning { color: var(--lake-status-pending); }
-.b3-list-item--hide-action .b3-list-item__action { opacity: 0; }
-.b3-list-item:hover .b3-list-item__action,
-.b3-list-item--focus .b3-list-item__action { opacity: 1; }
+.ln-list-item__action:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.ln-list-item__action--warning { color: var(--lake-status-pending); }
+.ln-list-item--hide-action .ln-list-item__action { opacity: 0; }
+.ln-list-item:hover .ln-list-item__action,
+.ln-list-item--focus .ln-list-item__action { opacity: 1; }
 
 /* 表单标签行（设置面板） */
-.b3-label {
+.ln-label {
   display: flex;
   align-items: center;
   padding: 8px 12px;
   line-height: 20px;
 }
-.b3-label__text { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
-
-/* 开关基础（外观细节见 kit.css 的 .b3-switch 规格） */
-.b3-switch {
-  flex-shrink: 0;
-  -webkit-appearance: none;
-  appearance: none;
-  margin: 0;
-  outline: none;
-  display: inline-block;
-  position: relative;
-  cursor: pointer;
-  overflow: inherit;
-  user-select: none;
-}
+.ln-label__text { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 
 /* 侧栏卡片几何（原 b3/layout.css：抑制边框/阴影的材质部分）。
  * margin 已收单到 styles/app/shell.css 的 .sidebar.sidebar-docked —— 这里再写一份会因 legacy 层内
@@ -185,9 +170,9 @@
   background-color: var(--lake-bg-block);
 }
 .config-items > .config-item:last-child,
-.config-items > .b3-label:last-child,
+.config-items > .ln-label:last-child,
 .config-items > .config-block:last-child { border-bottom: 0; }
-/* 注：原先此处是思源的 `.config-items .b3-label__text { font-size: var(--lake-font-size-small) }`。
+/* 注：原先此处是思源的 `.config-items .ln-label__text { font-size: var(--lake-font-size-small) }`。
  * 删掉思源层后该 不再存在 ⇒ **设置项说明终于可以按设计走小字号**
  * （原「待移动端批次」阻塞项 ① 就此解除，见 HANDOFF）。 */
 .config-item { display: flex; align-items: center; }
@@ -201,14 +186,6 @@
 .config-block:last-child { border-bottom: 0; }
 .config-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 .config-empty { padding: 24px 0; color: var(--lake-text-4); font-size: var(--lake-font-size-small); text-align: center; }
-
-/* 下拉基础（原 b3/siyuan/component/_select.scss）：外观其余部分由 kit.css 的新规格给 */
-.b3-select {  box-sizing: border-box;
-  line-height: 20px;
-  -webkit-appearance: none;
-  appearance: none;
-  display: block;
-}
 
 /* 内核卡片渲染失败的兜底块（`lakeRuntime.ts` 的单卡错误边界 CardErrorBoundary）。
  * 260928：原先内联 style + 颜色字面量，违反 AGENTS §3 #14「桌面 UI 禁止内联样式、颜色只走 --lake-*」；

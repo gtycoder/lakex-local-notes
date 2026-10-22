@@ -145,10 +145,9 @@
 button.ln-btn { color: var(--lake-text-1); }
 button.ln-btn--primary { color: var(--lake-text-on-accent); }
 button.ln-btn--danger { color: var(--lake-status-error); }
-button.b3-button:not(.quick-note-publish):not(.quick-note-discard) { color: var(--lake-text-on-accent); }
-button.b3-button:not(.quick-note-publish):not(.quick-note-discard).b3-button--outline { color: var(--lake-text-1); }
-button.b3-button:not(.quick-note-publish):not(.quick-note-discard).b3-button--cancel { color: var(--lake-text-2); }
-button.b3-button:not(.quick-note-publish):not(.quick-note-discard).ft__error { color: var(--lake-status-error); }
+button.ln-btn--secondary { color: var(--lake-text-1); }
+button.ln-btn--ghost:not(.quick-note-discard) { color: var(--lake-text-2); }
+button.ln-btn--secondary.ln-btn--danger-text { color: var(--lake-status-error); }
 button.quick-note-tag { color: var(--lake-text-2); }
 button.quick-note-tag.is-selected { color: var(--lake-fg-selected); }
 button.quick-note-tag-add { color: var(--lake-text-3); }

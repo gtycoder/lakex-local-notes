@@ -168,7 +168,7 @@ export function SyncStatusPopover({
               </section>
               <footer className="sync-status-actions">
                 <span className="sync-status-footer-state">数据仅在本机</span>
-                <button type="button" className="b3-button b3-button--outline" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />去设置云同步</button>
+                <button type="button" className="ln-btn ln-btn--secondary" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />去设置云同步</button>
               </footer>
             </>
           ) : (
@@ -210,11 +210,11 @@ export function SyncStatusPopover({
               <div>
                 <strong>已保留历史快照 · {conflictSnapshots.length}</strong>
                 <span>{conflictSnapshotText ?? "检测到远端版本差异，已保留历史快照"}</span>
-                <div className="sync-status-history-list b3-list b3-list--background" role="list">
+                <div className="sync-status-history-list ln-list-panel ln-list-panel--background" role="list">
                   {conflictSnapshots.map((item) => (
-                    <button key={item.noteId} type="button" className="b3-list-item" onClick={() => onOpenHistory?.(item.noteId)}>
-                      <span className="b3-list-item__text ln-ellipsis">{item.title || "无标题"}</span>
-                      <span className="b3-list-item__meta">查看历史</span>
+                    <button key={item.noteId} type="button" className="ln-list-item" onClick={() => onOpenHistory?.(item.noteId)}>
+                      <span className="ln-list-item__text ln-ellipsis">{item.title || "无标题"}</span>
+                      <span className="ln-list-item__meta">查看历史</span>
                     </button>
                   ))}
                 </div>
@@ -227,17 +227,17 @@ export function SyncStatusPopover({
               <div>
                 <strong>同步有 {stats.warnings.length} 项被跳过</strong>
                 <span>远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</span>
-                <div className="sync-status-history-list b3-list b3-list--background" role="list">
+                <div className="sync-status-history-list ln-list-panel ln-list-panel--background" role="list">
                   {stats.warnings.map((w, i) => (
                     <button
                       key={`${w.kind}-${w.noteId ?? i}-${w.filename ?? ""}`}
                       type="button"
-                      className="b3-list-item"
+                      className="ln-list-item"
                       disabled={!w.noteId || !onOpenNote}
                       onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
                     >
-                      <span className="b3-list-item__text ln-ellipsis">{warningPrimary(w)}</span>
-                      <span className="b3-list-item__meta">{warningMeta(w)}</span>
+                      <span className="ln-list-item__text ln-ellipsis">{warningPrimary(w)}</span>
+                      <span className="ln-list-item__meta">{warningMeta(w)}</span>
                     </button>
                   ))}
                 </div>
@@ -249,7 +249,7 @@ export function SyncStatusPopover({
               上次同步 {formatTime(sync.lastSyncedAt)}
               {model.pendingTotal > 0 && ` · 未同步 ${model.pendingTotal} 项`}
             </span>
-            <button type="button" className="b3-button b3-button--outline" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
+            <button type="button" className="ln-btn ln-btn--secondary" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
           </footer>
             </>
           )}

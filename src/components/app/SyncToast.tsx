@@ -63,7 +63,7 @@ export function SyncToast({ data, onClose, anchorRect }: { data: SyncToastData; 
         )}
         {data.detail && <div className="sync-toast-detail">{data.detail}</div>}
         {data.kind === "unavailable" && data.onConfigure && (
-          <button className="b3-button sync-toast-action" onClick={data.onConfigure}>去配置</button>
+          <button className="ln-btn ln-btn--primary sync-toast-action" onClick={data.onConfigure}>去配置</button>
         )}
       </div>
       <button className="sync-toast-close" onClick={onClose} aria-label="关闭"><X size={14} /></button>

@@ -285,7 +285,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             </button>
           </div>
           {tab === "history" && (
-            <button className="b3-button b3-button--outline ln-tabs__action" onClick={() => void createSnapshot()} title="手动创建快照">
+            <button className="ln-btn ln-btn--secondary ln-tabs__action" onClick={() => void createSnapshot()} title="手动创建快照">
               <Camera size={14} /> 创建快照
             </button>
           )}
@@ -297,14 +297,14 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
         {tab === "orphans" && orphans.length > 0 && (
           <div className="ln-toolbar">
             <span className="ln-toolbar__info">共 {orphans.length} 个 · 可清理 {cleanable} · 受历史保护 {orphans.length - cleanable}</span>
-            <button className="b3-button b3-button--outline ft__error" onClick={() => void cleanOrphan()} disabled={cleanable === 0}>
+            <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void cleanOrphan()} disabled={cleanable === 0}>
               清理全部可清（{cleanable} 个）
             </button>
           </div>
         )}
         <SplitPane ariaLabel="调整历史列表宽度" storageKey="history" minRight={280}>
           <div
-            className="history-list b3-list b3-list--background history-list-left"
+            className="history-list ln-list-panel ln-list-panel--background history-list-left"
             ref={listRef}
             tabIndex={0}
             aria-label="历史快照列表（可用 ↑/↓ 切换）"
@@ -320,9 +320,9 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               const protectedUntil = h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() ? Date.parse(h.protectedUntil as string) : null;
               const label = formatDateTime(h.createdAt, true);
               return (
-                <div key={h.id} data-history-id={h.id} className={`b3-list-item b3-list-item--hide-action ln-row2${inline?.title === label ? " b3-list-item--focus" : ""}`}>
-                  <span className="b3-list-item__graphic"><Clock size={14} /></span>
-                  <div className="b3-list-item__text ln-row2__main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
+                <div key={h.id} data-history-id={h.id} className={`ln-list-item ln-list-item--hide-action ln-row2${inline?.title === label ? " ln-list-item--focus" : ""}`}>
+                  <span className="ln-list-item__graphic"><Clock size={14} /></span>
+                  <div className="ln-list-item__text ln-row2__main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
                     <span className="ln-row2__title">{label}</span>
                     <span className="ln-row2__meta">{(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}</span>
                   </div>
@@ -334,21 +334,21 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                       冲突保留 · 剩余 {Math.max(1, Math.ceil((protectedUntil - Date.now()) / (24 * 3600 * 1000)))} 天
                     </span>
                   )}
-                  <span className="fn__space" />
-                  <button className="b3-list-item__action" title="恢复此版本" aria-label="恢复此版本" onClick={() => void restore(h.id)}><RotateCcw size={14} /></button>
-                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除快照" aria-label="删除快照" onClick={() => void removeHistory(h.id)}><Trash size={14} /></button>
+                  <span className="ln-spacer" />
+                  <button className="ln-list-item__action" title="恢复此版本" aria-label="恢复此版本" onClick={() => void restore(h.id)}><RotateCcw size={14} /></button>
+                  <button className="ln-list-item__action ln-list-item__action--warning" title="删除快照" aria-label="删除快照" onClick={() => void removeHistory(h.id)}><Trash size={14} /></button>
                 </div>
               );
             })}
             {!loading && tab === "orphans" && orphans.map((o) => (
-              <div key={o.filename} className={`b3-list-item b3-list-item--hide-action${orphanSel === o.filename ? " b3-list-item--focus" : ""}`}>
-                <span className="b3-list-item__graphic"><File size={14} /></span>
-                <span className="b3-list-item__text ln-ellipsis" onClick={() => void previewOrphanFile(o)} title="点击预览文件">{o.filename}</span>
+              <div key={o.filename} className={`ln-list-item ln-list-item--hide-action${orphanSel === o.filename ? " ln-list-item--focus" : ""}`}>
+                <span className="ln-list-item__graphic"><File size={14} /></span>
+                <span className="ln-list-item__text ln-ellipsis" onClick={() => void previewOrphanFile(o)} title="点击预览文件">{o.filename}</span>
                 {o.protectedByHistory && <span className="badge badge--warn">历史保护</span>}
-                <span className="b3-list-item__meta">{(o.size / 1024).toFixed(1)} KB</span>
-                <span className="fn__space" />
+                <span className="ln-list-item__meta">{(o.size / 1024).toFixed(1)} KB</span>
+                <span className="ln-spacer" />
                 {!o.protectedByHistory && (
-                  <button className="b3-list-item__action b3-list-item__action--warning" title="清理该文件" aria-label="清理该文件" onClick={() => void cleanOrphan(o.filename)}><Trash size={14} /></button>
+                  <button className="ln-list-item__action ln-list-item__action--warning" title="清理该文件" aria-label="清理该文件" onClick={() => void cleanOrphan(o.filename)}><Trash size={14} /></button>
                 )}
               </div>
             ))}

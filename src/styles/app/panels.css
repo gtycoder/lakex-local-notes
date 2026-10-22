@@ -45,9 +45,9 @@
 .history-error { margin: 10px 16px 0; padding: 8px 10px; border-radius: var(--lake-radius-md); font-size: var(--lake-font-size-tiny); color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 
 .history-list { flex: 1 1 auto; overflow-y: auto; padding: 8px; min-height: 120px; }
-/* 回收站 / 历史版本的行：把 .b3-list-item 的 8px 统一间距收到 4px（一行 6 个间隙 ⇒ 省 24px），
+/* 回收站 / 历史版本的行：把 .ln-list-item 的 8px 统一间距收到 4px（一行 6 个间隙 ⇒ 省 24px），
  * 让「文档 · 时间」和「N 天后清除」徽标在默认宽度下都放得下（用户 261006：默认要能看到时间）。 */
-.history-list .b3-list-item { gap: 4px; }
+.history-list .ln-list-item { gap: 4px; }
 
 .history-preview-text { width: 100%; margin: 0; font-size: var(--lake-font-size-small); line-height: 1.7; color: var(--lake-text-1); white-space: pre-wrap; word-break: break-word; font-family: inherit; }
 

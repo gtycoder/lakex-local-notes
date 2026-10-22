@@ -40,9 +40,9 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
 
   return (
     <div className="trash-tree-node">
-      <div className={`b3-list-item b3-list-item--hide-action ln-row2${selectedId === item.id ? " b3-list-item--focus" : ""}`}>
+      <div className={`ln-list-item ln-list-item--hide-action ln-row2${selectedId === item.id ? " ln-list-item--focus" : ""}`}>
         <span
-          className={`b3-list-item__toggle${children.length > 0 ? "" : " is-empty"}`}
+          className={`ln-list-item__toggle${children.length > 0 ? "" : " is-empty"}`}
           role="button"
           tabIndex={children.length > 0 ? 0 : -1}
           aria-label={open ? "折叠子项" : "展开子项"}
@@ -52,8 +52,8 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
         >
           {children.length > 0 ? <ChevronRight size={13} className={open ? "trash-caret-open" : ""} /> : null}
         </span>
-        <span className="b3-list-item__graphic">{item.nodeType === "note" ? <File size={14} /> : <Folder size={14} />}</span>
-        <div className="b3-list-item__text ln-row2__main ln-ellipsis" onClick={() => onSelect(item)} title={item.nodeType === "note" ? "点击预览内容" : ""}>
+        <span className="ln-list-item__graphic">{item.nodeType === "note" ? <File size={14} /> : <Folder size={14} />}</span>
+        <div className="ln-list-item__text ln-row2__main ln-ellipsis" onClick={() => onSelect(item)} title={item.nodeType === "note" ? "点击预览内容" : ""}>
           <span className="ln-row2__title">{item.title || "无标题"}</span>
           <span className="ln-row2__meta">
             {item.nodeType === "note" ? "文档" : "目录"}
@@ -65,12 +65,12 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
         {days !== null && (
           <span className={`badge ${days <= 7 ? "badge--warn" : "badge--muted"}`} title="自动过期彻底删除倒计时（含云端）">{days} 天后清除</span>
         )}
-        <span className="fn__space" />
+        <span className="ln-spacer" />
         {isRoot && (
-          <button className="b3-list-item__action" title="恢复（含全部内容）" aria-label="恢复（含全部内容）" onClick={() => onRestore(item.id)}><RotateCcw size={14} /></button>
+          <button className="ln-list-item__action" title="恢复（含全部内容）" aria-label="恢复（含全部内容）" onClick={() => onRestore(item.id)}><RotateCcw size={14} /></button>
         )}
         <button
-          className="b3-list-item__action b3-list-item__action--warning"
+          className="ln-list-item__action ln-list-item__action--warning"
           title={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
           aria-label={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
           onClick={() => onPurge(item.id)}
@@ -295,7 +295,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
         </div>
         <div className="panel-actions">
           {items.length > 0 && (
-            <button className="b3-button b3-button--outline ft__error" onClick={() => void empty()}>
+            <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void empty()}>
               <Trash size={14} /> 清空
             </button>
           )}
@@ -329,7 +329,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       )}
       {error && <div className="trash-error">{error}</div>}
       <SplitPane ariaLabel="调整回收站列表宽度" storageKey="trash" hidden={tab !== "docs"} minRight={280}>
-        <div className="history-list b3-list b3-list--background history-list-left">
+        <div className="history-list ln-list-panel ln-list-panel--background history-list-left">
           {loading && <div className="ln-empty">加载中…</div>}
           {!loading && items.length === 0 && <div className="ln-empty">回收站是空的</div>}
           {!loading && roots.map((item) => (
@@ -360,18 +360,18 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
         </div>
       </SplitPane>
       {tab === "quick" && (
-        <div className="history-list b3-list b3-list--background">
+        <div className="history-list ln-list-panel ln-list-panel--background">
           {quickItems.length === 0 && <div className="ln-empty">回收站是空的</div>}
           {quickItems.map((item) => (
-            <div className="b3-list-item b3-list-item--hide-action ln-row2" key={item.id}>
-              <span className="b3-list-item__graphic"><File size={14} /></span>
-              <div className="b3-list-item__text ln-row2__main ln-ellipsis">
+            <div className="ln-list-item ln-list-item--hide-action ln-row2" key={item.id}>
+              <span className="ln-list-item__graphic"><File size={14} /></span>
+              <div className="ln-list-item__text ln-row2__main ln-ellipsis">
                 <span className="ln-row2__title">小记</span>
                 <span className="ln-row2__meta">{formatDateTime(item.deletedAt)}</span>
               </div>
-              <span className="fn__space" />
-              <button className="b3-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
-              <button className="b3-list-item__action b3-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
+              <span className="ln-spacer" />
+              <button className="ln-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
+              <button className="ln-list-item__action ln-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
             </div>
           ))}
         </div>

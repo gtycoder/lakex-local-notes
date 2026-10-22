@@ -1,7 +1,7 @@
 /* 桌面基础规则（P7-d 精简后）。
  *
  * ⚠️ 本文件**不再定义任何设计令牌**：原先这里的 :root / [data-theme="dark"] 两段共 50 个
- * --lake-* / --b3-* / --radius-* / --lakex-editor-* 定义，在 P2 建立「主题即数据」之后
+ * --lake-* / --radius-* / --lakex-editor-* 定义（思源 --b3-* 桥接令牌已于 261022 全部删除），在 P2 建立「主题即数据」之后
  * 已 100% 被 src/styles/themes/{base,light,dark,warm}.css（tokens 层，更高）覆盖 ⇒ 桌面端是死代码，
  * 于 P7-d 删除（一次性去掉 65 个颜色字面量）。令牌的**唯一来源**现在是 themes/*。
  * 移动端仍按自己的入口加载它（本文件保留，不删）。

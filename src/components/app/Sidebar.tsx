@@ -936,8 +936,8 @@ function TreeRenameDialog({ initial, onCancel, onConfirm }: { initial: string; o
         </span>
       </div>
       <div className="ln-dialog__actions">
-        <button className="b3-button b3-button--cancel" onClick={onCancel}>取消</button>
-        <button className="b3-button" disabled={!canConfirm} onClick={() => { if (canConfirm) onConfirm(trimmed); }}>确定</button>
+        <button className="ln-btn ln-btn--ghost" onClick={onCancel}>取消</button>
+        <button className="ln-btn ln-btn--primary" disabled={!canConfirm} onClick={() => { if (canConfirm) onConfirm(trimmed); }}>确定</button>
       </div>
     </Dialog>
   );
@@ -1038,8 +1038,8 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
     <div className="ln-dialog__head"><span className="ln-dialog__title">删除“{node.title}”？</span></div>
     <div className="ln-dialog__body">将删除该节点及其所有子项，移入本地回收站（可在回收站中恢复或彻底删除）。</div>
     <div className="ln-dialog__actions">
-      <button className="b3-button b3-button--cancel" onClick={onCancel}>取消</button>
-      <button className="b3-button b3-button--outline ft__error" onClick={onConfirm}>删除</button>
+      <button className="ln-btn ln-btn--ghost" onClick={onCancel}>取消</button>
+      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={onConfirm}>删除</button>
     </div>
   </Dialog>
 );

@@ -28,7 +28,7 @@ pre {
  * 标签 12/600 --lake-text-1；说明 10.5 --lake-text-3；控件右对齐固定列 200px）。
  *
  * ⚠️ 共享层 !important 的两端约束（260923 W2/W4 收尾）：
- *   ① 【.config-items .b3-label__text】原在 b3/siyuan/business/_config.scss 的 font-size !important——
+ *   ① 【.config-items .ln-label__text】原在 b3/siyuan/business/_config.scss 的 font-size !important——
  *      已随 W2 整体删除 src/b3/** 一并消失，不再是阻塞项。
  *   ② 【.seg__item】4 处 !important 仍保留（styles/components.css）：双端共享 + @layer 的 !important
  *      反转层序 ⇒ 桌面 kit 无法在不影响移动端的前提下取代；正解是段控件改用 kit 的 ln-segment（后续）。*/
@@ -84,8 +84,7 @@ pre {
 /* flex-basis:0（不是 auto）：否则长说明按 max-content 撑开主列，flex-wrap 下会先把控件挤到下一行 */
 .settings-panel .config-item--field .config-item__main { flex-basis: 0; }
 .settings-panel .config-item--field .config-item__ctl { flex: 0 0 54%; min-width: 200px; justify-content: flex-start; }
-.settings-panel .config-item--field .config-item__ctl > .b3-text-field,
-.settings-panel .config-item--field .config-item__ctl > .b3-select,
+.settings-panel .config-item--field .config-item__ctl > .ln-text-field,
 .settings-panel .config-item--field .config-item__ctl > .ln-select { flex: 1 1 auto; width: auto; min-width: 0; }
 .settings-panel .config-item--field .config-item__ctl > .ln-input { flex: 1 1 auto; min-width: 0; }
 .settings-panel .config-item--field .config-item__error { flex: 1 1 100%; }
@@ -132,8 +131,8 @@ pre {
   font-weight: var(--lake-font-weight-semibold);
 }
 .quick-note-index-row:hover { background: var(--lake-bg-hover); }
-.quick-note-index-row.b3-list-item--focus,
-.quick-notes-index .b3-list-item.is-checked {
+.quick-note-index-row.ln-list-item--focus,
+.quick-notes-index .ln-list-item.is-checked {
   background: var(--lake-accent-tint);
   color: var(--lake-accent-text);
 }

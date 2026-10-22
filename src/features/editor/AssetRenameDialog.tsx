@@ -34,7 +34,7 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
           <div className="asset-rename-field">
             <input
               ref={inputRef}
-              className="b3-text-field"
+              className="ln-text-field"
               value={value}
               aria-label="附件名称"
               onChange={(e) => setValue(e.target.value)}
@@ -45,8 +45,8 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
           </div>
           <p className="asset-rename-hint">只改文档里显示的名称，磁盘文件名和扩展名都不变。</p>
           <footer className="asset-rename-actions">
-            <button className="b3-button b3-button--cancel" onClick={onCancel}>取消</button>
-            <button className="b3-button" disabled={!canConfirm} onClick={() => canConfirm && onConfirm(trimmed + ext)}>确定</button>
+            <button className="ln-btn ln-btn--ghost" onClick={onCancel}>取消</button>
+            <button className="ln-btn ln-btn--primary" disabled={!canConfirm} onClick={() => canConfirm && onConfirm(trimmed + ext)}>确定</button>
           </footer>
         </div>
     </Dialog>

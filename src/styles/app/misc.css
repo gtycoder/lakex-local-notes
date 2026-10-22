@@ -146,7 +146,7 @@
  * 一并删除：它们会**同时命中文档里内核自己的表情面板**，正是用户要求消除的互相影响。 */
 
 
-/* M2 全文搜索面板（思源 b3-dialog / b3-text-field 令牌风格） */
+/* M2 全文搜索面板（对齐思源设置面板的表面/输入框风格） */
 .search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
 
 .search-panel-input-row {display: flex; align-items: center;}

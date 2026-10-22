@@ -283,7 +283,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
             ))}
           </div>
         </div>
-        <span className="fn__space" />
+        <span className="ln-spacer" />
         <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />
       </div>
 
@@ -292,13 +292,13 @@ export function AssetsBrowser({ active }: { active: boolean }) {
           <input ref={allRef} type="checkbox" checked={selectableItems.length > 0 && selected.size >= selectableItems.length} onChange={toggleSelectAll} aria-label="全选可删资源" />
           <span>全选可删（{selectableItems.length}）</span>
         </label>
-        <span className="fn__space" />
+        <span className="ln-spacer" />
         <span className="asset-browser__summary">
           {selected.size > 0 && <strong>{selected.size} 个 · {formatBytes(selectedBytes)}　</strong>}
           共 {items.length} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档
         </span>
         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
-        <button className="b3-button b3-button--outline ft__error" disabled={busy || selected.size === 0} onClick={() => setPendingDelete(selectedItems)}>
+        <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={busy || selected.size === 0} onClick={() => setPendingDelete(selectedItems)}>
           {busy ? "清理中…" : `清理选中${selected.size > 0 ? `（${selected.size}）` : ""}`}
         </button>
       </div>
@@ -311,7 +311,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
         <>
           {/* 左 2/3 列表、右 1/3 纯预览；可左右拖动（SplitPane 原语，与回收站/历史版本同一套） */}
           <SplitPane ariaLabel="调整资源列表宽度" storageKey="resources" minRight={280}>
-          <div className="asset-browser__list b3-list" ref={listRef} tabIndex={0}
+          <div className="asset-browser__list ln-list-panel" ref={listRef} tabIndex={0}
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") { event.preventDefault(); moveFocus(1); }
               else if (event.key === "ArrowUp") { event.preventDefault(); moveFocus(-1); }
@@ -322,7 +322,7 @@ export function AssetsBrowser({ active }: { active: boolean }) {
               <div className="asset-browser__group" key={group.key}>
                 <div className="asset-browser__grouptitle">
                   <Paperclip size={13} />
-                  <span className="fn__ellipsis" title={group.title}>{group.title}</span>
+                  <span className="ln-ellipsis-block" title={group.title}>{group.title}</span>
                   {group.state === "trash" && <span className="badge badge--warn">回收站</span>}
                   {group.state === "missing" && <span className="badge badge--error">文档已删除</span>}
                   <span className="asset-browser__gcount">{group.items.length} 个</span>
@@ -389,8 +389,8 @@ export function AssetsBrowser({ active }: { active: boolean }) {
             </p>
           </div>
           <div className="ln-dialog__actions">
-            <button className="b3-button b3-button--cancel" onClick={() => setPendingDelete(null)}>取消</button>
-            <button className="b3-button b3-button--outline ft__error" disabled={busy} onClick={() => void confirmDelete()}>{busy ? "删除中…" : "删除"}</button>
+            <button className="ln-btn ln-btn--ghost" onClick={() => setPendingDelete(null)}>取消</button>
+            <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={busy} onClick={() => void confirmDelete()}>{busy ? "删除中…" : "删除"}</button>
           </div>
         </Dialog>
       )}

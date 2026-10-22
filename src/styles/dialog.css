@@ -61,7 +61,7 @@
    输入框随 .ln-input 撑满；超长名字仍靠输入框自身横向滚动。 */
 .rename-dialog { width: min(460px, 92vw); }
 .asset-rename-field { display: flex; align-items: center; gap: 6px; }
-.asset-rename-field .b3-text-field { flex: 1 1 auto; min-width: 0; }
+.asset-rename-field .ln-text-field { flex: 1 1 auto; min-width: 0; }
 .asset-rename-ext { flex: 0 0 auto; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 .asset-rename-hint { margin: 8px 0 0; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 .asset-rename-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }

@@ -118,8 +118,8 @@
 .quick-note-index-row.is-checked .quick-note-index-check { opacity: 1; }
 .quick-note-index-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 6px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 /* 行标题只显示前几个字（JS 已截断），这里保证不横向滚动、不换行 */
-.quick-note-index-main .b3-list-item__text { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quick-note-index-main .b3-list-item__meta { flex: 0 0 auto; white-space: nowrap; }
+.quick-note-index-main .ln-list-item__text { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-note-index-main .ln-list-item__meta { flex: 0 0 auto; white-space: nowrap; }
 .quick-note-index-actions { position: relative; flex: 0 0 auto; display: flex; align-items: center; opacity: 0; }
 .quick-note-index-row:hover .quick-note-index-actions,
 .quick-note-index-row:focus-within .quick-note-index-actions { opacity: 1; }
@@ -135,7 +135,7 @@
 .quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
 .quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: var(--lake-font-size-tiny); }
 .quick-notes-index { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
-.quick-notes-index .b3-list-item { width: 100%; text-align: left; }
+.quick-notes-index .ln-list-item { width: 100%; text-align: left; }
 .quick-notes-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 列表视图右侧：去掉卡片边框/圆角，编辑器直接铺开（对齐文档页观感，用户 260919 要求试试） */
 .quick-notes-detail .quick-note-composer { border: 0; border-radius: 0; padding: 0; }
@@ -204,7 +204,7 @@
 .quick-note-entry.editing { position: static; }
 
 /* 动作行直接复用 kit 的 ln-btn 三档（primary / secondary / ghost）；这里只收紧小记的密度。 */
-.quick-note-composer-actions .ln-btn, .quick-note-convert-dialog .b3-button--cancel { height: 28px; min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: var(--lake-font-size-tiny); }
+.quick-note-composer-actions .ln-btn, .quick-note-convert-dialog .ln-btn--ghost { height: 28px; min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: var(--lake-font-size-tiny); }
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */

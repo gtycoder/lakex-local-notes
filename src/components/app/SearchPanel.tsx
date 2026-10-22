@@ -111,7 +111,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
           <button className="search-panel-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭搜索"><X size={15} /></button>
         </div>
         <div id="search-panel-help" className="search-panel-help">文档标题优先 · 小记按更新时间 · ↑↓ 选择 · Enter 打开</div>
-        <div className="search-panel-results b3-list b3-list--background" role="listbox" aria-label="搜索结果">
+        <div className="search-panel-results ln-list-panel ln-list-panel--background" role="listbox" aria-label="搜索结果">
           {results.length === 0 && query.trim() && !searching && (
             <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题、正文或小记关键词</span></div>
           )}
@@ -122,14 +122,14 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
             <Fragment key={`${result.kind ?? "note"}:${result.id}`}>
               {index === firstQuickIndex && firstQuickIndex > 0 && <div className="search-panel-section">小记</div>}
               <button
-                className={`b3-list-item ln-row2${index === activeIndex ? " b3-list-item--focus" : ""}`}
+                className={`ln-list-item ln-row2${index === activeIndex ? " ln-list-item--focus" : ""}`}
                 role="option"
                 aria-selected={index === activeIndex}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => { setActiveIndex(index); openResult(result); }}
               >
-                <span className="b3-list-item__graphic">{result.kind === "quick-note" ? <StickyNote size={14} /> : <File size={14} />}</span>
-                <span className="b3-list-item__text ln-row2__main ln-ellipsis">
+                <span className="ln-list-item__graphic">{result.kind === "quick-note" ? <StickyNote size={14} /> : <File size={14} />}</span>
+                <span className="ln-list-item__text ln-row2__main ln-ellipsis">
                   <span className="ln-row2__title">{result.title || (result.kind === "quick-note" ? "小记" : "无标题")}</span>
                   {/* snippet 由 buildSnippet 全量 HTML 转义、只含 <mark>（W-10：不需要 dompurify，见 snippet.test.ts） */}
                   {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: result.snippet }} />}

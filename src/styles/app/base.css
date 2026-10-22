@@ -44,7 +44,7 @@ button { cursor: pointer; }
 
 /* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
 :root {
-  /* font-family 单一来源：--b3-font-family（见 :root 顶部与 b3/base.css body）*/
+  /* font-family 单一来源：--lake-font-family（见 themes/base.css）*/
   font-optical-sizing: auto;
   /* 壳层令牌单一来源：一律从 tokens.css 的 --lake-* 派生（深浅主题自动跟随）。
      历史上这里另写了一套灰/蓝字面值，深色下没有覆盖 → 某些表面会在深底上露出浅灰/深灰文字；

@@ -32,9 +32,9 @@ describe("小记版式切换（列表 / 小记）", () => {
 
   it("两种版式各自成体系：小记卡（写作卡+卡片流）与列表（索引 + 全尺寸编辑器）", () => {
     expect(WORKSPACE_SRC).toMatch(/quick-notes-split--list/);
-    expect(WORKSPACE_SRC).toMatch(/quick-notes-index b3-list b3-list--background/);
+    expect(WORKSPACE_SRC).toMatch(/quick-notes-index ln-list-panel ln-list-panel--background/);
     // 列表版式用思源列表件（hover/选中底色直接复用，勿自造）
-    expect(WORKSPACE_SRC).toMatch(/b3-list-item/);
+    expect(WORKSPACE_SRC).toMatch(/ln-list-item/);
     // 两种版式共用一个编辑器组件，但版式不同：分块视图＝小卡片(card)，列表视图＝文档样式(full)
     expect(WORKSPACE_SRC).not.toMatch(/editorMode=/);
     expect(WORKSPACE_SRC).toMatch(/ui="full"/);

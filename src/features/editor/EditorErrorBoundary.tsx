@@ -23,7 +23,7 @@ export class EditorErrorBoundary extends Component<{ noteId: string; children: R
       return (
         <div className="empty-workspace-hint">
           该类型编辑器渲染出错（已隔离，未影响其他文档）。
-          <button type="button" className="b3-button b3-button--outline" onClick={this.retry}>重试</button>
+          <button type="button" className="ln-btn ln-btn--secondary" onClick={this.retry}>重试</button>
           <span>若仍无法恢复，请关闭该标签后重新打开。</span>
         </div>
       );

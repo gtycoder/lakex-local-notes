@@ -582,10 +582,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
           <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
         <div className="settings-layout">
-          <nav className="settings-nav b3-list b3-list--background">
+          <nav className="settings-nav ln-list-panel ln-list-panel--background">
             <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} value={navQuery} onChange={(event) => setNavQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { navSearchRef.current?.blur(); return; } if (event.key === "Enter" && itemHits.length > 0) { event.preventDefault(); jumpToItem(itemHits[0]); } }} placeholder="搜索设置（分类与条目）" aria-label="搜索设置" /></label>
             {visibleNav.map((item) => (
-              <button key={item.id} className={`b3-list-item settings-nav-item${category === item.id ? " active" : ""}`} onClick={() => setCategory(item.id)}>
+              <button key={item.id} className={`ln-list-item settings-nav-item${category === item.id ? " active" : ""}`} onClick={() => setCategory(item.id)}>
                 {item.icon}<span>{item.label}</span>
               </button>
             ))}
@@ -594,9 +594,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <div className="settings-nav-hits">
                 <span className="settings-nav-hits__label">条目 · {itemHits.length} 项</span>
                 {itemHits.map((hit) => (
-                  <button key={hit.id} className="b3-list-item settings-nav-hit" onClick={() => jumpToItem(hit)} title={hit.label}>
-                    <span className="b3-list-item__text ln-ellipsis">{hit.label}</span>
-                    <span className="b3-list-item__meta">{nav.find((item) => item.id === hit.category)?.label}</span>
+                  <button key={hit.id} className="ln-list-item settings-nav-hit" onClick={() => jumpToItem(hit)} title={hit.label}>
+                    <span className="ln-list-item__text ln-ellipsis">{hit.label}</span>
+                    <span className="ln-list-item__meta">{nav.find((item) => item.id === hit.category)?.label}</span>
                   </button>
                 ))}
               </div>
@@ -638,7 +638,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Item itemId="appearance-theme" name="主题">
                   <Seg ariaLabel="主题">
                     {LAKE_THEMES.map((t) => (
-                      <button key={t.id} className={`b3-button b3-button--outline seg__item ${settings.theme === t.id ? "is-active" : ""}`} onClick={() => onChange({ theme: t.id })}>
+                      <button key={t.id} className={`ln-btn ln-btn--secondary seg__item ${settings.theme === t.id ? "is-active" : ""}`} onClick={() => onChange({ theme: t.id })}>
                         {t.id === "dark" ? <Moon size={14} /> : t.id === "warm" ? <Coffee size={14} /> : <Sun size={14} />} {t.label}
                       </button>
                     ))}
@@ -670,7 +670,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {lastCleanup && <span>上次清理 {formatDateTime(new Date(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runCleanup()} disabled={histBusy}><Trash size={14} /> {histBusy ? "清理中…" : "立即清理"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runCleanup()} disabled={histBusy}><Trash size={14} /> {histBusy ? "清理中…" : "立即清理"}</button>
                     </div>
                     {histMsg && <div className="block__text">{histMsg}</div>}
                   </Block>
@@ -686,7 +686,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
                   <Block itemId="history-data-health" name="一致性检查" desc="只读比对正文文件、历史快照、孤儿登记与引用资源；不自动修复。发现问题请从备份/云端恢复对应文件。">
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runHealth()} disabled={healthBusy}><Search size={14} /> {healthBusy ? "检查中…" : "运行检查"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runHealth()} disabled={healthBusy}><Search size={14} /> {healthBusy ? "检查中…" : "运行检查"}</button>
                       {health && !healthBusy && (
                         <span className="config-stats"><span>笔记 {health.notesChecked} · 快照 {health.historyChecked} · 孤儿登记 {health.orphanRowsChecked} · 树节点 {health.treeChecked}</span></span>
                       )}
@@ -738,15 +738,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <Switch itemId="s3-path-style" name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(checked) => setS3Field("forcePathStyle", checked)} />
                   <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void testS3()}>测试连接</button>
-                      <button className="b3-button" onClick={() => void saveS3()}>保存配置</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void testS3()}>测试连接</button>
+                      <button className="ln-btn ln-btn--primary" onClick={() => void saveS3()}>保存配置</button>
                     </div>
                   </Block>
                   <Block itemId="s3-transfer" name="配置迁移" desc="桌面端导出 .json 配置文件，发送到手机后在「同步设置 → 配置迁移 → 从文件导入」选择该文件，省去逐项手填。只含 S3 配置，不含同步策略；导入会覆盖本机 S3 配置。文件含密钥（已加密封装），请只在自己的设备间传递。">
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
-                      <button className="b3-button" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
-                      <button className="b3-button b3-button--outline" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
+                      <button className="ln-btn ln-btn--primary" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
                     </div>
                   </Block>
                 </Group>
@@ -779,10 +779,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runReconcile()} disabled={gcBusy || cloudOffline}><Trash size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
-                      <button className="b3-button b3-button--outline" onClick={() => void runGcAction(true)} disabled={gcBusy || cloudOffline}>深度清理预览</button>
-                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runGcAction(false)} disabled={gcBusy || cloudOffline}>执行深度清理</button>
-                      <button className="b3-button b3-button--outline" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy || cloudOffline}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runReconcile()} disabled={gcBusy || cloudOffline}><Trash size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcBusy || cloudOffline}>深度清理预览</button>
+                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcBusy || cloudOffline}>执行深度清理</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy || cloudOffline}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
                     </div>
                     {gcDiag && (
                       <div className="config-stats">
@@ -822,12 +822,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="备份与恢复" icon={<Archive size={16} />}>
                   <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runBackup()} disabled={backupBusy}><Archive size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backupBusy}><Archive size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
                   <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runCloudRestore()} disabled={backupBusy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backupBusy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
                     </div>
                   </Block>
                   {backupMsg && <Block name={backupMsg} />}
@@ -853,7 +853,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Block name="现状" desc="读写与本机同一份数据；同步进度/待办计数走 SSE 实时推送；图片「另存为」走浏览器下载、附件在新标签打开。导出/整库备份等需要系统目录框的操作仍请在桌面端使用。此开关不落盘（每次启动应用都从关闭开始）。" />
                 {webStatus?.enabled && (
                   <Item itemId="browser-open" name="在本机浏览器打开" desc={webStatus.url}>
-                    <button className="b3-button b3-button--outline" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
+                    <button className="ln-btn ln-btn--secondary" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
                   </Item>
                 )}
                 {webMsg && <Block desc={webMsg} />}
@@ -865,8 +865,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               {/* 261006：索引重建从「资源」挪到「日志」（维护动作归一处，后续再整理） */}
               <Group title="全文搜索" icon={<Search size={16} />}>
                 <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题/正文全文索引（FTS5，中文单字分词）。正常由增量账本自动维护；索引异常或换分词器后可手动重建。">
-                  {searchMsg && <span className="b3-label__text">{searchMsg}</span>}
-                  <button className="b3-button b3-button--outline" disabled={searchBusy} onClick={() => {
+                  {searchMsg && <span className="ln-label__text">{searchMsg}</span>}
+                  <button className="ln-btn ln-btn--secondary" disabled={searchBusy} onClick={() => {
                     setSearchBusy(true);
                     setSearchMsg(null);
                     void native.rebuildSearchIndex()
@@ -880,7 +880,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Block itemId="logs-main" name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
                   <div className="config-block__actions">
                     <input
-                      className="b3-text-field logs__filter"
+                      className="ln-text-field logs__filter"
                       type="text"
                       value={logKeyword}
                       onChange={(e) => setLogKeyword(e.target.value)}
@@ -888,7 +888,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
                       aria-label="日志关键字过滤"
                     />
-                    <button className="b3-button b3-button--outline" onClick={() => void runLogLoad(logKeyword)} disabled={logBusy}><Search size={14} /> {logBusy ? "读取中…" : "读取"}</button>
+                    <button className="ln-btn ln-btn--secondary" onClick={() => void runLogLoad(logKeyword)} disabled={logBusy}><Search size={14} /> {logBusy ? "读取中…" : "读取"}</button>
                   </div>
                   {logInfo && <div className="block__text">{logInfo}</div>}
                 </Block>
@@ -914,7 +914,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </Field>
                     <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
                       <span className="ln-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
-                      <button className="b3-button b3-button--outline" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
                     </Field>
                   </Section>
 
@@ -946,7 +946,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       </span>
                       {/* 清除：只删本机的 Key（换机/共享设备时抹掉），不清其它配置项 */}
                       {activeAi?.hasApiKey && (
-                        <button className="b3-button b3-button--outline" onClick={() => void saveAi({ providers: [{ id: aiProviderId, clearApiKey: true }] })}>清除</button>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => void saveAi({ providers: [{ id: aiProviderId, clearApiKey: true }] })}>清除</button>
                       )}
                     </Field>
                   </Section>
@@ -962,19 +962,19 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       ) : (
                         <>
                           <span className="ln-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} aria-label="AI 模型" /></span>
-                          {aiModels && aiModels.length > 0 && <button className="b3-button b3-button--outline" onClick={() => setAiManualModel(false)}>用列表</button>}
+                          {aiModels && aiModels.length > 0 && <button className="ln-btn ln-btn--secondary" onClick={() => setAiManualModel(false)}>用列表</button>}
                         </>
                       )}
-                      <button className="b3-button b3-button--outline" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>{aiModelsBusy ? "拉取中…" : "获取模型列表"}</button>
+                      <button className="ln-btn ln-btn--secondary" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>{aiModelsBusy ? "拉取中…" : "获取模型列表"}</button>
                     </Field>
                     {activeDef.supportsReasoning && (
                       <Item itemId="ai-reasoning" name="思考强度" desc="DeepSeek 的 reasoning_effort（默认 high）。思考模式下 temperature 不生效。">
-                        <Select label="思考强度" className="fn__size200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(v) => setAiDraft((d) => ({ ...d, reasoningEffort: v as AiReasoningEffort }))} options={AI_REASONING_EFFORTS.map((v) => ({ value: v, label: v }))} />
+                        <Select label="思考强度" className="ln-w-200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(v) => setAiDraft((d) => ({ ...d, reasoningEffort: v as AiReasoningEffort }))} options={AI_REASONING_EFFORTS.map((v) => ({ value: v, label: v }))} />
                       </Item>
                     )}
                     {activeDef.supportsThinking && (
                       <Item itemId="ai-thinking" name="思考模式" desc="DeepSeek 的 thinking：关闭更省 token 与延迟；开启时温度不生效。">
-                        <Select label="思考模式" className="fn__size200" value={aiPending.thinking ?? "enabled"} onChange={(v) => setAiDraft((d) => ({ ...d, thinking: v as AiThinkingMode }))} options={AI_THINKING_MODES.map((v) => ({ value: v, label: v === "enabled" ? "开启" : "关闭" }))} />
+                        <Select label="思考模式" className="ln-w-200" value={aiPending.thinking ?? "enabled"} onChange={(v) => setAiDraft((d) => ({ ...d, thinking: v as AiThinkingMode }))} options={AI_THINKING_MODES.map((v) => ({ value: v, label: v === "enabled" ? "开启" : "关闭" }))} />
                       </Item>
                     )}
                     {(!activeDef.supportsThinking || aiPending.thinking === "disabled") && (
@@ -987,9 +987,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <Section title="连通性">
                     <Block itemId="ai-test" name="测试并保存" desc="保存前先发一次最小真实请求：鉴权 / 模型类错误会拦住保存；网络 / 限流可选择仍要保存。">
                       <div className="config-block__actions">
-                        <button className="b3-button" disabled={aiBusy} onClick={() => void testAndSaveAi()}>{aiBusy ? "测试中…" : "测试并保存"}</button>
-                        <button className="b3-button b3-button--outline" disabled={aiBusy} onClick={() => void testAi()}>仅测试</button>
-                        {aiForceSave && <button className="b3-button b3-button--outline" onClick={() => void forceSaveAi()}>仍要保存</button>}
+                        <button className="ln-btn ln-btn--primary" disabled={aiBusy} onClick={() => void testAndSaveAi()}>{aiBusy ? "测试中…" : "测试并保存"}</button>
+                        <button className="ln-btn ln-btn--secondary" disabled={aiBusy} onClick={() => void testAi()}>仅测试</button>
+                        {aiForceSave && <button className="ln-btn ln-btn--secondary" onClick={() => void forceSaveAi()}>仍要保存</button>}
                       </div>
                       {aiErr.all && <div className="config-item__error">{aiErr.all}</div>}
                       {aiMsg && <div className="config-note">{aiMsg}</div>}
@@ -1057,33 +1057,33 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                         </div>
                       </Block>
                       <Item itemId="about-data-dir" name="数据目录" pathDesc desc={sysInfo.storage.root}>
-                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-workspace-dir" name="工作空间" pathDesc desc={sysInfo.paths.workspace}>
-                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-assets-dir" name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
-                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-history-dir" name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
-                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-logs-dir" name="日志目录" pathDesc desc={sysInfo.paths.logs}>
-                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
                       </Item>
                     </Group>
 
                     <Group title="诊断" icon={<Search size={16} />}>
                       <Block itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。">
                         <div className="config-block__actions">
-                          <button className="b3-button b3-button--outline" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
+                          <button className="ln-btn ln-btn--secondary" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
                         </div>
                       </Block>
                       <Block itemId="about-health-entry" name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
                     </Group>
 
                     <Group title="第三方与许可" icon={<Info size={16} />}>
-                      <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：组件样式见 src/b3/siyuan/，分组版式见 src/b3/siyuan/business/_config.scss，均在文件头保留署名；本项目不构成分发思源代码。" />
+                      <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：相关规则已收编到 src/styles/compat.css 与 kit.css（保留署名）；本项目不构成分发思源代码。" />
                       <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="Lake 内核为语雀闭源产物（随 @dlient/lakex-doc-react 的 MIT wrapper 源码一并 vendor、已 pin）；wrapper 与卡片层源码可改并保留署名，内核本体内核不修改、不再分发。" />
                       <Block itemId="about-third-party" name="开源依赖" desc="better-sqlite3 (MIT) · sharp (Apache-2.0/MIT) · @aws-sdk/client-s3 (Apache-2.0) · lucide-react (ISC) · react/react-dom (MIT) · electron-log (MIT) · Typescript (Apache-2.0) · Vite (MIT)。完整清单以 package.json 与 lockfile 为准。" />
                     </Group>

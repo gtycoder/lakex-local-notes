@@ -109,7 +109,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onEditorReady={onEditorReady}
         onEditorCapture={onEditorCapture}
         onReloadNote={onReloadNote}
-        emptyAction={<button className="b3-button" onClick={onCreateNote}>新建文档</button>}
+        emptyAction={<button className="ln-btn ln-btn--primary" onClick={onCreateNote}>新建文档</button>}
       />
       {outlineSlot}
     </section>

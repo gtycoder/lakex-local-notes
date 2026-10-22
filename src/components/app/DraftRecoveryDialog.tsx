@@ -19,15 +19,15 @@ export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: 
       </header>
       <div className="ln-dialog__body">
         <p className="draft-recovery-hint">应用上次退出前发现了未保存的本地草稿。你可以恢复它们，或稍后在本机处理。</p>
-        <div className="draft-recovery-list b3-list b3-list--background">
+        <div className="draft-recovery-list ln-list-panel ln-list-panel--background">
           {entries.slice(0, 5).map((entry) => (
-            <div className="b3-list-item draft-recovery-row" key={entry.noteId}>
-              <div className="b3-list-item__text ln-row2__main ln-ellipsis">
+            <div className="ln-list-item draft-recovery-row" key={entry.noteId}>
+              <div className="ln-list-item__text ln-row2__main ln-ellipsis">
                 <span className="ln-row2__title">{entry.title || "无标题"}</span>
                 <span className="ln-row2__meta">{new Date(entry.updatedAt).toLocaleString("zh-CN", { hour12: false })}</span>
               </div>
-              <button type="button" className="b3-list-item__action draft-recovery-restore" title="恢复这份草稿" aria-label="恢复这份草稿" onClick={() => onRestore(entry)}><RotateCcw size={14} /></button>
-              <button type="button" className="b3-list-item__action b3-list-item__action--warning draft-recovery-discard" title="丢弃这份草稿" aria-label="丢弃这份草稿" onClick={() => onDiscard(entry.noteId)}><Trash size={14} /></button>
+              <button type="button" className="ln-list-item__action draft-recovery-restore" title="恢复这份草稿" aria-label="恢复这份草稿" onClick={() => onRestore(entry)}><RotateCcw size={14} /></button>
+              <button type="button" className="ln-list-item__action ln-list-item__action--warning draft-recovery-discard" title="丢弃这份草稿" aria-label="丢弃这份草稿" onClick={() => onDiscard(entry.noteId)}><Trash size={14} /></button>
             </div>
           ))}
         </div>

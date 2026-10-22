@@ -185,9 +185,9 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
               <div className="note-info-section-title">
                 <FolderOpen size={14} /><span>文件位置</span>
                 <div className="note-info-actions">
-                  {onRevealNoteFile && <button className="b3-button b3-button--outline" onClick={onRevealNoteFile}>打开文件位置</button>}
-                  {onOpenAssetsDir && <button className="b3-button b3-button--outline" onClick={onOpenAssetsDir}>打开附件文件夹</button>}
-                  <button className="b3-button b3-button--outline" onClick={copyId}>{copied ? "已复制" : "复制 ID"}</button>
+                  {onRevealNoteFile && <button className="ln-btn ln-btn--secondary" onClick={onRevealNoteFile}>打开文件位置</button>}
+                  {onOpenAssetsDir && <button className="ln-btn ln-btn--secondary" onClick={onOpenAssetsDir}>打开附件文件夹</button>}
+                  <button className="ln-btn ln-btn--secondary" onClick={copyId}>{copied ? "已复制" : "复制 ID"}</button>
                 </div>
               </div>
               <div className="note-info-path" title={info.lakePath}>{info.lakePath}</div>
@@ -214,7 +214,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
             {/* 第四部分：历史版本（同一滚动约束 + 内联快照预览） */}
             <div className="note-info-section">
               <div className="note-info-section-title"><History size={14} /><span>历史版本 {info.history.length} 个</span>
-                <button className="b3-button b3-button--outline" onClick={onOpenHistory}>打开历史版本</button>
+                <button className="ln-btn ln-btn--secondary" onClick={onOpenHistory}>打开历史版本</button>
               </div>
               {info.history.length === 0 ? <p className="note-info-empty">暂无历史快照</p> : (
                 <ul className="note-info-history">
