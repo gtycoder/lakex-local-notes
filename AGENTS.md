@@ -24,6 +24,7 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
   ③ **源码字典对照** `lake-editor-main/`（第三方 VSCode 插件）与 `lake-main/`（lakejs 社区版，**序列化方言已分叉、结论不可套用**）。
   **最终仲裁 = vendor bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js` + 运行时实测**（冲突时以实测为准）。
 - **内核已 vendored 并 pin（v1.99.0），不要随意升级**；必须改行为时按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 最小改。
+- **闭源内核分发边界（261022 起）**：语雀闭源内核产物（`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`）**不随仓库分发**——已从源码树与 git 历史移除并写入 `.gitignore`。本地恢复：`npm run setup:lakex`（读 `.lakex-private.source` / `LAKEX_PRIVATE_TARBALL` / `LAKEX_PRIVATE_DIR`）；私有归档默认在仓库外 `../private/lakex-private-<stamp>.tar.gz`（`npm run backup:lakex` 生成）。**禁止**把上述产物提交、上传、打进公开 release 或放到任何公开位置；公开仓库只放集成代码。缺内核时 `preinstall` 会直接报错——**这是有意为之**，不要改成静默降级。
 - **表格 = 第三方 Univer**（`@univerjs/*` 全部精确锁版本）：动之前先读 `src/features/usheet/usheetKernelContract.ts`（每处触点写了失效表现）；**升级只走 `docs/USHEET-UPGRADE.md` 的 playbook**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 npm update**。对 Univer 只有**一处**补丁 `patches/@univerjs+ui+1.0.3.patch`（floating 容器留 `document.body` + `data-lake-owner`，应用侧按可见标签收起；**不要挂回实例宿主**——261022 排序对话框死循环）；**除它之外不要再给依赖打 patch**。
 - **多维表 Grid / 关联选择器的行窗口**：动视口或屏外交互前读 `docs/BITABLE-VIEWPORT.md` —— 记录全集不裁剪，主表/选择器共用一套有界行窗口；缓存不留滚过的全格；编辑/IME/选区/粘贴/统计/填色/搜索必须按完整模型验证，**只读与保存/历史协议不因性能改动放宽**。
 - **文档分工（防漂移）**：`README` 概览（不维护进度/计数）· `HANDOFF` 唯一交接 · `AGENTS` 长期红线。**已完成的研究/计划/spike/审计直接删**（git 可查），不建 archive 目录。
@@ -128,6 +129,7 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lake-notes-electron
+npm run setup:lakex                                             # 首次/新 clone：从私有归档恢复闭源内核（缺归档会报错并给指引）
 npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（≈20s）
 npx vite build && npx vite build -c vite.mobile.config.ts       # 两条构建
 node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && npm run check:bundle

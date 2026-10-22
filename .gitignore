@@ -16,6 +16,14 @@ test-node-abi
 .impeccable/questions/
 .impeccable/live/
 
+# 闭源 lakex 内核产物（261022 起**不入库**，也不进公开 git 历史）
+# 恢复：npm run setup:lakex（读 .lakex-private.source / LAKEX_PRIVATE_TARBALL / LAKEX_PRIVATE_DIR）
+# 备份：npm run backup:lakex（默认写到仓库外的 ../private/）
+vendor/lakex-doc-react/
+public/vendor/lakex/
+public/vendor/lakex-doc/
+.lakex-private*
+
 # Local development credentials (never commit real values)
 .env
 .env.*

@@ -3,10 +3,11 @@ Local Lakex Notes — 第三方组件与许可说明
 本项目自有代码以 AGPL-3.0-only 授权（见 LICENSE）。
 
 一、不作为 AGPL 授权范围再分发的第三方组件
-- 语雀 Lakex 编辑器内核：闭源第三方产物，经 @dlient/lakex-doc-react（MIT 包装层）引入并
-  vendored 在 vendor/lakex-doc-react/。该内核不属于本项目版权，不能由本项目按 AGPL 再授权。
-  该目录的公开再分发可能受语雀服务条款/授权限制；如需公开仓库，请先移除该目录并改为
-  构建时从外部获取，或先取得权利人许可。
+- 语雀 Lakex 编辑器内核：闭源第三方产物（@alipay/lakex-doc v1.99.0），经
+  @dlient/lakex-doc-react（MIT 包装层）引入。该内核不属于本项目版权，不能由本项目按 AGPL
+  再授权。**本仓库不包含该内核**：vendor/lakex-doc-react/、public/vendor/lakex-doc/、
+  public/vendor/lakex/ 已从源码树与 git 历史移除，构建前需本地/私有引入（npm run setup:lakex）。
+  缺少权利人许可时，不得公开分发包含该内核的安装包。
 - 思源笔记（SiYuan）样式与交互参考：AGPL-3.0；本项目仅在兼容层与设计系统中保留署名与
   对应声明（见 src/styles/compat.css 文件头、应用内「关于」页）。
 

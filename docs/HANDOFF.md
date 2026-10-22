@@ -2,7 +2,7 @@
 
 > 写给完全没有上下文的新会话。接手顺序：**README（根）→ 本文件 → AGENTS.md（根，长期红线/机制）**。
 > 本文件只保留【最新几个批次 + 当前基线 + 真正的待办 + 长期坑】；历史 dated handoff 已删除，只在 git 历史可查（`git log -p --follow docs/HANDOFF.md`）。
-> **⚠️ 261022 历史已重写（品牌/邮箱标准化）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
+> **⚠️ 261022 历史已重写两次（品牌/邮箱标准化 → 闭源内核移出公开仓库）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
 > **§8 是移动端（Android）专职交接**；桌面会话不要改 §8，移动端会话不要改 §0–§7 之外的桌面文件。
 
 ## 0. 最新交接（261022）
@@ -11,6 +11,16 @@
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
+
+### 261022 · 闭源内核移出公开仓库（为 public 仓库准备）· **已提交**（hash 以 `git log` 为准）
+
+- **用户定稿**：仓库要 public，但闭源 lakex 内核不公开；**本地留一份私有备份**（"万一语雀要求下架/追责，确保自己还能用"）。README / NOTICE / AGENTS 已按此改口径。
+- **移出内容（源码树 + git 历史都移除）**：`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`（含历史旧路径 `vendor/npm/lakex-editor-react-component`、旧 `public/vendor/lakex-doc`）。已写入 `.gitignore`；`git filter-repo --invert-paths` 重写全部历史（旧 hash 再次失效）。
+- **恢复/备份脚本**：`scripts/setup-lakex-private.mjs`（`npm run setup:lakex` / `backup:lakex`）；`preinstall` 已接入 —— 缺内核时直接报错给指引，**不静默降级**。
+- **私有备份（仓库外，不入库）**：`/Users/admin/file/local-lake/private/lakex-private-261022.tar.gz`（12MB，附 sha256/元数据 json）、`lake-notes-electron-pre-kernel-purge-261022.bundle`（56MB，重写前全历史）。
+- **口径**：本地留存 ≠ 获得授权，只是"被要求下架后自己还能构建/自用"的技术保障；不得再把内核提交/上传/打进公开 release。
+- **门禁**：删掉三处 → 从归档恢复 → 逐文件对比一致；tsc 0 · vitest 全量 · `git diff --check`。
+- **未做/注意**：GitHub 仓库仍待用户创建；Gitee 若为 public，历史已 force-push 覆盖，但平台缓存/旧对象可能滞后。
 
 ### 261022 · 收尾：AGENTS 回根 / AGPL-3.0 / HANDOFF 大精简
 
