@@ -58,7 +58,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: android-actions/setup-android@v3
+      - name: Set up Android SDK
+        run: |
+          sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          echo "sdk.dir=$sdk" > android/local.properties
+          ls "$sdk" >/dev/null
       - name: Install dependencies
         run: npm ci
       - name: Build mobile web & sync Capacitor
