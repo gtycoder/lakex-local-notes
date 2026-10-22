@@ -28,21 +28,14 @@ import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
 import { isFavorite, toggleFavorite } from "../data/favorites";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
 import { notebookTabsStorageKey, useNotebookTabs, type NotebookTab } from "./useNotebookTabs";
+import { useNotebookTreeData, type NotebookTreeItem } from "./useNotebookTreeData";
+export type { NotebookTreeItem } from "./useNotebookTreeData";
 /** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
 /** 表格（usheet）：与桌面同一套 Univer 内核的**只读**查看器（Univer 运行时随之按需加载）。 */
 const MobileUsheetViewer = lazy(() => import("../usheet/MobileUsheetViewer").then((m) => ({ default: m.MobileUsheetViewer })));
 /** 手写板：共享 InkPad + perfect-freehand，按需分包。 */
 const MobileInkPad = lazy(() => import("../ink/MobileInkPad").then((m) => ({ default: m.MobileInkPad })));
-/** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
-export interface NotebookTreeItem {
-  id: string;
-  title: string;
-  kind: "group" | "note";
-  parentId: string | null;
-  sortOrder: number;
-  icon: string | null;
-}
 import type { TreeNode } from "../../lib/types";
 
 /** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
@@ -73,9 +66,17 @@ export interface NotebookWorkspaceProps {
 
 export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onActiveNoteChange, onRegisterBackHandler } = props;
-  const [title, setTitle] = useState("知识库");
-  const [tree, setTree] = useState<NotebookTreeItem[]>([]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
+  const {
+    tree,
+    setTree,
+    title,
+    notebookIcon: nbIcon,
+    expanded,
+    toggleGroup,
+    expandGroup,
+    childrenOf,
+    loadTree,
+  } = useNotebookTreeData(notebookId);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   /** 实例内正文（usheet / board）的同步 capture：完成/关标签前现取最新 body，绕过防抖。 */
   const liveBodyCapturesRef = useRef<Map<string, () => string | null>>(new Map());
@@ -123,8 +124,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
    *  `createParent` = 建到哪个节点下：抽屉工具栏的 ＋ = 笔记本根，行内 ＋ = 该行节点（复用同一个面板）。 */
   const [createOpen, setCreateOpen] = useState(false);
   const [createParent, setCreateParent] = useState<string>(notebookId);
-  /** 笔记本自己的图标（抽屉首行要展示 + 可点改名图标，桌面同款手势）。 */
-  const [nbIcon, setNbIcon] = useState<string | null>(null);
 
   // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
@@ -216,16 +215,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 切到没有大纲的文档类型（表格 / 多维表 / 画板）时收掉已展开的大纲抽屉，别停在空面板上
   useEffect(() => { if (!outlineAvailable) setOutlineOpen(false); }, [outlineAvailable]);
-
-  const loadTree = useCallback(async () => {
-    const [treeArr, nodes] = await Promise.all([bridge.listNotebookTree(notebookId), bridge.listTreeNodes()]);
-    setTree(treeArr);
-    const nb = nodes.find((n) => n.id === notebookId);
-    if (nb) { setTitle(nb.title); setNbIcon(nb.icon ?? null); }
-    return treeArr;
-  }, [notebookId]);
-
-  useEffect(() => { void loadTree(); }, [loadTree]);
 
   // 初次进入（仅一次）：
   //  - 显式指定了要打开的文档（首页/搜索/新建）→ 优先开它并置为活动标签（修"从首页点文档直达不了"）；
@@ -369,13 +358,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     return () => remove?.();
   }, []);
 
-  const toggleGroup = (id: string) => {
-    setExpanded((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  };
-
-  // 必须按 sortOrder 排序：否则拖拽的乐观重排（只改 sortOrder 不动数组顺序）看不出效果——
-  // 同级拖动会"没反应"，而 inside（改了 parentId）却能立刻显示。这是同级拖不动的真因。
-  const childrenOf = (parentId: string) => tree.filter((it) => it.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
   const findFirstNote = (arr: NotebookTreeItem[]): NotebookTreeItem | null => {
     for (const it of arr) {
       if (it.kind === "note") return it;
@@ -439,7 +421,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     try {
       await bridge.createGroup(parentId || notebookId, "新建分组");
       await loadTree();
-      setExpanded((prev) => new Set(prev).add(parentId || notebookId));
+      expandGroup(parentId || notebookId);
     } catch { showToast("新建失败", { type: "error" }); }
   }, [loadTree, notebookId]);
 
@@ -487,7 +469,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       const i = orderIndex.get(moved.id);
       return i === undefined ? moved : { ...moved, sortOrder: i };
     }));
-    if (d.position === "inside") setExpanded((prev) => new Set(prev).add(over.id));
+    if (d.position === "inside") expandGroup(over.id);
     // FLIP：重排后从旧位置平移到新位置（松手回弹）
     window.requestAnimationFrame(() => {
       const el = document.querySelector('.side-panel-body [data-node-id="' + d.id + '"]') as HTMLElement | null;
