@@ -1,7 +1,7 @@
 /**
  * 移动端设置页版式原语（P4，261012）—— **移动端自建**，不复用桌面 components/ui/settingsPrimitives。
  *
- * 口径（docs/MOBILE-TECH-STACK.md §一/§九 · MOBILE-UI-REDESIGN §6 P4/P6）：
+ * 口径（docs/MOBILE-TECH-STACK.md §一/§九 · docs/MOBILE-DESIGN §6 P4/P6）：
  *   · 类名走 mb-set-*（移动端自有），几何按触屏密度（行 ≥44/48、字号 7 档、内距 16）；
  *   · **契约保持不变**：每个可搜索行仍带 data-set-id={itemId} ⇒ desktop/mobile 共用的
  *     src/components/model/settingsSearch.ts 的 SETTING_ITEMS 继续有效（漂移有单测卡住）；

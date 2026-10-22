@@ -169,7 +169,7 @@ interface ManifestFolder {
 > 桌面 `electron/s3Store.ts`（`ObjectStore`，Node SDK + NodeHttpHandler）经 `electron/syncAdapters.ts` 适配成端口；
 > 移动端 `src/mobile/native/s3Store.ts` 直接实现端口（AWS SDK + `CapacitorHttpHandler` → Android OkHttp，绕 WebView CORS）。
 > **分成两份实现是正确的**（传输栈不同）；要守的是**协议面等价**。本节 = 那张对拍表 + 已发现的漂移。
-> 判据 = 逐项读码对比（见 `docs/CODE-REVIEW-261015.md` C2-4）。**本节的 P1 项尚未修**，P2 项需真云验证或产品决策。
+> 判据 = 逐项读码对比（见 `AGENTS.md` C2-4）。**本节的 P1 项尚未修**，P2 项需真云验证或产品决策。
 
 ### 7.1 端口面（core 契约）与两端实现
 

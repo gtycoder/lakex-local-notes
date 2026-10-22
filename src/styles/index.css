@@ -2,7 +2,7 @@
  * 层序显式声明：vendor 最低（第三方 JS import 的 CSS 由 scripts/vendorCssLayer.ts 自动入这一层）
  * ⇒ legacy 次低，新层写入即自动压过旧样式，迁移期不靠特异性/顺序取胜。
  * legacy 层内部相对顺序 = 原 main.tsx 的 import 顺序，逐字不变（引入当天应 0 视觉变化）。
- * 详见 docs/UI-PRIMITIVES-PHASE1-260926.md §3.1。 */
+ * 详见 docs/DESIGN.md §3.1。 */
 
 @layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y;   /* 261021：+vendor（第三方 CSS 自动入层，排最底）  // 260923：删掉声明了却没人 import 的 reset 空层 */
 

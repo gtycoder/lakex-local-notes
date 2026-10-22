@@ -24,7 +24,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** 允许 createPortal 的非原语文件（有意保留，见 docs/UI-PRIMITIVES-PHASE1-260926.md）：
+/** 允许 createPortal 的非原语文件（有意保留，见 docs/DESIGN.md）：
  *  - ImageLightbox / AttachmentPreview：全屏媒体预览（自带背景点击关闭 + fixed 铺满）
  *  - kernelUiAtoms：非交互 tooltip tip（§3.7 决定不建 Tooltip 原语） */
 const PORTAL_ALLOWLIST = [

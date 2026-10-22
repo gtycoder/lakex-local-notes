@@ -1,6 +1,6 @@
 /* ── 移动端取色 · 深色（P1）────────────────────────────────────────────
  * 取值来源 = 本项目色阶（用户 261012 定稿：沿用我们的色阶、模仿语雀的形态）；
- * P1 阶段逐字节等于 src/styles/themes/dark.css（暖色移动端暂不做，见 MOBILE-UI-REDESIGN §5.2）。 */
+ * P1 阶段逐字节等于 src/styles/themes/dark.css（暖色移动端暂不做，见 docs/MOBILE-DESIGN §5.2）。 */
 [data-theme="dark"] {
   color-scheme: dark;
   /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，

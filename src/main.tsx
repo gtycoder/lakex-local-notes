@@ -5,7 +5,7 @@ import { installPasteInterceptor } from "./features/editor/clipboardHtml";
 import { installImageCopyBridge } from "./features/editor/imageCopyBridge";
 import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
-import "./styles/index.css";   // 样式单入口：@layer 层序 + 旧样式整体入 legacy 层（见 docs/UI-PRIMITIVES-PHASE1-260926.md §3.1）
+import "./styles/index.css";   // 样式单入口：@layer 层序 + 旧样式整体入 legacy 层（见 docs/DESIGN.md §3.1）
 
 // 首帧前应用主题，避免闪烁（App 挂载后的 settings 订阅会继续跟随变化）
 applyTheme(loadSettings().theme);

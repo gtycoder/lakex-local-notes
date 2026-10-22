@@ -3,7 +3,7 @@
  * UI 重设计硬指标度量（P7 收尾用；也可随时跑到看进度）。
  * 用法：node scripts/ui-metrics.mjs [--json]
  *
- * 口径（与 docs/UI-PRIMITIVES-PHASE1-260926.md 第 1 节一致）：
+ * 口径（与 docs/DESIGN.md 第 1 节一致）：
  *  - 「桌面侧样式」= src 下的 .css，排除 src/b3/siyuan 与 src/vendor；**再排除 src/mobile**（移动端本批不动）
  *  - 颜色字面量只允许出现在 src/styles/themes（主题文件）
  *  - !important 分别统计「我们」与「思源层」
@@ -171,7 +171,7 @@ for (const p of cssAll) {
 r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, aliasTop, undefTop };
 
 // ── 合规护栏（B0，261016）：把「红线」变成可执行判据（基线只许降）──────────────
-// 背景：代码 review（docs/CODE-REVIEW-261015.md）发现三条红线只有文字规定、没有机器判据：
+// 背景：代码 review（docs/AGENTS.md）发现三条红线只有文字规定、没有机器判据：
 //   ① 桌面「非主题颜色字面量 0」此前只报告、不判失败；
 //   ② 移动端颜色字面量**完全没有统计**（scripts/check-mobile-ui.mjs 头注释却声称已含）；
 //   ③ 「文字一律用 --lake-accent-text」与「同一 (选择器,属性) 不得跨文件重复」都没有判据。

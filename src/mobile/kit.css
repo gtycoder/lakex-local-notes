@@ -1,5 +1,5 @@
 /* ── 移动端原语库 mb-*（P2，261012）──────────────────────────────────────────
- * 口径（docs/MOBILE-TECH-STACK.md §一/§九 · docs/MOBILE-UI-REDESIGN.md §4/§5）：
+ * 口径（docs/MOBILE-TECH-STACK.md §一/§九 · docs/MOBILE-DESIGN.md §4/§5）：
  *   移动端**自己一套** UI 与样式，不复用桌面 kit 的 ln-*；两端只共享必要**逻辑**。
  *   词表（--lake-*）与桌面共享，取值由 src/mobile/theme/** 定义；几何按触屏密度（见 tokens.css 的
  *   移动端密度档：触达 44/48、页内距 16、圆角 8/12、字号 7 档）。

@@ -586,7 +586,7 @@ txn.commit();
 2. 容器重排优先用 `moveCollapse`/`moveColumns`/`moveColumn`/`moveTable`/`moveImage`，而非统一「读-插-删」（更省且保内部节点 id）。
 3. ~~选区取内容/字数改用 `getSelectionContent`/`wordCountSelection`~~ **已核（261017）**：`getSelectionContent` 已在用；`wordCountSelection` 无消费方、审计 B5 结案不做。
 
-> **261017 复核**：本清单 1/2/3 已由 `docs/KERNEL-REUSE-AUDIT.md` 的 B3/B4/B5 逐条核过，结论**均为不做**（理由见该文档 §3.2）。
+> **261017 复核**：本清单 1/2/3 已由 `LAKEX-CONTRACT.md` 的 B3/B4/B5 逐条核过，结论**均为不做**（理由见该文档 §3.2）。
 
 **枚举脚本（可复现）**：
 

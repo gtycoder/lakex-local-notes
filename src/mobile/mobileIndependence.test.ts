@@ -4,7 +4,7 @@
  * 口径（用户 261012 定稿）：移动端要有自己的适配与 UI 规则，仅共享「必要逻辑」，**不共享样式与 UI**。
  * 本文件把这条口径变成可断言的不变量：**允许红、基线只许降**（对齐桌面 cssLayers 的做法）。
  *
- * 依据：docs/MOBILE-UI-REDESIGN.md §6（P0）· docs/MOBILE-TECH-STACK.md §9.3 · docs/MOBILE-DESKTOP-DECOUPLING.md §4
+ * 依据：docs/MOBILE-DESIGN.md §6（P0）· docs/MOBILE-TECH-STACK.md §9.3 · docs/MOBILE-TECH-STACK.md §4
  *
  * 三条判据：
  *   ① src/mobile/** 不得 import 桌面样式（src/styles/** 与桌面 feature CSS）；内核（@dlient/lakex-doc-react）
