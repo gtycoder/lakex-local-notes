@@ -86,11 +86,11 @@ export const PRIORITY_OPS = [
  */
 export const NONE_OPS = [
   // 启动 / 只读
-  "init", "getHomeSnapshot", "listTreeNodes", "listNotes", "readNote", "noteGoneState", "searchNotes",
-  "listQuickNotes", "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash",
+  "init", "getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage", "readNote", "noteGoneState", "searchNotes",
+  "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "listOrphanAssets", "listS3GcPending", "getHistorySettings",
-  "listTrashed", "listTrashTree", "listNotebookTree", "listDeletedNotesForSync", "readDeletedContent",
+  "listTrashed", "listTrashTree", "listDeletedNotesForSync", "readDeletedContent",
   "getSyncSettings", "getS3Settings", "getDiagnostics", "isFolderPurged",
   // 只读：UI 用它给「保存并同步」置灰（关云同步时）
   "getCloudState",

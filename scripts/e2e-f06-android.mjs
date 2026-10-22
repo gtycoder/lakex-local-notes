@@ -114,7 +114,7 @@ try {
     "  await api.purgeTreeItem(b.id, 'note');",
     "  out.rejectPurge = false;",
     "  try { await api.saveNote(b.id, b.title, '<p>b-late</p>', null); } catch(e){ out.rejectPurge = true; out.purgeErr = String((e && e.message) || e); }",
-    "  out.bGone = !(await api.listNotes()).some(function(n){ return n.id === b.id; }) && !(await api.listTrashed()).some(function(n){ return n.id === b.id; });",
+    "  out.bGone = !(await api.getHomeSnapshot().then(function(s){return s.notes;})).some(function(n){ return n.id === b.id; }) && !(await api.listTrashed()).some(function(n){ return n.id === b.id; });",
     "  return JSON.stringify(out);",
     "})()",
   ].join(NL);

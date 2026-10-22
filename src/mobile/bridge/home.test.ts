@@ -33,7 +33,7 @@ describe("mobile home snapshot query", () => {
     expect(mocks.ensureDb).toHaveBeenCalledTimes(1);
     expect(mocks.listTreeNodes).toHaveBeenCalledWith(mocks.db);
     expect(mocks.listNotes).toHaveBeenCalledWith(mocks.db);
-    expect(mocks.listQuickNotePage).toHaveBeenCalledWith(mocks.db);
+    expect(mocks.listQuickNotePage).toHaveBeenCalledWith(mocks.db, { limit: undefined, cursor: undefined });
   });
 
   it("任一投影读取失败时整体失败，不返回半份首页状态", async () => {

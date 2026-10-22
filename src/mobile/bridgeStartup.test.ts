@@ -41,7 +41,7 @@ describe("mobile startup performance contract", () => {
     expect(listNoteAssetKeysFs).toHaveBeenCalledWith("startup-note");
     expect(listAssetKeysFs).not.toHaveBeenCalled();
 
-    const notes = await bridge.listNotes();
+    const notes = await (await bridge.getHomeSnapshot()).notes;
 
     expect(notes).toEqual([
       {
@@ -85,7 +85,7 @@ describe("mobile startup performance contract", () => {
     await Promise.all([
       freshBridge.init(),
       freshBridge.init(),
-      freshBridge.listNotes(),
+      freshBridge.getHomeSnapshot(),
     ]);
 
     expect(open).toHaveBeenCalledTimes(1);

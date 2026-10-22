@@ -9,9 +9,13 @@ import * as notebookTreeRepository from "../data/notebookTreeRepository.js";
 
 
 export const treeDomain = {
-  async listTreeNodes(): Promise<TreeNode[]> {
+  async getWorkspaceSnapshot(notebookId: string): Promise<{ notebook: TreeNode | null; tree: notebookTreeRepository.NotebookTreeItem[] }> {
     const d = await ensureDb();
-    return await treeRepository.listTreeNodes(d);
+    const [tree, nodes] = await Promise.all([
+      notebookTreeRepository.listNotebookTree(d, notebookId),
+      treeRepository.listTreeNodes(d),
+    ]);
+    return { notebook: nodes.find((node) => node.id === notebookId) ?? null, tree };
   },
 
   async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
@@ -63,8 +67,4 @@ export const treeDomain = {
     });
   },
 
-  async listNotebookTree(notebookId: string): Promise<notebookTreeRepository.NotebookTreeItem[]> {
-    const d = await ensureDb();
-    return await notebookTreeRepository.listNotebookTree(d, notebookId);
-  },
 };

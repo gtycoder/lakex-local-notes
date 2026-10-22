@@ -49,7 +49,7 @@ export interface MobileQuickNote {
   previewText: string;
   imageCount: number;
   updatedAt: string;
-  /** 首图文件名（listQuickNotes 一次返回，卡片不再逐条 readQuickNote） */
+  /** 首图文件名（getHomeSnapshot / getQuickNotePage 一次返回，卡片不再逐条 readQuickNote） */
   firstImage: string | null;
   /** 内核形态正文：有它就用桌面同一套只读预览渲染（富文本/卡片/待办），没有则回退纯文本摘要。 */
   body?: string;

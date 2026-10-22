@@ -23,6 +23,7 @@ const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
   { file: "src/mobile/bridge/notes.ts", exportName: "notesDomain" },
   { file: "src/mobile/bridge/quickNotes.ts", exportName: "quickNotesDomain" },
   { file: "src/mobile/bridge/tree.ts", exportName: "treeDomain" },
+  { file: "src/mobile/bridge/home.ts", exportName: "homeDomain" },
 ];
 
 function objectMethodNames(source: string, exportName: string): string[] {

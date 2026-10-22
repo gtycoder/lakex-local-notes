@@ -26,7 +26,7 @@
 - `run5b.mjs`：套件2 边界资产（非 doc 正文逐字节/小记图片/purge 幽灵/目录传播/删除压编辑）
 - `run5c.mjs`：套件3 目录/图标/排序/移动/duplicate/删除恢复purge/S3 操作 smoke
 - `run5d.mjs`：压力测试（1000 笔记 + 100 目录 + 2MB 文档，输出各端耗时）
-- `run5e.mjs`：单端基准（testS3Connection 延迟 / createNote×1000 / listNotes）
+- `run5e.mjs`：单端基准（testS3Connection 延迟 / createNote×1000 / getHomeSnapshot）
 - `volume.mjs`：量数据体量；`delprefix.mjs`：删隔离前缀（env PREFIX/DELPREFIX）；`s3verify.mjs`：凭证连通性
 
 ## 典型流程

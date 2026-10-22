@@ -36,11 +36,11 @@ function pullMobile(e) {
   try { return db.prepare('SELECT id,title,doc_kind,content,trashed_at FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), kind: r.doc_kind || 'doc', content: String(r.content), trashed: !!r.trashed_at }; }); }
   finally { db.close(); }
 }
-async function mobileActive(id) { return ev(id, 'window.lakeNative.listNotes().then(function(n){return n.map(function(x){return {id:x.id,title:x.title};});})'); }
+async function mobileActive(id) { return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.notes;}).then(function(n){return n.map(function(x){return {id:x.id,title:x.title};});})'); }
 async function mobileTrash(id) { return ev(id, 'window.lakeNative.listTrashTree().then(function(t){return t.filter(function(x){return x.kind==="note";}).map(function(x){return {id:x.id,title:x.title};});})'); }
 async function notes(id) {
   const e = find(id);
-  if (e.type === 'desktop') return ev(id, 'window.lakeNative.listTreeNodes().then(function(t){return t.filter(function(n){return n.nodeType==="note";}).map(function(n){return {id:n.id,title:n.title,kind:n.kind||"doc"};});})');
+  if (e.type === 'desktop') return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.filter(function(n){return n.nodeType==="note";}).map(function(n){return {id:n.id,title:n.title,kind:n.kind||"doc"};});})');
   const live = await mobileActive(id); const db = pullMobile(e); const km = {}; db.forEach(function (n) { km[n.id] = n.kind; });
   return live.map(function (n) { return { id: n.id, title: n.title, kind: km[n.id] || 'doc' }; });
 }
@@ -54,13 +54,13 @@ async function contentOf(id, noteId) {
   if (e.type === 'desktop') return ev(id, 'window.lakeNative.readNote(' + JSON.stringify(noteId) + ').then(function(n){return n.content;})');
   const row = pullMobile(e).find(function (n) { return n.id === noteId; }); return row ? row.content : '';
 }
-async function quickInv(id) { return ev(id, 'window.lakeNative.listQuickNotes().then(function(q){return q.map(function(x){return {id:x.id,text:x.previewText,images:x.imageCount};});})'); }
-async function treeOf(id) { return ev(id, 'window.lakeNative.listTreeNodes().then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType};});})'); }
+async function quickInv(id) { return ev(id, 'window.lakeNative.getQuickNotePage().then(function(p){return p.items;}).then(function(q){return q.map(function(x){return {id:x.id,text:x.previewText,images:x.imageCount};});})'); }
+async function treeOf(id) { return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType};});})'); }
 const s3 = new S3Client({ endpoint: process.env.S3_ENDPOINT, region: process.env.S3_REGION, credentials: { accessKeyId: process.env.S3_AK, secretAccessKey: process.env.S3_SK }, forcePathStyle: false });
 async function s3list(p) { const o = []; let token; do { const r = await s3.send(new ListObjectsV2Command({ Bucket: process.env.S3_BUCKET, Prefix: p, ContinuationToken: token })); (r.Contents || []).forEach(function (x) { o.push(x.Key); }); token = r.IsTruncated ? r.NextContinuationToken : undefined; } while (token); return o; }
 const prefix = process.env.PREFIX;
 const sfx = String(Date.now()).slice(-6);
-const nbId = ((await ev('D1', 'window.lakeNative.listTreeNodes()')).find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
+const nbId = ((await ev('D1', 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})')).find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
 
 console.log('== Phase 11: non-doc content byte-equality across ends ==');
 const usheet = await ev('D1', 'window.lakeNative.createUsheetIn(' + JSON.stringify(nbId) + ', "p11-usheet-' + sfx + '")');

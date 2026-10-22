@@ -16,7 +16,7 @@ import type { SearchResult } from "../../core/searchTypes.js";
 
 import * as noteRepository from "../data/noteRepository.js";
 import { noteBodyPath } from "../data/noteBodies.js";
-import type { LocalNote, LocalNoteSummary } from "../data/noteRepository.js";
+import type { LocalNote } from "../data/noteRepository.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
@@ -24,11 +24,6 @@ import { downloadDeclaredAssetsFor } from "./sync";
 
 
 export const notesDomain = {
-  async listNotes(): Promise<LocalNoteSummary[]> {
-    const d = await ensureDb();
-    return await noteRepository.listNotes(d);
-  },
-
   async readNote(id: string): Promise<LocalNote | null> {
     const d = await ensureDb();
     return await noteRepository.readNote(d, id);

@@ -158,12 +158,12 @@ try {
   let created;
   await check("row-create-child", async () => {
     const before = await page.evaluate(
-      "window.lakeNative.listTreeNodes().then(x=>x.map(n=>n.id))",
+      "window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(x=>x.map(n=>n.id))",
     );
     await click(`${row(seed.g)}.querySelector('[aria-label="新建子项"]')`);
     await click(byText(".context-menu button", "新建文档"));
     created = await page.evaluate(
-      `window.lakeNative.listTreeNodes().then(x=>x.find(n=>!${JSON.stringify(before)}.includes(n.id))?.id)`,
+      `window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(x=>x.find(n=>!${JSON.stringify(before)}.includes(n.id))?.id)`,
     );
     assert.ok(created);
     await waitFor(page, `!!(${row(created)})`);
@@ -192,7 +192,7 @@ try {
     await pointer("mouseReleased", to);
     await waitFor(
       page,
-      `window.lakeNative.listTreeNodes().then(x=>x.find(n=>n.id==='${seed.b}')?.parentId==='${seed.h}')`,
+      `window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(x=>x.find(n=>n.id==='${seed.b}')?.parentId==='${seed.h}')`,
     );
     await wait(400);
     assert.equal(
@@ -214,7 +214,7 @@ try {
     await pointer("mouseReleased", to);
     await waitFor(
       page,
-      `window.lakeNative.listTreeNodes().then(x=>x.find(n=>n.id==='${seed.b}').sortOrder<x.find(n=>n.id==='${seed.c}').sortOrder)`,
+      `window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(x=>x.find(n=>n.id==='${seed.b}').sortOrder<x.find(n=>n.id==='${seed.c}').sortOrder)`,
     );
     await wait(400);
   });

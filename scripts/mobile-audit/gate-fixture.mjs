@@ -20,15 +20,15 @@
   const DOC_TITLES = ["夹具文档 1", "夹具文档 2", "夹具文档 3", "夹具文档 4", "夹具文档 5"];
   const QN_TEXTS = ["夹具小记 1", "夹具小记 2", "夹具小记 3", "夹具小记 4"];
 
-  const nodes = await L.listTreeNodes();
+  const nodes = await L.getHomeSnapshot().then(function(s){return s.treeNodes;});
   const findNb = async () => {
-    const list = await L.listTreeNodes();
+    const list = await L.getHomeSnapshot().then(function(s){return s.treeNodes;});
     return list.find((n) => n.id === DEFAULT_NB_ID) || list.find((n) => n.type === "notebook") || null;
   };
   const nb = await findNb();
   if (!nb) return { error: "没有可用笔记本（默认笔记本也没有？）" };
 
-  const existing = await L.listNotes();
+  const existing = await L.getHomeSnapshot().then(function(s){return s.notes;});
   const made = [];
   for (const title of DOC_TITLES) {
     if (existing.some((n) => n.title === title)) continue;
@@ -36,7 +36,7 @@
     made.push({ id: note.id, title });
   }
 
-  const qnBefore = await L.listQuickNotes();
+  const qnBefore = await L.getQuickNotePage().then(function(p){return p.items;});
   let qnMade = 0;
   for (const text of QN_TEXTS) {
     if (qnBefore.some((q) => (q.previewText || "").indexOf(text) >= 0)) continue;
@@ -44,7 +44,7 @@
     qnMade += 1;
   }
 
-  const [nbAfter, notesAfter, qnAfter] = [await findNb(), await L.listNotes(), await L.listQuickNotes()];
+  const [nbAfter, notesAfter, qnAfter] = [await findNb(), await L.getHomeSnapshot().then(function(s){return s.notes;}), await L.getQuickNotePage().then(function(p){return p.items;})];
   return {
     notebook: nbAfter ? { id: nbAfter.id, title: nbAfter.title } : null,
     docsTotal: notesAfter.length,

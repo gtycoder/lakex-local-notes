@@ -4,14 +4,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const bridgeMocks = vi.hoisted(() => ({
-  listNotebookTree: vi.fn(),
-  listTreeNodes: vi.fn(),
+  getWorkspaceSnapshot: vi.fn(),
 }));
 
 vi.mock("../bridge", () => ({
   bridge: {
-    listNotebookTree: bridgeMocks.listNotebookTree,
-    listTreeNodes: bridgeMocks.listTreeNodes,
+    getWorkspaceSnapshot: bridgeMocks.getWorkspaceSnapshot,
   },
 }));
 
@@ -33,14 +31,14 @@ const render = async () => {
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  bridgeMocks.listNotebookTree.mockResolvedValue([
-    { id: "g1", title: "分组", kind: "group", parentId: "nb1", sortOrder: 2, icon: null },
-    { id: "n2", title: "后", kind: "note", parentId: "nb1", sortOrder: 2, icon: null },
-    { id: "n1", title: "前", kind: "note", parentId: "nb1", sortOrder: 1, icon: null },
-  ]);
-  bridgeMocks.listTreeNodes.mockResolvedValue([
-    { id: "nb1", title: "笔记本", icon: "book" },
-  ]);
+  bridgeMocks.getWorkspaceSnapshot.mockResolvedValue({
+    notebook: { id: "nb1", title: "笔记本", icon: "book", nodeType: "notebook" },
+    tree: [
+      { id: "g1", title: "分组", kind: "group", parentId: "nb1", sortOrder: 2, icon: null },
+      { id: "n2", title: "后", kind: "note", parentId: "nb1", sortOrder: 2, icon: null },
+      { id: "n1", title: "前", kind: "note", parentId: "nb1", sortOrder: 1, icon: null },
+    ],
+  });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -75,7 +73,10 @@ describe("useNotebookTreeData", () => {
 
   it("loadTree 可重新读取并刷新笔记本元数据", async () => {
     await render();
-    bridgeMocks.listTreeNodes.mockResolvedValueOnce([{ id: "nb1", title: "新标题", icon: null }]);
+    bridgeMocks.getWorkspaceSnapshot.mockResolvedValueOnce({
+      notebook: { id: "nb1", title: "新标题", icon: null, nodeType: "notebook" },
+      tree: data.tree,
+    });
     await act(async () => { await data.loadTree(); });
     expect(data.title).toBe("新标题");
     expect(data.notebookIcon).toBeNull();

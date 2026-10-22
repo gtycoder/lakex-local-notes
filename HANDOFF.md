@@ -29,6 +29,15 @@
 - **全量门禁（本次修复后）**：tsc 0 · vitest **359 文件 / 2502 通过（16 skip）** · ui-metrics 0 · check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓。
 - **未做（已知）**：`scripts/usheet-kernel-probes.mjs` 还没为 hyperlink/note/crosshair 增运行时探针（静态护栏已覆盖）；桌面 dmg 仍是旧包（需重打）。
 
+### 261022 · 移动端代码审计结项 + query API 彻底迁移 · **已完成，待推送**
+
+- `docs/MOBILE-CODE-REVIEW-261020.md` 范围内 P0–P3 已结项；P2-6 完成 13 个状态切片，`MobileUsheetViewer` 834 → 544 行。
+- 删除旧移动 bridge/lakeNative API：`listNotes` / `listQuickNotes` / `listTreeNodes` / `listNotebookTree`；统一迁移为 `getHomeSnapshot` / `getQuickNotePage` / `getWorkspaceSnapshot`。
+- 生产、单测、夹具、同步探针、性能脚本和验收脚本已全部迁到新 query API；仓库内不再有旧接口调用。
+- `getHomeSnapshot` 返回树/文档 metadata 与 `QuickNotePage`；`getQuickNotePage` 直接支持 keyset 分页；`getWorkspaceSnapshot` 一次返回当前笔记本元数据与递归 CTE 子树。
+- CI 性能基准：5k 首页 metadata 8.6ms / 树 24.4ms / 小记首屏 0.37ms；100k 树 470ms。
+- 门禁：tsc ✓ · 全库 vitest **361 文件 / 2508 通过（17 skip）** · quickNotes 60 例 ✓ · 双端构建 ✓ · check:core/mobileui/bundle ✓ · diff-check ✓；APK 在 `emulator-5562` 安装/启动/首屏截图/无 FATAL 日志烟测通过。
+
 ### 261022 · 表格 P1（超链接 / 单元格备注）+ 十字高亮（用户点单）· **已提交 `212aa4f5`**
 
 - **依赖**：新增 3 个 Univer 1.0.3 精确锁包（`preset-sheets-hyper-link`、`preset-sheets-note`、`sheets-crosshair-highlight`）+ 2 个直接依赖（`sheets-hyper-link` / `-ui`，移动端要直接引移动 UI 插件）⇒ 全部 1.0.3，`univerContract` 护栏同步扩包列表。

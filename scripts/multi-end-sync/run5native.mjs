@@ -41,11 +41,11 @@ active.length = 0; active.push(...ready);
 async function sync(end) { const t0 = Date.now(); const v = await end.ev('window.lakeNative.syncNow()'); return { wallMs: Date.now() - t0, value: v }; }
 function pullMobileFile(serial, id, name) { return execSync(ADB + ' -s ' + serial + ' exec-out run-as com.lakenotes.mobile cat files/note-assets/' + id + '/' + name, { maxBuffer: 64 * 1024 * 1024 }); }
 
-const d1Nb = await D1.ev('window.lakeNative.listTreeNodes().then(function(t){return (t.find(function(n){return n.nodeType==="notebook";})||{}).id;})');
+const d1Nb = await D1.ev('window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return (t.find(function(n){return n.nodeType==="notebook";})||{}).id;})');
 
 for (const m of active) {
   console.log('== [' + m.id + '] Phase U: 该端原生上传资产 -> D1 下载 ==');
-  const up = await m.cdp.ev('(async function(){var nb=(await window.lakeNative.listTreeNodes()).find(function(n){return n.nodeType==="notebook";});var note=await window.lakeNative.createNote("native-' + m.id + '-' + sfx + '",nb?nb.id:null);var id=(typeof note==="string")?note:note.id;var b=new Uint8Array(' + SIZE + ');for(var i=0;i<b.length;i++){b[i]=(i*7)&255;}var up=await window.lakeNative.uploadResource({bytes:b,filename:"native.png"},id);return {id:id,name:up.url.split("/").pop()};})()');
+  const up = await m.cdp.ev('(async function(){var nb=(await window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})).find(function(n){return n.nodeType==="notebook";});var note=await window.lakeNative.createNote("native-' + m.id + '-' + sfx + '",nb?nb.id:null);var id=(typeof note==="string")?note:note.id;var b=new Uint8Array(' + SIZE + ');for(var i=0;i<b.length;i++){b[i]=(i*7)&255;}var up=await window.lakeNative.uploadResource({bytes:b,filename:"native.png"},id);return {id:id,name:up.url.split("/").pop()};})()');
   await sync(m.cdp);
   await sync(D1);
   const f = path.join(D1_ASSETS, up.id, up.name);

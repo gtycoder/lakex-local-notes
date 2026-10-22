@@ -14,7 +14,7 @@
 /** 从 bridge 派生的方法（CDP 驱动与真机调试用）。 */
 export const LAKE_NATIVE_BRIDGE_METHODS = [
   "uploadResource", "syncNow", "testS3Connection",
-  "listTreeNodes", "listNotes", "listQuickNotes",
+  "getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage",
   "listOrphanAssets", "cleanOrphanAssets", "deleteOrphanAsset", "gcDeepCleanup",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "openAttachment", "saveAssetAs", "restoreHistory", "cleanupHistory",

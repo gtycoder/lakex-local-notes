@@ -58,7 +58,7 @@ export interface QuickNotePage {
   nextCursor: QuickNoteCursor | null;
 }
 
-interface QuickNotePageOptions {
+export interface QuickNotePageOptions {
   limit?: number;
   cursor?: QuickNoteCursor;
 }

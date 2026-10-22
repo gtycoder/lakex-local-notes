@@ -43,11 +43,11 @@ function pullMobile(e) {
   try { return db.prepare('SELECT id,title,doc_kind,content,trashed_at FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), kind: r.doc_kind || 'doc', content: String(r.content), trashed: !!r.trashed_at }; }); }
   finally { db.close(); }
 }
-async function mobileActive(e) { return ev(e.id, 'window.lakeNative.listNotes().then(function(n){return n.map(function(x){return {id:x.id,title:x.title};});})'); }
+async function mobileActive(e) { return ev(e.id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.notes;}).then(function(n){return n.map(function(x){return {id:x.id,title:x.title};});})'); }
 async function mobileTrash(e) { return ev(e.id, 'window.lakeNative.listTrashTree().then(function(t){return t.filter(function(x){return x.kind==="note";}).map(function(x){return {id:x.id,title:x.title};});})'); }
 async function notes(id) {
   const e = find(id);
-  if (e.type === 'desktop') return ev(id, 'window.lakeNative.listTreeNodes().then(function(t){return t.filter(function(n){return n.nodeType==="note";}).map(function(n){return {id:n.id,title:n.title,kind:n.kind||"doc"};});})');
+  if (e.type === 'desktop') return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.filter(function(n){return n.nodeType==="note";}).map(function(n){return {id:n.id,title:n.title,kind:n.kind||"doc"};});})');
   const live = await mobileActive(e);
   const db = pullMobile(e);
   const kindById = {}; db.forEach(function (n) { kindById[n.id] = n.kind; });
@@ -64,12 +64,12 @@ async function contentOf(id, noteId) {
   const row = pullMobile(e).find(function (n) { return n.id === noteId; });
   return row ? row.content : '';
 }
-async function quickInv(id) { return ev(id, 'window.lakeNative.listQuickNotes().then(function(q){return q.map(function(x){return {id:x.id,text:x.previewText};});})'); }
+async function quickInv(id) { return ev(id, 'window.lakeNative.getQuickNotePage().then(function(p){return p.items;}).then(function(q){return q.map(function(x){return {id:x.id,text:x.previewText};});})'); }
 function activeMap(list) { const m = {}; for (const n of list) m[n.id] = n.kind + '|' + n.title; return m; }
 function canon(m) { return Object.keys(m).sort().map(function (k) { return k + '=' + m[k]; }).join(';'); }
 
 console.log('== Phase 1: kind propagation (D1 -> all) ==');
-const tree = await ev('D1', 'window.lakeNative.listTreeNodes()');
+const tree = await ev('D1', 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})');
 const nbId = (tree.find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
 const sfx = String(Date.now()).slice(-6);
 const doc = await ev('D1', 'window.lakeNative.createNoteIn(' + JSON.stringify(nbId) + ', "p1-doc-' + sfx + '")');

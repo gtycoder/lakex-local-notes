@@ -99,14 +99,14 @@ async function main() {
     // 1) 解析目标文档
     let target = NOTE;
     if (!target && TITLE) {
-      target = await evalJs("(async () => { const n = (await window.lakeNative.listTreeNodes()).find(x => x.title === " + JSON.stringify(TITLE) + "); return n ? n.id : null; })()");
+      target = await evalJs("(async () => { const n = (await window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})).find(x => x.title === " + JSON.stringify(TITLE) + "); return n ? n.id : null; })()");
       if (!target) throw new Error("按标题找不到文档：" + TITLE);
     }
     if (!target) {
       target = await evalJs("(() => { const t = document.querySelector('.tab-item.active'); return t ? t.getAttribute('data-note-id') : null; })()");
       if (!target) throw new Error("当前没有活动文档；请用 --note 或 --title 指定");
     }
-    const meta = await evalJs("(async () => { const n = (await window.lakeNative.listTreeNodes()).find(x => x.id === " + JSON.stringify(target) + "); return n ? { title: n.title, syncState: n.syncState } : null; })()");
+    const meta = await evalJs("(async () => { const n = (await window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})).find(x => x.id === " + JSON.stringify(target) + "); return n ? { title: n.title, syncState: n.syncState } : null; })()");
     if (!meta) throw new Error("找不到文档：" + target);
     const original = await evalJs("(async () => { const c = await window.__rtRead(" + JSON.stringify(target) + "); return { content: c, len: c.length, hash: window.__rtHash(c) }; })()");
     console.log("目标原件 : " + meta.title + "  [" + target + "]  syncState=" + meta.syncState);
@@ -156,7 +156,7 @@ async function main() {
     }
     console.log("  观察了 " + (Date.now() - t0) + "ms");
     const dirty = await evalJs("(() => { const t = window.__rtTab(" + JSON.stringify(tempId) + "); return !!(t && t.querySelector('.tab-dirty-dot')); })()");
-    const tempState = await evalJs("(async () => { const n = (await window.lakeNative.listTreeNodes()).find(x => x.id === " + JSON.stringify(tempId) + "); return n ? n.syncState : null; })()");
+    const tempState = await evalJs("(async () => { const n = (await window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})).find(x => x.id === " + JSON.stringify(tempId) + "); return n ? n.syncState : null; })()");
     const d = firstDiff(expected, actual);
     const pass = d === -1;
     console.log("");

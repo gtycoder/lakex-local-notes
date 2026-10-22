@@ -1,6 +1,6 @@
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
-import type { QuickNotePage } from "../data/quickNotesRepository";
+import type { QuickNoteCursor, QuickNotePage } from "../data/quickNotesRepository";
 import * as noteRepository from "../data/noteRepository.js";
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
 import * as treeRepository from "../data/treeRepository.js";
@@ -13,13 +13,21 @@ export interface HomeSnapshot {
   quickNotes: QuickNotePage;
 }
 
+export interface HomeSnapshotOptions {
+  quickNoteLimit?: number;
+  quickNoteCursor?: QuickNoteCursor;
+}
+
 export const homeDomain = {
-  async getHomeSnapshot(): Promise<HomeSnapshot> {
+  async getHomeSnapshot(options: HomeSnapshotOptions = {}): Promise<HomeSnapshot> {
     const db = await ensureDb();
     const [treeNodes, notes, quickNotes] = await Promise.all([
       treeRepository.listTreeNodes(db),
       noteRepository.listNotes(db),
-      quickNotesRepository.listQuickNotePage(db),
+      quickNotesRepository.listQuickNotePage(db, {
+        limit: options.quickNoteLimit,
+        cursor: options.quickNoteCursor,
+      }),
     ]);
     return { treeNodes, notes, quickNotes };
   },

@@ -272,7 +272,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
   /** 首页常驻渲染：工作区打开期间它只是被盖住（inert），tab 值取当前 home 路由或回退「知识库」（返回落点）。 */
   const homeTab = route.kind === "home" ? route.tab : "library";
-  // 笔记本 → 直接文档数（首页列表行 .counter；与 listNotebookTree 的归属口径一致：parent 为笔记本）
+  // 笔记本 → 直接文档数（首页列表行 .counter；与 getWorkspaceSnapshot 的树归属口径一致）
   const docCounts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const n of notes) { if (n.parentId) m[n.parentId] = (m[n.parentId] ?? 0) + 1; }

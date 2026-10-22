@@ -160,7 +160,7 @@ export default async function run(ctx) {
   const wantQn = !ONLY || ONLY === "quicknote";
   const wantDoc = !ONLY || ONLY === "document";
   if (!wantQn && !wantDoc) { console.log("FAILED: 未选中任何场景（ONLY=" + ONLY + "）"); process.exit(2); }
-  for (let i = 0; i < 30; i++) { if (await page.evaluate("Boolean(window.lakeNative && window.lakeNative.listQuickNotes)")) break; await sleep(1000); }
+  for (let i = 0; i < 30; i++) { if (await page.evaluate("Boolean(window.lakeNative && window.lakeNative.getQuickNotePage)")) break; await sleep(1000); }
   if (wantQn) { out.quicknote = { log: [] }; await scenarioQuickNote(); }
   if (wantDoc) { out.document = { log: [] }; await scenarioDocument(); }
   console.log("== 移动端编辑面不变量 ==");

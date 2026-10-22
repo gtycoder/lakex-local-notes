@@ -71,7 +71,7 @@ describe("mobile 目录树（文档套文档）", () => {
     // 根层文档（直接挂 notebook）
     await bridge.saveNote("root-1", "根层文档", "<p>x</p>", nb.id);
 
-    const tree = await bridge.listNotebookTree(nb.id);
+    const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     const byId = new Map(tree.map((t) => [t.id, t]));
     expect(byId.get("parent-1")?.parentId).toBe(group.id);   // 父文档在 group 下
     expect(byId.get("child-1")?.parentId).toBe("parent-1");  // 子文档在父文档下（此前被过滤）
@@ -85,10 +85,10 @@ describe("mobile 目录树（文档套文档）", () => {
     const group = await bridge.createGroup(nb.id, "图标分组");
     await bridge.setNodeIcon(group.id, "🗂️");
 
-    const tree = await bridge.listNotebookTree(nb.id);
+    const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     expect(tree.find((t) => t.id === group.id)?.icon).toBe("🗂️");  // group 图标
     // notebook 本身不在 listNotebookTree（树从 notebook 根展开，不含根自身）；listTreeNodes 验证
-    const nodes = await bridge.listTreeNodes();
+    const nodes = await (await bridge.getHomeSnapshot()).treeNodes;
     expect(nodes.find((n) => n.id === nb.id)?.icon).toBe("📁");      // notebook 图标
   });
 
@@ -106,7 +106,7 @@ describe("mobile 目录树（文档套文档）", () => {
     expect(body.version).toBe(1);
     expect(body.workbook?.sheets?.s1).toMatchObject({ rowCount: 50, columnCount: 16 });
 
-    const tree = await bridge.listNotebookTree(nb.id);
+    const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     expect(tree.find((t) => t.id === sheet.id)?.title).toBe("无标题表格");
 
     // 空串父节点必须兜底到真实笔记本，不能建出 parent_id="" 的孤儿表格
@@ -131,7 +131,7 @@ describe("mobile 新建画板", () => {
     expect(body.version).toBe(1);
     expect(body.elements).toEqual([]);
 
-    const tree = await bridge.listNotebookTree(nb.id);
+    const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     expect(tree.find((t) => t.id === board.id)?.title).toBe("无标题画板");
 
     const fallback = await bridge.createBoard("空父兜底画板", " ");
@@ -162,7 +162,7 @@ describe("mobile 新建数据表", () => {
     expect(body.tables?.[0].records?.length).toBe(3);
     expect(body.activeTableId).toBe(body.tables?.[0].id);
 
-    const tree = await bridge.listNotebookTree(nb.id);
+    const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     expect(tree.find((t) => t.id === bitable.id)?.title).toBe("无标题数据表");
 
     // 空串父节点必须兜底到真实笔记本，不能建出 parent_id="" 的孤儿数据表
@@ -180,19 +180,19 @@ describe("mobile 保存不改树归属（261020 实测 bug）", () => {
 
     // 模拟移动端自动保存：只传标题/正文（历史实现会把 parent_id 写成 NULL）
     await bridge.saveNote(note.id, "归属文档", "<p>改一下</p>");
-    const after = (await bridge.listNotes()).find((n) => n.id === note.id);
+    const after = (await (await bridge.getHomeSnapshot()).notes).find((n) => n.id === note.id);
     expect(after?.parentId).toBe(nb.id);
-    expect((await bridge.listNotebookTree(nb.id)).some((t) => t.id === note.id)).toBe(true);
+    expect((await (await bridge.getWorkspaceSnapshot(nb.id)).tree).some((t) => t.id === note.id)).toBe(true);
 
     // 数据表同一条写边界
     const bitable = await bridge.createBitable("归属数据表", nb.id);
     await bridge.saveNote(bitable.id, "归属数据表", bitable.content);
-    expect((await bridge.listNotes()).find((n) => n.id === bitable.id)?.parentId).toBe(nb.id);
+    expect((await (await bridge.getHomeSnapshot()).notes).find((n) => n.id === bitable.id)?.parentId).toBe(nb.id);
 
     // 显式移动仍能改父节点（树操作不受 COALESCE 影响）
     const group = await bridge.createGroup(nb.id, "归属分组");
     await bridge.moveTreeNodeOrdered(note.id, group.id, [note.id]);
-    expect((await bridge.listNotes()).find((n) => n.id === note.id)?.parentId).toBe(group.id);
+    expect((await (await bridge.getHomeSnapshot()).notes).find((n) => n.id === note.id)?.parentId).toBe(group.id);
   });
 });
 
@@ -204,7 +204,7 @@ describe("mobile 目录重命名", () => {
     expect(renamed.id).toBe(nb.id);
     expect(renamed.title).toBe("重命名成功");
 
-    const nodes = await bridge.listTreeNodes();
+    const nodes = await (await bridge.getHomeSnapshot()).treeNodes;
     expect(nodes.find((node) => node.id === nb.id)?.title).toBe("重命名成功");
   });
 
@@ -214,7 +214,7 @@ describe("mobile 目录重命名", () => {
     const renamed = await bridge.renameTreeNode(note.id, "新标题");
     expect(renamed.id).toBe(note.id);
     expect(renamed.title).toBe("新标题");
-    const tree = await bridge.listNotebookTree(nb.id);
+    const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     expect(tree.find((node) => node.id === note.id)?.title).toBe("新标题");
   });
 });
@@ -312,7 +312,7 @@ describe("mobile 文档图标同步能力", () => {
     const updated = await bridge.setNodeIcon(noteId, "star");
     expect(updated.id).toBe(noteId);
     expect(updated.icon).toBe("star");
-    const tree = await bridge.listNotebookTree(nb.id);
+    const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     expect(tree.find((item) => item.id === noteId)?.icon).toBe("star");
   });
 });

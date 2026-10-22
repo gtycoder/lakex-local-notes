@@ -36,7 +36,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 if (!(await ev("typeof window.lakeNative === 'object'"))) { console.error("window.lakeNative 不存在"); process.exit(3); }
 
 // 取一个合法父（移动端文档必须挂在笔记本下）
-const parentId = await ev(`(async()=>{const ns=await window.lakeNative.listNotes();return (ns.find(n=>n.parentId)||{}).parentId||null;})()`);
+const parentId = await ev(`(async()=>{const ns=await window.lakeNative.getHomeSnapshot().then(function(s){return s.notes;});return (ns.find(n=>n.parentId)||{}).parentId||null;})()`);
 if (!parentId) { console.error("取不到 parentId（库为空？）"); process.exit(4); }
 
 /** 页内计时一次写操作。 */
@@ -47,7 +47,7 @@ const timedWrite = (title) => ev(`(async()=>{
 })()`);
 
 console.log("父笔记本:", parentId);
-const before = await ev("(async()=>(await window.lakeNative.listNotes()).length)()");
+const before = await ev("(async()=>(await window.lakeNative.getHomeSnapshot().then(function(s){return s.notes;})).length)()");
 
 // ① 基线写（无同步）
 const baseline = await timedWrite("F16 验收 A");
@@ -60,7 +60,7 @@ const during = await timedWrite("F16 验收 B");
 
 // ③ 等同步收尾，读它的总时长与结论
 const sync = await ev(`window.__f16.p.then(r=>({ms:Math.round(performance.now()-window.__f16.t0),message:String((r&&r.message)||"").slice(0,90)})).catch(e=>({ms:Math.round(performance.now()-window.__f16.t0),message:"ERR "+String(e).slice(0,80)}))`);
-const after = await ev("(async()=>(await window.lakeNative.listNotes()).length)()");
+const after = await ev("(async()=>(await window.lakeNative.getHomeSnapshot().then(function(s){return s.notes;})).length)()");
 
 const verdict = {
   baselineWriteMs: baseline.ms,

@@ -34,7 +34,7 @@ function createMobileAdapter(): TreeBehaviorAdapter {
       await bridge.restoreTreeItem(rootId, "folder");
     },
     async notebookTreeIds(notebookId) {
-      return (await bridge.listNotebookTree(notebookId)).map((item) => item.id);
+      return (await (await bridge.getWorkspaceSnapshot(notebookId)).tree).map((item) => item.id);
     },
     async isNoteTrashed(noteId) {
       return (await bridge.listTrashTree()).some((item) => item.id === noteId);
@@ -79,7 +79,7 @@ describe("mobile purge 删除传播", () => {
 
     // 行已物理删除：回收站不再残留（此前 sync_state='purged' 行保留 → 回收站仍显示 = 删不掉）
     expect((await bridge.listTrashTree()).some((t) => t.id === NID)).toBe(false);
-    expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
+    expect((await (await bridge.getHomeSnapshot()).notes).some((n) => n.id === NID)).toBe(false);
 
     // 墓碑写入 deleted_notes（node_type='note'），供 syncEngine 发布 deleted:true 传播删除
     const tombstones = await bridge.listDeletedNotesForSync();
@@ -100,8 +100,8 @@ describe("mobile purge 删除传播", () => {
     await bridge.purgeTreeItem(nb.id, "folder");
 
     // 物理删除
-    expect((await bridge.listNotebookTree(nb.id)).length).toBe(0);
-    expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
+    expect((await (await bridge.getWorkspaceSnapshot(nb.id)).tree).length).toBe(0);
+    expect((await (await bridge.getHomeSnapshot()).notes).some((n) => n.id === NID)).toBe(false);
 
     // folder 墓碑：isFolderPurged 生效（下载远端 folders 时过滤，防复活）
     expect(await bridge.isFolderPurged(nb.id)).toBe(true);
@@ -136,7 +136,7 @@ describe("mobile purge 删除传播", () => {
     // 子树 notes 级联进回收站
     expect(trash.some((t) => t.id === nid && t.kind === "note")).toBe(true);
     // 已移出可见树（trashed_at 标记生效）
-    const visible = await bridge.listTreeNodes();
+    const visible = await (await bridge.getHomeSnapshot()).treeNodes;
     expect(visible.some((n) => n.id === nbRow.id)).toBe(false);
     // 回收站条目带删除时间（deletedAt = trashed_at，同步传播载体）
     const trashNb = trash.find((t) => t.id === nbRow.id);
@@ -158,7 +158,7 @@ describe("mobile purge 删除传播", () => {
       await bridge.restoreNote(NID);
 
       // 恢复后回到可见列表，且 updated_at bump 到恢复时刻（严格晚于删除时刻）
-      const restored = (await bridge.listNotes()).find((n) => n.id === NID);
+      const restored = (await (await bridge.getHomeSnapshot()).notes).find((n) => n.id === NID);
       expect(restored).toBeDefined();
       expect(restored!.updatedAt > trashAt).toBe(true);
       expect(restored!.updatedAt).toBe("2026-01-01T00:00:05.000Z");
@@ -189,7 +189,7 @@ describe("mobile purge 删除传播", () => {
 
     await bridge.purgeTreeItem(nb.id, "folder");
 
-    const notes = await bridge.listNotes();
+    const notes = await (await bridge.getHomeSnapshot()).notes;
     expect(notes.some((note) => note.id === "purge-nested-parent")).toBe(false);
     expect(notes.some((note) => note.id === "purge-nested-child")).toBe(false);
 
@@ -203,11 +203,11 @@ describe("mobile purge 删除传播", () => {
     await bridge.saveNote(NID, "已彻底删", "<p>v1</p>", null);
     await bridge.trashNote(NID);
     await bridge.purgeTreeItem(NID, "note");
-    expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
+    expect((await (await bridge.getHomeSnapshot()).notes).some((n) => n.id === NID)).toBe(false);
 
     await expect(bridge.saveNote(NID, "晚到保存", "<p>v2</p>", null)).rejects.toThrow();
     // 未被复活：行仍是物理删除，墓碑仍在（删除继续传播）
-    expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
+    expect((await (await bridge.getHomeSnapshot()).notes).some((n) => n.id === NID)).toBe(false);
     expect((await bridge.listDeletedNotesForSync()).some((t) => t.id === NID)).toBe(true);
   });
 });

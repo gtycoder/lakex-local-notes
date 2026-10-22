@@ -8,7 +8,7 @@
 > - **P0 / P1 / P2-1～P2-4：已完成**。包括可等待保存、GC 维护锁、子树 CTE、小记轻量投影/虚拟列表、最小索引与批量写、标签页懒读、编辑面单一 owner、结构化命令结果、原生流式 fail-fast、路径围栏、分享限长、多维表 draft 等。
 > - **P2-5：已完成**。编辑面关闭/焦点/隐藏实例改为 jsdom 行为测试；GC / syncNow / priority 改为真实操作时间线验证；契约面从实际 `bridge` 与 `nativeSqlite` 导出派生。
 > - **P2-6：已完成（13 个状态切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、同步设置、编辑命令分发、目录数据、目录行动作、表格卡片状态、表格阅读态筛选、表格 chrome 状态与表格命令 facade。`MobileUsheetViewer` 从 834 行降至 544 行；`EditSession` 不再需要平行抽象，编辑面 owner 仍是 `useEditSurface`，表格剩余职责是容器与 Univer 装配。
-> - **P3 / Mobile Data Plane v2：当前审计范围已完成**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot`、`QuickNotePage` keyset 查询均已落地；首页保留全集投影以维持本地标签筛选/排序语义，因为 5000 文档基准远低于目标。`executeBatch` 提供单事务/单桥往返的 Unit of Work 基础，`useAutoSave` 覆盖 SaveCoordinator 行为不变量。
+> - **P3 / Mobile Data Plane v2：当前审计范围已完成**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot`、`QuickNotePage` keyset 查询与 `WorkspaceSnapshot` 均已落地；旧 `listNotes/listQuickNotes/listTreeNodes/listNotebookTree` bridge/lakeNative 方法已删除，生产与自动化脚本全部迁移到新 query API。首页保留全集 metadata 投影以维持本地标签筛选/排序语义，因为 5000 文档基准远低于目标。`executeBatch` 提供单事务/单桥往返的 Unit of Work 基础，`useAutoSave` 覆盖 SaveCoordinator 行为不变量。
 > - **验证基线**：移动端 vitest 109 文件 / 475 例、quickNotes 60 例、全库 361 文件 / 2508 例（17 skip）、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过；APK 已在 `emulator-5562` 安装、启动并完成首屏截图烟测。只读模型基准：5000 文档首页元数据 8.6ms、5000 文档树 24.4ms、5000 小记首屏 50 条约 0.37ms；100000 文档树 470ms、100000 文档首页元数据 214ms（superset 口径）。
 
 ---
@@ -661,11 +661,11 @@ interface SaveCoordinator {
 
 ### 5.7 迁移步骤
 
-1. **完成**：索引已加，首页收敛到 `getHomeSnapshot()`；`DocumentMetaQuery` 的职责由 metadata-only `listNotes` 提供，小记用 `QuickNotePage`。
+1. **完成**：索引已加；首页收敛到 `getHomeSnapshot()`，工作区收敛到 `getWorkspaceSnapshot()`，小记分页使用 `getQuickNotePage()`。
 2. **完成（按当前目标）**：轻量投影、虚拟列表、可见正文 LRU、`HomeSnapshot`、`QuickNotePage` 均已落地；首页保留全量元数据是因为 5k 基准仅 8.6ms，且本地标签筛选/排序要求全集。
 3. **完成**：工作区子树走递归 CTE；标签页 metadata-only，正文按活动页懒读。
 4. **完成**：`useAutoSave` 具备 schedule / single-flight / 合并新快照 / 可等待 flush / 失败保留快照语义。
-5. **按设计关闭**：旧 bridge 读方法只返回 metadata 或作为调试/测试契约保留；首页生产路径已不再直接拼调用，未发现正文热读。
+5. **完成**：旧 `listNotes/listQuickNotes/listTreeNodes/listNotebookTree` bridge/lakeNative 接口已删除；测试、夹具、同步探针、性能脚本与验收脚本全部迁移到 `getHomeSnapshot/getQuickNotePage/getWorkspaceSnapshot`。
 6. **按设计关闭**：`useEditSurface` 已是文档/小记唯一编辑面 owner，表格没有重复面板/IME 状态机；新增 `useSheetChromeState` + `useSheetCommandActions` 只负责本机视图与命令分派。
 
 ### 5.8 验收目标（建议值，需设备实测）

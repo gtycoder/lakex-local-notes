@@ -104,7 +104,7 @@ async function main() {
     await evalJs(INJECT);
     let source = NOTE || await evalJs("window.__activeId()");
     if (!source) throw new Error("当前没有活动文档；请用 --note 指定含嵌套列表的文档");
-    const meta = await evalJs(`(async () => { const n = (await window.lakeNative.listTreeNodes()).find((x) => x.id === ${JSON.stringify(source)}); return n ? { title: n.title } : null; })()`);
+    const meta = await evalJs(`(async () => { const n = (await window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})).find((x) => x.id === ${JSON.stringify(source)}); return n ? { title: n.title } : null; })()`);
     if (!meta) throw new Error("找不到文档：" + source);
     console.log(`源  : ${meta.title} [${source}]`);
 
@@ -113,7 +113,7 @@ async function main() {
     const dup = await evalJs(`(async () => {
       const src = ${JSON.stringify(source)};
       const api = window.lakeNative;
-      const nodes = await api.listTreeNodes(); const byId = new Map(nodes.map((n) => [n.id, n]));
+      const nodes = await api.getHomeSnapshot().then(function(s){return s.treeNodes;}); const byId = new Map(nodes.map((n) => [n.id, n]));
       const chain = []; let cur = byId.get(src);
       while (cur && cur.parentId) { chain.push(cur.parentId); cur = byId.get(cur.parentId); }
       for (const pid of chain.reverse()) { const row = window.__row(pid); const chev = row && row.querySelector('.tree-chevron'); if (chev && !chev.classList.contains('open')) { chev.click(); await new Promise((r) => setTimeout(r, 260)); } }

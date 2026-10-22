@@ -36,7 +36,7 @@ function pullMobile(e) {
 }
 async function counts(id) {
   const e = find(id);
-  const t = await evT(id, 'window.lakeNative.listTreeNodes()', 60000);
+  const t = await evT(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})', 60000);
   if (e.type === 'desktop') { const notes = t.value.filter(function (n) { return n.nodeType === 'note'; }).length; const folders = t.value.filter(function (n) { return n.nodeType !== 'note'; }).length; return { notes: notes, folders: folders }; }
   const mc = pullMobile(e); return { notes: mc.length, folders: t.value.length };
 }
@@ -44,7 +44,7 @@ async function counts(id) {
 const N = 1000, M = 100, BIG = 2 * 1024 * 1024;
 const sfx = String(Date.now()).slice(-6);
 console.log('== T1: create ' + N + ' notes on D1 ==');
-const nbId = (await evT('D1', 'window.lakeNative.listTreeNodes()', 30000)).value.find(function (n) { return n.nodeType === 'notebook'; }).id;
+const nbId = (await evT('D1', 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})', 30000)).value.find(function (n) { return n.nodeType === 'notebook'; }).id;
 const t1 = await evT('D1', '(async function(){var t0=Date.now();for(var i=0;i<' + N + ';i++){await window.lakeNative.createNoteIn(' + JSON.stringify(nbId) + ', "stress-"+i);}return Date.now()-t0;})()', 1200000);
 console.log('  create notes ms=' + t1.ms + ' inner=' + t1.value);
 check('T1 created ' + N + ' notes', (await counts('D1')).notes >= N, JSON.stringify(await counts('D1')));

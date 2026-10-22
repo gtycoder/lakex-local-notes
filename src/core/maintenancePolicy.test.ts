@@ -25,9 +25,10 @@ describe("互斥域判据（F16 红线化）", () => {
     expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
     // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
     // 另含 remote ink 批的写操作（WRITE_OPS 30）
-    // 261022 移动端批：+getHomeSnapshot（首页快照只读接口，落 none）
-    expect(NONE_OPS.length).toBe(43);
-    expect(ALL.length).toBe(77); // 30 写 + 3 维护 + 1 高优 + 43 none
+    // 261022 query API 收口：旧 listTreeNodes/listNotes/listQuickNotes/listNotebookTree 已删除；
+    // 新 getHomeSnapshot/getWorkspaceSnapshot/getQuickNotePage 均为只读 none。
+    expect(NONE_OPS.length).toBe(41);
+    expect(ALL.length).toBe(75); // 30 写 + 3 维护 + 1 高优 + 41 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {
@@ -51,7 +52,7 @@ describe("互斥域判据（F16 红线化）", () => {
   });
 
   it("只读操作不取锁", () => {
-    for (const op of ["listTreeNodes", "readNote", "listNotes", "searchNotes", "getS3Settings"]) {
+    for (const op of ["getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage", "readNote", "searchNotes", "getS3Settings"]) {
       expect(lockDomainOf(classifyOp(op))).toBeNull();
     }
   });

@@ -77,7 +77,7 @@ if (process.env.SKIP_UPLOAD !== '1') {
 }
 
 // 下载：D1 新建普通笔记 → 直接落资产文件 → D1 同步（流式上传）→ E 同步下载。
-const nbId = ((await D1.ev('window.lakeNative.listTreeNodes()')).find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
+const nbId = ((await D1.ev('window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})')).find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
 for (const b of BATCHES) {
   console.log('== download ' + b.name + ' to E (seeded on D1 disk) ==');
   const note = await D1.ev('window.lakeNative.createNoteIn(' + JSON.stringify(nbId) + ', "perfdown-' + b.name + '-' + sfx + '")');

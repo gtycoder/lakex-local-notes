@@ -11,14 +11,14 @@ export function useNotebookTreeData(notebookId: string) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
 
   const loadTree = useCallback(async () => {
-    const [treeItems, nodes] = await Promise.all([bridge.listNotebookTree(notebookId), bridge.listTreeNodes()]);
-    setTree(treeItems);
-    const notebook = nodes.find((node) => node.id === notebookId);
+    const snapshot = await bridge.getWorkspaceSnapshot(notebookId);
+    setTree(snapshot.tree);
+    const notebook = snapshot.notebook;
     if (notebook) {
       setTitle(notebook.title);
       setNotebookIcon(notebook.icon ?? null);
     }
-    return treeItems;
+    return snapshot.tree;
   }, [notebookId]);
 
   useEffect(() => { void loadTree(); }, [loadTree]);

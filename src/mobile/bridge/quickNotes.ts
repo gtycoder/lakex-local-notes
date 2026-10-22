@@ -7,16 +7,16 @@ import { buildAssetFilename, mimeTypeForFilename } from "../../core/assetNaming.
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { cloudStateHint, type CloudState } from "../../core/cloudState.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../../core/quickNoteModel.js";
-import type { QuickNoteListItem } from "../data/quickNotesRepository.js";
+import type { QuickNotePage, QuickNotePageOptions } from "../data/quickNotesRepository.js";
 
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
 import { mobileCloudState, pushSingleQuickNote, scheduleQuickNoteVerify } from "./sync";
 
 
 export const quickNotesDomain = {
-  async listQuickNotes(): Promise<QuickNoteListItem[]> {
+  async getQuickNotePage(options?: QuickNotePageOptions): Promise<QuickNotePage> {
     const d = await ensureDb();
-    return await quickNotesRepository.listQuickNotes(d);
+    return await quickNotesRepository.listQuickNotePage(d, options);
   },
 
   async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {

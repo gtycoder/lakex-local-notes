@@ -105,7 +105,7 @@ async function clickHandle(send, evalJs) {
 }
 async function openCopy(evalJs, source) {
   const tabsBefore = await evalJs("[...document.querySelectorAll('.tab-item')].map((t) => t.getAttribute('data-note-id'))");
-  const dup = await evalJs("(async () => { const src = " + JSON.stringify(source) + "; const api = window.lakeNative; const nodes = await api.listTreeNodes(); const byId = new Map(nodes.map((n) => [n.id, n])); const chain = []; let cur = byId.get(src); while (cur && cur.parentId) { chain.push(cur.parentId); cur = byId.get(cur.parentId); } for (const pid of chain.reverse()) { const row = window.__row(pid); const chev = row && row.querySelector('.tree-chevron'); if (chev && !chev.classList.contains('open')) { chev.click(); await new Promise((r) => setTimeout(r, 260)); } } const row = window.__row(src); if (!row) return { err: '目录里找不到源行' }; const b = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 60), clientY: Math.round(b.top + 8) })); await new Promise((r) => setTimeout(r, 400)); const items = [...document.querySelectorAll('.context-menu button, .context-menu .context-menu-item')]; const hit = items.find((el) => (el.textContent || '').trim() === '复制'); if (!hit) return { err: '右键菜单里没有「复制」' }; hit.click(); return { ok: true }; })()");
+  const dup = await evalJs("(async () => { const src = " + JSON.stringify(source) + "; const api = window.lakeNative; const nodes = await api.getHomeSnapshot().then(function(s){return s.treeNodes;}); const byId = new Map(nodes.map((n) => [n.id, n])); const chain = []; let cur = byId.get(src); while (cur && cur.parentId) { chain.push(cur.parentId); cur = byId.get(cur.parentId); } for (const pid of chain.reverse()) { const row = window.__row(pid); const chev = row && row.querySelector('.tree-chevron'); if (chev && !chev.classList.contains('open')) { chev.click(); await new Promise((r) => setTimeout(r, 260)); } } const row = window.__row(src); if (!row) return { err: '目录里找不到源行' }; const b = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 60), clientY: Math.round(b.top + 8) })); await new Promise((r) => setTimeout(r, 400)); const items = [...document.querySelectorAll('.context-menu button, .context-menu .context-menu-item')]; const hit = items.find((el) => (el.textContent || '').trim() === '复制'); if (!hit) return { err: '右键菜单里没有「复制」' }; hit.click(); return { ok: true }; })()");
   if (dup && dup.err) throw new Error(dup.err);
   let id = null;
   for (let i = 0; i < 60; i++) { await sleep(250); const active = await evalJs("window.__activeId()"); if (active && !tabsBefore.includes(active)) { id = active; break; } }
@@ -130,7 +130,7 @@ async function main() {
     await evalJs(INJECT);
     const source = NOTE || await evalJs("window.__activeId()");
     if (!source) throw new Error("当前没有活动文档；请用 --note 指定");
-    const meta = await evalJs("(async () => { const n = (await window.lakeNative.listTreeNodes()).find((x) => x.id === " + JSON.stringify(source) + "); return n ? { title: n.title } : null; })()");
+    const meta = await evalJs("(async () => { const n = (await window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})).find((x) => x.id === " + JSON.stringify(source) + "); return n ? { title: n.title } : null; })()");
     console.log("源  : " + (meta ? meta.title : "?") + " [" + source + "]");
 
     // ---- 副本 A：聚合手柄 + 批量删除 ----
