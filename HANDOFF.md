@@ -22,7 +22,7 @@
 ### 261022 · 表格 P1（超链接 / 单元格备注）+ 十字高亮（用户点单）· **已提交 `212aa4f5`**
 
 - **依赖**：新增 3 个 Univer 1.0.3 精确锁包（`preset-sheets-hyper-link`、`preset-sheets-note`、`sheets-crosshair-highlight`）+ 2 个直接依赖（`sheets-hyper-link` / `-ui`，移动端要直接引移动 UI 插件）⇒ 全部 1.0.3，`univerContract` 护栏同步扩包列表。
-- **桌面**（`usheetUniverFactory` 单一入口）：超链接 preset（`urlHandler.navigateToOtherWebsite → window.open`，主进程 `setWindowOpenHandler` 已转系统浏览器）+ 备注 preset + 十字高亮插件；locale/CSS 一并引入。实测「插入」页签出现 **插入链接**；十字高亮打开表格默认开启（徽标/行高亮截图），「视图」页签出现内核开关（图标型，hover 提示「十字高亮」）。
+- **桌面**（`usheetUniverFactory` 单一入口）：超链接 preset（`urlHandler.navigateToOtherWebsite → window.open`，主进程 `setWindowOpenHandler` 已转系统浏览器）+ 备注 preset + 十字高亮插件；locale/CSS 一并引入。实测「插入」页签出现 **插入链接**；**单元格右键菜单出现「添加链接 / 添加批注」**；十字高亮打开表格默认开启（行列底色截图），「视图」页签出现内核开关（图标型，hover 提示「十字高亮」）。
 - **移动端**：超链接用**移动 UI 变体**（`UniverSheetsHyperLinkMobileUIPlugin`，弹层是移动版），入口 = ⋯ 卡「链接」；十字高亮用移动插件 + ⋯「十字高亮」toggle（默认开启）；备注在内核 1.0.3 无移动 UI 变体 ⇒ 移动端暂不接（已记录）。
 - **一处内核缺词条**：`sheets-crosshair-highlight` 1.0.3 没有 zh-CN 词条 ⇒ 菜单按钮无文字/tooltip。已在两端 `mergeLocales` 补 `sheets-crosshair-highlight.button.tooltip=十字高亮`。
 - **契约/护栏**：`usheetKernelContract.ts` 增超链接/十字高亮/备注命令 + crosshair 配置键 + 移动菜单 id；`univerContract.test.ts` 扩包；`usheetChromeModel.test` / `mobileUniverPreset.test` 增断言（链接可用、十字高亮存在、移动 UI 替换生效）。
