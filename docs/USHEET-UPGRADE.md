@@ -156,6 +156,10 @@ node scripts/check-bundle-budget.mjs
   2. **两端必须都装 `UniverSheetsFilterPlugin`**，否则没装的一端保存会**静默抹掉筛选条件**；
   3. 两端插件**注册顺序必须一致**（现在都是 sort→sortUI→filter→filterUI），否则每次保存字节不同 ⇒ 假冲突。
 - **排序不写任何字段**（只重排 `cellData`）；但含**浮动图**的行被排序后，浮动图不随之移动（它锚在 canvas 坐标上）⇒ 走查要覆盖。
+- **单元格备注（261022）= 新增一条 plugin resource**：`@univerjs/sheets-note` 用 `registerPluginResource({pluginName: PLUGIN_NAME, …})`
+  把备注写进 `workbook.resources`。⇒ **移动端即使没有备注 UI 也必须注册 `UniverSheetsNotePlugin`**（只装数据插件），
+  否则移动端保存会静默抹掉桌面写的备注。插件顺序两端都按 **hyperlink → note → crosshair**（与 §4.4 筛选同理，避免 resources 顺序不同造成假冲突）。
+- **超链接 / 十字高亮都不注册 plugin resource**（超链接直接落 cellData；高亮是纯视图），不影响正文快照。
 
 ### 4.5 facade / 引擎
 | API | 用途 | 注意 |
@@ -240,12 +244,12 @@ node scripts/check-bundle-budget.mjs
 | 能力 | 包 | 现状 |
 | --- | --- | --- |
 | 超链接（插入/编辑/跳转） | `@univerjs/preset-sheets-hyper-link` | ✅ **261022 已接**：桌面「插入 → 插入链接」；移动端 ⋯「链接」（移动 UI 变体）。urlHandler → `window.open`，主进程 setWindowOpenHandler 转系统浏览器 |
-| 单元格备注 / 批注 | `@univerjs/preset-sheets-note` | ✅ **261022 已接（仅桌面）**：装上 preset 后由内核提供入口；移动端 1.0.3 无移动 UI 变体，暂不接 |
+| 单元格备注 / 批注 | `@univerjs/preset-sheets-note` | ✅ **261022 已接（桌面 UI + 移动数据插件）**：桌面右键「添加批注」；移动端无移动 UI（看不到入口），但**必须装数据插件**，否则移动端保存会丢掉 note plugin resource（见 §4.4） |
 | 评论（threaded） | `@univerjs/preset-sheets-thread-comment` | 无入口；单人场景价值一般 |
 | 结构化表格（Excel「套用表格格式」） | `@univerjs/preset-sheets-table` | 无入口；语义要先定（避免与「表格文档」混淆） |
 | 条件格式 | `@univerjs/preset-sheets-conditional-formatting` | 无入口（用户 261022：**不急，可做可不做**） |
 | 数据验证 | `@univerjs/preset-sheets-data-validation` | 无入口（同上） |
-| 行列十字高亮 | `@univerjs/sheets-crosshair-highlight` | ✅ **261022 已接**：桌面「视图」页签内核开关 + 移动端 ⋯「十字高亮」；**打开默认开启**（`enableUsheetCrosshair`）；纯视图 op，不写正文。⚠️ 1.0.3 的 crosshair 包无 zh 词条，已在两端补 `sheets-crosshair-highlight.button.tooltip=十字高亮` |
+| 行列十字高亮 | `@univerjs/sheets-crosshair-highlight` | ✅ **261022 已接**：桌面「视图」页签内核开关 + 移动端 ⋯「十字高亮」；**打开默认开启**（`enableUsheetCrosshair`）；纯视图 op（**不注册 plugin resource、不写正文**）。内核自带 zh 词条 |
 
 ### B. 已内置、只是没入口（主要是移动端）
 

@@ -19,6 +19,16 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · 本会话改动 review（查漏补缺）· **已修复，全量门禁转绿**
+
+- **修复 1（数据安全，真问题）**：`@univerjs/sheets-note` 会把备注写进 **plugin resource**；移动端只装了 UI 无关的数据插件之前**没装** ⇒ 移动端保存会静默丢掉桌面写的备注。现在移动端也注册 `UniverSheetsNotePlugin`（只数据、无 UI），并把两端插件顺序统一为 **hyperlink → note → crosshair**（resources 顺序一致，避免假冲突）。`·`
+- **修复 2（护栏与移动端重构同步）**：`quickNoteSort.test` 的「移动端用共享本机读写」断言仍指向 `HomePage`，而 261022 重构把偏好读写移到 `src/mobile/home/useQuickNoteListModel.ts` ⇒ 断言改到新落点（仍是同一份 `lib/quickNoteSortPref`）。
+- **修复 3（红线计数）**：移动端新增只读接口 `getHomeSnapshot` 已登记进 `NONE_OPS` ⇒ `maintenancePolicy.test` 基线 42→43（ALL 76→77），注释写明来源。
+- **清理**：去掉未使用的直接依赖 `@univerjs/sheets-hyper-link`（只经 preset/-ui 使用）；去掉多余的 crosshair zh 词条覆盖（内核 1.0.3 自带 zh-CN）。
+- **复核结论（本会话各批）**：① 思源类名清零后，产品代码无 `.b3-*`/`fn__*`，改名均为同层同声明（42 态计算值多重集对照见前条）；② 分屏分隔线只在右栏 border 上、像素扫描 0 缺口；③ 目录栏渐隐仅目录树摘除、另两个接入点保留；④ 表格 P1 桌面右键「添加链接/添加批注」与十字高亮实测通过；⑤ 新增包全部 1.0.3 精确锁、`univerContract` 护栏通过。
+- **全量门禁（本次修复后）**：tsc 0 · vitest **359 文件 / 2502 通过（16 skip）** · ui-metrics 0 · check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓。
+- **未做（已知）**：`scripts/usheet-kernel-probes.mjs` 还没为 hyperlink/note/crosshair 增运行时探针（静态护栏已覆盖）；桌面 dmg 仍是旧包（需重打）。
+
 ### 261022 · 表格 P1（超链接 / 单元格备注）+ 十字高亮（用户点单）· **已提交 `212aa4f5`**
 
 - **依赖**：新增 3 个 Univer 1.0.3 精确锁包（`preset-sheets-hyper-link`、`preset-sheets-note`、`sheets-crosshair-highlight`）+ 2 个直接依赖（`sheets-hyper-link` / `-ui`，移动端要直接引移动 UI 插件）⇒ 全部 1.0.3，`univerContract` 护栏同步扩包列表。
@@ -1318,7 +1328,7 @@
   另一处是**新建知识库** sheet 左侧的图标按钮。⚠️ **笔记本（知识库）本身建完之后没有改图标的入口**（只有建库时能选）——既有缺口，非本次引入；桌面则可以（点目录行首图标本身就改）。
 - **两处内核 CSS 坑就地纠偏**（不碰 vendor）：`-tabs` 被内核写成 `overflow-y`（横向行笔误，9 个 tab 会溢出面板）⇒ 补 `overflow-x: auto`；搜索框是内核内部输入组件，我们渲染原生 input ⇒ 自己补盒子。
 - **验证**：`tsc` ✓ · `vitest` **241 passed / 5 skipped（1897 例，新增 6 例 emojiRecents）** ✓ · `ui-metrics` ✓（移动端字号字面量 49 → **47**）· `check:core` ✓ · `check:mobileui` ✓ · `check:bundle` ✓；
-  **设备**：桌面三主题实拍（418×266 / 32px 格 / 26px 表情 / 选中 tab 700；面板底 `#fff`·`#1e1f23`·`#fff`）+ 移动 AVD 实拍（372 宽 / 命中区 44×44 / 表情盒 32）+ `check:mobilesnap` **6 态 0 差异** + 22 屏走查。
+  **设备**：桌面三主题实拍（418×266 / 32px 格 / 26px 表情 / 选中 tab 700；面板底 `#fff#1e1f23`·`#fff`）+ 移动 AVD 实拍（372 宽 / 命中区 44×44 / 表情盒 32）+ `check:mobilesnap` **6 态 0 差异** + 22 屏走查。
 - **⚠️ 用户实拍抓到一真缺陷（已修）**：**桌面面板会偶发没有背景（透明）** —— 根因是面板底色取 `--lakex-editor-background-foreground`，而那些 token 由**内核在编辑器挂载时注入的 schema `<style>`** 提供；
   **没有编辑器时 tag 数 0 ⇒ token 缺失 ⇒ `background-color` 失效 ⇒ 整块透明**（复现：全新实例 `panelBg=rgba(0,0,0,0)`；把内核那两份 style 禁掉同样复现）。等有编辑器挂载它又"自己好了"，所以是间歇的。
   **修法**：在**未分层**的 `styles/kernel-theme.css` 给该表面钉 5 个 token（`.ne-ui-unicode-emoji-panel.lakex-default-theme`，值走 `--lake-*`；未分层 + 0-2-0 才压得过内核的 0-1-0 声明，且不进编辑器树）。
