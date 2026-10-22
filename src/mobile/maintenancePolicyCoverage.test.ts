@@ -1,14 +1,9 @@
 /**
- * 移动端互斥域护栏（F16）：把 src/mobile/bridge.ts 的调用点钉在判据表上。
+ * 移动端互斥域登记与调用点报告（F16）。
  *
- * 卡住三件事（任一条被破坏都会让 F16 复发或直接自锁）：
- *  1. 判据表完整性：bridge 的每个方法都必须在 src/core/maintenancePolicy.ts 里登记；
- *  2. 调用点与判据一致：runWrite 只接 write 类、runMaintenance 只接 maintenance 类，
- *     且每个 write/maintenance 类操作都真的取锁（不许"登记了却不锁"）；
- *  3. I3 无同域嵌套：同一方法体内同域只能有一个调用点，且已取锁的方法不得再调同类的
- *     bridge 方法 —— KeyedAsyncQueue 无重入，嵌套获取同域会**自锁**。
- *
- * 用源码解析而非 import：bridge 是静态对象字面量，源码即权威；也免去 Capacitor 的 mock 铺陈。
+ * 这里保留静态报告：判据表完整性、取锁类别/op 名与 I3 嵌套风险。
+ * 「锁是否真的包住网络工作、不同域是否真的不交错」由 bridge/syncGc.test.ts 的
+ * 真实操作时间线验证；静态扫描不能单独证明行为安全。
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -78,14 +73,14 @@ const OP_NAME_EXCEPTIONS: Record<string, string> = {
   restoreTreeItem: "ensureTrashNoteAssets",
 };
 
-describe("移动端互斥域护栏（F16）", () => {
+describe("移动端互斥域登记与调用点报告（F16）", () => {
   it("判据表与 bridge 方法集合完全一致（新增/删除方法必须同时改判据）", () => {
     const policy = [...WRITE_OPS, ...MAINTENANCE_OPS, ...PRIORITY_OPS, ...NONE_OPS].sort();
     const names = METHODS.map((m) => m.name).sort();
     expect(names).toEqual(policy);
   });
 
-  it("调用点类别与判据一致，且写/维护类操作都真的取锁", () => {
+  it("报告：取锁类别与判据一致，登记的写/维护类操作都有取锁调用点", () => {
     const locked = new Set<string>();
     for (const m of METHODS) {
       for (const site of lockSites(bodyOf(m))) {

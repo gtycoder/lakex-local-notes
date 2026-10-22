@@ -14,7 +14,27 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("./native/nativeSqliteDb.js", async () =>
+  (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
+);
+vi.mock("./native/assetFs", () => ({
+  saveAssetBytesFs: vi.fn(async () => {}),
+  loadAssetBytesFs: vi.fn(async () => null),
+  listAssetKeysFs: vi.fn(async () => []),
+  listNoteAssetKeysFs: vi.fn(async () => []),
+  removeAssetBytesFs: vi.fn(async () => {}),
+}));
+
+import { bridge } from "./bridge";
+import {
+  LAKE_NATIVE_BRIDGE_METHODS,
+  LAKE_NATIVE_EXTRA_METHODS,
+  LAKE_NATIVE_METHODS,
+  buildLakeNative,
+} from "./native/lakeNativeContract";
+import * as nativeSqlite from "./native/nativeSqlite";
 
 const ROOT = process.cwd();
 const read = (f: string): string => readFileSync(path.join(ROOT, f), "utf8");
@@ -33,43 +53,6 @@ const SRC = walk("src").filter((f) => /\.(ts|tsx)$/.test(f));
 const SCRIPTS = walk("scripts").filter((f) => /\.(mjs|ts|js)$/.test(f));
 const MOBILE_UI = SRC.filter((f) => f.startsWith("src/mobile/") && f !== "src/mobile/bridge.ts" && !/\.test\./.test(f));
 const SHARED = SRC.filter((f) => !f.startsWith("src/mobile/") && !/\.test\./.test(f));
-const LAKE_NATIVE = read("src/mobile/native/lakeNativeContract.ts");
-
-/** 域模块（C3-5）：bridge 用 `...xxxDomain` 展开，方法名需从域文件里一起解析。 */
-const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
-  { file: "src/mobile/bridge/assets.ts", exportName: "assetsDomain" },
-  { file: "src/mobile/bridge/sync.ts", exportName: "syncDomain" },
-  { file: "src/mobile/bridge/notes.ts", exportName: "notesDomain" },
-  { file: "src/mobile/bridge/quickNotes.ts", exportName: "quickNotesDomain" },
-  { file: "src/mobile/bridge/tree.ts", exportName: "treeDomain" },
-];
-
-function objectMethodNames(source: string, exportName: string): string[] {
-  const lines = source.split("\n");
-  const start = lines.findIndex((l) => new RegExp("^export const " + exportName + " = \\{$").test(l));
-  const out: string[] = [];
-  if (start < 0) return out;
-  let depth = 0;
-  for (let i = start; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (i === start) { depth = 1; continue; }
-    const hit = /^  (?:async )?([a-zA-Z_$][a-zA-Z0-9_$]*)\(/.exec(line);
-    if (hit && depth === 1) out.push(hit[1]);
-    depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
-    if (depth <= 0) break;
-  }
-  return out;
-}
-
-/** 解析 bridge 的一级方法名 + 域模块展开的方法名。 */
-function bridgeMethods(): string[] {
-  const source = read("src/mobile/bridge.ts");
-  const out = objectMethodNames(source, "bridge");
-  for (const mod of DOMAIN_MODULES) {
-    if (source.includes("..." + mod.exportName)) out.push(...objectMethodNames(read(mod.file), mod.exportName));
-  }
-  return out;
-}
 
 const anyMatch = (files: string[], re: RegExp): boolean => files.some((f) => re.test(read(f)));
 
@@ -86,7 +69,7 @@ const TEST_SEAM: string[] = [
 ];
 
 describe("契约面归属（bridge 每个方法都要有主）", () => {
-  const methods = bridgeMethods();
+  const methods = Object.keys(bridge);
 
   it("bridge 方法集合非空（护栏自身有效性）", () => {
     expect(methods.length).toBeGreaterThan(60);
@@ -98,7 +81,9 @@ describe("契约面归属（bridge 每个方法都要有主）", () => {
     for (const name of methods) {
       const t1 = anyMatch(MOBILE_UI, new RegExp("bridge\\." + name + "\\s*\\("));
       const t2 = anyMatch(SHARED, new RegExp("native\\." + name + "\\s*\\("));
-      const t3 = anyMatch(SCRIPTS, new RegExp("\\." + name + "\\s*\\(")) || LAKE_NATIVE.includes(`"${name}"`);
+      const t3 = anyMatch(SCRIPTS, new RegExp("\\." + name + "\\s*\\("))
+        || (LAKE_NATIVE_BRIDGE_METHODS as readonly string[]).includes(name)
+        || (LAKE_NATIVE_EXTRA_METHODS as readonly string[]).includes(name);
       if (t1) classes.t1.push(name);
       else if (t2) classes.t2.push(name);
       else if (t3) classes.t3.push(name);
@@ -114,17 +99,10 @@ describe("契约面归属（bridge 每个方法都要有主）", () => {
     expect(stale, "TEST_SEAM 里的方法已不存在，请删掉条目").toEqual([]);
   });
 
-  it("lakeNative 调试契约仍是 bridge 的子集（派生实现不得漂移）", () => {
-    // 只取两个名字数组（整文件正则会误抓 `typeof x !== "function"` 这类字符串）
-    const arrayOf = (name: string): string[] => {
-      const m = new RegExp(name + "\\s*=\\s*\\[([\\s\\S]*?)\\]").exec(LAKE_NATIVE);
-      return m ? [...m[1].matchAll(/"([a-zA-Z_$][a-zA-Z0-9_$]*)"/g)].map((x) => x[1]) : [];
-    };
-    const declared = [...arrayOf("LAKE_NATIVE_BRIDGE_METHODS"), ...arrayOf("LAKE_NATIVE_EXTRA_METHODS")];
-    expect(declared.length).toBeGreaterThan(40);
-    // 附加入口（runNativeSqliteSpike）在 LAKE_NATIVE_EXTRA_METHODS 里单独登记，本就不该是 bridge 方法。
-    const extras = ["runNativeSqliteSpike"];
-    const missing = declared.filter((n) => !methods.includes(n) && !extras.includes(n));
-    expect(missing, "lakeNative 声明了 bridge 上不存在的方法").toEqual([]);
+  it("lakeNative 契约从真实 bridge / extra 导出派生，声明的方法必须可调用", () => {
+    const extra = nativeSqlite as unknown as Record<string, unknown>;
+    expect(Object.keys(buildLakeNative({ bridge, extra })).sort()).toEqual([...LAKE_NATIVE_METHODS].sort());
+    expect(LAKE_NATIVE_BRIDGE_METHODS.filter((name) => typeof bridge[name as keyof typeof bridge] !== "function")).toEqual([]);
+    expect(LAKE_NATIVE_EXTRA_METHODS.filter((name) => typeof extra[name] !== "function")).toEqual([]);
   });
 });

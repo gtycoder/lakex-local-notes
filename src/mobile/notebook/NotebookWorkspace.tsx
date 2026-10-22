@@ -5,15 +5,12 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { bridge } from "../bridge";
-import { loadSettings } from "../../lib/settings";
-import { selectEvictionIds } from "../../core/tabLimit";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
@@ -30,6 +27,7 @@ import type { LocalNote } from "../data/noteRepository";
 import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
 import { isFavorite, toggleFavorite } from "../data/favorites";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
+import { notebookTabsStorageKey, useNotebookTabs, type NotebookTab } from "./useNotebookTabs";
 /** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
 /** 表格（usheet）：与桌面同一套 Univer 内核的**只读**查看器（Univer 运行时随之按需加载）。 */
@@ -56,15 +54,6 @@ const CREATE_MENU_KINDS: Record<string, "doc" | "usheet" | "bitable" | "board" |
   ink: "ink",
 };
 
-/** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
-interface TabState { id: string; title: string; content: string; editing: boolean; loaded: boolean; lastAccessedAt: number; kind: "doc" | "usheet" | "bitable" | "board" | "ink"; }
-
-interface OpenTabOptions {
-  activate?: boolean;
-  enterEditor?: boolean;
-  load?: boolean;
-}
-
 export interface NotebookWorkspaceProps {
   notebookId: string;
   initialNoteId?: string | null;
@@ -87,13 +76,41 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [title, setTitle] = useState("知识库");
   const [tree, setTree] = useState<NotebookTreeItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
-  const [tabs, setTabs] = useState<TabState[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(initialNoteId ?? null);
-  /** 异步保存屏障读取最新状态，避免 await 期间用户又开/关页签时用旧闭包覆盖新状态。 */
-  const tabsStateRef = useRef<TabState[]>([]);
-  const activeIdStateRef = useRef<string | null>(activeId);
-  tabsStateRef.current = tabs;
-  activeIdStateRef.current = activeId;
+  const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
+  /** 实例内正文（usheet / board）的同步 capture：完成/关标签前现取最新 body，绕过防抖。 */
+  const liveBodyCapturesRef = useRef<Map<string, () => string | null>>(new Map());
+  const reportReadError = useCallback((reason: unknown) => {
+    showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" });
+  }, []);
+  const reportReadMissing = useCallback(() => {
+    showToast("文档不存在或正文文件缺失", { type: "error" });
+  }, []);
+  const dropTabResources = useCallback((id: string) => {
+    editorsRef.current.delete(id);
+    liveBodyCapturesRef.current.delete(id);
+  }, []);
+  const getTabTitle = useCallback((id: string) => tree.find((item) => item.id === id)?.title, [tree]);
+  const {
+    tabs,
+    tabsRef: tabsStateRef,
+    active,
+    activeId,
+    mountedIds,
+    freshId,
+    openTab,
+    loadTabBody,
+    removeTab,
+    clearTabs,
+    updateTab,
+  } = useNotebookTabs({
+    notebookId,
+    initialNoteId,
+    getTitle: getTabTitle,
+    readBody: (id) => bridge.readNote(id),
+    onReadError: reportReadError,
+    onMissing: reportReadMissing,
+    onDrop: dropTabResources,
+  });
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
@@ -112,13 +129,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
   const openOutline = useCallback((v: boolean) => { setOutlineOpen(v); if (v) { setSidebarOpen(false); setTabsOpen(false); } }, []);
-  const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
-  /** 实例内正文（usheet / board）的同步 capture：完成/关标签前现取最新 body，绕过防抖。 */
-  const liveBodyCapturesRef = useRef<Map<string, () => string | null>>(new Map());
   const autoOpenedRef = useRef(false);
   const closingRef = useRef(false);
-  // 标签保持：本地记录上次打开的标签（按笔记本隔离）
-  const TABS_KEY = "lake-notes-mobile.tabs." + notebookId;
 
   // 目录树长按管理：思源 sheet 菜单 / 内联重命名 / 图标 / 移动（菜单子层）/ 删除（确认框）
   const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
@@ -146,7 +158,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   useSwipeToClose(iconSheetRef, () => setIconFor(null), !!iconFor);
   useSwipeToClose(historySheetRef, () => setHistoryFor(null), !!historyFor);
 
-  const active = tabs.find((t) => t.id === activeId) ?? null;
   /** 大纲只属于 Lake 文档：表格 / 多维表 / 画板没有大纲（与顶栏「编辑」按钮同一口径）。 */
   const outlineAvailable = !!active && (active.kind ?? "doc") === "doc";
   /**
@@ -193,27 +204,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     return () => root.removeEventListener("scroll", onScroll, true);
   }, []);
 
-  /** 刚打开（异步读回）的 tab：给正文一次淡入，避免内容"蹦"出来。 */
-  const [freshId, setFreshId] = useState<string | null>(null);
-  /**
-   * 哪些 tab 的**正文分量已挂载**（261019 优化）：恢复历史标签时只挂当前这一页，
-   * 其余标签只登记数据、等切到它时再挂（一上来就挂 8 个内核编辑器 ≈ 1s 骨架白屏）。
-   * 一旦挂过就保持（keep-alive），与原来的多 tab 行为一致。
-   */
-  const [mountedIds, setMountedIds] = useState<Set<string>>(() => new Set());
-  /** 最新 activeId（openTab 的 elision 判据要用"当前活动页"，不能用刚加入的那个 id）。 */
-  const activeIdRef = useRef<string | null>(activeId);
-  activeIdRef.current = activeId;
-  /** 正在读正文的 tab（自愈：活动页从未进 tabs 时不要永远停在骨架）。 */
-  const pendingIdsRef = useRef<Set<string>>(new Set());
-  const loadedIdsRef = useRef<Set<string>>(new Set());
-  loadedIdsRef.current = new Set(tabs.filter((tab) => tab.loaded).map((tab) => tab.id));
-  /** 读取完成计数：pendingIdsRef 是 ref，删掉待读标记本身不会触发重渲染；靠它让自愈判据重跑一次。 */
-  const [readTick, setReadTick] = useState(0);
-  /** 标签代际：`关闭全部` 递增；在途 readNote 回来时代际不一致就丢弃（否则关了又被异步加回来）。 */
-  const tabEpochRef = useRef(0);
-
-
   // 跟手开合抽屉（思源 touch.ts 口径：内容区任意横滑、面板跟手、释放按 1/3 屏宽提交）
   usePanelDrag({
     getPanel: (side: PanelSide) => document.querySelector<HTMLElement>(side === "left" ? ".side-panel--left" : ".side-panel--right"),
@@ -245,7 +235,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   useEffect(() => {
     if (autoOpenedRef.current) return;
     let saved: string[] = [];
-    try { saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]") as string[]; } catch { saved = []; }
+    try { saved = JSON.parse(localStorage.getItem(notebookTabsStorageKey(notebookId)) ?? "[]") as string[]; } catch { saved = []; }
     const knownNoteIds = new Set(tree.filter((item) => item.kind === "note").map((item) => item.id));
     saved = saved.filter((id) => knownNoteIds.has(id) || id === initialNoteId);
     if (initialNoteId) {
@@ -269,100 +259,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree]);
 
-  // 标签保持：打开标签变化即落本地（仅本机，不参与同步）
-  useEffect(() => {
-    writeLocalStorage(TABS_KEY, JSON.stringify(tabs.map((t) => t.id)));
-  }, [tabs, TABS_KEY]);
-
-  /** 只给真正激活的标签读正文；恢复历史标签时先建占位，不并发预读。 */
-  const loadTabBody = useCallback((id: string, epoch: number): Promise<void> => {
-    if (pendingIdsRef.current.has(id) || loadedIdsRef.current.has(id)) return Promise.resolve();
-    pendingIdsRef.current.add(id);
-    setReadTick((t) => t + 1);
-    return bridge.readNote(id).then((n) => {
-      if (epoch !== tabEpochRef.current) return;
-      if (!n) {
-        loadedIdsRef.current.delete(id);
-        setTabs((prev) => prev.filter((tab) => tab.id !== id));
-        if (activeIdStateRef.current === id) setActiveId(null);
-        showToast("文档不存在或正文文件缺失", { type: "error" });
-        return;
-      }
-      loadedIdsRef.current.add(id);
-      setFreshId(id);
-      window.setTimeout(() => setFreshId((cur) => (cur === id ? null : cur)), 260);
-      setTabs((prev) => {
-        if (!prev.some((tab) => tab.id === id)) {
-          loadedIdsRef.current.delete(id);
-          return prev;
-        }
-        return prev.map((tab) => tab.id === id
-          ? { ...tab, title: n.title, content: n.content, kind: n.kind, loaded: true, lastAccessedAt: Date.now() }
-          : tab);
-      });
-    }).catch((reason) => {
-      showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" });
-    }).finally(() => {
-      pendingIdsRef.current.delete(id);
-      setReadTick((t) => t + 1);
-    });
-  }, []);
-
-  const openTab = useCallback((id: string, options: OpenTabOptions = {}): Promise<void> => {
-    const activate = options.activate ?? true;
-    const enterEditor = options.enterEditor ?? false;
-    const load = options.load ?? activate;
-    if (activate) {
-      activeIdRef.current = id;
-      setActiveId(id);
-    }
-    setTabs((prev) => {
-      const existing = prev.find((tab) => tab.id === id);
-      if (existing) {
-        return prev.map((tab) => tab.id === id
-          ? { ...tab, editing: enterEditor ? true : tab.editing, lastAccessedAt: Date.now() }
-          : tab);
-      }
-      const node = tree.find((item) => item.id === id);
-      const added: TabState[] = [...prev, {
-        id,
-        title: node?.title || "无标题文档",
-        content: "",
-        editing: activate && enterEditor,
-        loaded: false,
-        lastAccessedAt: Date.now(),
-        kind: "doc",
-      }];
-      const evicted = selectEvictionIds(added.map((tab) => ({ noteId: tab.id, lastAccessedAt: tab.lastAccessedAt })), {
-        limit: loadSettings().maxOpenTabs,
-        activeNoteId: activeIdRef.current,
-        pinnedNoteIds: new Set(),
-      });
-      if (evicted.length === 0) return added;
-      const evictedSet = new Set(evicted);
-      for (const ev of evicted) {
-        editorsRef.current.delete(ev);
-        loadedIdsRef.current.delete(ev);
-        liveBodyCapturesRef.current.delete(ev);
-      }
-      return added.filter((tab) => !evictedSet.has(tab.id));
-    });
-    return load ? loadTabBody(id, tabEpochRef.current) : Promise.resolve();
-  }, [tree, loadTabBody]);
-
-  /** 自愈：活动页既不在 tabs、也没有在途读取（例如目标文档读回空/失败）⇒ 落到第一个标签，避免一直空白/骨架。
-   *  261021：没有标签时必须把 activeId 收回 null —— 否则「恢复的历史标签已被删除」会永远停在 mb-doc-skeleton
-   *  （骨架的呼吸动画看起来像在一直加载，实际没有任何在途读取/网络请求）。 */
-  useEffect(() => {
-    if (tabs.length === 0) {
-      if (activeId && !pendingIdsRef.current.has(activeId)) setActiveId(null);
-      return;
-    }
-    if (activeId && tabs.some((t) => t.id === activeId)) return;
-    if (activeId && pendingIdsRef.current.has(activeId)) return;
-    setActiveId(tabs[0].id);
-  }, [activeId, tabs, readTick]);
-
   // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
   // 否则会"文档建好了但界面不跳转"。
@@ -376,25 +272,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   /** 活动占位页统一在这里补读正文；openTab / 自愈 / 恢复都共用同一条懒加载路径。 */
   useEffect(() => {
     if (!active || active.loaded) return;
-    void loadTabBody(active.id, tabEpochRef.current);
+    void loadTabBody(active.id);
   }, [active?.id, active?.loaded, loadTabBody]);
-
-  /** 活动 tab 必须挂载正文；切到未挂载的旧 tab 时在这一刻才挂（数据早已在 tabs 里）。 */
-  useEffect(() => {
-    if (!active?.loaded) return;
-    setMountedIds((prev) => (prev.has(active.id) ? prev : new Set(prev).add(active.id)));
-  }, [active?.id, active?.loaded]);
-
-  /** tab 被关闭 / LRU 驱逐后，同步丢掉挂载标记（避免 Set 只增不减）。 */
-  useEffect(() => {
-    const ids = new Set(tabs.map((t) => t.id));
-    setMountedIds((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of prev) { if (ids.has(id)) next.add(id); else changed = true; }
-      return changed ? next : prev;
-    });
-  }, [tabs]);
 
   // 自动保存：编辑态内容变化防抖 1s 落盘；flush 返回真实写盘 Promise，失败保留界面并提示。
   const reportAutoSaveError = useCallback((_id: string, reason: unknown) => {
@@ -405,7 +284,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   }, { onError: reportAutoSaveError });
 
   /** 现取 usheet/board 最新正文并等待保存完成；成功前不释放实例 capture，也不关闭界面。 */
-  const captureAndSaveTab = useCallback(async (tab: TabState): Promise<void> => {
+  const captureAndSaveTab = useCallback(async (tab: NotebookTab): Promise<void> => {
     const captured = liveBodyCapturesRef.current.get(tab.id)?.();
     if (captured && captured !== tab.content) {
       scheduleAutoSave(tab.id, tab.title, captured);
@@ -425,29 +304,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     closingRef.current = true;
     try {
       await flushAllTabs();
-      for (const tab of tabsStateRef.current) liveBodyCapturesRef.current.delete(tab.id);
-      tabEpochRef.current += 1;
-      editorsRef.current.clear();
-      loadedIdsRef.current.clear();
-      setTabs([]);
-      setActiveId(null);
+      clearTabs();
       setTabsOpen(false);
     } catch { /* useAutoSave.onError 已给出可见原因；保留全部标签供重试 */ }
     finally { closingRef.current = false; }
-  }, [flushAllTabs]);
-
-  const removeTab = useCallback((id: string) => {
-    const current = tabsStateRef.current;
-    const idx = current.findIndex((t) => t.id === id);
-    if (idx < 0) return;
-    const next = current.filter((t) => t.id !== id);
-    setTabs(next);
-    // keep-alive 编辑器实例句柄：关闭 tab 必须同步丢弃，否则 Map 只增不删 → 泄漏
-    editorsRef.current.delete(id);
-    loadedIdsRef.current.delete(id);
-    liveBodyCapturesRef.current.delete(id);
-    if (activeIdStateRef.current === id) setActiveId(next.length ? next[Math.min(idx, next.length - 1)].id : null);
-  }, []);
+  }, [clearTabs, flushAllTabs]);
 
   const closeTab = useCallback(async (id: string) => {
     if (closingRef.current) return;
@@ -456,7 +317,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     closingRef.current = true;
     try {
       await captureAndSaveTab(closing);
-      liveBodyCapturesRef.current.delete(id);
       removeTab(id);
     } catch { /* 保留当前 tab 与编辑器，允许重试 */ }
     finally { closingRef.current = false; }
@@ -464,7 +324,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   /** 文档已进回收站后的关闭：不能再保存（写边界会正确拒绝），直接丢弃本地 tab。 */
   const discardTab = useCallback((id: string) => {
-    liveBodyCapturesRef.current.delete(id);
     removeTab(id);
   }, [removeTab]);
 
@@ -552,8 +411,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       }
       successFeedback(); // 只有真正落盘后才提示完成
     }
-    setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, content: nextContent, editing: !t.editing } : t)));
-  }, [active, cancelAutoSave]);
+    updateTab(active.id, { content: nextContent, editing: !active.editing });
+  }, [active, cancelAutoSave, updateTab]);
 
   /**
    * 行内 ＋ / 抽屉「新建」→ 建子节点（同一条创建管线：建库 → 刷新目录 → 收抽屉 → 打开标签）。
@@ -890,7 +749,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             const t = e.target.value;
             const id = activeId;
             if (!id || !active?.loaded) return;
-            setTabs((prev) => prev.map((x) => (x.id === id ? { ...x, title: t } : x)));
+            updateTab(id, { title: t });
             scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
           }}
         />
@@ -946,7 +805,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                 active={t.id === activeId}
                 editing={t.editing}
                 onChange={(c) => {
-                  setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x)));
+                  updateTab(t.id, { content: c });
                   if (t.editing) scheduleAutoSave(t.id, t.title, c);
                 }}
                 onCapture={(capture) => {
@@ -960,7 +819,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   content={t.content}
                   active={t.id === activeId}
                   readOnly={!t.editing}
-                  onChange={(c) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
+                  onChange={(c) => { updateTab(t.id, { content: c }); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
                 />
               </Suspense>
             ) : t.kind === "bitable" ? (
@@ -972,7 +831,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   content={t.content}
                   editing={t.editing && t.id === activeId}
                   onChange={(c) => {
-                    setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x)));
+                    updateTab(t.id, { content: c });
                     if (t.editing) scheduleAutoSave(t.id, t.title, c);
                   }}
                 />
@@ -986,7 +845,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   active={t.id === activeId}
                   editing={t.editing}
                   onChange={(c) => {
-                    setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x)));
+                    updateTab(t.id, { content: c });
                     if (t.editing) scheduleAutoSave(t.id, t.title, c);
                   }}
                   onCapture={(capture) => {
@@ -1005,7 +864,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               note={{ id: t.id, title: t.title, content: t.content } as LocalNote}
               content={t.content}
               editing={t.editing}
-              onContentChange={(c, plain) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c, plain); }}
+              onContentChange={(c, plain) => { updateTab(t.id, { content: c }); if (t.editing) scheduleAutoSave(t.id, t.title, c, plain); }}
               documents={[]}
               hidePanels
               findOpen={findOpen && t.id === activeId}
