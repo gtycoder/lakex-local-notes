@@ -110,7 +110,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     const snapshot = await bridge.getHomeSnapshot();
     setTreeNodes(snapshot.treeNodes);
     setNotes(snapshot.notes);
-    setQuickNotes(snapshot.quickNotes);
+    setQuickNotes(snapshot.quickNotes.items);
   }, []);
 
   /**

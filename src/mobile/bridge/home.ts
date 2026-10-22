@@ -1,6 +1,6 @@
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
-import type { QuickNoteListItem } from "../data/quickNotesRepository";
+import type { QuickNotePage } from "../data/quickNotesRepository";
 import * as noteRepository from "../data/noteRepository.js";
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
 import * as treeRepository from "../data/treeRepository.js";
@@ -10,7 +10,7 @@ import { ensureDb } from "./context";
 export interface HomeSnapshot {
   treeNodes: TreeNode[];
   notes: LocalNoteSummary[];
-  quickNotes: QuickNoteListItem[];
+  quickNotes: QuickNotePage;
 }
 
 export const homeDomain = {
@@ -19,7 +19,7 @@ export const homeDomain = {
     const [treeNodes, notes, quickNotes] = await Promise.all([
       treeRepository.listTreeNodes(db),
       noteRepository.listNotes(db),
-      quickNotesRepository.listQuickNotes(db),
+      quickNotesRepository.listQuickNotePage(db),
     ]);
     return { treeNodes, notes, quickNotes };
   },

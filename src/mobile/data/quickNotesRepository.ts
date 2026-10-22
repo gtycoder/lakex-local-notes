@@ -48,6 +48,21 @@ export interface QuickNoteListItem {
   tags: string[];
 }
 
+export interface QuickNoteCursor {
+  updatedAt: string;
+  id: string;
+}
+
+export interface QuickNotePage {
+  items: QuickNoteListItem[];
+  nextCursor: QuickNoteCursor | null;
+}
+
+interface QuickNotePageOptions {
+  limit?: number;
+  cursor?: QuickNoteCursor;
+}
+
 export interface QuickNoteReadResult {
   id: string;
   content: StoredQuickNoteContent;
@@ -88,19 +103,18 @@ function parseTagsJson(raw: unknown): string[] {
   }
 }
 
-export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> {
-  const rows = await d.prepare(
-    "SELECT id, created_at, preview_text, image_count, updated_at, first_image, tags_json FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC, id DESC",
-  ).all() as Array<{
-    id: string;
-    created_at: string;
-    preview_text: string;
-    image_count: number;
-    updated_at: string;
-    first_image: string | null;
-    tags_json: string;
-  }>;
-  return rows.map((row) => ({
+type QuickNoteListRow = {
+  id: string;
+  created_at: string;
+  preview_text: string;
+  image_count: number;
+  updated_at: string;
+  first_image: string | null;
+  tags_json: string;
+};
+
+function quickNoteListItemFromRow(row: QuickNoteListRow): QuickNoteListItem {
+  return {
     id: String(row.id),
     createdAt: String(row.created_at),
     previewText: String(row.preview_text),
@@ -108,7 +122,36 @@ export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> 
     updatedAt: String(row.updated_at),
     firstImage: row.first_image ? String(row.first_image) : null,
     tags: parseTagsJson(row.tags_json),
-  }));
+  };
+}
+
+/** 小记列表投影的分页读取；不传 limit 时保持旧的全集行为。 */
+export async function listQuickNotePage(d: MobileDb, options: QuickNotePageOptions = {}): Promise<QuickNotePage> {
+  const values: unknown[] = [];
+  let where = "deleted_at IS NULL AND restore_pending_at IS NULL";
+  if (options.cursor) {
+    where += " AND (updated_at < ? OR (updated_at = ? AND id < ?))";
+    values.push(options.cursor.updatedAt, options.cursor.updatedAt, options.cursor.id);
+  }
+  const bounded = typeof options.limit === "number" && options.limit > 0;
+  const sql = "SELECT id, created_at, preview_text, image_count, updated_at, first_image, tags_json FROM quick_notes"
+    + " WHERE " + where
+    + " ORDER BY updated_at DESC, id DESC"
+    + (bounded ? " LIMIT ?" : "");
+  if (bounded) values.push(options.limit! + 1);
+  const rows = await d.prepare(sql).all(...values) as QuickNoteListRow[];
+  const hasMore = bounded && rows.length > options.limit!;
+  const visibleRows = hasMore ? rows.slice(0, options.limit) : rows;
+  const items = visibleRows.map(quickNoteListItemFromRow);
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? { updatedAt: last.updatedAt, id: last.id } : null,
+  };
+}
+
+export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> {
+  return (await listQuickNotePage(d)).items;
 }
 
 /**

@@ -5,13 +5,13 @@ const mocks = vi.hoisted(() => ({
   ensureDb: vi.fn(),
   listTreeNodes: vi.fn(),
   listNotes: vi.fn(),
-  listQuickNotes: vi.fn(),
+  listQuickNotePage: vi.fn(),
 }));
 
 vi.mock("./context", () => ({ ensureDb: mocks.ensureDb }));
 vi.mock("../data/treeRepository.js", () => ({ listTreeNodes: mocks.listTreeNodes }));
 vi.mock("../data/noteRepository.js", () => ({ listNotes: mocks.listNotes }));
-vi.mock("../data/quickNotesRepository.js", () => ({ listQuickNotes: mocks.listQuickNotes }));
+vi.mock("../data/quickNotesRepository.js", () => ({ listQuickNotePage: mocks.listQuickNotePage }));
 
 import { homeDomain } from "./home";
 
@@ -20,7 +20,7 @@ beforeEach(() => {
   mocks.ensureDb.mockResolvedValue(mocks.db);
   mocks.listTreeNodes.mockResolvedValue([{ id: "nb1", title: "笔记本" }]);
   mocks.listNotes.mockResolvedValue([{ id: "n1", title: "文档" }]);
-  mocks.listQuickNotes.mockResolvedValue([{ id: "q1", previewText: "小记" }]);
+  mocks.listQuickNotePage.mockResolvedValue({ items: [{ id: "q1", previewText: "小记" }], nextCursor: null });
 });
 
 describe("mobile home snapshot query", () => {
@@ -28,12 +28,12 @@ describe("mobile home snapshot query", () => {
     await expect(homeDomain.getHomeSnapshot()).resolves.toEqual({
       treeNodes: [{ id: "nb1", title: "笔记本" }],
       notes: [{ id: "n1", title: "文档" }],
-      quickNotes: [{ id: "q1", previewText: "小记" }],
+      quickNotes: { items: [{ id: "q1", previewText: "小记" }], nextCursor: null },
     });
     expect(mocks.ensureDb).toHaveBeenCalledTimes(1);
     expect(mocks.listTreeNodes).toHaveBeenCalledWith(mocks.db);
     expect(mocks.listNotes).toHaveBeenCalledWith(mocks.db);
-    expect(mocks.listQuickNotes).toHaveBeenCalledWith(mocks.db);
+    expect(mocks.listQuickNotePage).toHaveBeenCalledWith(mocks.db);
   });
 
   it("任一投影读取失败时整体失败，不返回半份首页状态", async () => {
