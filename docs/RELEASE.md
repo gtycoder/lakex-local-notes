@@ -145,8 +145,14 @@ codesign -dv --verbose=4 "release/mac-arm64/LocalLakexNotes.app"
 | --- | --- | --- |
 | macOS | `macos-15` | `*.dmg` / `*.zip`（未签名） |
 | Windows | `windows-latest` | NSIS 安装包 `*.exe`（未签名） |
-| Android | `ubuntu-24.04` | `app-debug.apk`（debug 签名） |
+| Android | `ubuntu-24.04` | `LocalLakexNotes-<version>-android-debug.apk`（debug 签名） |
 | Publish | `ubuntu-24.04` | GitHub Release；配置 `GITEE_TOKEN` 时同步 Gitee 发行版 |
+
+产物命名统一为「产品名 + 版本」：
+
+- macOS：`LocalLakexNotes-<version>-arm64.dmg` / `-arm64-mac.zip`
+- Windows：`LocalLakexNotes Setup <version>.exe`（electron-builder NSIS 默认命名）
+- Android：`LocalLakexNotes-<version>-android-debug.apk`（debug 签名；正式版换 release keystore 后可去掉 -debug）
 
 ### 3. 发版步骤
 

@@ -82,6 +82,10 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Rename APK with product name + version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          mv android/app/build/outputs/apk/debug/app-debug.apk              "android/app/build/outputs/apk/debug/LocalLakexNotes-${version}-android-debug.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android
