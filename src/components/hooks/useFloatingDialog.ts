@@ -28,7 +28,7 @@ interface StoredDialogState {
   y: number;
 }
 
-const STORE_KEY = "lake-notes-v3.dialog-states";
+const STORE_KEY = "local-lakex-notes-v3.dialog-states";
 const EDGE = 8;
 
 function readStore(): Record<string, StoredDialogState> {

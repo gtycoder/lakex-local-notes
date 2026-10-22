@@ -23,8 +23,8 @@ async function syncAll(creator) { for (const id of [creator].concat(IDS.filter(f
 async function tree(id) { return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType,parentId:n.parentId,sortOrder:n.sortOrder,icon:n.icon||null};});})'); }
 function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; fs.mkdirSync(dir, { recursive: true });
-  for (const f of ['lake-notes-mobileSQLite.db', 'lake-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakenotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
-  const db = new Database(dir + '/lake-notes-mobileSQLite.db', { readonly: true });
+  for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
+  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,title,parent_id,sort_order,icon,doc_kind FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), parentId: r.parent_id, sortOrder: r.sort_order, icon: r.icon || null, kind: r.doc_kind || 'doc' }; }); }
   finally { db.close(); }
 }

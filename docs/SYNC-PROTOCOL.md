@@ -23,7 +23,7 @@
 
 ---
 
-## 2. S3 对象布局（前缀由 settings.prefix 决定，默认 `lake-notes/`）
+## 2. S3 对象布局（前缀由 settings.prefix 决定，默认 `local-lakex-notes/`）
 
 ```text
 objects/{noteId}-{contentHash}.lake     Lake 正文（内容寻址，幂等 PUT）
@@ -213,7 +213,7 @@ interface ManifestFolder {
 | **D4** | 404 判定两端两套：桌面 `isNoSuchKey`（含 `NotFound`），移动端只认 404 状态码 / `NoSuchKey` | 桌面注释**明确记录**"部分操作（AWS/七牛 Kodo）返回 NotFound" ⇒ 移动端可能把"对象缺失"当错误抛出（首次同步判定失败） | 移动端改用 core 的 `isNoSuchKey`（纯函数） | **P1** |
 | **D6** | 移动端有**两套** client 工厂且设置不同：`bridge.createS3Client`（用 `cfg.forcePathStyle`、**无** checksum 绕行）只服务「测连通」；`mobile/s3Store`（硬编码 false、**有**绕行）服务全部同步 | 可能出现「测连通报 Checksum mismatch，真同步却正常」这类难查的不一致；`forcePathStyle` 也会两边不同 | 合并为**一个** client 工厂（移动端内部先自洽，再谈与桌面对齐） | **P1** |
 | **D2** | `forcePathStyle` 移动端写死 false | 自建 MinIO（path-style）无法在移动端使用；主流公有云不受影响 | ✅ **261017 用户定稿：不做**。支持范围 = 虚拟托管风格（阿里云 OSS 官方仅支持虚拟托管；腾讯云 COS 2024+ 新桶不支持 path-style；AWS/七牛同理）。移动端固定 false 写成有意约束；桌面端保留开关。自建 MinIO 等需要 path-style + http 的场景与 D3 一起另立项 | ✅ |
-| **D5** | 移动端 gzip PUT **不带** `Content-Encoding: gzip`（桌面带） | 读侧按魔数识别 ⇒ 当前兼容；但对象元数据两端不同（控制台/第三方工具看移动端 manifest 是"未知二进制"） | ✅ **261017 已修 + 真云验证**：七牛 `local-lake-hebei` / prefix `lake-notes-dev1` 实测——gzip 体（不带 header）存回 `ContentEncoding=null`；带 `Content-Encoding: gzip` 存回 `ContentEncoding=gzip`，Get 回压缩字节（SDK 不解压），读侧魔数兼容仍成立。移动端 gzip 分支补 header；`s3PortGuards` 加 D5 护栏 | ✅ |
+| **D5** | 移动端 gzip PUT **不带** `Content-Encoding: gzip`（桌面带） | 读侧按魔数识别 ⇒ 当前兼容；但对象元数据两端不同（控制台/第三方工具看移动端 manifest 是"未知二进制"） | ✅ **261017 已修 + 真云验证**：七牛 `local-lake-hebei` / prefix `local-lakex-notes-dev1` 实测——gzip 体（不带 header）存回 `ContentEncoding=null`；带 `Content-Encoding: gzip` 存回 `ContentEncoding=gzip`，Get 回压缩字节（SDK 不解压），读侧魔数兼容仍成立。移动端 gzip 分支补 header；`s3PortGuards` 加 D5 护栏 | ✅ |
 | **D3** | `normalizeEndpoint` / `validateS3Settings` 只在桌面 | 误写 endpoint 两端表现不同；移动端不强制 https（签名重放风险） | ✅ **261017 已修**：D2 定稿不做 MinIO 后冲突消失；移动端 client 工厂/保存/读取统一走 core 规范化 + 保存时校验（强制 https），错误在设置页可见。护栏：`s3PortGuards` D3/D7 | ✅ |
 | **D7** | region 缺省不同（桌面 `cn-east-1`，移动端空） | 用户没填 region 时行为可能不同 | ✅ **261017 已修**：移动端 client/native 配置/保存读取统一 `region?.trim() \|\| "cn-east-1"` | ✅ |
 

@@ -160,7 +160,7 @@ export default async function run(ctx) {
   const page = ctx.page; pageRef = page;
   const theme = ctx.args[0] || "light";
   const width = Number(ctx.args[1] || 1315);
-  await page.evaluate('(function () { var k = "lake-notes-v1.settings"; var s = JSON.parse(localStorage.getItem(k) || "{}"); s.theme = ' + JSON.stringify(theme) + '; localStorage.setItem(k, JSON.stringify(s)); localStorage.setItem("lake-notes-v2.sidebar-mode", "docked"); })()');
+  await page.evaluate('(function () { var k = "local-lakex-notes-v1.settings"; var s = JSON.parse(localStorage.getItem(k) || "{}"); s.theme = ' + JSON.stringify(theme) + '; localStorage.setItem(k, JSON.stringify(s)); localStorage.setItem("local-lakex-notes-v2.sidebar-mode", "docked"); })()');
   await page.send("Emulation.setDeviceMetricsOverride", { width: width, height: 868, deviceScaleFactor: 1, mobile: false });
   await page.send("Page.reload", { ignoreCache: false });
   await page.sleep(4600);

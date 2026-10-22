@@ -4,13 +4,13 @@
  * 视觉与行为**复用资料库侧栏的把手**（`.ln-split-handle`，见 kit.css）与唯一分隔条实现
  * （`SplitHandle`）：零布局占位 + 绝对定位的 10px 命中带 + 居中 2px 药丸。
  *
- * 宽度**设备本地**：存 `lake-notes-v3.split.<key>`（与「表格本机视图 / 多维表导航」同族：纯展示，
+ * 宽度**设备本地**：存 `local-lakex-notes-v3.split.<key>`（与「表格本机视图 / 多维表导航」同族：纯展示，
  * 不进正文、不进 S3）。没拖过时**不给内联变量** ⇒ 各站点用自己 CSS 里的默认宽度。
  */
 import { Children, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { SplitHandle } from "./SplitHandle";
 
-const KEY_PREFIX = "lake-notes-v3.split.";
+const KEY_PREFIX = "local-lakex-notes-v3.split.";
 
 function readStored(key: string): number | null {
   try {
@@ -24,7 +24,7 @@ function readStored(key: string): number | null {
 export interface SplitPaneProps {
   /** 分隔条的可访问名（如「调整资源列表宽度」）。 */
   ariaLabel: string;
-  /** 设备本地的记住键（`lake-notes-v3.split.<key>`）。 */
+  /** 设备本地的记住键（`local-lakex-notes-v3.split.<key>`）。 */
   storageKey: string;
   minWidth?: number;
   maxWidth?: number;

@@ -1,7 +1,7 @@
 /**
  * 长按桌面图标 →「小记」静态快捷方式（Android App Shortcuts）的深链处理。
  *
- * 链路：`res/xml/shortcuts.xml` 的快捷方式发 `ACTION_VIEW` + `lakenotes://quick-note` ⇒
+ * 链路：`res/xml/shortcuts.xml` 的快捷方式发 `ACTION_VIEW` + `locallakexnotes://quick-note` ⇒
  * MainActivity（singleTask）⇒ `@capacitor/app` 的 `getLaunchUrl()`（冷启动）/ `appUrlOpen`（已在运行）。
  * 两边都收敛到 `subscribeQuickNoteShortcut`：命中即回调，让上层切到「小记」标签并直接打开新建写作区。
  *
@@ -10,7 +10,7 @@
  */
 import { registerPlugin } from "@capacitor/core";
 
-const QUICK_NOTE_URL = "lakenotes://quick-note";
+const QUICK_NOTE_URL = "locallakexnotes://quick-note";
 
 /**
  * 本次启动是否由「小记」快捷方式拉起（冷启动 getLaunchUrl 命中）。null = 尚未判定。
@@ -67,7 +67,7 @@ export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean 
   if (!url) return false;
   const normalized = url.trim().toLowerCase();
   // QUICK_NOTE_URL 是自建快捷方式的正式 URL；`quicknote` 是历史别名（老版本 shortcuts.xml 发过）
-  return normalized.startsWith(QUICK_NOTE_URL) || normalized.startsWith("lakenotes://quicknote");
+  return normalized.startsWith(QUICK_NOTE_URL) || normalized.startsWith("locallakexnotes://quicknote");
 }
 
 /**

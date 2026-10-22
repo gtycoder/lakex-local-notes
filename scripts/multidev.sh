@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LocalLakeNotes 本地多端联调脚本（顺序双端）。
+# LocalLakexNotes 本地多端联调脚本（顺序双端）。
 # 用法：
 #   ./scripts/multidev.sh vite       # 启动 vite dev server（自动临时禁用 electron 自动拉起）
 #   ./scripts/multidev.sh device-a   # 启动设备 A（默认 dev userData）

@@ -21,7 +21,7 @@ describe("系统分享接入（ACTION_SEND）", () => {
   });
 
   it("原生插件接住分享，冷启动 load / 热启动 handleOnNewIntent 都覆盖", () => {
-    const kt = read("../../../android/app/src/main/java/com/lakenotes/mobile/SharedContentPlugin.kt");
+    const kt = read("../../../android/app/src/main/java/com/locallakexnotes/mobile/SharedContentPlugin.kt");
     expect(kt).toMatch(/Intent\.ACTION_SEND/);
     expect(kt).toMatch(/override fun load\(\)/);
     expect(kt).toMatch(/handleOnNewIntent/);

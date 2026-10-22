@@ -84,7 +84,7 @@ beforeEach(() => {
   mocks.deleteOrphanAsset.mockResolvedValue(undefined);
   mocks.gcDeepCleanup.mockResolvedValue({ deletedCount: 2, candidateCount: 4, keys: ["a", "b"] });
   mocks.getDiagnostics.mockResolvedValue(diagnostics);
-  mocks.getAppInfo.mockResolvedValue({ name: "LocalLakeNotes", version: "1", build: "1", protocolVersion: 1, platform: "android" });
+  mocks.getAppInfo.mockResolvedValue({ name: "LocalLakexNotes", version: "1", build: "1", protocolVersion: 1, platform: "android" });
   mocks.getCacheSummary.mockResolvedValue(cache);
   mocks.clearDerivedCaches.mockResolvedValue({ cleared: { runtimeBlobBytes: 3 } });
   host = document.createElement("div");
@@ -104,7 +104,7 @@ describe("useSettingsSectionData", () => {
     expect(data.history).toEqual(history);
     expect(data.orphans).toEqual([orphan]);
     expect(data.cacheSummary).toEqual(cache);
-    expect(data.appInfo?.name).toBe("LocalLakeNotes");
+    expect(data.appInfo?.name).toBe("LocalLakexNotes");
     expect(data.diagnostics).toEqual(diagnostics);
   });
 

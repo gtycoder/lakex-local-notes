@@ -68,7 +68,7 @@ node scripts/css-audit/check-stylesnap.mjs --port 9231 --states "resources:1315:
 
 自包含靠三件事，都在 `stylesnap.mjs`：
 
-1. `pin()` 每个态都 `Page.reload` + 钉主题/侧栏/大纲模式 + **清 `lake-notes-v3.dialog-states`**（否则夹具副本会带上「上一台机器把弹窗拖到哪、拉多大」，所有 settings 态整体位移）；
+1. `pin()` 每个态都 `Page.reload` + 钉主题/侧栏/大纲模式 + **清 `local-lakex-notes-v3.dialog-states`**（否则夹具副本会带上「上一台机器把弹窗拖到哪、拉多大」，所有 settings 态整体位移）；
 2. 每个态都**显式设置 CDP 媒体模拟**（没写的清空），避免 reduced-motion / transparency 泄漏到下一态；
 3. 末态**归位鼠标并等「块拖动把手」收干净** —— 它带过渡，而 `settle()` 只等 DOM/几何稳定、不等过渡结束，
    否则 `settings:1315:light` 这类态连拍两份会出现「元素数相同、指纹不同」的 11 条假差异（260906 实测）。
@@ -84,7 +84,7 @@ node scripts/css-audit/check-stylesnap.mjs --port 9231 --states "resources:1315:
 
 ```bash
 cd <仓库根>
-FX="$HOME/Library/Caches/lake-notes-css-audit/fixture"   # 冻结位置（缓存目录，不进 git）
+FX="$HOME/Library/Caches/local-lakex-notes-css-audit/fixture"   # 冻结位置（缓存目录，不进 git）
 RUN=/tmp/lake-fixture-build
 
 # ① 空用户目录起实例（必须空：生成器要从零造）

@@ -277,13 +277,13 @@ describe("mobile maintenance writes", () => {
       setItem: (key: string, value: string) => storage.set(key, value),
       removeItem: (key: string) => storage.delete(key),
     });
-    storage.set("lake-notes-mobile.s3", JSON.stringify({
+    storage.set("local-lakex-notes-mobile.s3", JSON.stringify({
       endpoint: "https://s3.example.test",
       region: "us-east-1",
-      bucket: "lake-notes",
+      bucket: "local-lakex-notes",
       accessKeyId: "access-key",
       secretAccessKey: "secret-key",
-      prefix: "lake-notes",
+      prefix: "local-lakex-notes",
     }));
 
     try {

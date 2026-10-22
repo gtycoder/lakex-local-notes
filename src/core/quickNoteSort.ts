@@ -23,7 +23,7 @@ export const QUICK_NOTE_SORT_OPTIONS: ReadonlyArray<{ id: QuickNoteSort; label: 
 ];
 
 /** 存储键（桌面与移动共用；**本机**偏好，见 STORAGE-LAYERS §5）。 */
-export const QUICK_NOTE_SORT_KEY = "lake-notes-v3.quick-notes-sort";
+export const QUICK_NOTE_SORT_KEY = "local-lakex-notes-v3.quick-notes-sort";
 export const QUICK_NOTE_SORT_DEFAULT: QuickNoteSort = "recent";
 
 const isSort = (v: unknown): v is QuickNoteSort =>

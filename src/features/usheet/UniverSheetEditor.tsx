@@ -43,7 +43,7 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 
 
 /** 工具栏「收起 / 展开」偏好（设备本地；遵 AGENTS §4，不进正文 / S3 / 历史）。 */
-const RIBBON_COLLAPSED_KEY = "lake-notes-v3.usheet.ribbon-collapsed";
+const RIBBON_COLLAPSED_KEY = "local-lakex-notes-v3.usheet.ribbon-collapsed";
 
 /** 只声明本文件用到的 FWorkbook 方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
 type UniverBook = {

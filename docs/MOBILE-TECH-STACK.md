@@ -2,7 +2,7 @@
 
 > 本文是移动端**唯一架构规格**。运行方式 / AVD / CDP / 验收见 `HANDOFF.md` §8；
 > 长期红线与机制见 `AGENTS.md`；内核（lakex）行为契约见 `docs/LAKEX-CONTRACT.md`。
-> 移动端是**正式端之一**（Capacitor Android，包名 `com.lakenotes.mobile`），桌面红线同样适用。
+> 移动端是**正式端之一**（Capacitor Android，包名 `com.locallakexnotes.mobile`），桌面红线同样适用。
 
 ## 一、三层边界，以及"每层用哪种复用方式"
 
@@ -224,7 +224,7 @@
     - **正文语义**：与桌面同一份 core 写入纯函数（`core/bitableMutations`）；序列化恒写 canonical 导航（第一表 / 第一视图）
       ⇒ 切数据表/视图是**设备本地 UI 状态**，不写正文、不落盘、不进 S3。**bitable 正文 JSON 绝不给 Lake 编辑器**。
       导航的读写/应用是**单一来源** `features/bitable/bitableNavStore.ts`（桌面 `BitableEditor` 与移动端共用；
-      localStorage 键 `lake-notes-v3.bitable-nav.<noteId>`），切表只写导航、重开回到上次那张表。
+      localStorage 键 `local-lakex-notes-v3.bitable-nav.<noteId>`），切表只写导航、重开回到上次那张表。
     - **行窗口**：记录全集留在模型里，只限制挂载行（100 条/页 + 显式「加载更多」；不静默裁剪）。真实虚拟滚动视设备表现再定（P1）。
     - **已知边界（P1 清单）**：复制/剪切/粘贴、公式库、数字格式、排序/筛选/分组、填充柄、附件/关联编辑、撤销重做、
       视图切换与视图配置、真实虚拟滚动。`docs/BITABLE-VIEWPORT.md` 的桌面行窗口契约不因本条改动。
@@ -278,7 +278,7 @@
 > 问题：桌面端 Lake（lakex 内核）能输入的东西，移动端能不能**展示**、能不能**编辑**。
 > 口径（用户 261010 定）：移动端的输入面**只有底部 dock** —— **`/` 斜杠面板在移动端不可触发（小记与文档都不能）**，
 > 所有工具栏都走 dock 那条路。实测：隔离桌面实例（dev1 前缀）+ 模拟器 App，夹具经 **S3 真实链路**送达
-> （桌面 16 篇 → `lake-notes-dev1` → 移动端拉取应用 17 篇 / 4.55MB；图片·PDF·音频·视频用 `~/Documents` 真实文件）。
+> （桌面 16 篇 → `local-lakex-notes-dev1` → 移动端拉取应用 17 篇 / 4.55MB；图片·PDF·音频·视频用 `~/Documents` 真实文件）。
 
 **移动端输入面（设备实测枚举）**
 

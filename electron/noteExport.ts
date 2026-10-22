@@ -70,9 +70,9 @@ export class NoteExport {
     return exportDir;
   }
 
-  /** 默认导出根目录（桌面 lake-notes-导出）。 */
+  /** 默认导出根目录（桌面 local-lakex-notes-导出）。 */
   private defaultExportBase(): string {
-    return path.join(os.homedir(), "Desktop", "lake-notes-导出");
+    return path.join(os.homedir(), "Desktop", "local-lakex-notes-导出");
   }
 
   /**
@@ -389,7 +389,7 @@ export class NoteExport {
   }
 
   /**
-   * M1：导出资料包（Markdown + 图片）到桌面 lake-notes-导出/{标题}/。
+   * M1：导出资料包（Markdown + 图片）到桌面 local-lakex-notes-导出/{标题}/。
    * 图片引用从 Lake 生成的 markdown 里以轻量正则提取（`![](http://127.0.0.1:19876/{noteId}/{filename})`），
    * 复制到导出目录 images/ 并把 MD 改写为相对引用，产出自包含资料包。
    */

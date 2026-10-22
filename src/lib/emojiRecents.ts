@@ -13,8 +13,8 @@ import { writeLocalStorage } from "./localStorageSafe";
 
 /** 桶 → localStorage 键。`icon` 沿用 261013 首版键名（不迁移，避免动已落盘的数据）。 */
 const KEYS = {
-  icon: "lake-notes-v3.emoji-recents",
-  input: "lake-notes-v3.emoji-recents.input",
+  icon: "local-lakex-notes-v3.emoji-recents",
+  input: "local-lakex-notes-v3.emoji-recents.input",
 } as const;
 
 export type EmojiRecentBucket = keyof typeof KEYS;

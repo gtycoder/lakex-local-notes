@@ -5,7 +5,7 @@ import path from "node:path";
 import { readVersionsFromPackageJson, resolveDataFolder } from "./registerSystemInfo.js";
 import { IpcInputError } from "../ipcLimits.js";
 
-const UD = "/Users/x/Library/Application Support/lake-notes-dev";
+const UD = "/Users/x/Library/Application Support/local-lakex-notes-dev";
 const WS = path.join(UD, "workspace-default");
 
 describe("关于页 IPC 白名单与版本读取", () => {
@@ -15,7 +15,7 @@ describe("关于页 IPC 白名单与版本读取", () => {
     expect(resolveDataFolder(UD, WS, "assets").dir).toBe(path.join(WS, "note-assets"));
     expect(resolveDataFolder(UD, WS, "history").dir).toBe(path.join(WS, "history"));
     expect(resolveDataFolder(UD, WS, "quickNotes").dir).toBe(path.join(WS, "quick-notes"));
-    expect(resolveDataFolder(UD, WS, "logs").revealTarget).toBe(path.join(UD, "logs", "lake-notes.log"));
+    expect(resolveDataFolder(UD, WS, "logs").revealTarget).toBe(path.join(UD, "logs", "local-lakex-notes.log"));
   });
 
   it("未知 kind 一律拒绝（渲染层不得传任意路径）", () => {
@@ -28,12 +28,12 @@ describe("关于页 IPC 白名单与版本读取", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-sysinfo-"));
     const file = path.join(dir, "package.json");
     fs.writeFileSync(file, JSON.stringify({
-      name: "lake-notes-electron", version: "0.1.0", description: "本地优先",
+      name: "local-lakex-notes", version: "0.1.0", description: "本地优先",
       dependencies: { "@dlient/lakex-doc-react": "0.1.3", "better-sqlite3": "^13.0.0" },
       devDependencies: { electron: "43.4.0", typescript: "^5.9.0" },
     }));
     const r = readVersionsFromPackageJson(file);
-    expect(r.app).toEqual({ name: "lake-notes-electron", version: "0.1.0", description: "本地优先" });
+    expect(r.app).toEqual({ name: "local-lakex-notes", version: "0.1.0", description: "本地优先" });
     expect(r.deps["@dlient/lakex-doc-react"]).toBe("0.1.3");
     expect(r.deps.electron).toBe("43.4.0");
     expect(r.deps["not-listed"]).toBeUndefined();

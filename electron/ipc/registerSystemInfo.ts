@@ -28,9 +28,9 @@ export function readVersionsFromPackageJson(pkgJsonPath: string): { app: SystemI
     const all = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
     const deps: Record<string, string> = {};
     for (const key of wanted) if (all[key]) deps[key] = all[key];
-    return { app: { name: pkg.name ?? "lake-notes", version: pkg.version ?? "0.0.0", description: pkg.description ?? "" }, deps };
+    return { app: { name: pkg.name ?? "local-lakex-notes", version: pkg.version ?? "0.0.0", description: pkg.description ?? "" }, deps };
   } catch {
-    return { app: { name: "lake-notes", version: "0.0.0", description: "" }, deps: {} };
+    return { app: { name: "local-lakex-notes", version: "0.0.0", description: "" }, deps: {} };
   }
 }
 
@@ -39,7 +39,7 @@ export function resolveDataFolder(userData: string, workspaceRoot: string, kind:
   switch (kind) {
     case "data": return { dir: userData, revealTarget: userData };
     case "workspace": return { dir: workspaceRoot, revealTarget: workspaceRoot };
-    case "logs": return { dir: path.join(userData, "logs"), revealTarget: path.join(userData, "logs", "lake-notes.log") };
+    case "logs": return { dir: path.join(userData, "logs"), revealTarget: path.join(userData, "logs", "local-lakex-notes.log") };
     case "assets": return { dir: path.join(workspaceRoot, "note-assets"), revealTarget: path.join(workspaceRoot, "note-assets") };
     case "history": return { dir: path.join(workspaceRoot, "history"), revealTarget: path.join(workspaceRoot, "history") };
     case "quickNotes": return { dir: path.join(workspaceRoot, "quick-notes"), revealTarget: path.join(workspaceRoot, "quick-notes") };

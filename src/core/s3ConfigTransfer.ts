@@ -4,7 +4,7 @@
  * 为什么需要：安卓端手填 Endpoint / Region / Bucket / 前缀 / AK / SK 六个字段很痛苦；桌面已经有一份
  * 可用配置，导出成一串迁移码，在另一端粘贴导入即可。
  *
- * 形态：`LNS3.1.<base64url(iv || AES-GCM 密文)>`，明文载荷是 JSON（见 S3TransferPayload）。
+ * 形态：`LLN1.<base64url(iv || AES-GCM 密文)>`，明文载荷是 JSON（见 S3TransferPayload）。
  * 为什么加一层加密：迁移码会经过剪贴板 / 微信等第三方文本通道，明文等于把 AK/SK 暴露给任何看到
  * 这段文字的人。**但密钥种子内置在本模块源码里 ⇒ 这只是"防误读 / 防随手转发"的封装，不是安全边界**
  * —— 迁移码只发给自己的设备，别发群 / 公开；怀疑泄露时请在 S3 控制台轮换密钥。
@@ -16,16 +16,16 @@
 import { normalizeEndpoint, validateS3Settings, type S3Settings } from "./syncUtils.js";
 
 /** 迁移码前缀（版本化；解码只认这个前缀，便于把「贴错内容」与「码损坏」分开报错）。 */
-export const S3_TRANSFER_PREFIX = "LNS3.1.";
+export const S3_TRANSFER_PREFIX = "LLN1.";
 /** 迁移码上限：正常 ~400 字符；超过即视为贴错/攻击输入，避免在解码前做无界工作。 */
 const MAX_CODE_CHARS = 8 * 1024;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 /** 固定种子：只为避免明文直出（见文件头）。改这个值会让旧迁移码失效。 */
-const KEY_SEED = "lake-notes.s3-config-transfer.v1";
+const KEY_SEED = "local-lakex-notes.s3-config-transfer.v1";
 
 interface S3TransferPayload {
-  app: "lake-notes";
+  app: "local-lakex-notes";
   kind: "s3-config";
   v: 1;
   exportedAt: string;
@@ -119,7 +119,7 @@ export async function encodeS3ConfigTransfer(settings: S3Settings, exportedAt: D
     throw new Error(`当前 S3 配置不合法，无法导出：${(error as Error).message}`);
   }
   const payload: S3TransferPayload = {
-    app: "lake-notes",
+    app: "local-lakex-notes",
     kind: "s3-config",
     v: 1,
     exportedAt: exportedAt.toISOString(),
@@ -144,11 +144,11 @@ export async function encodeS3ConfigTransfer(settings: S3Settings, exportedAt: D
 const MAX_FILE_CHARS = 64 * 1024;
 
 interface S3TransferFile {
-  app: "lake-notes";
+  app: "local-lakex-notes";
   kind: "s3-config";
   version: 1;
   exportedAt: string;
-  /** 内层仍是 `LNS3.1.` 迁移码（加密载荷），文件本身不含明文密钥。 */
+  /** 内层仍是 `LLN1.` 迁移码（加密载荷），文件本身不含明文密钥。 */
   payload: string;
 }
 
@@ -166,7 +166,7 @@ export function s3ConfigTransferFileName(now: Date = new Date()): string {
 export async function encodeS3ConfigTransferFile(settings: S3Settings, exportedAt: Date = new Date()): Promise<string> {
   const payload = await encodeS3ConfigTransfer(settings, exportedAt);
   const file: S3TransferFile = {
-    app: "lake-notes",
+    app: "local-lakex-notes",
     kind: "s3-config",
     version: 1,
     exportedAt: exportedAt.toISOString(),
@@ -188,11 +188,11 @@ export async function decodeS3ConfigTransferFile(text: string): Promise<S3Settin
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    throw new Error("不是 LocalLakeNotes 的 S3 配置文件");
+    throw new Error("不是 LocalLakexNotes 的 S3 配置文件");
   }
-  if (!parsed || typeof parsed !== "object") throw new Error("不是 LocalLakeNotes 的 S3 配置文件");
+  if (!parsed || typeof parsed !== "object") throw new Error("不是 LocalLakexNotes 的 S3 配置文件");
   const file = parsed as Partial<S3TransferFile>;
-  if (file.app !== "lake-notes" || file.kind !== "s3-config") throw new Error("不是 LocalLakeNotes 的 S3 配置文件");
+  if (file.app !== "local-lakex-notes" || file.kind !== "s3-config") throw new Error("不是 LocalLakexNotes 的 S3 配置文件");
   if (file.version !== 1) throw new Error("S3 配置文件版本不受支持（请先升级应用）");
   if (typeof file.payload !== "string") throw new Error("S3 配置文件缺少载荷");
   return decodeS3ConfigTransfer(file.payload);
@@ -207,7 +207,7 @@ export async function decodeS3ConfigTransfer(code: string): Promise<S3Settings> 
   if (!compact) throw new Error("请先粘贴 S3 迁移码");
   if (compact.length > MAX_CODE_CHARS) throw new Error("S3 迁移码过长，不像是有效内容");
   if (!compact.startsWith(S3_TRANSFER_PREFIX)) {
-    throw new Error("不是 LocalLakeNotes 的 S3 迁移码（应以 LNS3.1. 开头）");
+    throw new Error("不是 LocalLakexNotes 的 S3 迁移码（应以 LLN1. 开头）");
   }
   const packed = decodeBase64UrlOrThrow(compact.slice(S3_TRANSFER_PREFIX.length));
   if (packed.length < IV_BYTES + TAG_BYTES) throw new Error("S3 迁移码无效或已损坏（可能复制不完整）");
@@ -229,7 +229,7 @@ export async function decodeS3ConfigTransfer(code: string): Promise<S3Settings> 
   }
   if (!payload || typeof payload !== "object") throw new Error("S3 迁移码内容无法解析");
   const raw = payload as Partial<S3TransferPayload>;
-  if (raw.app !== "lake-notes" || raw.kind !== "s3-config") throw new Error("S3 迁移码来源不是 LocalLakeNotes");
+  if (raw.app !== "local-lakex-notes" || raw.kind !== "s3-config") throw new Error("S3 迁移码来源不是 LocalLakexNotes");
   if (raw.v !== 1) throw new Error("S3 迁移码版本不受支持（请先升级应用）");
 
   const strings: Array<keyof Pick<S3TransferPayload, "endpoint" | "region" | "bucket" | "prefix" | "accessKeyId" | "secretAccessKey">> = [

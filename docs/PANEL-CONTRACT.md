@@ -55,7 +55,7 @@
 
 ## 4. 宽度持久化与默认值
 
-- 键：宽度 `lake-notes-v3.sidebar-width` / `lake-notes-v3.outline-sidebar-width`；模式 `lake-notes-v2.sidebar-mode` / `lake-notes-v2.outline-sidebar-mode`。
+- 键：宽度 `local-lakex-notes-v3.sidebar-width` / `local-lakex-notes-v3.outline-sidebar-width`；模式 `local-lakex-notes-v2.sidebar-mode` / `local-lakex-notes-v2.outline-sidebar-mode`。
 - **必须区分「没存过」**：`Number(null) === 0` 会被钳到**最小值**（曾导致目录恒 160、大纲恒 200 而非默认）。**禁止** `Number(localStorage.getItem(x))` 直接当数值；unset → NaN → 走默认（目录 **224** / 大纲 **280**）。
 - 拖拽 = 橡皮筋；键盘微调 ←/→ 8、Shift 24、Home/End 到极值；handle 带 `role="separator"` + aria 值。
 

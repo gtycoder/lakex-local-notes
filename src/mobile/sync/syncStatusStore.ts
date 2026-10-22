@@ -21,7 +21,7 @@ export interface MobileSyncStatus {
   message: string;
 }
 
-const KEY = "lake-notes-mobile.lastSync";
+const KEY = "local-lakex-notes-mobile.lastSync";
 const listeners = new Set<() => void>();
 
 function parse(raw: string | null): MobileSyncStatus | null {

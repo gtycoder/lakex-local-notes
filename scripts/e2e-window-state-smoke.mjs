@@ -16,7 +16,7 @@ if (process.platform !== "darwin") {
   process.exit(0);
 }
 const execFileAsync = promisify(execFile);
-const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes");
+const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes");
 const port = Number(process.env.LAKE_CDP_PORT || 9337);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "lake-window-state-smoke-"));
@@ -28,7 +28,7 @@ async function appleScript(script) {
   return stdout.trim();
 }
 async function getBounds() {
-  const output = await appleScript(`tell application id "com.lakenotes.electron" to activate
+  const output = await appleScript(`tell application id "com.locallakexnotes.desktop" to activate
  delay 0.15
  tell application "System Events"
    set frontProcess to first process whose frontmost is true
@@ -52,7 +52,7 @@ async function waitForNativeWindow() {
 }
 async function setBounds(bounds) {
 
-  await appleScript(`tell application id "com.lakenotes.electron" to activate
+  await appleScript(`tell application id "com.locallakexnotes.desktop" to activate
  delay 0.15
  tell application "System Events"
    set frontProcess to first process whose frontmost is true
@@ -82,7 +82,7 @@ function launch() {
   });
 }
 async function quitApp() {
-  try { await appleScript('tell application id "com.lakenotes.electron" to quit'); } catch { /* already closed */ }
+  try { await appleScript('tell application id "com.locallakexnotes.desktop" to quit'); } catch { /* already closed */ }
 }
 
 let first = null;

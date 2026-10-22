@@ -20,7 +20,7 @@ const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex"
 
 const S3_CFG: S3Settings = {
   endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "test-bucket",
-  prefix: "lake-notes", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: false,
+  prefix: "local-lakex-notes", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: false,
 };
 
 /** 内存 ObjectStore（模拟 S3；put gzip 压缩 + getOptional 魔数解压，对齐真实行为） */

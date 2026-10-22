@@ -65,7 +65,7 @@ describe("画板视图本机记忆", () => {
   });
 
   it("脏数据 / 被清空后不炸：解析失败按「没记过」处理", () => {
-    localStorage.setItem("lake-notes-v3.board-views", "{not json");
+    localStorage.setItem("local-lakex-notes-v3.board-views", "{not json");
     expect(readBoardView("n1")).toBeNull();
     writeBoardView("n1", { scroll: { left: 5, top: 6 } });
     expect(readBoardView("n1")?.scroll).toEqual({ left: 5, top: 6 });

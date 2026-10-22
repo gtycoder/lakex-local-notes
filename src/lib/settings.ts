@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 /** 设置面板提供的附件大小档位（MiB）。 */
 export const MAX_ATTACHMENT_MB_OPTIONS_SETTINGS = MAX_ATTACHMENT_MB_OPTIONS;
 
-const STORAGE_KEY = "lake-notes-v1.settings";
+const STORAGE_KEY = "local-lakex-notes-v1.settings";
 /** 正文字号档位（= 内核正文字号取值，bundle `R_`：12/13/14/15/16/19/22/24；不含 20）。 */
 const FONT_SIZES = [12, 13, 14, 15, 16, 19, 22, 24];
 

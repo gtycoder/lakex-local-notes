@@ -186,7 +186,7 @@ try {
   check("app boot + window.lakeNative", ready);
 
   const origin = await evaluate("JSON.stringify({ protocol: location.protocol, host: location.host })");
-  check("scheme origin（lake://app）", /"protocol":"lake:"/.test(origin), origin);
+  check("scheme origin（locallakexnotes://app）", /"protocol":"lake:"/.test(origin), origin);
 
   await evaluate(INJECT);
 

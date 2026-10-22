@@ -159,7 +159,7 @@
 
 **门禁**：`npx tsc --noEmit` ✓ · `npx vitest run` **258 文件 / 2010 例通过**（5 文件 / 16 例跳过）✓ · `git diff --check` ✓。
 
-**运行时实测**（隔离 `lake://app` 实例 + CDP，`LAKE_USER_DATA=$TMPDIR/lake-b1-probe` / CDP 9266 / 资源 19870）：
+**运行时实测**（隔离 `locallakexnotes://app` 实例 + CDP，`LAKE_USER_DATA=$TMPDIR/lake-b1-probe` / CDP 9266 / 资源 19870）：
 夹具正文 `<p>你好 world</p><p>a -- b</p><p>hello-world 3.14</p>` ⇒ 内核 `getDocument('text/plain')` = `"你好 world\na -- b\nhello-world 3.14"`；
 `queryCommandValue('wordCount')` = **8**、移植实现 = **8**、状态栏「字数」= **8** ⇒ 三项一致（`PROBE PASS`）。探针脚本为临时件（`/tmp/lake-b1-probe.mjs`），**不入库**。
 
@@ -172,7 +172,7 @@
 - **现状**：`src/components/app/SearchPanel.tsx` 是**库级**搜索（`native.searchNotes` + FTS 索引），与"文档内查找"不是一回事；**文档内查找不需要我们做** —— 内核自带。
 - **内核证据**：插件 `search`（`toolbar:'search'`，命令 `search`/`replaceText`/`replaceAll`）自带完整面板 `.ne-ui-search-panel`（查找/替换两个页签、输入框、命中计数、上一个/下一个）；热键由该 descriptor 注册，本构建开着虚拟渲染 ⇒ **⌘F**；该命令族**不在官方 08 文档里**（属"文档没写、bundle 有"）。
 
-**A 批次实测（261016，隔离 `lake://app` + CDP）**
+**A 批次实测（261016，隔离 `locallakexnotes://app` + CDP）**
 
 | 结论 | 证据 |
 | --- | --- |
@@ -229,7 +229,7 @@
 | `moveColumn(columnsId, from, to)` | **容器内列重排**（真正的 reorder；越界返回 false） | 目标必须是 columns 节点 |
 | `tableRowMoveTo(i)` · `tableColumnMoveTo(i)` | 把**当前选区所在表格**的行/列移到索引 i（整数校验） | 依赖选区 |
 
-**运行时实测**（隔离 `lake://app` + CDP；文档 = 两段 `<ne-p>` + 一张图片卡）：
+**运行时实测**（隔离 `locallakexnotes://app` + CDP；文档 = 两段 `<ne-p>` + 一张图片卡）：
 `moveImage(cardId, …)` 依次试了三种位置形状 —— ① DOM 节点 `{node: <ne-p>, offset:0}`；② `ed.engine.transformDOMRange(range).start`（模型 position，实测 `start.node.type === "p"`）；③ 整个 `{start,end}` ⇒
 **三种全部抛 `setStart: parameter 1 is not of type 'Node'`**，且 `.lake` 序列化**逐字节未变**、`undo` 返回 `false`（什么都没发生）⇒ 该 position 是**内核内部类型**（它自己拖拽链路的产物），**无法从公开面构造**。
 

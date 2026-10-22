@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes");
+const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes");
 const port = Number(process.env.LAKE_CDP_PORT || 9338);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "lake-renderer-recovery-smoke-"));

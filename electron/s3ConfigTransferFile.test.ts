@@ -10,7 +10,7 @@ const SETTINGS: S3Settings = {
   endpoint: "https://s3.cn-north-1.qiniucs.com",
   region: "cn-north-1",
   bucket: "local-lake-hebei",
-  prefix: "lake-notes",
+  prefix: "local-lakex-notes",
   accessKeyId: "AKIDEXAMPLE1234567890",
   secretAccessKey: "SECRET-EXAMPLE-0123456789",
   forcePathStyle: true,

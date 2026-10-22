@@ -6,7 +6,7 @@
  * - 写正文 = pan/zoom 每次都保存 + 上传（260916 用户报过的坑），且视口会跨端串味
  *   （移动端查看器本来靠「没有视口就 fit 内容」避免打开一片空白）；
  * - 所以按 `docs/STORAGE-LAYERS.md` 的 **L3「纯本机 UI 状态」** 档次落在 localStorage
- *   （与 `lake-notes-v3.sidebar-width` / `dialog-states` / `board-recent-shapes` 同档）。
+ *   （与 `local-lakex-notes-v3.sidebar-width` / `dialog-states` / `board-recent-shapes` 同档）。
  *
  * 实测（260926）这个 plait 版本的**平移 = 滚动画布容器**：手形工具拖拽只改
  * `.viewport-container` 的 `scrollLeft/scrollTop`，`board.viewport` 不变（所以内核的
@@ -26,7 +26,7 @@ export interface BoardView {
   scroll: BoardViewScroll | null;
 }
 
-const KEY = "lake-notes-v3.board-views";
+const KEY = "local-lakex-notes-v3.board-views";
 /** 上限纯属兜底（正常远小于标签上限），避免长开窗口无界增长；超出按最近使用淘汰。 */
 const LIMIT = 200;
 

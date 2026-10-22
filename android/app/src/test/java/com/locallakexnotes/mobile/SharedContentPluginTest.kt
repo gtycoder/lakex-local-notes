@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

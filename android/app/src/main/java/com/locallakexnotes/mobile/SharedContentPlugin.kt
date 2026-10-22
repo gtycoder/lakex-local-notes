@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import android.content.Intent
 import android.net.Uri
@@ -35,7 +35,7 @@ internal fun copyStreamToFile(input: InputStream, output: OutputStream, maxBytes
 private data class InboxCopy(val filename: String? = null, val error: String? = null)
 
 /**
- * 系统「分享 → LocalLakeNotes」入口（ACTION_SEND）。
+ * 系统「分享 → LocalLakexNotes」入口（ACTION_SEND）。
  *
  * 原生只做接住：文本原样交给 JS；图片/文件复制到 `filesDir/shared-inbox/<name>`
  * （JS 用 `capacitor/filesystem` 的 Directory.Data 读取），随后 JS 打开「小记」框预填。

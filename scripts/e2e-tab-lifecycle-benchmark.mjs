@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakeNotes.app/Contents/MacOS/LocalLakeNotes");
+const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes");
 const port = Number(process.env.LAKE_CDP_PORT || 9340);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 const dataDir = `/tmp/lake-tab-benchmark-${Date.now()}`;
@@ -61,7 +61,7 @@ try {
   await connect(); await send("Runtime.enable"); await send("Page.enable");
   await waitFor('document.readyState === "complete" && Boolean(window.lakeNative)');
   noteIds = await evaluate(`(async()=>{ const ids=[]; for(let i=0;i<24;i++){ const note=await window.lakeNative.createNote(${JSON.stringify("__tab-benchmark__")}+i); await window.lakeNative.saveNote(note.id,note.title,"<p>tab benchmark "+i+"</p>"); ids.push(note.id); } return ids; })()`);
-  await evaluate(`(()=>{ const current=JSON.parse(localStorage.getItem("lake-notes-v1.settings")||"{}"); localStorage.setItem("lake-notes-v1.settings", JSON.stringify({...current, maxOpenTabs:24})); location.reload(); return true; })()`);
+  await evaluate(`(()=>{ const current=JSON.parse(localStorage.getItem("local-lakex-notes-v1.settings")||"{}"); localStorage.setItem("local-lakex-notes-v1.settings", JSON.stringify({...current, maxOpenTabs:24})); location.reload(); return true; })()`);
   await waitFor('document.querySelectorAll("[data-tree-node-id]").length > 10');
   await wait(500);
   await evaluate('document.querySelector(".tab-item .tab-close")?.click(); true');

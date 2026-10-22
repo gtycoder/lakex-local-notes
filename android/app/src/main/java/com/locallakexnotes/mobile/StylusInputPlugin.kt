@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import android.os.Build
 import com.getcapacitor.BridgeActivity

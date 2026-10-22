@@ -40,7 +40,7 @@ const isDev = !app.isPackaged;
 let bootWindow: BrowserWindow | null = null;
 
 // userData 隔离（必须在 app ready 前设置）：
-// - dev 默认 lake-notes-dev（空库+种子），打包版默认 lake-notes-electron（正式数据）；
+// - dev 默认 local-lakex-notes-dev（空库+种子），打包版默认 local-lakex-notes（正式数据）；
 // - 两者路径不同、单实例锁各自独立，可同时运行。
 // - 任意模式可用 LAKE_USER_DATA 覆盖：dev 模拟多「设备」，打包版隔离测试（避免触碰正式数据）。
 const userDataOverride = process.env.LAKE_USER_DATA?.trim();
@@ -48,15 +48,15 @@ app.setPath(
   "userData",
   userDataOverride ||
     (isDev
-      ? path.join(app.getPath("appData"), "lake-notes-dev")
-      : path.join(app.getPath("appData"), "lake-notes-electron")),
+      ? path.join(app.getPath("appData"), "local-lakex-notes-dev")
+      : path.join(app.getPath("appData"), "local-lakex-notes")),
 );
 // dev server 地址可经 LAKE_DEV_SERVER_URL 覆盖：多端/隔离冒烟时避开默认 1421（IPC 信任判定同用此值）。
 const DEV_SERVER_URL = process.env.LAKE_DEV_SERVER_URL?.trim() || "http://127.0.0.1:1421";
 /**
  * 渲染层加载方式（对齐 DSH 桌面壳：不打 file://）：
  * - `vite`：dev 默认走 vite dev server（保留 HMR；LAKE_DEV_SERVER_URL 可覆盖）；
- * - `scheme`：打包版走私有协议 lake://app（服务构建产物 dist/）。dev 下亦可用
+ * - `scheme`：打包版走私有协议 locallakexnotes://app（服务构建产物 dist/）。dev 下亦可用
  *   LAKE_RENDERER=scheme 强制走这条路径（需先 vite build），用于本机验证该分支。
  */
 const rendererMode: "vite" | "scheme" = !isDev || process.env.LAKE_RENDERER?.trim() === "scheme" ? "scheme" : "vite";
@@ -200,7 +200,7 @@ const trustedWebContents = new Set<number>();
 function isAppPageUrl(url: string): boolean {
   let parsed: URL;
   try { parsed = new URL(url); } catch { return false; }
-  // 私有协议：只信任 lake://app 自己的页面（该 origin 下只有 dist 产物，无第三方内容）。
+  // 私有协议：只信任 locallakexnotes://app 自己的页面（该 origin 下只有 dist 产物，无第三方内容）。
   // 判定走 isAppOriginUrl（比 scheme+host）——非特殊 scheme 在 Node 里 URL.origin 恒为 "null"。
   if (rendererMode === "scheme") return isAppOriginUrl(url);
   return parsed.origin === DEV_SERVER_URL;
@@ -279,7 +279,7 @@ function createBootWindow() {
     frame: false,
     resizable: false,
     movable: true,
-    title: "LocalLakeNotes",
+    title: "LocalLakexNotes",
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#f3f4f6",
     webPreferences: {
       sandbox: true,

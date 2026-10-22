@@ -8,7 +8,7 @@
 import type { BitableDoc } from "../../core/bitableDoc";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 
-export const BITABLE_NAV_KEY_PREFIX = "lake-notes-v3.bitable-nav.";
+export const BITABLE_NAV_KEY_PREFIX = "local-lakex-notes-v3.bitable-nav.";
 
 export interface BitableNav {
   tableId?: string;

@@ -32,14 +32,14 @@ function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; fs.mkdirSync(dir, { recursive: true });
   for (let i = 0; i < 3; i++) {
     try {
-      for (const f of ['lake-notes-mobileSQLite.db', 'lake-notes-mobileSQLite.db-wal']) {
-        const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakenotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 });
+      for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) {
+        const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 });
         fs.writeFileSync(dir + '/' + f, b);
       }
       break;
     } catch (err) { if (i === 2) throw err; }
   }
-  const db = new Database(dir + '/lake-notes-mobileSQLite.db', { readonly: true });
+  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,title,doc_kind,content,trashed_at FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), kind: r.doc_kind || 'doc', content: String(r.content), trashed: !!r.trashed_at }; }); }
   finally { db.close(); }
 }

@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import android.content.Context
 import android.content.Intent
@@ -24,7 +24,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
  *   - isPinned：该快捷方式是否已在桌面（已固定则 UI 隐藏入口）
  *   - requestPin：发起固定（系统会弹确认框）
  *
- * 固定的快捷方式用**深链**（`lakenotes://quick-note`），与静态快捷方式落到同一条 JS 处理路径
+ * 固定的快捷方式用**深链**（`locallakexnotes://quick-note`），与静态快捷方式落到同一条 JS 处理路径
  * （src/mobile/native/quickNoteShortcut.ts）。
  */
 @CapacitorPlugin(name = "PinShortcut")
@@ -89,6 +89,6 @@ class PinShortcutPlugin : Plugin() {
 
     private companion object {
         const val SHORTCUT_ID = "quick-note"
-        const val DEEP_LINK = "lakenotes://quick-note"
+        const val DEEP_LINK = "locallakexnotes://quick-note"
     }
 }

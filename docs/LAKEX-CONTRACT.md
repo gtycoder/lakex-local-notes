@@ -1031,7 +1031,7 @@ r.getHotKeyByName = function (name) { try { return orig.call(this, name) ?? null
 
 ```bash
 # 复查：直接读某条小记的正文/资源清单（dev 库）
-cd ~/Library/Application\ Support/lake-notes-dev/workspace-default/quick-notes
+cd ~/Library/Application\ Support/local-lakex-notes-dev/workspace-default/quick-notes
 python3 - <<'PY'
 import json,re,urllib.parse
 d=json.load(open('items/<id>.qnote'))
@@ -1446,7 +1446,7 @@ PY
    ⚠️ **判据必须看前台窗口**：`adb shell dumpsys window | grep mCurrentFocus`。
    Intent 场景下 `location.href` 与 CDP target 列表**都不会变** —— 只看这两个会得出「点了没反应」的**错误**结论
    （本轮就误判过一次，见本节末的修订记录）。
-   结果：点前 `com.lakenotes.mobile/MainActivity` → 点后 **`com.android.chrome/ChromeTabbedActivity`** ⇒ 系统浏览器正常打开。
+   结果：点前 `com.locallakexnotes.mobile/MainActivity` → 点后 **`com.android.chrome/ChromeTabbedActivity`** ⇒ 系统浏览器正常打开。
    对照 A/B：`<a target="_blank">` 与 `window.open(…, "_blank")` **两条路径都能**打开系统浏览器
    （各自从 App 前台切到 Chrome）⇒ Capacitor 已把外部 origin 转成 Intent。
    ⇒ **单一姿势 = 都靠壳层**（桌面 Electron 窗口钩子 / 移动 Capacitor Intent）。
@@ -1581,7 +1581,7 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 
 ### 5.32 移动端「文本增强」五项命令实测：能干活，但**内核对选区的认账有时序**（261012 设备实测）
 
-> 装置：AVD `lake_mobile` + App `com.lakenotes.mobile` + CDP（`scripts/emu-cdp.sh 9335`）；走的是 dock 同一条路径
+> 装置：AVD `lake_mobile` + App `com.locallakexnotes.mobile` + CDP（`scripts/emu-cdp.sh 9335`）；走的是 dock 同一条路径
 > `window.__mobileEditor.renderer.execCommand`，并用 `queryCommandValue/queryCommandEnabled` 回读。
 
 **① 五项命令都有效**（返回 true 且正文确实改变）：
@@ -1708,7 +1708,7 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
   两页（表情符号 / 图标）的网格在 `src/components/ui/nodeIcon.css`；**几何沿用原观感**（418 宽 / 内距 16 / 正文固定 266 高 / 8 列 / 32 格）
   ⇒ 不依赖任何内核 token，三主题一律由 `--lake-*` 决定。上面那 3 条全局覆盖与 5 个 token 已删除。
 · 内核这套类**现在只属于内核自己的面板**（移动端 261013 起也是自有的微信样式面板）⇒ **别再加耦合**。
-· **261015 桌面应用层更新（含第二轮用户截图修订）**：顶部页签栏右侧（`.ln-tabs__action` / `.ln-btn--ghost`）为EyeOff +「移除」，两页共用；底部仅保留表情分组跳转。自定义图标走`NodeIconGlyph`的**飞书参考浅渐变圆角底块 + 白色线性轮廓**，选择器/目录/标签单一来源，八档底色三主题同源；32×32圆角方色板按用户截图排列，显式code保持落库色号独立于展示顺序。隔离Electron `lake://app`实测：表情页418×392 / 图标页418×358，正文仍266高、表情仍26px/1055格；渐变预览与两页移除落库正常。来源：`src/components/{app/Sidebar.tsx,ui/NodeIconGlyph.tsx,ui/nodeIcon.css}` + `.css-audit/node-icon-soft-261015/results.json`（真实点按/计算值/截图）；旧实色证据在`.css-audit/node-icon-tile-261015/`。未改内核API或样式。
+· **261015 桌面应用层更新（含第二轮用户截图修订）**：顶部页签栏右侧（`.ln-tabs__action` / `.ln-btn--ghost`）为EyeOff +「移除」，两页共用；底部仅保留表情分组跳转。自定义图标走`NodeIconGlyph`的**飞书参考浅渐变圆角底块 + 白色线性轮廓**，选择器/目录/标签单一来源，八档底色三主题同源；32×32圆角方色板按用户截图排列，显式code保持落库色号独立于展示顺序。隔离Electron `locallakexnotes://app`实测：表情页418×392 / 图标页418×358，正文仍266高、表情仍26px/1055格；渐变预览与两页移除落库正常。来源：`src/components/{app/Sidebar.tsx,ui/NodeIconGlyph.tsx,ui/nodeIcon.css}` + `.css-audit/node-icon-soft-261015/results.json`（真实点按/计算值/截图）；旧实色证据在`.css-audit/node-icon-tile-261015/`。未改内核API或样式。
 · **261015第三轮交互**：目录选择器选图标/表情/移除后保持打开，用更新的picker值即时更新选中格；仅点击外部（含其他浮层）/Esc关闭。实现是Sidebar + Overlay既有外点机制，不影响正文内核表情面板；运行时证据`.css-audit/node-icon-stay-261015/results.json`。
 · **261015第六轮应用层定位**：目录图标选择器不再按鼠标点击点定位，改为真实图标元素锚点 + `usePopoverPosition`既有右侧定位，距图标右缘8px。底部/窄窗仍不遮挡锚点；1315×860/760×600/560×600实測相交面积0。色板在采样渐变基础上累计混白约41%。来源`Sidebar.tsx` / `themes/base.css` + `.css-audit/node-icon-anchor-261015/results.json`；不涉及内核改动。
 · **261015第七轮应用层图形尺寸**：`NodeIconGlyph`两类共用1.15em居中槽，图标缩小、表情字号放大。目录两类17.82px / 标签两类14.95px；选择器图标底块23px，表情选择格仍26px字号。来源`NodeIconGlyph.tsx` / `nodeIcon.css` / `themes/base.css` + `.css-audit/node-icon-size-261015/results.json`（真实Electron计算值/截图）；不影响内核表情组件。
@@ -1875,7 +1875,7 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
 「查找 / 替换」两个页签、`请输入` 输入框、命中计数（`N/M`）、上一个/下一个；输入即高亮。热键由它的 toolbar descriptor 注册：
 本构建开着虚拟渲染 ⇒ 热键是 **⌘F**（源码 `virtualRendering ? ['cmd','F'] : shift+cmd+F`）。该命令族**不在官方 08 命令列表**里。
 
-**四条实测（隔离 lake://app + CDP，261016）**：
+**四条实测（隔离 locallakexnotes://app + CDP，261016）**：
 1. **只有真实按键能唤起**：trusted 按键可打开；页面内 `new KeyboardEvent(...)`（untrusted）无效。
 2. **没有可编程的打开口**：`hotKey` 插件自身**未注册 service**（`kO({ pluginName: 'hotKey' })` 无 `service`）；
    `renderer._$services[]` 里能扫到 hotKey 管理器（有 `triggerHotKey`/`getKeyByName`），但 `triggerHotKey('openSearchPanel')` 返回 undefined、面板不出现。
@@ -1898,7 +1898,7 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 **内核侧静态事实**：`envAdapter.previewImgs(imgs, index)` 是官方适配口，内核把它当**编辑器事件**转发
 （bundle @1482481：`editor.on('previewImgs', (e,n) => t.previewImgs(e,n))`）；图片卡选项默认 `allowClickToMaximize: true`（bundle @5865257）。
 
-**两条实测（隔离 `lake://app` + CDP）**：
+**两条实测（隔离 `locallakexnotes://app` + CDP）**：
 1. 在活动宿主内挂 `editor.on('previewImgs')`，对 inline 图片卡（64×64 真图，鼠标落在其中心）真实点击 ⇒ **事件 0 次**。
 2. 临时给 `createOpenEditor` 补上 `envAdapter.previewImgs` 并重建后复测 ⇒ **仍然 0 次**（回调与事件都没有）。临时改动已回滚、源码与产物残留检查均为 0。
 
@@ -1912,7 +1912,7 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - `moveCard(cardId, position)` / `moveImage(cardId, position)`：把卡片移到 position；**`moveImage` 是 `moveCard` 的子类、无自有 execute**；position 是**内核内部对象**。
 - `moveColumn(columnsId, from, to)` = 容器内列重排（越界 false）；`tableRowMoveTo(i)` / `tableColumnMoveTo(i)` = 当前选区所在表格的行/列移动。
 
-**实测（261016，隔离 `lake://app` + CDP）**：`moveImage(cardId, …)` 试了 ① DOM 节点 `{node,offset}`、② `engine.transformDOMRange(range).start`（模型 position）、③ `{start,end}` 三种形状，
+**实测（261016，隔离 `locallakexnotes://app` + CDP）**：`moveImage(cardId, …)` 试了 ① DOM 节点 `{node,offset}`、② `engine.transformDOMRange(range).start`（模型 position）、③ `{start,end}` 三种形状，
 **全部抛 `setStart: parameter 1 is not of type 'Node'`**；`.lake` 序列化逐字节未变、`undo=false` ⇒ 该 position **无法从公开面构造**。
 
 **结论：宿主不入这套命令。** 我们的「摘-插」模型事务覆盖所有块类型，而内核没有"任意块移动"接口（非卡片块完全没有）。

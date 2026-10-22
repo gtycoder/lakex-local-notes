@@ -39,7 +39,7 @@ for (const m of active) {
 }
 active.length = 0; active.push(...ready);
 async function sync(end) { const t0 = Date.now(); const v = await end.ev('window.lakeNative.syncNow()'); return { wallMs: Date.now() - t0, value: v }; }
-function pullMobileFile(serial, id, name) { return execSync(ADB + ' -s ' + serial + ' exec-out run-as com.lakenotes.mobile cat files/note-assets/' + id + '/' + name, { maxBuffer: 64 * 1024 * 1024 }); }
+function pullMobileFile(serial, id, name) { return execSync(ADB + ' -s ' + serial + ' exec-out run-as com.locallakexnotes.mobile cat files/note-assets/' + id + '/' + name, { maxBuffer: 64 * 1024 * 1024 }); }
 
 const d1Nb = await D1.ev('window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return (t.find(function(n){return n.nodeType==="notebook";})||{}).id;})');
 

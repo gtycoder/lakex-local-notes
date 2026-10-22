@@ -1398,7 +1398,7 @@ describe("S3 配置（safeStorage 加密落盘）", () => {
     endpoint: "https://s3.cn-north-1.qiniucs.com",
     region: "cn-north-1",
     bucket: "local-lake-hebei",
-    prefix: "lake-notes",
+    prefix: "local-lakex-notes",
     accessKeyId: "ak",
     secretAccessKey: "sk-secret",
     forcePathStyle: true,

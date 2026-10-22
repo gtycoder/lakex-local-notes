@@ -2,7 +2,7 @@
  * 统一日志模块（electron-log v5）。
  *
  * - 主进程：`initLogger()` 后所有分类日志（log.sync / log.s3 / log.history ...）落盘到
- *   `userData/logs/lake-notes.log`（多端用 LAKE_USER_DATA 各自隔离），同时输出到终端。
+ *   `userData/logs/local-lakex-notes.log`（多端用 LAKE_USER_DATA 各自隔离），同时输出到终端。
  * - 渲染进程：不需要 import 本模块，直接 console.log 即可；main.ts 通过
  *   `webContents.on("console-message")` 捕获并转发到 `log.renderer` 落盘。
  * - vitest / 非 Electron 环境：自动静音（不写文件、不输出），保证测试无噪音。
@@ -25,7 +25,7 @@ export function initLogger(): void {
   if (!isElectronMain) return;
   electronLog.initialize();
   electronLog.transports.file.resolvePathFn = () =>
-    path.join(app.getPath("userData"), "logs", "lake-notes.log");
+    path.join(app.getPath("userData"), "logs", "local-lakex-notes.log");
   electronLog.transports.file.maxSize = 5 * 1024 * 1024; // 5MB 后轮转 .old
   electronLog.transports.file.format = lineFormat();
   electronLog.transports.console.format = lineFormat();

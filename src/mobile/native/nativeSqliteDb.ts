@@ -23,7 +23,7 @@ function isPragmaStatement(sql: string): boolean {
 export class NativeSqliteDb implements MobileDb {
   private constructor(private readonly database: string) {}
 
-  static async open(database = "lake-notes-mobile"): Promise<NativeSqliteDb> {
+  static async open(database = "local-lakex-notes-mobile"): Promise<NativeSqliteDb> {
     const connection = {
       database,
       encrypted: false,

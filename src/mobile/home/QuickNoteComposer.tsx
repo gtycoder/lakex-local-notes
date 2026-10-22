@@ -53,7 +53,7 @@ export interface QuickNoteComposerProps {
   /** 已有标签候选（从全部有效小记派生，随首页数据刷新）。 */
   tagOptions: readonly QuickNoteTagSummary[];
   /**
-   * 草稿模式（261010：长按图标 / `lakenotes://quick-note` 深链那条 capture 路径用）：
+   * 草稿模式（261010：长按图标 / `locallakexnotes://quick-note` 深链那条 capture 路径用）：
    * 挂载时恢复上一次未提交的草稿（含富内容 body）、输入防抖落库、保存/取消清除。
    * 工作台里的「新建小记 / 编辑」不传（行为不变）。
    */

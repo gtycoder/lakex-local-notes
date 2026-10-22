@@ -77,7 +77,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "browser-enabled", category: "browser", label: "浏览器端", keywords: "浏览器 网页 web 附属窗口 端口 局域网 伺服 127.0.0.1" },
   { id: "browser-open", category: "browser", label: "打开浏览器", keywords: "打开 浏览器 chrome 网页 访问 地址" },
   { id: "logs-main", category: "logs", label: "主进程日志", keywords: "日志 主进程 log 过滤 关键字" },
-  { id: "about-app", category: "about", label: "LocalLakeNotes", keywords: "版本 简介" },
+  { id: "about-app", category: "about", label: "LocalLakexNotes", keywords: "版本 简介" },
   { id: "about-fonts", category: "about", label: "字体", keywords: "字体 MiSans JetBrains Mono 内置 字体授权" },
   { id: "about-version", category: "about", label: "应用版本", keywords: "版本号 version" },
   { id: "about-runtime", category: "about", label: "运行时", keywords: "Electron Chromium Node 运行时 内核版本" },

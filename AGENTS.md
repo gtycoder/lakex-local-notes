@@ -1,4 +1,4 @@
-# LocalLakeNotes Electron — 项目记忆（AGENTS.md）
+# LocalLakexNotes Electron — 项目记忆（AGENTS.md）
 
 > 本项目的**长期记忆**，每次会话自动加载。接手顺序 **README → HANDOFF → AGENTS**：README 看概览，HANDOFF 看当前状态/待办/坑，本文看长期红线与机制。
 > **本文只写长期内容**：分支名、commit、测试计数、当前焦点等易过期事实一律进 `HANDOFF.md`。
@@ -6,9 +6,10 @@
 
 ## 1. 项目是什么
 
-LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
+LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
 
-- 目录 `/Users/admin/file/local-lake/lake-notes-electron`；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
+- 目录 `/Users/admin/file/local-lake/lake-notes-electron`（**物理目录暂未改名**）；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
+- **身份已标准化为 `local-lakex-notes`（261022）**：productName `LocalLakexNotes`；npm `local-lakex-notes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；localStorage `local-lakex-notes-v3.*` / `local-lakex-notes-mobile.*`；S3 迁移码 `LLN1.`；私有协议 `locallakexnotes://app`；深链 `locallakexnotes://quick-note`。**保留不动**：`LAKE_*` 开发环境变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
 - Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）
 - **目标量级 = 10 万文档 / 100 万附件**：性能与同步决策按此验证，**别用"小库正常"下结论**
 
@@ -79,17 +80,17 @@ LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + bet
 ## 4. 关键机制速览
 
 - **Manifest V1**：只读写 `{1}`（字段沿用原 v7：folders/墓碑/锁/`kind`/board），所有端一起升级。传输/GC/类型见 `electron/{s3Store,s3Maintenance,syncTypes}.ts`，编排 `syncEngineController.ts`。
-- **壳层双 origin**：打包版页面 = 私有协议 `lake://app`（`appOrigin.ts` + `appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 在 Node 里恒为 `"null"`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产服务白名单/ACAO 要同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/`），别退回首写清单。
+- **壳层双 origin**：打包版页面 = 私有协议 `locallakexnotes://app`（`appOrigin.ts` + `appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 在 Node 里恒为 `"null"`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产服务白名单/ACAO 要同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/`），别退回首写清单。
 - **冲突四分支**在 `core/syncEngine.ts` 下载阶段；`baseHash`/`lastUploadedHash` 存本地 `sync_base`，**绝不上 manifest**；本地改动被远端覆盖时先强制 `createHistorySnapshot`（`supersededNotes`）。
 - `folders[]` 必填；手动同步只发触发窗口、自动同步广播所有窗口；同步/GC/深度清理共用 `enqueueMaintenance` 串行队列（进程内唯一必需互斥）。
 - **资产差集**：`scanLocalAssets(..., cloudDeclaredFilenames)`（后者 = 已下载清单声明的 filename；空 = 全量）；跨笔记并发登记 `assetTasks`，环后 `runAssetPool(NOTE_UPLOAD_CONCURRENCY=2)` 回填。
 - manifest 链保留 `MANIFEST_CHAIN_KEEP=3`，prune/GC/deep-cleanup 共用 + 滞后裁剪；活动对象恒在 latest 全量快照内。
 - 小记独立前缀 `quick-notes/` + 独立库 `quick-notes/metadata.sqlite3`。
 - **编辑器「本机视图」= 设备本地**（用户定稿）：当前工作表/缩放/选区/滚动/折叠/画板视口 **不进正文、不标脏、不进 S3**；表格列宽行高隐藏冻结、多维表视图配置仍属文档数据。`onDirty` 只在正文真变时触发。
-- **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`lake-notes-v3.bitable-nav.<noteId>`）。**不要**把导航写回正文（纯导航会触发一次 S3 上传）。
+- **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`local-lakex-notes-v3.bitable-nav.<noteId>`）。**不要**把导航写回正文（纯导航会触发一次 S3 上传）。
 - **互斥域**（判据单一来源 `src/core/maintenancePolicy.ts`；移动端 `mobile/sync/maintenanceLocks.ts`）：**写域**（本地写 + 同步引擎的 DB 片段）／**维护域**（syncNow / GC / 资产补拉）／**高优先域**（用户当场发起、不得排在整轮同步后面的 `syncQuickNote`，判据 `PRIORITY_OPS`）。三条不变量：**I1** 网络往返不得持有写域；**I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash），不靠全局互斥；**I3** 同域串行、**禁止同域嵌套**（`KeyedAsyncQueue` 无重入 ⇒ 自锁）。护栏：`electron/maintenanceQueueScope.test.ts`、`src/mobile/maintenancePolicyCoverage.test.ts`。
 - **同步要"看得见"**：移动端把「上次同步（时间/结果/失败原因）」落盘并**常驻设置页**（`mobile/sync/syncStatusStore.ts`，设备本地；**写入点唯一** = `bridge.syncNow()`；"离线没尝试"不写）；桌面有 `SyncStatusPopover`。
-- **S3 配置迁移（261017）**：主路径 = 桌面导出 `.json` 文件 → 手机选文件导入；内层统一走 `src/core/s3ConfigTransfer.ts` 的 `LNS3.1.` 迁移码（AES-GCM）。桌面**在主进程**弹框/封装/解码（渲染层不接触明文 Secret，不破 W-14），移动端导入强制虚拟托管（D2）；迁移码仅作备用。**固定种子只是防误读封装，不是安全边界**——文件/迁移码别外传，怀疑泄露就轮换 S3 密钥。
+- **S3 配置迁移（261017）**：主路径 = 桌面导出 `.json` 文件 → 手机选文件导入；内层统一走 `src/core/s3ConfigTransfer.ts` 的 `LLN1.` 迁移码（AES-GCM）。桌面**在主进程**弹框/封装/解码（渲染层不接触明文 Secret，不破 W-14），移动端导入强制虚拟托管（D2）；迁移码仅作备用。**固定种子只是防误读封装，不是安全边界**——文件/迁移码别外传，怀疑泄露就轮换 S3 密钥。
 - **开/关应用各同步一次**（只要 `autoMode !== "manual"`；`manual` 不补，保持真正不出网）：桌面 = 就绪 + `before-quit`（`QUIT_SYNC_DEADLINE_MS=60s` 兜底）；移动端 = 就绪（显式信号：`phase` 离开 booting）+ 回前台 + **进后台 best-effort（失败静默、不做等待）**，自动触发之间在途去重。判据单一来源 `core/syncModes.ts` 的 `shouldSyncOnOpenClose()`；文案 `SYNC_OPEN_CLOSE_NOTE`。**能不能出网仍另走 `canTouchNetwork()`，两条判据别合并**。
   **两个例外（用户定稿）**：① 长按桌面图标「小记」的快捷入口 = **「假单独模块」**：这次会话**不主动发起任何同步**（入口/回前台/进后台全跳，只有点「保存并同步」出网；用户自己配的间隔定时器不在此列），提交后不进列表、停在写作界面可连续记，手动退出 = 直接退 App 回桌面。② **点「保存」而不点「保存并同步」= 用户不着急** ⇒ **不得**替他补一次隐式推送（"这种情况下做什么同步，不能想当然"）。
 - **小记「保存并同步」= 单条推送**（唯一来源 `src/core/quickNotePush.ts` 的 `pushQuickNote`；桌面 IPC `sync_quick_note`、移动 `bridge.syncQuickNote` 走高优先域 + 推送后回核）：**必须先读远端清单、只 upsert 这一条、其余条目逐字段原样保留**（清单是单文件覆盖写、**没有 CAS**，覆盖式重建 ⇒ 他端按未声明处理、墓碑/GC 误删）。两条**退回完整同步**的路径（都不静默降级）：云端还没有清单；该条在远端是墓碑且本机无恢复标记（墓碑权威，不许复活）。记账 `setBaseHash` + `markSyncedGuarded`。UI：主按钮**保持原来的「保存 / 小记一下」**，「保存并同步」是**普通按钮**夹在中间；云同步关闭时**置灰 + 给理由**（移动端要有一行可见说明，没有 hover）。护栏 `src/components/app/quickNoteSyncGate.test.ts`。
@@ -114,10 +115,10 @@ LocalLakeNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + bet
 
 | 项 | 路径 |
 | --- | --- |
-| 开发数据 | `~/Library/Application Support/lake-notes-dev`（可重建） |
-| 正式数据 | `~/Library/Application Support/lake-notes-electron`（**禁止触碰**） |
+| 开发数据 | `~/Library/Application Support/local-lakex-notes-dev`（可重建） |
+| 正式数据 | `~/Library/Application Support/local-lakex-notes`（**禁止触碰**） |
 | B 端开发数据 | `$TMPDIR/lake-device-b` |
-| 日志 | 上面两个目录下的 `logs/lake-notes.log` |
+| 日志 | 上面两个目录下的 `logs/local-lakex-notes.log` |
 | 只读检查 DB | `workspace-default/metadata.sqlite3`（小记 `workspace-default/quick-notes/metadata.sqlite3`） |
 
 - **移动端 S3 密钥不落 WebView 存储**：走 Android Keystore（`android/**/SecureStorePlugin.kt` + `src/mobile/native/keystoreSecretStore.ts`），密文在应用私有 SharedPreferences；`localStorageSecretStore` 只是 web/vitest 后端与历史值迁移来源。
@@ -154,7 +155,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 8. **`ObjectStore.test()` 必须用 ListObjectsV2**（七牛 HeadBucket 对存在的桶也 404）。正确配置：Endpoint `https://s3.cn-north-1.qiniucs.com` / Region `cn-north-1` / Bucket `local-lake-hebei` / `forcePathStyle=false`。
 9. 主进程 external **从 dependencies 派生**（别硬编码）；better-sqlite3 是 Electron ABI（系统 Node 跑不了，bench 用 python3 sqlite3）；vitest 下 electron-log 要静音。
 10. 打包：`electron-builder` 弱网会整批失败 ⇒ 换 `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`；打包版默认写**正式数据目录** ⇒ 自测必须覆盖 `LAKE_USER_DATA`。
-11. e2e 里"非 http(s) 页面"不要写死 `file:`（打包版是 `lake://app`）。
+11. e2e 里"非 http(s) 页面"不要写死 `file:`（打包版是 `locallakexnotes://app`）。
 12. `KeyedAsyncQueue` **无重入** ⇒ 同域嵌套会永久挂起（按 I3 自查）。
 
 ### 移动端

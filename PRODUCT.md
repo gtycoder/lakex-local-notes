@@ -7,7 +7,7 @@ init 说明（本次）：`impeccable init` 的实时问答工具在当前模式
 因此本文全部结论来自仓库既有事实（README.md / AGENTS.md / HANDOFF.md / docs/ 与源码），
 其中推断而非逐条确认的条目一律标注「（推断）」。若与实际不符，请直接改本文。
 
-工作区布局：本文件位于应用仓库 `lake-notes-electron/`（独立 git 仓库），即本项目根。
+工作区布局：本文件位于应用仓库 `local-lakex-notes/`（独立 git 仓库），即本项目根。
 其父目录 `local-lake/` 只是容器，里面的兄弟目录（siyuan-master / lake-main / lake-editor-main /
 lakex-doc-react-main / yuque-developer-docs）是只读参考资料。
 -->
@@ -65,7 +65,7 @@ web
 
 ## Brand Commitments
 
-- 名称：LocalLakeNotes（桌面）/ LocalLakeNotes（Android）；应用 id `com.lakenotes.electron` / `com.lakenotes.mobile`。
+- 名称：LocalLakexNotes（桌面）/ LocalLakexNotes（Android）；应用 id `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`。
 - 界面语言：简体中文（`<html lang="zh-CN">`）。
 - 气质：务实、工程师导向、自觉拒绝炫技；明确不弹「正在加载」之类的 toast（README 核心理念）。
 - 现有资源：`build/icon.icns`、`build/icon.png`。
@@ -80,7 +80,7 @@ web
 
 ## Evidence on Hand
 
-- 真实代码与测试：`lake-notes-electron/`（vitest 1600+ 用例、多份 e2e 脚本，真实 Electron 实测记录见 `HANDOFF.md`）。
+- 真实代码与测试：`local-lakex-notes/`（vitest 1600+ 用例、多份 e2e 脚本，真实 Electron 实测记录见 `HANDOFF.md`）。
 - 架构/协议文档：`docs/ARCHITECTURE.md`、`docs/SYNC-PROTOCOL.md`、`docs/S3-GC-DESIGN.md`、`docs/STORAGE-LAYERS.md`、`docs/LAKEX-CONTRACT.md`、`docs/QUICK-NOTES-SPEC.md`、`docs/MOBILE-*.md` 等。
 - 只读参考仓库：`siyuan-master`（思源 v3.8.0，AGPL-3.0，样式/同步参考，移植需留 NOTICE）、`lake-main`（lakejs 社区版，仅机制字典）、`lake-editor-main`（第三方 VSCode 插件）、`yuque-developer-docs`（语雀官方文档本地副本，内核资料第一顺位）。
 - 缺面：没有用户研究、真实客户/案例、基准数据出处；后续工作**不得**编造 testimonials、客户、定价或部署声明。

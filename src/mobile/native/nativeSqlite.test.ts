@@ -43,7 +43,7 @@ const plugin = vi.hoisted(() => ({
     plugin.calls.push("closeConnection");
   }),
   getDatabaseList: vi.fn(async () => ({
-    values: ["lake-notes-mobile-spikeSQLite.db"],
+    values: ["local-lakex-notes-mobile-spikeSQLite.db"],
   })),
 }));
 
@@ -55,20 +55,20 @@ import { runNativeSqliteSpike } from "./nativeSqlite.js";
 
 describe("native SQLite spike", () => {
   it("verifies WAL, batching, rollback, reopen, and file naming", async () => {
-    const result = await runNativeSqliteSpike("lake-notes-mobile-spike");
+    const result = await runNativeSqliteSpike("local-lakex-notes-mobile-spike");
 
     expect(result).toEqual({
-      databaseName: "lake-notes-mobile-spike",
+      databaseName: "local-lakex-notes-mobile-spike",
       journalMode: "wal",
       rowCount: 100,
       reopenedRowCount: 100,
       rolledBackRowCount: 0,
       pageBytes: 8192,
-      databaseList: ["lake-notes-mobile-spikeSQLite.db"],
+      databaseList: ["local-lakex-notes-mobile-spikeSQLite.db"],
     });
     expect(plugin.executeSet).toHaveBeenCalledWith(
       expect.objectContaining({
-        database: "lake-notes-mobile-spike",
+        database: "local-lakex-notes-mobile-spike",
         transaction: true,
       }),
     );

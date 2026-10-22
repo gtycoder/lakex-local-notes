@@ -67,7 +67,7 @@ function semanticManifest(m: any): ManifestSemantic {
 // ===== A) 桌面侧 =====
 const S3_CFG: S3Settings = {
   endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "test-bucket",
-  prefix: "lake-notes", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: false,
+  prefix: "local-lakex-notes", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: false,
 };
 class MockS3 {
   map = new Map<string, Buffer>();
@@ -191,7 +191,7 @@ async hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syn
 const CFG: SyncConfig = { endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "b", accessKeyId: "ak", secretAccessKey: "sk", prefix: "p" };
 const hashOf = (s: string) => sha256Sync(new TextEncoder().encode(s));
 /** 桌面种子 welcome-note 的真实内容（store.ts seed()）——场景构造两端必须一致，否则本地 hash 不同走不同分支。 */
-const WELCOME_CONTENT = `<h1 id="welcome" class="ne-h1">欢迎来到 LocalLakeNotes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
+const WELCOME_CONTENT = `<h1 id="welcome" class="ne-h1">欢迎来到 LocalLakexNotes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
 
 // ===== 场景驱动：两端同构构造 → 同步 → 比较终态 =====
 async function runScenarioDesktop(sc: Scenario): Promise<{ manifest: ManifestSemantic; notes: Array<{ id: string; syncState: string; trashedAt: boolean; title: string }> }> {
@@ -287,7 +287,7 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
     await assertEquivalent({
       name: "first-upload",
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
         { id: "n1", title: "笔记1", content: "<p>content-1</p>", parentId: "notebook-personal", sortOrder: 0, syncState: "local" },
       ],
     });
@@ -298,10 +298,10 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
     await assertEquivalent({
       name: "remote-download",
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "r1", title: "远端笔记", parentId: "notebook-personal", sortOrder: 1, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isLocked: true, lockedAt: "2026-01-02T00:00:00.000Z", icon: "star" },
       ],
       remoteFolders: [
@@ -316,11 +316,11 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
     await assertEquivalent({
       name: "remote-trash",
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
         { id: "n1", title: "将被删", content: "<p>content</p>", parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "n1", title: "将被删", parentId: TRASH_NOTEBOOK_ID, sortOrder: 1, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, trashedAt: "2026-01-02T00:00:00.000Z", deletedFromParentId: "notebook-personal" },
       ],
       remoteFolders: [
@@ -335,11 +335,11 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
     await assertEquivalent({
       name: "conflict-remote-wins",
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 1, syncState: "local" },
         { id: "n1", title: "冲突笔记", content: "<p>local-edit</p>", parentId: "notebook-personal", sortOrder: 0, syncState: "local" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "n1", title: "冲突笔记", parentId: "notebook-personal", sortOrder: 1, updatedAt: "2026-01-03T00:00:00.000Z", contentHash: H2 },
       ],
       remoteFolders: [
@@ -354,11 +354,11 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
     await assertEquivalent({
       name: "remote-purge",
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
         { id: "p1", title: "将被永久删除", content: "<p>purge-content</p>", parentId: "notebook-personal", sortOrder: 1, syncState: "synced" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "p1", title: "将被永久删除", parentId: TRASH_NOTEBOOK_ID, sortOrder: 1, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
       ],
       remoteFolders: [
@@ -373,11 +373,11 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
     await assertEquivalent({
       name: "restore-exception",
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
         { id: "r1", title: "恢复的笔记", content: "<p>restored-content</p>", parentId: "notebook-personal", sortOrder: 0, syncState: "local", restorePendingAt: "2026-01-03T00:00:00.000Z" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "r1", title: "恢复的笔记", parentId: TRASH_NOTEBOOK_ID, sortOrder: 1, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, trashedAt: "2026-01-02T00:00:00.000Z", deletedFromParentId: "notebook-personal" },
       ],
       remoteFolders: [
@@ -393,11 +393,11 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
     await assertEquivalent({
       name: "zero-change-skip",
       localNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", content: WELCOME_CONTENT, parentId: "notebook-personal", sortOrder: 0, syncState: "synced" },
         { id: "z1", title: "已同步", content: "<p>content-1</p>", parentId: "notebook-personal", sortOrder: 1, syncState: "synced" },
       ],
       remoteNotes: [
-        { id: "welcome-note", title: "欢迎来到 LocalLakeNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
+        { id: "welcome-note", title: "欢迎来到 LocalLakexNotes", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf(WELCOME_CONTENT) },
         { id: "z1", title: "已同步", parentId: "notebook-personal", sortOrder: 1, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h },
       ],
       remoteFolders: [

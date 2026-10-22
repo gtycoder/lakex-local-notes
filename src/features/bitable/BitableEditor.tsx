@@ -237,10 +237,10 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
   /** 已折叠的分组 key（本机展示态，不进正文）。 */
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [tablesWidth, setTablesWidth] = useState<number>(() => {
-    const v = Number(localStorage.getItem("lake-notes-v3.bitable-tables-width"));
+    const v = Number(localStorage.getItem("local-lakex-notes-v3.bitable-tables-width"));
     return Number.isFinite(v) && v >= 140 && v <= 420 ? v : 190;
   });
-  const [tablesCollapsed, setTablesCollapsed] = useState<boolean>(() => localStorage.getItem("lake-notes-v3.bitable-tables-collapsed") === "1");
+  const [tablesCollapsed, setTablesCollapsed] = useState<boolean>(() => localStorage.getItem("local-lakex-notes-v3.bitable-tables-collapsed") === "1");
 
   const activeTable = doc.tables.find((t) => t.id === doc.activeTableId) ?? doc.tables[0];
   const activeView = activeTable.views.find((v) => v.id === activeTable.activeViewId) ?? activeTable.views[0];
@@ -712,8 +712,8 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     return () => document.removeEventListener("keydown", onKey);
   }, [rowCtx]);
 
-  useEffect(() => { writeLocalStorage("lake-notes-v3.bitable-tables-width", String(tablesWidth)); }, [tablesWidth]);
-  useEffect(() => { writeLocalStorage("lake-notes-v3.bitable-tables-collapsed", tablesCollapsed ? "1" : "0"); }, [tablesCollapsed]);
+  useEffect(() => { writeLocalStorage("local-lakex-notes-v3.bitable-tables-width", String(tablesWidth)); }, [tablesWidth]);
+  useEffect(() => { writeLocalStorage("local-lakex-notes-v3.bitable-tables-collapsed", tablesCollapsed ? "1" : "0"); }, [tablesCollapsed]);
 
   /** 数据表列表宽度拖拽（对齐钉钉：右边缘可左右调；收起后留一条窄栏）。 */
   const startTablesResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

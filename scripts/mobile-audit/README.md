@@ -30,11 +30,11 @@ nohup emulator -avd lake_gate -no-snapshot -no-boot-anim -gpu host &
 # 2) 装包 + CDP 转发到 9336（别占用用户那台的 9335）
 export ANDROID_SERIAL=emulator-5556
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.lakenotes.mobile/.MainActivity
+adb shell am start -n com.locallakexnotes.mobile/.MainActivity
 bash scripts/emu-cdp.sh 9336
 
 # 3) 灌固定夹具（幂等；**先 pm clear 保证干净**）
-adb shell pm clear com.lakenotes.mobile && adb shell am start -n com.lakenotes.mobile/.MainActivity && sleep 8
+adb shell pm clear com.locallakexnotes.mobile && adb shell am start -n com.locallakexnotes.mobile/.MainActivity && sleep 8
 bash scripts/emu-cdp.sh 9336
 node scripts/cdp-eval.mjs 9336 @scripts/mobile-audit/gate-fixture.mjs
 

@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest

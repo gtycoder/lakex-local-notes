@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin

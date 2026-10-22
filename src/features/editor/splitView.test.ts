@@ -40,7 +40,7 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
   });
 
   it("临时不持久化：分屏状态不写 localStorage / 不进 settings", () => {
-    expect(MULTITAB).not.toContain("lake-notes-v3.split");
+    expect(MULTITAB).not.toContain("local-lakex-notes-v3.split");
     expect(SPLITCSS).not.toContain("localStorage");
     expect(STATE).not.toMatch(/splitPair[\s\S]{0,120}localStorage/);
   });

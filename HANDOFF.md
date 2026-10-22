@@ -19,6 +19,21 @@
 > **已定不再讨论**：「开始」工具收窄后**隐藏旧工具就是为了让折叠的出来**（用户 261010 定：不给白名单、保持现状）；canonical 快照挪空闲时段暂不做；移动端/桌面抽公共 runtime、单实例多 workbook 共享不做；公式栏收起方案仅存档；MiSans 桌面字体（暂缓）；
 > **移动端小记工具条不加「＋」面板入口**（用户 261010 定："这个+号本来就不应该出现，在移动端太突兀"）——已知副作用：移动端小记插不了表格/代码块/公式/等高亮块等（显示不受影响），别再提议加回。；**Android 端"先保证能用"**。**唯一已知遗留** = 多标签切换时内核工具条 1~4 帧绘制空帧，见 §3#9（诊断与可行方向已写全，别重复试提层类改动）。
 
+### 261022 · 品牌/身份标准化：local-lakex-notes（全量改名，无存量）· **已提交**
+
+- **用户定稿**：项目名 `local-lakex-notes`（GitHub 空间同名，用户自行创建）；本地无存量数据 ⇒ **连同包名 / appId / 数据库与存储键全部标准化**，不做旧值兼容。
+- **映射（执行结果）**：
+  - npm `name`：`lake-notes-electron` → **`local-lakex-notes`**；`build.productName`：`LocalLakeNotes` → **`LocalLakexNotes`**。
+  - appId：`com.lakenotes.electron` → **`com.locallakexnotes.desktop`**；Android `com.lakenotes.mobile` → **`com.locallakexnotes.mobile`**（namespace/applicationId/`strings.xml`/Kotlin 包目录一并迁移）。
+  - 数据目录：`lake-notes-dev` → **`local-lakex-notes-dev`**；`lake-notes-electron` → **`local-lakex-notes`**（旧目录不再读取）；日志 `local-lakex-notes.log`。
+  - 存储键：`lake-notes-v3.*` → **`local-lakex-notes-v3.*`**；`lake-notes-mobile.*` → **`local-lakex-notes-mobile.*`**；移动端 SQLite `lake-notes-mobile` → **`local-lakex-notes-mobile`**。
+  - S3：迁移码前缀 `LNS3.1.` → **`LLN1.`**（载荷 app/seed/key 同步改名）；默认对象前缀 `lake-notes` → **`local-lakex-notes`**。
+  - 深链：`lakenotes://quick-note` → **`locallakexnotes://quick-note`**；私有协议：`lake://app` → **`locallakexnotes://app`**（`APP_SCHEME` + 协议注册 + 测试/脚本同步）。
+  - 共 172 个跟踪文件、约 500 处替换；Android Kotlin 包目录 `com/lakenotes/mobile` → `com/locallakexnotes/mobile`（main + test）。
+- **有意保留（不是漏改）**：物理仓库目录 `lake-notes-electron` 与 `lake-notes-electron-worktrees/*`（改名会断 worktree/其它会话，另行处理）；`LAKE_*` 开发环境变量；`--lake-*` 设计令牌；`lakex` 内核名与 `.lake` 格式；S3 桶名 `local-lake-hebei`。
+- **验证**：tsc 0 · 全库 vitest **361 文件 / 2509 通过（17 skip）** · 桌面构建 ✓（隔离实例实测页面 `locallakexnotes://app/index.html`、标题 `LocalLakexNotes`、日志 `local-lakex-notes.log`）· Android `assembleDebug` ✓、新包 `com.locallakexnotes.mobile` 已装 emulator-5562 并启动（旧包 `com.lakenotes.mobile` 仍在设备上，可自行卸载）。
+- **注意**：桌面 dmg/app 仍是旧名旧包（需重打）；本机旧开发数据（`lake-notes-dev`）不再被读取；GitHub 仓库需用户在 GitHub 建 `local-lakex-notes` 后加 remote。
+
 ### 261022 · 本会话改动 review（查漏补缺）· **已修复，全量门禁转绿**
 
 - **修复 1（数据安全，真问题）**：`@univerjs/sheets-note` 会把备注写进 **plugin resource**；移动端只装了 UI 无关的数据插件之前**没装** ⇒ 移动端保存会静默丢掉桌面写的备注。现在移动端也注册 `UniverSheetsNotePlugin`（只数据、无 UI），并把两端插件顺序统一为 **hyperlink → note → crosshair**（resources 顺序一致，避免假冲突）。`·`
@@ -84,7 +99,7 @@
 ### 261022 · 桌面 stylesnap 基线重烤（§3#24 结案）· **已提交 `ba6d5a8d`**
 
 - **背景**：基线是 261018 烤的，261019–261021 批次后每态 +19 元素 ⇒ 定点/全量 stylesnap 一直假红（§3#24）。
-- **做法（按 README 口径）**：冻结合成夹具 `$HOME/Library/Caches/lake-notes-css-audit/fixture`（8 notes / 11 tree_nodes）→ 隔离 scheme 实例（独立 `LAKE_USER_DATA` + `LAKE_ASSET_PORT=19811` + CDP **9231** + `--disable-gpu --no-sandbox`）→ 两轮完整 42 态采集（snapA / snapB）→ 逐态逐行完全相同 → `check-stylesnap.mjs --from snapA.json --write-baseline` → 用 snapB 复验 0 差异。
+- **做法（按 README 口径）**：冻结合成夹具 `$HOME/Library/Caches/local-lakex-notes-css-audit/fixture`（8 notes / 11 tree_nodes）→ 隔离 scheme 实例（独立 `LAKE_USER_DATA` + `LAKE_ASSET_PORT=19811` + CDP **9231** + `--disable-gpu --no-sandbox`）→ 两轮完整 42 态采集（snapA / snapB）→ 逐态逐行完全相同 → `check-stylesnap.mjs --from snapA.json --write-baseline` → 用 snapB 复验 0 差异。
 - **结果**：相对旧基线**每态 +21 元素**（plain 2351 → **2372**、settings 2480 → **2501**、resources 2389 → **2410**），与 §3#24 的「恒定增量 = 全局外壳」判断一致；34 态严格比对 0 差异，8 个窄窗态按脚本 `UNSTABLE` 名单跳过（照常入库）。
 - **一次假基线的教训（已排除，未入库）**：第一次拷贝夹具时用了 `process.env.HOME`（**本机 DSH 的 `run_code` 里 `process.env` 为空**）⇒ `cp` 失败、实例新建了空工作区，烤出「每态 2194 元素」的假基线。判据：**元素数比旧基线少 157** ⇒ 立刻停手、查夹具是否真加载（`.tree-row` 只有 2 行 = 空工作区）。以后在 DSH 里复制路径一律用 **shell 的 `$HOME`**，不要用 Node 的 `process.env.HOME`。
 - **状态**：已提交 `ba6d5a8d`。`§3#24` 结案。
@@ -134,16 +149,16 @@
   - 交互抽查（CDP）：侧栏拖拽 300→372 预览并提交落盘、键盘 ArrowRight +8 / Shift+ArrowRight +24、双击复位 224；大纲（临时 `outlineEnhance=true`）左缘拖动 300→372、键盘 ArrowLeft +8（invert 方向正确）。
 - **待办（顺带发现，未处理）**：① 桌面 `stylesnap` 基线陈旧（见 261021(五) 条目）；② **移动端 `mobile-snap` 基线同样陈旧**：master 构建即 1816→1768（−48），与本批无关；合并后用整份 6 态重烤（**别用 `--states` 覆盖基线**）。
 - **合并**：`feat/desktop-vendor-css-layer` 以 **FF** 合入 `master`（`master` = `98e9278e`，含 `0d0d8e5a` 的 master 合并 + A/B + C/D）；合并后在主树重跑门禁全绿（tsc 0 · 337 文件 / 2448 例 · 双端构建 · ui-metrics / check:core / check:mobileui / check:bundle / `git diff --check` ✓）。**已推送 `origin/master`（`2845c8bf`）**。
-- **状态**：已合并 master；worktree `.../vendor-css-layer` 已删除、`feat/desktop-vendor-css-layer` 已删（合入即删，符合 AGENTS §1）；对拍快照保留在 `.css-audit/snap/vendor-css-layer-261021/`。主树 `lake-notes-electron` 只多出本批改动。
+- **状态**：已合并 master；worktree `.../vendor-css-layer` 已删除、`feat/desktop-vendor-css-layer` 已删（合入即删，符合 AGENTS §1）；对拍快照保留在 `.css-audit/snap/vendor-css-layer-261021/`。主树 `local-lakex-notes` 只多出本批改动。
 
 ### 261022(二) · 长按小记入口零等待启动（capture 无 logo / 普通启动保留 logo）· **已提交 `c21d3adc`、已推送 master**
 
 - **用户口径**：视觉连续后仍觉得慢；**不加遮罩、不延长任何等待**；capture 不展示 logo、普通启动保留 logo；参考思源「双入口」。
-- **入口分离**：新增 `activity-alias .QuickNoteAlias`（target = MainActivity，theme = `AppTheme.NoActionBarLaunchNoLogo`）：Android 12+ 用 `windowSplashScreenBackground` + 透明图标（无 logo/动画），旧版本用纯色 `windowBackground`；普通启动主题保留 `@drawable/splash` / `@mipmap/ic_launcher`。快捷方式 `targetClass` 改为 alias；`lakenotes://quick-note` 的 VIEW filter 只留在 alias，MainActivity 保留 launcher / 分享入口。两者是**同一个 MainActivity/WebView/数据**，不复制第二套 App。
+- **入口分离**：新增 `activity-alias .QuickNoteAlias`（target = MainActivity，theme = `AppTheme.NoActionBarLaunchNoLogo`）：Android 12+ 用 `windowSplashScreenBackground` + 透明图标（无 logo/动画），旧版本用纯色 `windowBackground`；普通启动主题保留 `@drawable/splash` / `@mipmap/ic_launcher`。快捷方式 `targetClass` 改为 alias；`locallakexnotes://quick-note` 的 VIEW filter 只留在 alias，MainActivity 保留 launcher / 分享入口。两者是**同一个 MainActivity/WebView/数据**，不复制第二套 App。
 - **零等待首帧路由**：MainActivity 注入 `lakeLaunchUrl` JS 接口；`main.tsx` 在 `createRoot` 前同步读，`MobileApp initialCapture` ⇒ React 首帧直接进 capture，不再先画首页骨架再整树切换。`subscribeQuickNoteShortcut` 支持 `skipColdRead`（冷启动不重复轮询 `getLaunchUrl`），并用触发时刻去重，避免 appUrlOpen 二次触发 `setCaptureNonce` 重挂写作卡。
 - **纯色底（不盖图）**：Capacitor `backgroundColor`、`mobile.html` 内联 `html,body{background:#ededf1}`、Android `launch_background` 纯色；splash 退场到 WebView 首帧不露白。
 - **骨架/过渡**：`QuickNoteComposerSkeleton` 独立成文件，与真实写作卡同构（正文/标签/底部动作行）；模块已到、内核未就绪的窗口期用同一份骨架盖住白卡（就绪即揭，不是启动遮罩）；capture 卡片 120ms 淡入（`prefers-reduced-motion` 关闭）。
-- **设备实测（emulator-5554）**：普通启动截帧 s01–s04 有 logo；alias 启动 s02–s03 纯色无 logo → s04–s07 骨架 → s08+ 写作卡+键盘；热启动 alias 复用现有 MainActivity 并打开 capture；`cmd shortcut get-shortcuts` 实测 intent `cmp=com.lakenotes.mobile/.QuickNoteAlias`；首帧采样 `home:false / overlay:false / composer:true / skel:true`。
+- **设备实测（emulator-5554）**：普通启动截帧 s01–s04 有 logo；alias 启动 s02–s03 纯色无 logo → s04–s07 骨架 → s08+ 写作卡+键盘；热启动 alias 复用现有 MainActivity 并打开 capture；`cmd shortcut get-shortcuts` 实测 intent `cmp=com.locallakexnotes.mobile/.QuickNoteAlias`；首帧采样 `home:false / overlay:false / composer:true / skel:true`。
 - **门禁**：tsc 0 · vitest **334 文件 / 2415 通过（16 skip）** · ui-metrics 0 · check:mobileui ✓ · 双端构建 ✓ · diff-check ✓。
 - **文件**：Manifest / values(-v31)/styles / shortcuts / MainActivity / capacitor.config / mobile.html / MobileApp / main.tsx / quickNoteShortcut / QuickNoteComposer / QuickNoteComposerSkeleton / quickNoteComposerLazy / mobile.css + capture/prewarm/mobile-layers 测试。
 
@@ -261,7 +276,7 @@
 - **门禁**：tsc 0 · 全库 vitest **328 文件 / 2366 通过（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:mobileui / check:bundle（含审计）✓ · `git diff --check` ✓。
 - **视觉对拍（A/B，非全量）**：合成夹具 + 隔离实例（scheme / CDP 9231 / 独立 userData），`plain:1315:light` + `settings:1315:light` 两态：**HEAD 构建 vs 本分支构建逐态 0 差异**（snapdiff 0 态有差）。Univer 编辑面不在现成态集里；静态核对：分层 CSS **无任何 `.univer-*` 选择器**与 vendor 层竞争（只有我们 unlayered 的 `usheetEditor.css` 覆盖它，语义不变）⇒ 预期中性；验收时开一张表格看一眼即可。
 - **顺带发现（与本批无关，登记为待办）**：`scripts/css-audit/baseline/stylesnap.json`（261018 烤）在 261019–261021 批次后**每态 +19 元素**（HEAD 构建同样 2370 vs 基线 2351）⇒ 基线陈旧；合并后应在 master 用**整份 42 态**重烤（按 README「陈旧基线」判据，别用 `--states` 覆盖）。
-- **状态**：已合并 master（`98e9278e`）；主树（`lake-notes-electron`）本批未触碰，合并由该分支 FF 完成。
+- **状态**：已合并 master（`98e9278e`）；主树（`local-lakex-notes`）本批未触碰，合并由该分支 FF 完成。
 
 ### 261021(三) · Android 小记搜索（全局搜索合并小记）· **待用户验收**
 
@@ -357,10 +372,10 @@
 - **资源/代码**：`electron/boot.html`、`public/brand/*`、`src/styles/brand-launch.css`、`src/mobile/brand-launch.css`、两端 `BrandLaunchMark`；打包 `files` 已纳入 `electron/boot.html`。
 - **门禁（暂存区隔离 worktree）**：tsc 0 · vitest **316 文件 / 2303 例（16 skip）** · 双端构建 ✓ · ui-metrics / check:core / check:bundle ✓ · `git diff --check` ✓。
 
-### 261020(七) · 产品名暂定 LocalLakeNotes + 桌面/Android 图标换 14A · 已提交
+### 261020(七) · 产品名暂定 LocalLakexNotes + 桌面/Android 图标换 14A · 已提交
 
-- **产品名**：用户暂定 `LocalLakeNotes`（L/L/N 大写）。已更新 `package.json.productName`、桌面/移动页面标题、Capacitor `appName`、Android `app_name/title_activity_main`、设置/关于/欢迎文档/S3 配置错误文案与打包脚本路径。**内部 appId、`com.lakenotes.*`、数据库/S3 标记不改**，避免破坏数据身份。
-- **桌面图标**：`build/icon.png` 与 `build/icon.icns` 由 14A Paper Finch 重新生成；鸟形在 256 图标坐标上 `translate(2 -20)`，在圆角底框中水平/垂直居中。macOS 打包产物名为 `LocalLakeNotes.app`，包内 `icon.icns` hash 与 `build/icon.icns` 一致。
+- **产品名**：用户暂定 `LocalLakexNotes`（L/L/N 大写）。已更新 `package.json.productName`、桌面/移动页面标题、Capacitor `appName`、Android `app_name/title_activity_main`、设置/关于/欢迎文档/S3 配置错误文案与打包脚本路径。~~内部 appId、`com.locallakexnotes.*`、数据库/S3 标记不改~~（261022 已按用户要求全量标准化改名，见 §0 最新条目）。
+- **桌面图标**：`build/icon.png` 与 `build/icon.icns` 由 14A Paper Finch 重新生成；鸟形在 256 图标坐标上 `translate(2 -20)`，在圆角底框中水平/垂直居中。macOS 打包产物名为 `LocalLakexNotes.app`，包内 `icon.icns` hash 与 `build/icon.icns` 一致。
 - **Android 图标**：legacy `ic_launcher.png`（48/72/96/144/192）与 `ic_launcher_round.png` 全部换 14A；adaptive foreground `ic_launcher_foreground.png`（108/162/216/324/432）换透明鸟形，adaptive background 改 `#F0FBF5`；`drawable(-v24)` 的旧默认机器人/青绿网格也同步替换。原生 splash 已是 14A。
 - **门禁**：tsc 0 · 全量 vitest **320 文件 / 2327 例（16 skip）** · Android `assembleDebug` ✓ · 桌面/移动构建 ✓ · `git diff --check` ✓。打包 `build.files` 已补回 `electron/boot.html`（并行提交曾带掉），包内 `electron/boot.html` + `dist/brand/*` 已确认存在。
 - **注意**：macOS Dock 可能缓存旧图标；重新打包后退出旧 App，必要时移除 Dock 固定项再重新添加。完整 `electron-builder --mac dir` 第二次重跑在 packaging 阶段卡住，已终止；已有本地包名/资源/图标路径验证，最终发布时重新执行打包即可。
@@ -408,13 +423,13 @@
 ### 261019(十二) · 桌面导出补齐：表格 CSV / 表格 Excel / 画板 PNG·SVG / Word · **已提交 `f6390745`、已推送（用户 261019 验收通过）**
 
 - **用户点单**：把导出占位补齐，顺序 = usheet CSV → 画板菜单接线 → usheet Excel → Word。
-- **① usheet CSV（活动工作表）**：core [usheetCsv.ts](lake-notes-electron/src/core/usheetCsv.ts)（BOM+CRLF、显示值 `m`→原始值 `v`、只导有效区域、超限报错）；主进程 `NoteExport.exportUsheetCsv`；新增 IPC `export_table_csv` **按 kind 分派**（bitable 活动数据表 / usheet 工作表）⇒ 渲染层只认一个「导出为 CSV」。
-  - 活动工作表属**本机视图**（不进正文/不写 S3）：新增 [usheetActiveSheet.ts](lake-notes-electron/src/features/usheet/usheetActiveSheet.ts) 内存登记表，`UniverSheetEditor` 挂载时登记 getter；文档没打开时后端回退 `sheetOrder[0]`，提示里写明导的是哪张。
+- **① usheet CSV（活动工作表）**：core [usheetCsv.ts](local-lakex-notes/src/core/usheetCsv.ts)（BOM+CRLF、显示值 `m`→原始值 `v`、只导有效区域、超限报错）；主进程 `NoteExport.exportUsheetCsv`；新增 IPC `export_table_csv` **按 kind 分派**（bitable 活动数据表 / usheet 工作表）⇒ 渲染层只认一个「导出为 CSV」。
+  - 活动工作表属**本机视图**（不进正文/不写 S3）：新增 [usheetActiveSheet.ts](local-lakex-notes/src/features/usheet/usheetActiveSheet.ts) 内存登记表，`UniverSheetEditor` 挂载时登记 getter；文档没打开时后端回退 `sheetOrder[0]`，提示里写明导的是哪张。
   - 空工作表 / 空表格**明确报错**，不产出空文件。
-- **② 画板 PNG/SVG**：不另写画布渲染，复用画板内已有 Drawnix 导出（`lakex-drawnix` 的 `saveAsPng/saveAsSvg`，CSP 已放行 data:）。新增 [boardExport.ts](lake-notes-electron/src/features/board/boardExport.ts) 登记表：`BoardEditor` 挂载时登记触发器，菜单动作点开 vendor 导出菜单再点目标格式。**画板没打开 ⇒ 明确提示先打开**；文件落**系统下载目录**（画板工具栏本来就是这种行为）。
+- **② 画板 PNG/SVG**：不另写画布渲染，复用画板内已有 Drawnix 导出（`lakex-drawnix` 的 `saveAsPng/saveAsSvg`，CSP 已放行 data:）。新增 [boardExport.ts](local-lakex-notes/src/features/board/boardExport.ts) 登记表：`BoardEditor` 挂载时登记触发器，菜单动作点开 vendor 导出菜单再点目标格式。**画板没打开 ⇒ 明确提示先打开**；文件落**系统下载目录**（画板工具栏本来就是这种行为）。
   - 坑：等待用 **setTimeout 而非 rAF** —— 隐藏窗口（CDP 依附/最小化）rAF 不触发会把导出 promise 永久挂住。
-- **③ usheet Excel（261019 晚升级：改用 `write-excel-file@4.1.1`，用户确认「接受 oneCellAnchor + 补数字格式/列宽/合并/冻结 + 样式扩展」）**：core [usheetExcel.ts](lake-notes-electron/src/core/usheetExcel.ts) 只做 Univer 快照 → 中立模型（值/公式/数字格式/粗斜下划线删除线/字号/字色/底色/边框四边/对齐/换行/行高/列宽/合并/冻结/隐藏表照常导出/富文本 `p` 文字/图片引用与锚点），主进程 [usheetXlsxExport.ts](lake-notes-electron/electron/usheetXlsxExport.ts) 解析资产字节（webp 等 sharp 转 png）并调库写 xlsx。**图片两种形态都接**：单元格内图片取 `cell.p.drawings`（锚到本格、尺寸 `docTransform.size`），浮动图片取 `SHEET_DRAWING_PLUGIN`（`sheetTransform.from` + 像素偏移 + `transform` 宽高）；缺失/外链/不支持格式计入 skipped，不阻断导出。依赖只进主进程（`dependencies` 精确锁 4.1.1，+fflate 共 2 个包），core 保持零依赖；旧手写 `xlsx.ts` 已删除（单一实现）。IPC 仍为 `export_usheet_xlsx`，结果新增 `imageCount/skipped`。
-- **④ Word（docx）**：core [docx.ts](lake-notes-electron/src/core/docx.ts) 手写极简 OOXML：H1–H6 / 列表（numbering）/ 引用 / 代码块 / 分隔线 / 基础表格 / 粗斜删除线·行内代码 / 外部链接 / 图片（主进程读本地资产，webp 等用 sharp 转 png，≤600px 宽）。走既有 `export_note`，`NOT_IMPLEMENTED` 已清空。图片缺失计入 skipped 并提示；远程图降级为「[图片] alt」。
+- **③ usheet Excel（261019 晚升级：改用 `write-excel-file@4.1.1`，用户确认「接受 oneCellAnchor + 补数字格式/列宽/合并/冻结 + 样式扩展」）**：core [usheetExcel.ts](local-lakex-notes/src/core/usheetExcel.ts) 只做 Univer 快照 → 中立模型（值/公式/数字格式/粗斜下划线删除线/字号/字色/底色/边框四边/对齐/换行/行高/列宽/合并/冻结/隐藏表照常导出/富文本 `p` 文字/图片引用与锚点），主进程 [usheetXlsxExport.ts](local-lakex-notes/electron/usheetXlsxExport.ts) 解析资产字节（webp 等 sharp 转 png）并调库写 xlsx。**图片两种形态都接**：单元格内图片取 `cell.p.drawings`（锚到本格、尺寸 `docTransform.size`），浮动图片取 `SHEET_DRAWING_PLUGIN`（`sheetTransform.from` + 像素偏移 + `transform` 宽高）；缺失/外链/不支持格式计入 skipped，不阻断导出。依赖只进主进程（`dependencies` 精确锁 4.1.1，+fflate 共 2 个包），core 保持零依赖；旧手写 `xlsx.ts` 已删除（单一实现）。IPC 仍为 `export_usheet_xlsx`，结果新增 `imageCount/skipped`。
+- **④ Word（docx）**：core [docx.ts](local-lakex-notes/src/core/docx.ts) 手写极简 OOXML：H1–H6 / 列表（numbering）/ 引用 / 代码块 / 分隔线 / 基础表格 / 粗斜删除线·行内代码 / 外部链接 / 图片（主进程读本地资产，webp 等用 sharp 转 png，≤600px 宽）。走既有 `export_note`，`NOT_IMPLEMENTED` 已清空。图片缺失计入 skipped 并提示；远程图降级为「[图片] alt」。
 - **已知边界（如实记录）**：Excel 图片为 **oneCellAnchor**（不随列宽缩放）、隐藏工作表/隐藏行列统一导出为可见（库无 API）、公式只写 `<f>` 无缓存值（Excel/WPS 打开重算）、**边框四边已补（对角线不支持）**、**字体族不搬（用户 261020 明确不需要）**；Word 不搬运行内 HTML/复杂嵌套/表格样式/页眉页脚（文本不丢，结构降级）；画板导出落下载目录且需画板已打开。
 - **门禁**：tsc 0 · 全库 vitest **306 文件 / 2232 例（301 通过 / 5 skip 文件；16 skip 例）全绿** ✓ · 双端构建 ✓ · `dist-electron/main.js` 以 `import "write-excel-file/node"` 外置（主进程 external 从 dependencies 派生）✓ · ui-metrics ✓ · check:core **91 文件 0 违规** ✓ · check:mobileui ✓ · check:bundle ✓ · `git diff --check` ✓。新增测试：核心模型 7 例 + Store 级 xlsx 2 例（真实 zip 解包断言 media/drawing/numFmt/merge/pane/col/公式）。
 - **IPC 基线**：`ipcChannelParity` 119 → **121**（`export_table_csv` / `export_usheet_xlsx`）。
@@ -436,7 +451,7 @@
 ### 261019(十) · 长按图标「小记」快捷入口：响应速度实测与收口（**不立项大改**）· **待用户验收**
 
 - **问题（用户问）**：长按桌面图标快捷创建小记，还有没有优化响应速度的空间。
-- **实测（emulator-5554 冷启动：`am force-stop` + `am start -W -a VIEW -d lakenotes://quick-note`；AVD 空闲时）**：
+- **实测（emulator-5554 冷启动：`am force-stop` + `am start -W -a VIEW -d locallakexnotes://quick-note`；AVD 空闲时）**：
   - Activity 首次显示 **TotalTime 503ms**；
   - WebView 页内：DCL **208ms** · composer 挂载 **576ms** · 正文可输入 **677ms**（分包与 lakeRuntime 就位后，内核实例化只占 ~100ms）；
   - 点击→可输入（含观测端 CDP 连接开销）≈ **1.1s**。
@@ -451,7 +466,7 @@
 
 - **需求（用户点单）**：最右侧 ⌨ 同时承担"收起 / 展开"两种动作、却一直是同一个键盘图标 ⇒ 分不出当前会收还是展。用户给了两个参照（思源「键盘+斜线」/ 语雀「键盘+向下标志」），让我们定。
 - **定稿**：键盘**展开中** ⇒ **`KeyboardOff`（键盘+斜线，思源同款）** + title/aria「收起键盘」；键盘**收起** ⇒ `Keyboard` + 「展开键盘」；面板展开态仍是「收起面板」且图标保持 `Keyboard`（此时键盘本就是收起的，动作是"关面板 + 放回键盘"，用 KeyboardOff 会被读成"再收一次"）。
-- **改法**：[EditorDock.tsx](lake-notes-electron/src/mobile/editor/EditorDock.tsx) 的 `.med-btn--kb` 内按 `keyboardOpen` 二选一；`aria-label` / `title` 继续用既有 `kbLabel`（三态文案不变）。
+- **改法**：[EditorDock.tsx](local-lakex-notes/src/mobile/editor/EditorDock.tsx) 的 `.med-btn--kb` 内按 `keyboardOpen` 二选一；`aria-label` / `title` 继续用既有 `kbLabel`（三态文案不变）。
 - **设备验收（emulator-5554）**：键盘展开（ih 530）实测 `svg.lucide-keyboard-off` + label「收起键盘」；点一下收起（ih 842）⇒ `svg.lucide-keyboard` +「展开键盘」；再点展开 ⇒ 回到 `keyboard-off`。实拍裁图 `.css-audit/mobile-props-261019/{kb-icon-open,kb-icon-closed}.png`。
 - **门禁**：tsc 0 · vitest **292 文件 / 2167 例**（本批 +1 例）· 双端构建 ✓ · ui-metrics / core / mobileui / bundle / diff-check ✓。
 - **护栏**：`dockPanelFocusGuard.test.ts` 增 1 例（KeyboardOff 映射 + aria-label/title）。
@@ -481,7 +496,7 @@
 ### 261019(六) · 移动端两处点单：目录行菜单去重复「新建」+ 文档属性适配手机 · **待用户验收**
 
 - **需求（用户点单，附设备截图）**：① 目录行 ⋮ 菜单移除「新建文档 / 新建分组」（行内 ＋ 已有同一份新建清单）；② 属性页面要适配手机。
-- **① 改法**：[NotebookWorkspace.tsx](lake-notes-electron/src/mobile/notebook/NotebookWorkspace.tsx) 的 `treeMenuItems` 删掉 `new-note` / `new-group` 两项与 `onTreeMenuSelect` 的对应分支；创建通道不变（行内「新建子项」＋抽屉工具栏「新建」→ 同一份 5 项清单：文档/分组可建、表格/数据表/画板仍置灰）。菜单只剩「对这一行本身的动作」：重命名 / 设置图标 / 设为常用 / 移动到… / 历史版本 / 属性 / 移入回收站。
+- **① 改法**：[NotebookWorkspace.tsx](local-lakex-notes/src/mobile/notebook/NotebookWorkspace.tsx) 的 `treeMenuItems` 删掉 `new-note` / `new-group` 两项与 `onTreeMenuSelect` 的对应分支；创建通道不变（行内「新建子项」＋抽屉工具栏「新建」→ 同一份 5 项清单：文档/分组可建、表格/数据表/画板仍置灰）。菜单只剩「对这一行本身的动作」：重命名 / 设置图标 / 设为常用 / 移动到… / 历史版本 / 属性 / 移入回收站。
 - **② 根因（设备实测，不靠目测）**：`NoteInfoSheet` 内容区 `.minfo` **没有横向内距** ⇒ 实测 `dt.left=0 / dd.right=412 / 操作按钮右缘≈412`，标签与数值/按钮全贴屏幕边，观感像"被裁掉"。修法：`.minfo { padding: 0 var(--mb-page-pad) }`（16px，与 sheet 头部同档）；行密度/字号/分区线不动（分区线随内容一起内缩）。
 - **设备验收（emulator-5554 / 412×842）**：行 ⋮ 实测 **9 项 → 7 项**（新建两项消失、其余逐项一致）；属性页实测 `padding: 0px 16px`、`dt.left=16`、`dd.right=396`、`docScrollW=412`（无横向溢出）。实拍（before/after/菜单）见 `.css-audit/mobile-props-261019/`（gitignore，不入库）。
 - **护栏**：`workspaceMenu.test.ts` 增「行 ⋮ 不再有新建」；新增 `ui/noteInfoSheet.test.ts`（内距必须用 `--mb-page-pad` + 清单必须来自 `core/noteInfo`）；`mobileLayers` mobile.css 1339 → **1340**（+1，写明是补缺失内距）。
@@ -496,7 +511,7 @@
 - **根因**：`QuickNoteComposer` 一直走 `React.lazy` 懒加载；冷启动没预取 ⇒ Suspense fallback。**而且即使分包已预取，
   React.lazy 首次渲染仍会抛一次 fallback**（实测仍有 4 帧 / 43–89ms）⇒ 光预取消不掉这一下。
 - **修法**：
-  1. 新增自研加载壳 [quickNoteComposerLazy.tsx](lake-notes-electron/src/mobile/home/quickNoteComposerLazy.tsx)：模块级缓存 + 订阅通知；
+  1. 新增自研加载壳 [quickNoteComposerLazy.tsx](local-lakex-notes/src/mobile/home/quickNoteComposerLazy.tsx)：模块级缓存 + 订阅通知；
      **预取完成 ⇒ 同一帧同步渲染（零 fallback）**；没赶上则先画写作卡骨架、模块到即替换（不再走 Suspense）。HomePage 与 capture 两处共用。
   2. `scheduleComposerPrewarm()`：bridge 就绪 effect 里**立即排空闲**预取分包（只 import、不实例化内核；内核预热仍是 4s 独立排期，不合并）。
   3. 兜底从「正在加载编辑器…」文字页改为 `.mb-composer-skeleton`（写作卡骨架，复用 `mb-skel`）。
@@ -529,11 +544,11 @@
 
 - **用户点单（4 条）**：① 知识库页顶部固定「常用」分组，带三角可收起/展开，展开用与"最近"相同的卡片、多个靠**左右滑动**；② 删除最近访问、手机端**不存**该记录；③ 目录行菜单加「设为常用」；④ **仅手机端**、不同步、不触发 S3、桌面零改动。
 - **实现**：
-  - 新增 [favorites.ts](lake-notes-electron/src/mobile/data/favorites.ts)：本机 `localStorage`（`lake-notes-mobile.favorites` / `.favoritesOpen`）+ 同端内存事件；**不 import bridge / S3 / 同步模块** ⇒ 不触网、不进 manifest、桌面不感知。
-  - [HomePage.tsx](lake-notes-electron/src/mobile/home/HomePage.tsx)：删除「最近文档」（`recentNotes` 派生 + JSX 整体移除），顶部新增「常用」：标题 + 三角按钮（`aria-expanded`，本机持久化展开态），展开为横排纸卡（复用 `.doc-card`，容器 `.home-card-row` 横向滚动）；**没有常用时整个分组不渲染**；卡片只展示仍存在于库里的文档。
-  - [NotebookWorkspace.tsx](lake-notes-electron/src/mobile/notebook/NotebookWorkspace.tsx)：目录行 ⋮ 菜单在「设置图标」之后新增 **「设为常用 / 取消常用」**（Star 图标，**只对文档行**，分组没有），点击写本地 + toast；首页通过事件即时刷新。
+  - 新增 [favorites.ts](local-lakex-notes/src/mobile/data/favorites.ts)：本机 `localStorage`（`local-lakex-notes-mobile.favorites` / `.favoritesOpen`）+ 同端内存事件；**不 import bridge / S3 / 同步模块** ⇒ 不触网、不进 manifest、桌面不感知。
+  - [HomePage.tsx](local-lakex-notes/src/mobile/home/HomePage.tsx)：删除「最近文档」（`recentNotes` 派生 + JSX 整体移除），顶部新增「常用」：标题 + 三角按钮（`aria-expanded`，本机持久化展开态），展开为横排纸卡（复用 `.doc-card`，容器 `.home-card-row` 横向滚动）；**没有常用时整个分组不渲染**；卡片只展示仍存在于库里的文档。
+  - [NotebookWorkspace.tsx](local-lakex-notes/src/mobile/notebook/NotebookWorkspace.tsx)：目录行 ⋮ 菜单在「设置图标」之后新增 **「设为常用 / 取消常用」**（Star 图标，**只对文档行**，分组没有），点击写本地 + toast；首页通过事件即时刷新。
   - 顺带把 `.home-recent` 类名改为 `.home-card-row`（彻底告别"最近"语义）。
-- **「最近访问」存储核查**：手机端**从未持久化**最近访问记录（原「最近文档」= 按 `updatedAt` 现算，不写库）；唯一沾边的本机持久化是**标签页保持**（`lake-notes-mobile.tabs.<notebookId>`，记录打开过哪些 tab），属另一功能，本批未动。
+- **「最近访问」存储核查**：手机端**从未持久化**最近访问记录（原「最近文档」= 按 `updatedAt` 现算，不写库）；唯一沾边的本机持久化是**标签页保持**（`local-lakex-notes-mobile.tabs.<notebookId>`，记录打开过哪些 tab），属另一功能，本批未动。
 - **设备验收（lake_mobile / 5554）**：目录菜单「设为常用」两条 ⇒ 首页「常用」2 卡；收起（卡片 0 / aria-expanded=false / 键=0）→ 展开恢复（键=1）；**重启后仍在**；注入 6 个真实文档 id 验证横滑（`scrollWidth 524 > clientWidth 412`，scrollLeft 112）；首页已无「最近文档」；已收藏文档的菜单显示「取消常用」。
 - **用户复验（同日）报「从常用进入文档会闪一下，退出也会」**：CDP screencast 逐帧定位到根因 —— 路由层自身带 transform，
   而工作区左右抽屉是 `position:fixed + translateX(±100%)`（fixed 因此以 layer 为包含块）；**layer 在 push/pop 整体位移时，
@@ -558,8 +573,8 @@
   真正会露出空白的两个窗口：**(a) 首次进入工作区**（工作区按需分包，Suspense 兜底原为「加载中…」文字）；**(b) 点到尚未读回的文档**（active 已切、tab 还没进 tabs）。
   ⇒ 两处都改成**文档骨架**（复用 `.mb-skel` 呼吸），并给刚读回的那一页加 **150ms 正文淡入**（`.doc-pane--fresh`，260ms 后清标记；切回旧 tab 不重播）。
 - **① 实现**：
-  - 新增 [scrollChrome.ts](lake-notes-electron/src/mobile/notebook/scrollChrome.ts)（纯函数判据，单一来源）：顶部 ≤24px 一律展开；**向下累计 ≥24 收起**；**向上累计 ≥12 展开**（回翻更灵敏）；反向滚动清零。
-  - [NotebookWorkspace.tsx](lake-notes-electron/src/mobile/notebook/NotebookWorkspace.tsx)：用**捕获**监听 `.mobile-doc-body` 的滚动（scroll 不冒泡），**只对 kind=doc 且非编辑态**生效；
+  - 新增 [scrollChrome.ts](local-lakex-notes/src/mobile/notebook/scrollChrome.ts)（纯函数判据，单一来源）：顶部 ≤24px 一律展开；**向下累计 ≥24 收起**；**向上累计 ≥12 展开**（回翻更灵敏）；反向滚动清零。
+  - [NotebookWorkspace.tsx](local-lakex-notes/src/mobile/notebook/NotebookWorkspace.tsx)：用**捕获**监听 `.mobile-doc-body` 的滚动（scroll 不冒泡），**只对 kind=doc 且非编辑态**生效；
     顶栏加 `.mobile-topbar--auto-hidden`（高度 44→0 + margin/padding/border/opacity 过渡 150ms ⇒ 正文自然上移，不改 position），底部胶囊复用既有 `--hidden`；`aria-hidden` 同步；
     **切文档 / 进出编辑 / 打开任意浮层（目录、标签、大纲、切换笔记本）→ 复位展开**（要操作时导航必须在）。
   - **删掉旧的 8px 阈值 `navHidden` 监听**（上一版只藏胶囊、无顶栏、阈值过灵）——避免两套判据并存。
@@ -579,12 +594,12 @@
   - 思源（真机操作 + 源码 `_mobile.scss`）：顶/底栏滚动收起用 `translate3d(0, var(--mobile-bar-translate-y),0)` + `opacity` + `will-change`；
     底栏条目 `:active { transform: scale(.92) }`、80ms ease；抽屉/弹层 150ms `cubic-bezier(0,0,.2,1)`（我们已是 150ms 口径，**不动**）。
 - **落地**：
-  - 新增 [useRouteTransition.ts](lake-notes-electron/src/mobile/hooks/useRouteTransition.ts)（状态机 + 单一来源）：工作区**按需挂载**、出场播完才卸载；
+  - 新增 [useRouteTransition.ts](local-lakex-notes/src/mobile/hooks/useRouteTransition.ts)（状态机 + 单一来源）：工作区**按需挂载**、出场播完才卸载；
     首页层**常驻**（页栈语义 ⇒ 返回时列表滚动/数据都在）；非活动层 `inert` + `aria-hidden`；`prefers-reduced-motion` 下等待 0ms。
   - `MobileApp`：路由区改两层 `.mobile-route-stage / .mobile-route-layer`；返回统一走 `closeWorkspace`（**顶部返回按钮与 Android 硬件返回键同一条路**）。
-  - [mobile.css](lake-notes-electron/src/mobile/mobile.css)：新页 `translateX(100%)→0`、旧页 `0→-25%`，240ms = `--lake-motion-slow` + `--lake-ease-standard`；
+  - [mobile.css](local-lakex-notes/src/mobile/mobile.css)：新页 `translateX(100%)→0`、旧页 `0→-25%`，240ms = `--lake-motion-slow` + `--lake-ease-standard`；
     reduced-motion 关闭位移。按压反馈统一：底色/颜色过渡 80ms（`--mobile-duration-press`）+ **紧凑条目** `scale(.98)`（整行列表只做底色，整行缩放不采用）。
-  - 护栏 [useRouteTransition.test.ts](lake-notes-electron/src/mobile/hooks/useRouteTransition.test.ts) 4 例（时长/0ms、MobileApp 接线、hook 语义、CSS 位移与降级）；
+  - 护栏 [useRouteTransition.test.ts](local-lakex-notes/src/mobile/hooks/useRouteTransition.test.ts) 4 例（时长/0ms、MobileApp 接线、hook 语义、CSS 位移与降级）；
     `mobileLayers` mobile.css 基线 1253 → **1270**（+17；dupGroups 3 → 4 = `.mobile-route-layer` 在 reduced-motion 里关 transition，沿用 `.mb-skel` 的无障碍登记模式）。
 - **设备验收（lake_mobile / 5554）**：push 后首页层 `matrix(...,-103,0)`（= 25%×412）+ `inert=true`；返回（点按 / 硬件键）出场播完层数 2→1、首页 transform 复位；
   写作卡仍在首页层内（`inHome=true`）且 tab 横滑锁定不回归；设置抽屉 / 新建面板 / 返回键均正常。
@@ -616,9 +631,9 @@
   - `HomePage.tsx`：舞台改**两页常驻**的横向滚动容器（`.mobile-tab-pane` ×2），不再按 tab 条件渲染、不再 `key={tab}`；
     `scrollend`（+120ms 去抖兜底）把页码回写成 tab；tab 变化 → `scrollTo(smooth)`；宽度变化（ResizeObserver）立即重对齐；
     非活动页 `inert`；`prefers-reduced-motion` 下改为 `auto`。
-  - 新增 [tabPager.ts](lake-notes-electron/src/mobile/home/tabPager.ts)（纯函数：`tabIndex / tabAt / pagerScrollLeft / settledIndex`，四舍五入 + 夹紧）——
+  - 新增 [tabPager.ts](local-lakex-notes/src/mobile/home/tabPager.ts)（纯函数：`tabIndex / tabAt / pagerScrollLeft / settledIndex`，四舍五入 + 夹紧）——
     判据单一来源，DOM 交互只在 HomePage。
-  - [mobile.css](lake-notes-electron/src/mobile/mobile.css)：`.mobile-tab-stage` = `overflow-x:auto` + `scroll-snap-type:x mandatory` + `overscroll-behavior-x:contain`；
+  - [mobile.css](local-lakex-notes/src/mobile/mobile.css)：`.mobile-tab-stage` = `overflow-x:auto` + `scroll-snap-type:x mandatory` + `overscroll-behavior-x:contain`；
     `.mobile-tab-pane` = 100% 宽 + `scroll-snap-align:start` + `scroll-snap-stop:always`。
   - **删除** 上午那版 `useHorizontalSwipe`（已被分页取代；`data-prevent-swipe` 仍服务抽屉手势 / 弹层右滑关闭）。
 - **三个实测坑（修法均已验证）**：
@@ -650,14 +665,14 @@
 
 - **需求（用户 261017）**：桌面端已有一份可用 S3 配置，导出一份到手机导入，省去安卓端逐项手填；做法参考思源「导入 / 导出 S3 同步配置」。
 - **口径（用户二次定稿）**：**导出一个文件**——桌面写 `.json` 配置文件，发送到手机后手机选文件导入；迁移码降级为**备用**（手机「导出迁移码」→ 桌面「粘贴迁移码…」）。其余同思源：一键导出、导入覆盖本机 S3 配置（**同步策略不动**）。
-- **单一来源** [s3ConfigTransfer.ts](lake-notes-electron/src/core/s3ConfigTransfer.ts)：迁移码 `LNS3.1.<base64url(iv||AES-GCM 密文)>`；文件 = 外层 JSON 元数据 + 内层迁移码（`encode/decodeS3ConfigTransferFile`，兼容直接放迁移码的 `.txt`）；AES-GCM 带认证；**固定种子只是防误读 / 防随手转发的封装，不是安全边界**（文件头写明；怀疑泄露请轮换 S3 密钥）。导出拒绝无 Secret / 非法配置；导入规范化 endpoint、region 缺省、强制 https，`forcePathStyle` 原样返回由端侧决定。
-- **桌面**：IPC `export_s3_config_file` / `import_s3_config_file`（**主进程**弹系统保存/选择框 + 加密封装/解码/落库，渲染层不接触明文 Secret，延续 W-14）；保留 `import_s3_config` 作粘贴备用。主进程文件工具 [s3ConfigTransferFile.ts](lake-notes-electron/electron/s3ConfigTransferFile.ts)（0600 落盘、64KB 上限）；粘贴弹窗 [S3ConfigImportDialog.tsx](lake-notes-electron/src/components/app/S3ConfigImportDialog.tsx)（标准 `<Dialog>`）；S3 设置「配置迁移」Block = 导出到文件… / 从文件导入… / 粘贴迁移码…；IPC 三方一致性基线 118 → **119**（删 export_s3_config、加两个文件通道）。
+- **单一来源** [s3ConfigTransfer.ts](local-lakex-notes/src/core/s3ConfigTransfer.ts)：迁移码 `LLN1.<base64url(iv||AES-GCM 密文)>`；文件 = 外层 JSON 元数据 + 内层迁移码（`encode/decodeS3ConfigTransferFile`，兼容直接放迁移码的 `.txt`）；AES-GCM 带认证；**固定种子只是防误读 / 防随手转发的封装，不是安全边界**（文件头写明；怀疑泄露请轮换 S3 密钥）。导出拒绝无 Secret / 非法配置；导入规范化 endpoint、region 缺省、强制 https，`forcePathStyle` 原样返回由端侧决定。
+- **桌面**：IPC `export_s3_config_file` / `import_s3_config_file`（**主进程**弹系统保存/选择框 + 加密封装/解码/落库，渲染层不接触明文 Secret，延续 W-14）；保留 `import_s3_config` 作粘贴备用。主进程文件工具 [s3ConfigTransferFile.ts](local-lakex-notes/electron/s3ConfigTransferFile.ts)（0600 落盘、64KB 上限）；粘贴弹窗 [S3ConfigImportDialog.tsx](local-lakex-notes/src/components/app/S3ConfigImportDialog.tsx)（标准 `<Dialog>`）；S3 设置「配置迁移」Block = 导出到文件… / 从文件导入… / 粘贴迁移码…；IPC 三方一致性基线 118 → **119**（删 export_s3_config、加两个文件通道）。
 - **移动**：同步设置「配置迁移」= **从文件导入**（`pickLocalFile` → core 解码 → `bridge.saveS3Settings` 同一路径；强制 `forcePathStyle:false`（D2）并在提示里说明）+ **导出迁移码**（备用；桌面粘贴导入）。多行输入修饰 `.mb-input--multiline`（kit 基线 511 → 517）。
 - **测试 / 门禁**：core 12 例（往返 / 文件包装 / 兼容 .txt / 防泄漏 / 篡改 / 空 / 超长 / 非法配置 / 规范化 / 文件名 / 摘要）+ electron 文件助手 3 例；tsc 0 · 全库 vitest **280 文件 / 2127 例** ✓ · 双端构建 ✓ · ui-metrics 0（字号字面量 49/49）· core / mobileui / bundle / diff ✓ · cssLayers dialog 204→238、mobileLayers kit 517、settingsSearch 同步登记。
 - **实测**：桌面隔离实例（scheme + CDP 9234）真实 UI：点「导出到文件…」弹出系统保存框，保存得到 **585B / 0600 / 无明文**的 `.json`；先把桶改成探针值，再点「从文件导入…」选中该文件 ⇒ 落库与表单都恢复为文件里的配置、状态栏提示正确。`lake_gate` 模拟器（5556 / CDP 9336）：真实文件选择器（CDP 注入 App 私有目录文件）导入成功，6 个字段回填、toast「S3 配置已导入」、Path-style 提示；「导出迁移码」仍可用且码内无明文。
   ⚠️ **遗留 / 环境问题**：该 AVD 上 `am force-stop` / 重启后 `localStorage` 只剩 `libraryView` —— 直接 `localStorage.setItem` 探针同样丢，**与本批无关**（既有 S3 手填保存 / 主题 / 排序同受影响），判断为该 `lake_gate` 实例的 WebView localStorage / leveldb 复现性问题；**冷启动持久化需真机复验**。
   该实例已重装 debug 包并留下探针 S3 配置 ⇒ **跑移动快照门前按 README 重灌夹具**。
-- **同日追加（用户点单）**：S3 设置页顶部新增「**第三方 S3 服务说明**」（对齐思源：浅底提醒块 + 标题 + 计费/技术限制/条款清单 + 免责声明），并按用户要求加一句**着重提醒**：笔记正文/附件按原样上传、云端不加密，务必确认桶为私有且未开放公开读（amber 文字 + `TriangleAlert` 图标）。桌面 `.s3-service-notice`（[feature.css](lake-notes-electron/src/styles/feature.css) +22，基线 266→288）、移动 `.mb-s3-notice`（[kit.css](lake-notes-electron/src/mobile/kit.css) +22，基线 517→539）；两端各自样式层、不共享。设备实测：桌面设置页与 `lake_gate` 设置页均显示完整说明 + 3 条清单 + 着重提醒；证据 `.css-audit/s3-transfer-261017/notice-{desktop,mobile}.png`。门禁同批全绿（合并后 280 文件 / 2128 例）。
+- **同日追加（用户点单）**：S3 设置页顶部新增「**第三方 S3 服务说明**」（对齐思源：浅底提醒块 + 标题 + 计费/技术限制/条款清单 + 免责声明），并按用户要求加一句**着重提醒**：笔记正文/附件按原样上传、云端不加密，务必确认桶为私有且未开放公开读（amber 文字 + `TriangleAlert` 图标）。桌面 `.s3-service-notice`（[feature.css](local-lakex-notes/src/styles/feature.css) +22，基线 266→288）、移动 `.mb-s3-notice`（[kit.css](local-lakex-notes/src/mobile/kit.css) +22，基线 517→539）；两端各自样式层、不共享。设备实测：桌面设置页与 `lake_gate` 设置页均显示完整说明 + 3 条清单 + 着重提醒；证据 `.css-audit/s3-transfer-261017/notice-{desktop,mobile}.png`。门禁同批全绿（合并后 280 文件 / 2128 例）。
 - **状态**：已合并 master 并推送 `origin/master`（merge commit `d3e17f74`；同批带上 261017 B 批 + 固定目录高度修复）；本地 `feat/s3-config-transfer` 分支保留。
 
 ### 261017(十六) · Git 历史重写（清除旧 AK/SK）
@@ -698,7 +713,7 @@
 - **D2 产品定稿（用户 261017）**：移动端**只支持虚拟托管风格的 S3 兼容服务**。理由（官方口径）：
   阿里云 OSS 仅支持虚拟托管（path-style 会被拒绝）；腾讯云 COS 2024-01-01 后新建桶不支持 path-style；AWS S3 / 七牛 Kodo 也用虚拟托管。因此不做 `forcePathStyle` 开关、不扩 `SyncConfig`：自建 MinIO/路径风格 + http 内网端点与 **D3 一起**另立项。
   代码：`s3Store.ts` 的 `forcePathStyle:false` 从 TODO 改成**有意约束**注释；`SettingsDrawer` 保存处同步注释。
-- **D5 真云验证 + 修复**：用用户提供的七牛桶 `local-lake-hebei` / prefix `lake-notes-dev1` 实测（AWS SDK v3，验完即删）：
+- **D5 真云验证 + 修复**：用用户提供的七牛桶 `local-lake-hebei` / prefix `local-lakex-notes-dev1` 实测（AWS SDK v3，验完即删）：
   - gzip 体**不带** header → 读回 `ContentEncoding=null`、字节是 gzip 魔数；
   - gzip 体**带** `Content-Encoding: gzip` → 读回 `ContentEncoding=gzip`、GET 返回压缩字节（SDK 不解压）；
   - 读侧按魔数解压的兼容路径仍成立；对象列表/删除/清理到 0 均正常。
@@ -709,7 +724,7 @@
 
 ### 261017(十二) · C1-6 多维表只读单元格共享（Q7：共享逻辑、不共享样式）
 
-- **新模块** [bitableReadOnly.ts](lake-notes-electron/src/core/bitableReadOnly.ts)：只依赖 core/bitableDoc 的纯函数，零 React/DOM —— `readOnlyAttachments`（file/name/image）、`readOnlyOptions`（按存储顺序）、`readOnlyBoolean`、`readOnlyLink`（仅 http(s) 给 href）、`readOnlyRating`（0..5 clamp）、`readOnlyProgress`（0..100 clamp）、`readOnlyRelation`（target/invalid/chips）。样式仍由两端各自类名提供，**不共享桌面 CSS**。
+- **新模块** [bitableReadOnly.ts](local-lakex-notes/src/core/bitableReadOnly.ts)：只依赖 core/bitableDoc 的纯函数，零 React/DOM —— `readOnlyAttachments`（file/name/image）、`readOnlyOptions`（按存储顺序）、`readOnlyBoolean`、`readOnlyLink`（仅 http(s) 给 href）、`readOnlyRating`（0..5 clamp）、`readOnlyProgress`（0..100 clamp）、`readOnlyRelation`（target/invalid/chips）。样式仍由两端各自类名提供，**不共享桌面 CSS**。
 - **移动端**：`MobileBitableViewer` 的 Attachment/Option/Boolean/Link/Rating/Progress/Relation 全部改用共享语义，删掉本地 clamp/解析实现。
 - **桌面端**：`bitableCells.tsx` 的 Rating/Progress/Link/Boolean 改用同一组 helper（交互态逻辑未动）。
 - **护栏**：`bitableReadOnly.test.ts` 6 例（布尔/链接/评分进度 clamp/选项顺序/附件图片标记/关联失效）+ 源码级「两端都必须 import 且移动端不得再自写 clamp/关联解析」。
@@ -720,10 +735,10 @@
 ### 261017(十一) · C3-5 第③步：抽 notes / quickNotes / tree 域，bridge 只做组合
 
 - **最终结构**（合计 1030 行，原 bridge 1095 行）：
-  - [bridge.ts](lake-notes-electron/src/mobile/bridge.ts) **31 行**——只 import 6 个域并展开 + `init()`；
+  - [bridge.ts](local-lakex-notes/src/mobile/bridge.ts) **31 行**——只 import 6 个域并展开 + `init()`；
   - `bridge/context.ts` 122 · `bridge/assets.ts` 96 · `bridge/sync.ts` 344 · `bridge/notes.ts` 233 · `bridge/quickNotes.ts` 134 · `bridge/tree.ts` 70。
 - **跨域调用**只剩 notes 内部 3 处（`restoreHistory/createNote → notesDomain.saveNote`、`restoreNote → notesDomain.restoreTreeItem`），全部是**同域自引用**，无需 getBridge 注入；其余域之间零直接调用。
-- **新增结构护栏** [bridgeStructure.test.ts](lake-notes-electron/src/mobile/bridge/bridgeStructure.test.ts)：bridge.ts 除 `init` 外不得再定义方法；6 个域文件必须存在且被展开。
+- **新增结构护栏** [bridgeStructure.test.ts](local-lakex-notes/src/mobile/bridge/bridgeStructure.test.ts)：bridge.ts 除 `init` 外不得再定义方法；6 个域文件必须存在且被展开。
 - **护栏更新**：三份契约/互斥域解析器的 `DOMAIN_MODULES` 补齐 notes/quickNotes/tree；`quickNoteCapturePath` / `quickNotePushSyncRace` / `quickNoteSyncGate` 的源码护栏改为读「bridge + 对应域」。
 - **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · 双端构建 ✓ · ui-metrics 0 · diff-check 0；**lake_gate 设备门禁 `check:mobilesnap` 6 态 0 差异**；运行时 smoke：`window.lakeNative` **51 键**，`listTreeNodes/listNotes/listQuickNotes/getCloudState` 均 function。
 - **状态**：已提交（261017，见 git log）（C3-5 三步骤全部完成）。
@@ -741,7 +756,7 @@
 ### 261017(九) · C3-5 第①步：抽 `src/mobile/bridge/context.ts`（零行为变化）
 
 - **动机**：C3-5 按风险分三步。第①步只把**域无关上下文**从 bridge.ts 抽出来，给后续域拆分做准备。
-- **新文件** [context.ts](lake-notes-electron/src/mobile/bridge/context.ts)（122 行）：DB 单例/初始化（`db`/`ensureDb`/迁移+索引对账）、运行期资源缓存（`assets`）、互斥域包装（`runWrite/runMaintenance/runPriority` + `assertOpClass`）、S3 客户端工厂（`assertS3Credentials/createS3Client`）、同步设置读取（`readSyncSettings` + 三个默认常量）、`dbPort` 与字节上限断言。
+- **新文件** [context.ts](local-lakex-notes/src/mobile/bridge/context.ts)（122 行）：DB 单例/初始化（`db`/`ensureDb`/迁移+索引对账）、运行期资源缓存（`assets`）、互斥域包装（`runWrite/runMaintenance/runPriority` + `assertOpClass`）、S3 客户端工厂（`assertS3Credentials/createS3Client`）、同步设置读取（`readSyncSettings` + 三个默认常量）、`dbPort` 与字节上限断言。
 - **bridge.ts 1095 → 948 行**；方法体**一行未改**，只改 import 来源。仍留在 bridge 的跨域 helper：`mobileCloudState` / `downloadDeclaredAssetsFor` / `pushSingleQuickNote` / `scheduleQuickNoteVerify`（它们要 `bridge.getS3Settings()`，先不引入循环依赖）。
 - **护栏更新**：`src/mobile/native/s3PortGuards.test.ts` 的 D6 检查从「bridge.ts 调共用工厂」改为「context.ts 调工厂 + bridge 只经 createS3Client」；`contractSurface.test.ts` 49+2 方法面不变。
 - **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓ · `contractSurface` / `maintenancePolicyCoverage` / `s3PortGuards` 全绿 · 桌面/移动双构建 ✓ · ui-metrics 0 · diff-check 0。纯抽取、无行为变化（未跑设备门禁；②③改运行时代码时才跑）。
@@ -751,7 +766,7 @@
 ### 261017(八) · C3-2 `src/components` 拆 4 桶（纯搬迁）
 
 - **落地**：`src/components` 根目录 31 文件 → **`app/`(14) · `ui/`(16) · `hooks/`(2) · `model/`(16)**（含测试/CSS；`markdown/` 并入 `ui/markdown/`）。`git mv` 保历史 + 全仓说明符重写 **216 处**（含 `import()` / `vi.mock` / `new URL(..., import.meta.url)`）；`App.tsx` / `desktop/` / `features/` / `mobile/` 的引用全部改到新路径。
-- **新增护栏**：[componentsStructure.test.ts](lake-notes-electron/src/components/model/componentsStructure.test.ts) —— 根目录只允许 4 个桶、每桶非空、桶内不再嵌套同名桶。
+- **新增护栏**：[componentsStructure.test.ts](local-lakex-notes/src/components/model/componentsStructure.test.ts) —— 根目录只允许 4 个桶、每桶非空、桶内不再嵌套同名桶。
 - **口径修正**：`mobileIndependence.test.ts` 的允许清单 `../../components/model/treeDrag` → `../../components/model/treeDrag`（纯决策件，仍在白名单）。
 - **⚠️ 踩坑（本次真踩）**：一次性 codemod 里把 `String.replace` 回调的第 4 个参数当 `post` 用了 —— 对 3 组正则它其实是 **match offset**，导致 51 个文件的 import 尾部被追加 2~6 位数字（`"path"123`），tsc 报 `; expected`。已用「引号后数字」清理自证通过；**以后写批量 replace 一律按正则分组数对齐回调签名（或命名组）**。
 - **验收**：tsc 0 · 全库 vitest **274 文件 / 2087 例** ✓（含新结构护栏 2 例）· 桌面/移动双构建 ✓ · `ui-metrics` 0 ✓ · `git diff --check` 0。纯搬迁、零视觉变化（CSS 内容与 import 顺序未改，未跑 stylesnap）。
@@ -761,7 +776,7 @@
 ### 261017(七) · C1-5 第二步（Q10 = B 加强版）：列表时间措辞统一
 
 - **用户定稿（261017）**：Q10 选 **B 加强版**——列表时间统一为 **今天 → 昨天 → 本周X → 上周X → 本月D日 → 上月D日 → 其余默认 `YYYY-MM-DD`**；"其他跨年了就默认就行"。**261017 二次调整：去掉「今年更早」分类**（其余含今年更早/跨年都走默认绝对）。
-- **具体口径（唯一来源 = [core/dateFormat.ts](lake-notes-electron/src/core/dateFormat.ts) 的 `formatListTime`）**：
+- **具体口径（唯一来源 = [core/dateFormat.ts](local-lakex-notes/src/core/dateFormat.ts) 的 `formatListTime`）**：
   - 优先级：今天 → 昨天 → 本周（周一为周起点）→ 上周 → 本月 → 上月 → 默认绝对；**年初的"上周"不会被默认吞掉**。
   - 今天/昨天：`今天 HH:mm` / `昨天 HH:mm`（紧凑列表也带时刻）。
   - 本周/上周：`本周X` / `上周X`（紧凑列表不带时刻；卡片 `withClock` 追加 ` HH:mm`）。
@@ -775,8 +790,8 @@
 
 ### 261017(六) · C5-4 同名令牌差异表 + C1-5 第一步（时间格式化单一来源）
 
-- **C5-4（review §C5-4）**：新增只读脚本 [token-parity.mjs](lake-notes-electron/scripts/token-parity.mjs)（`--md` 输出表；不是门禁）；审计结果 **177 个同名令牌完全一致 / 10 个有意不同 / 桌面独有 2 / 移动独有 0**；差异表与逐条意图登记到 [MOBILE-DESKTOP-DECOUPLING.md §7](lake-notes-electron/docs/MOBILE-DESKTOP-DECOUPLING.md)。脚本内 `INTENT` 表：未来新增差异会显示「待确认（新增差异）」。
-- **C1-5 第一步（review §C1-5）**：新增 [core/dateFormat.ts](lake-notes-electron/src/core/dateFormat.ts)（`formatHm / formatMd / formatMdHm / formatYmd / formatDateTime / sameLocalDay`；纯本地、无 locale 副作用）+ `dateFormat.test.ts` 3 例；收编 8 处重复：
+- **C5-4（review §C5-4）**：新增只读脚本 [token-parity.mjs](local-lakex-notes/scripts/token-parity.mjs)（`--md` 输出表；不是门禁）；审计结果 **177 个同名令牌完全一致 / 10 个有意不同 / 桌面独有 2 / 移动独有 0**；差异表与逐条意图登记到 [MOBILE-DESKTOP-DECOUPLING.md §7](local-lakex-notes/docs/MOBILE-DESKTOP-DECOUPLING.md)。脚本内 `INTENT` 表：未来新增差异会显示「待确认（新增差异）」。
+- **C1-5 第一步（review §C1-5）**：新增 [core/dateFormat.ts](local-lakex-notes/src/core/dateFormat.ts)（`formatHm / formatMd / formatMdHm / formatYmd / formatDateTime / sameLocalDay`；纯本地、无 locale 副作用）+ `dateFormat.test.ts` 3 例；收编 8 处重复：
   - 小记列表/卡片（QuickNotesWorkspace，去掉 2 处 pad）· 设置页（SettingsPanel，删本地 formatDateTime）· 移动首页/知识库（HomePage/NotebookGrid：只换原子格式化，**今天/昨天措辞策略仍留各自入口**）· 小记转正式笔记标题（electron/quickNoteConversion）· 属性面板（core/noteInfo）· 多维表本地日期/时间（core/bitableDoc）· 日历格（bitableCells）。
   - 输出逐字符不变（单测覆盖补零/边界/同日）；`quickNotesView.test.ts` 的旧断言（夹带 pad 实现）改为「必须 import core/dateFormat + 不得再出现 padStart(2」。
 - **未做**：Q10「两端列表时间措辞是否统一」仍待产品决策（本批刻意只抽纯函数，不动措辞）；`lib/formatTime.ts`（toLocaleString）与移动同步状态（中文月日）属不同口径，未合并。
@@ -786,12 +801,12 @@
 ### 261017(五) · Q3 选中态语义令牌 + 选中+hover（裸 .active 收编第一刀）
 
 - **口径（用户 261017 定，Q3 = A）**：UI 选中继续用主题色，但只经 3 个语义令牌；**不重命名 JSX 类名**（避免结构性大改），只把颜色与选中+hover 收口到单一来源。内容选中另有口径（见 261017(三)），互不替代。
-- **令牌**（桌面 [themes/base.css](lake-notes-electron/src/styles/themes/base.css) + 移动 [mobile/theme/tokens.css](lake-notes-electron/src/mobile/theme/tokens.css)）：
+- **令牌**（桌面 [themes/base.css](local-lakex-notes/src/styles/themes/base.css) + 移动 [mobile/theme/tokens.css](local-lakex-notes/src/mobile/theme/tokens.css)）：
   `--lake-bg-selected: var(--lake-accent-tint)` · `--lake-fg-selected: var(--lake-accent-text)` · `--lake-bg-selected-hover: color-mix(in srgb, var(--lake-accent-tint) 88%, var(--lake-accent))`（实测浅 #d9e0ef / 深 #3d424e / 暖 #fadfcc）。
 - **落点**：kit 三元组（`.ln-row` / 菜单项 / 页签切换器 / 设置左导航）· `.ln-btn--secondary.is-selected` · `.ln-iconbtn(.is-selected|--accent.is-selected)` · `.ln-tabs__item.is-active` 及其计数 · chrome `.note-row.active` + `.tree-row-icon` + `.pin-btn.is-active` · 多维表 `.bt-table-item.active` / `.bt-tool-btn.is-active` · 移动 `.mb-row.is-selected` / `.mb-list-item.is-selected` / `.mobile-model-body .mb-row.is-selected` / `.bottom-bar-btn.active` / `.mobile-bottom-bar__item.active` / `.mbt-table-tab.is-active`。
 - **选中 + hover（新增状态，解决「选中后 hover 无反馈」）**：`.ln-row.is-selected:hover` / `.tab-switcher-item.active:hover` / `.ln-menu__item.is-selected:hover` / `.ln-iconbtn(.is-selected|--accent.is-selected):hover` / `.ln-btn--secondary.is-selected:hover` / `.note-row.active:hover` → `--lake-bg-selected-hover`；页签/分段**不加上底色**（仍是文字 + 下划线 / raised）。
 - **实测**：选中目录行 + 鼠标悬停 ⇒ `background-color = color(srgb 0.85098 0.879843 0.938039)`（= #d9e0ef，候选 A）、字色 accent-text；截图 `.css-audit/q3-261017/selected-row-hover.png`（gitignored）。
-- **护栏**：新增 [selectionTokens.test.ts](lake-notes-electron/src/styles/selectionTokens.test.ts)（5 例：两端令牌定义 / 桌面语义迁移 / hover 档 / 移动端 / 内容选区边框仍是 accent，防「内容选中去主题色」误伤）。
+- **护栏**：新增 [selectionTokens.test.ts](local-lakex-notes/src/styles/selectionTokens.test.ts)（5 例：两端令牌定义 / 桌面语义迁移 / hover 档 / 移动端 / 内容选区边框仍是 accent，防「内容选中去主题色」误伤）。
 - **基线**：`cssLayers` kit **642 → 646**（+4 = 选中+hover 规则）；`mobileLayers` tokens **189 → 192**（+3 令牌）。
 - **视觉门禁**：旧基线只有 **2 态**差异（`hover-row:1315:light` / `:warm`，正是选中+hover 生效）⇒ 全量重烤：两个全新实例 **42/42 逐字节一致**；live gate **34 态严格 0 差异**（8 窄窗态按既有 UNSTABLE 跳过）。
 - **未做（登记）**：裸 `.active` 只做颜色令牌化、未重命名 JSX 类名；settings 左导航仍是「`bg-hover` 灰」现状（未改观感）；页签/分段保留自身选中语义。
@@ -800,7 +815,7 @@
 ### 261017(四) · 画板默认工具 = 选择工具（261017 用户要求）
 
 - **用户定稿**：画板选中框颜色**不动**（Drawnix 有自己的逻辑，不同级）；只做一个优化：**进入画板默认选中「选择工具」**（不要手型/上次绘图工具）。
-- **落地**：vendor 适配层 [DrawnixBoardCore.tsx](lake-notes-electron/vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.tsx#L1273) 给 `<Drawnix initialToolState={{ pointer: PlaitPointerType.selection }}>`；独立画板与文档内嵌画板卡共用该适配层 ⇒ 都生效。`Drawnix` 的 `initialToolState` 只在挂载时合并，不覆盖用户本次会话里后续切换的工具。
+- **落地**：vendor 适配层 [DrawnixBoardCore.tsx](local-lakex-notes/vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.tsx#L1273) 给 `<Drawnix initialToolState={{ pointer: PlaitPointerType.selection }}>`；独立画板与文档内嵌画板卡共用该适配层 ⇒ 都生效。`Drawnix` 的 `initialToolState` 只在挂载时合并，不覆盖用户本次会话里后续切换的工具。
 - **护栏**：`boardEditorMount.test.ts` 源码级断言该 prop 存在。
 - **实测（隔离实例 + 合成夹具）**：打开 `合成·画板` ⇒ `.plait-board-container` 的类为 **`pointer-selection`**（重建前是 `pointer-hand`）。
 - **⚠️ 踩坑（vendor 工作流）**：改 `vendor/lakex-doc-react/src/**` 后**必须** `npm run build:vendor`（产物入库）；本次第一轮只改 src 就启动 ⇒ 应用仍用旧 dist，实测还是 `pointer-hand`，重建后才对。本次提交同时包含 vendor dist 的新旧 chunk 换名（`DrawnixBoardCore-*.js/.cjs`）。
@@ -811,9 +826,9 @@
 
 - **用户定稿（261017）**：① **文字选中背景不能是主题色**；② **表格（内容）选区的边框用主题色**（暖色下橙框是有意的）；③ "hover 弹窗"= **内容 hover 预览**（附件/图片名、长文本/MD/AI 整段内容），不是选区工具条/菜单浮层。
 - **落地（8 文件）**：
-  - `--lake-select-bg` 由 `rgba(63,95,160,.16)`（主色系蓝）改为**主题无关中性灰 `rgba(128,130,134,.38)`**（桌面 [themes/base.css](lake-notes-electron/src/styles/themes/base.css#L166) + 移动 [mobile/theme/tokens.css](lake-notes-electron/src/mobile/theme/tokens.css#L179)，一套值跨主题）；影响全局 `::selection`（文档正文 / 输入框 / 多维表文字）、内核选区令牌、AI 自绘高亮、树箭头 hover 底色。
-  - 表格/多维表单元格选区环**继续用 `--lake-accent`**（[bitableEditor.css](lake-notes-electron/src/features/bitable/bitableEditor.css#L341) 加注释锁定，防以后被"内容选中去主题色"误改）。
-  - `.ln-tip` 新增 **`--wide`** 变体（≤460px / max-height 50vh / 内滚 / pre-wrap）；[NativeTitleTips.tsx](lake-notes-electron/src/components/ui/NativeTitleTips.tsx) 对 **>80 字或含换行**的 `title` 自动启用 ⇒ 长内容预览不再被挤成 260px 竖条，短提示不变。表面仍只用 `--lake-tooltip-bg/fg`（主题无关）。
+  - `--lake-select-bg` 由 `rgba(63,95,160,.16)`（主色系蓝）改为**主题无关中性灰 `rgba(128,130,134,.38)`**（桌面 [themes/base.css](local-lakex-notes/src/styles/themes/base.css#L166) + 移动 [mobile/theme/tokens.css](local-lakex-notes/src/mobile/theme/tokens.css#L179)，一套值跨主题）；影响全局 `::selection`（文档正文 / 输入框 / 多维表文字）、内核选区令牌、AI 自绘高亮、树箭头 hover 底色。
+  - 表格/多维表单元格选区环**继续用 `--lake-accent`**（[bitableEditor.css](local-lakex-notes/src/features/bitable/bitableEditor.css#L341) 加注释锁定，防以后被"内容选中去主题色"误改）。
+  - `.ln-tip` 新增 **`--wide`** 变体（≤460px / max-height 50vh / 内滚 / pre-wrap）；[NativeTitleTips.tsx](local-lakex-notes/src/components/ui/NativeTitleTips.tsx) 对 **>80 字或含换行**的 `title` 自动启用 ⇒ 长内容预览不再被挤成 260px 竖条，短提示不变。表面仍只用 `--lake-tooltip-bg/fg`（主题无关）。
 - **实测（隔离实例 + 合成夹具）**：多维表文字选中背景 = 中性灰；单元格选区环浅色=墨蓝 / 暖色=橙；长 title 预览实测 `460×127`、class `ln-tip--wide`。证据 `.css-audit/selection-261017/`（gitignored）。
 - **护栏/基线**：`cssLayers` 的 kit.css 声明基线 **635 → 642**（+7 = `.ln-tip--wide`，一次性新增原语变体，已写理由）。
 - **门禁**：tsc 0 · vitest **270 文件 / 2065 例** ✓ · ui-metrics 0 ✓ · diff-check 0（全库跑时并行会话在途文件未纳入本批提交）。
@@ -824,7 +839,7 @@
 
 - **用户报**（截图）：新建的**单字段多维表**里，复选框/编号列被拉得很宽、新建行左右很长、编号列右侧**缺边框**（与选中色无关）。
 - **根因（261014 行窗口引入）**：`bitableViewport.css` 给 `.bt-grid-windowed` 加了 `table-layout: fixed`，但表宽仍是**固定 px**、且 `.bt-grid` 有 `min-width: 100%` ⇒ 固定布局把「表宽 − 列宽和」的剩余**按比例摊给所有列**（实测窗口 864：80/180/40 → **230/518/115**）。编号格 `.bt-td-index` 是 `display:flex`（非 table-cell），只画自己 80px 的框 ⇒ 被摊宽的列里那 150px **没有单元覆盖、没有边框**。
-- **修法（2 文件 + 2 护栏）**：① 表宽改成 **`max(100%, 80 + 末列 33/40 + Σ字段宽)`**（[BitableEditor.tsx](lake-notes-electron/src/features/bitable/BitableEditor.tsx#L1271)）；② 末尾 `<col class="bt-col-empty">` **不再给宽度**，由 fixed 布局的 auto 列吸收剩余（[bitableViewport.css](lake-notes-electron/src/features/bitable/bitableViewport.css)）。表宽 ≥ 窗口时末列自动回到 33/40，不改变原有横向滚动。
+- **修法（2 文件 + 2 护栏）**：① 表宽改成 **`max(100%, 80 + 末列 33/40 + Σ字段宽)`**（[BitableEditor.tsx](local-lakex-notes/src/features/bitable/BitableEditor.tsx#L1271)）；② 末尾 `<col class="bt-col-empty">` **不再给宽度**，由 fixed 布局的 auto 列吸收剩余（[bitableViewport.css](local-lakex-notes/src/features/bitable/bitableViewport.css)）。表宽 ≥ 窗口时末列自动回到 33/40，不改变原有横向滚动。
 - **实测（隔离实例 + 合成夹具，`合成·多维表`，窗口 864）**：修前 `230 / 518 / 115`（复选框列宽、编号格右侧无边框）；修后 **`80 / 180 / 604`**，边框连续、末尾 + 与添加行正常。截图 `.css-audit/bitable-width-261017/{before,after}.png`（gitignored）。
 - **护栏**：`BitableEditor.behavior.test.ts` 断言表宽 `max(100%, 293px/300px)` + 末列无行内宽；`bitableEditorMount.test.ts` 源码级断言（表宽 max、末列 auto、`bitableViewport.css` 不得给 `.bt-col-empty` 固定宽）。
 - **门禁**：tsc 0 · vitest **269 文件 / 2057 例** ✓ · `ui-metrics` 0 ✓ · `git diff --check` 0。
@@ -1203,7 +1218,7 @@
 - **实现（当时）**：`styles/chrome.css`唯一来源的`.note-row-copy strong`从body14→bodyMd15；`app/shell.css`树行屏外占位28→32px。**⚠️ 复核更正**：本节原文写"`.note-row`上下内距2→`--lake-space-xs`4"**并未落地**（代码里内距一直是 `2px 8px`，也从未引用过 `--lake-space-xs`），"普通行31.57px"是在内距按4px估算下得出的数，实际是 **27.57px**；"没有新增令牌"属实。字重500/选中600、图标17.82px、层级缩进/行内操作/裁切语义确实保留。
 - **261015 二次试调与最终定稿（用户逐档看真实截图后裁定）**：15px（偏大）→ 14.5px（仍偏大）→ **回到 14px 定稿**。目录行高由 `min-height` 下限兜底（普通行 27px / 笔记本行 29px），**字号半档不会改变行高**；只改字号时实测普通行 27px、笔记本行 29px，文本未被裁。
   结论：**只保留 14px 与屏外占位 32px**；专用令牌 `--lake-font-size-sidebar` 试调后删除，不占通用档位。
-- **复核实测（隔离实例 `lake://app`、1280×820、目录 220px、合成夹具）**：标题 14px / line-height 22px / copy 盒 22px；普通行 **27px**、笔记本行 **29px**；图标 17.82px（`.tree-node-custom-icon` 自带 15.5px 字号上下文，不吃行字号）；三主题行几何相同。
+- **复核实测（隔离实例 `locallakexnotes://app`、1280×820、目录 220px、合成夹具）**：标题 14px / line-height 22px / copy 盒 22px；普通行 **27px**、笔记本行 **29px**；图标 17.82px（`.tree-node-custom-icon` 自带 15.5px 字号上下文，不吃行字号）；三主题行几何相同。
 - **视觉基线**：曾按 14.5px 重烤过整份 42 态基线，回滚 14px 后**已恢复成旧基线**（`scripts/css-audit/baseline/stylesnap.json`，与 14px 代码对拍一致；未留备份文件）。
 - **证据/预览**：`.css-audit/sidebar-density-261015/{before.json,results.json,before.png,after-selected.png,stylesnap*.log}`（当时那版）；本轮三态对照截图在 `/tmp/density-{pt1,pt2,mid,final14}.png`（临时目录，不入库）。
 
@@ -1218,7 +1233,7 @@
 - **弹出不遮挡 + 再浅一档（用户同日第六轮，当前方案）**：从鼠标点击点改成真实`.tree-row-icon`元素锚点，复用`usePopoverPosition({anchor,side:"right",gap:8,width:418})`，沿整枚图标右缘弹出；不写估算高度/新定位函数。底部向上夹在视口内时仍靠水平间距避开图标。八档渐变再混白15%（采样版累计约41%）。隔离Electron实测：点同枚图标上/下缘位置一致、真实底部目录项在1315×860/760×600/560×600下与面板相交面积0、右缘间距8px，连续选择后仍不相交；八色与40枚预览同源。tsc/相关28例/cssLayers/ui-metrics/全库255文件1976例/桌面构建/bundle/diff通过。证据`.css-audit/node-icon-anchor-261015/{results.json,anchor-visible.png,picker.png,palette.png}`，数据`/tmp/lake-node-icon-anchor-261015-TnjXbA` / CDP9241 / 资源19841；独立测试库有28篇位置探针，不触碰正式数据。移动端在途改动保留，未提交。
 - **图标/表情大小收拢（用户同日第七轮）**：用户对照飞书指出图标大、表情小，要求都向中间尺寸靠。`NodeIconGlyph`的emoji分支改为共用`.node-icon-glyph`居中槽，字符不变；新增主题令牌`--lake-node-glyph-size:1.15em`给槽宽高和表情字号，底块从1.3em缩到1.15em、表情从1em放到1.15em，白色轮廓.9→.85em。目录20.15/15.5→**两类17.82px**（中心误差<.01px）；标签16.90/13→**两类14.95px**。选择器图标26→23px、白色轮廓18→17px；表情选择格仍26px字号，未改变面板格/行几何与8px锚点间距。相关30例/tsc/cssLayers/ui-metrics/桌面构建/全库255文件1980例（含同工作树移动端在途变更）/bundle/diff通过；cssLayers nodeIcon102→104（+2 emoji字号/行高）。实机浅深主题+目录/标签/选择器几何证据`.css-audit/node-icon-size-261015/{before.json,results.json,directory.png,tabs.png}`，隔离数据`/tmp/lake-node-icon-size-261015-53PLh0` / CDP9242 / 资源19842。未提交。
 - **色号与显示顺序解耦**：`NODE_ICON_TINTS` 每项显式`code`，encode按code、parse按code查询。蓝0/青绿2/绿3/紫7保留，旧青1换靛蓝、黄绿4换暖橙、琥珀5换珊瑚（用户整体换色板），重排后不串码；字段/同步/历史emoji分支不变。新增1例锁住全部色号唯一0..7与原四色编码。
-- **真实 Electron / lake://app 验收**：表情页418×392，正文266高 / 1055格 / 26px；图标页418×358。八档选色、目录与标签渲染、重开时色号落座、浅/深/暖、两页移除落库null均通过；面板内核类0。验收使用隔离数据`/tmp/lake-node-icon-soft-261015-UukvhI` / CDP9238 / 资源19838；实例是否仍在运行以端口现状为准（此前9237在收尾时已不可连接），不触碰正式数据。**最新证据**`.css-audit/node-icon-soft-261015/{results.json,*.png}`；旧实色证据在`.css-audit/node-icon-tile-261015/`。
+- **真实 Electron / locallakexnotes://app 验收**：表情页418×392，正文266高 / 1055格 / 26px；图标页418×358。八档选色、目录与标签渲染、重开时色号落座、浅/深/暖、两页移除落库null均通过；面板内核类0。验收使用隔离数据`/tmp/lake-node-icon-soft-261015-UukvhI` / CDP9238 / 资源19838；实例是否仍在运行以端口现状为准（此前9237在收尾时已不可连接），不触碰正式数据。**最新证据**`.css-audit/node-icon-soft-261015/{results.json,*.png}`；旧实色证据在`.css-audit/node-icon-tile-261015/`。
 - **移动端接入 + 默认页（用户同日追加，当前决定）**：40枚lucide图标/8档浅渐变/共享`i:<id>:<色号>`编码已接入Android。**节点选择器与文内输入表情彻底解耦**：移动`ui/NodeIconPicker.tsx` + `ui/nodeIcon.css`自有表情分类/网格/移除，不import输入态`EmojiPanel`，也不使用`mb-emoji-*`；只共享表情表、最近使用逻辑、图标目录/编解码。输入态`EmojiPanel.tsx`与dock本批未改。图形由移动端`MobileNodeIconGlyph`自有渲染，知识库书架/列表、目录（笔记本行/分组/文档）、标签列表、新建知识库预览不再显示原始串。三个选择入口=知识库长按→设置图标 / 目录行菜单→设置图标 / 新建知识库。选图标/表情/移除后保持面板，外点/关闭/原有滑动关闭继续生效；可滚到最后一枚图标。
 - **两端共同默认规则**：`src/lib/nodeIcons.ts`的`nodeIconPickerMode(nodeType)`唯一来源：**notebook/group→图标；note（文档/表格/数据表/画板）→表情符号**。按节点用途初始化，即使已有资源是另一类也遵守该规则；当前保存的色号仍带出。不是新增持久化偏好，不改库表/同步协议。桌面公共Sidebar+移动组件测试均锁住该语义，桌面真实四种节点亦验过。
 - **最新桌面弹出位置 / 颜色（261015追加）**：用户要求能看见当前图标与文档名，**面板贴齐当前修改行的左边缘（跟随层级缩进），从整行底边下方8px弹出**；不是目录栏左缘，也不再贴图标右侧。`setTreeIcon`取真实`.tree-row`作锚点，共用`usePopoverPosition`新增显式`side:"below-fixed"`：不翻到行上方，按剩余视口限制maxHeight；面板整面可滚，子区不收缩，滚动不穿透。其他浮层默认定位与AI原有allowFlip口径不变。颜色回调深一档到飞书采样版累计混白约30%，桌面/移动主题同档，保留17.8px节点图形/14.9px标签图形。实测笔记本/分组/文档左缘5/22/39px与面板一致，行与面板相交0；1315×860/760×600/560×600靠底均不遮当前行，可滚到最后一枚加密图标并选中。tsc/相关40例、最终相关30例/全库257文件1998例/两端构建/Android安装（仅5556）/ui-metrics/bundle/diff通过；移动六态0差异与八色令牌实测通过。CSS nodeIcon104→107（整面滚动/阻止穿透/子项不收缩）。证据`.css-audit/node-icon-below-261015/{results.json,final.png,mobile-colors.json,*.log}`；隔离桌面数据`/tmp/lake-node-below-261015-BVNh7w` / CDP9244 / 资源19844。早期位置探针使用鼠标移动时错误带left按钮，曾误触拖拽；已改真实buttons状态后整套复跑。未提交/未推送。
@@ -1233,7 +1248,7 @@
 - **面板与内核解耦（用户："这两个面板可以分离了，做到互不影响"）**：过去「选图标」浮层**借用内核**的 `.ne-ui-unicode-emoji-*` 类 ⇒ 只能靠在未分层文件写**全局覆盖**（`-item > button` / `-tabs` / `-search input`）并给该表面**钉 5 个 `--lakex-editor-*` token**，而这些规则**同时命中文档里内核自己的表情面板**。现在它是一等自有面板：表面走 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`、类型页签走 kit 的 `.ln-tabs`（横向页签唯一来源），两页网格在 `src/components/ui/nodeIcon.css`；那 3 条全局覆盖与 5 个 token **全部删除**。契约回填：`docs/LAKEX-CONTRACT.md` **§5.35**（标题与 ③④⑥ 已标注作废/教训）。
 - **实现位置**：`src/lib/nodeIcons.ts`（目录 + 编解码 + 默认页规则 + 单测）· `src/components/ui/NodeIconGlyph.tsx` + `nodeIcon.css`（图形与面板）· `Sidebar.tsx`的`EmojiIconPicker`（顶部双tab/右上移除/选色/图标网格；emoji分组跳转在底部）· `MultiTabEditor.tsx`的4处`tab.icon`统一走图形组件。**当前打开按节点类型默认页，已保存色号仍带出**（最初按当前值决定页的方案已被用户改定）。移动端组件与实测见上节。
 - **门禁**：`tsc` ✓ · 全库 vitest **255 文件 / 1974 例** ✓ · `ui-metrics`（非主题颜色 0 / 字号字面量 0 / `!important` 10 / 未定义 token 0）✓ · `check:core`/`check:mobileui`/`check:bundle` ✓ · 两条构建 ✓ · `git diff --check` ✓ · `cssLayers`：新增 `components/ui/nodeIcon.css`（104），`kernel-theme.css` 69→**64**、`app/misc.css` 顺手按实测收紧到 **113**。
-- **261014旧版设备实测**（隔离 userData + `lake://app` + CDP；证据 `.css-audit/icon-picker-261014/`，gitignored）：面板 = `.ln-overlay-surface.ln-popover.node-icon-picker`、**全页无内核面板类**、418×401、正文 266 高、40 图标 / 8 色；表情页 **9 组 / 1055 格 / 26px 字形**（原观感未变）；点「紫 + 闪电」落库 `i:zap:7` ⇒ 目录行与标签页都渲染彩色字形（tab 那枚 `i:rocket:3` = 绿 / 13.6px）；深色主题取 `#b39cf0`、面板底 = `--lake-bg-panel` `rgb(30,31,35)`（**不再依赖内核 token**）。最新底块形态与尺寸见261015节。
+- **261014旧版设备实测**（隔离 userData + `locallakexnotes://app` + CDP；证据 `.css-audit/icon-picker-261014/`，gitignored）：面板 = `.ln-overlay-surface.ln-popover.node-icon-picker`、**全页无内核面板类**、418×401、正文 266 高、40 图标 / 8 色；表情页 **9 组 / 1055 格 / 26px 字形**（原观感未变）；点「紫 + 闪电」落库 `i:zap:7` ⇒ 目录行与标签页都渲染彩色字形（tab 那枚 `i:rocket:3` = 绿 / 13.6px）；深色主题取 `#b39cf0`、面板底 = `--lake-bg-panel` `rgb(30,31,35)`（**不再依赖内核 token**）。最新底块形态与尺寸见261015节。
 - **未做 / 待跟进**：① ~~移动端新图标编码显示成原始串~~ **261015已接入自有选择器/图形，详见上节**。② 图标集是**数据表**（40个，可加/换/调色）；③ 钉钉那套实心图标资源未引入（仍用lucide、描边1.75）。
 
 ### 261014 · 分屏：复合标签右键菜单（取消分屏 / 左右互换）
@@ -1291,7 +1306,7 @@
 
 ### 261013 · 正式包性能验收（默认 GPU；只测量，不改产品）
 
-- 用户授权做正式包性能验收。冻结当前 HEAD `04a22b3` + 当时工作树（源码/vendor 产物 hash 已保存），由副本构建真实 macOS arm64 `.app`。**不是 dev/scheme 冒充 packaged**：`app.isPackaged=true`、`lake://app`，Electron44.3.0 / Chromium152.0.7977.78 / Node24.20.0；Apple M3 /16GiB / macOS27.0.1。保留默认 GPU / sandbox / contextIsolation，未加 disable-gpu/no-sandbox/实验加速参数。
+- 用户授权做正式包性能验收。冻结当前 HEAD `04a22b3` + 当时工作树（源码/vendor 产物 hash 已保存），由副本构建真实 macOS arm64 `.app`。**不是 dev/scheme 冒充 packaged**：`app.isPackaged=true`、`locallakexnotes://app`，Electron44.3.0 / Chromium152.0.7977.78 / Node24.20.0；Apple M3 /16GiB / macOS27.0.1。保留默认 GPU / sandbox / contextIsolation，未加 disable-gpu/no-sandbox/实验加速参数。
 - GPU **确实启用**：ANGLE Metal Apple M3 + GraphiteDawnMetal；Code Cache 46 文件约6.4MiB落盘。没有证据需要新增“GPU加速开关”或改 v8CacheOptions/no-store。
 - 固定合成库：**5000文档 /20000附件**（正文约27.6MiB、附件约78.1MiB，每份4KiB），媒体卡字段取自真实内核插入附件的序列化；不是20GB传输。正常已建索引，搜索不纳入本轮。
 - **最后一轮前台确认数据**（小样本，不作跨设备保证）：空应用缓存启动3次中位 **2.10s**（2.06–3.51），同目录保留缓存3次中位 **1.69s**（1.65–1.91）；程序化长文滚动中位16.7ms；保存ack普通约1–2ms、2MB约30ms；四类型首开/长正文/多标签/分屏均已测。完整数值与测量定义看下面报告（例如分屏313ms含250ms驱动等待，不能当纯应用耗时）。
@@ -1344,7 +1359,7 @@
   修后实测：**禁掉内核 schema，面板依旧实心白底**；`cssLayers` 账本 `kernel-theme.css` 64 → **69**（已写理由）。
   ⚠️ **通用教训**：我们自己渲染却依赖内核注入 token 的表面（本例、以及 `noteRefCard` 那两个浮层）都要显式兜底 —— 已写进 LAKEX-CONTRACT §5.35 ⑥。
 - **「最近」= 常显（用户 261013 二次定稿，有意偏离内核）**：内核是"有最近记录才前置「最近」"，用户要求**始终显示、空的也留位置**（否则会怀疑这功能到底有没有）⇒
-  tab 与分组恒定存在，为空时给一句「用过的图标会出现在这里」。实测：空态下 tab = 最近/表情/…、选中 = 最近、该分组 0 个格 + 提示；选一个 😀 后填入并落盘 `localStorage["lake-notes-v3.emoji-recents"]=["😀"]`。两端一致。
+  tab 与分组恒定存在，为空时给一句「用过的图标会出现在这里」。实测：空态下 tab = 最近/表情/…、选中 = 最近、该分组 0 个格 + 提示；选一个 😀 后填入并落盘 `localStorage["local-lakex-notes-v3.emoji-recents"]=["😀"]`。两端一致。
 - **261013 第三轮（用户点单，移动端 + 第三个选择器）**：
   ① **「清除」并入「最近」首格**（对照色板里那块"默认/无填充"首格；用户要求），**底部整幅「清除图标」条取消** ⇒ 少一行高度；只在「最近」分类出现（最近是默认且常显 ⇒ 一步可达）。
   ② **第三个表情选择器也改成微信样式**（`quickNoteToolbarWidgets.ts` 的 `openEmojiPicker`：小记写作卡工具条 + 移动 dock 共用）：顶部分类条（搜索 / 最近 / 8 组）+ 浅灰底大格子 + 空态；
@@ -1446,7 +1461,7 @@
   ④ **处理**：17 个抖动 1315 态写进 `check-stylesnap.mjs` 的 **`UNSTABLE_1315`**（照常采集入库、只跳过严格比对，与窄窗态同款），从一份完整快照整份重烤基线，
      再在**全新实例**（CDP 9255、scheme、冻结合成夹具）自证：**`[gate] 17 态整页计算值 0 差异 … GATE_EXIT=0`**（另有 1 态 `settings-editor:1315:light` 只在一轮出现，被去抖机制按 flaky 排除）。
      **代价如实**：严格比对 34 → 17 态。**正确修法留给专门一批**：在 `snapExpr` 里剔除「无 id 无 class 的 SVG 图元」能**保住全部 34 态**，但那份表达式**两端共用** ⇒ 必须桌面 + 移动端一起整份重烤（做完就删 `UNSTABLE_1315`）。
-  ⑤ **交付物**：**冻结合成夹具** `~/Library/Caches/lake-notes-css-audit/fixture`（与基线数据态同构，可直接复用；生成器第 0 步"删欢迎笔记"因 `bootstrap()` 只返回 `notes` 而**静默空转**这件事已记进 README）；
+  ⑤ **交付物**：**冻结合成夹具** `~/Library/Caches/local-lakex-notes-css-audit/fixture`（与基线数据态同构，可直接复用；生成器第 0 步"删欢迎笔记"因 `bootstrap()` 只返回 `notes` 而**静默空转**这件事已记进 README）；
      候选/备份基线在 `.css-audit/baseline-stylesnap-*-261013.json`（gitignored）。判据、三条坑（含 `--states` 不能配 `--write-baseline`）见 `scripts/css-audit/README.md`。
   ⚠️ **环境坑**：两个 agent **同时**起桌面门禁实例会互相踩（`bind() failed: Address already in use (48)` + 门禁连到别人的实例 ⇒ CDP 超时/元素数莫名），起实例前先 `lsof -nP -iTCP:<port> -sTCP:LISTEN` 查。
   ⚠️ **顺带记录一条环境坑**：两个 agent **同时**起桌面门禁实例会互相踩（`bind() failed: Address already in use (48)` + 门禁连到别人的实例 ⇒ CDP 超时/元素数莫名），起实例前先 `lsof` 查端口。
@@ -1474,7 +1489,7 @@
 - **移动端进后台 best-effort 触发（同批，对齐思源安卓壳）**：`useAutoSync` 在 `appStateChange(isActive=false)` 也补一次（"离开设备前最后一次推送"）；**失败静默、不做任何等待**（WebView 可能随即被冻结/杀掉）；自动触发之间**在途去重**（对齐思源壳侧 `AtomicBoolean syncing`），手动「立即同步」不受影响。
 - **文案如实**：两端「自动同步间隔」行写明"**App 不在运行时不会再按间隔触发**，下次打开或回到前台会对齐一次"——上线的诚实要求。
 - **快捷入口（长按桌面图标「小记」）两条定稿（用户 261013 第五轮）**：
-  · **这次冷启动不跑整轮同步**：`quickNoteShortcut` 暴露 `whenQuickNoteLaunchResolved()`（命中 `lakenotes://quick-note` ⇒ true；其它深链 / 无深链 / 超时 ⇒ false，**绝不永久挂起**），
+  · **这次冷启动不跑整轮同步**：`quickNoteShortcut` 暴露 `whenQuickNoteLaunchResolved()`（命中 `locallakexnotes://quick-note` ⇒ true；其它深链 / 无深链 / 超时 ⇒ false，**绝不永久挂起**），
     `useAutoSync` 的冷启动那一次先等它 ⇒ 是快捷入口就跳过。理由：写作区本来是秒开的（`captureOpen` 同步置位），但 3s 后的整轮同步跑在 **WebView 主线程**上（读/写清单 JSON、算 hash、遍历条目），正好抢"开始打字"那几秒。
     **代价（已与用户确认）**：这次进入不拉远端新小记；数据上云靠 ① 点「保存并同步」② 进后台 best-effort ③ 下次普通启动/回前台的对齐。
   · ~~保存后退出 App~~ **已撤回（用户 261013 第六轮定稿）**：思源是"提交后可继续提交、手动退出"，语雀是"创建后留在小记页" ——
@@ -1492,7 +1507,7 @@
   · 它的界面**纯原生、没有任何小记预览/列表**：`activity_shortcut.xml` = 标题 + 「添加到桌面」+ 提交按钮 + 一个全屏 `EditText`，**无 WebView、不挂内核**。
   · 提交后**清空输入框、界面留着**（源码注释原话："使速记作为常驻速记本存在"）⇒ **可连续提交**；内容**原子写成一个 .md 文件**（`<externalFilesDir>/home/.config/siyuan/shortcuts/shorthands/<ts>.md`，`.tmp`→rename）。
   · **数据不依赖 App 是否运行**：内核 `model/shortcuts.go` 的 `consumeShorthands()` 由 `AutoConsumeShorthandsJob` **每 3 秒**（仅 mobile 容器，`job/cron.go:54`）捞该目录建/追加文档；启动同步成功后也会消费一次。
-  · **语雀 = 打开整个 App、留在小记页（有列表、能看到已有小记）**；**我们走语雀的路**（长按 `lakenotes://quick-note` → 拉起 MainActivity → 小记 tab + 写作浮层）。
+  · **语雀 = 打开整个 App、留在小记页（有列表、能看到已有小记）**；**我们走语雀的路**（长按 `locallakexnotes://quick-note` → 拉起 MainActivity → 小记 tab + 写作浮层）。
     ⇒ 上一轮"提交后留在原地、退出交给系统"的定稿**在这条路下正确**；**思源的"手动退出"不能直接类比**（它退的是独立模块，我们退的是整个 App）—— 我上轮把两者并列叙述**不严谨**，此处更正。
   ⇒ **不学思源那条路**（独立原生 Activity + 极简视图 + 文件桥 + 内核侧消费）：我们的 lakex 跑在 WebView 里，没有"原生 Activity 直接写文件给内核捞"的结构，要走等于另立一条产品线；
     若将来"零冷启动成本的速度记录"成为明确诉求，再单独立项（当前不做）。
@@ -1501,7 +1516,7 @@
   · **实现**：`MobileApp` 的 capture 分支 —— 保存后不再关界面，而是 `setCaptureNonce(n+1)` **重挂一条新的空小记**（草稿在提交时已清）⇒ 可连续记；新增 `closeCapture()` 统一"手动退出"（系统返回键 + 「取消」都走它）：关界面 → 快捷入口会话 `exitApp()`，否则刷新列表；
     `useAutoSync` 新增 `isCaptureSession()`（复用 `whenQuickNoteLaunchResolved()`，判定一次）⇒ **入口 / 回前台 / 进后台三处全跳**，只有「保存并同步」走高优先域单条推送。
   · **护栏**：`quickNoteCapturePath.test.ts` 在原 261010 四条之上新增三条（提交后重挂而不是关闭 / 手动退出统一走 `closeCapture` 且快捷入口会话退 App / capture 会话两处都过判定）；261010 那四条（共用 composer、独立入口在启动门之前、draft、seed）**全部保持**。
-  · **证据等级（如实）**：UX 流程在**专用实例**上做过设备级核对（冷启动走 lakenotes://quick-note → 点进编辑器 → 真实输入 → 点「保存」⇒ **小记 +1 且写作界面仍在**；返回键 ⇒ **topResumedActivity = 桌面**）；
+  · **证据等级（如实）**：UX 流程在**专用实例**上做过设备级核对（冷启动走 locallakexnotes://quick-note → 点进编辑器 → 真实输入 → 点「保存」⇒ **小记 +1 且写作界面仍在**；返回键 ⇒ **topResumedActivity = 桌面**）；
     **"确实没出网"只有静态护栏 + 代码路径**（门禁实例不配 S3，无法观测真网络；要看真网络得在配了 S3 的机器上试）。
   · **设备核对暴露的一处体验缺口（待用户定）**：每条提交后编辑器是**重挂的新实例、焦点丢失** ⇒ 连续记要再点一下才继续输入（思源是同一个输入框所以不需要）。可补"提交后自动聚焦"（内核有 focus 命令；编辑器 API 现只有 getBody/getText，要加一个暴露）。
   · **自动聚焦已补（用户 261013 第八轮点单）**：编辑器 API 暴露 `focus()`（内核官方命令 focus），写作卡在**创建时**（editNote 为空）
@@ -1848,15 +1863,15 @@
 
 **装置现状（换机后需重建；数据一律不清理 —— 用户明确"不用清理数据"）**
 - 桌面隔离实例：`env -u ELECTRON_RUN_AS_NODE LAKE_RENDERER=scheme LAKE_USER_DATA="$TMPDIR/lake-detect" LAKE_ASSET_PORT=19891 LAKE_DEV_S3_* ./node_modules/.bin/electron --disable-gpu --no-sandbox --remote-debugging-port=9231 .`
-- 移动端：AVD `lake_mobile` + `bash scripts/emu-cdp.sh 9335`（App 已配 `lake-notes-dev1` 前缀）。
-- 夹具留痕：隔离实例 17 篇 + S3 `lake-notes-dev1` 对应对象 + 模拟器 App 内同名文档；「Lake 单卡 · 折叠块」被补过 `-body` 段。
+- 移动端：AVD `lake_mobile` + `bash scripts/emu-cdp.sh 9335`（App 已配 `local-lakex-notes-dev1` 前缀）。
+- 夹具留痕：隔离实例 17 篇 + S3 `local-lakex-notes-dev1` 对应对象 + 模拟器 App 内同名文档；「Lake 单卡 · 折叠块」被补过 `-body` 段。
 
 **改完必须过的门禁**：`npx tsc --noEmit` · `npx vitest run` · `npm run check:mobilesnap`（6 态 0 差异）·
 `node scripts/ui-metrics.mjs` · `cssLayers` 基线只许变小 · 设备级截图验收（`adb exec-out screencap -p`，按 §7.22）
 + `scripts/css-audit/mobile-walkthrough.mjs`。样式一律走 `--lake-*` 令牌与既有 `ln-*` 原语，**禁内联样式/禁新增 `!important`**。
 ### 261010(四) · 移动端 Lake 能力覆盖检测（桌面输入 vs 移动展示/编辑）+ 装置入库
 
-- **用户命题**：桌面端 Lake 能输入的东西，移动端能不能**展示**、能不能**编辑**；用真实数据（S3 `lake-notes-dev1` + `~/Documents` 真实附件），不要造玩具数据。
+- **用户命题**：桌面端 Lake 能输入的东西，移动端能不能**展示**、能不能**编辑**；用真实数据（S3 `local-lakex-notes-dev1` + `~/Documents` 真实附件），不要造玩具数据。
 - **口径（用户 261010 定）**：**`/` 斜杠面板在移动端不可触发（小记 + 文档都不能）**；**所有工具栏都走底部 dock 那条路**。
 - **方法**：隔离桌面实例（scheme + dev1 前缀 + CDP 9231）造 **16 篇夹具**（覆盖 30+ 格式，图片/PDF/音频/视频用真实文件）→
   `syncNow` 上传 → **S3 真实链路** → 模拟器 App 拉取（应用 17 篇 / 4.55MB）→ 设备级逐项探针 + `adb screencap` 截图。
@@ -1872,7 +1887,7 @@
   · `AGENTS.md` §4 新增「移动端输入面 = dock」长期机制。
 - **待确认（1 项，别当结论）**：某篇以 `<h1>` 开头、缺 `-body` 段落的文档出现过「标题栏是该篇、正文空折叠块」；
   补 `-body` 段后正常、桌面一直正常、设备 DB 内容完好（无损坏）⇒ 自动化未稳定隔离，需人工复核一次。
-- **数据留痕（未清理，用户 261010 明确不清）**：隔离实例 `$TMPDIR/lake-detect` 的 17 篇夹具 + S3 `lake-notes-dev1` 对应对象 +
+- **数据留痕（未清理，用户 261010 明确不清）**：隔离实例 `$TMPDIR/lake-detect` 的 17 篇夹具 + S3 `local-lakex-notes-dev1` 对应对象 +
   模拟器 App 内同名文档；「Lake 单卡 · 折叠块」被补了一个 `-body` 段。
 - **下一步（用户 261010 定）**：① 把缺的 12 个插入项接进 dock；② 文本增强二级面板（字号/字色/背景色/对齐/链接）。
 
@@ -1961,9 +1976,9 @@
   · **Move SecretStore 到 Android Keystore**：新原生插件 `SecureStorePlugin.kt`（AndroidKeyStore AES-256-GCM + 私有 SharedPreferences）、
     JS `keystoreSecretStore.ts` + 迁移层（native 优先、读到旧值迁一次、**native 有值时也一次性清掉残留旧副本**）；
     降级件降为 Web/vitest 后端。**设备验证（AVD `lake_mobile`）**：冷启动 692ms → `skLen 40` / `testS3Connection OK（对象数 ≥ 1）` /
-    `localStorageSecretLen = null`（WebView 存储已无 secret）/ `keystore-ok`；`shared_prefs/lake-notes-secure.xml` 存的是 `base64(iv):base64(ct)`。
+    `localStorageSecretLen = null`（WebView 存储已无 secret）/ `keystore-ok`；`shared_prefs/local-lakex-notes-secure.xml` 存的是 `base64(iv):base64(ct)`。
   · **`envAdapter` 取证收口（261010，结论＝不改行为）**：
-    **外链**：端到端实测**正常**（点后前台从 `com.lakenotes.mobile` 切到 `com.android.chrome`）⇒ 壳层已接管，`openLink` 不必接。
+    **外链**：端到端实测**正常**（点后前台从 `com.locallakexnotes.mobile` 切到 `com.android.chrome`）⇒ 壳层已接管，`openLink` 不必接。
     ⚠️ **判据必须看前台窗口**（`dumpsys window | grep mCurrentFocus`）—— Intent 场景下 `location.href`/CDP target 都不变，
     只看它们会误判「没反应」（本轮误判过一次，已在 CONTRACT §5.27 留修订记录）。
     **`longPressCard`**：官方语义是「使用方**自实现 UI** 并回传参数」，不是内核自带长按 UI ⇒ 我方自写手势等价，**保留**。
@@ -2044,7 +2059,7 @@
 
 ### 261009 续 · 工具栏「收起 / 展开」+「开始」精简 + 右侧槽位 + 残留收尾 + 合并 master（已交付并合并）
 
-- **工具栏「收起 / 展开」**：**不切 `ribbonType`**，保持 `classic`（工具行永远跟随**选中的大分类**），收起时只用宿主类藏掉**页签行** `[data-u-comp="ribbon-header-menu"]` ⇒ 双行 76px ↔ 单行 40px。按钮在工具行最右（24×24 / 圆角 4 / 图标色 `--lake-text-1`，与 Univer 工具按钮同规格；左侧 1px 分隔线成独立槽位），纵向位置由 `syncRibbonToggleTop` 量出工具行 top 写进 `--usheet-ribbon-toggle-top`（自动跟随；须扣 `host.clientTop` 的 1px 边框）。收起状态**设备本地记忆**（`lake-notes-v3.usheet.ribbon-collapsed`）。
+- **工具栏「收起 / 展开」**：**不切 `ribbonType`**，保持 `classic`（工具行永远跟随**选中的大分类**），收起时只用宿主类藏掉**页签行** `[data-u-comp="ribbon-header-menu"]` ⇒ 双行 76px ↔ 单行 40px。按钮在工具行最右（24×24 / 圆角 4 / 图标色 `--lake-text-1`，与 Univer 工具按钮同规格；左侧 1px 分隔线成独立槽位），纵向位置由 `syncRibbonToggleTop` 量出工具行 top 写进 `--usheet-ribbon-toggle-top`（自动跟随；须扣 `host.clientTop` 的 1px 边框）。收起状态**设备本地记忆**（`local-lakex-notes-v3.usheet.ribbon-collapsed`）。
 - **关键实测（别再走弯路）**：Univer **没有**运行期"关公式栏 / 关页签"的公开 API（`formulaBar` 是创建时布尔；`setUIVisible('header-menu')` no-op；`updateMenuConfig({hidden:true})` 藏不掉页签）；原生 `simple`/`collapsed` 单行模式**会把工具重置回「开始」**；**`defaultEngine.resize()` 是 no-op**，必须用**渲染单元**的 `engine.resize()`（`IRenderManagerService.getRenderAll()`），否则收起后画布不跟（底部留空条）。CDP 依附窗口 `document.hidden` ⇒ `rAF` 不触发，重排触发用 `setTimeout`。
 - **右侧槽位与「更多」**：Univer 的溢出判定读 `ribbon-toolbar` 的 **`contentRect.width`（不含 padding）** ⇒ `padding-right: 50px` 既让「更多」**更早出现并左移**，又给收起按钮让出槽位（不预留时实测「更多」占 gap 19–43、按钮占 9–33 ⇒ **重叠**）。
 - **「开始」精简 5 项**：字体 / 粘贴 / 百分比 / 货币 / 快捷键面板，走公开 API `updateMenuConfig({ hidden: true })`。⚠️ **只列该位置专属的 id**：`sheet.command.paste` 同时挂在右键菜单（隐藏会连带干掉**右键粘贴**）⇒ 粘贴只藏 `sheet.menu.paste`。副作用：腾出的宽度会被原先挤在「更多」里的工具**自动补位**（缩小字体填充 / 文本旋转 / 合并单元格 / 常规 / 增加小数位）——要"真的变短"须继续点名或给「开始」定白名单（**待用户定**）。
@@ -2066,7 +2081,7 @@
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 44 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
 **红线**：① 本地是真相、S3 只是镜像（云端备份绝不反噬本地）；② 目录/删除强一致（删除传播、墓碑权威）；
-③ `src/core/` 禁 `node:` 导入（平台差异走端口注入）；④ 开发数据只用 `lake-notes-dev`，绝不碰正式数据；
+③ `src/core/` 禁 `node:` 导入（平台差异走端口注入）；④ 开发数据只用 `local-lakex-notes-dev`，绝不碰正式数据；
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交；**260928 多维表批次已由用户明确授权「提交代码」（仅提交、未推送）**）。移动端另有铁律见 **§8.0**。
 
@@ -2088,7 +2103,7 @@
      （重启后探针库的 `onupgradeneeded` 再次触发；磁盘上 `app_webview/Default/IndexedDB/http_localhost_0.indexeddb.leveldb` 还在）。
      旧实现（`src/mobile/native/secretStore.ts`）把密文放 IndexedDB ⇒ 重启后 `getS3Settings().secretAccessKey` 长度 0，
      所有 S3 操作报 `The request signature we calculated does not match the signature you provided`。
-   - **修法（保留原设计的降级语义，只换持久层）**：密文改存 **localStorage**（键 `lake-notes-mobile.secret.*`，仍是 WebCrypto AES-GCM 密文、**不是明文**）；
+   - **修法（保留原设计的降级语义，只换持久层）**：密文改存 **localStorage**（键 `local-lakex-notes-mobile.secret.*`，仍是 WebCrypto AES-GCM 密文、**不是明文**）；
      并在 `read` 时**一次性兼容迁移**旧 IDB 值（读到就搬进 localStorage 并清旧条目）。
    - **顺带治理报错**：`bridge.ts` 在建 S3 客户端处加 `assertS3Credentials()`（单一来源，同步/测连通/上传三条路径共用）：
      密钥缺失时给「请到「设置 → 同步设置」重新填写 Access Key / Secret Key」，不再让请求去报签名错。
@@ -2131,7 +2146,7 @@
 11. ~~**多维表Grid行窗口接入（5000×20）**~~ **已完成主树整合（261014用户确认亚秒即可接受）**：主Grid/关联选择器共用窗口，首开0.31–0.38s/重开0.17–0.22s；全库1945例与23包检查通过、正常关表回收。契约`docs/BITABLE-VIEWPORT.md`，最新§0与`.css-audit/bitable-integration-261014/RESULTS.md`为当前状态。**发布前待补**：低内存/长时/真实大图高扇出关联/完整发布矩阵；精细毫秒级尾延迟继续观察，不为33/50ms参考目标重新阻止接入。旧AR04的12.4–24.8s/百万格全量DOM数据只是历史，不再描述当前实现。
 
 12. **非多维表审计遗留（260930 会话决定）**：
-    - **F16 安卓整轮网络同步持本地写队列 —— 已实测（261009，用户授权用 dev 前缀 `lake-notes-dev1` 直连 S3）**：结论 **立项** ⇒ **已修复（261010，见 §0 本批）**：写域/维护域分离 + 判据单一来源 + I2 守卫；**弱网实测已收尾（261010）：同步 59.3s 期间写等待 32ms（旧 152.0s），见 §0**。
+    - **F16 安卓整轮网络同步持本地写队列 —— 已实测（261009，用户授权用 dev 前缀 `local-lakex-notes-dev1` 直连 S3）**：结论 **立项** ⇒ **已修复（261010，见 §0 本批）**：写域/维护域分离 + 判据单一来源 + I2 守卫；**弱网实测已收尾（261010）：同步 59.3s 期间写等待 32ms（旧 152.0s），见 §0**。
   - **量法**：移动端调试契约 `window.lakeNative`（`saveNote` / `syncNow`）+ 页内 `performance.now()` —— 先起 `syncNow()`，等 150–300ms 让同步进入队列，再发一次本地写，量这次写完成耗时；同法先量"无同步时"的基线写。
   - **数据**（AVD lake_mobile；弱网档 = 模拟器 `-netdelay gprs -netspeed gprs`，≈80kbps / 500ms RTT）：
 
@@ -2363,7 +2378,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   curl -s http://127.0.0.1:9230/json/list
   ```
   详见 `docs/CODEX-GUIDE.md`。注意 §4 的三条坑（重建、可见元素、lazy 图片）。
-- 日志：A `~/Library/Application Support/lake-notes-dev/logs/lake-notes.log`；B `$TMPDIR/lake-device-b/logs/lake-notes.log`。数据目录见 `AGENTS.md §5`（**正式数据禁碰**）。
+- 日志：A `~/Library/Application Support/local-lakex-notes-dev/logs/local-lakex-notes.log`；B `$TMPDIR/lake-device-b/logs/local-lakex-notes.log`。数据目录见 `AGENTS.md §5`（**正式数据禁碰**）。
 - 安卓/模拟器：全部命令与环境见 **§8**。
 
 ## 7. 文档索引（`docs/` 按需查）
@@ -2513,7 +2528,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
   并把 `plaitViewport`（缩放）喂给引擎；平移 = **滚动画布容器**，盯 `.viewport-container`（滚动合并 200ms + 松手立即落盘）；
   恢复用重复贴位（≤1.2s）。**视口不进正文、不标脏、不进 S3**。
 - **设备验收（emulator-5554）**：新建画板并 seed 一块 3000×2000 大画布 → 滚到 800/499.8（store 写入
-  `lake-notes-v3.board-views`）→ **force-stop 重启**后重开 ⇒ `scrollLeft/Top = 800/499.8`（`scrollWidth 3618`）；
+  `local-lakex-notes-v3.board-views`）→ **force-stop 重启**后重开 ⇒ `scrollLeft/Top = 800/499.8`（`scrollWidth 3618`）；
   期间 `boards/*.board.json` **逐字节未变**。测试画板已 purge 并清掉其 store 条目。
 - 护栏：`mobile/board/mobileBoardViewer.test.ts`（有记忆不 fit / 缩放回写 / 滚动回写）+ `boardEditorMount.test.ts`
   （宿主必须传 `noteId`、视口不经正文）。
@@ -2544,7 +2559,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 
 - **单一来源收敛**：新增 `features/bitable/bitableNavStore.ts` —— 多维表设备本地导航（当前表/每表当前视图）的
   读写与 `applyBitableNav` 从桌面 `BitableEditor` 内联实现上收，**桌面与移动端共用**（localStorage 键不变
-  `lake-notes-v3.bitable-nav.<noteId>`；移动端切表只写导航、重开回到上次那张表）。桌面行为不变（behavior test 通过）。
+  `local-lakex-notes-v3.bitable-nav.<noteId>`；移动端切表只写导航、重开回到上次那张表）。桌面行为不变（behavior test 通过）。
 - **创建通道收敛**：`NotebookWorkspace` 里 文档/表格/数据表/画板 四个几乎相同的 create 处理器合成
   **一个 `createChildDocument(kind, parentId)`**，清单 id → kind 由 `CREATE_MENU_KINDS` 单表映射（group 另走
   `createChildGroup`）。行为保持：文档建完停在阅读态，其余三类建完直接进编辑态；建完都刷新目录 + 收抽屉。
@@ -2755,7 +2770,7 @@ npx vite build && npx vite build -c vite.mobile.config.ts
     我**未触碰**这些文件；提交/验收时请把两批分开。
 - **261015 十改（用户点单：排序偏好**持久化** + **桌面与移动统一**，都只存本机）**：
   · **单一来源**：新增 `src/core/quickNoteSort.ts`（四档类型 / 菜单文案 / 比较器 / 旧值归一 —— **纯逻辑、不碰 DOM**）
-    + `src/lib/quickNoteSortPref.ts`（本机读写，两端共用同一个键 `lake-notes-v3.quick-notes-sort`）。
+    + `src/lib/quickNoteSortPref.ts`（本机读写，两端共用同一个键 `local-lakex-notes-v3.quick-notes-sort`）。
     ⚠️ 第一版把 `localStorage` 写进了 core，被 `npm run check:core`（core 禁 DOM/electron/node）**当场拦下** —— 分层规矩的用处正在于此。
   · **桌面**：`QuickNotesWorkspace` 删掉自己那份 `QuickSort`/`SORT_KEY`/`readSortPref`/`writeSortPref`，菜单改由 `QUICK_NOTE_SORT_OPTIONS` 渲染（**2 档 → 4 档**）；
     **置顶优先级保留**（先置顶、组内沿用所选排序，用 filter 保序）；列表行时间戳跟随排序口径（`quickNoteSortTime`）；排序按钮 title 由档位文案派生。
@@ -2764,7 +2779,7 @@ npx vite build && npx vite build -c vite.mobile.config.ts
   · **实机验证**：
     - **移动**（emulator-5554）：面板 4 档 ✓；选「最早创建」⇒ 落盘 `createdOld`、卡片按 createdAt 升序；
       **`am force-stop` + 重启后仍是 `createdOld`**，顺序与面板「当前」标记都保持 ✓。
-    - **桌面**（隔离 userData + `lake://app` + CDP 9235，⌘2 切小记）：菜单 4 档 ✓；选「最早创建」⇒ 落盘 `createdOld`、按钮 title 变「排序：最早创建」；
+    - **桌面**（隔离 userData + `locallakexnotes://app` + CDP 9235，⌘2 切小记）：菜单 4 档 ✓；选「最早创建」⇒ 落盘 `createdOld`、按钮 title 变「排序：最早创建」；
       `Page.reload` 后偏好保持、菜单勾选在「最早创建」✓。实例已按 CDP 端口精确 kill、临时 userData 已删。
   · **文档/护栏**：`docs/STORAGE-LAYERS.md` §5 的 L3 localStorage 清单**补登**该键（桌面其实早就在用却**漏登记** —— 正是该文档要防的漂移）；
     新增 `src/core/quickNoteSort.test.ts` **10 例**（四档语义 / 不改入参 / 旧值迁移 / 写读往返 / **两端源码级护栏**：都必须 import 共享模块、且不得再出现那个键字面量）。
@@ -2954,7 +2969,7 @@ npx vite build && npx vite build -c vite.mobile.config.ts
   "自动高度"改成受约束的 flex 列 ⇒ 5/6 态**元素数不变、指纹变**＝纯计算值变化；重烤后连跑两次 0 差异）· 设备走查 **23/23 ok · 五类探针全 0** ✓。
 - **口径回填**：`docs/LAKEX-CONTRACT.md` **§5.37**（内核 `min-height:40vh` 的机制与收口 + 一般化教训："内核按 vh 写的定高在移动端要换基准"）·
   `docs/MOBILE-TECH-STACK.md` **§五-7**（三条口径：稳定外壳高 / 滚动容器只留工具栏留白 / vh 定高换基准；光标跟随统一走 `useCaretIntoView`）。
-- **快捷入口那条路也验了**（长按桌面图标「小记」深链 `lakenotes://quick-note`，走的是另一个容器 `.mobile-qn-composer-wrap`）：
+- **快捷入口那条路也验了**（长按桌面图标「小记」深链 `locallakexnotes://quick-note`，走的是另一个容器 `.mobile-qn-composer-wrap`）：
   键盘态/面板态/收回态**逐项完全相同**（appH 530 / wrap 530 / 卡片 442 / 内核滚动口 ch 350 · st 521 / 首块 Y −472 / 工具栏 474 / 光标 346–363）。
 - **本轮查漏补缺（用户 261014 要求）**：① 撤掉无效的 `interactive-widget=resizes-visual`（Capacitor 的 adjustResize 在原生层就改窗口，实测无效 ⇒ 不留无效改动，结论留在 LAKEX-CONTRACT §5.37）；
   ② 修掉**首帧风险**：`useKeyboard` 的 `base` 初值原本是 0，而写 `--mb-app-h` 的是 `useLayoutEffect`（比测量更早跑）⇒ 挂载首帧外壳会变 0px；改为初值取当前视口高 + 写前判空；
@@ -3101,7 +3116,7 @@ npx vite build && npx vite build -c vite.mobile.config.ts
   ⇒ 数据到达原地填充、不整屏跳。设备时序实测：**~200ms 出现 11 个骨架节点 → ~250ms 接上真实首页**，「启动中」**0 次**出现。
   新增 `.mb-skel` 原语并登记进 `prefers-reduced-motion` 名单。
 - **6.4–6.8 已在上一批「必要项」交付**（目录树缩进 / 命中区 44 / 走查探针 / 死 CSS 与目录层失效 / 文档数字）。**6.1–6.9 至此全部有结论**。
-- **装置第二处确定化（本轮附带，价值大）**：`check:mobilesnap` 每态先**清掉 `lake-notes-mobile.tabs.*`** 再 reload ——
+- **装置第二处确定化（本轮附带，价值大）**：`check:mobilesnap` 每态先**清掉 `local-lakex-notes-mobile.tabs.*`** 再 reload ——
   整页快照把 keep-alive 的**隐藏 pane 也数进元素数**，而标签集随使用历史变 ⇒ 同一份代码得到不同计数
   （历史 `home-library` 1784/1755 抖动、本轮 `home-doc` 2943/2937/2926 漂移，根因都是它）。清掉后**连续 3 次复跑 0 差异**。
   同时把 `home-doc` 断言收紧到「**活动** pane 里真的有 `.ne-viewer` / `.ne-engine`」（此前只查 `.mobile-doc-body`，会被隐藏 pane 蒙混）。
@@ -3140,8 +3155,8 @@ npx vite build && npx vite build -c vite.mobile.config.ts
 > 已有单测 `src/mobile/hooks/gestureCore.test.ts` 明确断言「表格/多维表/画板没有大纲 ⇒ 左滑作废」；本轮在设备上又量到**同一个 `outlineAvailable` 判据的两侧**：文档（无标题文档）底栏「大纲」`disabled=false`、画板与表格 `disabled=true`。运行期用 CDP touch 驱动左滑没做成——壳是 keep-alive（隐藏视图元素仍在 DOM、rect 为 0），我的导航在"从文档回首页"这一步反复选到不可见元素；由于门控已有单测 + 状态侧实测，判定为**价值重叠、不再投入**（真要驱动得先给 walkthrough 的 goHome 加命中测试版可见性判据，那是装置改进、不是产品验证）。
 > ③ 真机项（图片 / 附件、键盘安全区、同步后图片加载）仍待真机，与本节「当前剩余验收」合并。
 
-- 正式端：Capacitor Android，包名 `com.lakenotes.mobile`；定位为完整端，桌面红线同样适用。
-- 数据在模拟器 App 沙盒，不在 macOS 数据目录；开发可 `adb shell pm clear com.lakenotes.mobile` 重建。
+- 正式端：Capacitor Android，包名 `com.locallakexnotes.mobile`；定位为完整端，桌面红线同样适用。
+- 数据在模拟器 App 沙盒，不在 macOS 数据目录；开发可 `adb shell pm clear com.locallakexnotes.mobile` 重建。
 - AVD：`lake_mobile`（Pixel 6 / API 36 / arm64）；SDK 在 `/opt/homebrew/share/android-commandlinetools`。
 - Node 24；Android 脚本已内置 JAVA/SDK 环境。
 
@@ -3161,7 +3176,7 @@ bash scripts/mobile-preview.sh
 - App 重启后 WebView socket 会变化；重新 `adb forward` 后再连 `/json/list`。
 - **CDP `forward` 会指向旧 PID 的 socket（261010 本轮踩到）**：App 重启后 `/proc/net/unix` 里**新旧 webview socket 并存**，
   `forward` 若还指着旧名，表现为 **`/json/list` 空** 或 node 侧 **`fetch failed: other side closed`** —— **不是 App 崩**（进程 `pidof` 仍在）。
-  修法（按**当前** PID 精确重转）：`PID=$(adb shell pidof com.lakenotes.mobile | tr -d "\r"); adb forward --remove tcp:9335; adb forward tcp:9335 localabstract:webview_devtools_remote_$PID`。
+  修法（按**当前** PID 精确重转）：`PID=$(adb shell pidof com.locallakexnotes.mobile | tr -d "\r"); adb forward --remove tcp:9335; adb forward tcp:9335 localabstract:webview_devtools_remote_$PID`。
 - 活跃 Lake 实例暴露为 `window.__mobileEditor`；命令用 `renderer.execCommand`。
 - 有效命令：`bold`、`unorderedList`、`orderedList`、`taskList`、`quote`、`code`、`underline`、`italic`、`insertLink`、`hr`、`color`、`style("p"/"h1"/"h2")`、`undo/redo`。
 - 无效/易错命令：`insertUnorderedList`、`formatBlock`、`heading`、`strike`、`justify*`、`clearFormat`、`fontsize`。
@@ -3173,7 +3188,7 @@ bash scripts/mobile-preview.sh
 - 单元格按字段类型给**只读控件**（不再是裸文本）：布尔=禁用复选框、链接=`<a target="_blank">`（外部 origin 走系统浏览器）、评分=5 星、进度=条+百分比、关联=目标记录主字段 chip、附件/图片=缩略图、单选/多选=色块；其余走 `bitableFieldText`（系统时间到分钟）。
 - 非 grid 视图（看板/画册/日历/未知类型）仍走「明确提示 + 表格只读」，不空白、不改数据。
 - **验收姿势**：`android-build.sh --sync --install` → `emu-up.sh --no-window` → `emu-cdp.sh 9335` → 连 `http://127.0.0.1:9335/json/list`（Node 内置 WebSocket 直驱 `Runtime.evaluate`）。
-- **造数据**（模拟器是全新安装、库里 0 条）：DB = `databases/lake-notes-mobileSQLite.db`；`notes` 表写 `doc_kind='bitable'`、`content=<正文 JSON>`、`parent_id='notebook-personal'`（**必须挂到笔记本**，否则首页点开会提示「未找到该文档所属笔记本」）。改法：force-stop → `exec-out run-as … cat` 拉出 db/wal/shm → python sqlite3 写 + `PRAGMA wal_checkpoint(TRUNCATE)` → push 回 + 删 -wal/-shm → 重启 App。
+- **造数据**（模拟器是全新安装、库里 0 条）：DB = `databases/local-lakex-notes-mobileSQLite.db`；`notes` 表写 `doc_kind='bitable'`、`content=<正文 JSON>`、`parent_id='notebook-personal'`（**必须挂到笔记本**，否则首页点开会提示「未找到该文档所属笔记本」）。改法：force-stop → `exec-out run-as … cat` 拉出 db/wal/shm → python sqlite3 写 + `PRAGMA wal_checkpoint(TRUNCATE)` → push 回 + 删 -wal/-shm → 重启 App。
 - **点开笔记必须用真实点按**：首页最近文档是 `<button class="doc-card">`，CDP 里 `el.click()` **不触发**导航（页面不动），要用 `Input.dispatchMouseEvent` 在元素中心 mousePressed/Released。
 - 已验收（模拟器 lake_mobile，Pixel 6 / API36）：`移动多维表`（全字段）断言 bool=[true,false] 且 disabled、链接 href/target 正确、评分星数=[4,2]、进度=60%/0%（条宽一致）、关联 chip=[目标A,目标B]/[目标B]、创建时间到分钟、只读徽标；`移动看板表` 显示「「看板视图」桌面已支持，移动端暂以表格只读展示。」
 

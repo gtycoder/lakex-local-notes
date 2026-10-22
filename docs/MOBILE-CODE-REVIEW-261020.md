@@ -258,9 +258,9 @@
 
 **证据**
 
-- `android/app/src/main/java/com/lakenotes/mobile/AssetSyncPlugin.kt:65-105`：PUT 使用 `localAssetFile(localKey)` 读文件。
-- `android/app/src/main/java/com/lakenotes/mobile/AssetSyncPlugin.kt:119-203`：GET 使用同一函数写文件。
-- `android/app/src/main/java/com/lakenotes/mobile/AssetSyncPlugin.kt:267`：只做 `File(filesDir/"note-assets", localKey)`，没有 canonical path 校验。
+- `android/app/src/main/java/com/locallakexnotes/mobile/AssetSyncPlugin.kt:65-105`：PUT 使用 `localAssetFile(localKey)` 读文件。
+- `android/app/src/main/java/com/locallakexnotes/mobile/AssetSyncPlugin.kt:119-203`：GET 使用同一函数写文件。
+- `android/app/src/main/java/com/locallakexnotes/mobile/AssetSyncPlugin.kt:267`：只做 `File(filesDir/"note-assets", localKey)`，没有 canonical path 校验。
 - 其他原生插件已有正确范式：`BodyStorePlugin.kt:35-56`、`AssetServer.kt:170-177`、`OpenFilePlugin.kt:42-58`。
 
 **影响**
@@ -301,7 +301,7 @@
 
 **证据**
 
-- `android/app/src/main/java/com/lakenotes/mobile/SharedContentPlugin.kt:78-99`：复制任意 `EXTRA_STREAM`，无字节上限。
+- `android/app/src/main/java/com/locallakexnotes/mobile/SharedContentPlugin.kt:78-99`：复制任意 `EXTRA_STREAM`，无字节上限。
 - `src/mobile/native/sharedContent.ts:43-55`：Filesystem 读出 base64 后 `atob` 成完整 `Uint8Array`。
 - 图片后续还可能在 `createImageBitmap`、hash、写盘阶段产生多份内存副本。
 

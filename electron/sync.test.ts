@@ -120,9 +120,9 @@ interface Manifest {
 
 const SETTINGS: S3Settings = {
   endpoint: "https://s3.cn-north-1.example.com", region: "cn-north-1", bucket: "test-bucket",
-  prefix: "lake-notes", accessKeyId: "test-ak", secretAccessKey: "test-sk", forcePathStyle: true,
+  prefix: "local-lakex-notes", accessKeyId: "test-ak", secretAccessKey: "test-sk", forcePathStyle: true,
 };
-const key = (suffix: string) => `lake-notes/${suffix}`;
+const key = (suffix: string) => `local-lakex-notes/${suffix}`;
 const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
 function maybeGunzip(bytes: Buffer): Buffer {

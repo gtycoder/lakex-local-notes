@@ -408,7 +408,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="mb-set-title"><Info size={16} />关于</div>
               <div className="mb-set-items">
                 <div className="mb-set-block">
-                  <div className="mb-set-block__name">{appInfo?.name ?? "LocalLakeNotes"}</div>
+                  <div className="mb-set-block__name">{appInfo?.name ?? "LocalLakexNotes"}</div>
                   <div className="mb-set-item__desc">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
                   <div className="mb-set-item__desc">协议：manifest v{appInfo?.protocolVersion ?? String(MANIFEST_VERSION)} · 本地为真相，S3 为同步镜像</div>
                   <div className="mb-set-item__desc">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + native SQLite)"}</div>

@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.lakenotes.mobile',
-  appName: 'LocalLakeNotes',
+  appId: 'com.locallakexnotes.mobile',
+  appName: 'LocalLakexNotes',
   webDir: 'dist-mobile',
   // 与原生 splash 同色的纯色底（261022）：页面首帧前不闪白；不是遮罩、不延迟任何东西。
   backgroundColor: '#ededf1',

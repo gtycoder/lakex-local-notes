@@ -18,14 +18,14 @@ import { createMobileS3Client } from "../native/s3Store";
 import type { SyncDbPort } from "../../core/syncEngine.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
 
-/** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "lake-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
-export const DEFAULT_S3_PREFIX = "lake-notes";
+/** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "local-lakex-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
+export const DEFAULT_S3_PREFIX = "local-lakex-notes";
 
-export const S3_STORAGE_KEY = "lake-notes-mobile.s3";
+export const S3_STORAGE_KEY = "local-lakex-notes-mobile.s3";
 /** 云同步开关 / 自动同步节奏（与桌面 SyncSettings 同形）。关闭 = 纯离线本地空间（用户 261006 定稿）。 */
-export const SYNC_STORAGE_KEY = "lake-notes-mobile.sync";
+export const SYNC_STORAGE_KEY = "local-lakex-notes-mobile.sync";
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
-const MOBILE_DATABASE = "lake-notes-mobile";
+const MOBILE_DATABASE = "local-lakex-notes-mobile";
 
 export function readSyncSettings(): SyncSettings {
   try {

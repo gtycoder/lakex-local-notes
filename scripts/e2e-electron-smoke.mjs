@@ -6,7 +6,7 @@
 import fs from "node:fs/promises";
 
 const port = Number(process.env.LAKE_CDP_PORT || 9222);
-const outputDir = process.env.LAKE_UI_EVIDENCE_DIR || "/tmp/lake-notes-ui-smoke";
+const outputDir = process.env.LAKE_UI_EVIDENCE_DIR || "/tmp/local-lakex-notes-ui-smoke";
 await fs.mkdir(outputDir, { recursive: true });
 const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
 const page = targets.find((target) => target.type === "page");

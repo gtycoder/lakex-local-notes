@@ -29,10 +29,10 @@ async function sync(id) { return ev(id, 'window.lakeNative.syncNow()'); }
 async function syncAll(creator) { for (const id of [creator].concat(IDS.filter(function (x) { return x !== creator; }))) await sync(id); }
 function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; fs.mkdirSync(dir, { recursive: true });
-  for (const f of ['lake-notes-mobileSQLite.db', 'lake-notes-mobileSQLite.db-wal']) {
-    try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakenotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {}
+  for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) {
+    try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {}
   }
-  const db = new Database(dir + '/lake-notes-mobileSQLite.db', { readonly: true });
+  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,title,doc_kind,content,trashed_at FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), kind: r.doc_kind || 'doc', content: String(r.content), trashed: !!r.trashed_at }; }); }
   finally { db.close(); }
 }

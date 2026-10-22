@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
@@ -19,7 +19,7 @@ import javax.crypto.spec.GCMParameterSpec
  * S3 密钥等 secret 的 **Android Keystore** 存储（261010）。
  *
  * 为什么需要：先前的实现把密文放 WebView 存储（WebCrypto AES-GCM + localStorage），
- * 密钥材料是**固定派生**的（`lake-notes-mobile.secret-key.v1`）—— 拿到 WebView 存储就能解开，
+ * 密钥材料是**固定派生**的（`local-lakex-notes-mobile.secret-key.v1`）—— 拿到 WebView 存储就能解开，
  * 属于"混淆"而非硬件级保护。这里改为：
  *   · 密钥由 **AndroidKeyStore** 生成并保管（不落盘、不出安全硬件/TEE 支持范围）；
  *   · 密文（`base64(iv):base64(ciphertext)`，AES-256-GCM）落 **应用私有 SharedPreferences**；
@@ -33,8 +33,8 @@ import javax.crypto.spec.GCMParameterSpec
 class SecureStorePlugin : Plugin() {
     companion object {
         private const val KEYSTORE = "AndroidKeyStore"
-        private const val ALIAS = "lake-notes-mobile.secret.v1"
-        private const val PREFS = "lake-notes-secure"
+        private const val ALIAS = "local-lakex-notes-mobile.secret.v1"
+        private const val PREFS = "local-lakex-notes-secure"
         private const val TRANSFORM = "AES/GCM/NoPadding"
         private const val TAG_BITS = 128
     }

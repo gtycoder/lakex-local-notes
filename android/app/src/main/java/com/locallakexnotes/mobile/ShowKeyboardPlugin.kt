@@ -1,4 +1,4 @@
-package com.lakenotes.mobile
+package com.locallakexnotes.mobile
 
 import android.content.Context
 import android.view.inputmethod.InputMethodManager
@@ -11,7 +11,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
  * 主动弹软键盘（Android 原生 InputMethodManager）。
  *
  * 为什么需要：**WebView 里程序化 focus 不会弹软键盘** —— Android 只允许「用户手势」触发软键盘，
- * 而长按桌面图标走深链（lakenotes://quick-note）进来时**没有手势** ⇒ 「小记」写作卡虽然拿到了焦点
+ * 而长按桌面图标走深链（locallakexnotes://quick-note）进来时**没有手势** ⇒ 「小记」写作卡虽然拿到了焦点
  * （内核 focus 命令），键盘却不弹（261013 AVD 实测：innerHeight 842→842；页面路点按钮进的有手势，842→530）。
  * 思源没这问题是因为它的闪念速记是**原生 EditText**（requestFocus + showSoftInput）；这里给 WebView 补上同一步。
  *

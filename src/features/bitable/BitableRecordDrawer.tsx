@@ -29,7 +29,7 @@ export interface BitableRecordDrawerProps {
   ctx?: BitableDisplayContext;
 }
 
-const DRAWER_WIDTH_KEY = "lake-notes-v3.bitable-drawer-width";
+const DRAWER_WIDTH_KEY = "local-lakex-notes-v3.bitable-drawer-width";
 const MIN_W = 320;
 const MAX_W = 1000;
 

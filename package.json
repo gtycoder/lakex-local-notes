@@ -1,5 +1,5 @@
 {
-  "name": "lake-notes-electron",
+  "name": "local-lakex-notes",
   "version": "0.1.0",
   "private": true,
   "description": "本地优先的 Lake 编辑器笔记应用（Electron 桌面端）",
@@ -99,8 +99,8 @@
     "vitest": "^5.0.5"
   },
   "build": {
-    "appId": "com.lakenotes.electron",
-    "productName": "LocalLakeNotes",
+    "appId": "com.locallakexnotes.desktop",
+    "productName": "LocalLakexNotes",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",

@@ -141,7 +141,7 @@ function indexStamp(iso: string): string {
  * 依据（已核查）：小记的同步清单只带 `{id, createdAt, updatedAt, contentHash, isConflict, images}`，
  * 没有任何顺序/置顶字段；各端各按本机偏好排序（桌面存 localStorage，移动端按 updated_at）。
  */
-const PIN_KEY = "lake-notes-v3.quick-notes-pinned";
+const PIN_KEY = "local-lakex-notes-v3.quick-notes-pinned";
 const readPins = (): Set<string> => {
   try { return new Set(JSON.parse(localStorage.getItem(PIN_KEY) ?? "[]") as string[]); } catch { return new Set(); }
 };
@@ -150,7 +150,7 @@ const writePins = (value: Set<string>): void => {
 };
 
 type QuickNotesView = "note" | "list";
-const VIEW_KEY = "lake-notes-v3.quick-notes-view";
+const VIEW_KEY = "local-lakex-notes-v3.quick-notes-view";
 const readViewPref = (): QuickNotesView => {
   try { return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "note"; } catch { return "note"; }
 };

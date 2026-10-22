@@ -26,7 +26,7 @@ describe("mobile asset filesystem", () => {
     readFile.mockReset();
     deleteFile.mockReset();
     mkdir.mockReset();
-    mkdir.mockResolvedValue({ uri: "file:///data/user/0/com.lakenotes.mobile/files/x" });
+    mkdir.mockResolvedValue({ uri: "file:///data/user/0/com.locallakexnotes.mobile/files/x" });
   });
 
   it("lists one note directory without scanning the asset root", async () => {
@@ -94,7 +94,7 @@ describe("mobile asset filesystem", () => {
     const bytes = new Uint8Array([1, 2, 3]);
     writeFile
       .mockRejectedValueOnce(new Error("Missing parent directory – possibly recursive=false was passed or parent directory creation failed."))
-      .mockResolvedValueOnce({ uri: "file:///data/user/0/com.lakenotes.mobile/files/note-assets/note-1/new.png" });
+      .mockResolvedValueOnce({ uri: "file:///data/user/0/com.locallakexnotes.mobile/files/note-assets/note-1/new.png" });
     await expect(saveAssetBytesFs("note-1/new.png", bytes)).resolves.toBeUndefined();
     // 写前 mkdir 父目录 + 失败后再次 mkdir（两次）
     expect(mkdir).toHaveBeenCalledTimes(2);

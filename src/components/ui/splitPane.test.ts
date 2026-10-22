@@ -46,7 +46,7 @@ describe("左右分栏（可拖动）", () => {
   });
 
   it("宽度设备本地、默认走 CSS（没拖过不写内联变量）、键盘与双击复位齐全", () => {
-    expect(SRC).toContain("lake-notes-v3.split.");
+    expect(SRC).toContain("local-lakex-notes-v3.split.");
     expect(SRC).toContain("localStorage.removeItem");
     expect(HANDLE).toContain("onDoubleClick={() => onCommit(null)}");
     expect(HANDLE).toContain('"ArrowLeft"');

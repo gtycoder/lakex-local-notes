@@ -15,7 +15,7 @@ describe("readDevS3Settings", () => {
       endpoint: "https://s3.cn-north-1.qiniucs.com",
       region: "cn-north-1",
       bucket: "local-lake-hebei",
-      prefix: "lake-notes",
+      prefix: "local-lakex-notes",
       accessKeyId: "ak",
       secretAccessKey: "sk",
       forcePathStyle: false,

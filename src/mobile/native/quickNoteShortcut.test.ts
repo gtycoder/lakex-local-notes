@@ -44,19 +44,19 @@ describe("小记深链订阅", () => {
   });
 
   it("冷启动触发一次；之后的热启动 appUrlOpen 仍能再次触发（不是永久去重）", async () => {
-    h.getLaunchUrl.mockResolvedValue({ url: "lakenotes://quick-note" });
+    h.getLaunchUrl.mockResolvedValue({ url: "locallakexnotes://quick-note" });
     const onTrigger = vi.fn();
     const dispose = subscribeQuickNoteShortcut(onTrigger);
     await vi.advanceTimersByTimeAsync(0);
     expect(onTrigger).toHaveBeenCalledTimes(1);
 
     // 同一次冷启动的第二条路径（appUrlOpen 几乎同时到达）⇒ 被 1.5s 窗口去重
-    h.getCb()?.({ url: "lakenotes://quick-note" });
+    h.getCb()?.({ url: "locallakexnotes://quick-note" });
     expect(onTrigger).toHaveBeenCalledTimes(1);
 
     // 用户回到 App，隔一会儿再次长按桌面图标（热启动）⇒ 必须能再次触发
     await vi.advanceTimersByTimeAsync(1600);
-    h.getCb()?.({ url: "lakenotes://quick-note" });
+    h.getCb()?.({ url: "locallakexnotes://quick-note" });
     expect(onTrigger).toHaveBeenCalledTimes(2);
     dispose();
   });
@@ -77,12 +77,12 @@ describe("小记深链订阅", () => {
     expect(onTrigger2).not.toHaveBeenCalled();
   });
 
-  it("URL 判定容错大小写/尾斜杠（lakenotes://quick-note / quicknote）", () => {
-    expect(isQuickNoteShortcutUrl("lakenotes://quick-note")).toBe(true);
-    expect(isQuickNoteShortcutUrl("LAKENOTES://QUICK-NOTE/")).toBe(true);
-    expect(isQuickNoteShortcutUrl("lakenotes://quicknote")).toBe(true);
-    expect(isQuickNoteShortcutUrl("lakenotes://quick-notes")).toBe(true);
-    expect(isQuickNoteShortcutUrl("lakenotes://other")).toBe(false);
+  it("URL 判定容错大小写/尾斜杠（locallakexnotes://quick-note / quicknote）", () => {
+    expect(isQuickNoteShortcutUrl("locallakexnotes://quick-note")).toBe(true);
+    expect(isQuickNoteShortcutUrl("LOCALLAKEXNOTES://QUICK-NOTE/")).toBe(true);
+    expect(isQuickNoteShortcutUrl("locallakexnotes://quicknote")).toBe(true);
+    expect(isQuickNoteShortcutUrl("locallakexnotes://quick-notes")).toBe(true);
+    expect(isQuickNoteShortcutUrl("locallakexnotes://other")).toBe(false);
     expect(isQuickNoteShortcutUrl(null)).toBe(false);
   });
 });
@@ -105,7 +105,7 @@ describe("冷启动性质判定（快捷入口 ⇒ useAutoSync 跳过本次整�
   });
 
   it("命中小记深链 ⇒ true", async () => {
-    h.getLaunchUrl.mockResolvedValue({ url: "lakenotes://quick-note" });
+    h.getLaunchUrl.mockResolvedValue({ url: "locallakexnotes://quick-note" });
     const mod = await import("./quickNoteShortcut");
     const pending = mod.whenQuickNoteLaunchResolved();
     mod.subscribeQuickNoteShortcut(() => undefined);
@@ -114,7 +114,7 @@ describe("冷启动性质判定（快捷入口 ⇒ useAutoSync 跳过本次整�
   });
 
   it("其它深链 ⇒ false（不能被「任意深链」当成快捷入口）", async () => {
-    h.getLaunchUrl.mockResolvedValue({ url: "lakenotes://other" });
+    h.getLaunchUrl.mockResolvedValue({ url: "locallakexnotes://other" });
     const mod = await import("./quickNoteShortcut");
     const pending = mod.whenQuickNoteLaunchResolved();
     mod.subscribeQuickNoteShortcut(() => undefined);

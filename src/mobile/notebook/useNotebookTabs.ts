@@ -22,7 +22,7 @@ export interface OpenNotebookTabOptions {
 }
 
 export function notebookTabsStorageKey(notebookId: string): string {
-  return "lake-notes-mobile.tabs." + notebookId;
+  return "local-lakex-notes-mobile.tabs." + notebookId;
 }
 
 interface UseNotebookTabsOptions {

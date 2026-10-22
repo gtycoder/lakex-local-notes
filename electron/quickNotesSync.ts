@@ -38,7 +38,7 @@ import {
 export type { QuickNotesSyncResult, QuickNotesSyncProgress } from "../src/core/quickNotesSyncEngine.js";
 export { parseManifest } from "../src/core/quickNotesSyncEngine.js";
 
-/** 小记独立子空间前缀（同一 bucket 下 `lake-notes/quick-notes/`）——**单一来源**在 src/core/quickNoteKeys.ts。 */
+/** 小记独立子空间前缀（同一 bucket 下 `local-lakex-notes/quick-notes/`）——**单一来源**在 src/core/quickNoteKeys.ts。 */
 export { QUICK_NOTES_ROOT };
 
 /** 把桌面 QuickNotesStore（node sqlite + .qnote 文件）适配成共享引擎端口。 */
@@ -128,7 +128,7 @@ export async function syncQuickNotes(
   const cfg = {
     endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket,
     accessKeyId: settings.accessKeyId, secretAccessKey: settings.secretAccessKey,
-    prefix: settings.prefix ?? "lake-notes",
+    prefix: settings.prefix ?? "local-lakex-notes",
   };
   const s3Store = createS3StoreAdapter(remote, cfg.prefix);
   const qnPort = createQuickNotesSyncPort(quickNotes);
@@ -152,7 +152,7 @@ export async function pushQuickNoteToS3(
   const cfg = {
     endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket,
     accessKeyId: settings.accessKeyId, secretAccessKey: settings.secretAccessKey,
-    prefix: settings.prefix ?? "lake-notes",
+    prefix: settings.prefix ?? "local-lakex-notes",
   };
   const s3Store = createS3StoreAdapter(remote, cfg.prefix);
   const qnPort = createQuickNotesSyncPort(quickNotes);

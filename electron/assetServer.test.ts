@@ -107,10 +107,10 @@ describe("ACAO 回显（W-8：不再使用 \"*\"）", () => {
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
   });
 
-  it("Origin: lake://app（A1 起打包版渲染层的私有协议来源）+ token → 200 且 ACAO 回显该 Origin", async () => {
-    const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "lake://app" } });
+  it("Origin: locallakexnotes://app（A1 起打包版渲染层的私有协议来源）+ token → 200 且 ACAO 回显该 Origin", async () => {
+    const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "locallakexnotes://app" } });
     expect(res.status).toBe(200);
-    expect(res.headers.get("access-control-allow-origin")).toBe("lake://app");
+    expect(res.headers.get("access-control-allow-origin")).toBe("locallakexnotes://app");
     expect(res.headers.get("vary")).toContain("Origin");
   });
 

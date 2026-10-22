@@ -52,7 +52,7 @@ function defaultStorage(): OutlineStorage | null {
   return null;
 }
 
-const storagePrefix = "lake-notes:outline:collapsed:";
+const storagePrefix = "local-lakex-notes:outline:collapsed:";
 
 export class OutlineController {
   private roots: OutlineNode[] = [];
@@ -61,7 +61,7 @@ export class OutlineController {
   private selectedId: string | null = null;
   private filterText = "";
   private keepCurrentExpand = false;
-  private prefsStorageKey = "lake-notes:outline:prefs";
+  private prefsStorageKey = "local-lakex-notes:outline:prefs";
   private version = 0;
   private listeners = new Set<() => void>();
   private storage: OutlineStorage | null;

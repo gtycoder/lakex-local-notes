@@ -18,7 +18,7 @@ export interface DevS3Settings {
 const DEFAULT_ENDPOINT = "https://s3.cn-north-1.qiniucs.com";
 const DEFAULT_REGION = "cn-north-1";
 const DEFAULT_BUCKET = "local-lake-hebei";
-const DEFAULT_PREFIX = "lake-notes";
+const DEFAULT_PREFIX = "local-lakex-notes";
 
 function envOrDefault(env: NodeJS.ProcessEnv, key: string, fallback: string): string {
   const value = env[key]?.trim();

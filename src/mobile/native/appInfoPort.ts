@@ -15,7 +15,7 @@ export const mobileAppInfoPort: AppInfoPort = {
       const { App } = await import("@capacitor/app");
       const info = await App.getInfo();
       return {
-        name: info.name || "LocalLakeNotes",
+        name: info.name || "LocalLakexNotes",
         version: info.version || "0.0.0",
         build: info.build || "",
         protocolVersion: PROTOCOL_VERSION,
@@ -24,7 +24,7 @@ export const mobileAppInfoPort: AppInfoPort = {
     } catch {
       // Web 预览/测试环境：Capacitor 不可用，回退常量
       return {
-        name: "LocalLakeNotes",
+        name: "LocalLakexNotes",
         version: "0.0.0-dev",
         build: "dev",
         protocolVersion: PROTOCOL_VERSION,

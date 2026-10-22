@@ -26,7 +26,7 @@ const MOBILE_COMPOSER_SRC = read("../../mobile/home/QuickNoteComposer.tsx");
 
 describe("小记版式切换（列表 / 小记）", () => {
   it("版式是纯展示偏好：存 localStorage，不进设置/同步", () => {
-    expect(WORKSPACE_SRC).toMatch(/const VIEW_KEY = "lake-notes-v3\.quick-notes-view"/);
+    expect(WORKSPACE_SRC).toMatch(/const VIEW_KEY = "local-lakex-notes-v3\.quick-notes-view"/);
     expect(WORKSPACE_SRC).toMatch(/writeLocalStorage\(VIEW_KEY/);
     expect(WORKSPACE_SRC).not.toMatch(/native\.saveSettings\([\s\S]{0,80}viewMode/);
   });

@@ -19,7 +19,7 @@ function fakeKernel(over: Record<string, unknown> = {}) {
 /** 「复制为 Lake」（261005）：外壳格式是内核内部约定（lakex.js eSz），这里锁住以防内核升级漂移。 */
 describe("buildLakeClipboard", () => {
   it("外壳 = <ne-clipboard data=URL编码(ne-inode) source=URL编码(href)> + 内核 html", () => {
-    const href = "lake://app/";
+    const href = "locallakexnotes://app/";
     const p = buildLakeClipboard(fakeKernel(), "**x**", href);
     expect(p).not.toBeNull();
     expect(p!.html).toBe('<ne-clipboard data="' + encodeURIComponent('{"type":"fragment"}') + '" source="' + encodeURIComponent(href) + '"></ne-clipboard>' + HTML);

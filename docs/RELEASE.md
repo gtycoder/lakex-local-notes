@@ -1,4 +1,4 @@
-# LocalLakeNotes macOS 发布指南（签名 + 公证 + 打包）
+# LocalLakexNotes macOS 发布指南（签名 + 公证 + 打包）
 
 > 目标：消除 dmg 首次打开需「右键 → 打开」的问题，产出可安全分发的 .app/.dmg。
 > 原理：Apple 要求 **Developer ID 签名**（证明应用来自你）+ **公证**（Apple 服务器扫描无恶意代码）。
@@ -82,7 +82,7 @@ node node_modules/.bin/electron-builder --mac
 ```
 
 首次公证需上传整个 .app 到 Apple 服务器，通常 3~10 分钟；`release/` 下会生成
-`LocalLakeNotes-x.y.z.dmg` / `.zip`。
+`LocalLakexNotes-x.y.z.dmg` / `.zip`。
 
 ---
 
@@ -90,13 +90,13 @@ node node_modules/.bin/electron-builder --mac
 
 ```bash
 # 1) 签名是否有效
-spctl --assess --type execute --verbose=4 "release/mac-arm64/LocalLakeNotes.app"
+spctl --assess --type execute --verbose=4 "release/mac-arm64/LocalLakexNotes.app"
 
 # 2) 公证是否通过（在 dmg 挂载或解压 zip 后对 .app 验证）
-xcrun stapler validate "release/mac-arm64/LocalLakeNotes.app"
+xcrun stapler validate "release/mac-arm64/LocalLakexNotes.app"
 
 # 3) 查看签名详情（应含 Developer ID Application）
-codesign -dv --verbose=4 "release/mac-arm64/LocalLakeNotes.app"
+codesign -dv --verbose=4 "release/mac-arm64/LocalLakexNotes.app"
 ```
 
 预期输出：`accepted`（spctl）+ `The validate action worked!`（stapler）→ 分发出去用户可直接打开。
@@ -119,7 +119,7 @@ codesign -dv --verbose=4 "release/mac-arm64/LocalLakeNotes.app"
 ## 六、当前进度（2026-08-03）
 
 - [x] 应用图标（`build/icon.icns`，程序化设计：湖蓝 + 文档页 + 波浪）
-- [x] electron-builder 配置（appId `com.lakenotes.electron`、mac target dmg+zip、icon）
+- [x] electron-builder 配置（appId `com.locallakexnotes.desktop`、mac target dmg+zip、icon）
 - [ ] 用户注册 Apple Developer Program（一.1）
 - [ ] 生成 Developer ID Application 证书（一.2）
 - [ ] 准备公证凭据（一.4）

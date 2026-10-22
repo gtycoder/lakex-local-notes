@@ -1,5 +1,5 @@
 ---
-name: LocalLakeNotes
+name: LocalLakexNotes
 description: 本地优先的 Lake 编辑器笔记应用（桌面端）——克制的品类标准
 colors:
   accent: "#3f5fa0"
@@ -137,7 +137,7 @@ components:
     rounded: "{rounded.lg}"
 ---
 
-# Design System: LocalLakeNotes
+# Design System: LocalLakexNotes
 
 ## Overview
 

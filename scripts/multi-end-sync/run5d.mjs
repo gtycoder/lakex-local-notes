@@ -29,8 +29,8 @@ async function evT(id, expr, ms) {
 async function syncT(id, ms) { const t0 = Date.now(); const v = await evT(id, 'window.lakeNative.syncNow()', ms); return { value: v.value, ms: Date.now() - t0 }; }
 function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; const fs = require('node:fs'); fs.mkdirSync(dir, { recursive: true });
-  for (const f of ['lake-notes-mobileSQLite.db', 'lake-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakenotes.mobile cat databases/' + f, { maxBuffer: 300 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
-  const db = new Database(dir + '/lake-notes-mobileSQLite.db', { readonly: true });
+  for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 300 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
+  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,doc_kind,content FROM notes').all().map(function (r) { return { id: String(r.id), kind: r.doc_kind || 'doc', len: String(r.content).length }; }); }
   finally { db.close(); }
 }
@@ -79,7 +79,7 @@ for (const id of IDS) { const e = find(id); let len = 0; if (e.type === 'desktop
 
 console.log('== T7: liveness + eval latency ==');
 for (const id of IDS) { const t = await evT(id, '1+1', 10000); check(id + ' responsive', t.value === 2, 'eval=' + t.ms + 'ms'); }
-for (const e of ENDS.filter(function (x) { return x.type === 'android'; })) { let alive = false; try { alive = execSync(ADB + ' -s ' + e.serial + ' shell pidof com.lakenotes.mobile').toString().trim().length > 0; } catch (err) {} check(e.id + ' process alive', alive); }
+for (const e of ENDS.filter(function (x) { return x.type === 'android'; })) { let alive = false; try { alive = execSync(ADB + ' -s ' + e.serial + ' shell pidof com.locallakexnotes.mobile').toString().trim().length > 0; } catch (err) {} check(e.id + ' process alive', alive); }
 
 console.log('== T8: idempotent second sync D1 ==');
 const s2 = await syncT('D1', 1200000);

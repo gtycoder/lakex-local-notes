@@ -143,7 +143,7 @@ export function registerNotesIpc(
     if (dir !== lastPickedBackupDir) throw new IpcInputError("备份目录无效：请先通过系统选择框选择目录");
     return enqueueMaintenance(async () => {
       const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
-      const target = path.join(dir, `lake-notes-backup-${ts}`);
+      const target = path.join(dir, `local-lakex-notes-backup-${ts}`);
       const log = (msg: string) => store.logScopes.sync.info(msg);
       const result = exportWorkspaceBackup(workspaceRoot, target, backupDatabases, log);
       return { backupPath: result.backupPath, copiedDirs: result.copiedDirs };

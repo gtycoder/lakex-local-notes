@@ -116,7 +116,7 @@ describe("Markdown 单元格与展开浮窗（261004）", () => {
   });
 
   it("尺寸本地记忆：打开用记住的大小、松手写回；未记忆时用默认（261004）", () => {
-    localStorage.setItem("lake-notes-v3.bitable-expand-size", JSON.stringify({ md: { w: 500, h: 360 } }));
+    localStorage.setItem("local-lakex-notes-v3.bitable-expand-size", JSON.stringify({ md: { w: 500, h: 360 } }));
     render("abc");
     openPanel();
     const panel = document.querySelector<HTMLElement>(".bt-text-expand")!;
@@ -129,7 +129,7 @@ describe("Markdown 单元格与展开浮窗（261004）", () => {
       window.dispatchEvent(new MouseEvent("pointerup", {}));
     });
     expect(panel.style.width).toBe("580px");
-    const stored = JSON.parse(localStorage.getItem("lake-notes-v3.bitable-expand-size")!) as { md?: { w: number } };
+    const stored = JSON.parse(localStorage.getItem("local-lakex-notes-v3.bitable-expand-size")!) as { md?: { w: number } };
     expect(stored.md?.w).toBe(580);
   });
 
@@ -144,7 +144,7 @@ describe("Markdown 单元格与展开浮窗（261004）", () => {
   it("展开浮窗适配窗口边界：锚点贴右/下缘时不越出视口（261006 修复）", () => {
     // jsdom 视口 1024×768；记住的宽度 900 —— 旧实现横向只按占位宽 400 夹取，会按左侧 616 定位、
     // 实际 900 宽渲染 ⇒ 右缘 1516 越界；修复后必须用真实尺寸夹取，面板完整落在视口内。
-    localStorage.setItem("lake-notes-v3.bitable-expand-size", JSON.stringify({ md: { w: 900, h: 300 } }));
+    localStorage.setItem("local-lakex-notes-v3.bitable-expand-size", JSON.stringify({ md: { w: 900, h: 300 } }));
     render("abc");
     const button = host.querySelector<HTMLButtonElement>(".bt-expand-btn")!;
     button.getBoundingClientRect = () => ({ x: 820, y: 100, top: 100, bottom: 140, left: 820, right: 900, width: 80, height: 40, toJSON: () => ({}) } as unknown as DOMRect);

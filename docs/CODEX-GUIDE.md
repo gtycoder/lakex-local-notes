@@ -82,7 +82,7 @@ await win.screenshot({ path: "/tmp/xxx.png" });  // 截图给用户看
 ### 测试纪律（很重要）
 - **测试数据会写进用户真实笔记**：粘贴/建笔记后必须清理（从 .lake 文件按块删除），
   并全库扫描验证无残留；`.lake` 是 HTML+URL 编码文本，grep 用编码后的模式
-- **杀进程只 `grep "lake-notes-electron"`**（禁 `pkill -f Electron`，会误杀 Trae CN）
+- **杀进程只 `grep "local-lakex-notes"`**（禁 `pkill -f Electron`，会误杀 Trae CN）
 - **单实例锁**：dev 与打包版不能同时跑；端口 1421 冲突先 `lsof -ti tcp:1421 | xargs kill -9`
 - 结束前关闭应用 + 静态服务器，释放端口
 

@@ -137,7 +137,7 @@ export function MultiTabEditor({
   const tabMenuRef = useRef<HTMLDivElement>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [tabMenuWidth, setTabMenuWidth] = useState<number>(() => {
-    const v = Number(localStorage.getItem("lake-notes-v3.tab-switcher-width"));
+    const v = Number(localStorage.getItem("local-lakex-notes-v3.tab-switcher-width"));
     return Number.isFinite(v) && v >= 160 && v <= 440 ? v : 220;
   });
   const tabMenuWidthRef = useRef(tabMenuWidth);
@@ -153,7 +153,7 @@ export function MultiTabEditor({
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      writeLocalStorage("lake-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
+      writeLocalStorage("local-lakex-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);

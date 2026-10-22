@@ -38,8 +38,8 @@
 
 ## 数据安全（务必遵守）
 - 真机测试前**必须备份**，测试后**还原**：
-  - 备份：`adb -s 50950385 shell am force-stop com.lakenotes.mobile && adb -s 50950385 exec-out run-as com.lakenotes.mobile tar -cz databases shared_prefs app_webview files > backup.tgz`
-  - 还原：`pm clear` 后 `adb push` 到 `/data/local/tmp`，再 `adb shell "cat /data/local/tmp/x.tgz | run-as com.lakenotes.mobile tar -xzf -"`
-- **不要碰正式数据** `~/Library/Application Support/lake-notes-electron`
+  - 备份：`adb -s 50950385 shell am force-stop com.locallakexnotes.mobile && adb -s 50950385 exec-out run-as com.locallakexnotes.mobile tar -cz databases shared_prefs app_webview files > backup.tgz`
+  - 还原：`pm clear` 后 `adb push` 到 `/data/local/tmp`，再 `adb shell "cat /data/local/tmp/x.tgz | run-as com.locallakexnotes.mobile tar -xzf -"`
+- **不要碰正式数据** `~/Library/Application Support/local-lakex-notes`
 - 杀 Electron **只 kill 具体 PID**，禁 `pkill -f Electron`（机器上还有 SiYuan/VSCode/Trae）
 - 隔离前缀用完必删（0 残留）

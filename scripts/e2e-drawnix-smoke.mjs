@@ -84,7 +84,7 @@ try {
   const parsed = JSON.parse(result);
   if (parsed.boardResizers < 1 || parsed.plaitBoards < 1) throw new Error("Drawnix 画板未渲染");
   if (!parsed.drawnixModuleRendered) throw new Error("Drawnix 模块未渲染");
-  // 非 http(s) 页面（打包版：A1 起是私有协议 lake://app，此前是 file://）下 Chromium 不记录
+  // 非 http(s) 页面（打包版：A1 起是私有协议 locallakexnotes://app，此前是 file://）下 Chromium 不记录
   // JS module 的 resource timing（两者实测 drawnixJs=0），该断言只在 http(s)（vite dev/preview）下有意义；
   // 非 http(s) 时由上面的「画板已渲染 + 模块已渲染」证明引擎已加载。
   // 懒加载/首屏体积的护栏归 scripts/check-bundle-budget.mjs，不在这里。

@@ -6,7 +6,7 @@ const SETTINGS: S3Settings = {
   endpoint: "https://s3.cn-north-1.qiniucs.com",
   region: "cn-north-1",
   bucket: "local-lake-hebei",
-  prefix: "lake-notes",
+  prefix: "local-lakex-notes",
   accessKeyId: "AKIDEXAMPLE1234567890",
   secretAccessKey: "SECRET-EXAMPLE-do-not-log-0123456789",
   forcePathStyle: false,
@@ -45,8 +45,8 @@ describe("S3 配置迁移码", () => {
 
   it("贴错内容 / 明文 JSON / 空串都给明确原因", async () => {
     await expect(decodeS3ConfigTransfer("")).rejects.toThrow(/请先粘贴/);
-    await expect(decodeS3ConfigTransfer("随便一段文字")).rejects.toThrow(/不是 LocalLakeNotes 的 S3 迁移码/);
-    await expect(decodeS3ConfigTransfer(JSON.stringify(SETTINGS))).rejects.toThrow(/不是 LocalLakeNotes 的 S3 迁移码/);
+    await expect(decodeS3ConfigTransfer("随便一段文字")).rejects.toThrow(/不是 LocalLakexNotes 的 S3 迁移码/);
+    await expect(decodeS3ConfigTransfer(JSON.stringify(SETTINGS))).rejects.toThrow(/不是 LocalLakexNotes 的 S3 迁移码/);
     await expect(decodeS3ConfigTransfer(S3_TRANSFER_PREFIX + "AAAA")).rejects.toThrow(/无效或已损坏/);
   });
 
@@ -69,7 +69,7 @@ describe("S3 配置迁移码", () => {
   it("配置文件：JSON 包装一层元数据，内层仍是加密迁移码", async () => {
     const file = await encodeS3ConfigTransferFile(SETTINGS, new Date("2026-10-17T14:30:00Z"));
     const parsed = JSON.parse(file) as { app: string; kind: string; version: number; payload: string; exportedAt: string };
-    expect(parsed).toMatchObject({ app: "lake-notes", kind: "s3-config", version: 1 });
+    expect(parsed).toMatchObject({ app: "local-lakex-notes", kind: "s3-config", version: 1 });
     expect(parsed.exportedAt).toBe("2026-10-17T14:30:00.000Z");
     expect(parsed.payload.startsWith(S3_TRANSFER_PREFIX)).toBe(true);
     expect(file).not.toContain(SETTINGS.secretAccessKey);
@@ -81,13 +81,13 @@ describe("S3 配置迁移码", () => {
     const code = await encodeS3ConfigTransfer(SETTINGS);
     await expect(decodeS3ConfigTransferFile(code)).resolves.toEqual(SETTINGS);
     await expect(decodeS3ConfigTransferFile("")).rejects.toThrow(/空/);
-    await expect(decodeS3ConfigTransferFile("{}")).rejects.toThrow(/不是 LocalLakeNotes 的 S3 配置文件/);
-    await expect(decodeS3ConfigTransferFile(JSON.stringify({ app: "lake-notes", kind: "s3-config", version: 2, payload: "x" }))).rejects.toThrow(/版本不受支持/);
+    await expect(decodeS3ConfigTransferFile("{}")).rejects.toThrow(/不是 LocalLakexNotes 的 S3 配置文件/);
+    await expect(decodeS3ConfigTransferFile(JSON.stringify({ app: "local-lakex-notes", kind: "s3-config", version: 2, payload: "x" }))).rejects.toThrow(/版本不受支持/);
     const file = await encodeS3ConfigTransferFile(SETTINGS);
     const payloadIndex = file.indexOf(S3_TRANSFER_PREFIX);
     const tamperAt = payloadIndex + S3_TRANSFER_PREFIX.length + 10;
     const tamperedFile = file.slice(0, tamperAt) + (file[tamperAt] === "A" ? "B" : "A") + file.slice(tamperAt + 1);
-    await expect(decodeS3ConfigTransferFile(tamperedFile)).rejects.toThrow(/无效或已损坏|不是 LocalLakeNotes/);
+    await expect(decodeS3ConfigTransferFile(tamperedFile)).rejects.toThrow(/无效或已损坏|不是 LocalLakexNotes/);
   });
 
   it("导出文件名带本地时间戳且是 .json", () => {

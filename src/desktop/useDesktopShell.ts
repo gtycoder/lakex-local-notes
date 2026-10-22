@@ -78,14 +78,14 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
 
   // sidebar 模式持久化
   useEffect(() => {
-    if (sidebarMode !== "floating") writeLocalStorage("lake-notes-v2.sidebar-mode", sidebarMode);
+    if (sidebarMode !== "floating") writeLocalStorage("local-lakex-notes-v2.sidebar-mode", sidebarMode);
   }, [sidebarMode]);
 
   const updateSidebarWidth = useCallback((width: number) => { setSidebarWidth(width); }, []);
   const commitSidebarWidth = useCallback((width: number) => {
     const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
     setSidebarWidth(clamped);
-    writeLocalStorage("lake-notes-v3.sidebar-width", String(Math.round(clamped)));
+    writeLocalStorage("local-lakex-notes-v3.sidebar-width", String(Math.round(clamped)));
   }, []);
   const handleSidebarResizeActiveChange = useCallback((active: boolean) => {
     sidebarResizingRef.current = active;
@@ -126,7 +126,7 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   // outline 状态
   const setOutlineModeForActive = useCallback((mode: OutlineMode) => {
     setOutlineMode(mode);
-    writeLocalStorage("lake-notes-v2.outline-sidebar-mode", mode);
+    writeLocalStorage("local-lakex-notes-v2.outline-sidebar-mode", mode);
     if (mode === "docked" && activeOutlineEmpty) setOutlineEmptyOverride(true);
     else if (mode === "collapsed") setOutlineEmptyOverride(false);
   }, [activeOutlineEmpty]);
@@ -136,7 +136,7 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   const commitOutlineSidebarWidth = useCallback((width: number) => {
     const clamped = Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, width));
     setOutlineSidebarWidth(clamped);
-    writeLocalStorage("lake-notes-v3.outline-sidebar-width", String(Math.round(clamped)));
+    writeLocalStorage("local-lakex-notes-v3.outline-sidebar-width", String(Math.round(clamped)));
   }, []);
 
   // 工作区切换（原语义：先判同值；离开小记工作区前 confirmLeave）

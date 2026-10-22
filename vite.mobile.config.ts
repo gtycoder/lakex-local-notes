@@ -38,7 +38,7 @@ const MOBILE_PREVIEW_HTML = `<!doctype html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>LocalLakeNotes 移动端预览</title>
+<title>LocalLakexNotes 移动端预览</title>
 <style>
   html,body{margin:0;height:100vh;height:100dvh;background:#2b2b30;overflow:hidden;}
   .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
@@ -49,7 +49,7 @@ const MOBILE_PREVIEW_HTML = `<!doctype html>
 </head>
 <body>
   <div class="stage"><div class="phone"><iframe src="index.html" allow="clipboard-read; clipboard-write"></iframe></div></div>
-  <div class="hint">LocalLakeNotes 移动端预览 · 390×844 · DevTools 设备模式可调试</div>
+  <div class="hint">LocalLakexNotes 移动端预览 · 390×844 · DevTools 设备模式可调试</div>
   <script>
     function fit(){
       const p=document.querySelector('.phone');

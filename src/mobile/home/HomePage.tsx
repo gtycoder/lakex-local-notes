@@ -94,7 +94,7 @@ type ComposerState =
   | { mode: "edit"; id: string }
   | null;
 
-const VIEW_KEY = "lake-notes-mobile.libraryView";
+const VIEW_KEY = "local-lakex-notes-mobile.libraryView";
 
 /**
  * 卡片封面缩略图档位。封面是整列宽、最高 210px（`.qn-card__img` max-width 100% / max-height 210px），

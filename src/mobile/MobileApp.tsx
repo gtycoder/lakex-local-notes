@@ -168,7 +168,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   }, []);
 
   /**
-   * 本次 capture 是否由**快捷入口**（长按桌面图标 / `lakenotes://quick-note` 深链）拉起 —— 决定两件事（用户 261013 定稿）：
+   * 本次 capture 是否由**快捷入口**（长按桌面图标 / `locallakexnotes://quick-note` 深链）拉起 —— 决定两件事（用户 261013 定稿）：
    *  ① **手动退出时直接退 App 回桌面**（"假单独模块"，模仿思源的闪念速记；首页底栏「新建小记」那条不受影响）；
    *  ② 这次会话**不主动发起同步**（见 `useAutoSync` 的 capture 会话判定：入口 / 回前台 / 进后台三处都跳过）。
    */

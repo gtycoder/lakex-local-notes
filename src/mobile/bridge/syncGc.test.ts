@@ -55,7 +55,7 @@ const s3 = {
   bucket: "bucket",
   accessKeyId: "ak",
   secretAccessKey: "sk",
-  prefix: "lake-notes",
+  prefix: "local-lakex-notes",
   forcePathStyle: false,
 };
 

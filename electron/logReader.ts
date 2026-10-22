@@ -2,7 +2,7 @@
  * F1 应用内日志读取（桌面主进程专用；含纯函数 tailLinesMatching 供单测）。
  *
  * - 纯函数：按关键字过滤 + 保留上下文 ±1 行，返回尾部优先、条数封顶。
- * - IPC（registerLogIpc）：白名单路径 = userData/logs/lake-notes.log（+ 轮转 .old），
+ * - IPC（registerLogIpc）：白名单路径 = userData/logs/local-lakex-notes.log（+ 轮转 .old），
  *   渲染层只传 keyword/maxLines，绝不接受任意路径。
  */
 

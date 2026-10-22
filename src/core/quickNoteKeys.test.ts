@@ -38,12 +38,12 @@ describe("小记 key 布局（单一来源 + 格式钉死）", () => {
   });
 
   it("带前缀的 key 组 = prefix + 相对布局（单条推送与整轮同步必须同构）", () => {
-    const keys = quickNoteKeys("lake-notes");
-    expect(keys.manifestKey).toBe("lake-notes/quick-notes/manifests/latest.json");
-    expect(keys.objectKey("abc123")).toBe("lake-notes/quick-notes/objects/abc123.qnote");
-    expect(keys.assetKey("note-a", "a.png")).toBe("lake-notes/quick-notes/assets/note-a/a.png");
+    const keys = quickNoteKeys("local-lakex-notes");
+    expect(keys.manifestKey).toBe("local-lakex-notes/quick-notes/manifests/latest.json");
+    expect(keys.objectKey("abc123")).toBe("local-lakex-notes/quick-notes/objects/abc123.qnote");
+    expect(keys.assetKey("note-a", "a.png")).toBe("local-lakex-notes/quick-notes/assets/note-a/a.png");
     // 关键不变量：剥掉同步前缀后，必须与相对 key 逐字相同（两条路径永远指向同一批对象）
-    const prefix = "lake-notes/";
+    const prefix = "local-lakex-notes/";
     expect(keys.manifestKey.slice(prefix.length)).toBe(quickNoteManifestKeyRel());
     expect(keys.objectKey("abc123").slice(prefix.length)).toBe(quickNoteObjectKeyRel("abc123"));
     expect(keys.assetKey("note-a", "a.png").slice(prefix.length)).toBe(quickNoteAssetKeyRel("note-a", "a.png"));

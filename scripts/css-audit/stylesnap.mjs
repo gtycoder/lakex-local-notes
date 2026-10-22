@@ -165,19 +165,19 @@ export const pin = async (page, w, theme, outlineMode, media) => {
     return false;
   };
   await page.evaluate(`(() => {
-    const k = "lake-notes-v1.settings";
+    const k = "local-lakex-notes-v1.settings";
     const s = JSON.parse(localStorage.getItem(k) || "{}");
     // ⚠️ 所有状态都钉 outlineEnhance=false ⇒ 增强大纲（.outline-sidebar 等）在本矩阵中**不可达**，
     // L3 的 DOM 零命中对它无效（须叠加代码生产者过滤，见 README §状态矩阵 / l3-plan.mjs）。
     s.theme = ${JSON.stringify(theme)}; s.outlineEnhance = false;
     localStorage.setItem(k, JSON.stringify(s));
-    localStorage.setItem("lake-notes-v2.sidebar-mode", "docked");
-    localStorage.setItem("lake-notes-v2.outline-sidebar-mode", ${JSON.stringify(outlineMode || "collapsed")});
+    localStorage.setItem("local-lakex-notes-v2.sidebar-mode", "docked");
+    localStorage.setItem("local-lakex-notes-v2.outline-sidebar-mode", ${JSON.stringify(outlineMode || "collapsed")});
     // 浮动弹窗（设置/历史/回收站）的位置与尺寸也持久化在 localStorage（useFloatingDialog 的
-    // lake-notes-v3.dialog-states）⇒ 夹具副本会带上"上一台机器把设置弹窗拖到哪、拉多大"，
+    // local-lakex-notes-v3.dialog-states）⇒ 夹具副本会带上"上一台机器把设置弹窗拖到哪、拉多大"，
     // 让**所有 settings 态整体位移/缩放**（2026-10-06 实测：settings-* 全态 hash 变、根节点 .settings-panel 起）。
     // 清掉它 = 每个态都按 initialSize 默认居中打开，几何只跟 CSS 与视口走。
-    localStorage.removeItem("lake-notes-v3.dialog-states");
+    localStorage.removeItem("local-lakex-notes-v3.dialog-states");
   })()`);
   await page.send("Emulation.setDeviceMetricsOverride", { width: w, height: 868, deviceScaleFactor: 1, mobile: false });
   await page.send("Page.reload", { ignoreCache: true });
@@ -185,7 +185,7 @@ export const pin = async (page, w, theme, outlineMode, media) => {
   await page.sleep(1200);
   const shellCls = await page.evaluate(`document.querySelector(".app-shell").className`);
   if (!/\bsidebar-docked\b/.test(shellCls)) {
-    await page.evaluate(`localStorage.setItem("lake-notes-v2.sidebar-mode","docked")`);
+    await page.evaluate(`localStorage.setItem("local-lakex-notes-v2.sidebar-mode","docked")`);
     await page.send("Page.reload", { ignoreCache: true });
     await waitShell();
     await page.sleep(1000);

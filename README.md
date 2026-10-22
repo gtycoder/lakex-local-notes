@@ -1,4 +1,4 @@
-# LocalLakeNotes（Electron）
+# LocalLakexNotes（Electron）
 
 本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目总览入口；会话交接的唯一文档是** **`HANDOFF.md`。**
 
@@ -23,6 +23,9 @@
 6. **搜索单独立项**：搜索功能（FTS 索引/短词/增量等）将整体统一重构，常规审计与重构不含搜索优化项。
 
 ## 一、项目概览
+
+- **名称**：仓库 / npm 包 = `local-lakex-notes`；产品显示名 = `LocalLakexNotes`；**本地目录名暂仍为 `lake-notes-electron`**（改名会牵动 worktree，另行处理）。
+- **身份标识**：桌面 appId `com.locallakexnotes.desktop`、Android `com.locallakexnotes.mobile`；S3 迁移码前缀 `LLN1.`；私有协议 `locallakexnotes://app`；深链 `locallakexnotes://quick-note`。
 
 - **形态**：Electron 44 桌面应用 + Capacitor 安卓端（正式端）。
 

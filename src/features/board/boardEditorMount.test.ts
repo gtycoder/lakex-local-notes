@@ -87,7 +87,7 @@ describe("画板编辑器护栏", () => {
     expect(EDITOR).toMatch(/const onPointerUp = \(event: PointerEvent\) => \{[\s\S]{0,200}host\.contains\(target\)/);
     // 位置只在本机（localStorage，L3）：不进正文、不进 S3
     const STORE = readFileSync(new URL("./boardViewStore.ts", import.meta.url), "utf8");
-    expect(STORE).toMatch(/lake-notes-v3\.board-views/);
+    expect(STORE).toMatch(/local-lakex-notes-v3\.board-views/);
     expect(STORE).toMatch(/localStorage/);
   });
 

@@ -63,7 +63,7 @@ export function S3ConfigImportDialog({ onClose, onImport }: S3ConfigImportDialog
           className="s3-transfer-dialog__code"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="粘贴 LNS3.1. 开头的迁移码"
+          placeholder="粘贴 LLN1. 开头的迁移码"
           aria-label="S3 迁移码"
           spellCheck={false}
         />

@@ -761,9 +761,9 @@ interface TextExpandPopoverProps {
 
 /**
  * 展开浮窗尺寸记忆（261004 用户要求；存本地 localStorage，与「侧栏宽度 / 数据表栏宽」同款做法）：
- * 文本格与 AI/Markdown 格**各记一份**，只记大小、不记位置。键 = lake-notes-v3.bitable-expand-size。
+ * 文本格与 AI/Markdown 格**各记一份**，只记大小、不记位置。键 = local-lakex-notes-v3.bitable-expand-size。
  */
-const BT_EXPAND_SIZE_KEY = "lake-notes-v3.bitable-expand-size";
+const BT_EXPAND_SIZE_KEY = "local-lakex-notes-v3.bitable-expand-size";
 type ExpandRemember = "text" | "md";
 function loadExpandSize(kind: ExpandRemember): { w: number; h: number } | null {
   try {

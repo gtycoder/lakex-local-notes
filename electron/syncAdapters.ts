@@ -241,5 +241,5 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
 export function syncConfigFromStore(store: Store): SyncConfig {
   const s = store.getS3Settings();
   if (!s) throw new Error("请先保存 S3 配置");
-  return { endpoint: s.endpoint, region: s.region, bucket: s.bucket, accessKeyId: s.accessKeyId, secretAccessKey: s.secretAccessKey, prefix: s.prefix ?? "lake-notes" };
+  return { endpoint: s.endpoint, region: s.region, bucket: s.bucket, accessKeyId: s.accessKeyId, secretAccessKey: s.secretAccessKey, prefix: s.prefix ?? "local-lakex-notes" };
 }

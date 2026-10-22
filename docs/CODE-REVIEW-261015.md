@@ -301,7 +301,7 @@ AGENTS §4 已把「小记保存并同步 = 单条推送」列为高危路径（
 **验收**：移动端只读清单（bool 禁用复选、link href/target、5 星、进度百分比、关联 chip、时间到分钟）逐项设备复跑
 （HANDOFF §8「多维表只读」既有判据）；`check:mobilesnap` 6 态 0 差异。
 
-**✅ 实际做法（261017）**：新增 [bitableReadOnly.ts](lake-notes-electron/src/core/bitableReadOnly.ts)（`readOnlyAttachments/Options/Boolean/Link/Rating/Progress/Relation`，零 React/DOM，clamp/href/失效判定单一来源）；移动端 `MobileBitableViewer` 全部改用，桌面 `bitableCells.tsx` 的 Rating/Progress/Link/Boolean 也改用（交互态不动）。护栏 `bitableReadOnly.test.ts` 6 例 + 两端源码级守卫。设备验收（lake_gate + 自建全字段表）：bool=[true,false] disabled、link href/target 正确、stars=[4,2]、bars=60%/0%、relation=[目标A,目标B,目标B]；`.css-audit/c1-6-261017/bitable-readonly.png`。
+**✅ 实际做法（261017）**：新增 [bitableReadOnly.ts](local-lakex-notes/src/core/bitableReadOnly.ts)（`readOnlyAttachments/Options/Boolean/Link/Rating/Progress/Relation`，零 React/DOM，clamp/href/失效判定单一来源）；移动端 `MobileBitableViewer` 全部改用，桌面 `bitableCells.tsx` 的 Rating/Progress/Link/Boolean 也改用（交互态不动）。护栏 `bitableReadOnly.test.ts` 6 例 + 两端源码级守卫。设备验收（lake_gate + 自建全字段表）：bool=[true,false] disabled、link href/target 正确、stars=[4,2]、bars=60%/0%、relation=[目标A,目标B,目标B]；`.css-audit/c1-6-261017/bitable-readonly.png`。
 
 ### C1-7 `NoteInfoDialog` 与 `NoteInfoSheet` 是同功能两端实现
 
@@ -859,7 +859,7 @@ border-color = var(--lake-accent) 28 处   ← 合法（图形/边框）
 | --- | --- | --- |
 | **Q3** | 是否新增 `--lake-bg-selected` / `--lake-fg-selected` / `--lake-bg-selected-hover`？ | ✅ **261017 裁定 A 并落地**：`color-mix(tint 88%, accent 12%)`；C5-1/C5-2 随之完成。 |
 | **D2** | `forcePathStyle` 移动端写死 false | ✅ **261017 用户定稿：不做**。移动端只支持虚拟托管（阿里云 OSS 官方仅虚拟托管；腾讯云 COS 2024+ 新桶不支持 path-style；AWS/七牛同理）；自建 MinIO 与 D3 一起另立项。 |
-| **D5** | 移动端 gzip PUT 不带 `Content-Encoding` | ✅ **261017 已修 + 真云验证**（七牛 `local-lake-hebei` / `lake-notes-dev1`）：带 header 存回 `ContentEncoding=gzip`；移动端已补，D5 护栏已加。 |
+| **D5** | 移动端 gzip PUT 不带 `Content-Encoding` | ✅ **261017 已修 + 真云验证**（七牛 `local-lake-hebei` / `local-lakex-notes-dev1`）：带 header 存回 `ContentEncoding=gzip`；移动端已补，D5 护栏已加。 |
 | **C1-6** | 移动端只读单元格复用桌面只读渲染 | ✅ **261017 已落地并设备验收**：`core/bitableReadOnly.ts` 纯语义；lake_gate 实测 bool=[true,false] disabled、link href/target、stars=[4,2]、bars=60%/0%、relation=[目标A,目标B,目标B]。 |
 | **C1-5** | 桌面与移动列表的时间措辞是否统一 | ✅ **已裁定并落地（261017，Q10=B）**：列表统一 今天/昨天/本周/上周/本月/上月，其余默认绝对；绝对/细节时间固定 `YYYY-MM-DD HH:mm[:ss]`。见 HANDOFF 261017(七)。 |
 

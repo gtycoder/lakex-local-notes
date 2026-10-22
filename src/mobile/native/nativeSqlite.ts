@@ -22,7 +22,7 @@ async function query(database: string, statement: string): Promise<unknown[]> {
 
 /** Android 原生 SQLite spike：不接主路径，只验证插件行为和文件库语义。 */
 export async function runNativeSqliteSpike(
-  database = "lake-notes-mobile-spike",
+  database = "local-lakex-notes-mobile-spike",
   reset = true,
 ): Promise<NativeSqliteSpikeResult> {
   await CapacitorSQLite.createConnection({

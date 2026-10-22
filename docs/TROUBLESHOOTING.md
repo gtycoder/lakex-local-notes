@@ -33,7 +33,7 @@
 20. **性能优化破坏 TOC（历史教训，已被 2026-08-02 会话推翻/解决）**：历史上 `content-visibility: auto`、`virtualRendering`、Tab 离屏销毁、MutationObserver 懒加载都曾破坏 TOC。**现已证明可行**：`virtualRendering` + `scrollNode` 指对真实滚动容器（`.ne-editor-wrap`）+ setDocument 后重放 `tocChange`，TOC 正常工作（打开时延迟 ~600ms 出现）；高亮/点击/列表跟随由自研 `setupTocScrollFollow` 补齐。
 21. **overflow 修改影响 Lake 浮动 UI（已演进）**：`.multi-tab-editor`/`.tab-panels` 设 overflow 曾裁剪表格工具栏与 TOC 按钮。最终方案：**每标签独立滚动容器**——`.lake-editor-tab` 固定高度外壳（`overflow:hidden`）+ 高度链让 Lake 原生 `.ne-editor-wrap`（`height:100%; overflow-y:auto`）内部滚动；`.multi-tab-editor` 用 `height:100%`（确定高度）而非 `min-height`（否则内容撑高、内部滚动失效、外层裁剪）。
 22. **`-webkit-app-region: drag` 原生层吃点击**：`pointer-events: none` 无效。`.tab-bar` 设 drag、`.tab-item` 设 no-drag。
-23. **CSS 修改铁律**：改前先看样式层叠顺序（`scripts/css-audit/README.md`；改了声明量必须跑 `vitest src/styles/cssLayers.test.ts` 对基线，只允许变小或合法抬高并注明），别造第四套类名；绝不加 `content-visibility`/`contain` 到引擎层。（原 `lake-notes-tauri-poc` CSS 基准仓库已清理，历史 diff 走 git 历史。）
+23. **CSS 修改铁律**：改前先看样式层叠顺序（`scripts/css-audit/README.md`；改了声明量必须跑 `vitest src/styles/cssLayers.test.ts` 对基线，只允许变小或合法抬高并注明），别造第四套类名；绝不加 `content-visibility`/`contain` 到引擎层。（原 `local-lakex-notes-tauri-poc` CSS 基准仓库已清理，历史 diff 走 git 历史。）
 24. **Drawnix CSS 不能直接 import**：包的 exports 没导出 CSS。复制到 `src/vendor/` 从本地路径导入。
 25. **DefaultEditorConfig 必须递归深合并**：一层合并丢嵌套配置（`deepMerge` 已实现）。
 26. **scrollNode 必须指向真实滚动容器**（虚拟渲染/大纲定位前提）：本项目桌面多标签下是 `.ne-editor-wrap`（高度链修复后）；`body` 是 `overflow:hidden`，Lake 默认回退 `document.scrollingElement || document.body` 会拿错，导致视口测量/TOC 全乱。
@@ -42,7 +42,7 @@
 29. **TOC 条目是 `div.ne-toc-item`，不是 `<a>`**：探测/选择器用 `a` 会数出 0 造成误判。
 30. **多标签共用滚动容器 → 滚动位置共享**：`.document-pane` 包所有标签时，A 标签滚到中部，切 B 也在中部。解法：每标签独立滚动容器。
 31. **`npm run dev` 会启动两个 Electron**：`vite-plugin-electron` 默认自动拉起 Electron，脚本里再 `wait-on && electron .` 就是双实例 → 单实例锁冲突 + ERR_FAILED。已修：dev 只跑 vite（commit 3b7db20）。
-32. **打包版卸载后 SingletonLock 残留**：`~/Library/Application Support/lake-notes-electron/SingletonLock|SingletonSocket|SingletonCookie` 残留会挡 dev 启动（"Failed to create SingletonLock: File exists"）。确认无进程后改名 `.stale-bak` 即可（沙箱禁 `rm -f`，用 mv）。
+32. **打包版卸载后 SingletonLock 残留**：`~/Library/Application Support/local-lakex-notes/SingletonLock|SingletonSocket|SingletonCookie` 残留会挡 dev 启动（"Failed to create SingletonLock: File exists"）。确认无进程后改名 `.stale-bak` 即可（沙箱禁 `rm -f`，用 mv）。
 33. **埋点/日志坑**：`console.debug` 被 DevTools 默认过滤（改用 `console.log`）；HMR 不重建已创建的编辑器实例（测新埋点必须 Cmd+R 或重启）；`editor.on("tocChange")` 收不到内核事件（要走 `editor.kernel.onPluginEvent`）。
 34. **docInitPerf 探针**：monitorLog 走内核 emitter，`editor.on("monitorLog")` 收不到（facade 不转发）；当前 `__lakePerfReport` 的 docInitPerf 采集是否生效取决于订阅路径，非功能问题。
 55. **原生大纲点击把整个壳滚乱（260916）**：内核 TOC 点击除 `scrollByNodeId` 外还会 `location.hash = 标题节点id`（`toc.allowModifyHash` 内核默认 true）→ 浏览器锚点导航滚锚点的**整条祖先滚动链** → `html` 被滚满 42px（=topbar 高，html 未锁 overflow）→ 整壳上移、topbar 滚出视野、tab 栏顶到第一行、fixed 状态栏不动（观感即「点一下大纲布局全乱」）。双层修复：① `toc: { allowModifyHash: false }`（**扁平 schema**——`toc.editing/reading` 嵌套是 LakexEditor 组件层转换，直传 `Doc.createOpenEditor` 无效）；② `html,body { overflow: hidden }`（base.css，原来只锁 body）兜底一切内核误滚 html 的路径。详见 LAKEX-CONTRACT §5.1。
@@ -60,7 +60,7 @@
 
 ## E. 环境与工具
 
-35. **杀进程误杀 Trae CN**：永远用 `grep "lake-notes-electron"` 精确匹配，禁 `pkill -f Electron`。
+35. **杀进程误杀 Trae CN**：永远用 `grep "local-lakex-notes"` 精确匹配，禁 `pkill -f Electron`。
 36. **npm 私有镜像不可达**：显式用 `registry.npmmirror.com` + 独立 cache 目录。
 37. **better-sqlite3 ABI**：装完必须 `@electron/rebuild`（Node ABI ≠ Electron ABI）。
 38. **React StrictMode**：useEffect 双执行，setOpenTabs 需去重（`tabs.some(...)`）。

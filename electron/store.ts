@@ -383,7 +383,7 @@ export class Store {
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
       workspaceId: DEFAULT_WORKSPACE_ID,
-      workspaceName: "LocalLakeNotes 本地仓库",
+      workspaceName: "LocalLakexNotes 本地仓库",
       notes,
       lastOpenedNoteId: last?.value ?? null,
       sync: { phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 },

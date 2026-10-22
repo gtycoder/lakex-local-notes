@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M0 POC Android 构建脚本（lake-notes-mobile worktree）
+# M0 POC Android 构建脚本（local-lakex-notes-mobile worktree）
 # 用法：./scripts/android-build.sh [--sync] [--install]
 #   --sync   先跑 cap sync（重新打包 web 资源到 android assets）
 #   --install 构建后 adb 安装到已连接设备
@@ -40,6 +40,6 @@ echo "==> APK: $(ls -la "$APK" | awk '{print $5}') bytes"
 if [[ " $* " == *" --install "* ]]; then
   echo "==> adb install -r $APK"
   adb install -r "$APK"
-  echo "==> 启动 com.lakenotes.mobile"
-  adb shell am start -n com.lakenotes.mobile/.MainActivity
+  echo "==> 启动 com.locallakexnotes.mobile"
+  adb shell am start -n com.locallakexnotes.mobile/.MainActivity
 fi
