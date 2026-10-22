@@ -14,18 +14,13 @@ import { describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyn
 import { bridge } from "../bridge";
 import { MANIFEST_VERSION } from "../../core/syncUtils";
 import { usePanelDrag } from "../hooks/usePanelDrag";
-import type { HistoryMobileSettings } from "../bridge";
-import { mobileCachePort } from "../native/cachePort";
-import { mobileAppInfoPort } from "../native/appInfoPort";
 import { TrashList } from "./TrashList";
-import { showToast } from "../ui/toastBus";
-import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
-import type { AppInfo } from "../../core/ports";
 import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
 import type { SyncSettings, SyncWarning } from "../../lib/types";
 import { useS3SettingsForm } from "./useS3SettingsForm";
+import { useSettingsSectionData } from "./useSettingsSectionData";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -76,6 +71,26 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     importFromFile: importS3ConfigFromFile,
     closeExport: closeS3Export,
   } = useS3SettingsForm(open);
+  const {
+    history: hist,
+    updateHistory: updateHist,
+    orphans,
+    orphanBusy,
+    gcMsg,
+    cleanOrphans,
+    deleteOrphan,
+    cleanCloud,
+    cacheMsg,
+    cacheSummary,
+    clearCache,
+    appInfo,
+    diagnostics: diag,
+  } = useSettingsSectionData({
+    historyOpen: open && view === "history",
+    resourcesOpen: open && view === "resources",
+    cacheOpen: open && view === "cache",
+    aboutOpen: open && view === "about",
+  });
   /** 云同步开关（与桌面同语义：关闭 = 纯离线本地空间，任何路径都不出网） */
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const cloudState = cloudStateOf(Boolean(s3), syncCfg);
@@ -91,49 +106,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
    */
   const [lastSync, setLastSync] = useState<MobileSyncStatus | null>(() => readSyncStatus());
   const [syncWarnings, setSyncWarnings] = useState<SyncWarning[]>([]);
-  const [cacheMsg, setCacheMsg] = useState("");
-  const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
-  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [diag, setDiag] = useState<{ noteCount: number; folderCount: number; quickNoteCount: number; resourceCount: number; orphanCount: number; gcPendingCount: number; snapshotCount: number; dbBytes: number } | null>(null);
-  const [orphans, setOrphans] = useState<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string }>>([]);
-  const [orphanBusy, setOrphanBusy] = useState(false);
-  const [gcMsg, setGcMsg] = useState("");
-  const [hist, setHist] = useState<HistoryMobileSettings | null>(null);
-
-  const updateHist = (patch: Partial<HistoryMobileSettings>) => {
-    if (!hist) return;
-    const next = { ...hist, ...patch };
-    setHist(next);
-    void bridge.saveHistorySettings(next).catch(() => {
-      // 乐观 UI 不能停留在未落盘的值；失败后重新读取真实设置并明确提示。
-      void bridge.getHistorySettings().then(setHist).catch((error) => { reportNativeActionError("回读历史设置", error); setHist(hist); });
-      showToast("历史设置保存失败，已恢复原值", { type: "error" });
-    });
-  };
-
-  useEffect(() => {
-    if (!open || view !== "resources") return;
-    void bridge.listOrphanAssets().then((rows) => setOrphans(rows)).catch((error) => { reportNativeActionError("读取孤儿资源", error); setOrphans([]); });
-  }, [open, view]);
-
-  useEffect(() => {
-    if (!open || view !== "history") return;
-    // 读失败不该冒未处理拒绝（与相邻几个读取 effect 同口径）
-    void bridge.getHistorySettings().then((h) => setHist(h)).catch((error) => reportNativeActionError("读取历史设置", error));
-  }, [open, view]);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
-
-  useEffect(() => {
-    if (!open || view !== "about") return;
-    void mobileAppInfoPort.getAppInfo().then(setAppInfo).catch((error) => reportNativeActionError("读取应用信息", error));
-    void bridge.getDiagnostics().then(setDiag).catch((error) => reportNativeActionError("读取诊断信息", error));
-  }, [open, view]);
-
-  useEffect(() => {
-    if (!open || view !== "cache") return;
-    void mobileCachePort.getCacheSummary().then(setCacheSummary).catch((error) => reportNativeActionError("读取缓存统计", error));
-  }, [open, view]);
 
   useEffect(() => {
     if (!open) return;
@@ -155,16 +129,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     }
   }, [onRefresh]);
 
-  const clearCache = useCallback(async () => {
-    setCacheMsg("清理中…");
-    try {
-      const result = await mobileCachePort.clearDerivedCaches();
-      setCacheMsg("已清理：blob " + (result.cleared.runtimeBlobBytes ?? 0) + " 项");
-    } catch (e) {
-      setCacheMsg("清理失败: " + (e as Error).message);
-    }
-    void mobileCachePort.getCacheSummary().then(setCacheSummary).catch((error) => reportNativeActionError("读取缓存统计", error));
-  }, []);
 
   const pageRef = useRef<HTMLDivElement>(null);
   const maskRef = useRef<HTMLDivElement>(null);
@@ -271,10 +235,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "resources" && (
             <Group title="资源管理" icon={<Images size={16} />}>
               <Block itemId="resources-clean" name="未引用资源" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
-                <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).catch((error) => { setOrphans([]); reportNativeActionError("清理孤儿资源", error); }).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
+                <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => void cleanOrphans()}>清理全部（{orphans.length}）</button>
               </Block>
               <Block itemId="resources-gc" name="云端未引用对象" desc="删除云端未被任何清单/历史快照引用且超过 7 天的对象（对齐桌面深度清理）。">
-                <button className="mb-btn mb-btn--primary" disabled={orphanBusy || !canTouchNetwork(cloudState)} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch((error) => { setGcMsg("清理失败：" + getNativeErrorMessage(error)); reportNativeActionError("云端清理", error); }).finally(() => setOrphanBusy(false)); }}>清理云端</button>
+                <button className="mb-btn mb-btn--primary" disabled={orphanBusy || !canTouchNetwork(cloudState)} onClick={() => void cleanCloud()}>清理云端</button>
                 {(gcMsg || cloudBlockReason) && <div className="mb-form__desc">{gcMsg || cloudBlockReason}</div>}
               </Block>
               {orphans.length === 0 && <div className="mb-empty mb-empty--inset">暂无冗余资源</div>}
@@ -282,7 +246,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 <div key={o.id} className="mb-row">
                   <span className="mb-row__title">{o.filename}</span>
                   <span className="mb-row__meta">{formatBytes(o.size)}</span>
-                  <button className="mb-iconbtn mb-row__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))).catch((error) => reportNativeActionError("删除孤儿资源", error)); }} aria-label="删除"><Trash size={16} /></button>
+                  <button className="mb-iconbtn mb-row__action" onClick={() => void deleteOrphan(o.id)} aria-label="删除"><Trash size={16} /></button>
                 </div>
               ))}
             </Group>
