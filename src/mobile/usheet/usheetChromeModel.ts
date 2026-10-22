@@ -157,10 +157,11 @@ export function buildMoreRows(fmt: SheetCellFormatLite): SheetMoreRow[] {
         { id: "sort-asc", label: "升序（按当前列）" },
         { id: "sort-desc", label: "降序（按当前列）" },
       ] },
+      { id: "crosshair", label: "十字高亮", icon: "grid" },
       { id: "conditional", label: "条件格式（暂不支持）", icon: "table", disabled: true },
     ],
     [
-      { id: "link", label: "链接（暂不支持）", icon: "link", disabled: true },
+      { id: "link", label: "链接", icon: "link" },
       { id: "select", label: "选择（暂不支持）", icon: "select", disabled: true },
       { id: "chart", label: "图表（暂不支持）", icon: "chart", disabled: true },
       { id: "formula", label: "公式", icon: "sigma", children: USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label })) },

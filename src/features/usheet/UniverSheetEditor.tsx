@@ -19,6 +19,7 @@ import { ICommandService, CommandType, DOCS_NORMAL_EDITOR_UNIT_ID_KEY, type FUni
 import { DocSelectionRenderService } from "@univerjs/preset-sheets-core";
 import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
+import { enableUsheetCrosshair } from "./usheetCrosshair";
 import { createUsheetUniver, type UsheetUniverCore } from "./usheetUniverFactory";
 import { lakeFontFamily } from "./usheetFont";
 import { editorCaretPoint, shouldPlaceCaretAfterDoubleClick } from "./usheetCellEdit";
@@ -283,6 +284,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       const { univer, univerAPI } = createUsheetUniver({ container: "univer-sheet-" + noteId, toolbar: showToolbar, formulaBar: showToolbar });
       const book = univerAPI.createWorkbook(workbook as never);
       book.setEditable(!readOnlyRef.current);
+      // 261022：十字高亮默认开启（纯本机视图；桌面「视图」页签另有内核开关）。
+      enableUsheetCrosshair(univerAPI);
       created = { univer, univerAPI, book };
       // last = 规范化后的**磁盘形态**正文；避免打开即被判为"有改动"或把 URL 写回正文。
       const canonical = deepCloneWorkbook(book.save() as unknown as UsheetWorkbook);

@@ -43,6 +43,11 @@ describe("移动端表格 chrome 模型（261021：对齐语雀工具条）", ()
     ]);
     // 261021 P5：筛选/排序已接（不再是置灰占位）；排序用我们自己的子菜单。
     expect(byId.get("filter")?.disabled).toBeUndefined();
+    // 261022 P1：超链接已接；十字高亮已接（纯视图 operation）。
+    expect(byId.get("link")?.disabled).toBeUndefined();
+    expect(byId.has("crosshair")).toBe(true);
+    expect(byId.get("crosshair")?.label).toBe("十字高亮");
+    expect(byId.get("conditional")?.disabled).toBe(true);
     // 261021 P5：查找替换已接（基础层 + sheets 适配器；移动端用官方 mobile bar）。
     expect(byId.get("find")?.disabled).toBeUndefined();
     expect(byId.get("sort")?.children?.map((item) => item.id)).toEqual(["sort-asc", "sort-desc"]);

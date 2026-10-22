@@ -44,9 +44,15 @@ vi.mock("@univerjs/presets", () => ({
 vi.mock("./mobileUniverPreset", () => ({
   createMobileSheetsCorePreset: (cfg: Record<string, unknown>) => { calls.core = cfg; calls.container = String(cfg.container); return { plugins: [] }; },
   createMobileSheetsDrawingPreset: () => ({ plugins: [] }),
+  // 261022 P1：超链接移动变体（真实实现只在 createUniver 里用，测试不关心内容）
+  createMobileSheetsHyperLinkPreset: () => ({ plugins: [] }),
 }));
 vi.mock("@univerjs/preset-sheets-core/locales/zh-CN", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-drawing/locales/zh-CN", () => ({ default: {} }));
+vi.mock("@univerjs/preset-sheets-hyper-link/locales/zh-CN", () => ({ default: {} }));
+vi.mock("@univerjs/sheets-crosshair-highlight/locale/zh-CN", () => ({ default: {} }));
+vi.mock("@univerjs/preset-sheets-hyper-link/lib/index.css", () => ({}));
+vi.mock("@univerjs/sheets-crosshair-highlight/lib/index.css", () => ({}));
 vi.mock("@univerjs/preset-sheets-core/lib/index.css", () => ({}));
 vi.mock("@univerjs/preset-sheets-drawing/lib/index.css", () => ({}));
 

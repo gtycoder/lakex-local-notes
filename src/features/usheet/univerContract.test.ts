@@ -47,6 +47,15 @@ const UNIVER_PACKAGES = [
   "@univerjs/find-replace",
   "@univerjs/sheets-find-replace",
   "@univerjs/preset-sheets-find-replace",
+  // 261022 P1：超链接 / 单元格备注（preset + 基础层 + UI 层）
+  "@univerjs/preset-sheets-hyper-link",
+  "@univerjs/sheets-hyper-link",
+  "@univerjs/sheets-hyper-link-ui",
+  "@univerjs/preset-sheets-note",
+  "@univerjs/sheets-note",
+  "@univerjs/sheets-note-ui",
+  // 261022：十字高亮（桌面/移动两份 UI 插件在同一包里）
+  "@univerjs/sheets-crosshair-highlight",
 ];
 
 /** 把实装内核的 ESM 产物拼起来（index.js + facade.js），供"符号还在不在"的静态核对。 */

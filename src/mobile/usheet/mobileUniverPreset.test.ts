@@ -18,7 +18,8 @@ import {
   UniverSheetsDrawingMobileUIPlugin,
   UniverSheetsDrawingUIPlugin,
 } from "@univerjs/preset-sheets-drawing";
-import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
+import { UniverSheetsHyperLinkMobileUIPlugin, UniverSheetsHyperLinkUIPlugin } from "@univerjs/sheets-hyper-link-ui";
+import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
 
 function ctors(preset: IPreset): unknown[] {
   return preset.plugins.map((entry) => Array.isArray(entry) ? entry[0] : entry);
@@ -49,6 +50,12 @@ describe("移动端 Univer 预设（261019 表格触摸手势）", () => {
     expect((ui as [unknown, { footer: boolean }])[1].footer).toBe(true);
     const sheets = preset.plugins.find((entry) => Array.isArray(entry) && entry[0] === UniverSheetsMobileUIPlugin);
     expect((sheets as [unknown, { footer: { addSheetButtonConfig: { show: boolean } } }])[1].footer.addSheetButtonConfig.show).toBe(false);
+  });
+
+  it("261022 P1：超链接 preset 换成移动 UI 插件（链接编辑器用移动弹层）", () => {
+    const got = ctors(createMobileSheetsHyperLinkPreset());
+    expect(got).toContain(UniverSheetsHyperLinkMobileUIPlugin);
+    expect(got).not.toContain(UniverSheetsHyperLinkUIPlugin);
   });
 
   it("drawing preset 同步换成移动 UI 插件（否则依赖桌面 UI 插件会启动失败）", () => {

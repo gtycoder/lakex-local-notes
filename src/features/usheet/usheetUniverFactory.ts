@@ -18,6 +18,16 @@ import "@univerjs/preset-sheets-drawing/lib/index.css";
 import "@univerjs/sheets-sort-ui/lib/index.css";
 import "@univerjs/preset-sheets-find-replace/lib/index.css";
 import { UniverSheetsFindReplacePreset } from "@univerjs/preset-sheets-find-replace";
+import { UniverSheetsHyperLinkPreset } from "@univerjs/preset-sheets-hyper-link";
+import hyperLinkZhCN from "@univerjs/preset-sheets-hyper-link/locales/zh-CN";
+import "@univerjs/preset-sheets-hyper-link/lib/index.css";
+import { UniverSheetsNotePreset } from "@univerjs/preset-sheets-note";
+import noteZhCN from "@univerjs/preset-sheets-note/locales/zh-CN";
+import "@univerjs/preset-sheets-note/lib/index.css";
+import { UniverSheetsCrosshairHighlightPlugin } from "@univerjs/sheets-crosshair-highlight";
+import { CROSSHAIR_LOCALE_ZH } from "./usheetCrosshair";
+import crosshairZhCN from "@univerjs/sheets-crosshair-highlight/locale/zh-CN";
+import "@univerjs/sheets-crosshair-highlight/lib/index.css";
 import "@univerjs/sheets-filter-ui/lib/index.css";
 import { createDesktopSortFilterPlugins } from "./univerSortFilter";
 import { buildUniverTheme } from "./univerTheme";
@@ -39,7 +49,7 @@ export function createUsheetUniver({ container, toolbar, formulaBar }: CreateUsh
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.ZH_CN,
     locales: {
-      [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never),
+      [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never, hyperLinkZhCN as never, noteZhCN as never, crosshairZhCN as never, CROSSHAIR_LOCALE_ZH as never),
     },
     theme: buildUniverTheme() as never,
     presets: [
@@ -59,6 +69,12 @@ export function createUsheetUniver({ container, toolbar, formulaBar }: CreateUsh
       { plugins: createDesktopSortFilterPlugins() },
       // 261021 P5：查找替换（sheets 适配器 + 基础层；preset 包已把两者组合好）。
       UniverSheetsFindReplacePreset(),
+      // 261022 P1：超链接（urlHandler → window.open；主进程 setWindowOpenHandler 转系统浏览器）。
+      UniverSheetsHyperLinkPreset({ urlHandler: { navigateToOtherWebsite: (url) => { window.open(url, "_blank", "noopener"); } } }),
+      // 261022 P1：单元格备注 / 批注（桌面 UI；移动端暂无移动版 UI，不装）。
+      UniverSheetsNotePreset(),
+      // 261022：十字高亮（行列高亮）—— 默认关闭由内核决定，编辑器在 createWorkbook 后统一开启。
+      { plugins: [UniverSheetsCrosshairHighlightPlugin] },
     ],
   });
   return { univer, univerAPI };

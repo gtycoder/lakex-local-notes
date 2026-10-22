@@ -19,6 +19,10 @@ import drawingZhCN from "@univerjs/preset-sheets-drawing/locales/zh-CN";
 import sortZhCN from "@univerjs/sheets-sort-ui/locale/zh-CN";
 import filterZhCN from "@univerjs/sheets-filter-ui/locale/zh-CN";
 import findZhCN from "@univerjs/preset-sheets-find-replace/locales/zh-CN";
+import hyperLinkZhCN from "@univerjs/preset-sheets-hyper-link/locales/zh-CN";
+import crosshairZhCN from "@univerjs/sheets-crosshair-highlight/locale/zh-CN";
+import "@univerjs/preset-sheets-hyper-link/lib/index.css";
+import "@univerjs/sheets-crosshair-highlight/lib/index.css";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-drawing/lib/index.css";
 import "@univerjs/sheets-sort-ui/lib/index.css";
@@ -46,7 +50,9 @@ import {
   type SheetCardId,
 } from "./usheetChromeModel";
 import { showToast } from "../ui/toastBus";
-import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset } from "./mobileUniverPreset";
+import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
+import { UniverSheetsCrosshairHighlightMobileUIPlugin } from "@univerjs/sheets-crosshair-highlight";
+import { CROSSHAIR_LOCALE_ZH, enableUsheetCrosshair, USHEET_CROSSHAIR_COMMANDS } from "../../features/usheet/usheetCrosshair";
 import { createMobileSortFilterPlugins } from "./mobileSortFilter";
 import "./usheet-chrome.css";
 import { USHEET_LAYOUT_ACTIONS, applyUsheetLayoutAction } from "./usheetLayoutActions";
@@ -456,7 +462,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ZH_CN,
         locales: {
-          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never),
+          [LocaleType.ZH_CN]: mergeLocales(zhCN as never, drawingZhCN as never, sortZhCN as never, filterZhCN as never, findZhCN as never, hyperLinkZhCN as never, crosshairZhCN as never, CROSSHAIR_LOCALE_ZH as never),
         },
         // 移动端专用画布主题：共用主题 + 语雀对齐覆盖（桌面那份不动，见 mobileUniverTheme.ts）。
         theme: buildMobileUniverTheme() as never,
@@ -469,10 +475,16 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           { plugins: createMobileSortFilterPlugins() },
           // 261021 P5：查找替换 —— 移动端只装移动变体（sheets 适配器也取 Mobile 版，依赖 UniverSheetsMobileUIPlugin）。
           { plugins: [[UniverFindReplaceMobileUIPlugin], [UniverSheetsFindReplaceMobileUIPlugin]] as unknown as IPresetPlugin[] },
+          // 261022 P1：超链接（移动 UI 变体；链接点击 → window.open，由系统浏览器接管）。
+          createMobileSheetsHyperLinkPreset({ urlHandler: { navigateToOtherWebsite: (url) => { window.open(url, "_blank", "noopener"); } } }),
+          // 261022：十字高亮（移动插件；默认开启见下方 enableUsheetCrosshair）。
+          { plugins: [UniverSheetsCrosshairHighlightMobileUIPlugin] as unknown as IPresetPlugin[] },
         ],
       });
       const book = univerAPI.createWorkbook(workbook as never) as unknown as UniverBook;
       book.setEditable(editingRef.current);
+      // 261022：十字高亮默认开启（纯本机视图，不写正文）。
+      enableUsheetCrosshair(univerAPI);
       const last = usheetToBody(book.save() as never);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
@@ -645,6 +657,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     else if (id === "sort-asc") runSheetSort("asc");
     else if (id === "sort-desc") runSheetSort("desc");
     else if (id === "filter") openSheetFilter();
+    // 261022 P1：超链接 / 十字高亮（内核 1.0.3 独立包；链接走移动版弹层，高亮是纯视图 operation）。
+    else if (id === "link") { void instanceRef.current?.univerAPI.executeCommand("sheet.operation.insert-hyper-link"); }
+    else if (id === "crosshair") { instanceRef.current?.univerAPI.executeCommand(USHEET_CROSSHAIR_COMMANDS.toggle); }
     // 261021 P4：一级「格式刷 / 清除格式 / 小数位」三项（语雀同级位；保存位按用户定稿不重复）
     else if (id === "clear-style") withActiveRange((range) => { range.clearFormat(); });
     else if (id === "decimals") stepDecimals(1);

@@ -36,6 +36,16 @@ export const UNIVER_COMMAND_IDS = {
   /** sheets 适配器的「替换一格」（替换会写 cellData；桌面 Ctrl+H 与移动共用）。 */
   sheetReplace: "sheet.command.replace",
   smartToggleFilter: "sheet.command.smart-toggle-filter",
+  /** 261022 P1：超链接（insert-hyper-link = 对当前单元格开编辑弹层；toolbar 变体是开关型）。
+   *  失效表现 = 桌面「插入 → 链接」/移动端 ⋯「链接」点了没反应。 */
+  insertHyperLink: "sheet.operation.insert-hyper-link",
+  insertHyperLinkToolbar: "sheet.operation.insert-hyper-link-toolbar",
+  /** 261022：十字高亮（纯视图 operation，不写正文）。失效表现 = 默认不亮、移动端 ⋯「十字高亮」无效。 */
+  crosshairEnable: "sheet.operation.enable-crosshair-highlight",
+  crosshairDisable: "sheet.operation.disable-crosshair-highlight",
+  crosshairToggle: "sheet.operation.toggle-crosshair-highlight",
+  /** 261022 P1：单元格备注（桌面右键/插入；移动端暂无 UI）。 */
+  noteTogglePopup: "sheet.command.toggle-note-popup",
   setFilterCriteria: "sheet.command.set-filter-criteria",
   removeSheetFilter: "sheet.command.remove-sheet-filter",
 } as const;
@@ -51,10 +61,12 @@ export const UNIVER_MENU_ITEM_IDS = [
   "sheet.command.numfmt.set.percent",
   "sheet.command.numfmt.set.currency",
   "base-ui.operation.toggle-shortcut-panel",
+  /** 261022：十字高亮的移动端菜单项（我们不渲染内核 toolbar，但插件仍会 merge；用作契约存在性）。 */
+  "sheet.menu.mobile.crosshair-highlight",
 ] as const;
 
 /** 依赖的内核配置键 / 字段（工作表标签「＋」的默认尺寸只在这里可配）。 */
-export const UNIVER_CONFIG_KEYS = ["sheets-ui.config", "addSheetButtonConfig", "defaultRowCount", "defaultColumnCount"] as const;
+export const UNIVER_CONFIG_KEYS = ["sheets-ui.config", "addSheetButtonConfig", "defaultRowCount", "defaultColumnCount", "sheets-crosshair-highlight.config"] as const;
 
 /** 依赖的内核函数/概念名（用于升级时确认整条机制还在）。 */
 export const UNIVER_FEATURE_NAMES = [

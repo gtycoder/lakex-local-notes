@@ -26,6 +26,8 @@ import {
   UniverSheetsUIPlugin,
   UniverUIPlugin,
 } from "@univerjs/preset-sheets-core";
+import { UniverSheetsHyperLinkMobileUIPlugin, UniverSheetsHyperLinkUIPlugin } from "@univerjs/sheets-hyper-link-ui";
+import { UniverSheetsHyperLinkPreset } from "@univerjs/preset-sheets-hyper-link";
 import {
   UniverDrawingMobileUIPlugin,
   UniverDrawingUIPlugin,
@@ -43,6 +45,8 @@ const MOBILE_UI_REPLACEMENTS = new Map<unknown, IPresetPlugin>([
   [UniverSheetsFormulaUIPlugin, UniverSheetsFormulaMobileUIPlugin],
   [UniverDrawingUIPlugin, UniverDrawingMobileUIPlugin],
   [UniverSheetsDrawingUIPlugin, UniverSheetsDrawingMobileUIPlugin],
+  // 261022 P1：超链接（桌面 UI → 移动 UI；数据插件沿用 preset）。
+  [UniverSheetsHyperLinkUIPlugin, UniverSheetsHyperLinkMobileUIPlugin],
 ]);
 
 /** 把 preset 里的桌面 UI 插件替换为移动 UI 插件，保留原插件 config 与其余插件。 */
@@ -78,4 +82,9 @@ export function createMobileSheetsCorePreset(config: CorePresetConfig): IPreset 
 /** 移动端图片/绘图 preset：同样只换 UI 插件族。 */
 export function createMobileSheetsDrawingPreset(): IPreset {
   return withMobileUniverUi(UniverSheetsDrawingPreset());
+}
+
+/** 移动端超链接 preset：把桌面 UI 换成移动 UI（弹出的是移动版编辑/查看弹层）。 */
+export function createMobileSheetsHyperLinkPreset(config: Parameters<typeof UniverSheetsHyperLinkPreset>[0] = {}): IPreset {
+  return withMobileUniverUi(UniverSheetsHyperLinkPreset(config));
 }
