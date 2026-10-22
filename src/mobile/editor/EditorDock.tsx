@@ -30,6 +30,7 @@ import { applyTextLink, captureLinkTarget, isValidLink, type LinkEditorTarget } 
 import { KLinkEditor } from "../../features/editor/selectionToolbar/kernelUiAtoms";
 // 「编辑面」的口径：算术在 editSurfaceModel.ts（纯函数 + CI 单测），owner（外壳高 / 面板状态机 / 输入法 / 焦点守卫）在 useEditSurface.ts
 import { useEditSurface } from "./useEditSurface";
+import { useEditorCommandDispatcher } from "./useEditorCommandDispatcher";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
 import { EmojiPanel } from "../ui/EmojiPanel";
 // 原生弹键盘兜底（261015）：WebView 里程序化 focus 不保证弹软键盘，点「⌨ 展开键盘」时用它补一次。
@@ -45,13 +46,6 @@ type DockItem = { label: string; Icon?: typeof ImageIcon; glyph?: string; run?: 
 
 /** 行高档位：**直接取内核 lineHeight 命令的取值域**（bundle `Ik.values = [1, 1.15, 1.5, 2, 2.5, 3]`）。 */
 const LINE_HEIGHT_VALUES = [1, 1.15, 1.5, 2, 2.5, 3] as const;
-
-/** 选区/焦点节点是否属于编辑器正文（面板命令只认正文选区） */
-function isEditorNode(node: Node | null): boolean {
-  let el: Element | null = node ? (node.nodeType === 1 ? (node as Element) : (node as ChildNode).parentElement) : null;
-  while (el) { if (el.nodeType === 1 && (el as HTMLElement).isContentEditable) return true; el = el.parentElement; }
-  return false;
-}
 
 // 输入法抑制（setbackIme）与焦点守卫已迁到 useEditSurface.ts —— 261014 P2 收口：
 // 「外壳高度 / 输入法抑制 / 焦点守卫」三件事只有那一处实现，本组件只负责面板状态与渲染。
@@ -238,14 +232,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   const [linkSrc, setLinkSrc] = useState("");
   const linkTargetRef = useRef<LinkEditorTarget>({ range: null, selected: "" });
 
-  /** 面板打开期间的选区快照：命令执行前后都还原，才能连续加粗→倾斜→下划线 */
-  const savedRangeRef = useRef<Range | null>(null);
-  /**
-   * 输入法**组合中**（候选未上屏）：内核 history 还没有这一笔，此时点撤销/重做会完全无反应
-   * —— 用户 261017 报「打字快了能撤、慢一点撤不了」的根因（实测：composing 时连点 3 次撤销都不动）。
-   * 处理：执行工具栏命令前先 blur→focus 触发 compositionend 提交，再执行命令。
-   */
-  const composingRef = useRef(false);
   const dockRef = useRef<HTMLDivElement>(null);
   /**
    * **编辑面 owner**（261014 P2/P3 收口）：外壳高度 + 面板状态机 + 输入法抑制 + 焦点守卫全在 useEditSurface.ts，
@@ -261,20 +247,21 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   const execRef = useRef(exec);
   execRef.current = exec;
   const { states: activeStates, enabled: commandEnabled, values: activeValues, refresh: refreshActive } = useActiveCommandStates(editor);
+  const {
+    savedRangeRef,
+    snapshotSelection,
+    restoreSelection,
+    runInline,
+    runPanel,
+    runPanelAndClose,
+  } = useEditorCommandDispatcher({
+    exec,
+    refreshActive,
+    dismissIme: () => surface.suppressIme(),
+    closePanel,
+  });
   /** 前端兜底撤销栈（思源 LocalUndo 式）：仅小记等 kernel history 不可用的编辑器启用。 */
   const snapshotUndo = useSnapshotUndo(editor, undoBackend === "snapshot", undoLimits);
-
-  // 输入法组合态跟踪（document 捕获阶段：软键盘的 composition 事件都冒泡到这里）
-  useEffect(() => {
-    const onStart = () => { composingRef.current = true; };
-    const onEnd = () => { composingRef.current = false; };
-    document.addEventListener("compositionstart", onStart, true);
-    document.addEventListener("compositionend", onEnd, true);
-    return () => {
-      document.removeEventListener("compositionstart", onStart, true);
-      document.removeEventListener("compositionend", onEnd, true);
-    };
-  }, []);
 
   // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
   useEffect(() => {
@@ -298,18 +285,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   focusEditorRef.current = focusEditor;
   /** 收起输入法（面板要占键盘区）：**保留焦点与光标**（口径见 useEditSurface.ts） */
   const dismissIme = () => surface.suppressIme();
-  /** 记下当前选区（Range 克隆在 blur 之后仍可用于还原） */
-  const snapshotSelection = () => {
-    const sel = document.getSelection();
-    if (sel && sel.rangeCount > 0 && isEditorNode(sel.anchorNode)) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
-  };
-  const restoreSelection = () => {
-    const r = savedRangeRef.current;
-    const sel = document.getSelection();
-    if (!r || !sel || !r.startContainer.isConnected) return;
-    sel.removeAllRanges();
-    sel.addRange(r);
-  };
 
   /**
    * 展开/收起面板（面板占住键盘区；同一帧挂面板、下一帧才收输入法 —— 键盘从铺满的面板背后滑走，不与面板对撞）。
@@ -323,44 +298,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     openPanel(mode);
   };
 
-  // 工具栏行内命令（bold/列表/待办/撤销/重做）：按钮 onMouseDown preventDefault 不抢焦点 →
-  // 焦点/选区留在正文，命令作用在正确位置，键盘不收；执行后再记一次选区，供面板连续使用。
-  // ⚠️ 输入法组合中先提交（blur→focus → compositionend）：否则 history 里没有这一笔，撤销/重做会静默无效。
-  const runInline = (cmd: string, ...args: unknown[]) => {
-    if (composingRef.current) {
-      const active = document.activeElement as HTMLElement | null;
-      try { active?.blur(); } catch { /* 忽略 */ }
-      composingRef.current = false;
-      // 等一拍让内核收到 compositionend 并记账，再执行命令并交还焦点
-      window.setTimeout(() => {
-        try { active?.focus(); } catch { /* 忽略 */ }
-        exec(cmd, ...args);
-        snapshotSelection();
-        refreshActive();
-      }, 60);
-      return;
-    }
-    exec(cmd, ...args);
-    snapshotSelection();
-    refreshActive();
-  };
-  // 面板项命令：**还原选区 → 执行 → 再记选区 → 面板保持打开**（加粗后还能接着点倾斜/下划线）。
-  // dismissIme：面板占着键盘区，命令后内核会异步重聚焦正文把键盘顶回来，必须再收一次（260911 修过）。
-  const runPanel = (cmd: string, ...args: unknown[]) => {
-    restoreSelection();
-    exec(cmd, ...args);
-    snapshotSelection();
-    dismissIme();
-    refreshActive();
-  };
-  /** 同 runPanel，但执行后**收起面板并放回输入法** —— 用于「格式刷」这类需要下一步去点正文两步命令（B6）。 */
-  const runPanelAndClose = (cmd: string, ...args: unknown[]) => {
-    restoreSelection();
-    exec(cmd, ...args);
-    snapshotSelection();
-    refreshActive();
-    closePanel();
-  };
 
   // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板 —— **不放回输入法**（hide 档），光标留住。
   // 261015 用户点单：**点 ⌨ 要连带展开区一切收起**（面板关 + 键盘放回来）。
