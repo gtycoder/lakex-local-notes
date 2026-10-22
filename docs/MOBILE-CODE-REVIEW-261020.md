@@ -7,9 +7,9 @@
 > **261022 实施状态（持续更新）**
 > - **P0 / P1 / P2-1～P2-4：已完成**。包括可等待保存、GC 维护锁、子树 CTE、小记轻量投影/虚拟列表、最小索引与批量写、标签页懒读、编辑面单一 owner、结构化命令结果、原生流式 fail-fast、路径围栏、分享限长、多维表 draft 等。
 > - **P2-5：已完成**。编辑面关闭/焦点/隐藏实例改为 jsdom 行为测试；GC / syncNow / priority 改为真实操作时间线验证；契约面从实际 `bridge` 与 `nativeSqlite` 导出派生。
-> - **P2-6：进行中（已完成 10 个局部切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、同步设置、编辑命令分发、目录数据、目录行动作与表格卡片状态；`EditSession` 与 `MobileUsheetViewer` 其余命令状态仍是后续重点。`useAutoSave` 已满足 SaveCoordinator 的核心行为不变量，暂不另造平行抽象。
+> - **P2-6：进行中（已完成 11 个局部切片）**。已抽 `TabSession`、小记详情缓存、小记列表展示模型、S3 设置表单、设置子页数据、同步设置、编辑命令分发、目录数据、目录行动作、表格卡片状态与表格阅读态筛选；`EditSession` 与 `MobileUsheetViewer` 其余命令状态仍是后续重点。`useAutoSave` 已满足 SaveCoordinator 的核心行为不变量，暂不另造平行抽象。
 > - **P3 / Mobile Data Plane v2：进行中（首个 query + 小记分页模型已落）**。索引、递归 CTE、小记轻量投影/虚拟列表、标签页正文懒读、`HomeSnapshot` 与 `QuickNotePage` keyset 查询已完成；UI 尚未切到 bounded page、其余细粒度 query 尚未抽出，显式 Unit of Work 仍需领域收口，旧全量接口尚未删除，设备性能目标仍待实测。
-> - **验证基线**：截至本轮，移动端 vitest 106 文件 / 466 例、quickNotes 60 例、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过。P2-6 仍需 Android 设备复验。
+> - **验证基线**：截至本轮，移动端 vitest 107 文件 / 469 例、quickNotes 60 例、TypeScript、双端构建、`check:core`、`check:mobileui`、`check:bundle` 均通过。P2-6 仍需 Android 设备复验。
 
 ---
 
@@ -448,7 +448,7 @@
 
 ### P2-6 巨型组件已经阻碍局部推理
 
-> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、小记列表展示模型（`useQuickNoteListModel`）、S3 设置表单（`useS3SettingsForm`）、设置子页数据（`useSettingsSectionData`）、同步设置（`useSyncSettingsForm`）、编辑命令分发（`useEditorCommandDispatcher`）、目录数据（`useNotebookTreeData`）、目录行动作（`useNotebookTreeActions`）与表格卡片状态（`useSheetCardState`）十个局部切片。剩余重点是 `EditSession` 与 `MobileUsheetViewer` 其余命令状态；`useAutoSave` 已覆盖 SaveCoordinator 的核心行为。
+> **261022 状态：进行中。** 已完成 `TabSession`（`useNotebookTabs`）、小记详情缓存（`useQuickNoteDetailCache`）、小记列表展示模型（`useQuickNoteListModel`）、S3 设置表单（`useS3SettingsForm`）、设置子页数据（`useSettingsSectionData`）、同步设置（`useSyncSettingsForm`）、编辑命令分发（`useEditorCommandDispatcher`）、目录数据（`useNotebookTreeData`）、目录行动作（`useNotebookTreeActions`）、表格卡片状态（`useSheetCardState`）与表格阅读态筛选（`useSheetReadFilter`）十一个局部切片。剩余重点是 `EditSession` 与 `MobileUsheetViewer` 其余命令状态；`useAutoSave` 已覆盖 SaveCoordinator 的核心行为。
 
 规模（不含测试）：
 
