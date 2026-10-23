@@ -7,10 +7,10 @@
 
 ## 0. 最新交接（261023）
 
-> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 363 文件 2528 例（261023 快照，**含并行会话的在途用例**）。
+> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest **385 文件 2631 例（17 skip）**（261023 干净 worktree 快照 = `c9ebb117` + 维护域补丁，主树并行会话的在途 WIP 不计）。
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
-> **待用户裁决**：移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）。
-> **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
+> **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
+> **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
 ### 261023 · 移动端表格编辑态 dock 落地（v5 定稿，分支 feat/mobile-sheet-dock）· **已合并 master（261023 晚），设备实测通过**
@@ -63,7 +63,7 @@
 - **前端**：资源页第 5 个页签 **缺小记**，三组「可从云端恢复 / 仅能用搜索缓存恢复纯文本 / 无法恢复（只能删除）」；行内三动作 + 彻底删除二次确认（文案写明：无历史快照、彻底删除不可恢复）。
 - **E2E**（干净 worktree `e2724cf7` 构建 + 合成 2 条小记，启动后删 `.qnote`）：列表 `recovery=text/cache=true`；页签「缺小记 2」；分组「仅能用搜索缓存恢复纯文本 2 条」；缓存重建 1 条 → **文件回写、行 2→1**；彻底删除另 1 条 → 确认框 → 行 0、`quick_note_deleted` 的 **purged 墓碑 = 1**。
 - **门禁（干净 worktree 复核，含互斥域补丁）**：tsc 0 · 全库 vitest **385 文件 / 2631 通过（17 skip）** · 双端构建 ✓ · `git diff --check` ✓。⚠️ 主树同时有并行会话的在途 sync 重构 WIP（tsc 红在 `src/core/lockedText.ts`，与本批无关）⇒ 本批只 stage 自己的文件提交，未碰它们的改动。另：干净 worktree 里 `sql.js` 的 2 个用例会因 node_modules 软链被 Vite `fs.allow` 拒（`Denied ID … sql-wasm.wasm?url`），主树实跑该 2 文件 5 例通过 ⇒ 属 worktree 装置限制，不是代码红。
-- **未接**：移动端没有资源页（后续可复用同一判据）。
+- **未接**：移动端没有资源页（后续可复用同一判据）⇒ 已列入 §0 **待用户裁决②** / **下一会话焦点⑥**，等产品决定入口再动。
 
 ### 261023(八) · 资源页新增「缺正文」分类：可云恢复 / 仅历史 / 彻底删除 · **已修**
 
