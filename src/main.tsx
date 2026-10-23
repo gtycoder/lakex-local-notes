@@ -7,6 +7,7 @@ import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
 import "./styles/index.css";   // 样式单入口：@layer 层序 + 旧样式整体入 legacy 层（见 docs/DESIGN.md §3.1）
 import "./styles/vendor-focus.css";   // 261023：第三方编辑器 UI 的焦点视觉归属（unlayered，压过 vendor 层）
+import "./styles/window-chrome.css";   // 261023：全屏（独立 Space）时撤掉「为红绿灯让位」的内距（顶栏 / 附件预览）
 
 // 首帧前应用主题，避免闪烁（App 挂载后的 settings 订阅会继续跟随变化）
 applyTheme(loadSettings().theme);

@@ -8,10 +8,28 @@
 ## 0. 最新交接（261023）
 
 > **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 363 文件 2528 例（261023 快照，**含并行会话的在途用例**）。
-> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）。
+> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
 > **待用户裁决**：移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
+
+### 261023(三) · 桌面逐页走查（隔离实例 + 合成夹具，用户点单）· **仅验证，无代码改动**
+
+- **方法**：`make-fixture.mjs` 合成夹具（富文本/表格/多维表/画板/2 回收站/2 小记/4 类资产）→ 独立 userData + 独立资源端口 + CDP 9231 的**隔离窗口**（不碰用户 dev 实例与数据）→ CDP 驱动逐页截图；全程收集 `Runtime.exceptionThrown` = **0 条**。
+- **覆盖**：资料库/编辑器（H1/列表/代码块/表格/图片卡）、表格、多维表、画板、小记、全文搜索、AI 助手、云同步浮窗、历史版本、回收站、资源、设置（编辑器/外观/快捷键/文档与历史/云端与同步/AI/回收站/浏览器端/日志/关于）、标签右键菜单。
+- **结论**：**未发现视觉缺陷/回归**。四类「看似异常」经复验均为夹具/环境所致：① 双工具条 = 隐藏窗口（`document.hidden=true`）下 keep-alive 清理被节流，出帧后 mounts=1/toolbars=1（与 §3#9 已知空帧同源，暂不做）；② 富文本「图片」区块空 = 夹具是 **1×1 PNG**（`<img width="1">`），非加载失败；③ 画板空白 = 夹具画板无图形；④ 小记页红色校验横幅 = 自动化上一轮空提交残留，冷启动复验不存在。
+- **资源页数据自洽**：可删 2 / 历史保护 3 / 缺失 0（共 5 个 · 350B · 4 篇文档）。
+- **产物**：`.css-audit/walkthrough-261023/`（gitignored，31 张）。**没跑 42 态 stylesnap**：本批未动外壳几何，且发版线已放弃。
+
+### 261023(二) · 桌面收尾：查替面板单边框实测 + 全屏 chrome 收口（附件预览不留缺口）· **已改，未提交**
+
+- **① 表格「查找替换」面板实测**（补上一批只测了「插入链接」的缺口）：数据页签 →「查找替换」→ 查找输入框（316×32）实测 `border 1px #3f5fa0` / `outline 0` / `box-shadow 0 0 0 2px rgba(28,31,36,.2)`（= 自有 `.ln-text-field` 口径，单条边）；`window.__vendorFocusProbe()` = `[]`（无叠层）。宿主是 `.usheet-editor` **内联**（不是 portal）——与链接弹窗的 `[data-lake-univer-floating]` 两类宿主都已被 `vendor-focus.css` 覆盖。证据 `.css-audit/vendor-focus-261023/find-input-after.png`。
+- **② 全屏 chrome 收口（单一来源）**：新增 `src/styles/window-chrome.css`（unlayered，`main.tsx` 引入）：
+  - `:root.window-fullscreen .platform-mac .tab-bar` → `padding-left: 10px` + `no-drag`（从 `tabs.css` **搬进来**，`tabs.css` 恢复原样、全屏规则不再散落）；
+  - `:root.window-fullscreen .attachment-preview.is-mac .attachment-preview__toolbar` → `padding-left: 16px`（正常窗口 82px 让位 → 全屏不再留左侧缺口）。
+  - `cssLayers` 登记新文件（3 声明）；`layoutMetrics.test` 改指新文件并锁两条规则（含「tabs.css 不得再出现 window-fullscreen」）。
+- **实测**（同一页面实时切 `:root.window-fullscreen`）：顶栏 `82px → 10px`；附件预览工具栏 `82px → 16px → 82px`（动态加载其 CSS + 同构 DOM 验证，验完清掉根类）。
+- **门禁**：tsc 0 · 全库 vitest **363 文件 / 2528 例** · ui-metrics 0 · check:bundle ✓ · `git diff --check` ✓。
 
 ### 261023 · 表格第三方输入框「两层边框」根因 + 系统性收口（用户点单：「最后一次彻底排查」）· **已提交 `41d0a597`，待验收**
 
