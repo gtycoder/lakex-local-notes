@@ -223,7 +223,7 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     expect(dock.querySelector('button[aria-label="关闭文字格式"]')).toBeTruthy();
     // DOM 顺序：dock 在面板前面（面板占键盘区、工具条在它上方）
     expect(dock.compareDocumentPosition(panel!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    for (const label of ["加粗", "斜体", "下划线", "删除线", "水平对齐 左", "垂直对齐 上", "字号 16"]) {
+    for (const label of ["加粗", "斜体", "下划线", "删除线", "清除格式", "水平对齐 左", "垂直对齐 上", "字号 16"]) {
       expect(panel!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
     expect(panel!.querySelectorAll(".mb-usheet-fsw").length).toBe(14);

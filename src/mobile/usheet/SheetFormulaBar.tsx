@@ -6,7 +6,7 @@
  * - 最右侧按钮：展开/收起多行输入（用户点单）。
  */
 import { useEffect, useRef } from "react";
-import { ChevronUp, ChevronDown, CornerDownLeft } from "lucide-react";
+import { CornerDownLeft, Maximize2, Minimize2 } from "lucide-react";
 
 export interface SheetFormulaBarProps {
   address: string;
@@ -79,7 +79,7 @@ export function SheetFormulaBar({ address, value, expanded, onChange, onConfirm,
         aria-pressed={expanded}
         onClick={onToggleExpand}
       >
-        {expanded ? <ChevronUp size={19} /> : <ChevronDown size={19} />}
+        {expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
       </button>
     </div>
   );

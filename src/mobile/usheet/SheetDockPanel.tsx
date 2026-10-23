@@ -10,7 +10,27 @@
  *
  * 纯展示：所有动作经 props 抛给 MobileUsheetViewer（命令分派仍在 useSheetCommandActions）。
  */
-import { ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, ChevronLeft, Image, Link2, MessageSquare, Paperclip, PenLine, Calendar, ChartColumn } from "lucide-react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
+  ArrowDownToLine,
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  ArrowUpToLine,
+  Calendar,
+  ChartColumn,
+  ChevronLeft,
+  Eraser,
+  Image,
+  Link2,
+  MessageSquare,
+  Paperclip,
+  PenLine,
+} from "lucide-react";
 import {
   SHEET_ALIGN_H,
   SHEET_ALIGN_V,
@@ -63,6 +83,8 @@ export interface SheetDockPanelProps {
   onFontColor: (value: string) => void;
   onFill: (value: string) => void;
   onFontSize: (size: number) => void;
+  /** 清除格式（放在 T 面板第一行最后）。 */
+  onClearFormat: () => void;
   onData: (id: string) => void;
   onView: (id: string) => void;
   onZoom: (value: number) => void;
@@ -120,13 +142,20 @@ function InsertPanel({ onInsert }: SheetDockPanelProps) {
   );
 }
 
-function FormatPanel({ fmt, onFormat, onAlignH, onAlignV, onFontColor, onFill, onFontSize }: SheetDockPanelProps) {
+const ALIGN_H_ICONS = { left: AlignLeft, center: AlignCenter, right: AlignRight } as const;
+const ALIGN_V_ICONS = {
+  top: AlignVerticalJustifyStart,
+  middle: AlignVerticalJustifyCenter,
+  bottom: AlignVerticalJustifyEnd,
+} as const;
+
+function FormatPanel({ fmt, onFormat, onAlignH, onAlignV, onFontColor, onFill, onFontSize, onClearFormat }: SheetDockPanelProps) {
   const alignCurrent = fmt.align === "normal" ? "right" : fmt.align;
   return (
     <div className="mb-usheet-fpanel">
-      {/* 第一行：B / I / U / S（一张卡） */}
+      {/* 第一行：B / I / U / S + 清除格式（放在最后） */}
       <div className="mb-usheet-frow">
-        <div className="mb-usheet-fcard" data-count={SHEET_FORMAT_TOGGLES.length}>
+        <div className="mb-usheet-fcard" data-count={SHEET_FORMAT_TOGGLES.length + 1}>
           {SHEET_FORMAT_TOGGLES.map((item) => (
             <button
               key={item.id}
@@ -139,35 +168,46 @@ function FormatPanel({ fmt, onFormat, onAlignH, onAlignV, onFontColor, onFill, o
               <span className="mb-usheet-fglyph" data-style={item.id}>{item.glyph}</span>
             </button>
           ))}
+          <button type="button" className="mb-usheet-fbtn" aria-label="清除格式" title="清除格式" onClick={onClearFormat}>
+            <Eraser size={20} />
+          </button>
         </div>
       </div>
       {/* 第二行：水平对齐 + 垂直对齐（两张卡按条目数分宽） */}
       <div className="mb-usheet-frow">
         <div className="mb-usheet-fcard" data-count={SHEET_ALIGN_H.length} role="group" aria-label="水平对齐">
-          {SHEET_ALIGN_H.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={"mb-usheet-fbtn" + (alignCurrent === item.id ? " is-on" : "")}
-              aria-label={"水平对齐 " + item.label}
-              onClick={() => onAlignH(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {SHEET_ALIGN_H.map((item) => {
+            const Icon = ALIGN_H_ICONS[item.id];
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={"mb-usheet-fbtn" + (alignCurrent === item.id ? " is-on" : "")}
+                aria-label={"水平对齐 " + item.label}
+                title={"水平对齐 " + item.label}
+                onClick={() => onAlignH(item.id)}
+              >
+                <Icon size={20} />
+              </button>
+            );
+          })}
         </div>
         <div className="mb-usheet-fcard" data-count={SHEET_ALIGN_V.length} role="group" aria-label="垂直对齐">
-          {SHEET_ALIGN_V.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={"mb-usheet-fbtn" + ((fmt.valign || "middle") === item.id ? " is-on" : "")}
-              aria-label={"垂直对齐 " + item.label}
-              onClick={() => onAlignV(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {SHEET_ALIGN_V.map((item) => {
+            const Icon = ALIGN_V_ICONS[item.id];
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={"mb-usheet-fbtn" + ((fmt.valign || "middle") === item.id ? " is-on" : "")}
+                aria-label={"垂直对齐 " + item.label}
+                title={"垂直对齐 " + item.label}
+                onClick={() => onAlignV(item.id)}
+              >
+                <Icon size={20} />
+              </button>
+            );
+          })}
         </div>
       </div>
       {/* 第三行：字体颜色（A × 8） */}

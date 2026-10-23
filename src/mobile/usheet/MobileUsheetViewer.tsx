@@ -732,6 +732,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
               onFontColor={(value) => dispatchMenu(value ? "font-" + value : "font-default")}
               onFill={(value) => dispatchMenu(value ? "fill-" + value : "fill-none")}
               onFontSize={(size) => dispatchMenu("fontsize-" + size)}
+              onClearFormat={() => dispatchMenu("clear-style")}
               onData={handleData}
               onView={handleView}
               onZoom={handleZoomLevel}
