@@ -13,7 +13,7 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
-### 261023(十) · 加密文本卡（端到端）+ `isLocked` → `isEditLocked` 更名 · **已实现，待用户验收**
+### 261023(十) · 加密文本卡（端到端）+ `isLocked` → `isEditLocked` 更名 · **已提交 `6333e8a9` 并推送三仓，待用户验收**
 
 - **① 更名（用户点单）**：`isLocked` 有歧义 ⇒ 全仓代码标识符改为 **`isEditLocked`（是否锁编辑）**，并成对改 `lockedAt→editLockedAt`、`setNoteLocked→setNoteEditLocked`、`applyRemoteLock→applyRemoteEditLock`、`mergeLockState→mergeEditLockState`（40 既有文件 + 1 新护栏，约 300 处）。
   **对外标识一律冻结**：S3 清单 JSON 键仍是 `isLocked/lockedAt`（解析 `syncUtils.ts` 的 `manifestFromWire`、写出 `syncEngine.ts` 的 `manifestToWire` 两处映射；护栏 `manifestLockWire.test.ts` 5 例）；SQLite 列 `is_locked/locked_at` 与 schema 不动（三处行映射补注释）；IPC 通道 `set_note_locked`、preload 导出名、`scripts/*.mjs`、用户文案「已锁定」全部未动。口径由用户定：**线上键冻结、代码内改名**，避免与旧 APK 互操作裂缝。
