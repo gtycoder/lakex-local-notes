@@ -15,6 +15,7 @@ import { runGcReconcile } from "./s3Maintenance.js";
 import type { SyncResult, SyncProgress } from "./syncTypes.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
 import { initLogger, log, logHeapPeak } from "./logger.js";
+import { ConsoleNoiseFilter } from "./consoleNoise.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
@@ -398,6 +399,10 @@ async function createWindow() {
   // 外链（http/https）交给系统浏览器打开，绝不进入应用窗口
   trustedWebContents.add(win.webContents.id);
   // 渲染进程日志统一落盘：console-message 转发到主进程 logger（scope=renderer）。
+  // CSP 拦截通知折叠（261023）：粘贴整页网页时内核会为每张远程图各打一条通知（实测 103 行），
+  // 逐条落盘会把同期真正需要的日志冲掉 ⇒ 折叠成一行汇总（consoleNoise.ts，排查见 TROUBLESHOOTING §M）。
+  const consoleNoise = new ConsoleNoiseFilter({ emit: (line) => log.renderer.info(line) });
+  win.on("closed", () => consoleNoise.flush());
   // Electron 33 事件签名：event 对象带 { level, message, lineNumber, sourceId }；
   // 同时兼容旧式 (event, level, message) 回调。
   win.webContents.on("console-message" as unknown as "console-message", (event: unknown, ...args: unknown[]) => {
@@ -408,6 +413,7 @@ async function createWindow() {
     if (!msg) return;
     // 过滤 DevTools 样式占位与空消息
     if (msg.includes("%c") || msg.length > 4000) return;
+    if (consoleNoise.observe(msg)) return;
     log.renderer.info(msg);
   });
   win.webContents.on("will-navigate", (event, url) => {

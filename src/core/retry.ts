@@ -7,6 +7,8 @@ export interface RetryOptions {
   delayMs: number;
   backoffMultiplier: number;
   maxDelayMs: number;
+  /** 每次即将重试前回调（261023：资源上传统计重试次数用；不影响重试语义）。 */
+  onRetry?: (attempt: number, error: Error) => void;
 }
 
 const DEFAULT_OPTIONS: RetryOptions = {
@@ -37,6 +39,7 @@ export async function withRetry<T>(
       lastError = error instanceof Error ? error : new Error(String(error));
       
       if (attempt < config.maxRetries) {
+        config.onRetry?.(attempt + 1, lastError);
         await sleep(delay);
         delay = Math.min(delay * config.backoffMultiplier, config.maxDelayMs);
       }

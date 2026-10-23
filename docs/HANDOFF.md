@@ -13,6 +13,18 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261023(四) · 粘贴整页网页：CSP 噪音折叠 + 上传爆发统计（分支 fix/paste-perf，未合并）· **待验收**
+
+- **背景**：用户报「值得买」文章（4700 字 / 67 图）从浏览器全选粘贴进文档非常卡，日志同时刷出上百条 CSP 报错，怀疑是日志记录导致。
+- **结论（已实测，不改粘贴逻辑）**：日志不是原因。同内容在隔离实例复现：同步 dispatch 341ms、96 条 CSP 全落在 1 秒内、端到端 ≈3s；12:24 重粘同一页：63 张图卡 21ms 内插完、端到端 ≈2.2s ⇒ 11:54 那次的 8.8s 静默是当时的机器负载（同机并行开发会话）造成的偶发卡顿。判据与取证方法见 docs/TROUBLESHOOTING.md §M。
+- **本批只加可观测性**：
+  - electron/consoleNoise.ts：CSP 拦截通知折叠成一行（条数 + 示例 URL），main.ts 接线、窗口关闭时 flush；护栏 consoleNoise.test.ts（6 例）。
+  - src/lib/uploadStats.ts + src/features/editor/resourceUpload.ts：上传爆发聚合（次数 / 远程 / 墙钟 / 单次最长 / 重试 / 失败），阈值（≥3 次 / 墙钟 ≥1.5s / 有失败）才落一行 [perf]；src/core/retry.ts 加可选 onRetry（唯一调用方，重试语义不变）；护栏 uploadStats.test.ts（7 例）。
+  - docs/TROUBLESHOOTING.md 新增 §M（症状 / 四条判据 / 结论 / 稳定复现时怎么查）。
+- **明确不做**：粘贴前把远程 img 换成占位。实测这 90+ 次被 CSP 拦截的请求只花 21ms / 20KB 日志；唯一能真正消除的实现 = 把粘贴改成异步预取再重派发（会改选区/撤销语义）⇒ 按 AGENTS §3#17 不做，等真有网络/大图瓶颈再单独立项。
+- **门禁**：tsc 0 · 全库 vitest **365 文件 / 2541 通过（17 skip）** · git diff --check ✓。
+- **落点**：worktree lake-notes-electron-worktrees/paste-perf（分支 fix/paste-perf，基于 master 73f63039），**未合并、未推送**。
+
 ### 261023(三) · 桌面逐页走查（隔离实例 + 合成夹具，用户点单）· **仅验证，无代码改动**
 
 - **方法**：`make-fixture.mjs` 合成夹具（富文本/表格/多维表/画板/2 回收站/2 小记/4 类资产）→ 独立 userData + 独立资源端口 + CDP 9231 的**隔离窗口**（不碰用户 dev 实例与数据）→ CDP 驱动逐页截图；全程收集 `Runtime.exceptionThrown` = **0 条**。
