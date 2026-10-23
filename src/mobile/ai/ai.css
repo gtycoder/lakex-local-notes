@@ -126,6 +126,7 @@
   font-family: var(--lake-font-family-mono); font-size: .92em;
 }
 .ai-md__link { color: var(--lake-accent-text); }
+.ai-md__hr { margin: var(--lake-space-lg) 0; border: 0; border-top: 1px solid var(--lake-border-1); }
 .ai-md__tablewrap { margin: 0 0 10px; overflow-x: auto; }
 .ai-md__table { width: 100%; border-collapse: collapse; font-size: var(--lake-font-size-small); line-height: 1.5; }
 .ai-md__table th, .ai-md__table td { padding: 6px 8px; border: 1px solid var(--lake-border-1); text-align: left; vertical-align: top; }

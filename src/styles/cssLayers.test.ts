@@ -142,7 +142,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 },
   "features/ink/inkPad.desktop.css": { decls: 23, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）；261006：+5 = 左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 3 条 + label 定位 1 条 + 注入触发器居中 1 条）
   "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
-  "components/ui/markdown/markdown.css": { decls: 43, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
+  "components/ui/markdown/markdown.css": { decls: 57, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
   "features/ai/aiDialogParts.css": { decls: 25, dupGroups: 0 },   // 261021 P1：+9 = 「附加当前文档全文」行（doc 行 flex/wrap/gap/margin 5 条 + label 2 + hint 2；开关本身复用 .ln-switch，无覆盖）。P0：+2 = 预设扩到 7 条后窄窗换行。261013：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。
   "styles/dialog.css": { decls: 238, dupGroups: 8 },   // 261017：+34 = S3 配置迁移弹窗（尺寸 + 多行迁移码输入/提示/错误/动作行；表面与按钮全部复用 .ln-dialog / .ln-btn，无覆盖）  |  +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 94, dupGroups: 2 },   // 260930：+17 = 状态栏锁标识改可点（button 形态 + hover/focus）+ 解锁浮层内容类   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）

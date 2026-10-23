@@ -402,7 +402,7 @@ Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 | electron/ai/aiChatMessages.ts 护栏 | **上收为 src/core/aiChatMessages.ts**（纯函数、无 node: 导入），桌面 main 改为 re-export；移动端共用（约 120 行，属必要重构） |
 | electron/ai/aiClient.ts | 桌面专用（OpenAI SDK），移动端不用 |
 | 桌面 UI（AiAssistantDialog / AiMessageBody / MarkdownView） | **不复用**（两端 UI 不共享）；移动端自写 src/mobile/ai/* |
-| Markdown 渲染 | 移动端新写最小子集 AiMarkdown.tsx：段落/标题(≤h3)/粗斜体/行内代码/代码块/有序无序列表/引用/链接；**只渲染 React 节点，禁止 dangerouslySetInnerHTML**（AI 输出是不可信文本）；链接只放行 http(s) 并走系统浏览器 |
+| Markdown | **解析器共用** `src/core/markdown.ts`（261023 从桌面抽出：块/行内 token + **GFM 表格**；纯数据、不碰 React/DOM）；**渲染各端自绘**：桌面 `MarkdownView.tsx`（`.md-preview` + `window.open`）、移动端 `AiMarkdown.tsx`（`.ai-md` + `<a target=_blank>`）。都只渲染 React 节点、禁止 dangerouslySetInnerHTML，链接只放行 http(s) |
 
 ---
 
@@ -565,5 +565,5 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 6. **Markdown 表格不渲染**：模型偶尔输出表格，当前最小渲染器按下标原样显示 `|` 文本；要不要支持表格是 P2 的小决定。
 7. **后台行为与设计稿不一致**：设计写「进后台即中止」，实测是继续流；需要你拍板保留哪种（继续更像 ChatGPT，中止更省流量）。
 8. **会话连续性（261023 定稿）**：AI 页关闭不销毁会话（模块级 `aiChatStore` + 常驻 `onAiStream`），后台流继续、再进来可看完整回答；**App 进程结束才清空**（仍不持久化）。若要跨 App 重启保留，需要单独拍板"保留最近一次会话"。
-9. **Markdown 表格（261023 定稿）**：移动端最小渲染器补了 GFM 表格（表头/对齐/单元格，纯 React 节点、零依赖）；**桌面 `MarkdownView` 仍不支持表格**（其注释写明"表格与图片首版不做"）——若要对齐，桌面需另开一批。
+9. **Markdown 表格（261023 定稿）**：解析器已抽到 `src/core/markdown.ts`（桌面/移动共用，含 GFM 表格）；**两端都渲染表格**（桌面 `.md-table`、移动 `.ai-md__table`），样式各走各的令牌；零依赖、纯 React 节点。图片仍不做（按原文呈现）。
 10. **未提交/未推送**：本批只落工作树，等用户验收后按仓库规则提交。

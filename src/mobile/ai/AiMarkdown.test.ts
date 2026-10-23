@@ -1,35 +1,42 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown } from "./AiMarkdown";
+import { AiMarkdown } from "./AiMarkdown";
 
-describe("AI Markdown 解析（最小子集，纯数据）", () => {
-  it("标题/段落/列表/引用/代码块", () => {
-    const blocks = parseMarkdown("# 标题\n正文一段\n- 甲\n- 乙\n1. 一\n2. 二\n> 引用\n```\ncode\n```");
-    expect(blocks.map((b) => b.kind)).toEqual(["h", "p", "ul", "ol", "quote", "code"]);
-    expect(blocks[0]).toMatchObject({ kind: "h", level: 1 });
-    expect(blocks[5]).toMatchObject({ kind: "code", text: "code" });
+const html = (text: string): string => renderToStaticMarkup(createElement(AiMarkdown, { text }));
+
+describe("AI Markdown 渲染（移动端；解析器与桌面共用）", () => {
+  it("标题/段落/粗体/行内代码", () => {
+    const out = html("# 标题\n\n这是 **粗** 与 `code`");
+    expect(out).toContain('<h1 class="ai-md__h ai-md__h1">标题</h1>');
+    expect(out).toContain("<strong>粗</strong>");
+    expect(out).toContain('<code class="ai-md__code">code</code>');
   });
 
-  it("行内：粗体 / 行内代码 / 链接只放行 http(s)", () => {
-    const tokens = parseInline("a **b** `c` [d](https://e.com) [f](javascript:alert(1))");
-    expect(tokens.some((t) => t.kind === "strong" && t.value === "b")).toBe(true);
-    expect(tokens.some((t) => t.kind === "code" && t.value === "c")).toBe(true);
-    expect(tokens.some((t) => t.kind === "link" && t.href === "https://e.com")).toBe(true);
-    expect(tokens.some((t) => t.kind === "link" && t.href.startsWith("javascript"))).toBe(false);
+  it("GFM 表格：表头/对齐/单元格", () => {
+    const out = html("| 项 | 结果 |\n| :-- | --: |\n| 通道 | 原生 SSE |");
+    expect(out).toContain('<table class="ai-md__table">');
+    expect(out).toContain('<th class="is-left">项</th>');
+    expect(out).toContain('<th class="is-right">结果</th>');
+    expect(out).toContain('<td class="is-left">通道</td>');
+    expect(out).toContain('<td class="is-right">原生 SSE</td>');
   });
 
-  it("GFM 表格：表头/对齐/单元格文字", () => {
-    const blocks = parseMarkdown("| 项 | 结果 |\n| :-- | --: |\n| 通道 | 原生 SSE |\n| 缓存 | 前缀命中 |");
-    expect(blocks).toHaveLength(1);
-    const table = blocks[0] as { kind: string; align: Array<string | null>; header: Array<Array<{ value: string }>>; rows: Array<Array<Array<{ value: string }>>> };
-    expect(table.kind).toBe("table");
-    expect(table.align).toEqual(["left", "right"]);
-    expect(table.header.map((cells) => cells.map((c) => c.value).join(""))).toEqual(["项", "结果"]);
-    expect(table.rows).toHaveLength(2);
-    expect(table.rows[1].map((cells) => cells.map((c) => c.value).join(""))).toEqual(["缓存", "前缀命中"]);
+  it("列表/代码块/引用", () => {
+    const out = html("- 甲\n- 乙\n\n```\ncode\n```\n\n> 引用");
+    expect(out).toContain("<li>甲</li>");
+    expect(out).toContain('<pre class="ai-md__pre"><code>code</code></pre>');
+    expect(out).toContain("<blockquote");
   });
 
-  it("未闭合的标记当纯文本，不吞内容", () => {
-    const tokens = parseInline("**未闭合 ");
-    expect(tokens.map((t) => t.value).join("")).toBe("**未闭合 ");
+  it("不可信输出：HTML 转义、javascript 链接不渲染成 a", () => {
+    const out = html("<img src=x onerror=alert(1)> [x](javascript:alert(1))");
+    expect(out).not.toContain("<img");
+    expect(out).toContain("&lt;img");
+    expect(out).not.toContain("<a ");
+  });
+
+  it("http(s) 链接可点", () => {
+    expect(html("[官网](https://example.com)")).toContain('href="https://example.com"');
   });
 });

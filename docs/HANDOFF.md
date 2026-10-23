@@ -23,6 +23,7 @@
 - **真实探针（小米 MiMo `mimo-v2.6-flash`，emulator-5554）**：testConnection ≈0.9s；流式首字 ≈1.2s、71 字回答 ≈1.8s；停止后正文冻结并显示「已停止」；坏 URL→`network`、坏 Key→`401 auth`（错误体取 `error.message`）；选 365 字文档后回答确实引用资料；**重启 App/模拟器后 Key 仍可读并连通**；切后台 4s 回来流继续（未做后台中止）。
 - **探针顺手修的两处**：① Kotlin `delta.content` 为 JSON null 时 `optString` 会产出字符串 "null" ⇒ 正文前缀出现 `nullnull`，改用 `opt` 判类型；② **移动端「彻底删除」事务嵌套 bug**：`d.transaction` 内再调 `executeSet`（默认 transaction:true）⇒ 原生重复 BEGIN、回收站 purge 一直失败；`executeSet` 增加 `{transaction}` 选项、事务内传 false，补 `sqliteDb.batch.test.ts`；4 篇探针文档已 purge、回收站清空。
 - **261023 二次收口（用户定稿）**：① **后台继续流**；② **AI 页关闭不销毁会话**（模块级 `aiChatStore` + 常驻流订阅，后台 delta 继续累积，再进页面可看完整回答；App 进程结束才清空）；③ **移动端 Markdown 表格**（GFM 表头/对齐/单元格，零依赖、纯 React）；④ 图片附件维持"即将支持"占位（P2）。桌面 `MarkdownView` 仍无表格，未动。
+- **261023 三修（Markdown 解析器共用 + 桌面表格）**：解析器从桌面 `MarkdownView` 抽到 `src/core/markdown.ts`（块/行内 token + GFM 表格，纯数据）；桌面/移动端各自渲染（`.md-preview` / `.ai-md`），**桌面端同步支持表格**；bitable 静态护栏改指 core；移动端复测表格渲染正常。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
 ### 261023(五) · 桌面端日志系统重做（分级 / 关键流程埋点 / 错误捕获 / 文档）· **待验收**
