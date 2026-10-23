@@ -32,4 +32,31 @@ describe("top bar ↔ macOS traffic light alignment", () => {
     expect(Number.isInteger(y)).toBe(true);
     expect(y).toBeGreaterThanOrEqual(0);
   });
+
+  it("全屏（macOS 独立 Space）下顶栏不再留红绿灯让位：主进程广播 → 渲染层切根类 → CSS 收窄到 10px", () => {
+    // 主进程：enter/leave-full-screen 都要广播；renderer-ready 时补一次初始态（启动即全屏的恢复路径）
+    const main = readFileSync(path.join(ROOT, "electron/main.ts"), "utf8");
+    expect(main).toContain('win.webContents.send("window-fullscreen", win.isFullScreen())');
+    expect(main).toMatch(/win\.on\("enter-full-screen", \(\) => \{ persistWindowState\(\); sendWindowFullscreen\(\); \}\)/);
+    expect(main).toMatch(/win\.on\("leave-full-screen", \(\) => \{ persistWindowState\(\); sendWindowFullscreen\(\); \}\)/);
+    expect(main).toMatch(/revealMainWindow\("renderer-ready"\);\s*\n\s*\/\/[^\n]*初始态\s*\n\s*sendWindowFullscreen\(\);/);
+    // IPC 三处同步：preload 暴露 + native 类型/封装
+    const preload = readFileSync(path.join(ROOT, "electron/preload.cjs"), "utf8");
+    expect(preload).toContain('ipcRenderer.on("window-fullscreen"');
+    expect(preload).toContain("onWindowFullscreen");
+    const nativeSrc = readFileSync(path.join(ROOT, "src/lib/native.ts"), "utf8");
+    expect(nativeSrc).toContain("onWindowFullscreen(callback: (fullscreen: boolean) => void): () => void;");
+    expect(nativeSrc).toContain("onWindowFullscreen: (callback: (fullscreen: boolean) => void) => api().onWindowFullscreen(callback),");
+    // 渲染层：订阅后切 :root 类（全屏态 CSS 的唯一判据）
+    const app = readFileSync(path.join(ROOT, "src/App.tsx"), "utf8");
+    expect(app).toContain("native.onWindowFullscreen(apply)");
+    expect(app).toContain('classList.toggle("window-fullscreen"');
+    expect(app).toContain('classList.remove("window-fullscreen"');
+    // CSS：同一套 10px / no-drag 与非 mac 标题栏共用，不再写第二套值
+    const css = readFileSync(path.join(ROOT, "src/styles/app/tabs.css"), "utf8");
+    expect(css).toMatch(/:root\.window-fullscreen \.platform-mac \.tab-bar/);
+    expect(css).toMatch(/\.platform-native-titlebar \.tab-bar,\s*\n:root\.window-fullscreen \.platform-mac \.tab-bar \{[^}]*padding-left: 10px;[^}]*-webkit-app-region: no-drag;/);
+    // 窗口/最大化态仍保留 82px 让位（别把原规则一起改掉）
+    expect(css).toMatch(/\.platform-mac \.tab-bar \{\s*\n\s*padding-left: 82px;/);
+  });
 });

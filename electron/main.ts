@@ -352,8 +352,16 @@ async function createWindow() {
     win.focus();
     log.app.info(`[boot] main window shown (${reason})`);
   };
+  /** macOS 原生全屏（独立 Space）时系统把标题栏/红绿灯一起隐藏 ⇒ 把全屏状态广播给渲染层，
+   *  让顶栏不再为红绿灯让位（避免左侧 82px 空缺口）。 */
+  const sendWindowFullscreen = () => {
+    if (!win.isDestroyed()) win.webContents.send("window-fullscreen", win.isFullScreen());
+  };
   const onRendererReady = (event: IpcMainEvent) => {
-    if (event.sender.id === win.webContents.id) revealMainWindow("renderer-ready");
+    if (event.sender.id !== win.webContents.id) return;
+    revealMainWindow("renderer-ready");
+    // 启动即全屏（从 window-state 恢复）时，渲染层靠这条拿到初始态
+    sendWindowFullscreen();
   };
   ipcMain.on("renderer-ready", onRendererReady);
   bootFallback = setTimeout(() => revealMainWindow("fallback-timeout"), 8_000);
@@ -380,8 +388,8 @@ async function createWindow() {
   win.on("move", persistWindowState);
   win.on("maximize", persistWindowState);
   win.on("unmaximize", persistWindowState);
-  win.on("enter-full-screen", persistWindowState);
-  win.on("leave-full-screen", persistWindowState);
+  win.on("enter-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
+  win.on("leave-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
   win.on("close", persistWindowState);
   if (restored.maximized) win.maximize();
   if (restored.fullscreen) win.setFullScreen(true);

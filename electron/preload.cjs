@@ -169,4 +169,10 @@ contextBridge.exposeInMainWorld("lakeNative", {
     ipcRenderer.on("library-changed", listener);
     return () => { ipcRenderer.removeListener("library-changed", listener); };
   },
+  /** 窗口全屏状态（macOS 独立 Space）→ 顶栏据此决定是否保留红绿灯让位。 */
+  onWindowFullscreen: (callback) => {
+    const listener = (_event, fullscreen) => callback(Boolean(fullscreen));
+    ipcRenderer.on("window-fullscreen", listener);
+    return () => { ipcRenderer.removeListener("window-fullscreen", listener); };
+  },
 });

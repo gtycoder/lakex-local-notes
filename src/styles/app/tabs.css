@@ -106,7 +106,10 @@
   -webkit-app-region: drag;
 }
 
-.platform-native-titlebar .tab-bar {
+.platform-native-titlebar .tab-bar,
+:root.window-fullscreen .platform-mac .tab-bar {
+  /* 261023：macOS 原生全屏（独立 Space）下系统把红绿灯一起隐藏 ⇒ 不再留 82px 让位，
+     顶栏从最左侧开始（仿思源；窗口/最大化态仍走上面的 .platform-mac 让位规则）。 */
   padding-left: 10px;
   -webkit-app-region: no-drag;
 }

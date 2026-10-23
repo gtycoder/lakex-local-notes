@@ -125,6 +125,16 @@ export function App() {
     const handle = window.setTimeout(prewarm, 4000);
     return () => window.clearTimeout(handle);
   }, [workspace]);
+  // 261023：macOS 原生全屏（独立 Space）里系统把标题栏/红绿灯一起隐藏 ⇒ 顶栏不再留 82px 让位，
+  // 整体从最左侧开始（仿思源；只影响全屏，窗口/最大化仍是 82px）。判据 = 主进程广播的真实全屏态。
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = (fullscreen: boolean) => root.classList.toggle("window-fullscreen", fullscreen);
+    let off: (() => void) | undefined;
+    try { off = native.onWindowFullscreen(apply); } catch { /* 非 Electron（浏览器预览/测试）忽略 */ }
+    return () => { off?.(); root.classList.remove("window-fullscreen"); };
+  }, []);
+
   // boot 窗口：等 workspace（或启动错误）已经渲染到主窗口后再显示，避免主窗口先露白/重复播 splash。
   useEffect(() => {
     if (!workspace && !error) return;
