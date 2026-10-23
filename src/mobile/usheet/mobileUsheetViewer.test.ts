@@ -175,14 +175,19 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     expect(calls.editable).toEqual([true]);
     const formula = host.querySelector(".mb-usheet-formula");
     expect(formula).toBeTruthy();
-    expect(formula!.querySelector(".mb-usheet-formula__addr")?.textContent).toBe("A1");
+    for (const label of ["取消编辑", "确认输入", "收起键盘"]) {
+      expect(formula!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
+    }
+    expect(formula!.querySelector(".mb-usheet-formula__fx")?.textContent).toBe("fx");
     expect(formula!.querySelector<HTMLInputElement>(".mb-usheet-formula__input")?.value).toBe("季度预算");
     const dock = host.querySelector(".mb-usheet-dock");
     expect(dock).toBeTruthy();
     expect(dock!.getAttribute("aria-label")).toBe("表格工具");
-    for (const label of ["插入", "文字格式", "数据", "视图", "更多", "撤销", "重做", "收起键盘"]) {
+    for (const label of ["插入", "文字格式", "数据", "视图", "更多", "撤销", "重做"]) {
       expect(dock!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
+    // 键盘键两态：jsdom 里没有真键盘（keyboardOpen=false）⇒ 显示「展开键盘」。
+    expect(dock!.querySelector("button.mb-usheet-dock__kb")).toBeTruthy();
     expect(host.querySelector(".mb-usheet-readingbar")).toBeNull();
     root.unmount();
   });

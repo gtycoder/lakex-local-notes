@@ -39,7 +39,7 @@ import { SheetTopBar } from "./SheetTopBar";
 import { SheetFormulaBar } from "./SheetFormulaBar";
 import { SheetDock } from "./SheetDock";
 import { SheetDockPanel } from "./SheetDockPanel";
-import { useKeyboard } from "../hooks/useKeyboard";
+import { useSheetKeyboardOpen } from "./useSheetKeyboardOpen";
 import { showToast } from "../ui/toastBus";
 import { SHEET_ZOOM_LEVELS, type SheetDockId, type SheetMoreId } from "./usheetChromeModel";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
@@ -110,13 +110,12 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   /** 更多面板内的下钻（数字格式 / 边框 / 公式）。 */
   const [dockSub, setDockSub] = useState<"numfmt" | "border" | "formula" | null>(null);
   const [sheetListAnchor, setSheetListAnchor] = useState<HTMLElement | null>(null);
-  /** 公式栏（主输入位）：受控文本 + 多行态。 */
+  /** 公式栏（主输入位）：受控文本（值在获焦/失焦时与单元格同步）。 */
   const [formulaValue, setFormulaValue] = useState("");
-  const [formulaMultiline, setFormulaMultiline] = useState(false);
   const formulaValueRef = useRef("");
   formulaValueRef.current = formulaValue;
   const formulaInputFocusedRef = useRef(false);
-  const { keyboardOpen } = useKeyboard();
+  const keyboardOpen = useSheetKeyboardOpen();
   /** 视图：冻结行列的本机状态（cycle：none → 首行 → 首列）。 */
   const [freezeState, setFreezeState] = useState<"none" | "row" | "col">("none");
   const {
@@ -202,6 +201,17 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }, AUTOSAVE_DEBOUNCE_MS);
   }, [capture]);
 
+  /** 内核命令后的 chrome 刷新：用 rAF 合并（一次交互可能连发多条命令，别每条都跑一遍 facade 读取）。 */
+  const chromeRafRef = useRef(0);
+  const scheduleChromeRefresh = useCallback(() => {
+    if (chromeRafRef.current) return;
+    chromeRafRef.current = window.requestAnimationFrame(() => {
+      chromeRafRef.current = 0;
+      refreshCellFmt();
+      refreshSheetChrome();
+    });
+  }, [refreshCellFmt, refreshSheetChrome]);
+
   /** 收起/放回输入法：面板占键盘区期间加 inputmode=none + blur/focus（与文档 dock 同一实测口径）。 */
   const setImeSuppressed = useCallback((on: boolean) => {
     const host = hostRef.current;
@@ -218,11 +228,21 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }
   }, []);
 
+  /** 把焦点放回公式栏 → 软键盘随之弹出（用户 261023：点一级 ✕ 就是「恢复键盘」）。 */
+  const focusFormulaInput = useCallback(() => {
+    window.setTimeout(() => {
+      hostRef.current?.querySelector<HTMLInputElement>(".mb-usheet-formula__input")?.focus();
+    }, 20);
+  }, []);
+
   const closeDockPanel = useCallback((restoreKeyboard: boolean) => {
     setDockPanel(null);
     setDockSub(null);
-    if (restoreKeyboard) setImeSuppressed(false);
-  }, [setImeSuppressed]);
+    if (restoreKeyboard) {
+      setImeSuppressed(false);
+      focusFormulaInput();
+    }
+  }, [setImeSuppressed, focusFormulaInput]);
 
   const openDockPanel = useCallback((id: SheetDockId) => {
     setDockPanel(id);
@@ -251,22 +271,30 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     } catch (error) {
       console.warn("[mobile-usheet] 公式栏提交失败", error);
     }
+    // ✓ = 确认并收起键盘（原内核公式栏同语义）。
+    try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
   }, [getUniverAPI, refreshCellFmt, scheduleFlush]);
+
+  /** ✕ = 放弃本次输入（恢复单元格原值），并收起键盘。 */
+  const cancelFormula = useCallback(() => {
+    setFormulaValue(cellFmt.value);
+    formulaValueRef.current = cellFmt.value;
+    try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
+  }, [cellFmt.value]);
+
+  /** ▲ = 只收起键盘（不提交、不改值）。 */
+  const collapseFormulaKeyboard = useCallback(() => {
+    try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
+  }, []);
 
   const onFormulaFocus = useCallback(() => {
     formulaInputFocusedRef.current = true;
     if (dockPanel) closeDockPanel(false);
   }, [dockPanel, closeDockPanel]);
 
-  const focusFormulaInput = useCallback(() => {
-    window.setTimeout(() => {
-      hostRef.current?.querySelector<HTMLInputElement>(".mb-usheet-formula__input")?.focus();
-    }, 30);
-  }, []);
-
   /** 键盘键：面板开着 = 收面板并放回键盘；键盘开着 = 收起；否则 = 展开。 */
   const onDockKeyboard = useCallback(() => {
-    if (dockPanel) { closeDockPanel(true); focusFormulaInput(); return; }
+    if (dockPanel) { closeDockPanel(true); return; }
     if (keyboardOpen) {
       try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
       return;
@@ -349,7 +377,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (editing) return;
     setDockPanel(null);
     setDockSub(null);
-    setFormulaMultiline(false);
   }, [editing]);
 
   useEffect(() => {
@@ -419,8 +446,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           setPainterStatus((event.params as { status?: number } | undefined)?.status ?? 0);
         }
         scheduleFlush();
-        refreshCellFmt();
-        refreshSheetChrome();
+        scheduleChromeRefresh();
       }));
       // 选中单元格（点 canvas / 方向键）后刷新公式栏地址与值：CommandExecuted 已经覆盖，这里补一次初始同步。
       refreshCellFmt();
@@ -434,6 +460,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => {
       if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
+      if (chromeRafRef.current) { window.cancelAnimationFrame(chromeRafRef.current); chromeRafRef.current = 0; }
       capture();
       for (const item of disposables) { try { item.dispose(); } catch { /* ignore */ } }
       observer.disconnect();
@@ -514,13 +541,13 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       {editing && ready && (
         <>
           <SheetFormulaBar
-            address={cellFmt.address}
             value={formulaValue}
-            multiline={formulaMultiline}
             onChange={setFormulaValue}
-            onCommit={commitFormula}
-            onToggleMultiline={() => setFormulaMultiline((value) => !value)}
+            onConfirm={commitFormula}
+            onCancel={cancelFormula}
+            onCollapse={collapseFormulaKeyboard}
             onFocusInput={onFormulaFocus}
+            onBlurInput={() => { formulaInputFocusedRef.current = false; }}
           />
           <SheetDock
             open={dockPanel}

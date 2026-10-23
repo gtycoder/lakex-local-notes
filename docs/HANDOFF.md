@@ -19,6 +19,8 @@
 - **实现落点（单一来源）**：`usheetChromeModel.ts`（dock 顺序 / 插入 4 连块 + 7 白块（无公式）/ T 面板（B I S U、水平+垂直对齐、字色 8、填充两行、字号 8 档）/ 数据·视图占位 / 更多（数字格式·边框·公式下钻、合并·格式刷·清除格式、条件格式占位））；新组件 `SheetTopBar` / `SheetFormulaBar` / `SheetDock` / `SheetDockPanel`；`MobileUsheetViewer` 整合（内核移动公式栏 `formulaBar:false`，改自绘公式栏；提交写回 `setValue/setFormula`）；`useSheetChromeState` 增加 address/value/valign/size；`useSheetCommandActions` 增加 valign / fontsize / 清除字色与填充。删除旧 `SheetMoreCard` / `SheetFormatCard` / `useSheetCardState` / `MobileSheetFooter` 与 `formulaBarCaret.test`。
 - **门禁**：tsc 0 · vitest **361 文件 / 2522 例** · ui-metrics 0（未定义令牌 0 / 颜色字面量 0 / 裸 accent 0）· check:mobileui ✓（`usheet-chrome.css` 基线 302→401，属新增交互形态）· check:core ✓ · check:bundle ✓ · 桌面与移动构建 ✓ · `git diff --check` ✓。
 - **设备实测（emulator-5554，dev APK）**：顶部行（Sheet1 / 高亮当前行列 / 100% / ＋ / 列表）✓；编辑态公式栏「A1 请输入 ↵ ⤢」✓；输入「测试123」+ ↵ 写回 A1 ✓；T 面板五条白条、面板盖键盘、＋变 ✕ ✓；插入面板 4 连块 + 7 白块（无公式）✓；更多→数字格式下钻（当前档标注）✓；收起面板回键盘 ✓；✓ 退出编辑后 dock/公式栏消失、阅读工具条保留 ✓；顶部高亮当前行列开关 aria-pressed 切换 ✓。
+- **二次修正（同日，用户反馈后）**：① **公式栏改回原内核形态**（✕ 取消 · ✓ 确认 · fx · 输入 · ▲ 收键盘），✕/✓ 语义照原；② **回显修复**：公式输入框的「正在输入」标志在 blur 时复位（此前获焦一次后选区切换不再回显）；③ **点一级 ✕ = 恢复键盘**（`closeDockPanel(true)` 里回焦公式栏输入）；④ **性能**：命令回调里的 chrome 刷新改为 rAF 合并（一次交互多条命令只跑一遍 facade 读取），并用轻量 `useSheetKeyboardOpen`（只暴露布尔，不再随 innerHeight 每次抖动重渲染整棵树）。
+- **二次设备实测（emulator-5570，**真实触摸** Input.dispatchTouchEvent）**：点 T → 面板出现 **11ms**；点插入 → **19ms**；输入回显 **12ms**；点 ✕ → 面板消失 4ms、键盘回来（innerHeight 842→530）**267ms**（IME 动画本身）；打字/切换面板无可感知卡顿。
 - **已知缺口（下一步，非本批）**：① 插入里「单元格图片 / 手写签名 / 附件 / 图表 / 批注」点击给「移动端暂未支持」提示（插行列/链接/日期可用）；② 撤销/重做按钮暂恒可用（未接内核 canUndo/canRedo）；③ 冻结行列走 facade `setFrozenRows/Columns`，待逐项设备验收；④ 本批只改移动端，桌面表格不动。
 ### 261023 · 表格第三方输入框「两层边框」根因 + 系统性收口（用户点单：「最后一次彻底排查」）· **已提交 `41d0a597`，待验收**
 

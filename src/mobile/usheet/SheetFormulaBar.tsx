@@ -1,70 +1,51 @@
 /**
- * 移动端表格公式栏（261023 用户定稿：**主要输入位置，不能省**）。
+ * 移动端表格公式栏（261023 二次定稿：**形态照原来的内核移动公式栏**）。
  *
- * 形态：地址 + 输入 + ↵（提交并下移）+ ⤢（多行输入），贴在编辑态 dock 上方。
- * 纯受控组件：值/地址/多行态都由 MobileUsheetViewer 持有，提交时由 viewer 写回单元格。
+ * 结构（左 → 右）：✕ 取消 · ✓ 确认 · fx 图标 · 输入框 · ▲ 收起键盘。
+ * 纯受控组件：值由 MobileUsheetViewer 持有；✕/✓/▲ 三个动作都抛给 viewer 执行。
+ * 说明：原内核公式栏（Univer mobile-formula-bar）就是这样，换成自绘是为了把它放到 dock 上方并统一交互。
  */
-import { useRef } from "react";
-import { ChevronDown, CornerDownLeft, Maximize2, Minimize2 } from "lucide-react";
+import { X, Check, ChevronUp } from "lucide-react";
 
 export interface SheetFormulaBarProps {
-  address: string;
   value: string;
-  multiline: boolean;
   onChange: (value: string) => void;
-  onCommit: () => void;
-  onToggleMultiline: () => void;
-  /** 输入框获得焦点（用于收起面板：面板开着时点公式栏 = 回键盘输入）。 */
+  /** ✓：写回当前单元格（= 公式 / 数字 / 文本）。 */
+  onConfirm: () => void;
+  /** ✕：放弃本次输入（恢复单元格原值）。 */
+  onCancel: () => void;
+  /** ▲：收起键盘（不提交、不改值）。 */
+  onCollapse: () => void;
   onFocusInput?: () => void;
+  onBlurInput?: () => void;
 }
 
-export function SheetFormulaBar({ address, value, multiline, onChange, onCommit, onToggleMultiline, onFocusInput }: SheetFormulaBarProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const areaRef = useRef<HTMLTextAreaElement>(null);
-
+export function SheetFormulaBar({ value, onChange, onConfirm, onCancel, onCollapse, onFocusInput, onBlurInput }: SheetFormulaBarProps) {
   return (
     <div className="mb-usheet-formula" data-prevent-swipe role="group" aria-label="公式栏">
-      <span className="mb-usheet-formula__addr" aria-label="当前单元格">{address}</span>
-      {multiline ? (
-        <textarea
-          ref={areaRef}
-          className="mb-usheet-formula__area"
-          value={value}
-          placeholder="请输入"
-          onChange={(event) => onChange(event.target.value)}
-          onFocus={onFocusInput}
-        />
-      ) : (
-        <input
-          ref={inputRef}
-          className="mb-usheet-formula__input"
-          value={value}
-          placeholder="请输入"
-          inputMode="text"
-          onChange={(event) => onChange(event.target.value)}
-          onFocus={onFocusInput}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onCommit();
-            }
-          }}
-        />
-      )}
-      <button type="button" className="mb-usheet-formula__btn" aria-label="换行并提交" title="换行" onClick={onCommit}>
-        <CornerDownLeft size={18} />
+      <button type="button" className="mb-usheet-formula__btn is-cancel" aria-label="取消编辑" title="取消" onClick={onCancel}>
+        <X size={20} />
       </button>
-      <button
-        type="button"
-        className="mb-usheet-formula__btn"
-        aria-label={multiline ? "收起多行输入" : "展开多行输入"}
-        title="展开输入"
-        aria-pressed={multiline}
-        onClick={onToggleMultiline}
-      >
-        {multiline ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+      <button type="button" className="mb-usheet-formula__btn is-confirm" aria-label="确认输入" title="确认" onClick={onConfirm}>
+        <Check size={20} />
       </button>
-      <ChevronDown size={0} aria-hidden="true" />
+      <span className="mb-usheet-formula__fx" aria-hidden="true">fx</span>
+      <input
+        className="mb-usheet-formula__input"
+        value={value}
+        placeholder=""
+        inputMode="text"
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={onFocusInput}
+        onBlur={onBlurInput}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") { event.preventDefault(); onConfirm(); }
+          if (event.key === "Escape") { event.preventDefault(); onCancel(); }
+        }}
+      />
+      <button type="button" className="mb-usheet-formula__btn is-collapse" aria-label="收起键盘" title="收起键盘" onClick={onCollapse}>
+        <ChevronUp size={20} />
+      </button>
     </div>
   );
 }
