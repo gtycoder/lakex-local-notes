@@ -172,9 +172,12 @@ node scripts/check-bundle-budget.mjs
      直接把当前序列化设为 `last` 并 return —— **不写盘、不标脏、不出网**；
   2. **内容输入判据**：`keydown / beforeinput / paste / cut / drop`（捕获阶段）+ **非网格画布的 pointerdown**（工具栏/公式栏/右键菜单）；
      网格内单击只选格、不算编辑；
-  3. **capture 契约**：没有真实改动时返回**磁盘原文**（`persistedBodyRef`），避免"打开后直接关闭"因规范化差异写盘。
+  3. **capture 契约**：没有真实改动时返回**磁盘原文**（`persistedBodyRef`）；**改过又改回原样（撤销/改回原值）**时也一样
+     （`persistedNormalizedRef` 比较：规范化后与磁盘原文等价就返回原文），避免"打开→编辑→撤销→关闭"因规范化差异写盘；
+     外部 `content` 刷新（同一挂载内）会同步更新这个基线。
   实测：原始正文 / 人为扰动正文（未知 plugin、resources 倒序、单引号字族）打开均 **0 次 save、文件 hash 不变**；
-  真实操作（点工作表「＋」新增工作表）**1 次 save**、内容正确落盘。
+  真实操作（点工作表「＋」新增工作表）**1 次 save**、内容正确落盘（落盘为规范化形态：字族双引号）；
+  落盘后**再次打开该文档 0 次 save、hash 不变**（写→读闭环）。
 
 ### 4.5 facade / 引擎
 | API | 用途 | 注意 |

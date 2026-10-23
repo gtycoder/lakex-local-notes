@@ -41,7 +41,8 @@
      作用：覆盖已知漂移（plugin 空壳 / 字族引号），并让 dev 与打包版**写盘字节一致**。
   2. **结构保证「打开 = 只读」**（`UniverSheetEditor`）：打开后**第一次 flush 只对齐基线**（`baselineSettledRef` + `contentInputRef`，
      不写盘不标脏）；内容输入判据 = 键盘/粘贴/剪切/拖放（捕获阶段）+ **非网格画布**的 pointerdown（工具栏/公式栏/右键菜单）；
-     `capture` 在**无真实改动**时返回磁盘原文（`persistedBodyRef`），避免"打开后直接关闭"写盘。
+     `capture` 在**无真实改动**时返回磁盘原文（`persistedBodyRef`）；**改过又改回原样**（撤销/改回原值）时也返回原文
+     （`persistedNormalizedRef` 比较），避免"打开→编辑→撤销→关闭"写盘；外部 content 刷新会更新该基线。
      ⇒ 即使上游再换序列化形态（我们不认识的新漂移），打开也不会写盘/标脏/出网。
 - **验证（隔离实例 + 用户 dev 数据只读副本）**：
   - 修复前：打开「表格11」→ 1 次 `ipc.save_note`、body hash 变化。

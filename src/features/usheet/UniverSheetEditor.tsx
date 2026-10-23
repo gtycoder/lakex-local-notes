@@ -63,6 +63,19 @@ function deepCloneWorkbook(workbook: UsheetWorkbook): UsheetWorkbook {
   return JSON.parse(JSON.stringify(workbook)) as UsheetWorkbook;
 }
 
+/**
+ * 磁盘原文 → 规范化正文：用于判断「改过又改回去」（如编辑后撤销）时是否真的需要写盘。
+ * 解析失败返回 null（调用方按"有过改动"处理，宁可多存一次也不丢）。
+ */
+function normalizedBodyOf(body: string): string | null {
+  const parsed = parseUsheetBody(body);
+  if (!parsed) return null;
+  const workbook = deepCloneWorkbook(parsed.workbook);
+  applyFontPolicy(workbook, lakeFontFamily());
+  normalizeUsheetWorkbook(workbook);
+  return usheetToBody(workbook);
+}
+
 /** 磁盘 filename → 可渲染 URL（打开时喂给 createWorkbook）。 */
 function renderSource(src: string, noteId: string): string {
   if (HAS_SCHEME_RE.test(src)) return src;
@@ -219,6 +232,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const contentInputRef = useRef(false);
   const changedSinceOpenRef = useRef(false);
   const persistedBodyRef = useRef(content);
+  /** 磁盘原文的规范化形态（判断「改过又改回去」用；content 变化时刷新）。 */
+  const persistedNormalizedRef = useRef<string | null>(null);
   const captureRef = useRef(onEditorCapture); captureRef.current = onEditorCapture;
   const readOnlyRef = useRef(readOnly); readOnlyRef.current = readOnly;
   /** 最近一次的**磁盘形态**正文（正文真相）：隐藏释放实例后，显示时按它重建。 */
@@ -229,6 +244,13 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const flushPendingRef = useRef(false);
 
   useEffect(() => { if (visible) setEverVisible(true); }, [visible]);
+
+  // 外部正文刷新（同一挂载内 content 变化）时更新磁盘原文基线；已产生真实改动则不动。
+  useEffect(() => {
+    if (changedSinceOpenRef.current) return;
+    persistedBodyRef.current = content;
+    persistedNormalizedRef.current = normalizedBodyOf(content);
+  }, [content]);
 
   // 首次可见后量高度：隐藏容器会量到 0，retry 到有高度为止（避免 Univer 挂在 0 尺寸容器里）。
   useEffect(() => {
@@ -319,6 +341,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       mapUsheetImageSources(canonical, (src) => promotedRef.current.get(src) ?? diskSource(src));
       const canonicalBody = usheetToBody(canonical);
       lastBodyRef.current = canonicalBody;
+      persistedNormalizedRef.current = normalizedBodyOf(persistedBodyRef.current);
       instanceRef.current = { ...created, last: canonicalBody };
       // 导出 CSV 要知道「用户正看着哪张工作表」（本机视图：不写正文、不进 S3）。
       // 只登记可编辑的实例：历史快照预览也是 usheet，但它的工作表选择不属于当前文档。
@@ -538,7 +561,16 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       });
       // capture 契约：**没有真实改动时返回磁盘原文**（而不是规范化后的内存形态），
       // 否则"打开后直接关闭"也会因规范化差异写盘、触发一次同步。
-      captureRef.current?.(() => (changedSinceOpenRef.current ? instanceRef.current?.last ?? null : persistedBodyRef.current));
+      captureRef.current?.(() => {
+        const state = instanceRef.current;
+        if (!state) return null;
+        if (!changedSinceOpenRef.current) return persistedBodyRef.current;
+        // 改过又改回原样（撤销 / 改回原值）：规范化后与磁盘原文等价 ⇒ 返回磁盘原文，避免为规范化差异写盘。
+        if (persistedNormalizedRef.current !== null && state.last === persistedNormalizedRef.current) {
+          return persistedBodyRef.current;
+        }
+        return state.last;
+      });
     } catch (error) {
       console.error("Univer 表格挂载失败", error);
       created = null;

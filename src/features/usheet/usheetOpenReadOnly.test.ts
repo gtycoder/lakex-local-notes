@@ -35,8 +35,11 @@ describe("usheet 打开只读（结构护栏）", () => {
     expect(block).toContain("pointerdown");
   });
 
-  it("capture 无真实改动时返回磁盘原文（避免为规范化写盘）", () => {
-    expect(SOURCE).toMatch(/changedSinceOpenRef\.current \? instanceRef\.current\?\.last \?\? null : persistedBodyRef\.current/);
+  it("capture：无真实改动 / 改过又改回原样 都返回磁盘原文（避免为规范化写盘）", () => {
+    // 无改动 → persistedBodyRef；改动后再回到基线（撤销/改回原值）→ 同样返回磁盘原文
+    expect(SOURCE).toMatch(/if \(!changedSinceOpenRef\.current\) return persistedBodyRef\.current;/);
+    expect(SOURCE).toMatch(/state\.last === persistedNormalizedRef\.current/);
+    expect(SOURCE).toContain("persistedNormalizedRef");
   });
 
   it("写入/比较统一走规范化（打开基线与每次 flush 都调用）", () => {
