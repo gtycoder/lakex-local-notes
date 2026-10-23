@@ -1,85 +1,62 @@
 import { describe, expect, it } from "vitest";
 import {
-  SHEET_CARD_META,
+  SHEET_ALIGN_H,
+  SHEET_ALIGN_V,
+  SHEET_DATA_ROWS,
+  SHEET_DOCK_ITEMS,
+  SHEET_FILL_LIGHT,
+  SHEET_FILL_STRONG,
   SHEET_FONT_COLORS,
+  SHEET_FONT_SIZES,
   SHEET_FORMAT_TOGGLES,
-  SHEET_FREEZE_MENU,
-  SHEET_FORMULA_MENU,
-  SHEET_SORT_MENU,
-  SHEET_TOOLBAR_ROWS,
-  buildInsertMenu,
-  buildMoreRows,
-  buildNumfmtMenu,
+  SHEET_INSERTER_ACTIONS,
+  SHEET_INSERT_TILES,
+  SHEET_MORE_ROWS,
+  SHEET_VIEW_ROWS,
+  SHEET_ZOOM_LEVELS,
+  buildMoreSubMenu,
   numfmtLabelOf,
 } from "./usheetChromeModel";
 
-describe("移动端表格 chrome 模型（261022 晚：两行工具条 + T 一级标签）", () => {
-  it("工具条两行与分组顺序：常用 / 次常用；保存与小数位都不在工具条", () => {
-    expect(SHEET_TOOLBAR_ROWS.map((row) => row.map((group) => group.map((item) => item.id)))).toEqual([
-      [["insert"], ["undo", "redo"], ["format"], ["numfmt"], ["more"]],
-      [["format-painter", "clear-style"], ["filter", "sort", "freeze", "find"], ["link", "formula"]],
-    ]);
-    const flat = SHEET_TOOLBAR_ROWS.flat(3);
-    // 保存不在工具条（顶栏 ✓ 已是「保存并退出编辑」）。
-    expect(flat.some((item) => item.label.includes("保存"))).toBe(false);
-    // 用户 261022 晚：增/减小数位**都收进 ⋯**。
-    expect(flat.some((item) => String(item.id) === "decimals")).toBe(false);
-    // B/I/S/U/字色不再占一级（收进 T 的二级卡）。
-    expect(flat.some((item) => ["bold", "italic", "strike", "underline", "font-color"].includes(item.id))).toBe(false);
+describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock）", () => {
+  it("一级按钮顺序：插入 | T | 数据 | 视图 | 更多（撤销/重做/键盘由组件追加）", () => {
+    expect(SHEET_DOCK_ITEMS.map((item) => item.id)).toEqual(["insert", "format", "data", "view", "more"]);
+    expect(SHEET_DOCK_ITEMS.map((item) => item.label)).toEqual(["插入", "文字格式", "数据", "视图", "更多"]);
   });
 
-  it("插入卡保留我们自己的插行列/合并（语雀 App 没有）", () => {
-    expect(buildInsertMenu().map((item) => item.id)).toEqual(["row-above", "row-below", "col-left", "col-right", "merge"]);
+  it("插入：4 个插入行列动作 + 7 个白块（公式按用户要求移到更多）", () => {
+    expect(SHEET_INSERTER_ACTIONS.map((item) => item.id)).toEqual(["row-above", "row-below", "col-left", "col-right"]);
+    expect(SHEET_INSERT_TILES.map((item) => item.id)).toEqual(["image", "sign", "link", "date", "attachment", "chart", "comment"]);
+    expect(SHEET_INSERT_TILES.some((item) => item.label.includes("公式"))).toBe(false);
   });
 
-  it("⋯ 卡只留低频能力：填充/边框/对齐/合并、小数位、行高/列宽、删除行列 + 未接占位", () => {
-    const rows = buildMoreRows();
-    expect(rows.length).toBe(4);
-    const byId = new Map(rows.flat().map((button) => [button.id, button]));
-    expect(rows[0].map((button) => button.id)).toEqual(["fill-color", "border", "align", "merge"]);
-    expect(rows[1].map((button) => button.id)).toEqual(["decimal-up", "decimal-down", "row-height", "col-width"]);
-    expect(rows[2].map((button) => button.id)).toEqual(["delete-row", "delete-col"]);
-    for (const id of rows[3].map((button) => button.id)) expect(byId.get(id)?.disabled).toBe(true);
-    expect(rows[3].map((button) => button.id)).toEqual(["font-size", "valign", "wrap", "select", "chart", "conditional", "protect"]);
-    // 已搬走/删掉的项不能还留在这里（避免两套入口）。
-    for (const id of ["bold", "italic", "strike", "underline", "font-color", "crosshair", "filter", "sort", "freeze", "find", "link", "formula", "more-tools"]) {
-      expect(byId.has(id)).toBe(false);
-    }
-    // 边框子菜单 8 项；对齐是图标行；填充是色板。
-    expect(byId.get("border")?.children?.map((item) => item.id)).toEqual([
-      "border-all", "border-outside", "border-inside", "border-top", "border-bottom", "border-left", "border-right", "border-none",
-    ]);
-    expect(byId.get("align")?.childLayout).toBe("icons");
-    expect(byId.get("fill-color")?.childLayout).toBe("swatch");
-    for (const item of byId.get("fill-color")?.children ?? []) expect(item.swatch).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(byId.get("row-height")?.children?.length).toBe(3);
-    expect(byId.get("delete-row")?.danger).toBe(true);
-  });
-
-  it("T 卡（文字格式二级）：B / I / S / U 四个开关 + 8 色字体颜色", () => {
-    expect(SHEET_FORMAT_TOGGLES.map((item) => [item.id, item.key])).toEqual([
-      ["bold", "bold"], ["italic", "italic"], ["strike", "strike"], ["underline", "underline"],
-    ]);
-    expect(SHEET_FONT_COLORS.map((item) => item.id)).toContain("font-#e5484d");
+  it("T 面板：B/I/S/U、水平/垂直对齐、字色 8、填充两行、字号 8 档", () => {
+    expect(SHEET_FORMAT_TOGGLES.map((item) => item.id)).toEqual(["bold", "italic", "underline", "strike"]);
+    expect(SHEET_ALIGN_H.map((item) => item.id)).toEqual(["left", "center", "right"]);
+    expect(SHEET_ALIGN_V.map((item) => item.id)).toEqual(["top", "middle", "bottom"]);
     expect(SHEET_FONT_COLORS.length).toBe(8);
-    for (const item of SHEET_FONT_COLORS) expect(item.swatch).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(SHEET_CARD_META.format.width).toBe(240);
+    expect(SHEET_FONT_COLORS[0].value).toBe("");
+    for (const color of SHEET_FONT_COLORS.slice(1)) expect(color.value).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(SHEET_FILL_LIGHT[0].value).toBe("");
+    expect(SHEET_FILL_LIGHT.length).toBe(7);
+    expect(SHEET_FILL_STRONG.length).toBe(7);
+    expect(SHEET_FONT_SIZES).toEqual([14, 15, 16, 19, 22, 24, 29, 32]);
   });
 
-  it("第二行的小卡：排序 2 项 / 冻结 3 项 / 公式 5 项", () => {
-    expect(SHEET_SORT_MENU.map((item) => item.id)).toEqual(["sort-asc", "sort-desc"]);
-    expect(SHEET_FREEZE_MENU.map((item) => item.id)).toEqual(["freeze-row", "freeze-col", "freeze-none"]);
-    expect(SHEET_FORMULA_MENU.length).toBe(5);
-    expect(SHEET_FORMULA_MENU[0].id).toBe("quickformula-sum");
+  it("数据 / 视图面板：先保留这些（含占位），视图比例三档", () => {
+    expect(SHEET_DATA_ROWS.map((row) => row.id)).toEqual(["sort-asc", "sort-desc", "filter", "find", "validation", "split"]);
+    expect(SHEET_DATA_ROWS.filter((row) => row.disabled).map((row) => row.id)).toEqual(["validation", "split"]);
+    expect(SHEET_VIEW_ROWS.map((row) => row.id)).toEqual(["freeze", "formview", "chartview"]);
+    expect(SHEET_VIEW_ROWS.filter((row) => row.disabled).map((row) => row.id)).toEqual(["formview", "chartview"]);
+    expect(SHEET_ZOOM_LEVELS.map((level) => level.value)).toEqual([1, 0.85, 1.15]);
   });
 
-  it("数字格式卡：按类别分组、按当前 pattern 标「当前」，默认常规", () => {
+  it("更多：数字格式 / 边框 / 公式可下钻；条件格式置灰", () => {
+    expect(SHEET_MORE_ROWS.map((row) => row.id)).toEqual(["numfmt", "border", "formula", "merge", "painter", "clear", "conditional"]);
+    expect(SHEET_MORE_ROWS.find((row) => row.id === "conditional")?.disabled).toBe(true);
+    expect(buildMoreSubMenu("numfmt", "#,##0.00").find((item) => item.id === "numfmt-number")?.note).toBe("当前");
+    expect(buildMoreSubMenu("border").length).toBe(8);
+    expect(buildMoreSubMenu("formula").length).toBe(5);
     expect(numfmtLabelOf("")).toBe("常规");
-    expect(numfmtLabelOf("#,##0.00")).toBe("数字");
-    const items = buildNumfmtMenu("#,##0.00");
-    expect(items.filter((item) => item.header).map((item) => item.label)).toEqual(["通用", "数值", "日期时间"]);
-    expect(items.find((item) => item.id === "numfmt-number")?.note).toBe("当前");
-    expect(items.length).toBe(12);
-    expect(SHEET_CARD_META.more.width).toBe(232);
   });
 });

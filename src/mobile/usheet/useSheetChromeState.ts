@@ -1,6 +1,11 @@
 import { useCallback, useState } from "react";
 import type { FUniver } from "@univerjs/presets";
-import type { MobileSheetTab } from "./MobileSheetFooter";
+
+/** 工作表页签（顶部 sheet 行用）。 */
+export interface MobileSheetTab {
+  id: string;
+  name: string;
+}
 
 export interface SheetCellFormat {
   bold: boolean;
@@ -8,7 +13,15 @@ export interface SheetCellFormat {
   underline: boolean;
   strike: boolean;
   align: "left" | "center" | "normal" | "general";
+  /** 垂直对齐（261023：T 面板的第二条对齐白条）。 */
+  valign: "top" | "middle" | "bottom" | "general";
+  /** 字号（px；261023：T 面板字号白条）。 */
+  size: number;
   numfmt: string;
+  /** 当前活动单元格地址（如 A1）；公式栏左侧地址位用。 */
+  address: string;
+  /** 当前活动单元格的「显示值」；公式栏输入框用。 */
+  value: string;
 }
 
 const EMPTY_CELL_FORMAT: SheetCellFormat = {
@@ -17,10 +30,25 @@ const EMPTY_CELL_FORMAT: SheetCellFormat = {
   underline: false,
   strike: false,
   align: "general",
+  valign: "general",
+  size: 14,
   numfmt: "",
+  address: "A1",
+  value: "",
 };
 
-/** 表格 chrome 的本机视图状态：选区格式、工作表页签、活动表、缩放与格式刷高亮。 */
+function columnName(index: number): string {
+  let n = index + 1;
+  let name = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    name = String.fromCharCode(65 + rem) + name;
+    n = Math.floor((n - 1) / 26);
+  }
+  return name;
+}
+
+/** 表格 chrome 的本机视图状态：选区格式/地址/值、工作表页签、活动表、缩放与格式刷高亮。 */
 export function useSheetChromeState(getUniverAPI: () => FUniver | null) {
   const [cellFormat, setCellFormat] = useState<SheetCellFormat>(EMPTY_CELL_FORMAT);
   const [sheets, setSheets] = useState<MobileSheetTab[]>([]);
@@ -34,14 +62,27 @@ export function useSheetChromeState(getUniverAPI: () => FUniver | null) {
       if (!range) return;
       const style = range.getCellStyleData() as { bl?: number; it?: number; ul?: { s?: number }; st?: { s?: number } } | null;
       const align = range.getHorizontalAlignment();
+      const valignRaw = (range as unknown as { getVerticalAlignment?: () => string }).getVerticalAlignment?.() ?? "general";
+      const sizeRaw = (range as unknown as { getFontSize?: () => number | null }).getFontSize?.() ?? 0;
       const numfmt = (range as unknown as { getNumberFormat?: () => string | undefined }).getNumberFormat?.() ?? "";
+      const row = range.getRow();
+      const col = range.getColumn();
+      let value = "";
+      try {
+        const raw = (range as unknown as { getValue?: () => unknown }).getValue?.();
+        value = raw === null || raw === undefined ? "" : String(raw);
+      } catch { value = ""; }
       const next: SheetCellFormat = {
         bold: style?.bl === 1,
         italic: style?.it === 1,
         underline: style?.ul?.s === 1,
         strike: style?.st?.s === 1,
         align: (align === "left" || align === "center" || align === "normal" ? align : "general"),
+        valign: (valignRaw === "top" || valignRaw === "middle" || valignRaw === "bottom" ? valignRaw : "general"),
+        size: sizeRaw && Number.isFinite(sizeRaw) ? Math.round(sizeRaw) : 14,
         numfmt,
+        address: columnName(col) + String(row + 1),
+        value,
       };
       setCellFormat((prev) => Object.keys(next).every((key) => prev[key as keyof SheetCellFormat] === next[key as keyof SheetCellFormat]) ? prev : next);
     } catch {

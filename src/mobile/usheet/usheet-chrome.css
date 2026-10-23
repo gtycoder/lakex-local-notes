@@ -4,83 +4,6 @@
  * 旧版底部 Sheet（.mb-sheet）不再用于表格工具。
  */
 /* 261022 晚：工具条 = **两行**（第一行常用 / 第二行次常用，均可横滑）。 */
-.mb-usheet-toolbar {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  border-top: 1px solid var(--lake-border-1);
-  border-bottom: 1px solid var(--lake-border-1);
-  background: var(--lake-bg-window);
-  color: var(--lake-text-1);
-}
-.mb-usheet-toolbar__row {
-  display: flex;
-  align-items: center;
-  height: 38px;
-  padding: 0 6px;
-}
-.mb-usheet-toolbar__row--secondary { border-top: 1px solid var(--lake-border-1); }
-.mb-usheet-toolbar__scroll {
-  display: flex;
-  align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-.mb-usheet-toolbar__scroll::-webkit-scrollbar { display: none; }
-.mb-usheet-toolbar__group {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  padding: 0 3px;
-}
-.mb-usheet-toolbar__group + .mb-usheet-toolbar__group { border-left: 1px solid var(--lake-border-1); }
-.mb-usheet-btn {
-  appearance: none;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  height: 32px;
-  min-width: 34px;
-  padding: 0 7px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-micro);
-  line-height: 32px;
-  transition: background-color var(--mobile-duration-press) ease;
-}
-.mb-usheet-btn:active { background: var(--lake-bg-hover); }
-.mb-usheet-btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
-.mb-usheet-btn--text { width: 55px; justify-content: space-between; }
-/* 261022 晚：文字格式一级标签 = 字面 T（点开二级卡：B / I / S / U / 字色）。 */
-.mb-usheet-btn--format {
-  min-width: 34px;
-  width: 34px;
-  font-size: var(--lake-font-size-body);
-  font-weight: 600;
-  line-height: 1;
-}
-/* 语雀 toolbar-decimal-inc：文字「.00」+ 小加号（一级只有「增」，减在 ⋯ 卡第一行）。 */
-.mb-usheet-btn--numdot { min-width: 40px; gap: 1px; }
-.mb-usheet-btn--numdot > span { font-size: var(--lake-font-size-micro); line-height: 1; letter-spacing: .5px; }
-.mb-usheet-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--lake-status-ok);
-  color: var(--lake-text-on-accent);
-}
 .mb-usheet-popcard {
   position: absolute;
   z-index: 60;
@@ -182,174 +105,6 @@
 .mb-usheet-icons__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 
 /* ⋯ 卡：语雀七行图标网格（+ 我们自己的第八行）。 */
-.mb-usheet-morecard { padding: 4px 0; }
-.mb-usheet-morecard__row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 39px;
-  padding: 0 6px;
-}
-.mb-usheet-morecard__btn {
-  appearance: none;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--lake-text-1);
-}
-.mb-usheet-morecard__btn:active { background: var(--lake-bg-hover); }
-.mb-usheet-morecard__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
-.mb-usheet-morecard__btn.is-danger { color: var(--lake-status-error); }
-.mb-usheet-morecard__btn:disabled { opacity: .25; }
-.mb-usheet-morecard__text { font-size: var(--lake-font-size-micro); line-height: 1; }
-.mb-usheet-popcard__header {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  color: var(--lake-text-3);
-  font-size: var(--lake-font-size-nano);
-}
-.mb-usheet-popcard__icon { flex: none; display: inline-flex; color: var(--lake-text-2); }
-
-/* 261022 晚：T 卡（文字格式二级）—— 四个开关 + 8 色字体颜色圆点。 */
-.mb-usheet-formatcard__toggles {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-}
-.mb-usheet-formatcard__toggle {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--lake-text-1);
-}
-.mb-usheet-formatcard__toggle:active { background: var(--lake-bg-hover); }
-.mb-usheet-formatcard__toggle.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
-.mb-usheet-formatcard__swatches {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  padding: 8px 10px 10px;
-  border-top: 1px solid var(--lake-border-1);
-}
-.mb-usheet-formatcard__dot {
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid var(--lake-border-1);
-  border-radius: 50%;
-}
-
-/* 底栏（261021 P3）：语雀 .lake-sheet-footer 32px / 上边框 / 页签横滑 / 右侧缩放。 */
-.mb-usheet-footer {
-  position: relative;
-  z-index: 10;
-  flex: none;
-  display: flex;
-  align-items: stretch;
-  height: 32px;
-  border-top: 1px solid var(--lake-border-1);
-  background: var(--lake-bg-window);
-  color: var(--lake-text-2);
-}
-.mb-usheet-footer__list {
-  appearance: none;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-right: 1px solid var(--lake-border-1);
-  background: transparent;
-  color: var(--lake-text-2);
-}
-.mb-usheet-footer__list:active { background: var(--lake-bg-hover); }
-/* 261022 晚：十字高亮开关（缩放左侧，编辑态/阅读态都常驻；纯本机视图）。 */
-.mb-usheet-footer__toggle {
-  appearance: none;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--lake-text-2);
-}
-.mb-usheet-footer__toggle:active { background: var(--lake-bg-hover); }
-.mb-usheet-footer__toggle.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
-.mb-usheet-footer__tabs {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-.mb-usheet-footer__tabs::-webkit-scrollbar { display: none; }
-.mb-usheet-footer__tab {
-  appearance: none;
-  flex: none;
-  height: 32px;
-  padding: 0 16px;
-  border: 0;
-  border-right: 1px solid var(--lake-border-1);
-  background: transparent;
-  color: var(--lake-text-2);
-  font-size: var(--lake-font-size-micro);
-  font-weight: 500;
-  white-space: nowrap;
-}
-.mb-usheet-footer__tab.is-active { color: var(--lake-fg-selected); }
-.mb-usheet-footer__zoom {
-  flex: none;
-  display: flex;
-  align-items: center;
-}
-.mb-usheet-footer__zoom-btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 25px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--lake-text-2);
-}
-.mb-usheet-footer__zoom-btn:active { background: var(--lake-bg-hover); }
-.mb-usheet-footer__zoom-value {
-  width: 45px;
-  text-align: center;
-  font-size: var(--lake-font-size-micro);
-  color: var(--lake-text-2);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 阅读态轻工具条（语雀 5 项）：无公式栏，工具条贴工作区顶栏。 */
 .mb-usheet-readingbar {
   flex: none;
   display: flex;
@@ -373,3 +128,355 @@
   color: var(--lake-text-1);
 }
 .mb-usheet-readingbar__btn:disabled { opacity: .25; }
+
+/* ==========================================================================
+ * 261023 v5：顶部行 + 编辑态 dock + 面板（形态对齐文档编辑器 dock）
+ * 顶部行 = 工作表页签 + 高亮当前行列 + 视图比例 + ＋ + 工作表列表（选择态不再有底栏）
+ * 编辑态 = 公式栏 + dock（＋ / T / 数据 / 视图 / ⋯ / 撤销 / 重做 / 键盘）；面板占住键盘区域
+ * ========================================================================== */
+
+/* 网格宿主：必须裁掉画布溢出（否则 Univer canvas 会盖住公式栏/dock 一带）。 */
+.mobile-usheet .mobile-usheet-root { overflow: hidden; }
+
+/* ---------- 顶部工作表行 ---------- */
+.mb-usheet-topbar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  background: var(--lake-bg-panel);
+  border-bottom: 1px solid var(--lake-border-1);
+}
+.mb-usheet-topbar__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mb-usheet-topbar__tabs::-webkit-scrollbar { display: none; }
+.mb-usheet-topbar__tab {
+  appearance: none;
+  flex: none;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-right: 1px solid var(--lake-border-1);
+  background: transparent;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+  position: relative;
+}
+.mb-usheet-topbar__tab.is-active { color: var(--lake-accent-text); font-weight: 600; }
+.mb-usheet-topbar__tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  background: var(--lake-accent);
+}
+.mb-usheet-topbar__actions { display: flex; align-items: center; flex: none; padding: 0 2px; }
+.mb-usheet-topbar__btn {
+  appearance: none;
+  flex: none;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-micro);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.mb-usheet-topbar__btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-topbar__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-topbar__zoom { min-width: 48px; font-size: var(--lake-font-size-micro); }
+
+/* ---------- 公式栏（编辑态主输入位） ---------- */
+.mb-usheet-formula {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background: var(--lake-bg-panel);
+  border-top: 1px solid var(--lake-border-1);
+}
+.mb-usheet-formula__addr {
+  flex: none;
+  min-width: 38px;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  font-size: var(--lake-font-size-micro);
+  color: var(--lake-text-3);
+  border-right: 1px solid var(--lake-border-1);
+  font-variant-numeric: tabular-nums;
+}
+.mb-usheet-formula__input,
+.mb-usheet-formula__area {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+}
+.mb-usheet-formula__input { height: 30px; }
+.mb-usheet-formula__area { height: 84px; resize: none; padding: 4px 0; }
+.mb-usheet-formula__btn {
+  appearance: none;
+  flex: none;
+  width: 36px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--lake-text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mb-usheet-formula__btn:active { background: var(--lake-bg-hover); }
+
+/* ---------- dock（与文档编辑器底部 dock 同款） ---------- */
+.mb-usheet-dock {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  background: var(--lake-bg-panel);
+  border-top: 1px solid var(--lake-border-1);
+}
+.mb-usheet-dock__scroll {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mb-usheet-dock__scroll::-webkit-scrollbar { display: none; }
+.mb-usheet-dock__btn {
+  appearance: none;
+  flex: none;
+  width: 46px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--lake-text-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mb-usheet-dock__btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-dock__btn:disabled { opacity: var(--lake-disabled-opacity, .45); }
+.mb-usheet-dock__btn.is-open {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+  box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
+}
+.mb-usheet-dock__glyph { font-size: var(--lake-font-size-body); font-weight: 700; line-height: 1; }
+.mb-usheet-dock__kb { margin: 0 4px; border-left: 1px solid var(--lake-border-1); border-radius: 0; width: 48px; }
+
+/* ---------- 面板（占住键盘区域） ---------- */
+.mb-usheet-panel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  height: var(--mb-usheet-panel-h, 300px);
+  background: var(--lake-bg-block);
+  border-top: 1px solid var(--lake-border-1);
+}
+.mb-usheet-panel__inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 10px 10px;
+}
+
+/* 插入：上排 4 连块（钉钉式）+ 4 列白块（文档插入面板同款） */
+.mb-usheet-inserter {
+  display: flex;
+  background: var(--lake-bg-panel);
+  border-radius: var(--r-md, 10px);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.mb-usheet-inserter__btn {
+  appearance: none;
+  flex: 1 1 0;
+  height: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-accent-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mb-usheet-inserter__btn + .mb-usheet-inserter__btn { border-left: 1px solid var(--lake-border-1); }
+.mb-usheet-inserter__btn:active { background: var(--lake-bg-hover); }
+.mb-usheet-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.mb-usheet-tile {
+  appearance: none;
+  border: 0;
+  height: 54px;
+  border-radius: var(--r-sm, 8px);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: var(--lake-font-size-micro);
+}
+.mb-usheet-tile svg { color: var(--lake-text-2); }
+.mb-usheet-tile:active { background: var(--lake-bg-hover); }
+
+/* T 面板：文档 T 面板同款白条 */
+.mb-usheet-bar {
+  display: flex;
+  background: var(--lake-bg-panel);
+  border-radius: var(--r-md, 10px);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.mb-usheet-bar__cell {
+  appearance: none;
+  flex: 1 1 0;
+  height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mb-usheet-bar__cell + .mb-usheet-bar__cell { border-left: 1px solid var(--lake-border-1); }
+.mb-usheet-bar__cell.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: 600; }
+.mb-usheet-bar__cell:active { background: var(--lake-bg-hover); }
+.mb-usheet-bar__glyph span { font-size: var(--lake-font-size-body); font-weight: 600; }
+.mb-usheet-bar__glyph span[data-style="italic"] { font-style: italic; }
+.mb-usheet-bar__glyph span[data-style="underline"] { text-decoration: underline; }
+.mb-usheet-bar__glyph span[data-style="strike"] { text-decoration: line-through; }
+.mb-usheet-bar-split { display: flex; gap: 6px; }
+.mb-usheet-bar-split .mb-usheet-bar { flex: 1 1 0; margin-bottom: 6px; }
+.mb-usheet-color-A { font-size: var(--lake-font-size-body); font-weight: 700; }
+.mb-usheet-fills {
+  background: var(--lake-bg-panel);
+  border-radius: var(--r-md, 10px);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.mb-usheet-fills__row { display: flex; }
+.mb-usheet-fills__row + .mb-usheet-fills__row { border-top: 1px solid var(--lake-border-1); }
+.mb-usheet-fills__cell {
+  appearance: none;
+  flex: 1 1 0;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mb-usheet-fills__cell + .mb-usheet-fills__cell { border-left: 1px solid var(--lake-border-1); }
+.mb-usheet-fills__cell:active { background: var(--lake-bg-hover); }
+.mb-usheet-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--lake-border-2);
+}
+.mb-usheet-swatch--none { background: var(--lake-bg-panel); position: relative; }
+.mb-usheet-swatch--none::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 9px;
+  height: 1.5px;
+  background: var(--lake-text-4);
+  transform: rotate(-45deg);
+}
+.mb-usheet-sizes { display: flex; background: var(--lake-bg-panel); border-radius: var(--r-md, 10px); overflow: hidden; }
+.mb-usheet-sizes__cell {
+  appearance: none;
+  flex: 1 1 0;
+  height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+.mb-usheet-sizes__cell + .mb-usheet-sizes__cell { border-left: 1px solid var(--lake-border-1); }
+.mb-usheet-sizes__cell.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: 600; }
+
+/* 数据 / 视图 / 更多：白卡列表 */
+.mb-usheet-rows { background: var(--lake-bg-panel); border-radius: var(--r-md, 10px); overflow: hidden; margin-bottom: 8px; }
+.mb-usheet-row {
+  appearance: none;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+.mb-usheet-row + .mb-usheet-row { border-top: 1px solid var(--lake-border-1); }
+.mb-usheet-row:active { background: var(--lake-bg-hover); }
+.mb-usheet-row.is-disabled { opacity: var(--lake-disabled-opacity, .45); }
+.mb-usheet-row__note { margin-left: auto; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
+.mb-usheet-switch {
+  margin-left: auto;
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--lake-bg-sunken);
+  position: relative;
+}
+.mb-usheet-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--lake-bg-panel);
+
+}
+.mb-usheet-switch.is-on { background: var(--lake-accent); }
+.mb-usheet-switch.is-on::after { left: 19px; }
+.mb-usheet-back {
+  appearance: none;
+  width: 100%;
+  height: 40px;
+  border: 0;
+  border-bottom: 1px solid var(--lake-border-1);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-micro);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  margin-bottom: 8px;
+}

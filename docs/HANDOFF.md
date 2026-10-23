@@ -13,6 +13,13 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261023 · 移动端表格编辑态 dock 落地（v5 定稿，分支 feat/mobile-sheet-dock）· **已实现，设备实测通过，待验收**
+
+- **用户定稿**：不做底部胶囊/四页签面板；编辑态 = **公式栏（保留，主输入位）+ dock + 面板**；dock 顺序 `＋插入 | T | 数据 | 视图 | ⋯更多 | 撤销 | 重做 |（右侧固定）键盘`；面板**占住键盘区域**展开、dock 停在其上方；一级按钮打开时变 **✕**、再点收起并放回键盘；样式与交互**对齐文档编辑器 dock**（`EditorDock.tsx` / `editor-dock.css` 的实测口径）。选择态（高亮当前行列 / 视图比例 / ＋ / 工作表列表）放**顶部与 Sheet 同一行**；顶栏 ✓ 保留。
+- **实现落点（单一来源）**：`usheetChromeModel.ts`（dock 顺序 / 插入 4 连块 + 7 白块（无公式）/ T 面板（B I S U、水平+垂直对齐、字色 8、填充两行、字号 8 档）/ 数据·视图占位 / 更多（数字格式·边框·公式下钻、合并·格式刷·清除格式、条件格式占位））；新组件 `SheetTopBar` / `SheetFormulaBar` / `SheetDock` / `SheetDockPanel`；`MobileUsheetViewer` 整合（内核移动公式栏 `formulaBar:false`，改自绘公式栏；提交写回 `setValue/setFormula`）；`useSheetChromeState` 增加 address/value/valign/size；`useSheetCommandActions` 增加 valign / fontsize / 清除字色与填充。删除旧 `SheetMoreCard` / `SheetFormatCard` / `useSheetCardState` / `MobileSheetFooter` 与 `formulaBarCaret.test`。
+- **门禁**：tsc 0 · vitest **361 文件 / 2522 例** · ui-metrics 0（未定义令牌 0 / 颜色字面量 0 / 裸 accent 0）· check:mobileui ✓（`usheet-chrome.css` 基线 302→401，属新增交互形态）· check:core ✓ · check:bundle ✓ · 桌面与移动构建 ✓ · `git diff --check` ✓。
+- **设备实测（emulator-5554，dev APK）**：顶部行（Sheet1 / 高亮当前行列 / 100% / ＋ / 列表）✓；编辑态公式栏「A1 请输入 ↵ ⤢」✓；输入「测试123」+ ↵ 写回 A1 ✓；T 面板五条白条、面板盖键盘、＋变 ✕ ✓；插入面板 4 连块 + 7 白块（无公式）✓；更多→数字格式下钻（当前档标注）✓；收起面板回键盘 ✓；✓ 退出编辑后 dock/公式栏消失、阅读工具条保留 ✓；顶部高亮当前行列开关 aria-pressed 切换 ✓。
+- **已知缺口（下一步，非本批）**：① 插入里「单元格图片 / 手写签名 / 附件 / 图表 / 批注」点击给「移动端暂未支持」提示（插行列/链接/日期可用）；② 撤销/重做按钮暂恒可用（未接内核 canUndo/canRedo）；③ 冻结行列走 facade `setFrozenRows/Columns`，待逐项设备验收；④ 本批只改移动端，桌面表格不动。
 ### 261023 · 表格第三方输入框「两层边框」根因 + 系统性收口（用户点单：「最后一次彻底排查」）· **已提交 `41d0a597`，待验收**
 
 - **用户口径**：桌面表格后续接入的功能输入框（插入链接、查找替换…）都是 2 层边框，怀疑没接原语；要求彻底排查、以后别再出现。

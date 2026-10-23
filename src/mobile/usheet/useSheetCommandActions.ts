@@ -160,6 +160,16 @@ export function useSheetCommandActions(opts: {
     else if (id === "align-left") withActiveRange((range) => range.setHorizontalAlignment("left"));
     else if (id === "align-center") withActiveRange((range) => range.setHorizontalAlignment("center"));
     else if (id === "align-right") withActiveRange((range) => range.setHorizontalAlignment("normal"));
+    // 261023 T 面板：垂直对齐 / 字号 / 清除字色与填充（id 前缀与通用 font-/fill- 区分，必须先判）。
+    else if (id === "valign-top") withActiveRange((range) => { range.setVerticalAlignment("top"); });
+    else if (id === "valign-middle") withActiveRange((range) => { range.setVerticalAlignment("middle"); });
+    else if (id === "valign-bottom") withActiveRange((range) => { range.setVerticalAlignment("bottom"); });
+    else if (id === "font-default") withActiveRange((range) => { range.setFontColor(null as unknown as string); });
+    else if (id === "fill-none") withActiveRange((range) => { range.setBackgroundColor(null as unknown as string); });
+    else if (id.startsWith("fontsize-")) {
+      const size = Number(id.slice("fontsize-".length));
+      if (Number.isFinite(size)) withActiveRange((range) => { (range as unknown as { setFontSize?: (n: number) => unknown }).setFontSize?.(size); });
+    }
     else if (id.startsWith("font-")) withActiveRange((range) => range.setFontColor(id.slice("font-".length)));
     else if (id.startsWith("fill-")) withActiveRange((range) => range.setBackgroundColor(id.slice("fill-".length)));
     else if (id === "find") openFindDialog();
