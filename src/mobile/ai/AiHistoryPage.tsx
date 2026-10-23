@@ -36,12 +36,19 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
   const [detail, setDetail] = useState<StoredAiConversation | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listSeq = useRef(0);
 
   const loadList = useCallback(async (keyword: string) => {
+    const seq = ++listSeq.current;
     setLoading(true);
-    try { setItems(await onList(keyword)); }
-    catch { setItems([]); }
-    finally { setLoading(false); }
+    try {
+      const next = await onList(keyword);
+      if (seq === listSeq.current) setItems(next);
+    } catch {
+      if (seq === listSeq.current) setItems([]);
+    } finally {
+      if (seq === listSeq.current) setLoading(false);
+    }
   }, [onList]);
 
   useEffect(() => {

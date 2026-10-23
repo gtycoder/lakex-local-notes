@@ -149,7 +149,8 @@ async function pruneConversations(): Promise<void> {
 
 async function persistNow(): Promise<void> {
   if (persistInFlight) { schedulePersist(); return; }
-  if (state.messages.length === 0 && state.corpus.length === 0) return;
+  // 只有“真的问过”的会话才落盘：仅勾选资料不应在历史里留下空对话。
+  if (state.messages.length === 0) return;
   const fingerprint = contentFingerprint();
   if (fingerprint === lastFingerprint) return;
   const ids = ensureCurrentId();
@@ -260,6 +261,13 @@ export async function deleteConversation(id: string): Promise<void> {
     await deleteConversationFile(id);
   } catch { /* 忽略 */ }
   if (id === currentId) {
+    // 正在流的会话被删除：先取消请求，否则 delta 会继续写进已被清空的 messages（busy 卡死）。
+    if (activeRequestId) {
+      await bridge.aiCancel(activeRequestId).catch(() => undefined);
+      activeRequestId = null;
+      assistantText = "";
+      if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = 0; }
+    }
     currentId = null;
     currentCreatedAt = null;
     lastFingerprint = "";

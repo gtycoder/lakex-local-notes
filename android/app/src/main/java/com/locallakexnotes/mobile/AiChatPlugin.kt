@@ -309,6 +309,8 @@ class AiChatPlugin : Plugin() {
             "png" -> "image/png"
             "webp" -> "image/webp"
             "gif" -> "image/gif"
+            "heic" -> "image/heic"
+            "heif" -> "image/heif"
             else -> "image/jpeg"
         }
         return "data:" + mime + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)

@@ -20,6 +20,8 @@ export interface AssetSyncNativePlugin {
   putFile(options: { key: string; localKey: string }): Promise<{ status: number; bytes: number }>;
   getFile(options: { key: string; localKey: string; maxBytes?: number; expectedSize?: number; expectedSha256?: string }): Promise<{ status: number | "ok" | "corrupt"; size?: number; sha256?: string }>;
   listAssets(options: { noteId: string }): Promise<{ assets: NativeAssetMeta[] }>;
+  /** 轻量图片列表（filename/size，不算 sha256）；AI 图片选择器用。旧 APK 无此方法时回退 listAssets。 */
+  listImageAssets?(options: { noteId: string }): Promise<{ assets: Array<{ filename: string; size: number }> }>;
 }
 
 export const NativeAssetSync = registerPlugin<AssetSyncNativePlugin>("AssetSync");

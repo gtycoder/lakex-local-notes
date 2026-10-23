@@ -54,6 +54,8 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [imageSheetOpen, setImageSheetOpen] = useState(false);
   const [pendingImages, setPendingImages] = useState<AiPendingImage[]>([]);
+  const pendingRef = useRef<AiPendingImage[]>([]);
+  pendingRef.current = pendingImages;
   const [candidates, setCandidates] = useState<CorpusCandidate[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -96,11 +98,10 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
       } catch { /* 单张失败跳过 */ }
     }
     if (compressed.length === 0) { showToast(source + "：图片格式不支持或压缩失败", { type: "error" }); return; }
-    setPendingImages((prev) => {
-      const merged = appendPendingImages(prev, compressed);
-      if (merged.skipped > 0) showToast("一次最多发送 10 张图片，已忽略 " + merged.skipped + " 张", { type: "error" });
-      return merged.images;
-    });
+    const merged = appendPendingImages(pendingRef.current, compressed);
+    setPendingImages(merged.images);
+    pendingRef.current = merged.images;
+    if (merged.skipped > 0) showToast("一次最多发送 10 张图片，已忽略 " + merged.skipped + " 张", { type: "error" });
     followRef.current = true;
   }, []);
 
