@@ -224,6 +224,11 @@ export async function listConversations(query = ""): Promise<AiConversationMeta[
   return await listAiConversations(db, query);
 }
 
+/** 只读取某条历史会话（不切换当前会话；历史详情页用）。 */
+export async function readConversationDetail(id: string): Promise<StoredAiConversation | null> {
+  return readConversationFile(id);
+}
+
 /** 切到某条历史会话（会先取消在途请求）。 */
 export async function openConversation(id: string): Promise<boolean> {
   if (activeRequestId) {

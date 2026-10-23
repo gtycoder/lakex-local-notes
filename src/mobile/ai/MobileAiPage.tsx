@@ -10,7 +10,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { showToast } from "../ui/toastBus";
 import { AiCorpusSheet, type CorpusCandidate } from "./AiCorpusSheet";
 import { AiMarkdown } from "./AiMarkdown";
-import { AiHistorySheet } from "./AiHistorySheet";
+import { AiHistoryPage } from "./AiHistoryPage";
 import { AiSendSheet } from "./AiSendSheet";
 import {
   addCorpusDoc,
@@ -20,6 +20,7 @@ import {
   init,
   listConversations,
   newConversation,
+  readConversationDetail,
   openConversation,
   removeCorpusDoc,
   retry,
@@ -30,7 +31,6 @@ import {
   toggleSend,
   type AiMessage,
 } from "./aiChatStore";
-import type { AiConversationMeta } from "../data/aiConversationRepository";
 import { answerTitle, lakeBodyFromText, suggestions, takeCorpus } from "./aiSession";
 
 export interface MobileAiPageProps {
@@ -49,8 +49,6 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   const [sendOpen, setSendOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyItems, setHistoryItems] = useState<AiConversationMeta[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [candidates, setCandidates] = useState<CorpusCandidate[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,17 +63,6 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
     const node = listRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [chat.messages, chat.busy]);
-
-  const loadHistory = useCallback(async (query: string) => {
-    setHistoryLoading(true);
-    try {
-      setHistoryItems(await listConversations(query));
-    } catch {
-      showToast("读取历史对话失败", { type: "error" });
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
 
   const loadCandidates = useCallback(async () => {
     try {
@@ -261,20 +248,14 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         </button>
       </div>
 
-      <AiHistorySheet
+      <AiHistoryPage
         open={historyOpen}
-        items={historyItems}
-        loading={historyLoading}
-        onQuery={(query) => void loadHistory(query)}
-        onOpen={(id) => {
-          void openConversation(id).then((ok) => {
-            if (ok) setHistoryOpen(false);
-            else showToast("这条对话已不存在", { type: "error" });
-          });
-        }}
-        onDelete={(id) => { void deleteConversation(id).then(() => void loadHistory("")); }}
-        onClearAll={() => { void clearAllConversations().then(() => { setHistoryItems([]); setHistoryOpen(false); showToast("已清空全部 AI 历史对话"); }); }}
         onClose={() => setHistoryOpen(false)}
+        onList={listConversations}
+        onDetail={readConversationDetail}
+        onContinue={openConversation}
+        onDelete={deleteConversation}
+        onClearAll={clearAllConversations}
       />
       <AiCorpusSheet
         open={corpusOpen}

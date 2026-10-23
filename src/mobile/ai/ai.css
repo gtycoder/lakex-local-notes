@@ -133,3 +133,12 @@
 .ai-md__table th { background: var(--lake-bg-block); font-weight: var(--lake-font-weight-semibold); }
 .ai-md__table .is-center { text-align: center; }
 .ai-md__table .is-right { text-align: right; }
+
+/* ── AI 历史对话独立页（261023 P1.7）——层序压在 AI 页之上 */
+.ai-history-page { z-index: calc(var(--mobile-z-page) + 1); }
+.ai-history-meta { padding: 8px 16px 0; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.ai-history-body { padding-top: 10px; padding-bottom: 12px; }
+.ai-history-actions { padding: 8px 16px calc(12px + var(--mobile-bottom-safe-area)); }
+.ai-history-foot { padding: 12px 0 4px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); }
+.ai-history-row { width: 100%; text-align: left; }
+.ai-history-row__delete { flex: 0 0 auto; margin-left: 8px; color: var(--lake-text-3); }

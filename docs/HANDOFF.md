@@ -25,7 +25,7 @@
 - **261023 二次收口（用户定稿）**：① **后台继续流**；② **AI 页关闭不销毁会话**（模块级 `aiChatStore` + 常驻流订阅，后台 delta 继续累积，再进页面可看完整回答；App 进程结束才清空）；③ **移动端 Markdown 表格**（GFM 表头/对齐/单元格，零依赖、纯 React）；④ 图片附件维持"即将支持"占位（P2）。桌面 `MarkdownView` 仍无表格，未动。
 - **261023 三修（Markdown 解析器共用 + 桌面表格）**：解析器从桌面 `MarkdownView` 抽到 `src/core/markdown.ts`（块/行内 token + GFM 表格，纯数据）；桌面/移动端各自渲染（`.md-preview` / `.ai-md`），**桌面端同步支持表格**；bitable 静态护栏改指 core；移动端复测表格渲染正常。
 - **261023 四修（AI 会话设备本地持久化，用户定稿）**：只保留最近一次会话（消息 + 资料快照），存 App 私有 Data `ai/last-conversation.json`（BodyStore 原子写）；启动恢复、1s 防抖写、≤2MiB / 30 天 TTL；「新对话」与设置「清空本机对话」删除；**不存 API Key/端点/温度、不进 S3**。
-- **261023 五修（AI 历史对话，用户定稿）**：多会话落设备本地——每会话 `ai/conversations/{id}.json` + SQLite 索引表 `ai_conversations`（schema v4）；顶栏「历史」= 列表 + title/preview 搜索 + 切回/删除/清空全部；启动恢复最近一次；50 条 / 30 天淘汰（连带删文件）；旧 v1 单文件启动迁移。仍不进 S3、不存 Key。
+- **261023 五修（AI 历史对话，用户定稿）**：多会话落设备本地——每会话 `ai/conversations/{id}.json` + SQLite 索引表 `ai_conversations`（schema v4）；顶栏「历史」**独立全屏页**（列表 + title/preview 搜索 → 点开看完整对话详情 → 继续对话/删除；列表顶部清空全部）；启动恢复最近一次；50 条 / 30 天淘汰（连带删文件）；旧 v1 单文件启动迁移。仍不进 S3、不存 Key。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
 ### 261023(六) · 表格「一打开就待保存」：Univer 正文序列化不幂等 · **已修**
