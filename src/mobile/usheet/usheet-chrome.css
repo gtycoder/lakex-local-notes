@@ -198,21 +198,43 @@
 .mb-usheet-topbar__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .mb-usheet-topbar__zoom { min-width: 48px; font-size: var(--lake-font-size-micro); }
 
-/* ---------- 公式栏（编辑态主输入位；形态照原内核移动公式栏：✕ ✓ fx 输入 ▲） ---------- */
+/* ---------- 公式栏（编辑态主输入位；自绘「仿钉钉」：地址 + 输入 + ↵） ---------- */
 .mb-usheet-formula {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   height: 44px;
-  padding: 0 6px;
+  padding: 0 8px;
   background: var(--lake-bg-panel);
   border-top: 1px solid var(--lake-border-1);
+}
+.mb-usheet-formula__addr {
+  flex: none;
+  min-width: 42px;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  font-size: var(--lake-font-size-small);
+  color: var(--lake-text-2);
+  border-right: 1px solid var(--lake-border-1);
+  font-variant-numeric: tabular-nums;
+}
+.mb-usheet-formula__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+  caret-color: var(--lake-accent);
 }
 .mb-usheet-formula__btn {
   appearance: none;
   flex: none;
-  width: 38px;
+  width: 40px;
   height: 36px;
   border: 0;
   border-radius: var(--r-sm, 8px);
@@ -223,25 +245,6 @@
   justify-content: center;
 }
 .mb-usheet-formula__btn:active { background: var(--lake-bg-hover); }
-.mb-usheet-formula .is-confirm { color: var(--lake-status-ok); }
-.mb-usheet-formula .is-cancel { color: var(--lake-status-error); }
-.mb-usheet-formula__fx {
-  flex: none;
-  padding: 0 6px;
-  font-family: var(--lake-font-family-mono, ui-monospace, monospace);
-  font-size: var(--lake-font-size-small);
-  color: var(--lake-text-3);
-}
-.mb-usheet-formula__input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-small);
-}
 
 /* ---------- dock（与文档编辑器底部 dock 同款） ---------- */
 .mb-usheet-dock {

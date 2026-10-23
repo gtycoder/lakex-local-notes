@@ -177,10 +177,8 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     expect(calls.editable).toEqual([true]);
     const formula = host.querySelector(".mb-usheet-formula");
     expect(formula).toBeTruthy();
-    for (const label of ["取消编辑", "确认输入", "收起键盘"]) {
-      expect(formula!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
-    }
-    expect(formula!.querySelector(".mb-usheet-formula__fx")?.textContent).toBe("fx");
+    expect(formula!.querySelector(".mb-usheet-formula__addr")?.textContent).toBe("A1");
+    expect(formula!.querySelector('button[aria-label="确认输入"]')).toBeTruthy();
     expect(formula!.querySelector<HTMLInputElement>(".mb-usheet-formula__input")?.value).toBe("季度预算");
     const dock = host.querySelector(".mb-usheet-dock");
     expect(dock).toBeTruthy();

@@ -282,18 +282,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
   }, [getUniverAPI, refreshCellFmt, scheduleFlush]);
 
-  /** ✕ = 放弃本次输入（恢复单元格原值），并收起键盘。 */
-  const cancelFormula = useCallback(() => {
-    setFormulaValue(cellFmt.value);
-    formulaValueRef.current = cellFmt.value;
-    try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
-  }, [cellFmt.value]);
-
-  /** ▲ = 只收起键盘（不提交、不改值）。 */
-  const collapseFormulaKeyboard = useCallback(() => {
-    try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
-  }, []);
-
   const onFormulaFocus = useCallback(() => {
     formulaInputFocusedRef.current = true;
     if (dockPanel) closeDockPanel(false);
@@ -417,6 +405,24 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (formulaInputFocusedRef.current) return;
     setFormulaValue(cellFmt.value);
   }, [cellFmt.address, cellFmt.value]);
+
+  // 编辑态点网格（非公式栏）= 先结束公式栏输入 → 选区命令后能正常回显新单元格内容。
+  useEffect(() => {
+    if (!editing) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.(".mb-usheet-formula")) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active.classList.contains("mb-usheet-formula__input")) {
+        try { active.blur(); } catch { /* 忽略 */ }
+        formulaInputFocusedRef.current = false;
+      }
+    };
+    host.addEventListener("pointerdown", onPointerDown, true);
+    return () => host.removeEventListener("pointerdown", onPointerDown, true);
+  }, [editing]);
 
   // 退出编辑态：收起面板（避免面板挂在阅读态上）。
   useEffect(() => {
@@ -594,11 +600,10 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       {editing && ready && (
         <>
           <SheetFormulaBar
+            address={cellFmt.address}
             value={formulaValue}
             onChange={setFormulaValue}
             onConfirm={commitFormula}
-            onCancel={cancelFormula}
-            onCollapse={collapseFormulaKeyboard}
             onFocusInput={onFormulaFocus}
             onBlurInput={() => { formulaInputFocusedRef.current = false; }}
           />
