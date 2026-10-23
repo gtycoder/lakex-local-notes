@@ -405,63 +405,12 @@
 .mb-usheet-bar__cell + .mb-usheet-bar__cell { border-left: 1px solid var(--lake-border-1); }
 .mb-usheet-bar__cell.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: 600; }
 .mb-usheet-bar__cell:active { background: var(--lake-bg-hover); }
-.mb-usheet-bar__glyph span { font-size: var(--lake-font-size-body); font-weight: 600; }
-.mb-usheet-bar__glyph span[data-style="italic"] { font-style: italic; }
-.mb-usheet-bar__glyph span[data-style="underline"] { text-decoration: underline; }
-.mb-usheet-bar__glyph span[data-style="strike"] { text-decoration: line-through; }
-.mb-usheet-bar-split { display: flex; gap: 6px; }
-.mb-usheet-bar-split .mb-usheet-bar { flex: 1 1 0; margin-bottom: 6px; }
-.mb-usheet-color-A { font-size: var(--lake-font-size-body); font-weight: 700; }
-.mb-usheet-fills {
-  background: var(--lake-bg-panel);
-  border-radius: var(--r-md, 10px);
-  overflow: hidden;
-  margin-bottom: 6px;
-}
-.mb-usheet-fills__row { display: flex; }
-.mb-usheet-fills__row + .mb-usheet-fills__row { border-top: 1px solid var(--lake-border-1); }
-.mb-usheet-fills__cell {
-  appearance: none;
-  flex: 1 1 0;
-  height: 40px;
-  border: 0;
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.mb-usheet-fills__cell + .mb-usheet-fills__cell { border-left: 1px solid var(--lake-border-1); }
-.mb-usheet-fills__cell:active { background: var(--lake-bg-hover); }
 .mb-usheet-swatch {
   width: 22px;
   height: 22px;
   border-radius: 50%;
   border: 1px solid var(--lake-border-2);
 }
-.mb-usheet-swatch--none { background: var(--lake-bg-panel); position: relative; }
-.mb-usheet-swatch--none::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  top: 9px;
-  height: 1.5px;
-  background: var(--lake-text-4);
-  transform: rotate(-45deg);
-}
-.mb-usheet-sizes { display: flex; background: var(--lake-bg-panel); border-radius: var(--r-md, 10px); overflow: hidden; }
-.mb-usheet-sizes__cell {
-  appearance: none;
-  flex: 1 1 0;
-  height: 42px;
-  border: 0;
-  background: transparent;
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-small);
-  font-variant-numeric: tabular-nums;
-}
-.mb-usheet-sizes__cell + .mb-usheet-sizes__cell { border-left: 1px solid var(--lake-border-1); }
-.mb-usheet-sizes__cell.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: 600; }
 
 
 /* ---------- T 面板（照文档 Aa 面板：分组白卡 + 40 高条目 + 2px 内缝；色板两行圆点） ---------- */
