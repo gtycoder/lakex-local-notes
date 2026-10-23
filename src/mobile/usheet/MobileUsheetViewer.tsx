@@ -39,7 +39,8 @@ import { SheetTopBar } from "./SheetTopBar";
 import { SheetFormulaBar } from "./SheetFormulaBar";
 import { SheetDock } from "./SheetDock";
 import { SheetDockPanel } from "./SheetDockPanel";
-import { useSheetKeyboardOpen } from "./useSheetKeyboardOpen";
+import { useKeyboard } from "../hooks/useKeyboard";
+import { capturePanelHeight, dockKbOffset } from "../editor/editSurfaceModel";
 import { showToast } from "../ui/toastBus";
 import { SHEET_ZOOM_LEVELS, type SheetDockId, type SheetMoreId } from "./usheetChromeModel";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
@@ -105,8 +106,17 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (setUsheetCrosshair(api, next)) setCrosshairOn(next);
   }, [crosshairOn, getUniverAPI]);
 
-  /** 编辑态 dock 面板（null = 收起）；面板**占住键盘区域**展开（与文档 dock 一致）。 */
+  /** 编辑态 dock 面板状态机（照文档 EditorDock：open/closing/closingHold/panelHeight，覆盖键盘区、滑入滑出）。 */
   const [dockPanel, setDockPanel] = useState<SheetDockId | null>(null);
+  const [renderedPanel, setRenderedPanel] = useState<SheetDockId | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelClosing, setPanelClosing] = useState(false);
+  const [panelClosingHold, setPanelClosingHold] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(300);
+  const panelCloseTimerRef = useRef(0);
+  const panelFallbackTimerRef = useRef(0);
+  /** 公式栏展开多行（最右按钮）。 */
+  const [formulaExpanded, setFormulaExpanded] = useState(false);
   /** 更多面板内的下钻（数字格式 / 边框 / 公式）。 */
   const [dockSub, setDockSub] = useState<"numfmt" | "border" | "formula" | null>(null);
   const [sheetListAnchor, setSheetListAnchor] = useState<HTMLElement | null>(null);
@@ -115,7 +125,10 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const formulaValueRef = useRef("");
   formulaValueRef.current = formulaValue;
   const formulaInputFocusedRef = useRef(false);
-  const keyboardOpen = useSheetKeyboardOpen();
+  const { base: shellHeight, innerHeight, offset: edgeToEdgeOffset, height: keyboardHeight, keyboardOpen } = useKeyboard();
+  /** 历史最大键盘高：打开面板时若键盘已收起（height=0），也用它捕获面板高度，避免与真键盘高度差出「工具栏跳一下」。 */
+  const keyboardHeightRef = useRef(0);
+  if (keyboardHeight > keyboardHeightRef.current) keyboardHeightRef.current = keyboardHeight;
   /** 视图：冻结行列的本机状态（cycle：none → 首行 → 首列）。 */
   const [freezeState, setFreezeState] = useState<"none" | "row" | "col">("none");
   /** 撤销/重做可用态（内核没有公开的 canUndo，这里按命令流维护近似深度）。 */
@@ -239,20 +252,41 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     }, 20);
   }, []);
 
+  const finishPanelClose = useCallback(() => {
+    if (panelCloseTimerRef.current) { window.clearTimeout(panelCloseTimerRef.current); panelCloseTimerRef.current = 0; }
+    if (panelFallbackTimerRef.current) { window.clearTimeout(panelFallbackTimerRef.current); panelFallbackTimerRef.current = 0; }
+    setPanelClosing(false);
+    setPanelClosingHold(false);
+    setRenderedPanel(null);
+  }, []);
+
+  /** 收面板：restore = 放回键盘（用户定稿：一级 ✕ 就是恢复键盘）。内容保持到键盘盖住（closingHold）再撤。 */
   const closeDockPanel = useCallback((restoreKeyboard: boolean) => {
     setDockPanel(null);
     setDockSub(null);
-    if (restoreKeyboard) {
-      setImeSuppressed(false);
-      focusFormulaInput();
-    }
-  }, [setImeSuppressed, focusFormulaInput]);
+    setPanelOpen(false);
+    setImeSuppressed(false);
+    if (!restoreKeyboard) { finishPanelClose(); return; }
+    setPanelClosing(true);
+    setPanelClosingHold(true);
+    focusFormulaInput();
+    if (panelFallbackTimerRef.current) window.clearTimeout(panelFallbackTimerRef.current);
+    panelFallbackTimerRef.current = window.setTimeout(finishPanelClose, 1800);
+  }, [setImeSuppressed, focusFormulaInput, finishPanelClose]);
 
   const openDockPanel = useCallback((id: SheetDockId) => {
+    if (panelCloseTimerRef.current) { window.clearTimeout(panelCloseTimerRef.current); panelCloseTimerRef.current = 0; }
+    if (panelFallbackTimerRef.current) { window.clearTimeout(panelFallbackTimerRef.current); panelFallbackTimerRef.current = 0; }
     setDockPanel(id);
     setDockSub(null);
+    setRenderedPanel(id);
+    setPanelOpen(true);
+    setPanelClosing(false);
+    setPanelClosingHold(false);
     setImeSuppressed(true);
-  }, [setImeSuppressed]);
+    // 面板高度 = 打开时捕获的键盘区高度（照文档 capturePanelHeight；优先用历史实测键盘高，下限 280）。
+    setPanelHeight(capturePanelHeight(Math.max(keyboardHeight, keyboardHeightRef.current)));
+  }, [setImeSuppressed, keyboardOpen, keyboardHeight]);
 
   const toggleDockPanel = useCallback((id: SheetDockId) => {
     if (dockPanel === id) { closeDockPanel(true); return; }
@@ -406,6 +440,15 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     setFormulaValue(cellFmt.value);
   }, [cellFmt.address, cellFmt.value]);
 
+  // 键盘盖住面板区后，再把面板内容撤掉（文档 dock 的 closingHold 同款；避免「面板先消失、键盘还没升」的闪烁）。
+  useEffect(() => {
+    if (!panelClosing) return;
+    if (!keyboardOpen) return;
+    if (panelCloseTimerRef.current) window.clearTimeout(panelCloseTimerRef.current);
+    panelCloseTimerRef.current = window.setTimeout(finishPanelClose, 240);
+    return () => { if (panelCloseTimerRef.current) { window.clearTimeout(panelCloseTimerRef.current); panelCloseTimerRef.current = 0; } };
+  }, [panelClosing, keyboardOpen, finishPanelClose]);
+
   // 编辑态点网格（非公式栏）= 先结束公式栏输入 → 选区命令后能正常回显新单元格内容。
   useEffect(() => {
     if (!editing) return;
@@ -429,6 +472,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (editing) return;
     setDockPanel(null);
     setDockSub(null);
+    setFormulaExpanded(false);
+    setPanelOpen(false);
+    setPanelClosing(false);
+    setPanelClosingHold(false);
+    setRenderedPanel(null);
   }, [editing]);
 
   useEffect(() => {
@@ -571,9 +619,30 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
 
 
 
+  // 底部几何（照文档 dock：kbOffset 给 fixed 工具条与面板定位；与键盘/面板过渡同步，不跳）。
+  const kbOffset = dockKbOffset({
+    panelOpen: !!dockPanel,
+    closing: panelClosing,
+    innerHeight,
+    shellHeight,
+    panelHeight,
+    edgeToEdgeOffset,
+  });
   // 退出编辑态时收起面板（避免面板挂在阅读态上）。
   return (
-    <div className={"mobile-usheet" + (editing ? " is-editing" : " is-readonly")} ref={hostRef} data-prevent-swipe>
+    <div
+      className={"mobile-usheet" + (editing ? " is-editing" : " is-readonly")}
+      ref={hostRef}
+      data-prevent-swipe
+      style={
+        editing
+          ? {
+              ["--mb-usheet-kb-offset" as string]: kbOffset + "px",
+              ["--mb-usheet-formula-h" as string]: (formulaExpanded ? 148 : 44) + "px",
+            }
+          : undefined
+      }
+    >
       {ready && (
         <SheetTopBar
           sheets={sheets}
@@ -597,13 +666,16 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         />
       )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
+      {editing && ready && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
       {editing && ready && (
         <>
           <SheetFormulaBar
             address={cellFmt.address}
             value={formulaValue}
+            expanded={formulaExpanded}
             onChange={setFormulaValue}
             onConfirm={commitFormula}
+            onToggleExpand={() => setFormulaExpanded((value) => !value)}
             onFocusInput={onFormulaFocus}
             onBlurInput={() => { formulaInputFocusedRef.current = false; }}
           />
@@ -617,9 +689,17 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
             onRedo={handleRedo}
             onKeyboard={onDockKeyboard}
           />
-          {dockPanel && (
-            <SheetDockPanel
-              open={dockPanel}
+          {renderedPanel && (
+            <div
+              className="mb-usheet-panel"
+              data-open={panelOpen || panelClosingHold ? "1" : "0"}
+              data-closing={panelClosing ? "1" : undefined}
+              style={{ ["--mb-usheet-panel-h" as string]: panelHeight + "px" }}
+              aria-hidden={!panelOpen}
+            >
+              <div className="mb-usheet-panel__inner">
+                <SheetDockPanel
+              open={renderedPanel}
               fmt={cellFmt}
               filterOn={false}
               freeze={freezeState}
@@ -636,9 +716,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
               onView={handleView}
               onZoom={handleZoomLevel}
               onMore={handleMore}
-              onMoreSub={handleMoreSub}
-              onSubBack={() => setDockSub(null)}
-            />
+                  onMoreSub={handleMoreSub}
+                  onSubBack={() => setDockSub(null)}
+                />
+              </div>
+            </div>
           )}
         </>
       )}

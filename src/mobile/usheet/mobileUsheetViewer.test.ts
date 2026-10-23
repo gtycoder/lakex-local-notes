@@ -179,6 +179,7 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     expect(formula).toBeTruthy();
     expect(formula!.querySelector(".mb-usheet-formula__addr")?.textContent).toBe("A1");
     expect(formula!.querySelector('button[aria-label="确认输入"]')).toBeTruthy();
+    expect(formula!.querySelector('button[aria-label="展开多行"]')).toBeTruthy();
     expect(formula!.querySelector<HTMLInputElement>(".mb-usheet-formula__input")?.value).toBe("季度预算");
     const dock = host.querySelector(".mb-usheet-dock");
     expect(dock).toBeTruthy();
@@ -227,7 +228,10 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     }
     expect(panel!.querySelectorAll(".mb-usheet-swatch").length).toBe(14);
     await click(host, "关闭文字格式");
-    expect(host.querySelector(".mb-usheet-panel")).toBeNull();
+    // 关闭后要么保持挂载（closingHold，等键盘盖住）且 data-open=0，要么已卸载（jsdom 无键盘）。
+    const closingPanel = host.querySelector(".mb-usheet-panel");
+    // 关闭过渡中：panel 仍挂载且带 data-closing=1（等键盘盖住才卸载，与文档 dock 同款）。
+    expect(!closingPanel || closingPanel.getAttribute("data-closing") === "1" || closingPanel.getAttribute("data-open") === "0").toBe(true);
     root.unmount();
   });
 

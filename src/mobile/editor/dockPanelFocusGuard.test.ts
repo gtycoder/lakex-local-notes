@@ -14,10 +14,11 @@ const USHEET = read("src/mobile/usheet/MobileUsheetViewer.tsx");
 const HOOK_CALL = /\buse(?:State|Ref|Effect|LayoutEffect|Callback|Memo|Context)\s*\(/g;
 
 describe("编辑面：必要结构护栏", () => {
-  it("表格锚定卡片不再复制底部面板/输入法状态机", () => {
-    for (const token of ["closingHold", "renderedPanel", "panelHeight", "inSetback"]) {
-      expect(USHEET, `MobileUsheetViewer 不应再持有 ${token}`).not.toContain(token);
-    }
+  it("表格侧面板状态机为**用户定稿的独立实现**（261023：照抄文档 dock 的展开/收起），但仍不得复用 useEditSurface", () => {
+    // 261023 用户明确要求「全盘参考文档工具栏展开收起，不行就照抄」⇒ 表格侧自持 open/closing/closingHold。
+    expect(USHEET).not.toContain("useEditSurface(");
+    expect(USHEET).toContain("closingHold");
+    expect(USHEET).toContain("data-open");
   });
 
   it("编辑面 owner 只有 useEditSurface：dock 不再自己挂全局焦点监听", () => {

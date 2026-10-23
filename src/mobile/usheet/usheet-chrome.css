@@ -198,60 +198,31 @@
 .mb-usheet-topbar__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .mb-usheet-topbar__zoom { min-width: 48px; font-size: var(--lake-font-size-micro); }
 
-/* ---------- 公式栏（编辑态主输入位；自绘「仿钉钉」：地址 + 输入 + ↵） ---------- */
+/* ---------- 公式栏（fixed；底距 = --mb-usheet-kb-offset + dock 高，与文档工具栏同一套几何） ---------- */
 .mb-usheet-formula {
-  flex: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--mb-usheet-kb-offset, 0px) + var(--mb-usheet-dock-h, 52px));
+  z-index: 21;
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 44px;
+  height: var(--mb-usheet-formula-h, 44px);
   padding: 0 8px;
   background: var(--lake-bg-panel);
   border-top: 1px solid var(--lake-border-1);
 }
-.mb-usheet-formula__addr {
-  flex: none;
-  min-width: 42px;
-  height: 30px;
-  line-height: 30px;
-  text-align: center;
-  font-size: var(--lake-font-size-small);
-  color: var(--lake-text-2);
-  border-right: 1px solid var(--lake-border-1);
-  font-variant-numeric: tabular-nums;
-}
-.mb-usheet-formula__input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-body);
-  caret-color: var(--lake-accent);
-}
-.mb-usheet-formula__btn {
-  appearance: none;
-  flex: none;
-  width: 40px;
-  height: 36px;
-  border: 0;
-  border-radius: var(--r-sm, 8px);
-  background: transparent;
-  color: var(--lake-text-2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.mb-usheet-formula__btn:active { background: var(--lake-bg-hover); }
-
 /* ---------- dock（与文档编辑器底部 dock 同款） ---------- */
 .mb-usheet-dock {
-  flex: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--mb-usheet-kb-offset, 0px);
+  z-index: 22;
   display: flex;
   align-items: center;
-  height: 52px;
+  height: var(--mb-usheet-dock-h, 52px);
   background: var(--lake-bg-panel);
   border-top: 1px solid var(--lake-border-1);
 }
@@ -287,22 +258,34 @@
 .mb-usheet-dock__glyph { font-size: var(--lake-font-size-body); font-weight: 700; line-height: 1; }
 .mb-usheet-dock__kb { margin: 0 4px; border-left: 1px solid var(--lake-border-1); border-radius: 0; width: 48px; }
 
-/* ---------- 面板（占住键盘区域） ---------- */
+/* ---------- 面板（fixed 占键盘区；照文档 .med-panel：高度 = --mb-usheet-kb-offset，内容滑入滑出） ---------- */
 .mb-usheet-panel {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  height: var(--mb-usheet-panel-h, 300px);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  height: var(--mb-usheet-kb-offset, 0px);
+  max-height: 60dvh;
+  overflow: hidden;
   background: var(--lake-bg-block);
   border-top: 1px solid var(--lake-border-1);
 }
+.mb-usheet-panel[data-closing="1"] { pointer-events: none; }
 .mb-usheet-panel__inner {
-  flex: 1 1 auto;
-  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px 10px 10px;
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform 160ms var(--lake-ease-exit, ease-out), opacity 160ms var(--lake-ease-exit, ease-out);
 }
+.mb-usheet-panel[data-open="0"] .mb-usheet-panel__inner { transform: translateY(100%); opacity: 0; }
+.mb-usheet-panel__body { display: flex; flex-direction: column; }
+/* 编辑态底部留白 = 公式栏 + dock（fixed 工具条覆盖在这块留白上，网格不被挡） */
+.mb-usheet-chrome-spacer { flex: none; height: calc(var(--mb-usheet-kb-offset, 0px) + var(--mb-usheet-formula-h, 44px) + var(--mb-usheet-dock-h, 52px)); }
 
 /* 插入：上排 4 连块（钉钉式）+ 4 列白块（文档插入面板同款） */
 .mb-usheet-inserter {

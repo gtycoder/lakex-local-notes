@@ -74,14 +74,12 @@ export interface SheetDockPanelProps {
 export function SheetDockPanel(props: SheetDockPanelProps) {
   const { open, sub } = props;
   return (
-    <div className="mb-usheet-panel" data-open={open} role="region" aria-label={SHEET_DOCK_ITEMS.find((item) => item.id === open)?.label}>
-      <div className="mb-usheet-panel__inner">
-        {open === "insert" ? <InsertPanel {...props} /> : null}
-        {open === "format" ? <FormatPanel {...props} /> : null}
-        {open === "data" ? <DataPanel {...props} /> : null}
-        {open === "view" ? <ViewPanel {...props} /> : null}
-        {open === "more" ? (sub ? <MoreSubPanel {...props} sub={sub} /> : <MorePanel {...props} />) : null}
-      </div>
+    <div className="mb-usheet-panel__body" data-open={open} role="region" aria-label={SHEET_DOCK_ITEMS.find((item) => item.id === open)?.label}>
+      {open === "insert" ? <InsertPanel {...props} /> : null}
+      {open === "format" ? <FormatPanel {...props} /> : null}
+      {open === "data" ? <DataPanel {...props} /> : null}
+      {open === "view" ? <ViewPanel {...props} /> : null}
+      {open === "more" ? (sub ? <MoreSubPanel {...props} sub={sub} /> : <MorePanel {...props} />) : null}
     </div>
   );
 }
