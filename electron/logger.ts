@@ -7,7 +7,7 @@
  * - 现场覆盖：LAKE_LOG_LEVEL=debug|info|warn|error（file+renderer）、LAKE_LOG_CONSOLE=1（开 console）。
  *
  * 约定（docs/LOGGING.md）：
- * - 耗时一律 [perf] <label> <ms>ms key=value（formatPerf，跨进程同一来源 src/core/logFormat.ts）；
+ * - 耗时一律 [perf] <label> <ms>ms key=value（perfMessage，跨进程同一来源 src/core/logFormat.ts）；
  * - 错误一律带 error="Name: message" + 前 3 帧调用栈；不记录正文内容/密钥；
  * - 落盘目录 userData/logs/local-lakex-notes.log，10MB 轮转（electron-log 默认保留一份 .old）。
  *
@@ -16,8 +16,8 @@
 import path from "node:path";
 import { app } from "electron";
 import electronLog from "electron-log/main";
-import { formatLogFields, type LogFields } from "../src/core/logFormat.js";
-import { resolveLogLevels, type LogLevel, type LogLevelConfig } from "./logLevels.js";
+import { formatLogFields, joinConsoleArgs, type LogFields } from "../src/core/logFormat.js";
+import { resolveLogLevels, type LogLevelConfig } from "./logLevels.js";
 
 /** 是否运行在真实 Electron 主进程（vitest 里 process.versions.electron 不存在） */
 const isElectronMain = typeof process !== "undefined" && !!process.versions?.electron;
@@ -52,6 +52,7 @@ export function initLogger(options: { isPackaged?: boolean } = {}): LogLevelConf
   electronLog.transports.file.level = activeLevels.file;
   electronLog.transports.console.level = activeLevels.console;
   electronLog.transports.console.format = lineFormat();
+  installConsoleBridge();
   return activeLevels;
 }
 
@@ -71,9 +72,9 @@ export const log = {
   ipc: electronLog.scope("ipc"),
   /** 启动链路（splash / window / ready 时序）。 */
   boot: electronLog.scope("boot"),
+  /** 主进程 console.* 桥接（历史快照/孤儿资源/资源服务等既有 console.warn 的落点）。 */
+  main: electronLog.scope("main"),
 } as const;
-
-export type LogScope = keyof typeof log;
 
 /** 启动上下文：排障时先看这一行（版本 / 平台 / 数据目录 / 生效级别）。 */
 export function logStartupInfo(extra?: LogFields): void {
@@ -106,11 +107,37 @@ export function logHeapPeak(label: string): void {
   }
 }
 
-/** 供将来按级别动态调整（设置页/诊断入口）；当前未接线，保留单一入口。 */
-export function applyLogLevel(level: LogLevel): void {
-  activeLevels = { ...activeLevels, file: level, renderer: level };
-  if (!isElectronMain) return;
-  electronLog.transports.file.level = level;
+let consoleBridgeInstalled = false;
+
+/**
+ * 主进程 console.* → 日志文件（261023）。
+ *
+ * 背景：主进程有 30+ 处 console.warn/error（历史快照失败 / 孤儿资源清理 / 资源服务异常 / 小记恢复…），
+ * 打包版没有终端 ⇒ 这些告警**原本从不落盘**，正式环境等于没有。桥接后统一进 `(main)` 作用域。
+ *
+ * 为什么不会回环 / 重复：electron-log 的 console transport 在 require 时就把原始 console 方法
+ * 快照进模块内（node_modules/electron-log/src/node/transports/console.js 的 consoleMethods），
+ * 我们的包装发生在快照之后 ⇒ 它仍调用原始方法，log.* 的输出不会二次经过桥接。
+ */
+export function installConsoleBridge(): void {
+  if (consoleBridgeInstalled || !isElectronMain) return;
+  consoleBridgeInstalled = true;
+  const target = console as unknown as Record<string, (...args: unknown[]) => void>;
+  const routes: Record<string, (message: string) => void> = {
+    error: (message) => log.main.error(message),
+    warn: (message) => log.main.warn(message),
+    info: (message) => log.main.info(message),
+    debug: (message) => log.main.debug(message),
+    log: (message) => log.main.info(message),
+  };
+  for (const method of ["error", "warn", "info", "debug", "log"]) {
+    const original = target[method].bind(console);
+    target[method] = (...args: unknown[]) => {
+      const line = joinConsoleArgs(args);
+      if (line) routes[method]?.(line);
+      original(...args);
+    };
+  }
 }
 
 // 非 Electron 环境（vitest）：electron-log 默认 console transport 会打满测试输出，关掉。

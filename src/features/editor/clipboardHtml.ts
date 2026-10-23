@@ -261,7 +261,8 @@ function armPasteFlush(): void {
 function flushPasteWindow(): void {
   if (pasteStats.timer !== null) { window.clearTimeout(pasteStats.timer); pasteStats.timer = null; }
   if (!pasteStats.open) return;
-  const fields = { bytes: pasteStats.bytes, getData: pasteStats.getData, guard: pasteStats.guard };
+  // chars = 剪贴板 HTML 的字符数（不是字节数；中文页面两者差约 2–3 倍，别混用）
+  const fields = { chars: pasteStats.bytes, getData: pasteStats.getData, guard: pasteStats.guard };
   const upgradeMs = pasteStats.upgradeMs;
   pasteStats.open = false;
   rlog.perf("paste.html", upgradeMs, fields);

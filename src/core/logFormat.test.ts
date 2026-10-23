@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeError, errorFields, formatLogFields, perfMessage } from "./logFormat.js";
+import { describeError, errorFields, formatLogFields, joinConsoleArgs, perfMessage } from "./logFormat.js";
 
 /**
  * 日志行格式是**可排查性**的基础（能被 grep、能被事后聚合），所以单独锁住。
@@ -27,6 +27,18 @@ describe("日志字段格式化", () => {
     expect(perfMessage("note.save", 12.4, { chars: 3456 })).toBe("[perf] note.save 12ms chars=3456");
     expect(perfMessage("boot.ready", 0)).toBe("[perf] boot.ready 0ms");
     expect(perfMessage("paste.html", Number.NaN)).toBe("[perf] paste.html 0ms");
+  });
+});
+
+describe("主进程 console 参数拼接", () => {
+  it("字符串原样、Error 转 Name: message、对象 JSON 化、超长截断", () => {
+    expect(joinConsoleArgs(["[sync] 自动同步失败:"]).trim()).toBe("[sync] 自动同步失败:");
+    expect(joinConsoleArgs(["失败:", new Error("boom")])).toBe("失败: Error: boom");
+    expect(joinConsoleArgs([{ code: 7 }])).toBe('{"code":7}');
+    const long = joinConsoleArgs(["x".repeat(5000)]);
+    expect(long.length).toBeLessThan(4100);
+    expect(long.endsWith("…")).toBe(true);
+    expect(joinConsoleArgs([])).toBe("");
   });
 });
 

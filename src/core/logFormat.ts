@@ -44,6 +44,28 @@ export function perfMessage(label: string, ms: number, fields?: LogFields): stri
   return "[perf] " + label + " " + rounded + "ms" + formatLogFields(fields);
 }
 
+const MAX_CONSOLE_LINE = 4000;
+
+/** 主进程 console.* 的参数 → 一行文本（桥接到日志文件时用；超长截断）。 */
+export function joinConsoleArgs(args: unknown[]): string {
+  const parts: string[] = [];
+  for (const arg of args) {
+    if (typeof arg === "string") {
+      parts.push(arg);
+    } else if (arg instanceof Error) {
+      parts.push(describeError(arg));
+    } else {
+      try {
+        parts.push(typeof arg === "object" ? JSON.stringify(arg) : String(arg));
+      } catch {
+        parts.push(String(arg));
+      }
+    }
+  }
+  const text = parts.join(" ").trim();
+  return text.length > MAX_CONSOLE_LINE ? text.slice(0, MAX_CONSOLE_LINE) + "…" : text;
+}
+
 /** 错误 → "Name: message"（非 Error 变成字符串；不吞掉原始信息）。 */
 export function describeError(error: unknown): string {
   if (error instanceof Error) return (error.name || "Error") + ": " + error.message;

@@ -178,6 +178,7 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
         result.quickNotes = quick;
       } catch (error) {
         result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
+        log.sync.warn("[sync] 小记同步失败（本轮其余部分不受影响）" + formatLogFields(errorFields(error)));
         report({ phase: "quick-notes", message: `小记同步失败：${String(error)}` });
       }
       store.recordSyncResult(JSON.stringify(result));
@@ -186,6 +187,10 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       logHeapPeak("sync");
       return result;
     });
+  } catch (error) {
+    // 同步失败必须留证据（正式环境没有终端，别只靠调用点的 console.warn）。
+    log.sync.error("[sync] 同步失败" + formatLogFields({ ...errorFields(error), ms: Date.now() - fullSyncStart }));
+    throw error;
   } finally {
     syncInFlight = false;
     clearQuitDeadline();

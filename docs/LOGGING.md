@@ -28,7 +28,7 @@
 
 ## 3. 作用域（每行前缀）
 
-主进程（`log.<scope>`）：`app` `sync` `s3` `quick` `history` `gc` `trash` `store` `renderer` `perf` `ipc` `boot`。
+主进程（`log.<scope>`）：`app` `sync` `s3` `quick` `history` `gc` `trash` `store` `renderer` `perf` `ipc` `boot` `main`。
 渲染层（`rlog.<level>("scope", ...)`）的 scope 是自由字符串，约定用：`boot` `window` `paste` `editor` `sync` `usheet` …
 
 ## 4. 格式约定
@@ -41,6 +41,7 @@
 - **耗时一律 `[perf] <label> <ms>ms`**（格式单一来源 `src/core/logFormat.ts` 的 `perfMessage`），后面跟字段。
 - **错误一律带字段** `error="Name: message"` + `stack="at … | at …"`（前 3 帧，`errorFields` / `rlog.error`）。
 - 字段规则：`k=v`，数字取整（避免亚毫秒抖动）；含空格/引号的值加 JSON 引号；没值的字段直接省略。
+- **主进程的 console.* 也会落盘**：`installConsoleBridge` 把 console.warn/error/info/debug/log 桥接到 `(main)` 作用域（electron-log 的 console transport 在加载时已快照原始方法 ⇒ 不会回环/重复）。新代码仍优先用 `log.<scope>`。
 - **不记录**：正文内容、密钥、S3 凭据、剪贴板原文。可以记录：noteId、filename、字节数、条数、阶段名。
 - 未捕获异常会留**两条**：我们的 `[window] 未捕获异常`（带 error/stack 字段）+ 浏览器自身的 `Uncaught …`（console 转发）。以带 stack 字段的那条为准，排障时不必当成两个问题。
 
@@ -56,14 +57,15 @@
 | `[ipc] <channel> 失败` | error | 同上 | 通道名 + 耗时 + 错误摘要 |
 | `[perf] note.save` | debug / info | `electron/store.ts` | 保存耗时 + 正文字数；≥200ms 或 ≥1MB 升 info |
 | `[perf] sync.round` | info | `electron/syncEngineController.ts` | 一轮同步：耗时、上传/下载条数、字节数、文件夹数、墓碑数、冲突数、warnings |
-| `[perf] paste.html` | info | `src/features/editor/clipboardHtml.ts` | 一次粘贴：bytes / getData 次数 / 我们升级耗时 / 大表护栏是否命中 |
+| `[perf] paste.html` | info | `src/features/editor/clipboardHtml.ts` | 一次粘贴：chars（HTML 字符数）/ getData 次数 / 我们升级耗时 / 大表护栏是否命中 |
 | `[perf] 资源上传 …` | info | `src/lib/uploadStats.ts` | 一次上传爆发：次数、远程数、墙钟、单次最长、重试、失败（阈值 ≥3 次/≥1.5s/有失败） |
-| `[perf] editor init` | info | `EditorTab` | 打开文档初始化耗时（现有 `[editor-perf]`） |
+| `[perf] editor.init` | info | `src/features/editor/EditorTab.tsx` | 打开文档初始化耗时 + noteId / mode / chars / locked |
 | `[heap]` | info | `logHeapPeak` | 主进程堆/常驻峰值（仅新峰值） |
 | `[crash]` | error/warn | `main.ts` | uncaughtException / unhandledRejection / render-process-gone / preload-error / child-process-gone |
 | `[security]` | warn | `main.ts` | 被阻止的窗口导航 |
 | `[ui]` | warn/info | `main.ts` | 窗口 unresponsive / responsive |
 | `[console-noise]` | info | `electron/consoleNoise.ts` | 一次粘贴的 N 条 CSP 拦截通知折叠成一行 |
+| `(main)` 桥接 | 原级 | `electron/logger.ts` `installConsoleBridge` | 主进程既有 `console.warn/error/info/debug/log` 统一落盘（打包版没有终端，不桥接就丢） |
 
 ## 6. 排查手册
 
