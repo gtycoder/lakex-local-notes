@@ -44,6 +44,13 @@ export function canAddImage(current: number): string | null {
   return current >= AI_IMAGES_MAX ? "一次最多发送 " + AI_IMAGES_MAX + " 张图片" : null;
 }
 
+/** 合并新图片（按上限截断），并返回被跳过的张数（UI 用于提示）。 */
+export function appendPendingImages(current: readonly AiPendingImage[], incoming: readonly AiPendingImage[]): { images: AiPendingImage[]; skipped: number } {
+  const room = Math.max(0, AI_IMAGES_MAX - current.length);
+  const take = incoming.slice(0, room);
+  return { images: [...current, ...take], skipped: incoming.length - take.length };
+}
+
 /** 待发送图片 → 请求内容块（text 由调用方另加）。 */
 export function imagePartsOf(images: readonly AiPendingImage[]): AiRequestPart[] {
   return images.slice(0, AI_IMAGES_MAX).map((image) => image.kind === "asset"

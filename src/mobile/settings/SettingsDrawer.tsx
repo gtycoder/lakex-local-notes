@@ -262,6 +262,22 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   }}>清空全部对话</button>
                 </div>
               </Block>
+              <Block itemId="ai-key-clear" name="API Key" desc={aiMeta?.hasKey ? "当前已配置（" + aiMeta.keyTail + "）；清除后需要重新填写才能使用。" : "尚未配置。"}>
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger" disabled={!aiMeta?.hasKey} onClick={() => {
+                    void confirmMobile({ title: "清除 API Key？", body: "清除后 AI 将无法出网，直到重新填写。", confirmText: "清除", danger: true })
+                      .then(async (ok) => {
+                        if (!ok) return;
+                        try {
+                          await bridge.aiSaveSettings({ apiKey: "" });
+                          const settings = await bridge.aiGetSettings();
+                          setAiMeta(settings);
+                          setAiMsg("已清除 API Key");
+                        } catch (error) { setAiMsg("清除失败：" + (error as Error).message); }
+                      });
+                  }}>清除 API Key</button>
+                </div>
+              </Block>
               <Block itemId="ai-actions" name="保存与连通性">
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--primary" onClick={() => void saveAiSettingsForm()}>保存</button>

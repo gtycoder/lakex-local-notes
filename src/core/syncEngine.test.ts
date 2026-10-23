@@ -1458,3 +1458,44 @@ describe("syncEngine（共享编排）", () => {
     expect(db.folders.has("nb1")).toBe(true); // 远端目录树导入
   });
 });
+
+describe("手动删数据：本地正文缺失时绝不上传空正文", () => {
+  const seedRemote = (s3: MemS3, body: string, h: string) => {
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+  };
+
+  it("云端有副本：拉回恢复 + warning（local_body_restored），不上传空正文", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const body = "<p>hi</p>"; const h = hashOf(body);
+    seedRemote(s3, body, h);
+    // 本地正文缺失；base 与远端一致 ⇒ 对账判为 local-wins（走上传环），由守卫改成"拉回"
+    db.notes.set("n1", row({ id: "n1", content: "" }));
+    db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: null });
+    const puts: string[] = [];
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => { puts.push(k); return origPut(k, b, o); };
+    const r = await syncNow(CFG, s3, db);
+    expect(puts.filter((k) => k.includes("/objects/"))).toEqual([]);
+    expect(db.notes.get("n1")!.content).toBe(body);
+    expect(r.warnings.some((w) => w.kind === "local_body_restored")).toBe(true);
+  });
+
+  it("云端也没有副本：warning（local_body_missing）跳过，不上传空正文", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.notes.set("n1", row({ id: "n1", content: "" }));
+    const puts: string[] = [];
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => { puts.push(k); return origPut(k, b, o); };
+    const r = await syncNow(CFG, s3, db);
+    expect(puts.filter((k) => k.includes("/objects/"))).toEqual([]);
+    expect(r.uploaded).toBe(0);
+    expect(r.warnings.some((w) => w.kind === "local_body_missing")).toBe(true);
+  });
+});

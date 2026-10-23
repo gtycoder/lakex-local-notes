@@ -46,6 +46,15 @@ describe("deriveDesktopView — tabInfos 文档类型透传", () => {
     expect(tabInfos.map((t) => t.kind)).toEqual(["usheet", "doc", "bitable"]);
   });
 
+  // 261023：正文文件缺失必须透传 —— 漏掉 ⇒ 缺正文文档会挂编辑器，又回到 ENOENT 报错提示。
+  it("bodyMissing 必须原样带出（缺正文文档渲染专用面板）", () => {
+    const { tabInfos } = deriveDesktopView(input([
+      { noteId: "m1", title: "缺正文", content: "", dirty: false, lastAccessedAt: 0, bodyMissing: true },
+      { noteId: "d1", title: "文档", content: "<p>x</p>", dirty: false, lastAccessedAt: 0 },
+    ]));
+    expect(tabInfos.map((t) => t.bodyMissing)).toEqual([true, undefined]);
+  });
+
   it("kind 缺省时归一为 doc（旧标签无类型字段）", () => {
     const { tabInfos } = deriveDesktopView(input([
       { noteId: "d1", title: "文档", content: "", dirty: false, lastAccessedAt: 0 },

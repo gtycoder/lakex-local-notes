@@ -530,8 +530,14 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         report.downloadedBytes += contentBytes.length;
         // D5：本机编辑成果被远端覆盖 → 先强制留档（协议 §4.2，防丢数据），再接受远端
         if (action.superseded && local) {
-          await db.createHistorySnapshot(rn.id, await contentOf(local), { title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, protectedDays: HISTORY_SNAPSHOT_PROTECT_DAYS });
-          supersededTracker.push(rn.id, rn.title);
+          const supersededContent = await contentOf(local);
+          if (supersededContent.trim() === "") {
+            // 本地正文文件已缺失（手动删除）：没有可留档的"本机编辑成果"，跳过留档但仍应用远端（把正文还原回来）。
+            report.warnings.push({ kind: "local_body_missing", noteId: rn.id, title: rn.title, message: `正文文件缺失，跳过本机留档（应用远端还原）: ${rn.id}` });
+          } else {
+            await db.createHistorySnapshot(rn.id, supersededContent, { title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, protectedDays: HISTORY_SNAPSHOT_PROTECT_DAYS });
+            supersededTracker.push(rn.id, rn.title);
+          }
         }
         if (opts?.strictAssets) {
           try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true, rn.title); }
@@ -599,6 +605,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       await db.log(`[tombstone] ${local.id} 上传软删条目（parentId=TRASH + trashedAt，非 deleted）`);
       // 回收站条目携带资源清单（对齐桌面：trash 上云带 assets，B 端下载全文+资源可恢复）
       const uploadContent = await contentOf(local);
+      if (uploadContent === "") {
+        // 正文文件已被手动删除：**绝不上传空正文**（会把空壳同步给其他端）。
+        report.warnings.push({ kind: "local_body_missing", noteId: local.id, title: local.title, message: `正文文件缺失，跳过软删条目上传: ${local.id}` });
+        continue;
+      }
       const entry = buildUploadEntry({
         // kind 必须透传：否则非 doc 文档（sheet/bitable/board）上云后在他端被当 doc 导入（260925 多端实测）。
         note: { id: local.id, title: local.title, parentId: TRASH_NOTEBOOK_ID, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, kind: local.kind, trashedAt: local.trashedAt, deletedFromParentId: local.deletedFromParentId ?? null },
@@ -626,6 +637,32 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       await db.log(`[decide] ${local.id} → upload（恢复=${localRestoring}）`);
       // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）。P3-4：解析登记为并发任务、环后执行。
       const uploadContent = await contentOf(local);
+      if (uploadContent === "") {
+        // 本地正文文件被手动删除：**绝不上传空正文**（会覆盖云端与其它设备）。
+        // 云端有副本 ⇒ 尝试拉回恢复（本地已无内容可丢；失败也只降级为 warning，不中止整轮）；
+        // 没有副本 ⇒ warning 跳过，等用户处置（历史恢复 / 删除）。
+        let restored = false;
+        if (rn && !remoteTrashed) {
+          try {
+            const bytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+            if (bytes != null && sha256Sync(bytes) === rn.contentHash) {
+              report.downloadedBytes += bytes.length;
+              await db.applyRemoteNote({ ...rn, parentId: rn.parentId, trashedAt: null, deleted: false }, decodeText(bytes));
+              if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false, rn.title);
+              await db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
+              report.appliedRemote++;
+              report.warnings.push({ kind: "local_body_restored", noteId: rn.id, title: rn.title, message: `本地正文缺失，已从云端拉回: ${rn.id}` });
+              restored = true;
+            }
+          } catch (error) {
+            await db.log(`[sync] 本地正文缺失、云端拉回失败（降级跳过）: ${local.id} ${(error as Error).message}`);
+          }
+        }
+        if (!restored) {
+          report.warnings.push({ kind: "local_body_missing", noteId: local.id, title: local.title, message: `正文文件缺失，跳过上传: ${local.id}` });
+        }
+        continue;
+      }
       const entry = buildUploadEntry({
         // kind 必须透传（同软删分支）：漏了的话 manifest 不含 kind → 他端把表格/画板当 doc 导入。
         note: { id: local.id, title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, kind: local.kind },

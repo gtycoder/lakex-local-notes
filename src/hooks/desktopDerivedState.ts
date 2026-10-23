@@ -78,6 +78,8 @@ export function deriveDesktopView(input: DesktopViewInput) {
 
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
+    // 261023：正文文件缺失必须透传（漏掉 ⇒ 缺正文文档会被当正常文档挂编辑器，又回到 ENOENT 报错）。
+    bodyMissing: tab.bodyMissing,
     icon: iconByNoteId.get(tab.noteId) ?? null,
     reloadKey: tab.reloadKey ?? 0,
     // v6：必须透传文档类型。漏掉它 ⇒ MultiTabEditor 收不到 kind=usheet，表格会被当成 Lake 文档用 EditorTab 渲染。

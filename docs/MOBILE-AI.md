@@ -526,43 +526,40 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 
 | 层 | 文件 | 说明 |
 |---|---|---|
-| 原生通道 | `android/.../AiChatPlugin.kt` · `SecretBox.kt` | Keystore 存配置；HttpURLConnection + SSE；ai:delta / ai:error / ai:done；aiChat / aiCancel / aiTestConnection / get·saveSettings |
-| 桥接 | `src/mobile/native/aiChat.ts` · `src/mobile/bridge/ai.ts` | 插件封装 + 域方法（含 `aiReadDocText`）；契约名单 +5（`lakeNativeContract` 55/56） |
-| core | `aiCorpus.ts` · `aiNetwork.ts` · `aiChatMessages.ts`（从 electron 上收） · `aiErrors.aiErrorInfoFromCode` | 资料块拼装 / 出网判据 / 统一预算 / 错误码中文映射 |
-| UI | `src/mobile/ai/`（MobileAiPage / AiCorpusSheet / AiSendSheet / AiMarkdown / aiSession / aiSettings / ai.css） | 全屏页、资料条、发送清单、流式、停止、错误重试、结果三动作（复制 / 存为新文档 / 存为小记） |
-| 接线 | `MobileApp.tsx`（lazy + aiOpen） · `HomePage.tsx`（AI 键） · `SettingsDrawer.tsx`（AI 子页） · `main.tsx`（ai.css） · `tokens.css`（--mobile-z-page） | 入口/设置/层序 |
-| 门禁 | `mobileLayers`（ai.css 234/1） · `mobileIndependence` · `ui-metrics` · `check:mobileui` · tsc · vitest（368 文件 / 2554 例） | 全绿 |
+| 原生通道 | `android/.../AiChatPlugin.kt` · `SecretBox.kt` | Keystore 存配置；HttpURLConnection + SSE；ai:delta / ai:error / ai:done；aiChat / aiCancel / aiTestConnection / get·saveSettings；内容块解析（text / image_url，资源图按 `{noteId,filename}` 读文件） |
+| 桥接 | `src/mobile/native/aiChat.ts` · `src/mobile/bridge/ai.ts` | 插件封装 + 域方法（`aiReadDocText` / `aiListNoteImages`）；调试契约 +5（55/56） |
+| core | `aiCorpus.ts` · `aiNetwork.ts` · `aiChatMessages.ts`（从 electron 上收） · `aiErrors.aiErrorInfoFromCode` · `core/markdown.ts`（与桌面共用解析器，含 GFM 表格） | 资料块 / 出网判据 / 统一预算 / 错误码 / Markdown 解析 |
+| 会话与历史 | `aiChatStore.ts` · `aiConversationPersist.ts` · `data/aiConversationRepository.ts`（schema v4 `ai_conversations`） | 模块级会话（关页不丢、后台继续）；每会话文件 `ai/conversations/{id}.json`；启动恢复最近一次；50 条 / 30 天 / 单份 2MiB；v1 单文件迁移 |
+| UI | `src/mobile/ai/`（MobileAiPage / AiHistoryPage / AiCorpusSheet / AiSendSheet / AiImageSheet / AiMarkdown / aiImages / aiSession / aiSettings / ai.css） | 全屏页、资料条与清单、历史（列表 + 详情 + 搜索 + 删除/清空）、图片（拍照/相册压缩 + 资料图片引用）、流式跟底可暂停、结果三动作 |
+| 接线 | `MobileApp.tsx`（lazy + aiOpen） · `HomePage.tsx`（AI 键） · `SettingsDrawer.tsx`（AI 子页：开关/端点/模型/Key/温度/连通性/清 Key/清历史） · `main.tsx`（ai.css） · `tokens.css`（--mobile-z-page） | 入口/设置/层序 |
+| 门禁 | tsc · vitest（379 文件 / 2616 例） · `check:core` · `check:mobileui` · `mobileLayers`（ai.css 329/1） · `git diff --check` | 全绿（并行桌面会话在途改动期间曾短暂红，与本模块无关） |
 
-### 设备实测（emulator-5554 + 小米 MiMo，261023）
-
-**配置**：`baseUrl=https://api.xiaomimimo.com/v1`、`model=mimo-v2.6-flash`；Key 经 `aiSaveSettings` 写入后只读回 `sk-****ju4z`；`aiTestConnection` **ok（≈0.9s）**；**重启 App/模拟器后仍可读回并连通**（Keystore 持久化 ✓）。
+### 设备实测（emulator-5554 + 小米 MiMo `mimo-v2.6-flash`）
 
 | 探针 | 结果 |
 |---|---|
-| 流式首字 | **≈1.2s**（短问答；长文创作首字略慢） |
-| 从发送到结束 | **≈1.8s**（71 字回答） |
-| 流式中止 | 点停止后正文冻结、显示「已停止」、按钮回到发送态；**之后的 delta 不再追加** |
-| 出网错误 | 不可达 baseUrl ⇒ `code=network`；坏 Key ⇒ `401` → `code=auth` +「Invalid API Key」（错误体已从 JSON 提取 message，不再把整段 JSON 塞进气泡） |
-| 带资料问答 | 选中 365 字文档 → 资料条/提示行/分隔行正确；回答**确实引用文档内容**并区分「资料集 vs 发送清单」 |
-| 切后台 | 后台 4s 再回前台：**未崩溃、流继续**（92 字 → 175 字）。**用户 261023 定稿：保留“继续流”**，不做后台中止 |
-| 离开 AI 页 | 流式期间点返回回首页、9s 后再进来：**完整回答还在**（会话存于模块级 store，订阅常驻）；「新对话」才清空；**App 进程结束 = 新会话** |
+| 配置/连通 | `aiTestConnection` ok ≈0.9s；重启 App/模拟器后 Key 仍可读（Keystore） |
+| 流式 | 首字 ≈1.2s；短问答 ≈1.8s；长文可滚动（用于跟底测试） |
+| 中止 | 正文冻结 +「已停止」，之后无新 delta |
+| 错误 | 不可达 baseUrl → `network`；坏 Key → `401 auth` +「Invalid API Key」 |
+| 带资料 | 选 365 字文档 → 回答引用文档内容；资料集/发送清单区分正确 |
+| 图片（P2） | 资料文档内纯红 PNG → 「什么颜色」答「红色」（引用图 → 原生读文件 → image_url 全链路通） |
+| 历史（P1.6/P1.7） | 两会话列表/搜索/切回完整流程/删除/重启恢复最近一次；「继续对话」载入当前会话 |
+| 跟底 | 流式中上滑 1.8s **不回弹**、出现「回到底部」，点击后回底 |
+| 后台/关页 | 切后台或关 AI 页后流继续；再进页面能看到完整回答 |
 
-截图（本地预览件 `docs/preview/`，未入库）：`ai-device-empty.png` · `ai-device-corpus.png` · `ai-device-corpus-chat.png` · `ai-device-streaming.png` · `ai-device-stopped.png` · `ai-device-error.png` · `ai-device-settings.png`。
+截图（本地预览件 `docs/preview/`，未入库）：`ai-device-*.png`（空态、资料、对话、流式、停止、错误、设置、历史列表/详情、图片待发送/回答、跟底暂停/回底）。
 
-**探针期间发现并修掉的两处**（都不在 happy path 上）：
+### 已修问题（探针期间发现）
 
-1. **Kotlin：delta 为 JSON null 时混入字符串 "null"**（`optString` 会把 null 变 "null"）→ 改用 `opt` 判类型；修前回答正文会出现 `nullnull…` 前缀。
-2. **移动端「彻底删除」在原生批量事务里重复 BEGIN**（`d.transaction` 内再调 `executeSet` 默认 `transaction:true`）⇒ 回收站 purge 报 `Already in transaction`，**删除一直失败**。修法：`executeSet` 增加 `{transaction}` 选项，事务内批量下发传 `false`；补单测 `sqliteDb.batch.test.ts`。实测 4 篇探针文档已全部 purge，回收站清空。
+1. Kotlin：`delta.content` 为 JSON null 时 `optString` 产出字符串 "null" → 改 `opt` 判类型。
+2. 移动端「彻底删除」事务嵌套（`d.transaction` 内 `executeSet` 再开事务）→ `executeSet` 增加 `{transaction}`，事务内传 false；补单测。
+3. `AiImageSheet` 的 `useMemo` 写在 early return 之后 ⇒ React #310 整树白屏 → 移到早退前。
 
-### 与设计的偏差 / 待办
+### 与本设计的偏差 / 待办
 
-1. **P0 探针已跑通主路径**（见上表）；仍缺：超时（read timeout）与限流（429）文案、后台策略拍板。
-2. **图片仍是 P2**：附件 ActionSheet 已按最终形态接线，拍照/相册/资源三项点了给「即将支持」提示（不假装可用）。
-3. **资料集冻结的实现口径**：首条消息发出后禁止增删资料（提示「换资料请新开对话」）；发送清单可随时改（文案已写清缓存重建代价）。
-4. **结果「存为新文档」**用「新建空文档 + 写入纯文本段落」，没有走内核编辑器（P1 无编辑器挂载）；后续若要保留 Markdown 结构，再评估内核写入。
-5. **未接设备门禁**：走查 23 屏尚未加 `ai-home`（需要设备；P1 验收第 7 条）。
-6. **Markdown 表格不渲染**：模型偶尔输出表格，当前最小渲染器按下标原样显示 `|` 文本；要不要支持表格是 P2 的小决定。
-7. **后台行为与设计稿不一致**：设计写「进后台即中止」，实测是继续流；需要你拍板保留哪种（继续更像 ChatGPT，中止更省流量）。
-8. **会话连续性（261023 定稿）**：AI 页关闭不销毁会话（模块级 `aiChatStore` + 常驻 `onAiStream`），后台流继续、再进来可看完整回答；**App 进程结束才清空**（仍不持久化）。若要跨 App 重启保留，需要单独拍板"保留最近一次会话"。
-9. **Markdown 表格（261023 定稿）**：解析器已抽到 `src/core/markdown.ts`（桌面/移动共用，含 GFM 表格）；**两端都渲染表格**（桌面 `.md-table`、移动 `.ai-md__table`），样式各走各的令牌；零依赖、纯 React 节点。图片仍不做（按原文呈现）。
-10. **未提交/未推送**：本批只落工作树，等用户验收后按仓库规则提交。
+1. **图片是「当轮附件」**：历史/持久化只保留 `[图片]` 占位，不重发旧图；若要做到「图片留在历史」需把图片 copy 进会话私有目录并纳入预算（另立）。
+2. **结果「存为新文档」**：新建空文档 + 纯文本段落，未走内核编辑器；Markdown 结构不保留。
+3. **未接设备门禁**：走查 23 屏尚未加 `ai-home` / `ai-history` 两屏；移动端 6 态基线仍陈旧（与 AI 无关）。
+4. **未实测**：拍照/相册系统选择器（纯 CDP 驱动不了）、429 限流文案、read timeout。
+5. **桌面 AI 未动**：本轮只动移动端 + 共用 core（markdown / aiChatMessages）。

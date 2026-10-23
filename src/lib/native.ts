@@ -17,6 +17,8 @@ export interface LakeNative {
   capabilities?: { browserClient: boolean; nativeDialog: boolean };
   bootstrap(): Promise<WorkspaceSnapshot>;
   readNote(id: string): Promise<NoteDocument>;
+  /** 正文文件是否缺失（只 stat；启动跳过缺正文文档用）。 */
+  noteBodyMissing(id: string): Promise<boolean>;
   getNoteDigest(id: string): Promise<NoteDigest | null>;
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   /** AI（P0）：设置读写/连通性测试/流式对话/取消；Key 绝不出主进程（视图已脱敏）。 */
@@ -220,6 +222,7 @@ export const native = {
   },
   bootstrap: () => api().bootstrap(),
   readNote: (id: string) => api().readNote(id),
+  noteBodyMissing: (id: string) => api().noteBodyMissing(id),
   getNoteDigest: (id: string) => api().getNoteDigest(id),
   setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   aiGetSettings: () => api().aiGetSettings(),

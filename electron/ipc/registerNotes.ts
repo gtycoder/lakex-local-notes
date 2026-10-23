@@ -43,6 +43,7 @@ export function registerNotesIpc(
 
   ipc.handle("bootstrap_workspace", () => store.bootstrap());
   ipc.handle("read_note", (id: string) => store.readNote(id));
+  ipc.handle("note_body_missing", (id: string) => store.isNoteBodyMissing(id));
   ipc.handle("get_note_digest", (id: string) => store.getNoteDigest(id));
   ipc.handle("create_note", (title: unknown) => store.createNote(assertTitle(title)));
   ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }) =>
