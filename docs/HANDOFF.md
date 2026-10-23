@@ -33,12 +33,12 @@
 - **格式（单一来源 `src/core/logFormat.ts`）**：一行一条；耗时统一 `[perf] label <ms>ms k=v`；错误带 `error=` + 前 3 帧 `stack=`；字段 `k=v`；不记正文/密钥。
 - **渲染层**：新增 `src/lib/log.ts`（debug 仅 DEV；perf 走 info）；`main.ts` 的 console-message 按 Electron 新旧签名映射级别（error 不再被压成 info）；入口装 window error / unhandledrejection 兜底。
 - **主进程**：logger 重写（10MB 轮转、`[start]` 启动上下文含版本/平台/userData/生效级别）、uncaughtException/unhandledRejection、preload-error、unresponsive/responsive、`[security]` 拦截导航、`[quit]` 时序、`[perf] boot.ready`。
-- **关键流程埋点**：`[perf] ipc.<channel>`（debug）+ `ipc.slow` ≥200ms（warn）+ 失败（error）；`[perf] note.save`（耗时+字数，慢保存升 info）；`[perf] sync.round`（耗时/条数/字节/墓碑/冲突/warnings）；`[perf] paste.html`（bytes/getData 次数/升级耗时/护栏命中）；沿用资源上传爆发统计与 CSP 折叠。
+- **关键流程埋点**：`[perf] ipc.<channel>`（debug）+ `ipc.slow` ≥200ms（warn）+ 失败（error）；`[perf] note.save`（耗时+字数，慢保存升 info）；`[perf] sync.round`（耗时/条数/字节/墓碑/冲突/warnings）；`[perf] paste.html`（chars/getData 次数/升级耗时/护栏命中）；沿用资源上传爆发统计与 CSP 折叠。
 - **文档**：新增 `docs/LOGGING.md`（分级 / 作用域 / 格式 / 埋点清单 / 排查手册 / 性能优化用法 / 新增埋点规范）；AGENTS §6 加一行；TROUBLESHOOTING §M 在上一批。
-- **实测（隔离实例）**：dev 日志 27 行（info 12 / debug 13 / error 2）——`[start]`、`boot.ready 1834ms`、逐次 ipc debug、`paste.html 0ms bytes=24 getData=9`、`note.save 2ms chars=181` 均正常；`LAKE_LOG_LEVEL=info` 时 12 行且 ipc debug = 0。
+- **实测（隔离实例）**：dev 日志 27 行（info 12 / debug 13 / error 2）——`[start]`、`boot.ready 1834ms`、逐次 ipc debug、`paste.html 0ms chars=24 getData=9`、`note.save 2ms chars=181` 均正常；`LAKE_LOG_LEVEL=info` 时 12 行且 ipc debug = 0。
 - **顺带发现（未修，登记待查）**：新建文档后渲染层抛 `IndexSizeError: Failed to execute 'getRangeAt' on 'Selection': 0 is not a valid index`（与本次改动无关，隔离实例必现；已由新增 `[window]` 兜底捕获）。
 - **门禁**：tsc 0 · 全库 vitest **375 文件 / 2561 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
-- **落点**：分支 `fix/paste-perf`（第 2 个 commit）；**已合入远端 master `bfa56509` 并推送三仓**。本地主树因并行会话未提交的 `docs/HANDOFF.md` 无法 FF，待其提交后 `git merge --ff-only origin/master`。
+- **落点**：分支 `fix/paste-perf`（第 2 个 commit）；**已随并行会话两笔一起进入 master `4d1184e2` 并推送三仓**（Gitee private/public、GitHub）。worktree 与分支已清理。
 
 ### 261023(四) · 粘贴整页网页：CSP 噪音折叠 + 上传爆发统计（分支 fix/paste-perf，未合并）· **待验收**
 
@@ -50,7 +50,7 @@
   - docs/TROUBLESHOOTING.md 新增 §M（症状 / 四条判据 / 结论 / 稳定复现时怎么查）。
 - **明确不做**：粘贴前把远程 img 换成占位。实测这 90+ 次被 CSP 拦截的请求只花 21ms / 20KB 日志；唯一能真正消除的实现 = 把粘贴改成异步预取再重派发（会改选区/撤销语义）⇒ 按 AGENTS §3#17 不做，等真有网络/大图瓶颈再单独立项。
 - **门禁**：tsc 0 · 全库 vitest **365 文件 / 2541 通过（17 skip）** · git diff --check ✓。
-- **落点**：worktree lake-notes-electron-worktrees/paste-perf（分支 fix/paste-perf，基于 master 73f63039）；**已随第二个 commit 合入远端 master `bfa56509` 并推送三仓**。
+- **落点**：worktree lake-notes-electron-worktrees/paste-perf（分支 fix/paste-perf，基于 master 73f63039）；**已合入 master `4d1184e2` 并推送三仓**。
 
 ### 261023(三) · 桌面逐页走查（隔离实例 + 合成夹具，用户点单）· **仅验证，无代码改动**
 
