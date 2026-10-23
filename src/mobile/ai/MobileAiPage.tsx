@@ -32,9 +32,9 @@ import {
   toggleSend,
   type AiMessage,
 } from "./aiChatStore";
-import { canAddImage, compressImageFile, type AiPendingImage } from "./aiImages";
+import { appendPendingImages, compressImageFile, type AiPendingImage } from "./aiImages";
 import { answerTitle, lakeBodyFromText, suggestions, takeCorpus } from "./aiSession";
-import { pickLocalFile } from "../ui/pickFile";
+import { pickLocalFile, pickLocalFiles } from "../ui/pickFile";
 
 export interface MobileAiPageProps {
   open: boolean;
@@ -57,6 +57,8 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   const [candidates, setCandidates] = useState<CorpusCandidate[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const followRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -66,26 +68,40 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
 
   useEffect(() => {
     const node = listRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
+    if (node && followRef.current) node.scrollTop = node.scrollHeight;
   }, [chat.messages, chat.busy]);
 
-  const addPickedImage = useCallback(async (file: File | null, source: string) => {
-    if (!file) return;
-    setPendingImages((prev) => {
-      const limitReason = canAddImage(prev.length);
-      if (limitReason) { showToast(limitReason, { type: "error" }); return prev; }
-      return prev;
-    });
-    try {
-      const compressed = await compressImageFile(file);
-      if (!compressed) { showToast(source + "：图片格式不支持或压缩失败", { type: "error" }); return; }
-      setPendingImages((prev) => {
-        if (canAddImage(prev.length)) { showToast("一次最多发送 10 张图片", { type: "error" }); return prev; }
-        return [...prev, { id: crypto.randomUUID(), kind: "temp", dataUrl: compressed.dataUrl, mimeType: compressed.mimeType, bytes: compressed.bytes }];
-      });
-    } catch {
-      showToast(source + "：读取图片失败", { type: "error" });
+  const onBodyScroll = useCallback(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
+    followRef.current = distance < 24;
+    setShowJump(distance >= 24);
+  }, []);
+
+  const jumpToBottom = useCallback(() => {
+    followRef.current = true;
+    setShowJump(false);
+    const node = listRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, []);
+
+  const addPickedImages = useCallback(async (files: readonly File[], source: string) => {
+    if (files.length === 0) return;
+    const compressed: AiPendingImage[] = [];
+    for (const file of files) {
+      try {
+        const image = await compressImageFile(file);
+        if (image) compressed.push({ id: crypto.randomUUID(), kind: "temp", dataUrl: image.dataUrl, mimeType: image.mimeType, bytes: image.bytes });
+      } catch { /* 单张失败跳过 */ }
     }
+    if (compressed.length === 0) { showToast(source + "：图片格式不支持或压缩失败", { type: "error" }); return; }
+    setPendingImages((prev) => {
+      const merged = appendPendingImages(prev, compressed);
+      if (merged.skipped > 0) showToast("一次最多发送 10 张图片，已忽略 " + merged.skipped + " 张", { type: "error" });
+      return merged.images;
+    });
+    followRef.current = true;
   }, []);
 
   const loadCandidates = useCallback(async () => {
@@ -200,7 +216,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         </div>
       )}
 
-      <div className="ai-body" ref={listRef}>
+      <div className="ai-body" ref={listRef} onScroll={onBodyScroll}>
         {chat.messages.length === 0 ? (
           <div className="ai-empty">
             <span className="ai-empty__logo" aria-hidden="true"><Sparkles size={24} /></span>
@@ -251,6 +267,10 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         </div>
       )}
 
+      {showJump && (
+        <button type="button" className="ai-jump" onClick={jumpToBottom}>回到底部</button>
+      )}
+
       <button
         type="button"
         className="ai-hint"
@@ -293,7 +313,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         onClose={() => setHistoryOpen(false)}
         onList={listConversations}
         onDetail={readConversationDetail}
-        onContinue={openConversation}
+        onContinue={async (id) => { setPendingImages([]); return openConversation(id); }}
         onDelete={deleteConversation}
         onClearAll={clearAllConversations}
       />
@@ -327,8 +347,8 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
           <div className="mb-actionsheet is-open" role="dialog" aria-modal="true" aria-label="附件">
             <div className="mb-actionsheet__group">
               <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); openCorpus(); }}><FileText size={18} />资料<span className="ai-action__sub">选择文档</span></button>
-              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFile("image/*", "environment").then((file) => addPickedImage(file, "拍照")); }}><Camera size={18} />拍照<span className="ai-action__sub">拍一张</span></button>
-              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFile("image/*").then((file) => addPickedImage(file, "相册")); }}><ImageIcon size={18} />相册<span className="ai-action__sub">从相册选</span></button>
+              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFile("image/*", "environment").then((file) => addPickedImages(file ? [file] : [], "拍照")); }}><Camera size={18} />拍照<span className="ai-action__sub">拍一张</span></button>
+              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFiles("image/*").then((files) => addPickedImages(files, "相册")); }}><ImageIcon size={18} />相册<span className="ai-action__sub">从相册选</span></button>
               <button type="button" className="mb-actionsheet__item" onClick={() => {
                 setActionsOpen(false);
                 if (chat.corpus.length === 0) { showToast("先选择资料文档，再用文档里的图片"); return; }

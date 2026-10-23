@@ -84,6 +84,7 @@
 .ai-round--primary:disabled { opacity: var(--lake-disabled-opacity); }
 .ai-round.is-stop { border-color: var(--lake-border-strong); background: var(--lake-bg-panel); color: var(--lake-text-1); }
 
+.ai-jump { align-self: center; margin: 0 0 6px; height: 30px; padding: 0 12px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-accent-text); font-size: var(--lake-font-size-micro); box-shadow: var(--lake-shadow-card); }
 .ai-sheet__search { padding: 8px 16px 4px; }
 .ai-sheet__search .mb-input { width: 100%; }
 .ai-sheet__body { padding-bottom: 8px; }

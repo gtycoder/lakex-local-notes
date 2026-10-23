@@ -36,3 +36,32 @@ export function pickLocalFile(accept: string, capture?: "environment"): Promise<
     input.click();
   });
 }
+
+/** 一次取多个本地文件（相册多选）。取消返回空数组（不会悬挂 await）。 */
+export function pickLocalFiles(accept: string, capture?: "environment"): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.multiple = true;
+    if (capture) input.setAttribute("capture", capture);
+    input.style.display = "none";
+
+    let done = false;
+    const finish = (files: File[]): void => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("focus", onFocus);
+      input.remove();
+      resolve(files);
+    };
+    const onFocus = (): void => {
+      window.setTimeout(() => finish(Array.from(input.files ?? [])), 300);
+    };
+    input.addEventListener("change", () => finish(Array.from(input.files ?? [])));
+    input.addEventListener("cancel", () => finish([]));
+    window.addEventListener("focus", onFocus, { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
