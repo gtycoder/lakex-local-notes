@@ -190,6 +190,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
+| [docs/MOBILE-AI.md](docs/MOBILE-AI.md) | 移动端 AI 设计与实施契约（资料集 / 预算 / 原生通道 / 分期） |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](docs/CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 环境/命令 / CDP 驱动指南 / 排错 |
 
 ## 数据与隐私

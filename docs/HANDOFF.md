@@ -7,10 +7,62 @@
 
 ## 0. 最新交接（261022）
 
-> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 361 文件 2509 例。
-> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按。
+> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 362 文件 2524 例（261022 晚快照，**含并行会话的移动端在途用例**）。
+> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口。
+> **待用户裁决**：移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
+
+### 261022(晚⑤) · AI 面板：「附加当前文档全文」只给无选区入口（用户点单）· **已提交 `2ded222b`，待验收**
+
+- **用户定稿**：区域选择用 AI（选区浮栏 / 块菜单 / 图片卡 AI）**不需要**「附加当前文档全文」；只有**无选区**入口（顶栏「更多 → AI 助手对话」）才需要这一行。
+- **判据（面板内单一来源）**：`const selectionContext = selectionText.trim().length > 0 || hasImages;` —— 文字选区 / 图片选区 / 块菜单（vendor 会把整块还原成选区，`blockHandleMount` 传的就是块文本）都算「有选区」⇒ 整行 `.ai-dialog__doc` 不渲染；`noteId && !selectionContext` 才出开关。开聊锁定、全文结果不自动回写等既有语义不变。
+- **不改三个入口组件**（`App.tsx` 顶栏 / `SelectionToolbar` / `blockHandleMount` 传参保持不变）：判据只在面板里，避免同一条件散到三处。
+- **验证**：jsdom 行为 1 例（文字选区 / 图片选区 ⇒ 无开关且面板不含该文案）+ 静态断言锁 `noteId && !selectionContext`；隔离实例（scheme 构建 + CDP 9230）实测：顶栏入口有开关（`aria-checked=false`），⌘A 选中后点浮栏「AI 助手」⇒ **无开关**、预设行仍在。证据 `.css-audit/bitable-rename-261022/ai-topbar.png` / `ai-selection.png`。
+- **不涉及**：样式（`.ai-dialog__doc` 规则与 `aiDialogParts.css` 基线不变）、数据/IPC/同步。
+
+### 261022(晚④) · 移动端表格工具条：两行 + T 一级标签 + 十字高亮挪底栏（用户点单）· **已提交 `41f84901`，待验收**
+
+- **用户点单（261022 晚，五条）**：① 工具条做成 **2 行**，常用放外边、不常用收起；② **增/减小数位都收起**；③ B/I/S/U/字色合成一个 **T 一级标签**，点开二级展开 5 项，T 放常用；④ **十字高亮放右下角缩放左侧**，阅读态也能用（不影响数据）；⑤ 删掉底栏那个**空图标**。
+- **实施（单一来源 usheetChromeModel.ts）**：SHEET_TOOLBAR_ROWS = 两行分组（第一行「+ / 撤销 重做 / T / 常规▾ / ⋯」；第二行「格式刷 清除格式 / 筛选 排序 冻结 查找 / 链接 公式」），第二行可横滑；T 的二级卡 = 新组件 SheetFormatCard（B/I/S/U 四开关 + 8 色字色圆点，按钮按当前选区亮起）；排序/冻结/公式改为第二行小卡（SHEET_SORT_MENU / SHEET_FREEZE_MENU / SHEET_FORMULA_MENU）；⋯ 只剩低频（填充/边框/对齐/合并、小数位增+减、行高/列宽、删除行列）+ 未接占位（7 个仍置灰，等用户逐项裁决）。
+- **⑤ 的真身 = 内核自带的「打开表格工具」浮动钮**（无图标、点了没可见效果）⇒ mobile.css 隐藏 + 删掉 ⋯ 里对应的「更多表格工具」（连带删掉 useSheetCommandActions 的 more-tools 分派与 getHost 入参）。
+- **十字高亮**：从 ⋯ 移到 MobileSheetFooter（缩放左侧，32×32，aria-pressed 反映开/关），**阅读态/编辑态都常驻**；仍默认关、不持久化、不进正文。
+- **门禁（本会话实测）**：tsc 0 · 本会话改动的 usheet 相关用例全绿（全库同树另有并行会话在途改动，故数字以最新 HANDOFF 基线为准）· ui-metrics ✓ · check:mobileui ✓（mobileLayers 基线：usheet-chrome.css 250→302、mobile.css 1459→1460，属新增交互形态）· diff-check ✓；APK --sync 重打并装 emulator-5554，两行工具条 / T 卡 / 十字高亮开关设备截图实测通过。
+- **未做/待裁**：⋯ 里 7 个置灰占位（字号/垂直对齐/换行/选择/图表/条件格式/保护）仍等用户逐项决定「留下做功能还是删除」；第二行目前只有图标（移动端无 hover，可加文字标签，待用户看效果定）。
+### 261022(晚③) · 默认标题「无标题多维表」+ 筛选输入单边框 + 云同步默认开关（用户点单）· **已提交 `d6482021`（多维表部分）+ `5c424799`（云同步默认值），待验收**
+
+- **用户定稿（逐条回应上轮三问）**：① 新建多维表的默认标题要叫「无标题多维表」；② 筛选条件输入统一成单边框；③ **表内仍叫「数据表」**（多维表 ⊃ 数据表，面板标题与「新建数据表」不动）；④ 全新安装、S3 一项都没配时，「启用云同步」应默认**关闭**（而不是现在默认开）。
+- **① 默认标题**：桌面 `useNoteLifecycle.createBitableIn` 与移动 `NotebookWorkspace.createChildDocument` 的默认名改为「无标题多维表」（`workspaceMenu.test` 断言同步）。实测：新建成目录行 / 标签都是「无标题多维表」。
+- **② 筛选输入（先纠错再修）**：`.bt-rule-row input/select` 是**死选择器**（排序/分组行用 `SelectMenu` 按钮，多维表里已无原生 input/select）⇒ 上一批补的规则已删；**真正的双边框**在 `bitableFilterEditor.css` 的 `.bt-filter-input:focus / .bt-filter-value-trigger:focus`（1px 边 + 2px 内描边）⇒ 改为 `border-color: accent; outline: 0`（只留一条边；与本批行内重命名同一判据）。护栏断言改成锁真实落点 + 禁止 `outline: 2px` 回流。**本文件按声明数只许降，故未加柔光环**。
+- **④ 云同步默认开关 = 是否已配置 S3**：桌面 `settingsRepository.getSyncSettings()` 的默认值改用 `hasS3Settings()`（只判 `settings` 里有 `s3_settings` 行、不解密）；移动 `bridge/context.readSyncSettings()` 的 fallback 同样按「本地是否存过 S3 配置」（`S3_STORAGE_KEY`）取 `enabled`。**已配置的旧库不回归（仍默认开）**；显式存过的值优先。语义依据：`cloudStateOf` 里「没配置」与「关掉」等价（一律不出网），只有连通测试通过才允许 `enabled=true`（`SettingsPanel.saveSyncCfg` 已内建测试）。
+- **设备实测（隔离实例 CDP 9230 / 全新 `LAKE_USER_DATA`）**：`[data-set-id=sync-enabled]` → `aria-checked=false`、`disabled=true`、说明为「先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。」；筛选输入 focus = `1px rgb(63,95,160)` + `outline 0` + 无第二圈；新建多维表默认名见上。
+- **不涉及**：同步语义/schema/数据（只改默认值与文案）；AGENTS §3#20 补了这条默认值口径。
+- **门禁**：tsc 0 · 全库 vitest **362 文件 / 2522 例**（本批新增 settingsRepository 4 例 + 移动 1 例 + 筛选/重命名护栏；同一工作树另有并行会话的移动端在途用例）· ui-metrics 0 · check:core ✓ · check:mobileui ✓ · check:bundle ✓ · `git diff --check` ✓。
+
+### 261022(晚②) · 多维表：数据表行内重命名「两个边框」+ 创建项改名「新建多维表」（用户点单）· **已提交 `d6482021`，待验收**
+
+- **用户口径（附截图）**：① 多数据表左侧列表里重命名，输入框「怎么还是 2 个边框」；② 「新建」里的「数据表」改叫「多维表」。
+- **① 两个边框 = 两层来源，根因修在「复用原语 + 只留一条边」**：
+  - 旧实现 `.bt-inline-input` 自带 `border: 1px solid var(--lake-accent)`，而全局 `:where(button,input,…):focus-visible`（`src/styles/tokens.css`）给所有输入框再加 `outline: 2px + offset 2px` ⇒ 截图逐像素 = 「2px 主色描边 + 2px 背景缝 + 1px 主色边」两条。
+  - 改为**复用多维表字段原语 `.bt-input`**（静息 `--lake-ctl-border`；`:focus` = 主色边 + `outline: 0`），`.bt-inline-input` 只留行内布局（`flex/min-width/height:auto/padding`）。
+  - **只换原语还不够**：`.bt-input:focus` 的 2px 柔光环在选中行（accent-tint 底）上又围一圈浅色（实测 196,199,207）⇒ 再加 `.bt-inline-input:focus { box-shadow: none }`，**只留 1px 主色边**。判据同 260929 链接格「格内输入框不再叠焦点环」：**已有边框/选中环处不再叠第二次焦点信号**。
+  - 实测（隔离实例 CDP 9230，dev 源 + 独立 `LAKE_USER_DATA`）：`border 1px rgb(63,95,160)` / `outline 0px` / `box-shadow none`；截图像素扫描主色边紧贴白底、无第二圈（`/tmp/lln-verify/rename-final.png`）。
+- **② 创建项文案**：桌面 `Sidebar.CREATE_CHILD_ITEMS` 与移动端目录抽屉「新建」清单同步 →「**新建多维表**」（文档类型名 = 多维表，**表内层级才叫「数据表」**：多维表面板标题「数据表」与面板内「新建数据表」按钮保持不变）；`docs/MOBILE-TECH-STACK.md` 引用同步。
+- **护栏**：`bitableEditorMount.test.ts` 新增「行内重命名复用 .bt-input + 不再自带主色边 + :focus 去柔光环」；`sidebarContextMenu.test.ts` 锁 `label: "新建多维表"`；`workspaceMenu.test.ts` 清单断言同步。
+- **门禁**：tsc 0 · 全库 vitest **361 文件 / 2512 例**（+1 例）· ui-metrics 0 · check:core ✓ · check:mobileui ✓ · check:bundle ✓（产物 CSS 未分层 0）· `git diff --check` ✓。
+- **不涉及**数据/同步（纯本机视图与文案）；stylesnap 42 态不含「行内重命名 / 创建菜单」⇒ 基线不变。
+- **同类观察（已在 261022(晚③) 收口）**：筛选条件输入 `.bt-filter-input` 的「1px 边 + 2px 内描边」已改成单边框；**注意 `.bt-rule-row input/select` 是多维表里的死选择器**（排序/分组行用的是 `SelectMenu` 按钮，没有原生 input/select），不要再拿它当落点。
+
+### 261022(晚) · 表格「十字高亮」改为默认关闭 + 开关可见（用户点单）· **已提交 `41f84901`，待验收**
+
+- **用户定稿**：默认关，且要保留开关（原 261022 白天按点单默认开启；实测默认亮的紫色行列带太抢眼）。
+- **实施（两端一致，纯本机视图）**：内核初始就是关（`_enabled$ = new BehaviorSubject(false)`）⇒ **打开表格不再自动开启**；
+  `features/usheet/usheetCrosshair.ts` 由 `enableUsheetCrosshair` 改为显式 `setUsheetCrosshair(api, on)`；
+  桌面 `UniverSheetEditor` 删自动开启（「视图」页签仍有内核开关）；移动端 `MobileUsheetViewer` 去掉自动开启，
+  改由 ⋯ 卡「十字高亮」按钮 toggle，按钮 `active` = 已开启（`usheetChromeModel.buildMoreRows(fmt, { crosshair })`）；
+  `useSheetCommandActions` 里原有的 crosshair 分派已删（状态归组件，避免两套）。
+- **不持久化**：operation 不写正文、不进 S3；重开表格回到「关」（用户只要求开关，未要求记忆）。
+- **门禁**：tsc 0 · vitest **361 文件 / 2511 例**（新增「十字高亮默认不亮 + 开启时 active」1 例）· ui-metrics ✓ · check:mobileui ✓ · diff-check ✓；APK `--sync` 重打并装 emulator-5554 冒烟通过。
 
 ### 261022 · 最终定稿：三个仓库同内容（vendored 公开）+ GitHub Actions 打包发布
 
