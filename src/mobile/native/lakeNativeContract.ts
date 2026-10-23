@@ -27,6 +27,7 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
   "restoreTreeItem", "purgeTreeItem",
   "createGroup", "renameTreeNode", "setNodeIcon", "reorderSiblings", "moveTreeNodeOrdered", "createNotebook",
   "searchNotes",
+  "aiGetSettings", "aiSaveSettings", "aiTestConnection", "aiChat", "aiCancel",
 ] as const;
 
 /** 非 bridge 的调试入口（sqlite 迁移/压测辅助）。 */

@@ -24,6 +24,7 @@ const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
   { file: "src/mobile/bridge/quickNotes.ts", exportName: "quickNotesDomain" },
   { file: "src/mobile/bridge/tree.ts", exportName: "treeDomain" },
   { file: "src/mobile/bridge/home.ts", exportName: "homeDomain" },
+  { file: "src/mobile/bridge/ai.ts", exportName: "aiDomain" },
 ];
 
 function objectMethodNames(source: string, exportName: string): string[] {
@@ -70,9 +71,9 @@ describe("lakeNative 调试契约", () => {
 
   it("清单无重复，且计数固定（改契约必须显式改这里）", () => {
     expect(new Set(LAKE_NATIVE_METHODS).size).toBe(LAKE_NATIVE_METHODS.length);
-    expect(LAKE_NATIVE_BRIDGE_METHODS.length).toBe(50); // 261020 +createBitable（CDP 造数/验收多维表编辑） // 261013 +syncQuickNote（保存并同步）/ +getCloudState（置灰判据）
+    expect(LAKE_NATIVE_BRIDGE_METHODS.length).toBe(55); // 261023 +5（AI 通道）ateBitable（CDP 造数/验收多维表编辑） // 261013 +syncQuickNote（保存并同步）/ +getCloudState（置灰判据）
     expect(LAKE_NATIVE_EXTRA_METHODS.length).toBe(1);
-    expect(LAKE_NATIVE_METHODS.length).toBe(51);
+    expect(LAKE_NATIVE_METHODS.length).toBe(56);
   });
 
   it("派生结果 = 声明清单，且缺失即抛（不静默少一个方法）", () => {

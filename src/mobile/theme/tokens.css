@@ -265,6 +265,8 @@
   --mobile-duration-press: 80ms;
   --mobile-mask: var(--lake-scrim, var(--lake-scrim));
   /* 移动端层叠层级令牌：浮层顺序的**唯一来源**，新浮层一律用这里的变量，别再写魔法数字。 */
+  /* 全屏功能页（AI 页等）：低于抽屉 40、高于 dock 7 */
+  --mobile-z-page: 30;
   --mobile-z-topbar: 3;
   --mobile-z-dock-mask: 6;
   --mobile-z-dock: 7;

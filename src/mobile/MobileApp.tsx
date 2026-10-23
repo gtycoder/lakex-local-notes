@@ -50,6 +50,8 @@ import "./brand-launch.css";
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
 const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
+/** AI 全屏页按需加载：不进首页首屏（与内核/表格一样不加重入口）。 */
+const MobileAiPage = lazy(() => import("./ai/MobileAiPage").then((m) => ({ default: m.MobileAiPage })));
 
 /**
  * 退出 App（Android：结束任务）。
@@ -99,6 +101,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   /** 全局搜索命中「小记」后待首页打开的 id（首页常驻，交给 HomePage 的 effect 接力）。 */
   const [pendingQuickNoteId, setPendingQuickNoteId] = useState<string | null>(null);
   // 用 HomePage 导出的 MobileQuickNote：这条链（仓储 → bridge → 列表 → 卡片）字段必须一路一致，
@@ -413,6 +416,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           onPendingQuickNoteConsumed={() => setPendingQuickNoteId(null)}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
+          onOpenAi={() => setAiOpen(true)}
           onCreateNotebook={() => setCreateNbOpen(true)}
           onCreateNote={(notebookId) => void createNoteInParent(notebookId)}
           onTreeChanged={refreshAll}
@@ -462,6 +466,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         onOpenNote={(id) => void openNote(id, "viewer")}
         onOpenQuickNote={openQuickNoteFromSearch}
       />
+      {aiOpen && (
+        <Suspense fallback={null}>
+          <MobileAiPage open onClose={() => setAiOpen(false)} onChanged={() => void refreshAll()} />
+        </Suspense>
+      )}
       <Toasts />
       <ConfirmHost />
       {/* 共享图片预览浮层（桌面/移动同一套控制器）：小记卡片、文档内图片点开都是它。 */}

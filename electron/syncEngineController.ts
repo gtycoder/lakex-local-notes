@@ -15,6 +15,7 @@ import { syncNow as engineSyncNow, downloadNoteAssets, type SyncReport } from ".
 import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
 import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
+import { perfMessage } from "../src/core/logFormat.js";
 
 /**
  * Step 5：桌面 Controller 化入口。
@@ -112,7 +113,19 @@ export async function syncNowViaEngine(
   store.markSyncComplete(completedAt);
   store.recordSyncResult(JSON.stringify(result));
   report({ phase: "done", message: "同步完成", supersededNotes: engineReport.supersededNotes });
-  store.logScopes.sync.info(`[perf] syncNowViaEngine done ${Date.now() - syncStart}ms (uploaded=${engineReport.uploaded}, applied=${engineReport.appliedRemote})`);
+  // 261023：一轮同步的耗时 + 数据量（后续做同步性能优化的唯一口径）。
+  store.logScopes.sync.info(perfMessage("sync.round", Date.now() - syncStart, {
+    uploaded: engineReport.uploaded,
+    downloaded: engineReport.appliedRemote,
+    foldersUp: engineReport.foldersUploaded,
+    foldersDown: engineReport.foldersDownloaded,
+    bytesUp: engineReport.uploadedBytes,
+    bytesDown: engineReport.downloadedBytes,
+    trash: engineReport.trashedDown + engineReport.trashedUp,
+    conflicts: engineReport.supersededNotes.length,
+    warnings: warnings.length,
+    manifest: commitId ? commitId.slice(0, 8) : "none",
+  }));
   return result;
 }
 

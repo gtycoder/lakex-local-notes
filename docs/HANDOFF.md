@@ -8,16 +8,16 @@
 ## 0. 最新交接（261023）
 
 > **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 363 文件 2528 例（261023 快照，**含并行会话的在途用例**）。
-> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）。
+> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
 > **待用户裁决**：移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
-### 261023 · 移动端表格编辑态 dock 落地（v5 定稿，分支 feat/mobile-sheet-dock）· **已实现，设备实测通过，待验收**
+### 261023 · 移动端表格编辑态 dock 落地（v5 定稿，分支 feat/mobile-sheet-dock）· **已合并 master（261023 晚），设备实测通过**
 
 - **用户定稿**：不做底部胶囊/四页签面板；编辑态 = **公式栏（保留，主输入位）+ dock + 面板**；dock 顺序 `＋插入 | T | 数据 | 视图 | ⋯更多 | 撤销 | 重做 |（右侧固定）键盘`；面板**占住键盘区域**展开、dock 停在其上方；一级按钮打开时变 **✕**、再点收起并放回键盘；样式与交互**对齐文档编辑器 dock**（`EditorDock.tsx` / `editor-dock.css` 的实测口径）。选择态（高亮当前行列 / 视图比例 / ＋ / 工作表列表）放**顶部与 Sheet 同一行**；顶栏 ✓ 保留。
 - **实现落点（单一来源）**：`usheetChromeModel.ts`（dock 顺序 / 插入 4 连块 + 7 白块（无公式）/ T 面板（B I S U、水平+垂直对齐、字色 8、填充两行、字号 8 档）/ 数据·视图占位 / 更多（数字格式·边框·公式下钻、合并·格式刷·清除格式、条件格式占位））；新组件 `SheetTopBar` / `SheetFormulaBar` / `SheetDock` / `SheetDockPanel`；`MobileUsheetViewer` 整合（内核移动公式栏 `formulaBar:false`，改自绘公式栏；提交写回 `setValue/setFormula`）；`useSheetChromeState` 增加 address/value/valign/size；`useSheetCommandActions` 增加 valign / fontsize / 清除字色与填充。删除旧 `SheetMoreCard` / `SheetFormatCard` / `useSheetCardState` / `MobileSheetFooter` 与 `formulaBarCaret.test`。
-- **门禁**：tsc 0 · vitest **361 文件 / 2522 例** · ui-metrics 0（未定义令牌 0 / 颜色字面量 0 / 裸 accent 0）· check:mobileui ✓（`usheet-chrome.css` 基线 302→401，属新增交互形态）· check:core ✓ · check:bundle ✓ · 桌面与移动构建 ✓ · `git diff --check` ✓。
+- **门禁（合并 master 后全量）**：tsc 0 · vitest **377 文件 / 2612 例** · ui-metrics 0 · check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓；`usheet-chrome.css` 基线 302→455（后因收口旧样式回落，属本批最终形态）。
 - **设备实测（emulator-5554，dev APK）**：顶部行（Sheet1 / 高亮当前行列 / 100% / ＋ / 列表）✓；编辑态公式栏「A1 请输入 ↵ ⤢」✓；输入「测试123」+ ↵ 写回 A1 ✓；T 面板五条白条、面板盖键盘、＋变 ✕ ✓；插入面板 4 连块 + 7 白块（无公式）✓；更多→数字格式下钻（当前档标注）✓；收起面板回键盘 ✓；✓ 退出编辑后 dock/公式栏消失、阅读工具条保留 ✓；顶部高亮当前行列开关 aria-pressed 切换 ✓。
 - **二次修正（同日，用户反馈后）**：① **公式栏改回原内核形态**（✕ 取消 · ✓ 确认 · fx · 输入 · ▲ 收键盘），✕/✓ 语义照原；② **回显修复**：公式输入框的「正在输入」标志在 blur 时复位（此前获焦一次后选区切换不再回显）；③ **点一级 ✕ = 恢复键盘**（`closeDockPanel(true)` 里回焦公式栏输入）；④ **性能**：命令回调里的 chrome 刷新改为 rAF 合并（一次交互多条命令只跑一遍 facade 读取），并用轻量 `useSheetKeyboardOpen`（只暴露布尔，不再随 innerHeight 每次抖动重渲染整棵树）。
 - **二次设备实测（emulator-5570，**真实触摸** Input.dispatchTouchEvent）**：点 T → 面板出现 **11ms**；点插入 → **19ms**；输入回显 **12ms**；点 ✕ → 面板消失 4ms、键盘回来（innerHeight 842→530）**267ms**（IME 动画本身）；打字/切换面板无可感知卡顿。
@@ -33,6 +33,91 @@
 - **四次修正（用户定稿：恢复自绘「仿钉钉」公式栏，但要回显 + 光标）**：公式栏恢复为 `地址 | 输入 | ↵`（去掉 ✕/✓/fx/▲）；输入框是普通 `<input>`（点哪落哪、可选中、可方向键移动光标）；**回显**：选区变化时同步地址与内容，且点网格时先 blur 输入框保证「点另一个格 → 立即显示该格内容」不被旧焦点卡住。真实触摸实测：A1→final / A2→2026-10-23 / A3→2026-10-23 回显正确；光标实测：输入 `abc` 后左移两位插 `X` 得 `2026/10/23aXbc`；↵ 提交、面板 ✕ 回键盘均通过。
 - **真实触摸自测（emulator-5570，Input.dispatchTouchEvent，26 项全 PASS）**：进入编辑 / T 打开 / 加粗·字号生效与回读 / T 关闭后键盘回来 / 撤销·重做可用态 / 插入面板与 5 项置灰 / 日期写入 / 插入行后撤销可用 / 更多→数字格式下钻与「当前」/ 冻结首行·首列 / 视图比例 / 新建工作表（页签 +1、SheetN 命名）/ 高亮当前行列 / 公式栏 ✕ 放弃 · ✓ 提交 / 退出编辑后 dock 消失、阅读工具条保留。命令：`node /tmp/real-touch-test.mjs 9338`（脚本未入库，流程已记录本节）。
 - **已知缺口（下一步，非本批）**：① 插入里「单元格图片 / 手写签名 / 附件 / 图表 / 批注」**已置灰**（未实现，后续补）；② 撤销/重做是**近似计数**（内核没有公开 canUndo，按命令流 + 回放抑制窗口维护）；③ canUndo/canRedo）；③ 冻结行列走 facade `setFrozenRows/Columns`，待逐项设备验收；④ 本批只改移动端，桌面表格不动。
+### 261023 · 移动端 AI 首版（P0 原生通道 + P1 页面）· **已提交 `88fcdc6c`（基于远端 `4130f256` rebase）**
+
+- 依据 `docs/MOBILE-AI.md`（D1–D13 定稿）落地：原生 SSE 通道 + 全屏 AI 页 + 资料集/发送清单 + 设置子页。
+- 新增：`android/.../AiChatPlugin.kt`（Keystore 存配置、HttpURLConnection + SSE、ai:delta/error/done、幂等 cancel）与 `SecretBox.kt`；`src/mobile/native/aiChat.ts` + `src/mobile/bridge/ai.ts`（调试契约 +5 → 55/56）；`src/mobile/ai/**`（MobileAiPage / AiCorpusSheet / AiSendSheet / AiMarkdown / aiSession / aiSettings / ai.css）；`src/core/{aiCorpus,aiNetwork,aiChatMessages}.ts`（后者从 `electron/ai` 上收，桌面改 re-export）；设置页新增「AI 助手」子页；`tokens.css` 新增 `--mobile-z-page`。
+- 门禁：tsc 0 · vitest **368 文件 / 2555 例** · check:mobileui ✓ · check:core ✓ · git diff --check ✓ · `vite build -c vite.mobile.config.ts` + `cap sync` + `gradle assembleDebug` ✓。
+- 设备实测（emulator-5554，覆盖安装保留数据）：空态/建议 chips/输入栏/关闭横幅、设置子页、资料选择器（含空文档置灰理由）、**未配置 Key 的端到端错误**（原生 not_configured → 中文气泡 + 重试）；截图 `docs/preview/ai-device-*.png`。
+- 未验：真实 Key 下的流式/取消/超时（P0 剩余探针）；选中有内容文档后的真实请求（该模拟器两篇都是空文档）；图片多模态（P2）；走查屏 `ai-home` 未加。
+- **真实探针（小米 MiMo `mimo-v2.6-flash`，emulator-5554）**：testConnection ≈0.9s；流式首字 ≈1.2s、71 字回答 ≈1.8s；停止后正文冻结并显示「已停止」；坏 URL→`network`、坏 Key→`401 auth`（错误体取 `error.message`）；选 365 字文档后回答确实引用资料；**重启 App/模拟器后 Key 仍可读并连通**；切后台 4s 回来流继续（未做后台中止）。
+- **探针顺手修的两处**：① Kotlin `delta.content` 为 JSON null 时 `optString` 会产出字符串 "null" ⇒ 正文前缀出现 `nullnull`，改用 `opt` 判类型；② **移动端「彻底删除」事务嵌套 bug**：`d.transaction` 内再调 `executeSet`（默认 transaction:true）⇒ 原生重复 BEGIN、回收站 purge 一直失败；`executeSet` 增加 `{transaction}` 选项、事务内传 false，补 `sqliteDb.batch.test.ts`；4 篇探针文档已 purge、回收站清空。
+- **261023 二次收口（用户定稿）**：① **后台继续流**；② **AI 页关闭不销毁会话**（模块级 `aiChatStore` + 常驻流订阅，后台 delta 继续累积，再进页面可看完整回答；App 进程结束才清空）；③ **移动端 Markdown 表格**（GFM 表头/对齐/单元格，零依赖、纯 React）；④ 图片附件维持"即将支持"占位（P2）。桌面 `MarkdownView` 仍无表格，未动。
+- **261023 三修（Markdown 解析器共用 + 桌面表格）**：解析器从桌面 `MarkdownView` 抽到 `src/core/markdown.ts`（块/行内 token + GFM 表格，纯数据）；桌面/移动端各自渲染（`.md-preview` / `.ai-md`），**桌面端同步支持表格**；bitable 静态护栏改指 core；移动端复测表格渲染正常。
+- **261023 四修（AI 会话设备本地持久化，用户定稿）**：只保留最近一次会话（消息 + 资料快照），存 App 私有 Data `ai/last-conversation.json`（BodyStore 原子写）；启动恢复、1s 防抖写、≤2MiB / 30 天 TTL；「新对话」与设置「清空本机对话」删除；**不存 API Key/端点/温度、不进 S3**。
+- **261023 五修（AI 历史对话，用户定稿）**：多会话落设备本地——每会话 `ai/conversations/{id}.json` + SQLite 索引表 `ai_conversations`（schema v4）；顶栏「历史」**独立全屏页**（列表 + title/preview 搜索 → 点开看完整对话详情 → 继续对话/删除；列表顶部清空全部）；启动恢复最近一次；50 条 / 30 天淘汰（连带删文件）；旧 v1 单文件启动迁移。仍不进 S3、不存 Key。
+- **261023 六修（AI 图片多模态 P2，用户定稿）**：拍照/相册 → 前端压缩（长边 1600 / ≤1MB JPEG）临时 data URL；「资源」= 资料文档里的图片，只传 `{noteId, filename}` 引用、原生读文件（字节不过 WebView）；Kotlin 组 `image_url`（≤10 张、总大小上限）；消息正文 `[图片]` 占位，历史/持久化不存图（当轮附件）。真机实测：纯红 PNG → 问「什么颜色」答「红色」。
+- 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
+
+### 261023(六) · 表格「一打开就待保存」：Univer 正文序列化不幂等 · **已修**
+
+- **用户报**：表格只要一打开就出现黄色「待保存」，怀疑会触发 S3。
+- **结论：确实会触发 S3**（修复前）。打开表格时首帧 vs 首个命令后的序列化不同 ⇒ 判为"有改动" ⇒ auto-save 写盘 ⇒ contentHash 变、\`sync_state=local\` ⇒ 下一轮自动/手动同步会 PUT 一次正文对象 + 新 manifest。**每次打开一次**。
+- **根因（两处序列化漂移，实测 diag + 产物 diff）**：
+  1. **plugin resource 未初始化形态**：首次 \`book.save()\` 给 \`SHEET_NOTE_PLUGIN.data=""\`，首个 CommandExecuted 之后给 \`"{}"\`（\`SHEET_RANGE_PROTECTION_PLUGIN\` 长期 \`""\`）⇒ 基线（mount 时 canonical）与第一次 flush 的 body 在 \`diff@957\` 处不同。
+  2. **字族引号随构建变**：dev 的 \`--lake-font-family\` 是 \`'MiSans', …\`，打包构建压缩 CSS 后是 \`"MiSans", …\` ⇒ 同一文档在 dev / 打包版之间来回改写 \`ff\`。
+- **修复（两层，缺一不可）**：
+  1. **正文规范化**（单一来源 `src/core/usheetDoc.ts`）：`normalizeFontFamily()` / `normalizeUsheetWorkbook()`（幂等：`data:""`→`"{}"`、
+     `ff` 单引号→双引号）；`UniverSheetEditor` 在打开基线 canonical 与每次 flush 的 snapshot 上都先规范化再 `usheetToBody()`。
+     作用：覆盖已知漂移（plugin 空壳 / 字族引号），并让 dev 与打包版**写盘字节一致**。
+  2. **结构保证「打开 = 只读」**（`UniverSheetEditor`）：打开后**第一次 flush 只对齐基线**（`baselineSettledRef` + `contentInputRef`，
+     不写盘不标脏）；内容输入判据 = 键盘/粘贴/剪切/拖放（捕获阶段）+ **非网格画布**的 pointerdown（工具栏/公式栏/右键菜单）；
+     `capture` 在**无真实改动**时返回磁盘原文（`persistedBodyRef`）；**改过又改回原样**（撤销/改回原值）时也返回原文
+     （`persistedNormalizedRef` 比较），避免"打开→编辑→撤销→关闭"写盘；外部 content 刷新会更新该基线。
+     ⇒ 即使上游再换序列化形态（我们不认识的新漂移），打开也不会写盘/标脏/出网。
+- **验证（隔离实例 + 用户 dev 数据只读副本）**：
+  - 修复前：打开「表格11」→ 1 次 `ipc.save_note`、body hash 变化。
+  - 修复后：**原始正文**打开 → 0 次 save、hash 不变；**人为扰动正文**（未知 plugin `data:""` + resources 倒序 + 单引号字族）
+    打开 → 仍 0 次 save、hash 不变（证明结构层不依赖"枚举漂移"）；**关闭不编辑** → 0 次 save、hash 不变。
+  - 真实操作（点工作表「＋」新增工作表）→ **1 次 save**、正文正确落盘（2 个工作表）、无异常。
+- **护栏**：`src/core/usheetDoc.test.ts`（规范化幂等 / 空资源归一 / 真实单元格差异不被吞）+
+  `src/features/usheet/usheetOpenReadOnly.test.ts`（静态锁住第 2 层：首次 flush 对齐、输入判据、capture 兜底、两处规范化）。
+- **门禁**：tsc 0 · 全库 vitest **385 文件 / 2616 通过（17 skip）**（含并行会话在途改动）· 双端构建 ✓ · `git diff --check` ✓。
+
+### 261023(五) · 桌面端日志系统重做（分级 / 关键流程埋点 / 错误捕获 / 文档）· **待验收**
+
+- **用户要求**：整理桌面端日志并按同样思路埋点；开发环境 debug 多、正式环境把 info/warn 用起来、重点处理 error；关键流程记录耗时与数据量，积累一段时间后做针对性性能优化。
+- **分级（单一来源 `electron/logLevels.ts`）**：dev = file/console/renderer 全 debug；prod = file info、console 关、renderer info；现场覆盖 `LAKE_LOG_LEVEL=…`、`LAKE_LOG_CONSOLE=1`（不改代码）。
+- **格式（单一来源 `src/core/logFormat.ts`）**：一行一条；耗时统一 `[perf] label <ms>ms k=v`；错误带 `error=` + 前 3 帧 `stack=`；字段 `k=v`；不记正文/密钥。
+- **渲染层**：新增 `src/lib/log.ts`（debug 仅 DEV；perf 走 info）；`main.ts` 的 console-message 按 Electron 新旧签名映射级别（error 不再被压成 info）；入口装 window error / unhandledrejection 兜底。
+- **主进程**：logger 重写（10MB 轮转、`[start]` 启动上下文含版本/平台/userData/生效级别）、uncaughtException/unhandledRejection、preload-error、unresponsive/responsive、`[security]` 拦截导航、`[quit]` 时序、`[perf] boot.ready`。
+- **关键流程埋点**：`[perf] ipc.<channel>`（debug）+ `ipc.slow` ≥200ms（warn）+ 失败（error）；`[perf] note.save`（耗时+字数，慢保存升 info）；`[perf] sync.round`（耗时/条数/字节/墓碑/冲突/warnings）；`[perf] paste.html`（chars/getData 次数/升级耗时/护栏命中）；沿用资源上传爆发统计与 CSP 折叠。
+- **文档**：新增 `docs/LOGGING.md`（分级 / 作用域 / 格式 / 埋点清单 / 排查手册 / 性能优化用法 / 新增埋点规范）；AGENTS §6 加一行；TROUBLESHOOTING §M 在上一批。
+- **实测（隔离实例）**：dev 日志 27 行（info 12 / debug 13 / error 2）——`[start]`、`boot.ready 1834ms`、逐次 ipc debug、`paste.html 0ms chars=24 getData=9`、`note.save 2ms chars=181` 均正常；`LAKE_LOG_LEVEL=info` 时 12 行且 ipc debug = 0。
+- **顺带发现（已定性，见 `docs/LAKEX-CONTRACT.md` §5.42）**：偶发 `IndexSizeError: getRangeAt` —— 产物取证确认是**闭源内核**选区 observer 未判 `rangeCount` 的竞态（入口 chunk 里 59 处 `getRangeAt(0)`、31 处无守卫；宿主 8 处全部有守卫）。不 patch 内核，已由 `[window]` 兜底记录；原先「隔离实例必现」的说法不成立（10+ 轮受控复现为 0）。
+- **门禁**：tsc 0 · 全库 vitest **375 文件 / 2561 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
+- **落点**：分支 `fix/paste-perf`（第 2 个 commit）；**已随并行会话两笔一起进入 master `4d1184e2` 并推送三仓**（Gitee private/public、GitHub）。worktree 与分支已清理。
+
+### 261023(四) · 粘贴整页网页：CSP 噪音折叠 + 上传爆发统计（分支 fix/paste-perf，未合并）· **待验收**
+
+- **背景**：用户报「值得买」文章（4700 字 / 67 图）从浏览器全选粘贴进文档非常卡，日志同时刷出上百条 CSP 报错，怀疑是日志记录导致。
+- **结论（已实测，不改粘贴逻辑）**：日志不是原因。同内容在隔离实例复现：同步 dispatch 341ms、96 条 CSP 全落在 1 秒内、端到端 ≈3s；12:24 重粘同一页：63 张图卡 21ms 内插完、端到端 ≈2.2s ⇒ 11:54 那次的 8.8s 静默是当时的机器负载（同机并行开发会话）造成的偶发卡顿。判据与取证方法见 docs/TROUBLESHOOTING.md §M。
+- **本批只加可观测性**：
+  - electron/consoleNoise.ts：CSP 拦截通知折叠成一行（条数 + 示例 URL），main.ts 接线、窗口关闭时 flush；护栏 consoleNoise.test.ts（6 例）。
+  - src/lib/uploadStats.ts + src/features/editor/resourceUpload.ts：上传爆发聚合（次数 / 远程 / 墙钟 / 单次最长 / 重试 / 失败），阈值（≥3 次 / 墙钟 ≥1.5s / 有失败）才落一行 [perf]；src/core/retry.ts 加可选 onRetry（唯一调用方，重试语义不变）；护栏 uploadStats.test.ts（7 例）。
+  - docs/TROUBLESHOOTING.md 新增 §M（症状 / 四条判据 / 结论 / 稳定复现时怎么查）。
+- **明确不做**：粘贴前把远程 img 换成占位。实测这 90+ 次被 CSP 拦截的请求只花 21ms / 20KB 日志；唯一能真正消除的实现 = 把粘贴改成异步预取再重派发（会改选区/撤销语义）⇒ 按 AGENTS §3#17 不做，等真有网络/大图瓶颈再单独立项。
+- **门禁**：tsc 0 · 全库 vitest **365 文件 / 2541 通过（17 skip）** · git diff --check ✓。
+- **落点**：worktree lake-notes-electron-worktrees/paste-perf（分支 fix/paste-perf，基于 master 73f63039）；**已合入 master `4d1184e2` 并推送三仓**。
+
+### 261023(三) · 桌面逐页走查（隔离实例 + 合成夹具，用户点单）· **仅验证，无代码改动**
+
+- **方法**：`make-fixture.mjs` 合成夹具（富文本/表格/多维表/画板/2 回收站/2 小记/4 类资产）→ 独立 userData + 独立资源端口 + CDP 9231 的**隔离窗口**（不碰用户 dev 实例与数据）→ CDP 驱动逐页截图；全程收集 `Runtime.exceptionThrown` = **0 条**。
+- **覆盖**：资料库/编辑器（H1/列表/代码块/表格/图片卡）、表格、多维表、画板、小记、全文搜索、AI 助手、云同步浮窗、历史版本、回收站、资源、设置（编辑器/外观/快捷键/文档与历史/云端与同步/AI/回收站/浏览器端/日志/关于）、标签右键菜单。
+- **结论**：**未发现视觉缺陷/回归**。四类「看似异常」经复验均为夹具/环境所致：① 双工具条 = 隐藏窗口（`document.hidden=true`）下 keep-alive 清理被节流，出帧后 mounts=1/toolbars=1（与 §3#9 已知空帧同源，暂不做）；② 富文本「图片」区块空 = 夹具是 **1×1 PNG**（`<img width="1">`），非加载失败；③ 画板空白 = 夹具画板无图形；④ 小记页红色校验横幅 = 自动化上一轮空提交残留，冷启动复验不存在。
+- **资源页数据自洽**：可删 2 / 历史保护 3 / 缺失 0（共 5 个 · 350B · 4 篇文档）。
+- **产物**：`.css-audit/walkthrough-261023/`（gitignored，31 张）。**没跑 42 态 stylesnap**：本批未动外壳几何，且发版线已放弃。
+
+### 261023(二) · 桌面收尾：查替面板单边框实测 + 全屏 chrome 收口（附件预览不留缺口）· **已改，未提交**
+
+- **① 表格「查找替换」面板实测**（补上一批只测了「插入链接」的缺口）：数据页签 →「查找替换」→ 查找输入框（316×32）实测 `border 1px #3f5fa0` / `outline 0` / `box-shadow 0 0 0 2px rgba(28,31,36,.2)`（= 自有 `.ln-text-field` 口径，单条边）；`window.__vendorFocusProbe()` = `[]`（无叠层）。宿主是 `.usheet-editor` **内联**（不是 portal）——与链接弹窗的 `[data-lake-univer-floating]` 两类宿主都已被 `vendor-focus.css` 覆盖。证据 `.css-audit/vendor-focus-261023/find-input-after.png`。
+- **② 全屏 chrome 收口（单一来源）**：新增 `src/styles/window-chrome.css`（unlayered，`main.tsx` 引入）：
+  - `:root.window-fullscreen .platform-mac .tab-bar` → `padding-left: 10px` + `no-drag`（从 `tabs.css` **搬进来**，`tabs.css` 恢复原样、全屏规则不再散落）；
+  - `:root.window-fullscreen .attachment-preview.is-mac .attachment-preview__toolbar` → `padding-left: 16px`（正常窗口 82px 让位 → 全屏不再留左侧缺口）。
+  - `cssLayers` 登记新文件（3 声明）；`layoutMetrics.test` 改指新文件并锁两条规则（含「tabs.css 不得再出现 window-fullscreen」）。
+- **实测**（同一页面实时切 `:root.window-fullscreen`）：顶栏 `82px → 10px`；附件预览工具栏 `82px → 16px → 82px`（动态加载其 CSS + 同构 DOM 验证，验完清掉根类）。
+- **门禁**：tsc 0 · 全库 vitest **363 文件 / 2528 例** · ui-metrics 0 · check:bundle ✓ · `git diff --check` ✓。
+
 ### 261023 · 表格第三方输入框「两层边框」根因 + 系统性收口（用户点单：「最后一次彻底排查」）· **已提交 `41d0a597`，待验收**
 
 - **用户口径**：桌面表格后续接入的功能输入框（插入链接、查找替换…）都是 2 层边框，怀疑没接原语；要求彻底排查、以后别再出现。
@@ -63,8 +148,11 @@
 - **用户口径（261023）**：不再自己探索移动端表格交互；以钉钉（Android）为参考——「感觉还是工具栏靠谱一点，且也是通过公式栏来编辑的」；**先出 HTML 原型定稿，不反复折腾代码**。
 - **钉钉实测（emulator-5554 实机 + WebView CDP 只读）**：选择态 = 网格 + 底部浮动胶囊「格式/插入/数据/视图」→ 底部全宽面板（4 页签常驻、右侧键盘图标进编辑）；编辑态 = 公式栏（地址 + 输入 + ↵ + 展开）+ 快捷条（表格工具/A/插入 | 选区 | 语音/图片/@/日期 | ✓）；格式面板 = 字号 ± 步进、B/I/S/U、水平/垂直对齐各 3、字色 8、填充 8（首格无填充）；插入 = 插行列 4 大按钮 + 单元格图片/手写签名/链接/日期…；数据 = 升/降序 + 筛选开关 + 查找替换；视图 = 视图比例（默认/全景/聚焦）+ 表单视图 + 图表视图 + 冻结行列 + **高亮当前行列开关**；顶栏「更多」= 文档级操作（不放表格格式）。
 - **用户二次澄清（同日）**：**不要**底部悬浮胶囊/四页签面板；要的是**双击编辑后、键盘上方那条工具条**（形态对齐我们文档编辑器的底部 dock），公式栏保留。
-- **原型（可交互，单文件、离线可用）**：`docs/preview/mobile-sheet-prototype.html` —— 选择态只有网格；**双击进编辑** → 公式栏 + **编辑 dock**（`＋ | T | B I S U | ⋯ | ✓`，撤销/重做留顶栏）+ 键盘示意；点 T/插入/⋯ 在 dock **上方**展开内联面板（T = 字号±/对齐/字色/填充；插入 = 插行列 + 图片/签名/链接/日期/附件/公式；⋯ = 排序/筛选/冻结/高亮当前行列/查找/格式刷/清除格式/视图比例）。右侧附「钉钉实测清单 + 待拍板问题」。
-- **状态**：仅调研 + 原型，**产品代码零改动**；待用户按原型逐项定稿（胶囊 vs 两行工具条、公式栏常驻与否、字号步进 vs 下拉、插入项取舍、冻结二级、⋯ 文档级菜单范围）。
+- **用户三次澄清（同日，定稿方向）**：① **公式栏必须保留**（主要输入位置）；② 选择态的（高亮当前行列 / 视图比例 / ＋ / 图层）放**顶部与 Sheet 同一行**，不算工具栏；③ dock 顺序 = `＋插入 | T | 数据 | 视图 | ↶撤销 | ↷重做` + 右侧固定**键盘**；④ 面板（T/插入/数据/视图）**占住键盘区域**展开（dock 在面板上方不动，与文档 dock 逻辑一致）。
+- **原型（可交互，单文件、离线可用）**：`docs/preview/mobile-sheet-prototype.html`（v4）—— 顶部 Sheet 行带十字高亮/比例/＋/图层；双击进编辑 → 公式栏 + dock + 键盘；点 dock 项 → 面板盖住键盘区域（再点收起回键盘）；**T** = 文档 T 面板同款白条（B I U S ｜ 水平对齐+垂直对齐 ｜ 字色 9 ｜ 填充两行 ｜ 字号 8 档，无标题无列表）；**插入** = 钉钉式 4 连块（插入行列，蓝色图标）+ 文档式 4 列白块（单元格图片/手写签名/链接/日期/附件/公式/图表/批注）；**数据** = 升序/降序/筛选/查找替换；**视图** = 冻结行列/视图比例。*展开内联面板（T = 字号±/对齐/字色/填充；插入 = 插行列 + 图片/签名/链接/日期/附件/公式；⋯ = 排序/筛选/冻结/高亮当前行列/查找/格式刷/清除格式/视图比例）。右侧附「钉钉实测清单 + 待拍板问题」。
+- **用户四次确认（同日）**：①顶栏 ✓ **保留**；②顶部那排**保留**；③数据/视图面板**增加占位**（数据验证/分列、表单/图表视图）；④T 面板就按原型；⑤插入去掉「公式」，公式放「更多」（**放哪个「更多」待定**）；⑥**样式与交互照文档 dock 的细节**：面板覆盖键盘、一级按钮打开变 **X**、再点 X 收起并恢复键盘。
+- **已照文档 dock 源码对齐的细节**（src/mobile/editor/EditorDock.tsx + editor-dock.css）：一级按钮打开时图标换成 X + med-open（accent 字 + tint 底 + inset 环 + 圆角 24）；键盘按钮两态（键盘开 = 键盘+斜线「收起」，关 = 键盘「展开」）；面板 .med-panel 占住键盘区（height: var(--kb-offset)、max-height: 60dvh、insert/font/more 面板底 --lake-bg-block）；插入白块 **4 列**、高 52、图标 22 + 文字 13；再点同一颗 = 关面板并放回键盘。
+- **状态**：仅调研 + 原型，**产品代码零改动**；待用户继续定稿（「公式」放哪个「更多」、数据/视图占位是否够、✓ 是否就放顶栏查找右边）。
 ### 261022(晚⑤) · AI 面板：「附加当前文档全文」只给无选区入口（用户点单）· **已提交 `2ded222b`，待验收**
 
 - **用户定稿**：区域选择用 AI（选区浮栏 / 块菜单 / 图片卡 AI）**不需要**「附加当前文档全文」；只有**无选区**入口（顶栏「更多 → AI 助手对话」）才需要这一行。

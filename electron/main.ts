@@ -14,7 +14,11 @@ import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.
 import { runGcReconcile } from "./s3Maintenance.js";
 import type { SyncResult, SyncProgress } from "./syncTypes.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
-import { initLogger, log, logHeapPeak } from "./logger.js";
+import { initLogger, currentLogLevels, log, logHeapPeak, logStartupInfo } from "./logger.js";
+import { isLevelEnabled } from "./logLevels.js";
+import { mapRendererConsoleLevel } from "./rendererLogLevel.js";
+import { errorFields, formatLogFields, perfMessage } from "../src/core/logFormat.js";
+import { ConsoleNoiseFilter } from "./consoleNoise.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
@@ -174,6 +178,7 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
         result.quickNotes = quick;
       } catch (error) {
         result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
+        log.sync.warn("[sync] 小记同步失败（本轮其余部分不受影响）" + formatLogFields(errorFields(error)));
         report({ phase: "quick-notes", message: `小记同步失败：${String(error)}` });
       }
       store.recordSyncResult(JSON.stringify(result));
@@ -182,6 +187,10 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       logHeapPeak("sync");
       return result;
     });
+  } catch (error) {
+    // 同步失败必须留证据（正式环境没有终端，别只靠调用点的 console.warn）。
+    log.sync.error("[sync] 同步失败" + formatLogFields({ ...errorFields(error), ms: Date.now() - fullSyncStart }));
+    throw error;
   } finally {
     syncInFlight = false;
     clearQuitDeadline();
@@ -305,6 +314,23 @@ function createBootWindow() {
   });
 }
 
+/** 启动计时基准（main.js 加载即开始）：[perf] boot.ready 用它算到主窗口首帧的耗时。 */
+const BOOT_STARTED_AT = Date.now();
+
+/**
+ * 崩溃 / 未捕获错误留档（261023）。
+ * 决策：**只记日志、不退出** —— 本地数据由原子写 + 历史快照保证；主进程直接退出会把用户当前编辑打断。
+ * 频次与形态由日志统计（grep '[crash]'）；若某类异常持续出现，再按证据收敛到具体调用点。
+ */
+function installCrashLogging(): void {
+  process.on("uncaughtException", (error) => {
+    log.app.error("[crash] uncaughtException" + formatLogFields(errorFields(error)));
+  });
+  process.on("unhandledRejection", (reason) => {
+    log.app.error("[crash] unhandledRejection" + formatLogFields(errorFields(reason)));
+  });
+}
+
 async function createWindow() {
   // macOS 关窗后从 Dock 重开时也要先有 boot 窗口，否则主窗口会隐藏到 renderer-ready 才出现。
   if (!bootWindow || bootWindow.isDestroyed()) createBootWindow();
@@ -351,6 +377,7 @@ async function createWindow() {
     win.show();
     win.focus();
     log.app.info(`[boot] main window shown (${reason})`);
+    log.perf.info(perfMessage("boot.ready", Date.now() - BOOT_STARTED_AT, { reason }));
   };
   /** macOS 原生全屏（独立 Space）时系统把标题栏/红绿灯一起隐藏 ⇒ 把全屏状态广播给渲染层，
    *  让顶栏不再为红绿灯让位（避免左侧 82px 空缺口）。 */
@@ -398,6 +425,10 @@ async function createWindow() {
   // 外链（http/https）交给系统浏览器打开，绝不进入应用窗口
   trustedWebContents.add(win.webContents.id);
   // 渲染进程日志统一落盘：console-message 转发到主进程 logger（scope=renderer）。
+  // CSP 拦截通知折叠（261023）：粘贴整页网页时内核会为每张远程图各打一条通知（实测 103 行），
+  // 逐条落盘会把同期真正需要的日志冲掉 ⇒ 折叠成一行汇总（consoleNoise.ts，排查见 TROUBLESHOOTING §M）。
+  const consoleNoise = new ConsoleNoiseFilter({ emit: (line) => log.renderer.info(line) });
+  win.on("closed", () => consoleNoise.flush());
   // Electron 33 事件签名：event 对象带 { level, message, lineNumber, sourceId }；
   // 同时兼容旧式 (event, level, message) 回调。
   win.webContents.on("console-message" as unknown as "console-message", (event: unknown, ...args: unknown[]) => {
@@ -408,10 +439,19 @@ async function createWindow() {
     if (!msg) return;
     // 过滤 DevTools 样式占位与空消息
     if (msg.includes("%c") || msg.length > 4000) return;
-    log.renderer.info(msg);
+    if (consoleNoise.observe(msg)) return;
+    // 级别映射（261023）：渲染层 error/warn 不能被压成 info；正式环境 debug 不落盘，避免调试噪音把日志冲掉。
+    const rendererLevel = mapRendererConsoleLevel(event as { level?: unknown }, args);
+    if (!isLevelEnabled(currentLogLevels().renderer, rendererLevel)) return;
+    if (rendererLevel === "error") log.renderer.error(msg);
+    else if (rendererLevel === "warn") log.renderer.warn(msg);
+    else if (rendererLevel === "debug") log.renderer.debug(msg);
+    else log.renderer.info(msg);
   });
   win.webContents.on("will-navigate", (event, url) => {
-    if (!isAppPageUrl(url)) event.preventDefault();
+    if (isAppPageUrl(url)) return;
+    event.preventDefault();
+    log.app.warn("[security] 阻止窗口导航" + formatLogFields({ url }));
   });
   win.webContents.on("destroyed", () => { trustedWebContents.delete(win.webContents.id); });
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -443,6 +483,11 @@ async function createWindow() {
       try { if (!win.isDestroyed()) win.webContents.reload(); } catch { /* 窗口已销毁 */ }
     }, 800);
   });
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    log.app.error("[crash] preload-error" + formatLogFields({ path: preloadPath, ...errorFields(error) }));
+  });
+  win.on("unresponsive", () => log.app.warn("[ui] 窗口无响应（unresponsive）"));
+  win.on("responsive", () => log.app.info("[ui] 窗口恢复响应（responsive）"));
 
   if (rendererMode === "scheme") {
     await win.loadURL(`${APP_ORIGIN}/index.html`);
@@ -554,9 +599,11 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    initLogger();
+    initLogger({ isPackaged: app.isPackaged });
+    installCrashLogging();
     createBootWindow();
-    log.app.info("app ready: initLogger done");
+    logStartupInfo();
+    log.app.info("app ready: initLogger done" + formatLogFields({ bootMs: Date.now() - BOOT_STARTED_AT }));
     store = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
     const integrity = store.checkIntegrity();
     if (!integrity.ok) {
@@ -723,6 +770,7 @@ if (!app.requestSingleInstanceLock()) {
 // （否则可能停在"对象已传、manifest 未写"的中间态）。
 let quittingForSync = false;
 app.on("before-quit", (event) => {
+  log.app.info("[quit] before-quit" + formatLogFields({ upMs: Date.now() - BOOT_STARTED_AT }));
   if (forceQuit || quittingForSync || !store || !quickNotes) return;
   const cfg = store.getSyncSettings();
   if (!cfg.enabled) return;
@@ -744,6 +792,7 @@ app.on("before-quit", (event) => {
 });
 
 app.on("will-quit", () => {
+  log.app.info("[quit] will-quit" + formatLogFields({ upMs: Date.now() - BOOT_STARTED_AT }));
   // Best-effort checkpoint after any onOpenClose sync has settled. This keeps
   // the metadata DB/WAL bounded without making shutdown depend on it.
   try { store?.checkpointWal(); } catch { /* app is already exiting */ }

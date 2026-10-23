@@ -33,8 +33,11 @@ export interface MobileDbStatement {
 
 export interface MobileDb {
   prepare(sql: string): MobileDbStatement;
-  /** 可选：N 条语句一次下发（原生一次桥往返 + 单事务）；缺省实现退回逐条。 */
-  executeSet?(set: Array<{ statement: string; values: unknown[] }>): Promise<void>;
+  /**
+   * 可选：N 条语句一次下发（原生一次桥往返）。默认由原生包一层事务；
+   * **已在事务内**时调用方必须传 `{ transaction: false }`（否则原生会重复 BEGIN）。
+   */
+  executeSet?(set: Array<{ statement: string; values: unknown[] }>, options?: { transaction?: boolean }): Promise<void>;
   transaction<T extends (...args: never[]) => Promise<unknown>>(fn: T): Promise<Awaited<ReturnType<T>>>;
   pragma(source: string): Promise<unknown>;
   exec(sql: string): Promise<void>;
@@ -61,7 +64,8 @@ export async function executeBatch(d: MobileDb, statements: MobileBatchStatement
 export async function executeBatchInTransaction(d: MobileDb, statements: MobileBatchStatement[]): Promise<void> {
   if (statements.length === 0) return;
   if (d.executeSet) {
-    await d.executeSet(statements);
+    // 已经在外层事务里：不能再让原生开一次事务（否则 "Already in transaction"）。
+    await d.executeSet(statements, { transaction: false });
     return;
   }
   for (const item of statements) await d.prepare(item.statement).run(...item.values);

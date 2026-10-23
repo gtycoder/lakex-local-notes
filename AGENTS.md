@@ -89,6 +89,7 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 - manifest 链保留 `MANIFEST_CHAIN_KEEP=3`，prune/GC/deep-cleanup 共用 + 滞后裁剪；活动对象恒在 latest 全量快照内。
 - 小记独立前缀 `quick-notes/` + 独立库 `quick-notes/metadata.sqlite3`。
 - **编辑器「本机视图」= 设备本地**（用户定稿）：当前工作表/缩放/选区/滚动/折叠/画板视口 **不进正文、不标脏、不进 S3**；表格列宽行高隐藏冻结、多维表视图配置仍属文档数据。`onDirty` 只在正文真变时触发。
+- **编辑器「打开 = 只读」（261023）**：打开文档**不得**因序列化/规范化差异写盘、标脏或触发同步。usheet 三件套（缺一即回归）：`core/usheetDoc.ts` 的 `normalizeUsheetWorkbook`（写入/比较的规范形式）、`UniverSheetEditor` 首次 flush 只对齐基线（`baselineSettledRef` + 内容输入判据）、capture 在**无真实改动或改回原样**时返回磁盘原文。护栏 `usheetOpenReadOnly.test.ts`。**移动端 usheet 保存路径尚未接同一 helper**。
 - **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`local-lakex-notes-v3.bitable-nav.<noteId>`）。**不要**把导航写回正文（纯导航会触发一次 S3 上传）。
 - **互斥域**（判据单一来源 `src/core/maintenancePolicy.ts`；移动端 `mobile/sync/maintenanceLocks.ts`）：**写域**（本地写 + 同步引擎的 DB 片段）／**维护域**（syncNow / GC / 资产补拉）／**高优先域**（用户当场发起、不得排在整轮同步后面的 `syncQuickNote`，判据 `PRIORITY_OPS`）。三条不变量：**I1** 网络往返不得持有写域；**I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash），不靠全局互斥；**I3** 同域串行、**禁止同域嵌套**（`KeyedAsyncQueue` 无重入 ⇒ 自锁）。护栏：`electron/maintenanceQueueScope.test.ts`、`src/mobile/maintenancePolicyCoverage.test.ts`。
 - **同步要"看得见"**：移动端把「上次同步（时间/结果/失败原因）」落盘并**常驻设置页**（`mobile/sync/syncStatusStore.ts`，设备本地；**写入点唯一** = `bridge.syncNow()`；"离线没尝试"不写）；桌面有 `SyncStatusPopover`。
@@ -139,6 +140,7 @@ node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && n
 # 多端：LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 …（启动前临时给 vite.config.ts 的 electron 入口加 onstart: () => {}，结束必须还原）
 node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对象查看
 # dev 控制台：window.__cssLayerProbe() 取「未分层全局 CSS」命中（空数组 = 干净）；命中会自动 console.warn
+# 日志：分级/作用域/埋点/排查手册 = docs/LOGGING.md；现场排障开 debug：LAKE_LOG_LEVEL=debug（file+renderer）、LAKE_LOG_CONSOLE=1（主进程终端）
 ```
 
 ## 7. 踩坑记录

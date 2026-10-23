@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { ASSET_PORT } from "./assetServer.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { AppError } from "../src/core/storeErrors.js";
+import { perfMessage } from "../src/core/logFormat.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
@@ -562,6 +563,7 @@ export class Store {
   }
 
   saveNote(id: string, title: string, content: string, caches?: NoteCacheInput): NoteDocument {
+    const startedAt = Date.now();
     // 非文档类型的正文不是 Lake HTML：缓存**只能**由主进程按类型派生；doc 仍沿用渲染层从内核带来的缓存（不改旧行为）。
     // 261019 review 实测：渲染层在没有 Lake 实例时也会传 { markdown:null, plain:null }（而非 undefined），
     // 若直接采用会把 text_cache / FTS 正文清空 ⇒ 多维表/表格/画板保存后正文搜不到。故非 doc 一律忽略入参。
@@ -574,6 +576,12 @@ export class Store {
       "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    // 261023：保存耗时 + 正文体量（"越写越慢"类问题的唯一量化依据）；慢保存升 info，其余 debug。
+    const savedMs = Date.now() - startedAt;
+    const savedChars = content.length;
+    const saveFields = { id, chars: savedChars };
+    if (savedMs >= 200 || savedChars >= 1024 * 1024) this.logScopes.store.info(perfMessage("note.save", savedMs, saveFields));
+    else this.logScopes.store.debug(perfMessage("note.save", savedMs, saveFields));
     return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
   }
 

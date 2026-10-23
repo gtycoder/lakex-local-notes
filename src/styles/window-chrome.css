@@ -1,0 +1,19 @@
+/**
+ * 全屏（macOS 独立 Space）下的窗口 chrome 收口（261023）。
+ *
+ * 全屏时系统把标题栏/红绿灯一起隐藏 ⇒ 所有「为红绿灯让位」的内距都必须撤掉，
+ * 否则左侧会留一块空缺口（用户口径：仿思源，从最左侧开始）。
+ * 归属判据 = `:root.window-fullscreen`（主进程 enter/leave-full-screen 广播，见 App.tsx）。
+ *
+ * 新增「为红绿灯让位」的界面时，在下面补一条同款覆盖；窗口/最大化态保持原让位值。
+ */
+:root.window-fullscreen .platform-mac .tab-bar {
+  /* 与非 mac 标题栏同组：10px + 不拖拽（全屏没有标题栏可拖）。 */
+  padding-left: 10px;
+  -webkit-app-region: no-drag;
+}
+
+:root.window-fullscreen .attachment-preview.is-mac .attachment-preview__toolbar {
+  /* 预览工具栏回到基础内距 16px（正常窗口是 82px，见 attachment-preview.css 的说明）。 */
+  padding-left: 16px;
+}

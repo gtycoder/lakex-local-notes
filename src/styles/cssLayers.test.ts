@@ -53,6 +53,7 @@ const FILES = [
   "features/ink/inkPad.desktop.css",
   "styles/dialog.css", "styles/document-status.css",   "styles/components.css",   "styles/tokens.css",   "styles/brand-launch.css",   // 261020：14A Paper Finch 启动动画（桌面）
   "styles/vendor-focus.css",   // 261023：第三方编辑器 UI 的焦点视觉归属（unlayered 覆盖层；规则见文件头）
+  "styles/window-chrome.css",   // 261023：全屏（独立 Space）时撤掉「为红绿灯让位」的内距（顶栏 / 附件预览）
   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   "styles/kit.css",       // P4 起：自有组件库（14 件）
   "styles/chrome.css",    // P5 起：应用外壳（活动栏/目录栏头部/状态栏 …）
@@ -141,13 +142,14 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 },
   "features/ink/inkPad.desktop.css": { decls: 23, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）；261006：+5 = 左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 3 条 + label 定位 1 条 + 注入触发器居中 1 条）
   "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
-  "components/ui/markdown/markdown.css": { decls: 43, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
+  "components/ui/markdown/markdown.css": { decls: 57, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
   "features/ai/aiDialogParts.css": { decls: 25, dupGroups: 0 },   // 261021 P1：+9 = 「附加当前文档全文」行（doc 行 flex/wrap/gap/margin 5 条 + label 2 + hint 2；开关本身复用 .ln-switch，无覆盖）。P0：+2 = 预设扩到 7 条后窄窗换行。261013：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。
   "styles/dialog.css": { decls: 238, dupGroups: 8 },   // 261017：+34 = S3 配置迁移弹窗（尺寸 + 多行迁移码输入/提示/错误/动作行；表面与按钮全部复用 .ln-dialog / .ln-btn，无覆盖）  |  +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 94, dupGroups: 2 },   // 260930：+17 = 状态栏锁标识改可点（button 形态 + hover/focus）+ 解锁浮层内容类   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）
   "styles/components.css": { decls: 367, dupGroups: 1 },   // 261021：+2 = 全局搜索结果分组标题（.search-panel-section）   // 260930：-2 = .settings-panel-large .settings-header（其 padding 早已被 overlay 层的 .floating-dialog-header 压死）按职责并到 overlay.css 单一来源。此前 260929：-45 = .ln-tabs* 页签整套收编到 kit 层单一来源（那边同时 +33）；260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in；260926 续：+4 = .sync-status-local-note
   "styles/tokens.css": { decls: 6, dupGroups: 0 },   // 260923 审计：按实测收紧（隔离/桥接规则拆走后基线一直是 83，围栏形同虚设）
   "styles/vendor-focus.css": { decls: 4, dupGroups: 0 },   // 261023：第三方焦点归属 —— 2 条规则（outline:none ×1 + 主色边/柔光环/outline ×3），单一来源，不再逐功能打补丁
+  "styles/window-chrome.css": { decls: 3, dupGroups: 0 },   // 261023：全屏 chrome 收口 —— 顶栏（10px/no-drag）+ 附件预览工具栏（16px）各一条覆盖
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 33, dupGroups: 0 },   // 260923：+3 垂直几何令牌；同批删掉全仓零引用的 6 条死令牌（--ease-in-out/--dur-press/--shell-toolbar/--shell-radius/--shell-card-shadow/--shell-micro-card）   // 260923：+3 = 垂直几何令牌 --breadcrumb-height / --editor-toolbar-height / --tab-item-height（合法新增，非覆盖回涨）
   "styles/app/dialogs.css": { decls: 114, dupGroups: 7 },   // 260923 W1-L2：-9 = 被 overlay 层同名选择器完全压制   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）

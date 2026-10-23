@@ -22,6 +22,7 @@ import { openAssetEntry } from "../attachment/openAssetEntry";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
+import { rlog } from "../../lib/log";
 
 export interface EditorTabProps {
   noteId: string;
@@ -712,7 +713,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
           const entries = performance.getEntriesByName("lake:tab-init:create+setDocument");
           const dur = entries.length ? Math.round(entries[entries.length - 1].duration) : 0;
           // 渲染进程日志经主进程 console-message 转发落盘；tab 重建（同步刷新/冲突重载/恢复历史）的耗时参考指标。
-          console.log(`[editor-perf] init ${noteId} ${dur}ms mode=${mode}${locked ? " (locked)" : ""}`);
+          // 261023：统一 [perf] 格式并带上正文字符数（大文档打开慢的第一判据）。
+          rlog.perf("editor.init", dur, { noteId, mode, chars: content.length, locked });
         } catch { /* 忽略 */ }
       }
     }

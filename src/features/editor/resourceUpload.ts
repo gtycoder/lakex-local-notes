@@ -5,6 +5,7 @@ import { loadSettings } from "../../lib/settings";
 import { imageDataUrl, normalizeImageInput } from "./imageFormat";
 import { createConcurrencyQueue } from "../../core/concurrency";
 import { withRetry } from "../../core/retry";
+import { UploadStats, type UploadKind } from "../../lib/uploadStats";
 
 interface LakeUploadRequest {
   type?: "url" | "file" | "base64";
@@ -13,6 +14,30 @@ interface LakeUploadRequest {
 }
 
 const uploadQueue = createConcurrencyQueue(6);
+
+/**
+ * 上传爆发统计（261023）：粘贴整页网页 = 60–100 次远程图上传，压成一行 [perf] 日志，
+ * 用来区分"卡"是 CPU 还是这段 I/O（阈值：≥3 次 / 墙钟 ≥1.5s / 有失败）。
+ * 单张图 / 单附件不落日志。判据与阈值见 src/lib/uploadStats.ts。
+ */
+const uploadStats = new UploadStats({ emit: (line) => console.info(line) });
+
+function nowMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+/** 请求形态 → 统计类别（远程 URL 是唯一会出网的类别）。 */
+function uploadKindOf(request: unknown): UploadKind {
+  if (request instanceof File) return request.type.startsWith("image/") ? "file" : "attachment";
+  const payload = (request as { data?: unknown; file?: unknown } | null)?.data ?? (request as { file?: unknown } | null)?.file;
+  if (payload instanceof File) return payload.type.startsWith("image/") ? "file" : "attachment";
+  if (typeof payload === "string") {
+    if (payload.startsWith("http://") || payload.startsWith("https://")) return "url";
+    if (payload.startsWith("data:image/")) return "data";
+    if (payload.startsWith("data:")) return "attachment";
+  }
+  return "file";
+}
 
 /** 当前附件上传上限（MiB 配置项；协议硬上限见 MAX_ATTACHMENT_BYTES）。 */
 function configuredMaxAttachmentBytes(): number {
@@ -37,13 +62,24 @@ export interface ResourceUploadOptions {
 }
 
 export async function uploadLakeResource(request: unknown, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
-  return uploadQueue.add(() =>
-    withRetry(() => performUpload(request, noteId, options), {
-      maxRetries: 2,
-      delayMs: 1000,
-      backoffMultiplier: 2,
-    })
-  );
+  const kind = uploadKindOf(request);
+  const startedAt = nowMs();
+  let retries = 0;
+  try {
+    const output = await uploadQueue.add(() =>
+      withRetry(() => performUpload(request, noteId, options), {
+        maxRetries: 2,
+        delayMs: 1000,
+        backoffMultiplier: 2,
+        onRetry: () => { retries += 1; },
+      })
+    );
+    uploadStats.record({ kind, startedAt, endedAt: nowMs(), ok: true, retries });
+    return output;
+  } catch (error) {
+    uploadStats.record({ kind, startedAt, endedAt: nowMs(), ok: false, retries });
+    throw error;
+  }
 }
 
 /** 图片判定（上传分流用）：先信 MIME，再按扩展名兜底。

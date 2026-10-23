@@ -1,5 +1,6 @@
 import { sniffImageFormat } from "./imageFormat";
 import { assetToken, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
+import { rlog } from "../../lib/log";
 
 const BLOCK_TAGS = new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "LI", "BLOCKQUOTE", "PRE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD"]);
 const INLINE_TAGS = new Set(["SPAN", "STRONG", "B", "EM", "I", "U", "S", "DEL", "CODE", "A", "BR"]);
@@ -244,6 +245,38 @@ function findRealImageUrl(img: Element): string | null {
 import { emitOversizeTablePaste, oversizeTableShape, shouldGuardOversizePaste } from "./tablePasteGuard";
 import { activeEditorHost } from "./activeEditor";
 
+/**
+ * 一次粘贴的采集窗口（261023）：同一 paste 事件里内核会**多次**读 text/html（实测 13 次），
+ * 统一压成一行 [perf] paste.html —— bytes / 读取次数 / 我们自己的升级耗时 / 是否被大表护栏拦下。
+ * 粘贴"卡"的排查先看这行（配合 [perf] 资源上传 与 docs/TROUBLESHOOTING.md §M）。
+ */
+const PASTE_FLUSH_MS = 500;
+const pasteStats = { open: false, bytes: 0, getData: 0, upgradeMs: 0, guard: "pass" as "pass" | "hit", timer: null as number | null };
+
+function armPasteFlush(): void {
+  if (pasteStats.timer !== null) window.clearTimeout(pasteStats.timer);
+  pasteStats.timer = window.setTimeout(flushPasteWindow, PASTE_FLUSH_MS);
+}
+
+function flushPasteWindow(): void {
+  if (pasteStats.timer !== null) { window.clearTimeout(pasteStats.timer); pasteStats.timer = null; }
+  if (!pasteStats.open) return;
+  // chars = 剪贴板 HTML 的字符数（不是字节数；中文页面两者差约 2–3 倍，别混用）
+  const fields = { chars: pasteStats.bytes, getData: pasteStats.getData, guard: pasteStats.guard };
+  const upgradeMs = pasteStats.upgradeMs;
+  pasteStats.open = false;
+  rlog.perf("paste.html", upgradeMs, fields);
+}
+
+function startPasteWindow(html: string): void {
+  pasteStats.open = true;
+  pasteStats.bytes = html ? html.length : 0;
+  pasteStats.getData = 0;
+  pasteStats.upgradeMs = 0;
+  pasteStats.guard = "pass";
+  armPasteFlush();
+}
+
 let pasteInterceptorInstalled = false;
 export function installPasteInterceptor(): void {
   if (pasteInterceptorInstalled) return;
@@ -260,19 +293,26 @@ export function installPasteInterceptor(): void {
       // 拦在捕获阶段：阻止本次粘贴 + 抛事件让 TablePasteGuardDialog 给明确出口；
       // **剪贴板内容保留、绝不静默丢弃**（AGENTS §3#16）。
       const pastedHtml = originalGetData("text/html");
+      startPasteWindow(pastedHtml);
       // 261009：护栏只对 **Lake 文档** 生效。网格类编辑器（usheet/sheet/bitable/board）自己按单元格
       // 处理大表粘贴、不经过内核表格卡片，拦它会把用户的大表粘贴误当成"文档卡死"（用户实测粘进 usheet 弹了护栏）。
       const oversized = shouldGuardOversizePaste(activeEditorHost()) ? oversizeTableShape(pastedHtml) : null;
       if (oversized) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        pasteStats.guard = "hit";
+        flushPasteWindow();
         emitOversizeTablePaste({ shape: oversized, html: pastedHtml, at: Date.now() });
         return;
       }
       clipboardData.getData = (type: string): string => {
         const value = originalGetData(type);
         if (type === "text/html" && value) {
+          const startedAt = performance.now();
           const upgraded = upgradePastedHtml(value);
+          pasteStats.getData += 1;
+          pasteStats.upgradeMs += performance.now() - startedAt;
+          armPasteFlush();
           return upgraded || value;
         }
         return value;

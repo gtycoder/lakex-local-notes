@@ -52,11 +52,13 @@ describe("top bar ↔ macOS traffic light alignment", () => {
     expect(app).toContain("native.onWindowFullscreen(apply)");
     expect(app).toContain('classList.toggle("window-fullscreen"');
     expect(app).toContain('classList.remove("window-fullscreen"');
-    // CSS：同一套 10px / no-drag 与非 mac 标题栏共用，不再写第二套值
-    const css = readFileSync(path.join(ROOT, "src/styles/app/tabs.css"), "utf8");
-    expect(css).toMatch(/:root\.window-fullscreen \.platform-mac \.tab-bar/);
-    expect(css).toMatch(/\.platform-native-titlebar \.tab-bar,\s*\n:root\.window-fullscreen \.platform-mac \.tab-bar \{[^}]*padding-left: 10px;[^}]*-webkit-app-region: no-drag;/);
-    // 窗口/最大化态仍保留 82px 让位（别把原规则一起改掉）
-    expect(css).toMatch(/\.platform-mac \.tab-bar \{\s*\n\s*padding-left: 82px;/);
+    // CSS：全屏 chrome 单一来源 = styles/window-chrome.css（顶栏 10px/no-drag + 附件预览回到 16px）
+    const chrome = readFileSync(path.join(ROOT, "src/styles/window-chrome.css"), "utf8");
+    expect(chrome).toMatch(/:root\.window-fullscreen \.platform-mac \.tab-bar \{[^}]*padding-left: 10px;[^}]*-webkit-app-region: no-drag;/);
+    expect(chrome).toMatch(/:root\.window-fullscreen \.attachment-preview\.is-mac \.attachment-preview__toolbar \{[^}]*padding-left: 16px;/);
+    const tabs = readFileSync(path.join(ROOT, "src/styles/app/tabs.css"), "utf8");
+    // 窗口/最大化态仍保留 82px 让位（别把原规则一起改掉）；全屏规则不再散落在 tabs.css
+    expect(tabs).toMatch(/\.platform-mac \.tab-bar \{\s*\n\s*padding-left: 82px;/);
+    expect(tabs).not.toContain("window-fullscreen");
   });
 });

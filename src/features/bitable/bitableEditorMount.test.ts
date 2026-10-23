@@ -1171,9 +1171,11 @@ describe("Markdown 字段与展开浮窗护栏（261004）", () => {
   });
 
   it("Markdown 渲染器：子集渲染 + 单行纯文本预览 + 不用 innerHTML + 链接只认 http(s)", () => {
+    // 261023：解析器抽到 core（桌面/移动端共用），渲染器保留在这两个文件里。
+    const CORE_MD = readFileSync(new URL("../../core/markdown.ts", import.meta.url), "utf8");
     expect(MD).toContain("export function MarkdownView");
-    expect(MD).toContain("export function markdownToPlainText");
-    expect(MD).toContain("export function parseMarkdownBlocks");
+    expect(CORE_MD).toContain("export function markdownToPlainText");
+    expect(CORE_MD).toContain("export function parseMarkdownBlocks");
     expect(MD).not.toContain("dangerouslySetInnerHTML");
     expect(MD).toContain("^https?:");
     expect(MD_CSS).toContain(".md-preview");
