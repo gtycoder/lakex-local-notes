@@ -3,7 +3,7 @@
  * **布局复刻思源资产页，样式仍走我们自己的设计系统**（用户 261006 定稿）。
  *
  * 单栏、上下分区：
- *   · 上半 = 操作 + 列表（吃满剩余高度、内容多了自己滚）：三个大页签（可删 / 历史保护 / 缺失）、
+ *   · 上半 = 操作 + 列表（吃满剩余高度、内容多了自己滚）：四个大页签（可删 / 历史保护 / 缺失 / 缺正文）、
  *     类型筛选、全选 + 清理选中、按文档分组的列表（行内动作：复制路径 / 在文件夹中显示 / 删除）。
  *   · 下半 = 固定 1/3 高的**纯预览**：只有内容（图片 / PDF / 视频 / 音频），不放文字、不放按钮。
  *
@@ -11,14 +11,17 @@
  * 图片走 ?w=1024 档位，音视频与 PDF 用原图（服务端支持 Range）。
  * "缺失"是**一等分类**（登记还在、磁盘文件已不在）：由主进程 listRemovedAssets 的 fileMissing 给出，
  * 不靠前端图片 onError 猜——后者对非图片类型根本不触发。
+ * "缺正文"（261023）= 文档的 .lake 被手动删除：按可恢复性分三组（可云恢复 / 仅历史 / 无备份），
+ * 行内处置 = 从云端拉回 / 恢复最新历史 / 彻底删除（移入回收站后 purge，写墓碑）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, FolderOpen, Image as ImageIcon, Paperclip, RefreshCw, Trash } from "lucide-react";
+import { CloudDownload, Copy, FileText, FolderOpen, History, Image as ImageIcon, Paperclip, RefreshCw, Trash } from "lucide-react";
 import { escapeId } from "../../lib/cssEscape";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { formatBytes } from "../../lib/formatBytes";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
+import type { MissingBodyDoc } from "../../core/missingBody";
 import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
 import { fileKindOf, type AssetFileKind } from "../../core/assetNaming";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon";
@@ -82,7 +85,7 @@ const KIND_OPTIONS = [
 
 const keyOf = (item: Pick<RemovedAsset, "noteId" | "filename">): string => item.noteId + "/" + item.filename;
 
-type StatusFilter = "orphan" | "history" | "missing";
+type StatusFilter = "orphan" | "history" | "missing" | "body";
 
 /** 纯预览台：只有内容，不放文字与按钮（思源式下半区）。 */
 function AssetStage({ item, broken, onBroken }: { item: RemovedAsset | null; broken: boolean; onBroken: () => void }) {
@@ -100,7 +103,33 @@ function AssetStage({ item, broken, onBroken }: { item: RemovedAsset | null; bro
   );
 }
 
-export function AssetsBrowser({ active }: { active: boolean }) {
+const BODY_RECOVERY_LABEL: Record<MissingBodyDoc["recovery"], string> = {
+  cloud: "可云恢复",
+  history: "仅历史",
+  none: "无备份",
+};
+const BODY_RECOVERY_GROUP_LABEL: Record<MissingBodyDoc["recovery"], string> = {
+  cloud: "可从云端恢复",
+  history: "仅能恢复历史版本",
+  none: "无法恢复（只能删除）",
+};
+const BODY_RECOVERY_BADGE: Record<MissingBodyDoc["recovery"], string> = {
+  cloud: "badge--accent",
+  history: "badge--warn",
+  none: "badge--error",
+};
+
+function bodyRestoreFailureText(reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch"): string {
+  switch (reason) {
+    case "no-cloud-config": return "没有配置 S3（无法从云端恢复）。";
+    case "cloud-off": return "云同步未启用（关闭云同步 = 不出网），无法从云端恢复。";
+    case "not-in-cloud": return "云端清单里没有这篇文档（可能已被云端回收）。";
+    case "object-missing": return "云端清单声明了这篇，但正文对象已缺失（可能被云端 GC）。";
+    case "hash-mismatch": return "云端正文校验不通过（hash 不符），已放弃，未写入本地。";
+  }
+}
+
+export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDataChanged?: () => void }) {
   const [items, setItems] = useState<RemovedAsset[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -120,7 +149,82 @@ export function AssetsBrowser({ active }: { active: boolean }) {
     catch (error) { setMsg(getNativeErrorMessage(error)); }
   }, []);
 
+  // ---- 缺正文（261023）：文档的 .lake 被手动删除后，在这里集中处置（云恢复 / 历史恢复 / 彻底删除） ----
+  const [missingBodies, setMissingBodies] = useState<MissingBodyDoc[]>([]);
+  const [bodyLoaded, setBodyLoaded] = useState(false);
+  const [bodyBusy, setBodyBusy] = useState<string | null>(null);
+  const [bodyMsg, setBodyMsg] = useState<string | null>(null);
+  const [pendingPurge, setPendingPurge] = useState<MissingBodyDoc | null>(null);
+
+  const loadMissingBodies = useCallback(async () => {
+    try { setMissingBodies(await native.listMissingBodies()); setBodyLoaded(true); }
+    catch (error) { setMsg(getNativeErrorMessage(error)); }
+  }, []);
+
   useEffect(() => { if (active) void refresh(); }, [active, refresh]);
+  useEffect(() => {
+    // 每次进入资源空间都重新检查（用户可能刚删过文件）；进入"缺正文"页签时才真正扫描（只 stat）。
+    if (!active) return;
+    setBodyLoaded(false);
+  }, [active]);
+  useEffect(() => {
+    // 进入资源页就统计一次（只 stat）：页签上的计数要从一开始就是真值，而不是点进去才变。
+    if (active) void loadMissingBodies();
+  }, [active, loadMissingBodies]);
+
+  const restoreBodyFromCloud = useCallback(async (doc: MissingBodyDoc) => {
+    setBodyBusy(doc.id);
+    try {
+      const result = await native.restoreMissingBodyFromCloud(doc.id);
+      if (result.ok) {
+        setBodyMsg(`已从云端恢复《${result.title}》。若该文档正在标签页里打开，请点它的「重新读取」。`);
+        onDataChanged?.();
+      } else {
+        setBodyMsg(bodyRestoreFailureText(result.reason));
+      }
+      await loadMissingBodies();
+    } catch (error) {
+      setBodyMsg(getNativeErrorMessage(error));
+    } finally {
+      setBodyBusy(null);
+    }
+  }, [loadMissingBodies, onDataChanged]);
+
+  const restoreBodyLatestHistory = useCallback(async (doc: MissingBodyDoc) => {
+    setBodyBusy(doc.id);
+    try {
+      const snapshots = await native.listNoteHistory(doc.id);
+      const newest = [...snapshots].sort((a, b) => b.id - a.id)[0];
+      if (!newest) {
+        setBodyMsg("这篇文档没有可恢复的历史版本。");
+      } else {
+        await native.restoreHistory(newest.id);
+        setBodyMsg(`已从历史版本恢复《${doc.title}》（快照 ${newest.createdAt}）。`);
+        onDataChanged?.();
+      }
+      await loadMissingBodies();
+    } catch (error) {
+      setBodyMsg(getNativeErrorMessage(error));
+    } finally {
+      setBodyBusy(null);
+    }
+  }, [loadMissingBodies, onDataChanged]);
+
+  const confirmPurgeBody = useCallback(async () => {
+    if (!pendingPurge) return;
+    setBodyBusy(pendingPurge.id);
+    try {
+      await native.purgeMissingBody(pendingPurge.id);
+      setBodyMsg(`已彻底删除《${pendingPurge.title}》（写墓碑，云端会下架且不会复活）。`);
+      setPendingPurge(null);
+      onDataChanged?.();
+      await loadMissingBodies();
+    } catch (error) {
+      setBodyMsg(getNativeErrorMessage(error));
+    } finally {
+      setBodyBusy(null);
+    }
+  }, [pendingPurge, loadMissingBodies, onDataChanged]);
 
   // 切分类/换类型 = 换上下文：右侧预览与勾选都清掉（否则会出现"预览还是上一个页签的文件"、
   // 以及"清理选中把看不见的条目也删了"——用户 261006 报的前者）。
@@ -254,10 +358,13 @@ export function AssetsBrowser({ active }: { active: boolean }) {
     setBusy(false);
   };
 
-  const STATUS_TABS: Array<{ id: StatusFilter; label: string; count: number }> = [
+  const STATUS_TABS: Array<{ id: StatusFilter; label: string; count: number | null }> = [
     { id: "orphan", label: "可删", count: counts.orphan },
     { id: "history", label: "历史保护", count: counts.history },
     { id: "missing", label: "缺失", count: counts.missing },
+    // 261023：文档正文被手动删除（.lake 不在）单独成一类 —— 可云恢复 / 仅历史 / 只能删除。
+    // 未扫描完前不显示数字（不让"0"误导成"没有缺失"）。
+    { id: "body", label: "缺正文", count: bodyLoaded ? missingBodies.length : null },
   ];
 
   const pendingBytes = (pendingDelete ?? []).reduce((sum, item) => sum + (item.size || 0), 0);
@@ -278,34 +385,80 @@ export function AssetsBrowser({ active }: { active: boolean }) {
               <button key={tab.id} type="button" role="tab" aria-selected={status === tab.id}
                 className={`ln-tabs__item${status === tab.id ? " is-active" : ""}`}
                 onClick={() => setStatus(tab.id)}>
-                {tab.label}<span className="ln-tabs__count">{tab.count}</span>
+                {tab.label}{tab.count !== null && <span className="ln-tabs__count">{tab.count}</span>}
               </button>
             ))}
           </div>
         </div>
         <span className="ln-spacer" />
-        <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />
+        {status !== "body" && <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />}
       </div>
 
-      <div className="asset-browser__toolbar">
-        <label className="asset-browser__all">
-          <input ref={allRef} type="checkbox" checked={selectableItems.length > 0 && selected.size >= selectableItems.length} onChange={toggleSelectAll} aria-label="全选可删资源" />
-          <span>全选可删（{selectableItems.length}）</span>
-        </label>
-        <span className="ln-spacer" />
-        <span className="asset-browser__summary">
-          {selected.size > 0 && <strong>{selected.size} 个 · {formatBytes(selectedBytes)}　</strong>}
-          共 {items.length} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档
-        </span>
-        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
-        <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={busy || selected.size === 0} onClick={() => setPendingDelete(selectedItems)}>
-          {busy ? "清理中…" : `清理选中${selected.size > 0 ? `（${selected.size}）` : ""}`}
-        </button>
-      </div>
+      {status === "body" ? (
+        <div className="asset-browser__toolbar">
+          <span className="asset-browser__summary">
+            共 {missingBodies.length} 篇缺正文文档 · 云恢复需联网（关闭云同步的库不会显示为可恢复）
+          </span>
+          <span className="ln-spacer" />
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="重新检查正文文件" onClick={() => void loadMissingBodies()}><RefreshCw size={14} /></button>
+        </div>
+      ) : (
+        <div className="asset-browser__toolbar">
+          <label className="asset-browser__all">
+            <input ref={allRef} type="checkbox" checked={selectableItems.length > 0 && selected.size >= selectableItems.length} onChange={toggleSelectAll} aria-label="全选可删资源" />
+            <span>全选可删（{selectableItems.length}）</span>
+          </label>
+          <span className="ln-spacer" />
+          <span className="asset-browser__summary">
+            {selected.size > 0 && <strong>{selected.size} 个 · {formatBytes(selectedBytes)}　</strong>}
+            共 {items.length} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档
+          </span>
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
+          <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={busy || selected.size === 0} onClick={() => setPendingDelete(selectedItems)}>
+            {busy ? "清理中…" : "清理选中" + (selected.size > 0 ? "（" + selected.size + "）" : "")}
+          </button>
+        </div>
+      )}
 
       {msg && <div className="asset-browser__msg" role="status">{msg}</div>}
+      {status === "body" && bodyMsg && <div className="asset-browser__msg" role="status">{bodyMsg}</div>}
 
-      {items.length === 0 ? (
+      {status === "body" ? (
+        bodyLoaded === false ? (
+          <div className="ln-empty"><strong>正在检查正文文件…</strong></div>
+        ) : missingBodies.length === 0 ? (
+          <div className="ln-empty"><strong>没有缺失正文的文档</strong><small>当前所有文档的正文文件都在。</small></div>
+        ) : (
+          <div className="asset-browser__list ln-list-panel">
+            {(["cloud", "history", "none"] as const).map((recovery) => {
+              const docs = missingBodies.filter((doc) => doc.recovery === recovery);
+              if (docs.length === 0) return null;
+              return (
+                <div className="asset-browser__group" key={recovery}>
+                  <div className="asset-browser__grouptitle">
+                    <FileText size={13} />
+                    <span>{BODY_RECOVERY_GROUP_LABEL[recovery]}</span>
+                    <span className="asset-browser__gcount">{docs.length} 篇</span>
+                  </div>
+                  {docs.map((doc) => (
+                    <div className="ln-row asset-browser__row" key={doc.id}>
+                      <span className="ln-row__icon asset-browser__thumb"><FileText size={18} /></span>
+                      <span className="ln-row__title" title={doc.title}>{doc.title}</span>
+                      <span className={"badge " + BODY_RECOVERY_BADGE[doc.recovery]}>{BODY_RECOVERY_LABEL[doc.recovery]}{doc.historyCount > 0 ? " · 历史 " + doc.historyCount : ""}</span>
+                      <span className="asset-browser__size">{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString("zh-CN") : ""}</span>
+                      <span className="ln-row__actions asset-browser__acts">
+                        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="从云端恢复" title={doc.recovery === "cloud" ? "从云端拉回正文（需联网）" : "没有可用的云端依据（未配置/未同步过）"} disabled={doc.recovery !== "cloud" || bodyBusy === doc.id} onClick={() => void restoreBodyFromCloud(doc)}><CloudDownload size={13} /></button>
+                        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="恢复最新历史" title={doc.historyCount > 0 ? "从最新历史版本恢复（" + doc.historyCount + " 个快照）" : "没有历史快照"} disabled={doc.historyCount === 0 || bodyBusy === doc.id} onClick={() => void restoreBodyLatestHistory(doc)}><History size={13} /></button>
+                        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="彻底删除" title="彻底删除（写墓碑，云端下架且不会复活）" disabled={bodyBusy === doc.id} onClick={() => setPendingPurge(doc)}><Trash size={13} /></button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : items.length === 0 ? (
         <div className="ln-empty"><strong>没有被移除的资源文件</strong><small>当前所有本地资产都仍被正文或历史快照引用。</small></div>
       ) : (
         <>
@@ -391,6 +544,21 @@ export function AssetsBrowser({ active }: { active: boolean }) {
           <div className="ln-dialog__actions">
             <button className="ln-btn ln-btn--ghost" onClick={() => setPendingDelete(null)}>取消</button>
             <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={busy} onClick={() => void confirmDelete()}>{busy ? "删除中…" : "删除"}</button>
+          </div>
+        </Dialog>
+      )}
+
+      {pendingPurge && (
+        <Dialog open onDismiss={() => setPendingPurge(null)} label="彻底删除缺正文文档" className="asset-browser-confirm">
+          <div className="ln-dialog__head"><span className="ln-dialog__title">彻底删除《{pendingPurge.title}》？</span></div>
+          <div className="ln-dialog__body">
+            <p className="asset-browser-confirm__note">
+              正文文件已经缺失。彻底删除会写 purge 墓碑：云端下架、其他设备跟随删除且不会复活；此操作不可撤销。
+            </p>
+          </div>
+          <div className="ln-dialog__actions">
+            <button className="ln-btn ln-btn--ghost" onClick={() => setPendingPurge(null)}>取消</button>
+            <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={bodyBusy === pendingPurge.id} onClick={() => void confirmPurgeBody()}>{bodyBusy === pendingPurge.id ? "删除中…" : "彻底删除"}</button>
           </div>
         </Dialog>
       )}

@@ -741,7 +741,7 @@ export function App() {
             <div className="tab-items" />
             <div className="tabbar-trailing">{topBarSearch}</div>
           </header>
-          <AssetsBrowser active={desktopWorkspace === "resources"} />
+          <AssetsBrowser active={desktopWorkspace === "resources"} onDataChanged={() => { void refreshTree(); }} />
         </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}

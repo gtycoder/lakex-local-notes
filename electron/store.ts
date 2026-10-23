@@ -18,6 +18,8 @@ import { emptyBoardBody } from "../src/core/boardDoc.js";
 import { emptyInkBody } from "../src/core/inkDoc.js";
 import { searchTextForKind } from "../src/core/noteSearchText.js";
 import { countChars, countWords } from "../src/core/textStats.js";
+import { missingBodyRecovery, type MissingBodyDoc } from "../src/core/missingBody.js";
+import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -1133,6 +1135,62 @@ export class Store {
   isNoteBodyMissing(id: string): boolean {
     return !fs.existsSync(this.notePath(id));
   }
+  /**
+   * 资源页「缺正文」清单（261023）：只 stat、不读正文；带历史快照数 / 同步基线 / 云配置，
+   * 供 UI 分组（云可恢复 / 仅历史 / 无备份）与处置。
+   */
+  listMissingBodies(): MissingBodyDoc[] {
+    const rows = this.db.prepare(`
+      SELECT n.id, n.title, n.kind, n.updated_at, n.parent_id,
+             (SELECT COUNT(*) FROM note_history h WHERE h.note_id = n.id) AS history_count,
+             (SELECT MAX(h.id) FROM note_history h WHERE h.note_id = n.id) AS last_history_id,
+             (SELECT 1 FROM sync_base b WHERE b.note_id = n.id) AS has_sync_base
+      FROM notes n
+      WHERE n.deleted_at IS NULL AND n.parent_id != ?
+    `).all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string; kind: string | null; updated_at: string; parent_id: string | null; history_count: number; last_history_id: number | null; has_sync_base: number | null }>;
+    // 可云恢复 = 已配置 S3 **且**允许出网（「关闭云同步 = 完全没配置」红线：关闭时任何路径不出网）。
+    // 只配置但关闭同步的库，这条判据为 false，UI 会归到"仅历史 / 无备份"，不会诱导点击后报"云同步不可用"。
+    const cloudConfigured = canTouchNetwork(cloudStateOf(this.getS3Settings() !== null, this.getSyncSettings()));
+    const out: MissingBodyDoc[] = [];
+    for (const row of rows) {
+      if (fs.existsSync(this.notePath(row.id))) continue;
+      const historyCount = Number(row.history_count) || 0;
+      const hasSyncBase = row.has_sync_base === 1;
+      out.push({
+        id: row.id,
+        title: row.title,
+        kind: normalizeNoteKind(row.kind) ?? "doc",
+        updatedAt: row.updated_at,
+        parentId: row.parent_id ?? null,
+        historyCount,
+        lastHistoryId: row.last_history_id ?? null,
+        hasSyncBase,
+        cloudConfigured,
+        recovery: missingBodyRecovery({ cloudConfigured, hasSyncBase, historyCount }),
+      });
+    }
+    out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    return out;
+  }
+
+  /** 从云端恢复正文时落盘（原子写；调用方负责校验 hash 与记账）。 */
+  writeRestoredBody(noteId: string, content: string): void {
+    const target = this.notePath(noteId);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const tmp = `${target}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
+    fs.writeFileSync(tmp, content, "utf8");
+    fs.renameSync(tmp, target);
+  }
+
+  /**
+   * 彻底删除「缺正文」文档：先走正常删除流程移入回收站（保留 deleted_from_parent_id 语义），
+   * 再彻底删除（写 purge 墓碑 ⇒ 云端下架、不会复活）。正文文件本来就不存在，不涉及文件移动。
+   */
+  purgeMissingBodyNote(id: string): void {
+    this.trashLifecycle.deleteTreeNode(id);
+    this.trashLifecycle.purgeTrashItem(id);
+  }
+
 
   contentHash(id: string): string {
     return this.syncReconciliation.contentHash(id);

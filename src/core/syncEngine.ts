@@ -31,7 +31,7 @@ export { HISTORY_SNAPSHOT_PROTECT_DAYS } from "./syncEngineTypes.js";
 export { downloadNoteAssets, scanLocalAssets } from "./syncAssets.js";
 
 /** 单对象大小护栏（对齐桌面 sync.ts:100）：正文 .lake 上限 64MiB。 */
-const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
+export const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 
 /** 正文对象并发上传车道数（内容寻址幂等，条目独立）。 */
 const UPLOAD_CONCURRENCY = 4;

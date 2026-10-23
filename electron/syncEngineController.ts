@@ -10,8 +10,8 @@ import type { Store } from "./store.js";
 import { ObjectStore } from "./s3Store.js";
 import { pruneOldManifests } from "./s3Maintenance.js";
 import type { SyncProgress, SyncResult, SyncWarning } from "./syncTypes.js";
-import { parseLakeManifest, objectKey, MAX_MANIFEST_BYTES, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
-import { syncNow as engineSyncNow, downloadNoteAssets, type SyncReport } from "../src/core/syncEngine.js";
+import { parseLakeManifest, objectKey, sha256Hex, MAX_MANIFEST_BYTES, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
+import { syncNow as engineSyncNow, downloadNoteAssets, MAX_REMOTE_NOTE_BYTES, type SyncReport } from "../src/core/syncEngine.js";
 import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
 import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
@@ -196,3 +196,36 @@ export async function ensureTrashNoteAssets(
  * 调 ensureTrashNoteAssets 在后台补拉，并按回执给用户「正在从 S3 拉取缺失数据…」/「未能下载」。
  * 恢复红线不变：恢复是墓碑权威的唯一显式例外，永远成功。
  */
+
+/**
+ * 资源页「缺正文」→ 从云端拉回该篇正文（261023，用户显式发起的恢复动作）。
+ *
+ * 语义：只在**允许出网**时执行（「关闭云同步 = 完全没配置」红线）；拉回前校验 sha256；
+ * 失败一律明确回报（不静默、不写空正文），由 UI 决定下一步（历史恢复 / 删除）。
+ * 资产（图片/附件）不在这里处理：正文落盘后，下一次正常同步会按清单差集补拉。
+ */
+export async function restoreMissingBodyFromCloud(
+  store: Store,
+  noteId: string,
+): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" }> {
+  const settings = store.getS3Settings();
+  if (!settings) return { ok: false, reason: "no-cloud-config" };
+  if (!canTouchNetwork(cloudStateOf(true, store.getSyncSettings()))) return { ok: false, reason: "cloud-off" };
+  validateS3Settings(settings);
+  const startedAt = Date.now();
+  const remote = new ObjectStore(settings, store.logScopes);
+  await remote.test();
+  const cfg = syncConfigFromStore(store);
+  const manifestBytes = await remote.getOptional(`${cfg.prefix}/manifests/latest.json`, { maxBytes: MAX_MANIFEST_BYTES });
+  const manifest = manifestBytes ? parseLakeManifest(manifestBytes) : null;
+  const entry = manifest?.notes.find((n) => n.id === noteId && !n.deleted);
+  if (!entry) return { ok: false, reason: "not-in-cloud" };
+  const bytes = await remote.getOptional(`${cfg.prefix}/${objectKey(noteId, entry.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+  if (!bytes) return { ok: false, reason: "object-missing" };
+  if (sha256Hex(bytes) !== entry.contentHash) return { ok: false, reason: "hash-mismatch" };
+  store.writeRestoredBody(noteId, new TextDecoder().decode(bytes));
+  store.setBaseHash(noteId, entry.contentHash);
+  store.markSynced(noteId);
+  store.logScopes.sync.info(perfMessage("missing-body.restoreFromCloud", Date.now() - startedAt, { noteId, bytes: bytes.length }));
+  return { ok: true, title: entry.title };
+}

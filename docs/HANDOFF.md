@@ -50,6 +50,19 @@
 - **261023 七修（AI 体验打磨）**：流式跟底改为「只在底部时跟随」+ 上滑暂停 +「回到底部」浮钮；相册多选（按剩余 10 张名额合并，超出提示）；历史「继续对话」/新对话清空待发送图片；设置页新增「清除 API Key」（二次确认）。真机验证：长回答流式中上滑 1.8s 不回弹、浮钮出现、点击回底。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
+### 261023(八) · 资源页新增「缺正文」分类：可云恢复 / 仅历史 / 彻底删除 · **已修**
+
+- **用户口径**：提示一次之后，在资源页加 tab 展示缺失正文的文档，让用户主动选择"恢复历史 / 彻底删除"；并区分**能云同步恢复**与**只能历史恢复**的。
+- **后端**：
+  - `store.listMissingBodies()`：只 stat 不读正文；每条带 `historyCount / lastHistoryId / hasSyncBase` 与 `cloudConfigured`（= **已配置 S3 且允许出网**，遵「关闭云同步 = 完全没配置」红线）；判据单一来源 `src/core/missingBody.ts` 的 `missingBodyRecovery()` → `cloud | history | none`。
+  - `restoreMissingBodyFromCloud()`（`syncEngineController`）：读 latest manifest → 取该篇正文对象 → **sha256 校验** → 原子写正文 → `setBaseHash` + `markSynced`；失败以 `reason` 明确回报（`cloud-off / no-cloud-config / not-in-cloud / object-missing / hash-mismatch`），不写空正文。资产不在此处理，后续同步按差集补拉。
+  - `store.purgeMissingBodyNote()`：先走正常删除流程移入回收站，再 `purgeTrashItem`（**写 purge 墓碑**，云端下架不复活）。
+  - IPC 三条：`list_missing_bodies` / `restore_missing_body_from_cloud` / `purge_missing_body`（通道数 123 → **126**，三方一致性护栏同步）。
+- **前端**（`AssetsBrowser`）：第 4 个页签 **缺正文**（进入资源页即统计，计数从开始就是真值；扫描未完成不显示 0 误导）；按 **可从云端恢复 / 仅能恢复历史版本 / 无法恢复（只能删除）** 三组展示；行内动作 = 从云端拉回（无云端依据时置灰并给原因）/ 恢复最新历史（显示快照数）/ 彻底删除（二次确认，写明"写墓碑、不可撤销"）。`App` 通过 `onDataChanged` 刷新目录树（彻底删除后目录同步消失）。
+- **E2E（隔离实例 + dev 数据只读副本，删掉两篇正文）**：列表 3 篇；页签「缺正文」；分组「仅能恢复历史版本 3 篇」；对「虎嗅11」恢复最新历史 ⇒ **正文文件回写、行消失**；对「值得买22」彻底删除 ⇒ 确认框 → 行消失、`deleted_notes` **墓碑=1**。
+- **门禁**：tsc 0 · 全库 vitest **386 文件 / 2628 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
+- **未接**：移动端没有资源页；云恢复的资产补拉依赖后续正常同步（面板/提示已说明）。
+
 ### 261023(七) · 手动删数据（正文文件缺失）不再反复报错 · **已修**
 
 - **用户报**（附截图）：手动删掉 `.lake` 后，每次打开/启动都弹 `ENOENT` 错误横幅（截图路径来自一次隔离实例的临时 userData），很烦。

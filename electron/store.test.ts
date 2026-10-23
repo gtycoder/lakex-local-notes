@@ -2242,3 +2242,34 @@ describe("手动删数据（正文文件缺失）的处置", () => {
     expect(store.isNoteBodyMissing(note.id)).toBe(false);
   });
 });
+
+describe("缺正文文档清单与彻底删除（资源页 261023）", () => {
+  it("listMissingBodies：只列正文缺失的文档，带历史快照与可恢复性", () => {
+    const withHistory = store.createNote("有历史");
+    store.createHistorySnapshot(withHistory.id, "<p>v1</p><p><br></p>");
+    const plain = store.createNote("无历史");
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", withHistory.id)));
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", plain.id)));
+    const rows = store.listMissingBodies();
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(withHistory.id)?.recovery).toBe("history");
+    expect(byId.get(withHistory.id)?.historyCount).toBeGreaterThanOrEqual(1);
+    expect(byId.get(withHistory.id)?.lastHistoryId).not.toBeNull();
+    expect(byId.get(plain.id)?.recovery).toBe("none");
+    const normal = store.createNote("正常");
+    expect(store.listMissingBodies().some((r) => r.id === normal.id)).toBe(false);
+  });
+
+  it("purgeMissingBodyNote：移入回收站后彻底删除，并写墓碑（不会复活）", () => {
+    const note = store.createNote("待删");
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", note.id)));
+    store.purgeMissingBodyNote(note.id);
+    expect(store.listMissingBodies().some((r) => r.id === note.id)).toBe(false);
+    expect(() => store.readNote(note.id)).toThrow();
+    const db = new Database(path.join(dir, "metadata.sqlite3"), { readonly: true });
+    try {
+      const row = db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE id=?").get(note.id) as { c: number };
+      expect(row.c).toBe(1);
+    } finally { db.close(); }
+  });
+});

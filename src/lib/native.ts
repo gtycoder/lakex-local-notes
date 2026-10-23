@@ -1,5 +1,6 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
+import type { MissingBodyDoc } from "../core/missingBody";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
@@ -19,6 +20,12 @@ export interface LakeNative {
   readNote(id: string): Promise<NoteDocument>;
   /** 正文文件是否缺失（只 stat；启动跳过缺正文文档用）。 */
   noteBodyMissing(id: string): Promise<boolean>;
+  /** 资源页「缺正文」清单（只 stat；带历史快照数 / 同步基线 / 云可恢复判据）。 */
+  listMissingBodies(): Promise<MissingBodyDoc[]>;
+  /** 缺正文：从云端拉回该篇正文（显式动作；失败以 reason 回报）。 */
+  restoreMissingBodyFromCloud(noteId: string): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" }>;
+  /** 缺正文：彻底删除该文档（移入回收站 → purge 写墓碑）。 */
+  purgeMissingBody(noteId: string): Promise<void>;
   getNoteDigest(id: string): Promise<NoteDigest | null>;
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   /** AI（P0）：设置读写/连通性测试/流式对话/取消；Key 绝不出主进程（视图已脱敏）。 */
@@ -223,6 +230,9 @@ export const native = {
   bootstrap: () => api().bootstrap(),
   readNote: (id: string) => api().readNote(id),
   noteBodyMissing: (id: string) => api().noteBodyMissing(id),
+  listMissingBodies: () => api().listMissingBodies(),
+  restoreMissingBodyFromCloud: (id: string) => api().restoreMissingBodyFromCloud(id),
+  purgeMissingBody: (id: string) => api().purgeMissingBody(id),
   getNoteDigest: (id: string) => api().getNoteDigest(id),
   setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   aiGetSettings: () => api().aiGetSettings(),

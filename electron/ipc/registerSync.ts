@@ -3,6 +3,7 @@ import path from "node:path";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
 import { runDeepCleanup, runGcReconcile } from "../s3Maintenance.js";
+import { restoreMissingBodyFromCloud } from "../syncEngineController.js";
 import { testConnection } from "../s3Store.js";
 import type { SyncProgress } from "../syncTypes.js";
 import { runGcDiagnostics } from "../syncGc.js";
@@ -125,6 +126,8 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   ipc.handle("get_s3_gc_settings", () => store.getS3GcSettings());
   ipc.handle("get_trash_reminder", () => store.listTrashReminder(store.getS3GcSettings().trashAutoPurgeDays));
   ipc.handle("run_data_health_check", () => store.runDataHealthCheck());
+  /** 资源页「缺正文」→ 从云端拉回（显式动作；失败以 reason 回报，不抛）。 */
+  ipc.handle("restore_missing_body_from_cloud", (id: string) => restoreMissingBodyFromCloud(store, id));
   ipc.handle("save_s3_gc_settings", (settings: unknown) => {
     if (!settings || typeof settings !== "object") throw new IpcInputError("云端回收配置格式无效");
     const s = settings as Record<string, unknown>;
