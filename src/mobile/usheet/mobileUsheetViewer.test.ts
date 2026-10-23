@@ -226,7 +226,7 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     for (const label of ["加粗", "斜体", "下划线", "删除线", "水平对齐 左", "垂直对齐 上", "字号 16"]) {
       expect(panel!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
-    expect(panel!.querySelectorAll(".mb-usheet-swatch").length).toBe(14);
+    expect(panel!.querySelectorAll(".mb-usheet-fsw").length).toBe(14);
     await click(host, "关闭文字格式");
     // 关闭后要么保持挂载（closingHold，等键盘盖住）且 data-open=0，要么已卸载（jsdom 无键盘）。
     const closingPanel = host.querySelector(".mb-usheet-panel");

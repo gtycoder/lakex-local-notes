@@ -121,29 +121,34 @@ function InsertPanel({ onInsert }: SheetDockPanelProps) {
 }
 
 function FormatPanel({ fmt, onFormat, onAlignH, onAlignV, onFontColor, onFill, onFontSize }: SheetDockPanelProps) {
+  const alignCurrent = fmt.align === "normal" ? "right" : fmt.align;
   return (
-    <>
-      <div className="mb-usheet-bar">
-        {SHEET_FORMAT_TOGGLES.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={"mb-usheet-bar__cell mb-usheet-bar__glyph" + (fmt[item.id] ? " is-active" : "")}
-            aria-label={item.label}
-            aria-pressed={Boolean(fmt[item.id])}
-            onClick={() => onFormat(item.id)}
-          >
-            <span data-style={item.id}>{item.glyph}</span>
-          </button>
-        ))}
+    <div className="mb-usheet-fpanel">
+      {/* 第一行：B / I / U / S（一张卡） */}
+      <div className="mb-usheet-frow">
+        <div className="mb-usheet-fcard" data-count={SHEET_FORMAT_TOGGLES.length}>
+          {SHEET_FORMAT_TOGGLES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={"mb-usheet-fbtn" + (fmt[item.id] ? " is-on" : "")}
+              aria-label={item.label}
+              aria-pressed={Boolean(fmt[item.id])}
+              onClick={() => onFormat(item.id)}
+            >
+              <span className="mb-usheet-fglyph" data-style={item.id}>{item.glyph}</span>
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="mb-usheet-bar-split">
-        <div className="mb-usheet-bar" role="group" aria-label="水平对齐">
+      {/* 第二行：水平对齐 + 垂直对齐（两张卡按条目数分宽） */}
+      <div className="mb-usheet-frow">
+        <div className="mb-usheet-fcard" data-count={SHEET_ALIGN_H.length} role="group" aria-label="水平对齐">
           {SHEET_ALIGN_H.map((item) => (
             <button
               key={item.id}
               type="button"
-              className={"mb-usheet-bar__cell" + ((fmt.align === "normal" ? "right" : fmt.align) === item.id ? " is-active" : "")}
+              className={"mb-usheet-fbtn" + (alignCurrent === item.id ? " is-on" : "")}
               aria-label={"水平对齐 " + item.label}
               onClick={() => onAlignH(item.id)}
             >
@@ -151,12 +156,12 @@ function FormatPanel({ fmt, onFormat, onAlignH, onAlignV, onFontColor, onFill, o
             </button>
           ))}
         </div>
-        <div className="mb-usheet-bar" role="group" aria-label="垂直对齐">
+        <div className="mb-usheet-fcard" data-count={SHEET_ALIGN_V.length} role="group" aria-label="垂直对齐">
           {SHEET_ALIGN_V.map((item) => (
             <button
               key={item.id}
               type="button"
-              className={"mb-usheet-bar__cell" + ((fmt.valign || "middle") === item.id ? " is-active" : "")}
+              className={"mb-usheet-fbtn" + ((fmt.valign || "middle") === item.id ? " is-on" : "")}
               aria-label={"垂直对齐 " + item.label}
               onClick={() => onAlignV(item.id)}
             >
@@ -165,49 +170,68 @@ function FormatPanel({ fmt, onFormat, onAlignH, onAlignV, onFontColor, onFill, o
           ))}
         </div>
       </div>
-      <div className="mb-usheet-bar mb-usheet-bar--colors" role="group" aria-label="字体颜色">
-        {SHEET_FONT_COLORS.map((color) => (
-          <button
-            key={color.id}
-            type="button"
-            className={"mb-usheet-bar__cell" + (color.value ? "" : " is-current")}
-            aria-label={"字体颜色 " + color.label}
-            onClick={() => onFontColor(color.value)}
-          >
-            <span className="mb-usheet-color-A" style={color.value ? { color: color.value } : undefined}>A</span>
-          </button>
-        ))}
-      </div>
-      <div className="mb-usheet-fills" role="group" aria-label="背景填充">
-        <div className="mb-usheet-fills__row">
-          {SHEET_FILL_LIGHT.map((fill) => (
-            <button key={fill.id} type="button" className="mb-usheet-fills__cell" aria-label={"背景填充 " + fill.label} onClick={() => onFill(fill.value)}>
-              {fill.value ? <span className="mb-usheet-swatch" style={{ background: fill.value }} /> : <span className="mb-usheet-swatch mb-usheet-swatch--none" />}
-            </button>
-          ))}
-        </div>
-        <div className="mb-usheet-fills__row">
-          {SHEET_FILL_STRONG.map((fill) => (
-            <button key={fill.id} type="button" className="mb-usheet-fills__cell" aria-label={"背景填充 " + fill.label} onClick={() => onFill(fill.value)}>
-              <span className="mb-usheet-swatch" style={{ background: fill.value }} />
+      {/* 第三行：字体颜色（A × 8） */}
+      <div className="mb-usheet-frow">
+        <div className="mb-usheet-fcard mb-usheet-fcolors" data-count={SHEET_FONT_COLORS.length} role="group" aria-label="字体颜色">
+          {SHEET_FONT_COLORS.map((color) => (
+            <button
+              key={color.id}
+              type="button"
+              className="mb-usheet-fbtn"
+              aria-label={"字体颜色 " + color.label}
+              onClick={() => onFontColor(color.value)}
+            >
+              <span className="mb-usheet-fA" style={color.value ? { color: color.value } : undefined}>A</span>
             </button>
           ))}
         </div>
       </div>
-      <div className="mb-usheet-sizes" role="group" aria-label="字号">
-        {SHEET_FONT_SIZES.map((size) => (
-          <button
-            key={size}
-            type="button"
-            className={"mb-usheet-sizes__cell" + ((fmt.size || 14) === size ? " is-active" : "")}
-            aria-label={"字号 " + size}
-            onClick={() => onFontSize(size)}
-          >
-            {size}
-          </button>
-        ))}
+      {/* 第四行：背景填充（两行圆点，照文档语雀式色板） */}
+      <div className="mb-usheet-frow">
+        <div className="mb-usheet-fcard mb-usheet-fboard" role="group" aria-label="背景填充">
+          <div className="mb-usheet-fboard-row">
+            {SHEET_FILL_LIGHT.map((fill) => (
+              <button
+                key={fill.id}
+                type="button"
+                className={"mb-usheet-fsw" + (fill.value ? "" : " mb-usheet-fsw--none")}
+                style={fill.value ? { background: fill.value } : undefined}
+                aria-label={"背景填充 " + fill.label}
+                onClick={() => onFill(fill.value)}
+              />
+            ))}
+          </div>
+          <div className="mb-usheet-fboard-row">
+            {SHEET_FILL_STRONG.map((fill) => (
+              <button
+                key={fill.id}
+                type="button"
+                className="mb-usheet-fsw"
+                style={{ background: fill.value }}
+                aria-label={"背景填充 " + fill.label}
+                onClick={() => onFill(fill.value)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
-    </>
+      {/* 第五行：字号（一行常用档） */}
+      <div className="mb-usheet-frow">
+        <div className="mb-usheet-fcard mb-usheet-fsizes" role="group" aria-label="字号">
+          {SHEET_FONT_SIZES.map((size) => (
+            <button
+              key={size}
+              type="button"
+              className={"mb-usheet-fbtn" + ((fmt.size || 14) === size ? " is-on" : "")}
+              aria-label={"字号 " + size}
+              onClick={() => onFontSize(size)}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -711,6 +711,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           {renderedPanel && (
             <div
               className="mb-usheet-panel"
+              data-kind={renderedPanel}
               data-open={panelOpen || panelClosingHold ? "1" : "0"}
               data-closing={panelClosing ? "1" : undefined}
               style={{ ["--mb-usheet-panel-h" as string]: panelHeight + "px" }}

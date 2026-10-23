@@ -463,6 +463,76 @@
 .mb-usheet-sizes__cell + .mb-usheet-sizes__cell { border-left: 1px solid var(--lake-border-1); }
 .mb-usheet-sizes__cell.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: 600; }
 
+
+/* ---------- T 面板（照文档 Aa 面板：分组白卡 + 40 高条目 + 2px 内缝；色板两行圆点） ---------- */
+.mb-usheet-panel[data-kind="format"] .mb-usheet-panel__inner { padding: 6px 6px; }
+.mb-usheet-fpanel { display: flex; flex-direction: column; gap: 6px; }
+.mb-usheet-frow { display: flex; gap: 6px; align-items: stretch; }
+.mb-usheet-fcard {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 2px;
+  min-width: 0;
+  flex: 1 1 0;
+  border-radius: 10px;
+  background: var(--lake-bg-panel);
+}
+.mb-usheet-fcard[data-count="3"] { flex-grow: 3; }
+.mb-usheet-fcard[data-count="4"] { flex-grow: 4; }
+.mb-usheet-fcard[data-count="8"] { flex-grow: 8; }
+.mb-usheet-fcard .mb-usheet-fbtn { flex: 1 1 0; min-width: 0; }
+.mb-usheet-fbtn {
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  height: 40px;
+  font-size: var(--lake-font-size-small);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--lake-text-1);
+  white-space: nowrap;
+}
+.mb-usheet-fbtn:active { background: var(--lake-bg-hover); }
+.mb-usheet-fbtn.is-on {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+  box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
+}
+.mb-usheet-fglyph { font-size: var(--lake-font-size-small); font-weight: 600; line-height: 1; }
+.mb-usheet-fglyph[data-style="italic"] { font-style: italic; }
+.mb-usheet-fglyph[data-style="underline"] { text-decoration: underline; }
+.mb-usheet-fglyph[data-style="strike"] { text-decoration: line-through; }
+.mb-usheet-fcolors .mb-usheet-fbtn { font-size: var(--lake-font-size-body); font-weight: 600; }
+.mb-usheet-fA { font-size: var(--lake-font-size-body); font-weight: 600; }
+.mb-usheet-fcard.mb-usheet-fboard { display: block; padding: 6px 10px; }
+.mb-usheet-fboard-row { display: flex; align-items: center; justify-content: space-between; }
+.mb-usheet-fboard-row + .mb-usheet-fboard-row { margin-top: 8px; }
+.mb-usheet-fsw {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--lake-border-1);
+}
+.mb-usheet-fsw:active { transform: scale(0.92); }
+.mb-usheet-fsw--none { position: relative; background: var(--lake-bg-panel); overflow: hidden; }
+.mb-usheet-fsw--none::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 1px;
+  background: var(--lake-border-2);
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+.mb-usheet-fcard.mb-usheet-fsizes .mb-usheet-fbtn { height: 40px; font-size: var(--lake-font-size-small); }
+
 /* 数据 / 视图 / 更多：白卡列表 */
 .mb-usheet-rows { background: var(--lake-bg-panel); border-radius: var(--r-md, 10px); overflow: hidden; margin-bottom: 8px; }
 .mb-usheet-row {
