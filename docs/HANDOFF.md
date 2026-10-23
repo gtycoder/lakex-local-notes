@@ -28,6 +28,21 @@
 - **261023 五修（AI 历史对话，用户定稿）**：多会话落设备本地——每会话 `ai/conversations/{id}.json` + SQLite 索引表 `ai_conversations`（schema v4）；顶栏「历史」= 列表 + title/preview 搜索 + 切回/删除/清空全部；启动恢复最近一次；50 条 / 30 天淘汰（连带删文件）；旧 v1 单文件启动迁移。仍不进 S3、不存 Key。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
+### 261023(六) · 表格「一打开就待保存」：Univer 正文序列化不幂等 · **已修**
+
+- **用户报**：表格只要一打开就出现黄色「待保存」，怀疑会触发 S3。
+- **结论：确实会触发 S3**（修复前）。打开表格时首帧 vs 首个命令后的序列化不同 ⇒ 判为"有改动" ⇒ auto-save 写盘 ⇒ contentHash 变、\`sync_state=local\` ⇒ 下一轮自动/手动同步会 PUT 一次正文对象 + 新 manifest。**每次打开一次**。
+- **根因（两处序列化漂移，实测 diag + 产物 diff）**：
+  1. **plugin resource 未初始化形态**：首次 \`book.save()\` 给 \`SHEET_NOTE_PLUGIN.data=""\`，首个 CommandExecuted 之后给 \`"{}"\`（\`SHEET_RANGE_PROTECTION_PLUGIN\` 长期 \`""\`）⇒ 基线（mount 时 canonical）与第一次 flush 的 body 在 \`diff@957\` 处不同。
+  2. **字族引号随构建变**：dev 的 \`--lake-font-family\` 是 \`'MiSans', …\`，打包构建压缩 CSS 后是 \`"MiSans", …\` ⇒ 同一文档在 dev / 打包版之间来回改写 \`ff\`。
+- **修复（单一来源 \`src/core/usheetDoc.ts\`）**：新增 \`normalizeFontFamily()\` / \`normalizeUsheetWorkbook()\`（幂等：\`data:""\`→\`"{}"\`、\`ff\` 单引号→双引号）；\`UniverSheetEditor\` 在**打开基线 canonical** 与**每次 flush 的 snapshot** 上都先规范化再 \`usheetToBody()\` ⇒ 比较的是稳定形式，打开不再产生 \`onChange\`。
+- **验证（隔离实例 + 用户 dev 数据只读副本）**：
+  - 修复前：打开「表格11」→ 1 次 \`ipc.save_note\`、body hash 变化。
+  - 修复后：打开 → **0 次 save、hash 不变、无异常**；关闭标签再打开 → 仍 0 次；把所有 resource 置 \`"{}"\` 的变体（= 修复后写盘形态）也能正常打开（画布/状态栏正常、0 异常）。
+- **影响面**：存量文档**不会被重写**（比较用规范化字符串、语义等价），只有真实编辑才落盘（落盘即规范化形态）；跨 dev/打包版不再抖动。
+- **未接**：移动端 usheet 保存路径暂未接同一 helper（当前移动端不改写正文，先登记；将来复用 \`normalizeUsheetWorkbook\`）。
+- **门禁**：tsc 0 · 全库 vitest **383 文件 / 2609 通过（17 skip）**（含并行会话在途改动）· 双端构建 ✓ · \`git diff --check\` ✓。
+
 ### 261023(五) · 桌面端日志系统重做（分级 / 关键流程埋点 / 错误捕获 / 文档）· **待验收**
 
 - **用户要求**：整理桌面端日志并按同样思路埋点；开发环境 debug 多、正式环境把 info/warn 用起来、重点处理 error；关键流程记录耗时与数据量，积累一段时间后做针对性性能优化。

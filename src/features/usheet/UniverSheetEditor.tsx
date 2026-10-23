@@ -22,7 +22,7 @@ import "./usheetEditor.css";
 import { createUsheetUniver, type UsheetUniverCore } from "./usheetUniverFactory";
 import { lakeFontFamily } from "./usheetFont";
 import { editorCaretPoint, shouldPlaceCaretAfterDoubleClick } from "./usheetCellEdit";
-import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
+import { emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
 import { imageFilesFromClipboard, isPureImageClipboard, pasteImageTarget } from "./usheetImagePaste";
 import { registerUsheetActiveSheet } from "./usheetActiveSheet";
 import {
@@ -241,6 +241,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     try {
       const snapshot = deepCloneWorkbook(state.book.save() as unknown as UsheetWorkbook);
       applyFontPolicy(snapshot, lakeFontFamily());
+      normalizeUsheetWorkbook(snapshot);
       // 1) 收集尚未提升的内联图（data:/blob:），提升成资产文件并记住映射。
       const inline: string[] = [];
       mapUsheetImageSources(snapshot, (src) => { if (INLINE_SOURCE_RE.test(src) && !promotedRef.current.has(src)) inline.push(src); return src; });
@@ -288,6 +289,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       // last = 规范化后的**磁盘形态**正文；避免打开即被判为"有改动"或把 URL 写回正文。
       const canonical = deepCloneWorkbook(book.save() as unknown as UsheetWorkbook);
       applyFontPolicy(canonical, lakeFontFamily());
+      normalizeUsheetWorkbook(canonical);
       mapUsheetImageSources(canonical, (src) => promotedRef.current.get(src) ?? diskSource(src));
       const canonicalBody = usheetToBody(canonical);
       lastBodyRef.current = canonicalBody;

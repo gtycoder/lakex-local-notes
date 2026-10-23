@@ -160,6 +160,12 @@ node scripts/check-bundle-budget.mjs
   把备注写进 `workbook.resources`。⇒ **移动端即使没有备注 UI 也必须注册 `UniverSheetsNotePlugin`**（只装数据插件），
   否则移动端保存会静默抹掉桌面写的备注。插件顺序两端都按 **hyperlink → note → crosshair**（与 §4.4 筛选同理，避免 resources 顺序不同造成假冲突）。
 - **超链接 / 十字高亮都不注册 plugin resource**（超链接直接落 cellData；高亮是纯视图），不影响正文快照。
+- **正文必须先规范化再比较 / 落盘（261023，`core/usheetDoc.ts` 的 `normalizeUsheetWorkbook`）**：Univer 的序列化**不幂等**，
+  已知两处漂移 —— ① 未初始化 plugin resource：**首次 `save()` 给 `data:""`，首个命令之后给 `"{}"`**（实测 `SHEET_NOTE_PLUGIN`；
+  `SHEET_RANGE_PROTECTION_PLUGIN` 长期是 `""`）；② 字族 `ff` 的引号随构造它的 CSS 文本变化（dev 的 `'MiSans'` ↔ 打包版 CSS 压缩后的 `"MiSans"`）。
+  不规范化 ⇒ **每次打开表格**首帧基线（canonical）与首个 flush 的序列化不一致 → `onChange` → 待保存 → 自动同步上传一次正文
+  （用户 261023 报「表格一打开就黄色待保存」）。⇒ 编辑器在「打开基线」与「每次 flush」都先 `normalizeUsheetWorkbook()`；
+  判据 `body !== last` 必须用**规范化后**的字符串。护栏 `src/core/usheetDoc.test.ts`（幂等 / 真实单元格差异不被吞）。
 
 ### 4.5 facade / 引擎
 | API | 用途 | 注意 |
@@ -176,6 +182,9 @@ node scripts/check-bundle-budget.mjs
   ⇒ 加钩子会双插，只能在 DOM 层（window 捕获）拦纯图片粘贴。见 LAKEX-CONTRACT §5.25。
 - 单元格图片整格覆盖 / 一格一张 / 文字被顶掉：§5.26。
 - 计算条高度是**行内样式**（不是类也不是变量）⇒ 只能 `!important` 覆盖。
+- **`FWorkbook.save()` 不是幂等**（261023 实测）：plugin resource 的 `toJson` 在「首次 save」与「首个 CommandExecuted 之后」结果不同
+  （`""` vs `"{}"`），`ff` 字族引号也会随来源 CSS 文本变。⇒ **任何"序列化结果与上次比较"的地方都要先规范化**（见 §4.4），
+  否则必然出现"打开即脏"。
 
 ### 4.7 我们打的补丁（`patches/@univerjs+ui+1.0.3.patch`）
 

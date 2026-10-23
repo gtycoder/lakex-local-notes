@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyUsheetBody, emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody, usheetToSearchText } from "./usheetDoc.js";
+import { emptyUsheetBody, emptyUsheetWorkbook, mapUsheetImageSources, normalizeFontFamily, normalizeUsheetWorkbook, parseUsheetBody, usheetToBody, usheetToSearchText } from "./usheetDoc.js";
 
 /** 单元格图：cellData[r][c].p.drawings[d] 带 source。 */
 function cellImageWorkbook() {
@@ -64,5 +64,41 @@ describe("usheetDoc", () => {
     expect(changed).toBe(true);
     const parsed = JSON.parse(wb.resources[0].data);
     expect(parsed.d2.source).toBe("http://127.0.0.1:19876/n1/1712345678902_deadbeef.png");
+  });
+});
+
+describe("正文规范化（打开表格不再误标脏 / 触发同步）", () => {
+  it("字族引号统一：单引号族名 → 双引号，且幂等", () => {
+    expect(normalizeFontFamily("'MiSans', -apple-system, \"Segoe UI\"")).toBe("\"MiSans\", -apple-system, \"Segoe UI\"");
+    const once = normalizeFontFamily("'A', 'B'");
+    expect(normalizeFontFamily(once)).toBe(once);
+  });
+
+  it("未初始化的 plugin resource（data=\"\"）归一成 \"{}\"，字族同时归一", () => {
+    const wb: any = {
+      id: "wb",
+      defaultStyle: { ff: "'MiSans', sans-serif" },
+      styles: { s1: { ff: "'JetBrains Mono', monospace" } },
+      resources: [
+        { name: "SHEET_NOTE_PLUGIN", data: "{}" },
+        { name: "SHEET_RANGE_PROTECTION_PLUGIN", data: "" },
+      ],
+    };
+    normalizeUsheetWorkbook(wb);
+    expect(wb.defaultStyle.ff).toBe("\"MiSans\", sans-serif");
+    expect(wb.styles.s1.ff).toBe("\"JetBrains Mono\", monospace");
+    expect(wb.resources[1].data).toBe("{}");
+    // 幂等：再规范化一次不再变化
+    const snapshot = JSON.stringify(wb);
+    normalizeUsheetWorkbook(wb);
+    expect(JSON.stringify(wb)).toBe(snapshot);
+  });
+
+  it("真实差异（单元格值）不会被规范化吞掉", () => {
+    const a: any = { id: "wb", sheets: { s1: { id: "s1", cellData: { 0: { 0: { v: "1" } } } } } };
+    const b: any = { id: "wb", sheets: { s1: { id: "s1", cellData: { 0: { 0: { v: "2" } } } } } };
+    normalizeUsheetWorkbook(a);
+    normalizeUsheetWorkbook(b);
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
   });
 });
