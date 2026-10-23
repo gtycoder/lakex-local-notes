@@ -449,12 +449,53 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     return () => { if (panelCloseTimerRef.current) { window.clearTimeout(panelCloseTimerRef.current); panelCloseTimerRef.current = 0; } };
   }, [panelClosing, keyboardOpen, finishPanelClose]);
 
+  // 编辑态**双击单元格** → 自动把焦点放到公式栏输入框（光标在末尾），接着打字就进公式栏。
+  // 自实现双击（触屏 WebView 对 canvas 的 dblclick 不可靠）：320ms / 28px 内两次 **pointerdown** 视为双击。
+  // 第二下 pointerdown 直接 preventDefault + stopPropagation：不让内核起 in-cell 编辑器抢焦点，并在同一手势里聚焦公式栏（键盘随之弹起）。
+  useEffect(() => {
+    if (!editing) return;
+    const host = hostRef.current;
+    if (!host) return;
+    let lastTap = { at: 0, x: 0, y: 0 };
+    const focusFormula = () => {
+      const input = host.querySelector<HTMLInputElement | HTMLTextAreaElement>(".mb-usheet-formula__input");
+      if (!input) return;
+      const apply = () => {
+        if (document.activeElement === input) return;
+        input.focus();
+        const end = input.value.length;
+        try { input.setSelectionRange(end, end); } catch { /* 忽略 */ }
+      };
+      apply();
+      // 内核在双击时可能异步把焦点收走（选区命令 / in-cell 编辑器），补两次聚焦。
+      window.setTimeout(apply, 60);
+      window.setTimeout(apply, 180);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest?.(".mobile-usheet-root")) return;
+      if (target.closest?.(".mb-usheet-formula")) return;
+      const now = Date.now();
+      if (now - lastTap.at < 320 && Math.abs(event.clientX - lastTap.x) < 28 && Math.abs(event.clientY - lastTap.y) < 28) {
+        lastTap = { at: 0, x: 0, y: 0 };
+        event.preventDefault();
+        event.stopPropagation();
+        focusFormula();
+        return;
+      }
+      lastTap = { at: now, x: event.clientX, y: event.clientY };
+    };
+    host.addEventListener("pointerdown", onPointerDown, true);
+    return () => host.removeEventListener("pointerdown", onPointerDown, true);
+  }, [editing]);
+
   // 编辑态点网格（非公式栏）= 先结束公式栏输入 → 选区命令后能正常回显新单元格内容。
   useEffect(() => {
     if (!editing) return;
     const host = hostRef.current;
     if (!host) return;
     const onPointerDown = (event: PointerEvent) => {
+      if (event.defaultPrevented) return; // 双击已拦截（焦点要交给公式栏）
       const target = event.target as HTMLElement | null;
       if (target?.closest?.(".mb-usheet-formula")) return;
       const active = document.activeElement as HTMLElement | null;

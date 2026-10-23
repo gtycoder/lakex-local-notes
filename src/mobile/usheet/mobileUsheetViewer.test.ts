@@ -268,6 +268,23 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     root.unmount();
   });
 
+  it("编辑态双击单元格 → 光标自动落到公式栏输入框", async () => {
+    const { root, host } = await mount(true, true);
+    const { act } = await import("react");
+    const grid = host.querySelector(".mobile-usheet-root");
+    expect(grid).toBeTruthy();
+    const fire = async (x: number, y: number) => {
+      await act(async () => {
+        grid!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+      });
+    };
+    await fire(100, 200);
+    await fire(102, 201);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 260)); });
+    expect(document.activeElement).toBe(host.querySelector(".mb-usheet-formula__input"));
+    root.unmount();
+  });
+
   it("顶部 ＋ = 新建工作表（走 facade insertSheet 并切过去）", async () => {
     const { root, host } = await mount(true, true);
     calls.insertSheet = 0;
