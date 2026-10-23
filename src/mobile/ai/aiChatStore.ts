@@ -24,7 +24,8 @@ import {
   upsertAiConversation,
   type AiConversationMeta,
 } from "../data/aiConversationRepository";
-import { onAiStream, type AiChatSettingsView } from "../native/aiChat";
+import { onAiStream, type AiChatSettingsView, type AiRequestPart } from "../native/aiChat";
+import { imagePartsOf, type AiPendingImage } from "./aiImages";
 import {
   conversationFilePath,
   deleteConversationFile,
@@ -382,7 +383,13 @@ export function setAllSend(on: boolean): void {
 }
 
 // ---- 发送 ----
-export async function send(raw: string, historyOverride?: ChatTurn[]): Promise<SendOutcome> {
+export interface SendOptions {
+  /** 本轮图片（拍照/相册临时图 + 资料里的图片引用）；不落历史、只随这一问发送。 */
+  images?: readonly AiPendingImage[];
+  history?: ChatTurn[];
+}
+
+export async function send(raw: string, options: SendOptions = {}): Promise<SendOutcome> {
   const question = raw.trim();
   if (!question) return { ok: false, reason: "" };
   if (state.busy) return { ok: false, reason: "正在生成中" };
@@ -392,7 +399,7 @@ export async function send(raw: string, historyOverride?: ChatTurn[]): Promise<S
 
   const budget = takeCorpus(state.corpus.filter((doc) => state.sendIds.includes(doc.id)));
   const corpusBlock = corpusBlockOf(budget);
-  const history: ChatTurn[] = historyOverride ?? state.messages
+  const history: ChatTurn[] = options.history ?? state.messages
     .filter((message) => !message.error && message.text.trim().length > 0)
     .map((message) => ({ role: message.role, text: message.text }));
   let payload;
@@ -403,16 +410,22 @@ export async function send(raw: string, historyOverride?: ChatTurn[]): Promise<S
       history,
       question,
     }));
-    payload = guarded.map((message) => ({
-      role: message.role,
-      content: typeof message.content === "string"
+    const images = imagePartsOf(options.images ?? []);
+    payload = guarded.map((message, index) => {
+      const text = typeof message.content === "string"
         ? message.content
-        : message.content.filter((part) => part.type === "text").map((part) => (part.type === "text" ? part.text : "")).join(""),
-    }));
+        : message.content.filter((part) => part.type === "text").map((part) => (part.type === "text" ? part.text : "")).join("");
+      const isLastUser = index === guarded.length - 1 && message.role === "user";
+      const content: string | AiRequestPart[] = isLastUser && images.length > 0
+        ? [{ type: "text", text }, ...images]
+        : text;
+      return { role: message.role, content };
+    });
   } catch (error) {
     return { ok: false, reason: (error as Error).message || "内容过长" };
   }
 
+  const displayText = question + ((options.images?.length ?? 0) > 0 ? "\n[图片]" : "");
   ensureCurrentId();
   const requestId = crypto.randomUUID();
   activeRequestId = requestId;
@@ -421,7 +434,7 @@ export async function send(raw: string, historyOverride?: ChatTurn[]): Promise<S
     busy: true,
     messages: [
       ...state.messages,
-      { id: crypto.randomUUID(), role: "user", text: question },
+      { id: crypto.randomUUID(), role: "user", text: displayText },
       { id: crypto.randomUUID(), role: "assistant", text: "", streaming: true },
     ],
   });
@@ -471,7 +484,7 @@ export async function retry(question: string): Promise<void> {
     .filter((message) => !message.error && message.text.trim().length > 0)
     .map((message) => ({ role: message.role, text: message.text }));
   set({ messages: before });
-  await send(question, history);
+  await send(question, { history });
 }
 
 /** 当前会话 id（调试/测试用；正常 UI 不需要）。 */

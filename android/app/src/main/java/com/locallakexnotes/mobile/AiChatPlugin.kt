@@ -7,6 +7,8 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import org.json.JSONArray
 import org.json.JSONObject
+import android.util.Base64
+import java.io.File
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStream
@@ -169,7 +171,7 @@ class AiChatPlugin : Plugin() {
             try {
                 val body = JSONObject()
                 body.put("model", model)
-                body.put("messages", messages)
+                body.put("messages", resolveMessages(messages))
                 body.put("temperature", temperature)
                 body.put("stream", true)
                 cfg.reasoningEffort?.let { body.put("reasoning_effort", it) }
@@ -249,6 +251,68 @@ class AiChatPlugin : Plugin() {
     }
 
     // ---- 内部 ----
+
+    /** 把 JS 的 messages（content 可为 string 或内容块数组）解析成 OpenAI 兼容请求体；图片 ≤10 张、总大小有上限。 */
+    private fun resolveMessages(messages: JSONArray): JSONArray {
+        val out = JSONArray()
+        var imageCount = 0
+        var totalImageChars = 0L
+        for (i in 0 until messages.length()) {
+            val message = messages.optJSONObject(i) ?: continue
+            val role = message.optString("role", "user")
+            val content = message.opt("content")
+            val resolved = JSONObject().put("role", role)
+            if (content is String) {
+                if (content.isNotEmpty()) out.put(resolved.put("content", content))
+                continue
+            }
+            if (content !is JSONArray) continue
+            val parts = JSONArray()
+            for (j in 0 until content.length()) {
+                val part = content.optJSONObject(j) ?: continue
+                when (part.optString("type", "")) {
+                    "text" -> {
+                        val text = part.optString("text", "")
+                        if (text.isNotEmpty()) parts.put(JSONObject().put("type", "text").put("text", text))
+                    }
+                    "image" -> {
+                        if (imageCount >= 10) continue
+                        val inline = part.optString("dataUrl", "")
+                        val url = if (inline.startsWith("data:image/")) inline else assetDataUrl(part.optJSONObject("asset")) ?: continue
+                        if (url.length > 3 * 1024 * 1024) continue
+                        totalImageChars += url.length.toLong()
+                        if (totalImageChars > 12L * 1024 * 1024) continue
+                        imageCount += 1
+                        parts.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", url)))
+                    }
+                }
+            }
+            if (parts.length() == 0) continue
+            resolved.put("content", parts)
+            out.put(resolved)
+        }
+        return out
+    }
+
+    /** 资料/笔记图片：按 `{noteId, filename}` 在私有目录读文件并编码 data URL（路径段严格校验）。 */
+    private fun assetDataUrl(asset: JSONObject?): String? {
+        if (asset == null) return null
+        val noteId = asset.optString("noteId", "")
+        val filename = asset.optString("filename", "")
+        if (noteId.isEmpty() || filename.isEmpty()) return null
+        if (noteId.contains('/') || noteId.contains("..") || filename.contains('/') || filename.contains("..")) return null
+        val file = File(File(File(context.filesDir, "note-assets"), noteId), filename)
+        if (!file.isFile || file.length() > 8L * 1024 * 1024) return null
+        val bytes = try { file.readBytes() } catch (e: Exception) { return null }
+        val extension = filename.substringAfterLast('.', "").lowercase()
+        val mime = when (extension) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> "image/jpeg"
+        }
+        return "data:" + mime + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }
 
     private fun openConnection(cfg: AiConfig, stream: Boolean): HttpURLConnection {
         val url = URL(cfg.baseUrl.trimEnd('/') + "/chat/completions")

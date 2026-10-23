@@ -11,6 +11,7 @@ import { showToast } from "../ui/toastBus";
 import { AiCorpusSheet, type CorpusCandidate } from "./AiCorpusSheet";
 import { AiMarkdown } from "./AiMarkdown";
 import { AiHistoryPage } from "./AiHistoryPage";
+import { AiImageSheet } from "./AiImageSheet";
 import { AiSendSheet } from "./AiSendSheet";
 import {
   addCorpusDoc,
@@ -31,7 +32,9 @@ import {
   toggleSend,
   type AiMessage,
 } from "./aiChatStore";
+import { canAddImage, compressImageFile, type AiPendingImage } from "./aiImages";
 import { answerTitle, lakeBodyFromText, suggestions, takeCorpus } from "./aiSession";
+import { pickLocalFile } from "../ui/pickFile";
 
 export interface MobileAiPageProps {
   open: boolean;
@@ -49,6 +52,8 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   const [sendOpen, setSendOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [imageSheetOpen, setImageSheetOpen] = useState(false);
+  const [pendingImages, setPendingImages] = useState<AiPendingImage[]>([]);
   const [candidates, setCandidates] = useState<CorpusCandidate[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,6 +68,25 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
     const node = listRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [chat.messages, chat.busy]);
+
+  const addPickedImage = useCallback(async (file: File | null, source: string) => {
+    if (!file) return;
+    setPendingImages((prev) => {
+      const limitReason = canAddImage(prev.length);
+      if (limitReason) { showToast(limitReason, { type: "error" }); return prev; }
+      return prev;
+    });
+    try {
+      const compressed = await compressImageFile(file);
+      if (!compressed) { showToast(source + "：图片格式不支持或压缩失败", { type: "error" }); return; }
+      setPendingImages((prev) => {
+        if (canAddImage(prev.length)) { showToast("一次最多发送 10 张图片", { type: "error" }); return prev; }
+        return [...prev, { id: crypto.randomUUID(), kind: "temp", dataUrl: compressed.dataUrl, mimeType: compressed.mimeType, bytes: compressed.bytes }];
+      });
+    } catch {
+      showToast(source + "：读取图片失败", { type: "error" });
+    }
+  }, []);
 
   const loadCandidates = useCallback(async () => {
     try {
@@ -105,13 +129,14 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   const sendDraft = useCallback(async () => {
     const question = draft.trim();
     if (!question || chat.busy) return;
-    const outcome = await send(question);
+    const outcome = await send(question, { images: pendingImages });
     if (!outcome.ok) {
       if (outcome.reason) showToast(outcome.reason, { type: "error" });
       return;
     }
     setDraft("");
-  }, [chat.busy, draft]);
+    setPendingImages([]);
+  }, [chat.busy, draft, pendingImages]);
 
   const questionBefore = useCallback((index: number): string => {
     for (let i = index - 1; i >= 0; i -= 1) if (chat.messages[i].role === "user") return chat.messages[i].text;
@@ -151,7 +176,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         <button type="button" className="toolbar__button" onClick={onClose} aria-label="返回"><ArrowLeft size={20} /></button>
         <span className="mobile-topbar-title">AI 助手</span>
         <button type="button" className="toolbar__button" onClick={() => setHistoryOpen(true)} aria-label="历史对话"><Clock size={20} /></button>
-        <button type="button" className="toolbar__button" onClick={() => newConversation()} aria-label="新对话"><Plus size={20} /></button>
+        <button type="button" className="toolbar__button" onClick={() => { newConversation(); setPendingImages([]); }} aria-label="新对话"><Plus size={20} /></button>
       </header>
 
       {docCount > 0 && (
@@ -214,14 +239,29 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         )}
       </div>
 
+      {pendingImages.length > 0 && (
+        <div className="ai-thumbrow">
+          {pendingImages.map((image) => (
+            <div key={image.id} className="ai-thumb">
+              {image.dataUrl ? <img src={image.dataUrl} alt="" /> : <span className="ai-thumb__placeholder" />}
+              <button type="button" className="ai-thumb__rm" aria-label="移除图片"
+                onClick={() => setPendingImages((prev) => prev.filter((item) => item.id !== image.id))}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <button
         type="button"
         className="ai-hint"
-        onClick={() => { if (docCount === 0) openCorpus(); else setSendOpen(true); }}
+        onClick={() => { if (docCount === 0 && pendingImages.length === 0) openCorpus(); else setSendOpen(true); }}
       >
-        {docCount === 0
-          ? "本轮不带资料 · 选择发送内容 ▾"
-          : "本轮发送：" + chat.sendIds.length + " 篇 · " + fmt(used) + " 字 ▾"}
+        {(() => {
+          const parts: string[] = [];
+          if (chat.sendIds.length > 0) parts.push(chat.sendIds.length + " 篇 · " + fmt(used) + " 字");
+          if (pendingImages.length > 0) parts.push(pendingImages.length + " 张图片");
+          return parts.length > 0 ? "本轮发送：" + parts.join(" + ") + " ▾" : "本轮不带资料 · 选择发送内容 ▾";
+        })()}
       </button>
 
       <div className="ai-composer">
@@ -257,6 +297,13 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         onDelete={deleteConversation}
         onClearAll={clearAllConversations}
       />
+      <AiImageSheet
+        open={imageSheetOpen}
+        docs={chat.corpus.map((doc) => ({ id: doc.id, title: doc.title }))}
+        used={pendingImages.length}
+        onConfirm={(images) => { setPendingImages((prev) => [...prev, ...images].slice(0, 10)); setImageSheetOpen(false); }}
+        onClose={() => setImageSheetOpen(false)}
+      />
       <AiCorpusSheet
         open={corpusOpen}
         candidates={candidates}
@@ -280,9 +327,13 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
           <div className="mb-actionsheet is-open" role="dialog" aria-modal="true" aria-label="附件">
             <div className="mb-actionsheet__group">
               <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); openCorpus(); }}><FileText size={18} />资料<span className="ai-action__sub">选择文档</span></button>
-              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); showToast("拍照 / 相册将在下一版接入（P2 多模态）"); }}><Camera size={18} />拍照<span className="ai-action__sub">即将支持</span></button>
-              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); showToast("相册将在下一版接入（P2 多模态）"); }}><ImageIcon size={18} />相册<span className="ai-action__sub">即将支持</span></button>
-              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); showToast("文档里的图片将在下一版接入（P2 多模态）"); }}><Paperclip size={18} />资源<span className="ai-action__sub">即将支持</span></button>
+              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFile("image/*", "environment").then((file) => addPickedImage(file, "拍照")); }}><Camera size={18} />拍照<span className="ai-action__sub">拍一张</span></button>
+              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFile("image/*").then((file) => addPickedImage(file, "相册")); }}><ImageIcon size={18} />相册<span className="ai-action__sub">从相册选</span></button>
+              <button type="button" className="mb-actionsheet__item" onClick={() => {
+                setActionsOpen(false);
+                if (chat.corpus.length === 0) { showToast("先选择资料文档，再用文档里的图片"); return; }
+                setImageSheetOpen(true);
+              }}><Paperclip size={18} />资源<span className="ai-action__sub">{chat.corpus.length > 0 ? "文档里的图片" : "先选资料文档"}</span></button>
             </div>
             <button type="button" className="mb-actionsheet__cancel" onClick={() => setActionsOpen(false)}>取消</button>
           </div>

@@ -26,6 +26,7 @@
 - **261023 三修（Markdown 解析器共用 + 桌面表格）**：解析器从桌面 `MarkdownView` 抽到 `src/core/markdown.ts`（块/行内 token + GFM 表格，纯数据）；桌面/移动端各自渲染（`.md-preview` / `.ai-md`），**桌面端同步支持表格**；bitable 静态护栏改指 core；移动端复测表格渲染正常。
 - **261023 四修（AI 会话设备本地持久化，用户定稿）**：只保留最近一次会话（消息 + 资料快照），存 App 私有 Data `ai/last-conversation.json`（BodyStore 原子写）；启动恢复、1s 防抖写、≤2MiB / 30 天 TTL；「新对话」与设置「清空本机对话」删除；**不存 API Key/端点/温度、不进 S3**。
 - **261023 五修（AI 历史对话，用户定稿）**：多会话落设备本地——每会话 `ai/conversations/{id}.json` + SQLite 索引表 `ai_conversations`（schema v4）；顶栏「历史」**独立全屏页**（列表 + title/preview 搜索 → 点开看完整对话详情 → 继续对话/删除；列表顶部清空全部）；启动恢复最近一次；50 条 / 30 天淘汰（连带删文件）；旧 v1 单文件启动迁移。仍不进 S3、不存 Key。
+- **261023 六修（AI 图片多模态 P2，用户定稿）**：拍照/相册 → 前端压缩（长边 1600 / ≤1MB JPEG）临时 data URL；「资源」= 资料文档里的图片，只传 `{noteId, filename}` 引用、原生读文件（字节不过 WebView）；Kotlin 组 `image_url`（≤10 张、总大小上限）；消息正文 `[图片]` 占位，历史/持久化不存图（当轮附件）。真机实测：纯红 PNG → 问「什么颜色」答「红色」。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
 ### 261023(六) · 表格「一打开就待保存」：Univer 正文序列化不幂等 · **已修**

@@ -32,9 +32,16 @@ export interface AiChatSettingsPatch {
   thinking?: AiThinkingMode | null;
 }
 
+export type AiRequestPart =
+  | { type: "text"; text: string }
+  /** 资料/笔记里的图片引用（原生读文件，字节不过 WebView）。 */
+  | { type: "image"; asset: { noteId: string; filename: string } }
+  /** 拍照/相册的临时图片（已压缩为 data URL；本轮临时，不落笔记资源）。 */
+  | { type: "image"; dataUrl: string };
+
 export interface AiChatMessageInput {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | AiRequestPart[];
 }
 
 export interface AiChatRequest {

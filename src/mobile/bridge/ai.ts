@@ -17,6 +17,8 @@ import { ensureDb } from "./context";
 import * as noteRepository from "../data/noteRepository.js";
 import { readNoteBody } from "../data/noteBodies.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
+import { mimeTypeForFilename } from "../../core/assetNaming.js";
+import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync";
 
 /** 浏览器预览/单元测试里的占位设置（不触网）。 */
 export const AI_SETTINGS_FALLBACK: AiChatSettingsView = {
@@ -62,6 +64,19 @@ export const aiDomain = {
     const body = note.content || (await readNoteBody(note.kind, note.id)) || "";
     const text = lakeHtmlToPlain(body);
     return { id: note.id, title: note.title, text, totalChars: text.length };
+  },
+
+  /** 列出某篇文档的资源里可直接给 AI 看的图片（只返回 image/*）。 */
+  async aiListNoteImages(noteId: string): Promise<Array<{ filename: string; mimeType: string; size: number }>> {
+    if (!nativeAssetSyncSupported()) return [];
+    try {
+      const result = await NativeAssetSync.listAssets({ noteId });
+      return (result.assets ?? [])
+        .map((asset) => ({ filename: asset.filename, mimeType: mimeTypeForFilename(asset.filename), size: asset.size }))
+        .filter((asset) => asset.mimeType.startsWith("image/"));
+    } catch {
+      return [];
+    }
   },
 
   /** 流式对话：事件走 native 的 ai:delta/ai:error/ai:done（见 native/aiChat.onAiStream）。 */

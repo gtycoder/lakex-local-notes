@@ -142,3 +142,17 @@
 .ai-history-foot { padding: 12px 0 4px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); }
 .ai-history-row { width: 100%; text-align: left; }
 .ai-history-row__delete { flex: 0 0 auto; margin-left: 8px; color: var(--lake-text-3); }
+
+/* ── AI 图片附件（261023 P2）：待发送缩略图 + 资料图片网格 */
+.ai-thumbrow { display: flex; gap: 8px; padding: 0 16px 8px; overflow-x: auto; }
+.ai-thumb { position: relative; flex: 0 0 56px; width: 56px; height: 56px; border-radius: var(--lake-radius-sm); border: 1px solid var(--lake-border-1); overflow: hidden; background: var(--lake-bg-block); }
+.ai-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ai-thumb__placeholder { display: block; width: 100%; height: 100%; }
+.ai-thumb__rm { position: absolute; top: 0; right: 0; width: 20px; height: 20px; border: 0; background: var(--lake-scrim); color: var(--lake-text-on-accent); font-size: var(--lake-font-size-micro); line-height: 1; }
+.ai-img-group { padding: 6px 4px 10px; }
+.ai-img-group__title { padding: 4px 8px 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.ai-img-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 4px; }
+.ai-img-cell { position: relative; aspect-ratio: 1; padding: 0; border: 2px solid transparent; border-radius: var(--lake-radius-sm); overflow: hidden; background: var(--lake-bg-block); }
+.ai-img-cell.is-on { border-color: var(--lake-accent-ink); }
+.ai-img-cell img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ai-img-cell__placeholder { display: block; width: 100%; height: 100%; }
