@@ -245,6 +245,39 @@ class AssetSyncPlugin : Plugin() {
         }
     }
 
+    /**
+     * 列出某笔记资源目录里的图片（只返回 filename/size，**不计算 sha256**）。
+     * 供 AI 图片选择器用：listAssets 会给每个文件算 sha256，附件多时会明显卡。
+     */
+    @PluginMethod
+    fun listImageAssets(call: PluginCall) {
+        val noteId = call.getString("noteId")
+        if (noteId.isNullOrEmpty()) {
+            call.reject("noteId required")
+            return
+        }
+        try {
+            val dir = File(File(getContext().filesDir, "note-assets"), noteId)
+            val arr = JSArray()
+            val imageExtensions = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp", "heic", "heif")
+            if (dir.isDirectory) {
+                for (f in dir.listFiles() ?: emptyArray()) {
+                    if (!f.isFile) continue
+                    val extension = f.name.substringAfterLast('.', "").lowercase()
+                    if (extension !in imageExtensions) continue
+                    val obj = JSObject()
+                    obj.put("filename", f.name)
+                    obj.put("size", f.length())
+                    arr.put(obj)
+                }
+            }
+            call.resolve(JSObject().put("assets", arr))
+        } catch (e: Exception) {
+            Log.e(TAG, "listImageAssets failed: " + e.message, e)
+            call.reject("listImageAssets failed: " + e.message)
+        }
+    }
+
     private data class SignedRequest(val url: String, val path: String, val signHost: String)
 
     private fun buildRequest(cfg: Config, key: String): SignedRequest {

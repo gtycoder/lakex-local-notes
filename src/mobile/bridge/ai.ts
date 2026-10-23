@@ -70,7 +70,9 @@ export const aiDomain = {
   async aiListNoteImages(noteId: string): Promise<Array<{ filename: string; mimeType: string; size: number }>> {
     if (!nativeAssetSyncSupported()) return [];
     try {
-      const result = await NativeAssetSync.listAssets({ noteId });
+      const result = NativeAssetSync.listImageAssets
+        ? await NativeAssetSync.listImageAssets({ noteId })
+        : await NativeAssetSync.listAssets({ noteId });
       return (result.assets ?? [])
         .map((asset) => ({ filename: asset.filename, mimeType: mimeTypeForFilename(asset.filename), size: asset.size }))
         .filter((asset) => asset.mimeType.startsWith("image/"));
