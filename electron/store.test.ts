@@ -556,7 +556,7 @@ describe("目录树操作", () => {
     // 元数据写边界 fail-closed：不再"编辑即隐式恢复"
     expect(() => store.renameTreeNode(note.id, "改名")).toThrow(/回收站|已删除/);
     expect(() => store.setNodeIcon(note.id, "star")).toThrow(/回收站|已删除/);
-    expect(() => store.setNoteLocked(note.id, true)).toThrow(/回收站|已删除/);
+    expect(() => store.setNoteEditLocked(note.id, true)).toThrow(/回收站|已删除/);
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("原标题");
     // 他端已 purge、本端保留副本：同样拒绝
     (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
@@ -566,7 +566,7 @@ describe("目录树操作", () => {
     store.restoreTrashItem(note.id);
     expect(store.renameTreeNode(note.id, "恢复后名").title).toBe("恢复后名");
     expect(store.setNodeIcon(note.id, "star").icon).toBe("star");
-    store.setNoteLocked(note.id, true);
+    store.setNoteEditLocked(note.id, true);
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("恢复后名");
   });
 
@@ -1645,11 +1645,11 @@ describe("同步状态 / 导入", () => {
   });
 
   it("importRemoteNote 同步下载后即生成缓存+FTS（锁定+从未编辑的新设备也能搜到正文）", () => {
-    // 模拟新设备同步到一篇"锁定且从未编辑"的文档（同步带 isLocked，正文为 .lake）
+    // 模拟新设备同步到一篇"锁定且从未编辑"的文档（同步带 isEditLocked，正文为 .lake）
     const note = {
       id: "remote-locked-1", title: "远程锁定文档", parentId: "notebook-personal", sortOrder: 6,
       updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false,
-      isLocked: true, lockedAt: "2026-08-02T00:00:00.000Z",
+      isEditLocked: true, editLockedAt: "2026-08-02T00:00:00.000Z",
     };
     const lakeHtml = '<p><span>这篇文档的正文里有一个独特关键词：北斗七星阵</span></p>';
     store.importRemoteNote(note, Buffer.from(lakeHtml), []);
@@ -1661,7 +1661,7 @@ describe("同步状态 / 导入", () => {
     const hits = store.searchNotes("北斗七星阵");
     expect(hits.some((h) => h.id === "remote-locked-1")).toBe(true);
     // 3) 锁状态正确带下来
-    expect(store.listNotesForSync().find((n) => n.id === "remote-locked-1")?.isLocked).toBe(true);
+    expect(store.listNotesForSync().find((n) => n.id === "remote-locked-1")?.isEditLocked).toBe(true);
   });
 
   it("rebuildSearchIndex 对无缓存文档从磁盘兜底生成缓存并重建 FTS", () => {
@@ -2052,13 +2052,13 @@ describe("R1：零变更早退 group-only 判定（红测试：现状 hasLocalPe
 describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", () => {
   function snapshotOf(noteId: string): {
     contentHash: string; updatedAt: string; title: string; parentId: string | null;
-    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+    sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   } {
     const n = store.listNotesForSync().find((x) => x.id === noteId)!;
     return {
       contentHash: store.contentHash(noteId), updatedAt: n.updatedAt, title: n.title,
-      parentId: n.parentId, sortOrder: n.sortOrder, isLocked: !!n.isLocked,
-      lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
+      parentId: n.parentId, sortOrder: n.sortOrder, isEditLocked: !!n.isEditLocked,
+      editLockedAt: n.editLockedAt ?? null, icon: n.icon ?? null,
     };
   }
 

@@ -33,8 +33,8 @@ function rowToLocal(r: Record<string, unknown>, content: string) {
     restorePendingAt: r.restore_pending_at ? String(r.restore_pending_at) : null,
     parentId: r.parent_id ? String(r.parent_id) : null,
     sortOrder: Number(r.sort_order ?? 0),
-    isLocked: !!r.is_locked,
-    lockedAt: r.locked_at ? String(r.locked_at) : null,
+    isEditLocked: !!r.is_locked,
+    editLockedAt: r.locked_at ? String(r.locked_at) : null,
     icon: r.icon ? String(r.icon) : null,
     isConflict: !!r.is_conflict,
     // TS 会在推断的返回类型里放宽字面量 → 显式标注联合类型（否则外层 SyncDbPort 不兼容）
@@ -71,9 +71,10 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：全新导入的回收站条目
   // （L339 分支）靠它恢复原父——硬编码 NULL 会让「安卓首次同步拉到他端已删笔记 → 恢复」后 parent 卡在
   // TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
+  // SQL 列名冻结：is_locked / locked_at（与桌面同 schema；不改表、不迁移）。内存字段 isEditLocked/editLockedAt 只在此处映射。
   const noteUpsertValues = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], textCache: string): unknown[] => [
     note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.contentHash,
-    note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null,
+    note.isConflict ? 1 : 0, note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, note.icon ?? null,
     note.trashedAt ?? null, note.deletedFromParentId ?? null, normalizeNoteKind(note.kind), textCache,
   ];
   const textCacheOf = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): string =>
@@ -298,9 +299,9 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       await d.prepare("UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=?, icon=? WHERE id=?")
         .run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.icon ?? null, note.id);
     },
-    async applyRemoteLock(id, locked, lockedAt) {
+    async applyRemoteEditLock(id, locked, editLockedAt) {
       const d = getDb();
-      await d.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=?").run(locked ? 1 : 0, lockedAt, id);
+      await d.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=?").run(locked ? 1 : 0, editLockedAt, id);
     },
     async markLocalNoteSynced(id, contentHash, metaAt, lastUploadedHash) {
       const d = getDb();

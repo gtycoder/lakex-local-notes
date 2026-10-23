@@ -104,7 +104,7 @@ export const notesDomain = {
       updatedAt: row?.updated_at ?? note.updatedAt,
       syncState: row?.sync_state ?? "local",
       isConflict: Boolean(row?.is_conflict),
-      isLocked: false,
+      isEditLocked: false,
       lakePath: noteBodyPath(note.kind, note.id),
       assetsDir: `note-assets/${id}`,
       sizeBytes: new TextEncoder().encode(note.content).length,

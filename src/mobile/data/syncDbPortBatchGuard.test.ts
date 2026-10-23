@@ -42,7 +42,7 @@ const assetFs = {
 function remoteNote(id: string, contentHash: string) {
   return {
     id, title: "远端标题", parentId: "nb", sortOrder: 0, updatedAt: "2026-10-10T00:00:00.000Z",
-    contentHash, isConflict: false, isLocked: false, lockedAt: null, icon: null,
+    contentHash, isConflict: false, isEditLocked: false, editLockedAt: null, icon: null,
     trashedAt: null, deletedFromParentId: null, kind: "doc", assets: [],
   } as unknown as Parameters<ReturnType<typeof createMobileSyncDbPort>["applyRemoteNote"]>[0];
 }

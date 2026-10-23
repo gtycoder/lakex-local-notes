@@ -62,7 +62,7 @@ class BigPort implements SyncDbPort {
   deleted = new Map<string, string>();
   defaultCalls = 0; lastSeenCommitId: string | null = null; lastTombstoneSig = "";
   row(id: string, content: string, syncState = "synced"): LocalNoteRow {
-    return { id, title: `笔记 ${id}`, content, updatedAt: "2026-01-01T00:00:00.000Z", syncState, trashedAt: null, restorePendingAt: null, parentId: "nb-root", sortOrder: 0, isLocked: false, lockedAt: null, icon: null, isConflict: false, contentHash: hashOf(content) };
+    return { id, title: `笔记 ${id}`, content, updatedAt: "2026-01-01T00:00:00.000Z", syncState, trashedAt: null, restorePendingAt: null, parentId: "nb-root", sortOrder: 0, isEditLocked: false, editLockedAt: null, icon: null, isConflict: false, contentHash: hashOf(content) };
   }
   seed(id: string, n: number) { const l: Array<{ filename: string; size: number; hash: string }> = []; for (let i = 0; i < n; i += 1) l.push({ filename: `1788355${String(i).padStart(6, "0")}_stress${i}.png`, size: PNG.length, hash: PNG_HASH }); this.assets.set(id, l); return l; }
 async getNote(id: string) { return this.notes.get(id) ?? null; }
@@ -77,7 +77,7 @@ async applyRemoteNoteMeta(note: ManifestNote) { const n = this.notes.get(note.id
 async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) n.syncState = "purged"; }
 async rememberDeleted(note: ManifestNote, at: string) { this.deleted.set(note.id, at); }
 async listDeletedNotesForSync() { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
-  async applyRemoteLock() {} async createHistorySnapshot() {} saveAsset(): Promise<void> { return Promise.resolve(); }
+  async applyRemoteEditLock() {} async createHistorySnapshot() {} saveAsset(): Promise<void> { return Promise.resolve(); }
   async listLocalAssets(id: string) { return this.assets.get(id) ?? []; }
   async readLocalAsset() { return new Uint8Array(PNG); }
 async defaultNotebookId() { this.defaultCalls++; return "nb-root"; }

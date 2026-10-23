@@ -123,7 +123,7 @@ export class RemoteImportRepository {
              trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id,
              kind=excluded.kind`
         ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0,
-          note.isLocked ? 1 : 0, note.lockedAt ?? null, trashedAt, deletedFrom, noteKind);
+          note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, trashedAt, deletedFrom, noteKind);
         this.deps.db.prepare(
           `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
            VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?,?,?,?)

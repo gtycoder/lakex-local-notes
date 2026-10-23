@@ -35,6 +35,8 @@ export interface LakeNative {
   /** 缺正文小记：彻底删除（墓碑 + purge）。 */
   purgeMissingQuickNote(id: string): Promise<void>;
   getNoteDigest(id: string): Promise<NoteDigest | null>;
+  /** 锁编辑（≠ 文档加密）。**桥接键冻结**：preload 仍导出 setNoteLocked / IPC 通道仍为 set_note_locked，
+   * 本接口必须与 preload 的导出名逐字一致；应用层请用下面 `native.setNoteEditLocked` 封装。 */
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   /** AI（P0）：设置读写/连通性测试/流式对话/取消；Key 绝不出主进程（视图已脱敏）。 */
   aiGetSettings(): Promise<AiSettingsView>;
@@ -242,7 +244,8 @@ export const native = {
   restoreMissingBodyFromCloud: (id: string) => api().restoreMissingBodyFromCloud(id),
   purgeMissingBody: (id: string) => api().purgeMissingBody(id),
   getNoteDigest: (id: string) => api().getNoteDigest(id),
-  setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
+  /** 锁编辑（应用侧名字）；底层桥接键仍是冻结的 setNoteLocked（见 LakeNative 注释）。 */
+  setNoteEditLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   aiGetSettings: () => api().aiGetSettings(),
   aiSaveSettings: (patch: AiSettingsPatch) => api().aiSaveSettings(patch),
   aiTestConnection: (draft?: AiProviderPatch) => api().aiTestConnection(draft),

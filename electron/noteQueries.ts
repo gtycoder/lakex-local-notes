@@ -11,10 +11,10 @@ export interface NoteSummary {
   updatedAt: string;
   syncState: string;
   isConflict: boolean;
-  isLocked?: boolean;
+  isEditLocked?: boolean;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
-  lockedAt?: string | null;
+  editLockedAt?: string | null;
 }
 
 export interface TreeNode {
@@ -43,8 +43,8 @@ export interface SyncNote {
   /** Only local listNotesForSync supplies this field. */
   syncState?: string;
   isConflict: boolean;
-  isLocked?: boolean;
-  lockedAt?: string | null;
+  isEditLocked?: boolean;
+  editLockedAt?: string | null;
   icon?: string | null;
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
@@ -143,8 +143,9 @@ export class NoteQueries {
       updatedAt: row.updated_at,
       syncState: row.sync_state,
       isConflict: !!row.is_conflict,
-      isLocked: !!row.is_locked,
-      lockedAt: row.locked_at ?? null,
+      // SQLite 列名冻结：is_locked / locked_at（不改 schema、不迁移）；内存字段叫 isEditLocked / editLockedAt。
+      isEditLocked: !!row.is_locked,
+      editLockedAt: row.locked_at ?? null,
       // 文档类型（渲染层据此选择编辑器；缺省 doc）
       kind: normalizeNoteKind(row.kind),
     };

@@ -1,7 +1,7 @@
 /**
  * 同步编排引擎（lake-core 共享层，V5 §13 高优先 TODO 落地）。
  *
- * 决策机制（reconcileLakeNote/decideUpload/mergeLockState）与执行编排在此统一：
+ * 决策机制（reconcileLakeNote/decideUpload/mergeEditLockState）与执行编排在此统一：
  * 桌面（electron/sync.ts 收敛）+ 移动端（Capacitor）共用同一实现，
  * 平台差异全部经端口注入：
  * - S3Store：对象读写（桌面=ObjectStore，移动端=CapacitorHttpHandler adapter）
@@ -16,11 +16,11 @@
 import { reconcileLakeNote } from "./lakeReconcile.js";
 import { decideUpload } from "./decideUpload.js";
 import { buildUploadEntry, buildTombstoneEntry, decideMetaApply, decideLocalTombstone, decidePurge, decideFolderPurge, decideTombstoneYield, TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
-import { mergeLockState } from "./syncDecision.js";
+import { mergeEditLockState } from "./syncDecision.js";
 import { shouldSkipZeroChange, isRemoteDescendant, createSupersededTracker } from "./syncPerf.js";
 import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
 import { sha256Sync } from "./sha256Sync.js";
-import { parseLakeManifest, objectKey, MANIFEST_VERSION } from "./syncUtils.js";
+import { parseLakeManifest, manifestToWire, objectKey, MANIFEST_VERSION } from "./syncUtils.js";
 import { extractAssetRefs } from "./assetNaming.js";
 import { isSafePathSegment } from "./storeUtils.js";
 import { AssetMissingError, decodeText, downloadNoteAssets, recordDeclaredAssetsOnly, runAssetPool, scanLocalAssets } from "./syncAssets.js";
@@ -484,11 +484,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       if (localHash === rn.contentHash) {
         if (local) {
           // 锁 LWW：锁变更不改 updated_at，必须显式按字段比对
-          const localLocked = local.isLocked;
-          const remoteLocked = !!rn.isLocked;
+          const localLocked = local.isEditLocked;
+          const remoteLocked = !!rn.isEditLocked;
           if (localLocked !== remoteLocked) {
-            const merged = mergeLockState(localLocked, local.lockedAt ?? null, remoteLocked, rn.lockedAt ?? null);
-            await db.applyRemoteLock(rn.id, merged.locked, merged.at);
+            const merged = mergeEditLockState(localLocked, local.editLockedAt ?? null, remoteLocked, rn.editLockedAt ?? null);
+            await db.applyRemoteEditLock(rn.id, merged.locked, merged.at);
           }
           // 元数据 LWW（标题/父/排序/图标）：远端 updatedAt 新于本设备已确认版本 → 应用远端（先同步者胜）
           // 结构环检测（先提交先确认）：本地移动（local.parentId）若在远端树中位于本节点之下
@@ -612,7 +612,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       }
       const entry = buildUploadEntry({
         // kind 必须透传：否则非 doc 文档（sheet/bitable/board）上云后在他端被当 doc 导入（260925 多端实测）。
-        note: { id: local.id, title: local.title, parentId: TRASH_NOTEBOOK_ID, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, kind: local.kind, trashedAt: local.trashedAt, deletedFromParentId: local.deletedFromParentId ?? null },
+        note: { id: local.id, title: local.title, parentId: TRASH_NOTEBOOK_ID, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isEditLocked: local.isEditLocked, editLockedAt: local.editLockedAt, icon: local.icon, kind: local.kind, trashedAt: local.trashedAt, deletedFromParentId: local.deletedFromParentId ?? null },
         contentHash: localHash,
         assets: [],
         trashedAt: local.trashedAt,
@@ -665,7 +665,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       }
       const entry = buildUploadEntry({
         // kind 必须透传（同软删分支）：漏了的话 manifest 不含 kind → 他端把表格/画板当 doc 导入。
-        note: { id: local.id, title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, kind: local.kind },
+        note: { id: local.id, title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isEditLocked: local.isEditLocked, editLockedAt: local.editLockedAt, icon: local.icon, kind: local.kind },
         contentHash: localHash,
         assets: [],
         // 恢复：显式清墓碑字段（覆盖远端墓碑 → local-wins）
@@ -842,7 +842,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     }
 
     // ---- 5. 发布：commit（简化，仅 latest）+ latest ----
-    const manifestJson = JSON.stringify(next);
+    // 写出边界：内存清单（isEditLocked/editLockedAt）→ 线上 JSON 键 isLocked/lockedAt（冻结，见 syncUtils）。
+    const manifestJson = JSON.stringify(manifestToWire(next));
     await s3.putObject(`${cfg.prefix}/manifests/${next.commitId}.json`, manifestJson, { gzip: true });
     await s3.putObject(`${cfg.prefix}/${MANIFEST_KEY}`, manifestJson, { gzip: true });
     report.uploadedBytes += manifestJson.length * 2;

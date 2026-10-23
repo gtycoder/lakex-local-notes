@@ -53,7 +53,7 @@ class BigPort implements SyncDbPort {
   lastTombstoneSig = "";
   private assetBytes = new Uint8Array(1024).fill(7);
   row(id: string, content: string, syncState = "synced", parentId: string | null = "nb-root"): LocalNoteRow {
-    return { id, title: `笔记 ${id}`, content, updatedAt: "2026-01-01T00:00:00.000Z", syncState, trashedAt: null, restorePendingAt: null, parentId, sortOrder: 0, isLocked: false, lockedAt: null, icon: null, isConflict: false, contentHash: hashOf(content) };
+    return { id, title: `笔记 ${id}`, content, updatedAt: "2026-01-01T00:00:00.000Z", syncState, trashedAt: null, restorePendingAt: null, parentId, sortOrder: 0, isEditLocked: false, editLockedAt: null, icon: null, isConflict: false, contentHash: hashOf(content) };
   }
   seedAssets(id: string, n: number): Asset[] {
     const list: Asset[] = []; const h = sha256Sync(this.assetBytes);
@@ -74,7 +74,7 @@ class BigPort implements SyncDbPort {
   async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) n.syncState = "purged"; }
   async rememberDeleted(note: ManifestNote, at: string) { this.deleted.set(note.id, at); }
   async listDeletedNotesForSync() { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
-  async applyRemoteLock() {}
+  async applyRemoteEditLock() {}
   async createHistorySnapshot() {}
   async saveAsset(): Promise<void> {}
   async listLocalAssets(id: string): Promise<Asset[]> { return this.assetsByNote.get(id) ?? []; }

@@ -71,7 +71,7 @@ export interface LocalNoteRow {
   id: string; title: string; content: string; updatedAt: string; syncState: string;
   trashedAt: string | null; restorePendingAt: string | null; parentId: string | null; sortOrder: number;
   /** 协议字段透传（D9）：锁/图标/冲突标记不得因移动端不展示而丢失（红线 §3.5）。 */
-  isLocked: boolean; lockedAt: string | null; icon: string | null; isConflict: boolean;
+  isEditLocked: boolean; editLockedAt: string | null; icon: string | null; isConflict: boolean;
   /** 当前本地内容 hash（桌面 adapter 用 store.contentHash 提供，避免为算 hash 读 content；
    * 移动端不传则 syncEngine 读 content 自行计算）。 */
   contentHash?: string;
@@ -129,7 +129,7 @@ export interface SyncDbPort {
   /** 正文相同但元数据（标题/父/排序/图标）变化时应用远端较新版本（B3 LWW）。 */
   applyRemoteNoteMeta(note: ManifestNote): Promise<void>;
   /** 锁字段级 LWW：应用远端锁状态（锁变更不改正文哈希，需独立应用）。 */
-  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): Promise<void>;
+  applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null): Promise<void>;
   /** lastUploadedHash 传 null = 两端一致 skip 记账（本机未上传该版本内容，须清除误标，防 ownEdit 重复留档）。 */
   markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null): Promise<void>;
   /** 记账快照保护（B2，V5 §5.2）：仅当本地当前内容 hash 仍等于 expectedContentHash（同步期间未编辑）才标 synced；否则保持 local 下轮重传。

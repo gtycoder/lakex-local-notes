@@ -92,7 +92,7 @@ export function deriveDesktopView(input: DesktopViewInput) {
     (activeNoteId ? openTabs.find((t) => t.noteId === activeNoteId)?.kind : undefined) ?? "doc";
   const outlineVisible = tocEnabled && outlineEnhance && desktopWorkspace === "library" && activeKind === "doc";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
-  const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
+  const lockedNoteIds = new Set(notes.filter((n) => n.isEditLocked).map((n) => n.id));
 
   // 窄窗：锁定态（docked）也按收起态渲染 —— 窄窗不允许大纲占列，只保留右侧 rail + 悬停浮层。
   const effectiveOutlineMode: OutlineMode = narrowOverlay && outlineMode === "docked"

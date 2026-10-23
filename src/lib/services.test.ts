@@ -33,17 +33,17 @@ describe("createNativeServices（DTO 字段映射）", () => {
     const child = await notes.createNote("group-1", "子笔记");
     expect(calls).toEqual(["createNote(根笔记)", "createNoteIn(group-1,子笔记)"]);
     expect(root).toMatchObject({ id: "n1", parentId: "notebook-default", content: "<p>x</p>" });
-    expect(child).toMatchObject({ id: "n2", parentId: "group-1", syncState: "local", isLocked: false });
+    expect(child).toMatchObject({ id: "n2", parentId: "group-1", syncState: "local", isEditLocked: false });
   });
 
   it("notes.saveNoteContent / renameNote 拆分映射", async () => {
     const api = fakeNative({
-      saveNote: async (id, title, content) => ({ id, title, parentId: null, sortOrder: 0, updatedAt: "t2", syncState: "synced", isConflict: false, isLocked: true, content }),
+      saveNote: async (id, title, content) => ({ id, title, parentId: null, sortOrder: 0, updatedAt: "t2", syncState: "synced", isConflict: false, isEditLocked: true, content }),
       renameTreeNode: async (id, title) => ({ id, workspaceId: "w", parentId: null, nodeType: "note", title, noteFileId: id, sortOrder: 3, createdAt: "c", updatedAt: "t3", syncState: "local", isConflict: false }),
     });
     const { notes } = createNativeServices(api);
     const saved = await notes.saveNoteContent("n1", "新标题", "<p>正文</p>");
-    expect(saved).toMatchObject({ title: "新标题", content: "<p>正文</p>", syncState: "synced", isLocked: true });
+    expect(saved).toMatchObject({ title: "新标题", content: "<p>正文</p>", syncState: "synced", isEditLocked: true });
     const renamed = await notes.renameNote("n1", "改标题");
     expect(renamed).toMatchObject({ id: "n1", title: "改标题", nodeType: "note", noteFileId: "n1" });
   });

@@ -105,6 +105,7 @@ interface S3Settings {
   endpoint: string; region: string; bucket: string; prefix: string;
   accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
 }
+/** 线上清单条目（readManifest/writeManifest 直接读写 JSON）：锁键冻结为 isLocked/lockedAt。 */
 interface ManifestNote {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; contentHash: string; isConflict: boolean;
@@ -144,7 +145,7 @@ class FakeStore {
   /** V5 Phase 2：日志注入点（测试用静默实现） */
   logScopes: LoggerScopes = createSilentLoggerScopes();
   settings: S3Settings | null = null;
-  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null; icon?: string | null }>();
+  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isEditLocked?: boolean; editLockedAt?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null; icon?: string | null }>();
   /** 测试探针：contentHash（读 .lake）被调用的次数，用于断言"跳过扫描"生效。 */
   hashReads = 0;
   deleted = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }>();
@@ -309,7 +310,7 @@ class FakeStore {
     }
   }
   /** V5 §5.2 简化模拟：仅以 updatedAt 为条件（FakeStore 无真实磁盘正文/元数据一致性，够覆盖同步测试场景） */
-  markSyncedIfUnchanged(id: string, expected: { contentHash: string; updatedAt: string; title: string; parentId: string | null; sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null }) {
+  markSyncedIfUnchanged(id: string, expected: { contentHash: string; updatedAt: string; title: string; parentId: string | null; sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null }) {
     const n = this.notes.get(id);
     if (!n || n.updatedAt !== expected.updatedAt) return false;
     n.syncState = "synced";
@@ -344,18 +345,18 @@ class FakeStore {
   listPurgedNotesForSync() {
     return [...this.purgedNotes.entries()].map(([id, purgedAt]) => ({ id, title: id, parentId: null, sortOrder: 0, updatedAt: purgedAt, deletedAt: purgedAt, purgedAt }));
   }
-  setNoteLocked(id: string, locked: boolean) {
+  setNoteEditLocked(id: string, locked: boolean) {
     const n = this.notes.get(id);
     if (!n) throw new Error(`笔记不存在: ${id}`);
-    n.isLocked = locked;
-    n.lockedAt = this.nowIso();
+    n.isEditLocked = locked;
+    n.editLockedAt = this.nowIso();
     n.syncState = "local";
   }
-  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) {
+  applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null) {
     const n = this.notes.get(id);
     if (!n) return;
-    n.isLocked = locked;
-    n.lockedAt = lockedAt;
+    n.isEditLocked = locked;
+    n.editLockedAt = editLockedAt;
   }
   importRemoteNote(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; trashedAt?: string | null; deletedFromParentId?: string | null }, content: Buffer, assets: { filename: string; bytes: Buffer }[]) {
     fs.writeFileSync(this.notePath(note.id), content, "utf8");
@@ -892,16 +893,16 @@ describe("syncNow 增量同步", () => {
     writeManifest(manifest);
     const r = await syncNow(store as unknown as Store);
     expect(r.downloaded).toBe(0); // 正文未下载
-    expect(store.notes.get("n1")?.isLocked).toBe(true); // 锁已合并下来
+    expect(store.notes.get("n1")?.isEditLocked).toBe(true); // 锁已合并下来
 
     // 本地更新解锁（时间戳新）→ 远端旧锁不覆盖本地
-    store.setNoteLocked("n1", false);
-    const localAt = store.notes.get("n1")!.lockedAt!;
+    store.setNoteEditLocked("n1", false);
+    const localAt = store.notes.get("n1")!.editLockedAt!;
     manifest.notes[0] = { ...manifest.notes[0], isLocked: true, lockedAt: "2020-01-01T00:00:00.000Z" };
     writeManifest(manifest);
     await syncNow(store as unknown as Store);
-    expect(store.notes.get("n1")?.isLocked).toBe(false);
-    expect(store.notes.get("n1")?.lockedAt).toBe(localAt);
+    expect(store.notes.get("n1")?.isEditLocked).toBe(false);
+    expect(store.notes.get("n1")?.editLockedAt).toBe(localAt);
   });
 
   it("审计#19：远程 manifest 结构非法时同步报错（不按任意 JSON 导入）", async () => {

@@ -183,7 +183,7 @@ export function registerNotesIpc(
     return true;
   });
   ipc.handle("delete_note", (id: string) => store.deleteNote(id));
-  ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
+  ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteEditLocked(id, locked); return store.readNote(id); });
   ipc.handle("list_tree_nodes", () => store.listTreeNodes());
   ipc.handle("list_note_summaries", () => store.listNoteSummaries());
   ipc.handle("create_notebook", (title: unknown) => store.createNotebook(assertTitle(title)));

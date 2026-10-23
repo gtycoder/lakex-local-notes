@@ -7,6 +7,7 @@
  */
 import { isGoneNote } from "../../core/syncDecisions";
 import type { NoteSummary } from "../../lib/types";
+import { CUSTOM_CARD_SLASH_GROUP_TITLE, appendCustomCard, withCustomCardSlashItem } from "./customCardUtils";
 
 /** 卡片名（持久化在 cardValue.`$name` 上，**必须唯一且不要改**：改了旧正文就不再渲染本卡）。 */
 export const NOTE_REF_CARD_NAME = "lake-note-ref";
@@ -19,9 +20,8 @@ export const NOTE_REF_ICON_ID = "icon-lake-note-ref";
 export const NOTE_REF_SLASH_ITEM = `custom-${NOTE_REF_CARD_NAME}`;
 /** 斜杠面板里的主搜索词（`/` 后直接打这几个字母命中）。 */
 export const NOTE_REF_MAIN_SEARCH = "/doc";
-/** 斜杠分组标题：内核默认分组里的「小工具」。
- *  ⚠️ 该组的 `name` 与「程序员」组**重名**（都是 `group-files`，内核默认配置如此）⇒ 只能按 title 找。 */
-export const NOTE_REF_SLASH_GROUP_TITLE = "小工具";
+/** 斜杠分组标题：与 lockedText 卡共用同一份常量（单一来源 = customCardUtils）。 */
+export const NOTE_REF_SLASH_GROUP_TITLE = CUSTOM_CARD_SLASH_GROUP_TITLE;
 const NOTE_REF_SCHEME = "lake-note";
 
 export interface NoteRefValue {
@@ -121,19 +121,10 @@ export const NOTE_REF_CARD_META = {
  * 由 lakeRuntime.ensureCustomCardIcons() 收进隐藏 sprite（不传则用内核 sprite 里既有的符号）。
  */
 export function appendNoteRefCard(config: Record<string, unknown>, cardConfig: unknown, icon?: unknown): void {
-  const cc = config.customCard as { cards?: unknown[] } | undefined;
-  if (!cc) return;
-  const cards = Array.isArray(cc.cards) ? cc.cards : [];
-  const exists = cards.some((card) => (card as { config?: { name?: string } })?.config?.name === NOTE_REF_CARD_NAME);
-  if (!exists) cards.push({ config: cardConfig, ...(icon ? { icon } : {}) });
-  cc.cards = cards;
+  appendCustomCard(config, NOTE_REF_CARD_NAME, cardConfig, icon);
 }
 
 /** 把斜杠项 `custom-lake-note-ref` 加进「小工具」分组（官方口径；幂等，其它组一字不动）。 */
 export function withNoteRefSlashItem(groups: unknown[]): unknown[] {
-  return groups.map((group) => {
-    const g = group as { title?: string; items?: unknown[] };
-    if (g?.title !== NOTE_REF_SLASH_GROUP_TITLE || !Array.isArray(g.items)) return group;
-    return g.items.includes(NOTE_REF_SLASH_ITEM) ? group : { ...g, items: [...g.items, NOTE_REF_SLASH_ITEM] };
-  });
+  return withCustomCardSlashItem(groups, NOTE_REF_SLASH_ITEM, NOTE_REF_SLASH_GROUP_TITLE);
 }

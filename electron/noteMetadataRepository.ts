@@ -175,7 +175,7 @@ export class NoteMetadataRepository {
     transaction();
   }
 
-  setNoteLocked(id: string, locked: boolean): void {
+  setNoteEditLocked(id: string, locked: boolean): void {
     const now = this.deps.nowIso();
     this.assertNodeWritable(id);
     const transaction = this.db.transaction(() => {
@@ -186,9 +186,9 @@ export class NoteMetadataRepository {
     transaction();
   }
 
-  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): void {
+  applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null): void {
     this.db.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=? AND deleted_at IS NULL")
-      .run(locked ? 1 : 0, lockedAt, id);
+      .run(locked ? 1 : 0, editLockedAt, id);
   }
 
   importRemoteFolder(folder: SyncFolder): void {

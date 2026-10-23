@@ -87,7 +87,7 @@ describe("buildUploadEntry（v4 编码）", () => {
     expect(entry.deletedFromParentId).toBeUndefined();
     expect(entry.deleted).toBeUndefined();
     expect(entry.contentHash).toBe("b".repeat(64));
-    expect(entry.isLocked).toBe(false);
+    expect(entry.isEditLocked).toBe(false);
     expect(entry.icon).toBeNull();
   });
 
@@ -121,9 +121,9 @@ describe("buildUploadEntry（v4 编码）", () => {
   });
 
   it("锁/图标字段透传", () => {
-    const entry = buildUploadEntry({ note: mkLocal({ isLocked: true, lockedAt: T1, icon: "📁" }), contentHash: "b".repeat(64), assets: [] });
-    expect(entry.isLocked).toBe(true);
-    expect(entry.lockedAt).toBe(T1);
+    const entry = buildUploadEntry({ note: mkLocal({ isEditLocked: true, editLockedAt: T1, icon: "📁" }), contentHash: "b".repeat(64), assets: [] });
+    expect(entry.isEditLocked).toBe(true);
+    expect(entry.editLockedAt).toBe(T1);
     expect(entry.icon).toBe("📁");
   });
 });
@@ -150,11 +150,11 @@ describe("computeBookkeeping", () => {
 
   it("快照 = manifest 字段（V5 §5.2）", () => {
     const items = computeBookkeeping([
-      { id: "a", title: "标题", parentId: "p", sortOrder: 3, updatedAt: T1, contentHash: "a".repeat(64), isConflict: false, assets: [], isLocked: true, lockedAt: T1, icon: "i" },
+      { id: "a", title: "标题", parentId: "p", sortOrder: 3, updatedAt: T1, contentHash: "a".repeat(64), isConflict: false, assets: [], isEditLocked: true, editLockedAt: T1, icon: "i" },
     ]);
     expect(items[0].snapshot).toEqual({
       contentHash: "a".repeat(64), updatedAt: T1, title: "标题", parentId: "p", sortOrder: 3,
-      isLocked: true, lockedAt: T1, icon: "i",
+      isEditLocked: true, editLockedAt: T1, icon: "i",
     });
   });
 });
@@ -168,7 +168,7 @@ describe("rowToLocalState", () => {
     });
     expect(state).toEqual({
       id: "n1", title: "t", parentId: "p", sortOrder: 2, updatedAt: T1, syncState: "synced",
-      isConflict: true, isLocked: true, lockedAt: T1, icon: "📁", trashedAt: null, deletedFromParentId: null,
+      isConflict: true, isEditLocked: true, editLockedAt: T1, icon: "📁", trashedAt: null, deletedFromParentId: null,
       kind: "doc",
     });
   });

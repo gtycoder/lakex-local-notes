@@ -6,8 +6,8 @@ export interface NoteSummary {
   updatedAt: string;
   syncState: "local" | "synced" | "conflict" | "purged";
   isConflict: boolean;
-  isLocked?: boolean;
-  lockedAt?: string | null;
+  isEditLocked?: boolean;
+  editLockedAt?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。渲染层据此选择编辑器。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
@@ -47,7 +47,7 @@ export interface NoteInfo {
   updatedAt: string;
   syncState: string;
   isConflict: boolean;
-  isLocked: boolean;
+  isEditLocked: boolean;
   lakePath: string;
   assetsDir: string;
   sizeBytes: number;

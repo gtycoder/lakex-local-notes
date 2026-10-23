@@ -16,7 +16,7 @@ import { Store } from "./store.js";
 import { createStoreSyncPort } from "./syncAdapters.js";
 
 const mkNote = (note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; contentHash: string }) => ({
-  ...note, deleted: false, isConflict: false, isLocked: false, lockedAt: null, icon: null,
+  ...note, deleted: false, isConflict: false, isEditLocked: false, editLockedAt: null, icon: null,
   trashedAt: null, deletedFromParentId: null, kind: "doc", assets: [],
 });
 

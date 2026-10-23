@@ -109,7 +109,8 @@ databases/local-lakex-notes-mobile              # 主库（Capacitor SQLite, WAL
 ```
 
 manifest 字段（`src/core/manifestTypes.ts`）：
-- `ManifestNote`：id/title/parentId/**sortOrder**/updatedAt/contentHash/isConflict/isLocked/lockedAt/**icon**/**kind**（doc|usheet|bitable|board，缺省 doc 不写）/assets[]/墓碑
+- `ManifestNote`：id/title/parentId/**sortOrder**/updatedAt/contentHash/isConflict/isEditLocked/editLockedAt/**icon**/**kind**（doc|usheet|bitable|board，缺省 doc 不写）/assets[]/墓碑
+  - 锁字段是**内存名**（锁编辑，≠ 加密）；线上 JSON 键冻结为 `isLocked`/`lockedAt`，映射只在 `src/core/syncUtils.ts` 的解析/写出边界（护栏 `manifestLockWire.test.ts`）。
 - `ManifestFolder`：id/title/parentId/**sortOrder**/nodeType/**icon**/updatedAt/墓碑
 
 ---

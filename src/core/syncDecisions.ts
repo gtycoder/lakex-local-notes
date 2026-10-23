@@ -16,7 +16,7 @@ export const TRASH_NOTEBOOK_ID = "notebook-trash";
 export interface LocalNoteState {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; syncState?: string; isConflict: boolean;
-  isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
+  isEditLocked?: boolean; editLockedAt?: string | null; icon?: string | null;
   trashedAt?: string | null; deletedFromParentId?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: NoteKind;
@@ -36,7 +36,8 @@ export function rowToLocalState(row: SyncNoteRowShape): LocalNoteState {
   return {
     id: row.id, title: row.title, parentId: row.parent_id, sortOrder: row.sort_order,
     updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict,
-    isLocked: !!row.is_locked, lockedAt: row.locked_at ?? null, icon: row.icon ?? null,
+    // SQLite 列名冻结：is_locked / locked_at（两端同列）；这里映射成内存名 isEditLocked / editLockedAt。
+    isEditLocked: !!row.is_locked, editLockedAt: row.locked_at ?? null, icon: row.icon ?? null,
     trashedAt: row.trashed_at ?? null, deletedFromParentId: row.deleted_from_parent_id ?? null,
     kind: normalizeNoteKind(row.kind),
   };
@@ -101,7 +102,7 @@ export function buildUploadEntry(input: UploadEntryInput): ManifestNote {
   return {
     id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
     updatedAt: note.updatedAt, contentHash, isConflict: note.isConflict,
-    isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, assets,
+    isEditLocked: !!note.isEditLocked, editLockedAt: note.editLockedAt ?? null, icon: note.icon ?? null, assets,
     // 只写非 doc：键缺席 = doc（旧端/旧清单兼容，且纯文档库的条目保持逐字节不变）
     ...(note.kind && note.kind !== "doc" ? { kind: note.kind } : {}),
     trashedAt: inTrash ? (input.trashedAt ?? null) : undefined,
@@ -130,7 +131,7 @@ export interface BookkeepingItem {
   snapshot: {
     contentHash: string; updatedAt: string; title: string;
     parentId: string | null; sortOrder: number;
-    isLocked: boolean; lockedAt: string | null; icon: string | null;
+    isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   };
 }
 
@@ -146,7 +147,7 @@ export function computeBookkeeping(manifestNotes: ManifestNote[]): BookkeepingIt
         contentHash: note.contentHash,
         updatedAt: note.updatedAt,
         title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
-        isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null,
+        isEditLocked: !!note.isEditLocked, editLockedAt: note.editLockedAt ?? null, icon: note.icon ?? null,
       },
     });
   }

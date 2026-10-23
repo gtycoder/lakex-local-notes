@@ -87,7 +87,7 @@ export interface NoteInfo {
   updatedAt: string;
   syncState: string;
   isConflict: boolean;
-  isLocked: boolean;
+  isEditLocked: boolean;
   lakePath: string;
   assetsDir: string;
   sizeBytes: number;
@@ -740,7 +740,7 @@ export class Store {
       updatedAt: doc.updatedAt,
       syncState: doc.syncState,
       isConflict: doc.isConflict,
-      isLocked: doc.isLocked ?? false,
+      isEditLocked: doc.isEditLocked ?? false,
       lakePath,
       assetsDir,
       sizeBytes,
@@ -1225,19 +1225,19 @@ export class Store {
   }
 
   /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
-  setNoteLocked(id: string, locked: boolean): void {
-    this.noteMetadata.setNoteLocked(id, locked);
+  setNoteEditLocked(id: string, locked: boolean): void {
+    this.noteMetadata.setNoteEditLocked(id, locked);
   }
 
-  /** 同步合并写入（远端锁状态按 lockedAt LWW 后由调用方判定）。 */
-  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): void {
-    this.noteMetadata.applyRemoteLock(id, locked, lockedAt);
+  /** 同步合并写入（远端锁状态按 editLockedAt LWW 后由调用方判定）。 */
+  applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null): void {
+    this.noteMetadata.applyRemoteEditLock(id, locked, editLockedAt);
   }
 
   /** 本地同步快照保护（V5 §5.2）：仅当本地状态与快照一致才标记 synced（语义详见 syncReconciliation）。 */
   markSyncedIfUnchanged(noteId: string, expected: {
     contentHash: string; updatedAt: string; title: string; parentId: string | null;
-    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+    sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   }): boolean {
     return this.syncReconciliation.markSyncedIfUnchanged(noteId, expected);
   }

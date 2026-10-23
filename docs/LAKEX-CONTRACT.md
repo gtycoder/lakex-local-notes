@@ -1943,3 +1943,42 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 **处置**：不 patch 内核（闭源 + 需改 vendor；证据只到"内核未守卫"这一层）。该异常已由渲染层 `window.onerror` 兜底记录（见 `docs/LOGGING.md` §5），应用继续运行、不丢数据；同一异常会留两条日志（我们的 `[window] …` + 浏览器 `Uncaught …`），以带 `stack` 字段的那条为准。
 若将来**频繁出现**（日志里可数）再考虑：先在 vendor 里定位到具体 observer 函数，按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 做单点最小 guard。
 
+### 5.43 「加密文本」卡：内核只有占位，语雀是服务端加密（261023 调研 + 自研落地）
+
+**用户问题**：截图里的「加密文本」卡片（标题 + 「未设置密码，将明文显示」/「输入密码 · 解锁」/「锁住」三态）怎么实现的、我们能不能做。
+
+**① 内核侧：只有"身份证"，没有任何实现**（v1.99.0）：
+| 位置 | 内容 |
+|---|---|
+| `lakex.js:76632-76636` | `LOCKED_TEXT:{NODE_NAME:'lockedtext',UI_NAME/OPTION_NAME/LAKE_NAME:'lockedtext'}`（与 VOTE / LOCAL_DOC / TRANSFER / THREE 同组，都是宿主 App 侧卡片） |
+| `lakex.js:122918` | 表格版式 cardSelect 的**按名移除**清单里有 `'lockedtext'`（不是"默认面板含它"） |
+| `lakex-doc.css:667 / :20698-20703` | `.ne-svg-icon-insert-lockedtext` 图标类、分栏内 `ne-card[data-card-name='lockedtext']` 的 `min-width:380px`（**没有** `.ne-card-lockedtext`） |
+| `icon.tsx:1855/1880` + `public/vendor/lakex-doc/kitchen-iconfont.js` | 共享 sprite 里的 `icon-加密文本`（sprite 连内核不认识的卡片图标都有 ⇒ 不能当能力证据；语雀 App 实际用 `editor-main-encrypted-text`，我们全仓 0 命中） |
+
+- **为什么面板里没有它**（可复用机制）：插入面板渲染时按名查注册表，查不到直接 `return null` 再 `filter(Boolean)`（`lakex.js:165979-166007`，`_transformConfig`）⇒ **未 `registerCardSelect` 的项不可能出现**。我们的面板 = 内核默认 groups 只过滤 third-party（`lakeRuntime.ts:855-871`）。
+- **内核无任何 crypto 原语**：`password|secret|AES|PBKDF2|importKey|deriveKey` 全 0（唯一 "Encrypt" 是 React 的 `onEncrypted` 属性表）。
+- **未知卡不丢数据**：fallback reader（`lakex.js:85085-85100`）读成通用 `block/inline` 节点并保留 `{cardName, cardValue}`，写回原样输出（`:85143-85146`）；界面显示「该卡片暂时无法显示」。副作用：`data-card-name` 退化为 `block`。
+- **产物侧也没有懒加载卡包**：`public/vendor/lakex/alipay/**`（195 个 svg/字体文件、0 目录）+ `public/vendor/cdn/**`（35 文件、4 个 js）全量检索 `lockedtext|加密|密码` = 0。
+
+**② 语雀产品侧（`yuque-re/android/out/nebula-offline/p__webapp__mobile_app__noteEdit.async.js`，5.9MB 单行，APK 1.2.2/710 快照）**：
+- 卡名：`PluginName "lockedText"` / `cardName "lockedtext"`；DOM `ne-card[data-card-name='lockedtext']` + `.ne-card-locked-text`；状态 `editing / set-password / unlock / read`；底部小把手 = **高度 resizer**（`getResizerConfig(){return{min:240}}`），不是折叠。
+- 值形状：`{originData, cryptoData, locked}`；`toLake(e){return e.cryptoData ? {originData:"", cryptoData:e.cryptoData, locked:true} : e}` ⇒ **未设密码时明文直接落 `originData`**（截图文案属实）。
+- **加解密不在客户端**：`POST /api/services/crypto`（`action: encrypt|decrypt|autoSave`），请求体含 `{pwd,text,action}`；`AES|PBKDF2|WebCrypto|CryptoJS` 在包内 0 命中 ⇒ **服务端持密码与明文，不是端到端**；算法/KDF/盐不可见。
+- 其它：密码只在 React state（不落 localStorage/IDB）；新密码仅 placeholder 建议 6 位；错 5 次 → 60s 冷却；忘记不可恢复（UI 明示）；3s 防抖自动保存；无自动锁定/无独立改密入口；导出降级文案「此处为语雀加密文本卡片，点击链接查看：」。
+
+**③ 我们的落地（用户 261023 定稿：加密存储 / 无密码不可见正文 / 多端同一密码 = 端到端）**：
+- **不复用语雀卡名**（`lockedtext` 是服务端密钥，谁也无法互通；复用只会制造"能解开"的错觉）⇒ 自有卡 `lake-locked-text`。
+  ⚠️ 语雀那张卡**不会**走到本卡节点上：内核按**节点名**（`lockedtext`）分派，未注册就进 unknown-card fallback
+  （「该卡片暂时无法显示」+ 原值原样保留，见上文 ①）⇒ 本卡**没有**（也不需要）「语雀旧卡态」，别把它当功能写进 UI。
+- 单一来源 `src/core/lockedText.ts`：PBKDF2-SHA256(210k, 参数随值存) + AES-GCM-256 + 随机 salt/iv + AAD `lake-locked-text:v1`；值只含 `{v,alg,kdf,iter,salt,iv,ct}`，**密码/派生密钥绝不进正文**。
+- **会话缓存派生密钥**：设密码/解锁时跑一次 PBKDF2，之后每次保存只做 AES-GCM（实测 210k ≈ 69–87ms；单次 AES 远小于 1ms）⇒ 未落盘窗口从"KDF 级"降到"亚毫秒级"。
+- **生命周期补写（评审 B1）**：`features/editor/lockedTextFlush.ts` 注册表；`closeTab` / `toggleNoteLock` 在 F01 持久化闸门**之前** await flush，并在 flush 发生时强制 persist 一次。
+  （不这么做时：明文只在组件 state、`tab.dirty` 还是 false ⇒ 关标签/锁文档直接跳过保存，最后 250–600ms 明文静默丢失。）
+- 明文只活在组件内存；唯一落盘 = 加密后 `updateCardValue(cipher)`；`writeText/writeHtml` 只给占位 ⇒ 不进 md_cache/text_cache/FTS/剪贴板/导出。
+- **外部改动跟随**：解锁态若 `cardValue.ct` 不是本卡刚写出的值（撤销/重做/他端同步/历史恢复），用会话 key 重解密刷新；
+  salt/iter 变了（别处改过密码）则锁回并提示，**绝不拿旧明文覆盖新密文**。
+- 密码按 **NFC** 归一（macOS 偏 NFD、Android 偏 NFC；不归一会让"多端同一个密码"失败）。
+- 实测（隔离 scheme 实例）：`.lake`、`md_cache`、`text_cache`、`notes_fts` 对明文 **0 命中**；锁住/重载后回 locked；错密码「密码错误」；改密码后旧密码失效。
+
+**④ 判据（以后碰这个功能先看）**：内核`lockedtext` 常量 ≠ 能力；面板项必须有 `registerCardSelect` + `customCard.cards` 两处才算"插得进、存得住、读得回"；"加密"必须逐项证明**没有明文路径**（正文/历史/快照/搜索缓存/导出/剪贴板），只用 UI 遮挡一律判为假加密。
+**另一个常被漏掉的口子 = 生命周期**：卡片自己 dedupe 的防抖窗口里，文档 tab 还是"干净"的 ⇒ 关标签/锁文档/退出必须先把卡内未落盘内容补写（见 ③ 的 flush 注册表）。

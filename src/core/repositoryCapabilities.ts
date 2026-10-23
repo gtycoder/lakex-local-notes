@@ -86,7 +86,7 @@ export const DESKTOP_ONLY_CAPABILITIES: readonly { desktop: string; note: string
   { desktop: "createNoteIn / createNoteInAtTopWithContent", note: "按父级/面板位置新建（移动端 createNote 用 parentId 覆盖前者的常见用法）" },
   { desktop: "createBitableIn / createBoardIn / createUsheetIn", note: "新建多维表/画板/表格文档（移动端不提供新建入口）" },
   { desktop: "getNoteDigest / getNoteInfo / getNotePaths / hasNote / hasTreeNode", note: "属性、路径、存在性查询（移动端用 noteGoneState + 本地查询替代）" },
-  { desktop: "setNoteLocked", note: "文档锁定（移动端不提供）" },
+  { desktop: "setNoteEditLocked", note: "文档锁定（移动端不提供）" },
   { desktop: "updateNoteCaches / readNoteCaches / ensureNoteCaches", note: "markdown/纯文本缓存（移动端检索走自己的 searchIndex，不维护该缓存）" },
   { desktop: "renameAssetDisplay / readAssetPreview / previewNoteOrphan", note: "资产展示名与预览（移动端资产入口不同）" },
   { desktop: "importRemoteNote / moveTreeNode", note: "同步内部使用（移动端同语义在 syncDbPort 内）" },

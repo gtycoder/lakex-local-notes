@@ -12,6 +12,7 @@ import { mountSelectionToolbar } from "./selectionToolbar/mountSelectionToolbar"
 import { registerEditorInstance } from "./editorRegistry";
 import { uploadLakeResource } from "./resourceUpload";
 import { registerNoteRefCard, withNoteRefSlashItem } from "./noteRefCard";
+import { registerLockedTextCard, withLockedTextSlashItem } from "./lockedTextCard";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
@@ -855,16 +856,20 @@ export function createLakeDocument(
     slash: {
       cardSelect: {
         general: {
-          groups: withNoteRefSlashItem(
-            ((defaultConfig as any).slash?.cardSelect?.general?.groups || []).filter(
-              (g: any) => g.name !== "third-party-services"
+          groups: withLockedTextSlashItem(
+            withNoteRefSlashItem(
+              ((defaultConfig as any).slash?.cardSelect?.general?.groups || []).filter(
+                (g: any) => g.name !== "third-party-services"
+              )
             )
           ),
         },
         table: {
-          groups: withNoteRefSlashItem(
-            ((defaultConfig as any).slash?.cardSelect?.table?.groups || []).filter(
-              (g: any) => g.name !== "third-party-services"
+          groups: withLockedTextSlashItem(
+            withNoteRefSlashItem(
+              ((defaultConfig as any).slash?.cardSelect?.table?.groups || []).filter(
+                (g: any) => g.name !== "third-party-services"
+              )
             )
           ),
         },
@@ -895,6 +900,8 @@ export function createLakeDocument(
   // 「文档引用」卡（R2，261008）：追加自定义卡 + 斜杠项；必须在 prepareCustomCards 之前注册
   // （它负责把 label/description 的函数形态归一化成字符串）。放在 deepMerge 之后 ⇒ 不覆盖内核自带卡。
   registerNoteRefCard(mergedOptions);
+  // 「加密文本」卡（261023）：同样必须在 prepareCustomCards 之前注册（否则卡不注册 ⇒ 面板无项、正文读成 fallback）。
+  registerLockedTextCard(mergedOptions);
 
   // 先收集图标：新 vendor 的 React `icon` 挂在 `{ config, icon }` 包装上，prepareCustomCards 解包后会丢。
   ensureCustomCardIcons(mergedOptions);

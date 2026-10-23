@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { PersistOutcome } from "./useSavePipeline";
 import { flushDirtyBeforeLifecycle } from "../core/lifecycleFlush";
+import { flushPendingLockedTextCommits } from "../features/editor/lockedTextFlush";
 
 export interface DocumentTabLike {
   noteId: string;
@@ -59,8 +60,13 @@ export function useDocumentTabs<T extends DocumentTabLike>({
       saveTimers.current.delete(noteId);
     }
     {
-      // 审计 F01：关闭前必须确认该 revision 已持久化；失败留在原文档（错误已由保存管线提示）。
-      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(noteId));
+      // 加密文本卡：明文可能还在防抖窗口里（此时 tab 还不脏）⇒ 先把密文补写回 cardValue，
+      // 再走 F01 闸门；补写过就等于"有过未落盘内容"，必须 persist 一次。
+      const flushedCard = await flushPendingLockedTextCommits();
+      const { proceed } = await flushDirtyBeforeLifecycle(
+        flushedCard ? { ...tab, dirty: true } : tab,
+        () => persistTab(noteId),
+      );
       if (!proceed) return;
     }
     clearScrollMemory(noteId);

@@ -58,6 +58,7 @@ interface Scenario {
 }
 
 interface ManifestSemantic {
+  // 读的是线上 JSON（键冻结）⇒ 这里用线上键名
   notes: Array<{ id: string; title: string; parentId: string | null; sortOrder: number; trashedAt: boolean; deleted: boolean; isLocked: boolean; icon: string | null; assets: number }>;
   folders: Array<{ id: string; title: string; parentId: string | null; nodeType: string }>;
 }
@@ -86,7 +87,7 @@ async function runDesktop(sc: Scenario) {
         const row = store.listNotesForSync().find((x) => x.id === n.id);
         if (row) store.markSyncedIfUnchanged(n.id, {
           contentHash: h, updatedAt: row.updatedAt, title: row.title, parentId: row.parentId ?? null,
-          sortOrder: row.sortOrder, isLocked: !!row.isLocked, lockedAt: row.lockedAt ?? null, icon: row.icon ?? null,
+          sortOrder: row.sortOrder, isEditLocked: !!row.isEditLocked, editLockedAt: row.editLockedAt ?? null, icon: row.icon ?? null,
         });
       }
       if (n.restorePendingAt) { store.deleteTreeNode(n.id); store.restoreTrashItem(n.id); }
@@ -124,7 +125,7 @@ async function runDesktopViaAdapter(sc: Scenario) {
         const row = store.listNotesForSync().find((x) => x.id === n.id);
         if (row) store.markSyncedIfUnchanged(n.id, {
           contentHash: h, updatedAt: row.updatedAt, title: row.title, parentId: row.parentId ?? null,
-          sortOrder: row.sortOrder, isLocked: !!row.isLocked, lockedAt: row.lockedAt ?? null, icon: row.icon ?? null,
+          sortOrder: row.sortOrder, isEditLocked: !!row.isEditLocked, editLockedAt: row.editLockedAt ?? null, icon: row.icon ?? null,
         });
       }
       if (n.restorePendingAt) { store.deleteTreeNode(n.id); store.restoreTrashItem(n.id); }

@@ -32,13 +32,13 @@ interface ScenarioNote {
   id: string; title: string; content: string;
   parentId?: string | null; sortOrder?: number; updatedAt?: string;
   syncState?: string; trashedAt?: string | null; restorePendingAt?: string | null;
-  isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
+  isEditLocked?: boolean; editLockedAt?: string | null; icon?: string | null;
 }
 interface Scenario {
   name: string;
   /** 本地初始状态（两端同构构造） */
   localNotes: ScenarioNote[];
-  /** 远端最新 manifest 的 notes（空 = 首次同步无远端） */
+  /** 远端最新 manifest 的 notes（空 = 首次同步无远端）。线上清单键冻结：锁字段是 isLocked/lockedAt。 */
   remoteNotes?: Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; contentHash: string; trashedAt?: string; deleted?: boolean; deletedAt?: string; deletedFromParentId?: string | null; isLocked?: boolean; lockedAt?: string | null; icon?: string | null; assets?: Array<{ filename: string; size: number; hash: string }> }>;
   remoteFolders?: Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: string; icon: string | null; updatedAt: string }>;
   /** 远端对象（正文）: key -> bytes */
@@ -47,6 +47,7 @@ interface Scenario {
 
 // ===== 语义归一化（比较基准） =====
 interface ManifestSemantic {
+  // 读的是线上 JSON（键冻结）⇒ 这里用线上键名
   notes: Array<{ id: string; title: string; parentId: string | null; sortOrder: number; trashedAt: boolean; deleted: boolean; isLocked: boolean; icon: string | null; assets: number }>;
   folders: Array<{ id: string; title: string; parentId: string | null; nodeType: string }>;
 }
@@ -128,11 +129,11 @@ async applyRemoteNote(note: any, content: string) {
     this.notes.set(note.id, {
       id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced",
       trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0,
-      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict,
+      isEditLocked: !!note.isEditLocked, editLockedAt: note.editLockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict,
     });
   }
 async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, _pid: string | null, _so: number) {
-    this.notes.set(id, { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId: null, sortOrder: 0, isLocked: false, lockedAt: null, icon: null, isConflict: false });
+    this.notes.set(id, { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId: null, sortOrder: 0, isEditLocked: false, editLockedAt: null, icon: null, isConflict: false });
   }
 async localTrashNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = new Date().toISOString(); n.syncState = "local"; } }
 async localRestoreNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = null; n.restorePendingAt = new Date().toISOString(); n.syncState = "local"; } }
@@ -144,9 +145,9 @@ async revokeLocalDeletion(id: string) { this.deletedNotes.delete(id); this.delet
 async markFolderSynced() { return true; }
 async applyRemoteNoteMeta(note: any) {
     const n = this.notes.get(note.id);
-    if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isLocked = !!note.isLocked; n.lockedAt = note.lockedAt ?? null; }
+    if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isEditLocked = !!note.isEditLocked; n.editLockedAt = note.editLockedAt ?? null; }
   }
-async applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isLocked = locked; n.lockedAt = lockedAt; } }
+async applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isEditLocked = locked; n.editLockedAt = editLockedAt; } }
 async markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null) {
     const n = this.notes.get(id); if (n) n.syncState = "synced";
     this.bases.set(id, { contentHash, lastUploadedHash, lastSyncedMetaAt: metaAt });
@@ -211,7 +212,7 @@ async function runScenarioDesktop(sc: Scenario): Promise<{ manifest: ManifestSem
         const row = store.listNotesForSync().find((x) => x.id === n.id);
         if (row) store.markSyncedIfUnchanged(n.id, {
           contentHash: h, updatedAt: row.updatedAt, title: row.title, parentId: row.parentId ?? null,
-          sortOrder: row.sortOrder, isLocked: !!row.isLocked, lockedAt: row.lockedAt ?? null, icon: row.icon ?? null,
+          sortOrder: row.sortOrder, isEditLocked: !!row.isEditLocked, editLockedAt: row.editLockedAt ?? null, icon: row.icon ?? null,
         });
       }
       if (n.restorePendingAt) {
@@ -221,7 +222,7 @@ async function runScenarioDesktop(sc: Scenario): Promise<{ manifest: ManifestSem
       } else if (n.trashedAt) {
         store.deleteTreeNode(n.id);
       }
-      if (n.isLocked) { /* 锁设置 API 待查 */ }
+      if (n.isEditLocked) { /* 锁设置 API 待查 */ }
     }
     // 远端预置
     if (sc.remoteNotes || sc.remoteFolders) {
@@ -254,7 +255,7 @@ async function runScenarioEngine(sc: Scenario): Promise<{ manifest: ManifestSema
       syncState: n.syncState ?? "local",
       trashedAt: n.trashedAt ?? null, restorePendingAt: n.restorePendingAt ?? null,
       parentId: n.parentId ?? null, sortOrder: n.sortOrder ?? 0,
-      isLocked: n.isLocked ?? false, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null, isConflict: false,
+      isEditLocked: n.isEditLocked ?? false, editLockedAt: n.editLockedAt ?? null, icon: n.icon ?? null, isConflict: false,
     });
   }
   db.folders.set("notebook-personal", { id: "notebook-personal", title: "个人笔记", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" });

@@ -42,12 +42,12 @@ async applyRemoteNote(note: any, content: string) {
     this.notes.set(note.id, {
       id: note.id, title: note.title, content, contentHash: note.contentHash, updatedAt: note.updatedAt, syncState: "synced",
       trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0,
-      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict,
+      isEditLocked: !!note.isEditLocked, editLockedAt: note.editLockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict,
       deletedFromParentId: note.deletedFromParentId ?? null,
     });
   }
 async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, _pid: string | null, _so: number) {
-    this.notes.set(id, { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId: null, sortOrder: 0, isLocked: false, lockedAt: null, icon: null, isConflict: false });
+    this.notes.set(id, { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId: null, sortOrder: 0, isEditLocked: false, editLockedAt: null, icon: null, isConflict: false });
   }
 async localTrashNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = new Date().toISOString(); n.syncState = "local"; } }
 async localRestoreNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = null; n.restorePendingAt = new Date().toISOString(); n.syncState = "local"; } }
@@ -71,9 +71,9 @@ async revokeLocalDeletion(id: string) { this.deletedNotes.delete(id); this.delet
 async markFolderSynced() { return true; }
 async applyRemoteNoteMeta(note: any) {
     const n = this.notes.get(note.id);
-    if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isLocked = !!note.isLocked; n.lockedAt = note.lockedAt ?? null; }
+    if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isEditLocked = !!note.isEditLocked; n.editLockedAt = note.editLockedAt ?? null; }
   }
-async applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isLocked = locked; n.lockedAt = lockedAt; } }
+async applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isEditLocked = locked; n.editLockedAt = editLockedAt; } }
 async markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null) {
     const n = this.notes.get(id); if (n) n.syncState = "synced";
     this.bases.set(id, { contentHash, lastUploadedHash, lastSyncedMetaAt: metaAt });
@@ -176,7 +176,7 @@ const hashOf = (s: string) => sha256Sync(new TextEncoder().encode(s));
 const row = (over: Partial<LocalNoteRow> & { id: string }): LocalNoteRow => ({
   id: over.id, title: over.title ?? "笔记", content: over.content ?? "<p>hi</p>", updatedAt: over.updatedAt ?? "2026-01-01T00:00:00.000Z", syncState: over.syncState ?? "local",
   trashedAt: over.trashedAt ?? null, restorePendingAt: over.restorePendingAt ?? null, parentId: over.parentId ?? null, sortOrder: over.sortOrder ?? 0,
-  isLocked: over.isLocked ?? false, lockedAt: over.lockedAt ?? null, icon: over.icon ?? null, isConflict: over.isConflict ?? false,
+  isEditLocked: over.isEditLocked ?? false, editLockedAt: over.editLockedAt ?? null, icon: over.icon ?? null, isConflict: over.isConflict ?? false,
   kind: over.kind,
 });
 
@@ -534,14 +534,15 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
       version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null,
       createdAt: "2026-01-01T00:00:00.000Z",
+      // 线上清单键冻结：远端 fixture 用 isLocked/lockedAt（解析边界归一成内存 isEditLocked/editLockedAt）
       notes: [{ id: "n2", title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], isLocked: true, lockedAt: "2026-01-02T00:00:00.000Z", icon: "star" }],
       folders: [],
     })));
     const r = await syncNow(CFG, s3, db);
     expect(r.appliedRemote).toBe(1);
     expect(db.notes.get("n2")!.content).toBe("<p>remote</p>");
-    expect(db.notes.get("n2")!.isLocked).toBe(true);
-    expect(db.notes.get("n2")!.lockedAt).toBe("2026-01-02T00:00:00.000Z");
+    expect(db.notes.get("n2")!.isEditLocked).toBe(true);
+    expect(db.notes.get("n2")!.editLockedAt).toBe("2026-01-02T00:00:00.000Z");
     expect(db.notes.get("n2")!.icon).toBe("star");
   });
 
@@ -597,7 +598,7 @@ describe("syncEngine（共享编排）", () => {
   it("B1：本地软删（回收站）上传条目用 buildUploadEntry——parentId=TRASH + trashedAt，无 deleted:true", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
-    db.notes.set("n1", row({ id: "n1", trashedAt: "2026-01-01T00:00:00.000Z", syncState: "local", isLocked: true, icon: "star" }));
+    db.notes.set("n1", row({ id: "n1", trashedAt: "2026-01-01T00:00:00.000Z", syncState: "local", isEditLocked: true, icon: "star" }));
     const r = await syncNow(CFG, s3, db);
     expect(r.uploaded).toBe(1);
     const manifestBytes = await s3.getObject("p/manifests/latest.json");
@@ -607,6 +608,7 @@ describe("syncEngine（共享编排）", () => {
     expect(n.deleted).toBeUndefined();
     expect(n.trashedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(n.parentId).toBe(TRASH_NOTEBOOK_ID);
+    // 发布出去的 JSON 用线上冻结键（不是内存名）
     expect(n.isLocked).toBe(true);
     expect(n.icon).toBe("star");
   });
@@ -872,6 +874,7 @@ describe("syncEngine（共享编排）", () => {
     db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
       version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      // 线上清单键冻结：远端 fixture 用 isLocked/lockedAt
       notes: [{ id: "n1", title: "远端新标题", parentId: null, sortOrder: 0, updatedAt: "2026-01-03T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], isLocked: true, lockedAt: "2026-01-03T00:00:00.000Z", icon: "star" }],
       folders: [],
     })));
@@ -879,7 +882,7 @@ describe("syncEngine（共享编排）", () => {
     expect(r.appliedRemote).toBe(0); // 幂等：正文相同不下载
     expect(db.notes.get("n1")!.title).toBe("远端新标题"); // B3 元数据 LWW
     expect(db.notes.get("n1")!.icon).toBe("star");
-    expect(db.notes.get("n1")!.isLocked).toBe(true);
+    expect(db.notes.get("n1")!.isEditLocked).toBe(true);
   });
 
   it("B2：markSyncedIfUnchanged 快照保护——同步中内容变化则不误标 synced", async () => {

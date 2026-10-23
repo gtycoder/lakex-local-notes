@@ -25,7 +25,7 @@ const info = (patch: Partial<NoteInfo> = {}): NoteInfo => ({
   sizeBytes: 2048,
   syncState: "synced",
   isConflict: false,
-  isLocked: false,
+  isEditLocked: false,
   ...patch,
 } as unknown as NoteInfo);
 
@@ -46,8 +46,8 @@ describe("文档属性共享清单（C1-7）", () => {
   it("状态：冲突与锁定以 · 叠加，未知状态原样回显", () => {
     const status = (patch: Partial<NoteInfo>) => Object.fromEntries(noteInfoRows(info(patch)))["状态"];
     expect(status({ isConflict: true })).toBe("已同步 · 有冲突副本");
-    expect(status({ isLocked: true })).toBe("已同步 · 已锁定");
-    expect(status({ isConflict: true, isLocked: true })).toBe("已同步 · 有冲突副本 · 已锁定");
+    expect(status({ isEditLocked: true })).toBe("已同步 · 已锁定");
+    expect(status({ isConflict: true, isEditLocked: true })).toBe("已同步 · 有冲突副本 · 已锁定");
     expect(status({ syncState: "weird" })).toBe("weird");
     expect(SYNC_STATE_LABEL.local).toBe("未同步");
     expect(SYNC_STATE_LABEL.conflict).toBe("冲突");

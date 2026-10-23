@@ -95,7 +95,7 @@ export class SyncReconciliation {
    * 这是单设备内快照比对，不是分布式 CAS；updated_at 无严格单调，同毫秒残留后果=延迟非丢失。 */
   markSyncedIfUnchanged(noteId: string, expected: {
     contentHash: string; updatedAt: string; title: string; parentId: string | null;
-    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+    sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   }): boolean {
     // 1) 事务外：重读磁盘正文 hash（正文在 .lake 文件，DB 事务管不到磁盘）
     if (this.contentHash(noteId) !== expected.contentHash) return false;
@@ -106,7 +106,7 @@ export class SyncReconciliation {
       ).get(noteId) as { title: string; parent_id: string | null; sort_order: number; is_locked: number; locked_at: string | null; icon: string | null } | undefined;
       if (!meta) return false;
       if (meta.title !== expected.title || meta.parent_id !== expected.parentId || meta.sort_order !== expected.sortOrder ||
-          !!meta.is_locked !== expected.isLocked || (meta.locked_at ?? null) !== expected.lockedAt || (meta.icon ?? null) !== expected.icon) return false;
+          !!meta.is_locked !== expected.isEditLocked || (meta.locked_at ?? null) !== expected.editLockedAt || (meta.icon ?? null) !== expected.icon) return false;
       // 3) 条件更新（快照后 meta 编辑的最后防线）
       const info = this.ctx.db.prepare(
         "UPDATE notes SET sync_state='synced', restore_pending_at=NULL WHERE id=? AND updated_at=?"

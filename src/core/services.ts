@@ -15,7 +15,7 @@ export interface NoteDto {
   updatedAt: string;
   content: string;
   syncState: "local" | "synced" | "conflict" | "purged";
-  isLocked: boolean;
+  isEditLocked: boolean;
 }
 
 export interface TreeNodeDto {

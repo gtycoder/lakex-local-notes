@@ -13,6 +13,23 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261023(十) · 加密文本卡（端到端）+ `isLocked` → `isEditLocked` 更名 · **已实现，待用户验收**
+
+- **① 更名（用户点单）**：`isLocked` 有歧义 ⇒ 全仓代码标识符改为 **`isEditLocked`（是否锁编辑）**，并成对改 `lockedAt→editLockedAt`、`setNoteLocked→setNoteEditLocked`、`applyRemoteLock→applyRemoteEditLock`、`mergeLockState→mergeEditLockState`（40 既有文件 + 1 新护栏，约 300 处）。
+  **对外标识一律冻结**：S3 清单 JSON 键仍是 `isLocked/lockedAt`（解析 `syncUtils.ts` 的 `manifestFromWire`、写出 `syncEngine.ts` 的 `manifestToWire` 两处映射；护栏 `manifestLockWire.test.ts` 5 例）；SQLite 列 `is_locked/locked_at` 与 schema 不动（三处行映射补注释）；IPC 通道 `set_note_locked`、preload 导出名、`scripts/*.mjs`、用户文案「已锁定」全部未动。口径由用户定：**线上键冻结、代码内改名**，避免与旧 APK 互操作裂缝。
+- **② 加密文本卡（用户两条要求：加密存储 / 无密码不可见正文 / 多端同一密码）**：
+  - **卡名 `lake-locked-text`（自有，不冒充语雀）**：语雀的 `lockedtext` 是**服务端加解密**（`POST /api/services/crypto`，客户端 0 密码学代码），本机无法互通。
+    ⚠️ 它是**内核内置节点名**，未注册时走 unknown-card fallback（「该卡片暂时无法显示」+ 原值保留），**不会**走到我们的节点上 ⇒ 本卡没有"语雀旧卡态"分支（评审 W1 后已删，避免承诺不存在的提示）。
+  - **密码学单一来源** `src/core/lockedText.ts`：PBKDF2-SHA256（210k，参数随密文存）+ AES-GCM-256 + 随机 salt(16B)/iv(12B) + AAD `lake-locked-text:v1`；值只存 `{v,alg,kdf,iter,salt,iv,ct}`；**密码与派生密钥不进正文**。
+  - **结构不变量**：明文只在组件内存（textarea），唯一落盘动作 = `sealLockedText` → `updateCardValue(cipher)`；不 setDocument / 不调内核命令；`writeText/writeHtml` 只给「［加密文本］」占位 ⇒ 不进 md_cache/text_cache/FTS/剪贴板/导出。护栏 `lockedText.test.ts`（15 例）+ `lockedTextCard.test.ts`（9 例静态锁：禁 setDocument/execCommand、每处 updateCardValue 入参必须是 cipher（含 `?.` 补写路径）、注册胶水、flush 注册表）。
+  - **生命周期补写（评审 B1，已修）**：会话缓存派生密钥（解锁一次 PBKDF2，之后每次保存只做 AES）⇒ 防抖 600→250ms；新增 `features/editor/lockedTextFlush.ts` 注册表，`closeTab` / `toggleNoteLock` 在 F01 闸门**之前** await 补写并在补写过时强制 persist（否则"打完最后一句立刻关标签"会静默丢最后一段明文）。
+  - **外部改动跟随（评审 W2）**：解锁态用"本卡自写 ct"区分外部变化（撤销/他端/历史）⇒ 用会话 key 重解密刷新；salt/iter 变了则锁回+提示，绝不拿旧明文覆盖新密文。
+  - **其它评审项**：密码 NFC 归一（macOS NFD ↔ Android NFC）、密文上界校验、AAD 注释改为"协议/版本域隔离"、viewer 不再显示「锁住」、删死 CSS/测试 id、注册胶水与 `noteRef` 合并到 `customCardUtils.ts`、移动端卡内控件补 `min-height: var(--mb-tap-min)`（桌面几何不变）。
+  - **UI 落点** `features/editor/lockedTextCard.tsx`（三态：未设密码/已锁/已解锁 + 修改密码 + 锁住；忘记密码不可恢复已明示）+ `lockedTextCard.css`（85 声明，登记 cssLayers）+ `lockedTextIcon.tsx`（symbol，currentColor）。注册 `lakeRuntime` 一处 + 「+」面板「小工具」组；移动端 `EditorDock`「＋」第二组加「加密文本」（`insertCard/customBlock/$name`）。
+- **实测（隔离 `locallakexnotes://app` 实例 + CDP，`$TMPDIR/lake-lockcard`）**：插入面板可见「/jm 加密文本」→ 建卡（未设密码态，textarea 不出现）→ 设密码 → 输入「秘密内容SECRET42_ZHEJIANG」→ **`.lake` 与 DB 三处（md_cache/text_cache/notes_fts）明文命中 0**、值只含密文（`$htmlStr` 为占位）→ 锁住（无 textarea、DOM 无明文）→ 重载页面后回 locked、仍无明文 → 错密码提示「密码错误」且不解锁 → 正确密码恢复正文 → 改密码后**旧密码失效、新密码可解且正文完整**。
+- **移动端设备实测（261023，专用 AVD `lake_lock` 全新实例 `emulator-5580`，APK 41,994,006B）**：dock「＋」面板第二组出现 **加密文本** → 点它插入（`insertCard/customBlock/$name`）→ 卡渲染为 setup 态、令牌全解析（边框 `#e6e8ec` / 圆角 10 / 字号 16）；**卡内控件 44px**（`--mb-tap-min` 生效，此前 22/27）→ 设密码 → unlocked → 输入「移动端秘密内容SECRET_MOBILE_99 / 第二行中文」→ 点「锁住」：`phase=locked`、无 textarea、**DOM 无明文**；点「完成」退出编辑（移动端保存时机 = 退出编辑）后读设备正文文件：**存在 `lake-locked-text` 卡、值只含 `{v,alg,kdf,iter,salt,iv,ct}`、明文命中 0**；重开文档回 reading 态 = locked、无明文；输入同一密码 → 解锁只读显示正文（无 textarea）。
+- **门禁**：tsc 0 · vitest **383 文件 / 2665 例通过**（17 skip=benchmark）· ui-metrics 0 · check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓。
+
 ### 261023 · 移动端表格编辑态 dock 落地（v5 定稿，分支 feat/mobile-sheet-dock）· **已合并 master（261023 晚），设备实测通过**
 
 - **用户定稿**：不做底部胶囊/四页签面板；编辑态 = **公式栏（保留，主输入位）+ dock + 面板**；dock 顺序 `＋插入 | T | 数据 | 视图 | ⋯更多 | 撤销 | 重做 |（右侧固定）键盘`；面板**占住键盘区域**展开、dock 停在其上方；一级按钮打开时变 **✕**、再点收起并放回键盘；样式与交互**对齐文档编辑器 dock**（`EditorDock.tsx` / `editor-dock.css` 的实测口径）。选择态（高亮当前行列 / 视图比例 / ＋ / 工作表列表）放**顶部与 Sheet 同一行**；顶栏 ✓ 保留。

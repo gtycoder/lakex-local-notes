@@ -85,10 +85,10 @@ async getNote(id: string) { return this.notes.get(id) ?? null; }
 async getAllNotes() { return [...this.notes.values()]; }
 async getSyncBase(id: string) { return this.bases.get(id) ?? null; }
 async applyRemoteNote(note: any, content: string) {
-    this.notes.set(note.id, { id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced", trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0, isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict });
+    this.notes.set(note.id, { id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced", trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0, isEditLocked: !!note.isEditLocked, editLockedAt: note.editLockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict });
   }
 async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, pid: string | null, _so: number) {
-    this.notes.set(id, { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId: pid, sortOrder: 0, isLocked: false, lockedAt: null, icon: null, isConflict: false });
+    this.notes.set(id, { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId: pid, sortOrder: 0, isEditLocked: false, editLockedAt: null, icon: null, isConflict: false });
   }
 async localTrashNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = new Date().toISOString(); n.syncState = "local"; } }
 async localRestoreNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = null; n.restorePendingAt = new Date().toISOString(); n.syncState = "local"; } }
@@ -96,9 +96,9 @@ async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) { n.sy
 async rememberDeleted(note: any, _deletedAt: string) { this.deletedNotes.add(note.id); }
 async applyRemoteNoteMeta(note: any) {
     const n = this.notes.get(note.id);
-    if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isLocked = !!note.isLocked; n.lockedAt = note.lockedAt ?? null; }
+    if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isEditLocked = !!note.isEditLocked; n.editLockedAt = note.editLockedAt ?? null; }
   }
-async applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isLocked = locked; n.lockedAt = lockedAt; } }
+async applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isEditLocked = locked; n.editLockedAt = editLockedAt; } }
 async markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null) {
     const n = this.notes.get(id); if (n) n.syncState = "synced";
     this.bases.set(id, { contentHash, lastUploadedHash, lastSyncedMetaAt: metaAt });
