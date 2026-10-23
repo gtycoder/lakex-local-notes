@@ -628,7 +628,26 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     panelHeight,
     edgeToEdgeOffset,
   });
+  // 几何变化（展开多行 / 面板开合 / 键盘）后通知内核重算画布尺寸，否则 canvas 停在旧高度会留白。
+  useEffect(() => {
+    if (!ready) return;
+    const raf = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [ready, kbOffset, formulaExpanded]);
+
   // 退出编辑态时收起面板（避免面板挂在阅读态上）。
+  useEffect(() => {
+    if (editing) return;
+    setDockPanel(null);
+    setDockSub(null);
+    setFormulaExpanded(false);
+    setPanelOpen(false);
+    setPanelClosing(false);
+    setPanelClosingHold(false);
+    setRenderedPanel(null);
+  }, [editing]);
   return (
     <div
       className={"mobile-usheet" + (editing ? " is-editing" : " is-readonly")}
