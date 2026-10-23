@@ -50,6 +50,20 @@
 - **261023 七修（AI 体验打磨）**：流式跟底改为「只在底部时跟随」+ 上滑暂停 +「回到底部」浮钮；相册多选（按剩余 10 张名额合并，超出提示）；历史「继续对话」/新对话清空待发送图片；设置页新增「清除 API Key」（二次确认）。真机验证：长回答流式中上滑 1.8s 不回弹、浮钮出现、点击回底。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
+### 261023(九) · 缺正文小记的恢复（小记没有历史快照）· **已修**
+
+- **用户问**：小记缺了正文怎么办？小记没有历史快照。
+- **结论**：小记只有**两条真恢复路径**——① **云端镜像**（`quick-notes/` 独立清单 + 按 contentHash 的对象，sha256 校验）；② **搜索索引全文缓存**（`quick_notes_search_index.text_cache`，可重建纯文本，**图片/格式丢失**，恢复后标 local 待同步）；两条都没有就只能删除。
+- **后端**：
+  - `src/core/missingBody.ts` 新增 `missingQuickNoteRecovery()`：`cloud`（可出网 + 有 sync_base）→ `text`（有全文缓存）→ `none`。
+  - `QuickNotesStore`：`listMissingQuickNotes()`（只 stat，带 sync_base / text_cache / 预览）、`recoverQuickNoteFromText()`、`applyRecoveredQuickNoteFromCloud()`、`purgeMissingQuickNote()`（**不读正文**，直接写含 `purged_at` 的 tombstone）。
+  - `quickNotesSync.restoreQuickNoteFromCloud()`：读 `quick-notes/manifests/latest.json` → 取对象 → **sha256 校验** → 落盘 → `setBaseHash` + `markSynced`；失败以 reason 回报（`not-in-cloud/object-missing/hash-mismatch/invalid-content`）。
+  - IPC 四条：`list_missing_quick_notes` / `restore_missing_quick_note_from_cloud` / `restore_missing_quick_note_from_text` / `purge_missing_quick_note`（通道 126 → **130**，三方一致性护栏同步）。
+- **前端**：资源页第 5 个页签 **缺小记**，三组「可从云端恢复 / 仅能用搜索缓存恢复纯文本 / 无法恢复（只能删除）」；行内三动作 + 彻底删除二次确认（文案写明：无历史快照、彻底删除不可恢复）。
+- **E2E**（干净 worktree `e2724cf7` 构建 + 合成 2 条小记，启动后删 `.qnote`）：列表 `recovery=text/cache=true`；页签「缺小记 2」；分组「仅能用搜索缓存恢复纯文本 2 条」；缓存重建 1 条 → **文件回写、行 2→1**；彻底删除另 1 条 → 确认框 → 行 0、`quick_note_deleted` 的 **purged 墓碑 = 1**。
+- **门禁（干净 worktree 复核）**：tsc 0 · 全库 vitest **384 文件 / 2629 通过（17 skip）** · 双端构建 ✓。⚠️ 主树同时有并行会话的在途 sync 重构 WIP（tsc 红在 `src/core/lockedText.ts`，与本批无关）⇒ 本批只 stage 自己的文件提交，未碰它们的改动。
+- **未接**：移动端没有资源页（后续可复用同一判据）。
+
 ### 261023(八) · 资源页新增「缺正文」分类：可云恢复 / 仅历史 / 彻底删除 · **已修**
 
 - **用户口径**：提示一次之后，在资源页加 tab 展示缺失正文的文档，让用户主动选择"恢复历史 / 彻底删除"；并区分**能云同步恢复**与**只能历史恢复**的。
