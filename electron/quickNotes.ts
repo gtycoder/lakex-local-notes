@@ -28,6 +28,7 @@ import {
   type StoredQuickNoteContent,
 } from "./quickNoteModel.js";
 import type { QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, SaveQuickNoteInput } from "./quickNoteTypes.js";
+import { missingQuickNoteRecovery, type MissingQuickNoteDoc } from "../src/core/missingBody.js";
 import { QuickNotesQueries, type QuickNoteConversionRow, type QuickNoteDeletedRow, type QuickNoteRow } from "./quickNotesQueries.js";
 import { buildMatchExpression, buildSnippet, segmentToIndexText } from "../src/core/search/index.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
@@ -245,6 +246,102 @@ export class QuickNotesStore {
   readQuickNote(id: string): QuickNoteDocument {
     return this.queries.read(id);
   }
+
+  // ---- 缺正文（手工删除等）与小记的两条恢复路径（261023）：云端镜像 / 搜索缓存纯文本 ----
+
+  /** 资源页「缺小记」清单：只 stat 不读正文；带同步基线 / 搜索缓存 / 可恢复性。 */
+  listMissingQuickNotes(options: { cloudConfigured: boolean }): MissingQuickNoteDoc[] {
+    const rows = this.db.prepare(
+      "SELECT q.id AS id, q.created_at AS created_at, q.updated_at AS updated_at, q.preview_text AS preview_text, q.image_count AS image_count, " +
+      "  (SELECT 1 FROM quick_note_sync_base b WHERE b.quick_note_id=q.id) AS has_sync_base, " +
+      "  i.text_cache AS text_cache, i.tags AS tags " +
+      "FROM quick_notes q LEFT JOIN quick_notes_search_index i ON i.quick_note_id=q.id"
+    ).all() as Array<{ id: string; created_at: string; updated_at: string; preview_text: string; image_count: number; has_sync_base: number | null; text_cache: string | null; tags: string | null }>;
+    const out: MissingQuickNoteDoc[] = [];
+    for (const row of rows) {
+      if (fs.existsSync(this.itemPath(row.id))) continue;
+      const textCache = typeof row.text_cache === "string" ? row.text_cache : "";
+      const hasTextCache = textCache.trim().length > 0;
+      const hasSyncBase = row.has_sync_base === 1;
+      out.push({
+        id: row.id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        previewText: row.preview_text,
+        imageCount: Number(row.image_count) || 0,
+        tags: typeof row.tags === "string" ? row.tags : "",
+        hasSyncBase,
+        cloudConfigured: options.cloudConfigured,
+        hasTextCache,
+        recovery: missingQuickNoteRecovery({ cloudConfigured: options.cloudConfigured, hasSyncBase, hasTextCache }),
+      });
+    }
+    out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    return out;
+  }
+
+  /** 从搜索索引的全文缓存重建纯文本小记（图片/格式丢失；恢复后标 local 待同步）。 */
+  recoverQuickNoteFromText(id: string): QuickNoteDocument {
+    this.readRow(id);
+    const cached = this.db.prepare("SELECT text_cache,tags FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as { text_cache: string; tags: string } | undefined;
+    if (!cached || !cached.text_cache.trim()) throw new AppError("NotFound", "没有可用于恢复的搜索缓存文本");
+    const tags = cached.tags ? cached.tags.split(" ").filter(Boolean) : [];
+    const body = quickNoteBodyFromTextAndImages(cached.text_cache, [], () => "", () => crypto.randomBytes(5).toString("hex"));
+    const content = toStoreValidation(() => normalizeQuickNoteContent(cached.text_cache, body, [], tags));
+    const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
+    this.persistRecoveredContent(id, content, encoded, { synced: false, updatedAt: nowIso() });
+    this.ensureSearchIndex();
+    return this.readQuickNote(id);
+  }
+
+  /** 云端正文恢复后落盘（调用方已做 sha256 校验与记账 setBaseHash + markSynced）。 */
+  applyRecoveredQuickNoteFromCloud(id: string, rawContent: unknown, options: { updatedAt: string }): QuickNoteDocument {
+    this.readRow(id);
+    const content = this.validateStoredContent(rawContent);
+    const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
+    this.persistRecoveredContent(id, content, encoded, { synced: true, updatedAt: options.updatedAt });
+    this.ensureSearchIndex();
+    return this.readQuickNote(id);
+  }
+
+  /** 缺正文小记的彻底删除：不读正文（读必失败），直接写 tombstone（含 purged_at）并清残留。 */
+  purgeMissingQuickNote(id: string): void {
+    if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
+    const row = this.readRow(id);
+    const deletedAt = nowIso();
+    const tx = this.db.transaction(() => {
+      this.db.prepare("INSERT OR REPLACE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync,purged_at) VALUES(?,?,?,?,NULL,1,?)")
+        .run(row.id, row.created_at, row.updated_at, deletedAt, deletedAt);
+      this.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(row.id);
+      this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(row.id);
+      this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(row.id);
+    });
+    tx();
+    this.removeSearchIndex([row.id]);
+    try { fs.rmSync(this.itemPath(id), { force: true }); } catch { /* best effort */ }
+    try { fs.rmSync(this.assetDirFor(id), { force: true, recursive: true }); } catch { /* best effort */ }
+  }
+
+  /** 恢复落盘（正文先写，DB 后提交；DB 失败回滚文件，避免"行里有 hash、文件不在"）。 */
+  private persistRecoveredContent(id: string, content: StoredQuickNoteContent, encoded: Buffer, options: { synced: boolean; updatedAt: string }): void {
+    const contentHash = hash(encoded);
+    const itemPath = this.itemPath(id);
+    this.atomicWrite(itemPath, encoded);
+    try {
+      const tx = this.db.transaction(() => {
+        this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state=?,is_conflict=0 WHERE id=?")
+          .run(options.updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, options.synced ? "synced" : "local", id);
+        this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+        const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
+        for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+      });
+      tx();
+    } catch (error) {
+      try { fs.rmSync(itemPath, { force: true }); } catch { /* best effort */ }
+      throw error;
+    }
+  }
+
 
   // ---- 小记全文搜索（独立 FTS，不混入文档 notes_fts） ----
 

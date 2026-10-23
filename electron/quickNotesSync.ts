@@ -7,6 +7,7 @@
  *   → QuickNotesSyncDbPort；连接检查（remote.test）保留桌面侧（七牛 HeadBucket 404 兼容）；
  * - 深度清理（GC）需要 ObjectStore.list/deleteMany（S3Store 端口不含），保留桌面侧实现。
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { ObjectStore } from "./s3Store.js";
@@ -15,6 +16,7 @@ import { gcCutoffMs, isPastWindow } from "../src/core/gcPolicy.js";
 import { createS3StoreAdapter } from "./syncAdapters.js";
 import {
   MAX_QUICK_MANIFEST_BYTES,
+  MAX_QUICK_NOTE_BYTES,
   parseManifest,
   syncQuickNotesViaEngine,
   type QuickNoteSyncItem,
@@ -24,7 +26,8 @@ import {
 } from "../src/core/quickNotesSyncEngine.js";
 import { pushQuickNote, type QuickNotePushOutcome } from "../src/core/quickNotePush.js";
 import { QuickNotesStore } from "./quickNotes.js";
-import { validateQuickNoteContent } from "../src/core/quickNoteModel.js";
+import { parseQuickNoteContent, validateQuickNoteContent } from "../src/core/quickNoteModel.js";
+import { perfMessage } from "../src/core/logFormat.js";
 import type { StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 import {
   QUICK_NOTES_ROOT,
@@ -231,4 +234,39 @@ export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, sett
   await remote.deleteMany(candidates);
   quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, bytes=${candidateBytes}, deleted=${candidates.length})`);
   return { dryRun, candidateCount: candidates.length, candidateBytes, deletedCount: candidates.length, deletedBytes: candidateBytes, keys: candidates };
+}
+
+/**
+ * 资源页「缺小记」→ 从云端拉回该条正文（261023）。
+ *
+ * 小记没有历史快照，云端是唯一无损来源；调用方负责先做「允许出网」判据
+ * （关闭云同步 = 完全没配置，任何路径不出网）。sha256 校验通过才落盘；
+ * 失败以 reason 回报，不写空内容。图片不在本函数处理（下一次正常同步按清单差集补拉）。
+ */
+export async function restoreQuickNoteFromCloud(
+  quickNotes: QuickNotesStore,
+  settings: S3Settings,
+  id: string,
+): Promise<{ ok: true } | { ok: false; reason: "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content" }> {
+  validateS3Settings(settings);
+  const startedAt = Date.now();
+  const remote = new ObjectStore(settings, quickNotes.logScopes);
+  await remote.test();
+  const manifestBytes = await remote.getOptional(quickNoteManifestKeyRel(), { maxBytes: MAX_QUICK_MANIFEST_BYTES });
+  if (!manifestBytes) return { ok: false, reason: "not-in-cloud" };
+  const manifest = parseManifest(manifestBytes);
+  const item = manifest.items.find((entry) => entry.id === id);
+  if (!item) return { ok: false, reason: "not-in-cloud" };
+  const bytes = await remote.getOptional(quickNoteObjectKeyRel(item.contentHash), { maxBytes: MAX_QUICK_NOTE_BYTES });
+  if (!bytes) return { ok: false, reason: "object-missing" };
+  const digest = crypto.createHash("sha256").update(bytes).digest("hex");
+  if (digest !== item.contentHash) return { ok: false, reason: "hash-mismatch" };
+  let content: unknown;
+  try { content = parseQuickNoteContent(bytes.toString("utf8")); } catch { return { ok: false, reason: "invalid-content" }; }
+  try { quickNotes.applyRecoveredQuickNoteFromCloud(id, content, { updatedAt: item.updatedAt }); }
+  catch { return { ok: false, reason: "invalid-content" }; }
+  quickNotes.setBaseHash(id, item.contentHash);
+  quickNotes.markSynced(id);
+  quickNotes.logScopes.quick.info(perfMessage("quick.restoreFromCloud", Date.now() - startedAt, { id, bytes: bytes.length }));
+  return { ok: true };
 }

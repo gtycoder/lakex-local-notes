@@ -23,6 +23,12 @@ describe("资源页「缺正文」分类（261023）", () => {
     expect(SRC).toContain("purgeMissingBody");
     expect(SRC).toContain("云恢复需联网");
     expect(APP).toContain("onDataChanged");
+    // 缺正文小记（261023）：小记没有历史快照，只有 云恢复 / 搜索缓存纯文本 两条路。
+    expect(SRC).toContain("缺小记");
+    expect(SRC).toContain("restoreQuickFromCloud");
+    expect(SRC).toContain("restoreQuickFromText");
+    expect(SRC).toContain("purgeMissingQuickNote");
+    expect(SRC).toContain("小记没有历史快照");
   });
 });
 

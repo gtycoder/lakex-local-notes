@@ -15,13 +15,13 @@
  * 行内处置 = 从云端拉回 / 恢复最新历史 / 彻底删除（移入回收站后 purge，写墓碑）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CloudDownload, Copy, FileText, FolderOpen, History, Image as ImageIcon, Paperclip, RefreshCw, Trash } from "lucide-react";
+import { CloudDownload, Copy, FileText, FolderOpen, History, Image as ImageIcon, Paperclip, RefreshCw, StickyNote, Trash } from "lucide-react";
 import { escapeId } from "../../lib/cssEscape";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { formatBytes } from "../../lib/formatBytes";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
-import type { MissingBodyDoc } from "../../core/missingBody";
+import type { MissingBodyDoc, MissingQuickNoteDoc } from "../../core/missingBody";
 import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
 import { fileKindOf, type AssetFileKind } from "../../core/assetNaming";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon";
@@ -85,7 +85,7 @@ const KIND_OPTIONS = [
 
 const keyOf = (item: Pick<RemovedAsset, "noteId" | "filename">): string => item.noteId + "/" + item.filename;
 
-type StatusFilter = "orphan" | "history" | "missing" | "body";
+type StatusFilter = "orphan" | "history" | "missing" | "body" | "qbody";
 
 /** 纯预览台：只有内容，不放文字与按钮（思源式下半区）。 */
 function AssetStage({ item, broken, onBroken }: { item: RemovedAsset | null; broken: boolean; onBroken: () => void }) {
@@ -113,6 +113,32 @@ const BODY_RECOVERY_GROUP_LABEL: Record<MissingBodyDoc["recovery"], string> = {
   history: "仅能恢复历史版本",
   none: "无法恢复（只能删除）",
 };
+const QUICK_RECOVERY_LABEL: Record<MissingQuickNoteDoc["recovery"], string> = {
+  cloud: "可云恢复",
+  text: "仅缓存文本",
+  none: "无备份",
+};
+const QUICK_RECOVERY_GROUP_LABEL: Record<MissingQuickNoteDoc["recovery"], string> = {
+  cloud: "可从云端恢复",
+  text: "仅能用搜索缓存恢复纯文本",
+  none: "无法恢复（只能删除）",
+};
+const QUICK_RECOVERY_BADGE: Record<MissingQuickNoteDoc["recovery"], string> = {
+  cloud: "badge--accent",
+  text: "badge--warn",
+  none: "badge--error",
+};
+
+function quickRestoreFailureText(reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content"): string {
+  switch (reason) {
+    case "no-cloud-config": return "没有配置 S3（无法从云端恢复）。";
+    case "cloud-off": return "云同步未启用（关闭云同步 = 不出网），无法从云端恢复。";
+    case "not-in-cloud": return "云端小记清单里没有这一条（可能已被云端回收）。";
+    case "object-missing": return "云端清单声明了这一条，但正文对象已缺失。";
+    case "hash-mismatch": return "云端正文校验不通过（hash 不符），已放弃。";
+    case "invalid-content": return "云端正文格式无效，已放弃。";
+  }
+}
 const BODY_RECOVERY_BADGE: Record<MissingBodyDoc["recovery"], string> = {
   cloud: "badge--accent",
   history: "badge--warn",
@@ -155,6 +181,65 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
   const [bodyBusy, setBodyBusy] = useState<string | null>(null);
   const [bodyMsg, setBodyMsg] = useState<string | null>(null);
   const [pendingPurge, setPendingPurge] = useState<MissingBodyDoc | null>(null);
+  // ---- 缺正文小记（261023）：小记没有历史快照，只有 云端镜像 / 搜索缓存纯文本 两条恢复路径 ----
+  const [missingQuickNotes, setMissingQuickNotes] = useState<MissingQuickNoteDoc[]>([]);
+  const [quickLoaded, setQuickLoaded] = useState(false);
+  const [quickBusy, setQuickBusy] = useState<string | null>(null);
+  const [quickMsg, setQuickMsg] = useState<string | null>(null);
+  const [pendingPurgeQuick, setPendingPurgeQuick] = useState<MissingQuickNoteDoc | null>(null);
+
+  const loadMissingQuickNotes = useCallback(async () => {
+    try { setMissingQuickNotes(await native.listMissingQuickNotes()); setQuickLoaded(true); }
+    catch (error) { setMsg(getNativeErrorMessage(error)); }
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    void loadMissingQuickNotes();
+  }, [active, loadMissingQuickNotes]);
+
+  const restoreQuickFromCloud = useCallback(async (doc: MissingQuickNoteDoc) => {
+    setQuickBusy(doc.id);
+    try {
+      const result = await native.restoreMissingQuickNoteFromCloud(doc.id);
+      if (result.ok) setQuickMsg("已从云端恢复这条小记。");
+      else setQuickMsg(quickRestoreFailureText(result.reason));
+      await loadMissingQuickNotes();
+    } catch (error) {
+      setQuickMsg(getNativeErrorMessage(error));
+    } finally {
+      setQuickBusy(null);
+    }
+  }, [loadMissingQuickNotes]);
+
+  const restoreQuickFromText = useCallback(async (doc: MissingQuickNoteDoc) => {
+    setQuickBusy(doc.id);
+    try {
+      await native.restoreMissingQuickNoteFromText(doc.id);
+      setQuickMsg("已用搜索缓存重建纯文本（图片与格式丢失），恢复后为待同步状态。");
+      await loadMissingQuickNotes();
+    } catch (error) {
+      setQuickMsg(getNativeErrorMessage(error));
+    } finally {
+      setQuickBusy(null);
+    }
+  }, [loadMissingQuickNotes]);
+
+  const confirmPurgeQuick = useCallback(async () => {
+    if (!pendingPurgeQuick) return;
+    setQuickBusy(pendingPurgeQuick.id);
+    try {
+      await native.purgeMissingQuickNote(pendingPurgeQuick.id);
+      setQuickMsg("已彻底删除这条小记（墓碑已写，云端下架且不会复活）。");
+      setPendingPurgeQuick(null);
+      await loadMissingQuickNotes();
+    } catch (error) {
+      setQuickMsg(getNativeErrorMessage(error));
+    } finally {
+      setQuickBusy(null);
+    }
+  }, [pendingPurgeQuick, loadMissingQuickNotes]);
+
 
   const loadMissingBodies = useCallback(async () => {
     try { setMissingBodies(await native.listMissingBodies()); setBodyLoaded(true); }
@@ -365,6 +450,8 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
     // 261023：文档正文被手动删除（.lake 不在）单独成一类 —— 可云恢复 / 仅历史 / 只能删除。
     // 未扫描完前不显示数字（不让"0"误导成"没有缺失"）。
     { id: "body", label: "缺正文", count: bodyLoaded ? missingBodies.length : null },
+    // 261023：小记的正文文件缺失（无历史快照）。
+    { id: "qbody", label: "缺小记", count: quickLoaded ? missingQuickNotes.length : null },
   ];
 
   const pendingBytes = (pendingDelete ?? []).reduce((sum, item) => sum + (item.size || 0), 0);
@@ -394,7 +481,15 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
         {status !== "body" && <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />}
       </div>
 
-      {status === "body" ? (
+      {status === "qbody" ? (
+        <div className="asset-browser__toolbar">
+          <span className="asset-browser__summary">
+            共 {missingQuickNotes.length} 条缺正文小记 · 小记没有历史快照：能云恢复的优先云恢复，否则只能用搜索缓存重建纯文本
+          </span>
+          <span className="ln-spacer" />
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="重新检查小记文件" onClick={() => void loadMissingQuickNotes()}><RefreshCw size={14} /></button>
+        </div>
+      ) : status === "body" ? (
         <div className="asset-browser__toolbar">
           <span className="asset-browser__summary">
             共 {missingBodies.length} 篇缺正文文档 · 云恢复需联网（关闭云同步的库不会显示为可恢复）
@@ -422,8 +517,44 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
 
       {msg && <div className="asset-browser__msg" role="status">{msg}</div>}
       {status === "body" && bodyMsg && <div className="asset-browser__msg" role="status">{bodyMsg}</div>}
+      {status === "qbody" && quickMsg && <div className="asset-browser__msg" role="status">{quickMsg}</div>}
 
-      {status === "body" ? (
+      {status === "qbody" ? (
+        quickLoaded === false ? (
+          <div className="ln-empty"><strong>正在检查小记文件…</strong></div>
+        ) : missingQuickNotes.length === 0 ? (
+          <div className="ln-empty"><strong>没有缺失正文的小记</strong><small>当前所有小记的正文文件都在。</small></div>
+        ) : (
+          <div className="asset-browser__list ln-list-panel">
+            {(["cloud", "text", "none"] as const).map((recovery) => {
+              const docs = missingQuickNotes.filter((doc) => doc.recovery === recovery);
+              if (docs.length === 0) return null;
+              return (
+                <div className="asset-browser__group" key={recovery}>
+                  <div className="asset-browser__grouptitle">
+                    <StickyNote size={13} />
+                    <span>{QUICK_RECOVERY_GROUP_LABEL[recovery]}</span>
+                    <span className="asset-browser__gcount">{docs.length} 条</span>
+                  </div>
+                  {docs.map((doc) => (
+                    <div className="ln-row asset-browser__row" key={doc.id}>
+                      <span className="ln-row__icon asset-browser__thumb"><StickyNote size={18} /></span>
+                      <span className="ln-row__title" title={doc.previewText}>{doc.previewText || "小记"}</span>
+                      <span className={"badge " + QUICK_RECOVERY_BADGE[doc.recovery]}>{QUICK_RECOVERY_LABEL[doc.recovery]}</span>
+                      <span className="asset-browser__size">{doc.imageCount > 0 ? doc.imageCount + " 图 · " : ""}{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString("zh-CN") : ""}</span>
+                      <span className="ln-row__actions asset-browser__acts">
+                        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="从云端恢复" title={doc.recovery === "cloud" ? "从云端拉回这条小记（需联网）" : "没有可用的云端依据（未配置/未同步过）"} disabled={doc.recovery !== "cloud" || quickBusy === doc.id} onClick={() => void restoreQuickFromCloud(doc)}><CloudDownload size={13} /></button>
+                        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="用缓存重建纯文本" title={doc.hasTextCache ? "用搜索缓存重建全文纯文本（图片/格式会丢）" : "没有搜索缓存"} disabled={!doc.hasTextCache || quickBusy === doc.id} onClick={() => void restoreQuickFromText(doc)}><FileText size={13} /></button>
+                        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="彻底删除" title="彻底删除（写墓碑，云端下架且不会复活）" disabled={quickBusy === doc.id} onClick={() => setPendingPurgeQuick(doc)}><Trash size={13} /></button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : status === "body" ? (
         bodyLoaded === false ? (
           <div className="ln-empty"><strong>正在检查正文文件…</strong></div>
         ) : missingBodies.length === 0 ? (
@@ -559,6 +690,22 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
           <div className="ln-dialog__actions">
             <button className="ln-btn ln-btn--ghost" onClick={() => setPendingPurge(null)}>取消</button>
             <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={bodyBusy === pendingPurge.id} onClick={() => void confirmPurgeBody()}>{bodyBusy === pendingPurge.id ? "删除中…" : "彻底删除"}</button>
+          </div>
+        </Dialog>
+      )}
+
+      {pendingPurgeQuick && (
+        <Dialog open onDismiss={() => setPendingPurgeQuick(null)} label="彻底删除缺正文小记" className="asset-browser-confirm">
+          <div className="ln-dialog__head"><span className="ln-dialog__title">彻底删除这条小记？</span></div>
+          <div className="ln-dialog__body">
+            <p className="asset-browser-confirm__note">{pendingPurgeQuick.previewText || "小记"}</p>
+            <p className="asset-browser-confirm__note">
+              小记没有历史快照，彻底删除后无法恢复；会写 purge 墓碑让云端下架且不会复活。此操作不可撤销。
+            </p>
+          </div>
+          <div className="ln-dialog__actions">
+            <button className="ln-btn ln-btn--ghost" onClick={() => setPendingPurgeQuick(null)}>取消</button>
+            <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={quickBusy === pendingPurgeQuick.id} onClick={() => void confirmPurgeQuick()}>{quickBusy === pendingPurgeQuick.id ? "删除中…" : "彻底删除"}</button>
           </div>
         </Dialog>
       )}

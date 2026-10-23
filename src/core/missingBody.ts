@@ -37,3 +37,32 @@ export function missingBodyRecovery(input: {
   if (input.historyCount > 0) return "history";
   return "none";
 }
+
+/** 缺正文「小记」的可恢复性：小记没有历史快照，只有两条路——云端镜像 / 搜索索引缓存文本。 */
+export type MissingQuickNoteRecovery = "cloud" | "text" | "none";
+
+export interface MissingQuickNoteDoc {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  previewText: string;
+  imageCount: number;
+  tags: string;
+  /** 本机 quick_note_sync_base 是否有记录（曾同步过）。 */
+  hasSyncBase: boolean;
+  /** 允许出网（已配置 S3 且未关闭云同步）。 */
+  cloudConfigured: boolean;
+  /** 搜索索引里是否还留有全文缓存（可从它重建纯文本；格式/图片会丢）。 */
+  hasTextCache: boolean;
+  recovery: MissingQuickNoteRecovery;
+}
+
+export function missingQuickNoteRecovery(input: {
+  cloudConfigured: boolean;
+  hasSyncBase: boolean;
+  hasTextCache: boolean;
+}): MissingQuickNoteRecovery {
+  if (input.cloudConfigured && input.hasSyncBase) return "cloud";
+  if (input.hasTextCache) return "text";
+  return "none";
+}

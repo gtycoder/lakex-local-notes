@@ -524,3 +524,34 @@ describe("小记全文搜索（独立 FTS）", () => {
     expect(hit.matchType).toBe("body");
   });
 });
+
+describe("缺正文小记的恢复路径（261023）", () => {
+  const itemPath = (id: string) => path.join(root, "quick-notes", "items", id + ".qnote");
+
+  it("listMissingQuickNotes 只列缺正文小记；搜索缓存可重建纯文本", () => {
+    const note = quickNotes.createQuickNote({ text: "缓存里的全文内容", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    quickNotes.ensureSearchIndex();
+    fs.rmSync(itemPath(note.id));
+    const rows = quickNotes.listMissingQuickNotes({ cloudConfigured: false });
+    const row = rows.find((r) => r.id === note.id);
+    expect(row?.recovery).toBe("text");
+    expect(row?.hasTextCache).toBe(true);
+    const restored = quickNotes.recoverQuickNoteFromText(note.id);
+    expect(restored.content.text).toContain("缓存里的全文内容");
+    expect(fs.existsSync(itemPath(note.id))).toBe(true);
+    expect(quickNotes.listMissingQuickNotes({ cloudConfigured: false }).some((r) => r.id === note.id)).toBe(false);
+  });
+
+  it("purgeMissingQuickNote：彻底删除并写墓碑", () => {
+    const note = quickNotes.createQuickNote({ text: "待删除", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    fs.rmSync(itemPath(note.id));
+    quickNotes.purgeMissingQuickNote(note.id);
+    expect(quickNotes.listMissingQuickNotes({ cloudConfigured: false }).some((r) => r.id === note.id)).toBe(false);
+    expect(() => quickNotes.readQuickNote(note.id)).toThrow();
+    const db = new Database(path.join(root, "quick-notes", "metadata.sqlite3"), { readonly: true });
+    try {
+      const row = db.prepare("SELECT purged_at FROM quick_note_deleted WHERE id=?").get(note.id) as { purged_at: string | null } | undefined;
+      expect(row?.purged_at).toBeTruthy();
+    } finally { db.close(); }
+  });
+});

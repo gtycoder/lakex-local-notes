@@ -1,6 +1,6 @@
 import { MAX_QUICK_NOTE_ATTACHMENT_BYTES, MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "../quickNotes.js";
 import { convertQuickNoteToLake } from "../quickNoteConversion.js";
-import { pushQuickNoteToS3 } from "../quickNotesSync.js";
+import { pushQuickNoteToS3, restoreQuickNoteFromCloud } from "../quickNotesSync.js";
 import { canTouchNetwork, cloudStateOf, cloudStateHint } from "../../src/core/cloudState.js";
 import type { Store } from "../store.js";
 import type { IpcRegistrar } from "./registrar.js";
@@ -33,6 +33,17 @@ export function registerQuickNotesIpc(
   ipc.handle("list_quick_note_trash", () => quickNotes.listQuickNoteTrash());
   ipc.handle("restore_quick_note", (id: string) => quickNotes.restoreQuickNote(id));
   ipc.handle("purge_quick_note", (id: string) => quickNotes.purgeQuickNote(id));
+  // ---- 缺正文小记（261023）：云端恢复 / 搜索缓存纯文本恢复 / 彻底删除 ----
+  const quickCloudAvailable = () => canTouchNetwork(cloudStateOf(store.getS3Settings() !== null, store.getSyncSettings()));
+  ipc.handle("list_missing_quick_notes", () => quickNotes.listMissingQuickNotes({ cloudConfigured: quickCloudAvailable() }));
+  ipc.handle("restore_missing_quick_note_from_cloud", async (id: string) => {
+    if (!quickCloudAvailable()) return { ok: false, reason: "cloud-off" };
+    const settings = store.getS3Settings();
+    if (!settings) return { ok: false, reason: "no-cloud-config" };
+    return enqueueMaintenance(() => restoreQuickNoteFromCloud(quickNotes, settings, id));
+  });
+  ipc.handle("restore_missing_quick_note_from_text", (id: string) => quickNotes.recoverQuickNoteFromText(id));
+  ipc.handle("purge_missing_quick_note", (id: string) => quickNotes.purgeMissingQuickNote(id));
   ipc.handle("discard_quick_note_draft", (draftId: string) => quickNotes.discardDraft(draftId));
   ipc.handle("discard_staged_quick_note_image", (draftId: string, imageId: string) => quickNotes.discardStagedImage(draftId, imageId));
   ipc.handle("stage_quick_note_image", (draftId: string, input: QuickNoteImageInput) => {

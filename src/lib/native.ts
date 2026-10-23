@@ -1,6 +1,6 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
-import type { MissingBodyDoc } from "../core/missingBody";
+import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
@@ -26,6 +26,14 @@ export interface LakeNative {
   restoreMissingBodyFromCloud(noteId: string): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" }>;
   /** 缺正文：彻底删除该文档（移入回收站 → purge 写墓碑）。 */
   purgeMissingBody(noteId: string): Promise<void>;
+  /** 缺正文小记清单（只 stat；带同步基线 / 搜索缓存 / 可恢复性）。 */
+  listMissingQuickNotes(): Promise<MissingQuickNoteDoc[]>;
+  /** 缺正文小记：从云端拉回（小记没有历史快照，这是唯一无损来源）。 */
+  restoreMissingQuickNoteFromCloud(id: string): Promise<{ ok: true } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content" }>;
+  /** 缺正文小记：用搜索索引缓存重建纯文本（图片/格式丢失）。 */
+  restoreMissingQuickNoteFromText(id: string): Promise<QuickNoteDocument>;
+  /** 缺正文小记：彻底删除（墓碑 + purge）。 */
+  purgeMissingQuickNote(id: string): Promise<void>;
   getNoteDigest(id: string): Promise<NoteDigest | null>;
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   /** AI（P0）：设置读写/连通性测试/流式对话/取消；Key 绝不出主进程（视图已脱敏）。 */
@@ -339,6 +347,10 @@ export const native = {
   listQuickNoteTrash: () => api().listQuickNoteTrash(),
   restoreQuickNote: (id: string) => api().restoreQuickNote(id),
   purgeQuickNote: (id: string) => api().purgeQuickNote(id),
+  listMissingQuickNotes: () => api().listMissingQuickNotes(),
+  restoreMissingQuickNoteFromCloud: (id: string) => api().restoreMissingQuickNoteFromCloud(id),
+  restoreMissingQuickNoteFromText: (id: string) => api().restoreMissingQuickNoteFromText(id),
+  purgeMissingQuickNote: (id: string) => api().purgeMissingQuickNote(id),
   getS3GcSettings: () => api().getS3GcSettings(),
   saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
   listS3GcPending: () => api().listS3GcPending(),
