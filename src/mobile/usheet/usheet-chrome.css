@@ -3,17 +3,24 @@
  * 语雀实测见 docs/MOBILE-USHEET-YUQUE-PARITY.md §2.1 / §2.3 / §4；颜色只用移动端令牌。
  * 旧版底部 Sheet（.mb-sheet）不再用于表格工具。
  */
+/* 261022 晚：工具条 = **两行**（第一行常用 / 第二行次常用，均可横滑）。 */
 .mb-usheet-toolbar {
   flex: none;
   display: flex;
-  align-items: center;
-  height: 40px;
-  padding: 0 6px;
+  flex-direction: column;
+  padding: 0;
   border-top: 1px solid var(--lake-border-1);
   border-bottom: 1px solid var(--lake-border-1);
   background: var(--lake-bg-window);
   color: var(--lake-text-1);
 }
+.mb-usheet-toolbar__row {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 6px;
+}
+.mb-usheet-toolbar__row--secondary { border-top: 1px solid var(--lake-border-1); }
 .mb-usheet-toolbar__scroll {
   display: flex;
   align-items: center;
@@ -53,6 +60,14 @@
 .mb-usheet-btn:active { background: var(--lake-bg-hover); }
 .mb-usheet-btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .mb-usheet-btn--text { width: 55px; justify-content: space-between; }
+/* 261022 晚：文字格式一级标签 = 字面 T（点开二级卡：B / I / S / U / 字色）。 */
+.mb-usheet-btn--format {
+  min-width: 34px;
+  width: 34px;
+  font-size: var(--lake-font-size-body);
+  font-weight: 600;
+  line-height: 1;
+}
 /* 语雀 toolbar-decimal-inc：文字「.00」+ 小加号（一级只有「增」，减在 ⋯ 卡第一行）。 */
 .mb-usheet-btn--numdot { min-width: 40px; gap: 1px; }
 .mb-usheet-btn--numdot > span { font-size: var(--lake-font-size-micro); line-height: 1; letter-spacing: .5px; }
@@ -204,6 +219,44 @@
 }
 .mb-usheet-popcard__icon { flex: none; display: inline-flex; color: var(--lake-text-2); }
 
+/* 261022 晚：T 卡（文字格式二级）—— 四个开关 + 8 色字体颜色圆点。 */
+.mb-usheet-formatcard__toggles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+}
+.mb-usheet-formatcard__toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lake-text-1);
+}
+.mb-usheet-formatcard__toggle:active { background: var(--lake-bg-hover); }
+.mb-usheet-formatcard__toggle.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+.mb-usheet-formatcard__swatches {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--lake-border-1);
+}
+.mb-usheet-formatcard__dot {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--lake-border-1);
+  border-radius: 50%;
+}
+
 /* 底栏（261021 P3）：语雀 .lake-sheet-footer 32px / 上边框 / 页签横滑 / 右侧缩放。 */
 .mb-usheet-footer {
   position: relative;
@@ -231,6 +284,22 @@
   color: var(--lake-text-2);
 }
 .mb-usheet-footer__list:active { background: var(--lake-bg-hover); }
+/* 261022 晚：十字高亮开关（缩放左侧，编辑态/阅读态都常驻；纯本机视图）。 */
+.mb-usheet-footer__toggle {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-2);
+}
+.mb-usheet-footer__toggle:active { background: var(--lake-bg-hover); }
+.mb-usheet-footer__toggle.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .mb-usheet-footer__tabs {
   display: flex;
   flex: 1 1 auto;

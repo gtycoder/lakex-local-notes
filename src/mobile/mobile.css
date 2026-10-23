@@ -1099,6 +1099,9 @@ button.mbt-option {
 .mobile-usheet.is-editing footer.univer-shrink-0:has([data-u-comp="mobile-formula-bar"]) { display: block; }
 .mobile-usheet footer.univer-shrink-0 > :not([data-u-comp="mobile-formula-bar"]):not([data-u-comp="mobile-find-replace-bar"]) { display: none; }
 .mobile-usheet .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 { display: none; }
+/* 261022 晚：内核自带的「打开表格工具」浮动按钮（无图标、点了没可见效果）在移动端一律隐藏；
+ * 对应 ⋯ 里的「更多表格工具」入口已随两行工具条一并删除。 */
+.mobile-usheet button[aria-label="打开表格工具"] { display: none; }
 
 /* 261021 P5：顶部只读公式栏已删（用户定稿"顶部那条和底部输入栏重复"）。
  * 编辑态输入面 = 内核移动公式栏（挂在 footer 里，见上方例外规则）；阅读态不再显示地址/显示值。 */

@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import type { FUniver } from "@univerjs/presets";
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade";
-import { USHEET_CROSSHAIR_COMMANDS } from "../../features/usheet/usheetCrosshair";
 import { showToast } from "../ui/toastBus";
 import { decimalStepMessage, stepNumberFormatDecimals } from "./usheetDecimals";
 import { USHEET_QUICK_FORMULA_IDS, planUsheetQuickFormula } from "./usheetFormulaQuick";
@@ -14,10 +13,9 @@ import { blockFailureMessage, planSortRange, resolveSheetBlock, type SortFilterS
 export function useSheetCommandActions(opts: {
   editing: boolean;
   getUniverAPI: () => FUniver | null;
-  getHost: () => HTMLElement | null;
   refreshCellFormat: () => void;
 }) {
-  const { editing, getUniverAPI, getHost, refreshCellFormat } = opts;
+  const { editing, getUniverAPI, refreshCellFormat } = opts;
 
   const sheetAccessor = useCallback((sheet: FWorksheet): SortFilterSheet => ({
     maxRows: sheet.getMaxRows(),
@@ -176,16 +174,14 @@ export function useSheetCommandActions(opts: {
     else if (id === "sort-desc") runSort("desc");
     else if (id === "filter") openFilter();
     else if (id === "link") { void api?.executeCommand("sheet.operation.insert-hyper-link"); }
-    else if (id === "crosshair") { void api?.executeCommand(USHEET_CROSSHAIR_COMMANDS.toggle); }
     else if (id === "clear-style") withActiveRange((range) => { range.clearFormat(); });
-    else if (id === "decimals") stepDecimals(1);
+    else if (id === "decimals" || id === "decimal-up") stepDecimals(1);
     else if (id === "decimal-down") stepDecimals(-1);
     else if (id === "clear-text") withActiveRange((range) => {
       range.setFontWeight(null).setFontStyle(null).setFontLine(null).setFontColor(null);
     });
     else if (id === "delete-row") withActiveRange((range, sheet) => { sheet.deleteRow(range.getRow()); });
     else if (id === "delete-col") withActiveRange((range, sheet) => { sheet.deleteColumn(range.getColumn()); });
-    else if (id === "more-tools") getHost()?.querySelector<HTMLButtonElement>('button[aria-label="打开表格工具"]')?.click();
     else if (USHEET_LAYOUT_ACTIONS.has(id)) withActiveRange((range, sheet) => { applyUsheetLayoutAction(id, range, sheet); });
     else if (USHEET_QUICK_FORMULA_IDS.has(id)) {
       withActiveRange((range, sheet) => {
@@ -203,7 +199,7 @@ export function useSheetCommandActions(opts: {
         if (!applied) showToast("当前表格内核不支持数字格式", { type: "error" });
       });
     }
-  }, [getHost, getUniverAPI, openFilter, openFindDialog, runSort, stepDecimals, withActiveRange]);
+  }, [getUniverAPI, openFilter, openFindDialog, runSort, stepDecimals, withActiveRange]);
 
   return { withActiveRange, stepDecimals, toggleFormatPainter, openFilter, openFindDialog, runHistory, dispatchMenu };
 }

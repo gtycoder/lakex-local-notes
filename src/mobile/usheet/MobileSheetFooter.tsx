@@ -3,7 +3,7 @@
  * 左侧工作表列表（≡，打开锚定卡）· 中间页签横滑 · 右侧缩放 −/百分比/+。
  * 只做 chrome；工作表切换 / 缩放都走 Univer facade / command，不碰数据格式。
  */
-import { List, Minus, Plus } from "lucide-react";
+import { Grid2x2, List, Minus, Plus } from "lucide-react";
 
 export interface MobileSheetTab {
   id: string;
@@ -17,9 +17,12 @@ export interface MobileSheetFooterProps {
   onSelect: (id: string) => void;
   onZoom: (delta: number) => void;
   onOpenList: (anchor: HTMLElement) => void;
+  /** 当前表格的十字高亮开关（纯本机视图；用户 261022 晚要求放在缩放左侧，阅读态也能用）。 */
+  crosshairOn?: boolean;
+  onToggleCrosshair?: () => void;
 }
 
-export function MobileSheetFooter({ sheets, activeId, zoom, onSelect, onZoom, onOpenList }: MobileSheetFooterProps) {
+export function MobileSheetFooter({ sheets, activeId, zoom, onSelect, onZoom, onOpenList, crosshairOn = false, onToggleCrosshair }: MobileSheetFooterProps) {
   return (
     <div className="mb-usheet-footer" data-prevent-swipe role="toolbar" aria-label="工作表底栏">
       <button type="button" className="mb-usheet-footer__list" aria-label="工作表列表" title="工作表列表"
@@ -35,6 +38,15 @@ export function MobileSheetFooter({ sheets, activeId, zoom, onSelect, onZoom, on
           </button>
         ))}
       </div>
+      {onToggleCrosshair && (
+        <button type="button"
+          className={"mb-usheet-footer__toggle" + (crosshairOn ? " is-active" : "")}
+          aria-label="十字高亮" title="十字高亮（行列高亮）"
+          aria-pressed={crosshairOn}
+          onClick={onToggleCrosshair}>
+          <Grid2x2 size={16} />
+        </button>
+      )}
       <div className="mb-usheet-footer__zoom">
         <button type="button" className="mb-usheet-footer__zoom-btn" aria-label="缩小" title="缩小" onClick={() => onZoom(-0.1)}>
           <Minus size={16} />

@@ -10,7 +10,7 @@
  * 分包、首次可见才挂载、图片 URL、主题跟随的约束与只读版保持一致。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Eraser, MoreHorizontal, Paintbrush, Plus, Redo2, Undo2 } from "lucide-react";
+import { ChevronDown, MoreHorizontal, Plus, Redo2, Undo2 } from "lucide-react";
 import { createUniver, DOCS_FORMULA_BAR_EDITOR_UNIT_ID_KEY, LocaleType, mergeLocales, type FUniver, type IPresetPlugin } from "@univerjs/presets";
 import { DocSelectionRenderService, IRenderManagerService } from "@univerjs/preset-sheets-core";
 import type { FWorksheet } from "@univerjs/sheets/facade";
@@ -42,15 +42,20 @@ import { MobileSheetFooter } from "./MobileSheetFooter";
 import { MobileSheetReadingBar } from "./MobileSheetReadingBar";
 import {
   SHEET_CARD_META,
-  SHEET_TOOLBAR_GROUPS,
+  SHEET_TOOLBAR_ROWS,
+  SHEET_FREEZE_MENU,
+  SHEET_FORMULA_MENU,
+  SHEET_SORT_MENU,
   buildInsertMenu,
   buildMoreRows,
   buildNumfmtMenu,
   numfmtLabelOf,
 } from "./usheetChromeModel";
+import { SheetFormatCard } from "./SheetFormatCard";
+import { SheetIcon } from "./SheetIcon";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
 import { UniverSheetsCrosshairHighlightMobileUIPlugin } from "@univerjs/sheets-crosshair-highlight";
-import { enableUsheetCrosshair } from "../../features/usheet/usheetCrosshair";
+import { setUsheetCrosshair } from "../../features/usheet/usheetCrosshair";
 import { UniverSheetsNotePlugin } from "@univerjs/sheets-note";
 import { createMobileSortFilterPlugins } from "./mobileSortFilter";
 import "./usheet-chrome.css";
@@ -143,6 +148,14 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const captureCallbackRef = useRef(onCapture);
   captureCallbackRef.current = onCapture;
   const getUniverAPI = useCallback(() => instanceRef.current?.univerAPI ?? null, []);
+  /** 十字高亮（⋯ 卡开关）：内核 operation 的纯本机视图状态，默认关、不持久化（重开表格回到关）。 */
+  const [crosshairOn, setCrosshairOn] = useState(false);
+  const toggleCrosshair = useCallback(() => {
+    const api = getUniverAPI();
+    if (!api) return;
+    const next = !crosshairOn;
+    if (setUsheetCrosshair(api, next)) setCrosshairOn(next);
+  }, [crosshairOn, getUniverAPI]);
 
   /** 顶部工具条弹出的原生面板：插入 / 文字格式 / 更多。 */
   /** 当前打开的锚定卡片（null = 无）；anchor = 触发按钮（卡片锚在它下方）。 */
@@ -167,7 +180,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     selectSheet,
     zoomBy,
   } = useSheetChromeState(getUniverAPI);
-  const getHost = useCallback(() => hostRef.current, []);
   const {
     toggleFormatPainter,
     openFindDialog,
@@ -176,7 +188,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   } = useSheetCommandActions({
     editing,
     getUniverAPI,
-    getHost,
     refreshCellFormat: refreshCellFmt,
   });
   /** 排序/筛选共用的「数据块」读取口（只读值，不改任何东西）。 */
@@ -291,14 +302,13 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           // 备注（桌面专属 UI）：移动端**必须**装数据插件，否则保存时会把桌面写入的 note plugin resource 丢掉。
           // 顺序与桌面保持一致（hyperlink → note → crosshair），避免两端 resources 数组顺序不同造成假冲突。
           { plugins: [UniverSheetsNotePlugin] as unknown as IPresetPlugin[] },
-          // 261022：十字高亮（移动插件；默认开启见下方 enableUsheetCrosshair）。
+          // 261022 晚：十字高亮插件仍装（开关可用），但**默认关闭**（内核初始即关，不再自动开启）。
           { plugins: [UniverSheetsCrosshairHighlightMobileUIPlugin] as unknown as IPresetPlugin[] },
         ],
       });
       const book = univerAPI.createWorkbook(workbook as never) as unknown as UniverBook;
       book.setEditable(editingRef.current);
-      // 261022：十字高亮默认开启（纯本机视图，不写正文）。
-      enableUsheetCrosshair(univerAPI);
+      // 261022 晚：十字高亮**默认关闭**（内核初始即关；需要时点 ⋯ →「十字高亮」开，纯本机视图）。
       const last = usheetToBody(book.save() as never);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
@@ -390,14 +400,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   // 卡片内容全部来自 usheetChromeModel（单一来源）；组件只按 id 分派动作。
   const insertItems = buildInsertMenu();
   const numfmtItems = buildNumfmtMenu(cellFmt.numfmt);
-  const moreRows = buildMoreRows({
-    bold: cellFmt.bold,
-    italic: cellFmt.italic,
-    underline: cellFmt.underline,
-    strike: cellFmt.strike,
-    align: cellFmt.align,
-    numfmt: cellFmt.numfmt,
-  });
+  const moreRows = buildMoreRows();
 
   const handleCardSelect = (id: string) => {
     closeCard();
@@ -409,77 +412,108 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     <div className={"mobile-usheet" + (editing ? " is-editing" : " is-readonly")} ref={hostRef} data-prevent-swipe>
       {editing && (
         <div className="mb-usheet-toolbar" data-prevent-swipe role="toolbar" aria-label="表格工具">
-          <div className="mb-usheet-toolbar__scroll">
-            {SHEET_TOOLBAR_GROUPS.map((group, groupIndex) => (
-              <div className="mb-usheet-toolbar__group" key={groupIndex}>
-                {group.map((item) => {
-                  if (item.id === "insert") {
-                    return (
-                      <button key={item.id} type="button" className="mb-usheet-btn" aria-label="插入" title="插入"
-                        onClick={(event) => toggleCard("insert", event.currentTarget)}>
-                        <span className="mb-usheet-add"><Plus size={13} /></span>
-                      </button>
-                    );
-                  }
-                  if (item.id === "undo" || item.id === "redo") {
-                    return (
-                      <button key={item.id} type="button" className="mb-usheet-btn" aria-label={item.label} title={item.label}
-                        onClick={() => runHistory(item.id === "undo" ? "undo" : "redo")}>
-                        {item.id === "undo" ? <Undo2 size={18} /> : <Redo2 size={18} />}
-                      </button>
-                    );
-                  }
-                  if (item.id === "format-painter") {
+          {/* 第一行：常用（+ / 撤销 重做 / T / 常规▾ / ⋯） */}
+          <div className="mb-usheet-toolbar__row">
+            <div className="mb-usheet-toolbar__scroll">
+              {SHEET_TOOLBAR_ROWS[0].map((group, groupIndex) => (
+                <div className="mb-usheet-toolbar__group" key={groupIndex}>
+                  {group.map((item) => {
+                    if (item.id === "insert") {
+                      return (
+                        <button key={item.id} type="button" className="mb-usheet-btn" aria-label="插入" title="插入"
+                          onClick={(event) => toggleCard("insert", event.currentTarget)}>
+                          <span className="mb-usheet-add"><Plus size={13} /></span>
+                        </button>
+                      );
+                    }
+                    if (item.id === "undo" || item.id === "redo") {
+                      return (
+                        <button key={item.id} type="button" className="mb-usheet-btn" aria-label={item.label} title={item.label}
+                          onClick={() => runHistory(item.id === "undo" ? "undo" : "redo")}>
+                          {item.id === "undo" ? <Undo2 size={18} /> : <Redo2 size={18} />}
+                        </button>
+                      );
+                    }
+                    if (item.id === "format") {
+                      return (
+                        <button key={item.id} type="button"
+                          className={"mb-usheet-btn mb-usheet-btn--format" + (openCard === "format" ? " is-active" : "")}
+                          aria-label="文字格式" title="文字格式（B / I / S / U / 字色）"
+                          onClick={(event) => toggleCard("format", event.currentTarget)}>
+                          <span aria-hidden="true">T</span>
+                        </button>
+                      );
+                    }
+                    if (item.id === "numfmt") {
+                      return (
+                        <button key={item.id} type="button"
+                          className={"mb-usheet-btn mb-usheet-btn--text" + (openCard === "numfmt" ? " is-active" : "")}
+                          aria-label={item.label} title={item.label}
+                          onClick={(event) => toggleCard("numfmt", event.currentTarget)}>
+                          <span>{numfmtLabelOf(cellFmt.numfmt)}</span>
+                          <ChevronDown size={12} />
+                        </button>
+                      );
+                    }
                     return (
                       <button key={item.id} type="button"
-                        className={"mb-usheet-btn" + (painterStatus !== 0 ? " is-active" : "")}
-                        aria-label={item.label} title={item.label} aria-pressed={painterStatus !== 0}
-                        onClick={toggleFormatPainter}>
-                        <Paintbrush size={18} strokeWidth={1.75} />
+                        className={"mb-usheet-btn" + (openCard === "more" ? " is-active" : "")}
+                        aria-label={item.label} title={item.label}
+                        onClick={(event) => toggleCard("more", event.currentTarget)}>
+                        <MoreHorizontal size={18} />
                       </button>
                     );
-                  }
-                  if (item.id === "clear-style") {
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* 第二行：次常用（格式刷 清除格式 / 筛选 排序 冻结 查找 / 链接 公式），可横滑 */}
+          <div className="mb-usheet-toolbar__row mb-usheet-toolbar__row--secondary">
+            <div className="mb-usheet-toolbar__scroll">
+              {SHEET_TOOLBAR_ROWS[1].map((group, groupIndex) => (
+                <div className="mb-usheet-toolbar__group" key={groupIndex}>
+                  {group.map((item) => {
+                    if (item.id === "format-painter") {
+                      return (
+                        <button key={item.id} type="button"
+                          className={"mb-usheet-btn" + (painterStatus !== 0 ? " is-active" : "")}
+                          aria-label={item.label} title={item.label} aria-pressed={painterStatus !== 0}
+                          onClick={toggleFormatPainter}>
+                          <SheetIcon name="format-painter" />
+                        </button>
+                      );
+                    }
+                    if (item.id === "clear-style") {
+                      return (
+                        <button key={item.id} type="button" className="mb-usheet-btn"
+                          aria-label={item.label} title={item.label}
+                          onClick={() => dispatchMenu("clear-style")}>
+                          <SheetIcon name="clear-style" />
+                        </button>
+                      );
+                    }
+                    if (item.id === "sort" || item.id === "freeze" || item.id === "formula") {
+                      return (
+                        <button key={item.id} type="button"
+                          className={"mb-usheet-btn" + (openCard === item.id ? " is-active" : "")}
+                          aria-label={item.label} title={item.label}
+                          onClick={(event) => toggleCard(item.id as "sort", event.currentTarget)}>
+                          <SheetIcon name={item.id === "formula" ? "sigma" : item.id} />
+                        </button>
+                      );
+                    }
                     return (
                       <button key={item.id} type="button" className="mb-usheet-btn"
                         aria-label={item.label} title={item.label}
-                        onClick={() => dispatchMenu("clear-style")}>
-                        <Eraser size={18} strokeWidth={1.75} />
+                        onClick={() => dispatchMenu(item.id)}>
+                        <SheetIcon name={item.id === "find" ? "search" : item.id} />
                       </button>
                     );
-                  }
-                  if (item.id === "decimals") {
-                    return (
-                      <button key={item.id} type="button" className="mb-usheet-btn mb-usheet-btn--numdot"
-                        aria-label={item.label} title={item.label}
-                        onClick={() => dispatchMenu("decimals")}>
-                        <span>.00</span>
-                        <Plus size={11} strokeWidth={2} />
-                      </button>
-                    );
-                  }
-                  if (item.id === "numfmt") {
-                    return (
-                      <button key={item.id} type="button"
-                        className={"mb-usheet-btn mb-usheet-btn--text" + (openCard === "numfmt" ? " is-active" : "")}
-                        aria-label={item.label} title={item.label}
-                        onClick={(event) => toggleCard("numfmt", event.currentTarget)}>
-                        <span>{numfmtLabelOf(cellFmt.numfmt)}</span>
-                        <ChevronDown size={12} />
-                      </button>
-                    );
-                  }
-                  return (
-                    <button key={item.id} type="button"
-                      className={"mb-usheet-btn" + (openCard === "more" ? " is-active" : "")}
-                      aria-label={item.label} title={item.label}
-                      onClick={(event) => toggleCard("more", event.currentTarget)}>
-                      <MoreHorizontal size={18} />
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -501,6 +535,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           onSelect={selectSheet}
           onZoom={zoomBy}
           onOpenList={openSheetList}
+          crosshairOn={crosshairOn}
+          onToggleCrosshair={toggleCrosshair}
         />
       )}
       {ready && sheetListAnchor && (
@@ -522,6 +558,29 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           width={SHEET_CARD_META.more.width}
           ariaLabel={SHEET_CARD_META.more.ariaLabel}
           rows={moreRows}
+          onSelect={handleCardSelect}
+          onClose={closeCard}
+        />
+      )}
+      {editing && openCard === "format" && (
+        <SheetFormatCard
+          host={hostRef.current}
+          anchor={cardAnchor}
+          width={SHEET_CARD_META.format.width}
+          ariaLabel={SHEET_CARD_META.format.ariaLabel}
+          fmt={cellFmt}
+          onToggle={(id) => dispatchMenu(id)}
+          onSelect={(id) => dispatchMenu(id)}
+          onClose={closeCard}
+        />
+      )}
+      {editing && (openCard === "sort" || openCard === "freeze" || openCard === "formula") && (
+        <SheetPopCard
+          host={hostRef.current}
+          anchor={cardAnchor}
+          width={SHEET_CARD_META[openCard].width}
+          ariaLabel={SHEET_CARD_META[openCard].ariaLabel}
+          items={openCard === "sort" ? SHEET_SORT_MENU : openCard === "freeze" ? SHEET_FREEZE_MENU : SHEET_FORMULA_MENU}
           onSelect={handleCardSelect}
           onClose={closeCard}
         />

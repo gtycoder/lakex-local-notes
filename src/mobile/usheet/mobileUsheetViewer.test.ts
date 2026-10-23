@@ -35,6 +35,7 @@ vi.mock("@univerjs/presets", () => ({
         setTheme: () => undefined,
         getActiveWorkbook: () => null,
         addEvent: () => ({ dispose: () => undefined }),
+        executeCommand: () => true,
         Event: { CommandExecuted: "command-executed" },
       },
     };
@@ -123,9 +124,16 @@ describe("移动端表格查看/编辑器", () => {
     expect(toolbar).toBeTruthy();
     expect(toolbar?.getAttribute("aria-label")).toBe("表格工具");
     expect(toolbar?.hasAttribute("data-prevent-swipe")).toBe(true);
-    for (const label of ["插入", "撤销", "重做", "数字格式", "更多表格操作"]) {
+    // 261022 晚：两行工具条（第一行常用 / 第二行次常用）。
+    expect(toolbar?.querySelectorAll(".mb-usheet-toolbar__row").length).toBe(2);
+    for (const label of ["插入", "撤销", "重做", "文字格式", "数字格式", "更多表格操作"]) {
       expect(toolbar?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
+    for (const label of ["格式刷", "清除格式", "筛选", "排序", "冻结", "查找", "链接", "公式"]) {
+      expect(toolbar?.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
+    }
+    // 小数位不再占一级（收进 ⋯）。
+    expect(toolbar?.querySelector('button[aria-label="增加小数位"]')).toBeNull();
     // 261021 P5：顶部只读公式栏已删（用户定稿：与内核底部输入栏重复）；编辑态输入面 = 内核移动公式栏。
     expect(host.querySelector(".mobile-usheet-formula")).toBeNull();
     expect(host.querySelector(".mb-usheet-footer")).toBeTruthy();
@@ -133,7 +141,7 @@ describe("移动端表格查看/编辑器", () => {
     root.unmount();
   });
 
-  it("「更多」锚定卡 = 七行图标网格 + 我们的第八行；不支持的项置灰；子菜单卡内下钻", async () => {
+  it("「更多」锚定卡只剩低频：4 行；边框子菜单卡内下钻；未接占位置灰", async () => {
     const { root, host } = await mount(true, true);
     const { act } = await import("react");
     const more = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="更多表格操作"]');
@@ -141,25 +149,71 @@ describe("移动端表格查看/编辑器", () => {
     await act(async () => { more!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     const card = host.querySelector(".mb-usheet-morecard");
     expect(card).toBeTruthy();
-    expect(card!.querySelectorAll(".mb-usheet-morecard__row").length).toBe(8);
-    for (const label of ["加粗", "斜体", "删除线", "下划线", "字体颜色", "填充颜色", "水平对齐", "合并选中单元格", "公式", "冻结窗格", "行高", "列宽", "删除当前行", "删除当前列", "更多表格工具"]) {
+    expect(card!.querySelectorAll(".mb-usheet-morecard__row").length).toBe(4);
+    for (const label of ["填充颜色", "边框", "水平对齐", "合并选中单元格", "增加小数位", "减少小数位", "行高", "列宽", "删除当前行", "删除当前列"]) {
       expect(card!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
     }
-    // 261021 P5：边框已接（不再是「暂不支持」占位）。
+    // 已搬去 T 卡 / 第二行 / 底栏的项不能还在 ⋯ 里（否则两套入口）。
+    for (const label of ["加粗", "字体颜色", "公式", "冻结窗格", "十字高亮", "更多表格工具"]) {
+      expect(card!.querySelector('button[aria-label="' + label + '"]')).toBeNull();
+    }
+    // 未接占位仍置灰（等用户逐项裁决）。
+    for (const label of ["字号（暂不支持）", "垂直对齐（暂不支持）", "换行（暂不支持）", "选择（暂不支持）", "图表（暂不支持）", "条件格式（暂不支持）", "保护（暂不支持）"]) {
+      const button = card!.querySelector<HTMLButtonElement>('button[aria-label="' + label + '"]');
+      expect(button?.disabled).toBe(true);
+    }
+    // 下钻边框：8 种框线都在卡片内（P5）。
     const border = card!.querySelector<HTMLButtonElement>('button[aria-label="边框"]');
-    expect(border).toBeTruthy();
-    expect(border!.disabled).toBe(false);
-    const freeze = card!.querySelector<HTMLButtonElement>('button[aria-label="冻结窗格"]');
-    expect(freeze).toBeTruthy();
-    await act(async () => { freeze!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-    for (const label of ["冻结至当前行", "冻结至当前列", "取消冻结"]) expect(host.textContent ?? "").toContain(label);
-    // 返回 → 下钻边框：8 种框线都在卡片内（P5）
-    await act(async () => { host.querySelector<HTMLButtonElement>(".mb-usheet-popcard__back")!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-    // 返回后行按钮是**新节点**（React 重渲染），必须重新取，否则派发到已卸载节点上（踩过）。
-    const borderRow = host.querySelector<HTMLButtonElement>('.mb-usheet-morecard button[aria-label="边框"]');
-    expect(borderRow).toBeTruthy();
-    await act(async () => { borderRow!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(border?.disabled).toBe(false);
+    await act(async () => { border!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     for (const label of ["全部框线", "外边框", "内部框线", "上边框", "下边框", "左边框", "右边框", "无框线"]) expect(host.textContent ?? "").toContain(label);
+    root.unmount();
+  });
+
+  it("T 卡（文字格式二级）：B / I / S / U 四个开关 + 8 色字体颜色；开关按当前格式亮起", async () => {
+    const { root, host } = await mount(true, true);
+    const { act } = await import("react");
+    const format = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="文字格式"]');
+    expect(format).toBeTruthy();
+    await act(async () => { format!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    const card = host.querySelector(".mb-usheet-formatcard");
+    expect(card).toBeTruthy();
+    for (const label of ["加粗", "斜体", "删除线", "下划线"]) {
+      expect(card!.querySelector('button[aria-label="' + label + '"]')).toBeTruthy();
+    }
+    expect(card!.querySelectorAll(".mb-usheet-formatcard__dot").length).toBe(8);
+    // 当前选区格式（mock 里 getActiveRange 为 null ⇒ 全部未激活）。
+    expect(card!.querySelectorAll(".mb-usheet-formatcard__toggle.is-active").length).toBe(0);
+    root.unmount();
+  });
+
+  it("第二行小卡：排序 / 冻结 / 公式 各自展开", async () => {
+    const { root, host } = await mount(true, true);
+    const { act } = await import("react");
+    const clickToolbar = async (label: string) => {
+      const button = host.querySelector<HTMLButtonElement>('.mb-usheet-toolbar button[aria-label="' + label + '"]');
+      expect(button).toBeTruthy();
+      await act(async () => { button!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    };
+    await clickToolbar("排序");
+    for (const label of ["升序（按当前列）", "降序（按当前列）"]) expect(host.textContent ?? "").toContain(label);
+    await clickToolbar("排序");
+    await clickToolbar("冻结");
+    for (const label of ["冻结至当前行", "冻结至当前列", "取消冻结"]) expect(host.textContent ?? "").toContain(label);
+    await clickToolbar("冻结");
+    await clickToolbar("公式");
+    for (const label of ["求和 SUM", "平均值 AVERAGE", "计数 COUNT", "最大值 MAX", "最小值 MIN"]) expect(host.textContent ?? "").toContain(label);
+    root.unmount();
+  });
+
+  it("十字高亮开关在底栏缩放左侧；阅读态也可用（纯本机视图）", async () => {
+    const { root, host } = await mount(true, false);
+    const { act } = await import("react");
+    const toggle = host.querySelector<HTMLButtonElement>('.mb-usheet-footer button[aria-label="十字高亮"]');
+    expect(toggle).toBeTruthy();
+    expect(toggle!.getAttribute("aria-pressed")).toBe("false");
+    await act(async () => { toggle!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(host.querySelector<HTMLButtonElement>('.mb-usheet-footer button[aria-label="十字高亮"]')!.getAttribute("aria-pressed")).toBe("true");
     root.unmount();
   });
 
