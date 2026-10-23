@@ -5,14 +5,46 @@
 > **⚠️ 261022 历史已重写两次（品牌/邮箱标准化 → 闭源内核移出公开仓库）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
 > **§8 是移动端（Android）专职交接**；桌面会话不要改 §8，移动端会话不要改 §0–§7 之外的桌面文件。
 
-## 0. 最新交接（261022）
+## 0. 最新交接（261023）
 
-> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 362 文件 2524 例（261022 晚快照，**含并行会话的移动端在途用例**）。
-> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口。
+> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 363 文件 2528 例（261023 快照，**含并行会话的在途用例**）。
+> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）。
 > **待用户裁决**：移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261023 · 表格第三方输入框「两层边框」根因 + 系统性收口（用户点单：「最后一次彻底排查」）· **已提交 `41d0a597`，待验收**
+
+- **用户口径**：桌面表格后续接入的功能输入框（插入链接、查找替换…）都是 2 层边框，怀疑没接原语；要求彻底排查、以后别再出现。
+- **根因（不是某个输入框写错，是全局焦点环跨界）**：`tokens.css` 的 `:where(button, input, textarea, select, [role=button]):focus-visible` 本意是给**自有**原生控件的焦点环，但它按标签命中所有 input/textarea/select；Univer 弹窗/面板自己已经画了「1px 边框 + 聚焦 ring（box-shadow）」⇒ 再叠我们的 2px offset outline 就是两三层。**关键坑**：表格弹窗 portal 到 `[data-lake-univer-floating]`（260922 补丁改回 body、带 `data-lake-owner`），所以只按 `.usheet-editor` 写作用域会漏——这正是「修过又出现」的原因。
+- **实测（隔离实例 CDP，插入链接弹窗输入框）**：修复前 = border `1px #33497f` + 厂商 ring `2px #eef2fa` + 全局 outline `2px #3f5fa0 offset 2`；修复后 = border `1px #3f5fa0` / outline `0px` / `box-shadow 0 0 0 2px rgba(28,31,36,.2)`（= 自有 `.ln-text-field` 的聚焦口径，单条边）。
+- **修法（单一来源，新文件）**：`src/styles/vendor-focus.css`（unlayered，压过 vendor 层；`main.tsx` 引入）——
+  - **归属**：第三方宿主（`.usheet-editor` / `[data-lake-univer-floating]` / `.lake-editor-mount` / `.ne-overlay-container` / `.board-editor`）里的 `input/textarea/select` 不再吃全局焦点环（交给厂商自己的焦点视觉）；
+  - **表格字段皮肤**：`[data-lake-univer-floating]` / `.usheet-editor` 里输入框聚焦 = 主色边 + 2px 柔光环 + `outline: 0`（并入原语口径）。
+  - `styles/cssLayers.test.ts` 登记该文件基线（4 声明）。
+- **防复发（三件套，不打补丁）**：
+  1. **dev 运行时探针** `src/lib/vendorFocusProbe.ts`：第三方宿主里聚焦控件时若仍带可见 outline ⇒ `console.warn` 并记入 `window.__vendorFocusProbe()`（空数组 = 干净）；`main.tsx` DEV 安装。
+  2. **静态护栏** `src/lib/vendorFocusProbe.test.ts`：宿主识别（内联 / 弹窗 portal / 内核浮层）、只对「第三方 + outline」判叠层、样式与入口都真的接上（含 `[data-lake-univer-floating]`）。
+  3. **后续新增第三方编辑器**：宿主加进 `vendor-focus.css` 的 `:is()` 列表 + `VENDOR_HOST_SELECTORS`；漏了 dev 控制台会报。
+- **门禁**：tsc 0 · 全库 vitest **363 文件 / 2528 例**（本批 +3 = 探针宿主识别 / 叠层判据 / 样式与入口接线）· ui-metrics 0 · check:bundle ✓ · `git diff --check` ✓。
+- **边界（未做）**：第三方**按钮**仍用我们的焦点环（与自有 `.ln-btn` 单环一致，不算「两层边框」）；若要让厂商按钮自己负责，把 `button/[role=button]` 加进归属规则即可，但会丢厂商 UI 的键盘焦点指示，需评估。
+
+### 261023 · macOS 原生全屏：顶栏去掉红绿灯让位（仿思源，用户点单）· **已提交 `d9c341ad`，待验收**
+
+- **用户定稿**：选 C —— **保留** macOS 原生全屏（绿色按钮进独立 Space），不改窗口模式；但全屏时系统把红绿灯一起隐藏，顶栏仍留 82px 让位 ⇒ 左侧空一块「比较丑」，要求仿思源：全屏时整条顶栏左移到最左。
+- **判据单一来源（三处接线）**：主进程 `enter-full-screen` / `leave-full-screen` 广播 `window-fullscreen`（并在 `renderer-ready` 补发一次初始态，覆盖「启动即全屏」的 window-state 恢复路径）→ `preload.cjs` + `src/lib/native.ts` 的 `onWindowFullscreen(cb)` → `App.tsx` 切 **`:root.window-fullscreen`** 类 → CSS 一处收口。
+- **实现落点**：`electron/main.ts`（`sendWindowFullscreen()`）· `electron/preload.cjs` · `src/lib/native.ts` · `src/App.tsx`（挂载订阅 + 卸载清理）· `src/styles/app/tabs.css` —— 把 `.platform-native-titlebar .tab-bar` 与非 mac 顶栏同组，追加 `:root.window-fullscreen .platform-mac .tab-bar`（`padding-left: 10px` + `no-drag`）。**声明数与既有规则相同**（cssLayers 基线不变、无新增 CSS 文件）。
+- **端到端实测**（隔离实例 + 临时调试钩子，已回退、未入库）：窗口态 `82px / drag` → 进入全屏 `10px / no-drag`（`:root` 类为 true）→ 退出恢复 `82px / drag`；CDP 每 300ms 采样，走的是真实 `enter/leave-full-screen` 事件。
+- **门禁**：tsc 0 · 全库 vitest **362 文件 / 2525 例**（新增 `layoutMetrics.test` 全屏让位端到端断言）· ui-metrics 0 · check:bundle ✓ · `git diff --check` ✓。
+- **已知剩余（未做，等点单）**：附件预览浮层的工具栏 `.attachment-preview.is-mac .attachment-preview__toolbar` 也有 82px 让位 ⇒ 全屏下标题仍偏右；要收左需在该文件 +1 条声明（会顶 cssLayers 基线，需新文件或减量），本次未做。
+
+### 261023 · 移动端表格交互改版：钉钉实测 + 可交互 HTML 原型（**未改产品代码**）
+
+- **用户口径（261023）**：不再自己探索移动端表格交互；以钉钉（Android）为参考——「感觉还是工具栏靠谱一点，且也是通过公式栏来编辑的」；**先出 HTML 原型定稿，不反复折腾代码**。
+- **钉钉实测（emulator-5554 实机 + WebView CDP 只读）**：选择态 = 网格 + 底部浮动胶囊「格式/插入/数据/视图」→ 底部全宽面板（4 页签常驻、右侧键盘图标进编辑）；编辑态 = 公式栏（地址 + 输入 + ↵ + 展开）+ 快捷条（表格工具/A/插入 | 选区 | 语音/图片/@/日期 | ✓）；格式面板 = 字号 ± 步进、B/I/S/U、水平/垂直对齐各 3、字色 8、填充 8（首格无填充）；插入 = 插行列 4 大按钮 + 单元格图片/手写签名/链接/日期…；数据 = 升/降序 + 筛选开关 + 查找替换；视图 = 视图比例（默认/全景/聚焦）+ 表单视图 + 图表视图 + 冻结行列 + **高亮当前行列开关**；顶栏「更多」= 文档级操作（不放表格格式）。
+- **用户二次澄清（同日）**：**不要**底部悬浮胶囊/四页签面板；要的是**双击编辑后、键盘上方那条工具条**（形态对齐我们文档编辑器的底部 dock），公式栏保留。
+- **原型（可交互，单文件、离线可用）**：`docs/preview/mobile-sheet-prototype.html` —— 选择态只有网格；**双击进编辑** → 公式栏 + **编辑 dock**（`＋ | T | B I S U | ⋯ | ✓`，撤销/重做留顶栏）+ 键盘示意；点 T/插入/⋯ 在 dock **上方**展开内联面板（T = 字号±/对齐/字色/填充；插入 = 插行列 + 图片/签名/链接/日期/附件/公式；⋯ = 排序/筛选/冻结/高亮当前行列/查找/格式刷/清除格式/视图比例）。右侧附「钉钉实测清单 + 待拍板问题」。
+- **状态**：仅调研 + 原型，**产品代码零改动**；待用户按原型逐项定稿（胶囊 vs 两行工具条、公式栏常驻与否、字号步进 vs 下拉、插入项取舍、冻结二级、⋯ 文档级菜单范围）。
 ### 261022(晚⑤) · AI 面板：「附加当前文档全文」只给无选区入口（用户点单）· **已提交 `2ded222b`，待验收**
 
 - **用户定稿**：区域选择用 AI（选区浮栏 / 块菜单 / 图片卡 AI）**不需要**「附加当前文档全文」；只有**无选区**入口（顶栏「更多 → AI 助手对话」）才需要这一行。
