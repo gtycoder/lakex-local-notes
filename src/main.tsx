@@ -5,12 +5,23 @@ import { installPasteInterceptor } from "./features/editor/clipboardHtml";
 import { installImageCopyBridge } from "./features/editor/imageCopyBridge";
 import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
+import { rlog } from "./lib/log";
 import "./styles/index.css";   // 样式单入口：@layer 层序 + 旧样式整体入 legacy 层（见 docs/DESIGN.md §3.1）
 import "./styles/vendor-focus.css";   // 261023：第三方编辑器 UI 的焦点视觉归属（unlayered，压过 vendor 层）
 import "./styles/window-chrome.css";   // 261023：全屏（独立 Space）时撤掉「为红绿灯让位」的内距（顶栏 / 附件预览）
 
 // 首帧前应用主题，避免闪烁（App 挂载后的 settings 订阅会继续跟随变化）
 applyTheme(loadSettings().theme);
+
+// 全局异常兜底（261023）：未捕获异常 / 未处理的 Promise 拒绝一律走 error 级落盘，
+// 否则它们只会出现在 DevTools 控制台、出问题时日志里什么都没有。
+window.addEventListener("error", (event) => {
+  rlog.error("window", "未捕获异常", event.error ?? event.message);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  rlog.error("window", "未处理的 Promise 拒绝", event.reason);
+});
+rlog.info("boot", "renderer 启动", { debug: rlog.debugEnabled });
 
 // 开发期字体试用切换器（P3：试用后定默认；不进设置项、不落盘、仅 dev）
 if (import.meta.env.DEV) void import("./lib/fontTrial").then((m) => m.installFontTrial());

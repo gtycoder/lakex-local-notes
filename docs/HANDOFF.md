@@ -13,6 +13,20 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261023(五) · 桌面端日志系统重做（分级 / 关键流程埋点 / 错误捕获 / 文档）· **待验收**
+
+- **用户要求**：整理桌面端日志并按同样思路埋点；开发环境 debug 多、正式环境把 info/warn 用起来、重点处理 error；关键流程记录耗时与数据量，积累一段时间后做针对性性能优化。
+- **分级（单一来源 `electron/logLevels.ts`）**：dev = file/console/renderer 全 debug；prod = file info、console 关、renderer info；现场覆盖 `LAKE_LOG_LEVEL=…`、`LAKE_LOG_CONSOLE=1`（不改代码）。
+- **格式（单一来源 `src/core/logFormat.ts`）**：一行一条；耗时统一 `[perf] label <ms>ms k=v`；错误带 `error=` + 前 3 帧 `stack=`；字段 `k=v`；不记正文/密钥。
+- **渲染层**：新增 `src/lib/log.ts`（debug 仅 DEV；perf 走 info）；`main.ts` 的 console-message 按 Electron 新旧签名映射级别（error 不再被压成 info）；入口装 window error / unhandledrejection 兜底。
+- **主进程**：logger 重写（10MB 轮转、`[start]` 启动上下文含版本/平台/userData/生效级别）、uncaughtException/unhandledRejection、preload-error、unresponsive/responsive、`[security]` 拦截导航、`[quit]` 时序、`[perf] boot.ready`。
+- **关键流程埋点**：`[perf] ipc.<channel>`（debug）+ `ipc.slow` ≥200ms（warn）+ 失败（error）；`[perf] note.save`（耗时+字数，慢保存升 info）；`[perf] sync.round`（耗时/条数/字节/墓碑/冲突/warnings）；`[perf] paste.html`（bytes/getData 次数/升级耗时/护栏命中）；沿用资源上传爆发统计与 CSP 折叠。
+- **文档**：新增 `docs/LOGGING.md`（分级 / 作用域 / 格式 / 埋点清单 / 排查手册 / 性能优化用法 / 新增埋点规范）；AGENTS §6 加一行；TROUBLESHOOTING §M 在上一批。
+- **实测（隔离实例）**：dev 日志 27 行（info 12 / debug 13 / error 2）——`[start]`、`boot.ready 1834ms`、逐次 ipc debug、`paste.html 0ms bytes=24 getData=9`、`note.save 2ms chars=181` 均正常；`LAKE_LOG_LEVEL=info` 时 12 行且 ipc debug = 0。
+- **顺带发现（未修，登记待查）**：新建文档后渲染层抛 `IndexSizeError: Failed to execute 'getRangeAt' on 'Selection': 0 is not a valid index`（与本次改动无关，隔离实例必现；已由新增 `[window]` 兜底捕获）。
+- **门禁**：tsc 0 · 全库 vitest **375 文件 / 2561 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
+- **落点**：同一 worktree（分支 `fix/paste-perf`，第 2 个 commit），**未合并、未推送**。
+
 ### 261023(四) · 粘贴整页网页：CSP 噪音折叠 + 上传爆发统计（分支 fix/paste-perf，未合并）· **待验收**
 
 - **背景**：用户报「值得买」文章（4700 字 / 67 图）从浏览器全选粘贴进文档非常卡，日志同时刷出上百条 CSP 报错，怀疑是日志记录导致。

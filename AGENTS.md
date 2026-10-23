@@ -139,6 +139,7 @@ node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && n
 # 多端：LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 …（启动前临时给 vite.config.ts 的 electron 入口加 onstart: () => {}，结束必须还原）
 node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对象查看
 # dev 控制台：window.__cssLayerProbe() 取「未分层全局 CSS」命中（空数组 = 干净）；命中会自动 console.warn
+# 日志：分级/作用域/埋点/排查手册 = docs/LOGGING.md；现场排障开 debug：LAKE_LOG_LEVEL=debug（file+renderer）、LAKE_LOG_CONSOLE=1（主进程终端）
 ```
 
 ## 7. 踩坑记录
