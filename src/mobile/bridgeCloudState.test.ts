@@ -69,6 +69,12 @@ describe("移动端云同步状态闸门", () => {
     expect(downloadNoteAssets).not.toHaveBeenCalled();
   });
 
+  it("未配置 S3 ⇒ 「启用云同步」默认关闭；配置后默认开启（与桌面同口径，用户 261022）", async () => {
+    expect(bridge.getSyncSettings().enabled).toBe(false);
+    await bridge.saveS3Settings(S3);
+    expect(bridge.getSyncSettings().enabled).toBe(true);
+  });
+
   it("配置了但关闭云同步 ⇒ 补拉与同步都不出网，同步返回说明", async () => {
     await bridge.saveS3Settings(S3);
     expect(bridge.getSyncSettings().enabled).toBe(true);   // 默认开着（不回归）

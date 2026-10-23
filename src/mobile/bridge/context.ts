@@ -27,10 +27,22 @@ export const SYNC_STORAGE_KEY = "local-lakex-notes-mobile.sync";
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
 const MOBILE_DATABASE = "local-lakex-notes-mobile";
 
+/** 是否已存过 S3 配置（只判本地是否存在，不读密钥；密钥在 Keystore）。 */
+function hasStoredS3Settings(): boolean {
+  try {
+    return Boolean(localStorage.getItem(S3_STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
 export function readSyncSettings(): SyncSettings {
+  // 261022（用户点单，与桌面同口径）：**默认开关 = 是否已配置 S3** —— 全新安装没有任何 S3 配置时
+  // 「启用云同步」默认关闭（没配置与关掉语义等价）；已配置的旧库仍默认开着（不回归）；存过的值优先。
+  const fallback = { ...DEFAULT_SYNC_SETTINGS, enabled: hasStoredS3Settings() };
   try {
     const raw = localStorage.getItem(SYNC_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_SYNC_SETTINGS };
+    if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<SyncSettings>;
     return {
       enabled: parsed.enabled !== false,
@@ -38,7 +50,7 @@ export function readSyncSettings(): SyncSettings {
       autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" ? parsed.autoIntervalMinutes : 15,
     };
   } catch {
-    return { ...DEFAULT_SYNC_SETTINGS };
+    return fallback;
   }
 }
 
