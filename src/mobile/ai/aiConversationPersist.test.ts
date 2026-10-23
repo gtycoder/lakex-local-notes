@@ -41,6 +41,19 @@ describe("AI 历史对话（多会话）序列化", () => {
     expect(parseConversation(out.json)!.messages[1]).toMatchObject({ text: "半截", stopped: true });
   });
 
+  it("消息图片引用往返（不把 base64 塞进 JSON）", () => {
+    const ref = { id: "11111111-1111-4111-8111-111111111111", mime: "image/png", ext: "png" };
+    const out = serializeConversation(snap({ messages: [{ role: "user", text: "看图\n[图片]", images: [ref] }, { role: "assistant", text: "红色" }] }))!;
+    expect(out.json).not.toContain("base64");
+    const parsed = parseConversation(out.json)!;
+    expect(parsed.messages[0].images).toEqual([ref]);
+  });
+
+  it("非法图片引用被丢弃", () => {
+    const out = serializeConversation(snap({ messages: [{ role: "user", text: "x", images: [{ id: "../evil", mime: "image/png", ext: "png" }] }] }))!;
+    expect(parseConversation(out.json)!.messages[0].images).toBeUndefined();
+  });
+
   it("空会话 / 超大（>2MiB）不落盘", () => {
     expect(serializeConversation({ id: "x".repeat(8), createdAt: new Date().toISOString(), corpus: [], sendIds: [], messages: [] })).toBeNull();
     expect(serializeConversation(snap({ messages: [{ role: "user", text: "x".repeat(AI_CONVERSATION_MAX_BYTES) }] }))).toBeNull();

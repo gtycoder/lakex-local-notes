@@ -10,6 +10,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { showToast } from "../ui/toastBus";
 import { AiCorpusSheet, type CorpusCandidate } from "./AiCorpusSheet";
 import { AiMarkdown } from "./AiMarkdown";
+import { AiMessageImages } from "./AiMessageImages";
 import { AiHistoryPage } from "./AiHistoryPage";
 import { AiImageSheet } from "./AiImageSheet";
 import { AiSendSheet } from "./AiSendSheet";
@@ -236,6 +237,9 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
             {chat.messages.map((message: AiMessage, index: number) => message.role === "user" ? (
               <div key={message.id} className="ai-msg ai-msg--user">
                 <div className="ai-bubble">{message.text}</div>
+                {message.images && message.images.length > 0 && (
+                  <AiMessageImages conversationId={chat.conversationId} images={message.images} />
+                )}
               </div>
             ) : (
               <div key={message.id} className="ai-msg">

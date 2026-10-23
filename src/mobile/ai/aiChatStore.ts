@@ -24,8 +24,18 @@ import {
   upsertAiConversation,
   type AiConversationMeta,
 } from "../data/aiConversationRepository";
+import { mimeTypeForFilename } from "../../core/assetNaming.js";
 import { onAiStream, type AiChatSettingsView, type AiRequestPart } from "../native/aiChat";
+import { loadAssetBytesFs } from "../native/assetFs";
 import { imagePartsOf, type AiPendingImage } from "./aiImages";
+import {
+  dataUrlToBytes,
+  deleteConversationImages,
+  imageExtOf,
+  sweepOrphanConversationDirs,
+  saveConversationImage,
+  type AiStoredImageRef,
+} from "./aiImageStore";
 import {
   conversationFilePath,
   deleteConversationFile,
@@ -53,6 +63,8 @@ export interface AiMessage {
   streaming?: boolean;
   stopped?: boolean;
   error?: { message: string; retryable: boolean };
+  /** 已归档的图片引用（字节在会话私有目录；UI 按 conversationId 懒加载）。 */
+  images?: AiStoredImageRef[];
 }
 
 export interface AiCorpusDoc {
@@ -69,11 +81,13 @@ export interface AiChatState {
   busy: boolean;
   corpus: AiCorpusDoc[];
   sendIds: string[];
+  /** 当前会话 id（无消息时为空）；UI 用它加载消息图片。 */
+  conversationId: string | null;
 }
 
 export type SendOutcome = { ok: true } | { ok: false; reason: string };
 
-const EMPTY: AiChatState = { enabled: false, settings: null, messages: [], busy: false, corpus: [], sendIds: [] };
+const EMPTY: AiChatState = { enabled: false, settings: null, messages: [], busy: false, corpus: [], sendIds: [], conversationId: null };
 
 let state: AiChatState = EMPTY;
 let snapshot: AiChatState = EMPTY;
@@ -142,8 +156,10 @@ async function pruneConversations(): Promise<void> {
     for (const id of pickPruneIds(all)) {
       await deleteAiConversation(db, id);
       await deleteConversationFile(id);
+      await deleteConversationImages(id);
       if (id === currentId) { currentId = null; currentCreatedAt = null; }
     }
+    await sweepOrphanConversationDirs(all.map((meta) => meta.id));
   } catch { /* 淘汰失败不影响对话 */ }
 }
 
@@ -175,6 +191,7 @@ function toMessages(stored: StoredAiConversation): AiMessage[] {
     streaming: false,
     ...(message.stopped ? { stopped: true } : {}),
     ...(message.error ? { error: message.error } : {}),
+    ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
   }));
 }
 
@@ -182,7 +199,7 @@ function applyStored(stored: StoredAiConversation): void {
   currentId = stored.id;
   currentCreatedAt = stored.createdAt;
   suppressPersist = true;
-  set({ messages: toMessages(stored), corpus: stored.corpus, sendIds: stored.sendIds, busy: false });
+  set({ messages: toMessages(stored), corpus: stored.corpus, sendIds: stored.sendIds, busy: false, conversationId: stored.id });
   suppressPersist = false;
   // 恢复的内容即落盘内容：不因「打开 App/切会话」刷新 updatedAt。
   lastFingerprint = contentFingerprint();
@@ -259,6 +276,7 @@ export async function deleteConversation(id: string): Promise<void> {
     const db = await ensureDb();
     await deleteAiConversation(db, id);
     await deleteConversationFile(id);
+    await deleteConversationImages(id);
   } catch { /* 忽略 */ }
   if (id === currentId) {
     // 正在流的会话被删除：先取消请求，否则 delta 会继续写进已被清空的 messages（busy 卡死）。
@@ -272,7 +290,7 @@ export async function deleteConversation(id: string): Promise<void> {
     currentCreatedAt = null;
     lastFingerprint = "";
     suppressPersist = true;
-    set({ messages: [], corpus: [], sendIds: [], busy: false });
+    set({ messages: [], corpus: [], sendIds: [], busy: false, conversationId: null });
     suppressPersist = false;
   }
 }
@@ -284,17 +302,20 @@ export async function clearAllConversations(): Promise<void> {
   if (activeRequestId) { await bridge.aiCancel(activeRequestId).catch(() => undefined); activeRequestId = null; }
   try {
     const db = await ensureDb();
-    for (const id of await listAiConversationIds(db)) {
+    const ids = await listAiConversationIds(db);
+    for (const id of ids) {
       await deleteAiConversation(db, id);
       await deleteConversationFile(id);
+      await deleteConversationImages(id);
     }
+    await sweepOrphanConversationDirs([]);
   } catch { /* 忽略 */ }
   await deleteLegacyConversationFile();
   currentId = null;
   currentCreatedAt = null;
   lastFingerprint = "";
   suppressPersist = true;
-  set({ messages: [], corpus: [], sendIds: [], busy: false });
+  set({ messages: [], corpus: [], sendIds: [], busy: false, conversationId: null });
   suppressPersist = false;
 }
 
@@ -365,7 +386,7 @@ export function newConversation(): void {
   currentCreatedAt = null;
   lastFingerprint = "";
   suppressPersist = true;
-  set({ messages: [], busy: false, corpus: [], sendIds: [] });
+  set({ messages: [], busy: false, corpus: [], sendIds: [], conversationId: null });
   suppressPersist = false;
 }
 
@@ -388,6 +409,30 @@ export function toggleSend(id: string): void {
 
 export function setAllSend(on: boolean): void {
   set({ sendIds: on ? state.corpus.map((doc) => doc.id) : [] });
+}
+
+// ---- 图片归档（历史展示用；模型侧仍只发当轮附件）----
+async function archiveTurnImages(conversationId: string, images: readonly AiPendingImage[]): Promise<AiStoredImageRef[]> {
+  const archived: AiStoredImageRef[] = [];
+  for (const image of images.slice(0, 10)) {
+    let bytes: Uint8Array | null = null;
+    let mime = "";
+    if (image.kind === "temp") {
+      bytes = dataUrlToBytes(image.dataUrl);
+      mime = image.mimeType;
+    } else {
+      try {
+        bytes = await loadAssetBytesFs(image.noteId + "/" + image.filename);
+        mime = mimeTypeForFilename(image.filename);
+      } catch {
+        bytes = null;
+      }
+    }
+    if (!bytes || bytes.length === 0) continue;
+    const ref: AiStoredImageRef = { id: crypto.randomUUID(), mime: mime || "image/jpeg", ext: imageExtOf(mime) };
+    if (await saveConversationImage(conversationId, ref, bytes)) archived.push(ref);
+  }
+  return archived;
 }
 
 // ---- 发送 ----
@@ -434,15 +479,19 @@ export async function send(raw: string, options: SendOptions = {}): Promise<Send
   }
 
   const displayText = question + ((options.images?.length ?? 0) > 0 ? "\n[图片]" : "");
-  ensureCurrentId();
+  const ids = ensureCurrentId();
+  const conversationId = ids?.id ?? null;
+  // 先归档图片再入状态（历史里能显示图；归档失败只保留 [图片] 占位，不影响发送）
+  const archivedImages = conversationId && (options.images?.length ?? 0) > 0 ? await archiveTurnImages(conversationId, options.images ?? []) : [];
   const requestId = crypto.randomUUID();
   activeRequestId = requestId;
   assistantText = "";
   set({
     busy: true,
+    conversationId,
     messages: [
       ...state.messages,
-      { id: crypto.randomUUID(), role: "user", text: displayText },
+      { id: crypto.randomUUID(), role: "user", text: displayText, ...(archivedImages.length > 0 ? { images: archivedImages } : {}) },
       { id: crypto.randomUUID(), role: "assistant", text: "", streaming: true },
     ],
   });

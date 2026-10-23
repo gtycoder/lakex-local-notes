@@ -8,6 +8,7 @@
  *  · 旧版单文件 `ai/last-conversation.json`（v1）在启动时迁移成一条会话后删除。
  */
 import type { AiConversationMeta } from "../data/aiConversationRepository";
+import { isValidImageRef, type AiStoredImageRef } from "./aiImageStore";
 import { getBodyStore } from "../native/bodyStore";
 
 export const AI_CONVERSATION_DIR = "ai/conversations";
@@ -24,6 +25,8 @@ export interface StoredAiMessage {
   text: string;
   stopped?: boolean;
   error?: { message: string; retryable: boolean };
+  /** 存档图片引用（字节在 ai/conversations/{id}/images/，JSON 不存 base64）。 */
+  images?: AiStoredImageRef[];
 }
 
 export interface StoredAiConversation {
@@ -43,7 +46,7 @@ export interface ConversationSnapshot {
   createdAt: string;
   corpus: Array<{ id: string; title: string; text: string; totalChars: number }>;
   sendIds: string[];
-  messages: Array<{ role: "user" | "assistant"; text: string; streaming?: boolean; stopped?: boolean; error?: { message: string; retryable: boolean } }>;
+  messages: Array<{ role: "user" | "assistant"; text: string; streaming?: boolean; stopped?: boolean; error?: { message: string; retryable: boolean }; images?: AiStoredImageRef[] }>;
 }
 
 export interface SerializedConversation {
@@ -70,11 +73,13 @@ export function serializeConversation(snapshot: ConversationSnapshot, now: numbe
   const messages: StoredAiMessage[] = [];
   for (const message of snapshot.messages) {
     if (!message.text && !message.error) continue;
+    const images = (message.images ?? []).filter(isValidImageRef).map((image) => ({ id: image.id, mime: image.mime, ext: image.ext }));
     messages.push({
       role: message.role,
       text: message.text,
       ...(message.stopped || message.streaming ? { stopped: true } : {}),
       ...(message.error ? { error: message.error } : {}),
+      ...(images.length > 0 ? { images } : {}),
     });
   }
   if (messages.length === 0 && snapshot.corpus.length === 0) return null;
@@ -124,6 +129,7 @@ export function parseConversation(raw: string | null, now: number = Date.now()):
   for (const message of data.messages) {
     if (!message || (message.role !== "user" && message.role !== "assistant")) continue;
     if (typeof message.text !== "string") continue;
+    const images = Array.isArray(message.images) ? message.images.filter(isValidImageRef).map((image) => ({ id: image.id, mime: image.mime, ext: image.ext })) : [];
     messages.push({
       role: message.role,
       text: message.text,
@@ -131,6 +137,7 @@ export function parseConversation(raw: string | null, now: number = Date.now()):
       ...(message.error && typeof message.error.message === "string"
         ? { error: { message: message.error.message, retryable: Boolean(message.error.retryable) } }
         : {}),
+      ...(images.length > 0 ? { images } : {}),
     });
   }
   const corpus = data.corpus

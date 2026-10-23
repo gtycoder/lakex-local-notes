@@ -12,6 +12,7 @@ import type { StoredAiConversation } from "./aiConversationPersist";
 import { pushBackHandler } from "../ui/backStack";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { AiMarkdown } from "./AiMarkdown";
+import { AiMessageImages } from "./AiMessageImages";
 
 export interface AiHistoryPageProps {
   open: boolean;
@@ -110,6 +111,9 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
             {detail.messages.map((message, index) => message.role === "user" ? (
               <div key={index} className="ai-msg ai-msg--user">
                 <div className="ai-bubble">{message.text}</div>
+                {message.images && message.images.length > 0 && (
+                  <AiMessageImages conversationId={detail.id} images={message.images} />
+                )}
               </div>
             ) : (
               <div key={index} className="ai-msg">

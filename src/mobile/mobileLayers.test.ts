@@ -71,7 +71,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
   // 261020 P1 新文件（表格 chrome）；基线按实测回填（只许降）
   "mobile/usheet/usheet-chrome.css": { decls: 455, dupGroups: 4 }, // 261023 v5：302→401 = 顶部工作表行 + 公式栏 + dock + 面板（新增交互形态，用户定稿）；dup 0→4 为同一批交互态的同名属性，接受。// 261022 晚：+52 = 两行工具条（行容器 / 次行分隔线）+ 文字格式一级标签 T + T 卡（四个开关 / 8 色圆点）+ 底栏十字高亮开关——属**新增交互形态**（用户点单：两行、常用外置、T 二级展开、十字高亮移到缩放左侧），不是覆盖叠层 // 261021 P4-2：+29 = 二级选择器两种形态（圆点色板 12 / 图标行 17），语雀同款且与 SheetMenuBody 单一来源 // 261021 P4：+5 = 一级「小数位」按钮（语雀 toolbar-decimal-inc：文字 .00 + 小加号；min-width / gap / 字号 / 行高 / 字距）——属新增一级工具项，不是覆盖叠层 // 261021：工具条 40 / 锚定卡片 / ⋯ 七行图标 / 底栏 32 / 阅读态 5 项（替换旧 dock 路线）
-  "mobile/ai/ai.css": { decls: 329, dupGroups: 1 }, // 261023：+10 = 「回到底部」浮钮 // 261023：+52 = 图片附件（待发送缩略图 6 + 资料图片网格 8 + 其余布局） // 261023：+16 = 历史对话独立页（层序/元信息/操作区/行尾删除） // 261023：+14 = GFM 表格（wrapper/table/th/td/对齐）；+3 = 解析器共用后的 hr // 261023：AI 页（布局 / 对话流 / Markdown / 设置页按钮组）；dupGroups 1 = reduced-motion 关掉入场动画（本文件既有登记模式）
+  "mobile/ai/ai.css": { decls: 341, dupGroups: 1 }, // 261023：+12 = 消息内图片（用户气泡方向 + 3 列网格） // 261023：+10 = 「回到底部」浮钮 // 261023：+52 = 图片附件（待发送缩略图 6 + 资料图片网格 8 + 其余布局） // 261023：+16 = 历史对话独立页（层序/元信息/操作区/行尾删除） // 261023：+14 = GFM 表格（wrapper/table/th/td/对齐）；+3 = 解析器共用后的 hr // 261023：AI 页（布局 / 对话流 / Markdown / 设置页按钮组）；dupGroups 1 = reduced-motion 关掉入场动画（本文件既有登记模式）
   "mobile/editor/edit-surface-kernel.css": { decls: 24, dupGroups: 0 }, // 261014 P2：把散在 mobile.css（doc 侧）/ quick-notes.css（note 侧）的内核几何收口**合成一份**（doc/note 共用 data-mb-edit-host 契约） // 261013：+1 = 表情面板分类条在 dock 里拉满面板边（当时口径：9 个分类 ≈45.8px、一屏放得下不横滚；261014 已改「一屏 8 格 + 横滑 + 钉住的动作键」，见 kit.css）
 };
 
