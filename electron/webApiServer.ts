@@ -28,6 +28,7 @@ export const WEB_API_PORT = Number(process.env.LAKE_WEB_PORT) || 19880;
 export const WEB_METHODS: Record<string, string> = {
   bootstrap: "bootstrap_workspace",
   readNote: "read_note",
+  noteBodyMissing: "note_body_missing",
   getNoteDigest: "get_note_digest",
   createNote: "create_note",
   saveNote: "save_note",

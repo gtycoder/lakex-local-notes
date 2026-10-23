@@ -10,6 +10,7 @@ import { createStoreSyncPort } from "./syncAdapters.js";
 import { DraftJournal, draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
+import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
@@ -2219,5 +2220,25 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
     fs.writeFileSync(path.join(assetsDir, refName), "refdata");
     const r2 = store.runDataHealthCheck();
     expect(r2.refsMissingResource.some((x) => x.noteId === note.id && x.filename === refName)).toBe(false);
+  });
+});
+
+describe("手动删数据（正文文件缺失）的处置", () => {
+  it("readNote 不抛 ENOENT：返回 bodyMissing + 空正文，isNoteBodyMissing=true", () => {
+    const note = store.createNote("缺正文");
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", note.id)));
+    expect(store.isNoteBodyMissing(note.id)).toBe(true);
+    const doc = store.readNote(note.id);
+    expect(doc.bodyMissing).toBe(true);
+    expect(doc.content).toBe("");
+    expect(doc.title).toBe(note.title);
+  });
+
+  it("正常文档不带 bodyMissing（不改变既有路径）", () => {
+    const note = store.createNote("正常");
+    const doc = store.readNote(note.id);
+    expect(doc.bodyMissing).toBeUndefined();
+    expect(doc.content.length).toBeGreaterThan(0);
+    expect(store.isNoteBodyMissing(note.id)).toBe(false);
   });
 });

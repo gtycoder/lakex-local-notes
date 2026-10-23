@@ -56,7 +56,11 @@ export { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
 
 export { AppError } from "../src/core/storeErrors.js";
 
-interface NoteDocument extends NoteSummary { content: string; }
+interface NoteDocument extends NoteSummary {
+  content: string;
+  /** 正文文件缺失（被手动删除等）：content 为空串；渲染层据此只读打开，同步不会上传空正文。 */
+  bodyMissing?: boolean;
+}
 
 /** 设置/账本类型单一来源：storeTypes.ts（S3/Sync/S3GC/History） */
 export type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, HistoryCleanupResult } from "./storeTypes.js";
@@ -407,9 +411,18 @@ export class Store {
       "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
-    const content = fs.readFileSync(this.notePath(id), "utf8");
+    // 261023：正文文件被手动删除（ENOENT）不是"打开失败"——按「缺正文」只读打开，
+    // 不再抛错（否则每次打开都弹 ENOENT，且渲染层无从处置）。其他 IO 错误仍抛出。
+    let content = "";
+    let bodyMissing = false;
+    try {
+      content = fs.readFileSync(this.notePath(id), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      bodyMissing = true;
+    }
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_opened_note_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(id);
-    return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
+    return { ...this.noteQueries.mapSummary(row as SummaryRow), content, ...(bodyMissing ? { bodyMissing: true } : {}) };
   }
 
   /** 轻量状态摘要：只读 DB 行（不读正文文件），供渲染进程在同步后判断打开 tab 是否需重载。
@@ -1114,6 +1127,11 @@ export class Store {
 
   saveS3Settings(settings: S3Settings): void {
     this.settingsRepository.saveS3Settings(settings);
+  }
+
+  /** 正文文件是否缺失（只 stat，不读正文；启动跳过缺正文文档用）。 */
+  isNoteBodyMissing(id: string): boolean {
+    return !fs.existsSync(this.notePath(id));
   }
 
   contentHash(id: string): string {

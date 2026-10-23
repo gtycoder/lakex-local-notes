@@ -38,6 +38,8 @@ export interface OpenTab {
   reloadKey?: number;
   /** 远端删除（软删/墓碑/purge）后标记，保留正文供复制/从回收站恢复；保存会被拦截。 */
   deleted?: boolean;
+  /** 正文文件缺失（被手动删除等）：只读 + 专用面板（恢复历史 / 重新读取 / 删除）；不弹 ENOENT、不保存空正文。 */
+  bodyMissing?: boolean;
   /** 上次同步后记录的轻量状态摘要（title+updatedAt），用于跳过未变化的全量重载。 */
   lastDigest?: { title: string; updatedAt: string } | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此选择编辑器。 */

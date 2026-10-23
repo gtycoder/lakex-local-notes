@@ -281,7 +281,7 @@ export function App() {
 
   useBootstrap({
     setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
-    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote,
+    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, showNotice,
   });
 
   useSyncProgress({
@@ -311,6 +311,25 @@ export function App() {
   });
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
+
+  /**
+   * 「正文缺失」面板的重新读取（261023）：同步把正文拉回来后刷该 tab；仍缺失就明确告知，不静默。
+   */
+  const retryMissingBody = useCallback(async (noteId: string) => {
+    try {
+      const note = await native.readNote(noteId);
+      if (note.bodyMissing) {
+        showNotice(`《${note.title || "无标题"}》的正文仍然缺失（可等同步拉回或从历史恢复）。`);
+        return;
+      }
+      setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId
+        ? { ...tab, title: note.title, content: note.content, bodyMissing: false, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+        : tab));
+      showNotice("已重新读取正文。");
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+    }
+  }, [setOpenTabs, setError, showNotice]);
 
 
   /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
@@ -669,6 +688,8 @@ export function App() {
             onEditorReady={handleEditorReady}
         onEditorCapture={handleCaptureReady}
             onReloadNote={reloadNoteTab}
+            onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
+            onRetryBody={(noteId) => { void retryMissingBody(noteId); }}
             onCreateNote={() => void createNote()}
             outlineSlot={outlineVisible ? (
               <OutlineSidebar

@@ -14,6 +14,8 @@ export interface NoteSummary {
 
 export interface NoteDocument extends NoteSummary {
   content: string;
+  /** 正文文件缺失（被手动删除等）：content 为空串；打开时按只读处理，同步不会上传空正文。 */
+  bodyMissing?: boolean;
 }
 
 /** 笔记的轻量状态摘要（同步后刷新打开 tab 用）。
@@ -168,7 +170,13 @@ export interface QuickNotesSyncStatus {
 
 /** 同步警告：远端对象/资源缺失时「跳过受影响条目、不覆盖本地、其余继续」（V5 §5.5 B 方案）的结构化报告。
  *  由 core 直接产出（不再拼字符串让消费方正则反解）；UI 据此展示与点击定位。 */
-export type SyncWarningKind = "remote_incomplete" | "asset_missing";
+export type SyncWarningKind =
+  | "remote_incomplete"
+  | "asset_missing"
+  /** 本地正文文件缺失（被手动删除等），且没有可拉回的云端副本 ⇒ 跳过，不上传空正文。 */
+  | "local_body_missing"
+  /** 本地正文缺失但云端有副本：已自动拉回恢复。 */
+  | "local_body_restored";
 export interface SyncWarning {
   kind: SyncWarningKind;
   /** 受影响文档 id（能定位时）。 */

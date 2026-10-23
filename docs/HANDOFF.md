@@ -30,6 +30,18 @@
 - **261023 七修（AI 体验打磨）**：流式跟底改为「只在底部时跟随」+ 上滑暂停 +「回到底部」浮钮；相册多选（按剩余 10 张名额合并，超出提示）；历史「继续对话」/新对话清空待发送图片；设置页新增「清除 API Key」（二次确认）。真机验证：长回答流式中上滑 1.8s 不回弹、浮钮出现、点击回底。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
+### 261023(七) · 手动删数据（正文文件缺失）不再反复报错 · **已修**
+
+- **用户报**（附截图）：手动删掉 `.lake` 后，每次打开/启动都弹 `ENOENT` 错误横幅（截图路径来自一次隔离实例的临时 userData），很烦。
+- **思源怎么做（只读参考 `siyuan-master/`）**：文件系统是**真源**、SQLite 索引是**派生**；`kernel/model/index_fix.go` 的 `fixIndexPipeline`（去重索引 → `fixBlockTreeByFileSys` → `fixDatabaseIndexByBlockTree` …）在同步后跑一次、并在用户空闲（7min）后自动订正 ⇒ 文件不在，索引条目被订正掉，**不会反复报错**；另有只读"数据体检"（我们的 A3 `runDataHealthCheck` 对应）。
+- **我们的差异**：树/元数据是权威，**不能因为正文文件缺失就把文档从索引删掉**（可能只是误删或云端还有副本）⇒ 采用"**缺正文状态**"而不是丢索引：
+  1. **主进程**：`store.readNote` 遇 ENOENT 返回 `bodyMissing:true` + 空正文（**不再抛错**，其他 IO 错误仍抛）；新增 `isNoteBodyMissing`（只 stat）+ IPC `note_body_missing`（三处同步 + WEB_METHODS；IPC 通道数 122→123，护栏已同步）。
+  2. **渲染层**：`OpenTab/TabInfo` 与 `deriveDesktopView` 投影透传 `bodyMissing`；打开缺正文文档 → **只读专用面板**（说明 + 打开历史版本 / 重新读取 / 关闭标签；删除仍走目录右键，保持删除流程单一来源），**每篇每会话只弹一次 toast**，不再走 `setError`；启动 `useBootstrap` 跳过缺正文候选（最多 8 个，逐个 `noteBodyMissing`）并**汇总一次**提示，不再一启动就 ENOENT。
+  3. **同步安全（关键）**：上传环若正文为空 ⇒ **绝不上传空正文**：云端有副本 → 拉回恢复（warning `local_body_restored`，失败降级 warning 不中止整轮）；没有 → warning `local_body_missing` 跳过；回收站软删条目同样跳过；远端覆盖前留档遇空正文跳过快照（不再因"留档内容为空"整轮中止）。
+- **护栏**：`store.test.ts`（缺正文 readNote 不抛 / 正常文档不带标记）· `syncEngine.test.ts`（云端有副本→拉回不上传空正文；无副本→warning 跳过；断言无 objects PUT）· `desktopDerivedState.test.ts`（bodyMissing 必须透传）· IPC 三方一致性 123。
+- **E2E 验证**（隔离实例 + dev 数据只读副本；删掉「虎嗅11」的 `.lake` 并把它设为 `last_opened_note_id`）：启动 **0 条 error banner**（自动落到欢迎文档）；点开该文档 → **缺正文面板**、0 条 error banner；「关闭标签」生效。
+- **门禁**：tsc 0 · 全库 vitest **385 文件 / 2622 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
+
 ### 261023(六) · 表格「一打开就待保存」：Univer 正文序列化不幂等 · **已修**
 
 - **用户报**：表格只要一打开就出现黄色「待保存」，怀疑会触发 S3。

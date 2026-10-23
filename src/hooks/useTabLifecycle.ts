@@ -11,6 +11,9 @@ import type { DraftJournalEntry } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
 import type { PersistOutcome, SaveState } from "./useSavePipeline";
 
+/** 「正文缺失」提示每篇文档每个会话只弹一次（用户 261023：缺数据不要每次都提示）。 */
+const bodyMissingNotified = new Set<string>();
+
 export interface UseTabLifecycleOptions {
   settingsMaxOpenTabs: number;
   pinnedNoteIds: Set<string>;
@@ -76,7 +79,7 @@ export function useTabLifecycle({
           const gone = isGoneNote(note);
           if (openTabsRef.current.some((t) => t.noteId === id)) {
             setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === id
-              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: gone, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: gone, bodyMissing: note.bodyMissing === true, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
               : tab));
           }
         } catch { /* 尚未恢复，保持标记 */ }
@@ -97,7 +100,13 @@ export function useTabLifecycle({
       resetRevision(note.id, 0);
       // 打开即判定：回收站里 / 已被他端 purge 的文档直接以"已删除"标签打开（只读 + 不保存），
       // 不等下一次同步才标记——否则重启自动重开"最后文档"时会看到能编辑的已删文档。
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), deleted: isGoneNote(note), kind: note.kind ?? "doc" };
+      const bodyMissing = note.bodyMissing === true;
+      if (bodyMissing && !bodyMissingNotified.has(note.id)) {
+        bodyMissingNotified.add(note.id);
+        // 一次性提示（不挡操作）：详细处置在标签内的专用面板里。
+        showNotice(`《${note.title || "无标题"}》的正文文件已丢失（可能被手动删除）：已按只读打开，可恢复历史或删除该文档。`);
+      }
+      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), deleted: isGoneNote(note), bodyMissing, kind: note.kind ?? "doc" };
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
         : [...openTabsRef.current, newTab];

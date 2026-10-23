@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   assetToken: process.env.LAKE_ASSET_TOKEN ?? "",
   bootstrap: () => invoke("bootstrap_workspace"),
   readNote: (id) => invoke("read_note", id),
+  noteBodyMissing: (id) => invoke("note_body_missing", id),
   getNoteDigest: (id) => invoke("get_note_digest", id),
   createNote: (title) => invoke("create_note", title),
   saveNote: (id, title, content, caches) => invoke("save_note", id, title, content, caches),
