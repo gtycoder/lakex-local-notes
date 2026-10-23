@@ -24,6 +24,7 @@
 - **探针顺手修的两处**：① Kotlin `delta.content` 为 JSON null 时 `optString` 会产出字符串 "null" ⇒ 正文前缀出现 `nullnull`，改用 `opt` 判类型；② **移动端「彻底删除」事务嵌套 bug**：`d.transaction` 内再调 `executeSet`（默认 transaction:true）⇒ 原生重复 BEGIN、回收站 purge 一直失败；`executeSet` 增加 `{transaction}` 选项、事务内传 false，补 `sqliteDb.batch.test.ts`；4 篇探针文档已 purge、回收站清空。
 - **261023 二次收口（用户定稿）**：① **后台继续流**；② **AI 页关闭不销毁会话**（模块级 `aiChatStore` + 常驻流订阅，后台 delta 继续累积，再进页面可看完整回答；App 进程结束才清空）；③ **移动端 Markdown 表格**（GFM 表头/对齐/单元格，零依赖、纯 React）；④ 图片附件维持"即将支持"占位（P2）。桌面 `MarkdownView` 仍无表格，未动。
 - **261023 三修（Markdown 解析器共用 + 桌面表格）**：解析器从桌面 `MarkdownView` 抽到 `src/core/markdown.ts`（块/行内 token + GFM 表格，纯数据）；桌面/移动端各自渲染（`.md-preview` / `.ai-md`），**桌面端同步支持表格**；bitable 静态护栏改指 core；移动端复测表格渲染正常。
+- **261023 四修（AI 会话设备本地持久化，用户定稿）**：只保留最近一次会话（消息 + 资料快照），存 App 私有 Data `ai/last-conversation.json`（BodyStore 原子写）；启动恢复、1s 防抖写、≤2MiB / 30 天 TTL；「新对话」与设置「清空本机对话」删除；**不存 API Key/端点/温度、不进 S3**。
 - 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
 
 ### 261023(五) · 桌面端日志系统重做（分级 / 关键流程埋点 / 错误捕获 / 文档）· **待验收**
@@ -36,7 +37,7 @@
 - **关键流程埋点**：`[perf] ipc.<channel>`（debug）+ `ipc.slow` ≥200ms（warn）+ 失败（error）；`[perf] note.save`（耗时+字数，慢保存升 info）；`[perf] sync.round`（耗时/条数/字节/墓碑/冲突/warnings）；`[perf] paste.html`（chars/getData 次数/升级耗时/护栏命中）；沿用资源上传爆发统计与 CSP 折叠。
 - **文档**：新增 `docs/LOGGING.md`（分级 / 作用域 / 格式 / 埋点清单 / 排查手册 / 性能优化用法 / 新增埋点规范）；AGENTS §6 加一行；TROUBLESHOOTING §M 在上一批。
 - **实测（隔离实例）**：dev 日志 27 行（info 12 / debug 13 / error 2）——`[start]`、`boot.ready 1834ms`、逐次 ipc debug、`paste.html 0ms chars=24 getData=9`、`note.save 2ms chars=181` 均正常；`LAKE_LOG_LEVEL=info` 时 12 行且 ipc debug = 0。
-- **顺带发现（未修，登记待查）**：新建文档后渲染层抛 `IndexSizeError: Failed to execute 'getRangeAt' on 'Selection': 0 is not a valid index`（与本次改动无关，隔离实例必现；已由新增 `[window]` 兜底捕获）。
+- **顺带发现（已定性，见 `docs/LAKEX-CONTRACT.md` §5.42）**：偶发 `IndexSizeError: getRangeAt` —— 产物取证确认是**闭源内核**选区 observer 未判 `rangeCount` 的竞态（入口 chunk 里 59 处 `getRangeAt(0)`、31 处无守卫；宿主 8 处全部有守卫）。不 patch 内核，已由 `[window]` 兜底记录；原先「隔离实例必现」的说法不成立（10+ 轮受控复现为 0）。
 - **门禁**：tsc 0 · 全库 vitest **375 文件 / 2561 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
 - **落点**：分支 `fix/paste-perf`（第 2 个 commit）；**已随并行会话两笔一起进入 master `4d1184e2` 并推送三仓**（Gitee private/public、GitHub）。worktree 与分支已清理。
 

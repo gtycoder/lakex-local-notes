@@ -1919,3 +1919,27 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 
 **结论：宿主不入这套命令。** 我们的「摘-插」模型事务覆盖所有块类型，而内核没有"任意块移动"接口（非卡片块完全没有）。
 将来若要做**容器内重排**，直接用 `moveColumn` / `tableRowMoveTo` / `tableColumnMoveTo`（走内核撤销栈、保 id），不要再自研。
+
+### 5.42 偶发 `IndexSizeError: getRangeAt: 0 is not a valid index`（内核选区竞态，不是宿主代码；261023）
+
+**现象**：偶发一条渲染层未捕获异常：
+
+    [window] 未捕获异常 error="IndexSizeError: Failed to execute 'getRangeAt' on 'Selection': 0 is not a valid index." stack="at HTMLDocument.value (locallakexnotes://app/assets/index-*.js:…)"
+
+**为什么容易误判成"我们的代码"**：
+1. 帧来自 `index-*.js` —— 本仓库把**闭源内核打进了入口 chunk**（`vite.config.ts` 的 `exclude` 只是 optimizeDeps 的事；产物里 `plugins/selection/...` 这些内核源码标签都在 `dist/assets/index-*.js`）。
+2. 函数名显示为 `.value` —— 内核经 Babel 编译，类方法以 `Object.defineProperty(..., { key, value: function … })` 形式挂载，匿名函数在 V8 里就叫 `value`；`HTMLDocument` 只是调用时的 receiver（挂在 document 上的 handler）。
+
+**根因（产物取证）**：在 `dist/assets/index-*.js` 里数 `getRangeAt(0)` 共 **59** 处，其中 **31** 处前后没有 `rangeCount` 守卫；带内核源码标签的落点集中在
+`plugins/selection/src/common/dom-selection-helper.ts:1205` 与
+`plugins/selection/src/render/selection-observer/keyboard/{table,columns}-keyboard/.../move-{left,right,up,down}.ts`。
+⇒ 内核在 selection observer / 键盘移动路径里**假设 DOM 选区恒有 ≥1 个 range**；当选区被清空（切标签、焦点转移、窗口激活、程序化 `removeAllRanges()`）而内核 handler 仍在跑 ⇒ 抛 IndexSizeError。
+
+**宿主侧不是来源**：桌面自有代码里 `getRangeAt` 共 8 处，**全部先判 `rangeCount`**
+（`EditorTab.tsx` copy/cut、`LakeEditor.tsx` copy/cut、`selectionToolbar/useSelectionToolbar.ts`、`selectionToolbar/linkEditor.ts`、`SelectionToolbar.tsx` 三处）。排查时**不要**再去动这些守卫。
+
+**触发与频率**：少见竞态。261023 本机只在"自动化建文档 + 机器同时有其他负载"时见过 1 次；随后 10+ 轮受控复现（新建 / 多标签快速切换 / 清空选区）均为 **0** 次。原先"隔离实例必现"的判断不成立。
+
+**处置**：不 patch 内核（闭源 + 需改 vendor；证据只到"内核未守卫"这一层）。该异常已由渲染层 `window.onerror` 兜底记录（见 `docs/LOGGING.md` §5），应用继续运行、不丢数据；同一异常会留两条日志（我们的 `[window] …` + 浏览器 `Uncaught …`），以带 `stack` 字段的那条为准。
+若将来**频繁出现**（日志里可数）再考虑：先在 vendor 里定位到具体 observer 函数，按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 做单点最小 guard。
+
