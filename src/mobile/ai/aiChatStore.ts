@@ -16,6 +16,7 @@ import { aiCanTouchNetwork, aiNetworkHint } from "../../core/aiNetwork";
 import { AI_SYSTEM_PROMPT } from "../../features/ai/aiPrompts";
 import { bridge } from "../bridge";
 import { onAiStream, type AiChatSettingsView } from "../native/aiChat";
+import { clearLastConversation, readLastConversation, writeLastConversation } from "./aiConversationPersist";
 import { loadAiEnabled } from "./aiSettings";
 import {
   AI_CORPUS_MAX_DOCS,
@@ -63,6 +64,7 @@ function set(patch: Partial<AiChatState>): void {
   state = { ...state, ...patch };
   snapshot = state;
   for (const listener of listeners) listener();
+  schedulePersist();
 }
 
 function replaceLastAssistant(patch: Partial<AiMessage>): void {
@@ -71,6 +73,60 @@ function replaceLastAssistant(patch: Partial<AiMessage>): void {
 
 export function getSnapshot(): AiChatState {
   return snapshot;
+}
+
+// ---- 设备本地持久化（只保留最近一次；1s 防抖写；不含 Key/端点）----
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let persistInFlight = false;
+let restoreStarted = false;
+
+function schedulePersist(): void {
+  if (typeof setTimeout !== "function") return;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persistNow();
+  }, 1000);
+}
+
+async function persistNow(): Promise<void> {
+  if (persistInFlight) { schedulePersist(); return; }
+  persistInFlight = true;
+  try {
+    await writeLastConversation({ corpus: state.corpus, sendIds: state.sendIds, messages: state.messages });
+  } finally {
+    persistInFlight = false;
+  }
+}
+
+/** 启动时恢复最近一次会话（只恢复一次；已有活动会话则不覆盖）。 */
+async function restorePersisted(): Promise<void> {
+  if (restoreStarted) return;
+  restoreStarted = true;
+  if (state.messages.length > 0) return;
+  const saved = await readLastConversation();
+  if (!saved || state.messages.length > 0) return;
+  set({
+    corpus: saved.corpus,
+    sendIds: saved.sendIds,
+    messages: saved.messages.map((message) => ({
+      id: crypto.randomUUID(),
+      role: message.role,
+      text: message.text,
+      streaming: false,
+      ...(message.stopped ? { stopped: true } : {}),
+      ...(message.error ? { error: message.error } : {}),
+    })),
+    busy: false,
+  });
+}
+
+/** 清空「已保存的对话」（设置页入口；同时清掉当前内存会话与落盘文件）。 */
+export async function clearPersistedConversation(): Promise<void> {
+  restoreStarted = true;
+  if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+  newConversation();
+  await clearLastConversation();
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -120,6 +176,7 @@ function ensureNative(): void {
 /** 页面每次打开都调（幂等）：首次装载开关/设置 + 订阅原生流。 */
 export function init(): void {
   ensureNative();
+  void restorePersisted();
   if (state.settings || settingsLoading) return;
   settingsLoading = true;
   set({ enabled: loadAiEnabled() });
@@ -139,7 +196,9 @@ export function newConversation(): void {
   activeRequestId = null;
   assistantText = "";
   if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = 0; }
+  if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
   set({ messages: [], busy: false, corpus: [], sendIds: [] });
+  void clearLastConversation();
 }
 
 export function addCorpusDoc(doc: AiCorpusDoc): string | null {

@@ -9,6 +9,8 @@ import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_
 import { Group, Item, Seg, Block, NumField, Switch, TextField } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
 import { loadAiEnabled, saveAiEnabled } from "../ai/aiSettings";
+import { clearPersistedConversation } from "../ai/aiChatStore";
+import { confirmMobile } from "../ui/ConfirmDialog";
 import { aiErrorInfoFromCode } from "../../core/aiErrors";
 import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
@@ -252,6 +254,14 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <Item itemId="ai-temperature" name="温度">
                 <TextField label="温度" value={aiForm.temperature} placeholder="0.7" onSave={(v) => setAiForm((form) => ({ ...form, temperature: v }))} />
               </Item>
+              <Block itemId="ai-history" name="已保存的对话" desc="只保留最近一次（设备本地，含资料快照；不含 API Key、不进云同步），30 天后自动失效。">
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => {
+                    void confirmMobile({ title: "清空已保存的对话？", body: "只影响本机保存的最近一次 AI 对话，不影响笔记与同步。", confirmText: "清空", danger: true })
+                      .then((ok) => { if (!ok) return; void clearPersistedConversation().then(() => setAiMsg("已清空本机保存的 AI 对话")); });
+                  }}>清空本机对话</button>
+                </div>
+              </Block>
               <Block itemId="ai-actions" name="保存与连通性">
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--primary" onClick={() => void saveAiSettingsForm()}>保存</button>
