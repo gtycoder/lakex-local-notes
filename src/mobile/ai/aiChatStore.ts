@@ -1,13 +1,11 @@
 /**
- * 移动端 AI 会话控制器（261023，解决「关掉 AI 页就丢回答」）。
+ * 移动端 AI 会话控制器（261023；P1.6 多会话历史）。
  *
- * 生命周期（用户 261023 定）：
- *  · **页离开 ≠ 会话结束**：状态放在模块级 store 里，流式订阅常驻 → 关闭 AI 页、回首页、切后台，
- *    后台请求继续跑、delta 继续累积；再进 AI 页能看到完整回答；
- *  · **App 进程结束 = 会话结束**（不持久化，与 D2 一致）：新进程从空会话开始；
- *  · 「新对话」显式清空。
- *
- * 页面只做渲染 + 调 action；所有网络/装配/流式状态都收在这里（单一来源）。
+ * 生命周期：
+ *  · 页离开 ≠ 会话结束：状态在模块级 store + 常驻流订阅 → 后台继续、再进来能看完整回答；
+ *  · App 进程结束：内存丢失，启动时从**设备本地**恢复「最近一次」会话；
+ *  · 历史：每次会话落 `ai/conversations/{id}.json` + SQLite 索引，可列表/搜索/切回/删除；
+ *  · 不存 Key/端点/温度，不进 S3。
  */
 import { assertMessages } from "../../core/aiChatMessages";
 import { buildAiSystemPrompt } from "../../core/aiCorpus";
@@ -15,8 +13,28 @@ import { aiErrorInfoFromCode } from "../../core/aiErrors";
 import { aiCanTouchNetwork, aiNetworkHint } from "../../core/aiNetwork";
 import { AI_SYSTEM_PROMPT } from "../../features/ai/aiPrompts";
 import { bridge } from "../bridge";
+import { ensureDb } from "../bridge/context";
+import {
+  deleteAiConversation,
+  latestAiConversationId,
+  listAiConversations,
+  listAiConversationIds,
+  listAllAiConversations,
+  pickPruneIds,
+  upsertAiConversation,
+  type AiConversationMeta,
+} from "../data/aiConversationRepository";
 import { onAiStream, type AiChatSettingsView } from "../native/aiChat";
-import { clearLastConversation, readLastConversation, writeLastConversation } from "./aiConversationPersist";
+import {
+  conversationFilePath,
+  deleteConversationFile,
+  deleteLegacyConversationFile,
+  parseLegacyConversation,
+  readConversationFile,
+  readLegacyConversationFile,
+  writeConversationFile,
+  type StoredAiConversation,
+} from "./aiConversationPersist";
 import { loadAiEnabled } from "./aiSettings";
 import {
   AI_CORPUS_MAX_DOCS,
@@ -60,11 +78,25 @@ let state: AiChatState = EMPTY;
 let snapshot: AiChatState = EMPTY;
 const listeners = new Set<() => void>();
 
+let currentId: string | null = null;
+let currentCreatedAt: string | null = null;
+let suppressPersist = false;
+/** 上次写入的内容指纹（不含时间）：避免启动恢复后把 updatedAt 刷新、打乱历史排序。 */
+let lastFingerprint = "";
+
+function contentFingerprint(): string {
+  return JSON.stringify({
+    c: state.corpus.map((doc) => [doc.id, doc.title, doc.totalChars]),
+    s: state.sendIds,
+    m: state.messages.map((message) => [message.role, message.text, Boolean(message.stopped), message.error?.message ?? ""]),
+  });
+}
+
 function set(patch: Partial<AiChatState>): void {
   state = { ...state, ...patch };
   snapshot = state;
   for (const listener of listeners) listener();
-  schedulePersist();
+  if (!suppressPersist) schedulePersist();
 }
 
 function replaceLastAssistant(patch: Partial<AiMessage>): void {
@@ -75,7 +107,12 @@ export function getSnapshot(): AiChatState {
   return snapshot;
 }
 
-// ---- 设备本地持久化（只保留最近一次；1s 防抖写；不含 Key/端点）----
+export function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+// ---- 持久化（1s 防抖写；会话文件 + SQLite 索引）----
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let persistInFlight = false;
 let restoreStarted = false;
@@ -89,49 +126,162 @@ function schedulePersist(): void {
   }, 1000);
 }
 
-async function persistNow(): Promise<void> {
-  if (persistInFlight) { schedulePersist(); return; }
-  persistInFlight = true;
-  try {
-    await writeLastConversation({ corpus: state.corpus, sendIds: state.sendIds, messages: state.messages });
-  } finally {
-    persistInFlight = false;
+function ensureCurrentId(): { id: string; createdAt: string } | null {
+  if (!currentId || !currentCreatedAt) {
+    currentId = crypto.randomUUID();
+    currentCreatedAt = new Date().toISOString();
   }
+  return { id: currentId, createdAt: currentCreatedAt };
 }
 
-/** 启动时恢复最近一次会话（只恢复一次；已有活动会话则不覆盖）。 */
-async function restorePersisted(): Promise<void> {
+async function pruneConversations(): Promise<void> {
+  try {
+    const db = await ensureDb();
+    const all = await listAllAiConversations(db);
+    for (const id of pickPruneIds(all)) {
+      await deleteAiConversation(db, id);
+      await deleteConversationFile(id);
+      if (id === currentId) { currentId = null; currentCreatedAt = null; }
+    }
+  } catch { /* 淘汰失败不影响对话 */ }
+}
+
+async function persistNow(): Promise<void> {
+  if (persistInFlight) { schedulePersist(); return; }
+  if (state.messages.length === 0 && state.corpus.length === 0) return;
+  const fingerprint = contentFingerprint();
+  if (fingerprint === lastFingerprint) return;
+  const ids = ensureCurrentId();
+  if (!ids) return;
+  persistInFlight = true;
+  try {
+    const meta = await writeConversationFile({ id: ids.id, createdAt: ids.createdAt, corpus: state.corpus, sendIds: state.sendIds, messages: state.messages });
+    if (!meta) return;
+    const db = await ensureDb();
+    await upsertAiConversation(db, meta);
+    lastFingerprint = fingerprint;
+    await pruneConversations();
+  } catch { /* 落盘失败不打断对话（下次变更会再试） */ }
+  finally { persistInFlight = false; }
+}
+
+function toMessages(stored: StoredAiConversation): AiMessage[] {
+  return stored.messages.map((message) => ({
+    id: crypto.randomUUID(),
+    role: message.role,
+    text: message.text,
+    streaming: false,
+    ...(message.stopped ? { stopped: true } : {}),
+    ...(message.error ? { error: message.error } : {}),
+  }));
+}
+
+function applyStored(stored: StoredAiConversation): void {
+  currentId = stored.id;
+  currentCreatedAt = stored.createdAt;
+  suppressPersist = true;
+  set({ messages: toMessages(stored), corpus: stored.corpus, sendIds: stored.sendIds, busy: false });
+  suppressPersist = false;
+  // 恢复的内容即落盘内容：不因「打开 App/切会话」刷新 updatedAt。
+  lastFingerprint = contentFingerprint();
+}
+
+/** 旧版单文件（v1）迁移成一条历史会话。 */
+async function migrateLegacy(): Promise<string | null> {
+  const raw = await readLegacyConversationFile();
+  if (!raw) return null;
+  const id = crypto.randomUUID();
+  const stored = parseLegacyConversation(raw, id);
+  await deleteLegacyConversationFile();
+  if (!stored) return null;
+  const meta = await writeConversationFile({ id, createdAt: stored.createdAt, corpus: stored.corpus, sendIds: stored.sendIds, messages: stored.messages });
+  if (!meta) return null;
+  const db = await ensureDb();
+  await upsertAiConversation(db, meta);
+  return id;
+}
+
+async function restoreLatest(): Promise<void> {
   if (restoreStarted) return;
   restoreStarted = true;
   if (state.messages.length > 0) return;
-  const saved = await readLastConversation();
-  if (!saved || state.messages.length > 0) return;
-  set({
-    corpus: saved.corpus,
-    sendIds: saved.sendIds,
-    messages: saved.messages.map((message) => ({
-      id: crypto.randomUUID(),
-      role: message.role,
-      text: message.text,
-      streaming: false,
-      ...(message.stopped ? { stopped: true } : {}),
-      ...(message.error ? { error: message.error } : {}),
-    })),
-    busy: false,
-  });
+  try {
+    const db = await ensureDb();
+    await pruneConversations();
+    let id = await latestAiConversationId(db);
+    if (!id) id = await migrateLegacy();
+    if (!id) return;
+    if (state.messages.length > 0) return;
+    const stored = await readConversationFile(id);
+    if (!stored) { await deleteAiConversation(db, id); return; }
+    applyStored(stored);
+  } catch { /* 恢复失败从空会话开始 */ }
 }
 
-/** 清空「已保存的对话」（设置页入口；同时清掉当前内存会话与落盘文件）。 */
-export async function clearPersistedConversation(): Promise<void> {
+/** 历史列表 / 搜索（title + preview）。 */
+export async function listConversations(query = ""): Promise<AiConversationMeta[]> {
+  const db = await ensureDb();
+  return await listAiConversations(db, query);
+}
+
+/** 切到某条历史会话（会先取消在途请求）。 */
+export async function openConversation(id: string): Promise<boolean> {
+  if (activeRequestId) {
+    await bridge.aiCancel(activeRequestId).catch(() => undefined);
+    activeRequestId = null;
+    assistantText = "";
+    if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = 0; }
+  }
+  try {
+    const stored = await readConversationFile(id);
+    if (!stored) {
+      const db = await ensureDb();
+      await deleteAiConversation(db, id);
+      return false;
+    }
+    applyStored(stored);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 删除一条历史会话；删的是当前会话时回到空白新会话。 */
+export async function deleteConversation(id: string): Promise<void> {
+  try {
+    const db = await ensureDb();
+    await deleteAiConversation(db, id);
+    await deleteConversationFile(id);
+  } catch { /* 忽略 */ }
+  if (id === currentId) {
+    currentId = null;
+    currentCreatedAt = null;
+    lastFingerprint = "";
+    suppressPersist = true;
+    set({ messages: [], corpus: [], sendIds: [], busy: false });
+    suppressPersist = false;
+  }
+}
+
+/** 清空全部历史（设置页入口）。 */
+export async function clearAllConversations(): Promise<void> {
   restoreStarted = true;
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
-  newConversation();
-  await clearLastConversation();
-}
-
-export function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  if (activeRequestId) { await bridge.aiCancel(activeRequestId).catch(() => undefined); activeRequestId = null; }
+  try {
+    const db = await ensureDb();
+    for (const id of await listAiConversationIds(db)) {
+      await deleteAiConversation(db, id);
+      await deleteConversationFile(id);
+    }
+  } catch { /* 忽略 */ }
+  await deleteLegacyConversationFile();
+  currentId = null;
+  currentCreatedAt = null;
+  lastFingerprint = "";
+  suppressPersist = true;
+  set({ messages: [], corpus: [], sendIds: [], busy: false });
+  suppressPersist = false;
 }
 
 // ---- 原生流（模块级常驻：页面关掉也不丢 delta）----
@@ -173,10 +323,10 @@ function ensureNative(): void {
   });
 }
 
-/** 页面每次打开都调（幂等）：首次装载开关/设置 + 订阅原生流。 */
+/** 页面每次打开都调（幂等）：装载开关/设置、订阅原生流、恢复最近一次会话。 */
 export function init(): void {
   ensureNative();
-  void restorePersisted();
+  void restoreLatest();
   if (state.settings || settingsLoading) return;
   settingsLoading = true;
   set({ enabled: loadAiEnabled() });
@@ -197,8 +347,12 @@ export function newConversation(): void {
   assistantText = "";
   if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = 0; }
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+  currentId = null;
+  currentCreatedAt = null;
+  lastFingerprint = "";
+  suppressPersist = true;
   set({ messages: [], busy: false, corpus: [], sendIds: [] });
-  void clearLastConversation();
+  suppressPersist = false;
 }
 
 export function addCorpusDoc(doc: AiCorpusDoc): string | null {
@@ -254,6 +408,7 @@ export async function send(raw: string, historyOverride?: ChatTurn[]): Promise<S
     return { ok: false, reason: (error as Error).message || "内容过长" };
   }
 
+  ensureCurrentId();
   const requestId = crypto.randomUUID();
   activeRequestId = requestId;
   assistantText = "";
@@ -313,3 +468,10 @@ export async function retry(question: string): Promise<void> {
   set({ messages: before });
   await send(question, history);
 }
+
+/** 当前会话 id（调试/测试用；正常 UI 不需要）。 */
+export function currentConversationId(): string | null {
+  return currentId;
+}
+
+export { conversationFilePath };

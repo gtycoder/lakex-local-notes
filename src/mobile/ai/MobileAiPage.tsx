@@ -4,18 +4,23 @@
  * 关键行为：离开页面不销毁会话（后台流式继续、再进来能看到完整回答）；App 进程结束才清空。
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, ArrowUp, Camera, FileText, Image as ImageIcon, Paperclip, Plus, Sparkles, Square } from "lucide-react";
+import { ArrowLeft, ArrowUp, Camera, Clock, FileText, Image as ImageIcon, Paperclip, Plus, Sparkles, Square } from "lucide-react";
 import { bridge } from "../bridge";
 import { pushBackHandler } from "../ui/backStack";
 import { showToast } from "../ui/toastBus";
 import { AiCorpusSheet, type CorpusCandidate } from "./AiCorpusSheet";
 import { AiMarkdown } from "./AiMarkdown";
+import { AiHistorySheet } from "./AiHistorySheet";
 import { AiSendSheet } from "./AiSendSheet";
 import {
   addCorpusDoc,
+  clearAllConversations,
+  deleteConversation,
   getSnapshot,
   init,
+  listConversations,
   newConversation,
+  openConversation,
   removeCorpusDoc,
   retry,
   send,
@@ -25,6 +30,7 @@ import {
   toggleSend,
   type AiMessage,
 } from "./aiChatStore";
+import type { AiConversationMeta } from "../data/aiConversationRepository";
 import { answerTitle, lakeBodyFromText, suggestions, takeCorpus } from "./aiSession";
 
 export interface MobileAiPageProps {
@@ -42,6 +48,9 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   const [corpusOpen, setCorpusOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState<AiConversationMeta[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [candidates, setCandidates] = useState<CorpusCandidate[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +65,17 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
     const node = listRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [chat.messages, chat.busy]);
+
+  const loadHistory = useCallback(async (query: string) => {
+    setHistoryLoading(true);
+    try {
+      setHistoryItems(await listConversations(query));
+    } catch {
+      showToast("读取历史对话失败", { type: "error" });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   const loadCandidates = useCallback(async () => {
     try {
@@ -143,6 +163,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
       <header className="toolbar toolbar--border mobile-topbar">
         <button type="button" className="toolbar__button" onClick={onClose} aria-label="返回"><ArrowLeft size={20} /></button>
         <span className="mobile-topbar-title">AI 助手</span>
+        <button type="button" className="toolbar__button" onClick={() => setHistoryOpen(true)} aria-label="历史对话"><Clock size={20} /></button>
         <button type="button" className="toolbar__button" onClick={() => newConversation()} aria-label="新对话"><Plus size={20} /></button>
       </header>
 
@@ -240,6 +261,21 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
         </button>
       </div>
 
+      <AiHistorySheet
+        open={historyOpen}
+        items={historyItems}
+        loading={historyLoading}
+        onQuery={(query) => void loadHistory(query)}
+        onOpen={(id) => {
+          void openConversation(id).then((ok) => {
+            if (ok) setHistoryOpen(false);
+            else showToast("这条对话已不存在", { type: "error" });
+          });
+        }}
+        onDelete={(id) => { void deleteConversation(id).then(() => void loadHistory("")); }}
+        onClearAll={() => { void clearAllConversations().then(() => { setHistoryItems([]); setHistoryOpen(false); showToast("已清空全部 AI 历史对话"); }); }}
+        onClose={() => setHistoryOpen(false)}
+      />
       <AiCorpusSheet
         open={corpusOpen}
         candidates={candidates}

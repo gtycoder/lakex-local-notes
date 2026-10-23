@@ -27,7 +27,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 3;
+export const MOBILE_SCHEMA_VERSION = 4; // 261023：+ai_conversations（AI 历史对话索引，设备本地）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -269,6 +269,18 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
     });
   }
 
+  // AI 历史对话索引（261023）：消息正文/资料快照在 files/ai/conversations/{id}.json，这里只存列表与搜索所需的元数据。
+  push(`CREATE TABLE IF NOT EXISTS ai_conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    preview TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    message_count INTEGER NOT NULL,
+    bytes INTEGER NOT NULL,
+    docs_json TEXT NOT NULL DEFAULT '[]'
+  )`);
+  push("CREATE INDEX IF NOT EXISTS idx_ai_conversations_updated ON ai_conversations(updated_at DESC)");
   push("CREATE INDEX IF NOT EXISTS idx_note_history_note ON note_history(note_id, created_at DESC)");
   push("CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path)");
   return statements;
