@@ -891,6 +891,25 @@ describe("多维表编辑器护栏", () => {
     expect(CSS).toMatch(/\.bt-td\.cell-selected\.sel-top\.sel-bottom\.sel-left\.sel-right \.bt-cell-input:focus \{ outline: 0; \}/);
   });
 
+  it("筛选条件输入只留一条主色边（不再「1px 边 + 2px 内描边」两条，用户 261022 点单统一）", () => {
+    expect(FILTER_CSS).toMatch(/\.bt-filter-input:focus, \.bt-filter-value-trigger:focus \{[^}]*border-color: var\(--lake-accent\)/);
+    expect(FILTER_CSS).toMatch(/\.bt-filter-input:focus, \.bt-filter-value-trigger:focus \{[^}]*outline: 0/);
+    // 旧的 2px 内描边不许回流（那会和 1px 边叠成两个边框）
+    expect(FILTER_CSS).not.toMatch(/outline: 2px/);
+  });
+
+  it("数据表行内重命名复用 .bt-input 字段原语（不再自带主色边 ⇒ 无「两个边框」，用户 261022）", () => {
+    // 旧实现：.bt-inline-input 自己写 border: 1px solid accent，又叠上全局 :focus-visible 的 2px 描边 = 两个边框。
+    // 根因修法：外观交给 .bt-input（:focus = 主色边 + 2px 柔光环 + outline: 0），行内只留布局。
+    expect(EDITOR).toMatch(/className="bt-input bt-inline-input"/);
+    expect(CSS).toMatch(/\.bt-inline-input \{[^}]*flex: 1/);
+    expect(CSS).not.toMatch(/\.bt-inline-input \{[^}]*border: 1px solid var\(--lake-accent\)/);
+    // 复用前提：.bt-input 的 focus 口径本身就是「主色边 + 柔光环 + outline: 0」，没有硬描边
+    expect(CSS).toMatch(/\.bt-input:focus \{ border-color: var\(--lake-accent\); box-shadow: 0 0 0 2px var\(--lake-focus-halo\); outline: 0; \}/);
+    // 行内重命名**只留这一条主色边**：它在选中行（accent-tint 底）里，柔光环会再围一圈浅色边框（用户 261022 复报）
+    expect(CSS).toMatch(/\.bt-inline-input:focus \{ box-shadow: none; \}/);
+  });
+
   it("追加修复：文档图片预览取正文全量、看板图片字段出缩略图", () => {
     // ① 文档：虚拟渲染下 DOM 只有视口内的图 ⇒ 列表必须来自正文（内核 image 卡片 + 裸 img）
     expect(PREVIEW).toMatch(/export function extractImagesFromContent/);

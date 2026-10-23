@@ -35,9 +35,10 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(WORKSPACE).toContain('aria-label="新建" title="新建"');
     // 每一行的「新建子项」
     expect(WORKSPACE).toContain('aria-label="新建子项"');
-    // 清单同款同序（桌面 Sidebar CREATE_CHILD_ITEMS：文档/表格/数据表/画板/手写板/分组）
+    // 清单同款同序（桌面 Sidebar CREATE_CHILD_ITEMS：文档/表格/多维表/画板/手写板/分组）
+    // 261022 用户点单：bitable 的创建项叫「多维表」（文档类型名），不叫「数据表」（表内层级名）。
     const items = [...WORKSPACE.matchAll(/\{ id: "(note|usheet|bitable|board|ink|group)", label: "([^"]+)"/g)].map((m) => m[2]);
-    expect(items).toEqual(["新建文档", "新建表格", "新建数据表", "新建画板", "新建手写板", "新建分组"]);
+    expect(items).toEqual(["新建文档", "新建表格", "新建多维表", "新建画板", "新建手写板", "新建分组"]);
     // 261020 移动端批后：六类创建项全部可点（usheet/bitable/board 都有移动编辑器；ink 由 remote ink 批解禁）
     for (const kind of ["note", "usheet", "bitable", "board", "ink", "group"]) {
       expect(WORKSPACE).not.toMatch(new RegExp('id: "' + kind + '"[^}]*disabled'));
@@ -50,7 +51,7 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(WORKSPACE).toMatch(/const pid = parentId \|\| notebookId;/);
     expect(WORKSPACE).toContain('bridge.createNote("无标题文档", pid)');
     expect(WORKSPACE).toContain('bridge.createUsheet("无标题表格", pid)');
-    expect(WORKSPACE).toContain('bridge.createBitable("无标题数据表", pid)');
+    expect(WORKSPACE).toContain('bridge.createBitable("无标题多维表", pid)');
     expect(WORKSPACE).toContain('bridge.createBoard("无标题画板", pid)');
     expect(WORKSPACE).toContain('bridge.createInk("无标题手写板", pid)');
     // 新建后关掉目录抽屉：否则编辑器在抽屉后面打开（设备实测）

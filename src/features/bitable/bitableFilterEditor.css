@@ -13,7 +13,9 @@
 .bt-filter-rule .bt-select { min-width: 0; }
 .bt-filter-rule .bt-select-trigger { width: 100%; height: 32px; padding: 0 8px; }
 .bt-filter-input, .bt-filter-value-trigger { width: 100%; height: 32px; min-width: 0; padding: 0 10px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); color: var(--lake-text-1); font: inherit; text-align: left; }
-.bt-filter-input:focus, .bt-filter-value-trigger:focus { outline: 2px solid var(--lake-accent); outline-offset: -2px; }
+/* 聚焦只留**一条主色边**：旧的「1px 边 + 2px 内描边」看得见两条（用户 261022 点单统一；
+   判据同 260929 链接格「已有边框处不再叠第二次焦点信号」）。本文件按声明数只许降的基线口径，未加柔光环。 */
+.bt-filter-input:focus, .bt-filter-value-trigger:focus { border-color: var(--lake-accent); outline: 0; }
 .bt-filter-value-trigger { display: flex; align-items: center; overflow: hidden; cursor: pointer; }
 .bt-filter-value-trigger:disabled { cursor: default; opacity: .55; }
 .bt-filter-value-text { min-width: 0; }

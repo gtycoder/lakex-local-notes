@@ -1087,7 +1087,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
             >
               <GripVertical size={13} className="bt-grip" />
               {tableEditor?.id === table.id
-                ? <input autoFocus className="bt-inline-input" value={tableEditor.draft}
+                ? <input autoFocus className="bt-input bt-inline-input" value={tableEditor.draft}
                     onChange={(event) => setTableEditor({ id: table.id, draft: event.target.value })}
                     onClick={(event) => event.stopPropagation()}
                     onBlur={() => { renameTable(table.id, tableEditor.draft); setTableEditor(null); }}

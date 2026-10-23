@@ -7,7 +7,7 @@ const SHELL = readFileSync(new URL("../../desktop/useDesktopShell.ts", import.me
 
 /**
  * 260930 目录栏右键菜单优化（用户口径）：
- * 1) 「新建文档/新建表格/新建数据表/新建画板/新建分组」收进「新建」子菜单，不再各占一行；
+ * 1) 「新建文档/新建表格/新建多维表/新建画板/新建手写板/新建分组」收进「新建」子菜单，不再各占一行；
  * 2) 右键菜单去掉「打开文件位置」（属性弹窗 NoteInfoDialog 里仍保留）；
  * 3) 文档级锁定入口放这里（只读锁统一入口）；目录行显示小锁标识。
  * 这是结构护栏，真实鼠标操作/只读生效由 CDP 真实验收覆盖。
@@ -15,6 +15,9 @@ const SHELL = readFileSync(new URL("../../desktop/useDesktopShell.ts", import.me
 describe("目录栏右键菜单", () => {
   it("新建动作收进「新建」子菜单", () => {
     expect(SRC).toMatch(/<Submenu label=\{<><Plus size=\{15\} \/><span>新建<\/span><\/>\}>/);
+    // 261022 用户点单：创建项文案 = 文档类型名「多维表」（表内层级才叫「数据表」）
+    expect(SRC).toContain('label: "新建多维表"');
+    expect(SRC).not.toContain('label: "新建数据表"');
   });
 
   it("目录行「＋」弹「新建子项」快捷菜单（在 ⋯ 右侧），与右键「新建」共用同一组动作（单一来源）", () => {

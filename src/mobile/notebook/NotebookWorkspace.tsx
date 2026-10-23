@@ -420,7 +420,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       const pid = parentId || notebookId;
       const n = kind === "doc" ? await bridge.createNote("无标题文档", pid)
         : kind === "usheet" ? await bridge.createUsheet("无标题表格", pid)
-          : kind === "bitable" ? await bridge.createBitable("无标题数据表", pid)
+          : kind === "bitable" ? await bridge.createBitable("无标题多维表", pid)
             : kind === "board" ? await bridge.createBoard("无标题画板", pid)
               : await bridge.createInk("无标题手写板", pid);
       await loadTree();
@@ -834,14 +834,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       </nav>
 
       {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
-          （文档 / 表格 / 数据表 / 画板 / 分组）。261020 起四类文档都有移动端编辑器（可直接新建并进入编辑），
+          （文档 / 表格 / 多维表 / 画板 / 分组）。261020 起四类文档都有移动端编辑器（可直接新建并进入编辑），
           分组走目录树创建。不要在移动端建出"打不开的文档"。 */}
       <MobileSheetMenu
         open={createOpen}
         items={[
           { id: "note", label: "新建文档", icon: FilePlus },
           { id: "usheet", label: "新建表格", icon: Table },
-          { id: "bitable", label: "新建数据表", icon: Database },
+          { id: "bitable", label: "新建多维表", icon: Database },
           { id: "board", label: "新建画板", icon: PenTool },
           { id: "ink", label: "新建手写板", icon: PenLine },
           { id: "group", label: "新建分组", icon: FolderPlus },
