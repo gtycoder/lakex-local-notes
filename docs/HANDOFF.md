@@ -59,9 +59,10 @@
   - `QuickNotesStore`：`listMissingQuickNotes()`（只 stat，带 sync_base / text_cache / 预览）、`recoverQuickNoteFromText()`、`applyRecoveredQuickNoteFromCloud()`、`purgeMissingQuickNote()`（**不读正文**，直接写含 `purged_at` 的 tombstone）。
   - `quickNotesSync.restoreQuickNoteFromCloud()`：读 `quick-notes/manifests/latest.json` → 取对象 → **sha256 校验** → 落盘 → `setBaseHash` + `markSynced`；失败以 reason 回报（`not-in-cloud/object-missing/hash-mismatch/invalid-content`）。
   - IPC 四条：`list_missing_quick_notes` / `restore_missing_quick_note_from_cloud` / `restore_missing_quick_note_from_text` / `purge_missing_quick_note`（通道 126 → **130**，三方一致性护栏同步）。
+  - **互斥域（同日补，261023）**：两条云端恢复都必须走 `enqueueMaintenance`——"缺正文"那条此前是**裸 `ipc.handle`**（小记那条一直是对的）：读清单 + 取对象是网络往返，落地后还要改 `sync_base`/`sync_state`，与在途整轮同步/GC 并发会互踩同一篇账本（AGENTS §4 互斥域 I1/I3）。护栏 `electron/ipc/maintenanceQueueHandlers.test.ts`（两条通道各一例 + "提取器没静默失效"自证；用 c9ebb117 的旧源码做过负向自测：`hasFn=true / inQueue=false` ⇒ 确实会红）。
 - **前端**：资源页第 5 个页签 **缺小记**，三组「可从云端恢复 / 仅能用搜索缓存恢复纯文本 / 无法恢复（只能删除）」；行内三动作 + 彻底删除二次确认（文案写明：无历史快照、彻底删除不可恢复）。
 - **E2E**（干净 worktree `e2724cf7` 构建 + 合成 2 条小记，启动后删 `.qnote`）：列表 `recovery=text/cache=true`；页签「缺小记 2」；分组「仅能用搜索缓存恢复纯文本 2 条」；缓存重建 1 条 → **文件回写、行 2→1**；彻底删除另 1 条 → 确认框 → 行 0、`quick_note_deleted` 的 **purged 墓碑 = 1**。
-- **门禁（干净 worktree 复核）**：tsc 0 · 全库 vitest **384 文件 / 2629 通过（17 skip）** · 双端构建 ✓。⚠️ 主树同时有并行会话的在途 sync 重构 WIP（tsc 红在 `src/core/lockedText.ts`，与本批无关）⇒ 本批只 stage 自己的文件提交，未碰它们的改动。
+- **门禁（干净 worktree 复核，含互斥域补丁）**：tsc 0 · 全库 vitest **385 文件 / 2631 通过（17 skip）** · 双端构建 ✓ · `git diff --check` ✓。⚠️ 主树同时有并行会话的在途 sync 重构 WIP（tsc 红在 `src/core/lockedText.ts`，与本批无关）⇒ 本批只 stage 自己的文件提交，未碰它们的改动。另：干净 worktree 里 `sql.js` 的 2 个用例会因 node_modules 软链被 Vite `fs.allow` 拒（`Denied ID … sql-wasm.wasm?url`），主树实跑该 2 文件 5 例通过 ⇒ 属 worktree 装置限制，不是代码红。
 - **未接**：移动端没有资源页（后续可复用同一判据）。
 
 ### 261023(八) · 资源页新增「缺正文」分类：可云恢复 / 仅历史 / 彻底删除 · **已修**
