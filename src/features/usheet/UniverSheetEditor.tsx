@@ -208,6 +208,17 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const timerRef = useRef<number | null>(null);
   const changeRef = useRef(onChange); changeRef.current = onChange;
   const dirtyRef = useRef(onDirty); dirtyRef.current = onDirty;
+  /**
+   * 「打开 = 只读」的结构性保证（261023）：
+   * - baselineSettledRef：内核初始化后的**第一次** flush 只用于对齐基线，不写盘、不标脏；
+   * - contentInputRef：打开后用户是否产生过「可能改内容」的输入（键盘/粘贴/剪切/拖放/工具栏·菜单点击）；
+   * - changedSinceOpenRef：是否真的发生过正文变化（capture 无变化时返回磁盘原文，避免为规范化写盘）。
+   * 这样即使将来 Univer 又换了序列化形态（不幂等），打开文档也不会自己写盘 / 触发同步。
+   */
+  const baselineSettledRef = useRef(false);
+  const contentInputRef = useRef(false);
+  const changedSinceOpenRef = useRef(false);
+  const persistedBodyRef = useRef(content);
   const captureRef = useRef(onEditorCapture); captureRef.current = onEditorCapture;
   const readOnlyRef = useRef(readOnly); readOnlyRef.current = readOnly;
   /** 最近一次的**磁盘形态**正文（正文真相）：隐藏释放实例后，显示时按它重建。 */
@@ -256,7 +267,22 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       // 2) 落盘口径：已提升 → filename；本地资产 URL → filename；其余原样。
       mapUsheetImageSources(snapshot, (src) => promotedRef.current.get(src) ?? diskSource(src));
       const body = usheetToBody(snapshot);
-      if (body !== state.last) { state.last = body; lastBodyRef.current = body; changeRef.current(body); }
+      if (!baselineSettledRef.current) {
+        baselineSettledRef.current = true;
+        if (!contentInputRef.current) {
+          // 首次 flush = 内核初始化后的第一次序列化。Univer 的 save() 不幂等（§4.4/§4.6），
+          // 这里的差异只可能是"同一内容的另一种序列化形态"⇒ 只对齐基线，绝不写盘/标脏。
+          state.last = body;
+          lastBodyRef.current = body;
+          return;
+        }
+      }
+      if (body !== state.last) {
+        changedSinceOpenRef.current = true;
+        state.last = body;
+        lastBodyRef.current = body;
+        changeRef.current(body);
+      }
     } finally {
       flushInflightRef.current = false;
       if (flushPendingRef.current) { flushPendingRef.current = false; void doFlush(); }
@@ -310,6 +336,26 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         });
       }
       disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, () => scheduleFlush()));
+      // 「打开 = 只读」的输入判据：只有用户真的可能改内容时才允许把首次差异当编辑（否则只对齐基线）。
+      const markContentInput = () => { contentInputRef.current = true; };
+      for (const type of ["keydown", "beforeinput", "paste", "cut", "drop"]) {
+        hostRef.current?.addEventListener(type, markContentInput, true);
+      }
+      const onHostPointerDown = (event: PointerEvent) => {
+        const target = event.target as Element | null;
+        const onGrid = target?.closest?.('canvas[data-u-comp="render-canvas"]');
+        // 网格内单击只是选格（不改内容）；工具栏/公式栏/右键菜单等点击可能执行改内容的命令。
+        if (!onGrid) contentInputRef.current = true;
+      };
+      hostRef.current?.addEventListener("pointerdown", onHostPointerDown, true);
+      disposables.push({
+        dispose: () => {
+          for (const type of ["keydown", "beforeinput", "paste", "cut", "drop"]) {
+            hostRef.current?.removeEventListener(type, markContentInput, true);
+          }
+          hostRef.current?.removeEventListener("pointerdown", onHostPointerDown, true);
+        },
+      });
 
       // 双击单元格只打开编辑器时，Univer 1.0.3 默认会全选单元格内容；Excel 语义是光标落在
       // 双击位置。宿主只负责把原始点击点记下来，等编辑器和文档渲染单元就绪后调用
@@ -490,7 +536,9 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
         [UNIVER_COMMAND_IDS.insertCellImage]: { commandId: UNIVER_COMMAND_IDS.ourInsertCellImage },
         ...USHEET_HIDDEN_TOOLBAR_ITEMS,
       });
-      captureRef.current?.(() => instanceRef.current?.last ?? null);
+      // capture 契约：**没有真实改动时返回磁盘原文**（而不是规范化后的内存形态），
+      // 否则"打开后直接关闭"也会因规范化差异写盘、触发一次同步。
+      captureRef.current?.(() => (changedSinceOpenRef.current ? instanceRef.current?.last ?? null : persistedBodyRef.current));
     } catch (error) {
       console.error("Univer 表格挂载失败", error);
       created = null;

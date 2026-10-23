@@ -166,6 +166,15 @@ node scripts/check-bundle-budget.mjs
   不规范化 ⇒ **每次打开表格**首帧基线（canonical）与首个 flush 的序列化不一致 → `onChange` → 待保存 → 自动同步上传一次正文
   （用户 261023 报「表格一打开就黄色待保存」）。⇒ 编辑器在「打开基线」与「每次 flush」都先 `normalizeUsheetWorkbook()`；
   判据 `body !== last` 必须用**规范化后**的字符串。护栏 `src/core/usheetDoc.test.ts`（幂等 / 真实单元格差异不被吞）。
+- **「打开 = 只读」是结构保证，不是靠枚举漂移（261023 第二层）**：光有规范化只能覆盖**已知**漂移；上游再换序列化形态仍会退回
+  "打开即脏"。`UniverSheetEditor` 因此加了三件（**删任何一件都会退回旧 bug**，静态护栏 `usheetOpenReadOnly.test.ts`）：
+  1. **首次 flush 只对齐基线**：`baselineSettledRef` 之前的那次 `doFlush` 若没有用户内容输入（`contentInputRef` 为 false），
+     直接把当前序列化设为 `last` 并 return —— **不写盘、不标脏、不出网**；
+  2. **内容输入判据**：`keydown / beforeinput / paste / cut / drop`（捕获阶段）+ **非网格画布的 pointerdown**（工具栏/公式栏/右键菜单）；
+     网格内单击只选格、不算编辑；
+  3. **capture 契约**：没有真实改动时返回**磁盘原文**（`persistedBodyRef`），避免"打开后直接关闭"因规范化差异写盘。
+  实测：原始正文 / 人为扰动正文（未知 plugin、resources 倒序、单引号字族）打开均 **0 次 save、文件 hash 不变**；
+  真实操作（点工作表「＋」新增工作表）**1 次 save**、内容正确落盘。
 
 ### 4.5 facade / 引擎
 | API | 用途 | 注意 |
@@ -205,6 +214,9 @@ node scripts/check-bundle-budget.mjs
 
 见 §3 第 5 步（10 条）。其中**必须亲手做**的两条：
 ① 粘贴单图 → 单元格图片；② 右键 → 插入 → 插入单元格图片（探针里这两条依赖合成输入，偶发）。
+
+**表格「打开即只读」判据（261023 起必查）**：打开任意表格后**状态栏不得出现「待保存」**，
+且日志里**不得有** `save_note` / `note.save`（打开 5 秒内）。若出现 ⇒ 先查 §4.4 的两层保证是否被删/被绕过。
 
 ## 6. 已知风险与预案
 

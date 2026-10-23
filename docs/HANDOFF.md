@@ -35,13 +35,22 @@
 - **根因（两处序列化漂移，实测 diag + 产物 diff）**：
   1. **plugin resource 未初始化形态**：首次 \`book.save()\` 给 \`SHEET_NOTE_PLUGIN.data=""\`，首个 CommandExecuted 之后给 \`"{}"\`（\`SHEET_RANGE_PROTECTION_PLUGIN\` 长期 \`""\`）⇒ 基线（mount 时 canonical）与第一次 flush 的 body 在 \`diff@957\` 处不同。
   2. **字族引号随构建变**：dev 的 \`--lake-font-family\` 是 \`'MiSans', …\`，打包构建压缩 CSS 后是 \`"MiSans", …\` ⇒ 同一文档在 dev / 打包版之间来回改写 \`ff\`。
-- **修复（单一来源 \`src/core/usheetDoc.ts\`）**：新增 \`normalizeFontFamily()\` / \`normalizeUsheetWorkbook()\`（幂等：\`data:""\`→\`"{}"\`、\`ff\` 单引号→双引号）；\`UniverSheetEditor\` 在**打开基线 canonical** 与**每次 flush 的 snapshot** 上都先规范化再 \`usheetToBody()\` ⇒ 比较的是稳定形式，打开不再产生 \`onChange\`。
+- **修复（两层，缺一不可）**：
+  1. **正文规范化**（单一来源 `src/core/usheetDoc.ts`）：`normalizeFontFamily()` / `normalizeUsheetWorkbook()`（幂等：`data:""`→`"{}"`、
+     `ff` 单引号→双引号）；`UniverSheetEditor` 在打开基线 canonical 与每次 flush 的 snapshot 上都先规范化再 `usheetToBody()`。
+     作用：覆盖已知漂移（plugin 空壳 / 字族引号），并让 dev 与打包版**写盘字节一致**。
+  2. **结构保证「打开 = 只读」**（`UniverSheetEditor`）：打开后**第一次 flush 只对齐基线**（`baselineSettledRef` + `contentInputRef`，
+     不写盘不标脏）；内容输入判据 = 键盘/粘贴/剪切/拖放（捕获阶段）+ **非网格画布**的 pointerdown（工具栏/公式栏/右键菜单）；
+     `capture` 在**无真实改动**时返回磁盘原文（`persistedBodyRef`），避免"打开后直接关闭"写盘。
+     ⇒ 即使上游再换序列化形态（我们不认识的新漂移），打开也不会写盘/标脏/出网。
 - **验证（隔离实例 + 用户 dev 数据只读副本）**：
-  - 修复前：打开「表格11」→ 1 次 \`ipc.save_note\`、body hash 变化。
-  - 修复后：打开 → **0 次 save、hash 不变、无异常**；关闭标签再打开 → 仍 0 次；把所有 resource 置 \`"{}"\` 的变体（= 修复后写盘形态）也能正常打开（画布/状态栏正常、0 异常）。
-- **影响面**：存量文档**不会被重写**（比较用规范化字符串、语义等价），只有真实编辑才落盘（落盘即规范化形态）；跨 dev/打包版不再抖动。
-- **未接**：移动端 usheet 保存路径暂未接同一 helper（当前移动端不改写正文，先登记；将来复用 \`normalizeUsheetWorkbook\`）。
-- **门禁**：tsc 0 · 全库 vitest **383 文件 / 2609 通过（17 skip）**（含并行会话在途改动）· 双端构建 ✓ · \`git diff --check\` ✓。
+  - 修复前：打开「表格11」→ 1 次 `ipc.save_note`、body hash 变化。
+  - 修复后：**原始正文**打开 → 0 次 save、hash 不变；**人为扰动正文**（未知 plugin `data:""` + resources 倒序 + 单引号字族）
+    打开 → 仍 0 次 save、hash 不变（证明结构层不依赖"枚举漂移"）；**关闭不编辑** → 0 次 save、hash 不变。
+  - 真实操作（点工作表「＋」新增工作表）→ **1 次 save**、正文正确落盘（2 个工作表）、无异常。
+- **护栏**：`src/core/usheetDoc.test.ts`（规范化幂等 / 空资源归一 / 真实单元格差异不被吞）+
+  `src/features/usheet/usheetOpenReadOnly.test.ts`（静态锁住第 2 层：首次 flush 对齐、输入判据、capture 兜底、两处规范化）。
+- **门禁**：tsc 0 · 全库 vitest **385 文件 / 2616 通过（17 skip）**（含并行会话在途改动）· 双端构建 ✓ · `git diff --check` ✓。
 
 ### 261023(五) · 桌面端日志系统重做（分级 / 关键流程埋点 / 错误捕获 / 文档）· **待验收**
 
