@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeBatch, type MobileDb } from "./sqliteDb";
+import { executeBatch, executeBatchInTransaction, type MobileDb } from "./sqliteDb";
 
 function baseDb(overrides: Partial<MobileDb> = {}): MobileDb {
   return {
@@ -19,6 +19,13 @@ describe("executeBatch", () => {
     const db = baseDb({ executeSet: async () => { throw new Error("bridge failed"); }, prepare: () => ({ get: async () => undefined, all: async () => [], run }) });
     await expect(executeBatch(db, [{ statement: "UPDATE t SET x=?", values: [1] }])).rejects.toThrow("bridge failed");
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it("事务内批量下发必须 transaction:false（否则原生会重复 BEGIN）", async () => {
+    const executeSet = vi.fn(async (_set: Array<{ statement: string; values: unknown[] }>, _options?: { transaction?: boolean }) => undefined);
+    const db = baseDb({ executeSet });
+    await executeBatchInTransaction(db, [{ statement: "UPDATE t SET x=?", values: [1] }]);
+    expect(executeSet).toHaveBeenCalledWith([{ statement: "UPDATE t SET x=?", values: [1] }], { transaction: false });
   });
 
   it("无 executeSet 时在一个事务内逐条执行", async () => {

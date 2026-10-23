@@ -1,6 +1,6 @@
 # 移动端 AI（Android）设计与实施契约
 
-> 状态：**P1 设计定稿（261022 用户拍板）**，未开工。实施前先读 §13 分期与 §15 未决项。
+> 状态：**P0 + P1 首版已实现（261023）**，待设备验收（P0 五项探针 + P1 八条验收见 §13）。设计部分仍是评审基线；实现偏差记录在 §17。
 > 归属：移动端（src/mobile/** + android/**）；**不改桌面 AI 行为**（共享的只是 core 纯函数）。
 > 相关：[MOBILE-TECH-STACK.md](./MOBILE-TECH-STACK.md)（架构/互斥域）· [MOBILE-DESIGN.md](./MOBILE-DESIGN.md)（视觉/浮层/44 Rule）· [LAKEX-CONTRACT.md](./LAKEX-CONTRACT.md)（内核命令）· [HANDOFF.md](./HANDOFF.md)（当前状态）。
 
@@ -30,8 +30,9 @@
 | D10 | 外部文件解析 | **不做**（PDF/Word 一律不解析） | 只支持我们自己的文档 + 图片 |
 | D11 | 资料的组成 | **1~5 篇 Lake 文档全文**；资源 = 这些文档里的图片 | 见 §3、§6 |
 | D12 | 资料交互细节 | 常驻资料条 / 不自动勾选 / 允许中途增删 / 资源入口随资料置灰 / 60k 字·5 篇 / 仅 Lake 文档 | 见 §6~§9 |
+| D13 | 每轮发送 | **资料集会话级冻结**（放固定前缀，含资源范围）；发送清单**可逐篇开关、默认继承上一轮**（改动=缓存重建点）；历史 **append-only** | 261023 三修，见 §9 |
 
-**明确不做**（写死，防止反复立项）：识屏/圈选、跨 App 执行、记忆/自动填充、系统级唤醒、语音输入（P3 再议）、长期会话、全局资源浏览器、结果替换正文、PDF/Office 解析、AI 出图。
+**明确不做**（写死，防止反复立项）：识屏/圈选、跨 App 执行、记忆/自动填充、系统级唤醒、语音输入（P3 再议）、长期会话、全局资源浏览器、结果替换正文、PDF/Office 解析、AI 出图、**历史压缩/自动摘要（P1 不做）**。
 
 ---
 
@@ -82,7 +83,7 @@
 │   ── 对话流（流式 Markdown）──             │
 │                                          │
 ├──────────────────────────────────────────┤
-│ 将发送：2 篇文档（1.5 万字）· 3 张图片      │ 24 高提示行（有附件才显示）
+│ 本轮发送：2 篇 · 15,617 字 ▾                │ 24 高提示行（可点，打开发送清单）
 │ [＋] [  问点什么…              ] [发送]    │ 输入栏 48 / 圆角 999
 │                        （生成中→[停止]）   │
 └──────────────────────────────────────────┘
@@ -95,6 +96,7 @@
 | 顶栏 | 44 | MOBILE-DESIGN「档位」 |
 | 资料条 | 44（chip 高 32，命中区补到 44） | 44 Rule |
 | 输入栏 | 48，圆角 999，高随安全区 | 胶囊输入 |
+| 发送提示行 | 24（可点，右侧 ▾）；无资料时显示「本轮不带资料 · 选择发送内容」 | D13 |
 | 页面左右内距 | 16 | --mb-page-pad |
 | 内容区 | flex:1; overflow:auto；键盘用 viewportShell 的 --mb-app-h 收口 | 复用既有 IME 处理 |
 | 字号 | 只用 --lake-font-size-*（空态问候 h1=24；正文 body=16；元信息 micro=12） | 无新字阶 |
@@ -145,6 +147,7 @@
 - 列表项标题单行省略（.mb-ellipsis）；多选复用现有 settings 行样式，不新造。
 - 「完成」回填资料条；中途打开时保留已选。
 - 浮层 = .mb-sheet（不新造第五件原语）；滑关/点遮罩/返回键走 useSwipeToClose + backStack。
+- **只在会话开始前可用**：会话一旦开始，资料集冻结；再点「＋/资料」提示「本会话资料集已固定，换资料请新开对话」（不提供会话内增删）。
 
 ---
 
@@ -160,7 +163,7 @@
 | 资料 | 打开资料选择器（§6） | — |
 
 资源选择器：
-- 范围 = **所选资料文档的资源并集**；按文档分组（组头 = 文档标题）。
+- 范围 = **会话资料集（A+B）的资源并集**，**与「本轮发送清单」无关**：例如资料 = A+B、本轮只发 A 的正文，仍可挑 B 里的图片；按文档分组（组头 = 文档标题）。
 - 数据源：AssetSyncPlugin.listAssets({noteId})（AssetSyncPlugin.kt:222）只取 filename/size；**不要在这里算 sha256**（现有实现会算，附件多的文档会卡；P1 加一个 listAssetsLite 或按目录读）。
 - 缩略图：readAssetPreview(noteId, filename)（bridge/assets.ts:21）返回 dataUrl，**只用于画缩略图**。
 - 只允许图片（image/*），其它置灰 + 理由「暂只支持图片」。
@@ -190,7 +193,7 @@ export const AI_TOTAL_MAX_CHARS = 200_000;    // 上游总护栏（含历史 + �
 
 ### 8.2 收录算法（纯函数 buildCorpus()，可单测）
 
-1. 资料按**选择顺序**排列（后加入的排末尾）。
+1. **本轮发送清单**按资料条顺序排列（后加入的排末尾）。
 2. 每篇先算纯文本长度 n_i。
 3. 依次取 take_i = min(n_i, remaining)；remaining 初值 60,000。
 4. 截断优先落在**段落边界**（换行），避免半句；找不到边界则硬切并在末尾加「……（以下省略）」。
@@ -201,52 +204,103 @@ export const AI_TOTAL_MAX_CHARS = 200_000;    // 上游总护栏（含历史 + �
 
 ### 8.3 文案口径（单一来源 aiCopy.ts）
 
-- 资料条：资料 · 2 篇 · 1.5 万字；超限追加（第 2 篇截断）。
-- 发送前提示行：将发送：2 篇文档（1.5 万字，第 2 篇截断）+ 3 张图片。
-- 超限空态提示：资料已达上限，第 3 篇起不会被发送。
+- 资料条：资料 · 2 篇；清单里被关掉的 chip 显示灰点。
+- 提示行：本轮发送：2 篇 · 15,617 字 ▾；清单为空：本轮不带资料 · 选择发送内容。
+- 超限提示：逐篇「收录 x/y 字（超预算截断）」，footer 显示 已截断。
+- 发送清单 footer：本轮发送 1 篇 · 3,214 字。
 
 ---
 
-## 9. 上下文组装协议
+## 9. 上下文装配（261023 二修：参照 DSH 的前缀 + 追加模型）
 
-### 9.1 资料块（固定前缀）
+> 结论先行：**无状态 API 下，“只发一次”不是不发，而是“发的内容逐字节不变、位置不变”**——供应商前缀缓存会把它按约 1/10 计价。要做到这一点，资料必须**会话级冻结**并放在历史最前，历史只能**追加**。
+
+### 9.1 先看 DSH 怎么做的（只读调研；源码 = `/Users/admin/file/local-lake/deepseek-harness-master`）
+
+| 关注点 | DSH 的做法 | 出处 |
+|---|---|---|
+| 多轮发送 | 会话是 append-only 事件日志，模型历史由日志派生；**已追加的消息在后续每一步都会重发**（API 无状态） | `packages/core/session/README.md`（Model Experience → Token effect） |
+| 固定开场白 | **冻结前缀**：一次组合、深冻结、放在 system 之后、**全部历史之前**；原文理由「frozen per instance ⇒ provider's prompt cache holds by construction」；被否方案里明确写了：每轮重算、放 system、放历史、放请求尾部都更差（尾部每轮重付且其后不可缓存） | `.agents/notes/archived/feature/2026-07-07-session-prefix.md` |
+| 会变的内容 | 走 append-only 通道：「paid once, cache-read thereafter」 | 同上 |
+| 大文件 | **不内联**：通用文件存字节 + 只读路径，模型收到“文件名/大小/digest/路径”一行句柄，**用 read 工具按需读** | `packages/attachment/attachment/README.md` |
+| 图片 | 规范化成 provider 无关光栅并持久化，**后续每一轮按 route 尺寸确定性重投影**（同一图同一版本）；加图会使“受影响的后缀”缓存失效 | 同上（Reuse images across the session / KV Cache effect） |
+| @文件 | 只是 prompt 文本，不附带内容，模型必须自己调 read 工具 | `packages/context/file-reference/README.md` |
+| 压缩 | 显式 replace，**从第一个被替换的消息起缓存失效**，代价被接受 | `packages/compaction/compaction-image-offload/README.md` |
+| 可观测 | token 用量分四个不重叠桶（input / output / cacheRead / cacheWrite），界面显示 cache 命中率 | `.agents/notes/archived/feature/2026-07-21-tui-footer-cache-hit-rate.md` |
+| 文档习惯 | 每个包 README 固定三段：What the model sees / Token effect / **KV Cache effect** | `docs/cookbook/adding-a-package.md` |
+
+### 9.2 我们的简化映射（不照搬复杂度）
+
+| DSH | 我们（P1） | 为什么简化 |
+|---|---|---|
+| 冻结前缀（session prefix） | **资料集 = 会话级冻结前缀**：进入对话时选定，之后不变 | 我们没有插件/多轮注入，只有“一次会话一份资料” |
+| append-only 历史 | 只追加问答；**不改写历史、不压缩** | 个人短会话，压缩收益低、破坏缓存 |
+| 大文件给句柄 + read 工具 | 我们**没有工具循环** ⇒ 资料仍内联全文（唯一差异），但只作为固定前缀 | 加 tool calling 是另一个量级（P3） |
+| 图片确定性重投影 | 图片规范化一次、**留在历史里**、每轮同版本重发 | 与 DSH 同构，代价可控（≤10 张） |
+| compaction replace | P1 不做；超预算 → 提示开新对话 | 避免“悄悄裁历史” |
+| 缓存命中率 | P3 可选显示 | 先不做 |
+
+### 9.3 每轮请求结构（稳定前缀 + 追加尾部）
 
 ```
-消息 1   system : AI_SYSTEM_PROMPT（共享，追加一段「资料规则」）
-消息 2   user   : 【资料开始】共 2 篇 · 约 1.5 万字
-                  【资料 1/2】《周报 261022》（3,214 字）
-                  <纯文本；图片位置替换为 [图片]>
-                  【资料 2/2】《内核笔记》（12,403 字，节选前 11,786 字）
-                  ……
-                  【资料结束】
-消息 3..N 历史（最近 12 轮）
-消息 N+1 user  : <本轮问题> + 图片块（image_url）
+[固定] system : AI_SYSTEM_PROMPT（本会话不变；含“资料规则”）
+[固定] user   : 资料块（会话级冻结；只含清单内文档，顺序固定）
+[追加] ...    : 历史（最近 12 轮问答；append-only）
+[尾部] user   : 本轮问题（+ 图片块）
 ```
 
-- 标记常量放 src/core/aiCorpus.ts（新）：AI_CORPUS_BEGIN/END、buildAiCorpusBlock()、buildAiSystemPrompt()；纯函数、两端都能用，方便将来桌面复用。
-- 图片在正文里的引用一律替换为 [图片]（避免模型看到 URL 噪音）。
-- 资料块**只注入一次**（会话首轮），随后作为**固定前缀**随会话保留。
+- 资料块每轮**仍随请求发送**（API 无状态），但**字节与位置不变** ⇒ 命中前缀缓存，等同“只发一次”的计费。
+- 历史只在尾部追加 ⇒ 每轮只有“新增问题 + 新回答”是新 token。
+- 会话内**固定模型/温度/system**（改任何一项都全量失效）。
 
-### 9.2 固定前缀（pin）与裁剪
+### 9.4 会话资料集 vs 本轮发送清单
 
-桌面 capMessages 现在只保「首条 system」（electron/ai/aiChatMessages.ts）。本设计需要：
+| 概念 | 范围 | 可变性 |
+|---|---|---|
+| **会话资料集** | 本次对话在册的文档（资料条） | 会话级冻结（P1）：中途增删 = 换资料 = 建议新对话 |
+| **本轮发送清单** | 这一轮真正放进资料块的文档 | **默认继承上一轮**（sticky）；可临时关某篇 |
 
-- AiChatMessage 增加可选 pinned?: boolean。
-- 裁剪规则改为：**保留开头连续 system + 开头连续 pinned 消息，再补最近若干条**，总数 ≤ 40。
-- 移动端自己按 AI_HISTORY_MAX_TURNS=12 先裁一轮，再交给共享护栏兜底。
+- 关掉/恢复某篇 = 改资料块 = **从资料块起缓存失效**（本轮全价，之后重新积累）；P1 在面板里写清一句“改动会重建缓存”。
+- 会话资料集本身不动（chip 灰点 = 本轮不发，× = 移出会话——P1 里 × 也提示“建议新对话”）。
+- 这个模型同时满足：“固定资料、只发一次”的缓存收益 + “继承上一轮”的零操作成本 + 必要时仍可关某篇。
 
-> 依据：资料不能被「保留最近 40 条」挤掉；且固定前缀稳定 ⇒ 供应商前缀缓存命中，成本远低于每轮重发 6 万字。
+**典型组合（用户 261023 举例）**：会话资料集 = A + B（固定）；本轮发送清单 = 仅 A（B 的正文不发）；同时从 B 里挑 1 张图片作为视觉输入。
+- 资料块只含 A ⇒ 体积小、更省 token；
+- B 的图片在尾部 user 消息里 ⇒ 不破坏 A 资料块的缓存前缀；
+- 下一轮继承「仅 A」，除非用户再把 B 打开（打开 = 资料块变化 = 重建一次缓存）。
 
-### 9.3 资料变更
+### 9.5 KV Cache 影响表（写进文档，评审时逐条看）
 
-- 允许中途增删；变更后**追加一条新的 pinned 资料块**，正文前缀写【资料更新 · 以本块为准】，旧块保留在历史里。
-- 对话流里插一条淡色分隔行：— 资料已更新：+《标题C》 —，并在其后第一条回答上标注「基于更新后的资料」。
-- 资料条实时更新；若文档 content_hash 变化（别端同步/本机编辑）→ 下次发送前重建资料块并追加（同一机制）。
+| 动作 | 影响 | 说明 |
+|---|---|---|
+| 正常发问 / 回答 | ✅ 前缀仍命中，只付新 token | 尾部追加 |
+| 关掉/恢复某篇（改清单） | ❌ 从资料块起失效，本轮全价 | 之后重新积累 |
+| 会话中途加/删资料（P1 不推荐） | ❌ 同“新会话” | 资料块变了 |
+| 新增图片 | ⚠️ 该图之前的前缀仍命中；图片与之后是新 token | 图在尾部 user 消息里 |
+| 换模型 / 改温度 / 改 system | ❌ 全失效 | 会话内固定 |
+| 开新对话 | ❌ 全冷启动 | 预期内 |
+| 压缩历史（P1 不做） | ❌ 从被替换点起失效 | DSH 明确接受该代价 |
 
-### 9.4 预算与总护栏
+### 9.6 图片
 
-- 资料 + 历史 + 本轮问题 ≤ AI_TOTAL_MAX_CHARS(200k)；超了先裁历史，**永不裁资料**（资料超限在选择阶段已解决）。
-- 图片数 ≤10，单张 ≤1MB。
+- 规范化：长边 1600 / ≤1MB / JPEG，**进入会话时做一次**；
+- **留在会话历史**里，每轮确定性重发（同图同字节）⇒ 不额外破坏缓存；
+- 单会话 ≤10 张；超出提示“移除一张或开新对话”；
+- P3 可借鉴 DSH 的 image-offload：旧图降级为占位文本（保留可再选的引用），而不是静默丢。
+- 会话退出即清（DSH 是“永不删除”，因为要跨重启复用；我们不持久化，所以清）。
+
+### 9.7 文件
+
+- P1 不解析外部文件（PDF/Word 不做）；DSH 那套“给只读路径 + read 工具”要 tool calling，列为 P3。
+
+### 9.8 超限策略（P1：不压缩）
+
+- 预算 = 资料块 + 历史 + 本轮问题（图片按 token 折算另计≤10 张）；
+- 资料 > 60k 字：在选择阶段截断（逐篇显示收录多少）；
+- 历史 + 问题 > 200k 字：**提示开新对话**，不静默裁历史（裁 = 破坏缓存 + 不可预期）。
+
+### 9.9 会话过期
+关闭页面即销毁（不持久化）；不提供“恢复上次对话”。
 
 ---
 
@@ -375,8 +429,9 @@ Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 - 资料条 + 资料选择器（搜索、多选、预算条、仅 doc）。
 - 资料块组装（固定前缀 + pin 裁剪 + hash 缓存）。
 - 设置页「AI」子页（地址/模型/Key/温度/思考档 + 连通性测试）。
+- 发送清单默认继承上一轮；图片进入会话后留在历史（每轮同版本重发）。
 - 结果动作：复制 / 存为新文档 / 存为小记。
-- 发送前提示行；关闭即清。
+- 发送前提示行；关闭即清；超预算提示开新对话（不压缩历史）。
 
 新增文件（建议）：
 
@@ -386,6 +441,7 @@ src/mobile/ai/AiConversation.tsx   会话状态机（发送/停止/重试/资料
 src/mobile/ai/AiMessageList.tsx    气泡 + 分隔行 + 自动跟底
 src/mobile/ai/AiComposer.tsx       输入栏 + ＋ ActionSheet + 待发送图片条
 src/mobile/ai/AiCorpusBar.tsx      资料条
+src/mobile/ai/AiSendSheet.tsx      本轮发送清单（每篇开关 / 全部发送 / 全部不发）
 src/mobile/ai/AiCorpusSheet.tsx    资料选择器
 src/mobile/ai/AiResourceSheet.tsx  （P2）资源选择器
 src/mobile/ai/AiMarkdown.tsx       最小 Markdown 渲染
@@ -403,7 +459,8 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 2. 选 2 篇文档：资料条、字数、预算条正确；超 60k 时有截断标记。
 3. 发送：原生流式可见、可停止、错误可读、重试可用。
 4. 结果：复制 / 存为新文档（正文与回答一致、无覆盖）/ 存为小记。
-5. 关闭页面再进：资料与历史为空（不持久化）。
+5. 组合场景：资料 = A+B 固定，本轮只发 A，从 B 挑图发送；下一轮继承「只发 A」；再打开 B ⇒ 资料块变化、缓存重建一次。
+6. 关闭页面再进：资料与历史为空（不持久化）。
 6. 关闭 AI 开关：任何路径不出网（抓包/日志双证）。
 7. 设备截图（adb exec-out screencap -p）+ 走查新增 1 屏 ai-home（23→24 屏，只跑该屏）。
 8. 门禁：tsc / vitest / 双端构建 / check:mobileui / ui-metrics / mobileLayers 基线只许按新增文件登记。
@@ -430,7 +487,7 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 
 | 类型 | 项 |
 |---|---|
-| 单测 | aiSession（发送/停止/资料增删/清空）· aiLimits+buildCorpus（顺序/截断/段落边界/未收录）· aiCorpus（块格式/markers/图片占位）· aiChatMessages（pin + 40 条 + system 保护）· aiNetwork（AI 开关 × 网络 × 云同步互不影响）· aiErrorText（码表）· AiMarkdown（不渲染 HTML、链接只放行 http(s)）· aiSuggestions |
+| 单测 | aiSession（发送/停止/资料增删/清空）· aiLimits+buildCorpus（顺序/截断/段落边界/未收录）· aiCorpus（块格式/markers/图片占位/清单为空不加块）· aiSendList（默认继承/关闭不移除/× 才移除）· aiCacheShape（资料块字节稳定、历史只追加、清单变化只影响本轮）· aiChatMessages（pin + 40 条 + system 保护）· aiNetwork（AI 开关 × 网络 × 云同步互不影响）· aiErrorText（码表）· AiMarkdown（不渲染 HTML、链接只放行 http(s)）· aiSuggestions |
 | 静态护栏 | mobileLayers.test.ts（新 css 登记基线）· mobileIndependence.test.ts（不 import 桌面样式/UI）· mobileStructure.test.ts（新文件放 src/mobile/ai/）· ui-metrics（无颜色/字号字面量）· lakeNativeContract/contractSurface（5 个方法登记）· CSP 测试不变（**不放开外网**） |
 | 设备门禁 | 走查 +1 屏 ai-home；check:mobilesnap 不含 AI 页（避免再动 6 态基线；6 态基线本来就陈旧待重烤） |
 | 手工 | 断网/弱网/后台切换/取消/超长文档/空文档/损坏正文/关闭开关/首次配置 |
@@ -442,7 +499,9 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 
 | # | 风险/未决 | 现状与建议 |
 |---|---|---|
-| R1 | 多文档全文 = token 成本 | 固定前缀 + 供应商前缀缓存；实测一轮 1.5 万字的实际计费后再决定是否降 60k |
+| R1 | 多文档全文 = token 成本 | 资料块冻结 + 历史 append-only ⇒ 稳定前缀命中缓存（约 1/10 价）。实测一轮 1.5 万字、连续 10 轮账单后再决定是否降 60k |
+| R9 | 改清单/改资料导致缓存失效 | 改一次只破一次，之后重新积累；P1 文案要写清“改动会重建缓存”，资料集则建议开新对话 |
+| R10 | 无历史压缩 ⇒ 长会话会撞 200k 上限 | P1 提示开新对话；P3 若做压缩，按 DSH 经验接受“从替换点起缓存失效” |
 | R2 | 切后台事件是否丢 | P0 探针第 4 条决定；默认「进后台即中止」 |
 | R3 | 大附件内存 | 单张原图 >10MB 直接拒绝并提示；压缩在 WebView 用 createImageBitmap+canvas（HEIC 可能不解码） |
 | R4 | 超长文档「整篇」期待 | 60k 是硬上限；P3 用 FTS 命中片段补，不做无限塞 |
@@ -456,3 +515,55 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 ## 16. 变更记录
 
 - 261022：立项与定稿（用户拍板 D1–D12；明确不做外部文件解析、不做文档内入口）。
+- 261023：新增 D13「每轮发送清单」，§9 首版为“每轮重建 + 历史剥离资料”。
+- 261023（二修，参照 DSH）：改为**资料集会话级冻结 + 固定前缀 + append-only 历史**；发送清单默认继承；图片留在历史；P1 不做压缩。附 DSH 出处与 KV Cache 影响表。
+- 261023（三修，用户定稿）：资料集冻结但**逐篇发送开关保留**（支持“资料 A+B、仅发 A、用 B 的图片”）；资源范围 = 会话资料集，与发送清单无关；会话内不再提供资料增删入口。
+
+---
+
+## 17. 实现状态（261023）
+
+### 已落地（可编译、门禁绿）
+
+| 层 | 文件 | 说明 |
+|---|---|---|
+| 原生通道 | `android/.../AiChatPlugin.kt` · `SecretBox.kt` | Keystore 存配置；HttpURLConnection + SSE；ai:delta / ai:error / ai:done；aiChat / aiCancel / aiTestConnection / get·saveSettings |
+| 桥接 | `src/mobile/native/aiChat.ts` · `src/mobile/bridge/ai.ts` | 插件封装 + 域方法（含 `aiReadDocText`）；契约名单 +5（`lakeNativeContract` 55/56） |
+| core | `aiCorpus.ts` · `aiNetwork.ts` · `aiChatMessages.ts`（从 electron 上收） · `aiErrors.aiErrorInfoFromCode` | 资料块拼装 / 出网判据 / 统一预算 / 错误码中文映射 |
+| UI | `src/mobile/ai/`（MobileAiPage / AiCorpusSheet / AiSendSheet / AiMarkdown / aiSession / aiSettings / ai.css） | 全屏页、资料条、发送清单、流式、停止、错误重试、结果三动作（复制 / 存为新文档 / 存为小记） |
+| 接线 | `MobileApp.tsx`（lazy + aiOpen） · `HomePage.tsx`（AI 键） · `SettingsDrawer.tsx`（AI 子页） · `main.tsx`（ai.css） · `tokens.css`（--mobile-z-page） | 入口/设置/层序 |
+| 门禁 | `mobileLayers`（ai.css 234/1） · `mobileIndependence` · `ui-metrics` · `check:mobileui` · tsc · vitest（368 文件 / 2554 例） | 全绿 |
+
+### 设备实测（emulator-5554 + 小米 MiMo，261023）
+
+**配置**：`baseUrl=https://api.xiaomimimo.com/v1`、`model=mimo-v2.6-flash`；Key 经 `aiSaveSettings` 写入后只读回 `sk-****ju4z`；`aiTestConnection` **ok（≈0.9s）**；**重启 App/模拟器后仍可读回并连通**（Keystore 持久化 ✓）。
+
+| 探针 | 结果 |
+|---|---|
+| 流式首字 | **≈1.2s**（短问答；长文创作首字略慢） |
+| 从发送到结束 | **≈1.8s**（71 字回答） |
+| 流式中止 | 点停止后正文冻结、显示「已停止」、按钮回到发送态；**之后的 delta 不再追加** |
+| 出网错误 | 不可达 baseUrl ⇒ `code=network`；坏 Key ⇒ `401` → `code=auth` +「Invalid API Key」（错误体已从 JSON 提取 message，不再把整段 JSON 塞进气泡） |
+| 带资料问答 | 选中 365 字文档 → 资料条/提示行/分隔行正确；回答**确实引用文档内容**并区分「资料集 vs 发送清单」 |
+| 切后台 | 后台 4s 再回前台：**未崩溃、流继续**（92 字 → 175 字）。**用户 261023 定稿：保留“继续流”**，不做后台中止 |
+| 离开 AI 页 | 流式期间点返回回首页、9s 后再进来：**完整回答还在**（会话存于模块级 store，订阅常驻）；「新对话」才清空；**App 进程结束 = 新会话** |
+
+截图（本地预览件 `docs/preview/`，未入库）：`ai-device-empty.png` · `ai-device-corpus.png` · `ai-device-corpus-chat.png` · `ai-device-streaming.png` · `ai-device-stopped.png` · `ai-device-error.png` · `ai-device-settings.png`。
+
+**探针期间发现并修掉的两处**（都不在 happy path 上）：
+
+1. **Kotlin：delta 为 JSON null 时混入字符串 "null"**（`optString` 会把 null 变 "null"）→ 改用 `opt` 判类型；修前回答正文会出现 `nullnull…` 前缀。
+2. **移动端「彻底删除」在原生批量事务里重复 BEGIN**（`d.transaction` 内再调 `executeSet` 默认 `transaction:true`）⇒ 回收站 purge 报 `Already in transaction`，**删除一直失败**。修法：`executeSet` 增加 `{transaction}` 选项，事务内批量下发传 `false`；补单测 `sqliteDb.batch.test.ts`。实测 4 篇探针文档已全部 purge，回收站清空。
+
+### 与设计的偏差 / 待办
+
+1. **P0 探针已跑通主路径**（见上表）；仍缺：超时（read timeout）与限流（429）文案、后台策略拍板。
+2. **图片仍是 P2**：附件 ActionSheet 已按最终形态接线，拍照/相册/资源三项点了给「即将支持」提示（不假装可用）。
+3. **资料集冻结的实现口径**：首条消息发出后禁止增删资料（提示「换资料请新开对话」）；发送清单可随时改（文案已写清缓存重建代价）。
+4. **结果「存为新文档」**用「新建空文档 + 写入纯文本段落」，没有走内核编辑器（P1 无编辑器挂载）；后续若要保留 Markdown 结构，再评估内核写入。
+5. **未接设备门禁**：走查 23 屏尚未加 `ai-home`（需要设备；P1 验收第 7 条）。
+6. **Markdown 表格不渲染**：模型偶尔输出表格，当前最小渲染器按下标原样显示 `|` 文本；要不要支持表格是 P2 的小决定。
+7. **后台行为与设计稿不一致**：设计写「进后台即中止」，实测是继续流；需要你拍板保留哪种（继续更像 ChatGPT，中止更省流量）。
+8. **会话连续性（261023 定稿）**：AI 页关闭不销毁会话（模块级 `aiChatStore` + 常驻 `onAiStream`），后台流继续、再进来可看完整回答；**App 进程结束才清空**（仍不持久化）。若要跨 App 重启保留，需要单独拍板"保留最近一次会话"。
+9. **Markdown 表格（261023 定稿）**：移动端最小渲染器补了 GFM 表格（表头/对齐/单元格，纯 React 节点、零依赖）；**桌面 `MarkdownView` 仍不支持表格**（其注释写明"表格与图片首版不做"）——若要对齐，桌面需另开一批。
+10. **未提交/未推送**：本批只落工作树，等用户验收后按仓库规则提交。

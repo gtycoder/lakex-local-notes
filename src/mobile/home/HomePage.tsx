@@ -74,6 +74,8 @@ export interface HomePageProps {
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
   onOpenSearch: () => void;
+  /** 打开 AI 全屏页（261023 P1）。 */
+  onOpenAi?: () => void;
   onCreateNotebook: () => void;
   /** 「空白文档」：在用户选中的笔记本下建文档并进编辑态（归属判定复用 MobileApp.createNoteInParent）。 */
   onCreateNote: (notebookId: string) => void;
@@ -118,7 +120,7 @@ function fmtRelative(iso: string): string {
 export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
-    onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged,
+    onOpenNote, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
@@ -740,7 +742,7 @@ export function HomePage(props: HomePageProps) {
         </div>
         <button className="mobile-bottom-bar__item" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
         <button className="mobile-bottom-bar__item" onClick={() => setCreateOpen(true)} aria-label="新建" title="新建" aria-haspopup="dialog" aria-expanded={createOpen}><Plus /></button>
-        <button className="mobile-bottom-bar__item" onClick={() => showToast("AI 助手尚未接入：已立项，接入后这里再定用法")} aria-label="AI 助手" title="AI 助手（未接入）"><Sparkles /></button>
+        <button className="mobile-bottom-bar__item" onClick={() => { if (onOpenAi) onOpenAi(); else showToast("AI 助手尚未接入"); }} aria-label="AI 助手" title="AI 助手"><Sparkles /></button>
       </nav>
       )}
 

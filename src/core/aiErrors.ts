@@ -9,7 +9,7 @@
 export type AiErrorKind =
   | "auth" | "forbidden" | "not_found" | "rate_limit" | "quota" | "server"
   | "network" | "timeout" | "aborted" | "context_length" | "content_filter"
-  | "bad_request" | "unknown";
+  | "bad_request" | "not_configured" | "unavailable" | "unknown";
 
 export interface AiErrorInfo {
   kind: AiErrorKind;
@@ -33,6 +33,8 @@ const MESSAGE: Record<AiErrorKind, string> = {
   context_length: "内容超过模型上下文上限，请减少选中文字或缩短提问",
   content_filter: "内容被供应商的安全策略拦截",
   bad_request: "请求参数有误（检查模型名与温度）",
+  not_configured: "未配置 API Key：到「设置 → AI 助手」填写",
+  unavailable: "当前平台不支持 AI 通道（需 Android 真机/模拟器）",
   unknown: "未知错误",
 };
 
@@ -49,6 +51,59 @@ const BY_NAME: Record<string, AiErrorKind> = {
   BadRequestError: "bad_request",
   UnprocessableEntityError: "bad_request",
 };
+
+/** 原生通道（Kotlin）回传的稳定错误码 → 归类。码表与 android/.../AiChatPlugin.kt 一致。 */
+const KIND_BY_CODE: Record<string, AiErrorKind> = {
+  auth: "auth",
+  forbidden: "forbidden",
+  not_found: "not_found",
+  rate_limit: "rate_limit",
+  quota: "quota",
+  server: "server",
+  network: "network",
+  timeout: "timeout",
+  aborted: "aborted",
+  context_length: "context_length",
+  content_filter: "content_filter",
+  bad_request: "bad_request",
+  not_configured: "not_configured",
+  unavailable: "unavailable",
+  unknown: "unknown",
+};
+
+export interface AiErrorCodeInput {
+  /** 原生侧归类后的稳定码（见 KIND_BY_CODE）。 */
+  code?: string;
+  /** HTTP 状态码（原生侧能拿到时一起给，用于兜底归类）。 */
+  status?: number;
+  /** 供应商原文/附加说明（会拼在中文后面；调用方保证不含 Key）。 */
+  detail?: string;
+}
+
+function kindFromStatus(status?: number): AiErrorKind | null {
+  if (status === undefined) return null;
+  if (status === 401) return "auth";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status === 408) return "timeout";
+  if (status === 429) return "rate_limit";
+  if (status >= 500) return "server";
+  if (status >= 400) return "bad_request";
+  return null;
+}
+
+/** 原生通道的错误 → 统一 { kind, message, retryable }（中文文案单一来源）。 */
+export function aiErrorInfoFromCode(input: AiErrorCodeInput): AiErrorInfo {
+  const kind: AiErrorKind =
+    (input.code ? KIND_BY_CODE[input.code] : undefined)
+    ?? kindFromStatus(input.status)
+    ?? "unknown";
+  const detail = typeof input.detail === "string" ? input.detail.trim() : "";
+  // 平台码本身已是完整中文（未配置 / 通道不可用），不再拼供应商原文，避免「…：未配置 API Key」重复。
+  const withDetail = detail && kind !== "not_configured" && kind !== "unavailable";
+  const message = withDetail ? MESSAGE[kind] + "：" + detail.slice(0, 200) : MESSAGE[kind];
+  return { kind, message, retryable: RETRYABLE.has(kind) };
+}
 
 function rec(v: unknown): Record<string, unknown> { return (v && typeof v === "object" ? v : {}) as Record<string, unknown>; }
 function str(v: unknown): string { return typeof v === "string" ? v : ""; }

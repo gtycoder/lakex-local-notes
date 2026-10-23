@@ -113,12 +113,12 @@ export class NativeSqliteDb implements MobileDb {
     });
   }
 
-  async executeSet(set: Array<{ statement: string; values: unknown[] }>): Promise<void> {
-    // 一次桥往返执行整批（transaction:true 由插件保证单事务）；逐条 run 的桥开销是移动端同步的大头。
+  async executeSet(set: Array<{ statement: string; values: unknown[] }>, options?: { transaction?: boolean }): Promise<void> {
+    // 一次桥往返执行整批；默认由插件开单事务，**已在事务内**时调用方传 transaction:false。
     await CapacitorSQLite.executeSet({
       database: this.database,
       set: set.map((s) => ({ statement: s.statement, values: s.values })),
-      transaction: true,
+      transaction: options?.transaction ?? true,
       readonly: false,
     });
   }

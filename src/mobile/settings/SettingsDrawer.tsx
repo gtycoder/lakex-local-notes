@@ -4,9 +4,12 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
-import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
+import { Group, Item, Seg, Block, NumField, Switch, TextField } from "../ui/settingsPrimitives";
+import { bridge } from "../bridge";
+import { loadAiEnabled, saveAiEnabled } from "../ai/aiSettings";
+import { aiErrorInfoFromCode } from "../../core/aiErrors";
 import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
 import { MANIFEST_VERSION } from "../../core/syncUtils";
@@ -30,7 +33,7 @@ export interface SettingsDrawerProps {
   onOpenNote?: (noteId: string) => void;
 }
 
-type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "ai" | "cache" | "trash" | "about";
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
   { key: "editor", label: "编辑器", icon: List },
@@ -38,6 +41,7 @@ const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] 
   { key: "history", label: "历史", icon: History },
   { key: "resources", label: "资源管理", icon: Images },
   { key: "s3", label: "同步设置", icon: Cloud },
+  { key: "ai", label: "AI 助手", icon: Sparkles },
   { key: "cache", label: "清理缓存", icon: HardDrive },
   { key: "trash", label: "回收站", icon: Trash },
   { key: "about", label: "关于", icon: Info },
@@ -105,6 +109,41 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       : "云同步已关闭：按纯本地空间处理，不能清理云端。";
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
+
+  // ── AI 助手（261023 P1）：开关与接入配置；Key 只在原生（Android Keystore），这里只显示尾号 ──
+  const [aiEnabled, setAiEnabled] = useState(() => loadAiEnabled());
+  const [aiMeta, setAiMeta] = useState<{ baseUrl: string; model: string; hasKey: boolean; keyTail: string; temperature: number } | null>(null);
+  const [aiForm, setAiForm] = useState({ baseUrl: "", model: "", apiKey: "", temperature: "" });
+  const [aiMsg, setAiMsg] = useState("");
+  useEffect(() => {
+    if (!open || view !== "ai") return;
+    void bridge.aiGetSettings().then((settings) => {
+      setAiMeta(settings);
+      setAiForm({ baseUrl: settings.baseUrl, model: settings.model, apiKey: "", temperature: String(settings.temperature) });
+    }).catch((error) => setAiMsg("读取 AI 设置失败：" + (error as Error).message));
+  }, [open, view]);
+  const saveAiSettingsForm = async (): Promise<void> => {
+    try {
+      const temperature = Number(aiForm.temperature);
+      await bridge.aiSaveSettings({
+        baseUrl: aiForm.baseUrl.trim(),
+        model: aiForm.model.trim(),
+        ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
+        ...(Number.isFinite(temperature) ? { temperature } : {}),
+      });
+      const settings = await bridge.aiGetSettings();
+      setAiMeta(settings);
+      setAiForm({ baseUrl: settings.baseUrl, model: settings.model, apiKey: "", temperature: String(settings.temperature) });
+      setAiMsg("已保存");
+    } catch (error) {
+      setAiMsg("保存失败：" + (error as Error).message);
+    }
+  };
+  const testAiConnection = async (): Promise<void> => {
+    setAiMsg("正在测试…");
+    const result = await bridge.aiTestConnection();
+    setAiMsg(result.ok ? "连通性正常" : aiErrorInfoFromCode({ code: result.code, status: result.status, detail: result.detail }).message);
+  };
 
 
   const pageRef = useRef<HTMLDivElement>(null);
@@ -189,6 +228,37 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
                 </Seg>
               </Item>
+            </Group>
+          )}
+
+          {view === "ai" && (
+            <Group title="AI 助手" icon={<Sparkles size={16} />}>
+              <Switch
+                itemId="ai-enabled"
+                name="AI 助手"
+                desc="开启后 AI 才会出网；与云同步完全无关（关同步也能用 AI）。"
+                checked={aiEnabled}
+                onChange={(checked) => { saveAiEnabled(checked); setAiEnabled(checked); }}
+              />
+              <Item itemId="ai-base-url" name="接口地址" desc="OpenAI 兼容端点（默认 DeepSeek）。">
+                <TextField label="接口地址" value={aiForm.baseUrl} placeholder="https://api.deepseek.com/v1" onSave={(v) => setAiForm((form) => ({ ...form, baseUrl: v }))} />
+              </Item>
+              <Item itemId="ai-model" name="模型">
+                <TextField label="模型" value={aiForm.model} placeholder="deepseek-chat" onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
+              </Item>
+              <Item itemId="ai-api-key" name="API Key" desc="保存在本机 Android Keystore，不进入网页层；只显示尾号。">
+                <TextField label="API Key" type="password" value={aiForm.apiKey} placeholder={aiMeta?.hasKey ? aiMeta.keyTail + "（留空＝不改）" : "sk-…"} onSave={(v) => setAiForm((form) => ({ ...form, apiKey: v }))} />
+              </Item>
+              <Item itemId="ai-temperature" name="温度">
+                <TextField label="温度" value={aiForm.temperature} placeholder="0.7" onSave={(v) => setAiForm((form) => ({ ...form, temperature: v }))} />
+              </Item>
+              <Block itemId="ai-actions" name="保存与连通性">
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--primary" onClick={() => void saveAiSettingsForm()}>保存</button>
+                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void testAiConnection()}>测试连通性</button>
+                </div>
+                {aiMsg && <div className="mb-form__desc">{aiMsg}</div>}
+              </Block>
             </Group>
           )}
 
