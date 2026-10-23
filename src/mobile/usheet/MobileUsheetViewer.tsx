@@ -118,6 +118,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const keyboardOpen = useSheetKeyboardOpen();
   /** 视图：冻结行列的本机状态（cycle：none → 首行 → 首列）。 */
   const [freezeState, setFreezeState] = useState<"none" | "row" | "col">("none");
+  /** 撤销/重做可用态（内核没有公开的 canUndo，这里按命令流维护近似深度）。 */
+  const [undoDepth, setUndoDepth] = useState(0);
+  const [redoDepth, setRedoDepth] = useState(0);
+  /** 撤销/重做回放期间抑制「新编辑」计数（内核回放的是原命令 id，会把 undo 误当新编辑）。 */
+  const historySuppressUntilRef = useRef(0);
   const {
     cellFormat: cellFmt,
     sheets,
@@ -132,7 +137,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const {
     toggleFormatPainter,
     openFindDialog,
-    runHistory,
     dispatchMenu,
   } = useSheetCommandActions({
     editing,
@@ -263,9 +267,12 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (!workbook || !range) return;
     const text = formulaValueRef.current;
     try {
-      if (text.startsWith("=")) range.setFormula(text);
-      else if (text.trim() !== "" && /^-?\d+(\.\d+)?$/.test(text.trim())) range.setValue(Number(text.trim()));
-      else range.setValue(text);
+      // 只写活动单元格（range.setValue 会对整个多选区域生效 ⇒ 粘贴/插入行后多选时会把文字复制到整片区域）。
+      const worksheet = workbook.getActiveSheet();
+      const target = worksheet.getRange(range.getRow(), range.getColumn());
+      if (text.startsWith("=")) target.setFormula(text);
+      else if (text.trim() !== "" && /^-?\d+(\.\d+)?$/.test(text.trim())) target.setValue(Number(text.trim()));
+      else target.setValue(text);
       refreshCellFmt();
       scheduleFlush();
     } catch (error) {
@@ -303,6 +310,43 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     focusFormulaInput();
   }, [dockPanel, keyboardOpen, closeDockPanel, setImeSuppressed, focusFormulaInput]);
 
+  /** 撤销/重做：无历史时给提示（撤销/重做按钮的可用态由 undoDepth/redoDepth 控制）。 */
+  const handleUndo = useCallback(() => {
+    if (undoDepth <= 0) { showToast("没有可撤销的操作"); return; }
+    // 乐观计数：内核没有公开 canUndo；回放期间的命令用抑制窗口过滤。
+    historySuppressUntilRef.current = Date.now() + 400;
+    setUndoDepth((value) => Math.max(0, value - 1));
+    setRedoDepth((value) => value + 1);
+    try { getUniverAPI()?.getActiveWorkbook()?.undo(); } catch { /* 忽略 */ }
+  }, [undoDepth, getUniverAPI]);
+
+  const handleRedo = useCallback(() => {
+    if (redoDepth <= 0) { showToast("没有可重做的操作"); return; }
+    historySuppressUntilRef.current = Date.now() + 400;
+    setUndoDepth((value) => value + 1);
+    setRedoDepth((value) => Math.max(0, value - 1));
+    try { getUniverAPI()?.getActiveWorkbook()?.redo(); } catch { /* 忽略 */ }
+  }, [redoDepth, getUniverAPI]);
+
+  /** 新建工作表（顶部行 ＋）：插入一张新表并切过去。 */
+  const onAddSheet = useCallback(() => {
+    const workbook = getUniverAPI()?.getActiveWorkbook();
+    if (!workbook) return;
+    try {
+      // 命名沿用 SheetN（默认 insertSheet() 会按 locale 叫「工作表N」，与已有 Sheet1 不一致）。
+      const names = workbook.getSheets().map((sheet) => sheet.getSheetName());
+      const maxIndex = names.reduce((max, name) => {
+        const match = /^Sheet(\d+)$/.exec(name);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, names.length);
+      const created = workbook.insertSheet("Sheet" + (maxIndex + 1));
+      selectSheet(created.getSheetId());
+    } catch (error) {
+      console.warn("[mobile-usheet] 新建工作表失败", error);
+      showToast("新建工作表失败");
+    }
+  }, [getUniverAPI, selectSheet]);
+
   const onCycleZoom = useCallback(() => {
     const levels = SHEET_ZOOM_LEVELS.map((level) => level.value * 100);
     const next = levels.find((level) => level > zoomPercent + 0.5) ?? levels[0];
@@ -315,10 +359,12 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       return;
     }
     if (id === "date") {
-      const range = getUniverAPI()?.getActiveWorkbook()?.getActiveRange();
-      if (!range) return;
+      const workbook = getUniverAPI()?.getActiveWorkbook();
+      const range = workbook?.getActiveRange();
+      if (!workbook || !range) return;
       try {
-        range.setValue(new Date().toLocaleDateString("zh-CN"));
+        // 同上：只写活动单元格，避免多选时整片被日期覆盖。
+        workbook.getActiveSheet().getRange(range.getRow(), range.getColumn()).setValue(new Date().toLocaleDateString("zh-CN"));
         refreshCellFmt();
         scheduleFlush();
       } catch { /* 忽略 */ }
@@ -445,6 +491,13 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         if (event?.id === "sheet.operation.set-format-painter") {
           setPainterStatus((event.params as { status?: number } | undefined)?.status ?? 0);
         }
+        // 撤销/重做可用态：undo/redo 自身反向计数，其余「非视图类命令」记一次可撤销。
+        // 撤销/重做回放期间不记「新编辑」（回放的是原命令 id）。
+        const commandId = String(event?.id ?? "");
+        if (Date.now() >= historySuppressUntilRef.current && commandId && !/selection|zoom|crosshair|format-painter|scroll|frozen/i.test(commandId)) {
+          setUndoDepth((value) => value + 1);
+          setRedoDepth(0);
+        }
         scheduleFlush();
         scheduleChromeRefresh();
       }));
@@ -525,7 +578,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           onOpenList={(anchor) => setSheetListAnchor(anchor)}
           onCycleZoom={onCycleZoom}
           onToggleCrosshair={toggleCrosshair}
-          onAddSheet={() => showToast("移动端暂未支持：新建工作表")}
+          onAddSheet={onAddSheet}
         />
       )}
       {!editing && ready && (
@@ -552,11 +605,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           <SheetDock
             open={dockPanel}
             keyboardOpen={keyboardOpen}
-            canUndo
-            canRedo
+            canUndo={undoDepth > 0}
+            canRedo={redoDepth > 0}
             onToggle={toggleDockPanel}
-            onUndo={() => runHistory("undo")}
-            onRedo={() => runHistory("redo")}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
             onKeyboard={onDockKeyboard}
           />
           {dockPanel && (

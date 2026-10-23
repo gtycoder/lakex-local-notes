@@ -24,7 +24,8 @@ const calls: {
   container: string | null;
   setValue: Array<unknown>;
   setFormula: string[];
-} = { created: 0, disposed: 0, editable: [], core: null, container: null, setValue: [], setFormula: [] };
+  insertSheet: number;
+} = { created: 0, disposed: 0, editable: [], core: null, container: null, setValue: [], setFormula: [], insertSheet: 0 };
 
 const range = {
   getCellStyleData: () => ({ bl: 0 }),
@@ -74,6 +75,7 @@ const workbook = {
   getActiveRange: () => range,
   undo: () => undefined,
   redo: () => undefined,
+  insertSheet: () => { calls.insertSheet += 1; return { getSheetId: () => "s2", getSheetName: () => "Sheet2" }; },
 };
 
 vi.mock("@univerjs/presets", () => ({
@@ -261,6 +263,15 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     panel = host.querySelector(".mb-usheet-panel")!;
     expect(panel.querySelector(".mb-usheet-back")?.textContent).toContain("数字格式");
     expect(panel.textContent).toContain("数字");
+    root.unmount();
+  });
+
+  it("顶部 ＋ = 新建工作表（走 facade insertSheet 并切过去）", async () => {
+    const { root, host } = await mount(true, true);
+    calls.insertSheet = 0;
+    await click(host, "新建工作表");
+    expect(calls.insertSheet).toBe(1);
+    // 新页签命名沿用 SheetN（不与已有 Sheet1 的「工作表N」混用）。
     root.unmount();
   });
 

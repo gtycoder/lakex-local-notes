@@ -103,7 +103,15 @@ function InsertPanel({ onInsert }: SheetDockPanelProps) {
         {SHEET_INSERT_TILES.map((tile) => {
           const Icon = TILE_ICONS[tile.id];
           return (
-            <button key={tile.id} type="button" className="mb-usheet-tile" aria-label={tile.label} onClick={() => onInsert(tile.id)}>
+            <button
+              key={tile.id}
+              type="button"
+              className={"mb-usheet-tile" + (tile.disabled ? " is-disabled" : "")}
+              aria-label={tile.label}
+              aria-disabled={tile.disabled ? "true" : undefined}
+              disabled={tile.disabled}
+              onClick={() => onInsert(tile.id)}
+            >
               <Icon size={22} />
               <span>{tile.label}</span>
             </button>
@@ -283,8 +291,8 @@ function MorePanel({ onMore }: SheetDockPanelProps) {
   );
 }
 
-function MoreSubPanel({ sub, onMoreSub, onSubBack }: SheetDockPanelProps & { sub: "numfmt" | "border" | "formula" }) {
-  const items = buildMoreSubMenu(sub);
+function MoreSubPanel({ sub, fmt, onMoreSub, onSubBack }: SheetDockPanelProps & { sub: "numfmt" | "border" | "formula" }) {
+  const items = buildMoreSubMenu(sub, fmt.numfmt);
   const title = sub === "numfmt" ? "数字格式" : sub === "border" ? "边框" : "公式";
   return (
     <>

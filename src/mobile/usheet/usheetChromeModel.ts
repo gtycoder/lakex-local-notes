@@ -46,14 +46,14 @@ export const SHEET_INSERTER_ACTIONS: ReadonlyArray<{ id: SheetInserterId; label:
 /** 白块（4 列）：与文档插入面板同款（图标在上、文字在下）。公式按用户要求放「更多」。 */
 export type SheetInsertTileId = "image" | "sign" | "link" | "date" | "attachment" | "chart" | "comment";
 
-export const SHEET_INSERT_TILES: ReadonlyArray<{ id: SheetInsertTileId; label: string; icon: string }> = [
-  { id: "image", label: "单元格图片", icon: "image" },
-  { id: "sign", label: "手写签名", icon: "sign" },
+export const SHEET_INSERT_TILES: ReadonlyArray<{ id: SheetInsertTileId; label: string; icon: string; disabled?: boolean }> = [
+  { id: "image", label: "单元格图片", icon: "image", disabled: true },
+  { id: "sign", label: "手写签名", icon: "sign", disabled: true },
   { id: "link", label: "链接", icon: "link" },
   { id: "date", label: "日期", icon: "date" },
-  { id: "attachment", label: "附件", icon: "attachment" },
-  { id: "chart", label: "图表", icon: "chart" },
-  { id: "comment", label: "批注", icon: "comment" },
+  { id: "attachment", label: "附件", icon: "attachment", disabled: true },
+  { id: "chart", label: "图表", icon: "chart", disabled: true },
+  { id: "comment", label: "批注", icon: "comment", disabled: true },
 ];
 
 /* ---------------- T 面板（文字格式） ---------------- */

@@ -28,6 +28,10 @@ describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock�
     expect(SHEET_INSERTER_ACTIONS.map((item) => item.id)).toEqual(["row-above", "row-below", "col-left", "col-right"]);
     expect(SHEET_INSERT_TILES.map((item) => item.id)).toEqual(["image", "sign", "link", "date", "attachment", "chart", "comment"]);
     expect(SHEET_INSERT_TILES.some((item) => item.label.includes("公式"))).toBe(false);
+    // 暂未支持的项置灰（不出现「点了没反应」的死按钮）；链接/日期可用。
+    expect(SHEET_INSERT_TILES.filter((item) => item.disabled).map((item) => item.id)).toEqual(["image", "sign", "attachment", "chart", "comment"]);
+    expect(SHEET_INSERT_TILES.find((item) => item.id === "link")?.disabled).toBeUndefined();
+    expect(SHEET_INSERT_TILES.find((item) => item.id === "date")?.disabled).toBeUndefined();
   });
 
   it("T 面板：B/I/S/U、水平/垂直对齐、字色 8、填充两行、字号 8 档", () => {

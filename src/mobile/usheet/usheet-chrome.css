@@ -339,6 +339,7 @@
 }
 .mb-usheet-tile svg { color: var(--lake-text-2); }
 .mb-usheet-tile:active { background: var(--lake-bg-hover); }
+.mb-usheet-tile.is-disabled { opacity: var(--lake-disabled-opacity, .45); }
 
 /* T 面板：文档 T 面板同款白条 */
 .mb-usheet-bar {
