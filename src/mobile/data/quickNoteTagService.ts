@@ -2,7 +2,7 @@
  * 移动端标签 ↔ 小记的唯一协调层：只有这里同时接触标签目录与关联表。
  * 删除/合并/同步在此编排；其它模块互不认识对方的表。
  */
-import { sameQuickNoteTagDirectory, type QuickNoteTag } from "../../core/quickNoteTags.js";
+import { normalizeQuickNoteTagIds, sameQuickNoteTagDirectory, type QuickNoteTag } from "../../core/quickNoteTags.js";
 import type { MobileDb } from "./sqliteDb.js";
 import {
   assertQuickNoteTagsExist,
@@ -17,7 +17,6 @@ import {
   applyRemoteQuickNoteTagLinks,
   listAllQuickNoteTagIds,
   listQuickNoteTagIds,
-  quickNoteTagCounts,
   quickNoteTagsUpdatedAt,
   removeQuickNoteTagLinksInTransaction,
   replaceQuickNoteTagLinksInTransaction,
@@ -77,18 +76,22 @@ export const mobileQuickNoteTags = {
     if (linksRemoved > 0 || !sameQuickNoteTagDirectory(before, merged)) await reindexAll(d);
     return merged;
   },
-  counts: (d: MobileDb) => quickNoteTagCounts(d),
   tagIds: (d: MobileDb, noteId: string) => listQuickNoteTagIds(d, noteId),
   allTagIds: (d: MobileDb) => listAllQuickNoteTagIds(d),
   tagsUpdatedAt: (d: MobileDb, noteId: string) => quickNoteTagsUpdatedAt(d, noteId),
-  setNoteTags: async (d: MobileDb, noteId: string, tagIds: readonly string[]) => {
+  setNoteTags: async (d: MobileDb, noteId: string, rawTagIds: readonly string[]) => {
+    // 标签存在性校验放在协调层：关系仓储不认识目录仓储（只接收已校验的 ID）。
+    const tagIds = normalizeQuickNoteTagIds(rawTagIds);
+    await assertQuickNoteTagsExist(d, tagIds);
     const next = await setQuickNoteTagLinks(d, noteId, tagIds);
     // 关系独立于正文：标签变了要单独强刷这条小记的搜索索引（否则按新标签搜不到）。
     await indexQuickNote(d, noteId, true);
     return next;
   },
   applyRemoteLinks: async (d: MobileDb, noteId: string, tagIds: readonly string[], updatedAt: string) => {
-    const changed = await applyRemoteQuickNoteTagLinks(d, noteId, tagIds, updatedAt);
+    // 删除标签 = 关系不应复活；墓碑集合由目录侧（协调层）提供，关系仓储仍不认识目录表。
+    const deleted = new Set((await listQuickNoteTags(d, { includeDeleted: true })).filter((tag) => tag.deletedAt).map((tag) => tag.id));
+    const changed = await applyRemoteQuickNoteTagLinks(d, noteId, tagIds, updatedAt, deleted);
     if (changed) await indexQuickNote(d, noteId, true);
     return changed;
   },

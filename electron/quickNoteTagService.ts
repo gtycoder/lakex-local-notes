@@ -3,7 +3,13 @@
  * 标签 store / 关联 store / 小记 store 互不认识对方的表；删除/合并/同步在此编排。
  */
 import type { DbLike } from "./dbLike.js";
-import { sameQuickNoteTagDirectory, type QuickNoteTag } from "../src/core/quickNoteTags.js";
+import { AppError } from "../src/core/storeErrors.js";
+import {
+  normalizeQuickNoteTagIds,
+  QuickNoteTagError,
+  sameQuickNoteTagDirectory,
+  type QuickNoteTag,
+} from "../src/core/quickNoteTags.js";
 import type { QuickNoteTagsStore } from "./quickNoteTagsStore.js";
 import type { QuickNoteTagLinksStore } from "./quickNoteTagLinksStore.js";
 
@@ -77,10 +83,6 @@ export class QuickNoteTagService {
     return merged;
   }
 
-  counts(): Map<string, number> {
-    return this.links.counts();
-  }
-
   tagIds(noteId: string): string[] {
     return this.links.listFor(noteId);
   }
@@ -93,15 +95,28 @@ export class QuickNoteTagService {
     return this.links.tagsUpdatedAt(noteId);
   }
 
-  setNoteTags(noteId: string, tagIds: readonly string[]): string[] {
+  setNoteTags(noteId: string, rawTagIds: readonly string[]): string[] {
+    // 标签存在性校验放在协调层：关系 store 不认识目录 store（只接收已校验的 ID）。
+    const tagIds = this.normalizeTagIds(rawTagIds);
+    this.tags.assertExist(tagIds);
     return this.links.setForNote(noteId, tagIds);
   }
 
   applyRemoteLinks(noteId: string, tagIds: readonly string[], tagsUpdatedAt: string): boolean {
-    return this.links.applyRemote(noteId, tagIds, tagsUpdatedAt);
+    // 删除标签 = 关系不应复活；墓碑集合由目录侧（协调层）提供，关系 store 仍不认识目录表。
+    const deleted = new Set(this.tags.list({ includeDeleted: true }).filter((tag) => tag.deletedAt).map((tag) => tag.id));
+    return this.links.applyRemote(noteId, tagIds, tagsUpdatedAt, deleted);
   }
 
   removeNoteLinks(noteId: string): void {
     this.links.removeNote(noteId);
+  }
+
+  private normalizeTagIds(rawTagIds: readonly string[]): string[] {
+    try { return normalizeQuickNoteTagIds(rawTagIds); }
+    catch (error) {
+      if (error instanceof QuickNoteTagError) throw new AppError("InvalidInput", error.message);
+      throw error;
+    }
   }
 }

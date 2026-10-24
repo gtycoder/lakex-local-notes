@@ -5,7 +5,6 @@
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { normalizeQuickNoteTagIds, QuickNoteTagError } from "../src/core/quickNoteTags.js";
-import type { QuickNoteTagsStore } from "./quickNoteTagsStore.js";
 
 interface LinkRow { note_id: string; tag_id: string }
 
@@ -13,7 +12,7 @@ export class QuickNoteTagLinksStore {
   /** 本次构造是否**新建**了关联表（用于升级后一次性重建标签搜索词，见 QuickNotesStore 构造器）。 */
   readonly schemaCreated: boolean;
 
-  constructor(private readonly db: DbLike, private readonly tags: QuickNoteTagsStore) {
+  constructor(private readonly db: DbLike) {
     this.schemaCreated = !this.db.prepare("SELECT 1 AS one FROM sqlite_master WHERE type='table' AND name='quick_note_tag_links'").get();
     this.ensureSchema();
   }
@@ -51,11 +50,6 @@ export class QuickNoteTagLinksStore {
     return byNote;
   }
 
-  counts(): Map<string, number> {
-    const rows = this.db.prepare("SELECT tag_id, COUNT(*) AS count FROM quick_note_tag_links GROUP BY tag_id").all() as Array<{ tag_id: string; count: number }>;
-    return new Map(rows.map((row) => [row.tag_id, Number(row.count)] as const));
-  }
-
   tagsUpdatedAt(noteId: string): string {
     const row = this.db.prepare("SELECT tags_updated_at FROM quick_notes WHERE id=?").get(noteId) as { tags_updated_at?: string } | undefined;
     return row?.tags_updated_at ?? "";
@@ -67,10 +61,9 @@ export class QuickNoteTagLinksStore {
     return new Map(rows.map((row) => [row.id, row.tags_updated_at] as const));
   }
 
-  /** 整组替换（标签关系 API）：去重、校验标签存在，并推进关系版本。 */
+  /** 整组替换（标签关系 API）：去重并推进关系版本；标签存在性由协调层校验。 */
   setForNote(noteId: string, rawTagIds: readonly string[], at = new Date().toISOString()): string[] {
     const tagIds = this.normalize(rawTagIds);
-    this.tags.assertExist(tagIds);
     const exists = this.db.prepare("SELECT 1 FROM quick_notes WHERE id=?").get(noteId);
     if (!exists) throw new AppError("NotFound", "小记不存在");
     this.db.transaction(() => {
@@ -118,12 +111,10 @@ export class QuickNoteTagLinksStore {
     return noteIds.length;
   }
 
-  /** 远端关系 LWW：远端版本更新才覆盖；已墓碑的标签不写入。返回是否采纳。 */
-  applyRemote(noteId: string, rawTagIds: readonly string[], remoteUpdatedAt: string): boolean {
+  /** 远端关系 LWW：远端版本更新才覆盖；`deletedTagIds` 由协调层传入（已墓碑的标签不写入）。返回是否采纳。 */
+  applyRemote(noteId: string, rawTagIds: readonly string[], remoteUpdatedAt: string, deletedTagIds: ReadonlySet<string>): boolean {
     if (!remoteUpdatedAt || remoteUpdatedAt <= this.tagsUpdatedAt(noteId)) return false;
-    // 删除标签 = 关系不应复活；目录随同一份清单先合并，所以本端已知的墓碑可以直接过滤。
-    const deleted = new Set((this.db.prepare("SELECT id FROM quick_note_tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>).map((row) => row.id));
-    const tagIds = this.normalize(rawTagIds).filter((tagId) => !deleted.has(tagId));
+    const tagIds = this.normalize(rawTagIds).filter((tagId) => !deletedTagIds.has(tagId));
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM quick_note_tag_links WHERE note_id=?").run(noteId);
       tagIds.forEach((tagId, index) => {

@@ -115,7 +115,7 @@ export class QuickNotesStore {
     this.db.pragma("foreign_keys = ON");
     this.migrate();
     this.tags = new QuickNoteTagsStore(this.db);
-    this.links = new QuickNoteTagLinksStore(this.db, this.tags);
+    this.links = new QuickNoteTagLinksStore(this.db);
     this.tagService = new QuickNoteTagService(this.db, this.tags, this.links, () => this.reindexAllSearchTags());
     this.queries = new QuickNotesQueries({
       db: this.db,

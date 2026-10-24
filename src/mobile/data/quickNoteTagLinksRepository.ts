@@ -3,7 +3,6 @@
  * 只写 `quick_note_tag_links` 与 `quick_notes.tags_updated_at`。
  */
 import { normalizeQuickNoteTagIds } from "../../core/quickNoteTags.js";
-import { assertQuickNoteTagsExist } from "./quickNoteTagsRepository.js";
 import type { MobileDb } from "./sqliteDb.js";
 
 type LinkRow = { note_id: string; tag_id: string };
@@ -25,11 +24,6 @@ export async function listAllQuickNoteTagIds(d: MobileDb): Promise<Map<string, s
   return byNote;
 }
 
-export async function quickNoteTagCounts(d: MobileDb): Promise<Map<string, number>> {
-  const rows = await d.prepare("SELECT tag_id, COUNT(*) AS count FROM quick_note_tag_links GROUP BY tag_id").all() as Array<{ tag_id: string; count: number }>;
-  return new Map(rows.map((row) => [String(row.tag_id), Number(row.count)] as const));
-}
-
 export async function quickNoteTagsUpdatedAt(d: MobileDb, noteId: string): Promise<string> {
   const row = await d.prepare("SELECT tags_updated_at FROM quick_notes WHERE id=?").get(noteId) as { tags_updated_at?: string } | undefined;
   return row?.tags_updated_at ?? "";
@@ -41,15 +35,9 @@ export async function listAllQuickNoteTagsUpdatedAt(d: MobileDb): Promise<Map<st
   return new Map(rows.map((row) => [String(row.id), String(row.tags_updated_at)] as const));
 }
 
-/** 已墓碑的标签 ID（关系合并时过滤：删除标签 = 关系不应复活）。 */
-async function deletedQuickNoteTagIds(d: MobileDb): Promise<Set<string>> {
-  const rows = await d.prepare("SELECT id FROM quick_note_tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>;
-  return new Set(rows.map((row) => String(row.id)));
-}
-
 export async function setQuickNoteTags(d: MobileDb, noteId: string, rawTagIds: readonly string[], at = new Date().toISOString()): Promise<string[]> {
   const tagIds = normalizeQuickNoteTagIds(rawTagIds);
-  await assertQuickNoteTagsExist(d, tagIds);
+  // 标签存在性由协调层校验（关系仓储不认识目录仓储）。
   const exists = await d.prepare("SELECT 1 FROM quick_notes WHERE id=?").get(noteId);
   if (!exists) throw new Error("小记不存在");
   await d.transaction(async () => {
@@ -91,11 +79,10 @@ export async function replaceQuickNoteTagLinksInTransaction(d: MobileDb, sourceI
   return noteIds.length;
 }
 
-/** 远端关系 LWW：远端版本更新才覆盖；已墓碑的标签不写入。 */
-export async function applyRemoteQuickNoteTagLinks(d: MobileDb, noteId: string, rawTagIds: readonly string[], remoteUpdatedAt: string): Promise<boolean> {
+/** 远端关系 LWW：远端版本更新才覆盖；`deletedTagIds` 由协调层传入（已墓碑的标签不写入）。 */
+export async function applyRemoteQuickNoteTagLinks(d: MobileDb, noteId: string, rawTagIds: readonly string[], remoteUpdatedAt: string, deletedTagIds: ReadonlySet<string>): Promise<boolean> {
   if (!remoteUpdatedAt || remoteUpdatedAt <= await quickNoteTagsUpdatedAt(d, noteId)) return false;
-  const deleted = await deletedQuickNoteTagIds(d);
-  const tagIds = normalizeQuickNoteTagIds(rawTagIds).filter((tagId) => !deleted.has(tagId));
+  const tagIds = normalizeQuickNoteTagIds(rawTagIds).filter((tagId) => !deletedTagIds.has(tagId));
   await d.transaction(async () => {
     await d.prepare("DELETE FROM quick_note_tag_links WHERE note_id=?").run(noteId);
     for (let index = 0; index < tagIds.length; index += 1) {
