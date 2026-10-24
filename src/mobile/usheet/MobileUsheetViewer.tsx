@@ -9,7 +9,7 @@
  * 正文仍是内部 JSON（`core/usheetDoc.ts`），绝不喂给 Lake 编辑器；本组件只负责 Univer ↔ JSON。
  * 分包、首次可见才挂载、图片 URL、主题跟随的约束与只读版保持一致。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createUniver, LocaleType, mergeLocales, type FUniver, type IPresetPlugin } from "@univerjs/presets";
 import type { FWorksheet } from "@univerjs/sheets/facade";
 import zhCN from "@univerjs/preset-sheets-core/locales/zh-CN";
@@ -42,7 +42,7 @@ import { SheetDockPanel } from "./SheetDockPanel";
 import { useKeyboard } from "../hooks/useKeyboard";
 import { capturePanelHeight, dockKbOffset } from "../editor/editSurfaceModel";
 import { showToast } from "../ui/toastBus";
-import { SHEET_ZOOM_LEVELS, type SheetDockId, type SheetMoreId } from "./usheetChromeModel";
+import { SHEET_PANEL_MIN_HEIGHT, SHEET_ZOOM_LEVELS, sheetPanelNeedsFade, type SheetDockId, type SheetMoreId } from "./usheetChromeModel";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
 import { UniverSheetsCrosshairHighlightMobileUIPlugin } from "@univerjs/sheets-crosshair-highlight";
 import { setUsheetCrosshair } from "../../features/usheet/usheetCrosshair";
@@ -120,11 +120,20 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   /** 更多面板内的下钻（数字格式 / 边框 / 公式）。 */
   const [dockSub, setDockSub] = useState<"numfmt" | "border" | "formula" | null>(null);
   const [sheetListAnchor, setSheetListAnchor] = useState<HTMLElement | null>(null);
+  /** 面板内容是否溢出：只由 DOM 实测（滚动余量）驱动，用于底部渐隐提示；放得下/已贴底时不提示。 */
+  const panelInnerRef = useRef<HTMLDivElement | null>(null);
+  const [panelFade, setPanelFade] = useState(false);
   /** 公式栏（主输入位）：受控文本（值在获焦/失焦时与单元格同步）。 */
   const [formulaValue, setFormulaValue] = useState("");
   const formulaValueRef = useRef("");
   formulaValueRef.current = formulaValue;
   const formulaInputFocusedRef = useRef(false);
+  /** 公式栏里有用户键入、还没写回单元格的内容：切格/失焦前先写回，绝不静默丢弃。 */
+  const formulaDirtyRef = useRef(false);
+  /** 公式栏内容所属的单元格（获焦/切格后更新）。写回必须用它 —— 切格时活动格已经变了。 */
+  const formulaAnchorRef = useRef<{ row: number; column: number } | null>(null);
+  /** 外部回显新格内容后把光标放到末尾（+1 信号；输入过程中不自作主张挪光标）。 */
+  const [formulaCaretEnd, setFormulaCaretEnd] = useState(0);
   const { base: shellHeight, innerHeight, offset: edgeToEdgeOffset, height: keyboardHeight, keyboardOpen } = useKeyboard();
   /** 历史最大键盘高：打开面板时若键盘已收起（height=0），也用它捕获面板高度，避免与真键盘高度差出「工具栏跳一下」。 */
   const keyboardHeightRef = useRef(0);
@@ -284,8 +293,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     setPanelClosing(false);
     setPanelClosingHold(false);
     setImeSuppressed(true);
-    // 面板高度 = 打开时捕获的键盘区高度（照文档 capturePanelHeight；优先用历史实测键盘高，下限 280）。
-    setPanelHeight(capturePanelHeight(Math.max(keyboardHeight, keyboardHeightRef.current)));
+    // 面板高度 = 打开时捕获的键盘区高度（照文档 capturePanelHeight；优先用历史实测键盘高）。
+    // 表格面板下限用 SHEET_PANEL_MIN_HEIGHT（280 放不下「更多」7 行 / T 面板 ⇒ 阅读→编辑→直接开面板会被裁）。
+    setPanelHeight(capturePanelHeight(Math.max(keyboardHeight, keyboardHeightRef.current), SHEET_PANEL_MIN_HEIGHT));
   }, [setImeSuppressed, keyboardOpen, keyboardHeight]);
 
   const toggleDockPanel = useCallback((id: SheetDockId) => {
@@ -293,33 +303,86 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     openDockPanel(id);
   }, [dockPanel, closeDockPanel, openDockPanel]);
 
-  /** 公式栏提交：写回当前活动单元格（= 公式 / 数字 / 文本），刷新 chrome 并触发自动保存。 */
-  const commitFormula = useCallback(() => {
-    const api = getUniverAPI();
-    const workbook = api?.getActiveWorkbook();
-    const range = workbook?.getActiveRange();
-    if (!workbook || !range) return;
-    const text = formulaValueRef.current;
+  /** 量一次面板的滚动余量（面板高度 = 键盘区，随设备/键盘高度变化）。 */
+  const measurePanelFade = useCallback(() => {
+    const inner = panelInnerRef.current;
+    if (!inner) return;
+    const next = sheetPanelNeedsFade({ scrollTop: inner.scrollTop, clientHeight: inner.clientHeight, scrollHeight: inner.scrollHeight });
+    setPanelFade((prev) => (prev === next ? prev : next));
+  }, []);
+
+  // 换面板 / 下钻时回到顶部并重新量；两帧 + 220ms 兜底覆盖「面板展开过渡」。放得下就不提示。
+  useLayoutEffect(() => {
+    if (!renderedPanel) {
+      setPanelFade(false);
+      return;
+    }
+    const inner = panelInnerRef.current;
+    if (inner) inner.scrollTop = 0;
+    const raf = window.requestAnimationFrame(measurePanelFade);
+    const timer = window.setTimeout(measurePanelFade, 220);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [renderedPanel, dockSub, panelOpen, measurePanelFade]);
+
+  /** 记住公式栏内容所属单元格（获焦/切格后调用）。 */
+  const captureFormulaAnchor = useCallback(() => {
+    const range = getUniverAPI()?.getActiveWorkbook()?.getActiveRange();
+    formulaAnchorRef.current = range ? { row: range.getRow(), column: range.getColumn() } : null;
+  }, [getUniverAPI]);
+
+  /** 把文本写到指定单元格（公式 / 数字 / 文本三分支；range.setValue 会对整片多选生效，所以只取单格）。 */
+  const writeFormulaText = useCallback((row: number, column: number, text: string) => {
+    const workbook = getUniverAPI()?.getActiveWorkbook();
+    if (!workbook) return;
     try {
-      // 只写活动单元格（range.setValue 会对整个多选区域生效 ⇒ 粘贴/插入行后多选时会把文字复制到整片区域）。
-      const worksheet = workbook.getActiveSheet();
-      const target = worksheet.getRange(range.getRow(), range.getColumn());
+      const target = workbook.getActiveSheet().getRange(row, column);
       if (text.startsWith("=")) target.setFormula(text);
       else if (text.trim() !== "" && /^-?\d+(\.\d+)?$/.test(text.trim())) target.setValue(Number(text.trim()));
       else target.setValue(text);
       refreshCellFmt();
       scheduleFlush();
     } catch (error) {
-      console.warn("[mobile-usheet] 公式栏提交失败", error);
+      console.warn("[mobile-usheet] 公式栏写回失败", error);
     }
-    // ✓ = 确认并收起键盘（原内核公式栏同语义）。
-    try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
   }, [getUniverAPI, refreshCellFmt, scheduleFlush]);
+
+  /** 公式栏提交（↵ / ✓）：写回当前活动单元格，然后收起键盘（原内核公式栏同语义）。 */
+  const commitFormula = useCallback(() => {
+    const workbook = getUniverAPI()?.getActiveWorkbook();
+    const range = workbook?.getActiveRange();
+    if (!workbook || !range) return;
+    formulaDirtyRef.current = false;
+    writeFormulaText(range.getRow(), range.getColumn(), formulaValueRef.current);
+    try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
+  }, [getUniverAPI, writeFormulaText]);
 
   const onFormulaFocus = useCallback(() => {
     formulaInputFocusedRef.current = true;
-    if (dockPanel) closeDockPanel(false);
-  }, [dockPanel, closeDockPanel]);
+    formulaDirtyRef.current = false;
+    captureFormulaAnchor();
+    // 面板 → 键盘必须走 restore 档（跟文档 dock 同款）：closingHold 期间面板内容保持到被键盘盖住，
+    // 且 kbOffset 随键盘高度渐变；用 hide 档会立刻卸面板 + 工具栏瞬移 = 用户看到的「跳动闪烁」。
+    if (dockPanel) closeDockPanel(true);
+  }, [dockPanel, closeDockPanel, captureFormulaAnchor]);
+
+  /** 公式栏键入：记脏（切格/失焦时先写回，不丢输入）。 */
+  const onFormulaChange = useCallback((value: string) => {
+    formulaDirtyRef.current = true;
+    setFormulaValue(value);
+  }, []);
+
+  /** 公式栏失焦（系统返回键 / 打开面板 / 点别处）：未写回的内容落到它所属单元格。 */
+  const onFormulaBlur = useCallback(() => {
+    if (formulaDirtyRef.current) {
+      const anchor = formulaAnchorRef.current;
+      if (anchor) writeFormulaText(anchor.row, anchor.column, formulaValueRef.current);
+      formulaDirtyRef.current = false;
+    }
+    formulaInputFocusedRef.current = false;
+  }, [writeFormulaText]);
 
   /** 键盘键：面板开着 = 收面板并放回键盘；键盘开着 = 收起；否则 = 展开。 */
   const onDockKeyboard = useCallback(() => {
@@ -434,11 +497,22 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     dispatchMenu(id);
   }, [dispatchMenu]);
 
-  // 选区变化（含点单元格）时同步公式栏；正在输入时不覆盖用户已键入的内容。
+  // 选区变化（含点单元格）时同步公式栏。键盘开着（公式栏有焦点）也**不 blur**：保持焦点 = 键盘不消失。
+  // 若用户有没写回的键入，先落到它所属的原单元格再切走（不静默丢弃输入）；随后回显新格并把光标放到末尾。
   useEffect(() => {
-    if (formulaInputFocusedRef.current) return;
+    if (!formulaInputFocusedRef.current) {
+      setFormulaValue(cellFmt.value);
+      return;
+    }
+    if (formulaDirtyRef.current) {
+      const anchor = formulaAnchorRef.current;
+      if (anchor) writeFormulaText(anchor.row, anchor.column, formulaValueRef.current);
+      formulaDirtyRef.current = false;
+    }
+    captureFormulaAnchor();
     setFormulaValue(cellFmt.value);
-  }, [cellFmt.address, cellFmt.value]);
+    setFormulaCaretEnd((value) => value + 1);
+  }, [cellFmt.address, cellFmt.value, writeFormulaText, captureFormulaAnchor]);
 
   // 键盘盖住面板区后，再把面板内容撤掉（文档 dock 的 closingHold 同款；避免「面板先消失、键盘还没升」的闪烁）。
   useEffect(() => {
@@ -484,25 +558,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         return;
       }
       lastTap = { at: now, x: event.clientX, y: event.clientY };
-    };
-    host.addEventListener("pointerdown", onPointerDown, true);
-    return () => host.removeEventListener("pointerdown", onPointerDown, true);
-  }, [editing]);
-
-  // 编辑态点网格（非公式栏）= 先结束公式栏输入 → 选区命令后能正常回显新单元格内容。
-  useEffect(() => {
-    if (!editing) return;
-    const host = hostRef.current;
-    if (!host) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.defaultPrevented) return; // 双击已拦截（焦点要交给公式栏）
-      const target = event.target as HTMLElement | null;
-      if (target?.closest?.(".mb-usheet-formula")) return;
-      const active = document.activeElement as HTMLElement | null;
-      if (active && active.classList.contains("mb-usheet-formula__input")) {
-        try { active.blur(); } catch { /* 忽略 */ }
-        formulaInputFocusedRef.current = false;
-      }
     };
     host.addEventListener("pointerdown", onPointerDown, true);
     return () => host.removeEventListener("pointerdown", onPointerDown, true);
@@ -669,14 +724,102 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     panelHeight,
     edgeToEdgeOffset,
   });
-  // 几何变化（展开多行 / 面板开合 / 键盘）后通知内核重算画布尺寸，否则 canvas 停在旧高度会留白。
+  /**
+   * 面板⇄键盘过渡的一帧补丁：useKeyboard 的 React 状态会比 WebView 视口晚一帧，
+   * 这一帧里 spacer 已按新视口收窄、--mb-usheet-kb-offset 还是旧值 ⇒ 根高 342→30→342、
+   * 公式栏/dock 瞬移（真机实测 ~50ms 的跳动闪烁）。用实时 innerHeight 直接写变量兜住这一帧。
+   */
+  const geometryRef = useRef({ panelOpen: false, closing: false, panelHeight: 0, shellHeight: 0, edge: 0 });
+  geometryRef.current = {
+    panelOpen: !!dockPanel,
+    closing: panelClosing,
+    panelHeight,
+    shellHeight,
+    edge: edgeToEdgeOffset,
+  };
+  const applyGeometry = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const g = geometryRef.current;
+    const offset = dockKbOffset({
+      panelOpen: g.panelOpen,
+      closing: g.closing,
+      innerHeight: window.innerHeight,
+      shellHeight: g.shellHeight,
+      panelHeight: g.panelHeight,
+      edgeToEdgeOffset: g.edge,
+    });
+    host.style.setProperty("--mb-usheet-kb-offset", offset + "px");
+  }, []);
+  // 每次渲染后（layout 阶段、paint 前）都用**实时** innerHeight 覆写变量：
+  // 不再由 React 内联 style 写旧值（那正是慢一帧、把刚写对的值又覆盖回去的来源）。
+  useLayoutEffect(() => {
+    if (editing) applyGeometry();
+  });
+  useLayoutEffect(() => {
+    if (!editing) return;
+    const onResize = () => applyGeometry();
+    window.addEventListener("resize", onResize, { passive: true });
+    window.visualViewport?.addEventListener("resize", onResize, { passive: true });
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+    };
+  }, [editing, applyGeometry]);
+  /**
+   * 选中区域被键盘/展开的工具栏盖住时才滚动，且只滚到"刚好露出来"：
+   * 用内核的 scroll-to-cell（目标已在视口内 = no-op；在视口外才最小滚动）。
+   * 不用 facade 的 scrollToCell —— 它把目标钉到视口左上角（用户反馈"不是固定在左上角"）。
+   */
+  const ensureActiveCellVisible = useCallback(() => {
+    const api = getUniverAPI();
+    const workbook = api?.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    const range = workbook?.getActiveRange();
+    if (!api || !workbook || !sheet || !range) return;
+    try {
+      void api.executeCommand("sheet.command.scroll-to-cell", {
+        unitId: workbook.getId(),
+        range: {
+          startRow: range.getRow(),
+          endRow: range.getLastRow(),
+          startColumn: range.getColumn(),
+          endColumn: range.getLastColumn(),
+        },
+        forceTop: false,
+        forceLeft: false,
+      });
+    } catch { /* 忽略 */ }
+  }, [getUniverAPI]);
+
+  // 几何变化（展开多行 / 面板开合 / 键盘）后让内核按**真实可视区**重算：
+  // Univer 挂载时把自己的根 div 写成固定 px 高（654），键盘弹起后它不会跟随容器缩到 342；
+  // 必须把它改回 100%，否则内核以为视口还很高（选中格判定"已可见"、实际被工具栏盖住）。
   useEffect(() => {
     if (!ready) return;
+    const fitUniverViewport = () => {
+      const wrapper = hostRef.current?.querySelector<HTMLElement>(".mobile-usheet-root > .univer-relative");
+      if (wrapper) wrapper.style.height = "100%";
+    };
+    fitUniverViewport();
+    let settle = 0;
     const raf = window.requestAnimationFrame(() => {
+      fitUniverViewport();
       window.dispatchEvent(new Event("resize"));
+      settle = window.setTimeout(ensureActiveCellVisible, 120);
     });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      if (settle) window.clearTimeout(settle);
+    };
+  }, [ready, kbOffset, formulaExpanded, keyboardOpen, innerHeight, ensureActiveCellVisible]);
+
+  // 选区变化（点格/命令改选区）后把活动格滚进可视区；只在地址变化时滚，不打断用户自由滚动。
+  useEffect(() => {
+    if (!ready || !editing) return;
+    const raf = window.requestAnimationFrame(ensureActiveCellVisible);
     return () => window.cancelAnimationFrame(raf);
-  }, [ready, kbOffset, formulaExpanded]);
+  }, [ready, editing, cellFmt.address, ensureActiveCellVisible]);
 
   // 退出编辑态时收起面板（避免面板挂在阅读态上）。
   useEffect(() => {
@@ -697,7 +840,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       style={
         editing
           ? {
-              ["--mb-usheet-kb-offset" as string]: kbOffset + "px",
+              // --mb-usheet-kb-offset 由 applyGeometry 在 layout 阶段按实时 innerHeight 写入（见上）。
               ["--mb-usheet-formula-h" as string]: (formulaExpanded ? 148 : 44) + "px",
             }
           : undefined
@@ -733,11 +876,12 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
             address={cellFmt.address}
             value={formulaValue}
             expanded={formulaExpanded}
-            onChange={setFormulaValue}
+            caretEndSignal={formulaCaretEnd}
+            onChange={onFormulaChange}
             onConfirm={commitFormula}
             onToggleExpand={() => setFormulaExpanded((value) => !value)}
             onFocusInput={onFormulaFocus}
-            onBlurInput={() => { formulaInputFocusedRef.current = false; }}
+            onBlurInput={onFormulaBlur}
           />
           <SheetDock
             open={dockPanel}
@@ -755,10 +899,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
               data-kind={renderedPanel}
               data-open={panelOpen || panelClosingHold ? "1" : "0"}
               data-closing={panelClosing ? "1" : undefined}
+              data-scrollable={panelFade ? "1" : undefined}
               style={{ ["--mb-usheet-panel-h" as string]: panelHeight + "px" }}
               aria-hidden={!panelOpen}
             >
-              <div className="mb-usheet-panel__inner">
+              <div className="mb-usheet-panel__inner" ref={panelInnerRef} onScroll={measurePanelFade}>
                 <SheetDockPanel
               open={renderedPanel}
               fmt={cellFmt}

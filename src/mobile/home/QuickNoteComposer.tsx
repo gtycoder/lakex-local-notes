@@ -44,12 +44,12 @@ import { emptyLakeBody } from "../../core/lakeDocForm.js";
 import { extractAssetRefs, mediaKindOfFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { isQuickNoteImageMime, quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
-import { addQuickNoteTag, removeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags.js";
+import { addQuickNoteTagId, removeQuickNoteTagId, type QuickNoteTagSummary } from "../../core/quickNoteTags.js";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 
 export interface QuickNoteComposerProps {
   /** 编辑目标（已有小记 id + 正文）；null = 新建 */
-  editNote?: { id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tags?: string[] } | null;
+  editNote?: { id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tagIds?: string[] } | null;
   /** 已有标签候选（从全部有效小记派生，随首页数据刷新）。 */
   tagOptions: readonly QuickNoteTagSummary[];
   /**
@@ -119,7 +119,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
   const cardRef = useRef<HTMLDivElement | null>(null);
   useCaretIntoView(cardRef, true);
   const [text, setText] = useState(editNote?.text ?? "");
-  const [tags, setTags] = useState<string[]>(editNote?.tags ?? []);
+  const [tagIds, setTagIds] = useState<string[]>(editNote?.tagIds ?? []);
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   /** 「保存并同步」的网络阶段（与保存分开：保存是本地写、同步是维护域网络操作）。 */
@@ -161,7 +161,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
             () => crypto.randomUUID(),
           ));
         setText(saved.text);
-        setTags(saved.tags ?? []);
+        setTagIds(saved.tagIds ?? []);
       } catch { /* 读草稿失败不阻断输入 */ }
       finally { if (alive) setDraftReady(true); }
     })();
@@ -176,10 +176,10 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
       let body = "";
       try { body = stripAssetAccessToken(apiRef.current?.getBody() ?? ""); } catch { body = ""; }
       if (!text.trim() && !body.trim()) return;
-      void bridge.saveQuickNoteDraft({ id: noteId, text, body, tags });
+      void bridge.saveQuickNoteDraft({ id: noteId, text, body, tagIds });
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [draft, draftReady, text, noteId, tags]);
+  }, [draft, draftReady, text, noteId, tagIds]);
 
   /**
    * 新建小记**自动聚焦**（用户 261013 定稿：两条路都要 —— 快捷 capture 与页面「新建小记」）。
@@ -322,7 +322,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
         setSaving(false);
         return;
       }
-      await bridge.saveQuickNoteContent(noteId, { text: plain, body, images, tags });
+      await bridge.saveQuickNoteContent(noteId, { text: plain, body, images, tagIds });
       // 提交成功 ⇒ 草稿使命结束（不清会让下次 capture 恢复出已保存的内容）
       committedRef.current = true;
       if (draft) await bridge.clearQuickNoteDraft().catch(() => undefined);
@@ -394,14 +394,17 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
         <button type="button" className="qn-tag-add" onClick={() => setTagSheetOpen(true)} disabled={saving || syncing}>
           <Plus size={13} /><span>添加标签</span>
         </button>
-        {tags.map((tag) => (
-          <span className="qn-tag is-editable" key={tag}>
-            <span className="mb-ellipsis">{tag}</span>
-            <button type="button" className="qn-tag__remove" aria-label={`移除标签 ${tag}`} onClick={() => setTags(removeQuickNoteTag(tags, tag))} disabled={saving || syncing}>
-              <X size={13} />
-            </button>
-          </span>
-        ))}
+        {tagIds.map((tagId) => {
+          const name = tagOptions.find((option) => option.id === tagId)?.name ?? "已删除标签";
+          return (
+            <span className="qn-tag is-editable" key={tagId}>
+              <span className="mb-ellipsis">{name}</span>
+              <button type="button" className="qn-tag__remove" aria-label={`移除标签 ${name}`} onClick={() => setTagIds(removeQuickNoteTagId(tagIds, tagId))} disabled={saving || syncing}>
+                <X size={13} />
+              </button>
+            </span>
+          );
+        })}
       </div>
       <footer className="mobile-qn-actions">
         {/* 这里原有一行写死的「工具条：…」清单：工具条条目一变它就变成假话（本轮已发生两次）。
@@ -436,8 +439,9 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
       <MobileQuickNoteTagSheet
         open={tagSheetOpen}
         options={tagOptions}
-        selected={tags}
-        onAdd={(tag) => setTags(addQuickNoteTag(tags, tag))}
+        selected={tagIds}
+        onAdd={(tagId) => setTagIds(addQuickNoteTagId(tagIds, tagId))}
+        onCreate={async (name) => (await bridge.createQuickNoteTag(name)).id}
         onClose={() => setTagSheetOpen(false)}
       />
     </div>

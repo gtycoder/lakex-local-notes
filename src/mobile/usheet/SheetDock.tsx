@@ -4,6 +4,7 @@
  * - 单行图标工具条，贴在键盘上沿；一级按钮顺序 ＝ ＋插入 | T | 数据 | 视图 | ⋯更多 | 撤销 | 重做，右侧固定键盘。
  * - 一级按钮展开面板时**变成 ✕**（同文档 .med-toggle.med-open），再点 ✕ = 收面板并放回键盘。
  * - 键盘键两态：键盘开着 = 键盘+斜线（收起）；键盘收起/面板开着 = 键盘（展开）。
+ * - 261024：A 批只改面板样式；dock 不新增确认键（确认由公式栏 ↵ 承担，用户要求去掉重复的 ✓）。
  */
 import { Filter, Keyboard, KeyboardOff, LayoutGrid, MoreHorizontal, Plus, Redo2, Type, Undo2, X } from "lucide-react";
 import { SHEET_DOCK_ITEMS, type SheetDockId } from "./usheetChromeModel";

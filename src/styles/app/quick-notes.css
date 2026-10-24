@@ -462,3 +462,41 @@
 .quick-note-tag-picker__section { margin-top: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-tag-picker__list { display: flex; flex-direction: column; gap: 1px; max-height: 220px; overflow-y: auto; }
 .quick-note-tag-picker__empty { padding: 8px 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+
+/* 标签管理（261024）：标签表是唯一来源；行 = 拖拽柄 + 置顶 + 名称 + 计数 + 动作 */
+.quick-note-tag--manage { color: var(--lake-text-3); }
+.quick-note-tag-manager { width: min(560px, calc(100vw - 48px)); }
+.quick-note-tag-manager__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.quick-note-tag-manager__head h3 { margin: 0; font-size: var(--lake-font-size-title); }
+.quick-note-tag-manager__search { display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 8px; color: var(--lake-text-3); }
+.quick-note-tag-manager__list { display: flex; flex-direction: column; gap: 2px; max-height: min(52vh, 420px); overflow-y: auto; }
+.quick-note-tag-manager__row { display: flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 4px; border-radius: var(--lake-radius-2xs); }
+.quick-note-tag-manager__row:hover { background: var(--lake-bg-hover); }
+.quick-note-tag-manager__row.is-pinned .quick-note-tag-manager__name { font-weight: 600; }
+.quick-note-tag-manager__grip { display: flex; color: var(--lake-text-4); cursor: grab; }
+.quick-note-tag-manager__name { flex: 1 1 auto; min-width: 0; font-size: var(--lake-font-size-small); }
+.quick-note-tag-manager__rename { flex: 1 1 auto; min-width: 0; height: 26px; }
+.quick-note-tag-manager__count { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; }
+.quick-note-tag-manager__danger:hover { color: var(--lake-status-error); }
+.quick-note-tag-manager__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.quick-note-tag-manager__hint { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.quick-note-tag-manager__merge p { margin: 0 0 8px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.quick-note-tag-manager__merge .ln-row { width: 100%; }
+
+/* 快捷筛选对话框（261024）：时间档 / 自定日期 / 类型 / 标签包含与排除 */
+.quick-note-filter-dialog { width: min(520px, calc(100vw - 48px)); }
+.quick-note-filter-dialog__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.quick-note-filter-dialog__head h3 { margin: 0; font-size: var(--lake-font-size-title); }
+.quick-note-filter-dialog__section { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--lake-border-2); }
+.quick-note-filter-dialog__label { color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: 500; }
+.quick-note-filter-dialog__sublabel { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.quick-note-filter-dialog__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-note-filter-dialog__chips .quick-note-tag { display: inline-flex; align-items: center; gap: 4px; }
+.quick-note-filter-dialog__dates { display: flex; gap: 8px; }
+.quick-note-filter-dialog__dates .ln-input { flex: 1 1 0; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.quick-note-filter-dialog__dates .ln-input > span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.quick-note-filter-dialog__empty { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.quick-note-filter-dialog__minus { color: var(--lake-text-3); }
+.quick-note-tag--exclude.is-selected { color: var(--lake-status-error); border-color: var(--lake-status-error); }
+.quick-note-filter-dialog__footer { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--lake-border-2); }
+.quick-note-filter-dialog__hint { flex: 1 1 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }

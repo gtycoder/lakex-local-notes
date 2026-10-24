@@ -15,6 +15,7 @@ interface SaveQuickNoteInput {
   draftId: string;
   stagedImageIds: string[];
   retainedImageIds?: string[];
+  tagIds?: string[];
 }
 
 export function registerQuickNotesIpc(
@@ -30,6 +31,13 @@ export function registerQuickNotesIpc(
   ipc.handle("create_quick_note", (input: SaveQuickNoteInput) => quickNotes.createQuickNote(input));
   ipc.handle("update_quick_note", (id: string, input: SaveQuickNoteInput) => quickNotes.updateQuickNote(id, input));
   ipc.handle("delete_quick_note", (id: string) => quickNotes.deleteQuickNote(id));
+  // ---- 标签目录（261024）：表是唯一来源，随小记 Manifest 同步 ----
+  ipc.handle("list_quick_note_tags", () => quickNotes.listQuickNoteTags());
+  ipc.handle("create_quick_note_tag", (name: string) => quickNotes.createQuickNoteTag(name));
+  ipc.handle("update_quick_note_tag", (id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => quickNotes.updateQuickNoteTag(id, patch));
+  ipc.handle("reorder_quick_note_tags", (ids: string[]) => quickNotes.reorderQuickNoteTags(ids));
+  ipc.handle("merge_quick_note_tags", (sourceId: string, targetId: string) => quickNotes.mergeQuickNoteTags(sourceId, targetId));
+  ipc.handle("delete_quick_note_tag", (id: string) => quickNotes.deleteQuickNoteTag(id));
   ipc.handle("list_quick_note_trash", () => quickNotes.listQuickNoteTrash());
   ipc.handle("restore_quick_note", (id: string) => quickNotes.restoreQuickNote(id));
   ipc.handle("purge_quick_note", (id: string) => quickNotes.purgeQuickNote(id));

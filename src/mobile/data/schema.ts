@@ -27,7 +27,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 4; // 261023：+ai_conversations（AI 历史对话索引，设备本地）
+export const MOBILE_SCHEMA_VERSION = 5; // 261024：+quick_note_tags（小记标签目录，随小记 Manifest 同步）；261023：+ai_conversations（AI 历史对话索引，设备本地）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -112,8 +112,19 @@ export function baseSchemaStatements(): SchemaStatement[] {
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT,
     tags_json TEXT NOT NULL DEFAULT '[]',
+    tag_ids_json TEXT NOT NULL DEFAULT '[]',
     first_image TEXT,
     list_metadata_version INTEGER NOT NULL DEFAULT 0
+  )`);
+  // 标签目录（261024）：名称/排序/置顶/墓碑；小记正文只存 tagIds。
+  push(`CREATE TABLE IF NOT EXISTS quick_note_tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
   )`);
   push(`CREATE TABLE IF NOT EXISTS sync_base (
     note_id TEXT PRIMARY KEY,

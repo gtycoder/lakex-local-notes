@@ -35,9 +35,11 @@ export interface QuickNoteDocumentParts {
   content: StoredQuickNoteContent;
   /** 图片 URL 解析（桌面/移动端统一 canonical assetServer URL）。 */
   imageUrl(noteId: string, filename: string): string;
+  /** 标签 ID → 展示名（来自标签表；墓碑/未知 ID 由调用方过滤）。 */
+  tagNames(tagIds: readonly string[]): string[];
 }
 
-/** 行 → 小记文档（共享映射；content/images 由调用方注入）。 */
+/** 行 → 小记文档（共享映射；content/images/tagNames 由调用方注入）。 */
 export function mapQuickNoteRow(row: QuickNoteRowShape, parts: QuickNoteDocumentParts): QuickNoteDocument {
   const images = parts.content.images.map((image) => ({ ...image, url: parts.imageUrl(row.id, image.filename) }));
   return {
@@ -49,7 +51,14 @@ export function mapQuickNoteRow(row: QuickNoteRowShape, parts: QuickNoteDocument
     contentHash: row.content_hash,
     syncState: row.sync_state,
     isConflict: !!row.is_conflict,
-    content: { version: parts.content.version, text: parts.content.text, body: parts.content.body, images, tags: [...parts.content.tags] },
+    content: {
+      version: parts.content.version,
+      text: parts.content.text,
+      body: parts.content.body,
+      images,
+      tagIds: [...parts.content.tagIds],
+      tags: parts.tagNames(parts.content.tagIds),
+    },
   };
 }
 

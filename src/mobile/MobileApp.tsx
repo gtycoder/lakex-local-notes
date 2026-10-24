@@ -18,7 +18,7 @@ import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelP
 import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
 import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
-import { buildQuickNoteTagIndex } from "../core/quickNoteTags.js";
+import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, type QuickNoteTag } from "../core/quickNoteTags.js";
 
 /**
  * 小记写作区（懒加载）：261010 起 **深链/长按那条 capture 路径与工作台共用同一个内核卡片**
@@ -107,13 +107,19 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   // 用 HomePage 导出的 MobileQuickNote：这条链（仓储 → bridge → 列表 → 卡片）字段必须一路一致，
   //  261015 加 createdAt 时就因为这里另写了一份内联类型而漏改（tsc 当场抓到）。
   const [quickNotes, setQuickNotes] = useState<MobileQuickNote[]>([]);
-  const quickTagOptions = useMemo(() => buildQuickNoteTagIndex(quickNotes, (note) => note.tags).tags, [quickNotes]);
+  const [tagDirectory, setTagDirectory] = useState<QuickNoteTag[]>([]);
+  /** 写作区用完整目录（含 0 条小记的新标签）；列表标签条只用有计数的索引。 */
+  const quickTagOptions = useMemo(
+    () => buildQuickNoteTagOptions(tagDirectory, buildQuickNoteTagIndex(quickNotes, tagDirectory, (note) => note.tagIds).tags),
+    [quickNotes, tagDirectory],
+  );
 
   const refreshAll = useCallback(async () => {
-    const snapshot = await bridge.getHomeSnapshot();
+    const [snapshot, tags] = await Promise.all([bridge.getHomeSnapshot(), bridge.listQuickNoteTags()]);
     setTreeNodes(snapshot.treeNodes);
     setNotes(snapshot.notes);
     setQuickNotes(snapshot.quickNotes.items);
+    setTagDirectory(tags);
   }, []);
 
   /**
@@ -408,6 +414,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           notebooks={notebooks}
           notes={notes}
           quickNotes={quickNotes}
+          tagDirectory={tagDirectory}
           docCounts={docCounts}
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}

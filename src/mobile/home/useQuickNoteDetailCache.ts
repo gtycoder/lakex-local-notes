@@ -6,6 +6,7 @@ export interface QuickNoteDetail {
   body: string;
   images: StoredQuickNoteImage[];
   tags: string[];
+  tagIds: string[];
   firstImage: string | null;
   updatedAt: string;
 }
@@ -18,7 +19,8 @@ export interface QuickNoteDetailSource {
 
 export interface QuickNoteDetailReader {
   (id: string): Promise<{
-    content: { body: string; images: StoredQuickNoteImage[]; tags: string[] };
+    content: { body: string; images: StoredQuickNoteImage[]; tagIds: string[] };
+    tags: string[];
     updatedAt: string;
   } | null>;
 }
@@ -49,7 +51,8 @@ export function useQuickNoteDetailCache(
       next.set(id, {
         body: typeof full.content.body === "string" ? full.content.body : "",
         images,
-        tags: Array.isArray(full.content.tags) ? full.content.tags : [],
+        tags: Array.isArray(full.tags) ? full.tags : [],
+        tagIds: Array.isArray(full.content.tagIds) ? full.content.tagIds : [],
         firstImage: images[0]?.filename ?? null,
         updatedAt: full.updatedAt,
       });

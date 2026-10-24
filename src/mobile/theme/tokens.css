@@ -31,6 +31,10 @@
   --lake-note-ref-icon-accent: #73adff;        /* 高亮短线（蓝） */
   --lake-note-ref-icon-link: #20ba77;          /* 链接勾（绿） */
   --lake-note-ref-icon-knockout: #ffffff;      /* 链接前的挖空描边（= 底框色） */
+  /* 「加密文本」卡插入面板图标（几何在 src/features/editor/lockedTextIcon.tsx；浅色原值）。 */
+  --lake-locked-text-icon-tile: #ffffff;
+  --lake-locked-text-icon-tile-border: #e6e8e7;
+  --lake-locked-text-icon-ink: #2b2d2c;
   /* 间距 */
   --lake-space-xxs: 2px;
   --lake-space-xs: 4px;

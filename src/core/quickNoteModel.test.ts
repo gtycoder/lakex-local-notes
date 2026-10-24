@@ -3,6 +3,7 @@ import { QuickNoteModelError } from "./quickNoteModel";
 import {
   MAX_QUICK_NOTE_TEXT_LENGTH,
   buildQuickNoteImageFiles,
+  migrateLegacyQuickNoteContent,
   normalizeQuickNoteContent,
   parseQuickNoteContent,
   previewQuickNote,
@@ -11,6 +12,7 @@ import {
   validateQuickNoteImageBytes,
   validateQuickNoteImageDimensions,
 } from "./quickNoteModel";
+import { quickNoteTagId } from "./quickNoteTags";
 import { MAX_IMAGE_BYTES } from "./storeLimits";
 
 const image = {
@@ -24,38 +26,49 @@ const image = {
 };
 
 describe("quickNoteModel", () => {
+  const tagA = quickNoteTagId("灵感");
+  const tagB = quickNoteTagId("待办");
+
   it("normalizes valid content and rejects empty/oversized text", () => {
-    expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 2, text: " hello ", body: "<p><br></p>", images: [], tags: [] });
+    expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 3, text: " hello ", body: "<p><br></p>", images: [], tagIds: [] });
     expect(() => normalizeQuickNoteContent("", "<p><br></p>", [])).toThrow("请至少记录文字、一张图片或一个附件");
     expect(() => normalizeQuickNoteContent("x".repeat(MAX_QUICK_NOTE_TEXT_LENGTH + 1), "", [])).toThrow("小记正文过长");
   });
 
   it("validates image metadata, duplicate IDs, and unsafe paths", () => {
-    expect(validateQuickNoteContent({ version: 2, text: "", body: "<p><br></p>", images: [image] }).images[0]).toEqual(image);
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, id: "../bad" }] })).toThrow("小记资源元数据无效");
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [image, image] })).toThrow("小记资源元数据无效");
+    expect(validateQuickNoteContent({ version: 3, text: "", body: "<p><br></p>", images: [image], tagIds: [] }).images[0]).toEqual(image);
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, id: "../bad" }], tagIds: [] })).toThrow("小记资源元数据无效");
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [image, image], tagIds: [] })).toThrow("小记资源元数据无效");
     // 图片 MIME 白名单仍然生效（不在白名单里 ⇒ 只能按附件形态存：宽高必须为 null）
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "text/plain" }] })).toThrow("小记资源元数据无效");
-    expect(validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "application/pdf", width: null, height: null }] }).images[0])
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "text/plain" }], tagIds: [] })).toThrow("小记资源元数据无效");
+    expect(validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "application/pdf", width: null, height: null }], tagIds: [] }).images[0])
       .toMatchObject({ mimeType: "application/pdf", width: null, height: null });
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "not a mime" }] })).toThrow("小记资源元数据无效");
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "not a mime" }], tagIds: [] })).toThrow("小记资源元数据无效");
   });
 
   it("round-trips canonical JSON without runtime URLs", () => {
-    const content = normalizeQuickNoteContent("hello", "<p><br></p>", [image], [" 灵感 ", "待办", "灵感"]);
+    const content = normalizeQuickNoteContent("hello", "<p><br></p>", [image], [tagA, tagB, tagA]);
     const encoded = serializeQuickNoteContent(content);
     const parsed = validateQuickNoteContent(parseQuickNoteContent(encoded));
     expect(parsed).toEqual(content);
-    expect(parsed.tags).toEqual(["灵感", "待办"]);
-    expect(encoded).toContain('"version": 2');
-    expect(encoded).toContain('"tags": [');
+    expect(parsed.tagIds).toEqual([tagA, tagB]);
+    expect(encoded).toContain('"version": 3');
+    expect(encoded).toContain('"tagIds": [');
     expect(encoded).not.toContain("url");
   });
 
-  it("旧内容没有 tags 时按空数组读取；非法标签拒绝", () => {
-    expect(validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [] }).tags).toEqual([]);
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [], tags: ["无标签"] })).toThrow("筛选状态");
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [], tags: "bad" })).toThrow("标签格式无效");
+  it("旧内容没有 tagIds 时按空数组读取；非法标签 ID 拒绝", () => {
+    expect(validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [] }).tagIds).toEqual([]);
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [], tagIds: ["bad"] })).toThrow("标签 ID");
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [], tagIds: "bad" })).toThrow("标签格式无效");
+  });
+
+  it("v2（tags 名称）迁移为 v3（tagIds），名称可回填标签表", () => {
+    const legacy = migrateLegacyQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [], tags: [" 灵感 ", "待办", "灵感"] });
+    expect(legacy?.tagNames).toEqual(["灵感", "待办"]);
+    expect(legacy?.content.version).toBe(3);
+    expect(legacy?.content.tagIds).toEqual([tagA, tagB]);
+    expect(migrateLegacyQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [], tagIds: [] })).toBeNull();
   });
 
   it("creates stable previews for text, images, and empty content", () => {

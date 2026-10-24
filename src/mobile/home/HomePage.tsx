@@ -38,7 +38,7 @@ import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
-import { addQuickNoteTag } from "../../core/quickNoteTags";
+import { addQuickNoteTagId, buildQuickNoteTagOptions, type QuickNoteTag } from "../../core/quickNoteTags";
 
 // 完整小记编辑器（内含 Lake 内核）：**按需加载**，加载壳见 ./quickNoteComposerLazy（预取过则同步渲染、零 fallback）。
 
@@ -55,6 +55,7 @@ export interface MobileQuickNote {
   body?: string;
   images?: StoredQuickNoteImage[];
   tags: string[];
+  tagIds: string[];
 }
 
 const QUICK_NOTE_VIRTUAL_THRESHOLD = 24;
@@ -67,6 +68,8 @@ export interface HomePageProps {
   /** 全部笔记（解析「常用」文档的标题/时间用） */
   notes: LocalNoteSummary[];
   quickNotes: MobileQuickNote[];
+  /** 标签目录（标签表是唯一来源；随小记 Manifest 同步）。 */
+  tagDirectory: readonly QuickNoteTag[];
   /** 笔记本 → 文档数 */
   docCounts: Record<string, number>;
   onTabChange: (tab: "quick" | "library") => void;
@@ -119,12 +122,12 @@ function fmtRelative(iso: string): string {
 
 export function HomePage(props: HomePageProps) {
   const {
-    tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
+    tab, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
     onOpenNote, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
-  const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[]; tags: string[] } | null>(null);
+  const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[]; tagIds: string[] } | null>(null);
   const [revealedQuickNoteId, setRevealedQuickNoteId] = useState<string | null>(null);
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
@@ -290,7 +293,13 @@ export function HomePage(props: HomePageProps) {
     setQuickSort,
     quickSortOptions,
     sortedQuickNotes,
-  } = useQuickNoteListModel(quickNotes, quickNoteDetails);
+  } = useQuickNoteListModel(quickNotes, quickNoteDetails, tagDirectory);
+
+  /** 写作区/选择器用完整目录（含 0 条小记的新标签）；标签条只用有计数的索引。 */
+  const quickNoteTagOptions = useMemo(
+    () => buildQuickNoteTagOptions(tagDirectory, quickTagIndex.tags),
+    [tagDirectory, quickTagIndex.tags],
+  );
 
   const quickVirtualEnabled = tab === "quick" && composer === null && sortedQuickNotes.length > QUICK_NOTE_VIRTUAL_THRESHOLD;
   const [quickScrollMargin, setQuickScrollMargin] = useState(0);
@@ -334,7 +343,7 @@ export function HomePage(props: HomePageProps) {
     try {
       const full = await bridge.readQuickNote(id);
       if (!full) return;
-      setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tags: full.content.tags });
+      setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tagIds: full.content.tagIds });
       setComposer({ mode: "edit", id });
     } catch { /* 读取失败忽略 */ }
   };
@@ -497,7 +506,7 @@ export function HomePage(props: HomePageProps) {
     catch { showToast("删除失败", { type: "error" }); }
   };
 
-  const applyQuickNoteTags = async (id: string, tags: string[]): Promise<void> => {
+  const applyQuickNoteTags = async (id: string, tagIds: string[]): Promise<void> => {
     try {
       const full = await bridge.readQuickNote(id);
       if (!full) return;
@@ -505,7 +514,7 @@ export function HomePage(props: HomePageProps) {
         text: full.content.text,
         body: full.content.body,
         images: full.content.images,
-        tags,
+        tagIds,
       });
       await onQuickNotesChanged();
     } catch (reason) {
@@ -567,7 +576,7 @@ export function HomePage(props: HomePageProps) {
       dateValue={quickNoteSortTime(note, quickSort)}
       onEdit={() => { void openEdit(note.id); }}
       onMore={() => setQuickMenuFor(note.id)}
-      onFilterTag={(name) => setQuickTagFilter({ kind: "tag", name })}
+      onFilterTag={(tagId) => setQuickTagFilter({ kind: "tag", id: tagId })}
     />
   );
 
@@ -603,7 +612,7 @@ export function HomePage(props: HomePageProps) {
           <div className="mobile-scroll mobile-scroll--with-dock">
             <QuickNoteComposerLazy
               editNote={editNote}
-              tagOptions={quickTagIndex.tags}
+              tagOptions={quickNoteTagOptions}
               initialInsert={composer.mode === "new" ? { files: composer.files, command: composer.command } : null}
               onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
               onCancel={closeComposer}
@@ -618,9 +627,9 @@ export function HomePage(props: HomePageProps) {
                 </button>
                 {quickTagIndex.tags.map((tag) => (
                   <button
-                    key={tag.name}
-                    className={"qn-tag" + (quickTagFilter.kind === "tag" && quickTagFilter.name === tag.name ? " is-selected" : "")}
-                    onClick={() => setQuickTagFilter(quickTagFilter.kind === "tag" && quickTagFilter.name === tag.name ? { kind: "all" } : { kind: "tag", name: tag.name })}
+                    key={tag.id}
+                    className={"qn-tag" + (quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? " is-selected" : "")}
+                    onClick={() => setQuickTagFilter(quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? { kind: "all" } : { kind: "tag", id: tag.id })}
                   >
                     <span className="mb-ellipsis">{tag.name}</span><span className="qn-tag__count">{tag.count}</span>
                   </button>
@@ -763,9 +772,14 @@ export function HomePage(props: HomePageProps) {
         return note ? (
           <MobileQuickNoteTagSheet
             open
-            options={quickTagIndex.tags}
-            selected={note.tags}
-            onAdd={(tag) => { void applyQuickNoteTags(note.id, addQuickNoteTag(note.tags, tag)); }}
+            options={quickNoteTagOptions}
+            selected={note.tagIds}
+            onAdd={(tagId) => { void applyQuickNoteTags(note.id, addQuickNoteTagId(note.tagIds, tagId)); }}
+            onCreate={async (name) => {
+              const created = await bridge.createQuickNoteTag(name);
+              await onQuickNotesChanged();
+              return created.id;
+            }}
             onClose={() => setTagSheetFor(null)}
           />
         ) : null;
@@ -828,7 +842,7 @@ export function HomePage(props: HomePageProps) {
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
-function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (name: string) => void; onRequestDetail: (id: string) => void }) {
+function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (note.body || typeof IntersectionObserver === "undefined") return;
@@ -882,13 +896,17 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
           <span className="qn-card__date">{fmtDate(dateValue)}</span>
           <button className="qn-card__more mb-tap" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
         </div>
-        {note.tags.length > 0 && (
+        {note.tagIds.length > 0 && (
           <div className="qn-card__tags">
-            {note.tags.map((tag) => (
-              <button type="button" className="qn-tag" key={tag} onClick={(event) => { event.stopPropagation(); onFilterTag(tag); }}>
-                <span className="mb-ellipsis">{tag}</span>
-              </button>
-            ))}
+            {note.tagIds.map((tagId, index) => {
+              const name = note.tags[index];
+              if (!name) return null;
+              return (
+                <button type="button" className="qn-tag" key={tagId} onClick={(event) => { event.stopPropagation(); onFilterTag(tagId); }}>
+                  <span className="mb-ellipsis">{name}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

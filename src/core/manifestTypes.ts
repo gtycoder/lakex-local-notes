@@ -5,6 +5,7 @@
  */
 
 import type { NoteKind } from "./noteKind.js";
+import type { QuickNoteTag } from "./quickNoteTags.js";
 
 /** Lake 笔记清单条目。 */
 export interface ManifestNote {
@@ -70,4 +71,6 @@ export interface QuickNotesManifest {
   commitId: string;
   createdAt: string;
   items: ManifestItem[];
+  /** 标签目录（可选；旧端忽略、原样带回）。桌面合并写入，移动端只做字段保真。 */
+  tags?: QuickNoteTag[];
 }

@@ -41,6 +41,8 @@ interface QuickNotesQueryDeps {
   db: DbLike;
   itemPath(id: string): string;
   imageUrl(noteId: string, filename: string): string;
+  /** 标签目录（读取展示名用）：桌面直接查 quick_note_tags。 */
+  listTags(): Array<{ id: string; name: string; deleted_at: string | null }>;
 }
 
 /** Read-only Quick Notes queries; write/state-machine operations stay in QuickNotesStore. */
@@ -61,8 +63,14 @@ export class QuickNotesQueries {
     catch (error) { throw new AppError("InvalidInput", error instanceof Error ? error.message : String(error)); }
   }
 
-  mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent): QuickNoteDocument {
-    return mapQuickNoteRow(row, { content, imageUrl: this.deps.imageUrl });
+  mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent, tagNames?: (ids: readonly string[]) => string[]): QuickNoteDocument {
+    return mapQuickNoteRow(row, { content, imageUrl: this.deps.imageUrl, tagNames: tagNames ?? this.tagNameResolver() });
+  }
+
+  /** 标签 ID → 名称（一次性载入目录，列表映射共用一个解析器；未知 ID 给空串以保持与 tagIds 对齐）。 */
+  private tagNameResolver(): (ids: readonly string[]) => string[] {
+    const names = new Map(this.deps.listTags().filter((tag) => !tag.deleted_at).map((tag) => [tag.id, tag.name] as const));
+    return (ids) => ids.map((id) => names.get(id) ?? "");
   }
 
   read(id: string): QuickNoteDocument {
@@ -72,7 +80,8 @@ export class QuickNotesQueries {
 
   list(): QuickNoteDocument[] {
     const rows = this.deps.db.prepare("SELECT * FROM quick_notes ORDER BY created_at DESC").all() as QuickNoteRow[];
-    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id)));
+    const tagNames = this.tagNameResolver();
+    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id), tagNames));
   }
 
   listTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }> {

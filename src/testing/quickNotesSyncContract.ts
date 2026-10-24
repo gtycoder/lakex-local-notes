@@ -131,11 +131,11 @@ export async function runQuickNotesRemoteImportRollbackContract(
     hash: sha256Sync(imageBytes),
   };
   const content = serializeQuickNoteContent({
-    version: 2,
+    version: 3,
     text: "remote body",
     body: "<p><br></p>",
     images: [image],
-    tags: [],
+    tagIds: [],
   });
   const bytes = new TextEncoder().encode(content);
   const item: ManifestItem = {

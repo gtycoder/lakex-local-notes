@@ -22,6 +22,12 @@
   --lake-note-ref-icon-link: #20ba77;          /* 链接勾（绿） */
   --lake-note-ref-icon-knockout: #ffffff;      /* 链接前的挖空描边（= 底框色） */
 
+  /* 「加密文本」卡插入面板图标（几何在 src/features/editor/lockedTextIcon.tsx）。
+   * 与 note-ref 同理：内容是 <use> 的 shadow 树，颜色只能靠自定义属性继承。下面 = 浅色设计稿原值。 */
+  --lake-locked-text-icon-tile: #ffffff;         /* 圆角底框 */
+  --lake-locked-text-icon-tile-border: #e6e8e7;
+  --lake-locked-text-icon-ink: #2b2d2c;          /* 锁描边 / 锁孔 */
+
   /* 选择器里表情格的字号（原为内核面板的 26px 字面量；自有面板后收成令牌，字号字面量护栏才为 0）。 */
   --lake-emoji-glyph-size: 26px;
   --lake-node-glyph-size: 1.15em; /* 节点图标底块与表情字号共用尺度，跟随目录/标签宿主字号。 */

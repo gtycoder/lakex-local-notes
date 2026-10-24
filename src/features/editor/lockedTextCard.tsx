@@ -325,7 +325,7 @@ export const LOCKED_TEXT_CARD_META = {
     icon: LOCKED_TEXT_ICON_ID,
     mainSearch: LOCKED_TEXT_MAIN_SEARCH,
     label: "加密文本",
-    description: "设置密码后加密保存，无密码不可见正文",
+    description: "设置密码后加密保存",
     keywords: ["加密", "密码", "加密文本", "locked", "lock", "secret", "jm"],
   },
   initValue: {} as Record<string, unknown>,

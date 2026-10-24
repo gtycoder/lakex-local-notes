@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
@@ -168,6 +168,13 @@ export interface LakeNative {
   createQuickNote(input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   updateQuickNote(id: string, input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   deleteQuickNote(id: string): Promise<void>;
+  /** 标签目录（唯一来源；随小记 Manifest 同步）。 */
+  listQuickNoteTags(): Promise<QuickNoteTag[]>;
+  createQuickNoteTag(name: string): Promise<QuickNoteTag>;
+  updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }): Promise<QuickNoteTag>;
+  reorderQuickNoteTags(ids: string[]): Promise<QuickNoteTag[]>;
+  mergeQuickNoteTags(sourceId: string, targetId: string): Promise<{ updated: number; failed: number }>;
+  deleteQuickNoteTag(id: string): Promise<{ updated: number; failed: number }>;
   /** 字节走 Electron 结构化克隆：传 Uint8Array（大附件时 number[] 会凭空多出几百 MB 的数组）。 */
   stageQuickNoteImage(draftId: string, input: QuickNoteStageInput): Promise<QuickNoteImage>;
   /** 小记附件（内核 file 卡）暂存：与图片同一 staging 空间，宽高为 null。 */
@@ -341,6 +348,12 @@ export const native = {
   createQuickNote: (input: SaveQuickNoteInput) => api().createQuickNote(input),
   updateQuickNote: (id: string, input: SaveQuickNoteInput) => api().updateQuickNote(id, input),
   deleteQuickNote: (id: string) => api().deleteQuickNote(id),
+  listQuickNoteTags: () => api().listQuickNoteTags(),
+  createQuickNoteTag: (name: string) => api().createQuickNoteTag(name),
+  updateQuickNoteTag: (id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => api().updateQuickNoteTag(id, patch),
+  reorderQuickNoteTags: (ids: string[]) => api().reorderQuickNoteTags(ids),
+  mergeQuickNoteTags: (sourceId: string, targetId: string) => api().mergeQuickNoteTags(sourceId, targetId),
+  deleteQuickNoteTag: (id: string) => api().deleteQuickNoteTag(id),
   stageQuickNoteImage: (draftId: string, input: QuickNoteStageInput) => api().stageQuickNoteImage(draftId, input),
   stageQuickNoteFile: (draftId: string, input: QuickNoteStageInput) => api().stageQuickNoteFile(draftId, input),
   discardQuickNoteDraft: (draftId: string) => api().discardQuickNoteDraft(draftId),

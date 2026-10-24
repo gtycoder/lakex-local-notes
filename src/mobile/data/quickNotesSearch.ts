@@ -9,6 +9,7 @@ import { buildMatchExpression, buildSnippet, segmentToIndexText } from "../../co
 import type { SearchResult } from "../../core/searchTypes.js";
 import type { MobileDb } from "./sqliteDb.js";
 import { readQuickNoteBody } from "./noteBodies.js";
+import { resolveQuickNoteTagNames } from "./quickNotesRepository.js";
 
 const QUICK_INDEX_UPSERT_SQL =
   "INSERT INTO quick_notes_search_index(quick_note_id, fts_rowid, content_hash, text_cache, tags, indexed_at) VALUES(?,?,?,?,?,?) " +
@@ -26,14 +27,15 @@ interface QuickContent {
   tags: string[];
 }
 
-async function readQuickContent(id: string): Promise<QuickContent | null> {
+async function readQuickContent(d: MobileDb, id: string): Promise<QuickContent | null> {
   const raw = await readQuickNoteBody(id);
   if (raw == null) return null;
   try {
-    const parsed = JSON.parse(raw) as { text?: unknown; tags?: unknown };
+    const parsed = JSON.parse(raw) as { text?: unknown; tagIds?: unknown };
+    const tagIds = Array.isArray(parsed.tagIds) ? parsed.tagIds.filter((tagId): tagId is string => typeof tagId === "string") : [];
     return {
       text: typeof parsed.text === "string" ? parsed.text : "",
-      tags: Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === "string") : [],
+      tags: (await resolveQuickNoteTagNames(d, tagIds)).filter(Boolean),
     };
   } catch { return null; }
 }
@@ -51,7 +53,7 @@ export async function indexQuickNote(d: MobileDb, id: string): Promise<void> {
   if (!row) { await removeQuickNoteFromIndex(d, id); return; }
   const prev = await d.prepare("SELECT content_hash FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as { content_hash: string } | undefined;
   if (prev && prev.content_hash === row.content_hash) return;
-  const content = await readQuickContent(id);
+  const content = await readQuickContent(d, id);
   if (!content) return;
   const tagsText = content.tags.join(" ");
   const rowid = prev
@@ -140,7 +142,7 @@ async function searchQuickNotesFallback(d: MobileDb, query: string, limit: numbe
   const needle = query.toLocaleLowerCase();
   const out: Array<SearchResult & { kind: "quick-note" }> = [];
   for (const row of rows) {
-    const content = await readQuickContent(String(row.id));
+    const content = await readQuickContent(d, String(row.id));
     if (!content) continue;
     const hay = [content.text, ...content.tags].join("\n").toLocaleLowerCase();
     if (!hay.includes(needle)) continue;

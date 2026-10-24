@@ -68,6 +68,7 @@ describe("小记虚拟列表渲染", () => {
       imageCount: 0,
       firstImage: null,
       tags: [],
+      tagIds: [],
     }));
     await act(async () => {
       root.render(createElement(HomePage, {
@@ -75,6 +76,7 @@ describe("小记虚拟列表渲染", () => {
         notebooks: [],
         notes: [],
         quickNotes: notes,
+        tagDirectory: [],
         docCounts: {},
         onTabChange: () => {},
         onOpenNotebook: () => {},

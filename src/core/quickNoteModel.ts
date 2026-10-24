@@ -3,11 +3,15 @@ import { buildLakeImageCardValue, lakeEmptyParagraph, lakeImageCardParagraph, la
 import { sniffImageFormat, type ImageDimensions, type ImageFormat } from "./imageUtils.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
-import { normalizeQuickNoteTags, QuickNoteTagError } from "./quickNoteTags.js";
+import { normalizeQuickNoteTagIds, normalizeQuickNoteTags, quickNoteTagId, QuickNoteTagError } from "./quickNoteTags.js";
 import type { QuickNoteImage } from "./types.js";
 
-/** v2 起小记正文是**内核形态的 Lake 正文**（`body`），`text` 退化为派生镜像（预览/搜索/移动端降级）。 */
-export const QUICK_NOTE_VERSION = 2;
+/**
+ * v3 起小记正文只存 `tagIds`（标签表是目录与元数据的唯一来源）；
+ * v2 的 `tags`（名称数组）由一次性迁移转换（见 migrateLegacyQuickNoteContent）。
+ */
+export const QUICK_NOTE_VERSION = 3;
+export const LEGACY_QUICK_NOTE_VERSION = 2;
 export const MAX_QUICK_NOTE_TEXT_LENGTH = 200_000;
 /** 正文（Lake HTML，含图片卡片的 JSON 载荷）上限；比纯文本宽，但仍远低于同步侧硬上限。 */
 export const MAX_QUICK_NOTE_BODY_LENGTH = 4_000_000;
@@ -50,8 +54,8 @@ export interface StoredQuickNoteContent {
    * 需要"当图片渲染"的地方用 `isQuickNoteImageMime(mimeType)` 过滤（缩略图、图片网格）。
    */
   images: StoredQuickNoteImage[];
-  /** 小记标签；旧内容缺失时按空数组读取。顺序 = 最近添加在前。 */
-  tags: string[];
+  /** 小记标签 ID（顺序 = 最近添加在前）；名称与元数据在标签表。旧内容缺失时按空数组读取。 */
+  tagIds: string[];
 }
 
 export class QuickNoteModelError extends Error {
@@ -68,19 +72,19 @@ export function normalizeQuickNoteContent(
   text: string,
   body: string,
   images: StoredQuickNoteImage[],
-  tags: unknown = [],
+  tagIds: unknown = [],
 ): StoredQuickNoteContent {
   if (typeof text !== "string") throw new QuickNoteModelError("小记正文必须是文本");
   if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (typeof body !== "string") throw new QuickNoteModelError("小记正文格式无效");
   if (body.length > MAX_QUICK_NOTE_BODY_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (!text.trim() && images.length === 0) throw new QuickNoteModelError("请至少记录文字、一张图片或一个附件");
-  let normalizedTags: string[];
-  try { normalizedTags = normalizeQuickNoteTags(tags); }
+  let normalizedTagIds: string[];
+  try { normalizedTagIds = normalizeQuickNoteTagIds(tagIds); }
   catch (error) {
     throw new QuickNoteModelError(error instanceof QuickNoteTagError ? error.message : "小记标签格式无效");
   }
-  return { version: QUICK_NOTE_VERSION, text, body, images, tags: normalizedTags };
+  return { version: QUICK_NOTE_VERSION, text, body, images, tagIds: normalizedTagIds };
 }
 
 /**
@@ -190,7 +194,28 @@ export function validateQuickNoteContent(raw: unknown): StoredQuickNoteContent {
   }
   const seen = new Set<string>();
   const images = value.images.map((image) => validateQuickNoteImage(image, seen));
-  return normalizeQuickNoteContent(value.text, value.body, images, value.tags);
+  return normalizeQuickNoteContent(value.text, value.body, images, value.tagIds);
+}
+
+/**
+ * 一次性迁移：v2（`tags` = 名称数组）→ v3（`tagIds`）。
+ * 不是 v2 或内容损坏 → null（调用方跳过）。迁移后旧格式不再参与读写。
+ */
+export function migrateLegacyQuickNoteContent(raw: unknown): { content: StoredQuickNoteContent; tagNames: string[] } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as { version?: unknown; text?: unknown; body?: unknown; images?: unknown; tags?: unknown };
+  if (value.version !== LEGACY_QUICK_NOTE_VERSION) return null;
+  if (typeof value.text !== "string" || typeof value.body !== "string" || !Array.isArray(value.images)) {
+    throw new QuickNoteModelError("小记内容版本或字段无效");
+  }
+  const seen = new Set<string>();
+  const images = value.images.map((image) => validateQuickNoteImage(image, seen));
+  const tagNames = normalizeQuickNoteTags(value.tags);
+  const tagIds = tagNames.map((name) => quickNoteTagId(name));
+  return {
+    content: normalizeQuickNoteContent(value.text, value.body, images, tagIds),
+    tagNames,
+  };
 }
 
 export function parseQuickNoteContent(json: string): unknown {

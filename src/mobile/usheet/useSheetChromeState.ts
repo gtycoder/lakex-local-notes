@@ -22,6 +22,10 @@ export interface SheetCellFormat {
   address: string;
   /** 当前活动单元格的「显示值」；公式栏输入框用。 */
   value: string;
+  /** 字体颜色（内核 style.cl.rgb；空 = 默认色）。T 面板色板反显用。 */
+  fontColor: string;
+  /** 单元格背景色（内核 style.bg.rgb；空 = 无填充）。T 面板色板反显用。 */
+  bgColor: string;
 }
 
 const EMPTY_CELL_FORMAT: SheetCellFormat = {
@@ -35,6 +39,8 @@ const EMPTY_CELL_FORMAT: SheetCellFormat = {
   numfmt: "",
   address: "A1",
   value: "",
+  fontColor: "",
+  bgColor: "",
 };
 
 function columnName(index: number): string {
@@ -60,7 +66,10 @@ export function useSheetChromeState(getUniverAPI: () => FUniver | null) {
     try {
       const range = getUniverAPI()?.getActiveWorkbook()?.getActiveRange();
       if (!range) return;
-      const style = range.getCellStyleData() as { bl?: number; it?: number; ul?: { s?: number }; st?: { s?: number } } | null;
+      const style = range.getCellStyleData() as {
+        bl?: number; it?: number; ul?: { s?: number }; st?: { s?: number };
+        cl?: { rgb?: string }; bg?: { rgb?: string };
+      } | null;
       const align = range.getHorizontalAlignment();
       const valignRaw = (range as unknown as { getVerticalAlignment?: () => string }).getVerticalAlignment?.() ?? "general";
       const sizeRaw = (range as unknown as { getFontSize?: () => number | null }).getFontSize?.() ?? 0;
@@ -83,6 +92,8 @@ export function useSheetChromeState(getUniverAPI: () => FUniver | null) {
         numfmt,
         address: columnName(col) + String(row + 1),
         value,
+        fontColor: style?.cl?.rgb ?? "",
+        bgColor: style?.bg?.rgb ?? "",
       };
       setCellFormat((prev) => Object.keys(next).every((key) => prev[key as keyof SheetCellFormat] === next[key as keyof SheetCellFormat]) ? prev : next);
     } catch {

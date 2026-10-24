@@ -23,6 +23,7 @@ const MAIN_SRC = read("../../../electron/quickNotes.ts");
 const MOBILE_HOME_SRC = read("../../mobile/home/HomePage.tsx");
 const MOBILE_LIST_MODEL_SRC = read("../../mobile/home/useQuickNoteListModel.ts");
 const MOBILE_COMPOSER_SRC = read("../../mobile/home/QuickNoteComposer.tsx");
+const MOBILE_APP_SRC = read("../../mobile/MobileApp.tsx");
 
 describe("小记版式切换（列表 / 小记）", () => {
   it("版式是纯展示偏好：存 localStorage，不进设置/同步", () => {
@@ -45,6 +46,23 @@ describe("小记版式切换（列表 / 小记）", () => {
     expect(WORKSPACE_SRC).toContain("formatListTime(new Date(iso), new Date())");
     expect(WORKSPACE_SRC).toContain("formatListTime(new Date(item.updatedAt || item.createdAt), new Date(), true)");
     expect(WORKSPACE_SRC).not.toMatch(/padStart\(2/);
+  });
+});
+
+describe("小记标签与筛选缺陷回归（261024）", () => {
+  const fnBody = (name: string) => {
+    const start = WORKSPACE_SRC.indexOf(`async function ${name}`);
+    return WORKSPACE_SRC.slice(start, WORKSPACE_SRC.indexOf("\n  }", start));
+  };
+
+  it("预览勾选待办必须原样提交标签 ID（缺省会被当作清空）", () => {
+    const body = fnBody("togglePreviewTask");
+    expect(body).toContain("native.updateQuickNote");
+    expect(body).toContain("tagIds: item.content.tagIds");
+  });
+
+  it("类型筛选生效时点卡片标签会清掉类型筛选，不形成隐藏 AND", () => {
+    expect(fnBody("changeTagFilter")).toMatch(/if \(typeFilter !== "all"\) setTypeFilter\("all"\)/);
   });
 });
 
@@ -166,22 +184,34 @@ describe("小记附件（内核 file 卡）", () => {
   });
 });
 
-describe("小记标签（随 .qnote 同步，无独立目录表）", () => {
-  it("两端都从有效小记派生候选标签，并在写作区支持选择/创建", () => {
-    expect(WORKSPACE_SRC).toContain("buildQuickNoteTagIndex(items");
-    expect(WORKSPACE_SRC).toContain("tagOptions={tagIndex.tags}");
+describe("小记标签（独立标签表，随 Manifest 同步）", () => {
+  it("两端都从标签表派生候选标签，并在写作区支持选择/创建", () => {
+    expect(WORKSPACE_SRC).toContain("buildQuickNoteTagIndex(items, tagDirectory");
+    expect(WORKSPACE_SRC).toContain("tagOptions={tagOptions}");
     expect(WORKSPACE_SRC).toContain("<QuickNoteTagPicker");
-    expect(MOBILE_LIST_MODEL_SRC).toContain("buildQuickNoteTagIndex(displayedQuickNotes");
-    expect(MOBILE_HOME_SRC).toContain("tagOptions={quickTagIndex.tags}");
+    expect(MOBILE_LIST_MODEL_SRC).toContain("buildQuickNoteTagIndex(displayedQuickNotes, tagDirectory");
+    expect(MOBILE_HOME_SRC).toContain("tagOptions={quickNoteTagOptions}");
     expect(MOBILE_COMPOSER_SRC).toContain("<MobileQuickNoteTagSheet");
   });
 
-  it("卡片显示标签，筛选只影响当前列表；标签写回 .qnote 内容", () => {
-    expect(WORKSPACE_SRC).toContain("item.content.tags");
-    expect(WORKSPACE_SRC).toContain("filterQuickNotesByTag(items");
+  it("标签展示永不用 ID 兜底（261024 用户报：写作区显示了 t_...）", () => {
+    // 写作区/选择器用完整目录（含 0 条小记的新标签），不能只拿有计数的索引
+    expect(WORKSPACE_SRC).toContain("const tagOptions = useMemo<QuickNoteTagSummary[]>");
+    expect(WORKSPACE_SRC).toContain("buildQuickNoteTagOptions(tagDirectory, tagIndex.tags)");
+    expect(WORKSPACE_SRC).not.toMatch(/\.name \?\? id\b/);
+    expect(WORKSPACE_SRC).toContain('?.name ?? "已删除标签"');
+    expect(MOBILE_COMPOSER_SRC).not.toMatch(/\.name \?\? tagId\b/);
+    expect(MOBILE_COMPOSER_SRC).toContain('?.name ?? "已删除标签"');
+    expect(MOBILE_APP_SRC).toContain("buildQuickNoteTagOptions(tagDirectory");
+    expect(MOBILE_HOME_SRC).toContain("quickNoteTagOptions");
+  });
+
+  it("卡片显示标签名，筛选按 tagIds；正文只存 tagIds", () => {
+    expect(WORKSPACE_SRC).toContain("item.content.tagIds");
+    expect(WORKSPACE_SRC).toContain("filterQuickNotesByTag(timed");
     expect(MOBILE_LIST_MODEL_SRC).toContain("filterQuickNotesByTag(displayedQuickNotes");
-    expect(WORKSPACE_SRC).toMatch(/native\.updateQuickNote\(noteId,[\s\S]{0,260}tags,/);
-    expect(MOBILE_COMPOSER_SRC).toMatch(/saveQuickNoteContent\(noteId, \{ text: plain, body, images, tags \}\)/);
+    expect(WORKSPACE_SRC).toMatch(/native\.updateQuickNote\(noteId,[\s\S]{0,260}tagIds,/);
+    expect(MOBILE_COMPOSER_SRC).toMatch(/saveQuickNoteContent\(noteId, \{ text: plain, body, images, tagIds \}\)/);
   });
 
   it("切换标签筛选前先保存并退出正在编辑的小记，避免筛掉卡片时丢未保存内容", () => {
@@ -197,7 +227,7 @@ describe("小记类型筛选（261021，对齐语雀 dashboard/notes）", () => 
     expect(WORKSPACE_SRC).toMatch(/async function changeTypeFilter\(next: QuickNoteTypeFilter\)/);
     // 语雀语义：类型筛选与标签筛选互斥（切类型清标签；类型非「小记」时标签条不渲染）
     expect(WORKSPACE_SRC).toMatch(/setTagFilter\(\{ kind: "all" \}\);\s*setTypeFilter\(next\);/);
-    expect(WORKSPACE_SRC).toMatch(/if \(typeFilter !== "all" \|\| items\.length === 0 \|\| tagIndex\.tags\.length === 0\) return null;/);
+    expect(WORKSPACE_SRC).toMatch(/if \(typeFilter !== "all" \|\| tagFilter\.kind === "selection" \|\| items\.length === 0 \|\| tagIndex\.tags\.length === 0\) return null;/);
   });
 
   it("卡片视图标签条渲染在右侧列表列；列表视图收进「标签 ▾」下拉", () => {

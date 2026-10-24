@@ -24,6 +24,7 @@ import type { ManifestItem, QuickNotesManifest } from "./manifestTypes.js";
 import { runAsyncPool, ASSET_TRANSFER_CONCURRENCY } from "./asyncPool.js";
 import type { S3Store, SyncConfig } from "./syncEngine.js";
 import { quickNoteKeys } from "./quickNoteKeys.js";
+import { normalizeQuickNoteTagEntity, type QuickNoteTag } from "./quickNoteTags.js";
 
 const MANIFEST_VERSION = 1;
 
@@ -32,6 +33,8 @@ export const MAX_QUICK_MANIFEST_BYTES = 10 * 1024 * 1024;
 /** V5 §5.6：小记正文单对象上限（投毒防护）。 */
 export const MAX_QUICK_NOTE_BYTES = 64 * 1024 * 1024;
 export const MAX_QUICK_MANIFEST_ITEMS = 100_000;
+/** 标签目录上限（防异常清单打爆）。 */
+export const MAX_QUICK_MANIFEST_TAGS = 10_000;
 
 export interface QuickNotesSyncResult {
   uploaded: number;
@@ -116,6 +119,11 @@ export interface QuickNotesSyncDbPort {
    * 缺失时引擎退回 markSynced（调用方必须以串行队列保证无并发编辑，如桌面）。
    */
   markSyncedIfUnchanged?(id: string, expectedContentHash: string): Promise<void>;
+  /**
+   * 标签目录合并（可选）：桌面实现（LWW + 墓碑 + 清引用）；移动端未实现 ⇒ 引擎原样保留远端 tags，
+   * 保证「读不懂也不抹掉」。返回值 = 本端权威目录，写入下一份 manifest。
+   */
+  mergeRemoteQuickNoteTags?(remote: readonly QuickNoteTag[]): Promise<QuickNoteTag[]>;
   log(message: string): void;
 }
 
@@ -164,7 +172,19 @@ export function parseManifest(
     if (ids.has(item.id)) throw new Error(`小记同步清单包含重复条目: ${item.id}`);
     ids.add(item.id);
   }
-  return value as QuickNotesManifest;
+  let tags: QuickNoteTag[] | undefined;
+  if (value.tags !== undefined) {
+    if (!Array.isArray(value.tags)) throw new Error("小记标签目录格式无效");
+    if (value.tags.length > MAX_QUICK_MANIFEST_TAGS) throw new Error(`小记标签目录条目过多（${value.tags.length}），拒绝加载`);
+    const tagIds = new Set<string>();
+    tags = value.tags.map((tag) => {
+      const normalized = normalizeQuickNoteTagEntity(tag);
+      if (tagIds.has(normalized.id)) throw new Error(`小记标签目录包含重复 ID: ${normalized.id}`);
+      tagIds.add(normalized.id);
+      return normalized;
+    });
+  }
+  return { ...(value as QuickNotesManifest), ...(tags ? { tags } : {}) };
 }
 
 function validateRemoteItem(item: ManifestItem): void {
@@ -239,6 +259,10 @@ export async function syncQuickNotesViaEngine(
   }
   let downloaded = 0;
   let conflicts = 0;
+  // 标签目录：桌面按 ID + updatedAt 合并（含墓碑）；移动端未实现端口 ⇒ 原样保留远端目录。
+  const localTags: QuickNoteTag[] = qn.mergeRemoteQuickNoteTags
+    ? await qn.mergeRemoteQuickNoteTags(remoteManifest?.tags ?? [])
+    : remoteManifest?.tags ?? [];
 
   if (remoteManifest) {
     // 转换墓碑（Lake 放行前）恒不复活源小记；普通删除墓碑按 LWW（远端恢复较新时撤销本地墓碑并跟随恢复）。
@@ -498,6 +522,7 @@ export async function syncQuickNotesViaEngine(
     commitId: randomUUID(),
     createdAt: completedAt,
     items: manifestItems,
+    ...(localTags.length > 0 ? { tags: localTags } : {}),
   };
   report({ phase: "quick-notes", message: "写入小记同步清单…" });
   const manifestStart = Date.now();

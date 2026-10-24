@@ -12,10 +12,14 @@ import {
   SHEET_INSERTER_ACTIONS,
   SHEET_INSERT_TILES,
   SHEET_MORE_ROWS,
+  SHEET_PANEL_MIN_HEIGHT,
   SHEET_VIEW_ROWS,
   SHEET_ZOOM_LEVELS,
   buildMoreSubMenu,
+  normalizeSheetColor,
   numfmtLabelOf,
+  sheetColorEquals,
+  sheetPanelNeedsFade,
 } from "./usheetChromeModel";
 
 describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock）", () => {
@@ -62,5 +66,35 @@ describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock�
     expect(buildMoreSubMenu("border").length).toBe(8);
     expect(buildMoreSubMenu("formula").length).toBe(5);
     expect(numfmtLabelOf("")).toBe("常规");
+  });
+
+  it("颜色归一化：hex 大小写 / rgb() / 空值都能比较（T 面板反显口径）", () => {
+    expect(normalizeSheetColor("#E5484D")).toBe("#e5484d");
+    expect(normalizeSheetColor("rgb(229, 72, 77)")).toBe("#e5484d");
+    expect(normalizeSheetColor("  ")).toBe("");
+    expect(normalizeSheetColor("#abc")).toBe("#aabbcc");
+    expect(sheetColorEquals("rgb(229, 72, 77)", "#e5484d")).toBe(true);
+    expect(sheetColorEquals("", "")).toBe(true);
+    expect(sheetColorEquals("#e5484d", "")).toBe(false);
+  });
+
+  it("面板下限高度放得下最高的常驻面板（更多 7 行 = 294；T = 300）", () => {
+    // 行高 40（border-box 含 1px 分隔）+ 内距 6+8 —— 与 usheet-chrome.css 的 .mb-usheet-row / .mb-usheet-panel__inner 对齐。
+    const moreContent = SHEET_MORE_ROWS.length * 40 + 14;
+    expect(moreContent).toBe(294);
+    expect(SHEET_PANEL_MIN_HEIGHT).toBe(300);
+    expect(SHEET_PANEL_MIN_HEIGHT).toBeGreaterThanOrEqual(moreContent);
+  });
+
+  it("面板渐隐判据：只有下方还有内容才提示，贴底/完全放得下都不提示", () => {
+    // 内容比可视区矮：不提示
+    expect(sheetPanelNeedsFade({ scrollTop: 0, clientHeight: 312, scrollHeight: 306 })).toBe(false);
+    // 溢出且未滚到底：提示
+    expect(sheetPanelNeedsFade({ scrollTop: 0, clientHeight: 312, scrollHeight: 354 })).toBe(true);
+    // 已滚到底（含 2px 亚像素容差）：不提示
+    expect(sheetPanelNeedsFade({ scrollTop: 42, clientHeight: 312, scrollHeight: 354 })).toBe(false);
+    expect(sheetPanelNeedsFade({ scrollTop: 41, clientHeight: 312, scrollHeight: 354 })).toBe(false);
+    // 还差 3px 到底：仍然提示
+    expect(sheetPanelNeedsFade({ scrollTop: 39, clientHeight: 312, scrollHeight: 354 })).toBe(true);
   });
 });

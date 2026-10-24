@@ -6,6 +6,7 @@ import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
 import { writeQuickNoteBody } from "./noteBodies.js";
 import { normalizeQuickNoteContent, serializeQuickNoteContent } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
+import { ensureQuickNoteTag } from "./quickNotesRepository.js";
 
 function adapt(raw: Database.Database): MobileDb {
   return {
@@ -36,15 +37,17 @@ async function makeDb(): Promise<MobileDb> {
   return d;
 }
 
-async function addQuickNote(d: MobileDb, id: string, text: string, tags: string[] = []): Promise<void> {
-  const content = normalizeQuickNoteContent(text, `<p>${text}</p>`, [], tags);
+async function addQuickNote(d: MobileDb, id: string, text: string, tagNames: string[] = []): Promise<void> {
+  const tags = [];
+  for (const name of tagNames) tags.push(await ensureQuickNoteTag(d, name));
+  const content = normalizeQuickNoteContent(text, `<p>${text}</p>`, [], tags.map((tag) => tag.id));
   const serialized = serializeQuickNoteContent(content);
   await writeQuickNoteBody(id, serialized);
   const now = new Date().toISOString();
   await d.prepare(
-    "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict) VALUES (?,?,?,?,0,?,'local',0) " +
-    "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL"
-  ).run(id, now, now, text.replace(/\s+/g, " ").trim(), sha256Sync(new TextEncoder().encode(serialized)));
+    "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, tags_json, tag_ids_json) VALUES (?,?,?,?,0,?,'local',0,?,?) " +
+    "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, tags_json=excluded.tags_json, tag_ids_json=excluded.tag_ids_json"
+  ).run(id, now, now, text.replace(/\s+/g, " ").trim(), sha256Sync(new TextEncoder().encode(serialized)), JSON.stringify(tags.map((tag) => tag.name)), JSON.stringify(tags.map((tag) => tag.id)));
 }
 
 describe("移动端小记搜索", () => {

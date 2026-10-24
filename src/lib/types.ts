@@ -318,7 +318,9 @@ export interface QuickNoteContent {
   /** v2：内核形态正文（Lake HTML）。桌面编辑态由内核产出，其它入口由 text 合成。 */
   body: string;
   images: QuickNoteImage[];
-  /** 小记标签；随正文一起同步。 */
+  /** v3：小记引用的标签 ID（标签表是目录与元数据的唯一来源）。 */
+  tagIds: string[];
+  /** 展示用标签名（由标签表解析，不落盘）；与 tagIds 一一对应。 */
   tags: string[];
 }
 
@@ -344,8 +346,19 @@ export interface SaveQuickNoteInput {
   draftId: string;
   stagedImageIds: string[];
   retainedImageIds?: string[];
-  /** 标签名（顺序 = 最近添加在前）；缺省按空数组。 */
-  tags?: string[];
+  /** 标签 ID（顺序 = 最近添加在前）；**更新时缺省 = 保持原标签**，新建时缺省 = 空数组。显式传 `[]` 才是清空。 */
+  tagIds?: string[];
+}
+
+/** 小记标签目录实体（与 `core/quickNoteTags` 的 QuickNoteTag 对齐；IPC/manifest 共用）。 */
+export interface QuickNoteTag {
+  id: string;
+  name: string;
+  sortOrder: number;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 /** 关于页：主进程 get_system_info 的返回（只读概览）。 */

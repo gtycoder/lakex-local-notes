@@ -42,6 +42,8 @@ export const WRITE_OPS = [
   "saveQuickNote", "saveQuickNoteWithImages", "saveQuickNoteContent", "createQuickNote",
   "deleteQuickNote", "restoreQuickNote", "purgeQuickNote",
   "saveQuickNoteDraft", "clearQuickNoteDraft",
+  // 小记标签目录（261024）
+  "createQuickNoteTag", "updateQuickNoteTag", "reorderQuickNoteTags", "mergeQuickNoteTags", "deleteQuickNoteTag",
   // 正文
   "saveNote", "createInk",
   // 历史快照
@@ -87,7 +89,7 @@ export const PRIORITY_OPS = [
 export const NONE_OPS = [
   // 启动 / 只读
   "init", "getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage", "readNote", "noteGoneState", "searchNotes",
-  "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash",
+  "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash", "listQuickNoteTags",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "listOrphanAssets", "listS3GcPending", "getHistorySettings",
   "listTrashed", "listTrashTree", "listDeletedNotesForSync", "readDeletedContent",

@@ -1,7 +1,7 @@
 /**
  * 移动端表格公式栏（261023 五次定稿）：地址 + 输入 + ↵ + **最右「展开多行」**。
  *
- * - 回显：选区变化时由 viewer 同步 value/address；点网格会先 blur，保证立刻显示新格内容。
+ * - 回显：选区变化时由 viewer 同步 value/address，且**保持焦点**（键盘不消失）；有未写回的输入时先写回旧格。
  * - 光标：普通 input（点哪落哪、可选中、方向键正常）；多行时是普通 textarea。
  * - 最右侧按钮：展开/收起多行输入（用户点单）。
  */
@@ -12,6 +12,8 @@ export interface SheetFormulaBarProps {
   address: string;
   value: string;
   expanded: boolean;
+  /** +1 = 外部回显了新格内容：若输入框仍有焦点，把光标放到末尾。 */
+  caretEndSignal?: number;
   onChange: (value: string) => void;
   onConfirm: () => void;
   onToggleExpand: () => void;
@@ -19,9 +21,19 @@ export interface SheetFormulaBarProps {
   onBlurInput?: () => void;
 }
 
-export function SheetFormulaBar({ address, value, expanded, onChange, onConfirm, onToggleExpand, onFocusInput, onBlurInput }: SheetFormulaBarProps) {
+export function SheetFormulaBar({ address, value, expanded, caretEndSignal, onChange, onConfirm, onToggleExpand, onFocusInput, onBlurInput }: SheetFormulaBarProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const firstRunRef = useRef(true);
+  const caretEndSignalRef = useRef(caretEndSignal);
+  // 切格回显（外部改 value）时把光标放到末尾；用户自己输入的 value 变化不走这里（signal 不变）。
+  useEffect(() => {
+    if (caretEndSignal === undefined || caretEndSignalRef.current === caretEndSignal) return;
+    caretEndSignalRef.current = caretEndSignal;
+    const el = rootRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(".mb-usheet-formula__input");
+    if (!el || document.activeElement !== el) return;
+    const end = el.value.length;
+    try { el.setSelectionRange(end, end); } catch { /* 忽略 */ }
+  }, [caretEndSignal]);
   // 展开/收起后把焦点放到当前输入面并把光标放到末尾（展开多行 = 继续输入）。首帧不抢焦点（避免挂载即弹键盘/回显卡住）。
   useEffect(() => {
     if (firstRunRef.current) { firstRunRef.current = false; return; }

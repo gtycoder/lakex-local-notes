@@ -112,6 +112,8 @@ export async function pushQuickNote(
       commitId: randomUUID(),
       createdAt: new Date().toISOString(),
       items,
+      // 单条推送不碰标签目录：远端有什么就原样带回（桌面整轮同步才会合并/写入）。
+      ...(remote.tags ? { tags: remote.tags } : {}),
     };
     await s3.putObject(manifestKey, `${JSON.stringify(manifest, null, 2)}\n`, { gzip: true });
     manifestId = manifest.commitId;

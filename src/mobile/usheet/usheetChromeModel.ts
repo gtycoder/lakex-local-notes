@@ -70,6 +70,10 @@ export interface SheetCellFormatLite {
   valign?: "top" | "middle" | "bottom" | "general";
   /** 字号（px，来自 SetFontSize 命令；空 = 默认 14）。 */
   size?: number;
+  /** 字体颜色（内核 style.cl.rgb；空 = 默认色）。 */
+  fontColor?: string;
+  /** 单元格背景色（内核 style.bg.rgb；空 = 无填充）。 */
+  bgColor?: string;
 }
 
 /** B / I / S / U 四个开关（横排一条白条）。 */
@@ -154,6 +158,8 @@ export interface SheetMenuItem {
 export interface SheetPanelRow {
   id: string;
   label: string;
+  /** 行首线性图标 id（SheetDockPanel 里映射成 lucide 组件）。 */
+  icon: string;
   note?: string;
   disabled?: boolean;
   switch?: boolean;
@@ -161,18 +167,18 @@ export interface SheetPanelRow {
 }
 
 export const SHEET_DATA_ROWS: ReadonlyArray<SheetPanelRow> = [
-  { id: "sort-asc", label: "按当前列升序" },
-  { id: "sort-desc", label: "按当前列降序" },
-  { id: "filter", label: "筛选", switch: true },
-  { id: "find", label: "查找替换" },
-  { id: "validation", label: "数据验证（下拉列表）", note: "占位", disabled: true },
-  { id: "split", label: "分列", note: "占位", disabled: true },
+  { id: "sort-asc", label: "按当前列升序", icon: "sortAsc" },
+  { id: "sort-desc", label: "按当前列降序", icon: "sortDesc" },
+  { id: "filter", label: "筛选", icon: "filter", switch: true },
+  { id: "find", label: "查找替换", icon: "find" },
+  { id: "validation", label: "数据验证（下拉列表）", icon: "validation", note: "占位", disabled: true },
+  { id: "split", label: "分列", icon: "split", note: "占位", disabled: true },
 ];
 
 export const SHEET_VIEW_ROWS: ReadonlyArray<SheetPanelRow> = [
-  { id: "freeze", label: "冻结行列" },
-  { id: "formview", label: "表单视图", note: "占位", disabled: true },
-  { id: "chartview", label: "图表视图", note: "占位", disabled: true },
+  { id: "freeze", label: "冻结行列", icon: "freeze" },
+  { id: "formview", label: "表单视图", icon: "form", note: "占位", disabled: true },
+  { id: "chartview", label: "图表视图", icon: "chart", note: "占位", disabled: true },
 ];
 
 export const SHEET_ZOOM_LEVELS: ReadonlyArray<{ id: "zoom-default" | "zoom-fit" | "zoom-focus"; label: string; value: number }> = [
@@ -181,18 +187,25 @@ export const SHEET_ZOOM_LEVELS: ReadonlyArray<{ id: "zoom-default" | "zoom-fit" 
   { id: "zoom-focus", label: "聚焦", value: 1.15 },
 ];
 
+/**
+ * 面板下限高度（拿不到键盘高时）：必须放得下最高的**常驻**面板 ——
+ * 「更多」7 行 = 7×40 + 6 分隔 + 14 内距 = 294；T 面板 = 300。
+ * 阅读态点「编辑」直接开面板（没弹过键盘）时用它，避免底行被切。
+ */
+export const SHEET_PANEL_MIN_HEIGHT = 300;
+
 /* ---------------- 更多面板 ---------------- */
 
 export type SheetMoreId = "numfmt" | "border" | "formula" | "merge" | "painter" | "clear" | "conditional";
 
-export const SHEET_MORE_ROWS: ReadonlyArray<{ id: SheetMoreId; label: string; disabled?: boolean }> = [
-  { id: "numfmt", label: "数字格式" },
-  { id: "border", label: "边框" },
-  { id: "formula", label: "公式" },
-  { id: "merge", label: "合并单元格" },
-  { id: "painter", label: "格式刷" },
-  { id: "clear", label: "清除格式" },
-  { id: "conditional", label: "条件格式", disabled: true },
+export const SHEET_MORE_ROWS: ReadonlyArray<{ id: SheetMoreId; label: string; icon: string; disabled?: boolean }> = [
+  { id: "numfmt", label: "数字格式", icon: "number" },
+  { id: "border", label: "边框", icon: "border" },
+  { id: "formula", label: "公式", icon: "formula" },
+  { id: "merge", label: "合并单元格", icon: "merge" },
+  { id: "painter", label: "格式刷", icon: "painter" },
+  { id: "clear", label: "清除格式", icon: "clear" },
+  { id: "conditional", label: "条件格式", icon: "conditional", disabled: true },
 ];
 
 /** 更多面板的下钻列表（数字格式 / 边框 / 公式）。 */
@@ -217,4 +230,36 @@ export function buildMoreSubMenu(
 export function numfmtLabelOf(pattern: string): string {
   const found = USHEET_NUMFMT_OPTIONS.find((option) => option.pattern === (pattern || ""));
   return found ? found.label.replace(/（.*）$/, "") : "常规";
+}
+
+/**
+ * 颜色归一化：内核可能回 `#E5484D` / `rgb(229, 72, 77)` / 空串，面板反显比较必须走这一处。
+ * 输出统一为小写 `#rrggbb`（认不出的值原样小写返回，仍可做相等比较）。
+ */
+export function normalizeSheetColor(value: string | null | undefined): string {
+  const text = (value ?? "").trim().toLowerCase();
+  if (!text) return "";
+  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(text);
+  if (rgb) {
+    return "#" + [rgb[1], rgb[2], rgb[3]].map((part) => Number(part).toString(16).padStart(2, "0")).join("");
+  }
+  if (/^#[0-9a-f]{6}$/.test(text)) return text;
+  if (/^#[0-9a-f]{3}$/.test(text)) return "#" + text.slice(1).split("").map((char) => char + char).join("");
+  return text;
+}
+
+/** 两个颜色是否同一个（默认色/无填充 = 空串）。 */
+export function sheetColorEquals(a: string | null | undefined, b: string | null | undefined): boolean {
+  return normalizeSheetColor(a) === normalizeSheetColor(b);
+}
+
+/**
+ * 面板内容下方是否还有可滚动余量（底部渐隐提示的**唯一判据**）。
+ * 2px 容差吸收亚像素取整：恰好贴底时不留一条假提示。
+ */
+export function sheetPanelNeedsFade(
+  metrics: { scrollTop: number; clientHeight: number; scrollHeight: number },
+  tolerance = 2,
+): boolean {
+  return metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop > tolerance;
 }

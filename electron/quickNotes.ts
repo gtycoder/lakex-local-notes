@@ -14,6 +14,7 @@ import { sanitizeDisplayName } from "./resourceRepository.js";
 import { AppError } from "../src/core/storeErrors.js";
 import {
   QUICK_NOTE_VERSION,
+  migrateLegacyQuickNoteContent,
   normalizeQuickNoteContent,
   parseQuickNoteContent,
   previewQuickNote,
@@ -27,6 +28,13 @@ import {
   QuickNoteModelError,
   type StoredQuickNoteContent,
 } from "./quickNoteModel.js";
+import {
+  mergeQuickNoteTags,
+  normalizeQuickNoteTag,
+  quickNoteTagId,
+  QuickNoteTagError,
+  type QuickNoteTag,
+} from "../src/core/quickNoteTags.js";
 import type { QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, SaveQuickNoteInput } from "./quickNoteTypes.js";
 import { missingQuickNoteRecovery, type MissingQuickNoteDoc } from "../src/core/missingBody.js";
 import { QuickNotesQueries, type QuickNoteConversionRow, type QuickNoteDeletedRow, type QuickNoteRow } from "./quickNotesQueries.js";
@@ -52,12 +60,41 @@ function firstSearchLine(text: string): string {
 function uuid(): string { return crypto.randomUUID(); }
 function hash(bytes: Buffer | string): string { return crypto.createHash("sha256").update(bytes).digest("hex"); }
 
+/**
+ * 搜索账本的 `tags` 列用 JSON 数组存（标签名允许内部空格，空格拼接无法还原）。
+ * FTS 的 tags 列仍是空格拼接的分词文本，只服务检索、不承担还原。
+ */
+function encodeIndexTags(tags: readonly string[]): string {
+  return JSON.stringify(tags);
+}
+function decodeIndexTags(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed.filter((tag): tag is string => typeof tag === "string");
+  } catch {
+    // 旧账本用空格拼接（派生缓存，只能按原规则降级读取；新写入一律 JSON）。
+  }
+  return raw.split(" ").filter(Boolean);
+}
+
 function toStoreValidation<T>(operation: () => T): T {
   try { return operation(); }
   catch (error) {
     if (error instanceof QuickNoteModelError) throw new AppError(error.kind, error.message);
+    if (error instanceof QuickNoteTagError) throw new AppError("InvalidInput", error.message);
     throw error;
   }
+}
+
+interface QuickNoteTagRow {
+  id: string;
+  name: string;
+  sort_order: number;
+  pinned: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
 }
 
 /**
@@ -91,9 +128,11 @@ export class QuickNotesStore {
       db: this.db,
       itemPath: (id) => this.itemPath(id),
       imageUrl: (noteId, filename) => this.quickImageUrl(noteId, filename),
+      listTags: () => this.db.prepare("SELECT id,name,deleted_at FROM quick_note_tags").all() as Array<{ id: string; name: string; deleted_at: string | null }>,
     });
     this.recoverStagedSaves();
     this.recoverImports();
+    this.migrateLegacyContents();
     this.ensureSearchIndex();
   }
 
@@ -164,6 +203,19 @@ export class QuickNotesStore {
         error_message TEXT
       );
     `);
+    // 标签目录：小记正文只存 tagIds；名称/排序/置顶/墓碑都在这里，随小记 Manifest 同步。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS quick_note_tags (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      );
+    `);
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_quick_note_tags_order ON quick_note_tags(deleted_at, pinned, sort_order, name)");
     // V5 Phase 6：小记独立全文索引（与文档 notes_fts 分开，避免跨库 / tree_nodes join）。
     // body/tags 都由 src/core/search 的分词器预分词；ledger 保留 text_cache 供 buildSnippet。
     this.db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS quick_notes_fts USING fts5(body, tags, tokenize='unicode61')");
@@ -247,6 +299,223 @@ export class QuickNotesStore {
     return this.queries.read(id);
   }
 
+  // ---- 标签目录（唯一来源；随小记 Manifest 同步） ----
+
+  private mapTagRow(row: QuickNoteTagRow): QuickNoteTag {
+    return {
+      id: row.id,
+      name: row.name,
+      sortOrder: row.sort_order,
+      pinned: !!row.pinned,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      deletedAt: row.deleted_at,
+    };
+  }
+
+  listQuickNoteTags(options: { includeDeleted?: boolean } = {}): QuickNoteTag[] {
+    const where = options.includeDeleted ? "" : "WHERE deleted_at IS NULL";
+    const rows = this.db.prepare(`SELECT * FROM quick_note_tags ${where} ORDER BY pinned DESC, sort_order, name`).all() as QuickNoteTagRow[];
+    return rows.map((row) => this.mapTagRow(row));
+  }
+
+  /** 幂等创建：同名 active 标签直接返回；同名墓碑按原 ID 复活。 */
+  ensureQuickNoteTag(raw: string, at = nowIso()): QuickNoteTag {
+    const name = normalizeQuickNoteTag(raw);
+    const existing = this.db.prepare("SELECT * FROM quick_note_tags WHERE name=? AND deleted_at IS NULL ORDER BY created_at LIMIT 1").get(name) as QuickNoteTagRow | undefined;
+    if (existing) return this.mapTagRow(existing);
+    const id = quickNoteTagId(name);
+    const previous = this.db.prepare("SELECT * FROM quick_note_tags WHERE id=?").get(id) as QuickNoteTagRow | undefined;
+    const sortOrder = (this.db.prepare("SELECT IFNULL(MAX(sort_order), -1) AS m FROM quick_note_tags WHERE deleted_at IS NULL").get() as { m: number }).m + 1;
+    const tag: QuickNoteTag = {
+      id,
+      name,
+      sortOrder,
+      pinned: false,
+      createdAt: previous?.created_at ?? at,
+      updatedAt: at,
+      deletedAt: null,
+    };
+    this.upsertTagRow(tag);
+    return tag;
+  }
+
+  createQuickNoteTag(name: string): QuickNoteTag {
+    return this.ensureQuickNoteTag(name);
+  }
+
+  private upsertTagRow(tag: QuickNoteTag): void {
+    this.db.prepare(
+      "INSERT INTO quick_note_tags(id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, pinned=excluded.pinned, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at"
+    ).run(tag.id, tag.name, tag.sortOrder, tag.pinned ? 1 : 0, tag.createdAt, tag.updatedAt, tag.deletedAt);
+  }
+
+  private activeTag(id: string): QuickNoteTagRow | null {
+    const row = this.db.prepare("SELECT * FROM quick_note_tags WHERE id=? AND deleted_at IS NULL").get(id) as QuickNoteTagRow | undefined;
+    return row ?? null;
+  }
+
+  updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }): QuickNoteTag {
+    const row = this.activeTag(id);
+    if (!row) throw new AppError("NotFound", "标签不存在或已删除");
+    const now = nowIso();
+    let name = row.name;
+    if (patch.name !== undefined) {
+      name = normalizeQuickNoteTag(patch.name);
+      if (name !== row.name) {
+        const clash = this.db.prepare("SELECT id FROM quick_note_tags WHERE name=? AND deleted_at IS NULL AND id<>?").get(name, id) as { id: string } | undefined;
+        if (clash) throw new AppError("InvalidInput", `已存在同名标签“${name}”，请改用合并`);
+      }
+    }
+    const sortOrder = patch.sortOrder ?? row.sort_order;
+    if (!Number.isSafeInteger(sortOrder) || sortOrder < 0) throw new AppError("InvalidInput", "标签排序值无效");
+    const next: QuickNoteTag = {
+      id,
+      name,
+      sortOrder,
+      pinned: patch.pinned ?? !!row.pinned,
+      createdAt: row.created_at,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    this.upsertTagRow(next);
+    if (name !== row.name) this.reindexAllNoteTagNames();
+    return next;
+  }
+
+  reorderQuickNoteTags(orderedIds: readonly string[]): QuickNoteTag[] {
+    const now = nowIso();
+    const tx = this.db.transaction(() => {
+      orderedIds.forEach((id, index) => {
+        const row = this.activeTag(id);
+        if (!row) return;
+        this.db.prepare("UPDATE quick_note_tags SET sort_order=?, updated_at=? WHERE id=?").run(index, now, id);
+      });
+    });
+    tx();
+    return this.listQuickNoteTags();
+  }
+
+  /** 删除标签：只从所有小记移除引用，不删除小记。 */
+  deleteQuickNoteTag(id: string): { updated: number; failed: number } {
+    const row = this.activeTag(id);
+    if (!row) throw new AppError("NotFound", "标签不存在或已删除");
+    const now = nowIso();
+    const result = this.rewriteNoteTagIds((tagIds) => tagIds.filter((tagId) => tagId !== id));
+    this.upsertTagRow({ ...this.mapTagRow(row), updatedAt: now, deletedAt: now });
+    return result;
+  }
+
+  /** 合并到目标标签：受影响小记的源 ID 替换为目标 ID，源标签写墓碑。 */
+  mergeQuickNoteTags(sourceId: string, targetId: string): { updated: number; failed: number } {
+    if (sourceId === targetId) return { updated: 0, failed: 0 };
+    const source = this.activeTag(sourceId);
+    const target = this.activeTag(targetId);
+    if (!source || !target) throw new AppError("NotFound", "标签不存在或已删除");
+    const result = this.rewriteNoteTagIds((tagIds) => {
+      if (!tagIds.includes(sourceId)) return tagIds;
+      const next: string[] = [];
+      for (const tagId of tagIds) {
+        const value = tagId === sourceId ? targetId : tagId;
+        if (!next.includes(value)) next.push(value);
+      }
+      return next;
+    });
+    this.upsertTagRow({ ...this.mapTagRow(source), updatedAt: nowIso(), deletedAt: nowIso() });
+    return result;
+  }
+
+  /** 标签名查询（写正文/索引时解析展示名用；未知 ID 按空串跳过）。 */
+  private tagNamesFor(tagIds: readonly string[]): string[] {
+    const names = new Map(this.listQuickNoteTags().map((tag) => [tag.id, tag.name] as const));
+    return tagIds.map((id) => names.get(id) ?? "");
+  }
+
+  /**
+   * 批量改写所有引用标签的小记（标签管理专用）：文件原子写 → DB 改 hash → 索引同步。
+   * `updatedAt` 不变（与「仅改标签不顶到最前」口径一致）；`sync_state='local'` 保证下一轮上传。
+   */
+  private rewriteNoteTagIds(mutate: (tagIds: string[]) => string[]): { updated: number; failed: number } {
+    const rows = this.db.prepare("SELECT id FROM quick_notes").all() as Array<{ id: string }>;
+    let updated = 0;
+    let failed = 0;
+    const names = new Map(this.listQuickNoteTags().map((tag) => [tag.id, tag.name] as const));
+    for (const row of rows) {
+      try {
+        const content = this.readStoredContent(row.id);
+        const nextTagIds = mutate([...content.tagIds]);
+        if (nextTagIds.join("\u0000") === content.tagIds.join("\u0000")) continue;
+        const next = normalizeQuickNoteContent(content.text, content.body, content.images, nextTagIds);
+        const encoded = Buffer.from(serializeQuickNoteContent(next), "utf8");
+        this.atomicWrite(this.itemPath(row.id), encoded);
+        this.db.prepare("UPDATE quick_notes SET content_hash=?, sync_state='local' WHERE id=?").run(hash(encoded), row.id);
+        this.upsertSearchIndex(row.id, next.text, next.tagIds.map((id) => names.get(id)).filter((name): name is string => typeof name === "string"));
+        updated += 1;
+      } catch (error) {
+        failed += 1;
+        this.logScopes.quick.warn(`[quick][tags] 改写失败 ${row.id}: ${String(error)}`);
+      }
+    }
+    return { updated, failed };
+  }
+
+  /** 标签改名后重算索引里的标签词（正文没变，索引的 tags 列要跟上）。 */
+  private reindexAllNoteTagNames(): void {
+    const rows = this.db.prepare("SELECT id FROM quick_notes").all() as Array<{ id: string }>;
+    const names = new Map(this.listQuickNoteTags().map((tag) => [tag.id, tag.name] as const));
+    for (const row of rows) {
+      try {
+        const content = this.readStoredContent(row.id);
+        this.upsertSearchIndex(row.id, content.text, content.tagIds.map((id) => names.get(id)).filter((name): name is string => typeof name === "string"));
+      } catch (error) {
+        this.logScopes.quick.warn(`[quick][tags] 重建索引失败 ${row.id}: ${String(error)}`);
+      }
+    }
+  }
+
+  /** 同步端口：合并远端标签目录（按 ID + updatedAt LWW；远端墓碑会清掉本地引用）并返回本端权威列表。 */
+  applyRemoteQuickNoteTags(remote: readonly QuickNoteTag[]): QuickNoteTag[] {
+    const merged = mergeQuickNoteTags(this.listQuickNoteTags({ includeDeleted: true }), remote);
+    const deletedIds = new Set(merged.filter((tag) => tag.deletedAt).map((tag) => tag.id));
+    for (const tag of merged) this.upsertTagRow(tag);
+    if (deletedIds.size > 0) {
+      this.rewriteNoteTagIds((tagIds) => tagIds.filter((id) => !deletedIds.has(id)));
+    }
+    this.reindexAllNoteTagNames();
+    return merged;
+  }
+
+  /** 一次性迁移：v2 `tags`（名称）→ v3 `tagIds`；标签目录同步补行。 */
+  private migrateLegacyContents(): void {
+    const rows = this.db.prepare("SELECT id,created_at,updated_at FROM quick_notes").all() as Array<{ id: string; created_at: string; updated_at: string }>;
+    let migrated = 0;
+    for (const row of rows) {
+      try {
+        const raw = parseQuickNoteContent(fs.readFileSync(this.itemPath(row.id), "utf8"));
+        const legacy = migrateLegacyQuickNoteContent(raw);
+        if (!legacy) continue;
+        legacy.tagNames.forEach((name) => this.ensureQuickNoteTag(name, row.updated_at));
+        const encoded = Buffer.from(serializeQuickNoteContent(legacy.content), "utf8");
+        this.atomicWrite(this.itemPath(row.id), encoded);
+        // sync_state='local'：正文 hash 已变，必须让下一轮上传而不是走 skip-fast。
+        this.db.prepare("UPDATE quick_notes SET content_hash=?, sync_state='local' WHERE id=?").run(hash(encoded), row.id);
+        migrated += 1;
+      } catch (error) {
+        this.logScopes.quick.warn(`[quick][tags] 迁移跳过 ${row.id}: ${String(error)}`);
+      }
+    }
+    if (migrated > 0) this.logScopes.quick.info(`[perf] quick-note v2→v3 标签迁移 ${migrated} 条`);
+  }
+
+  /** 保存前校验：引用的标签必须存在且未删除（标签表是唯一来源）。 */
+  private assertTagsExist(tagIds: readonly string[]): void {
+    const unique = [...new Set(tagIds)];
+    if (unique.length === 0) return;
+    const rows = this.db.prepare(`SELECT id FROM quick_note_tags WHERE deleted_at IS NULL AND id IN (${unique.map(() => "?").join(",")})`).all(...unique) as Array<{ id: string }>;
+    if (rows.length !== unique.length) throw new AppError("InvalidInput", "标签不存在或已删除");
+  }
+
   // ---- 缺正文（手工删除等）与小记的两条恢复路径（261023）：云端镜像 / 搜索缓存纯文本 ----
 
   /** 资源页「缺小记」清单：只 stat 不读正文；带同步基线 / 搜索缓存 / 可恢复性。 */
@@ -269,7 +538,7 @@ export class QuickNotesStore {
         updatedAt: row.updated_at,
         previewText: row.preview_text,
         imageCount: Number(row.image_count) || 0,
-        tags: typeof row.tags === "string" ? row.tags : "",
+        tags: typeof row.tags === "string" ? decodeIndexTags(row.tags).join(" ") : "",
         hasSyncBase,
         cloudConfigured: options.cloudConfigured,
         hasTextCache,
@@ -285,9 +554,11 @@ export class QuickNotesStore {
     this.readRow(id);
     const cached = this.db.prepare("SELECT text_cache,tags FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as { text_cache: string; tags: string } | undefined;
     if (!cached || !cached.text_cache.trim()) throw new AppError("NotFound", "没有可用于恢复的搜索缓存文本");
-    const tags = cached.tags ? cached.tags.split(" ").filter(Boolean) : [];
+    const tagNames = decodeIndexTags(cached.tags);
+    const at = nowIso();
+    const tagIds = tagNames.map((name) => this.ensureQuickNoteTag(name, at).id);
     const body = quickNoteBodyFromTextAndImages(cached.text_cache, [], () => "", () => crypto.randomBytes(5).toString("hex"));
-    const content = toStoreValidation(() => normalizeQuickNoteContent(cached.text_cache, body, [], tags));
+    const content = toStoreValidation(() => normalizeQuickNoteContent(cached.text_cache, body, [], tagIds));
     const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
     this.persistRecoveredContent(id, content, encoded, { synced: false, updatedAt: nowIso() });
     this.ensureSearchIndex();
@@ -297,7 +568,10 @@ export class QuickNotesStore {
   /** 云端正文恢复后落盘（调用方已做 sha256 校验与记账 setBaseHash + markSynced）。 */
   applyRecoveredQuickNoteFromCloud(id: string, rawContent: unknown, options: { updatedAt: string }): QuickNoteDocument {
     this.readRow(id);
-    const content = this.validateStoredContent(rawContent);
+    // 云端可能还是 v2（另一台设备尚未升级）：按同一迁移规则转 v3 并补齐标签目录。
+    const legacy = migrateLegacyQuickNoteContent(rawContent);
+    if (legacy) legacy.tagNames.forEach((name) => this.ensureQuickNoteTag(name, options.updatedAt));
+    const content = this.validateStoredContent(legacy ? legacy.content : rawContent);
     const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
     this.persistRecoveredContent(id, content, encoded, { synced: true, updatedAt: options.updatedAt });
     this.ensureSearchIndex();
@@ -360,7 +634,7 @@ export class QuickNotesStore {
     ).all(match, Math.max(1, limit)) as Array<{ id: string; preview_text: string; updated_at: string; text_cache: string; tags: string }>;
     return rows.map((row) => {
       const title = row.preview_text.trim() || firstSearchLine(row.text_cache) || "小记";
-      const snippet = buildSnippet(row.text_cache, normalized) || buildSnippet(row.tags, normalized) || firstSearchLine(row.text_cache);
+      const snippet = buildSnippet(row.text_cache, normalized) || buildSnippet(decodeIndexTags(row.tags).join(" "), normalized) || firstSearchLine(row.text_cache);
       return {
         id: row.id,
         title,
@@ -388,9 +662,10 @@ export class QuickNotesStore {
       for (const doc of docs) {
         rowid += 1;
         const text = doc.content.text ?? "";
-        const tags = doc.content.tags.join(" ");
-        insertFts.run(rowid, segmentToIndexText(text), segmentToIndexText(tags));
-        insertLedger.run(doc.id, rowid, hash(text + "\0" + tags), text, tags, now);
+        const tags = doc.content.tags;
+        const tagsJson = encodeIndexTags(tags);
+        insertFts.run(rowid, segmentToIndexText(text), segmentToIndexText(tags.join(" ")));
+        insertLedger.run(doc.id, rowid, hash(text + "\0" + tagsJson), text, tagsJson, now);
       }
     });
     tx();
@@ -410,19 +685,19 @@ export class QuickNotesStore {
   /** 内容落盘后增量更新；hash 未变直接短路。 */
   private upsertSearchIndex(id: string, text: string, tags: readonly string[]): void {
     const textCache = text ?? "";
-    const tagsText = tags.join(" ");
-    const textHash = hash(textCache + "\0" + tagsText);
+    const tagsJson = encodeIndexTags(tags);
+    const textHash = hash(textCache + "\0" + tagsJson);
     const prev = this.db.prepare("SELECT fts_rowid, text_hash FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as
       { fts_rowid: number; text_hash: string } | undefined;
     if (prev && prev.text_hash === textHash) return;
     const rowid = prev?.fts_rowid ?? ((this.db.prepare("SELECT IFNULL(MAX(fts_rowid), 0) AS m FROM quick_notes_search_index").get() as { m: number }).m + 1);
     const tx = this.db.transaction(() => {
       if (prev) this.db.prepare("DELETE FROM quick_notes_fts WHERE rowid=?").run(rowid);
-      this.db.prepare("INSERT INTO quick_notes_fts(rowid, body, tags) VALUES(?,?,?)").run(rowid, segmentToIndexText(textCache), segmentToIndexText(tagsText));
+      this.db.prepare("INSERT INTO quick_notes_fts(rowid, body, tags) VALUES(?,?,?)").run(rowid, segmentToIndexText(textCache), segmentToIndexText(tags.join(" ")));
       this.db.prepare(
         "INSERT INTO quick_notes_search_index(quick_note_id, fts_rowid, text_hash, text_cache, tags, indexed_at) VALUES(?,?,?,?,?,?) " +
         "ON CONFLICT(quick_note_id) DO UPDATE SET fts_rowid=excluded.fts_rowid, text_hash=excluded.text_hash, text_cache=excluded.text_cache, tags=excluded.tags, indexed_at=excluded.indexed_at"
-      ).run(id, rowid, textHash, textCache, tagsText, nowIso());
+      ).run(id, rowid, textHash, textCache, tagsJson, nowIso());
     });
     tx();
   }
@@ -447,7 +722,7 @@ export class QuickNotesStore {
   private reindexFromDisk(id: string): void {
     try {
       const content = this.readStoredContent(id);
-      this.upsertSearchIndex(id, content.text, content.tags);
+      this.upsertSearchIndex(id, content.text, this.tagNamesFor(content.tagIds));
     } catch (error) {
       console.warn("[quick][search] 索引更新失败（启动重建可修复）: " + id + " " + String(error));
     }
@@ -567,7 +842,10 @@ export class QuickNotesStore {
           makeId,
         );
     const body = rewriteQuickNoteAssetScope(rawBody, `/quick-notes/staging/${input.draftId}/`, `/quick-notes/${id}/`);
-    const content = toStoreValidation(() => normalizeQuickNoteContent(input.text, body, allImages, input.tags));
+    // 更新时 `tagIds` 缺省 = **保持原标签**（不是清空）：预览勾选待办等"只改正文"的调用点不该顺手丢标签。
+    const tagIds = input.tagIds ?? (updating ? oldContent?.tagIds ?? [] : []);
+    this.assertTagsExist(tagIds);
+    const content = toStoreValidation(() => normalizeQuickNoteContent(input.text, body, allImages, tagIds));
     const effectiveUpdatedAt = oldContent && previousUpdatedAt && sameQuickNoteExceptTags(oldContent, content)
       ? previousUpdatedAt
       : updatedAt;

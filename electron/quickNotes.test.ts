@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { QuickNotesStore } from "./quickNotes.js";
+import { quickNoteTagId } from "../src/core/quickNoteTags.js";
 import { convertQuickNoteToLake } from "./quickNoteConversion.js";
 import { Store } from "./store.js";
 
@@ -48,12 +49,15 @@ describe("QuickNotesStore", () => {
   });
 
   it("标签随 .qnote 往返；仅改标签不刷新 updatedAt", async () => {
+    const inspiration = quickNotes.createQuickNoteTag(" 灵感 ").id;
+    const todo = quickNotes.createQuickNoteTag("待办").id;
+    const inbox = quickNotes.createQuickNoteTag("收件箱").id;
     const saved = quickNotes.createQuickNote({
       text: "带标签",
       body: "<p><br></p>",
       draftId: crypto.randomUUID(),
       stagedImageIds: [],
-      tags: [" 灵感 ", "待办", "灵感"],
+      tagIds: [inspiration, todo, inspiration],
     });
     expect(saved.content.tags).toEqual(["灵感", "待办"]);
     expect(quickNotes.readQuickNote(saved.id).content.tags).toEqual(["灵感", "待办"]);
@@ -65,11 +69,69 @@ describe("QuickNotesStore", () => {
       draftId: crypto.randomUUID(),
       stagedImageIds: [],
       retainedImageIds: [],
-      tags: ["待办", "收件箱"],
+      tagIds: [todo, inbox],
     });
     expect(updated.content.tags).toEqual(["待办", "收件箱"]);
     expect(updated.updatedAt).toBe(saved.updatedAt);
     expect(updated.contentHash).not.toBe(saved.contentHash);
+  });
+
+  it("只改正文时未传 tagIds = 保持原标签；显式传空数组才清空", () => {
+    const inspiration = quickNotes.createQuickNoteTag("灵感").id;
+    const todo = quickNotes.createQuickNoteTag("待办").id;
+    const saved = quickNotes.createQuickNote({
+      text: "勾选待办前",
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      tagIds: [inspiration, todo],
+    });
+    const kept = quickNotes.updateQuickNote(saved.id, {
+      text: "勾选待办前",
+      body: "<p>改过的正文</p>",
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      retainedImageIds: [],
+    });
+    expect(kept.content.tags).toEqual(["灵感", "待办"]);
+
+    const cleared = quickNotes.updateQuickNote(saved.id, {
+      text: "勾选待办前",
+      body: "<p>改过的正文</p>",
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      retainedImageIds: [],
+      tagIds: [],
+    });
+    expect(cleared.content.tags).toEqual([]);
+  });
+
+  it("远端标签目录合并：改名/新增/墓碑按 updatedAt 生效，墓碑清掉小记引用", () => {
+    const inspiration = quickNotes.createQuickNoteTag("灵感");
+    const todo = quickNotes.createQuickNoteTag("待办");
+    const note = quickNotes.createQuickNote({
+      text: "合并目录",
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      tagIds: [inspiration.id, todo.id],
+    });
+    const at = "2026-10-25T00:00:00.000Z";
+    const project = {
+      id: quickNoteTagId("项目"),
+      name: "项目",
+      sortOrder: 2,
+      pinned: false,
+      createdAt: at,
+      updatedAt: at,
+      deletedAt: null,
+    };
+    quickNotes.applyRemoteQuickNoteTags([
+      { ...inspiration, name: "灵感库", updatedAt: at },
+      { ...todo, updatedAt: at, deletedAt: at },
+      project,
+    ]);
+    expect(quickNotes.listQuickNoteTags().map((tag) => tag.name)).toEqual(["灵感库", "项目"]);
+    expect(quickNotes.readQuickNote(note.id).content.tags).toEqual(["灵感库"]);
+    expect(quickNotes.search("待办")).toEqual([]);
   });
 
   it("暂存图片保存后移动到独立 assets，并清理整个 staging 草稿目录", async () => {
@@ -187,7 +249,7 @@ describe("QuickNotesStore", () => {
   });
 
   it("拒绝远端多余的不安全文件名，且不留下小记资源目录", () => {
-    const raw = Buffer.from(JSON.stringify({ version: 2, text: "远端文本", body: "<p><br></p>", images: [] }));
+    const raw = Buffer.from(JSON.stringify({ version: 3, text: "远端文本", body: "<p><br></p>", images: [], tagIds: [] }));
     const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
     expect(() => quickNotes.importRemoteQuickNote(
       { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), contentHash, isConflict: false },
@@ -365,7 +427,7 @@ describe("R3：save staging 恢复（V5 §5.3）", () => {
 describe("R4：import_remote 4 态 journal 恢复（V5 §5.4）", () => {
   function rawQnDb() { return new Database(path.join(root, "quick-notes", "metadata.sqlite3")); }
   function makeItem(text: string) {
-    const body = Buffer.from(JSON.stringify({ version: 2, text, body: "<p><br></p>", images: [] }), "utf8");
+    const body = Buffer.from(JSON.stringify({ version: 3, text, body: "<p><br></p>", images: [], tagIds: [] }), "utf8");
     return { item: { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), contentHash: crypto.createHash("sha256").update(body).digest("hex"), isConflict: false }, body };
   }
   function insertJournal(db: Database.Database, id: string, itemPath: string, stagingDir: string, stagingKey: string, contentHash: string, state: string) {
@@ -491,7 +553,8 @@ describe("R9：recoverConversions 崩溃恢复（V5 §4，四组状态×目标�
 });
 describe("小记全文搜索（独立 FTS）", () => {
   it("正文与标签都能命中，更新后旧词失效、新词生效", () => {
-    const saved = quickNotes.createQuickNote({ text: "今天写搜索索引\n第二行", draftId: crypto.randomUUID(), stagedImageIds: [], tags: ["灵感"] });
+    const inspiration = quickNotes.createQuickNoteTag("灵感").id;
+    const saved = quickNotes.createQuickNote({ text: "今天写搜索索引\n第二行", draftId: crypto.randomUUID(), stagedImageIds: [], tagIds: [inspiration] });
     const hits = quickNotes.search("搜索");
     expect(hits.map((hit) => hit.id)).toEqual([saved.id]);
     expect(hits[0].kind).toBe("quick-note");
@@ -499,7 +562,7 @@ describe("小记全文搜索（独立 FTS）", () => {
     expect(hits[0].snippet).toContain("<mark>");
     expect(quickNotes.search("灵感").map((hit) => hit.id)).toEqual([saved.id]);
 
-    quickNotes.updateQuickNote(saved.id, { text: "改成完全不同的内容", draftId: crypto.randomUUID(), stagedImageIds: [], tags: [] });
+    quickNotes.updateQuickNote(saved.id, { text: "改成完全不同的内容", draftId: crypto.randomUUID(), stagedImageIds: [], tagIds: [] });
     expect(quickNotes.search("搜索")).toEqual([]);
     expect(quickNotes.search("不同").map((hit) => hit.id)).toEqual([saved.id]);
   });
@@ -518,7 +581,8 @@ describe("小记全文搜索（独立 FTS）", () => {
   it("空查询/无索引时返回空；标签命中也能生成结果", () => {
     expect(quickNotes.search("   ")).toEqual([]);
     expect(quickNotes.search("不存在的词")).toEqual([]);
-    const saved = quickNotes.createQuickNote({ text: "只有标签能命中", draftId: crypto.randomUUID(), stagedImageIds: [], tags: ["项目A"] });
+    const projectA = quickNotes.createQuickNoteTag("项目A").id;
+    const saved = quickNotes.createQuickNote({ text: "只有标签能命中", draftId: crypto.randomUUID(), stagedImageIds: [], tagIds: [projectA] });
     const hit = quickNotes.search("项目A")[0];
     expect(hit.id).toBe(saved.id);
     expect(hit.matchType).toBe("body");
@@ -540,6 +604,20 @@ describe("缺正文小记的恢复路径（261023）", () => {
     expect(restored.content.text).toContain("缓存里的全文内容");
     expect(fs.existsSync(itemPath(note.id))).toBe(true);
     expect(quickNotes.listMissingQuickNotes({ cloudConfigured: false }).some((r) => r.id === note.id)).toBe(false);
+  });
+
+  it("缺正文恢复不拆坏含空格的标签（账本 JSON，不再用空格拼接）", () => {
+    const projectA = quickNotes.createQuickNoteTag("项目 A").id;
+    const inspiration = quickNotes.createQuickNoteTag("灵感").id;
+    const note = quickNotes.createQuickNote({
+      text: "缓存文本",
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      tagIds: [projectA, inspiration],
+    });
+    fs.rmSync(itemPath(note.id));
+    const restored = quickNotes.recoverQuickNoteFromText(note.id);
+    expect(restored.content.tags).toEqual(["项目 A", "灵感"]);
   });
 
   it("purgeMissingQuickNote：彻底删除并写墓碑", () => {

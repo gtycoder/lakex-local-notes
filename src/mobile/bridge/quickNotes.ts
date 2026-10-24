@@ -19,9 +19,50 @@ export const quickNotesDomain = {
     return await quickNotesRepository.listQuickNotePage(d, options);
   },
 
-  async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {
+  async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; tags: string[]; previewText: string; updatedAt: string } | null> {
     const d = await ensureDb();
     return await quickNotesRepository.readQuickNote(d, id);
+  },
+
+  // ---- 标签目录（261024）：表是唯一来源，随小记 Manifest 同步 ----
+  async listQuickNoteTags() {
+    const d = await ensureDb();
+    return await quickNotesRepository.listQuickNoteTags(d);
+  },
+
+  async createQuickNoteTag(name: string) {
+    return runWrite("createQuickNoteTag", async () => {
+      const d = await ensureDb();
+      return await quickNotesRepository.createQuickNoteTag(d, name);
+    });
+  },
+
+  async updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) {
+    return runWrite("updateQuickNoteTag", async () => {
+      const d = await ensureDb();
+      return await quickNotesRepository.updateQuickNoteTag(d, id, patch);
+    });
+  },
+
+  async reorderQuickNoteTags(ids: string[]) {
+    return runWrite("reorderQuickNoteTags", async () => {
+      const d = await ensureDb();
+      return await quickNotesRepository.reorderQuickNoteTags(d, ids);
+    });
+  },
+
+  async mergeQuickNoteTags(sourceId: string, targetId: string) {
+    return runWrite("mergeQuickNoteTags", async () => {
+      const d = await ensureDb();
+      return await quickNotesRepository.mergeQuickNoteTags(d, sourceId, targetId);
+    });
+  },
+
+  async deleteQuickNoteTag(id: string) {
+    return runWrite("deleteQuickNoteTag", async () => {
+      const d = await ensureDb();
+      return await quickNotesRepository.deleteQuickNoteTag(d, id);
+    });
   },
 
   async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
@@ -43,15 +84,15 @@ export const quickNotesDomain = {
     });
   },
 
-  async getQuickNoteDraft(): Promise<{ id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tags?: string[]; updatedAt: string } | null> {
+  async getQuickNoteDraft(): Promise<{ id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tagIds?: string[]; updatedAt: string } | null> {
     const d = await ensureDb();
     return await quickNotesRepository.readQuickNoteDraft(d);
   },
 
-  async saveQuickNoteDraft(draft: { id: string; text: string; body?: string; images?: StoredQuickNoteImage[]; tags?: string[] }): Promise<void> {
+  async saveQuickNoteDraft(draft: { id: string; text: string; body?: string; images?: StoredQuickNoteImage[]; tagIds?: string[] }): Promise<void> {
     return runWrite("saveQuickNoteDraft", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, body: draft.body, images: draft.images ?? [], tags: draft.tags ?? [], updatedAt: new Date().toISOString() });
+      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, body: draft.body, images: draft.images ?? [], tagIds: draft.tagIds ?? [], updatedAt: new Date().toISOString() });
     });
   },
 
@@ -76,7 +117,7 @@ export const quickNotesDomain = {
     };
   },
 
-  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[]; tags?: string[] }): Promise<string> {
+  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[]; tagIds?: string[] }): Promise<string> {
     return runWrite("saveQuickNoteContent", async () => {
       const d = await ensureDb();
       return await quickNotesRepository.saveQuickNoteContent(d, id, payload);

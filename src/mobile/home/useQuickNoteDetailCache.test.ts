@@ -26,7 +26,12 @@ const image = (filename: string): StoredQuickNoteImage => ({
 });
 
 const full = (id: string, tags: string[] = []) => ({
-  content: { body: `<p>${id}</p>`, images: [image(`${id}.png`)], tags },
+  content: {
+    body: `<p>${id}</p>`,
+    images: [image(`${id}.png`)],
+    tagIds: tags.map((_, index) => `t_${String(index).padStart(16, "0")}`),
+  },
+  tags,
   updatedAt: "2026-10-22T00:00:00.000Z",
 });
 
@@ -77,6 +82,7 @@ describe("useQuickNoteDetailCache", () => {
       body: "<p>a</p>",
       images: [image("a.png")],
       tags: ["标签"],
+      tagIds: ["t_0000000000000000"],
       firstImage: "a.png",
       updatedAt: "2026-10-22T00:00:00.000Z",
     });
@@ -132,7 +138,7 @@ describe("useQuickNoteDetailCache", () => {
   it("历史正文缺 tags/images 时规范为空数组，不用 undefined 覆盖列表 metadata", async () => {
     render({
       notes: [{ id: "a", updatedAt: "2026-10-22T00:00:00.000Z", tags: ["列表标签"] }],
-      readDetail: async () => ({ content: { body: "<p>a</p>" } as never, updatedAt: "2026-10-22T00:00:00.000Z" }),
+      readDetail: async () => ({ content: { body: "<p>a</p>" } as never, tags: [] as string[], updatedAt: "2026-10-22T00:00:00.000Z" }),
     });
     await act(async () => { await cache.loadDetail("a"); });
     expect(cache.details.get("a")?.tags).toEqual([]);

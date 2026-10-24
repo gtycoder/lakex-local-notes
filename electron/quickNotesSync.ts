@@ -104,6 +104,7 @@ export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNote
     async setBaseHash(id, contentHash) { quickNotes.setBaseHash(id, contentHash); },
     async markSynced(id) { quickNotes.markSynced(id); },
     async markSyncedIfUnchanged(id, expectedContentHash) { quickNotes.markSyncedIfUnchanged(id, expectedContentHash); },
+    async mergeRemoteQuickNoteTags(remote) { return quickNotes.applyRemoteQuickNoteTags(remote); },
     async log(message) { quickNotes.logScopes.quick.info(message); },
   };
 }
