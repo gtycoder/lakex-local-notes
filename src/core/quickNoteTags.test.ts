@@ -12,6 +12,7 @@ import {
   normalizeQuickNoteTagIds,
   quickNoteTagId,
   removeQuickNoteTagId,
+  sameQuickNoteTagDirectory,
   type QuickNoteTag,
 } from "./quickNoteTags";
 
@@ -113,5 +114,15 @@ describe("quickNoteTags", () => {
     expect(mergedOlder.map((entry) => entry.name)).toEqual(["灵感"]);
     const deleted = mergeQuickNoteTags([local], [{ ...local, updatedAt: "2026-10-25T00:00:00.000Z", deletedAt: "2026-10-25T00:00:00.000Z" }]);
     expect(deleted[0].deletedAt).toBe("2026-10-25T00:00:00.000Z");
+  });
+
+  it("目录等价比较：字段级、忽略顺序；任一字段变化即不等价（同步不做无谓重建）", () => {
+    const a = tag("灵感");
+    const b = tag("待办", { sortOrder: 1 });
+    expect(sameQuickNoteTagDirectory([a, b], [b, a])).toBe(true);
+    expect(sameQuickNoteTagDirectory([a, b], [a])).toBe(false);
+    expect(sameQuickNoteTagDirectory([a], [{ ...a, name: "灵感库" }])).toBe(false);
+    expect(sameQuickNoteTagDirectory([a], [{ ...a, deletedAt: "2026-10-25T00:00:00.000Z" }])).toBe(false);
+    expect(sameQuickNoteTagDirectory([a], [{ ...a, pinned: true }])).toBe(false);
   });
 });

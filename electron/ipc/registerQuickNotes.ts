@@ -15,7 +15,6 @@ interface SaveQuickNoteInput {
   draftId: string;
   stagedImageIds: string[];
   retainedImageIds?: string[];
-  tagIds?: string[];
 }
 
 export function registerQuickNotesIpc(
@@ -31,13 +30,17 @@ export function registerQuickNotesIpc(
   ipc.handle("create_quick_note", (input: SaveQuickNoteInput) => quickNotes.createQuickNote(input));
   ipc.handle("update_quick_note", (id: string, input: SaveQuickNoteInput) => quickNotes.updateQuickNote(id, input));
   ipc.handle("delete_quick_note", (id: string) => quickNotes.deleteQuickNote(id));
-  // ---- 标签目录（261024）：表是唯一来源，随小记 Manifest 同步 ----
-  ipc.handle("list_quick_note_tags", () => quickNotes.listQuickNoteTags());
-  ipc.handle("create_quick_note_tag", (name: string) => quickNotes.createQuickNoteTag(name));
-  ipc.handle("update_quick_note_tag", (id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => quickNotes.updateQuickNoteTag(id, patch));
-  ipc.handle("reorder_quick_note_tags", (ids: string[]) => quickNotes.reorderQuickNoteTags(ids));
-  ipc.handle("merge_quick_note_tags", (sourceId: string, targetId: string) => quickNotes.mergeQuickNoteTags(sourceId, targetId));
-  ipc.handle("delete_quick_note_tag", (id: string) => quickNotes.deleteQuickNoteTag(id));
+  // ---- 标签子系统（独立）：目录走 tagService；关系走独立 API，正文保存不携带标签 ----
+  ipc.handle("list_quick_note_tags", () => quickNotes.tagService.list());
+  ipc.handle("create_quick_note_tag", (name: string) => quickNotes.tagService.create(name));
+  ipc.handle("update_quick_note_tag", (id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => quickNotes.tagService.update(id, patch));
+  ipc.handle("reorder_quick_note_tags", (ids: string[]) => quickNotes.tagService.reorder(ids));
+  ipc.handle("merge_quick_note_tags", (sourceId: string, targetId: string) => quickNotes.tagService.merge(sourceId, targetId));
+  ipc.handle("delete_quick_note_tag", (id: string) => quickNotes.tagService.delete(id));
+  ipc.handle("set_quick_note_tags", (id: string, tagIds: string[]) => {
+    quickNotes.setQuickNoteTags(id, tagIds);
+    return quickNotes.readQuickNote(id);
+  });
   ipc.handle("list_quick_note_trash", () => quickNotes.listQuickNoteTrash());
   ipc.handle("restore_quick_note", (id: string) => quickNotes.restoreQuickNote(id));
   ipc.handle("purge_quick_note", (id: string) => quickNotes.purgeQuickNote(id));

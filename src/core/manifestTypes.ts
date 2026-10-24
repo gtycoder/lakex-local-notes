@@ -60,6 +60,10 @@ export interface ManifestItem {
   contentHash: string;
   isConflict: boolean;
   assets: Array<{ id: string; filename: string; mimeType: string; width: number | null; height: number | null; size: number; hash: string }>;
+  /** 小记标签 ID（关系在本地关联表，随清单同步；缺失 = 无标签）。 */
+  tagIds?: string[];
+  /** 标签关系最后修改时间（与正文独立，按它做关系 LWW；缺失 = 0）。 */
+  tagsUpdatedAt?: string;
   deleted?: boolean;
   deletedAt?: string;
 }

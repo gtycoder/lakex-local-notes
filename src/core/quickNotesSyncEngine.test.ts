@@ -35,6 +35,7 @@ interface FakeNote {
   id: string; createdAt: string; updatedAt: string; contentHash: string;
   syncState: string; isConflict: boolean; images: QuickNoteSyncItem["images"];
   content: Uint8Array;
+  tagIds: string[]; tagsUpdatedAt: string;
 }
 
 /** 内存假端口：语义对齐 QuickNotesSyncDbPort 契约（软删保留内容、归档不进墓碑列表）。
@@ -54,6 +55,7 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
       return [...notes.values()].filter((n) => !deleted.has(n.id)).map((n) => ({
         id: n.id, createdAt: n.createdAt, updatedAt: n.updatedAt,
         contentHash: n.contentHash, syncState: n.syncState, isConflict: n.isConflict, images: n.images,
+        tagIds: n.tagIds, tagsUpdatedAt: n.tagsUpdatedAt,
       }));
     },
     async readContent(id) { return notes.get(id)?.content ?? null; },
@@ -64,8 +66,15 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
         id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
         contentHash: item.contentHash, syncState: "synced", isConflict: item.isConflict, content,
         images: item.assets.map(({ id, filename, mimeType, width, height, size, hash }) => ({ id, filename, mimeType, width, height, size, hash })),
+        tagIds: [], tagsUpdatedAt: "",
       });
       for (const a of assetsIn) assets.set(`${item.id}/${a.filename}`, a.bytes);
+    },
+    async applyRemoteQuickNoteTagLinks(id, tagIds, tagsUpdatedAt) {
+      const n = notes.get(id);
+      if (!n || tagsUpdatedAt <= n.tagsUpdatedAt) return;
+      n.tagIds = [...tagIds];
+      n.tagsUpdatedAt = tagsUpdatedAt;
     },
     async applyTombstoneContent(id, content) {
       const n = notes.get(id); if (n) { n.content = content; n.contentHash = sha256Sync(content); }
@@ -136,7 +145,7 @@ function createLocal(port: ReturnType<typeof createFakePort>, text: string): str
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const { serialized, hash } = makeContent(text);
-  port.notes.set(id, { id, createdAt: now, updatedAt: now, contentHash: hash, syncState: "local", isConflict: false, images: [], content: new TextEncoder().encode(serialized) });
+  port.notes.set(id, { id, createdAt: now, updatedAt: now, contentHash: hash, syncState: "local", isConflict: false, images: [], content: new TextEncoder().encode(serialized), tagIds: [], tagsUpdatedAt: "" });
   return id;
 }
 
@@ -177,6 +186,22 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     await syncQuickNotesViaEngine(cfg, s3, b.port);
     expect(b.notes.get(id)?.syncState).toBe("synced");
+  });
+
+  it("远端关系随正文落地：新小记下载后 tagsUpdatedAt 不丢（先建行再合并关系）", async () => {
+    const a = createFakePort();
+    const b = createFakePort();
+    const s3 = createFakeS3();
+    const id = createLocal(a, "带标签");
+    const tagId = "t_0123456789abcdef";
+    a.notes.get(id)!.tagIds = [tagId];
+    a.notes.get(id)!.tagsUpdatedAt = "2026-10-24T00:00:01.000Z";
+
+    await syncQuickNotesViaEngine(cfg, s3, a.port);
+    await syncQuickNotesViaEngine(cfg, s3, b.port);
+
+    expect(b.notes.get(id)?.tagIds).toEqual([tagId]);
+    expect(b.notes.get(id)?.tagsUpdatedAt).toBe("2026-10-24T00:00:01.000Z");
   });
 
   it("接受全异步存储端口：Promise 返回值与同步返回值语义一致", async () => {

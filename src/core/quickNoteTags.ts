@@ -1,8 +1,10 @@
 /**
- * 小记标签：**标签表是目录与元数据的唯一来源**，小记正文只存 `tagIds`。
- * - 标签 ID 由首次创建时的名称派生（`t_` + sha256 前 16 位）⇒ 两端各自迁移同一名称会得到同一个 ID；
- *   重命名只改标签表，不重写小记正文。
- * - 标签表随小记 Manifest 同步（可选字段 `tags`），小记正文仍按内容 hash 同步。
+ * 小记标签：**标签目录与关联表是唯一事实**，小记正文只存内容（text/body/images）。
+ * - 标签目录 `quick_note_tags` 独占名称/排序/置顶；关系在 `quick_note_tag_links(note_id, tag_id, position)`；
+ *   两者只在协调层（桌面/移动端各自的 `quickNoteTagService`）里组合。
+ * - 标签 ID 由首次创建时的名称派生（`t_` + sha256 前 16 位）⇒ 同一名称在任何一端会得到同一个 ID；
+ *   重命名只改目录，不重写 `.qnote`。
+ * - 标签目录随小记 Manifest 同步（可选字段 `tags`），每条小记的关系随 `tagIds/tagsUpdatedAt` 同步。
  */
 
 import { sha256Sync } from "./sha256Sync.js";
@@ -32,23 +34,7 @@ export function normalizeQuickNoteTag(raw: unknown): string {
   return name;
 }
 
-/** 标签名列表归一（仅用于 v2→v3 迁移；新内容一律存 tagIds）。 */
-export function normalizeQuickNoteTags(raw: unknown): string[] {
-  if (raw == null) return [];
-  if (!Array.isArray(raw)) throw new QuickNoteTagError("小记标签格式无效");
-  const tags: string[] = [];
-  const seen = new Set<string>();
-  for (const value of raw) {
-    const tag = normalizeQuickNoteTag(value);
-    if (seen.has(tag)) continue;
-    seen.add(tag);
-    tags.push(tag);
-  }
-  if (tags.length > MAX_QUICK_NOTE_TAGS) throw new QuickNoteTagError(`每条小记最多 ${MAX_QUICK_NOTE_TAGS} 个标签`);
-  return tags;
-}
-
-/** 由标签名派生稳定 ID：同一名称在任何一端都得到同一个 ID（迁移/跨端首次创建不会分叉）。 */
+/** 由标签名派生稳定 ID：同一名称在任何一端都得到同一个 ID（跨端首次创建不会分叉）。 */
 export function quickNoteTagId(name: string): string {
   const normalized = normalizeQuickNoteTag(name);
   return `t_${sha256Sync(new TextEncoder().encode(normalized)).slice(0, 16)}`;
@@ -205,4 +191,23 @@ export function mergeQuickNoteTags(
     if (!current || tag.updatedAt > current.updatedAt) merged.set(tag.id, tag);
   }
   return [...merged.values()];
+}
+
+/**
+ * 目录是否等价（同步用）：字段级比较，避免远端目录无变化时也全量重建搜索索引。
+ * 顺序不参与比较（展示顺序由调用方按 sortOrder/pinned 重新排序）。
+ */
+export function sameQuickNoteTagDirectory(a: readonly QuickNoteTag[], b: readonly QuickNoteTag[]): boolean {
+  if (a.length !== b.length) return false;
+  const byId = new Map(b.map((tag) => [tag.id, tag] as const));
+  return a.every((tag) => {
+    const other = byId.get(tag.id);
+    return !!other
+      && tag.name === other.name
+      && tag.sortOrder === other.sortOrder
+      && tag.pinned === other.pinned
+      && tag.createdAt === other.createdAt
+      && tag.updatedAt === other.updatedAt
+      && tag.deletedAt === other.deletedAt;
+  });
 }

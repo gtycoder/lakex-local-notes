@@ -17,7 +17,8 @@ import type { QuickNoteSyncItemImage, QuickNotesSyncDbPort } from "../../core/qu
 import type { MobileDb } from "./sqliteDb.js";
 import { stageAssetWrites } from "../native/assetWrites.js";
 import { deleteQuickNoteBody, readQuickNoteBody, writeQuickNoteBody } from "./noteBodies.js";
-import { applyRemoteQuickNoteTags, resolveQuickNoteTagNames } from "./quickNotesRepository.js";
+import { mobileQuickNoteTags } from "./quickNoteTagService.js";
+import { listAllQuickNoteTagIds, listAllQuickNoteTagsUpdatedAt } from "./quickNoteTagLinksRepository.js";
 
 /** 小记图片文件访问依赖（注入：bridge 用 Capacitor Filesystem + 内存 assets Map；测试用内存实现）。
  * 键 = "quick-notes/{quickNoteId}/{filename}"（与 Lake 资源的 note-assets/{noteId}/{file} 同构）。 */
@@ -56,8 +57,8 @@ export async function buildQuickNotesSyncSchemaStatements(d: MobileDb): Promise<
   if (!qCols.includes("base_hash")) statements.push("ALTER TABLE quick_notes ADD COLUMN base_hash TEXT");
   // ready_to_sync：0 = 纯本地归档（冲突归档新 id，不向云端发布删除记录，防幽灵墓碑，对齐桌面）；1 = 可同步的删除墓碑
   if (!qCols.includes("ready_to_sync")) statements.push("ALTER TABLE quick_notes ADD COLUMN ready_to_sync INTEGER NOT NULL DEFAULT 1");
-  if (!qCols.includes("tags_json")) statements.push("ALTER TABLE quick_notes ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'");
-  if (!qCols.includes("tag_ids_json")) statements.push("ALTER TABLE quick_notes ADD COLUMN tag_ids_json TEXT NOT NULL DEFAULT '[]'");
+  // 标签在独立目录/关联表（方案 B）：正文不带标签，也不再建 tags_json/tag_ids_json 投影列。
+  if (!qCols.includes("tags_updated_at")) statements.push("ALTER TABLE quick_notes ADD COLUMN tags_updated_at TEXT NOT NULL DEFAULT ''");
   if (!qCols.includes("first_image")) statements.push("ALTER TABLE quick_notes ADD COLUMN first_image TEXT");
   if (!qCols.includes("list_metadata_version")) statements.push("ALTER TABLE quick_notes ADD COLUMN list_metadata_version INTEGER NOT NULL DEFAULT 0");
   statements.push(`CREATE TABLE IF NOT EXISTS quick_note_tags (
@@ -69,6 +70,13 @@ export async function buildQuickNotesSyncSchemaStatements(d: MobileDb): Promise<
     updated_at TEXT NOT NULL,
     deleted_at TEXT
   )`);
+  statements.push(`CREATE TABLE IF NOT EXISTS quick_note_tag_links (
+    note_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(note_id, tag_id)
+  )`);
+  statements.push("CREATE INDEX IF NOT EXISTS idx_quick_note_tag_links_tag ON quick_note_tag_links(tag_id)");
   statements.push(`CREATE TABLE IF NOT EXISTS quick_note_deleted (
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
@@ -95,6 +103,9 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
   return {
     async listLocalQuickNotes() {
       const rows = await d.prepare("SELECT id, created_at, updated_at, content_hash, sync_state, is_conflict FROM quick_notes WHERE deleted_at IS NULL").all() as Array<Record<string, unknown>>;
+      // 关系与版本一次性读出（避免逐条 SQLite 查询）。
+      const links = await listAllQuickNoteTagIds(d);
+      const stamps = await listAllQuickNoteTagsUpdatedAt(d);
       return Promise.all(rows.map(async (r) => {
         let images: QuickNoteSyncItemImage[] = [];
         try {
@@ -114,6 +125,8 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
           syncState: String(r.sync_state),
           isConflict: !!r.is_conflict,
           images,
+          tagIds: links.get(String(r.id)) ?? [],
+          tagsUpdatedAt: stamps.get(String(r.id)) ?? "",
         };
       }));
     },
@@ -133,7 +146,6 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
       catch (reason) { throw new Error(`远端小记内容无效: ${item.id}: ${(reason as Error).message}`); }
       const contentHash = sha256Sync(content);
       if (contentHash !== item.contentHash) throw new Error(`小记内容哈希不符: ${item.id}`);
-      const tagNames = (await resolveQuickNoteTagNames(d, parsed.tagIds)).filter(Boolean);
       // 预校验图片齐全（在写 DB 前——原子性：任一缺失则整体失败，正文不落库，对齐桌面事务回滚语义）
       const byName = new Map(assets.map((a) => [a.filename, a]));
       for (const image of parsed.images) {
@@ -157,10 +169,10 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
         await bodyFs.write(item.id, text);
         await d.transaction(async () => {
           await d.prepare(
-            "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync, tags_json, tag_ids_json, first_image, list_metadata_version) " +
-            "VALUES (?,?,?,?,?,?, 'synced', ?, NULL, 1, ?, ?, ?, 1) " +
-            "ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at, updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, restore_pending_at=NULL, deleted_at=NULL, ready_to_sync=1, tags_json=excluded.tags_json, tag_ids_json=excluded.tag_ids_json, first_image=excluded.first_image, list_metadata_version=1"
-          ).run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, item.isConflict ? 1 : 0, JSON.stringify(tagNames), JSON.stringify(parsed.tagIds), parsed.images[0]?.filename ?? null);
+            "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync, first_image, list_metadata_version) " +
+            "VALUES (?,?,?,?,?,?, 'synced', ?, NULL, 1, ?, 1) " +
+            "ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at, updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, restore_pending_at=NULL, deleted_at=NULL, ready_to_sync=1, first_image=excluded.first_image, list_metadata_version=1"
+          ).run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, item.isConflict ? 1 : 0, parsed.images[0]?.filename ?? null);
         });
       } catch (error) {
         // DB 失败 ⇒ 正文文件回滚到应用前版本（没有旧版本则删掉本次新写的），避免"文件新、DB 旧"。
@@ -203,6 +215,9 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
         { memory: assetBytes, read: loadAssetFile, save: saveAssetFile, remove: removeAssetFile },
       );
     },
+    async applyRemoteQuickNoteTagLinks(id, tagIds, tagsUpdatedAt) {
+      await mobileQuickNoteTags.applyRemoteLinks(d, id, tagIds, tagsUpdatedAt);
+    },
     async deleteLocalQuickNote(id) {
       await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
     },
@@ -211,6 +226,8 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
       if (!row) return;
       const bodyText = await bodyFs.read(id);
       if (bodyText == null) return;
+      // 归档副本是「本地版本」的快照：标签关系一并复制，恢复后标签不丢。
+      const tagIds = await mobileQuickNoteTags.tagIds(d, id);
 
       const newId = crypto.randomUUID();
       const now = new Date().toISOString();
@@ -236,6 +253,9 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
         await d.transaction(async () => {
           // ready_to_sync=0：纯本地归档，不向云端发布删除记录（其他端从未持有该 id，防幽灵墓碑，对齐桌面 archiveLocalToTrash）
           await d.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, deleted_at, ready_to_sync) VALUES (?,?,?,?,?,?,'local',0,NULL,?,0)").run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, now);
+          for (let index = 0; index < tagIds.length; index += 1) {
+            await d.prepare("INSERT OR IGNORE INTO quick_note_tag_links(note_id, tag_id, position) VALUES(?,?,?)").run(newId, tagIds[index], index);
+          }
         });
       } catch (error) {
         // 归档行没提交 ⇒ 新 id 的正文文件也不能留下（否则是一个"打不开的孤儿小记"）。
@@ -322,7 +342,7 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
       await d.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
     },
     async mergeRemoteQuickNoteTags(remote) {
-      return applyRemoteQuickNoteTags(d, remote);
+      return mobileQuickNoteTags.applyRemote(d, remote);
     },
     log(msg) {
       console.log("[mobile-quick-sync]", msg);

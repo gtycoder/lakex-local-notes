@@ -20,15 +20,15 @@ describe("互斥域判据（F16 红线化）", () => {
 
   it("计数基线：改动分类表必须是有意的（改这里 = 改架构判据）", () => {
     // 与 cssLayers 的基线同理：只允许"显式改基线"来变更，防无声漂移。
-    expect(WRITE_OPS.length).toBe(35);
+    // 261024 方案 B：+setQuickNoteTags（小记 ↔ 标签关联表整组替换，独立于保存正文）
+    expect(WRITE_OPS.length).toBe(36);
     expect(MAINTENANCE_OPS.length).toBe(3);
     expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
     // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
-    // 另含 remote ink 批的写操作（WRITE_OPS 35）
     // 261022 query API 收口：旧 listTreeNodes/listNotes/listQuickNotes/listNotebookTree 已删除；
     // 新 getHomeSnapshot/getWorkspaceSnapshot/getQuickNotePage 均为只读 none。
     expect(NONE_OPS.length).toBe(42);
-    expect(ALL.length).toBe(81); // 35 写 + 3 维护 + 1 高优 + 42 none
+    expect(ALL.length).toBe(82); // 36 写 + 3 维护 + 1 高优 + 42 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

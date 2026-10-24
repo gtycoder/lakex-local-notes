@@ -42,8 +42,9 @@ export const WRITE_OPS = [
   "saveQuickNote", "saveQuickNoteWithImages", "saveQuickNoteContent", "createQuickNote",
   "deleteQuickNote", "restoreQuickNote", "purgeQuickNote",
   "saveQuickNoteDraft", "clearQuickNoteDraft",
-  // 小记标签目录（261024）
+  // 小记标签目录（261024）+ 小记与标签的关系（独立关联表）
   "createQuickNoteTag", "updateQuickNoteTag", "reorderQuickNoteTags", "mergeQuickNoteTags", "deleteQuickNoteTag",
+  "setQuickNoteTags",
   // 正文
   "saveNote", "createInk",
   // 历史快照

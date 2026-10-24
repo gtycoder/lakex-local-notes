@@ -24,7 +24,7 @@ import type { ManifestItem, QuickNotesManifest } from "./manifestTypes.js";
 import { runAsyncPool, ASSET_TRANSFER_CONCURRENCY } from "./asyncPool.js";
 import type { S3Store, SyncConfig } from "./syncEngine.js";
 import { quickNoteKeys } from "./quickNoteKeys.js";
-import { normalizeQuickNoteTagEntity, type QuickNoteTag } from "./quickNoteTags.js";
+import { normalizeQuickNoteTagEntity, normalizeQuickNoteTagIds, type QuickNoteTag } from "./quickNoteTags.js";
 
 const MANIFEST_VERSION = 1;
 
@@ -70,6 +70,10 @@ export interface QuickNoteSyncItem {
   isConflict: boolean;
   /** 图片元数据（正文中同款信息；manifest assets 直接映射） */
   images: QuickNoteSyncItemImage[];
+  /** 关联表里的标签 ID（顺序 = 最近添加在前）。 */
+  tagIds: string[];
+  /** 关联表最后修改时间（关系 LWW；空串 = 从未打过标签）。 */
+  tagsUpdatedAt: string;
 }
 
 /**
@@ -84,6 +88,11 @@ export interface QuickNotesSyncDbPort {
   readAsset(id: string, filename: string): Promise<Uint8Array | null>;
   /** 应用远端小记（新/覆盖）：写入内容 + 图片 + DB 行。 */
   applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): Promise<void>;
+  /**
+   * 标签关系合并（独立于正文）：按 `tagsUpdatedAt` LWW 写入本地关联表。
+   * 正文冲突时关系仍按自己的时间戳合并，不跟正文走。
+   */
+  applyRemoteQuickNoteTagLinks(id: string, tagIds: readonly string[], tagsUpdatedAt: string): Promise<void>;
   /** 墓碑内容落地（先内容后标志）：把删除方内容写入本地存储，随后 deleteLocalQuickNote。 */
   applyTombstoneContent(id: string, content: Uint8Array): Promise<void>;
   /** 墓碑携带图片（A）：读取删除小记保留内容中的删除前图片元数据；无保留内容/解析失败 → []。 */
@@ -193,6 +202,11 @@ function validateRemoteItem(item: ManifestItem): void {
   }
   if (item.deleted !== undefined && typeof item.deleted !== "boolean") throw new Error("小记删除标记无效");
   if (item.deletedAt !== undefined && typeof item.deletedAt !== "string") throw new Error("小记删除时间无效");
+  if (item.tagIds !== undefined) {
+    try { normalizeQuickNoteTagIds(item.tagIds); }
+    catch (error) { throw new Error(`小记标签关系无效: ${item.id}: ${(error as Error).message}`); }
+  }
+  if (item.tagsUpdatedAt !== undefined && typeof item.tagsUpdatedAt !== "string") throw new Error(`小记标签关系时间无效: ${item.id}`);
   for (const asset of item.assets) {
     if (!asset || typeof asset !== "object" || !isSafeSegment(asset.id) || !isSafeSegment(asset.filename) || typeof asset.mimeType !== "string" || typeof asset.size !== "number" || !Number.isSafeInteger(asset.size) || asset.size <= 0 || typeof asset.hash !== "string" || !/^[a-f0-9]{64}$/.test(asset.hash)) {
       throw new Error(`小记同步清单图片无效: ${item.id}`);
@@ -334,8 +348,18 @@ export async function syncQuickNotesViaEngine(
         }
       }
 
+      // 标签关系独立于正文：按 tagsUpdatedAt 做关系 LWW 合并。
+      // 顺序必须跟「正文是否已落地」配套：新小记先 applyRemoteQuickNote 再合并关系，
+      // 否则 quick_notes 行还不存在，tags_updated_at 会写丢（本机要等下一轮才补上）。
+      // 冲突时先归档本地版本（归档会复制本地关系），再写远端正文与关系。
+      const mergeRemoteTagLinks = async (): Promise<void> => {
+        // 旧清单没有关系字段 ⇒ 不读本地行、不做空合并。
+        if (item.tagIds === undefined && item.tagsUpdatedAt === undefined) return;
+        await qn.applyRemoteQuickNoteTagLinks(item.id, item.tagIds ?? [], item.tagsUpdatedAt ?? "");
+      };
       const local = localById.get(item.id) ?? null;
       if (local?.contentHash === item.contentHash) {
+        await mergeRemoteTagLinks();
         await qn.setBaseHash(item.id, item.contentHash);
         await markSyncedGuarded(qn, item.id, item.contentHash);
         qn.log(`[perf] download ${item.id} unchanged ${Date.now() - itemStart}ms`);
@@ -362,15 +386,18 @@ export async function syncQuickNotesViaEngine(
         // 验收 #4（B 方案）：双端都改 → 远端覆盖本地；本地版本归档进回收站（新 id，恢复后为一条新小记）。
         await qn.archiveLocalQuickNoteToTrash(item.id);
         await qn.applyRemoteQuickNote(item, content, assets);
+        await mergeRemoteTagLinks();
         await qn.setBaseHash(item.id, item.contentHash);
         conflicts += 1;
         downloaded += 1;
         qn.log(`[perf] download ${item.id} conflict → remote wins, local archived to trash ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
       } else if (action.kind === "local-wins") {
-        // 只在本地变更：上传阶段将其作为权威版本，不以下载覆盖。
+        // 只在本地变更：上传阶段将其作为权威版本，不以下载覆盖；关系仍按自己的时间戳合并。
+        await mergeRemoteTagLinks();
         continue;
       } else {
         await qn.applyRemoteQuickNote(item, content, assets);
+        await mergeRemoteTagLinks();
         await qn.setBaseHash(item.id, item.contentHash);
         downloaded += 1;
         qn.log(`[perf] download ${item.id} new-content ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
@@ -410,6 +437,8 @@ export async function syncQuickNotesViaEngine(
       manifestItems.push({
         id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
         contentHash: item.contentHash, isConflict: item.isConflict, assets: entry.assets ?? [],
+        ...(item.tagIds.length > 0 ? { tagIds: item.tagIds } : {}),
+        ...(item.tagsUpdatedAt ? { tagsUpdatedAt: item.tagsUpdatedAt } : {}),
       });
       continue;
     }
@@ -439,7 +468,11 @@ export async function syncQuickNotesViaEngine(
       uploaded += 1;
       contentUploaded = true;
     }
-    manifestItems.push({ id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, contentHash, isConflict: item.isConflict, assets });
+    manifestItems.push({
+      id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, contentHash, isConflict: item.isConflict, assets,
+      ...(item.tagIds.length > 0 ? { tagIds: item.tagIds } : {}),
+      ...(item.tagsUpdatedAt ? { tagsUpdatedAt: item.tagsUpdatedAt } : {}),
+    });
     qn.log(`[perf] upload ${item.id} ${Date.now() - itemUploadStart}ms (content=${contentUploaded ? `${content.length}B` : "skip"}, assets=${pendingAssets.length})`);
   }
   qn.log(`[perf] quick upload phase ${Date.now() - uploadStart}ms (uploaded=${uploaded})`);

@@ -87,6 +87,7 @@ describe("小记虚拟列表渲染", () => {
         onCreateNote: () => {},
         onTreeChanged: async () => {},
         onQuickNotesChanged: async () => {},
+        onQuickNoteTagsChanged: async () => {},
       }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });

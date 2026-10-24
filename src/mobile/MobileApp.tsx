@@ -122,6 +122,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     setTagDirectory(tags);
   }, []);
 
+  /** 标签子系统独立刷新：建/改/删标签只动目录，不回读小记列表。 */
+  const refreshQuickNoteTags = useCallback(async () => {
+    setTagDirectory(await bridge.listQuickNoteTags());
+  }, []);
+
   /**
    * 从工作区回到首页时刷新列表（261020 实测）：首页是 keep-alive 常驻层，`refreshAll` 只在冷启动与
    * 首页自身操作时跑 ⇒ 在工作区新建/编辑后返回，笔记本计数与「最近文档」还是旧的（用户报的「计数不涨」）。
@@ -381,6 +386,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
               draft
               raiseKeyboard
               tagOptions={quickTagOptions}
+              onCreateTag={async (name) => {
+                const created = await bridge.createQuickNoteTag(name);
+                await refreshQuickNoteTags();
+                return created.id;
+              }}
               // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
               // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
               // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。
@@ -428,6 +438,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           onCreateNote={(notebookId) => void createNoteInParent(notebookId)}
           onTreeChanged={refreshAll}
           onQuickNotesChanged={refreshAll}
+          onQuickNoteTagsChanged={refreshQuickNoteTags}
         />
       </div>
       {route.kind === "notebook" && wsMounted && (

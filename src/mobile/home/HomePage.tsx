@@ -85,6 +85,8 @@ export interface HomePageProps {
   /** 目录树（笔记本/分组）变了以后刷新数据（重命名 / 设置图标 / 删除笔记本都走它）。 */
   onTreeChanged: () => Promise<void>;
   onQuickNotesChanged: () => Promise<void>;
+  /** 标签目录变了（建标签/改名/删除）：只刷新标签目录，不回读小记列表。 */
+  onQuickNoteTagsChanged: () => Promise<void>;
   /** 全局搜索命中小记：首页常驻组件接力定位/高亮该条（不自动进编辑态）。 */
   pendingQuickNoteId?: string | null;
   onPendingQuickNoteConsumed?: () => void;
@@ -123,7 +125,7 @@ function fmtRelative(iso: string): string {
 export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
-    onOpenNote, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged,
+    onOpenNote, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
@@ -343,7 +345,7 @@ export function HomePage(props: HomePageProps) {
     try {
       const full = await bridge.readQuickNote(id);
       if (!full) return;
-      setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tagIds: full.content.tagIds });
+      setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tagIds: full.tagIds });
       setComposer({ mode: "edit", id });
     } catch { /* 读取失败忽略 */ }
   };
@@ -506,16 +508,10 @@ export function HomePage(props: HomePageProps) {
     catch { showToast("删除失败", { type: "error" }); }
   };
 
+  /** 标签关系是独立子系统：只改关联表，**不重写正文**（正文 hash 不变，也不推进正文更新时间）。 */
   const applyQuickNoteTags = async (id: string, tagIds: string[]): Promise<void> => {
     try {
-      const full = await bridge.readQuickNote(id);
-      if (!full) return;
-      await bridge.saveQuickNoteContent(id, {
-        text: full.content.text,
-        body: full.content.body,
-        images: full.content.images,
-        tagIds,
-      });
+      await bridge.setQuickNoteTags(id, tagIds);
       await onQuickNotesChanged();
     } catch (reason) {
       showToast("更新标签失败：" + (reason as Error).message, { type: "error" });
@@ -613,6 +609,11 @@ export function HomePage(props: HomePageProps) {
             <QuickNoteComposerLazy
               editNote={editNote}
               tagOptions={quickNoteTagOptions}
+              onCreateTag={async (name) => {
+                const created = await bridge.createQuickNoteTag(name);
+                await onQuickNoteTagsChanged();
+                return created.id;
+              }}
               initialInsert={composer.mode === "new" ? { files: composer.files, command: composer.command } : null}
               onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
               onCancel={closeComposer}
@@ -777,7 +778,8 @@ export function HomePage(props: HomePageProps) {
             onAdd={(tagId) => { void applyQuickNoteTags(note.id, addQuickNoteTagId(note.tagIds, tagId)); }}
             onCreate={async (name) => {
               const created = await bridge.createQuickNoteTag(name);
-              await onQuickNotesChanged();
+              // 标签是独立子系统：建标签只刷新标签目录，不回读小记列表。
+              await onQuickNoteTagsChanged();
               return created.id;
             }}
             onClose={() => setTagSheetFor(null)}

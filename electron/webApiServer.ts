@@ -134,6 +134,7 @@ export const WEB_METHODS: Record<string, string> = {
   listQuickNotes: "list_quick_notes",
   createQuickNote: "create_quick_note",
   updateQuickNote: "update_quick_note",
+  setQuickNoteTags: "set_quick_note_tags",
   deleteQuickNote: "delete_quick_note",
   listQuickNoteTags: "list_quick_note_tags",
   createQuickNoteTag: "create_quick_note_tag",

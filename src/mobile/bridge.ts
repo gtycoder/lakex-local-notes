@@ -18,7 +18,7 @@ import { quickNotesDomain } from "./bridge/quickNotes";
 import { treeDomain } from "./bridge/tree";
 import { homeDomain } from "./bridge/home";
 import { aiDomain } from "./bridge/ai";
-import { backfillQuickNoteListMetadata, migrateQuickNotesV3 } from "./data/quickNotesRepository";
+import { backfillQuickNoteListMetadata } from "./data/quickNotesRepository";
 
 export type { HistoryMobileSettings } from "./data/historyRepository.js";
 
@@ -32,9 +32,7 @@ export const bridge = {
   ...aiDomain,
   async init(): Promise<void> {
     const d = await ensureDb();
-    // 261024：小记内容 v2（tags 名称）→ v3（tagIds）+ 标签目录补行；失败不阻断 App，下次启动重试。
-    await migrateQuickNotesV3(d).catch((error) => console.warn("[quick-notes] v3 tag migration failed", error));
-    // 一次性把旧小记的标签/首图元数据回填到 SQLite；失败不阻断 App，下次启动重试。
+    // 一次性把旧小记的首图元数据回填到 SQLite；失败不阻断 App，下次启动重试。
     await backfillQuickNoteListMetadata(d).catch((error) => console.warn("[quick-notes] list metadata backfill failed", error));
     // 资源显示走 AssetServer（Filesystem 文件直读，无需预加载/迁移）。
   },

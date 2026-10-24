@@ -122,6 +122,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   listQuickNotes: () => invoke("list_quick_notes"),
   createQuickNote: (input) => invoke("create_quick_note", input),
   updateQuickNote: (id, input) => invoke("update_quick_note", id, input),
+  setQuickNoteTags: (id, tagIds) => invoke("set_quick_note_tags", id, tagIds),
   deleteQuickNote: (id) => invoke("delete_quick_note", id),
   listQuickNoteTags: () => invoke("list_quick_note_tags"),
   createQuickNoteTag: (name) => invoke("create_quick_note_tag", name),

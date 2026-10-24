@@ -10,6 +10,7 @@ import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../../core/qu
 import type { QuickNotePage, QuickNotePageOptions } from "../data/quickNotesRepository.js";
 
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
+import { mobileQuickNoteTags } from "../data/quickNoteTagService.js";
 import { mobileCloudState, pushSingleQuickNote, scheduleQuickNoteVerify } from "./sync";
 
 
@@ -19,49 +20,58 @@ export const quickNotesDomain = {
     return await quickNotesRepository.listQuickNotePage(d, options);
   },
 
-  async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; tags: string[]; previewText: string; updatedAt: string } | null> {
+  async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; tagIds: string[]; tags: string[]; previewText: string; updatedAt: string } | null> {
     const d = await ensureDb();
     return await quickNotesRepository.readQuickNote(d, id);
   },
 
-  // ---- 标签目录（261024）：表是唯一来源，随小记 Manifest 同步 ----
+  // ---- 标签子系统（独立）：目录走 service；关系走独立 API ----
   async listQuickNoteTags() {
     const d = await ensureDb();
-    return await quickNotesRepository.listQuickNoteTags(d);
+    return await mobileQuickNoteTags.list(d);
   },
 
   async createQuickNoteTag(name: string) {
     return runWrite("createQuickNoteTag", async () => {
       const d = await ensureDb();
-      return await quickNotesRepository.createQuickNoteTag(d, name);
+      return await mobileQuickNoteTags.create(d, name);
     });
   },
 
   async updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) {
     return runWrite("updateQuickNoteTag", async () => {
       const d = await ensureDb();
-      return await quickNotesRepository.updateQuickNoteTag(d, id, patch);
+      return await mobileQuickNoteTags.update(d, id, patch);
     });
   },
 
   async reorderQuickNoteTags(ids: string[]) {
     return runWrite("reorderQuickNoteTags", async () => {
       const d = await ensureDb();
-      return await quickNotesRepository.reorderQuickNoteTags(d, ids);
+      return await mobileQuickNoteTags.reorder(d, ids);
     });
   },
 
   async mergeQuickNoteTags(sourceId: string, targetId: string) {
     return runWrite("mergeQuickNoteTags", async () => {
       const d = await ensureDb();
-      return await quickNotesRepository.mergeQuickNoteTags(d, sourceId, targetId);
+      return await mobileQuickNoteTags.merge(d, sourceId, targetId);
     });
   },
 
   async deleteQuickNoteTag(id: string) {
     return runWrite("deleteQuickNoteTag", async () => {
       const d = await ensureDb();
-      return await quickNotesRepository.deleteQuickNoteTag(d, id);
+      return await mobileQuickNoteTags.delete(d, id);
+    });
+  },
+
+  /** 标签关系（独立 API）：整组替换。 */
+  async setQuickNoteTags(id: string, tagIds: string[]) {
+    return runWrite("setQuickNoteTags", async () => {
+      const d = await ensureDb();
+      await mobileQuickNoteTags.setNoteTags(d, id, tagIds);
+      return await quickNotesRepository.readQuickNote(d, id);
     });
   },
 
@@ -117,7 +127,7 @@ export const quickNotesDomain = {
     };
   },
 
-  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[]; tagIds?: string[] }): Promise<string> {
+  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[] }): Promise<string> {
     return runWrite("saveQuickNoteContent", async () => {
       const d = await ensureDb();
       return await quickNotesRepository.saveQuickNoteContent(d, id, payload);

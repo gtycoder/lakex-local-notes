@@ -6,7 +6,7 @@ import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
 import { writeQuickNoteBody } from "./noteBodies.js";
 import { normalizeQuickNoteContent, serializeQuickNoteContent } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
-import { ensureQuickNoteTag } from "./quickNotesRepository.js";
+import { mobileQuickNoteTags } from "./quickNoteTagService.js";
 
 function adapt(raw: Database.Database): MobileDb {
   return {
@@ -39,15 +39,17 @@ async function makeDb(): Promise<MobileDb> {
 
 async function addQuickNote(d: MobileDb, id: string, text: string, tagNames: string[] = []): Promise<void> {
   const tags = [];
-  for (const name of tagNames) tags.push(await ensureQuickNoteTag(d, name));
-  const content = normalizeQuickNoteContent(text, `<p>${text}</p>`, [], tags.map((tag) => tag.id));
+  for (const name of tagNames) tags.push(await mobileQuickNoteTags.create(d, name));
+  const content = normalizeQuickNoteContent(text, `<p>${text}</p>`, []);
   const serialized = serializeQuickNoteContent(content);
   await writeQuickNoteBody(id, serialized);
   const now = new Date().toISOString();
   await d.prepare(
-    "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, tags_json, tag_ids_json) VALUES (?,?,?,?,0,?,'local',0,?,?) " +
-    "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, tags_json=excluded.tags_json, tag_ids_json=excluded.tag_ids_json"
-  ).run(id, now, now, text.replace(/\s+/g, " ").trim(), sha256Sync(new TextEncoder().encode(serialized)), JSON.stringify(tags.map((tag) => tag.name)), JSON.stringify(tags.map((tag) => tag.id)));
+    "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict) VALUES (?,?,?,?,0,?,'local',0) " +
+    "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL"
+  ).run(id, now, now, text.replace(/\s+/g, " ").trim(), sha256Sync(new TextEncoder().encode(serialized)));
+  // 标签走独立关联表（正文里没有标签）。
+  await mobileQuickNoteTags.setNoteTags(d, id, tags.map((tag) => tag.id));
 }
 
 describe("移动端小记搜索", () => {
@@ -79,6 +81,37 @@ describe("移动端小记搜索", () => {
     expect((await searchQuickNotes(d, "待删除")).length).toBe(1);
     await d.prepare("UPDATE quick_notes SET deleted_at=? WHERE id=?").run(new Date().toISOString(), "q1");
     expect(await searchQuickNotes(d, "待删除")).toEqual([]);
+    await d.close();
+  });
+
+  it("标签关系：新增/改名/删除都维护搜索索引；删标签只清关联、不删小记", async () => {
+    const d = await makeDb();
+    const tag = await mobileQuickNoteTags.create(d, "灵感");
+    await addQuickNote(d, "q1", "正文");
+    await mobileQuickNoteTags.setNoteTags(d, "q1", [tag.id]);
+    expect((await searchQuickNotes(d, "灵感")).map((hit) => hit.id)).toEqual(["q1"]);
+
+    await mobileQuickNoteTags.update(d, tag.id, { name: "项目" });
+    expect(await searchQuickNotes(d, "灵感")).toEqual([]);
+    expect((await searchQuickNotes(d, "项目")).map((hit) => hit.id)).toEqual(["q1"]);
+
+    const result = await mobileQuickNoteTags.delete(d, tag.id);
+    expect(result.updated).toBe(1);
+    expect(await searchQuickNotes(d, "项目")).toEqual([]);
+    expect((await d.prepare("SELECT COUNT(*) AS c FROM quick_notes WHERE id=?").get("q1") as { c: number }).c).toBe(1);
+    await d.close();
+  });
+
+  it("合并标签：关联改指向目标、源标签墓碑（事务内不再嵌套 BEGIN）", async () => {
+    const d = await makeDb();
+    const source = await mobileQuickNoteTags.create(d, "灵感");
+    const target = await mobileQuickNoteTags.create(d, "待办");
+    await addQuickNote(d, "q1", "合并", ["灵感", "待办"]);
+
+    const result = await mobileQuickNoteTags.merge(d, source.id, target.id);
+    expect(result.updated).toBe(1);
+    expect(await mobileQuickNoteTags.tagIds(d, "q1")).toEqual([target.id]);
+    expect((await mobileQuickNoteTags.list(d)).map((tag) => tag.name)).toEqual(["待办"]);
     await d.close();
   });
 });

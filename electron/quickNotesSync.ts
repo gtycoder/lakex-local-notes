@@ -48,6 +48,9 @@ export { QUICK_NOTES_ROOT };
 export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDbPort {
   return {
     async listLocalQuickNotes(): Promise<QuickNoteSyncItem[]> {
+      // 关系与版本一次性读出（避免逐条 SQLite 查询）。
+      const links = quickNotes.links.listAll();
+      const stamps = quickNotes.links.allTagsUpdatedAt();
       return quickNotes.listQuickNotesForSync().map((item) => ({
         id: item.id,
         createdAt: item.createdAt,
@@ -56,6 +59,8 @@ export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNote
         syncState: item.syncState,
         isConflict: item.isConflict,
         images: item.content.images.map(({ id, filename, mimeType, width, height, size, hash }) => ({ id, filename, mimeType, width, height, size, hash })),
+        tagIds: links.get(item.id) ?? [],
+        tagsUpdatedAt: stamps.get(item.id) ?? "",
       }));
     },
     async readContent(id: string): Promise<Uint8Array | null> {
@@ -70,6 +75,9 @@ export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNote
         Buffer.from(content),
         assets.map((a) => ({ filename: a.filename, bytes: Buffer.from(a.bytes) })),
       );
+    },
+    async applyRemoteQuickNoteTagLinks(id, tagIds, tagsUpdatedAt) {
+      quickNotes.applyRemoteQuickNoteTagLinks(id, tagIds, tagsUpdatedAt);
     },
     async applyTombstoneContent(id, content) {
       // V5 §5.5：墓碑内容原子写（写临时 + rename，防崩溃半写文件）
@@ -104,7 +112,7 @@ export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNote
     async setBaseHash(id, contentHash) { quickNotes.setBaseHash(id, contentHash); },
     async markSynced(id) { quickNotes.markSynced(id); },
     async markSyncedIfUnchanged(id, expectedContentHash) { quickNotes.markSyncedIfUnchanged(id, expectedContentHash); },
-    async mergeRemoteQuickNoteTags(remote) { return quickNotes.applyRemoteQuickNoteTags(remote); },
+    async mergeRemoteQuickNoteTags(remote) { return quickNotes.tagService.applyRemote(remote); },
     async log(message) { quickNotes.logScopes.quick.info(message); },
   };
 }

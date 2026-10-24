@@ -55,10 +55,10 @@ describe("小记标签与筛选缺陷回归（261024）", () => {
     return WORKSPACE_SRC.slice(start, WORKSPACE_SRC.indexOf("\n  }", start));
   };
 
-  it("预览勾选待办必须原样提交标签 ID（缺省会被当作清空）", () => {
+  it("预览勾选待办只保存正文：标签在独立关联表，保存正文不会清空它", () => {
     const body = fnBody("togglePreviewTask");
     expect(body).toContain("native.updateQuickNote");
-    expect(body).toContain("tagIds: item.content.tagIds");
+    expect(body).not.toContain("tagIds");
   });
 
   it("类型筛选生效时点卡片标签会清掉类型筛选，不形成隐藏 AND", () => {
@@ -206,12 +206,17 @@ describe("小记标签（独立标签表，随 Manifest 同步）", () => {
     expect(MOBILE_HOME_SRC).toContain("quickNoteTagOptions");
   });
 
-  it("卡片显示标签名，筛选按 tagIds；正文只存 tagIds", () => {
-    expect(WORKSPACE_SRC).toContain("item.content.tagIds");
+  it("正文保存不携带标签；标签关系走独立 API（桌面 / 移动端同一条）", () => {
     expect(WORKSPACE_SRC).toContain("filterQuickNotesByTag(timed");
     expect(MOBILE_LIST_MODEL_SRC).toContain("filterQuickNotesByTag(displayedQuickNotes");
-    expect(WORKSPACE_SRC).toMatch(/native\.updateQuickNote\(noteId,[\s\S]{0,260}tagIds,/);
-    expect(MOBILE_COMPOSER_SRC).toMatch(/saveQuickNoteContent\(noteId, \{ text: plain, body, images, tagIds \}\)/);
+    // 桌面：保存正文之后按需单独提交关系；保存正文的入参里没有 tagIds。
+    expect(WORKSPACE_SRC).toContain("native.setQuickNoteTags");
+    expect(WORKSPACE_SRC).not.toMatch(/native\.updateQuickNote\((?:noteId|editingId), \{[^}]*tagIds/);
+    expect(WORKSPACE_SRC).not.toMatch(/native\.createQuickNote\(\{[^}]*tagIds/);
+    // 移动端：composer 保存正文 → 关系另调 setQuickNoteTags。
+    expect(MOBILE_COMPOSER_SRC).toContain("bridge.setQuickNoteTags");
+    expect(MOBILE_COMPOSER_SRC).not.toMatch(/saveQuickNoteContent\([^)]*tagIds/);
+    expect(MOBILE_HOME_SRC).toContain("bridge.setQuickNoteTags");
   });
 
   it("切换标签筛选前先保存并退出正在编辑的小记，避免筛掉卡片时丢未保存内容", () => {

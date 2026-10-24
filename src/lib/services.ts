@@ -87,9 +87,9 @@ export function createNativeServices(api: LakeNative): AppServices {
     quickNotes: {
       list: () => api.listQuickNotes().then((items) => items.map(quickNoteToDto)),
       create: (input) =>
-        api.createQuickNote({ text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, tagIds: input.tagIds }).then(quickNoteToDto),
+        api.createQuickNote({ text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds }).then(quickNoteToDto),
       update: (id, input) =>
-        api.updateQuickNote(id, { text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, retainedImageIds: input.retainedImageIds, tagIds: input.tagIds }).then(quickNoteToDto),
+        api.updateQuickNote(id, { text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, retainedImageIds: input.retainedImageIds }).then(quickNoteToDto),
       delete: (id) => api.deleteQuickNote(id),
     },
     trash: {

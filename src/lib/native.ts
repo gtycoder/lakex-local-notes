@@ -167,6 +167,8 @@ export interface LakeNative {
   listQuickNotes(): Promise<QuickNoteDocument[]>;
   createQuickNote(input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   updateQuickNote(id: string, input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
+  /** 标签关系（独立 API）：整组替换，返回更新后的小记。 */
+  setQuickNoteTags(id: string, tagIds: string[]): Promise<QuickNoteDocument>;
   deleteQuickNote(id: string): Promise<void>;
   /** 标签目录（唯一来源；随小记 Manifest 同步）。 */
   listQuickNoteTags(): Promise<QuickNoteTag[]>;
@@ -347,6 +349,7 @@ export const native = {
   listQuickNotes: () => api().listQuickNotes(),
   createQuickNote: (input: SaveQuickNoteInput) => api().createQuickNote(input),
   updateQuickNote: (id: string, input: SaveQuickNoteInput) => api().updateQuickNote(id, input),
+  setQuickNoteTags: (id: string, tagIds: string[]) => api().setQuickNoteTags(id, tagIds),
   deleteQuickNote: (id: string) => api().deleteQuickNote(id),
   listQuickNoteTags: () => api().listQuickNoteTags(),
   createQuickNoteTag: (name: string) => api().createQuickNoteTag(name),

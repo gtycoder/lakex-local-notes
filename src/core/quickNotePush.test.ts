@@ -38,6 +38,7 @@ function createFakeS3(): S3Store & { bucket: Map<string, Uint8Array>; puts: stri
 interface FakeNote {
   id: string; createdAt: string; updatedAt: string; syncState: string; isConflict: boolean;
   images: QuickNoteSyncItemImage[]; content: Uint8Array;
+  tagIds: string[]; tagsUpdatedAt: string;
 }
 
 interface FakePort {
@@ -64,6 +65,7 @@ function createFakePort(): FakePort {
       return [...notes.values()].map((n) => ({
         id: n.id, createdAt: n.createdAt, updatedAt: n.updatedAt,
         contentHash: sha256Sync(n.content), syncState: n.syncState, isConflict: n.isConflict, images: n.images,
+        tagIds: n.tagIds, tagsUpdatedAt: n.tagsUpdatedAt,
       }));
     },
     async readContent(id) { return notes.get(id)?.content ?? null; },
@@ -73,8 +75,15 @@ function createFakePort(): FakePort {
         id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, syncState: "synced",
         isConflict: item.isConflict, content,
         images: item.assets.map((a) => ({ ...a })),
+        tagIds: [], tagsUpdatedAt: "",
       });
       for (const a of incoming) assets.set(`${item.id}/${a.filename}`, a.bytes);
+    },
+    async applyRemoteQuickNoteTagLinks(id, tagIds, tagsUpdatedAt) {
+      const note = notes.get(id);
+      if (!note || tagsUpdatedAt <= note.tagsUpdatedAt) return;
+      note.tagIds = [...tagIds];
+      note.tagsUpdatedAt = tagsUpdatedAt;
     },
     async applyTombstoneContent() { /* 本文件不覆盖墓碑落地 */ },
     async listDeletedQuickNoteAssets() { return []; },
@@ -102,8 +111,11 @@ function createFakePort(): FakePort {
   return { port, notes, assets, bases, syncedCalls, restorePending };
 }
 
-function addNote(f: FakePort, id: string, text: string, images: QuickNoteSyncItemImage[] = []): FakeNote {
-  const note: FakeNote = { id, createdAt: "2026-10-13T00:00:00.000Z", updatedAt: "2026-10-13T00:00:00.000Z", syncState: "local", isConflict: false, images, content: bytesOf(text) };
+function addNote(f: FakePort, id: string, text: string, images: QuickNoteSyncItemImage[] = [], tags: { tagIds?: string[]; tagsUpdatedAt?: string } = {}): FakeNote {
+  const note: FakeNote = {
+    id, createdAt: "2026-10-13T00:00:00.000Z", updatedAt: "2026-10-13T00:00:00.000Z", syncState: "local", isConflict: false, images, content: bytesOf(text),
+    tagIds: [...(tags.tagIds ?? [])], tagsUpdatedAt: tags.tagsUpdatedAt ?? "",
+  };
   f.notes.set(id, note);
   return note;
 }
@@ -158,6 +170,24 @@ describe("单条小记推送（保存并同步）", () => {
     expect(outcome).toMatchObject({ status: "pushed", unchanged: true, uploadedContent: false, manifestId: null });
     expect(s3.puts).toHaveLength(0);
     expect(readManifest(s3).commitId).toBe("seed-commit");
+  });
+
+  it("远端关系更新而本地从未同步过 ⇒ 不拿本地空关系覆盖远端标签", async () => {
+    const s3 = createFakeS3();
+    const f = createFakePort();
+    const hash = sha256Sync(bytesOf("same"));
+    const tagId = "t_0123456789abcdef";
+    seedManifest(s3, [remoteItem("note-a", hash, { tagIds: [tagId], tagsUpdatedAt: "2026-10-15T00:00:00.000Z" })]);
+    addNote(f, "note-a", "same");
+    s3.bucket.set(`${cfg.prefix}/quick-notes/objects/${hash}.qnote`, bytesOf("same"));
+    s3.puts.length = 0;
+
+    const outcome = await pushQuickNote(cfg, s3, f.port, "note-a");
+
+    // 关系权威版本在远端 ⇒ 清单无需重写，更不能把远端 tagIds 抹掉。
+    expect(outcome).toMatchObject({ status: "pushed", unchanged: true, manifestId: null });
+    expect(readManifest(s3).items[0].tagIds).toEqual([tagId]);
+    expect(readManifest(s3).items[0].tagsUpdatedAt).toBe("2026-10-15T00:00:00.000Z");
   });
 
   it("云端还没有清单 ⇒ 退回一次完整同步（不写「只有这一条」的清单）", async () => {

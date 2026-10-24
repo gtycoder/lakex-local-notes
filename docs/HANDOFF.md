@@ -5,26 +5,31 @@
 > **⚠️ 261022 历史已重写两次（品牌/邮箱标准化 → 闭源内核移出公开仓库）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
 > **§8 是移动端（Android）专职交接**；桌面会话不要改 §8，移动端会话不要改 §0–§7 之外的桌面文件。
 
-## 0. 最新交接（261023）
+## 0. 最新交接（261024）
 
-> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest **385 文件 2631 例（17 skip）**（261023 干净 worktree 快照 = `c9ebb117` + 维护域补丁，主树并行会话的在途 WIP 不计）。
+> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest **384 文件 2698 例（17 skip）**（261024 标签子系统方案 B 落地后的主树快照）。
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
 > **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
-### 261024 · 小记标签管理（独立标签表 + Manifest）+ 快捷筛选 · **已改，未提交**
+### 261024 · 小记标签子系统（方案 B：目录 + 关联表）+ 快捷筛选 · **已改，未提交**
 
-- **口径（用户定稿）**：做独立标签表与 Manifest 同步；**标签 ID 为身份**；删除标签只从小记移除、不删小记；不做每日/随机回顾；快捷筛选做**时间档 + 自定日期 + 标签包含/排除**（不做媒体类型）。
-- **协议**：`.qnote` 升 **v3**：`content.tagIds`（不再存标签名）；标签 ID = `t_` + `sha256(归一名称)` 前 16 位（同名同 ID、改名不变）。小记 Manifest（version 仍 `1`）新增**可选** `tags` 数组（`{id,name,sortOrder,pinned,createdAt,updatedAt,deletedAt}`），旧端忽略、不报错；整轮同步合并（按 ID + `updatedAt` LWW，墓碑会清掉本地引用），单条推送原样带回；移动端未实现端口时原样保留远端目录。
-- **数据迁移**：桌面 `QuickNotesStore` 启动扫描 v2 `.qnote` → 建标签行 + 改 v3 + `sync_state='local'`（`updatedAt` 不变；正文 hash 变 ⇒ 下一轮上传，不顶到时间线最前）。移动端 `migrateQuickNotesV3` 同规则（`device_state.quick_note_content_v3` 标记，失败下次重试）；`MOBILE_SCHEMA_VERSION` **4 → 5**（+`quick_note_tags`、`quick_notes.tag_ids_json`）。⚠️ **旧 APK 读不了 v3 小记**：桌面与 Android 必须同批升级后再同步。
-- **标签目录**：`quick_note_tags(id,name,sort_order,pinned,created_at,updated_at,deleted_at)`；名称不设唯一约束（改名冲突由 UI 提示改用合并）。重命名只改表 + 刷新索引标签词，不重写 `.qnote`；合并/删除批量改写受影响 `.qnote` 的 `tagIds`（`updatedAt` 不变）。创建幂等（同名 active 直接返回、同名墓碑复活）。
-- **桌面 UI**：标签管理（`QuickNoteTagManager`：搜索 / 重命名 / 合并到… / 删除 / 置顶 / 拖拽排序）入口 = 标题栏「标签管理」+ 标签条右侧「管理」+ 列表「标签 ▾」底部「管理标签…」；选择器改按 ID（新建走 IPC 写表）；快捷筛选（`QuickNoteFilterDialog`：时间六档 + 自定起止 + 类型 + 标签包含/排除）入口 = 漏斗菜单「更多筛选…」/ 列表 ⋯「筛选小记…」。筛选按创建时间（时间去年前日按本地日界）。
-- **移动端**：标签表 + 仓储 CRUD/合并/删除/迁移（`src/mobile/data/quickNotesRepository.ts`）；bridge 新增 6 个方法（`list/create/update/reorder/merge/deleteQuickNoteTag`，写域；`list` 归 none）；列表投影加 `tag_ids_json`；HomePage/Composer/TagSheet 改按 ID；首页 `refreshAll` 同时拉标签目录。**移动端暂无标签管理页**（入口后续再接）。
-- **缺陷修复（本批前置）**：① 更新时 `tagIds` 缺省 = 保持原标签、显式 `[]` 才清空，预览勾选待办不再丢标签；② 搜索账本 `tags` 改 JSON 数组（含空格标签恢复不再拆坏；旧空格账本读取降级）；③ 类型/标签筛选互斥，点卡片标签会清掉类型筛选。
-- **护栏**：`quickNoteTags.test.ts`（ID/目录/筛选/合并）、`quickNoteFilters.test.ts`（时间档）、`quickNoteModel.test.ts`（v3 + v2 迁移）、`quickNotes.test.ts`（标签往返/未传保持/空格恢复）、`quickNotesDbPort`/`quickNotesSearch`/`quickNotesListProjection`/`useQuickNoteListModel` 等；IPC 通道 130 → **136**、互斥域写操作 30 → **35**、`cssLayers` quick-notes 726 → **824**（均同步基线并写明理由）。
+- **架构（用户拍板方案 B：最彻底）**：标签与笔记**独立管理、独立逻辑**，只通过关联表发生关系。
+  - `.qnote` **只存内容** `version/text/body/images`（v3，但已移除 `tagIds`）；
+  - 标签目录 `quick_note_tags`；关系 `quick_note_tag_links(note_id, tag_id, position)`；`quick_notes.tags_updated_at` = 关系 LWW 时钟；
+  - 桌面：`electron/quickNoteTagsStore.ts`（目录）/ `quickNoteTagLinksStore.ts`（关系）/ `quickNoteTagService.ts`（唯一协调层）；`quickNotes.ts` 只留薄 API `setQuickNoteTags` / `applyRemoteQuickNoteTagLinks`，保存正文不再接标签；
+  - 移动端：`src/mobile/data/quickNoteTagsRepository.ts` / `quickNoteTagLinksRepository.ts` / `quickNoteTagService.ts`；仓储/搜索/同步端口同规则。
+- **无历史迁移（用户原话：\"不用管历史。也不用管迁移。\"）**：删除 v2→v3 迁移与移动端 `migrateQuickNotesV3`；`MOBILE_SCHEMA_VERSION` **6**（删 `tags_json/tag_ids_json`，加 `tags_updated_at` + links 表/索引）。
+- **协议**：`.qnote` v3 = 纯内容；小记 Manifest（version 仍 `1`）保留可选 `tags` 目录，并给每条 item 新增可选 `tagIds` + `tagsUpdatedAt`。下载时**正文未变也按 `tagsUpdatedAt` 合并关系**；上传/单条推送都带本地关系（unchanged 判定含关系签名）。
+- **标签目录/管理**：ID = `t_` + `sha256(归一名称)` 前 16 位；改名只改目录 + 重索引标签词；合并 = 改关联 + 墓碑；删除 = 墓碑 + 清关联（小记保留）；创建幂等（同名 active 返回、同名墓碑复活）。
+- **桌面 UI**：`QuickNoteTagManager`（搜索/重命名/合并/删除/置顶/排序）、`QuickNoteFilterDialog`（时间六档 + 自定起止 + 类型 + 标签包含/排除）、`QuickNoteTagPicker` 按 ID；保存正文后再按需 `native.setQuickNoteTags`。
+- **移动端**：HomePage/Composer/TagSheet 改按 ID；`applyQuickNoteTags` 只调 `bridge.setQuickNoteTags`；建标签只刷新标签目录（`onQuickNoteTagsChanged`），不重读小记列表；详情缓存从 `readQuickNote` 顶层 `tagIds` 取。
+- **缺陷修复**：① 保存正文不携带标签 ⇒ 预览勾选待办不再清空标签；② 搜索账本 `tags` 存 JSON 数组（含空格标签恢复不拆坏）；③ 类型/标签筛选互斥，点卡片标签会清掉类型筛选。
+- **护栏**：`quickNoteTags.test.ts`、`quickNoteFilters.test.ts`、`quickNoteModel.test.ts`（正文不含标签字段）、`quickNotes.test.ts`（关系独立 / 墓碑清关联）、`quickNotesDbPort` / `quickNotesSearch` / `quickNotesListProjection` / `useQuickNoteDetailCache` 等；IPC 通道 **137**（+`set_quick_note_tags`）、WRITE_OPS **36** / ALL **82**（同步基线并写明理由）。
+- **门禁**：tsc 0 · vitest **384 文件 / 2698 例通过**（17 skip）· ui-metrics 0（未定义令牌 0）· check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓。**未做 CDP 真实验收 / 设备实测 / 移动端标签管理页**。
 - **标签展示修复（用户 261024 报：写作区标签行显示 `t_...`）**：根因是写作区/选择器只拿 `tagIndex.tags`（只含有计数标签）查名称，刚加到草稿、尚未保存的标签计数为 0 ⇒ 查不到 ⇒ 回退显示 ID。现在统一由 core `buildQuickNoteTagOptions(tagDirectory, index.tags)` 合成**完整目录选项**（含 0 条小记的标签），写作区/选择器/管理页都用它；名称缺失只显示「已删除标签」，**任何展示路径都不再回退到 ID**。标签条仍只用有计数的索引。桌面与移动端同规则。
-- **门禁**：tsc 0 · vitest **384 文件 / 2690 例通过**（17 skip）· ui-metrics 0（未定义令牌 0）· check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓。**未做 CDP 真实验收 / 设备实测**（下一会话补）。
+- **评审收口（261024 方案 B 复审）**：① 移动端搜索索引在 `setNoteTags` / 远端关系变化后强制重建（此前只有内容 hash 变化才重建，按新标签搜不到）；② 移动端删除/合并/同步目录不再嵌套 `d.transaction`（SQLite 不允许嵌套 BEGIN），改为 `*InTransaction` 变体；③ 同步下载改为「新小记先落正文行、再合并关系」，冲突时先归档本地关系再写远端；冲突归档副本复制标签关系，恢复时推进 `tags_updated_at`；④ 删除标签/合并目标校验 + 远端关系过滤已墓碑标签，防关系复活；⑤ 标签目录合并改为字段级等价比较，远端目录为空/无变化时不再全量重建搜索索引；桌面首次建关联表、移动端 v5→v6 升级各清一次派生搜索索引；⑥ 单条推送按 `tagsUpdatedAt` 选关系权威版本，避免本地空关系抹掉远端较新标签；⑦ 列表/详情 `tags` 与 `tagIds` 保持等长（未知标签用空串），修复卡片标签名错位。
 - **未做（等用户决策）**：移动端标签管理页；桌面回顾/导出；标签颜色/图标/多级。
 
 ### 261023(十) · 加密文本卡（端到端）+ `isLocked` → `isEditLocked` 更名 · **已提交 `6333e8a9` 并推送三仓，待用户验收**

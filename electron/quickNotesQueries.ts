@@ -5,6 +5,7 @@ import { AppError } from "../src/core/storeErrors.js";
 import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 import { mapQuickNoteDeletedRow, mapQuickNoteRow, mapTrashRow } from "../src/core/quickNoteQueries.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
+import type { QuickNoteTag } from "../src/core/quickNoteTags.js";
 
 export interface QuickNoteRow {
   id: string;
@@ -41,8 +42,12 @@ interface QuickNotesQueryDeps {
   db: DbLike;
   itemPath(id: string): string;
   imageUrl(noteId: string, filename: string): string;
-  /** 标签目录（读取展示名用）：桌面直接查 quick_note_tags。 */
-  listTags(): Array<{ id: string; name: string; deleted_at: string | null }>;
+  /** 标签目录（独立子系统；读取展示名用）。 */
+  listTags(): QuickNoteTag[];
+  /** 关联表里的标签 ID（顺序 = 最近添加在前）。 */
+  tagIds(noteId: string): string[];
+  /** 一次性读出全部关联（列表映射用，避免 N+1）。 */
+  allTagIds(): Map<string, string[]>;
 }
 
 /** Read-only Quick Notes queries; write/state-machine operations stay in QuickNotesStore. */
@@ -63,25 +68,26 @@ export class QuickNotesQueries {
     catch (error) { throw new AppError("InvalidInput", error instanceof Error ? error.message : String(error)); }
   }
 
-  mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent, tagNames?: (ids: readonly string[]) => string[]): QuickNoteDocument {
-    return mapQuickNoteRow(row, { content, imageUrl: this.deps.imageUrl, tagNames: tagNames ?? this.tagNameResolver() });
+  mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent, tagIds: readonly string[], tagNames?: (ids: readonly string[]) => string[]): QuickNoteDocument {
+    return mapQuickNoteRow(row, { content, imageUrl: this.deps.imageUrl, tagIds, tagNames: tagNames ?? this.tagNameResolver() });
   }
 
   /** 标签 ID → 名称（一次性载入目录，列表映射共用一个解析器；未知 ID 给空串以保持与 tagIds 对齐）。 */
   private tagNameResolver(): (ids: readonly string[]) => string[] {
-    const names = new Map(this.deps.listTags().filter((tag) => !tag.deleted_at).map((tag) => [tag.id, tag.name] as const));
+    const names = new Map(this.deps.listTags().filter((tag) => !tag.deletedAt).map((tag) => [tag.id, tag.name] as const));
     return (ids) => ids.map((id) => names.get(id) ?? "");
   }
 
   read(id: string): QuickNoteDocument {
     const row = this.readRow(id);
-    return this.mapDocument(row, this.readStoredContent(id));
+    return this.mapDocument(row, this.readStoredContent(id), this.deps.tagIds(id));
   }
 
   list(): QuickNoteDocument[] {
     const rows = this.deps.db.prepare("SELECT * FROM quick_notes ORDER BY created_at DESC").all() as QuickNoteRow[];
     const tagNames = this.tagNameResolver();
-    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id), tagNames));
+    const links = this.deps.allTagIds();
+    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id), links.get(row.id) ?? [], tagNames));
   }
 
   listTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }> {

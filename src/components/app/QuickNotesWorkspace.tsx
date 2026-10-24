@@ -482,9 +482,14 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       const referenced = assets.filter((item) => { const key = assetKey(item); return !key || body.includes(key); });
       const stagedImageIds = referenced.filter((item) => item.source === "staged").map((item) => item.image.id);
       const retainedImageIds = referenced.filter((item) => item.source === "saved").map((item) => item.image.id);
-      const saved = isEditing && editingId
-        ? await native.updateQuickNote(editingId, { text, body, draftId: draft.id, stagedImageIds, retainedImageIds, tagIds: draft.tagIds })
-        : await native.createQuickNote({ text, body, draftId: draft.id, stagedImageIds, tagIds: draft.tagIds });
+      const tagsChanged = isEditing
+        ? draft.tagIds.join("\u0000") !== draft.baseline.tagIds.join("\u0000")
+        : draft.tagIds.length > 0;
+      let saved = isEditing && editingId
+        ? await native.updateQuickNote(editingId, { text, body, draftId: draft.id, stagedImageIds, retainedImageIds })
+        : await native.createQuickNote({ text, body, draftId: draft.id, stagedImageIds });
+      // 关系是独立子系统：正文保存成功后，单独调用标签关系 API。
+      if (tagsChanged) saved = await native.setQuickNoteTags(saved.id, draft.tagIds);
       listVersionRef.current.invalidate();
       setItems((current) => {
         const without = current.filter((item) => item.id !== saved.id);
@@ -581,7 +586,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         draftId: crypto.randomUUID(),
         stagedImageIds: [],
         retainedImageIds: item.content.images.map((asset) => asset.id),
-        tagIds: item.content.tagIds,
       });
       listVersionRef.current.invalidate();
       setItems((current) => current.map((candidate) => (candidate.id === noteId ? saved : candidate)));
@@ -772,6 +776,31 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     }
   }, [tagFilter, tagIndex.tags]);
 
+  // 草稿里引用的标签可能被删除（标签管理或同步墓碑）：删掉后从草稿与基线一起剔除，
+  // 否则保存时 setQuickNoteTags 会因「标签不存在或已删除」直接失败、卡住整次保存。
+  useEffect(() => {
+    const active = new Set(tagDirectory.filter((tag) => !tag.deletedAt).map((tag) => tag.id));
+    const prune = (draft: DraftState | null): DraftState | null => {
+      if (!draft) return null;
+      const tagIds = draft.tagIds.filter((id) => active.has(id));
+      const baselineTagIds = draft.baseline.tagIds.filter((id) => active.has(id));
+      if (tagIds.length === draft.tagIds.length && baselineTagIds.length === draft.baseline.tagIds.length) return draft;
+      return { ...draft, tagIds, baseline: { ...draft.baseline, tagIds: baselineTagIds } };
+    };
+    setEditingDraft((current) => prune(current));
+    setCreateDraft((current) => prune(current) ?? current);
+  }, [tagDirectory]);
+
+  // 高级筛选里的标签可能被删除：把已不存在的 ID 从包含/排除里剔掉，避免形成看不见的隐藏 AND。
+  useEffect(() => {
+    if (tagFilter.kind !== "selection") return;
+    const active = new Set(tagOptions.map((tag) => tag.id));
+    const include = tagFilter.include.filter((id) => active.has(id));
+    const exclude = tagFilter.exclude.filter((id) => active.has(id));
+    if (include.length === tagFilter.include.length && exclude.length === tagFilter.exclude.length) return;
+    setTagFilter(include.length === 0 && exclude.length === 0 ? { kind: "all" } : { kind: "selection", include, exclude });
+  }, [tagFilter, tagOptions]);
+
   /** 排序只影响本端展示顺序（不写库、不进 manifest）；四档比较器在 core/quickNoteSort（与移动端同一份）。 */
   const visibleItems = useMemo(() => {
     const timed = items.filter((item) => matchesQuickNoteTimeFilter(item.createdAt, timeFilter));
@@ -918,14 +947,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     const item = items.find((candidate) => candidate.id === noteId);
     if (!item) return;
     try {
-      const saved = await native.updateQuickNote(noteId, {
-        text: item.content.text,
-        body: item.content.body,
-        draftId: crypto.randomUUID(),
-        stagedImageIds: [],
-        retainedImageIds: item.content.images.map((asset) => asset.id),
-        tagIds,
-      });
+      // 只改关联，不重写正文。
+      const saved = await native.setQuickNoteTags(noteId, tagIds);
       listVersionRef.current.invalidate();
       setItems((current) => current.map((candidate) => (candidate.id === noteId ? saved : candidate)));
     } catch (reason) {

@@ -46,12 +46,13 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { isQuickNoteImageMime, quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { addQuickNoteTagId, removeQuickNoteTagId, type QuickNoteTagSummary } from "../../core/quickNoteTags.js";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
-
 export interface QuickNoteComposerProps {
   /** 编辑目标（已有小记 id + 正文）；null = 新建 */
   editNote?: { id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tagIds?: string[] } | null;
-  /** 已有标签候选（从全部有效小记派生，随首页数据刷新）。 */
+  /** 已有标签候选（完整目录；不含小记计数）。 */
   tagOptions: readonly QuickNoteTagSummary[];
+  /** 新建标签（写标签子系统后返回 ID；由上层负责刷新目录）。 */
+  onCreateTag?: (name: string) => Promise<string>;
   /**
    * 草稿模式（261010：长按图标 / `locallakexnotes://quick-note` 深链那条 capture 路径用）：
    * 挂载时恢复上一次未提交的草稿（含富内容 body）、输入防抖落库、保存/取消清除。
@@ -97,7 +98,7 @@ async function readDimensions(bytes: Uint8Array, mimeType: string): Promise<{ wi
   }
 }
 
-export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, draft = false, raiseKeyboard = false, initialInsert = null }: QuickNoteComposerProps) {
+export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, onCancel, draft = false, raiseKeyboard = false, initialInsert = null }: QuickNoteComposerProps) {
   /** 初始 id：新建时先固定一个；草稿恢复后用**草稿自己的 id**（沿用 ⇒ 图片作用域一致）。 */
   const initialId = useMemo(() => editNote?.id ?? crypto.randomUUID(), [editNote]);
   const [noteId, setNoteId] = useState(initialId);
@@ -120,6 +121,8 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
   useCaretIntoView(cardRef, true);
   const [text, setText] = useState(editNote?.text ?? "");
   const [tagIds, setTagIds] = useState<string[]>(editNote?.tagIds ?? []);
+  /** 关系基线：只有真正改过标签才调 setQuickNoteTags（避免每次保存都推进关系版本）。 */
+  const tagBaselineRef = useRef<string[]>([...(editNote?.tagIds ?? [])]);
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   /** 「保存并同步」的网络阶段（与保存分开：保存是本地写、同步是维护域网络操作）。 */
@@ -162,6 +165,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
           ));
         setText(saved.text);
         setTagIds(saved.tagIds ?? []);
+        tagBaselineRef.current = [...(saved.tagIds ?? [])];
       } catch { /* 读草稿失败不阻断输入 */ }
       finally { if (alive) setDraftReady(true); }
     })();
@@ -322,7 +326,12 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
         setSaving(false);
         return;
       }
-      await bridge.saveQuickNoteContent(noteId, { text: plain, body, images, tagIds });
+      await bridge.saveQuickNoteContent(noteId, { text: plain, body, images });
+      // 标签是独立子系统：正文保存成功后，关系发生变化才单独落库。
+      if (tagIds.join("\u0000") !== tagBaselineRef.current.join("\u0000")) {
+        await bridge.setQuickNoteTags(noteId, tagIds);
+        tagBaselineRef.current = [...tagIds];
+      }
       // 提交成功 ⇒ 草稿使命结束（不清会让下次 capture 恢复出已保存的内容）
       committedRef.current = true;
       if (draft) await bridge.clearQuickNoteDraft().catch(() => undefined);
@@ -441,7 +450,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onSaved, onCancel, dra
         options={tagOptions}
         selected={tagIds}
         onAdd={(tagId) => setTagIds(addQuickNoteTagId(tagIds, tagId))}
-        onCreate={async (name) => (await bridge.createQuickNoteTag(name)).id}
+        onCreate={onCreateTag ?? (async (name) => (await bridge.createQuickNoteTag(name)).id)}
         onClose={() => setTagSheetOpen(false)}
       />
     </div>

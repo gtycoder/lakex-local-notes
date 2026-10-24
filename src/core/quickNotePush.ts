@@ -94,14 +94,25 @@ export async function pushQuickNote(
   }
 
   const signature = (list: Array<{ filename: string; hash: string }>) => list.map((a) => `${a.filename}:${a.hash}`).sort().join("|");
-  // 已是最新（远端同 id、同正文、同图片集）⇒ 不写清单：避免"没改动也产生一次清单写入"给多端 GC 添噪声。
-  const unchanged = activeRemote !== null && activeRemote.contentHash === contentHash && signature(activeRemote.assets) === signature(assets);
+  const tagSignature = (ids: readonly string[]) => [...ids].sort().join("|");
+  // 单条推送只写"这一条"，但关系也必须按 LWW 选权威版本：
+  // 若本机从未同步过关系（tagsUpdatedAt 为空）而远端已有标签，直接写本地空关系会抹掉远端标签。
+  const remoteTagsUpdatedAt = activeRemote?.tagsUpdatedAt ?? "";
+  const localTagsWin = local.tagsUpdatedAt >= remoteTagsUpdatedAt;
+  const pushTagIds = localTagsWin ? local.tagIds : (activeRemote?.tagIds ?? []);
+  const pushTagsUpdatedAt = localTagsWin ? local.tagsUpdatedAt : remoteTagsUpdatedAt;
+  // 已是最新（远端同 id、同正文、同图片集、同标签关系）⇒ 不写清单。
+  const unchanged = activeRemote !== null && activeRemote.contentHash === contentHash && signature(activeRemote.assets) === signature(assets)
+    && tagSignature(activeRemote.tagIds ?? []) === tagSignature(pushTagIds)
+    && (activeRemote.tagsUpdatedAt ?? "") === pushTagsUpdatedAt;
 
   let manifestId: string | null = null;
   if (!unchanged) {
     const nextItem: ManifestItem = {
       id, createdAt: local.createdAt, updatedAt: local.updatedAt,
       contentHash, isConflict: local.isConflict, assets,
+      ...(pushTagIds.length > 0 ? { tagIds: pushTagIds } : {}),
+      ...(pushTagsUpdatedAt ? { tagsUpdatedAt: pushTagsUpdatedAt } : {}),
     };
     const items = remote.items.some((item) => item.id === id)
       ? remote.items.map((item) => (item.id === id ? nextItem : item))

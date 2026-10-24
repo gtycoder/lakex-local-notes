@@ -89,6 +89,7 @@ interface FakeNote {
   id: string; createdAt: string; updatedAt: string; contentHash: string;
   syncState: string; isConflict: boolean; images: QuickNoteSyncItemImage[];
   content: Uint8Array;
+  tagIds: string[]; tagsUpdatedAt: string;
 }
 
 interface FakePort {
@@ -124,6 +125,7 @@ function createFakePort(): FakePort {
       return [...notes.values()].filter((n) => !deleted.has(n.id)).map((n) => ({
         id: n.id, createdAt: n.createdAt, updatedAt: n.updatedAt,
         contentHash: n.contentHash, syncState: n.syncState, isConflict: n.isConflict, images: n.images,
+        tagIds: n.tagIds, tagsUpdatedAt: n.tagsUpdatedAt,
       }));
     },
     async readContent(id) { return notes.get(id)?.content ?? null; },
@@ -134,8 +136,15 @@ function createFakePort(): FakePort {
         id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
         contentHash: item.contentHash, syncState: "synced", isConflict: item.isConflict, content,
         images: item.assets.map(({ id, filename, mimeType, width, height, size, hash }) => ({ id, filename, mimeType, width, height, size, hash })),
+        tagIds: [], tagsUpdatedAt: "",
       });
       for (const a of assetsIn) assets.set(`${item.id}/${a.filename}`, a.bytes);
+    },
+    async applyRemoteQuickNoteTagLinks(id, tagIds, tagsUpdatedAt) {
+      const n = notes.get(id);
+      if (!n || tagsUpdatedAt <= n.tagsUpdatedAt) return;
+      n.tagIds = [...tagIds];
+      n.tagsUpdatedAt = tagsUpdatedAt;
     },
     async applyTombstoneContent(id, content) {
       const n = notes.get(id); if (n) { n.content = content; n.contentHash = sha256Sync(content); }
@@ -191,9 +200,12 @@ function createFakePort(): FakePort {
   return { port, notes, assets, bases, deleted, syncedCalls, armDeferredGate: (g) => { deferredGate = g; } };
 }
 
-function addNote(f: FakePort, id: string, text: string, images: QuickNoteSyncItemImage[] = [], assetData: Record<string, Uint8Array> = {}): FakeNote {
+function addNote(f: FakePort, id: string, text: string, images: QuickNoteSyncItemImage[] = [], assetData: Record<string, Uint8Array> = {}, tags: { tagIds?: string[]; tagsUpdatedAt?: string } = {}): FakeNote {
   const content = bytesOf(text);
-  const note: FakeNote = { id, createdAt: FIXED_AT, updatedAt: FIXED_AT, contentHash: sha256Sync(content), syncState: "local", isConflict: false, images, content };
+  const note: FakeNote = {
+    id, createdAt: FIXED_AT, updatedAt: FIXED_AT, contentHash: sha256Sync(content), syncState: "local", isConflict: false, images, content,
+    tagIds: [...(tags.tagIds ?? [])], tagsUpdatedAt: tags.tagsUpdatedAt ?? "",
+  };
   f.notes.set(id, note);
   for (const [filename, bytes] of Object.entries(assetData)) f.assets.set(`${id}/${filename}`, bytes);
   return note;

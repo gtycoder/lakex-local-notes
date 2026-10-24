@@ -3,15 +3,13 @@ import { buildLakeImageCardValue, lakeEmptyParagraph, lakeImageCardParagraph, la
 import { sniffImageFormat, type ImageDimensions, type ImageFormat } from "./imageUtils.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
-import { normalizeQuickNoteTagIds, normalizeQuickNoteTags, quickNoteTagId, QuickNoteTagError } from "./quickNoteTags.js";
 import type { QuickNoteImage } from "./types.js";
 
 /**
- * v3 起小记正文只存 `tagIds`（标签表是目录与元数据的唯一来源）；
- * v2 的 `tags`（名称数组）由一次性迁移转换（见 migrateLegacyQuickNoteContent）。
+ * 小记正文**只存内容**（text/body/images）。标签是独立子系统：
+ * 标签目录在 `quick_note_tags`，关联在 `quick_note_tag_links`，随清单同步；正文里不再有标签字段。
  */
 export const QUICK_NOTE_VERSION = 3;
-export const LEGACY_QUICK_NOTE_VERSION = 2;
 export const MAX_QUICK_NOTE_TEXT_LENGTH = 200_000;
 /** 正文（Lake HTML，含图片卡片的 JSON 载荷）上限；比纯文本宽，但仍远低于同步侧硬上限。 */
 export const MAX_QUICK_NOTE_BODY_LENGTH = 4_000_000;
@@ -54,8 +52,6 @@ export interface StoredQuickNoteContent {
    * 需要"当图片渲染"的地方用 `isQuickNoteImageMime(mimeType)` 过滤（缩略图、图片网格）。
    */
   images: StoredQuickNoteImage[];
-  /** 小记标签 ID（顺序 = 最近添加在前）；名称与元数据在标签表。旧内容缺失时按空数组读取。 */
-  tagIds: string[];
 }
 
 export class QuickNoteModelError extends Error {
@@ -72,19 +68,13 @@ export function normalizeQuickNoteContent(
   text: string,
   body: string,
   images: StoredQuickNoteImage[],
-  tagIds: unknown = [],
 ): StoredQuickNoteContent {
   if (typeof text !== "string") throw new QuickNoteModelError("小记正文必须是文本");
   if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (typeof body !== "string") throw new QuickNoteModelError("小记正文格式无效");
   if (body.length > MAX_QUICK_NOTE_BODY_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (!text.trim() && images.length === 0) throw new QuickNoteModelError("请至少记录文字、一张图片或一个附件");
-  let normalizedTagIds: string[];
-  try { normalizedTagIds = normalizeQuickNoteTagIds(tagIds); }
-  catch (error) {
-    throw new QuickNoteModelError(error instanceof QuickNoteTagError ? error.message : "小记标签格式无效");
-  }
-  return { version: QUICK_NOTE_VERSION, text, body, images, tagIds: normalizedTagIds };
+  return { version: QUICK_NOTE_VERSION, text, body, images };
 }
 
 /**
@@ -194,28 +184,7 @@ export function validateQuickNoteContent(raw: unknown): StoredQuickNoteContent {
   }
   const seen = new Set<string>();
   const images = value.images.map((image) => validateQuickNoteImage(image, seen));
-  return normalizeQuickNoteContent(value.text, value.body, images, value.tagIds);
-}
-
-/**
- * 一次性迁移：v2（`tags` = 名称数组）→ v3（`tagIds`）。
- * 不是 v2 或内容损坏 → null（调用方跳过）。迁移后旧格式不再参与读写。
- */
-export function migrateLegacyQuickNoteContent(raw: unknown): { content: StoredQuickNoteContent; tagNames: string[] } | null {
-  if (!raw || typeof raw !== "object") return null;
-  const value = raw as { version?: unknown; text?: unknown; body?: unknown; images?: unknown; tags?: unknown };
-  if (value.version !== LEGACY_QUICK_NOTE_VERSION) return null;
-  if (typeof value.text !== "string" || typeof value.body !== "string" || !Array.isArray(value.images)) {
-    throw new QuickNoteModelError("小记内容版本或字段无效");
-  }
-  const seen = new Set<string>();
-  const images = value.images.map((image) => validateQuickNoteImage(image, seen));
-  const tagNames = normalizeQuickNoteTags(value.tags);
-  const tagIds = tagNames.map((name) => quickNoteTagId(name));
-  return {
-    content: normalizeQuickNoteContent(value.text, value.body, images, tagIds),
-    tagNames,
-  };
+  return normalizeQuickNoteContent(value.text, value.body, images);
 }
 
 export function parseQuickNoteContent(json: string): unknown {
@@ -227,8 +196,8 @@ export function serializeQuickNoteContent(content: StoredQuickNoteContent): stri
   return `${JSON.stringify(content, null, 2)}\n`;
 }
 
-/** 仅比较正文/资源；标签单独变化时不刷新小记时间。 */
-export function sameQuickNoteExceptTags(
+/** 正文/资源是否相同（标签在独立关联表，不参与内容 hash 与时间线更新）。 */
+export function sameQuickNoteContent(
   a: Pick<StoredQuickNoteContent, "text" | "body" | "images">,
   b: Pick<StoredQuickNoteContent, "text" | "body" | "images">,
 ): boolean {
