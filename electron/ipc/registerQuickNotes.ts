@@ -2,6 +2,8 @@ import { MAX_QUICK_NOTE_ATTACHMENT_BYTES, MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotes
 import { convertQuickNoteToLake } from "../quickNoteConversion.js";
 import { pushQuickNoteToS3, restoreQuickNoteFromCloud } from "../quickNotesSync.js";
 import { syncNowViaEngine } from "../syncEngineController.js";
+import { S3v3S3Remote } from "../s3v3/s3Remote.js";
+import { fetchQuickNoteFromV3 } from "../s3v3/quickNotesRecovery.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNotePush.js";
 import { canTouchNetwork, cloudStateOf, cloudStateHint } from "../../src/core/cloudState.js";
 import type { Store } from "../store.js";
@@ -54,6 +56,22 @@ export function registerQuickNotesIpc(
     if (!quickCloudAvailable()) return { ok: false, reason: "cloud-off" };
     const settings = store.getS3Settings();
     if (!settings) return { ok: false, reason: "no-cloud-config" };
+    if (quickV3()) {
+      return enqueueMaintenance(async () => {
+        try {
+          const remote = new S3v3S3Remote({ endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket, accessKeyId: settings.accessKeyId, secretAccessKey: settings.secretAccessKey, prefix: settings.prefix, forcePathStyle: settings.forcePathStyle });
+          const snap = await fetchQuickNoteFromV3(remote, id);
+          if (!snap) return { ok: false as const, reason: "not-in-cloud" as const };
+          quickNotes.importRemoteQuickNote(
+            { id, createdAt: snap.entry.createdAt, updatedAt: snap.entry.updatedAt, contentHash: snap.entry.contentHash, isConflict: !!snap.entry.isConflict },
+            Buffer.from(snap.content),
+            snap.assets.map((a) => ({ filename: a.filename, bytes: Buffer.from(a.bytes) })),
+          );
+          quickNotes.applyRemoteQuickNoteTagLinks(id, snap.entry.tagIds ?? [], snap.entry.tagsUpdatedAt ?? "");
+          return { ok: true as const };
+        } catch { return { ok: false as const, reason: "invalid-content" as const }; }
+      });
+    }
     return enqueueMaintenance(() => restoreQuickNoteFromCloud(quickNotes, settings, id));
   });
   ipc.handle("restore_missing_quick_note_from_text", (id: string) => quickNotes.recoverQuickNoteFromText(id));

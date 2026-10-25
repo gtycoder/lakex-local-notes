@@ -9,6 +9,7 @@ import { Store } from "../store.js";
 import { QuickNotesStore } from "../quickNotes.js";
 import sharp from "sharp";
 import { DesktopStoreDevice } from "./desktopStoreAdapter.js";
+import { fetchQuickNoteFromV3 } from "./quickNotesRecovery.js";
 
 class MemoryRemote implements S3v3Remote {
   objects = new Map<string, { bytes: Uint8Array; gzip: boolean }>();
@@ -105,5 +106,28 @@ describe("桌面小记 v3 适配器（文本）", () => {
     const ptr = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { quickNotes: { commit: string } };
     const idx = JSON.parse(new TextDecoder().decode((await remote.get("quick-notes/meta/index/" + ptr.quickNotes.commit + ".json"))!)) as { purged?: string[] };
     expect(idx.purged).toContain(q.id);
+  }, 120_000);
+
+  it("v3 云端恢复缺正文小记：正文 + 图片 + 标签关系可回填", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("recover-a");
+    const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: { r: 0, g: 255, b: 0 } } }).png().toBuffer();
+    const staged = await a.quick.stageImage("d-rec", { bytes: png, filename: "r.png" });
+    const q = a.quick.createQuickNote({ text: "recover-me", draftId: "d-rec", stagedImageIds: [staged.id] });
+    const engine = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "R" });
+    await engine.sync({ onEmptyCloud: "upload" });
+    const snap = await fetchQuickNoteFromV3(remote, q.id);
+    expect(snap).not.toBeNull();
+    await fs.rm(a.quick.quickNotePathFor(q.id), { force: true });
+    await fs.rm(a.quick.quickNoteAssetsPathFor(q.id), { recursive: true, force: true });
+    a.quick.importRemoteQuickNote(
+      { id: q.id, createdAt: snap!.entry.createdAt, updatedAt: snap!.entry.updatedAt, contentHash: snap!.entry.contentHash, isConflict: false },
+      Buffer.from(snap!.content),
+      snap!.assets.map((x) => ({ filename: x.filename, bytes: Buffer.from(x.bytes) })),
+    );
+    const recovered = a.quick.readQuickNote(q.id);
+    expect(recovered.content.text).toBe("recover-me");
+    expect(recovered.content.images.length).toBe(1);
+    expect(await fs.stat(path.join(a.quick.quickNoteAssetsPathFor(q.id), recovered.content.images[0].filename)).then(() => true).catch(() => false)).toBe(true);
   }, 120_000);
 });

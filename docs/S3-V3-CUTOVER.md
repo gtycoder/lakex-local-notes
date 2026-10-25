@@ -35,14 +35,14 @@
 - 已验证 `electron/s3v3/quickNotesAdapter.test.ts` 3 例：文本创建→上传→双端拉取→编辑→删除回回收站；图片附件；彻底删除后另一端 active/trash 均无副本且指数组含 purged。
 - 真实 S3：默认路径（无 env）同时上传文档 + 小记通过（`defaultSwitch.integration.test.ts`）。
 - 单条“保存并同步”已改为 v3：v3 串行门内触发整轮 v3 同步兜底（先检查本地存在；返回 pushed）。
-- 残留：`restore_missing_quick_note_from_cloud` 仍走旧 quick-notes API，需要改成 v3（下一轮）。
+- `restore_missing_quick_note_from_cloud` 已改为 v3：从 v3 pointer/index 读正文+声明+附件并校验 hash，调用 `importRemoteQuickNote` 回填；legacy 才走旧 API。
 - `sync_state` 仍被旧通道/UI 计数/legacy 回滚使用，仍不能删。
 
 ## 4.6 移动端 v3（已默认）
 
 - 默认 v3；`syncProtocol=legacy` 回滚旧通道。
 - 已验证：`src/mobile` 117 文件 526 例全过（含 v3 MobileDb/小记/标签/附件/回收站测试）；全仓 2807 例。
-- 残留：**真实设备 UI 点击/设备路径验收未做**（仅 Node/sql.js 测试）；移动端单条推送目前用整轮 v3 同步兜底（较慢）；`restore_missing_quick_note_from_cloud` 仍走旧 API。
+- 残留：**真实设备 UI 点击/设备路径验收未做**（仅 Node/sql.js 测试）；移动端单条推送目前用整轮 v3 同步兜底（较慢）；移动端缺正文小记的 v3 云端恢复尚未接。
 
 ## 5. 完整转正还差什么（sync_state 能否删除）
 
