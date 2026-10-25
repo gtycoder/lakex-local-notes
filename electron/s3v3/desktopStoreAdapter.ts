@@ -18,7 +18,10 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   private stagedBodies = new Map<string, Uint8Array>();
   private stagedAssets = new Map<string, Map<string, Uint8Array>>();
   private clearedAssets = new Set<string>();
-  constructor(store: Store, storeRoot: string, opts: { stateFile?: string; baselineFile?: string } = {}) {
+  private readonly skipQuickNotesGuard: boolean;
+
+  constructor(store: Store, storeRoot: string, opts: { stateFile?: string; baselineFile?: string; skipQuickNotesGuard?: boolean } = {}) {
+    this.skipQuickNotesGuard = !!opts.skipQuickNotesGuard;
     this.store = store;
     const dir = path.join(storeRoot, "sync-v3");
     this.stateFile = opts.stateFile ?? path.join(dir, "state.json");
@@ -29,8 +32,10 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   async init(): Promise<void> {
     await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
     await fs.mkdir(this.stagingDir, { recursive: true });
-    const quickDb = path.join(path.dirname(this.stateFile), "..", "quick-notes", "metadata.sqlite3");
-    if (await this.exists(quickDb)) throw new Error("DesktopStoreDevice: quick notes adapter not implemented（检测到 quick-notes 库，拒绝静默跳过）");
+    if (!this.skipQuickNotesGuard) {
+      const quickDb = path.join(path.dirname(this.stateFile), "..", "quick-notes", "metadata.sqlite3");
+      if (await this.exists(quickDb)) throw new Error("DesktopStoreDevice: quick notes adapter not implemented（检测到 quick-notes 库，拒绝静默跳过）");
+    }
   }
 
   private async exists(p: string): Promise<boolean> { try { await fs.stat(p); return true; } catch { return false; } }

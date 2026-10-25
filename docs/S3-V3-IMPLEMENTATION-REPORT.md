@@ -34,6 +34,7 @@
 | `s3Remote.ts` | 七牛/S3 兼容实现（gzip、LIST 分页、DeleteObjects、前缀删除、读后一致） |
 | `deviceStore.ts` | **设备契约 `S3v3DeviceStore`**（接入现有桌面 Store / 移动端 SQLite 的接口） |
 | `desktopStoreAdapter.ts` | **桌面真实 Store 适配器 v1**（Lake 文档/目录/附件；sidecar 存 baseline/intents/pending/assetsHash；quick notes 检测到即拒绝） |
+| `desktopSync.ts` | **桌面 v3 同步入口**（feature flag `LAKE_SYNC_PROTOCOL=v3`；Store+适配器+S3 v3 引擎；`LAKE_S3V3_EMPTY_CLOUD` 控制首同步） |
 | `fileDeviceStore.ts` | 文件系统实现（测试/CLI；正文/附件/基线/历史/待删/意图/恢复标记；原子写） |
 | `syncEngine.ts` | v3 同步引擎：拉取→合并→上传→发布锁/读回→待删门禁→意图生命周期→深度清理→全量重拉 |
 | `migrate.ts` | 旧 Manifest（含墓碑/回收站/小记标签）→ v3 索引+不可变声明+pointer |
@@ -79,6 +80,7 @@ npx vitest run electron/s3v3/scale.integration.test.ts
 | 双端引擎（假 S3） | 15 例 + 并发池 3 例 | 全过（初始化/增量/冲突/软删恢复/purge/恢复例外/锁/门禁/深度清理/缺对象/小记/上传失败隔离/删除失败重试/pointer 损坏/有界并发） | 93ms |
 | 迁移（假 S3） | 1 例 | 全过（墓碑丢弃、附件/回收站/标签保留、新设备可拉） | 11ms |
 | **桌面 Store 适配器** | 2 例 | 全过（loadState 映射、初始化上传、双端增量、远端新文档落 Store、quick-notes 拒绝） | 48ms |
+| **桌面 v3 feature flag 入口** | 1 例 | 全过（真实 Store ↔ v3 引擎 ↔ 对端 FileDeviceStore：初始化/增量/远端新文档落 Store） | 39ms |
 | **迁移（真实 S3）** | 1 例 | 全过：旧布局对象→迁移→新设备拉取→孤儿深度清理 | 1.4s |
 | 真实 S3 集成 | 2 文档+附件+双端+purge+清理 | 全过 | 3.3s |
 | **真实 S3 规模（串行传输）** | **200 文档 × 10 附件 = 2391 对象** | 全过 | 初始化 154.8s / 拉取 80.1s / 增量 0.59s / purge 0.74s |

@@ -25,6 +25,10 @@ export async function syncNowViaEngine(
   onProgress?: (p: SyncProgress) => void,
   createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
 ): Promise<SyncResult> {
+  if (process.env.LAKE_SYNC_PROTOCOL === "v3") {
+    const { syncWithV3 } = await import("./s3v3/desktopSync.js");
+    return syncWithV3(store, onProgress);
+  }
   const syncStart = Date.now();
   store.logScopes.sync.info("[perf] syncNowViaEngine start");
   const settings = store.getS3Settings();

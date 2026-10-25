@@ -151,6 +151,9 @@ export class Store {
   /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；sync/quickNotes 经此读取） */
   readonly logScopes: LoggerScopes;
 
+  /** 数据根目录（v3 适配器/诊断用；只读）。 */
+  get rootPath(): string { return this.root; }
+
   constructor(root: string, secretCipher: SecretCipher = createPlaintextSecretCipher(), logScopes: LoggerScopes = createSilentLoggerScopes()) {
     this.root = root;
     this.logScopes = logScopes;
