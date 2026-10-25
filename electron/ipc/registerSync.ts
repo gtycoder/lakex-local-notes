@@ -2,12 +2,12 @@ import { app, BrowserWindow, dialog, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
-import { runDeepCleanup, runGcReconcile } from "../s3Maintenance.js";
+import { runGcReconcile } from "../s3Maintenance.js";
 import { restoreMissingBodyFromCloud } from "../syncEngineController.js";
 import { testConnection } from "../s3Store.js";
 import type { SyncProgress } from "../syncTypes.js";
 import { runGcDiagnostics } from "../syncGc.js";
-import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
+import { runV3DeepCleanup } from "../s3v3/desktopSync.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../../src/core/cloudState.js";
 import { decodeS3ConfigTransfer, s3ConfigTransferFileName, summarizeS3Settings } from "../../src/core/s3ConfigTransfer.js";
@@ -189,14 +189,9 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
       if (!settings) throw new AppError("NotConfigured", "请先保存 S3 配置");
-      const gcSettings = store.getS3GcSettings();
-      // 手动清理（ignoreRetention=true）= 显式清云端：无视 7 天窗口；自动/定时仍按窗口。
-      const lake = await runDeepCleanup(store, { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention });
-      const quick = await runQuickNotesDeepCleanup(quickNotes, settings, {
-        dryRun: !!dryRun,
-        gcRetentionDays: ignoreRetention ? 0 : gcSettings.gcRetentionDays,
-      });
-      return { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention, lake, quickNotes: quick };
+      // v3 统一深度清理（文档 + 小记）；ignoreRetention 由 v3 自身 pending 门禁负责，不再使用旧窗口。
+      const result = await runV3DeepCleanup(store, { dryRun: !!dryRun });
+      return { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention, lake: result, quickNotes: result };
     });
   });
   ipc.handleEvent("sync_now", (event: IpcMainInvokeEvent) => {

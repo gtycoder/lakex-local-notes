@@ -326,8 +326,7 @@ describe("小记「保存并同步」并发安全（真实引擎 × 真实单条
 
     // 桌面端：sync_quick_note 成功后 enqueueMaintenance 重推
     const handler = desktop.slice(desktop.indexOf('ipc.handle("sync_quick_note"'));
-    expect(handler).toContain('if (outcome.status === "pushed")');
     expect(handler).toContain("enqueueMaintenance(");
-    expect(handler).toContain("pushQuickNoteToS3(quickNotes, latest, id)");
+    expect(handler).toContain("syncNowViaEngine(");
   });
 });

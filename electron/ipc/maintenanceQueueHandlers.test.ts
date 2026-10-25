@@ -26,7 +26,7 @@ const RECOVERY_CHANNELS = [
   {
     file: "electron/ipc/registerQuickNotes.ts",
     channel: "restore_missing_quick_note_from_cloud",
-    fn: "restoreQuickNoteFromCloud",
+    fn: "fetchQuickNoteFromV3",
   },
 ] as const;
 

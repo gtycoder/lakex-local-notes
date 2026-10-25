@@ -11,6 +11,22 @@ import { getQuickNotesStoreForV3 } from "./quickNotesRegistry.js";
  * 桌面 v3 同步入口（feature flag: LAKE_SYNC_PROTOCOL=v3）。
  * 真实数据 = Store；云端 = S3；协议 = v3。小记暂不在 v3 内同步（由原 quick-notes 通道继续）。
  */
+/** v3 深度清理：文档 + 小记统一按当前 pointer/index/声明算 keep 集。 */
+export async function runV3DeepCleanup(store: Store, opts: { dryRun?: boolean } = {}): Promise<{ deleted: string[]; kept: number }> {
+  const settings = store.getS3Settings();
+  if (!settings) throw new Error("请先保存 S3 配置");
+  const remote = new S3v3S3Remote({
+    endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket,
+    accessKeyId: settings.accessKeyId, secretAccessKey: settings.secretAccessKey,
+    prefix: settings.prefix, forcePathStyle: settings.forcePathStyle,
+  });
+  const quickNotes = getQuickNotesStoreForV3();
+  const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true, ...(quickNotes ? { quickNotes } : {}) });
+  await device.init();
+  const engine = new S3v3SyncEngine({ remote, device, deviceId: "desktop-cleanup" });
+  return engine.deepCleanup(opts);
+}
+
 export async function syncWithV3(
   store: Store,
   onProgress?: (p: SyncProgress) => void,

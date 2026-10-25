@@ -107,18 +107,6 @@ function enqueueMaintenance<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/**
- * **高优先队列**（判据 `PRIORITY_OPS`）：用户当场发起的「把这一条推到云端」**不等整轮同步** ——
- * 长按小记 → 写完 → 同步 → 桌面端及时看到 是高频场景（用户 261013 点单）；
- * 与维护队列是两条独立队列，交叉风险由 IPC 侧的"推送后回核"（排维护队尾）兜底。
- */
-let priorityQueue: Promise<unknown> = Promise.resolve();
-function enqueuePriority<T>(task: () => Promise<T>): Promise<T> {
-  const run = priorityQueue.then(task, task);
-  priorityQueue = run.then(() => undefined, () => undefined);
-  return run;
-}
-
 /** 同步单飞保护：同一时刻只允许一个完整同步（手动 / 自动 / 开关触发共用）。 */
 let syncInFlight = false;
 
@@ -558,7 +546,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     restartGcTimers: () => restartGcTimers?.(),
     restartSyncTimers: () => restartSyncTimers?.(),
   });
-  registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance, enqueuePriority);
+  registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance);
   registerLogIpc(ipc);
   registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
   return ipc.registry;
