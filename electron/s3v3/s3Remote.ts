@@ -54,7 +54,8 @@ export class S3v3S3Remote implements S3v3Remote {
   }
 
   async put(rel: string, bytes: Uint8Array, opts?: { gzip?: boolean }): Promise<void> {
-    const body = opts?.gzip ? gzipSync(Buffer.from(bytes), { level: 9 }) : Buffer.from(bytes);
+    // level 1：索引/声明是 JSON，压缩率几乎相同但 CPU 明显更低（大库增量发布更快）
+      const body = opts?.gzip ? gzipSync(Buffer.from(bytes), { level: 1 }) : Buffer.from(bytes);
     await this.client.send(new PutObjectCommand({
       Bucket: this.bucket,
       Key: this.key(rel),
