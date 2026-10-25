@@ -19,6 +19,7 @@
 - **本项目现状**：单文件 Manifest + 永久墓碑 + 墓碑内容进 GC keep 集 + Manifest 无 CAS/云端锁；删除传播可靠，但墓碑元数据与删除前正文/图片没有退出机制（`pruneTombstones` 生产未调用）。
 - **完整对照、差异表与推荐方案**（P0 墓碑 payload 老化 / P1 Manifest 条件写或云端锁 / P2 last-sync 快照 + 三方合并）见 `docs/S3-GC-DESIGN.md` §7。
 - **决策**：用户 261025 定“后续优化”，本批不改同步协议；P0 落地前现行红线不变（purge 必须写墓碑、墓碑永久保留）。
+- **v3 实现（分支 `feat/s3-v3`，未合并）**：协议内核 + 运行时 + 旧清单迁移 + 假 S3/真实七牛/大规模测试已完成；**尚未接入 Electron/移动端、未复用 8 并发池、未做设备级 e2e**。报告：`docs/S3-V3-IMPLEMENTATION-REPORT.md`。
 - **S3 重设计方案（草案，261025，仅文档）**：`docs/S3-REDESIGN.md` —— 目标 2 万文档/20 万附件；云端只存当前状态（无墓碑/无提交链/无全局资产清单）+ 设备本地基线 + 锁 + epoch；**永久删除当轮清空、零痕迹**；含迁移与验收计划。
 - **清单规模与分片调研（261025，仅文档）**：清单体积实测（10 万文档/100 万附件 = 170MB 明文 / 71MB gzip；20MB 断点 5.76 万篇或 1.24 万篇）、字段去留矩阵、三项零风险结构项、墓碑退役最小充分条件（锁 + epoch + 缺席语义翻面 + 主动删条目）见 `docs/S3-MANIFEST-SCALE-RESEARCH.md`。
 
@@ -965,6 +966,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 - **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 V1 重置）· `S3-GC-DESIGN.md`（存储/删除 GC）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
 - **S3 清单规模**：`S3-MANIFEST-SCALE-RESEARCH.md`（20MB 上限实测、条目瘦身、分片、墓碑退役最小条件；配套 `S3-GC-DESIGN.md` §7）。
 - **S3 重设计**：`S3-REDESIGN.md`（2 万/20 万目标；当前状态 + 设备基线 + 锁；永久删除零痕迹；迁移/验收）。
+- **S3 v3 实施报告**：`S3-V3-IMPLEMENTATION-REPORT.md`（测试方案/结果/bug 修复/上生产缺口；分支 `feat/s3-v3`）。
 - **同类软件同步**：`SYNC-APPROACHES-SURVEY.md`（网盘/条目/快照/服务端四派对照，大白话）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）。
 - **表格（usheet / Univer）**：`USHEET-UPGRADE.md`（内核触点清单 + 依赖升级 playbook + 路线图；配套 `src/features/usheet/usheetKernelContract.ts` · `univerContract.test.ts` · `scripts/usheet-kernel-probes.mjs`）。
