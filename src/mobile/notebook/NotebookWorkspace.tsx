@@ -383,9 +383,16 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 立即同步（思源顶栏右侧的云图标就是同步状态/触发器）
   const runSync = useCallback(async () => {
-    try { const r = await bridge.syncNow(); const w = r.notes?.warnings?.length ?? 0; showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : "")); }
-    catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
-  }, []);
+    try {
+      const r = await bridge.syncNow();
+      // 同步可能改了远端标题/正文：刷新目录，并在阅读态强制重读当前文档（编辑态不打断）。
+      await loadTree();
+      const activeTab = tabsStateRef.current.find((t) => t.id === activeId);
+      if (activeTab && !activeTab.editing) await loadTabBody(activeTab.id, true);
+      const w = r.notes?.warnings?.length ?? 0;
+      showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
+    } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
+  }, [loadTree, openTab, activeId]);
 
   // 活动文档上报（MobileApp 的定时自动快照按当前文档留档）
   useEffect(() => { onActiveNoteChange?.(activeId); }, [activeId, onActiveNoteChange]);

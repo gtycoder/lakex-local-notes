@@ -52,11 +52,18 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     expect(r2.downloadedNotes).toBe(1);
     const bodyB = await b.store.readBody("m1");
     expect(new TextDecoder().decode(bodyB!)).toBe("hello-mobile");
+    // 发布成功后 baseline 必须清 is_dirty（否则 UI 永远“待同步”）
+    expect(((await b.db.prepare("SELECT is_dirty FROM notes WHERE id='m1'").get()) as { is_dirty: number }).is_dirty).toBe(0);
 
-    await saveNote(a.db, "m1", "Mobile Doc", "hello-mobile-v2", null, new Map());
+    await saveNote(a.db, "m1", "Renamed Mobile", "hello-mobile-v2", null, new Map());
     await engineA.sync();
     await engineB.sync();
     expect(new TextDecoder().decode((await b.store.readBody("m1"))!)).toBe("hello-mobile-v2");
+    const renamed = await b.db.prepare("SELECT title,updated_at,is_dirty FROM notes WHERE id='m1'").get() as { title: string; updated_at: string; is_dirty: number };
+    expect(renamed.title).toBe("Renamed Mobile");
+    expect(renamed.is_dirty).toBe(0);
+    const remoteTitle = await a.db.prepare("SELECT updated_at FROM notes WHERE id='m1'").get() as { updated_at: string };
+    expect(renamed.updated_at).toBe(remoteTitle.updated_at);
 
     // B 删除 → 远端墓碑 → A 应用后进入回收站
     await b.db.prepare("UPDATE notes SET trashed_at=?, updated_at=?, is_dirty=1 WHERE id=?").run(new Date().toISOString(), new Date(Date.now() + 2000).toISOString(), "m1");

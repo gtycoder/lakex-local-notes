@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { Store, ImportedNoteAsset } from "../store.js";
+import type { Store } from "../store.js";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../../src/core/s3v3Index.js";
 import { sha256Hex } from "../../src/core/syncUtils.js";
@@ -120,19 +120,30 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
         if (d.purgedAt) quickPurges.push(d.id);
       }
     }
+    // 本地 purge（deleted_notes.purged_at）→ v3 删除意图：否则远端条目会被当成“本地缺失”重新拉回。
+    const baseline = await this.loadBaseline();
+    const intents = [...(side?.intents ?? [])];
+    const knownIntents = new Set(intents.map((it) => it.noteId));
+    for (const t of this.store.listPurgedTombstones()) {
+      if (knownIntents.has(t.id)) continue;
+      intents.push({ noteId: t.id, targetEpoch: baseline?.epoch ?? "", targetGeneration: baseline?.generation ?? 0, ...(t.purgedAt ? { purgedAt: t.purgedAt } : {}) });
+    }
     const state: DeviceState = {
       lake: { v: 3, space: "lake", notes, folders },
       quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags, ...(quickPurges.length ? { purged: quickPurges } : {}) },
       quickDeletes,
       quickPurges,
       folders,
-      intents: side?.intents ?? [], pending: side?.pending ?? [],
+      intents, pending: side?.pending ?? [],
       remotePurged: side?.remotePurged ?? [], restorePending: side?.restorePending ?? [], archived: side?.archived ?? [],
     };
     return state;
   }
 
   async saveState(state: DeviceState): Promise<void> {
+    // 目录必须先于文档落库：他端新建的笔记本/分组 id 在本地还不存在，先建目录才能建子文档。
+    // 删除目录则放到文档之后（避免先删父目录导致子文档归位失败）。
+    await this.saveFolders(state.folders, false);
     const current = new Map(this.store.listNotesSyncMeta().map((n) => [n.id, n]));
     const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
     for (const n of wanted.values()) {
@@ -141,8 +152,18 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       const curHash = cur ? (this.hashCache.get(n.id)?.hash ?? cur.contentHash) : "";
       try {
         if (!cur) {
-          const assets = await this.stagedAssetsToImported(n.id);
-          this.store.createNoteInAtTopWithContent(n.parentId, n.title, content ?? "", assets, n.id, (n.kind ?? "doc") as never);
+          // 走 importRemoteNote：它支持原样 id / 远端 trashedAt / deletedFromParentId / 冲突标记，
+          // 而 createNoteInAtTopWithContent 会拒绝“回收站”父目录（他端已删文档首次拉取会炸）。
+          const staged = this.stagedAssets.get(n.id) ?? new Map<string, Uint8Array>();
+          const assets = [...staged.entries()].map(([filename, bytes]) => ({ filename, bytes: Buffer.from(bytes) }));
+          const syncNote = {
+            id: n.id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
+            contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
+            editLockedAt: n.lockedAt ?? null, icon: n.icon ?? null, trashedAt: n.trashedAt ?? null,
+            deletedFromParentId: n.deletedFromParentId ?? null, kind: n.kind ?? "doc",
+          };
+          this.store.importRemoteNote(syncNote as never, Buffer.from(content ?? "", "utf8"), assets);
+          if (n.icon) this.store.setNodeIcon(n.id, n.icon);
         } else {
           // 只有引擎真的写入了新正文（staged）才保存，避免每轮读全库正文
           if (content !== null && sha256Hex(new TextEncoder().encode(content)) !== curHash) {
@@ -179,7 +200,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       try { this.store.deleteNote(cur.id); this.store.purgeTrashItem(cur.id); } catch { /* 已不在 */ }
     }
     await this.saveQuickNotes(state);
-    await this.saveFolders(state.folders);
+    await this.saveFolders(state.folders, true);
     await this.writeAtomic(this.stateFile, JSON.stringify(this.sidecarShape(state)));
     this.stagedBodies.clear();
     this.stagedAssets.clear();
@@ -232,14 +253,14 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     }
   }
 
-  private async saveFolders(folders: LakeFolderEntry[]): Promise<void> {
+  private async saveFolders(folders: LakeFolderEntry[], deleteMissing: boolean): Promise<void> {
     const cur = new Map(this.store.listFoldersForSync().map((f) => [f.id, f]));
     for (const f of folders) {
       const c = cur.get(f.id);
       try {
         if (!c) {
-          const created = f.nodeType === "notebook" ? this.store.createNotebook(f.title) : this.store.createGroup(f.parentId ?? (this.store.listFoldersForSync()[0]?.id ?? ""), f.title);
-          if (created.id !== f.id) throw new Error("目录 id 无法指定: " + f.id + " -> " + created.id);
+          // 远端目录 id 必须原样落库（createNotebook/createGroup 会生成新 id，跨端子文档将找不到父）
+          this.store.importRemoteFolder(f as never);
         } else {
           if (c.title !== f.title) this.store.renameTreeNode(f.id, f.title);
           if ((c.parentId ?? null) !== (f.parentId ?? null) || c.sortOrder !== f.sortOrder) this.store.moveTreeNode(f.id, f.parentId, f.sortOrder);
@@ -247,22 +268,9 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
         }
       } catch (e) { throw new Error("DesktopStoreDevice.saveFolders 失败(" + f.id + "): " + (e as Error).message); }
     }
-    for (const c of cur.values()) if (!folders.some((f) => f.id === c.id)) { try { this.store.deleteTreeNode(c.id); } catch { /* ignore */ } }
+    if (deleteMissing) for (const c of cur.values()) if (!folders.some((f) => f.id === c.id)) { try { this.store.deleteTreeNode(c.id); } catch { /* ignore */ } }
   }
 
-  private async stagedAssetsToImported(noteId: string): Promise<ImportedNoteAsset[]> {
-    const staged = this.stagedAssets.get(noteId);
-    if (!staged || staged.size === 0) return [];
-    const dir = path.join(this.stagingDir, noteId);
-    await fs.mkdir(dir, { recursive: true });
-    const out: ImportedNoteAsset[] = [];
-    for (const [filename, bytes] of staged) {
-      const file = path.join(dir, filename);
-      await fs.writeFile(file, bytes);
-      out.push({ filename, sourcePath: file });
-    }
-    return out;
-  }
   private async flushStagedAssets(noteId: string): Promise<void> {
     const dir = this.store.getNotePaths(noteId).assetsDir;
     const staged = this.stagedAssets.get(noteId);

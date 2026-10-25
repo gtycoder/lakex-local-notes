@@ -121,9 +121,12 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         } else if (!targetTrashed && curTrashed) {
           await this.db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(new Date().toISOString(), n.parentId, n.id);
         } else if (!targetTrashed) {
-          if (content !== null) await saveNote(this.db, n.id, n.title, content, n.parentId, new Map());
-          else if (n.title !== cur.title || (n.parentId ?? null) !== (cur.parent_id ?? null)) {
-            await this.db.prepare("UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=? WHERE id=?").run(n.title, n.parentId, n.sortOrder, n.id);
+          if (content !== null) {
+            await saveNote(this.db, n.id, n.title, content, n.parentId, new Map());
+            // 远端正文落地必须保留远端 updatedAt（saveNote 会写 now，导致下一轮误判本地更新）
+            await this.db.prepare("UPDATE notes SET updated_at=?, is_dirty=0 WHERE id=?").run(n.updatedAt, n.id);
+          } else if (n.title !== cur.title || (n.parentId ?? null) !== (cur.parent_id ?? null)) {
+            await this.db.prepare("UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=?, updated_at=? WHERE id=?").run(n.title, n.parentId, n.sortOrder, n.updatedAt, n.id);
           }
         }
       }
@@ -212,6 +215,23 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   }
   async saveBaseline(baseline: DeviceBaseline): Promise<void> {
     const s = await loadV3State(this.db);
+    // 发布成功后才写 baseline：此时这些条目已与云端一致，必须清 UI 待同步标记；
+    // 否则 is_dirty 永远停在 1（同步候选虽由三方比对得出，UI 会一直显示“待同步”）。
+    const sets: Array<{ sql: string; ids: string[] }> = [
+      { sql: "UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE is_purged=0 AND id IN (", ids: baseline.lake.notes.map((n) => n.id) },
+      { sql: "UPDATE folders SET is_dirty=0 WHERE is_purged=0 AND id IN (", ids: baseline.lake.folders.map((f) => f.id) },
+      { sql: "UPDATE quick_notes SET is_dirty=0 WHERE id IN (", ids: baseline.quickNotes.items.map((q) => q.id) },
+    ];
+    await this.db.transaction(async () => {
+      for (const { sql, ids } of sets) {
+        for (let i = 0; i < ids.length; i += 400) {
+          const part = ids.slice(i, i + 400);
+          if (part.length === 0) continue;
+          const ph = part.map(() => "?").join(",");
+          await this.db.prepare(sql + ph + ")").run(...part);
+        }
+      }
+    });
     await saveV3State(this.db, { ...s, baseline: baseline as MobileV3Baseline });
   }
 

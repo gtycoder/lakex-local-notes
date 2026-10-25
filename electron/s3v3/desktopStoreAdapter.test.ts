@@ -156,6 +156,59 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     expect(await remote.list("objects/p1-")).toHaveLength(0);
   }, 60_000);
 
+
+  it("远端首拉：先建目录（保留 id）再建子文档，并落图标", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-first-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const remote = new MemoryRemote();
+    const adapter = new DesktopStoreDevice(store, root);
+    await adapter.init();
+    const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
+
+    const b = await fileDevice();
+    const st = emptyState();
+    const now = new Date().toISOString();
+    const folder = { id: "folder-remote", parentId: null, nodeType: "notebook" as const, title: "远端新建本", sortOrder: 9, updatedAt: now, icon: null };
+    st.lake.folders.push(folder);
+    st.folders.push(folder);
+    const bytes = new TextEncoder().encode("远端首拉正文");
+    await b.store.writeBody("n-remote", bytes);
+    st.lake.notes.push({ id: "n-remote", title: "远端首拉文档", parentId: "folder-remote", sortOrder: 0, updatedAt: now, contentHash: sha256Hex(bytes), icon: "🎃" } as never);
+    await b.store.saveState(st);
+    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync({ onEmptyCloud: "upload" });
+
+    await engineA.sync();
+    const node = store.listTreeNodes().find((n) => n.id === "n-remote");
+    expect(node?.parentId).toBe("folder-remote");
+    expect(node?.icon).toBe("🎃");
+    expect(store.listTreeNodes().some((n) => n.id === "folder-remote" && n.title === "远端新建本")).toBe(true);
+    expect(store.readNote("n-remote").content).toBe("远端首拉正文");
+  }, 60_000);
+
+
+  it("本地 purge 墓碑 → v3 删除意图：远端条目与对象被删除，不被重新拉回", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-purge-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("PurgeNB");
+    store.createNoteInAtTopWithContent(nb.id, "PurgeMe", "purge-body", [], "p1");
+    const remote = new MemoryRemote();
+    const adapter = new DesktopStoreDevice(store, root);
+    await adapter.init();
+    const engine = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
+    await engine.sync({ onEmptyCloud: "upload" });
+    expect(await remote.list("objects/p1-")).toHaveLength(1);
+
+    store.deleteNote("p1");
+    store.purgeTrashItem("p1");
+    await engine.sync();
+    expect(await remote.list("objects/p1-")).toHaveLength(0);
+    const idx = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { lake: { commit: string } };
+    const lake = JSON.parse(new TextDecoder().decode((await remote.get("meta/index/" + idx.lake.commit + ".json"))!)) as { notes: Array<{ id: string }> };
+    expect(lake.notes.some((n) => n.id === "p1")).toBe(false);
+  }, 60_000);
+
   it("检测到 quick-notes 库时拒绝（不静默丢小记）", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-q-"));
     const store = new Store(root);

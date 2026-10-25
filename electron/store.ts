@@ -1477,6 +1477,12 @@ export class Store {
     return this.syncReconciliation.listDeletedNotesForSync();
   }
 
+  /** v3 删除意图来源：已彻底删除（purged_at 非空）的墓碑；用于把本地 purge 传播到云端。 */
+  listPurgedTombstones(): Array<{ id: string; purgedAt: string | null }> {
+    return (this.db.prepare("SELECT id, purged_at FROM deleted_notes WHERE purged_at IS NOT NULL").all() as Array<{ id: string; purged_at: string | null }>)
+      .map((r) => ({ id: r.id, purgedAt: r.purged_at }));
+  }
+
   /** 墓碑已发布到 manifest：标记 published_at；墓碑本体永久保留（审计 #2）。 */
   markTombstonesPublished(ids: string[]): void {
     this.syncReconciliation.markTombstonesPublished(ids);
