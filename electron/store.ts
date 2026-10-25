@@ -87,6 +87,8 @@ export interface NoteInfo {
   createdAt: string | null;
   updatedAt: string;
   syncState: string;
+  isDirty?: boolean;
+  isPurged?: boolean;
   isConflict: boolean;
   isEditLocked: boolean;
   lakePath: string;
@@ -786,6 +788,8 @@ export class Store {
       createdAt: created?.created_at ?? null,
       updatedAt: doc.updatedAt,
       syncState: doc.syncState,
+      isDirty: doc.isDirty,
+      isPurged: doc.isPurged,
       isConflict: doc.isConflict,
       isEditLocked: doc.isEditLocked ?? false,
       lakePath,

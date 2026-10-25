@@ -50,6 +50,8 @@ export interface NoteInfo {
   createdAt: string | null;
   updatedAt: string;
   syncState: string;
+  isDirty?: boolean;
+  isPurged?: boolean;
   isConflict: boolean;
   isEditLocked: boolean;
   lakePath: string;
