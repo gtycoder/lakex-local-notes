@@ -16,7 +16,7 @@ const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
 
 const note = (over: Partial<NoteSummary> = {}): NoteSummary => ({
   id: "n-1", title: "标题", parentId: "nb-1", sortOrder: 0,
-  updatedAt: "2026-10-08T00:00:00.000Z", syncState: "synced", isConflict: false, kind: "doc", ...over,
+  updatedAt: "2026-10-08T00:00:00.000Z", isConflict: false, kind: "doc", ...over,
 });
 
 afterEach(() => setNoteRefHost(null));
@@ -40,7 +40,7 @@ describe("文档引用卡：纯逻辑", () => {
     expect(isNoteRefGone(null)).toBe(false);
     setNoteRefHost({ listNotes: () => [note({ parentId: "notebook-trash" })], openNote: () => {} });
     expect(isNoteRefGone("n-1")).toBe(true);
-    setNoteRefHost({ listNotes: () => [note({ syncState: "purged" })], openNote: () => {} });
+    setNoteRefHost({ listNotes: () => [note({ isPurged: true })], openNote: () => {} });
     expect(isNoteRefGone("n-1")).toBe(true);
   });
 

@@ -147,7 +147,7 @@ export class QuickNotesStore {
         preview_text TEXT NOT NULL,
         image_count INTEGER NOT NULL,
         content_hash TEXT NOT NULL,
-        sync_state TEXT NOT NULL DEFAULT 'local',
+        is_dirty INTEGER NOT NULL DEFAULT 0,
         is_conflict INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS quick_note_assets (
@@ -226,6 +226,12 @@ export class QuickNotesStore {
     const quickCols = this.db.prepare("PRAGMA table_info(quick_notes)").all() as Array<{ name: string }>;
     if (!quickCols.some((c) => c.name === "restore_pending_at")) {
       this.db.exec("ALTER TABLE quick_notes ADD COLUMN restore_pending_at TEXT");
+    }
+    if (!quickCols.some((c) => c.name === "is_dirty")) {
+      this.db.exec("ALTER TABLE quick_notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
+    }
+    if (quickCols.some((c) => c.name === "sync_state")) {
+      this.db.exec("ALTER TABLE quick_notes DROP COLUMN sync_state");
     }
   }
 
@@ -398,8 +404,8 @@ export class QuickNotesStore {
     this.atomicWrite(itemPath, encoded);
     try {
       const tx = this.db.transaction(() => {
-        this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state=?,is_conflict=0 WHERE id=?")
-          .run(options.updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, options.synced ? "synced" : "local", id);
+        this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,is_dirty=?,is_conflict=0 WHERE id=?")
+          .run(options.updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, options.synced ? 0 : 1, id);
         this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
         const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
         for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
@@ -684,11 +690,11 @@ export class QuickNotesStore {
     // DB 事务（只更新索引，不碰正式路径）
     const tx = this.db.transaction(() => {
       if (updating) {
-        this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state='local',is_conflict=0 WHERE id=?")
+        this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,is_dirty=1,is_conflict=0 WHERE id=?")
           .run(effectiveUpdatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, id);
         this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
       } else {
-        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'local', 0)")
+        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES(?,?,?,?,?,?, 1, 0)")
           .run(id, createdAt, effectiveUpdatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash);
       }
       const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
@@ -845,7 +851,7 @@ export class QuickNotesStore {
     // 否则 tagsUpdatedAt 为空，标签只在本机可见、不会随清单同步出去。
     const tagsUpdatedAt = this.links.listFor(id).length > 0 ? restoredAt : "";
     const tx = this.db.transaction(() => {
-      this.db.prepare("INSERT OR REPLACE INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at) VALUES(?,?,?,?,?,?, 'local', 0, ?)")
+      this.db.prepare("INSERT OR REPLACE INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,restore_pending_at) VALUES(?,?,?,?,?,?, 1, 0, ?)")
         .run(id, tomb.created_at, restoredAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, restoredAt);
       this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
       const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
@@ -962,7 +968,7 @@ export class QuickNotesStore {
 
   // ===== Quick Note S3 sync adapter =====
   getPendingSyncSummary(): { items: number; resources: number } {
-    const row = this.db.prepare("SELECT COUNT(*) AS items, COALESCE(SUM(image_count), 0) AS resources FROM quick_notes WHERE sync_state != 'synced'").get() as { items: number; resources: number };
+    const row = this.db.prepare("SELECT COUNT(*) AS items, COALESCE(SUM(image_count), 0) AS resources FROM quick_notes WHERE is_dirty=1").get() as { items: number; resources: number };
     // 墓碑计数只算"可发布"的（ready=1 且未发布）；已发布（published_at 非空）不再计入待同步
     const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1 AND published_at IS NULL").get() as { items: number };
     return { items: row.items + deleted.items, resources: row.resources };
@@ -979,7 +985,7 @@ export class QuickNotesStore {
   }
   markSynced(id: string): void {
     // restore_pending_at 一并清除：恢复已生效后残留标记会让本设备永远 local-wins（墓碑永胜被破坏）。
-    this.db.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
+    this.db.prepare("UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id=?").run(id);
   }
 
   /**
@@ -998,7 +1004,7 @@ export class QuickNotesStore {
   isRestorePending(id: string): boolean {
     return this.queries.isRestorePending(id);
   }
-  markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET sync_state='local' WHERE id=?").run(id); }
+  markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET is_dirty=1 WHERE id=?").run(id); }
   listDeletedForSync(): QuickNoteDeleted[] {
     return this.queries.listDeletedForSync();
   }
@@ -1055,8 +1061,8 @@ export class QuickNotesStore {
     ).run("import_remote", item.id, itemPath, path.join(temporary, SAVE_BODY_FILE), oldAssetsBackup, assetDir, stagingKey, item.contentHash, "prepared", now, now).lastInsertRowid);
     try {
       const tx = this.db.transaction(() => {
-        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,sync_state='synced',is_conflict=excluded.is_conflict")
-          .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, "synced", item.isConflict ? 1 : 0);
+        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,is_dirty=0,is_conflict=excluded.is_conflict")
+          .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, 0, item.isConflict ? 1 : 0);
         this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(item.id);
         const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
         for (const image of parsed.images) insert.run(image.id, item.id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);

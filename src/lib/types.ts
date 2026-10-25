@@ -4,8 +4,7 @@ export interface NoteSummary {
   parentId: string | null;
   sortOrder: number;
   updatedAt: string;
-  syncState: "local" | "synced" | "conflict" | "purged";
-  /** 独立 purged 标记（迁移中；最终替代 syncState='purged'）。 */
+  /** 独立 purged 标记。 */
   isPurged?: boolean;
   /** UI 待同步标记（v3 发布成功后清 0；不参与同步正确性）。 */
   isDirty?: boolean;
@@ -49,7 +48,6 @@ export interface NoteInfo {
   cardStats: Array<{ key: string; label: string; count: number }>;
   createdAt: string | null;
   updatedAt: string;
-  syncState: string;
   isDirty?: boolean;
   isPurged?: boolean;
   isConflict: boolean;
@@ -78,7 +76,6 @@ export interface TreeNode {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
-  syncState: NoteSummary["syncState"];
   isPurged?: boolean;
   isDirty?: boolean;
   isConflict: boolean;

@@ -1,6 +1,6 @@
 import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
-import type { QuickNoteDocument, QuickNoteSummary, QuickNoteDeleted } from "./quickNoteTypes.js";
+import type { QuickNoteDocument, QuickNoteDeleted } from "./quickNoteTypes.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 import { mapQuickNoteDeletedRow, mapQuickNoteRow, mapTrashRow } from "../src/core/quickNoteQueries.js";
@@ -14,7 +14,7 @@ export interface QuickNoteRow {
   preview_text: string;
   image_count: number;
   content_hash: string;
-  sync_state: QuickNoteSummary["syncState"];
+  is_dirty: number;
   is_conflict: number;
   restore_pending_at?: string | null;
 }

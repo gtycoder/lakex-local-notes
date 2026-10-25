@@ -20,8 +20,7 @@ import { useSavePipeline, type PersistOutcome } from "./useSavePipeline";
 import type { NoteDocument } from "../lib/types";
 
 const savedNote = (id: string, content: string): NoteDocument => ({
-  id, title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-09-30T00:00:00.000Z",
-  syncState: "local", isConflict: false, content, kind: "doc",
+  id, title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-09-30T00:00:00.000Z", content, isConflict: false,
 });
 
 const events: string[] = [];

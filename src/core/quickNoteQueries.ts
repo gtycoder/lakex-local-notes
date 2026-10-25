@@ -4,7 +4,7 @@
  * 本文件只包含：行→文档映射、删除行→已删记录映射（无 fs/平台依赖）。
  * 内容读取（桌面文件 / 移动端 native SQLite）由调用方注入后经 mapDocument 组装。
  */
-import type { QuickNoteDocument, QuickNoteSummary } from "../lib/types.js";
+import type { QuickNoteDocument } from "../lib/types.js";
 import type { StoredQuickNoteContent } from "./quickNoteModel.js";
 
 /** 行结构（与 electron/quickNotesQueries.ts QuickNoteRow 对齐；两端共用的最小字段集）。 */
@@ -15,7 +15,7 @@ export interface QuickNoteRowShape {
   preview_text: string;
   image_count: number;
   content_hash: string;
-  sync_state: QuickNoteSummary["syncState"];
+  is_dirty: number;
   is_conflict: number;
   restore_pending_at?: string | null;
 }
@@ -51,7 +51,7 @@ export function mapQuickNoteRow(row: QuickNoteRowShape, parts: QuickNoteDocument
     previewText: row.preview_text,
     imageCount: row.image_count,
     contentHash: row.content_hash,
-    syncState: row.sync_state,
+    syncState: row.is_dirty ? "local" : "synced",
     isConflict: !!row.is_conflict,
     content: {
       version: parts.content.version,

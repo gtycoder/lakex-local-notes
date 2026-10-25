@@ -34,7 +34,7 @@ export class SchemaInit {
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT,
         sort_order INTEGER NOT NULL, updated_at TEXT NOT NULL,
-        sync_state TEXT NOT NULL DEFAULT 'local', is_conflict INTEGER NOT NULL DEFAULT 0,
+        is_conflict INTEGER NOT NULL DEFAULT 0,
         deleted_at TEXT,
         kind TEXT NOT NULL DEFAULT 'doc',
         is_locked INTEGER NOT NULL DEFAULT 0,
@@ -54,7 +54,7 @@ export class SchemaInit {
         node_type TEXT NOT NULL CHECK(node_type IN ('notebook','group','note')),
         title TEXT NOT NULL, note_file_id TEXT, sort_order INTEGER NOT NULL,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
-        sync_state TEXT NOT NULL DEFAULT 'local', is_conflict INTEGER NOT NULL DEFAULT 0,
+        is_conflict INTEGER NOT NULL DEFAULT 0,
         icon TEXT,
         trashed_at TEXT,
         deleted_from_parent_id TEXT,
@@ -152,30 +152,23 @@ export class SchemaInit {
       const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
       if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);
     }
-    // dirty 触发器：UI 待同步状态用；同步成功统一 markNotesSynced 清 0，不依赖调用点逐个写。
+    // 迁移：sync_state 已由 is_dirty/is_purged 替代；先删旧触发器再删列（无数据回填）。
     for (const table of ["notes", "tree_nodes"] as const) {
-      this.ctx.db.exec(`
-        CREATE TRIGGER IF NOT EXISTS ${table}_dirty_insert AFTER INSERT ON ${table} WHEN NEW.sync_state='local'
-        BEGIN UPDATE ${table} SET is_dirty=1 WHERE id=NEW.id; END;
-        CREATE TRIGGER IF NOT EXISTS ${table}_dirty_update AFTER UPDATE ON ${table} WHEN NEW.sync_state='local' AND NEW.is_dirty=0
-        BEGIN UPDATE ${table} SET is_dirty=1 WHERE id=NEW.id; END;
-        CREATE TRIGGER IF NOT EXISTS ${table}_clean_synced AFTER UPDATE ON ${table} WHEN NEW.sync_state='synced'
-        BEGIN UPDATE ${table} SET is_dirty=0 WHERE id=NEW.id; END;
-        CREATE TRIGGER IF NOT EXISTS ${table}_clean_purged AFTER UPDATE ON ${table} WHEN NEW.sync_state='purged'
-        BEGIN UPDATE ${table} SET is_dirty=0 WHERE id=NEW.id; END;
-      `);
+      this.ctx.db.exec(`DROP TRIGGER IF EXISTS ${table}_dirty_insert; DROP TRIGGER IF EXISTS ${table}_dirty_update; DROP TRIGGER IF EXISTS ${table}_clean_synced; DROP TRIGGER IF EXISTS ${table}_clean_purged;`);
+      const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
+      if (cols.some((c) => c.name === "sync_state")) this.ctx.db.exec("ALTER TABLE " + table + " DROP COLUMN sync_state");
     }
     const now = nowIso();
     // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除。唯一机制容器，不可删。
-    this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-      VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'synced',0)`).run(this.ctx.trashNotebookId, this.ctx.workspaceId, null, "notebook", "回收站", now, now);
+    this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict)
+      VALUES(?,?,?,?,?,NULL,0,?,?,NULL,0,0)`).run(this.ctx.trashNotebookId, this.ctx.workspaceId, null, "notebook", "回收站", now, now);
     // 种子笔记本：仅全新库首次初始化自动创建一个普通笔记本（固定 ID 仅为多端首启同步一致）。
     // 行为与用户手动创建的笔记本完全相同——可删/改名/purge、无任何默认/特殊地位；
     // seed_initialized 标记保证用户删除（含 purge）后**不复活**。
     const seeded = this.ctx.db.prepare("SELECT value FROM device_state WHERE key='seed_initialized'").get() as { value: string } | undefined;
     if (!seeded) {
-      this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-        VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(this.ctx.defaultNotebookId, this.ctx.workspaceId, null, "notebook", "个人笔记", now, now);
+      this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict)
+        VALUES(?,?,?,?,?,NULL,0,?,?,NULL,1,0)`).run(this.ctx.defaultNotebookId, this.ctx.workspaceId, null, "notebook", "个人笔记", now, now);
 
       this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('seed_initialized','1')").run();
     }
@@ -191,9 +184,9 @@ export class SchemaInit {
       const sortOrder = this.ctx.nextSortOrder(parent);
       const content = WELCOME_NOTE_BODY;
       const tx = this.ctx.db.transaction(() => {
-        this.ctx.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
+        this.ctx.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty) VALUES(?,?,?,?,?,1)")
           .run(id, "欢迎来到 LocalLakexNotes", parent, sortOrder, updatedAt);
-        this.ctx.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
+        this.ctx.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,1,0)")
           .run(id, this.ctx.workspaceId, parent, "欢迎来到 LocalLakexNotes", id, sortOrder, updatedAt, updatedAt);
         this.ctx.atomicWrite(this.ctx.notePathFor(id), content);
       });

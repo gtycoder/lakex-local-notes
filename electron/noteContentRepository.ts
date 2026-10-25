@@ -32,16 +32,16 @@ export class NoteContentRepository {
     const notePath = this.deps.notePathFor(noteId);
     if (!fs.existsSync(notePath)) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
 
-    const current = this.deps.db.prepare("SELECT title, trashed_at, sync_state, is_purged FROM notes WHERE id=? AND deleted_at IS NULL").get(noteId) as
-      | { title: string; trashed_at: string | null; sync_state: string | null; is_purged?: number | null }
+    const current = this.deps.db.prepare("SELECT title, trashed_at, is_purged FROM notes WHERE id=? AND deleted_at IS NULL").get(noteId) as
+      | { title: string; trashed_at: string | null; is_purged?: number | null }
       | undefined;
     if (!current) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
-    if (current.trashed_at != null || current.sync_state === "purged" || current.is_purged === 1) {
+    if (current.trashed_at != null || current.is_purged === 1) {
       throw new AppError("InvalidInput", `笔记已在回收站或已被删除，保存被拒绝；请先显式恢复: ${noteId}`);
     }
     const currentContent = fs.readFileSync(notePath, "utf8");
     if (!hasNoteSaveChanges({ title: current.title, content: currentContent }, { title, content })) {
-      // 编辑器打开时可能只补派生缓存；缓存更新不能改变 updated_at/sync_state。
+      // 编辑器打开时可能只补派生缓存；缓存更新不能改变 updated_at/is_dirty。
       if (caches) {
         const transaction = this.deps.db.transaction(() => {
           this.deps.db.prepare("UPDATE notes SET md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
@@ -59,15 +59,15 @@ export class NoteContentRepository {
     this.deps.atomicWrite(notePath, content);
     const transaction = this.deps.db.transaction(() => {
       if (caches) {
-        this.deps.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local',md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
+        this.deps.db.prepare("UPDATE notes SET title=?,updated_at=?,is_dirty=1,md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
           .run(title, updatedAt, caches.markdown ?? null, caches.plain ?? null, noteId);
         this.deps.upsertSearch(noteId, title, caches.plain ?? "");
       } else {
-        this.deps.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
+        this.deps.db.prepare("UPDATE notes SET title=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL")
           .run(title, updatedAt, noteId);
         this.deps.upsertSearch(noteId, title, null);
       }
-      this.deps.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL")
+      this.deps.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,is_dirty=1 WHERE note_file_id=? AND deleted_at IS NULL")
         .run(title, updatedAt, noteId);
     });
     transaction();

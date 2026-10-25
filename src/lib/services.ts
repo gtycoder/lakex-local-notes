@@ -20,12 +20,11 @@ import type {
 
 function noteToDto(note: {
   id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string;
-  content: string; syncState: string; isEditLocked?: boolean;
+  content: string; isEditLocked?: boolean;
 }): NoteDto {
   return {
     id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
     updatedAt: note.updatedAt, content: note.content,
-    syncState: note.syncState as NoteDto["syncState"],
     isEditLocked: note.isEditLocked ?? false,
   };
 }

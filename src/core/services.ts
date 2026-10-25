@@ -14,7 +14,6 @@ export interface NoteDto {
   sortOrder: number;
   updatedAt: string;
   content: string;
-  syncState: "local" | "synced" | "conflict" | "purged";
   isEditLocked: boolean;
 }
 

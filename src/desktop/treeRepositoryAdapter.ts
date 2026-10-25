@@ -16,7 +16,6 @@ function toSharedTreeNode(n: StoreNode): TreeNode {
   return {
     ...n,
     nodeType: n.nodeType as TreeNodeType,
-    syncState: n.syncState as TreeNode["syncState"],
     icon: n.icon ?? null,
   };
 }

@@ -49,11 +49,11 @@ export class NoteMetadataRepository {
    * 这里明确拒绝，避免把 purged 行改成 local 却仍留在回收站产生脏态。 */
   private assertNodeWritable(id: string): void {
     const row = this.db.prepare(
-      "SELECT t.parent_id AS parent_id, t.trashed_at AS trashed_at, t.sync_state AS node_sync, n.sync_state AS note_sync " +
+      "SELECT t.parent_id AS parent_id, t.trashed_at AS trashed_at, t.is_purged AS node_purged, n.is_purged AS note_purged " +
       "FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id WHERE t.id = ?"
-    ).get(id) as { parent_id: string | null; trashed_at: string | null; node_sync: string | null; note_sync: string | null } | undefined;
+    ).get(id) as { parent_id: string | null; trashed_at: string | null; node_purged: number | null; note_purged: number | null } | undefined;
     if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
-    if (row.parent_id === this.trashNotebookId || row.trashed_at != null || row.node_sync === "purged" || row.note_sync === "purged") {
+    if (row.parent_id === this.trashNotebookId || row.trashed_at != null || row.node_purged === 1 || row.note_purged === 1) {
       throw new AppError("InvalidInput", `节点已在回收站或已被删除，不能修改；请先显式恢复: ${id}`);
     }
   }
@@ -65,7 +65,7 @@ export class NoteMetadataRepository {
     const id = this.deps.uuid();
     const now = this.deps.nowIso();
     const sortOrder = this.deps.nextSortOrder(null);
-    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,'local',0)")
+    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,1,0)")
       .run(id, this.workspaceId, trimmed, sortOrder, now, now);
     return this.deps.readTreeNode(id);
   }
@@ -79,7 +79,7 @@ export class NoteMetadataRepository {
     const id = this.deps.uuid();
     const now = this.deps.nowIso();
     const sortOrder = this.deps.nextSortOrder(parentId);
-    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'group',?,NULL,?,?,?,'local',0)")
+    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'group',?,NULL,?,?,?,1,0)")
       .run(id, this.workspaceId, parentId, trimmed, sortOrder, now, now);
     return this.deps.readTreeNode(id);
   }
@@ -90,9 +90,9 @@ export class NoteMetadataRepository {
     this.assertNodeWritable(id);
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
-      const changed = this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(trimmed, now, id).changes;
+      const changed = this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL").run(trimmed, now, id).changes;
       if (changed === 0) throw new AppError("NotFound", `节点不存在: ${id}`);
-      this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL").run(trimmed, now, id);
+      this.db.prepare("UPDATE notes SET title=?,updated_at=?,is_dirty=1 WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL").run(trimmed, now, id);
       const node = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?").get(id) as NoteTreeRow | undefined;
       if (node?.note_file_id) this.deps.upsertSearch(node.note_file_id, trimmed, null);
     });
@@ -107,8 +107,8 @@ export class NoteMetadataRepository {
     const now = this.deps.nowIso();
     this.assertNodeWritable(id);
     const transaction = this.db.transaction(() => {
-      this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
-      this.db.prepare("UPDATE notes SET updated_at=?, sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL")
+      this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, is_dirty=1 WHERE id=?").run(icon, now, id);
+      this.db.prepare("UPDATE notes SET updated_at=?, is_dirty=1 WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL")
         .run(now, id);
     });
     transaction();
@@ -125,10 +125,10 @@ export class NoteMetadataRepository {
     this.deps.assertParentCompatible(parentId, moving.nodeType);
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
-      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
+      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL")
         .run(parentId, sortOrder, now, id);
       if (moving.noteFileId) {
-        this.db.prepare("UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
+        this.db.prepare("UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL")
           .run(parentId, sortOrder, now, moving.noteFileId);
       }
     });
@@ -152,11 +152,11 @@ export class NoteMetadataRepository {
     this.validateOrder(orderedIds, allowed);
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
-      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
+      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL")
         .run(parentId, orderedIds.indexOf(id), now, id);
-      const treeStatement = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
+      const treeStatement = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL");
       orderedIds.forEach((childId, index) => treeStatement.run(index, now, childId));
-      const noteStatement = this.db.prepare("UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL");
+      const noteStatement = this.db.prepare("UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,is_dirty=1 WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL");
       orderedIds.forEach((childId, index) => noteStatement.run(parentId, index, now, childId));
     });
     transaction();
@@ -168,8 +168,8 @@ export class NoteMetadataRepository {
     this.validateOrder(orderedIds, children);
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
-      const treeStatement = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
-      const noteStatement = this.db.prepare("UPDATE notes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL");
+      const treeStatement = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL");
+      const noteStatement = this.db.prepare("UPDATE notes SET sort_order=?,updated_at=?,is_dirty=1 WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL");
       orderedIds.forEach((childId, index) => { treeStatement.run(index, now, childId); noteStatement.run(index, now, childId); });
     });
     transaction();
@@ -179,9 +179,9 @@ export class NoteMetadataRepository {
     const now = this.deps.nowIso();
     this.assertNodeWritable(id);
     const transaction = this.db.transaction(() => {
-      this.db.prepare("UPDATE notes SET is_locked=?, locked_at=?, sync_state='local' WHERE id=? AND deleted_at IS NULL")
+      this.db.prepare("UPDATE notes SET is_locked=?, locked_at=?, is_dirty=1 WHERE id=? AND deleted_at IS NULL")
         .run(locked ? 1 : 0, now, id);
-      this.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL").run(id);
+      this.db.prepare("UPDATE tree_nodes SET is_dirty=1 WHERE note_file_id=? AND deleted_at IS NULL").run(id);
     });
     transaction();
   }
@@ -196,8 +196,8 @@ export class NoteMetadataRepository {
     const existing = this.db.prepare("SELECT title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE id=?").get(folder.id) as ExistingFolderRow | undefined;
     if (!existing) {
       this.db.prepare(
-        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
-         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,'synced',0,?,?,?)`
+        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict,icon,trashed_at,deleted_from_parent_id)
+         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,0,0,?,?,?)`
       ).run(folder.id, this.workspaceId, folder.parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null,
         folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
         folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null);
@@ -205,7 +205,7 @@ export class NoteMetadataRepository {
     }
     if (folder.updatedAt > existing.updated_at) {
       this.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, sync_state='synced', node_type=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
+        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, is_dirty=0, node_type=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
       ).run(folder.parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType,
         folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
         folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null,

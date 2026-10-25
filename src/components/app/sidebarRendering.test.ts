@@ -43,7 +43,6 @@ const makeNode = (
   sortOrder: 0,
   createdAt: "t",
   updatedAt: "t",
-  syncState: "local",
   isConflict: false,
 });
 const nodes = [

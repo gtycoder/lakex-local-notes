@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { NoteInfo } from "../lib/types.js";
-import { SYNC_STATE_LABEL, formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "./noteInfo.js";
+import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "./noteInfo.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -23,7 +23,6 @@ const info = (patch: Partial<NoteInfo> = {}): NoteInfo => ({
   wordCount: 12,
   charCount: 34,
   sizeBytes: 2048,
-  syncState: "synced",
   isConflict: false,
   isEditLocked: false,
   ...patch,
@@ -48,9 +47,6 @@ describe("文档属性共享清单（C1-7）", () => {
     expect(status({ isConflict: true })).toBe("已同步 · 有冲突副本");
     expect(status({ isEditLocked: true })).toBe("已同步 · 已锁定");
     expect(status({ isConflict: true, isEditLocked: true })).toBe("已同步 · 有冲突副本 · 已锁定");
-    expect(status({ syncState: "weird" })).toBe("weird");
-    expect(SYNC_STATE_LABEL.local).toBe("未同步");
-    expect(SYNC_STATE_LABEL.conflict).toBe("冲突");
   });
 
   it("时间口径：空 → 破折号；非法值原样回显；本地时区格式化", () => {

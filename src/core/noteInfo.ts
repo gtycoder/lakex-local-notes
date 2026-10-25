@@ -52,6 +52,6 @@ export function noteInfoRows(info: NoteInfo): Array<[string, string]> {
     ["更新", formatNoteInfoTime(info.updatedAt)],
     ["字数", `${info.wordCount} 字 · ${info.charCount} 字符`],
     ["大小", formatNoteInfoSize(info.sizeBytes)],
-    ["状态", `${info.isPurged ? "已彻底删除" : info.isDirty ? "待同步" : SYNC_STATE_LABEL[info.syncState] ?? info.syncState}${info.isConflict ? " · 有冲突副本" : ""}${info.isEditLocked ? " · 已锁定" : ""}`],
+    ["状态", `${info.isPurged ? "已彻底删除" : info.isDirty ? "待同步" : "已同步"}${info.isConflict ? " · 有冲突副本" : ""}${info.isEditLocked ? " · 已锁定" : ""}`],
   ];
 }

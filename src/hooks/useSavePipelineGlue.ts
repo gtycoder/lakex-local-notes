@@ -24,7 +24,7 @@ export function useSavePipelineGlue({
 }: UseSavePipelineGlueOptions) {
   const handleNoteSaved = useCallback((saved: NoteDocument) => {
     setNotes(patchNoteById(saved.id, summaryOf(saved)));
-    setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState, isDirty: saved.isDirty } : item));
+    setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, isDirty: saved.isDirty } : item));
     setSync((current) => ({
       ...current,
       pendingChanges: saved.isDirty ? Math.max(1, current.pendingChanges) : current.pendingChanges,

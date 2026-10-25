@@ -23,7 +23,6 @@ function noteRowToTreeNode(
     sortOrder: Number(row.sort_order),
     createdAt: String(row.updated_at),
     updatedAt: overrides.updatedAt ?? String(row.updated_at),
-    syncState: String(row.sync_state ?? "local") as TreeNode["syncState"],
     isConflict: Boolean(row.is_conflict),
     icon: overrides.icon !== undefined ? overrides.icon : (row.icon ? String(row.icon) : null),
   };
@@ -43,7 +42,6 @@ function folderRowToTreeNode(
     sortOrder: Number(row.sort_order),
     createdAt: String(row.updated_at),
     updatedAt: overrides.updatedAt ?? String(row.updated_at),
-    syncState: "local",
     isConflict: false,
     icon: overrides.icon !== undefined ? overrides.icon : (row.icon ? String(row.icon) : null),
   };
@@ -51,14 +49,14 @@ function folderRowToTreeNode(
 
 export async function listTreeNodes(d: MobileDb): Promise<TreeNode[]> {
   const rows = await d.prepare(
-    "SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state FROM folders WHERE trashed_at IS NULL ORDER BY parent_id, sort_order",
+    "SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders WHERE trashed_at IS NULL ORDER BY parent_id, sort_order",
   ).all() as Array<{
-    id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null; sync_state: string;
+    id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null;
   }>;
   return rows.map((r) => ({
     id: r.id, workspaceId: "mobile", parentId: r.parent_id, nodeType: r.node_type as TreeNodeType,
     title: r.title, noteFileId: null, sortOrder: r.sort_order, createdAt: r.updated_at, updatedAt: r.updated_at,
-    syncState: r.sync_state as TreeNode["syncState"], isConflict: false, icon: r.icon ?? null,
+    isConflict: false, icon: r.icon ?? null,
   }));
 }
 

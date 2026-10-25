@@ -163,7 +163,7 @@ describe("computeBookkeeping", () => {
 describe("rowToLocalState", () => {
   it("snake_case 行 → LocalState 字段映射", () => {
     const state = rowToLocalState({
-      id: "n1", title: "t", parent_id: "p", sort_order: 2, updated_at: T1, sync_state: "synced",
+      id: "n1", title: "t", parent_id: "p", sort_order: 2, updated_at: T1, is_dirty: 0,
       is_conflict: 1, is_locked: 1, locked_at: T1, icon: "📁", trashed_at: null, deleted_from_parent_id: null,
     });
     expect(state).toEqual({
@@ -175,7 +175,7 @@ describe("rowToLocalState", () => {
 
   it("kind 归一：usheet/bitable/board/ink 原样保留，未知值回退 doc", () => {
     const kindOf = (raw: string | null) => rowToLocalState({
-      id: "n1", title: "t", parent_id: null, sort_order: 0, updated_at: T0, sync_state: "local",
+      id: "n1", title: "t", parent_id: null, sort_order: 0, updated_at: T0, is_dirty: 1,
       is_conflict: 0, is_locked: 0, locked_at: null, icon: null, trashed_at: null, deleted_from_parent_id: null,
       kind: raw,
     }).kind;

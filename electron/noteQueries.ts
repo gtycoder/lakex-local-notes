@@ -9,7 +9,6 @@ export interface NoteSummary {
   parentId: string | null;
   sortOrder: number;
   updatedAt: string;
-  syncState: string;
   isPurged?: boolean;
   isDirty?: boolean;
   isConflict: boolean;
@@ -29,7 +28,6 @@ export interface TreeNode {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
-  syncState: string;
   isPurged?: boolean;
   isDirty?: boolean;
   isConflict: boolean;
@@ -74,7 +72,6 @@ export interface SummaryRow {
   parent_id: string | null;
   sort_order: number;
   updated_at: string;
-  sync_state: string;
   is_conflict: number;
   is_locked: number;
   locked_at: string | null;
@@ -93,7 +90,6 @@ export interface TreeNodeRow {
   sort_order: number;
   created_at: string;
   updated_at: string;
-  sync_state: string;
   is_conflict: number;
   is_purged?: number;
   is_dirty?: number;
@@ -108,7 +104,8 @@ interface SyncNoteRow {
   parent_id: string | null;
   sort_order: number;
   updated_at: string;
-  sync_state: string;
+  is_dirty: number;
+  is_purged?: number;
   is_conflict: number;
   is_locked: number;
   locked_at: string | null;
@@ -149,7 +146,6 @@ export class NoteQueries {
       parentId: row.parent_id,
       sortOrder: row.sort_order,
       updatedAt: row.updated_at,
-      syncState: row.sync_state,
       isConflict: !!row.is_conflict,
       ...(row.is_purged ? { isPurged: true } : {}),
       ...(row.is_dirty ? { isDirty: true } : {}),
@@ -172,7 +168,6 @@ export class NoteQueries {
       sortOrder: row.sort_order,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      syncState: row.sync_state,
       isConflict: !!row.is_conflict,
       ...(row.is_purged ? { isPurged: true } : {}),
       ...(row.is_dirty ? { isDirty: true } : {}),
@@ -210,13 +205,13 @@ export class NoteQueries {
 
   listNoteSummaries(): NoteSummary[] {
     const rows = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,is_purged,is_dirty,kind FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_conflict,is_locked,locked_at,is_purged,is_dirty,kind FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
     ).all() as SummaryRow[];
     return rows.map((row) => this.mapSummary(row));
   }
 
   private static readonly SYNC_NOTE_COLUMNS =
-    `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,n.is_purged,n.is_dirty,t.icon,n.trashed_at,n.deleted_from_parent_id,n.kind
+    `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.is_dirty,n.is_purged,n.is_conflict,n.is_locked,n.locked_at,n.is_purged,n.is_dirty,t.icon,n.trashed_at,n.deleted_from_parent_id,n.kind
      FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id`;
 
   listNotesForSync(): SyncNote[] {
@@ -240,10 +235,10 @@ export class NoteQueries {
   }
 
   listFoldersForSync(): SyncFolder[] {
-    // v5：排除 sync_state='purged'（收到他端 folder 墓碑后保留的回收站副本）——学习端不回填，
+    // v5：排除 is_purged=1, is_dirty=0（收到他端 folder 墓碑后保留的回收站副本）——学习端不回填，
     // 对齐 notes 上传环的 purged continue；否则每端都会把已删目录当活跃条目重新发布 → manifest 震荡。
     const rows = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND sync_state != 'purged' AND is_purged = 0 AND id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND is_purged = 0 AND is_purged = 0 AND id != ? ORDER BY sort_order"
     ).all(this.trashNotebookId) as SyncFolderRow[];
     return rows.map((row) => ({
       id: row.id,

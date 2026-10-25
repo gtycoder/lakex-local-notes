@@ -25,7 +25,7 @@ export interface LocalNoteState {
 /** 行映射输入（对齐桌面 noteQueries.ts SyncNoteRow 字段形态）。 */
 export interface SyncNoteRowShape {
   id: string; title: string; parent_id: string | null; sort_order: number;
-  updated_at: string; sync_state: string; is_conflict: number;
+  updated_at: string; is_dirty: number; is_purged?: number; is_conflict: number;
   is_locked: number; locked_at: string | null; icon: string | null;
   trashed_at: string | null; deleted_from_parent_id: string | null;
   kind?: string | null;
@@ -35,7 +35,7 @@ export interface SyncNoteRowShape {
 export function rowToLocalState(row: SyncNoteRowShape): LocalNoteState {
   return {
     id: row.id, title: row.title, parentId: row.parent_id, sortOrder: row.sort_order,
-    updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict,
+    updatedAt: row.updated_at, syncState: row.is_purged === 1 ? "purged" : row.is_dirty === 1 ? "local" : "synced", isConflict: !!row.is_conflict,
     // SQLite 列名冻结：is_locked / locked_at（两端同列）；这里映射成内存名 isEditLocked / editLockedAt。
     isEditLocked: !!row.is_locked, editLockedAt: row.locked_at ?? null, icon: row.icon ?? null,
     trashedAt: row.trashed_at ?? null, deletedFromParentId: row.deleted_from_parent_id ?? null,
@@ -157,6 +157,6 @@ export function computeBookkeeping(manifestNotes: ManifestNote[]): BookkeepingIt
 /** 文档是否"已进回收站 / 已被他端彻底删除"：这类文档不得再被编辑保存。
  * 打开（含启动恢复最后文档）与同步刷新共用同一判定——此前只有同步路径标记，
  * 于是重启后自动重开的回收站文档会以正常可编辑标签出现（2026-09-04 实数据踩到）。 */
-export function isGoneNote(note: { parentId: string | null; syncState: string; isPurged?: boolean }): boolean {
+export function isGoneNote(note: { parentId: string | null; syncState?: string; isPurged?: boolean }): boolean {
   return note.parentId === TRASH_NOTEBOOK_ID || note.isPurged === true || note.syncState === "purged";
 }

@@ -86,7 +86,6 @@ export interface NoteInfo {
   cardStats: Array<{ key: string; label: string; count: number }>;
   createdAt: string | null;
   updatedAt: string;
-  syncState: string;
   isDirty?: boolean;
   isPurged?: boolean;
   isConflict: boolean;
@@ -411,7 +410,7 @@ export class Store {
 
   bootstrap() {
     const notes = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
     ).all(TRASH_NOTEBOOK_ID).map((r) => this.noteQueries.mapSummary(r as SummaryRow));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
@@ -459,7 +458,7 @@ export class Store {
 
   readNote(id: string): NoteDocument {
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     // 261023：正文文件被手动删除（ENOENT）不是"打开失败"——按「缺正文」只读打开，
@@ -572,15 +571,15 @@ export class Store {
       const tx = this.db.transaction(() => {
         if (position === "top") {
           // 同一事务内挪开所有同级节点和笔记元数据，避免排序重叠与 IPC 中断窗口。
-          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,sync_state='local' WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL")
+          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL")
             .run(updatedAt, DEFAULT_WORKSPACE_ID, parent);
-          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,sync_state='local' WHERE parent_id=? AND deleted_at IS NULL")
+          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE parent_id=? AND deleted_at IS NULL")
             .run(updatedAt, parent);
         }
-        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,kind) VALUES(?,?,?,?,?,'local',?)")
+        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty,kind) VALUES(?,?,?,?,?,1,?)")
           .run(id, normalizedTitle, parent, sortOrder, updatedAt, kind);
         this.noteKindCache.set(id, kind);
-        this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
+        this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,1,0)")
           .run(id, DEFAULT_WORKSPACE_ID, parent, normalizedTitle, id, sortOrder, updatedAt, updatedAt);
       });
       tx();
@@ -595,7 +594,7 @@ export class Store {
       }
       throw error;
     }
-    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, kind, content };
+    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, isDirty: true, isConflict: false, kind, content };
   }
 
   /** conversion journal 崩溃恢复使用：仅删除没有元数据登记的目标残留。 */
@@ -637,7 +636,7 @@ export class Store {
     // IPC 全文回传；轻量 SELECT 只取元数据（无文件 IO）。副作用修正：保存不再误写
     // last_opened_note_id（那是「打开」语义，保存非活动文档不应改「最后打开」记录）。
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     // 261023：保存耗时 + 正文体量（"越写越慢"类问题的唯一量化依据）；慢保存升 info，其余 debug。
@@ -787,7 +786,6 @@ export class Store {
       cardStats,
       createdAt: created?.created_at ?? null,
       updatedAt: doc.updatedAt,
-      syncState: doc.syncState,
       isDirty: doc.isDirty,
       isPurged: doc.isPurged,
       isConflict: doc.isConflict,
@@ -1249,8 +1247,8 @@ export class Store {
     for (let i = 0; i < unique.length; i += 200) {
       const batch = unique.slice(i, i + 200);
       const ph = batch.map(() => "?").join(",");
-      this.db.prepare("UPDATE notes SET sync_state='synced', is_dirty=0 WHERE id IN (" + ph + ") AND sync_state!='purged'").run(...batch);
-      this.db.prepare("UPDATE tree_nodes SET sync_state='synced', is_dirty=0 WHERE note_file_id IN (" + ph + ") AND sync_state!='purged'").run(...batch);
+      this.db.prepare("UPDATE notes SET is_dirty=0 WHERE id IN (" + ph + ") AND is_purged=0").run(...batch);
+      this.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id IN (" + ph + ") AND is_purged=0").run(...batch);
     }
   }
 

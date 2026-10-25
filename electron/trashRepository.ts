@@ -26,7 +26,7 @@ interface TrashRow {
   parent_id: string | null;
   trashed_at: string | null;
   updated_at: string;
-  sync_state: string;
+  is_purged?: number;
 }
 
 /** 只读回收站查询（restore/purge 写操作在各端 store 实现）。 */
@@ -42,7 +42,7 @@ export class TrashRepository {
          UNION ALL
          SELECT c.id FROM tree_nodes c JOIN trash_tree tt ON c.parent_id=tt.id AND c.deleted_at IS NULL
        )
-       SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.trashed_at,t.updated_at,t.sync_state
+       SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.trashed_at,t.updated_at,t.is_purged
        FROM tree_nodes t JOIN trash_tree tt ON t.id=tt.id
        ORDER BY t.sort_order`
     ).all(this.trashNotebookId) as TrashRow[];
@@ -55,7 +55,7 @@ export class TrashRepository {
       deletedAt: row.trashed_at,
       updatedAt: row.updated_at,
       hasFile: !!row.note_file_id,
-      purged: row.sync_state === "purged",
+      purged: row.is_purged === 1,
     }));
   }
 
