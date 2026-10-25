@@ -46,6 +46,7 @@
 
 1. **纯适配器 + 假 DB/假 S3 单测**（Node/vitest，用移动端 fake bridge）：DeviceState 映射、正文/资产读写、墓碑/恢复。
 2. **v3 状态表 + schema 迁移**：baseline/intents/pending 落库；单测覆盖重启/崩溃续跑。
+   - ✅ 已完成第一步：`src/mobile/data/v3StateRepository.ts`（sync_v3_state JSON 账本 + 2 例单测）；尚未并入 MOBILE_SCHEMA_VERSION/未接引擎。
 3. **移动 S3v3Remote**：复用 s3Store 的 S3 client；真实 S3 集成（dev 前缀）。
 4. **bridge.syncNow v3 feature flag + 移动 UI 同步按钮/状态**；旧路径保留回滚。
 5. **2 台模拟器/真机真实点击**：建文档/编辑/删除/恢复/彻底删除/冲突，观察 S3 对象与指针。
