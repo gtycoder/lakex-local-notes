@@ -27,7 +27,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 6; // 261024(B)：+quick_note_tag_links / quick_notes.tags_updated_at，小记正文不再带标签；261024(A)：+quick_note_tags；261023：+ai_conversations
+export const MOBILE_SCHEMA_VERSION = 7; // 261025：标签通用化 tags/tag_links/tag_link_versions（替换 quick_note_tags/quick_note_tag_links）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -115,8 +115,8 @@ export function baseSchemaStatements(): SchemaStatement[] {
     first_image TEXT,
     list_metadata_version INTEGER NOT NULL DEFAULT 0
   )`);
-  // 标签目录（261024）：独立子系统；名称/排序/置顶/墓碑。
-  push(`CREATE TABLE IF NOT EXISTS quick_note_tags (
+  // 标签（261025 通用化）：目录 + 多态关联 + 每目标关系版本；正文不存标签名。
+  push(`CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -125,14 +125,21 @@ export function baseSchemaStatements(): SchemaStatement[] {
     updated_at TEXT NOT NULL,
     deleted_at TEXT
   )`);
-  // 关系（261024 B）：唯一关联事实；小记正文不含标签。
-  push(`CREATE TABLE IF NOT EXISTS quick_note_tag_links (
-    note_id TEXT NOT NULL,
+  push(`CREATE TABLE IF NOT EXISTS tag_links (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
     tag_id TEXT NOT NULL,
     position INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY(note_id, tag_id)
+    PRIMARY KEY(target_kind, target_id, tag_id)
   )`);
-  push("CREATE INDEX IF NOT EXISTS idx_quick_note_tag_links_tag ON quick_note_tag_links(tag_id)");
+  push(`CREATE TABLE IF NOT EXISTS tag_link_versions (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    links_updated_at TEXT NOT NULL,
+    PRIMARY KEY(target_kind, target_id)
+  )`);
+  push("CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links(tag_id)");
+  push("CREATE INDEX IF NOT EXISTS idx_tag_links_target ON tag_links(target_kind, target_id)");
   push(`CREATE TABLE IF NOT EXISTS sync_base (
     note_id TEXT PRIMARY KEY,
     content_hash TEXT NOT NULL,

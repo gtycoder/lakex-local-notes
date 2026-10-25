@@ -77,14 +77,14 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       ...(f.deleted_from_parent_id !== null ? { deletedFromParentId: f.deleted_from_parent_id } : {}),
     }));
     const qRows = await this.db.prepare(
-      "SELECT id,created_at,updated_at,content_hash,is_conflict,tags_updated_at FROM quick_notes WHERE deleted_at IS NULL ORDER BY id"
+      "SELECT q.id,q.created_at,q.updated_at,q.content_hash,q.is_conflict,COALESCE(v.links_updated_at,'') AS tags_updated_at FROM quick_notes q LEFT JOIN tag_link_versions v ON v.target_kind='quickNote' AND v.target_id=q.id WHERE q.deleted_at IS NULL ORDER BY q.id"
     ).all() as unknown as Array<{ id: string; created_at: string; updated_at: string; content_hash: string; is_conflict: number; tags_updated_at: string }>;
     const tagRows = await this.db.prepare(
-      "SELECT id,name,sort_order,created_at,updated_at FROM quick_note_tags WHERE deleted_at IS NULL ORDER BY sort_order,id"
+      "SELECT id,name,sort_order,created_at,updated_at FROM tags WHERE deleted_at IS NULL ORDER BY sort_order,id"
     ).all() as unknown as Array<{ id: string; name: string; sort_order: number; created_at: string; updated_at: string }>;
-    const linkRows = await this.db.prepare("SELECT note_id,tag_id,position FROM quick_note_tag_links ORDER BY note_id,position").all() as unknown as Array<{ note_id: string; tag_id: string; position: number }>;
+    const linkRows = await this.db.prepare("SELECT target_id,tag_id,position FROM tag_links WHERE target_kind='quickNote' ORDER BY target_id,position").all() as unknown as Array<{ target_id: string; tag_id: string; position: number }>;
     const links = new Map<string, string[]>();
-    for (const l of linkRows) { const arr = links.get(l.note_id) ?? []; arr.push(l.tag_id); links.set(l.note_id, arr); }
+    for (const l of linkRows) { const arr = links.get(l.target_id) ?? []; arr.push(l.tag_id); links.set(l.target_id, arr); }
     const tags: QuickNoteTagEntry[] = tagRows.map((t) => ({ id: t.id, name: t.name, order: t.sort_order, createdAt: t.created_at, updatedAt: t.updated_at }));
     const quickItems: QuickNoteEntry[] = qRows.map((q) => ({
       id: q.id, createdAt: q.created_at, updatedAt: q.updated_at, contentHash: q.content_hash,
@@ -149,28 +149,32 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       if (!curQ.has(q.id)) {
         if (body !== null) await writeQuickNoteBody(q.id, body);
         await this.db.prepare(
-          "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at,tags_updated_at) VALUES (?,?,?,'',0,?,'local',?,NULL,?)"
-        ).run(q.id, q.createdAt, q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, q.tagsUpdatedAt ?? "");
+          "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at) VALUES (?,?,?,'',0,?,'local',?,NULL)"
+        ).run(q.id, q.createdAt, q.updatedAt, q.contentHash, q.isConflict ? 1 : 0);
       } else if (body !== null) {
         await writeQuickNoteBody(q.id, body);
-        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, sync_state='local', tags_updated_at=? WHERE id=?").run(q.updatedAt, q.contentHash, q.tagsUpdatedAt ?? "", q.id);
+        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, sync_state='local' WHERE id=?").run(q.updatedAt, q.contentHash, q.id);
       }
-      await this.db.prepare("DELETE FROM quick_note_tag_links WHERE note_id=?").run(q.id);
+      await this.db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(q.id);
       const tagIds = q.tagIds ?? [];
       for (let i = 0; i < tagIds.length; i++) {
-        await this.db.prepare("INSERT INTO quick_note_tag_links (note_id,tag_id,position) VALUES (?,?,?) ON CONFLICT(note_id,tag_id) DO UPDATE SET position=excluded.position").run(q.id, tagIds[i], i);
+        await this.db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote',?,?,?) ON CONFLICT(target_kind,target_id,tag_id) DO UPDATE SET position=excluded.position").run(q.id, tagIds[i], i);
+      }
+      if (q.tagsUpdatedAt || tagIds.length > 0) {
+        await this.db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at").run(q.id, q.tagsUpdatedAt ?? q.updatedAt);
       }
     }
     for (const id of curQ) {
       if (wantedQ.has(id)) continue;
-      await this.db.prepare("DELETE FROM quick_note_tag_links WHERE note_id=?").run(id);
+      await this.db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(id);
+      await this.db.prepare("DELETE FROM tag_link_versions WHERE target_kind='quickNote' AND target_id=?").run(id);
       await this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
       await deleteQuickNoteBody(id);
       for (const key of await listQuickNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
     }
     for (const tag of state.quickNotes.tags ?? []) {
       await this.db.prepare(
-        "INSERT INTO quick_note_tags (id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES (?,?,?,0,?,?,NULL) ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=NULL"
+        "INSERT INTO tags (id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES (?,?,?,0,?,?,NULL) ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=NULL"
       ).run(tag.id, tag.name, tag.order ?? 0, tag.createdAt, tag.updatedAt);
     }
     // 目录：按 state 做 upsert/删除（v1 直接写 folders 表；树索引由旧移动通道/启动对账维护）

@@ -61,7 +61,7 @@ export async function buildQuickNotesSyncSchemaStatements(d: MobileDb): Promise<
   if (!qCols.includes("tags_updated_at")) statements.push("ALTER TABLE quick_notes ADD COLUMN tags_updated_at TEXT NOT NULL DEFAULT ''");
   if (!qCols.includes("first_image")) statements.push("ALTER TABLE quick_notes ADD COLUMN first_image TEXT");
   if (!qCols.includes("list_metadata_version")) statements.push("ALTER TABLE quick_notes ADD COLUMN list_metadata_version INTEGER NOT NULL DEFAULT 0");
-  statements.push(`CREATE TABLE IF NOT EXISTS quick_note_tags (
+  statements.push(`CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -70,13 +70,20 @@ export async function buildQuickNotesSyncSchemaStatements(d: MobileDb): Promise<
     updated_at TEXT NOT NULL,
     deleted_at TEXT
   )`);
-  statements.push(`CREATE TABLE IF NOT EXISTS quick_note_tag_links (
-    note_id TEXT NOT NULL,
+  statements.push(`CREATE TABLE IF NOT EXISTS tag_links (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
     tag_id TEXT NOT NULL,
     position INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY(note_id, tag_id)
+    PRIMARY KEY(target_kind, target_id, tag_id)
   )`);
-  statements.push("CREATE INDEX IF NOT EXISTS idx_quick_note_tag_links_tag ON quick_note_tag_links(tag_id)");
+  statements.push(`CREATE TABLE IF NOT EXISTS tag_link_versions (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    links_updated_at TEXT NOT NULL,
+    PRIMARY KEY(target_kind, target_id)
+  )`);
+  statements.push("CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links(tag_id)");
   statements.push(`CREATE TABLE IF NOT EXISTS quick_note_deleted (
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
@@ -254,7 +261,10 @@ export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAsset
           // ready_to_sync=0：纯本地归档，不向云端发布删除记录（其他端从未持有该 id，防幽灵墓碑，对齐桌面 archiveLocalToTrash）
           await d.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, deleted_at, ready_to_sync) VALUES (?,?,?,?,?,?,'local',0,NULL,?,0)").run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, now);
           for (let index = 0; index < tagIds.length; index += 1) {
-            await d.prepare("INSERT OR IGNORE INTO quick_note_tag_links(note_id, tag_id, position) VALUES(?,?,?)").run(newId, tagIds[index], index);
+            await d.prepare("INSERT OR IGNORE INTO tag_links(target_kind,target_id,tag_id,position) VALUES('quickNote',?,?,?)").run(newId, tagIds[index], index);
+          }
+          if (tagIds.length > 0) {
+            await d.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at").run(newId, now);
           }
         });
       } catch (error) {

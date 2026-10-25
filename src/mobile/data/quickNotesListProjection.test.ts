@@ -32,11 +32,11 @@ describe("小记列表轻量投影", () => {
           id: "q1", created_at: "2026-01-01", preview_text: "摘要", image_count: 1,
           updated_at: "2026-01-02", first_image: "a.png",
         }] });
-        if (sql.includes("quick_note_tag_links")) return statement({ all: async () => [
-          { note_id: "q1", tag_id: "t_0123456789abcdef" },
-          { note_id: "q1", tag_id: "t_abcdef0123456789" },
+        if (sql.includes("tag_links")) return statement({ all: async () => [
+          { target_id: "q1", tag_id: "t_0123456789abcdef" },
+          { target_id: "q1", tag_id: "t_abcdef0123456789" },
         ] });
-        if (sql.includes("FROM quick_note_tags")) return statement({ all: async () => [
+        if (sql.includes("FROM tags")) return statement({ all: async () => [
           { id: "t_0123456789abcdef", name: "工作", sort_order: 0, pinned: 0, created_at: "c", updated_at: "u", deleted_at: null },
           { id: "t_abcdef0123456789", name: "重要", sort_order: 1, pinned: 0, created_at: "c", updated_at: "u", deleted_at: null },
         ] });

@@ -21,7 +21,7 @@ import {
   writeQuickNoteBody,
 } from "./noteBodies.js";
 import { quickNoteTagNames } from "./quickNoteTagsRepository.js";
-import { listAllQuickNoteTagIds, listQuickNoteTagIds, removeQuickNoteLinks } from "./quickNoteTagLinksRepository.js";
+import { listAllQuickNoteTagIds, listQuickNoteTagIds, removeQuickNoteLinks, setQuickNoteTagVersion } from "./quickNoteTagLinksRepository.js";
 
 /**
  * 移动端小记仓储（261019 起与桌面存储架构对齐）：
@@ -322,7 +322,8 @@ export async function restoreQuickNote(d: MobileDb, id: string): Promise<void> {
   const now = new Date().toISOString();
   // 恢复 = 本地重新拥有这条小记：若关系还在，把关系版本推进到当前，标签才会随清单同步出去。
   const tagsUpdatedAt = (await listQuickNoteTagIds(d, id)).length > 0 ? now : "";
-  await d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=?, tags_updated_at=? WHERE id=?").run(now, now, tagsUpdatedAt, id);
+  await d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, id);
+  if (tagsUpdatedAt) await setQuickNoteTagVersion(d, id, tagsUpdatedAt);
 }
 
 export async function purgeQuickNote(

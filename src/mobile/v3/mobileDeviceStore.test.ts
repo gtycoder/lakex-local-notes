@@ -110,10 +110,11 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     const b = await freshDevice();
     const body = "quick-body";
     const hash = sha256Sync(new TextEncoder().encode(body));
-    await a.db.prepare("INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,tags_updated_at) VALUES ('q1','2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z','',0,?,'local',0,'')").run(hash);
+    await a.db.prepare("INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES ('q1','2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z','',0,?,'local',0)").run(hash);
+    await a.db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote','q1','2026-10-25T00:00:01.000Z')").run();
     await writeQuickNoteBody("q1", body);
-    await a.db.prepare("INSERT INTO quick_note_tags (id,name,sort_order,pinned,created_at,updated_at) VALUES ('t1','Tag',0,0,'2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z')").run();
-    await a.db.prepare("INSERT INTO quick_note_tag_links (note_id,tag_id,position) VALUES ('q1','t1',0)").run();
+    await a.db.prepare("INSERT INTO tags (id,name,sort_order,pinned,created_at,updated_at) VALUES ('t1','Tag',0,0,'2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z')").run();
+    await a.db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote','q1','t1',0)").run();
     assetStore.set("quick-notes/q1/pic.png", new TextEncoder().encode("Q-IMG"));
     const engineA = new S3v3SyncEngine({ remote, device: a.store, deviceId: "A" });
     const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
@@ -123,7 +124,7 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     const row = await b.db.prepare("SELECT content_hash FROM quick_notes WHERE id='q1'").get() as { content_hash: string };
     expect(row.content_hash).toBe(hash);
     expect(new TextDecoder().decode((await b.store.readQuickBody("q1"))!)).toBe(body);
-    const link = await b.db.prepare("SELECT tag_id FROM quick_note_tag_links WHERE note_id='q1'").get() as { tag_id: string };
+    const link = await b.db.prepare("SELECT tag_id FROM tag_links WHERE target_kind='quickNote' AND target_id='q1'").get() as { tag_id: string };
     expect(link.tag_id).toBe("t1");
     expect(new TextDecoder().decode((await b.store.readQuickAsset("q1", "pic.png"))!)).toBe("Q-IMG");
     await a.db.close(); await b.db.close();
