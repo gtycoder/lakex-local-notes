@@ -32,6 +32,7 @@ import { shouldClearDeletionIntent, type DeletionIntent } from "./s3v3Intent.js"
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { runPool, runPoolSettled } from "./s3v3Pool.js";
+import { mergeQuickNoteTags, type QuickNoteTag } from "./quickNoteTags.js";
 
 const DEFAULT_TRANSFER_CONCURRENCY = 12; // 用户批准：8 → 12（实测首同步约 1.5x）
 
@@ -87,6 +88,16 @@ export interface S3v3EngineOptions {
   onPhase?: (phase: string, ms: number) => void;
   /** 传输并发（261025 用户批准从 8 提到 12；实测首同步约 1.5x）。 */
   transferConcurrency?: number;
+}
+
+function tagEntryToTag(e: { id: string; name: string; sortOrder?: number; order?: number; pinned?: boolean; createdAt: string; updatedAt: string; deletedAt?: string | null }): QuickNoteTag {
+  return { id: e.id, name: e.name, sortOrder: e.sortOrder ?? e.order ?? 0, pinned: !!e.pinned, createdAt: e.createdAt, updatedAt: e.updatedAt, deletedAt: e.deletedAt ?? null };
+}
+function tagToEntry(t: QuickNoteTag) {
+  return { id: t.id, name: t.name, sortOrder: t.sortOrder, pinned: t.pinned, createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}) };
+}
+function sortTagEntries<T extends { id: string }>(tags: readonly T[]): T[] {
+  return [...tags].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 const emptyState = (): DeviceState => ({
@@ -356,7 +367,13 @@ export class S3v3SyncEngine {
     const intentIds = new Set(state.intents.filter((i) => !yieldedIntents.has(i.noteId)).map((i) => i.noteId));
     const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id)), folders: state.folders };
     const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: intentIds });
-    const quickPlan = planQuickNotesMerge(baselineQuick, state.quickNotes, remoteQuick, restore, intentIds);
+    const quickPlan = planQuickNotesMerge(baselineQuick, state.quickNotes, remoteQuick, restore, intentIds, new Set(state.quickDeletes ?? []));
+    // 标签目录单独做 id LWW（含墓碑）；条目标签关系仍走 quickPlan。
+    const mergedQuickTags = mergeQuickNoteTags(
+      (state.quickNotes.tags ?? []).map(tagEntryToTag),
+      (remoteQuick.tags ?? []).map(tagEntryToTag),
+    ).map(tagToEntry);
+    const tagsChanged = JSON.stringify(sortTagEntries(mergedQuickTags)) !== JSON.stringify(sortTagEntries(state.quickNotes.tags ?? []));
     this.phase("merge");
 
     const lakeWS = new WorkingSet(state.lake.notes);
@@ -425,9 +442,8 @@ export class S3v3SyncEngine {
       const remote = plan.remote;
       const local = quickWS.get(plan.id);
       if (plan.kind === "local-delete") {
+        // 删除语义交给设备端：桌面小记要进回收站（保留正文/附件），不能在这里物理删。
         quickWS.delete(plan.id);
-        await this.device.deleteQuickBody(plan.id);
-        await this.device.deleteQuickAssetsDir(plan.id);
         continue;
       }
       if (plan.kind === "local-purge") { quickWS.delete(plan.id); continue; }
@@ -542,12 +558,28 @@ export class S3v3SyncEngine {
     }
 
     const lakeChanged = lakePlan.notes.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote) || lakePlan.folders.some((f) => f.kind !== "none" || f.applyRemote);
-    const quickChanged = quickPlan.items.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote);
+    // 小记标签关系（tagIds/tagsUpdatedAt）独立于正文 hash：关系版本较新的一侧胜出。
+    const remoteQuickById = new Map(remoteQuick.items.map((q) => [q.id, q] as const));
+    let quickLinksChanged = false;
+    for (const [id, localEntry] of new Map(quickWS.indexValues().map((q) => [q.id, q] as const))) {
+      const remoteEntry = remoteQuickById.get(id);
+      if (!remoteEntry) continue;
+      const lt = localEntry.tagsUpdatedAt ?? "";
+      const rt = remoteEntry.tagsUpdatedAt ?? "";
+      if (rt > lt) {
+        localEntry.tagIds = remoteEntry.tagIds ? [...remoteEntry.tagIds] : undefined;
+        localEntry.tagsUpdatedAt = remoteEntry.tagsUpdatedAt;
+        quickLinksChanged = true;
+      } else if ((localEntry.tagIds ?? []).join("\u0000") !== (remoteEntry.tagIds ?? []).join("\u0000") || lt !== rt) {
+        quickLinksChanged = true;
+      }
+    }
+    const quickChanged = tagsChanged || quickLinksChanged || quickPlan.items.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote);
     // 本地状态保留「远端已彻底删除、本机回收站副本」（remotePurged），但不进同步索引。
     const stateNotes = lakeChanged ? lakeWS.localValues().sort((a, b) => (a.id < b.id ? -1 : 1)) : state.lake.notes;
     const stateFolders = [...state.folders].sort((a, b) => (a.id < b.id ? -1 : 1));
     const newLake: LakeIndex = lakeChanged ? { v: 3, space: "lake", notes: lakeWS.indexValues().filter((n) => !purged.has(n.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), folders: stateFolders } : remoteLake;
-    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags } : remoteQuick;
+    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().sort((a, b) => (a.id < b.id ? -1 : 1)), tags: mergedQuickTags } : remoteQuick;
     // 无变化的半边不做全量序列化/哈希（大库空跑时这是主要 CPU）
     const lakeSerialized = lakeChanged ? serializeLakeIndex(newLake) : "";
     const quickSerialized = quickChanged ? serializeQuickNotesIndex(newQuick) : "";

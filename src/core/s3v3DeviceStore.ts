@@ -14,6 +14,8 @@ export interface DeviceState {
   remotePurged?: string[];
   /** 本地显式恢复标记（唯一提前例外）。 */
   restorePending?: string[];
+  /** 本地已软删/待传播的小记 ID（小记回收站墓碑）；用于区分“远端新增”与“本地删除”。 */
+  quickDeletes?: string[];
   /** 全量重拉/重置时归档的本地条目（不参与同步）。 */
   archived?: Array<{ id: string; kind: "lake" | "quickNote"; title?: string }>;
 }

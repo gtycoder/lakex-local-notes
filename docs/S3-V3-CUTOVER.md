@@ -26,6 +26,14 @@
 - 全仓测试 2,804 passed / 25 skipped（转正默认后）。
 - 旧通道测试显式设 `LAKE_SYNC_PROTOCOL=legacy`，继续覆盖回滚路径。
 
+## 4.5 桌面小记 v3（experimental，默认关）
+
+- 开关：`LAKE_S3V3_QUICK_NOTES=1`（同时停用旧 quick-notes 通道）。
+- 已实现：桌面小记正文/附件/标签目录/标签关系/删除进回收站/远端删除跟随；`DesktopStoreDevice` 注入 `QuickNotesStore`。
+- 已验证：`electron/s3v3/quickNotesAdapter.test.ts` 2 例——文本创建→上传→双端拉取→编辑→删除回回收站；图片附件上传/下载。
+- 尚未默认：**彻底删除（purge）的跨端语义**尚未区分“删除/彻底删除”（v3 只有 absence），需要小记墓碑表示；标签墓碑/目录合并虽已实现但仍建议做一轮真实双端验收。
+- 因此小记旧通道仍默认；`sync_state` 仍不能删。
+
 ## 5. 完整转正还差什么（sync_state 能否删除）
 
 ### 不能现在删的原因

@@ -163,6 +163,6 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     await fs.mkdir(path.join(root, "quick-notes"), { recursive: true });
     await fs.writeFile(path.join(root, "quick-notes", "metadata.sqlite3"), "");
     const adapter = new DesktopStoreDevice(store, root);
-    await expect(adapter.init()).rejects.toThrow(/quick notes adapter not implemented/);
+    await expect(adapter.init()).rejects.toThrow(/quick notes store 未注入/);
   });
 });

@@ -20,6 +20,7 @@ import { mapRendererConsoleLevel } from "./rendererLogLevel.js";
 import { errorFields, formatLogFields, perfMessage } from "../src/core/logFormat.js";
 import { ConsoleNoiseFilter } from "./consoleNoise.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
+import { setQuickNotesStoreForV3 } from "./s3v3/quickNotesRegistry.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
@@ -174,8 +175,13 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       try {
         const settings = store.getS3Settings();
         if (!settings) throw new Error("请先保存 S3 配置");
-        const quick = await syncQuickNotes(quickNotes, settings, report);
-        result.quickNotes = quick;
+        // 小记 v3 开关打开时，小记已随文档 v3 同一轮同步；不再走旧 quick-notes 通道。
+        if (process.env.LAKE_S3V3_QUICK_NOTES === "1") {
+          result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
+        } else {
+          const quick = await syncQuickNotes(quickNotes, settings, report);
+          result.quickNotes = quick;
+        }
       } catch (error) {
         result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
         log.sync.warn("[sync] 小记同步失败（本轮其余部分不受影响）" + formatLogFields(errorFields(error)));
@@ -637,6 +643,7 @@ if (!app.requestSingleInstanceLock()) {
       else log.app.info("dev S3 seed skipped: credentials are not configured");
     }
     quickNotes = new QuickNotesStore(workspaceRoot(), log);
+    setQuickNotesStoreForV3(quickNotes);
     drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();

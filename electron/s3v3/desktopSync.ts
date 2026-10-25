@@ -5,6 +5,7 @@ import { S3v3S3Remote } from "./s3Remote.js";
 import { DesktopStoreDevice } from "./desktopStoreAdapter.js";
 import { S3v3SyncEngine, S3v3SyncError, classifyS3v3Error } from "./syncEngine.js";
 import type { S3v3Remote } from "./ports.js";
+import { getQuickNotesStoreForV3 } from "./quickNotesRegistry.js";
 
 /**
  * 桌面 v3 同步入口（feature flag: LAKE_SYNC_PROTOCOL=v3）。
@@ -24,7 +25,8 @@ export async function syncWithV3(
     accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
     prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
   });
-  const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true });
+  const quickNotes = process.env.LAKE_S3V3_QUICK_NOTES === "1" ? getQuickNotesStoreForV3() : null;
+  const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true, ...(quickNotes ? { quickNotes } : {}) });
   await device.init();
   const deviceId = deps.deviceId ?? process.env.LAKE_S3V3_DEVICE_ID ?? "desktop-" + createHash("sha256").update(store.rootPath).digest("hex").slice(0, 8);
   report({ phase: "connect", message: "v3：连接 S3..." });

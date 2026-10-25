@@ -2,7 +2,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
 import type { Store, ImportedNoteAsset } from "../store.js";
-import type { LakeFolderEntry, LakeNoteEntry } from "../../src/core/s3v3Index.js";
+import type { QuickNotesStore } from "../quickNotes.js";
+import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../../src/core/s3v3Index.js";
 import { sha256Hex } from "../../src/core/syncUtils.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
 
@@ -22,9 +23,11 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   private readonly skipQuickNotesGuard: boolean;
   /** 正文 hash 缓存：文件 mtime+size 未变则复用，避免每轮全库读正文。首次/变更文件才重算。 */
   private hashCache = new Map<string, { mtimeMs: number; size: number; hash: string }>();
+  private readonly quickNotes?: QuickNotesStore;
 
-  constructor(store: Store, storeRoot: string, opts: { stateFile?: string; baselineFile?: string; skipQuickNotesGuard?: boolean } = {}) {
+  constructor(store: Store, storeRoot: string, opts: { stateFile?: string; baselineFile?: string; skipQuickNotesGuard?: boolean; quickNotes?: QuickNotesStore } = {}) {
     this.skipQuickNotesGuard = !!opts.skipQuickNotesGuard;
+    this.quickNotes = opts.quickNotes;
     this.store = store;
     const dir = path.join(storeRoot, "sync-v3");
     this.stateFile = opts.stateFile ?? path.join(dir, "state.json");
@@ -35,9 +38,9 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   async init(): Promise<void> {
     await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
     await fs.mkdir(this.stagingDir, { recursive: true });
-    if (!this.skipQuickNotesGuard) {
+    if (!this.quickNotes && !this.skipQuickNotesGuard) {
       const quickDb = path.join(path.dirname(this.stateFile), "..", "quick-notes", "metadata.sqlite3");
-      if (await this.exists(quickDb)) throw new Error("DesktopStoreDevice: quick notes adapter not implemented（检测到 quick-notes 库，拒绝静默跳过）");
+      if (await this.exists(quickDb)) throw new Error("DesktopStoreDevice: quick notes store 未注入（拒绝静默跳过小记）");
     }
   }
 
@@ -56,6 +59,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       intents: state.intents, pending: state.pending,
       remotePurged: state.remotePurged ?? [], restorePending: state.restorePending ?? [], archived: state.archived ?? [],
       assetsHash: Object.fromEntries(state.lake.notes.map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
+      quickAssetsHash: Object.fromEntries((state.quickNotes.items ?? []).map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
       hashCache: Object.fromEntries(this.hashCache),
     };
   }
@@ -66,7 +70,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       ...(f.trashedAt !== undefined && f.trashedAt !== null ? { trashedAt: f.trashedAt } : {}),
       ...(f.deletedFromParentId !== undefined && f.deletedFromParentId !== null ? { deletedFromParentId: f.deletedFromParentId } : {}),
     }));
-    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }> }>(this.stateFile);
+    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; quickAssetsHash?: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }> }>(this.stateFile);
     this.hashCache = new Map(Object.entries(side?.hashCache ?? {}));
     const notes: LakeNoteEntry[] = [];
     // 单 SQL 轻量元数据：避免逐篇 getNoteInfo（读正文/算字数/扫资产卡片，20k 文档会退化到秒级+）
@@ -92,9 +96,30 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
         ...(side?.assetsHash?.[n.id] ? { assetsHash: side.assetsHash[n.id] } : {}),
       });
     }
+    const quickItems: QuickNoteEntry[] = [];
+    const quickTags: QuickNoteTagEntry[] = [];
+    const quickDeletes: string[] = [];
+    if (this.quickNotes) {
+      for (const q of this.quickNotes.listQuickNotesForSync()) {
+        const tagIds = this.quickNotes.listQuickNoteTagIds(q.id);
+        const tagsUpdatedAt = this.quickNotes.links.tagsUpdatedAt(q.id);
+        quickItems.push({
+          id: q.id, createdAt: q.createdAt, updatedAt: q.updatedAt, contentHash: q.contentHash,
+          ...(q.isConflict ? { isConflict: true } : {}),
+          ...(side?.quickAssetsHash?.[q.id] ? { assetsHash: side.quickAssetsHash[q.id] } : {}),
+          ...(tagIds.length ? { tagIds } : {}),
+          ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
+        });
+      }
+      for (const t of this.quickNotes.tags.list({ includeDeleted: true })) {
+        quickTags.push({ id: t.id, name: t.name, sortOrder: t.sortOrder, pinned: t.pinned, createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}) });
+      }
+      for (const d of this.quickNotes.listDeletedForSync()) quickDeletes.push(d.id);
+    }
     const state: DeviceState = {
       lake: { v: 3, space: "lake", notes, folders },
-      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags },
+      quickDeletes,
       folders,
       intents: side?.intents ?? [], pending: side?.pending ?? [],
       remotePurged: side?.remotePurged ?? [], restorePending: side?.restorePending ?? [], archived: side?.archived ?? [],
@@ -148,11 +173,58 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       this.hashCache.delete(cur.id);
       try { this.store.deleteNote(cur.id); this.store.purgeTrashItem(cur.id); } catch { /* 已不在 */ }
     }
+    await this.saveQuickNotes(state);
     await this.saveFolders(state.folders);
     await this.writeAtomic(this.stateFile, JSON.stringify(this.sidecarShape(state)));
     this.stagedBodies.clear();
     this.stagedAssets.clear();
     this.clearedAssets.clear();
+  }
+
+  private async saveQuickNotes(state: DeviceState): Promise<void> {
+    if (!this.quickNotes) return;
+    const qn = this.quickNotes;
+    const current = new Map(qn.listQuickNotesForSync().map((q) => [q.id, q] as const));
+    const wanted = new Map(state.quickNotes.items.map((q) => [q.id, q] as const));
+    for (const item of wanted.values()) {
+      const cur = current.get(item.id);
+      try {
+        if (!cur || cur.contentHash !== item.contentHash) {
+          const body = await this.readQuickBody(item.id);
+          if (!body) throw new Error("缺小记正文");
+          const assets: Array<{ filename: string; bytes: Buffer }> = [];
+          for (const filename of await this.listQuickAssets(item.id)) {
+            const bytes = await this.readQuickAsset(item.id, filename);
+            if (bytes) assets.push({ filename, bytes: Buffer.from(bytes) });
+          }
+          qn.importRemoteQuickNote({ id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, contentHash: item.contentHash, isConflict: !!item.isConflict }, Buffer.from(body), assets);
+        } else {
+          // 本地上传成功：仅当同步期间未被编辑才标 synced（I2 守卫）。
+          qn.markSyncedIfUnchanged(item.id, item.contentHash);
+        }
+        qn.applyRemoteQuickNoteTagLinks(item.id, item.tagIds ?? [], item.tagsUpdatedAt ?? "");
+      } catch (err) {
+        throw new Error("DesktopStoreDevice.saveQuickNotes 失败(" + item.id + "): " + (err as Error).message);
+      }
+    }
+    // 合并标签目录（含墓碑；LWW 在 QuickNoteTagsStore 内）。
+    qn.tags.mergeRemote((state.quickNotes.tags ?? []).map((t) => ({
+      id: t.id, name: t.name, sortOrder: t.sortOrder ?? t.order ?? 0, pinned: !!t.pinned,
+      createdAt: t.createdAt, updatedAt: t.updatedAt, deletedAt: t.deletedAt ?? null,
+    })));
+    for (const cur of current.values()) {
+      if (wanted.has(cur.id)) continue;
+      const purge = state.intents.some((it) => it.noteId === cur.id);
+      try {
+        if (purge) {
+          try { qn.purgeQuickNote(cur.id); }
+          catch { qn.deleteQuickNote(cur.id); qn.purgeQuickNote(cur.id); }
+        } else {
+          // 远端删除（或本地已删）：进回收站，保留正文/附件，避免误清用户副本。
+          qn.deleteQuickNote(cur.id);
+        }
+      } catch { /* 已不在 active */ }
+    }
   }
 
   private async saveFolders(folders: LakeFolderEntry[]): Promise<void> {
@@ -239,11 +311,36 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   }
   async deleteAssetsDir(id: string): Promise<void> { this.clearedAssets.add(id); }
 
-  async readQuickBody(): Promise<Uint8Array | null> { throw new Error("DesktopStoreDevice: quick notes adapter not implemented"); }
-  async writeQuickBody(): Promise<void> { throw new Error("DesktopStoreDevice: quick notes adapter not implemented"); }
-  async deleteQuickBody(): Promise<void> { throw new Error("DesktopStoreDevice: quick notes adapter not implemented"); }
-  async listQuickAssets(): Promise<string[]> { throw new Error("DesktopStoreDevice: quick notes adapter not implemented"); }
-  async readQuickAsset(): Promise<Uint8Array | null> { throw new Error("DesktopStoreDevice: quick notes adapter not implemented"); }
-  async writeQuickAsset(): Promise<void> { throw new Error("DesktopStoreDevice: quick notes adapter not implemented"); }
-  async deleteQuickAssetsDir(): Promise<void> { throw new Error("DesktopStoreDevice: quick notes adapter not implemented"); }
+  async readQuickBody(id: string): Promise<Uint8Array | null> {
+    if (!this.quickNotes) return null;
+    try { return new Uint8Array(await fs.readFile(this.quickNotes.quickNotePathFor(id))); } catch { return null; }
+  }
+  async writeQuickBody(id: string, bytes: Uint8Array): Promise<void> {
+    if (!this.quickNotes) throw new Error("quickNotes 未注入");
+    const file = this.quickNotes.quickNotePathFor(id);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await this.writeAtomic(file, bytes);
+  }
+  async deleteQuickBody(id: string): Promise<void> {
+    if (!this.quickNotes) return;
+    try { await fs.unlink(this.quickNotes.quickNotePathFor(id)); } catch { /* 已不存在 */ }
+  }
+  async listQuickAssets(id: string): Promise<string[]> {
+    if (!this.quickNotes) return [];
+    try { return (await fs.readdir(this.quickNotes.quickNoteAssetsPathFor(id))).filter((f) => !f.includes(".tmp")).sort(); } catch { return []; }
+  }
+  async readQuickAsset(id: string, filename: string): Promise<Uint8Array | null> {
+    if (!this.quickNotes) return null;
+    try { return new Uint8Array(await fs.readFile(path.join(this.quickNotes.quickNoteAssetsPathFor(id), filename))); } catch { return null; }
+  }
+  async writeQuickAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
+    if (!this.quickNotes) throw new Error("quickNotes 未注入");
+    const dir = this.quickNotes.quickNoteAssetsPathFor(id);
+    await fs.mkdir(dir, { recursive: true });
+    await this.writeAtomic(path.join(dir, filename), bytes);
+  }
+  async deleteQuickAssetsDir(id: string): Promise<void> {
+    if (!this.quickNotes) return;
+    try { await fs.rm(this.quickNotes.quickNoteAssetsPathFor(id), { recursive: true, force: true }); } catch { /* ignore */ }
+  }
 }

@@ -156,7 +156,7 @@ export interface QuickNotePlan {
 }
 export interface QuickNotesMergePlan { items: QuickNotePlan[] }
 
-export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNotesIndex, remote: QuickNotesIndex, restorePending: ReadonlySet<string>, purgeIntents: ReadonlySet<string> = new Set()): QuickNotesMergePlan {
+export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNotesIndex, remote: QuickNotesIndex, restorePending: ReadonlySet<string>, purgeIntents: ReadonlySet<string> = new Set(), localDeletes: ReadonlySet<string> = new Set()): QuickNotesMergePlan {
 
   const b = byId(base?.items);
   const l = byId(local.items);
@@ -177,6 +177,10 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
     }
     if (ll && !rr && !bb) {
       items.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: ll, remote: undefined });
+      continue;
+    }
+    if (!ll && rr && bb && localDeletes.has(id)) {
+      items.push({ id, kind: "local-delete", applyRemote: false, uploadLocal: false, archiveLocal: false, local: undefined, remote: rr });
       continue;
     }
     if (!ll && rr) {
