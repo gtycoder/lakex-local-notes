@@ -35,6 +35,16 @@
 - 根因：下载应用只写 `lakeEntries/quickEntries`，未同步「本轮发布用」的 `lakeIndexEntries/quickIndexEntries`；该端下一轮用旧条目构建索引并发布。
 - 修复：下载应用同时更新 index 副本；新增多端回归测试（无修复时 C 拉到 v1 失败，有修复后 v2）。详见实施报告 B14。
 
+## 4 端复跑（修复 B14 后，通过）
+
+- 4 台桌面（A/B/C/D，独立 userData，CDP 9241-9244，同前缀 lake-notes-v3-dev1/_ui5/1792923016）：
+  - A 首次上传 uploaded=1，670ms，v3-g1；
+  - B/C/D 依次拉取 downloaded=1，258/172/212ms；
+  - D 真实点击打开欢迎文档 + Input.insertText 输入「 [from-D5]」→ 点同步 uploaded=1，563ms，v3-g2；
+  - A/B/C 依次同步 downloaded=1，137/121/124ms，manifestId 均为 v3-g2；
+  - 四端正文 sha256 全部 = 77156366fe85…，均含 from-D5（完全收敛）。
+- 说明：4 端同步按钮用 DOM button.click() 触发（真实 Input 曾因 hover 浮层拦截）；正文编辑仍是真实鼠标点击 + Input.insertText。
+
 ## 下一步
 
 - 4 桌面矩阵（A/B/C/D 独立 userData + CDP 端口）+ 冲突/回收站/彻底删除的真实点击路径；
