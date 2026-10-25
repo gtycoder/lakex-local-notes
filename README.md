@@ -186,7 +186,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [AGENTS.md](AGENTS.md) | **长期红线与机制**（会话启动必读） |
 | [docs/PRODUCT.md](docs/PRODUCT.md) · [docs/DESIGN.md](docs/DESIGN.md) | 产品定位 / 设计系统（令牌、层序、组件规范） |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 进程结构、关键文件、数据流 |
-| [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/S3-GC-DESIGN.md](docs/S3-GC-DESIGN.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议 / GC / 存储分层 |
+| [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/S3-GC-DESIGN.md](docs/S3-GC-DESIGN.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) · [docs/S3-MANIFEST-SCALE-RESEARCH.md](docs/S3-MANIFEST-SCALE-RESEARCH.md) · [docs/S3-REDESIGN.md](docs/S3-REDESIGN.md) | 同步协议 / GC / 存储分层 / 清单规模调研 / S3 重设计草案（零痕迹删除） |
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
