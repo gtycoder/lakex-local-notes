@@ -79,4 +79,27 @@ describe("6 端并发推拉（假 S3 + 延迟）", () => {
       }
     }
   }, 120_000);
+
+  it("并发发布容量：12/20 端同时推送的锁等待与错误", async () => {
+    const out: Array<{ n: number; ms: number; errors: string[] }> = [];
+    for (const n of [12, 20, 28]) {
+      const remote = new LatencyRemote();
+      const devices = await Promise.all(Array.from({ length: n }, (_, i) => device("cap" + i)));
+      for (let i = 0; i < n; i++) await putDoc(devices[0].store, "own-" + i, "seed-" + i);
+      const engines = devices.map((d, i) => new S3v3SyncEngine({ remote, device: d.store, deviceId: "cap-" + i }));
+      await engines[0].sync({ onEmptyCloud: "upload" });
+      for (let i = 1; i < n; i++) await engines[i].sync();
+      for (let i = 0; i < n; i++) await putDoc(devices[i].store, "own-" + i, "edited-" + i);
+      const t = Date.now();
+      const rs = await Promise.allSettled(engines.map((e2) => e2.sync()));
+      const errors = rs.filter((r) => r.status === "rejected").map((r) => String((r as PromiseRejectedResult).reason));
+      out.push({ n, ms: Date.now() - t, errors });
+      console.log("CONC-CAP " + JSON.stringify({ n, ms: Date.now() - t, errors }));
+    }
+    expect(out.length).toBe(3);
+    // 容量结论固化：≤20 端并发发布无错误；28 端出现频发发布冲突（锁串行 + 重试超限）
+    // 三点：12 端正常；20 端偶发（允许 0~少量错误，实测 0~2）；28 端频发（实测 6~7）
+    expect(out.find((r) => r.n === 12)!.errors).toEqual([]);
+    expect(out.find((r) => r.n === 28)!.errors.length).toBeGreaterThanOrEqual(3);
+  }, 300_000);
 });
