@@ -30,7 +30,7 @@ import { planLakeMerge, planQuickNotesMerge } from "../../src/core/s3v3Merge.js"
 import { planLakeDeletes, planQuickNotesDeletes, type PlannedDelete } from "../../src/core/s3v3Gc.js";
 import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "../../src/core/s3v3Gate.js";
 import { shouldClearDeletionIntent, type DeletionIntent } from "../../src/core/s3v3Intent.js";
-import type { DeviceBaseline, DeviceState, FileDeviceStore } from "./fileDeviceStore.js";
+import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
 import type { S3v3Remote } from "./ports.js";
 import { runPool, runPoolSettled } from "../../src/core/s3v3Pool.js";
 
@@ -63,7 +63,7 @@ export interface S3v3SyncReport {
 }
 export interface S3v3EngineOptions {
   remote: S3v3Remote;
-  device: FileDeviceStore;
+  device: S3v3DeviceStore;
   deviceId: string;
   now?: () => Date;
 }
@@ -80,7 +80,7 @@ const emptyState = (): DeviceState => ({
 
 export class S3v3SyncEngine {
   private readonly remote: S3v3Remote;
-  private readonly device: FileDeviceStore;
+  private readonly device: S3v3DeviceStore;
   private readonly deviceId: string;
   private readonly now: () => Date;
   private readonly declCache = new Map<string, AssetDeclaration>();

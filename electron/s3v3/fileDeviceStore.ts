@@ -1,36 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { LakeIndex, QuickNotesIndex } from "../../src/core/s3v3Index.js";
-import type { DeletionIntent } from "../../src/core/s3v3Intent.js";
-import type { PendingDelete } from "../../src/core/s3v3Gate.js";
+import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
+export type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
 
-/** S3 v3 设备本地模型（Node 文件系统实现；生产接入时映射到现有 store，测试可直接用）。 */
-
-export interface DeviceState {
-  lake: LakeIndex;
-  quickNotes: QuickNotesIndex;
-  folders: LakeIndex["folders"];
-  intents: DeletionIntent[];
-  pending: PendingDelete[];
-  /** 远端已彻底删除、本地保留的回收站副本（不参与同步上传）。 */
-  remotePurged?: string[];
-  /** 本地显式恢复标记（唯一提前例外）。 */
-  restorePending?: string[];
-  /** 全量重拉/重置时归档的本地条目（不参与同步）。 */
-  archived?: Array<{ id: string; kind: "lake" | "quickNote"; title?: string }>;
-}
-
-export interface DeviceBaseline {
-  epoch: string;
-  generation: number;
-  lakeCommit: string;
-  quickNotesCommit: string;
-  lake: LakeIndex;
-  quickNotes: QuickNotesIndex;
-}
-
-export class FileDeviceStore {
+/** 文件系统实现（测试与 CLI 用；生产接入时用适配器映射现有 Store / 移动端 SQLite）。 */
+export class FileDeviceStore implements S3v3DeviceStore {
   constructor(readonly root: string) {}
 
   private p(...parts: string[]): string { return path.join(this.root, ...parts); }

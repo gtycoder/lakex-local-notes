@@ -8,7 +8,7 @@
 1. **协议内核与运行时已完成**：指针状态机、不可变索引/声明、三方合并、删除意图、待删门禁、发布锁/读回、深度清理、旧 Manifest 迁移、文件设备模型、S3 远程实现。
 2. **验证已覆盖**：单元/表驱动 70+ 例、双端假 S3 场景 12 例、迁移 1 例、真实七牛 S3 集成 1 例、真实 S3 规模 200 文档 × 10 附件（2391 对象）1 例、合成 2 万文档 / 20 万附件的索引级压测。
 3. **关键实测结论**：七牛 Kodo **不支持条件写**（If-Match/If-None-Match 均被忽略；并发抢锁双持 20/20）→ v3 采用「持久删除意图 + 分叉检测 + 发布后读回」降级路线；读后写一致、LIST 即时、DeleteObjects、multipart 中止清理均通过。
-4. **尚未达到「可替换现有线上同步」**：v3 引擎尚未接入 Electron 主进程/移动端（现有 syncEngine/syncEngineController 未改）、未接现有并发池、未做设备级 e2e；首次全量上云为串行传输，200×10 实测 155s，接入时必须复用现有 8 并发池。
+4. **尚未达到「可替换现有线上同步」**：v3 引擎尚未接入 Electron 主进程/移动端（现有 syncEngine/syncEngineController 未改）、未做设备级 e2e；传输已做全局并发 8（200×10 初始化 16.1s、拉取 22.0s），但下载尚未全局池化。
 5. **仓库存在 1 个与本批无关的既有红灯**：`electron/quickNotes.test.ts > 远端标签目录合并` 在 master 上同样失败（已用 master worktree 复核），不是 v3 引入。
 
 ## 1. 交付物与代码地图
@@ -32,7 +32,8 @@
 |---|---|
 | `ports.ts` | S3 远程/设备存储端口 |
 | `s3Remote.ts` | 七牛/S3 兼容实现（gzip、LIST 分页、DeleteObjects、前缀删除、读后一致） |
-| `fileDeviceStore.ts` | 设备本地模型（正文/附件/基线/历史/待删/意图/恢复标记；原子写） |
+| `deviceStore.ts` | **设备契约 `S3v3DeviceStore`**（接入现有桌面 Store / 移动端 SQLite 的接口） |
+| `fileDeviceStore.ts` | 文件系统实现（测试/CLI；正文/附件/基线/历史/待删/意图/恢复标记；原子写） |
 | `syncEngine.ts` | v3 同步引擎：拉取→合并→上传→发布锁/读回→待删门禁→意图生命周期→深度清理→全量重拉 |
 | `migrate.ts` | 旧 Manifest（含墓碑/回收站/小记标签）→ v3 索引+不可变声明+pointer |
 
@@ -117,7 +118,7 @@ npx vitest run electron/s3v3/scale.integration.test.ts
 
 ## 5. 尚未完成 / 上生产前必须做
 
-1. **接入应用层（最大缺口）**：把 `electron/s3v3/syncEngine.ts` 接入 Electron 主进程同步编排（替换/并行于现有 `syncEngineController`），移动端需按同一 core 逻辑实现；本次未改现有 `src/core/syncEngine.ts` / `electron/syncEngineController.ts`。
+1. **接入应用层（最大缺口）**：把 `electron/s3v3/syncEngine.ts` 接入 Electron 主进程同步编排（替换/并行于现有 `syncEngineController`），移动端需按同一 core 逻辑实现；本次未改现有 `src/core/syncEngine.ts` / `electron/syncEngineController.ts`。**设备契约 `S3v3DeviceStore` 已抽出**（引擎不再依赖文件实现），下一步实现桌面 Store / 移动 SQLite 适配器。
 2. **传输并发**：上传已改为**全局任务队列（≤8）**（200×10：初始化 154.8s→50.1s→**16.1s**；拉取 80.1s→**22.0s**）；下载仍是「按笔记 + 资源级 8」，下一步同样改为全局队列。按 200×10 外推 2 万/20 万首装仍需数十分钟，属可接受的一次性迁移成本。
 3. **UI/DB 映射**：文件设备模型需映射到现有 `store`/移动端 SQLite：baseline、intents、pending、remotePurged/restorePending 落库；设置页展示能力探测结果。
 4. **迁移演练**：用真实旧库（dev 副本）跑「旧清单→v3」，双端升级顺序、旧客户端拒绝、回滚预案。
