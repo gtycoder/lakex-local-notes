@@ -320,6 +320,24 @@ describe("S3v3 同步引擎（双端）", () => {
     await expect(engine(remote, a.store, "A").sync()).rejects.toMatchObject({ code: "pointer-corrupt" });
   });
 
+  it("多端：拉取到的新版本不能被旧索引重新发布（回归）", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("a"); const b = await device("b"); const c = await device("c");
+    await addDoc(a.store, "n1", "v1");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    const b1 = await engine(remote, b.store, "B").sync();
+    expect(b1.downloadedNotes).toBe(1);
+    await addDoc(a.store, "n1", "v2");
+    await engine(remote, a.store, "A").sync();
+    // B 拉到 v2；关键：B 本轮不应把旧 v1 索引重新发布
+    const b2 = await engine(remote, b.store, "B").sync();
+    expect(b2.downloadedNotes).toBe(1);
+    expect(new TextDecoder().decode((await b.store.readBody("n1"))!)).toBe("v2");
+    const c1 = await engine(remote, c.store, "C").sync();
+    expect(c1.downloadedNotes).toBe(1);
+    expect(new TextDecoder().decode((await c.store.readBody("n1"))!)).toBe("v2");
+  });
+
   it("小记：上传/拉取/删除无痕", async () => {
     const remote = new MemoryRemote();
     const a = await device("a"); const b = await device("b");

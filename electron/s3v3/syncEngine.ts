@@ -332,6 +332,7 @@ export class S3v3SyncEngine {
         const decl = await this.downloadAssets(remote.id, remote.assetsHash);
         if (decl) newLakeDecls.set(remote.id, { declHash: remote.assetsHash!, filenames: decl.assets.map((a) => a.filename) });
         lakeEntries.set(remote.id, { ...remote });
+        lakeIndexEntries.set(remote.id, { ...remote });
       }
     }
     for (const plan of lakePlan.notes) {
@@ -386,6 +387,7 @@ export class S3v3SyncEngine {
       const decl = await this.downloadQuickAssets(remote.id, remote.assetsHash);
       if (decl) newQuickDecls.set(remote.id, { declHash: remote.assetsHash!, filenames: decl.assets.map((a) => a.filename) });
       quickEntries.set(remote.id, { ...remote });
+      quickIndexEntries.set(remote.id, { ...remote });
     }
 
     // ---- 上传 ----

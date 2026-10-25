@@ -29,6 +29,12 @@
 4. v3 feature flag 默认关闭；未改默认同步路径。
 5. 设备 A 的 deviceId 为 desktop-<hash(userData)>，可作为稳定设备标识。
 
+## 4 端复测发现 P0（已修复）
+
+- 4 台桌面（A/B/C/D，CDP 9241-9244，独立 userData）同一前缀：A 上传 g1 → B/C/D 拉取 → D 编辑并发布 g2 → A 拉取成功（本地正文含 from-D），但 B/C 再同步时 `downloaded=0` 且各自 `published=true`，把旧索引重新发布（云端回退），B/C 本地正文仍为旧版。
+- 根因：下载应用只写 `lakeEntries/quickEntries`，未同步「本轮发布用」的 `lakeIndexEntries/quickIndexEntries`；该端下一轮用旧条目构建索引并发布。
+- 修复：下载应用同时更新 index 副本；新增多端回归测试（无修复时 C 拉到 v1 失败，有修复后 v2）。详见实施报告 B14。
+
 ## 下一步
 
 - 4 桌面矩阵（A/B/C/D 独立 userData + CDP 端口）+ 冲突/回收站/彻底删除的真实点击路径；

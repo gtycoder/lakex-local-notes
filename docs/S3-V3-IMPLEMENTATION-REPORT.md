@@ -117,6 +117,7 @@ npx vitest run electron/s3v3/scale.integration.test.ts
 | B11 | 设计风险 | 七牛不支持条件写，锁无法互斥 | 实测后定稿：持久删除意图 + 分叉检测 + 发布读回；限制写入文档 |
 | B12 | 数据错误 | 上传失败（正文/附件 PUT 抛错）仍可能把新 hash 写进索引，造成索引引用未落盘对象 | 上传失败只回退「待发布索引条目」到远端旧版/移出，本地 state 保留重试意图；下一轮重传成功 |
 | B13 | 可用性 | pointer 非合法 JSON 时抛原生 SyntaxError，未归类为指针损坏 | `readPointer` 捕获并抛 `S3v3SyncError(pointer-corrupt)`，不猜测恢复 |
+| B14 | **P0 数据丢失** | 下载应用到本地后只更新 lakeEntries/quickEntries，未同步「本轮待发布索引」lakeIndexEntries/quickIndexEntries → 该端下一轮把旧版本索引重新发布，其他端回退（4 端真实点击复现：A 基线 hash 仍为新，云端被 B/C 回退为旧） | 下载应用同时更新 index entries；新增多端回归测试（去掉修复即失败） |
 
 > 说明：以上均为本轮实现/测试中真实出现并修复的问题；修复后对应断言已加入测试。
 
