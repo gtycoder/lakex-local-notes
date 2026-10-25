@@ -49,10 +49,9 @@ describe("小记 key 布局（单一来源 + 格式钉死）", () => {
     expect(keys.assetKey("note-a", "a.png").slice(prefix.length)).toBe(quickNoteAssetKeyRel("note-a", "a.png"));
   });
 
-  it("三个生产调用点都从单一来源取 key，且不得再自行拼（源码级护栏）", () => {
+  it("生产调用点都从单一来源取 key，且不得再自行拼（源码级护栏）", () => {
     const push = read("core/quickNotePush.ts");
     const engine = read("core/quickNotesSyncEngine.ts");
-    const desktop = read("../electron/quickNotesSync.ts");
     const coreSources: Array<[string, string]> = [
       ["quickNotePush", push],
       ["quickNotesSyncEngine", engine],
@@ -61,11 +60,6 @@ describe("小记 key 布局（单一来源 + 格式钉死）", () => {
       expect(src.includes('from "./quickNoteKeys.js"'), name + " 必须 import 单一来源").toBe(true);
       // 旧写法：内联模板 `${cfg.prefix}/${ROOT}/objects|assets|manifests/...`
       expect(src.includes("`${cfg.prefix}/${ROOT}"), name + " 不得再内联拼 key").toBe(false);
-    }
-    expect(desktop.includes('from "../src/core/quickNoteKeys.js"'), "桌面 quickNotesSync 必须 import 单一来源").toBe(true);
-    const forbidden = ["`${ROOT}/objects/", "`${ROOT}/assets/", "`${ROOT}/manifests/", '= "quick-notes"'];
-    for (const bad of forbidden) {
-      expect(desktop.includes(bad), "桌面 quickNotesSync 不得再出现：" + bad).toBe(false);
     }
   });
 });

@@ -1,7 +1,6 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
-import type { GcDiagnostics } from "../core/gcDiagnostics";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
 
@@ -193,14 +192,12 @@ export interface LakeNative {
   saveS3GcSettings(settings: S3GcSettings): Promise<void>;
   listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
-  runS3GcDiagnostics(): Promise<GcDiagnostics>;
   runDataHealthCheck(): Promise<DataHealthReport>;
   readAppLog(opts: { keyword?: string; maxLines?: number; context?: number }): Promise<{ matches: Array<{ line: string; hit: boolean }>; file: string; truncated: boolean; generatedAt: string }>;
   /** 关于页：版本与运行环境 + 数据与存储概览（只读）。 */
   getSystemInfo(): Promise<import("./types").SystemInfo>;
   /** 关于页：在文件管理器中显示白名单目录（kind 由主进程解析，绝不传路径）。 */
   revealDataFolder(kind: import("./types").DataFolderKind): Promise<{ ok: boolean; path: string }>;
-  runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   /** 浏览器端服务（桌面附属窗口；仅本机、不落盘、每次启动默认关闭）。 */
@@ -374,12 +371,10 @@ export const native = {
   saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
   listS3GcPending: () => api().listS3GcPending(),
   listS3GcLog: () => api().listS3GcLog(),
-  runS3GcDiagnostics: () => api().runS3GcDiagnostics(),
   runDataHealthCheck: () => api().runDataHealthCheck(),
   readAppLog: (opts: { keyword?: string; maxLines?: number; context?: number }) => api().readAppLog(opts),
   getSystemInfo: () => api().getSystemInfo(),
   revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
-  runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
   getWebStatus: () => api().getWebStatus(),

@@ -155,12 +155,10 @@ export const WEB_METHODS: Record<string, string> = {
   saveS3GcSettings: "save_s3_gc_settings",
   listS3GcPending: "list_s3_gc_pending",
   listS3GcLog: "list_s3_gc_log",
-  runS3GcDiagnostics: "run_s3_gc_diagnostics",
   runDataHealthCheck: "run_data_health_check",
   readAppLog: "read_app_log",
   getSystemInfo: "get_system_info",
   revealDataFolder: "reveal_data_folder",
-  runS3GcReconcile: "run_s3_gc_reconcile",
   runS3DeepCleanup: "run_s3_deep_cleanup",
   getTrashReminder: "get_trash_reminder",
 };

@@ -2,11 +2,9 @@ import { app, BrowserWindow, dialog, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
-import { runGcReconcile } from "../s3Maintenance.js";
 import { restoreMissingBodyFromCloud } from "../syncEngineController.js";
 import { testConnection } from "../s3Store.js";
 import type { SyncProgress } from "../syncTypes.js";
-import { runGcDiagnostics } from "../syncGc.js";
 import { runV3DeepCleanup } from "../s3v3/desktopSync.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../../src/core/cloudState.js";
@@ -176,22 +174,14 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   });
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
-  ipc.handle("run_s3_gc_diagnostics", () => {
-    requireCloud();
-    return enqueueMaintenance(() => runGcDiagnostics(store));
-  });
-  ipc.handle("run_s3_gc_reconcile", (ignoreRetention = false) => {
-    requireCloud();
-    return enqueueMaintenance(() => runGcReconcile(store, { ignoreRetention: !!ignoreRetention }));
-  });
-  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, ignoreRetention = false) => {
+  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, _ignoreRetention = false) => {
     requireCloud();
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
       if (!settings) throw new AppError("NotConfigured", "请先保存 S3 配置");
       // v3 统一深度清理（文档 + 小记）；ignoreRetention 由 v3 自身 pending 门禁负责，不再使用旧窗口。
       const result = await runV3DeepCleanup(store, { dryRun: !!dryRun });
-      return { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention, lake: result, quickNotes: result };
+      return { dryRun: !!dryRun, deleted: result.deleted, kept: result.kept };
     });
   });
   ipc.handleEvent("sync_now", (event: IpcMainInvokeEvent) => {

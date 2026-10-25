@@ -124,8 +124,9 @@ export interface S3GcLogItem {
 }
 export interface DeepCleanupResult {
   dryRun: boolean;
-  lake: { dryRun: boolean; candidateCount: number; deletedCount: number; keys: string[] };
-  quickNotes: { dryRun: boolean; candidateCount: number; deletedCount: number; keys: string[] };
+  /** v3 统一清理：本次删除/保留的对象 key。 */
+  deleted: string[];
+  kept: number;
 }
 export interface QuickNoteTrashItem {
   id: string;

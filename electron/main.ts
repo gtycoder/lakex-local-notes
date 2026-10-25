@@ -11,7 +11,6 @@ import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { createWebServerController, type WebServerController, WEB_API_PORT } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
-import { runGcReconcile } from "./s3Maintenance.js";
 import type { SyncResult, SyncProgress } from "./syncTypes.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
 import { initLogger, currentLogLevels, log, logHeapPeak, logStartupInfo } from "./logger.js";
@@ -703,26 +702,6 @@ if (!app.requestSingleInstanceLock()) {
       });
     }
 
-    // S3 GC 定期对账（gcIntervalHours 默认 24；0=关闭）。云同步关闭时不执行。
-    let gcTimer: NodeJS.Timeout | null = null;
-    const startGcTimer = () => {
-      if (gcTimer) { clearInterval(gcTimer); gcTimer = null; }
-      // 云同步关闭 ⇒ 定期对账也不出网（与 core/cloudState 同一判据）。
-      if (!canTouchNetwork(cloudStateOf(!!store.getS3Settings(), store.getSyncSettings()))) return;
-      const gcCfg = store.getS3GcSettings();
-      if (gcCfg.gcIntervalHours > 0) {
-        gcTimer = setInterval(() => {
-          void enqueueMaintenance(async () => {
-            try {
-              const r = await runGcReconcile(store);
-              if (r.deleted > 0) log.gc.info(`[s3-gc] 定期对账删除 ${r.deleted} 个过期对象`);
-            } catch (error) { console.warn("[s3-gc] 定期对账失败:", error); }
-          });
-        }, gcCfg.gcIntervalHours * 3600 * 1000);
-      }
-    };
-    startGcTimer();
-
     // 回收站自动过期（trashAutoPurgeDays 默认 60；0=关闭）。本地操作：启动即查一次 + 每天一次。
     let trashTimer: NodeJS.Timeout | null = null;
     const startTrashTimer = () => {
@@ -739,7 +718,7 @@ if (!app.requestSingleInstanceLock()) {
       trashTimer = setInterval(run, 24 * 3600 * 1000);
     };
     startTrashTimer();
-    restartGcTimers = () => { startGcTimer(); startTrashTimer(); };
+    restartGcTimers = () => { startTrashTimer(); };
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
