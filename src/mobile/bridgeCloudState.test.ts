@@ -56,6 +56,7 @@ describe("移动端云同步状态闸门", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storage.clear();
+    storage.set("local-lakex-notes-mobile.syncProtocol", "legacy"); // 本文件验证旧引擎路径
     // 移动端跑在 node 环境（无 jsdom）：store 的 localStorage 用手写 Map 兜底（同 bridgeTree.test.ts）
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => storage.get(key) ?? null,

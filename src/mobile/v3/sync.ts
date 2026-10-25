@@ -13,7 +13,8 @@ const DEVICE_ID_KEY = "local-lakex-notes-mobile.v3.deviceId";
 const EMPTY_CLOUD_KEY = "local-lakex-notes-mobile.v3.emptyCloud";
 
 export function isMobileV3Enabled(): boolean {
-  try { return localStorage.getItem("local-lakex-notes-mobile.syncProtocol") === "v3"; } catch { return false; }
+  // 转正默认：未显式设置 legacy 即走 v3；`syncProtocol=legacy` 为回滚开关。
+  try { return localStorage.getItem("local-lakex-notes-mobile.syncProtocol") !== "legacy"; } catch { return true; }
 }
 
 function mobileDeviceId(): string {
@@ -42,9 +43,12 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
     remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId(),
     onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] ${phase} ${ms}ms`); },
   });
-  let mode: "upload" | "stay" | "throw" = opts.emptyCloud ?? "throw";
+  let mode: "upload" | "stay" | "throw" = opts.emptyCloud ?? "upload";
   if (!opts.emptyCloud) {
-    try { if (localStorage.getItem(EMPTY_CLOUD_KEY) === "upload") mode = "upload"; } catch { /* ignore */ }
+    try {
+      const override = localStorage.getItem(EMPTY_CLOUD_KEY);
+      if (override === "upload" || override === "stay" || override === "throw") mode = override;
+    } catch { /* ignore */ }
   }
   return engine.sync(mode === "throw" ? {} : { onEmptyCloud: mode });
 }

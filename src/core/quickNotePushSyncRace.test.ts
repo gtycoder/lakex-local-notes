@@ -319,7 +319,7 @@ describe("小记「保存并同步」并发安全（真实引擎 × 真实单条
     const desktop = readFileSync(path.join(repoRoot, "electron/ipc/registerQuickNotes.ts"), "utf8");
 
     // 移动端：syncQuickNote 成功后调 scheduleQuickNoteVerify；后者取 maintenance 锁再重推
-    expect(mobile).toContain('if (outcome.status === "pushed") scheduleQuickNoteVerify(id);');
+    expect(mobile).toContain('if (outcome.status === "pushed" && !isMobileV3Enabled()) scheduleQuickNoteVerify(id);');
     const verifyFn = mobile.slice(mobile.indexOf("function scheduleQuickNoteVerify"));
     expect(verifyFn).toContain('maintenanceQueue.run("maintenance"');
     expect(verifyFn).toContain("pushSingleQuickNote(id)");

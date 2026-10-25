@@ -277,6 +277,7 @@ describe("mobile maintenance writes", () => {
       setItem: (key: string, value: string) => storage.set(key, value),
       removeItem: (key: string) => storage.delete(key),
     });
+    storage.set("local-lakex-notes-mobile.syncProtocol", "legacy"); // 本用例验证旧引擎路径
     storage.set("local-lakex-notes-mobile.s3", JSON.stringify({
       endpoint: "https://s3.example.test",
       region: "us-east-1",

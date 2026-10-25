@@ -19,6 +19,7 @@ import * as historyRepository from "../data/historyRepository.js";
 import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
 import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, assets, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
+import { isMobileV3Enabled, runMobileV3Sync } from "../v3/sync.js";
 
 export interface MobileSyncResult {
   message: string;
@@ -70,6 +71,12 @@ export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing =
 /** 单条推送的一次尝试（高优先域与"推送后回核"共用；云状态判据在调用方）。 */
 export async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutcome> {
   const cfg = await syncDomain.getS3Settings();
+  if (!cfg) throw new Error("未配置 S3");
+  if (isMobileV3Enabled()) {
+    const d = await ensureDb();
+    await runMobileV3Sync(d, cfg);
+    return { status: "pushed", uploadedContent: true, uploadedAssets: 0, unchanged: false, manifestId: null };
+  }
   if (!cfg) throw new Error("未配置 S3");
   try { assertS3Credentials(cfg); } catch (e) { throw new Error((e as Error).message); }
   const d = await ensureDb();
@@ -270,13 +277,13 @@ export const syncDomain = {
       // 同步也走同一条"密钥缺失"提示（别让用户以为"同步失败"却看不出该重填密钥）。
       try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
       const d = await ensureDb();
-      // v3 feature flag（dev/灰度）：显式 localStorage 开启才走；默认旧路径。
-      let v3Enabled = false;
-      try { v3Enabled = localStorage.getItem("local-lakex-notes-mobile.syncProtocol") === "v3"; } catch { /* ignore */ }
-      if (v3Enabled) {
-        const { runMobileV3Sync } = await import("../v3/sync.js");
+      // 转正默认：v3；`syncProtocol=legacy` 回滚旧路径。
+      if (isMobileV3Enabled()) {
         const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix });
-        return { message: `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`, notes: null, quickNotes: null };
+        try { await reconcileIndex(d); } catch { /* 派生索引失败不影响同步结果 */ }
+        const message = `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
+        writeSyncStatus({ at: new Date().toISOString(), ok: true, message });
+        return { message, notes: null, quickNotes: null };
       }
       const syncCfg: SyncConfig = {
         endpoint: cfg.endpoint,

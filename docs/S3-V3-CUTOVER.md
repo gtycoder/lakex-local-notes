@@ -4,7 +4,9 @@
 
 - **桌面文档同步已默认 v3**：`syncEngineController.syncNowViaEngine` 在未设置 `LAKE_SYNC_PROTOCOL` 时走 v3；显式 `LAKE_SYNC_PROTOCOL=legacy` 才走旧通道（回滚）。
 - 桌面小记已默认随 v3 同步；旧 quick-notes 通道只在 `LAKE_SYNC_PROTOCOL=legacy` 或 `LAKE_S3V3_QUICK_NOTES=0` 时使用。
-- 移动端 v3 仍是 beta（localStorage 开关），旧移动同步仍是默认。
+- 移动端默认 v3：未设 `localStorage["local-lakex-notes-mobile.syncProtocol"]="legacy"` 即走 v3；旧移动同步仅 legacy 回滚。
+- 移动端首次 v3：云端无 pointer 默认上传本地真相；同步后写「上次同步」状态并重建搜索索引。
+- 移动端单条「保存并同步」也走 v3（整轮 v3 同步兜底）。
 
 ## 2. 切换语义（无历史数据兼容）
 
@@ -35,6 +37,12 @@
 - 单条“保存并同步”已改为 v3：v3 串行门内触发整轮 v3 同步兜底（先检查本地存在；返回 pushed）。
 - 残留：`restore_missing_quick_note_from_cloud` 仍走旧 quick-notes API，需要改成 v3（下一轮）。
 - `sync_state` 仍被旧通道/UI 计数/legacy 回滚使用，仍不能删。
+
+## 4.6 移动端 v3（已默认）
+
+- 默认 v3；`syncProtocol=legacy` 回滚旧通道。
+- 已验证：`src/mobile` 117 文件 526 例全过（含 v3 MobileDb/小记/标签/附件/回收站测试）；全仓 2807 例。
+- 残留：**真实设备 UI 点击/设备路径验收未做**（仅 Node/sql.js 测试）；移动端单条推送目前用整轮 v3 同步兜底（较慢）；`restore_missing_quick_note_from_cloud` 仍走旧 API。
 
 ## 5. 完整转正还差什么（sync_state 能否删除）
 

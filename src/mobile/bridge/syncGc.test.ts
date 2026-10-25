@@ -67,6 +67,7 @@ function configure(enabled: boolean): void {
 describe("移动端 gcDeepCleanup", () => {
   beforeEach(() => {
     localStorage.clear();
+    localStorage.setItem("local-lakex-notes-mobile.syncProtocol", "legacy"); // 本文件验证旧引擎路径
     nativeStore.createCapacitorS3Store.mockReset();
     nativeStore.readSecret.mockReset();
     nativeStore.runSync.mockReset();

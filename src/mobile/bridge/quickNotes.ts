@@ -12,6 +12,7 @@ import type { QuickNotePage, QuickNotePageOptions } from "../data/quickNotesRepo
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
 import { mobileQuickNoteTags } from "../data/quickNoteTagService.js";
 import { mobileCloudState, pushSingleQuickNote, scheduleQuickNoteVerify } from "./sync";
+import { isMobileV3Enabled } from "../v3/sync";
 
 
 export const quickNotesDomain = {
@@ -137,7 +138,7 @@ export const quickNotesDomain = {
   async syncQuickNote(id: string): Promise<QuickNotePushOutcome> {
     if ((await mobileCloudState()) === "offline") throw new Error(cloudStateHint("offline") ?? "云同步已关闭");
     const outcome = await runPriority("syncQuickNote", () => pushSingleQuickNote(id));
-    if (outcome.status === "pushed") scheduleQuickNoteVerify(id);
+    if (outcome.status === "pushed" && !isMobileV3Enabled()) scheduleQuickNoteVerify(id);
     return outcome;
   },
 
