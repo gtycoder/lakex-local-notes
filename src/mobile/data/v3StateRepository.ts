@@ -25,10 +25,11 @@ export interface MobileV3State {
   pending: PendingDelete[];
   remotePurged: string[];
   restorePending: string[];
+  quickPurgeTimes?: Record<string, string>;
   assetsHash: Record<string, string>;
 }
 
-export const EMPTY_MOBILE_V3_STATE: MobileV3State = { baseline: null, intents: [], pending: [], remotePurged: [], restorePending: [], assetsHash: {} };
+export const EMPTY_MOBILE_V3_STATE: MobileV3State = { baseline: null, intents: [], pending: [], remotePurged: [], restorePending: [], assetsHash: {}, quickPurgeTimes: {} };
 
 export async function ensureV3StateTable(db: MobileDb): Promise<void> {
   await db.prepare("CREATE TABLE IF NOT EXISTS sync_v3_state (id TEXT PRIMARY KEY, json TEXT NOT NULL)").run();
@@ -45,6 +46,7 @@ export async function loadV3State(db: MobileDb): Promise<MobileV3State> {
       pending: Array.isArray(parsed.pending) ? parsed.pending : [],
       remotePurged: Array.isArray(parsed.remotePurged) ? parsed.remotePurged : [],
       restorePending: Array.isArray(parsed.restorePending) ? parsed.restorePending : [],
+      quickPurgeTimes: parsed.quickPurgeTimes && typeof parsed.quickPurgeTimes === "object" ? parsed.quickPurgeTimes : {},
       assetsHash: parsed.assetsHash && typeof parsed.assetsHash === "object" ? parsed.assetsHash : {},
     };
   } catch {

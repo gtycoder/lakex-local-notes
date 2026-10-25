@@ -56,7 +56,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
 
   private sidecarShape(state: DeviceState) {
     return {
-      intents: state.intents, pending: state.pending,
+      intents: state.intents, pending: state.pending, quickPurgeTimes: state.quickPurgeTimes ?? {},
       remotePurged: state.remotePurged ?? [], restorePending: state.restorePending ?? [], archived: state.archived ?? [],
       assetsHash: Object.fromEntries(state.lake.notes.map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
       quickAssetsHash: Object.fromEntries((state.quickNotes.items ?? []).map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
@@ -70,7 +70,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       ...(f.trashedAt !== undefined && f.trashedAt !== null ? { trashedAt: f.trashedAt } : {}),
       ...(f.deletedFromParentId !== undefined && f.deletedFromParentId !== null ? { deletedFromParentId: f.deletedFromParentId } : {}),
     }));
-    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; quickAssetsHash?: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }> }>(this.stateFile);
+    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; quickPurgeTimes?: Record<string, string>; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; quickAssetsHash?: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }> }>(this.stateFile);
     this.hashCache = new Map(Object.entries(side?.hashCache ?? {}));
     const notes: LakeNoteEntry[] = [];
     // 单 SQL 轻量元数据：避免逐篇 getNoteInfo（读正文/算字数/扫资产卡片，20k 文档会退化到秒级+）
@@ -100,6 +100,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     const quickTags: QuickNoteTagEntry[] = [];
     const quickDeletes: string[] = [];
     const quickPurges: string[] = [];
+    const quickPurgeTimes: Record<string, string> = { ...(side?.quickPurgeTimes ?? {}) };
     if (this.quickNotes) {
       for (const q of this.quickNotes.listQuickNotesForSync()) {
         const tagIds = this.quickNotes.listQuickNoteTagIds(q.id);
@@ -117,7 +118,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       }
       for (const d of this.quickNotes.listAllDeleted()) {
         quickDeletes.push(d.id);
-        if (d.purgedAt) quickPurges.push(d.id);
+        if (d.purgedAt) { quickPurges.push(d.id); quickPurgeTimes[d.id] = d.purgedAt; }
       }
     }
     // 本地 purge（deleted_notes.purged_at）→ v3 删除意图：否则远端条目会被当成“本地缺失”重新拉回。
@@ -141,6 +142,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags, ...(quickPurges.length ? { purged: quickPurges } : {}) },
       quickDeletes,
       quickPurges,
+      quickPurgeTimes,
       folders,
       intents, pending: side?.pending ?? [],
       remotePurged: side?.remotePurged ?? [], restorePending, archived: side?.archived ?? [],

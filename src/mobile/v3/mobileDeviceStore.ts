@@ -113,7 +113,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     // quick_note_deleted 同时装「软删/远端学习墓碑」（purged_at 为空）与「本地彻底删除墓碑」（purged_at 非空）：
     // 前者属于 quickDeletes（可恢复语义），只有后者才是 v3 quickPurges（不可恢复删除、不复活）。
     const quickSoftTombstones = await this.db.prepare("SELECT id FROM quick_note_deleted WHERE purged_at IS NULL").all() as Array<{ id: string }>;
-    const quickPurgeRows = await this.db.prepare("SELECT id FROM quick_note_deleted WHERE purged_at IS NOT NULL").all() as Array<{ id: string }>;
+    const quickPurgeRows = await this.db.prepare("SELECT id,purged_at FROM quick_note_deleted WHERE purged_at IS NOT NULL").all() as Array<{ id: string; purged_at: string | null }>;
     // 本地 purge 墓碑（文档/目录）→ v3 删除意图：否则云端条目会被当成本地缺失重新拉回。
     const purgedTombstones = await this.db.prepare("SELECT id,purged_at FROM deleted_notes WHERE purged_at IS NOT NULL").all() as Array<{ id: string; purged_at: string | null }>;
     const intents: DeviceState["intents"] = [...side.intents];
@@ -129,6 +129,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     // 标记失效的三种情形（与引擎 resolveRemotePurged 同口径，适配器侧再兜一次）：
     // 本地已彻底删除（副本不存在）、显式恢复（让位给正常上传）、远端已重新出现（引擎负责）。
     const quickPurges = quickPurgeRows.map((r) => r.id);
+    const quickPurgeTimes = Object.fromEntries(quickPurgeRows.filter((r) => r.purged_at).map((r) => [r.id, r.purged_at!]));
     for (const id of quickPurges) purged.delete(id);
     for (const t of purgedTombstones) purged.delete(t.id);
     for (const id of restorePending) purged.delete(id);
@@ -138,7 +139,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       intents, pending: side.pending,
       remotePurged: [...purged].sort(), restorePending: [...restorePending].sort(),
       quickDeletes: [...quickDeleteRows.map((r) => r.id), ...quickSoftTombstones.map((r) => r.id)].sort(),
-      quickPurges, archived: [],
+      quickPurges, quickPurgeTimes, archived: [],
     };
   }
 
@@ -211,6 +212,8 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         }
         continue;
       }
+      // 远端 active 条目回来 = 他端恢复/显式恢复：清本地 purged 墓碑；回收站副本行同步清 cloud_deleted。
+      await this.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(q.id);
       if (cur === undefined) {
         if (body !== null) await writeQuickNoteBody(q.id, body);
         await this.db.prepare(
@@ -219,7 +222,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       } else if (cur.deleted_at !== null) {
         // 回收站副本被显式恢复 / 远端重新出现：激活（正文/预览/标签原样保留）。
         if (body !== null) await writeQuickNoteBody(q.id, body);
-        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1, is_conflict=?, deleted_at=NULL WHERE id=?").run(q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, q.id);
+        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1, is_conflict=?, deleted_at=NULL, cloud_deleted=0, restore_pending_at=NULL WHERE id=?").run(q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, q.id);
       } else if (body !== null) {
         await writeQuickNoteBody(q.id, body);
         await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1 WHERE id=?").run(q.updatedAt, q.contentHash, q.id);
@@ -294,6 +297,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       ...side,
       intents: state.intents, pending: state.pending,
       remotePurged: purgedFinal, restorePending: state.restorePending ?? [],
+      quickPurgeTimes: state.quickPurgeTimes ?? {},
       assetsHash: Object.fromEntries([...state.lake.notes, ...state.quickNotes.items].filter((n) => n.assetsHash).map((n) => [n.id, n.assetsHash!])),
     });
     this.stagedBodies.clear();

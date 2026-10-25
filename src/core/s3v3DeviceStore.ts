@@ -22,6 +22,8 @@ export interface DeviceState {
   quickDeletes?: string[];
   /** 本地已彻底删除的小记 ID（purged 墓碑；跨端传播不可恢复删除）。 */
   quickPurges?: string[];
+  /** 本地小记彻底删除时间（id → purgedAt）；与他端恢复的 updatedAt 比较，避免本地 purge 被误判成远端恢复。 */
+  quickPurgeTimes?: Record<string, string>;
   /** 全量重拉/重置时归档的本地条目（不参与同步）。 */
   archived?: Array<{ id: string; kind: "lake" | "quickNote"; title?: string }>;
 }

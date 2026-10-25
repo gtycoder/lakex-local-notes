@@ -1095,6 +1095,8 @@ export class QuickNotesStore {
         this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,is_dirty=0,is_conflict=excluded.is_conflict,cloud_deleted=0")
           .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, 0, item.isConflict ? 1 : 0);
         this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(item.id);
+        // 他端恢复/显式恢复：远端 active 条目回来时清掉本地 purged 墓碑（否则每轮又会被当成删除）。
+        this.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(item.id);
         const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
         for (const image of parsed.images) insert.run(image.id, item.id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
         this.db.prepare("UPDATE quick_note_file_ops SET state=?, updated_at=? WHERE id=?").run("db_committed", now, journalId);

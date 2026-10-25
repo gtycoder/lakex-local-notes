@@ -406,15 +406,29 @@ export class S3v3SyncEngine {
     // · 显式恢复 → 标记失效，恢复走正常上传（用户定稿：远端删除不限制恢复）；
     // · 远端同 id 条目回来了（他端恢复）→ 标记不再成立，本轮跟随远端下载（revived 的陈旧本地副本不得再进索引）。
     const { purged, revived } = this.resolveRemotePurged(state, remoteLake, remoteQuick, restore);
+    // 他端恢复小记：远端索引重新出现该 id，而本地仍有 purged 墓碑 ⇒ 删除意图让位（用户定稿 261026：
+    // 别的端恢复后就是正常小记，删除方也跟随恢复）。不需要时间戳比较：v3 里 active 条目出现即
+    // 表示它被显式恢复/重建；本地 purged 副本必须作废，跟随远端内容下载。
+    // 只有「远端恢复时间晚于本地 purge 时间」才算他端恢复；否则会把本端尚未发布的 purge 直接让位掉。
+    const quickRestoredIds = new Set(
+      (state.quickPurges ?? []).filter((id) => {
+        const purgedAt = state.quickPurgeTimes?.[id];
+        const remote = remoteQuick.items.find((q) => q.id === id);
+        return !!purgedAt && !!remote && remote.updatedAt > purgedAt;
+      }),
+    );
+    for (const id of quickRestoredIds) purged.delete(id);
     const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id) && !revived.has(n.id)), folders: state.folders };
     const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: intentIds });
-    // 显式恢复优先：恢复的 id 从 quick 墓碑集合剔除，否则本端会再次发布 purge、把恢复弹回回收站。
-    const mergedQuickPurges = [...new Set([...(state.quickPurges ?? []), ...(remoteQuick.purged ?? [])])].filter((id) => !restore.has(id)).sort();
+    // 显式恢复/他端恢复优先：恢复的 id 从 quick 墓碑集合剔除，否则本端会再次发布 purge、把恢复弹回回收站。
+    const mergedQuickPurges = [...new Set([...(state.quickPurges ?? []), ...(remoteQuick.purged ?? [])])]
+      .filter((id) => !restore.has(id) && !quickRestoredIds.has(id)).sort();
     const purgedQuickIds = new Set(mergedQuickPurges);
+    const quickPurgeTimes = Object.fromEntries(Object.entries(state.quickPurgeTimes ?? {}).filter(([id]) => purgedQuickIds.has(id)));
     // 小记同理：标记内的条目（若适配器按契约保留了回收站只读副本）不参与三方合并 → 不上传、不复活。
     const quickLocal: QuickNotesIndex = {
       ...state.quickNotes,
-      items: state.quickNotes.items.filter((q) => !purged.has(q.id) && !revived.has(q.id)),
+      items: state.quickNotes.items.filter((q) => !purged.has(q.id) && !revived.has(q.id) && !quickRestoredIds.has(q.id)),
     };
     const quickPlan = planQuickNotesMerge(baselineQuick, quickLocal, remoteQuick, restore, intentIds, new Set(state.quickDeletes ?? []), purgedQuickIds);
     // 标签目录单独做 id LWW（含墓碑）；条目标签关系仍走 quickPlan。
@@ -656,7 +670,7 @@ export class S3v3SyncEngine {
         ...quickPlan.items.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
       ]);
       const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds).filter((it) => !yieldedIntents.has(it.noteId));
-      const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, folders: stateFolders, remotePurged, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
+      const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, quickPurgeTimes, folders: stateFolders, remotePurged, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(newState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
       await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, newState, report);
@@ -674,7 +688,7 @@ export class S3v3SyncEngine {
     for (const p of planned) dedup.set(p.key + "|" + p.kind, p);
     const pending = [...dedup.values()];
 
-    const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, folders: stateFolders, remotePurged, pending };
+    const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, quickPurgeTimes, folders: stateFolders, remotePurged, pending };
     await this.device.saveState(newState);
     this.phase("publish-save-state");
     if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步，请稍后重试");

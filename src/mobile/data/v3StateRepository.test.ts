@@ -22,7 +22,7 @@ describe("移动端 v3 同步账本", () => {
       baseline: { epoch: "e1", generation: 3, lakeCommit: "a".repeat(64), quickNotesCommit: "b".repeat(64), lake: { v: 3, space: "lake", notes: [], folders: [] }, quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] } },
       intents: [{ noteId: "n1", targetEpoch: "e1", targetGeneration: 2, purgedAt: "2026-10-25T00:00:00.000Z" }],
       pending: [{ kind: "body", key: "objects/n1-" + "a".repeat(64) + ".lake", noteId: "n1", oldHash: "a".repeat(64), targetEpoch: "e1", targetGeneration: 2, targetCommit: "c".repeat(64), createdAt: "2026-10-25T00:00:00.000Z" }],
-      remotePurged: ["n2"], restorePending: ["n3"], assetsHash: { n1: "d".repeat(64) },
+      remotePurged: ["n2"], restorePending: ["n3"], assetsHash: { n1: "d".repeat(64) }, quickPurgeTimes: { n4: "2026-10-25T00:00:00.000Z" },
     };
     await saveV3State(db, state);
     expect(await loadV3State(db)).toEqual(state);

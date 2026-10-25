@@ -231,12 +231,17 @@ describe("移动端「云端已删除 · 仅本地」（261026）", () => {
     expect(Number(cRow!.cloud_deleted)).toBe(0);
     expect(new TextDecoder().decode((await c.store.readQuickBody("q3"))!)).toBe("quick-body-q3");
 
-    // A（删除方）再同步：墓碑权威 = 删除压编辑（AGENTS §3#3）—— A 本地有 purge 墓碑，不跟随 B 的恢复。
-    // 文档侧 A 会因「远端 updatedAt 晚于 purgedAt」让位（engine yieldedIntents），小记侧目前没有等价 yield；
-    // 若后续 core 给 quickPurges 补上该机制，这条断言会变红，届时改成「A 也拉回」即可。
+    // A（删除方）再同步：2026-10-26 用户定稿——别的端恢复之后就是正常小记，删除方也跟随恢复。
+    // 远端 active q3 出现即让位本地 purged 墓碑，A 把 q3 作为普通小记拉回；本地墓碑清除。
     await eA.sync();
-    expect(await a.db.prepare("SELECT 1 FROM quick_notes WHERE id='q3'").get()).toBeUndefined();
-    expect((await a.store.loadState())!.remotePurged).not.toContain("q3");
+    const aRow = await a.db.prepare("SELECT deleted_at, cloud_deleted FROM quick_notes WHERE id='q3'").get() as { deleted_at: string | null; cloud_deleted: number } | undefined;
+    expect(aRow).toBeTruthy();
+    expect(aRow!.deleted_at).toBeNull();
+    expect(Number(aRow!.cloud_deleted)).toBe(0);
+    expect(new TextDecoder().decode((await a.store.readQuickBody("q3"))!)).toBe("quick-body-q3");
+    const stateA = (await a.store.loadState())!;
+    expect(stateA.quickPurges).not.toContain("q3");
+    expect(stateA.remotePurged).not.toContain("q3");
     await a.db.close(); await b.db.close(); await c.db.close();
   }, 90_000);
 
