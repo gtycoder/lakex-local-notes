@@ -33,7 +33,7 @@ import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceS
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { runPool, runPoolSettled } from "./s3v3Pool.js";
 
-const TRANSFER_CONCURRENCY = 8;
+const DEFAULT_TRANSFER_CONCURRENCY = 12; // 用户批准：8 → 12（实测首同步约 1.5x）
 
 const LOCK_KEY = "meta/lock.json";
 const LOCK_TTL_MS = 120_000;
@@ -85,6 +85,8 @@ export interface S3v3EngineOptions {
   lockWaitMs?: number;
   /** 阶段耗时回调（诊断慢同步/卡顿）：phase + 距上一阶段毫秒数。 */
   onPhase?: (phase: string, ms: number) => void;
+  /** 传输并发（261025 用户批准从 8 提到 12；实测首同步约 1.5x）。 */
+  transferConcurrency?: number;
 }
 
 const emptyState = (): DeviceState => ({
@@ -121,6 +123,7 @@ export class S3v3SyncEngine {
   private readonly now: () => Date;
   private readonly lockWaitMs: number;
   private readonly onPhase?: (phase: string, ms: number) => void;
+  private readonly transferConcurrency: number;
   private phaseStart = 0;
   private readonly declCache = new Map<string, AssetDeclaration>();
   private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes: Uint8Array; gzip?: boolean }> = [];
@@ -134,6 +137,7 @@ export class S3v3SyncEngine {
     this.now = opts.now ?? (() => new Date());
     this.lockWaitMs = opts.lockWaitMs ?? LOCK_DEADLINE_MS;
     this.onPhase = opts.onPhase;
+    this.transferConcurrency = Math.max(1, Math.min(32, opts.transferConcurrency ?? DEFAULT_TRANSFER_CONCURRENCY));
   }
 
   /** 记录阶段耗时；回调异常不影响同步。 */
@@ -758,14 +762,18 @@ export class S3v3SyncEngine {
   private async uploadAssets(space: "lake" | "quickNotes", id: string, remoteDecl: AssetDeclaration | null): Promise<ReturnType<typeof buildAssetDeclaration> | null> {
     const filenames = space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id);
     if (filenames.length === 0) return null;
-    const entries = [];
-    const remoteFiles = new Set((remoteDecl?.assets ?? []).map((a) => a.filename));
+    // 附件按 filename 内容寻址（同名 = 同内容）：远端声明已有的文件直接复用 size/hash，
+    // 不读本地字节；只有新增/改名的附件才 readAsset。增量时改一篇带 100 张图的文档也只读新图。
+    const remoteByName = new Map((remoteDecl?.assets ?? []).map((a) => [a.filename, a] as const));
+    const entries: AssetDeclaration["assets"] = [];
     const toUpload: Array<{ filename: string; bytes: Uint8Array }> = [];
     for (const filename of filenames) {
+      const known = remoteByName.get(filename);
+      if (known) { entries.push(known); continue; }
       const bytes = space === "lake" ? await this.device.readAsset(id, filename) : await this.device.readQuickAsset(id, filename);
       if (!bytes) continue;
       entries.push({ filename, size: bytes.length, hash: sha256Hex(bytes) });
-      if (!remoteFiles.has(filename)) toUpload.push({ filename, bytes });
+      toUpload.push({ filename, bytes });
     }
     for (const a of toUpload) {
       this.uploadOps.push({ space, noteId: id, key: space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename), bytes: a.bytes });
@@ -777,7 +785,7 @@ export class S3v3SyncEngine {
   private async flushUploadOps(): Promise<Map<string, string>> {
     const ops = this.uploadOps;
     this.uploadOps = [];
-    const { errors } = await runPoolSettled(ops, TRANSFER_CONCURRENCY, async (op) => {
+    const { errors } = await runPoolSettled(ops, this.transferConcurrency, async (op) => {
       await this.remote.put(op.key, op.bytes, op.gzip ? { gzip: true } : undefined);
     });
     const failed = new Map<string, string>();
@@ -796,7 +804,7 @@ export class S3v3SyncEngine {
     if (!declHash) { return null; }
     const decl = await this.getDeclaration("lake", id, declHash);
     if (!decl) { this.warnings.push("缺资产声明: " + id); return null; }
-    await runPool(decl.assets, TRANSFER_CONCURRENCY, async (a) => {
+    await runPool(decl.assets, this.transferConcurrency, async (a) => {
       const bytes = await this.remote.get(assetKey(id, a.filename));
       if (!bytes) { this.warnings.push("缺附件: " + id + "/" + a.filename); return; }
       if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("附件校验失败: " + id + "/" + a.filename); return; }
@@ -808,7 +816,7 @@ export class S3v3SyncEngine {
     if (!declHash) return null;
     const decl = await this.getDeclaration("quickNotes", id, declHash);
     if (!decl) { this.warnings.push("缺小记图片声明: " + id); return null; }
-    await runPool(decl.assets, TRANSFER_CONCURRENCY, async (a) => {
+    await runPool(decl.assets, this.transferConcurrency, async (a) => {
       const bytes = await this.remote.get(quickNoteAssetKey(id, a.filename));
       if (!bytes) { this.warnings.push("缺小记图片: " + id + "/" + a.filename); return; }
       if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("小记图片校验失败: " + id + "/" + a.filename); return; }
