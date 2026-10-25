@@ -5,13 +5,23 @@
 > **⚠️ 261022 历史已重写两次（品牌/邮箱标准化 → 闭源内核移出公开仓库）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
 > **§8 是移动端（Android）专职交接**；桌面会话不要改 §8，移动端会话不要改 §0–§7 之外的桌面文件。
 
-## 0. 最新交接（261024）
+## 0. 最新交接（261026）
 
 > **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest **384 文件 2698 例（17 skip）**（261024 标签子系统方案 B 落地后的主树快照）。
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
 > **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
+
+### 261026 · S3 v3 转正 + 旧同步字段删除（分支 `feat/s3-v3`，未合并 master）
+
+- **默认 v3**：桌面文档/小记、移动端全部默认走 v3；旧 legacy 同步入口、旧 quick-notes 单条推送/云端恢复、旧 GC/旧 quick-notes 同步模块与对应测试已删除。移动端不再有 `syncProtocol=legacy`。
+- **旧字段彻底删除（无历史数据回填）**：
+  - 桌面 `notes.sync_state` / `tree_nodes.sync_state` / `quick_notes.sync_state` 列已删，统一 `is_dirty` / `is_purged`；`listNotesForSync` 的 `syncState` 由新字段派生（旧同步账本只读派生值）。
+  - 移动端 schema **v8**：同样删 `sync_state`，加 `is_dirty/is_purged`；迁移先删旧列（`DROP COLUMN`，失败可选跳过），**不迁移旧值**。
+  - UI/DTO/NoteInfo/文档状态模型已去掉 `syncState`；`is_dirty` 只在 v3 发布成功写 baseline 后清零。
+- **门禁**：tsc 0 · vitest **2691 passed / 24 skipped**（移动端 520）· 桌面 + 移动 `vite build` ✓。
+- **剩余**：① 移动端真实设备 UI/点按验收（协议/构建/Node+sql.js+S3 已验）；② v3 标签独立空间/文档标签 UI；③ 合并 master 前复核。报告：`docs/S3-V3-REMOVAL-PLAN.md` / `docs/S3-V3-CUTOVER.md`。
 
 ### 261025 · S3 墓碑保留调研（仅文档，未改代码）
 
