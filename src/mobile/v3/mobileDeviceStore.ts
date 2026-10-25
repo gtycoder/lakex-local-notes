@@ -120,13 +120,22 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       await this.db.prepare("DELETE FROM notes WHERE id=?").run(id);
       await deleteNoteBodies(id);
     }
-    // 目录写入 v1 不支持：若与当前不一致，明确抛错
+    // 目录：按 state 做 upsert/删除（v1 直接写 folders 表；树索引由旧移动通道/启动对账维护）
     const folderRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM folders").all() as unknown as FolderRow[];
-    const sameFolders = folderRows.length === state.folders.length && folderRows.every((f) => {
-      const w = state.folders.find((x) => x.id === f.id);
-      return w && w.title === f.title && (w.parentId ?? null) === (f.parent_id ?? null) && w.sortOrder === f.sort_order && w.nodeType === f.node_type && (w.icon ?? null) === (f.icon ?? null) && (w.updatedAt === f.updated_at);
-    });
-    if (!sameFolders) throw new Error("MobileDeviceStore v1: 目录写入尚未实现（拒绝静默）");
+    const curFolders = new Map(folderRows.map((f) => [f.id, f]));
+    const wantedFolders = new Map(state.folders.map((f) => [f.id, f]));
+    for (const f of wantedFolders.values()) {
+      if (curFolders.has(f.id)) {
+        await this.db.prepare("UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,sync_state='local' WHERE id=?").run(
+          f.title, f.parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null, f.id,
+        );
+      } else {
+        await this.db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,sync_state) VALUES (?,?,?,?,?,?,?,?,?,'local')").run(
+          f.id, f.title, f.parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null,
+        );
+      }
+    }
+    for (const id of curFolders.keys()) if (!wantedFolders.has(id)) await this.db.prepare("DELETE FROM folders WHERE id=?").run(id);
     const side = await loadV3State(this.db);
     await saveV3State(this.db, {
       ...side,

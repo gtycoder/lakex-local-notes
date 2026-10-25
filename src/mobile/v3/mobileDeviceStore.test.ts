@@ -81,4 +81,24 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     expect(await b.store.listAssets("m2")).toContain("pic.png");
     await a.db.close(); await b.db.close();
   }, 60_000);
+
+  it("目录：A 笔记本 + 文档 → B 拉取目录与归属", async () => {
+    const remote = new MemoryRemote();
+    const a = await freshDevice();
+    const b = await freshDevice();
+    await a.db.prepare(
+      "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,sync_state) VALUES ('nb1','Notebook',NULL,0,'notebook',NULL,?,NULL,NULL,'local')"
+    ).run(new Date().toISOString());
+    await createNote(a.db, "m4", "In Notebook", "folder-body", "nb1", new Map());
+    const engineA = new S3v3SyncEngine({ remote, device: a.store, deviceId: "A" });
+    const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
+    await engineA.sync({ onEmptyCloud: "upload" });
+    await engineB.sync();
+    const folder = await b.db.prepare("SELECT title,node_type FROM folders WHERE id='nb1'").get() as { title: string; node_type: string };
+    expect(folder.title).toBe("Notebook");
+    expect(folder.node_type).toBe("notebook");
+    const note = await b.db.prepare("SELECT parent_id FROM notes WHERE id='m4'").get() as { parent_id: string | null };
+    expect(note.parent_id).toBe("nb1");
+    await a.db.close(); await b.db.close();
+  }, 60_000);
 });
