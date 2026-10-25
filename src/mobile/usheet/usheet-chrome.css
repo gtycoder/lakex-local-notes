@@ -198,8 +198,88 @@
 .mb-usheet-topbar__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .mb-usheet-topbar__zoom { min-width: 48px; font-size: var(--lake-font-size-micro); }
 
-/* ---------- 公式栏（fixed；底距 = --mb-usheet-kb-offset + dock 高，与文档工具栏同一套几何） ---------- */
-.mb-usheet-formula {
+/* 261025：内核原生公式栏接管编辑输入面（自绘输入条已删除），按截图收口：
+ * 左地址 A11 / fx / 输入 / 右 ↵ + ⤢；非编辑态用只读条常驻（地址+值，点击进原生编辑）。 */
+.mobile-usheet [data-u-comp="mobile-formula-bar"] {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--mb-usheet-kb-offset, 0px) + var(--mb-usheet-dock-h, 52px));
+  z-index: 21;
+  background: var(--lake-bg-panel);
+  border-top: 1px solid var(--lake-border-1);
+  box-shadow: none;
+}
+.mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar"] {
+  position: relative;
+  height: var(--mb-usheet-formula-h, 44px);
+  padding-left: 56px;
+  background: var(--lake-bg-panel);
+  border: 0;
+}
+.mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar"]::before {
+  content: attr(data-lake-address);
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-right: 1px solid var(--lake-border-1);
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+  font-weight: 500;
+}
+.mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar-actions"] {
+  position: static;
+  width: 40px;
+  flex: none;
+  justify-content: flex-start;
+}
+.mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar-actions"] > button:first-child { display: none; }
+/* 右侧确认：原生确定按钮挪到最右，图标用 lucide corner-down-left 的 mask */
+.mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar-actions"] > button:nth-child(2) {
+  position: absolute;
+  right: 40px;
+  top: 0;
+  width: 40px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+.mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar-actions"] > button:nth-child(2) svg { display: none; }
+.mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar-actions"] > button:nth-child(2)::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  background-color: var(--lake-text-2);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 10 4 15 9 20'/%3E%3Cpath d='M20 4v7a4 4 0 0 1-4 4H4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+/* 最右展开：lucide maximize-2 的 mask */
+.mobile-usheet [data-u-comp="mobile-formula-bar"] .univer-flex.univer-h-full.univer-w-10.univer-cursor-pointer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 40px;
+  height: 100%;
+  z-index: 3;
+}
+.mobile-usheet [data-u-comp="mobile-formula-bar"] .univer-flex.univer-h-full.univer-w-10.univer-cursor-pointer svg { display: none; }
+.mobile-usheet [data-u-comp="mobile-formula-bar"] .univer-flex.univer-h-full.univer-w-10.univer-cursor-pointer::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  background-color: var(--lake-text-2);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='15 3 21 3 21 9'/%3E%3Cpolyline points='9 21 3 21 3 15'/%3E%3Cline x1='21' y1='3' x2='14' y2='10'/%3E%3Cline x1='3' y1='21' x2='10' y2='14'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.mobile-usheet [data-u-comp="mobile-formula-bar"] .univer-flex.univer-w-full.univer-flex-1.univer-overflow-hidden { padding-right: 80px; }
+/* 非编辑态常驻只读条：地址 + 当前值，点一下进入原生编辑 */
+.mb-usheet-fbar {
   position: fixed;
   left: 0;
   right: 0;
@@ -207,66 +287,50 @@
   z-index: 21;
   display: flex;
   align-items: center;
-  gap: 6px;
   height: var(--mb-usheet-formula-h, 44px);
-  padding: 0 8px;
-  background: var(--lake-bg-panel);
+  padding: 0;
+  border: 0;
   border-top: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-panel);
+  text-align: left;
 }
-
-.mb-usheet-formula__addr {
+.mb-usheet-fbar__addr {
   flex: none;
-  min-width: 42px;
-  height: 30px;
-  line-height: 30px;
-  text-align: center;
-  font-size: var(--lake-font-size-small);
-  color: var(--lake-text-2);
-  border-right: 1px solid var(--lake-border-1);
-  font-variant-numeric: tabular-nums;
-}
-.mb-usheet-formula__input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-body);
-  caret-color: var(--lake-accent);
-}
-.mb-usheet-formula__btn {
-  appearance: none;
-  flex: none;
-  width: 40px;
-  height: 36px;
-  border: 0;
-  border-radius: var(--r-sm, 8px);
-  background: transparent;
-  color: var(--lake-text-2);
-  display: inline-flex;
+  width: 56px;
+  height: 100%;
+  display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  border-right: 1px solid var(--lake-border-1);
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+  font-weight: 500;
 }
-.mb-usheet-formula__btn:active { background: var(--lake-bg-hover); }
-.mb-usheet-formula:focus-within { box-shadow: inset 0 0 0 1px var(--lake-accent); }
-.mb-usheet-formula__input:focus,
-.mb-usheet-formula__input:focus-visible { outline: 0; }
-.mb-usheet-formula.is-expanded {
-  height: var(--mb-usheet-formula-h, 148px);
-  align-items: flex-start;
-  padding-top: 6px;
-  padding-bottom: 6px;
+.mb-usheet-fbar__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
 }
-.mb-usheet-formula__area {
-  height: 92px;
-  padding: 4px 0;
-  resize: none;
-  line-height: 1.5;
+/* 原生 canvas 不画 caret：viewer 按文本末尾像素位置放 2px 闪烁条 */
+.mb-usheet-caret {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 2px;
+  display: none;
+  border-radius: 1px;
+  background: var(--lake-text-1);
+  pointer-events: none;
+  z-index: 22;
+  animation: mb-usheet-caret-blink 1s steps(1, end) infinite;
 }
-.mb-usheet-formula.is-expanded .mb-usheet-formula__addr { height: 26px; line-height: 26px; }
-.mb-usheet-formula.is-expanded .mb-usheet-formula__btn { height: 30px; }
+@keyframes mb-usheet-caret-blink { 50% { opacity: 0; } }
 
 /* ---------- dock（与文档编辑器底部 dock 同款） ---------- */
 .mb-usheet-dock {

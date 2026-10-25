@@ -1,11 +1,11 @@
 /**
- * 移动端表格查看/编辑器（kind=usheet）挂载护栏（261023 v5：顶部行 + 公式栏 + 编辑态 dock）。
+ * 移动端表格查看/编辑器（kind=usheet）挂载护栏（261025：原生公式栏 + 编辑态 dock）。
  *
  * jsdom + mock 掉 Univer 运行时（真 canvas 在模拟器实测）：只验「宿主这一层」的行为：
  * - 未活动过的 tab 不建实例；阅读态不挂编辑面、保留顶部行与阅读工具条；
- * - 编辑态 = 公式栏（地址/值/提交）+ dock（插入/T/数据/视图/更多/撤销/重做/键盘）+ 面板；
+ * - 编辑态 = 只读地址/值条（点一下进原生编辑）+ dock（插入/T/数据/视图/更多/撤销/重做/键盘）+ 面板；
+ * - 双击单元格 → 启动内核原生编辑（set-cell-edit-visible）；原生 canvas 公式栏由内核 UI 插件渲染；
  * - 面板展开时一级按钮变 X、再点收起；面板占键盘区（DOM 顺序：dock 在面板上方）；
- * - 公式栏提交写回活动单元格（数字/文本/公式三条分支）；
  * - 顶部行含高亮当前行列开关（纯本机视图）；
  * - 图片 source 走本机 AssetServer canonical URL。
  */
@@ -176,17 +176,14 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     root.unmount();
   });
 
-  it("编辑态：公式栏显示地址与值；dock 一级按钮 + 撤销/重做 + 键盘", async () => {
+  it("编辑态：只读地址/值条 + dock 一级按钮 + 撤销/重做 + 键盘", async () => {
     calls.created = 0; calls.editable.length = 0;
     const { root, host } = await mount(true, true);
     expect(calls.created).toBe(1);
     expect(calls.editable).toEqual([true]);
-    const formula = host.querySelector(".mb-usheet-formula");
-    expect(formula).toBeTruthy();
-    expect(formula!.querySelector(".mb-usheet-formula__addr")?.textContent).toBe("A1");
-    expect(formula!.querySelector('button[aria-label="确认输入"]')).toBeTruthy();
-    expect(formula!.querySelector('button[aria-label="展开多行"]')).toBeTruthy();
-    expect(formula!.querySelector<HTMLInputElement>(".mb-usheet-formula__input")?.value).toBe("季度预算");
+    const readBar = host.querySelector(".mb-usheet-fbar");
+    expect(readBar?.querySelector(".mb-usheet-fbar__addr")?.textContent).toBe("A1");
+    expect(readBar?.querySelector(".mb-usheet-fbar__value")?.textContent).toBe("季度预算");
     const dock = host.querySelector(".mb-usheet-dock");
     expect(dock).toBeTruthy();
     expect(dock!.getAttribute("aria-label")).toBe("表格工具");
@@ -196,27 +193,6 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     // 键盘键两态：jsdom 里没有真键盘（keyboardOpen=false）⇒ 显示「展开键盘」。
     expect(dock!.querySelector("button.mb-usheet-dock__kb")).toBeTruthy();
     expect(host.querySelector(".mb-usheet-readingbar")).toBeNull();
-    root.unmount();
-  });
-
-  it("公式栏提交：文本 / 数字 / 公式三条分支写回活动单元格", async () => {
-    const { root, host } = await mount(true, true);
-    const { act } = await import("react");
-    const input = host.querySelector<HTMLInputElement>(".mb-usheet-formula__input")!;
-    const type = async (value: string) => {
-      await act(async () => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-        setter.call(input, value);
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-      await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
-    };
-    calls.setValue.length = 0; calls.setFormula.length = 0;
-    await type("完成");
-    await type("42");
-    await type("=SUM(A1:A2)");
-    expect(calls.setValue).toEqual(["完成", 42]);
-    expect(calls.setFormula).toEqual(["=SUM(A1:A2)"]);
     root.unmount();
   });
 
@@ -269,20 +245,6 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     root.unmount();
   });
 
-  it("T 面板开着点公式栏：面板走 closingHold 收起（不瞬间卸掉 = 工具栏不跳/不闪）", async () => {
-    const { root, host } = await mount(true, true);
-    await click(host, "文字格式");
-    expect(host.querySelector(".mb-usheet-panel")!.getAttribute("data-closing")).not.toBe("1");
-    const input = host.querySelector<HTMLInputElement>(".mb-usheet-formula__input")!;
-    const { act } = await import("react");
-    await act(async () => { input.focus(); });
-    const closing = host.querySelector(".mb-usheet-panel");
-    expect(closing).toBeTruthy();
-    expect(closing!.getAttribute("data-closing")).toBe("1");
-    expect(closing!.getAttribute("data-open")).toBe("1"); // closingHold 期间内容仍保持可见
-    root.unmount();
-  });
-
   it("字号步进：+ 按档位调大字号（14 → 15）；最小值时 − 置灰", async () => {
     const { root, host } = await mount(true, true);
     await click(host, "文字格式");
@@ -327,7 +289,7 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     root.unmount();
   });
 
-  it("编辑态双击单元格 → 光标自动落到公式栏输入框", async () => {
+  it("编辑态双击单元格 → 启动内核原生编辑（原生公式栏接管输入）", async () => {
     const { root, host } = await mount(true, true);
     const { act } = await import("react");
     const grid = host.querySelector(".mobile-usheet-root");
@@ -337,74 +299,23 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
         grid!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
       });
     };
+    calls.commands.length = 0;
     await fire(100, 200);
     await fire(102, 201);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 260)); });
-    expect(document.activeElement).toBe(host.querySelector(".mb-usheet-formula__input"));
+    expect(calls.commands).toContainEqual({ id: "sheet.operation.set-cell-edit-visible", params: { visible: true, eventType: 3 } });
     root.unmount();
   });
 
-  it("键盘开着时点 dock / 面板不在 pointerdown 阶段 blur 公式栏（否则位移会吞掉这一下点按）", async () => {
+  it("非编辑态（原生栏未挂）显示只读地址/值条，点一下进入原生编辑", async () => {
     const { root, host } = await mount(true, true);
-    const { act } = await import("react");
-    const input = host.querySelector<HTMLInputElement>(".mb-usheet-formula__input")!;
-    await act(async () => { input.focus(); });
-    expect(document.activeElement).toBe(input);
-    // 点 dock 一级按钮：pointerdown 不得 blur（否则 dock 随键盘收起位移，click 落空 = 要按两次）
-    const dockBtn = host.querySelector<HTMLButtonElement>('.mb-usheet-dock button[aria-label="文字格式"]')!;
-    await act(async () => { dockBtn.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true })); });
-    expect(document.activeElement).toBe(input);
-    // 同一序列的 click 仍能打开面板（打开时由 setImeSuppressed 统一收键盘）
-    await click(host, "文字格式");
-    expect(host.querySelector(".mb-usheet-panel")).toBeTruthy();
-    root.unmount();
-  });
-
-  it("键盘开着点网格：公式栏保持焦点（不再 pointerdown 就 blur ⇒ 键盘不会消失）", async () => {
-    const { root, host } = await mount(true, true);
-    const { act } = await import("react");
-    const input = host.querySelector<HTMLInputElement>(".mb-usheet-formula__input")!;
-    await act(async () => { input.focus(); });
-    const grid = host.querySelector(".mobile-usheet-root")!;
-    await act(async () => { grid.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true })); });
-    expect(document.activeElement).toBe(input);
-    root.unmount();
-  });
-
-  it("键盘开着切换单元格：保持焦点、回显新格值；未写回的键入先落到原格（不静默丢弃）", async () => {
-    const { root, host } = await mount(true, true);
-    const { act } = await import("react");
-    const input = host.querySelector<HTMLInputElement>(".mb-usheet-formula__input")!;
-    await act(async () => { input.focus(); });
-    // 键入未提交内容（模拟用户输入）
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setter.call(input, "123");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    // 模拟选区切到 B2（值「新值」），再触发一次 chrome 刷新
-    calls.setValue.length = 0;
+    const bar = host.querySelector<HTMLButtonElement>(".mb-usheet-fbar");
+    expect(bar).toBeTruthy();
+    expect(host.querySelector(".mb-usheet-fbar__addr")?.textContent).toBe("A1");
+    expect(host.querySelector(".mb-usheet-fbar__value")?.textContent).toBe("季度预算");
     calls.commands.length = 0;
-    const original = { getRow: range.getRow, getColumn: range.getColumn, getValue: range.getValue };
-    range.getRow = () => 1;
-    range.getColumn = () => 1;
-    range.getValue = () => "新值";
-    try {
-      await act(async () => { calls.commandHandler?.({ id: "sheet.command.set-selection" }); });
-    } finally {
-      range.getRow = original.getRow;
-      range.getColumn = original.getColumn;
-      range.getValue = original.getValue;
-    }
-    expect(calls.setValue).toContain(123);        // 键入先写回原格（A1）
-    expect(input.value).toBe("新值");               // 回显新格
-    expect(document.activeElement).toBe(input);     // 焦点保留 = 键盘不消失
-    // 选区变化 → 调内核 scroll-to-cell（不 forceTop/Left：已可见就 no-op，被盖住才最小滚动）
-    const scroll = calls.commands.filter((item) => item.id === "sheet.command.scroll-to-cell").at(-1);
-    expect(scroll).toBeTruthy();
-    const scrollRange = (scroll!.params as { range?: { startRow?: number; startColumn?: number } }).range;
-    expect(scrollRange?.startRow).toBe(1);
-    expect(scrollRange?.startColumn).toBe(1);
+    await click(host, "编辑单元格");
+    expect(calls.commands).toContainEqual({ id: "sheet.operation.set-cell-edit-visible", params: { visible: true, eventType: 3 } });
     root.unmount();
   });
 
