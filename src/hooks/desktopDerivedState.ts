@@ -42,8 +42,8 @@ export function deriveDesktopView(input: DesktopViewInput) {
   } = input;
 
   const activeNode = activeNoteId ? treeNodes.find((n) => n.noteFileId === activeNoteId) : undefined;
-  const activeNodeDirty = activeNode?.isDirty === true || activeNode?.syncState === "local";
-  const activeNodeConflict = activeNode?.isConflict === true || activeNode?.syncState === "conflict";
+  const activeNodeDirty = activeNode?.isDirty === true;
+  const activeNodeConflict = activeNode?.isConflict === true;
 
   // blockHandle：桌面编辑态的块悬浮手柄/块操作菜单（菜单只走内核原生命令，见 blockHandleMount）
   const editorPrefs = { fontSize, showToolbar, floatingToolbar, blockHandle: true };
