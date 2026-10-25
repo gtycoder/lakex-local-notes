@@ -37,8 +37,13 @@ const TRANSFER_CONCURRENCY = 8;
 
 const LOCK_KEY = "meta/lock.json";
 const LOCK_TTL_MS = 120_000;
+/** 锁重试：无 CAS 的 provider 下，靠「写后静置再读回」降低双持窗口。 */
+const LOCK_DEADLINE_MS = 15_000;
+const LOCK_SETTLE_MS = 100;
 const TRASH_ID = "trash";
-const MAX_PUBLISH_RETRIES = 3;
+const MAX_PUBLISH_RETRIES = 6;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export class S3v3SyncError extends Error {
   constructor(readonly code: string, message: string) {
@@ -105,7 +110,12 @@ export class S3v3SyncEngine {
       try {
         return await this.syncOnce(opts);
       } catch (e) {
-        if (e instanceof PublishRetry) { lastErr = e; continue; }
+        if (e instanceof PublishRetry) {
+          lastErr = e;
+          // 并发发布冲突：指数退避 + 抖动，避免 6 端同步碰撞后一起重试
+          await sleep(120 + Math.floor(Math.random() * (attempt + 1) * 220));
+          continue;
+        }
         throw e;
       }
     }
@@ -257,6 +267,7 @@ export class S3v3SyncEngine {
       await this.writeIndex("lake", lakeCommit, lakeSerialized);
       await this.writeIndex("quickNotes", quickCommit, quickSerialized);
       const p: S3v3Pointer = { v: 3, epoch, generation: 1, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: this.iso(), deviceId: this.deviceId };
+      await this.assertLockOwned();
       await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(p)));
       const check = await this.readPointer();
       if (!check || check.generation !== 1 || check.lake.commit !== lakeCommit) throw new PublishRetry();
@@ -523,6 +534,7 @@ export class S3v3SyncEngine {
       if (lakeChanged) await this.writeIndex("lake", lakeCommit, lakeSerialized);
       if (quickChanged) await this.writeIndex("quickNotes", quickCommit, quickSerialized);
       const nextPointer: S3v3Pointer = { v: 3, epoch: pointer.epoch, generation, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: this.iso(), deviceId: this.deviceId };
+      await this.assertLockOwned();
       await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(nextPointer)));
       const check = await this.readPointer();
       if (!check || check.generation !== generation || check.lake.commit !== lakeCommit || check.quickNotes.commit !== quickCommit) throw new PublishRetry();
@@ -607,20 +619,43 @@ export class S3v3SyncEngine {
     return deleted;
   }
 
-  private async acquireLock(): Promise<boolean> {
+  private async lockOwner(): Promise<string | null> {
     const raw = await this.remote.get(LOCK_KEY);
-    if (raw) {
-      try {
-        const lock = JSON.parse(new TextDecoder().decode(raw)) as { deviceId: string; time: number; ttl: number };
-        const fresh = Date.now() - lock.time < (lock.ttl ?? LOCK_TTL_MS);
-        if (fresh && lock.deviceId !== this.deviceId) return false;
-      } catch { /* 损坏锁按过期处理 */ }
+    if (!raw) return null;
+    try { return (JSON.parse(new TextDecoder().decode(raw)) as { deviceId: string }).deviceId; } catch { return null; }
+  }
+
+  /**
+   * 无 CAS provider 的发布锁：写锁 → 静置 LOCK_SETTLE_MS → 读回确认仍是自己。
+   * 静置是必要的：两端交错「写 + 立刻读回」时都可能读到自己的写，静置后后写者胜出、先写者会看到别人的锁。
+   * 拿不到锁不再立刻抛错，而是在 LOCK_DEADLINE_MS 内带抖动重试（并发同步不应变成用户可见失败）。
+   */
+  private async acquireLock(): Promise<boolean> {
+    const deadline = Date.now() + LOCK_DEADLINE_MS;
+    for (;;) {
+      const owner = await this.lockOwner();
+      if (owner && owner !== this.deviceId) {
+        const raw = await this.remote.get(LOCK_KEY);
+        let fresh = false;
+        if (raw) { try { const l = JSON.parse(new TextDecoder().decode(raw)) as { time: number; ttl: number }; fresh = Date.now() - l.time < (l.ttl ?? LOCK_TTL_MS); } catch { fresh = false; } }
+        if (fresh) {
+          if (Date.now() > deadline) return false;
+          await sleep(60 + Math.floor(Math.random() * 240));
+          continue;
+        }
+      }
+      const lock = { deviceId: this.deviceId, time: Date.now(), ttl: LOCK_TTL_MS };
+      await this.remote.put(LOCK_KEY, new TextEncoder().encode(JSON.stringify(lock)));
+      await sleep(LOCK_SETTLE_MS);
+      if (await this.lockOwner() === this.deviceId) return true;
+      if (Date.now() > deadline) return false;
+      await sleep(60 + Math.floor(Math.random() * 240));
     }
-    const lock = { deviceId: this.deviceId, time: Date.now(), ttl: LOCK_TTL_MS };
-    await this.remote.put(LOCK_KEY, new TextEncoder().encode(JSON.stringify(lock)));
-    const check = await this.remote.get(LOCK_KEY);
-    if (!check) return false;
-    try { return (JSON.parse(new TextDecoder().decode(check)) as { deviceId: string }).deviceId === this.deviceId; } catch { return false; }
+  }
+
+  /** 发布 pointer 前再确认锁仍属于自己（防止静置后又被别的端抢走）。 */
+  private async assertLockOwned(): Promise<void> {
+    if (await this.lockOwner() !== this.deviceId) throw new PublishRetry();
   }
   private async releaseLock(): Promise<void> {
     const raw = await this.remote.get(LOCK_KEY);
