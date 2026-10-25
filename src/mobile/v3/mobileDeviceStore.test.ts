@@ -2,6 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import path from "node:path";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({ default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm") }));
+const assetStore = vi.hoisted(() => new Map<string, Uint8Array>());
+vi.mock("../native/assetFs", () => ({
+  saveAssetBytesFs: async (key: string, bytes: Uint8Array) => { assetStore.set(key, new Uint8Array(bytes)); },
+  loadAssetBytesFs: async (key: string) => assetStore.get(key) ?? null,
+  removeAssetBytesFs: async (key: string) => { assetStore.delete(key); },
+  listNoteAssetKeysFs: async (noteId: string) => [...assetStore.keys()].filter((k) => k.startsWith(noteId + "/")),
+  listQuickNoteAssetKeysFs: async () => [],
+  listAssetKeysFs: async () => [...assetStore.keys()],
+}));
 import { gunzipSync, gzipSync } from "node:zlib";
 import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
@@ -53,6 +62,23 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     await engineA.sync();
     const row = await a.db.prepare("SELECT trashed_at FROM notes WHERE id=?").get("m1") as { trashed_at: string | null };
     expect(row.trashed_at).toBeTruthy();
+    await a.db.close(); await b.db.close();
+  }, 60_000);
+
+  it("附件：A 上传资源 → B 拉取（声明 + 对象）", async () => {
+    const remote = new MemoryRemote();
+    const a = await freshDevice();
+    const b = await freshDevice();
+    await createNote(a.db, "m2", "With Asset", "body", null, new Map());
+    assetStore.set("m2/pic.png", new TextEncoder().encode("PNG-BYTES"));
+    const engineA = new S3v3SyncEngine({ remote, device: a.store, deviceId: "A" });
+    const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
+    await engineA.sync({ onEmptyCloud: "upload" });
+    expect((await remote.list("assets/m2/")).length).toBe(1);
+    expect((await remote.list("meta/assets/m2/")).length).toBe(1);
+    await engineB.sync();
+    expect(new TextDecoder().decode((await b.store.readAsset("m2", "pic.png"))!)).toBe("PNG-BYTES");
+    expect(await b.store.listAssets("m2")).toContain("pic.png");
     await a.db.close(); await b.db.close();
   }, 60_000);
 });

@@ -5,6 +5,7 @@ import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import type { MobileDb } from "../data/sqliteDb.js";
 import { deleteNoteBodies, readNoteBody, writeNoteBody } from "../data/noteBodies.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
+import { listNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { createNote, saveNote } from "../data/noteRepository.js";
 
 /**
@@ -164,10 +165,19 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   async writeHistory(): Promise<string> { return "mobile-v3-history-skip"; }
   async archiveBody(): Promise<void> { /* v1：历史归档由旧通道负责 */ }
 
-  async listAssets(): Promise<string[]> { return []; }
-  async readAsset(): Promise<Uint8Array | null> { return null; }
-  async writeAsset(): Promise<void> { throw new Error("MobileDeviceStore v1: 附件写入尚未实现"); }
-  async deleteAssetsDir(): Promise<void> { /* no-op */ }
+  async listAssets(id: string): Promise<string[]> {
+    const keys = await listNoteAssetKeysFs(id);
+    return keys.map((k) => k.slice(id.length + 1)).sort();
+  }
+  async readAsset(id: string, filename: string): Promise<Uint8Array | null> {
+    return await loadAssetBytesFs(id + "/" + filename);
+  }
+  async writeAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
+    await saveAssetBytesFs(id + "/" + filename, bytes);
+  }
+  async deleteAssetsDir(id: string): Promise<void> {
+    for (const key of await listNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
+  }
 
   async readQuickBody(): Promise<Uint8Array | null> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
   async writeQuickBody(): Promise<void> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
