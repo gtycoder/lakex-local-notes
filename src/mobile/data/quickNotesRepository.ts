@@ -232,9 +232,9 @@ async function persistQuickNoteContent(
   try {
     await d.transaction(async () => {
       await d.prepare(
-        `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync, first_image, list_metadata_version)
-         VALUES (?,?,?,?,?,?,'local',0,NULL,1,?,1)
-         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1, first_image=excluded.first_image, list_metadata_version=1`
+        `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict, restore_pending_at, ready_to_sync, first_image, list_metadata_version)
+         VALUES (?,?,?,?,?,?,1,0,NULL,1,?,1)
+         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, is_dirty=1, deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1, first_image=excluded.first_image, list_metadata_version=1`
       ).run(id, now, effectiveUpdatedAt, preview, content.images.length, contentHash, content.images[0]?.filename ?? null);
       // 活跃写入统一清删除墓碑，避免“活跃行 + 墓碑”二义性。
       await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
@@ -308,7 +308,7 @@ export async function saveQuickNoteContent(
 }
 
 export async function deleteQuickNote(d: MobileDb, id: string): Promise<void> {
-  await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
+  await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, is_dirty=1, ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
 }
 
 export async function listQuickNoteTrash(d: MobileDb): Promise<QuickNoteTrashItem[]> {
@@ -322,7 +322,7 @@ export async function restoreQuickNote(d: MobileDb, id: string): Promise<void> {
   const now = new Date().toISOString();
   // 恢复 = 本地重新拥有这条小记：若关系还在，把关系版本推进到当前，标签才会随清单同步出去。
   const tagsUpdatedAt = (await listQuickNoteTagIds(d, id)).length > 0 ? now : "";
-  await d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, id);
+  await d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?").run(now, now, id);
   if (tagsUpdatedAt) await setQuickNoteTagVersion(d, id, tagsUpdatedAt);
 }
 

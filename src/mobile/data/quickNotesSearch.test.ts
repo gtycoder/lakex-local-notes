@@ -45,8 +45,8 @@ async function addQuickNote(d: MobileDb, id: string, text: string, tagNames: str
   await writeQuickNoteBody(id, serialized);
   const now = new Date().toISOString();
   await d.prepare(
-    "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict) VALUES (?,?,?,?,0,?,'local',0) " +
-    "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL"
+    "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict) VALUES (?,?,?,?,0,?,1,0) " +
+    "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, content_hash=excluded.content_hash, is_dirty=1, deleted_at=NULL, restore_pending_at=NULL"
   ).run(id, now, now, text.replace(/\s+/g, " ").trim(), sha256Sync(new TextEncoder().encode(serialized)));
   // 标签走独立关联表（正文里没有标签）。
   await mobileQuickNoteTags.setNoteTags(d, id, tags.map((tag) => tag.id));

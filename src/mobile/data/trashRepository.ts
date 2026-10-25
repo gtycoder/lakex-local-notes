@@ -53,7 +53,7 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
   await d.transaction(async () => {
     const now = new Date().toISOString();
     if (kind === "note") {
-      await d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL WHERE id=?").run(now, id);
+      await d.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(now, id);
       return;
     }
 
@@ -68,7 +68,7 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     for (const batch of sqlParameterBatches(folderIdList)) {
       const ph = batch.map(() => "?").join(",");
       statements.push({
-        statement: "UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL",
+        statement: "UPDATE folders SET trashed_at=?, is_dirty=1, updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL",
         values: [now, now, ...batch],
       });
     }
@@ -78,7 +78,7 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     }
     for (const n of noteRows) {
       statements.push({
-        statement: "UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL, updated_at=? WHERE id=?",
+        statement: "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, updated_at=? WHERE id=?",
         values: [now, now, n.id],
       });
     }
@@ -127,7 +127,7 @@ export async function restoreTreeItem(
     // 是 parent=TRASH 容器表示——不移回则恢复后行仍挂在回收站容器下，上传条目 parentId=TRASH，
     // 他端"跟随恢复"后同样卡在回收站（260910 四端实测）。
     await d.prepare(
-      "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?"
+      "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?"
     ).run(now, now, id);
     return;
   }
@@ -139,14 +139,14 @@ export async function restoreTreeItem(
       // folder 同理：远端学到的 folder 删除（applyRemoteFolderDelete）标 trashed 但根行 parent 可能不变；
       // COALESCE 兼容两种表示（UI 软删 parent 未动 → 保持；远端学来 → deleted_from_parent_id 为原父）。
       statements.push({
-        statement: "UPDATE folders SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?",
+        statement: "UPDATE folders SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, updated_at=?, is_dirty=1 WHERE id=?",
         values: [now, fid],
       });
     }
     for (const nid of restoreNoteIds) {
       // 子树内 notes：applyRemoteFolderDelete 会把子笔记 parent 移到 TRASH 容器 → 恢复时一并移回原父
       statements.push({
-        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?",
+        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?",
         values: [now, now, nid],
       });
     }

@@ -77,7 +77,7 @@ describe("mobile purge 删除传播", () => {
 
     await bridge.purgeTreeItem(NID, "note");
 
-    // 行已物理删除：回收站不再残留（此前 sync_state='purged' 行保留 → 回收站仍显示 = 删不掉）
+    // 行已物理删除：回收站不再残留（此前 is_dirty='purged' 行保留 → 回收站仍显示 = 删不掉）
     expect((await bridge.listTrashTree()).some((t) => t.id === NID)).toBe(false);
     expect((await (await bridge.getHomeSnapshot()).notes).some((n) => n.id === NID)).toBe(false);
 

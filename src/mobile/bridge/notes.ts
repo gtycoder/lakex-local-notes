@@ -62,8 +62,8 @@ export const notesDomain = {
     const d = await ensureDb();
     const note = await noteRepository.readNote(d, id);
     if (!note) throw new Error("笔记不存在");
-    const row = await d.prepare("SELECT sync_state, is_conflict, updated_at FROM notes WHERE id=?").get(id) as
-      { sync_state: string; is_conflict: number; updated_at: string } | undefined;
+    const row = await d.prepare("SELECT is_dirty, is_purged, is_conflict, updated_at FROM notes WHERE id=?").get(id) as
+      { is_dirty: number; is_purged: number; is_conflict: number; updated_at: string } | undefined;
     // 与搜索索引共用同一条按 kind 分派的派生口径；表格/多维表/画板正文是 JSON，不能喂 Lake HTML 解析器。
     const plain = searchTextForKind(note.kind, note.content).plain ?? "";
     // 字数/字符数 = 与内核 wordCount 同语义的单一来源（261016，B1；此前这里另写了一套正则）。
@@ -102,7 +102,8 @@ export const notesDomain = {
       cardStats,
       createdAt: null,
       updatedAt: row?.updated_at ?? note.updatedAt,
-      syncState: row?.sync_state ?? "local",
+      isDirty: row ? row.is_dirty === 1 : true,
+      isPurged: row?.is_purged === 1,
       isConflict: Boolean(row?.is_conflict),
       isEditLocked: false,
       lakePath: noteBodyPath(note.kind, note.id),

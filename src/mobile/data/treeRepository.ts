@@ -66,10 +66,10 @@ export async function createNotebook(d: MobileDb, input: { title: string; icon: 
   const now = new Date().toISOString();
   const maxRow = await d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id IS NULL AND trashed_at IS NULL").get() as { m: number | null } | undefined;
   const sortOrder = nextSortOrder(maxRow?.m ?? null);
-  await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,?,?,?,?,'local')")
+  await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, is_dirty) VALUES (?,?,NULL,?,?,?,?,1)")
     .run(id, title, sortOrder, "notebook", null, now);
   if (input.icon) {
-    await d.prepare("UPDATE folders SET icon = ?, sync_state = 'local' WHERE id = ?").run(input.icon, id);
+    await d.prepare("UPDATE folders SET icon = ?, is_dirty = 1 WHERE id = ?").run(input.icon, id);
   }
   const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
   return folderRowToTreeNode(row, { title, updatedAt: now, icon: input.icon ?? null });
@@ -83,7 +83,7 @@ export async function createGroup(d: MobileDb, parentId: string, title: string):
   const now = new Date().toISOString();
   const maxRow = await d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id = ? AND trashed_at IS NULL").get(parentId) as { m: number | null } | undefined;
   const sortOrder = nextSortOrder(maxRow?.m ?? null);
-  await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,?,?,?,?,?,'local')")
+  await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, is_dirty) VALUES (?,?,?,?,?,?,?,1)")
     .run(id, trimmed, parentId, sortOrder, "group", null, now);
   const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
   return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
@@ -92,15 +92,15 @@ export async function createGroup(d: MobileDb, parentId: string, title: string):
 export async function renameTreeNode(d: MobileDb, id: string, title: string): Promise<TreeNode> {
   const trimmed = assertTreeNodeTitle(title);
   const now = new Date().toISOString();
-  const changedFolder = (await d.prepare("UPDATE folders SET title=?, updated_at=?, sync_state='local' WHERE id=?").run(trimmed, now, id)).changes;
+  const changedFolder = (await d.prepare("UPDATE folders SET title=?, updated_at=?, is_dirty=1 WHERE id=?").run(trimmed, now, id)).changes;
   if (changedFolder) {
     const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
     return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
   }
   // 文档（notes）也是目录树节点：移动端长按重命名 / 顶栏改名都走这里；与桌面 renameTreeNode 语义对齐。
-  const changedNote = (await d.prepare("UPDATE notes SET title=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(trimmed, now, id)).changes;
+  const changedNote = (await d.prepare("UPDATE notes SET title=?, updated_at=?, is_dirty=1 WHERE id=? AND trashed_at IS NULL").run(trimmed, now, id)).changes;
   if (changedNote) {
-    const row = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, sync_state, is_conflict FROM notes WHERE id=?").get(id) as Record<string, unknown>;
+    const row = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, is_dirty, is_conflict FROM notes WHERE id=?").get(id) as Record<string, unknown>;
     return noteRowToTreeNode(row, { title: trimmed, updatedAt: now });
   }
   throw new Error("节点不存在: " + id);
@@ -109,16 +109,16 @@ export async function renameTreeNode(d: MobileDb, id: string, title: string): Pr
 export async function setNodeIcon(d: MobileDb, id: string, icon: string | null): Promise<TreeNode> {
   assertNodeIcon(icon);
   const now = new Date().toISOString();
-  const folder = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state FROM folders WHERE id=?").get(id) as Record<string, unknown> | undefined;
+  const folder = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown> | undefined;
   if (folder) {
-    await d.prepare("UPDATE folders SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
-    const row = { ...folder, icon, updated_at: now, sync_state: "local" };
+    await d.prepare("UPDATE folders SET icon=?, updated_at=?, is_dirty=1 WHERE id=?").run(icon, now, id);
+    const row = { ...folder, icon, updated_at: now };
     return folderRowToTreeNode(row, { icon, updatedAt: now });
   }
-  const note = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, sync_state, is_conflict FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as Record<string, unknown> | undefined;
+  const note = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, is_dirty, is_conflict FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as Record<string, unknown> | undefined;
   if (!note) throw new Error("节点不存在: " + id);
-  await d.prepare("UPDATE notes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
-  const row = { ...note, icon, updated_at: now, sync_state: "local" };
+  await d.prepare("UPDATE notes SET icon=?, updated_at=?, is_dirty=1 WHERE id=?").run(icon, now, id);
+  const row = { ...note, icon, updated_at: now };
   return noteRowToTreeNode(row, { icon, updatedAt: now });
 }
 
@@ -158,19 +158,19 @@ export async function moveTreeNodeOrdered(d: MobileDb, id: string, parentId: str
   const folderIds = new Set(folderRows.map((r) => r.id));
   const movedInFolders = folderIds.has(id);
   const statements: MobileBatchStatement[] = [movedInFolders
-    ? { statement: "UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?", values: [parentId, now, id] }
-    : { statement: "UPDATE notes SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?", values: [parentId, now, id] }];
+    ? { statement: "UPDATE folders SET parent_id=?, updated_at=?, is_dirty=1 WHERE id=?", values: [parentId, now, id] }
+    : { statement: "UPDATE notes SET parent_id=?, updated_at=?, is_dirty=1 WHERE id=?", values: [parentId, now, id] }];
   for (const [index, childId] of orderedIds.entries()) {
     statements.push(folderIds.has(childId)
-      ? { statement: "UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?", values: [index, now, childId] }
-      : { statement: "UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?", values: [index, now, childId] });
+      ? { statement: "UPDATE folders SET sort_order=?, updated_at=?, is_dirty=1 WHERE id=?", values: [index, now, childId] }
+      : { statement: "UPDATE notes SET sort_order=?, updated_at=?, is_dirty=1 WHERE id=?", values: [index, now, childId] });
   }
   await executeBatch(d, statements);
   if (movedInFolders) {
     const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
     return folderRowToTreeNode(row, { parentId, updatedAt: now });
   }
-  const row = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, sync_state, is_conflict FROM notes WHERE id=?").get(id) as Record<string, unknown>;
+  const row = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, is_dirty, is_conflict FROM notes WHERE id=?").get(id) as Record<string, unknown>;
   return noteRowToTreeNode(row, { parentId, updatedAt: now });
 }
 
@@ -189,6 +189,6 @@ export async function reorderSiblings(d: MobileDb, parentId: string | null, orde
     throw new Error("重排列表包含不属于该父节点的节点");
   }
   await executeBatch(d, orderedIds.map((childId, index) => folderIds.has(childId)
-    ? { statement: "UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL", values: [index, now, childId] }
-    : { statement: "UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL", values: [index, now, childId] }));
+    ? { statement: "UPDATE folders SET sort_order=?, updated_at=?, is_dirty=1 WHERE id=? AND trashed_at IS NULL", values: [index, now, childId] }
+    : { statement: "UPDATE notes SET sort_order=?, updated_at=?, is_dirty=1 WHERE id=? AND trashed_at IS NULL", values: [index, now, childId] }));
 }

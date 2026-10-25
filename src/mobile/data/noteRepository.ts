@@ -116,8 +116,8 @@ export async function readNote(d: MobileDb, id: string): Promise<LocalNote | nul
 
 /** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16）。 */
 export async function noteGoneState(d: MobileDb, id: string): Promise<{ parentId: string | null; syncState: string } | null> {
-  const row = await d.prepare("SELECT parent_id, sync_state FROM notes WHERE id = ?").get(id) as { parent_id: string | null; sync_state: string | null } | undefined;
-  return row ? { parentId: row.parent_id, syncState: row.sync_state ?? "" } : null;
+  const row = await d.prepare("SELECT parent_id, is_dirty, is_purged FROM notes WHERE id = ?").get(id) as { parent_id: string | null; is_dirty: number; is_purged: number } | undefined;
+  return row ? { parentId: row.parent_id, syncState: row.is_purged === 1 ? "purged" : row.is_dirty === 1 ? "local" : "synced" } : null;
 }
 
 /** 全文搜索：FTS5 + unicode61，与桌面同分词/查询/摘要（src/core/search）。 */
@@ -128,13 +128,13 @@ export async function searchNotes(d: MobileDb, query: string): Promise<SearchRes
   return [...notes, ...quickNotes];
 }
 
-/** 写入边界判定（审计 F06）：missing = 无行；gone = 已在回收站（trashed_at）或被 purge（sync_state='purged'）。 */
+/** 写入边界判定（审计 F06）：missing = 无行；gone = 已在回收站（trashed_at）或被 purge（is_purged=1,is_dirty=0）。 */
 export async function noteWriteState(d: MobileDb, id: string): Promise<"missing" | "gone" | "active"> {
-  const row = await d.prepare("SELECT trashed_at, sync_state FROM notes WHERE id=?").get(id) as
-    | { trashed_at: string | null; sync_state: string | null }
+  const row = await d.prepare("SELECT trashed_at, is_purged FROM notes WHERE id=?").get(id) as
+    | { trashed_at: string | null; is_purged: number }
     | undefined;
   if (!row) return "missing";
-  return row.trashed_at != null || row.sync_state === "purged" ? "gone" : "active";
+  return row.trashed_at != null || row.is_purged === 1 ? "gone" : "active";
 }
 
 /** 该 id 是否已有永久墓碑（purge 后行被物理删除，只剩 deleted_notes）——缺失的 id 只有在无墓碑时才允许初始化。 */
@@ -161,7 +161,7 @@ export async function createNote(
   try {
     const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
     await d.prepare(
-      "INSERT INTO notes (id, title, parent_id, updated_at, content_hash, sync_state, text_cache, doc_kind) VALUES (?,?,?,?,?,'local',?,?)"
+      "INSERT INTO notes (id, title, parent_id, updated_at, content_hash, is_dirty, text_cache, doc_kind) VALUES (?,?,?,?,?,1,?,?)"
     ).run(id, safeTitle, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, kind);
   } catch (error) {
     // 只有"DB 里确实没有这一行"才清理刚写的正文：INSERT 失败也可能来自 id 已存在（并发/调用方误用），
@@ -188,11 +188,11 @@ export async function saveNote(
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
-  const existing = await d.prepare("SELECT title, doc_kind, trashed_at, sync_state FROM notes WHERE id=?").get(id) as
-    | { title: string; doc_kind?: string | null; trashed_at: string | null; sync_state: string | null }
+  const existing = await d.prepare("SELECT title, doc_kind, trashed_at, is_purged FROM notes WHERE id=?").get(id) as
+    | { title: string; doc_kind?: string | null; trashed_at: string | null; is_purged: number }
     | undefined;
   if (!existing) throw new Error("笔记不存在，不能保存（新建请走 createNote）");
-  if (existing.trashed_at != null || existing.sync_state === "purged") {
+  if (existing.trashed_at != null || existing.is_purged === 1) {
     throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
   }
   const kind = normalizeNoteKind(existing.doc_kind);
@@ -209,8 +209,8 @@ export async function saveNote(
   // parent_id=? ⇒ 每次保存把文档从笔记本里摘出来（parent_id 变 NULL），表现为「编辑一下计数就少一篇、
   // 目录里也找不到」。显式移动必须走 moveTreeNodeOrdered（那才是树操作）。
   const changed = (await d.prepare(
-    `UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), updated_at=?, content_hash=?, sync_state='local', text_cache=?
-     WHERE id=? AND trashed_at IS NULL AND sync_state != 'purged'`
+    `UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), updated_at=?, content_hash=?, is_dirty=1, text_cache=?
+     WHERE id=? AND trashed_at IS NULL AND is_purged=0`
   ).run(safeTitle, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, id)).changes;
   if (changed === 0) {
     if (previous != null) await writeNoteBody(kind, id, previous).catch(() => undefined);
@@ -223,7 +223,7 @@ export async function saveNote(
 
 /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。 */
 export async function trashNote(d: MobileDb, id: string): Promise<void> {
-  await d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
+  await d.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
   await removeNoteFromIndex(d, id);
 }
 

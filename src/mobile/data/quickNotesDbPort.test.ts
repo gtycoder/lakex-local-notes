@@ -130,7 +130,7 @@ async function openQuickNotesDb(): Promise<{ db: Database; d: DbLike }> {
     preview_text TEXT NOT NULL,
     image_count INTEGER NOT NULL DEFAULT 0,
     content_hash TEXT NOT NULL,
-    sync_state TEXT NOT NULL DEFAULT 'local',
+    is_dirty INTEGER NOT NULL DEFAULT 1,
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
@@ -147,8 +147,8 @@ async function createQuickNote(d: DbLike, text: string): Promise<{ id: string; c
   // 261019：正文落 .qnote 文件；DB 只存元数据 + hash。
   await deviceBodies.get(d)!.write(id, serialized);
   d.prepare(
-    `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict)
-     VALUES (?,?,?,?,?,?, 'local',0)`
+    `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict)
+     VALUES (?,?,?,?,?,?, 1,0)`
   ).run(id, now, now, previewQuickNote(text, 0), 0, contentHash);
   return { id, contentHash };
 }
@@ -158,7 +158,7 @@ async function editQuickNote(d: DbLike, id: string, text: string): Promise<void>
   const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, "<p><br></p>", []));
   const contentHash = sha256Sync(new TextEncoder().encode(serialized));
   await deviceBodies.get(d)!.write(id, serialized);
-  d.prepare("UPDATE quick_notes SET updated_at=?, preview_text=?, content_hash=?, sync_state='local' WHERE id=?").run(now, previewQuickNote(text, 0), contentHash, id);
+  d.prepare("UPDATE quick_notes SET updated_at=?, preview_text=?, content_hash=?, is_dirty=1 WHERE id=?").run(now, previewQuickNote(text, 0), contentHash, id);
 }
 
 async function listActive(d: DbLike): Promise<Array<{ id: string }>> {
@@ -266,10 +266,10 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const created = await createQuickNote(d, "恢复后又删除");
     d.prepare("UPDATE quick_notes SET restore_pending_at=? WHERE id=?").run("2099-01-01T00:00:00.000Z", created.id);
     await mkPort(d).deleteLocalQuickNote(created.id);
-    const row = d.prepare("SELECT deleted_at, restore_pending_at, sync_state, ready_to_sync FROM quick_notes WHERE id=?").get(created.id) as { deleted_at: string | null; restore_pending_at: string | null; sync_state: string; ready_to_sync: number };
+    const row = d.prepare("SELECT deleted_at, restore_pending_at, is_dirty, ready_to_sync FROM quick_notes WHERE id=?").get(created.id) as { deleted_at: string | null; restore_pending_at: string | null; is_dirty: number; ready_to_sync: number };
     expect(row.deleted_at).toBeTruthy();
     expect(row.restore_pending_at).toBeNull();
-    expect(row.sync_state).toBe("local");
+    expect(row.is_dirty).toBe(1);
     expect(row.ready_to_sync).toBe(1);
   });
 
@@ -389,8 +389,8 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const now = new Date().toISOString();
     await deviceBodies.get(d)!.write(id, serialized);
     d.prepare(
-      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict)
-       VALUES (?,?,?,?,?,?, 'local', 0)`
+      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict)
+       VALUES (?,?,?,?,?,?, 1, 0)`
     ).run(id, now, now, "冲突本地版", 1, sha256Sync(new TextEncoder().encode(serialized)));
 
     const assetFs = makeAssetFsDeps();
@@ -425,9 +425,9 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     // B 学到删除（墓碑权威）
     await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
     expect((await listActive(db)).some((i) => i.id === created.id)).toBe(false);
-    // B 恢复：恢复标记 + 内容回 active（模拟 restoreQuickNote：清 deleted_at、置 restore_pending_at、sync_state=local）
+    // B 恢复：恢复标记 + 内容回 active（模拟 restoreQuickNote：清 deleted_at、置 restore_pending_at、is_dirty=local）
     await new Promise((r) => setTimeout(r, 10));
-    db.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(new Date().toISOString(), new Date().toISOString(), created.id);
+    db.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?").run(new Date().toISOString(), new Date().toISOString(), created.id);
     await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
     // 云端墓碑被 active 覆盖
     const m = readManifest(s3);
@@ -455,7 +455,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await deviceBodies.get(da)!.write(id, serialized);
-    da.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict) VALUES (?,?,?,?,?,?,'local',0)").run(id, now, now, "带图", 1, hash);
+    da.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict) VALUES (?,?,?,?,?,?,1,0)").run(id, now, now, "带图", 1, hash);
     aDeps.deps.assetBytes.set("quick-notes/" + id + "/a.png", imgBytes);
     aDeps.files.set("quick-notes/" + id + "/a.png", imgBytes);
     await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(toMobileDb(da), { ...aDeps.deps, bodyFs: deviceBodies.get(da)! }));
@@ -493,7 +493,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await deviceBodies.get(da)!.write(id, serialized);
-    da.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict) VALUES (?,?,?,?,?,?,'local',0)").run(id, now, now, "待删带图", 1, hash);
+    da.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict) VALUES (?,?,?,?,?,?,1,0)").run(id, now, now, "待删带图", 1, hash);
     aDeps.deps.assetBytes.set("quick-notes/" + id + "/t.png", imgBytes);
     aDeps.files.set("quick-notes/" + id + "/t.png", imgBytes);
     await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(toMobileDb(da), { ...aDeps.deps, bodyFs: deviceBodies.get(da)! }));

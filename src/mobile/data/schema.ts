@@ -27,7 +27,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 7; // 261025：标签通用化 tags/tag_links/tag_link_versions（替换 quick_note_tags/quick_note_tag_links）
+export const MOBILE_SCHEMA_VERSION = 8; // 261025：标签通用化 tags/tag_links/tag_link_versions（替换 quick_note_tags/quick_note_tag_links）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -69,7 +69,8 @@ export function baseSchemaStatements(): SchemaStatement[] {
     sort_order INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     content_hash TEXT,
-    sync_state TEXT NOT NULL DEFAULT 'local',
+    is_dirty INTEGER NOT NULL DEFAULT 0,
+    is_purged INTEGER NOT NULL DEFAULT 0,
     is_conflict INTEGER NOT NULL DEFAULT 0,
     deleted_at TEXT,
     doc_kind TEXT NOT NULL DEFAULT 'doc'
@@ -95,7 +96,8 @@ export function baseSchemaStatements(): SchemaStatement[] {
     updated_at TEXT NOT NULL,
     trashed_at TEXT,
     deleted_from_parent_id TEXT,
-    sync_state TEXT NOT NULL DEFAULT 'synced'
+    is_dirty INTEGER NOT NULL DEFAULT 0,
+    is_purged INTEGER NOT NULL DEFAULT 0
   )`);
   push(`CREATE TABLE IF NOT EXISTS device_state (
     key TEXT PRIMARY KEY,
@@ -108,7 +110,7 @@ export function baseSchemaStatements(): SchemaStatement[] {
     preview_text TEXT NOT NULL,
     image_count INTEGER NOT NULL DEFAULT 0,
     content_hash TEXT NOT NULL,
-    sync_state TEXT NOT NULL DEFAULT 'local',
+    is_dirty INTEGER NOT NULL DEFAULT 0,
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT,
     tags_updated_at TEXT NOT NULL DEFAULT '',
@@ -204,7 +206,8 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   addNoteColumn("parent_id", "TEXT");
   addNoteColumn("sort_order", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("content_hash", "TEXT");
-  addNoteColumn("sync_state", "TEXT NOT NULL DEFAULT 'local'");
+  addNoteColumn("is_dirty", "INTEGER NOT NULL DEFAULT 0");
+  addNoteColumn("is_purged", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("is_conflict", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("deleted_at", "TEXT");
   addNoteColumn("trashed_at", "TEXT");
@@ -253,9 +256,20 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   const folderColumns = (
     (await db.prepare("PRAGMA table_info(folders)").all()) as Array<{ name: string }>
   ).map((column) => column.name);
-  if (!folderColumns.includes("sync_state")) {
-    push("ALTER TABLE folders ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'");
-  }
+  if (!folderColumns.includes("is_dirty")) push("ALTER TABLE folders ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
+  if (!folderColumns.includes("is_purged")) push("ALTER TABLE folders ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0");
+  if (folderColumns.includes("sync_state")) push("ALTER TABLE folders DROP COLUMN sync_state", { optional: true });
+  const noteColumns2 = (
+    (await db.prepare("PRAGMA table_info(notes)").all()) as Array<{ name: string }>
+  ).map((column) => column.name);
+  if (!noteColumns2.includes("is_dirty")) push("ALTER TABLE notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
+  if (!noteColumns2.includes("is_purged")) push("ALTER TABLE notes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0");
+  if (noteColumns2.includes("sync_state")) push("ALTER TABLE notes DROP COLUMN sync_state", { optional: true });
+  const quickColumns = (
+    (await db.prepare("PRAGMA table_info(quick_notes)").all()) as Array<{ name: string }>
+  ).map((column) => column.name);
+  if (!quickColumns.includes("is_dirty")) push("ALTER TABLE quick_notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
+  if (quickColumns.includes("sync_state")) push("ALTER TABLE quick_notes DROP COLUMN sync_state", { optional: true });
 
   for (const statement of await buildQuickNotesSyncSchemaStatements(db)) push(statement);
   // 列表/树/小记时间线的最小索引集合（261022 代码 review P1-3）；列必须在上面的 ALTER 之后建索引。
@@ -285,8 +299,8 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   if (!seeded) {
     statements.push({
       statement: `INSERT OR IGNORE INTO folders
-        (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state)
-       VALUES (?,?,NULL,0,'notebook',NULL,?,'synced')`,
+        (id, title, parent_id, sort_order, node_type, icon, updated_at, is_dirty)
+       VALUES (?,?,NULL,0,'notebook',NULL,?,0)`,
       values: ["notebook-personal", "个人笔记", new Date().toISOString()],
     });
     statements.push({

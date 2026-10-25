@@ -43,7 +43,7 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
     preview_text TEXT NOT NULL,
     image_count INTEGER NOT NULL DEFAULT 0,
     content_hash TEXT NOT NULL,
-    sync_state TEXT NOT NULL DEFAULT 'local',
+    is_dirty TEXT NOT NULL DEFAULT 1,
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
@@ -60,8 +60,8 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
     db.prepare(
       `INSERT INTO quick_notes (
         id, created_at, updated_at, preview_text, image_count,
-        content_hash, sync_state, is_conflict
-      ) VALUES (?,?,?,?,?,?,'local',0)`,
+        content_hash, is_dirty, is_conflict
+      ) VALUES (?,?,?,?,?,?,1,0)`,
     ).run(id, now, now, previewQuickNote(text, 0), 0, contentHash);
     return { id, contentHash };
   };
@@ -77,7 +77,7 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
       const contentHash = sha256Sync(new TextEncoder().encode(content));
       await writeQuickNoteBody(id, content);
       db.prepare(
-        `UPDATE quick_notes SET updated_at=?, preview_text=?, content_hash=?, sync_state='local'
+        `UPDATE quick_notes SET updated_at=?, preview_text=?, content_hash=?, is_dirty=1
          WHERE id=?`,
       ).run(now, previewQuickNote(text, 0), contentHash, id);
     },
@@ -104,7 +104,7 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
     async restore(id) {
       const now = new Date().toISOString();
       db.prepare(
-        `UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=?
+        `UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?
          WHERE id=?`,
       ).run(now, now, id);
     },

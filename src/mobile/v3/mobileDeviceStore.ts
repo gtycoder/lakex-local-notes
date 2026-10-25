@@ -117,9 +117,9 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         const targetTrashed = !!n.trashedAt;
         const curTrashed = !!cur.trashed_at;
         if (targetTrashed && !curTrashed) {
-          await this.db.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL WHERE id=?").run(n.trashedAt, n.id);
+          await this.db.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(n.trashedAt, n.id);
         } else if (!targetTrashed && curTrashed) {
-          await this.db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local', parent_id=COALESCE(?, parent_id) WHERE id=?").run(new Date().toISOString(), n.parentId, n.id);
+          await this.db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(new Date().toISOString(), n.parentId, n.id);
         } else if (!targetTrashed) {
           if (content !== null) await saveNote(this.db, n.id, n.title, content, n.parentId, new Map());
           else if (n.title !== cur.title || (n.parentId ?? null) !== (cur.parent_id ?? null)) {
@@ -149,11 +149,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       if (!curQ.has(q.id)) {
         if (body !== null) await writeQuickNoteBody(q.id, body);
         await this.db.prepare(
-          "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at) VALUES (?,?,?,'',0,?,'local',?,NULL)"
+          "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,restore_pending_at) VALUES (?,?,?,'',0,?,1,?,NULL)"
         ).run(q.id, q.createdAt, q.updatedAt, q.contentHash, q.isConflict ? 1 : 0);
       } else if (body !== null) {
         await writeQuickNoteBody(q.id, body);
-        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, sync_state='local' WHERE id=?").run(q.updatedAt, q.contentHash, q.id);
+        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1 WHERE id=?").run(q.updatedAt, q.contentHash, q.id);
       }
       await this.db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(q.id);
       const tagIds = q.tagIds ?? [];
@@ -183,11 +183,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const wantedFolders = new Map(state.folders.map((f) => [f.id, f]));
     for (const f of wantedFolders.values()) {
       if (curFolders.has(f.id)) {
-        await this.db.prepare("UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,sync_state='local' WHERE id=?").run(
+        await this.db.prepare("UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,is_dirty=1 WHERE id=?").run(
           f.title, f.parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null, f.id,
         );
       } else {
-        await this.db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,sync_state) VALUES (?,?,?,?,?,?,?,?,?,'local')").run(
+        await this.db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty) VALUES (?,?,?,?,?,?,?,?,?,1)").run(
           f.id, f.title, f.parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null,
         );
       }
