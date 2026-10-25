@@ -278,6 +278,8 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   }
   async saveBaseline(baseline: DeviceBaseline): Promise<void> {
     await this.writeAtomic(this.baselineFile, gzipSync(Buffer.from(JSON.stringify(baseline)), { level: 1 }));
+    // baseline 只在发布成功后写 ⇒ 这里批量清 UI dirty；20k 也只两条批量 UPDATE。
+    this.store.markNotesSynced(baseline.lake.notes.map((n) => n.id));
   }
 
   async readBody(id: string): Promise<Uint8Array | null> {

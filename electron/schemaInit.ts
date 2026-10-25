@@ -44,7 +44,8 @@ export class SchemaInit {
         restore_pending_at TEXT,
         trashed_at TEXT,
         deleted_from_parent_id TEXT,
-        is_purged INTEGER NOT NULL DEFAULT 0
+        is_purged INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -58,6 +59,7 @@ export class SchemaInit {
         trashed_at TEXT,
         deleted_from_parent_id TEXT,
         is_purged INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 0,
         CHECK((node_type IN ('notebook','group') AND note_file_id IS NULL) OR (node_type = 'note' AND note_file_id IS NOT NULL))
       );
       CREATE INDEX IF NOT EXISTS idx_tree_nodes_parent ON tree_nodes(workspace_id,parent_id,deleted_at,sort_order);
@@ -144,9 +146,24 @@ export class SchemaInit {
     for (const [table, column, ddl] of [
       ["notes", "is_purged", "ALTER TABLE notes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],
       ["tree_nodes", "is_purged", "ALTER TABLE tree_nodes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],
+      ["notes", "is_dirty", "ALTER TABLE notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"],
+      ["tree_nodes", "is_dirty", "ALTER TABLE tree_nodes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"],
     ] as const) {
       const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
       if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);
+    }
+    // dirty 触发器：UI 待同步状态用；同步成功统一 markNotesSynced 清 0，不依赖调用点逐个写。
+    for (const table of ["notes", "tree_nodes"] as const) {
+      this.ctx.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS ${table}_dirty_insert AFTER INSERT ON ${table} WHEN NEW.sync_state='local'
+        BEGIN UPDATE ${table} SET is_dirty=1 WHERE id=NEW.id; END;
+        CREATE TRIGGER IF NOT EXISTS ${table}_dirty_update AFTER UPDATE ON ${table} WHEN NEW.sync_state='local' AND NEW.is_dirty=0
+        BEGIN UPDATE ${table} SET is_dirty=1 WHERE id=NEW.id; END;
+        CREATE TRIGGER IF NOT EXISTS ${table}_clean_synced AFTER UPDATE ON ${table} WHEN NEW.sync_state='synced'
+        BEGIN UPDATE ${table} SET is_dirty=0 WHERE id=NEW.id; END;
+        CREATE TRIGGER IF NOT EXISTS ${table}_clean_purged AFTER UPDATE ON ${table} WHEN NEW.sync_state='purged'
+        BEGIN UPDATE ${table} SET is_dirty=0 WHERE id=NEW.id; END;
+      `);
     }
     const now = nowIso();
     // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除。唯一机制容器，不可删。

@@ -7,6 +7,8 @@ export interface NoteSummary {
   syncState: "local" | "synced" | "conflict" | "purged";
   /** 独立 purged 标记（迁移中；最终替代 syncState='purged'）。 */
   isPurged?: boolean;
+  /** UI 待同步标记（v3 发布成功后清 0；不参与同步正确性）。 */
+  isDirty?: boolean;
   isConflict: boolean;
   isEditLocked?: boolean;
   editLockedAt?: string | null;
@@ -75,6 +77,8 @@ export interface TreeNode {
   createdAt: string;
   updatedAt: string;
   syncState: NoteSummary["syncState"];
+  isPurged?: boolean;
+  isDirty?: boolean;
   isConflict: boolean;
   icon?: string | null;
   description?: string | null;

@@ -10,6 +10,8 @@ export interface NoteSummary {
   sortOrder: number;
   updatedAt: string;
   syncState: string;
+  isPurged?: boolean;
+  isDirty?: boolean;
   isConflict: boolean;
   isEditLocked?: boolean;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
@@ -28,6 +30,8 @@ export interface TreeNode {
   createdAt: string;
   updatedAt: string;
   syncState: string;
+  isPurged?: boolean;
+  isDirty?: boolean;
   isConflict: boolean;
   icon: string | null;
   /** 文档类型（doc | usheet | bitable | board；缺省 doc）。 */
@@ -75,6 +79,7 @@ export interface SummaryRow {
   is_locked: number;
   locked_at: string | null;
   is_purged?: number;
+  is_dirty?: number;
   kind?: string | null;
 }
 
@@ -91,6 +96,7 @@ export interface TreeNodeRow {
   sync_state: string;
   is_conflict: number;
   is_purged?: number;
+  is_dirty?: number;
   icon: string | null;
   /** LEFT JOIN notes 带来的文档类型；非 note 节点为 undefined。 */
   note_kind?: string | null;
@@ -146,6 +152,7 @@ export class NoteQueries {
       syncState: row.sync_state,
       isConflict: !!row.is_conflict,
       ...(row.is_purged ? { isPurged: true } : {}),
+      ...(row.is_dirty ? { isDirty: true } : {}),
       // SQLite 列名冻结：is_locked / locked_at（不改 schema、不迁移）；内存字段叫 isEditLocked / editLockedAt。
       isEditLocked: !!row.is_locked,
       editLockedAt: row.locked_at ?? null,
@@ -168,6 +175,7 @@ export class NoteQueries {
       syncState: row.sync_state,
       isConflict: !!row.is_conflict,
       ...(row.is_purged ? { isPurged: true } : {}),
+      ...(row.is_dirty ? { isDirty: true } : {}),
       icon: row.icon ?? null,
       // 渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
       kind: normalizeNoteKind(row.note_kind),
@@ -202,13 +210,13 @@ export class NoteQueries {
 
   listNoteSummaries(): NoteSummary[] {
     const rows = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,is_purged,kind FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,is_purged,is_dirty,kind FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
     ).all() as SummaryRow[];
     return rows.map((row) => this.mapSummary(row));
   }
 
   private static readonly SYNC_NOTE_COLUMNS =
-    `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,n.is_purged,t.icon,n.trashed_at,n.deleted_from_parent_id,n.kind
+    `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,n.is_purged,n.is_dirty,t.icon,n.trashed_at,n.deleted_from_parent_id,n.kind
      FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id`;
 
   listNotesForSync(): SyncNote[] {

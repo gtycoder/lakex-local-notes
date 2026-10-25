@@ -1239,6 +1239,17 @@ export class Store {
   }
 
 
+  /** v3 发布成功后批量标记已同步（只改同步账本/UI dirty，不碰正文）。 */
+  markNotesSynced(ids: readonly string[]): void {
+    const unique = [...new Set(ids)];
+    for (let i = 0; i < unique.length; i += 200) {
+      const batch = unique.slice(i, i + 200);
+      const ph = batch.map(() => "?").join(",");
+      this.db.prepare("UPDATE notes SET sync_state='synced', is_dirty=0 WHERE id IN (" + ph + ") AND sync_state!='purged'").run(...batch);
+      this.db.prepare("UPDATE tree_nodes SET sync_state='synced', is_dirty=0 WHERE note_file_id IN (" + ph + ") AND sync_state!='purged'").run(...batch);
+    }
+  }
+
   contentHash(id: string): string {
     return this.syncReconciliation.contentHash(id);
   }
