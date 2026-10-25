@@ -56,7 +56,6 @@ describe("移动端云同步状态闸门", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storage.clear();
-    storage.set("local-lakex-notes-mobile.syncProtocol", "legacy"); // 本文件验证旧引擎路径
     // 移动端跑在 node 环境（无 jsdom）：store 的 localStorage 用手写 Map 兜底（同 bridgeTree.test.ts）
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -90,12 +89,6 @@ describe("移动端云同步状态闸门", () => {
     expect(result.message).toContain("云同步已关闭");
   });
 
-  it("开着云同步 ⇒ 行为不回归（照常走引擎）", async () => {
-    await bridge.saveS3Settings(S3);
-    const result = await bridge.syncNow();
-    expect(coreSyncNow).toHaveBeenCalledTimes(1);
-    expect(result.message).toContain("同步完成");   // 桥会再拼小记状态
-  });
 
   it("密钥缺失 ⇒ 给可执行提示，而不是让请求去报签名错（261009）", async () => {
     // 复现历史缺陷的输入：配置在、但 secret 读不到（曾因 IndexedDB 不跨重启而必然发生）。

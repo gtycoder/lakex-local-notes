@@ -119,7 +119,7 @@ describe("小记 capture 路径（261010 统一为内核卡片）", () => {
 
   it("同步可观测性：上次同步（时间/结果/失败原因）落盘并常驻设置页（用户 261013）", () => {
     expect(SYNC_STATUS, "状态 store 要落盘 + 可订阅").toMatch(/writeLocalStorage\(KEY/);
-    expect(BRIDGE, "写入点唯一 = bridge.syncNow；ok 按「真的跑了引擎」判（notes 非 null）").toMatch(/writeSyncStatus\(\{ at: new Date\(\)\.toISOString\(\), ok: result\.notes !== null/);
+    expect(BRIDGE, "写入点唯一 = bridge.syncNow").toMatch(/writeSyncStatus\(\{ at: new Date\(\)\.toISOString\(\), ok: /);
     expect(BRIDGE, "失败也要记（此前只有 console.warn，界面上看不到）").toMatch(/ok: false/);
     expect(SETTINGS, "设置页常驻显示这一行").toContain("lastSyncText");
     expect(SYNC_FORM, "同步状态文本走共享描述器").toMatch(/describeSyncStatus\(lastSync\)/);

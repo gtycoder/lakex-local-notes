@@ -1,25 +1,22 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listAssetKeysFs } from "../native/assetFs";
-import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncReport } from "../../core/syncEngine.js";
+import { listAssetKeysFs } from "../native/assetFs";
+import { downloadNoteAssets, type SyncConfig, type SyncReport } from "../../core/syncEngine.js";
 import { buildGcKeepSet } from "../../core/gcDecisions.js";
-import { normalizeEndpoint, parseLakeManifest, objectKey, validateS3Settings } from "../../core/syncUtils.js";
+import { normalizeEndpoint, parseLakeManifest, validateS3Settings } from "../../core/syncUtils.js";
 import type { Manifest } from "../../core/manifestTypes.js";
-import { maintenanceQueue } from "../sync/maintenanceLocks";
 import type { QuickNotesSyncResult } from "../../core/quickNotesSyncEngine.js";
-import { syncQuickNotesViaEngine } from "../../core/quickNotesSyncEngine.js";
 import { createCapacitorS3Store } from "../native/s3Store";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "../../core/cloudState.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
-import { pushQuickNote, type QuickNotePushOutcome } from "../../core/quickNotePush.js";
-import { createQuickNotesSyncDbPort } from "../data/quickNotesDbPort.js";
+import type { QuickNotePushOutcome } from "../../core/quickNotePush.js";
 import { mobileSecretStore } from "../native/secretStore.js";
 import { writeSyncStatus } from "../sync/syncStatusStore";
 import * as gcRepository from "../data/gcRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
-import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, assets, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
+import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
-import { isMobileV3Enabled, runMobileV3Sync } from "../v3/sync.js";
+import { runMobileV3Sync } from "../v3/sync.js";
 
 export interface MobileSyncResult {
   message: string;
@@ -69,46 +66,13 @@ export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing =
 }
 
 /** 单条推送的一次尝试（高优先域与"推送后回核"共用；云状态判据在调用方）。 */
-export async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutcome> {
+export async function pushSingleQuickNote(_id: string): Promise<QuickNotePushOutcome> {
   const cfg = await syncDomain.getS3Settings();
-  if (!cfg) throw new Error("未配置 S3");
-  if (isMobileV3Enabled()) {
-    const d = await ensureDb();
-    await runMobileV3Sync(d, cfg);
-    return { status: "pushed", uploadedContent: true, uploadedAssets: 0, unchanged: false, manifestId: null };
-  }
   if (!cfg) throw new Error("未配置 S3");
   try { assertS3Credentials(cfg); } catch (e) { throw new Error((e as Error).message); }
   const d = await ensureDb();
-  const syncCfg: SyncConfig = {
-    endpoint: cfg.endpoint,
-    region: cfg.region,
-    bucket: cfg.bucket,
-    accessKeyId: cfg.accessKeyId,
-    secretAccessKey: cfg.secretAccessKey,
-    prefix: cfg.prefix,
-  };
-  return await pushQuickNote(syncCfg, createCapacitorS3Store(syncCfg), createQuickNotesSyncDbPort(d, {
-    assetBytes: assets,
-    saveAssetFile: saveAssetBytesFs,
-    loadAssetFile: loadAssetBytesFs,
-    removeAssetFile: removeAssetBytesFs,
-  }), id);
-}
-
-/**
- * 推送后回核（幂等；排**维护域队尾** ⇒ 任何在途/排队的整轮同步跑完之后才轮到它）：
- * 整轮同步若在"读到本地清单快照"之后才被我们插进来写清单，它落地时会把这一条覆盖掉；
- * 回核就是把那一条补回来（`pushQuickNote` 在远端缺该条时会重传，不缺则只读一次清单）。
- * 失败静默：下轮整轮同步仍会自愈（远端缺条目 ⇒ decideUpload 走 upload）。
- */
-export function scheduleQuickNoteVerify(id: string): void {
-  void maintenanceQueue.run("maintenance", async () => {
-    try {
-      if ((await mobileCloudState()) === "offline") return;
-      await pushSingleQuickNote(id);
-    } catch { /* 安全网失败：交给下轮整轮同步自愈 */ }
-  });
+  await runMobileV3Sync(d, cfg);
+  return { status: "pushed", uploadedContent: true, uploadedAssets: 0, unchanged: false, manifestId: null };
 }
 
 
@@ -266,102 +230,24 @@ export const syncDomain = {
   },
 
   async syncNow(): Promise<MobileSyncResult> {
-    // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面 runSync 同一判据）
+    // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面同一判据）。
     if ((await mobileCloudState()) === "offline") {
       return { message: cloudStateHint("offline") ?? "云同步已关闭", notes: null, quickNotes: null };
     }
     try {
       const result = await runMaintenance("syncNow", async () => {
-      const cfg = await syncDomain.getS3Settings();
-      if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
-      // 同步也走同一条"密钥缺失"提示（别让用户以为"同步失败"却看不出该重填密钥）。
-      try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
-      const d = await ensureDb();
-      // 转正默认：v3；`syncProtocol=legacy` 回滚旧路径。
-      if (isMobileV3Enabled()) {
+        const cfg = await syncDomain.getS3Settings();
+        if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
+        try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
+        const d = await ensureDb();
         const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix });
         try { await reconcileIndex(d); } catch { /* 派生索引失败不影响同步结果 */ }
         const message = `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
-        writeSyncStatus({ at: new Date().toISOString(), ok: true, message });
         return { message, notes: null, quickNotes: null };
-      }
-      const syncCfg: SyncConfig = {
-        endpoint: cfg.endpoint,
-        region: cfg.region,
-        bucket: cfg.bucket,
-        accessKeyId: cfg.accessKeyId,
-        secretAccessKey: cfg.secretAccessKey,
-        prefix: cfg.prefix,
-      };
-      const s3Store = createCapacitorS3Store(syncCfg);
-      const mobileDb = d;
-      const report = await runSync(syncCfg, s3Store, dbPort, {
-          onPublished: async (next, prev) => {
-            // GC 差集标记（对齐桌面 syncEngineController.onPublished）：新 manifest 不再引用的旧正文/资源 → 待回收。用 full key（含 prefix）与 gcDeepCleanup 一致。
-            try {
-              const newById = new Map(next.notes.map((n) => [n.id, n]));
-              for (const p of prev?.notes ?? []) {
-                if (p.deleted) continue;
-                const nx = newById.get(p.id);
-                if (!nx || nx.deleted) continue;
-                if (nx.contentHash !== p.contentHash) await gcRepository.addS3GcPending(mobileDb, `${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
-                const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
-                for (const asset of p.assets ?? []) {
-                  if (nextAssets.has(asset.filename)) continue;
-                  await gcRepository.addS3GcPending(mobileDb, `${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
-                }
-              }
-              const referencedNow = new Set<string>();
-              for (const note of next.notes) {
-                if (note.deleted) continue;
-                referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
-                for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
-              }
-              await gcRepository.removeS3GcPending(mobileDb, [...referencedNow]);
-            } catch { /* 不影响同步 */ }
-          },
-        });
-        // 小记独立子空间同步（quick-notes/ 前缀，同一 S3 配置；墓碑/恢复/冲突语义与桌面一致）。
-        // 失败不拖垮笔记同步（对齐桌面 main.ts：quickNotes 错误单独上报）。
-        let quickNotes: QuickNotesSyncResult | { error: string };
-        let quickMsg = "；小记已同步";
-        try {
-          quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d, {
-            assetBytes: assets,
-            saveAssetFile: saveAssetBytesFs,
-            loadAssetFile: loadAssetBytesFs,
-            removeAssetFile: removeAssetBytesFs,
-          }));
-          if (quickNotes.uploaded + quickNotes.downloaded > 0) {
-            quickMsg = `；小记 ↓${quickNotes.downloaded} ↑${quickNotes.uploaded}`;
-          }
-        } catch (reason) {
-          quickNotes = { error: (reason as Error).message };
-          quickMsg = `；小记同步失败：${quickNotes.error}`;
-        }
-        // 清理可能部分成功；失败不拖垮同步，下一次同步继续按策略清理。
-        try {
-          const mobileDb = d;
-          await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
-        } catch {
-          // 清理失败不拖垮同步；下一次同步会继续按策略清理。
-        }
-      // 同步可能增删改文档：对账搜索索引（本地派生数据，随同步刷新）。
-      let indexMs = 0;
-      try {
-        const indexStart = Date.now();
-        await reconcileIndex(d);
-        indexMs = Date.now() - indexStart;
-        console.log(`[sync] reconcileIndex ms=${indexMs}`);
-      } catch { /* 索引对账失败不影响同步结果 */ }
-      return { message: report.message + quickMsg, notes: report, quickNotes, indexMs };
       });
-      // 可观测性（用户 261013）：**每次尝试只写一处**，成功与否按"**真的跑了引擎**"判（notes 非 null）——
-      // 「未配置 S3」「密钥缺失」是正常返回（不抛错）但**没跑成**，必须记成失败，否则状态行会显示"同步成功：未配置 S3"（探针实测踩到）。
-      writeSyncStatus({ at: new Date().toISOString(), ok: result.notes !== null, message: result.message });
+      writeSyncStatus({ at: new Date().toISOString(), ok: true, message: result.message });
       return result;
     } catch (error) {
-      // 引擎抛错（网络/协议）：记失败原因，错误照旧抛给调用方（它决定要不要 toast）
       writeSyncStatus({ at: new Date().toISOString(), ok: false, message: (error as Error)?.message ?? String(error) });
       throw error;
     }

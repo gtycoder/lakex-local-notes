@@ -12,11 +12,6 @@ import { createMobileS3v3Remote } from "./s3v3Remote.js";
 const DEVICE_ID_KEY = "local-lakex-notes-mobile.v3.deviceId";
 const EMPTY_CLOUD_KEY = "local-lakex-notes-mobile.v3.emptyCloud";
 
-export function isMobileV3Enabled(): boolean {
-  // 转正默认：未显式设置 legacy 即走 v3；`syncProtocol=legacy` 为回滚开关。
-  try { return localStorage.getItem("local-lakex-notes-mobile.syncProtocol") !== "legacy"; } catch { return true; }
-}
-
 function mobileDeviceId(): string {
   try {
     const existing = localStorage.getItem(DEVICE_ID_KEY);

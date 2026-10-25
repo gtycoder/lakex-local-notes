@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SQL_PARAMETER_BATCH_SIZE } from "../core/sqlParameterBatch.js";
-import { sha256Sync } from "../core/sha256Sync.js";
 
 const sqlitePrepareSqls = vi.hoisted(() => [] as string[]);
 
@@ -48,7 +47,6 @@ vi.mock("./native/secretStore.js", () => ({
 }));
 
 import { bridge } from "./bridge.js";
-import { syncNow as coreSyncNow } from "../core/syncEngine.js";
 import { SqlJsAsyncDb } from "./data/sqliteDb.js";
 
 const sqlJsPrepare = SqlJsAsyncDb.prototype.prepare;
@@ -268,39 +266,6 @@ describe("mobile maintenance writes", () => {
     expect(await bridge.listS3GcPending()).toEqual([]);
 
     await expect(bridge.cleanupHistory()).resolves.toEqual({ deleted: 0 });
-  });
-
-  it("syncNow updates GC state inside its existing maintenance queue without deadlocking", async () => {
-    const storage = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
-    });
-    storage.set("local-lakex-notes-mobile.syncProtocol", "legacy"); // 本用例验证旧引擎路径
-    storage.set("local-lakex-notes-mobile.s3", JSON.stringify({
-      endpoint: "https://s3.example.test",
-      region: "us-east-1",
-      bucket: "local-lakex-notes",
-      accessKeyId: "access-key",
-      secretAccessKey: "secret-key",
-      prefix: "local-lakex-notes",
-    }));
-
-    try {
-      const result = await bridge.syncNow();
-      expect(result.message).toContain("同步完成");
-      expect(coreSyncNow).toHaveBeenCalled();
-      const port = vi.mocked(coreSyncNow).mock.calls[0]?.[2] as {
-        getAllNotes(): Promise<Array<{ id: string; content: string; contentHash?: string }>>;
-      };
-      const metadata = (await port.getAllNotes()).find((row) => row.id === "maintenance-note");
-      expect(metadata?.content).toBe("");
-      expect(metadata?.contentHash).toBe(sha256Sync(new TextEncoder().encode("<p>x</p>")));
-      expect(await bridge.listS3GcPending()).toHaveLength(2);
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 });
 
