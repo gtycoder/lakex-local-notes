@@ -3,7 +3,9 @@ export type DocumentSyncKind = "local-only" | "pending" | "synced" | "synced-his
 
 export interface DocumentStatusInput {
   hasCloudConfig: boolean;
-  syncState: "local" | "synced" | "conflict";
+  /** UI 待同步标记（is_dirty；替代 sync_state='local'）。 */
+  isDirty?: boolean;
+  isConflict?: boolean;
   saveState: LocalSaveState;
   historyCount?: number;
 }
@@ -20,10 +22,10 @@ export function getDocumentStatus(input: DocumentStatusInput): DocumentStatusMod
   if (input.saveState === "dirty") return { kind: "dirty", label: "待保存", historyCount };
   if (input.saveState === "error") return { kind: "save-error", label: "保存失败", historyCount };
   if (!input.hasCloudConfig) return { kind: "local-only", label: "仅本地", historyCount };
-  if (input.syncState === "local") return { kind: "pending", label: "待同步", historyCount };
-  if (input.syncState === "conflict") {
+  if (input.isConflict) {
     if (historyCount > 0) return { kind: "synced-history", label: `已同步 · 历史 ${historyCount}`, historyCount };
     return { kind: "conflict", label: "有冲突", historyCount };
   }
+  if (input.isDirty) return { kind: "pending", label: "待同步", historyCount };
   return { kind: historyCount > 0 ? "synced-history" : "synced", label: historyCount > 0 ? `已同步 · 历史 ${historyCount}` : "已同步", historyCount };
 }
