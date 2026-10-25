@@ -70,6 +70,8 @@ export interface S3v3EngineOptions {
   device: S3v3DeviceStore;
   deviceId: string;
   now?: () => Date;
+  /** 发布锁最长等待（ms）；测试可调小。默认 LOCK_DEADLINE_MS。 */
+  lockWaitMs?: number;
 }
 
 const emptyState = (): DeviceState => ({
@@ -87,6 +89,7 @@ export class S3v3SyncEngine {
   private readonly device: S3v3DeviceStore;
   private readonly deviceId: string;
   private readonly now: () => Date;
+  private readonly lockWaitMs: number;
   private readonly declCache = new Map<string, AssetDeclaration>();
   private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes: Uint8Array; gzip?: boolean }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
@@ -97,6 +100,7 @@ export class S3v3SyncEngine {
     this.device = opts.device;
     this.deviceId = opts.deviceId;
     this.now = opts.now ?? (() => new Date());
+    this.lockWaitMs = opts.lockWaitMs ?? LOCK_DEADLINE_MS;
   }
 
   private iso(): string { return this.now().toISOString(); }
@@ -631,7 +635,7 @@ export class S3v3SyncEngine {
    * 拿不到锁不再立刻抛错，而是在 LOCK_DEADLINE_MS 内带抖动重试（并发同步不应变成用户可见失败）。
    */
   private async acquireLock(): Promise<boolean> {
-    const deadline = Date.now() + LOCK_DEADLINE_MS;
+    const deadline = Date.now() + this.lockWaitMs;
     for (;;) {
       const owner = await this.lockOwner();
       if (owner && owner !== this.deviceId) {

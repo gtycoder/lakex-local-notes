@@ -230,7 +230,7 @@ describe("S3v3 同步引擎（双端）", () => {
     await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
     await remote.put("meta/lock.json", new TextEncoder().encode(JSON.stringify({ deviceId: "other", time: Date.now(), ttl: 120000 })));
     await addDoc(a.store, "n1", "v2");
-    await expect(engine(remote, a.store, "A").sync()).rejects.toMatchObject({ code: "lock-busy" });
+    await expect(new S3v3SyncEngine({ remote, device: a.store, deviceId: "A", lockWaitMs: 300 }).sync()).rejects.toMatchObject({ code: "lock-busy" });
     await remote.deleteMany(["meta/lock.json"]);
   });
 
