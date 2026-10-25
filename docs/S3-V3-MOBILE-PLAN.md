@@ -55,9 +55,11 @@
 ## 5. 实施顺序（建议批次）
 
 1. **纯适配器 + 假 DB/假 S3 单测**（Node/vitest，用移动端 fake bridge）：DeviceState 映射、正文/资产读写、墓碑/恢复。
+   - ✅ 已完成 v1：`src/mobile/v3/mobileDeviceStore.ts`（Lake 文档；双移动端 + 假 S3 + core v3 引擎单测通过：初始化/拉取/增量/墓碑→回收站）；附件/小记/目录写入明确抛错。
 2. **v3 状态表 + schema 迁移**：baseline/intents/pending 落库；单测覆盖重启/崩溃续跑。
-   - ✅ 已完成第一步：`src/mobile/data/v3StateRepository.ts`（sync_v3_state JSON 账本 + 2 例单测）；尚未并入 MOBILE_SCHEMA_VERSION/未接引擎。
-3. **移动 S3v3Remote**：复用 s3Store 的 S3 client；真实 S3 集成（dev 前缀）。
+   - ✅ `sync_v3_state` 仓储 + 2 例单测；尚未并入 MOBILE_SCHEMA_VERSION。
+3. **引擎/端口下沉到 core**：✅ `src/core/s3v3Engine.ts` / `s3v3Ports.ts` / `s3v3DeviceStore.ts`；electron 仅 re-export；check:core 0 违规。
+4. **移动 S3v3Remote**：复用 s3Store 的 S3 client；真实 S3 集成（dev 前缀）。
 4. **bridge.syncNow v3 feature flag + 移动 UI 同步按钮/状态**；旧路径保留回滚。
 5. **2 台模拟器/真机真实点击**：建文档/编辑/删除/恢复/彻底删除/冲突，观察 S3 对象与指针。
 6. **指标**：移动端耗时、流量、对象数、索引大小；与桌面/旧移动同步对比。
