@@ -20,6 +20,17 @@ import { perfMessage } from "../src/core/logFormat.js";
 /**
  * Step 5：桌面 Controller 化入口。
  */
+let v3Gate: Promise<unknown> = Promise.resolve();
+/** v3 全量同步串行化：整轮同步与“单条推送→全量 v3”不会并发写同一设备 sidecar/索引。 */
+async function serializedV3<T>(fn: () => Promise<T>): Promise<T> {
+  let release!: () => void;
+  const mine = new Promise<void>((r) => { release = r; });
+  const previous = v3Gate;
+  v3Gate = mine;
+  await previous.catch(() => undefined);
+  try { return await fn(); } finally { release(); }
+}
+
 export async function syncNowViaEngine(
   store: Store,
   onProgress?: (p: SyncProgress) => void,
@@ -28,8 +39,10 @@ export async function syncNowViaEngine(
   // 261025 转正：默认 v3；仅显式 LAKE_SYNC_PROTOCOL=legacy 走旧通道（回滚用）。
   const protocol = process.env.LAKE_SYNC_PROTOCOL ?? "v3";
   if (protocol === "v3") {
-    const { syncWithV3 } = await import("./s3v3/desktopSync.js");
-    return syncWithV3(store, onProgress);
+    return serializedV3(async () => {
+      const { syncWithV3 } = await import("./s3v3/desktopSync.js");
+      return syncWithV3(store, onProgress);
+    });
   }
   const syncStart = Date.now();
   store.logScopes.sync.info("[perf] syncNowViaEngine start");

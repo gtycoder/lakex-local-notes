@@ -1,6 +1,8 @@
 import { MAX_QUICK_NOTE_ATTACHMENT_BYTES, MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "../quickNotes.js";
 import { convertQuickNoteToLake } from "../quickNoteConversion.js";
 import { pushQuickNoteToS3, restoreQuickNoteFromCloud } from "../quickNotesSync.js";
+import { syncNowViaEngine } from "../syncEngineController.js";
+import type { QuickNotePushOutcome } from "../../src/core/quickNotePush.js";
 import { canTouchNetwork, cloudStateOf, cloudStateHint } from "../../src/core/cloudState.js";
 import type { Store } from "../store.js";
 import type { IpcRegistrar } from "./registrar.js";
@@ -46,6 +48,7 @@ export function registerQuickNotesIpc(
   ipc.handle("purge_quick_note", (id: string) => quickNotes.purgeQuickNote(id));
   // ---- 缺正文小记（261023）：云端恢复 / 搜索缓存纯文本恢复 / 彻底删除 ----
   const quickCloudAvailable = () => canTouchNetwork(cloudStateOf(store.getS3Settings() !== null, store.getSyncSettings()));
+  const quickV3 = () => process.env.LAKE_SYNC_PROTOCOL !== "legacy" && process.env.LAKE_S3V3_QUICK_NOTES !== "0";
   ipc.handle("list_missing_quick_notes", () => quickNotes.listMissingQuickNotes({ cloudConfigured: quickCloudAvailable() }));
   ipc.handle("restore_missing_quick_note_from_cloud", async (id: string) => {
     if (!quickCloudAvailable()) return { ok: false, reason: "cloud-off" };
@@ -82,6 +85,12 @@ export function registerQuickNotesIpc(
     if (!settings) throw new Error("请先保存 S3 配置");
     const state = cloudStateOf(true, store.getSyncSettings());
     if (!canTouchNetwork(state)) throw new Error(cloudStateHint(state) ?? "云同步已关闭：不会联网");
+    // v3 转正后：单条推送用整轮 v3 同步兜底（同一设备/索引串行；先检查本地是否存在）。
+    if (quickV3()) {
+      try { quickNotes.readQuickNote(id); } catch { return { status: "not-found" } satisfies QuickNotePushOutcome; }
+      await enqueueMaintenance(async () => { await syncNowViaEngine(store, undefined); });
+      return { status: "pushed", uploadedContent: true, uploadedAssets: 0, unchanged: false, manifestId: null } satisfies QuickNotePushOutcome;
+    }
     const outcome = await enqueuePriority(() => pushQuickNoteToS3(quickNotes, settings, id));
     if (outcome.status === "pushed") {
       void enqueueMaintenance(async () => {

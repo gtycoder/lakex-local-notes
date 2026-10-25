@@ -32,7 +32,8 @@
 - 已实现：正文/附件/标签目录/标签关系/软删进回收站/远端删除跟随/**彻底删除 purged 墓碑跨端传播**；`DesktopStoreDevice` 注入 `QuickNotesStore`。
 - 已验证 `electron/s3v3/quickNotesAdapter.test.ts` 3 例：文本创建→上传→双端拉取→编辑→删除回回收站；图片附件；彻底删除后另一端 active/trash 均无副本且指数组含 purged。
 - 真实 S3：默认路径（无 env）同时上传文档 + 小记通过（`defaultSwitch.integration.test.ts`）。
-- 残留：`sync_quick_note` 单条“保存并同步”和 `restore_missing_quick_note_from_cloud` 仍走旧 quick-notes API，需要改成 v3（下一轮）。
+- 单条“保存并同步”已改为 v3：v3 串行门内触发整轮 v3 同步兜底（先检查本地存在；返回 pushed）。
+- 残留：`restore_missing_quick_note_from_cloud` 仍走旧 quick-notes API，需要改成 v3（下一轮）。
 - `sync_state` 仍被旧通道/UI 计数/legacy 回滚使用，仍不能删。
 
 ## 5. 完整转正还差什么（sync_state 能否删除）
