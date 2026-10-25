@@ -43,7 +43,8 @@ export class SchemaInit {
         text_cache TEXT,
         restore_pending_at TEXT,
         trashed_at TEXT,
-        deleted_from_parent_id TEXT
+        deleted_from_parent_id TEXT,
+        is_purged INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -56,6 +57,7 @@ export class SchemaInit {
         icon TEXT,
         trashed_at TEXT,
         deleted_from_parent_id TEXT,
+        is_purged INTEGER NOT NULL DEFAULT 0,
         CHECK((node_type IN ('notebook','group') AND note_file_id IS NULL) OR (node_type = 'note' AND note_file_id IS NOT NULL))
       );
       CREATE INDEX IF NOT EXISTS idx_tree_nodes_parent ON tree_nodes(workspace_id,parent_id,deleted_at,sort_order);
@@ -138,6 +140,14 @@ export class SchemaInit {
     );
     this.ctx.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
 
+    // 轻量列迁移：不写历史数据兼容，只补新列默认值（旧值由调用方决定）。
+    for (const [table, column, ddl] of [
+      ["notes", "is_purged", "ALTER TABLE notes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],
+      ["tree_nodes", "is_purged", "ALTER TABLE tree_nodes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],
+    ] as const) {
+      const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);
+    }
     const now = nowIso();
     // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除。唯一机制容器，不可删。
     this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)

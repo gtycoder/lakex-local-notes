@@ -5,6 +5,8 @@ export interface NoteSummary {
   sortOrder: number;
   updatedAt: string;
   syncState: "local" | "synced" | "conflict" | "purged";
+  /** 独立 purged 标记（迁移中；最终替代 syncState='purged'）。 */
+  isPurged?: boolean;
   isConflict: boolean;
   isEditLocked?: boolean;
   editLockedAt?: string | null;

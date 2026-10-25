@@ -227,10 +227,10 @@ export class SyncReconciliation {
       // restore_pending_at 一并清除（对齐移动端 bridge applyRemotePurge）：purge 后恢复标记无意义，
       // 残留会让 isRestorePending 误判。engine 的 decidePurge 已挡 restoring 场景，此处纯口径对齐。
       this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',is_purged=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, now, id);
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE note_file_id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',is_purged=1 WHERE note_file_id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, now, id);
       this.ctx.removeSearch([id]);
     });
@@ -274,10 +274,10 @@ export class SyncReconciliation {
          ) SELECT t.id, t.note_file_id, t.node_type FROM tree_nodes t WHERE t.id IN (SELECT id FROM sub) AND t.deleted_at IS NULL`
       ).all(id) as Array<{ id: string; note_file_id: string | null; node_type: string }>;
       const purgeNote = this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',is_purged=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       );
       const purgeNode = this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',is_purged=1 WHERE id=? AND deleted_at IS NULL"
       );
       const removedNoteIds: string[] = [];
       for (const node of subtree) {
