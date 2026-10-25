@@ -124,7 +124,7 @@ describe("S3v3 同步引擎（双端）", () => {
     sa.intents = [...sa.intents, { noteId: "n2", targetEpoch: sa.intents[0]?.targetEpoch ?? "", targetGeneration: 0 }].map((it) => ({ ...it }));
     // targetEpoch 用当前 pointer 的 epoch（从云端读）
     const pointer = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { epoch: string; generation: number };
-    sa.intents = [{ noteId: "n2", targetEpoch: pointer.epoch, targetGeneration: pointer.generation }];
+    sa.intents = [{ noteId: "n2", targetEpoch: pointer.epoch, targetGeneration: pointer.generation, purgedAt: new Date().toISOString() }];
     await a.store.saveState(sa);
     await a.store.deleteBody("n2"); await a.store.deleteAssetsDir("n2");
     await engine(remote, a.store, "A").sync();
@@ -183,6 +183,71 @@ describe("S3v3 同步引擎（双端）", () => {
     expect(remote.objects.has("meta/pointer.json")).toBe(true);
   });
 
+  it("显式恢复是唯一例外：远端已 purge 后仍可恢复", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("a"); const b = await device("b");
+    await addDoc(a.store, "n1", "resurrect-me");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    await engine(remote, b.store, "B").sync();
+    // A purge
+    const pointer = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { epoch: string; generation: number };
+    const sa = (await a.store.loadState())!;
+    sa.lake.notes = []; sa.intents = [{ noteId: "n1", targetEpoch: pointer.epoch, targetGeneration: pointer.generation, purgedAt: new Date().toISOString() }];
+    await a.store.saveState(sa); await a.store.deleteBody("n1");
+    await engine(remote, a.store, "A").sync();
+    await engine(remote, b.store, "B").sync();
+    // B 恢复（本地有副本）
+    const sb = (await b.store.loadState())!;
+    sb.remotePurged = [];
+    sb.restorePending = ["n1"];
+    sb.lake.notes = sb.lake.notes.map((n) => n.id === "n1" ? { ...n, parentId: null, trashedAt: null, deletedFromParentId: null, updatedAt: new Date(Date.now() + 5000).toISOString() } : n);
+    await b.store.saveState(sb);
+    await engine(remote, b.store, "B").sync();
+    // A 拉回
+    await engine(remote, a.store, "A").sync();
+    expect(new TextDecoder().decode((await a.store.readBody("n1"))!)).toBe("resurrect-me");
+    expect((await a.store.loadState())!.lake.notes.find((n) => n.id === "n1")).toBeTruthy();
+  });
+
+  it("发布锁被占用 → lock-busy（不并发覆盖）", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("a");
+    await addDoc(a.store, "n1", "v1");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    await remote.put("meta/lock.json", new TextEncoder().encode(JSON.stringify({ deviceId: "other", time: Date.now(), ttl: 120000 })));
+    await addDoc(a.store, "n1", "v2");
+    await expect(engine(remote, a.store, "A").sync()).rejects.toMatchObject({ code: "lock-busy" });
+    await remote.deleteMany(["meta/lock.json"]);
+  });
+
+  it("深度清理：删除孤儿（模拟声明/正文写入后崩溃）且保留当前数据", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("a");
+    await addDoc(a.store, "n1", "x");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    await remote.put("objects/orphan-" + "a".repeat(64) + ".lake", new TextEncoder().encode("orphan"));
+    await remote.put("meta/assets/n1/" + "b".repeat(64) + ".json", new TextEncoder().encode(JSON.stringify({ assets: [] })));
+    const dry = await engine(remote, a.store, "A").deepCleanup({ dryRun: true });
+    expect(dry.deleted.length).toBe(2);
+    expect(remote.objects.has("objects/orphan-" + "a".repeat(64) + ".lake")).toBe(true);
+    const real = await engine(remote, a.store, "A").deepCleanup();
+    expect(real.deleted.length).toBe(2);
+    expect(remote.objects.has("objects/orphan-" + "a".repeat(64) + ".lake")).toBe(false);
+    expect(remote.objects.has("meta/assets/n1/" + "b".repeat(64) + ".json")).toBe(false);
+  });
+
+  it("缺远端正文时降级为 warning，不破坏本地", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("a"); const b = await device("b");
+    await addDoc(a.store, "n1", "content");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    const hash = sha256Hex(new TextEncoder().encode("content"));
+    await remote.deleteMany(["objects/n1-" + hash + ".lake"]);
+    const r = await engine(remote, b.store, "B").sync();
+    expect(r.warnings.some((w) => w.includes("缺正文"))).toBe(true);
+    expect(await b.store.readBody("n1")).toBeNull();
+  });
+
   it("小记：上传/拉取/删除无痕", async () => {
     const remote = new MemoryRemote();
     const a = await device("a"); const b = await device("b");
@@ -201,7 +266,7 @@ describe("S3v3 同步引擎（双端）", () => {
     sa = (await a.store.loadState())!;
     sa.quickNotes.items = [];
     const pointer = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { epoch: string; generation: number };
-    sa.intents = [{ noteId: "q1", targetEpoch: pointer.epoch, targetGeneration: pointer.generation }];
+    sa.intents = [{ noteId: "q1", targetEpoch: pointer.epoch, targetGeneration: pointer.generation, purgedAt: new Date().toISOString() }];
     await a.store.saveState(sa);
     await engine(remote, a.store, "A").sync();
     await engine(remote, b.store, "B").sync();

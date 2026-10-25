@@ -14,6 +14,10 @@ export interface AssetDeclEntry {
   filename: string;
   size: number;
   hash: string;
+  /** 小记图片渲染元信息（可选；Lake 附件不需要）。 */
+  mimeType?: string;
+  width?: number | null;
+  height?: number | null;
 }
 export interface AssetDeclaration {
   assets: AssetDeclEntry[];
@@ -144,8 +148,11 @@ export function validateAssetDeclaration(raw: unknown): AssetDeclaration {
     if (!isHash(a.hash)) throw new Error("资产 hash 非法");
     if (seen.has(a.filename)) throw new Error("资产文件名重复: " + a.filename);
     seen.add(a.filename);
+    if (a.mimeType !== undefined && typeof a.mimeType !== "string") throw new Error("资产 mimeType 非法");
+    if (a.width !== undefined && a.width !== null && !Number.isSafeInteger(a.width)) throw new Error("资产 width 非法");
+    if (a.height !== undefined && a.height !== null && !Number.isSafeInteger(a.height)) throw new Error("资产 height 非法");
   }
-  return { assets: d.assets.map((a) => ({ filename: a.filename, size: a.size, hash: a.hash })) };
+  return { assets: d.assets.map((a) => ({ filename: a.filename, size: a.size, hash: a.hash, ...(a.mimeType !== undefined ? { mimeType: a.mimeType } : {}), ...(a.width !== undefined ? { width: a.width } : {}), ...(a.height !== undefined ? { height: a.height } : {}) })) };
 }
 
 export function validateLakeIndex(raw: unknown): LakeIndex {

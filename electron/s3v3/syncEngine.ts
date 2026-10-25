@@ -271,7 +271,13 @@ export class S3v3SyncEngine {
 
     const purged = new Set(state.remotePurged ?? []);
     const restore = new Set(state.restorePending ?? []);
-    const intentIds = new Set(state.intents.map((i) => i.noteId));
+    // 「恢复是唯一显式例外」：远端条目 updatedAt 晚于本地 purgedAt → 视为他端显式恢复，删除意图让位。
+    const yieldedIntents = new Set<string>();
+    for (const it of state.intents) {
+      const remote = remoteLake.notes.find((n) => n.id === it.noteId);
+      if (remote && it.purgedAt && remote.updatedAt > it.purgedAt) yieldedIntents.add(it.noteId);
+    }
+    const intentIds = new Set(state.intents.filter((i) => !yieldedIntents.has(i.noteId)).map((i) => i.noteId));
     const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id)), folders: state.folders };
     const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: intentIds });
     const quickPlan = planQuickNotesMerge(baselineQuick, state.quickNotes, remoteQuick, restore, intentIds);
@@ -446,11 +452,11 @@ export class S3v3SyncEngine {
 
     if (!needPublish) {
       const restoredIds = new Set(lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id));
-      const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds);
+      const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds).filter((it) => !yieldedIntents.has(it.noteId));
       const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: newQuick, folders: stateFolders, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(newState);
-      await this.device.saveBaseline({ ...baseline, lake: newLake, quickNotes: newQuick });
-      await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, state, report);
+      await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
+      await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, newState, report);
       return { ...report, generation: pointer.generation };
     }
 
@@ -480,7 +486,7 @@ export class S3v3SyncEngine {
       if (!check || check.generation !== generation || check.lake.commit !== lakeCommit || check.quickNotes.commit !== quickCommit) throw new PublishRetry();
       const restoredIds = new Set(lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id));
       const publishedPurgeIds = new Set([...lakePlan.notes.filter((p) => p.kind === "local-purge").map((p) => p.id), ...quickPlan.items.filter((p) => p.kind === "local-purge").map((p) => p.id)]);
-      const updatedIntents = this.bumpIntentsAfterPublish(state.intents, pointer.epoch, generation, restoredIds, publishedPurgeIds);
+      const updatedIntents = this.bumpIntentsAfterPublish(state.intents, pointer.epoch, generation, restoredIds, publishedPurgeIds).filter((it) => !yieldedIntents.has(it.noteId));
       const finalState: DeviceState = { ...newState, intents: updatedIntents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(finalState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation, lakeCommit, quickNotesCommit: quickCommit, lake: newLake, quickNotes: newQuick });
@@ -659,6 +665,50 @@ export class S3v3SyncEngine {
       await this.device.writeQuickAsset(id, a.filename, bytes);
     }
     return decl;
+  }
+
+  /**
+   * 深度清理（手动/周期）：列举对象并用「当前指针+索引+声明」算 keep 集，删除不可达对象。
+   * 用于崩溃/半途失败留下的孤儿（如「声明已写、pointer 未切」）。不进入日常同步。
+   */
+  async deepCleanup(opts: { dryRun?: boolean } = {}): Promise<{ deleted: string[]; kept: number }> {
+    const pointer = await this.readPointer();
+    if (!pointer) throw new S3v3SyncError("pointer-corrupt", "云端没有 pointer，无法深度清理");
+    const lake = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
+    const quick = (await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex;
+    const keep = new Set<string>();
+    keep.add(S3V3_POINTER_KEY);
+    keep.add(LOCK_KEY);
+    keep.add(indexKey("lake", pointer.lake.commit));
+    keep.add(indexKey("quickNotes", pointer.quickNotes.commit));
+    for (const n of lake.notes) {
+      keep.add(lakeBodyKey(n.id, n.contentHash));
+      if (!n.assetsHash) continue;
+      keep.add(declarationKey("lake", n.id, n.assetsHash));
+      const d = await this.getDeclaration("lake", n.id, n.assetsHash);
+      for (const a of d?.assets ?? []) keep.add(assetKey(n.id, a.filename));
+    }
+    for (const q of quick.items) {
+      keep.add(quickNoteBodyKey(q.contentHash));
+      if (!q.assetsHash) continue;
+      keep.add(declarationKey("quickNotes", q.id, q.assetsHash));
+      const d = await this.getDeclaration("quickNotes", q.id, q.assetsHash);
+      for (const a of d?.assets ?? []) keep.add(quickNoteAssetKey(q.id, a.filename));
+    }
+    const prefixes = ["objects/", "assets/", "meta/index/", "meta/assets/", "quick-notes/objects/", "quick-notes/assets/", "quick-notes/meta/"];
+    const all = new Set<string>();
+    for (const prefix of prefixes) for (const item of await this.remote.list(prefix)) all.add(item.key);
+    const toDelete = [...all].filter((k) => !keep.has(k)).sort();
+    if (!opts.dryRun) {
+      const CHUNK = 1000;
+      for (let i = 0; i < toDelete.length; i += CHUNK) await this.remote.deleteMany(toDelete.slice(i, i + CHUNK));
+      const state = await this.device.loadState();
+      if (state) {
+        state.pending = state.pending.filter((p) => all.has(p.key) && !toDelete.includes(p.key));
+        await this.device.saveState(state);
+      }
+    }
+    return { deleted: toDelete, kept: keep.size };
   }
 
   /** 全量重拉（epoch/回滚/换桶后由 UI 调用）：云端赢，本地多出的归档。 */

@@ -10,6 +10,8 @@ export interface DeletionIntent {
   /** 删除意图产生时的云端世代（用于只认「更高 generation」）。 */
   targetEpoch: string;
   targetGeneration: number;
+  /** 彻底删除发生时间；远端条目 updatedAt 更新于此 → 视为「他端显式恢复」，删除意图让位。 */
+  purgedAt?: string;
 }
 
 export interface IntentContext {
