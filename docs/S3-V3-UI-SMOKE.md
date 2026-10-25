@@ -45,6 +45,12 @@
   - 四端正文 sha256 全部 = 77156366fe85…，均含 from-D5（完全收敛）。
 - 说明：4 端同步按钮用 DOM button.click() 触发（真实 Input 曾因 hover 浮层拦截）；正文编辑仍是真实鼠标点击 + Input.insertText。
 
+## 删除/回收站路径（2 桌面，真实点击）
+
+- A 右键欢迎文档 → 「删除」→ 确认弹窗「删除」→ 点同步：published v3-g2，593ms；
+- B 点同步首次失败（适配器 B15）→ 修复后重试成功：B 的 notes 行变为 parent=notebook-trash、trashed_at 有值、deleted_from_parent_id=notebook-personal（488ms）。
+- 发现并修复 B15：远端墓碑不能 moveTreeNode 到回收站隐藏笔记本，必须走 deleteNote；恢复走 restoreTrashItem 后再移动。
+
 ## 下一步
 
 - 4 桌面矩阵（A/B/C/D 独立 userData + CDP 端口）+ 冲突/回收站/彻底删除的真实点击路径；

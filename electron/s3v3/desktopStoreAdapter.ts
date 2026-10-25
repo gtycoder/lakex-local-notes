@@ -100,11 +100,16 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
           const doc = this.store.readNote(n.id);
           if (content !== null && content !== doc.content) this.store.saveNote(n.id, n.title, content);
           else if (n.title !== doc.title) this.store.saveNote(n.id, n.title, doc.content);
-          if ((cur.parentId ?? null) !== (n.parentId ?? null) || cur.sortOrder !== n.sortOrder) this.store.moveTreeNode(n.id, n.parentId, n.sortOrder);
+          if (!n.trashedAt && !cur.trashedAt && ((cur.parentId ?? null) !== (n.parentId ?? null) || cur.sortOrder !== n.sortOrder)) this.store.moveTreeNode(n.id, n.parentId, n.sortOrder);
           if ((cur.icon ?? null) !== (n.icon ?? null)) this.store.setNodeIcon(n.id, n.icon ?? null);
           if (!!cur.isEditLocked !== !!n.isLocked) this.store.setNoteEditLocked(n.id, !!n.isLocked);
-          if (n.trashedAt && !cur.trashedAt) this.store.deleteNote(n.id);
-          else if (!n.trashedAt && cur.trashedAt) this.store.restoreTrashItem(n.id);
+          if (n.trashedAt && !cur.trashedAt) {
+            // 远端墓碑 → 回收站：必须走 deleteNote（不能 moveTreeNode 到回收站隐藏笔记本）
+            this.store.deleteNote(n.id);
+          } else if (!n.trashedAt && cur.trashedAt) {
+            this.store.restoreTrashItem(n.id);
+            if ((cur.deletedFromParentId ?? null) !== (n.parentId ?? null) || cur.sortOrder !== n.sortOrder) this.store.moveTreeNode(n.id, n.parentId, n.sortOrder);
+          }
         }
         await this.flushStagedAssets(n.id);
       } catch (e) {
