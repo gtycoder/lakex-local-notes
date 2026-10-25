@@ -20,7 +20,8 @@
   - 桌面 `notes.sync_state` / `tree_nodes.sync_state` / `quick_notes.sync_state` 列已删，统一 `is_dirty` / `is_purged`；`listNotesForSync` 的 `syncState` 由新字段派生（旧同步账本只读派生值）。
   - 移动端 schema **v8**：同样删 `sync_state`，加 `is_dirty/is_purged`；迁移先删旧列（`DROP COLUMN`，失败可选跳过），**不迁移旧值**。
   - UI/DTO/NoteInfo/文档状态模型已去掉 `syncState`；`is_dirty` 只在 v3 发布成功写 baseline 后清零。
-- **门禁**：tsc 0 · vitest **2693 passed / 24 skipped**（移动端 520+）· 桌面 + 移动 `vite build` ✓ · 真实七牛 v3 集成测试 ✓ · 真实七牛压测 200 文档 × 10 附件 ✓。
+- **「云端已删除 · 仅本地」徽标（261026 追加）**：远端彻底删除后本地回收站副本只打标、不改恢复语义；桌面/移动回收站文档与小记均显示；恢复并重新上传成功后自动清标。移动端远端删除小记改为保留 quick 回收站只读副本（原先物理删），并修复 quick `restorePending` 优先于 purge 墓碑，恢复可重传；本地 purge 后标记清除且多轮同步零 put/delete。
+- **门禁**：tsc 0 · vitest **2717 passed / 24 skipped**（移动端 528）· 桌面 + 移动 `vite build` ✓· 真实七牛 v3 集成测试 ✓ · 真实七牛压测 200 文档 × 10 附件 ✓。
 - **真实设备/双端验收（261026，模拟器 + 桌面隔离数据 + 真实七牛）**：移动端新建知识库/文档/小记、编辑、重命名、表情图标、删除、同步；桌面拉取与回传；创建/重命名/排序/图标/软删/彻底删除/小记删除均跑通。压测：200 文档 × 10 附件 = 2391 对象，首传 13.3s、对端全量 25.2s、增量 0.65s、purge 0.82s。
 - **验收中发现并修复（`4850ed9f` / `dcf44e6f`）**：
   - 桌面 v3 首拉顺序错误：先建文档后建目录 ⇒ 新父目录缺失直接报错；改为先 upsert 目录（保留远端 id）再落文档，目录删除放文档之后。

@@ -10,7 +10,11 @@ export interface DeviceState {
   folders: LakeIndex["folders"];
   intents: DeletionIntent[];
   pending: PendingDelete[];
-  /** 远端已彻底删除、本地保留的回收站副本（不参与同步上传）。 */
+  /** 远端已彻底删除、本地保留的回收站副本 id（Lake 文档 / 小记共用一张 id 表；不参与同步上传）。
+   * 契约（261026 定稿，引擎侧唯一权威，适配器只做 DB 投影）：
+   *  - 由引擎在「基线有条目、远端索引缺失」时写入并持久化（上一轮丢了 ⇒ 副本会被当本地新建重新上传）；
+   *  - 失效三态：显式恢复（restorePending → 允许重新上传）、远端同 id 复活（跟随远端下载）、本地彻底删除；
+   *  - 标记内的条目：发布索引与三方合并都看不到它 → 不上传、不复活，但本地副本保留可恢复。 */
   remotePurged?: string[];
   /** 本地显式恢复标记（唯一提前例外）。 */
   restorePending?: string[];

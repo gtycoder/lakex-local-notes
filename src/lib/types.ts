@@ -6,6 +6,8 @@ export interface NoteSummary {
   updatedAt: string;
   /** 独立 purged 标记。 */
   isPurged?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）。 */
+  cloudDeleted?: boolean;
   /** UI 待同步标记（v3 发布成功后清 0；不参与同步正确性）。 */
   isDirty?: boolean;
   isConflict: boolean;
@@ -50,6 +52,8 @@ export interface NoteInfo {
   updatedAt: string;
   isDirty?: boolean;
   isPurged?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
   isEditLocked: boolean;
   lakePath: string;
@@ -78,6 +82,8 @@ export interface TreeNode {
   updatedAt: string;
   isPurged?: boolean;
   isDirty?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
   icon?: string | null;
   description?: string | null;
@@ -130,6 +136,8 @@ export interface QuickNoteTrashItem {
   createdAt: string;
   updatedAt: string;
   deletedAt: string;
+  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
+  cloudDeleted?: boolean;
 }
 
 export interface S3Settings {

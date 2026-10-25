@@ -250,7 +250,7 @@ export const notesDomain = {
     });
   },
 
-  async listTrashTree(): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
+  async listTrashTree(): Promise<trashRepository.MobileTrashTreeItem[]> {
     const d = await ensureDb();
     return await trashRepository.listTrashTree(d);
   },

@@ -11,6 +11,8 @@ export interface NoteSummary {
   updatedAt: string;
   isPurged?: boolean;
   isDirty?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
   isEditLocked?: boolean;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
@@ -30,6 +32,8 @@ export interface TreeNode {
   updatedAt: string;
   isPurged?: boolean;
   isDirty?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
   icon: string | null;
   /** 文档类型（doc | usheet | bitable | board；缺省 doc）。 */
@@ -77,6 +81,7 @@ export interface SummaryRow {
   locked_at: string | null;
   is_purged?: number;
   is_dirty?: number;
+  cloud_deleted?: number;
   kind?: string | null;
 }
 
@@ -93,6 +98,7 @@ export interface TreeNodeRow {
   is_conflict: number;
   is_purged?: number;
   is_dirty?: number;
+  cloud_deleted?: number;
   icon: string | null;
   /** LEFT JOIN notes 带来的文档类型；非 note 节点为 undefined。 */
   note_kind?: string | null;
@@ -149,6 +155,7 @@ export class NoteQueries {
       isConflict: !!row.is_conflict,
       ...(row.is_purged ? { isPurged: true } : {}),
       ...(row.is_dirty ? { isDirty: true } : {}),
+      ...(row.cloud_deleted ? { cloudDeleted: true } : {}),
       // SQLite 列名冻结：is_locked / locked_at（不改 schema、不迁移）；内存字段叫 isEditLocked / editLockedAt。
       isEditLocked: !!row.is_locked,
       editLockedAt: row.locked_at ?? null,
@@ -171,6 +178,7 @@ export class NoteQueries {
       isConflict: !!row.is_conflict,
       ...(row.is_purged ? { isPurged: true } : {}),
       ...(row.is_dirty ? { isDirty: true } : {}),
+      ...(row.cloud_deleted ? { cloudDeleted: true } : {}),
       icon: row.icon ?? null,
       // 渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
       kind: normalizeNoteKind(row.note_kind),
@@ -205,7 +213,7 @@ export class NoteQueries {
 
   listNoteSummaries(): NoteSummary[] {
     const rows = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_conflict,is_locked,locked_at,is_purged,is_dirty,kind FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_conflict,is_locked,locked_at,is_purged,is_dirty,cloud_deleted,kind FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
     ).all() as SummaryRow[];
     return rows.map((row) => this.mapSummary(row));
   }

@@ -327,7 +327,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .mobile-drawer-trash-entry:active { background: var(--lake-bg-window); }
 .mobile-status-msg { padding: 6px 12px; font-size: 12px; color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: 1px solid var(--lake-border-1); }
-.mobile-trash-title { flex: 1; }   /* 截断走 .ln-ellipsis */
+.mobile-trash-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 0; }
+.mobile-trash-title { min-width: 0; }   /* 截断走 .ln-ellipsis */
+.mobile-trash-cloud { align-self: flex-start; }   /* 复用 kit 的 .mb-tag 原语，只定位置；261026「云端已删除 · 仅本地」 */
 .mobile-trash-date { color: var(--lake-text-3); font-size: 12px; }
 .mobile-trash-action { border: none; background: transparent; color: var(--lake-accent-text); cursor: pointer; display: flex; padding: 6px; }
 .mobile-trash-danger { color: var(--lake-status-error); }

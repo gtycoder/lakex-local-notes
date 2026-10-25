@@ -86,12 +86,22 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
   });
 }
 
-export async function listTrashTree(d: MobileDb): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
-  const folders = await d.prepare("SELECT id, title, parent_id, trashed_at FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
-  const notes = await d.prepare("SELECT id, title, parent_id, trashed_at FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
+/** 总回收站行：cloudDeleted = 远端已彻底删除、本机仅保留副本（「云端已删除 · 仅本地」）。 */
+export interface MobileTrashTreeItem {
+  id: string;
+  title: string;
+  kind: "folder" | "note";
+  parentId: string | null;
+  deletedAt: string | null;
+  cloudDeleted: boolean;
+}
+
+export async function listTrashTree(d: MobileDb): Promise<MobileTrashTreeItem[]> {
+  const folders = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number }>;
+  const notes = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number }>;
   return [
-    ...folders.map((f) => ({ id: f.id, title: f.title, kind: "folder" as const, parentId: f.parent_id, deletedAt: f.trashed_at })),
-    ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, deletedAt: n.trashed_at })),
+    ...folders.map((f) => ({ id: f.id, title: f.title, kind: "folder" as const, parentId: f.parent_id, deletedAt: f.trashed_at, cloudDeleted: f.cloud_deleted === 1 })),
+    ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, deletedAt: n.trashed_at, cloudDeleted: n.cloud_deleted === 1 })),
   ].sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
 }
 

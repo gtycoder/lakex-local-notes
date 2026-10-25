@@ -535,7 +535,7 @@ export function App() {
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const {
     activeNodeDirty, activeNodeConflict, editorPrefs, notePathTitle,
-    tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
+    tabInfos, outlineVisible, lockedNoteIds, cloudDeletedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   } = deriveDesktopView({
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
     fontSize: settings.fontSize, showToolbar: settings.showToolbar, floatingToolbar: settings.floatingToolbar,
@@ -755,6 +755,7 @@ export function App() {
             hasCloudConfig: cloudConfigured,
             isDirty: activeNodeDirty,
             isConflict: activeNodeConflict,
+            isCloudDeleted: activeNoteId !== null && cloudDeletedNoteIds.has(activeNoteId),
             // 只取**活动文档**的保存状态；没有记录时回落到标签自身的 dirty（按文档，后台保存不污染当前状态栏）
             saveState: activeNoteId
               ? (saveStates[activeNoteId] ?? (tabInfos.find((tab) => tab.noteId === activeNoteId)?.dirty ? "dirty" : "idle"))

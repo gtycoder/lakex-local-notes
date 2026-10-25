@@ -25,6 +25,8 @@ export interface LocalNote {
   parentId: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。非 doc/ink 类型移动端只读占位，不得交给 Lake 编辑器。 */
   kind: NoteKind;
+  /** 远端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）；恢复上传成功后清除。 */
+  cloudDeleted?: boolean;
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
@@ -36,7 +38,11 @@ export interface LocalNoteSummary {
 }
 
 function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
-  return { id: String(r.id), title: String(r.title), content, updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null, kind: normalizeNoteKind(r.doc_kind) };
+  return {
+    id: String(r.id), title: String(r.title), content, updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null,
+    kind: normalizeNoteKind(r.doc_kind),
+    ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
+  };
 }
 
 function rowToNoteSummary(r: Record<string, unknown>): LocalNoteSummary {
@@ -102,7 +108,7 @@ export async function listNotes(d: MobileDb): Promise<LocalNoteSummary[]> {
 }
 
 export async function readNote(d: MobileDb, id: string): Promise<LocalNote | null> {
-  const row = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind FROM notes WHERE id = ?").get(id);
+  const row = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted FROM notes WHERE id = ?").get(id);
   if (!row) return null;
   const kind = normalizeNoteKind(row.doc_kind);
   const content = await readNoteBody(kind, id);
@@ -228,7 +234,7 @@ export async function trashNote(d: MobileDb, id: string): Promise<void> {
 }
 
 export async function listTrashed(d: MobileDb): Promise<LocalNote[]> {
-  const rows = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all() as Array<Record<string, unknown>>;
+  const rows = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all() as Array<Record<string, unknown>>;
   const notes: LocalNote[] = [];
   for (const row of rows) {
     const kind = normalizeNoteKind(row.doc_kind);

@@ -6,12 +6,14 @@ export interface DocumentStatusInput {
   /** UI 待同步标记（is_dirty；替代 sync_state='local'）。 */
   isDirty?: boolean;
   isConflict?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）。 */
+  isCloudDeleted?: boolean;
   saveState: LocalSaveState;
   historyCount?: number;
 }
 
 export interface DocumentStatusModel {
-  kind: DocumentSyncKind | "saving" | "dirty" | "save-error";
+  kind: DocumentSyncKind | "saving" | "dirty" | "save-error" | "cloud-deleted";
   label: string;
   historyCount: number;
 }
@@ -21,6 +23,8 @@ export function getDocumentStatus(input: DocumentStatusInput): DocumentStatusMod
   if (input.saveState === "saving") return { kind: "saving", label: "保存中", historyCount };
   if (input.saveState === "dirty") return { kind: "dirty", label: "待保存", historyCount };
   if (input.saveState === "error") return { kind: "save-error", label: "保存失败", historyCount };
+  // 云端已彻底删除、本机仅保留回收站副本：不限制恢复，恢复并重新上传成功后该标记会自动消失。
+  if (input.isCloudDeleted) return { kind: "cloud-deleted", label: "云端已删除 · 仅本地", historyCount };
   if (!input.hasCloudConfig) return { kind: "local-only", label: "仅本地", historyCount };
   if (input.isConflict) {
     if (historyCount > 0) return { kind: "synced-history", label: `已同步 · 历史 ${historyCount}`, historyCount };

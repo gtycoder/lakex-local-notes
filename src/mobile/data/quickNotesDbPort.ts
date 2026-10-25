@@ -88,8 +88,16 @@ export async function buildQuickNotesSyncSchemaStatements(d: MobileDb): Promise<
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    deleted_at TEXT NOT NULL
+    deleted_at TEXT NOT NULL,
+    purged_at TEXT
   )`);
+  // 261026：本表同时承载「软删/远端学习墓碑」与「本地彻底删除墓碑」。只有 purged_at 非空才是永久删除
+  // （v3 quickPurges）；软删/学习墓碑在 v3 里属于 quickDeletes。旧表补列（不迁移旧值：旧行语义无法区分）。
+  const tombstoneExists = await d.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quick_note_deleted'").get();
+  if (tombstoneExists) {
+    const tombstoneColumns = ((await d.prepare("PRAGMA table_info(quick_note_deleted)").all()) as Array<{ name: string }>).map((c) => c.name);
+    if (!tombstoneColumns.includes("purged_at")) statements.push("ALTER TABLE quick_note_deleted ADD COLUMN purged_at TEXT");
+  }
   return statements;
 }
 

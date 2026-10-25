@@ -45,7 +45,8 @@ export class SchemaInit {
         trashed_at TEXT,
         deleted_from_parent_id TEXT,
         is_purged INTEGER NOT NULL DEFAULT 0,
-        is_dirty INTEGER NOT NULL DEFAULT 0
+        is_dirty INTEGER NOT NULL DEFAULT 0,
+        cloud_deleted INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -60,6 +61,7 @@ export class SchemaInit {
         deleted_from_parent_id TEXT,
         is_purged INTEGER NOT NULL DEFAULT 0,
         is_dirty INTEGER NOT NULL DEFAULT 0,
+        cloud_deleted INTEGER NOT NULL DEFAULT 0,
         CHECK((node_type IN ('notebook','group') AND note_file_id IS NULL) OR (node_type = 'note' AND note_file_id IS NOT NULL))
       );
       CREATE INDEX IF NOT EXISTS idx_tree_nodes_parent ON tree_nodes(workspace_id,parent_id,deleted_at,sort_order);
@@ -148,6 +150,10 @@ export class SchemaInit {
       ["tree_nodes", "is_purged", "ALTER TABLE tree_nodes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],
       ["notes", "is_dirty", "ALTER TABLE notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"],
       ["tree_nodes", "is_dirty", "ALTER TABLE tree_nodes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"],
+      // v3 remotePurged（远端已彻底删除、本机保留回收站副本）的 UI 标记；独立于 is_purged
+      //（is_purged = 本地/他端彻底删除的抑制位，cloud_deleted = 「云端已删除 · 仅本地」）。
+      ["notes", "cloud_deleted", "ALTER TABLE notes ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0"],
+      ["tree_nodes", "cloud_deleted", "ALTER TABLE tree_nodes ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0"],
     ] as const) {
       const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
       if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);

@@ -90,12 +90,12 @@ export class QuickNotesQueries {
     return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id), links.get(row.id) ?? [], tagNames));
   }
 
-  listTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }> {
+  listTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted: boolean }> {
     return (this.deps.db.prepare(
-      "SELECT id,created_at,updated_at,deleted_at FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
-    ).all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string }>)
+      "SELECT id,created_at,updated_at,deleted_at,cloud_deleted FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
+    ).all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; cloud_deleted?: number }>)
       .filter((row) => fs.existsSync(this.deps.itemPath(row.id)))
-      .map(mapTrashRow);
+      .map((row) => ({ ...mapTrashRow(row), cloudDeleted: row.cloud_deleted === 1 }));
   }
 
   isRestorePending(id: string): boolean {

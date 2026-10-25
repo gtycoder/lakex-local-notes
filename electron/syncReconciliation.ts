@@ -205,10 +205,10 @@ export class SyncReconciliation {
   applyRemoteRestore(id: string, parentId: string | null, updatedAt: string): void {
     const tx = this.ctx.db.transaction(() => {
       this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,cloud_deleted=0,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       ).run(parentId, updatedAt, id);
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0 WHERE note_file_id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,cloud_deleted=0 WHERE note_file_id=? AND deleted_at IS NULL"
       ).run(parentId, updatedAt, id);
       const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
       if (titleRow) {

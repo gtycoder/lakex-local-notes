@@ -349,6 +349,44 @@ export class S3v3SyncEngine {
     }
   }
 
+  /**
+   * 「云端已彻底删除·仅本地」标记（state.remotePurged）的本轮视图：
+   * 标记语义 = 「该 id 在远端索引里已不存在，本地保留的副本仅作回收站用途」。
+   * 因此只要前提不成立，标记就必须失效——
+   *   · restorePending（本地显式恢复，唯一提前例外）：标记清除，恢复走正常上传；
+   *   · 远端重新出现同 id 条目（他端恢复/重建）：标记清除，本地陈旧副本作废（revived），跟随远端下载，
+   *     否则会被状态保留的旧副本盖回索引，等于把别人的恢复又删掉。
+   * 其余情况保持标记：本地副本不参与合并 → 不上传、不复活（用户定稿 261026）。
+   */
+  private resolveRemotePurged(
+    state: DeviceState,
+    remoteLake: LakeIndex,
+    remoteQuick: QuickNotesIndex,
+    restore: ReadonlySet<string>,
+  ): { purged: Set<string>; revived: Set<string> } {
+    const purged = new Set(state.remotePurged ?? []);
+    const revived = new Set<string>();
+    for (const id of restore) purged.delete(id);
+    const remoteIds = new Set<string>();
+    for (const n of remoteLake.notes) remoteIds.add(n.id);
+    for (const q of remoteQuick.items) remoteIds.add(q.id);
+    for (const id of [...purged]) {
+      if (!remoteIds.has(id)) continue;
+      purged.delete(id);
+      revived.add(id);
+    }
+    // 本地已把「仅本地」副本也彻底删除（有删除意图、副本已不在状态里）→ 标记无对象可指，一并作废，
+    // 避免 sidecar 无限累积。小记侧有墓碑证据时不作废：quick 回收站副本可能本就不在 items 里
+    //（适配器按契约保留时），标记是它「云端已删除」的依据。
+    const localIds = new Set<string>([...state.lake.notes.map((n) => n.id), ...state.quickNotes.items.map((q) => q.id)]);
+    const quickSideEvidence = new Set<string>([...(state.quickPurges ?? []), ...(state.quickDeletes ?? [])]);
+    for (const id of [...purged]) {
+      if (localIds.has(id) || quickSideEvidence.has(id)) continue;
+      if (state.intents.some((it) => it.noteId === id)) purged.delete(id);
+    }
+    return { purged, revived };
+  }
+
   private async incrementalSync(pointer: S3v3Pointer, baseline: DeviceBaseline, state: DeviceState, report: S3v3SyncReport): Promise<S3v3SyncReport> {
     const remoteLake = pointer.lake.commit === baseline.lakeCommit ? baseline.lake : ((await this.readIndex("lake", pointer.lake.commit)) as LakeIndex);
     const remoteQuick = pointer.quickNotes.commit === baseline.quickNotesCommit ? baseline.quickNotes : ((await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex);
@@ -356,7 +394,6 @@ export class S3v3SyncEngine {
     const baselineLake = baseline.lake;
     const baselineQuick = baseline.quickNotes;
 
-    const purged = new Set(state.remotePurged ?? []);
     const restore = new Set(state.restorePending ?? []);
     // 「恢复是唯一显式例外」：远端条目 updatedAt 晚于本地 purgedAt → 视为他端显式恢复，删除意图让位。
     const yieldedIntents = new Set<string>();
@@ -365,11 +402,21 @@ export class S3v3SyncEngine {
       if (remote && it.purgedAt && remote.updatedAt > it.purgedAt) yieldedIntents.add(it.noteId);
     }
     const intentIds = new Set(state.intents.filter((i) => !yieldedIntents.has(i.noteId)).map((i) => i.noteId));
-    const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id)), folders: state.folders };
+    // 「云端已彻底删除·仅本地」标记的本轮视图（见 resolveRemotePurged）：
+    // · 显式恢复 → 标记失效，恢复走正常上传（用户定稿：远端删除不限制恢复）；
+    // · 远端同 id 条目回来了（他端恢复）→ 标记不再成立，本轮跟随远端下载（revived 的陈旧本地副本不得再进索引）。
+    const { purged, revived } = this.resolveRemotePurged(state, remoteLake, remoteQuick, restore);
+    const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id) && !revived.has(n.id)), folders: state.folders };
     const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: intentIds });
-    const mergedQuickPurges = [...new Set([...(state.quickPurges ?? []), ...(remoteQuick.purged ?? [])])].sort();
+    // 显式恢复优先：恢复的 id 从 quick 墓碑集合剔除，否则本端会再次发布 purge、把恢复弹回回收站。
+    const mergedQuickPurges = [...new Set([...(state.quickPurges ?? []), ...(remoteQuick.purged ?? [])])].filter((id) => !restore.has(id)).sort();
     const purgedQuickIds = new Set(mergedQuickPurges);
-    const quickPlan = planQuickNotesMerge(baselineQuick, state.quickNotes, remoteQuick, restore, intentIds, new Set(state.quickDeletes ?? []), purgedQuickIds);
+    // 小记同理：标记内的条目（若适配器按契约保留了回收站只读副本）不参与三方合并 → 不上传、不复活。
+    const quickLocal: QuickNotesIndex = {
+      ...state.quickNotes,
+      items: state.quickNotes.items.filter((q) => !purged.has(q.id) && !revived.has(q.id)),
+    };
+    const quickPlan = planQuickNotesMerge(baselineQuick, quickLocal, remoteQuick, restore, intentIds, new Set(state.quickDeletes ?? []), purgedQuickIds);
     // 标签目录单独做 id LWW（含墓碑）；条目标签关系仍走 quickPlan。
     const mergedQuickTags = mergeQuickNoteTags(
       (state.quickNotes.tags ?? []).map(tagEntryToTag),
@@ -423,6 +470,8 @@ export class S3v3SyncEngine {
     for (const plan of lakePlan.notes) {
       if (plan.kind === "local-purge") {
         lakeWS.delete(plan.id);
+        // 本地彻底删除：标记随之作废（副本已不存在，「仅本地」不再有意义），避免标记无限累积。
+        purged.delete(plan.id);
         await this.device.deleteBody(plan.id);
         await this.device.deleteAssetsDir(plan.id);
       }
@@ -448,7 +497,7 @@ export class S3v3SyncEngine {
         quickWS.delete(plan.id);
         continue;
       }
-      if (plan.kind === "local-purge") { quickWS.delete(plan.id); continue; }
+      if (plan.kind === "local-purge") { quickWS.delete(plan.id); purged.delete(plan.id); continue; }
       if (!remote || !plan.applyRemote) continue;
       if (plan.archiveLocal && local) {
         const bytes = await this.device.readQuickBody(plan.id);
@@ -582,7 +631,16 @@ export class S3v3SyncEngine {
     const stateNotes = lakeChanged ? lakeWS.localValues().sort((a, b) => (a.id < b.id ? -1 : 1)) : state.lake.notes;
     const stateFolders = [...state.folders].sort((a, b) => (a.id < b.id ? -1 : 1));
     const newLake: LakeIndex = lakeChanged ? { v: 3, space: "lake", notes: lakeWS.indexValues().filter((n) => !purged.has(n.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), folders: stateFolders } : remoteLake;
-    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().sort((a, b) => (a.id < b.id ? -1 : 1)), tags: mergedQuickTags, ...(mergedQuickPurges.length ? { purged: mergedQuickPurges } : {}) } : remoteQuick;
+    // 小记：发布索引同样剔除「云端已删除」的副本；本地状态保留它们（适配器据此留 quick 回收站只读副本）。
+    const quickKeptCopies = state.quickNotes.items.filter((q) => purged.has(q.id) && !revived.has(q.id));
+    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().filter((q) => !purged.has(q.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), tags: mergedQuickTags, ...(mergedQuickPurges.length ? { purged: mergedQuickPurges } : {}) } : remoteQuick;
+    const quickState: QuickNotesIndex = quickKeptCopies.length === 0 ? newQuick : (() => {
+      const byId = new Map(newQuick.items.map((q) => [q.id, q] as const));
+      for (const q of quickKeptCopies) if (!byId.has(q.id)) byId.set(q.id, q);
+      return { ...newQuick, items: [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : 1)) };
+    })();
+    // 标记持久化：本轮视图（恢复/远端复活/本地 purge 已相应剔除）原样落盘，下一轮才能继续挡住复活。
+    const remotePurged = [...purged].sort();
     // 无变化的半边不做全量序列化/哈希（大库空跑时这是主要 CPU）
     const lakeSerialized = lakeChanged ? serializeLakeIndex(newLake) : "";
     const quickSerialized = quickChanged ? serializeQuickNotesIndex(newQuick) : "";
@@ -591,9 +649,14 @@ export class S3v3SyncEngine {
     const needPublish = lakeCommit !== pointer.lake.commit || quickCommit !== pointer.quickNotes.commit;
 
     if (!needPublish) {
-      const restoredIds = new Set(lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id));
+      // 恢复成功的 id 同时包含文档与小记：只清文档会让 quick 的 restorePending 在 sidecar 里长期残留，
+      // 下一轮又把同内容小记重 PUT 一次（幂等但违背“恢复完成后不再产生 S3 行为”）。
+      const restoredIds = new Set([
+        ...lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
+        ...quickPlan.items.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
+      ]);
       const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds).filter((it) => !yieldedIntents.has(it.noteId));
-      const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: newQuick, quickPurges: mergedQuickPurges, folders: stateFolders, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
+      const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, folders: stateFolders, remotePurged, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(newState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
       await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, newState, report);
@@ -611,7 +674,7 @@ export class S3v3SyncEngine {
     for (const p of planned) dedup.set(p.key + "|" + p.kind, p);
     const pending = [...dedup.values()];
 
-    const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: newQuick, quickPurges: mergedQuickPurges, folders: stateFolders, pending };
+    const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, folders: stateFolders, remotePurged, pending };
     await this.device.saveState(newState);
     this.phase("publish-save-state");
     if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步，请稍后重试");
@@ -630,7 +693,12 @@ export class S3v3SyncEngine {
       const check = await this.readPointer();
       if (!check || check.generation !== generation || check.lake.commit !== lakeCommit || check.quickNotes.commit !== quickCommit) throw new PublishRetry();
       this.phase("publish-pointer");
-      const restoredIds = new Set(lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id));
+      // 恢复成功的 id 同时包含文档与小记：只清文档会让 quick 的 restorePending 在 sidecar 里长期残留，
+      // 下一轮又把同内容小记重 PUT 一次（幂等但违背“恢复完成后不再产生 S3 行为”）。
+      const restoredIds = new Set([
+        ...lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
+        ...quickPlan.items.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
+      ]);
       const publishedPurgeIds = new Set([...lakePlan.notes.filter((p) => p.kind === "local-purge").map((p) => p.id), ...quickPlan.items.filter((p) => p.kind === "local-purge").map((p) => p.id)]);
       const updatedIntents = this.bumpIntentsAfterPublish(state.intents, pointer.epoch, generation, restoredIds, publishedPurgeIds).filter((it) => !yieldedIntents.has(it.noteId));
       const finalState: DeviceState = { ...newState, intents: updatedIntents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
@@ -760,7 +828,9 @@ export class S3v3SyncEngine {
   }
 
   private async buildAndUploadAll(state: DeviceState, report: S3v3SyncReport): Promise<{ lake: LakeIndex; quickNotes: QuickNotesIndex }> {
-    const lakeEntries = new Map(state.lake.notes.map((n) => [n.id, { ...n }]));
+    // 初始化上传也不得复活「云端已彻底删除·仅本地」的副本（用户定稿：本地只保留，不产生 S3 行为）。
+    const purgedIds = new Set(state.remotePurged ?? []);
+    const lakeEntries = new Map(state.lake.notes.filter((n) => !purgedIds.has(n.id)).map((n) => [n.id, { ...n }]));
     for (const entry of lakeEntries.values()) {
       const body = await this.device.readBody(entry.id);
       if (!body) { this.warnings.push("缺正文，跳过初始化上传: " + entry.id); continue; }
@@ -773,7 +843,7 @@ export class S3v3SyncEngine {
       this.uploadOps.push({ space: "lake", noteId: entry.id, key: lakeBodyKey(entry.id, entry.contentHash), bytes: body });
       report.uploadedNotes++;
     }
-    const quickEntries = new Map(state.quickNotes.items.map((q) => [q.id, { ...q }]));
+    const quickEntries = new Map(state.quickNotes.items.filter((q) => !purgedIds.has(q.id)).map((q) => [q.id, { ...q }]));
     for (const entry of quickEntries.values()) {
       const body = await this.device.readQuickBody(entry.id);
       if (!body) { this.warnings.push("缺小记正文，跳过初始化上传: " + entry.id); continue; }

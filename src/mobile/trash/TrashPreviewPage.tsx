@@ -23,6 +23,8 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
   const [content, setContent] = useState("");
   // 非 doc（表格/多维表/画板/手写板）正文不是 Lake 格式 → 预览一律挡住，不挂 Lake 编辑器。
   const [kind, setKind] = useState<"doc" | "usheet" | "bitable" | "board" | "ink">("doc");
+  // 261026：远端已彻底删除、本机仅保留这份回收站副本 → 顶部说明「云端已删除 · 仅本地」（仍可恢复）。
+  const [cloudDeleted, setCloudDeleted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -34,7 +36,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
       // 回收站惰性下载补偿：预览前按需补拉该笔记本地缺失资源（best-effort，失败仍显示本地内容）
       await bridge.ensureTrashNoteAssets(noteId).catch((error) => reportNativeActionError("预览回收站附件", error));
       const n = await bridge.readNote(noteId);
-      if (n) { setTitle(n.title); setContent(n.content); setKind(n.kind); }
+      if (n) { setTitle(n.title); setContent(n.content); setKind(n.kind); setCloudDeleted(!!n.cloudDeleted); }
     } catch (e) {
       setMsg("预览失败: " + (e as Error).message);
     } finally {
@@ -67,6 +69,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
         </div>
       </header>
       {msg && <div className="mobile-status-msg">{msg}</div>}
+      {cloudDeleted && <div className="mobile-status-msg">云端已删除 · 仅本地（恢复并同步成功后重新上传）</div>}
       <section className="mobile-doc-body">
         {loading ? (
           <div className="poc-center"><LoaderCircle className="spin" /><span>正在加载资源…</span></div>

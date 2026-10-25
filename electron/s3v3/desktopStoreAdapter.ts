@@ -128,6 +128,14 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       if (knownIntents.has(t.id)) continue;
       intents.push({ noteId: t.id, targetEpoch: baseline?.epoch ?? "", targetGeneration: baseline?.generation ?? 0, ...(t.purgedAt ? { purgedAt: t.purgedAt } : {}) });
     }
+    // 显式恢复标记以 DB 为准（restoreTrashItem 写 notes.restore_pending_at、restoreQuickNote 写
+    // quick_notes.restore_pending_at）：引擎只认 state.restorePending。sidecar 里的是上次未收尾的残留，
+    // 两者取并集（缺了它 ⇒ 用户已恢复的副本会被当成「本地缺失」，永远不重新上传）。
+    const restorePending = [...new Set([
+      ...(side?.restorePending ?? []),
+      ...this.store.listRestorePendingNoteIds(),
+      ...(this.quickNotes?.listRestorePendingQuickNoteIds() ?? []),
+    ])].sort();
     const state: DeviceState = {
       lake: { v: 3, space: "lake", notes, folders },
       quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags, ...(quickPurges.length ? { purged: quickPurges } : {}) },
@@ -135,7 +143,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       quickPurges,
       folders,
       intents, pending: side?.pending ?? [],
-      remotePurged: side?.remotePurged ?? [], restorePending: side?.restorePending ?? [], archived: side?.archived ?? [],
+      remotePurged: side?.remotePurged ?? [], restorePending, archived: side?.archived ?? [],
     };
     return state;
   }
@@ -201,7 +209,12 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     }
     await this.saveQuickNotes(state);
     await this.saveFolders(state.folders, true);
-    await this.writeAtomic(this.stateFile, JSON.stringify(this.sidecarShape(state)));
+    // 引擎持久化的 remotePurged（远端已彻底删除、本机保留回收站副本）→ 本地展示位 cloud_deleted。
+    // 只保留「本地仍有行」的 id：本地主动 purge 后行已物理删除，必须从 sidecar 清掉——
+    // 否则永远打标、且引擎每轮都把它当已删条目空转（本地 purge 后不得再有任何 S3 行为）。
+    const remotePurged = (state.remotePurged ?? []).filter((id) => this.store.hasNote(id));
+    this.store.applyNotesCloudDeleted(remotePurged);
+    await this.writeAtomic(this.stateFile, JSON.stringify({ ...this.sidecarShape(state), remotePurged }));
     this.stagedBodies.clear();
     this.stagedAssets.clear();
     this.clearedAssets.clear();
@@ -238,6 +251,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       id: t.id, name: t.name, sortOrder: t.sortOrder ?? t.order ?? 0, pinned: !!t.pinned,
       createdAt: t.createdAt, updatedAt: t.updatedAt, deletedAt: t.deletedAt ?? null,
     })));
+    const remoteDeletedQuickIds: string[] = [];
     for (const cur of current.values()) {
       if (wanted.has(cur.id)) continue;
       const purge = state.intents.some((it) => it.noteId === cur.id) || (state.quickPurges ?? []).includes(cur.id);
@@ -246,11 +260,14 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
           try { qn.purgeQuickNote(cur.id); }
           catch { qn.deleteQuickNote(cur.id); qn.purgeQuickNote(cur.id); }
         } else {
-          // 远端删除（或本地已删）：进回收站，保留正文/附件，避免误清用户副本。
+          // 远端彻底删除（不是本地 purge）：进回收站保留正文/附件，并打「云端已删除 · 仅本地」标。
+          // 本地主动 purge 走上面的分支——purgeQuickNote 会显式清标，之后不得再有任何 S3 行为。
           qn.deleteQuickNote(cur.id);
+          remoteDeletedQuickIds.push(cur.id);
         }
       } catch { /* 已不在 active */ }
     }
+    if (remoteDeletedQuickIds.length > 0) qn.markQuickNoteTrashCloudDeleted(remoteDeletedQuickIds);
   }
 
   private async saveFolders(folders: LakeFolderEntry[], deleteMissing: boolean): Promise<void> {

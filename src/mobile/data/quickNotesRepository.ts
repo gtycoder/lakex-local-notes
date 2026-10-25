@@ -83,6 +83,8 @@ export interface QuickNoteTrashItem {
   updatedAt: string;
   deletedAt: string;
   previewText: string;
+  /** 远端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）；恢复上传成功后清除。 */
+  cloudDeleted: boolean;
 }
 
 /** DB 提交失败时把正文恢复到写前版本（无旧版本 = 删除本次新写的文件）。 */
@@ -312,8 +314,11 @@ export async function deleteQuickNote(d: MobileDb, id: string): Promise<void> {
 }
 
 export async function listQuickNoteTrash(d: MobileDb): Promise<QuickNoteTrashItem[]> {
-  const rows = await d.prepare("SELECT id, created_at, updated_at, deleted_at, preview_text FROM quick_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; preview_text: string }>;
-  return rows.map((r) => ({ id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at), previewText: String(r.preview_text) }));
+  const rows = await d.prepare("SELECT id, created_at, updated_at, deleted_at, preview_text, cloud_deleted FROM quick_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; preview_text: string; cloud_deleted: number }>;
+  return rows.map((r) => ({
+    id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at),
+    previewText: String(r.preview_text), cloudDeleted: r.cloud_deleted === 1,
+  }));
 }
 
 export async function restoreQuickNote(d: MobileDb, id: string): Promise<void> {
@@ -334,7 +339,9 @@ export async function purgeQuickNote(
   const prev = await readBodyContent(id);
   await d.transaction(async () => {
     // 兼容"直接彻底删除未进回收站的小记"的调用：deleted_at 为空时用当前时间补墓碑时间（原 SQL 会撞 NOT NULL）。
-    await d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) SELECT id, created_at, updated_at, COALESCE(deleted_at, ?) FROM quick_notes WHERE id=?").run(new Date().toISOString(), id);
+    // purged_at 非空 = 本地彻底删除墓碑（v3 quickPurges）；只有软删语义的墓碑 purged_at 保持 NULL。
+    const now = new Date().toISOString();
+    await d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at, purged_at) SELECT id, created_at, updated_at, COALESCE(deleted_at, ?), ? FROM quick_notes WHERE id=?").run(now, now, id);
     await d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
     await removeQuickNoteLinks(d, id);
   });

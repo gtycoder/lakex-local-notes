@@ -7,7 +7,7 @@ import { buildAssetFilename, mimeTypeForFilename } from "../../core/assetNaming.
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { cloudStateHint, type CloudState } from "../../core/cloudState.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../../core/quickNoteModel.js";
-import type { QuickNotePage, QuickNotePageOptions } from "../data/quickNotesRepository.js";
+import type { QuickNotePage, QuickNotePageOptions, QuickNoteTrashItem } from "../data/quickNotesRepository.js";
 
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
 import { mobileQuickNoteTags } from "../data/quickNoteTagService.js";
@@ -164,7 +164,7 @@ export const quickNotesDomain = {
     return loadAssetBytesFs("quick-notes/" + id + "/" + filename);
   },
 
-  async listQuickNoteTrash(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; previewText: string }>> {
+  async listQuickNoteTrash(): Promise<QuickNoteTrashItem[]> {
     const d = await ensureDb();
     return await quickNotesRepository.listQuickNoteTrash(d);
   },

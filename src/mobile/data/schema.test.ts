@@ -18,6 +18,20 @@ describe("mobile schema", () => {
     expect(await readMobileSchemaVersion(mobile)).toBe(MOBILE_SCHEMA_VERSION);
   });
 
+  it("261026 v9：notes/folders/quick_notes 都有 cloud_deleted（远端彻底删除·仅本地标记）", async () => {
+    const db = await SqlJsDb.open();
+    const mobile = new SqlJsAsyncDb(db);
+    await applyMobileSchema(mobile);
+    for (const table of ["notes", "folders", "quick_notes"]) {
+      const columns = (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string; dflt_value: unknown; notnull: number }>);
+      const column = columns.find((c) => c.name === "cloud_deleted");
+      expect(column, table + ".cloud_deleted").toBeTruthy();
+      expect(Number(column!.notnull)).toBe(1);
+      expect(String(column!.dflt_value)).toBe("0");
+    }
+    expect(MOBILE_SCHEMA_VERSION).toBe(9);
+  });
+
   it("261021：版本已到 ⇒ 第二次应用整体跳过（冷启动省 ~2.4s 的建表往返）", async () => {
     const db = await SqlJsDb.open();
     const mobile = new SqlJsAsyncDb(db);

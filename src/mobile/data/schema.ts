@@ -27,7 +27,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 8; // 261025：标签通用化 tags/tag_links/tag_link_versions（替换 quick_note_tags/quick_note_tag_links）
+export const MOBILE_SCHEMA_VERSION = 9; // 261026：notes/folders/quick_notes 加 cloud_deleted（远端彻底删除·仅本地副本标记）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -73,7 +73,8 @@ export function baseSchemaStatements(): SchemaStatement[] {
     is_purged INTEGER NOT NULL DEFAULT 0,
     is_conflict INTEGER NOT NULL DEFAULT 0,
     deleted_at TEXT,
-    doc_kind TEXT NOT NULL DEFAULT 'doc'
+    doc_kind TEXT NOT NULL DEFAULT 'doc',
+    cloud_deleted INTEGER NOT NULL DEFAULT 0
   )`);
   push(`CREATE TABLE IF NOT EXISTS deleted_notes (
     id TEXT PRIMARY KEY,
@@ -97,7 +98,8 @@ export function baseSchemaStatements(): SchemaStatement[] {
     trashed_at TEXT,
     deleted_from_parent_id TEXT,
     is_dirty INTEGER NOT NULL DEFAULT 0,
-    is_purged INTEGER NOT NULL DEFAULT 0
+    is_purged INTEGER NOT NULL DEFAULT 0,
+    cloud_deleted INTEGER NOT NULL DEFAULT 0
   )`);
   push(`CREATE TABLE IF NOT EXISTS device_state (
     key TEXT PRIMARY KEY,
@@ -115,7 +117,8 @@ export function baseSchemaStatements(): SchemaStatement[] {
     restore_pending_at TEXT,
     tags_updated_at TEXT NOT NULL DEFAULT '',
     first_image TEXT,
-    list_metadata_version INTEGER NOT NULL DEFAULT 0
+    list_metadata_version INTEGER NOT NULL DEFAULT 0,
+    cloud_deleted INTEGER NOT NULL DEFAULT 0
   )`);
   // 标签（261025 通用化）：目录 + 多态关联 + 每目标关系版本；正文不存标签名。
   push(`CREATE TABLE IF NOT EXISTS tags (
@@ -270,6 +273,11 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   ).map((column) => column.name);
   if (!quickColumns.includes("is_dirty")) push("ALTER TABLE quick_notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
   if (quickColumns.includes("sync_state")) push("ALTER TABLE quick_notes DROP COLUMN sync_state", { optional: true });
+  // 261026：远端彻底删除、本机仅保留回收站副本的标记（v3 state.remotePurged 的 DB 投影；UI 徽标与
+  // 「恢复后清标记」都读它）。三张表都加，列名统一 cloud_deleted。
+  for (const [table, columns] of [["notes", noteColumns2], ["folders", folderColumns], ["quick_notes", quickColumns]] as const) {
+    if (!columns.includes("cloud_deleted")) push(`ALTER TABLE ${table} ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0`);
+  }
 
   for (const statement of await buildQuickNotesSyncSchemaStatements(db)) push(statement);
   // 列表/树/小记时间线的最小索引集合（261022 代码 review P1-3）；列必须在上面的 ALTER 之后建索引。

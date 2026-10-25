@@ -88,6 +88,8 @@ export interface NoteInfo {
   updatedAt: string;
   isDirty?: boolean;
   isPurged?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
   isEditLocked: boolean;
   lakePath: string;
@@ -410,7 +412,7 @@ export class Store {
 
   bootstrap() {
     const notes = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
     ).all(TRASH_NOTEBOOK_ID).map((r) => this.noteQueries.mapSummary(r as SummaryRow));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
@@ -458,7 +460,7 @@ export class Store {
 
   readNote(id: string): NoteDocument {
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     // 261023：正文文件被手动删除（ENOENT）不是"打开失败"——按「缺正文」只读打开，
@@ -636,7 +638,7 @@ export class Store {
     // IPC 全文回传；轻量 SELECT 只取元数据（无文件 IO）。副作用修正：保存不再误写
     // last_opened_note_id（那是「打开」语义，保存非活动文档不应改「最后打开」记录）。
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     // 261023：保存耗时 + 正文体量（"越写越慢"类问题的唯一量化依据）；慢保存升 info，其余 debug。
@@ -788,6 +790,7 @@ export class Store {
       updatedAt: doc.updatedAt,
       isDirty: doc.isDirty,
       isPurged: doc.isPurged,
+      cloudDeleted: doc.cloudDeleted === true,
       isConflict: doc.isConflict,
       isEditLocked: doc.isEditLocked ?? false,
       lakePath,
@@ -1247,9 +1250,43 @@ export class Store {
     for (let i = 0; i < unique.length; i += 200) {
       const batch = unique.slice(i, i + 200);
       const ph = batch.map(() => "?").join(",");
-      this.db.prepare("UPDATE notes SET is_dirty=0 WHERE id IN (" + ph + ") AND is_purged=0").run(...batch);
+      // restore_pending_at 一并清：本批 = 已发布基线里的条目，代表「恢复已生效/已重新上传成功」。
+      // 不清会让恢复标记残留 ⇒ v3 每轮都判 restore-upload 重传（cloud_deleted 也永远等不到清除）。
+      this.db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id IN (" + ph + ") AND is_purged=0").run(...batch);
       this.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id IN (" + ph + ") AND is_purged=0").run(...batch);
     }
+  }
+
+  /**
+   * v3：把「远端已彻底删除、本机保留回收站副本」的 remotePurged 全集落到本地标记位。
+   * - 传进来的 id → cloud_deleted=1（notes + tree_nodes 同步打标，UI/属性/回收站列表都读它）；
+   * - 不在集合里的已标记行 → 清 0（恢复并重新上传成功、或他端恢复后跟随，徽标消失）。
+   * 只写有变化的行 ⇒ 稳态同步零 INSERT/UPDATE；独立于 is_purged（后者是抑制位，不是展示位）。
+   */
+  applyNotesCloudDeleted(ids: readonly string[]): void {
+    const next = new Set(ids.filter((id) => isSafePathSegment(id)));
+    const flagged = new Set(
+      (this.db.prepare("SELECT id FROM notes WHERE cloud_deleted=1").all() as Array<{ id: string }>).map((r) => r.id),
+    );
+    const setNote = this.db.prepare("UPDATE notes SET cloud_deleted=1 WHERE id=? AND cloud_deleted=0");
+    const clearNote = this.db.prepare("UPDATE notes SET cloud_deleted=0 WHERE id=? AND cloud_deleted=1");
+    const setNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=1 WHERE note_file_id=? AND cloud_deleted=0");
+    const clearNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=0 WHERE note_file_id=? AND cloud_deleted=1");
+    const tx = this.db.transaction(() => {
+      for (const id of next) if (!flagged.has(id)) { setNote.run(id); setNode.run(id); }
+      for (const id of flagged) if (!next.has(id)) { clearNote.run(id); clearNode.run(id); }
+    });
+    tx();
+  }
+
+  /** 当前「云端已删除 · 仅本地」标记的文档 id（诊断/测试用；UI 走 listNoteSummaries/listTreeNodes）。 */
+  listCloudDeletedNoteIds(): string[] {
+    return (this.db.prepare("SELECT id FROM notes WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>).map((r) => r.id);
+  }
+
+  /** 显式恢复标记（restore_pending_at）的本地文档 id：v3 adapter 用它填 state.restorePending。 */
+  listRestorePendingNoteIds(): string[] {
+    return (this.db.prepare("SELECT id FROM notes WHERE deleted_at IS NULL AND restore_pending_at IS NOT NULL ORDER BY id").all() as Array<{ id: string }>).map((r) => r.id);
   }
 
   contentHash(id: string): string {

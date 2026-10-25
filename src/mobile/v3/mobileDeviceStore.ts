@@ -12,6 +12,8 @@ import { createNote, saveNote } from "../data/noteRepository.js";
  * 移动端 S3v3DeviceStore v1（Lake 文档；无附件/小记/目录写入）。
  * - 元数据/正文：notes 表 + BodyStore（与旧移动同步同源）；
  * - 同步账本：sync_v3_state（baseline/intents/pending/remotePurged/restorePending/assetsHash）。
+ * - 「云端已删除·仅本地」：state.remotePurged ↔ notes/folders/quick_notes.cloud_deleted（DB 投影，UI 徽标读它）；
+ *   小记副本保留在 quick 回收站（deleted_at 非空、正文/图片/标签不删），恢复并上传成功后清空标记。
  * - 目录：只读映射；写入目录变更会抛错（v1 明确不支持，不静默）。
  * - 附件/小记：写入抛错/读出空；接入前不得把真实带资产/小记的库切到 v3。
  */
@@ -20,10 +22,12 @@ interface NoteRow {
   id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string;
   content_hash: string | null; is_conflict: number; is_locked: number; icon: string | null; doc_kind: string | null;
   trashed_at: string | null; deleted_from_parent_id: string | null; restore_pending_at: string | null;
+  cloud_deleted: number;
 }
 interface FolderRow {
   id: string; title: string; parent_id: string | null; sort_order: number; node_type: string;
   icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null;
+  cloud_deleted: number;
 }
 
 export class MobileDeviceStore implements S3v3DeviceStore {
@@ -45,10 +49,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   async loadState(): Promise<DeviceState | null> {
     const side = await loadV3State(this.db);
     const rows = await this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,content_hash,is_conflict,is_locked,icon,doc_kind,trashed_at,deleted_from_parent_id,restore_pending_at FROM notes ORDER BY id"
+      "SELECT id,title,parent_id,sort_order,updated_at,content_hash,is_conflict,is_locked,icon,doc_kind,trashed_at,deleted_from_parent_id,restore_pending_at,cloud_deleted FROM notes ORDER BY id"
     ).all() as unknown as NoteRow[];
     const notes: LakeNoteEntry[] = [];
     const restorePending = new Set(side.restorePending);
+    const purged = new Set(side.remotePurged);
     for (const r of rows) {
       const kind = normalizeNoteKind(r.doc_kind);
       let contentHash = r.content_hash ?? "";
@@ -58,6 +63,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       }
       if (!contentHash) continue;
       if (r.restore_pending_at) restorePending.add(r.id);
+      if (r.cloud_deleted === 1) purged.add(r.id);
       notes.push({
         id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order, updatedAt: r.updated_at, contentHash,
         ...(kind !== "doc" ? { kind } : {}), ...(r.icon !== null ? { icon: r.icon } : {}),
@@ -68,17 +74,22 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       });
     }
     const folderRows = await this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM folders ORDER BY id"
+      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,cloud_deleted FROM folders ORDER BY id"
     ).all() as unknown as FolderRow[];
-    const folders: LakeFolderEntry[] = folderRows.map((f) => ({
-      id: f.id, title: f.title, parentId: f.parent_id, sortOrder: f.sort_order,
-      nodeType: f.node_type === "group" ? "group" : "notebook", icon: f.icon, updatedAt: f.updated_at,
-      ...(f.trashed_at ? { trashedAt: f.trashed_at } : {}),
-      ...(f.deleted_from_parent_id !== null ? { deletedFromParentId: f.deleted_from_parent_id } : {}),
-    }));
+    const folders: LakeFolderEntry[] = folderRows.map((f) => {
+      if (f.cloud_deleted === 1) purged.add(f.id);
+      return {
+        id: f.id, title: f.title, parentId: f.parent_id, sortOrder: f.sort_order,
+        nodeType: f.node_type === "group" ? "group" : "notebook", icon: f.icon, updatedAt: f.updated_at,
+        ...(f.trashed_at ? { trashedAt: f.trashed_at } : {}),
+        ...(f.deleted_from_parent_id !== null ? { deletedFromParentId: f.deleted_from_parent_id } : {}),
+      };
+    });
+    // 小记：活跃行 + 「云端已删除·仅本地」的回收站副本。副本必须作为 state 条目存在（引擎按
+    // remotePurged 过滤：不进同步索引、不上传，但保留在 state.quickNotes.items 里才能跨轮存活）。
     const qRows = await this.db.prepare(
-      "SELECT q.id,q.created_at,q.updated_at,q.content_hash,q.is_conflict,COALESCE(v.links_updated_at,'') AS tags_updated_at FROM quick_notes q LEFT JOIN tag_link_versions v ON v.target_kind='quickNote' AND v.target_id=q.id WHERE q.deleted_at IS NULL ORDER BY q.id"
-    ).all() as unknown as Array<{ id: string; created_at: string; updated_at: string; content_hash: string; is_conflict: number; tags_updated_at: string }>;
+      "SELECT q.id,q.created_at,q.updated_at,q.content_hash,q.is_conflict,q.restore_pending_at,q.cloud_deleted,COALESCE(v.links_updated_at,'') AS tags_updated_at FROM quick_notes q LEFT JOIN tag_link_versions v ON v.target_kind='quickNote' AND v.target_id=q.id WHERE q.deleted_at IS NULL OR q.cloud_deleted=1 ORDER BY q.id"
+    ).all() as unknown as Array<{ id: string; created_at: string; updated_at: string; content_hash: string; is_conflict: number; restore_pending_at: string | null; cloud_deleted: number; tags_updated_at: string }>;
     const tagRows = await this.db.prepare(
       "SELECT id,name,sort_order,created_at,updated_at FROM tags WHERE deleted_at IS NULL ORDER BY sort_order,id"
     ).all() as unknown as Array<{ id: string; name: string; sort_order: number; created_at: string; updated_at: string }>;
@@ -86,22 +97,55 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const links = new Map<string, string[]>();
     for (const l of linkRows) { const arr = links.get(l.target_id) ?? []; arr.push(l.tag_id); links.set(l.target_id, arr); }
     const tags: QuickNoteTagEntry[] = tagRows.map((t) => ({ id: t.id, name: t.name, order: t.sort_order, createdAt: t.created_at, updatedAt: t.updated_at }));
-    const quickItems: QuickNoteEntry[] = qRows.map((q) => ({
-      id: q.id, createdAt: q.created_at, updatedAt: q.updated_at, contentHash: q.content_hash,
-      isConflict: !!q.is_conflict,
-      ...(side.assetsHash[q.id] ? { assetsHash: side.assetsHash[q.id] } : {}),
-      ...(links.has(q.id) ? { tagIds: links.get(q.id) } : {}),
-      ...(q.tags_updated_at ? { tagsUpdatedAt: q.tags_updated_at } : {}),
-    }));
+    const quickItems: QuickNoteEntry[] = qRows.map((q) => {
+      if (q.restore_pending_at) restorePending.add(q.id);
+      if (q.cloud_deleted === 1) purged.add(q.id);
+      return {
+        id: q.id, createdAt: q.created_at, updatedAt: q.updated_at, contentHash: q.content_hash,
+        isConflict: !!q.is_conflict,
+        ...(side.assetsHash[q.id] ? { assetsHash: side.assetsHash[q.id] } : {}),
+        ...(links.has(q.id) ? { tagIds: links.get(q.id) } : {}),
+        ...(q.tags_updated_at ? { tagsUpdatedAt: q.tags_updated_at } : {}),
+      };
+    });
+    // 本地进入回收站（未打云端删除标）的小记 → 引擎用它区分「本地删除」与「远端新增」，避免误判后者。
+    const quickDeleteRows = await this.db.prepare("SELECT id FROM quick_notes WHERE deleted_at IS NOT NULL AND cloud_deleted=0").all() as Array<{ id: string }>;
+    // quick_note_deleted 同时装「软删/远端学习墓碑」（purged_at 为空）与「本地彻底删除墓碑」（purged_at 非空）：
+    // 前者属于 quickDeletes（可恢复语义），只有后者才是 v3 quickPurges（不可恢复删除、不复活）。
+    const quickSoftTombstones = await this.db.prepare("SELECT id FROM quick_note_deleted WHERE purged_at IS NULL").all() as Array<{ id: string }>;
+    const quickPurgeRows = await this.db.prepare("SELECT id FROM quick_note_deleted WHERE purged_at IS NOT NULL").all() as Array<{ id: string }>;
+    // 本地 purge 墓碑（文档/目录）→ v3 删除意图：否则云端条目会被当成本地缺失重新拉回。
+    const purgedTombstones = await this.db.prepare("SELECT id,purged_at FROM deleted_notes WHERE purged_at IS NOT NULL").all() as Array<{ id: string; purged_at: string | null }>;
+    const intents: DeviceState["intents"] = [...side.intents];
+    const knownIntents = new Set(intents.map((it) => it.noteId));
+    for (const t of purgedTombstones) {
+      if (knownIntents.has(t.id)) continue;
+      knownIntents.add(t.id);
+      intents.push({
+        noteId: t.id, targetEpoch: side.baseline?.epoch ?? "", targetGeneration: side.baseline?.generation ?? 0,
+        ...(t.purged_at ? { purgedAt: t.purged_at } : {}),
+      });
+    }
+    // 标记失效的三种情形（与引擎 resolveRemotePurged 同口径，适配器侧再兜一次）：
+    // 本地已彻底删除（副本不存在）、显式恢复（让位给正常上传）、远端已重新出现（引擎负责）。
+    const quickPurges = quickPurgeRows.map((r) => r.id);
+    for (const id of quickPurges) purged.delete(id);
+    for (const t of purgedTombstones) purged.delete(t.id);
+    for (const id of restorePending) purged.delete(id);
     const quickNotes: QuickNotesIndex = { v: 3, space: "quickNotes", items: quickItems, tags };
     return {
       lake: { v: 3, space: "lake", notes, folders }, quickNotes, folders,
-      intents: side.intents, pending: side.pending,
-      remotePurged: side.remotePurged, restorePending: [...restorePending], archived: [],
+      intents, pending: side.pending,
+      remotePurged: [...purged].sort(), restorePending: [...restorePending].sort(),
+      quickDeletes: [...quickDeleteRows.map((r) => r.id), ...quickSoftTombstones.map((r) => r.id)].sort(),
+      quickPurges, archived: [],
     };
   }
 
   async saveState(state: DeviceState): Promise<void> {
+    const side = await loadV3State(this.db);
+    // 本轮「云端已彻底删除·仅本地」集合：引擎（state.remotePurged）是权威，适配器只把它投影到 DB 列。
+    const purged = new Set(state.remotePurged ?? []);
     const currentRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,trashed_at FROM notes").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; trashed_at: string | null }>;
     const current = new Map(currentRows.map((r) => [r.id, r]));
     const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
@@ -119,7 +163,9 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         if (targetTrashed && !curTrashed) {
           await this.db.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(n.trashedAt, n.id);
         } else if (!targetTrashed && curTrashed) {
-          await this.db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(new Date().toISOString(), n.parentId, n.id);
+          // 远端恢复/复活 → 移出回收站。restore_pending_at 保持原值：用户显式恢复在 DB 里已经写过这个标记，
+          // 而「远端把条目恢复回来」不是本地显式恢复 —— 不能给它补标记，否则会误把自己的旧副本上传覆盖远端。
+          await this.db.prepare("UPDATE notes SET trashed_at=NULL, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(n.parentId, n.id);
         } else if (!targetTrashed) {
           if (content !== null) {
             await saveNote(this.db, n.id, n.title, content, n.parentId, new Map());
@@ -143,17 +189,37 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       await deleteNoteBodies(id);
     }
     // 小记：按 state upsert/删除 + 标签关系 + 标签目录
-    const curQRows = await this.db.prepare("SELECT id FROM quick_notes WHERE deleted_at IS NULL").all() as unknown as Array<{ id: string }>;
-    const curQ = new Set(curQRows.map((r) => r.id));
+    const allQRows = await this.db.prepare("SELECT id,deleted_at,cloud_deleted FROM quick_notes").all() as unknown as Array<{ id: string; deleted_at: string | null; cloud_deleted: number }>;
+    const curQ = new Map(allQRows.map((r) => [r.id, r]));
     const wantedQ = new Map(state.quickNotes.items.map((q) => [q.id, q]));
+    // 只有「曾经同步过」的条目才算远端删除；全量重拉/同步窗口内本地新建的条目维持旧语义（物理删除）。
+    const baselineQuickIds = new Set((side.baseline?.quickNotes.items ?? []).map((q) => q.id));
+    // 本轮新打标的 quick 副本（引擎 state.remotePurged 之外的第一次识别；下面并回 state.remotePurged 持久化）。
+    const cloudDeletedQuick = new Set<string>();
     for (const q of wantedQ.values()) {
       const bodyBytes = this.stagedQuickBodies.get(q.id);
       const body = bodyBytes ? new TextDecoder().decode(bodyBytes) : null;
-      if (!curQ.has(q.id)) {
+      const cur = curQ.get(q.id);
+      if (purged.has(q.id)) {
+        // 「云端已删除·仅本地」的 quick 回收站副本：只读保留，不写正文/不改标签/不参与上传。
+        if (cur === undefined) {
+          await this.db.prepare(
+            "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,restore_pending_at,deleted_at,cloud_deleted) VALUES (?,?,?,'',0,?,0,?,NULL,?,1)"
+          ).run(q.id, q.createdAt, q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, new Date().toISOString());
+        } else if (cur.deleted_at === null) {
+          await this.db.prepare("UPDATE quick_notes SET deleted_at=?, is_dirty=0, cloud_deleted=1 WHERE id=?").run(new Date().toISOString(), q.id);
+        }
+        continue;
+      }
+      if (cur === undefined) {
         if (body !== null) await writeQuickNoteBody(q.id, body);
         await this.db.prepare(
           "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,restore_pending_at) VALUES (?,?,?,'',0,?,1,?,NULL)"
         ).run(q.id, q.createdAt, q.updatedAt, q.contentHash, q.isConflict ? 1 : 0);
+      } else if (cur.deleted_at !== null) {
+        // 回收站副本被显式恢复 / 远端重新出现：激活（正文/预览/标签原样保留）。
+        if (body !== null) await writeQuickNoteBody(q.id, body);
+        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1, is_conflict=?, deleted_at=NULL WHERE id=?").run(q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, q.id);
       } else if (body !== null) {
         await writeQuickNoteBody(q.id, body);
         await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1 WHERE id=?").run(q.updatedAt, q.contentHash, q.id);
@@ -167,8 +233,21 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         await this.db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at").run(q.id, q.tagsUpdatedAt ?? q.updatedAt);
       }
     }
-    for (const id of curQ) {
+    for (const [id, cur] of curQ) {
       if (wantedQ.has(id)) continue;
+      if (cur.deleted_at !== null) continue; // 已在 quick 回收站：保留（本地删除或已打标副本）
+      // 活跃行从 state 消失，三种来源必须区分：
+      // ① 本行本来就是「云端已删除·仅本地」副本（恢复后又被引擎判定为 purge 拦截）⇒ 回到回收站并保留标记，
+      //    绝不物理删除（用户仍可在 core 修好后恢复）；
+      // ② 曾同步过（在 baseline 里）⇒ 远端删除/远端彻底删除：保留 quick 回收站只读副本，仅打标；
+      // ③ 从未同步（全量重拉 / 同步窗口内本地新建）⇒ 维持旧语义物理删除（不产生墓碑、不外传）。
+      if (cur.cloud_deleted === 1 || baselineQuickIds.has(id)) {
+        // 清 restore_pending_at：恢复意图已被云端 purge 墓碑挡下（core 修好前重试也不会成功），
+        // 不清就会每轮同步都重放一次「恢复 → 判 purge」循环。用户可再次点恢复。
+        await this.db.prepare("UPDATE quick_notes SET deleted_at=?, cloud_deleted=1, is_dirty=0, ready_to_sync=0, restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
+        cloudDeletedQuick.add(id);
+        continue;
+      }
       await this.db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(id);
       await this.db.prepare("DELETE FROM tag_link_versions WHERE target_kind='quickNote' AND target_id=?").run(id);
       await this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
@@ -181,7 +260,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       ).run(tag.id, tag.name, tag.order ?? 0, tag.createdAt, tag.updatedAt);
     }
     // 目录：按 state 做 upsert/删除（v1 直接写 folders 表；树索引由旧移动通道/启动对账维护）
-    const folderRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM folders").all() as unknown as FolderRow[];
+    const folderRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,cloud_deleted FROM folders").all() as unknown as FolderRow[];
     const curFolders = new Map(folderRows.map((f) => [f.id, f]));
     const wantedFolders = new Map(state.folders.map((f) => [f.id, f]));
     for (const f of wantedFolders.values()) {
@@ -196,11 +275,25 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       }
     }
     for (const id of curFolders.keys()) if (!wantedFolders.has(id)) await this.db.prepare("DELETE FROM folders WHERE id=?").run(id);
-    const side = await loadV3State(this.db);
+    // 本轮「云端已删除·仅本地」集合 = 引擎 state.remotePurged ∪ 适配器本轮新打标的小记副本。
+    const purgedFinal = [...new Set([...purged, ...cloudDeletedQuick])].sort();
+    // 标记投影：先全清再按本轮集合置位 —— 恢复上传成功、远端复活、本地 purge 后标记都会自然消失。
+    await this.db.transaction(async () => {
+      await this.db.prepare("UPDATE notes SET cloud_deleted=0 WHERE cloud_deleted=1").run();
+      await this.db.prepare("UPDATE folders SET cloud_deleted=0 WHERE cloud_deleted=1").run();
+      await this.db.prepare("UPDATE quick_notes SET cloud_deleted=0 WHERE cloud_deleted=1").run();
+      for (let i = 0; i < purgedFinal.length; i += 400) {
+        const part = purgedFinal.slice(i, i + 400);
+        const ph = part.map(() => "?").join(",");
+        await this.db.prepare("UPDATE notes SET cloud_deleted=1 WHERE id IN (" + ph + ")").run(...part);
+        await this.db.prepare("UPDATE folders SET cloud_deleted=1 WHERE id IN (" + ph + ")").run(...part);
+        await this.db.prepare("UPDATE quick_notes SET cloud_deleted=1 WHERE id IN (" + ph + ")").run(...part);
+      }
+    });
     await saveV3State(this.db, {
       ...side,
       intents: state.intents, pending: state.pending,
-      remotePurged: state.remotePurged ?? [], restorePending: state.restorePending ?? [],
+      remotePurged: purgedFinal, restorePending: state.restorePending ?? [],
       assetsHash: Object.fromEntries([...state.lake.notes, ...state.quickNotes.items].filter((n) => n.assetsHash).map((n) => [n.id, n.assetsHash!])),
     });
     this.stagedBodies.clear();
@@ -220,7 +313,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const sets: Array<{ sql: string; ids: string[] }> = [
       { sql: "UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE is_purged=0 AND id IN (", ids: baseline.lake.notes.map((n) => n.id) },
       { sql: "UPDATE folders SET is_dirty=0 WHERE is_purged=0 AND id IN (", ids: baseline.lake.folders.map((f) => f.id) },
-      { sql: "UPDATE quick_notes SET is_dirty=0 WHERE id IN (", ids: baseline.quickNotes.items.map((q) => q.id) },
+      { sql: "UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id IN (", ids: baseline.quickNotes.items.map((q) => q.id) },
     ];
     await this.db.transaction(async () => {
       for (const { sql, ids } of sets) {

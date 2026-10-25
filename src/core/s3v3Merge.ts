@@ -171,12 +171,14 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
       items.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, archiveLocal: false, local: undefined, remote: rr });
       continue;
     }
-    if (purgedIds.has(id)) {
-      if (ll) items.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, archiveLocal: false, local: ll, remote: rr ?? undefined });
-      continue;
-    }
+    // 显式恢复优先于 purge 墓碑：用户从「云端已删除 · 仅本地」副本恢复时，必须重新上传，
+    // 不能被远端/本地的 purged 墓碑再次判成 local-purge 弹回回收站。
     if (restorePending.has(id) && ll) {
       items.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: ll, remote: rr ?? undefined });
+      continue;
+    }
+    if (purgedIds.has(id)) {
+      if (ll) items.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, archiveLocal: false, local: ll, remote: rr ?? undefined });
       continue;
     }
     if (ll && !rr && !bb) {

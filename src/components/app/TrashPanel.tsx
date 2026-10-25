@@ -61,6 +61,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           </span>
         </div>
         {item.purged && <span className="badge badge--error" title="其他设备已彻底删除；本机仍保留可恢复副本">已被他端删除</span>}
+        {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除 · 仅本地</span>}
         {fileMissing && <span className="badge badge--muted" title="正文文件已不在本机">正文已删</span>}
         {days !== null && (
           <span className={`badge ${days <= 7 ? "badge--warn" : "badge--muted"}`} title="自动过期彻底删除倒计时（含云端）">{days} 天后清除</span>
@@ -104,7 +105,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
 }) {
   const [tab, setTab] = useState<"docs" | "quick">("docs");
   const [items, setItems] = useState<TrashItem[]>([]);
-  const [quickItems, setQuickItems] = useState<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>([]);
+  const [quickItems, setQuickItems] = useState<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted?: boolean }>>([]);
   const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string; kind?: NoteKind } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -369,6 +370,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
                 <span className="ln-row2__title">小记</span>
                 <span className="ln-row2__meta">{formatDateTime(item.deletedAt)}</span>
               </div>
+              {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除 · 仅本地</span>}
               <span className="ln-spacer" />
               <button className="ln-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
               <button className="ln-list-item__action ln-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>

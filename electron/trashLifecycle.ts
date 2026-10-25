@@ -188,8 +188,8 @@ export class TrashLifecycle {
     const now = nowIso();
     const tx = this.ctx.db.transaction(() => {
       this.ctx.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(id);
-      this.ctx.db.prepare("UPDATE notes SET is_dirty=1,is_purged=0 WHERE id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
-      this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=1,is_purged=0 WHERE note_file_id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
+      this.ctx.db.prepare("UPDATE notes SET is_dirty=1,is_purged=0,cloud_deleted=0 WHERE id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
+      this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=1,is_purged=0,cloud_deleted=0 WHERE note_file_id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
       const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
       // 容错：本端已 purge（行被彻底删除）时跳过缓存/FTS——行将由下载分支 importRemoteNote 重建，
       // 避免 readNoteCaches 对不存在的行抛"笔记不存在"导致同步中断（远端恢复传播场景）。

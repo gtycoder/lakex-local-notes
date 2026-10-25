@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, History, LoaderCircle, Lock, Save, Upload, WifiOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CloudOff, History, LoaderCircle, Lock, Save, Upload, WifiOff } from "lucide-react";
 import type { DocumentStatusModel } from "../model/documentStatusModel";
 import { Popover } from "../ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
@@ -32,6 +32,8 @@ function StatusIcon({ status }: { status: DocumentStatusModel }) {
     case "dirty": return <Save size={12} />;
     case "save-error": return <AlertTriangle size={12} />;
     case "local-only": return <WifiOff size={12} />;
+    // v3：云端已彻底删除、本机仅保留回收站副本（恢复并重新上传成功后自动消失）
+    case "cloud-deleted": return <CloudOff size={12} />;
     case "pending": return <Upload size={12} />;
     case "conflict": return <AlertTriangle size={12} />;
     case "synced-history": return <History size={12} />;
