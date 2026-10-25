@@ -127,6 +127,35 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     expect(mapped?.parentId).toBe(nb.id);
   }, 60_000);
 
+  it("远端彻底删除（purge）应用到桌面 Store：删除 + 写墓碑", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-purge-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("NB");
+    store.createNoteInAtTopWithContent(nb.id, "PurgeMe", "content", [], "p1");
+    const remote = new MemoryRemote();
+    const adapter = new DesktopStoreDevice(store, root);
+    await adapter.init();
+    const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
+    await engineA.sync({ onEmptyCloud: "upload" });
+    const b = await fileDevice();
+    const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
+    await engineB.sync();
+    const ptr = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { epoch: string; generation: number };
+    const st = (await b.store.loadState())!;
+    st.lake.notes = st.lake.notes.filter((x) => x.id !== "p1");
+    st.intents = [{ noteId: "p1", targetEpoch: ptr.epoch, targetGeneration: ptr.generation, purgedAt: new Date().toISOString() }];
+    await b.store.saveState(st);
+    await b.store.deleteBody("p1");
+    await engineB.sync();
+    expect(await remote.list("objects/p1-")).toHaveLength(0);
+    await engineA.sync();
+    // 远端 purge → 本机按设计保留回收站副本（remotePurged），不是本地硬删
+    const trashed = store.listNotesForSync().find((x) => x.id === "p1");
+    expect(trashed?.trashedAt).toBeTruthy();
+    expect(await remote.list("objects/p1-")).toHaveLength(0);
+  }, 60_000);
+
   it("检测到 quick-notes 库时拒绝（不静默丢小记）", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-q-"));
     const store = new Store(root);

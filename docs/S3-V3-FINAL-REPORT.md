@@ -29,7 +29,7 @@ pointer 状态机 / 不可变索引与资产声明 / 三方合并 / 删除意图
 | syncEngineController.ts | 桌面 Controller 顶部 v3 分支 |
 
 ### 2.3 测试资产
-- 单元/回归：src/core/s3v3*.test.ts、electron/s3v3/syncEngine.test.ts（16）、desktopStoreAdapter.test.ts（4，含 B15 墓碑→回收站、恢复→取消回收站回归）、desktopSync.test.ts（1）、migrate.test.ts（1）
+- 单元/回归：src/core/s3v3*.test.ts、electron/s3v3/syncEngine.test.ts（16）、desktopStoreAdapter.test.ts（5，含墓碑→回收站、恢复→取消回收站、远端 purge→本地回收站副本回归）、desktopSync.test.ts（1）、migrate.test.ts（1）
 - 真实 S3：s3.integration.test.ts、migrate.integration.test.ts、scale.integration.test.ts、ab.integration.test.ts
 - 合成 2 万/20 万：src/core/s3v3Scale.test.ts
 - UI 证据与流程：docs/S3-V3-UI-SMOKE.md、docs/S3-V3-AB-COMPARISON.md
