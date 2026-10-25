@@ -33,6 +33,16 @@
 | baseline/intents/pending/restore | 新增 v3 状态表（JSON 列或分列） |
 | history | 移动端历史快照表/文件（archive/superseded 留档） |
 
+## 3.5 架构前提（实施前必须确认）
+
+- 当前 v3 引擎/端口/设备契约都在 `electron/s3v3/`（`syncEngine.ts` / `ports.ts` / `deviceStore.ts`），移动端 WebView **不能 import electron 目录**（边界 + 打包）。
+- 因此移动端接入前必须先做一次**纯化迁移**：
+  1. 把 `deviceStore` / `ports` / `syncEngine` 移到 `src/core/s3v3*`（纯 TS，无 node 依赖）；
+  2. `syncEngine.ts` 现在用 `node:crypto.randomUUID` → 换成 `globalThis.crypto.randomUUID`（两端可用）；
+  3. electron 侧保留 re-export/适配器（FileDeviceStore/DesktopStoreAdapter/S3v3S3Remote 仍在 electron）；
+  4. 移动端再实现 MobileDeviceStore + Capacitor S3v3Remote。
+- 该迁移本身也是一次中等改动，需配合 `check:core`/全量测试；未完成前移动适配器无法真正接引擎。
+
 ## 4. 关键差异与风险
 
 1. **无 Node**：v3 引擎依赖 `Buffer`/`gzip`/crypto？核心已用纯 JS（sha256Hex 基于 WebCrypto/实现需核对）；S3 端口需走 CapacitorHttp。
