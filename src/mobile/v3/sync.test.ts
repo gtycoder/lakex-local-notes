@@ -5,7 +5,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote } from "../data/noteRepository.js";
-import { runMobileV3Sync } from "./sync.js";
+import { isMobileV3Enabled, runMobileV3Sync } from "./sync.js";
 import type { RemoteObjectInfo, S3v3Remote } from "../../core/s3v3Ports.js";
 
 class MemoryRemote implements S3v3Remote {
@@ -31,4 +31,15 @@ describe("移动端 v3 同步编排", () => {
     expect(await remote.get("meta/pointer.json")).not.toBeNull();
     await db.close();
   }, 30_000);
+
+  it("默认 v3；显式 legacy 才回滚", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) });
+    expect(isMobileV3Enabled()).toBe(true);
+    store.set("local-lakex-notes-mobile.syncProtocol", "legacy");
+    expect(isMobileV3Enabled()).toBe(false);
+    store.delete("local-lakex-notes-mobile.syncProtocol");
+    expect(isMobileV3Enabled()).toBe(true);
+    vi.unstubAllGlobals();
+  });
 });
