@@ -18,7 +18,7 @@
 - **默认 v3**：桌面文档/小记、移动端全部默认走 v3；旧 legacy 同步入口、旧 quick-notes 单条推送/云端恢复、旧 GC/旧 quick-notes 同步模块与对应测试已删除。移动端不再有 `syncProtocol=legacy`。
 - **旧字段彻底删除（无历史数据回填）**：
   - 桌面 `notes.sync_state` / `tree_nodes.sync_state` / `quick_notes.sync_state` 列已删，统一 `is_dirty` / `is_purged`；`listNotesForSync` 的 `syncState` 由新字段派生（旧同步账本只读派生值）。
-  - 移动端 schema **v8**：同样删 `sync_state`，加 `is_dirty/is_purged`；迁移先删旧列（`DROP COLUMN`，失败可选跳过），**不迁移旧值**。
+  - 移动端 schema **v8**：同样删 `sync_state`，加 `is_dirty/is_purged`；迁移先删旧列（`DROP COLUMN`，失败可选跳过），**不迁移旧值**。后续 261026 徽标追加升 **v9**（`cloud_deleted` + quick_note_deleted.purged_at）。
   - UI/DTO/NoteInfo/文档状态模型已去掉 `syncState`；`is_dirty` 只在 v3 发布成功写 baseline 后清零。
 - **「云端已删除 · 仅本地」徽标（261026 追加）**：远端彻底删除后本地回收站副本只打标、不改恢复语义；桌面/移动回收站文档与小记均显示；恢复并重新上传成功后自动清标。移动端远端删除小记改为保留 quick 回收站只读副本（原先物理删），并修复 quick `restorePending` 优先于 purge 墓碑，恢复可重传；本地 purge 后标记清除且多轮同步零 put/delete。
 - **门禁**：tsc 0 · vitest **2717 passed / 24 skipped**（移动端 528）· 桌面 + 移动 `vite build` ✓· 真实七牛 v3 集成测试 ✓ · 真实七牛压测 200 文档 × 10 附件 ✓。
@@ -29,7 +29,15 @@
   - 移动端 `saveBaseline` 从不清 `is_dirty` ⇒ 同步后 UI 永远“待同步”；改为发布成功批量清 notes/folders/quick_notes 并清 restore_pending；远端正文落地保留远端 updatedAt（避免下一轮误判本地更新）。
   - 桌面本地 purge 未生成 v3 删除意图 ⇒ 远端条目被重新拉回；改为从 `deleted_notes.purged_at` 派生 intents（适配器载入时补齐）。
   - 移动端同步后阅读态标题/正文不刷新；首页小记/目录不刷新。改为 sync 后强制重读活动标签 + 刷新首页快照。
-- **剩余/产品待确认**：① 远端彻底删除后，v3 当前按设计在本机回收站保留副本（remotePurged，不参与上传），与“永久删除零痕迹”的跨端预期需产品确认；② v3 标签独立空间/文档标签 UI；③ 合并 master 前复核。报告：`docs/S3-V3-REMOVAL-PLAN.md` / `docs/S3-V3-CUTOVER.md`。
+- **已定稿（用户 261026）**：远端彻底删除时本地副本保留在回收站、只打「云端已删除 · 仅本地」徽标，允许恢复；恢复重新上传成功后徽标消失；本地主动彻底删除后不再产生任何 S3 行为。**目录（folder）不做该语义**（用户决定）。
+- **分支状态**：feat/s3-v3 已推送到 origin，**未合并 master**；用户将自行测试。提交：15411bb3（徽标/小记保留/恢复）、a2d7e684（小记删除方跟随恢复）。
+- **剩余待办**：
+  1. **真实 Android 物理机验收**（目前只有模拟器；触摸、系统返回、键盘、后台切换、真机 schema v8→v9 迁移）。
+  2. **目录 folder 的云端删除语义**：当前按用户决定不做；若以后要做，需要 core 侧保留 folder 副本 + 徽标 + 恢复链路。
+  3. **状态栏 cloud-deleted 专属配色**：DesktopStatusBar 已有文案/图标，但 styles/chrome.css 还没有该 kind 的 pending/橙色样式（可选）。
+  4. **v3 标签独立空间 / 文档标签 UI**：小记标签已同步，文档标签仍未做。
+  5. **合并 master 前复核**：双端构建、门禁、真实 S3 回归、HANDOFF 收口；合并时不要带测试前缀/临时凭据（已清理）。
+- 报告：docs/S3-V3-REMOVAL-PLAN.md / docs/S3-V3-CUTOVER.md。
 
 ### 261025 · S3 墓碑保留调研（仅文档，未改代码）
 
