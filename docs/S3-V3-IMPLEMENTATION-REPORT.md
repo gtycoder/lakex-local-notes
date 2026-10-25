@@ -33,6 +33,7 @@
 | `ports.ts` | S3 远程/设备存储端口 |
 | `s3Remote.ts` | 七牛/S3 兼容实现（gzip、LIST 分页、DeleteObjects、前缀删除、读后一致） |
 | `deviceStore.ts` | **设备契约 `S3v3DeviceStore`**（接入现有桌面 Store / 移动端 SQLite 的接口） |
+| `desktopStoreAdapter.ts` | **桌面真实 Store 适配器 v1**（Lake 文档/目录/附件；sidecar 存 baseline/intents/pending/assetsHash；quick notes 检测到即拒绝） |
 | `fileDeviceStore.ts` | 文件系统实现（测试/CLI；正文/附件/基线/历史/待删/意图/恢复标记；原子写） |
 | `syncEngine.ts` | v3 同步引擎：拉取→合并→上传→发布锁/读回→待删门禁→意图生命周期→深度清理→全量重拉 |
 | `migrate.ts` | 旧 Manifest（含墓碑/回收站/小记标签）→ v3 索引+不可变声明+pointer |
@@ -77,6 +78,7 @@ npx vitest run electron/s3v3/scale.integration.test.ts
 | 核心索引/合并/GC | 18 例 | 全过 | 7ms |
 | 双端引擎（假 S3） | 15 例 + 并发池 3 例 | 全过（初始化/增量/冲突/软删恢复/purge/恢复例外/锁/门禁/深度清理/缺对象/小记/上传失败隔离/删除失败重试/pointer 损坏/有界并发） | 93ms |
 | 迁移（假 S3） | 1 例 | 全过（墓碑丢弃、附件/回收站/标签保留、新设备可拉） | 11ms |
+| **桌面 Store 适配器** | 2 例 | 全过（loadState 映射、初始化上传、双端增量、远端新文档落 Store、quick-notes 拒绝） | 48ms |
 | **迁移（真实 S3）** | 1 例 | 全过：旧布局对象→迁移→新设备拉取→孤儿深度清理 | 1.4s |
 | 真实 S3 集成 | 2 文档+附件+双端+purge+清理 | 全过 | 3.3s |
 | **真实 S3 规模（串行传输）** | **200 文档 × 10 附件 = 2391 对象** | 全过 | 初始化 154.8s / 拉取 80.1s / 增量 0.59s / purge 0.74s |
@@ -118,7 +120,7 @@ npx vitest run electron/s3v3/scale.integration.test.ts
 
 ## 5. 尚未完成 / 上生产前必须做
 
-1. **接入应用层（最大缺口）**：把 `electron/s3v3/syncEngine.ts` 接入 Electron 主进程同步编排（替换/并行于现有 `syncEngineController`），移动端需按同一 core 逻辑实现；本次未改现有 `src/core/syncEngine.ts` / `electron/syncEngineController.ts`。**设备契约 `S3v3DeviceStore` 已抽出**（引擎不再依赖文件实现），下一步实现桌面 Store / 移动 SQLite 适配器。
+1. **接入应用层（最大缺口）**：把 `electron/s3v3/syncEngine.ts` 接入 Electron 主进程同步编排（替换/并行于现有 `syncEngineController`），移动端需按同一 core 逻辑实现；本次未改现有 `src/core/syncEngine.ts` / `electron/syncEngineController.ts`。**桌面 Store 适配器 v1 已完成并通过真实 Store 测试**（Lake 文档/目录/附件）；待补：quick notes 适配、远端新建目录的 id 映射（Store 创建接口不能指定 id）、lock 的 `lockedAt` 精度。
 2. **传输并发**：上传已改为**全局任务队列（≤8）**（200×10：初始化 154.8s→50.1s→**16.1s**；拉取 80.1s→**22.0s**）；下载仍是「按笔记 + 资源级 8」，下一步同样改为全局队列。按 200×10 外推 2 万/20 万首装仍需数十分钟，属可接受的一次性迁移成本。
 3. **UI/DB 映射**：文件设备模型需映射到现有 `store`/移动端 SQLite：baseline、intents、pending、remotePurged/restorePending 落库；设置页展示能力探测结果。
 4. **迁移演练**：用真实旧库（dev 副本）跑「旧清单→v3」，双端升级顺序、旧客户端拒绝、回滚预案。
