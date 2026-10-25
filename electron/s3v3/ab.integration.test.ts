@@ -14,8 +14,9 @@ import { S3v3SyncEngine } from "./syncEngine.js";
 const enabled = process.env.S3V3_AB === "1" && !!process.env.S3V3_ENDPOINT && !!process.env.S3V3_BUCKET && !!process.env.S3V3_AK && !!process.env.S3V3_SK;
 const describeIt = enabled ? describe : describe.skip;
 const DOCS = Number(process.env.S3V3_AB_DOCS || 100);
+const ASSETS = Number(process.env.S3V3_AB_ASSETS || 0);
 
-async function makeStore(docs: number): Promise<{ root: string; store: Store }> {
+async function makeStore(docs: number, assetsPerDoc: number): Promise<{ root: string; store: Store }> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-ab-"));
   const store = new Store(root);
   store.bootstrap();
@@ -23,6 +24,11 @@ async function makeStore(docs: number): Promise<{ root: string; store: Store }> 
   for (let i = 0; i < docs; i++) {
     const id = "ab" + String(i).padStart(4, "0");
     store.createNoteInAtTopWithContent(nb.id, "Doc " + i, "body-" + id + "-" + "x".repeat(900), [], id);
+    if (assetsPerDoc > 0) {
+      const dir = store.getNotePaths(id).assetsDir;
+      await fs.mkdir(dir, { recursive: true });
+      for (let a = 0; a < assetsPerDoc; a++) await fs.writeFile(path.join(dir, "a" + a + ".bin"), Buffer.alloc(1024, a + 1));
+    }
   }
   return { root, store };
 }
@@ -34,8 +40,8 @@ function settings(basePrefix: string, suffix: string) {
 describeIt("master 旧同步 vs v3（真实 S3，A/B 指标）", () => {
   test("初始/空跑/增量/删除 的耗时与对象数", async () => {
     const basePrefix = process.env.S3V3_PREFIX || "lake-notes-v3-dev1";
-    const oldStore = await makeStore(DOCS);
-    const v3Store = await makeStore(DOCS);
+    const oldStore = await makeStore(DOCS, ASSETS);
+    const v3Store = await makeStore(DOCS, ASSETS);
     const oldSettings = settings(basePrefix, "old");
     const v3Settings = settings(basePrefix, "v3");
     const oldRemote = new ObjectStore(oldSettings as never, oldStore.store.logScopes);
@@ -66,7 +72,7 @@ describeIt("master 旧同步 vs v3（真实 S3，A/B 指标）", () => {
       t = Date.now(); await oldSyncNow(cfg as never, s3, port); const oldInc = Date.now() - t;
       t = Date.now(); await v3Engine.sync(); const v3Inc = Date.now() - t;
       const out = {
-        docs: DOCS, old: { init: oldInit, noop: oldNoop, inc: oldInc, uploaded: oldR1.uploaded, objects: oldStats.objects, bytes: oldStats.bytes },
+        docs: DOCS, assetsPerDoc: ASSETS, old: { init: oldInit, noop: oldNoop, inc: oldInc, uploaded: oldR1.uploaded, objects: oldStats.objects, bytes: oldStats.bytes },
         v3: { init: v3Init, noop: v3Noop, inc: v3Inc, uploaded: v3R1.uploadedNotes, objects: v3Stats.objects, bytes: v3Stats.bytes },
       };
       console.log(JSON.stringify(out));
