@@ -270,6 +270,14 @@ export const syncDomain = {
       // 同步也走同一条"密钥缺失"提示（别让用户以为"同步失败"却看不出该重填密钥）。
       try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
       const d = await ensureDb();
+      // v3 feature flag（dev/灰度）：显式 localStorage 开启才走；默认旧路径。
+      let v3Enabled = false;
+      try { v3Enabled = localStorage.getItem("local-lakex-notes-mobile.syncProtocol") === "v3"; } catch { /* ignore */ }
+      if (v3Enabled) {
+        const { runMobileV3Sync } = await import("../v3/sync.js");
+        const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix });
+        return { message: `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`, notes: null, quickNotes: null };
+      }
       const syncCfg: SyncConfig = {
         endpoint: cfg.endpoint,
         region: cfg.region,
