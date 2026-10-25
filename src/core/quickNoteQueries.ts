@@ -72,6 +72,7 @@ export function mapQuickNoteDeletedRow(row: QuickNoteDeletedRowShape): {
   deletedAt: string;
   conversionTargetNoteId: string | null;
   readyToSync: boolean;
+  purgedAt: string | null;
 } {
   return {
     id: row.id,
@@ -80,6 +81,7 @@ export function mapQuickNoteDeletedRow(row: QuickNoteDeletedRowShape): {
     deletedAt: row.deleted_at,
     conversionTargetNoteId: row.conversion_target_note_id ?? null,
     readyToSync: !!row.ready_to_sync,
+    purgedAt: row.purged_at ?? null,
   };
 }
 

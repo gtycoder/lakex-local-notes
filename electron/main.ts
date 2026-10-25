@@ -175,8 +175,9 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       try {
         const settings = store.getS3Settings();
         if (!settings) throw new Error("请先保存 S3 配置");
-        // 小记 v3 开关打开时，小记已随文档 v3 同一轮同步；不再走旧 quick-notes 通道。
-        if (process.env.LAKE_S3V3_QUICK_NOTES === "1") {
+        // 转正默认：v3 通道下小记随同一轮同步；只有 legacy / 显式 0 才走旧 quick-notes 通道。
+        const quickV3 = process.env.LAKE_SYNC_PROTOCOL !== "legacy" && process.env.LAKE_S3V3_QUICK_NOTES !== "0";
+        if (quickV3) {
           result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
         } else {
           const quick = await syncQuickNotes(quickNotes, settings, report);

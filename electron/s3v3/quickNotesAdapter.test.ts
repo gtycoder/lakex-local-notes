@@ -79,4 +79,31 @@ describe("桌面小记 v3 适配器（文本）", () => {
     const filename = got.content.images[0].filename;
     expect(await fs.stat(path.join(b.quick.quickNoteAssetsPathFor(q.id), filename)).then(() => true).catch(() => false)).toBe(true);
   }, 120_000);
+
+  it("彻底删除跨端：purged 墓碑传播，另一端不留回收站副本", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("purge-a");
+    const b = await device("purge-b");
+    const q = a.quick.createQuickNote({ text: "to-purge", draftId: "d-purge", stagedImageIds: [] });
+    const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
+    const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
+    await ea.sync({ onEmptyCloud: "upload" });
+    await eb.sync();
+    expect(b.quick.readQuickNote(q.id).content.text).toBe("to-purge");
+
+    a.quick.deleteQuickNote(q.id);
+    a.quick.purgeQuickNote(q.id);
+    console.log("A pre", JSON.stringify({ active: a.quick.listQuickNotes().map((n) => n.id), trash: a.quick.listQuickNoteTrash().map((n) => n.id), tombstones: a.quick.listAllDeleted().map((t) => ({ id: t.id, purgedAt: t.purgedAt })) }));
+    console.log("A load", JSON.stringify({ purges: (await a.adapter.loadState())!.quickPurges, items: (await a.adapter.loadState())!.quickNotes.items.length, baseline: (await a.adapter.loadBaseline())?.quickNotes.items.length }));
+    await ea.sync();
+    await eb.sync();
+    expect(a.quick.listQuickNotes().some((n) => n.id === q.id)).toBe(false);
+    expect(a.quick.listQuickNoteTrash().some((n) => n.id === q.id)).toBe(false);
+    expect(b.quick.listQuickNotes().some((n) => n.id === q.id)).toBe(false);
+    expect(b.quick.listQuickNoteTrash().some((n) => n.id === q.id)).toBe(false);
+    expect(await fs.stat(b.quick.quickNotePathFor(q.id)).then(() => true).catch(() => false)).toBe(false);
+    const ptr = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { quickNotes: { commit: string } };
+    const idx = JSON.parse(new TextDecoder().decode((await remote.get("quick-notes/meta/index/" + ptr.quickNotes.commit + ".json"))!)) as { purged?: string[] };
+    expect(idx.purged).toContain(q.id);
+  }, 120_000);
 });

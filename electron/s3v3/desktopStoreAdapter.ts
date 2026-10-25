@@ -99,6 +99,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     const quickItems: QuickNoteEntry[] = [];
     const quickTags: QuickNoteTagEntry[] = [];
     const quickDeletes: string[] = [];
+    const quickPurges: string[] = [];
     if (this.quickNotes) {
       for (const q of this.quickNotes.listQuickNotesForSync()) {
         const tagIds = this.quickNotes.listQuickNoteTagIds(q.id);
@@ -114,12 +115,16 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       for (const t of this.quickNotes.tags.list({ includeDeleted: true })) {
         quickTags.push({ id: t.id, name: t.name, sortOrder: t.sortOrder, pinned: t.pinned, createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}) });
       }
-      for (const d of this.quickNotes.listDeletedForSync()) quickDeletes.push(d.id);
+      for (const d of this.quickNotes.listAllDeleted()) {
+        quickDeletes.push(d.id);
+        if (d.purgedAt) quickPurges.push(d.id);
+      }
     }
     const state: DeviceState = {
       lake: { v: 3, space: "lake", notes, folders },
-      quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags },
+      quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags, ...(quickPurges.length ? { purged: quickPurges } : {}) },
       quickDeletes,
+      quickPurges,
       folders,
       intents: side?.intents ?? [], pending: side?.pending ?? [],
       remotePurged: side?.remotePurged ?? [], restorePending: side?.restorePending ?? [], archived: side?.archived ?? [],
@@ -214,7 +219,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     })));
     for (const cur of current.values()) {
       if (wanted.has(cur.id)) continue;
-      const purge = state.intents.some((it) => it.noteId === cur.id);
+      const purge = state.intents.some((it) => it.noteId === cur.id) || (state.quickPurges ?? []).includes(cur.id);
       try {
         if (purge) {
           try { qn.purgeQuickNote(cur.id); }

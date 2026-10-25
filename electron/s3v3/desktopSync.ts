@@ -25,7 +25,9 @@ export async function syncWithV3(
     accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
     prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
   });
-  const quickNotes = process.env.LAKE_S3V3_QUICK_NOTES === "1" ? getQuickNotesStoreForV3() : null;
+  // 转正默认：v3 文档通道下小记也默认走 v3（旧 quick-notes 通道只在 legacy 或显式 0 时使用）。
+  const quickV3 = process.env.LAKE_SYNC_PROTOCOL !== "legacy" && process.env.LAKE_S3V3_QUICK_NOTES !== "0";
+  const quickNotes = quickV3 ? getQuickNotesStoreForV3() : null;
   const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true, ...(quickNotes ? { quickNotes } : {}) });
   await device.init();
   const deviceId = deps.deviceId ?? process.env.LAKE_S3V3_DEVICE_ID ?? "desktop-" + createHash("sha256").update(store.rootPath).digest("hex").slice(0, 8);

@@ -90,6 +90,8 @@ export interface QuickNotesIndex {
   space: "quickNotes";
   items: QuickNoteEntry[];
   tags?: QuickNoteTagEntry[];
+  /** 已彻底删除的小记 ID（墓碑；跨端传播“不可恢复删除”，与普通 absent 软删区分）。 */
+  purged?: string[];
 }
 
 /** 递归 canonical JSON：对象 key 排序、数组保持顺序（调用方先排序）。 */
@@ -113,7 +115,8 @@ export function serializeLakeIndex(index: LakeIndex): string {
 export function serializeQuickNotesIndex(index: QuickNotesIndex): string {
   const items = [...index.items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const tags = index.tags ? [...index.tags].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) : undefined;
-  return canonicalJson({ v: index.v, space: index.space, items, tags });
+  const purged = index.purged ? [...index.purged].sort() : undefined;
+  return canonicalJson({ v: index.v, space: index.space, items, tags, purged });
 }
 export function indexHashOf(serialized: string): string {
   return sha256Text(serialized);
@@ -199,7 +202,9 @@ export function validateQuickNotesIndex(raw: unknown): QuickNotesIndex {
     if (it.assetsHash !== undefined && !isHash(it.assetsHash)) throw new Error("小记 assetsHash 非法: " + it.id);
     if (it.tagIds !== undefined && (!Array.isArray(it.tagIds) || it.tagIds.some((t) => typeof t !== "string"))) throw new Error("小记 tagIds 非法");
   }
-  return { v: S3V3_INDEX_VERSION, space: "quickNotes", items: idx.items as QuickNoteEntry[], tags: idx.tags as QuickNoteTagEntry[] | undefined };
+  const purged = idx.purged as string[] | undefined;
+  if (purged !== undefined && (!Array.isArray(purged) || purged.some((id) => typeof id !== "string"))) throw new Error("小记 purged 列表非法");
+  return { v: S3V3_INDEX_VERSION, space: "quickNotes", items: idx.items as QuickNoteEntry[], tags: idx.tags as QuickNoteTagEntry[] | undefined, ...(purged ? { purged } : {}) };
 }
 
 export function parseLakeIndexBytes(bytes: Uint8Array): { index: LakeIndex; commit: string; serialized: string } {

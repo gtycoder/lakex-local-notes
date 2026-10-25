@@ -367,7 +367,9 @@ export class S3v3SyncEngine {
     const intentIds = new Set(state.intents.filter((i) => !yieldedIntents.has(i.noteId)).map((i) => i.noteId));
     const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id)), folders: state.folders };
     const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: intentIds });
-    const quickPlan = planQuickNotesMerge(baselineQuick, state.quickNotes, remoteQuick, restore, intentIds, new Set(state.quickDeletes ?? []));
+    const mergedQuickPurges = [...new Set([...(state.quickPurges ?? []), ...(remoteQuick.purged ?? [])])].sort();
+    const purgedQuickIds = new Set(mergedQuickPurges);
+    const quickPlan = planQuickNotesMerge(baselineQuick, state.quickNotes, remoteQuick, restore, intentIds, new Set(state.quickDeletes ?? []), purgedQuickIds);
     // 标签目录单独做 id LWW（含墓碑）；条目标签关系仍走 quickPlan。
     const mergedQuickTags = mergeQuickNoteTags(
       (state.quickNotes.tags ?? []).map(tagEntryToTag),
@@ -574,12 +576,13 @@ export class S3v3SyncEngine {
         quickLinksChanged = true;
       }
     }
-    const quickChanged = tagsChanged || quickLinksChanged || quickPlan.items.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote);
+    const purgesChanged = JSON.stringify(mergedQuickPurges) !== JSON.stringify([...(remoteQuick.purged ?? [])].sort());
+    const quickChanged = tagsChanged || quickLinksChanged || purgesChanged || quickPlan.items.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote);
     // 本地状态保留「远端已彻底删除、本机回收站副本」（remotePurged），但不进同步索引。
     const stateNotes = lakeChanged ? lakeWS.localValues().sort((a, b) => (a.id < b.id ? -1 : 1)) : state.lake.notes;
     const stateFolders = [...state.folders].sort((a, b) => (a.id < b.id ? -1 : 1));
     const newLake: LakeIndex = lakeChanged ? { v: 3, space: "lake", notes: lakeWS.indexValues().filter((n) => !purged.has(n.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), folders: stateFolders } : remoteLake;
-    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().sort((a, b) => (a.id < b.id ? -1 : 1)), tags: mergedQuickTags } : remoteQuick;
+    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().sort((a, b) => (a.id < b.id ? -1 : 1)), tags: mergedQuickTags, ...(mergedQuickPurges.length ? { purged: mergedQuickPurges } : {}) } : remoteQuick;
     // 无变化的半边不做全量序列化/哈希（大库空跑时这是主要 CPU）
     const lakeSerialized = lakeChanged ? serializeLakeIndex(newLake) : "";
     const quickSerialized = quickChanged ? serializeQuickNotesIndex(newQuick) : "";
@@ -590,7 +593,7 @@ export class S3v3SyncEngine {
     if (!needPublish) {
       const restoredIds = new Set(lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id));
       const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds).filter((it) => !yieldedIntents.has(it.noteId));
-      const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: newQuick, folders: stateFolders, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
+      const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: newQuick, quickPurges: mergedQuickPurges, folders: stateFolders, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(newState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
       await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, newState, report);
@@ -608,7 +611,7 @@ export class S3v3SyncEngine {
     for (const p of planned) dedup.set(p.key + "|" + p.kind, p);
     const pending = [...dedup.values()];
 
-    const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: newQuick, folders: stateFolders, pending };
+    const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: newQuick, quickPurges: mergedQuickPurges, folders: stateFolders, pending };
     await this.device.saveState(newState);
     this.phase("publish-save-state");
     if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步，请稍后重试");
@@ -787,7 +790,7 @@ export class S3v3SyncEngine {
     if (failures.size > 0) throw new Error("初始化上传失败: " + [...failures.values()][0]);
     return {
       lake: { v: 3, space: "lake", notes: [...lakeEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), folders: state.folders },
-      quickNotes: { v: 3, space: "quickNotes", items: [...quickEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags },
+      quickNotes: { v: 3, space: "quickNotes", items: [...quickEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags, ...((state.quickPurges ?? []).length ? { purged: [...(state.quickPurges ?? [])].sort() } : {}) },
     };
   }
 

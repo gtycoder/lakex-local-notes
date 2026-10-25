@@ -3,7 +3,7 @@
 ## 1. 当前状态
 
 - **桌面文档同步已默认 v3**：`syncEngineController.syncNowViaEngine` 在未设置 `LAKE_SYNC_PROTOCOL` 时走 v3；显式 `LAKE_SYNC_PROTOCOL=legacy` 才走旧通道（回滚）。
-- 小记仍由旧 quick-notes 通道同步（`main.ts` 文档同步之后调用 `syncQuickNotes`），v3 桌面适配器不处理小记。
+- 桌面小记已默认随 v3 同步；旧 quick-notes 通道只在 `LAKE_SYNC_PROTOCOL=legacy` 或 `LAKE_S3V3_QUICK_NOTES=0` 时使用。
 - 移动端 v3 仍是 beta（localStorage 开关），旧移动同步仍是默认。
 
 ## 2. 切换语义（无历史数据兼容）
@@ -26,13 +26,14 @@
 - 全仓测试 2,804 passed / 25 skipped（转正默认后）。
 - 旧通道测试显式设 `LAKE_SYNC_PROTOCOL=legacy`，继续覆盖回滚路径。
 
-## 4.5 桌面小记 v3（experimental，默认关）
+## 4.5 桌面小记 v3（已默认）
 
-- 开关：`LAKE_S3V3_QUICK_NOTES=1`（同时停用旧 quick-notes 通道）。
-- 已实现：桌面小记正文/附件/标签目录/标签关系/删除进回收站/远端删除跟随；`DesktopStoreDevice` 注入 `QuickNotesStore`。
-- 已验证：`electron/s3v3/quickNotesAdapter.test.ts` 2 例——文本创建→上传→双端拉取→编辑→删除回回收站；图片附件上传/下载。
-- 尚未默认：**彻底删除（purge）的跨端语义**尚未区分“删除/彻底删除”（v3 只有 absence），需要小记墓碑表示；标签墓碑/目录合并虽已实现但仍建议做一轮真实双端验收。
-- 因此小记旧通道仍默认；`sync_state` 仍不能删。
+- 默认：v3 文档通道下小记随同一轮同步；`LAKE_S3V3_QUICK_NOTES=0` 或 legacy 才走旧通道。
+- 已实现：正文/附件/标签目录/标签关系/软删进回收站/远端删除跟随/**彻底删除 purged 墓碑跨端传播**；`DesktopStoreDevice` 注入 `QuickNotesStore`。
+- 已验证 `electron/s3v3/quickNotesAdapter.test.ts` 3 例：文本创建→上传→双端拉取→编辑→删除回回收站；图片附件；彻底删除后另一端 active/trash 均无副本且指数组含 purged。
+- 真实 S3：默认路径（无 env）同时上传文档 + 小记通过（`defaultSwitch.integration.test.ts`）。
+- 残留：`sync_quick_note` 单条“保存并同步”和 `restore_missing_quick_note_from_cloud` 仍走旧 quick-notes API，需要改成 v3（下一轮）。
+- `sync_state` 仍被旧通道/UI 计数/legacy 回滚使用，仍不能删。
 
 ## 5. 完整转正还差什么（sync_state 能否删除）
 
