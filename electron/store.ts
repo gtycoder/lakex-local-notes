@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { ASSET_PORT } from "./assetServer.js";
+import { DocumentTagsService } from "./documentTags.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { perfMessage } from "../src/core/logFormat.js";
@@ -150,6 +151,8 @@ export class Store {
   private remoteImport: RemoteImportRepository;
   /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；sync/quickNotes 经此读取） */
   readonly logScopes: LoggerScopes;
+  /** 文档标签（目录 + tag_links(target_kind='note')）。 */
+  readonly documentTags: DocumentTagsService;
 
   /** 数据根目录（v3 适配器/诊断用；只读）。 */
   get rootPath(): string { return this.root; }
@@ -178,6 +181,7 @@ export class Store {
       notePathFor: (noteId) => this.notePath(noteId),
     });
     this.schemaInit.migrate();
+    this.documentTags = new DocumentTagsService(this.db);
     this.settingsRepository = new SettingsRepository(this.db, secretCipher);
     this.historyRepository = new HistoryRepository(this.db, this.root);
     this.trashRepository = new TrashRepository(this.db, TRASH_NOTEBOOK_ID);
