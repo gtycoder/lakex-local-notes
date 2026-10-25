@@ -966,7 +966,8 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 - **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 V1 重置）· `S3-GC-DESIGN.md`（存储/删除 GC）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
 - **S3 清单规模**：`S3-MANIFEST-SCALE-RESEARCH.md`（20MB 上限实测、条目瘦身、分片、墓碑退役最小条件；配套 `S3-GC-DESIGN.md` §7）。
 - **S3 重设计**：`S3-REDESIGN.md`（2 万/20 万目标；当前状态 + 设备基线 + 锁；永久删除零痕迹；迁移/验收）。
-- **S3 v3 实施报告**：`S3-V3-IMPLEMENTATION-REPORT.md`（测试方案/结果/bug 修复/上生产缺口；分支 `feat/s3-v3`）。
+- **S3 v3 实施报告**：`S3-V3-IMPLEMENTATION-REPORT.md`（协议/运行时/bug 修复/上生产缺口）。
+- **S3 v3 最终对比与测试报告**：`S3-V3-FINAL-REPORT.md`（4 桌面真实 UI、master A/B、真实 S3 规模、B14 P0、移动端缺口）。
 - **同类软件同步**：`SYNC-APPROACHES-SURVEY.md`（网盘/条目/快照/服务端四派对照，大白话）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）。
 - **表格（usheet / Univer）**：`USHEET-UPGRADE.md`（内核触点清单 + 依赖升级 playbook + 路线图；配套 `src/features/usheet/usheetKernelContract.ts` · `univerContract.test.ts` · `scripts/usheet-kernel-probes.mjs`）。
