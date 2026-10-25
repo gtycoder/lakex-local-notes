@@ -32,6 +32,9 @@ import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "../../
 import { shouldClearDeletionIntent, type DeletionIntent } from "../../src/core/s3v3Intent.js";
 import type { DeviceBaseline, DeviceState, FileDeviceStore } from "./fileDeviceStore.js";
 import type { S3v3Remote } from "./ports.js";
+import { runPool } from "../../src/core/s3v3Pool.js";
+
+const TRANSFER_CONCURRENCY = 8;
 
 const LOCK_KEY = "meta/lock.json";
 const LOCK_TTL_MS = 120_000;
@@ -626,15 +629,16 @@ export class S3v3SyncEngine {
     if (filenames.length === 0) return null;
     const entries = [];
     const remoteFiles = new Set((remoteDecl?.assets ?? []).map((a) => a.filename));
+    const toUpload: Array<{ filename: string; bytes: Uint8Array }> = [];
     for (const filename of filenames) {
       const bytes = space === "lake" ? await this.device.readAsset(id, filename) : await this.device.readQuickAsset(id, filename);
       if (!bytes) continue;
-      const hash = sha256Hex(bytes);
-      entries.push({ filename, size: bytes.length, hash });
-      if (!remoteFiles.has(filename)) {
-        await this.remote.put(space === "lake" ? assetKey(id, filename) : quickNoteAssetKey(id, filename), bytes);
-      }
+      entries.push({ filename, size: bytes.length, hash: sha256Hex(bytes) });
+      if (!remoteFiles.has(filename)) toUpload.push({ filename, bytes });
     }
+    await runPool(toUpload, TRANSFER_CONCURRENCY, async (a) => {
+      await this.remote.put(space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename), a.bytes);
+    });
     return buildAssetDeclaration(entries);
   }
 
@@ -646,24 +650,24 @@ export class S3v3SyncEngine {
     if (!declHash) { return null; }
     const decl = await this.getDeclaration("lake", id, declHash);
     if (!decl) { this.warnings.push("缺资产声明: " + id); return null; }
-    for (const a of decl.assets) {
+    await runPool(decl.assets, TRANSFER_CONCURRENCY, async (a) => {
       const bytes = await this.remote.get(assetKey(id, a.filename));
-      if (!bytes) { this.warnings.push("缺附件: " + id + "/" + a.filename); continue; }
-      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("附件校验失败: " + id + "/" + a.filename); continue; }
+      if (!bytes) { this.warnings.push("缺附件: " + id + "/" + a.filename); return; }
+      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("附件校验失败: " + id + "/" + a.filename); return; }
       await this.device.writeAsset(id, a.filename, bytes);
-    }
+    });
     return decl;
   }
   private async downloadQuickAssets(id: string, declHash?: string): Promise<AssetDeclaration | null> {
     if (!declHash) return null;
     const decl = await this.getDeclaration("quickNotes", id, declHash);
     if (!decl) { this.warnings.push("缺小记图片声明: " + id); return null; }
-    for (const a of decl.assets) {
+    await runPool(decl.assets, TRANSFER_CONCURRENCY, async (a) => {
       const bytes = await this.remote.get(quickNoteAssetKey(id, a.filename));
-      if (!bytes) { this.warnings.push("缺小记图片: " + id + "/" + a.filename); continue; }
-      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("小记图片校验失败: " + id + "/" + a.filename); continue; }
+      if (!bytes) { this.warnings.push("缺小记图片: " + id + "/" + a.filename); return; }
+      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("小记图片校验失败: " + id + "/" + a.filename); return; }
       await this.device.writeQuickAsset(id, a.filename, bytes);
-    }
+    });
     return decl;
   }
 
