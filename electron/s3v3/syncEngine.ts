@@ -32,7 +32,7 @@ import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "../../
 import { shouldClearDeletionIntent, type DeletionIntent } from "../../src/core/s3v3Intent.js";
 import type { DeviceBaseline, DeviceState, FileDeviceStore } from "./fileDeviceStore.js";
 import type { S3v3Remote } from "./ports.js";
-import { runPool } from "../../src/core/s3v3Pool.js";
+import { runPool, runPoolSettled } from "../../src/core/s3v3Pool.js";
 
 const TRANSFER_CONCURRENCY = 8;
 
@@ -84,6 +84,7 @@ export class S3v3SyncEngine {
   private readonly deviceId: string;
   private readonly now: () => Date;
   private readonly declCache = new Map<string, AssetDeclaration>();
+  private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes: Uint8Array; gzip?: boolean }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
   private warnings: string[] = [];
 
@@ -98,6 +99,7 @@ export class S3v3SyncEngine {
 
   /** 正常同步（先拉后推 + 发布锁 + 待删门禁）。 */
   async sync(opts: S3v3SyncOptions = {}): Promise<S3v3SyncReport> {
+    this.uploadOps = [];
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < MAX_PUBLISH_RETRIES; attempt++) {
       this.warnings = [];
@@ -399,7 +401,7 @@ export class S3v3SyncEngine {
         const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("lake", plan.id, plan.remote.assetsHash) : null;
         const decl = await this.uploadAssets("lake", plan.id, remoteDecl);
         if (decl) {
-          await this.remote.put(declarationKey("lake", plan.id, decl.declHash), new TextEncoder().encode(serializeDeclaration(decl.declaration)), { gzip: true });
+          this.uploadOps.push({ space: "lake", noteId: plan.id, key: declarationKey("lake", plan.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
           entry.assetsHash = decl.declHash;
           newLakeDecls.set(plan.id, { declHash: decl.declHash, filenames: decl.declaration.assets.map((a) => a.filename) });
           if (plan.remote?.assetsHash && plan.remote.assetsHash !== decl.declHash) {
@@ -413,7 +415,7 @@ export class S3v3SyncEngine {
             if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
           }
         }
-        await this.remote.put(lakeBodyKey(plan.id, hash), body);
+        this.uploadOps.push({ space: "lake", noteId: plan.id, key: lakeBodyKey(plan.id, hash), bytes: body });
         report.uploadedNotes++;
       } catch (e) {
         this.warnings.push("上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
@@ -435,7 +437,7 @@ export class S3v3SyncEngine {
         const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("quickNotes", plan.id, plan.remote.assetsHash) : null;
         const decl = await this.uploadQuickAssets(plan.id, remoteDecl);
         if (decl) {
-          await this.remote.put(declarationKey("quickNotes", plan.id, decl.declHash), new TextEncoder().encode(serializeDeclaration(decl.declaration)), { gzip: true });
+          this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: declarationKey("quickNotes", plan.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
           entry.assetsHash = decl.declHash;
           newQuickDecls.set(plan.id, { declHash: decl.declHash, filenames: decl.declaration.assets.map((a) => a.filename) });
           if (plan.remote?.assetsHash && plan.remote.assetsHash !== decl.declHash) {
@@ -445,7 +447,7 @@ export class S3v3SyncEngine {
         } else {
           entry.assetsHash = undefined;
         }
-        await this.remote.put(quickNoteBodyKey(entry.contentHash), body);
+        this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: quickNoteBodyKey(entry.contentHash), bytes: body });
         report.uploadedNotes++;
       } catch (e) {
         this.warnings.push("小记上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
@@ -453,6 +455,26 @@ export class S3v3SyncEngine {
         else quickIndexEntries.delete(plan.id);
         newQuickDecls.delete(plan.id);
         prevQuickDecls.delete(plan.id);
+      }
+    }
+
+    // 全局传输（≤8）：all-or-isolate，失败笔记不进本轮索引。
+    const uploadFailures = await this.flushUploadOps();
+    for (const [key, msg] of uploadFailures) {
+      const [space, id] = key.split(":");
+      this.warnings.push((space === "lake" ? "上传失败，保持 local 下轮重试: " : "小记上传失败，保持 local 下轮重试: ") + id + " " + msg);
+      if (space === "lake") {
+        const plan = lakePlan.notes.find((p) => p.id === id);
+        if (plan?.remote) lakeIndexEntries.set(id, { ...plan.remote });
+        else lakeIndexEntries.delete(id);
+        newLakeDecls.delete(id);
+        prevDecls.delete(id);
+      } else {
+        const plan = quickPlan.items.find((p) => p.id === id);
+        if (plan?.remote) quickIndexEntries.set(id, { ...plan.remote });
+        else quickIndexEntries.delete(id);
+        newQuickDecls.delete(id);
+        prevQuickDecls.delete(id);
       }
     }
 
@@ -615,10 +637,10 @@ export class S3v3SyncEngine {
       entry.contentHash = sha256Hex(body);
       const decl = await this.uploadAssets("lake", entry.id, null);
       if (decl) {
-        await this.remote.put(declarationKey("lake", entry.id, decl.declHash), new TextEncoder().encode(serializeDeclaration(decl.declaration)), { gzip: true });
+        this.uploadOps.push({ space: "lake", noteId: entry.id, key: declarationKey("lake", entry.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
         entry.assetsHash = decl.declHash;
       }
-      await this.remote.put(lakeBodyKey(entry.id, entry.contentHash), body);
+      this.uploadOps.push({ space: "lake", noteId: entry.id, key: lakeBodyKey(entry.id, entry.contentHash), bytes: body });
       report.uploadedNotes++;
     }
     const quickEntries = new Map(state.quickNotes.items.map((q) => [q.id, { ...q }]));
@@ -628,12 +650,14 @@ export class S3v3SyncEngine {
       entry.contentHash = sha256Hex(body);
       const decl = await this.uploadQuickAssets(entry.id, null);
       if (decl) {
-        await this.remote.put(declarationKey("quickNotes", entry.id, decl.declHash), new TextEncoder().encode(serializeDeclaration(decl.declaration)), { gzip: true });
+        this.uploadOps.push({ space: "quickNotes", noteId: entry.id, key: declarationKey("quickNotes", entry.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
         entry.assetsHash = decl.declHash;
       }
-      await this.remote.put(quickNoteBodyKey(entry.contentHash), body);
+      this.uploadOps.push({ space: "quickNotes", noteId: entry.id, key: quickNoteBodyKey(entry.contentHash), bytes: body });
       report.uploadedNotes++;
     }
+    const failures = await this.flushUploadOps();
+    if (failures.size > 0) throw new Error("初始化上传失败: " + [...failures.values()][0]);
     return {
       lake: { v: 3, space: "lake", notes: [...lakeEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), folders: state.folders },
       quickNotes: { v: 3, space: "quickNotes", items: [...quickEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags },
@@ -652,10 +676,25 @@ export class S3v3SyncEngine {
       entries.push({ filename, size: bytes.length, hash: sha256Hex(bytes) });
       if (!remoteFiles.has(filename)) toUpload.push({ filename, bytes });
     }
-    await runPool(toUpload, TRANSFER_CONCURRENCY, async (a) => {
-      await this.remote.put(space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename), a.bytes);
-    });
+    for (const a of toUpload) {
+      this.uploadOps.push({ space, noteId: id, key: space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename), bytes: a.bytes });
+    }
     return buildAssetDeclaration(entries);
+  }
+
+  /** 把本轮积累的全部写操作按全局并发 8 执行；返回失败分组（space:noteId → 错误）。 */
+  private async flushUploadOps(): Promise<Map<string, string>> {
+    const ops = this.uploadOps;
+    this.uploadOps = [];
+    const { errors } = await runPoolSettled(ops, TRANSFER_CONCURRENCY, async (op) => {
+      await this.remote.put(op.key, op.bytes, op.gzip ? { gzip: true } : undefined);
+    });
+    const failed = new Map<string, string>();
+    for (const err of errors) {
+      const op = ops[err.index];
+      failed.set(op.space + ":" + op.noteId, (err.error as Error).message);
+    }
+    return failed;
   }
 
   private async uploadQuickAssets(id: string, remoteDecl: AssetDeclaration | null) {
