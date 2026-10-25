@@ -1,5 +1,5 @@
 /**
- * 标签目录子系统（桌面）：只拥有 `quick_note_tags`，不认识小记、不读 `.qnote`。
+ * 标签目录子系统（桌面）：只拥有 `tags`（通用标签目录），不认识小记、不读 `.qnote`。
  * 关联关系在 `quickNoteTagLinksStore`；两者只在协调层（quickNoteTagService）里组合。
  */
 import type { DbLike } from "./dbLike.js";
@@ -49,7 +49,7 @@ export class QuickNoteTagsStore {
 
   private ensureSchema(): void {
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS quick_note_tags (
+      CREATE TABLE IF NOT EXISTS tags (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         sort_order INTEGER NOT NULL DEFAULT 0,
@@ -59,12 +59,12 @@ export class QuickNoteTagsStore {
         deleted_at TEXT
       );
     `);
-    this.db.exec("CREATE INDEX IF NOT EXISTS idx_quick_note_tags_order ON quick_note_tags(deleted_at, pinned, sort_order, name)");
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_tags_order ON tags(deleted_at, pinned, sort_order, name)");
   }
 
   list(options: { includeDeleted?: boolean } = {}): QuickNoteTag[] {
     const where = options.includeDeleted ? "" : "WHERE deleted_at IS NULL";
-    const rows = this.db.prepare(`SELECT * FROM quick_note_tags ${where} ORDER BY pinned DESC, sort_order, name`).all() as QuickNoteTagRow[];
+    const rows = this.db.prepare(`SELECT * FROM tags ${where} ORDER BY pinned DESC, sort_order, name`).all() as QuickNoteTagRow[];
     return rows.map(mapTagRow);
   }
 
@@ -75,11 +75,11 @@ export class QuickNoteTagsStore {
   /** 幂等创建：同名 active 直接返回；同名墓碑按原 ID 复活。 */
   ensure(raw: string, at = new Date().toISOString()): QuickNoteTag {
     const name = toTagError(() => normalizeQuickNoteTag(raw));
-    const existing = this.db.prepare("SELECT * FROM quick_note_tags WHERE name=? AND deleted_at IS NULL ORDER BY created_at LIMIT 1").get(name) as QuickNoteTagRow | undefined;
+    const existing = this.db.prepare("SELECT * FROM tags WHERE name=? AND deleted_at IS NULL ORDER BY created_at LIMIT 1").get(name) as QuickNoteTagRow | undefined;
     if (existing) return mapTagRow(existing);
     const id = quickNoteTagId(name);
-    const previous = this.db.prepare("SELECT * FROM quick_note_tags WHERE id=?").get(id) as QuickNoteTagRow | undefined;
-    const sortOrder = (this.db.prepare("SELECT IFNULL(MAX(sort_order), -1) AS m FROM quick_note_tags WHERE deleted_at IS NULL").get() as { m: number }).m + 1;
+    const previous = this.db.prepare("SELECT * FROM tags WHERE id=?").get(id) as QuickNoteTagRow | undefined;
+    const sortOrder = (this.db.prepare("SELECT IFNULL(MAX(sort_order), -1) AS m FROM tags WHERE deleted_at IS NULL").get() as { m: number }).m + 1;
     const tag: QuickNoteTag = {
       id,
       name,
@@ -104,7 +104,7 @@ export class QuickNoteTagsStore {
     if (patch.name !== undefined) {
       name = toTagError(() => normalizeQuickNoteTag(patch.name));
       if (name !== row.name) {
-        const clash = this.db.prepare("SELECT id FROM quick_note_tags WHERE name=? AND deleted_at IS NULL AND id<>?").get(name, id) as { id: string } | undefined;
+        const clash = this.db.prepare("SELECT id FROM tags WHERE name=? AND deleted_at IS NULL AND id<>?").get(name, id) as { id: string } | undefined;
         if (clash) throw new AppError("InvalidInput", `已存在同名标签“${name}”，请改用合并`);
       }
     }
@@ -127,7 +127,7 @@ export class QuickNoteTagsStore {
     const now = new Date().toISOString();
     this.db.transaction(() => {
       orderedIds.forEach((id, index) => {
-        this.db.prepare("UPDATE quick_note_tags SET sort_order=?, updated_at=? WHERE id=? AND deleted_at IS NULL").run(index, now, id);
+        this.db.prepare("UPDATE tags SET sort_order=?, updated_at=? WHERE id=? AND deleted_at IS NULL").run(index, now, id);
       });
     })();
     return this.list();
@@ -150,18 +150,18 @@ export class QuickNoteTagsStore {
   assertExist(tagIds: readonly string[]): void {
     const unique = [...new Set(tagIds)];
     if (unique.length === 0) return;
-    const rows = this.db.prepare(`SELECT id FROM quick_note_tags WHERE deleted_at IS NULL AND id IN (${unique.map(() => "?").join(",")})`).all(...unique) as Array<{ id: string }>;
+    const rows = this.db.prepare(`SELECT id FROM tags WHERE deleted_at IS NULL AND id IN (${unique.map(() => "?").join(",")})`).all(...unique) as Array<{ id: string }>;
     if (rows.length !== unique.length) throw new AppError("InvalidInput", "标签不存在或已删除");
   }
 
   private active(id: string): QuickNoteTagRow | null {
-    const row = this.db.prepare("SELECT * FROM quick_note_tags WHERE id=? AND deleted_at IS NULL").get(id) as QuickNoteTagRow | undefined;
+    const row = this.db.prepare("SELECT * FROM tags WHERE id=? AND deleted_at IS NULL").get(id) as QuickNoteTagRow | undefined;
     return row ?? null;
   }
 
   private upsert(tag: QuickNoteTag): void {
     this.db.prepare(
-      "INSERT INTO quick_note_tags(id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?) " +
+      "INSERT INTO tags(id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?) " +
       "ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, pinned=excluded.pinned, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at"
     ).run(tag.id, tag.name, tag.sortOrder, tag.pinned ? 1 : 0, tag.createdAt, tag.updatedAt, tag.deletedAt);
   }

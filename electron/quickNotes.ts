@@ -382,7 +382,8 @@ export class QuickNotesStore {
       this.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(row.id);
       this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(row.id);
       this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(row.id);
-      this.db.prepare("DELETE FROM quick_note_tag_links WHERE note_id=?").run(row.id);
+      this.db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(row.id);
+      this.db.prepare("DELETE FROM tag_link_versions WHERE target_kind='quickNote' AND target_id=?").run(row.id);
     });
     tx();
     this.removeSearchIndex([row.id]);
@@ -844,14 +845,15 @@ export class QuickNotesStore {
     // 否则 tagsUpdatedAt 为空，标签只在本机可见、不会随清单同步出去。
     const tagsUpdatedAt = this.links.listFor(id).length > 0 ? restoredAt : "";
     const tx = this.db.transaction(() => {
-      this.db.prepare("INSERT OR REPLACE INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at,tags_updated_at) VALUES(?,?,?,?,?,?, 'local', 0, ?, ?)")
-        .run(id, tomb.created_at, restoredAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, restoredAt, tagsUpdatedAt);
+      this.db.prepare("INSERT OR REPLACE INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at) VALUES(?,?,?,?,?,?, 'local', 0, ?)")
+        .run(id, tomb.created_at, restoredAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, restoredAt);
       this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
       const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
       for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
       this.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
     });
     tx();
+    if (tagsUpdatedAt) this.links.setVersion(id, tagsUpdatedAt);
     this.reindexFromDisk(id);
     return this.readQuickNote(id);
   }
@@ -1160,8 +1162,11 @@ export class QuickNotesStore {
       this.db.prepare("INSERT OR REPLACE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync) VALUES(?,?,?,?,NULL,0)")
         .run(newId, row.created_at, row.updated_at, now);
       // 归档副本是「本地版本」的快照：标签关系一并复制，恢复后标签不丢。
-      const insertLink = this.db.prepare("INSERT OR IGNORE INTO quick_note_tag_links(note_id, tag_id, position) VALUES(?,?,?)");
+      const insertLink = this.db.prepare("INSERT OR IGNORE INTO tag_links(target_kind, target_id, tag_id, position) VALUES('quickNote',?,?,?)");
       tagIds.forEach((tagId, index) => insertLink.run(newId, tagId, index));
+      if (tagIds.length > 0) {
+        this.db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at").run(newId, now);
+      }
     })();
     return newId;
   }
