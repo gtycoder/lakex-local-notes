@@ -70,6 +70,32 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     expect(store.readNote("n3").content).toBe("from-b");
   }, 60_000);
 
+  it("远端墓碑应用到桌面回收站（B15 回归）", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-trash-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("NB");
+    store.createNoteInAtTopWithContent(nb.id, "TrashMe", "content", [], "t1");
+    const remote = new MemoryRemote();
+    const adapter = new DesktopStoreDevice(store, root);
+    await adapter.init();
+    const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
+    await engineA.sync({ onEmptyCloud: "upload" });
+    const b = await fileDevice();
+    const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
+    await engineB.sync();
+    const st = (await b.store.loadState())!;
+    const note = st.lake.notes.find((x) => x.id === "t1")!;
+    note.parentId = "trash";
+    note.trashedAt = new Date().toISOString();
+    note.updatedAt = new Date(Date.now() + 2000).toISOString();
+    await b.store.saveState(st);
+    await engineB.sync();
+    await engineA.sync();
+    const mapped = store.listNotesForSync().find((x) => x.id === "t1");
+    expect(mapped?.trashedAt).toBeTruthy();
+  }, 60_000);
+
   it("检测到 quick-notes 库时拒绝（不静默丢小记）", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-q-"));
     const store = new Store(root);
