@@ -574,7 +574,9 @@ export class S3v3SyncEngine {
 
     const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: newQuick, folders: stateFolders, pending };
     await this.device.saveState(newState);
+    this.phase("publish-save-state");
     if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步，请稍后重试");
+    this.phase("publish-lock");
     try {
       const now = await this.readPointer();
       if (!now || now.epoch !== pointer.epoch || now.generation !== pointer.generation || now.lake.commit !== pointer.lake.commit || now.quickNotes.commit !== pointer.quickNotes.commit) {
@@ -582,18 +584,20 @@ export class S3v3SyncEngine {
       }
       if (lakeChanged) await this.writeIndex("lake", lakeCommit, lakeSerialized);
       if (quickChanged) await this.writeIndex("quickNotes", quickCommit, quickSerialized);
+      this.phase("publish-index");
       const nextPointer: S3v3Pointer = { v: 3, epoch: pointer.epoch, generation, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: this.iso(), deviceId: this.deviceId };
       await this.assertLockOwned();
       await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(nextPointer)));
       const check = await this.readPointer();
       if (!check || check.generation !== generation || check.lake.commit !== lakeCommit || check.quickNotes.commit !== quickCommit) throw new PublishRetry();
+      this.phase("publish-pointer");
       const restoredIds = new Set(lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id));
       const publishedPurgeIds = new Set([...lakePlan.notes.filter((p) => p.kind === "local-purge").map((p) => p.id), ...quickPlan.items.filter((p) => p.kind === "local-purge").map((p) => p.id)]);
       const updatedIntents = this.bumpIntentsAfterPublish(state.intents, pointer.epoch, generation, restoredIds, publishedPurgeIds).filter((it) => !yieldedIntents.has(it.noteId));
       const finalState: DeviceState = { ...newState, intents: updatedIntents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(finalState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation, lakeCommit, quickNotesCommit: quickCommit, lake: newLake, quickNotes: newQuick });
-      this.phase("publish");
+      this.phase("publish-finalize");
       const deleted = await this.executePending(newLake, newQuick, lakeCommit, quickCommit, finalState, report);
       this.phase("pending");
       return { ...report, published: true, generation, deletedObjects: deleted };

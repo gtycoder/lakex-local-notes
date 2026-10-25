@@ -32,6 +32,21 @@
 4. **发布锁静置 100→40ms**：单用户场景降低固定发布延迟；多端冲突仍由锁重试/归属复核兜底。
 5. **baseline/S3 gzip level 9→1**：JSON 压缩率几乎相同、CPU 更低。
 
+### 增量发布阶段拆解（真实 S3，1,000 文档，改 10 篇，总 832ms）
+| 阶段 | 耗时 | 说明 |
+|---|---|---|
+| load-state | 54ms | 轻量元数据 + stat/hash 缓存 |
+| uploads | 165ms | 10 篇正文 PUT（8 并发） |
+| publish-save-state | 17ms | 本地状态落盘 |
+| publish-lock | 152ms | 读锁 + 写锁 + 静置 40ms + 读回（约 4 个 RTT） |
+| publish-index | 78ms | 读 pointer + 写索引 |
+| publish-pointer | 121ms | 写 pointer + 读回 |
+| publish-finalize | 11ms | 本地 baseline |
+| pending | 176ms | DeleteObjects 旧正文 + 状态落盘 |
+| total | 53ms | 收尾/云状态等 |
+
+结论：增量同步已接近**网络 RTT 下限**（约 10~12 次对象操作 × 30~60ms）。继续压缩需要协议级改变（如合并发布、延迟清理），不是简单代码优化；当前 2 万目标内不做过度优化。
+
 ## 3. 数据量范围（单用户常用场景）
 | 范围 | 文档/附件 | 增量同步 | 首次同步 | 结论 |
 |---|---|---|---|---|
@@ -50,7 +65,12 @@
 3. 适配器增量 load-state（利用本地脏标记/变更集，减少 2 万+ 文档的全量 stat/映射）。
 4. baseline 增量存储或压缩级别自适应。
 
-## 5. 复跑
+## 5. 准确性验证
+- `electron/s3v3/correctness.integration.test.ts`：4 端 × 3 轮并发编辑共享文档 + 各端新建，最终 25 篇文档全端内容 hash 一致、云端索引一致、每篇正文可读；无丢失。
+- `electron/s3v3/desktopStoreAdapter.cache.test.ts`：hash 缓存第二次 loadState 复用；直接改正文文件后 mtime/size 变化能重新识别（不丢外部编辑）。
+- 全仓测试 2799→2800 例通过（新增用例后）。
+
+## 6. 复跑
 ```bash
 # 本地 CPU/IO（MemoryRemote）
 S3V3_PERF_SIZES=500,2000,5000,10000 ./node_modules/.bin/vitest run electron/s3v3/perf.integration.test.ts
