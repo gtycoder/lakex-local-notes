@@ -55,7 +55,7 @@
 ## 5. 实施顺序（建议批次）
 
 1. **纯适配器 + 假 DB/假 S3 单测**（Node/vitest，用移动端 fake bridge）：DeviceState 映射、正文/资产读写、墓碑/恢复。
-   - ✅ 已完成 v1：`src/mobile/v3/mobileDeviceStore.ts`（Lake 文档；双移动端 + 假 S3 + core v3 引擎单测通过：初始化/拉取/增量/墓碑→回收站；附件上传/下载 + 声明；目录 upsert/删除与文档归属也已通过）；小记仍明确抛错。
+   - ✅ 已完成 v1：`src/mobile/v3/mobileDeviceStore.ts`（Lake 文档；双移动端 + 假 S3 + core v3 引擎单测通过：初始化/拉取/增量/墓碑→回收站；附件上传/下载 + 声明；目录 upsert/删除与文档归属；**小记正文/标签/图片**）。移动端数据面已齐。
 2. **v3 状态表 + schema 迁移**：baseline/intents/pending 落库；单测覆盖重启/崩溃续跑。
    - ✅ `sync_v3_state` 仓储 + 2 例单测；尚未并入 MOBILE_SCHEMA_VERSION。
 3. **引擎/端口下沉到 core**：✅ `src/core/s3v3Engine.ts` / `s3v3Ports.ts` / `s3v3DeviceStore.ts`；electron 仅 re-export；check:core 0 违规。

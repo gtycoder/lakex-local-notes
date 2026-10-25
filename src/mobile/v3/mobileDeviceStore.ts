@@ -1,11 +1,11 @@
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "../../core/s3v3DeviceStore.js";
-import type { LakeFolderEntry, LakeNoteEntry, QuickNotesIndex } from "../../core/s3v3Index.js";
+import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry, QuickNotesIndex } from "../../core/s3v3Index.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import type { MobileDb } from "../data/sqliteDb.js";
-import { deleteNoteBodies, readNoteBody, writeNoteBody } from "../data/noteBodies.js";
+import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readQuickNoteBody, writeNoteBody, writeQuickNoteBody } from "../data/noteBodies.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
-import { listNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
+import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { createNote, saveNote } from "../data/noteRepository.js";
 
 /**
@@ -30,6 +30,8 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   private readonly db: MobileDb;
   private stagedBodies = new Map<string, Uint8Array>();
   private stagedDeletes = new Set<string>();
+  private stagedQuickBodies = new Map<string, Uint8Array>();
+  private stagedQuickDeletes = new Set<string>();
 
   constructor(db: MobileDb) { this.db = db; }
 
@@ -74,7 +76,24 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       ...(f.trashed_at ? { trashedAt: f.trashed_at } : {}),
       ...(f.deleted_from_parent_id !== null ? { deletedFromParentId: f.deleted_from_parent_id } : {}),
     }));
-    const quickNotes: QuickNotesIndex = { v: 3, space: "quickNotes", items: [], tags: [] };
+    const qRows = await this.db.prepare(
+      "SELECT id,created_at,updated_at,content_hash,is_conflict,tags_updated_at FROM quick_notes WHERE deleted_at IS NULL ORDER BY id"
+    ).all() as unknown as Array<{ id: string; created_at: string; updated_at: string; content_hash: string; is_conflict: number; tags_updated_at: string }>;
+    const tagRows = await this.db.prepare(
+      "SELECT id,name,sort_order,created_at,updated_at FROM quick_note_tags WHERE deleted_at IS NULL ORDER BY sort_order,id"
+    ).all() as unknown as Array<{ id: string; name: string; sort_order: number; created_at: string; updated_at: string }>;
+    const linkRows = await this.db.prepare("SELECT note_id,tag_id,position FROM quick_note_tag_links ORDER BY note_id,position").all() as unknown as Array<{ note_id: string; tag_id: string; position: number }>;
+    const links = new Map<string, string[]>();
+    for (const l of linkRows) { const arr = links.get(l.note_id) ?? []; arr.push(l.tag_id); links.set(l.note_id, arr); }
+    const tags: QuickNoteTagEntry[] = tagRows.map((t) => ({ id: t.id, name: t.name, order: t.sort_order, createdAt: t.created_at, updatedAt: t.updated_at }));
+    const quickItems: QuickNoteEntry[] = qRows.map((q) => ({
+      id: q.id, createdAt: q.created_at, updatedAt: q.updated_at, contentHash: q.content_hash,
+      isConflict: !!q.is_conflict,
+      ...(side.assetsHash[q.id] ? { assetsHash: side.assetsHash[q.id] } : {}),
+      ...(links.has(q.id) ? { tagIds: links.get(q.id) } : {}),
+      ...(q.tags_updated_at ? { tagsUpdatedAt: q.tags_updated_at } : {}),
+    }));
+    const quickNotes: QuickNotesIndex = { v: 3, space: "quickNotes", items: quickItems, tags };
     return {
       lake: { v: 3, space: "lake", notes, folders }, quickNotes, folders,
       intents: side.intents, pending: side.pending,
@@ -120,6 +139,40 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       await this.db.prepare("DELETE FROM notes WHERE id=?").run(id);
       await deleteNoteBodies(id);
     }
+    // 小记：按 state upsert/删除 + 标签关系 + 标签目录
+    const curQRows = await this.db.prepare("SELECT id FROM quick_notes WHERE deleted_at IS NULL").all() as unknown as Array<{ id: string }>;
+    const curQ = new Set(curQRows.map((r) => r.id));
+    const wantedQ = new Map(state.quickNotes.items.map((q) => [q.id, q]));
+    for (const q of wantedQ.values()) {
+      const bodyBytes = this.stagedQuickBodies.get(q.id);
+      const body = bodyBytes ? new TextDecoder().decode(bodyBytes) : null;
+      if (!curQ.has(q.id)) {
+        if (body !== null) await writeQuickNoteBody(q.id, body);
+        await this.db.prepare(
+          "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at,tags_updated_at) VALUES (?,?,?,'',0,?,'local',?,NULL,?)"
+        ).run(q.id, q.createdAt, q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, q.tagsUpdatedAt ?? "");
+      } else if (body !== null) {
+        await writeQuickNoteBody(q.id, body);
+        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, sync_state='local', tags_updated_at=? WHERE id=?").run(q.updatedAt, q.contentHash, q.tagsUpdatedAt ?? "", q.id);
+      }
+      await this.db.prepare("DELETE FROM quick_note_tag_links WHERE note_id=?").run(q.id);
+      const tagIds = q.tagIds ?? [];
+      for (let i = 0; i < tagIds.length; i++) {
+        await this.db.prepare("INSERT INTO quick_note_tag_links (note_id,tag_id,position) VALUES (?,?,?) ON CONFLICT(note_id,tag_id) DO UPDATE SET position=excluded.position").run(q.id, tagIds[i], i);
+      }
+    }
+    for (const id of curQ) {
+      if (wantedQ.has(id)) continue;
+      await this.db.prepare("DELETE FROM quick_note_tag_links WHERE note_id=?").run(id);
+      await this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+      await deleteQuickNoteBody(id);
+      for (const key of await listQuickNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
+    }
+    for (const tag of state.quickNotes.tags ?? []) {
+      await this.db.prepare(
+        "INSERT INTO quick_note_tags (id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES (?,?,?,0,?,?,NULL) ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=NULL"
+      ).run(tag.id, tag.name, tag.order ?? 0, tag.createdAt, tag.updatedAt);
+    }
     // 目录：按 state 做 upsert/删除（v1 直接写 folders 表；树索引由旧移动通道/启动对账维护）
     const folderRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM folders").all() as unknown as FolderRow[];
     const curFolders = new Map(folderRows.map((f) => [f.id, f]));
@@ -141,10 +194,12 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       ...side,
       intents: state.intents, pending: state.pending,
       remotePurged: state.remotePurged ?? [], restorePending: state.restorePending ?? [],
-      assetsHash: Object.fromEntries(state.lake.notes.filter((n) => n.assetsHash).map((n) => [n.id, n.assetsHash!])),
+      assetsHash: Object.fromEntries([...state.lake.notes, ...state.quickNotes.items].filter((n) => n.assetsHash).map((n) => [n.id, n.assetsHash!])),
     });
     this.stagedBodies.clear();
     this.stagedDeletes.clear();
+    this.stagedQuickBodies.clear();
+    this.stagedQuickDeletes.clear();
   }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {
@@ -188,11 +243,33 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     for (const key of await listNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
   }
 
-  async readQuickBody(): Promise<Uint8Array | null> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
-  async writeQuickBody(): Promise<void> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
-  async deleteQuickBody(): Promise<void> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
-  async listQuickAssets(): Promise<string[]> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
-  async readQuickAsset(): Promise<Uint8Array | null> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
-  async writeQuickAsset(): Promise<void> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
-  async deleteQuickAssetsDir(): Promise<void> { throw new Error("MobileDeviceStore v1: 小记尚未接入 v3"); }
+  async readQuickBody(id: string): Promise<Uint8Array | null> {
+    const staged = this.stagedQuickBodies.get(id);
+    if (staged) return staged;
+    if (this.stagedQuickDeletes.has(id)) return null;
+    const content = await readQuickNoteBody(id);
+    return content == null ? null : new TextEncoder().encode(content);
+  }
+  async writeQuickBody(id: string, bytes: Uint8Array): Promise<void> {
+    this.stagedQuickBodies.set(id, bytes);
+    this.stagedQuickDeletes.delete(id);
+  }
+  async deleteQuickBody(id: string): Promise<void> {
+    this.stagedQuickBodies.delete(id);
+    this.stagedQuickDeletes.add(id);
+  }
+  async listQuickAssets(id: string): Promise<string[]> {
+    const keys = await listQuickNoteAssetKeysFs(id);
+    const prefix = "quick-notes/" + id + "/";
+    return keys.map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k)).sort();
+  }
+  async readQuickAsset(id: string, filename: string): Promise<Uint8Array | null> {
+    return await loadAssetBytesFs("quick-notes/" + id + "/" + filename);
+  }
+  async writeQuickAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
+    await saveAssetBytesFs("quick-notes/" + id + "/" + filename, bytes);
+  }
+  async deleteQuickAssetsDir(id: string): Promise<void> {
+    for (const key of await listQuickNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
+  }
 }

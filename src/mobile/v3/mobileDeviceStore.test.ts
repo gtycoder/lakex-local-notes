@@ -8,13 +8,15 @@ vi.mock("../native/assetFs", () => ({
   loadAssetBytesFs: async (key: string) => assetStore.get(key) ?? null,
   removeAssetBytesFs: async (key: string) => { assetStore.delete(key); },
   listNoteAssetKeysFs: async (noteId: string) => [...assetStore.keys()].filter((k) => k.startsWith(noteId + "/")),
-  listQuickNoteAssetKeysFs: async () => [],
+  listQuickNoteAssetKeysFs: async (id: string) => [...assetStore.keys()].filter((k) => k.startsWith("quick-notes/" + id + "/")),
   listAssetKeysFs: async () => [...assetStore.keys()],
 }));
 import { gunzipSync, gzipSync } from "node:zlib";
 import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, saveNote } from "../data/noteRepository.js";
+import { writeQuickNoteBody } from "../data/noteBodies.js";
+import { sha256Sync } from "../../core/sha256Sync.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
 import { S3v3SyncEngine } from "../../core/s3v3Engine.js";
 import type { RemoteObjectInfo, S3v3Remote } from "../../core/s3v3Ports.js";
@@ -99,6 +101,31 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     expect(folder.node_type).toBe("notebook");
     const note = await b.db.prepare("SELECT parent_id FROM notes WHERE id='m4'").get() as { parent_id: string | null };
     expect(note.parent_id).toBe("nb1");
+    await a.db.close(); await b.db.close();
+  }, 60_000);
+
+  it("小记：正文/标签/图片双端同步", async () => {
+    const remote = new MemoryRemote();
+    const a = await freshDevice();
+    const b = await freshDevice();
+    const body = "quick-body";
+    const hash = sha256Sync(new TextEncoder().encode(body));
+    await a.db.prepare("INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,tags_updated_at) VALUES ('q1','2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z','',0,?,'local',0,'')").run(hash);
+    await writeQuickNoteBody("q1", body);
+    await a.db.prepare("INSERT INTO quick_note_tags (id,name,sort_order,pinned,created_at,updated_at) VALUES ('t1','Tag',0,0,'2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z')").run();
+    await a.db.prepare("INSERT INTO quick_note_tag_links (note_id,tag_id,position) VALUES ('q1','t1',0)").run();
+    assetStore.set("quick-notes/q1/pic.png", new TextEncoder().encode("Q-IMG"));
+    const engineA = new S3v3SyncEngine({ remote, device: a.store, deviceId: "A" });
+    const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
+    await engineA.sync({ onEmptyCloud: "upload" });
+    expect((await remote.list("quick-notes/objects/")).length).toBe(1);
+    await engineB.sync();
+    const row = await b.db.prepare("SELECT content_hash FROM quick_notes WHERE id='q1'").get() as { content_hash: string };
+    expect(row.content_hash).toBe(hash);
+    expect(new TextDecoder().decode((await b.store.readQuickBody("q1"))!)).toBe(body);
+    const link = await b.db.prepare("SELECT tag_id FROM quick_note_tag_links WHERE note_id='q1'").get() as { tag_id: string };
+    expect(link.tag_id).toBe("t1");
+    expect(new TextDecoder().decode((await b.store.readQuickAsset("q1", "pic.png"))!)).toBe("Q-IMG");
     await a.db.close(); await b.db.close();
   }, 60_000);
 });
