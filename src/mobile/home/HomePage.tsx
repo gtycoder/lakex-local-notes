@@ -388,8 +388,13 @@ export function HomePage(props: HomePageProps) {
   }, [composer]);
   const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
-    try { const r = await bridge.syncNow(); const w = r.notes?.warnings?.length ?? 0; showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : "")); }
-    catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
+    try {
+      const r = await bridge.syncNow();
+      // 同步可能改了远端小记/目录：刷新首页数据，否则列表停留在旧快照。
+      await Promise.all([onQuickNotesChanged(), onTreeChanged()]);
+      const w = r.notes?.warnings?.length ?? 0;
+      showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
+    } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
   const toggleView = (): void => {
     setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; writeLocalStorage(VIEW_KEY, nv); return nv; });
