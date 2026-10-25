@@ -59,7 +59,7 @@
 2. **v3 状态表 + schema 迁移**：baseline/intents/pending 落库；单测覆盖重启/崩溃续跑。
    - ✅ `sync_v3_state` 仓储 + 2 例单测；尚未并入 MOBILE_SCHEMA_VERSION。
 3. **引擎/端口下沉到 core**：✅ `src/core/s3v3Engine.ts` / `s3v3Ports.ts` / `s3v3DeviceStore.ts`；electron 仅 re-export；check:core 0 违规。
-4. **移动 S3v3Remote**：✅ `src/mobile/v3/s3v3Remote.ts`（复用 createMobileS3Client；prefix/gzip/list/delete；fake client 1 例单测）；真实 S3 集成待做。
+4. **移动 S3v3Remote**：✅ `src/mobile/v3/s3v3Remote.ts`（复用 createMobileS3Client；prefix/gzip/list/delete；fake client 1 例单测）；✅ 真实 S3 gated 测试（Node 默认 handler 验证端口逻辑：gzip 往返/list/deleteByPrefix，511ms）。Capacitor handler 真机待验。
 4. **移动 v3 编排 + bridge 分支**：✅ `src/mobile/v3/sync.ts`（MobileDeviceStore + remote + core 引擎；空云端 upload 开关）；✅ `bridge.syncNow` feature flag（localStorage `syncProtocol=v3`，动态 import，默认旧路径）；v3 编排 1 例 + bridge 43 例通过。
 5. **2 台模拟器/真机真实点击**：建文档/编辑/删除/恢复/彻底删除/冲突，观察 S3 对象与指针。
 6. **指标**：移动端耗时、流量、对象数、索引大小；与桌面/旧移动同步对比。
