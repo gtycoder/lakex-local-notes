@@ -99,7 +99,8 @@ describe("QuickNotesStore", () => {
       stagedImageIds: [],
     });
     quickNotes.setQuickNoteTags(note.id, [inspiration.id, todo.id]);
-    const at = "2026-10-25T00:00:00.000Z";
+    // 远端时间必须晚于本端标签创建时间，LWW 才应接受（否则测试在真实当前时间会错误地期待远端胜）
+    const at = new Date(Date.now() + 60_000).toISOString();
     const project = {
       id: quickNoteTagId("项目"),
       name: "项目",
