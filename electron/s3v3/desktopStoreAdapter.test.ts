@@ -96,6 +96,37 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     expect(mapped?.trashedAt).toBeTruthy();
   }, 60_000);
 
+  it("远端恢复（restore）应用到桌面回收站（B15 恢复路径回归）", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-restore-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("NB");
+    store.createNoteInAtTopWithContent(nb.id, "RestoreMe", "content", [], "r1");
+    const remote = new MemoryRemote();
+    const adapter = new DesktopStoreDevice(store, root);
+    await adapter.init();
+    const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
+    await engineA.sync({ onEmptyCloud: "upload" });
+    const b = await fileDevice();
+    const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
+    await engineB.sync();
+    // B 先删（trash）→ A 收到回收站
+    let st = (await b.store.loadState())!;
+    let note = st.lake.notes.find((x) => x.id === "r1")!;
+    note.parentId = "trash"; note.trashedAt = new Date().toISOString(); note.updatedAt = new Date(Date.now() + 1000).toISOString();
+    await b.store.saveState(st); await engineB.sync(); await engineA.sync();
+    expect(store.listNotesForSync().find((x) => x.id === "r1")?.trashedAt).toBeTruthy();
+    // B 恢复 → A 应 restoreTrashItem 并移回原目录
+    st = (await b.store.loadState())!;
+    note = st.lake.notes.find((x) => x.id === "r1")!;
+    note.parentId = nb.id; delete note.trashedAt; note.updatedAt = new Date(Date.now() + 2000).toISOString();
+    st.restorePending = ["r1"];
+    await b.store.saveState(st); await engineB.sync(); await engineA.sync();
+    const mapped = store.listNotesForSync().find((x) => x.id === "r1");
+    expect(mapped?.trashedAt ?? null).toBeNull();
+    expect(mapped?.parentId).toBe(nb.id);
+  }, 60_000);
+
   it("检测到 quick-notes 库时拒绝（不静默丢小记）", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-q-"));
     const store = new Store(root);
