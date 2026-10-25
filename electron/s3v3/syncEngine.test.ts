@@ -31,6 +31,20 @@ class MemoryRemote implements S3v3Remote {
   }
 }
 
+class FlakyRemote extends MemoryRemote {
+  failPut: ((key: string) => boolean) | null = null;
+  failDelete = false;
+  override async put(key: string, bytes: Uint8Array, opts?: { gzip?: boolean }): Promise<void> {
+    if (this.failPut?.(key)) throw new Error("injected put failure: " + key);
+    return super.put(key, bytes, opts);
+  }
+  override async deleteMany(keys: string[]): Promise<void> {
+    if (this.failDelete) throw new Error("injected delete failure");
+    return super.deleteMany(keys);
+  }
+}
+
+const INDEX_KEY = (commit: string) => "meta/index/" + commit + ".json";
 const tmp = async (name: string) => fs.mkdtemp(path.join(os.tmpdir(), "s3v3-" + name + "-"));
 async function device(name: string) {
   const root = await tmp(name);
@@ -246,6 +260,64 @@ describe("S3v3 同步引擎（双端）", () => {
     const r = await engine(remote, b.store, "B").sync();
     expect(r.warnings.some((w) => w.includes("缺正文"))).toBe(true);
     expect(await b.store.readBody("n1")).toBeNull();
+  });
+
+  it("上传失败不污染索引：保持旧版本，下一轮重试成功", async () => {
+    const remote = new FlakyRemote();
+    const a = await device("a");
+    await addDoc(a.store, "n1", "v1");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    const v2 = new TextEncoder().encode("v2-failing");
+    const h2 = sha256Hex(v2);
+    await a.store.writeBody("n1", v2);
+    const sa = (await a.store.loadState())!;
+    sa.lake.notes = sa.lake.notes.map((n) => n.id === "n1" ? { ...n, contentHash: h2, updatedAt: new Date(Date.now() + 1000).toISOString() } : n);
+    await a.store.saveState(sa);
+    remote.failPut = (key) => key === "objects/n1-" + h2 + ".lake";
+    const r = await engine(remote, a.store, "A").sync();
+    expect(r.warnings.some((w) => w.includes("上传失败"))).toBe(true);
+    // 云端仍是 v1，索引不引用未落盘的 v2
+    expect(await remote.list("objects/n1-" + h2 + ".lake")).toHaveLength(0);
+    const pointer = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { lake: { commit: string } };
+    const idx = JSON.parse(new TextDecoder().decode((await remote.get(INDEX_KEY(pointer.lake.commit)))!)) as { notes: Array<{ id: string; contentHash: string }> };
+    expect(idx.notes.find((n) => n.id === "n1")!.contentHash).not.toBe(h2);
+    // 清故障后重试成功
+    remote.failPut = null;
+    await engine(remote, a.store, "A").sync();
+    expect(await remote.list("objects/n1-" + h2 + ".lake")).toHaveLength(1);
+    const pointer2 = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { lake: { commit: string } };
+    const idx2 = JSON.parse(new TextDecoder().decode((await remote.get(INDEX_KEY(pointer2.lake.commit)))!)) as { notes: Array<{ id: string; contentHash: string }> };
+    expect(idx2.notes.find((n) => n.id === "n1")!.contentHash).toBe(h2);
+  });
+
+  it("待删执行失败时保留队列，恢复后补删（零痕迹）", async () => {
+    const remote = new FlakyRemote();
+    const a = await device("a");
+    await addDoc(a.store, "n1", "x");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    const orphan = "orphan-" + "b".repeat(64) + ".lake";
+    await remote.put("objects/" + orphan, new TextEncoder().encode("orphan"));
+    const state = (await a.store.loadState())!;
+    state.pending = [{ kind: "body", key: "objects/" + orphan, noteId: "n9", oldHash: "b".repeat(64), targetEpoch: "", targetGeneration: 1, targetCommit: "", createdAt: new Date().toISOString() }];
+    await a.store.saveState(state);
+    remote.failDelete = true;
+    const r = await engine(remote, a.store, "A").sync();
+    expect(r.warnings.some((w) => w.includes("待删执行失败"))).toBe(true);
+    expect((await a.store.loadState())!.pending).toHaveLength(1);
+    expect(remote.objects.has("objects/" + orphan)).toBe(true);
+    remote.failDelete = false;
+    await engine(remote, a.store, "A").sync();
+    expect((await a.store.loadState())!.pending).toHaveLength(0);
+    expect(remote.objects.has("objects/" + orphan)).toBe(false);
+  });
+
+  it("pointer 损坏 → pointer-corrupt（不猜）", async () => {
+    const remote = new MemoryRemote();
+    const a = await device("a");
+    await addDoc(a.store, "n1", "x");
+    await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
+    await remote.put("meta/pointer.json", new TextEncoder().encode("{not-json"));
+    await expect(engine(remote, a.store, "A").sync()).rejects.toMatchObject({ code: "pointer-corrupt" });
   });
 
   it("小记：上传/拉取/删除无痕", async () => {

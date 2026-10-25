@@ -114,7 +114,9 @@ export class S3v3SyncEngine {
   private async readPointer(): Promise<S3v3Pointer | null> {
     const bytes = await this.remote.get(S3V3_POINTER_KEY);
     if (!bytes) return null;
-    const parsed = validatePointer(JSON.parse(new TextDecoder().decode(bytes)));
+    let raw: unknown;
+    try { raw = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new S3v3SyncError("pointer-corrupt", "pointer 不是合法 JSON"); }
+    const parsed = validatePointer(raw);
     if (!parsed.ok) throw new S3v3SyncError("pointer-corrupt", parsed.reason);
     return parsed.pointer;
   }
@@ -287,6 +289,9 @@ export class S3v3SyncEngine {
 
     const lakeEntries = new Map(state.lake.notes.map((n) => [n.id, n]));
     const quickEntries = new Map(state.quickNotes.items.map((n) => [n.id, n]));
+    /** 本轮准备发布的条目（上传失败时回退到远端/移出，不影响本地 state 的重试意图）。 */
+    const lakeIndexEntries = new Map(lakeEntries);
+    const quickIndexEntries = new Map(quickEntries);
     const newLakeDecls = new Map<string, { declHash: string; filenames: string[] }>();
     const prevDecls = new Map<string, { declHash: string; filenames: string[] }>();
     const newQuickDecls = new Map<string, { declHash: string; filenames: string[] }>();
@@ -330,6 +335,7 @@ export class S3v3SyncEngine {
     for (const plan of lakePlan.notes) {
       if (plan.kind === "local-purge") {
         lakeEntries.delete(plan.id);
+        lakeIndexEntries.delete(plan.id);
         await this.device.deleteBody(plan.id);
         await this.device.deleteAssetsDir(plan.id);
       }
@@ -352,11 +358,12 @@ export class S3v3SyncEngine {
       const local = quickEntries.get(plan.id);
       if (plan.kind === "local-delete") {
         quickEntries.delete(plan.id);
+        quickIndexEntries.delete(plan.id);
         await this.device.deleteQuickBody(plan.id);
         await this.device.deleteQuickAssetsDir(plan.id);
         continue;
       }
-      if (plan.kind === "local-purge") { quickEntries.delete(plan.id); continue; }
+      if (plan.kind === "local-purge") { quickEntries.delete(plan.id); quickIndexEntries.delete(plan.id); continue; }
       if (!remote || !plan.applyRemote) continue;
       if (plan.archiveLocal && local) {
         const bytes = await this.device.readQuickBody(plan.id);
@@ -410,6 +417,11 @@ export class S3v3SyncEngine {
         report.uploadedNotes++;
       } catch (e) {
         this.warnings.push("上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
+        // 关键：失败笔记不得进入本轮新索引（否则索引引用未落盘正文/声明），回退到远端旧条目或移出。
+        if (plan.remote) lakeIndexEntries.set(plan.id, { ...plan.remote });
+        else lakeIndexEntries.delete(plan.id);
+        newLakeDecls.delete(plan.id);
+        prevDecls.delete(plan.id);
       }
     }
     for (const plan of quickPlan.items) {
@@ -437,6 +449,10 @@ export class S3v3SyncEngine {
         report.uploadedNotes++;
       } catch (e) {
         this.warnings.push("小记上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
+        if (plan.remote) quickIndexEntries.set(plan.id, { ...plan.remote });
+        else quickIndexEntries.delete(plan.id);
+        newQuickDecls.delete(plan.id);
+        prevQuickDecls.delete(plan.id);
       }
     }
 
@@ -445,8 +461,8 @@ export class S3v3SyncEngine {
     // 本地状态保留「远端已彻底删除、本机回收站副本」（remotePurged），但不进同步索引。
     const stateNotes = [...lakeEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
     const stateFolders = [...state.folders].sort((a, b) => (a.id < b.id ? -1 : 1));
-    const newLake: LakeIndex = lakeChanged ? { v: 3, space: "lake", notes: stateNotes.filter((n) => !purged.has(n.id)), folders: stateFolders } : remoteLake;
-    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: [...quickEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags } : remoteQuick;
+    const newLake: LakeIndex = lakeChanged ? { v: 3, space: "lake", notes: [...lakeIndexEntries.values()].filter((n) => !purged.has(n.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), folders: stateFolders } : remoteLake;
+    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: [...quickIndexEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags } : remoteQuick;
     const lakeSerialized = serializeLakeIndex(newLake);
     const quickSerialized = serializeQuickNotesIndex(newQuick);
     const lakeCommit = lakeChanged ? indexHashOf(lakeSerialized) : pointer.lake.commit;
