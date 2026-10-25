@@ -343,6 +343,35 @@ quick-notes/assets/{quickNoteId}/{filename} # 小记图片（沿用现有）
 **结论**：当前 Kodo 桶**不支持条件写**，因此 v3 **采用分支 2**（持久删除意图 + 分叉检测 + 发布后读回/重试），不采用分支 1；残余限制见下方「限制（必须写进承诺）」。真云实验在**迁移上云前**仍需在最终桶/region 复测一次（含 LIST 延迟、限流、multipart）。
 
 
+### 6.8 Provider 可移植性与能力探测（阿里云/腾讯云/任意 S3 兼容）
+
+**v3 的 fallback 路线只要求最基础的对象存储 API**，因此天然跨 provider；「条件写」只是可选加速。
+
+| 能力 | 路线是否必需 | 说明 |
+|---|---|---|
+| PUT / GET / LIST / DeleteObjects | 必需 | 所有 S3 兼容 provider 都有；DeleteObjects 注意单批上限（逐批 ≤1000） |
+| 覆盖写后立即读（read-after-write） | 必需 | pointer 读回校验、索引切换依赖；现代对象存储通常强一致，但网关/代理类需实测 |
+| 覆盖写 + 幂等 | 必需 | 内容寻址对象、pointer 覆盖写 |
+| Multipart 中止清理 | 必需 | 大附件中断后的残留清理 |
+| 无 versioning / object lock / replication | 强烈建议 | 否则「应用可见零痕迹」之外仍有服务端痕迹；启用则部署预检失败或明确取消承诺（§5.5） |
+| 条件写（`If-Match` / `If-None-Match`） | **可选**（有则升级） | 支持 → 走 CAS 分支（锁降级为碰撞避免）；不支持 → 持久删除意图 + 分叉检测（§6.6） |
+| path-style / virtual-host | 配置项 | 移动端现有约束固定 virtual-host（AGENTS 已定），自建 MinIO 等需 path-style 的场景仅桌面支持 |
+
+**能力探测（初始化 / 换桶时做一次，结果缓存本机并在设置页可见）**：
+- 条件写：PUT 已存在键带 `If-None-Match:*` 是否被拒；PUT 带错误 `If-Match` 是否被拒（两者都被拒才算支持）。
+- 一致性：覆盖写后立即 GET 是否读到新值；PUT 后立即 LIST 是否可见。
+- 能力项：`conditionalWrite`、`readAfterWrite`、`listAfterWrite`、`deleteManyLimit`、`versioning`、`objectLock`、`replication`、`multipartAbortClean`。
+- 一键脚本：`scripts/s3-v3-probe.mjs`（已入库，环境变量传凭证，不落盘密钥）；换 provider/换 bucket 必须复测并归档报告。
+
+**已知 provider 备注（除七牛外均未实测，标「待探测」）**：
+- 七牛 Kodo：261025 实测无条件写、无 versioning/replication、无 object lock、multipart 可清理（§6.7）。
+- AWS S3：新版本支持条件写（`If-None-Match`/`If-Match`）；versioning 可能默认关闭，需部署检查。
+- 阿里云 OSS：S3 兼容接口可用性/条件写/一致性需用本脚本实测；OSS 自有 API 与 S3 兼容层行为可能不同。
+- 腾讯云 COS：S3 兼容接口较完整，条件写/一致性待探测。
+- MinIO / Cloudflare R2 / Backblaze B2：S3 兼容，条件写与一致性随版本/网关而变，全部「待探测」。
+
+**跨 provider 迁移**：等于换云端世界 → 走 §15 的 epoch/全量重拉或重新上传；正文/附件布局不变，不重传字节（全量重拉口径见 §15）。
+
 ## 7. 规模预算（2 万文档 / 20 万附件）
 
 | 项 | 数值 |
@@ -393,6 +422,7 @@ quick-notes/assets/{quickNoteId}/{filename} # 小记图片（沿用现有）
 8. 规模承诺是否写入 AGENTS.md §1（2 万/20 万）并撤销「10 万/100 万」；若未来突破，演进预案用按篇增量索引（v3.1），不回分片。
 9. ✅ 已定（261025 实测）：Kodo 不支持条件写 → 采用「持久本地删除意图 + 分叉检测 + 发布后读回/重试」；若未来桶/网关支持 `If-Match`，再升级为条件写（锁降级为碰撞避免）。
 10. **「零痕迹」范围**：接受「应用可见对象零痕迹 + 部署约束」（推荐，§5.5），还是要求服务商层面字面零痕迹（超出应用范围）。
+11. **目标 provider 清单与探测**：七牛已测；阿里云 OSS / 腾讯云 COS / 其他 S3 兼容是否要纳入支持矩阵？纳入则每个 provider 用 §6.8 脚本各测一次并归档。
 
 ## 11. 流程图：旧 vs 新
 
