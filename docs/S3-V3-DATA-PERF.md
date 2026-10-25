@@ -81,6 +81,7 @@
 
 ## 5. 准确性验证
 - `electron/s3v3/correctness.integration.test.ts`：4 端 × 3 轮并发编辑共享文档 + 各端新建，最终 25 篇文档全端内容 hash 一致、云端索引一致、每篇正文可读；无丢失。
+- `electron/s3v3/correctness.large.test.ts`：2 台设备、2,000 篇文档初始同步 + 双端各改 10 篇/各建 10 篇，最终 2,020 篇全端 hash 一致、正文可读；无丢失。
 - `electron/s3v3/desktopStoreAdapter.cache.test.ts`：hash 缓存第二次 loadState 复用；直接改正文文件后 mtime/size 变化能重新识别（不丢外部编辑）。
 - 全仓测试 2799→2800 例通过（新增用例后）。
 
