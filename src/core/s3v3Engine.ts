@@ -51,6 +51,17 @@ export class S3v3SyncError extends Error {
     this.name = "S3v3SyncError";
   }
 }
+
+/** 同步错误分类：UI/日志据此决定是否可自动重试，或必须人工处理（分叉/损坏）。 */
+export type S3v3ErrorClass = "retryable" | "action-required" | "fatal";
+export function classifyS3v3Error(error: unknown): S3v3ErrorClass {
+  const code = error instanceof S3v3SyncError ? error.code : (error as { code?: string } | null)?.code;
+  if (code === "lock-busy" || code === "publish-conflict" || code === "cloud-changed") return "retryable";
+  if (code === "empty-cloud" || code === "epoch-mismatch" || code === "generation-rollback" || code === "fork") return "action-required";
+  if (code === "pointer-corrupt") return "fatal";
+  // 网络/未知错误按可重试处理（S3 SDK 自身有重试；上层每轮同步会再试）
+  return "retryable";
+}
 class PublishRetry extends Error {}
 
 export interface S3v3SyncOptions {
@@ -72,6 +83,8 @@ export interface S3v3EngineOptions {
   now?: () => Date;
   /** 发布锁最长等待（ms）；测试可调小。默认 LOCK_DEADLINE_MS。 */
   lockWaitMs?: number;
+  /** 阶段耗时回调（诊断慢同步/卡顿）：phase + 距上一阶段毫秒数。 */
+  onPhase?: (phase: string, ms: number) => void;
 }
 
 const emptyState = (): DeviceState => ({
@@ -90,6 +103,8 @@ export class S3v3SyncEngine {
   private readonly deviceId: string;
   private readonly now: () => Date;
   private readonly lockWaitMs: number;
+  private readonly onPhase?: (phase: string, ms: number) => void;
+  private phaseStart = 0;
   private readonly declCache = new Map<string, AssetDeclaration>();
   private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes: Uint8Array; gzip?: boolean }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
@@ -101,6 +116,15 @@ export class S3v3SyncEngine {
     this.deviceId = opts.deviceId;
     this.now = opts.now ?? (() => new Date());
     this.lockWaitMs = opts.lockWaitMs ?? LOCK_DEADLINE_MS;
+    this.onPhase = opts.onPhase;
+  }
+
+  /** 记录阶段耗时；回调异常不影响同步。 */
+  private phase(name: string): void {
+    const now = Date.now();
+    const ms = now - this.phaseStart;
+    this.phaseStart = now;
+    try { this.onPhase?.(name, ms); } catch { /* 日志回调自行负责 */ }
   }
 
   private iso(): string { return this.now().toISOString(); }
@@ -108,11 +132,14 @@ export class S3v3SyncEngine {
   /** 正常同步（先拉后推 + 发布锁 + 待删门禁）。 */
   async sync(opts: S3v3SyncOptions = {}): Promise<S3v3SyncReport> {
     this.uploadOps = [];
+    this.phaseStart = Date.now();
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < MAX_PUBLISH_RETRIES; attempt++) {
       this.warnings = [];
       try {
-        return await this.syncOnce(opts);
+        const result = await this.syncOnce(opts);
+        this.phase("total");
+        return result;
       } catch (e) {
         if (e instanceof PublishRetry) {
           lastErr = e;
@@ -184,6 +211,7 @@ export class S3v3SyncEngine {
     const pointer = await this.readPointer();
     const cloudHasObjects = pointer ? true : (await this.remote.list("objects/")).length > 0 || (await this.remote.list("meta/index/")).length > 0;
     const cloudState = classifyCloudState({ pointer, baseline, cloudHasObjects });
+    this.phase("load-state");
 
     if (!baseline) {
       if (pointer) return await this.pullAll(pointer, state, report, true);
@@ -215,6 +243,7 @@ export class S3v3SyncEngine {
   private async pullAll(pointer: S3v3Pointer, state: DeviceState, report: S3v3SyncReport, archiveLocal: boolean): Promise<S3v3SyncReport> {
     const lake = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
     const quick = (await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex;
+    this.phase("read-index");
     if (archiveLocal) {
       for (const n of state.lake.notes) {
         const bytes = await this.device.readBody(n.id);
@@ -249,8 +278,10 @@ export class S3v3SyncEngine {
       await this.downloadQuickAssets(q.id, q.assetsHash);
       report.downloadedNotes++;
     }
+    this.phase("downloads");
     await this.device.saveState(newState);
     await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake, quickNotes: quick });
+    this.phase("save");
     return { ...report, generation: pointer.generation };
   }
 
@@ -259,6 +290,7 @@ export class S3v3SyncEngine {
     const pointer = await this.readPointer();
     if (pointer) throw new S3v3SyncError("cloud-changed", "初始化时云端已有数据");
     const { lake, quickNotes } = await this.buildAndUploadAll(state, report);
+    this.phase("upload");
     if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步");
     try {
       const again = await this.readPointer();
@@ -275,6 +307,7 @@ export class S3v3SyncEngine {
       await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(p)));
       const check = await this.readPointer();
       if (!check || check.generation !== 1 || check.lake.commit !== lakeCommit) throw new PublishRetry();
+      this.phase("publish");
       const newState = { ...state, lake, quickNotes, folders: lake.folders };
       await this.device.saveState(newState);
       await this.device.saveBaseline({ epoch, generation: 1, lakeCommit, quickNotesCommit: quickCommit, lake, quickNotes });
@@ -287,6 +320,7 @@ export class S3v3SyncEngine {
   private async incrementalSync(pointer: S3v3Pointer, baseline: DeviceBaseline, state: DeviceState, report: S3v3SyncReport): Promise<S3v3SyncReport> {
     const remoteLake = pointer.lake.commit === baseline.lakeCommit ? baseline.lake : ((await this.readIndex("lake", pointer.lake.commit)) as LakeIndex);
     const remoteQuick = pointer.quickNotes.commit === baseline.quickNotesCommit ? baseline.quickNotes : ((await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex);
+    this.phase("read-index");
     const baselineLake = baseline.lake;
     const baselineQuick = baseline.quickNotes;
 
@@ -302,6 +336,7 @@ export class S3v3SyncEngine {
     const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id)), folders: state.folders };
     const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: intentIds });
     const quickPlan = planQuickNotesMerge(baselineQuick, state.quickNotes, remoteQuick, restore, intentIds);
+    this.phase("merge");
 
     const lakeEntries = new Map(state.lake.notes.map((n) => [n.id, n]));
     const quickEntries = new Map(state.quickNotes.items.map((n) => [n.id, n]));
@@ -474,8 +509,10 @@ export class S3v3SyncEngine {
       }
     }
 
+    this.phase("downloads");
     // 全局传输（≤8）：all-or-isolate，失败笔记不进本轮索引。
     const uploadFailures = await this.flushUploadOps();
+    this.phase("uploads");
     for (const [key, msg] of uploadFailures) {
       const [space, id] = key.split(":");
       this.warnings.push((space === "lake" ? "上传失败，保持 local 下轮重试: " : "小记上传失败，保持 local 下轮重试: ") + id + " " + msg);
@@ -514,6 +551,7 @@ export class S3v3SyncEngine {
       await this.device.saveState(newState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
       await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, newState, report);
+      this.phase("pending");
       return { ...report, generation: pointer.generation };
     }
 
@@ -548,7 +586,9 @@ export class S3v3SyncEngine {
       const finalState: DeviceState = { ...newState, intents: updatedIntents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(finalState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation, lakeCommit, quickNotesCommit: quickCommit, lake: newLake, quickNotes: newQuick });
+      this.phase("publish");
       const deleted = await this.executePending(newLake, newQuick, lakeCommit, quickCommit, finalState, report);
+      this.phase("pending");
       return { ...report, published: true, generation, deletedObjects: deleted };
     } finally {
       await this.releaseLock();

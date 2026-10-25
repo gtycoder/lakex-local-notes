@@ -38,7 +38,10 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
   const store = new MobileDeviceStore(db);
   await store.init();
   const remote = opts.remote ?? createMobileS3v3Remote(settings);
-  const engine = new S3v3SyncEngine({ remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId() });
+  const engine = new S3v3SyncEngine({
+    remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId(),
+    onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] ${phase} ${ms}ms`); },
+  });
   let mode: "upload" | "stay" | "throw" = opts.emptyCloud ?? "throw";
   if (!opts.emptyCloud) {
     try { if (localStorage.getItem(EMPTY_CLOUD_KEY) === "upload") mode = "upload"; } catch { /* ignore */ }
