@@ -77,7 +77,7 @@ export function isNoteRefGone(noteId: string | null): boolean {
   if (!noteId) return false;
   const note = findNoteRef(noteId);
   if (!note) return true;
-  return isGoneNote({ parentId: note.parentId, syncState: note.syncState });
+  return isGoneNote({ parentId: note.parentId, syncState: note.syncState, isPurged: note.isPurged });
 }
 
 /** 目标文档类型的中文名（只做展示）。 */

@@ -32,11 +32,11 @@ export class NoteContentRepository {
     const notePath = this.deps.notePathFor(noteId);
     if (!fs.existsSync(notePath)) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
 
-    const current = this.deps.db.prepare("SELECT title, trashed_at, sync_state FROM notes WHERE id=? AND deleted_at IS NULL").get(noteId) as
-      | { title: string; trashed_at: string | null; sync_state: string | null }
+    const current = this.deps.db.prepare("SELECT title, trashed_at, sync_state, is_purged FROM notes WHERE id=? AND deleted_at IS NULL").get(noteId) as
+      | { title: string; trashed_at: string | null; sync_state: string | null; is_purged?: number | null }
       | undefined;
     if (!current) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
-    if (current.trashed_at != null || current.sync_state === "purged") {
+    if (current.trashed_at != null || current.sync_state === "purged" || current.is_purged === 1) {
       throw new AppError("InvalidInput", `笔记已在回收站或已被删除，保存被拒绝；请先显式恢复: ${noteId}`);
     }
     const currentContent = fs.readFileSync(notePath, "utf8");

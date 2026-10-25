@@ -151,14 +151,14 @@ export class TrashLifecycle {
     const tx = this.ctx.db.transaction(() => {
       if (node.note_file_id) {
         this.ctx.db.prepare(
-          "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local',restore_pending_at=? WHERE id=?"
+          "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local',is_purged=0,restore_pending_at=? WHERE id=?"
         ).run(parentId, now, now, node.note_file_id);
         const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title: string } | undefined;
         const caches = this.ctx.readNoteCaches(node.note_file_id);
         this.ctx.upsertSearch(node.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
       }
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local' WHERE id=?"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local',is_purged=0 WHERE id=?"
       ).run(parentId, now, id);
       // 级联：子树（跟随根进回收站的嵌套分组/笔记）随根恢复——清 trashed_at（父位置不变）。
       const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
@@ -188,8 +188,8 @@ export class TrashLifecycle {
     const now = nowIso();
     const tx = this.ctx.db.transaction(() => {
       this.ctx.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(id);
-      this.ctx.db.prepare("UPDATE notes SET sync_state='local' WHERE id=? AND sync_state='purged'").run(id);
-      this.ctx.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE note_file_id=? AND sync_state='purged'").run(id);
+      this.ctx.db.prepare("UPDATE notes SET sync_state='local',is_purged=0 WHERE id=? AND (sync_state='purged' OR is_purged=1)").run(id);
+      this.ctx.db.prepare("UPDATE tree_nodes SET sync_state='local',is_purged=0 WHERE note_file_id=? AND (sync_state='purged' OR is_purged=1)").run(id);
       const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
       // 容错：本端已 purge（行被彻底删除）时跳过缓存/FTS——行将由下载分支 importRemoteNote 重建，
       // 避免 readNoteCaches 对不存在的行抛"笔记不存在"导致同步中断（远端恢复传播场景）。

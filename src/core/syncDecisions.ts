@@ -157,6 +157,6 @@ export function computeBookkeeping(manifestNotes: ManifestNote[]): BookkeepingIt
 /** 文档是否"已进回收站 / 已被他端彻底删除"：这类文档不得再被编辑保存。
  * 打开（含启动恢复最后文档）与同步刷新共用同一判定——此前只有同步路径标记，
  * 于是重启后自动重开的回收站文档会以正常可编辑标签出现（2026-09-04 实数据踩到）。 */
-export function isGoneNote(note: { parentId: string | null; syncState: string }): boolean {
-  return note.parentId === TRASH_NOTEBOOK_ID || note.syncState === "purged";
+export function isGoneNote(note: { parentId: string | null; syncState: string; isPurged?: boolean }): boolean {
+  return note.parentId === TRASH_NOTEBOOK_ID || note.isPurged === true || note.syncState === "purged";
 }
