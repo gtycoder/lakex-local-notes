@@ -8,10 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Store } from "./store.js";
 import { ObjectStore } from "./s3Store.js";
-import { pruneOldManifests } from "./s3Maintenance.js";
-import type { SyncProgress, SyncResult, SyncWarning } from "./syncTypes.js";
+import type { SyncProgress, SyncResult } from "./syncTypes.js";
 import { parseLakeManifest, objectKey, sha256Hex, MAX_MANIFEST_BYTES, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
-import { syncNow as engineSyncNow, downloadNoteAssets, MAX_REMOTE_NOTE_BYTES, type SyncReport } from "../src/core/syncEngine.js";
+import { downloadNoteAssets, MAX_REMOTE_NOTE_BYTES, type SyncReport } from "../src/core/syncEngine.js";
 import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
 import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
@@ -34,126 +33,13 @@ async function serializedV3<T>(fn: () => Promise<T>): Promise<T> {
 export async function syncNowViaEngine(
   store: Store,
   onProgress?: (p: SyncProgress) => void,
-  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
+  _createRemote?: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore,
 ): Promise<SyncResult> {
-  // 261025 转正：默认 v3；仅显式 LAKE_SYNC_PROTOCOL=legacy 走旧通道（回滚用）。
-  const protocol = process.env.LAKE_SYNC_PROTOCOL ?? "v3";
-  if (protocol === "v3") {
-    return serializedV3(async () => {
-      const { syncWithV3 } = await import("./s3v3/desktopSync.js");
-      return syncWithV3(store, onProgress);
-    });
-  }
-  const syncStart = Date.now();
-  store.logScopes.sync.info("[perf] syncNowViaEngine start");
-  const settings = store.getS3Settings();
-  if (!settings) throw new Error("请先保存 S3 配置");
-  validateS3Settings(settings);
-  const remote = createRemote(settings, store.logScopes);
-  const report = (p: SyncProgress) => { try { onProgress?.(p); } catch { /* 渲染层已关闭 */ } };
-  report({ phase: "connect", message: "正在连接 S3..." });
-  const connectStart = Date.now();
-  await remote.test();
-  store.logScopes.sync.info(`[perf] connect ${Date.now() - connectStart}ms`);
-
-  // adapter 装配（Step 3）
-  const cfg = syncConfigFromStore(store);
-  const s3Store = createS3StoreAdapter(remote, cfg.prefix);
-  const dbPort = createStoreSyncPort(store);
-
-  // 进度阶段映射：syncEngine（pull/upload/publish）→ 桌面（connect/download/upload/manifest/done）
-  const phaseMap: Record<string, SyncProgress["phase"]> = {
-    pull: "download", upload: "upload", publish: "manifest",
-  };
-
-  // P3-3：本次同步若发布了新 manifest，engine 的 onPublished 回调会把新 commitId 填到这里，
-  // 供结果组装直接复用；未发布（仅拉取对账/零变更）时再回退 readLatestCommitId。
-  let publishedCommitId: string | null = null;
-
-  const engineReport = await engineSyncNow(cfg, s3Store, dbPort, {
-    strictAssets: true,
-    onProgress: (phase, message) => {
-      const mapped = phaseMap[phase] ?? "download";
-      report({ phase: mapped, message });
-    },
-    onPublished: async (next, prev) => {
-      // P3-3：本次已发布 → 直接记下新 commitId，避免结束后 readLatestCommitId 再全量 GET+解析一次。
-      publishedCommitId = next.commitId;
-      // 4.5 GC 差集标记（对齐原 sync.ts 语义）：新 manifest 不再引用的旧正文/资源 → 待回收
-      try {
-        const newById = new Map(next.notes.map((n) => [n.id, n]));
-        for (const p of prev?.notes ?? []) {
-          if (p.deleted) continue;
-          const nx = newById.get(p.id);
-          if (!nx || nx.deleted) continue;
-          if (nx.contentHash !== p.contentHash) store.addS3GcPending(objectKey(p.id, p.contentHash));
-          const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
-          for (const asset of p.assets ?? []) {
-            if (nextAssets.has(asset.filename)) continue;
-            if (!store.getProtectedRefs(p.id).has(asset.filename)) store.addS3GcPending(`assets/${p.id}/${asset.filename}`);
-          }
-        }
-        const referencedNow = new Set<string>();
-        for (const note of next.notes) {
-          if (note.deleted) continue;
-          referencedNow.add(objectKey(note.id, note.contentHash));
-          for (const asset of note.assets ?? []) referencedNow.add(`assets/${note.id}/${asset.filename}`);
-        }
-        store.removeS3GcPending([...referencedNow]);
-      } catch (e) { store.logScopes.sync.warn(`[gc-mark] 失败（不影响同步）: ${(e as Error).message}`); }
-      // 滞后裁剪旧 manifest（稳态 latest + 本 commit + 链 3 层 = 5 份；未到水位只 list 一次，见 pruneOldManifests）
-      try { await pruneOldManifests(remote, next.commitId, prev, store.logScopes); } catch (e) { store.logScopes.sync.warn(`[prune] 失败（不影响同步）: ${(e as Error).message}`); }
-    },
+  // 261025 转正完成：只保留 v3；legacy 回滚入口已移除。
+  return serializedV3(async () => {
+    const { syncWithV3 } = await import("./s3v3/desktopSync.js");
+    return syncWithV3(store, onProgress);
   });
-
-  // 4.6 purge 前缀立即删（M4）：先写 manifest（engine 已发布）→ 再删 objects/assets 前缀
-  const purgedNotes = store.listPurgedNotesForSync();
-  for (const note of purgedNotes) {
-    const purgeStart = Date.now();
-    const objs = await remote.deletePrefix(`objects/${note.id}-`);
-    const assets = await remote.deletePrefix(`assets/${note.id}/`);
-    store.markPurgeSynced(note.id);
-    store.logScopes.sync.info(`[perf] purge ${note.id} ${Date.now() - purgeStart}ms (objects=${objs}, assets=${assets})`);
-  }
-
-  // warnings 已由 core 直接产出结构化对象（kind/noteId/title/filename/message）；这里只透传，不再正则反解字符串。
-  const warnings: SyncWarning[] = engineReport.warnings;
-  const completedAt = new Date().toISOString();
-  const commitId = publishedCommitId ?? await readLatestCommitId(remote);
-  const result: SyncResult = {
-    uploaded: engineReport.uploaded, downloaded: engineReport.appliedRemote, conflicts: engineReport.supersededNotes.length,
-    manifestId: commitId ?? "", completedAt, supersededNotes: engineReport.supersededNotes,
-    foldersUploaded: engineReport.foldersUploaded, foldersDownloaded: engineReport.foldersDownloaded,
-    uploadedBytes: engineReport.uploadedBytes, downloadedBytes: engineReport.downloadedBytes,
-    durationMs: Date.now() - syncStart,
-    trashed: engineReport.trashedDown + engineReport.trashedUp,
-    warnings: warnings.length > 0 ? warnings : undefined,
-  };
-  store.markSyncComplete(completedAt);
-  store.recordSyncResult(JSON.stringify(result));
-  report({ phase: "done", message: "同步完成", supersededNotes: engineReport.supersededNotes });
-  // 261023：一轮同步的耗时 + 数据量（后续做同步性能优化的唯一口径）。
-  store.logScopes.sync.info(perfMessage("sync.round", Date.now() - syncStart, {
-    uploaded: engineReport.uploaded,
-    downloaded: engineReport.appliedRemote,
-    foldersUp: engineReport.foldersUploaded,
-    foldersDown: engineReport.foldersDownloaded,
-    bytesUp: engineReport.uploadedBytes,
-    bytesDown: engineReport.downloadedBytes,
-    trash: engineReport.trashedDown + engineReport.trashedUp,
-    conflicts: engineReport.supersededNotes.length,
-    warnings: warnings.length,
-    manifest: commitId ? commitId.slice(0, 8) : "none",
-  }));
-  return result;
-}
-
-async function readLatestCommitId(remote: ObjectStore): Promise<string | null> {
-  try {
-    const bytes = await remote.getOptional("manifests/latest.json", { maxBytes: MAX_MANIFEST_BYTES });
-    if (!bytes) return null;
-    return parseLakeManifest(bytes).commitId;
-  } catch { return null; }
 }
 
 /**

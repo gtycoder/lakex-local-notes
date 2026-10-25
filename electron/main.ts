@@ -19,7 +19,6 @@ import { isLevelEnabled } from "./logLevels.js";
 import { mapRendererConsoleLevel } from "./rendererLogLevel.js";
 import { errorFields, formatLogFields, perfMessage } from "../src/core/logFormat.js";
 import { ConsoleNoiseFilter } from "./consoleNoise.js";
-import { syncQuickNotes } from "./quickNotesSync.js";
 import { setQuickNotesStoreForV3 } from "./s3v3/quickNotesRegistry.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
@@ -172,22 +171,8 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       };
       const result = await syncNowViaEngine(store, report);
       quickNotes.markTargetNotesSynced();
-      try {
-        const settings = store.getS3Settings();
-        if (!settings) throw new Error("请先保存 S3 配置");
-        // 转正默认：v3 通道下小记随同一轮同步；只有 legacy / 显式 0 才走旧 quick-notes 通道。
-        const quickV3 = process.env.LAKE_SYNC_PROTOCOL !== "legacy" && process.env.LAKE_S3V3_QUICK_NOTES !== "0";
-        if (quickV3) {
-          result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
-        } else {
-          const quick = await syncQuickNotes(quickNotes, settings, report);
-          result.quickNotes = quick;
-        }
-      } catch (error) {
-        result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
-        log.sync.warn("[sync] 小记同步失败（本轮其余部分不受影响）" + formatLogFields(errorFields(error)));
-        report({ phase: "quick-notes", message: `小记同步失败：${String(error)}` });
-      }
+      // 小记已随 v3 同一轮同步；旧 quick-notes 通道已移除。
+      result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
       store.recordSyncResult(JSON.stringify(result));
       report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
       log.sync.info(`[perf] runFullSync done ${Date.now() - fullSyncStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts}, superseded=${result.supersededNotes.length}, quickNotes=${result.quickNotes?.error ? "error" : "ok"})`);
