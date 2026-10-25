@@ -969,6 +969,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 - **S3 v3 实施报告**：`S3-V3-IMPLEMENTATION-REPORT.md`（协议/运行时/bug 修复/上生产缺口）。
 - **S3 v3 最终对比与测试报告**：`S3-V3-FINAL-REPORT.md`（4 桌面真实 UI、master A/B、真实 S3 规模、B14 P0、移动端缺口）。
 - **S3 v3 生产化收口报告**：`S3-V3-PRODUCTION-REPORT.md`（6 端并发/容量三拐点/标签通用化/上线判定）。
+- **S3 v3 转正/切换**：`S3-V3-CUTOVER.md`（桌面文档默认 v3、回滚、sync_state 删除条件）。
 - **S3 v3 并发/容量/Review/标签设计**：`S3-V3-CONCURRENCY.md`、`S3-V3-CAPACITY.md`、`S3-V3-CODE-REVIEW.md`、`TAG-SYSTEM-DESIGN.md`。
 - **同类软件同步**：`SYNC-APPROACHES-SURVEY.md`（网盘/条目/快照/服务端四派对照，大白话）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）。

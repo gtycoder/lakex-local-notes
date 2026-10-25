@@ -1,3 +1,4 @@
+process.env.LAKE_SYNC_PROTOCOL = "legacy"; // 这些用例验证旧通道；生产默认已切 v3
 /**
  * Step 4 等价测试：桌面 sync.ts vs 共享 syncEngine（SHARED-SYNC-PLAN §Step 4）。
  *

@@ -1,3 +1,4 @@
+process.env.LAKE_SYNC_PROTOCOL = "legacy"; // 这些用例验证旧通道；生产默认已切 v3
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import crypto from "node:crypto";
 import zlib from "node:zlib";

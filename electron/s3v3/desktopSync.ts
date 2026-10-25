@@ -35,7 +35,8 @@ export async function syncWithV3(
       else store.logScopes.sync.debug(`[v3] ${phase} ${ms}ms`);
     },
   });
-  const emptyMode = (process.env.LAKE_S3V3_EMPTY_CLOUD ?? "throw") as "upload" | "stay" | "throw";
+  // 转正后默认把「云端无 v3 pointer」视为首次上传：本地就是真相（旧 manifest 不迁移，符合无历史兼容）。
+  const emptyMode = (process.env.LAKE_S3V3_EMPTY_CLOUD ?? "upload") as "upload" | "stay" | "throw";
   try {
     const r = await engine.sync(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode });
     for (const w of r.warnings) store.logScopes.sync.warn("[v3] " + w);

@@ -1,3 +1,4 @@
+process.env.LAKE_SYNC_PROTOCOL = "legacy"; // 这些用例验证旧通道；生产默认已切 v3
 /**
  * Step 5 前置验证：桌面 Store + adapter + syncEngine 与桌面 sync.ts 输出一致（第三路径）。
  * 复用 Step 4 场景输入，额外断言 adapter 驱动 syncEngine 的终态 == 桌面 sync.ts 终态。

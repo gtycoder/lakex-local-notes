@@ -1,3 +1,4 @@
+process.env.LAKE_SYNC_PROTOCOL = "legacy"; // 这些用例验证旧通道；生产默认已切 v3
 /**
  * Step 5 双端 A/B：桌面 Controller（syncNowViaEngine）↔ 移动端（MemDb + syncEngine）共享同一 S3，
  * 模拟真实跨端同步（建笔记→A 同步→B 拉到→B 编辑→A 拉到→删除传播）。

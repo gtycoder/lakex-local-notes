@@ -25,7 +25,9 @@ export async function syncNowViaEngine(
   onProgress?: (p: SyncProgress) => void,
   createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
 ): Promise<SyncResult> {
-  if (process.env.LAKE_SYNC_PROTOCOL === "v3") {
+  // 261025 转正：默认 v3；仅显式 LAKE_SYNC_PROTOCOL=legacy 走旧通道（回滚用）。
+  const protocol = process.env.LAKE_SYNC_PROTOCOL ?? "v3";
+  if (protocol === "v3") {
     const { syncWithV3 } = await import("./s3v3/desktopSync.js");
     return syncWithV3(store, onProgress);
   }

@@ -1,3 +1,4 @@
+process.env.LAKE_SYNC_PROTOCOL = "legacy"; // 这些用例验证旧通道；生产默认已切 v3
 /**
  * 双设备同步集成测试（重构验证核心）：两个真实 Store 实例 + 共享 mock S3，
  * 模拟 A/B 设备经 S3 交互，验证 Step A/B 拆分后同步语义正确
