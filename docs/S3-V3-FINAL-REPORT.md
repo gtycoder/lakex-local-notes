@@ -29,7 +29,7 @@ pointer 状态机 / 不可变索引与资产声明 / 三方合并 / 删除意图
 | syncEngineController.ts | 桌面 Controller 顶部 v3 分支 |
 
 ### 2.3 测试资产
-- 单元/回归：src/core/s3v3*.test.ts、electron/s3v3/syncEngine.test.ts（16）、desktopStoreAdapter.test.ts（2）、desktopSync.test.ts（1）、migrate.test.ts（1）
+- 单元/回归：src/core/s3v3*.test.ts、electron/s3v3/syncEngine.test.ts（16）、desktopStoreAdapter.test.ts（3，含 B15 墓碑→回收站回归）、desktopSync.test.ts（1）、migrate.test.ts（1）
 - 真实 S3：s3.integration.test.ts、migrate.integration.test.ts、scale.integration.test.ts、ab.integration.test.ts
 - 合成 2 万/20 万：src/core/s3v3Scale.test.ts
 - UI 证据与流程：docs/S3-V3-UI-SMOKE.md、docs/S3-V3-AB-COMPARISON.md
@@ -59,7 +59,7 @@ pointer 状态机 / 不可变索引与资产声明 / 三方合并 / 删除意图
 - 现象：4 端矩阵中 B/C 拉到新版本后未更新发布索引，下一轮把旧索引重新发布，云端回退、其他端丢更新。
 - 根因：下载应用只更新 lakeEntries/quickEntries，未同步 lakeIndexEntries/quickIndexEntries。
 - 修复：下载应用同时更新索引副本；回归测试去掉修复即失败（C 拉到 v1），恢复后通过（v2）。
-- 提交：e68ce2ea。
+- 提交：e68ce2ea；B15 修复：ed44694b，B15 回归测试：493faf51。
 
 ## 4. master 旧同步 vs v3（真实 S3）
 
