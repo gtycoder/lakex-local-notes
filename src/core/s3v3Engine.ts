@@ -39,7 +39,7 @@ const LOCK_KEY = "meta/lock.json";
 const LOCK_TTL_MS = 120_000;
 /** 锁重试：无 CAS 的 provider 下，靠「写后静置再读回」降低双持窗口。 */
 const LOCK_DEADLINE_MS = 15_000;
-const LOCK_SETTLE_MS = 100;
+const LOCK_SETTLE_MS = 40; // 单用户场景下减少固定发布延迟；多端冲突仍由锁重试/归属复核兜底
 const TRASH_ID = "trash";
 const MAX_PUBLISH_RETRIES = 6;
 
@@ -540,12 +540,13 @@ export class S3v3SyncEngine {
     const lakeChanged = lakePlan.notes.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote) || lakePlan.folders.some((f) => f.kind !== "none" || f.applyRemote);
     const quickChanged = quickPlan.items.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote);
     // 本地状态保留「远端已彻底删除、本机回收站副本」（remotePurged），但不进同步索引。
-    const stateNotes = lakeWS.localValues().sort((a, b) => (a.id < b.id ? -1 : 1));
+    const stateNotes = lakeChanged ? lakeWS.localValues().sort((a, b) => (a.id < b.id ? -1 : 1)) : state.lake.notes;
     const stateFolders = [...state.folders].sort((a, b) => (a.id < b.id ? -1 : 1));
     const newLake: LakeIndex = lakeChanged ? { v: 3, space: "lake", notes: lakeWS.indexValues().filter((n) => !purged.has(n.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), folders: stateFolders } : remoteLake;
     const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags } : remoteQuick;
-    const lakeSerialized = serializeLakeIndex(newLake);
-    const quickSerialized = serializeQuickNotesIndex(newQuick);
+    // 无变化的半边不做全量序列化/哈希（大库空跑时这是主要 CPU）
+    const lakeSerialized = lakeChanged ? serializeLakeIndex(newLake) : "";
+    const quickSerialized = quickChanged ? serializeQuickNotesIndex(newQuick) : "";
     const lakeCommit = lakeChanged ? indexHashOf(lakeSerialized) : pointer.lake.commit;
     const quickCommit = quickChanged ? indexHashOf(quickSerialized) : pointer.quickNotes.commit;
     const needPublish = lakeCommit !== pointer.lake.commit || quickCommit !== pointer.quickNotes.commit;

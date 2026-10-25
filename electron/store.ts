@@ -108,6 +108,23 @@ export interface NoteInfoAsset {
   kind: string;
 }
 
+/** v3 同步用的轻量元数据（不读正文、不算资产卡片），O(notes) 单查询。 */
+export interface NoteSyncMeta {
+  id: string;
+  title: string;
+  parentId: string | null;
+  sortOrder: number;
+  updatedAt: string;
+  contentHash: string;
+  isConflict: boolean;
+  isEditLocked: boolean;
+  editLockedAt: string | null;
+  icon: string | null;
+  trashedAt: string | null;
+  deletedFromParentId: string | null;
+  kind: string;
+}
+
 /** 卡片名 → 统计展示名。 */
 const CARD_LABELS: Record<string, string> = {
   image: "图片", video: "视频", audio: "音频", file: "附件",
@@ -402,6 +419,29 @@ export class Store {
       lastOpenedNoteId: last?.value ?? null,
       sync: { phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 },
     };
+  }
+
+  /** v3 同步专用：单 SQL 取轻量元数据，禁止逐篇 readNote/getNoteInfo（大库会退化为全量 IO）。 */
+  listNotesSyncMeta(): NoteSyncMeta[] {
+    const rows = this.db.prepare(
+      "SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,'' AS content_hash,n.is_conflict,n.is_locked,n.locked_at,n.trashed_at,n.deleted_from_parent_id,n.kind AS doc_kind,t.icon " +
+      "FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id=n.id WHERE n.deleted_at IS NULL ORDER BY n.sort_order"
+    ).all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: String(row.id),
+      title: String(row.title),
+      parentId: row.parent_id == null ? null : String(row.parent_id),
+      sortOrder: Number(row.sort_order),
+      updatedAt: String(row.updated_at),
+      contentHash: row.content_hash == null ? "" : String(row.content_hash),
+      isConflict: !!row.is_conflict,
+      isEditLocked: !!row.is_locked,
+      editLockedAt: row.locked_at == null ? null : String(row.locked_at),
+      icon: row.icon == null ? null : String(row.icon),
+      trashedAt: row.trashed_at == null ? null : String(row.trashed_at),
+      deletedFromParentId: row.deleted_from_parent_id == null ? null : String(row.deleted_from_parent_id),
+      kind: row.doc_kind == null ? "doc" : String(row.doc_kind),
+    }));
   }
 
   /** 侧栏树：排除隐藏回收站笔记本及其全部后代（trash 子树只出现在回收站面板）。 */

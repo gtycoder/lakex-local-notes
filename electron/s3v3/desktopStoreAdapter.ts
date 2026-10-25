@@ -3,6 +3,7 @@ import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
 import type { Store, ImportedNoteAsset } from "../store.js";
 import type { LakeFolderEntry, LakeNoteEntry } from "../../src/core/s3v3Index.js";
+import { sha256Hex } from "../../src/core/syncUtils.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
 
 /**
@@ -19,6 +20,8 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   private stagedAssets = new Map<string, Map<string, Uint8Array>>();
   private clearedAssets = new Set<string>();
   private readonly skipQuickNotesGuard: boolean;
+  /** 正文 hash 缓存：文件 mtime+size 未变则复用，避免每轮全库读正文。首次/变更文件才重算。 */
+  private hashCache = new Map<string, { mtimeMs: number; size: number; hash: string }>();
 
   constructor(store: Store, storeRoot: string, opts: { stateFile?: string; baselineFile?: string; skipQuickNotesGuard?: boolean } = {}) {
     this.skipQuickNotesGuard = !!opts.skipQuickNotesGuard;
@@ -53,6 +56,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       intents: state.intents, pending: state.pending,
       remotePurged: state.remotePurged ?? [], restorePending: state.restorePending ?? [], archived: state.archived ?? [],
       assetsHash: Object.fromEntries(state.lake.notes.map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
+      hashCache: Object.fromEntries(this.hashCache),
     };
   }
 
@@ -62,17 +66,29 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       ...(f.trashedAt !== undefined && f.trashedAt !== null ? { trashedAt: f.trashedAt } : {}),
       ...(f.deletedFromParentId !== undefined && f.deletedFromParentId !== null ? { deletedFromParentId: f.deletedFromParentId } : {}),
     }));
-    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string> }>(this.stateFile);
+    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }> }>(this.stateFile);
+    this.hashCache = new Map(Object.entries(side?.hashCache ?? {}));
     const notes: LakeNoteEntry[] = [];
-    for (const n of this.store.listNotesForSync()) {
-      let contentHash = "";
-      try { contentHash = this.store.getNoteInfo(n.id).contentHash; } catch { /* 缺正文/已 purge：跳过 */ continue; }
+    // 单 SQL 轻量元数据：避免逐篇 getNoteInfo（读正文/算字数/扫资产卡片，20k 文档会退化到秒级+）
+    for (const n of this.store.listNotesSyncMeta()) {
+      let contentHash = n.contentHash;
+      if (!contentHash) {
+        const lakePath = this.store.getNotePaths(n.id).lakePath;
+        let stat: { mtimeMs: number; size: number };
+        try { stat = await fs.stat(lakePath); } catch { continue; }
+        const cached = this.hashCache.get(n.id);
+        if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) contentHash = cached.hash;
+        else {
+          try { contentHash = sha256Hex(await fs.readFile(lakePath)); } catch { continue; }
+          this.hashCache.set(n.id, { mtimeMs: stat.mtimeMs, size: stat.size, hash: contentHash });
+        }
+      }
       if (!contentHash) continue;
       notes.push({
         id: n.id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt, contentHash,
-        ...(n.kind ? { kind: String(n.kind) } : {}), ...(n.icon !== undefined ? { icon: n.icon } : {}),
-        isLocked: !!n.isEditLocked, lockedAt: n.editLockedAt ?? null, isConflict: !!n.isConflict,
-        ...(n.trashedAt ? { trashedAt: n.trashedAt } : {}), ...(n.deletedFromParentId !== undefined ? { deletedFromParentId: n.deletedFromParentId } : {}),
+        ...(n.kind && n.kind !== "doc" ? { kind: n.kind } : {}), ...(n.icon !== null ? { icon: n.icon } : {}),
+        isLocked: n.isEditLocked, lockedAt: n.editLockedAt, isConflict: n.isConflict,
+        ...(n.trashedAt ? { trashedAt: n.trashedAt } : {}), ...(n.deletedFromParentId !== null ? { deletedFromParentId: n.deletedFromParentId } : {}),
         ...(side?.assetsHash?.[n.id] ? { assetsHash: side.assetsHash[n.id] } : {}),
       });
     }
@@ -87,19 +103,23 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   }
 
   async saveState(state: DeviceState): Promise<void> {
-    const current = new Map(this.store.listNotesForSync().map((n) => [n.id, n]));
+    const current = new Map(this.store.listNotesSyncMeta().map((n) => [n.id, n]));
     const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
     for (const n of wanted.values()) {
       const content = this.stagedBodies.has(n.id) ? new TextDecoder().decode(this.stagedBodies.get(n.id)) : null;
       const cur = current.get(n.id);
+      const curHash = cur ? (this.hashCache.get(n.id)?.hash ?? cur.contentHash) : "";
       try {
         if (!cur) {
           const assets = await this.stagedAssetsToImported(n.id);
           this.store.createNoteInAtTopWithContent(n.parentId, n.title, content ?? "", assets, n.id, (n.kind ?? "doc") as never);
         } else {
-          const doc = this.store.readNote(n.id);
-          if (content !== null && content !== doc.content) this.store.saveNote(n.id, n.title, content);
-          else if (n.title !== doc.title) this.store.saveNote(n.id, n.title, doc.content);
+          // 只有引擎真的写入了新正文（staged）才保存，避免每轮读全库正文
+          if (content !== null && sha256Hex(new TextEncoder().encode(content)) !== curHash) {
+            this.store.saveNote(n.id, n.title, content);
+          } else if (content === null && n.title !== cur.title) {
+            this.store.saveNote(n.id, n.title, this.store.readNote(n.id).content);
+          }
           if (!n.trashedAt && !cur.trashedAt && ((cur.parentId ?? null) !== (n.parentId ?? null) || cur.sortOrder !== n.sortOrder)) this.store.moveTreeNode(n.id, n.parentId, n.sortOrder);
           if ((cur.icon ?? null) !== (n.icon ?? null)) this.store.setNodeIcon(n.id, n.icon ?? null);
           if (!!cur.isEditLocked !== !!n.isLocked) this.store.setNoteEditLocked(n.id, !!n.isLocked);
@@ -111,13 +131,21 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
             if ((cur.deletedFromParentId ?? null) !== (n.parentId ?? null) || cur.sortOrder !== n.sortOrder) this.store.moveTreeNode(n.id, n.parentId, n.sortOrder);
           }
         }
-        await this.flushStagedAssets(n.id);
+        if (this.stagedAssets.has(n.id) || this.clearedAssets.has(n.id)) await this.flushStagedAssets(n.id);
+        if (content !== null) {
+          try {
+            const lakePath = this.store.getNotePaths(n.id).lakePath;
+            const st = await fs.stat(lakePath);
+            this.hashCache.set(n.id, { mtimeMs: st.mtimeMs, size: st.size, hash: sha256Hex(new TextEncoder().encode(content)) });
+          } catch { /* 文件缺失时下轮重新计算 */ }
+        }
       } catch (e) {
         throw new Error("DesktopStoreDevice.saveState 失败(" + n.id + "): " + (e as Error).message);
       }
     }
     for (const cur of current.values()) {
       if (wanted.has(cur.id)) continue;
+      this.hashCache.delete(cur.id);
       try { this.store.deleteNote(cur.id); this.store.purgeTrashItem(cur.id); } catch { /* 已不在 */ }
     }
     await this.saveFolders(state.folders);
@@ -172,7 +200,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     try { return JSON.parse(gunzipSync(await fs.readFile(this.baselineFile)).toString("utf8")) as DeviceBaseline; } catch { return null; }
   }
   async saveBaseline(baseline: DeviceBaseline): Promise<void> {
-    await this.writeAtomic(this.baselineFile, gzipSync(Buffer.from(JSON.stringify(baseline)), { level: 9 }));
+    await this.writeAtomic(this.baselineFile, gzipSync(Buffer.from(JSON.stringify(baseline)), { level: 1 }));
   }
 
   async readBody(id: string): Promise<Uint8Array | null> {
