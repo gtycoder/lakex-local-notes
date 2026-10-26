@@ -38,6 +38,15 @@ export async function writeNoteBodiesBatch(items: Array<{ kind: NoteKind; id: st
   return bytes;
 }
 
+/** 批量读正文（261026 续传提速）：原生平台一次桥读一批；非原生逐篇读。 */
+export async function readNoteBodiesBatch(items: Array<{ kind: NoteKind; id: string }>): Promise<Array<string | null>> {
+  if (items.length === 0) return [];
+  const store = getBodyStore();
+  const paths = items.map((i) => noteBodyRelativePath(i.kind, i.id));
+  if (store.readTextMany) return await store.readTextMany(paths);
+  return await Promise.all(paths.map((p) => store.readText(p)));
+}
+
 /** 删除同一 id 的全部候选正文（彻底删除 / kind 变更后残留；不存在静默）。 */
 export async function deleteNoteBodies(id: string): Promise<void> {
   const store = getBodyStore();

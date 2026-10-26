@@ -21,13 +21,19 @@ class MemRemote implements S3v3Remote {
 
 class ResumeDevice implements S3v3DeviceStore {
   archived: string[] = [];
+  readBodyCalls = 0;
+  readBodiesCalls = 0;
   constructor(public bodies: Map<string, Uint8Array>, public state: DeviceState) {}
   async init(): Promise<void> {}
   async loadState(): Promise<DeviceState | null> { return this.state; }
   async saveState(): Promise<void> {}
   async loadBaseline(): Promise<null> { return null; }
   async saveBaseline(): Promise<void> {}
-  async readBody(id: string): Promise<Uint8Array | null> { return this.bodies.get(id) ?? null; }
+  async readBody(id: string): Promise<Uint8Array | null> { this.readBodyCalls += 1; return this.bodies.get(id) ?? null; }
+  async readBodies(ids: string[]): Promise<Array<Uint8Array | null>> {
+    this.readBodiesCalls += 1;
+    return ids.map((id) => this.bodies.get(id) ?? null);
+  }
   async writeBody(id: string, bytes: Uint8Array): Promise<void> { this.bodies.set(id, bytes); }
   async deleteBody(): Promise<void> {}
   async writeHistory(id: string): Promise<string> { this.archived.push(id); return id; }
@@ -79,6 +85,9 @@ describe("首拉中断后续传（261026）", () => {
     const report = await engine.sync({ onEmptyCloud: "stay" });
     expect(report.downloadedNotes).toBe(0); // 正文已就绪，不重复下载
     expect(device.archived).toEqual([]);   // 内容一致，不归档
+    // 续传读正文按批（移动端一次桥 100 篇）：不应逐篇 readBody。
+    expect(device.readBodyCalls).toBe(0);
+    expect(device.readBodiesCalls).toBeGreaterThan(0);
   });
 
   it("本地正文与云端不同 ⇒ 只归档被覆盖的那一篇", async () => {

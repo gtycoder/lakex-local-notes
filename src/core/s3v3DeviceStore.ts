@@ -45,6 +45,9 @@ export interface S3v3DeviceStore {
   saveBaseline(baseline: DeviceBaseline): Promise<void>;
 
   readBody(id: string): Promise<Uint8Array | null>;
+  /** 批量读正文（可选；261026 续传提速）：一次调用读一批，减少移动端逐篇桥往返。
+   *  返回顺序与 ids 一致；不支持时引擎回退逐篇 readBody。 */
+  readBodies?(ids: string[]): Promise<Array<Uint8Array | null>>;
   writeBody(id: string, bytes: Uint8Array): Promise<void>;
   deleteBody(id: string): Promise<void>;
   writeHistory(id: string, bytes: Uint8Array): Promise<string>;
@@ -60,6 +63,7 @@ export interface S3v3DeviceStore {
   deleteAssetsDir(id: string): Promise<void>;
 
   readQuickBody(id: string): Promise<Uint8Array | null>;
+  readQuickBodies?(ids: string[]): Promise<Array<Uint8Array | null>>;
   writeQuickBody(id: string, bytes: Uint8Array): Promise<void>;
   deleteQuickBody(id: string): Promise<void>;
   listQuickAssets(id: string): Promise<string[]>;

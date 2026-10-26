@@ -3,7 +3,7 @@ import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry,
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
-import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readQuickNoteBody, writeNoteBody, writeNoteBodiesBatch, writeQuickNoteBody } from "../data/noteBodies.js";
+import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readNoteBodiesBatch, readQuickNoteBody, writeNoteBody, writeNoteBodiesBatch, writeQuickNoteBody } from "../data/noteBodies.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
@@ -428,6 +428,29 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     if (this.stagedDeletes.has(id)) return null;
     const content = await readNoteBody(await this.kindOf(id), id);
     return content == null ? null : new TextEncoder().encode(content);
+  }
+  /**
+   * 批量读正文（261026 续传提速）：doc_kind 用**一条 SQL** 查齐，正文用**一次 BodyStore.readMany**；
+   * 替代「每篇一次 SQL + 一次桥读」。staged 状态优先（与 readBody 同语义）。
+   */
+  async readBodies(ids: string[]): Promise<Array<Uint8Array | null>> {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = await this.db.prepare("SELECT id,doc_kind FROM notes WHERE id IN (" + placeholders + ")").all(...ids) as Array<{ id: string; doc_kind: string | null }>;
+    const kindById = new Map(rows.map((row) => [row.id, normalizeNoteKind(row.doc_kind)] as const));
+    const texts = await readNoteBodiesBatch(ids.map((id) => ({ kind: kindById.get(id) ?? "doc", id })));
+    return texts.map((text, index) => {
+      const id = ids[index];
+      const staged = this.stagedBodies.get(id);
+      if (staged) return staged;
+      if (this.stagedDeletes.has(id)) return null;
+      return text == null ? null : new TextEncoder().encode(text);
+    });
+  }
+  async readQuickBodies(ids: string[]): Promise<Array<Uint8Array | null>> {
+    const out: Array<Uint8Array | null> = [];
+    for (const id of ids) out.push(await this.readQuickBody(id));
+    return out;
   }
   async writeBody(id: string, bytes: Uint8Array): Promise<void> {
     if (this.stagedDeletes.has(id)) {

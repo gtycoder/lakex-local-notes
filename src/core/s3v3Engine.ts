@@ -503,17 +503,20 @@ export class S3v3SyncEngine {
     if (archiveLocal) {
       // 断点续传（261026）：本地正文和云端索引一致的条目**不是被覆盖**，不用再写一遍历史。
       // 否则一次“首拉中途退出再进入”会把几千篇已下正文重新归档（真机上几分钟的纯开销）。
+      // 读正文按批（移动端一次桥读 100 篇），避免 2k 次 readBody 往返。
       const remoteById = new Map(lake.notes.map((n) => [n.id, n] as const));
+      const localLakeBodies = await this.readLocalBodies("lake", state.lake.notes.map((n) => n.id));
       for (const n of state.lake.notes) {
-        const bytes = await this.device.readBody(n.id);
+        const bytes = localLakeBodies.get(n.id);
         if (!bytes) continue;
         const remote = remoteById.get(n.id);
         if (remote && remote.contentHash === sha256Hex(bytes)) continue;
         await this.device.archiveBody(n.id, bytes);
       }
       const remoteQuickById = new Map(quick.items.map((q) => [q.id, q] as const));
+      const localQuickBodies = await this.readLocalBodies("quickNotes", state.quickNotes.items.map((q) => q.id));
       for (const q of state.quickNotes.items) {
-        const bytes = await this.device.readQuickBody(q.id);
+        const bytes = localQuickBodies.get(q.id);
         if (!bytes) continue;
         const remote = remoteQuickById.get(q.id);
         if (remote && remote.contentHash === sha256Hex(bytes)) continue;
@@ -533,15 +536,17 @@ export class S3v3SyncEngine {
     // 全量重拉 = 元数据对账 + 本地内容复用（S3-REDESIGN §15）：本地正文/附件已持同内容就不重下字节。
     const hadLake = new Set(state.lake.notes.map((n) => n.id));
     const hadQuick = new Set(state.quickNotes.items.map((q) => q.id));
+    const reusableLakeBodies = await this.readLocalBodies("lake", [...hadLake]);
     const lakeNeed: LakeIndex["notes"] = [];
     for (const n of lake.notes) {
-      const local = await this.readLocalBody("lake", n.id);
+      const local = reusableLakeBodies.get(n.id);
       const reusable = hadLake.has(n.id) && !!local && sha256Hex(local) === n.contentHash;
       if (!reusable) lakeNeed.push(n);
     }
+    const reusableQuickBodies = await this.readLocalBodies("quickNotes", [...hadQuick]);
     const quickNeed: QuickNotesIndex["items"] = [];
     for (const q of quick.items) {
-      const local = await this.readLocalBody("quickNotes", q.id);
+      const local = reusableQuickBodies.get(q.id);
       const reusableQuick = hadQuick.has(q.id) && !!local && sha256Hex(local) === q.contentHash;
       if (!reusableQuick) quickNeed.push(q);
     }
@@ -1406,6 +1411,28 @@ export class S3v3SyncEngine {
 
   private async uploadQuickAssets(id: string, remoteDecl: AssetDeclaration | null) {
     return this.uploadAssets("quickNotes", id, remoteDecl);
+  }
+
+  /**
+   * 批量读本地正文（261026）：设备端口支持 readBodies 时按 100 篇一批读（移动端一次桥一批），
+   * 否则回退逐篇。缺失/异常一律 null（与 readLocalBody 同语义）。
+   */
+  private async readLocalBodies(space: "lake" | "quickNotes", ids: string[]): Promise<Map<string, Uint8Array | null>> {
+    const out = new Map<string, Uint8Array | null>();
+    const batchFn = space === "lake" ? this.device.readBodies : this.device.readQuickBodies;
+    const CHUNK = 100;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const part = ids.slice(i, i + CHUNK);
+      if (batchFn) {
+        try {
+          const got = await batchFn.call(this.device, part);
+          part.forEach((id, j) => out.set(id, got[j] ?? null));
+          continue;
+        } catch { /* 端口异常：回退逐篇 */ }
+      }
+      for (const id of part) out.set(id, await this.readLocalBody(space, id));
+    }
+    return out;
   }
 
   /** 读本地正文（缺失/异常一律 null；用于差集判定，不参与同步语义）。 */

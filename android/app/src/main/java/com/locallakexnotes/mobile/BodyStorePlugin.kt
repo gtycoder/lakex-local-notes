@@ -1,5 +1,6 @@
 package com.locallakexnotes.mobile
 
+import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -139,6 +140,37 @@ class BodyStorePlugin : Plugin() {
             call.resolve(res)
         } catch (e: Exception) {
             call.reject("正文读取失败: " + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
+    /**
+     * 批量读正文（261026 续传提速）：一次桥读一批（如 100 篇），替代续传时逐篇 readBody 的 2k 次往返。
+     * paths: [relative] → items: [{ path, exists, data? }]
+     */
+    @PluginMethod
+    fun readMany(call: PluginCall) {
+        val paths = call.getArray("paths") ?: run { call.reject("paths 必填"); return }
+        val items = JSArray()
+        try {
+            for (i in 0 until paths.length()) {
+                val relative = paths.optString(i, "")
+                val item = JSObject()
+                val file = resolve(relative)
+                if (file == null) {
+                    item.put("path", relative)
+                    item.put("exists", false)
+                    items.put(item)
+                    continue
+                }
+                val data = readTextFile(file)
+                item.put("path", relative)
+                item.put("exists", data != null)
+                if (data != null) item.put("data", data)
+                items.put(item)
+            }
+            call.resolve(JSObject().put("items", items))
+        } catch (e: Exception) {
+            call.reject("正文批量读取失败: " + (e.message ?: e.javaClass.simpleName))
         }
     }
 
