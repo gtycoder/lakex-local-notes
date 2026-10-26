@@ -1,6 +1,18 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { vi } from "vitest";
+
+// 资产存储：conformance 里每台「设备」一份内存资产表（模拟 assetFs；真实设备走原生/Filesystem）。
+const assetState = vi.hoisted(() => ({ current: new Map<string, Uint8Array>() }));
+vi.mock("../native/assetFs", () => ({
+  saveAssetBytesFs: async (key: string, bytes: Uint8Array) => { assetState.current.set(key, new Uint8Array(bytes)); },
+  loadAssetBytesFs: async (key: string) => assetState.current.get(key) ?? null,
+  removeAssetBytesFs: async (key: string) => { assetState.current.delete(key); },
+  listNoteAssetKeysFs: async (noteId: string) => [...assetState.current.keys()].filter((k) => k.startsWith(noteId + "/")),
+  listQuickNoteAssetKeysFs: async (id: string) => [...assetState.current.keys()].filter((k) => k.startsWith("quick-notes/" + id + "/")),
+  listAssetKeysFs: async () => [...assetState.current.keys()],
+}));
 import { defineDeviceConformance } from "../../../electron/s3v3/deviceConformance.js";
 import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
@@ -30,16 +42,23 @@ function fsBackend(dir: string): BodyStoreBackend {
 defineDeviceConformance("设备适配器一致性（移动 store）", async (remote) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-conf-mobile-"));
   const backend = fsBackend(root);
+  const assetStore = new Map<string, Uint8Array>();
   setBodyStoreBackendForTest(backend);
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
   await applyMobileSchema(db);
   const device = new MobileDeviceStore(db);
   await device.init();
   const engine = new S3v3SyncEngine({ remote, device, deviceId: "mobile-conf-" + Math.random().toString(36).slice(2, 8) });
-  const use = async <T>(fn: () => Promise<T>): Promise<T> => { setBodyStoreBackendForTest(backend); return await fn(); };
+  const use = async <T>(fn: () => Promise<T>): Promise<T> => {
+    setBodyStoreBackendForTest(backend);
+    assetState.current = assetStore;
+    return await fn();
+  };
   return {
     sync: (opts) => use(() => engine.sync(opts ?? {})),
     seedNote: (id, title, body) => use(() => createNote(db, id, title, body, null, new Map())),
+    seedAsset: (id, filename, bytes) => use(() => device.writeAsset(id, filename, bytes)),
+    readAsset: (id, filename) => use(() => device.readAsset(id, filename)),
     editNote: (id, title, body) => use(async () => { await saveNote(db, id, title, body, null, new Map()); }),
     listActiveIds: () => use(async () => { const rows = await db.prepare("SELECT id FROM notes WHERE trashed_at IS NULL ORDER BY id").all() as Array<{ id: string }>; return rows.map((r) => r.id); }),
     listTrashIds: () => use(async () => (await listTrashed(db)).map((n) => n.id).sort()),

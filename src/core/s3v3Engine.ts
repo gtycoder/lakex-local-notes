@@ -1164,6 +1164,7 @@ export class S3v3SyncEngine {
     const quickCommit = quickChanged ? indexHashOf(quickSerialized) : pointer.quickNotes.commit;
     const needPublish = lakeCommit !== pointer.lake.commit || quickCommit !== pointer.quickNotes.commit;
 
+
     if (!needPublish) {
       // 注意（勿删这里的 saveState）：无发布轮也必须落盘 state —— resolveRemotePurged 本轮可能已经把
       // 「显式恢复 / 远端复活 / 本地 purge」的 id 从 state.remotePurged 剔除，restorePending 也可能已清；

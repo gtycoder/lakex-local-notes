@@ -10,13 +10,22 @@ defineDeviceConformance("设备适配器一致性（桌面 store）", async (rem
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-conf-desktop-"));
   const store = new Store(root);
   store.bootstrap();
-  const nb = store.createNotebook("NB");
+  // 只在真正要造数据时才建「NB」笔记本：否则第二台设备会凭空多一个本地专属目录，
+  // 下一轮被判 upload 造成空发布（conformance 之外也是真实风险）。
+  let nbId: string | null = null;
+  const ensureNotebook = (): string => { if (!nbId) nbId = store.createNotebook("NB").id; return nbId; };
   const device = new DesktopStoreDevice(store, root, { skipQuickNotesGuard: true });
   await device.init();
   const engine = new S3v3SyncEngine({ remote, device, deviceId: "desktop-conf-" + Math.random().toString(36).slice(2, 8) });
   return {
     sync: (opts) => engine.sync(opts ?? {}),
-    seedNote: async (id, title, body) => { store.createNoteInAtTopWithContent(nb.id, title, body, [], id); },
+    seedNote: async (id, title, body) => { store.createNoteInAtTopWithContent(ensureNotebook(), title, body, [], id); },
+    seedAsset: async (id, filename, bytes) => {
+      const dir = path.join(root, "note-assets", id);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, filename), bytes);
+    },
+    readAsset: async (id, filename) => { const bytes = await device.readAsset(id, filename); return bytes ?? null; },
     editNote: async (id, title, body) => { store.saveNote(id, title, body); },
     // 桌面 listNoteSummaries 含回收站条目（用 trashed_at/parent 过滤），活跃 = 摘要 - 回收站。
     listActiveIds: async () => {

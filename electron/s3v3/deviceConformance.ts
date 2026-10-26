@@ -34,6 +34,8 @@ export class MemoryRemote implements S3v3Remote {
 export interface ConformanceHarness {
   sync(opts?: { onEmptyCloud?: "upload" | "stay" }): Promise<S3v3SyncReport>;
   seedNote(id: string, title: string, body: string): Promise<void>;
+  seedAsset(id: string, filename: string, bytes: Uint8Array): Promise<void>;
+  readAsset(id: string, filename: string): Promise<Uint8Array | null>;
   editNote(id: string, title: string, body: string): Promise<void>;
   listActiveIds(): Promise<string[]>;
   listTrashIds(): Promise<string[]>;
@@ -140,6 +142,27 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
         await b.sync();
         expect(await b.listActiveIds()).not.toContain("n1");
         expect(await b.listCloudDeletedIds()).toContain("n1");
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("带附件文档：A 上传声明+附件字节 → B 拉取到同字节", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        const img = new Uint8Array([137, 80, 78, 71, 1, 2, 3, 4, 5, 250]);
+        await a.seedNote("n1", "带图文档", "<p>正文一</p>");
+        await a.seedAsset("n1", "a.png", img);
+        const up = await a.sync({ onEmptyCloud: "upload" });
+        expect(up.published).toBe(true);
+        await b.sync();
+        const got = await b.readAsset("n1", "a.png");
+        expect(got).not.toBeNull();
+        expect(Array.from(got as Uint8Array)).toEqual(Array.from(img));
+        // B 再同步：附件已存在 ⇒ 不重复下载（引擎按声明差集跳过）
+        const putsBefore = remote.puts;
+        await b.sync();
+        expect(remote.puts).toBe(putsBefore);
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 
