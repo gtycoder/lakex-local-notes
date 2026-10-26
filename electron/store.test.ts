@@ -728,7 +728,7 @@ describe("目录树操作", () => {
     expect(store.listFoldersForSync().some((f) => f.id === "notebook-trash")).toBe(false);
   });
 
-  it("回收站自动过期：trashed_at 超期条目自动 purge（默认 60 天可配）", () => {
+  it("回收站自动过期：trashed_at 超期条目自动 purge（可配天数）", () => {
     const nb = store.createNotebook("待过期");
     const note = store.createNoteIn(nb.id, "子笔记");
     store.saveNote(note.id, "子笔记", "<p>内容</p>");

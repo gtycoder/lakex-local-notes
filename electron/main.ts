@@ -702,7 +702,7 @@ if (!app.requestSingleInstanceLock()) {
       });
     }
 
-    // 回收站自动过期（trashAutoPurgeDays 默认 60；0=关闭）。本地操作：启动即查一次 + 每天一次。
+    // 回收站自动过期（trashAutoPurgeDays 默认 90；0=关闭）。本地操作：启动即查一次 + 每天一次。
     let trashTimer: NodeJS.Timeout | null = null;
     const startTrashTimer = () => {
       if (trashTimer) { clearInterval(trashTimer); trashTimer = null; }

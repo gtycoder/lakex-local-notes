@@ -20,7 +20,7 @@
 |---|---|---|
 | D1 | 回收站上云 | ✅ Lake 回收站 = 隐藏笔记本，条目全量同步（正文/资源/元数据） |
 | D2 | purge 不广播 | ✅ purge 墓碑上云（`deleted:true`）；其他端**不删本地回收站副本**，标 `sync_state='purged'`（保留可恢复、不上传）；恢复 = 移出 + 清 purged → 上传覆盖墓碑（LWW：恢复 updatedAt > 墓碑 deletedAt 则墓碑让位） |
-| D3 | 自动过期 | ✅ 默认 60 天，开放配置（复用 `trashAutoPurgeDays`，语义从"提醒"改为"真正自动过期"；main.ts 定时扫 trash 笔记本） |
+| D3 | 自动过期 | ✅ 默认 90 天，开放配置（复用 `trashAutoPurgeDays`，语义从"提醒"改为"真正自动过期"；main.ts 定时扫 trash 笔记本） |
 | D4 | trash 笔记本 ID | 常量 `notebook-trash`，`node_type='notebook'`（**不改 CHECK 约束**），每端本地初始化，**不同步 folder**；侧栏/创建/拖拽按 ID 排除 |
 | D5 | 恢复位置 | `deletedFromParentId` 上云（manifest 可选字段，仅 trash 条目带）；恢复 = 移回原父目录，原父缺失/已删 → fallback 根目录；`trashedAt` 上云（自动过期时间基准，仅 trash 条目带） |
 | D6 | 小记 | 产品形态不变（回收站本地、不上云）；技术只做共享层统一（gzip 已做、增量扫描本轮做）；**不合并数据空间**（QUICK-NOTES-SPEC 明令） |
@@ -79,7 +79,7 @@ const TRASH_NOTEBOOK_ID = "notebook-trash";   // 与 DEFAULT_NOTEBOOK_ID 同层
 - purge 的 M4 前缀删除不变
 - 回收站条目对象（正文/资源）在 purge 前永不进 GC 候选（manifest keep）
 
-### 4.7 自动过期（60 天可配）
+### 4.7 自动过期（90 天可配，261026 由 60 调整为 90）
 - `trashAutoPurgeDays` 默认 60（现默认 0=提醒）；main.ts 并入维护队列：定期查 trash 笔记本 `trashed_at < now - N天` 的顶级条目 → 自动 `purgeTrashItem`
 - 时间基准 `trashedAt` 上云 → 各端过期起点一致
 
@@ -99,7 +99,7 @@ const TRASH_NOTEBOOK_ID = "notebook-trash";   // 与 DEFAULT_NOTEBOOK_ID 同层
 ## 6. 测试计划
 
 - 重写现有墓碑测试为移动语义（`sync.test.ts` ~14 个）
-- 新增：情况 3（全新设备拉到回收站全文+资源并可恢复）、purge 不广播（B 保留副本标 purged、不上传、可恢复）、恢复位置跨端一致（deletedFromParentId）、自动过期 60 天、两端 purge 后云端对象清理、trash 笔记本不出现在侧栏/不可新建/不可拖入、trashed 文件夹整体恢复
+- 新增：情况 3（全新设备拉到回收站全文+资源并可恢复）、purge 不广播（B 保留副本标 purged、不上传、可恢复）、恢复位置跨端一致（deletedFromParentId）、自动过期 90 天、两端 purge 后云端对象清理、trash 笔记本不出现在侧栏/不可新建/不可拖入、trashed 文件夹整体恢复
 - 回归：gzip（manifest 透明解压）、增量扫描（synced 0 读取）
 
 ## 7. 实施顺序

@@ -115,7 +115,7 @@ export class SettingsRepository {
 
   getS3GcSettings(): S3GcSettings {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_gc_settings'").get() as { value: string } | undefined;
-    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 60 };
+    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 90 };
     if (!row) return def;
     try {
       const parsed = JSON.parse(row.value) as Partial<S3GcSettings>;
