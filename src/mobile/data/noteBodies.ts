@@ -47,6 +47,24 @@ export async function readNoteBodiesBatch(items: Array<{ kind: NoteKind; id: str
   return await Promise.all(paths.map((p) => store.readText(p)));
 }
 
+/** 批量 stat 小记正文（261026 续传提速）。 */
+export async function statQuickNoteBodiesBatch(ids: string[]): Promise<Array<{ exists: boolean; size: number }>> {
+  if (ids.length === 0) return [];
+  const store = getBodyStore();
+  const paths = ids.map((id) => quickNoteBodyRelativePath(id));
+  if (store.statTextMany) return await store.statTextMany(paths);
+  return await Promise.all(paths.map((p) => store.stat(p)));
+}
+
+/** 批量 stat 正文（261026 续传提速）：hash 一致时只 stat，不读内容；非原生逐篇 stat。 */
+export async function statNoteBodiesBatch(items: Array<{ kind: NoteKind; id: string }>): Promise<Array<{ exists: boolean; size: number }>> {
+  if (items.length === 0) return [];
+  const store = getBodyStore();
+  const paths = items.map((i) => noteBodyRelativePath(i.kind, i.id));
+  if (store.statTextMany) return await store.statTextMany(paths);
+  return await Promise.all(paths.map((p) => store.stat(p)));
+}
+
 /** 删除同一 id 的全部候选正文（彻底删除 / kind 变更后残留；不存在静默）。 */
 export async function deleteNoteBodies(id: string): Promise<void> {
   const store = getBodyStore();

@@ -23,6 +23,7 @@ class ResumeDevice implements S3v3DeviceStore {
   archived: string[] = [];
   readBodyCalls = 0;
   readBodiesCalls = 0;
+  statBodiesCalls = 0;
   constructor(public bodies: Map<string, Uint8Array>, public state: DeviceState) {}
   async init(): Promise<void> {}
   async loadState(): Promise<DeviceState | null> { return this.state; }
@@ -33,6 +34,10 @@ class ResumeDevice implements S3v3DeviceStore {
   async readBodies(ids: string[]): Promise<Array<Uint8Array | null>> {
     this.readBodiesCalls += 1;
     return ids.map((id) => this.bodies.get(id) ?? null);
+  }
+  async statBodies(ids: string[]): Promise<Array<{ exists: boolean; size: number }>> {
+    this.statBodiesCalls += 1;
+    return ids.map((id) => ({ exists: this.bodies.has(id), size: this.bodies.get(id)?.length ?? 0 }));
   }
   async writeBody(id: string, bytes: Uint8Array): Promise<void> { this.bodies.set(id, bytes); }
   async deleteBody(): Promise<void> {}
@@ -85,15 +90,20 @@ describe("首拉中断后续传（261026）", () => {
     const report = await engine.sync({ onEmptyCloud: "stay" });
     expect(report.downloadedNotes).toBe(0); // 正文已就绪，不重复下载
     expect(device.archived).toEqual([]);   // 内容一致，不归档
-    // 续传读正文按批（移动端一次桥 100 篇）：不应逐篇 readBody。
+    // 续传快速复用（261026）：状态 hash 与远端一致 + stat 存在 ⇒ 不读正文（比批量读再快一档）。
     expect(device.readBodyCalls).toBe(0);
-    expect(device.readBodiesCalls).toBeGreaterThan(0);
+    expect(device.readBodiesCalls).toBe(0);
+    expect(device.statBodiesCalls).toBeGreaterThan(0);
   });
 
   it("本地正文与云端不同 ⇒ 只归档被覆盖的那一篇", async () => {
     const { remote, lake } = cloudWith(["n1", "n2"], (id) => "body-" + id);
     const bodies = new Map([["n1", enc("body-n1")], ["n2", enc("OLD-local")]]);
-    const device = new ResumeDevice(bodies, localState(lake));
+    // 真实数据里 DB 的 content_hash 记录的是**本地**正文 hash；这里让状态如实反映 n2 的本地内容，
+    // 才对应「本地更新、远端也更新」的覆盖场景（快速复用信任 state hash，见引擎注释）。
+    const state = localState(lake);
+    state.lake.notes = state.lake.notes.map((n) => (n.id === "n2" ? { ...n, contentHash: H("OLD-local") } : n));
+    const device = new ResumeDevice(bodies, state);
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev" });
     await engine.sync({ onEmptyCloud: "stay" });
     expect(device.archived).toEqual(["n2"]);

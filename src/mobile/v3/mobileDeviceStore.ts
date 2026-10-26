@@ -3,7 +3,7 @@ import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry,
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
-import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readNoteBodiesBatch, readQuickNoteBody, writeNoteBody, writeNoteBodiesBatch, writeQuickNoteBody } from "../data/noteBodies.js";
+import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readNoteBodiesBatch, readQuickNoteBody, statNoteBodiesBatch, statQuickNoteBodiesBatch, writeNoteBody, writeNoteBodiesBatch, writeQuickNoteBody } from "../data/noteBodies.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
@@ -451,6 +451,30 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const out: Array<Uint8Array | null> = [];
     for (const id of ids) out.push(await this.readQuickBody(id));
     return out;
+  }
+  /** 批量 stat 正文（261026 续传提速）：与 readBodies 同样一条 SQL 查 kind + 一次原生 stat。 */
+  async statBodies(ids: string[]): Promise<Array<{ exists: boolean; size: number }>> {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = await this.db.prepare("SELECT id,doc_kind FROM notes WHERE id IN (" + placeholders + ")").all(...ids) as Array<{ id: string; doc_kind: string | null }>;
+    const kindById = new Map(rows.map((row) => [row.id, normalizeNoteKind(row.doc_kind)] as const));
+    const stats = await statNoteBodiesBatch(ids.map((id) => ({ kind: kindById.get(id) ?? "doc", id })));
+    // staged 状态优先（与 readBody 同语义）：本轮刚写入的正文按内存态回答。
+    return stats.map((st, index) => {
+      const id = ids[index];
+      if (this.stagedBodies.has(id)) return { exists: true, size: this.stagedBodies.get(id)!.length };
+      if (this.stagedDeletes.has(id)) return { exists: false, size: 0 };
+      return st;
+    });
+  }
+  async statQuickBodies(ids: string[]): Promise<Array<{ exists: boolean; size: number }>> {
+    const stats = await statQuickNoteBodiesBatch(ids);
+    return stats.map((st, index) => {
+      const id = ids[index];
+      if (this.stagedQuickBodies.has(id)) return { exists: true, size: this.stagedQuickBodies.get(id)!.length };
+      if (this.stagedQuickDeletes.has(id)) return { exists: false, size: 0 };
+      return st;
+    });
   }
   async writeBody(id: string, bytes: Uint8Array): Promise<void> {
     if (this.stagedDeletes.has(id)) {

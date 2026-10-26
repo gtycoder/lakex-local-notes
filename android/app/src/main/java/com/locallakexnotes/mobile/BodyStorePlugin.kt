@@ -144,6 +144,30 @@ class BodyStorePlugin : Plugin() {
     }
 
     /**
+     * 批量 stat 正文（261026 续传提速）：续传时先比对 hash，一致且文件存在就完全不用读内容。
+     * paths: [relative] → items: [{ path, exists, size }]
+     */
+    @PluginMethod
+    fun statMany(call: PluginCall) {
+        val paths = call.getArray("paths") ?: run { call.reject("paths 必填"); return }
+        val items = JSArray()
+        try {
+            for (i in 0 until paths.length()) {
+                val relative = paths.optString(i, "")
+                val item = JSObject()
+                val file = resolve(relative)
+                item.put("path", relative)
+                item.put("exists", file != null && file.isFile)
+                item.put("size", if (file != null && file.isFile) file.length() else 0L)
+                items.put(item)
+            }
+            call.resolve(JSObject().put("items", items))
+        } catch (e: Exception) {
+            call.reject("正文批量 stat 失败: " + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
+    /**
      * 批量读正文（261026 续传提速）：一次桥读一批（如 100 篇），替代续传时逐篇 readBody 的 2k 次往返。
      * paths: [relative] → items: [{ path, exists, data? }]
      */

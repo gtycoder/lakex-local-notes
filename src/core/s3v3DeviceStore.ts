@@ -48,6 +48,8 @@ export interface S3v3DeviceStore {
   /** 批量读正文（可选；261026 续传提速）：一次调用读一批，减少移动端逐篇桥往返。
    *  返回顺序与 ids 一致；不支持时引擎回退逐篇 readBody。 */
   readBodies?(ids: string[]): Promise<Array<Uint8Array | null>>;
+  /** 批量 stat 正文（可选；261026）：续传时先按 hash 比对，一致且文件存在就完全不用读内容。 */
+  statBodies?(ids: string[]): Promise<Array<{ exists: boolean; size: number }>>;
   writeBody(id: string, bytes: Uint8Array): Promise<void>;
   deleteBody(id: string): Promise<void>;
   writeHistory(id: string, bytes: Uint8Array): Promise<string>;
@@ -64,6 +66,7 @@ export interface S3v3DeviceStore {
 
   readQuickBody(id: string): Promise<Uint8Array | null>;
   readQuickBodies?(ids: string[]): Promise<Array<Uint8Array | null>>;
+  statQuickBodies?(ids: string[]): Promise<Array<{ exists: boolean; size: number }>>;
   writeQuickBody(id: string, bytes: Uint8Array): Promise<void>;
   deleteQuickBody(id: string): Promise<void>;
   listQuickAssets(id: string): Promise<string[]>;

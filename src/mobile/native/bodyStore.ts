@@ -19,6 +19,7 @@ interface BodyStorePluginApi {
   writeMany(options: { items: Array<{ path: string; data: string }> }): Promise<{ written: number; bytes: number }>;
   read(options: { path: string }): Promise<{ exists: boolean; data?: string }>;
   readMany(options: { paths: string[] }): Promise<{ items: Array<{ path: string; exists: boolean; data?: string }> }>;
+  statMany(options: { paths: string[] }): Promise<{ items: Array<{ path: string; exists: boolean; size: number }> }>;
   remove(options: { path: string }): Promise<void>;
   stat(options: { path: string }): Promise<{ exists: boolean; size: number }>;
   writeSnapshot(options: { path: string; data: string }): Promise<{ size: number }>;
@@ -35,6 +36,8 @@ export interface BodyStoreBackend {
   writeTextMany?(items: Array<{ path: string; text: string }>): Promise<number>;
   /** 批量读（可选；261026 续传提速：一次桥读一批）。缺省时调用方逐篇读。 */
   readTextMany?(paths: string[]): Promise<Array<string | null>>;
+  /** 批量 stat（可选；261026 续传提速：hash 一致时只 stat 不读内容）。 */
+  statTextMany?(paths: string[]): Promise<Array<{ exists: boolean; size: number }>>;
   remove(path: string): Promise<void>;
   stat(path: string): Promise<{ exists: boolean; size: number }>;
   readSnapshot(path: string): Promise<string | null>;
@@ -60,6 +63,11 @@ function nativeBackend(): BodyStoreBackend {
       const res = await NativeBodyStore.readMany({ paths });
       const byPath = new Map((res?.items ?? []).map((i) => [i.path, i.exists && typeof i.data === "string" ? i.data : null] as const));
       return paths.map((p) => byPath.get(p) ?? null);
+    },
+    async statTextMany(paths) {
+      const res = await NativeBodyStore.statMany({ paths });
+      const byPath = new Map((res?.items ?? []).map((i) => [i.path, { exists: Boolean(i.exists), size: Number(i.size ?? 0) }] as const));
+      return paths.map((p) => byPath.get(p) ?? { exists: false, size: 0 });
     },
     async remove(path) {
       await NativeBodyStore.remove({ path });
@@ -89,6 +97,7 @@ const memoryBackend: BodyStoreBackend = {
   async writeText(path, text) { memoryText.set(path, text); return new TextEncoder().encode(text).length; },
   async writeTextMany(items) { let bytes = 0; for (const i of items) { memoryText.set(i.path, i.text); bytes += new TextEncoder().encode(i.text).length; } return bytes; },
   async readTextMany(paths) { return paths.map((p) => (memoryText.has(p) ? memoryText.get(p)! : null)); },
+  async statTextMany(paths) { return paths.map((p) => ({ exists: memoryText.has(p), size: new TextEncoder().encode(memoryText.get(p) ?? "").length })); },
   async remove(path) { memoryText.delete(path); },
   async stat(path) { return { exists: memoryText.has(path), size: new TextEncoder().encode(memoryText.get(path) ?? "").length }; },
   async readSnapshot(path) { return memoryText.has(path) ? memoryText.get(path)! : null; },
