@@ -944,6 +944,9 @@ export class S3v3SyncEngine {
         if (localAssetsEmpty && plan.remote?.assetsHash) {
           entry.assetsHash = plan.remote.assetsHash;
           this.warn("本地附件未落地，保留云端声明不删附件: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id, title: entry.title });
+          // 顺手自愈：把缺失的附件按远端声明补下来（本次循环后在下方统一 flush）。
+          const decl = await this.scheduleAssets("lake", plan.id, plan.remote.assetsHash);
+          if (decl) newLakeDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: decl.assets.map((a) => a.filename) });
         } else {
           const decl = await this.uploadAssets("lake", plan.id, remoteDecl);
           if (decl) {
@@ -979,6 +982,8 @@ export class S3v3SyncEngine {
         prevDecls.delete(plan.id);
       }
     }
+    // 上传分支里登记的自愈资产任务（本地附件未落地但远端有声明）在这里统一下载，失败只影响该对象。
+    await this.flushAssetTasks();
     for (const plan of quickPlan.items) {
       if (!plan.uploadLocal) continue;
       const entry = quickWS.get(plan.id);
@@ -1005,6 +1010,8 @@ export class S3v3SyncEngine {
         if (localQuickAssetsEmpty && plan.remote?.assetsHash) {
           entry.assetsHash = plan.remote.assetsHash;
           this.warn("本地小记图片未落地，保留云端声明: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id });
+          const decl = await this.scheduleAssets("quickNotes", plan.id, plan.remote.assetsHash);
+          if (decl) newQuickDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: decl.assets.map((a) => a.filename) });
         } else {
         const decl = await this.uploadQuickAssets(plan.id, remoteDecl);
         if (decl) {
@@ -1034,6 +1041,8 @@ export class S3v3SyncEngine {
       }
     }
 
+    // 小记上传分支的自愈任务同样在这里下载。
+    await this.flushAssetTasks();
     this.phase("downloads");
     // 全局传输（≤8）：all-or-isolate，失败笔记不进本轮索引。
     const uploadFailures = await this.flushUploadOps();

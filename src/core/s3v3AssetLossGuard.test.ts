@@ -24,6 +24,7 @@ class MemRemote implements S3v3Remote {
 /** 复现 261026 真机事故的状态：本地只有正文、附件目录为空（未落地），但 assetsHash 账本字段丢了。 */
 class LossyDevice implements S3v3DeviceStore {
   savedState: DeviceState | null = null;
+  writtenAssets: string[] = [];
   async init(): Promise<void> {}
   constructor(public state: DeviceState, public baseline: DeviceBaseline) {}
   async loadState(): Promise<DeviceState | null> { return this.state; }
@@ -37,7 +38,7 @@ class LossyDevice implements S3v3DeviceStore {
   async archiveBody(): Promise<void> {}
   async listAssets(): Promise<string[]> { return []; }
   async readAsset(): Promise<Uint8Array | null> { return null; }
-  async writeAsset(): Promise<void> {}
+  async writeAsset(_id: string, filename: string): Promise<void> { this.writtenAssets.push(filename); }
   async deleteAssetsDir(): Promise<void> {}
   async readQuickBody(): Promise<Uint8Array | null> { return null; }
   async writeQuickBody(): Promise<void> {}
@@ -52,8 +53,8 @@ describe("v3 附件声明数据安全（261026 真机事故回归）", () => {
   it("本地附件目录为空、assetsHash 账本缺失 ⇒ 保留云端声明，绝不删除云端附件", async () => {
     const remote = new MemRemote();
     const decl = buildAssetDeclaration([
-      { filename: "a1.png", size: 3, hash: H("A1") },
-      { filename: "a2.png", size: 3, hash: H("A2") },
+      { filename: "a1.png", size: enc("A1").length, hash: H("A1") },
+      { filename: "a2.png", size: enc("A2").length, hash: H("A2") },
     ]);
     const contentHash = H(BODY);
     const lake: LakeIndex = {
@@ -101,5 +102,7 @@ describe("v3 附件声明数据安全（261026 真机事故回归）", () => {
     expect(report.warningDetails.some((w) => w.kind === "asset_kept_remote" && w.noteId === "n1")).toBe(true);
     // 4) 本地 state 也保留声明（下轮从这里恢复）
     expect(device.savedState?.lake.notes[0].assetsHash).toBe(decl.declHash);
+    // 5) 顺手自愈：缺失的附件按远端声明补拉回本地
+    expect(new Set(device.writtenAssets)).toEqual(new Set(["a1.png", "a2.png"]));
   });
 });
