@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { reconcileQuickNote, type QuickNoteReconcileAction } from "./quickNoteReconcile.js";
 
-/** 表驱动测试：与 electron/quickNotesSync.ts 下载阶段「正文不同」分支一一对应。 */
+/** 表驱动测试：与旧 electron/quickNotesSync.ts（已删）下载阶段「正文不同」分支一一对应。 */
 const cases: Array<{ name: string; input: Parameters<typeof reconcileQuickNote>[0]; expect: QuickNoteReconcileAction }> = [
   { name: "双端都改 → conflict", input: { baseHash: "A", localHash: "B", remoteHash: "C" }, expect: { kind: "conflict" } },
   { name: "仅在本地变更 → local-wins", input: { baseHash: "A", localHash: "B", remoteHash: "A" }, expect: { kind: "local-wins" } },

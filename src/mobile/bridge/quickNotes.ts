@@ -2,7 +2,7 @@
 import { assets, ensureDb, runPriority, runWrite } from "./context";
 
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs } from "../native/assetFs";
-import type { QuickNotePushOutcome } from "../../core/quickNotePush.js";
+import type { QuickNotePushOutcome } from "../../core/quickNoteSyncTypes.js";
 import { buildAssetFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { cloudStateHint, type CloudState } from "../../core/cloudState.js";

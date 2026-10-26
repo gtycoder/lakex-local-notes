@@ -213,6 +213,26 @@ export class NoteMetadataRepository {
     }
   }
 
+  /**
+   * v3 同步：把本轮合并结果中的目录元数据原样落库（含 updatedAt）。
+   * 与 importRemoteFolder 的区别：这里是「合并已定夺，local state 即真相」，不能再按
+   * updatedAt 大小做条件（两端种子/升级时间不同时，远端时间戳可能更旧但已胜出；
+   * 不落库会让本地行时间戳与 baseline 长期不一致，导致空跑隔轮各 +1 generation）。
+   */
+  applyRemoteFolderMeta(folder: SyncFolder): void {
+    if (folder.id === this.trashNotebookId) return;
+    const trashedAt = folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null;
+    const deletedFrom = folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null;
+    const existing = this.db.prepare("SELECT id FROM tree_nodes WHERE id=?").get(folder.id);
+    if (!existing) {
+      this.importRemoteFolder(folder);
+      return;
+    }
+    this.db.prepare(
+      "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, node_type=?, icon=?, updated_at=?, is_dirty=0, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
+    ).run(folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, trashedAt, deletedFrom, folder.id);
+  }
+
   hasTreeNode(id: string): boolean {
     return !!this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id);
   }

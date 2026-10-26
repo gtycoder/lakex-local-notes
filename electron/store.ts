@@ -1461,6 +1461,11 @@ export class Store {
     this.noteMetadata.importRemoteFolder(folder);
   }
 
+  /** v3：把合并结果里的目录元数据原样落库（含 updatedAt；不按新旧做条件）。 */
+  applyRemoteFolderMeta(folder: SyncFolder): void {
+    this.noteMetadata.applyRemoteFolderMeta(folder);
+  }
+
   /** 兜底父笔记本（无默认笔记本概念）：存在的笔记本 → 无则自动创建"未分类"（见 resolveParentNotebook）。 */
   defaultNotebookId(): string {
     return this.resolveParentNotebook();

@@ -1,5 +1,7 @@
 # S3 v3 转正后旧通道/字段移除计划（261025）
 
+> **261026 状态：本计划已执行完毕（保留作历史）**。legacy 文档同步、旧 quick-notes 通道、旧单条推送、旧 GC/维护模块与 `sync_state` 列均已删除；迁移工具 `migrate.ts` 也已删除（定稿不迁移）。当前口径以 HANDOFF §0 / AGENTS 为准。
+
 ## 1. 当前已完成
 
 - 桌面文档：默认 v3；`LAKE_SYNC_PROTOCOL=legacy` 回滚。

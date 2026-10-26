@@ -13,6 +13,16 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261026 · S3 v3 P1 修复 + 口径定稿（分支 `fix/s3v3-p1`，基于 `feat/s3-v3` ba8f185c）
+
+- **P1 v3 空发布抖动（已修 + 回归）**：根因 = 桌面 v3 适配器把合并结果写回 Store 时只落正文/部分几何字段，**远端/合并结果里的 `updatedAt` 没落库**（正文未变时完全不写；改走 `saveNote/moveTreeNode/setNodeIcon` 时又被改成 now()）。而 v3 三方合并用 `updatedAt` 判断「本地元数据是否更新」⇒ 两端各持不同旧时间戳，隔轮互相判定"元数据更新"，索引在 A/B 两个 hash 间翻转、每轮 +1 generation（实测 g10→g11，published=true、uploaded/downloaded=0；零变更从只读 200B pointer 退化为拉整份索引）。修复：`DesktopStoreDevice.saveState` 对已存在条目把合并结果元数据原样落库（`applyRemoteNoteMeta` + 新增 `Store.applyRemoteFolderMeta`；正文下载后同样回写远端 `updatedAt`）；并把引擎回收站常量从 `"trash"` 改为真实 `notebook-trash`（否则回收站条目父节点写坏）。回归：`electron/s3v3/idlePublishRegression.test.ts`（两端空闲 5 轮 + 增量后回闲：published=false、零传输/零写、只读 pointer ≤1KB）。
+- **并发上限定稿 12（用户 261026 批准）**：代码原本已默认 12（`DEFAULT_TRANSFER_CONCURRENCY` / `deleteMany`）；本次统一文档口径（AGENTS §3#13、S3-REDESIGN §1.1、S3-V3-BATCHING/CAPACITY）。
+- **死代码清理**：删除 `src/core/syncEngine.ts`、`quickNotesSyncEngine.ts`、`quickNotePush.ts`、`syncPerf.ts` 与只测它们的旧测试/AB 对比测试；仍被 type-only 引用的形状集中到 `src/core/quickNoteSyncTypes.ts`（无运行时逻辑，勿复活旧通道）。
+- **迁移策略定稿 = 不迁移**：`electron/s3v3/migrate.ts` 与迁移测试已删；S3-REDESIGN §8 改写为「首开 v3 从本地真相全量上传 / 旧 manifest 不读不删留孤儿 / 回滚 = 换回旧版本客户端」。升级与回滚路径见 `docs/S3-V3-CUTOVER.md` §2/§3。
+- **移动端首拉 profile（只诊断，未改行为）**：移动端 v3 复用同一引擎 ⇒ 并发上限 12 生效；传输走 `CapacitorHttpHandler` → Capacitor 原生 `Executors.newCachedThreadPool()`（无信号量/无串行化），12 个请求可同时在飞；但每请求 body/响应要 base64 过桥 + JS 主线程编解码（大对象是 CPU/内存瓶颈），底层 HttpURLConnection 无连接池调优。**未做低风险改动**；首拉还受 `MobileDeviceStore.loadState` 全表映射与启动 DDL 影响。
+- **仍存风险**：① 移动端适配器仍不落「仅 `updatedAt` 变化」的元数据（标题/父/排序/正文路径会写；图标/锁/排序分支不写 `updated_at`）且 `lockedAt` 恒为 null ⇒ 桌面↔移动混合使用仍可能偶发一轮元数据抖动（真机验证后在移动端做同构修复）；② **真实 Android 物理机未验收**（触摸/返回/键盘/后台/schema 迁移）；③ **大库阈值未在真实设备探测**（>2 万文档、索引 3~5MB gzip 时首拉/增量耗时；v3.1 按篇增量索引是下一档）。
+- **门禁（本分支）**：tsc 0 · 定向 vitest（s3v3 引擎/适配器/回归 + 移动 v3 + 相关守卫）147 passed / 2 failed（`src/mobile/v3/mobileCloudDeleted.test.ts` 两例在 **HEAD ba8f185c 上同样失败**，非本批引入）· 桌面 + 移动 `vite build` ✓ · `git diff --check` ✓。按 lead 指令本机并发压测期间未重跑全库。
+
 ### 261026 · S3 v3 转正 + 旧同步字段删除（分支 `feat/s3-v3`，未合并 master）
 
 - **默认 v3**：桌面文档/小记、移动端全部默认走 v3；旧 legacy 同步入口、旧 quick-notes 单条推送/云端恢复、旧 GC/旧 quick-notes 同步模块与对应测试已删除。移动端不再有 `syncProtocol=legacy`。
@@ -37,6 +47,8 @@
   3. **状态栏 cloud-deleted 专属配色**：DesktopStatusBar 已有文案/图标，但 styles/chrome.css 还没有该 kind 的 pending/橙色样式（可选）。
   4. **v3 标签独立空间 / 文档标签 UI**：小记标签已同步，文档标签仍未做。
   5. **合并 master 前复核**：双端构建、门禁、真实 S3 回归、HANDOFF 收口；合并时不要带测试前缀/临时凭据（已清理）。
+  6. **大库阈值探测**：>2 万文档 / 索引 3~5MB gzip 时首拉与增量实机耗时（当前只有合成数据；v3.1 按篇增量索引是下一档）。
+  7. **移动端同构 metadata 对齐**：桌面 P1 修复后，移动适配器仍可能因不落 `updatedAt`/`lockedAt` 产生一轮抖动；真机验证后按 `DesktopStoreDevice.saveState` 同一口径修。
 - 报告：docs/S3-V3-REMOVAL-PLAN.md / docs/S3-V3-CUTOVER.md。
 
 ### 261025 · S3 墓碑保留调研（仅文档，未改代码）

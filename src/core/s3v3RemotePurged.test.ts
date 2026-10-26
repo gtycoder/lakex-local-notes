@@ -141,7 +141,7 @@ describe("v3 · 云端已彻底删除 · 仅本地（remotePurged）", () => {
     const n2 = sb.lake.notes.find((n) => n.id === "n2")!;
     expect(n2).toBeTruthy();
     expect(n2.trashedAt).toBeTruthy();
-    expect(n2.parentId).toBe("trash");
+    expect(n2.parentId).toBe("notebook-trash"); // 回收站父节点与 Store/移动端一致（TRASH_NOTEBOOK_ID）
     expect(sb.remotePurged).toEqual(["n2"]);
     expect(b.bodies.has("n2")).toBe(true); // 本地副本保留（可恢复）
 

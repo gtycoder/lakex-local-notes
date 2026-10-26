@@ -3,7 +3,7 @@ import { convertQuickNoteToLake } from "../quickNoteConversion.js";
 import { syncNowViaEngine } from "../syncEngineController.js";
 import { S3v3S3Remote } from "../s3v3/s3Remote.js";
 import { fetchQuickNoteFromV3 } from "../s3v3/quickNotesRecovery.js";
-import type { QuickNotePushOutcome } from "../../src/core/quickNotePush.js";
+import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
 import { canTouchNetwork, cloudStateOf, cloudStateHint } from "../../src/core/cloudState.js";
 import type { Store } from "../store.js";
 import type { IpcRegistrar } from "./registrar.js";

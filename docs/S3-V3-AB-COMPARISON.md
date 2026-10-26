@@ -1,5 +1,6 @@
 # master 旧同步 vs v3 真实 S3 A/B（261025）
 
+> **261026 状态：历史报告**。旧引擎（`src/core/syncEngine.ts`）与对照测试 `electron/s3v3/ab.integration.test.ts` 已删除，本文件只保留当时数据。
 > 目的：同一批真实桌面 Store 数据、同一真实七牛桶，分别跑 master 旧引擎（manifest 链）与 v3（不可变索引/pointer），对比耗时、对象数、字节数。
 > 测试：electron/s3v3/ab.integration.test.ts（S3V3_AB=1）。每档都新建两份独立 Store（文档正文约 900B，无附件），两个独立 S3 前缀，结束后 deleteByPrefix 清空。
 

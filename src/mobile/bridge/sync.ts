@@ -1,14 +1,15 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { listAssetKeysFs } from "../native/assetFs";
-import { downloadNoteAssets, type SyncConfig, type SyncReport } from "../../core/syncEngine.js";
+import { downloadNoteAssets } from "../../core/syncAssets.js";
+import type { SyncConfig, SyncReport } from "../../core/syncEngineTypes.js";
 import { buildGcKeepSet } from "../../core/gcDecisions.js";
 import { normalizeEndpoint, parseLakeManifest, validateS3Settings } from "../../core/syncUtils.js";
 import type { Manifest } from "../../core/manifestTypes.js";
-import type { QuickNotesSyncResult } from "../../core/quickNotesSyncEngine.js";
+import type { QuickNotesSyncResult } from "../../core/quickNoteSyncTypes.js";
 import { createCapacitorS3Store } from "../native/s3Store";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "../../core/cloudState.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
-import type { QuickNotePushOutcome } from "../../core/quickNotePush.js";
+import type { QuickNotePushOutcome } from "../../core/quickNoteSyncTypes.js";
 import { mobileSecretStore } from "../native/secretStore.js";
 import { writeSyncStatus } from "../sync/syncStatusStore";
 import * as gcRepository from "../data/gcRepository.js";

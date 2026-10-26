@@ -7,7 +7,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Store } from "./store.js";
 import type { ObjectStore } from "./s3Store.js";
-import type { S3Store, SyncDbPort, LocalNoteRow, SyncConfig } from "../src/core/syncEngine.js";
+import type { S3Store, SyncDbPort, LocalNoteRow, SyncConfig } from "../src/core/syncEngineTypes.js";
 import type { ManifestFolder, ManifestNote } from "../src/core/manifestTypes.js";
 import { sha256Hex } from "../src/core/syncUtils.js";
 import { setSha256HexImpl } from "../src/core/sha256Sync.js";

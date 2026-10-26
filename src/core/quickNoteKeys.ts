@@ -2,7 +2,7 @@
  * 小记（quick-notes）S3 对象布局的**唯一来源**（B1，261016）。
  *
  * ## 为什么必须独立成文件
- * 这套 key 曾同时写在 `quickNotePush.ts` 与 `quickNotesSyncEngine.ts` 里（逐字相同的三行），
+ * 这套 key 曾同时写在旧 `quickNotePush.ts` 与 `quickNotesSyncEngine.ts` 里（两者均已删除；逐字相同的三行），
  * 且 `quick-notes` 这个前缀常量本身在 core 与 electron 各定义过一次。
  * 而「保存并同步」正是**单条推送**与**整轮同步**两条路径共用同一份清单与同一个对象命名空间：
  * 两处各写一份 ⇒ 将来改布局只改一处时，单条推送会与整轮同步指向**不同的对象**

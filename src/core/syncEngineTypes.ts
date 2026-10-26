@@ -5,6 +5,9 @@ import type { SyncWarning } from "../lib/types.js";
  * 桌面 store 落 protected_until（未到期自动清理跳过、手动删除不受限）；移动端简化 schema 无保护、忽略。 */
 export const HISTORY_SNAPSHOT_PROTECT_DAYS = 30;
 
+/** 单篇正文对象大小护栏（恢复/预览从云端拉回时的上限；原在已删除的 core/syncEngine.ts）。 */
+export const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
+
 export interface SyncConfig {
   endpoint: string;
   region: string;

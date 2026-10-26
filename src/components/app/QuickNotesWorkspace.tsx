@@ -503,7 +503,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   }
 
   /**
-   * 「保存并同步」（用户 261013）：只把**这一条**小记推到 S3（其余小记在云端原样保留，见 core/quickNotePush）。
+   * 「保存并同步」（用户 261013）：v3 起不再有单条推送实现，改为整轮 v3 同步兜底（旧 core/quickNotePush 已删除）。
    * 失败不静默：本地已经存住了 ⇒ 提示「已保存到本机，同步失败：…」，用户可再点一次（幂等）。
    */
   async function pushOneNote(id: string) {

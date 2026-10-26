@@ -1,5 +1,6 @@
 # S3 v3 同步协议 · 实施与测试报告（261025）
 
+> **历史报告（261025）**：文中的「尚未接入应用层 / 8 并发 / 旧 Manifest 迁移」均为当时状态。261026 转正后：应用层已接入、并发定稿 **12**（用户批准）、**不迁移**（`migrate.ts` 与旧 `src/core/syncEngine.ts` 等已删除）。以 HANDOFF §0 / AGENTS 为准。
 > 分支：`feat/s3-v3`（master 未动）· 实施时间：2026-10-25 · 状态：**协议内核已实现并通过真实 S3 验证；尚未接入 Electron/Android 应用层**
 > 设计来源：[S3-REDESIGN.md](./S3-REDESIGN.md)（含两份独立审计与三轮复核处置）
 
@@ -37,7 +38,7 @@
 | `desktopSync.ts` | **桌面 v3 同步入口**（feature flag `LAKE_SYNC_PROTOCOL=v3`；Store+适配器+S3 v3 引擎；`LAKE_S3V3_EMPTY_CLOUD` 控制首同步） |
 | `fileDeviceStore.ts` | 文件系统实现（测试/CLI；正文/附件/基线/历史/待删/意图/恢复标记；原子写） |
 | `syncEngine.ts` | v3 同步引擎：拉取→合并→上传→发布锁/读回→待删门禁→意图生命周期→深度清理→全量重拉 |
-| `migrate.ts` | 旧 Manifest（含墓碑/回收站/小记标签）→ v3 索引+不可变声明+pointer |
+| ~~`migrate.ts`~~ | 旧 Manifest→v3 迁移（**261026 删除**：定稿不迁移） |
 
 ### 1.3 探测/测试脚本
 - `scripts/s3-v3-probe.mjs`：条件写/一致性/桶配置/ multipart 探测（只读环境变量，不落盘密钥）。

@@ -15,7 +15,7 @@ import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../../c
 import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from "../../core/maintenancePolicy.js";
 import { maintenanceQueue, priorityQueue, writeLock } from "../sync/maintenanceLocks";
 import { createMobileS3Client } from "../native/s3Store";
-import type { SyncDbPort } from "../../core/syncEngine.js";
+import type { SyncDbPort } from "../../core/syncEngineTypes.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
 
 /** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "local-lakex-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */

@@ -1,5 +1,6 @@
 # S3 v3 最终对比与测试报告（261025 · 桌面实测批）
 
+> **261026 状态：历史报告**。清单中的 `migrate.ts` / `migrate.integration.test.ts` / `ab.integration.test.ts` 已删除（定稿不迁移）；并发已定稿 12（本报告数据多为 8 并发基线）。现状以 HANDOFF §0 / AGENTS 为准。
 > 分支 feat/s3-v3（master 未动）· 报告范围：协议内核 + 桌面应用层接入 + 4 桌面真实 UI 矩阵 + 2 台 Android 设备推拉 + master A/B + 真实 S3 压测。
 > 移动端：v3 适配/编排/2 台模拟器真实 S3 推拉已完成（bridge 触发，非 UI 点击）；设备端 UI 点击、附件/小记/删除路径与指标仍未做（见 §6）。
 
@@ -25,7 +26,7 @@ pointer 状态机 / 不可变索引与资产声明 / 三方合并 / 删除意图
 | desktopStoreAdapter.ts | 真实桌面 Store 适配器 v1（Lake 文档/目录/附件；sidecar；quick notes 未支持） |
 | syncEngine.ts | v3 同步引擎（先拉后推/发布锁+读回/门禁/意图/清理/重拉） |
 | desktopSync.ts | 桌面 v3 入口（LAKE_SYNC_PROTOCOL=v3；LAKE_S3V3_EMPTY_CLOUD） |
-| migrate.ts | 旧 Manifest→v3 迁移 |
+| ~~migrate.ts~~ | 旧 Manifest→v3 迁移（**261026 删除**：定稿为不迁移、首开 v3 从本地真相全量上传） |
 | syncEngineController.ts | 桌面 Controller 顶部 v3 分支 |
 | src/mobile/v3/mobileDeviceStore.ts | 移动端 S3v3DeviceStore（Lake/附件/目录/小记） |
 | src/mobile/v3/s3v3Remote.ts | 移动端 S3v3Remote（CapacitorHttpHandler） |

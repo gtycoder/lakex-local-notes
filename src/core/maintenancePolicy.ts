@@ -13,7 +13,7 @@
  * - **I1（F16）**：`write` 与 `maintenance` 必须落在**不同互斥域**；网络往返期间不得持有写域。
  * - **I2**：跨网络窗口的「读 → 标记已同步」必须靠**"未变才标"守卫**（内容 hash 比较），
  *   不得依赖全局互斥。Lake 侧已有 `markSyncedIfUnchanged`（V5 §5.2）；
- *   小记侧 `markSynced` 缺守卫，是本判据落地的前置条件（见 quickNotesSyncEngine）。
+ *   小记侧 `markSynced` 缺守卫，是本判据落地的前置条件（v3 起小记走 syncEngine 同一套发布/基线语义）。
  * - **I3**：同一互斥域内串行；**禁止嵌套获取同一域**（KeyedAsyncQueue 无重入 ⇒ 会自锁）。
  *   证据：`bridge.ts` 的 `restoreTreeItem` 注释「仍走同一串行队列，不嵌套 → 不会自锁」。
  *

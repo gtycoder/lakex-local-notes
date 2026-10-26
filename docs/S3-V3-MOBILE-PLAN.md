@@ -1,14 +1,14 @@
-# S3 v3 移动端接入方案（待实施）
+# S3 v3 移动端接入方案（历史方案，已实施）
 
-> 背景：桌面 v3 已接入并通过 4 桌面真实 UI 矩阵；移动端仍是旧同步路径，2 台移动设备无法做 v3 实测。
-> 本文件只做方案与映射，不代表已实现/已测试。
+> **261026 状态：已实施并转正**（`src/mobile/v3/*`；旧移动同步分支已删）。本文是当时的方案文档，文中「旧同步路径 / 待实施 / `src/core/syncEngine.ts`」等描述已过期（该文件已删除）；现口径见 HANDOFF §0/§8 与 `src/mobile/v3/sync.ts`。
+> 背景：桌面 v3 已接入并通过 4 桌面真实 UI 矩阵；移动端当时仍是旧同步路径。
 
 ## 1. 移动端现状（旧同步）
 
 - 入口：`src/mobile/bridge/sync.ts` 的 `bridge.syncNow()`（设置页/首页调用）。
 - S3 端口：`src/mobile/native/s3Store.ts`（@aws-sdk/client-s3 + CapacitorHttpHandler/OkHttp），实现 core 的 `S3Store`。
 - DB 端口：`src/mobile/bridge/context.ts` 构造 `SyncDbPort`；正文/小记/历史走 `BodyStorePlugin` 文件（`src/core/noteBodyPaths.ts`），SQLite 只存元数据/hash/同步账本。
-- 引擎：`src/core/syncEngine.ts`（旧 manifest 链）。
+- 引擎：旧 `src/core/syncEngine.ts`（旧 manifest 链；**261026 已删除**，现为 `src/core/s3v3Engine.ts`）。
 
 ## 2. 需要新增的模块
 

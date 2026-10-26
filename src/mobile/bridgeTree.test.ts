@@ -15,28 +15,13 @@ vi.mock("./native/assetFs", () => ({
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
-type TestManifest = {
-  notes: Array<{ id: string; contentHash: string; assets?: Array<{ filename: string }> }>;
-};
-
-vi.mock("../core/syncEngine.js", () => ({
+vi.mock("../core/syncAssets.js", () => ({
   downloadNoteAssets: vi.fn(),
-  syncNow: vi.fn(async (
-    _config: unknown,
-    _store: unknown,
-    _port: unknown,
-    options: { onPublished: (next: TestManifest, prev: TestManifest) => Promise<void> },
-  ) => {
-    await options.onPublished(
-      { notes: [{ id: "sync-note", contentHash: "next", assets: [] }] },
-      { notes: [{ id: "sync-note", contentHash: "prev", assets: [{ filename: "old.png" }] }] },
-    );
-    return { message: "同步完成" };
-  }),
 }));
 
-vi.mock("../core/quickNotesSyncEngine.js", () => ({
-  syncQuickNotesViaEngine: vi.fn(async () => ({ uploaded: 0, downloaded: 0 })),
+// 旧 legacy 引擎已删除；移动端同步入口 = v3（本文件只测目录树，不需要它真正跑）。
+vi.mock("./v3/sync.js", () => ({
+  runMobileV3Sync: vi.fn(async () => ({ downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: [] })),
 }));
 
 vi.mock("./native/secretStore.js", () => ({

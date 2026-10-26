@@ -29,6 +29,7 @@ import { planLakeMerge, planQuickNotesMerge } from "./s3v3Merge.js";
 import { planLakeDeletes, planQuickNotesDeletes, type PlannedDelete } from "./s3v3Gc.js";
 import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3Gate.js";
 import { shouldClearDeletionIntent, type DeletionIntent } from "./s3v3Intent.js";
+import { TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { runPool, runPoolSettled } from "./s3v3Pool.js";
@@ -41,7 +42,8 @@ const LOCK_TTL_MS = 120_000;
 /** 锁重试：无 CAS 的 provider 下，靠「写后静置再读回」降低双持窗口。 */
 const LOCK_DEADLINE_MS = 15_000;
 const LOCK_SETTLE_MS = 40; // 单用户场景下减少固定发布延迟；多端冲突仍由锁重试/归属复核兜底
-const TRASH_ID = "trash";
+/** 回收站父节点 id 与 Store/移动端一致（曾误写 "trash"，会把回收站条目挂到不存在的父节点）。 */
+const TRASH_ID = TRASH_NOTEBOOK_ID;
 const MAX_PUBLISH_RETRIES = 6;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

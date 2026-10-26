@@ -1,6 +1,7 @@
-# S3 存储与 GC 契约
+# S3 存储与 GC 契约（历史：manifest/墓碑时代）
 
-> 当前实现：`electron/s3Store.ts`（传输）· `electron/s3Maintenance.ts`（keep 集、对账、深度清理、manifest prune）· `src/core/gcPolicy.ts` / `src/core/gcDecisions.ts`（纯策略）。
+> **261026 状态：v3 转正后本文描述的 manifest 链 / 永久墓碑 / keep 集 GC 已不适用**（当前实现：`meta/pointer.json` + 不可变索引 + 每文档资产声明 + 待删队列 + `deepCleanup`；`electron/s3Maintenance.ts`、`src/core/syncEngine.ts`、`src/core/quickNotesSyncEngine.ts` 均已删除）。本文只作历史参考。
+> 当时实现：`electron/s3Store.ts`（传输）· `electron/s3Maintenance.ts`（keep 集、对账、深度清理、manifest prune）· `src/core/gcPolicy.ts` / `src/core/gcDecisions.ts`（纯策略）。
 > 本地是唯一真相，S3 只是镜像；GC 最坏只丢云端冗余，随后可由本地重新上传自愈。
 
 ## 1. 对象与 Manifest

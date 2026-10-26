@@ -12,23 +12,13 @@ vi.mock("./native/assetFs", () => ({
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
-type TestManifest = { notes: Array<{ id: string; contentHash: string; assets?: Array<{ filename: string }> }> };
-
-vi.mock("../core/syncEngine.js", () => ({
+vi.mock("../core/syncAssets.js", () => ({
   downloadNoteAssets: vi.fn(async () => {}),
-  syncNow: vi.fn(async (
-    _config: unknown,
-    _store: unknown,
-    _port: unknown,
-    options: { onPublished: (next: TestManifest, prev: TestManifest) => Promise<void> },
-  ) => {
-    await options.onPublished({ notes: [] }, { notes: [] });
-    return { message: "同步完成" };
-  }),
 }));
 
-vi.mock("../core/quickNotesSyncEngine.js", () => ({
-  syncQuickNotesViaEngine: vi.fn(async () => ({ uploaded: 0, downloaded: 0 })),
+// 旧 legacy 引擎已删除；移动端同步入口 = v3（这里只断言"没被调用" ⇒ 零请求）。
+vi.mock("./v3/sync.js", () => ({
+  runMobileV3Sync: vi.fn(async () => ({ downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: [] })),
 }));
 
 vi.mock("./native/secretStore.js", () => ({
@@ -41,7 +31,8 @@ vi.mock("./native/secretStore.js", () => ({
 }));
 
 import { bridge } from "./bridge.js";
-import { downloadNoteAssets, syncNow as coreSyncNow } from "../core/syncEngine.js";
+import { downloadNoteAssets } from "../core/syncAssets.js";
+import { runMobileV3Sync } from "./v3/sync.js";
 
 const S3 = {
   endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "b", prefix: "p",
@@ -85,7 +76,7 @@ describe("移动端云同步状态闸门", () => {
     expect(downloadNoteAssets).not.toHaveBeenCalled();
 
     const result = await bridge.syncNow();
-    expect(coreSyncNow).not.toHaveBeenCalled();          // ← 引擎没被调用 = 零请求
+    expect(runMobileV3Sync).not.toHaveBeenCalled();      // ← 引擎没被调用 = 零请求
     expect(result.message).toContain("云同步已关闭");
   });
 
@@ -104,7 +95,7 @@ describe("移动端云同步状态闸门", () => {
       // 同步：同样给提示，且**不发请求**（引擎不被调用）
       const result = await bridge.syncNow();
       expect(result.message).toContain("S3 密钥缺失");
-      expect(coreSyncNow).not.toHaveBeenCalled();
+      expect(runMobileV3Sync).not.toHaveBeenCalled();
     } finally {
       readMock.mockResolvedValue("sk");   // 还原本文件"已配置 S3"的默认语义
     }

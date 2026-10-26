@@ -184,7 +184,7 @@ export interface LakeNative {
   discardStagedQuickNoteImage(draftId: string, imageId: string): Promise<void>;
   convertQuickNote(quickNoteId: string, notebookId: string): Promise<NoteDocument>;
   /** 「保存并同步」：只推这一条小记（其余小记在云端原样保留）。 */
-  syncQuickNote(id: string): Promise<import("../core/quickNotePush").QuickNotePushOutcome>;
+  syncQuickNote(id: string): Promise<import("../core/quickNoteSyncTypes").QuickNotePushOutcome>;
   listQuickNoteTrash(): Promise<QuickNoteTrashItem[]>;
   restoreQuickNote(id: string): Promise<QuickNoteDocument>;
   purgeQuickNote(id: string): Promise<void>;

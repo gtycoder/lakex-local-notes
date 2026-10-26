@@ -1,8 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { Store } from "../store.js";
+import { TRASH_NOTEBOOK_ID, type Store } from "../store.js";
 import type { QuickNotesStore } from "../quickNotes.js";
+import type { SyncNote } from "../noteQueries.js";
 import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../../src/core/s3v3Index.js";
 import { sha256Hex } from "../../src/core/syncUtils.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
@@ -167,7 +168,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
           const staged = this.stagedAssets.get(n.id) ?? new Map<string, Uint8Array>();
           const assets = [...staged.entries()].map(([filename, bytes]) => ({ filename, bytes: Buffer.from(bytes) }));
           const syncNote = {
-            id: n.id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
+            id: n.id, title: n.title, parentId: n.trashedAt ? TRASH_NOTEBOOK_ID : n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
             contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
             editLockedAt: n.lockedAt ?? null, icon: n.icon ?? null, trashedAt: n.trashedAt ?? null,
             deletedFromParentId: n.deletedFromParentId ?? null, kind: n.kind ?? "doc",
@@ -176,20 +177,40 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
           if (n.icon) this.store.setNodeIcon(n.id, n.icon);
         } else {
           // 只有引擎真的写入了新正文（staged）才保存，避免每轮读全库正文
-          if (content !== null && sha256Hex(new TextEncoder().encode(content)) !== curHash) {
-            this.store.saveNote(n.id, n.title, content);
-          } else if (content === null && n.title !== cur.title) {
-            this.store.saveNote(n.id, n.title, this.store.readNote(n.id).content);
-          }
-          if (!n.trashedAt && !cur.trashedAt && ((cur.parentId ?? null) !== (n.parentId ?? null) || cur.sortOrder !== n.sortOrder)) this.store.moveTreeNode(n.id, n.parentId, n.sortOrder);
-          if ((cur.icon ?? null) !== (n.icon ?? null)) this.store.setNodeIcon(n.id, n.icon ?? null);
-          if (!!cur.isEditLocked !== !!n.isLocked) this.store.setNoteEditLocked(n.id, !!n.isLocked);
+          const contentChanged = content !== null && sha256Hex(new TextEncoder().encode(content)) !== curHash;
+          if (contentChanged) this.store.saveNote(n.id, n.title, content);
           if (n.trashedAt && !cur.trashedAt) {
             // 远端墓碑 → 回收站：必须走 deleteNote（不能 moveTreeNode 到回收站隐藏笔记本）
             this.store.deleteNote(n.id);
           } else if (!n.trashedAt && cur.trashedAt) {
             this.store.restoreTrashItem(n.id);
-            if ((cur.deletedFromParentId ?? null) !== (n.parentId ?? null) || cur.sortOrder !== n.sortOrder) this.store.moveTreeNode(n.id, n.parentId, n.sortOrder);
+          }
+          // P1（v3 空发布抖动根因）：本轮合并结果的元数据必须原样落库，尤其 updatedAt。
+          // 只按字段调 moveTreeNode/setNodeIcon 时它们会用 now() 改写 updated_at，且正文未变时
+          // 根本不会写 updated_at ⇒ 本地行永远停留在旧时间戳，下一轮三方合并又把它判成
+          // 「本地元数据更新/远端元数据更新」再发布一次，两端空跑隔轮各 +1 generation。
+          const metaDiffers = contentChanged
+            || (!!n.trashedAt !== !!cur.trashedAt)
+            || n.updatedAt !== cur.updatedAt
+            || n.title !== cur.title
+            || (n.parentId ?? null) !== (cur.parentId ?? null)
+            || n.sortOrder !== cur.sortOrder
+            || !!n.isConflict !== !!cur.isConflict
+            || (n.trashedAt ?? null) !== (cur.trashedAt ?? null)
+            || (n.deletedFromParentId ?? null) !== (cur.deletedFromParentId ?? null)
+            || (n.icon !== undefined && (cur.icon ?? null) !== (n.icon ?? null));
+          if (metaDiffers) {
+            const syncNote: SyncNote = {
+              id: n.id, title: n.title, parentId: n.trashedAt ? TRASH_NOTEBOOK_ID : n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
+              isConflict: !!n.isConflict, isEditLocked: !!n.isLocked, editLockedAt: n.lockedAt ?? null,
+              ...(n.icon !== undefined ? { icon: n.icon } : {}),
+              trashedAt: n.trashedAt ?? null, deletedFromParentId: n.deletedFromParentId ?? null,
+              kind: n.kind as SyncNote["kind"],
+            };
+            this.store.applyRemoteNoteMeta(syncNote);
+          }
+          if (!!cur.isEditLocked !== !!n.isLocked || (cur.editLockedAt ?? null) !== (n.lockedAt ?? null)) {
+            this.store.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);
           }
         }
         if (this.stagedAssets.has(n.id) || this.clearedAssets.has(n.id)) await this.flushStagedAssets(n.id);
@@ -281,9 +302,15 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
           // 远端目录 id 必须原样落库（createNotebook/createGroup 会生成新 id，跨端子文档将找不到父）
           this.store.importRemoteFolder(f as never);
         } else {
-          if (c.title !== f.title) this.store.renameTreeNode(f.id, f.title);
-          if ((c.parentId ?? null) !== (f.parentId ?? null) || c.sortOrder !== f.sortOrder) this.store.moveTreeNode(f.id, f.parentId, f.sortOrder);
-          if ((c.icon ?? null) !== (f.icon ?? null)) this.store.setNodeIcon(f.id, f.icon ?? null);
+          // P1（v3 空发布抖动根因）：目录同样要把合并结果的 updatedAt/元数据原样落库。
+          // moveTreeNode/setNodeIcon 会改成 now()，且不能把「远端较旧但胜出」的时间戳写回；
+          // 本地行时间戳一旦与 baseline 不一致，下一轮就再发布一次（隔轮 +1 generation）。
+          const changed = c.title !== f.title
+            || (c.parentId ?? null) !== (f.parentId ?? null)
+            || c.sortOrder !== f.sortOrder
+            || (c.icon ?? null) !== (f.icon ?? null)
+            || c.updatedAt !== f.updatedAt;
+          if (changed) this.store.applyRemoteFolderMeta(f);
         }
       } catch (e) { throw new Error("DesktopStoreDevice.saveFolders 失败(" + f.id + "): " + (e as Error).message); }
     }

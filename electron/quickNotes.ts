@@ -98,7 +98,7 @@ export class QuickNotesStore {
   readonly links: QuickNoteTagLinksStore;
   /** 唯一同时接触两个子系统的协调层。 */
   readonly tagService: QuickNoteTagService;
-  /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；quickNotesSync 经此读取） */
+  /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；v3 适配器经此读取） */
   readonly logScopes: LoggerScopes;
 
   constructor(workspaceRoot: string, logScopes: LoggerScopes = createSilentLoggerScopes()) {

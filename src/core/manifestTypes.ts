@@ -1,6 +1,6 @@
 /**
  * 同步清单（Manifest）共享类型（lake-core）。
- * 单一来源迁自 electron/sync.ts / electron/quickNotesSync.ts；
+ * 单一来源迁自已删除的 electron/sync.ts / electron/quickNotesSync.ts（v3 只保留兼容解析测试夹具用途）；
  * 供移动端与同步对账纯函数（lakeReconcile / quickNoteReconcile）复用。
  */
 

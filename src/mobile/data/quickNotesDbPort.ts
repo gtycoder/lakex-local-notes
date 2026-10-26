@@ -1,5 +1,5 @@
 /**
- * 移动端 Quick Notes 同步端口（quickNotesSyncEngine 的本地存储实现）。
+ * 移动端 Quick Notes 同步端口的历史形状（旧 quickNotesSyncEngine 已删；schema 批处理仍由本文件提供）。
  *
  * 独立于 bridge.ts 以便单测（注入测试用同步 DB + 资产文件依赖，不依赖 Capacitor/native SQLite 装载）：
  * - native SQLite 单库方案：quick_notes 行 + content 列（序列化正文）；图片**纯文件**（无 BLOB，与桌面一致），
@@ -13,7 +13,7 @@
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { previewQuickNote, validateQuickNoteContent } from "../../core/quickNoteModel.js";
 import type { StoredQuickNoteContent } from "../../core/quickNoteModel.js";
-import type { QuickNoteSyncItemImage, QuickNotesSyncDbPort } from "../../core/quickNotesSyncEngine.js";
+import type { QuickNoteSyncItemImage, QuickNotesSyncDbPort } from "../../core/quickNoteSyncTypes.js";
 import type { MobileDb } from "./sqliteDb.js";
 import { stageAssetWrites } from "../native/assetWrites.js";
 import { deleteQuickNoteBody, readQuickNoteBody, writeQuickNoteBody } from "./noteBodies.js";

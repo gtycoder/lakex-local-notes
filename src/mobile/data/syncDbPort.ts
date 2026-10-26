@@ -1,4 +1,4 @@
-import type { SyncDbPort } from "../../core/syncEngine.js";
+import type { SyncDbPort } from "../../core/syncEngineTypes.js";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
 import { nextSortOrder } from "../../core/treeRules.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
