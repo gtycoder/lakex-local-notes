@@ -190,7 +190,9 @@ export type SyncWarningKind =
   /** 本地正文文件缺失（被手动删除等），且没有可拉回的云端副本 ⇒ 跳过，不上传空正文。 */
   | "local_body_missing"
   /** 本地正文缺失但云端有副本：已自动拉回恢复。 */
-  | "local_body_restored";
+  | "local_body_restored"
+  /** 本地附件未落地/读不出（不是用户删除）⇒ 保留云端声明，避免误删云端附件。 */
+  | "asset_kept_remote";
 export interface SyncWarning {
   kind: SyncWarningKind;
   /** 受影响文档 id（能定位时）。 */

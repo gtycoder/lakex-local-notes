@@ -73,7 +73,9 @@ export function gatePendingDelete(item: PendingDelete, world: CurrentWorld): Gat
     case "asset": {
       const note = world.notes.find((n) => n.id === item.noteId);
       if (!note) return DELETE("条目已不存在");
-      if (!note.assetsHash) return DELETE("当前条目无资产声明");
+      // 数据安全（261026）：无当前声明 = 无法确认附件是否还被引用（本地未落地/索引异常都会这样）。
+      // 保守跳过；真被删的附件交给 deepCleanup 的孤儿清理，不能在这里冒「误删仍被引用的对象」的风险。
+      if (!note.assetsHash) return KEEP("当前条目无资产声明（无法确认），保守跳过");
       const decl = world.declarations[item.noteId];
       if (!decl || decl.declHash !== note.assetsHash) return KEEP("声明缺失或与索引不一致，保守跳过");
       return decl.filenames.includes(item.filename) ? KEEP("当前声明仍引用该附件") : DELETE("附件已从声明移除");
@@ -98,7 +100,7 @@ export function gatePendingDelete(item: PendingDelete, world: CurrentWorld): Gat
     case "quick-note-asset": {
       const note = world.quickNotes.find((n) => n.id === item.noteId);
       if (!note) return DELETE("小记条目已不存在");
-      if (!note.assetsHash) return DELETE("当前小记无图片声明");
+      if (!note.assetsHash) return KEEP("当前小记无图片声明（无法确认），保守跳过");
       const decl = world.quickDeclarations[item.noteId];
       if (!decl || decl.declHash !== note.assetsHash) return KEEP("小记声明缺失或与索引不一致，保守跳过");
       return decl.filenames.includes(item.filename) ? KEEP("当前小记声明仍引用该图片") : DELETE("图片已从声明移除");

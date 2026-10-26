@@ -936,20 +936,34 @@ export class S3v3SyncEngine {
         const hash = sha256Hex(body);
         entry.contentHash = hash;
         const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("lake", plan.id, plan.remote.assetsHash) : null;
-        const decl = await this.uploadAssets("lake", plan.id, remoteDecl);
-        if (decl) {
+        // 数据安全（261026 真机事故）：本地附件目录为空 ≠ 用户删光了附件。
+        // 首拉未完成/附件还没落地/外部清缓存时目录同样是空的；此时若按 uploadAssets 的结果把
+        // entry.assetsHash 置空，新索引会「声明该条目没有附件」，随后 planLakeDeletes 会把这台的
+        // 全部云端附件判成孤儿执行物理删除（真机上一次性删掉 2 万对象）。没有本地证据就不改声明。
+        const localAssetsEmpty = (await this.device.listAssets(plan.id)).length === 0;
+        if (localAssetsEmpty && plan.remote?.assetsHash) {
+          entry.assetsHash = plan.remote.assetsHash;
+          this.warn("本地附件未落地，保留云端声明不删附件: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id, title: entry.title });
+        } else {
+          const decl = await this.uploadAssets("lake", plan.id, remoteDecl);
+          if (decl) {
           this.uploadOps.push({ space: "lake", noteId: plan.id, key: declarationKey("lake", plan.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
           entry.assetsHash = decl.declHash;
           newLakeDecls.set(plan.id, { declHash: decl.declHash, filenames: decl.declaration.assets.map((a) => a.filename) });
-          if (plan.remote?.assetsHash && plan.remote.assetsHash !== decl.declHash) {
-            const old = await this.getDeclaration("lake", plan.id, plan.remote.assetsHash);
-            if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
-          }
-        } else {
-          entry.assetsHash = undefined;
-          if (plan.remote?.assetsHash) {
-            const old = await this.getDeclaration("lake", plan.id, plan.remote.assetsHash);
-            if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
+            if (plan.remote?.assetsHash && plan.remote.assetsHash !== decl.declHash) {
+              const old = await this.getDeclaration("lake", plan.id, plan.remote.assetsHash);
+              if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
+            }
+          } else if (plan.remote?.assetsHash) {
+            // 本地有文件但读不出字节（IO 异常等）：同样不能丢声明，保留远端版本。
+            entry.assetsHash = plan.remote.assetsHash;
+            this.warn("附件读取失败，保留云端声明: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id, title: entry.title });
+          } else {
+            entry.assetsHash = undefined;
+            if (plan.remote?.assetsHash) {
+              const old = await this.getDeclaration("lake", plan.id, plan.remote.assetsHash);
+              if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
+            }
           }
         }
         // 仅在正文内容真的变化时 PUT（锁/图标等元数据变更不必重传正文）。
@@ -986,6 +1000,12 @@ export class S3v3SyncEngine {
         }
         entry.contentHash = sha256Hex(body);
         const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("quickNotes", plan.id, plan.remote.assetsHash) : null;
+        // 与 Lake 同一条数据安全规则：本地图片目录为空不能当成「用户删光了图片」。
+        const localQuickAssetsEmpty = (await this.device.listQuickAssets(plan.id)).length === 0;
+        if (localQuickAssetsEmpty && plan.remote?.assetsHash) {
+          entry.assetsHash = plan.remote.assetsHash;
+          this.warn("本地小记图片未落地，保留云端声明: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id });
+        } else {
         const decl = await this.uploadQuickAssets(plan.id, remoteDecl);
         if (decl) {
           this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: declarationKey("quickNotes", plan.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
@@ -995,8 +1015,12 @@ export class S3v3SyncEngine {
             const old = await this.getDeclaration("quickNotes", plan.id, plan.remote.assetsHash);
             if (old) prevQuickDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
           }
+        } else if (plan.remote?.assetsHash) {
+          entry.assetsHash = plan.remote.assetsHash;
+          this.warn("小记图片读取失败，保留云端声明: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id });
         } else {
           entry.assetsHash = undefined;
+        }
         }
         if (plan.remote?.contentHash !== entry.contentHash) {
           this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: quickNoteBodyKey(entry.contentHash), bytes: body });

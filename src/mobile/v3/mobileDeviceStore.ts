@@ -53,6 +53,13 @@ export class MobileDeviceStore implements S3v3DeviceStore {
 
   async loadState(): Promise<DeviceState | null> {
     const side = await loadV3State(this.db);
+    // 升级/历史数据兜底（261026 真机数据事故）：assetsHash 是后加的账本字段，旧版本或未落盘的轮次里可能为空，
+    // 而 baseline 里的索引必然带着它。只看 side 会把「本地附件还没下下来」误判成「用户删光了附件」，
+    // 上传时清空声明 → 旧附件被当孤儿物理删除。这里以 side 为准、baseline 兜底。
+    const baselineAssets = new Map<string, string>();
+    for (const n of side.baseline?.lake.notes ?? []) if (n.assetsHash) baselineAssets.set(n.id, n.assetsHash);
+    for (const q of side.baseline?.quickNotes.items ?? []) if (q.assetsHash) baselineAssets.set(q.id, q.assetsHash);
+    const assetsHashOf = (id: string): string | undefined => side.assetsHash[id] ?? baselineAssets.get(id);
     const rows = await this.db.prepare(
       "SELECT id,title,parent_id,sort_order,updated_at,content_hash,is_conflict,is_locked,icon,doc_kind,trashed_at,deleted_from_parent_id,restore_pending_at,cloud_deleted FROM notes ORDER BY id"
     ).all() as unknown as NoteRow[];
@@ -75,7 +82,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         isLocked: !!r.is_locked, lockedAt: null, isConflict: !!r.is_conflict,
         ...(r.trashed_at ? { trashedAt: r.trashed_at } : {}),
         ...(r.deleted_from_parent_id !== null ? { deletedFromParentId: r.deleted_from_parent_id } : {}),
-        ...(side.assetsHash[r.id] ? { assetsHash: side.assetsHash[r.id] } : {}),
+        ...(assetsHashOf(r.id) ? { assetsHash: assetsHashOf(r.id) } : {}),
       });
     }
     const folderRows = await this.db.prepare(
@@ -108,7 +115,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       return {
         id: q.id, createdAt: q.created_at, updatedAt: q.updated_at, contentHash: q.content_hash,
         isConflict: !!q.is_conflict,
-        ...(side.assetsHash[q.id] ? { assetsHash: side.assetsHash[q.id] } : {}),
+        ...(assetsHashOf(q.id) ? { assetsHash: assetsHashOf(q.id) } : {}),
         ...(links.has(q.id) ? { tagIds: links.get(q.id) } : {}),
         ...(q.tags_updated_at ? { tagsUpdatedAt: q.tags_updated_at } : {}),
       };
