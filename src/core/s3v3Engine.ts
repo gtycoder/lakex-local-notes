@@ -587,7 +587,7 @@ export class S3v3SyncEngine {
     const totalBodies = lakeNeed.length + quickNeed.length;
     let applied = 0;
     const downloadBodies = async (items: Array<LakeIndex["notes"][number] | QuickNotesIndex["items"][number]>, space: "lake" | "quickNotes", apply: boolean) => {
-      await runTransferPipeline(items, this.downloadConcurrency, async (item) => {
+      const pipeline = await runTransferPipeline(items, this.downloadConcurrency, async (item) => {
         const bytes = space === "lake"
           ? await this.getBody("lake", (item as LakeIndex["notes"][number]).id, item.contentHash)
           : await this.getQuickBody(item.contentHash);
@@ -605,6 +605,15 @@ export class S3v3SyncEngine {
         offsetDone: applied,
         onProgress: (p) => this.emitProgress(p),
       });
+      // 单对象失败不炸整轮，但必须留结构化警告：否则“少了一篇”是静默的（重试/诊断都看不到）。
+      for (const failure of pipeline.errors) {
+        const item = items[failure.index] as { id: string; title?: string } | undefined;
+        const reason = failure.error instanceof Error ? failure.error.message : String(failure.error);
+        this.warn((space === "lake" ? "正文下载失败: " : "小记正文下载失败: ") + (item?.id ?? ""), {
+          kind: "remote_incomplete", ...(item?.id ? { noteId: item.id } : {}), ...(item?.title ? { title: item.title } : {}),
+        });
+        this.warnings[this.warnings.length - 1] += " " + reason;
+      }
       applied += items.length;
       if (apply) {
         await this.device.saveState(newState); // 分块应用：正文已就绪的条目立即落库（可打开）

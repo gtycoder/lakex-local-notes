@@ -9,13 +9,24 @@ import { describe, expect, it } from "vitest";
 import { gzipSync, gunzipSync } from "node:zlib";
 import type { S3v3Remote, RemoteObjectInfo } from "../../src/core/s3v3Ports.js";
 import type { S3v3SyncReport } from "../../src/core/s3v3Engine.js";
+import { sha256Hex } from "../../src/core/syncUtils.js";
+import { lakeBodyKey } from "../../src/core/s3v3Keys.js";
 
 export class MemoryRemote implements S3v3Remote {
   objects = new Map<string, { bytes: Uint8Array; gzip: boolean }>();
   gets = 0;
   puts = 0;
+  /** 每 key 的 GET 次数（断点/重复下载断言用）。 */
+  getsByKey = new Map<string, number>();
+  /** 注入「第一次 GET 失败」（模拟传输中断）。 */
+  failOnce = new Set<string>();
   async get(key: string): Promise<Uint8Array | null> {
     this.gets += 1;
+    this.getsByKey.set(key, (this.getsByKey.get(key) ?? 0) + 1);
+    if (this.failOnce.has(key)) {
+      this.failOnce.delete(key);
+      throw new Error("injected-get-failure");
+    }
     const o = this.objects.get(key);
     if (!o) return null;
     return o.gzip ? new Uint8Array(gunzipSync(Buffer.from(o.bytes))) : o.bytes;
@@ -163,6 +174,32 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
         const putsBefore = remote.puts;
         await b.sync();
         expect(remote.puts).toBe(putsBefore);
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("正文传输中断：本轮跳过（有警告）、下轮补齐；已应用正文不重下", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      const enc = (s: string) => new TextEncoder().encode(s);
+      const bodyKey = (id: string, text: string) => lakeBodyKey(id, sha256Hex(enc(text)));
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.seedNote("n2", "标题二", "<p>正文二</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+
+        remote.failOnce.add(bodyKey("n2", "<p>正文二</p>"));
+        const first = await b.sync();
+        // 不整轮失败：n1 已应用；n2 本轮缺正文，留结构化警告
+        expect(await b.listActiveIds()).toContain("n1");
+        expect(first.warningDetails.some((w) => w.noteId === "n2")).toBe(true);
+
+        const before = remote.getsByKey.get(bodyKey("n2", "<p>正文二</p>")) ?? 0;
+        await b.sync();
+        expect(remote.getsByKey.get(bodyKey("n2", "<p>正文二</p>"))).toBe(before + 1);
+        expect(await b.readBody("n2")).toBe("<p>正文二</p>");
+        // 已应用的 n1 正文只下载过一次（断点续传不重复搬运）
+        expect(remote.getsByKey.get(bodyKey("n1", "<p>正文一</p>"))).toBe(1);
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 
