@@ -58,7 +58,8 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /**
  * 资产声明是**不可变内容寻址对象**（key = declHash）⇒ 进程内可安全跨轮/跨引擎复用。
  * 桌面每轮都会 new 一个引擎：没有这层缓存时，元数据漂移导致大量 applyRemote 的轮次会
- * 逐篇重复 GET 声明对象（崩溃追赶实测 4,070 次 meta GET 的一部分）。上限防止无限增长。
+ * 逐篇重复 GET 声明对象（崩溃追赶实测 4,070 次 meta GET 的一部分）。上限 4096 条 + **LRU**
+ * （命中刷新队尾，避免热点声明被新条目挤掉；跨引擎共享是刻意的）。
  */
 const DECL_CACHE_LIMIT = 4096;
 const DECL_CACHE = new Map<string, AssetDeclaration>();
@@ -431,7 +432,12 @@ export class S3v3SyncEngine {
   private async getDeclaration(space: "lake" | "quickNotes", id: string, declHash: string): Promise<AssetDeclaration | null> {
     const cacheKey = space + "/" + id + "/" + declHash;
     const cached = DECL_CACHE.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      // LRU：命中刷新到队尾，避免热点声明被新条目挤掉。
+      DECL_CACHE.delete(cacheKey);
+      DECL_CACHE.set(cacheKey, cached);
+      return cached;
+    }
     const bytes = await this.remote.get(declarationKey(space, id, declHash));
     if (!bytes) return null;
     const decl = validateAssetDeclaration(JSON.parse(new TextDecoder().decode(bytes)));
@@ -629,7 +635,7 @@ export class S3v3SyncEngine {
     if (!deferAssets) {
       const lakeDecls = lake.notes.filter((n) => n.assetsHash);
       // P0：这里把声明取回的同时按 id 留一份，下面 scheduleAssets 直接复用——
-      // 否则 2k 篇会再串行 GET 一遍声明（DECL_CACHE 有上限，必然大部分 miss）。
+      // 否则 2k 篇会再串行 GET 一遍声明（声明 LRU 有上限，必然大部分 miss）。
       const fetchedDecls = new Map<string, AssetDeclaration | null>();
       await runTransferPipeline(
         lakeDecls.map((n) => ({ space: "lake" as const, id: n.id, declHash: n.assetsHash! })),
