@@ -56,6 +56,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "sync-enabled", category: "sync", label: "启用云同步", keywords: "同步 开关 启用 云同步 隐私 隐私数据 加密 不加密 私有" },
   { id: "sync-auto-mode", category: "sync", label: "自动同步模式", keywords: "自动同步 模式 手动 间隔 开启关闭" },
   { id: "sync-auto-interval", category: "sync", label: "自动同步间隔（分钟）", keywords: "自动同步 间隔 分钟" },
+  { id: "sync-defer-assets", category: "sync", label: "按需下载附件", keywords: "按需 附件 图片 下载 流量 首拉 懒加载 媒体" },
   { id: "backup-export", category: "sync", label: "整库备份", keywords: "备份 整库 导出 目录" },
   { id: "backup-restore", category: "sync", label: "从云端恢复", keywords: "恢复 换机 坏库 云端恢复 隔离" },
   { id: "s3-endpoint", category: "sync", label: "Endpoint", keywords: "endpoint 接入点 地址 七牛 qiniu" },
