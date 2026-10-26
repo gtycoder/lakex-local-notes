@@ -121,6 +121,37 @@ describe("planLakeMerge", () => {
     expect(p2.kind).toBe("none");
     expect(p2.uploadLocal).toBe(true); // 本端加锁 → 上传元数据
   });
+  it("目录恢复传播（D4）：远端缺席但本地在本轮恢复/编辑过 → 按 upload 重新发布", () => {
+    const f = (id: string, updatedAt: string, parentId: string | null = null, trashedAt: string | null = null): LakeIndex["folders"][number] => ({ id, title: id, parentId, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt, ...(trashedAt ? { trashedAt } : {}) });
+    const baseIdx = lake([], [f("f1", "2026-10-25T00:00:00.000Z")]);
+    const localRestored = lake([], [f("f1", "2026-10-26T00:00:00.000Z")]);
+    const remoteGone = lake([], []);
+    const p = planLakeMerge(baseIdx, localRestored, remoteGone, emptyCtx);
+    expect(p.folders.find((x) => x.id === "f1")?.kind).toBe("upload");
+    // 仍在回收站（trashedAt 非空）= 跟随远端删除语义，不得复活
+    const localStillTrashed = lake([], [f("f1", "2026-10-26T00:00:00.000Z", null, "2026-10-26T00:00:00.000Z")]);
+    const p2 = planLakeMerge(baseIdx, localStillTrashed, remoteGone, emptyCtx);
+    expect(p2.folders.find((x) => x.id === "f1")?.kind).toBe("remote-purged-trash");
+  });
+  it("目录环检测（C4）：本地把目录移进其远端子树 → 即使本地更新也跟随远端断开", () => {
+    const f = (id: string, parentId: string | null, updatedAt: string): LakeIndex["folders"][number] => ({ id, title: id, parentId, sortOrder: 0, nodeType: "group", icon: null, updatedAt });
+    const baseIdx = lake([], [f("f1", null, "2026-10-25T00:00:00.000Z"), f("f2", "f1", "2026-10-25T00:00:00.000Z")]);
+    // 本地：把 f1 移进 f2（f1.updatedAt 更新）
+    const local = lake([], [f("f1", "f2", "2026-10-26T02:00:00.000Z"), f("f2", "f1", "2026-10-25T00:00:00.000Z")]);
+    // 远端：同一时刻 f2 也在 f1 下（本地父 f2 在远端树中位于 f1 之下 ⇒ 上传会成环）
+    const remote = lake([], [f("f1", null, "2026-10-26T00:00:00.000Z"), f("f2", "f1", "2026-10-25T00:00:00.000Z")]);
+    const p = planLakeMerge(baseIdx, local, remote, emptyCtx);
+    expect(p.folders.find((x) => x.id === "f1")?.kind).toBe("download");
+  });
+  it("文档环检测（C4）：本地父在远端树中位于本节点之下 → 跟随远端", () => {
+    const parented = (id: string, parentId: string | null, updatedAt: string): LakeNoteEntry => ({ ...note(id, H("a")), parentId, updatedAt });
+    const baseIdx = lake([parented("n1", null, "2026-10-25T00:00:00.000Z"), parented("n2", "n1", "2026-10-25T00:00:00.000Z")]);
+    const local = lake([parented("n1", "n2", "2026-10-26T02:00:00.000Z"), parented("n2", "n1", "2026-10-25T00:00:00.000Z")]);
+    const remote = lake([parented("n1", null, "2026-10-26T00:00:00.000Z"), parented("n2", "n1", "2026-10-25T00:00:00.000Z")]);
+    const n = planLakeMerge(baseIdx, local, remote, emptyCtx).notes.find((x) => x.id === "n1")!;
+    expect(n.applyRemote).toBe(true);
+    expect(n.uploadLocal).toBe(false);
+  });
   it("目录：本地新建/远端新建/远端删除/本地删除意图", () => {
     const f = (id: string, updatedAt = "2026-10-25T00:00:00.000Z"): LakeIndex["folders"][number] => ({ id, title: id, parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt });
     const baseIdx = lake([], [f("f1"), f("f2"), f("f3")]);

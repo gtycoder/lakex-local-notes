@@ -135,4 +135,28 @@ describe("单条小记推送（parity E2：只 upsert 这一条）", () => {
     const r = await engine(remote, a).pushQuickNote("q1");
     expect(r).toEqual({ status: "full-sync", reason: "remote-deleted" });
   });
+
+  it("推送已恢复「云端已删除·仅本地」小记后：remotePurged/restorePending 落盘清空（persistSyncMarkers）", async () => {
+    const remote = new MemoryRemote();
+    const a = await freshStore("e");
+    await addQuick(a, "q1", "restored");
+    const lake: LakeIndex = { v: 3, space: "lake", notes: [], folders: [] };
+    const quick: QuickNotesIndex = { v: 3, space: "quickNotes", items: [] };
+    const lakeCommit = indexHashOf(serializeLakeIndex(lake));
+    const quickCommit = indexHashOf(serializeQuickNotesIndex(quick));
+    await remote.put("meta/index/" + lakeCommit + ".json", enc(serializeLakeIndex(lake)), { gzip: true });
+    await remote.put("quick-notes/meta/index/" + quickCommit + ".json", enc(serializeQuickNotesIndex(quick)), { gzip: true });
+    const pointer = { v: 3, epoch: "22222222-2222-4222-8222-222222222222", generation: 1, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: new Date().toISOString(), deviceId: "A" };
+    await remote.put("meta/pointer.json", enc(JSON.stringify(pointer)));
+    await a.saveBaseline({ epoch: pointer.epoch, generation: 1, lakeCommit, quickNotesCommit: quickCommit, lake, quickNotes: quick });
+    const st = (await a.loadState())!;
+    st.remotePurged = ["q1"];
+    st.restorePending = ["q1"];
+    await a.saveState(st);
+    const r = await engine(remote, a).pushQuickNote("q1");
+    expect(r.status).toBe("pushed");
+    const after = (await a.loadState())!;
+    expect(after.remotePurged ?? []).toEqual([]);
+    expect(after.restorePending ?? []).toEqual([]);
+  });
 });

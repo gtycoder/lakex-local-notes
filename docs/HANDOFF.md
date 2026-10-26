@@ -13,6 +13,18 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261026 · S3 v3 遗留收尾（分支 `fix/s3v3-rem`，基于 `f3c3585f`）
+
+> 输入 = PARITY 审计剩余 P1/P2 + 上一批 HANDOFF「仍缺」。本批 6 项，全部带回归；不改协议布局。
+
+- **移动端云清理改 v3 原生（item 1）**：`runMobileV3DeepCleanup` 走 pointer→索引/声明→keep 集→引擎 `deepCleanup`（保留窗口默认 7 天 + `historyRepository.historyAssetRefs` 历史引用保护），bridge `gcDeepCleanup` 写 `s3_gc_log`。原实现读 v3 永不写的 `manifests/latest.json` ⇒ 清理按钮恒 0。回归 `src/mobile/v3/remParity.test.ts`。
+- **恢复标记轻量落盘（item 2）**：无发布轮本来就会 `saveState`（补注释防回退）；新增可选端口 `persistSyncMarkers`——单条小记推送等「不走整轮 saveState」的路径把清除后的 `remotePurged/restorePending` 落盘并同步 DB `cloud_deleted` 投影（桌面 sidecar/移动 v3_state/FileDeviceStore 三端实现）。回归 `electron/s3v3/markerPersist.test.ts`、`quickPushSingle.test.ts`、`src/mobile/v3/remParity.test.ts`。
+- **元数据兜底 C4/C5**：`planLakeMerge` 增 `isRemoteDescendant` 环检测（文档/目录：本地父在远端树中位于本节点之下 ⇒ 跟随远端断开，即使本地 updatedAt 更新）；引擎建 `validParents` 乐观集合传给合并；桌面/移动适配器把**非法/缺失远端 parent 回落兜底笔记本**（懒建「未分类」），且同轮 `deleteMissing` 不删这些兜底目录。移动端 `saveState` 顺序改为**目录先于文档**落库。回归 `remFolderParent.test.ts`、`s3v3Core.test.ts`（C4 两例）、`remParity.test.ts`（C5）。
+- **目录恢复传播 D4**：`l && !r` 时若本地目录在本轮被恢复/编辑过（`updatedAt > base.updatedAt` 且不在回收站）⇒ 按 `upload` 重新发布（远端缺席让位）；配套「目录删除意图让位」——远端同 id 目录重新出现且更新时间不早于本机 purge 时间 ⇒ 删除意图本轮失效，否则 A 会每轮把 B 恢复的目录再删掉。双端回归 `remFolderParent.test.ts`（A purge → B 恢复 → A 拉回为活跃目录）。
+- **移动端小记冲突副本 C8**：`MobileDeviceStore.archiveQuickNote` 实现（新 id、正文/图片复制、标签关系复制、`ready_to_sync=0` 纯本地墓碑、归档后清旧图片目录）；双端同改时移动端也能在 quick 回收站找回本地版本。回归 `remParity.test.ts`。
+- **移动端结构化同步回执（item 6）**：`runMobileV3Sync` 支持 `onPhase` 回调；`MobileSyncResult` 增 `warnings/supersededNotes/progress`；设置页同步区新增「N 篇被云端版本覆盖（已留历史）」列表，并修正原先只读 `result.notes?.warnings`（v3 下恒空）的取数。
+- **门禁（本分支）**：tsc 0 · 定向 vitest（`electron/s3v3` + `src/core/s3v3` + `src/mobile/v3` + settings/ipc 相关 = 48 文件 / 177 passed / 8 skipped；`mobileCloudDeleted.test.ts` 2 例为 **HEAD 既有失败**）· 桌面 + 移动 `vite build` ✓ · `git diff --check` ✓。
+
 ### 261026 · S3 v3 parity 补齐（分支 `fix/s3v3-parity`，基于 `5c88da5b`）
 
 > 输入 = 旧新逐项审计 `/tmp/lake-ab/deliverables/PARITY-OLD-VS-V3.md` 的剩余 P0/P1。本批补 5 项 + 桌面端 1 项可选能力，不改协议布局、不做数据迁移，全部带 vitest 回归。
@@ -36,7 +48,8 @@
 - **P1 崩溃追赶放大（R4，根因已定位）**：真实故障 = kill -9 落在 initialUpload「pointer 已写、baseline 未写」窗口 ⇒ 重启走 `pullAll`；旧实现无条件 GET 全部正文+附件（实测 B 一轮 22,115 GET/1.37GB/423s）。**数据侧**修复：`pullAll` 对 state 里已有的条目按 contentHash 复用本地正文；资产走差集（声明仍读、字节不重下）。根因二：崩溃重发布使大批条目元数据漂移 ⇒ 每篇 `applyRemote` 触发整篇资产刷新（40,152 次 asset GET、只有 8 次正文）⇒ 由资产差集 + 声明缓存消掉。回归 `pullAllDiff.test.ts`（删 baseline 模拟崩溃：整轮 0 正文/资产 GET）。
 - **对齐旧协议的缺失行为（本批已补）**：编辑锁字段级 LWW（锁变更不 bump updatedAt，原先跨端不传播；`s3v3Merge` + 双端 e2e 回归）；元数据变更不再重传同 hash 正文；同步进度阶段（`load-state/read-index/downloads/uploads/publish-*/pending` → SyncProgress download/upload/manifest，首拉不再只有 connect→done）；冲突留档回执（`S3v3SyncReport.supersededNotes` → `SyncResult.conflicts/supersededNotes`，UI 冲突清单恢复）。
 - **后续批次已补（见下方 `fix/s3v3-parity`）**：B6 回收站附件惰性补拉、F3/F4 深度清理 history 引用/上一版索引/年龄窗口、E2 小记单条推送、F1 移动端历史快照、C8 小记冲突副本（桌面）。
-- **仍缺（PARITY 审计 P1/P2，待排期）**：① 小记/ Lake 墓碑不携带删除前内容（D2/D3/E4，产品语义待确认）；② 目录恢复不可传播（D4）、父目录回落/环检测（C4/C5）；③ 移动端 qnotes 缺正文恢复入口未接 v3；④ 移动端小记冲突副本（C8 桌面已做）；⑤ 移动端云清理 `gcDeepCleanup` 仍走旧 manifest 路径（v3 下恒 0）。
+- **后续已补（见上方 `fix/s3v3-rem`）**：移动端云清理 v3 原生（item 1）、恢复标记轻量落盘（item 2）、C4/C5 环检测与父目录兜底、D4 目录恢复传播（含目录删除意图让位）、移动端小记冲突副本（C8）、移动端结构化回执（warnings/superseded/progress）。
+- **仍缺（PARITY 审计，待排期）**：① 小记/ Lake 墓碑不携带删除前内容（D2/D3/E4，产品语义待确认）；② 移动端 qnotes 缺正文恢复入口未接 v3；③ 移动端云清理无 UI 入口（IPC 具备，设置页未接按钮）；④ 目录恢复后 tombstone 清理（每轮靠意图让位，`deleted_notes` 行保留）；⑤ PARITY 其余 P2（GC 待回收表/诊断、状态栏字节/目录计数等）。
 - **门禁**：tsc 0 · 定向 vitest（s3v3/移动 v3/相关 core）通过（`mobileCloudDeleted.test.ts` 2 例为**既有失败**，HEAD 同样红，非本批引入）· 桌面+移动 `vite build` ✓ · `git diff --check` ✓。
 
 ### 261026 · S3 v3 P1 修复 + 口径定稿（分支 `fix/s3v3-p1`，基于 `feat/s3-v3` ba8f185c）

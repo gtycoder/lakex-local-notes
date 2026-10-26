@@ -100,6 +100,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     updateSyncSettings,
     syncMsg,
     warnings: syncWarnings,
+    supersededNotes: syncSuperseded,
     lastSyncText,
     runSync,
   } = useSyncSettingsForm(open, onRefresh);
@@ -452,6 +453,20 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
                     </div>
                   </div>
+                  {syncSuperseded.length > 0 && (
+                    <div className="mb-set-block">
+                      <div className="mb-set-block__name">同步有 {syncSuperseded.length} 篇被云端版本覆盖</div>
+                      <div className="mb-set-item__desc">本地版本已自动留历史（可在此条目历史里找回），云端版本为准。</div>
+                      <div className="mb-list" role="list">
+                        {syncSuperseded.map((n) => (
+                          <button key={n.id} type="button" className="mb-list-item" disabled={!onOpenNote} onClick={() => onOpenNote?.(n.id)}>
+                            <span className="mb-list-item__text mb-ellipsis">{n.title || n.id}</span>
+                            <span className="mb-list-item__meta">已留历史</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {syncWarnings.length > 0 && (
                     <div className="mb-set-block">
                       <div className="mb-set-block__name">同步有 {syncWarnings.length} 项被跳过</div>

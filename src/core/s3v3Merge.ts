@@ -7,6 +7,28 @@ export interface LakeMergeContext {
   restorePending: ReadonlySet<string>;
   purgeIntents: ReadonlySet<string>;
   folderPurgeIntents: ReadonlySet<string>;
+  /** 乐观合法父集合（回收站 + 本地/远端目录与文档 id + 基线；缺省 = 不做父合法性过滤）。
+   *  用于"父目录尚未落库/被删"时的环检测与元数据判定；真正落库兜底在适配器（见 C5）。 */
+  validParents?: ReadonlySet<string>;
+}
+
+/** 环检测（对齐旧协议 syncPerf.isRemoteDescendant）：nodeId 在远端树中是否为 ancestorId 的子孙。
+ *  用于「本地把 A 移进 B 的子树、而他端已把 B 移进 A」这类互成父子——即使本地 updatedAt 更新，
+ *  也必须跟随远端断开，否则两端索引会长期成环（打开文档/移动目录都会失败）。 */
+export function isRemoteDescendant(
+  nodeId: string | null,
+  ancestorId: string,
+  parentMap: Map<string, string | null>,
+): boolean {
+  let cur: string | null | undefined = nodeId;
+  const seen = new Set<string>();
+  while (cur !== null && cur !== undefined) {
+    if (cur === ancestorId) return true;
+    if (seen.has(cur)) return false;
+    seen.add(cur);
+    cur = parentMap.get(cur) ?? null;
+  }
+  return false;
 }
 
 export type LakeNoteActionKind =
@@ -50,6 +72,10 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
   const baseNotes = byId(base?.notes);
   const localNotes = byId(local.notes);
   const remoteNotes = byId(remote.notes);
+  const remoteNoteParents = new Map<string, string | null>();
+  for (const n of remoteNotes.values()) remoteNoteParents.set(n.id, n.parentId);
+  const remoteFolderParents = new Map<string, string | null>();
+  for (const f of (remote.folders ?? [])) remoteFolderParents.set(f.id, f.parentId);
   const ids = new Set<string>([...localNotes.keys(), ...remoteNotes.keys(), ...baseNotes.keys()]);
   const notes: LakeNotePlan[] = [];
   for (const id of [...ids].sort()) {
@@ -99,11 +125,13 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
         const remoteLockAt = r?.lockedAt ?? "";
         const remoteLockNewer = !!r && remoteLockAt > localLockAt;
         const localLockNewer = !!l && localLockAt > remoteLockAt;
+        // 环检测（C4）：本地父在远端树中位于本节点之下 ⇒ 上传会把远端树弄成环，必须跟随远端断开。
+        const wouldCycle = !!l && !!r && !!l.parentId && isRemoteDescendant(l.parentId, id, remoteNoteParents);
         notes.push({
           id,
           kind: "none",
-          applyRemote: remoteMetaNewer || remoteLockNewer,
-          uploadLocal: localMetaNewer || (!remoteMetaNewer && localLockNewer),
+          applyRemote: wouldCycle || remoteMetaNewer || remoteLockNewer,
+          uploadLocal: !wouldCycle && (localMetaNewer || (!remoteMetaNewer && localLockNewer)),
           archiveLocal: false,
           local: l ?? undefined,
           remote: r ?? undefined,
@@ -127,9 +155,14 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       continue;
     }
     if (l && !r) {
-      // 本地有、远端无：基线存在 = 远端已彻底删除（本地跟随进回收站）；否则 = 本地新建。
-      if (b) folders.push({ id, kind: "remote-purged-trash", applyRemote: true, uploadLocal: false, local: l, remote: undefined });
-      else folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
+      // 本地有、远端无：
+      // - 无基线 = 本地新建 → upload；
+      // - 基线存在且本地在本轮被恢复/编辑过（updatedAt 晚于基线、且已不在回收站）→ 显式恢复传播：
+      //   远端「缺席」让位，按 upload 重新发布（D4：否则恢复下一轮又被判 remote-purged-trash 打回）；
+      // - 其余 = 远端已彻底删除 → 本地跟随进回收站（删除权威）。
+      if (!b) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
+      else if (!l.trashedAt && l.updatedAt > b.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
+      else folders.push({ id, kind: "remote-purged-trash", applyRemote: true, uploadLocal: false, local: l, remote: undefined });
       continue;
     }
     if (!l && r) {
@@ -143,7 +176,9 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
     if (lChanged && !rChanged) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
     else if (!lChanged && rChanged) folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
     else if (lChanged && rChanged) {
-      if (l.updatedAt > r.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
+      // 环检测（C4）：本地 new parent 在远端目录树中位于本目录之下 ⇒ 上传会成环，跟随远端断开。
+      const wouldCycle = !!l.parentId && isRemoteDescendant(l.parentId, id, remoteFolderParents);
+      if (!wouldCycle && l.updatedAt > r.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
       else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
     } else folders.push({ id, kind: "none", applyRemote: false, uploadLocal: false, local: l, remote: r });
   }

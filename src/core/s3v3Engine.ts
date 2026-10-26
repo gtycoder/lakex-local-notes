@@ -359,6 +359,16 @@ export class S3v3SyncEngine {
       lakeCommit: pointer.lake.commit, quickNotesCommit: commit,
       lake: baseline.lake, quickNotes: nextIndex,
     });
+    // 单条推送不走整轮 saveState：如果该条此前是「云端已删除·仅本地」副本（remotePurged）
+    // 或正处于显式恢复（restorePending），必须把清除后的标记单独落盘；否则 sidecar/DB 残留旧标记，
+    // 回收站徽标不消失、下轮还可能把它重新压回「仅本地」。
+    const markerPurged = (state.remotePurged ?? []).filter((x) => x !== id);
+    const markerRestore = (state.restorePending ?? []).filter((x) => x !== id);
+    const markersStale = markerPurged.length !== (state.remotePurged ?? []).length || markerRestore.length !== (state.restorePending ?? []).length;
+    if (markersStale && this.device.persistSyncMarkers) {
+      try { await this.device.persistSyncMarkers({ remotePurged: markerPurged, restorePending: markerRestore }); }
+      catch (e) { this.warn("同步标记落盘失败（下轮整轮同步会清理）: " + (e as Error).message, { kind: "remote_incomplete", noteId: id }); }
+    }
     return { status: "pushed", uploadedContent, uploadedAssets, unchanged, generation };
   }
 
@@ -596,6 +606,14 @@ export class S3v3SyncEngine {
       if (remote && it.purgedAt && remote.updatedAt > it.purgedAt) yieldedIntents.add(it.noteId);
     }
     const intentIds = new Set(state.intents.filter((i) => !yieldedIntents.has(i.noteId)).map((i) => i.noteId));
+    // 目录删除意图让位（D4 的配套）：远端同 id 目录重新出现且更新时间不早于本机 purge 时间
+    // ⇒ 他端已显式恢复。否则「A purge 目录 → B 恢复 → A 下一轮又把它删掉」（删除意图永不让位）。
+    const yieldedFolderIntents = new Set<string>();
+    for (const it of state.intents) {
+      const rf = remoteLake.folders.find((x) => x.id === it.noteId);
+      if (rf && (!it.purgedAt || rf.updatedAt > it.purgedAt)) yieldedFolderIntents.add(it.noteId);
+    }
+    const folderIntentIds = new Set([...intentIds].filter((id) => !yieldedFolderIntents.has(id)));
     // 「云端已彻底删除·仅本地」标记的本轮视图（见 resolveRemotePurged）：
     // · 显式恢复 → 标记失效，恢复走正常上传（用户定稿：远端删除不限制恢复）；
     // · 远端同 id 条目回来了（他端恢复）→ 标记不再成立，本轮跟随远端下载（revived 的陈旧本地副本不得再进索引）。
@@ -613,7 +631,16 @@ export class S3v3SyncEngine {
     );
     for (const id of quickRestoredIds) purged.delete(id);
     const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id) && !revived.has(n.id)), folders: state.folders };
-    const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: intentIds });
+    // 乐观合法父集合（C5）：回收站 + 本地/远端/基线的目录与文档 id。
+    // 用途：① 环检测（C4）只在远端父可解释时成立；② 给适配器一个"远端父是否本机可解析"的参考口径
+    // （真正落库兜底在适配器：非法 parent 回落兜底笔记本，不得直接写库）。
+    const validParents = new Set<string>([TRASH_ID]);
+    for (const f of remoteLake.folders) validParents.add(f.id);
+    for (const f of state.folders) validParents.add(f.id);
+    for (const f of baselineLake.folders) validParents.add(f.id);
+    for (const n of remoteLake.notes) validParents.add(n.id);
+    for (const n of state.lake.notes) validParents.add(n.id);
+    const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: folderIntentIds, validParents });
     // 显式恢复/他端恢复优先：恢复的 id 从 quick 墓碑集合剔除，否则本端会再次发布 purge、把恢复弹回回收站。
     const mergedQuickPurges = [...new Set([...(state.quickPurges ?? []), ...(remoteQuick.purged ?? [])])]
       .filter((id) => !restore.has(id) && !quickRestoredIds.has(id)).sort();
@@ -915,13 +942,16 @@ export class S3v3SyncEngine {
     const needPublish = lakeCommit !== pointer.lake.commit || quickCommit !== pointer.quickNotes.commit;
 
     if (!needPublish) {
+      // 注意（勿删这里的 saveState）：无发布轮也必须落盘 state —— resolveRemotePurged 本轮可能已经把
+      // 「显式恢复 / 远端复活 / 本地 purge」的 id 从 state.remotePurged 剔除，restorePending 也可能已清；
+      // 不落盘就会让 sidecar/DB 残留旧标记（下次加载又当「云端已删除·仅本地」，回收站徽标不消失）。
       // 恢复成功的 id 同时包含文档与小记：只清文档会让 quick 的 restorePending 在 sidecar 里长期残留，
       // 下一轮又把同内容小记重 PUT 一次（幂等但违背“恢复完成后不再产生 S3 行为”）。
       const restoredIds = new Set([
         ...lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
         ...quickPlan.items.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
       ]);
-      const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds).filter((it) => !yieldedIntents.has(it.noteId));
+      const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds).filter((it) => !yieldedIntents.has(it.noteId) && !yieldedFolderIntents.has(it.noteId));
       const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, quickPurgeTimes, folders: stateFolders, remotePurged, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(newState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
@@ -966,7 +996,7 @@ export class S3v3SyncEngine {
         ...quickPlan.items.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
       ]);
       const publishedPurgeIds = new Set([...lakePlan.notes.filter((p) => p.kind === "local-purge").map((p) => p.id), ...quickPlan.items.filter((p) => p.kind === "local-purge").map((p) => p.id)]);
-      const updatedIntents = this.bumpIntentsAfterPublish(state.intents, pointer.epoch, generation, restoredIds, publishedPurgeIds).filter((it) => !yieldedIntents.has(it.noteId));
+      const updatedIntents = this.bumpIntentsAfterPublish(state.intents, pointer.epoch, generation, restoredIds, publishedPurgeIds).filter((it) => !yieldedIntents.has(it.noteId) && !yieldedFolderIntents.has(it.noteId));
       const finalState: DeviceState = { ...newState, intents: updatedIntents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
       await this.device.saveState(finalState);
       await this.device.saveBaseline({ epoch: pointer.epoch, generation, lakeCommit, quickNotesCommit: quickCommit, lake: newLake, quickNotes: newQuick });

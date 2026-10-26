@@ -1,24 +1,20 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
-import type { SyncConfig, SyncReport } from "../../core/syncEngineTypes.js";
+import type { SyncReport } from "../../core/syncEngineTypes.js";
 import { backfillV3Assets, type AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";
 import { createMobileS3v3Remote } from "../v3/s3v3Remote.js";
-import { buildGcKeepSet } from "../../core/gcDecisions.js";
-import { normalizeEndpoint, parseLakeManifest, validateS3Settings } from "../../core/syncUtils.js";
-import type { Manifest } from "../../core/manifestTypes.js";
+import { normalizeEndpoint, validateS3Settings } from "../../core/syncUtils.js";
 import type { QuickNotesSyncResult } from "../../core/quickNoteSyncTypes.js";
-import { createCapacitorS3Store } from "../native/s3Store";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "../../core/cloudState.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
 import type { QuickNotePushOutcome } from "../../core/quickNoteSyncTypes.js";
 import { mobileSecretStore } from "../native/secretStore.js";
 import { writeSyncStatus } from "../sync/syncStatusStore";
 import * as gcRepository from "../data/gcRepository.js";
-import * as historyRepository from "../data/historyRepository.js";
 import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
 import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
-import { runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
+import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
 
 export interface MobileSyncResult {
   message: string;
@@ -28,6 +24,10 @@ export interface MobileSyncResult {
   indexMs?: number;
   /** v3 结构化警告（缺正文/资源缺失等；与桌面 SyncResult.warnings 同构，供 UI 展示）。 */
   warnings?: import("../../lib/types").SyncWarning[];
+  /** 本轮被远端覆盖、已强制留档的文档（对齐桌面 SyncResult.supersededNotes）。 */
+  supersededNotes?: Array<{ id: string; title: string }>;
+  /** 阶段耗时（load-state、read-index、downloads、uploads、publish、pending、total），供设置页诊断展示。 */
+  progress?: Array<{ phase: string; ms: number }>;
 }
 
 /** 云端状态（单一判据，与桌面同源 src/core/cloudState）：没配置 或 关闭云同步 ⇒ 一律不出网。 */
@@ -196,46 +196,17 @@ export const syncDomain = {
       const cfg = await syncDomain.getS3Settings();
       if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
       assertS3Credentials(cfg);
-      const syncCfg: SyncConfig = { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix };
-      const s3Store = createCapacitorS3Store(syncCfg);
-      if (!s3Store.listObjects || !s3Store.deleteMany) return { candidateCount: 0, deletedCount: 0, keys: [] };
-      // 从读清单到删对象、写 GC 日志，全段都在维护域内，禁止与 syncNow 交错。
-      const latestBytes = await s3Store.getObject(`${syncCfg.prefix}/manifests/latest.json`, { maxBytes: 20 * 1024 * 1024 });
-      if (!latestBytes) return { candidateCount: 0, deletedCount: 0, keys: [] }; // 无清单 → 不 GC（安全）
-      let manifest;
-      try { manifest = parseLakeManifest(latestBytes); } catch { return { candidateCount: 0, deletedCount: 0, keys: [] }; } // 清单损坏 → 不 GC
-      // prev 链引用保护（最多 3 层，对齐桌面 MANIFEST_CHAIN_KEEP）
-      const prevManifests: Manifest[] = [];
-      let prev = manifest.prevCommitId;
-      let chain = 0;
-      while (prev && chain < 3) {
-        const pb = await s3Store.getObject(`${syncCfg.prefix}/manifests/${prev}.json`, { maxBytes: 20 * 1024 * 1024 });
-        if (!pb) break;
-        try { const pm = parseLakeManifest(pb); prevManifests.push(pm); prev = pm.prevCommitId; } catch { break; }
-        chain += 1;
-      }
       const d = await ensureDb();
-      const keep = buildGcKeepSet({
-        manifest,
-        extraManifests: prevManifests,
-        prefix: syncCfg.prefix,
-        historyRefs: await historyRepository.historyAssetRefs(d),
+      // v3 原生清理（261026）：pointer→索引/声明→keep 集→deepCleanup（保留窗口 + 历史引用保护）。
+      // 旧实现读 manifests/latest.json，而 v3 永不写该清单 ⇒ 原逻辑恒返回 0（清理按钮点了没效果）。
+      const result = await runMobileV3DeepCleanup(d, {
+        endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket,
+        accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix,
       });
-      const pendingByKey = new Map((await syncDomain.listS3GcPending()).map((p) => [p.key, p.markedAt] as const));
-      const all = [...(await s3Store.listObjects(`${syncCfg.prefix}/objects/`)), ...(await s3Store.listObjects(`${syncCfg.prefix}/assets/`))];
-      const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天窗口
-      const toDelete: string[] = [];
-      for (const o of all) {
-        if (keep.has(o.key)) continue;
-        if (new Date(o.lastModified).getTime() > cutoff) continue; // 创建不足窗口 → 保护
-        const marked = pendingByKey.get(o.key);
-        if (marked && new Date(marked).getTime() > cutoff) continue; // 本机待回收标记但窗口未过 → 保护
-        toDelete.push(o.key);
+      for (const key of result.deleted) {
+        try { await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true); } catch { /* 日志失败不阻断 */ }
       }
-      const keys = toDelete;
-      const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
-      for (const key of keys) await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true);
-      return { candidateCount: all.length, deletedCount, keys };
+      return { candidateCount: result.deleted.length, deletedCount: result.deleted.length, keys: result.deleted };
     });
   },
 
@@ -259,12 +230,18 @@ export const syncDomain = {
         if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
         try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
         const d = await ensureDb();
-        const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix });
+        const progress: Array<{ phase: string; ms: number }> = [];
+        const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, { onPhase: (phase, ms) => progress.push({ phase, ms }) });
         try { await reconcileIndex(d); } catch { /* 派生索引失败不影响同步结果 */ }
         const message = v3.warningDetails.length > 0
           ? `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}（${v3.warningDetails.length} 项被跳过）`
           : `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
-        return { message, notes: null, quickNotes: null, ...(v3.warningDetails.length > 0 ? { warnings: v3.warningDetails } : {}) };
+        return {
+          message, notes: null, quickNotes: null,
+          ...(v3.warningDetails.length > 0 ? { warnings: v3.warningDetails } : {}),
+          ...(v3.supersededNotes.length > 0 ? { supersededNotes: v3.supersededNotes } : {}),
+          progress,
+        };
       });
       writeSyncStatus({ at: new Date().toISOString(), ok: true, message: result.message });
       return result;

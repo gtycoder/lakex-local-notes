@@ -25,6 +25,8 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   /** 正文 hash 缓存：文件 mtime+size 未变则复用，避免每轮全库读正文。首次/变更文件才重算。 */
   private hashCache = new Map<string, { mtimeMs: number; size: number; hash: string }>();
   private readonly quickNotes?: QuickNotesStore;
+  /** 同步期兜底创建/复用的目录（未进远端索引）：同轮 deleteMissing 不得删，否则文档父级悬空。 */
+  private readonly protectedFolderIds = new Set<string>();
 
   constructor(store: Store, storeRoot: string, opts: { stateFile?: string; baselineFile?: string; skipQuickNotesGuard?: boolean; quickNotes?: QuickNotesStore } = {}) {
     this.skipQuickNotesGuard = !!opts.skipQuickNotesGuard;
@@ -167,6 +169,9 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       const content = this.stagedBodies.has(n.id) ? new TextDecoder().decode(this.stagedBodies.get(n.id)) : null;
       const cur = current.get(n.id);
       const curHash = cur ? (this.hashCache.get(n.id)?.hash ?? cur.contentHash) : "";
+      // C5：远端 parent 可能是本机还没有/已删的目录（首拉父未落库）——不得直接落库；
+      // 非法父回落到兜底笔记本（懒建「未分类」），与旧协议 validParents 回落同义。
+      const resolvedParentId = n.trashedAt ? TRASH_NOTEBOOK_ID : this.resolveRemoteParent(n.parentId);
       try {
         if (!cur) {
           // 走 importRemoteNote：它支持原样 id / 远端 trashedAt / deletedFromParentId / 冲突标记，
@@ -174,7 +179,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
           const staged = this.stagedAssets.get(n.id) ?? new Map<string, Uint8Array>();
           const assets = [...staged.entries()].map(([filename, bytes]) => ({ filename, bytes: Buffer.from(bytes) }));
           const syncNote = {
-            id: n.id, title: n.title, parentId: n.trashedAt ? TRASH_NOTEBOOK_ID : n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
+            id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
             contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
             editLockedAt: n.lockedAt ?? null, icon: n.icon ?? null, trashedAt: n.trashedAt ?? null,
             deletedFromParentId: n.deletedFromParentId ?? null, kind: n.kind ?? "doc",
@@ -194,7 +199,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
               const staged = this.stagedAssets.get(n.id) ?? new Map<string, Uint8Array>();
               const assets = [...staged.entries()].map(([filename, bytes]) => ({ filename, bytes: Buffer.from(bytes) }));
               this.store.importRemoteNote({
-                id: n.id, title: n.title, parentId: n.trashedAt ? TRASH_NOTEBOOK_ID : n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
+                id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
                 contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
                 editLockedAt: n.lockedAt ?? null, ...(n.icon !== undefined ? { icon: n.icon } : {}),
                 trashedAt: n.trashedAt ?? null, deletedFromParentId: n.deletedFromParentId ?? null, kind: n.kind ?? "doc",
@@ -215,7 +220,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
             || (!!n.trashedAt !== !!cur.trashedAt)
             || n.updatedAt !== cur.updatedAt
             || n.title !== cur.title
-            || (n.parentId ?? null) !== (cur.parentId ?? null)
+            || (resolvedParentId ?? null) !== (cur.parentId ?? null)
             || n.sortOrder !== cur.sortOrder
             || !!n.isConflict !== !!cur.isConflict
             || (n.trashedAt ?? null) !== (cur.trashedAt ?? null)
@@ -223,7 +228,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
             || (n.icon !== undefined && (cur.icon ?? null) !== (n.icon ?? null));
           if (metaDiffers) {
             const syncNote: SyncNote = {
-              id: n.id, title: n.title, parentId: n.trashedAt ? TRASH_NOTEBOOK_ID : n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
+              id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
               isConflict: !!n.isConflict, isEditLocked: !!n.isLocked, editLockedAt: n.lockedAt ?? null,
               ...(n.icon !== undefined ? { icon: n.icon } : {}),
               trashedAt: n.trashedAt ?? null, deletedFromParentId: n.deletedFromParentId ?? null,
@@ -320,23 +325,27 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     for (const f of folders) {
       const c = cur.get(f.id);
       try {
+        const parentId = this.resolveRemoteFolderParent(f);
         if (!c) {
           // 远端目录 id 必须原样落库（createNotebook/createGroup 会生成新 id，跨端子文档将找不到父）
-          this.store.importRemoteFolder(f as never);
+          this.store.importRemoteFolder({ ...f, parentId } as never);
         } else {
           // P1（v3 空发布抖动根因）：目录同样要把合并结果的 updatedAt/元数据原样落库。
           // moveTreeNode/setNodeIcon 会改成 now()，且不能把「远端较旧但胜出」的时间戳写回；
           // 本地行时间戳一旦与 baseline 不一致，下一轮就再发布一次（隔轮 +1 generation）。
           const changed = c.title !== f.title
-            || (c.parentId ?? null) !== (f.parentId ?? null)
+            || (c.parentId ?? null) !== (parentId ?? null)
             || c.sortOrder !== f.sortOrder
             || (c.icon ?? null) !== (f.icon ?? null)
             || c.updatedAt !== f.updatedAt;
-          if (changed) this.store.applyRemoteFolderMeta(f);
+          if (changed) this.store.applyRemoteFolderMeta({ ...f, parentId } as never);
         }
       } catch (e) { throw new Error("DesktopStoreDevice.saveFolders 失败(" + f.id + "): " + (e as Error).message); }
     }
-    if (deleteMissing) for (const c of cur.values()) if (!folders.some((f) => f.id === c.id)) { try { this.store.deleteTreeNode(c.id); } catch { /* ignore */ } }
+    if (deleteMissing) for (const c of cur.values()) {
+      if (folders.some((f) => f.id === c.id) || this.protectedFolderIds.has(c.id)) continue;
+      try { this.store.deleteTreeNode(c.id); } catch { /* ignore */ }
+    }
   }
 
   private async flushStagedAssets(noteId: string): Promise<void> {
@@ -425,6 +434,37 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   async deleteQuickAssetsDir(id: string): Promise<void> {
     if (!this.quickNotes) return;
     try { await fs.rm(this.quickNotes.quickNoteAssetsPathFor(id), { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+
+  /**
+   * C5 父目录兜底：远端 parent 必须能在本机解析后才落库。
+   * - null / 回收站 → 原样；
+   * - 已存在的树节点 → 原样；
+   * - 其余（首拉父未落库 / 父已被删 / 非法 id）→ 兜底笔记本（懒建「未分类」，沿用旧协议语义）。
+   */
+  private resolveRemoteParent(parentId: string | null): string | null {
+    if (parentId === null || parentId === TRASH_NOTEBOOK_ID) return parentId;
+    try { if (this.store.hasTreeNode(parentId)) return parentId; } catch { /* fallthrough */ }
+    try {
+      const id = this.store.defaultNotebookId();
+      this.protectedFolderIds.add(id);
+      return id;
+    } catch { return null; }
+  }
+
+  /** 目录 version：笔记本只能根层（回收站除外）；分组的父按文档同一套兜底。 */
+  private resolveRemoteFolderParent(f: LakeFolderEntry): string | null {
+    if (f.parentId === TRASH_NOTEBOOK_ID) return TRASH_NOTEBOOK_ID;
+    if (f.nodeType === "notebook") return null;
+    return this.resolveRemoteParent(f.parentId);
+  }
+
+  /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清 sidecar 标记 + DB cloud_deleted 投影。 */
+  async persistSyncMarkers(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void> {
+    try { this.store.applyNotesCloudDeleted(markers.remotePurged); } catch { /* 投影失败不阻断 */ }
+    const side = await this.readJson<Record<string, unknown>>(this.stateFile);
+    if (!side) return;
+    await this.writeAtomic(this.stateFile, JSON.stringify({ ...side, remotePurged: markers.remotePurged, restorePending: markers.restorePending }));
   }
 
   /** 单条推送记账：markSynced 同时清 restore_pending_at；按内容 hash 未变才标（I2 守卫）。 */

@@ -1,6 +1,7 @@
-import { S3v3SyncEngine, type QuickNotePushResult, type S3v3SyncReport } from "../../core/s3v3Engine.js";
+import { S3v3SyncEngine, type QuickNotePushResult, type S3v3DeepCleanupResult, type S3v3SyncReport } from "../../core/s3v3Engine.js";
 import type { S3v3Remote, S3v3Settings } from "../../core/s3v3Ports.js";
 import type { MobileDb } from "../data/sqliteDb.js";
+import * as historyRepository from "../data/historyRepository.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
 import { createMobileS3v3Remote } from "./s3v3Remote.js";
 
@@ -28,6 +29,8 @@ export interface MobileV3SyncOptions {
   deviceId?: string;
   /** 云端为空时的决策；缺省读 localStorage 开关，否则 throw。 */
   emptyCloud?: "upload" | "stay" | "throw";
+  /** 阶段耗时回调（bridge 收集成结构化进度，供设置页展示；与桌面 onPhase 同源）。 */
+  onPhase?: (phase: string, ms: number) => void;
 }
 
 export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts: MobileV3SyncOptions = {}): Promise<S3v3SyncReport> {
@@ -36,7 +39,10 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
   const remote = opts.remote ?? createMobileS3v3Remote(settings);
   const engine = new S3v3SyncEngine({
     remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId(),
-    onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] ${phase} ${ms}ms`); },
+    onPhase: (phase, ms) => {
+      if (ms >= 2000) console.warn(`[v3][slow] ${phase} ${ms}ms`);
+      try { opts.onPhase?.(phase, ms); } catch { /* UI 回调自行负责 */ }
+    },
   });
   let mode: "upload" | "stay" | "throw" = opts.emptyCloud ?? "upload";
   if (!opts.emptyCloud) {
@@ -65,4 +71,21 @@ export async function runMobileV3PushQuickNote(
     onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] push ${phase} ${ms}ms`); },
   });
   return engine.pushQuickNote(id);
+}
+/**
+ * 移动端云清理（v3 原生，parity：旧实现读 v3 永不写的 manifests/latest.json ⇒ 恒 0）：
+ * pointer → 索引/声明算 keep 集 → 引擎 deepCleanup（保留窗口默认 7 天 + 本机历史引用保护）。
+ * 与桌面 `runV3DeepCleanup` 同语义；删除明细由 bridge 写 s3_gc_log。
+ */
+export async function runMobileV3DeepCleanup(
+  db: MobileDb,
+  settings: S3v3Settings,
+  opts: { dryRun?: boolean; retentionDays?: number; remote?: S3v3Remote; deviceId?: string } = {},
+): Promise<S3v3DeepCleanupResult> {
+  const store = new MobileDeviceStore(db);
+  await store.init();
+  const remote = opts.remote ?? createMobileS3v3Remote(settings);
+  const engine = new S3v3SyncEngine({ remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId() });
+  const extraKeep = await historyRepository.historyAssetRefs(db).catch(() => new Set<string>());
+  return engine.deepCleanup({ dryRun: opts.dryRun, extraKeep, retentionDays: opts.retentionDays ?? 7 });
 }

@@ -110,4 +110,9 @@ export class FileDeviceStore implements S3v3DeviceStore {
   }
   /** 测试/CLI 文件实现没有同步账本：单条推送的记账由 state 落盘承担。 */
   async markQuickNoteSynced(): Promise<void> { /* no-op */ }
+  async persistSyncMarkers(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void> {
+    const state = await this.loadState();
+    if (!state) return;
+    await this.saveState({ ...state, remotePurged: markers.remotePurged, restorePending: markers.restorePending });
+  }
 }

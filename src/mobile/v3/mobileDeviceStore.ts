@@ -38,6 +38,8 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   private stagedDeletes = new Set<string>();
   private stagedQuickBodies = new Map<string, Uint8Array>();
   private stagedQuickDeletes = new Set<string>();
+  /** 同步期兜底创建/复用的目录（未进远端索引）：同轮 deleteMissing 不得删，否则文档父级悬空。 */
+  private readonly protectedFolderIds = new Set<string>();
 
   constructor(db: MobileDb) { this.db = db; }
 
@@ -149,6 +151,9 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const side = await loadV3State(this.db);
     // 本轮「云端已彻底删除·仅本地」集合：引擎（state.remotePurged）是权威，适配器只把它投影到 DB 列。
     const purged = new Set(state.remotePurged ?? []);
+    // 目录必须先于文档落库：他端新建的笔记本/分组 id 在本机还不存在时，
+    // 文档 parent 兜底（C5）才有目录可用；删除目录放最后（避免先删父导致子文档悬空）。
+    await this.upsertSyncFolders(state.folders);
     const currentRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,trashed_at FROM notes").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; trashed_at: string | null }>;
     const current = new Map(currentRows.map((r) => [r.id, r]));
     const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
@@ -157,9 +162,12 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       const kind = normalizeNoteKind(n.kind);
       let content: string | null = null;
       if (this.stagedBodies.has(n.id)) content = new TextDecoder().decode(this.stagedBodies.get(n.id));
+      // C5：远端 parent 可能是本机还没有/已删的目录（首拉父未落库）——不得直接落库；
+      // 非法父回落兜底笔记本（懒建「未分类」）。回收站条目不解析（移动端用 trashed_at 表示）。
+      const resolvedParentId = n.trashedAt ? (n.deletedFromParentId ?? null) : await this.resolveSyncNoteParent(n.parentId);
       if (!cur) {
-        await createNote(this.db, n.id, n.title, content ?? "", n.parentId, new Map(), undefined, kind);
-        current.set(n.id, { id: n.id, title: n.title, parent_id: n.parentId, sort_order: n.sortOrder, trashed_at: n.trashedAt ?? null });
+        await createNote(this.db, n.id, n.title, content ?? "", resolvedParentId, new Map(), undefined, kind);
+        current.set(n.id, { id: n.id, title: n.title, parent_id: resolvedParentId, sort_order: n.sortOrder, trashed_at: n.trashedAt ?? null });
       } else {
         const targetTrashed = !!n.trashedAt;
         const curTrashed = !!cur.trashed_at;
@@ -168,14 +176,14 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         } else if (!targetTrashed && curTrashed) {
           // 远端恢复/复活 → 移出回收站。restore_pending_at 保持原值：用户显式恢复在 DB 里已经写过这个标记，
           // 而「远端把条目恢复回来」不是本地显式恢复 —— 不能给它补标记，否则会误把自己的旧副本上传覆盖远端。
-          await this.db.prepare("UPDATE notes SET trashed_at=NULL, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(n.parentId, n.id);
+          await this.db.prepare("UPDATE notes SET trashed_at=NULL, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(resolvedParentId, n.id);
         } else if (!targetTrashed) {
           if (content !== null) {
-            await saveNote(this.db, n.id, n.title, content, n.parentId, new Map());
+            await saveNote(this.db, n.id, n.title, content, resolvedParentId, new Map());
             // 远端正文落地必须保留远端 updatedAt（saveNote 会写 now，导致下一轮误判本地更新）
             await this.db.prepare("UPDATE notes SET updated_at=?, is_dirty=0 WHERE id=?").run(n.updatedAt, n.id);
-          } else if (n.title !== cur.title || (n.parentId ?? null) !== (cur.parent_id ?? null)) {
-            await this.db.prepare("UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=?, updated_at=? WHERE id=?").run(n.title, n.parentId, n.sortOrder, n.updatedAt, n.id);
+          } else if (n.title !== cur.title || (resolvedParentId ?? null) !== (cur.parent_id ?? null)) {
+            await this.db.prepare("UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=?, updated_at=? WHERE id=?").run(n.title, resolvedParentId, n.sortOrder, n.updatedAt, n.id);
           }
         }
       }
@@ -264,22 +272,14 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         "INSERT INTO tags (id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES (?,?,?,0,?,?,NULL) ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=NULL"
       ).run(tag.id, tag.name, tag.order ?? 0, tag.createdAt, tag.updatedAt);
     }
-    // 目录：按 state 做 upsert/删除（v1 直接写 folders 表；树索引由旧移动通道/启动对账维护）
-    const folderRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,cloud_deleted FROM folders").all() as unknown as FolderRow[];
-    const curFolders = new Map(folderRows.map((f) => [f.id, f]));
-    const wantedFolders = new Map(state.folders.map((f) => [f.id, f]));
-    for (const f of wantedFolders.values()) {
-      if (curFolders.has(f.id)) {
-        await this.db.prepare("UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,is_dirty=1 WHERE id=?").run(
-          f.title, f.parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null, f.id,
-        );
-      } else {
-        await this.db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty) VALUES (?,?,?,?,?,?,?,?,?,1)").run(
-          f.id, f.title, f.parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null,
-        );
-      }
+    // 目录删除：upsert 已在开头完成；这里只清「不在本轮 state.folders」的陈旧目录。
+    // 兜底笔记本（本轮为非法远端父新建/复用）不在 state.folders 里，但文档父级引用它 ⇒ 不得删。
+    const wantedFolders = new Set(state.folders.map((f) => f.id));
+    const folderRows = await this.db.prepare("SELECT id FROM folders").all() as Array<{ id: string }>;
+    for (const { id } of folderRows) {
+      if (wantedFolders.has(id) || this.protectedFolderIds.has(id)) continue;
+      await this.db.prepare("DELETE FROM folders WHERE id=?").run(id);
     }
-    for (const id of curFolders.keys()) if (!wantedFolders.has(id)) await this.db.prepare("DELETE FROM folders WHERE id=?").run(id);
     // 本轮「云端已删除·仅本地」集合 = 引擎 state.remotePurged ∪ 适配器本轮新打标的小记副本。
     const purgedFinal = [...new Set([...purged, ...cloudDeletedQuick])].sort();
     // 标记投影：先全清再按本轮集合置位 —— 恢复上传成功、远端复活、本地 purge 后标记都会自然消失。
@@ -424,5 +424,103 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   /** 单条推送记账（I2）：内容 hash 未变才清 dirty，同时清显式恢复标记。 */
   async markQuickNoteSynced(id: string, expectedContentHash: string): Promise<void> {
     await this.db.prepare("UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id=? AND content_hash=?").run(id, expectedContentHash);
+  }
+
+  /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清 v3_state 标记 + DB cloud_deleted 投影。 */
+  async persistSyncMarkers(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void> {
+    const side = await loadV3State(this.db);
+    await this.db.transaction(async () => {
+      await this.db.prepare("UPDATE notes SET cloud_deleted=0 WHERE cloud_deleted=1").run();
+      await this.db.prepare("UPDATE folders SET cloud_deleted=0 WHERE cloud_deleted=1").run();
+      await this.db.prepare("UPDATE quick_notes SET cloud_deleted=0 WHERE cloud_deleted=1").run();
+      for (let i = 0; i < markers.remotePurged.length; i += 400) {
+        const part = markers.remotePurged.slice(i, i + 400);
+        if (part.length === 0) continue;
+        const ph = part.map(() => "?").join(",");
+        await this.db.prepare("UPDATE notes SET cloud_deleted=1 WHERE id IN (" + ph + ")").run(...part);
+        await this.db.prepare("UPDATE folders SET cloud_deleted=1 WHERE id IN (" + ph + ")").run(...part);
+        await this.db.prepare("UPDATE quick_notes SET cloud_deleted=1 WHERE id IN (" + ph + ")").run(...part);
+      }
+    });
+    await saveV3State(this.db, { ...side, remotePurged: markers.remotePurged, restorePending: markers.restorePending });
+  }
+
+  /**
+   * 小记冲突副本（C8，移动端）：双端同改、远端胜出时把本地版本归档进小记回收站。
+   * 语义对齐桌面 quickNotes.archiveLocalToTrash：新 id、纯本地（ready_to_sync=0，不向云端发布删除）、
+   * 正文与图片按新 id 复制、标签关系一并复制（恢复后是一条带标签的新小记）。
+   * 归档后删除旧 id 的图片目录：随后引擎会用远端正文/资源覆盖原条目，留着旧图会被下一轮误声明上传。
+   */
+  async archiveQuickNote(id: string): Promise<void> {
+    const row = await this.db.prepare("SELECT created_at,updated_at,preview_text,image_count,content_hash FROM quick_notes WHERE id=?").get(id) as
+      { created_at: string; updated_at: string; preview_text: string; image_count: number; content_hash: string } | undefined;
+    if (!row) return;
+    const body = await readQuickNoteBody(id);
+    if (body == null) return;
+    const newId = globalThis.crypto.randomUUID();
+    await writeQuickNoteBody(newId, body);
+    const oldPrefix = "quick-notes/" + id + "/";
+    const oldKeys = await listQuickNoteAssetKeysFs(id);
+    for (const key of oldKeys) {
+      const bytes = await loadAssetBytesFs(key);
+      if (bytes) await saveAssetBytesFs("quick-notes/" + newId + "/" + key.slice(oldPrefix.length), bytes);
+    }
+    const now = new Date().toISOString();
+    const tagRows = await this.db.prepare("SELECT tag_id FROM tag_links WHERE target_kind='quickNote' AND target_id=? ORDER BY position").all(id) as Array<{ tag_id: string }>;
+    await this.db.transaction(async () => {
+      await this.db.prepare(
+        "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,restore_pending_at,deleted_at,ready_to_sync) VALUES (?,?,?,?,?,?,1,0,NULL,?,0)"
+      ).run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, now);
+      for (let i = 0; i < tagRows.length; i++) {
+        await this.db.prepare("INSERT OR IGNORE INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote',?,?,?)").run(newId, tagRows[i].tag_id, i);
+      }
+      if (tagRows.length > 0) {
+        await this.db.prepare("INSERT INTO tag_link_versions (target_kind,target_id,links_updated_at) VALUES ('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at").run(newId, now);
+      }
+    });
+    for (const key of oldKeys) await removeAssetBytesFs(key);
+  }
+
+  /** 目录 upsert（先于文档；父级走 C5 兜底）。 */
+  private async upsertSyncFolders(folders: readonly LakeFolderEntry[]): Promise<void> {
+    const existing = new Set(((await this.db.prepare("SELECT id FROM folders").all()) as Array<{ id: string }>).map((r) => r.id));
+    for (const f of folders) {
+      const parentId = await this.resolveSyncFolderParent(f);
+      if (existing.has(f.id)) {
+        await this.db.prepare("UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,is_dirty=1 WHERE id=?").run(
+          f.title, parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null, f.id,
+        );
+      } else {
+        await this.db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty) VALUES (?,?,?,?,?,?,?,?,?,1)").run(
+          f.id, f.title, parentId, f.sortOrder, f.nodeType, f.icon ?? null, f.updatedAt, f.trashedAt ?? null, f.deletedFromParentId ?? null,
+        );
+      }
+    }
+  }
+
+  // ---- C5 父目录兜底（远端父可能是本机还没落库/已被删的目录） ----
+  private async resolveSyncNoteParent(parentId: string | null): Promise<string | null> {
+    if (parentId === null) return null;
+    const exists = await this.db.prepare("SELECT 1 FROM folders WHERE id=?").get(parentId);
+    if (exists) return parentId;
+    return await this.defaultNotebookId();
+  }
+
+  private async resolveSyncFolderParent(f: LakeFolderEntry): Promise<string | null> {
+    if (f.parentId === null) return null;
+    if (f.nodeType === "notebook") return null; // 笔记本只能根层
+    return await this.resolveSyncNoteParent(f.parentId);
+  }
+
+  /** 兜底父笔记本：复用任意未删除笔记本；没有才建「未分类」（与旧协议 resolveParentNotebook 同义）。 */
+  private async defaultNotebookId(): Promise<string | null> {
+    const row = await this.db.prepare("SELECT id FROM folders WHERE node_type='notebook' ORDER BY sort_order LIMIT 1").get() as { id?: string } | undefined;
+    if (row?.id) { this.protectedFolderIds.add(row.id); return row.id; }
+    const id = "notebook-" + globalThis.crypto.randomUUID();
+    await this.db.prepare(
+      "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES (?,?,NULL,0,'notebook',NULL,?,1)"
+    ).run(id, "未分类", new Date().toISOString());
+    this.protectedFolderIds.add(id);
+    return id;
   }
 }

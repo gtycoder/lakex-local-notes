@@ -67,6 +67,10 @@ export interface S3v3DeviceStore {
    *  并清掉显式恢复标记。未实现时引擎退回 saveState（整表投影，可能误清新条目的待同步角标）。 */
   markQuickNoteSynced?(id: string, expectedContentHash: string): Promise<void>;
 
+  /** 轻量持久化同步标记（可选）：单条推送等「不走整轮 saveState」的路径用它清理 remotePurged/restorePending，
+   *  并同步 DB 侧投影（cloud_deleted），避免 sidecar/DB 残留已恢复 id 的「云端已删除·仅本地」标记。 */
+  persistSyncMarkers?(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void>;
+
   /** 小记冲突副本（可选，parity C8）：双端同改、远端胜出时把本地版本归档进小记回收站
    *  （旧协议 archiveLocalQuickNoteToTrash 语义：新 id、纯本地、恢复后是一条新小记）。
    *  未实现时退化为历史快照尝试（桌面）或不留副本（移动端产品定稿：小记无历史快照）。 */
