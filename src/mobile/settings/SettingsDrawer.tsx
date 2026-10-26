@@ -424,6 +424,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                           }}
                         />
                       </Item>
+                      <Switch
+                        name="按需下载附件"
+                        desc="开启后首拉只同步文档与附件清单，图片/附件在打开或预览时按需下载（首拉更快、省流量）；关闭则首拉全量下载（离线完整性最好）。"
+                        checked={syncCfg?.deferAssets === true}
+                        onChange={(next) => updateSyncSettings({ deferAssets: next })}
+                      />
                       {syncCfg?.autoMode === "interval" && (
                         <Item itemId="sync-auto-interval" name="自动同步间隔" desc="按固定间隔自动同步：到点触发一次（离线/未配置时由引擎侧判据拦住，不会出网）。App 不在运行时（被切走或被杀）不会再按间隔触发，下次打开或回到前台会自动对齐一次。">
                           <PickerSheet

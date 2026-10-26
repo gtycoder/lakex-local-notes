@@ -104,6 +104,9 @@ export interface SyncSettings {
   enabled: boolean;
   autoMode: "interval" | "onOpenClose" | "manual";
   autoIntervalMinutes: number;
+  /** 按需资产（P0-4，261026）：首拉只同步 pointer/索引/正文，媒体字节打开/预览时补拉。
+   *  缺省 false（全量语义）；移动端从「按需下载附件」开关写入。 */
+  deferAssets?: boolean;
 }
 
 export interface S3GcSettings {

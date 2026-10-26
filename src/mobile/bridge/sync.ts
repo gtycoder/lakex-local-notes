@@ -251,9 +251,12 @@ export const syncDomain = {
         try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
         const d = await ensureDb();
         const progress: Array<{ phase: string; ms: number }> = [];
+        // 按需资产（P0-4）：设置里打开时首拉只搬正文/元数据，媒体打开/预览时补拉。
+        const deferAssets = readSyncSettings().deferAssets === true;
         const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, {
           onPhase: (phase, ms) => progress.push({ phase, ms }),
           onProgress: (p) => pushSyncProgress(p),
+          ...(deferAssets ? { deferAssets: true } : {}),
         });
         // P0-5：全文索引（text_cache/FTS reconcile）不进同步关键路径——首拉先把正文/行落库让文档可打开，
         // 派生索引在后台队列构建（失败只影响搜索，不回滚同步结果）。

@@ -85,6 +85,9 @@ class PublishRetry extends Error {}
 export interface S3v3SyncOptions {
   /** 云端为空且本地有数据时的选择；未给则抛 empty-cloud，交给 UI 询问。 */
   onEmptyCloud?: "upload" | "stay";
+  /** 按需资产（P0-4，261026）：首拉只拉 pointer/索引/正文，媒体字节延后到打开/预览时补拉。
+   *  默认 false（保持全量语义）；移动端可由「按需下载附件」开关打开。 */
+  deferAssets?: boolean;
 }
 export interface S3v3SyncReport {
   downloadedNotes: number;
@@ -466,7 +469,7 @@ export class S3v3SyncEngine {
     this.phase("load-state");
 
     if (!baseline) {
-      if (pointer) return await this.pullAll(pointer, state, report, true);
+      if (pointer) return await this.pullAll(pointer, state, report, true, opts.deferAssets === true);
       if (cloudHasObjects) throw new S3v3SyncError("pointer-corrupt", "pointer 缺失但云端已有对象");
       const hasLocal = state.lake.notes.length > 0 || state.quickNotes.items.length > 0;
       if (!hasLocal) return report;
@@ -492,7 +495,7 @@ export class S3v3SyncEngine {
   }
 
   /** 新设备/全量重拉：只拉不推，建立基线。 */
-  private async pullAll(pointer: S3v3Pointer, state: DeviceState, report: S3v3SyncReport, archiveLocal: boolean): Promise<S3v3SyncReport> {
+  private async pullAll(pointer: S3v3Pointer, state: DeviceState, report: S3v3SyncReport, archiveLocal: boolean, deferAssets = false): Promise<S3v3SyncReport> {
     // 两份索引互不依赖：并行取，省一个 RTT（首拉时索引可能是几 MB/条 gzip 对象）。
     const [lake, quick] = await Promise.all([
       this.readIndex("lake", pointer.lake.commit) as Promise<LakeIndex>,
@@ -607,7 +610,9 @@ export class S3v3SyncEngine {
     // 小记：正文先下、但**等小记图片声明/资源就绪后再落库**（importRemoteQuickNote 会校验图片完整性）。
     if (quickNeed.length > 0) await downloadBodies(quickNeed, "quickNotes", false);
     this.phase("apply");
-    if (quick.items.some((q) => q.assetsHash)) {
+    // 按需资产（P0-4）：首拉只拉 pointer/索引/正文/声明元数据，媒体字节延后到打开/预览时
+    // 由 assetBackfill 补拉（声明与索引仍完整，删除/清理语义不受影响）。
+    if (!deferAssets && quick.items.some((q) => q.assetsHash)) {
       await runTransferPipeline(
         quick.items.filter((q) => q.assetsHash).map((q) => ({ space: "quickNotes" as const, id: q.id, declHash: q.assetsHash! })),
         this.downloadConcurrency,
@@ -620,17 +625,20 @@ export class S3v3SyncEngine {
     await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake, quickNotes: quick });
     this.phase("save");
     // Lake 资产：先并发取「声明」（小对象），再按全局流水线只补本地缺失/损坏的字节。
-    const lakeDecls = lake.notes.filter((n) => n.assetsHash);
-    // P0：这里把声明取回的同时按 id 留一份，下面 scheduleAssets 直接复用——
-    // 否则 2k 篇会再串行 GET 一遍声明（DECL_CACHE 有上限，必然大部分 miss）。
-    const fetchedDecls = new Map<string, AssetDeclaration | null>();
-    await runTransferPipeline(
-      lakeDecls.map((n) => ({ space: "lake" as const, id: n.id, declHash: n.assetsHash! })),
-      this.downloadConcurrency,
-      async (t) => { const d = await this.getDeclaration(t.space, t.id, t.declHash); fetchedDecls.set(t.space + "/" + t.id, d); return 0; },
-      { phase: "declarations", onProgress: (p) => this.emitProgress(p) });
-    for (const n of lake.notes) await this.scheduleAssets("lake", n.id, n.assetsHash, fetchedDecls.get("lake/" + n.id));
-    await this.flushAssetTasks();
+    // deferAssets=true（按需资产）：以上全部跳过，首拉不搬媒体字节。
+    if (!deferAssets) {
+      const lakeDecls = lake.notes.filter((n) => n.assetsHash);
+      // P0：这里把声明取回的同时按 id 留一份，下面 scheduleAssets 直接复用——
+      // 否则 2k 篇会再串行 GET 一遍声明（DECL_CACHE 有上限，必然大部分 miss）。
+      const fetchedDecls = new Map<string, AssetDeclaration | null>();
+      await runTransferPipeline(
+        lakeDecls.map((n) => ({ space: "lake" as const, id: n.id, declHash: n.assetsHash! })),
+        this.downloadConcurrency,
+        async (t) => { const d = await this.getDeclaration(t.space, t.id, t.declHash); fetchedDecls.set(t.space + "/" + t.id, d); return 0; },
+        { phase: "declarations", onProgress: (p) => this.emitProgress(p) });
+      for (const n of lake.notes) await this.scheduleAssets("lake", n.id, n.assetsHash, fetchedDecls.get("lake/" + n.id));
+      await this.flushAssetTasks();
+    }
     this.phase("downloads");
     await this.device.saveState(newState);
     this.emitProgress({ phase: "finalize", done: 1, total: 1 });

@@ -33,6 +33,8 @@ export interface MobileV3SyncOptions {
   onPhase?: (phase: string, ms: number) => void;
   /** 结构化进度（阶段 + 计数 + 字节；由 bridge 节流转发到 UI）。 */
   onProgress?: (progress: import("../../core/s3v3Engine.js").S3v3Progress) => void;
+  /** 按需资产（P0-4）：首拉不搬媒体字节，打开/预览时补拉。 */
+  deferAssets?: boolean;
 }
 
 export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts: MobileV3SyncOptions = {}): Promise<S3v3SyncReport> {
@@ -56,7 +58,7 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
       if (override === "upload" || override === "stay" || override === "throw") mode = override;
     } catch { /* ignore */ }
   }
-  return engine.sync(mode === "throw" ? {} : { onEmptyCloud: mode });
+  return engine.sync({ ...(mode === "throw" ? {} : { onEmptyCloud: mode }), ...(opts.deferAssets ? { deferAssets: true } : {}) });
 }
 /**
  * 单条小记推送（parity E2）：只 upsert 这一条，其余条目/标签/墓碑在云端逐字段不变。

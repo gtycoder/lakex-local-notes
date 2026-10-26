@@ -48,6 +48,8 @@ export function readSyncSettings(): SyncSettings {
       enabled: parsed.enabled !== false,
       autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" ? parsed.autoMode : "manual",
       autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" ? parsed.autoIntervalMinutes : 15,
+      // 按需资产（P0-4）：缺省 false（全量），存过 true 才生效。
+      ...(parsed.deferAssets === true ? { deferAssets: true } : {}),
     };
   } catch {
     return fallback;

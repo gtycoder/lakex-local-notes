@@ -22,7 +22,7 @@ describe("互斥域判据（F16 红线化）", () => {
     // 与 cssLayers 的基线同理：只允许"显式改基线"来变更，防无声漂移。
     // 261024 方案 B：+setQuickNoteTags（小记 ↔ 标签关联表整组替换，独立于保存正文）
     expect(WRITE_OPS.length).toBe(36);
-    // 261026 +ensureSearchIndex（派生索引后台补建：只读正文/FTS，轮次级串行；不占写域）
+    // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
     expect(MAINTENANCE_OPS.length).toBe(4);
     expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
     // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
@@ -77,7 +77,7 @@ describe("互斥域判据（F16 红线化）", () => {
   });
 
   it("I3：维护域里没有「用户当场发起」的操作（轮次级才允许串行等待）", () => {
-    // ensureSearchIndex（261026）也是轮次级：冷启动/回前台自检后补齐 FTS，用户不用等它。
+    // ensureSearchIndex（261026）也是轮次级：后台自检补齐 FTS，用户不用等它。
     expect([...MAINTENANCE_OPS].sort()).toEqual(["ensureSearchIndex", "ensureTrashNoteAssets", "gcDeepCleanup", "syncNow"]);
   });
 

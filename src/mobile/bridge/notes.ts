@@ -1,5 +1,5 @@
 /** C3-5 第③步：notes 域（从 bridge.ts 抽取，行为保持）。 */
-import { assets, dbPort, ensureDb, runMaintenance, runWrite } from "./context";
+import { assets, dbPort, ensureDb, readSyncSettings, runMaintenance, runWrite } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
 
 import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
@@ -26,7 +26,18 @@ import { downloadDeclaredAssetsFor } from "./sync";
 export const notesDomain = {
   async readNote(id: string): Promise<LocalNote | null> {
     const d = await ensureDb();
-    return await noteRepository.readNote(d, id);
+    const note = await noteRepository.readNote(d, id);
+    // 按需资产（P0-4，261026）：打开文档时补齐该篇声明里缺失的媒体，保证首屏图片可见。
+    // 只有「按需下载附件」打开时才走网络；失败静默（下次打开/同步再补）。
+    if (note && readSyncSettings().deferAssets === true) {
+      try {
+        // 复用维护域「保证某篇资产」这个操作（语义一致；避免为一个内部调用新增桥操作/类别）。
+        await runMaintenance("ensureTrashNoteAssets", () => downloadDeclaredAssetsFor([id], true));
+      } catch (error) {
+        console.warn("[asset] 打开文档时补拉失败（下次再试）", error);
+      }
+    }
+    return note;
   },
 
   async noteGoneState(id: string): Promise<{ parentId: string | null; syncState: string } | null> {

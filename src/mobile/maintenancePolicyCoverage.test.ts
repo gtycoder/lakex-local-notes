@@ -72,6 +72,8 @@ const CLASS_OF_FN: Record<"runWrite" | "runMaintenance" | "runPriority", string>
 /** op 名与方法名不同名的例外（附理由）。 */
 const OP_NAME_EXCEPTIONS: Record<string, string> = {
   restoreTreeItem: "ensureTrashNoteAssets",
+  // 261026 按需资产：打开文档时后台补拉该篇缺失媒体，语义同为「保证该篇资产本地化」。
+  readNote: "ensureTrashNoteAssets",
 };
 
 describe("移动端互斥域登记与调用点报告（F16）", () => {
