@@ -24,8 +24,10 @@ defineDeviceConformance("设备适配器一致性（桌面 store）", async (rem
       return store.listNoteSummaries().map((s) => s.id).filter((id) => !trash.has(id)).sort();
     },
     listTrashIds: async () => store.listTrash().map((t) => t.id).sort(),
+    listCloudDeletedIds: async () => store.listCloudDeletedNoteIds().sort(),
     trashNote: async (id) => { store.deleteTreeNode(id); },
     restoreNote: async (id) => { store.restoreTrashItem(id); },
+    purgeNote: async (id) => { store.deleteTreeNode(id); store.purgeTrashItem(id); },
     readBody: async (id) => { const bytes = await device.readBody(id); return bytes ? new TextDecoder().decode(bytes) : null; },
     close: async () => { await fs.rm(root, { recursive: true, force: true }); },
   };

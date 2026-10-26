@@ -5,7 +5,7 @@ import { defineDeviceConformance } from "../../../electron/s3v3/deviceConformanc
 import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, listTrashed, saveNote, trashNote } from "../data/noteRepository.js";
-import { restoreTreeItem } from "../data/trashRepository.js";
+import { purgeTreeItem, restoreTreeItem } from "../data/trashRepository.js";
 import { setBodyStoreBackendForTest, type BodyStoreBackend } from "../native/bodyStore.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
 import { S3v3SyncEngine } from "../../core/s3v3Engine.js";
@@ -43,8 +43,10 @@ defineDeviceConformance("设备适配器一致性（移动 store）", async (rem
     editNote: (id, title, body) => use(async () => { await saveNote(db, id, title, body, null, new Map()); }),
     listActiveIds: () => use(async () => { const rows = await db.prepare("SELECT id FROM notes WHERE trashed_at IS NULL ORDER BY id").all() as Array<{ id: string }>; return rows.map((r) => r.id); }),
     listTrashIds: () => use(async () => (await listTrashed(db)).map((n) => n.id).sort()),
+    listCloudDeletedIds: () => use(async () => { const rows = await db.prepare("SELECT id FROM notes WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>; return rows.map((r) => r.id); }),
     trashNote: (id) => use(() => trashNote(db, id)),
     restoreNote: (id) => use(() => restoreTreeItem(db, id, "note", () => Promise.resolve())),
+    purgeNote: (id) => use(async () => { await trashNote(db, id); await purgeTreeItem(db, id, "note"); }),
     readBody: (id) => use(async () => { const bytes = await device.readBody(id); return bytes ? new TextDecoder().decode(bytes) : null; }),
     close: async () => { await db.close(); setBodyStoreBackendForTest(null); await fs.rm(root, { recursive: true, force: true }); },
   };

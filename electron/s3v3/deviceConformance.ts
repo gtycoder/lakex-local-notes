@@ -37,8 +37,10 @@ export interface ConformanceHarness {
   editNote(id: string, title: string, body: string): Promise<void>;
   listActiveIds(): Promise<string[]>;
   listTrashIds(): Promise<string[]>;
+  listCloudDeletedIds(): Promise<string[]>;
   trashNote(id: string): Promise<void>;
   restoreNote(id: string): Promise<void>;
+  purgeNote(id: string): Promise<void>;
   readBody(id: string): Promise<string | null>;
   close(): Promise<void>;
 }
@@ -114,6 +116,30 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
         await b.sync();
         expect(await b.listActiveIds()).toContain("n1");
         expect(await b.listTrashIds()).not.toContain("n1");
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("云端彻底删除 → 对端保留回收站副本、正文仍在、打「云端已删除」标记", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        expect(await b.listActiveIds()).toContain("n1");
+
+        await a.purgeNote("n1");
+        await a.sync();
+        await b.sync();
+        expect(await b.listActiveIds()).not.toContain("n1");
+        expect(await b.listTrashIds()).toContain("n1"); // 副本进回收站
+        expect(await b.readBody("n1")).toBe("<p>正文一</p>"); // 正文保留（本地是最后副本）
+        expect(await b.listCloudDeletedIds()).toContain("n1"); // 标记为「云端已删除 · 仅本地」
+        // 多轮同步不复活、不冲掉标记
+        await b.sync();
+        expect(await b.listActiveIds()).not.toContain("n1");
+        expect(await b.listCloudDeletedIds()).toContain("n1");
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 
