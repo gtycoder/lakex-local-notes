@@ -1252,18 +1252,32 @@ export class S3v3SyncEngine {
   private async executePending(lake: LakeIndex, quick: QuickNotesIndex, lakeCommit: string, quickCommit: string, state: DeviceState, report: S3v3SyncReport): Promise<number> {
     if (state.pending.length === 0) return 0;
     const world: CurrentWorld = { lakeCommit, quickNotesCommit: quickCommit, notes: lake.notes, quickNotes: quick.items, declarations: {}, quickDeclarations: {} };
+    // 声明并发取（261026）：待删项多时（批量 purge / 首轮 GC）逐条 RTT 会很慢；只读、可安全并发 8。
+    const declTasks: Array<{ space: "lake" | "quickNotes"; id: string; declHash: string }> = [];
+    const seenDecl = new Set<string>();
     for (const p of state.pending) {
       if (p.kind === "asset" || p.kind === "declaration" || p.kind === "quick-note-asset" || p.kind === "quick-note-declaration") {
-        const list = p.kind.startsWith("quick") ? world.quickNotes : world.notes;
+        const space: "lake" | "quickNotes" = p.kind.startsWith("quick") ? "quickNotes" : "lake";
+        const list = space === "quickNotes" ? world.quickNotes : world.notes;
         const n = list.find((x) => x.id === p.noteId);
-        if (n?.assetsHash) {
-          const d = await this.getDeclaration(p.kind.startsWith("quick") ? "quickNotes" : "lake", n.id, n.assetsHash);
-          if (d) {
-            const target = p.kind.startsWith("quick") ? world.quickDeclarations : world.declarations;
-            target[n.id] = { declHash: n.assetsHash, filenames: d.assets.map((a) => a.filename) };
-          }
-        }
+        if (!n?.assetsHash) continue;
+        const key = space + "/" + n.id;
+        if (seenDecl.has(key)) continue;
+        seenDecl.add(key);
+        declTasks.push({ space, id: n.id, declHash: n.assetsHash });
       }
+    }
+    if (declTasks.length > 0) {
+      const { errors } = await runTransferPipeline(declTasks, Math.min(8, this.transferConcurrency), async (t) => {
+        const d = await this.getDeclaration(t.space, t.id, t.declHash);
+        if (d) {
+          const target = t.space === "quickNotes" ? world.quickDeclarations : world.declarations;
+          target[t.id] = { declHash: t.declHash, filenames: d.assets.map((a) => a.filename) };
+        }
+        return 0;
+      });
+      const firstError = errors[0]?.error;
+      if (firstError) throw firstError;
     }
     let deleted = 0;
     const deleteKeys: string[] = [];
@@ -1629,19 +1643,26 @@ export class S3v3SyncEngine {
     keep.add(LOCK_KEY);
     keep.add(indexKey("lake", pointer.lake.commit));
     keep.add(indexKey("quickNotes", pointer.quickNotes.commit));
+    // 声明并发取（261026）：深度清理要遍历全库声明，逐条串行在大库上很慢；keep 集写入是同步的，安全。
+    const cleanupDeclTasks: Array<{ space: "lake" | "quickNotes"; id: string; declHash: string }> = [];
     for (const n of lake.notes) {
       keep.add(lakeBodyKey(n.id, n.contentHash));
       if (!n.assetsHash) continue;
       keep.add(declarationKey("lake", n.id, n.assetsHash));
-      const d = await this.getDeclaration("lake", n.id, n.assetsHash);
-      for (const a of d?.assets ?? []) keep.add(assetKey(n.id, a.filename));
+      cleanupDeclTasks.push({ space: "lake", id: n.id, declHash: n.assetsHash });
     }
     for (const q of quick.items) {
       keep.add(quickNoteBodyKey(q.contentHash));
       if (!q.assetsHash) continue;
       keep.add(declarationKey("quickNotes", q.id, q.assetsHash));
-      const d = await this.getDeclaration("quickNotes", q.id, q.assetsHash);
-      for (const a of d?.assets ?? []) keep.add(quickNoteAssetKey(q.id, a.filename));
+      cleanupDeclTasks.push({ space: "quickNotes", id: q.id, declHash: q.assetsHash });
+    }
+    if (cleanupDeclTasks.length > 0) {
+      await runTransferPipeline(cleanupDeclTasks, Math.min(8, this.transferConcurrency), async (t) => {
+        const d = await this.getDeclaration(t.space, t.id, t.declHash);
+        for (const a of d?.assets ?? []) keep.add(t.space === "lake" ? assetKey(t.id, a.filename) : quickNoteAssetKey(t.id, a.filename));
+        return 0;
+      });
     }
     // 本机历史快照引用（平台注入；调用方负责只读收集，引擎不碰设备 API）。
     for (const k of opts.extraKeep ?? []) keep.add(k);
