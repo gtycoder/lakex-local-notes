@@ -498,13 +498,23 @@ export class S3v3SyncEngine {
     this.phase("read-index");
     this.emitProgress({ phase: "metadata", done: 1, total: 1 });
     if (archiveLocal) {
+      // 断点续传（261026）：本地正文和云端索引一致的条目**不是被覆盖**，不用再写一遍历史。
+      // 否则一次“首拉中途退出再进入”会把几千篇已下正文重新归档（真机上几分钟的纯开销）。
+      const remoteById = new Map(lake.notes.map((n) => [n.id, n] as const));
       for (const n of state.lake.notes) {
         const bytes = await this.device.readBody(n.id);
+        if (!bytes) continue;
+        const remote = remoteById.get(n.id);
+        if (remote && remote.contentHash === sha256Hex(bytes)) continue;
         await this.device.archiveBody(n.id, bytes);
       }
+      const remoteQuickById = new Map(quick.items.map((q) => [q.id, q] as const));
       for (const q of state.quickNotes.items) {
         const bytes = await this.device.readQuickBody(q.id);
-        if (bytes) await this.device.writeHistory("quick-" + q.id, bytes);
+        if (!bytes) continue;
+        const remote = remoteQuickById.get(q.id);
+        if (remote && remote.contentHash === sha256Hex(bytes)) continue;
+        await this.device.writeHistory("quick-" + q.id, bytes);
       }
     }
     const newState: DeviceState = {

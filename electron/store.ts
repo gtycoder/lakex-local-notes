@@ -1538,6 +1538,21 @@ export class Store {
     this.syncReconciliation.setLastSeenCommitId(commitId);
   }
 
+  /**
+   * 断点续传标记（261026）：一轮同步开始即置位，**成功结束才清除**。
+   * 进程被杀/崩溃/断网中断时标记残留 ⇒ 下次启动自动续传（不管 autoMode 是 interval/onOpenClose/manual）。
+   */
+  markSyncInterrupted(at: string): void {
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('sync_interrupted_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
+  }
+  clearSyncInterrupted(): void {
+    this.db.prepare("DELETE FROM device_state WHERE key='sync_interrupted_at'").run();
+  }
+  getSyncInterruptedAt(): string | null {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='sync_interrupted_at'").get() as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
   /** 本地上次同步时的墓碑签名（COUNT:MAX(deleted_at)），早退判定"是否新增了 purge"。 */
   getLastTombstoneSig(): string {
     return this.syncReconciliation.getLastTombstoneSig();

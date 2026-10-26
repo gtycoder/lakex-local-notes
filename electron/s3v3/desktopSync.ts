@@ -83,6 +83,12 @@ export async function syncWithV3(
     "load-state": { phase: "download", message: "v3：读取本地状态..." },
     "read-index": { phase: "download", message: "v3：读取云端索引..." },
     merge: { phase: "download", message: "v3：合并远端变更..." },
+    // 首拉/大库：正文/应用/声明/附件都是可观察阶段（渲染层据此渐进刷新，文档边下边出现）。
+    bodies: { phase: "download", message: "v3：下载正文..." },
+    apply: { phase: "download", message: "v3：应用到本地..." },
+    declarations: { phase: "download", message: "v3：读取资产声明..." },
+    assets: { phase: "download", message: "v3：下载附件..." },
+    finalize: { phase: "manifest", message: "v3：收尾..." },
     downloads: { phase: "download", message: "v3：下载正文/附件..." },
     uploads: { phase: "upload", message: "v3：上传变更..." },
     "publish-save-state": { phase: "manifest", message: "v3：保存发布状态..." },
@@ -92,8 +98,24 @@ export async function syncWithV3(
     "publish-finalize": { phase: "manifest", message: "v3：确认发布..." },
     pending: { phase: "manifest", message: "v3：清理待删对象..." },
   };
+  // 引擎进度（每个对象完成回调一次）→ IPC 有节流：2 万个附件不能把桥打满。
+  let lastProgressAt = 0;
+  let lastProgressPhase = "";
+  const reportTransferProgress = (p: { phase: string; done?: number; total?: number }) => {
+    const label = p.phase === "bodies" ? "v3：下载正文" : p.phase === "apply" ? "v3：应用到本地"
+      : p.phase === "declarations" ? "v3：读取资产声明" : p.phase === "assets" ? "v3：下载附件" : "";
+    if (!label) return;
+    const now = Date.now();
+    if (p.phase === lastProgressPhase && now - lastProgressAt < 250) return;
+    lastProgressAt = now;
+    lastProgressPhase = p.phase;
+    const done = p.done ?? 0;
+    const total = p.total ?? 0;
+    report({ phase: "download", message: label + (total > 0 ? " " + done + "/" + total : ""), current: done, total });
+  };
   const engine = new S3v3SyncEngine({
     remote, device, deviceId,
+    onProgress: (p) => reportTransferProgress(p),
     onPhase: (phase, ms) => {
       if (ms >= 1000) store.logScopes.sync.warn(`[v3][slow] ${phase} ${ms}ms`);
       else store.logScopes.sync.debug(`[v3] ${phase} ${ms}ms`);

@@ -34,9 +34,21 @@ export function useSyncProgress({
   const syncRunRef = useRef(createRequestVersion());
   useEffect(() => {
     if (!isDesktop()) return;
+    // 首拉/大库的渐进展示（261026）：引擎按块把正文/行落库，列表也要跟着长出来，
+    // 否则要等整轮结束才看得到文档。节流 2.5s，done 分支仍走下面完整刷新。
+    let lastProgressiveRefreshAt = 0;
+    const refreshListsProgressively = () => {
+      const now = Date.now();
+      if (now - lastProgressiveRefreshAt < 2500) return;
+      lastProgressiveRefreshAt = now;
+      void native.listNoteSummaries().then((items) => setNotes(items)).catch(() => undefined);
+      void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+      void quickNotesRef.current?.refresh();
+    };
     return native.onSyncProgress((progress) => {
       const message = progress.message || (progress.phase === "done" ? "同步完成" : "同步中...");
       setSync((current) => ({ ...current, phase: progress.error ? "error" : progress.phase === "done" ? "success" : "syncing", message }));
+      if (progress.phase !== "done" && !progress.error) refreshListsProgressively();
       if (progress.phase === "done" && !progress.error) {
         void native.getSyncStatus().then((status) => {
           setSync((current) => ({ ...current, phase: "success", message: "同步完成", lastSyncedAt: status.lastSyncedAt, pendingChanges: 0 }));

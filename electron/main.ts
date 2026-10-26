@@ -147,6 +147,8 @@ function clearQuitDeadline(): void {
 async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
   if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
   syncInFlight = true;
+  // 断点续传标记：开始即置位，成功结束才清（中断/被杀/断网时残留，下次启动自动续）。
+  try { store.markSyncInterrupted(new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
   const fullSyncStart = Date.now();
   log.sync.info("[perf] runFullSync start");
   try {
@@ -161,6 +163,7 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       // 小记已随 v3 同一轮同步；旧 quick-notes 通道已移除。
       result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
       store.recordSyncResult(JSON.stringify(result));
+      try { store.clearSyncInterrupted(); } catch { /* 同上 */ }
       report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
       log.sync.info(`[perf] runFullSync done ${Date.now() - fullSyncStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts}, superseded=${result.supersededNotes.length}, quickNotes=${result.quickNotes?.error ? "error" : "ok"})`);
       logHeapPeak("sync");
@@ -690,11 +693,15 @@ if (!app.requestSingleInstanceLock()) {
     startSyncTimers();
     restartSyncTimers = startSyncTimers;
 
-    // 开启应用时对齐一次（261013：interval 也含在内；manual 不补）。失败仅告警。
+    // 开启应用时对齐一次（261013：interval 也含在内；manual 不补）+ 断点续传（261026）。
+    // 续传优先级最高：上次同步没跑完（进程被杀/崩溃/断网）⇒ 启动就续上，**不受 autoMode 影响**
+    // （manual 也一样——用户点过同步，退出再进来必须接着下，而不是等他自己再点一次）。
     const syncCfgOpen = store.getSyncSettings();
+    const interruptedAt = store.getSyncInterruptedAt();
     // 两条判据都走单一来源：能不能出网 = core/cloudState（没配置 或 关闭云同步 ⇒ 不出网）；
     // 该不该在开/关时补一次 = core/syncModes 的 shouldSyncOnOpenClose（enabled 且 autoMode ≠ "manual"）。
-    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && shouldSyncOnOpenClose(syncCfgOpen)) {
+    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && (interruptedAt !== null || shouldSyncOnOpenClose(syncCfgOpen))) {
+      if (interruptedAt !== null) log.app.info("[sync] 上次同步未完成（" + interruptedAt + "），启动自动续传" + formatLogFields({ backend: "v3" }));
       void runFullSync().catch((error) => {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("[sync] 开启同步失败:", msg);

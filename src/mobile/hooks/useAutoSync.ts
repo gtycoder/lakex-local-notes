@@ -23,6 +23,7 @@ import { bridge } from "../bridge";
 import { readSyncSettings, subscribeSyncSettings } from "../sync/syncSettingsStore";
 import { whenQuickNoteLaunchResolved } from "../native/quickNoteShortcut";
 import { reportNativeActionError } from "../../lib/nativeErrors";
+import { hasInterruptedSync } from "../sync/syncResumeMarker";
 
 /**
  * @param ready 应用是否已就绪（MobileApp 的 `phase` 离开 booting，即 bridge.init + refreshAll 之后）。
@@ -78,6 +79,9 @@ export function useAutoSync(ready = true): void {
       foregroundHandler = () => {
         void (async () => {
           if (await isCaptureSession()) return; // 「假单独模块」：这次会话不主动同步
+          // 断点续传优先（261026）：上次同步没跑完（被杀/断网/切后台）⇒ 冷启动或回前台无条件续上，
+          // 不看 autoMode —— 用户点过同步、退出再进来必须接着下（manual 也续）。
+          if (hasInterruptedSync()) { runOnce("续传未完成的同步"); return; }
           if (shouldSyncOnOpenClose(readSettings())) runOnce("回到前台同步");
         })();
       };

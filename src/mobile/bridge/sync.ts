@@ -16,6 +16,7 @@ import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, 
 import { reconcileIndex } from "../data/searchIndex.js";
 import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
 import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
+import { clearSyncInterrupted, markSyncInterrupted } from "../sync/syncResumeMarker";
 
 export interface MobileSyncResult {
   message: string;
@@ -242,6 +243,8 @@ export const syncDomain = {
     }
     try {
       beginSyncProgress();
+      // 断点续传：成功才清标记；失败/被杀保留 ⇒ 下次进入自动续上（261026）。
+      markSyncInterrupted();
       const result = await runMaintenance("syncNow", async () => {
         const cfg = await syncDomain.getS3Settings();
         if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
@@ -266,6 +269,7 @@ export const syncDomain = {
         };
       });
       writeSyncStatus({ at: new Date().toISOString(), ok: true, message: result.message });
+      clearSyncInterrupted();
       return result;
     } catch (error) {
       writeSyncStatus({ at: new Date().toISOString(), ok: false, message: (error as Error)?.message ?? String(error) });
