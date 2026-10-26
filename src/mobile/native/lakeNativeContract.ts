@@ -26,7 +26,7 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
   "createNote", "createBitable", "saveNote", "trashNote", "restoreNote", "listTrashed",
   "restoreTreeItem", "purgeTreeItem",
   "createGroup", "renameTreeNode", "setNodeIcon", "reorderSiblings", "moveTreeNodeOrdered", "createNotebook",
-  "searchNotes",
+  "searchNotes", "ensureSearchIndex",
   "aiGetSettings", "aiSaveSettings", "aiTestConnection", "aiChat", "aiCancel",
 ] as const;
 

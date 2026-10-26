@@ -493,8 +493,11 @@ export class S3v3SyncEngine {
 
   /** 新设备/全量重拉：只拉不推，建立基线。 */
   private async pullAll(pointer: S3v3Pointer, state: DeviceState, report: S3v3SyncReport, archiveLocal: boolean): Promise<S3v3SyncReport> {
-    const lake = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
-    const quick = (await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex;
+    // 两份索引互不依赖：并行取，省一个 RTT（首拉时索引可能是几 MB/条 gzip 对象）。
+    const [lake, quick] = await Promise.all([
+      this.readIndex("lake", pointer.lake.commit) as Promise<LakeIndex>,
+      this.readIndex("quickNotes", pointer.quickNotes.commit) as Promise<QuickNotesIndex>,
+    ]);
     this.phase("read-index");
     this.emitProgress({ phase: "metadata", done: 1, total: 1 });
     if (archiveLocal) {
@@ -1411,10 +1414,22 @@ export class S3v3SyncEngine {
     catch { return null; }
   }
 
+  /** 本轮每篇的本地资产 size/hash 缓存（原生统计；仅移动端支持时填充）。 */
+  private localAssetStatsCache = new Map<string, Array<{ filename: string; size: number; hash: string }>>();
+
   /** 本地资产清单（filename 集合）；扫描失败回退空集 = 全量下载（不改旧行为）。 */
   private async localAssetNames(space: "lake" | "quickNotes", id: string): Promise<Set<string>> {
-    try { return new Set(space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id)); }
-    catch { return new Set(); }
+    try {
+      const statsFn = space === "lake" ? this.device.listAssetStats : this.device.listQuickAssetStats;
+      if (statsFn) {
+        try {
+          const stats = await statsFn.call(this.device, id);
+          this.localAssetStatsCache.set(space + "/" + id, stats);
+          return new Set(stats.map((s) => s.filename));
+        } catch { /* 旧 APK/不支持：回退名字列表 */ }
+      }
+      return new Set(space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id));
+    } catch { return new Set(); }
   }
 
   private async readLocalAsset(space: "lake" | "quickNotes", id: string, filename: string): Promise<Uint8Array | null> {
@@ -1425,6 +1440,12 @@ export class S3v3SyncEngine {
   /** P0 资产下载差集：本地已持「同名 + 同 size + 同 sha256」⇒ 内容寻址下逐字节等价，跳过 GET。 */
   private async localAssetMatches(space: "lake" | "quickNotes", id: string, a: AssetDeclaration["assets"][number], localNames: Set<string>): Promise<boolean> {
     if (!localNames.has(a.filename)) return false;
+    // 移动端原生清单（261026）：size/hash 在原生算好并缓存（每篇只取一次），
+    // 避免把 20k 张图读回 JS 再逐字节 sha256（原 P0 热点）。
+    const cachedStats = this.localAssetStatsCache.get(space + "/" + id);
+    const hit = cachedStats?.find((s) => s.filename === a.filename);
+    if (hit) return hit.size === a.size && hit.hash === a.hash;
+    if (cachedStats) return false;
     const have = await this.readLocalAsset(space, id, a.filename);
     return !!have && have.length === a.size && sha256Hex(have) === a.hash;
   }

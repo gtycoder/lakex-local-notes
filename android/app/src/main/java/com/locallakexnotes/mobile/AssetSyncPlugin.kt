@@ -273,6 +273,66 @@ class AssetSyncPlugin : Plugin() {
     }
 
     /**
+     * 一次性列出全部本地资产名（261026 首拉提速）：note-assets/<noteId>/<file> 与
+     * quick-notes/assets/<noteId>/<file>。只返回文件名（不 hash），供同步做「本地差集」：
+     * 首拉 2k 篇时把 2k 次 readdir 桥调用压成 1 次。
+     */
+    @PluginMethod
+    fun listAllAssets(call: PluginCall) {
+        ioPool.execute {
+            try {
+                val notes = JSObject()
+                val noteRoot = File(getContext().filesDir, "note-assets")
+                for (dir in noteRoot.listFiles() ?: emptyArray()) {
+                    if (!dir.isDirectory) continue
+                    val arr = JSArray()
+                    for (f in dir.listFiles() ?: emptyArray()) if (f.isFile && !f.name.startsWith(".tmp-")) arr.put(f.name)
+                    notes.put(dir.name, arr)
+                }
+                val quick = JSObject()
+                val quickRoot = File(getContext().filesDir, "quick-notes/assets")
+                for (dir in quickRoot.listFiles() ?: emptyArray()) {
+                    if (!dir.isDirectory) continue
+                    val arr = JSArray()
+                    for (f in dir.listFiles() ?: emptyArray()) if (f.isFile && !f.name.startsWith(".tmp-")) arr.put(f.name)
+                    quick.put(dir.name, arr)
+                }
+                call.resolve(JSObject().put("notes", notes).put("quickNotes", quick))
+            } catch (e: Exception) {
+                Log.e(TAG, "listAllAssets failed: " + e.message, e)
+                call.reject("listAllAssets failed: " + e.message)
+            }
+        }
+    }
+
+    /** 某条小记的本地图片清单（filename/size/sha256；quick-notes/assets/<id>）。 */
+    @PluginMethod
+    fun listQuickAssets(call: PluginCall) {
+        val noteId = call.getString("noteId")
+        if (noteId.isNullOrEmpty()) { call.reject("noteId required"); return }
+        ioPool.execute {
+            try {
+                val dir = File(File(getContext().filesDir, "quick-notes/assets"), noteId)
+                val arr = JSArray()
+                if (dir.isDirectory) {
+                    for (f in dir.listFiles() ?: emptyArray()) {
+                        if (!f.isFile) continue
+                        val obj = JSObject()
+                        obj.put("filename", f.name)
+                        obj.put("size", f.length())
+                        obj.put("hash", sha256File(f))
+                        arr.put(obj)
+                    }
+                }
+                call.resolve(JSObject().put("assets", arr))
+            } catch (e: Exception) {
+                Log.e(TAG, "listQuickAssets failed: " + e.message, e)
+                call.reject("listQuickAssets failed: " + e.message)
+            }
+        }
+    }
+
+    /**
      * 列出某笔记资源目录里的图片（只返回 filename/size，**不计算 sha256**）。
      * 供 AI 图片选择器用：listAssets 会给每个文件算 sha256，附件多时会明显卡。
      */

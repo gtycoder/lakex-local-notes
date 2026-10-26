@@ -96,6 +96,34 @@ class BodyStorePlugin : Plugin() {
         }
     }
 
+    /**
+     * 批量原子写（261026 首拉提速）：一次桥调用写多篇正文（每篇仍是 tmp+fsync+rename）。
+     * 首拉 2k 篇时把「2k 次 JS↔native 往返」压成「每 100 篇 1 次」。
+     * items: [{ path, data }] → { written, bytes }
+     */
+    @PluginMethod
+    fun writeMany(call: PluginCall) {
+        val items = call.getArray("items") ?: run { call.reject("items 必填"); return }
+        var written = 0
+        var bytes = 0L
+        try {
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                val file = resolve(item.optString("path", "")) ?: throw IOException("非法正文路径: " + item.optString("path", ""))
+                val data = item.optString("data", "")
+                atomicWrite(file) { out -> out.write(data.toByteArray(Charsets.UTF_8)) }
+                written += 1
+                bytes += file.length()
+            }
+            val res = JSObject()
+            res.put("written", written)
+            res.put("bytes", bytes)
+            call.resolve(res)
+        } catch (e: Exception) {
+            call.reject("正文批量写入失败（已完成 " + written + " 篇）: " + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
     @PluginMethod
     fun read(call: PluginCall) {
         val file = resolveOrReject(call) ?: return

@@ -67,6 +67,8 @@ export const MAINTENANCE_OPS = [
   "syncNow",
   "gcDeepCleanup",
   "ensureTrashNoteAssets",
+  // 派生搜索索引后台补建（261026）：与同步/GC 串行，但只读正文/写 FTS，不占用写域。
+  "ensureSearchIndex",
 ] as const;
 
 /**

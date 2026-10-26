@@ -2,12 +2,13 @@ import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "../../core/s3
 import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry, QuickNotesIndex } from "../../core/s3v3Index.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
-import type { MobileDb } from "../data/sqliteDb.js";
-import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readQuickNoteBody, writeNoteBody, writeQuickNoteBody } from "../data/noteBodies.js";
+import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
+import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readQuickNoteBody, writeNoteBody, writeNoteBodiesBatch, writeQuickNoteBody } from "../data/noteBodies.js";
+import { searchTextForKind } from "../../core/noteSearchText.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
-import { nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
-import { createNote, saveNote, type NoteWriteOptions } from "../data/noteRepository.js";
+import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
+import { saveNote, type NoteWriteOptions } from "../data/noteRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import { HISTORY_SNAPSHOT_PROTECT_DAYS } from "../../core/syncEngineTypes.js";
 
@@ -41,15 +42,21 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   private stagedQuickDeletes = new Set<string>();
   /** 同步期兜底创建/复用的目录（未进远端索引）：同轮 deleteMissing 不得删，否则文档父级悬空。 */
   private readonly protectedFolderIds = new Set<string>();
+  /**
+   * 本地资产名缓存（261026）：一次原生 listAllAssets 替代「每篇一次 readdir 桥」。
+   * 同步期间资产目录只增不减（下载走原生直写，不走 writeAsset），缓存足够用来算差集；
+   * 本地新增/删除资产（writeAsset/deleteAssetsDir）会让缓存失效。
+   */
+  private assetNames: Promise<{ notes: Map<string, string[]>; quick: Map<string, string[]> }> | null = null;
 
   /**
    * 同步批量导入的写路径：派生索引（FTS）交给同步结束后的 reconcileIndex、孤儿扫描交给资产流水线、
    * 正文直接来自云端权威数据不做读盘比对。首拉 2k 篇时这三项是每篇都要做的重活。
    */
-  // 注意：**不跳过 FTS**。reconcileIndex 是「同步结束后后台补」，但进程可能被系统冻/杀
-  // （真机实测：后台补索引跑一半被 doze 杀掉，搜索就是空的），所以逐篇索引仍留在同步关键路径上；
-  // 这里只关掉「读旧正文比较」和「孤儿扫描」两项对导入无意义的活。
-  private static readonly SYNC_IMPORT_WRITE: NoteWriteOptions = { skipOrphanScan: true, skipChangeCheck: true };
+  // 同步导入不逐篇建 FTS（正文阶段省 ~60s）：派生索引由「同步结束后台补 + 冷启动/回前台自愈」
+  // 两条路径保证（bridge.ensureSearchIndex，幂等可续跑；进程被杀下次进入继续）。
+  // 另两项对远端导入无意义：读旧正文比较、孤儿扫描。
+  private static readonly SYNC_IMPORT_WRITE: NoteWriteOptions = { skipSearchIndex: true, skipOrphanScan: true, skipChangeCheck: true };
 
   constructor(db: MobileDb) { this.db = db; }
 
@@ -187,6 +194,9 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       parentCache.set(pid, v);
       return v;
     };
+    // 首拉新建行的批量通道（261026）：正文一次批量落盘 + 一批 INSERT/UPDATE 一次 executeSet
+    // 下发，替代「每篇 1 次 BodyStore 桥 + 1 次 CapacitorSQLite 桥」。
+    const createBatch: Array<{ n: LakeNoteEntry; kind: NoteKind; resolvedParentId: string | null; content: string }> = [];
     for (const n of wanted.values()) {
       const cur = current.get(n.id);
       const kind = normalizeNoteKind(n.kind);
@@ -199,13 +209,8 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       if (!cur) {
         // P0-2 分块应用：正文还没下到的条目先不建行（否则先落一个空正文），等它的分块/下一轮。
         if (content === null) continue;
-        await createNote(this.db, n.id, n.title, content, resolvedParentId, new Map(), undefined, kind, MobileDeviceStore.SYNC_IMPORT_WRITE);
-        current.set(n.id, {
-          id: n.id, title: n.title, parent_id: resolvedParentId, sort_order: n.sortOrder,
-          trashed_at: n.trashedAt ?? null, icon: n.icon ?? null, is_locked: n.isLocked ? 1 : 0,
-          content_hash: n.contentHash, updated_at: n.updatedAt,
-        });
-        // 新建行 INSERT 不含 icon/锁/排序，下面统一补一次（仅这一次；后续块走 compare 不再发）。
+        createBatch.push({ n, kind, resolvedParentId, content });
+        continue;
       } else {
         const curTrashed = !!cur.trashed_at;
         if (targetTrashed && !curTrashed) {
@@ -247,6 +252,31 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         rowNow.is_locked = n.isLocked ? 1 : 0;
         rowNow.sort_order = n.sortOrder;
       }
+    }
+    // 新建行批量落库：先批量写正文（一次原生调用），再一批 SQL（一次 executeSet）建行 + 元数据。
+    if (createBatch.length > 0) {
+      await writeNoteBodiesBatch(createBatch.map((c) => ({ kind: c.kind, id: c.n.id, content: c.content })));
+      const statements: Array<{ statement: string; values: unknown[] }> = [];
+      for (const c of createBatch) {
+        const n = c.n;
+        const title = n.title.trim() ? n.title.trim() : (c.kind === "usheet" ? "无标题表格" : "无标题文档");
+        const contentHash = sha256Sync(new TextEncoder().encode(c.content));
+        const textCache = searchTextForKind(c.kind, c.content).plain ?? "";
+        statements.push({
+          statement: "INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,1,?,?,?,?)",
+          values: [n.id, title, c.resolvedParentId, n.updatedAt, contentHash, textCache, c.kind, n.trashedAt ?? null, n.deletedFromParentId ?? null],
+        });
+        // 默认值行不必再 UPDATE（大多数文档 icon=null/locked=0/sort=0）。
+        if ((n.icon ?? null) !== null || n.isLocked || n.sortOrder !== 0) {
+          statements.push({ statement: "UPDATE notes SET icon=?, is_locked=?, sort_order=? WHERE id=?", values: [n.icon ?? null, n.isLocked ? 1 : 0, n.sortOrder, n.id] });
+        }
+        current.set(n.id, {
+          id: n.id, title, parent_id: c.resolvedParentId, sort_order: n.sortOrder,
+          trashed_at: n.trashedAt ?? null, icon: n.icon ?? null, is_locked: n.isLocked ? 1 : 0,
+          content_hash: contentHash, updated_at: n.updatedAt,
+        });
+      }
+      await executeBatch(this.db, statements);
     }
     for (const [id, cur] of current) {
       if (wanted.has(id)) continue;
@@ -435,17 +465,52 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     if (bytes) await this.writeHistory(id, bytes);
   }
 
+  private async loadAssetNames(): Promise<{ notes: Map<string, string[]>; quick: Map<string, string[]> }> {
+    if (!this.assetNames) {
+      this.assetNames = (async () => {
+        const out = { notes: new Map<string, string[]>(), quick: new Map<string, string[]>() };
+        if (!nativeAssetSyncSupported()) return out;
+        try {
+          const res = await NativeAssetSync.listAllAssets();
+          for (const [id, names] of Object.entries(res.notes ?? {})) out.notes.set(id, [...names].sort());
+          for (const [id, names] of Object.entries(res.quickNotes ?? {})) out.quick.set(id, [...names].sort());
+        } catch { /* 原生不可用/旧 APK：回退逐篇扫描 */ }
+        return out;
+      })();
+    }
+    return this.assetNames;
+  }
+
+  private invalidateAssetNames(): void { this.assetNames = null; }
+
   async listAssets(id: string): Promise<string[]> {
+    if (nativeAssetSyncSupported()) {
+      const cache = await this.loadAssetNames();
+      return cache.notes.get(id) ?? [];
+    }
     const keys = await listNoteAssetKeysFs(id);
     return keys.map((k) => k.slice(id.length + 1)).sort();
+  }
+  /** 原生「文件名→size/sha256」清单：附件差集不必把字节读回 JS（原 P0 大热点）。 */
+  async listAssetStats(id: string): Promise<Array<{ filename: string; size: number; hash: string }>> {
+    if (!nativeAssetSyncSupported()) throw new Error("native asset stats unsupported");
+    const res = await NativeAssetSync.listAssets({ noteId: id });
+    return res.assets.map((a) => ({ filename: a.filename, size: Number(a.size), hash: a.hash }));
+  }
+  async listQuickAssetStats(id: string): Promise<Array<{ filename: string; size: number; hash: string }>> {
+    if (!nativeAssetSyncSupported()) throw new Error("native asset stats unsupported");
+    const res = await NativeAssetSync.listQuickAssets({ noteId: id });
+    return res.assets.map((a) => ({ filename: a.filename, size: Number(a.size), hash: a.hash }));
   }
   async readAsset(id: string, filename: string): Promise<Uint8Array | null> {
     return await loadAssetBytesFs(id + "/" + filename);
   }
   async writeAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
+    this.invalidateAssetNames();
     await saveAssetBytesFs(id + "/" + filename, bytes);
   }
   async deleteAssetsDir(id: string): Promise<void> {
+    this.invalidateAssetNames();
     for (const key of await listNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
   }
 
@@ -465,6 +530,10 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     this.stagedQuickDeletes.add(id);
   }
   async listQuickAssets(id: string): Promise<string[]> {
+    if (nativeAssetSyncSupported()) {
+      const cache = await this.loadAssetNames();
+      return cache.quick.get(id) ?? [];
+    }
     const keys = await listQuickNoteAssetKeysFs(id);
     const prefix = "quick-notes/" + id + "/";
     return keys.map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k)).sort();
@@ -473,9 +542,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     return await loadAssetBytesFs("quick-notes/" + id + "/" + filename);
   }
   async writeQuickAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
+    this.invalidateAssetNames();
     await saveAssetBytesFs("quick-notes/" + id + "/" + filename, bytes);
   }
   async deleteQuickAssetsDir(id: string): Promise<void> {
+    this.invalidateAssetNames();
     for (const key of await listQuickNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
   }
 

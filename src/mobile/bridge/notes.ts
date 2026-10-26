@@ -39,6 +39,25 @@ export const notesDomain = {
     return await noteRepository.searchNotes(d, query);
   },
 
+  /**
+   * 派生搜索索引的后台自愈（261026）：同步批量导入不再逐篇建 FTS（正文阶段快 ~60s），
+   * 改由冷启动/回前台时按需补齐。已补完时只是两次 COUNT，几乎零成本；中途被杀下次接着来（幂等）。
+   */
+  async ensureSearchIndex(): Promise<{ notes: number; indexed: number; rebuilt: boolean }> {
+    const d = await ensureDb();
+    const count = async (sql: string): Promise<number> => {
+      try { return Number(((await d.prepare(sql).get()) as { c?: number } | undefined)?.c ?? 0); } catch { return 0; }
+    };
+    const notes = await count("SELECT count(*) AS c FROM notes WHERE trashed_at IS NULL");
+    const before = await count("SELECT count(*) AS c FROM search_index");
+    if (before >= notes) return { notes, indexed: before, rebuilt: false };
+    await runMaintenance("ensureSearchIndex", async () => {
+      await reconcileIndex(d);
+    });
+    const after = await count("SELECT count(*) AS c FROM search_index");
+    return { notes, indexed: after, rebuilt: true };
+  },
+
   async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string, kind: NoteKind = "doc"): Promise<void> {
     return runWrite("saveNote", async () => {
       const d = await ensureDb();

@@ -20,6 +20,10 @@ export interface AssetSyncNativePlugin {
   putFile(options: { key: string; localKey: string }): Promise<{ status: number; bytes: number }>;
   getFile(options: { key: string; localKey: string; maxBytes?: number; expectedSize?: number; expectedSha256?: string }): Promise<{ status: number | "ok" | "corrupt"; size?: number; sha256?: string }>;
   listAssets(options: { noteId: string }): Promise<{ assets: NativeAssetMeta[] }>;
+  /** 全部本地资产名（不 hash；261026）：一次桥调用替代逐篇 readdir，供同步本地差集。 */
+  listAllAssets(): Promise<{ notes: Record<string, string[]>; quickNotes: Record<string, string[]> }>;
+  /** 某条小记的本地图片清单（filename/size/sha256）。 */
+  listQuickAssets(options: { noteId: string }): Promise<{ assets: NativeAssetMeta[] }>;
   /** 轻量图片列表（filename/size，不算 sha256）；AI 图片选择器用。旧 APK 无此方法时回退 listAssets。 */
   listImageAssets?(options: { noteId: string }): Promise<{ assets: Array<{ filename: string; size: number }> }>;
 }

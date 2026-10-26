@@ -16,6 +16,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 
 interface BodyStorePluginApi {
   write(options: { path: string; data: string }): Promise<{ size: number }>;
+  writeMany(options: { items: Array<{ path: string; data: string }> }): Promise<{ written: number; bytes: number }>;
   read(options: { path: string }): Promise<{ exists: boolean; data?: string }>;
   remove(options: { path: string }): Promise<void>;
   stat(options: { path: string }): Promise<{ exists: boolean; size: number }>;
@@ -29,6 +30,8 @@ const NativeBodyStore = registerPlugin<BodyStorePluginApi>("BodyStore");
 export interface BodyStoreBackend {
   readText(path: string): Promise<string | null>;
   writeText(path: string, text: string): Promise<number>;
+  /** 批量原子写（可选；261026 首拉提速：一次桥调用写多篇）。缺省时调用方逐篇写。 */
+  writeTextMany?(items: Array<{ path: string; text: string }>): Promise<number>;
   remove(path: string): Promise<void>;
   stat(path: string): Promise<{ exists: boolean; size: number }>;
   readSnapshot(path: string): Promise<string | null>;
@@ -45,6 +48,10 @@ function nativeBackend(): BodyStoreBackend {
     async writeText(path, text) {
       const res = await NativeBodyStore.write({ path, data: text });
       return Number(res?.size ?? text.length);
+    },
+    async writeTextMany(items) {
+      const res = await NativeBodyStore.writeMany({ items: items.map((i) => ({ path: i.path, data: i.text })) });
+      return Number(res?.bytes ?? 0);
     },
     async remove(path) {
       await NativeBodyStore.remove({ path });
@@ -72,6 +79,7 @@ const memoryText = new Map<string, string>();
 const memoryBackend: BodyStoreBackend = {
   async readText(path) { return memoryText.has(path) ? memoryText.get(path)! : null; },
   async writeText(path, text) { memoryText.set(path, text); return new TextEncoder().encode(text).length; },
+  async writeTextMany(items) { let bytes = 0; for (const i of items) { memoryText.set(i.path, i.text); bytes += new TextEncoder().encode(i.text).length; } return bytes; },
   async remove(path) { memoryText.delete(path); },
   async stat(path) { return { exists: memoryText.has(path), size: new TextEncoder().encode(memoryText.get(path) ?? "").length }; },
   async readSnapshot(path) { return memoryText.has(path) ? memoryText.get(path)! : null; },

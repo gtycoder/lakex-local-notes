@@ -51,6 +51,10 @@ export interface S3v3DeviceStore {
   archiveBody(id: string, bytes: Uint8Array | null): Promise<void>;
 
   listAssets(id: string): Promise<string[]>;
+  /** 本地资产「文件名→size/sha256」原生清单（可选，261026）：附件差集不必把字节读回 JS。
+   *  不支持时（旧 APK/桌面）缺失或抛错 ⇒ 引擎回退 readAsset+sha256。 */
+  listAssetStats?(id: string): Promise<Array<{ filename: string; size: number; hash: string }>>;
+  listQuickAssetStats?(id: string): Promise<Array<{ filename: string; size: number; hash: string }>>;
   readAsset(id: string, filename: string): Promise<Uint8Array | null>;
   writeAsset(id: string, filename: string, bytes: Uint8Array): Promise<void>;
   deleteAssetsDir(id: string): Promise<void>;
