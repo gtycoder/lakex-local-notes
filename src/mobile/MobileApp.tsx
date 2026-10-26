@@ -33,6 +33,7 @@ import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./hooks/useBackHandler";
 import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
+import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
@@ -138,6 +139,23 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     prevRouteKindRef.current = route.kind;
     if (prev === "notebook" && route.kind === "home") void refreshAll().catch(() => undefined);
   }, [route.kind, refreshAll]);
+
+  /**
+   * P0-6 渐进展示（261026 用户点单「先让文档能够展示出来」）：首拉时引擎每 100 篇应用一次，
+   * UI 也要跟着刷列表 —— 否则 DB 里已经有 1000 篇，首页还显示「0 篇」，要等整轮同步结束才出现。
+   * 只在正文/应用阶段触发，节流 2s；同步结束（progress 清空）自然停止。
+   */
+  useEffect(() => {
+    let lastRefreshAt = 0;
+    return subscribeSyncProgress(() => {
+      const p = readSyncProgress();
+      if (!p || (p.phase !== "bodies" && p.phase !== "apply")) return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 2000) return;
+      lastRefreshAt = now;
+      void refreshAll().catch(() => undefined);
+    });
+  }, [refreshAll]);
 
   useEffect(() => {
     // 启动速度优先：不加人为最短展示；native splash + WebView overlay 只覆盖真实加载时间。
