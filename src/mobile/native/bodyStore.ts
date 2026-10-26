@@ -116,3 +116,11 @@ export function getBodyStore(): BodyStoreBackend {
 export function resetMemoryBodyStore(): void {
   memoryText.clear();
 }
+
+/**
+ * 测试注入：替换正文后端（conformance harness 用独立文件目录，避免多设备共享内存后端）。
+ * 传 null 恢复默认（原生/内存）。仅测试使用，产品代码不要调用。
+ */
+export function setBodyStoreBackendForTest(next: BodyStoreBackend | null): void {
+  backend = next;
+}
