@@ -60,7 +60,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * 桌面每轮都会 new 一个引擎：没有这层缓存时，元数据漂移导致大量 applyRemote 的轮次会
  * 逐篇重复 GET 声明对象（崩溃追赶实测 4,070 次 meta GET 的一部分）。上限防止无限增长。
  */
-const DECL_CACHE_LIMIT = 2000;
+const DECL_CACHE_LIMIT = 4096;
 const DECL_CACHE = new Map<string, AssetDeclaration>();
 
 export class S3v3SyncError extends Error {
@@ -581,12 +581,15 @@ export class S3v3SyncEngine {
     this.phase("save");
     // Lake 资产：先并发取「声明」（小对象），再按全局流水线只补本地缺失/损坏的字节。
     const lakeDecls = lake.notes.filter((n) => n.assetsHash);
+    // P0：这里把声明取回的同时按 id 留一份，下面 scheduleAssets 直接复用——
+    // 否则 2k 篇会再串行 GET 一遍声明（DECL_CACHE 有上限，必然大部分 miss）。
+    const fetchedDecls = new Map<string, AssetDeclaration | null>();
     await runTransferPipeline(
       lakeDecls.map((n) => ({ space: "lake" as const, id: n.id, declHash: n.assetsHash! })),
       this.downloadConcurrency,
-      async (t) => { await this.getDeclaration(t.space, t.id, t.declHash); return 0; },
+      async (t) => { const d = await this.getDeclaration(t.space, t.id, t.declHash); fetchedDecls.set(t.space + "/" + t.id, d); return 0; },
       { phase: "declarations", onProgress: (p) => this.emitProgress(p) });
-    for (const n of lake.notes) await this.scheduleAssets("lake", n.id, n.assetsHash);
+    for (const n of lake.notes) await this.scheduleAssets("lake", n.id, n.assetsHash, fetchedDecls.get("lake/" + n.id));
     await this.flushAssetTasks();
     this.phase("downloads");
     await this.device.saveState(newState);
@@ -772,14 +775,18 @@ export class S3v3SyncEngine {
     const seenDecl = new Set<string>();
     for (const plan of lakePlan.notes) {
       const dh = plan.remote?.assetsHash;
-      if (dh && !seenDecl.has("lake:" + plan.id + ":" + dh)) {
+      // 上传分支（本地元数据变更）也要用声明：本地附件未落地时按远端声明自愈，
+      // 不在上传环里串行 GET（2k 篇 = 2k 个 RTT，真机上几分钟的静默卡顿）。
+      const need = plan.applyRemote || plan.uploadLocal;
+      if (dh && need && !seenDecl.has("lake:" + plan.id + ":" + dh)) {
         seenDecl.add("lake:" + plan.id + ":" + dh);
         declTasks.push({ space: "lake", id: plan.id, declHash: dh });
       }
     }
     for (const plan of quickPlan.items) {
       const dh = plan.remote?.assetsHash;
-      if (dh && !seenDecl.has("quickNotes:" + plan.id + ":" + dh)) {
+      const need = plan.applyRemote || plan.uploadLocal;
+      if (dh && need && !seenDecl.has("quickNotes:" + plan.id + ":" + dh)) {
         seenDecl.add("quickNotes:" + plan.id + ":" + dh);
         declTasks.push({ space: "quickNotes", id: plan.id, declHash: dh });
       }
@@ -1426,9 +1433,9 @@ export class S3v3SyncEngine {
    * 登记某条的资产下载任务（P0-1）：只做「声明读取 + 本地差集判定」，真正 GET 由全局流水线执行。
    * 与旧 downloadAssets 的差异：不再 per-note runPool（按篇 barrier，有效并发吃不满）。
    */
-  private async scheduleAssets(space: "lake" | "quickNotes", id: string, declHash?: string): Promise<AssetDeclaration | null> {
+  private async scheduleAssets(space: "lake" | "quickNotes", id: string, declHash?: string, preloaded?: AssetDeclaration | null): Promise<AssetDeclaration | null> {
     if (!declHash) return null;
-    const decl = await this.getDeclaration(space, id, declHash);
+    const decl = preloaded !== undefined ? preloaded : await this.getDeclaration(space, id, declHash);
     if (!decl) {
       this.warn((space === "lake" ? "缺资产声明: " : "缺小记图片声明: ") + id, { kind: "remote_incomplete", noteId: id });
       return null;
