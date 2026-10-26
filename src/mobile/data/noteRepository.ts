@@ -149,6 +149,16 @@ export async function isTombstoned(d: MobileDb, id: string): Promise<boolean> {
   return !!row;
 }
 
+/** 同步批量导入用的写路径开关（默认全开；同步导入由调用方显式关闭重活）。 */
+export interface NoteWriteOptions {
+  /** 跳过逐篇 FTS 索引：派生索引统一由 reconcileIndex 后台重建（首拉 2k 篇时省掉 2k 次 FTS 写）。 */
+  skipSearchIndex?: boolean;
+  /** 跳过孤儿扫描：远端导入的附件由声明/资产流水线负责，不走本地孤儿补扫。 */
+  skipOrphanScan?: boolean;
+  /** 跳过“内容是否变化”的读盘比较：正文来自云端权威数据，无需再读旧文件比对。 */
+  skipChangeCheck?: boolean;
+}
+
 /** 新建笔记（审计 F06：create 与 save 分离——新建走 INSERT，不对任何既有 id 做 upsert）。 */
 export async function createNote(
   d: MobileDb,
@@ -159,6 +169,7 @@ export async function createNote(
   assets: Map<string, Uint8Array>,
   plain?: string,
   kind: NoteKind = "doc",
+  opts: NoteWriteOptions = {},
 ): Promise<void> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : (kind === "usheet" ? "无标题表格" : "无标题文档");
@@ -176,8 +187,8 @@ export async function createNote(
     if (!exists) await deleteNoteBodies(id).catch(() => undefined);
     throw error;
   }
-  await detectOrphans(d, id, content, assets);
-  await indexNote(d, id);
+  if (!opts.skipOrphanScan) await detectOrphans(d, id, content, assets);
+  if (!opts.skipSearchIndex) await indexNote(d, id);
 }
 
 /** 保存已有笔记（审计 F06）：missing/gone 明确拒绝，绝不做 upsert 自愈。
@@ -191,6 +202,7 @@ export async function saveNote(
   parentId: string | null,
   assets: Map<string, Uint8Array>,
   plain?: string,
+  opts: NoteWriteOptions = {},
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
@@ -202,7 +214,8 @@ export async function saveNote(
     throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
   }
   const kind = normalizeNoteKind(existing.doc_kind);
-  const previous = await readNoteBody(kind, id);
+  // 同步批量导入（skipChangeCheck）：正文是云端权威数据，不必读旧文件比对。
+  const previous = opts.skipChangeCheck ? null : await readNoteBody(kind, id);
   if (previous != null && !hasNoteSaveChanges({ title: existing.title, content: previous }, { title: safeTitle, content })) return false;
   // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省按 **kind** 派生（usheet/bitable/board 的正文是 JSON，
   // 直接 lakeHtmlToPlain 会把 JSON 碎片写进 text_cache ⇒ 搜索索引与摘要全脏）。口径见 src/core/noteSearchText.ts。
@@ -222,8 +235,8 @@ export async function saveNote(
     if (previous != null) await writeNoteBody(kind, id, previous).catch(() => undefined);
     throw new Error("笔记状态已变化（回收站/已删除），保存被拒绝");
   }
-  await detectOrphans(d, id, content, assets);
-  await indexNote(d, id);
+  if (!opts.skipOrphanScan) await detectOrphans(d, id, content, assets);
+  if (!opts.skipSearchIndex) await indexNote(d, id);
   return true;
 }
 

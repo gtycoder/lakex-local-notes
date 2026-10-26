@@ -7,7 +7,7 @@ import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readQuickNoteBody,
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
-import { createNote, saveNote } from "../data/noteRepository.js";
+import { createNote, saveNote, type NoteWriteOptions } from "../data/noteRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import { HISTORY_SNAPSHOT_PROTECT_DAYS } from "../../core/syncEngineTypes.js";
 
@@ -41,6 +41,15 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   private stagedQuickDeletes = new Set<string>();
   /** 同步期兜底创建/复用的目录（未进远端索引）：同轮 deleteMissing 不得删，否则文档父级悬空。 */
   private readonly protectedFolderIds = new Set<string>();
+
+  /**
+   * 同步批量导入的写路径：派生索引（FTS）交给同步结束后的 reconcileIndex、孤儿扫描交给资产流水线、
+   * 正文直接来自云端权威数据不做读盘比对。首拉 2k 篇时这三项是每篇都要做的重活。
+   */
+  // 注意：**不跳过 FTS**。reconcileIndex 是「同步结束后后台补」，但进程可能被系统冻/杀
+  // （真机实测：后台补索引跑一半被 doze 杀掉，搜索就是空的），所以逐篇索引仍留在同步关键路径上；
+  // 这里只关掉「读旧正文比较」和「孤儿扫描」两项对导入无意义的活。
+  private static readonly SYNC_IMPORT_WRITE: NoteWriteOptions = { skipOrphanScan: true, skipChangeCheck: true };
 
   constructor(db: MobileDb) { this.db = db; }
 
@@ -162,43 +171,82 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     // 目录必须先于文档落库：他端新建的笔记本/分组 id 在本机还不存在时，
     // 文档 parent 兜底（C5）才有目录可用；删除目录放最后（避免先删父导致子文档悬空）。
     await this.upsertSyncFolders(state.folders);
-    const currentRows = await this.db.prepare("SELECT id,title,parent_id,sort_order,trashed_at FROM notes").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; trashed_at: string | null }>;
+    const currentRows = await this.db.prepare(
+      "SELECT id,title,parent_id,sort_order,trashed_at,icon,is_locked,content_hash,updated_at FROM notes"
+    ).all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; trashed_at: string | null; icon: string | null; is_locked: number; content_hash: string | null; updated_at: string }>;
     const current = new Map(currentRows.map((r) => [r.id, r]));
     const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
+    // 首拉分块每落一次库都会遍历全表：父目录解析按 id 缓存，无变化的行一条 SQL 都不发。
+    // （否则 2k 篇 × 21 块 ≈ 8.6 万条 UPDATE + 同样多的 folders 查询 —— 真机上正文阶段几分钟的纯开销。）
+    const parentCache = new Map<string, string | null>();
+    const resolveParentCached = async (pid: string | null): Promise<string | null> => {
+      if (pid === null) return null;
+      const hit = parentCache.get(pid);
+      if (hit !== undefined) return hit;
+      const v = await this.resolveSyncNoteParent(pid);
+      parentCache.set(pid, v);
+      return v;
+    };
     for (const n of wanted.values()) {
       const cur = current.get(n.id);
       const kind = normalizeNoteKind(n.kind);
       let content: string | null = null;
       if (this.stagedBodies.has(n.id)) content = new TextDecoder().decode(this.stagedBodies.get(n.id));
+      const targetTrashed = !!n.trashedAt;
       // C5：远端 parent 可能是本机还没有/已删的目录（首拉父未落库）——不得直接落库；
       // 非法父回落兜底笔记本（懒建「未分类」）。回收站条目不解析（移动端用 trashed_at 表示）。
-      const resolvedParentId = n.trashedAt ? (n.deletedFromParentId ?? null) : await this.resolveSyncNoteParent(n.parentId);
+      const resolvedParentId = targetTrashed ? (n.deletedFromParentId ?? null) : await resolveParentCached(n.parentId);
       if (!cur) {
         // P0-2 分块应用：正文还没下到的条目先不建行（否则先落一个空正文），等它的分块/下一轮。
         if (content === null) continue;
-        await createNote(this.db, n.id, n.title, content, resolvedParentId, new Map(), undefined, kind);
-        current.set(n.id, { id: n.id, title: n.title, parent_id: resolvedParentId, sort_order: n.sortOrder, trashed_at: n.trashedAt ?? null });
+        await createNote(this.db, n.id, n.title, content, resolvedParentId, new Map(), undefined, kind, MobileDeviceStore.SYNC_IMPORT_WRITE);
+        current.set(n.id, {
+          id: n.id, title: n.title, parent_id: resolvedParentId, sort_order: n.sortOrder,
+          trashed_at: n.trashedAt ?? null, icon: n.icon ?? null, is_locked: n.isLocked ? 1 : 0,
+          content_hash: n.contentHash, updated_at: n.updatedAt,
+        });
+        // 新建行 INSERT 不含 icon/锁/排序，下面统一补一次（仅这一次；后续块走 compare 不再发）。
       } else {
-        const targetTrashed = !!n.trashedAt;
         const curTrashed = !!cur.trashed_at;
         if (targetTrashed && !curTrashed) {
           await this.db.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(n.trashedAt, n.id);
+          cur.trashed_at = n.trashedAt ?? null;
         } else if (!targetTrashed && curTrashed) {
           // 远端恢复/复活 → 移出回收站。restore_pending_at 保持原值：用户显式恢复在 DB 里已经写过这个标记，
           // 而「远端把条目恢复回来」不是本地显式恢复 —— 不能给它补标记，否则会误把自己的旧副本上传覆盖远端。
           await this.db.prepare("UPDATE notes SET trashed_at=NULL, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(resolvedParentId, n.id);
+          cur.trashed_at = null;
         } else if (!targetTrashed) {
           if (content !== null) {
-            await saveNote(this.db, n.id, n.title, content, resolvedParentId, new Map());
+            await saveNote(this.db, n.id, n.title, content, resolvedParentId, new Map(), undefined, MobileDeviceStore.SYNC_IMPORT_WRITE);
             // 远端正文落地必须保留远端 updatedAt（saveNote 会写 now，导致下一轮误判本地更新）
             await this.db.prepare("UPDATE notes SET updated_at=?, is_dirty=0 WHERE id=?").run(n.updatedAt, n.id);
-          } else if (n.title !== cur.title || (resolvedParentId ?? null) !== (cur.parent_id ?? null)) {
+            cur.content_hash = n.contentHash;
+            cur.updated_at = n.updatedAt;
+            cur.title = n.title;
+            if (resolvedParentId !== null) cur.parent_id = resolvedParentId;
+          } else if (n.title !== cur.title || resolvedParentId !== (cur.parent_id ?? null)) {
             await this.db.prepare("UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=?, updated_at=? WHERE id=?").run(n.title, resolvedParentId, n.sortOrder, n.updatedAt, n.id);
+            cur.title = n.title;
+            if (resolvedParentId !== null) cur.parent_id = resolvedParentId;
+            cur.sort_order = n.sortOrder;
+            cur.updated_at = n.updatedAt;
           }
         }
       }
-      // 图标/锁/排序等元数据（不与正文写冲突）
-      await this.db.prepare("UPDATE notes SET icon=?, is_locked=?, sort_order=? WHERE id=?").run(n.icon ?? null, n.isLocked ? 1 : 0, n.sortOrder, n.id);
+      const rowNow = current.get(n.id);
+      const metadataChanged = !cur || (rowNow !== undefined && (
+        (rowNow.icon ?? null) !== (n.icon ?? null)
+        || (rowNow.is_locked ? 1 : 0) !== (n.isLocked ? 1 : 0)
+        || rowNow.sort_order !== n.sortOrder
+      ));
+      // 图标/锁/排序等元数据（不与正文写冲突）：无变化的行不再发 SQL。
+      if (metadataChanged && rowNow !== undefined) {
+        await this.db.prepare("UPDATE notes SET icon=?, is_locked=?, sort_order=? WHERE id=?").run(n.icon ?? null, n.isLocked ? 1 : 0, n.sortOrder, n.id);
+        rowNow.icon = n.icon ?? null;
+        rowNow.is_locked = n.isLocked ? 1 : 0;
+        rowNow.sort_order = n.sortOrder;
+      }
     }
     for (const [id, cur] of current) {
       if (wanted.has(id)) continue;

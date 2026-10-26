@@ -40,7 +40,9 @@ async function freshDevice() {
   return { db, store };
 }
 
-let clock = Date.parse("2026-10-26T00:00:00.000Z");
+// 用真实时间起点：createNote 写的是真实 now；若用固定过去时间，purgedAt 会早于 remote.updatedAt，
+// 引擎按「他端显式恢复」让位删除意图（产品语义），本文件测的就不是 purge 传播了。
+let clock = Date.now();
 const stamp = () => new Date((clock += 1000)).toISOString();
 
 async function seedQuickNote(d: { db: SqlJsAsyncDb }, id: string, body: string) {
