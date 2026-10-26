@@ -24,6 +24,11 @@ export interface AssetSyncNativePlugin {
   listAllAssets(): Promise<{ notes: Record<string, string[]>; quickNotes: Record<string, string[]> }>;
   /** 某条小记的本地图片清单（filename/size/sha256）。 */
   listQuickAssets(options: { noteId: string }): Promise<{ assets: NativeAssetMeta[] }>;
+  /** 本地资产文件原生读写（261026）：path = note-assets/... 或 quick-notes/assets/...；base64 传输。 */
+  writeLocal(options: { path: string; data: string }): Promise<{ size: number }>;
+  readLocal(options: { path: string }): Promise<{ exists: boolean; data?: string }>;
+  removeLocal(options: { path: string }): Promise<{ ok: boolean }>;
+  listLocal(options: { path: string }): Promise<{ files: string[] }>;
   /** 轻量图片列表（filename/size，不算 sha256）；AI 图片选择器用。旧 APK 无此方法时回退 listAssets。 */
   listImageAssets?(options: { noteId: string }): Promise<{ assets: Array<{ filename: string; size: number }> }>;
 }

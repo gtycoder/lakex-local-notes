@@ -9,6 +9,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { isSafePathSegment } from "../../core/storeUtils.js";
 import { quickNoteAssetRelativePath } from "../../core/noteBodyPaths.js";
 import { assetPerf, recordPerf } from "./assetPerf";
+import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";
 
 const ROOT = "note-assets";
 /** 小记图片：与桌面同构（quick-notes/assets/{id}/{filename}），URL/同步键仍是 quick-notes/{id}/{file}。 */
@@ -28,6 +29,21 @@ export function bytesToBase64(bytes: Uint8Array): string {
     bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
   return btoa(bin);
+}
+
+/**
+ * 原生资产文件后端可用性（261026）：新 APK 的 AssetSync 提供 writeLocal/readLocal/removeLocal/listLocal，
+ * 把资产读写从 @capacitor/filesystem（base64 + mkdir 桥 + 重试）换成一次原生调用；旧 APK 回退 Filesystem。
+ */
+function nativeAssetFsAvailable(): boolean {
+  try {
+    const p = NativeAssetSync as unknown as Record<string, unknown>;
+    return nativeAssetSyncSupported()
+      && typeof p.writeLocal === "function"
+      && typeof p.readLocal === "function"
+      && typeof p.removeLocal === "function"
+      && typeof p.listLocal === "function";
+  } catch { return false; }
 }
 
 function requireAssetPath(key: string): string {
@@ -62,6 +78,12 @@ export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<
   const base64 = bytesToBase64(bytes);
   recordPerf(assetPerf.b64Encode, Date.now() - encodeStart, bytes.length);
   const writeStart = Date.now();
+  if (nativeAssetFsAvailable()) {
+    // 原生原子写（tmp+fsync+rename、自带 mkdir），不再经过 Filesystem 插件。
+    await NativeAssetSync.writeLocal({ path, data: base64 });
+    recordPerf(assetPerf.fsWrite, Date.now() - writeStart, bytes.length);
+    return;
+  }
   if (parent) {
     await Filesystem.mkdir({ path: parent, directory: Directory.Data, recursive: true }).catch(() => { /* 已存在 */ });
   }
@@ -87,6 +109,16 @@ export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<
 
 export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> {
   const path = requireAssetPath(key);
+  if (nativeAssetFsAvailable()) {
+    const readStart = Date.now();
+    const res = await NativeAssetSync.readLocal({ path });
+    if (!res.exists || typeof res.data !== "string") return null;
+    const decodeStart = Date.now();
+    const bytes = base64ToBytes(res.data);
+    recordPerf(assetPerf.b64Decode, Date.now() - decodeStart, bytes.length);
+    recordPerf(assetPerf.fsRead, Date.now() - readStart, bytes.length);
+    return bytes;
+  }
   try {
     const readStart = Date.now();
     const res = await Filesystem.readFile({
@@ -109,6 +141,10 @@ export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> 
 /** 删除已持久化资产文件（不存在时静默成功）。 */
 export async function removeAssetBytesFs(key: string): Promise<void> {
   const path = requireAssetPath(key);
+  if (nativeAssetFsAvailable()) {
+    await NativeAssetSync.removeLocal({ path });
+    return;
+  }
   try {
     await Filesystem.deleteFile({
       path,
@@ -122,6 +158,12 @@ export async function removeAssetBytesFs(key: string): Promise<void> {
 /** 列出单个普通笔记目录下的资产键（{noteId}/{file}）。 */
 export async function listNoteAssetKeysFs(noteId: string): Promise<string[]> {
   if (!isSafePathSegment(noteId)) return [];
+  if (nativeAssetFsAvailable()) {
+    try {
+      const dir = await NativeAssetSync.listLocal({ path: ROOT + "/" + noteId });
+      return dir.files.filter((name) => isSafePathSegment(name)).map((name) => noteId + "/" + name);
+    } catch { return []; }
+  }
   try {
     const dir = await Filesystem.readdir({ path: `${ROOT}/${noteId}`, directory: Directory.Data });
     return dir.files
@@ -135,6 +177,12 @@ export async function listNoteAssetKeysFs(noteId: string): Promise<string[]> {
 /** 列出单条小记目录下的资产键（quick-notes/{quickNoteId}/{file}）。 */
 export async function listQuickNoteAssetKeysFs(quickNoteId: string): Promise<string[]> {
   if (!isSafePathSegment(quickNoteId)) return [];
+  if (nativeAssetFsAvailable()) {
+    try {
+      const dir = await NativeAssetSync.listLocal({ path: QUICK_ROOT + "/" + quickNoteId });
+      return dir.files.filter((name) => isSafePathSegment(name)).map((name) => "quick-notes/" + quickNoteId + "/" + name);
+    } catch { return []; }
+  }
   try {
     const dir = await Filesystem.readdir({ path: `${QUICK_ROOT}/${quickNoteId}`, directory: Directory.Data });
     return dir.files
@@ -147,6 +195,15 @@ export async function listQuickNoteAssetKeysFs(quickNoteId: string): Promise<str
 
 /** 列出全部已持久化资产键；仅供诊断/缓存统计，同步与保存路径应使用按笔记目录的函数。 */
 export async function listAssetKeysFs(): Promise<string[]> {
+  if (nativeAssetFsAvailable()) {
+    try {
+      const all = await NativeAssetSync.listAllAssets();
+      const keys: string[] = [];
+      for (const [noteId, names] of Object.entries(all.notes ?? {})) for (const name of names) if (isSafePathSegment(noteId) && isSafePathSegment(name)) keys.push(noteId + "/" + name);
+      for (const [noteId, names] of Object.entries(all.quickNotes ?? {})) for (const name of names) if (isSafePathSegment(noteId) && isSafePathSegment(name)) keys.push("quick-notes/" + noteId + "/" + name);
+      return keys;
+    } catch { /* 回退 Filesystem 扫描 */ }
+  }
   const keys: string[] = [];
   let entries: Array<{ name: string; type?: string }> = [];
   try {

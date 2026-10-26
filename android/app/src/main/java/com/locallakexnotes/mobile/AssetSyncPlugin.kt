@@ -305,6 +305,102 @@ class AssetSyncPlugin : Plugin() {
         }
     }
 
+    /**
+     * 本地资产文件读写/删除/列目录（261026）：把移动端资产文件操作从 @capacitor/filesystem 全原生化。
+     * path 只接受 note-assets/... 或 quick-notes/assets/...（filesDir 下 canonical 校验）；data 为 base64。
+     */
+    private fun resolveAssetFsPath(relative: String?): File? {
+        if (relative.isNullOrBlank()) return null
+        if (relative.startsWith("/") || relative.contains('\u0000')) return null
+        if (relative.split('/').any { it == ".." || it == "." || it.isEmpty() }) return null
+        if (!relative.startsWith("note-assets/") && !relative.startsWith("quick-notes/assets/")) return null
+        return try {
+            val root = getContext().filesDir.canonicalFile
+            val target = File(root, relative).canonicalFile
+            if (target.path.startsWith(root.path + File.separator)) target else null
+        } catch (e: Exception) { null }
+    }
+
+    private fun atomicWriteBytes(target: File, bytes: ByteArray) {
+        val parent = target.parentFile ?: throw Exception("资产父目录无效")
+        if (!parent.exists() && !parent.mkdirs()) throw Exception("资产目录创建失败")
+        val tmp = File(parent, target.name + ".tmp-" + java.util.UUID.randomUUID())
+        try {
+            java.io.FileOutputStream(tmp).use { out ->
+                out.write(bytes)
+                out.flush()
+                out.fd.sync()
+            }
+            if (!tmp.renameTo(target)) {
+                if (target.exists() && !target.delete()) throw Exception("旧资产删除失败")
+                if (!tmp.renameTo(target)) throw Exception("资产 rename 失败")
+            }
+        } finally { if (tmp.exists()) tmp.delete() }
+    }
+
+    @PluginMethod
+    fun writeLocal(call: PluginCall) {
+        val target = resolveAssetFsPath(call.getString("path")) ?: run { call.reject("非法资产路径"); return }
+        val data = call.getString("data") ?: run { call.reject("data 必填"); return }
+        ioPool.execute {
+            try {
+                val bytes = android.util.Base64.decode(data, android.util.Base64.DEFAULT)
+                atomicWriteBytes(target, bytes)
+                call.resolve(JSObject().put("size", target.length()))
+            } catch (e: Exception) {
+                Log.e(TAG, "writeLocal failed: " + e.message, e)
+                call.reject("writeLocal failed: " + e.message)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun readLocal(call: PluginCall) {
+        val target = resolveAssetFsPath(call.getString("path")) ?: run { call.reject("非法资产路径"); return }
+        ioPool.execute {
+            try {
+                if (!target.isFile) {
+                    call.resolve(JSObject().put("exists", false))
+                    return@execute
+                }
+                val bytes = target.readBytes()
+                call.resolve(JSObject().put("exists", true).put("data", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)))
+            } catch (e: Exception) {
+                call.reject("readLocal failed: " + e.message)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun removeLocal(call: PluginCall) {
+        val target = resolveAssetFsPath(call.getString("path")) ?: run { call.reject("非法资产路径"); return }
+        ioPool.execute {
+            try {
+                if (target.isFile) target.delete()
+                call.resolve(JSObject().put("ok", true))
+            } catch (e: Exception) {
+                call.reject("removeLocal failed: " + e.message)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun listLocal(call: PluginCall) {
+        val target = resolveAssetFsPath(call.getString("path")?.trimEnd('/')) ?: run {
+            call.reject("非法资产目录")
+            return
+        }
+        ioPool.execute {
+            try {
+                val arr = JSArray()
+                if (target.isDirectory) for (f in target.listFiles() ?: emptyArray()) if (f.isFile && !f.name.startsWith(".tmp-")) arr.put(f.name)
+                call.resolve(JSObject().put("files", arr))
+            } catch (e: Exception) {
+                call.reject("listLocal failed: " + e.message)
+            }
+        }
+    }
+
     /** 某条小记的本地图片清单（filename/size/sha256；quick-notes/assets/<id>）。 */
     @PluginMethod
     fun listQuickAssets(call: PluginCall) {
