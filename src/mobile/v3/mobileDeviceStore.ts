@@ -6,6 +6,7 @@ import type { MobileDb } from "../data/sqliteDb.js";
 import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readQuickNoteBody, writeNoteBody, writeQuickNoteBody } from "../data/noteBodies.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
+import { nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
 import { createNote, saveNote } from "../data/noteRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import { HISTORY_SNAPSHOT_PROTECT_DAYS } from "../../core/syncEngineTypes.js";
@@ -426,6 +427,13 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   /** 单条推送记账（I2）：内容 hash 未变才清 dirty，同时清显式恢复标记。 */
   async markQuickNoteSynced(id: string, expectedContentHash: string): Promise<void> {
     await this.db.prepare("UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id=? AND content_hash=?").run(id, expectedContentHash);
+  }
+
+  /** P0-4：原生流式资产的 localKey（相对 note-assets 根，如 `<id>/<file>`）；非原生平台返回 null。 */
+  async assetNativePath(id: string, filename: string): Promise<string | null> {
+    if (!nativeAssetSyncSupported()) return null;
+    if (!/^[A-Za-z0-9._-]+$/.test(id) || !/^[A-Za-z0-9._-]+$/.test(filename)) return null;
+    return id + "/" + filename;
   }
 
   /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清 v3_state 标记 + DB cloud_deleted 投影。 */

@@ -3,6 +3,7 @@ import type { SyncSettings, SyncWarning } from "../../lib/types";
 import { bridge } from "../bridge";
 import { writeSyncSettings } from "../sync/syncSettingsStore";
 import { describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyncStatus } from "../sync/syncStatusStore";
+import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 
 const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
 
@@ -13,6 +14,7 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
   const [warnings, setWarnings] = useState<SyncWarning[]>([]);
   const [supersededNotes, setSupersededNotes] = useState<Array<{ id: string; title: string }>>([]);
   const [lastSync, setLastSync] = useState<MobileSyncStatus | null>(() => readSyncStatus());
+  const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
 
   useEffect(() => {
     if (!open) return;
@@ -20,6 +22,7 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
   }, [open]);
 
   useEffect(() => subscribeSyncStatus(() => setLastSync(readSyncStatus())), []);
+  useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
 
   const updateSyncSettings = useCallback((patch: Partial<SyncSettings>) => {
     setSyncSettings((current) => {
@@ -47,6 +50,7 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     syncSettings,
     updateSyncSettings,
     syncMsg,
+    syncProgressText: describeSyncProgress(syncProgress),
     warnings,
     supersededNotes,
     lastSync,

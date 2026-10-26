@@ -15,6 +15,7 @@ import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
 import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
+import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
 
 export interface MobileSyncResult {
   message: string;
@@ -94,6 +95,21 @@ export async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutc
   };
 }
 
+
+/** 派生搜索索引的后台重建（去抖、串行、失败静默；P0-5）。 */
+let searchReconcileTimer: ReturnType<typeof setTimeout> | null = null;
+let searchReconcileRunning = false;
+function scheduleSearchReconcile(db: import("../data/sqliteDb.js").MobileDb): void {
+  if (searchReconcileTimer) clearTimeout(searchReconcileTimer);
+  searchReconcileTimer = setTimeout(() => {
+    searchReconcileTimer = null;
+    if (searchReconcileRunning) return;
+    searchReconcileRunning = true;
+    void reconcileIndex(db)
+      .catch((error) => console.warn("[sync] 后台搜索索引重建失败（下次同步再试）", error))
+      .finally(() => { searchReconcileRunning = false; });
+  }, 1500);
+}
 
 export const syncDomain = {
   async addS3GcPending(key: string): Promise<void> {
@@ -225,14 +241,20 @@ export const syncDomain = {
       return { message: cloudStateHint("offline") ?? "云同步已关闭", notes: null, quickNotes: null };
     }
     try {
+      beginSyncProgress();
       const result = await runMaintenance("syncNow", async () => {
         const cfg = await syncDomain.getS3Settings();
         if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
         try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
         const d = await ensureDb();
         const progress: Array<{ phase: string; ms: number }> = [];
-        const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, { onPhase: (phase, ms) => progress.push({ phase, ms }) });
-        try { await reconcileIndex(d); } catch { /* 派生索引失败不影响同步结果 */ }
+        const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, {
+          onPhase: (phase, ms) => progress.push({ phase, ms }),
+          onProgress: (p) => pushSyncProgress(p),
+        });
+        // P0-5：全文索引（text_cache/FTS reconcile）不进同步关键路径——首拉先把正文/行落库让文档可打开，
+        // 派生索引在后台队列构建（失败只影响搜索，不回滚同步结果）。
+        scheduleSearchReconcile(d);
         const message = v3.warningDetails.length > 0
           ? `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}（${v3.warningDetails.length} 项被跳过）`
           : `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
@@ -248,6 +270,8 @@ export const syncDomain = {
     } catch (error) {
       writeSyncStatus({ at: new Date().toISOString(), ok: false, message: (error as Error)?.message ?? String(error) });
       throw error;
+    } finally {
+      endSyncProgress();
     }
   },
 

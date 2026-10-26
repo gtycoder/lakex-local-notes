@@ -67,6 +67,11 @@ export interface S3v3DeviceStore {
    *  并清掉显式恢复标记。未实现时引擎退回 saveState（整表投影，可能误清新条目的待同步角标）。 */
   markQuickNoteSynced?(id: string, expectedContentHash: string): Promise<void>;
 
+  /** 资产在本机「原生资产根」下的相对路径（可选，P0-4）；不支持时返回 null ⇒ 走 JS 字节路径。
+   *  移动端 = note-assets 根下的 `<id>/<filename>`（原生 AssetSync getFile/putFile 的 localKey 语义）；
+   *  桌面端不实现（本机写盘已经很快，不需要绕过 JS）。 */
+  assetNativePath?(id: string, filename: string): Promise<string | null>;
+
   /** 轻量持久化同步标记（可选）：单条推送等「不走整轮 saveState」的路径用它清理 remotePurged/restorePending，
    *  并同步 DB 侧投影（cloud_deleted），避免 sidecar/DB 残留已恢复 id 的「云端已删除·仅本地」标记。 */
   persistSyncMarkers?(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void>;

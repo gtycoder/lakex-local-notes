@@ -13,6 +13,20 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261026 · S3 v3 首拉性能 + 进度 UI（分支 `fix/s3v3-perf`，基于 `7f329011`）
+
+> 输入 = 真机首拉 39 分钟（资产 26min + 应用 13min）+ `SIYUAN-SYNC-BORROW.md`。目标：1.6GB 首拉 5–10 分钟、文档先出来、进度可见。分两笔提交（`3c67360d` + 本笔）。
+
+- **P0-1 全局下载流水线**：新增 core `s3v3Transfer.runTransferPipeline`（对象级任务、失败隔离、完成即回调）；正文/声明/资产统一进同一调度器（`downloadConcurrency` 默认 20，可配），删掉「按篇 runPool + 逐篇 barrier」；增量同步先并发预取正文/声明再应用，资产登记后统一 flush。
+- **P0-2 文档先出来**：`pullAll` 正文按 100 篇分块下载并**分块 saveState**（文档/目录先可打开），小记等图片就绪再落库，资产在应用之后跑；适配器对「正文未到」的新条目先跳过建行。
+- **P0-3 桌面资产下载即落盘**：`DesktopStoreDevice.writeAsset` 直接写 `noteAssetsPathFor`（不依赖 DB 行、不再内存 stage 整轮 1.7GB），`importRemoteNote` 传空 assets（文件已就位）。
+- **P0-4 移动原生资产直传**：`S3v3Remote` 增可选 `getToFile/putFromFile`、`S3v3DeviceStore` 增可选 `assetNativePath`；引擎资产下载/上传优先走原生（移动端 `NativeAssetSync.getFile/putFile`，字节不过 JS/Capacitor 桥、原生做 size+sha256 校验），仅 Lake 资产（`assets/`）生效，小记/桌面自动回退字节路径。
+- **P0-5 移动派生索引延后（部分）**：`bridge.syncNow` 不再 `await reconcileIndex`，改为去抖后台重建（失败只影响搜索）；正文/行仍按批落库。**未做**：createNote 的 text_cache 逐篇计算仍在 apply 路径（需再拆「行快速写入 + text_cache 后台回填」）。
+- **P0-6 进度事件 + UI**：引擎 `onProgress({phase,done,total,bytesDone,bytesTotal})`（metadata/bodies/apply/declarations/assets/finalize）；移动 `syncProgressStore` 节流（≥250ms 或 ≥1%）转发；设置页同步卡显示「阶段 + 已/总 + 字节」，首页云同步按钮的 title/aria-label 同步显示（不改 5 槽构图）。桌面引擎进度已可用，UI 接线下一步（SyncStatusPopover）。
+- **测试**：`perfPipeline.test.ts`（并发峰值 12–20、进度到齐、正文落库早于资产写盘、桌面资产立即写盘）、`nativeAssetTransfer.test.ts`（原生下载/上传不产生资产字节 GET/PUT；unsupported 回退）、`syncProgressStore.test.ts`（节流/文案）。既有契约测试全过：零变更只读 pointer、改 5 篇资产 GET=0、缺正文/删除/恢复/小记单条推送。
+- **门禁**：tsc 0；定向 vitest 51 文件 188 passed/8 skipped（`mobileCloudDeleted` 2 例为 HEAD 既有失败）；桌面+移动 `vite build` ✓；`git diff --check` ✓。
+- **未做/待真机**：真机首拉复测（预期资产 13→40–80 文件/s、正文应用不再串行、文档先可打开）；移动应用批量化（text_cache 延后回填）；移动首页可见进度条（当前仅 title + 设置卡）；按需资产（首拉不搬媒体）仍列为下一步 P1。
+
 ### 261026 · S3 v3 遗留收尾（分支 `fix/s3v3-rem`，基于 `f3c3585f`）
 
 > 输入 = PARITY 审计剩余 P1/P2 + 上一批 HANDOFF「仍缺」。本批 6 项，全部带回归；不改协议布局。

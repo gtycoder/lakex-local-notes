@@ -204,7 +204,7 @@ export class S3v3SyncEngine {
   private readonly transferConcurrency: number;
   private readonly downloadConcurrency: number;
   private phaseStart = 0;
-  private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes: Uint8Array; gzip?: boolean }> = [];
+  private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes?: Uint8Array; fromFile?: string; gzip?: boolean }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
   private warnings: string[] = [];
   private warningDetails: SyncWarning[] = [];
@@ -1307,17 +1307,24 @@ export class S3v3SyncEngine {
     // 不读本地字节；只有新增/改名的附件才 readAsset。增量时改一篇带 100 张图的文档也只读新图。
     const remoteByName = new Map((remoteDecl?.assets ?? []).map((a) => [a.filename, a] as const));
     const entries: AssetDeclaration["assets"] = [];
-    const toUpload: Array<{ filename: string; bytes: Uint8Array }> = [];
+    const toUpload: Array<{ filename: string; bytes: Uint8Array; nativePath?: string | null }> = [];
     for (const filename of filenames) {
       const known = remoteByName.get(filename);
       if (known) { entries.push(known); continue; }
       const bytes = space === "lake" ? await this.device.readAsset(id, filename) : await this.device.readQuickAsset(id, filename);
       if (!bytes) continue;
       entries.push({ filename, size: bytes.length, hash: sha256Hex(bytes) });
-      toUpload.push({ filename, bytes });
+      // P0-4：Lake 资产上传时若有原生流式能力，登记「本地路径」而不是把字节留在内存/过桥。
+      let nativePath: string | null = null;
+      if (space === "lake" && this.remote.putFromFile && this.device.assetNativePath) {
+        try { nativePath = await this.device.assetNativePath(id, filename); } catch { nativePath = null; }
+      }
+      toUpload.push({ filename, bytes, nativePath });
     }
     for (const a of toUpload) {
-      this.uploadOps.push({ space, noteId: id, key: space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename), bytes: a.bytes });
+      const key = space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename);
+      if (a.nativePath) this.uploadOps.push({ space, noteId: id, key, fromFile: a.nativePath });
+      else this.uploadOps.push({ space, noteId: id, key, bytes: a.bytes });
     }
     return buildAssetDeclaration(entries);
   }
@@ -1327,6 +1334,13 @@ export class S3v3SyncEngine {
     const ops = this.uploadOps;
     this.uploadOps = [];
     const { errors } = await runPoolSettled(ops, this.transferConcurrency, async (op) => {
+      // P0-4：有原生流式上传能力时只传 key + 本地相对路径（字节不过 JS 桥）；否则回退字节路径。
+      if (op.fromFile && this.remote.putFromFile) {
+        try {
+          if (await this.remote.putFromFile(op.key, op.fromFile, op.gzip ? { gzip: true } : undefined)) return;
+        } catch { /* 回退字节路径 */ }
+      }
+      if (!op.bytes) throw new Error("上传任务缺少字节/原生文件路径: " + op.key);
       await this.remote.put(op.key, op.bytes, op.gzip ? { gzip: true } : undefined);
     });
     const failed = new Map<string, string>();
@@ -1406,6 +1420,25 @@ export class S3v3SyncEngine {
     const bytesTotal = tasks.reduce((sum, t) => sum + (Number.isFinite(t.size) ? t.size : 0), 0);
     this.phase("assets");
     const result = await runTransferPipeline(tasks, this.downloadConcurrency, async (t) => {
+      // P0-4：原生流式下载（移动端 OkHttp 直写文件 + 原生 size/sha256 校验，字节不过 JS 桥）。
+      if (t.space === "lake" && this.remote.getToFile && this.device.assetNativePath) {
+        try {
+          const dest = await this.device.assetNativePath(t.noteId, t.filename);
+          if (dest) {
+            const status = await this.remote.getToFile(t.key, dest, { size: t.size, sha256: t.hash });
+            if (status === "ok") return t.size;
+            if (status === "missing") {
+              this.warn("缺附件: " + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+              return 0;
+            }
+            if (status === "corrupt") {
+              this.warn("附件校验失败: " + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+              return 0;
+            }
+            // unsupported → 回退下面的字节路径
+          }
+        } catch { /* 原生路径异常 → 回退字节路径，保证可用性 */ }
+      }
       const bytes = await this.remote.get(t.key);
       if (!bytes) {
         this.warn((t.space === "lake" ? "缺附件: " : "缺小记图片: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });

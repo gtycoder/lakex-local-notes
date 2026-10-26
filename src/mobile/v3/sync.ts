@@ -31,6 +31,8 @@ export interface MobileV3SyncOptions {
   emptyCloud?: "upload" | "stay" | "throw";
   /** 阶段耗时回调（bridge 收集成结构化进度，供设置页展示；与桌面 onPhase 同源）。 */
   onPhase?: (phase: string, ms: number) => void;
+  /** 结构化进度（阶段 + 计数 + 字节；由 bridge 节流转发到 UI）。 */
+  onProgress?: (progress: import("../../core/s3v3Engine.js").S3v3Progress) => void;
 }
 
 export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts: MobileV3SyncOptions = {}): Promise<S3v3SyncReport> {
@@ -42,6 +44,9 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
     onPhase: (phase, ms) => {
       if (ms >= 2000) console.warn(`[v3][slow] ${phase} ${ms}ms`);
       try { opts.onPhase?.(phase, ms); } catch { /* UI 回调自行负责 */ }
+    },
+    onProgress: (progress) => {
+      try { opts.onProgress?.(progress); } catch { /* UI 回调自行负责 */ }
     },
   });
   let mode: "upload" | "stay" | "throw" = opts.emptyCloud ?? "upload";

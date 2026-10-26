@@ -25,6 +25,7 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
+import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 import { escapeId } from "../../lib/cssEscape";
 import { HOME_TABS, pagerScrollLeft, settledIndex, tabAt, tabIndex } from "./tabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
@@ -135,6 +136,9 @@ export function HomePage(props: HomePageProps) {
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [tagSheetFor, setTagSheetFor] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
+  const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
+  useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
   const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
@@ -598,7 +602,12 @@ export function HomePage(props: HomePageProps) {
         ) : (
           <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
         )}
-        <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
+        <button
+          className="toolbar__button"
+          onClick={() => void runSync()}
+          aria-label={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
+          title={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
+        ><CloudUpload /></button>
       </header>
 
       <div

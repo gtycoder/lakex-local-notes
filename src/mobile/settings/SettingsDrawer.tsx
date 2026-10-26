@@ -99,6 +99,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     syncSettings: syncCfg,
     updateSyncSettings,
     syncMsg,
+    syncProgressText,
     warnings: syncWarnings,
     supersededNotes: syncSuperseded,
     lastSyncText,
@@ -447,6 +448,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     </div>
                     {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
                     {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
+                    {syncProgressText && <div className="mb-set-item__desc" aria-live="polite">{syncProgressText}</div>}
                     {/* 常驻：上次同步的时间/结果/失败原因（自动同步的失败也在这里看得到；云同步关闭时另加一句说明） */}
                     <div className="mb-set-item__desc">
                       上次同步：{lastSyncText}

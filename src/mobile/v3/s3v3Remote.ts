@@ -2,6 +2,7 @@ import type { RemoteObjectInfo, S3v3Remote, S3v3Settings } from "../../core/s3v3
 import { isGzipMetadataKey } from "../../core/s3v3Keys.js";
 import { assertSafeKey, isGzip, isNoSuchKey, normalizeEndpoint } from "../../core/syncUtils.js";
 import { createMobileS3Client } from "../native/s3Store.js";
+import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
 
 /**
  * 移动端 S3v3Remote：v3 引擎 ↔ @aws-sdk/client-s3 + CapacitorHttpHandler。
@@ -22,6 +23,49 @@ async function compressGzip(bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 type S3ClientLike = { send(command: unknown): Promise<unknown> };
+
+/**
+ * 挂载原生流式资产传输（P0-4）：字节不经过 JS/Capacitor 桥。
+ * - 只对 Lake 资产键 `assets/<id>/<file>` 生效（原生 AssetSync 的 localKey 根就是 note-assets，
+ *   小记资产在 quick-notes/assets 子树外，走 JS 路径）；
+ * - 每次调用前确保 configure 完成；404/校验失败由原生返回，语义与 JS 端口一致。
+ */
+function attachNativeAssetTransfer(remote: S3v3Remote, cfg: { endpoint: string; region: string; bucket: string; accessKeyId: string; secretAccessKey: string; forcePathStyle?: boolean }, full: (key: string) => string): void {
+  if (!nativeAssetSyncSupported()) return;
+  let configured: Promise<boolean> | null = null;
+  const ensure = (): Promise<boolean> => {
+    if (!configured) {
+      configured = NativeAssetSync.configure({
+        endpoint: normalizeEndpoint(cfg.endpoint), region: cfg.region?.trim() || "cn-east-1",
+        bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey,
+        forcePathStyle: false,
+      }).then(() => true).catch(() => false);
+    }
+    return configured;
+  };
+  remote.getToFile = async (key, destPath, expected) => {
+    if (!key.startsWith("assets/")) return "unsupported";
+    if (!(await ensure())) return "unsupported";
+    try {
+      const res = await NativeAssetSync.getFile({
+        key: full(key), localKey: destPath,
+        expectedSize: expected.size, expectedSha256: expected.sha256,
+      });
+      if (res.status === 404) return "missing";
+      if (res.status === "corrupt") return "corrupt";
+      if (res.status === "ok" || res.status === 200) return "ok";
+      return "unsupported";
+    } catch { return "unsupported"; }
+  };
+  remote.putFromFile = async (key, localPath) => {
+    if (!key.startsWith("assets/")) return false;
+    if (!(await ensure())) return false;
+    try {
+      const res = await NativeAssetSync.putFile({ key: full(key), localKey: localPath });
+      return res.status >= 200 && res.status < 300;
+    } catch { return false; }
+  };
+}
 
 export function createS3v3RemoteWithClient(client: S3ClientLike, bucket: string, prefix: string): S3v3Remote {
   const cleanPrefix = prefix.replace(/^\/+|\/+$/g, "");
@@ -97,7 +141,10 @@ export function createMobileS3v3Remote(settings: S3v3Settings): S3v3Remote {
     return client;
   };
   const lazyClient: S3ClientLike = { send: async (command) => (await getClient()).send(command) };
-  return createS3v3RemoteWithClient(lazyClient, settings.bucket, settings.prefix);
+  const cleanPrefix = settings.prefix.replace(/^\/+|\/+$/g, "");
+  const remote = createS3v3RemoteWithClient(lazyClient, settings.bucket, settings.prefix);
+  attachNativeAssetTransfer(remote, settings, (key) => (cleanPrefix ? cleanPrefix + "/" + key : key));
+  return remote;
 }
 
 export function mobileS3v3Endpoint(settings: S3v3Settings): string {
