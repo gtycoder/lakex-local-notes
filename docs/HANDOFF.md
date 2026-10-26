@@ -13,6 +13,17 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261026 · S3 v3 parity 补齐（分支 `fix/s3v3-parity`，基于 `5c88da5b`）
+
+> 输入 = 旧新逐项审计 `/tmp/lake-ab/deliverables/PARITY-OLD-VS-V3.md` 的剩余 P0/P1。本批补 5 项 + 桌面端 1 项可选能力，不改协议布局、不做数据迁移，全部带 vitest 回归。
+
+- **B6 回收站附件惰性补拉（v3 原生）**：新增 `src/core/s3v3AssetBackfill.ts`：pointer → 对应空间索引 → 该条 `assetsHash` → 声明对象（校验 declHash）→ 本地 size+sha256 差集 → 只对缺失/损坏者 GET 并按 size+sha256 校验落盘（`force` 供恢复强拉）。桌面 `ensureTrashNoteAssets` 改走它（不再读 v3 从不写的 `declared_assets`）；移动 `downloadDeclaredAssetsFor` 同步改走 v3（`createMobileS3v3Remote` + assetFs 端口）。回归 `trashAssetBackfill.test.ts`（删本地附件后补拉成功）、`s3v3AssetBackfill.test.ts`（跳过/补下/校验失败/无 pointer/声明被篡改）。
+- **F3/F4 深度清理保护**：`deepCleanup` 增 `extraKeep` / `retentionDays`（默认 7 天；<=0 = 立即到期）/ `now`，并新增「每空间保留最近一个未引用索引（上一版）」；provider 不返回 `lastModified` 时保守保留；`runV3DeepCleanup` 注入本机历史引用（`store.listNoteIdsWithHistory/getProtectedRefs`）与 `getS3GcSettings().gcRetentionDays`。回归 `deepCleanupWindow.test.ts`（历史引用不删、窗口内不删、窗口外删、上一版索引保留、dryRun 不删、retentionDays=0 语义）。
+- **E2 小记单条推送**：引擎新增 `pushQuickNote`（读 pointer/quick 索引 → 只替换该条 → 上传正文/图片 → 取锁 → CAS 复核 pointer → 写索引 → 写 pointer（lake commit 不动，generation+1）→ 读回校验 → `markQuickNoteSynced` + baseline）。桌面 `sync_quick_note` 与移动 `bridge.pushSingleQuickNote` 改走它；两条退回整轮路径保留且显式返回 `full-sync`（no-cloud / no-baseline / cloud-changed / remote-deleted）。回归 `quickPushSingle.test.ts`（其余条目/标签逐字节不变、lake 不动、重复推送 unchanged、三类 fallback）。
+- **F1 移动端历史快照**：`mobileDeviceStore.writeHistory` 接 `historyRepository.createHistorySnapshot`（Lake 文档，保护 30 天；小记按产品定稿返回 `quick-note-history-skip`），`archiveBody` 同步生效。回归 `historySnapshot.test.ts`。
+- **C8 小记冲突副本（桌面）**：`S3v3DeviceStore` 增可选 `archiveQuickNote`；引擎在「双端同改、远端胜出」时先把本地版本归档进小记回收站（`QuickNotesStore.archiveLocalToTrash`：新 id、纯本地、恢复后是一条新小记），不再依赖对小记无实际作用的 `createHistorySnapshot`。移动端未实现该端口（产品定稿：小记不留副本）。
+- **门禁（本分支）**：tsc 0 · 定向 vitest（`electron/s3v3` + `src/core/s3v3` + `src/mobile/v3` + 相关 core/ipc = 43 文件 / 198 passed / 8 skipped）· `mobileCloudDeleted.test.ts` 2 例为**既有失败**（HEAD 同样红，非本批引入）· 桌面 + 移动 `vite build` ✓ · `git diff --check` ✓。
+
 ### 261026 · S3 v3 生产化修复（分支 `fix/s3v3-prod`，基于 `fix/s3v3-p1` 1287d2af）
 
 > 输入 = 真实用户 A/B 实测（`/tmp/lake-ab/deliverables/AB-REPORT-V3-REAL-USER.md`）+ 旧新逐项对照审计（`/tmp/lake-ab/deliverables/PARITY-OLD-VS-V3.md`）。本批只做 P0/高价值缺口，全部有 vitest 回归。
@@ -24,7 +35,8 @@
 - **P0 资源页「缺正文 → 从云端拉回」（B5）**：`restoreMissingBodyFromCloud` 原实现读旧 `manifests/latest.json`（v3 永不写 ⇒ 永远 not-in-cloud）。改为读 v3 pointer→lake 索引→内容寻址正文并校验 sha256；支持注入 remote 供测试。回归 `parity.test.ts`（成功/hash 不符/条目不存在）。
 - **P1 崩溃追赶放大（R4，根因已定位）**：真实故障 = kill -9 落在 initialUpload「pointer 已写、baseline 未写」窗口 ⇒ 重启走 `pullAll`；旧实现无条件 GET 全部正文+附件（实测 B 一轮 22,115 GET/1.37GB/423s）。**数据侧**修复：`pullAll` 对 state 里已有的条目按 contentHash 复用本地正文；资产走差集（声明仍读、字节不重下）。根因二：崩溃重发布使大批条目元数据漂移 ⇒ 每篇 `applyRemote` 触发整篇资产刷新（40,152 次 asset GET、只有 8 次正文）⇒ 由资产差集 + 声明缓存消掉。回归 `pullAllDiff.test.ts`（删 baseline 模拟崩溃：整轮 0 正文/资产 GET）。
 - **对齐旧协议的缺失行为（本批已补）**：编辑锁字段级 LWW（锁变更不 bump updatedAt，原先跨端不传播；`s3v3Merge` + 双端 e2e 回归）；元数据变更不再重传同 hash 正文；同步进度阶段（`load-state/read-index/downloads/uploads/publish-*/pending` → SyncProgress download/upload/manifest，首拉不再只有 connect→done）；冲突留档回执（`S3v3SyncReport.supersededNotes` → `SyncResult.conflicts/supersededNotes`，UI 冲突清单恢复）。
-- **仍缺（按 PARITY 审计，P0/P1 未完成，下一批）**：① 回收站附件惰性补拉（B6）仍读 `store.listDeclaredAssets`（v3 不写该表 ⇒ 空操作）；② 深度清理无"上一版索引/history 引用"保护与年龄窗口（F3/F4，可能删历史图片）；③ 小记单条推送仍退化为整轮（E2）；④ 小记/ lake 墓碑不携带删除前内容（D2/D3/E4，产品语义待确认）；⑤ 移动端 `archiveBody/writeHistory` no-op（移动端冲突留档仍缺）；⑥ 目录恢复不可传播（D4）、父目录回落/环检测（C4/C5）；⑦ 移动端 qnotes 缺正文恢复入口未接 v3。
+- **后续批次已补（见下方 `fix/s3v3-parity`）**：B6 回收站附件惰性补拉、F3/F4 深度清理 history 引用/上一版索引/年龄窗口、E2 小记单条推送、F1 移动端历史快照、C8 小记冲突副本（桌面）。
+- **仍缺（PARITY 审计 P1/P2，待排期）**：① 小记/ Lake 墓碑不携带删除前内容（D2/D3/E4，产品语义待确认）；② 目录恢复不可传播（D4）、父目录回落/环检测（C4/C5）；③ 移动端 qnotes 缺正文恢复入口未接 v3；④ 移动端小记冲突副本（C8 桌面已做）；⑤ 移动端云清理 `gcDeepCleanup` 仍走旧 manifest 路径（v3 下恒 0）。
 - **门禁**：tsc 0 · 定向 vitest（s3v3/移动 v3/相关 core）通过（`mobileCloudDeleted.test.ts` 2 例为**既有失败**，HEAD 同样红，非本批引入）· 桌面+移动 `vite build` ✓ · `git diff --check` ✓。
 
 ### 261026 · S3 v3 P1 修复 + 口径定稿（分支 `fix/s3v3-p1`，基于 `feat/s3-v3` ba8f185c）

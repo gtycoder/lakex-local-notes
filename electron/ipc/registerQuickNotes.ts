@@ -1,6 +1,6 @@
 import { MAX_QUICK_NOTE_ATTACHMENT_BYTES, MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "../quickNotes.js";
 import { convertQuickNoteToLake } from "../quickNoteConversion.js";
-import { syncNowViaEngine } from "../syncEngineController.js";
+import { pushQuickNoteViaEngine } from "../syncEngineController.js";
 import { S3v3S3Remote } from "../s3v3/s3Remote.js";
 import { fetchQuickNoteFromV3 } from "../s3v3/quickNotesRecovery.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
@@ -96,11 +96,10 @@ export function registerQuickNotesIpc(
     if (!settings) throw new Error("请先保存 S3 配置");
     const state = cloudStateOf(true, store.getSyncSettings());
     if (!canTouchNetwork(state)) throw new Error(cloudStateHint(state) ?? "云同步已关闭：不会联网");
-    // v3：单条推送用整轮 v3 同步兜底（同一设备/索引串行；先检查本地是否存在）。
-    {
-      try { quickNotes.readQuickNote(id); } catch { return { status: "not-found" } satisfies QuickNotePushOutcome; }
-      await enqueueMaintenance(async () => { await syncNowViaEngine(store, undefined); });
-      return { status: "pushed", uploadedContent: true, uploadedAssets: 0, unchanged: false, manifestId: null } satisfies QuickNotePushOutcome;
-    }
+    // v3 单条推送（parity E2）：只 upsert 这一条，其余条目/标签/墓碑在云端逐字段不变。
+    // 两条退回整轮的路径（云端无 pointer / 无基线 / 基线不同代；远端墓碑且本机无恢复标记）
+    // 由 pushQuickNoteWithV3 内部执行一次整轮并如实回传 full-sync（不静默降级）。
+    try { quickNotes.readQuickNote(id); } catch { return { status: "not-found" } satisfies QuickNotePushOutcome; }
+    return enqueueMaintenance(() => pushQuickNoteViaEngine(store, id));
   });
 }

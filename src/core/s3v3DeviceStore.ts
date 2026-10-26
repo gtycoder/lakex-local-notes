@@ -62,4 +62,13 @@ export interface S3v3DeviceStore {
   readQuickAsset(id: string, filename: string): Promise<Uint8Array | null>;
   writeQuickAsset(id: string, filename: string, bytes: Uint8Array): Promise<void>;
   deleteQuickAssetsDir(id: string): Promise<void>;
+
+  /** 单条推送后的记账（可选）：仅当本地内容仍等于 expectedContentHash 时才标已同步（I2 守卫），
+   *  并清掉显式恢复标记。未实现时引擎退回 saveState（整表投影，可能误清新条目的待同步角标）。 */
+  markQuickNoteSynced?(id: string, expectedContentHash: string): Promise<void>;
+
+  /** 小记冲突副本（可选，parity C8）：双端同改、远端胜出时把本地版本归档进小记回收站
+   *  （旧协议 archiveLocalQuickNoteToTrash 语义：新 id、纯本地、恢复后是一条新小记）。
+   *  未实现时退化为历史快照尝试（桌面）或不留副本（移动端产品定稿：小记无历史快照）。 */
+  archiveQuickNote?(id: string): Promise<void>;
 }

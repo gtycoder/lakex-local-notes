@@ -10,15 +10,14 @@ import type { Store } from "./store.js";
 import { ObjectStore } from "./s3Store.js";
 import type { SyncProgress, SyncResult } from "./syncTypes.js";
 import { sha256Hex, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
-import { downloadNoteAssets } from "../src/core/syncAssets.js";
-import type { SyncReport } from "../src/core/syncEngineTypes.js";
 import { S3V3_POINTER_KEY, indexKey, lakeBodyKey } from "../src/core/s3v3Keys.js";
+import { backfillV3Assets, type AssetBackfillPort } from "../src/core/s3v3AssetBackfill.js";
+import type { QuickNotePushOutcome } from "../src/core/quickNoteSyncTypes.js";
 import { parseLakeIndexBytes } from "../src/core/s3v3Index.js";
 import { validatePointer, type S3v3Pointer } from "../src/core/s3v3Types.js";
 import { S3v3S3Remote } from "./s3v3/s3Remote.js";
 import type { S3v3Remote } from "./s3v3/ports.js";
 import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
-import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
 import { perfMessage } from "../src/core/logFormat.js";
 
@@ -49,56 +48,68 @@ export async function syncNowViaEngine(
 }
 
 /**
- * 下载某笔记的 declared 资产（惰性下载补偿）。best-effort：无 S3 配置/资源缺失/网络失败
- * 一律返回 warnings、不抛错（恢复/预览都不被下载阻塞）。
- * @param onlyMissing 只下载本地缺失的资源（预览用，已有文件不重复拉）
+ * 单条小记推送入口（「保存并同步」）：与整轮同步共用 v3 串行门（同一设备 sidecar/指针不得并发写）。
+ * 内部只 upsert 一条；遇到「必须整轮」的情形（云端无 pointer/无基线/不同代，或远端墓碑未恢复）
+ * 会执行一次整轮并回传 full-sync（不静默降级）。
  */
-async function downloadDeclaredAssets(
+export async function pushQuickNoteViaEngine(store: Store, id: string): Promise<QuickNotePushOutcome> {
+  return serializedV3(async () => {
+    const { pushQuickNoteWithV3 } = await import("./s3v3/desktopSync.js");
+    return pushQuickNoteWithV3(store, id);
+  });
+}
+
+/**
+ * 回收站预览 / 恢复的后台补拉：只补云端声明、本地缺失/损坏的资产（**v3 原生路径**）。
+ *
+ * 旧实现读本地 `declared_assets` 表，而 v3 从不写该表（声明是独立的内容寻址对象）⇒ 空操作。
+ * 现在：pointer → lake 索引 → 该篇 assetsHash → 声明对象 → 本地差集（同名+同 size+同 sha256 跳过）
+ * → 按需 GET + size/sha256 校验后落盘。best-effort：无配置/关云同步/网络失败一律只回 warnings。
+ */
+export async function ensureTrashNoteAssets(
   store: Store,
   id: string,
-  onlyMissing: boolean,
-  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore,
+  deps: { remote?: S3v3Remote; force?: boolean } = {},
 ): Promise<{ warnings: string[]; skipped?: CloudState }> {
   const warnings: string[] = [];
   const settings = store.getS3Settings();
-  // 单一判据：没配置 或 关了云同步 ⇒ 一律不出网（用户 261006：关闭云同步 = 当作纯离线本地空间）。
-  const state = cloudStateOf(!!settings, store.getSyncSettings());
-  if (!settings || !canTouchNetwork(state)) return { warnings, skipped: state };
-  try {
+  if (!deps.remote) {
+    if (!settings) return { warnings, skipped: "unconfigured" };
+    // 单一判据：没配置 或 关了云同步 ⇒ 一律不出网（用户 261006：关闭云同步 = 纯离线本地空间）。
+    const state = cloudStateOf(true, store.getSyncSettings());
+    if (!canTouchNetwork(state)) return { warnings, skipped: state };
     validateS3Settings(settings);
-    const remote = createRemote(settings, store.logScopes);
-    await remote.test();
-    const cfg = syncConfigFromStore(store);
-    const s3Store = createS3StoreAdapter(remote, cfg.prefix);
-    const dbPort = createStoreSyncPort(store);
-    let assets = store.listDeclaredAssets(id);
-    if (onlyMissing) {
-      const dir = store.noteAssetsPathFor(id);
-      assets = assets.filter((a) => !fs.existsSync(path.join(dir, a.filename)));
-    }
-    if (assets.length === 0) return { warnings };
-    const report: SyncReport = {
-      pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
-      warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
-      trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
-    };
-    await downloadNoteAssets(cfg, s3Store, dbPort, id, assets, report, false);
-    // 回收站恢复/预览的补拉对外仍是 string[]（TrashPanel 直接展示）；结构化只用于 SyncResult。
-    warnings.push(...report.warnings.map((w) => w.message));
+  }
+  const remote = deps.remote ?? new S3v3S3Remote({
+    endpoint: settings!.endpoint, region: settings!.region, bucket: settings!.bucket,
+    accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
+    prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
+  });
+  const port: AssetBackfillPort = {
+    listLocal: async (noteId) => {
+      try { return (await fs.promises.readdir(store.noteAssetsPathFor(noteId))).filter((f) => !f.includes(".tmp")); } catch { return []; }
+    },
+    readLocal: async (noteId, filename) => {
+      try { return new Uint8Array(await fs.promises.readFile(path.join(store.noteAssetsPathFor(noteId), filename))); } catch { return null; }
+    },
+    writeLocal: async (noteId, filename, bytes) => {
+      const dir = store.noteAssetsPathFor(noteId);
+      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.writeFile(path.join(dir, filename), Buffer.from(bytes));
+    },
+  };
+  const startedAt = Date.now();
+  try {
+    const result = await backfillV3Assets(remote, "lake", id, port, { force: deps.force });
+    warnings.push(...result.warnings);
+    store.logScopes.sync.info(perfMessage("v3.asset-backfill", Date.now() - startedAt, {
+      noteId: id, found: result.found, downloaded: result.downloaded, skipped: result.skipped,
+      missing: result.missing.length, failed: result.failed.length,
+    }));
   } catch (e) {
     warnings.push(`资源下载失败（保留恢复/预览，资源下次同步补拉）: ${(e as Error).message}`);
   }
   return { warnings };
-}
-
-/** 回收站预览 / 恢复后台补拉：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。
- *  离线（未配置 / 关闭云同步）时直接返回 `skipped`，一个请求都不发。 */
-export async function ensureTrashNoteAssets(
-  store: Store,
-  id: string,
-  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
-): Promise<{ warnings: string[]; skipped?: CloudState }> {
-  return downloadDeclaredAssets(store, id, true, createRemote);
 }
 
 /*

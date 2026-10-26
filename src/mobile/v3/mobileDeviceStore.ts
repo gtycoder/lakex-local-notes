@@ -7,6 +7,8 @@ import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readQuickNoteBody,
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { createNote, saveNote } from "../data/noteRepository.js";
+import * as historyRepository from "../data/historyRepository.js";
+import { HISTORY_SNAPSHOT_PROTECT_DAYS } from "../../core/syncEngineTypes.js";
 
 /**
  * 移动端 S3v3DeviceStore v1（Lake 文档；无附件/小记/目录写入）。
@@ -347,8 +349,33 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     this.stagedBodies.set(id, bytes);
   }
   async deleteBody(id: string): Promise<void> { this.stagedBodies.delete(id); this.stagedDeletes.add(id); }
-  async writeHistory(): Promise<string> { return "mobile-v3-history-skip"; }
-  async archiveBody(): Promise<void> { /* v1：历史归档由旧通道负责 */ }
+  /**
+   * v3 覆盖留档（parity F1）：被远端覆盖/远端彻底删除前把本地版本写进移动端历史库。
+   * - Lake 文档：走 historyRepository.createHistorySnapshot（受保护 30 天，清理不会先清它）；
+   * - 小记：产品定稿「小记没有历史快照」（随手记语义），返回占位值，调用方不视为失败。
+   * best-effort：写历史失败不得中断同步（宁可少一份快照，不可让同步失败）。
+   */
+  async writeHistory(id: string, bytes: Uint8Array): Promise<string> {
+    if (id.startsWith("quick-")) return "quick-note-history-skip";
+    try {
+      const row = await this.db.prepare("SELECT title,parent_id,sort_order FROM notes WHERE id=?").get(id) as
+        { title?: string; parent_id?: string | null; sort_order?: number } | undefined;
+      if (!row) return "mobile-v3-history-skip";
+      await historyRepository.createHistorySnapshot(this.db, id, new TextDecoder().decode(bytes), {
+        title: row.title ?? id,
+        parentId: row.parent_id ?? null,
+        sortOrder: row.sort_order ?? 0,
+        protectedDays: HISTORY_SNAPSHOT_PROTECT_DAYS,
+      });
+      return id;
+    } catch (e) {
+      console.warn("[v3][history] 写历史快照失败（跳过，不影响同步）:", (e as Error).message);
+      return "mobile-v3-history-skip";
+    }
+  }
+  async archiveBody(id: string, bytes: Uint8Array | null): Promise<void> {
+    if (bytes) await this.writeHistory(id, bytes);
+  }
 
   async listAssets(id: string): Promise<string[]> {
     const keys = await listNoteAssetKeysFs(id);
@@ -392,5 +419,10 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   }
   async deleteQuickAssetsDir(id: string): Promise<void> {
     for (const key of await listQuickNoteAssetKeysFs(id)) await removeAssetBytesFs(key);
+  }
+
+  /** 单条推送记账（I2）：内容 hash 未变才清 dirty，同时清显式恢复标记。 */
+  async markQuickNoteSynced(id: string, expectedContentHash: string): Promise<void> {
+    await this.db.prepare("UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id=? AND content_hash=?").run(id, expectedContentHash);
   }
 }

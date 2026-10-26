@@ -21,7 +21,8 @@ class MemoryRemote implements S3v3Remote {
     else this.objects.set(key, { bytes: new Uint8Array(bytes), gzip: false });
   }
   async list(prefix: string): Promise<RemoteObjectInfo[]> {
-    return [...this.objects.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, o]) => ({ key, size: o.bytes.length })).sort((a, b) => (a.key < b.key ? -1 : 1));
+    // lastModified=0：测试对象视为"远古对象"，深度清理的保留窗口不会误保护它们。
+    return [...this.objects.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, o]) => ({ key, size: o.bytes.length, lastModified: 0 })).sort((a, b) => (a.key < b.key ? -1 : 1));
   }
   async deleteMany(keys: string[]): Promise<void> { for (const k of keys) this.objects.delete(k); }
   async deleteByPrefix(prefix: string): Promise<number> {

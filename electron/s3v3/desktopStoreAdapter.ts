@@ -426,4 +426,16 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     if (!this.quickNotes) return;
     try { await fs.rm(this.quickNotes.quickNoteAssetsPathFor(id), { recursive: true, force: true }); } catch { /* ignore */ }
   }
+
+  /** 单条推送记账：markSynced 同时清 restore_pending_at；按内容 hash 未变才标（I2 守卫）。 */
+  async markQuickNoteSynced(id: string, expectedContentHash: string): Promise<void> {
+    if (!this.quickNotes) return;
+    this.quickNotes.markSyncedIfUnchanged(id, expectedContentHash);
+  }
+
+  /** 小记冲突副本：本地版本归档为小记回收站里的**新 id**（纯本地，不向云端发布删除/新增）。 */
+  async archiveQuickNote(id: string): Promise<void> {
+    if (!this.quickNotes) return;
+    this.quickNotes.archiveLocalToTrash(id);
+  }
 }

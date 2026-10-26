@@ -1,4 +1,4 @@
-import { S3v3SyncEngine, type S3v3SyncReport } from "../../core/s3v3Engine.js";
+import { S3v3SyncEngine, type QuickNotePushResult, type S3v3SyncReport } from "../../core/s3v3Engine.js";
 import type { S3v3Remote, S3v3Settings } from "../../core/s3v3Ports.js";
 import type { MobileDb } from "../data/sqliteDb.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
@@ -46,4 +46,23 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
     } catch { /* ignore */ }
   }
   return engine.sync(mode === "throw" ? {} : { onEmptyCloud: mode });
+}
+/**
+ * 单条小记推送（parity E2）：只 upsert 这一条，其余条目/标签/墓碑在云端逐字段不变。
+ * 返回 full-sync 时由调用方（bridge.pushSingleQuickNote）执行一次整轮，不静默降级。
+ */
+export async function runMobileV3PushQuickNote(
+  db: MobileDb,
+  settings: S3v3Settings,
+  id: string,
+  opts: MobileV3SyncOptions = {},
+): Promise<QuickNotePushResult> {
+  const store = new MobileDeviceStore(db);
+  await store.init();
+  const remote = opts.remote ?? createMobileS3v3Remote(settings);
+  const engine = new S3v3SyncEngine({
+    remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId(),
+    onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] push ${phase} ${ms}ms`); },
+  });
+  return engine.pushQuickNote(id);
 }

@@ -20,6 +20,7 @@ import {
   validateAssetDeclaration,
   type AssetDeclaration,
   type LakeIndex,
+  type QuickNoteEntry,
   type QuickNotesIndex,
 } from "./s3v3Index.js";
 import { classifyCloudState } from "./s3v3Pointer.js";
@@ -46,6 +47,8 @@ const LOCK_SETTLE_MS = 40; // 单用户场景下减少固定发布延迟；多�
 /** 回收站父节点 id 与 Store/移动端一致（曾误写 "trash"，会把回收站条目挂到不存在的父节点）。 */
 const TRASH_ID = TRASH_NOTEBOOK_ID;
 const MAX_PUBLISH_RETRIES = 6;
+/** 单条推送的发布重试（pointer 被别的端改动时重来一次）。 */
+const SINGLE_PUSH_MAX_RETRIES = 3;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -93,6 +96,37 @@ export interface S3v3SyncReport {
   /** 本轮被远端覆盖、已强制写本地历史的文档（UI 冲突清单/角标；对齐旧协议 supersededNotes）。 */
   supersededNotes: Array<{ id: string; title: string }>;
 }
+/** 深度清理选项（手动/周期；不进入日常同步）。 */
+export interface S3v3DeepCleanupOptions {
+  dryRun?: boolean;
+  /** 额外保留的相对键（本机历史快照引用的 `assets/<noteId>/<filename>` 等）。 */
+  extraKeep?: Iterable<string>;
+  /** 保留窗口（天）：窗口内对象一律不删（默认 7；<=0 = 立即到期，只保留显式 keep）。 */
+  retentionDays?: number;
+  /** 时钟注入（测试用）。 */
+  now?: () => Date;
+}
+
+export interface S3v3DeepCleanupResult {
+  /** 实际删除（dryRun 时为「将删除」）的相对键。 */
+  deleted: string[];
+  /** 显式 keep 集大小。 */
+  kept: number;
+  dryRun: boolean;
+  /** 已不可达但仍在保留窗口内、本轮跳过删除的对象数。 */
+  skippedRecent: number;
+  /** provider 未返回 lastModified（无法判龄）而保守保留的对象数。 */
+  ageUnknown: number;
+  /** 被额外保护的上一版索引 key（每空间至多 1 个）。 */
+  previousIndexes: string[];
+}
+
+/** 单条小记推送结果（「保存并同步」）。full-sync = 调用方必须退回一次整轮同步（不静默降级）。 */
+export type QuickNotePushResult =
+  | { status: "pushed"; uploadedContent: boolean; uploadedAssets: number; unchanged: boolean; generation: number }
+  | { status: "full-sync"; reason: "no-cloud" | "no-baseline" | "cloud-changed" | "remote-deleted" }
+  | { status: "not-found" };
+
 export interface S3v3EngineOptions {
   remote: S3v3Remote;
   device: S3v3DeviceStore;
@@ -208,6 +242,124 @@ export class S3v3SyncEngine {
       }
     }
     throw new S3v3SyncError("publish-conflict", "发布冲突重试超限: " + String(lastErr));
+  }
+
+  /**
+   * 单条小记推送（「保存并同步」，对齐旧 quickNotePush 语义；v3 parity E2）。
+   *
+   * 铁律：**只 upsert 这一条** —— 其余小记条目、标签目录、purged 墓碑逐字段保持云端原样。
+   * 流程：读 pointer/quick 索引 → 上传本条正文/图片 → 生成新 quick 索引（内容寻址）→
+   *       取发布锁 → 复核 pointer 未变（CAS）→ 写索引 → 写 pointer（generation+1，lake 不动）→ 读回校验
+   *       → 本地记账（markQuickNoteSynced + baseline 跟进，I2「未变才标」由适配器保证）。
+   *
+   * 两条退回整轮的路径（不静默降级，由调用方执行整轮）：
+   *  1) 云端没有 pointer / 没有 baseline / baseline 与 pointer 不同代（云已变）；
+   *  2) 远端 quick 索引里该条是 purged 墓碑且本机没有显式恢复标记（墓碑权威，不许复活）。
+   */
+  async pushQuickNote(id: string): Promise<QuickNotePushResult> {
+    this.uploadOps = [];
+    this.warnings = [];
+    this.warningDetails = [];
+    this.supersededNotes.length = 0;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < SINGLE_PUSH_MAX_RETRIES; attempt++) {
+      try { return await this.pushQuickNoteOnce(id); }
+      catch (e) {
+        if (e instanceof PublishRetry) {
+          lastErr = e;
+          await sleep(80 + Math.floor(Math.random() * (attempt + 1) * 160));
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new S3v3SyncError("publish-conflict", "单条推送发布冲突重试超限: " + String(lastErr));
+  }
+
+  private async pushQuickNoteOnce(id: string): Promise<QuickNotePushResult> {
+    const pointer = await this.readPointer();
+    if (!pointer) return { status: "full-sync", reason: "no-cloud" };
+    const baseline = await this.device.loadBaseline();
+    if (!baseline) return { status: "full-sync", reason: "no-baseline" };
+    // baseline 与 pointer 不同代 ⇒ 云端已有本机未合并的变更；单条推送不得在旧世界上发布（退回整轮）。
+    if (baseline.epoch !== pointer.epoch || baseline.generation !== pointer.generation || baseline.lakeCommit !== pointer.lake.commit) {
+      return { status: "full-sync", reason: "cloud-changed" };
+    }
+    const state = (await this.device.loadState()) ?? emptyState();
+    const local = state.quickNotes.items.find((q) => q.id === id);
+    if (!local) return { status: "not-found" };
+    const restore = new Set(state.restorePending ?? []);
+    const remoteIndexBytes = await this.remote.get(indexKey("quickNotes", pointer.quickNotes.commit));
+    if (!remoteIndexBytes) throw new S3v3SyncError("index-missing", "小记索引缺失: " + pointer.quickNotes.commit);
+    const remoteIndex = parseQuickNotesIndexBytes(remoteIndexBytes).index;
+    const remoteEntry = remoteIndex.items.find((q) => q.id === id) ?? null;
+    const remoteTombs = remoteIndex.purged ?? [];
+    // 墓碑权威：远端已彻底删除且本机无显式恢复标记 → 交给整轮语义处理（不静默复活）。
+    if (remoteTombs.includes(id) && !restore.has(id)) return { status: "full-sync", reason: "remote-deleted" };
+
+    const body = await this.device.readQuickBody(id);
+    if (!body) throw new S3v3SyncError("quick-body-missing", "本地小记正文缺失: " + id);
+    const contentHash = sha256Hex(body);
+    const opsBefore = this.uploadOps.length;
+    const remoteDecl = remoteEntry?.assetsHash ? await this.getDeclaration("quickNotes", id, remoteEntry.assetsHash) : null;
+    const decl = await this.uploadQuickAssets(id, remoteDecl);
+    const uploadedAssets = this.uploadOps.length - opsBefore;
+    if (decl) {
+      this.uploadOps.push({ space: "quickNotes", noteId: id, key: declarationKey("quickNotes", id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
+    }
+    this.uploadOps.push({ space: "quickNotes", noteId: id, key: quickNoteBodyKey(contentHash), bytes: body });
+    const failures = await this.flushUploadOps();
+    const failure = failures.get("quickNotes:" + id);
+    if (failure) throw new S3v3SyncError("upload-failed", "小记上传失败: " + failure);
+
+    // 只替换本条；tags/purged/其余条目保持远端原样（恢复标记命中时才从 purged 移除）。
+    const entry: QuickNoteEntry = {
+      ...local,
+      contentHash,
+      ...(decl ? { assetsHash: decl.declHash } : {}),
+    };
+    if (!decl) delete (entry as { assetsHash?: string }).assetsHash;
+    const items = [...remoteIndex.items.filter((q) => q.id !== id), entry].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const purged = remoteTombs.filter((x) => x !== id);
+    const nextIndex: QuickNotesIndex = {
+      v: 3, space: "quickNotes", items,
+      ...(remoteIndex.tags !== undefined ? { tags: remoteIndex.tags } : {}),
+      ...(purged.length ? { purged: [...purged].sort() } : {}),
+    };
+    const serialized = serializeQuickNotesIndex(nextIndex);
+    const commit = indexHashOf(serialized);
+    const uploadedContent = remoteEntry?.contentHash !== contentHash;
+    const unchanged = !uploadedContent && uploadedAssets === 0 && commit === pointer.quickNotes.commit && !restore.has(id);
+    let generation = pointer.generation;
+    if (!unchanged) {
+      if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步，请稍后重试");
+      try {
+        const now = await this.readPointer();
+        if (!now || now.epoch !== pointer.epoch || now.generation !== pointer.generation ||
+          now.lake.commit !== pointer.lake.commit || now.quickNotes.commit !== pointer.quickNotes.commit) throw new PublishRetry();
+        await this.writeIndex("quickNotes", commit, serialized);
+        generation = pointer.generation + 1;
+        const nextPointer: S3v3Pointer = {
+          v: 3, epoch: pointer.epoch, generation,
+          lake: { commit: pointer.lake.commit }, quickNotes: { commit },
+          createdAt: this.iso(), deviceId: this.deviceId,
+        };
+        await this.assertLockOwned();
+        await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(nextPointer)));
+        const check = await this.readPointer();
+        if (!check || check.generation !== generation || check.quickNotes.commit !== commit || check.lake.commit !== pointer.lake.commit) throw new PublishRetry();
+      } finally {
+        await this.releaseLock();
+      }
+    }
+    // 记账：只标这一条（I2：适配器按内容 hash 未变才标），baseline 跟到新代。
+    if (this.device.markQuickNoteSynced) await this.device.markQuickNoteSynced(id, contentHash);
+    await this.device.saveBaseline({
+      epoch: pointer.epoch, generation,
+      lakeCommit: pointer.lake.commit, quickNotesCommit: commit,
+      lake: baseline.lake, quickNotes: nextIndex,
+    });
+    return { status: "pushed", uploadedContent, uploadedAssets, unchanged, generation };
   }
 
   private async readPointer(): Promise<S3v3Pointer | null> {
@@ -571,8 +723,15 @@ export class S3v3SyncEngine {
       if (!remote || !plan.applyRemote) continue;
       if (plan.kind === "remote-wins-history") this.supersededNotes.push({ id: plan.id, title: "小记" });
       if (plan.archiveLocal && local) {
-        const bytes = await this.device.readQuickBody(plan.id);
-        if (bytes) await this.device.writeHistory("quick-" + plan.id, bytes);
+        // 冲突副本（parity C8）：优先由设备端把本地版本归档进小记回收站（旧协议语义）；
+        // 设备未实现时退化为历史快照尝试（桌面 createHistorySnapshot 对小记无实际归档）。
+        if (this.device.archiveQuickNote) {
+          try { await this.device.archiveQuickNote(plan.id); }
+          catch (e) { this.warn("小记冲突归档失败（远端继续覆盖）: " + plan.id + " " + (e as Error).message, { kind: "remote_incomplete", noteId: plan.id }); }
+        } else {
+          const bytes = await this.device.readQuickBody(plan.id);
+          if (bytes) await this.device.writeHistory("quick-" + plan.id, bytes);
+        }
       }
       const needBody = !local || local.contentHash !== remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
       if (needBody) {
@@ -1087,8 +1246,17 @@ export class S3v3SyncEngine {
   /**
    * 深度清理（手动/周期）：列举对象并用「当前指针+索引+声明」算 keep 集，删除不可达对象。
    * 用于崩溃/半途失败留下的孤儿（如「声明已写、pointer 未切」）。不进入日常同步。
+   *
+   * 护栏（对齐旧协议 s3Maintenance 的 keep 集 / 窗口口径，补齐 v3 parity F3/F4）：
+   * 1) `extraKeep`：本机历史快照引用的资产（桌面 `store.getProtectedRefs`）必须保留——
+   *    否则清理会删掉历史面板仍在引用的图片/附件；
+   * 2) 上一版索引：每空间额外保留「未被当前 pointer 引用、lastModified 最新」的 1 个 index，
+   *    给「他端还在读旧索引」留出容错（索引是内容寻址对象，保留不会污染当前世界）；
+   * 3) 保留窗口：默认 7 天（可传 retentionDays；<=0 表示立即到期=手动显式清理）；
+   *    窗口内对象一律不删；provider 不返回 lastModified（无法判龄）时保守保留；
+   * 4) dryRun：只返回候选，不删对象、不动本地 pending。
    */
-  async deepCleanup(opts: { dryRun?: boolean } = {}): Promise<{ deleted: string[]; kept: number }> {
+  async deepCleanup(opts: S3v3DeepCleanupOptions = {}): Promise<S3v3DeepCleanupResult> {
     const pointer = await this.readPointer();
     if (!pointer) throw new S3v3SyncError("pointer-corrupt", "云端没有 pointer，无法深度清理");
     const lake = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
@@ -1112,20 +1280,52 @@ export class S3v3SyncEngine {
       const d = await this.getDeclaration("quickNotes", q.id, q.assetsHash);
       for (const a of d?.assets ?? []) keep.add(quickNoteAssetKey(q.id, a.filename));
     }
+    // 本机历史快照引用（平台注入；调用方负责只读收集，引擎不碰设备 API）。
+    for (const k of opts.extraKeep ?? []) keep.add(k);
+
     const prefixes = ["objects/", "assets/", "meta/index/", "meta/assets/", "quick-notes/objects/", "quick-notes/assets/", "quick-notes/meta/"];
-    const all = new Set<string>();
-    for (const prefix of prefixes) for (const item of await this.remote.list(prefix)) all.add(item.key);
-    const toDelete = [...all].filter((k) => !keep.has(k)).sort();
-    if (!opts.dryRun) {
+    const all = new Map<string, { key: string; lastModified?: number }>();
+    for (const prefix of prefixes) for (const item of await this.remote.list(prefix)) all.set(item.key, item);
+
+    // 上一版索引保护：每空间保留最近一个未引用的 index（当前 pointer 的索引已在 keep 里）。
+    const previousIndexes: string[] = [];
+    const indexPrefixes: Array<["lake" | "quickNotes", string]> = [["lake", "meta/index/"], ["quickNotes", "quick-notes/meta/index/"]];
+    for (const [space, prefix] of indexPrefixes) {
+      const commit = space === "lake" ? pointer.lake.commit : pointer.quickNotes.commit;
+      let best: { key: string; lastModified: number } | null = null;
+      for (const item of all.values()) {
+        if (!item.key.startsWith(prefix) || item.key === indexKey(space, commit)) continue;
+        const at = item.lastModified ?? 0;
+        if (!best || at > best.lastModified) best = { key: item.key, lastModified: at };
+      }
+      if (best) { keep.add(best.key); previousIndexes.push(best.key); }
+    }
+
+    const nowMs = (opts.now ?? this.now)().getTime();
+    const retentionDays = opts.retentionDays ?? 7;
+    const cutoff = retentionDays > 0 ? nowMs - retentionDays * 86_400_000 : Number.POSITIVE_INFINITY;
+    const toDelete: string[] = [];
+    let skippedRecent = 0;
+    let ageUnknown = 0;
+    for (const item of all.values()) {
+      if (keep.has(item.key)) continue;
+      if (item.lastModified === undefined) { ageUnknown += 1; continue; } // 判不出年龄 ⇒ 保守保留
+      if (item.lastModified > cutoff) { skippedRecent += 1; continue; }   // 窗口内 ⇒ 保留
+      toDelete.push(item.key);
+    }
+    toDelete.sort();
+    if (!opts.dryRun && toDelete.length > 0) {
       const CHUNK = 1000;
       for (let i = 0; i < toDelete.length; i += CHUNK) await this.remote.deleteMany(toDelete.slice(i, i + CHUNK));
+      const deletedSet = new Set(toDelete);
       const state = await this.device.loadState();
       if (state) {
-        state.pending = state.pending.filter((p) => all.has(p.key) && !toDelete.includes(p.key));
+        // 只摘掉「本轮真的删掉了目标」的待删项；前缀删除/未命中项保持原样等门禁重判。
+        state.pending = state.pending.filter((p) => !deletedSet.has(p.key));
         await this.device.saveState(state);
       }
     }
-    return { deleted: toDelete, kept: keep.size };
+    return { deleted: toDelete, kept: keep.size, dryRun: !!opts.dryRun, skippedRecent, ageUnknown, previousIndexes };
   }
 
   /** 全量重拉（epoch/回滚/换桶后由 UI 调用）：云端赢，本地多出的归档。 */

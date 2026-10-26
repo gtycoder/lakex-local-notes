@@ -108,4 +108,6 @@ export class FileDeviceStore implements S3v3DeviceStore {
   async deleteQuickAssetsDir(id: string): Promise<void> {
     await fs.rm(this.quickAssetsDir(id), { recursive: true, force: true });
   }
+  /** 测试/CLI 文件实现没有同步账本：单条推送的记账由 state 落盘承担。 */
+  async markQuickNoteSynced(): Promise<void> { /* no-op */ }
 }

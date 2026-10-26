@@ -1,7 +1,8 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { listAssetKeysFs } from "../native/assetFs";
-import { downloadNoteAssets } from "../../core/syncAssets.js";
+import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
 import type { SyncConfig, SyncReport } from "../../core/syncEngineTypes.js";
+import { backfillV3Assets, type AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";
+import { createMobileS3v3Remote } from "../v3/s3v3Remote.js";
 import { buildGcKeepSet } from "../../core/gcDecisions.js";
 import { normalizeEndpoint, parseLakeManifest, validateS3Settings } from "../../core/syncUtils.js";
 import type { Manifest } from "../../core/manifestTypes.js";
@@ -17,7 +18,7 @@ import * as historyRepository from "../data/historyRepository.js";
 import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
 import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
-import { runMobileV3Sync } from "../v3/sync.js";
+import { runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
 
 export interface MobileSyncResult {
   message: string;
@@ -35,6 +36,8 @@ export async function mobileCloudState(): Promise<CloudState> {
   return cloudStateOf(Boolean(cfg), readSyncSettings());
 }
 /** 下载这些笔记的已声明资产（best-effort）；失败不阻断调用方（恢复/预览红线）。
+ * v3 原生路径（261026 parity B6）：pointer→索引→该篇 assetsHash→声明对象→本地差集下载，
+ * 旧实现读的 declared_assets 表在 v3 下永远为空（空操作）。
  * @param onlyMissing true = 只补本地缺失的资源（预览用）；false = 强拉全量（恢复用） */
 export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false): Promise<void> {
   if (noteIds.length === 0) return;
@@ -44,38 +47,51 @@ export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing =
     if (!canTouchNetwork(state)) { console.info(`[asset] 跳过补拉（${state}）`); return; }
     const cfg = await syncDomain.getS3Settings();
     if (!cfg) return;
-    const syncCfg: SyncConfig = {
-      endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket,
-      accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix,
-    };
-    const s3Store = createCapacitorS3Store(syncCfg);
-    const report: SyncReport = {
-      pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
-      warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
-      trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
+    const remote = createMobileS3v3Remote(cfg);
+    const port: AssetBackfillPort = {
+      listLocal: async (id) => (await listNoteAssetKeysFs(id)).map((k) => (k.startsWith(id + "/") ? k.slice(id.length + 1) : k)),
+      readLocal: async (id, filename) => loadAssetBytesFs(id + "/" + filename),
+      writeLocal: async (id, filename, bytes) => saveAssetBytesFs(id + "/" + filename, bytes),
     };
     for (const noteId of noteIds) {
-      let assets = typeof dbPort.listDeclaredAssets === "function" ? await dbPort.listDeclaredAssets(noteId) : [];
-      if (onlyMissing && assets.length > 0) {
-        const local = new Set((await dbPort.listLocalAssets(noteId)).map((a) => a.filename));
-        assets = assets.filter((a) => !local.has(a.filename));
-      }
-      if (assets.length === 0) continue;
-      await downloadNoteAssets(syncCfg, s3Store, dbPort, noteId, assets, report, false);
+      const result = await backfillV3Assets(remote, "lake", noteId, port, { force: !onlyMissing });
+      if (result.warnings.length > 0) console.warn(`[asset] ${noteId} 补拉: ` + result.warnings.slice(0, 5).join(" | "));
+      console.info(`[asset] ${noteId} found=${result.found} down=${result.downloaded} skip=${result.skipped} missing=${result.missing.length} failed=${result.failed.length}`);
     }
   } catch (e) {
     console.warn("[asset] 资源下载失败（保留调用方，资源下次同步补拉）", e);
   }
 }
 
-/** 单条推送的一次尝试（高优先域与"推送后回核"共用；云状态判据在调用方）。 */
-export async function pushSingleQuickNote(_id: string): Promise<QuickNotePushOutcome> {
+
+/** 单条推送（「保存并同步」；云状态判据在调用方）。
+ * v3 parity E2：只 upsert 这一条（其余条目/标签/墓碑云端逐字段不变）；
+ * 必须整轮的两条路径（云端无 pointer/无基线/不同代、远端墓碑未恢复）执行一次整轮并回传 full-sync。 */
+export async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutcome> {
   const cfg = await syncDomain.getS3Settings();
   if (!cfg) throw new Error("未配置 S3");
   try { assertS3Credentials(cfg); } catch (e) { throw new Error((e as Error).message); }
   const d = await ensureDb();
-  await runMobileV3Sync(d, cfg);
-  return { status: "pushed", uploadedContent: true, uploadedAssets: 0, unchanged: false, manifestId: null };
+  const result = await runMobileV3PushQuickNote(d, cfg, id);
+  if (result.status === "not-found") return { status: "not-found" };
+  if (result.status === "full-sync") {
+    const full = await runMobileV3Sync(d, cfg);
+    return {
+      status: "full-sync",
+      reason: result.reason === "remote-deleted" ? "remote-deleted" : "no-remote-manifest",
+      result: {
+        uploaded: full.uploadedNotes, downloaded: full.downloadedNotes, conflicts: 0,
+        manifestId: "v3-g" + full.generation, completedAt: new Date().toISOString(),
+      },
+    };
+  }
+  return {
+    status: "pushed",
+    uploadedContent: result.uploadedContent,
+    uploadedAssets: result.uploadedAssets,
+    unchanged: result.unchanged,
+    manifestId: "v3-g" + result.generation,
+  };
 }
 
 
