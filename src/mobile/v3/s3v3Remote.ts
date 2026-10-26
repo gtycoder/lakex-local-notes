@@ -1,4 +1,5 @@
 import type { RemoteObjectInfo, S3v3Remote, S3v3Settings } from "../../core/s3v3Ports.js";
+import { isGzipMetadataKey } from "../../core/s3v3Keys.js";
 import { assertSafeKey, isGzip, isNoSuchKey, normalizeEndpoint } from "../../core/syncUtils.js";
 import { createMobileS3Client } from "../native/s3Store.js";
 
@@ -35,7 +36,8 @@ export function createS3v3RemoteWithClient(client: S3ClientLike, bucket: string,
         const out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: full(key) })) as { Body?: { transformToByteArray?: () => Promise<Uint8Array> } };
         if (!out.Body) return null;
         const raw = await out.Body.transformToByteArray!();
-        return isGzip(raw) ? await decompressGzip(raw) : raw;
+        // P0：只解压元数据对象；附件/正文即便以 1f8b 开头也不能当 gzip（否则 Z_DATA_ERROR）。
+        return isGzipMetadataKey(key) && isGzip(raw) ? await decompressGzip(raw) : raw;
       } catch (e) {
         if (isNoSuchKey(e)) return null;
         throw e;

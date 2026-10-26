@@ -6,6 +6,7 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { gunzipSync, gzipSync } from "node:zlib";
+import { isGzipMetadataKey } from "../../src/core/s3v3Keys.js";
 import type { RemoteObjectInfo, S3v3Remote, S3v3Settings } from "./ports.js";
 
 const GZIP_MAGIC_0 = 0x1f;
@@ -13,6 +14,15 @@ const GZIP_MAGIC_1 = 0x8b;
 
 function isGzip(bytes: Uint8Array): boolean {
   return bytes.length >= 2 && bytes[0] === GZIP_MAGIC_0 && bytes[1] === GZIP_MAGIC_1;
+}
+
+/**
+ * P0：只有元数据对象按 gzip 解压；正文/附件即使字节恰好以 1f8b 开头也原样返回。
+ * 单独导出便于单测（不需要真实 S3）。
+ */
+export function decodeRemoteObject(rel: string, bytes: Uint8Array): Uint8Array {
+  if (!isGzipMetadataKey(rel) || !isGzip(bytes)) return bytes;
+  return new Uint8Array(gunzipSync(bytes));
 }
 
 export class S3v3S3Remote implements S3v3Remote {
@@ -44,8 +54,7 @@ export class S3v3S3Remote implements S3v3Remote {
       const out = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.key(rel) }));
       const chunks: Buffer[] = [];
       for await (const c of out.Body as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(c));
-      const bytes = Buffer.concat(chunks);
-      return isGzip(bytes) ? new Uint8Array(gunzipSync(bytes)) : new Uint8Array(bytes);
+      return decodeRemoteObject(rel, new Uint8Array(Buffer.concat(chunks)));
     } catch (e) {
       const err = e as { name?: string; $metadata?: { httpStatusCode?: number }; Code?: string };
       if (err.name === "NoSuchKey" || err.name === "NotFound" || err.$metadata?.httpStatusCode === 404 || err.Code === "NoSuchKey") return null;

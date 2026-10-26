@@ -48,11 +48,27 @@ export async function syncWithV3(
   await device.init();
   const deviceId = deps.deviceId ?? process.env.LAKE_S3V3_DEVICE_ID ?? "desktop-" + createHash("sha256").update(store.rootPath).digest("hex").slice(0, 8);
   report({ phase: "connect", message: "v3：连接 S3..." });
+  // 进度阶段（对齐旧协议 G1/G2）：引擎阶段 → SyncProgress。首拉/大库时 UI 不再只有 connect→done。
+  const PHASE_PROGRESS: Record<string, { phase: SyncProgress["phase"]; message: string }> = {
+    "load-state": { phase: "download", message: "v3：读取本地状态..." },
+    "read-index": { phase: "download", message: "v3：读取云端索引..." },
+    merge: { phase: "download", message: "v3：合并远端变更..." },
+    downloads: { phase: "download", message: "v3：下载正文/附件..." },
+    uploads: { phase: "upload", message: "v3：上传变更..." },
+    "publish-save-state": { phase: "manifest", message: "v3：保存发布状态..." },
+    "publish-lock": { phase: "manifest", message: "v3：获取发布锁..." },
+    "publish-index": { phase: "manifest", message: "v3：写入云端索引..." },
+    "publish-pointer": { phase: "manifest", message: "v3：发布指针..." },
+    "publish-finalize": { phase: "manifest", message: "v3：确认发布..." },
+    pending: { phase: "manifest", message: "v3：清理待删对象..." },
+  };
   const engine = new S3v3SyncEngine({
     remote, device, deviceId,
     onPhase: (phase, ms) => {
       if (ms >= 1000) store.logScopes.sync.warn(`[v3][slow] ${phase} ${ms}ms`);
       else store.logScopes.sync.debug(`[v3] ${phase} ${ms}ms`);
+      const mapped = PHASE_PROGRESS[phase];
+      if (mapped) report({ phase: mapped.phase, message: mapped.message });
     },
   });
   // 转正后默认把「云端无 v3 pointer」视为首次上传：本地就是真相（旧 manifest 不迁移，符合无历史兼容）。
@@ -61,9 +77,11 @@ export async function syncWithV3(
     const r = await engine.sync(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode });
     for (const w of r.warnings) store.logScopes.sync.warn("[v3] " + w);
     const result: SyncResult = {
-      uploaded: r.uploadedNotes, downloaded: r.downloadedNotes, conflicts: 0,
+      uploaded: r.uploadedNotes, downloaded: r.downloadedNotes, conflicts: r.supersededNotes.length,
       manifestId: "v3-g" + r.generation, completedAt: new Date().toISOString(),
-      durationMs: Date.now() - startedAt, supersededNotes: [],
+      durationMs: Date.now() - startedAt, supersededNotes: r.supersededNotes,
+      // 旧协议有的结构化警告（UI SyncStatusPopover 读取 warnings；只增不减）。
+      ...(r.warningDetails.length > 0 ? { warnings: r.warningDetails } : {}),
     };
     store.logScopes.sync.info("[v3] sync done " + JSON.stringify({ published: r.published, gen: r.generation, warnings: r.warnings.length, ms: result.durationMs }));
     return result;

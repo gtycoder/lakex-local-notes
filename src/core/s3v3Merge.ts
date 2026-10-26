@@ -93,11 +93,17 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
         // none：内容一致；元数据按 updatedAt 后写胜（本地更新 → 上传元数据；远端更新 → 应用远端）。
         const localMetaNewer = !!l && !!r && l.updatedAt > r.updatedAt;
         const remoteMetaNewer = !!r && (!l || r.updatedAt > l.updatedAt);
+        // 编辑锁字段级 LWW（补齐旧协议 C3）：锁变更不 bump updatedAt，只按 updatedAt 判会永不传播。
+        // lockedAt 是 ISO 串/空串，可直接字典序比较；相等时双方都不动。
+        const localLockAt = l?.lockedAt ?? "";
+        const remoteLockAt = r?.lockedAt ?? "";
+        const remoteLockNewer = !!r && remoteLockAt > localLockAt;
+        const localLockNewer = !!l && localLockAt > remoteLockAt;
         notes.push({
           id,
           kind: "none",
-          applyRemote: remoteMetaNewer,
-          uploadLocal: localMetaNewer,
+          applyRemote: remoteMetaNewer || remoteLockNewer,
+          uploadLocal: localMetaNewer || (!remoteMetaNewer && localLockNewer),
           archiveLocal: false,
           local: l ?? undefined,
           remote: r ?? undefined,

@@ -9,9 +9,14 @@ import path from "node:path";
 import type { Store } from "./store.js";
 import { ObjectStore } from "./s3Store.js";
 import type { SyncProgress, SyncResult } from "./syncTypes.js";
-import { parseLakeManifest, objectKey, sha256Hex, MAX_MANIFEST_BYTES, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
+import { sha256Hex, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
 import { downloadNoteAssets } from "../src/core/syncAssets.js";
-import { MAX_REMOTE_NOTE_BYTES, type SyncReport } from "../src/core/syncEngineTypes.js";
+import type { SyncReport } from "../src/core/syncEngineTypes.js";
+import { S3V3_POINTER_KEY, indexKey, lakeBodyKey } from "../src/core/s3v3Keys.js";
+import { parseLakeIndexBytes } from "../src/core/s3v3Index.js";
+import { validatePointer, type S3v3Pointer } from "../src/core/s3v3Types.js";
+import { S3v3S3Remote } from "./s3v3/s3Remote.js";
+import type { S3v3Remote } from "./s3v3/ports.js";
 import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
 import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
@@ -113,20 +118,36 @@ export async function ensureTrashNoteAssets(
 export async function restoreMissingBodyFromCloud(
   store: Store,
   noteId: string,
+  deps: { remote?: S3v3Remote } = {},
 ): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" }> {
   const settings = store.getS3Settings();
-  if (!settings) return { ok: false, reason: "no-cloud-config" };
-  if (!canTouchNetwork(cloudStateOf(true, store.getSyncSettings()))) return { ok: false, reason: "cloud-off" };
-  validateS3Settings(settings);
+  // deps.remote = 测试/诊断注入（生产永远走已配置的 S3 settings）。
+  if (!settings && !deps.remote) return { ok: false, reason: "no-cloud-config" };
+  if (!deps.remote && !canTouchNetwork(cloudStateOf(true, store.getSyncSettings()))) return { ok: false, reason: "cloud-off" };
+  if (settings) validateS3Settings(settings);
   const startedAt = Date.now();
-  const remote = new ObjectStore(settings, store.logScopes);
-  await remote.test();
-  const cfg = syncConfigFromStore(store);
-  const manifestBytes = await remote.getOptional(`${cfg.prefix}/manifests/latest.json`, { maxBytes: MAX_MANIFEST_BYTES });
-  const manifest = manifestBytes ? parseLakeManifest(manifestBytes) : null;
-  const entry = manifest?.notes.find((n) => n.id === noteId && !n.deleted);
+  // v3（261026 转正）：资源页「缺正文 → 从云端拉回」不能再读旧 manifests/latest.json（v3 永不写它，
+  // 旧实现 100% 返回 not-in-cloud）。改为读 v3 pointer → lake 索引 → 内容寻址正文对象，并校验 sha256。
+  const remote = deps.remote ?? new S3v3S3Remote({
+    endpoint: settings!.endpoint, region: settings!.region, bucket: settings!.bucket,
+    accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
+    prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
+  });
+  const pointerBytes = await remote.get(S3V3_POINTER_KEY);
+  if (!pointerBytes) return { ok: false, reason: "not-in-cloud" };
+  let pointer: S3v3Pointer;
+  try {
+    const parsed = validatePointer(JSON.parse(new TextDecoder().decode(pointerBytes)));
+    if (!parsed.ok) return { ok: false, reason: "not-in-cloud" };
+    pointer = parsed.pointer;
+  } catch { return { ok: false, reason: "not-in-cloud" }; }
+  const indexBytes = await remote.get(indexKey("lake", pointer.lake.commit));
+  if (!indexBytes) return { ok: false, reason: "not-in-cloud" };
+  let entry: ReturnType<typeof parseLakeIndexBytes>["index"]["notes"][number] | undefined;
+  try { entry = parseLakeIndexBytes(indexBytes).index.notes.find((n) => n.id === noteId); }
+  catch { return { ok: false, reason: "not-in-cloud" }; }
   if (!entry) return { ok: false, reason: "not-in-cloud" };
-  const bytes = await remote.getOptional(`${cfg.prefix}/${objectKey(noteId, entry.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+  const bytes = await remote.get(lakeBodyKey(noteId, entry.contentHash));
   if (!bytes) return { ok: false, reason: "object-missing" };
   if (sha256Hex(bytes) !== entry.contentHash) return { ok: false, reason: "hash-mismatch" };
   store.writeRestoredBody(noteId, new TextDecoder().decode(bytes));

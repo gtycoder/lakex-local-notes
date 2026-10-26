@@ -80,7 +80,13 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       if (!contentHash) {
         const lakePath = this.store.getNotePaths(n.id).lakePath;
         let stat: { mtimeMs: number; size: number };
-        try { stat = await fs.stat(lakePath); } catch { continue; }
+        try { stat = await fs.stat(lakePath); }
+        catch {
+          // P0：正文文件被删后，sidecar 里的 hash 缓存必须失效；否则 saveState 会误以为
+          // 「本地已有同 hash 正文」而跳过落盘，云端拉回的正文永远不恢复（0 PUT/0 警告/不恢复）。
+          this.hashCache.delete(n.id);
+          continue;
+        }
         const cached = this.hashCache.get(n.id);
         if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) contentHash = cached.hash;
         else {
@@ -178,7 +184,23 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
         } else {
           // 只有引擎真的写入了新正文（staged）才保存，避免每轮读全库正文
           const contentChanged = content !== null && sha256Hex(new TextEncoder().encode(content)) !== curHash;
-          if (contentChanged) this.store.saveNote(n.id, n.title, content);
+          if (contentChanged) {
+            const bodyPath = this.store.notePathFor(n.id);
+            if (await this.exists(bodyPath)) {
+              this.store.saveNote(n.id, n.title, content);
+            } else {
+              // P0：本地正文文件被删（DB 行还在）⇒ 普通 saveNote 会以「笔记不存在」拒绝；
+              // 这是「从云端拉回正文」的恢复路径，必须走 importRemoteNote 重建文件。
+              const staged = this.stagedAssets.get(n.id) ?? new Map<string, Uint8Array>();
+              const assets = [...staged.entries()].map(([filename, bytes]) => ({ filename, bytes: Buffer.from(bytes) }));
+              this.store.importRemoteNote({
+                id: n.id, title: n.title, parentId: n.trashedAt ? TRASH_NOTEBOOK_ID : n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
+                contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
+                editLockedAt: n.lockedAt ?? null, ...(n.icon !== undefined ? { icon: n.icon } : {}),
+                trashedAt: n.trashedAt ?? null, deletedFromParentId: n.deletedFromParentId ?? null, kind: n.kind ?? "doc",
+              } as never, Buffer.from(content), assets);
+            }
+          }
           if (n.trashedAt && !cur.trashedAt) {
             // 远端墓碑 → 回收站：必须走 deleteNote（不能 moveTreeNode 到回收站隐藏笔记本）
             this.store.deleteNote(n.id);

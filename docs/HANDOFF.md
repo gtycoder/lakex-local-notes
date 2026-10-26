@@ -13,6 +13,20 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261026 · S3 v3 生产化修复（分支 `fix/s3v3-prod`，基于 `fix/s3v3-p1` 1287d2af）
+
+> 输入 = 真实用户 A/B 实测（`/tmp/lake-ab/deliverables/AB-REPORT-V3-REAL-USER.md`）+ 旧新逐项对照审计（`/tmp/lake-ab/deliverables/PARITY-OLD-VS-V3.md`）。本批只做 P0/高价值缺口，全部有 vitest 回归。
+
+- **P0 资产下载差集（R1）**：`downloadAssets/downloadQuickAssets` 先扫本地（`listAssets`+`readAsset`，size+sha256 精确匹配）⇒ 跳过 GET。以前改 5 篇长文会让对端重下该篇全部图片（50 轮下行 5.06MB/轮、≈上行 3×）。回归 `assetDownloadDiff.test.ts`（正文/元数据变更 ⇒ 0 资产 GET；本地缺一张只补那一张）。
+- **P0 声明对象跨轮缓存（P0-1 残余）**：资产声明是不可变内容寻址对象 ⇒ 引擎改用模块级 `DECL_CACHE`（上限 2000），桌面每轮新引擎也能复用；元数据漂移轮不再逐篇重复 GET 声明。
+- **P0 gzip 魔数误判（R2）**：端口改为**按 key** 解压（仅 `meta/`、`quick-notes/meta/`）；正文/附件即使以 `1f8b` 开头也原样返回（修复 .gz/.tgz 类附件 `Z_DATA_ERROR`）。桌面 `s3Remote.ts` 抽出 `decodeRemoteObject` 便于单测；移动 `s3v3Remote.ts` 同步改。旧协议存在同 bug，不记为 v3 回归。
+- **P0 缺正文闭环（R3）**：① 适配器 hash 缓存文件缺失即失效（原先"云端已拉回却不落盘"）；② 正文文件缺失时 `saveState` 走 `importRemoteNote` 重建（普通 `saveNote` 会以"笔记不存在"拒绝）；③ 下载分支：本地/云端都缺 ⇒ `local_body_missing`（且**保留远端索引条目**，避免一次对象缺失变永久删除）；本地缺失但云端有 ⇒ 拉回 + `local_body_restored`；④ 上传分支：缺正文先从云端按 hash 拉回，失败则 `failUpload` 回退索引，**绝不上传空正文**；⑤ 初始化上传剔除缺正文条目。新增结构化 `warningDetails: SyncWarning[]` 并透传 `SyncResult.warnings`（UI `SyncStatusPopover` 可见）；移动端 `MobileSyncResult.warnings` 同步透传。回归 `missingBody.test.ts` / `parity.test.ts`。
+- **P0 资源页「缺正文 → 从云端拉回」（B5）**：`restoreMissingBodyFromCloud` 原实现读旧 `manifests/latest.json`（v3 永不写 ⇒ 永远 not-in-cloud）。改为读 v3 pointer→lake 索引→内容寻址正文并校验 sha256；支持注入 remote 供测试。回归 `parity.test.ts`（成功/hash 不符/条目不存在）。
+- **P1 崩溃追赶放大（R4，根因已定位）**：真实故障 = kill -9 落在 initialUpload「pointer 已写、baseline 未写」窗口 ⇒ 重启走 `pullAll`；旧实现无条件 GET 全部正文+附件（实测 B 一轮 22,115 GET/1.37GB/423s）。**数据侧**修复：`pullAll` 对 state 里已有的条目按 contentHash 复用本地正文；资产走差集（声明仍读、字节不重下）。根因二：崩溃重发布使大批条目元数据漂移 ⇒ 每篇 `applyRemote` 触发整篇资产刷新（40,152 次 asset GET、只有 8 次正文）⇒ 由资产差集 + 声明缓存消掉。回归 `pullAllDiff.test.ts`（删 baseline 模拟崩溃：整轮 0 正文/资产 GET）。
+- **对齐旧协议的缺失行为（本批已补）**：编辑锁字段级 LWW（锁变更不 bump updatedAt，原先跨端不传播；`s3v3Merge` + 双端 e2e 回归）；元数据变更不再重传同 hash 正文；同步进度阶段（`load-state/read-index/downloads/uploads/publish-*/pending` → SyncProgress download/upload/manifest，首拉不再只有 connect→done）；冲突留档回执（`S3v3SyncReport.supersededNotes` → `SyncResult.conflicts/supersededNotes`，UI 冲突清单恢复）。
+- **仍缺（按 PARITY 审计，P0/P1 未完成，下一批）**：① 回收站附件惰性补拉（B6）仍读 `store.listDeclaredAssets`（v3 不写该表 ⇒ 空操作）；② 深度清理无"上一版索引/history 引用"保护与年龄窗口（F3/F4，可能删历史图片）；③ 小记单条推送仍退化为整轮（E2）；④ 小记/ lake 墓碑不携带删除前内容（D2/D3/E4，产品语义待确认）；⑤ 移动端 `archiveBody/writeHistory` no-op（移动端冲突留档仍缺）；⑥ 目录恢复不可传播（D4）、父目录回落/环检测（C4/C5）；⑦ 移动端 qnotes 缺正文恢复入口未接 v3。
+- **门禁**：tsc 0 · 定向 vitest（s3v3/移动 v3/相关 core）通过（`mobileCloudDeleted.test.ts` 2 例为**既有失败**，HEAD 同样红，非本批引入）· 桌面+移动 `vite build` ✓ · `git diff --check` ✓。
+
 ### 261026 · S3 v3 P1 修复 + 口径定稿（分支 `fix/s3v3-p1`，基于 `feat/s3-v3` ba8f185c）
 
 - **P1 v3 空发布抖动（已修 + 回归）**：根因 = 桌面 v3 适配器把合并结果写回 Store 时只落正文/部分几何字段，**远端/合并结果里的 `updatedAt` 没落库**（正文未变时完全不写；改走 `saveNote/moveTreeNode/setNodeIcon` 时又被改成 now()）。而 v3 三方合并用 `updatedAt` 判断「本地元数据是否更新」⇒ 两端各持不同旧时间戳，隔轮互相判定"元数据更新"，索引在 A/B 两个 hash 间翻转、每轮 +1 generation（实测 g10→g11，published=true、uploaded/downloaded=0；零变更从只读 200B pointer 退化为拉整份索引）。修复：`DesktopStoreDevice.saveState` 对已存在条目把合并结果元数据原样落库（`applyRemoteNoteMeta` + 新增 `Store.applyRemoteFolderMeta`；正文下载后同样回写远端 `updatedAt`）；并把引擎回收站常量从 `"trash"` 改为真实 `notebook-trash`（否则回收站条目父节点写坏）。回归：`electron/s3v3/idlePublishRegression.test.ts`（两端空闲 5 轮 + 增量后回闲：published=false、零传输/零写、只读 pointer ≤1KB）。

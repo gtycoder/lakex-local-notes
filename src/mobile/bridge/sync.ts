@@ -25,6 +25,8 @@ export interface MobileSyncResult {
   quickNotes: QuickNotesSyncResult | { error: string } | null;
   /** 同步收尾对账搜索索引的耗时（ms）；移动端性能专项观测用。 */
   indexMs?: number;
+  /** v3 结构化警告（缺正文/资源缺失等；与桌面 SyncResult.warnings 同构，供 UI 展示）。 */
+  warnings?: import("../../lib/types").SyncWarning[];
 }
 
 /** 云端状态（单一判据，与桌面同源 src/core/cloudState）：没配置 或 关闭云同步 ⇒ 一律不出网。 */
@@ -243,8 +245,10 @@ export const syncDomain = {
         const d = await ensureDb();
         const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix });
         try { await reconcileIndex(d); } catch { /* 派生索引失败不影响同步结果 */ }
-        const message = `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
-        return { message, notes: null, quickNotes: null };
+        const message = v3.warningDetails.length > 0
+          ? `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}（${v3.warningDetails.length} 项被跳过）`
+          : `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
+        return { message, notes: null, quickNotes: null, ...(v3.warningDetails.length > 0 ? { warnings: v3.warningDetails } : {}) };
       });
       writeSyncStatus({ at: new Date().toISOString(), ok: true, message: result.message });
       return result;

@@ -109,6 +109,18 @@ describe("planLakeMerge", () => {
     expect(n.kind).toBe("none");
     expect(n.applyRemote).toBe(true);
   });
+  it("编辑锁字段级 LWW：锁变更不 bump updatedAt，仍按 lockedAt 传播（C3）", () => {
+    const locked = (at: string | null): LakeNoteEntry => ({ ...note("n1", H("a")), isLocked: !!at, lockedAt: at });
+    const baseIdx = lake([locked(null)]);
+    const localUnlocked = lake([locked(null)]);
+    const remoteLocked = lake([locked("2026-10-26T00:00:00.000Z")]);
+    const p1 = planLakeMerge(baseIdx, localUnlocked, remoteLocked, emptyCtx).notes.find((x) => x.id === "n1")!;
+    expect(p1.kind).toBe("none");
+    expect(p1.applyRemote).toBe(true); // 远端加锁 → 本端跟随
+    const p2 = planLakeMerge(baseIdx, remoteLocked, localUnlocked, emptyCtx).notes.find((x) => x.id === "n1")!;
+    expect(p2.kind).toBe("none");
+    expect(p2.uploadLocal).toBe(true); // 本端加锁 → 上传元数据
+  });
   it("目录：本地新建/远端新建/远端删除/本地删除意图", () => {
     const f = (id: string, updatedAt = "2026-10-25T00:00:00.000Z"): LakeIndex["folders"][number] => ({ id, title: id, parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt });
     const baseIdx = lake([], [f("f1"), f("f2"), f("f3")]);

@@ -9,6 +9,15 @@ export const S3V3_PREFIX = "";
 
 const SAFE_KEY_RE = /^[A-Za-z0-9._/-]+$/;
 
+/**
+ * gzip 只用于 v3 的**元数据对象**（索引 / 资产声明）；正文与附件一律不压缩。
+ * P0（261026）：端口曾按「字节以 1f8b 开头」判定 gzip，会把恰好以这两个字节开头的
+ * 二进制附件当 gzip 解压 ⇒ Z_DATA_ERROR / 附件下载失败。判定必须按 key 而非魔数。
+ */
+export function isGzipMetadataKey(rel: string): boolean {
+  return rel.startsWith("meta/") || rel.startsWith("quick-notes/meta/");
+}
+
 export function assertSafeS3Key(key: string): void {
   if (!key || key.length > 1024 || key.startsWith("/") || key.includes("//") || !SAFE_KEY_RE.test(key)) {
     throw new Error("非法 S3 key: " + key);

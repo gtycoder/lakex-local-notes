@@ -31,6 +31,7 @@ import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3
 import { shouldClearDeletionIntent, type DeletionIntent } from "./s3v3Intent.js";
 import { TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
+import type { SyncWarning } from "../lib/types.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { runPool, runPoolSettled } from "./s3v3Pool.js";
 import { mergeQuickNoteTags, type QuickNoteTag } from "./quickNoteTags.js";
@@ -47,6 +48,14 @@ const TRASH_ID = TRASH_NOTEBOOK_ID;
 const MAX_PUBLISH_RETRIES = 6;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * 资产声明是**不可变内容寻址对象**（key = declHash）⇒ 进程内可安全跨轮/跨引擎复用。
+ * 桌面每轮都会 new 一个引擎：没有这层缓存时，元数据漂移导致大量 applyRemote 的轮次会
+ * 逐篇重复 GET 声明对象（崩溃追赶实测 4,070 次 meta GET 的一部分）。上限防止无限增长。
+ */
+const DECL_CACHE_LIMIT = 2000;
+const DECL_CACHE = new Map<string, AssetDeclaration>();
 
 export class S3v3SyncError extends Error {
   constructor(readonly code: string, message: string) {
@@ -77,7 +86,12 @@ export interface S3v3SyncReport {
   deletedObjects: number;
   published: boolean;
   generation: number | null;
+  /** 兼容旧调用方/日志的一行式消息（与 warningDetails 一一对应子集）。 */
   warnings: string[];
+  /** 结构化警告（UI 展示/点击定位；SyncWarningKind 见 src/lib/types.ts）。 */
+  warningDetails: SyncWarning[];
+  /** 本轮被远端覆盖、已强制写本地历史的文档（UI 冲突清单/角标；对齐旧协议 supersededNotes）。 */
+  supersededNotes: Array<{ id: string; title: string }>;
 }
 export interface S3v3EngineOptions {
   remote: S3v3Remote;
@@ -138,10 +152,11 @@ export class S3v3SyncEngine {
   private readonly onPhase?: (phase: string, ms: number) => void;
   private readonly transferConcurrency: number;
   private phaseStart = 0;
-  private readonly declCache = new Map<string, AssetDeclaration>();
   private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes: Uint8Array; gzip?: boolean }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
   private warnings: string[] = [];
+  private warningDetails: SyncWarning[] = [];
+  private supersededNotes: Array<{ id: string; title: string }> = [];
 
   constructor(opts: S3v3EngineOptions) {
     this.remote = opts.remote;
@@ -163,6 +178,12 @@ export class S3v3SyncEngine {
 
   private iso(): string { return this.now().toISOString(); }
 
+  /** 记录一条结构化警告（同时保留一行式消息给日志/旧调用方）。 */
+  private warn(message: string, extra: Omit<SyncWarning, "message"> = { kind: "remote_incomplete" }): void {
+    this.warnings.push(message);
+    this.warningDetails.push({ ...extra, message });
+  }
+
   /** 正常同步（先拉后推 + 发布锁 + 待删门禁）。 */
   async sync(opts: S3v3SyncOptions = {}): Promise<S3v3SyncReport> {
     this.uploadOps = [];
@@ -170,6 +191,8 @@ export class S3v3SyncEngine {
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < MAX_PUBLISH_RETRIES; attempt++) {
       this.warnings = [];
+      this.warningDetails = [];
+      this.supersededNotes.length = 0;
       try {
         const result = await this.syncOnce(opts);
         this.phase("total");
@@ -211,12 +234,14 @@ export class S3v3SyncEngine {
 
   private async getDeclaration(space: "lake" | "quickNotes", id: string, declHash: string): Promise<AssetDeclaration | null> {
     const cacheKey = space + "/" + id + "/" + declHash;
-    if (this.declCache.has(cacheKey)) return this.declCache.get(cacheKey)!;
+    const cached = DECL_CACHE.get(cacheKey);
+    if (cached) return cached;
     const bytes = await this.remote.get(declarationKey(space, id, declHash));
     if (!bytes) return null;
     const decl = validateAssetDeclaration(JSON.parse(new TextDecoder().decode(bytes)));
     if (declarationHashOf(decl) !== declHash) throw new S3v3SyncError("declaration-hash-mismatch", "声明 hash 不符: " + id);
-    this.declCache.set(cacheKey, decl);
+    if (DECL_CACHE.size >= DECL_CACHE_LIMIT) DECL_CACHE.delete(DECL_CACHE.keys().next().value as string);
+    DECL_CACHE.set(cacheKey, decl);
     return decl;
   }
 
@@ -239,7 +264,7 @@ export class S3v3SyncEngine {
   }
 
   private async syncOnce(opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
-    const report: S3v3SyncReport = { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: this.warnings };
+    const report: S3v3SyncReport = { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: this.warnings, warningDetails: this.warningDetails, supersededNotes: this.supersededNotes };
     const state = (await this.device.loadState()) ?? emptyState();
     const baseline = await this.device.loadBaseline();
     const pointer = await this.readPointer();
@@ -298,19 +323,34 @@ export class S3v3SyncEngine {
       remotePurged: [],
       restorePending: [],
     };
+    // 全量重拉 = 元数据对账 + 本地内容复用（S3-REDESIGN §15）：本地正文/附件已持同内容就不重下字节。
+    // 记账口径：新设备（state 里本来没有该条目）仍算「下载」；崩溃重拉（state 已有）只算真正补拉的字节。
+    const hadLake = new Set(state.lake.notes.map((n) => n.id));
+    const hadQuick = new Set(state.quickNotes.items.map((q) => q.id));
+    // 修复 P1 崩溃追赶放大：初始上传在 pointer 之后、baseline 之前被 kill -9 ⇒ 下一轮走 pullAll，
+    // 旧实现无条件 GET 全部正文+附件（实测 2.2 万 GET / 1.37GB）；差集后只拉真正缺失/损坏的。
     for (const n of lake.notes) {
-      const bytes = await this.getBody("lake", n.id, n.contentHash);
-      if (!bytes) { this.warnings.push("缺正文: " + n.id); continue; }
-      await this.device.writeBody(n.id, bytes);
+      const local = await this.readLocalBody("lake", n.id);
+      // 只有「本设备 state 里本来就有这条」才复用本地字节（崩溃重拉场景）；新设备一律完整下载。
+      const reusable = hadLake.has(n.id) && !!local && sha256Hex(local) === n.contentHash;
+      if (!reusable) {
+        const bytes = await this.getBody("lake", n.id, n.contentHash);
+        if (!bytes) { this.warn("缺正文: " + n.id, { kind: "remote_incomplete", noteId: n.id, title: n.title }); continue; }
+        await this.device.writeBody(n.id, bytes);
+        report.downloadedNotes++;
+      }
       await this.downloadAssets(n.id, n.assetsHash);
-      report.downloadedNotes++;
     }
     for (const q of quick.items) {
-      const bytes = await this.getQuickBody(q.contentHash);
-      if (!bytes) { this.warnings.push("缺小记正文: " + q.id); continue; }
-      await this.device.writeQuickBody(q.id, bytes);
+      const local = await this.readLocalBody("quickNotes", q.id);
+      const reusableQuick = hadQuick.has(q.id) && !!local && sha256Hex(local) === q.contentHash;
+      if (!reusableQuick) {
+        const bytes = await this.getQuickBody(q.contentHash);
+        if (!bytes) { this.warn("缺小记正文: " + q.id, { kind: "remote_incomplete", noteId: q.id }); continue; }
+        await this.device.writeQuickBody(q.id, bytes);
+        report.downloadedNotes++;
+      }
       await this.downloadQuickAssets(q.id, q.assetsHash);
-      report.downloadedNotes++;
     }
     this.phase("downloads");
     await this.device.saveState(newState);
@@ -463,13 +503,27 @@ export class S3v3SyncEngine {
         continue;
       }
       if (!remote || !plan.applyRemote) continue;
+      if (plan.kind === "remote-wins-history") this.supersededNotes.push({ id: plan.id, title: remote.title });
       const local = lakeWS.get(plan.id);
       if (plan.applyRemote && remote) {
         if (plan.archiveLocal && local) await this.device.archiveBody(plan.id, await this.device.readBody(plan.id));
         const needBody = !local || local.contentHash !== remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
         if (needBody) {
           const bytes = await this.getBody("lake", remote.id, remote.contentHash);
-          if (!bytes) { this.warnings.push("远端缺正文，跳过: " + remote.id); continue; }
+          if (!bytes) {
+            // 本地正文也缺失 ⇒ 两边都没有内容：绝不能把条目发布成"有正文"。
+            const localBody = await this.readLocalBody("lake", remote.id);
+            if (!localBody) this.warn("本地与云端都缺正文，跳过: " + remote.id, { kind: "local_body_missing", noteId: remote.id, title: remote.title });
+            else this.warn("远端缺正文，跳过: " + remote.id, { kind: "remote_incomplete", noteId: remote.id, title: remote.title });
+            // 正文对象暂时缺失不得把条目从云端索引删掉（否则一次半失败就成了永久删除）：
+            // 保留远端条目（索引 = 远端），下轮对象恢复后自然对齐。
+            lakeWS.set(remote.id, { ...remote });
+            continue;
+          }
+          if (!local && baseline.lake.notes.some((n) => n.id === remote.id)) {
+            // 基线里有、本地行/正文却没了（如 .lake 被手动删除）⇒ 已从云端拉回。
+            this.warn("本地缺正文，已从云端拉回: " + remote.id, { kind: "local_body_restored", noteId: remote.id, title: remote.title });
+          }
           await this.device.writeBody(remote.id, bytes);
           report.downloadedNotes++;
         }
@@ -515,6 +569,7 @@ export class S3v3SyncEngine {
       }
       if (plan.kind === "local-purge") { quickWS.delete(plan.id); purged.delete(plan.id); continue; }
       if (!remote || !plan.applyRemote) continue;
+      if (plan.kind === "remote-wins-history") this.supersededNotes.push({ id: plan.id, title: "小记" });
       if (plan.archiveLocal && local) {
         const bytes = await this.device.readQuickBody(plan.id);
         if (bytes) await this.device.writeHistory("quick-" + plan.id, bytes);
@@ -522,7 +577,11 @@ export class S3v3SyncEngine {
       const needBody = !local || local.contentHash !== remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
       if (needBody) {
         const bytes = await this.getQuickBody(remote.contentHash);
-        if (!bytes) { this.warnings.push("远端缺小记正文，跳过: " + remote.id); continue; }
+        if (!bytes) {
+          this.warn("远端缺小记正文，跳过: " + remote.id, { kind: "remote_incomplete", noteId: remote.id });
+          quickWS.set(remote.id, { ...remote });
+          continue;
+        }
         await this.device.writeQuickBody(remote.id, bytes);
         report.downloadedNotes++;
       }
@@ -543,7 +602,22 @@ export class S3v3SyncEngine {
       if (!entry) continue;
       try {
         const body = await this.device.readBody(plan.id);
-        if (!body) { this.warnings.push("本地缺正文，跳过上传: " + plan.id); continue; }
+        if (!body) {
+          // P0：上传前本地正文缺失 → 先按远端同条目 contentHash 尝试拉回（校验一致才落盘）。
+          const restored = await this.restoreMissingBody("lake", plan.id, plan.remote?.contentHash ?? entry.contentHash);
+          if (restored) {
+            this.warn("本地缺正文，已从云端拉回: " + plan.id, { kind: "local_body_restored", noteId: plan.id, title: entry.title });
+            entry.contentHash = sha256Hex(restored);
+            // 云端已有同内容正文：本轮无需上传（索引仍以合并结果为准）。
+            continue;
+          }
+          // 云端也没有可拉回的副本：跳过 + 绝不把空正文上传/声明进新索引。
+          this.warn("本地缺正文，跳过上传: " + plan.id, { kind: "local_body_missing", noteId: plan.id, title: entry.title });
+          lakeWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
+          newLakeDecls.delete(plan.id);
+          prevDecls.delete(plan.id);
+          continue;
+        }
         const hash = sha256Hex(body);
         entry.contentHash = hash;
         const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("lake", plan.id, plan.remote.assetsHash) : null;
@@ -563,8 +637,11 @@ export class S3v3SyncEngine {
             if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
           }
         }
-        this.uploadOps.push({ space: "lake", noteId: plan.id, key: lakeBodyKey(plan.id, hash), bytes: body });
-        report.uploadedNotes++;
+        // 仅在正文内容真的变化时 PUT（锁/图标等元数据变更不必重传正文）。
+        if (plan.remote?.contentHash !== hash) {
+          this.uploadOps.push({ space: "lake", noteId: plan.id, key: lakeBodyKey(plan.id, hash), bytes: body });
+          report.uploadedNotes++;
+        }
       } catch (e) {
         this.warnings.push("上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
         // 关键：失败笔记不得进入本轮新索引（否则索引引用未落盘正文/声明），回退到远端旧条目或移出。
@@ -579,7 +656,19 @@ export class S3v3SyncEngine {
       if (!entry) continue;
       try {
         const body = await this.device.readQuickBody(plan.id);
-        if (!body) { this.warnings.push("本地缺小记正文，跳过上传: " + plan.id); continue; }
+        if (!body) {
+          const restored = await this.restoreMissingBody("quickNotes", plan.id, plan.remote?.contentHash ?? entry.contentHash);
+          if (restored) {
+            this.warn("本地缺小记正文，已从云端拉回: " + plan.id, { kind: "local_body_restored", noteId: plan.id });
+            entry.contentHash = sha256Hex(restored);
+            continue;
+          }
+          this.warn("本地缺小记正文，跳过上传: " + plan.id, { kind: "local_body_missing", noteId: plan.id });
+          quickWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
+          newQuickDecls.delete(plan.id);
+          prevQuickDecls.delete(plan.id);
+          continue;
+        }
         entry.contentHash = sha256Hex(body);
         const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("quickNotes", plan.id, plan.remote.assetsHash) : null;
         const decl = await this.uploadQuickAssets(plan.id, remoteDecl);
@@ -594,8 +683,10 @@ export class S3v3SyncEngine {
         } else {
           entry.assetsHash = undefined;
         }
-        this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: quickNoteBodyKey(entry.contentHash), bytes: body });
-        report.uploadedNotes++;
+        if (plan.remote?.contentHash !== entry.contentHash) {
+          this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: quickNoteBodyKey(entry.contentHash), bytes: body });
+          report.uploadedNotes++;
+        }
       } catch (e) {
         this.warnings.push("小记上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
         quickWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
@@ -849,7 +940,12 @@ export class S3v3SyncEngine {
     const lakeEntries = new Map(state.lake.notes.filter((n) => !purgedIds.has(n.id)).map((n) => [n.id, { ...n }]));
     for (const entry of lakeEntries.values()) {
       const body = await this.device.readBody(entry.id);
-      if (!body) { this.warnings.push("缺正文，跳过初始化上传: " + entry.id); continue; }
+      if (!body) {
+        // 云端为空时没有可拉回的副本：跳过且不得声明进初始化索引（否则索引引用不存在的正文）。
+        this.warn("缺正文，跳过初始化上传: " + entry.id, { kind: "local_body_missing", noteId: entry.id, title: entry.title });
+        lakeEntries.delete(entry.id);
+        continue;
+      }
       entry.contentHash = sha256Hex(body);
       const decl = await this.uploadAssets("lake", entry.id, null);
       if (decl) {
@@ -862,7 +958,11 @@ export class S3v3SyncEngine {
     const quickEntries = new Map(state.quickNotes.items.filter((q) => !purgedIds.has(q.id)).map((q) => [q.id, { ...q }]));
     for (const entry of quickEntries.values()) {
       const body = await this.device.readQuickBody(entry.id);
-      if (!body) { this.warnings.push("缺小记正文，跳过初始化上传: " + entry.id); continue; }
+      if (!body) {
+        this.warn("缺小记正文，跳过初始化上传: " + entry.id, { kind: "local_body_missing", noteId: entry.id });
+        quickEntries.delete(entry.id);
+        continue;
+      }
       entry.contentHash = sha256Hex(body);
       const decl = await this.uploadQuickAssets(entry.id, null);
       if (decl) {
@@ -921,14 +1021,50 @@ export class S3v3SyncEngine {
     return this.uploadAssets("quickNotes", id, remoteDecl);
   }
 
+  /** 读本地正文（缺失/异常一律 null；用于差集判定，不参与同步语义）。 */
+  private async readLocalBody(space: "lake" | "quickNotes", id: string): Promise<Uint8Array | null> {
+    try { return space === "lake" ? await this.device.readBody(id) : await this.device.readQuickBody(id); }
+    catch { return null; }
+  }
+
+  /** 本地资产清单（filename 集合）；扫描失败回退空集 = 全量下载（不改旧行为）。 */
+  private async localAssetNames(space: "lake" | "quickNotes", id: string): Promise<Set<string>> {
+    try { return new Set(space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id)); }
+    catch { return new Set(); }
+  }
+
+  private async readLocalAsset(space: "lake" | "quickNotes", id: string, filename: string): Promise<Uint8Array | null> {
+    try { return space === "lake" ? await this.device.readAsset(id, filename) : await this.device.readQuickAsset(id, filename); }
+    catch { return null; }
+  }
+
+  /** P0 资产下载差集：本地已持「同名 + 同 size + 同 sha256」⇒ 内容寻址下逐字节等价，跳过 GET。 */
+  private async localAssetMatches(space: "lake" | "quickNotes", id: string, a: AssetDeclaration["assets"][number], localNames: Set<string>): Promise<boolean> {
+    if (!localNames.has(a.filename)) return false;
+    const have = await this.readLocalAsset(space, id, a.filename);
+    return !!have && have.length === a.size && sha256Hex(have) === a.hash;
+  }
+
+  /** 上传前正文缺失：按远端内容 hash 尝试从云端拉回（校验一致才落盘）。 */
+  private async restoreMissingBody(space: "lake" | "quickNotes", id: string, expectedHash?: string): Promise<Uint8Array | null> {
+    if (!expectedHash) return null;
+    const bytes = space === "lake" ? await this.getBody("lake", id, expectedHash) : await this.getQuickBody(expectedHash);
+    if (!bytes || sha256Hex(bytes) !== expectedHash) return null;
+    if (space === "lake") await this.device.writeBody(id, bytes);
+    else await this.device.writeQuickBody(id, bytes);
+    return bytes;
+  }
+
   private async downloadAssets(id: string, declHash?: string): Promise<AssetDeclaration | null> {
     if (!declHash) { return null; }
     const decl = await this.getDeclaration("lake", id, declHash);
-    if (!decl) { this.warnings.push("缺资产声明: " + id); return null; }
+    if (!decl) { this.warn("缺资产声明: " + id, { kind: "remote_incomplete", noteId: id }); return null; }
+    const localNames = await this.localAssetNames("lake", id);
     await runPool(decl.assets, this.transferConcurrency, async (a) => {
+      if (await this.localAssetMatches("lake", id, a, localNames)) return; // 本地已持同内容：不产生 GET
       const bytes = await this.remote.get(assetKey(id, a.filename));
-      if (!bytes) { this.warnings.push("缺附件: " + id + "/" + a.filename); return; }
-      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("附件校验失败: " + id + "/" + a.filename); return; }
+      if (!bytes) { this.warn("缺附件: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
+      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warn("附件校验失败: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
       await this.device.writeAsset(id, a.filename, bytes);
     });
     return decl;
@@ -936,11 +1072,13 @@ export class S3v3SyncEngine {
   private async downloadQuickAssets(id: string, declHash?: string): Promise<AssetDeclaration | null> {
     if (!declHash) return null;
     const decl = await this.getDeclaration("quickNotes", id, declHash);
-    if (!decl) { this.warnings.push("缺小记图片声明: " + id); return null; }
+    if (!decl) { this.warn("缺小记图片声明: " + id, { kind: "remote_incomplete", noteId: id }); return null; }
+    const localNames = await this.localAssetNames("quickNotes", id);
     await runPool(decl.assets, this.transferConcurrency, async (a) => {
+      if (await this.localAssetMatches("quickNotes", id, a, localNames)) return;
       const bytes = await this.remote.get(quickNoteAssetKey(id, a.filename));
-      if (!bytes) { this.warnings.push("缺小记图片: " + id + "/" + a.filename); return; }
-      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warnings.push("小记图片校验失败: " + id + "/" + a.filename); return; }
+      if (!bytes) { this.warn("缺小记图片: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
+      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warn("小记图片校验失败: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
       await this.device.writeQuickAsset(id, a.filename, bytes);
     });
     return decl;
@@ -995,6 +1133,6 @@ export class S3v3SyncEngine {
     const pointer = await this.readPointer();
     if (!pointer) throw new S3v3SyncError("pointer-corrupt", "云端没有 pointer，无法全量重拉");
     const state = (await this.device.loadState()) ?? emptyState();
-    return this.pullAll(pointer, { ...state, pending: [] }, { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: [] }, true);
+    return this.pullAll(pointer, { ...state, pending: [] }, { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: [], warningDetails: [], supersededNotes: [] }, true);
   }
 }
