@@ -152,6 +152,8 @@ export class SettingsRepository {
         enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : def.enabled,
         autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" || parsed.autoMode === "manual" ? parsed.autoMode : def.autoMode,
         autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" && parsed.autoIntervalMinutes >= 1 ? Math.floor(parsed.autoIntervalMinutes) : def.autoIntervalMinutes,
+        // 按需资产（P0-4）：缺省 undefined = 全量语义。
+        ...(parsed.deferAssets === true ? { deferAssets: true } : {}),
       };
     } catch {
       return def;

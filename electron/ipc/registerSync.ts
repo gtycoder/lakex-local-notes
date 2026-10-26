@@ -151,6 +151,8 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
       enabled: raw.enabled,
       autoMode: raw.autoMode,
       autoIntervalMinutes: clampNum(raw.autoIntervalMinutes, 15, 1, 1440),
+      // 按需资产（P0-4）：只接受显式 true（缺省 undefined = 全量语义）。
+      ...(raw.deferAssets === true ? { deferAssets: true } : {}),
     };
     const previous = store.getSyncSettings();
     let alignWarning: string | undefined;

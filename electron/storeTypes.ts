@@ -32,6 +32,9 @@ export interface SyncSettings {
   autoMode: "interval" | "onOpenClose" | "manual";
   /** autoMode=interval 时的间隔分钟数（>=1）。 */
   autoIntervalMinutes: number;
+  /** 按需资产（P0-4，261026，与移动端同口径）：首拉只同步 pointer/索引/正文，媒体打开/预览时补拉。
+   *  缺省 false（全量语义）。 */
+  deferAssets?: boolean;
 }
 
 /** S3 GC 保留策略配置（v4，可配置；存 settings 表，纯本地） */

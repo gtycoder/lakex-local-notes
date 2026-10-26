@@ -734,6 +734,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           {syncCfg.autoMode === "interval" && (
                             <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）" desc="到点触发一次；应用退出后不会在后台继续定时（下次启动时的对齐会补上）。"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
+                          <Switch itemId="sync-defer-assets" name="按需下载附件" desc="开启后首拉只同步文档与附件清单，图片/附件在打开或预览时按需下载（首拉更快、省流量）；关闭则首拉全量下载（离线完整性最好）。与移动端同口径。" checked={syncCfg.deferAssets === true} onChange={(checked) => void saveSyncCfg({ deferAssets: checked })} />
                         </>
                       )}
                     </>

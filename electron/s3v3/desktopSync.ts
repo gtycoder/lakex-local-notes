@@ -125,8 +125,10 @@ export async function syncWithV3(
   });
   // 转正后默认把「云端无 v3 pointer」视为首次上传：本地就是真相（旧 manifest 不迁移，符合无历史兼容）。
   const emptyMode = (process.env.LAKE_S3V3_EMPTY_CLOUD ?? "upload") as "upload" | "stay" | "throw";
+  // 按需资产（P0-4，与移动端同口径）：设置里打开时首拉只同步正文/声明，媒体打开/预览时补拉。
+  const deferAssets = store.getSyncSettings().deferAssets === true;
   try {
-    const r = await engine.sync(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode });
+    const r = await engine.sync({ ...(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode }), ...(deferAssets ? { deferAssets: true } : {}) });
     for (const w of r.warnings) store.logScopes.sync.warn("[v3] " + w);
     const result: SyncResult = {
       uploaded: r.uploadedNotes, downloaded: r.downloadedNotes, conflicts: r.supersededNotes.length,
