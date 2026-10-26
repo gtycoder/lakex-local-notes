@@ -35,7 +35,10 @@ export interface ConformanceHarness {
   sync(opts?: { onEmptyCloud?: "upload" | "stay" }): Promise<S3v3SyncReport>;
   seedNote(id: string, title: string, body: string): Promise<void>;
   editNote(id: string, title: string, body: string): Promise<void>;
-  listNoteIds(): Promise<string[]>;
+  listActiveIds(): Promise<string[]>;
+  listTrashIds(): Promise<string[]>;
+  trashNote(id: string): Promise<void>;
+  restoreNote(id: string): Promise<void>;
   readBody(id: string): Promise<string | null>;
   close(): Promise<void>;
 }
@@ -64,7 +67,7 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
         expect(second.uploadedNotes).toBe(0);
         expect(remote.puts).toBe(putsAfterFirst);
         // 桌面 bootstrap 会带一条 welcome-note 种子；两端都只要求包含我们造的这两篇。
-        expect(await dev.listNoteIds()).toEqual(expect.arrayContaining(["n1", "n2"]));
+        expect(await dev.listActiveIds()).toEqual(expect.arrayContaining(["n1", "n2"]));
         expect(await dev.readBody("n1")).toBe("<p>正文一</p>");
       } finally { await dev.close(); }
     }, 120_000);
@@ -79,7 +82,7 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
         await a.sync({ onEmptyCloud: "upload" });
         const pulled = await b.sync();
         expect(pulled.downloadedNotes).toBeGreaterThanOrEqual(2);
-        expect(await b.listNoteIds()).toEqual(expect.arrayContaining(["n1", "n2"]));
+        expect(await b.listActiveIds()).toEqual(expect.arrayContaining(["n1", "n2"]));
         expect(await b.readBody("n1")).toBe("<p>正文一</p>");
         expect(await b.readBody("n2")).toBe("<p>正文二</p>");
         // 再空跑一次：B 不重复下载
@@ -87,6 +90,32 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
         expect(noop.downloadedNotes).toBe(0);
       } finally { await a.close(); await b.close(); }
     }, 120_000);
+
+    it("本地移入回收站 → 对端跟随（回收站可见、正文仍在），恢复后回到活跃", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        expect(await b.listActiveIds()).toContain("n1");
+
+        await a.trashNote("n1");
+        await a.sync();
+        await b.sync();
+        expect(await b.listActiveIds()).not.toContain("n1");
+        expect(await b.listTrashIds()).toContain("n1");
+        // 正文仍在（回收站是软删，不是墓碑）
+        expect(await b.readBody("n1")).toBe("<p>正文一</p>");
+
+        await a.restoreNote("n1");
+        await a.sync();
+        await b.sync();
+        expect(await b.listActiveIds()).toContain("n1");
+        expect(await b.listTrashIds()).not.toContain("n1");
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
 
     it("双端编辑互相同步（各自改各自、再改对方）", async () => {
       const remote = new MemoryRemote();

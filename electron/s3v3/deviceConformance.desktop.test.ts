@@ -18,7 +18,14 @@ defineDeviceConformance("设备适配器一致性（桌面 store）", async (rem
     sync: (opts) => engine.sync(opts ?? {}),
     seedNote: async (id, title, body) => { store.createNoteInAtTopWithContent(nb.id, title, body, [], id); },
     editNote: async (id, title, body) => { store.saveNote(id, title, body); },
-    listNoteIds: async () => store.listNoteSummaries().map((s) => s.id).sort(),
+    // 桌面 listNoteSummaries 含回收站条目（用 trashed_at/parent 过滤），活跃 = 摘要 - 回收站。
+    listActiveIds: async () => {
+      const trash = new Set(store.listTrash().map((t) => t.id));
+      return store.listNoteSummaries().map((s) => s.id).filter((id) => !trash.has(id)).sort();
+    },
+    listTrashIds: async () => store.listTrash().map((t) => t.id).sort(),
+    trashNote: async (id) => { store.deleteTreeNode(id); },
+    restoreNote: async (id) => { store.restoreTrashItem(id); },
     readBody: async (id) => { const bytes = await device.readBody(id); return bytes ? new TextDecoder().decode(bytes) : null; },
     close: async () => { await fs.rm(root, { recursive: true, force: true }); },
   };

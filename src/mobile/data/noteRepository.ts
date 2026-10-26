@@ -242,7 +242,10 @@ export async function saveNote(
 
 /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。 */
 export async function trashNote(d: MobileDb, id: string): Promise<void> {
-  await d.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
+  // 261026：软删必须 bump updated_at —— v3 索引的 trashedAt/恢复靠 updatedAt 做 LWW 传播；
+  // 不 bump 时对端看到的 updatedAt 没变，回收站状态永远同步不过去（conformance 抓到）。
+  const now = new Date().toISOString();
+  await d.prepare("UPDATE notes SET trashed_at=?, updated_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(now, now, id);
   await removeNoteFromIndex(d, id);
 }
 
