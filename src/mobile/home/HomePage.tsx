@@ -572,6 +572,20 @@ export function HomePage(props: HomePageProps) {
 
   const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;
 
+  /**
+   * P0-6 可视进度条（261026）：用户点单"先让文档展示出来 + 加进度条"。
+   * 计数优先（正文/附件张数），没有计数就用字节；两者都没有（metadata/finalize）= 不确定态。
+   * 只有同步进行中才渲染；结束后条消失，布局回到原样。
+   */
+  const syncPct = (() => {
+    if (!syncProgress) return -1;
+    const counted = syncProgress.total !== undefined && syncProgress.total > 0;
+    const bytes = syncProgress.bytesTotal !== undefined && syncProgress.bytesTotal > 0;
+    if (counted) return Math.max(0, Math.min(100, Math.round(((syncProgress.done ?? 0) / (syncProgress.total as number)) * 100)));
+    if (bytes) return Math.max(0, Math.min(100, Math.round(((syncProgress.bytesDone ?? 0) / (syncProgress.bytesTotal as number)) * 100)));
+    return -1;
+  })();
+
   const renderQuickNoteCard = (note: MobileQuickNote) => (
     <QuickNoteCard
       key={note.id}
@@ -609,6 +623,18 @@ export function HomePage(props: HomePageProps) {
           title={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
         ><CloudUpload /></button>
       </header>
+
+      {syncProgress && (
+        <div className={"mobile-sync-strip" + (syncPct < 0 ? " is-indeterminate" : "")} role="status" aria-live="polite">
+          <div className="mobile-sync-strip__text">
+            <span className="mobile-sync-strip__label">{describeSyncProgress(syncProgress)}</span>
+            {syncPct >= 0 && <span className="mobile-sync-strip__pct">{syncPct}%</span>}
+          </div>
+          <div className="mobile-sync-strip__bar" aria-hidden="true">
+            <span style={{ width: (syncPct < 0 ? 100 : syncPct) + "%" }} />
+          </div>
+        </div>
+      )}
 
       <div
         ref={stageRef}

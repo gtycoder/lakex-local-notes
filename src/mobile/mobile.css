@@ -79,6 +79,25 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    让它像 `.mobile-workspace` 一样撑满外壳（外壳高度已被 --mb-app-h 钉住）⇒ 内层才是真正的滚动容器。 */
 .mobile-home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
+/* P0-6 可视进度条（261026）：首拉/大同步时在顶栏与主页舞台之间显示"阶段 + 计数 + 字节 + 进度"。
+   只在同步进行中条件渲染 ⇒ 结束后布局回到原样；不动顶栏 5 槽构图。
+   不确定态（读索引/收尾）走滑块，不给假百分比。 */
+.mobile-sync-strip {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px;
+  padding: 6px var(--mb-page-pad) 8px;
+  border-bottom: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-panel);
+  animation: mb-sync-strip-in var(--lake-motion-fast) var(--mobile-ease-panel);
+}
+.mobile-sync-strip__text { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.mobile-sync-strip__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--lake-font-size-tiny); color: var(--lake-text-2); }
+.mobile-sync-strip__pct { flex: 0 0 auto; font-size: var(--lake-font-size-nano); color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+.mobile-sync-strip__bar { position: relative; height: 3px; border-radius: 2px; overflow: hidden; background: var(--lake-bg-block); }
+.mobile-sync-strip__bar > span { display: block; height: 100%; border-radius: 2px; background: var(--lake-accent); transition: width var(--lake-motion-fast) linear; }
+.mobile-sync-strip.is-indeterminate .mobile-sync-strip__bar > span { width: 40% !important; animation: mb-sync-strip-sweep 1.2s var(--mobile-ease-panel) infinite; }
+@keyframes mb-sync-strip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes mb-sync-strip-sweep { from { transform: translateX(-110%); } to { transform: translateX(280%); } }
+
 /* 首层 tab（小记 ↔ 知识库）= **原生横向分页**（261019 用户点单，对齐语雀 App）：
    两页并排放在同一个横向滚动容器里 ⇒ 手指跟手拖动、松手由 scroll-snap 吸附，
    与语雀 RN 侧的 `react-native-pager-view` 同一形态；tab↔页码的取整判据在 home/tabPager.ts。

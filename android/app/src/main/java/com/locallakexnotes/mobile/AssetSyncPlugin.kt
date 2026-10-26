@@ -18,6 +18,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.Executors
 
 /** `localKey` 只能落在 filesDir/note-assets 的 canonical 子树内；拒绝绝对路径、.. 与软链逃逸。 */
 internal fun resolveLocalAssetFile(filesRoot: File, localKey: String): File {
@@ -50,6 +51,16 @@ class AssetSyncPlugin : Plugin() {
     @Volatile
     private var config: Config? = null
 
+    /**
+     * Capacitor Android 把所有插件调用都 post 到同一条 HandlerThread（"CapacitorPlugins"），
+     * 所以插件方法里做阻塞 IO 会把 20 个并发请求串行化：实测首拉资产只有约 6 文件/s。
+     * 这里把 GET/PUT 的实际 IO 丢给独立线程池（方法本身立即返回、稍后 resolve/reject），
+     * 让 JS 侧 20 并发真正并行。CapacitorHttp 也是同样的做法。
+     */
+    private val ioPool = Executors.newFixedThreadPool(16) { runnable ->
+        Thread(runnable, "LakeAssetSync-io").apply { isDaemon = true }
+    }
+
     @PluginMethod
     fun configure(call: PluginCall) {
         val endpoint = call.getString("endpoint")
@@ -72,7 +83,7 @@ class AssetSyncPlugin : Plugin() {
         call.resolve(JSObject().put("available", true))
     }
 
-    /** PUT：把本地 note-assets/localKey 流式上传到 S3 key。 */
+    /** PUT：把本地 note-assets/localKey 流式上传到 S3 key（IO 在 ioPool，避免插件单线程串行）。 */
     @PluginMethod
     fun putFile(call: PluginCall) {
         val key = call.getString("key")
@@ -86,6 +97,10 @@ class AssetSyncPlugin : Plugin() {
             call.reject("not configured")
             return
         }
+        ioPool.execute { performPut(call, cfg, key, localKey) }
+    }
+
+    private fun performPut(call: PluginCall, cfg: Config, key: String, localKey: String) {
         try {
             val file = localAssetFile(localKey)
             if (!file.isFile) {
@@ -126,7 +141,7 @@ class AssetSyncPlugin : Plugin() {
         }
     }
 
-    /** GET：把 S3 key 流式下载到 note-assets/localKey，返回 size/sha256（供校验）。 */
+    /** GET：把 S3 key 流式下载到 note-assets/localKey，返回 size/sha256（IO 在 ioPool，避免插件单线程串行）。 */
     @PluginMethod
     fun getFile(call: PluginCall) {
         val key = call.getString("key")
@@ -143,6 +158,18 @@ class AssetSyncPlugin : Plugin() {
         val maxBytes = (call.getInt("maxBytes") ?: Int.MAX_VALUE).toLong()
         val expectedSize = call.getLong("expectedSize")
         val expectedSha256 = call.getString("expectedSha256")
+        ioPool.execute { performGet(call, cfg, key, localKey, maxBytes, expectedSize, expectedSha256) }
+    }
+
+    private fun performGet(
+        call: PluginCall,
+        cfg: Config,
+        key: String,
+        localKey: String,
+        maxBytes: Long,
+        expectedSize: Long?,
+        expectedSha256: String?,
+    ) {
         try {
             val dest = localAssetFile(localKey)
             val request = buildRequest(cfg, key)
