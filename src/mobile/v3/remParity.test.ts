@@ -81,6 +81,7 @@ describe("移动端父目录兜底（C5）", () => {
       quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
       folders: [], intents: [], pending: [],
     };
+    await store.writeBody("n1", new TextEncoder().encode("hello"));
     await store.saveState(state);
     const row = await db.prepare("SELECT parent_id FROM notes WHERE id=?").get("n1") as { parent_id: string | null };
     expect(row.parent_id).not.toBe("missing-parent");

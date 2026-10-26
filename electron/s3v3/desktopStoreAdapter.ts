@@ -8,6 +8,9 @@ import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry 
 import { sha256Hex } from "../../src/core/syncUtils.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
 
+/** 资源文件名安全字符集（与 core isSafePathSegment 同口径；纯防御，声明/键已校验）。 */
+const SAFE_ASSET_FILENAME = /^[A-Za-z0-9._-]+$/;
+
 /**
  * 桌面现有 Store → S3v3DeviceStore 适配器（v1：Lake 文档/目录/附件）。
  * - 元数据以 Store 为准；sync 专属状态（baseline/intents/pending/remotePurged/restorePending/assetsHash）落 sidecar。
@@ -19,7 +22,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   private readonly baselineFile: string;
   private readonly stagingDir: string;
   private stagedBodies = new Map<string, Uint8Array>();
-  private stagedAssets = new Map<string, Map<string, Uint8Array>>();
+  /** 已直写落盘的资产（仅用于诊断/断言，不再在内存里存字节：1.7GB 首拉峰值的主因）。 */
   private clearedAssets = new Set<string>();
   private readonly skipQuickNotesGuard: boolean;
   /** 正文 hash 缓存：文件 mtime+size 未变则复用，避免每轮全库读正文。首次/变更文件才重算。 */
@@ -174,10 +177,12 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       const resolvedParentId = n.trashedAt ? TRASH_NOTEBOOK_ID : this.resolveRemoteParent(n.parentId);
       try {
         if (!cur) {
+          // P0-2 分块应用：正文还没下到的条目先不建行（否则会先落一个空正文），等它的分块/下一轮。
+          if (content === null) continue;
           // 走 importRemoteNote：它支持原样 id / 远端 trashedAt / deletedFromParentId / 冲突标记，
           // 而 createNoteInAtTopWithContent 会拒绝“回收站”父目录（他端已删文档首次拉取会炸）。
-          const staged = this.stagedAssets.get(n.id) ?? new Map<string, Uint8Array>();
-          const assets = [...staged.entries()].map(([filename, bytes]) => ({ filename, bytes: Buffer.from(bytes) }));
+          // 资产已由 writeAsset 直写进 assetsDir，这里传空数组（importNote 不会清已有目录）。
+          const assets: Array<{ filename: string; bytes: Buffer }> = [];
           const syncNote = {
             id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
             contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
@@ -196,8 +201,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
             } else {
               // P0：本地正文文件被删（DB 行还在）⇒ 普通 saveNote 会以「笔记不存在」拒绝；
               // 这是「从云端拉回正文」的恢复路径，必须走 importRemoteNote 重建文件。
-              const staged = this.stagedAssets.get(n.id) ?? new Map<string, Uint8Array>();
-              const assets = [...staged.entries()].map(([filename, bytes]) => ({ filename, bytes: Buffer.from(bytes) }));
+              const assets: Array<{ filename: string; bytes: Buffer }> = [];
               this.store.importRemoteNote({
                 id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
                 contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
@@ -240,7 +244,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
             this.store.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);
           }
         }
-        if (this.stagedAssets.has(n.id) || this.clearedAssets.has(n.id)) await this.flushStagedAssets(n.id);
+        if (this.clearedAssets.has(n.id)) await this.flushStagedAssets(n.id);
         if (content !== null) {
           try {
             const lakePath = this.store.getNotePaths(n.id).lakePath;
@@ -266,7 +270,6 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     this.store.applyNotesCloudDeleted(remotePurged);
     await this.writeAtomic(this.stateFile, JSON.stringify({ ...this.sidecarShape(state), remotePurged }));
     this.stagedBodies.clear();
-    this.stagedAssets.clear();
     this.clearedAssets.clear();
   }
 
@@ -280,7 +283,8 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       try {
         if (!cur || cur.contentHash !== item.contentHash) {
           const body = await this.readQuickBody(item.id);
-          if (!body) throw new Error("缺小记正文");
+          // P0-2 分块应用：正文尚未下到的条目先跳过（行保持旧态/不新建），等正文流水线完成后再落。
+          if (!body) { if (!cur) continue; else continue; }
           const assets: Array<{ filename: string; bytes: Buffer }> = [];
           for (const filename of await this.listQuickAssets(item.id)) {
             const bytes = await this.readQuickAsset(item.id, filename);
@@ -348,14 +352,9 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     }
   }
 
+  /** 资产已「下载即落盘」；这里只执行「远端已移除整目录」的清理（延迟到正文/行落库之后）。 */
   private async flushStagedAssets(noteId: string): Promise<void> {
-    const dir = this.store.getNotePaths(noteId).assetsDir;
-    const staged = this.stagedAssets.get(noteId);
-    if (staged) {
-      await fs.mkdir(dir, { recursive: true });
-      for (const [filename, bytes] of staged) await fs.writeFile(path.join(dir, filename), bytes);
-    }
-    if (this.clearedAssets.has(noteId)) await fs.rm(dir, { recursive: true, force: true });
+    if (this.clearedAssets.has(noteId)) await fs.rm(this.store.getNotePaths(noteId).assetsDir, { recursive: true, force: true });
   }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {
@@ -385,21 +384,21 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   async archiveBody(id: string, bytes: Uint8Array | null): Promise<void> { if (bytes) await this.writeHistory(id, bytes); }
 
   async listAssets(id: string): Promise<string[]> {
-    const dir = this.store.getNotePaths(id).assetsDir;
-    let files: string[] = [];
-    try { files = await fs.readdir(dir); } catch { /* none */ }
-    const staged = this.stagedAssets.get(id);
-    return [...new Set([...files.filter((f) => !f.includes(".tmp")), ...(staged ? [...staged.keys()] : [])])].sort();
+    // 用 noteAssetsPathFor（纯路径）而不是 getNotePaths（要求 DB 行已存在）：
+    // 首拉时资产落盘发生在 importRemoteNote 建行之前（下载即落盘，P0-3）。
+    const dir = this.store.noteAssetsPathFor(id);
+    try { return (await fs.readdir(dir)).filter((f) => !f.includes(".tmp")).sort(); } catch { return []; }
   }
   async readAsset(id: string, filename: string): Promise<Uint8Array | null> {
-    const staged = this.stagedAssets.get(id)?.get(filename);
-    if (staged) return staged;
-    const got = this.store.readAssetBytes(id, filename);
-    return got ? new Uint8Array(got.bytes) : null;
+    if (!SAFE_ASSET_FILENAME.test(filename)) return null;
+    try { return new Uint8Array(await fs.readFile(path.join(this.store.noteAssetsPathFor(id), filename))); } catch { return null; }
   }
+  /** 下载即落盘（P0-3）：不再把整轮 1.7GB 资产 stage 在内存；单对象写完即可继续下一个。 */
   async writeAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
-    let map = this.stagedAssets.get(id); if (!map) { map = new Map(); this.stagedAssets.set(id, map); }
-    map.set(filename, bytes);
+    if (!SAFE_ASSET_FILENAME.test(filename)) throw new Error("非法资源文件名: " + filename);
+    const dir = this.store.noteAssetsPathFor(id);
+    await fs.mkdir(dir, { recursive: true });
+    await this.writeAtomic(path.join(dir, filename), bytes);
   }
   async deleteAssetsDir(id: string): Promise<void> { this.clearedAssets.add(id); }
 

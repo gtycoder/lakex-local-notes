@@ -34,10 +34,13 @@ import { TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { SyncWarning } from "../lib/types.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
-import { runPool, runPoolSettled } from "./s3v3Pool.js";
+import { runPoolSettled } from "./s3v3Pool.js";
+import { runTransferPipeline } from "./s3v3Transfer.js";
 import { mergeQuickNoteTags, type QuickNoteTag } from "./quickNoteTags.js";
 
-const DEFAULT_TRANSFER_CONCURRENCY = 12; // 用户批准：8 → 12（实测首同步约 1.5x）
+const DEFAULT_TRANSFER_CONCURRENCY = 12; // 上传并发（用户批准：8 → 12）
+/** 下载流水线并发（正文/声明/资产统一调度；用户批准 16–24，实测七牛/真机带宽在此区间打满）。 */
+const DEFAULT_DOWNLOAD_CONCURRENCY = 20;
 
 const LOCK_KEY = "meta/lock.json";
 const LOCK_TTL_MS = 120_000;
@@ -96,6 +99,15 @@ export interface S3v3SyncReport {
   /** 本轮被远端覆盖、已强制写本地历史的文档（UI 冲突清单/角标；对齐旧协议 supersededNotes）。 */
   supersededNotes: Array<{ id: string; title: string }>;
 }
+/** 引擎级进度（P0-6）：阶段 + 已下/总数 + 字节；UI 据此显示进度条与预计剩余。 */
+export interface S3v3Progress {
+  phase: "connect" | "metadata" | "bodies" | "declarations" | "assets" | "apply" | "uploads" | "finalize" | "done";
+  done?: number;
+  total?: number;
+  bytesDone?: number;
+  bytesTotal?: number;
+}
+
 /** 深度清理选项（手动/周期；不进入日常同步）。 */
 export interface S3v3DeepCleanupOptions {
   dryRun?: boolean;
@@ -136,8 +148,12 @@ export interface S3v3EngineOptions {
   lockWaitMs?: number;
   /** 阶段耗时回调（诊断慢同步/卡顿）：phase + 距上一阶段毫秒数。 */
   onPhase?: (phase: string, ms: number) => void;
-  /** 传输并发（261025 用户批准从 8 提到 12；实测首同步约 1.5x）。 */
+  /** 结构化进度回调（阶段 + 计数 + 字节；桥接层负责节流，引擎不节流）。 */
+  onProgress?: (progress: S3v3Progress) => void;
+  /** 上传并发（261025 用户批准从 8 提到 12；实测首同步约 1.5x）。 */
   transferConcurrency?: number;
+  /** 下载流水线并发（正文/声明/资产共用；默认 20，clamp 1..32）。 */
+  downloadConcurrency?: number;
 }
 
 function tagEntryToTag(e: { id: string; name: string; sortOrder?: number; order?: number; pinned?: boolean; createdAt: string; updatedAt: string; deletedAt?: string | null }): QuickNoteTag {
@@ -184,7 +200,9 @@ export class S3v3SyncEngine {
   private readonly now: () => Date;
   private readonly lockWaitMs: number;
   private readonly onPhase?: (phase: string, ms: number) => void;
+  private readonly onProgress?: (progress: S3v3Progress) => void;
   private readonly transferConcurrency: number;
+  private readonly downloadConcurrency: number;
   private phaseStart = 0;
   private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes: Uint8Array; gzip?: boolean }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
@@ -199,7 +217,9 @@ export class S3v3SyncEngine {
     this.now = opts.now ?? (() => new Date());
     this.lockWaitMs = opts.lockWaitMs ?? LOCK_DEADLINE_MS;
     this.onPhase = opts.onPhase;
+    this.onProgress = opts.onProgress;
     this.transferConcurrency = Math.max(1, Math.min(32, opts.transferConcurrency ?? DEFAULT_TRANSFER_CONCURRENCY));
+    this.downloadConcurrency = Math.max(1, Math.min(32, opts.downloadConcurrency ?? DEFAULT_DOWNLOAD_CONCURRENCY));
   }
 
   /** 记录阶段耗时；回调异常不影响同步。 */
@@ -211,6 +231,17 @@ export class S3v3SyncEngine {
   }
 
   private iso(): string { return this.now().toISOString(); }
+
+  /** 进度上报（UI 回调异常绝不影响同步）。 */
+  private emitProgress(progress: S3v3Progress): void {
+    try { this.onProgress?.(progress); } catch { /* UI 回调自行负责 */ }
+  }
+
+  /**
+   * 资产下载任务队列（P0-1）：不再按篇 runPool（有效并发 ≈ 每篇池 + 逐篇 barrier），
+   * 而是全部登记后由 flushAssetTasks 用**全局有界流水线**统一跑。
+   */
+  private assetTasks: Array<{ space: "lake" | "quickNotes"; noteId: string; filename: string; key: string; size: number; hash: string }> = [];
 
   /** 记录一条结构化警告（同时保留一行式消息给日志/旧调用方）。 */
   private warn(message: string, extra: Omit<SyncWarning, "message"> = { kind: "remote_incomplete" }): void {
@@ -465,6 +496,7 @@ export class S3v3SyncEngine {
     const lake = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
     const quick = (await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex;
     this.phase("read-index");
+    this.emitProgress({ phase: "metadata", done: 1, total: 1 });
     if (archiveLocal) {
       for (const n of state.lake.notes) {
         const bytes = await this.device.readBody(n.id);
@@ -486,38 +518,79 @@ export class S3v3SyncEngine {
       restorePending: [],
     };
     // 全量重拉 = 元数据对账 + 本地内容复用（S3-REDESIGN §15）：本地正文/附件已持同内容就不重下字节。
-    // 记账口径：新设备（state 里本来没有该条目）仍算「下载」；崩溃重拉（state 已有）只算真正补拉的字节。
     const hadLake = new Set(state.lake.notes.map((n) => n.id));
     const hadQuick = new Set(state.quickNotes.items.map((q) => q.id));
-    // 修复 P1 崩溃追赶放大：初始上传在 pointer 之后、baseline 之前被 kill -9 ⇒ 下一轮走 pullAll，
-    // 旧实现无条件 GET 全部正文+附件（实测 2.2 万 GET / 1.37GB）；差集后只拉真正缺失/损坏的。
+    const lakeNeed: LakeIndex["notes"] = [];
     for (const n of lake.notes) {
       const local = await this.readLocalBody("lake", n.id);
-      // 只有「本设备 state 里本来就有这条」才复用本地字节（崩溃重拉场景）；新设备一律完整下载。
       const reusable = hadLake.has(n.id) && !!local && sha256Hex(local) === n.contentHash;
-      if (!reusable) {
-        const bytes = await this.getBody("lake", n.id, n.contentHash);
-        if (!bytes) { this.warn("缺正文: " + n.id, { kind: "remote_incomplete", noteId: n.id, title: n.title }); continue; }
-        await this.device.writeBody(n.id, bytes);
-        report.downloadedNotes++;
-      }
-      await this.downloadAssets(n.id, n.assetsHash);
+      if (!reusable) lakeNeed.push(n);
     }
+    const quickNeed: QuickNotesIndex["items"] = [];
     for (const q of quick.items) {
       const local = await this.readLocalBody("quickNotes", q.id);
       const reusableQuick = hadQuick.has(q.id) && !!local && sha256Hex(local) === q.contentHash;
-      if (!reusableQuick) {
-        const bytes = await this.getQuickBody(q.contentHash);
-        if (!bytes) { this.warn("缺小记正文: " + q.id, { kind: "remote_incomplete", noteId: q.id }); continue; }
-        await this.device.writeQuickBody(q.id, bytes);
-        report.downloadedNotes++;
-      }
-      await this.downloadQuickAssets(q.id, q.assetsHash);
+      if (!reusableQuick) quickNeed.push(q);
     }
-    this.phase("downloads");
+    // 首拉 P0-2：**正文先下、分块应用**（文档先出来）——每 CHUNK 篇落一次库，已下正文的文档/目录
+    // 立刻可打开阅读；资产与后续批次的正文继续在后台流水线里跑。内存峰值也被 CHUNK 限住。
+    const BODY_CHUNK = 100;
+    const totalBodies = lakeNeed.length + quickNeed.length;
+    let applied = 0;
+    const downloadBodies = async (items: Array<LakeIndex["notes"][number] | QuickNotesIndex["items"][number]>, space: "lake" | "quickNotes", apply: boolean) => {
+      await runTransferPipeline(items, this.downloadConcurrency, async (item) => {
+        const bytes = space === "lake"
+          ? await this.getBody("lake", (item as LakeIndex["notes"][number]).id, item.contentHash)
+          : await this.getQuickBody(item.contentHash);
+        if (!bytes) {
+          this.warn((space === "lake" ? "缺正文: " : "缺小记正文: ") + item.id, { kind: "remote_incomplete", noteId: item.id, title: (item as { title?: string }).title });
+          return 0;
+        }
+        if (space === "lake") await this.device.writeBody(item.id, bytes);
+        else await this.device.writeQuickBody(item.id, bytes);
+        report.downloadedNotes++;
+        return bytes.length;
+      }, {
+        phase: "bodies",
+        totalOverride: totalBodies,
+        offsetDone: applied,
+        onProgress: (p) => this.emitProgress(p),
+      });
+      applied += items.length;
+      if (apply) {
+        await this.device.saveState(newState); // 分块应用：正文已就绪的条目立即落库（可打开）
+        this.emitProgress({ phase: "apply", done: applied, total: totalBodies });
+      }
+    };
+    for (let i = 0; i < lakeNeed.length; i += BODY_CHUNK) await downloadBodies(lakeNeed.slice(i, i + BODY_CHUNK), "lake", true);
+    if (lakeNeed.length === 0) await this.device.saveState(newState); // 没有 lake 需要下载也要先把目录/行落下
+    // 小记：正文先下、但**等小记图片声明/资源就绪后再落库**（importRemoteQuickNote 会校验图片完整性）。
+    if (quickNeed.length > 0) await downloadBodies(quickNeed, "quickNotes", false);
+    this.phase("apply");
+    if (quick.items.some((q) => q.assetsHash)) {
+      await runTransferPipeline(
+        quick.items.filter((q) => q.assetsHash).map((q) => ({ space: "quickNotes" as const, id: q.id, declHash: q.assetsHash! })),
+        this.downloadConcurrency,
+        async (t) => { await this.getDeclaration(t.space, t.id, t.declHash); return 0; },
+        { phase: "declarations", onProgress: (p) => this.emitProgress(p) });
+      for (const q of quick.items) await this.scheduleAssets("quickNotes", q.id, q.assetsHash);
+      await this.flushAssetTasks();
+    }
     await this.device.saveState(newState);
     await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake, quickNotes: quick });
     this.phase("save");
+    // Lake 资产：先并发取「声明」（小对象），再按全局流水线只补本地缺失/损坏的字节。
+    const lakeDecls = lake.notes.filter((n) => n.assetsHash);
+    await runTransferPipeline(
+      lakeDecls.map((n) => ({ space: "lake" as const, id: n.id, declHash: n.assetsHash! })),
+      this.downloadConcurrency,
+      async (t) => { await this.getDeclaration(t.space, t.id, t.declHash); return 0; },
+      { phase: "declarations", onProgress: (p) => this.emitProgress(p) });
+    for (const n of lake.notes) await this.scheduleAssets("lake", n.id, n.assetsHash);
+    await this.flushAssetTasks();
+    this.phase("downloads");
+    await this.device.saveState(newState);
+    this.emitProgress({ phase: "finalize", done: 1, total: 1 });
     return { ...report, generation: pointer.generation };
   }
 
@@ -595,6 +668,7 @@ export class S3v3SyncEngine {
     const remoteLake = pointer.lake.commit === baseline.lakeCommit ? baseline.lake : ((await this.readIndex("lake", pointer.lake.commit)) as LakeIndex);
     const remoteQuick = pointer.quickNotes.commit === baseline.quickNotesCommit ? baseline.quickNotes : ((await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex);
     this.phase("read-index");
+    this.emitProgress({ phase: "metadata", done: 1, total: 1 });
     const baselineLake = baseline.lake;
     const baselineQuick = baseline.quickNotes;
 
@@ -667,6 +741,57 @@ export class S3v3SyncEngine {
     const newQuickDecls = new Map<string, { declHash: string; filenames: string[] }>();
     const prevQuickDecls = new Map<string, { declHash: string; filenames: string[] }>();
 
+    // ---- P0-1 全局有界流水线：先把本轮要应用的正文/声明并发取回（进缓存），再逐条应用 ----
+    // 旧实现逐篇 await 正文 GET（2k 篇 = 2k 个串行 RTT）；资产又是按篇 runPool（per-note barrier）。
+    const bodyTasks: Array<{ space: "lake" | "quickNotes"; id: string; hash: string; title?: string }> = [];
+    for (const plan of lakePlan.notes) {
+      if (!plan.applyRemote || !plan.remote) continue;
+      const localEntry = lakeWS.get(plan.id);
+      const needBody = !localEntry || localEntry.contentHash !== plan.remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
+      if (needBody) bodyTasks.push({ space: "lake", id: plan.remote.id, hash: plan.remote.contentHash, title: plan.remote.title });
+    }
+    for (const plan of quickPlan.items) {
+      if (!plan.applyRemote || !plan.remote) continue;
+      const localEntry = quickWS.get(plan.id);
+      const needBody = !localEntry || localEntry.contentHash !== plan.remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
+      if (needBody) bodyTasks.push({ space: "quickNotes", id: plan.remote.id, hash: plan.remote.contentHash });
+    }
+    if (bodyTasks.length > 0) {
+      this.phase("bodies");
+      await runTransferPipeline(bodyTasks, this.downloadConcurrency, async (t) => {
+        const bytes = t.space === "lake" ? await this.getBody("lake", t.id, t.hash) : await this.getQuickBody(t.hash);
+        if (!bytes) {
+          this.warn((t.space === "lake" ? "缺正文: " : "缺小记正文: ") + t.id, { kind: "remote_incomplete", noteId: t.id, title: t.title });
+          return 0;
+        }
+        return bytes.length;
+      }, { phase: "bodies", totalOverride: bodyTasks.length, onProgress: (p) => this.emitProgress(p) });
+    }
+    // 声明：上传/应用都可能需要（内容寻址、按 declHash 缓存），先并发取回，避免应用环里串行 GET。
+    const declTasks: Array<{ space: "lake" | "quickNotes"; id: string; declHash: string }> = [];
+    const seenDecl = new Set<string>();
+    for (const plan of lakePlan.notes) {
+      const dh = plan.remote?.assetsHash;
+      if (dh && !seenDecl.has("lake:" + plan.id + ":" + dh)) {
+        seenDecl.add("lake:" + plan.id + ":" + dh);
+        declTasks.push({ space: "lake", id: plan.id, declHash: dh });
+      }
+    }
+    for (const plan of quickPlan.items) {
+      const dh = plan.remote?.assetsHash;
+      if (dh && !seenDecl.has("quickNotes:" + plan.id + ":" + dh)) {
+        seenDecl.add("quickNotes:" + plan.id + ":" + dh);
+        declTasks.push({ space: "quickNotes", id: plan.id, declHash: dh });
+      }
+    }
+    if (declTasks.length > 0) {
+      this.phase("declarations");
+      await runTransferPipeline(declTasks, this.downloadConcurrency, async (t) => {
+        await this.getDeclaration(t.space, t.id, t.declHash);
+        return 0;
+      }, { phase: "declarations", totalOverride: declTasks.length, onProgress: (p) => this.emitProgress(p) });
+    }
+
     // ---- 拉取/应用远端 ----
     for (const plan of lakePlan.notes) {
       const remote = plan.remote;
@@ -711,7 +836,7 @@ export class S3v3SyncEngine {
           const d = await this.getDeclaration("lake", remote.id, oldDecl);
           if (d) prevDecls.set(remote.id, { declHash: oldDecl, filenames: d.assets.map((a) => a.filename) });
         }
-        const decl = await this.downloadAssets(remote.id, remote.assetsHash);
+        const decl = await this.scheduleAssets("lake", remote.id, remote.assetsHash);
         if (decl) newLakeDecls.set(remote.id, { declHash: remote.assetsHash!, filenames: decl.assets.map((a) => a.filename) });
         lakeWS.set(remote.id, { ...remote });
       }
@@ -776,10 +901,14 @@ export class S3v3SyncEngine {
         const d = await this.getDeclaration("quickNotes", remote.id, oldDecl);
         if (d) prevQuickDecls.set(remote.id, { declHash: oldDecl, filenames: d.assets.map((a) => a.filename) });
       }
-      const decl = await this.downloadQuickAssets(remote.id, remote.assetsHash);
+      const decl = await this.scheduleAssets("quickNotes", remote.id, remote.assetsHash);
       if (decl) newQuickDecls.set(remote.id, { declHash: remote.assetsHash!, filenames: decl.assets.map((a) => a.filename) });
       quickWS.set(remote.id, { ...remote });
     }
+
+    // 资产：全局流水线（与上面的正文/声明同一调度器；失败只影响该对象）。
+    await this.flushAssetTasks();
+    this.emitProgress({ phase: "apply", done: lakePlan.notes.length + quickPlan.items.length, total: lakePlan.notes.length + quickPlan.items.length });
 
     // ---- 上传 ----
     for (const plan of lakePlan.notes) {
@@ -957,6 +1086,7 @@ export class S3v3SyncEngine {
       await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
       await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, newState, report);
       this.phase("pending");
+      this.emitProgress({ phase: "finalize", done: 1, total: 1 });
       return { ...report, generation: pointer.generation };
     }
 
@@ -1003,6 +1133,7 @@ export class S3v3SyncEngine {
       this.phase("publish-finalize");
       const deleted = await this.executePending(newLake, newQuick, lakeCommit, quickCommit, finalState, report);
       this.phase("pending");
+      this.emitProgress({ phase: "finalize", done: 1, total: 1 });
       return { ...report, published: true, generation, deletedObjects: deleted };
     } finally {
       await this.releaseLock();
@@ -1244,33 +1375,65 @@ export class S3v3SyncEngine {
     return bytes;
   }
 
-  private async downloadAssets(id: string, declHash?: string): Promise<AssetDeclaration | null> {
-    if (!declHash) { return null; }
-    const decl = await this.getDeclaration("lake", id, declHash);
-    if (!decl) { this.warn("缺资产声明: " + id, { kind: "remote_incomplete", noteId: id }); return null; }
-    const localNames = await this.localAssetNames("lake", id);
-    await runPool(decl.assets, this.transferConcurrency, async (a) => {
-      if (await this.localAssetMatches("lake", id, a, localNames)) return; // 本地已持同内容：不产生 GET
-      const bytes = await this.remote.get(assetKey(id, a.filename));
-      if (!bytes) { this.warn("缺附件: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
-      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warn("附件校验失败: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
-      await this.device.writeAsset(id, a.filename, bytes);
-    });
+  /**
+   * 登记某条的资产下载任务（P0-1）：只做「声明读取 + 本地差集判定」，真正 GET 由全局流水线执行。
+   * 与旧 downloadAssets 的差异：不再 per-note runPool（按篇 barrier，有效并发吃不满）。
+   */
+  private async scheduleAssets(space: "lake" | "quickNotes", id: string, declHash?: string): Promise<AssetDeclaration | null> {
+    if (!declHash) return null;
+    const decl = await this.getDeclaration(space, id, declHash);
+    if (!decl) {
+      this.warn((space === "lake" ? "缺资产声明: " : "缺小记图片声明: ") + id, { kind: "remote_incomplete", noteId: id });
+      return null;
+    }
+    const localNames = await this.localAssetNames(space, id);
+    for (const a of decl.assets) {
+      if (await this.localAssetMatches(space, id, a, localNames)) continue; // 本地已持同内容：不产生 GET
+      this.assetTasks.push({
+        space, noteId: id, filename: a.filename,
+        key: space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename),
+        size: a.size, hash: a.hash,
+      });
+    }
     return decl;
   }
-  private async downloadQuickAssets(id: string, declHash?: string): Promise<AssetDeclaration | null> {
-    if (!declHash) return null;
-    const decl = await this.getDeclaration("quickNotes", id, declHash);
-    if (!decl) { this.warn("缺小记图片声明: " + id, { kind: "remote_incomplete", noteId: id }); return null; }
-    const localNames = await this.localAssetNames("quickNotes", id);
-    await runPool(decl.assets, this.transferConcurrency, async (a) => {
-      if (await this.localAssetMatches("quickNotes", id, a, localNames)) return;
-      const bytes = await this.remote.get(quickNoteAssetKey(id, a.filename));
-      if (!bytes) { this.warn("缺小记图片: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
-      if (bytes.length !== a.size || sha256Hex(bytes) !== a.hash) { this.warn("小记图片校验失败: " + id + "/" + a.filename, { kind: "asset_missing", noteId: id, filename: a.filename }); return; }
-      await this.device.writeQuickAsset(id, a.filename, bytes);
+
+  /** 全局有界流水线执行全部资产下载：对象级失败隔离，谁先完成谁写盘。 */
+  private async flushAssetTasks(): Promise<void> {
+    const tasks = this.assetTasks;
+    this.assetTasks = [];
+    if (tasks.length === 0) return;
+    const bytesTotal = tasks.reduce((sum, t) => sum + (Number.isFinite(t.size) ? t.size : 0), 0);
+    this.phase("assets");
+    const result = await runTransferPipeline(tasks, this.downloadConcurrency, async (t) => {
+      const bytes = await this.remote.get(t.key);
+      if (!bytes) {
+        this.warn((t.space === "lake" ? "缺附件: " : "缺小记图片: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+        return 0;
+      }
+      if (bytes.length !== t.size || sha256Hex(bytes) !== t.hash) {
+        this.warn((t.space === "lake" ? "附件校验失败: " : "小记图片校验失败: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+        return 0;
+      }
+      try {
+        if (t.space === "lake") await this.device.writeAsset(t.noteId, t.filename, bytes);
+        else await this.device.writeQuickAsset(t.noteId, t.filename, bytes);
+      } catch (e) {
+        this.warn("附件落盘失败: " + t.noteId + "/" + t.filename + " " + (e as Error).message, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+        return 0;
+      }
+      return bytes.length;
+    }, {
+      phase: "assets",
+      totalOverride: tasks.length,
+      bytesTotal,
+      onProgress: (p) => this.emitProgress(p),
     });
-    return decl;
+    for (const err of result.errors) {
+      const t = tasks[err.index];
+      if (!t) continue;
+      this.warn("附件下载异常: " + t.noteId + "/" + t.filename + " " + ((err.error as Error)?.message ?? String(err.error)), { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+    }
   }
 
   /**

@@ -166,7 +166,9 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       // 非法父回落兜底笔记本（懒建「未分类」）。回收站条目不解析（移动端用 trashed_at 表示）。
       const resolvedParentId = n.trashedAt ? (n.deletedFromParentId ?? null) : await this.resolveSyncNoteParent(n.parentId);
       if (!cur) {
-        await createNote(this.db, n.id, n.title, content ?? "", resolvedParentId, new Map(), undefined, kind);
+        // P0-2 分块应用：正文还没下到的条目先不建行（否则先落一个空正文），等它的分块/下一轮。
+        if (content === null) continue;
+        await createNote(this.db, n.id, n.title, content, resolvedParentId, new Map(), undefined, kind);
         current.set(n.id, { id: n.id, title: n.title, parent_id: resolvedParentId, sort_order: n.sortOrder, trashed_at: n.trashedAt ?? null });
       } else {
         const targetTrashed = !!n.trashedAt;
