@@ -244,7 +244,9 @@ export const syncDomain = {
     try {
       beginSyncProgress();
       // 断点续传：成功才清标记；失败/被杀保留 ⇒ 下次进入自动续上（261026）。
-      markSyncInterrupted();
+      // 标记落 device_state（随 App 数据持久），localStorage 只作迁移兜底。
+      const resumeDb = await ensureDb();
+      await markSyncInterrupted(resumeDb);
       const result = await runMaintenance("syncNow", async () => {
         const cfg = await syncDomain.getS3Settings();
         if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
@@ -272,7 +274,7 @@ export const syncDomain = {
         };
       });
       writeSyncStatus({ at: new Date().toISOString(), ok: true, message: result.message });
-      clearSyncInterrupted();
+      await clearSyncInterrupted(resumeDb);
       return result;
     } catch (error) {
       writeSyncStatus({ at: new Date().toISOString(), ok: false, message: (error as Error)?.message ?? String(error) });
