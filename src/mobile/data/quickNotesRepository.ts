@@ -162,16 +162,20 @@ export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> 
  * 启动迁移路径调用；完成后写 device_state 标记，首页后续只读轻量行，不再批量读正文。
  */
 export async function backfillQuickNoteListMetadata(d: MobileDb): Promise<void> {
-  const done = await d.prepare("SELECT value FROM device_state WHERE key='quick_note_list_metadata_v1'").get() as { value?: string } | undefined;
-  if (done?.value === "1") return;
+  // 261027：不再只看一次性 device_state 标记 —— 之后同步才导入的行 list_metadata_version=0，
+  // 按旧逻辑永远轮不到回填（首页卡片空白/无图）。改为「有未回填行就干活」，标志只用来跳过空跑。
   const rows = await d.prepare("SELECT id FROM quick_notes WHERE list_metadata_version<1").all() as Array<{ id: string }>;
+  if (rows.length === 0) {
+    await d.prepare("INSERT INTO device_state(key,value) VALUES('quick_note_list_metadata_v1','1') ON CONFLICT(key) DO UPDATE SET value='1'").run();
+    return;
+  }
   const statements: Array<{ statement: string; values: unknown[] }> = [];
   for (const row of rows) {
     const id = String(row.id);
     const content = await readBodyContent(id).catch(() => null);
     statements.push({
-      statement: "UPDATE quick_notes SET first_image=?, list_metadata_version=1 WHERE id=?",
-      values: [content?.images?.[0]?.filename ?? null, id],
+      statement: "UPDATE quick_notes SET preview_text=?, image_count=?, first_image=?, list_metadata_version=1 WHERE id=?",
+      values: [content ? previewQuickNote(content.text, content.images.length) : "", content?.images?.length ?? 0, content?.images?.[0]?.filename ?? null, id],
     });
   }
   if (statements.length > 0) {

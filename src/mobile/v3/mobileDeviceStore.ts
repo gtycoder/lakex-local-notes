@@ -14,6 +14,7 @@ import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAsset
 import { saveNote, type NoteWriteOptions } from "../data/noteRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import { HISTORY_SNAPSHOT_PROTECT_DAYS } from "../../core/syncEngineTypes.js";
+import { previewQuickNote, validateQuickNoteContent } from "../../core/quickNoteModel.js";
 
 /**
  * 移动端 S3v3DeviceStore v1（Lake 文档；无附件/小记/目录写入）。
@@ -362,6 +363,15 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       const bodyBytes = this.stagedQuickBodies.get(q.id);
       const body = bodyBytes ? new TextDecoder().decode(bodyBytes) : null;
       const cur = curQ.get(q.id);
+      // 261027：同步导入的小记当场回填列表元数据（预览/图片数/首图），否则首页卡片空白、imageCount=0；
+      // 一次性 backfill 有 device_state 标记，后导入的行永远轮不到（E2E 抓到）。
+      const parsedQuick = (() => {
+        if (body === null) return null;
+        try { return validateQuickNoteContent(JSON.parse(body)); } catch { return null; }
+      })();
+      const quickPreview = parsedQuick ? previewQuickNote(parsedQuick.text, parsedQuick.images.length) : "";
+      const quickImageCount = parsedQuick?.images.length ?? 0;
+      const quickFirstImage = parsedQuick?.images?.[0]?.filename ?? null;
       if (purged.has(q.id)) {
         // 「云端已删除·仅本地」的 quick 回收站副本：只读保留，不写正文/不改标签/不参与上传。
         if (cur === undefined) {
@@ -378,15 +388,19 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       if (cur === undefined) {
         if (body !== null) await writeQuickNoteBody(q.id, body);
         await this.db.prepare(
-          "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,restore_pending_at) VALUES (?,?,?,'',0,?,1,?,NULL)"
-        ).run(q.id, q.createdAt, q.updatedAt, q.contentHash, q.isConflict ? 1 : 0);
+          "INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,restore_pending_at,first_image,list_metadata_version) VALUES (?,?,?,?,?,?,1,?,NULL,?,1)"
+        ).run(q.id, q.createdAt, q.updatedAt, quickPreview, quickImageCount, q.contentHash, q.isConflict ? 1 : 0, quickFirstImage);
       } else if (cur.deleted_at !== null) {
         // 回收站副本被显式恢复 / 远端重新出现：激活（正文/预览/标签原样保留）。
-        if (body !== null) await writeQuickNoteBody(q.id, body);
-        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1, is_conflict=?, deleted_at=NULL, cloud_deleted=0, restore_pending_at=NULL WHERE id=?").run(q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, q.id);
+        if (body !== null) {
+          await writeQuickNoteBody(q.id, body);
+          await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1, is_conflict=?, deleted_at=NULL, cloud_deleted=0, restore_pending_at=NULL, preview_text=?, image_count=?, first_image=?, list_metadata_version=1 WHERE id=?").run(q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, quickPreview, quickImageCount, quickFirstImage, q.id);
+        } else {
+          await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1, is_conflict=?, deleted_at=NULL, cloud_deleted=0, restore_pending_at=NULL WHERE id=?").run(q.updatedAt, q.contentHash, q.isConflict ? 1 : 0, q.id);
+        }
       } else if (body !== null) {
         await writeQuickNoteBody(q.id, body);
-        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1 WHERE id=?").run(q.updatedAt, q.contentHash, q.id);
+        await this.db.prepare("UPDATE quick_notes SET updated_at=?, content_hash=?, is_dirty=1, preview_text=?, image_count=?, first_image=?, list_metadata_version=1 WHERE id=?").run(q.updatedAt, q.contentHash, quickPreview, quickImageCount, quickFirstImage, q.id);
       }
       await this.db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(q.id);
       const tagIds = q.tagIds ?? [];

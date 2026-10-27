@@ -27,6 +27,7 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
   "restoreTreeItem", "purgeTreeItem",
   "createGroup", "renameTreeNode", "setNodeIcon", "reorderSiblings", "moveTreeNodeOrdered", "createNotebook",
   "searchNotes", "ensureSearchIndex",
+  "ensureNoteAssets", "ensureQuickNoteAssets", // 261027：按需资产占位补拉（CDP 自动化/调试也会用）
   "aiGetSettings", "aiSaveSettings", "aiTestConnection", "aiChat", "aiCancel",
 ] as const;
 

@@ -16,6 +16,9 @@ import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, saveNote } from "../data/noteRepository.js";
 import { writeQuickNoteBody } from "../data/noteBodies.js";
+import { QUICK_NOTE_VERSION, quickNoteBodyFromTextAndImages, serializeQuickNoteContent } from "../../core/quickNoteModel.js";
+import { listQuickNotePage } from "../data/quickNotesRepository.js";
+import type { DeviceState } from "../../core/s3v3DeviceStore.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
 import { S3v3SyncEngine } from "../../core/s3v3Engine.js";
@@ -136,4 +139,28 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     expect(new TextDecoder().decode((await b.store.readQuickAsset("q1", "pic.png"))!)).toBe("Q-IMG");
     await a.db.close(); await b.db.close();
   }, 60_000);
+
+  it("同步导入小记当场回填列表元数据（预览/图片数/首图，261027）", async () => {
+    const { db, store } = await freshDevice();
+    const html = quickNoteBodyFromTextAndImages("你好", [{ filename: "pic.png", size: 5, width: 1, height: 1, mimeType: "image/png" }], (f) => "http://127.0.0.1:19876/quick-notes/q1/" + f, () => crypto.randomUUID());
+    const content = {
+      version: QUICK_NOTE_VERSION, text: "你好", body: html,
+      images: [{ id: "img-1", filename: "pic.png", mimeType: "image/png", size: 5, width: 1, height: 1, hash: "a".repeat(64) }],
+    };
+    const body = serializeQuickNoteContent(content);
+    await store.writeQuickBody("q1", new TextEncoder().encode(body));
+    const contentHash = sha256Sync(new TextEncoder().encode(body));
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: "2026-10-27T00:00:00.000Z", updatedAt: "2026-10-27T00:00:00.000Z", contentHash }] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [], archived: [],
+    };
+    await store.saveState(state);
+    const page = await listQuickNotePage(db);
+    const item = page.items.find((i) => i.id === "q1")!;
+    expect(item.previewText).toContain("你好");
+    expect(item.imageCount).toBe(1);
+    expect(item.firstImage).toBe("pic.png");
+    await db.close();
+  });
 });

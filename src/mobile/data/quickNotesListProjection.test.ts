@@ -80,9 +80,10 @@ describe("小记列表轻量投影", () => {
 
     await backfillQuickNoteListMetadata(db);
 
+    // 261027：回填也补 preview_text/image_count（同步后导入的行按旧逻辑永远轮不到一次性的首图回填）。
     expect(updates).toEqual([{
-      statement: "UPDATE quick_notes SET first_image=?, list_metadata_version=1 WHERE id=?",
-      values: ["a.png", "q1"],
+      statement: "UPDATE quick_notes SET preview_text=?, image_count=?, first_image=?, list_metadata_version=1 WHERE id=?",
+      values: ["正文", 1, "a.png", "q1"],
     }]);
     expect(runs).toHaveLength(1);
     expect(runs[0]).toContain("quick_note_list_metadata_v1");
