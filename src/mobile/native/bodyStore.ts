@@ -16,7 +16,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 
 interface BodyStorePluginApi {
   write(options: { path: string; data: string }): Promise<{ size: number }>;
-  writeMany(options: { items: Array<{ path: string; data: string }> }): Promise<{ written: number; bytes: number }>;
+  writeMany(options: { items: Array<{ path: string; data: string }>; durable?: boolean }): Promise<{ written: number; bytes: number }>;
   read(options: { path: string }): Promise<{ exists: boolean; data?: string }>;
   readMany(options: { paths: string[] }): Promise<{ items: Array<{ path: string; exists: boolean; data?: string }> }>;
   statMany(options: { paths: string[] }): Promise<{ items: Array<{ path: string; exists: boolean; size: number }> }>;
@@ -32,8 +32,9 @@ const NativeBodyStore = registerPlugin<BodyStorePluginApi>("BodyStore");
 export interface BodyStoreBackend {
   readText(path: string): Promise<string | null>;
   writeText(path: string, text: string): Promise<number>;
-  /** 批量原子写（可选；261026 首拉提速：一次桥调用写多篇）。缺省时调用方逐篇写。 */
-  writeTextMany?(items: Array<{ path: string; text: string }>): Promise<number>;
+  /** 批量原子写（可选；261026 首拉提速：一次桥调用写多篇）。缺省时调用方逐篇写。
+   *  durable=false 供同步导入使用（原子 rename 保留、跳过逐文件 fsync；云端有同内容副本可自愈）。 */
+  writeTextMany?(items: Array<{ path: string; text: string }>, opts?: { durable?: boolean }): Promise<number>;
   /** 批量读（可选；261026 续传提速：一次桥读一批）。缺省时调用方逐篇读。 */
   readTextMany?(paths: string[]): Promise<Array<string | null>>;
   /** 批量 stat（可选；261026 续传提速：hash 一致时只 stat 不读内容）。 */
@@ -55,8 +56,8 @@ function nativeBackend(): BodyStoreBackend {
       const res = await NativeBodyStore.write({ path, data: text });
       return Number(res?.size ?? text.length);
     },
-    async writeTextMany(items) {
-      const res = await NativeBodyStore.writeMany({ items: items.map((i) => ({ path: i.path, data: i.text })) });
+    async writeTextMany(items, opts) {
+      const res = await NativeBodyStore.writeMany({ items: items.map((i) => ({ path: i.path, data: i.text })), durable: opts?.durable !== false });
       return Number(res?.bytes ?? 0);
     },
     async readTextMany(paths) {

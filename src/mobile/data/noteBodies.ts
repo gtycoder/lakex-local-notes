@@ -27,11 +27,14 @@ export async function writeNoteBody(kind: NoteKind, id: string, content: string)
 }
 
 /** 批量写正文（261026 首拉提速）：原生平台一次桥调用写完一批，非原生逐篇写。返回总字节数。 */
-export async function writeNoteBodiesBatch(items: Array<{ kind: NoteKind; id: string; content: string }>): Promise<number> {
+export async function writeNoteBodiesBatch(
+  items: Array<{ kind: NoteKind; id: string; content: string }>,
+  opts?: { durable?: boolean },
+): Promise<number> {
   if (items.length === 0) return 0;
   const store = getBodyStore();
   if (store.writeTextMany) {
-    return await store.writeTextMany(items.map((i) => ({ path: noteBodyRelativePath(i.kind, i.id), text: i.content })));
+    return await store.writeTextMany(items.map((i) => ({ path: noteBodyRelativePath(i.kind, i.id), text: i.content })), opts);
   }
   let bytes = 0;
   for (const i of items) bytes += await store.writeText(noteBodyRelativePath(i.kind, i.id), i.content);

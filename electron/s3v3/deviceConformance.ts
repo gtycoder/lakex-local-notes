@@ -203,6 +203,35 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 
+    it("三端交错编辑：最终收敛且不互相覆盖", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      const c = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.seedNote("n2", "标题二", "<p>正文二</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        await c.sync();
+        expect(await c.listActiveIds()).toEqual(expect.arrayContaining(["n1", "n2"]));
+
+        // A 改 n1、C 改 n2，先后发布；B 最后拉一次（三端交错）。
+        await a.editNote("n1", "标题一", "<p>A改正文一</p>");
+        await a.sync();
+        await c.editNote("n2", "标题二", "<p>C改正文二</p>");
+        await c.sync();
+        await b.sync();
+        await a.sync(); // A 也拉一次，三端才都收敛
+
+        // 三端最终看到同一份内容。
+        for (const dev of [a, b, c]) {
+          expect(await dev.readBody("n1")).toBe("<p>A改正文一</p>");
+          expect(await dev.readBody("n2")).toBe("<p>C改正文二</p>");
+        }
+      } finally { await a.close(); await b.close(); await c.close(); }
+    }, 240_000);
+
     it("双端编辑互相同步（各自改各自、再改对方）", async () => {
       const remote = new MemoryRemote();
       const a = await newDevice(make, remote);

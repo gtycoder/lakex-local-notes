@@ -23,6 +23,26 @@ function isPragmaStatement(sql: string): boolean {
 export class NativeSqliteDb implements MobileDb {
   private constructor(private readonly database: string) {}
 
+  /**
+   * 数据库级串行锁（261026 真机发现）：CapacitorSQLite 的**事务状态是连接级的**，
+   * JS 侧 transaction() 中间有 await，别的异步任务（后台 FTS reconcile、用户写操作）可以插进来，
+   * 造成嵌套 BEGIN / COMMIT 无事务（真机报 "CommitTransaction: no current transaction"）。
+   * 这里把「事务整体」与「单条语句」放到同一把串行锁上；事务内（txDepth>0）不再抢锁，避免自锁。
+   */
+  private lock: Promise<unknown> = Promise.resolve();
+  private txDepth = 0;
+
+  private withLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.lock.then(fn, fn);
+    this.lock = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  /** 事务内直接执行（外层已持锁）；否则排队。 */
+  private locked<T>(fn: () => Promise<T>): Promise<T> {
+    return this.txDepth > 0 ? fn() : this.withLock(fn);
+  }
+
   static async open(database = "local-lakex-notes-mobile"): Promise<NativeSqliteDb> {
     const connection = {
       database,
@@ -50,13 +70,15 @@ export class NativeSqliteDb implements MobileDb {
   }
 
   private async query(statement: string, values: unknown[] = []): Promise<MobileRow[]> {
-    const result = await CapacitorSQLite.query({
-      database: this.database,
-      statement,
-      values,
-      readonly: false,
+    return await this.locked(async () => {
+      const result = await CapacitorSQLite.query({
+        database: this.database,
+        statement,
+        values,
+        readonly: false,
+      });
+      return normalizeRows(result.values ?? []);
     });
-    return normalizeRows(result.values ?? []);
   }
 
   prepare(sql: string): MobileDbStatement {
@@ -66,7 +88,7 @@ export class NativeSqliteDb implements MobileDb {
         return rows[0];
       },
       all: async (...params: unknown[]) => this.query(sql, params),
-      run: async (...params: unknown[]) => {
+      run: async (...params: unknown[]) => await this.locked(async () => {
         const result = await CapacitorSQLite.run({
           database: this.database,
           statement: sql,
@@ -78,22 +100,29 @@ export class NativeSqliteDb implements MobileDb {
           changes: Number(result.changes?.changes ?? 0),
           lastInsertRowid: Number(result.changes?.lastId ?? 0),
         };
-      },
+      }),
     };
   }
 
   async transaction<T extends (...args: never[]) => Promise<unknown>>(
     fn: T,
   ): Promise<Awaited<ReturnType<T>>> {
-    await CapacitorSQLite.beginTransaction({ database: this.database, readonly: false });
-    try {
-      const result = await fn();
-      await CapacitorSQLite.commitTransaction({ database: this.database, readonly: false });
-      return result as Awaited<ReturnType<T>>;
-    } catch (error) {
-      await CapacitorSQLite.rollbackTransaction({ database: this.database, readonly: false });
-      throw error;
-    }
+    // 嵌套事务：外层已持锁且有事务，直接执行（由最外层统一 commit/rollback）。
+    if (this.txDepth > 0) return (await fn()) as Awaited<ReturnType<T>>;
+    return await this.withLock(async () => {
+      await CapacitorSQLite.beginTransaction({ database: this.database, readonly: false });
+      this.txDepth += 1;
+      try {
+        const result = await fn();
+        await CapacitorSQLite.commitTransaction({ database: this.database, readonly: false });
+        return result as Awaited<ReturnType<T>>;
+      } catch (error) {
+        try { await CapacitorSQLite.rollbackTransaction({ database: this.database, readonly: false }); } catch { /* 已无事务 */ }
+        throw error;
+      } finally {
+        this.txDepth -= 1;
+      }
+    });
   }
 
   async pragma(source: string): Promise<unknown> {
@@ -105,21 +134,27 @@ export class NativeSqliteDb implements MobileDb {
       await this.query(sql);
       return;
     }
-    await CapacitorSQLite.execute({
-      database: this.database,
-      statements: sql,
-      transaction: true,
-      readonly: false,
+    await this.locked(async () => {
+      await CapacitorSQLite.execute({
+        database: this.database,
+        statements: sql,
+        // 事务内不能再开事务；外层事务已保证原子性。
+        transaction: this.txDepth === 0,
+        readonly: false,
+      });
     });
   }
 
   async executeSet(set: Array<{ statement: string; values: unknown[] }>, options?: { transaction?: boolean }): Promise<void> {
     // 一次桥往返执行整批；默认由插件开单事务，**已在事务内**时调用方传 transaction:false。
-    await CapacitorSQLite.executeSet({
-      database: this.database,
-      set: set.map((s) => ({ statement: s.statement, values: s.values })),
-      transaction: options?.transaction ?? true,
-      readonly: false,
+    // 整批必须在锁内执行：否则别的任务可能在批内插入语句/事务（真机 CommitTransaction 报错的根因）。
+    await this.locked(async () => {
+      await CapacitorSQLite.executeSet({
+        database: this.database,
+        set: set.map((s) => ({ statement: s.statement, values: s.values })),
+        transaction: this.txDepth === 0 ? (options?.transaction ?? true) : false,
+        readonly: false,
+      });
     });
   }
 
@@ -130,7 +165,9 @@ export class NativeSqliteDb implements MobileDb {
   }
 
   async close(): Promise<void> {
-    await CapacitorSQLite.close({ database: this.database, readonly: false });
-    await CapacitorSQLite.closeConnection({ database: this.database, readonly: false });
+    await this.withLock(async () => {
+      await CapacitorSQLite.close({ database: this.database, readonly: false });
+      await CapacitorSQLite.closeConnection({ database: this.database, readonly: false });
+    });
   }
 }

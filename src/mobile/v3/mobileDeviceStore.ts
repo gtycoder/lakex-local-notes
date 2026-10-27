@@ -34,6 +34,14 @@ interface FolderRow {
   cloud_deleted: number;
 }
 
+/** 桥层量化开关（诊断用）：localStorage["lake.bridgePerf"]="1" 时把批量桥耗时打到 console。 */
+function bridgePerfEnabled(): boolean {
+  try { return globalThis.localStorage?.getItem("lake.bridgePerf") === "1"; } catch { return false; }
+}
+function bridgePerfLog(parts: Record<string, unknown>): void {
+  if (bridgePerfEnabled()) console.info("[bridge-perf] " + JSON.stringify(parts));
+}
+
 export class MobileDeviceStore implements S3v3DeviceStore {
   private readonly db: MobileDb;
   private stagedBodies = new Map<string, Uint8Array>();
@@ -255,13 +263,19 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     }
     // 新建行批量落库：先批量写正文（一次原生调用），再一批 SQL（一次 executeSet）建行 + 元数据。
     if (createBatch.length > 0) {
-      await writeNoteBodiesBatch(createBatch.map((c) => ({ kind: c.kind, id: c.n.id, content: c.content })));
+      const bodiesStartedAt = Date.now();
+      // 同步导入：durable=false（原子 rename 保留、跳过逐文件 fsync）。真机实测 100 篇批量写 ~800ms，
+      // 主要是 100 次 fsync；进程被杀不丢（页缓存），断电可由云端同内容自愈。
+      await writeNoteBodiesBatch(createBatch.map((c) => ({ kind: c.kind, id: c.n.id, content: c.content })), { durable: false });
+      const bodiesMs = Date.now() - bodiesStartedAt;
       const statements: Array<{ statement: string; values: unknown[] }> = [];
+      let textCacheBytes = 0;
       for (const c of createBatch) {
         const n = c.n;
         const title = n.title.trim() ? n.title.trim() : (c.kind === "usheet" ? "无标题表格" : "无标题文档");
         const contentHash = sha256Sync(new TextEncoder().encode(c.content));
         const textCache = searchTextForKind(c.kind, c.content).plain ?? "";
+        textCacheBytes += textCache.length;
         statements.push({
           statement: "INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,1,?,?,?,?)",
           values: [n.id, title, c.resolvedParentId, n.updatedAt, contentHash, textCache, c.kind, n.trashedAt ?? null, n.deletedFromParentId ?? null],
@@ -276,7 +290,12 @@ export class MobileDeviceStore implements S3v3DeviceStore {
           content_hash: contentHash, updated_at: n.updatedAt,
         });
       }
+      const sqlStartedAt = Date.now();
       await executeBatch(this.db, statements);
+      bridgePerfLog({
+        where: "importBatch", notes: createBatch.length, statements: statements.length,
+        bodiesMs, sqlMs: Date.now() - sqlStartedAt, textCacheBytes,
+      });
     }
     for (const [id, cur] of current) {
       if (wanted.has(id)) continue;
