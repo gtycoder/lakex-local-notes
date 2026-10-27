@@ -9,7 +9,7 @@
  *    避免出现「首次按需、下一次同步又全量下载」的抖动。
  */
 import type { MobileDb } from "../data/sqliteDb.js";
-import { loadV3State, type MobileV3State } from "../data/v3StateRepository.js";
+import { ensureV3StateTable, loadV3State, type MobileV3State } from "../data/v3StateRepository.js";
 import { hasStoredSyncSettings, readSyncSettings } from "../bridge/context";
 
 /** 本机是否从未参与过 v3 同步（账本为空 = baseline 为空且没有任何资产哈希）。 */
@@ -28,6 +28,8 @@ export interface DeferAssetsResolution {
 /** 解析本轮同步的按需资产开关（纯判定，不写设置）。 */
 export async function resolveDeferAssets(db: MobileDb): Promise<DeferAssetsResolution> {
   if (hasStoredSyncSettings()) return { deferAssets: readSyncSettings().deferAssets === true, defaulted: false };
+  // 自防御：全新库在首次同步前可能还没建账本表（真机新装实测）。
+  await ensureV3StateTable(db);
   const state = await loadV3State(db);
   if (!isFreshDeviceState(state)) return { deferAssets: false, defaulted: false };
   return { deferAssets: true, defaulted: true };

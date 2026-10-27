@@ -8,6 +8,7 @@
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
 import { applyMobileSchema } from "../data/schema";
+import { ensureV3StateTable } from "../data/v3StateRepository";
 import { reconcileIndex } from "../data/searchIndex";
 import { createMobileSyncDbPort } from "../data/syncDbPort";
 import { sniffImageFormat, readImageDimensions } from "../../core/imageUtils.js";
@@ -86,6 +87,9 @@ export function assertResourceBytes(bytes: Uint8Array): void {
 export async function initializeDb(): Promise<NativeSqliteDb> {
   const openedDb = await NativeSqliteDb.open(MOBILE_DATABASE);
   await applyMobileSchema(openedDb);
+  // 261027 真机新装发现：v3 账本表原来只在 MobileDeviceStore.init 里建，而「新设备默认按需」判定/
+  // 打开文档补拉（ensureAssetsNative）会在首次同步前读它 ⇒ 全新安装直接报 no such table。统一在开库时建。
+  await ensureV3StateTable(openedDb);
   db = openedDb;
   try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
   return openedDb;

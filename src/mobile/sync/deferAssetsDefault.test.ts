@@ -19,10 +19,10 @@ function stubLocalStorage(): { data: Map<string, string> } {
   return { data };
 }
 
-async function freshDb(): Promise<SqlJsAsyncDb> {
+async function freshDb(initV3Table = true): Promise<SqlJsAsyncDb> {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
   await applyMobileSchema(db);
-  await ensureV3StateTable(db);
+  if (initV3Table) await ensureV3StateTable(db);
   return db;
 }
 
@@ -42,6 +42,13 @@ describe("按需下载附件默认值（261027 新设备默认开）", () => {
     expect(isFreshDeviceState(EMPTY_MOBILE_V3_STATE)).toBe(true);
     expect(isFreshDeviceState({ baseline: withBaseline().baseline, assetsHash: {} })).toBe(false);
     expect(isFreshDeviceState({ baseline: null, assetsHash: { n1: "h1" } })).toBe(false);
+  });
+
+  it("全新库连 v3 账本表都还没建（真机新装路径）⇒ 也要能判定，不抛 no such table", async () => {
+    const db = await freshDb(false);
+    try {
+      expect(await resolveDeferAssets(db)).toEqual({ deferAssets: true, defaulted: true });
+    } finally { await db.close(); }
   });
 
   it("未存过设置 + 全新设备 ⇒ 默认开（defaulted=true，调用方固化）", async () => {
