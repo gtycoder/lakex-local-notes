@@ -94,7 +94,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-sync-strip__pct { flex: 0 0 auto; font-size: var(--lake-font-size-nano); color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
 .mobile-sync-strip__bar { position: relative; height: 3px; border-radius: 2px; overflow: hidden; background: var(--lake-bg-block); }
 .mobile-sync-strip__bar > span { display: block; height: 100%; border-radius: 2px; background: var(--lake-accent); transition: width var(--lake-motion-fast) linear; }
-.mobile-sync-strip.is-indeterminate .mobile-sync-strip__bar > span { width: 40% !important; animation: mb-sync-strip-sweep 1.2s var(--mobile-ease-panel) infinite; }
+/* 不确定进度：indeterminate 时 HomePage 不再下发 inline width，这里直接给 40%，无需 !important。 */
+.mobile-sync-strip.is-indeterminate .mobile-sync-strip__bar > span { width: 40%; animation: mb-sync-strip-sweep 1.2s var(--mobile-ease-panel) infinite; }
 @keyframes mb-sync-strip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes mb-sync-strip-sweep { from { transform: translateX(-110%); } to { transform: translateX(280%); } }
 
@@ -1228,11 +1229,11 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
   min-width: 120px;
   min-height: 84px;
   max-width: 100%;
-  border: 1px dashed var(--mb-line, rgba(0, 0, 0, 0.18));
+  border: 1px dashed var(--lake-border-strong);
   border-radius: 10px;
-  background: var(--mb-fill-quiet, rgba(0, 0, 0, 0.04));
-  color: var(--mb-text-tertiary, rgba(0, 0, 0, 0.45));
-  font-size: 12px;
+  background: var(--lake-bg-block);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-micro);
   line-height: 1.4;
   text-align: center;
   object-fit: contain;

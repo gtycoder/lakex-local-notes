@@ -631,7 +631,8 @@ export function HomePage(props: HomePageProps) {
             {syncPct >= 0 && <span className="mobile-sync-strip__pct">{syncPct}%</span>}
           </div>
           <div className="mobile-sync-strip__bar" aria-hidden="true">
-            <span style={{ width: (syncPct < 0 ? 100 : syncPct) + "%" }} />
+            {/* 不确定进度交给 CSS 动画（width 由 .is-indeterminate 规则给），不下发 inline width。 */}
+            <span style={syncPct < 0 ? undefined : { width: syncPct + "%" }} />
           </div>
         </div>
       )}
