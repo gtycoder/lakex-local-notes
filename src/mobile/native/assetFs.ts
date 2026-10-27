@@ -156,6 +156,22 @@ export async function removeAssetBytesFs(key: string): Promise<void> {
 }
 
 /** 列出单个普通笔记目录下的资产键（{noteId}/{file}）。 */
+/**
+ * 资产目录「文件名→大小」（261027）：只 stat 不读内容。
+ * 原生不可用/旧 APK 返回 null（调用方回退旧路径：读字节拿 size）。
+ */
+export async function statNoteAssetSizesFs(noteId: string): Promise<Map<string, number> | null> {
+  if (!isSafePathSegment(noteId)) return null;
+  const plugin = NativeAssetSync as unknown as { statLocal?: (o: { path: string }) => Promise<{ files: Array<{ name: string; size: number }> }> };
+  if (!nativeAssetFsAvailable() || typeof plugin.statLocal !== "function") return null;
+  try {
+    const res = await plugin.statLocal({ path: ROOT + "/" + noteId });
+    const out = new Map<string, number>();
+    for (const f of res.files ?? []) if (isSafePathSegment(f.name)) out.set(f.name, Number(f.size));
+    return out;
+  } catch { return null; }
+}
+
 export async function listNoteAssetKeysFs(noteId: string): Promise<string[]> {
   if (!isSafePathSegment(noteId)) return [];
   if (nativeAssetFsAvailable()) {

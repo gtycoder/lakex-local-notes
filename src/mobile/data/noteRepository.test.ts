@@ -12,12 +12,14 @@ vi.mock("../native/assetFs", () => ({
   loadAssetBytesFs: vi.fn(async () => null),
   listAssetKeysFs: vi.fn(async () => []),
   listNoteAssetKeysFs: vi.fn(async () => []),
+  statNoteAssetSizesFs: vi.fn(async () => null),
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyMobileSchema } from "./schema.js";
-import { createNote, isTombstoned, noteWriteState, readNote, saveNote, trashNote } from "./noteRepository.js";
+import { loadAssetBytesFs, listNoteAssetKeysFs, statNoteAssetSizesFs } from "../native/assetFs";
+import { createNote, detectOrphans, isTombstoned, noteWriteState, readNote, saveNote, trashNote } from "./noteRepository.js";
 
 async function freshDb() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
@@ -77,6 +79,20 @@ describe("mobile noteRepository 保存写边界（审计 F06）", () => {
     await db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, is_dirty=1 WHERE id=?").run("2026-10-01T00:00:00.000Z", "r1");
     await expect(saveNote(db, "r1", "标题", "<p>恢复后编辑版</p>", null, new Map())).resolves.toBe(true);
     expect((await readNote(db, "r1"))!.content).toBe("<p>恢复后编辑版</p>");
+    await db.close();
+  });
+
+  it("孤儿登记只用原生 size，不读资产内容（261027）", async () => {
+    const db = await freshDb();
+    await createNote(db, "n1", "带附件", "<p>正文无引用</p>", null, new Map());
+    vi.mocked(listNoteAssetKeysFs).mockResolvedValueOnce(["n1/orphan.bin"]);
+    vi.mocked(statNoteAssetSizesFs).mockResolvedValueOnce(new Map([["orphan.bin", 777]]));
+    const loadMock = vi.mocked(loadAssetBytesFs);
+    loadMock.mockClear();
+    await detectOrphans(db, "n1", "<p>正文无引用</p>", new Map());
+    const row = await db.prepare("SELECT size FROM orphan_assets WHERE note_id=? AND filename=?").get("n1", "orphan.bin") as { size: number } | undefined;
+    expect(row?.size).toBe(777);
+    expect(loadMock).not.toHaveBeenCalled();
     await db.close();
   });
 });

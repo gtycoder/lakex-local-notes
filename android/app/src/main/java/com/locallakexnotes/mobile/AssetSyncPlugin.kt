@@ -20,13 +20,21 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.Executors
 
-/** `localKey` 只能落在 filesDir/note-assets 的 canonical 子树内；拒绝绝对路径、.. 与软链逃逸。 */
+/**
+ * `localKey` 是**相对 filesDir 的完整资产路径**（261027 起）：
+ *   lake 资产 = `note-assets/<id>/<file>`；小记图片 = `quick-notes/assets/<id>/<file>`。
+ * 只允许落在两个资产根的 canonical 子树内；拒绝绝对路径、.. 与软链逃逸。
+ * （旧版只认 note-assets 根 + 不含前缀的 `<id>/<file>`，小记图片因此没有原生上传/下载通道。）
+ */
 internal fun resolveLocalAssetFile(filesRoot: File, localKey: String): File {
     require(localKey.isNotBlank() && !File(localKey).isAbsolute) { "invalid localKey: $localKey" }
-    val root = File(filesRoot, "note-assets").canonicalFile
+    require(localKey.startsWith("note-assets/") || localKey.startsWith("quick-notes/assets/")) { "invalid localKey: $localKey" }
+    val root = filesRoot.canonicalFile
     val target = File(root, localKey).canonicalFile
-    val rootPrefix = root.path + File.separator
-    require(target.path.startsWith(rootPrefix)) { "invalid localKey: $localKey" }
+    require(target.path.startsWith(root.path + File.separator)) { "invalid localKey: $localKey" }
+    val lakeRoot = File(root, "note-assets").canonicalFile.path + File.separator
+    val quickRoot = File(root, "quick-notes/assets").canonicalFile.path + File.separator
+    require(target.path.startsWith(lakeRoot) || target.path.startsWith(quickRoot)) { "invalid localKey: $localKey" }
     return target
 }
 
@@ -306,8 +314,37 @@ class AssetSyncPlugin : Plugin() {
     }
 
     /**
+     * 本地资产目录「文件名→大小」（261027）：只 stat、不读内容、不算 hash。
+     * 保存文档时孤儿登记只需要 size；旧实现为拿 size 把整份附件读回 JS（25MB 附件 × N 就是几十 MB 桥流量）。
+     */
+    @PluginMethod
+    fun statLocal(call: PluginCall) {
+        val dir = resolveAssetFsPath(call.getString("path"))
+        if (dir == null) {
+            call.reject("非法资产路径")
+            return
+        }
+        ioPool.execute {
+            try {
+                val arr = JSArray()
+                if (dir.isDirectory) {
+                    for (f in dir.listFiles() ?: emptyArray()) {
+                        if (!f.isFile) continue
+                        if (f.name.startsWith(".tmp-")) continue
+                        arr.put(JSObject().put("name", f.name).put("size", f.length()))
+                    }
+                }
+                call.resolve(JSObject().put("files", arr))
+            } catch (e: Exception) {
+                Log.e(TAG, "statLocal failed: " + e.message, e)
+                call.reject("statLocal failed: " + e.message)
+            }
+        }
+    }
+
+    /**
      * 本地资产文件读写/删除/列目录（261026）：把移动端资产文件操作从 @capacitor/filesystem 全原生化。
-     * path 只接受 note-assets/... 或 quick-notes/assets/...（filesDir 下 canonical 校验）；data 为 base64。
+     * path 只接受 note-assets/... 或 quick-notes/assets/...（与 resolveLocalAssetFile 同口径）；data 为 base64。
      */
     private fun resolveAssetFsPath(relative: String?): File? {
         if (relative.isNullOrBlank()) return null

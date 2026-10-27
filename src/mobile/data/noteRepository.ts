@@ -6,7 +6,7 @@ import type { SearchResult } from "../../core/searchTypes.js";
 import { hasNoteSaveChanges } from "../../core/noteSaveDecision.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
-import { loadAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
+import { loadAssetBytesFs, listNoteAssetKeysFs, statNoteAssetSizesFs } from "../native/assetFs";
 import type { MobileDb } from "./sqliteDb";
 import { deleteNoteBodies, readNoteBody, writeNoteBody } from "./noteBodies.js";
 
@@ -84,14 +84,19 @@ export async function detectOrphans(
   const prefix = noteId + "/";
   const keys = new Set((await listNoteAssetKeysFs(noteId)).map((key) => key.slice(prefix.length)));
   for (const [key] of assets) if (key.startsWith(prefix)) keys.add(key.slice(prefix.length));
+  // 261027：孤儿行只需要 size —— 优先原生 stat（不读内容）。旧实现会对每个未引用文件 loadAssetBytesFs
+  // 读整份字节，25MB 附件 × N 时每次保存都是几十 MB 桥流量（真机实测保存 3 个 25MB 文件读回 78MB）。
+  let sizes: Map<string, number> | null = null;
+  try { sizes = await statNoteAssetSizesFs(noteId); } catch { sizes = null; }
   const insert = d.prepare("INSERT OR IGNORE INTO orphan_assets (note_id, filename, file_path, size, mime_type) VALUES (?,?,?,?,?)");
   const unorphan = d.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
   for (const filename of keys) {
     if (referenced.has(filename) || historyRefs.has(filename)) {
       await unorphan.run(noteId, filename);
     } else {
-      const bytes = assets.get(prefix + filename) ?? await loadAssetBytesFs(prefix + filename);
-      await insert.run(noteId, filename, `note-assets/${noteId}/${filename}`, bytes ? bytes.length : 0, mimeOf(filename));
+      const memBytes = assets.get(prefix + filename);
+      const size = memBytes?.length ?? sizes?.get(filename) ?? (await loadAssetBytesFs(prefix + filename))?.length ?? 0;
+      await insert.run(noteId, filename, `note-assets/${noteId}/${filename}`, size, mimeOf(filename));
     }
   }
 }

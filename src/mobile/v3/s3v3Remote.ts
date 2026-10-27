@@ -58,7 +58,8 @@ function attachNativeAssetTransfer(remote: S3v3Remote, cfg: { endpoint: string; 
     } catch { return "unsupported"; }
   };
   remote.putFromFile = async (key, localPath) => {
-    if (!key.startsWith("assets/")) return false;
+    // 261027：lake 资产与 quick-notes 资产都走原生流式上传（localPath 由 device.assetNativePathFor 给出）。
+    if (!key.startsWith("assets/") && !key.startsWith("quick-notes/assets/")) return false;
     if (!(await ensure())) return false;
     try {
       const res = await NativeAssetSync.putFile({ key: full(key), localKey: localPath });

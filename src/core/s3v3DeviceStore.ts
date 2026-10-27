@@ -96,6 +96,9 @@ export interface S3v3DeviceStore {
    *  移动端 = note-assets 根下的 `<id>/<filename>`（原生 AssetSync getFile/putFile 的 localKey 语义）；
    *  桌面端不实现（本机写盘已经很快，不需要绕过 JS）。 */
   assetNativePath?(id: string, filename: string): Promise<string | null>;
+  /** 同上，按空间返回（261027）：lake = note-assets/<id>/<file>，quickNotes = quick-notes/assets/<id>/<file>。
+   *  供「所有附件上传走原生流式」使用（小记图片此前没有原生路径，只能字节过桥）。 */
+  assetNativePathFor?(space: "lake" | "quickNotes", id: string, filename: string): Promise<string | null>;
 
   /** 轻量持久化同步标记（可选）：单条推送等「不走整轮 saveState」的路径用它清理 remotePurged/restorePending，
    *  并同步 DB 侧投影（cloud_deleted），避免 sidecar/DB 残留已恢复 id 的「云端已删除·仅本地」标记。 */

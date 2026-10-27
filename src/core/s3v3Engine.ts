@@ -1451,31 +1451,54 @@ export class S3v3SyncEngine {
     };
   }
 
+  /** 原生资产路径（261027）：lake/quickNotes 都走原生流式上传；无能力时返回 null ⇒ 回退字节路径。 */
+  private async nativeAssetPathOf(space: "lake" | "quickNotes", id: string, filename: string): Promise<string | null> {
+    if (!this.remote.putFromFile) return null;
+    try {
+      if (this.device.assetNativePathFor) {
+        const p = await this.device.assetNativePathFor(space, id, filename);
+        if (p) return p;
+      }
+      if (space === "lake" && this.device.assetNativePath) return await this.device.assetNativePath(id, filename);
+    } catch { /* 回退字节路径 */ }
+    return null;
+  }
+
   private async uploadAssets(space: "lake" | "quickNotes", id: string, remoteDecl: AssetDeclaration | null): Promise<ReturnType<typeof buildAssetDeclaration> | null> {
-    const filenames = space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id);
+    // 261027 Phase1：原生「filename→size/sha256」清单优先 —— 上传声明完全不读字节（旧 APK 自动回退）。
+    // 否则每张新增附件都要 readAsset（base64 过桥）+ 纯 JS SHA-256，大附件在真机上是主要上传成本与 OOM 风险。
+    const statsFn = space === "lake" ? this.device.listAssetStats : this.device.listQuickAssetStats;
+    let stats: Map<string, { size: number; hash: string }> | null = null;
+    if (statsFn) {
+      try {
+        const list = await statsFn.call(this.device, id);
+        stats = new Map(list.map((s) => [s.filename, { size: s.size, hash: s.hash }] as const));
+      } catch { stats = null; }
+    }
+    const filenames = stats
+      ? [...stats.keys()].sort()
+      : (space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id));
     if (filenames.length === 0) return null;
     // 附件按 filename 内容寻址（同名 = 同内容）：远端声明已有的文件直接复用 size/hash，
-    // 不读本地字节；只有新增/改名的附件才 readAsset。增量时改一篇带 100 张图的文档也只读新图。
+    // 不读本地字节；只有新增/改名的附件才需要 size/hash（优先原生清单，其次 readAsset）。
     const remoteByName = new Map((remoteDecl?.assets ?? []).map((a) => [a.filename, a] as const));
     const entries: AssetDeclaration["assets"] = [];
-    const toUpload: Array<{ filename: string; bytes: Uint8Array; nativePath?: string | null }> = [];
     for (const filename of filenames) {
       const known = remoteByName.get(filename);
       if (known) { entries.push(known); continue; }
-      const bytes = space === "lake" ? await this.device.readAsset(id, filename) : await this.device.readQuickAsset(id, filename);
-      if (!bytes) continue;
-      entries.push({ filename, size: bytes.length, hash: sha256Hex(bytes) });
-      // P0-4：Lake 资产上传时若有原生流式能力，登记「本地路径」而不是把字节留在内存/过桥。
-      let nativePath: string | null = null;
-      if (space === "lake" && this.remote.putFromFile && this.device.assetNativePath) {
-        try { nativePath = await this.device.assetNativePath(id, filename); } catch { nativePath = null; }
+      const stat = stats?.get(filename);
+      const nativePath = await this.nativeAssetPathOf(space, id, filename);
+      let bytes: Uint8Array | null = null;
+      if (!nativePath || !stat) {
+        bytes = space === "lake" ? await this.device.readAsset(id, filename) : await this.device.readQuickAsset(id, filename);
+        if (!bytes) continue;
       }
-      toUpload.push({ filename, bytes, nativePath });
-    }
-    for (const a of toUpload) {
-      const key = space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename);
-      if (a.nativePath) this.uploadOps.push({ space, noteId: id, key, fromFile: a.nativePath });
-      else this.uploadOps.push({ space, noteId: id, key, bytes: a.bytes });
+      const size = stat && stat.size >= 0 ? stat.size : bytes!.length;
+      const hash = stat && stat.hash ? stat.hash : sha256Hex(bytes!);
+      entries.push({ filename, size, hash });
+      const key = space === "lake" ? assetKey(id, filename) : quickNoteAssetKey(id, filename);
+      if (nativePath) this.uploadOps.push({ space, noteId: id, key, fromFile: nativePath });
+      else this.uploadOps.push({ space, noteId: id, key, bytes: bytes! });
     }
     return buildAssetDeclaration(entries);
   }

@@ -685,9 +685,15 @@ export class MobileDeviceStore implements S3v3DeviceStore {
 
   /** P0-4：原生流式资产的 localKey（相对 note-assets 根，如 `<id>/<file>`）；非原生平台返回 null。 */
   async assetNativePath(id: string, filename: string): Promise<string | null> {
+    return await this.assetNativePathFor("lake", id, filename);
+  }
+
+  /** 261027：原生 AssetSync 的 localKey 现在是「相对 filesDir 的完整路径」——
+   *  lake = note-assets/<id>/<file>，quickNotes = quick-notes/assets/<id>/<file>（与 Kotlin 侧 canonical 校验一致）。 */
+  async assetNativePathFor(space: "lake" | "quickNotes", id: string, filename: string): Promise<string | null> {
     if (!nativeAssetSyncSupported()) return null;
     if (!/^[A-Za-z0-9._-]+$/.test(id) || !/^[A-Za-z0-9._-]+$/.test(filename)) return null;
-    return id + "/" + filename;
+    return space === "lake" ? "note-assets/" + id + "/" + filename : "quick-notes/assets/" + id + "/" + filename;
   }
 
   /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清 v3_state 标记 + DB cloud_deleted 投影。 */
