@@ -14,6 +14,7 @@ import * as gcRepository from "../data/gcRepository.js";
 import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
 import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
+import { backfillTextCache } from "../data/textCacheBackfill.js";
 import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
 import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
 import { clearSyncInterrupted, markSyncInterrupted } from "../sync/syncResumeMarker";
@@ -66,6 +67,17 @@ export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing =
 }
 
 
+/** 关闭「按需下载附件」后的后台全量补齐（best-effort；分批降低峰值）。 */
+async function materializeAllDeclaredAssets(): Promise<void> {
+  const d = await ensureDb();
+  const rows = await d.prepare("SELECT id FROM notes WHERE trashed_at IS NULL ORDER BY id").all() as Array<{ id: string }>;
+  const ids = rows.map((row) => row.id);
+  // 8 路并行（每路内部再 4 并发）⇒ 全量补齐时有效并发 ~32，避免 2 万附件单线程慢慢爬。
+  const WORKERS = 8;
+  const slices = Array.from({ length: WORKERS }, (_, worker) => ids.filter((_, index) => index % WORKERS === worker));
+  await Promise.all(slices.map((slice) => downloadDeclaredAssetsFor(slice, true)));
+}
+
 /** 单条推送（「保存并同步」；云状态判据在调用方）。
  * v3 parity E2：只 upsert 这一条（其余条目/标签/墓碑云端逐字段不变）；
  * 必须整轮的两条路径（云端无 pointer/无基线/不同代、远端墓碑未恢复）执行一次整轮并回传 full-sync。 */
@@ -106,7 +118,10 @@ function scheduleSearchReconcile(db: import("../data/sqliteDb.js").MobileDb): vo
     searchReconcileTimer = null;
     if (searchReconcileRunning) return;
     searchReconcileRunning = true;
-    void reconcileIndex(db)
+    // 261027：导入不再写 text_cache ⇒ 先后台补齐纯文本（分批、幂等续跑），再建 FTS。
+    void backfillTextCache(db)
+      .catch((error) => console.warn("[sync] 后台 text_cache 补齐失败（下次同步再试）", error))
+      .then(() => reconcileIndex(db))
       .catch((error) => console.warn("[sync] 后台搜索索引重建失败（下次同步再试）", error))
       .finally(() => { searchReconcileRunning = false; });
   }, 1500);
@@ -144,7 +159,14 @@ export const syncDomain = {
   },
 
   saveSyncSettings(next: SyncSettings): void {
+    const previous = readSyncSettings();
     writeLocalStorage(SYNC_STORAGE_KEY, JSON.stringify(next));
+    // 261027：从「按需」切回「全量」时，后台补齐所有已存在条目的缺失附件
+    //（增量同步只处理变更条目，不会碰它们；否则用户关掉按需也看不到老图）。
+    if (previous.deferAssets === true && next.deferAssets !== true) {
+      void runMaintenance("ensureTrashNoteAssets", () => materializeAllDeclaredAssets())
+        .catch((error) => console.warn("[asset] 关闭按需后补齐全部附件失败（打开文档/下次同步再补）", error));
+    }
   },
 
   async getS3Settings(): Promise<S3Settings | null> {

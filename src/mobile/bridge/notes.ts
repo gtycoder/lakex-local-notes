@@ -1,6 +1,7 @@
 /** C3-5 第③步：notes 域（从 bridge.ts 抽取，行为保持）。 */
 import { assets, dbPort, ensureDb, readSyncSettings, runMaintenance, runWrite } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
+import { backfillTextCache } from "../data/textCacheBackfill.js";
 
 import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
@@ -54,19 +55,22 @@ export const notesDomain = {
    * 派生搜索索引的后台自愈（261026）：同步批量导入不再逐篇建 FTS（正文阶段快 ~60s），
    * 改由冷启动/回前台时按需补齐。已补完时只是两次 COUNT，几乎零成本；中途被杀下次接着来（幂等）。
    */
-  async ensureSearchIndex(): Promise<{ notes: number; indexed: number; rebuilt: boolean }> {
+  async ensureSearchIndex(): Promise<{ notes: number; indexed: number; rebuilt: boolean; textFilled: number }> {
     const d = await ensureDb();
     const count = async (sql: string): Promise<number> => {
       try { return Number(((await d.prepare(sql).get()) as { c?: number } | undefined)?.c ?? 0); } catch { return 0; }
     };
     const notes = await count("SELECT count(*) AS c FROM notes WHERE trashed_at IS NULL");
     const before = await count("SELECT count(*) AS c FROM search_index");
-    if (before >= notes) return { notes, indexed: before, rebuilt: false };
+    if (before >= notes) return { notes, indexed: before, rebuilt: false, textFilled: 0 };
+    let textFilled = 0;
     await runMaintenance("ensureSearchIndex", async () => {
+      // 261027：导入只写 NULL text_cache；这里先补纯文本，再建 FTS（都幂等可续跑）。
+      textFilled = (await backfillTextCache(d)).filled;
       await reconcileIndex(d);
     });
     const after = await count("SELECT count(*) AS c FROM search_index");
-    return { notes, indexed: after, rebuilt: true };
+    return { notes, indexed: after, rebuilt: true, textFilled };
   },
 
   async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string, kind: NoteKind = "doc"): Promise<void> {

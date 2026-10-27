@@ -4,7 +4,6 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
 import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readNoteBodiesBatch, readQuickNoteBody, statNoteBodiesBatch, statQuickNoteBodiesBatch, writeNoteBody, writeNoteBodiesBatch, writeQuickNoteBody } from "../data/noteBodies.js";
-import { searchTextForKind } from "../../core/noteSearchText.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
@@ -269,16 +268,14 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       await writeNoteBodiesBatch(createBatch.map((c) => ({ kind: c.kind, id: c.n.id, content: c.content })), { durable: false });
       const bodiesMs = Date.now() - bodiesStartedAt;
       const statements: Array<{ statement: string; values: unknown[] }> = [];
-      let textCacheBytes = 0;
       for (const c of createBatch) {
         const n = c.n;
         const title = n.title.trim() ? n.title.trim() : (c.kind === "usheet" ? "无标题表格" : "无标题文档");
         const contentHash = sha256Sync(new TextEncoder().encode(c.content));
-        const textCache = searchTextForKind(c.kind, c.content).plain ?? "";
-        textCacheBytes += textCache.length;
+        // 261027：text_cache 不再随导入过桥（真机 ~4.8MB/100 篇），同步结束后台补（backfillTextCache）。
         statements.push({
-          statement: "INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,1,?,?,?,?)",
-          values: [n.id, title, c.resolvedParentId, n.updatedAt, contentHash, textCache, c.kind, n.trashedAt ?? null, n.deletedFromParentId ?? null],
+          statement: "INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,1,NULL,?,?,?)",
+          values: [n.id, title, c.resolvedParentId, n.updatedAt, contentHash, c.kind, n.trashedAt ?? null, n.deletedFromParentId ?? null],
         });
         // 默认值行不必再 UPDATE（大多数文档 icon=null/locked=0/sort=0）。
         if ((n.icon ?? null) !== null || n.isLocked || n.sortOrder !== 0) {
@@ -294,7 +291,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       await executeBatch(this.db, statements);
       bridgePerfLog({
         where: "importBatch", notes: createBatch.length, statements: statements.length,
-        bodiesMs, sqlMs: Date.now() - sqlStartedAt, textCacheBytes,
+        bodiesMs, sqlMs: Date.now() - sqlStartedAt,
       });
     }
     for (const [id, cur] of current) {
