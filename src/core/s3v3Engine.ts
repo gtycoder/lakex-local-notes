@@ -50,6 +50,10 @@ const LOCK_SETTLE_MS = 40; // 单用户场景下减少固定发布延迟；多�
 /** 回收站父节点 id 与 Store/移动端一致（曾误写 "trash"，会把回收站条目挂到不存在的父节点）。 */
 const TRASH_ID = TRASH_NOTEBOOK_ID;
 const MAX_PUBLISH_RETRIES = 6;
+/** 「首轮并发首传」竞态重试上限（261027）：两端同时空桶首传时，后到者可能先读到 pointer=null、
+ *  再 list 到对端已上传的对象 ⇒ pointer-corrupt。等对端发布完 pointer 再同步一次即可（若真是损坏，
+ *  重试仍失败、错误码不变，不会掩盖问题）。 */
+const MAX_CLOUD_RACE_RETRIES = 2;
 /** 单条推送的发布重试（pointer 被别的端改动时重来一次）。 */
 const SINGLE_PUSH_MAX_RETRIES = 3;
 
@@ -263,6 +267,7 @@ export class S3v3SyncEngine {
     this.uploadOps = [];
     this.phaseStart = Date.now();
     let lastErr: unknown = null;
+    let raceRetries = 0;
     for (let attempt = 0; attempt < MAX_PUBLISH_RETRIES; attempt++) {
       this.warnings = [];
       this.warningDetails = [];
@@ -277,6 +282,15 @@ export class S3v3SyncEngine {
           // 并发发布冲突：指数退避 + 抖动，避免 6 端同步碰撞后一起重试
           await sleep(120 + Math.floor(Math.random() * (attempt + 1) * 220));
           continue;
+        }
+        // 首轮并发现身（pointer 还没写、对象已在 Cloud）⇒ 等一拍重试；有基线时的 pointer 缺失是真损坏，照抛。
+        if (e instanceof S3v3SyncError && e.code === "pointer-corrupt" && raceRetries < MAX_CLOUD_RACE_RETRIES) {
+          const baseline = await this.device.loadBaseline().catch(() => null);
+          if (!baseline) {
+            raceRetries++;
+            await sleep(150 + Math.floor(Math.random() * 250));
+            continue;
+          }
         }
         throw e;
       }
