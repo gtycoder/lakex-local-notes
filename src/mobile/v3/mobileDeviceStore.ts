@@ -189,6 +189,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       remotePurged: [...purged].sort(), restorePending: [...restorePending].sort(),
       quickDeletes: [...quickDeleteRows.map((r) => r.id), ...quickSoftTombstones.map((r) => r.id)].sort(),
       quickPurges, quickPurgeTimes, archived: [],
+      pendingAssets: side.pendingAssets ?? [],
     };
   }
 
@@ -450,6 +451,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       intents: state.intents, pending: state.pending,
       remotePurged: purgedFinal, restorePending: state.restorePending ?? [],
       quickPurgeTimes: state.quickPurgeTimes ?? {},
+      pendingAssets: state.pendingAssets ?? [],
       assetsHash: Object.fromEntries([...state.lake.notes, ...state.quickNotes.items].filter((n) => n.assetsHash).map((n) => [n.id, n.assetsHash!])),
     });
     this.stagedBodies.clear();

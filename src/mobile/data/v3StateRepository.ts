@@ -2,6 +2,7 @@ import type { LakeIndex, QuickNotesIndex } from "../../core/s3v3Index.js";
 import type { DeletionIntent } from "../../core/s3v3Intent.js";
 import type { PendingDelete } from "../../core/s3v3Gate.js";
 import type { MobileDb } from "./sqliteDb.js";
+import type { PendingAssetRetry } from "../../core/s3v3DeviceStore.js";
 
 /** 与 electron/s3v3/deviceStore 的 DeviceBaseline 结构一致；移动端不 import electron。 */
 export interface MobileV3Baseline {
@@ -27,9 +28,11 @@ export interface MobileV3State {
   restorePending: string[];
   quickPurgeTimes?: Record<string, string>;
   assetsHash: Record<string, string>;
+  /** 待补资产账本（261027）：附件下载失败后由引擎记账，下一轮同步开头重试。 */
+  pendingAssets?: PendingAssetRetry[];
 }
 
-export const EMPTY_MOBILE_V3_STATE: MobileV3State = { baseline: null, intents: [], pending: [], remotePurged: [], restorePending: [], assetsHash: {}, quickPurgeTimes: {} };
+export const EMPTY_MOBILE_V3_STATE: MobileV3State = { baseline: null, intents: [], pending: [], remotePurged: [], restorePending: [], assetsHash: {}, quickPurgeTimes: {}, pendingAssets: [] };
 
 export async function ensureV3StateTable(db: MobileDb): Promise<void> {
   await db.prepare("CREATE TABLE IF NOT EXISTS sync_v3_state (id TEXT PRIMARY KEY, json TEXT NOT NULL)").run();
@@ -48,6 +51,7 @@ export async function loadV3State(db: MobileDb): Promise<MobileV3State> {
       restorePending: Array.isArray(parsed.restorePending) ? parsed.restorePending : [],
       quickPurgeTimes: parsed.quickPurgeTimes && typeof parsed.quickPurgeTimes === "object" ? parsed.quickPurgeTimes : {},
       assetsHash: parsed.assetsHash && typeof parsed.assetsHash === "object" ? parsed.assetsHash : {},
+      pendingAssets: Array.isArray(parsed.pendingAssets) ? parsed.pendingAssets : [],
     };
   } catch {
     // 损坏的账本不应让同步中断：视为空账本（baseline 丢失会触发更保守的合并，由引擎决定）。

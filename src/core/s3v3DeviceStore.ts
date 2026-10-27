@@ -4,6 +4,18 @@ import type { PendingDelete } from "./s3v3Gate.js";
 
 /** S3 v3 设备端存储契约：引擎只依赖此接口，便于接入现有 Store / 移动端 SQLite。 */
 
+/** 待补资产账本条目（261027）：附件下载失败后落账，下一轮同步开头自动重试。 */
+export interface PendingAssetRetry {
+  space: "lake" | "quickNotes";
+  /** 文档 / 小记 id（对象 key 由 space + id + filename 现算，不落 key 避免空间规则变更后失配）。 */
+  id: string;
+  filename: string;
+  size: number;
+  hash: string;
+  /** 已失败轮数；超过上限即丢弃（声明里的对象可能已被清理，避免账本无限重试）。 */
+  attempts: number;
+}
+
 export interface DeviceState {
   lake: LakeIndex;
   quickNotes: QuickNotesIndex;
@@ -26,6 +38,8 @@ export interface DeviceState {
   quickPurgeTimes?: Record<string, string>;
   /** 全量重拉/重置时归档的本地条目（不参与同步）。 */
   archived?: Array<{ id: string; kind: "lake" | "quickNote"; title?: string }>;
+  /** 待补资产账本：附件下载失败后由引擎记录、下一轮同步开头自动重试（适配器只负责持久化）。 */
+  pendingAssets?: PendingAssetRetry[];
 }
 
 export interface DeviceBaseline {

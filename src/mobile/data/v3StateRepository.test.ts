@@ -23,6 +23,8 @@ describe("移动端 v3 同步账本", () => {
       intents: [{ noteId: "n1", targetEpoch: "e1", targetGeneration: 2, purgedAt: "2026-10-25T00:00:00.000Z" }],
       pending: [{ kind: "body", key: "objects/n1-" + "a".repeat(64) + ".lake", noteId: "n1", oldHash: "a".repeat(64), targetEpoch: "e1", targetGeneration: 2, targetCommit: "c".repeat(64), createdAt: "2026-10-25T00:00:00.000Z" }],
       remotePurged: ["n2"], restorePending: ["n3"], assetsHash: { n1: "d".repeat(64) }, quickPurgeTimes: { n4: "2026-10-25T00:00:00.000Z" },
+      // 261027：待补资产账本也要能原样往返（跨重启自动重试依赖它）。
+      pendingAssets: [{ space: "lake", id: "n1", filename: "a.png", size: 3, hash: "e".repeat(64), attempts: 1 }],
     };
     await saveV3State(db, state);
     expect(await loadV3State(db)).toEqual(state);

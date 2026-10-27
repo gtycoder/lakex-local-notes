@@ -6,7 +6,7 @@ import type { QuickNotesStore } from "../quickNotes.js";
 import type { SyncNote } from "../noteQueries.js";
 import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../../src/core/s3v3Index.js";
 import { sha256Hex } from "../../src/core/syncUtils.js";
-import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
+import type { DeviceBaseline, DeviceState, PendingAssetRetry, S3v3DeviceStore } from "./deviceStore.js";
 
 /** 资源文件名安全字符集（与 core isSafePathSegment 同口径；纯防御，声明/键已校验）。 */
 const SAFE_ASSET_FILENAME = /^[A-Za-z0-9._-]+$/;
@@ -64,6 +64,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     return {
       intents: state.intents, pending: state.pending, quickPurgeTimes: state.quickPurgeTimes ?? {},
       remotePurged: state.remotePurged ?? [], restorePending: state.restorePending ?? [], archived: state.archived ?? [],
+      pendingAssets: state.pendingAssets ?? [],
       assetsHash: Object.fromEntries(state.lake.notes.map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
       quickAssetsHash: Object.fromEntries((state.quickNotes.items ?? []).map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
       hashCache: Object.fromEntries(this.hashCache),
@@ -76,7 +77,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       ...(f.trashedAt !== undefined && f.trashedAt !== null ? { trashedAt: f.trashedAt } : {}),
       ...(f.deletedFromParentId !== undefined && f.deletedFromParentId !== null ? { deletedFromParentId: f.deletedFromParentId } : {}),
     }));
-    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; quickPurgeTimes?: Record<string, string>; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; quickAssetsHash?: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }> }>(this.stateFile);
+    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; quickPurgeTimes?: Record<string, string>; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; quickAssetsHash?: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }>; pendingAssets?: PendingAssetRetry[] }>(this.stateFile);
     this.hashCache = new Map(Object.entries(side?.hashCache ?? {}));
     const notes: LakeNoteEntry[] = [];
     // 单 SQL 轻量元数据：避免逐篇 getNoteInfo（读正文/算字数/扫资产卡片，20k 文档会退化到秒级+）
@@ -158,6 +159,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       folders,
       intents, pending: side?.pending ?? [],
       remotePurged: side?.remotePurged ?? [], restorePending, archived: side?.archived ?? [],
+      pendingAssets: side?.pendingAssets ?? [],
     };
     return state;
   }

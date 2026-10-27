@@ -31,7 +31,7 @@ import { planLakeDeletes, planQuickNotesDeletes, type PlannedDelete } from "./s3
 import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3Gate.js";
 import { shouldClearDeletionIntent, type DeletionIntent } from "./s3v3Intent.js";
 import { TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
-import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
+import type { DeviceBaseline, DeviceState, PendingAssetRetry, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { SyncWarning } from "../lib/types.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { runPoolSettled } from "./s3v3Pool.js";
@@ -54,6 +54,10 @@ const MAX_PUBLISH_RETRIES = 6;
  *  再 list 到对端已上传的对象 ⇒ pointer-corrupt。等对端发布完 pointer 再同步一次即可（若真是损坏，
  *  重试仍失败、错误码不变，不会掩盖问题）。 */
 const MAX_CLOUD_RACE_RETRIES = 2;
+/** 单条待补资产最多重试轮数（超过即丢弃：声明里的对象可能已被清理，不能无限重试）。 */
+const MAX_PENDING_ASSET_ATTEMPTS = 3;
+/** 待补资产账本上限（防止极端情况下账本无限增长拖慢每轮同步）。 */
+const MAX_PENDING_ASSETS = 500;
 /** 单条推送的发布重试（pointer 被别的端改动时重来一次）。 */
 const SINGLE_PUSH_MAX_RETRIES = 3;
 
@@ -180,6 +184,7 @@ const emptyState = (): DeviceState => ({
   lake: { v: 3, space: "lake", notes: [], folders: [] },
   quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
   folders: [],
+  pendingAssets: [],
   intents: [],
   pending: [],
   remotePurged: [],
@@ -255,6 +260,8 @@ export class S3v3SyncEngine {
    * 而是全部登记后由 flushAssetTasks 用**全局有界流水线**统一跑。
    */
   private assetTasks: Array<{ space: "lake" | "quickNotes"; noteId: string; filename: string; key: string; size: number; hash: string }> = [];
+  /** 待补资产账本（261027）：与 state.pendingAssets 同一引用，失败即记账、成功即销账。 */
+  private pendingAssets: PendingAssetRetry[] = [];
 
   /** 记录一条结构化警告（同时保留一行式消息给日志/旧调用方）。 */
   private warn(message: string, extra: Omit<SyncWarning, "message"> = { kind: "remote_incomplete" }): void {
@@ -487,6 +494,9 @@ export class S3v3SyncEngine {
   private async syncOnce(opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
     const report: S3v3SyncReport = { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: this.warnings, warningDetails: this.warningDetails, supersededNotes: this.supersededNotes };
     const state = (await this.device.loadState()) ?? emptyState();
+    // 待补资产账本（261027）：与 state 同一引用；适配器持久化，失败记账、成功销账。
+    state.pendingAssets ??= [];
+    this.pendingAssets = state.pendingAssets;
     const baseline = await this.device.loadBaseline();
     const pointer = await this.readPointer();
     const cloudHasObjects = pointer ? true : (await this.remote.list("objects/")).length > 0 || (await this.remote.list("meta/index/")).length > 0;
@@ -558,7 +568,9 @@ export class S3v3SyncEngine {
       pending: state.pending,
       remotePurged: [],
       restorePending: [],
+      pendingAssets: state.pendingAssets ?? [],
     };
+    this.pendingAssets = newState.pendingAssets!;
     // 全量重拉 = 元数据对账 + 本地内容复用（S3-REDESIGN §15）：本地正文/附件已持同内容就不重下字节。
     const hadLake = new Set(state.lake.notes.map((n) => n.id));
     const hadQuick = new Set(state.quickNotes.items.map((q) => q.id));
@@ -750,6 +762,8 @@ export class S3v3SyncEngine {
   }
 
   private async incrementalSync(pointer: S3v3Pointer, baseline: DeviceBaseline, state: DeviceState, report: S3v3SyncReport): Promise<S3v3SyncReport> {
+    // 261027：上一轮失败的附件先补（普通增量轮不会重新调度资产，不补就永久缺失）。
+    await this.retryPendingAssets();
     const remoteLake = pointer.lake.commit === baseline.lakeCommit ? baseline.lake : ((await this.readIndex("lake", pointer.lake.commit)) as LakeIndex);
     const remoteQuick = pointer.quickNotes.commit === baseline.quickNotesCommit ? baseline.quickNotes : ((await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex);
     this.phase("read-index");
@@ -1064,7 +1078,7 @@ export class S3v3SyncEngine {
           report.uploadedNotes++;
         }
       } catch (e) {
-        this.warnings.push("上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
+        this.warn("上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message, { kind: "remote_incomplete", noteId: plan.id, title: entry.title });
         // 关键：失败笔记不得进入本轮新索引（否则索引引用未落盘正文/声明），回退到远端旧条目或移出。
         lakeWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
         newLakeDecls.delete(plan.id);
@@ -1123,7 +1137,7 @@ export class S3v3SyncEngine {
           report.uploadedNotes++;
         }
       } catch (e) {
-        this.warnings.push("小记上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message);
+        this.warn("小记上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message, { kind: "remote_incomplete", noteId: plan.id });
         quickWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
         newQuickDecls.delete(plan.id);
         prevQuickDecls.delete(plan.id);
@@ -1138,7 +1152,7 @@ export class S3v3SyncEngine {
     this.phase("uploads");
     for (const [key, msg] of uploadFailures) {
       const [space, id] = key.split(":");
-      this.warnings.push((space === "lake" ? "上传失败，保持 local 下轮重试: " : "小记上传失败，保持 local 下轮重试: ") + id + " " + msg);
+      this.warn((space === "lake" ? "上传失败，保持 local 下轮重试: " : "小记上传失败，保持 local 下轮重试: ") + id + " " + msg, { kind: "remote_incomplete", noteId: id });
       if (space === "lake") {
         const plan = lakePlan.notes.find((p) => p.id === id);
         lakeWS.failUpload(id, plan?.remote ? { ...plan.remote } : null);
@@ -1620,13 +1634,15 @@ export class S3v3SyncEngine {
           const dest = await this.device.assetNativePath(t.noteId, t.filename);
           if (dest) {
             const status = await this.remote.getToFile(t.key, dest, { size: t.size, sha256: t.hash });
-            if (status === "ok") return t.size;
+            if (status === "ok") { this.clearPendingAsset(t); return t.size; }
             if (status === "missing") {
               this.warn("缺附件: " + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+              this.markPendingAsset(t);
               return 0;
             }
             if (status === "corrupt") {
               this.warn("附件校验失败: " + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+              this.markPendingAsset(t);
               return 0;
             }
             // unsupported → 回退下面的字节路径
@@ -1640,10 +1656,12 @@ export class S3v3SyncEngine {
       const bytes = ranged ?? await this.remote.get(t.key);
       if (!bytes) {
         this.warn((t.space === "lake" ? "缺附件: " : "缺小记图片: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+        this.markPendingAsset(t);
         return 0;
       }
       if (bytes.length !== t.size || sha256Hex(bytes) !== t.hash) {
         this.warn((t.space === "lake" ? "附件校验失败: " : "小记图片校验失败: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+        this.markPendingAsset(t);
         return 0;
       }
       try {
@@ -1651,8 +1669,10 @@ export class S3v3SyncEngine {
         else await this.device.writeQuickAsset(t.noteId, t.filename, bytes);
       } catch (e) {
         this.warn("附件落盘失败: " + t.noteId + "/" + t.filename + " " + (e as Error).message, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+        this.markPendingAsset(t);
         return 0;
       }
+      this.clearPendingAsset(t);
       return bytes.length;
     }, {
       phase: "assets",
@@ -1664,7 +1684,48 @@ export class S3v3SyncEngine {
       const t = tasks[err.index];
       if (!t) continue;
       this.warn("附件下载异常: " + t.noteId + "/" + t.filename + " " + ((err.error as Error)?.message ?? String(err.error)), { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
+      this.markPendingAsset(t);
     }
+  }
+
+  /** 记账：本轮失败的资产 → 待补账本（同一条目合并、attempts 累加，超限丢弃）。 */
+  private markPendingAsset(t: { space: "lake" | "quickNotes"; noteId: string; filename: string; size: number; hash: string }): void {
+    const hit = this.pendingAssets.find((e) => e.space === t.space && e.id === t.noteId && e.filename === t.filename);
+    if (hit) {
+      hit.attempts += 1;
+      hit.size = t.size;
+      hit.hash = t.hash;
+    } else {
+      this.pendingAssets.push({ space: t.space, id: t.noteId, filename: t.filename, size: t.size, hash: t.hash, attempts: 1 });
+    }
+    // 超限丢弃（对象可能已被云端清理/声明过期）：只清本数组内的过期项，不打断调用方。
+    for (let i = this.pendingAssets.length - 1; i >= 0; i--) {
+      if (this.pendingAssets[i].attempts > MAX_PENDING_ASSET_ATTEMPTS) this.pendingAssets.splice(i, 1);
+    }
+    if (this.pendingAssets.length > MAX_PENDING_ASSETS) this.pendingAssets.splice(0, this.pendingAssets.length - MAX_PENDING_ASSETS);
+  }
+
+  /** 销账：本轮成功的资产从待补账本移除。 */
+  private clearPendingAsset(t: { space: "lake" | "quickNotes"; noteId: string; filename: string }): void {
+    const idx = this.pendingAssets.findIndex((e) => e.space === t.space && e.id === t.noteId && e.filename === t.filename);
+    if (idx >= 0) this.pendingAssets.splice(idx, 1);
+  }
+
+  /**
+   * 重试上一轮失败的资产（261027）：普通增量轮不会 applyRemote 重调度资产，失败即永久缺失
+   * （旧协议「每变更轮差集」的退步）。每轮同步开头把账本里的条目重新排进全局流水线，
+   * 失败继续留账（attempts+1），成功销账；账本随 state 持久化，重启后仍生效。
+   */
+  private async retryPendingAssets(): Promise<void> {
+    if (this.pendingAssets.length === 0) return;
+    for (const e of this.pendingAssets) {
+      this.assetTasks.push({
+        space: e.space, noteId: e.id, filename: e.filename,
+        key: e.space === "lake" ? assetKey(e.id, e.filename) : quickNoteAssetKey(e.id, e.filename),
+        size: e.size, hash: e.hash,
+      });
+    }
+    await this.flushAssetTasks();
   }
 
   /**

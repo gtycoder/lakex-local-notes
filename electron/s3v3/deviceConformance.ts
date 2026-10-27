@@ -447,10 +447,8 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 
-    // 已知缺口（expected-fail）：附件下载失败后**普通下一轮同步不会重试**（该轮没有 applyRemote ⇒ 不会
-    // 重新调度资产），只有再次发生变更轮或显式补拉（ensureNoteAssets/打开文档）才会补齐。
-    // 旧协议 downloadNoteAssets 在每个变更轮都会重跑差集；这里保持严格规格并标记已知缺口，修好后删 it.fails。
-    it.fails("弱网：附件下载失败 → 警告 + 下轮自动同步补齐字节一致（当前缺口）", async () => {
+    // 261027 已修：附件失败会记进「待补资产账本」，下一轮同步开头自动重试（成功销账、失败 attempts+1）。
+    it("弱网：附件下载失败 → 警告 + 下轮自动同步补齐字节一致", async () => {
       const remote = new MemoryRemote();
       const a = await newDevice(make, remote);
       const b = await newDevice(make, remote);
