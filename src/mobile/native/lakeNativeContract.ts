@@ -21,12 +21,14 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
   "getHistorySettings", "saveHistorySettings", "snapshotNote", "getDiagnostics",
   "createQuickNote", "deleteQuickNote", "saveQuickNote", "saveQuickNoteWithImages",
   "getQuickNoteImage", "listQuickNoteTrash", "restoreQuickNote", "purgeQuickNote", "syncQuickNote",
-  "getCloudState",
+  "getCloudState", "getSyncSettings", "saveSyncSettings",
   "listTrashTree", "getS3Settings", "saveS3Settings",
-  "createNote", "createBitable", "saveNote", "trashNote", "restoreNote", "listTrashed",
+  "createNote", "createBitable", "readNote", "saveNote", "trashNote", "restoreNote", "listTrashed",
   "restoreTreeItem", "purgeTreeItem",
   "createGroup", "renameTreeNode", "setNodeIcon", "reorderSiblings", "moveTreeNodeOrdered", "createNotebook",
-  "searchNotes",
+  "searchNotes", "ensureSearchIndex",
+  "ensureNoteAssets", "ensureQuickNoteAssets", // 261027：按需资产占位补拉（CDP 自动化/调试也会用）
+  "aiGetSettings", "aiSaveSettings", "aiTestConnection", "aiChat", "aiCancel",
 ] as const;
 
 /** 非 bridge 的调试入口（sqlite 迁移/压测辅助）。 */

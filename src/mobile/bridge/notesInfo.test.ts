@@ -37,7 +37,7 @@ describe("getNoteInfo 文本统计", () => {
     mocks.readNote.mockResolvedValue({ id: "n1", title: "表格", content, updatedAt: "2026-01-01T00:00:00.000Z", parentId: null, kind: "usheet" });
     mocks.ensureDb.mockResolvedValue({
       prepare: (sql: string) => ({
-        get: async () => sql.includes("sync_state") ? { sync_state: "local", is_conflict: 0, updated_at: "2026-01-01T00:00:00.000Z" } : undefined,
+        get: async () => sql.includes("is_dirty") ? { is_dirty: 1, is_conflict: 0, updated_at: "2026-01-01T00:00:00.000Z" } : undefined,
       }),
     });
 

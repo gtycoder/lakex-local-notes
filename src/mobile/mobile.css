@@ -79,6 +79,25 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    让它像 `.mobile-workspace` 一样撑满外壳（外壳高度已被 --mb-app-h 钉住）⇒ 内层才是真正的滚动容器。 */
 .mobile-home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
+/* P0-6 可视进度条（261026）：首拉/大同步时在顶栏与主页舞台之间显示"阶段 + 计数 + 字节 + 进度"。
+   只在同步进行中条件渲染 ⇒ 结束后布局回到原样；不动顶栏 5 槽构图。
+   不确定态（读索引/收尾）走滑块，不给假百分比。 */
+.mobile-sync-strip {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px;
+  padding: 6px var(--mb-page-pad) 8px;
+  border-bottom: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-panel);
+  animation: mb-sync-strip-in var(--lake-motion-fast) var(--mobile-ease-panel);
+}
+.mobile-sync-strip__text { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.mobile-sync-strip__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--lake-font-size-tiny); color: var(--lake-text-2); }
+.mobile-sync-strip__pct { flex: 0 0 auto; font-size: var(--lake-font-size-nano); color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+.mobile-sync-strip__bar { position: relative; height: 3px; border-radius: 2px; overflow: hidden; background: var(--lake-bg-block); }
+.mobile-sync-strip__bar > span { display: block; height: 100%; border-radius: 2px; background: var(--lake-accent); transition: width var(--lake-motion-fast) linear; }
+.mobile-sync-strip.is-indeterminate .mobile-sync-strip__bar > span { width: 40% !important; animation: mb-sync-strip-sweep 1.2s var(--mobile-ease-panel) infinite; }
+@keyframes mb-sync-strip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes mb-sync-strip-sweep { from { transform: translateX(-110%); } to { transform: translateX(280%); } }
+
 /* 首层 tab（小记 ↔ 知识库）= **原生横向分页**（261019 用户点单，对齐语雀 App）：
    两页并排放在同一个横向滚动容器里 ⇒ 手指跟手拖动、松手由 scroll-snap 吸附，
    与语雀 RN 侧的 `react-native-pager-view` 同一形态；tab↔页码的取整判据在 home/tabPager.ts。
@@ -327,7 +346,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 .mobile-drawer-trash-entry:active { background: var(--lake-bg-window); }
 .mobile-status-msg { padding: 6px 12px; font-size: 12px; color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: 1px solid var(--lake-border-1); }
-.mobile-trash-title { flex: 1; }   /* 截断走 .ln-ellipsis */
+.mobile-trash-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 0; }
+.mobile-trash-title { min-width: 0; }   /* 截断走 .ln-ellipsis */
+.mobile-trash-cloud { align-self: flex-start; }   /* 复用 kit 的 .mb-tag 原语，只定位置；261026「云端已删除 · 仅本地」 */
 .mobile-trash-date { color: var(--lake-text-3); font-size: 12px; }
 .mobile-trash-action { border: none; background: transparent; color: var(--lake-accent-text); cursor: pointer; display: flex; padding: 6px; }
 .mobile-trash-danger { color: var(--lake-status-error); }
@@ -1096,9 +1117,11 @@ button.mbt-option {
  * P3 把 footer 整条隐藏 ⇒ 打字进了隐藏编辑器，屏幕上完全看不到，只有提交后才出现在格子里。
  * 规则：footer 只在「编辑态」或「查找条存在」时放行；footer 内只显示公式栏/查找条，其余 Univer 部件仍隐藏。 */
 .mobile-usheet footer.univer-shrink-0:has([data-u-comp="mobile-find-replace-bar"]),
-.mobile-usheet.is-editing footer.univer-shrink-0:has([data-u-comp="mobile-formula-bar"]) { display: block; }
+.mobile-usheet footer.univer-shrink-0:has([data-u-comp="mobile-formula-bar"]) { display: block; }
 .mobile-usheet footer.univer-shrink-0 > :not([data-u-comp="mobile-formula-bar"]):not([data-u-comp="mobile-find-replace-bar"]) { display: none; }
 .mobile-usheet .univer-pointer-events-none.univer-absolute.univer-bottom-14.univer-right-4 { display: none; }
+.mobile-usheet button[aria-label="打开表格工具"],
+body.lake-mobile button[aria-label="打开表格工具"] { display: none; }
 
 /* 261021 P5：顶部只读公式栏已删（用户定稿"顶部那条和底部输入栏重复"）。
  * 编辑态输入面 = 内核移动公式栏（挂在 footer 里，见上方例外规则）；阅读态不再显示地址/显示值。 */
@@ -1196,3 +1219,22 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 .mb-doc-skeleton__line--short { width: 62%; }
 @keyframes mb-doc-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 .doc-pane--fresh .mobile-doc-body { animation: mb-doc-fade var(--mobile-duration-panel) var(--mobile-ease-panel); }
+
+/* 261027 按需资产占位：AssetServer 还没有这个文件时，内核里是一张破图（alt 文本会显示在框里）。
+   直接把 img 撑成「未下载」卡片（点击会触发该篇/该条补拉，见 editor/missingAssetPlaceholder.ts）。 */
+.mb-asset-missing {
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: 120px;
+  min-height: 84px;
+  max-width: 100%;
+  border: 1px dashed var(--mb-line, rgba(0, 0, 0, 0.18));
+  border-radius: 10px;
+  background: var(--mb-fill-quiet, rgba(0, 0, 0, 0.04));
+  color: var(--mb-text-tertiary, rgba(0, 0, 0, 0.45));
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  object-fit: contain;
+  cursor: pointer;
+}

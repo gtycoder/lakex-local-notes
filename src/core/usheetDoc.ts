@@ -51,6 +51,38 @@ export interface UsheetWorkbook {
   [key: string]: unknown;
 }
 
+/** 字族字符串的**跨构建规范形式**：单引号族名 → 双引号。
+ *  原因：dev 的 `--lake-font-family` 是 'MiSans', …，打包构建压缩 CSS 后会变成 "MiSans", …
+ *  ⇒ 同一文档在 dev / 打包版之间打开会来回改写正文（contentHash 变化 → 触发同步上传）。 */
+export function normalizeFontFamily(value: string): string {
+  return value.replace(/'([^']*)'/g, '"$1"');
+}
+
+/**
+ * 正文规范化（**写盘与比较的唯一形式**，261023）：
+ * 1) plugin resource 的 `data === ""` → `"{}"`：Univer 首次 `save()` 与首个命令之后的序列化对未初始化资源
+ *    给出不同形态（实测 SHEET_NOTE_PLUGIN 首帧 ""、首个命令后 "{}"），不规范化 ⇒ **每次打开表格**
+ *    首次 flush 都判为"有差异"→ onChange → 待保存 → 自动同步上传（用户 261023 报「一打开就黄色待保存」）。
+ * 2) 字族引号统一（见 normalizeFontFamily）。
+ * 幂等；就地修改传入 workbook（编辑器在序列化前调用）。
+ */
+export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
+  const wb = workbook as unknown as { defaultStyle?: unknown; styles?: unknown; resources?: unknown };
+  if (isRecord(wb.defaultStyle) && typeof wb.defaultStyle.ff === "string") {
+    wb.defaultStyle.ff = normalizeFontFamily(wb.defaultStyle.ff);
+  }
+  if (isRecord(wb.styles)) {
+    for (const style of Object.values(wb.styles)) {
+      if (isRecord(style) && typeof style.ff === "string") style.ff = normalizeFontFamily(style.ff);
+    }
+  }
+  if (Array.isArray(wb.resources)) {
+    for (const resource of wb.resources) {
+      if (isRecord(resource) && typeof resource.data === "string" && resource.data.trim() === "") resource.data = "{}";
+    }
+  }
+}
+
 export interface UsheetDoc {
   kind: typeof USHEET_DOC_KIND;
   version: typeof USHEET_DOC_VERSION;

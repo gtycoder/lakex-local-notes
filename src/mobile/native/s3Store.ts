@@ -5,7 +5,7 @@
  * 端口职责（红线 §3.2）：gunzip/压缩在端口内完成——getObject 返回**已解压**字节；
  * putObject 按 opts.gzip 压缩。syncEngine 不感知 gzip（core 无 gzip 调用）。
  */
-import type { S3Store, SyncConfig } from "../../core/syncEngine.js";
+import type { S3Store, SyncConfig } from "../../core/syncEngineTypes.js";
 import { assertSafeKey, isGzip, isNoSuchKey, normalizeEndpoint } from "../../core/syncUtils.js";
 import { CapacitorHttpHandler } from "./capacitorHttpHandler";
 import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";

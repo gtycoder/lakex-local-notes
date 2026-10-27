@@ -5,12 +5,392 @@
 > **⚠️ 261022 历史已重写两次（品牌/邮箱标准化 → 闭源内核移出公开仓库）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
 > **§8 是移动端（Android）专职交接**；桌面会话不要改 §8，移动端会话不要改 §0–§7 之外的桌面文件。
 
-## 0. 最新交接（261022）
+## 0. 最新交接（261026）
 
-> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest 361 文件 2509 例。
-> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按。
-> **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证。
+> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest **384 文件 2698 例（17 skip）**（261024 标签子系统方案 B 落地后的主树快照）。
+> **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
+> **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
+> **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
+
+### 261026 · S3 v3 首拉性能 + 进度 UI（分支 `fix/s3v3-perf`，基于 `7f329011`）
+
+> 输入 = 真机首拉 39 分钟（资产 26min + 应用 13min）+ `SIYUAN-SYNC-BORROW.md`。目标：1.6GB 首拉 5–10 分钟、文档先出来、进度可见。分两笔提交（`3c67360d` + 本笔）。
+
+- **P0-1 全局下载流水线**：新增 core `s3v3Transfer.runTransferPipeline`（对象级任务、失败隔离、完成即回调）；正文/声明/资产统一进同一调度器（`downloadConcurrency` 默认 20，可配），删掉「按篇 runPool + 逐篇 barrier」；增量同步先并发预取正文/声明再应用，资产登记后统一 flush。
+- **P0-2 文档先出来**：`pullAll` 正文按 100 篇分块下载并**分块 saveState**（文档/目录先可打开），小记等图片就绪再落库，资产在应用之后跑；适配器对「正文未到」的新条目先跳过建行。
+- **P0-3 桌面资产下载即落盘**：`DesktopStoreDevice.writeAsset` 直接写 `noteAssetsPathFor`（不依赖 DB 行、不再内存 stage 整轮 1.7GB），`importRemoteNote` 传空 assets（文件已就位）。
+- **P0-4 移动原生资产直传**：`S3v3Remote` 增可选 `getToFile/putFromFile`、`S3v3DeviceStore` 增可选 `assetNativePath`；引擎资产下载/上传优先走原生（移动端 `NativeAssetSync.getFile/putFile`，字节不过 JS/Capacitor 桥、原生做 size+sha256 校验），仅 Lake 资产（`assets/`）生效，小记/桌面自动回退字节路径。
+- **P0-5 移动派生索引延后（部分）**：`bridge.syncNow` 不再 `await reconcileIndex`，改为去抖后台重建（失败只影响搜索）；正文/行仍按批落库。**未做**：createNote 的 text_cache 逐篇计算仍在 apply 路径（需再拆「行快速写入 + text_cache 后台回填」）。
+- **P0-6 进度事件 + UI**：引擎 `onProgress({phase,done,total,bytesDone,bytesTotal})`（metadata/bodies/apply/declarations/assets/finalize）；移动 `syncProgressStore` 节流（≥250ms 或 ≥1%）转发；设置页同步卡显示「阶段 + 已/总 + 字节」，首页云同步按钮的 title/aria-label 同步显示（不改 5 槽构图）。桌面引擎进度已可用，UI 接线下一步（SyncStatusPopover）。
+- **测试**：`perfPipeline.test.ts`（并发峰值 12–20、进度到齐、正文落库早于资产写盘、桌面资产立即写盘）、`nativeAssetTransfer.test.ts`（原生下载/上传不产生资产字节 GET/PUT；unsupported 回退）、`syncProgressStore.test.ts`（节流/文案）。既有契约测试全过：零变更只读 pointer、改 5 篇资产 GET=0、缺正文/删除/恢复/小记单条推送。
+- **门禁**：tsc 0；定向 vitest 51 文件 188 passed/8 skipped（`mobileCloudDeleted` 2 例为 HEAD 既有失败）；桌面+移动 `vite build` ✓；`git diff --check` ✓。
+- **未做/待真机**：真机首拉复测（预期资产 13→40–80 文件/s、正文应用不再串行、文档先可打开）；移动应用批量化（text_cache 延后回填）；移动首页可见进度条（当前仅 title + 设置卡）；按需资产（首拉不搬媒体）仍列为下一步 P1。
+
+### 261026 · S3 v3 遗留收尾（分支 `fix/s3v3-rem`，基于 `f3c3585f`）
+
+> 输入 = PARITY 审计剩余 P1/P2 + 上一批 HANDOFF「仍缺」。本批 6 项，全部带回归；不改协议布局。
+
+- **移动端云清理改 v3 原生（item 1）**：`runMobileV3DeepCleanup` 走 pointer→索引/声明→keep 集→引擎 `deepCleanup`（保留窗口默认 7 天 + `historyRepository.historyAssetRefs` 历史引用保护），bridge `gcDeepCleanup` 写 `s3_gc_log`。原实现读 v3 永不写的 `manifests/latest.json` ⇒ 清理按钮恒 0。回归 `src/mobile/v3/remParity.test.ts`。
+- **恢复标记轻量落盘（item 2）**：无发布轮本来就会 `saveState`（补注释防回退）；新增可选端口 `persistSyncMarkers`——单条小记推送等「不走整轮 saveState」的路径把清除后的 `remotePurged/restorePending` 落盘并同步 DB `cloud_deleted` 投影（桌面 sidecar/移动 v3_state/FileDeviceStore 三端实现）。回归 `electron/s3v3/markerPersist.test.ts`、`quickPushSingle.test.ts`、`src/mobile/v3/remParity.test.ts`。
+- **元数据兜底 C4/C5**：`planLakeMerge` 增 `isRemoteDescendant` 环检测（文档/目录：本地父在远端树中位于本节点之下 ⇒ 跟随远端断开，即使本地 updatedAt 更新）；引擎建 `validParents` 乐观集合传给合并；桌面/移动适配器把**非法/缺失远端 parent 回落兜底笔记本**（懒建「未分类」），且同轮 `deleteMissing` 不删这些兜底目录。移动端 `saveState` 顺序改为**目录先于文档**落库。回归 `remFolderParent.test.ts`、`s3v3Core.test.ts`（C4 两例）、`remParity.test.ts`（C5）。
+- **目录恢复传播 D4**：`l && !r` 时若本地目录在本轮被恢复/编辑过（`updatedAt > base.updatedAt` 且不在回收站）⇒ 按 `upload` 重新发布（远端缺席让位）；配套「目录删除意图让位」——远端同 id 目录重新出现且更新时间不早于本机 purge 时间 ⇒ 删除意图本轮失效，否则 A 会每轮把 B 恢复的目录再删掉。双端回归 `remFolderParent.test.ts`（A purge → B 恢复 → A 拉回为活跃目录）。
+- **移动端小记冲突副本 C8**：`MobileDeviceStore.archiveQuickNote` 实现（新 id、正文/图片复制、标签关系复制、`ready_to_sync=0` 纯本地墓碑、归档后清旧图片目录）；双端同改时移动端也能在 quick 回收站找回本地版本。回归 `remParity.test.ts`。
+- **移动端结构化同步回执（item 6）**：`runMobileV3Sync` 支持 `onPhase` 回调；`MobileSyncResult` 增 `warnings/supersededNotes/progress`；设置页同步区新增「N 篇被云端版本覆盖（已留历史）」列表，并修正原先只读 `result.notes?.warnings`（v3 下恒空）的取数。
+- **门禁（本分支）**：tsc 0 · 定向 vitest（`electron/s3v3` + `src/core/s3v3` + `src/mobile/v3` + settings/ipc 相关 = 48 文件 / 177 passed / 8 skipped；`mobileCloudDeleted.test.ts` 2 例为 **HEAD 既有失败**）· 桌面 + 移动 `vite build` ✓ · `git diff --check` ✓。
+
+### 261026 · S3 v3 parity 补齐（分支 `fix/s3v3-parity`，基于 `5c88da5b`）
+
+> 输入 = 旧新逐项审计 `/tmp/lake-ab/deliverables/PARITY-OLD-VS-V3.md` 的剩余 P0/P1。本批补 5 项 + 桌面端 1 项可选能力，不改协议布局、不做数据迁移，全部带 vitest 回归。
+
+- **B6 回收站附件惰性补拉（v3 原生）**：新增 `src/core/s3v3AssetBackfill.ts`：pointer → 对应空间索引 → 该条 `assetsHash` → 声明对象（校验 declHash）→ 本地 size+sha256 差集 → 只对缺失/损坏者 GET 并按 size+sha256 校验落盘（`force` 供恢复强拉）。桌面 `ensureTrashNoteAssets` 改走它（不再读 v3 从不写的 `declared_assets`）；移动 `downloadDeclaredAssetsFor` 同步改走 v3（`createMobileS3v3Remote` + assetFs 端口）。回归 `trashAssetBackfill.test.ts`（删本地附件后补拉成功）、`s3v3AssetBackfill.test.ts`（跳过/补下/校验失败/无 pointer/声明被篡改）。
+- **F3/F4 深度清理保护**：`deepCleanup` 增 `extraKeep` / `retentionDays`（默认 7 天；<=0 = 立即到期）/ `now`，并新增「每空间保留最近一个未引用索引（上一版）」；provider 不返回 `lastModified` 时保守保留；`runV3DeepCleanup` 注入本机历史引用（`store.listNoteIdsWithHistory/getProtectedRefs`）与 `getS3GcSettings().gcRetentionDays`。回归 `deepCleanupWindow.test.ts`（历史引用不删、窗口内不删、窗口外删、上一版索引保留、dryRun 不删、retentionDays=0 语义）。
+- **E2 小记单条推送**：引擎新增 `pushQuickNote`（读 pointer/quick 索引 → 只替换该条 → 上传正文/图片 → 取锁 → CAS 复核 pointer → 写索引 → 写 pointer（lake commit 不动，generation+1）→ 读回校验 → `markQuickNoteSynced` + baseline）。桌面 `sync_quick_note` 与移动 `bridge.pushSingleQuickNote` 改走它；两条退回整轮路径保留且显式返回 `full-sync`（no-cloud / no-baseline / cloud-changed / remote-deleted）。回归 `quickPushSingle.test.ts`（其余条目/标签逐字节不变、lake 不动、重复推送 unchanged、三类 fallback）。
+- **F1 移动端历史快照**：`mobileDeviceStore.writeHistory` 接 `historyRepository.createHistorySnapshot`（Lake 文档，保护 30 天；小记按产品定稿返回 `quick-note-history-skip`），`archiveBody` 同步生效。回归 `historySnapshot.test.ts`。
+- **C8 小记冲突副本（桌面）**：`S3v3DeviceStore` 增可选 `archiveQuickNote`；引擎在「双端同改、远端胜出」时先把本地版本归档进小记回收站（`QuickNotesStore.archiveLocalToTrash`：新 id、纯本地、恢复后是一条新小记），不再依赖对小记无实际作用的 `createHistorySnapshot`。移动端未实现该端口（产品定稿：小记不留副本）。
+- **门禁（本分支）**：tsc 0 · 定向 vitest（`electron/s3v3` + `src/core/s3v3` + `src/mobile/v3` + 相关 core/ipc = 43 文件 / 198 passed / 8 skipped）· `mobileCloudDeleted.test.ts` 2 例为**既有失败**（HEAD 同样红，非本批引入）· 桌面 + 移动 `vite build` ✓ · `git diff --check` ✓。
+
+### 261026 · S3 v3 生产化修复（分支 `fix/s3v3-prod`，基于 `fix/s3v3-p1` 1287d2af）
+
+> 输入 = 真实用户 A/B 实测（`/tmp/lake-ab/deliverables/AB-REPORT-V3-REAL-USER.md`）+ 旧新逐项对照审计（`/tmp/lake-ab/deliverables/PARITY-OLD-VS-V3.md`）。本批只做 P0/高价值缺口，全部有 vitest 回归。
+
+- **P0 资产下载差集（R1）**：`downloadAssets/downloadQuickAssets` 先扫本地（`listAssets`+`readAsset`，size+sha256 精确匹配）⇒ 跳过 GET。以前改 5 篇长文会让对端重下该篇全部图片（50 轮下行 5.06MB/轮、≈上行 3×）。回归 `assetDownloadDiff.test.ts`（正文/元数据变更 ⇒ 0 资产 GET；本地缺一张只补那一张）。
+- **P0 声明对象跨轮缓存（P0-1 残余）**：资产声明是不可变内容寻址对象 ⇒ 引擎改用模块级 `DECL_CACHE`（上限 2000），桌面每轮新引擎也能复用；元数据漂移轮不再逐篇重复 GET 声明。
+- **P0 gzip 魔数误判（R2）**：端口改为**按 key** 解压（仅 `meta/`、`quick-notes/meta/`）；正文/附件即使以 `1f8b` 开头也原样返回（修复 .gz/.tgz 类附件 `Z_DATA_ERROR`）。桌面 `s3Remote.ts` 抽出 `decodeRemoteObject` 便于单测；移动 `s3v3Remote.ts` 同步改。旧协议存在同 bug，不记为 v3 回归。
+- **P0 缺正文闭环（R3）**：① 适配器 hash 缓存文件缺失即失效（原先"云端已拉回却不落盘"）；② 正文文件缺失时 `saveState` 走 `importRemoteNote` 重建（普通 `saveNote` 会以"笔记不存在"拒绝）；③ 下载分支：本地/云端都缺 ⇒ `local_body_missing`（且**保留远端索引条目**，避免一次对象缺失变永久删除）；本地缺失但云端有 ⇒ 拉回 + `local_body_restored`；④ 上传分支：缺正文先从云端按 hash 拉回，失败则 `failUpload` 回退索引，**绝不上传空正文**；⑤ 初始化上传剔除缺正文条目。新增结构化 `warningDetails: SyncWarning[]` 并透传 `SyncResult.warnings`（UI `SyncStatusPopover` 可见）；移动端 `MobileSyncResult.warnings` 同步透传。回归 `missingBody.test.ts` / `parity.test.ts`。
+- **P0 资源页「缺正文 → 从云端拉回」（B5）**：`restoreMissingBodyFromCloud` 原实现读旧 `manifests/latest.json`（v3 永不写 ⇒ 永远 not-in-cloud）。改为读 v3 pointer→lake 索引→内容寻址正文并校验 sha256；支持注入 remote 供测试。回归 `parity.test.ts`（成功/hash 不符/条目不存在）。
+- **P1 崩溃追赶放大（R4，根因已定位）**：真实故障 = kill -9 落在 initialUpload「pointer 已写、baseline 未写」窗口 ⇒ 重启走 `pullAll`；旧实现无条件 GET 全部正文+附件（实测 B 一轮 22,115 GET/1.37GB/423s）。**数据侧**修复：`pullAll` 对 state 里已有的条目按 contentHash 复用本地正文；资产走差集（声明仍读、字节不重下）。根因二：崩溃重发布使大批条目元数据漂移 ⇒ 每篇 `applyRemote` 触发整篇资产刷新（40,152 次 asset GET、只有 8 次正文）⇒ 由资产差集 + 声明缓存消掉。回归 `pullAllDiff.test.ts`（删 baseline 模拟崩溃：整轮 0 正文/资产 GET）。
+- **对齐旧协议的缺失行为（本批已补）**：编辑锁字段级 LWW（锁变更不 bump updatedAt，原先跨端不传播；`s3v3Merge` + 双端 e2e 回归）；元数据变更不再重传同 hash 正文；同步进度阶段（`load-state/read-index/downloads/uploads/publish-*/pending` → SyncProgress download/upload/manifest，首拉不再只有 connect→done）；冲突留档回执（`S3v3SyncReport.supersededNotes` → `SyncResult.conflicts/supersededNotes`，UI 冲突清单恢复）。
+- **后续批次已补（见下方 `fix/s3v3-parity`）**：B6 回收站附件惰性补拉、F3/F4 深度清理 history 引用/上一版索引/年龄窗口、E2 小记单条推送、F1 移动端历史快照、C8 小记冲突副本（桌面）。
+- **后续已补（见上方 `fix/s3v3-rem`）**：移动端云清理 v3 原生（item 1）、恢复标记轻量落盘（item 2）、C4/C5 环检测与父目录兜底、D4 目录恢复传播（含目录删除意图让位）、移动端小记冲突副本（C8）、移动端结构化回执（warnings/superseded/progress）。
+- **仍缺（PARITY 审计，待排期）**：① 小记/ Lake 墓碑不携带删除前内容（D2/D3/E4，产品语义待确认）；② 移动端 qnotes 缺正文恢复入口未接 v3；③ 移动端云清理无 UI 入口（IPC 具备，设置页未接按钮）；④ 目录恢复后 tombstone 清理（每轮靠意图让位，`deleted_notes` 行保留）；⑤ PARITY 其余 P2（GC 待回收表/诊断、状态栏字节/目录计数等）。
+- **门禁**：tsc 0 · 定向 vitest（s3v3/移动 v3/相关 core）通过（`mobileCloudDeleted.test.ts` 2 例为**既有失败**，HEAD 同样红，非本批引入）· 桌面+移动 `vite build` ✓ · `git diff --check` ✓。
+
+### 261026 · S3 v3 P1 修复 + 口径定稿（分支 `fix/s3v3-p1`，基于 `feat/s3-v3` ba8f185c）
+
+- **P1 v3 空发布抖动（已修 + 回归）**：根因 = 桌面 v3 适配器把合并结果写回 Store 时只落正文/部分几何字段，**远端/合并结果里的 `updatedAt` 没落库**（正文未变时完全不写；改走 `saveNote/moveTreeNode/setNodeIcon` 时又被改成 now()）。而 v3 三方合并用 `updatedAt` 判断「本地元数据是否更新」⇒ 两端各持不同旧时间戳，隔轮互相判定"元数据更新"，索引在 A/B 两个 hash 间翻转、每轮 +1 generation（实测 g10→g11，published=true、uploaded/downloaded=0；零变更从只读 200B pointer 退化为拉整份索引）。修复：`DesktopStoreDevice.saveState` 对已存在条目把合并结果元数据原样落库（`applyRemoteNoteMeta` + 新增 `Store.applyRemoteFolderMeta`；正文下载后同样回写远端 `updatedAt`）；并把引擎回收站常量从 `"trash"` 改为真实 `notebook-trash`（否则回收站条目父节点写坏）。回归：`electron/s3v3/idlePublishRegression.test.ts`（两端空闲 5 轮 + 增量后回闲：published=false、零传输/零写、只读 pointer ≤1KB）。
+- **并发上限定稿 12（用户 261026 批准）**：代码原本已默认 12（`DEFAULT_TRANSFER_CONCURRENCY` / `deleteMany`）；本次统一文档口径（AGENTS §3#13、S3-REDESIGN §1.1、S3-V3-BATCHING/CAPACITY）。
+- **死代码清理**：删除 `src/core/syncEngine.ts`、`quickNotesSyncEngine.ts`、`quickNotePush.ts`、`syncPerf.ts` 与只测它们的旧测试/AB 对比测试；仍被 type-only 引用的形状集中到 `src/core/quickNoteSyncTypes.ts`（无运行时逻辑，勿复活旧通道）。
+- **迁移策略定稿 = 不迁移**：`electron/s3v3/migrate.ts` 与迁移测试已删；S3-REDESIGN §8 改写为「首开 v3 从本地真相全量上传 / 旧 manifest 不读不删留孤儿 / 回滚 = 换回旧版本客户端」。升级与回滚路径见 `docs/S3-V3-CUTOVER.md` §2/§3。
+- **移动端首拉 profile（只诊断，未改行为）**：移动端 v3 复用同一引擎 ⇒ 并发上限 12 生效；传输走 `CapacitorHttpHandler` → Capacitor 原生 `Executors.newCachedThreadPool()`（无信号量/无串行化），12 个请求可同时在飞；但每请求 body/响应要 base64 过桥 + JS 主线程编解码（大对象是 CPU/内存瓶颈），底层 HttpURLConnection 无连接池调优。**未做低风险改动**；首拉还受 `MobileDeviceStore.loadState` 全表映射与启动 DDL 影响。
+- **仍存风险**：① 移动端适配器仍不落「仅 `updatedAt` 变化」的元数据（标题/父/排序/正文路径会写；图标/锁/排序分支不写 `updated_at`）且 `lockedAt` 恒为 null ⇒ 桌面↔移动混合使用仍可能偶发一轮元数据抖动（真机验证后在移动端做同构修复）；② **真实 Android 物理机未验收**（触摸/返回/键盘/后台/schema 迁移）；③ **大库阈值未在真实设备探测**（>2 万文档、索引 3~5MB gzip 时首拉/增量耗时；v3.1 按篇增量索引是下一档）。
+- **门禁（本分支）**：tsc 0 · 定向 vitest（s3v3 引擎/适配器/回归 + 移动 v3 + 相关守卫）147 passed / 2 failed（`src/mobile/v3/mobileCloudDeleted.test.ts` 两例在 **HEAD ba8f185c 上同样失败**，非本批引入）· 桌面 + 移动 `vite build` ✓ · `git diff --check` ✓。按 lead 指令本机并发压测期间未重跑全库。
+
+### 261026 · S3 v3 转正 + 旧同步字段删除（分支 `feat/s3-v3`，未合并 master）
+
+- **默认 v3**：桌面文档/小记、移动端全部默认走 v3；旧 legacy 同步入口、旧 quick-notes 单条推送/云端恢复、旧 GC/旧 quick-notes 同步模块与对应测试已删除。移动端不再有 `syncProtocol=legacy`。
+- **旧字段彻底删除（无历史数据回填）**：
+  - 桌面 `notes.sync_state` / `tree_nodes.sync_state` / `quick_notes.sync_state` 列已删，统一 `is_dirty` / `is_purged`；`listNotesForSync` 的 `syncState` 由新字段派生（旧同步账本只读派生值）。
+  - 移动端 schema **v8**：同样删 `sync_state`，加 `is_dirty/is_purged`；迁移先删旧列（`DROP COLUMN`，失败可选跳过），**不迁移旧值**。后续 261026 徽标追加升 **v9**（`cloud_deleted` + quick_note_deleted.purged_at）。
+  - UI/DTO/NoteInfo/文档状态模型已去掉 `syncState`；`is_dirty` 只在 v3 发布成功写 baseline 后清零。
+- **「云端已删除 · 仅本地」徽标（261026 追加）**：远端彻底删除后本地回收站副本只打标、不改恢复语义；桌面/移动回收站文档与小记均显示；恢复并重新上传成功后自动清标。移动端远端删除小记改为保留 quick 回收站只读副本（原先物理删），并修复 quick `restorePending` 优先于 purge 墓碑，恢复可重传；本地 purge 后标记清除且多轮同步零 put/delete。
+- **门禁**：tsc 0 · vitest **2717 passed / 24 skipped**（移动端 528）· 桌面 + 移动 `vite build` ✓· 真实七牛 v3 集成测试 ✓ · 真实七牛压测 200 文档 × 10 附件 ✓。
+- **真实设备/双端验收（261026，模拟器 + 桌面隔离数据 + 真实七牛）**：移动端新建知识库/文档/小记、编辑、重命名、表情图标、删除、同步；桌面拉取与回传；创建/重命名/排序/图标/软删/彻底删除/小记删除均跑通。压测：200 文档 × 10 附件 = 2391 对象，首传 13.3s、对端全量 25.2s、增量 0.65s、purge 0.82s。
+- **验收中发现并修复（`4850ed9f` / `dcf44e6f`）**：
+  - 桌面 v3 首拉顺序错误：先建文档后建目录 ⇒ 新父目录缺失直接报错；改为先 upsert 目录（保留远端 id）再落文档，目录删除放文档之后。
+  - 桌面首拉丢失远端文档图标；改为首次创建后应用 icon（新文档统一走 `importRemoteNote`，支持远端 trashed/deletedFromParentId）。
+  - 移动端 `saveBaseline` 从不清 `is_dirty` ⇒ 同步后 UI 永远“待同步”；改为发布成功批量清 notes/folders/quick_notes 并清 restore_pending；远端正文落地保留远端 updatedAt（避免下一轮误判本地更新）。
+  - 桌面本地 purge 未生成 v3 删除意图 ⇒ 远端条目被重新拉回；改为从 `deleted_notes.purged_at` 派生 intents（适配器载入时补齐）。
+  - 移动端同步后阅读态标题/正文不刷新；首页小记/目录不刷新。改为 sync 后强制重读活动标签 + 刷新首页快照。
+- **已定稿（用户 261026）**：远端彻底删除时本地副本保留在回收站、只打「云端已删除 · 仅本地」徽标，允许恢复；恢复重新上传成功后徽标消失；本地主动彻底删除后不再产生任何 S3 行为。**目录（folder）不做该语义**（用户决定）。
+- **删除语义定稿（261026 二轮确认）**：回收站 = 软删除（移动到「回收站」笔记本，**不是墓碑**，正文/附件保留、不写墓碑）；墓碑 = 彻底删除后云端索引缺席，曾持有端保留「云端已删除·仅本地」只读可恢复副本、不参与 S3（除显式恢复）；从未持有过的新设备无法恢复已 purge 文档（用户接受）；回收站自动过期默认 **90 天**（原 60，trashAutoPurgeDays），cloud_deleted 副本不豁免。
+- **分支状态**：feat/s3-v3 已推送到 origin，**未合并 master**；用户将自行测试。提交：15411bb3（徽标/小记保留/恢复）、a2d7e684（小记删除方跟随恢复）。
+- **剩余待办**：
+  1. **真实 Android 物理机验收**（目前只有模拟器；触摸、系统返回、键盘、后台切换、真机 schema v8→v9 迁移）。
+  2. **目录 folder 的云端删除语义**：当前按用户决定不做；若以后要做，需要 core 侧保留 folder 副本 + 徽标 + 恢复链路。
+  3. **状态栏 cloud-deleted 专属配色**：DesktopStatusBar 已有文案/图标，但 styles/chrome.css 还没有该 kind 的 pending/橙色样式（可选）。
+  4. **v3 标签独立空间 / 文档标签 UI**：小记标签已同步，文档标签仍未做。
+  5. **合并 master 前复核**：双端构建、门禁、真实 S3 回归、HANDOFF 收口；合并时不要带测试前缀/临时凭据（已清理）。
+  6. **大库阈值探测**：>2 万文档 / 索引 3~5MB gzip 时首拉与增量实机耗时（当前只有合成数据；v3.1 按篇增量索引是下一档）。
+  7. **移动端同构 metadata 对齐**：桌面 P1 修复后，移动适配器仍可能因不落 `updatedAt`/`lockedAt` 产生一轮抖动；真机验证后按 `DesktopStoreDevice.saveState` 同一口径修。
+- 报告：docs/S3-V3-REMOVAL-PLAN.md / docs/S3-V3-CUTOVER.md。
+
+### 261025 · S3 墓碑保留调研（仅文档，未改代码）
+
+- **调研 SiYuan/dejavu**：Git-like 仓库（objects/indexes/refs）+ `refs/latest-sync` 三方合并 + 云端锁 + 有界 purge；删除 = 新 Index 中缺席，没有墓碑字段。
+- **本项目现状**：单文件 Manifest + 永久墓碑 + 墓碑内容进 GC keep 集 + Manifest 无 CAS/云端锁；删除传播可靠，但墓碑元数据与删除前正文/图片没有退出机制（`pruneTombstones` 生产未调用）。
+- **完整对照、差异表与推荐方案**（P0 墓碑 payload 老化 / P1 Manifest 条件写或云端锁 / P2 last-sync 快照 + 三方合并）见 `docs/S3-GC-DESIGN.md` §7。
+- **决策**：用户 261025 定“后续优化”，本批不改同步协议；P0 落地前现行红线不变（purge 必须写墓碑、墓碑永久保留）。
+- **v3 实现（分支 `feat/s3-v3`，未合并）**：协议内核 + 运行时 + 旧清单迁移 + 假 S3/真实七牛/大规模测试已完成；**尚未接入 Electron/移动端、未复用 8 并发池、未做设备级 e2e**。报告：`docs/S3-V3-IMPLEMENTATION-REPORT.md`。
+- **S3 重设计方案（草案，261025，仅文档）**：`docs/S3-REDESIGN.md` —— 目标 2 万文档/20 万附件；云端只存当前状态（无墓碑/无提交链/无全局资产清单）+ 设备本地基线 + 锁 + epoch；**永久删除当轮清空、零痕迹**；含迁移与验收计划。
+- **清单规模与分片调研（261025，仅文档）**：清单体积实测（10 万文档/100 万附件 = 170MB 明文 / 71MB gzip；20MB 断点 5.76 万篇或 1.24 万篇）、字段去留矩阵、三项零风险结构项、墓碑退役最小充分条件（锁 + epoch + 缺席语义翻面 + 主动删条目）见 `docs/S3-MANIFEST-SCALE-RESEARCH.md`。
+
+### 261024 · 小记标签子系统（方案 B：目录 + 关联表）+ 快捷筛选 · **已提交 `d7a589da` / `0ac825fd`**
+
+- **架构（用户拍板方案 B：最彻底）**：标签与笔记**独立管理、独立逻辑**，只通过关联表发生关系。
+  - `.qnote` **只存内容** `version/text/body/images`（v3，但已移除 `tagIds`）；
+  - 标签目录 `quick_note_tags`；关系 `quick_note_tag_links(note_id, tag_id, position)`；`quick_notes.tags_updated_at` = 关系 LWW 时钟；
+  - 桌面：`electron/quickNoteTagsStore.ts`（目录）/ `quickNoteTagLinksStore.ts`（关系）/ `quickNoteTagService.ts`（唯一协调层）；`quickNotes.ts` 只留薄 API `setQuickNoteTags` / `applyRemoteQuickNoteTagLinks`，保存正文不再接标签；
+  - 移动端：`src/mobile/data/quickNoteTagsRepository.ts` / `quickNoteTagLinksRepository.ts` / `quickNoteTagService.ts`；仓储/搜索/同步端口同规则。
+- **无历史迁移（用户原话：\"不用管历史。也不用管迁移。\"）**：删除 v2→v3 迁移与移动端 `migrateQuickNotesV3`；`MOBILE_SCHEMA_VERSION` **6**（删 `tags_json/tag_ids_json`，加 `tags_updated_at` + links 表/索引）。
+- **协议**：`.qnote` v3 = 纯内容；小记 Manifest（version 仍 `1`）保留可选 `tags` 目录，并给每条 item 新增可选 `tagIds` + `tagsUpdatedAt`。下载时**正文未变也按 `tagsUpdatedAt` 合并关系**；上传/单条推送都带本地关系（unchanged 判定含关系签名）。
+- **标签目录/管理**：ID = `t_` + `sha256(归一名称)` 前 16 位；改名只改目录 + 重索引标签词；合并 = 改关联 + 墓碑；删除 = 墓碑 + 清关联（小记保留）；创建幂等（同名 active 返回、同名墓碑复活）。
+- **桌面 UI**：`QuickNoteTagManager`（搜索/重命名/合并/删除/置顶/排序）、`QuickNoteFilterDialog`（时间六档 + 自定起止 + 类型 + 标签包含/排除）、`QuickNoteTagPicker` 按 ID；保存正文后再按需 `native.setQuickNoteTags`。
+- **移动端**：HomePage/Composer/TagSheet 改按 ID；`applyQuickNoteTags` 只调 `bridge.setQuickNoteTags`；建标签只刷新标签目录（`onQuickNoteTagsChanged`），不重读小记列表；详情缓存从 `readQuickNote` 顶层 `tagIds` 取。
+- **缺陷修复**：① 保存正文不携带标签 ⇒ 预览勾选待办不再清空标签；② 搜索账本 `tags` 存 JSON 数组（含空格标签恢复不拆坏）；③ 类型/标签筛选互斥，点卡片标签会清掉类型筛选。
+- **护栏**：`quickNoteTags.test.ts`、`quickNoteFilters.test.ts`、`quickNoteModel.test.ts`（正文不含标签字段）、`quickNotes.test.ts`（关系独立 / 墓碑清关联）、`quickNotesDbPort` / `quickNotesSearch` / `quickNotesListProjection` / `useQuickNoteDetailCache` 等；IPC 通道 **137**（+`set_quick_note_tags`）、WRITE_OPS **36** / ALL **82**（同步基线并写明理由）。
+- **门禁**：tsc 0 · vitest **384 文件 / 2698 例通过**（17 skip）· ui-metrics 0（未定义令牌 0）· check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓。**未做 CDP 真实验收 / 设备实测 / 移动端标签管理页**。
+- **标签展示修复（用户 261024 报：写作区标签行显示 `t_...`）**：根因是写作区/选择器只拿 `tagIndex.tags`（只含有计数标签）查名称，刚加到草稿、尚未保存的标签计数为 0 ⇒ 查不到 ⇒ 回退显示 ID。现在统一由 core `buildQuickNoteTagOptions(tagDirectory, index.tags)` 合成**完整目录选项**（含 0 条小记的标签），写作区/选择器/管理页都用它；名称缺失只显示「已删除标签」，**任何展示路径都不再回退到 ID**。标签条仍只用有计数的索引。桌面与移动端同规则。
+- **评审收口（261024 方案 B 复审）**：① 移动端搜索索引在 `setNoteTags` / 远端关系变化后强制重建（此前只有内容 hash 变化才重建，按新标签搜不到）；② 移动端删除/合并/同步目录不再嵌套 `d.transaction`（SQLite 不允许嵌套 BEGIN），改为 `*InTransaction` 变体；③ 同步下载改为「新小记先落正文行、再合并关系」，冲突时先归档本地关系再写远端；冲突归档副本复制标签关系，恢复时推进 `tags_updated_at`；④ 删除标签/合并目标校验 + 远端关系过滤已墓碑标签，防关系复活；⑤ 标签目录合并改为字段级等价比较，远端目录为空/无变化时不再全量重建搜索索引；桌面首次建关联表、移动端 v5→v6 升级各清一次派生搜索索引；⑥ 单条推送按 `tagsUpdatedAt` 选关系权威版本，避免本地空关系抹掉远端较新标签；⑦ 列表/详情 `tags` 与 `tagIds` 保持等长（未知标签用空串），修复卡片标签名错位；⑧ 关系 store/仓储不再依赖目录 store/仓储：存在性校验与墓碑过滤上移到 `tagService`，并删除未使用的 `counts` API。
+- **未做（等用户决策）**：移动端标签管理页；桌面回顾/导出；标签颜色/图标/多级。
+
+### 261023(十) · 加密文本卡（端到端）+ `isLocked` → `isEditLocked` 更名 · **已提交 `6333e8a9` 并推送三仓，待用户验收**
+
+- **① 更名（用户点单）**：`isLocked` 有歧义 ⇒ 全仓代码标识符改为 **`isEditLocked`（是否锁编辑）**，并成对改 `lockedAt→editLockedAt`、`setNoteLocked→setNoteEditLocked`、`applyRemoteLock→applyRemoteEditLock`、`mergeLockState→mergeEditLockState`（40 既有文件 + 1 新护栏，约 300 处）。
+  **对外标识一律冻结**：S3 清单 JSON 键仍是 `isLocked/lockedAt`（解析 `syncUtils.ts` 的 `manifestFromWire`、写出 `syncEngine.ts` 的 `manifestToWire` 两处映射；护栏 `manifestLockWire.test.ts` 5 例）；SQLite 列 `is_locked/locked_at` 与 schema 不动（三处行映射补注释）；IPC 通道 `set_note_locked`、preload 导出名、`scripts/*.mjs`、用户文案「已锁定」全部未动。口径由用户定：**线上键冻结、代码内改名**，避免与旧 APK 互操作裂缝。
+- **② 加密文本卡（用户两条要求：加密存储 / 无密码不可见正文 / 多端同一密码）**：
+  - **卡名 `lake-locked-text`（自有，不冒充语雀）**：语雀的 `lockedtext` 是**服务端加解密**（`POST /api/services/crypto`，客户端 0 密码学代码），本机无法互通。
+    ⚠️ 它是**内核内置节点名**，未注册时走 unknown-card fallback（「该卡片暂时无法显示」+ 原值保留），**不会**走到我们的节点上 ⇒ 本卡没有"语雀旧卡态"分支（评审 W1 后已删，避免承诺不存在的提示）。
+  - **密码学单一来源** `src/core/lockedText.ts`：PBKDF2-SHA256（210k，参数随密文存）+ AES-GCM-256 + 随机 salt(16B)/iv(12B) + AAD `lake-locked-text:v1`；值只存 `{v,alg,kdf,iter,salt,iv,ct}`；**密码与派生密钥不进正文**。
+  - **结构不变量**：明文只在组件内存（textarea），唯一落盘动作 = `sealLockedText` → `updateCardValue(cipher)`；不 setDocument / 不调内核命令；`writeText/writeHtml` 只给「［加密文本］」占位 ⇒ 不进 md_cache/text_cache/FTS/剪贴板/导出。护栏 `lockedText.test.ts`（15 例）+ `lockedTextCard.test.ts`（9 例静态锁：禁 setDocument/execCommand、每处 updateCardValue 入参必须是 cipher（含 `?.` 补写路径）、注册胶水、flush 注册表）。
+  - **生命周期补写（评审 B1，已修）**：会话缓存派生密钥（解锁一次 PBKDF2，之后每次保存只做 AES）⇒ 防抖 600→250ms；新增 `features/editor/lockedTextFlush.ts` 注册表，`closeTab` / `toggleNoteLock` 在 F01 闸门**之前** await 补写并在补写过时强制 persist（否则"打完最后一句立刻关标签"会静默丢最后一段明文）。
+  - **外部改动跟随（评审 W2）**：解锁态用"本卡自写 ct"区分外部变化（撤销/他端/历史）⇒ 用会话 key 重解密刷新；salt/iter 变了则锁回+提示，绝不拿旧明文覆盖新密文。
+  - **其它评审项**：密码 NFC 归一（macOS NFD ↔ Android NFC）、密文上界校验、AAD 注释改为"协议/版本域隔离"、viewer 不再显示「锁住」、删死 CSS/测试 id、注册胶水与 `noteRef` 合并到 `customCardUtils.ts`、移动端卡内控件补 `min-height: var(--mb-tap-min)`（桌面几何不变）。
+  - **UI 落点** `features/editor/lockedTextCard.tsx`（三态：未设密码/已锁/已解锁 + 修改密码 + 锁住；忘记密码不可恢复已明示）+ `lockedTextCard.css`（85 声明，登记 cssLayers）+ `lockedTextIcon.tsx`（symbol，currentColor）。注册 `lakeRuntime` 一处 + 「+」面板「小工具」组；移动端 `EditorDock`「＋」第二组加「加密文本」（`insertCard/customBlock/$name`）。
+- **实测（隔离 `locallakexnotes://app` 实例 + CDP，`$TMPDIR/lake-lockcard`）**：插入面板可见「/jm 加密文本」→ 建卡（未设密码态，textarea 不出现）→ 设密码 → 输入「秘密内容SECRET42_ZHEJIANG」→ **`.lake` 与 DB 三处（md_cache/text_cache/notes_fts）明文命中 0**、值只含密文（`$htmlStr` 为占位）→ 锁住（无 textarea、DOM 无明文）→ 重载页面后回 locked、仍无明文 → 错密码提示「密码错误」且不解锁 → 正确密码恢复正文 → 改密码后**旧密码失效、新密码可解且正文完整**。
+- **移动端设备实测（261023，专用 AVD `lake_lock` 全新实例 `emulator-5580`，APK 41,994,006B）**：dock「＋」面板第二组出现 **加密文本** → 点它插入（`insertCard/customBlock/$name`）→ 卡渲染为 setup 态、令牌全解析（边框 `#e6e8ec` / 圆角 10 / 字号 16）；**卡内控件 44px**（`--mb-tap-min` 生效，此前 22/27）→ 设密码 → unlocked → 输入「移动端秘密内容SECRET_MOBILE_99 / 第二行中文」→ 点「锁住」：`phase=locked`、无 textarea、**DOM 无明文**；点「完成」退出编辑（移动端保存时机 = 退出编辑）后读设备正文文件：**存在 `lake-locked-text` 卡、值只含 `{v,alg,kdf,iter,salt,iv,ct}`、明文命中 0**；重开文档回 reading 态 = locked、无明文；输入同一密码 → 解锁只读显示正文（无 textarea）。
+- **门禁**：tsc 0 · vitest **383 文件 / 2665 例通过**（17 skip=benchmark）· ui-metrics 0 · check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓。
+
+### 261023 · 移动端表格编辑态 dock 落地（v5 定稿，分支 feat/mobile-sheet-dock）· **已合并 master（261023 晚），设备实测通过**
+
+- **用户定稿**：不做底部胶囊/四页签面板；编辑态 = **公式栏（保留，主输入位）+ dock + 面板**；dock 顺序 `＋插入 | T | 数据 | 视图 | ⋯更多 | 撤销 | 重做 |（右侧固定）键盘`；面板**占住键盘区域**展开、dock 停在其上方；一级按钮打开时变 **✕**、再点收起并放回键盘；样式与交互**对齐文档编辑器 dock**（`EditorDock.tsx` / `editor-dock.css` 的实测口径）。选择态（高亮当前行列 / 视图比例 / ＋ / 工作表列表）放**顶部与 Sheet 同一行**；顶栏 ✓ 保留。
+- **实现落点（单一来源）**：`usheetChromeModel.ts`（dock 顺序 / 插入 4 连块 + 7 白块（无公式）/ T 面板（B I S U、水平+垂直对齐、字色 8、填充两行、字号 8 档）/ 数据·视图占位 / 更多（数字格式·边框·公式下钻、合并·格式刷·清除格式、条件格式占位））；新组件 `SheetTopBar` / `SheetFormulaBar` / `SheetDock` / `SheetDockPanel`；`MobileUsheetViewer` 整合（内核移动公式栏 `formulaBar:false`，改自绘公式栏；提交写回 `setValue/setFormula`）；`useSheetChromeState` 增加 address/value/valign/size；`useSheetCommandActions` 增加 valign / fontsize / 清除字色与填充。删除旧 `SheetMoreCard` / `SheetFormatCard` / `useSheetCardState` / `MobileSheetFooter` 与 `formulaBarCaret.test`。
+- **门禁（合并 master 后全量）**：tsc 0 · vitest **377 文件 / 2618 例** · ui-metrics 0 · check:core ✓ · check:mobileui ✓ · 双端构建 ✓ · check:bundle ✓ · `git diff --check` ✓；`usheet-chrome.css` 基线 302→455（后因收口旧样式回落，属本批最终形态）。
+- **设备实测（emulator-5554，dev APK）**：顶部行（Sheet1 / 高亮当前行列 / 100% / ＋ / 列表）✓；编辑态公式栏「A1 请输入 ↵ ⤢」✓；输入「测试123」+ ↵ 写回 A1 ✓；T 面板五条白条、面板盖键盘、＋变 ✕ ✓；插入面板 4 连块 + 7 白块（无公式）✓；更多→数字格式下钻（当前档标注）✓；收起面板回键盘 ✓；✓ 退出编辑后 dock/公式栏消失、阅读工具条保留 ✓；顶部高亮当前行列开关 aria-pressed 切换 ✓。
+- **二次修正（同日，用户反馈后）**：① **公式栏改回原内核形态**（✕ 取消 · ✓ 确认 · fx · 输入 · ▲ 收键盘），✕/✓ 语义照原；② **回显修复**：公式输入框的「正在输入」标志在 blur 时复位（此前获焦一次后选区切换不再回显）；③ **点一级 ✕ = 恢复键盘**（`closeDockPanel(true)` 里回焦公式栏输入）；④ **性能**：命令回调里的 chrome 刷新改为 rAF 合并（一次交互多条命令只跑一遍 facade 读取），并用轻量 `useSheetKeyboardOpen`（只暴露布尔，不再随 innerHeight 每次抖动重渲染整棵树）。
+- **二次设备实测（emulator-5570，**真实触摸** Input.dispatchTouchEvent）**：点 T → 面板出现 **11ms**；点插入 → **19ms**；输入回显 **12ms**；点 ✕ → 面板消失 4ms、键盘回来（innerHeight 842→530）**267ms**（IME 动画本身）；打字/切换面板无可感知卡顿。
+- **三次修正（用户要求「自己按真实触摸验、交成品」后）**：① **撤销/重做可用态**：内核 undo 回放的是原命令 id（会把 undo 当成新编辑），改为「乐观计数 + 回放抑制窗口」；② **公式栏/日期只写活动单元格**（`range.setValue` 会对整个多选区生效，之前多选时会把文字复制整片）；③ 新建工作表命名 **SheetN**（默认按 locale 叫「工作表N」）；④ 插入白块里暂未支持的 5 项**置灰**（不再出现「点了没反应」）；⑤ 数字格式下钻的「当前」标注补上（传当前 numfmt）。
+- **九次修正（用户：双击单元格自动把光标放到公式栏）**：自实现双击（触屏 WebView 对 canvas 的 `dblclick` 不可靠）——320ms / 28px 内两次 **pointerdown** 视为双击；第二下 `preventDefault+stopPropagation`（不让内核起 in-cell 编辑器抢焦点）并在同一手势内聚焦公式栏输入框、光标放到末尾；内核异步收焦点时补 60/180ms 两次聚焦。「点网格先 blur」的守卫会跳过 `defaultPrevented` 事件，避免刚聚焦就被自身 blur 掉。真触摸实测：双击 A1 → `activeElement = .mb-usheet-formula__input`、键盘弹起、输入 `dblTest` 进公式栏（`finaldblTest`），未提交前网格不变。
+- **八次修正（用户三点：清除格式放 T 首行最后 / 对齐换图标 / 多行展开换图标）**：T 第一行 = `B I U S + 清除格式（Eraser）`；水平对齐与垂直对齐改 **lucide 图标**（AlignLeft/Center/Right；AlignVerticalJustifyStart/Center/End，20px）；公式栏多行展开按钮由 chevron 换成 **Maximize2/Minimize2**（消除「向下箭头=收起还是展开」的歧义）。
+- **七次修正（用户：T 的展开样式也要和文档类似）**：T 面板从「整条白条 + 分隔线」改成**文档 Aa 面板同款**：`fpanel > frow > fcard` 分组白卡（圆角 10、卡内 2px 缝、条目高 40、圆角 8），B/I/U/S 一张卡；水平对齐 + 垂直对齐两张卡**按条目数等宽**；字色 A×8 一张卡；填充改**两行圆点色板**（34 圆点、无填充斜线、行距 8）；字号一行；面板内距 6。选中态 = 主色字 + 浅底 + 1px 内描边（同 `.med-f-on`）。字号全部改令牌（否则 ui-metrics 字号字面量超基线）。
+- **六次修正（用户：公式栏最右要「展开多行」；工具栏切换闪烁太大，照文档 dock 全盘参考/照抄）**：
+  1. **公式栏最右加「展开多行」**：地址 + 输入/多行 textarea + ↵ + ⌄/⌃；展开后高度 148、自动聚焦并把光标放到末尾，⌘/Ctrl+↵ 或 ↵ 提交；收起回 44。真触摸实测：展开 h=148、键盘弹起、`第一行\n第二行` 可输入、收起回 44。
+  2. **工具栏展开/收起几何改为照抄文档 dock 的模型**：直接复用 `src/mobile/editor/editSurfaceModel.ts` 的纯函数 `capturePanelHeight` / `dockKbOffset`，配合 `hooks/useKeyboard`；公式栏与 dock 改 **position: fixed**（dock `bottom: var(--mb-usheet-kb-offset)`、公式栏在其上 52px），面板 **fixed bottom:0、高度 = --mb-usheet-kb-offset**（照 `.med-panel`，内容 `translateY(100%)` 滑入滑出），网格后加 chrome spacer 预留 `kb-offset + 96`。面板打开时用**历史实测键盘高**（`capturePanelHeight`，本次 312）而不是 280 下限，避免工具栏与真键盘差 32px 的跳动。
+  4. **收尾（同一轮）**：公式栏补齐地址/输入/按钮/展开态样式（此前几何重构时漏掉，浏览器默认 input 会出全局双环）；底部几何变化（展开多行/面板开合/键盘）后 `dispatchEvent(new Event("resize"))` 让内核重算画布，避免 canvas 停在旧高度留白；输入框焦点改为整条公式栏 1px 主色内环（不再用全局 outline 双环）。
+  3. **实测（真触摸 + 逐帧几何采样）**：打开 T → dockTop 790→478、formulaTop 746→434（让位给面板，等同键盘弹起）；关闭 ✕ → **dockTop/formulaTop 全程恒定 478/434**，260ms 时键盘已完全盖住（innerHeight 842→530）、面板 312→0 并卸载，**无掉底/回弹/空白帧**；面板内容保持到被键盘盖住（closingHold 同款）。
+- **四次修正（用户定稿：恢复自绘「仿钉钉」公式栏，但要回显 + 光标）**：公式栏恢复为 `地址 | 输入 | ↵`（去掉 ✕/✓/fx/▲）；输入框是普通 `<input>`（点哪落哪、可选中、可方向键移动光标）；**回显**：选区变化时同步地址与内容，且点网格时先 blur 输入框保证「点另一个格 → 立即显示该格内容」不被旧焦点卡住。真实触摸实测：A1→final / A2→2026-10-23 / A3→2026-10-23 回显正确；光标实测：输入 `abc` 后左移两位插 `X` 得 `2026/10/23aXbc`；↵ 提交、面板 ✕ 回键盘均通过。
+- **真实触摸自测（emulator-5570，Input.dispatchTouchEvent，26 项全 PASS）**：进入编辑 / T 打开 / 加粗·字号生效与回读 / T 关闭后键盘回来 / 撤销·重做可用态 / 插入面板与 5 项置灰 / 日期写入 / 插入行后撤销可用 / 更多→数字格式下钻与「当前」/ 冻结首行·首列 / 视图比例 / 新建工作表（页签 +1、SheetN 命名）/ 高亮当前行列 / 公式栏 ✕ 放弃 · ✓ 提交 / 退出编辑后 dock 消失、阅读工具条保留。命令：`node /tmp/real-touch-test.mjs 9338`（脚本未入库，流程已记录本节）。
+- **已知缺口（下一步，非本批）**：① 插入里「单元格图片 / 手写签名 / 附件 / 图表 / 批注」**已置灰**（未实现，后续补）；② 撤销/重做是**近似计数**（内核没有公开 canUndo，按命令流 + 回放抑制窗口维护）；③ canUndo/canRedo）；③ 冻结行列走 facade `setFrozenRows/Columns`，待逐项设备验收；④ 本批只改移动端，桌面表格不动。
+### 261023 · 移动端 AI 首版（P0 原生通道 + P1 页面）· **已提交 `88fcdc6c`（基于远端 `4130f256` rebase）**
+
+- 依据 `docs/MOBILE-AI.md`（D1–D13 定稿）落地：原生 SSE 通道 + 全屏 AI 页 + 资料集/发送清单 + 设置子页。
+- 新增：`android/.../AiChatPlugin.kt`（Keystore 存配置、HttpURLConnection + SSE、ai:delta/error/done、幂等 cancel）与 `SecretBox.kt`；`src/mobile/native/aiChat.ts` + `src/mobile/bridge/ai.ts`（调试契约 +5 → 55/56）；`src/mobile/ai/**`（MobileAiPage / AiCorpusSheet / AiSendSheet / AiMarkdown / aiSession / aiSettings / ai.css）；`src/core/{aiCorpus,aiNetwork,aiChatMessages}.ts`（后者从 `electron/ai` 上收，桌面改 re-export）；设置页新增「AI 助手」子页；`tokens.css` 新增 `--mobile-z-page`。
+- 门禁：tsc 0 · vitest **368 文件 / 2555 例** · check:mobileui ✓ · check:core ✓ · git diff --check ✓ · `vite build -c vite.mobile.config.ts` + `cap sync` + `gradle assembleDebug` ✓。
+- 设备实测（emulator-5554，覆盖安装保留数据）：空态/建议 chips/输入栏/关闭横幅、设置子页、资料选择器（含空文档置灰理由）、**未配置 Key 的端到端错误**（原生 not_configured → 中文气泡 + 重试）；截图 `docs/preview/ai-device-*.png`。
+- 未验：真实 Key 下的流式/取消/超时（P0 剩余探针）；选中有内容文档后的真实请求（该模拟器两篇都是空文档）；图片多模态（P2）；走查屏 `ai-home` 未加。
+- **真实探针（小米 MiMo `mimo-v2.6-flash`，emulator-5554）**：testConnection ≈0.9s；流式首字 ≈1.2s、71 字回答 ≈1.8s；停止后正文冻结并显示「已停止」；坏 URL→`network`、坏 Key→`401 auth`（错误体取 `error.message`）；选 365 字文档后回答确实引用资料；**重启 App/模拟器后 Key 仍可读并连通**；切后台 4s 回来流继续（未做后台中止）。
+- **探针顺手修的两处**：① Kotlin `delta.content` 为 JSON null 时 `optString` 会产出字符串 "null" ⇒ 正文前缀出现 `nullnull`，改用 `opt` 判类型；② **移动端「彻底删除」事务嵌套 bug**：`d.transaction` 内再调 `executeSet`（默认 transaction:true）⇒ 原生重复 BEGIN、回收站 purge 一直失败；`executeSet` 增加 `{transaction}` 选项、事务内传 false，补 `sqliteDb.batch.test.ts`；4 篇探针文档已 purge、回收站清空。
+- **261023 二次收口（用户定稿）**：① **后台继续流**；② **AI 页关闭不销毁会话**（模块级 `aiChatStore` + 常驻流订阅，后台 delta 继续累积，再进页面可看完整回答；App 进程结束才清空）；③ **移动端 Markdown 表格**（GFM 表头/对齐/单元格，零依赖、纯 React）；④ 图片附件维持"即将支持"占位（P2）。桌面 `MarkdownView` 仍无表格，未动。
+- **261023 三修（Markdown 解析器共用 + 桌面表格）**：解析器从桌面 `MarkdownView` 抽到 `src/core/markdown.ts`（块/行内 token + GFM 表格，纯数据）；桌面/移动端各自渲染（`.md-preview` / `.ai-md`），**桌面端同步支持表格**；bitable 静态护栏改指 core；移动端复测表格渲染正常。
+- **261023 四修（AI 会话设备本地持久化，用户定稿）**：只保留最近一次会话（消息 + 资料快照），存 App 私有 Data `ai/last-conversation.json`（BodyStore 原子写）；启动恢复、1s 防抖写、≤2MiB / 30 天 TTL；「新对话」与设置「清空本机对话」删除；**不存 API Key/端点/温度、不进 S3**。
+- **261023 五修（AI 历史对话，用户定稿）**：多会话落设备本地——每会话 `ai/conversations/{id}.json` + SQLite 索引表 `ai_conversations`（schema v4）；顶栏「历史」**独立全屏页**（列表 + title/preview 搜索 → 点开看完整对话详情 → 继续对话/删除；列表顶部清空全部）；启动恢复最近一次；50 条 / 30 天淘汰（连带删文件）；旧 v1 单文件启动迁移。仍不进 S3、不存 Key。
+- **261023 六修（AI 图片多模态 P2，用户定稿）**：拍照/相册 → 前端压缩（长边 1600 / ≤1MB JPEG）临时 data URL；「资源」= 资料文档里的图片，只传 `{noteId, filename}` 引用、原生读文件（字节不过 WebView）；Kotlin 组 `image_url`（≤10 张、总大小上限）；消息正文 `[图片]` 占位，历史/持久化不存图（当轮附件）。真机实测：纯红 PNG → 问「什么颜色」答「红色」。
+- **261023 七修（AI 体验打磨）**：流式跟底改为「只在底部时跟随」+ 上滑暂停 +「回到底部」浮钮；相册多选（按剩余 10 张名额合并，超出提示）；历史「继续对话」/新对话清空待发送图片；设置页新增「清除 API Key」（二次确认）。真机验证：长回答流式中上滑 1.8s 不回弹、浮钮出现、点击回底。
+- **261023 八修（图片入历史 P2.5）**：图片存档到会话私有目录（JSON 只存引用）+ 历史/重启/继续对话可见；单会话 20MiB、删会话/清空连目录、启动 sweep 孤儿；模型侧仍当轮附件。真机：发红图→重启→聊天与历史详情都显示图；孤儿目录 sweep 实测清除。
+- 设计口径：控件全部复用 kit/floating 原语（mb-input / mb-btn / mb-row / mb-switch / mb-sheet / mb-scrim / mb-actionsheet + Switch/TextField + backStack/useSwipeToClose/toastBus）；`ai.css` 已登记 `mobileLayers` 基线（234/1）；无颜色/字号字面量、无新增 `!important`。
+
+### 261023(九) · 缺正文小记的恢复（小记没有历史快照）· **已修**
+
+- **用户问**：小记缺了正文怎么办？小记没有历史快照。
+- **结论**：小记只有**两条真恢复路径**——① **云端镜像**（`quick-notes/` 独立清单 + 按 contentHash 的对象，sha256 校验）；② **搜索索引全文缓存**（`quick_notes_search_index.text_cache`，可重建纯文本，**图片/格式丢失**，恢复后标 local 待同步）；两条都没有就只能删除。
+- **后端**：
+  - `src/core/missingBody.ts` 新增 `missingQuickNoteRecovery()`：`cloud`（可出网 + 有 sync_base）→ `text`（有全文缓存）→ `none`。
+  - `QuickNotesStore`：`listMissingQuickNotes()`（只 stat，带 sync_base / text_cache / 预览）、`recoverQuickNoteFromText()`、`applyRecoveredQuickNoteFromCloud()`、`purgeMissingQuickNote()`（**不读正文**，直接写含 `purged_at` 的 tombstone）。
+  - `quickNotesSync.restoreQuickNoteFromCloud()`：读 `quick-notes/manifests/latest.json` → 取对象 → **sha256 校验** → 落盘 → `setBaseHash` + `markSynced`；失败以 reason 回报（`not-in-cloud/object-missing/hash-mismatch/invalid-content`）。
+  - IPC 四条：`list_missing_quick_notes` / `restore_missing_quick_note_from_cloud` / `restore_missing_quick_note_from_text` / `purge_missing_quick_note`（通道 126 → **130**，三方一致性护栏同步）。
+  - **互斥域（同日补，261023）**：两条云端恢复都必须走 `enqueueMaintenance`——"缺正文"那条此前是**裸 `ipc.handle`**（小记那条一直是对的）：读清单 + 取对象是网络往返，落地后还要改 `sync_base`/`sync_state`，与在途整轮同步/GC 并发会互踩同一篇账本（AGENTS §4 互斥域 I1/I3）。护栏 `electron/ipc/maintenanceQueueHandlers.test.ts`（两条通道各一例 + "提取器没静默失效"自证；用 c9ebb117 的旧源码做过负向自测：`hasFn=true / inQueue=false` ⇒ 确实会红）。
+- **前端**：资源页第 5 个页签 **缺小记**，三组「可从云端恢复 / 仅能用搜索缓存恢复纯文本 / 无法恢复（只能删除）」；行内三动作 + 彻底删除二次确认（文案写明：无历史快照、彻底删除不可恢复）。
+- **E2E**（干净 worktree `e2724cf7` 构建 + 合成 2 条小记，启动后删 `.qnote`）：列表 `recovery=text/cache=true`；页签「缺小记 2」；分组「仅能用搜索缓存恢复纯文本 2 条」；缓存重建 1 条 → **文件回写、行 2→1**；彻底删除另 1 条 → 确认框 → 行 0、`quick_note_deleted` 的 **purged 墓碑 = 1**。
+- **门禁（干净 worktree 复核，含互斥域补丁）**：tsc 0 · 全库 vitest **385 文件 / 2631 通过（17 skip）** · 双端构建 ✓ · `git diff --check` ✓。⚠️ 主树同时有并行会话的在途 sync 重构 WIP（tsc 红在 `src/core/lockedText.ts`，与本批无关）⇒ 本批只 stage 自己的文件提交，未碰它们的改动。另：干净 worktree 里 `sql.js` 的 2 个用例会因 node_modules 软链被 Vite `fs.allow` 拒（`Denied ID … sql-wasm.wasm?url`），主树实跑该 2 文件 5 例通过 ⇒ 属 worktree 装置限制，不是代码红。
+- **未接**：移动端没有资源页（后续可复用同一判据）⇒ 已列入 §0 **待用户裁决②** / **下一会话焦点⑥**，等产品决定入口再动。
+
+### 261023(八) · 资源页新增「缺正文」分类：可云恢复 / 仅历史 / 彻底删除 · **已修**
+
+- **用户口径**：提示一次之后，在资源页加 tab 展示缺失正文的文档，让用户主动选择"恢复历史 / 彻底删除"；并区分**能云同步恢复**与**只能历史恢复**的。
+- **后端**：
+  - `store.listMissingBodies()`：只 stat 不读正文；每条带 `historyCount / lastHistoryId / hasSyncBase` 与 `cloudConfigured`（= **已配置 S3 且允许出网**，遵「关闭云同步 = 完全没配置」红线）；判据单一来源 `src/core/missingBody.ts` 的 `missingBodyRecovery()` → `cloud | history | none`。
+  - `restoreMissingBodyFromCloud()`（`syncEngineController`）：读 latest manifest → 取该篇正文对象 → **sha256 校验** → 原子写正文 → `setBaseHash` + `markSynced`；失败以 `reason` 明确回报（`cloud-off / no-cloud-config / not-in-cloud / object-missing / hash-mismatch`），不写空正文。资产不在此处理，后续同步按差集补拉。
+  - `store.purgeMissingBodyNote()`：先走正常删除流程移入回收站，再 `purgeTrashItem`（**写 purge 墓碑**，云端下架不复活）。
+  - IPC 三条：`list_missing_bodies` / `restore_missing_body_from_cloud` / `purge_missing_body`（通道数 123 → **126**，三方一致性护栏同步）。
+- **前端**（`AssetsBrowser`）：第 4 个页签 **缺正文**（进入资源页即统计，计数从开始就是真值；扫描未完成不显示 0 误导）；按 **可从云端恢复 / 仅能恢复历史版本 / 无法恢复（只能删除）** 三组展示；行内动作 = 从云端拉回（无云端依据时置灰并给原因）/ 恢复最新历史（显示快照数）/ 彻底删除（二次确认，写明"写墓碑、不可撤销"）。`App` 通过 `onDataChanged` 刷新目录树（彻底删除后目录同步消失）。
+- **E2E（隔离实例 + dev 数据只读副本，删掉两篇正文）**：列表 3 篇；页签「缺正文」；分组「仅能恢复历史版本 3 篇」；对「虎嗅11」恢复最新历史 ⇒ **正文文件回写、行消失**；对「值得买22」彻底删除 ⇒ 确认框 → 行消失、`deleted_notes` **墓碑=1**。
+- **门禁**（rebase 到远端合并后 master 复跑）：tsc 0 · 全库 vitest **384 文件 / 2624 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓；E2E 在合并后树上复跑通过（页签计数直接为真值）。
+- **未接**：移动端没有资源页；云恢复的资产补拉依赖后续正常同步（面板/提示已说明）。
+
+### 261023(七) · 手动删数据（正文文件缺失）不再反复报错 · **已修**
+
+- **用户报**（附截图）：手动删掉 `.lake` 后，每次打开/启动都弹 `ENOENT` 错误横幅（截图路径来自一次隔离实例的临时 userData），很烦。
+- **思源怎么做（只读参考 `siyuan-master/`）**：文件系统是**真源**、SQLite 索引是**派生**；`kernel/model/index_fix.go` 的 `fixIndexPipeline`（去重索引 → `fixBlockTreeByFileSys` → `fixDatabaseIndexByBlockTree` …）在同步后跑一次、并在用户空闲（7min）后自动订正 ⇒ 文件不在，索引条目被订正掉，**不会反复报错**；另有只读"数据体检"（我们的 A3 `runDataHealthCheck` 对应）。
+- **我们的差异**：树/元数据是权威，**不能因为正文文件缺失就把文档从索引删掉**（可能只是误删或云端还有副本）⇒ 采用"**缺正文状态**"而不是丢索引：
+  1. **主进程**：`store.readNote` 遇 ENOENT 返回 `bodyMissing:true` + 空正文（**不再抛错**，其他 IO 错误仍抛）；新增 `isNoteBodyMissing`（只 stat）+ IPC `note_body_missing`（三处同步 + WEB_METHODS；IPC 通道数 122→123，护栏已同步）。
+  2. **渲染层**：`OpenTab/TabInfo` 与 `deriveDesktopView` 投影透传 `bodyMissing`；打开缺正文文档 → **只读专用面板**（说明 + 打开历史版本 / 重新读取 / 关闭标签；删除仍走目录右键，保持删除流程单一来源），**每篇每会话只弹一次 toast**，不再走 `setError`；启动 `useBootstrap` 跳过缺正文候选（最多 8 个，逐个 `noteBodyMissing`）并**汇总一次**提示，不再一启动就 ENOENT。
+  3. **同步安全（关键）**：上传环若正文为空 ⇒ **绝不上传空正文**：云端有副本 → 拉回恢复（warning `local_body_restored`，失败降级 warning 不中止整轮）；没有 → warning `local_body_missing` 跳过；回收站软删条目同样跳过；远端覆盖前留档遇空正文跳过快照（不再因"留档内容为空"整轮中止）。
+- **护栏**：`store.test.ts`（缺正文 readNote 不抛 / 正常文档不带标记）· `syncEngine.test.ts`（云端有副本→拉回不上传空正文；无副本→warning 跳过；断言无 objects PUT）· `desktopDerivedState.test.ts`（bodyMissing 必须透传）· IPC 三方一致性 123。
+- **E2E 验证**（隔离实例 + dev 数据只读副本；删掉「虎嗅11」的 `.lake` 并把它设为 `last_opened_note_id`）：启动 **0 条 error banner**（自动落到欢迎文档）；点开该文档 → **缺正文面板**、0 条 error banner；「关闭标签」生效。
+- **门禁**：tsc 0 · 全库 vitest **385 文件 / 2622 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
+
+### 261023(六) · 表格「一打开就待保存」：Univer 正文序列化不幂等 · **已修**
+
+- **用户报**：表格只要一打开就出现黄色「待保存」，怀疑会触发 S3。
+- **结论：确实会触发 S3**（修复前）。打开表格时首帧 vs 首个命令后的序列化不同 ⇒ 判为"有改动" ⇒ auto-save 写盘 ⇒ contentHash 变、\`sync_state=local\` ⇒ 下一轮自动/手动同步会 PUT 一次正文对象 + 新 manifest。**每次打开一次**。
+- **根因（两处序列化漂移，实测 diag + 产物 diff）**：
+  1. **plugin resource 未初始化形态**：首次 \`book.save()\` 给 \`SHEET_NOTE_PLUGIN.data=""\`，首个 CommandExecuted 之后给 \`"{}"\`（\`SHEET_RANGE_PROTECTION_PLUGIN\` 长期 \`""\`）⇒ 基线（mount 时 canonical）与第一次 flush 的 body 在 \`diff@957\` 处不同。
+  2. **字族引号随构建变**：dev 的 \`--lake-font-family\` 是 \`'MiSans', …\`，打包构建压缩 CSS 后是 \`"MiSans", …\` ⇒ 同一文档在 dev / 打包版之间来回改写 \`ff\`。
+- **修复（两层，缺一不可）**：
+  1. **正文规范化**（单一来源 `src/core/usheetDoc.ts`）：`normalizeFontFamily()` / `normalizeUsheetWorkbook()`（幂等：`data:""`→`"{}"`、
+     `ff` 单引号→双引号）；`UniverSheetEditor` 在打开基线 canonical 与每次 flush 的 snapshot 上都先规范化再 `usheetToBody()`。
+     作用：覆盖已知漂移（plugin 空壳 / 字族引号），并让 dev 与打包版**写盘字节一致**。
+  2. **结构保证「打开 = 只读」**（`UniverSheetEditor`）：打开后**第一次 flush 只对齐基线**（`baselineSettledRef` + `contentInputRef`，
+     不写盘不标脏）；内容输入判据 = 键盘/粘贴/剪切/拖放（捕获阶段）+ **非网格画布**的 pointerdown（工具栏/公式栏/右键菜单）；
+     `capture` 在**无真实改动**时返回磁盘原文（`persistedBodyRef`）；**改过又改回原样**（撤销/改回原值）时也返回原文
+     （`persistedNormalizedRef` 比较），避免"打开→编辑→撤销→关闭"写盘；外部 content 刷新会更新该基线。
+     ⇒ 即使上游再换序列化形态（我们不认识的新漂移），打开也不会写盘/标脏/出网。
+- **验证（隔离实例 + 用户 dev 数据只读副本）**：
+  - 修复前：打开「表格11」→ 1 次 `ipc.save_note`、body hash 变化。
+  - 修复后：**原始正文**打开 → 0 次 save、hash 不变；**人为扰动正文**（未知 plugin `data:""` + resources 倒序 + 单引号字族）
+    打开 → 仍 0 次 save、hash 不变（证明结构层不依赖"枚举漂移"）；**关闭不编辑** → 0 次 save、hash 不变。
+  - 真实操作（点工作表「＋」新增工作表）→ **1 次 save**、正文正确落盘（2 个工作表）、无异常。
+- **护栏**：`src/core/usheetDoc.test.ts`（规范化幂等 / 空资源归一 / 真实单元格差异不被吞）+
+  `src/features/usheet/usheetOpenReadOnly.test.ts`（静态锁住第 2 层：首次 flush 对齐、输入判据、capture 兜底、两处规范化）。
+- **门禁**：tsc 0 · 全库 vitest **385 文件 / 2616 通过（17 skip）**（含并行会话在途改动）· 双端构建 ✓ · `git diff --check` ✓。
+
+### 261023(五) · 桌面端日志系统重做（分级 / 关键流程埋点 / 错误捕获 / 文档）· **待验收**
+
+- **用户要求**：整理桌面端日志并按同样思路埋点；开发环境 debug 多、正式环境把 info/warn 用起来、重点处理 error；关键流程记录耗时与数据量，积累一段时间后做针对性性能优化。
+- **分级（单一来源 `electron/logLevels.ts`）**：dev = file/console/renderer 全 debug；prod = file info、console 关、renderer info；现场覆盖 `LAKE_LOG_LEVEL=…`、`LAKE_LOG_CONSOLE=1`（不改代码）。
+- **格式（单一来源 `src/core/logFormat.ts`）**：一行一条；耗时统一 `[perf] label <ms>ms k=v`；错误带 `error=` + 前 3 帧 `stack=`；字段 `k=v`；不记正文/密钥。
+- **渲染层**：新增 `src/lib/log.ts`（debug 仅 DEV；perf 走 info）；`main.ts` 的 console-message 按 Electron 新旧签名映射级别（error 不再被压成 info）；入口装 window error / unhandledrejection 兜底。
+- **主进程**：logger 重写（10MB 轮转、`[start]` 启动上下文含版本/平台/userData/生效级别）、uncaughtException/unhandledRejection、preload-error、unresponsive/responsive、`[security]` 拦截导航、`[quit]` 时序、`[perf] boot.ready`。
+- **关键流程埋点**：`[perf] ipc.<channel>`（debug）+ `ipc.slow` ≥200ms（warn）+ 失败（error）；`[perf] note.save`（耗时+字数，慢保存升 info）；`[perf] sync.round`（耗时/条数/字节/墓碑/冲突/warnings）；`[perf] paste.html`（chars/getData 次数/升级耗时/护栏命中）；沿用资源上传爆发统计与 CSP 折叠。
+- **文档**：新增 `docs/LOGGING.md`（分级 / 作用域 / 格式 / 埋点清单 / 排查手册 / 性能优化用法 / 新增埋点规范）；AGENTS §6 加一行；TROUBLESHOOTING §M 在上一批。
+- **实测（隔离实例）**：dev 日志 27 行（info 12 / debug 13 / error 2）——`[start]`、`boot.ready 1834ms`、逐次 ipc debug、`paste.html 0ms chars=24 getData=9`、`note.save 2ms chars=181` 均正常；`LAKE_LOG_LEVEL=info` 时 12 行且 ipc debug = 0。
+- **顺带发现（已定性，见 `docs/LAKEX-CONTRACT.md` §5.42）**：偶发 `IndexSizeError: getRangeAt` —— 产物取证确认是**闭源内核**选区 observer 未判 `rangeCount` 的竞态（入口 chunk 里 59 处 `getRangeAt(0)`、31 处无守卫；宿主 8 处全部有守卫）。不 patch 内核，已由 `[window]` 兜底记录；原先「隔离实例必现」的说法不成立（10+ 轮受控复现为 0）。
+- **门禁**：tsc 0 · 全库 vitest **375 文件 / 2561 通过（17 skip）** · 双端构建 ✓ · check:core ✓ · git diff --check ✓。
+- **落点**：分支 `fix/paste-perf`（第 2 个 commit）；**已随并行会话两笔一起进入 master `4d1184e2` 并推送三仓**（Gitee private/public、GitHub）。worktree 与分支已清理。
+
+### 261023(四) · 粘贴整页网页：CSP 噪音折叠 + 上传爆发统计（分支 fix/paste-perf，未合并）· **待验收**
+
+- **背景**：用户报「值得买」文章（4700 字 / 67 图）从浏览器全选粘贴进文档非常卡，日志同时刷出上百条 CSP 报错，怀疑是日志记录导致。
+- **结论（已实测，不改粘贴逻辑）**：日志不是原因。同内容在隔离实例复现：同步 dispatch 341ms、96 条 CSP 全落在 1 秒内、端到端 ≈3s；12:24 重粘同一页：63 张图卡 21ms 内插完、端到端 ≈2.2s ⇒ 11:54 那次的 8.8s 静默是当时的机器负载（同机并行开发会话）造成的偶发卡顿。判据与取证方法见 docs/TROUBLESHOOTING.md §M。
+- **本批只加可观测性**：
+  - electron/consoleNoise.ts：CSP 拦截通知折叠成一行（条数 + 示例 URL），main.ts 接线、窗口关闭时 flush；护栏 consoleNoise.test.ts（6 例）。
+  - src/lib/uploadStats.ts + src/features/editor/resourceUpload.ts：上传爆发聚合（次数 / 远程 / 墙钟 / 单次最长 / 重试 / 失败），阈值（≥3 次 / 墙钟 ≥1.5s / 有失败）才落一行 [perf]；src/core/retry.ts 加可选 onRetry（唯一调用方，重试语义不变）；护栏 uploadStats.test.ts（7 例）。
+  - docs/TROUBLESHOOTING.md 新增 §M（症状 / 四条判据 / 结论 / 稳定复现时怎么查）。
+- **明确不做**：粘贴前把远程 img 换成占位。实测这 90+ 次被 CSP 拦截的请求只花 21ms / 20KB 日志；唯一能真正消除的实现 = 把粘贴改成异步预取再重派发（会改选区/撤销语义）⇒ 按 AGENTS §3#17 不做，等真有网络/大图瓶颈再单独立项。
+- **门禁**：tsc 0 · 全库 vitest **365 文件 / 2541 通过（17 skip）** · git diff --check ✓。
+- **落点**：worktree lake-notes-electron-worktrees/paste-perf（分支 fix/paste-perf，基于 master 73f63039）；**已合入 master `4d1184e2` 并推送三仓**。
+
+### 261023(三) · 桌面逐页走查（隔离实例 + 合成夹具，用户点单）· **仅验证，无代码改动**
+
+- **方法**：`make-fixture.mjs` 合成夹具（富文本/表格/多维表/画板/2 回收站/2 小记/4 类资产）→ 独立 userData + 独立资源端口 + CDP 9231 的**隔离窗口**（不碰用户 dev 实例与数据）→ CDP 驱动逐页截图；全程收集 `Runtime.exceptionThrown` = **0 条**。
+- **覆盖**：资料库/编辑器（H1/列表/代码块/表格/图片卡）、表格、多维表、画板、小记、全文搜索、AI 助手、云同步浮窗、历史版本、回收站、资源、设置（编辑器/外观/快捷键/文档与历史/云端与同步/AI/回收站/浏览器端/日志/关于）、标签右键菜单。
+- **结论**：**未发现视觉缺陷/回归**。四类「看似异常」经复验均为夹具/环境所致：① 双工具条 = 隐藏窗口（`document.hidden=true`）下 keep-alive 清理被节流，出帧后 mounts=1/toolbars=1（与 §3#9 已知空帧同源，暂不做）；② 富文本「图片」区块空 = 夹具是 **1×1 PNG**（`<img width="1">`），非加载失败；③ 画板空白 = 夹具画板无图形；④ 小记页红色校验横幅 = 自动化上一轮空提交残留，冷启动复验不存在。
+- **资源页数据自洽**：可删 2 / 历史保护 3 / 缺失 0（共 5 个 · 350B · 4 篇文档）。
+- **产物**：`.css-audit/walkthrough-261023/`（gitignored，31 张）。**没跑 42 态 stylesnap**：本批未动外壳几何，且发版线已放弃。
+
+### 261023(二) · 桌面收尾：查替面板单边框实测 + 全屏 chrome 收口（附件预览不留缺口）· **已改，未提交**
+
+- **① 表格「查找替换」面板实测**（补上一批只测了「插入链接」的缺口）：数据页签 →「查找替换」→ 查找输入框（316×32）实测 `border 1px #3f5fa0` / `outline 0` / `box-shadow 0 0 0 2px rgba(28,31,36,.2)`（= 自有 `.ln-text-field` 口径，单条边）；`window.__vendorFocusProbe()` = `[]`（无叠层）。宿主是 `.usheet-editor` **内联**（不是 portal）——与链接弹窗的 `[data-lake-univer-floating]` 两类宿主都已被 `vendor-focus.css` 覆盖。证据 `.css-audit/vendor-focus-261023/find-input-after.png`。
+- **② 全屏 chrome 收口（单一来源）**：新增 `src/styles/window-chrome.css`（unlayered，`main.tsx` 引入）：
+  - `:root.window-fullscreen .platform-mac .tab-bar` → `padding-left: 10px` + `no-drag`（从 `tabs.css` **搬进来**，`tabs.css` 恢复原样、全屏规则不再散落）；
+  - `:root.window-fullscreen .attachment-preview.is-mac .attachment-preview__toolbar` → `padding-left: 16px`（正常窗口 82px 让位 → 全屏不再留左侧缺口）。
+  - `cssLayers` 登记新文件（3 声明）；`layoutMetrics.test` 改指新文件并锁两条规则（含「tabs.css 不得再出现 window-fullscreen」）。
+- **实测**（同一页面实时切 `:root.window-fullscreen`）：顶栏 `82px → 10px`；附件预览工具栏 `82px → 16px → 82px`（动态加载其 CSS + 同构 DOM 验证，验完清掉根类）。
+- **门禁**：tsc 0 · 全库 vitest **363 文件 / 2528 例** · ui-metrics 0 · check:bundle ✓ · `git diff --check` ✓。
+
+### 261023 · 表格第三方输入框「两层边框」根因 + 系统性收口（用户点单：「最后一次彻底排查」）· **已提交 `41d0a597`，待验收**
+
+- **用户口径**：桌面表格后续接入的功能输入框（插入链接、查找替换…）都是 2 层边框，怀疑没接原语；要求彻底排查、以后别再出现。
+- **根因（不是某个输入框写错，是全局焦点环跨界）**：`tokens.css` 的 `:where(button, input, textarea, select, [role=button]):focus-visible` 本意是给**自有**原生控件的焦点环，但它按标签命中所有 input/textarea/select；Univer 弹窗/面板自己已经画了「1px 边框 + 聚焦 ring（box-shadow）」⇒ 再叠我们的 2px offset outline 就是两三层。**关键坑**：表格弹窗 portal 到 `[data-lake-univer-floating]`（260922 补丁改回 body、带 `data-lake-owner`），所以只按 `.usheet-editor` 写作用域会漏——这正是「修过又出现」的原因。
+- **实测（隔离实例 CDP，插入链接弹窗输入框）**：修复前 = border `1px #33497f` + 厂商 ring `2px #eef2fa` + 全局 outline `2px #3f5fa0 offset 2`；修复后 = border `1px #3f5fa0` / outline `0px` / `box-shadow 0 0 0 2px rgba(28,31,36,.2)`（= 自有 `.ln-text-field` 的聚焦口径，单条边）。
+- **修法（单一来源，新文件）**：`src/styles/vendor-focus.css`（unlayered，压过 vendor 层；`main.tsx` 引入）——
+  - **归属**：第三方宿主（`.usheet-editor` / `[data-lake-univer-floating]` / `.lake-editor-mount` / `.ne-overlay-container` / `.board-editor`）里的 `input/textarea/select` 不再吃全局焦点环（交给厂商自己的焦点视觉）；
+  - **表格字段皮肤**：`[data-lake-univer-floating]` / `.usheet-editor` 里输入框聚焦 = 主色边 + 2px 柔光环 + `outline: 0`（并入原语口径）。
+  - `styles/cssLayers.test.ts` 登记该文件基线（4 声明）。
+- **防复发（三件套，不打补丁）**：
+  1. **dev 运行时探针** `src/lib/vendorFocusProbe.ts`：第三方宿主里聚焦控件时若仍带可见 outline ⇒ `console.warn` 并记入 `window.__vendorFocusProbe()`（空数组 = 干净）；`main.tsx` DEV 安装。
+  2. **静态护栏** `src/lib/vendorFocusProbe.test.ts`：宿主识别（内联 / 弹窗 portal / 内核浮层）、只对「第三方 + outline」判叠层、样式与入口都真的接上（含 `[data-lake-univer-floating]`）。
+  3. **后续新增第三方编辑器**：宿主加进 `vendor-focus.css` 的 `:is()` 列表 + `VENDOR_HOST_SELECTORS`；漏了 dev 控制台会报。
+- **门禁**：tsc 0 · 全库 vitest **363 文件 / 2528 例**（本批 +3 = 探针宿主识别 / 叠层判据 / 样式与入口接线）· ui-metrics 0 · check:bundle ✓ · `git diff --check` ✓。
+- **边界（未做）**：第三方**按钮**仍用我们的焦点环（与自有 `.ln-btn` 单环一致，不算「两层边框」）；若要让厂商按钮自己负责，把 `button/[role=button]` 加进归属规则即可，但会丢厂商 UI 的键盘焦点指示，需评估。
+
+### 261023 · macOS 原生全屏：顶栏去掉红绿灯让位（仿思源，用户点单）· **已提交 `d9c341ad`，待验收**
+
+- **用户定稿**：选 C —— **保留** macOS 原生全屏（绿色按钮进独立 Space），不改窗口模式；但全屏时系统把红绿灯一起隐藏，顶栏仍留 82px 让位 ⇒ 左侧空一块「比较丑」，要求仿思源：全屏时整条顶栏左移到最左。
+- **判据单一来源（三处接线）**：主进程 `enter-full-screen` / `leave-full-screen` 广播 `window-fullscreen`（并在 `renderer-ready` 补发一次初始态，覆盖「启动即全屏」的 window-state 恢复路径）→ `preload.cjs` + `src/lib/native.ts` 的 `onWindowFullscreen(cb)` → `App.tsx` 切 **`:root.window-fullscreen`** 类 → CSS 一处收口。
+- **实现落点**：`electron/main.ts`（`sendWindowFullscreen()`）· `electron/preload.cjs` · `src/lib/native.ts` · `src/App.tsx`（挂载订阅 + 卸载清理）· `src/styles/app/tabs.css` —— 把 `.platform-native-titlebar .tab-bar` 与非 mac 顶栏同组，追加 `:root.window-fullscreen .platform-mac .tab-bar`（`padding-left: 10px` + `no-drag`）。**声明数与既有规则相同**（cssLayers 基线不变、无新增 CSS 文件）。
+- **端到端实测**（隔离实例 + 临时调试钩子，已回退、未入库）：窗口态 `82px / drag` → 进入全屏 `10px / no-drag`（`:root` 类为 true）→ 退出恢复 `82px / drag`；CDP 每 300ms 采样，走的是真实 `enter/leave-full-screen` 事件。
+- **门禁**：tsc 0 · 全库 vitest **362 文件 / 2525 例**（新增 `layoutMetrics.test` 全屏让位端到端断言）· ui-metrics 0 · check:bundle ✓ · `git diff --check` ✓。
+- **已知剩余（未做，等点单）**：附件预览浮层的工具栏 `.attachment-preview.is-mac .attachment-preview__toolbar` 也有 82px 让位 ⇒ 全屏下标题仍偏右；要收左需在该文件 +1 条声明（会顶 cssLayers 基线，需新文件或减量），本次未做。
+
+### 261023 · 移动端表格交互改版：钉钉实测 + 可交互 HTML 原型（**未改产品代码**）
+
+- **用户口径（261023）**：不再自己探索移动端表格交互；以钉钉（Android）为参考——「感觉还是工具栏靠谱一点，且也是通过公式栏来编辑的」；**先出 HTML 原型定稿，不反复折腾代码**。
+- **钉钉实测（emulator-5554 实机 + WebView CDP 只读）**：选择态 = 网格 + 底部浮动胶囊「格式/插入/数据/视图」→ 底部全宽面板（4 页签常驻、右侧键盘图标进编辑）；编辑态 = 公式栏（地址 + 输入 + ↵ + 展开）+ 快捷条（表格工具/A/插入 | 选区 | 语音/图片/@/日期 | ✓）；格式面板 = 字号 ± 步进、B/I/S/U、水平/垂直对齐各 3、字色 8、填充 8（首格无填充）；插入 = 插行列 4 大按钮 + 单元格图片/手写签名/链接/日期…；数据 = 升/降序 + 筛选开关 + 查找替换；视图 = 视图比例（默认/全景/聚焦）+ 表单视图 + 图表视图 + 冻结行列 + **高亮当前行列开关**；顶栏「更多」= 文档级操作（不放表格格式）。
+- **用户二次澄清（同日）**：**不要**底部悬浮胶囊/四页签面板；要的是**双击编辑后、键盘上方那条工具条**（形态对齐我们文档编辑器的底部 dock），公式栏保留。
+- **用户三次澄清（同日，定稿方向）**：① **公式栏必须保留**（主要输入位置）；② 选择态的（高亮当前行列 / 视图比例 / ＋ / 图层）放**顶部与 Sheet 同一行**，不算工具栏；③ dock 顺序 = `＋插入 | T | 数据 | 视图 | ↶撤销 | ↷重做` + 右侧固定**键盘**；④ 面板（T/插入/数据/视图）**占住键盘区域**展开（dock 在面板上方不动，与文档 dock 逻辑一致）。
+- **原型（可交互，单文件、离线可用）**：`docs/preview/mobile-sheet-prototype.html`（v4）—— 顶部 Sheet 行带十字高亮/比例/＋/图层；双击进编辑 → 公式栏 + dock + 键盘；点 dock 项 → 面板盖住键盘区域（再点收起回键盘）；**T** = 文档 T 面板同款白条（B I U S ｜ 水平对齐+垂直对齐 ｜ 字色 9 ｜ 填充两行 ｜ 字号 8 档，无标题无列表）；**插入** = 钉钉式 4 连块（插入行列，蓝色图标）+ 文档式 4 列白块（单元格图片/手写签名/链接/日期/附件/公式/图表/批注）；**数据** = 升序/降序/筛选/查找替换；**视图** = 冻结行列/视图比例。*展开内联面板（T = 字号±/对齐/字色/填充；插入 = 插行列 + 图片/签名/链接/日期/附件/公式；⋯ = 排序/筛选/冻结/高亮当前行列/查找/格式刷/清除格式/视图比例）。右侧附「钉钉实测清单 + 待拍板问题」。
+- **用户四次确认（同日）**：①顶栏 ✓ **保留**；②顶部那排**保留**；③数据/视图面板**增加占位**（数据验证/分列、表单/图表视图）；④T 面板就按原型；⑤插入去掉「公式」，公式放「更多」（**放哪个「更多」待定**）；⑥**样式与交互照文档 dock 的细节**：面板覆盖键盘、一级按钮打开变 **X**、再点 X 收起并恢复键盘。
+- **已照文档 dock 源码对齐的细节**（src/mobile/editor/EditorDock.tsx + editor-dock.css）：一级按钮打开时图标换成 X + med-open（accent 字 + tint 底 + inset 环 + 圆角 24）；键盘按钮两态（键盘开 = 键盘+斜线「收起」，关 = 键盘「展开」）；面板 .med-panel 占住键盘区（height: var(--kb-offset)、max-height: 60dvh、insert/font/more 面板底 --lake-bg-block）；插入白块 **4 列**、高 52、图标 22 + 文字 13；再点同一颗 = 关面板并放回键盘。
+- **状态**：仅调研 + 原型，**产品代码零改动**；待用户继续定稿（「公式」放哪个「更多」、数据/视图占位是否够、✓ 是否就放顶栏查找右边）。
+### 261022(晚⑤) · AI 面板：「附加当前文档全文」只给无选区入口（用户点单）· **已提交 `2ded222b`，待验收**
+
+- **用户定稿**：区域选择用 AI（选区浮栏 / 块菜单 / 图片卡 AI）**不需要**「附加当前文档全文」；只有**无选区**入口（顶栏「更多 → AI 助手对话」）才需要这一行。
+- **判据（面板内单一来源）**：`const selectionContext = selectionText.trim().length > 0 || hasImages;` —— 文字选区 / 图片选区 / 块菜单（vendor 会把整块还原成选区，`blockHandleMount` 传的就是块文本）都算「有选区」⇒ 整行 `.ai-dialog__doc` 不渲染；`noteId && !selectionContext` 才出开关。开聊锁定、全文结果不自动回写等既有语义不变。
+- **不改三个入口组件**（`App.tsx` 顶栏 / `SelectionToolbar` / `blockHandleMount` 传参保持不变）：判据只在面板里，避免同一条件散到三处。
+- **验证**：jsdom 行为 1 例（文字选区 / 图片选区 ⇒ 无开关且面板不含该文案）+ 静态断言锁 `noteId && !selectionContext`；隔离实例（scheme 构建 + CDP 9230）实测：顶栏入口有开关（`aria-checked=false`），⌘A 选中后点浮栏「AI 助手」⇒ **无开关**、预设行仍在。证据 `.css-audit/bitable-rename-261022/ai-topbar.png` / `ai-selection.png`。
+- **不涉及**：样式（`.ai-dialog__doc` 规则与 `aiDialogParts.css` 基线不变）、数据/IPC/同步。
+
+### 261022(晚④) · 移动端表格工具条：两行 + T 一级标签 + 十字高亮挪底栏（用户点单）· **已提交 `41f84901`，待验收**
+
+- **用户点单（261022 晚，五条）**：① 工具条做成 **2 行**，常用放外边、不常用收起；② **增/减小数位都收起**；③ B/I/S/U/字色合成一个 **T 一级标签**，点开二级展开 5 项，T 放常用；④ **十字高亮放右下角缩放左侧**，阅读态也能用（不影响数据）；⑤ 删掉底栏那个**空图标**。
+- **实施（单一来源 usheetChromeModel.ts）**：SHEET_TOOLBAR_ROWS = 两行分组（第一行「+ / 撤销 重做 / T / 常规▾ / ⋯」；第二行「格式刷 清除格式 / 筛选 排序 冻结 查找 / 链接 公式」），第二行可横滑；T 的二级卡 = 新组件 SheetFormatCard（B/I/S/U 四开关 + 8 色字色圆点，按钮按当前选区亮起）；排序/冻结/公式改为第二行小卡（SHEET_SORT_MENU / SHEET_FREEZE_MENU / SHEET_FORMULA_MENU）；⋯ 只剩低频（填充/边框/对齐/合并、小数位增+减、行高/列宽、删除行列）+ 未接占位（7 个仍置灰，等用户逐项裁决）。
+- **⑤ 的真身 = 内核自带的「打开表格工具」浮动钮**（无图标、点了没可见效果）⇒ mobile.css 隐藏 + 删掉 ⋯ 里对应的「更多表格工具」（连带删掉 useSheetCommandActions 的 more-tools 分派与 getHost 入参）。
+- **十字高亮**：从 ⋯ 移到 MobileSheetFooter（缩放左侧，32×32，aria-pressed 反映开/关），**阅读态/编辑态都常驻**；仍默认关、不持久化、不进正文。
+- **门禁（本会话实测）**：tsc 0 · 本会话改动的 usheet 相关用例全绿（全库同树另有并行会话在途改动，故数字以最新 HANDOFF 基线为准）· ui-metrics ✓ · check:mobileui ✓（mobileLayers 基线：usheet-chrome.css 250→302、mobile.css 1459→1460，属新增交互形态）· diff-check ✓；APK --sync 重打并装 emulator-5554，两行工具条 / T 卡 / 十字高亮开关设备截图实测通过。
+- **未做/待裁**：⋯ 里 7 个置灰占位（字号/垂直对齐/换行/选择/图表/条件格式/保护）仍等用户逐项决定「留下做功能还是删除」；第二行目前只有图标（移动端无 hover，可加文字标签，待用户看效果定）。
+### 261022(晚③) · 默认标题「无标题多维表」+ 筛选输入单边框 + 云同步默认开关（用户点单）· **已提交 `d6482021`（多维表部分）+ `5c424799`（云同步默认值），待验收**
+
+- **用户定稿（逐条回应上轮三问）**：① 新建多维表的默认标题要叫「无标题多维表」；② 筛选条件输入统一成单边框；③ **表内仍叫「数据表」**（多维表 ⊃ 数据表，面板标题与「新建数据表」不动）；④ 全新安装、S3 一项都没配时，「启用云同步」应默认**关闭**（而不是现在默认开）。
+- **① 默认标题**：桌面 `useNoteLifecycle.createBitableIn` 与移动 `NotebookWorkspace.createChildDocument` 的默认名改为「无标题多维表」（`workspaceMenu.test` 断言同步）。实测：新建成目录行 / 标签都是「无标题多维表」。
+- **② 筛选输入（先纠错再修）**：`.bt-rule-row input/select` 是**死选择器**（排序/分组行用 `SelectMenu` 按钮，多维表里已无原生 input/select）⇒ 上一批补的规则已删；**真正的双边框**在 `bitableFilterEditor.css` 的 `.bt-filter-input:focus / .bt-filter-value-trigger:focus`（1px 边 + 2px 内描边）⇒ 改为 `border-color: accent; outline: 0`（只留一条边；与本批行内重命名同一判据）。护栏断言改成锁真实落点 + 禁止 `outline: 2px` 回流。**本文件按声明数只许降，故未加柔光环**。
+- **④ 云同步默认开关 = 是否已配置 S3**：桌面 `settingsRepository.getSyncSettings()` 的默认值改用 `hasS3Settings()`（只判 `settings` 里有 `s3_settings` 行、不解密）；移动 `bridge/context.readSyncSettings()` 的 fallback 同样按「本地是否存过 S3 配置」（`S3_STORAGE_KEY`）取 `enabled`。**已配置的旧库不回归（仍默认开）**；显式存过的值优先。语义依据：`cloudStateOf` 里「没配置」与「关掉」等价（一律不出网），只有连通测试通过才允许 `enabled=true`（`SettingsPanel.saveSyncCfg` 已内建测试）。
+- **设备实测（隔离实例 CDP 9230 / 全新 `LAKE_USER_DATA`）**：`[data-set-id=sync-enabled]` → `aria-checked=false`、`disabled=true`、说明为「先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。」；筛选输入 focus = `1px rgb(63,95,160)` + `outline 0` + 无第二圈；新建多维表默认名见上。
+- **不涉及**：同步语义/schema/数据（只改默认值与文案）；AGENTS §3#20 补了这条默认值口径。
+- **门禁**：tsc 0 · 全库 vitest **362 文件 / 2522 例**（本批新增 settingsRepository 4 例 + 移动 1 例 + 筛选/重命名护栏；同一工作树另有并行会话的移动端在途用例）· ui-metrics 0 · check:core ✓ · check:mobileui ✓ · check:bundle ✓ · `git diff --check` ✓。
+
+### 261022(晚②) · 多维表：数据表行内重命名「两个边框」+ 创建项改名「新建多维表」（用户点单）· **已提交 `d6482021`，待验收**
+
+- **用户口径（附截图）**：① 多数据表左侧列表里重命名，输入框「怎么还是 2 个边框」；② 「新建」里的「数据表」改叫「多维表」。
+- **① 两个边框 = 两层来源，根因修在「复用原语 + 只留一条边」**：
+  - 旧实现 `.bt-inline-input` 自带 `border: 1px solid var(--lake-accent)`，而全局 `:where(button,input,…):focus-visible`（`src/styles/tokens.css`）给所有输入框再加 `outline: 2px + offset 2px` ⇒ 截图逐像素 = 「2px 主色描边 + 2px 背景缝 + 1px 主色边」两条。
+  - 改为**复用多维表字段原语 `.bt-input`**（静息 `--lake-ctl-border`；`:focus` = 主色边 + `outline: 0`），`.bt-inline-input` 只留行内布局（`flex/min-width/height:auto/padding`）。
+  - **只换原语还不够**：`.bt-input:focus` 的 2px 柔光环在选中行（accent-tint 底）上又围一圈浅色（实测 196,199,207）⇒ 再加 `.bt-inline-input:focus { box-shadow: none }`，**只留 1px 主色边**。判据同 260929 链接格「格内输入框不再叠焦点环」：**已有边框/选中环处不再叠第二次焦点信号**。
+  - 实测（隔离实例 CDP 9230，dev 源 + 独立 `LAKE_USER_DATA`）：`border 1px rgb(63,95,160)` / `outline 0px` / `box-shadow none`；截图像素扫描主色边紧贴白底、无第二圈（`/tmp/lln-verify/rename-final.png`）。
+- **② 创建项文案**：桌面 `Sidebar.CREATE_CHILD_ITEMS` 与移动端目录抽屉「新建」清单同步 →「**新建多维表**」（文档类型名 = 多维表，**表内层级才叫「数据表」**：多维表面板标题「数据表」与面板内「新建数据表」按钮保持不变）；`docs/MOBILE-TECH-STACK.md` 引用同步。
+- **护栏**：`bitableEditorMount.test.ts` 新增「行内重命名复用 .bt-input + 不再自带主色边 + :focus 去柔光环」；`sidebarContextMenu.test.ts` 锁 `label: "新建多维表"`；`workspaceMenu.test.ts` 清单断言同步。
+- **门禁**：tsc 0 · 全库 vitest **361 文件 / 2512 例**（+1 例）· ui-metrics 0 · check:core ✓ · check:mobileui ✓ · check:bundle ✓（产物 CSS 未分层 0）· `git diff --check` ✓。
+- **不涉及**数据/同步（纯本机视图与文案）；stylesnap 42 态不含「行内重命名 / 创建菜单」⇒ 基线不变。
+- **同类观察（已在 261022(晚③) 收口）**：筛选条件输入 `.bt-filter-input` 的「1px 边 + 2px 内描边」已改成单边框；**注意 `.bt-rule-row input/select` 是多维表里的死选择器**（排序/分组行用的是 `SelectMenu` 按钮，没有原生 input/select），不要再拿它当落点。
+
+### 261022(晚) · 表格「十字高亮」改为默认关闭 + 开关可见（用户点单）· **已提交 `41f84901`，待验收**
+
+- **用户定稿**：默认关，且要保留开关（原 261022 白天按点单默认开启；实测默认亮的紫色行列带太抢眼）。
+- **实施（两端一致，纯本机视图）**：内核初始就是关（`_enabled$ = new BehaviorSubject(false)`）⇒ **打开表格不再自动开启**；
+  `features/usheet/usheetCrosshair.ts` 由 `enableUsheetCrosshair` 改为显式 `setUsheetCrosshair(api, on)`；
+  桌面 `UniverSheetEditor` 删自动开启（「视图」页签仍有内核开关）；移动端 `MobileUsheetViewer` 去掉自动开启，
+  改由 ⋯ 卡「十字高亮」按钮 toggle，按钮 `active` = 已开启（`usheetChromeModel.buildMoreRows(fmt, { crosshair })`）；
+  `useSheetCommandActions` 里原有的 crosshair 分派已删（状态归组件，避免两套）。
+- **不持久化**：operation 不写正文、不进 S3；重开表格回到「关」（用户只要求开关，未要求记忆）。
+- **门禁**：tsc 0 · vitest **361 文件 / 2511 例**（新增「十字高亮默认不亮 + 开启时 active」1 例）· ui-metrics ✓ · check:mobileui ✓ · diff-check ✓；APK `--sync` 重打并装 emulator-5554 冒烟通过。
+
+### 261022 · 最终定稿：三个仓库同内容（vendored 公开）+ GitHub Actions 打包发布
+
+- **用户定稿（261022 晚）**：不再区分“公开镜像不含内核”。**Gitee private / Gitee public / GitHub public 三个仓库内容完全一致**，内核以 vendored 形式随仓库与构建产物公开分发（未取得语雀授权，风险自担，声明见 `NOTICE`；权利人要求即移除）。
+- **仓库管理**：一个本地仓 + `publish` remote（private + Gitee public + GitHub public 三个 pushurl），`git push publish master --tags` 一次推三处；不再使用 export 脚本（已删）。
+- **打包**：`.github/workflows/release.yml` —— tag `v*` 触发；macOS（`macos-15`，未签名 dmg/zip）+ Android（`ubuntu-24.04`，debug apk）构建，产物发 GitHub Release；若配置 `GITEE_TOKEN` secret 则同时通过 Gitee API 上传到 Gitee 发行版。
+- **前提**：GitHub 仓库待建；建好后加 remote 推同一提交再打 tag 验证 CI；Gitee 公开仓已改为同内容（含内核）。
+- **风险**：公开仓/Release 含内核源文件与二进制 = 最高暴露形态；`NOTICE` 仅声明态度，不改变法律风险。
 
 ### 261022 · 双仓落地：私有开发仓（vendored）+ 公开镜像（导出）· **已提交**（hash 以 `git log` 为准）
 
@@ -549,6 +929,15 @@
     ④ 阅读态 5 项动作（当前全置灰）与「目录/编辑」浮动胶囊（待拍板）；⑤ 暗色主题 + 设备全量对拍（编辑/阅读/键盘/多表/新表网格/工作表切换）。
     **P5（能力补齐，逐项确认 Univer facade/command）**：保存按钮 / 格式刷 / 清除格式 / 小数位 / 边框 / 筛选 / 排序 / 保护 / 查找替换；多工作表切换真实设备点测（当前只有单表）。
 
+25. **移动端 AI 后续（261023 移交，按优先级）**：
+    - ~~① **图片入历史**~~ ✅ **已实现（261023 P2.5）**：图片字节存 `ai/conversations/{id}/images/`、JSON 只存 `{id,mime,ext}` 引用；历史详情/重启恢复/继续对话可看图（模型侧仍当轮附件不重发）；单会话 20MiB 上限、删会话连目录、启动 sweep 清孤儿。剩余可选：历史里“继续对话”时把旧图也回传给模型（成本重，未做）。
+    - ② **历史整理**：对话重命名 / 按资料文档或时间筛选（当前只有 title+preview 搜索）。
+    - ③ **设备门禁**：走查加 `ai-home` / `ai-history` 两屏；移动端 6 态 mobile-snap 基线陈旧（§3#23）一并重烤。
+    - ④ **错误文案**：429 限流、read timeout 的中文提示与重试引导（现 `aiErrors` 已归类，缺实测与按场景文案）。
+    - ⑤ **P3（先证价值）**：语音输入（系统 STT，需提示音频交给设备语音服务）、资料集超预算时的 FTS 检索增强（用现有 `src/core/search/`）。
+
+26. **小记标签管理（261023 调研 → 261024 落地）**：调研见 `docs/QUICK-NOTES-FLOMO-BENCHMARK.md`；**已按用户 261024 口径实现**：独立标签表 + `.qnote` v3（tagIds）+ Manifest 可选 tags（LWW/墓碑）+ 桌面标签管理（重命名/合并/删除/置顶/排序）+ 快捷筛选（时间/自定日期/标签包含排除）。删除标签只移除引用、不删小记。**移动端**：标签表/仓储/选择器已按 ID 改造，**管理页尚未做**（后续接入口）。旧 APK 读不了 v3 小记，两端需同批升级。详见 §0 本批。
+
 ## 4. 关键坑（长期有效）
 
 ### 同步 / 数据
@@ -667,6 +1056,14 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 
 ## 7. 文档索引（`docs/` 按需查）
 - **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 V1 重置）· `S3-GC-DESIGN.md`（存储/删除 GC）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
+- **S3 清单规模**：`S3-MANIFEST-SCALE-RESEARCH.md`（20MB 上限实测、条目瘦身、分片、墓碑退役最小条件；配套 `S3-GC-DESIGN.md` §7）。
+- **S3 重设计**：`S3-REDESIGN.md`（2 万/20 万目标；当前状态 + 设备基线 + 锁；永久删除零痕迹；迁移/验收）。
+- **S3 v3 实施报告**：`S3-V3-IMPLEMENTATION-REPORT.md`（协议/运行时/bug 修复/上生产缺口）。
+- **S3 v3 最终对比与测试报告**：`S3-V3-FINAL-REPORT.md`（4 桌面真实 UI、master A/B、真实 S3 规模、B14 P0、移动端缺口）。
+- **S3 v3 生产化收口报告**：`S3-V3-PRODUCTION-REPORT.md`（6 端并发/容量三拐点/标签通用化/上线判定）。
+- **S3 v3 转正/切换**：`S3-V3-CUTOVER.md`（桌面文档默认 v3、回滚、sync_state 删除条件）。
+- **S3 v3 并发/容量/Review/标签设计**：`S3-V3-CONCURRENCY.md`、`S3-V3-CAPACITY.md`、`S3-V3-CODE-REVIEW.md`、`TAG-SYSTEM-DESIGN.md`。
+- **同类软件同步**：`SYNC-APPROACHES-SURVEY.md`（网盘/条目/快照/服务端四派对照，大白话）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）。
 - **表格（usheet / Univer）**：`USHEET-UPGRADE.md`（内核触点清单 + 依赖升级 playbook + 路线图；配套 `src/features/usheet/usheetKernelContract.ts` · `univerContract.test.ts` · `scripts/usheet-kernel-probes.mjs`）。
 - **正文写入（写 `.lake` 前必读）**：`LAKE-CONTENT-WRITING.md`（约定 + 反例 + 校验判据；配套 `src/core/lakeDocForm.ts` 与 `scripts/lake-roundtrip-check.mjs`）。

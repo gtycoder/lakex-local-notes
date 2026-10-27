@@ -34,7 +34,7 @@ export class SchemaInit {
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT,
         sort_order INTEGER NOT NULL, updated_at TEXT NOT NULL,
-        sync_state TEXT NOT NULL DEFAULT 'local', is_conflict INTEGER NOT NULL DEFAULT 0,
+        is_conflict INTEGER NOT NULL DEFAULT 0,
         deleted_at TEXT,
         kind TEXT NOT NULL DEFAULT 'doc',
         is_locked INTEGER NOT NULL DEFAULT 0,
@@ -43,7 +43,10 @@ export class SchemaInit {
         text_cache TEXT,
         restore_pending_at TEXT,
         trashed_at TEXT,
-        deleted_from_parent_id TEXT
+        deleted_from_parent_id TEXT,
+        is_purged INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 0,
+        cloud_deleted INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -52,10 +55,13 @@ export class SchemaInit {
         node_type TEXT NOT NULL CHECK(node_type IN ('notebook','group','note')),
         title TEXT NOT NULL, note_file_id TEXT, sort_order INTEGER NOT NULL,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
-        sync_state TEXT NOT NULL DEFAULT 'local', is_conflict INTEGER NOT NULL DEFAULT 0,
+        is_conflict INTEGER NOT NULL DEFAULT 0,
         icon TEXT,
         trashed_at TEXT,
         deleted_from_parent_id TEXT,
+        is_purged INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 0,
+        cloud_deleted INTEGER NOT NULL DEFAULT 0,
         CHECK((node_type IN ('notebook','group') AND note_file_id IS NULL) OR (node_type = 'note' AND note_file_id IS NOT NULL))
       );
       CREATE INDEX IF NOT EXISTS idx_tree_nodes_parent ON tree_nodes(workspace_id,parent_id,deleted_at,sort_order);
@@ -138,17 +144,37 @@ export class SchemaInit {
     );
     this.ctx.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
 
+    // 轻量列迁移：不写历史数据兼容，只补新列默认值（旧值由调用方决定）。
+    for (const [table, column, ddl] of [
+      ["notes", "is_purged", "ALTER TABLE notes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],
+      ["tree_nodes", "is_purged", "ALTER TABLE tree_nodes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],
+      ["notes", "is_dirty", "ALTER TABLE notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"],
+      ["tree_nodes", "is_dirty", "ALTER TABLE tree_nodes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"],
+      // v3 remotePurged（远端已彻底删除、本机保留回收站副本）的 UI 标记；独立于 is_purged
+      //（is_purged = 本地/他端彻底删除的抑制位，cloud_deleted = 「云端已删除 · 仅本地」）。
+      ["notes", "cloud_deleted", "ALTER TABLE notes ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0"],
+      ["tree_nodes", "cloud_deleted", "ALTER TABLE tree_nodes ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0"],
+    ] as const) {
+      const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);
+    }
+    // 迁移：sync_state 已由 is_dirty/is_purged 替代；先删旧触发器再删列（无数据回填）。
+    for (const table of ["notes", "tree_nodes"] as const) {
+      this.ctx.db.exec(`DROP TRIGGER IF EXISTS ${table}_dirty_insert; DROP TRIGGER IF EXISTS ${table}_dirty_update; DROP TRIGGER IF EXISTS ${table}_clean_synced; DROP TRIGGER IF EXISTS ${table}_clean_purged;`);
+      const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
+      if (cols.some((c) => c.name === "sync_state")) this.ctx.db.exec("ALTER TABLE " + table + " DROP COLUMN sync_state");
+    }
     const now = nowIso();
     // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除。唯一机制容器，不可删。
-    this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-      VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'synced',0)`).run(this.ctx.trashNotebookId, this.ctx.workspaceId, null, "notebook", "回收站", now, now);
+    this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict)
+      VALUES(?,?,?,?,?,NULL,0,?,?,NULL,0,0)`).run(this.ctx.trashNotebookId, this.ctx.workspaceId, null, "notebook", "回收站", now, now);
     // 种子笔记本：仅全新库首次初始化自动创建一个普通笔记本（固定 ID 仅为多端首启同步一致）。
     // 行为与用户手动创建的笔记本完全相同——可删/改名/purge、无任何默认/特殊地位；
     // seed_initialized 标记保证用户删除（含 purge）后**不复活**。
     const seeded = this.ctx.db.prepare("SELECT value FROM device_state WHERE key='seed_initialized'").get() as { value: string } | undefined;
     if (!seeded) {
-      this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-        VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(this.ctx.defaultNotebookId, this.ctx.workspaceId, null, "notebook", "个人笔记", now, now);
+      this.ctx.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict)
+        VALUES(?,?,?,?,?,NULL,0,?,?,NULL,1,0)`).run(this.ctx.defaultNotebookId, this.ctx.workspaceId, null, "notebook", "个人笔记", now, now);
 
       this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('seed_initialized','1')").run();
     }
@@ -164,9 +190,9 @@ export class SchemaInit {
       const sortOrder = this.ctx.nextSortOrder(parent);
       const content = WELCOME_NOTE_BODY;
       const tx = this.ctx.db.transaction(() => {
-        this.ctx.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
+        this.ctx.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty) VALUES(?,?,?,?,?,1)")
           .run(id, "欢迎来到 LocalLakexNotes", parent, sortOrder, updatedAt);
-        this.ctx.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
+        this.ctx.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,1,0)")
           .run(id, this.ctx.workspaceId, parent, "欢迎来到 LocalLakexNotes", id, sortOrder, updatedAt, updatedAt);
         this.ctx.atomicWrite(this.ctx.notePathFor(id), content);
       });

@@ -10,6 +10,7 @@ import { createStoreSyncPort } from "./syncAdapters.js";
 import { DraftJournal, draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
+import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
@@ -97,7 +98,7 @@ describe("笔记创建 / 读取 / 保存", () => {
   it("createNote 写入 .lake 文件 + DB + 树节点", () => {
     const note = store.createNote("标题A");
     expect(note.parentId).toBe("notebook-personal");
-    expect(note.syncState).toBe("local");
+    expect(note.isDirty).toBe(true);
     expect(fs.existsSync(path.join(dir, "notes", `${note.id}.lake`))).toBe(true);
     const tree = store.listTreeNodes().find((n) => n.id === note.id);
     expect(tree?.nodeType).toBe("note");
@@ -241,14 +242,14 @@ describe("目录树操作", () => {
   it("重复保存同一正文只更新派生缓存，不产生新的同步修改", () => {
     const note = store.createNote("幂等保存");
     const first = store.saveNote(note.id, "幂等保存", "<p>same</p>", { markdown: "same", plain: "same" });
-    expect(store.readNote(note.id).syncState).toBe("local");
+    expect(store.readNote(note.id).isDirty).toBe(true);
     // 先模拟已经同步，第二次相同保存不应重新标记 local 或更新时间。
-    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
-    (store as any).db.prepare("UPDATE tree_nodes SET sync_state='synced' WHERE note_file_id=?").run(note.id);
+    (store as any).db.prepare("UPDATE notes SET is_dirty=0 WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id=?").run(note.id);
     const before = store.readNote(note.id);
     const second = store.saveNote(note.id, "幂等保存", "<p>same</p>", { markdown: "same", plain: "same" });
     expect(second.updatedAt).toBe(before.updatedAt);
-    expect(store.readNote(note.id).syncState).toBe("synced");
+    expect(store.readNote(note.id).isDirty).toBeFalsy();
     expect(first.content).toBe(second.content);
   });
 
@@ -527,8 +528,8 @@ describe("目录树操作", () => {
     store.saveNote(note.id, "待编辑", "<p>v1</p>");
     store.deleteTreeNode(note.id); // 进回收站
     // 模拟"他端已 purge、本端保留"：标 purged（applyRemotePurge 的等价状态）
-    (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
-    (store as any).db.prepare("UPDATE tree_nodes SET sync_state='purged' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE notes SET is_purged=1,is_dirty=0 WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE tree_nodes SET is_purged=1,is_dirty=0 WHERE id=?").run(note.id);
     // 审计 F04：普通保存不再"编辑即恢复"——明确拒绝，且不改写正文/生命周期
     expect(() => store.saveNote(note.id, "待编辑", "<p>隐式恢复版</p>")).toThrow();
     const stillTrashed = store.listNotesForSync().find((n) => n.id === note.id)!;
@@ -555,17 +556,17 @@ describe("目录树操作", () => {
     // 元数据写边界 fail-closed：不再"编辑即隐式恢复"
     expect(() => store.renameTreeNode(note.id, "改名")).toThrow(/回收站|已删除/);
     expect(() => store.setNodeIcon(note.id, "star")).toThrow(/回收站|已删除/);
-    expect(() => store.setNoteLocked(note.id, true)).toThrow(/回收站|已删除/);
+    expect(() => store.setNoteEditLocked(note.id, true)).toThrow(/回收站|已删除/);
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("原标题");
     // 他端已 purge、本端保留副本：同样拒绝
-    (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
-    (store as any).db.prepare("UPDATE tree_nodes SET sync_state='purged' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE notes SET is_purged=1,is_dirty=0 WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE tree_nodes SET is_purged=1,is_dirty=0 WHERE id=?").run(note.id);
     expect(() => store.renameTreeNode(note.id, "改名2")).toThrow(/回收站|已删除/);
     // 显式恢复（唯一例外）后三个入口都能写
     store.restoreTrashItem(note.id);
     expect(store.renameTreeNode(note.id, "恢复后名").title).toBe("恢复后名");
     expect(store.setNodeIcon(note.id, "star").icon).toBe("star");
-    store.setNoteLocked(note.id, true);
+    store.setNoteEditLocked(note.id, true);
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.title).toBe("恢复后名");
   });
 
@@ -727,7 +728,7 @@ describe("目录树操作", () => {
     expect(store.listFoldersForSync().some((f) => f.id === "notebook-trash")).toBe(false);
   });
 
-  it("回收站自动过期：trashed_at 超期条目自动 purge（默认 60 天可配）", () => {
+  it("回收站自动过期：trashed_at 超期条目自动 purge（可配天数）", () => {
     const nb = store.createNotebook("待过期");
     const note = store.createNoteIn(nb.id, "子笔记");
     store.saveNote(note.id, "子笔记", "<p>内容</p>");
@@ -853,7 +854,7 @@ describe("文档历史（快照，纯本地）", () => {
     // 缓存更新（可搜索）
     expect(store.searchNotes("北斗七星").some((h) => h.id === id)).toBe(true);
     // P0-1（S3-GC v4 §5.2）：恢复后保持恢复前 base，仅标 local 待上传
-    expect(store.readNote(id).syncState).toBe("local");
+    expect(store.readNote(id).isDirty).toBe(true);
     // 恢复前留档：版本2 已在历史（去重后不新增重复快照，但版本2 快照本身可反悔）
     const after = store.listNoteHistory(id);
     expect(after.some((h) => h.contentHash !== v1.contentHash)).toBe(true);
@@ -912,7 +913,7 @@ describe("文档历史（快照，纯本地）", () => {
     // P0-1（S3-GC v4 §5.2）：恢复后保持恢复前 base/lastUploaded，仅标 local 待上传
     expect(store.baseHash(id)).toBe(v2hash);
     expect(store.lastUploadedHash(id)).toBe(v2hash);
-    expect(store.readNote(id).syncState).toBe("local");
+    expect(store.readNote(id).isDirty).toBe(true);
   });
 
   it("deleteHistory 删除快照文件 + DB 记录", () => {
@@ -1544,7 +1545,7 @@ describe("同步状态 / 导入", () => {
     const nb = store.createNotebook("体检-哈希口径");
     const note = store.createNoteIn(nb.id, "体检-改过未传");
     store.saveNote(note.id, "体检-改过未传", "<p>v1</p>");
-    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE notes SET is_dirty=0 WHERE id=?").run(note.id);
     (store as any).db.prepare("INSERT INTO sync_base(note_id,content_hash) VALUES(?,?)")
       .run(note.id, (require("node:crypto") as typeof import("node:crypto")).createHash("sha256").update(fs.readFileSync(path.join(dir, "notes", note.id + ".lake"))).digest("hex"));
     expect(store.runDataHealthCheck().notesHashMismatch).toHaveLength(0);
@@ -1552,7 +1553,7 @@ describe("同步状态 / 导入", () => {
     store.saveNote(note.id, "体检-改过未传", "<p>v2</p>");
     expect(store.runDataHealthCheck().notesHashMismatch).toHaveLength(0);
     // 真被外部改动（synced 但盘上内容变了）→ 必须报
-    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE notes SET is_dirty=0 WHERE id=?").run(note.id);
     fs.writeFileSync(path.join(dir, "notes", note.id + ".lake"), "<p>外部篡改</p>");
     expect(store.runDataHealthCheck().notesHashMismatch.map((m) => m.id)).toContain(note.id);
   });
@@ -1644,11 +1645,11 @@ describe("同步状态 / 导入", () => {
   });
 
   it("importRemoteNote 同步下载后即生成缓存+FTS（锁定+从未编辑的新设备也能搜到正文）", () => {
-    // 模拟新设备同步到一篇"锁定且从未编辑"的文档（同步带 isLocked，正文为 .lake）
+    // 模拟新设备同步到一篇"锁定且从未编辑"的文档（同步带 isEditLocked，正文为 .lake）
     const note = {
       id: "remote-locked-1", title: "远程锁定文档", parentId: "notebook-personal", sortOrder: 6,
       updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false,
-      isLocked: true, lockedAt: "2026-08-02T00:00:00.000Z",
+      isEditLocked: true, editLockedAt: "2026-08-02T00:00:00.000Z",
     };
     const lakeHtml = '<p><span>这篇文档的正文里有一个独特关键词：北斗七星阵</span></p>';
     store.importRemoteNote(note, Buffer.from(lakeHtml), []);
@@ -1660,7 +1661,7 @@ describe("同步状态 / 导入", () => {
     const hits = store.searchNotes("北斗七星阵");
     expect(hits.some((h) => h.id === "remote-locked-1")).toBe(true);
     // 3) 锁状态正确带下来
-    expect(store.listNotesForSync().find((n) => n.id === "remote-locked-1")?.isLocked).toBe(true);
+    expect(store.listNotesForSync().find((n) => n.id === "remote-locked-1")?.isEditLocked).toBe(true);
   });
 
   it("rebuildSearchIndex 对无缓存文档从磁盘兜底生成缓存并重建 FTS", () => {
@@ -2051,13 +2052,13 @@ describe("R1：零变更早退 group-only 判定（红测试：现状 hasLocalPe
 describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", () => {
   function snapshotOf(noteId: string): {
     contentHash: string; updatedAt: string; title: string; parentId: string | null;
-    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+    sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   } {
     const n = store.listNotesForSync().find((x) => x.id === noteId)!;
     return {
       contentHash: store.contentHash(noteId), updatedAt: n.updatedAt, title: n.title,
-      parentId: n.parentId, sortOrder: n.sortOrder, isLocked: !!n.isLocked,
-      lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
+      parentId: n.parentId, sortOrder: n.sortOrder, isEditLocked: !!n.isEditLocked,
+      editLockedAt: n.editLockedAt ?? null, icon: n.icon ?? null,
     };
   }
 
@@ -2176,7 +2177,7 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
     const hash1 = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
     store.setBaseHash(note.id, hash1);
     // 只有"自认已与云端一致"（synced）的笔记才比对基线：本地已编辑待上传时 hash 必然不同，属正常
-    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE notes SET is_dirty=0 WHERE id=?").run(note.id);
     // 用脏内容覆盖 .lake → hash 不符
     fs.writeFileSync(lakePath, "<p>corrupted</p>");
     let r = store.runDataHealthCheck();
@@ -2219,5 +2220,56 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
     fs.writeFileSync(path.join(assetsDir, refName), "refdata");
     const r2 = store.runDataHealthCheck();
     expect(r2.refsMissingResource.some((x) => x.noteId === note.id && x.filename === refName)).toBe(false);
+  });
+});
+
+describe("手动删数据（正文文件缺失）的处置", () => {
+  it("readNote 不抛 ENOENT：返回 bodyMissing + 空正文，isNoteBodyMissing=true", () => {
+    const note = store.createNote("缺正文");
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", note.id)));
+    expect(store.isNoteBodyMissing(note.id)).toBe(true);
+    const doc = store.readNote(note.id);
+    expect(doc.bodyMissing).toBe(true);
+    expect(doc.content).toBe("");
+    expect(doc.title).toBe(note.title);
+  });
+
+  it("正常文档不带 bodyMissing（不改变既有路径）", () => {
+    const note = store.createNote("正常");
+    const doc = store.readNote(note.id);
+    expect(doc.bodyMissing).toBeUndefined();
+    expect(doc.content.length).toBeGreaterThan(0);
+    expect(store.isNoteBodyMissing(note.id)).toBe(false);
+  });
+});
+
+describe("缺正文文档清单与彻底删除（资源页 261023）", () => {
+  it("listMissingBodies：只列正文缺失的文档，带历史快照与可恢复性", () => {
+    const withHistory = store.createNote("有历史");
+    store.createHistorySnapshot(withHistory.id, "<p>v1</p><p><br></p>");
+    const plain = store.createNote("无历史");
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", withHistory.id)));
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", plain.id)));
+    const rows = store.listMissingBodies();
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(withHistory.id)?.recovery).toBe("history");
+    expect(byId.get(withHistory.id)?.historyCount).toBeGreaterThanOrEqual(1);
+    expect(byId.get(withHistory.id)?.lastHistoryId).not.toBeNull();
+    expect(byId.get(plain.id)?.recovery).toBe("none");
+    const normal = store.createNote("正常");
+    expect(store.listMissingBodies().some((r) => r.id === normal.id)).toBe(false);
+  });
+
+  it("purgeMissingBodyNote：移入回收站后彻底删除，并写墓碑（不会复活）", () => {
+    const note = store.createNote("待删");
+    fs.rmSync(path.join(dir, noteBodyRelativePath("doc", note.id)));
+    store.purgeMissingBodyNote(note.id);
+    expect(store.listMissingBodies().some((r) => r.id === note.id)).toBe(false);
+    expect(() => store.readNote(note.id)).toThrow();
+    const db = new Database(path.join(dir, "metadata.sqlite3"), { readonly: true });
+    try {
+      const row = db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE id=?").get(note.id) as { c: number };
+      expect(row.c).toBe(1);
+    } finally { db.close(); }
   });
 });

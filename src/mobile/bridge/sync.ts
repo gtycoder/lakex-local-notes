@@ -1,24 +1,29 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listAssetKeysFs } from "../native/assetFs";
-import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncReport } from "../../core/syncEngine.js";
-import { buildGcKeepSet } from "../../core/gcDecisions.js";
-import { normalizeEndpoint, parseLakeManifest, objectKey, validateS3Settings } from "../../core/syncUtils.js";
-import type { Manifest } from "../../core/manifestTypes.js";
-import { maintenanceQueue } from "../sync/maintenanceLocks";
-import type { QuickNotesSyncResult } from "../../core/quickNotesSyncEngine.js";
-import { syncQuickNotesViaEngine } from "../../core/quickNotesSyncEngine.js";
-import { createCapacitorS3Store } from "../native/s3Store";
+import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs, listQuickNoteAssetKeysFs } from "../native/assetFs";
+import type { SyncReport } from "../../core/syncEngineTypes.js";
+import { backfillV3Assets, type AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";
+import { createMobileS3v3Remote } from "../v3/s3v3Remote.js";
+import { normalizeEndpoint, validateS3Settings } from "../../core/syncUtils.js";
+import type { QuickNotesSyncResult } from "../../core/quickNoteSyncTypes.js";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "../../core/cloudState.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
-import { pushQuickNote, type QuickNotePushOutcome } from "../../core/quickNotePush.js";
-import { createQuickNotesSyncDbPort } from "../data/quickNotesDbPort.js";
+import type { QuickNotePushOutcome } from "../../core/quickNoteSyncTypes.js";
 import { mobileSecretStore } from "../native/secretStore.js";
 import { writeSyncStatus } from "../sync/syncStatusStore";
 import * as gcRepository from "../data/gcRepository.js";
-import * as historyRepository from "../data/historyRepository.js";
 import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
-import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, assets, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
+import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
+import { resolveDeferAssets } from "../sync/deferAssetsDefault";
 import { reconcileIndex } from "../data/searchIndex.js";
+import { backfillTextCache } from "../data/textCacheBackfill.js";
+import { loadV3State } from "../data/v3StateRepository.js";
+import { MobileDeviceStore } from "../v3/mobileDeviceStore.js";
+import { declarationKey, assetKey, quickNoteAssetKey } from "../../core/s3v3Keys.js";
+import { validateAssetDeclaration, type AssetDeclaration } from "../../core/s3v3Index.js";
+import { runTransferPipeline } from "../../core/s3v3Transfer.js";
+import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
+import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
+import { clearSyncInterrupted, markSyncInterrupted } from "../sync/syncResumeMarker";
 
 export interface MobileSyncResult {
   message: string;
@@ -26,6 +31,12 @@ export interface MobileSyncResult {
   quickNotes: QuickNotesSyncResult | { error: string } | null;
   /** 同步收尾对账搜索索引的耗时（ms）；移动端性能专项观测用。 */
   indexMs?: number;
+  /** v3 结构化警告（缺正文/资源缺失等；与桌面 SyncResult.warnings 同构，供 UI 展示）。 */
+  warnings?: import("../../lib/types").SyncWarning[];
+  /** 本轮被远端覆盖、已强制留档的文档（对齐桌面 SyncResult.supersededNotes）。 */
+  supersededNotes?: Array<{ id: string; title: string }>;
+  /** 阶段耗时（load-state、read-index、downloads、uploads、publish、pending、total），供设置页诊断展示。 */
+  progress?: Array<{ phase: string; ms: number }>;
 }
 
 /** 云端状态（单一判据，与桌面同源 src/core/cloudState）：没配置 或 关闭云同步 ⇒ 一律不出网。 */
@@ -34,76 +45,188 @@ export async function mobileCloudState(): Promise<CloudState> {
   return cloudStateOf(Boolean(cfg), readSyncSettings());
 }
 /** 下载这些笔记的已声明资产（best-effort）；失败不阻断调用方（恢复/预览红线）。
+ * v3 原生路径（261026 parity B6）：pointer→索引→该篇 assetsHash→声明对象→本地差集下载，
+ * 旧实现读的 declared_assets 表在 v3 下永远为空（空操作）。
  * @param onlyMissing true = 只补本地缺失的资源（预览用）；false = 强拉全量（恢复用） */
-export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false): Promise<void> {
-  if (noteIds.length === 0) return;
+/** 本地资产存储键（261027）：文档 = {id}/{file}；小记 = quick-notes/{id}/{file}（assetFs 再映射到物理目录）。 */
+export function assetLocalKey(space: "lake" | "quickNotes", id: string, filename: string): string {
+  return space === "quickNotes" ? "quick-notes/" + id + "/" + filename : id + "/" + filename;
+}
+
+export async function downloadDeclaredAssetsFor(
+  noteIds: string[],
+  onlyMissing = false,
+  space: "lake" | "quickNotes" = "lake",
+): Promise<{ downloaded: number; failed: number }> {
+  const totals = { downloaded: 0, failed: 0 };
+  if (noteIds.length === 0) return totals;
   try {
     // 单一判据：没配置 或 关闭云同步 ⇒ **一个请求都不发**（用户 261006：关闭云同步 = 离线本地空间）
     const state = await mobileCloudState();
-    if (!canTouchNetwork(state)) { console.info(`[asset] 跳过补拉（${state}）`); return; }
+    if (!canTouchNetwork(state)) { console.info(`[asset] 跳过补拉（${state}）`); return totals; }
     const cfg = await syncDomain.getS3Settings();
-    if (!cfg) return;
-    const syncCfg: SyncConfig = {
-      endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket,
-      accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix,
-    };
-    const s3Store = createCapacitorS3Store(syncCfg);
-    const report: SyncReport = {
-      pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
-      warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
-      trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
+    if (!cfg) return totals;
+    const remote = createMobileS3v3Remote(cfg);
+    // 261027：同一份补拉逻辑同时服务文档与小记（小记资源键前缀 quick-notes/{id}/，物理在 quick-notes/assets/）。
+    const prefixOf = (id: string): string => assetLocalKey(space, id, "").slice(0, -1) + "/";
+    const port: AssetBackfillPort = {
+      listLocal: async (id) => {
+        const prefix = prefixOf(id);
+        const keys = await (space === "quickNotes" ? listQuickNoteAssetKeysFs(id) : listNoteAssetKeysFs(id));
+        return keys.map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k));
+      },
+      readLocal: async (id, filename) => loadAssetBytesFs(assetLocalKey(space, id, filename)),
+      writeLocal: async (id, filename, bytes) => saveAssetBytesFs(assetLocalKey(space, id, filename), bytes),
     };
     for (const noteId of noteIds) {
-      let assets = typeof dbPort.listDeclaredAssets === "function" ? await dbPort.listDeclaredAssets(noteId) : [];
-      if (onlyMissing && assets.length > 0) {
-        const local = new Set((await dbPort.listLocalAssets(noteId)).map((a) => a.filename));
-        assets = assets.filter((a) => !local.has(a.filename));
-      }
-      if (assets.length === 0) continue;
-      await downloadNoteAssets(syncCfg, s3Store, dbPort, noteId, assets, report, false);
+      const result = await backfillV3Assets(remote, space, noteId, port, { force: !onlyMissing });
+      totals.downloaded += result.downloaded;
+      totals.failed += result.failed.length;
+      if (result.warnings.length > 0) console.warn(`[asset] ${noteId} 补拉: ` + result.warnings.slice(0, 5).join(" | "));
+      console.info(`[asset] ${noteId} found=${result.found} down=${result.downloaded} skip=${result.skipped} missing=${result.missing.length} failed=${result.failed.length}`);
     }
   } catch (e) {
     console.warn("[asset] 资源下载失败（保留调用方，资源下次同步补拉）", e);
   }
+  return totals;
 }
 
-/** 单条推送的一次尝试（高优先域与"推送后回核"共用；云状态判据在调用方）。 */
+
+/**
+ * 原生快速补拉（261027 第二版）：声明并发取 + 原生 getToFile 直写 + 全局流水线 20 并发。
+ * 走的是 v3 同步同一条「字节不过桥」路径（device.assetNativePath + remote.getToFile），
+ * 比通用 backfill（JS 字节 + 写本地）快一个量级。只补本地缺失的文件名（同名坏文件由同步/打开校验兜底）。
+ */
+export async function ensureAssetsNative(
+  noteIds: string[],
+  opts: { concurrency?: number; space?: "lake" | "quickNotes" } = {},
+): Promise<{ downloaded: number; failed: number; skipped: number }> {
+  const space = opts.space ?? "lake";
+  if (noteIds.length === 0) return { downloaded: 0, failed: 0, skipped: 0 };
+  const state = await mobileCloudState();
+  if (!canTouchNetwork(state)) return { downloaded: 0, failed: 0, skipped: noteIds.length };
+  const cfg = await syncDomain.getS3Settings();
+  if (!cfg) return { downloaded: 0, failed: 0, skipped: noteIds.length };
+  const d = await ensureDb();
+  const side = await loadV3State(d);
+  const ids = noteIds.filter((id) => side.assetsHash[id]);
+  const skipped = noteIds.length - ids.length;
+  if (ids.length === 0) return { downloaded: 0, failed: 0, skipped };
+  const remote = createMobileS3v3Remote(cfg);
+  const store = new MobileDeviceStore(d);
+  await store.init();
+
+  // 1) 声明并发取（小对象；8 并发足够）。
+  const decls = new Map<string, AssetDeclaration>();
+  await runTransferPipeline(ids.map((id) => ({ id, hash: side.assetsHash[id] })), 8, async (t) => {
+    const bytes = await remote.get(declarationKey(space, t.id, t.hash));
+    if (bytes) decls.set(t.id, validateAssetDeclaration(JSON.parse(new TextDecoder().decode(bytes))));
+    return 0;
+  });
+
+  // 2) 本地差集（一次原生 listAllAssets 后按篇缓存）。
+  const tasks: Array<{ noteId: string; filename: string; size: number; hash: string }> = [];
+  for (const id of ids) {
+    const decl = decls.get(id);
+    if (!decl) continue;
+    const local = new Set(space === "lake" ? await store.listAssets(id) : await store.listQuickAssets(id));
+    for (const a of decl.assets) if (!local.has(a.filename)) tasks.push({ noteId: id, filename: a.filename, size: a.size, hash: a.hash });
+  }
+  if (tasks.length === 0) return { downloaded: 0, failed: 0, skipped };
+
+  // 3) 原生流式下载 + 全局 20 并发（失败只影响该对象）。
+  const pipeline = await runTransferPipeline(tasks, opts.concurrency ?? 20, async (t) => {
+    const objectKey = space === "lake" ? assetKey(t.noteId, t.filename) : quickNoteAssetKey(t.noteId, t.filename);
+    if (remote.getToFile) {
+      try {
+        const dest = store.assetNativePathFor
+          ? await store.assetNativePathFor(space, t.noteId, t.filename)
+          : (space === "lake" && store.assetNativePath ? await store.assetNativePath(t.noteId, t.filename) : null);
+        if (dest) {
+          const status = await remote.getToFile(objectKey, dest, { size: t.size, sha256: t.hash });
+          if (status === "ok") return t.size;
+          if (status === "missing" || status === "corrupt") return 0;
+        }
+      } catch { /* 回退字节路径 */ }
+    }
+    const bytes = await remote.get(objectKey);
+    if (!bytes || bytes.length !== t.size) return 0;
+    if (space === "lake") await store.writeAsset(t.noteId, t.filename, bytes);
+    else await store.writeQuickAsset(t.noteId, t.filename, bytes);
+    return bytes.length;
+  });
+  return { downloaded: tasks.length - pipeline.errors.length, failed: pipeline.errors.length, skipped };
+}
+
+/**
+ * 关闭「按需下载附件」后的后台全量补齐（best-effort）。
+ * 261027：按 50 篇一组**多次**获取维护锁，而不是一口气占着 —— 否则用户此时打开文档
+ * （readNote 也要补该篇资产）会被整轮补齐堵住几分钟。每组之间锁释放，打开文档最多等一组。
+ */
+async function materializeAllDeclaredAssetsChunked(): Promise<void> {
+  const d = await ensureDb();
+  const side = await loadV3State(d);
+  const ids = Object.keys(side.assetsHash ?? {});
+  if (ids.length === 0) return;
+  let downloaded = 0;
+  let failed = 0;
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const result = await runMaintenance("ensureTrashNoteAssets", () => ensureAssetsNative(chunk, { concurrency: 20 }));
+    downloaded += result.downloaded;
+    failed += result.failed;
+  }
+  console.info("[asset] 关闭按需后补齐完成: " + JSON.stringify({ downloaded, failed, notes: ids.length }));
+}
+
+/** 单条推送（「保存并同步」；云状态判据在调用方）。
+ * v3 parity E2：只 upsert 这一条（其余条目/标签/墓碑云端逐字段不变）；
+ * 必须整轮的两条路径（云端无 pointer/无基线/不同代、远端墓碑未恢复）执行一次整轮并回传 full-sync。 */
 export async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutcome> {
   const cfg = await syncDomain.getS3Settings();
   if (!cfg) throw new Error("未配置 S3");
   try { assertS3Credentials(cfg); } catch (e) { throw new Error((e as Error).message); }
   const d = await ensureDb();
-  const syncCfg: SyncConfig = {
-    endpoint: cfg.endpoint,
-    region: cfg.region,
-    bucket: cfg.bucket,
-    accessKeyId: cfg.accessKeyId,
-    secretAccessKey: cfg.secretAccessKey,
-    prefix: cfg.prefix,
+  const result = await runMobileV3PushQuickNote(d, cfg, id);
+  if (result.status === "not-found") return { status: "not-found" };
+  if (result.status === "full-sync") {
+    const full = await runMobileV3Sync(d, cfg);
+    return {
+      status: "full-sync",
+      reason: result.reason === "remote-deleted" ? "remote-deleted" : "no-remote-manifest",
+      result: {
+        uploaded: full.uploadedNotes, downloaded: full.downloadedNotes, conflicts: 0,
+        manifestId: "v3-g" + full.generation, completedAt: new Date().toISOString(),
+      },
+    };
+  }
+  return {
+    status: "pushed",
+    uploadedContent: result.uploadedContent,
+    uploadedAssets: result.uploadedAssets,
+    unchanged: result.unchanged,
+    manifestId: "v3-g" + result.generation,
   };
-  return await pushQuickNote(syncCfg, createCapacitorS3Store(syncCfg), createQuickNotesSyncDbPort(d, {
-    assetBytes: assets,
-    saveAssetFile: saveAssetBytesFs,
-    loadAssetFile: loadAssetBytesFs,
-    removeAssetFile: removeAssetBytesFs,
-  }), id);
 }
 
-/**
- * 推送后回核（幂等；排**维护域队尾** ⇒ 任何在途/排队的整轮同步跑完之后才轮到它）：
- * 整轮同步若在"读到本地清单快照"之后才被我们插进来写清单，它落地时会把这一条覆盖掉；
- * 回核就是把那一条补回来（`pushQuickNote` 在远端缺该条时会重传，不缺则只读一次清单）。
- * 失败静默：下轮整轮同步仍会自愈（远端缺条目 ⇒ decideUpload 走 upload）。
- */
-export function scheduleQuickNoteVerify(id: string): void {
-  void maintenanceQueue.run("maintenance", async () => {
-    try {
-      if ((await mobileCloudState()) === "offline") return;
-      await pushSingleQuickNote(id);
-    } catch { /* 安全网失败：交给下轮整轮同步自愈 */ }
-  });
-}
 
+/** 派生搜索索引的后台重建（去抖、串行、失败静默；P0-5）。 */
+let searchReconcileTimer: ReturnType<typeof setTimeout> | null = null;
+let searchReconcileRunning = false;
+function scheduleSearchReconcile(db: import("../data/sqliteDb.js").MobileDb): void {
+  if (searchReconcileTimer) clearTimeout(searchReconcileTimer);
+  searchReconcileTimer = setTimeout(() => {
+    searchReconcileTimer = null;
+    if (searchReconcileRunning) return;
+    searchReconcileRunning = true;
+    // 261027：导入不再写 text_cache ⇒ 先后台补齐纯文本（分批、幂等续跑），再建 FTS。
+    void backfillTextCache(db)
+      .catch((error) => console.warn("[sync] 后台 text_cache 补齐失败（下次同步再试）", error))
+      .then(() => reconcileIndex(db))
+      .catch((error) => console.warn("[sync] 后台搜索索引重建失败（下次同步再试）", error))
+      .finally(() => { searchReconcileRunning = false; });
+  }, 1500);
+}
 
 export const syncDomain = {
   async addS3GcPending(key: string): Promise<void> {
@@ -137,7 +260,14 @@ export const syncDomain = {
   },
 
   saveSyncSettings(next: SyncSettings): void {
+    const previous = readSyncSettings();
     writeLocalStorage(SYNC_STORAGE_KEY, JSON.stringify(next));
+    // 261027：从「按需」切回「全量」时，后台补齐所有已存在条目的缺失附件
+    //（增量同步只处理变更条目，不会碰它们；否则用户关掉按需也看不到老图）。
+    if (previous.deferAssets === true && next.deferAssets !== true) {
+      void materializeAllDeclaredAssetsChunked()
+        .catch((error) => console.warn("[asset] 关闭按需后补齐全部附件失败（打开文档/下次同步再补）", error));
+    }
   },
 
   async getS3Settings(): Promise<S3Settings | null> {
@@ -206,46 +336,17 @@ export const syncDomain = {
       const cfg = await syncDomain.getS3Settings();
       if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
       assertS3Credentials(cfg);
-      const syncCfg: SyncConfig = { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix };
-      const s3Store = createCapacitorS3Store(syncCfg);
-      if (!s3Store.listObjects || !s3Store.deleteMany) return { candidateCount: 0, deletedCount: 0, keys: [] };
-      // 从读清单到删对象、写 GC 日志，全段都在维护域内，禁止与 syncNow 交错。
-      const latestBytes = await s3Store.getObject(`${syncCfg.prefix}/manifests/latest.json`, { maxBytes: 20 * 1024 * 1024 });
-      if (!latestBytes) return { candidateCount: 0, deletedCount: 0, keys: [] }; // 无清单 → 不 GC（安全）
-      let manifest;
-      try { manifest = parseLakeManifest(latestBytes); } catch { return { candidateCount: 0, deletedCount: 0, keys: [] }; } // 清单损坏 → 不 GC
-      // prev 链引用保护（最多 3 层，对齐桌面 MANIFEST_CHAIN_KEEP）
-      const prevManifests: Manifest[] = [];
-      let prev = manifest.prevCommitId;
-      let chain = 0;
-      while (prev && chain < 3) {
-        const pb = await s3Store.getObject(`${syncCfg.prefix}/manifests/${prev}.json`, { maxBytes: 20 * 1024 * 1024 });
-        if (!pb) break;
-        try { const pm = parseLakeManifest(pb); prevManifests.push(pm); prev = pm.prevCommitId; } catch { break; }
-        chain += 1;
-      }
       const d = await ensureDb();
-      const keep = buildGcKeepSet({
-        manifest,
-        extraManifests: prevManifests,
-        prefix: syncCfg.prefix,
-        historyRefs: await historyRepository.historyAssetRefs(d),
+      // v3 原生清理（261026）：pointer→索引/声明→keep 集→deepCleanup（保留窗口 + 历史引用保护）。
+      // 旧实现读 manifests/latest.json，而 v3 永不写该清单 ⇒ 原逻辑恒返回 0（清理按钮点了没效果）。
+      const result = await runMobileV3DeepCleanup(d, {
+        endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket,
+        accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix,
       });
-      const pendingByKey = new Map((await syncDomain.listS3GcPending()).map((p) => [p.key, p.markedAt] as const));
-      const all = [...(await s3Store.listObjects(`${syncCfg.prefix}/objects/`)), ...(await s3Store.listObjects(`${syncCfg.prefix}/assets/`))];
-      const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天窗口
-      const toDelete: string[] = [];
-      for (const o of all) {
-        if (keep.has(o.key)) continue;
-        if (new Date(o.lastModified).getTime() > cutoff) continue; // 创建不足窗口 → 保护
-        const marked = pendingByKey.get(o.key);
-        if (marked && new Date(marked).getTime() > cutoff) continue; // 本机待回收标记但窗口未过 → 保护
-        toDelete.push(o.key);
+      for (const key of result.deleted) {
+        try { await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true); } catch { /* 日志失败不阻断 */ }
       }
-      const keys = toDelete;
-      const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
-      for (const key of keys) await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true);
-      return { candidateCount: all.length, deletedCount, keys };
+      return { candidateCount: result.deleted.length, deletedCount: result.deleted.length, keys: result.deleted };
     });
   },
 
@@ -259,96 +360,56 @@ export const syncDomain = {
   },
 
   async syncNow(): Promise<MobileSyncResult> {
-    // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面 runSync 同一判据）
+    // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面同一判据）。
     if ((await mobileCloudState()) === "offline") {
       return { message: cloudStateHint("offline") ?? "云同步已关闭", notes: null, quickNotes: null };
     }
     try {
+      beginSyncProgress();
+      // 断点续传：成功才清标记；失败/被杀保留 ⇒ 下次进入自动续上（261026）。
+      // 标记落 device_state（随 App 数据持久），localStorage 只作迁移兜底。
+      const resumeDb = await ensureDb();
+      await markSyncInterrupted(resumeDb);
       const result = await runMaintenance("syncNow", async () => {
-      const cfg = await syncDomain.getS3Settings();
-      if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
-      // 同步也走同一条"密钥缺失"提示（别让用户以为"同步失败"却看不出该重填密钥）。
-      try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
-      const d = await ensureDb();
-      const syncCfg: SyncConfig = {
-        endpoint: cfg.endpoint,
-        region: cfg.region,
-        bucket: cfg.bucket,
-        accessKeyId: cfg.accessKeyId,
-        secretAccessKey: cfg.secretAccessKey,
-        prefix: cfg.prefix,
-      };
-      const s3Store = createCapacitorS3Store(syncCfg);
-      const mobileDb = d;
-      const report = await runSync(syncCfg, s3Store, dbPort, {
-          onPublished: async (next, prev) => {
-            // GC 差集标记（对齐桌面 syncEngineController.onPublished）：新 manifest 不再引用的旧正文/资源 → 待回收。用 full key（含 prefix）与 gcDeepCleanup 一致。
-            try {
-              const newById = new Map(next.notes.map((n) => [n.id, n]));
-              for (const p of prev?.notes ?? []) {
-                if (p.deleted) continue;
-                const nx = newById.get(p.id);
-                if (!nx || nx.deleted) continue;
-                if (nx.contentHash !== p.contentHash) await gcRepository.addS3GcPending(mobileDb, `${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
-                const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
-                for (const asset of p.assets ?? []) {
-                  if (nextAssets.has(asset.filename)) continue;
-                  await gcRepository.addS3GcPending(mobileDb, `${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
-                }
-              }
-              const referencedNow = new Set<string>();
-              for (const note of next.notes) {
-                if (note.deleted) continue;
-                referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
-                for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
-              }
-              await gcRepository.removeS3GcPending(mobileDb, [...referencedNow]);
-            } catch { /* 不影响同步 */ }
-          },
+        const cfg = await syncDomain.getS3Settings();
+        if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
+        try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
+        const d = await ensureDb();
+        const progress: Array<{ phase: string; ms: number }> = [];
+        // 按需资产（P0-4）：设置里打开时首拉只搬正文/元数据，媒体打开/预览时补拉。
+        // 261027：全新设备（从未同步过且没存过设置）默认开，并立刻固化 → 打开文档时的按需补拉同样生效。
+        const resolved = await resolveDeferAssets(d);
+        if (resolved.defaulted) {
+          syncDomain.saveSyncSettings({ ...readSyncSettings(), deferAssets: true });
+          console.info("[sync] 新设备默认开启「按需下载附件」：首拉只同步正文/清单，媒体打开时补拉");
+        }
+        const deferAssets = resolved.deferAssets;
+        const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, {
+          onPhase: (phase, ms) => progress.push({ phase, ms }),
+          onProgress: (p) => pushSyncProgress(p),
+          ...(deferAssets ? { deferAssets: true } : {}),
         });
-        // 小记独立子空间同步（quick-notes/ 前缀，同一 S3 配置；墓碑/恢复/冲突语义与桌面一致）。
-        // 失败不拖垮笔记同步（对齐桌面 main.ts：quickNotes 错误单独上报）。
-        let quickNotes: QuickNotesSyncResult | { error: string };
-        let quickMsg = "；小记已同步";
-        try {
-          quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d, {
-            assetBytes: assets,
-            saveAssetFile: saveAssetBytesFs,
-            loadAssetFile: loadAssetBytesFs,
-            removeAssetFile: removeAssetBytesFs,
-          }));
-          if (quickNotes.uploaded + quickNotes.downloaded > 0) {
-            quickMsg = `；小记 ↓${quickNotes.downloaded} ↑${quickNotes.uploaded}`;
-          }
-        } catch (reason) {
-          quickNotes = { error: (reason as Error).message };
-          quickMsg = `；小记同步失败：${quickNotes.error}`;
-        }
-        // 清理可能部分成功；失败不拖垮同步，下一次同步继续按策略清理。
-        try {
-          const mobileDb = d;
-          await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
-        } catch {
-          // 清理失败不拖垮同步；下一次同步会继续按策略清理。
-        }
-      // 同步可能增删改文档：对账搜索索引（本地派生数据，随同步刷新）。
-      let indexMs = 0;
-      try {
-        const indexStart = Date.now();
-        await reconcileIndex(d);
-        indexMs = Date.now() - indexStart;
-        console.log(`[sync] reconcileIndex ms=${indexMs}`);
-      } catch { /* 索引对账失败不影响同步结果 */ }
-      return { message: report.message + quickMsg, notes: report, quickNotes, indexMs };
+        // P0-5：全文索引（text_cache/FTS reconcile）不进同步关键路径——首拉先把正文/行落库让文档可打开，
+        // 派生索引在后台队列构建（失败只影响搜索，不回滚同步结果）。
+        scheduleSearchReconcile(d);
+        const message = v3.warningDetails.length > 0
+          ? `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}（${v3.warningDetails.length} 项被跳过）`
+          : `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
+        return {
+          message, notes: null, quickNotes: null,
+          ...(v3.warningDetails.length > 0 ? { warnings: v3.warningDetails } : {}),
+          ...(v3.supersededNotes.length > 0 ? { supersededNotes: v3.supersededNotes } : {}),
+          progress,
+        };
       });
-      // 可观测性（用户 261013）：**每次尝试只写一处**，成功与否按"**真的跑了引擎**"判（notes 非 null）——
-      // 「未配置 S3」「密钥缺失」是正常返回（不抛错）但**没跑成**，必须记成失败，否则状态行会显示"同步成功：未配置 S3"（探针实测踩到）。
-      writeSyncStatus({ at: new Date().toISOString(), ok: result.notes !== null, message: result.message });
+      writeSyncStatus({ at: new Date().toISOString(), ok: true, message: result.message });
+      await clearSyncInterrupted(resumeDb);
       return result;
     } catch (error) {
-      // 引擎抛错（网络/协议）：记失败原因，错误照旧抛给调用方（它决定要不要 toast）
       writeSyncStatus({ at: new Date().toISOString(), ok: false, message: (error as Error)?.message ?? String(error) });
       throw error;
+    } finally {
+      endSyncProgress();
     }
   },
 

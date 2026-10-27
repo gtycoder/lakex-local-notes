@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="14px" height="14px" viewBox="0 0 14 14" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <g id="导航栏+卡片" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="更多菜单" transform="translate(-1197.000000, -285.000000)" stroke="#262626" stroke-width="1.25">
+            <g id="编组-12" transform="translate(1176.000000, 56.000000)">
+                <g id="编组-6" transform="translate(20.000000, 226.000000)">
+                    <g id="icon/复制" transform="translate(0.000000, 2.000000)">
+                        <rect id="矩形" x="6.125" y="2.375" width="7.5" height="7.5" rx="1.25"></rect>
+                        <path d="M9.875,9.83093488 L9.875,12.375 C9.875,13.0653559 9.31535594,13.625 8.625,13.625 L3.625,13.625 C2.93464406,13.625 2.375,13.0653559 2.375,12.375 L2.375,7.375 C2.375,6.68464406 2.93464406,6.125 3.625,6.125 L6.09999319,6.125" id="路径"></path>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

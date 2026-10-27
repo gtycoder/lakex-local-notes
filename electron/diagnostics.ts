@@ -104,7 +104,7 @@ export class Diagnostics {
     const checkedAt = new Date().toISOString();
     const notesMissingFile: Array<{ id: string; title: string }> = [];
     const notesHashMismatch: Array<{ id: string; title: string }> = [];
-    const noteRows = this.ctx.db.prepare("SELECT id,title,parent_id,sync_state FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(this.ctx.trashNotebookId) as Array<{ id: string; title: string; sync_state: string }>;
+    const noteRows = this.ctx.db.prepare("SELECT id,title,parent_id,is_dirty FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(this.ctx.trashNotebookId) as Array<{ id: string; title: string; is_dirty: number }>;
     for (const n of noteRows) {
       const lakePath = this.ctx.notePathFor(n.id);
       if (!fs.existsSync(lakePath)) {
@@ -114,7 +114,7 @@ export class Diagnostics {
       const base = this.ctx.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(n.id) as { content_hash: string } | undefined;
       // 只在"我们自认为与云端一致"（synced）时比对基线 hash：本地已编辑待上传（local）的正文
       // 与基线不同是**正常状态**，比了就是天天误报"可能被外部改动"，诊断就失去意义。
-      if (!base || n.sync_state !== "synced") continue; // 无基线/本地未上传 → 只查存在，不比 hash
+      if (!base || n.is_dirty === 1) continue; // 无基线/本地未上传 → 只查存在，不比 hash
       try {
         const diskHash = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
         if (diskHash !== base.content_hash) notesHashMismatch.push({ id: n.id, title: n.title });

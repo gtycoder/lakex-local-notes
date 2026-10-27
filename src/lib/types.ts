@@ -4,16 +4,23 @@ export interface NoteSummary {
   parentId: string | null;
   sortOrder: number;
   updatedAt: string;
-  syncState: "local" | "synced" | "conflict" | "purged";
+  /** 独立 purged 标记。 */
+  isPurged?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）。 */
+  cloudDeleted?: boolean;
+  /** UI 待同步标记（v3 发布成功后清 0；不参与同步正确性）。 */
+  isDirty?: boolean;
   isConflict: boolean;
-  isLocked?: boolean;
-  lockedAt?: string | null;
+  isEditLocked?: boolean;
+  editLockedAt?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。渲染层据此选择编辑器。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
 export interface NoteDocument extends NoteSummary {
   content: string;
+  /** 正文文件缺失（被手动删除等）：content 为空串；打开时按只读处理，同步不会上传空正文。 */
+  bodyMissing?: boolean;
 }
 
 /** 笔记的轻量状态摘要（同步后刷新打开 tab 用）。
@@ -43,9 +50,12 @@ export interface NoteInfo {
   cardStats: Array<{ key: string; label: string; count: number }>;
   createdAt: string | null;
   updatedAt: string;
-  syncState: string;
+  isDirty?: boolean;
+  isPurged?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
-  isLocked: boolean;
+  isEditLocked: boolean;
   lakePath: string;
   assetsDir: string;
   sizeBytes: number;
@@ -70,7 +80,10 @@ export interface TreeNode {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
-  syncState: NoteSummary["syncState"];
+  isPurged?: boolean;
+  isDirty?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
   icon?: string | null;
   description?: string | null;
@@ -91,6 +104,9 @@ export interface SyncSettings {
   enabled: boolean;
   autoMode: "interval" | "onOpenClose" | "manual";
   autoIntervalMinutes: number;
+  /** 按需资产（P0-4，261026）：首拉只同步 pointer/索引/正文，媒体字节打开/预览时补拉。
+   *  缺省 false（全量语义）；移动端从「按需下载附件」开关写入。 */
+  deferAssets?: boolean;
 }
 
 export interface S3GcSettings {
@@ -114,14 +130,17 @@ export interface S3GcLogItem {
 }
 export interface DeepCleanupResult {
   dryRun: boolean;
-  lake: { dryRun: boolean; candidateCount: number; deletedCount: number; keys: string[] };
-  quickNotes: { dryRun: boolean; candidateCount: number; deletedCount: number; keys: string[] };
+  /** v3 统一清理：本次删除/保留的对象 key。 */
+  deleted: string[];
+  kept: number;
 }
 export interface QuickNoteTrashItem {
   id: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string;
+  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
+  cloudDeleted?: boolean;
 }
 
 export interface S3Settings {
@@ -168,7 +187,15 @@ export interface QuickNotesSyncStatus {
 
 /** 同步警告：远端对象/资源缺失时「跳过受影响条目、不覆盖本地、其余继续」（V5 §5.5 B 方案）的结构化报告。
  *  由 core 直接产出（不再拼字符串让消费方正则反解）；UI 据此展示与点击定位。 */
-export type SyncWarningKind = "remote_incomplete" | "asset_missing";
+export type SyncWarningKind =
+  | "remote_incomplete"
+  | "asset_missing"
+  /** 本地正文文件缺失（被手动删除等），且没有可拉回的云端副本 ⇒ 跳过，不上传空正文。 */
+  | "local_body_missing"
+  /** 本地正文缺失但云端有副本：已自动拉回恢复。 */
+  | "local_body_restored"
+  /** 本地附件未落地/读不出（不是用户删除）⇒ 保留云端声明，避免误删云端附件。 */
+  | "asset_kept_remote";
 export interface SyncWarning {
   kind: SyncWarningKind;
   /** 受影响文档 id（能定位时）。 */
@@ -310,7 +337,9 @@ export interface QuickNoteContent {
   /** v2：内核形态正文（Lake HTML）。桌面编辑态由内核产出，其它入口由 text 合成。 */
   body: string;
   images: QuickNoteImage[];
-  /** 小记标签；随正文一起同步。 */
+  /** 读取模型：关联表里的标签 ID（标签目录/关联表是唯一事实，`.qnote` 不落盘标签）。 */
+  tagIds: string[];
+  /** 展示用标签名（由标签目录解析，不落盘）；与 tagIds 一一对应。 */
   tags: string[];
 }
 
@@ -336,8 +365,17 @@ export interface SaveQuickNoteInput {
   draftId: string;
   stagedImageIds: string[];
   retainedImageIds?: string[];
-  /** 标签名（顺序 = 最近添加在前）；缺省按空数组。 */
-  tags?: string[];
+}
+
+/** 小记标签目录实体（与 `core/quickNoteTags` 的 QuickNoteTag 对齐；IPC/manifest 共用）。 */
+export interface QuickNoteTag {
+  id: string;
+  name: string;
+  sortOrder: number;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 /** 关于页：主进程 get_system_info 的返回（只读概览）。 */

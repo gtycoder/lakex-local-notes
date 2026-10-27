@@ -212,6 +212,11 @@ describe("AI 文档全文上下文接线（261021 P1）", () => {
     expect(DIALOG).toContain("全文模式的结果不自动回写，请复制使用");
   });
 
+  it("开关只给无选区入口：有选区/图片/块上下文时整行不渲染（用户 261022）", () => {
+    expect(DIALOG).toContain("const selectionContext = selectionText.trim().length > 0 || hasImages;");
+    expect(DIALOG).toContain("noteId && !selectionContext && (");
+  });
+
   it("开关行复用 kit 的 .ln-switch，且带 aria-checked / 可见说明", () => {
     expect(DIALOG).toContain('className="ln-switch"');
     expect(DIALOG).toContain('role="switch"');

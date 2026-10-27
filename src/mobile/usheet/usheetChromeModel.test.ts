@@ -1,81 +1,100 @@
 import { describe, expect, it } from "vitest";
 import {
-  SHEET_CARD_META,
-  SHEET_TOOLBAR_GROUPS,
-  buildInsertMenu,
-  buildMoreRows,
-  buildNumfmtMenu,
+  SHEET_ALIGN_H,
+  SHEET_ALIGN_V,
+  SHEET_DATA_ROWS,
+  SHEET_DOCK_ITEMS,
+  SHEET_FILL_LIGHT,
+  SHEET_FILL_STRONG,
+  SHEET_FONT_COLORS,
+  SHEET_FONT_SIZES,
+  SHEET_FORMAT_TOGGLES,
+  SHEET_INSERTER_ACTIONS,
+  SHEET_INSERT_TILES,
+  SHEET_MORE_ROWS,
+  SHEET_PANEL_MIN_HEIGHT,
+  SHEET_VIEW_ROWS,
+  SHEET_ZOOM_LEVELS,
+  buildMoreSubMenu,
+  normalizeSheetColor,
   numfmtLabelOf,
+  sheetColorEquals,
+  sheetPanelNeedsFade,
 } from "./usheetChromeModel";
 
-const FMT = { bold: false, italic: false, underline: false, strike: false, align: "general" as const, numfmt: "" };
-
-describe("移动端表格 chrome 模型（261021：对齐语雀工具条）", () => {
-  it("一级工具条分组与顺序：插入 | 撤销 重做 格式刷 清除格式 | 数字格式 | 小数位 | 更多（语雀 §2.1，去掉保存位）", () => {
-    expect(SHEET_TOOLBAR_GROUPS.map((group) => group.map((item) => item.id))).toEqual([
-      ["insert"],
-      ["undo", "redo", "format-painter", "clear-style"],
-      ["numfmt"],
-      ["decimals"],
-      ["more"],
-    ]);
-    // 保存不在工具条（用户 261021 定稿：顶栏 ✓ 已是手动保存并退出编辑）。
-    expect(SHEET_TOOLBAR_GROUPS.flat().some((item) => item.label.includes("保存"))).toBe(false);
+describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock）", () => {
+  it("一级按钮顺序：插入 | T | 数据 | 视图 | 更多（撤销/重做/键盘由组件追加）", () => {
+    expect(SHEET_DOCK_ITEMS.map((item) => item.id)).toEqual(["insert", "format", "data", "view", "more"]);
+    expect(SHEET_DOCK_ITEMS.map((item) => item.label)).toEqual(["插入", "文字格式", "数据", "视图", "更多"]);
   });
 
-  it("插入卡保留我们自己的插行列/合并（语雀 App 没有）", () => {
-    expect(buildInsertMenu().map((item) => item.id)).toEqual(["row-above", "row-below", "col-left", "col-right", "merge"]);
+  it("插入：4 个插入行列动作 + 7 个白块（公式按用户要求移到更多）", () => {
+    expect(SHEET_INSERTER_ACTIONS.map((item) => item.id)).toEqual(["row-above", "row-below", "col-left", "col-right"]);
+    expect(SHEET_INSERT_TILES.map((item) => item.id)).toEqual(["image", "sign", "link", "date", "attachment", "chart", "comment"]);
+    expect(SHEET_INSERT_TILES.some((item) => item.label.includes("公式"))).toBe(false);
+    // 暂未支持的项置灰（不出现「点了没反应」的死按钮）；链接/日期可用。
+    expect(SHEET_INSERT_TILES.filter((item) => item.disabled).map((item) => item.id)).toEqual(["image", "sign", "attachment", "chart", "comment"]);
+    expect(SHEET_INSERT_TILES.find((item) => item.id === "link")?.disabled).toBeUndefined();
+    expect(SHEET_INSERT_TILES.find((item) => item.id === "date")?.disabled).toBeUndefined();
   });
 
-  it("⋯ 卡 = 语雀七行图标网格 + 我们自己的第八行；能力/置灰与子菜单齐备", () => {
-    const rows = buildMoreRows(FMT);
-    expect(rows.length).toBe(8);
-    const buttons = rows.flat();
-    const byId = new Map(buttons.map((button) => [button.id, button]));
-    for (const id of ["bold", "italic", "strike", "underline", "font-color", "fill-color", "align", "merge", "formula", "freeze"]) {
-      expect(byId.has(id)).toBe(true);
-    }
-    expect(byId.get("bold")?.active).toBe(false);
-    // 261021 P5：边框已接（子菜单 8 项，对齐语雀常用框线）。
-    expect(byId.get("border")?.disabled).toBeUndefined();
-    expect(byId.get("border")?.children?.map((item) => item.id)).toEqual([
-      "border-all", "border-outside", "border-inside", "border-top", "border-bottom", "border-left", "border-right", "border-none",
-    ]);
-    // 261021 P5：筛选/排序已接（不再是置灰占位）；排序用我们自己的子菜单。
-    expect(byId.get("filter")?.disabled).toBeUndefined();
-    // 261022 P1：超链接已接；十字高亮已接（纯视图 operation）。
-    expect(byId.get("link")?.disabled).toBeUndefined();
-    expect(byId.has("crosshair")).toBe(true);
-    expect(byId.get("crosshair")?.label).toBe("十字高亮");
-    expect(byId.get("conditional")?.disabled).toBe(true);
-    // 261021 P5：查找替换已接（基础层 + sheets 适配器；移动端用官方 mobile bar）。
-    expect(byId.get("find")?.disabled).toBeUndefined();
-    expect(byId.get("sort")?.children?.map((item) => item.id)).toEqual(["sort-asc", "sort-desc"]);
-    // 小数位按语雀分工：增已提到一级，「减」留在 ⋯ 卡第一行且现在可用。
-    expect(rows[0].map((button) => button.id)).toEqual(["decimal-down"]);
-    expect(byId.get("decimal-down")?.disabled).toBeUndefined();
-    expect(byId.has("decimal-up")).toBe(false);
-    expect(byId.get("freeze")?.children?.map((item) => item.id)).toEqual(["freeze-row", "freeze-col", "freeze-none"]);
-    expect(byId.get("row-height")?.children?.length).toBe(3);
-    expect(byId.get("delete-row")?.danger).toBe(true);
-    expect(byId.get("more-tools")?.id).toBe("more-tools");
-    // 261021 P4-2：二级选择器形态 —— 色板 / 图标行（语雀同款），其余保持列表。
-    expect(byId.get("font-color")?.childLayout).toBe("swatch");
-    expect(byId.get("fill-color")?.childLayout).toBe("swatch");
-    expect(byId.get("align")?.childLayout).toBe("icons");
-    expect(byId.get("freeze")?.childLayout).toBeUndefined();
-    expect(byId.get("formula")?.childLayout).toBeUndefined();
-    for (const item of byId.get("font-color")?.children ?? []) expect(item.swatch).toMatch(/^#[0-9a-f]{6}$/i);
-    for (const item of byId.get("align")?.children ?? []) expect(item.icon).toBeTruthy();
+  it("T 面板：B/I/S/U、水平/垂直对齐、字色 8、填充两行、字号 8 档", () => {
+    expect(SHEET_FORMAT_TOGGLES.map((item) => item.id)).toEqual(["bold", "italic", "underline", "strike"]);
+    expect(SHEET_ALIGN_H.map((item) => item.id)).toEqual(["left", "center", "right"]);
+    expect(SHEET_ALIGN_V.map((item) => item.id)).toEqual(["top", "middle", "bottom"]);
+    expect(SHEET_FONT_COLORS.length).toBe(8);
+    expect(SHEET_FONT_COLORS[0].value).toBe("");
+    for (const color of SHEET_FONT_COLORS.slice(1)) expect(color.value).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(SHEET_FILL_LIGHT[0].value).toBe("");
+    expect(SHEET_FILL_LIGHT.length).toBe(7);
+    expect(SHEET_FILL_STRONG.length).toBe(7);
+    expect(SHEET_FONT_SIZES).toEqual([14, 15, 16, 19, 22, 24, 29, 32]);
   });
 
-  it("数字格式卡：按类别分组、按当前 pattern 标「当前」，默认常规", () => {
+  it("数据 / 视图面板：先保留这些（含占位），视图比例三档", () => {
+    expect(SHEET_DATA_ROWS.map((row) => row.id)).toEqual(["sort-asc", "sort-desc", "filter", "find", "validation", "split"]);
+    expect(SHEET_DATA_ROWS.filter((row) => row.disabled).map((row) => row.id)).toEqual(["validation", "split"]);
+    expect(SHEET_VIEW_ROWS.map((row) => row.id)).toEqual(["freeze", "formview", "chartview"]);
+    expect(SHEET_VIEW_ROWS.filter((row) => row.disabled).map((row) => row.id)).toEqual(["formview", "chartview"]);
+    expect(SHEET_ZOOM_LEVELS.map((level) => level.value)).toEqual([1, 0.85, 1.15]);
+  });
+
+  it("更多：数字格式 / 边框 / 公式可下钻；条件格式置灰", () => {
+    expect(SHEET_MORE_ROWS.map((row) => row.id)).toEqual(["numfmt", "border", "formula", "merge", "painter", "clear", "conditional"]);
+    expect(SHEET_MORE_ROWS.find((row) => row.id === "conditional")?.disabled).toBe(true);
+    expect(buildMoreSubMenu("numfmt", "#,##0.00").find((item) => item.id === "numfmt-number")?.note).toBe("当前");
+    expect(buildMoreSubMenu("border").length).toBe(8);
+    expect(buildMoreSubMenu("formula").length).toBe(5);
     expect(numfmtLabelOf("")).toBe("常规");
-    expect(numfmtLabelOf("#,##0.00")).toBe("数字");
-    const items = buildNumfmtMenu("#,##0.00");
-    expect(items.filter((item) => item.header).map((item) => item.label)).toEqual(["通用", "数值", "日期时间"]);
-    expect(items.find((item) => item.id === "numfmt-number")?.note).toBe("当前");
-    expect(items.length).toBe(12);
-    expect(SHEET_CARD_META.more.width).toBe(232);
+  });
+
+  it("颜色归一化：hex 大小写 / rgb() / 空值都能比较（T 面板反显口径）", () => {
+    expect(normalizeSheetColor("#E5484D")).toBe("#e5484d");
+    expect(normalizeSheetColor("rgb(229, 72, 77)")).toBe("#e5484d");
+    expect(normalizeSheetColor("  ")).toBe("");
+    expect(normalizeSheetColor("#abc")).toBe("#aabbcc");
+    expect(sheetColorEquals("rgb(229, 72, 77)", "#e5484d")).toBe(true);
+    expect(sheetColorEquals("", "")).toBe(true);
+    expect(sheetColorEquals("#e5484d", "")).toBe(false);
+  });
+
+  it("面板下限高度放得下最高的常驻面板（更多 7 行 = 294；T = 300）", () => {
+    // 行高 40（border-box 含 1px 分隔）+ 内距 6+8 —— 与 usheet-chrome.css 的 .mb-usheet-row / .mb-usheet-panel__inner 对齐。
+    const moreContent = SHEET_MORE_ROWS.length * 40 + 14;
+    expect(moreContent).toBe(294);
+    expect(SHEET_PANEL_MIN_HEIGHT).toBe(300);
+    expect(SHEET_PANEL_MIN_HEIGHT).toBeGreaterThanOrEqual(moreContent);
+  });
+
+  it("面板渐隐判据：只有下方还有内容才提示，贴底/完全放得下都不提示", () => {
+    // 内容比可视区矮：不提示
+    expect(sheetPanelNeedsFade({ scrollTop: 0, clientHeight: 312, scrollHeight: 306 })).toBe(false);
+    // 溢出且未滚到底：提示
+    expect(sheetPanelNeedsFade({ scrollTop: 0, clientHeight: 312, scrollHeight: 354 })).toBe(true);
+    // 已滚到底（含 2px 亚像素容差）：不提示
+    expect(sheetPanelNeedsFade({ scrollTop: 42, clientHeight: 312, scrollHeight: 354 })).toBe(false);
+    expect(sheetPanelNeedsFade({ scrollTop: 41, clientHeight: 312, scrollHeight: 354 })).toBe(false);
+    // 还差 3px 到底：仍然提示
+    expect(sheetPanelNeedsFade({ scrollTop: 39, clientHeight: 312, scrollHeight: 354 })).toBe(true);
   });
 });

@@ -37,6 +37,8 @@ export interface TabInfo {
   deleted?: boolean;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  /** 正文文件缺失（被手动删除等）：渲染专用面板（只读、不挂编辑器、不弹 ENOENT）。 */
+  bodyMissing?: boolean;
 }
 
 interface MultiTabEditorProps {
@@ -70,6 +72,10 @@ interface MultiTabEditorProps {
   onEditorCapture?: (noteId: string, capture: (() => string | null) | null) => void;
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote?: (noteId: string) => void;
+  /** 「正文缺失」面板：打开该文档的历史版本（由上层接 HistoryPanel）。 */
+  onOpenHistory?: (noteId: string) => void;
+  /** 「正文缺失」面板：重新读取（同步把正文拉回来之后用）。 */
+  onRetryBody?: (noteId: string) => void;
   /** 顶栏左侧元素（工作空间/云同步），渲染在标签左侧，与多 tab 融合成一条顶栏 */
   topbarLeading?: ReactNode;
   /** 顶栏右侧元素（外观/更多），渲染在标签最右侧 */
@@ -93,6 +99,30 @@ interface MultiTabEditorProps {
   onSwapSplit?: () => void;
 }
 
+/**
+ * 「正文文件缺失」面板（261023）：不挂编辑器、不写盘、不弹 ENOENT。
+ * 处置出口：历史版本恢复 / 同步拉回后重新读取 / 关闭标签。
+ * 删除仍走目录右键（保持删除流程单一来源：确认框 + 回收站 + 墓碑 + 同步）。
+ */
+function MissingBodyPanel({ tab, onOpenHistory, onRetryBody, onTabClose }: {
+  tab: TabInfo;
+  onOpenHistory?: (noteId: string) => void;
+  onRetryBody?: (noteId: string) => void;
+  onTabClose: (noteId: string) => void;
+}) {
+  return (
+    <section className="empty-workspace" role="alert" aria-label="正文文件缺失">
+      <span className="empty-workspace-icon" aria-hidden="true"><File size={24} /></span>
+      <h2>《{tab.title || "无标题"}》的正文文件已丢失</h2>
+      <p className="empty-workspace-hint">可能是在磁盘上手动删除了对应文件。该文档已按只读处理：不会覆盖磁盘上的任何数据，也不会把空正文上传到云端。</p>
+      <p className="empty-workspace-hint">云端有副本时，下次同步会自动把正文拉回来（拉回后点「重新读取」）；也可以从历史版本恢复，或在左侧目录右键删除这篇文档。设置 →「文档与历史」→「数据体检（只读诊断）」可列出所有缺失项。</p>
+      <button type="button" className="ln-btn ln-btn--secondary" onClick={() => onOpenHistory?.(tab.noteId)} disabled={!onOpenHistory}>打开历史版本</button>
+      <button type="button" className="ln-btn ln-btn--secondary" onClick={() => onRetryBody?.(tab.noteId)} disabled={!onRetryBody}>重新读取</button>
+      <button type="button" className="ln-btn ln-btn--ghost" onClick={() => onTabClose(tab.noteId)}>关闭标签</button>
+    </section>
+  );
+}
+
 export function MultiTabEditor({
   tabs,
   activeNoteId,
@@ -113,6 +143,8 @@ export function MultiTabEditor({
   onEditorReady,
   onEditorCapture,
   onReloadNote,
+  onOpenHistory,
+  onRetryBody,
   onOpenTrash,
   topbarLeading,
   topbarTrailing,
@@ -636,7 +668,15 @@ export function MultiTabEditor({
           <p className="empty-workspace-hint">新建文档开始记录，或按 ⌘K 搜索已有笔记</p>
           {emptyAction}
         </section> : <Suspense fallback={<div className="empty-workspace-hint">正在加载表格编辑器…</div>}>{tabs.map((tab) => (
-          tab.kind === "usheet" ? (
+          tab.bodyMissing ? (
+            <MissingBodyPanel
+              key={"mb-" + tab.noteId}
+              tab={tab}
+              onOpenHistory={onOpenHistory}
+              onRetryBody={onRetryBody}
+              onTabClose={onTabClose}
+            />
+          ) : tab.kind === "usheet" ? (
             <EditorErrorBoundary key={"us-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <UniverSheetEditor
                 noteId={tab.noteId}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decideUpload, type UploadDecision } from "./decideUpload.js";
 
-/** 表驱动测试：Lake 与 Quick Notes 上传快路径判定（与 sync.ts / quickNotesSync.ts 一致）。 */
+/** 表驱动测试：Lake 与 Quick Notes 上传快路径判定（与旧 sync.ts / quickNotesSync.ts 一致，两者均已删除）。 */
 const cases: Array<{ name: string; input: Parameters<typeof decideUpload>[0]; expect: UploadDecision }> = [
   { name: "synced + 远端 == 本地基线 → skip-fast", input: { syncState: "synced", baseHash: "A", remoteContentHash: "A", remoteDeleted: false }, expect: "skip-fast" },
   { name: "synced + 远端不同 → upload", input: { syncState: "synced", baseHash: "A", remoteContentHash: "B", remoteDeleted: false }, expect: "upload" },

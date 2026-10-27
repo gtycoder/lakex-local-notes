@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld("lakeNative", {
   assetToken: process.env.LAKE_ASSET_TOKEN ?? "",
   bootstrap: () => invoke("bootstrap_workspace"),
   readNote: (id) => invoke("read_note", id),
+  noteBodyMissing: (id) => invoke("note_body_missing", id),
+  listMissingBodies: () => invoke("list_missing_bodies"),
+  restoreMissingBodyFromCloud: (id) => invoke("restore_missing_body_from_cloud", id),
+  purgeMissingBody: (id) => invoke("purge_missing_body", id),
   getNoteDigest: (id) => invoke("get_note_digest", id),
   createNote: (title) => invoke("create_note", title),
   saveNote: (id, title, content, caches) => invoke("save_note", id, title, content, caches),
@@ -118,7 +122,14 @@ contextBridge.exposeInMainWorld("lakeNative", {
   listQuickNotes: () => invoke("list_quick_notes"),
   createQuickNote: (input) => invoke("create_quick_note", input),
   updateQuickNote: (id, input) => invoke("update_quick_note", id, input),
+  setQuickNoteTags: (id, tagIds) => invoke("set_quick_note_tags", id, tagIds),
   deleteQuickNote: (id) => invoke("delete_quick_note", id),
+  listQuickNoteTags: () => invoke("list_quick_note_tags"),
+  createQuickNoteTag: (name) => invoke("create_quick_note_tag", name),
+  updateQuickNoteTag: (id, patch) => invoke("update_quick_note_tag", id, patch),
+  reorderQuickNoteTags: (ids) => invoke("reorder_quick_note_tags", ids),
+  mergeQuickNoteTags: (sourceId, targetId) => invoke("merge_quick_note_tags", sourceId, targetId),
+  deleteQuickNoteTag: (id) => invoke("delete_quick_note_tag", id),
   stageQuickNoteImage: (draftId, input) => invoke("stage_quick_note_image", draftId, input),
   stageQuickNoteFile: (draftId, input) => invoke("stage_quick_note_file", draftId, input),
   discardQuickNoteDraft: (draftId) => invoke("discard_quick_note_draft", draftId),
@@ -128,16 +139,18 @@ contextBridge.exposeInMainWorld("lakeNative", {
   listQuickNoteTrash: () => invoke("list_quick_note_trash"),
   restoreQuickNote: (id) => invoke("restore_quick_note", id),
   purgeQuickNote: (id) => invoke("purge_quick_note", id),
+  listMissingQuickNotes: () => invoke("list_missing_quick_notes"),
+  restoreMissingQuickNoteFromCloud: (id) => invoke("restore_missing_quick_note_from_cloud", id),
+  restoreMissingQuickNoteFromText: (id) => invoke("restore_missing_quick_note_from_text", id),
+  purgeMissingQuickNote: (id) => invoke("purge_missing_quick_note", id),
   getS3GcSettings: () => invoke("get_s3_gc_settings"),
   saveS3GcSettings: (settings) => invoke("save_s3_gc_settings", settings),
   listS3GcPending: () => invoke("list_s3_gc_pending"),
   listS3GcLog: () => invoke("list_s3_gc_log"),
-  runS3GcDiagnostics: () => invoke("run_s3_gc_diagnostics"),
   runDataHealthCheck: () => invoke("run_data_health_check"),
   readAppLog: (opts) => invoke("read_app_log", opts),
   getSystemInfo: () => invoke("get_system_info"),
   revealDataFolder: (kind) => invoke("reveal_data_folder", kind),
-  runS3GcReconcile: (ignoreRetention = false) => invoke("run_s3_gc_reconcile", ignoreRetention),
   runS3DeepCleanup: (dryRun, ignoreRetention = false) => invoke("run_s3_deep_cleanup", dryRun, ignoreRetention),
   getTrashReminder: () => invoke("get_trash_reminder"),
   getWebStatus: () => invoke("get_web_status"),
@@ -168,5 +181,11 @@ contextBridge.exposeInMainWorld("lakeNative", {
     const listener = (_event, detail) => callback(detail);
     ipcRenderer.on("library-changed", listener);
     return () => { ipcRenderer.removeListener("library-changed", listener); };
+  },
+  /** 窗口全屏状态（macOS 独立 Space）→ 顶栏据此决定是否保留红绿灯让位。 */
+  onWindowFullscreen: (callback) => {
+    const listener = (_event, fullscreen) => callback(Boolean(fullscreen));
+    ipcRenderer.on("window-fullscreen", listener);
+    return () => { ipcRenderer.removeListener("window-fullscreen", listener); };
   },
 });

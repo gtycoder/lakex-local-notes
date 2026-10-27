@@ -1,10 +1,11 @@
 import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
-import type { QuickNoteDocument, QuickNoteSummary, QuickNoteDeleted } from "./quickNoteTypes.js";
+import type { QuickNoteDocument, QuickNoteDeleted } from "./quickNoteTypes.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 import { mapQuickNoteDeletedRow, mapQuickNoteRow, mapTrashRow } from "../src/core/quickNoteQueries.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
+import type { QuickNoteTag } from "../src/core/quickNoteTags.js";
 
 export interface QuickNoteRow {
   id: string;
@@ -13,7 +14,7 @@ export interface QuickNoteRow {
   preview_text: string;
   image_count: number;
   content_hash: string;
-  sync_state: QuickNoteSummary["syncState"];
+  is_dirty: number;
   is_conflict: number;
   restore_pending_at?: string | null;
 }
@@ -41,6 +42,12 @@ interface QuickNotesQueryDeps {
   db: DbLike;
   itemPath(id: string): string;
   imageUrl(noteId: string, filename: string): string;
+  /** 标签目录（独立子系统；读取展示名用）。 */
+  listTags(): QuickNoteTag[];
+  /** 关联表里的标签 ID（顺序 = 最近添加在前）。 */
+  tagIds(noteId: string): string[];
+  /** 一次性读出全部关联（列表映射用，避免 N+1）。 */
+  allTagIds(): Map<string, string[]>;
 }
 
 /** Read-only Quick Notes queries; write/state-machine operations stay in QuickNotesStore. */
@@ -61,26 +68,34 @@ export class QuickNotesQueries {
     catch (error) { throw new AppError("InvalidInput", error instanceof Error ? error.message : String(error)); }
   }
 
-  mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent): QuickNoteDocument {
-    return mapQuickNoteRow(row, { content, imageUrl: this.deps.imageUrl });
+  mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent, tagIds: readonly string[], tagNames?: (ids: readonly string[]) => string[]): QuickNoteDocument {
+    return mapQuickNoteRow(row, { content, imageUrl: this.deps.imageUrl, tagIds, tagNames: tagNames ?? this.tagNameResolver() });
+  }
+
+  /** 标签 ID → 名称（一次性载入目录，列表映射共用一个解析器；未知 ID 给空串以保持与 tagIds 对齐）。 */
+  private tagNameResolver(): (ids: readonly string[]) => string[] {
+    const names = new Map(this.deps.listTags().filter((tag) => !tag.deletedAt).map((tag) => [tag.id, tag.name] as const));
+    return (ids) => ids.map((id) => names.get(id) ?? "");
   }
 
   read(id: string): QuickNoteDocument {
     const row = this.readRow(id);
-    return this.mapDocument(row, this.readStoredContent(id));
+    return this.mapDocument(row, this.readStoredContent(id), this.deps.tagIds(id));
   }
 
   list(): QuickNoteDocument[] {
     const rows = this.deps.db.prepare("SELECT * FROM quick_notes ORDER BY created_at DESC").all() as QuickNoteRow[];
-    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id)));
+    const tagNames = this.tagNameResolver();
+    const links = this.deps.allTagIds();
+    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id), links.get(row.id) ?? [], tagNames));
   }
 
-  listTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }> {
+  listTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted: boolean }> {
     return (this.deps.db.prepare(
-      "SELECT id,created_at,updated_at,deleted_at FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
-    ).all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string }>)
+      "SELECT id,created_at,updated_at,deleted_at,cloud_deleted FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
+    ).all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; cloud_deleted?: number }>)
       .filter((row) => fs.existsSync(this.deps.itemPath(row.id)))
-      .map(mapTrashRow);
+      .map((row) => ({ ...mapTrashRow(row), cloudDeleted: row.cloud_deleted === 1 }));
   }
 
   isRestorePending(id: string): boolean {

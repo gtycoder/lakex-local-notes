@@ -3,9 +3,12 @@
  * store/sync/quickNotes 不再直接 import electron-log（electron/logger.ts）；
  * 通过本接口接收 LoggerScopes（桌面默认 = electron/logger.ts 的 log，由 main.ts 装配；
  * 测试/纯逻辑默认静默实现，保持既有测试零噪音）。
+ *
+ * 261023：补 debug 级别 —— 正式环境由 electron-log 的 file level=info 过滤，调用点不必自己判环境。
  */
 
 export interface Logger {
+  debug(message: string, ...args: unknown[]): void;
   info(message: string, ...args: unknown[]): void;
   warn(message: string, ...args: unknown[]): void;
   error(message: string, ...args: unknown[]): void;
@@ -25,7 +28,7 @@ export interface LoggerScopes {
 }
 
 export function createSilentLogger(): Logger {
-  return { info() {}, warn() {}, error() {} };
+  return { debug() {}, info() {}, warn() {}, error() {} };
 }
 
 export function createSilentLoggerScopes(): LoggerScopes {

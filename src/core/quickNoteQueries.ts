@@ -4,7 +4,7 @@
  * 本文件只包含：行→文档映射、删除行→已删记录映射（无 fs/平台依赖）。
  * 内容读取（桌面文件 / 移动端 native SQLite）由调用方注入后经 mapDocument 组装。
  */
-import type { QuickNoteDocument, QuickNoteSummary } from "../lib/types.js";
+import type { QuickNoteDocument } from "../lib/types.js";
 import type { StoredQuickNoteContent } from "./quickNoteModel.js";
 
 /** 行结构（与 electron/quickNotesQueries.ts QuickNoteRow 对齐；两端共用的最小字段集）。 */
@@ -15,7 +15,7 @@ export interface QuickNoteRowShape {
   preview_text: string;
   image_count: number;
   content_hash: string;
-  sync_state: QuickNoteSummary["syncState"];
+  is_dirty: number;
   is_conflict: number;
   restore_pending_at?: string | null;
 }
@@ -35,9 +35,13 @@ export interface QuickNoteDocumentParts {
   content: StoredQuickNoteContent;
   /** 图片 URL 解析（桌面/移动端统一 canonical assetServer URL）。 */
   imageUrl(noteId: string, filename: string): string;
+  /** 关联表里的标签 ID（顺序 = 最近添加在前；标签子系统独立，内容里没有标签）。 */
+  tagIds: readonly string[];
+  /** 标签 ID → 展示名（来自标签表；墓碑/未知 ID 由调用方过滤）。 */
+  tagNames(tagIds: readonly string[]): string[];
 }
 
-/** 行 → 小记文档（共享映射；content/images 由调用方注入）。 */
+/** 行 → 小记文档（共享映射；content/images/tagIds/tagNames 由调用方注入）。 */
 export function mapQuickNoteRow(row: QuickNoteRowShape, parts: QuickNoteDocumentParts): QuickNoteDocument {
   const images = parts.content.images.map((image) => ({ ...image, url: parts.imageUrl(row.id, image.filename) }));
   return {
@@ -47,9 +51,16 @@ export function mapQuickNoteRow(row: QuickNoteRowShape, parts: QuickNoteDocument
     previewText: row.preview_text,
     imageCount: row.image_count,
     contentHash: row.content_hash,
-    syncState: row.sync_state,
+    syncState: row.is_dirty ? "local" : "synced",
     isConflict: !!row.is_conflict,
-    content: { version: parts.content.version, text: parts.content.text, body: parts.content.body, images, tags: [...parts.content.tags] },
+    content: {
+      version: parts.content.version,
+      text: parts.content.text,
+      body: parts.content.body,
+      images,
+      tagIds: [...parts.tagIds],
+      tags: parts.tagNames(parts.tagIds),
+    },
   };
 }
 
@@ -61,6 +72,7 @@ export function mapQuickNoteDeletedRow(row: QuickNoteDeletedRowShape): {
   deletedAt: string;
   conversionTargetNoteId: string | null;
   readyToSync: boolean;
+  purgedAt: string | null;
 } {
   return {
     id: row.id,
@@ -69,6 +81,7 @@ export function mapQuickNoteDeletedRow(row: QuickNoteDeletedRowShape): {
     deletedAt: row.deleted_at,
     conversionTargetNoteId: row.conversion_target_note_id ?? null,
     readyToSync: !!row.ready_to_sync,
+    purgedAt: row.purged_at ?? null,
   };
 }
 

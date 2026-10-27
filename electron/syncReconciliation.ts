@@ -91,11 +91,11 @@ export class SyncReconciliation {
    * - 事务外重读磁盘正文 hash（覆盖「上传全程的正文编辑」）；
    * - 事务内重读 metadata 比对（覆盖 title/parent/sort/lock/icon——锁变更不改 updated_at，必须比对字段）；
    * - 条件更新 updated_at（meta 编辑最后防线；changes=0 → 快照后又有编辑 → 不标）。
-   * 任一不一致 → 保持 sync_state='local'，下次同步重传。
+   * 任一不一致 → 保持 is_dirty=1，下次同步重传。
    * 这是单设备内快照比对，不是分布式 CAS；updated_at 无严格单调，同毫秒残留后果=延迟非丢失。 */
   markSyncedIfUnchanged(noteId: string, expected: {
     contentHash: string; updatedAt: string; title: string; parentId: string | null;
-    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+    sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   }): boolean {
     // 1) 事务外：重读磁盘正文 hash（正文在 .lake 文件，DB 事务管不到磁盘）
     if (this.contentHash(noteId) !== expected.contentHash) return false;
@@ -106,14 +106,14 @@ export class SyncReconciliation {
       ).get(noteId) as { title: string; parent_id: string | null; sort_order: number; is_locked: number; locked_at: string | null; icon: string | null } | undefined;
       if (!meta) return false;
       if (meta.title !== expected.title || meta.parent_id !== expected.parentId || meta.sort_order !== expected.sortOrder ||
-          !!meta.is_locked !== expected.isLocked || (meta.locked_at ?? null) !== expected.lockedAt || (meta.icon ?? null) !== expected.icon) return false;
+          !!meta.is_locked !== expected.isEditLocked || (meta.locked_at ?? null) !== expected.editLockedAt || (meta.icon ?? null) !== expected.icon) return false;
       // 3) 条件更新（快照后 meta 编辑的最后防线）
       const info = this.ctx.db.prepare(
-        "UPDATE notes SET sync_state='synced', restore_pending_at=NULL WHERE id=? AND updated_at=?"
+        "UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id=? AND updated_at=?"
       ).run(noteId, expected.updatedAt);
       if (info.changes === 0) return false;
       // 4) 归位 + 记录元数据已确认版本（与原 markSynced 语义一致）
-      this.ctx.db.prepare("UPDATE tree_nodes SET sync_state='synced' WHERE note_file_id=?").run(noteId);
+      this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id=?").run(noteId);
       this.ctx.db.prepare("UPDATE sync_base SET last_synced_meta_at=? WHERE note_id=?").run(expected.updatedAt, noteId);
       return true;
     })();
@@ -123,9 +123,9 @@ export class SyncReconciliation {
     const tx = this.ctx.db.transaction(() => {
       // restore_pending_at 一并清除：任何"变为 synced"的路径都代表恢复已生效或被远端采纳，
       // 残留标记会让本设备永远 local-wins、压住后续墓碑（墓碑永胜被破坏）。
-      this.ctx.db.prepare("UPDATE notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
+      this.ctx.db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id=?").run(id);
       // 侧栏/状态栏读的是 tree_nodes.sync_state，必须同步置为 synced。
-      this.ctx.db.prepare("UPDATE tree_nodes SET sync_state='synced' WHERE note_file_id=?").run(id);
+      this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id=?").run(id);
       // 统一冲突语义：记录本次成功同步时笔记的 updated_at（元数据已确认版本），供下次对账 LWW。
       // 真实同步流中 sync_base 行已由 setBaseHash/setLastUploadedHash 创建，这里仅更新；
       // 无行时（如单测直接调用）跳过，last_synced_meta_at 保持 null（远端视为未确认 → 应用远端）。
@@ -142,7 +142,7 @@ export class SyncReconciliation {
    * 只作用于无 note_file_id 的 group/notebook 节点；返回是否归位成功。 */
   markFolderSynced(id: string, expectedUpdatedAt: string): boolean {
     const info = this.ctx.db.prepare(
-      "UPDATE tree_nodes SET sync_state='synced' WHERE id=? AND updated_at=? AND note_file_id IS NULL"
+      "UPDATE tree_nodes SET is_dirty=0 WHERE id=? AND updated_at=? AND note_file_id IS NULL"
     ).run(id, expectedUpdatedAt);
     return info.changes > 0;
   }
@@ -153,10 +153,10 @@ export class SyncReconciliation {
     return !!this.ctx.db.prepare("SELECT 1 FROM notes WHERE id=? AND restore_pending_at IS NOT NULL").get(id);
   }
 
-  /** 是否处于待上传/本地未对齐状态（sync_state != synced）。用于远端墓碑与本地恢复的 P0-1 判定。 */
+  /** 是否处于待上传/本地未对齐状态（is_dirty=1）。用于远端墓碑与本地恢复的 P0-1 判定。 */
   isSyncPending(id: string): boolean {
-    const row = this.ctx.db.prepare("SELECT sync_state FROM notes WHERE id=?").get(id) as { sync_state: string } | undefined;
-    return row !== undefined && row.sync_state !== "synced";
+    const row = this.ctx.db.prepare("SELECT is_dirty FROM notes WHERE id=?").get(id) as { is_dirty: number } | undefined;
+    return row !== undefined && row.is_dirty === 1;
   }
 
   // ===== 应用远端（下载分支对账写） =====
@@ -191,10 +191,10 @@ export class SyncReconciliation {
   applyRemoteMoveToTrash(id: string, trashedAt: string | null, deletedFromParentId: string | null): void {
     const tx = this.ctx.db.transaction(() => {
       this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,?),updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,?),updated_at=?,is_dirty=1,is_purged=0,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, trashedAt, deletedFromParentId, trashedAt ?? nowIso(), id);
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,?),updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,?),updated_at=?,is_dirty=1,is_purged=0 WHERE note_file_id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, trashedAt, deletedFromParentId, trashedAt ?? nowIso(), id);
       this.ctx.removeSearch([id]);
     });
@@ -205,10 +205,10 @@ export class SyncReconciliation {
   applyRemoteRestore(id: string, parentId: string | null, updatedAt: string): void {
     const tx = this.ctx.db.transaction(() => {
       this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,cloud_deleted=0,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       ).run(parentId, updatedAt, id);
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,cloud_deleted=0 WHERE note_file_id=? AND deleted_at IS NULL"
       ).run(parentId, updatedAt, id);
       const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
       if (titleRow) {
@@ -227,10 +227,10 @@ export class SyncReconciliation {
       // restore_pending_at 一并清除（对齐移动端 bridge applyRemotePurge）：purge 后恢复标记无意义，
       // 残留会让 isRestorePending 误判。engine 的 decidePurge 已挡 restoring 场景，此处纯口径对齐。
       this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, now, id);
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE note_file_id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1 WHERE note_file_id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, now, id);
       this.ctx.removeSearch([id]);
     });
@@ -274,10 +274,10 @@ export class SyncReconciliation {
          ) SELECT t.id, t.note_file_id, t.node_type FROM tree_nodes t WHERE t.id IN (SELECT id FROM sub) AND t.deleted_at IS NULL`
       ).all(id) as Array<{ id: string; note_file_id: string | null; node_type: string }>;
       const purgeNote = this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       );
       const purgeNode = this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1 WHERE id=? AND deleted_at IS NULL"
       );
       const removedNoteIds: string[] = [];
       for (const node of subtree) {
@@ -380,9 +380,9 @@ export class SyncReconciliation {
 
   /** 廉价 pending 指纹（三个索引级 COUNT，微秒级）：IPC 层每次调用后 diff，变化才广播完整摘要。 */
   pendingSignature(): string {
-    const docs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL").get() as { c: number };
+    const docs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM notes WHERE is_dirty=1 AND deleted_at IS NULL").get() as { c: number };
     const tombs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL").get() as { c: number };
-    const folders = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state NOT IN ('synced','purged') AND id != ?").get(this.ctx.trashNotebookId) as { c: number };
+    const folders = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND is_dirty=1 AND id != ?").get(this.ctx.trashNotebookId) as { c: number };
     return `${docs.c}:${folders.c}:${tombs.c}`;
   }
 
@@ -392,16 +392,16 @@ export class SyncReconciliation {
     // 不再触发发布，若计入则 pending folders 永久挂起；口径与 listFoldersForSync/hasLocalPendingNotes 一致）。
     // 被回收的目录仍会随 listFoldersForSync 发布（移动即同步传播），
     // 发布后 markFolderSynced 归位 synced，故这里不做 trashed_at 过滤。
-    const pendingRows = this.ctx.listNotesForSync().filter((note) => note.syncState !== "synced" && note.syncState !== "purged");
+    const pendingDocs = (this.ctx.db.prepare("SELECT COUNT(*) AS count FROM notes WHERE is_dirty=1 AND deleted_at IS NULL AND is_purged=0").get() as { count: number }).count;
     const pendingFolders = (this.ctx.db.prepare(
-      "SELECT COUNT(*) AS count FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state NOT IN ('synced','purged') AND id != ?"
+      "SELECT COUNT(*) AS count FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND is_dirty=1 AND id != ?"
     ).get(this.ctx.trashNotebookId) as { count: number }).count;
     // 待同步墓碑 = 未发布（published_at IS NULL）的 note 墓碑。
     // 资源不在本地维护上传 ledger，不能把正文引用数冒充为待上传数；真实资源 diff 在同步阶段完成。
     const tombstones = (this.ctx.db.prepare(
       "SELECT COUNT(*) AS count FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL"
     ).get() as { count: number }).count;
-    return { documents: pendingRows.length + tombstones, folders: pendingFolders, resources: 0, generatedAt: nowIso() };
+    return { documents: pendingDocs + tombstones, folders: pendingFolders, resources: 0, generatedAt: nowIso() };
   }
 
   /** 是否有本地待上传变更（早退判定）：notes 非 synced（含锁/元数据变更）或纯目录/分组改动（V5 §5.1）。
@@ -410,10 +410,10 @@ export class SyncReconciliation {
    * purged（收到他端删除的保留副本，含 folder 行）也排除：永不上传，不应阻塞早退——
    * 否则学习端收到 folder 墓碑后早退永不生效（每轮全量 + 重发布，260910 实测）。 */
   hasLocalPendingNotes(): boolean {
-    const noteRow = this.ctx.db.prepare("SELECT 1 FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL LIMIT 1").get();
+    const noteRow = this.ctx.db.prepare("SELECT 1 FROM notes WHERE is_dirty=1 AND deleted_at IS NULL LIMIT 1").get();
     if (noteRow) return true;
     const groupRow = this.ctx.db.prepare(
-      "SELECT 1 FROM tree_nodes WHERE sync_state NOT IN ('synced','purged') AND note_file_id IS NULL AND id != ? LIMIT 1"
+      "SELECT 1 FROM tree_nodes WHERE is_dirty=1 AND note_file_id IS NULL AND id != ? LIMIT 1"
     ).get(this.ctx.trashNotebookId);
     if (groupRow) return true;
     // 未发布的 purge 墓碑 = 待上传事实：墓碑环节要把它发布/对齐记账（markTombstonesPublished）。
@@ -426,10 +426,10 @@ export class SyncReconciliation {
   /** 批量读取同步基线信息（一次性取回，替代逐条 lastSyncedMetaAt 查询 + 支撑记账去重）。 */
   allSyncBaseInfo(): Map<string, { syncState: string; updatedAt: string; baseHash: string | null; lastSyncedMetaAt: string | null; lastUploadedHash: string | null }> {
     const rows = this.ctx.db.prepare(
-      "SELECT n.id,n.sync_state,n.updated_at,s.content_hash,s.last_synced_meta_at,s.last_uploaded_hash FROM notes n LEFT JOIN sync_base s ON s.note_id=n.id WHERE n.deleted_at IS NULL"
-    ).all() as Array<{ id: string; sync_state: string; updated_at: string; content_hash: string | null; last_synced_meta_at: string | null; last_uploaded_hash: string | null }>;
+      "SELECT n.id,n.is_dirty,n.updated_at,s.content_hash,s.last_synced_meta_at,s.last_uploaded_hash FROM notes n LEFT JOIN sync_base s ON s.note_id=n.id WHERE n.deleted_at IS NULL"
+    ).all() as Array<{ id: string; is_dirty: number; updated_at: string; content_hash: string | null; last_synced_meta_at: string | null; last_uploaded_hash: string | null }>;
     return new Map(rows.map((r) => [r.id, {
-      syncState: r.sync_state, updatedAt: r.updated_at, baseHash: r.content_hash ?? null,
+      syncState: r.is_dirty ? "local" : "synced", updatedAt: r.updated_at, baseHash: r.content_hash ?? null,
       lastSyncedMetaAt: r.last_synced_meta_at ?? null, lastUploadedHash: r.last_uploaded_hash ?? null,
     }]));
   }

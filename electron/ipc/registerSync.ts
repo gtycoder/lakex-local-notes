@@ -2,11 +2,10 @@ import { app, BrowserWindow, dialog, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
-import { runDeepCleanup, runGcReconcile } from "../s3Maintenance.js";
+import { restoreMissingBodyFromCloud } from "../syncEngineController.js";
 import { testConnection } from "../s3Store.js";
 import type { SyncProgress } from "../syncTypes.js";
-import { runGcDiagnostics } from "../syncGc.js";
-import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
+import { runV3DeepCleanup } from "../s3v3/desktopSync.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../../src/core/cloudState.js";
 import { decodeS3ConfigTransfer, s3ConfigTransferFileName, summarizeS3Settings } from "../../src/core/s3ConfigTransfer.js";
@@ -125,6 +124,11 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   ipc.handle("get_s3_gc_settings", () => store.getS3GcSettings());
   ipc.handle("get_trash_reminder", () => store.listTrashReminder(store.getS3GcSettings().trashAutoPurgeDays));
   ipc.handle("run_data_health_check", () => store.runDataHealthCheck());
+  /** 资源页「缺正文」→ 从云端拉回（显式动作；失败以 reason 回报，不抛）。
+   *  **必须进维护域**：读清单 + 取对象都是出网往返，落地后还要改 sync_base / sync_state
+   *  —— 与整轮同步/GC 并发会互踩同一篇的账本（AGENTS §4 互斥域 I3 / 单一队列），故走 enqueueMaintenance。 */
+  ipc.handle("restore_missing_body_from_cloud", (id: string) =>
+    enqueueMaintenance(() => restoreMissingBodyFromCloud(store, id)));
   ipc.handle("save_s3_gc_settings", (settings: unknown) => {
     if (!settings || typeof settings !== "object") throw new IpcInputError("云端回收配置格式无效");
     const s = settings as Record<string, unknown>;
@@ -147,6 +151,8 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
       enabled: raw.enabled,
       autoMode: raw.autoMode,
       autoIntervalMinutes: clampNum(raw.autoIntervalMinutes, 15, 1, 1440),
+      // 按需资产（P0-4）：只接受显式 true（缺省 undefined = 全量语义）。
+      ...(raw.deferAssets === true ? { deferAssets: true } : {}),
     };
     const previous = store.getSyncSettings();
     let alignWarning: string | undefined;
@@ -170,27 +176,14 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   });
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
-  ipc.handle("run_s3_gc_diagnostics", () => {
-    requireCloud();
-    return enqueueMaintenance(() => runGcDiagnostics(store));
-  });
-  ipc.handle("run_s3_gc_reconcile", (ignoreRetention = false) => {
-    requireCloud();
-    return enqueueMaintenance(() => runGcReconcile(store, { ignoreRetention: !!ignoreRetention }));
-  });
-  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, ignoreRetention = false) => {
+  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, _ignoreRetention = false) => {
     requireCloud();
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
       if (!settings) throw new AppError("NotConfigured", "请先保存 S3 配置");
-      const gcSettings = store.getS3GcSettings();
-      // 手动清理（ignoreRetention=true）= 显式清云端：无视 7 天窗口；自动/定时仍按窗口。
-      const lake = await runDeepCleanup(store, { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention });
-      const quick = await runQuickNotesDeepCleanup(quickNotes, settings, {
-        dryRun: !!dryRun,
-        gcRetentionDays: ignoreRetention ? 0 : gcSettings.gcRetentionDays,
-      });
-      return { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention, lake, quickNotes: quick };
+      // v3 统一深度清理（文档 + 小记）；ignoreRetention 由 v3 自身 pending 门禁负责，不再使用旧窗口。
+      const result = await runV3DeepCleanup(store, { dryRun: !!dryRun });
+      return { dryRun: !!dryRun, deleted: result.deleted, kept: result.kept };
     });
   });
   ipc.handleEvent("sync_now", (event: IpcMainInvokeEvent) => {

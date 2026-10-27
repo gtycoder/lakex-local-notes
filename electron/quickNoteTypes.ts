@@ -23,6 +23,8 @@ export interface QuickNoteDeleted {
   deletedAt: string;
   conversionTargetNoteId: string | null;
   readyToSync: boolean;
+  /** 非空 = 已彻底删除（purged_at）。 */
+  purgedAt?: string | null;
 }
 
 export interface QuickNoteConversion {

@@ -13,7 +13,7 @@
  * - **I1（F16）**：`write` 与 `maintenance` 必须落在**不同互斥域**；网络往返期间不得持有写域。
  * - **I2**：跨网络窗口的「读 → 标记已同步」必须靠**"未变才标"守卫**（内容 hash 比较），
  *   不得依赖全局互斥。Lake 侧已有 `markSyncedIfUnchanged`（V5 §5.2）；
- *   小记侧 `markSynced` 缺守卫，是本判据落地的前置条件（见 quickNotesSyncEngine）。
+ *   小记侧 `markSynced` 缺守卫，是本判据落地的前置条件（v3 起小记走 syncEngine 同一套发布/基线语义）。
  * - **I3**：同一互斥域内串行；**禁止嵌套获取同一域**（KeyedAsyncQueue 无重入 ⇒ 会自锁）。
  *   证据：`bridge.ts` 的 `restoreTreeItem` 注释「仍走同一串行队列，不嵌套 → 不会自锁」。
  *
@@ -42,6 +42,9 @@ export const WRITE_OPS = [
   "saveQuickNote", "saveQuickNoteWithImages", "saveQuickNoteContent", "createQuickNote",
   "deleteQuickNote", "restoreQuickNote", "purgeQuickNote",
   "saveQuickNoteDraft", "clearQuickNoteDraft",
+  // 小记标签目录（261024）+ 小记与标签的关系（独立关联表）
+  "createQuickNoteTag", "updateQuickNoteTag", "reorderQuickNoteTags", "mergeQuickNoteTags", "deleteQuickNoteTag",
+  "setQuickNoteTags",
   // 正文
   "saveNote", "createInk",
   // 历史快照
@@ -64,10 +67,20 @@ export const MAINTENANCE_OPS = [
   "syncNow",
   "gcDeepCleanup",
   "ensureTrashNoteAssets",
+  // 派生搜索索引后台补建（261026）：与同步/GC 串行，但只读正文/写 FTS，不占用写域。
+  // （按需资产打开时补拉复用 ensureTrashNoteAssets 这个操作，语义同为「保证该篇资产本地化」。）
+  "ensureSearchIndex",
 ] as const;
 
 /**
- * **高优先域**：用户当场发起、且必须**不等整轮同步**的「把这一条推到云端」操作（261013）。
+ * **高优先域**：用户当场发起、且必须**不等整轮同步**的**单条网络动作**（261013 推送；261027 补拉）。
+ *
+ * 261027 新增 `ensureNoteAssets` / `ensureQuickNoteAssets`（占位图点击补拉）：
+ *  - 并进维护域 ⇒ 用户点「图片未下载」时正好有整轮同步在跑，就要等到它结束（弱网分钟级）；
+ *  - 归 none ⇒ 与整轮同步并发写同一个资产文件（整对象下载），有半截文件风险；
+ *  - ⇒ 与推送同域：彼此串行、绝不排在整轮同步后面；资产是内容寻址的（同 key 同内容），
+ *    与整轮同步偶发写同一文件也只是覆盖成同一份字节。
+ *
  *
  * 为什么单列一域（既不并进维护域，也不归 none）：
  *  · 并进维护域 ⇒ 长按小记 → 写完点「保存并同步」，若正好撞上冷启动/回前台触发的整轮同步，**要排队等它跑完**
@@ -79,6 +92,8 @@ export const MAINTENANCE_OPS = [
  */
 export const PRIORITY_OPS = [
   "syncQuickNote",
+  "ensureNoteAssets",
+  "ensureQuickNoteAssets",
 ] as const;
 
 /**
@@ -87,7 +102,7 @@ export const PRIORITY_OPS = [
 export const NONE_OPS = [
   // 启动 / 只读
   "init", "getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage", "readNote", "noteGoneState", "searchNotes",
-  "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash",
+  "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash", "listQuickNoteTags",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "listOrphanAssets", "listS3GcPending", "getHistorySettings",
   "listTrashed", "listTrashTree", "listDeletedNotesForSync", "readDeletedContent",

@@ -1,0 +1,351 @@
+/* src/components/BlockContextMenu/BlockContextMenu.css
+ * 块节点右键上下文菜单样式（参考截图中的 Notion 风格）
+ */
+
+.ne-block-context-menu {
+  position: fixed;
+  z-index: 1100;
+  min-width: 204px;
+  max-width: 252px;
+  animation: ne-block-menu-appear 0.12s ease-out;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@keyframes ne-block-menu-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.ne-block-context-menu-inner {
+  background: #fff;
+  border-radius: 6px;
+  box-shadow:
+    0 12px 32px rgba(31, 35, 41, 0.14),
+    0 2px 8px rgba(31, 35, 41, 0.08);
+  padding: 4px 0;
+  border: 1px solid rgba(31, 35, 41, 0.1);
+  overflow: visible;
+}
+
+/* 菜单项 */
+.ne-block-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 18px;
+  color: #262626;
+  outline: none;
+  transition: background-color 0.1s ease;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ne-block-menu-item:hover:not(.disabled) {
+  background-color: #f2f3f5;
+}
+
+.ne-block-menu-item.active,
+.ne-block-menu-item:focus-visible {
+  background-color: #f0f2f5;
+}
+
+.ne-block-menu-item.disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+/* 图标 */
+.ne-block-menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: #666;
+}
+
+.ne-block-menu-item:hover:not(.disabled) > .ne-block-menu-icon,
+.ne-block-menu-item.active > .ne-block-menu-icon {
+  color: #333;
+}
+
+.ne-block-menu-item.disabled > .ne-block-menu-icon {
+  color: #ddd;
+}
+
+/* 标签文字 */
+.ne-block-menu-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 箭头 */
+.ne-block-menu-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: #999;
+  flex-shrink: 0;
+}
+
+/* 分隔线 */
+.ne-block-menu-divider {
+  height: 1px;
+  background-color: #e5e6eb;
+  margin: 4px 0;
+}
+
+/* ========== 子菜单 ========== */
+.ne-block-submenu {
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  min-width: 140px;
+  max-width: 220px;
+  max-height: min(520px, calc(100vh - 16px));
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.12),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 6px 0;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  animation: ne-block-submenu-appear 0.1s ease-out;
+}
+
+@keyframes ne-block-submenu-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ne-block-submenu .ne-block-menu-item {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+/* “转化为”面板：上方为紧凑图标网格，下方为双列功能卡片 */
+.ne-block-convert-submenu {
+  width: 224px;
+  min-width: 224px;
+  max-width: min(224px, calc(100vw - 16px));
+  display: grid;
+  grid-template-columns: repeat(6, minmax(30px, 1fr));
+  gap: 4px;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.ne-block-convert-submenu .ne-block-convert-item {
+  margin: 0;
+  border-radius: 7px;
+}
+
+.ne-block-convert-submenu .ne-block-convert-item--compact {
+  min-height: 30px;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  gap: 0;
+}
+
+.ne-block-convert-item--compact .ne-block-menu-icon {
+  width: 18px;
+  height: 18px;
+  color: #262626;
+}
+
+.ne-block-convert-item--compact .ne-block-menu-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ne-block-yuque-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: currentColor;
+}
+
+.ne-block-convert-submenu .ne-block-convert-item.selected {
+  color: #1677ff;
+  background: #e8f3ff;
+}
+
+.ne-block-convert-submenu .ne-block-convert-item.selected .ne-block-menu-icon {
+  color: #1677ff;
+}
+
+.ne-block-convert-item--compact .ne-block-menu-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ne-block-convert-submenu .ne-block-convert-item--card {
+  grid-column: span 3;
+  min-height: 30px;
+  padding: 2px 6px;
+  gap: 6px;
+}
+
+.ne-block-convert-item--card .ne-block-menu-icon {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  color: #646a73;
+  background: transparent;
+}
+
+.ne-block-convert-item--card .ne-block-menu-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ne-block-convert-item--card .ne-block-menu-label {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* “在下方添加”使用独立的 CardSelect，不经过工具栏“+”按钮的 Popover。 */
+.ne-block-card-select-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  width: 292px;
+  min-width: 292px;
+  max-width: min(292px, calc(100vw - 16px));
+  height: min(600px, calc(100vh - 16px));
+  max-height: min(600px, calc(100vh - 16px));
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.ne-block-card-select-submenu .ne-ui-search-menu,
+.ne-block-card-select-submenu .ne-ui-card-menu {
+  height: 100%;
+}
+
+/* LOCAL-CHANGE(261004)：「转化为」内联到第一级时**沿用子菜单原样式**，只取消浮层定位/阴影。 */
+.ne-block-convert-inline {
+  position: static;
+  left: auto;
+  top: auto;
+  margin: 0 auto;
+  box-shadow: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+  overflow: visible;
+}
+
+/* 暗黑模式 */
+.ne-block-context-menu--dark .ne-block-context-menu-inner,
+.ne-block-context-menu--dark .ne-block-submenu {
+  color: rgba(255, 255, 255, 0.88);
+  background: #272829;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.38),
+    0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.ne-block-context-menu--dark .ne-block-menu-item {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.ne-block-context-menu--dark .ne-block-menu-item:hover:not(.disabled),
+.ne-block-context-menu--dark .ne-block-menu-item.active,
+.ne-block-context-menu--dark .ne-block-menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ne-block-context-menu--dark .ne-block-menu-icon {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.ne-block-context-menu--dark .ne-block-menu-item:hover:not(.disabled) > .ne-block-menu-icon,
+.ne-block-context-menu--dark .ne-block-menu-item.active > .ne-block-menu-icon,
+.ne-block-context-menu--dark .ne-block-menu-item:focus-visible > .ne-block-menu-icon {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.ne-block-context-menu--dark .ne-block-menu-divider {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ne-block-context-menu--dark .ne-block-convert-item--compact:not(.selected) .ne-block-menu-icon {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.ne-block-context-menu--dark .ne-block-convert-submenu .ne-block-convert-item.selected {
+  color: #69a7ff;
+  background: rgba(22, 119, 255, 0.22);
+}
+
+.ne-block-context-menu--dark .ne-block-convert-submenu .ne-block-convert-item.selected .ne-block-menu-icon {
+  color: #69a7ff;
+}
+
+.ne-block-context-menu--dark .ne-block-convert-item--card .ne-block-menu-icon {
+  color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+  border-color: transparent;
+}
+
+.ne-block-context-menu--dark .ne-block-card-select-submenu {
+  background: #1f1f1f;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+/* Lakex 的全局 SVG 主题样式可能覆盖 presentation attribute。
+ * 二级菜单图标统一继承菜单项颜色，确保转化和缩进图标在暗色背景中可见。 */
+.ne-block-context-menu--dark .ne-block-submenu .ne-block-menu-icon svg {
+  color: inherit;
+}
+
+.ne-block-context-menu--dark .ne-block-submenu .ne-block-menu-icon svg [stroke]:not([stroke="none"]) {
+  stroke: currentColor;
+}
+
+.ne-block-context-menu--dark .ne-block-submenu .ne-block-menu-icon svg [fill]:not([fill="none"]) {
+  fill: currentColor;
+}

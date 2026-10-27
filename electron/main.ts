@@ -11,11 +11,14 @@ import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { createWebServerController, type WebServerController, WEB_API_PORT } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
-import { runGcReconcile } from "./s3Maintenance.js";
 import type { SyncResult, SyncProgress } from "./syncTypes.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
-import { initLogger, log, logHeapPeak } from "./logger.js";
-import { syncQuickNotes } from "./quickNotesSync.js";
+import { initLogger, currentLogLevels, log, logHeapPeak, logStartupInfo } from "./logger.js";
+import { isLevelEnabled } from "./logLevels.js";
+import { mapRendererConsoleLevel } from "./rendererLogLevel.js";
+import { errorFields, formatLogFields, perfMessage } from "../src/core/logFormat.js";
+import { ConsoleNoiseFilter } from "./consoleNoise.js";
+import { setQuickNotesStoreForV3 } from "./s3v3/quickNotesRegistry.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
@@ -103,18 +106,6 @@ function enqueueMaintenance<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/**
- * **高优先队列**（判据 `PRIORITY_OPS`）：用户当场发起的「把这一条推到云端」**不等整轮同步** ——
- * 长按小记 → 写完 → 同步 → 桌面端及时看到 是高频场景（用户 261013 点单）；
- * 与维护队列是两条独立队列，交叉风险由 IPC 侧的"推送后回核"（排维护队尾）兜底。
- */
-let priorityQueue: Promise<unknown> = Promise.resolve();
-function enqueuePriority<T>(task: () => Promise<T>): Promise<T> {
-  const run = priorityQueue.then(task, task);
-  priorityQueue = run.then(() => undefined, () => undefined);
-  return run;
-}
-
 /** 同步单飞保护：同一时刻只允许一个完整同步（手动 / 自动 / 开关触发共用）。 */
 let syncInFlight = false;
 
@@ -156,6 +147,8 @@ function clearQuitDeadline(): void {
 async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
   if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
   syncInFlight = true;
+  // 断点续传标记：开始即置位，成功结束才清（中断/被杀/断网时残留，下次启动自动续）。
+  try { store.markSyncInterrupted(new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
   const fullSyncStart = Date.now();
   log.sync.info("[perf] runFullSync start");
   try {
@@ -167,21 +160,19 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       };
       const result = await syncNowViaEngine(store, report);
       quickNotes.markTargetNotesSynced();
-      try {
-        const settings = store.getS3Settings();
-        if (!settings) throw new Error("请先保存 S3 配置");
-        const quick = await syncQuickNotes(quickNotes, settings, report);
-        result.quickNotes = quick;
-      } catch (error) {
-        result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
-        report({ phase: "quick-notes", message: `小记同步失败：${String(error)}` });
-      }
+      // 小记已随 v3 同一轮同步；旧 quick-notes 通道已移除。
+      result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
       store.recordSyncResult(JSON.stringify(result));
+      try { store.clearSyncInterrupted(); } catch { /* 同上 */ }
       report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
       log.sync.info(`[perf] runFullSync done ${Date.now() - fullSyncStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts}, superseded=${result.supersededNotes.length}, quickNotes=${result.quickNotes?.error ? "error" : "ok"})`);
       logHeapPeak("sync");
       return result;
     });
+  } catch (error) {
+    // 同步失败必须留证据（正式环境没有终端，别只靠调用点的 console.warn）。
+    log.sync.error("[sync] 同步失败" + formatLogFields({ ...errorFields(error), ms: Date.now() - fullSyncStart }));
+    throw error;
   } finally {
     syncInFlight = false;
     clearQuitDeadline();
@@ -305,6 +296,23 @@ function createBootWindow() {
   });
 }
 
+/** 启动计时基准（main.js 加载即开始）：[perf] boot.ready 用它算到主窗口首帧的耗时。 */
+const BOOT_STARTED_AT = Date.now();
+
+/**
+ * 崩溃 / 未捕获错误留档（261023）。
+ * 决策：**只记日志、不退出** —— 本地数据由原子写 + 历史快照保证；主进程直接退出会把用户当前编辑打断。
+ * 频次与形态由日志统计（grep '[crash]'）；若某类异常持续出现，再按证据收敛到具体调用点。
+ */
+function installCrashLogging(): void {
+  process.on("uncaughtException", (error) => {
+    log.app.error("[crash] uncaughtException" + formatLogFields(errorFields(error)));
+  });
+  process.on("unhandledRejection", (reason) => {
+    log.app.error("[crash] unhandledRejection" + formatLogFields(errorFields(reason)));
+  });
+}
+
 async function createWindow() {
   // macOS 关窗后从 Dock 重开时也要先有 boot 窗口，否则主窗口会隐藏到 renderer-ready 才出现。
   if (!bootWindow || bootWindow.isDestroyed()) createBootWindow();
@@ -351,9 +359,18 @@ async function createWindow() {
     win.show();
     win.focus();
     log.app.info(`[boot] main window shown (${reason})`);
+    log.perf.info(perfMessage("boot.ready", Date.now() - BOOT_STARTED_AT, { reason }));
+  };
+  /** macOS 原生全屏（独立 Space）时系统把标题栏/红绿灯一起隐藏 ⇒ 把全屏状态广播给渲染层，
+   *  让顶栏不再为红绿灯让位（避免左侧 82px 空缺口）。 */
+  const sendWindowFullscreen = () => {
+    if (!win.isDestroyed()) win.webContents.send("window-fullscreen", win.isFullScreen());
   };
   const onRendererReady = (event: IpcMainEvent) => {
-    if (event.sender.id === win.webContents.id) revealMainWindow("renderer-ready");
+    if (event.sender.id !== win.webContents.id) return;
+    revealMainWindow("renderer-ready");
+    // 启动即全屏（从 window-state 恢复）时，渲染层靠这条拿到初始态
+    sendWindowFullscreen();
   };
   ipcMain.on("renderer-ready", onRendererReady);
   bootFallback = setTimeout(() => revealMainWindow("fallback-timeout"), 8_000);
@@ -380,8 +397,8 @@ async function createWindow() {
   win.on("move", persistWindowState);
   win.on("maximize", persistWindowState);
   win.on("unmaximize", persistWindowState);
-  win.on("enter-full-screen", persistWindowState);
-  win.on("leave-full-screen", persistWindowState);
+  win.on("enter-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
+  win.on("leave-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
   win.on("close", persistWindowState);
   if (restored.maximized) win.maximize();
   if (restored.fullscreen) win.setFullScreen(true);
@@ -390,6 +407,10 @@ async function createWindow() {
   // 外链（http/https）交给系统浏览器打开，绝不进入应用窗口
   trustedWebContents.add(win.webContents.id);
   // 渲染进程日志统一落盘：console-message 转发到主进程 logger（scope=renderer）。
+  // CSP 拦截通知折叠（261023）：粘贴整页网页时内核会为每张远程图各打一条通知（实测 103 行），
+  // 逐条落盘会把同期真正需要的日志冲掉 ⇒ 折叠成一行汇总（consoleNoise.ts，排查见 TROUBLESHOOTING §M）。
+  const consoleNoise = new ConsoleNoiseFilter({ emit: (line) => log.renderer.info(line) });
+  win.on("closed", () => consoleNoise.flush());
   // Electron 33 事件签名：event 对象带 { level, message, lineNumber, sourceId }；
   // 同时兼容旧式 (event, level, message) 回调。
   win.webContents.on("console-message" as unknown as "console-message", (event: unknown, ...args: unknown[]) => {
@@ -400,10 +421,19 @@ async function createWindow() {
     if (!msg) return;
     // 过滤 DevTools 样式占位与空消息
     if (msg.includes("%c") || msg.length > 4000) return;
-    log.renderer.info(msg);
+    if (consoleNoise.observe(msg)) return;
+    // 级别映射（261023）：渲染层 error/warn 不能被压成 info；正式环境 debug 不落盘，避免调试噪音把日志冲掉。
+    const rendererLevel = mapRendererConsoleLevel(event as { level?: unknown }, args);
+    if (!isLevelEnabled(currentLogLevels().renderer, rendererLevel)) return;
+    if (rendererLevel === "error") log.renderer.error(msg);
+    else if (rendererLevel === "warn") log.renderer.warn(msg);
+    else if (rendererLevel === "debug") log.renderer.debug(msg);
+    else log.renderer.info(msg);
   });
   win.webContents.on("will-navigate", (event, url) => {
-    if (!isAppPageUrl(url)) event.preventDefault();
+    if (isAppPageUrl(url)) return;
+    event.preventDefault();
+    log.app.warn("[security] 阻止窗口导航" + formatLogFields({ url }));
   });
   win.webContents.on("destroyed", () => { trustedWebContents.delete(win.webContents.id); });
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -435,6 +465,11 @@ async function createWindow() {
       try { if (!win.isDestroyed()) win.webContents.reload(); } catch { /* 窗口已销毁 */ }
     }, 800);
   });
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    log.app.error("[crash] preload-error" + formatLogFields({ path: preloadPath, ...errorFields(error) }));
+  });
+  win.on("unresponsive", () => log.app.warn("[ui] 窗口无响应（unresponsive）"));
+  win.on("responsive", () => log.app.info("[ui] 窗口恢复响应（responsive）"));
 
   if (rendererMode === "scheme") {
     await win.loadURL(`${APP_ORIGIN}/index.html`);
@@ -513,7 +548,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     restartGcTimers: () => restartGcTimers?.(),
     restartSyncTimers: () => restartSyncTimers?.(),
   });
-  registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance, enqueuePriority);
+  registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance);
   registerLogIpc(ipc);
   registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
   return ipc.registry;
@@ -546,9 +581,11 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    initLogger();
+    initLogger({ isPackaged: app.isPackaged });
+    installCrashLogging();
     createBootWindow();
-    log.app.info("app ready: initLogger done");
+    logStartupInfo();
+    log.app.info("app ready: initLogger done" + formatLogFields({ bootMs: Date.now() - BOOT_STARTED_AT }));
     store = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
     const integrity = store.checkIntegrity();
     if (!integrity.ok) {
@@ -582,6 +619,7 @@ if (!app.requestSingleInstanceLock()) {
       else log.app.info("dev S3 seed skipped: credentials are not configured");
     }
     quickNotes = new QuickNotesStore(workspaceRoot(), log);
+    setQuickNotesStoreForV3(quickNotes);
     drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
@@ -655,11 +693,15 @@ if (!app.requestSingleInstanceLock()) {
     startSyncTimers();
     restartSyncTimers = startSyncTimers;
 
-    // 开启应用时对齐一次（261013：interval 也含在内；manual 不补）。失败仅告警。
+    // 开启应用时对齐一次（261013：interval 也含在内；manual 不补）+ 断点续传（261026）。
+    // 续传优先级最高：上次同步没跑完（进程被杀/崩溃/断网）⇒ 启动就续上，**不受 autoMode 影响**
+    // （manual 也一样——用户点过同步，退出再进来必须接着下，而不是等他自己再点一次）。
     const syncCfgOpen = store.getSyncSettings();
+    const interruptedAt = store.getSyncInterruptedAt();
     // 两条判据都走单一来源：能不能出网 = core/cloudState（没配置 或 关闭云同步 ⇒ 不出网）；
     // 该不该在开/关时补一次 = core/syncModes 的 shouldSyncOnOpenClose（enabled 且 autoMode ≠ "manual"）。
-    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && shouldSyncOnOpenClose(syncCfgOpen)) {
+    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && (interruptedAt !== null || shouldSyncOnOpenClose(syncCfgOpen))) {
+      if (interruptedAt !== null) log.app.info("[sync] 上次同步未完成（" + interruptedAt + "），启动自动续传" + formatLogFields({ backend: "v3" }));
       void runFullSync().catch((error) => {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("[sync] 开启同步失败:", msg);
@@ -667,27 +709,7 @@ if (!app.requestSingleInstanceLock()) {
       });
     }
 
-    // S3 GC 定期对账（gcIntervalHours 默认 24；0=关闭）。云同步关闭时不执行。
-    let gcTimer: NodeJS.Timeout | null = null;
-    const startGcTimer = () => {
-      if (gcTimer) { clearInterval(gcTimer); gcTimer = null; }
-      // 云同步关闭 ⇒ 定期对账也不出网（与 core/cloudState 同一判据）。
-      if (!canTouchNetwork(cloudStateOf(!!store.getS3Settings(), store.getSyncSettings()))) return;
-      const gcCfg = store.getS3GcSettings();
-      if (gcCfg.gcIntervalHours > 0) {
-        gcTimer = setInterval(() => {
-          void enqueueMaintenance(async () => {
-            try {
-              const r = await runGcReconcile(store);
-              if (r.deleted > 0) log.gc.info(`[s3-gc] 定期对账删除 ${r.deleted} 个过期对象`);
-            } catch (error) { console.warn("[s3-gc] 定期对账失败:", error); }
-          });
-        }, gcCfg.gcIntervalHours * 3600 * 1000);
-      }
-    };
-    startGcTimer();
-
-    // 回收站自动过期（trashAutoPurgeDays 默认 60；0=关闭）。本地操作：启动即查一次 + 每天一次。
+    // 回收站自动过期（trashAutoPurgeDays 默认 90；0=关闭）。本地操作：启动即查一次 + 每天一次。
     let trashTimer: NodeJS.Timeout | null = null;
     const startTrashTimer = () => {
       if (trashTimer) { clearInterval(trashTimer); trashTimer = null; }
@@ -703,7 +725,7 @@ if (!app.requestSingleInstanceLock()) {
       trashTimer = setInterval(run, 24 * 3600 * 1000);
     };
     startTrashTimer();
-    restartGcTimers = () => { startGcTimer(); startTrashTimer(); };
+    restartGcTimers = () => { startTrashTimer(); };
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -715,6 +737,7 @@ if (!app.requestSingleInstanceLock()) {
 // （否则可能停在"对象已传、manifest 未写"的中间态）。
 let quittingForSync = false;
 app.on("before-quit", (event) => {
+  log.app.info("[quit] before-quit" + formatLogFields({ upMs: Date.now() - BOOT_STARTED_AT }));
   if (forceQuit || quittingForSync || !store || !quickNotes) return;
   const cfg = store.getSyncSettings();
   if (!cfg.enabled) return;
@@ -736,6 +759,7 @@ app.on("before-quit", (event) => {
 });
 
 app.on("will-quit", () => {
+  log.app.info("[quit] will-quit" + formatLogFields({ upMs: Date.now() - BOOT_STARTED_AT }));
   // Best-effort checkpoint after any onOpenClose sync has settled. This keeps
   // the metadata DB/WAL bounded without making shutdown depend on it.
   try { store?.checkpointWal(); } catch { /* app is already exiting */ }

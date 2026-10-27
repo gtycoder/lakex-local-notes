@@ -12,12 +12,14 @@ vi.mock("../native/assetFs", () => ({
   loadAssetBytesFs: vi.fn(async () => null),
   listAssetKeysFs: vi.fn(async () => []),
   listNoteAssetKeysFs: vi.fn(async () => []),
+  statNoteAssetSizesFs: vi.fn(async () => null),
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyMobileSchema } from "./schema.js";
-import { createNote, isTombstoned, noteWriteState, readNote, saveNote, trashNote } from "./noteRepository.js";
+import { loadAssetBytesFs, listNoteAssetKeysFs, statNoteAssetSizesFs } from "../native/assetFs";
+import { createNote, detectOrphans, isTombstoned, noteWriteState, readNote, saveNote, trashNote } from "./noteRepository.js";
 
 async function freshDb() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
@@ -40,22 +42,22 @@ describe("mobile noteRepository 保存写边界（审计 F06）", () => {
     await createNote(db, "t1", "标题", "<p>trash-original</p>", null, new Map());
     await trashNote(db, "t1");
     expect(await noteWriteState(db, "t1")).toBe("gone");
-    const before = await db.prepare("SELECT sync_state, trashed_at FROM notes WHERE id=?").get("t1");
+    const before = await db.prepare("SELECT is_dirty, trashed_at FROM notes WHERE id=?").get("t1");
     await expect(saveNote(db, "t1", "标题", "<p>late-save</p>", null, new Map())).rejects.toThrow();
-    const after = await db.prepare("SELECT sync_state, trashed_at FROM notes WHERE id=?").get("t1");
+    const after = await db.prepare("SELECT is_dirty, trashed_at FROM notes WHERE id=?").get("t1");
     expect(after).toEqual(before);
     // 261019：正文在文件里，晚到保存不得覆盖它。
     expect((await readNote(db, "t1"))!.content).toBe("<p>trash-original</p>");
     await db.close();
   });
 
-  it("他端 purge 的保留副本（sync_state='purged'）：晚到保存被拒绝，不标回 local", async () => {
+  it("他端 purge 的保留副本（is_dirty='purged'）：晚到保存被拒绝，不标回 local", async () => {
     const db = await freshDb();
     await createNote(db, "p1", "标题", "<p>purged-original</p>", null, new Map());
-    await db.prepare("UPDATE notes SET trashed_at=?, sync_state='purged' WHERE id=?").run("2026-09-30T00:00:00.000Z", "p1");
+    await db.prepare("UPDATE notes SET trashed_at=?, is_dirty='purged' WHERE id=?").run("2026-09-30T00:00:00.000Z", "p1");
     await expect(saveNote(db, "p1", "标题", "<p>late</p>", null, new Map())).rejects.toThrow();
-    const row = await db.prepare("SELECT sync_state FROM notes WHERE id=?").get("p1");
-    expect(row).toMatchObject({ sync_state: "purged" });
+    const row = await db.prepare("SELECT is_dirty FROM notes WHERE id=?").get("p1");
+    expect(row).toMatchObject({ is_dirty: "purged" });
     expect((await readNote(db, "p1"))!.content).toBe("<p>purged-original</p>");
     await db.close();
   });
@@ -70,13 +72,27 @@ describe("mobile noteRepository 保存写边界（审计 F06）", () => {
     await db.close();
   });
 
-  it("显式恢复后（trashed_at 清空、sync_state=local）可继续保存", async () => {
+  it("显式恢复后（trashed_at 清空、is_dirty=local）可继续保存", async () => {
     const db = await freshDb();
     await createNote(db, "r1", "标题", "<p>v1</p>", null, new Map());
     await trashNote(db, "r1");
-    await db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local' WHERE id=?").run("2026-10-01T00:00:00.000Z", "r1");
+    await db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, is_dirty=1 WHERE id=?").run("2026-10-01T00:00:00.000Z", "r1");
     await expect(saveNote(db, "r1", "标题", "<p>恢复后编辑版</p>", null, new Map())).resolves.toBe(true);
     expect((await readNote(db, "r1"))!.content).toBe("<p>恢复后编辑版</p>");
+    await db.close();
+  });
+
+  it("孤儿登记只用原生 size，不读资产内容（261027）", async () => {
+    const db = await freshDb();
+    await createNote(db, "n1", "带附件", "<p>正文无引用</p>", null, new Map());
+    vi.mocked(listNoteAssetKeysFs).mockResolvedValueOnce(["n1/orphan.bin"]);
+    vi.mocked(statNoteAssetSizesFs).mockResolvedValueOnce(new Map([["orphan.bin", 777]]));
+    const loadMock = vi.mocked(loadAssetBytesFs);
+    loadMock.mockClear();
+    await detectOrphans(db, "n1", "<p>正文无引用</p>", new Map());
+    const row = await db.prepare("SELECT size FROM orphan_assets WHERE note_id=? AND filename=?").get("n1", "orphan.bin") as { size: number } | undefined;
+    expect(row?.size).toBe(777);
+    expect(loadMock).not.toHaveBeenCalled();
     await db.close();
   });
 });

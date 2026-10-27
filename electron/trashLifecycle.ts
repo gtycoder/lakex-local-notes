@@ -88,11 +88,11 @@ export class TrashLifecycle {
         // restore_pending_at 一并清除：恢复后未同步再删除，残留标记会以"恢复语义"上传（trashedAt:null）
         // 导致本地删除不传播、云端复活（与 applyRemoteMoveToTrash/applyRemoteRestore 同口径清理）。
         this.ctx.db.prepare(
-          "UPDATE notes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+          "UPDATE notes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,is_dirty=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
         ).run(this.ctx.trashNotebookId, now, node.parentId, now, node.noteFileId);
       }
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, node.parentId, now, id);
       // 级联：子树所有节点（嵌套分组 + 笔记）跟随根进回收站——trashed_at 必须标上，
       // 否则同步发布时子树按"正常"传播，其他端不跟随删除（内容"没删掉"、根恢复/删除语义不一致）。
@@ -101,13 +101,13 @@ export class TrashLifecycle {
         const subNotes: Array<{ note_file_id: string }> = [];
         for (const batch of sqlParameterBatches(subtreeIds)) {
           const ph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE tree_nodes SET trashed_at=?,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, now, ...batch);
+          this.ctx.db.prepare(`UPDATE tree_nodes SET trashed_at=?,updated_at=?,is_dirty=1 WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, now, ...batch);
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
         const subNoteIds = subNotes.map((s) => s.note_file_id);
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...batch);
+          this.ctx.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,is_dirty=1,restore_pending_at=NULL WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...batch);
         }
       }
       // 回收站条目不出现在搜索（子树整体移出 FTS 账本，恢复时重建）
@@ -151,14 +151,14 @@ export class TrashLifecycle {
     const tx = this.ctx.db.transaction(() => {
       if (node.note_file_id) {
         this.ctx.db.prepare(
-          "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local',restore_pending_at=? WHERE id=?"
+          "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,restore_pending_at=? WHERE id=?"
         ).run(parentId, now, now, node.note_file_id);
         const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title: string } | undefined;
         const caches = this.ctx.readNoteCaches(node.note_file_id);
         this.ctx.upsertSearch(node.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
       }
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local' WHERE id=?"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0 WHERE id=?"
       ).run(parentId, now, id);
       // 级联：子树（跟随根进回收站的嵌套分组/笔记）随根恢复——清 trashed_at（父位置不变）。
       const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
@@ -166,13 +166,13 @@ export class TrashLifecycle {
         const subNotes: Array<{ note_file_id: string }> = [];
         for (const batch of sqlParameterBatches(subtreeIds)) {
           const ph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE tree_nodes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, ...batch);
+          this.ctx.db.prepare(`UPDATE tree_nodes SET trashed_at=NULL,updated_at=?,is_dirty=1 WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, ...batch);
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
         const subNoteIds = subNotes.map((s) => s.note_file_id);
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE notes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, ...batch);
+          this.ctx.db.prepare(`UPDATE notes SET trashed_at=NULL,updated_at=?,is_dirty=1 WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, ...batch);
         }
       }
     });
@@ -188,8 +188,8 @@ export class TrashLifecycle {
     const now = nowIso();
     const tx = this.ctx.db.transaction(() => {
       this.ctx.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(id);
-      this.ctx.db.prepare("UPDATE notes SET sync_state='local' WHERE id=? AND sync_state='purged'").run(id);
-      this.ctx.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE note_file_id=? AND sync_state='purged'").run(id);
+      this.ctx.db.prepare("UPDATE notes SET is_dirty=1,is_purged=0,cloud_deleted=0 WHERE id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
+      this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=1,is_purged=0,cloud_deleted=0 WHERE note_file_id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
       const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
       // 容错：本端已 purge（行被彻底删除）时跳过缓存/FTS——行将由下载分支 importRemoteNote 重建，
       // 避免 readNoteCaches 对不存在的行抛"笔记不存在"导致同步中断（远端恢复传播场景）。

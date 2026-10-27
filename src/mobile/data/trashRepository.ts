@@ -53,7 +53,7 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
   await d.transaction(async () => {
     const now = new Date().toISOString();
     if (kind === "note") {
-      await d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL WHERE id=?").run(now, id);
+      await d.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(now, id);
       return;
     }
 
@@ -68,7 +68,7 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     for (const batch of sqlParameterBatches(folderIdList)) {
       const ph = batch.map(() => "?").join(",");
       statements.push({
-        statement: "UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL",
+        statement: "UPDATE folders SET trashed_at=?, is_dirty=1, updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL",
         values: [now, now, ...batch],
       });
     }
@@ -78,7 +78,7 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     }
     for (const n of noteRows) {
       statements.push({
-        statement: "UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL, updated_at=? WHERE id=?",
+        statement: "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, updated_at=? WHERE id=?",
         values: [now, now, n.id],
       });
     }
@@ -86,13 +86,48 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
   });
 }
 
-export async function listTrashTree(d: MobileDb): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
-  const folders = await d.prepare("SELECT id, title, parent_id, trashed_at FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
-  const notes = await d.prepare("SELECT id, title, parent_id, trashed_at FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
+/** 总回收站行：cloudDeleted = 远端已彻底删除、本机仅保留副本（「云端已删除 · 仅本地」）。 */
+export interface MobileTrashTreeItem {
+  id: string;
+  title: string;
+  kind: "folder" | "note";
+  parentId: string | null;
+  deletedAt: string | null;
+  cloudDeleted: boolean;
+}
+
+export async function listTrashTree(d: MobileDb): Promise<MobileTrashTreeItem[]> {
+  const folders = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number }>;
+  const notes = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number }>;
   return [
-    ...folders.map((f) => ({ id: f.id, title: f.title, kind: "folder" as const, parentId: f.parent_id, deletedAt: f.trashed_at })),
-    ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, deletedAt: n.trashed_at })),
+    ...folders.map((f) => ({ id: f.id, title: f.title, kind: "folder" as const, parentId: f.parent_id, deletedAt: f.trashed_at, cloudDeleted: f.cloud_deleted === 1 })),
+    ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, deletedAt: n.trashed_at, cloudDeleted: n.cloud_deleted === 1 })),
   ].sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
+}
+
+/**
+ * 恢复目标父必须「存在且不在回收站」，否则回落兜底笔记本（对齐桌面 trashLifecycle.restoreTrashItem：130–149）。
+ * 261027 conformance 抓到：只 COALESCE(deleted_from_parent_id,parent_id) 会把文档挂到已删目录上 ⇒
+ * 活跃文档父级悬空、树里不可见。没有活跃笔记本时懒建「未分类」（与 syncDbPort.defaultNotebookId 同口径）。
+ */
+async function resolveRestoreParent(
+  d: MobileDb,
+  preferred: string | null,
+  restoringFolderIds: ReadonlySet<string> = new Set(),
+): Promise<string | null> {
+  if (preferred) {
+    // 本次一起恢复的子树成员还没落库（trashed_at 仍是删除时的值）⇒ 视为可用，否则嵌套组/子文档会被拆散。
+    if (restoringFolderIds.has(preferred)) return preferred;
+    const parent = await d.prepare("SELECT id FROM folders WHERE id=? AND trashed_at IS NULL").get(preferred) as { id?: string } | undefined;
+    if (parent?.id) return preferred;
+  }
+  const notebook = await d.prepare("SELECT id FROM folders WHERE node_type='notebook' AND trashed_at IS NULL ORDER BY sort_order LIMIT 1").get() as { id?: string } | undefined;
+  if (notebook?.id) return notebook.id;
+  const id = "notebook-" + globalThis.crypto.randomUUID();
+  await d.prepare(
+    "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES (?,?,NULL,0,'notebook',NULL,?,1)"
+  ).run(id, "未分类", new Date().toISOString());
+  return id;
 }
 
 export async function restoreTreeItem(
@@ -126,27 +161,34 @@ export async function restoreTreeItem(
     // parent_id 必须移回原父：UI 自己的软删不动 parent，但从远端学到的删除（applyRemoteTrash）
     // 是 parent=TRASH 容器表示——不移回则恢复后行仍挂在回收站容器下，上传条目 parentId=TRASH，
     // 他端"跟随恢复"后同样卡在回收站（260910 四端实测）。
+    // 261027：原父已被删（或不在活跃目录里）⇒ 回落兜底笔记本，绝不恢复成悬空文档。
+    const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid FROM notes WHERE id=?").get(id) as { pid?: string | null } | undefined;
+    const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds));
     await d.prepare(
-      "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?"
-    ).run(now, now, id);
+      "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?"
+    ).run(parentId, now, now, id);
     return;
   }
 
+  const restoringFolders = new Set(folderIds);
   await d.transaction(async () => {
     const now = new Date().toISOString();
     const statements: MobileBatchStatement[] = [];
     for (const fid of folderIds) {
       // folder 同理：远端学到的 folder 删除（applyRemoteFolderDelete）标 trashed 但根行 parent 可能不变；
       // COALESCE 兼容两种表示（UI 软删 parent 未动 → 保持；远端学来 → deleted_from_parent_id 为原父）。
+      // 261027：笔记本回根层；分组/目录若原父已删 ⇒ 回落兜底笔记本（与 note 分支同口径，不悬空）。
+      const row = await d.prepare("SELECT node_type, COALESCE(deleted_from_parent_id, parent_id) AS pid FROM folders WHERE id=?").get(fid) as { node_type?: string; pid?: string | null } | undefined;
+      const parentId = row?.node_type === "notebook" ? null : await resolveRestoreParent(d, row?.pid ?? null, restoringFolders);
       statements.push({
-        statement: "UPDATE folders SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?",
-        values: [now, fid],
+        statement: "UPDATE folders SET parent_id=?, trashed_at=NULL, updated_at=?, is_dirty=1 WHERE id=?",
+        values: [parentId, now, fid],
       });
     }
     for (const nid of restoreNoteIds) {
       // 子树内 notes：applyRemoteFolderDelete 会把子笔记 parent 移到 TRASH 容器 → 恢复时一并移回原父
       statements.push({
-        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?",
+        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?",
         values: [now, now, nid],
       });
     }

@@ -57,7 +57,7 @@ export function useTreeActions({
       const renamed = await native.renameTreeNode(id, title);
       setTreeNodes(replaceTreeNode(renamed));
       if (renamed.noteFileId) {
-        setNotes(patchNoteById(renamed.noteFileId, { title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" }));
+        setNotes(patchNoteById(renamed.noteFileId, { title: renamed.title, updatedAt: renamed.updatedAt }));
         setOpenTabs(patchTabById(renamed.noteFileId, { title: renamed.title }));
       }
     } catch (reason) { setError(getNativeErrorMessage(reason)); }

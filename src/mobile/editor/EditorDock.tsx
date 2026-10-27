@@ -12,7 +12,7 @@
  *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
+import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Lock, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
 import { showToast } from "../ui/toastBus";
@@ -386,8 +386,8 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   /**
    * 「＋」面板的插入项清单（用户 261015 亲自指定顺序与分组）。
    *
-   * **两组（8 + 10）**：① 拍照 图片 附件 音频 视频 表情 状态 日期；② 表格 引用 分割线 代码块 高亮块 分栏 折叠块 链接 文档引用 日历。
-   * **4 列**下：① 8 项 = 2 行**零空洞**；② 10 项 = 3 行（末行 2 项、2 个空位）。两组之间用更大的间距分隔。
+   * **两组（8 + 11）**：① 拍照 图片 附件 音频 视频 表情 状态 日期；② 表格 引用 分割线 代码块 高亮块 分栏 折叠块 链接 文档引用 加密文本 日历。
+   * **4 列**下：① 8 项 = 2 行**零空洞**；② 11 项 = 3 行（末行 3 项、1 个空位）。两组之间用更大的间距分隔。
    */
   const INSERT_GROUPS: ReadonlyArray<{ key: string; items: ReadonlyArray<DockItem> }> = [
     // ① 媒体与时间（用户 261015 定：拍照 · 图片 · 附件 · 音频 · 视频 · 表情 · 状态 · 日期 · 日历）
@@ -416,6 +416,8 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       // 链接从「Aa」面板移到这里（用户 261012：链接融合到 + 号里）；点它在本面板内联展开链接编辑行
       { label: "链接", Icon: Link2, run: () => toggleLinkEditor() },
       { label: "文档引用", Icon: FileSymlink, run: () => runPanel("insertCard", "customBlock", { $name: "lake-note-ref", $htmlStr: "", noteId: "", title: "" }, true) },
+      // 加密文本（261023）：自定义卡「lake-locked-text」，与桌面「+」面板同一张卡（卡值是密文，明文从不进正文）
+      { label: "加密文本", Icon: Lock, run: () => runPanel("insertCard", "customBlock", { $name: "lake-locked-text", $htmlStr: "" }, true) },
       // 日历从第一组挪到这里（用户 261015：「把日历放到第二组」）
       { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
     ] },

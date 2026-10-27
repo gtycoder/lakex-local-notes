@@ -3,10 +3,10 @@ import { buildTreeIndex } from "./treeIndex.js";
 import type { TreeNode } from "./types.js";
 
 const nodes: TreeNode[] = [
-  { id: "book", parentId: null, nodeType: "notebook", title: "工作", sortOrder: 0, updatedAt: "", syncState: "local", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
-  { id: "group", parentId: "book", nodeType: "group", title: "项目", sortOrder: 0, updatedAt: "", syncState: "local", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
-  { id: "match", parentId: "group", nodeType: "note", title: "性能记录", sortOrder: 0, updatedAt: "", syncState: "local", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
-  { id: "other", parentId: "book", nodeType: "note", title: "日记", sortOrder: 1, updatedAt: "", syncState: "local", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
+  { id: "book", parentId: null, nodeType: "notebook", title: "工作", sortOrder: 0, updatedAt: "", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
+  { id: "group", parentId: "book", nodeType: "group", title: "项目", sortOrder: 0, updatedAt: "", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
+  { id: "match", parentId: "group", nodeType: "note", title: "性能记录", sortOrder: 0, updatedAt: "", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
+  { id: "other", parentId: "book", nodeType: "note", title: "日记", sortOrder: 1, updatedAt: "", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },
 ];
 
 describe("buildTreeIndex", () => {

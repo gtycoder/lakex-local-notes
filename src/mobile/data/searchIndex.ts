@@ -52,8 +52,13 @@ interface IndexStatement {
   values: unknown[];
 }
 
-/** reconcile 每次桥往返处理的文档数：一次 SELECT prev + 一次 SELECT MAX + 一批 executeSet。 */
-export const RECONCILE_BATCH_SIZE = 200;
+/**
+ * reconcile 每次桥往返处理的文档数：一次 SELECT prev + 一次 SELECT MAX + 一批 executeSet。
+ * 20（261026）：批经 Capacitor 桥传输；正文很长的库（实测 text_cache 总计 109MB、单篇均值 53KB）
+ * 单批太大时 Android 端 stringify 会直接把进程打爆。20 条/批 ≈ 1MB 级；且 FTS body 已改为
+ * SQL 侧从 notes.text_cache 直取，不再随批传输正文（见 reconcile 内注释）。
+ */
+export const RECONCILE_BATCH_SIZE = 20;
 
 const SEARCH_INDEX_UPSERT_SQL =
   "INSERT INTO search_index(note_id, fts_rowid, title, raw_hash, title_hash, body_hash, indexed_at) VALUES(?,?,?,?,?,?,?) " +
@@ -142,15 +147,18 @@ export async function reconcileIndex(d: MobileDb): Promise<void> {
     }
     await flushIndexStatements(d, deletes);
   }
-  const changed = await d.prepare(
-    "SELECT n.id AS id, n.title AS title, n.content_hash AS content_hash, n.text_cache AS text_cache, n.doc_kind AS doc_kind " +
-    "FROM notes n LEFT JOIN search_index si ON si.note_id = n.id " +
-    "WHERE n.trashed_at IS NULL AND (si.note_id IS NULL OR si.title != n.title OR si.raw_hash IS NULL OR si.raw_hash != n.content_hash)"
-  ).all() as unknown as NoteRow[];
-  // 分块：每块一次 SELECT prev（IN (...)）+ 一次 SELECT MAX(fts_rowid)，JS 内顺序分配新 rowid，
-  // 语句入队后 executeSet 一次下发。块与块之间顺序执行，后一块的 MAX 已包含前一块的写入。
-  for (let i = 0; i < changed.length; i += RECONCILE_BATCH_SIZE) {
-    const chunk = changed.slice(i, i + RECONCILE_BATCH_SIZE);
+  // 分批（keyset）取需要（重）建索引的行：2k 篇的 text_cache 一次性读回会把 Android WebView 堆打爆
+  // （261026 实测 OOM：selectSQL 组装 2k × 十几 KB 的 JSON）。按 id 升序、每批 RECONCILE_BATCH_SIZE。
+  let cursor = "";
+  for (;;) {
+    const chunk = await d.prepare(
+      "SELECT n.id AS id, n.title AS title, n.content_hash AS content_hash, n.text_cache AS text_cache, n.doc_kind AS doc_kind " +
+      "FROM notes n LEFT JOIN search_index si ON si.note_id = n.id " +
+      "WHERE n.trashed_at IS NULL AND n.id > ? AND (si.note_id IS NULL OR si.title != n.title OR si.raw_hash IS NULL OR si.raw_hash != n.content_hash) " +
+      "ORDER BY n.id LIMIT ?"
+    ).all(cursor, RECONCILE_BATCH_SIZE) as unknown as NoteRow[];
+    if (chunk.length === 0) break;
+    cursor = String(chunk[chunk.length - 1].id);
     const placeholders = chunk.map(() => "?").join(",");
     const prevRows = await d.prepare(
       "SELECT note_id, fts_rowid, title_hash, body_hash FROM search_index WHERE note_id IN (" + placeholders + ")"
@@ -179,6 +187,9 @@ export async function reconcileIndex(d: MobileDb): Promise<void> {
       } else {
         rowid = nextRowid++;
       }
+      // 正文必须按 segmentToIndexText（CJK 分词）写 FTS，否则中文搜索会失效；
+      // 批大小压到 20 条是为了不让一次 executeSet 的 JSON 在 Android 端 stringify 时 OOM
+      // （实测 200 条 × 均 53KB 的批会把调试包直接打崩）。
       statements.push({ statement: "INSERT INTO notes_fts(rowid, title, body) VALUES(?,?,?)", values: [rowid, segmentToIndexText(title), segmentToIndexText(plain)] });
       statements.push({ statement: SEARCH_INDEX_UPSERT_SQL, values: [row.id, rowid, title, row.content_hash, titleHash, bodyHash, indexedAt] });
     }

@@ -1,0 +1,169 @@
+/* src/components/BlockHoverHandle/BlockHoverHandle.css
+ * 块节点悬浮拖拽手柄样式
+ */
+
+.ne-block-hover-handle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  /* 图标靠左，右侧约 12px 作为透明延伸区，使手柄右边缘紧贴块、消除间隙，
+     鼠标从块滑到手柄时不会因 12px 真空而丢失 */
+  padding-left: 6px;
+  cursor: grab;
+  border-radius: 4px;
+  /* 外层容器透明：实色背景与 hover 高亮收敛到内层图标区，
+     右侧约 12px 延伸区无背景、保持透明，仅作命中用途 */
+  background-color: transparent;
+  color: #999;
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  /* 初始不可见，通过 fade-in 动画显示 */
+  opacity: 0;
+  outline: none;
+  /* animation: ne-block-handle-fade-in 0.15s ease forwards; */
+}
+
+.ne-block-handle-tooltip {
+  position: absolute;
+  /* 外层左侧 6px padding + 24px 可见按钮的一半：以按钮中心为锚点。 */
+  left: 18px;
+  top: calc(100% + 8px);
+  z-index: 1200;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(38, 38, 38, 0.94);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -2px);
+  transition:
+    opacity 0.12s ease-out 0.3s,
+    transform 0.12s ease-out 0.3s,
+    visibility 0s linear 0.42s;
+}
+
+.ne-block-hover-handle:hover .ne-block-handle-tooltip,
+.ne-block-hover-handle:focus-visible .ne-block-handle-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition-delay: 0.3s, 0.3s, 0s;
+}
+
+.ne-block-hover-handle:active .ne-block-handle-tooltip {
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0s;
+}
+
+@keyframes ne-block-handle-fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+
+
+.ne-block-hover-handle:hover .ne-block-handle-inner,
+.ne-block-hover-handle:focus-visible .ne-block-handle-inner {
+  background-color: #f0f2f5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* 拖拽中：grabbing 光标 + 蓝色高亮 */
+.ne-block-hover-handle:active {
+  cursor: grabbing;
+}
+
+.ne-block-hover-handle:active .ne-block-handle-inner {
+  background-color: #e8f0fe;
+  box-shadow: 0 1px 4px rgba(22, 119, 255, 0.25);
+}
+
+/* 内层图标区：承载实色背景与 hover/active 高亮；宽高 24px 对应可见图标区，
+   外层容器右侧约 12px 透明延伸区不在此内层内，故保持透明 */
+.ne-block-handle-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background-color: var(--lakex-editor-background, #fff);
+  transition: all 0.15s ease;
+}
+
+.ne-block-handle-icon {
+  display: block;
+  pointer-events: none;
+}
+
+/* 手柄右边缘已紧贴块、无间隙，不再需要 ::before 透明桥接区 */
+
+/* ===== 选中样式（LOCAL-CHANGE 261004）=====
+ * **只由「鼠标触达块句柄」触发**（不在 selectionchange 上挂）：候选块拿到 .ne-brick-highlight 时，
+ * 覆盖**所有行级块**（正文/标题/列表项）；段间距由**动态入参** `--ln-brick-hl-extend`
+ * （= 与下一个高亮紧邻兄弟的真实间距）用 box-shadow 补齐 ⇒ 相邻行连成一片、不留行间隙，
+ * 单行/末尾为 0、不用任何固定像素值（用户 261004 口径：行级渲染、不留行间隙）。
+ * ⚠️ 不照抄内核 ne-p 的 `::before + z-index:-1`：在列表项上会被引擎背景盖住、实测像素全白。 */
+.ne-engine .ne-brick-highlight {
+  background-color: var(--lakex-editor-background-focus);
+  box-shadow: 0 var(--ln-brick-hl-extend, 0px) 0 0 var(--lakex-editor-background-focus);
+}
+
+/* 拖拽中：源块保持原位，仅以浅色字体显示 */
+.ne-block-drag-source {
+  opacity: 0.4;
+}
+
+/* 跟随鼠标的克隆副本（拖拽预览，无边框） */
+.ne-block-drag-ghost {
+  border: none;
+  cursor: grab;
+}
+
+/* 蓝色插入线（落点指示），具体尺寸由 JS 内联设置 */
+.ne-block-drag-indicator {
+  pointer-events: none;
+}
+
+/* ===== 暗黑模式配色 =====
+ * 注意：框架的 --lakex-editor-* 主题变量定义在 .ne-engine 上，
+ * 手柄是其兄弟节点、继承不到，故暗色下使用写死的协调配色。
+ */
+.ne-block-hover-handle--dark {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.ne-block-hover-handle--dark .ne-block-handle-inner {
+  background-color: #2a2a2a;
+}
+
+.ne-block-hover-handle--dark:hover {
+  color: #1677ff;
+}
+
+.ne-block-hover-handle--dark:hover .ne-block-handle-inner {
+  background-color: #3a3a3a;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.ne-block-hover-handle--dark:active {
+  color: #1677ff;
+}
+
+.ne-block-hover-handle--dark:active .ne-block-handle-inner {
+  background-color: rgba(22, 119, 255, 0.3);
+}

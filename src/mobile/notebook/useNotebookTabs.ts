@@ -64,9 +64,9 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   onDropRef.current = opts.onDrop;
 
   /** 只给真正激活的标签读正文；恢复历史标签时先建占位，不并发预读。 */
-  const loadTabBody = useCallback((id: string): Promise<void> => {
+  const loadTabBody = useCallback((id: string, force = false): Promise<void> => {
     const current = tabsRef.current.find((tab) => tab.id === id);
-    if (pendingIdsRef.current.has(id) || current?.loaded) return Promise.resolve();
+    if (pendingIdsRef.current.has(id) || (current?.loaded && !force)) return Promise.resolve();
     pendingIdsRef.current.add(id);
     setReadTick((tick) => tick + 1);
     const epoch = tabEpochRef.current;

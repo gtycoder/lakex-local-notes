@@ -41,7 +41,9 @@ export function deriveDesktopView(input: DesktopViewInput) {
     sidebarWidth, sidebarMode, narrowOverlay, outlineSidebarWidth,
   } = input;
 
-  const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
+  const activeNode = activeNoteId ? treeNodes.find((n) => n.noteFileId === activeNoteId) : undefined;
+  const activeNodeDirty = activeNode?.isDirty === true;
+  const activeNodeConflict = activeNode?.isConflict === true;
 
   // blockHandle：桌面编辑态的块悬浮手柄/块操作菜单（菜单只走内核原生命令，见 blockHandleMount）
   const editorPrefs = { fontSize, showToolbar, floatingToolbar, blockHandle: true };
@@ -78,6 +80,8 @@ export function deriveDesktopView(input: DesktopViewInput) {
 
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
+    // 261023：正文文件缺失必须透传（漏掉 ⇒ 缺正文文档会被当正常文档挂编辑器，又回到 ENOENT 报错）。
+    bodyMissing: tab.bodyMissing,
     icon: iconByNoteId.get(tab.noteId) ?? null,
     reloadKey: tab.reloadKey ?? 0,
     // v6：必须透传文档类型。漏掉它 ⇒ MultiTabEditor 收不到 kind=usheet，表格会被当成 Lake 文档用 EditorTab 渲染。
@@ -90,7 +94,9 @@ export function deriveDesktopView(input: DesktopViewInput) {
     (activeNoteId ? openTabs.find((t) => t.noteId === activeNoteId)?.kind : undefined) ?? "doc";
   const outlineVisible = tocEnabled && outlineEnhance && desktopWorkspace === "library" && activeKind === "doc";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
-  const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
+  const lockedNoteIds = new Set(notes.filter((n) => n.isEditLocked).map((n) => n.id));
+  // v3「云端已删除 · 仅本地」：store 驱动（cloud_deleted，恢复并重新上传成功后自动清除）。
+  const cloudDeletedNoteIds = new Set(notes.filter((n) => n.cloudDeleted).map((n) => n.id));
 
   // 窄窗：锁定态（docked）也按收起态渲染 —— 窄窗不允许大纲占列，只保留右侧 rail + 悬停浮层。
   const effectiveOutlineMode: OutlineMode = narrowOverlay && outlineMode === "docked"
@@ -113,7 +119,7 @@ export function deriveDesktopView(input: DesktopViewInput) {
   } as CSSProperties;
 
   return {
-    activeNodeSyncState, editorPrefs, activePath, scrollActiveEditorToTop, notePathTitle,
-    tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
+    activeNodeDirty, activeNodeConflict, editorPrefs, activePath, scrollActiveEditorToTop, notePathTitle,
+    tabInfos, outlineVisible, lockedNoteIds, cloudDeletedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   };
 }

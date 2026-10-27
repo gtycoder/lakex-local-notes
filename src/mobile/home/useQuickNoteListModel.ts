@@ -4,7 +4,7 @@ import {
   sortQuickNotes,
   type QuickNoteSort,
 } from "../../core/quickNoteSort";
-import { buildQuickNoteTagIndex, filterQuickNotesByTag, type QuickNoteTagFilter } from "../../core/quickNoteTags";
+import { buildQuickNoteTagIndex, filterQuickNotesByTag, type QuickNoteTagFilter, type QuickNoteTag } from "../../core/quickNoteTags";
 import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPref";
 import type { QuickNoteDetail } from "./useQuickNoteDetailCache";
 
@@ -18,12 +18,14 @@ export interface QuickNoteListSource {
   body?: string;
   images?: import("../../core/quickNoteModel.js").StoredQuickNoteImage[];
   tags: string[];
+  tagIds: string[];
 }
 
 /** 小记列表展示模型：详情合并、标签索引、筛选、排序与本机排序偏好。 */
 export function useQuickNoteListModel<T extends QuickNoteListSource>(
   quickNotes: readonly T[],
   details: ReadonlyMap<string, QuickNoteDetail>,
+  tagDirectory: readonly QuickNoteTag[],
 ) {
   const [quickTagFilter, setQuickTagFilter] = useState<QuickNoteTagFilter>({ kind: "all" });
   const [quickSort, setQuickSortState] = useState<QuickNoteSort>(() => readQuickNoteSort());
@@ -31,23 +33,23 @@ export function useQuickNoteListModel<T extends QuickNoteListSource>(
   const displayedQuickNotes = useMemo(() => quickNotes.map((note) => {
     const detail = details.get(note.id);
     return detail
-      ? { ...note, body: detail.body, images: detail.images, tags: detail.tags, firstImage: detail.firstImage ?? note.firstImage }
+      ? { ...note, body: detail.body, images: detail.images, tags: detail.tags, tagIds: detail.tagIds, firstImage: detail.firstImage ?? note.firstImage }
       : note;
   }), [quickNotes, details]);
 
   const quickTagIndex = useMemo(
-    () => buildQuickNoteTagIndex(displayedQuickNotes, (note) => note.tags),
-    [displayedQuickNotes],
+    () => buildQuickNoteTagIndex(displayedQuickNotes, tagDirectory, (note) => note.tagIds),
+    [displayedQuickNotes, tagDirectory],
   );
 
   useEffect(() => {
-    if (quickTagFilter.kind === "tag" && !quickTagIndex.tags.some((tag) => tag.name === quickTagFilter.name)) {
+    if (quickTagFilter.kind === "tag" && !quickTagIndex.tags.some((tag) => tag.id === quickTagFilter.id)) {
       setQuickTagFilter({ kind: "all" });
     }
   }, [quickTagFilter, quickTagIndex.tags]);
 
   const sortedQuickNotes = useMemo(() => {
-    const filtered = filterQuickNotesByTag(displayedQuickNotes, quickTagFilter, (note) => note.tags);
+    const filtered = filterQuickNotesByTag(displayedQuickNotes, quickTagFilter, (note) => note.tagIds);
     return sortQuickNotes(filtered, quickSort);
   }, [displayedQuickNotes, quickSort, quickTagFilter]);
 

@@ -3,8 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { ASSET_PORT } from "./assetServer.js";
+import { DocumentTagsService } from "./documentTags.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { AppError } from "../src/core/storeErrors.js";
+import { perfMessage } from "../src/core/logFormat.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
@@ -17,6 +19,8 @@ import { emptyBoardBody } from "../src/core/boardDoc.js";
 import { emptyInkBody } from "../src/core/inkDoc.js";
 import { searchTextForKind } from "../src/core/noteSearchText.js";
 import { countChars, countWords } from "../src/core/textStats.js";
+import { missingBodyRecovery, type MissingBodyDoc } from "../src/core/missingBody.js";
+import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -55,7 +59,11 @@ export { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
 
 export { AppError } from "../src/core/storeErrors.js";
 
-interface NoteDocument extends NoteSummary { content: string; }
+interface NoteDocument extends NoteSummary {
+  content: string;
+  /** 正文文件缺失（被手动删除等）：content 为空串；渲染层据此只读打开，同步不会上传空正文。 */
+  bodyMissing?: boolean;
+}
 
 /** 设置/账本类型单一来源：storeTypes.ts（S3/Sync/S3GC/History） */
 export type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, HistoryCleanupResult } from "./storeTypes.js";
@@ -78,9 +86,12 @@ export interface NoteInfo {
   cardStats: Array<{ key: string; label: string; count: number }>;
   createdAt: string | null;
   updatedAt: string;
-  syncState: string;
+  isDirty?: boolean;
+  isPurged?: boolean;
+  /** v3：云端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）。 */
+  cloudDeleted?: boolean;
   isConflict: boolean;
-  isLocked: boolean;
+  isEditLocked: boolean;
   lakePath: string;
   assetsDir: string;
   sizeBytes: number;
@@ -97,6 +108,23 @@ export interface NoteInfo {
 export interface NoteInfoAsset {
   filename: string;
   size: number;
+  kind: string;
+}
+
+/** v3 同步用的轻量元数据（不读正文、不算资产卡片），O(notes) 单查询。 */
+export interface NoteSyncMeta {
+  id: string;
+  title: string;
+  parentId: string | null;
+  sortOrder: number;
+  updatedAt: string;
+  contentHash: string;
+  isConflict: boolean;
+  isEditLocked: boolean;
+  editLockedAt: string | null;
+  icon: string | null;
+  trashedAt: string | null;
+  deletedFromParentId: string | null;
   kind: string;
 }
 
@@ -143,6 +171,11 @@ export class Store {
   private remoteImport: RemoteImportRepository;
   /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；sync/quickNotes 经此读取） */
   readonly logScopes: LoggerScopes;
+  /** 文档标签（目录 + tag_links(target_kind='note')）。 */
+  readonly documentTags: DocumentTagsService;
+
+  /** 数据根目录（v3 适配器/诊断用；只读）。 */
+  get rootPath(): string { return this.root; }
 
   constructor(root: string, secretCipher: SecretCipher = createPlaintextSecretCipher(), logScopes: LoggerScopes = createSilentLoggerScopes()) {
     this.root = root;
@@ -168,6 +201,7 @@ export class Store {
       notePathFor: (noteId) => this.notePath(noteId),
     });
     this.schemaInit.migrate();
+    this.documentTags = new DocumentTagsService(this.db);
     this.settingsRepository = new SettingsRepository(this.db, secretCipher);
     this.historyRepository = new HistoryRepository(this.db, this.root);
     this.trashRepository = new TrashRepository(this.db, TRASH_NOTEBOOK_ID);
@@ -378,7 +412,7 @@ export class Store {
 
   bootstrap() {
     const notes = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
     ).all(TRASH_NOTEBOOK_ID).map((r) => this.noteQueries.mapSummary(r as SummaryRow));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
@@ -388,6 +422,29 @@ export class Store {
       lastOpenedNoteId: last?.value ?? null,
       sync: { phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 },
     };
+  }
+
+  /** v3 同步专用：单 SQL 取轻量元数据，禁止逐篇 readNote/getNoteInfo（大库会退化为全量 IO）。 */
+  listNotesSyncMeta(): NoteSyncMeta[] {
+    const rows = this.db.prepare(
+      "SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,'' AS content_hash,n.is_conflict,n.is_locked,n.locked_at,n.trashed_at,n.deleted_from_parent_id,n.kind AS doc_kind,t.icon " +
+      "FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id=n.id WHERE n.deleted_at IS NULL ORDER BY n.sort_order"
+    ).all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: String(row.id),
+      title: String(row.title),
+      parentId: row.parent_id == null ? null : String(row.parent_id),
+      sortOrder: Number(row.sort_order),
+      updatedAt: String(row.updated_at),
+      contentHash: row.content_hash == null ? "" : String(row.content_hash),
+      isConflict: !!row.is_conflict,
+      isEditLocked: !!row.is_locked,
+      editLockedAt: row.locked_at == null ? null : String(row.locked_at),
+      icon: row.icon == null ? null : String(row.icon),
+      trashedAt: row.trashed_at == null ? null : String(row.trashed_at),
+      deletedFromParentId: row.deleted_from_parent_id == null ? null : String(row.deleted_from_parent_id),
+      kind: row.doc_kind == null ? "doc" : String(row.doc_kind),
+    }));
   }
 
   /** 侧栏树：排除隐藏回收站笔记本及其全部后代（trash 子树只出现在回收站面板）。 */
@@ -403,12 +460,21 @@ export class Store {
 
   readNote(id: string): NoteDocument {
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
-    const content = fs.readFileSync(this.notePath(id), "utf8");
+    // 261023：正文文件被手动删除（ENOENT）不是"打开失败"——按「缺正文」只读打开，
+    // 不再抛错（否则每次打开都弹 ENOENT，且渲染层无从处置）。其他 IO 错误仍抛出。
+    let content = "";
+    let bodyMissing = false;
+    try {
+      content = fs.readFileSync(this.notePath(id), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      bodyMissing = true;
+    }
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_opened_note_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(id);
-    return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
+    return { ...this.noteQueries.mapSummary(row as SummaryRow), content, ...(bodyMissing ? { bodyMissing: true } : {}) };
   }
 
   /** 轻量状态摘要：只读 DB 行（不读正文文件），供渲染进程在同步后判断打开 tab 是否需重载。
@@ -507,15 +573,15 @@ export class Store {
       const tx = this.db.transaction(() => {
         if (position === "top") {
           // 同一事务内挪开所有同级节点和笔记元数据，避免排序重叠与 IPC 中断窗口。
-          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,sync_state='local' WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL")
+          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL")
             .run(updatedAt, DEFAULT_WORKSPACE_ID, parent);
-          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,sync_state='local' WHERE parent_id=? AND deleted_at IS NULL")
+          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE parent_id=? AND deleted_at IS NULL")
             .run(updatedAt, parent);
         }
-        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,kind) VALUES(?,?,?,?,?,'local',?)")
+        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty,kind) VALUES(?,?,?,?,?,1,?)")
           .run(id, normalizedTitle, parent, sortOrder, updatedAt, kind);
         this.noteKindCache.set(id, kind);
-        this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
+        this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,1,0)")
           .run(id, DEFAULT_WORKSPACE_ID, parent, normalizedTitle, id, sortOrder, updatedAt, updatedAt);
       });
       tx();
@@ -530,7 +596,7 @@ export class Store {
       }
       throw error;
     }
-    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, kind, content };
+    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, isDirty: true, isConflict: false, kind, content };
   }
 
   /** conversion journal 崩溃恢复使用：仅删除没有元数据登记的目标残留。 */
@@ -562,6 +628,7 @@ export class Store {
   }
 
   saveNote(id: string, title: string, content: string, caches?: NoteCacheInput): NoteDocument {
+    const startedAt = Date.now();
     // 非文档类型的正文不是 Lake HTML：缓存**只能**由主进程按类型派生；doc 仍沿用渲染层从内核带来的缓存（不改旧行为）。
     // 261019 review 实测：渲染层在没有 Lake 实例时也会传 { markdown:null, plain:null }（而非 undefined），
     // 若直接采用会把 text_cache / FTS 正文清空 ⇒ 多维表/表格/画板保存后正文搜不到。故非 doc 一律忽略入参。
@@ -571,9 +638,15 @@ export class Store {
     // IPC 全文回传；轻量 SELECT 只取元数据（无文件 IO）。副作用修正：保存不再误写
     // last_opened_note_id（那是「打开」语义，保存非活动文档不应改「最后打开」记录）。
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    // 261023：保存耗时 + 正文体量（"越写越慢"类问题的唯一量化依据）；慢保存升 info，其余 debug。
+    const savedMs = Date.now() - startedAt;
+    const savedChars = content.length;
+    const saveFields = { id, chars: savedChars };
+    if (savedMs >= 200 || savedChars >= 1024 * 1024) this.logScopes.store.info(perfMessage("note.save", savedMs, saveFields));
+    else this.logScopes.store.debug(perfMessage("note.save", savedMs, saveFields));
     return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
   }
 
@@ -715,9 +788,11 @@ export class Store {
       cardStats,
       createdAt: created?.created_at ?? null,
       updatedAt: doc.updatedAt,
-      syncState: doc.syncState,
+      isDirty: doc.isDirty,
+      isPurged: doc.isPurged,
+      cloudDeleted: doc.cloudDeleted === true,
       isConflict: doc.isConflict,
-      isLocked: doc.isLocked ?? false,
+      isEditLocked: doc.isEditLocked ?? false,
       lakePath,
       assetsDir,
       sizeBytes,
@@ -1108,6 +1183,112 @@ export class Store {
     this.settingsRepository.saveS3Settings(settings);
   }
 
+  /** 正文文件是否缺失（只 stat，不读正文；启动跳过缺正文文档用）。 */
+  isNoteBodyMissing(id: string): boolean {
+    return !fs.existsSync(this.notePath(id));
+  }
+  /**
+   * 资源页「缺正文」清单（261023）：只 stat、不读正文；带历史快照数 / 同步基线 / 云配置，
+   * 供 UI 分组（云可恢复 / 仅历史 / 无备份）与处置。
+   */
+  listMissingBodies(): MissingBodyDoc[] {
+    const rows = this.db.prepare(`
+      SELECT n.id, n.title, n.kind, n.updated_at, n.parent_id,
+             (SELECT COUNT(*) FROM note_history h WHERE h.note_id = n.id) AS history_count,
+             (SELECT MAX(h.id) FROM note_history h WHERE h.note_id = n.id) AS last_history_id,
+             (SELECT 1 FROM sync_base b WHERE b.note_id = n.id) AS has_sync_base
+      FROM notes n
+      WHERE n.deleted_at IS NULL AND n.parent_id != ?
+    `).all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string; kind: string | null; updated_at: string; parent_id: string | null; history_count: number; last_history_id: number | null; has_sync_base: number | null }>;
+    // 可云恢复 = 已配置 S3 **且**允许出网（「关闭云同步 = 完全没配置」红线：关闭时任何路径不出网）。
+    // 只配置但关闭同步的库，这条判据为 false，UI 会归到"仅历史 / 无备份"，不会诱导点击后报"云同步不可用"。
+    const cloudConfigured = canTouchNetwork(cloudStateOf(this.getS3Settings() !== null, this.getSyncSettings()));
+    const out: MissingBodyDoc[] = [];
+    for (const row of rows) {
+      if (fs.existsSync(this.notePath(row.id))) continue;
+      const historyCount = Number(row.history_count) || 0;
+      const hasSyncBase = row.has_sync_base === 1;
+      out.push({
+        id: row.id,
+        title: row.title,
+        kind: normalizeNoteKind(row.kind) ?? "doc",
+        updatedAt: row.updated_at,
+        parentId: row.parent_id ?? null,
+        historyCount,
+        lastHistoryId: row.last_history_id ?? null,
+        hasSyncBase,
+        cloudConfigured,
+        recovery: missingBodyRecovery({ cloudConfigured, hasSyncBase, historyCount }),
+      });
+    }
+    out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    return out;
+  }
+
+  /** 从云端恢复正文时落盘（原子写；调用方负责校验 hash 与记账）。 */
+  writeRestoredBody(noteId: string, content: string): void {
+    const target = this.notePath(noteId);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const tmp = `${target}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
+    fs.writeFileSync(tmp, content, "utf8");
+    fs.renameSync(tmp, target);
+  }
+
+  /**
+   * 彻底删除「缺正文」文档：先走正常删除流程移入回收站（保留 deleted_from_parent_id 语义），
+   * 再彻底删除（写 purge 墓碑 ⇒ 云端下架、不会复活）。正文文件本来就不存在，不涉及文件移动。
+   */
+  purgeMissingBodyNote(id: string): void {
+    this.trashLifecycle.deleteTreeNode(id);
+    this.trashLifecycle.purgeTrashItem(id);
+  }
+
+
+  /** v3 发布成功后批量标记已同步（只改同步账本/UI dirty，不碰正文）。 */
+  markNotesSynced(ids: readonly string[]): void {
+    const unique = [...new Set(ids)];
+    for (let i = 0; i < unique.length; i += 200) {
+      const batch = unique.slice(i, i + 200);
+      const ph = batch.map(() => "?").join(",");
+      // restore_pending_at 一并清：本批 = 已发布基线里的条目，代表「恢复已生效/已重新上传成功」。
+      // 不清会让恢复标记残留 ⇒ v3 每轮都判 restore-upload 重传（cloud_deleted 也永远等不到清除）。
+      this.db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id IN (" + ph + ") AND is_purged=0").run(...batch);
+      this.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id IN (" + ph + ") AND is_purged=0").run(...batch);
+    }
+  }
+
+  /**
+   * v3：把「远端已彻底删除、本机保留回收站副本」的 remotePurged 全集落到本地标记位。
+   * - 传进来的 id → cloud_deleted=1（notes + tree_nodes 同步打标，UI/属性/回收站列表都读它）；
+   * - 不在集合里的已标记行 → 清 0（恢复并重新上传成功、或他端恢复后跟随，徽标消失）。
+   * 只写有变化的行 ⇒ 稳态同步零 INSERT/UPDATE；独立于 is_purged（后者是抑制位，不是展示位）。
+   */
+  applyNotesCloudDeleted(ids: readonly string[]): void {
+    const next = new Set(ids.filter((id) => isSafePathSegment(id)));
+    const flagged = new Set(
+      (this.db.prepare("SELECT id FROM notes WHERE cloud_deleted=1").all() as Array<{ id: string }>).map((r) => r.id),
+    );
+    const setNote = this.db.prepare("UPDATE notes SET cloud_deleted=1 WHERE id=? AND cloud_deleted=0");
+    const clearNote = this.db.prepare("UPDATE notes SET cloud_deleted=0 WHERE id=? AND cloud_deleted=1");
+    const setNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=1 WHERE note_file_id=? AND cloud_deleted=0");
+    const clearNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=0 WHERE note_file_id=? AND cloud_deleted=1");
+    const tx = this.db.transaction(() => {
+      for (const id of next) if (!flagged.has(id)) { setNote.run(id); setNode.run(id); }
+      for (const id of flagged) if (!next.has(id)) { clearNote.run(id); clearNode.run(id); }
+    });
+    tx();
+  }
+
+  /** 当前「云端已删除 · 仅本地」标记的文档 id（诊断/测试用；UI 走 listNoteSummaries/listTreeNodes）。 */
+  listCloudDeletedNoteIds(): string[] {
+    return (this.db.prepare("SELECT id FROM notes WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>).map((r) => r.id);
+  }
+
+  /** 显式恢复标记（restore_pending_at）的本地文档 id：v3 adapter 用它填 state.restorePending。 */
+  listRestorePendingNoteIds(): string[] {
+    return (this.db.prepare("SELECT id FROM notes WHERE deleted_at IS NULL AND restore_pending_at IS NOT NULL ORDER BY id").all() as Array<{ id: string }>).map((r) => r.id);
+  }
+
   contentHash(id: string): string {
     return this.syncReconciliation.contentHash(id);
   }
@@ -1141,19 +1322,19 @@ export class Store {
   }
 
   /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
-  setNoteLocked(id: string, locked: boolean): void {
-    this.noteMetadata.setNoteLocked(id, locked);
+  setNoteEditLocked(id: string, locked: boolean): void {
+    this.noteMetadata.setNoteEditLocked(id, locked);
   }
 
-  /** 同步合并写入（远端锁状态按 lockedAt LWW 后由调用方判定）。 */
-  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): void {
-    this.noteMetadata.applyRemoteLock(id, locked, lockedAt);
+  /** 同步合并写入（远端锁状态按 editLockedAt LWW 后由调用方判定）。 */
+  applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null): void {
+    this.noteMetadata.applyRemoteEditLock(id, locked, editLockedAt);
   }
 
   /** 本地同步快照保护（V5 §5.2）：仅当本地状态与快照一致才标记 synced（语义详见 syncReconciliation）。 */
   markSyncedIfUnchanged(noteId: string, expected: {
     contentHash: string; updatedAt: string; title: string; parentId: string | null;
-    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+    sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   }): boolean {
     return this.syncReconciliation.markSyncedIfUnchanged(noteId, expected);
   }
@@ -1280,6 +1461,11 @@ export class Store {
     this.noteMetadata.importRemoteFolder(folder);
   }
 
+  /** v3：把合并结果里的目录元数据原样落库（含 updatedAt；不按新旧做条件）。 */
+  applyRemoteFolderMeta(folder: SyncFolder): void {
+    this.noteMetadata.applyRemoteFolderMeta(folder);
+  }
+
   /** 兜底父笔记本（无默认笔记本概念）：存在的笔记本 → 无则自动创建"未分类"（见 resolveParentNotebook）。 */
   defaultNotebookId(): string {
     return this.resolveParentNotebook();
@@ -1333,6 +1519,12 @@ export class Store {
     return this.syncReconciliation.listDeletedNotesForSync();
   }
 
+  /** v3 删除意图来源：已彻底删除（purged_at 非空）的墓碑；用于把本地 purge 传播到云端。 */
+  listPurgedTombstones(): Array<{ id: string; purgedAt: string | null }> {
+    return (this.db.prepare("SELECT id, purged_at FROM deleted_notes WHERE purged_at IS NOT NULL").all() as Array<{ id: string; purged_at: string | null }>)
+      .map((r) => ({ id: r.id, purgedAt: r.purged_at }));
+  }
+
   /** 墓碑已发布到 manifest：标记 published_at；墓碑本体永久保留（审计 #2）。 */
   markTombstonesPublished(ids: string[]): void {
     this.syncReconciliation.markTombstonesPublished(ids);
@@ -1344,6 +1536,21 @@ export class Store {
   }
   setLastSeenCommitId(commitId: string): void {
     this.syncReconciliation.setLastSeenCommitId(commitId);
+  }
+
+  /**
+   * 断点续传标记（261026）：一轮同步开始即置位，**成功结束才清除**。
+   * 进程被杀/崩溃/断网中断时标记残留 ⇒ 下次启动自动续传（不管 autoMode 是 interval/onOpenClose/manual）。
+   */
+  markSyncInterrupted(at: string): void {
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('sync_interrupted_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
+  }
+  clearSyncInterrupted(): void {
+    this.db.prepare("DELETE FROM device_state WHERE key='sync_interrupted_at'").run();
+  }
+  getSyncInterruptedAt(): string | null {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='sync_interrupted_at'").get() as { value: string } | undefined;
+    return row?.value ?? null;
   }
 
   /** 本地上次同步时的墓碑签名（COUNT:MAX(deleted_at)），早退判定"是否新增了 purge"。 */

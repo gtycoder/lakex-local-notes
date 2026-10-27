@@ -42,7 +42,20 @@ export function registerNotesIpc(
   let lastPickedExportDir: string | null = null;
 
   ipc.handle("bootstrap_workspace", () => store.bootstrap());
-  ipc.handle("read_note", (id: string) => store.readNote(id));
+  ipc.handle("read_note", (id: string) => {
+    const note = store.readNote(id);
+    // 按需资产（P0-4，与移动端同口径）：打开文档时后台补齐该篇声明里的缺失媒体。
+    // best-effort：失败只记日志，下次打开/同步再补。
+    if (store.getSyncSettings().deferAssets === true) {
+      void ensureTrashNoteAssets(store, id).catch((error) => {
+        console.warn("[sync] 打开文档时补拉资产失败（下次再试）:", (error as Error)?.message ?? error);
+      });
+    }
+    return note;
+  });
+  ipc.handle("note_body_missing", (id: string) => store.isNoteBodyMissing(id));
+  ipc.handle("list_missing_bodies", () => store.listMissingBodies());
+  ipc.handle("purge_missing_body", (id: string) => store.purgeMissingBodyNote(id));
   ipc.handle("get_note_digest", (id: string) => store.getNoteDigest(id));
   ipc.handle("create_note", (title: unknown) => store.createNote(assertTitle(title)));
   ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }) =>
@@ -180,7 +193,7 @@ export function registerNotesIpc(
     return true;
   });
   ipc.handle("delete_note", (id: string) => store.deleteNote(id));
-  ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
+  ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteEditLocked(id, locked); return store.readNote(id); });
   ipc.handle("list_tree_nodes", () => store.listTreeNodes());
   ipc.handle("list_note_summaries", () => store.listNoteSummaries());
   ipc.handle("create_notebook", (title: unknown) => store.createNotebook(assertTitle(title)));

@@ -21,11 +21,11 @@ describe("createNativeServices（DTO 字段映射）", () => {
     const api = fakeNative({
       createNote: async (title) => {
         calls.push(`createNote(${title})`);
-        return { id: "n1", title, parentId: "notebook-default", sortOrder: 1, updatedAt: "t", syncState: "local", isConflict: false, content: "<p>x</p>" };
+        return { id: "n1", title, parentId: "notebook-default", sortOrder: 1, updatedAt: "t", isConflict: false, content: "<p>x</p>" };
       },
       createNoteIn: async (parentId, title) => {
         calls.push(`createNoteIn(${parentId},${title})`);
-        return { id: "n2", title, parentId, sortOrder: 2, updatedAt: "t", syncState: "local", isConflict: false, content: "<p>y</p>" };
+        return { id: "n2", title, parentId, sortOrder: 2, updatedAt: "t", isConflict: false, content: "<p>y</p>" };
       },
     });
     const { notes } = createNativeServices(api);
@@ -33,17 +33,17 @@ describe("createNativeServices（DTO 字段映射）", () => {
     const child = await notes.createNote("group-1", "子笔记");
     expect(calls).toEqual(["createNote(根笔记)", "createNoteIn(group-1,子笔记)"]);
     expect(root).toMatchObject({ id: "n1", parentId: "notebook-default", content: "<p>x</p>" });
-    expect(child).toMatchObject({ id: "n2", parentId: "group-1", syncState: "local", isLocked: false });
+    expect(child).toMatchObject({ id: "n2", parentId: "group-1", isEditLocked: false });
   });
 
   it("notes.saveNoteContent / renameNote 拆分映射", async () => {
     const api = fakeNative({
-      saveNote: async (id, title, content) => ({ id, title, parentId: null, sortOrder: 0, updatedAt: "t2", syncState: "synced", isConflict: false, isLocked: true, content }),
-      renameTreeNode: async (id, title) => ({ id, workspaceId: "w", parentId: null, nodeType: "note", title, noteFileId: id, sortOrder: 3, createdAt: "c", updatedAt: "t3", syncState: "local", isConflict: false }),
+      saveNote: async (id, title, content) => ({ id, title, parentId: null, sortOrder: 0, updatedAt: "t2", isConflict: false, isEditLocked: true, content }),
+      renameTreeNode: async (id, title) => ({ id, workspaceId: "w", parentId: null, nodeType: "note", title, noteFileId: id, sortOrder: 3, createdAt: "c", updatedAt: "t3", isConflict: false }),
     });
     const { notes } = createNativeServices(api);
     const saved = await notes.saveNoteContent("n1", "新标题", "<p>正文</p>");
-    expect(saved).toMatchObject({ title: "新标题", content: "<p>正文</p>", syncState: "synced", isLocked: true });
+    expect(saved).toMatchObject({ title: "新标题", content: "<p>正文</p>", isEditLocked: true });
     const renamed = await notes.renameNote("n1", "改标题");
     expect(renamed).toMatchObject({ id: "n1", title: "改标题", nodeType: "note", noteFileId: "n1" });
   });
@@ -71,7 +71,7 @@ describe("createNativeServices（DTO 字段映射）", () => {
         {
           id: "q1", createdAt: "c", updatedAt: "u", previewText: "", imageCount: 1, contentHash: "h".repeat(64),
           syncState: "synced", isConflict: false,
-          content: { version: 2, text: "小记正文", body: "<p><br></p>", images: [{ id: "img-1", filename: "a.png", mimeType: "image/png", width: 10, height: 20, size: 5, hash: "f".repeat(64) }], tags: [] },
+          content: { version: 3, text: "小记正文", body: "<p><br></p>", images: [{ id: "img-1", filename: "a.png", mimeType: "image/png", width: 10, height: 20, size: 5, hash: "f".repeat(64) }], tagIds: [], tags: [] },
         },
       ],
     });
@@ -86,11 +86,11 @@ describe("createNativeServices（DTO 字段映射）", () => {
     const api = fakeNative({
       createQuickNote: async (input) => {
         captured.push({ input, id: "q-new" });
-        return { id: "q-new", createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 2, text: input.text, body: "<p><br></p>", images: [], tags: [] } };
+        return { id: "q-new", createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 3, text: input.text, body: "<p><br></p>", images: [], tagIds: [], tags: [] } };
       },
       updateQuickNote: async (id, input) => {
         captured.push({ input, id });
-        return { id, createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 2, text: input.text, body: "<p><br></p>", images: [], tags: [] } };
+        return { id, createdAt: "c", updatedAt: "u", previewText: "", imageCount: 0, contentHash: "h".repeat(64), syncState: "local", isConflict: false, content: { version: 3, text: input.text, body: "<p><br></p>", images: [], tagIds: [], tags: [] } };
       },
     });
     const { quickNotes } = createNativeServices(api);

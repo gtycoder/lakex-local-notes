@@ -1,6 +1,6 @@
 /**
  * Quick Notes 下载对账决策（lake-core 纯逻辑，V5 Phase 1）。
- * 收敛 electron/quickNotesSync.ts 下载阶段"正文不同"分支的判定：
+ * 收敛旧 electron/quickNotesSync.ts（已删）下载阶段"正文不同"分支的判定：
  * - conflict：双端都改 → 远端覆盖本地；本地版本归档进回收站（新 id，恢复后为一条新小记）；
  * - local-wins：仅在本地变更 → 不下载，上传阶段将其作为权威版本；
  * - remote-wins：其余（仅远端改 / 新内容）→ 下载导入。

@@ -14,6 +14,24 @@ const SCROLL = readFileSync(new URL("../../styles/app/settings.css", import.meta
  * 左 2/3 列表 / 右 1/3 纯预览、按文档分组、三分类页签、只留「清理选中」+ 全选、删除二次确认。
  * 这是结构护栏，真实观感/交互由 CDP 真实验收覆盖。
  */
+describe("资源页「缺正文」分类（261023）", () => {
+  it("资源页有「缺正文」页签，按可恢复性分组，行内三种处置（云恢复 / 历史恢复 / 彻底删除）", () => {
+    expect(SRC).toContain("缺正文");
+    expect(SRC).toContain("BODY_RECOVERY_GROUP_LABEL");
+    expect(SRC).toContain("restoreBodyFromCloud");
+    expect(SRC).toContain("restoreBodyLatestHistory");
+    expect(SRC).toContain("purgeMissingBody");
+    expect(SRC).toContain("云恢复需联网");
+    expect(APP).toContain("onDataChanged");
+    // 缺正文小记（261023）：小记没有历史快照，只有 云恢复 / 搜索缓存纯文本 两条路。
+    expect(SRC).toContain("缺小记");
+    expect(SRC).toContain("restoreQuickFromCloud");
+    expect(SRC).toContain("restoreQuickFromText");
+    expect(SRC).toContain("purgeMissingQuickNote");
+    expect(SRC).toContain("小记没有历史快照");
+  });
+});
+
 describe("未引用资源浏览器", () => {
   it("类型分桶与预览类型：MIME 优先、扩展名兜底（同一份 fileKindOf）", () => {
     expect(assetKindBucket("image")).toBe("image");
@@ -87,7 +105,8 @@ describe("未引用资源浏览器", () => {
     expect(PANEL).not.toContain("config-assets");
     expect(PANEL).not.toContain("AssetsBrowser");            // 设置里没有它了
     expect(PANEL).not.toContain('"resources"');              // 分类与导航项一起删
-    expect(APP).toContain('<AssetsBrowser active={desktopWorkspace === "resources"} />');
+    expect(APP).toContain('<AssetsBrowser active={desktopWorkspace === "resources"}');
+    expect(APP).toContain('onDataChanged={() => { void refreshTree(); }}');
     expect(APP).toContain('desktopWorkspace === "resources" ? "resources-space-active"');
     expect(SCROLL).toContain(".asset-browser__list");
     expect(SCROLL).not.toContain("config-assets");

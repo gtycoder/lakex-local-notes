@@ -25,37 +25,35 @@ const image = {
 
 describe("quickNoteModel", () => {
   it("normalizes valid content and rejects empty/oversized text", () => {
-    expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 2, text: " hello ", body: "<p><br></p>", images: [], tags: [] });
+    expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 3, text: " hello ", body: "<p><br></p>", images: [] });
     expect(() => normalizeQuickNoteContent("", "<p><br></p>", [])).toThrow("请至少记录文字、一张图片或一个附件");
     expect(() => normalizeQuickNoteContent("x".repeat(MAX_QUICK_NOTE_TEXT_LENGTH + 1), "", [])).toThrow("小记正文过长");
   });
 
   it("validates image metadata, duplicate IDs, and unsafe paths", () => {
-    expect(validateQuickNoteContent({ version: 2, text: "", body: "<p><br></p>", images: [image] }).images[0]).toEqual(image);
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, id: "../bad" }] })).toThrow("小记资源元数据无效");
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [image, image] })).toThrow("小记资源元数据无效");
+    expect(validateQuickNoteContent({ version: 3, text: "", body: "<p><br></p>", images: [image] }).images[0]).toEqual(image);
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, id: "../bad" }] })).toThrow("小记资源元数据无效");
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [image, image] })).toThrow("小记资源元数据无效");
     // 图片 MIME 白名单仍然生效（不在白名单里 ⇒ 只能按附件形态存：宽高必须为 null）
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "text/plain" }] })).toThrow("小记资源元数据无效");
-    expect(validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "application/pdf", width: null, height: null }] }).images[0])
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "text/plain" }] })).toThrow("小记资源元数据无效");
+    expect(validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "application/pdf", width: null, height: null }] }).images[0])
       .toMatchObject({ mimeType: "application/pdf", width: null, height: null });
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "not a mime" }] })).toThrow("小记资源元数据无效");
+    expect(() => validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "not a mime" }] })).toThrow("小记资源元数据无效");
   });
 
   it("round-trips canonical JSON without runtime URLs", () => {
-    const content = normalizeQuickNoteContent("hello", "<p><br></p>", [image], [" 灵感 ", "待办", "灵感"]);
+    const content = normalizeQuickNoteContent("hello", "<p><br></p>", [image]);
     const encoded = serializeQuickNoteContent(content);
     const parsed = validateQuickNoteContent(parseQuickNoteContent(encoded));
     expect(parsed).toEqual(content);
-    expect(parsed.tags).toEqual(["灵感", "待办"]);
-    expect(encoded).toContain('"version": 2');
-    expect(encoded).toContain('"tags": [');
+    expect(encoded).toContain('"version": 3');
     expect(encoded).not.toContain("url");
   });
 
-  it("旧内容没有 tags 时按空数组读取；非法标签拒绝", () => {
-    expect(validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [] }).tags).toEqual([]);
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [], tags: ["无标签"] })).toThrow("筛选状态");
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [], tags: "bad" })).toThrow("标签格式无效");
+  it("正文只存内容：标签字段即使出现也不进内容模型（标签走独立关联表）", () => {
+    const parsed = validateQuickNoteContent({ version: 3, text: "x", body: "<p><br></p>", images: [], tagIds: ["t_0000000000000000"], tags: ["灵感"] });
+    expect(parsed).toEqual({ version: 3, text: "x", body: "<p><br></p>", images: [] });
+    expect(serializeQuickNoteContent(parsed)).not.toContain("tag");
   });
 
   it("creates stable previews for text, images, and empty content", () => {

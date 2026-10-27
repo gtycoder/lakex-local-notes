@@ -1,4 +1,4 @@
-import type { SyncDbPort } from "../../core/syncEngine.js";
+import type { SyncDbPort } from "../../core/syncEngineTypes.js";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
 import { nextSortOrder } from "../../core/treeRules.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
@@ -28,13 +28,13 @@ function noteKindOf(r: Record<string, unknown>): NoteKind {
 function rowToLocal(r: Record<string, unknown>, content: string) {
   return {
     id: String(r.id), title: String(r.title), content,
-    updatedAt: String(r.updated_at), syncState: String(r.sync_state),
+    updatedAt: String(r.updated_at), syncState: Number(r.is_purged) === 1 ? "purged" : Number(r.is_dirty) === 1 ? "local" : "synced",
     trashedAt: r.trashed_at ? String(r.trashed_at) : null,
     restorePendingAt: r.restore_pending_at ? String(r.restore_pending_at) : null,
     parentId: r.parent_id ? String(r.parent_id) : null,
     sortOrder: Number(r.sort_order ?? 0),
-    isLocked: !!r.is_locked,
-    lockedAt: r.locked_at ? String(r.locked_at) : null,
+    isEditLocked: !!r.is_locked,
+    editLockedAt: r.locked_at ? String(r.locked_at) : null,
     icon: r.icon ? String(r.icon) : null,
     isConflict: !!r.is_conflict,
     // TS 会在推断的返回类型里放宽字面量 → 显式标注联合类型（否则外层 SyncDbPort 不兼容）
@@ -54,11 +54,11 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   // flushNoteBatch 用 executeSet 一次下发（原生一次桥往返 + 单事务）——移动端逐条写的桥开销是同步大头。
   // 批量失败回退逐条重放，保持与逐条写等价的提交/报错点。
   // 正文不进 DB（261019）：rows 只写元数据 + hash + 派生 text_cache；正文文件由 applyRemoteNote/flush 先落盘。
-  const NOTE_UPSERT_SQL = `INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at, doc_kind, text_cache)
-     VALUES (?,?,?,?,?,?,'synced',?,?,?,?,?,?,NULL,?,?)
+  const NOTE_UPSERT_SQL = `INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, is_dirty, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at, doc_kind, text_cache)
+     VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?,NULL,?,?)
      ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id,
        sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
-       sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind, text_cache=excluded.text_cache`;
+       is_dirty=excluded.is_dirty, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind, text_cache=excluded.text_cache`;
   const SYNCBASE_UPSERT_SQL = "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at) VALUES (?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at";
   const SYNCBASE_LAST_UPLOADED_SQL = "UPDATE sync_base SET last_uploaded_hash=? WHERE note_id=?";
   const DECLARED_ASSET_SQL = "INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?) ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash";
@@ -71,9 +71,10 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：全新导入的回收站条目
   // （L339 分支）靠它恢复原父——硬编码 NULL 会让「安卓首次同步拉到他端已删笔记 → 恢复」后 parent 卡在
   // TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
+  // SQL 列名冻结：is_locked / locked_at（与桌面同 schema；不改表、不迁移）。内存字段 isEditLocked/editLockedAt 只在此处映射。
   const noteUpsertValues = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], textCache: string): unknown[] => [
     note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.contentHash,
-    note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null,
+    note.isConflict ? 1 : 0, note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, note.icon ?? null,
     note.trashedAt ?? null, note.deletedFromParentId ?? null, normalizeNoteKind(note.kind), textCache,
   ];
   const textCacheOf = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): string =>
@@ -87,7 +88,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   const port: SyncDbPort = {
     async getNote(id) {
       const d = getDb();
-      const row = await d.prepare("SELECT id, title, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash, doc_kind FROM notes WHERE id = ?").get(id);
+      const row = await d.prepare("SELECT id, title, updated_at, is_dirty, is_purged, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash, doc_kind FROM notes WHERE id = ?").get(id);
       if (!row) return null;
       const kind = noteKindOf(row);
       const content = (await readNoteBody(kind, id)) ?? "";
@@ -95,7 +96,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     },
     async getAllNotes() {
       const d = getDb();
-      const rows = await d.prepare("SELECT id, title, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash, doc_kind FROM notes").all();
+      const rows = await d.prepare("SELECT id, title, updated_at, is_dirty, is_purged, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash, doc_kind FROM notes").all();
       return rows.map(rowToLocalMetadata);
     },
     async getSyncBase(id) {
@@ -204,27 +205,27 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       const contentHash = sha256Sync(new TextEncoder().encode(content));
       const textCache = searchTextForKind(noteKind, content).plain ?? "";
       await d.prepare(
-        `INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, sync_state, trashed_at, deleted_from_parent_id, doc_kind, text_cache)
-         VALUES (?,?,?,?,?,?,'synced',?,?,?,?)
+        `INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, is_dirty, trashed_at, deleted_from_parent_id, doc_kind, text_cache)
+         VALUES (?,?,?,?,?,?,0,?,?,?,?)
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id,
            sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
-           sync_state=excluded.sync_state, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id,
+           is_dirty=excluded.is_dirty, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id,
            doc_kind=excluded.doc_kind, text_cache=excluded.text_cache`
       ).run(id, title, parentId, sortOrder, trashedAt, contentHash, trashedAt, deletedFromParentId, noteKind, textCache);
     },
     async localTrashNote(id) {
       const d = getDb();
-      await d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
+      await d.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
     },
     async localRestoreNote(id) {
       const d = getDb();
-      await d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local' WHERE id=?").run(new Date().toISOString(), id);
+      await d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, is_dirty=1 WHERE id=?").run(new Date().toISOString(), id);
     },
     async applyRemotePurge(id) {
       const d = getDb();
       const now = new Date().toISOString();
       // 收到他端 purge：本地条目移入回收站并标 purged（保留可恢复、不上传）。
-      await d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now, now, id);
+      await d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, is_purged=1,is_dirty=0, restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now, now, id);
     },
     async rememberDeleted(note, deletedAt) {
       const d = getDb();
@@ -257,14 +258,14 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       for (const batch of sqlParameterBatches(folderIds)) {
         const ph = batch.map(() => "?").join(",");
         await d.prepare(
-          "UPDATE folders SET trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged' WHERE id IN (" + ph + ")"
+          "UPDATE folders SET trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, is_purged=1,is_dirty=0 WHERE id IN (" + ph + ")"
         ).run(now, now, ...batch);
       }
       // 子树内 notes：对齐 applyRemotePurge 语义（移入回收站标 purged、清恢复标记）
       for (const batch of sqlParameterBatches(folderIds)) {
         const ph = batch.map(() => "?").join(",");
         await d.prepare(
-          "UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE parent_id IN (" + ph + ")"
+          "UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, is_purged=1,is_dirty=0, restore_pending_at=NULL WHERE parent_id IN (" + ph + ")"
         ).run(TRASH_NOTEBOOK_ID, now, now, ...batch);
       }
     },
@@ -298,13 +299,13 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       await d.prepare("UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=?, icon=? WHERE id=?")
         .run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.icon ?? null, note.id);
     },
-    async applyRemoteLock(id, locked, lockedAt) {
+    async applyRemoteEditLock(id, locked, editLockedAt) {
       const d = getDb();
-      await d.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=?").run(locked ? 1 : 0, lockedAt, id);
+      await d.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=?").run(locked ? 1 : 0, editLockedAt, id);
     },
     async markLocalNoteSynced(id, contentHash, metaAt, lastUploadedHash) {
       const d = getDb();
-      await d.prepare("UPDATE notes SET sync_state='synced', content_hash=?, restore_pending_at=NULL WHERE id=?").run(contentHash, id);
+      await d.prepare("UPDATE notes SET is_dirty=0, content_hash=?, restore_pending_at=NULL WHERE id=?").run(contentHash, id);
       await d.prepare(
         "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at, last_uploaded_hash) VALUES (?,?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at, last_uploaded_hash=excluded.last_uploaded_hash"
       ).run(id, contentHash, metaAt, lastUploadedHash);
@@ -318,7 +319,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       if (body == null) return;
       const currentHash = sha256Sync(new TextEncoder().encode(body));
       if (currentHash !== expectedContentHash) return;
-      await d.prepare("UPDATE notes SET sync_state='synced', content_hash=?, restore_pending_at=NULL WHERE id=?").run(expectedContentHash, id);
+      await d.prepare("UPDATE notes SET is_dirty=0, content_hash=?, restore_pending_at=NULL WHERE id=?").run(expectedContentHash, id);
       await d.prepare(
         "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at) VALUES (?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at"
       ).run(id, expectedContentHash, metaAt);
@@ -344,21 +345,21 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const maxRow = await d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id IS NULL AND trashed_at IS NULL").get() as { m: number | null } | undefined;
-      await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,?,?,?,?,'local')")
+      await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, is_dirty) VALUES (?,?,NULL,?,?,?,?,1)")
         .run(id, "未分类", nextSortOrder(maxRow?.m ?? null), "notebook", "X", now);
       return id;
     },
     async importRemoteFolder(folder) {
       const d = getDb();
       await d.prepare(
-        "INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state) VALUES (?,?,?,?,?,?,?,?,?,'synced') ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, node_type=excluded.node_type, icon=excluded.icon, updated_at=excluded.updated_at, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id"
+        "INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, is_dirty) VALUES (?,?,?,?,?,?,?,?,?,0) ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, node_type=excluded.node_type, icon=excluded.icon, updated_at=excluded.updated_at, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id"
       ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null);
     },
     async listFoldersForSync() {
       const d = getDb();
       // v5：排除 purged（收到他端 folder 墓碑后保留的回收站副本）——学习端不回填，
       // 对齐 notes 上传环的 purged continue；否则每端把已删目录当活跃条目重新发布 → manifest 震荡。
-      const rows = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders WHERE sync_state != 'purged'").all() as Array<{
+      const rows = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders WHERE is_purged=0").all() as Array<{
         id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null;
       }>;
       return rows.map((r) => ({
@@ -443,7 +444,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       // 目录记账（对齐桌面 syncReconciliation.markFolderSynced）：latest 发布成功后按 updatedAt 快照归位。
       // 缺失此实现 → folder 永远停在 local → hasLocalPendingNotes 恒真 → 零变更早退永不生效（每轮全量+重发布）。
       const d = getDb();
-      const info = await d.prepare("UPDATE folders SET sync_state='synced' WHERE id=? AND updated_at=?").run(id, expectedUpdatedAt);
+      const info = await d.prepare("UPDATE folders SET is_dirty=0 WHERE id=? AND updated_at=?").run(id, expectedUpdatedAt);
       const changes = (info as { changes?: number }).changes ?? 0;
       return changes > 0;
     },
@@ -469,10 +470,10 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       const d = getDb();
       // purged 是收到他端删除后的本地保留副本（含 folder 行），不应阻塞早退——
       // 否则学习端收到 folder 墓碑后早退永不生效（每轮全量 + 重发布）。
-      const noteRow = await d.prepare("SELECT 1 FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL LIMIT 1").get();
+      const noteRow = await d.prepare("SELECT 1 FROM notes WHERE is_dirty=1 AND deleted_at IS NULL LIMIT 1").get();
       if (noteRow) return true;
       // 默认笔记本等已同步目录不算待上传，否则同步永远不会早退；v5 起排除 purged folder。
-      const groupRow = await d.prepare("SELECT 1 FROM folders WHERE sync_state NOT IN ('synced','purged') AND id != ? LIMIT 1").get(TRASH_NOTEBOOK_ID);
+      const groupRow = await d.prepare("SELECT 1 FROM folders WHERE is_dirty=1 AND id != ? LIMIT 1").get(TRASH_NOTEBOOK_ID);
       if (groupRow) return true;
       // 未发布的 purge 墓碑 = 待上传事实（对齐桌面 hasLocalPendingNotes）：否则墓碑与他端发布撞车时
       // 被零变更早退吞掉，markTombstonesPublished 永不执行 → pending documents 永久挂起（260910 实测）。

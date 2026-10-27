@@ -103,7 +103,7 @@ export function useNoteLifecycle({
 
   /** 新建多维表文档（kind=bitable）：正文是自研 record-based JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createBitableIn(parentId: string | null) {
-    await openCreatedNote(await native.createBitableIn(parentId, "无标题数据表"), "bitable");
+    await openCreatedNote(await native.createBitableIn(parentId, "无标题多维表"), "bitable");
   }
 
   /** 新建画板文档（kind=board）：正文是 Drawnix/Plait 场景 JSON；与文档同流程（进树、开 tab、可重命名）。 */

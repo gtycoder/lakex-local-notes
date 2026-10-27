@@ -74,7 +74,11 @@ interface Manifest {
 interface ManifestNote {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; contentHash: string; isConflict: boolean;
-  isLocked?: boolean; lockedAt?: string | null;   // v3 锁元数据（独立于正文哈希，按 lockedAt LWW）
+  // v3 锁元数据（锁编辑，独立于正文哈希，按 lockedAt 字段级 LWW）。
+  // ⚠️ 线上 JSON 键冻结：永远是 isLocked / lockedAt（跨端与旧数据契约，不得改名）。
+  //    代码内存类型叫 isEditLocked / editLockedAt；改名只发生在解析/写出边界
+  //    （src/core/syncUtils.ts 的 parseLakeManifest→manifestFromWire / manifestToWire）。
+  isLocked?: boolean; lockedAt?: string | null;
   icon?: string | null;                            // 可选字段：旧清单无此字段时本地保持原样
   assets: { filename: string; size: number; hash: string }[];
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink"; // 缺省 doc
@@ -91,6 +95,8 @@ interface ManifestFolder {
 
 **可选字段语义**：`icon: undefined` 保留本地 vs `null` 显式清除；锁字段缺席视为未锁定。
 
+**线上键冻结（261023）**：`isLocked` / `lockedAt` 是**线上键**，不随代码标识符改名（内存叫 `isEditLocked` / `editLockedAt`）。任何新写入都必须只产出这两个键；解析侧兼容旧清单（只有这两个键）。护栏 `src/core/manifestLockWire.test.ts`。
+
 ---
 
 ## 4. 冲突与一致性规则
@@ -99,7 +105,7 @@ interface ManifestFolder {
 
 - 正文：以 `sync_base.content_hash`（本设备已确认基线）为锚——远端 hash == 基线且本地在其上续编 → 本地为准上传；远端是其他设备新提交 → 接受远端，本地当前版本强制留历史快照（supersededNotes 提示）。
 - 元数据（标题/父目录/排序/图标）：以 `sync_base.last_synced_meta_at`（本设备上次成功同步时 updated_at）为已确认版本——远端 updatedAt 新于它 → 应用远端；否则保留本地续编。
-- 锁：`mergeLockState` 按 lockedAt 字段级 LWW。
+- 锁：`mergeEditLockState`（原 mergeLockState）按 lockedAt 字段级 LWW。
 
 ### 4.2 墓碑权威（删除压编辑）
 

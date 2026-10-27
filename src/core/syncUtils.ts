@@ -11,7 +11,7 @@
  */
 import { sha256Sync } from "./sha256Sync.js";
 import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
-import { mergeLockState } from "./syncDecision.js";
+import { mergeEditLockState } from "./syncDecision.js";
 import { NOTE_KINDS } from "./noteKind.js";
 
 // ===== 共享类型 =====
@@ -35,25 +35,66 @@ const GZIP_MAGIC = [0x1f, 0x8b];
 /** 键构造统一 ASCII 校验：防非 ASCII 键导致 ListObjectsV2 编码不一致（fail fast）。 */
 const SAFE_KEY_RE = /^[A-Za-z0-9._/-]+$/;
 
+// ===== 清单线上形态（S3 JSON 键冻结）=====
+// 内存类型用 isEditLocked / editLockedAt（"锁编辑"，不是文档加密）；
+// 线上清单 JSON 的键**冻结**为 isLocked / lockedAt（跨端与旧数据契约，不得改）。
+// 两个边界各一处显式映射：解析 parseLakeManifest → manifestFromWire；写出 manifestToWire（syncEngine 发布处）。
+// ⇒ 除这两个方向外，任何地方都不要再手写 isLocked / lockedAt 的改名转换。
+export interface ManifestNoteWire extends Omit<ManifestNote, "isEditLocked" | "editLockedAt"> {
+  isLocked?: boolean;
+  lockedAt?: string | null;
+}
+export interface ManifestWire extends Omit<Manifest, "notes"> {
+  notes: ManifestNoteWire[];
+}
+
+/** 线上条目 → 内存条目（锁字段归一成 isEditLocked/editLockedAt；键缺席则保持缺席）。 */
+function manifestNoteFromWire(wire: ManifestNoteWire): ManifestNote {
+  const { isLocked, lockedAt, ...rest } = wire;
+  const note: ManifestNote = { ...rest };
+  if (isLocked !== undefined) note.isEditLocked = isLocked;
+  if (lockedAt !== undefined) note.editLockedAt = lockedAt;
+  return note;
+}
+
+/** 线上清单 → 内存清单（解析边界）。 */
+export function manifestFromWire(wire: ManifestWire): Manifest {
+  return { ...wire, notes: wire.notes.map(manifestNoteFromWire) };
+}
+
+/** 内存条目 → 线上条目（锁字段写回冻结键；未定义则不写键，墓碑保持精简）。 */
+export function manifestNoteToWire(note: ManifestNote): ManifestNoteWire {
+  const { isEditLocked, editLockedAt, ...rest } = note;
+  const wire: ManifestNoteWire = { ...rest };
+  if (isEditLocked !== undefined) wire.isLocked = isEditLocked;
+  if (editLockedAt !== undefined) wire.lockedAt = editLockedAt;
+  return wire;
+}
+
+/** 内存清单 → 线上清单（写出边界）：syncEngine 发布 manifest 前必须经过这里。 */
+export function manifestToWire(manifest: Manifest): ManifestWire {
+  return { ...manifest, notes: manifest.notes.map(manifestNoteToWire) };
+}
+
 // ===== 记账快照（V5 §5.2：构造 markSyncedIfUnchanged 的"同步后应为状态"） =====
 export function syncSnapshot(local: {
   title: string; parentId: string | null; sortOrder: number; updatedAt: string;
-  isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
+  isEditLocked?: boolean; editLockedAt?: string | null; icon?: string | null;
 }, localHash: string, rn: ManifestNote, metaApplied: boolean, effectiveParent: string | null) {
-  const merged = mergeLockState(!!local.isLocked, local.lockedAt ?? null, !!rn.isLocked, rn.lockedAt ?? null);
+  const merged = mergeEditLockState(!!local.isEditLocked, local.editLockedAt ?? null, !!rn.isEditLocked, rn.editLockedAt ?? null);
   return {
     contentHash: localHash,
     updatedAt: metaApplied ? rn.updatedAt : local.updatedAt,
     title: metaApplied ? rn.title : local.title,
     parentId: metaApplied ? effectiveParent : local.parentId,
     sortOrder: metaApplied ? rn.sortOrder : local.sortOrder,
-    isLocked: merged.locked,
-    lockedAt: merged.at,
+    isEditLocked: merged.locked,
+    editLockedAt: merged.at,
     icon: metaApplied ? (rn.icon ?? null) : (local.icon ?? null),
   };
 }
 
-/** 解析并校验 Lake 清单：字节上限 → JSON.parse → 结构/条目校验。上限可注入（测试用）。 */
+/** 解析并校验 Lake 清单：字节上限 → JSON.parse → 结构/条目校验 → 锁字段归一（解析边界）。上限可注入（测试用）。 */
 export function parseLakeManifest(
   bytes: Uint8Array,
   limits: { maxBytes?: number; maxNotes?: number; maxFolders?: number } = {},
@@ -66,7 +107,8 @@ export function parseLakeManifest(
   try { parsed = JSON.parse(new TextDecoder("utf-8").decode(bytes)); }
   catch { throw new Error("同步清单不是合法 JSON"); }
   validateManifest(parsed, { maxNotes: limits.maxNotes ?? MAX_MANIFEST_NOTES, maxFolders: limits.maxFolders ?? MAX_MANIFEST_FOLDERS });
-  return parsed;
+  // 解析边界：线上键 isLocked/lockedAt → 内存 isEditLocked/editLockedAt（见本文件「清单线上形态」）。
+  return manifestFromWire(parsed);
 }
 
 export function isGzip(bytes: Uint8Array): boolean {
@@ -189,9 +231,9 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
 }
 
 /** 审计 #3/#19：远程 manifest 运行时 schema 校验（远程 JSON 不可信，不能直接断言类型） */
-export function validateManifest(manifest: unknown, limits: { maxNotes: number; maxFolders: number }): asserts manifest is Manifest {
+export function validateManifest(manifest: unknown, limits: { maxNotes: number; maxFolders: number }): asserts manifest is ManifestWire {
   if (!manifest || typeof manifest !== "object") throw new Error("清单格式无效：非对象");
-  const m = manifest as Partial<Manifest>;
+  const m = manifest as Partial<ManifestWire>;
   if (!READABLE_MANIFEST_VERSIONS.has(m.version as number)) {
     throw new Error(`清单版本不兼容（本地 ${MANIFEST_VERSION}，远端 ${String(m.version)}）`);
   }
@@ -205,7 +247,7 @@ export function validateManifest(manifest: unknown, limits: { maxNotes: number; 
   if (m.notes.length > limits.maxNotes) throw new Error(`清单条目过多（${m.notes.length} > ${limits.maxNotes}），拒绝加载`);
   for (const note of m.notes) {
     if (!note || typeof note !== "object") throw new Error("清单格式无效：note 非对象");
-    const n = note as Partial<ManifestNote>;
+    const n = note as Partial<ManifestNoteWire>;
     if (typeof n.id !== "string" || typeof n.title !== "string" || typeof n.contentHash !== "string") {
       throw new Error(`清单格式无效：note 缺少 id/title/contentHash（id=${String(n.id)}）`);
     }
@@ -230,6 +272,7 @@ export function validateManifest(manifest: unknown, limits: { maxNotes: number; 
       }
       if (!/^[a-f0-9]{64}$/.test(a.hash)) throw new Error("清单格式无效：asset hash 非法");
     }
+    // 线上键（冻结）：仍是 isLocked / lockedAt；错误文案也按线上键写，便于和云端 JSON 对照。
     if (n.isLocked !== undefined && typeof n.isLocked !== "boolean") throw new Error("清单格式无效：isLocked 非法");
     if (n.lockedAt !== undefined && n.lockedAt !== null && typeof n.lockedAt !== "string") throw new Error("清单格式无效：lockedAt 非法");
     if (n.deleted !== undefined && typeof n.deleted !== "boolean") throw new Error("清单格式无效：deleted 非法");

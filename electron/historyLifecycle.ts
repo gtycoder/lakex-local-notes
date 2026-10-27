@@ -137,8 +137,8 @@ export class HistoryLifecycle {
     // 下次同步上传覆盖（远端被他人改则接受远端、恢复版已入历史）。
     const now = new Date().toISOString();
     const tx = this.ctx.db.transaction(() => {
-      this.ctx.db.prepare("UPDATE notes SET sync_state='local', updated_at=? WHERE id=?").run(now, noteId);
-      this.ctx.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE id=?").run(noteId);
+      this.ctx.db.prepare("UPDATE notes SET is_dirty=1, updated_at=? WHERE id=?").run(now, noteId);
+      this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=1 WHERE id=?").run(noteId);
     });
     tx();
     this.ctx.logScopes.history.info(`[perf] restore ${noteId} from history#${historyId} ${Date.now() - t0}ms`);

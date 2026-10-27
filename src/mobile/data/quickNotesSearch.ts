@@ -9,6 +9,8 @@ import { buildMatchExpression, buildSnippet, segmentToIndexText } from "../../co
 import type { SearchResult } from "../../core/searchTypes.js";
 import type { MobileDb } from "./sqliteDb.js";
 import { readQuickNoteBody } from "./noteBodies.js";
+import { quickNoteTagNames } from "./quickNoteTagsRepository.js";
+import { listQuickNoteTagIds } from "./quickNoteTagLinksRepository.js";
 
 const QUICK_INDEX_UPSERT_SQL =
   "INSERT INTO quick_notes_search_index(quick_note_id, fts_rowid, content_hash, text_cache, tags, indexed_at) VALUES(?,?,?,?,?,?) " +
@@ -26,14 +28,16 @@ interface QuickContent {
   tags: string[];
 }
 
-async function readQuickContent(id: string): Promise<QuickContent | null> {
+async function readQuickContent(d: MobileDb, id: string): Promise<QuickContent | null> {
   const raw = await readQuickNoteBody(id);
   if (raw == null) return null;
   try {
-    const parsed = JSON.parse(raw) as { text?: unknown; tags?: unknown };
+    const parsed = JSON.parse(raw) as { text?: unknown };
+    const tagIds = await listQuickNoteTagIds(d, id);
+    const names = await quickNoteTagNames(d);
     return {
       text: typeof parsed.text === "string" ? parsed.text : "",
-      tags: Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === "string") : [],
+      tags: tagIds.map((tagId) => names.get(tagId) ?? "").filter(Boolean),
     };
   } catch { return null; }
 }
@@ -42,16 +46,16 @@ function firstLine(text: string): string {
   return text.split(/\r?\n/).map((line) => line.trim()).find(Boolean)?.slice(0, 120) ?? "";
 }
 
-/** 单条建/更新索引（FTS 不可用时 no-op；搜索走内存降级）。 */
-export async function indexQuickNote(d: MobileDb, id: string): Promise<void> {
+/** 单条建/更新索引（FTS 不可用时 no-op；搜索走内存降级）。`force` = 标签改名/关系变化时强刷。 */
+export async function indexQuickNote(d: MobileDb, id: string, force = false): Promise<void> {
   if (!(await hasQuickFts(d))) return;
   const row = await d.prepare(
     "SELECT content_hash FROM quick_notes WHERE id=? AND deleted_at IS NULL AND restore_pending_at IS NULL"
   ).get(id) as { content_hash: string } | undefined;
   if (!row) { await removeQuickNoteFromIndex(d, id); return; }
   const prev = await d.prepare("SELECT content_hash FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as { content_hash: string } | undefined;
-  if (prev && prev.content_hash === row.content_hash) return;
-  const content = await readQuickContent(id);
+  if (prev && prev.content_hash === row.content_hash && !force) return;
+  const content = await readQuickContent(d, id);
   if (!content) return;
   const tagsText = content.tags.join(" ");
   const rowid = prev
@@ -140,7 +144,7 @@ async function searchQuickNotesFallback(d: MobileDb, query: string, limit: numbe
   const needle = query.toLocaleLowerCase();
   const out: Array<SearchResult & { kind: "quick-note" }> = [];
   for (const row of rows) {
-    const content = await readQuickContent(String(row.id));
+    const content = await readQuickContent(d, String(row.id));
     if (!content) continue;
     const hay = [content.text, ...content.tags].join("\n").toLocaleLowerCase();
     if (!hay.includes(needle)) continue;

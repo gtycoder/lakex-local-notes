@@ -23,6 +23,9 @@ export const ALIPAY_JS_REUSE: Record<string, string> = {
   "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
 };
 
+/** Windows 文件名不允许 `*`：镜像落盘/引用统一替换为 `_`。 */
+const mirrorBasename = (url: string) => (url.split("/").pop() as string).replaceAll("*", "_");
+
 /** 少数非 gw host 的运行期图片：镜像后按完整 URL 精确重写（basename 有撞名风险，故用整串精确匹配）。 */
 export const MIRROR_EXACT: Record<string, string> = {
   "https://mdn.alipayobjects.com/huamei_0prmtq/afts/img/A*KA8xSYmgiYgAAAAAAAAAAAAADvuFAQ/original": "/vendor/lakex/misc/drawnix-default.jpg",
@@ -39,7 +42,7 @@ export function lakexGwUrlLocalPostcss() {
       decl.value = decl.value.replace(GW_RE, (m) => {
         const reuse = ALIPAY_JS_REUSE[m];
         if (reuse) return reuse;
-        return `/vendor/lakex/alipay/${m.split("/").pop()}`;
+        return `/vendor/lakex/alipay/${mirrorBasename(m)}`;
       });
     },
   };
@@ -71,7 +74,7 @@ export function lakexAlipayLocal(options: LakexAlipayLocalOptions): Plugin {
       const cleanId = id.split("?")[0];
       if (cleanId.endsWith(".css")) {
         return code.replace(/url\(https:\/\/gw\.alipayobjects\.com\/[^)]+\)/g, (m) => {
-          const name = m.slice(4, -1).split("/").pop() as string;
+          const name = mirrorBasename(m.slice(4, -1));
           return `url(/vendor/lakex/alipay/${name})`;
         });
       }
@@ -79,7 +82,7 @@ export function lakexAlipayLocal(options: LakexAlipayLocalOptions): Plugin {
         return code.replace(/https:\/\/gw\.alipayobjects\.com\/[^"'`\s)]+/g, (m) => {
           const reuse = ALIPAY_JS_REUSE[m];
           if (reuse) return reuse;
-          return `/vendor/lakex/alipay/${m.split("/").pop()}`;
+          return `/vendor/lakex/alipay/${mirrorBasename(m)}`;
         });
       }
       return code;

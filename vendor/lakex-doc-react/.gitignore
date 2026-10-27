@@ -1,0 +1,15 @@
+node_modules/
+# dist/ 由本仓库刻意提交（C1）——见 LOCAL-CHANGES.md
+dist-*/
+examples/dist-demo/
+examples/dist-examples/
+*.log
+.DS_Store
+.workbuddy
+.yarn-error.log
+.package-lock.json
+test/
+.git
+yarn.lock
+.env.local
+.env.*.local

@@ -1,6 +1,7 @@
 /** C3-5 第③步：notes 域（从 bridge.ts 抽取，行为保持）。 */
-import { assets, dbPort, ensureDb, runMaintenance, runWrite } from "./context";
+import { assets, dbPort, ensureDb, readSyncSettings, runMaintenance, runPriority, runWrite } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
+import { backfillTextCache } from "../data/textCacheBackfill.js";
 
 import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
@@ -20,13 +21,26 @@ import type { LocalNote } from "../data/noteRepository.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
-import { downloadDeclaredAssetsFor } from "./sync";
+import { downloadDeclaredAssetsFor, ensureAssetsNative } from "./sync";
 
 
 export const notesDomain = {
   async readNote(id: string): Promise<LocalNote | null> {
     const d = await ensureDb();
-    return await noteRepository.readNote(d, id);
+    const note = await noteRepository.readNote(d, id);
+    // 按需资产（P0-4，261026）：打开文档时补齐该篇声明里缺失的媒体，保证首屏图片可见。
+    // 只有「按需下载附件」打开时才走网络；失败静默（下次打开/同步再补）。
+    if (note && readSyncSettings().deferAssets === true) {
+      try {
+        // 复用维护域「保证某篇资产」这个操作（语义一致；避免为一个内部调用新增桥操作/类别）。
+        // 261027：走原生 getToFile 快速路径（字节不过桥），比通用 backfill 快。
+        await runMaintenance("ensureTrashNoteAssets", () => ensureAssetsNative([id]));
+
+      } catch (error) {
+        console.warn("[asset] 打开文档时补拉失败（下次再试）", error);
+      }
+    }
+    return note;
   },
 
   async noteGoneState(id: string): Promise<{ parentId: string | null; syncState: string } | null> {
@@ -37,6 +51,28 @@ export const notesDomain = {
   async searchNotes(query: string): Promise<SearchResult[]> {
     const d = await ensureDb();
     return await noteRepository.searchNotes(d, query);
+  },
+
+  /**
+   * 派生搜索索引的后台自愈（261026）：同步批量导入不再逐篇建 FTS（正文阶段快 ~60s），
+   * 改由冷启动/回前台时按需补齐。已补完时只是两次 COUNT，几乎零成本；中途被杀下次接着来（幂等）。
+   */
+  async ensureSearchIndex(): Promise<{ notes: number; indexed: number; rebuilt: boolean; textFilled: number }> {
+    const d = await ensureDb();
+    const count = async (sql: string): Promise<number> => {
+      try { return Number(((await d.prepare(sql).get()) as { c?: number } | undefined)?.c ?? 0); } catch { return 0; }
+    };
+    const notes = await count("SELECT count(*) AS c FROM notes WHERE trashed_at IS NULL");
+    const before = await count("SELECT count(*) AS c FROM search_index");
+    if (before >= notes) return { notes, indexed: before, rebuilt: false, textFilled: 0 };
+    let textFilled = 0;
+    await runMaintenance("ensureSearchIndex", async () => {
+      // 261027：导入只写 NULL text_cache；这里先补纯文本，再建 FTS（都幂等可续跑）。
+      textFilled = (await backfillTextCache(d)).filled;
+      await reconcileIndex(d);
+    });
+    const after = await count("SELECT count(*) AS c FROM search_index");
+    return { notes, indexed: after, rebuilt: true, textFilled };
   },
 
   async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string, kind: NoteKind = "doc"): Promise<void> {
@@ -62,8 +98,8 @@ export const notesDomain = {
     const d = await ensureDb();
     const note = await noteRepository.readNote(d, id);
     if (!note) throw new Error("笔记不存在");
-    const row = await d.prepare("SELECT sync_state, is_conflict, updated_at FROM notes WHERE id=?").get(id) as
-      { sync_state: string; is_conflict: number; updated_at: string } | undefined;
+    const row = await d.prepare("SELECT is_dirty, is_purged, is_conflict, updated_at FROM notes WHERE id=?").get(id) as
+      { is_dirty: number; is_purged: number; is_conflict: number; updated_at: string } | undefined;
     // 与搜索索引共用同一条按 kind 分派的派生口径；表格/多维表/画板正文是 JSON，不能喂 Lake HTML 解析器。
     const plain = searchTextForKind(note.kind, note.content).plain ?? "";
     // 字数/字符数 = 与内核 wordCount 同语义的单一来源（261016，B1；此前这里另写了一套正则）。
@@ -102,9 +138,10 @@ export const notesDomain = {
       cardStats,
       createdAt: null,
       updatedAt: row?.updated_at ?? note.updatedAt,
-      syncState: row?.sync_state ?? "local",
+      isDirty: row ? row.is_dirty === 1 : true,
+      isPurged: row?.is_purged === 1,
       isConflict: Boolean(row?.is_conflict),
-      isLocked: false,
+      isEditLocked: false,
       lakePath: noteBodyPath(note.kind, note.id),
       assetsDir: `note-assets/${id}`,
       sizeBytes: new TextEncoder().encode(note.content).length,
@@ -232,6 +269,23 @@ export const notesDomain = {
     });
   },
 
+  /**
+   * 按需资产占位点击补拉（261027）：只补这几篇缺失的媒体（原生 getToFile 快速路径）。
+   * 返回计数：0/0 通常表示离线、未配置云同步或本来就没有声明（调用方据此提示）。
+   */
+  async ensureNoteAssets(ids: string[]): Promise<{ downloaded: number; failed: number }> {
+    // 高优先域（261027）：用户点占位图是当场动作，不能排在整轮同步后面；彼此串行即可。
+    return runPriority("ensureNoteAssets", () => ensureAssetsNative(ids));
+  },
+
+  /** 小记图片按需补拉（261027 Phase2）：与文档同一条原生路径（getToFile 直写，空间换成 quickNotes）。 */
+  async ensureQuickNoteAssets(ids: string[]): Promise<{ downloaded: number; failed: number }> {
+    return runPriority("ensureQuickNoteAssets", async () => {
+      const r = await ensureAssetsNative(ids, { space: "quickNotes" });
+      return { downloaded: r.downloaded, failed: r.failed };
+    });
+  },
+
   async restoreNote(id: string): Promise<void> {
     return notesDomain.restoreTreeItem(id, "note");
   },
@@ -249,7 +303,7 @@ export const notesDomain = {
     });
   },
 
-  async listTrashTree(): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
+  async listTrashTree(): Promise<trashRepository.MobileTrashTreeItem[]> {
     const d = await ensureDb();
     return await trashRepository.listTrashTree(d);
   },

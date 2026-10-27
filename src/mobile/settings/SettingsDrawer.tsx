@@ -4,9 +4,14 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
-import { Group, Item, Seg, Block, NumField, Switch } from "../ui/settingsPrimitives";
+import { Group, Item, Seg, Block, NumField, Switch, TextField } from "../ui/settingsPrimitives";
+import { bridge } from "../bridge";
+import { loadAiEnabled, saveAiEnabled } from "../ai/aiSettings";
+import { clearAllConversations } from "../ai/aiChatStore";
+import { confirmMobile } from "../ui/ConfirmDialog";
+import { aiErrorInfoFromCode } from "../../core/aiErrors";
 import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
 import { MANIFEST_VERSION } from "../../core/syncUtils";
@@ -30,7 +35,7 @@ export interface SettingsDrawerProps {
   onOpenNote?: (noteId: string) => void;
 }
 
-type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "ai" | "cache" | "trash" | "about";
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
   { key: "editor", label: "编辑器", icon: List },
@@ -38,6 +43,7 @@ const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] 
   { key: "history", label: "历史", icon: History },
   { key: "resources", label: "资源管理", icon: Images },
   { key: "s3", label: "同步设置", icon: Cloud },
+  { key: "ai", label: "AI 助手", icon: Sparkles },
   { key: "cache", label: "清理缓存", icon: HardDrive },
   { key: "trash", label: "回收站", icon: Trash },
   { key: "about", label: "关于", icon: Info },
@@ -93,7 +99,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     syncSettings: syncCfg,
     updateSyncSettings,
     syncMsg,
+    syncProgressText,
     warnings: syncWarnings,
+    supersededNotes: syncSuperseded,
     lastSyncText,
     runSync,
   } = useSyncSettingsForm(open, onRefresh);
@@ -105,6 +113,41 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       : "云同步已关闭：按纯本地空间处理，不能清理云端。";
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
+
+  // ── AI 助手（261023 P1）：开关与接入配置；Key 只在原生（Android Keystore），这里只显示尾号 ──
+  const [aiEnabled, setAiEnabled] = useState(() => loadAiEnabled());
+  const [aiMeta, setAiMeta] = useState<{ baseUrl: string; model: string; hasKey: boolean; keyTail: string; temperature: number } | null>(null);
+  const [aiForm, setAiForm] = useState({ baseUrl: "", model: "", apiKey: "", temperature: "" });
+  const [aiMsg, setAiMsg] = useState("");
+  useEffect(() => {
+    if (!open || view !== "ai") return;
+    void bridge.aiGetSettings().then((settings) => {
+      setAiMeta(settings);
+      setAiForm({ baseUrl: settings.baseUrl, model: settings.model, apiKey: "", temperature: String(settings.temperature) });
+    }).catch((error) => setAiMsg("读取 AI 设置失败：" + (error as Error).message));
+  }, [open, view]);
+  const saveAiSettingsForm = async (): Promise<void> => {
+    try {
+      const temperature = Number(aiForm.temperature);
+      await bridge.aiSaveSettings({
+        baseUrl: aiForm.baseUrl.trim(),
+        model: aiForm.model.trim(),
+        ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
+        ...(Number.isFinite(temperature) ? { temperature } : {}),
+      });
+      const settings = await bridge.aiGetSettings();
+      setAiMeta(settings);
+      setAiForm({ baseUrl: settings.baseUrl, model: settings.model, apiKey: "", temperature: String(settings.temperature) });
+      setAiMsg("已保存");
+    } catch (error) {
+      setAiMsg("保存失败：" + (error as Error).message);
+    }
+  };
+  const testAiConnection = async (): Promise<void> => {
+    setAiMsg("正在测试…");
+    const result = await bridge.aiTestConnection();
+    setAiMsg(result.ok ? "连通性正常" : aiErrorInfoFromCode({ code: result.code, status: result.status, detail: result.detail }).message);
+  };
 
 
   const pageRef = useRef<HTMLDivElement>(null);
@@ -189,6 +232,61 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
                 </Seg>
               </Item>
+            </Group>
+          )}
+
+          {view === "ai" && (
+            <Group title="AI 助手" icon={<Sparkles size={16} />}>
+              <Switch
+                itemId="ai-enabled"
+                name="AI 助手"
+                desc="开启后 AI 才会出网；与云同步完全无关（关同步也能用 AI）。"
+                checked={aiEnabled}
+                onChange={(checked) => { saveAiEnabled(checked); setAiEnabled(checked); }}
+              />
+              <Item itemId="ai-base-url" name="接口地址" desc="OpenAI 兼容端点（默认 DeepSeek）。">
+                <TextField label="接口地址" value={aiForm.baseUrl} placeholder="https://api.deepseek.com/v1" onSave={(v) => setAiForm((form) => ({ ...form, baseUrl: v }))} />
+              </Item>
+              <Item itemId="ai-model" name="模型">
+                <TextField label="模型" value={aiForm.model} placeholder="deepseek-chat" onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
+              </Item>
+              <Item itemId="ai-api-key" name="API Key" desc="保存在本机 Android Keystore，不进入网页层；只显示尾号。">
+                <TextField label="API Key" type="password" value={aiForm.apiKey} placeholder={aiMeta?.hasKey ? aiMeta.keyTail + "（留空＝不改）" : "sk-…"} onSave={(v) => setAiForm((form) => ({ ...form, apiKey: v }))} />
+              </Item>
+              <Item itemId="ai-temperature" name="温度">
+                <TextField label="温度" value={aiForm.temperature} placeholder="0.7" onSave={(v) => setAiForm((form) => ({ ...form, temperature: v }))} />
+              </Item>
+              <Block itemId="ai-history" name="已保存的对话" desc="历史上限 50 条 / 30 天（设备本地，含资料快照；不含 API Key、不进云同步）。">
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => {
+                    void confirmMobile({ title: "清空全部历史对话？", body: "只影响本机保存的 AI 对话，不影响笔记与同步。", confirmText: "清空", danger: true })
+                      .then((ok) => { if (!ok) return; void clearAllConversations().then(() => setAiMsg("已清空本机保存的 AI 历史对话")); });
+                  }}>清空全部对话</button>
+                </div>
+              </Block>
+              <Block itemId="ai-key-clear" name="API Key" desc={aiMeta?.hasKey ? "当前已配置（" + aiMeta.keyTail + "）；清除后需要重新填写才能使用。" : "尚未配置。"}>
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger" disabled={!aiMeta?.hasKey} onClick={() => {
+                    void confirmMobile({ title: "清除 API Key？", body: "清除后 AI 将无法出网，直到重新填写。", confirmText: "清除", danger: true })
+                      .then(async (ok) => {
+                        if (!ok) return;
+                        try {
+                          await bridge.aiSaveSettings({ apiKey: "" });
+                          const settings = await bridge.aiGetSettings();
+                          setAiMeta(settings);
+                          setAiMsg("已清除 API Key");
+                        } catch (error) { setAiMsg("清除失败：" + (error as Error).message); }
+                      });
+                  }}>清除 API Key</button>
+                </div>
+              </Block>
+              <Block itemId="ai-actions" name="保存与连通性">
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--primary" onClick={() => void saveAiSettingsForm()}>保存</button>
+                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void testAiConnection()}>测试连通性</button>
+                </div>
+                {aiMsg && <div className="mb-form__desc">{aiMsg}</div>}
+              </Block>
             </Group>
           )}
 
@@ -326,6 +424,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                           }}
                         />
                       </Item>
+                      <Switch
+                        name="按需下载附件"
+                        desc="开启后首拉只同步文档与附件清单，图片/附件在打开或预览时按需下载（首拉更快、省流量）；关闭则首拉全量下载（离线完整性最好）。新设备默认开启。"
+                        checked={syncCfg?.deferAssets === true}
+                        onChange={(next) => updateSyncSettings({ deferAssets: next })}
+                      />
                       {syncCfg?.autoMode === "interval" && (
                         <Item itemId="sync-auto-interval" name="自动同步间隔" desc="按固定间隔自动同步：到点触发一次（离线/未配置时由引擎侧判据拦住，不会出网）。App 不在运行时（被切走或被杀）不会再按间隔触发，下次打开或回到前台会自动对齐一次。">
                           <PickerSheet
@@ -350,12 +454,27 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     </div>
                     {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
                     {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
+                    {syncProgressText && <div className="mb-set-item__desc" aria-live="polite">{syncProgressText}</div>}
                     {/* 常驻：上次同步的时间/结果/失败原因（自动同步的失败也在这里看得到；云同步关闭时另加一句说明） */}
                     <div className="mb-set-item__desc">
                       上次同步：{lastSyncText}
                       {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
                     </div>
                   </div>
+                  {syncSuperseded.length > 0 && (
+                    <div className="mb-set-block">
+                      <div className="mb-set-block__name">同步有 {syncSuperseded.length} 篇被云端版本覆盖</div>
+                      <div className="mb-set-item__desc">本地版本已自动留历史（可在此条目历史里找回），云端版本为准。</div>
+                      <div className="mb-list" role="list">
+                        {syncSuperseded.map((n) => (
+                          <button key={n.id} type="button" className="mb-list-item" disabled={!onOpenNote} onClick={() => onOpenNote?.(n.id)}>
+                            <span className="mb-list-item__text mb-ellipsis">{n.title || n.id}</span>
+                            <span className="mb-list-item__meta">已留历史</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {syncWarnings.length > 0 && (
                     <div className="mb-set-block">
                       <div className="mb-set-block__name">同步有 {syncWarnings.length} 项被跳过</div>

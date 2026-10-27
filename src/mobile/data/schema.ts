@@ -27,7 +27,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 3;
+export const MOBILE_SCHEMA_VERSION = 9; // 261026：notes/folders/quick_notes 加 cloud_deleted（远端彻底删除·仅本地副本标记）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -69,10 +69,12 @@ export function baseSchemaStatements(): SchemaStatement[] {
     sort_order INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     content_hash TEXT,
-    sync_state TEXT NOT NULL DEFAULT 'local',
+    is_dirty INTEGER NOT NULL DEFAULT 0,
+    is_purged INTEGER NOT NULL DEFAULT 0,
     is_conflict INTEGER NOT NULL DEFAULT 0,
     deleted_at TEXT,
-    doc_kind TEXT NOT NULL DEFAULT 'doc'
+    doc_kind TEXT NOT NULL DEFAULT 'doc',
+    cloud_deleted INTEGER NOT NULL DEFAULT 0
   )`);
   push(`CREATE TABLE IF NOT EXISTS deleted_notes (
     id TEXT PRIMARY KEY,
@@ -95,7 +97,9 @@ export function baseSchemaStatements(): SchemaStatement[] {
     updated_at TEXT NOT NULL,
     trashed_at TEXT,
     deleted_from_parent_id TEXT,
-    sync_state TEXT NOT NULL DEFAULT 'synced'
+    is_dirty INTEGER NOT NULL DEFAULT 0,
+    is_purged INTEGER NOT NULL DEFAULT 0,
+    cloud_deleted INTEGER NOT NULL DEFAULT 0
   )`);
   push(`CREATE TABLE IF NOT EXISTS device_state (
     key TEXT PRIMARY KEY,
@@ -108,13 +112,39 @@ export function baseSchemaStatements(): SchemaStatement[] {
     preview_text TEXT NOT NULL,
     image_count INTEGER NOT NULL DEFAULT 0,
     content_hash TEXT NOT NULL,
-    sync_state TEXT NOT NULL DEFAULT 'local',
+    is_dirty INTEGER NOT NULL DEFAULT 0,
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT,
-    tags_json TEXT NOT NULL DEFAULT '[]',
+    tags_updated_at TEXT NOT NULL DEFAULT '',
     first_image TEXT,
-    list_metadata_version INTEGER NOT NULL DEFAULT 0
+    list_metadata_version INTEGER NOT NULL DEFAULT 0,
+    cloud_deleted INTEGER NOT NULL DEFAULT 0
   )`);
+  // 标签（261025 通用化）：目录 + 多态关联 + 每目标关系版本；正文不存标签名。
+  push(`CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  )`);
+  push(`CREATE TABLE IF NOT EXISTS tag_links (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(target_kind, target_id, tag_id)
+  )`);
+  push(`CREATE TABLE IF NOT EXISTS tag_link_versions (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    links_updated_at TEXT NOT NULL,
+    PRIMARY KEY(target_kind, target_id)
+  )`);
+  push("CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links(tag_id)");
+  push("CREATE INDEX IF NOT EXISTS idx_tag_links_target ON tag_links(target_kind, target_id)");
   push(`CREATE TABLE IF NOT EXISTS sync_base (
     note_id TEXT PRIMARY KEY,
     content_hash TEXT NOT NULL,
@@ -179,7 +209,8 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   addNoteColumn("parent_id", "TEXT");
   addNoteColumn("sort_order", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("content_hash", "TEXT");
-  addNoteColumn("sync_state", "TEXT NOT NULL DEFAULT 'local'");
+  addNoteColumn("is_dirty", "INTEGER NOT NULL DEFAULT 0");
+  addNoteColumn("is_purged", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("is_conflict", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("deleted_at", "TEXT");
   addNoteColumn("trashed_at", "TEXT");
@@ -228,8 +259,24 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   const folderColumns = (
     (await db.prepare("PRAGMA table_info(folders)").all()) as Array<{ name: string }>
   ).map((column) => column.name);
-  if (!folderColumns.includes("sync_state")) {
-    push("ALTER TABLE folders ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'");
+  if (!folderColumns.includes("is_dirty")) push("ALTER TABLE folders ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
+  if (!folderColumns.includes("is_purged")) push("ALTER TABLE folders ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0");
+  if (folderColumns.includes("sync_state")) push("ALTER TABLE folders DROP COLUMN sync_state", { optional: true });
+  const noteColumns2 = (
+    (await db.prepare("PRAGMA table_info(notes)").all()) as Array<{ name: string }>
+  ).map((column) => column.name);
+  if (!noteColumns2.includes("is_dirty")) push("ALTER TABLE notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
+  if (!noteColumns2.includes("is_purged")) push("ALTER TABLE notes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0");
+  if (noteColumns2.includes("sync_state")) push("ALTER TABLE notes DROP COLUMN sync_state", { optional: true });
+  const quickColumns = (
+    (await db.prepare("PRAGMA table_info(quick_notes)").all()) as Array<{ name: string }>
+  ).map((column) => column.name);
+  if (!quickColumns.includes("is_dirty")) push("ALTER TABLE quick_notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
+  if (quickColumns.includes("sync_state")) push("ALTER TABLE quick_notes DROP COLUMN sync_state", { optional: true });
+  // 261026：远端彻底删除、本机仅保留回收站副本的标记（v3 state.remotePurged 的 DB 投影；UI 徽标与
+  // 「恢复后清标记」都读它）。三张表都加，列名统一 cloud_deleted。
+  for (const [table, columns] of [["notes", noteColumns2], ["folders", folderColumns], ["quick_notes", quickColumns]] as const) {
+    if (!columns.includes("cloud_deleted")) push(`ALTER TABLE ${table} ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0`);
   }
 
   for (const statement of await buildQuickNotesSyncSchemaStatements(db)) push(statement);
@@ -260,8 +307,8 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   if (!seeded) {
     statements.push({
       statement: `INSERT OR IGNORE INTO folders
-        (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state)
-       VALUES (?,?,NULL,0,'notebook',NULL,?,'synced')`,
+        (id, title, parent_id, sort_order, node_type, icon, updated_at, is_dirty)
+       VALUES (?,?,NULL,0,'notebook',NULL,?,0)`,
       values: ["notebook-personal", "个人笔记", new Date().toISOString()],
     });
     statements.push({
@@ -269,6 +316,18 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
     });
   }
 
+  // AI 历史对话索引（261023）：消息正文/资料快照在 files/ai/conversations/{id}.json，这里只存列表与搜索所需的元数据。
+  push(`CREATE TABLE IF NOT EXISTS ai_conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    preview TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    message_count INTEGER NOT NULL,
+    bytes INTEGER NOT NULL,
+    docs_json TEXT NOT NULL DEFAULT '[]'
+  )`);
+  push("CREATE INDEX IF NOT EXISTS idx_ai_conversations_updated ON ai_conversations(updated_at DESC)");
   push("CREATE INDEX IF NOT EXISTS idx_note_history_note ON note_history(note_id, created_at DESC)");
   push("CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path)");
   return statements;
@@ -297,7 +356,8 @@ async function execSchemaStatements(db: MobileDb, statements: SchemaStatement[])
 /** Apply idempotent mobile schema migrations and first-run seed data. */
 export async function applyMobileSchema(db: MobileDb): Promise<void> {
   // 快路径（261021）：版本已到 ⇒ 建表/加列/索引全部跳过（冷启动省 ~2.4s）。
-  if ((await readMobileSchemaVersion(db)) >= MOBILE_SCHEMA_VERSION) return;
+  const previousVersion = await readMobileSchemaVersion(db);
+  if (previousVersion >= MOBILE_SCHEMA_VERSION) return;
 
   try {
     await db.pragma("PRAGMA foreign_keys = ON");
@@ -307,6 +367,12 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
   // 两批 = 两次桥往返：先底表（条件读必须先有表），再条件语句 + 种子。
   await execSchemaStatements(db, baseSchemaStatements());
   await execSchemaStatements(db, await collectSchemaStatements(db));
+  // 261024(B)：标签移出正文、改由关联表提供 ⇒ 旧搜索账本里的标签词已失去来源。
+  // 这不是数据迁移，只是清一次派生索引，让搜索按新关联表重建（清账本后 reconcile 会重建全部小记）。
+  if (previousVersion > 0 && previousVersion < 6) {
+    try { await db.exec("DELETE FROM quick_notes_search_index"); } catch { /* 旧库没有账本表 */ }
+    try { await db.exec("DELETE FROM quick_notes_fts"); } catch { /* 无 FTS5 的环境 */ }
+  }
   // 全部 DDL 成功后才写版本（失败下次仍会重放，幂等）。
   await db.exec(`PRAGMA user_version = ${MOBILE_SCHEMA_VERSION}`);
 }

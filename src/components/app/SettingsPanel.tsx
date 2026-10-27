@@ -18,7 +18,6 @@ function fieldErrorFor(message: string, retryable?: boolean): Record<string, str
 import { LAKE_THEMES } from "../../lib/themes";
 import { native } from "../../lib/native";
 import type { DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../../lib/types";
-import type { GcDiagnostics } from "../../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../../core/gcPolicy";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../../core/syncModes";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
@@ -191,8 +190,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [gcPending, setGcPending] = useState<number>(0);
   const [gcLog, setGcLog] = useState<Array<{ id: number; ts: string; action: string; key: string; reason: string; ok: boolean }>>([]);
   const [gcBusy, setGcBusy] = useState(false);
-  const [gcDiag, setGcDiag] = useState<GcDiagnostics | null>(null);
-  const [gcDiagBusy, setGcDiagBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [webStatus, setWebStatus] = useState<{ enabled: boolean; port: number; url: string } | null>(null);
   const [webBusy, setWebBusy] = useState(false);
@@ -543,35 +540,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       // 手动清理 = 显式清云端：无视 7 天窗口，直接列出/删除当前全部未引用对象（自动定时仍按窗口）
       const r = await native.runS3DeepCleanup(dryRun, true);
       await refreshGcPending();
-      setGcDiag(null);
-      setSyncMsg(dryRun ? `预览：可清理 Lake ${r.lake.candidateCount} 个、小记 ${r.quickNotes.candidateCount} 个` : `已清理：Lake ${r.lake.deletedCount} 个、小记 ${r.quickNotes.deletedCount} 个`);
+      setSyncMsg(dryRun ? `预览：可清理 ${r.deleted.length} 个对象` : `已清理 ${r.deleted.length} 个对象`);
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
   };
-  const runReconcile = async () => {
-    if (gcBusy) return;
-    setGcBusy(true); setSyncMsg(null);
-    try {
-      // 手动对账 = 显式清云端：无视 7 天窗口（自动/定时仍按窗口）
-      const r = await native.runS3GcReconcile(true);
-      await refreshGcPending();
-      setGcDiag(null);
-      const cleared = r.clearedReferenced > 0 ? `；另有 ${r.clearedReferenced} 条已恢复引用、移出待回收` : "";
-      setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个未引用对象${cleared}` : cleared ? `无未引用对象可删${cleared}` : "云端无未引用对象");
-    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
-    finally { setGcBusy(false); }
-  };
-  const refreshCloudStats = async () => {
-    if (gcDiagBusy) return;
-    setGcDiagBusy(true); setSyncMsg(null);
-    try {
-      const d = await native.runS3GcDiagnostics();
-      setGcDiag(d);
-      setSyncMsg("云端统计已刷新");
-    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
-    finally { setGcDiagBusy(false); }
-  };
-  const diagNs = (name: string) => gcDiag?.cloud.namespaces.find((n) => n.namespace === name);
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
@@ -762,6 +734,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           {syncCfg.autoMode === "interval" && (
                             <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）" desc="到点触发一次；应用退出后不会在后台继续定时（下次启动时的对齐会补上）。"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
+                          <Switch itemId="sync-defer-assets" name="按需下载附件" desc="开启后首拉只同步文档与附件清单，图片/附件在打开或预览时按需下载（首拉更快、省流量）；关闭则首拉全量下载（离线完整性最好）。与移动端同口径。" checked={syncCfg.deferAssets === true} onChange={(checked) => void saveSyncCfg({ deferAssets: checked })} />
                         </>
                       )}
                     </>
@@ -779,19 +752,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runReconcile()} disabled={gcBusy || cloudOffline}><Trash size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcBusy || cloudOffline}>深度清理预览</button>
                       <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcBusy || cloudOffline}>执行深度清理</button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy || cloudOffline}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
                     </div>
-                    {gcDiag && (
-                      <div className="config-stats">
-                        <span>云端占用 {gcDiag.cloud.objects} 个对象 / {formatBytes(gcDiag.cloud.bytes)}</span>
-                        <span>正文 {diagNs("objects")?.cloudObjects ?? 0} · 资源 {diagNs("assets")?.cloudObjects ?? 0} · 清单 {diagNs("manifests")?.cloudObjects ?? 0} · 小记 {diagNs("quick-notes")?.cloudObjects ?? 0}</span>
-                        <span>未引用 {gcDiag.cloud.unreferenced} · 已到期 {gcDiag.cloud.due} · 窗口内 {gcDiag.cloud.inWindow}</span>
-                        <span>统计生成于 {formatDateTime(new Date(gcDiag.generatedAt))}</span>
-                      </div>
-                    )}
                   </Block>
                   {gcCfg && (
                     <>

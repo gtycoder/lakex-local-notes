@@ -1,0 +1,25 @@
+/**
+ * 第三方编辑器 UI 的**焦点视觉归属**（261023）—— 治「输入框两层/三层边框」反复出现。
+ *
+ * 背景：`src/styles/tokens.css` 有一条全局 `:where(button, input, textarea, select, [role="button"]):focus-visible`
+ * 焦点环，服务的是**我们自有的原生控件**；但 Univer / 内核（lakex）/ 画板（Drawnix）的弹窗与工具条里
+ * 同样有 input/textarea/select，它们自己已经画了边框 + 聚焦 ring，再叠我们的 2px outline 就是两三层。
+ * 表格是重灾区：弹窗 portal 到 `[data-lake-univer-floating]`（260922 补丁改回 body），
+ * 所以只按 `.usheet-editor` 作用域写规则会漏掉——这正是「插入链接 / 查找替换」那类输入框的老病根。
+ *
+ * 原则：**第三方宿主里的字段自己负责焦点视觉**；我们只把表格字段收成自己的口径
+ * （单条主色边 + 2px 柔光环，= .ln-text-field / .bt-input 的聚焦语言）。
+ * 新增第三方编辑器/弹窗容器 → 把宿主加进下面两个 :is() 列表；漏了的话 dev 探针
+ * （src/lib/vendorFocusProbe.ts，`window.__vendorFocusProbe()`）会在控制台报出来。
+ */
+:is(.usheet-editor, [data-lake-univer-floating], .lake-editor-mount, .ne-overlay-container, .board-editor)
+  :is(input, textarea, select):focus-visible {
+  outline: none;
+}
+
+:is(.usheet-editor, [data-lake-univer-floating])
+  :is(input, textarea):not([type="checkbox"]):not([type="radio"]):focus {
+  border-color: var(--lake-accent);
+  box-shadow: 0 0 0 2px var(--lake-focus-halo);
+  outline: 0;
+}

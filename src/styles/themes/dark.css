@@ -28,6 +28,11 @@
   --lake-note-ref-icon-accent: #7fb2ff;
   --lake-note-ref-icon-link: #2ed790;
   --lake-note-ref-icon-knockout: #232528;
+  /* 「加密文本」卡插入面板图标的深色重绘（几何不变；浅色原值见 themes/base.css）。
+   * 口径同 note-ref：底框比 panel 亮一档、锁用浅墨。 */
+  --lake-locked-text-icon-tile: #232528;
+  --lake-locked-text-icon-tile-border: #3b3e45;
+  --lake-locked-text-icon-ink: #d7dae0;
   /* 文字 */
   --lake-text-1: #e7e8ea;
   --lake-text-2: #a9abb1;

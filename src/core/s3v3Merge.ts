@@ -1,0 +1,260 @@
+import { decideItem } from "./s3v3Decision.js";
+import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3Index.js";
+
+/** 三方合并计划（纯逻辑）：输入基线×本地×远端，输出每条的下载/上传/删除/归档意图。 */
+
+export interface LakeMergeContext {
+  restorePending: ReadonlySet<string>;
+  purgeIntents: ReadonlySet<string>;
+  folderPurgeIntents: ReadonlySet<string>;
+  /** 乐观合法父集合（回收站 + 本地/远端目录与文档 id + 基线；缺省 = 不做父合法性过滤）。
+   *  用于"父目录尚未落库/被删"时的环检测与元数据判定；真正落库兜底在适配器（见 C5）。 */
+  validParents?: ReadonlySet<string>;
+}
+
+/** 环检测（对齐旧协议 syncPerf.isRemoteDescendant）：nodeId 在远端树中是否为 ancestorId 的子孙。
+ *  用于「本地把 A 移进 B 的子树、而他端已把 B 移进 A」这类互成父子——即使本地 updatedAt 更新，
+ *  也必须跟随远端断开，否则两端索引会长期成环（打开文档/移动目录都会失败）。 */
+export function isRemoteDescendant(
+  nodeId: string | null,
+  ancestorId: string,
+  parentMap: Map<string, string | null>,
+): boolean {
+  let cur: string | null | undefined = nodeId;
+  const seen = new Set<string>();
+  while (cur !== null && cur !== undefined) {
+    if (cur === ancestorId) return true;
+    if (seen.has(cur)) return false;
+    seen.add(cur);
+    cur = parentMap.get(cur) ?? null;
+  }
+  return false;
+}
+
+export type LakeNoteActionKind =
+  | "upload"
+  | "download"
+  | "local-purge"
+  | "remote-purged-trash"
+  | "remote-wins-history"
+  | "none";
+
+export interface LakeNotePlan {
+  id: string;
+  kind: LakeNoteActionKind;
+  /** 应用远端条目（元数据；download 类还会下载正文）。 */
+  applyRemote: boolean;
+  /** 上传本地条目（body 仅在 hash 变化时才真正上传，由运行时决定）。 */
+  uploadLocal: boolean;
+  /** 远端胜出时把本地版本写历史快照。 */
+  archiveLocal: boolean;
+  local?: LakeNoteEntry;
+  remote?: LakeNoteEntry;
+}
+
+export interface LakeFolderPlan {
+  id: string;
+  kind: "upload" | "download" | "local-purge" | "remote-purged-trash" | "none";
+  applyRemote: boolean;
+  uploadLocal: boolean;
+  local?: LakeFolderEntry;
+  remote?: LakeFolderEntry;
+}
+
+export interface LakeMergePlan {
+  notes: LakeNotePlan[];
+  folders: LakeFolderPlan[];
+}
+
+const byId = <T extends { id: string }>(list: T[] | undefined): Map<string, T> => new Map((list ?? []).map((x) => [x.id, x]));
+
+export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: LakeIndex, ctx: LakeMergeContext): LakeMergePlan {
+  const baseNotes = byId(base?.notes);
+  const localNotes = byId(local.notes);
+  const remoteNotes = byId(remote.notes);
+  const remoteNoteParents = new Map<string, string | null>();
+  for (const n of remoteNotes.values()) remoteNoteParents.set(n.id, n.parentId);
+  const remoteFolderParents = new Map<string, string | null>();
+  for (const f of (remote.folders ?? [])) remoteFolderParents.set(f.id, f.parentId);
+  const ids = new Set<string>([...localNotes.keys(), ...remoteNotes.keys(), ...baseNotes.keys()]);
+  const notes: LakeNotePlan[] = [];
+  for (const id of [...ids].sort()) {
+    const b = baseNotes.get(id) ?? null;
+    const l = localNotes.get(id) ?? null;
+    const r = remoteNotes.get(id) ?? null;
+    const action = decideItem({
+      basePresent: !!b,
+      baseHash: b?.contentHash ?? null,
+      localPresent: !!l,
+      localHash: l?.contentHash ?? null,
+      remotePresent: !!r,
+      remoteHash: r?.contentHash ?? null,
+      restorePending: ctx.restorePending.has(id),
+      localPurgeIntent: ctx.purgeIntents.has(id),
+    });
+    switch (action) {
+      case "upload":
+        notes.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: l ?? undefined, remote: r ?? undefined });
+        break;
+      case "restore-upload":
+        notes.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: l ?? undefined, remote: r ?? undefined });
+        break;
+      case "download":
+        notes.push({ id, kind: "download", applyRemote: true, uploadLocal: false, archiveLocal: false, local: l ?? undefined, remote: r ?? undefined });
+        break;
+      case "local-purge-wins":
+        notes.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, archiveLocal: false, local: l ?? undefined, remote: r ?? undefined });
+        break;
+      case "remote-purged-move-to-trash": {
+        const localChanged = !!l && !!b && l.contentHash !== b.contentHash;
+        notes.push({ id, kind: "remote-purged-trash", applyRemote: true, uploadLocal: false, archiveLocal: localChanged, local: l ?? undefined, remote: r ?? undefined });
+        break;
+      }
+      case "remote-wins-keep-history": {
+        const localChanged = !!l && !!b && l.contentHash !== b.contentHash;
+        notes.push({ id, kind: "remote-wins-history", applyRemote: true, uploadLocal: false, archiveLocal: localChanged, local: l ?? undefined, remote: r ?? undefined });
+        break;
+      }
+      default: {
+        // none：内容一致；元数据按 updatedAt 后写胜（本地更新 → 上传元数据；远端更新 → 应用远端）。
+        const localMetaNewer = !!l && !!r && l.updatedAt > r.updatedAt;
+        const remoteMetaNewer = !!r && (!l || r.updatedAt > l.updatedAt);
+        // 编辑锁字段级 LWW（补齐旧协议 C3）：锁变更不 bump updatedAt，只按 updatedAt 判会永不传播。
+        // lockedAt 是 ISO 串/空串，可直接字典序比较；相等时双方都不动。
+        const localLockAt = l?.lockedAt ?? "";
+        const remoteLockAt = r?.lockedAt ?? "";
+        const remoteLockNewer = !!r && remoteLockAt > localLockAt;
+        const localLockNewer = !!l && localLockAt > remoteLockAt;
+        // 环检测（C4）：本地父在远端树中位于本节点之下 ⇒ 上传会把远端树弄成环，必须跟随远端断开。
+        const wouldCycle = !!l && !!r && !!l.parentId && isRemoteDescendant(l.parentId, id, remoteNoteParents);
+        notes.push({
+          id,
+          kind: "none",
+          applyRemote: wouldCycle || remoteMetaNewer || remoteLockNewer,
+          uploadLocal: !wouldCycle && (localMetaNewer || (!remoteMetaNewer && localLockNewer)),
+          archiveLocal: false,
+          local: l ?? undefined,
+          remote: r ?? undefined,
+        });
+      }
+    }
+  }
+
+  const baseFolders = byId(base?.folders);
+  const localFolders = byId(local.folders);
+  const remoteFolders = byId(remote.folders);
+  const fids = new Set<string>([...localFolders.keys(), ...remoteFolders.keys(), ...baseFolders.keys()]);
+  const folders: LakeFolderPlan[] = [];
+  for (const id of [...fids].sort()) {
+    const b = baseFolders.get(id) ?? null;
+    const l = localFolders.get(id) ?? null;
+    const r = remoteFolders.get(id) ?? null;
+    const purge = ctx.folderPurgeIntents.has(id);
+    if (purge && !l && r) {
+      folders.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, local: undefined, remote: r });
+      continue;
+    }
+    if (l && !r) {
+      // 本地有、远端无：
+      // - 无基线 = 本地新建 → upload；
+      // - 基线存在且本地在本轮被恢复/编辑过（updatedAt 晚于基线、且已不在回收站）→ 显式恢复传播：
+      //   远端「缺席」让位，按 upload 重新发布（D4：否则恢复下一轮又被判 remote-purged-trash 打回）；
+      // - 其余 = 远端已彻底删除 → 本地跟随进回收站（删除权威）。
+      if (!b) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
+      else if (!l.trashedAt && l.updatedAt > b.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
+      else folders.push({ id, kind: "remote-purged-trash", applyRemote: true, uploadLocal: false, local: l, remote: undefined });
+      continue;
+    }
+    if (!l && r) {
+      // 本地无、远端有：基线存在 = 本地缺失（按云端恢复下载）；否则 = 远端新建。
+      folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: undefined, remote: r });
+      continue;
+    }
+    if (!l || !r) continue;
+    const lChanged = !b || l.updatedAt !== b.updatedAt;
+    const rChanged = !b || r.updatedAt !== b.updatedAt;
+    if (lChanged && !rChanged) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
+    else if (!lChanged && rChanged) folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
+    else if (lChanged && rChanged) {
+      // 环检测（C4）：本地 new parent 在远端目录树中位于本目录之下 ⇒ 上传会成环，跟随远端断开。
+      const wouldCycle = !!l.parentId && isRemoteDescendant(l.parentId, id, remoteFolderParents);
+      if (!wouldCycle && l.updatedAt > r.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
+      else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
+    } else folders.push({ id, kind: "none", applyRemote: false, uploadLocal: false, local: l, remote: r });
+  }
+  return { notes, folders };
+}
+
+export type QuickNoteActionKind = "upload" | "download" | "remote-wins-history" | "local-delete" | "local-purge" | "none";
+export interface QuickNotePlan {
+  id: string;
+  kind: QuickNoteActionKind;
+  applyRemote: boolean;
+  uploadLocal: boolean;
+  archiveLocal: boolean;
+  local?: QuickNoteEntry;
+  remote?: QuickNoteEntry;
+}
+export interface QuickNotesMergePlan { items: QuickNotePlan[] }
+
+export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNotesIndex, remote: QuickNotesIndex, restorePending: ReadonlySet<string>, purgeIntents: ReadonlySet<string> = new Set(), localDeletes: ReadonlySet<string> = new Set(), purgedIds: ReadonlySet<string> = new Set()): QuickNotesMergePlan {
+
+  const b = byId(base?.items);
+  const l = byId(local.items);
+  const r = byId(remote.items);
+  const ids = new Set<string>([...l.keys(), ...r.keys(), ...b.keys()]);
+  const items: QuickNotePlan[] = [];
+  for (const id of [...ids].sort()) {
+    const bb = b.get(id) ?? null;
+    const ll = l.get(id) ?? null;
+    const rr = r.get(id) ?? null;
+    if (purgeIntents.has(id) && !ll && rr) {
+      items.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, archiveLocal: false, local: undefined, remote: rr });
+      continue;
+    }
+    // 显式恢复优先于 purge 墓碑：用户从「云端已删除 · 仅本地」副本恢复时，必须重新上传，
+    // 不能被远端/本地的 purged 墓碑再次判成 local-purge 弹回回收站。
+    if (restorePending.has(id) && ll) {
+      items.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: ll, remote: rr ?? undefined });
+      continue;
+    }
+    if (purgedIds.has(id)) {
+      if (ll) items.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, archiveLocal: false, local: ll, remote: rr ?? undefined });
+      continue;
+    }
+    if (ll && !rr && !bb) {
+      items.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: ll, remote: undefined });
+      continue;
+    }
+    if (!ll && rr && bb && localDeletes.has(id)) {
+      items.push({ id, kind: "local-delete", applyRemote: false, uploadLocal: false, archiveLocal: false, local: undefined, remote: rr });
+      continue;
+    }
+    if (!ll && rr) {
+      items.push({ id, kind: "download", applyRemote: true, uploadLocal: false, archiveLocal: false, local: undefined, remote: rr });
+      continue;
+    }
+    if (ll && !rr && bb) {
+      items.push({ id, kind: "local-delete", applyRemote: false, uploadLocal: false, archiveLocal: false, local: ll, remote: undefined });
+      continue;
+    }
+    if (!ll || !rr) continue;
+    const lChanged = ll.contentHash !== (bb?.contentHash ?? null);
+    const rChanged = rr.contentHash !== (bb?.contentHash ?? null);
+    if (!lChanged && !rChanged) {
+      const remoteMetaNewer = rr.updatedAt > ll.updatedAt;
+      items.push({ id, kind: "none", applyRemote: remoteMetaNewer, uploadLocal: !remoteMetaNewer && ll.updatedAt > rr.updatedAt, archiveLocal: false, local: ll, remote: rr });
+      continue;
+    }
+    if (lChanged && !rChanged) {
+      items.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: ll, remote: rr });
+      continue;
+    }
+    if (!lChanged && rChanged) {
+      items.push({ id, kind: "download", applyRemote: true, uploadLocal: false, archiveLocal: false, local: ll, remote: rr });
+      continue;
+    }
+    items.push({ id, kind: "remote-wins-history", applyRemote: true, uploadLocal: false, archiveLocal: true, local: ll, remote: rr });
+  }
+  return { items };
+}

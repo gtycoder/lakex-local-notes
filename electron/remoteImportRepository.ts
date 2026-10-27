@@ -114,22 +114,22 @@ export class RemoteImportRepository {
         const trashedAt = trashed ? (note.trashedAt ?? null) : null;
         const deletedFrom = trashed ? (note.deletedFromParentId ?? null) : null;
         this.deps.db.prepare(
-          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at,is_locked,locked_at,trashed_at,deleted_from_parent_id,kind)
-           VALUES(?,?,?,?,?,'synced',?,NULL,?,?,?,?,?)
+          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,deleted_at,is_locked,locked_at,trashed_at,deleted_from_parent_id,kind)
+           VALUES(?,?,?,?,?,0,?,NULL,?,?,?,?,?)
            ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
              is_locked=excluded.is_locked,locked_at=excluded.locked_at,
-             sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL,
+             is_dirty=0,is_conflict=excluded.is_conflict,deleted_at=NULL,
              trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id,
              kind=excluded.kind`
         ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0,
-          note.isLocked ? 1 : 0, note.lockedAt ?? null, trashedAt, deletedFrom, noteKind);
+          note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, trashedAt, deletedFrom, noteKind);
         this.deps.db.prepare(
-          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
-           VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?,?,?,?)
+          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict,icon,trashed_at,deleted_from_parent_id)
+           VALUES(?,?,?,'note',?,?,?,?,?,NULL,0,?,?,?,?)
            ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
-             deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict,icon=excluded.icon,
+             deleted_at=NULL,is_dirty=0,is_conflict=excluded.is_conflict,icon=excluded.icon,
              trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id`
         ).run(note.id, this.deps.workspaceId, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null, trashedAt, deletedFrom);
       });

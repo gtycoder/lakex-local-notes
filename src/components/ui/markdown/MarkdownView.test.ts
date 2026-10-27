@@ -38,6 +38,14 @@ describe("Markdown 轻量子集渲染（261004）", () => {
     expect(unsafe).not.toContain("<a");
   });
 
+  it("GFM 表格（261023，解析器与移动端共用）", () => {
+    const out = html("| 项 | 结果 |\n| :-- | --: |\n| 通道 | 原生 SSE |");
+    expect(out).toContain('<table class="md-table">');
+    expect(out).toContain('<th class="md-align-left">项</th>');
+    expect(out).toContain('<th class="md-align-right">结果</th>');
+    expect(out).toContain('<td class="md-align-right">原生 SSE</td>');
+  });
+
   it("HTML 原样转义（不用 innerHTML，AI 输出不可信）", () => {
     const out = html("<img src=x onerror=alert(1)>");
     expect(out).not.toContain("<img");

@@ -9,6 +9,9 @@ export interface TrashItem {
   hasFile: boolean;
   /** 收到其他设备 purge 墓碑后被抑制的本地副本（保留可恢复、不上传） */
   purged: boolean;
+  /** v3：云端已彻底删除（远端索引缺失）、本机仅保留回收站副本 —— 只打标，不限制恢复。
+   *  与 purged 独立：purged=抑制位，cloudDeleted=「云端已删除 · 仅本地」展示位。 */
+  cloudDeleted?: boolean;
 }
 
 export interface TrashReminderItem {

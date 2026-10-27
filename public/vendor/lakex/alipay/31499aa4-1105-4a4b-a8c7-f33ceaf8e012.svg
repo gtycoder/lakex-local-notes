@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 63.1 (92452) - https://sketch.com -->
+    <title>本地文件-选项备份 4</title>
+    <desc>Created with Sketch.</desc>
+    <g id="关联语雀卡片" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="新建-本地内容" transform="translate(-446.000000, -675.000000)">
+            <g id="编组-7备份-5" transform="translate(426.000000, 368.000000)">
+                <g id="本地文件-选项备份-4" transform="translate(20.000000, 307.000000)">
+                    <g id="选项">
+                        <rect id="矩形备份-4" fill="#5ABA82" x="0" y="0" width="24" height="24" rx="2.5"></rect>
+                        <g id="play-circle" transform="translate(4.000000, 4.000000)" fill-rule="nonzero">
+                            <rect id="矩形" fill="#000000" opacity="0" x="0" y="0" width="16" height="16"></rect>
+                            <path d="M8,1 C4.134375,1 1,4.134375 1,8 C1,11.865625 4.134375,15 8,15 C11.865625,15 15,11.865625 15,8 C15,4.134375 11.865625,1 8,1 Z M8,13.8125 C4.790625,13.8125 2.1875,11.209375 2.1875,8 C2.1875,4.790625 4.790625,2.1875 8,2.1875 C11.209375,2.1875 13.8125,4.790625 13.8125,8 C13.8125,11.209375 11.209375,13.8125 8,13.8125 Z" id="形状" fill="#FFFFFF"></path>
+                            <path d="M11.240625,7.7984375 L6.6140625,4.4390625 C6.4484375,4.31875 6.21875,4.4359375 6.21875,4.640625 L6.21875,11.359375 C6.21875,11.5640625 6.45,11.6796875 6.6140625,11.5609375 L11.240625,8.2015625 C11.378125,8.1015625 11.378125,7.8984375 11.240625,7.7984375 Z M7.215625,9.8921875 L7.215625,6.1078125 L9.8203125,8 L7.215625,9.8921875 L7.215625,9.8921875 Z" id="形状" fill="#FFFFFF"></path>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

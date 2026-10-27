@@ -160,8 +160,8 @@ describe("mobile searchIndex（better-sqlite3 FTS5 验证）", () => {
       await addNote(d, "bulk-" + i, "批量标题" + i, "<p>批量正文关键字-" + i + "</p>", "nb", "2026-01-01T00:00:00Z");
     }
     await reconcileIndex(d);
-    // 两块文档 → 两次 executeSet（每块一次 SELECT prev + 一次 SELECT MAX）。
-    expect(capture.calls).toBe(2);
+    // 每块一次 executeSet（块大小 = RECONCILE_BATCH_SIZE；261026 从 200 降到 20 防 Android 端 stringify OOM）。
+    expect(capture.calls).toBe(Math.ceil(total / RECONCILE_BATCH_SIZE));
     const ledger = await d.prepare("SELECT COUNT(*) AS c, COUNT(DISTINCT fts_rowid) AS d, MIN(fts_rowid) AS mn, MAX(fts_rowid) AS mx FROM search_index").get() as { c: number; d: number; mn: number; mx: number };
     expect(ledger.c).toBe(total);
     expect(ledger.d).toBe(total); // 唯一索引不冲突

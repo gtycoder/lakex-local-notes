@@ -20,15 +20,17 @@ describe("互斥域判据（F16 红线化）", () => {
 
   it("计数基线：改动分类表必须是有意的（改这里 = 改架构判据）", () => {
     // 与 cssLayers 的基线同理：只允许"显式改基线"来变更，防无声漂移。
-    expect(WRITE_OPS.length).toBe(30);
-    expect(MAINTENANCE_OPS.length).toBe(3);
-    expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
+    // 261024 方案 B：+setQuickNoteTags（小记 ↔ 标签关联表整组替换，独立于保存正文）
+    expect(WRITE_OPS.length).toBe(36);
+    // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
+    expect(MAINTENANCE_OPS.length).toBe(4);
+    // 261013：syncQuickNote（小记单条推送）；261027：+ensureNoteAssets / +ensureQuickNoteAssets（占位图点击补拉）。
+    expect(PRIORITY_OPS.length).toBe(3);
     // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
-    // 另含 remote ink 批的写操作（WRITE_OPS 30）
     // 261022 query API 收口：旧 listTreeNodes/listNotes/listQuickNotes/listNotebookTree 已删除；
     // 新 getHomeSnapshot/getWorkspaceSnapshot/getQuickNotePage 均为只读 none。
-    expect(NONE_OPS.length).toBe(41);
-    expect(ALL.length).toBe(75); // 30 写 + 3 维护 + 1 高优 + 41 none
+    expect(NONE_OPS.length).toBe(42);
+    expect(ALL.length).toBe(85); // 36 写 + 4 维护 + 3 高优 + 42 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {
@@ -76,13 +78,14 @@ describe("互斥域判据（F16 红线化）", () => {
   });
 
   it("I3：维护域里没有「用户当场发起」的操作（轮次级才允许串行等待）", () => {
-    expect([...MAINTENANCE_OPS].sort()).toEqual(["ensureTrashNoteAssets", "gcDeepCleanup", "syncNow"]);
+    // ensureSearchIndex（261026）也是轮次级：后台自检补齐 FTS，用户不用等它。
+    expect([...MAINTENANCE_OPS].sort()).toEqual(["ensureSearchIndex", "ensureTrashNoteAssets", "gcDeepCleanup", "syncNow"]);
   });
 
   it("高优先域（261013）：用户当场发起的单条推送既不排在整轮同步后面，也不与彼此并发", () => {
     // 用户点单：长按小记 → 写完点「保存并同步」→ 桌面端要及时看到。若与 syncNow 同域，
     // 撞上冷启动/回前台触发的整轮同步就要排队等它跑完（弱网可到分钟级）⇒ 必须另立一域。
-    expect(PRIORITY_OPS).toEqual(["syncQuickNote"]);
+    expect([...PRIORITY_OPS].sort()).toEqual(["ensureNoteAssets", "ensureQuickNoteAssets", "syncQuickNote"]);
     expect(isPriorityOp("syncQuickNote")).toBe(true);
     expect(lockDomainOf(classifyOp("syncQuickNote"))).toBe("priority");
     expect(lockDomainOf(classifyOp("syncQuickNote"))).not.toBe(lockDomainOf(classifyOp("syncNow")));

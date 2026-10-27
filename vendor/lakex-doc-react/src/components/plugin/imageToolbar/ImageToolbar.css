@@ -1,0 +1,400 @@
+/* 图片浮动操作栏 —— 显式配色（渲染在 .ne-engine 兄弟节点，不继承框架主题变量） */
+
+/* ════════════════ 工具栏容器 ════════════════ */
+
+.ne-image-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid #e5e6eb;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-sizing: border-box;
+  user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+}
+
+.ne-image-toolbar--dark {
+  background: #2a2d33;
+  border-color: #3a3d42;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* ════════════════ 按钮包裹器（用于定位弹出层） ════════════════ */
+
+.ne-image-toolbar__btn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ════════════════ 按钮 ════════════════ */
+
+.ne-image-toolbar__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #4e5969;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__btn {
+  color: #c9cdd4;
+}
+
+.ne-image-toolbar__btn:hover {
+  background: #f2f3f5;
+  color: #1d2129;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__btn:hover {
+  background: #3a3d42;
+  color: #ffffff;
+}
+
+.ne-image-toolbar__btn:active {
+  background: #e5e6eb;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__btn:active {
+  background: #43464c;
+}
+
+/* 激活态（弹出层打开时） */
+.ne-image-toolbar__btn--active,
+.ne-image-toolbar__btn--active:hover {
+  background: #e8f3ff;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__btn--active,
+.ne-image-toolbar--dark .ne-image-toolbar__btn--active:hover {
+  background: #2b3a50;
+}
+
+/* 带下拉箭头的按钮 */
+.ne-image-toolbar__btn--dropdown {
+  padding-right: 4px;
+}
+
+.ne-image-toolbar__label {
+  font-weight: 500;
+}
+
+.ne-image-toolbar__icon {
+  color: var(--lakex-editor-icon-primary);
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 1;
+}
+.ne-image-toolbar__icon .ne-icon-symbol{
+  width: 16px;
+  height: 16px;
+}
+
+.ne-image-toolbar__arrow {
+  font-size: 10px;
+  margin-left: 1px;
+  opacity: 0.55;
+}
+
+/* ════════════════ 分隔线 ════════════════ */
+
+.ne-image-toolbar__divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: #e5e6eb;
+  display: inline-block;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__divider {
+  background: #3a3d42;
+}
+
+/* ════════════════ 弹出层容器（锚定在按钮下方） ════════════════ */
+
+.ne-image-toolbar__popover {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 4px;
+  z-index: 300;
+  pointer-events: auto;
+}
+
+/* ════════════════ 通用弹出面板 ════════════════ */
+
+.ne-image-toolbar__popup {
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid #e5e6eb;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+  min-width: 240px;
+  box-sizing: border-box;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__popup {
+  background: #33363d;
+  border-color: #454952;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ════════════════ 链接输入框 ════════════════ */
+
+.ne-image-toolbar__popup-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #c9cdd4;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #1d2129;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.ne-image-toolbar__popup-input:focus {
+  border-color: #165dff;
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.15);
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__popup-input {
+  background: #2a2d33;
+  border-color: #454952;
+  color: #c9cdd4;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__popup-input:focus {
+  border-color: #4a90ff;
+  box-shadow: 0 0 0 2px rgba(74, 144, 255, 0.25);
+}
+
+.ne-image-toolbar__popup-input::placeholder {
+  color: #86909c;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__popup-input::placeholder {
+  color: #6a7079;
+}
+
+/* 链接复选框 */
+.ne-image-toolbar__popup-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #4e5969;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__popup-check {
+  color: #c9cdd4;
+}
+
+.ne-image-toolbar__popup-check input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #165dff;
+  cursor: pointer;
+}
+
+/* 链接弹出层「确定」按钮 */
+.ne-image-toolbar__popup-ok {
+  display: block;
+  width: 100%;
+  height: 32px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 4px;
+  background: #165dff;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ne-image-toolbar__popup-ok:hover {
+  background: #0e42d2;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__popup-ok {
+  background: #4a90ff;
+  color: #fff;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__popup-ok:hover {
+  background: #6aa3ff;
+}
+
+/* ════════════════ 宽高弹出层 ════════════════ */
+
+.ne-image-toolbar__popup--size {
+  min-width: 280px;
+}
+
+.ne-image-toolbar__size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ne-image-toolbar__size-label {
+  font-size: 13px;
+  color: #4e5969;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__size-label {
+  color: #c9cdd4;
+}
+
+.ne-image-toolbar__size-input {
+  width: 80px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #c9cdd4;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #1d2129;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  flex: 1;
+}
+
+.ne-image-toolbar__size-input:focus {
+  border-color: #165dff;
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.15);
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__size-input {
+  background: #2a2d33;
+  border-color: #454952;
+  color: #c9cdd4;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__size-input:focus {
+  border-color: #4a90ff;
+  box-shadow: 0 0 0 2px rgba(74, 144, 255, 0.25);
+}
+
+/* 百分比快捷按钮 */
+.ne-image-toolbar__size-presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ne-image-toolbar__size-preset {
+  flex: 1;
+  height: 30px;
+  border: 1px solid #e5e6eb;
+  border-radius: 4px;
+  background: #fff;
+  color: #4e5969;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ne-image-toolbar__size-preset:hover {
+  border-color: #165dff;
+  color: #165dff;
+}
+
+.ne-image-toolbar__size-preset--active {
+  border-color: #165dff;
+  background: rgba(22, 93, 255, 0.06);
+  color: #165dff;
+  font-weight: 500;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__size-preset {
+  background: transparent;
+  border-color: #454952;
+  color: #c9cdd4;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__size-preset:hover {
+  border-color: #4a90ff;
+  color: #4a90ff;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__size-preset--active {
+  border-color: #4a90ff;
+  background: rgba(74, 144, 255, 0.12);
+  color: #4a90ff;
+}
+
+/* ════════════════ 样式下拉菜单 ════════════════ */
+
+.ne-image-toolbar__popup--menu {
+  padding: 4px 0;
+  min-width: 120px;
+}
+
+.ne-image-toolbar__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #4e5969;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+  box-sizing: border-box;
+}
+
+.ne-image-toolbar__menu-item:hover {
+  background: #f2f3f5;
+  color: #1d2129;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__menu-item {
+  color: #c9cdd4;
+}
+
+.ne-image-toolbar--dark .ne-image-toolbar__menu-item:hover {
+  background: #3a3d42;
+  color: #ffffff;
+}
+
+.ne-image-toolbar__menu-item--active {
+  font-weight: bold;
+}
+
+
+.ne-image-toolbar__menu-check {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 13px;
+}

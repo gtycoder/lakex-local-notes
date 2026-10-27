@@ -8,6 +8,7 @@
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
 import { applyMobileSchema } from "../data/schema";
+import { ensureV3StateTable } from "../data/v3StateRepository";
 import { reconcileIndex } from "../data/searchIndex";
 import { createMobileSyncDbPort } from "../data/syncDbPort";
 import { sniffImageFormat, readImageDimensions } from "../../core/imageUtils.js";
@@ -15,7 +16,7 @@ import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../../c
 import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from "../../core/maintenancePolicy.js";
 import { maintenanceQueue, priorityQueue, writeLock } from "../sync/maintenanceLocks";
 import { createMobileS3Client } from "../native/s3Store";
-import type { SyncDbPort } from "../../core/syncEngine.js";
+import type { SyncDbPort } from "../../core/syncEngineTypes.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
 
 /** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "local-lakex-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
@@ -27,18 +28,41 @@ export const SYNC_STORAGE_KEY = "local-lakex-notes-mobile.sync";
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
 const MOBILE_DATABASE = "local-lakex-notes-mobile";
 
+/** 是否已存过 S3 配置（只判本地是否存在，不读密钥；密钥在 Keystore）。 */
+function hasStoredS3Settings(): boolean {
+  try {
+    return Boolean(localStorage.getItem(S3_STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
+/** 是否**存过**同步设置（261027「新设备默认按需」判定：存过就以用户值为准，绝不再改）。 */
+export function hasStoredSyncSettings(): boolean {
+  try {
+    return localStorage.getItem(SYNC_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function readSyncSettings(): SyncSettings {
+  // 261022（用户点单，与桌面同口径）：**默认开关 = 是否已配置 S3** —— 全新安装没有任何 S3 配置时
+  // 「启用云同步」默认关闭（没配置与关掉语义等价）；已配置的旧库仍默认开着（不回归）；存过的值优先。
+  const fallback = { ...DEFAULT_SYNC_SETTINGS, enabled: hasStoredS3Settings() };
   try {
     const raw = localStorage.getItem(SYNC_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_SYNC_SETTINGS };
+    if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<SyncSettings>;
     return {
       enabled: parsed.enabled !== false,
       autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" ? parsed.autoMode : "manual",
       autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" ? parsed.autoIntervalMinutes : 15,
+      // 按需资产（P0-4）：缺省 false（全量），存过 true 才生效。
+      ...(parsed.deferAssets === true ? { deferAssets: true } : {}),
     };
   } catch {
-    return { ...DEFAULT_SYNC_SETTINGS };
+    return fallback;
   }
 }
 
@@ -63,6 +87,9 @@ export function assertResourceBytes(bytes: Uint8Array): void {
 export async function initializeDb(): Promise<NativeSqliteDb> {
   const openedDb = await NativeSqliteDb.open(MOBILE_DATABASE);
   await applyMobileSchema(openedDb);
+  // 261027 真机新装发现：v3 账本表原来只在 MobileDeviceStore.init 里建，而「新设备默认按需」判定/
+  // 打开文档补拉（ensureAssetsNative）会在首次同步前读它 ⇒ 全新安装直接报 no such table。统一在开库时建。
+  await ensureV3StateTable(openedDb);
   db = openedDb;
   try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
   return openedDb;

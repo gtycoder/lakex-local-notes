@@ -1,6 +1,6 @@
-import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
-import type { GcDiagnostics } from "../core/gcDiagnostics";
+import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
 
@@ -17,7 +17,25 @@ export interface LakeNative {
   capabilities?: { browserClient: boolean; nativeDialog: boolean };
   bootstrap(): Promise<WorkspaceSnapshot>;
   readNote(id: string): Promise<NoteDocument>;
+  /** 正文文件是否缺失（只 stat；启动跳过缺正文文档用）。 */
+  noteBodyMissing(id: string): Promise<boolean>;
+  /** 资源页「缺正文」清单（只 stat；带历史快照数 / 同步基线 / 云可恢复判据）。 */
+  listMissingBodies(): Promise<MissingBodyDoc[]>;
+  /** 缺正文：从云端拉回该篇正文（显式动作；失败以 reason 回报）。 */
+  restoreMissingBodyFromCloud(noteId: string): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" }>;
+  /** 缺正文：彻底删除该文档（移入回收站 → purge 写墓碑）。 */
+  purgeMissingBody(noteId: string): Promise<void>;
+  /** 缺正文小记清单（只 stat；带同步基线 / 搜索缓存 / 可恢复性）。 */
+  listMissingQuickNotes(): Promise<MissingQuickNoteDoc[]>;
+  /** 缺正文小记：从云端拉回（小记没有历史快照，这是唯一无损来源）。 */
+  restoreMissingQuickNoteFromCloud(id: string): Promise<{ ok: true } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content" }>;
+  /** 缺正文小记：用搜索索引缓存重建纯文本（图片/格式丢失）。 */
+  restoreMissingQuickNoteFromText(id: string): Promise<QuickNoteDocument>;
+  /** 缺正文小记：彻底删除（墓碑 + purge）。 */
+  purgeMissingQuickNote(id: string): Promise<void>;
   getNoteDigest(id: string): Promise<NoteDigest | null>;
+  /** 锁编辑（≠ 文档加密）。**桥接键冻结**：preload 仍导出 setNoteLocked / IPC 通道仍为 set_note_locked，
+   * 本接口必须与 preload 的导出名逐字一致；应用层请用下面 `native.setNoteEditLocked` 封装。 */
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   /** AI（P0）：设置读写/连通性测试/流式对话/取消；Key 绝不出主进程（视图已脱敏）。 */
   aiGetSettings(): Promise<AiSettingsView>;
@@ -148,7 +166,16 @@ export interface LakeNative {
   listQuickNotes(): Promise<QuickNoteDocument[]>;
   createQuickNote(input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   updateQuickNote(id: string, input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
+  /** 标签关系（独立 API）：整组替换，返回更新后的小记。 */
+  setQuickNoteTags(id: string, tagIds: string[]): Promise<QuickNoteDocument>;
   deleteQuickNote(id: string): Promise<void>;
+  /** 标签目录（唯一来源；随小记 Manifest 同步）。 */
+  listQuickNoteTags(): Promise<QuickNoteTag[]>;
+  createQuickNoteTag(name: string): Promise<QuickNoteTag>;
+  updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }): Promise<QuickNoteTag>;
+  reorderQuickNoteTags(ids: string[]): Promise<QuickNoteTag[]>;
+  mergeQuickNoteTags(sourceId: string, targetId: string): Promise<{ updated: number; failed: number }>;
+  deleteQuickNoteTag(id: string): Promise<{ updated: number; failed: number }>;
   /** 字节走 Electron 结构化克隆：传 Uint8Array（大附件时 number[] 会凭空多出几百 MB 的数组）。 */
   stageQuickNoteImage(draftId: string, input: QuickNoteStageInput): Promise<QuickNoteImage>;
   /** 小记附件（内核 file 卡）暂存：与图片同一 staging 空间，宽高为 null。 */
@@ -157,7 +184,7 @@ export interface LakeNative {
   discardStagedQuickNoteImage(draftId: string, imageId: string): Promise<void>;
   convertQuickNote(quickNoteId: string, notebookId: string): Promise<NoteDocument>;
   /** 「保存并同步」：只推这一条小记（其余小记在云端原样保留）。 */
-  syncQuickNote(id: string): Promise<import("../core/quickNotePush").QuickNotePushOutcome>;
+  syncQuickNote(id: string): Promise<import("../core/quickNoteSyncTypes").QuickNotePushOutcome>;
   listQuickNoteTrash(): Promise<QuickNoteTrashItem[]>;
   restoreQuickNote(id: string): Promise<QuickNoteDocument>;
   purgeQuickNote(id: string): Promise<void>;
@@ -165,14 +192,12 @@ export interface LakeNative {
   saveS3GcSettings(settings: S3GcSettings): Promise<void>;
   listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
-  runS3GcDiagnostics(): Promise<GcDiagnostics>;
   runDataHealthCheck(): Promise<DataHealthReport>;
   readAppLog(opts: { keyword?: string; maxLines?: number; context?: number }): Promise<{ matches: Array<{ line: string; hit: boolean }>; file: string; truncated: boolean; generatedAt: string }>;
   /** 关于页：版本与运行环境 + 数据与存储概览（只读）。 */
   getSystemInfo(): Promise<import("./types").SystemInfo>;
   /** 关于页：在文件管理器中显示白名单目录（kind 由主进程解析，绝不传路径）。 */
   revealDataFolder(kind: import("./types").DataFolderKind): Promise<{ ok: boolean; path: string }>;
-  runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   /** 浏览器端服务（桌面附属窗口；仅本机、不落盘、每次启动默认关闭）。 */
@@ -184,6 +209,8 @@ export interface LakeNative {
   onPendingSummaryChanged(callback: (summary: import("./types").SyncPendingSummary) => void): () => void;
   /** 目录树结构变更（其它窗口/浏览器端写入后广播）→ 调用方重读目录树。 */
   onLibraryChanged(callback: (detail: { channel?: string }) => void): () => void;
+  /** 窗口全屏（macOS 独立 Space）状态变化 → 顶栏据此去掉红绿灯让位（返回取消订阅）。 */
+  onWindowFullscreen(callback: (fullscreen: boolean) => void): () => void;
 }
 
 declare global {
@@ -218,8 +245,13 @@ export const native = {
   },
   bootstrap: () => api().bootstrap(),
   readNote: (id: string) => api().readNote(id),
+  noteBodyMissing: (id: string) => api().noteBodyMissing(id),
+  listMissingBodies: () => api().listMissingBodies(),
+  restoreMissingBodyFromCloud: (id: string) => api().restoreMissingBodyFromCloud(id),
+  purgeMissingBody: (id: string) => api().purgeMissingBody(id),
   getNoteDigest: (id: string) => api().getNoteDigest(id),
-  setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
+  /** 锁编辑（应用侧名字）；底层桥接键仍是冻结的 setNoteLocked（见 LakeNative 注释）。 */
+  setNoteEditLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   aiGetSettings: () => api().aiGetSettings(),
   aiSaveSettings: (patch: AiSettingsPatch) => api().aiSaveSettings(patch),
   aiTestConnection: (draft?: AiProviderPatch) => api().aiTestConnection(draft),
@@ -314,7 +346,14 @@ export const native = {
   listQuickNotes: () => api().listQuickNotes(),
   createQuickNote: (input: SaveQuickNoteInput) => api().createQuickNote(input),
   updateQuickNote: (id: string, input: SaveQuickNoteInput) => api().updateQuickNote(id, input),
+  setQuickNoteTags: (id: string, tagIds: string[]) => api().setQuickNoteTags(id, tagIds),
   deleteQuickNote: (id: string) => api().deleteQuickNote(id),
+  listQuickNoteTags: () => api().listQuickNoteTags(),
+  createQuickNoteTag: (name: string) => api().createQuickNoteTag(name),
+  updateQuickNoteTag: (id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => api().updateQuickNoteTag(id, patch),
+  reorderQuickNoteTags: (ids: string[]) => api().reorderQuickNoteTags(ids),
+  mergeQuickNoteTags: (sourceId: string, targetId: string) => api().mergeQuickNoteTags(sourceId, targetId),
+  deleteQuickNoteTag: (id: string) => api().deleteQuickNoteTag(id),
   stageQuickNoteImage: (draftId: string, input: QuickNoteStageInput) => api().stageQuickNoteImage(draftId, input),
   stageQuickNoteFile: (draftId: string, input: QuickNoteStageInput) => api().stageQuickNoteFile(draftId, input),
   discardQuickNoteDraft: (draftId: string) => api().discardQuickNoteDraft(draftId),
@@ -324,16 +363,18 @@ export const native = {
   listQuickNoteTrash: () => api().listQuickNoteTrash(),
   restoreQuickNote: (id: string) => api().restoreQuickNote(id),
   purgeQuickNote: (id: string) => api().purgeQuickNote(id),
+  listMissingQuickNotes: () => api().listMissingQuickNotes(),
+  restoreMissingQuickNoteFromCloud: (id: string) => api().restoreMissingQuickNoteFromCloud(id),
+  restoreMissingQuickNoteFromText: (id: string) => api().restoreMissingQuickNoteFromText(id),
+  purgeMissingQuickNote: (id: string) => api().purgeMissingQuickNote(id),
   getS3GcSettings: () => api().getS3GcSettings(),
   saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
   listS3GcPending: () => api().listS3GcPending(),
   listS3GcLog: () => api().listS3GcLog(),
-  runS3GcDiagnostics: () => api().runS3GcDiagnostics(),
   runDataHealthCheck: () => api().runDataHealthCheck(),
   readAppLog: (opts: { keyword?: string; maxLines?: number; context?: number }) => api().readAppLog(opts),
   getSystemInfo: () => api().getSystemInfo(),
   revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
-  runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
   getWebStatus: () => api().getWebStatus(),
@@ -342,4 +383,5 @@ export const native = {
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),
   onLibraryChanged: (callback: (detail: { channel?: string }) => void) => api().onLibraryChanged(callback),
+  onWindowFullscreen: (callback: (fullscreen: boolean) => void) => api().onWindowFullscreen(callback),
 };

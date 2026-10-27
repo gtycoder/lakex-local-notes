@@ -1,0 +1,1879 @@
+/*
+ * The published package does not export its stylesheet subpath. Vite inlines
+ * this dependency during the Lakex library build, so consumers still receive a
+ * single dist/style.css file.
+ */
+/* vendored 到仓库后位置深一层：改为指向仓库根的 node_modules（上游 ../../../ 对应上游仓库根） */
+@import "../../../../../node_modules/lakex-drawnix-react-board/index.css";
+@import "../../../../../node_modules/lakex-drawnix-react-text/index.css";
+@import "../../../../../node_modules/lakex-drawnix/index.css";
+
+.lakex-drawnix-core {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  overflow: hidden;
+  background: #f5f7fa;
+  border: 1px solid #e3e6eb;
+  border-radius: 8px;
+}
+
+.lakex-drawnix-core[data-theme="dark"] {
+  background: #141414;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.lakex-drawnix-core[data-theme="dark"] > .drawnix {
+  --island-bg-color: #242424;
+  --island-border-color: #3d3d3d;
+  --shadow-island: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --color-on-surface: #d6d6d6;
+  --color-surface-high: #333;
+  --color-surface-mid: #2b2b2b;
+  --color-surface-low: #242424;
+  --color-surface-lowest: #1f1f1f;
+  --color-gray-20: #3d3d3d;
+  --color-gray-30: #555;
+  --color-gray-60: #aaa;
+  --color-gray-90: #f5f5f5;
+  --default-border-color: #3d3d3d;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .theme-toolbar select {
+  background: #242424;
+  color: #d6d6d6;
+}
+
+.lakex-drawnix-core > .drawnix {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lakex-drawnix-core .plait-board-container,
+.lakex-drawnix-core .viewport-container {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* 编辑态画布必须自己接住触摸（否则浏览器把拖拽判成滚动，Drawnix 会收到 pointercancel）。
+   只读态不改：它仍用 viewport-container 的原生平移。 */
+.lakex-drawnix-core:not(.lakex-drawnix-core--readonly) .viewport-container {
+  touch-action: none;
+}
+
+/* Plait uses the scroll container internally to pan an infinite canvas. Keep
+   that behavior, but do not expose browser scrollbars in the card UI. */
+.lakex-drawnix-core .viewport-container {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lakex-drawnix-core .viewport-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* react-board owns interaction handles in a separate SVG layer. The published
+   Drawnix stylesheet omits these base rules, which makes resize/rotate controls
+   participate in normal layout and appear to be missing. */
+.lakex-drawnix-core .board-active-svg {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.lakex-drawnix-core .board-host-svg {
+  position: relative;
+  z-index: 1;
+}
+
+/* The native popup is mounted inside `.drawnix`, next to the board SVG. The
+   board host has its own stacking layer for selection hit-testing, so the
+   popup needs an explicit layer above it to remain visible. */
+.lakex-drawnix-core .popup-toolbar {
+  z-index: 130 !important;
+}
+
+/* Drawnix already owns link creation, hover preview, editing and removal.
+   Its floating link island has no explicit stacking level, so Lakex's board
+   host/active layers can otherwise paint over it. */
+.lakex-drawnix-core .link-popup {
+  z-index: 150 !important;
+  pointer-events: auto;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .link-popup {
+  border-color: var(--island-border-color, #3d3d3d);
+  background: var(--island-bg-color, #242424);
+  color: var(--color-gray-90, #f5f5f5);
+}
+
+.lakex-drawnix-core[data-theme="dark"] .link-popup__input {
+  background: transparent;
+  color: var(--color-gray-90, #f5f5f5);
+}
+
+/* Color pickers, arrow selectors and the more-actions menu are rendered as
+   sibling floating dialogs by the native toolbar. They must share the popup
+   layer; otherwise the board SVG (z-index: 1) paints over them. */
+.lakex-drawnix-core .plait-board-container [role="dialog"] {
+  z-index: 140 !important;
+}
+
+/* Application/file menu does not belong inside a document card. */
+.lakex-drawnix-core .app-toolbar {
+  display: none !important;
+}
+
+.lakex-drawnix-export {
+  position: relative;
+  z-index: 40;
+}
+
+.lakex-drawnix-export__menu button {
+  border: 1px solid var(--island-border-color, #eee);
+  background: var(--island-bg-color, #fff);
+  color: var(--icon-fill-color, #666);
+  box-shadow: var(--shadow-island, 0 0 16px #00000014);
+}
+
+.lakex-drawnix-export__trigger {
+  width: var(--lg-button-size, 36px);
+  height: var(--lg-button-size, 36px);
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--icon-fill-color, #666);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.lakex-drawnix-export__trigger:hover,
+.lakex-drawnix-export__trigger:focus-visible,
+.lakex-drawnix-export__menu button:hover {
+  background: var(--color-surface-primary-container, #eef4ff);
+  color: var(--color-primary, #6698ff);
+}
+
+.lakex-drawnix-export__trigger svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.lakex-drawnix-export__menu {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  width: 132px;
+  padding: 4px;
+  border: 1px solid var(--island-border-color, #eee);
+  border-radius: 8px;
+  background: var(--island-bg-color, #fff);
+  box-shadow: var(--shadow-island, 0 0 16px #00000014);
+}
+
+.lakex-drawnix-export__menu button {
+  width: 100%;
+  border: 0;
+  box-shadow: none;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+}
+
+.lakex-material-trigger-wrap {
+  position: relative;
+  z-index: 40;
+  order: -20;
+}
+
+.lakex-material-trigger {
+  width: var(--lg-button-size, 36px);
+  height: var(--lg-button-size, 36px);
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--icon-fill-color, #666);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.lakex-material-trigger:hover,
+.lakex-material-trigger:focus-visible,
+.lakex-material-trigger[aria-expanded="true"] {
+  background: var(--color-surface-primary-container, #eef4ff);
+  color: var(--color-primary, #6698ff);
+}
+
+.lakex-material-trigger svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.lakex-material-trigger-wrap::after {
+  position: absolute;
+  z-index: 230;
+  top: 50%;
+  left: calc(100% + 10px);
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(31, 35, 41, 0.92);
+  color: #fff;
+  content: attr(data-tooltip);
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(2px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+
+.lakex-material-trigger-wrap:hover::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.lakex-material-library__backdrop {
+  position: absolute;
+  z-index: 220;
+  inset: 0;
+  box-sizing: border-box;
+  padding: 18px;
+  background: rgba(18, 22, 28, 0.46);
+  display: grid;
+  place-items: center;
+}
+
+.lakex-drawnix-core:has(.lakex-material-library__backdrop) {
+  z-index: 1000;
+}
+
+.ne-engine:has(.lakex-material-library__backdrop),
+ne-card:has(.lakex-material-library__backdrop),
+ne-card-root:has(.lakex-material-library__backdrop) {
+  z-index: 2 !important;
+}
+
+.lakex-material-library {
+  display: flex;
+  box-sizing: border-box;
+  width: min(1120px, 100%);
+  height: min(720px, 100%);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--island-border-color, #e5e7eb);
+  border-radius: 10px;
+  background: var(--island-bg-color, #fff);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  color: var(--color-on-surface, #252b36);
+}
+
+.lakex-material-library__header {
+  display: flex;
+  height: 62px;
+  flex: 0 0 62px;
+  align-items: stretch;
+  justify-content: space-between;
+  padding: 0 24px 0 32px;
+  border-bottom: 1px solid var(--color-gray-20, #e8eaed);
+}
+
+.lakex-material-library__main-tabs {
+  display: flex;
+  gap: 34px;
+}
+
+.lakex-material-library__main-tabs button {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-gray-60, #8a9099);
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+}
+
+.lakex-material-library__main-tabs button[aria-selected="true"] {
+  color: var(--color-gray-90, #252b36);
+  font-weight: 600;
+}
+
+.lakex-material-library__main-tabs button[aria-selected="true"]::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  background: var(--color-gray-90, #252b36);
+  content: "";
+}
+
+.lakex-material-library__close {
+  width: 42px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-gray-60, #666);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.lakex-material-library__close:hover {
+  color: var(--color-gray-90, #222);
+}
+
+.lakex-material-library__close svg {
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.6;
+}
+
+.lakex-material-library__categories {
+  display: flex;
+  box-sizing: border-box;
+  min-height: 56px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 32px;
+  overflow-x: auto;
+  background: var(--island-bg-color, #fff);
+  scrollbar-width: none;
+}
+
+.lakex-material-library__categories::-webkit-scrollbar {
+  display: none;
+}
+
+.lakex-material-library__categories button {
+  display: inline-flex;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-gray-60, #626973);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.lakex-material-library__categories button:hover,
+.lakex-material-library__categories button[aria-pressed="true"] {
+  background: var(--color-surface-mid, #f1f2f4);
+  color: var(--color-gray-90, #252b36);
+}
+
+.lakex-material-library__grid {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+  align-content: start;
+  gap: 24px;
+  padding: 10px 32px 32px;
+}
+
+.lakex-material-library__recommended {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.lakex-material-library__recommended-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  position: relative;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--color-gray-30, #d4d7dc) transparent;
+  scrollbar-width: thin;
+}
+
+.lakex-material-library__recommended-section +
+  .lakex-material-library__recommended-section {
+  border-top: 1px solid var(--color-gray-20, #e8eaed);
+}
+
+.lakex-material-card {
+  position: relative;
+  min-width: 0;
+}
+
+.lakex-material-card__insert {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-gray-20, #e1e4e8);
+  border-radius: 7px;
+  background: var(--island-bg-color, #fff);
+  color: var(--color-gray-90, #252b36);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.lakex-material-card__insert:hover,
+.lakex-material-card__insert:focus-visible {
+  border-color: var(--color-primary, #6698ff);
+  box-shadow: 0 6px 18px rgba(56, 96, 168, 0.15);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.lakex-material-card__canvas {
+  display: block;
+  box-sizing: border-box;
+  height: 174px;
+  padding: 14px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-gray-20, #e1e4e8);
+  background:
+    linear-gradient(var(--lakex-material-grid, rgba(106, 116, 132, 0.06)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lakex-material-grid, rgba(106, 116, 132, 0.06)) 1px, transparent 1px),
+    var(--color-surface-lowest, #fcfcfd);
+  background-size: 16px 16px;
+}
+
+.lakex-material-card__preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.lakex-material-card__footer {
+  display: flex;
+  height: 54px;
+  align-items: center;
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.lakex-material-card__details {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 20px 26px 18px;
+  overflow: hidden;
+  border: 1px solid var(--color-gray-20, #e1e4e8);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-gray-90, #252b36);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(5px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.lakex-material-card:hover .lakex-material-card__details,
+.lakex-material-card:focus-within .lakex-material-card__details {
+  opacity: 0.94;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.lakex-material-card__details strong {
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.lakex-material-card__details p {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.lakex-material-card__use {
+  width: 100%;
+  min-height: 38px;
+  margin-top: auto;
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--color-gray-30, #98a2b3);
+  border-radius: 8px;
+  background-color: var(--island-bg-color, #fff) !important;
+  color: var(--color-gray-60, #697586);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.lakex-material-card__use:hover,
+.lakex-material-card__use:focus-visible {
+  border-color: #00a968;
+  background-color: var(--island-bg-color, #fff);
+  color: #00a968;
+  outline: none;
+}
+
+.lakex-material-card__remove {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-gray-20, #ddd);
+  border-radius: 50%;
+  background: var(--island-bg-color, #fff);
+  color: var(--color-gray-60, #777);
+  cursor: pointer;
+  font-size: 19px;
+  line-height: 24px;
+  opacity: 0.72;
+  pointer-events: auto;
+}
+
+.lakex-material-card:hover .lakex-material-card__remove,
+.lakex-material-card__remove:focus-visible {
+  opacity: 1;
+}
+
+.lakex-material-card__remove:hover {
+  border-color: #f06a6a;
+  color: #d83f3f;
+}
+
+.lakex-material-library__custom {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.lakex-material-library__empty {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 24px;
+  padding: clamp(32px, 6vh, 56px) 12% 28px;
+  color: var(--color-gray-60, #8a9099);
+  text-align: left;
+}
+
+.lakex-material-library__empty-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.lakex-material-library__empty strong {
+  color: var(--color-gray-90, #252b36);
+  font-size: 18px;
+}
+
+.lakex-material-library__empty span {
+  color: var(--color-gray-60, #626973);
+  font-size: 13px;
+}
+
+.lakex-material-library__empty-illustration {
+  position: relative;
+  width: min(460px, 100%);
+  height: 238px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #f5f9ff;
+}
+
+.lakex-material-library__empty-selection {
+  position: absolute;
+  top: 30px;
+  left: 16%;
+  width: 54%;
+  height: 116px;
+  border: 2px dashed #c9ddff;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.lakex-material-library__empty-selection i,
+.lakex-material-library__empty-selection b,
+.lakex-material-library__empty-selection em {
+  position: absolute;
+  display: block;
+  background: #bdd6ff;
+}
+
+.lakex-material-library__empty-selection i {
+  top: 26px;
+  left: 34px;
+  width: 45px;
+  height: 45px;
+  transform: rotate(45deg);
+}
+
+.lakex-material-library__empty-selection b {
+  top: 46px;
+  right: 24px;
+  width: 74px;
+  height: 34px;
+  border-radius: 4px;
+}
+
+.lakex-material-library__empty-selection em {
+  bottom: 18px;
+  left: 36px;
+  width: 86px;
+  height: 14px;
+  border-radius: 999px;
+}
+
+.lakex-material-library__empty-menu {
+  position: absolute;
+  right: 9%;
+  bottom: 18px;
+  display: flex;
+  width: 172px;
+  min-height: 116px;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 26px rgba(69, 100, 151, 0.14);
+}
+
+.lakex-material-library__empty-menu i {
+  display: block;
+  width: 48%;
+  height: 9px;
+  border-radius: 99px;
+  background: #ebf3ff;
+}
+
+.lakex-material-library__empty-menu i:nth-of-type(2) {
+  width: 100%;
+}
+
+.lakex-material-library__empty-menu b {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 4px;
+  background: #f5f7fa;
+  color: #77808d;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.lakex-material-toast {
+  position: fixed;
+  z-index: 1400;
+  top: 22px;
+  left: 50%;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #ccebdc;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(31, 78, 51, 0.16);
+  color: #1c7c4c;
+  font-size: 13px;
+  transform: translateX(-50%);
+}
+
+.lakex-material-toast span {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+  background: #20a464;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lakex-material-toast[data-theme="dark"] {
+  border-color: #365b48;
+  background: #25342b;
+  color: #83dfad;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+
+.lakex-material-name-dialog__backdrop {
+  position: fixed;
+  z-index: 1450;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(18, 22, 28, 0.36);
+}
+
+.lakex-material-name-dialog {
+  display: flex;
+  width: min(360px, 100%);
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--island-border-color, #e1e4e8);
+  border-radius: 10px;
+  background: var(--island-bg-color, #fff);
+  box-shadow: 0 16px 38px rgba(21, 32, 47, 0.2);
+  color: var(--color-on-surface, #252b36);
+}
+
+.lakex-material-name-dialog strong {
+  font-size: 16px;
+}
+
+.lakex-material-name-dialog > span {
+  color: var(--color-gray-60, #737a84);
+  font-size: 13px;
+}
+
+.lakex-material-name-dialog input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-gray-30, #d4d7dc);
+  border-radius: 6px;
+  outline: none;
+  background: var(--color-surface-lowest, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.lakex-material-name-dialog input:focus {
+  border-color: var(--color-primary, #6698ff);
+  box-shadow: 0 0 0 2px rgba(102, 152, 255, 0.14);
+}
+
+.lakex-material-name-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lakex-material-name-dialog__actions button {
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--color-gray-30, #d4d7dc);
+  border-radius: 6px;
+  background: var(--island-bg-color, #fff);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.lakex-material-name-dialog__actions button[type="submit"] {
+  border-color: var(--color-primary, #6698ff);
+  background: var(--color-primary, #6698ff);
+  color: #fff;
+}
+
+.lakex-material-name-dialog__backdrop[data-theme="dark"] .lakex-material-name-dialog {
+  border-color: #444;
+  background: #282828;
+  color: #e5e5e5;
+}
+
+.lakex-material-name-dialog__backdrop[data-theme="dark"] input,
+.lakex-material-name-dialog__backdrop[data-theme="dark"] .lakex-material-name-dialog__actions button {
+  border-color: #505050;
+  background: #202020;
+}
+
+.lakex-material-name-dialog__backdrop[data-theme="dark"] .lakex-material-name-dialog__actions button[type="submit"] {
+  border-color: #6698ff;
+  background: #6698ff;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-library {
+  --island-bg-color: #242424;
+  --island-border-color: #3d3d3d;
+  --color-on-surface: #e2e2e2;
+  --color-gray-90: #f2f2f2;
+  --color-gray-60: #aaa;
+  --color-gray-30: #555;
+  --color-gray-20: #3d3d3d;
+  --color-surface-mid: #333;
+  --color-surface-lowest: #1d1d1d;
+  --lakex-material-grid: rgba(255, 255, 255, 0.055);
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-card__details {
+  border-color: #454545;
+  background: rgba(36, 36, 36, 0.95);
+  color: #e2e2e2;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-card__use {
+  border-color: #666;
+  background-color: #242424;
+  color: #aaa;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-card__use:hover,
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-card__use:focus-visible {
+  border-color: #00c477;
+  background-color: #242424;
+  color: #00c477;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-library__empty-illustration {
+  background: #1e2734;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-library__empty-selection {
+  border-color: #3e5b84;
+  background: rgba(38, 51, 69, 0.72);
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-library__empty-menu {
+  background: #303943;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.25);
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-material-library__empty-menu b {
+  background: #3a4653;
+  color: #b9c2cc;
+}
+
+.lakex-board-context-menu {
+  position: fixed;
+  z-index: 1300;
+  display: flex;
+  width: 196px;
+  flex-direction: column;
+  padding: 5px;
+  border: 1px solid var(--island-border-color, #e1e4e8);
+  border-radius: 7px;
+  background: var(--island-bg-color, #fff);
+  box-shadow: 0 8px 20px rgba(27, 39, 57, 0.16);
+  color: var(--color-on-surface, #252b36);
+}
+
+.lakex-board-context-menu button {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.lakex-board-context-menu button:hover:not(:disabled),
+.lakex-board-context-menu button:focus-visible:not(:disabled) {
+  background: var(--color-surface-mid, #f1f3f5);
+  outline: none;
+}
+
+.lakex-board-context-menu button:disabled {
+  color: var(--color-gray-40, #b1b6bf);
+  cursor: not-allowed;
+}
+
+.lakex-board-context-menu kbd {
+  flex: 0 0 auto;
+  color: var(--color-gray-50, #9299a3);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.lakex-board-context-menu__divider {
+  height: 1px;
+  margin: 3px 2px;
+  background: var(--color-gray-20, #e8eaed);
+}
+
+.lakex-board-context-menu[data-theme="dark"] {
+  background: #242424;
+  border-color: #3d3d3d;
+  color: #e2e2e2;
+}
+
+.lakex-board-context-menu[data-theme="dark"] button:hover:not(:disabled),
+.lakex-board-context-menu[data-theme="dark"] button:focus-visible:not(:disabled) {
+  background: #363636;
+}
+
+.lakex-board-context-menu[data-theme="dark"] .lakex-board-context-menu__divider {
+  background: #3d3d3d;
+}
+
+
+/* Yuque-style vertical creation rail. Drawing behavior remains in Drawnix;
+   Lakex only adapts the surrounding product chrome. */
+.lakex-drawnix-core .draw-toolbar {
+  z-index: 20;
+  top: 50%;
+  left: 18px;
+  transform: translateY(-50%);
+}
+
+.lakex-drawnix-core .draw-toolbar .stack_horizontal {
+  grid-template-rows: none;
+  grid-template-columns: auto;
+  grid-auto-flow: row;
+}
+
+/* Drawnix already provides localized title attributes. Render them as visible
+   tooltips so the vertical rail has the same discoverability as Yuque. */
+.lakex-drawnix-core .draw-toolbar .tool-icon[title]::after {
+  position: absolute;
+  z-index: 120;
+  top: 50%;
+  left: calc(100% + 10px);
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(31, 35, 41, 0.92);
+  color: #fff;
+  content: attr(title);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(2px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+
+.lakex-drawnix-core .draw-toolbar .tool-icon[title]:hover::after,
+.lakex-drawnix-core .draw-toolbar .tool-icon[title]:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* The final upstream item opens Mermaid/Markdown extra tools, which are
+   intentionally excluded from the card product. */
+.lakex-drawnix-core
+  .draw-toolbar
+  button:is([title="更多工具"], [title="More tools"], [title="Extra Tools"]) {
+  display: none !important;
+}
+
+.lakex-drawnix-core .zoom-toolbar {
+  z-index: 20;
+  top: 20px;
+  right: 20px;
+}
+
+/* Keep the native theme entry. Lakex light/dark changes are also pushed into
+   the same board theme state by DrawnixBoardCore. */
+.lakex-drawnix-core .theme-toolbar {
+  z-index: 20;
+  right: 20px;
+  bottom: 20px;
+}
+
+.lakex-drawnix-core .pencil-mode-toolbar {
+  z-index: 30;
+  top: 50%;
+  left: 76px;
+  transform: translateY(-50%);
+}
+
+/* Creation popovers in upstream Drawnix assume a horizontal top toolbar and
+   default to a bottom placement. Re-anchor the three creation panels beside
+   Lakex's vertical rail. */
+.lakex-drawnix-core
+  [role="dialog"]:has(
+    button[title="画笔 — P"],
+    button[title="Freehand — P"],
+    button[title="橡皮擦 — E"],
+    button[title="Eraser — E"]
+  ) {
+  z-index: 100;
+  top: 50% !important;
+  left: 64px !important;
+  transform: translateY(-50%) !important;
+}
+
+.lakex-drawnix-core
+  [role="dialog"]:has(
+    button[title="直线"],
+    button[title="Straight"],
+    button[title="肘线"],
+    button[title="Elbow"]
+  ) {
+  z-index: 100;
+  top: calc(50% + 40px) !important;
+  left: 64px !important;
+  transform: translateY(-50%) !important;
+}
+
+.lakex-shape-catalog {
+  position: absolute;
+  z-index: 110;
+  top: 50%;
+  left: 76px;
+  box-sizing: border-box;
+  width: min(300px, calc(100% - 116px));
+  max-height: calc(100% - 40px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--island-border-color, #eee);
+  border-radius: 8px;
+  background: var(--island-bg-color, #fff);
+  box-shadow: var(--shadow-island, 0 10px 30px rgba(0, 0, 0, 0.14));
+  color: var(--color-on-surface, #333);
+  transform: translateY(-50%);
+}
+
+.lakex-shape-catalog__tabs {
+  display: flex;
+  gap: 20px;
+  padding: 0 18px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-gray-20, #ebebeb);
+  scrollbar-width: none;
+}
+
+.lakex-shape-catalog__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.lakex-shape-catalog__tab {
+  position: relative;
+  flex: 0 0 auto;
+  height: 50px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-gray-60, #7a7a7a);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+}
+
+.lakex-shape-catalog__tab[aria-selected="true"] {
+  color: var(--color-gray-90, #1e1e1e);
+  font-weight: 600;
+}
+
+.lakex-shape-catalog__tab[aria-selected="true"]::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--color-primary, #6698ff);
+  content: "";
+}
+
+.lakex-shape-catalog__body {
+  position: relative;
+  max-height: min(272px, calc(100vh - 120px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scrollbar-color: var(--color-gray-30, #d6d6d6) transparent;
+  scrollbar-width: thin;
+}
+
+.lakex-shape-catalog__body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.lakex-shape-catalog__body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--color-gray-30, #d6d6d6);
+}
+
+.lakex-shape-catalog__section {
+  position: relative;
+  scroll-margin-top: 0;
+}
+
+.lakex-shape-catalog__title {
+  padding: 12px 16px 6px;
+  font-size: 14px;
+  color: var(--color-gray-90);
+}
+
+.lakex-shape-catalog__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(36px, 1fr));
+  gap: 2px;
+  padding: 0 8px 6px;
+}
+
+.lakex-shape-catalog__shape {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-on-surface, #555);
+  cursor: pointer;
+  font: inherit;
+}
+
+.lakex-shape-catalog__shape:hover {
+  border-color: var(--color-primary-light-darker, #cce0ff);
+  background: var(--color-surface-primary-container, rgba(102, 152, 255, 0.1));
+  color: var(--color-primary, #6698ff);
+}
+
+.lakex-shape-catalog__shape svg {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+/* LOCAL-CHANGE #20：蓝点快创后的图形选择面板（对齐云端「最近使用 / 基础图形」浮层）。 */
+.lakex-quick-shape {
+  position: fixed;
+  z-index: 160;
+  box-sizing: border-box;
+  padding: 10px 10px 12px;
+  overflow-y: auto;
+  border: 1px solid var(--island-border-color, #eee);
+  border-radius: 10px;
+  background: var(--island-bg-color, #fff);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  color: var(--color-on-surface, #333);
+  animation: lakex-quick-shape-in 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lakex-quick-shape__section + .lakex-quick-shape__section {
+  margin-top: 6px;
+}
+
+.lakex-quick-shape__title {
+  padding: 6px 4px 4px;
+  color: var(--color-gray-60, #8a8f99);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.lakex-quick-shape__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.lakex-quick-shape__item {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-on-surface, #555);
+  cursor: pointer;
+  font: inherit;
+}
+
+.lakex-quick-shape__item:hover {
+  border-color: var(--color-primary-light-darker, #cce0ff);
+  background: var(--color-surface-primary-container, rgba(102, 152, 255, 0.1));
+  color: var(--color-primary, #6698ff);
+}
+
+.lakex-quick-shape__item svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+@keyframes lakex-quick-shape-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 面板 portal 到 body（不在 .lakex-drawnix-core 内）⇒ 深色只能用宿主的 `[data-theme="dark"]` 判定。 */
+[data-theme="dark"] .lakex-quick-shape {
+  --island-bg-color: #242424;
+  --island-border-color: #3d3d3d;
+  --color-on-surface: #ddd;
+  --color-gray-60: #aaa;
+}
+
+/* Plain text nodes should grow horizontally while typing. The default
+   published Drawnix CSS constrains the initial foreignObject to a tiny width,
+   which otherwise forces every CJK character onto a new line. */
+.lakex-drawnix-core .plait-board-container .text .plait-text-container,
+.lakex-drawnix-core .plait-board-container .text .slate-editable-container,
+.lakex-drawnix-core .plait-board-container .text [data-slate-node="element"] {
+  min-width: 36px;
+  overflow: visible;
+  white-space: pre !important;
+}
+
+.lakex-font-size-control {
+  display: flex;
+  box-sizing: border-box;
+  width: 52px;
+  height: 30px;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--color-surface-mid, #f5f5f5);
+}
+
+.lakex-font-size-control input {
+  box-sizing: border-box;
+  width: 34px;
+  padding: 0 3px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-on-surface, #333);
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.lakex-font-size-control input::-webkit-inner-spin-button,
+.lakex-font-size-control input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.lakex-font-size-control__steps {
+  display: flex;
+  width: 18px;
+  flex-direction: column;
+}
+
+.lakex-font-size-control__steps button {
+  width: 18px;
+  height: 50%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-on-surface, #666);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lakex-font-size-control__steps button:hover {
+  background: var(--color-surface-primary-container, rgba(102, 152, 255, 0.1));
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-shape-catalog {
+  --island-bg-color: #242424;
+  --island-border-color: #3d3d3d;
+  --color-on-surface: #ddd;
+  --color-gray-60: #aaa;
+  --color-gray-90: #f5f5f5;
+  --color-gray-20: #3d3d3d;
+}
+
+.lakex-drawnix-core--readonly .draw-toolbar,
+.lakex-drawnix-core--readonly .app-toolbar,
+.lakex-drawnix-core--readonly .theme-toolbar,
+.lakex-drawnix-core--readonly .pencil-mode-toolbar,
+.lakex-drawnix-core--readonly .popup-toolbar {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  /* 移动端创建栏保持 Drawnix 的顶部定位（top:20px）。
+     ⚠️ 不要再同时写 bottom:14px：top+bottom 会把容器上下拉满，覆盖整块画布并吞掉指针事件。
+     横向排布、居中与滚动仍沿用这里的规则。 */
+  .lakex-drawnix-core .draw-toolbar {
+    left: 50%;
+    max-width: calc(100% - 28px);
+    overflow-x: auto;
+    transform: translateX(-50%);
+  }
+
+  .lakex-drawnix-core .draw-toolbar .stack_horizontal {
+    grid-template-rows: auto;
+    grid-auto-flow: column;
+  }
+
+  .lakex-drawnix-core .draw-toolbar .tool-icon[title]::after {
+    top: auto;
+    right: auto;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translate(-50%, 2px);
+  }
+
+  .lakex-drawnix-core .draw-toolbar .tool-icon[title]:hover::after,
+  .lakex-drawnix-core .draw-toolbar .tool-icon[title]:focus-visible::after {
+    transform: translate(-50%, 0);
+  }
+
+  .lakex-shape-catalog {
+    top: auto;
+    right: 14px;
+    bottom: 64px;
+    left: 14px;
+    width: auto;
+    max-height: calc(100% - 86px);
+    transform: none;
+  }
+
+  .lakex-shape-catalog__grid {
+    grid-template-columns: repeat(6, minmax(42px, 1fr));
+  }
+
+  .lakex-material-library__backdrop {
+    padding: 8px;
+  }
+
+  .lakex-material-library {
+    height: 100%;
+  }
+
+  .lakex-material-library__header {
+    padding: 0 14px 0 18px;
+  }
+
+  .lakex-material-library__main-tabs {
+    gap: 24px;
+  }
+
+  .lakex-material-library__categories {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .lakex-material-library__grid {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+    gap: 12px;
+    padding: 8px 16px 20px;
+  }
+
+  .lakex-material-card__canvas {
+    height: 138px;
+  }
+
+  .lakex-material-library__empty {
+    gap: 18px;
+    padding: 28px 8% 20px;
+  }
+
+  .lakex-material-library__empty-illustration {
+    height: 200px;
+  }
+
+  .lakex-drawnix-core .zoom-toolbar {
+    top: 12px;
+    right: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .lakex-material-library__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lakex-ai-board-trigger-wrap {
+  position: relative;
+  z-index: 40;
+  order: -19;
+}
+
+.lakex-ai-board-trigger {
+  position: relative;
+  display: grid;
+  width: var(--lg-button-size, 36px);
+  height: var(--lg-button-size, 36px);
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lakex-ai-board-trigger:hover,
+.lakex-ai-board-trigger:focus-visible,
+.lakex-ai-board-trigger[aria-expanded="true"] {
+  background: var(--color-surface-primary-container, #eef4ff);
+}
+
+.lakex-ai-board-trigger svg {
+  width: 23px;
+  height: 23px;
+}
+
+.lakex-ai-board-trigger::after {
+  position: absolute;
+  z-index: 260;
+  top: 50%;
+  left: calc(100% + 10px);
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #262626;
+  color: #fff;
+  content: attr(data-tooltip);
+  font-size: 12px;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-2px, -50%);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+
+.lakex-ai-board-trigger:hover::after,
+.lakex-ai-board-trigger:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.lakex-ai-board-overlay {
+  position: absolute;
+  z-index: 250;
+  inset: 0;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: rgba(20, 24, 31, 0.38);
+  backdrop-filter: blur(1px);
+}
+
+.lakex-ai-board-dialog {
+  box-sizing: border-box;
+  width: min(500px, 100%);
+  padding: 20px;
+  border: 1px solid #e3e6eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #262626;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+}
+
+.lakex-ai-board-dialog__header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.lakex-ai-board-dialog__header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.lakex-ai-board-dialog__header p {
+  margin: 4px 0 0;
+  color: #73777f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.lakex-ai-board-dialog__close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #74777d;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 26px;
+}
+
+.lakex-ai-board-dialog__close:hover {
+  background: #f2f3f5;
+  color: #262626;
+}
+
+.lakex-ai-board-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 148px;
+  margin-top: 16px;
+  padding: 11px 12px;
+  resize: vertical;
+  border: 1px solid #d9dde4;
+  border-radius: 8px;
+  outline: none;
+  background: #fff;
+  color: #262626;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.lakex-ai-board-dialog textarea:focus {
+  border-color: #25b864;
+  box-shadow: 0 0 0 2px rgba(37, 184, 100, 0.14);
+}
+
+.lakex-ai-board-dialog textarea::placeholder {
+  color: #a0a4ab;
+}
+
+.lakex-ai-board-dialog__options {
+  display: flex;
+  gap: 20px;
+  margin-top: 12px;
+  color: #555a63;
+  font-size: 13px;
+}
+
+.lakex-ai-board-dialog__options label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.lakex-ai-board-dialog__options input {
+  accent-color: #1ca05a;
+}
+
+.lakex-ai-board-dialog__memory {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: #f6f7f9;
+}
+
+.lakex-ai-board-dialog__memory > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lakex-ai-board-dialog__memory span {
+  overflow: hidden;
+  color: #747981;
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lakex-ai-board-dialog__memory span:first-child {
+  color: #4d535b;
+  font-weight: 500;
+}
+
+.lakex-ai-board-dialog__memory button {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #168c4c;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.lakex-ai-board-dialog__memory button:hover:not(:disabled) {
+  background: rgba(32, 169, 93, 0.1);
+}
+
+.lakex-ai-board-dialog__memory button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.lakex-ai-board-dialog__notice,
+.lakex-ai-board-dialog__error {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lakex-ai-board-dialog__notice {
+  background: #fff8e8;
+  color: #8a641d;
+}
+
+.lakex-ai-board-dialog__error {
+  background: #fff1f0;
+  color: #c83b38;
+}
+
+.lakex-ai-board-dialog__footer {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.lakex-ai-board-dialog__footer > span {
+  color: #999da5;
+  font-size: 12px;
+}
+
+.lakex-ai-board-dialog__footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.lakex-ai-board-dialog__footer button {
+  min-width: 68px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #d9dde4;
+  border-radius: 6px;
+  background: #fff;
+  color: #4f535a;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.lakex-ai-board-dialog__footer button:hover:not(:disabled) {
+  border-color: #25b864;
+  color: #159653;
+}
+
+.lakex-ai-board-dialog__footer .lakex-ai-board-dialog__generate {
+  border-color: #20a95d;
+  background: #20a95d;
+  color: #fff;
+}
+
+.lakex-ai-board-dialog__footer .lakex-ai-board-dialog__generate:hover:not(:disabled) {
+  border-color: #168c4c;
+  background: #168c4c;
+  color: #fff;
+}
+
+.lakex-ai-board-dialog__footer button:disabled,
+.lakex-ai-board-dialog__close:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.lakex-ai-board-toast {
+  position: absolute;
+  z-index: 270;
+  top: 20px;
+  left: 50%;
+  display: flex;
+  max-width: min(460px, calc(100% - 32px));
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(24, 32, 44, 0.18);
+  color: #3d434b;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.lakex-ai-board-toast > span {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  place-items: center;
+  background: #20a95d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lakex-ai-board-toast[data-type="error"] > span {
+  background: #d84a45;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-overlay {
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog {
+  border-color: #3d3d3d;
+  background: #242424;
+  color: #ededed;
+  box-shadow: 0 16px 52px rgba(0, 0, 0, 0.52);
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__header p,
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__options {
+  color: #aaaeb5;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__memory {
+  background: #303030;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__memory span {
+  color: #9ea3aa;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__memory span:first-child {
+  color: #d0d3d8;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__memory button {
+  color: #66d394;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__close {
+  color: #aaa;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__close:hover {
+  background: #333;
+  color: #fff;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog textarea {
+  border-color: #4a4a4a;
+  background: #1a1a1a;
+  color: #ededed;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__notice {
+  background: rgba(217, 164, 65, 0.14);
+  color: #e4bd69;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__error {
+  background: rgba(200, 59, 56, 0.16);
+  color: #ef8a87;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__footer button {
+  border-color: #4a4a4a;
+  background: #2b2b2b;
+  color: #d5d5d5;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-dialog__footer .lakex-ai-board-dialog__generate {
+  border-color: #25995e;
+  background: #25995e;
+  color: #fff;
+}
+
+.lakex-drawnix-core[data-theme="dark"] .lakex-ai-board-toast {
+  border-color: #474747;
+  background: #2b2b2b;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
+  color: #ededed;
+}
+
+@media (max-width: 640px) {
+  .lakex-ai-board-overlay {
+    padding: 12px;
+  }
+
+  .lakex-ai-board-dialog {
+    padding: 16px;
+  }
+
+  .lakex-ai-board-dialog__footer {
+    align-items: flex-end;
+  }
+
+  .lakex-ai-board-dialog__footer > span {
+    max-width: 110px;
+  }
+}

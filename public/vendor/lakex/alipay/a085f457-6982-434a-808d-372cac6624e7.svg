@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="13px" height="8px" viewBox="0 0 13 8" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 62 (91390) - https://sketch.com -->
+    <title>形状</title>
+    <desc>Created with Sketch.</desc>
+    <g id="页面-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="阅读页" transform="translate(-893.000000, -763.000000)" fill="#595959" fill-rule="nonzero">
+            <g id="5.DataDisplay/7.Popover/2.Box/Right备份" transform="translate(871.000000, 647.000000)">
+                <g id="编组-11" transform="translate(20.000000, 24.000000)">
+                    <g id="编组-10" transform="translate(0.000000, 58.000000)">
+                        <g id="align-right" transform="translate(0.000000, 30.000000)">
+                            <path d="M9.875,4 L2.125,4 C2.05625,4 2,4.05625 2,4.125 L2,5 C2,5.06875 2.05625,5.125 2.125,5.125 L9.875,5.125 C9.94375,5.125 10,5.06875 10,5 L10,4.125 C10,4.05625 9.94375,4 9.875,4 Z M14.375,10.25 L2.125,10.25 C2.05625,10.25 2,10.30625 2,10.375 L2,11.25 C2,11.31875 2.05625,11.375 2.125,11.375 L14.375,11.375 C14.44375,11.375 14.5,11.31875 14.5,11.25 L14.5,10.375 C14.5,10.30625 14.44375,10.25 14.375,10.25 Z M14.375,7.125 L2.125,7.125 C2.05625,7.125 2,7.18125 2,7.25 L2,8.125 C2,8.19375 2.05625,8.25 2.125,8.25 L14.375,8.25 C14.44375,8.25 14.5,8.19375 14.5,8.125 L14.5,7.25 C14.5,7.18125 14.44375,7.125 14.375,7.125 Z" id="形状" transform="translate(8.250000, 7.687500) scale(1, -1) translate(-8.250000, -7.687500) "></path>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

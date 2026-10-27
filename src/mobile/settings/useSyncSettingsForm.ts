@@ -3,6 +3,7 @@ import type { SyncSettings, SyncWarning } from "../../lib/types";
 import { bridge } from "../bridge";
 import { writeSyncSettings } from "../sync/syncSettingsStore";
 import { describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyncStatus } from "../sync/syncStatusStore";
+import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 
 const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
 
@@ -11,7 +12,9 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
   const [syncSettings, setSyncSettings] = useState<SyncSettings | null>(null);
   const [syncMsg, setSyncMsg] = useState("");
   const [warnings, setWarnings] = useState<SyncWarning[]>([]);
+  const [supersededNotes, setSupersededNotes] = useState<Array<{ id: string; title: string }>>([]);
   const [lastSync, setLastSync] = useState<MobileSyncStatus | null>(() => readSyncStatus());
+  const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
 
   useEffect(() => {
     if (!open) return;
@@ -19,6 +22,7 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
   }, [open]);
 
   useEffect(() => subscribeSyncStatus(() => setLastSync(readSyncStatus())), []);
+  useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
 
   const updateSyncSettings = useCallback((patch: Partial<SyncSettings>) => {
     setSyncSettings((current) => {
@@ -33,7 +37,9 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     try {
       const result = await bridge.syncNow();
       setSyncMsg(result.message);
-      setWarnings(result.notes?.warnings ?? []);
+      // v3 把结构化回执放在顶层（notes 为 null）：warningDetails / supersededNotes 都要读。
+      setWarnings(result.warnings ?? result.notes?.warnings ?? []);
+      setSupersededNotes(result.supersededNotes ?? []);
       await onRefresh();
     } catch (error) {
       setSyncMsg("同步失败: " + (error as Error).message);
@@ -44,7 +50,9 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     syncSettings,
     updateSyncSettings,
     syncMsg,
+    syncProgressText: describeSyncProgress(syncProgress),
     warnings,
+    supersededNotes,
     lastSync,
     lastSyncText: lastSync ? describeSyncStatus(lastSync) : "本机还没有同步记录",
     runSync,

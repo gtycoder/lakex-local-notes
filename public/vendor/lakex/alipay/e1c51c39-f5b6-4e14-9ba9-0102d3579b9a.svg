@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="28px" height="34px" viewBox="0 0 28 34" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 60.1 (88133) - https://sketch.com -->
+    <title>eps备份</title>
+    <desc>Created with Sketch.</desc>
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-1">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#F4F4F4" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-2">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#FAFAFA" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-3">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#FAFAFA" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="付费阅读-0.2" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="eps备份">
+            <g id="Combined-Shape">
+                <g id="path-2-link" fill="#000000" fill-rule="nonzero">
+                    <path d="M19,0 L1.99124431,0 C0.899897516,0 -1.77635684e-15,0.895394863 -1.77635684e-15,1.9999204 L-1.77635684e-15,32.0000796 C-1.77635684e-15,33.1080589 0.891510444,34 1.99124431,34 L26.0087557,34 C27.1001025,34 28,33.1046051 28,32.0000796 L28,10 L19,10 L19,0 Z" id="path-2"></path>
+                </g>
+                <g id="path-2-link" fill="url(#linearGradient-1)" fill-rule="nonzero">
+                    <path d="M19,0 L1.99124431,0 C0.899897516,0 -1.77635684e-15,0.895394863 -1.77635684e-15,1.9999204 L-1.77635684e-15,32.0000796 C-1.77635684e-15,33.1080589 0.891510444,34 1.99124431,34 L26.0087557,34 C27.1001025,34 28,33.1046051 28,32.0000796 L28,10 L19,10 L19,0 Z" id="path-2"></path>
+                </g>
+                <path d="M18.5,0.5 L18.5,10 L18.5,10.5 L19,10.5 L27.5,10.5 L27.5,32.0000796 C27.5,32.8257232 26.8266952,33.5 26.0087557,33.5 L1.99124431,33.5 C1.16681741,33.5 0.5,32.8310761 0.5,32.0000796 L0.5,1.9999204 C0.5,1.17427675 1.17330482,0.5 1.99124431,0.5 L18.5,0.5 Z" id="路径" stroke="#CCCCCC"></path>
+            </g>
+            <g id="Group" transform="translate(3.000000, 4.000000)" fill="#D8D8D8" fill-rule="nonzero">
+                <rect id="Rectangle-4" x="0" y="2" width="11" height="1"></rect>
+                <rect id="Rectangle-4-Copy-6" x="12" y="2" width="2" height="1"></rect>
+                <rect id="Rectangle-4-Copy-5" x="0" y="0" width="6" height="1"></rect>
+                <rect id="Rectangle-4-Copy" x="0" y="4" width="5" height="1"></rect>
+                <rect id="Rectangle-4-Copy-3" x="7" y="4" width="5" height="1"></rect>
+                <rect id="Rectangle-4-Copy-4" x="13" y="4" width="5" height="1"></rect>
+                <rect id="Rectangle-4-Copy-2" x="0" y="6" width="11" height="1"></rect>
+                <rect id="Rectangle-4-Copy-7" x="0" y="8" width="7" height="1"></rect>
+                <rect id="Rectangle-4-Copy-8" x="9" y="8" width="7" height="1"></rect>
+                <rect id="Rectangle-4-Copy-9" x="0" y="10" width="5" height="1"></rect>
+            </g>
+            <g id="Rectangle-2" transform="translate(17.000000, 0.000000)">
+                <g id="path-5-link" fill="#000000" fill-rule="nonzero">
+                    <polygon id="path-5" points="0.9928436 0.00238037109 1.9984131 0.00410461426 10.9999414 10.0130031 11 11 1 11"></polygon>
+                </g>
+                <g id="path-5-link" fill="url(#linearGradient-3)" fill-rule="nonzero">
+                    <polygon id="path-5" points="0.9928436 0.00238037109 1.9984131 0.00410461426 10.9999414 10.0130031 11 11 1 11"></polygon>
+                </g>
+                <polygon id="路径" stroke="#CCCCCC" points="1.4931697 0.503239012 1.7752812 0.503722747 10.4999528 10.2047811 10.4999703 10.5 1.4996747 10.5"></polygon>
+            </g>
+            <path d="M13.06,27.07 L13.06,26.07 L8.91,26.07 L8.91,23.91 L12.65,23.91 L12.65,22.91 L8.91,22.91 L8.91,20.93 L12.89,20.93 L12.89,19.93 L7.74,19.93 L7.74,27.07 L13.06,27.07 Z M16.77,27.07 C17.93,27.07 18.8,26.75 19.4,26.11 C19.97,25.5 20.26,24.63 20.26,23.5 C20.26,22.36 19.97,21.49 19.4,20.89 C18.8,20.25 17.93,19.93 16.77,19.93 L14.16,19.93 L14.16,27.07 L16.77,27.07 Z M16.55,26.07 L15.33,26.07 L15.33,20.93 L16.55,20.93 C17.44,20.93 18.09,21.13 18.5,21.54 C18.9,21.94 19.1,22.6 19.1,23.5 C19.1,24.38 18.9,25.03 18.5,25.45 C18.09,25.86 17.44,26.07 16.55,26.07 Z" id="ED" stroke="#F39014" stroke-width="0.2" fill="#F39014" fill-rule="nonzero"></path>
+        </g>
+    </g>
+</svg>

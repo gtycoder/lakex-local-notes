@@ -5,10 +5,10 @@ import path from "node:path";
 import { NoteContentRepository } from "./noteContentRepository.js";
 import type { DbLike } from "./dbLike.js";
 
-type NoteRow = { title: string; trashed_at: string | null; sync_state: string | null };
+type NoteRow = { title: string; trashed_at: string | null; is_purged?: number | null };
 
 /** 最小 DbLike mock：prepare 返回 run()（计入 calls）/ get()；transaction(fn) 直接执行。 */
-function makeDb(row: NoteRow = { title: "旧标题", trashed_at: null, sync_state: "synced" }) {
+function makeDb(row: NoteRow = { title: "旧标题", trashed_at: null, is_purged: 0 }) {
   const runCalls: string[] = [];
   const db = {
     prepare(sql: string) {
@@ -62,7 +62,7 @@ describe("NoteContentRepository.save (W-7 文件写与 DB 事务分离)", () => 
   });
 
   it("审计 F04：回收站条目不能被普通保存改写（明确拒绝，正文/DB 都不动）", () => {
-    const { db, runCalls } = makeDb({ title: "旧标题", trashed_at: "2026-09-30T00:00:00.000Z", sync_state: "local" });
+    const { db, runCalls } = makeDb({ title: "旧标题", trashed_at: "2026-09-30T00:00:00.000Z", is_purged: 0 });
     const { base, notePath } = deps({ db });
     const repo = new NoteContentRepository(base);
     expect(() => repo.save("n1", "新标题", "<p>晚到保存</p>")).toThrow(/回收站|已删除/);
@@ -71,8 +71,8 @@ describe("NoteContentRepository.save (W-7 文件写与 DB 事务分离)", () => 
     expect(runCalls.length).toBe(0);
   });
 
-  it("审计 F04：sync_state='purged' 的保留副本同样拒绝（不兼职恢复）", () => {
-    const { db } = makeDb({ title: "旧标题", trashed_at: null, sync_state: "purged" });
+  it("审计 F04：is_purged 的保留副本同样拒绝（不兼职恢复）", () => {
+    const { db } = makeDb({ title: "旧标题", trashed_at: null, is_purged: 1 });
     const { base } = deps({ db });
     const repo = new NoteContentRepository(base);
     expect(() => repo.save("n1", "新标题", "<p>晚到保存</p>")).toThrow(/回收站|已删除/);

@@ -115,7 +115,7 @@ export class SettingsRepository {
 
   getS3GcSettings(): S3GcSettings {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_gc_settings'").get() as { value: string } | undefined;
-    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 60 };
+    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 90 };
     if (!row) return def;
     try {
       const parsed = JSON.parse(row.value) as Partial<S3GcSettings>;
@@ -134,9 +134,17 @@ export class SettingsRepository {
       .run(JSON.stringify(settings));
   }
 
+  /** 是否已配置 S3（只判存在性、不解密密钥）：全新安装没有任何 S3 配置时，「启用云同步」默认关闭。 */
+  private hasS3Settings(): boolean {
+    return Boolean(this.db.prepare("SELECT 1 FROM settings WHERE key='s3_settings'").get());
+  }
+
   getSyncSettings(): SyncSettings {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='sync_settings'").get() as { value: string } | undefined;
-    const def: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
+    // 261022（用户点单）：**默认开关 = 是否已配置 S3** —— 没配置时「启用云同步」默认关闭
+    // （没配置与关掉在语义上等价：cloudStateOf ⇒ unconfigured ⇒ 一律不出网）；
+    // 已配置的旧库仍默认开着（不回归）；显式存过的值永远优先。
+    const def: SyncSettings = { enabled: this.hasS3Settings(), autoMode: "manual", autoIntervalMinutes: 15 };
     if (!row) return def;
     try {
       const parsed = JSON.parse(row.value) as Partial<SyncSettings>;
@@ -144,6 +152,8 @@ export class SettingsRepository {
         enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : def.enabled,
         autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" || parsed.autoMode === "manual" ? parsed.autoMode : def.autoMode,
         autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" && parsed.autoIntervalMinutes >= 1 ? Math.floor(parsed.autoIntervalMinutes) : def.autoIntervalMinutes,
+        // 按需资产（P0-4）：缺省 undefined = 全量语义。
+        ...(parsed.deferAssets === true ? { deferAssets: true } : {}),
       };
     } catch {
       return def;

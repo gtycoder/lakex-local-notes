@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 const RESOLVER = readFileSync(new URL("./aiContentResolver.ts", import.meta.url), "utf8");
 const REGISTER = readFileSync(new URL("../ipc/registerAi.ts", import.meta.url), "utf8");
 const CORE = readFileSync(new URL("../../src/core/aiProviders.ts", import.meta.url), "utf8");
-const MESSAGES = readFileSync(new URL("./aiChatMessages.ts", import.meta.url), "utf8");
+// 261023：入参护栏已上收 core（桌面/移动共用一份预算），静态断言跟随单一来源。
+const MESSAGES = readFileSync(new URL("../../src/core/aiChatMessages.ts", import.meta.url), "utf8");
 
 describe("多模态链路护栏（261006）", () => {
   it("ai_chat 先校验再解析内容块，才发给供应商", () => {

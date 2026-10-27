@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 63 (92445) - https://sketch.com -->
+    <title>编组 6</title>
+    <desc>Created with Sketch.</desc>
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-1">
+            <stop stop-color="#69B3CA" offset="0%"></stop>
+            <stop stop-color="#275185" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="嵌入第三方服务" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="嵌入第三方服务/入口" transform="translate(-355.000000, -710.000000)">
+            <g id="编组-6" transform="translate(355.000000, 710.000000)">
+                <rect id="Rectangle-Copy-25" fill="url(#linearGradient-1)" x="0" y="0" width="24" height="24" rx="2.5"></rect>
+                <text id="On" font-family="AppleSDGothicNeo-Bold, Apple SD Gothic Neo" font-size="15" font-weight="bold" fill="#FFFFFF">
+                    <tspan x="2" y="18">On</tspan>
+                </text>
+            </g>
+        </g>
+    </g>
+</svg>

@@ -5,17 +5,25 @@ import { normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quic
 export interface MobileQuickNoteTagSheetProps {
   open: boolean;
   options: readonly QuickNoteTagSummary[];
+  /** 已选标签 ID。 */
   selected: readonly string[];
-  onAdd: (tag: string) => void;
+  onAdd: (tagId: string) => void;
+  /** 新建标签（写标签表后返回 ID）。 */
+  onCreate: (name: string) => Promise<string>;
   onClose: () => void;
 }
 
-/** 移动端小记标签选择：候选集合来自全部有效小记，当前小记已有标签置灰。 */
-export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onClose }: MobileQuickNoteTagSheetProps) {
+/** 移动端小记标签选择：候选集合来自标签表，当前小记已有标签置灰。 */
+export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCreate, onClose }: MobileQuickNoteTagSheetProps) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const selectedNames = useMemo(
+    () => new Set(options.filter((option) => selectedSet.has(option.id)).map((option) => option.name)),
+    [options, selectedSet],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -37,15 +45,24 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onClos
   const visible = needle
     ? options.filter((option) => option.name.toLocaleLowerCase().includes(needle))
     : options;
-  const exactExists = visible.some((option) => option.name === candidate) || selectedSet.has(candidate);
+  const existing = options.find((option) => option.name === candidate);
+  const exactExists = !!existing || selectedNames.has(candidate);
 
-  const add = (name: string) => {
+  const addExisting = (tagId: string) => {
+    onAdd(tagId);
+    onClose();
+  };
+
+  const create = async () => {
+    if (!candidate || candidateError || creating) return;
+    setCreating(true);
     try {
-      onAdd(name);
+      const tagId = await onCreate(candidate);
+      onAdd(tagId);
       onClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "添加标签失败");
-    }
+    } finally { setCreating(false); }
   };
 
   return (
@@ -64,34 +81,38 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onClos
                 value={query}
                 onChange={(event) => { setQuery(event.target.value); setError(null); }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && candidate && !candidateError && !selectedSet.has(candidate)) {
-                    event.preventDefault();
-                    add(candidate);
-                  }
+                  if (event.key !== "Enter" || !candidate || candidateError) return;
+                  event.preventDefault();
+                  if (existing && !selectedSet.has(existing.id)) addExisting(existing.id);
+                  else if (!exactExists) void create();
                 }}
                 placeholder="输入标签名..."
                 aria-label="标签名"
               />
             </span>
-            <button type="button" disabled={!candidate || !!candidateError || exactExists} onClick={() => candidate && add(candidate)}>添加</button>
+            <button
+              type="button"
+              disabled={!candidate || !!candidateError || exactExists || creating}
+              onClick={() => { if (existing && !selectedSet.has(existing.id)) addExisting(existing.id); else void create(); }}
+            >添加</button>
           </div>
           {(candidateError || error) && <div className="qn-tag-sheet__error">{error || candidateError}</div>}
           {candidate && !candidateError && !exactExists && (
-            <button type="button" className="qn-tag-sheet__create" onClick={() => add(candidate)}>
+            <button type="button" className="qn-tag-sheet__create" disabled={creating} onClick={() => void create()}>
               <Plus size={16} /><span>创建标签 “{candidate}”</span>
             </button>
           )}
           <div className="qn-tag-sheet__section"><Tag size={14} /><span>已有标签（{options.length}）</span></div>
           <div className="qn-tag-sheet__list">
             {visible.map((option) => {
-              const checked = selectedSet.has(option.name);
+              const checked = selectedSet.has(option.id);
               return (
                 <button
                   type="button"
-                  key={option.name}
+                  key={option.id}
                   className={"qn-tag-sheet__item" + (checked ? " is-selected" : "")}
                   disabled={checked}
-                  onClick={() => add(option.name)}
+                  onClick={() => addExisting(option.id)}
                 >
                   <span className="mb-ellipsis">{option.name}</span>
                   {checked ? <Check size={17} /> : <span className="qn-tag-sheet__count">{option.count}</span>}

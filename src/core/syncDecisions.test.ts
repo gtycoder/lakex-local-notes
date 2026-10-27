@@ -87,7 +87,7 @@ describe("buildUploadEntry（v4 编码）", () => {
     expect(entry.deletedFromParentId).toBeUndefined();
     expect(entry.deleted).toBeUndefined();
     expect(entry.contentHash).toBe("b".repeat(64));
-    expect(entry.isLocked).toBe(false);
+    expect(entry.isEditLocked).toBe(false);
     expect(entry.icon).toBeNull();
   });
 
@@ -121,9 +121,9 @@ describe("buildUploadEntry（v4 编码）", () => {
   });
 
   it("锁/图标字段透传", () => {
-    const entry = buildUploadEntry({ note: mkLocal({ isLocked: true, lockedAt: T1, icon: "📁" }), contentHash: "b".repeat(64), assets: [] });
-    expect(entry.isLocked).toBe(true);
-    expect(entry.lockedAt).toBe(T1);
+    const entry = buildUploadEntry({ note: mkLocal({ isEditLocked: true, editLockedAt: T1, icon: "📁" }), contentHash: "b".repeat(64), assets: [] });
+    expect(entry.isEditLocked).toBe(true);
+    expect(entry.editLockedAt).toBe(T1);
     expect(entry.icon).toBe("📁");
   });
 });
@@ -150,11 +150,11 @@ describe("computeBookkeeping", () => {
 
   it("快照 = manifest 字段（V5 §5.2）", () => {
     const items = computeBookkeeping([
-      { id: "a", title: "标题", parentId: "p", sortOrder: 3, updatedAt: T1, contentHash: "a".repeat(64), isConflict: false, assets: [], isLocked: true, lockedAt: T1, icon: "i" },
+      { id: "a", title: "标题", parentId: "p", sortOrder: 3, updatedAt: T1, contentHash: "a".repeat(64), isConflict: false, assets: [], isEditLocked: true, editLockedAt: T1, icon: "i" },
     ]);
     expect(items[0].snapshot).toEqual({
       contentHash: "a".repeat(64), updatedAt: T1, title: "标题", parentId: "p", sortOrder: 3,
-      isLocked: true, lockedAt: T1, icon: "i",
+      isEditLocked: true, editLockedAt: T1, icon: "i",
     });
   });
 });
@@ -163,19 +163,19 @@ describe("computeBookkeeping", () => {
 describe("rowToLocalState", () => {
   it("snake_case 行 → LocalState 字段映射", () => {
     const state = rowToLocalState({
-      id: "n1", title: "t", parent_id: "p", sort_order: 2, updated_at: T1, sync_state: "synced",
+      id: "n1", title: "t", parent_id: "p", sort_order: 2, updated_at: T1, is_dirty: 0,
       is_conflict: 1, is_locked: 1, locked_at: T1, icon: "📁", trashed_at: null, deleted_from_parent_id: null,
     });
     expect(state).toEqual({
       id: "n1", title: "t", parentId: "p", sortOrder: 2, updatedAt: T1, syncState: "synced",
-      isConflict: true, isLocked: true, lockedAt: T1, icon: "📁", trashedAt: null, deletedFromParentId: null,
+      isConflict: true, isEditLocked: true, editLockedAt: T1, icon: "📁", trashedAt: null, deletedFromParentId: null,
       kind: "doc",
     });
   });
 
   it("kind 归一：usheet/bitable/board/ink 原样保留，未知值回退 doc", () => {
     const kindOf = (raw: string | null) => rowToLocalState({
-      id: "n1", title: "t", parent_id: null, sort_order: 0, updated_at: T0, sync_state: "local",
+      id: "n1", title: "t", parent_id: null, sort_order: 0, updated_at: T0, is_dirty: 1,
       is_conflict: 0, is_locked: 0, locked_at: null, icon: null, trashed_at: null, deleted_from_parent_id: null,
       kind: raw,
     }).kind;

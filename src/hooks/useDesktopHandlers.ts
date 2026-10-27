@@ -7,6 +7,7 @@ import { stripAssetAccessToken } from "../lib/assetPort";
 import { patchNoteById, summaryOf, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
 import type { PersistOutcome } from "./useSavePipeline";
 import { flushDirtyBeforeLifecycle } from "../core/lifecycleFlush";
+import { flushPendingLockedTextCommits } from "../features/editor/lockedTextFlush";
 import type { NoteDocument, NoteSummary, S3Settings, TreeNode } from "../lib/types";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 
@@ -65,11 +66,16 @@ export function useDesktopHandlers({
     if (!tabId) return;
     const summary = notes.find((n) => n.id === tabId);
     if (!summary) return;
-    const next = !summary.isLocked;
+    const next = !summary.isEditLocked;
     const tab = openTabsRef.current.find((t) => t.noteId === tabId);
     if (next && tab) {
       // 审计 F01：锁定前必须确认该 revision 已持久化；失败则留在可编辑状态（错误已由保存管线提示）。
-      const { proceed } = await flushDirtyBeforeLifecycle(tab, () => persistTab(tabId));
+      // 加密文本卡：先把防抖窗口里的明文补写成密文（否则锁前后一段会静默丢失，评审 B1）。
+      const flushedCard = await flushPendingLockedTextCommits();
+      const { proceed } = await flushDirtyBeforeLifecycle(
+        flushedCard ? { ...tab, dirty: true } : tab,
+        () => persistTab(tabId),
+      );
       if (!proceed) return;
     }
     // 锁定态 Viewer 无法用内核生成文本缓存；锁定前确保 md/text 缓存存在（已有则跳过）
@@ -82,8 +88,8 @@ export function useDesktopHandlers({
       } catch { /* 缓存兜底失败不阻断锁定 */ }
     }
     try {
-      const updated = await native.setNoteLocked(tabId, next);
-      setNotes(patchNoteById(tabId, { isLocked: updated.isLocked, lockedAt: updated.lockedAt }));
+      const updated = await native.setNoteEditLocked(tabId, next);
+      setNotes(patchNoteById(tabId, { isEditLocked: updated.isEditLocked, editLockedAt: updated.editLockedAt }));
     } catch (reason) {
       setError(getNativeErrorMessage(reason));
     }

@@ -258,7 +258,6 @@
 
 .bt-icon-btn { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; cursor: pointer; padding: 3px; border-radius: var(--lake-radius-2xs); color: inherit; }
 .bt-icon-btn:hover { background: var(--lake-bg-hover); }
-.bt-inline-input { flex: 1; min-width: 0; border: 1px solid var(--lake-accent); border-radius: var(--lake-radius-2xs); background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: var(--lake-font-size-body); padding: 2px 4px; }
 
 .bt-primary, .bt-secondary, .bt-danger { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; padding: 5px 12px; font: inherit; font-size: var(--lake-font-size-body); cursor: pointer; border: 1px solid transparent; }
 .bt-primary { background: var(--lake-accent); color: var(--lake-text-on-accent); }
@@ -323,6 +322,13 @@
 /* 占位文案统一走 --lake-text-4（与 kit.css/overlay.css 的 placeholder 同一口径；浏览器默认灰不是令牌）。
    选项编辑的新行用它显示默认名「选项 N」（用户 260930：不要在输入框里预填再全选 ⇒ 那块蓝色底色）。 */
 .bt-input::placeholder { color: var(--lake-text-4); }
+/* 数据表行内重命名：外观与聚焦信号**复用 .bt-input**（静息控件边 + :focus 主色边、outline: 0），这里只留行内布局。
+   两个边框的根因有两层：① 自己再写 1px 主色边会与全局 :focus-visible 的 2px 描边叠成两条（旧实现）；
+   ② 改用 .bt-input 后仍需**去掉 2px 柔光环** —— 这一行本身是选中态（accent-tint 底），柔光环贴着主色边
+   又成了一圈浅色边框，用户 261022 复报「还是 2 个边框」。判据同 260929 链接格「格内输入框不再叠焦点环」：
+   **已经有边框/选中环的地方不再叠第二次焦点信号**。 */
+.bt-inline-input { flex: 1; min-width: 0; height: auto; padding: 2px 4px; }
+.bt-inline-input:focus { box-shadow: none; }
 .bt-field-label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
 /* 日期字段的默认值三态：形态下拉 +（选「指定时间」时）日期选择器 */
 .bt-date-default { display: flex; flex-direction: column; gap: 4px; }

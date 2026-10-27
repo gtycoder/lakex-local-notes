@@ -14,6 +14,7 @@ vi.mock("@capacitor-community/sqlite", () => ({
     beginTransaction: vi.fn(async () => ({ changes: { changes: 0 } })),
     commitTransaction: vi.fn(async () => ({ changes: { changes: 0 } })),
     rollbackTransaction: vi.fn(async () => ({ changes: { changes: 0 } })),
+    executeSet: vi.fn(async () => ({ changes: { changes: 0 } })),
   },
 }));
 
@@ -23,6 +24,7 @@ describe("native SQLite database adapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     plugin.query.mockResolvedValue({ values: [] });
+    plugin.executeSet.mockResolvedValue({ changes: { changes: 0 } });
   });
 
   it("opens a connection and enables WAL through query", async () => {
@@ -114,6 +116,35 @@ describe("native SQLite database adapter", () => {
         transaction: true,
       }),
     );
+  });
+
+  it("事务与并发的 executeSet/语句串行化（真机 CommitTransaction 报错回归）", async () => {
+    const events: string[] = [];
+    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    plugin.beginTransaction.mockImplementation(async () => { events.push("begin"); return { changes: { changes: 0 } }; });
+    plugin.commitTransaction.mockImplementation(async () => { events.push("commit"); return { changes: { changes: 0 } }; });
+    plugin.executeSet.mockImplementation(async () => { events.push("executeSet"); return { changes: { changes: 0 } }; });
+
+    const tx = db.transaction(async () => {
+      events.push("tx-start");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      events.push("tx-end");
+    });
+    const concurrent = db.executeSet([{ statement: "INSERT INTO t VALUES (1)", values: [] }]);
+    await Promise.all([tx, concurrent]);
+
+    // executeSet 必须等事务提交之后才能进（否则会在事务内插 BEGIN，真机报 no current transaction）。
+    expect(events).toEqual(["begin", "tx-start", "tx-end", "commit", "executeSet"]);
+  });
+
+  it("事务内的 executeSet 不再自带事务（transaction:false）", async () => {
+    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    await db.transaction(async () => {
+      await db.executeSet([{ statement: "INSERT INTO t VALUES (1)", values: [] }]);
+    });
+    expect(plugin.executeSet).toHaveBeenCalledWith(expect.objectContaining({ transaction: false }));
+    expect(plugin.beginTransaction).toHaveBeenCalledTimes(1);
+    expect(plugin.commitTransaction).toHaveBeenCalledTimes(1);
   });
 
   it("computes database size from SQLite page pragmas", async () => {

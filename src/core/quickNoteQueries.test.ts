@@ -5,20 +5,24 @@ import type { StoredQuickNoteContent } from "./quickNoteModel.js";
 describe("quickNoteQueries 共享映射（Phase 0B-4）", () => {
   const row = {
     id: "qn1", created_at: "2026-08-01T00:00:00.000Z", updated_at: "2026-08-02T00:00:00.000Z",
-    preview_text: "预览", image_count: 1, content_hash: "abc", sync_state: "local" as const, is_conflict: 0,
+    preview_text: "预览", image_count: 1, content_hash: "abc", is_dirty: 1, is_conflict: 0,
   };
-  const content: StoredQuickNoteContent = { version: 2, text: "正文", body: "<p><br></p>", images: [{ id: "img1", filename: "a.png", mimeType: "image/png", hash: "h", width: null, height: null, size: 10 }], tags: [] };
+  const content: StoredQuickNoteContent = { version: 3, text: "正文", body: "<p><br></p>", images: [{ id: "img1", filename: "a.png", mimeType: "image/png", hash: "h", width: null, height: null, size: 10 }] };
+  const tagIds = ["t_0123456789abcdef"];
+  const tagNames = (ids: readonly string[]) => ids.map((id) => (id === "t_0123456789abcdef" ? "灵感" : ""));
 
   it("mapQuickNoteRow：行→文档（含图片 URL 注入）", () => {
-    const doc = mapQuickNoteRow(row, { content, imageUrl: (id, f) => "http://x/" + id + "/" + f });
+    const doc = mapQuickNoteRow(row, { content, tagIds, imageUrl: (id, f) => "http://x/" + id + "/" + f, tagNames });
     expect(doc.id).toBe("qn1");
     expect(doc.previewText).toBe("预览");
     expect(doc.syncState).toBe("local");
     expect(doc.content.images[0].url).toBe("http://x/qn1/a.png");
+    expect(doc.content.tagIds).toEqual(["t_0123456789abcdef"]);
+    expect(doc.content.tags).toEqual(["灵感"]);
   });
 
   it("mapQuickNoteRow：isConflict 布尔化", () => {
-    const doc = mapQuickNoteRow({ ...row, is_conflict: 1 }, { content, imageUrl: () => "" });
+    const doc = mapQuickNoteRow({ ...row, is_conflict: 1 }, { content, tagIds, imageUrl: () => "", tagNames });
     expect(doc.isConflict).toBe(true);
   });
 

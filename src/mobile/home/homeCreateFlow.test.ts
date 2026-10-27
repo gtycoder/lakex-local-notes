@@ -63,20 +63,30 @@ describe("首页新建流（261014）", () => {
 
   it("排序/视图 + 云同步**固定挂在顶栏右上角**，云同步恒在最右，tab 仍居中", () => {
     const header = HOME.slice(HOME.indexOf("<header"), HOME.indexOf("</header>"));
-    const order = ['aria-label="设置"', "mobile-home-tabs", 'aria-label="排序"', 'aria-label="立即同步"'];
+    // P0-6：云按钮的 aria-label 变成进度感知（同步中显示阶段计数，空闲才是「立即同步」）⇒ 按表达式前缀断言。
+    const order = ['aria-label="设置"', "mobile-home-tabs", 'aria-label="排序"', "aria-label={syncProgress"];
     let last = -1;
     for (const label of order) {
       const at = header.indexOf(label);
       expect(at, label + " 应出现在顶栏且顺序正确").toBeGreaterThan(last);
       last = at;
     }
+    expect(header).toContain('"立即同步"');
     // 云同步是顶栏最后一个按钮
-    const cloud = header.indexOf('aria-label="立即同步"');
+    const cloud = header.indexOf("aria-label={syncProgress");
     expect(header.slice(cloud, header.indexOf("</header>"))).not.toContain("toolbar__button");
     // 左侧等宽空槽（右两枚 ⇒ 左补一格，tab 才居中）
     expect(header).toContain("mobile-topbar-gap");
     expect(header).toContain("setFilterOpen");
     expect(header).toContain("toggleView");
+  });
+
+  it("同步进行中渲染可视进度条（P0-6）：条 + 阶段文案 + 百分比，读索引阶段走不确定态", () => {
+    expect(HOME).toContain("mobile-sync-strip");
+    expect(HOME).toContain("mobile-sync-strip__bar");
+    expect(HOME).toContain("describeSyncProgress(syncProgress)");
+    expect(HOME).toContain("is-indeterminate");
+    expect(HOME).not.toContain("alert(");
   });
 
   it("首页胶囊用收窄变体（3 项紧凑宽度），冷启动骨架同步", () => {

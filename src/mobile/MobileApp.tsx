@@ -18,7 +18,8 @@ import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelP
 import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
 import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
-import { buildQuickNoteTagIndex } from "../core/quickNoteTags.js";
+import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, type QuickNoteTag } from "../core/quickNoteTags.js";
+import { installMissingAssetPlaceholders } from "./editor/missingAssetPlaceholder";
 
 /**
  * 小记写作区（懒加载）：261010 起 **深链/长按那条 capture 路径与工作台共用同一个内核卡片**
@@ -33,6 +34,7 @@ import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./hooks/useBackHandler";
 import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
+import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
@@ -50,6 +52,8 @@ import "./brand-launch.css";
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
 const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
+/** AI 全屏页按需加载：不进首页首屏（与内核/表格一样不加重入口）。 */
+const MobileAiPage = lazy(() => import("./ai/MobileAiPage").then((m) => ({ default: m.MobileAiPage })));
 
 /**
  * 退出 App（Android：结束任务）。
@@ -99,18 +103,30 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   /** 全局搜索命中「小记」后待首页打开的 id（首页常驻，交给 HomePage 的 effect 接力）。 */
   const [pendingQuickNoteId, setPendingQuickNoteId] = useState<string | null>(null);
   // 用 HomePage 导出的 MobileQuickNote：这条链（仓储 → bridge → 列表 → 卡片）字段必须一路一致，
   //  261015 加 createdAt 时就因为这里另写了一份内联类型而漏改（tsc 当场抓到）。
   const [quickNotes, setQuickNotes] = useState<MobileQuickNote[]>([]);
-  const quickTagOptions = useMemo(() => buildQuickNoteTagIndex(quickNotes, (note) => note.tags).tags, [quickNotes]);
+  const [tagDirectory, setTagDirectory] = useState<QuickNoteTag[]>([]);
+  /** 写作区用完整目录（含 0 条小记的新标签）；列表标签条只用有计数的索引。 */
+  const quickTagOptions = useMemo(
+    () => buildQuickNoteTagOptions(tagDirectory, buildQuickNoteTagIndex(quickNotes, tagDirectory, (note) => note.tagIds).tags),
+    [quickNotes, tagDirectory],
+  );
 
   const refreshAll = useCallback(async () => {
-    const snapshot = await bridge.getHomeSnapshot();
+    const [snapshot, tags] = await Promise.all([bridge.getHomeSnapshot(), bridge.listQuickNoteTags()]);
     setTreeNodes(snapshot.treeNodes);
     setNotes(snapshot.notes);
     setQuickNotes(snapshot.quickNotes.items);
+    setTagDirectory(tags);
+  }, []);
+
+  /** 标签子系统独立刷新：建/改/删标签只动目录，不回读小记列表。 */
+  const refreshQuickNoteTags = useCallback(async () => {
+    setTagDirectory(await bridge.listQuickNoteTags());
   }, []);
 
   /**
@@ -124,6 +140,23 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     prevRouteKindRef.current = route.kind;
     if (prev === "notebook" && route.kind === "home") void refreshAll().catch(() => undefined);
   }, [route.kind, refreshAll]);
+
+  /**
+   * P0-6 渐进展示（261026 用户点单「先让文档能够展示出来」）：首拉时引擎每 100 篇应用一次，
+   * UI 也要跟着刷列表 —— 否则 DB 里已经有 1000 篇，首页还显示「0 篇」，要等整轮同步结束才出现。
+   * 只在正文/应用阶段触发，节流 2s；同步结束（progress 清空）自然停止。
+   */
+  useEffect(() => {
+    let lastRefreshAt = 0;
+    return subscribeSyncProgress(() => {
+      const p = readSyncProgress();
+      if (!p || (p.phase !== "bodies" && p.phase !== "apply")) return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 2000) return;
+      lastRefreshAt = now;
+      void refreshAll().catch(() => undefined);
+    });
+  }, [refreshAll]);
 
   useEffect(() => {
     // 启动速度优先：不加人为最短展示；native splash + WebView overlay 只覆盖真实加载时间。
@@ -152,6 +185,28 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
 
   // 自动同步（261012）：autoMode=interval 起定时器；onOpenClose 在冷启动就绪 + 回到前台时补一次。
   useAutoSync(phase === "ready");
+
+  /**
+   * 按需资产占位（261027）：按需下载时，还没打开过的文档/小记里的图片本地没有文件，AssetServer 404 →
+   * 内核显示破图。这里统一接管为「图片未下载，点击下载」：点击补拉这一篇/这一条缺失的媒体（维护域，
+   * 不阻塞其它操作），成功后就地把所有同 key 的图片恢复成真实地址；离线/未配置时给提示。
+   */
+  useEffect(() => installMissingAssetPlaceholders(document, {
+    download: async (refs) => {
+      const noteIds = [...new Set(refs.filter((r) => r.space === "note").map((r) => r.noteId))];
+      const quickIds = [...new Set(refs.filter((r) => r.space === "quick-notes").map((r) => r.noteId))];
+      let downloaded = 0;
+      let failed = 0;
+      try {
+        if (noteIds.length > 0) { const got = await bridge.ensureNoteAssets(noteIds); downloaded += got.downloaded; failed += got.failed; }
+        if (quickIds.length > 0) { const got = await bridge.ensureQuickNoteAssets(quickIds); downloaded += got.downloaded; failed += got.failed; }
+      } catch (error) {
+        console.warn("[asset] 占位图补拉失败", error);
+      }
+      return { downloaded, failed };
+    },
+    showToast: (message, type) => showToast(message, { type: type ?? "info" }),
+  }), []);
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
   // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）
@@ -372,6 +427,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
               draft
               raiseKeyboard
               tagOptions={quickTagOptions}
+              onCreateTag={async (name) => {
+                const created = await bridge.createQuickNoteTag(name);
+                await refreshQuickNoteTags();
+                return created.id;
+              }}
               // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
               // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
               // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。
@@ -405,6 +465,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           notebooks={notebooks}
           notes={notes}
           quickNotes={quickNotes}
+          tagDirectory={tagDirectory}
           docCounts={docCounts}
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
@@ -413,10 +474,12 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           onPendingQuickNoteConsumed={() => setPendingQuickNoteId(null)}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
+          onOpenAi={() => setAiOpen(true)}
           onCreateNotebook={() => setCreateNbOpen(true)}
           onCreateNote={(notebookId) => void createNoteInParent(notebookId)}
           onTreeChanged={refreshAll}
           onQuickNotesChanged={refreshAll}
+          onQuickNoteTagsChanged={refreshQuickNoteTags}
         />
       </div>
       {route.kind === "notebook" && wsMounted && (
@@ -462,6 +525,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         onOpenNote={(id) => void openNote(id, "viewer")}
         onOpenQuickNote={openQuickNoteFromSearch}
       />
+      {aiOpen && (
+        <Suspense fallback={null}>
+          <MobileAiPage open onClose={() => setAiOpen(false)} onChanged={() => void refreshAll()} />
+        </Suspense>
+      )}
       <Toasts />
       <ConfirmHost />
       {/* 共享图片预览浮层（桌面/移动同一套控制器）：小记卡片、文档内图片点开都是它。 */}

@@ -16,7 +16,7 @@ export const TRASH_NOTEBOOK_ID = "notebook-trash";
 export interface LocalNoteState {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; syncState?: string; isConflict: boolean;
-  isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
+  isEditLocked?: boolean; editLockedAt?: string | null; icon?: string | null;
   trashedAt?: string | null; deletedFromParentId?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: NoteKind;
@@ -25,7 +25,7 @@ export interface LocalNoteState {
 /** 行映射输入（对齐桌面 noteQueries.ts SyncNoteRow 字段形态）。 */
 export interface SyncNoteRowShape {
   id: string; title: string; parent_id: string | null; sort_order: number;
-  updated_at: string; sync_state: string; is_conflict: number;
+  updated_at: string; is_dirty: number; is_purged?: number; is_conflict: number;
   is_locked: number; locked_at: string | null; icon: string | null;
   trashed_at: string | null; deleted_from_parent_id: string | null;
   kind?: string | null;
@@ -35,8 +35,9 @@ export interface SyncNoteRowShape {
 export function rowToLocalState(row: SyncNoteRowShape): LocalNoteState {
   return {
     id: row.id, title: row.title, parentId: row.parent_id, sortOrder: row.sort_order,
-    updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict,
-    isLocked: !!row.is_locked, lockedAt: row.locked_at ?? null, icon: row.icon ?? null,
+    updatedAt: row.updated_at, syncState: row.is_purged === 1 ? "purged" : row.is_dirty === 1 ? "local" : "synced", isConflict: !!row.is_conflict,
+    // SQLite 列名冻结：is_locked / locked_at（两端同列）；这里映射成内存名 isEditLocked / editLockedAt。
+    isEditLocked: !!row.is_locked, editLockedAt: row.locked_at ?? null, icon: row.icon ?? null,
     trashedAt: row.trashed_at ?? null, deletedFromParentId: row.deleted_from_parent_id ?? null,
     kind: normalizeNoteKind(row.kind),
   };
@@ -101,7 +102,7 @@ export function buildUploadEntry(input: UploadEntryInput): ManifestNote {
   return {
     id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
     updatedAt: note.updatedAt, contentHash, isConflict: note.isConflict,
-    isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, assets,
+    isEditLocked: !!note.isEditLocked, editLockedAt: note.editLockedAt ?? null, icon: note.icon ?? null, assets,
     // 只写非 doc：键缺席 = doc（旧端/旧清单兼容，且纯文档库的条目保持逐字节不变）
     ...(note.kind && note.kind !== "doc" ? { kind: note.kind } : {}),
     trashedAt: inTrash ? (input.trashedAt ?? null) : undefined,
@@ -130,7 +131,7 @@ export interface BookkeepingItem {
   snapshot: {
     contentHash: string; updatedAt: string; title: string;
     parentId: string | null; sortOrder: number;
-    isLocked: boolean; lockedAt: string | null; icon: string | null;
+    isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
   };
 }
 
@@ -146,7 +147,7 @@ export function computeBookkeeping(manifestNotes: ManifestNote[]): BookkeepingIt
         contentHash: note.contentHash,
         updatedAt: note.updatedAt,
         title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
-        isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null,
+        isEditLocked: !!note.isEditLocked, editLockedAt: note.editLockedAt ?? null, icon: note.icon ?? null,
       },
     });
   }
@@ -156,6 +157,6 @@ export function computeBookkeeping(manifestNotes: ManifestNote[]): BookkeepingIt
 /** 文档是否"已进回收站 / 已被他端彻底删除"：这类文档不得再被编辑保存。
  * 打开（含启动恢复最后文档）与同步刷新共用同一判定——此前只有同步路径标记，
  * 于是重启后自动重开的回收站文档会以正常可编辑标签出现（2026-09-04 实数据踩到）。 */
-export function isGoneNote(note: { parentId: string | null; syncState: string }): boolean {
-  return note.parentId === TRASH_NOTEBOOK_ID || note.syncState === "purged";
+export function isGoneNote(note: { parentId: string | null; syncState?: string; isPurged?: boolean }): boolean {
+  return note.parentId === TRASH_NOTEBOOK_ID || note.isPurged === true || note.syncState === "purged";
 }

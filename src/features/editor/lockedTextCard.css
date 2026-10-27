@@ -1,0 +1,152 @@
+/* 「加密文本」卡片（lake-locked-text）：只补**本卡特有布局**；颜色/字号/圆角全部走 --lake-* 令牌。
+ * 两端共用（桌面 kit 与移动端 mb-* 都不引）：卡内不引任何一端的外壳样式，靠语义令牌自适应主题。 */
+
+.lake-locked-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-md) var(--lake-space-lg);
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+  line-height: var(--lake-line-height-normal);
+}
+
+.lake-locked-text__head {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  min-height: var(--lake-ctl-h);
+}
+
+.lake-locked-text__title {
+  font-weight: var(--lake-font-weight-semibold);
+  color: var(--lake-text-1);
+}
+
+.lake-locked-text__hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
+
+.lake-locked-text__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  margin-left: auto;
+}
+
+.lake-locked-text__btn {
+  height: var(--lake-ctl-h-sm);
+  padding: 0 var(--lake-space-md);
+  border: 1px solid var(--lake-border-strong);
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-1);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  cursor: pointer;
+}
+
+.lake-locked-text__btn:hover {
+  background: var(--lake-bg-hover);
+}
+
+.lake-locked-text__btn:active {
+  background: var(--lake-bg-press);
+}
+
+.lake-locked-text__btn--primary {
+  border-color: var(--lake-accent-ink);
+  background: var(--lake-accent-ink);
+  color: var(--lake-text-on-accent);
+}
+
+.lake-locked-text__btn--primary:hover {
+  background: var(--lake-accent-ink-hover);
+}
+
+.lake-locked-text__btn:disabled {
+  opacity: var(--lake-disabled-opacity);
+  cursor: default;
+}
+
+.lake-locked-text__row {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+}
+
+.lake-locked-text__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--lake-ctl-h);
+  padding: 0 var(--lake-space-md);
+  border: 1px solid var(--lake-ctl-border);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+}
+
+.lake-locked-text__field:focus-visible {
+  outline: var(--lake-focus-ring-width) solid var(--lake-accent);
+  outline-offset: var(--lake-focus-ring-offset);
+}
+
+.lake-locked-text__body {
+  width: 100%;
+  min-height: 132px;
+  padding: var(--lake-space-sm) var(--lake-space-md);
+  border: 1px solid var(--lake-ctl-border);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  font-family: inherit;
+  font-size: var(--lake-font-size-body);
+  line-height: var(--lake-line-height-reading);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.lake-locked-text__body:focus-visible {
+  outline: var(--lake-focus-ring-width) solid var(--lake-accent);
+  outline-offset: var(--lake-focus-ring-offset);
+}
+
+/* 触屏基线：卡片内控件不得小于移动端点按下限（桌面几何不变 —— 评审 W4）。
+ * 只在 body.lake-mobile 生效，避免把移动端 44px 塞回桌面。 */
+body.lake-mobile .lake-locked-text__btn,
+body.lake-mobile .lake-locked-text__field {
+  min-height: var(--mb-tap-min, 44px);
+}
+
+.lake-locked-text__body--read {
+  min-height: 0;
+  border-color: transparent;
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.lake-locked-text__note {
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
+
+.lake-locked-text__error {
+  color: var(--lake-status-error);
+  font-size: var(--lake-font-size-tiny);
+}
+
+.lake-locked-text__warn {
+  color: var(--lake-status-pending);
+  font-size: var(--lake-font-size-tiny);
+}

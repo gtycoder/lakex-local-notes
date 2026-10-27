@@ -1,6 +1,8 @@
 /** 移动端「总回收站」列表（设置→回收站）。
  * 小记回收站并入总回收站：合并展示笔记/文件夹回收站（listTrashTree）与小记回收站（listQuickNoteTrash），
- * 按 deletedAt 倒序；支持恢复（同步后传播）/彻底删除；笔记行点击可预览。 */
+ * 按 deletedAt 倒序；支持恢复（同步后传播）/彻底删除；笔记行点击可预览。
+ * 261026：「云端已删除 · 仅本地」= 远端 v3 已彻底删除、本机仅保留这份回收站副本（不参与上传）；
+ * 恢复并重新上传成功后标记消失。 */
 import { useCallback, useEffect, useState } from "react";
 import { Feather, FolderOpen, File, RotateCcw, Trash } from "lucide-react";
 import { bridge } from "../bridge";
@@ -13,6 +15,8 @@ export interface TrashRow {
   title: string;
   kind: "note" | "folder" | "quick";
   deletedAt: string;
+  /** 远端已彻底删除、本机仅保留副本：显示「云端已删除 · 仅本地」，仍可恢复。 */
+  cloudDeleted: boolean;
 }
 
 export interface TrashListProps {
@@ -34,8 +38,8 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
     const trashIds = new Set(tree.map((it) => it.id));
     const noteRows: TrashRow[] = tree
       .filter((it) => !(it.parentId && trashIds.has(it.parentId)))
-      .map((it) => ({ key: "t-" + it.id, id: it.id, title: it.title, kind: it.kind === "folder" ? "folder" : "note", deletedAt: it.deletedAt ?? "" }));
-    const quickRows: TrashRow[] = quick.map((r) => ({ key: "q-" + r.id, id: r.id, title: r.previewText || "（空白小记）", kind: "quick", deletedAt: r.deletedAt }));
+      .map((it) => ({ key: "t-" + it.id, id: it.id, title: it.title, kind: it.kind === "folder" ? "folder" : "note", deletedAt: it.deletedAt ?? "", cloudDeleted: it.cloudDeleted }));
+    const quickRows: TrashRow[] = quick.map((r) => ({ key: "q-" + r.id, id: r.id, title: r.previewText || "（空白小记）", kind: "quick", deletedAt: r.deletedAt, cloudDeleted: r.cloudDeleted }));
     setRows([...noteRows, ...quickRows].sort((a, b) => (b.deletedAt || "").localeCompare(a.deletedAt || "")));
   }, []);
 
@@ -82,7 +86,12 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
             title={clickable ? "点击预览内容" : row.kind === "quick" ? "小记" : undefined}
           >
             <Icon size={18} />
-            <span className="mobile-trash-title mb-ellipsis">{row.title}</span>
+            <span className="mobile-trash-text">
+              <span className="mobile-trash-title mb-ellipsis">{row.title}</span>
+              {row.cloudDeleted && (
+                <span className="mb-tag mobile-trash-cloud" title="云端已彻底删除，本机仅保留这份回收站副本；恢复并同步成功后重新上传">云端已删除 · 仅本地</span>
+              )}
+            </span>
             <span className="mobile-trash-date">{row.deletedAt ? row.deletedAt.slice(0, 10) : ""}</span>
             <button className="mobile-trash-action" onClick={(e) => { e.stopPropagation(); void restore(row); }} title="恢复"><RotateCcw size={16} /></button>
             <button className="mobile-trash-action mobile-trash-danger" onClick={(e) => { e.stopPropagation(); void purge(row); }} title="彻底删除"><Trash size={15} /></button>

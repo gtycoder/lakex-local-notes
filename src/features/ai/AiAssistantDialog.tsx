@@ -160,6 +160,12 @@ export function AiAssistantDialog({ open, selectionText, noteId, attachments, on
   const canSendFirst = Boolean(instruction.trim());
   /** 图片上下文：有图时首轮把图片作为 image 块一起发出；没有文字选区时改出图片预设。 */
   const hasImages = (attachments?.length ?? 0) > 0;
+  /**
+   * 本次是否带**选区上下文**（文字选区 / 图片选区 / 块菜单把整块当选区）。
+   * 用户 261022 定稿：**区域选择用 AI 就是「只处理这段」**，不需要「附加当前文档全文」；
+   * 全文选项只留给**无选区**入口（顶栏）。判据只认入口带来的上下文，不看入口组件。
+   */
+  const selectionContext = selectionText.trim().length > 0 || hasImages;
   // 全文模式下即使只有图片，也走文字 system（它才是解释「全文块」规则的那份）。
   const imageOnly = hasImages && !selectionText.trim() && !includeDocument;
   const presets = imageOnly ? AI_IMAGE_PRESETS : AI_PROMPT_PRESETS;
@@ -535,8 +541,9 @@ export function AiAssistantDialog({ open, selectionText, noteId, attachments, on
           </span>
         </div>
       )}
-      {/* 261021 P1：附加当前文档全文（默认关）。只有该入口带 noteId 时出现；开聊后锁定。 */}
-      {noteId && (
+      {/* 261021 P1：附加当前文档全文（默认关）。**只给无选区入口**（顶栏）：有选区/图片/块上下文时
+          这一行不出现（用户 261022 点单）；开聊后锁定。 */}
+      {noteId && !selectionContext && (
         <div className="ai-dialog__doc">
           <button type="button" role="switch" aria-checked={includeDocument} aria-label="附加当前文档全文" className="ln-switch" disabled={docBusy || docLocked} onClick={() => void toggleDocument()}>
             <span className="ln-switch__knob" />

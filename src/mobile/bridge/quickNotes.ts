@@ -2,15 +2,16 @@
 import { assets, ensureDb, runPriority, runWrite } from "./context";
 
 import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs } from "../native/assetFs";
-import type { QuickNotePushOutcome } from "../../core/quickNotePush.js";
+import type { QuickNotePushOutcome } from "../../core/quickNoteSyncTypes.js";
 import { buildAssetFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { cloudStateHint, type CloudState } from "../../core/cloudState.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../../core/quickNoteModel.js";
-import type { QuickNotePage, QuickNotePageOptions } from "../data/quickNotesRepository.js";
+import type { QuickNotePage, QuickNotePageOptions, QuickNoteTrashItem } from "../data/quickNotesRepository.js";
 
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
-import { mobileCloudState, pushSingleQuickNote, scheduleQuickNoteVerify } from "./sync";
+import { mobileQuickNoteTags } from "../data/quickNoteTagService.js";
+import { mobileCloudState, pushSingleQuickNote } from "./sync";
 
 
 export const quickNotesDomain = {
@@ -19,9 +20,59 @@ export const quickNotesDomain = {
     return await quickNotesRepository.listQuickNotePage(d, options);
   },
 
-  async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {
+  async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; tagIds: string[]; tags: string[]; previewText: string; updatedAt: string } | null> {
     const d = await ensureDb();
     return await quickNotesRepository.readQuickNote(d, id);
+  },
+
+  // ---- 标签子系统（独立）：目录走 service；关系走独立 API ----
+  async listQuickNoteTags() {
+    const d = await ensureDb();
+    return await mobileQuickNoteTags.list(d);
+  },
+
+  async createQuickNoteTag(name: string) {
+    return runWrite("createQuickNoteTag", async () => {
+      const d = await ensureDb();
+      return await mobileQuickNoteTags.create(d, name);
+    });
+  },
+
+  async updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) {
+    return runWrite("updateQuickNoteTag", async () => {
+      const d = await ensureDb();
+      return await mobileQuickNoteTags.update(d, id, patch);
+    });
+  },
+
+  async reorderQuickNoteTags(ids: string[]) {
+    return runWrite("reorderQuickNoteTags", async () => {
+      const d = await ensureDb();
+      return await mobileQuickNoteTags.reorder(d, ids);
+    });
+  },
+
+  async mergeQuickNoteTags(sourceId: string, targetId: string) {
+    return runWrite("mergeQuickNoteTags", async () => {
+      const d = await ensureDb();
+      return await mobileQuickNoteTags.merge(d, sourceId, targetId);
+    });
+  },
+
+  async deleteQuickNoteTag(id: string) {
+    return runWrite("deleteQuickNoteTag", async () => {
+      const d = await ensureDb();
+      return await mobileQuickNoteTags.delete(d, id);
+    });
+  },
+
+  /** 标签关系（独立 API）：整组替换。 */
+  async setQuickNoteTags(id: string, tagIds: string[]) {
+    return runWrite("setQuickNoteTags", async () => {
+      const d = await ensureDb();
+      await mobileQuickNoteTags.setNoteTags(d, id, tagIds);
+      return await quickNotesRepository.readQuickNote(d, id);
+    });
   },
 
   async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
@@ -43,15 +94,15 @@ export const quickNotesDomain = {
     });
   },
 
-  async getQuickNoteDraft(): Promise<{ id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tags?: string[]; updatedAt: string } | null> {
+  async getQuickNoteDraft(): Promise<{ id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tagIds?: string[]; updatedAt: string } | null> {
     const d = await ensureDb();
     return await quickNotesRepository.readQuickNoteDraft(d);
   },
 
-  async saveQuickNoteDraft(draft: { id: string; text: string; body?: string; images?: StoredQuickNoteImage[]; tags?: string[] }): Promise<void> {
+  async saveQuickNoteDraft(draft: { id: string; text: string; body?: string; images?: StoredQuickNoteImage[]; tagIds?: string[] }): Promise<void> {
     return runWrite("saveQuickNoteDraft", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, body: draft.body, images: draft.images ?? [], tags: draft.tags ?? [], updatedAt: new Date().toISOString() });
+      await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, body: draft.body, images: draft.images ?? [], tagIds: draft.tagIds ?? [], updatedAt: new Date().toISOString() });
     });
   },
 
@@ -76,7 +127,7 @@ export const quickNotesDomain = {
     };
   },
 
-  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[]; tags?: string[] }): Promise<string> {
+  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[] }): Promise<string> {
     return runWrite("saveQuickNoteContent", async () => {
       const d = await ensureDb();
       return await quickNotesRepository.saveQuickNoteContent(d, id, payload);
@@ -86,7 +137,6 @@ export const quickNotesDomain = {
   async syncQuickNote(id: string): Promise<QuickNotePushOutcome> {
     if ((await mobileCloudState()) === "offline") throw new Error(cloudStateHint("offline") ?? "云同步已关闭");
     const outcome = await runPriority("syncQuickNote", () => pushSingleQuickNote(id));
-    if (outcome.status === "pushed") scheduleQuickNoteVerify(id);
     return outcome;
   },
 
@@ -114,7 +164,7 @@ export const quickNotesDomain = {
     return loadAssetBytesFs("quick-notes/" + id + "/" + filename);
   },
 
-  async listQuickNoteTrash(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; previewText: string }>> {
+  async listQuickNoteTrash(): Promise<QuickNoteTrashItem[]> {
     const d = await ensureDb();
     return await quickNotesRepository.listQuickNoteTrash(d);
   },

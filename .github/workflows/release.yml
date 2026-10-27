@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag（需已存在，如 v0.1.0）"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GITEE_OWNER: gtycoder
+  GITEE_REPO: local-lakex-notes
+
+jobs:
+  macos:
+    name: macOS (dmg/zip)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck & build web
+        run: |
+          npx tsc --noEmit
+          npx vite build
+      - name: Package macOS (unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
+        run: npx electron-builder --mac --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+
+  android:
+    name: Android (debug apk)
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Set up Android SDK
+        run: |
+          sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          echo "sdk.dir=$sdk" > android/local.properties
+          ls "$sdk" >/dev/null
+      - name: Install dependencies
+        run: npm ci
+      - name: Build mobile web & sync Capacitor
+        run: |
+          npx vite build --config vite.mobile.config.ts
+          npx cap sync android
+      - name: Use upstream Maven repositories in CI
+        run: |
+          # 阿里云镜像对个别构件返回 502（j2objc-annotations:1.3），Gradle 会直接禁用该仓库
+          # CI 在国外访问 google/mavenCentral 正常 ⇒ 构建前移除 aliyun 镜像（仅 CI checkout 内）
+          sed -i '/maven.aliyun.com/d' android/build.gradle android/settings.gradle
+      - name: Assemble debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Rename APK with product name + version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          mv android/app/build/outputs/apk/debug/app-debug.apk              "android/app/build/outputs/apk/debug/LocalLakexNotes-${version}-android-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  windows:
+    name: Windows (nsis exe)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck & build web
+        run: |
+          npx tsc --noEmit
+          npx vite build
+      - name: Package Windows (unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win nsis --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    needs: [macos, android, windows]
+    if: always() && needs.macos.result == 'success'
+    runs-on: ubuntu-24.04
+    env:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: dist/**
+      - name: Mirror assets to Gitee Release
+        if: env.GITEE_TOKEN != ''
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          api="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
+          rid=""
+          for attempt in 1 2; do
+            resp=$(curl -sS -X POST "$api/releases" \
+              -d "access_token=$GITEE_TOKEN" -d "tag_name=$TAG" -d "name=$TAG" \
+              -d "body=Automated release (built on GitHub Actions)" -d "target_commitish=master" || true)
+            rid=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
+            [ -n "$rid" ] && break
+            rid=$(curl -sS "$api/releases/tags/$TAG?access_token=$GITEE_TOKEN" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
+            [ -n "$rid" ] && break
+            sleep 2
+          done
+          [ -n "$rid" ] || { echo "无法创建/找到 Gitee release"; exit 1; }
+          for f in dist/*; do
+            [ -f "$f" ] || continue
+            echo "upload $f"
+            curl -sS -X POST "$api/releases/$rid/attach_files" \
+              -F "access_token=$GITEE_TOKEN" -F "file=@$f" > /dev/null
+          done

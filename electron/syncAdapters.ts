@@ -7,7 +7,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Store } from "./store.js";
 import type { ObjectStore } from "./s3Store.js";
-import type { S3Store, SyncDbPort, LocalNoteRow, SyncConfig } from "../src/core/syncEngine.js";
+import type { S3Store, SyncDbPort, LocalNoteRow, SyncConfig } from "../src/core/syncEngineTypes.js";
 import type { ManifestFolder, ManifestNote } from "../src/core/manifestTypes.js";
 import { sha256Hex } from "../src/core/syncUtils.js";
 import { setSha256HexImpl } from "../src/core/sha256Sync.js";
@@ -58,7 +58,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     syncState: n.syncState ?? "local",
     trashedAt: n.trashedAt ?? null,
     restorePendingAt: store.isRestorePending(n.id) ? n.updatedAt : null,
-    isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null, isConflict: n.isConflict,
+    isEditLocked: !!n.isEditLocked, editLockedAt: n.editLockedAt ?? null, icon: n.icon ?? null, isConflict: n.isConflict,
     deletedFromParentId: n.deletedFromParentId ?? null,
     kind: n.kind,
     content: "",
@@ -127,7 +127,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     async applyRemotePurge(id: string): Promise<void> { store.applyRemotePurge(id); },
     async rememberDeleted(note: ManifestNote, deletedAt: string): Promise<void> { store.rememberDeleted(note as never, deletedAt); },
     async applyRemoteNoteMeta(note: ManifestNote): Promise<void> { store.applyRemoteNoteMeta(note as never); },
-    async applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): Promise<void> { store.applyRemoteLock(id, locked, lockedAt); },
+    async applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null): Promise<void> { store.applyRemoteEditLock(id, locked, editLockedAt); },
     async markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null): Promise<void> {
       store.setBaseHash(id, contentHash);
       // 无条件写：string = 本机上传版本；null = 两端一致 skip（清除误标，SQL 写 NULL）
@@ -135,7 +135,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       const n = store.getNoteForSync(id);
       if (n) store.markSyncedIfUnchanged(id, {
         contentHash, updatedAt: metaAt, title: n.title, parentId: n.parentId ?? null,
-        sortOrder: n.sortOrder, isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
+        sortOrder: n.sortOrder, isEditLocked: !!n.isEditLocked, editLockedAt: n.editLockedAt ?? null, icon: n.icon ?? null,
       });
     },
     async markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string): Promise<void> {
@@ -146,7 +146,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       if (lastUploadedHash) store.setLastUploadedHash(id, lastUploadedHash);
       store.markSyncedIfUnchanged(id, {
         contentHash: expectedContentHash, updatedAt: metaAt, title: n.title, parentId: n.parentId ?? null,
-        sortOrder: n.sortOrder, isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
+        sortOrder: n.sortOrder, isEditLocked: !!n.isEditLocked, editLockedAt: n.editLockedAt ?? null, icon: n.icon ?? null,
       });
     },
     async setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null): Promise<void> {
@@ -158,7 +158,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
         const n = store.getNoteForSync(id);
         if (n) store.markSyncedIfUnchanged(id, {
           contentHash, updatedAt: metaAt, title: n.title, parentId: n.parentId ?? null,
-          sortOrder: n.sortOrder, isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
+          sortOrder: n.sortOrder, isEditLocked: !!n.isEditLocked, editLockedAt: n.editLockedAt ?? null, icon: n.icon ?? null,
         });
       }
     },

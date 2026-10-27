@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 60.1 (88133) - https://sketch.com -->
+    <title>画板</title>
+    <desc>Created with Sketch.</desc>
+    <defs>
+        <rect id="path-1" x="0" y="0" width="24" height="24"></rect>
+        <path d="M4.875,2.625 L19.125,2.625 C20.3676407,2.625 21.375,3.63235931 21.375,4.875 L21.375,19.125 C21.375,20.3676407 20.3676407,21.375 19.125,21.375 L4.875,21.375 C3.63235931,21.375 2.625,20.3676407 2.625,19.125 L2.625,4.875 C2.625,3.63235931 3.63235931,2.625 4.875,2.625 Z" id="path-3"></path>
+    </defs>
+    <g id="画板" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="编组">
+            <mask id="mask-2" fill="white">
+                <use xlink:href="#path-1"></use>
+            </mask>
+            <g id="蒙版"></g>
+            <mask id="mask-4" fill="white">
+                <use xlink:href="#path-3"></use>
+            </mask>
+            <use id="形状结合" fill="#DE5F31" xlink:href="#path-3"></use>
+            <path d="M1.5,20.25 L5.60153381,14.2149973 C5.84298216,13.8692647 6.31155404,13.7900575 6.64811841,14.0380831 C6.71452626,14.0870212 6.77270077,14.1467805 6.82034119,14.2149973 L9.50576157,18.0602809" id="路径-3" stroke="#FFFFFF" stroke-width="2.0625" stroke-linecap="round" stroke-linejoin="round" mask="url(#mask-4)"></path>
+            <path d="M9.50576157,18.0603111 L14.6254596,10.7455891 C14.8672588,10.4001207 15.3359108,10.3214167 15.6722232,10.5697987 C15.738145,10.618485 15.7959335,10.6778438 15.8433327,10.7455578 L22.4296875,20.25" id="路径-3备份" stroke="#FFFFFF" stroke-width="2.0625" stroke-linecap="round" stroke-linejoin="round" mask="url(#mask-4)"></path>
+            <path d="M9,9.46875 C9.77665043,9.46875 10.40625,8.83915043 10.40625,8.0625 C10.40625,7.28584957 9.77665043,6.65625 9,6.65625 C8.22334957,6.65625 7.59375,7.28584957 7.59375,8.0625 C7.59375,8.83915043 8.22334957,9.46875 9,9.46875 Z" id="椭圆形" fill="#FFFFFF" mask="url(#mask-4)"></path>
+        </g>
+    </g>
+</svg>

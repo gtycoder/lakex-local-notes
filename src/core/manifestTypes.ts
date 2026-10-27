@@ -1,18 +1,20 @@
 /**
  * 同步清单（Manifest）共享类型（lake-core）。
- * 单一来源迁自 electron/sync.ts / electron/quickNotesSync.ts；
+ * 单一来源迁自已删除的 electron/sync.ts / electron/quickNotesSync.ts（v3 只保留兼容解析测试夹具用途）；
  * 供移动端与同步对账纯函数（lakeReconcile / quickNoteReconcile）复用。
  */
 
 import type { NoteKind } from "./noteKind.js";
+import type { QuickNoteTag } from "./quickNoteTags.js";
 
 /** Lake 笔记清单条目。 */
 export interface ManifestNote {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; contentHash: string; isConflict: boolean;
-  /** v3：只读锁元数据（独立于正文哈希，按 lockedAt 字段级 LWW 合并） */
-  isLocked?: boolean;
-  lockedAt?: string | null;
+  /** v3：锁编辑元数据（锁编辑 ≠ 文档加密；独立于正文哈希，按 editLockedAt 字段级 LWW 合并）。
+   * 这是**内存**字段名；线上清单 JSON 键冻结为 isLocked / lockedAt（见 syncUtils 的解析/写出边界映射）。 */
+  isEditLocked?: boolean;
+  editLockedAt?: string | null;
   /** 文档自定义图标（可选字段，旧清单无此字段时本地保持原样） */
   icon?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink）。字段自历史清单 v6 引入；
@@ -58,6 +60,10 @@ export interface ManifestItem {
   contentHash: string;
   isConflict: boolean;
   assets: Array<{ id: string; filename: string; mimeType: string; width: number | null; height: number | null; size: number; hash: string }>;
+  /** 小记标签 ID（关系在本地关联表，随清单同步；缺失 = 无标签）。 */
+  tagIds?: string[];
+  /** 标签关系最后修改时间（与正文独立，按它做关系 LWW；缺失 = 0）。 */
+  tagsUpdatedAt?: string;
   deleted?: boolean;
   deletedAt?: string;
 }
@@ -69,4 +75,6 @@ export interface QuickNotesManifest {
   commitId: string;
   createdAt: string;
   items: ManifestItem[];
+  /** 标签目录（可选；旧端忽略、原样带回）。桌面合并写入，移动端只做字段保真。 */
+  tags?: QuickNoteTag[];
 }

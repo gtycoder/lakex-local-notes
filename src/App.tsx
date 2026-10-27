@@ -125,6 +125,16 @@ export function App() {
     const handle = window.setTimeout(prewarm, 4000);
     return () => window.clearTimeout(handle);
   }, [workspace]);
+  // 261023：macOS 原生全屏（独立 Space）里系统把标题栏/红绿灯一起隐藏 ⇒ 顶栏不再留 82px 让位，
+  // 整体从最左侧开始（仿思源；只影响全屏，窗口/最大化仍是 82px）。判据 = 主进程广播的真实全屏态。
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = (fullscreen: boolean) => root.classList.toggle("window-fullscreen", fullscreen);
+    let off: (() => void) | undefined;
+    try { off = native.onWindowFullscreen(apply); } catch { /* 非 Electron（浏览器预览/测试）忽略 */ }
+    return () => { off?.(); root.classList.remove("window-fullscreen"); };
+  }, []);
+
   // boot 窗口：等 workspace（或启动错误）已经渲染到主窗口后再显示，避免主窗口先露白/重复播 splash。
   useEffect(() => {
     if (!workspace && !error) return;
@@ -271,7 +281,7 @@ export function App() {
 
   useBootstrap({
     setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
-    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote,
+    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, showNotice,
   });
 
   useSyncProgress({
@@ -301,6 +311,25 @@ export function App() {
   });
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
+
+  /**
+   * 「正文缺失」面板的重新读取（261023）：同步把正文拉回来后刷该 tab；仍缺失就明确告知，不静默。
+   */
+  const retryMissingBody = useCallback(async (noteId: string) => {
+    try {
+      const note = await native.readNote(noteId);
+      if (note.bodyMissing) {
+        showNotice(`《${note.title || "无标题"}》的正文仍然缺失（可等同步拉回或从历史恢复）。`);
+        return;
+      }
+      setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId
+        ? { ...tab, title: note.title, content: note.content, bodyMissing: false, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+        : tab));
+      showNotice("已重新读取正文。");
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+    }
+  }, [setOpenTabs, setError, showNotice]);
 
 
   /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
@@ -505,8 +534,8 @@ export function App() {
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const {
-    activeNodeSyncState, editorPrefs, notePathTitle,
-    tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
+    activeNodeDirty, activeNodeConflict, editorPrefs, notePathTitle,
+    tabInfos, outlineVisible, lockedNoteIds, cloudDeletedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   } = deriveDesktopView({
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
     fontSize: settings.fontSize, showToolbar: settings.showToolbar, floatingToolbar: settings.floatingToolbar,
@@ -659,6 +688,8 @@ export function App() {
             onEditorReady={handleEditorReady}
         onEditorCapture={handleCaptureReady}
             onReloadNote={reloadNoteTab}
+            onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
+            onRetryBody={(noteId) => { void retryMissingBody(noteId); }}
             onCreateNote={() => void createNote()}
             outlineSlot={outlineVisible ? (
               <OutlineSidebar
@@ -710,7 +741,7 @@ export function App() {
             <div className="tab-items" />
             <div className="tabbar-trailing">{topBarSearch}</div>
           </header>
-          <AssetsBrowser active={desktopWorkspace === "resources"} />
+          <AssetsBrowser active={desktopWorkspace === "resources"} onDataChanged={() => { void refreshTree(); }} />
         </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
@@ -722,7 +753,9 @@ export function App() {
           notice={notice}
           documentStatus={getDocumentStatus({
             hasCloudConfig: cloudConfigured,
-            syncState: activeNodeSyncState as "local" | "synced" | "conflict",
+            isDirty: activeNodeDirty,
+            isConflict: activeNodeConflict,
+            isCloudDeleted: activeNoteId !== null && cloudDeletedNoteIds.has(activeNoteId),
             // 只取**活动文档**的保存状态；没有记录时回落到标签自身的 dirty（按文档，后台保存不污染当前状态栏）
             saveState: activeNoteId
               ? (saveStates[activeNoteId] ?? (tabInfos.find((tab) => tab.noteId === activeNoteId)?.dirty ? "dirty" : "idle"))

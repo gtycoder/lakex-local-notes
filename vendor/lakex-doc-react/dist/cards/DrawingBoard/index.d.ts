@@ -1,0 +1,14 @@
+import type { CustomCard, CustomCardConfig } from '../../components/lakex/types';
+import DrawingBoardEditor from './DrawingBoardEditor';
+import DrawingBoardViewer from './DrawingBoardViewer';
+import type { IDrawingBoardCardValue } from './types';
+export declare const drawingBoardCardConfig: CustomCardConfig<IDrawingBoardCardValue>;
+export declare const flowchartBoardCardConfig: CustomCardConfig<IDrawingBoardCardValue>;
+export declare const umlBoardCardConfig: CustomCardConfig<IDrawingBoardCardValue>;
+export declare const mindmapBoardCardConfig: CustomCardConfig<IDrawingBoardCardValue>;
+export declare const drawingBoardCard: CustomCard<IDrawingBoardCardValue>;
+export declare const flowchartBoardCard: CustomCard<IDrawingBoardCardValue>;
+export declare const umlBoardCard: CustomCard<IDrawingBoardCardValue>;
+export declare const mindmapBoardCard: CustomCard<IDrawingBoardCardValue>;
+export { DrawingBoardEditor, DrawingBoardViewer };
+export type { DrawingBoardPreset, IDrawingBoardCardValue } from './types';

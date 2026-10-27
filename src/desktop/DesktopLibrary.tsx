@@ -29,6 +29,10 @@ export interface DesktopLibraryProps {
   onExportBitableCsv?: (noteId: string) => void;
   /** 活动标签在回收站中：横幅里的"打开回收站"出口。 */
   onOpenTrash?: () => void;
+  /** 正文文件缺失面板：打开历史版本。 */
+  onOpenHistory?: (noteId: string) => void;
+  /** 正文文件缺失面板：重新读取（同步拉回正文后）。 */
+  onRetryBody?: (noteId: string) => void;
   pinnedNoteIds: ReadonlySet<string>;
   onTabChange: (noteId: string) => void;
   onTabClose: (noteId: string) => void;
@@ -109,6 +113,8 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onEditorReady={onEditorReady}
         onEditorCapture={onEditorCapture}
         onReloadNote={onReloadNote}
+        onOpenHistory={props.onOpenHistory}
+        onRetryBody={props.onRetryBody}
         emptyAction={<button className="ln-btn ln-btn--primary" onClick={onCreateNote}>新建文档</button>}
       />
       {outlineSlot}

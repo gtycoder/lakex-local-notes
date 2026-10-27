@@ -8,173 +8,108 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Store } from "./store.js";
 import { ObjectStore } from "./s3Store.js";
-import { pruneOldManifests } from "./s3Maintenance.js";
-import type { SyncProgress, SyncResult, SyncWarning } from "./syncTypes.js";
-import { parseLakeManifest, objectKey, MAX_MANIFEST_BYTES, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
-import { syncNow as engineSyncNow, downloadNoteAssets, type SyncReport } from "../src/core/syncEngine.js";
+import type { SyncProgress, SyncResult } from "./syncTypes.js";
+import { sha256Hex, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
+import { S3V3_POINTER_KEY, indexKey, lakeBodyKey } from "../src/core/s3v3Keys.js";
+import { backfillV3Assets, type AssetBackfillPort } from "../src/core/s3v3AssetBackfill.js";
+import type { QuickNotePushOutcome } from "../src/core/quickNoteSyncTypes.js";
+import { parseLakeIndexBytes } from "../src/core/s3v3Index.js";
+import { validatePointer, type S3v3Pointer } from "../src/core/s3v3Types.js";
+import { S3v3S3Remote } from "./s3v3/s3Remote.js";
+import type { S3v3Remote } from "./s3v3/ports.js";
 import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
-import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
+import { perfMessage } from "../src/core/logFormat.js";
 
 /**
  * Step 5：桌面 Controller 化入口。
  */
+let v3Gate: Promise<unknown> = Promise.resolve();
+/** v3 全量同步串行化：整轮同步与“单条推送→全量 v3”不会并发写同一设备 sidecar/索引。 */
+async function serializedV3<T>(fn: () => Promise<T>): Promise<T> {
+  let release!: () => void;
+  const mine = new Promise<void>((r) => { release = r; });
+  const previous = v3Gate;
+  v3Gate = mine;
+  await previous.catch(() => undefined);
+  try { return await fn(); } finally { release(); }
+}
+
 export async function syncNowViaEngine(
   store: Store,
   onProgress?: (p: SyncProgress) => void,
-  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
+  _createRemote?: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore,
 ): Promise<SyncResult> {
-  const syncStart = Date.now();
-  store.logScopes.sync.info("[perf] syncNowViaEngine start");
-  const settings = store.getS3Settings();
-  if (!settings) throw new Error("请先保存 S3 配置");
-  validateS3Settings(settings);
-  const remote = createRemote(settings, store.logScopes);
-  const report = (p: SyncProgress) => { try { onProgress?.(p); } catch { /* 渲染层已关闭 */ } };
-  report({ phase: "connect", message: "正在连接 S3..." });
-  const connectStart = Date.now();
-  await remote.test();
-  store.logScopes.sync.info(`[perf] connect ${Date.now() - connectStart}ms`);
-
-  // adapter 装配（Step 3）
-  const cfg = syncConfigFromStore(store);
-  const s3Store = createS3StoreAdapter(remote, cfg.prefix);
-  const dbPort = createStoreSyncPort(store);
-
-  // 进度阶段映射：syncEngine（pull/upload/publish）→ 桌面（connect/download/upload/manifest/done）
-  const phaseMap: Record<string, SyncProgress["phase"]> = {
-    pull: "download", upload: "upload", publish: "manifest",
-  };
-
-  // P3-3：本次同步若发布了新 manifest，engine 的 onPublished 回调会把新 commitId 填到这里，
-  // 供结果组装直接复用；未发布（仅拉取对账/零变更）时再回退 readLatestCommitId。
-  let publishedCommitId: string | null = null;
-
-  const engineReport = await engineSyncNow(cfg, s3Store, dbPort, {
-    strictAssets: true,
-    onProgress: (phase, message) => {
-      const mapped = phaseMap[phase] ?? "download";
-      report({ phase: mapped, message });
-    },
-    onPublished: async (next, prev) => {
-      // P3-3：本次已发布 → 直接记下新 commitId，避免结束后 readLatestCommitId 再全量 GET+解析一次。
-      publishedCommitId = next.commitId;
-      // 4.5 GC 差集标记（对齐原 sync.ts 语义）：新 manifest 不再引用的旧正文/资源 → 待回收
-      try {
-        const newById = new Map(next.notes.map((n) => [n.id, n]));
-        for (const p of prev?.notes ?? []) {
-          if (p.deleted) continue;
-          const nx = newById.get(p.id);
-          if (!nx || nx.deleted) continue;
-          if (nx.contentHash !== p.contentHash) store.addS3GcPending(objectKey(p.id, p.contentHash));
-          const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
-          for (const asset of p.assets ?? []) {
-            if (nextAssets.has(asset.filename)) continue;
-            if (!store.getProtectedRefs(p.id).has(asset.filename)) store.addS3GcPending(`assets/${p.id}/${asset.filename}`);
-          }
-        }
-        const referencedNow = new Set<string>();
-        for (const note of next.notes) {
-          if (note.deleted) continue;
-          referencedNow.add(objectKey(note.id, note.contentHash));
-          for (const asset of note.assets ?? []) referencedNow.add(`assets/${note.id}/${asset.filename}`);
-        }
-        store.removeS3GcPending([...referencedNow]);
-      } catch (e) { store.logScopes.sync.warn(`[gc-mark] 失败（不影响同步）: ${(e as Error).message}`); }
-      // 滞后裁剪旧 manifest（稳态 latest + 本 commit + 链 3 层 = 5 份；未到水位只 list 一次，见 pruneOldManifests）
-      try { await pruneOldManifests(remote, next.commitId, prev, store.logScopes); } catch (e) { store.logScopes.sync.warn(`[prune] 失败（不影响同步）: ${(e as Error).message}`); }
-    },
+  // 261025 转正完成：只保留 v3；legacy 回滚入口已移除。
+  return serializedV3(async () => {
+    const { syncWithV3 } = await import("./s3v3/desktopSync.js");
+    return syncWithV3(store, onProgress);
   });
-
-  // 4.6 purge 前缀立即删（M4）：先写 manifest（engine 已发布）→ 再删 objects/assets 前缀
-  const purgedNotes = store.listPurgedNotesForSync();
-  for (const note of purgedNotes) {
-    const purgeStart = Date.now();
-    const objs = await remote.deletePrefix(`objects/${note.id}-`);
-    const assets = await remote.deletePrefix(`assets/${note.id}/`);
-    store.markPurgeSynced(note.id);
-    store.logScopes.sync.info(`[perf] purge ${note.id} ${Date.now() - purgeStart}ms (objects=${objs}, assets=${assets})`);
-  }
-
-  // warnings 已由 core 直接产出结构化对象（kind/noteId/title/filename/message）；这里只透传，不再正则反解字符串。
-  const warnings: SyncWarning[] = engineReport.warnings;
-  const completedAt = new Date().toISOString();
-  const commitId = publishedCommitId ?? await readLatestCommitId(remote);
-  const result: SyncResult = {
-    uploaded: engineReport.uploaded, downloaded: engineReport.appliedRemote, conflicts: engineReport.supersededNotes.length,
-    manifestId: commitId ?? "", completedAt, supersededNotes: engineReport.supersededNotes,
-    foldersUploaded: engineReport.foldersUploaded, foldersDownloaded: engineReport.foldersDownloaded,
-    uploadedBytes: engineReport.uploadedBytes, downloadedBytes: engineReport.downloadedBytes,
-    durationMs: Date.now() - syncStart,
-    trashed: engineReport.trashedDown + engineReport.trashedUp,
-    warnings: warnings.length > 0 ? warnings : undefined,
-  };
-  store.markSyncComplete(completedAt);
-  store.recordSyncResult(JSON.stringify(result));
-  report({ phase: "done", message: "同步完成", supersededNotes: engineReport.supersededNotes });
-  store.logScopes.sync.info(`[perf] syncNowViaEngine done ${Date.now() - syncStart}ms (uploaded=${engineReport.uploaded}, applied=${engineReport.appliedRemote})`);
-  return result;
-}
-
-async function readLatestCommitId(remote: ObjectStore): Promise<string | null> {
-  try {
-    const bytes = await remote.getOptional("manifests/latest.json", { maxBytes: MAX_MANIFEST_BYTES });
-    if (!bytes) return null;
-    return parseLakeManifest(bytes).commitId;
-  } catch { return null; }
 }
 
 /**
- * 下载某笔记的 declared 资产（惰性下载补偿）。best-effort：无 S3 配置/资源缺失/网络失败
- * 一律返回 warnings、不抛错（恢复/预览都不被下载阻塞）。
- * @param onlyMissing 只下载本地缺失的资源（预览用，已有文件不重复拉）
+ * 单条小记推送入口（「保存并同步」）：与整轮同步共用 v3 串行门（同一设备 sidecar/指针不得并发写）。
+ * 内部只 upsert 一条；遇到「必须整轮」的情形（云端无 pointer/无基线/不同代，或远端墓碑未恢复）
+ * 会执行一次整轮并回传 full-sync（不静默降级）。
  */
-async function downloadDeclaredAssets(
+export async function pushQuickNoteViaEngine(store: Store, id: string): Promise<QuickNotePushOutcome> {
+  return serializedV3(async () => {
+    const { pushQuickNoteWithV3 } = await import("./s3v3/desktopSync.js");
+    return pushQuickNoteWithV3(store, id);
+  });
+}
+
+/**
+ * 回收站预览 / 恢复的后台补拉：只补云端声明、本地缺失/损坏的资产（**v3 原生路径**）。
+ *
+ * 旧实现读本地 `declared_assets` 表，而 v3 从不写该表（声明是独立的内容寻址对象）⇒ 空操作。
+ * 现在：pointer → lake 索引 → 该篇 assetsHash → 声明对象 → 本地差集（同名+同 size+同 sha256 跳过）
+ * → 按需 GET + size/sha256 校验后落盘。best-effort：无配置/关云同步/网络失败一律只回 warnings。
+ */
+export async function ensureTrashNoteAssets(
   store: Store,
   id: string,
-  onlyMissing: boolean,
-  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore,
+  deps: { remote?: S3v3Remote; force?: boolean } = {},
 ): Promise<{ warnings: string[]; skipped?: CloudState }> {
   const warnings: string[] = [];
   const settings = store.getS3Settings();
-  // 单一判据：没配置 或 关了云同步 ⇒ 一律不出网（用户 261006：关闭云同步 = 当作纯离线本地空间）。
-  const state = cloudStateOf(!!settings, store.getSyncSettings());
-  if (!settings || !canTouchNetwork(state)) return { warnings, skipped: state };
-  try {
+  if (!deps.remote) {
+    if (!settings) return { warnings, skipped: "unconfigured" };
+    // 单一判据：没配置 或 关了云同步 ⇒ 一律不出网（用户 261006：关闭云同步 = 纯离线本地空间）。
+    const state = cloudStateOf(true, store.getSyncSettings());
+    if (!canTouchNetwork(state)) return { warnings, skipped: state };
     validateS3Settings(settings);
-    const remote = createRemote(settings, store.logScopes);
-    await remote.test();
-    const cfg = syncConfigFromStore(store);
-    const s3Store = createS3StoreAdapter(remote, cfg.prefix);
-    const dbPort = createStoreSyncPort(store);
-    let assets = store.listDeclaredAssets(id);
-    if (onlyMissing) {
-      const dir = store.noteAssetsPathFor(id);
-      assets = assets.filter((a) => !fs.existsSync(path.join(dir, a.filename)));
-    }
-    if (assets.length === 0) return { warnings };
-    const report: SyncReport = {
-      pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
-      warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
-      trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
-    };
-    await downloadNoteAssets(cfg, s3Store, dbPort, id, assets, report, false);
-    // 回收站恢复/预览的补拉对外仍是 string[]（TrashPanel 直接展示）；结构化只用于 SyncResult。
-    warnings.push(...report.warnings.map((w) => w.message));
+  }
+  const remote = deps.remote ?? new S3v3S3Remote({
+    endpoint: settings!.endpoint, region: settings!.region, bucket: settings!.bucket,
+    accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
+    prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
+  });
+  const port: AssetBackfillPort = {
+    listLocal: async (noteId) => {
+      try { return (await fs.promises.readdir(store.noteAssetsPathFor(noteId))).filter((f) => !f.includes(".tmp")); } catch { return []; }
+    },
+    readLocal: async (noteId, filename) => {
+      try { return new Uint8Array(await fs.promises.readFile(path.join(store.noteAssetsPathFor(noteId), filename))); } catch { return null; }
+    },
+    writeLocal: async (noteId, filename, bytes) => {
+      const dir = store.noteAssetsPathFor(noteId);
+      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.writeFile(path.join(dir, filename), Buffer.from(bytes));
+    },
+  };
+  const startedAt = Date.now();
+  try {
+    const result = await backfillV3Assets(remote, "lake", id, port, { force: deps.force });
+    warnings.push(...result.warnings);
+    store.logScopes.sync.info(perfMessage("v3.asset-backfill", Date.now() - startedAt, {
+      noteId: id, found: result.found, downloaded: result.downloaded, skipped: result.skipped,
+      missing: result.missing.length, failed: result.failed.length,
+    }));
   } catch (e) {
     warnings.push(`资源下载失败（保留恢复/预览，资源下次同步补拉）: ${(e as Error).message}`);
   }
   return { warnings };
-}
-
-/** 回收站预览 / 恢复后台补拉：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。
- *  离线（未配置 / 关闭云同步）时直接返回 `skipped`，一个请求都不发。 */
-export async function ensureTrashNoteAssets(
-  store: Store,
-  id: string,
-  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
-): Promise<{ warnings: string[]; skipped?: CloudState }> {
-  return downloadDeclaredAssets(store, id, true, createRemote);
 }
 
 /*
@@ -183,3 +118,52 @@ export async function ensureTrashNoteAssets(
  * 调 ensureTrashNoteAssets 在后台补拉，并按回执给用户「正在从 S3 拉取缺失数据…」/「未能下载」。
  * 恢复红线不变：恢复是墓碑权威的唯一显式例外，永远成功。
  */
+
+/**
+ * 资源页「缺正文」→ 从云端拉回该篇正文（261023，用户显式发起的恢复动作）。
+ *
+ * 语义：只在**允许出网**时执行（「关闭云同步 = 完全没配置」红线）；拉回前校验 sha256；
+ * 失败一律明确回报（不静默、不写空正文），由 UI 决定下一步（历史恢复 / 删除）。
+ * 资产（图片/附件）不在这里处理：正文落盘后，下一次正常同步会按清单差集补拉。
+ */
+export async function restoreMissingBodyFromCloud(
+  store: Store,
+  noteId: string,
+  deps: { remote?: S3v3Remote } = {},
+): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" }> {
+  const settings = store.getS3Settings();
+  // deps.remote = 测试/诊断注入（生产永远走已配置的 S3 settings）。
+  if (!settings && !deps.remote) return { ok: false, reason: "no-cloud-config" };
+  if (!deps.remote && !canTouchNetwork(cloudStateOf(true, store.getSyncSettings()))) return { ok: false, reason: "cloud-off" };
+  if (settings) validateS3Settings(settings);
+  const startedAt = Date.now();
+  // v3（261026 转正）：资源页「缺正文 → 从云端拉回」不能再读旧 manifests/latest.json（v3 永不写它，
+  // 旧实现 100% 返回 not-in-cloud）。改为读 v3 pointer → lake 索引 → 内容寻址正文对象，并校验 sha256。
+  const remote = deps.remote ?? new S3v3S3Remote({
+    endpoint: settings!.endpoint, region: settings!.region, bucket: settings!.bucket,
+    accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
+    prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
+  });
+  const pointerBytes = await remote.get(S3V3_POINTER_KEY);
+  if (!pointerBytes) return { ok: false, reason: "not-in-cloud" };
+  let pointer: S3v3Pointer;
+  try {
+    const parsed = validatePointer(JSON.parse(new TextDecoder().decode(pointerBytes)));
+    if (!parsed.ok) return { ok: false, reason: "not-in-cloud" };
+    pointer = parsed.pointer;
+  } catch { return { ok: false, reason: "not-in-cloud" }; }
+  const indexBytes = await remote.get(indexKey("lake", pointer.lake.commit));
+  if (!indexBytes) return { ok: false, reason: "not-in-cloud" };
+  let entry: ReturnType<typeof parseLakeIndexBytes>["index"]["notes"][number] | undefined;
+  try { entry = parseLakeIndexBytes(indexBytes).index.notes.find((n) => n.id === noteId); }
+  catch { return { ok: false, reason: "not-in-cloud" }; }
+  if (!entry) return { ok: false, reason: "not-in-cloud" };
+  const bytes = await remote.get(lakeBodyKey(noteId, entry.contentHash));
+  if (!bytes) return { ok: false, reason: "object-missing" };
+  if (sha256Hex(bytes) !== entry.contentHash) return { ok: false, reason: "hash-mismatch" };
+  store.writeRestoredBody(noteId, new TextDecoder().decode(bytes));
+  store.setBaseHash(noteId, entry.contentHash);
+  store.markSynced(noteId);
+  store.logScopes.sync.info(perfMessage("missing-body.restoreFromCloud", Date.now() - startedAt, { noteId, bytes: bytes.length }));
+  return { ok: true, title: entry.title };
+}

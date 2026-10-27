@@ -3,7 +3,7 @@ import {
   normalizeQuickNoteContent,
   quickNoteBodyFromTextAndImages,
   previewQuickNote,
-  sameQuickNoteExceptTags,
+  sameQuickNoteContent,
   serializeQuickNoteContent,
   validateQuickNoteContent,
   validateQuickNoteImageBytes,
@@ -20,6 +20,8 @@ import {
   writeDraftJournal,
   writeQuickNoteBody,
 } from "./noteBodies.js";
+import { quickNoteTagNames } from "./quickNoteTagsRepository.js";
+import { listAllQuickNoteTagIds, listQuickNoteTagIds, removeQuickNoteLinks, setQuickNoteTagVersion } from "./quickNoteTagLinksRepository.js";
 
 /**
  * 移动端小记仓储（261019 起与桌面存储架构对齐）：
@@ -46,6 +48,7 @@ export interface QuickNoteListItem {
   firstImage: string | null;
   /** 列表投影只带轻量元数据；正文/图片清单由可见卡片按需 readQuickNote。 */
   tags: string[];
+  tagIds: string[];
 }
 
 export interface QuickNoteCursor {
@@ -66,6 +69,10 @@ export interface QuickNotePageOptions {
 export interface QuickNoteReadResult {
   id: string;
   content: StoredQuickNoteContent;
+  /** 关联表里的标签 ID（顺序 = 最近添加在前）。 */
+  tagIds: string[];
+  /** 标签展示名（由标签目录解析）。 */
+  tags: string[];
   previewText: string;
   updatedAt: string;
 }
@@ -76,6 +83,8 @@ export interface QuickNoteTrashItem {
   updatedAt: string;
   deletedAt: string;
   previewText: string;
+  /** 远端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）；恢复上传成功后清除。 */
+  cloudDeleted: boolean;
 }
 
 /** DB 提交失败时把正文恢复到写前版本（无旧版本 = 删除本次新写的文件）。 */
@@ -94,15 +103,6 @@ async function readBodyContent(id: string): Promise<StoredQuickNoteContent | nul
   }
 }
 
-function parseTagsJson(raw: unknown): string[] {
-  try {
-    const parsed = JSON.parse(String(raw ?? "[]")) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 type QuickNoteListRow = {
   id: string;
   created_at: string;
@@ -110,10 +110,9 @@ type QuickNoteListRow = {
   image_count: number;
   updated_at: string;
   first_image: string | null;
-  tags_json: string;
 };
 
-function quickNoteListItemFromRow(row: QuickNoteListRow): QuickNoteListItem {
+function quickNoteListItemFromRow(row: QuickNoteListRow, tagIds: readonly string[], names: Map<string, string>): QuickNoteListItem {
   return {
     id: String(row.id),
     createdAt: String(row.created_at),
@@ -121,7 +120,8 @@ function quickNoteListItemFromRow(row: QuickNoteListRow): QuickNoteListItem {
     imageCount: Number(row.image_count),
     updatedAt: String(row.updated_at),
     firstImage: row.first_image ? String(row.first_image) : null,
-    tags: parseTagsJson(row.tags_json),
+    tags: tagIds.map((id) => names.get(id) ?? ""),
+    tagIds: [...tagIds],
   };
 }
 
@@ -134,7 +134,7 @@ export async function listQuickNotePage(d: MobileDb, options: QuickNotePageOptio
     values.push(options.cursor.updatedAt, options.cursor.updatedAt, options.cursor.id);
   }
   const bounded = typeof options.limit === "number" && options.limit > 0;
-  const sql = "SELECT id, created_at, preview_text, image_count, updated_at, first_image, tags_json FROM quick_notes"
+  const sql = "SELECT id, created_at, preview_text, image_count, updated_at, first_image FROM quick_notes"
     + " WHERE " + where
     + " ORDER BY updated_at DESC, id DESC"
     + (bounded ? " LIMIT ?" : "");
@@ -142,7 +142,10 @@ export async function listQuickNotePage(d: MobileDb, options: QuickNotePageOptio
   const rows = await d.prepare(sql).all(...values) as QuickNoteListRow[];
   const hasMore = bounded && rows.length > options.limit!;
   const visibleRows = hasMore ? rows.slice(0, options.limit) : rows;
-  const items = visibleRows.map(quickNoteListItemFromRow);
+  // 关系与目录独立读取（一次查询，避免逐条 N+1）；未知/墓碑标签不展示名称。
+  const links = await listAllQuickNoteTagIds(d);
+  const names = await quickNoteTagNames(d);
+  const items = visibleRows.map((row) => quickNoteListItemFromRow(row, links.get(String(row.id)) ?? [], names));
   const last = items[items.length - 1];
   return {
     items,
@@ -155,20 +158,24 @@ export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> 
 }
 
 /**
- * 一次性把旧行的列表标签/首图元数据从 .qnote 回填进 SQLite。
+ * 一次性把旧行的首图元数据从 .qnote 回填进 SQLite（标签来自关联表，不再投影到行里）。
  * 启动迁移路径调用；完成后写 device_state 标记，首页后续只读轻量行，不再批量读正文。
  */
 export async function backfillQuickNoteListMetadata(d: MobileDb): Promise<void> {
-  const done = await d.prepare("SELECT value FROM device_state WHERE key='quick_note_list_metadata_v1'").get() as { value?: string } | undefined;
-  if (done?.value === "1") return;
+  // 261027：不再只看一次性 device_state 标记 —— 之后同步才导入的行 list_metadata_version=0，
+  // 按旧逻辑永远轮不到回填（首页卡片空白/无图）。改为「有未回填行就干活」，标志只用来跳过空跑。
   const rows = await d.prepare("SELECT id FROM quick_notes WHERE list_metadata_version<1").all() as Array<{ id: string }>;
+  if (rows.length === 0) {
+    await d.prepare("INSERT INTO device_state(key,value) VALUES('quick_note_list_metadata_v1','1') ON CONFLICT(key) DO UPDATE SET value='1'").run();
+    return;
+  }
   const statements: Array<{ statement: string; values: unknown[] }> = [];
   for (const row of rows) {
     const id = String(row.id);
     const content = await readBodyContent(id).catch(() => null);
     statements.push({
-      statement: "UPDATE quick_notes SET tags_json=?, first_image=?, list_metadata_version=1 WHERE id=?",
-      values: [JSON.stringify(content?.tags ?? []), content?.images?.[0]?.filename ?? null, id],
+      statement: "UPDATE quick_notes SET preview_text=?, image_count=?, first_image=?, list_metadata_version=1 WHERE id=?",
+      values: [content ? previewQuickNote(content.text, content.images.length) : "", content?.images?.length ?? 0, content?.images?.[0]?.filename ?? null, id],
     });
   }
   if (statements.length > 0) {
@@ -194,7 +201,16 @@ export async function readQuickNote(d: MobileDb, id: string): Promise<QuickNoteR
   if (!row) return null;
   const content = await readBodyContent(id);
   if (!content) return null;
-  return { id: String(row.id), content, previewText: String(row.preview_text), updatedAt: String(row.updated_at) };
+  const tagIds = await listQuickNoteTagIds(d, id);
+  const names = await quickNoteTagNames(d);
+  return {
+    id: String(row.id),
+    content,
+    tagIds,
+    tags: tagIds.map((tagId) => names.get(tagId) ?? ""),
+    previewText: String(row.preview_text),
+    updatedAt: String(row.updated_at),
+  };
 }
 
 async function readQuickNoteWriteBase(id: string): Promise<{ raw: string | null; parsed: StoredQuickNoteContent | null }> {
@@ -203,30 +219,29 @@ async function readQuickNoteWriteBase(id: string): Promise<{ raw: string | null;
   catch { return { raw, parsed: null }; }
 }
 
-/** 小记写入唯一核心：正文文件先落盘，DB 事务 upsert + 清墓碑；DB 失败恢复正文。 */
 async function persistQuickNoteContent(
   d: MobileDb,
   id: string,
-  draft: { text: string; body: string; images: StoredQuickNoteImage[]; tags?: readonly string[] },
+  draft: { text: string; body: string; images: StoredQuickNoteImage[] },
   previous: { raw: string | null; parsed: StoredQuickNoteContent | null },
 ): Promise<void> {
   const now = new Date().toISOString();
-  const content = normalizeQuickNoteContent(draft.text, draft.body, draft.images, draft.tags ?? previous.parsed?.tags ?? []);
+  const content = normalizeQuickNoteContent(draft.text, draft.body, draft.images);
   const serialized = serializeQuickNoteContent(content);
   const contentHash = sha256Sync(new TextEncoder().encode(serialized));
   const preview = previewQuickNote(content.text, content.images.length);
   const previousRow = await d.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(id) as { updated_at: string } | undefined;
-  const effectiveUpdatedAt = previous.parsed && previousRow && sameQuickNoteExceptTags(previous.parsed, content)
+  const effectiveUpdatedAt = previous.parsed && previousRow && sameQuickNoteContent(previous.parsed, content)
     ? previousRow.updated_at
     : now;
   await writeQuickNoteBody(id, serialized);
   try {
     await d.transaction(async () => {
       await d.prepare(
-        `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, sync_state, is_conflict, restore_pending_at, ready_to_sync, tags_json, first_image, list_metadata_version)
-         VALUES (?,?,?,?,?,?,'local',0,NULL,1,?,?,1)
-         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1, tags_json=excluded.tags_json, first_image=excluded.first_image, list_metadata_version=1`
-      ).run(id, now, effectiveUpdatedAt, preview, content.images.length, contentHash, JSON.stringify(content.tags), content.images[0]?.filename ?? null);
+        `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict, restore_pending_at, ready_to_sync, first_image, list_metadata_version)
+         VALUES (?,?,?,?,?,?,1,0,NULL,1,?,1)
+         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, is_dirty=1, deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1, first_image=excluded.first_image, list_metadata_version=1`
+      ).run(id, now, effectiveUpdatedAt, preview, content.images.length, contentHash, content.images[0]?.filename ?? null);
       // 活跃写入统一清删除墓碑，避免“活跃行 + 墓碑”二义性。
       await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
     });
@@ -241,7 +256,6 @@ export async function saveQuickNote(
   id: string,
   text: string,
   images: StoredQuickNoteImage[] = [],
-  tags?: readonly string[],
 ): Promise<string> {
   // 正文（body）口径：移动端只有纯文本编辑器，合成 body 会把桌面端排版的富内容（标题/列表/引用/表格/卡片）
   // 压成纯段落。所以 —— 若**纯文本没变**（用户只是打开又保存、或只调整了图片顺序），沿用原有 body，不压平。
@@ -249,7 +263,7 @@ export async function saveQuickNote(
   let preservedBody = "";
   if (previous.parsed && previous.parsed.text === text && typeof previous.parsed.body === "string" && previous.parsed.body) preservedBody = previous.parsed.body;
   const body = preservedBody || quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID());
-  await persistQuickNoteContent(d, id, { text, body, images, tags }, previous);
+  await persistQuickNoteContent(d, id, { text, body, images }, previous);
   return id;
 }
 
@@ -262,7 +276,6 @@ export async function saveQuickNoteWithImages(
     assets: Map<string, Uint8Array>;
     saveAssetFile: (key: string, bytes: Uint8Array) => Promise<void>;
   },
-  tags?: readonly string[],
 ): Promise<string> {
   const validatedImageFiles = imageFiles.map((image) => {
     const format = validateQuickNoteImageBytes(image.bytes);
@@ -281,7 +294,7 @@ export async function saveQuickNoteWithImages(
     await deps.saveAssetFile(key, f.bytes);
   }
   const body = quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID());
-  await persistQuickNoteContent(d, id, { text, body, images, tags }, previous);
+  await persistQuickNoteContent(d, id, { text, body, images }, previous);
   return id;
 }
 
@@ -293,7 +306,7 @@ export async function saveQuickNoteWithImages(
 export async function saveQuickNoteContent(
   d: MobileDb,
   id: string,
-  payload: { text: string; body: string; images: StoredQuickNoteImage[]; tags?: readonly string[] },
+  payload: { text: string; body: string; images: StoredQuickNoteImage[] },
 ): Promise<string> {
   const previous = await readQuickNoteWriteBase(id);
   await persistQuickNoteContent(d, id, payload, previous);
@@ -301,19 +314,25 @@ export async function saveQuickNoteContent(
 }
 
 export async function deleteQuickNote(d: MobileDb, id: string): Promise<void> {
-  await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
+  await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, is_dirty=1, ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
 }
 
 export async function listQuickNoteTrash(d: MobileDb): Promise<QuickNoteTrashItem[]> {
-  const rows = await d.prepare("SELECT id, created_at, updated_at, deleted_at, preview_text FROM quick_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; preview_text: string }>;
-  return rows.map((r) => ({ id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at), previewText: String(r.preview_text) }));
+  const rows = await d.prepare("SELECT id, created_at, updated_at, deleted_at, preview_text, cloud_deleted FROM quick_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; preview_text: string; cloud_deleted: number }>;
+  return rows.map((r) => ({
+    id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at),
+    previewText: String(r.preview_text), cloudDeleted: r.cloud_deleted === 1,
+  }));
 }
 
 export async function restoreQuickNote(d: MobileDb, id: string): Promise<void> {
   const row = await d.prepare("SELECT 1 FROM quick_notes WHERE id=? AND deleted_at IS NOT NULL").get(id);
   if (!row) throw new Error("小记不在回收站");
   const now = new Date().toISOString();
-  await d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, id);
+  // 恢复 = 本地重新拥有这条小记：若关系还在，把关系版本推进到当前，标签才会随清单同步出去。
+  const tagsUpdatedAt = (await listQuickNoteTagIds(d, id)).length > 0 ? now : "";
+  await d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?").run(now, now, id);
+  if (tagsUpdatedAt) await setQuickNoteTagVersion(d, id, tagsUpdatedAt);
 }
 
 export async function purgeQuickNote(
@@ -324,8 +343,11 @@ export async function purgeQuickNote(
   const prev = await readBodyContent(id);
   await d.transaction(async () => {
     // 兼容"直接彻底删除未进回收站的小记"的调用：deleted_at 为空时用当前时间补墓碑时间（原 SQL 会撞 NOT NULL）。
-    await d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) SELECT id, created_at, updated_at, COALESCE(deleted_at, ?) FROM quick_notes WHERE id=?").run(new Date().toISOString(), id);
+    // purged_at 非空 = 本地彻底删除墓碑（v3 quickPurges）；只有软删语义的墓碑 purged_at 保持 NULL。
+    const now = new Date().toISOString();
+    await d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at, purged_at) SELECT id, created_at, updated_at, COALESCE(deleted_at, ?), ? FROM quick_notes WHERE id=?").run(now, now, id);
     await d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+    await removeQuickNoteLinks(d, id);
   });
   await deleteQuickNoteBody(id).catch(() => undefined);
   if (!prev) return;
@@ -354,7 +376,8 @@ export interface QuickNoteDraft {
   body?: string;
   /** 草稿引用的图片（图片加入时已落盘到 quick-notes/{id}/，这里只记元数据/文件名）。 */
   images: StoredQuickNoteImage[];
-  tags?: string[];
+  /** 草稿引用的标签 ID（标签表是唯一来源）。 */
+  tagIds?: string[];
   updatedAt: string;
 }
 
@@ -372,7 +395,7 @@ export async function readQuickNoteDraft(d: MobileDb): Promise<QuickNoteDraft | 
       text: parsed.text,
       body: typeof parsed.body === "string" ? parsed.body : undefined,
       images: Array.isArray(parsed.images) ? (parsed.images as StoredQuickNoteImage[]) : [],
-      tags: Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === "string") : [],
+      tagIds: Array.isArray(parsed.tagIds) ? parsed.tagIds.filter((tagId): tagId is string => typeof tagId === "string") : [],
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
     };
   } catch {

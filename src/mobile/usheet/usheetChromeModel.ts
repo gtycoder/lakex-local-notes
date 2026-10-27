@@ -1,87 +1,62 @@
 /**
- * 移动端表格 chrome 的**单一来源**（261021：对齐语雀 App 工具条）。
+ * 移动端表格编辑态 chrome 的**单一来源**（261023 v5，用户定稿方向）。
  *
- * 这里只放「有哪些按钮/分组/卡片项」与纯查询函数；组件负责渲染，动作仍由 MobileUsheetViewer 按 id 分派。
- * 语雀实测见 docs/MOBILE-USHEET-YUQUE-PARITY.md §2.1（40px 工具条 / 34×32 按钮 / #fafafa / 分组竖线）、
- * §2.3（⋯ 七行图标面板）、§2.4（插入卡）、§2.5（数字格式卡）。
+ * 形态 = 文档编辑器的底部 dock：单行图标工具条贴在键盘上沿；点一级按钮展开的面板**占住键盘区域**
+ * （与文档 dock 一致：键盘不显示、工具条停在面板上方、再点同一颗收起并放回键盘）。
+ *
+ * 一级按钮（顺序定稿）：＋插入 | T 文字格式 | 数据 | 视图 | ⋯ 更多 | 撤销 | 重做 |（右侧固定）键盘。
+ * 公式栏不进这里：移动端编辑输入面用内核原生移动公式栏（261025 起，见 useNativeSheetFormulaBar）。
+ *
+ * 语雀/钉钉实测与取舍记录见 HANDOFF 261023 与 docs/preview/mobile-sheet-prototype.html。
  */
-import { COLUMN_WIDTH_STEP, ROW_HEIGHT_STEP } from "./usheetLayoutActions";
 import { USHEET_NUMFMT_OPTIONS } from "./usheetNumfmt";
 import { USHEET_QUICK_FORMULAS } from "./usheetFormulaQuick";
 import { USHEET_BORDER_OPTIONS } from "./usheetBorders";
 
-/** 一级工具条按钮 id（与 MobileUsheetViewer 的动作分派对齐）。 */
-export type SheetToolbarItemId =
-  | "insert" | "undo" | "redo" | "format-painter" | "clear-style" | "numfmt" | "decimals" | "more";
+/* ---------------- 一级 dock ---------------- */
 
-export interface SheetToolbarItem {
-  id: SheetToolbarItemId;
+export type SheetDockId = "insert" | "format" | "data" | "view" | "more";
+
+export interface SheetDockItem {
+  id: SheetDockId;
   label: string;
 }
 
-/**
- * 一级工具条的分组（顺序 = 语雀 §2.1 的组序；未支持项不放，避免死按钮）。
- *
- * 261021 用户定稿（对齐语雀 App，去掉「保存」位）：
- * `+ | 撤销 重做 格式刷 清除格式 | 常规▾ | 小数位 | ⋯`
- * —— 保存/退出编辑由工作区顶栏的 ✓ 承担，**工具条不再重复**（用户 261021：「做在工具条里不是多余了吗」）。
- * 一级只放**已经实现**的能力：语雀有而我们没实现过的项继续留在 ⋯ 卡里置灰。
- */
-export const SHEET_TOOLBAR_GROUPS: readonly (readonly SheetToolbarItem[])[] = [
-  [{ id: "insert", label: "插入" }],
-  [{ id: "undo", label: "撤销" }, { id: "redo", label: "重做" },
-    { id: "format-painter", label: "格式刷" }, { id: "clear-style", label: "清除格式" }],
-  [{ id: "numfmt", label: "数字格式" }],
-  [{ id: "decimals", label: "增加小数位" }],
-  [{ id: "more", label: "更多表格操作" }],
+/** 顺序即渲染顺序（定稿：插在最前、更多在撤销之前）。 */
+export const SHEET_DOCK_ITEMS: ReadonlyArray<SheetDockItem> = [
+  { id: "insert", label: "插入" },
+  { id: "format", label: "文字格式" },
+  { id: "data", label: "数据" },
+  { id: "view", label: "视图" },
+  { id: "more", label: "更多" },
 ];
 
-/** 锚定卡片 id 与几何（P2 起按语雀：⋯ 卡 206 宽、插入卡 216 宽、数字格式卡 136 宽）。 */
-export type SheetCardId = "insert" | "numfmt" | "more";
+/* ---------------- 插入面板 ---------------- */
 
-export const SHEET_CARD_META: Record<SheetCardId, { width: number; ariaLabel: string }> = {
-  insert: { width: 216, ariaLabel: "插入" },
-  numfmt: { width: 168, ariaLabel: "数字格式" },
-  more: { width: 232, ariaLabel: "更多表格操作" },
-};
+/** 上排 4 连块：插入行列（钉钉式：只有图标、蓝色、无文字）。 */
+export type SheetInserterId = "row-above" | "row-below" | "col-left" | "col-right";
 
-/** 卡片里的列表行（插入卡 / 数字格式卡 / ⋯ 的子菜单）。 */
-export interface SheetMenuItem {
-  id: string;
-  label: string;
-  note?: string;
-  danger?: boolean;
-  active?: boolean;
-  /** 非点击的分组标题（数字格式卡的分类）。 */
-  header?: boolean;
-  /** 图标名（由 SheetPopCard / SheetMoreCard 映射到 lucide）。 */
-  icon?: string;
-  /** 颜色色块的十六进制值（261021 P4-2）：有它就把子菜单渲染成**圆点色板**，不是文字行。 */
-  swatch?: string;
-  /** 子菜单的版式（261021 P4-2）：色板 / 图标行 / 普通列表（默认）。 */
-  childLayout?: "list" | "swatch" | "icons";
-  children?: SheetMenuItem[];
-}
-
-/** 「插入」卡：**保留我们自己的插行列/合并能力**（语雀 App 的 + 是插入数据，没有插行列）。 */
-export function buildInsertMenu(): SheetMenuItem[] {
-  return [
-    { id: "row-above", label: "在上方插入行", icon: "row-above" },
-    { id: "row-below", label: "在下方插入行", icon: "row-below" },
-    { id: "col-left", label: "在左侧插入列", icon: "col-left" },
-    { id: "col-right", label: "在右侧插入列", icon: "col-right" },
-    { id: "merge", label: "合并选中单元格", icon: "merge" },
-  ];
-}
-
-const COLOR_NAMES: Array<[string, string]> = [
-  ["#e5484d", "红色"], ["#f76b15", "橙色"], ["#ffb224", "黄色"], ["#30a46c", "绿色"],
-  ["#0091ff", "蓝色"], ["#8e4ec6", "紫色"], ["#8b8d98", "灰色"], ["#11181c", "黑色"],
+export const SHEET_INSERTER_ACTIONS: ReadonlyArray<{ id: SheetInserterId; label: string }> = [
+  { id: "row-above", label: "在上方插入行" },
+  { id: "row-below", label: "在下方插入行" },
+  { id: "col-left", label: "在左侧插入列" },
+  { id: "col-right", label: "在右侧插入列" },
 ];
 
-export function buildColorMenu(prefix: "font-" | "fill-"): SheetMenuItem[] {
-  return COLOR_NAMES.map(([value, label]) => ({ id: prefix + value, label, swatch: value }));
-}
+/** 白块（4 列）：与文档插入面板同款（图标在上、文字在下）。公式按用户要求放「更多」。 */
+export type SheetInsertTileId = "image" | "sign" | "link" | "date" | "attachment" | "chart" | "comment";
+
+export const SHEET_INSERT_TILES: ReadonlyArray<{ id: SheetInsertTileId; label: string; icon: string; disabled?: boolean }> = [
+  { id: "image", label: "单元格图片", icon: "image", disabled: true },
+  { id: "sign", label: "手写签名", icon: "sign", disabled: true },
+  { id: "link", label: "链接", icon: "link" },
+  { id: "date", label: "日期", icon: "date" },
+  { id: "attachment", label: "附件", icon: "attachment", disabled: true },
+  { id: "chart", label: "图表", icon: "chart", disabled: true },
+  { id: "comment", label: "批注", icon: "comment", disabled: true },
+];
+
+/* ---------------- T 面板（文字格式） ---------------- */
 
 export interface SheetCellFormatLite {
   bold: boolean;
@@ -91,123 +66,200 @@ export interface SheetCellFormatLite {
   /** Univer 的右对齐在 facade 里读出来是 "normal"（历史坑），两种都接。 */
   align: "left" | "center" | "right" | "normal" | "general";
   numfmt: string;
+  /** 垂直对齐（261023 新增；general/undefined = 默认 middle）。 */
+  valign?: "top" | "middle" | "bottom" | "general";
+  /** 字号（px，来自 SetFontSize 命令；空 = 默认 14）。 */
+  size?: number;
+  /** 字体颜色（内核 style.cl.rgb；空 = 默认色）。 */
+  fontColor?: string;
+  /** 单元格背景色（内核 style.bg.rgb；空 = 无填充）。 */
+  bgColor?: string;
 }
 
-/** ⋯ 卡的一颗图标按钮（语雀七行面板的一格）。 */
-export interface SheetMoreButton {
+/** B / I / S / U 四个开关（横排一条白条）。 */
+export const SHEET_FORMAT_TOGGLES: ReadonlyArray<{
+  id: "bold" | "italic" | "strike" | "underline";
+  label: string;
+  glyph: string;
+}> = [
+  { id: "bold", label: "加粗", glyph: "B" },
+  { id: "italic", label: "斜体", glyph: "I" },
+  { id: "underline", label: "下划线", glyph: "U" },
+  { id: "strike", label: "删除线", glyph: "S" },
+];
+
+/** 水平对齐（一条白条）。 */
+export const SHEET_ALIGN_H: ReadonlyArray<{ id: "left" | "center" | "right"; label: string }> = [
+  { id: "left", label: "左" },
+  { id: "center", label: "中" },
+  { id: "right", label: "右" },
+];
+
+/** 垂直对齐（一条白条；用户定稿「列表换成对齐」）。 */
+export const SHEET_ALIGN_V: ReadonlyArray<{ id: "top" | "middle" | "bottom"; label: string }> = [
+  { id: "top", label: "上" },
+  { id: "middle", label: "中" },
+  { id: "bottom", label: "下" },
+];
+
+/** 字体颜色（一条白条：A × 8）。 */
+export const SHEET_FONT_COLORS: ReadonlyArray<{ id: string; label: string; value: string }> = [
+  { id: "font-default", label: "默认", value: "" },
+  { id: "font-gray", label: "灰色", value: "#8b8d98" },
+  { id: "font-red", label: "红色", value: "#e5484d" },
+  { id: "font-orange", label: "橙色", value: "#f76b15" },
+  { id: "font-yellow", label: "黄色", value: "#ffb224" },
+  { id: "font-green", label: "绿色", value: "#30a46c" },
+  { id: "font-blue", label: "蓝色", value: "#0091ff" },
+  { id: "font-purple", label: "紫色", value: "#8e4ec6" },
+];
+
+/** 背景填充：两行（无 + 浅色 / 强色），同文档 T 面板。 */
+export const SHEET_FILL_LIGHT: ReadonlyArray<{ id: string; label: string; value: string }> = [
+  { id: "fill-none", label: "无填充", value: "" },
+  { id: "fill-pink", label: "浅粉", value: "#fde2e2" },
+  { id: "fill-peach", label: "浅橙", value: "#fde8d7" },
+  { id: "fill-cream", label: "浅黄", value: "#fdf3cf" },
+  { id: "fill-mint", label: "浅绿", value: "#e3f5e3" },
+  { id: "fill-sky", label: "浅蓝", value: "#e0ecfb" },
+  { id: "fill-lilac", label: "浅紫", value: "#f0e6fb" },
+];
+
+export const SHEET_FILL_STRONG: ReadonlyArray<{ id: string; label: string; value: string }> = [
+  { id: "fill-gray", label: "深灰", value: "#d9d9d9" },
+  { id: "fill-red", label: "红", value: "#e5484d" },
+  { id: "fill-orange", label: "橙", value: "#f76b15" },
+  { id: "fill-yellow", label: "黄", value: "#d9a300" },
+  { id: "fill-green", label: "绿", value: "#30a46c" },
+  { id: "fill-blue", label: "蓝", value: "#0091ff" },
+  { id: "fill-purple", label: "紫", value: "#8e4ec6" },
+];
+
+/** 字号固定档（照文档 T 面板：8 档）。 */
+export const SHEET_FONT_SIZES: ReadonlyArray<number> = [14, 15, 16, 19, 22, 24, 29, 32];
+
+/* ---------------- 通用菜单项（工作表列表浮层 SheetPopCard 仍在用） ---------------- */
+
+export interface SheetMenuItem {
   id: string;
   label: string;
-  icon: string;
-  /** 文字型按钮（语雀「字号 12px」那种）；有 text 时不画图标。 */
-  text?: string;
-  disabled?: boolean;
-  active?: boolean;
+  note?: string;
   danger?: boolean;
-  /** 子菜单版式（261021 P4-2）：色板 / 图标行 / 普通列表。 */
+  active?: boolean;
+  header?: boolean;
+  icon?: string;
+  swatch?: string;
   childLayout?: "list" | "swatch" | "icons";
   children?: SheetMenuItem[];
 }
 
-export type SheetMoreRow = SheetMoreButton[];
+/* ---------------- 数据 / 视图面板 ---------------- */
 
-/** 水平对齐：语雀是**图标行**（不是文字行）⇒ childLayout: "icons"。 */
-const ALIGN_MENU: SheetMenuItem[] = [
-  { id: "align-left", label: "左对齐", icon: "align-left" },
-  { id: "align-center", label: "居中对齐", icon: "align-center" },
-  { id: "align-right", label: "右对齐", icon: "align-right" },
+export interface SheetPanelRow {
+  id: string;
+  label: string;
+  /** 行首线性图标 id（SheetDockPanel 里映射成 lucide 组件）。 */
+  icon: string;
+  note?: string;
+  disabled?: boolean;
+  switch?: boolean;
+  switchOn?: boolean;
+}
+
+export const SHEET_DATA_ROWS: ReadonlyArray<SheetPanelRow> = [
+  { id: "sort-asc", label: "按当前列升序", icon: "sortAsc" },
+  { id: "sort-desc", label: "按当前列降序", icon: "sortDesc" },
+  { id: "filter", label: "筛选", icon: "filter", switch: true },
+  { id: "find", label: "查找替换", icon: "find" },
+  { id: "validation", label: "数据验证（下拉列表）", icon: "validation", note: "占位", disabled: true },
+  { id: "split", label: "分列", icon: "split", note: "占位", disabled: true },
 ];
 
-const FREEZE_MENU: SheetMenuItem[] = [
-  { id: "freeze-row", label: "冻结至当前行" },
-  { id: "freeze-col", label: "冻结至当前列" },
-  { id: "freeze-none", label: "取消冻结" },
+export const SHEET_VIEW_ROWS: ReadonlyArray<SheetPanelRow> = [
+  { id: "freeze", label: "冻结行列", icon: "freeze" },
+  { id: "formview", label: "表单视图", icon: "form", note: "占位", disabled: true },
+  { id: "chartview", label: "图表视图", icon: "chart", note: "占位", disabled: true },
+];
+
+export const SHEET_ZOOM_LEVELS: ReadonlyArray<{ id: "zoom-default" | "zoom-fit" | "zoom-focus"; label: string; value: number }> = [
+  { id: "zoom-default", label: "默认", value: 1 },
+  { id: "zoom-fit", label: "全景", value: 0.85 },
+  { id: "zoom-focus", label: "聚焦", value: 1.15 },
 ];
 
 /**
- * ⋯ 卡 = 语雀的七行图标网格 + 第八行「我们自己的布局/删除/更多工具」。
- * 语雀有、我们没接的能力**保留位置并置灰**（不删项破坏版式）；置灰按钮在卡片里禁用，长按/标题有说明。
+ * 面板下限高度（拿不到键盘高时）：必须放得下最高的**常驻**面板 ——
+ * 「更多」7 行 = 7×40 + 6 分隔 + 14 内距 = 294；T 面板 = 300。
+ * 阅读态点「编辑」直接开面板（没弹过键盘）时用它，避免底行被切。
  */
-export function buildMoreRows(fmt: SheetCellFormatLite): SheetMoreRow[] {
-  return [
-    // 语雀 ⋯ 卡第一行只有「小数位−」；「增」已提到一级常驻栏（见 SHEET_TOOLBAR_GROUPS）。
-    [{ id: "decimal-down", label: "减少小数位", icon: "minus" }],
-    [
-      { id: "font-size", label: "字号（暂不支持）", icon: "type", text: "12px", disabled: true },
-      { id: "bold", label: "加粗", icon: "bold", active: fmt.bold },
-      { id: "italic", label: "斜体", icon: "italic", active: fmt.italic },
-      { id: "strike", label: "删除线", icon: "strike", active: fmt.strike },
-      { id: "underline", label: "下划线", icon: "underline", active: fmt.underline },
-    ],
-    [
-      { id: "font-color", label: "字体颜色", icon: "baseline", childLayout: "swatch", children: buildColorMenu("font-") },
-      { id: "fill-color", label: "填充颜色", icon: "paintbucket", childLayout: "swatch", children: buildColorMenu("fill-") },
-      // 261021 P5：边框已接（FRange.setBorder；线型固定 THIN、颜色在 usheetBorders 里）。
-      { id: "border", label: "边框", icon: "grid", children: USHEET_BORDER_OPTIONS.map((option) => ({ id: option.id, label: option.label })) },
-    ],
-    [
-      { id: "align", label: "水平对齐", icon: "align-left", childLayout: "icons", children: ALIGN_MENU },
-      { id: "valign", label: "垂直对齐（暂不支持）", icon: "align-vertical", disabled: true },
-      { id: "wrap", label: "换行（暂不支持）", icon: "wrap", disabled: true },
-      { id: "merge", label: "合并选中单元格", icon: "merge" },
-    ],
-    [
-      // 261021 P5：筛选/排序已接（Univer 独立包 1.0.3）。排序走我们自己的子菜单，筛选开内核的移动筛选面板。
-      { id: "filter", label: "筛选", icon: "filter" },
-      { id: "sort", label: "排序", icon: "sort", children: [
-        { id: "sort-asc", label: "升序（按当前列）" },
-        { id: "sort-desc", label: "降序（按当前列）" },
-      ] },
-      { id: "crosshair", label: "十字高亮", icon: "grid" },
-      { id: "conditional", label: "条件格式（暂不支持）", icon: "table", disabled: true },
-    ],
-    [
-      { id: "link", label: "链接", icon: "link" },
-      { id: "select", label: "选择（暂不支持）", icon: "select", disabled: true },
-      { id: "chart", label: "图表（暂不支持）", icon: "chart", disabled: true },
-      { id: "formula", label: "公式", icon: "sigma", children: USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label })) },
-    ],
-    [
-      { id: "freeze", label: "冻结窗格", icon: "freeze", children: FREEZE_MENU },
-      { id: "protect", label: "保护（暂不支持）", icon: "lock", disabled: true },
-      // 261021 P5：查找替换（sheets 适配器 + 基础层；入口派发 ui.operation.open-find-dialog）。
-      { id: "find", label: "查找替换", icon: "search" },
-    ],
-    [
-      { id: "row-height", label: "行高", icon: "row-height", children: [
-        { id: "row-height-up", label: "增高（+" + ROW_HEIGHT_STEP + "px）" },
-        { id: "row-height-down", label: "降低（-" + ROW_HEIGHT_STEP + "px）" },
-        { id: "row-height-auto", label: "自动行高（按内容）" },
-      ] },
-      { id: "col-width", label: "列宽", icon: "col-width", children: [
-        { id: "col-width-up", label: "加宽（+" + COLUMN_WIDTH_STEP + "px）" },
-        { id: "col-width-down", label: "收窄（-" + COLUMN_WIDTH_STEP + "px）" },
-      ] },
-      { id: "delete-row", label: "删除当前行", icon: "rows", danger: true },
-      { id: "delete-col", label: "删除当前列", icon: "columns", danger: true },
-      { id: "more-tools", label: "更多表格工具", icon: "wrench" },
-    ],
-  ];
+export const SHEET_PANEL_MIN_HEIGHT = 300;
+
+/* ---------------- 更多面板 ---------------- */
+
+export type SheetMoreId = "numfmt" | "border" | "formula" | "merge" | "painter" | "clear" | "conditional";
+
+export const SHEET_MORE_ROWS: ReadonlyArray<{ id: SheetMoreId; label: string; icon: string; disabled?: boolean }> = [
+  { id: "numfmt", label: "数字格式", icon: "number" },
+  { id: "border", label: "边框", icon: "border" },
+  { id: "formula", label: "公式", icon: "formula" },
+  { id: "merge", label: "合并单元格", icon: "merge" },
+  { id: "painter", label: "格式刷", icon: "painter" },
+  { id: "clear", label: "清除格式", icon: "clear" },
+  { id: "conditional", label: "条件格式", icon: "conditional", disabled: true },
+];
+
+/** 更多面板的下钻列表（数字格式 / 边框 / 公式）。 */
+export function buildMoreSubMenu(
+  id: "numfmt" | "border" | "formula",
+  currentNumfmt = "",
+): Array<{ id: string; label: string; note?: string }> {
+  if (id === "numfmt") {
+    return USHEET_NUMFMT_OPTIONS.map((option) => ({
+      id: option.id,
+      label: option.label,
+      note: option.pattern === (currentNumfmt || "") ? "当前" : undefined,
+    }));
+  }
+  if (id === "border") {
+    return USHEET_BORDER_OPTIONS.map((option) => ({ id: option.id, label: option.label }));
+  }
+  return USHEET_QUICK_FORMULAS.map((option) => ({ id: option.id, label: option.label }));
 }
 
-/** 数字格式卡的当前档位显示（默认「常规」）。 */
+/** 数字格式的简写（显示当前档位用）。 */
 export function numfmtLabelOf(pattern: string): string {
   const found = USHEET_NUMFMT_OPTIONS.find((option) => option.pattern === (pattern || ""));
   return found ? found.label.replace(/（.*）$/, "") : "常规";
 }
 
-/** 数字格式卡（入口 = 一级「常规▾」；按语雀的类别分组，不支持的完整清单先不摆）。 */
-export function buildNumfmtMenu(currentPattern: string): SheetMenuItem[] {
-  const group = (header: string, ids: string[]): SheetMenuItem[] => [
-    { id: "header-" + header, label: header, header: true },
-    ...USHEET_NUMFMT_OPTIONS.filter((option) => ids.includes(option.id)).map((option) => ({
-      id: option.id,
-      label: option.label,
-      note: option.pattern === (currentPattern || "") ? "当前" : undefined,
-    })),
-  ];
-  return [
-    ...group("通用", ["numfmt-general", "numfmt-text"]),
-    ...group("数值", ["numfmt-number", "numfmt-integer", "numfmt-percent", "numfmt-currency"]),
-    ...group("日期时间", ["numfmt-date", "numfmt-time", "numfmt-datetime"]),
-  ];
+/**
+ * 颜色归一化：内核可能回 `#E5484D` / `rgb(229, 72, 77)` / 空串，面板反显比较必须走这一处。
+ * 输出统一为小写 `#rrggbb`（认不出的值原样小写返回，仍可做相等比较）。
+ */
+export function normalizeSheetColor(value: string | null | undefined): string {
+  const text = (value ?? "").trim().toLowerCase();
+  if (!text) return "";
+  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(text);
+  if (rgb) {
+    return "#" + [rgb[1], rgb[2], rgb[3]].map((part) => Number(part).toString(16).padStart(2, "0")).join("");
+  }
+  if (/^#[0-9a-f]{6}$/.test(text)) return text;
+  if (/^#[0-9a-f]{3}$/.test(text)) return "#" + text.slice(1).split("").map((char) => char + char).join("");
+  return text;
+}
+
+/** 两个颜色是否同一个（默认色/无填充 = 空串）。 */
+export function sheetColorEquals(a: string | null | undefined, b: string | null | undefined): boolean {
+  return normalizeSheetColor(a) === normalizeSheetColor(b);
+}
+
+/**
+ * 面板内容下方是否还有可滚动余量（底部渐隐提示的**唯一判据**）。
+ * 2px 容差吸收亚像素取整：恰好贴底时不留一条假提示。
+ */
+export function sheetPanelNeedsFade(
+  metrics: { scrollTop: number; clientHeight: number; scrollHeight: number },
+  tolerance = 2,
+): boolean {
+  return metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop > tolerance;
 }

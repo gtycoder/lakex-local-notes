@@ -20,13 +20,12 @@ import type {
 
 function noteToDto(note: {
   id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string;
-  content: string; syncState: string; isLocked?: boolean;
+  content: string; isEditLocked?: boolean;
 }): NoteDto {
   return {
     id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
     updatedAt: note.updatedAt, content: note.content,
-    syncState: note.syncState as NoteDto["syncState"],
-    isLocked: note.isLocked ?? false,
+    isEditLocked: note.isEditLocked ?? false,
   };
 }
 
@@ -43,11 +42,11 @@ function treeNodeToDto(node: {
 
 function quickNoteToDto(item: {
   id: string; createdAt: string; updatedAt: string; syncState: string; isConflict: boolean;
-  content: { text: string; images: Array<{ id: string; filename: string; mimeType: string; width: number | null; height: number | null; size: number }>; tags: string[] };
+  content: { text: string; images: Array<{ id: string; filename: string; mimeType: string; width: number | null; height: number | null; size: number }>; tags: string[]; tagIds: string[] };
 }): QuickNoteDto {
   return {
     id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
-    text: item.content.text, images: item.content.images, tags: item.content.tags,
+    text: item.content.text, images: item.content.images, tags: item.content.tags, tagIds: item.content.tagIds,
     syncState: item.syncState as QuickNoteDto["syncState"], isConflict: item.isConflict,
   };
 }
@@ -87,9 +86,9 @@ export function createNativeServices(api: LakeNative): AppServices {
     quickNotes: {
       list: () => api.listQuickNotes().then((items) => items.map(quickNoteToDto)),
       create: (input) =>
-        api.createQuickNote({ text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, tags: input.tags }).then(quickNoteToDto),
+        api.createQuickNote({ text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds }).then(quickNoteToDto),
       update: (id, input) =>
-        api.updateQuickNote(id, { text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, retainedImageIds: input.retainedImageIds, tags: input.tags }).then(quickNoteToDto),
+        api.updateQuickNote(id, { text: input.text, draftId: input.draftId, stagedImageIds: input.stagedImageIds, retainedImageIds: input.retainedImageIds }).then(quickNoteToDto),
       delete: (id) => api.deleteQuickNote(id),
     },
     trash: {

@@ -33,9 +33,10 @@ beforeEach(() => {
 
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
-function render() {
+function render(props: { selectionText?: string; attachments?: Array<{ noteId: string; filename: string }> } = {}) {
   act(() => root.render(createElement(AiAssistantDialog, {
-    open: true, selectionText: "", noteId: "note-1", onClose: () => {},
+    open: true, selectionText: props.selectionText ?? "", noteId: "note-1", onClose: () => {},
+    attachments: props.attachments,
     onInsertAfter: () => {}, onReplace: () => {},
   })));
 }
@@ -55,6 +56,16 @@ function typeInstruction(text: string) {
 }
 
 describe("AI 当前文档全文（261021 P1）", () => {
+  it("有选区 / 图片选区时不出现「附加全文」选项（用户 261022：区域选择用 AI 不需要）", () => {
+    render({ selectionText: "选中的一段文字" });
+    expect(switchEl()).toBeNull();
+    expect(host.textContent).not.toContain("附加当前文档全文");
+
+    render({ attachments: [{ noteId: "note-1", filename: "a.png" }] });
+    expect(switchEl()).toBeNull();
+    expect(host.textContent).not.toContain("附加当前文档全文");
+  });
+
   it("默认关：不读缓存、不带全文；打开开关才按需读一次", async () => {
     render();
     expect(switchEl().getAttribute("aria-checked")).toBe("false");

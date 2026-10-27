@@ -25,6 +25,7 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
+import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 import { escapeId } from "../../lib/cssEscape";
 import { HOME_TABS, pagerScrollLeft, settledIndex, tabAt, tabIndex } from "./tabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
@@ -38,7 +39,7 @@ import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
-import { addQuickNoteTag } from "../../core/quickNoteTags";
+import { addQuickNoteTagId, buildQuickNoteTagOptions, type QuickNoteTag } from "../../core/quickNoteTags";
 
 // 完整小记编辑器（内含 Lake 内核）：**按需加载**，加载壳见 ./quickNoteComposerLazy（预取过则同步渲染、零 fallback）。
 
@@ -55,6 +56,7 @@ export interface MobileQuickNote {
   body?: string;
   images?: StoredQuickNoteImage[];
   tags: string[];
+  tagIds: string[];
 }
 
 const QUICK_NOTE_VIRTUAL_THRESHOLD = 24;
@@ -67,6 +69,8 @@ export interface HomePageProps {
   /** 全部笔记（解析「常用」文档的标题/时间用） */
   notes: LocalNoteSummary[];
   quickNotes: MobileQuickNote[];
+  /** 标签目录（标签表是唯一来源；随小记 Manifest 同步）。 */
+  tagDirectory: readonly QuickNoteTag[];
   /** 笔记本 → 文档数 */
   docCounts: Record<string, number>;
   onTabChange: (tab: "quick" | "library") => void;
@@ -74,12 +78,16 @@ export interface HomePageProps {
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
   onOpenSearch: () => void;
+  /** 打开 AI 全屏页（261023 P1）。 */
+  onOpenAi?: () => void;
   onCreateNotebook: () => void;
   /** 「空白文档」：在用户选中的笔记本下建文档并进编辑态（归属判定复用 MobileApp.createNoteInParent）。 */
   onCreateNote: (notebookId: string) => void;
   /** 目录树（笔记本/分组）变了以后刷新数据（重命名 / 设置图标 / 删除笔记本都走它）。 */
   onTreeChanged: () => Promise<void>;
   onQuickNotesChanged: () => Promise<void>;
+  /** 标签目录变了（建标签/改名/删除）：只刷新标签目录，不回读小记列表。 */
+  onQuickNoteTagsChanged: () => Promise<void>;
   /** 全局搜索命中小记：首页常驻组件接力定位/高亮该条（不自动进编辑态）。 */
   pendingQuickNoteId?: string | null;
   onPendingQuickNoteConsumed?: () => void;
@@ -117,17 +125,20 @@ function fmtRelative(iso: string): string {
 
 export function HomePage(props: HomePageProps) {
   const {
-    tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
-    onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged,
+    tab, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
+    onOpenNote, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
-  const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[]; tags: string[] } | null>(null);
+  const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[]; tagIds: string[] } | null>(null);
   const [revealedQuickNoteId, setRevealedQuickNoteId] = useState<string | null>(null);
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [tagSheetFor, setTagSheetFor] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
+  const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
+  useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
   const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
@@ -288,7 +299,13 @@ export function HomePage(props: HomePageProps) {
     setQuickSort,
     quickSortOptions,
     sortedQuickNotes,
-  } = useQuickNoteListModel(quickNotes, quickNoteDetails);
+  } = useQuickNoteListModel(quickNotes, quickNoteDetails, tagDirectory);
+
+  /** 写作区/选择器用完整目录（含 0 条小记的新标签）；标签条只用有计数的索引。 */
+  const quickNoteTagOptions = useMemo(
+    () => buildQuickNoteTagOptions(tagDirectory, quickTagIndex.tags),
+    [tagDirectory, quickTagIndex.tags],
+  );
 
   const quickVirtualEnabled = tab === "quick" && composer === null && sortedQuickNotes.length > QUICK_NOTE_VIRTUAL_THRESHOLD;
   const [quickScrollMargin, setQuickScrollMargin] = useState(0);
@@ -332,7 +349,7 @@ export function HomePage(props: HomePageProps) {
     try {
       const full = await bridge.readQuickNote(id);
       if (!full) return;
-      setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tags: full.content.tags });
+      setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tagIds: full.tagIds });
       setComposer({ mode: "edit", id });
     } catch { /* 读取失败忽略 */ }
   };
@@ -375,8 +392,13 @@ export function HomePage(props: HomePageProps) {
   }, [composer]);
   const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
-    try { const r = await bridge.syncNow(); const w = r.notes?.warnings?.length ?? 0; showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : "")); }
-    catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
+    try {
+      const r = await bridge.syncNow();
+      // 同步可能改了远端小记/目录：刷新首页数据，否则列表停留在旧快照。
+      await Promise.all([onQuickNotesChanged(), onTreeChanged()]);
+      const w = r.notes?.warnings?.length ?? 0;
+      showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
+    } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
   const toggleView = (): void => {
     setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; writeLocalStorage(VIEW_KEY, nv); return nv; });
@@ -495,16 +517,10 @@ export function HomePage(props: HomePageProps) {
     catch { showToast("删除失败", { type: "error" }); }
   };
 
-  const applyQuickNoteTags = async (id: string, tags: string[]): Promise<void> => {
+  /** 标签关系是独立子系统：只改关联表，**不重写正文**（正文 hash 不变，也不推进正文更新时间）。 */
+  const applyQuickNoteTags = async (id: string, tagIds: string[]): Promise<void> => {
     try {
-      const full = await bridge.readQuickNote(id);
-      if (!full) return;
-      await bridge.saveQuickNoteContent(id, {
-        text: full.content.text,
-        body: full.content.body,
-        images: full.content.images,
-        tags,
-      });
+      await bridge.setQuickNoteTags(id, tagIds);
       await onQuickNotesChanged();
     } catch (reason) {
       showToast("更新标签失败：" + (reason as Error).message, { type: "error" });
@@ -556,6 +572,20 @@ export function HomePage(props: HomePageProps) {
 
   const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;
 
+  /**
+   * P0-6 可视进度条（261026）：用户点单"先让文档展示出来 + 加进度条"。
+   * 计数优先（正文/附件张数），没有计数就用字节；两者都没有（metadata/finalize）= 不确定态。
+   * 只有同步进行中才渲染；结束后条消失，布局回到原样。
+   */
+  const syncPct = (() => {
+    if (!syncProgress) return -1;
+    const counted = syncProgress.total !== undefined && syncProgress.total > 0;
+    const bytes = syncProgress.bytesTotal !== undefined && syncProgress.bytesTotal > 0;
+    if (counted) return Math.max(0, Math.min(100, Math.round(((syncProgress.done ?? 0) / (syncProgress.total as number)) * 100)));
+    if (bytes) return Math.max(0, Math.min(100, Math.round(((syncProgress.bytesDone ?? 0) / (syncProgress.bytesTotal as number)) * 100)));
+    return -1;
+  })();
+
   const renderQuickNoteCard = (note: MobileQuickNote) => (
     <QuickNoteCard
       key={note.id}
@@ -565,7 +595,7 @@ export function HomePage(props: HomePageProps) {
       dateValue={quickNoteSortTime(note, quickSort)}
       onEdit={() => { void openEdit(note.id); }}
       onMore={() => setQuickMenuFor(note.id)}
-      onFilterTag={(name) => setQuickTagFilter({ kind: "tag", name })}
+      onFilterTag={(tagId) => setQuickTagFilter({ kind: "tag", id: tagId })}
     />
   );
 
@@ -586,8 +616,25 @@ export function HomePage(props: HomePageProps) {
         ) : (
           <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
         )}
-        <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
+        <button
+          className="toolbar__button"
+          onClick={() => void runSync()}
+          aria-label={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
+          title={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
+        ><CloudUpload /></button>
       </header>
+
+      {syncProgress && (
+        <div className={"mobile-sync-strip" + (syncPct < 0 ? " is-indeterminate" : "")} role="status" aria-live="polite">
+          <div className="mobile-sync-strip__text">
+            <span className="mobile-sync-strip__label">{describeSyncProgress(syncProgress)}</span>
+            {syncPct >= 0 && <span className="mobile-sync-strip__pct">{syncPct}%</span>}
+          </div>
+          <div className="mobile-sync-strip__bar" aria-hidden="true">
+            <span style={{ width: (syncPct < 0 ? 100 : syncPct) + "%" }} />
+          </div>
+        </div>
+      )}
 
       <div
         ref={stageRef}
@@ -601,7 +648,12 @@ export function HomePage(props: HomePageProps) {
           <div className="mobile-scroll mobile-scroll--with-dock">
             <QuickNoteComposerLazy
               editNote={editNote}
-              tagOptions={quickTagIndex.tags}
+              tagOptions={quickNoteTagOptions}
+              onCreateTag={async (name) => {
+                const created = await bridge.createQuickNoteTag(name);
+                await onQuickNoteTagsChanged();
+                return created.id;
+              }}
               initialInsert={composer.mode === "new" ? { files: composer.files, command: composer.command } : null}
               onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
               onCancel={closeComposer}
@@ -616,9 +668,9 @@ export function HomePage(props: HomePageProps) {
                 </button>
                 {quickTagIndex.tags.map((tag) => (
                   <button
-                    key={tag.name}
-                    className={"qn-tag" + (quickTagFilter.kind === "tag" && quickTagFilter.name === tag.name ? " is-selected" : "")}
-                    onClick={() => setQuickTagFilter(quickTagFilter.kind === "tag" && quickTagFilter.name === tag.name ? { kind: "all" } : { kind: "tag", name: tag.name })}
+                    key={tag.id}
+                    className={"qn-tag" + (quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? " is-selected" : "")}
+                    onClick={() => setQuickTagFilter(quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? { kind: "all" } : { kind: "tag", id: tag.id })}
                   >
                     <span className="mb-ellipsis">{tag.name}</span><span className="qn-tag__count">{tag.count}</span>
                   </button>
@@ -740,7 +792,7 @@ export function HomePage(props: HomePageProps) {
         </div>
         <button className="mobile-bottom-bar__item" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
         <button className="mobile-bottom-bar__item" onClick={() => setCreateOpen(true)} aria-label="新建" title="新建" aria-haspopup="dialog" aria-expanded={createOpen}><Plus /></button>
-        <button className="mobile-bottom-bar__item" onClick={() => showToast("AI 助手尚未接入：已立项，接入后这里再定用法")} aria-label="AI 助手" title="AI 助手（未接入）"><Sparkles /></button>
+        <button className="mobile-bottom-bar__item" onClick={() => { if (onOpenAi) onOpenAi(); else showToast("AI 助手尚未接入"); }} aria-label="AI 助手" title="AI 助手"><Sparkles /></button>
       </nav>
       )}
 
@@ -761,9 +813,15 @@ export function HomePage(props: HomePageProps) {
         return note ? (
           <MobileQuickNoteTagSheet
             open
-            options={quickTagIndex.tags}
-            selected={note.tags}
-            onAdd={(tag) => { void applyQuickNoteTags(note.id, addQuickNoteTag(note.tags, tag)); }}
+            options={quickNoteTagOptions}
+            selected={note.tagIds}
+            onAdd={(tagId) => { void applyQuickNoteTags(note.id, addQuickNoteTagId(note.tagIds, tagId)); }}
+            onCreate={async (name) => {
+              const created = await bridge.createQuickNoteTag(name);
+              // 标签是独立子系统：建标签只刷新标签目录，不回读小记列表。
+              await onQuickNoteTagsChanged();
+              return created.id;
+            }}
             onClose={() => setTagSheetFor(null)}
           />
         ) : null;
@@ -826,7 +884,7 @@ export function HomePage(props: HomePageProps) {
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
-function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (name: string) => void; onRequestDetail: (id: string) => void }) {
+function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (note.body || typeof IntersectionObserver === "undefined") return;
@@ -880,13 +938,17 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
           <span className="qn-card__date">{fmtDate(dateValue)}</span>
           <button className="qn-card__more mb-tap" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
         </div>
-        {note.tags.length > 0 && (
+        {note.tagIds.length > 0 && (
           <div className="qn-card__tags">
-            {note.tags.map((tag) => (
-              <button type="button" className="qn-tag" key={tag} onClick={(event) => { event.stopPropagation(); onFilterTag(tag); }}>
-                <span className="mb-ellipsis">{tag}</span>
-              </button>
-            ))}
+            {note.tagIds.map((tagId, index) => {
+              const name = note.tags[index];
+              if (!name) return null;
+              return (
+                <button type="button" className="qn-tag" key={tagId} onClick={(event) => { event.stopPropagation(); onFilterTag(tagId); }}>
+                  <span className="mb-ellipsis">{name}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

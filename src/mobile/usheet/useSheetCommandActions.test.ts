@@ -21,7 +21,6 @@ function Harness({ editing }: { editing: boolean }) {
   api = useSheetCommandActions({
     editing,
     getUniverAPI: () => univer,
-    getHost: () => host,
     refreshCellFormat: refresh as () => void,
   });
   return null;
@@ -44,6 +43,8 @@ beforeEach(() => {
     setBackgroundColor: vi.fn(),
     clearFormat: vi.fn(),
     setHorizontalAlignment: vi.fn(),
+    getNumberFormat: vi.fn(() => "0.00"),
+    setNumberFormat: vi.fn(),
     getRow: vi.fn(() => 1),
     getLastRow: vi.fn(() => 1),
     getColumn: vi.fn(() => 1),
@@ -103,14 +104,9 @@ describe("useSheetCommandActions", () => {
     expect(univer.executeCommand).toHaveBeenCalledWith("ui.operation.open-find-dialog");
   });
 
-  it("more-tools 命中官方移动工具按钮", () => {
-    const click = vi.fn();
-    const button = document.createElement("button");
-    button.setAttribute("aria-label", "打开表格工具");
-    button.click = click;
+  it("decimal-up 与 decimals 等价（增加小数位收进 ⋯ 后 id 变了）", () => {
     render();
-    host.append(button);
-    act(() => api.dispatchMenu("more-tools"));
-    expect(click).toHaveBeenCalledTimes(1);
+    act(() => api.dispatchMenu("decimal-up"));
+    expect(range.setNumberFormat).toHaveBeenCalledTimes(1);
   });
 });
