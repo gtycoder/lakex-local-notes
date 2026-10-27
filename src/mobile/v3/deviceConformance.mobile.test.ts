@@ -13,10 +13,11 @@ vi.mock("../native/assetFs", () => ({
   listQuickNoteAssetKeysFs: async (id: string) => [...assetState.current.keys()].filter((k) => k.startsWith("quick-notes/" + id + "/")),
   listAssetKeysFs: async () => [...assetState.current.keys()],
 }));
-import { defineDeviceConformance } from "../../../electron/s3v3/deviceConformance.js";
+import { defineDeviceConformance, type HarnessFactory } from "../../../electron/s3v3/deviceConformance.js";
 import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, listTrashed, saveNote, trashNote } from "../data/noteRepository.js";
+import { trashTreeItem } from "../data/trashRepository.js";
 import { purgeTreeItem, restoreTreeItem } from "../data/trashRepository.js";
 import { setBodyStoreBackendForTest, type BodyStoreBackend } from "../native/bodyStore.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
@@ -39,7 +40,7 @@ function fsBackend(dir: string): BodyStoreBackend {
   return backend;
 }
 
-defineDeviceConformance("设备适配器一致性（移动 store）", async (remote) => {
+const mobileFactory: HarnessFactory = async (remote) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-conf-mobile-"));
   const backend = fsBackend(root);
   const assetStore = new Map<string, Uint8Array>();
@@ -56,7 +57,13 @@ defineDeviceConformance("设备适配器一致性（移动 store）", async (rem
   };
   return {
     sync: (opts) => use(() => engine.sync(opts ?? {})),
-    seedNote: (id, title, body) => use(() => createNote(db, id, title, body, null, new Map())),
+    seedNote: (id, title, body, parentId) => use(() => createNote(db, id, title, body, parentId ?? null, new Map())),
+    seedFolder: (id, title) => use(async () => {
+      await db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES (?,?,NULL,0,'notebook',NULL,?,1)").run(id, title, new Date().toISOString());
+    }),
+    listFolderIds: () => use(async () => { const rows = await db.prepare("SELECT id FROM folders WHERE trashed_at IS NULL ORDER BY id").all() as Array<{ id: string }>; return rows.map((r) => r.id); }),
+    noteParentId: (id) => use(async () => { const row = await db.prepare("SELECT parent_id FROM notes WHERE id=?").get(id) as { parent_id: string | null } | undefined; return row?.parent_id ?? null; }),
+    deleteFolder: (id) => use(() => trashTreeItem(db, id, "folder")),
     seedAsset: (id, filename, bytes) => use(() => device.writeAsset(id, filename, bytes)),
     readAsset: (id, filename) => use(() => device.readAsset(id, filename)),
     editNote: (id, title, body) => use(async () => { await saveNote(db, id, title, body, null, new Map()); }),
@@ -69,4 +76,9 @@ defineDeviceConformance("设备适配器一致性（移动 store）", async (rem
     readBody: (id) => use(async () => { const bytes = await device.readBody(id); return bytes ? new TextDecoder().decode(bytes) : null; }),
     close: async () => { await db.close(); setBodyStoreBackendForTest(null); await fs.rm(root, { recursive: true, force: true }); },
   };
-});
+};
+// 已确认的跨端缺口：移动端 restoreTreeItem 不校验原父是否存在/已删，会把文档恢复到已删目录下
+// （桌面 trashLifecycle.restoreTrashItem 会回落到默认笔记本）。规格保持严格，对该平台记 expected-fail；
+// 修好后删掉这一行即可把场景转正（详见 lead 汇报的 bug 复现）。
+mobileFactory.capabilities = { restoreFallsBackToDefaultNotebook: false };
+defineDeviceConformance("设备适配器一致性（移动 store）", mobileFactory);

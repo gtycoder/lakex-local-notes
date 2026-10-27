@@ -19,7 +19,14 @@ defineDeviceConformance("设备适配器一致性（桌面 store）", async (rem
   const engine = new S3v3SyncEngine({ remote, device, deviceId: "desktop-conf-" + Math.random().toString(36).slice(2, 8) });
   return {
     sync: (opts) => engine.sync(opts ?? {}),
-    seedNote: async (id, title, body) => { store.createNoteInAtTopWithContent(ensureNotebook(), title, body, [], id); },
+    seedNote: async (id, title, body, parentId) => { store.createNoteInAtTopWithContent(parentId ?? ensureNotebook(), title, body, [], id); },
+    seedFolder: async (id, title) => {
+      // 用 importRemoteFolder 强制指定 id（createNotebook 会生成新 id，跨端 id 保真断言需要）。
+      store.importRemoteFolder({ id, title, parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: new Date().toISOString() });
+    },
+    listFolderIds: async () => store.listFoldersForSync().filter((f) => !f.trashedAt).map((f) => f.id).sort(),
+    noteParentId: async (id) => store.listNotesSyncMeta().find((n) => n.id === id)?.parentId ?? null,
+    deleteFolder: async (id) => { store.deleteTreeNode(id); },
     seedAsset: async (id, filename, bytes) => {
       const dir = path.join(root, "note-assets", id);
       await fs.mkdir(dir, { recursive: true });
