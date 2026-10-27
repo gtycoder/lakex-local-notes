@@ -36,6 +36,15 @@ function hasStoredS3Settings(): boolean {
   }
 }
 
+/** 是否**存过**同步设置（261027「新设备默认按需」判定：存过就以用户值为准，绝不再改）。 */
+export function hasStoredSyncSettings(): boolean {
+  try {
+    return localStorage.getItem(SYNC_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function readSyncSettings(): SyncSettings {
   // 261022（用户点单，与桌面同口径）：**默认开关 = 是否已配置 S3** —— 全新安装没有任何 S3 配置时
   // 「启用云同步」默认关闭（没配置与关掉语义等价）；已配置的旧库仍默认开着（不回归）；存过的值优先。

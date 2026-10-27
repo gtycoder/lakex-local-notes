@@ -1219,3 +1219,22 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 .mb-doc-skeleton__line--short { width: 62%; }
 @keyframes mb-doc-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 .doc-pane--fresh .mobile-doc-body { animation: mb-doc-fade var(--mobile-duration-panel) var(--mobile-ease-panel); }
+
+/* 261027 按需资产占位：AssetServer 还没有这个文件时，内核里是一张破图（alt 文本会显示在框里）。
+   直接把 img 撑成「未下载」卡片（点击会触发该篇/该条补拉，见 editor/missingAssetPlaceholder.ts）。 */
+.mb-asset-missing {
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: 120px;
+  min-height: 84px;
+  max-width: 100%;
+  border: 1px dashed var(--mb-line, rgba(0, 0, 0, 0.18));
+  border-radius: 10px;
+  background: var(--mb-fill-quiet, rgba(0, 0, 0, 0.04));
+  color: var(--mb-text-tertiary, rgba(0, 0, 0, 0.45));
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  object-fit: contain;
+  cursor: pointer;
+}

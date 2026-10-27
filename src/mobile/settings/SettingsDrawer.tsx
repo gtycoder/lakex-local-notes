@@ -426,7 +426,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       </Item>
                       <Switch
                         name="按需下载附件"
-                        desc="开启后首拉只同步文档与附件清单，图片/附件在打开或预览时按需下载（首拉更快、省流量）；关闭则首拉全量下载（离线完整性最好）。"
+                        desc="开启后首拉只同步文档与附件清单，图片/附件在打开或预览时按需下载（首拉更快、省流量）；关闭则首拉全量下载（离线完整性最好）。新设备默认开启。"
                         checked={syncCfg?.deferAssets === true}
                         onChange={(next) => updateSyncSettings({ deferAssets: next })}
                       />

@@ -11,7 +11,9 @@ describe("移动端按需资产（P0-4，261026）", () => {
     expect(TYPES).toContain("deferAssets?: boolean");
     expect(V3).toContain("deferAssets?: boolean");
     expect(V3).toContain("deferAssets: true");
-    expect(BRIDGE).toContain("readSyncSettings().deferAssets");
+    // 261027：同步入口改走「新设备默认开」解析器（存过设置仍以用户值为准，见 sync/deferAssetsDefault.ts）。
+    expect(BRIDGE).toContain("resolveDeferAssets");
+    expect(BRIDGE).toContain("resolved.defaulted");
   });
 
   it("设置页有「按需下载附件」开关", () => {

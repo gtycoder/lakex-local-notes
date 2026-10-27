@@ -1,5 +1,5 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
+import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs, listQuickNoteAssetKeysFs } from "../native/assetFs";
 import type { SyncReport } from "../../core/syncEngineTypes.js";
 import { backfillV3Assets, type AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";
 import { createMobileS3v3Remote } from "../v3/s3v3Remote.js";
@@ -13,6 +13,7 @@ import { writeSyncStatus } from "../sync/syncStatusStore";
 import * as gcRepository from "../data/gcRepository.js";
 import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
 import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
+import { resolveDeferAssets } from "../sync/deferAssetsDefault";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
 import { loadV3State } from "../data/v3StateRepository.js";
@@ -47,28 +48,42 @@ export async function mobileCloudState(): Promise<CloudState> {
  * v3 原生路径（261026 parity B6）：pointer→索引→该篇 assetsHash→声明对象→本地差集下载，
  * 旧实现读的 declared_assets 表在 v3 下永远为空（空操作）。
  * @param onlyMissing true = 只补本地缺失的资源（预览用）；false = 强拉全量（恢复用） */
-export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false): Promise<void> {
-  if (noteIds.length === 0) return;
+export async function downloadDeclaredAssetsFor(
+  noteIds: string[],
+  onlyMissing = false,
+  space: "lake" | "quickNotes" = "lake",
+): Promise<{ downloaded: number; failed: number }> {
+  const totals = { downloaded: 0, failed: 0 };
+  if (noteIds.length === 0) return totals;
   try {
     // 单一判据：没配置 或 关闭云同步 ⇒ **一个请求都不发**（用户 261006：关闭云同步 = 离线本地空间）
     const state = await mobileCloudState();
-    if (!canTouchNetwork(state)) { console.info(`[asset] 跳过补拉（${state}）`); return; }
+    if (!canTouchNetwork(state)) { console.info(`[asset] 跳过补拉（${state}）`); return totals; }
     const cfg = await syncDomain.getS3Settings();
-    if (!cfg) return;
+    if (!cfg) return totals;
     const remote = createMobileS3v3Remote(cfg);
+    // 261027：同一份补拉逻辑同时服务文档与小记（小记资源键前缀 quick-notes/{id}/，物理在 quick-notes/assets/）。
+    const prefixOf = (id: string): string => (space === "quickNotes" ? "quick-notes/" + id + "/" : id + "/");
     const port: AssetBackfillPort = {
-      listLocal: async (id) => (await listNoteAssetKeysFs(id)).map((k) => (k.startsWith(id + "/") ? k.slice(id.length + 1) : k)),
-      readLocal: async (id, filename) => loadAssetBytesFs(id + "/" + filename),
-      writeLocal: async (id, filename, bytes) => saveAssetBytesFs(id + "/" + filename, bytes),
+      listLocal: async (id) => {
+        const prefix = prefixOf(id);
+        const keys = await (space === "quickNotes" ? listQuickNoteAssetKeysFs(id) : listNoteAssetKeysFs(id));
+        return keys.map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k));
+      },
+      readLocal: async (id, filename) => loadAssetBytesFs(prefixOf(id) + filename),
+      writeLocal: async (id, filename, bytes) => saveAssetBytesFs(prefixOf(id) + filename, bytes),
     };
     for (const noteId of noteIds) {
-      const result = await backfillV3Assets(remote, "lake", noteId, port, { force: !onlyMissing });
+      const result = await backfillV3Assets(remote, space, noteId, port, { force: !onlyMissing });
+      totals.downloaded += result.downloaded;
+      totals.failed += result.failed.length;
       if (result.warnings.length > 0) console.warn(`[asset] ${noteId} 补拉: ` + result.warnings.slice(0, 5).join(" | "));
       console.info(`[asset] ${noteId} found=${result.found} down=${result.downloaded} skip=${result.skipped} missing=${result.missing.length} failed=${result.failed.length}`);
     }
   } catch (e) {
     console.warn("[asset] 资源下载失败（保留调用方，资源下次同步补拉）", e);
   }
+  return totals;
 }
 
 
@@ -352,7 +367,13 @@ export const syncDomain = {
         const d = await ensureDb();
         const progress: Array<{ phase: string; ms: number }> = [];
         // 按需资产（P0-4）：设置里打开时首拉只搬正文/元数据，媒体打开/预览时补拉。
-        const deferAssets = readSyncSettings().deferAssets === true;
+        // 261027：全新设备（从未同步过且没存过设置）默认开，并立刻固化 → 打开文档时的按需补拉同样生效。
+        const resolved = await resolveDeferAssets(d);
+        if (resolved.defaulted) {
+          syncDomain.saveSyncSettings({ ...readSyncSettings(), deferAssets: true });
+          console.info("[sync] 新设备默认开启「按需下载附件」：首拉只同步正文/清单，媒体打开时补拉");
+        }
+        const deferAssets = resolved.deferAssets;
         const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, {
           onPhase: (phase, ms) => progress.push({ phase, ms }),
           onProgress: (p) => pushSyncProgress(p),

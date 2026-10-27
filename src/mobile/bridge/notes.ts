@@ -269,6 +269,19 @@ export const notesDomain = {
     });
   },
 
+  /**
+   * 按需资产占位点击补拉（261027）：只补这几篇缺失的媒体（原生 getToFile 快速路径）。
+   * 返回计数：0/0 通常表示离线、未配置云同步或本来就没有声明（调用方据此提示）。
+   */
+  async ensureNoteAssets(ids: string[]): Promise<{ downloaded: number; failed: number }> {
+    return runMaintenance("ensureNoteAssets", () => ensureAssetsNative(ids));
+  },
+
+  /** 小记图片按需补拉（261027）：与文档同一条 v3 补拉逻辑，空间换成 quickNotes。 */
+  async ensureQuickNoteAssets(ids: string[]): Promise<{ downloaded: number; failed: number }> {
+    return runMaintenance("ensureQuickNoteAssets", () => downloadDeclaredAssetsFor(ids, true, "quickNotes"));
+  },
+
   async restoreNote(id: string): Promise<void> {
     return notesDomain.restoreTreeItem(id, "note");
   },

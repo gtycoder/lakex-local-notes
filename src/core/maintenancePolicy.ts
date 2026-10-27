@@ -70,6 +70,10 @@ export const MAINTENANCE_OPS = [
   // 派生搜索索引后台补建（261026）：与同步/GC 串行，但只读正文/写 FTS，不占用写域。
   // （按需资产打开时补拉复用 ensureTrashNoteAssets 这个操作，语义同为「保证该篇资产本地化」。）
   "ensureSearchIndex",
+  // 261027：按需资产占位点击补拉（文档 / 小记各一条入口）。与同步/GC 串行，只读写本地资产，
+  // 语义同为「保证这一条资产的本地副本」，与 ensureTrashNoteAssets 同域。
+  "ensureNoteAssets",
+  "ensureQuickNoteAssets",
 ] as const;
 
 /**

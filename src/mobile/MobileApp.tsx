@@ -19,6 +19,7 @@ import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
 import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, type QuickNoteTag } from "../core/quickNoteTags.js";
+import { installMissingAssetPlaceholders } from "./editor/missingAssetPlaceholder";
 
 /**
  * 小记写作区（懒加载）：261010 起 **深链/长按那条 capture 路径与工作台共用同一个内核卡片**
@@ -184,6 +185,28 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
 
   // 自动同步（261012）：autoMode=interval 起定时器；onOpenClose 在冷启动就绪 + 回到前台时补一次。
   useAutoSync(phase === "ready");
+
+  /**
+   * 按需资产占位（261027）：按需下载时，还没打开过的文档/小记里的图片本地没有文件，AssetServer 404 →
+   * 内核显示破图。这里统一接管为「图片未下载，点击下载」：点击补拉这一篇/这一条缺失的媒体（维护域，
+   * 不阻塞其它操作），成功后就地把所有同 key 的图片恢复成真实地址；离线/未配置时给提示。
+   */
+  useEffect(() => installMissingAssetPlaceholders(document, {
+    download: async (refs) => {
+      const noteIds = [...new Set(refs.filter((r) => r.space === "note").map((r) => r.noteId))];
+      const quickIds = [...new Set(refs.filter((r) => r.space === "quick-notes").map((r) => r.noteId))];
+      let downloaded = 0;
+      let failed = 0;
+      try {
+        if (noteIds.length > 0) { const got = await bridge.ensureNoteAssets(noteIds); downloaded += got.downloaded; failed += got.failed; }
+        if (quickIds.length > 0) { const got = await bridge.ensureQuickNoteAssets(quickIds); downloaded += got.downloaded; failed += got.failed; }
+      } catch (error) {
+        console.warn("[asset] 占位图补拉失败", error);
+      }
+      return { downloaded, failed };
+    },
+    showToast: (message, type) => showToast(message, { type: type ?? "info" }),
+  }), []);
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
   // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）
