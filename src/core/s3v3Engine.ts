@@ -221,7 +221,7 @@ export class S3v3SyncEngine {
   /** 大对象分片阈值（261027）：超过则按 Range 并发下载；0 = 关闭。 */
   private readonly largeAssetChunkBytes: number;
   private phaseStart = 0;
-  private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes?: Uint8Array; fromFile?: string; gzip?: boolean }> = [];
+  private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes?: Uint8Array; fromFile?: string; gzip?: boolean; /** 字节数（fromFile 也带上，供上传进度用） */ size?: number }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
   private warnings: string[] = [];
   private warningDetails: SyncWarning[] = [];
@@ -1497,8 +1497,8 @@ export class S3v3SyncEngine {
       const hash = stat && stat.hash ? stat.hash : sha256Hex(bytes!);
       entries.push({ filename, size, hash });
       const key = space === "lake" ? assetKey(id, filename) : quickNoteAssetKey(id, filename);
-      if (nativePath) this.uploadOps.push({ space, noteId: id, key, fromFile: nativePath });
-      else this.uploadOps.push({ space, noteId: id, key, bytes: bytes! });
+      if (nativePath) this.uploadOps.push({ space, noteId: id, key, fromFile: nativePath, size });
+      else this.uploadOps.push({ space, noteId: id, key, bytes: bytes!, size });
     }
     return buildAssetDeclaration(entries);
   }
@@ -1507,15 +1507,27 @@ export class S3v3SyncEngine {
   private async flushUploadOps(): Promise<Map<string, string>> {
     const ops = this.uploadOps;
     this.uploadOps = [];
+    // 261027：上传也报进度（文件粒度；大附件单文件时 UI 至少能看到「上传中」而不是静止）。
+    const total = ops.length;
+    const bytesTotal = ops.reduce((sum, op) => sum + (op.size ?? op.bytes?.length ?? 0), 0);
+    let done = 0;
+    let bytesDone = 0;
+    if (total > 0) this.emitProgress({ phase: "uploads", done: 0, total, bytesDone: 0, bytesTotal });
     const { errors } = await runPoolSettled(ops, this.transferConcurrency, async (op) => {
-      // P0-4：有原生流式上传能力时只传 key + 本地相对路径（字节不过 JS 桥）；否则回退字节路径。
-      if (op.fromFile && this.remote.putFromFile) {
-        try {
-          if (await this.remote.putFromFile(op.key, op.fromFile, op.gzip ? { gzip: true } : undefined)) return;
-        } catch { /* 回退字节路径 */ }
+      try {
+        // P0-4：有原生流式上传能力时只传 key + 本地相对路径（字节不过 JS 桥）；否则回退字节路径。
+        if (op.fromFile && this.remote.putFromFile) {
+          try {
+            if (await this.remote.putFromFile(op.key, op.fromFile, op.gzip ? { gzip: true } : undefined)) return;
+          } catch { /* 回退字节路径 */ }
+        }
+        if (!op.bytes) throw new Error("上传任务缺少字节/原生文件路径: " + op.key);
+        await this.remote.put(op.key, op.bytes, op.gzip ? { gzip: true } : undefined);
+      } finally {
+        done += 1;
+        bytesDone += op.size ?? op.bytes?.length ?? 0;
+        this.emitProgress({ phase: "uploads", done, total, bytesDone, bytesTotal });
       }
-      if (!op.bytes) throw new Error("上传任务缺少字节/原生文件路径: " + op.key);
-      await this.remote.put(op.key, op.bytes, op.gzip ? { gzip: true } : undefined);
     });
     const failed = new Map<string, string>();
     for (const err of errors) {
@@ -1652,9 +1664,12 @@ export class S3v3SyncEngine {
     this.phase("assets");
     const result = await runTransferPipeline(tasks, this.downloadConcurrency, async (t) => {
       // P0-4：原生流式下载（移动端 OkHttp 直写文件 + 原生 size/sha256 校验，字节不过 JS 桥）。
-      if (t.space === "lake" && this.remote.getToFile && this.device.assetNativePath) {
+      // 261027 Phase2：小记图片（quick-notes/assets）也走同一条原生通道。
+      if (this.remote.getToFile && (this.device.assetNativePathFor || this.device.assetNativePath)) {
         try {
-          const dest = await this.device.assetNativePath(t.noteId, t.filename);
+          const dest = this.device.assetNativePathFor
+            ? await this.device.assetNativePathFor(t.space, t.noteId, t.filename)
+            : (t.space === "lake" && this.device.assetNativePath ? await this.device.assetNativePath(t.noteId, t.filename) : null);
           if (dest) {
             const status = await this.remote.getToFile(t.key, dest, { size: t.size, sha256: t.hash });
             if (status === "ok") { this.clearPendingAsset(t); return t.size; }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
+import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3Index.js";
 
 import { S3v3SyncEngine } from "./s3v3Engine.js";
 import type { S3v3Remote, RemoteObjectInfo } from "./s3v3Ports.js";
@@ -15,6 +16,7 @@ class MemRemote implements S3v3Remote {
   objects = new Map<string, Uint8Array>();
   puts: string[] = [];
   fromFileCalls: Array<{ key: string; localPath: string }> = [];
+  getToFile?: (key: string, localPath: string, expected: { size: number; sha256: string }) => Promise<"ok" | "missing" | "corrupt" | "unsupported">;
   async get(key: string): Promise<Uint8Array | null> { return this.objects.get(key) ?? null; }
   async put(key: string, bytes: Uint8Array): Promise<void> { this.puts.push(key); this.objects.set(key, new Uint8Array(bytes)); }
   async putFromFile(key: string, localPath: string): Promise<boolean> {
@@ -71,9 +73,14 @@ describe("原生资产上传（261027 Phase1）：声明用原生 hash，上传�
   it("lake 资产：size/hash 来自 listAssetStats，PUT 走 putFromFile，readAsset 零调用", async () => {
     const remote = new MemRemote();
     const device = new NativeDevice();
-    const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev-native" });
+    const progress: Array<{ phase: string; done?: number; total?: number; bytesDone?: number; bytesTotal?: number }> = [];
+    const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev-native", onProgress: (p) => progress.push(p) });
     const report = await engine.sync({ onEmptyCloud: "upload" });
     expect(report.published).toBe(true);
+    // 261027：上传也报进度（文件粒度 + 字节累计）。
+    const uploads = progress.filter((p) => p.phase === "uploads");
+    expect(uploads.length).toBeGreaterThan(0);
+    expect(uploads[uploads.length - 1].bytesDone).toBeGreaterThan(0);
     expect(device.readAssetCalls).toEqual([]); // 关键：字节没有过桥
     expect(remote.puts).not.toContain("assets/n1/a.png");
     expect(remote.fromFileCalls.some((c) => c.key === "assets/n1/a.png" && c.localPath === "note-assets/n1/a.png")).toBe(true);
@@ -96,5 +103,39 @@ describe("原生资产上传（261027 Phase1）：声明用原生 hash，上传�
     const call = remote.fromFileCalls.find((c) => c.key === "quick-notes/assets/q1/b.png");
     expect(call?.localPath).toBe("quick-notes/assets/q1/b.png");
     expect(remote.puts).not.toContain("quick-notes/assets/q1/b.png");
+  });
+
+  it("小记图片下载：原生 getToFile（quick-notes/assets 路径），不产生字节 GET", async () => {
+    const remote = new MemRemote();
+    const device = new NativeDevice();
+    device.state = { ...device.state, lake: { v: 3, space: "lake", notes: [], folders: [] } };
+    const quickBody = "quick-body";
+    const quickHash = H(quickBody);
+    const decl = { filename: "b.png", size: ASSET_BODY.length, hash: ASSET_HASH };
+    const built = buildAssetDeclaration([decl]);
+    const quickIndex: QuickNotesIndex = {
+      v: 3, space: "quickNotes",
+      items: [{ id: "q1", createdAt: ISO, updatedAt: ISO, contentHash: quickHash, assetsHash: built.declHash }],
+    };
+    const quickSer = serializeQuickNotesIndex(quickIndex);
+    const quickCommit = indexHashOf(quickSer);
+    const lakeIndex: LakeIndex = { v: 3, space: "lake", folders: [], notes: [] };
+    const lakeSer = serializeLakeIndex(lakeIndex);
+    const lakeCommit = indexHashOf(lakeSer);
+    remote.put("quick-notes/meta/index/" + quickCommit + ".json", enc(quickSer));
+    remote.put("meta/index/" + lakeCommit + ".json", enc(lakeSer));
+    remote.put("quick-notes/objects/" + quickHash + ".qnote", enc(quickBody));
+    remote.put("quick-notes/meta/assets/q1/" + built.declHash + ".json", enc(serializeDeclaration(built.declaration)));
+    remote.put("meta/pointer.json", enc(JSON.stringify({ v: 3, epoch: "11111111-1111-4111-8111-111111111111", generation: 1, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: ISO })));
+    // 本地没有该图片：清掉 fake 设备的「已有同内容」清单，确保真的走下载差集。
+    device.listQuickAssetStats = async () => [];
+    device.listQuickAssets = async () => [];
+    const downloads: Array<{ key: string; localPath: string }> = [];
+    remote.getToFile = async (key: string, localPath: string) => { downloads.push({ key, localPath }); return "ok"; };
+
+    const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev-native-dl" });
+    await engine.sync({ onEmptyCloud: "stay" });
+    expect(downloads).toEqual([{ key: "quick-notes/assets/q1/b.png", localPath: "quick-notes/assets/q1/b.png" }]);
+    expect(remote.objects.get("quick-notes/assets/q1/b.png")).toBeUndefined(); // 没有走字节路径落盘
   });
 });

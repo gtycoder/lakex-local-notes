@@ -278,9 +278,12 @@ export const notesDomain = {
     return runPriority("ensureNoteAssets", () => ensureAssetsNative(ids));
   },
 
-  /** 小记图片按需补拉（261027）：与文档同一条 v3 补拉逻辑，空间换成 quickNotes。 */
+  /** 小记图片按需补拉（261027 Phase2）：与文档同一条原生路径（getToFile 直写，空间换成 quickNotes）。 */
   async ensureQuickNoteAssets(ids: string[]): Promise<{ downloaded: number; failed: number }> {
-    return runPriority("ensureQuickNoteAssets", () => downloadDeclaredAssetsFor(ids, true, "quickNotes"));
+    return runPriority("ensureQuickNoteAssets", async () => {
+      const r = await ensureAssetsNative(ids, { space: "quickNotes" });
+      return { downloaded: r.downloaded, failed: r.failed };
+    });
   },
 
   async restoreNote(id: string): Promise<void> {

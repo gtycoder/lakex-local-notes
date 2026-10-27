@@ -18,7 +18,7 @@ import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
 import { loadV3State } from "../data/v3StateRepository.js";
 import { MobileDeviceStore } from "../v3/mobileDeviceStore.js";
-import { declarationKey, assetKey } from "../../core/s3v3Keys.js";
+import { declarationKey, assetKey, quickNoteAssetKey } from "../../core/s3v3Keys.js";
 import { validateAssetDeclaration, type AssetDeclaration } from "../../core/s3v3Index.js";
 import { runTransferPipeline } from "../../core/s3v3Transfer.js";
 import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
@@ -99,8 +99,9 @@ export async function downloadDeclaredAssetsFor(
  */
 export async function ensureAssetsNative(
   noteIds: string[],
-  opts: { concurrency?: number } = {},
+  opts: { concurrency?: number; space?: "lake" | "quickNotes" } = {},
 ): Promise<{ downloaded: number; failed: number; skipped: number }> {
+  const space = opts.space ?? "lake";
   if (noteIds.length === 0) return { downloaded: 0, failed: 0, skipped: 0 };
   const state = await mobileCloudState();
   if (!canTouchNetwork(state)) return { downloaded: 0, failed: 0, skipped: noteIds.length };
@@ -118,7 +119,7 @@ export async function ensureAssetsNative(
   // 1) 声明并发取（小对象；8 并发足够）。
   const decls = new Map<string, AssetDeclaration>();
   await runTransferPipeline(ids.map((id) => ({ id, hash: side.assetsHash[id] })), 8, async (t) => {
-    const bytes = await remote.get(declarationKey("lake", t.id, t.hash));
+    const bytes = await remote.get(declarationKey(space, t.id, t.hash));
     if (bytes) decls.set(t.id, validateAssetDeclaration(JSON.parse(new TextDecoder().decode(bytes))));
     return 0;
   });
@@ -128,26 +129,30 @@ export async function ensureAssetsNative(
   for (const id of ids) {
     const decl = decls.get(id);
     if (!decl) continue;
-    const local = new Set(await store.listAssets(id));
+    const local = new Set(space === "lake" ? await store.listAssets(id) : await store.listQuickAssets(id));
     for (const a of decl.assets) if (!local.has(a.filename)) tasks.push({ noteId: id, filename: a.filename, size: a.size, hash: a.hash });
   }
   if (tasks.length === 0) return { downloaded: 0, failed: 0, skipped };
 
   // 3) 原生流式下载 + 全局 20 并发（失败只影响该对象）。
   const pipeline = await runTransferPipeline(tasks, opts.concurrency ?? 20, async (t) => {
-    if (remote.getToFile && store.assetNativePath) {
+    const objectKey = space === "lake" ? assetKey(t.noteId, t.filename) : quickNoteAssetKey(t.noteId, t.filename);
+    if (remote.getToFile) {
       try {
-        const dest = await store.assetNativePath(t.noteId, t.filename);
+        const dest = store.assetNativePathFor
+          ? await store.assetNativePathFor(space, t.noteId, t.filename)
+          : (space === "lake" && store.assetNativePath ? await store.assetNativePath(t.noteId, t.filename) : null);
         if (dest) {
-          const status = await remote.getToFile(assetKey(t.noteId, t.filename), dest, { size: t.size, sha256: t.hash });
+          const status = await remote.getToFile(objectKey, dest, { size: t.size, sha256: t.hash });
           if (status === "ok") return t.size;
           if (status === "missing" || status === "corrupt") return 0;
         }
       } catch { /* 回退字节路径 */ }
     }
-    const bytes = await remote.get(assetKey(t.noteId, t.filename));
+    const bytes = await remote.get(objectKey);
     if (!bytes || bytes.length !== t.size) return 0;
-    await store.writeAsset(t.noteId, t.filename, bytes);
+    if (space === "lake") await store.writeAsset(t.noteId, t.filename, bytes);
+    else await store.writeQuickAsset(t.noteId, t.filename, bytes);
     return bytes.length;
   });
   return { downloaded: tasks.length - pipeline.errors.length, failed: pipeline.errors.length, skipped };

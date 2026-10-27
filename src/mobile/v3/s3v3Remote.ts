@@ -44,7 +44,8 @@ function attachNativeAssetTransfer(remote: S3v3Remote, cfg: { endpoint: string; 
     return configured;
   };
   remote.getToFile = async (key, destPath, expected) => {
-    if (!key.startsWith("assets/")) return "unsupported";
+    // 261027 Phase2：小记图片（quick-notes/assets/...）也走原生流式下载（destPath 由 assetNativePathFor 给出）。
+    if (!key.startsWith("assets/") && !key.startsWith("quick-notes/assets/")) return "unsupported";
     if (!(await ensure())) return "unsupported";
     try {
       const res = await NativeAssetSync.getFile({
