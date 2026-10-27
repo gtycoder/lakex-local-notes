@@ -158,6 +158,8 @@ export interface S3v3EngineOptions {
   transferConcurrency?: number;
   /** 下载流水线并发（正文/声明/资产共用；默认 20，clamp 1..32）。 */
   downloadConcurrency?: number;
+  /** 大对象分片大小（字节；默认 8MB，<=0 关闭分片）。仅当 remote.getRange 存在且没有原生整对象流式时生效。 */
+  largeAssetChunkBytes?: number;
 }
 
 function tagEntryToTag(e: { id: string; name: string; sortOrder?: number; order?: number; pinned?: boolean; createdAt: string; updatedAt: string; deletedAt?: string | null }): QuickNoteTag {
@@ -207,6 +209,8 @@ export class S3v3SyncEngine {
   private readonly onProgress?: (progress: S3v3Progress) => void;
   private readonly transferConcurrency: number;
   private readonly downloadConcurrency: number;
+  /** 大对象分片阈值（261027）：超过则按 Range 并发下载；0 = 关闭。 */
+  private readonly largeAssetChunkBytes: number;
   private phaseStart = 0;
   private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes?: Uint8Array; fromFile?: string; gzip?: boolean }> = [];
   private readonly bodyCache = new Map<string, Uint8Array>();
@@ -224,6 +228,7 @@ export class S3v3SyncEngine {
     this.onProgress = opts.onProgress;
     this.transferConcurrency = Math.max(1, Math.min(32, opts.transferConcurrency ?? DEFAULT_TRANSFER_CONCURRENCY));
     this.downloadConcurrency = Math.max(1, Math.min(32, opts.downloadConcurrency ?? DEFAULT_DOWNLOAD_CONCURRENCY));
+    this.largeAssetChunkBytes = Math.max(0, Math.floor(opts.largeAssetChunkBytes ?? 8 * 1024 * 1024));
   }
 
   /** 记录阶段耗时；回调异常不影响同步。 */
@@ -1614,7 +1619,11 @@ export class S3v3SyncEngine {
           }
         } catch { /* 原生路径异常 → 回退字节路径，保证可用性 */ }
       }
-      const bytes = await this.remote.get(t.key);
+      // 261027：桌面端大对象走 Range 分片并发（移动端有原生整对象流式，不在此列）。
+      const ranged = t.space === "lake" && !this.remote.getToFile
+        ? await this.downloadAssetByRanges(t.key, t.size, t.hash)
+        : null;
+      const bytes = ranged ?? await this.remote.get(t.key);
       if (!bytes) {
         this.warn((t.space === "lake" ? "缺附件: " : "缺小记图片: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
         return 0;
@@ -1642,6 +1651,33 @@ export class S3v3SyncEngine {
       if (!t) continue;
       this.warn("附件下载异常: " + t.noteId + "/" + t.filename + " " + ((err.error as Error)?.message ?? String(err.error)), { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
     }
+  }
+
+  /**
+   * 大对象 Range 分片并发下载（261027）：按 chunkBytes 切成 2–8 片并行 GET，拼回并校验 sha256。
+   * 任一失败/校验不符返回 null（调用方回退整对象 GET）。仅用于字节路径（桌面），移动端原生流式优先。
+   */
+  private async downloadAssetByRanges(key: string, size: number, hash: string): Promise<Uint8Array | null> {
+    const getRange = this.remote.getRange;
+    const chunk = this.largeAssetChunkBytes;
+    if (!getRange || chunk <= 0 || size <= chunk) return null;
+    const parts = Math.min(8, Math.max(2, Math.ceil(size / chunk)));
+    const partSize = Math.ceil(size / parts);
+    try {
+      const slices = await Promise.all(Array.from({ length: parts }, (_, index) => {
+        const start = index * partSize;
+        if (start >= size) return Promise.resolve(new Uint8Array(0));
+        return getRange.call(this.remote, key, start, Math.min(size, start + partSize));
+      }));
+      if (slices.some((slice) => slice === null)) return null;
+      const total = slices.reduce((sum, slice) => sum + (slice?.length ?? 0), 0);
+      if (total !== size) return null;
+      const out = new Uint8Array(size);
+      let offset = 0;
+      for (const slice of slices) { out.set(slice!, offset); offset += slice!.length; }
+      if (sha256Hex(out) !== hash) return null;
+      return out;
+    } catch { return null; }
   }
 
   /**

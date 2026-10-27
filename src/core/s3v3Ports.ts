@@ -23,6 +23,12 @@ export interface S3v3Remote {
   getToFile?(key: string, destPath: string, expected: { size: number; sha256: string }): Promise<NativeGetStatus>;
   /** 原生/流式上传本地文件（可选）：字节不经过 JS。返回 false/throw 由调用方按失败处理。 */
   putFromFile?(key: string, localPath: string, opts?: { gzip?: boolean }): Promise<boolean>;
+
+  /**
+   * 分片下载（可选，261027）：大对象按 byte 区间并发 GET（end 为开区间），由引擎负责拼接与 sha256 校验。
+   * 桌面实现走 S3 Range 头；移动端优先原生 getToFile（流式整对象），不实现时回退整对象 GET。
+   */
+  getRange?(key: string, start: number, end: number): Promise<Uint8Array | null>;
 }
 
 export interface S3v3Settings {

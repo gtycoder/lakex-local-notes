@@ -113,8 +113,12 @@ export async function syncWithV3(
     const total = p.total ?? 0;
     report({ phase: "download", message: label + (total > 0 ? " " + done + "/" + total : ""), current: done, total });
   };
+  // 测试/压测可用 LAKE_S3V3_RANGE_CHUNK 控制大对象分片（0 = 关闭 Range，走整对象）。
+  const rangeChunkEnv = process.env.LAKE_S3V3_RANGE_CHUNK;
+  const largeAssetChunkBytes = rangeChunkEnv !== undefined && rangeChunkEnv !== "" ? Number(rangeChunkEnv) : undefined;
   const engine = new S3v3SyncEngine({
     remote, device, deviceId,
+    ...(largeAssetChunkBytes !== undefined && Number.isFinite(largeAssetChunkBytes) ? { largeAssetChunkBytes } : {}),
     onProgress: (p) => reportTransferProgress(p),
     onPhase: (phase, ms) => {
       if (ms >= 1000) store.logScopes.sync.warn(`[v3][slow] ${phase} ${ms}ms`);

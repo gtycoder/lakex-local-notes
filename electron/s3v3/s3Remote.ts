@@ -62,6 +62,24 @@ export class S3v3S3Remote implements S3v3Remote {
     }
   }
 
+  /** 大对象分片下载（261027）：Range 头只取 [start,end) 字节。 */
+  async getRange(rel: string, start: number, end: number): Promise<Uint8Array | null> {
+    try {
+      const out = await this.client.send(new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: this.key(rel),
+        Range: "bytes=" + start + "-" + (end - 1),
+      }));
+      const chunks: Buffer[] = [];
+      for await (const c of out.Body as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(c));
+      return new Uint8Array(Buffer.concat(chunks));
+    } catch (e) {
+      const err = e as { name?: string; $metadata?: { httpStatusCode?: number }; Code?: string };
+      if (err.name === "NoSuchKey" || err.name === "NotFound" || err.$metadata?.httpStatusCode === 404 || err.Code === "NoSuchKey") return null;
+      throw e;
+    }
+  }
+
   async put(rel: string, bytes: Uint8Array, opts?: { gzip?: boolean }): Promise<void> {
     // level 1：索引/声明是 JSON，压缩率几乎相同但 CPU 明显更低（大库增量发布更快）
       const body = opts?.gzip ? gzipSync(Buffer.from(bytes), { level: 1 }) : Buffer.from(bytes);
