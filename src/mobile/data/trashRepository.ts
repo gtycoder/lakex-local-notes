@@ -110,8 +110,14 @@ export async function listTrashTree(d: MobileDb): Promise<MobileTrashTreeItem[]>
  * 261027 conformance 抓到：只 COALESCE(deleted_from_parent_id,parent_id) 会把文档挂到已删目录上 ⇒
  * 活跃文档父级悬空、树里不可见。没有活跃笔记本时懒建「未分类」（与 syncDbPort.defaultNotebookId 同口径）。
  */
-async function resolveRestoreParent(d: MobileDb, preferred: string | null): Promise<string | null> {
+async function resolveRestoreParent(
+  d: MobileDb,
+  preferred: string | null,
+  restoringFolderIds: ReadonlySet<string> = new Set(),
+): Promise<string | null> {
   if (preferred) {
+    // 本次一起恢复的子树成员还没落库（trashed_at 仍是删除时的值）⇒ 视为可用，否则嵌套组/子文档会被拆散。
+    if (restoringFolderIds.has(preferred)) return preferred;
     const parent = await d.prepare("SELECT id FROM folders WHERE id=? AND trashed_at IS NULL").get(preferred) as { id?: string } | undefined;
     if (parent?.id) return preferred;
   }
@@ -157,13 +163,14 @@ export async function restoreTreeItem(
     // 他端"跟随恢复"后同样卡在回收站（260910 四端实测）。
     // 261027：原父已被删（或不在活跃目录里）⇒ 回落兜底笔记本，绝不恢复成悬空文档。
     const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid FROM notes WHERE id=?").get(id) as { pid?: string | null } | undefined;
-    const parentId = await resolveRestoreParent(d, row?.pid ?? null);
+    const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds));
     await d.prepare(
       "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?"
     ).run(parentId, now, now, id);
     return;
   }
 
+  const restoringFolders = new Set(folderIds);
   await d.transaction(async () => {
     const now = new Date().toISOString();
     const statements: MobileBatchStatement[] = [];
@@ -172,7 +179,7 @@ export async function restoreTreeItem(
       // COALESCE 兼容两种表示（UI 软删 parent 未动 → 保持；远端学来 → deleted_from_parent_id 为原父）。
       // 261027：笔记本回根层；分组/目录若原父已删 ⇒ 回落兜底笔记本（与 note 分支同口径，不悬空）。
       const row = await d.prepare("SELECT node_type, COALESCE(deleted_from_parent_id, parent_id) AS pid FROM folders WHERE id=?").get(fid) as { node_type?: string; pid?: string | null } | undefined;
-      const parentId = row?.node_type === "notebook" ? null : await resolveRestoreParent(d, row?.pid ?? null);
+      const parentId = row?.node_type === "notebook" ? null : await resolveRestoreParent(d, row?.pid ?? null, restoringFolders);
       statements.push({
         statement: "UPDATE folders SET parent_id=?, trashed_at=NULL, updated_at=?, is_dirty=1 WHERE id=?",
         values: [parentId, now, fid],
