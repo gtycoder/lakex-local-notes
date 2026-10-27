@@ -34,6 +34,7 @@ describe("派生索引后台自愈（261026）", () => {
 
   it("关闭「按需下载附件」时后台补齐全部缺失附件（261027）", () => {
     expect(SYNC).toContain("previous.deferAssets === true && next.deferAssets !== true");
-    expect(SYNC).toContain("materializeAllDeclaredAssets");
+    expect(SYNC).toContain("materializeAllDeclaredAssetsChunked");
+    expect(SYNC).toContain("runMaintenance(\"ensureTrashNoteAssets\", () => ensureAssetsNative(chunk");
   });
 });

@@ -15,6 +15,11 @@ import * as diagnosticsRepository from "../data/diagnosticsRepository.js";
 import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, ensureDb, dbPort, assertS3Credentials, createS3Client, runWrite, runMaintenance } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
+import { loadV3State } from "../data/v3StateRepository.js";
+import { MobileDeviceStore } from "../v3/mobileDeviceStore.js";
+import { declarationKey, assetKey } from "../../core/s3v3Keys.js";
+import { validateAssetDeclaration, type AssetDeclaration } from "../../core/s3v3Index.js";
+import { runTransferPipeline } from "../../core/s3v3Transfer.js";
 import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
 import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
 import { clearSyncInterrupted, markSyncInterrupted } from "../sync/syncResumeMarker";
@@ -67,15 +72,86 @@ export async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing =
 }
 
 
-/** 关闭「按需下载附件」后的后台全量补齐（best-effort；分批降低峰值）。 */
-async function materializeAllDeclaredAssets(): Promise<void> {
+/**
+ * 原生快速补拉（261027 第二版）：声明并发取 + 原生 getToFile 直写 + 全局流水线 20 并发。
+ * 走的是 v3 同步同一条「字节不过桥」路径（device.assetNativePath + remote.getToFile），
+ * 比通用 backfill（JS 字节 + 写本地）快一个量级。只补本地缺失的文件名（同名坏文件由同步/打开校验兜底）。
+ */
+export async function ensureAssetsNative(
+  noteIds: string[],
+  opts: { concurrency?: number } = {},
+): Promise<{ downloaded: number; failed: number; skipped: number }> {
+  if (noteIds.length === 0) return { downloaded: 0, failed: 0, skipped: 0 };
+  const state = await mobileCloudState();
+  if (!canTouchNetwork(state)) return { downloaded: 0, failed: 0, skipped: noteIds.length };
+  const cfg = await syncDomain.getS3Settings();
+  if (!cfg) return { downloaded: 0, failed: 0, skipped: noteIds.length };
   const d = await ensureDb();
-  const rows = await d.prepare("SELECT id FROM notes WHERE trashed_at IS NULL ORDER BY id").all() as Array<{ id: string }>;
-  const ids = rows.map((row) => row.id);
-  // 8 路并行（每路内部再 4 并发）⇒ 全量补齐时有效并发 ~32，避免 2 万附件单线程慢慢爬。
-  const WORKERS = 8;
-  const slices = Array.from({ length: WORKERS }, (_, worker) => ids.filter((_, index) => index % WORKERS === worker));
-  await Promise.all(slices.map((slice) => downloadDeclaredAssetsFor(slice, true)));
+  const side = await loadV3State(d);
+  const ids = noteIds.filter((id) => side.assetsHash[id]);
+  const skipped = noteIds.length - ids.length;
+  if (ids.length === 0) return { downloaded: 0, failed: 0, skipped };
+  const remote = createMobileS3v3Remote(cfg);
+  const store = new MobileDeviceStore(d);
+  await store.init();
+
+  // 1) 声明并发取（小对象；8 并发足够）。
+  const decls = new Map<string, AssetDeclaration>();
+  await runTransferPipeline(ids.map((id) => ({ id, hash: side.assetsHash[id] })), 8, async (t) => {
+    const bytes = await remote.get(declarationKey("lake", t.id, t.hash));
+    if (bytes) decls.set(t.id, validateAssetDeclaration(JSON.parse(new TextDecoder().decode(bytes))));
+    return 0;
+  });
+
+  // 2) 本地差集（一次原生 listAllAssets 后按篇缓存）。
+  const tasks: Array<{ noteId: string; filename: string; size: number; hash: string }> = [];
+  for (const id of ids) {
+    const decl = decls.get(id);
+    if (!decl) continue;
+    const local = new Set(await store.listAssets(id));
+    for (const a of decl.assets) if (!local.has(a.filename)) tasks.push({ noteId: id, filename: a.filename, size: a.size, hash: a.hash });
+  }
+  if (tasks.length === 0) return { downloaded: 0, failed: 0, skipped };
+
+  // 3) 原生流式下载 + 全局 20 并发（失败只影响该对象）。
+  const pipeline = await runTransferPipeline(tasks, opts.concurrency ?? 20, async (t) => {
+    if (remote.getToFile && store.assetNativePath) {
+      try {
+        const dest = await store.assetNativePath(t.noteId, t.filename);
+        if (dest) {
+          const status = await remote.getToFile(assetKey(t.noteId, t.filename), dest, { size: t.size, sha256: t.hash });
+          if (status === "ok") return t.size;
+          if (status === "missing" || status === "corrupt") return 0;
+        }
+      } catch { /* 回退字节路径 */ }
+    }
+    const bytes = await remote.get(assetKey(t.noteId, t.filename));
+    if (!bytes || bytes.length !== t.size) return 0;
+    await store.writeAsset(t.noteId, t.filename, bytes);
+    return bytes.length;
+  });
+  return { downloaded: tasks.length - pipeline.errors.length, failed: pipeline.errors.length, skipped };
+}
+
+/**
+ * 关闭「按需下载附件」后的后台全量补齐（best-effort）。
+ * 261027：按 50 篇一组**多次**获取维护锁，而不是一口气占着 —— 否则用户此时打开文档
+ * （readNote 也要补该篇资产）会被整轮补齐堵住几分钟。每组之间锁释放，打开文档最多等一组。
+ */
+async function materializeAllDeclaredAssetsChunked(): Promise<void> {
+  const d = await ensureDb();
+  const side = await loadV3State(d);
+  const ids = Object.keys(side.assetsHash ?? {});
+  if (ids.length === 0) return;
+  let downloaded = 0;
+  let failed = 0;
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const result = await runMaintenance("ensureTrashNoteAssets", () => ensureAssetsNative(chunk, { concurrency: 20 }));
+    downloaded += result.downloaded;
+    failed += result.failed;
+  }
+  console.info("[asset] 关闭按需后补齐完成: " + JSON.stringify({ downloaded, failed, notes: ids.length }));
 }
 
 /** 单条推送（「保存并同步」；云状态判据在调用方）。
@@ -164,7 +240,7 @@ export const syncDomain = {
     // 261027：从「按需」切回「全量」时，后台补齐所有已存在条目的缺失附件
     //（增量同步只处理变更条目，不会碰它们；否则用户关掉按需也看不到老图）。
     if (previous.deferAssets === true && next.deferAssets !== true) {
-      void runMaintenance("ensureTrashNoteAssets", () => materializeAllDeclaredAssets())
+      void materializeAllDeclaredAssetsChunked()
         .catch((error) => console.warn("[asset] 关闭按需后补齐全部附件失败（打开文档/下次同步再补）", error));
     }
   },

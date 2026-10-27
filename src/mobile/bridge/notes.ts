@@ -21,7 +21,7 @@ import type { LocalNote } from "../data/noteRepository.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
-import { downloadDeclaredAssetsFor } from "./sync";
+import { downloadDeclaredAssetsFor, ensureAssetsNative } from "./sync";
 
 
 export const notesDomain = {
@@ -33,7 +33,9 @@ export const notesDomain = {
     if (note && readSyncSettings().deferAssets === true) {
       try {
         // 复用维护域「保证某篇资产」这个操作（语义一致；避免为一个内部调用新增桥操作/类别）。
-        await runMaintenance("ensureTrashNoteAssets", () => downloadDeclaredAssetsFor([id], true));
+        // 261027：走原生 getToFile 快速路径（字节不过桥），比通用 backfill 快。
+        await runMaintenance("ensureTrashNoteAssets", () => ensureAssetsNative([id]));
+
       } catch (error) {
         console.warn("[asset] 打开文档时补拉失败（下次再试）", error);
       }
