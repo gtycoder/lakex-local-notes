@@ -48,6 +48,11 @@ export async function mobileCloudState(): Promise<CloudState> {
  * v3 原生路径（261026 parity B6）：pointer→索引→该篇 assetsHash→声明对象→本地差集下载，
  * 旧实现读的 declared_assets 表在 v3 下永远为空（空操作）。
  * @param onlyMissing true = 只补本地缺失的资源（预览用）；false = 强拉全量（恢复用） */
+/** 本地资产存储键（261027）：文档 = {id}/{file}；小记 = quick-notes/{id}/{file}（assetFs 再映射到物理目录）。 */
+export function assetLocalKey(space: "lake" | "quickNotes", id: string, filename: string): string {
+  return space === "quickNotes" ? "quick-notes/" + id + "/" + filename : id + "/" + filename;
+}
+
 export async function downloadDeclaredAssetsFor(
   noteIds: string[],
   onlyMissing = false,
@@ -63,15 +68,15 @@ export async function downloadDeclaredAssetsFor(
     if (!cfg) return totals;
     const remote = createMobileS3v3Remote(cfg);
     // 261027：同一份补拉逻辑同时服务文档与小记（小记资源键前缀 quick-notes/{id}/，物理在 quick-notes/assets/）。
-    const prefixOf = (id: string): string => (space === "quickNotes" ? "quick-notes/" + id + "/" : id + "/");
+    const prefixOf = (id: string): string => assetLocalKey(space, id, "").slice(0, -1) + "/";
     const port: AssetBackfillPort = {
       listLocal: async (id) => {
         const prefix = prefixOf(id);
         const keys = await (space === "quickNotes" ? listQuickNoteAssetKeysFs(id) : listNoteAssetKeysFs(id));
         return keys.map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k));
       },
-      readLocal: async (id, filename) => loadAssetBytesFs(prefixOf(id) + filename),
-      writeLocal: async (id, filename, bytes) => saveAssetBytesFs(prefixOf(id) + filename, bytes),
+      readLocal: async (id, filename) => loadAssetBytesFs(assetLocalKey(space, id, filename)),
+      writeLocal: async (id, filename, bytes) => saveAssetBytesFs(assetLocalKey(space, id, filename), bytes),
     };
     for (const noteId of noteIds) {
       const result = await backfillV3Assets(remote, space, noteId, port, { force: !onlyMissing });

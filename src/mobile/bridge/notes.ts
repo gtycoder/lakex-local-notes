@@ -1,5 +1,5 @@
 /** C3-5 第③步：notes 域（从 bridge.ts 抽取，行为保持）。 */
-import { assets, dbPort, ensureDb, readSyncSettings, runMaintenance, runWrite } from "./context";
+import { assets, dbPort, ensureDb, readSyncSettings, runMaintenance, runPriority, runWrite } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
 
@@ -274,12 +274,13 @@ export const notesDomain = {
    * 返回计数：0/0 通常表示离线、未配置云同步或本来就没有声明（调用方据此提示）。
    */
   async ensureNoteAssets(ids: string[]): Promise<{ downloaded: number; failed: number }> {
-    return runMaintenance("ensureNoteAssets", () => ensureAssetsNative(ids));
+    // 高优先域（261027）：用户点占位图是当场动作，不能排在整轮同步后面；彼此串行即可。
+    return runPriority("ensureNoteAssets", () => ensureAssetsNative(ids));
   },
 
   /** 小记图片按需补拉（261027）：与文档同一条 v3 补拉逻辑，空间换成 quickNotes。 */
   async ensureQuickNoteAssets(ids: string[]): Promise<{ downloaded: number; failed: number }> {
-    return runMaintenance("ensureQuickNoteAssets", () => downloadDeclaredAssetsFor(ids, true, "quickNotes"));
+    return runPriority("ensureQuickNoteAssets", () => downloadDeclaredAssetsFor(ids, true, "quickNotes"));
   },
 
   async restoreNote(id: string): Promise<void> {

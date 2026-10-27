@@ -70,14 +70,17 @@ export const MAINTENANCE_OPS = [
   // 派生搜索索引后台补建（261026）：与同步/GC 串行，但只读正文/写 FTS，不占用写域。
   // （按需资产打开时补拉复用 ensureTrashNoteAssets 这个操作，语义同为「保证该篇资产本地化」。）
   "ensureSearchIndex",
-  // 261027：按需资产占位点击补拉（文档 / 小记各一条入口）。与同步/GC 串行，只读写本地资产，
-  // 语义同为「保证这一条资产的本地副本」，与 ensureTrashNoteAssets 同域。
-  "ensureNoteAssets",
-  "ensureQuickNoteAssets",
 ] as const;
 
 /**
- * **高优先域**：用户当场发起、且必须**不等整轮同步**的「把这一条推到云端」操作（261013）。
+ * **高优先域**：用户当场发起、且必须**不等整轮同步**的**单条网络动作**（261013 推送；261027 补拉）。
+ *
+ * 261027 新增 `ensureNoteAssets` / `ensureQuickNoteAssets`（占位图点击补拉）：
+ *  - 并进维护域 ⇒ 用户点「图片未下载」时正好有整轮同步在跑，就要等到它结束（弱网分钟级）；
+ *  - 归 none ⇒ 与整轮同步并发写同一个资产文件（整对象下载），有半截文件风险；
+ *  - ⇒ 与推送同域：彼此串行、绝不排在整轮同步后面；资产是内容寻址的（同 key 同内容），
+ *    与整轮同步偶发写同一文件也只是覆盖成同一份字节。
+ *
  *
  * 为什么单列一域（既不并进维护域，也不归 none）：
  *  · 并进维护域 ⇒ 长按小记 → 写完点「保存并同步」，若正好撞上冷启动/回前台触发的整轮同步，**要排队等它跑完**
@@ -89,6 +92,8 @@ export const MAINTENANCE_OPS = [
  */
 export const PRIORITY_OPS = [
   "syncQuickNote",
+  "ensureNoteAssets",
+  "ensureQuickNoteAssets",
 ] as const;
 
 /**

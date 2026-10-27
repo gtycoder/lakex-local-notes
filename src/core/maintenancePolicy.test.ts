@@ -24,12 +24,13 @@ describe("互斥域判据（F16 红线化）", () => {
     expect(WRITE_OPS.length).toBe(36);
     // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
     expect(MAINTENANCE_OPS.length).toBe(4);
-    expect(PRIORITY_OPS.length).toBe(1); // 261013：syncQuickNote（小记单条推送；理由见它自己的用例）
+    // 261013：syncQuickNote（小记单条推送）；261027：+ensureNoteAssets / +ensureQuickNoteAssets（占位图点击补拉）。
+    expect(PRIORITY_OPS.length).toBe(3);
     // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
     // 261022 query API 收口：旧 listTreeNodes/listNotes/listQuickNotes/listNotebookTree 已删除；
     // 新 getHomeSnapshot/getWorkspaceSnapshot/getQuickNotePage 均为只读 none。
     expect(NONE_OPS.length).toBe(42);
-    expect(ALL.length).toBe(83); // 36 写 + 4 维护 + 1 高优 + 42 none
+    expect(ALL.length).toBe(85); // 36 写 + 4 维护 + 3 高优 + 42 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {
@@ -84,7 +85,7 @@ describe("互斥域判据（F16 红线化）", () => {
   it("高优先域（261013）：用户当场发起的单条推送既不排在整轮同步后面，也不与彼此并发", () => {
     // 用户点单：长按小记 → 写完点「保存并同步」→ 桌面端要及时看到。若与 syncNow 同域，
     // 撞上冷启动/回前台触发的整轮同步就要排队等它跑完（弱网可到分钟级）⇒ 必须另立一域。
-    expect(PRIORITY_OPS).toEqual(["syncQuickNote"]);
+    expect([...PRIORITY_OPS].sort()).toEqual(["ensureNoteAssets", "ensureQuickNoteAssets", "syncQuickNote"]);
     expect(isPriorityOp("syncQuickNote")).toBe(true);
     expect(lockDomainOf(classifyOp("syncQuickNote"))).toBe("priority");
     expect(lockDomainOf(classifyOp("syncQuickNote"))).not.toBe(lockDomainOf(classifyOp("syncNow")));
