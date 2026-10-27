@@ -24,7 +24,8 @@
 - **打包纪律（261027 实锤）**：从**软链 node_modules 的 worktree** 跑 electron-builder 时 sharp 的平台包 `@img/*` 会被漏掉（asar 内 @img 条目 0）⇒ 打包版主进程启动即崩「Could not load the 'sharp' module using the darwin-arm64 runtime」。**不是 OOM**（渲染进程 `--max-old-space-size=4096`）。打包必须用**真实 node_modules**（`npm ci` 的克隆/CI；不要在 symlink worktree 里出包），出包后自检 `app.asar.unpacked/node_modules/@img` 存在；详见 `docs/RELEASE.md` 的「打包自检」。
 - **测试数据清理**：vis-r1 桶的 `vis-0591` 曾被上传基准测试写入 4×25MB `*.bin`（声明 100MB）——已重写 declaration/index/pointer（generation 9）移除并删对象；「首拉后首开文档 18s」就是这些大文件下载，不是产品回归（干净数据 171ms/67ms，已复测确认）。
 - **已知未做（非阻塞）**：超大文件 MPU/分片上传（用户决定不做，笔记本挂大附件是低频场景）；桌面快照 settings 态动态值抖动（CI 建议按 README 双实例自证）；旧 index 对象留待深度清理。
-- **下一步**：① DMG/签名/公证按 `docs/RELEASE.md`；② CI 加 packaged smoke；③ 发布前复跑设备冒烟（vis-r1 / quick-r1 测试桶可用，避开被污染的 vis-0591 说明）。
+- **CI**：已加 `.github/workflows/packaged-smoke.yml`（PR/push master/手动）+ release 工作流出包后 smoke 门禁；本地等价 `bash scripts/ci-packaged-smoke.sh`（含真实 node_modules 检查、@img 自检、packaged smoke；本机实测通过）。
+- **下一步**：① DMG/签名/公证按 `docs/RELEASE.md`（用户决定暂不做签名/公证）；② 发布前复跑设备冒烟（vis-r1 / quick-r1 测试桶可用，避开被污染的 vis-0591 说明）。
 ### 261026 · S3 v3 首拉性能 + 进度 UI（分支 `fix/s3v3-perf`，基于 `7f329011`）
 
 > 输入 = 真机首拉 39 分钟（资产 26min + 应用 13min）+ `SIYUAN-SYNC-BORROW.md`。目标：1.6GB 首拉 5–10 分钟、文档先出来、进度可见。分两笔提交（`3c67360d` + 本笔）。

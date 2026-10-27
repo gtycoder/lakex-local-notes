@@ -21,6 +21,13 @@
    ls release/mac-arm64/LocalLakexNotes.app/Contents/Resources/app.asar.unpacked/node_modules/@img   # 期望有 sharp-darwin-arm64 / sharp-libvips-darwin-arm64
    ```
 3. 冒烟：`node scripts/e2e-packaged-smoke.mjs`（需要 `release/mac-arm64/...app` 已存在；默认 CDP 9333、独立 LAKE_USER_DATA），通过后再签名/公证。
+
+**一条命令（本地/CI 通用）**：`bash scripts/ci-packaged-smoke.sh`
+—— 软链 node_modules 直接报错退出；否则 vite build → electron-builder --dir → asar @img 自检 → asar.unpacked @img 自检 → packaged smoke；`SKIP_BUILD=1` 复用已有 release 产物（release 工作流就是这么用的）。
+
+**CI**：
+- `.github/workflows/packaged-smoke.yml`：PR / push master / 手动触发，跑同一条脚本；失败上传 smoke 日志。
+- `.github/workflows/release.yml`：`electron-builder --mac` 之后、上传 dmg/zip 之前跑 `SKIP_BUILD=1 bash scripts/ci-packaged-smoke.sh` —— 安装包起不来的话不允许出 release。
 ---
 
 ## 一、你需要先在 Apple 侧完成的认证工作（按顺序）

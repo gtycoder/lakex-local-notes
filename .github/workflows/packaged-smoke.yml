@@ -1,0 +1,41 @@
+name: Packaged smoke (macOS, unsigned)
+
+# 261027：防止「打包版主进程起不来」类问题（sharp @img/* 缺失、asar 解包漏文件）混进 release。
+# 本地等价命令：bash scripts/ci-packaged-smoke.sh
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-smoke:
+    name: macOS packaged smoke
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies (real node_modules, not a symlink)
+        run: npm ci
+      - name: Packaged smoke (build + @img self-check + launch)
+        run: bash scripts/ci-packaged-smoke.sh
+      - name: Collect smoke logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-smoke-logs
+          path: |
+            /tmp/local-lakex-notes-packaged-smoke-data/**/*.log
+            release/mac-arm64/LocalLakexNotes.app/Contents/Resources/app.asar.unpacked/node_modules/@img
+          if-no-files-found: ignore

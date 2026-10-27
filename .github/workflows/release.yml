@@ -37,6 +37,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
         run: npx electron-builder --mac --publish never
+      # 261027：发布前先证明「安装包能启动」（sharp @img/* 必须在 asar.unpacked 里；防主进程启动崩溃）。
+      - name: Packaged smoke (launch check)
+        run: SKIP_BUILD=1 bash scripts/ci-packaged-smoke.sh
       - uses: actions/upload-artifact@v4
         with:
           name: macos
