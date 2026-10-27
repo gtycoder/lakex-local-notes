@@ -3,7 +3,11 @@ import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry,
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
-import { deleteNoteBodies, deleteQuickNoteBody, readNoteBody, readNoteBodiesBatch, readQuickNoteBody, statNoteBodiesBatch, statQuickNoteBodiesBatch, writeNoteBody, writeNoteBodiesBatch, writeQuickNoteBody } from "../data/noteBodies.js";
+import {
+  clearStagingBodies, deleteNoteBodies, deleteQuickNoteBody, moveStagedBodyFiles, readBodyStaging, readBodyStagingMany,
+  readNoteBody, readNoteBodiesBatch, readQuickNoteBody, removeBodyStaging, statBodyStagingMany, statNoteBodiesBatch,
+  statQuickNoteBodiesBatch, writeBodyStaging, writeNoteBodiesBatch, writeQuickNoteBody,
+} from "../data/noteBodies.js";
 import { ensureV3StateTable, loadV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { listNoteAssetKeysFs, listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
@@ -43,6 +47,12 @@ function bridgePerfLog(parts: Record<string, unknown>): void {
 
 export class MobileDeviceStore implements S3v3DeviceStore {
   private readonly db: MobileDb;
+  /**
+   * 同步下载的正文先落 staging/<id>.body（见 noteBodies staging 注释），这里只记 id；
+   * 不在 JS 内存里攒字节（261027 真机 OOM：增量拉 1852 篇正文时单次 writeMany ~300MB JSON）。
+   */
+  private stagedBodyIds = new Set<string>();
+  /** 旧路径残留（兼容测试/历史调用）：新代码不再使用。 */
   private stagedBodies = new Map<string, Uint8Array>();
   private stagedDeletes = new Set<string>();
   private stagedQuickBodies = new Map<string, Uint8Array>();
@@ -67,7 +77,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
 
   constructor(db: MobileDb) { this.db = db; }
 
-  async init(): Promise<void> { await ensureV3StateTable(this.db); }
+  async init(): Promise<void> {
+    await ensureV3StateTable(this.db);
+    // 上一轮崩溃可能留下 staging 正文；清理后由云端按 hash 重新下载。
+    await clearStagingBodies().catch(() => undefined);
+  }
 
   private async kindOf(id: string): Promise<NoteKind> {
     const row = await this.db.prepare("SELECT doc_kind FROM notes WHERE id=?").get(id) as { doc_kind?: string | null } | undefined;
@@ -203,20 +217,25 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     };
     // 首拉新建行的批量通道（261026）：正文一次批量落盘 + 一批 INSERT/UPDATE 一次 executeSet
     // 下发，替代「每篇 1 次 BodyStore 桥 + 1 次 CapacitorSQLite 桥」。
-    const createBatch: Array<{ n: LakeNoteEntry; kind: NoteKind; resolvedParentId: string | null; content: string }> = [];
+    const createBatch: Array<{ n: LakeNoteEntry; kind: NoteKind; resolvedParentId: string | null; content: string | null; staged: boolean }> = [];
+    // 已存在行 + staging 正文：更新语句攒起来，等 staging 文件 move 到最终路径后再执行
+    //（避免「DB 已指向新正文、文件还没到位」的崩溃窗口）。
+    const stagedRowUpdates: Array<{ n: LakeNoteEntry; kind: NoteKind; resolvedParentId: string | null }> = [];
     for (const n of wanted.values()) {
       const cur = current.get(n.id);
       const kind = normalizeNoteKind(n.kind);
+      const staged = this.stagedBodyIds.has(n.id);
       let content: string | null = null;
       if (this.stagedBodies.has(n.id)) content = new TextDecoder().decode(this.stagedBodies.get(n.id));
+      const hasBody = staged || content !== null;
       const targetTrashed = !!n.trashedAt;
       // C5：远端 parent 可能是本机还没有/已删的目录（首拉父未落库）——不得直接落库；
       // 非法父回落兜底笔记本（懒建「未分类」）。回收站条目不解析（移动端用 trashed_at 表示）。
       const resolvedParentId = targetTrashed ? (n.deletedFromParentId ?? null) : await resolveParentCached(n.parentId);
       if (!cur) {
         // P0-2 分块应用：正文还没下到的条目先不建行（否则先落一个空正文），等它的分块/下一轮。
-        if (content === null) continue;
-        createBatch.push({ n, kind, resolvedParentId, content });
+        if (!hasBody) continue;
+        createBatch.push({ n, kind, resolvedParentId, content, staged });
         continue;
       } else {
         const curTrashed = !!cur.trashed_at;
@@ -229,7 +248,14 @@ export class MobileDeviceStore implements S3v3DeviceStore {
           await this.db.prepare("UPDATE notes SET trashed_at=NULL, is_dirty=1, parent_id=COALESCE(?, parent_id) WHERE id=?").run(resolvedParentId, n.id);
           cur.trashed_at = null;
         } else if (!targetTrashed) {
-          if (content !== null) {
+          if (staged) {
+            // 正文已在 staging（下载时落盘），这里只记账；文件 move 与 UPDATE 都在 flush 阶段做。
+            cur.content_hash = n.contentHash;
+            cur.updated_at = n.updatedAt;
+            cur.title = n.title;
+            if (resolvedParentId !== null) cur.parent_id = resolvedParentId;
+            stagedRowUpdates.push({ n, kind, resolvedParentId });
+          } else if (content !== null) {
             await saveNote(this.db, n.id, n.title, content, resolvedParentId, new Map(), undefined, MobileDeviceStore.SYNC_IMPORT_WRITE);
             // 远端正文落地必须保留远端 updatedAt（saveNote 会写 now，导致下一轮误判本地更新）
             await this.db.prepare("UPDATE notes SET updated_at=?, is_dirty=0 WHERE id=?").run(n.updatedAt, n.id);
@@ -260,40 +286,60 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         rowNow.sort_order = n.sortOrder;
       }
     }
-    // 新建行批量落库：先批量写正文（一次原生调用），再一批 SQL（一次 executeSet）建行 + 元数据。
-    if (createBatch.length > 0) {
+    // 正文落盘：staging 文件先 move 到最终路径（kind 此时已确定），再写 DB。
+    // 顺序很重要：先文件、后行 ⇒ 崩溃最多留下「有文件没行」（下一轮复用/重建），不会出现「行声称有正文但文件缺失」。
+    const legacyBodies = createBatch.filter((c) => c.content !== null);
+    let bodiesMs = 0;
+    if (legacyBodies.length > 0) {
       const bodiesStartedAt = Date.now();
-      // 同步导入：durable=false（原子 rename 保留、跳过逐文件 fsync）。真机实测 100 篇批量写 ~800ms，
-      // 主要是 100 次 fsync；进程被杀不丢（页缓存），断电可由云端同内容自愈。
-      await writeNoteBodiesBatch(createBatch.map((c) => ({ kind: c.kind, id: c.n.id, content: c.content })), { durable: false });
-      const bodiesMs = Date.now() - bodiesStartedAt;
-      const statements: Array<{ statement: string; values: unknown[] }> = [];
-      for (const c of createBatch) {
-        const n = c.n;
-        const title = n.title.trim() ? n.title.trim() : (c.kind === "usheet" ? "无标题表格" : "无标题文档");
-        const contentHash = sha256Sync(new TextEncoder().encode(c.content));
-        // 261027：text_cache 不再随导入过桥（真机 ~4.8MB/100 篇），同步结束后台补（backfillTextCache）。
-        statements.push({
-          statement: "INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,1,NULL,?,?,?)",
-          values: [n.id, title, c.resolvedParentId, n.updatedAt, contentHash, c.kind, n.trashedAt ?? null, n.deletedFromParentId ?? null],
-        });
-        // 默认值行不必再 UPDATE（大多数文档 icon=null/locked=0/sort=0）。
-        if ((n.icon ?? null) !== null || n.isLocked || n.sortOrder !== 0) {
-          statements.push({ statement: "UPDATE notes SET icon=?, is_locked=?, sort_order=? WHERE id=?", values: [n.icon ?? null, n.isLocked ? 1 : 0, n.sortOrder, n.id] });
-        }
-        current.set(n.id, {
-          id: n.id, title, parent_id: c.resolvedParentId, sort_order: n.sortOrder,
-          trashed_at: n.trashedAt ?? null, icon: n.icon ?? null, is_locked: n.isLocked ? 1 : 0,
-          content_hash: contentHash, updated_at: n.updatedAt,
-        });
+      await writeNoteBodiesBatch(legacyBodies.map((c) => ({ kind: c.kind, id: c.n.id, content: c.content! })), { durable: false });
+      bodiesMs = Date.now() - bodiesStartedAt;
+    }
+    const moves = [
+      ...createBatch.filter((c) => c.staged).map((c) => ({ kind: c.kind, id: c.n.id })),
+      ...stagedRowUpdates.map((u) => ({ kind: u.kind, id: u.n.id })),
+    ];
+    if (moves.length > 0) await moveStagedBodyFiles(moves);
+
+    const statements: Array<{ statement: string; values: unknown[] }> = [];
+    for (const c of createBatch) {
+      const n = c.n;
+      const title = n.title.trim() ? n.title.trim() : (c.kind === "usheet" ? "无标题表格" : "无标题文档");
+      // staging 正文的内容 hash 来自远端索引（下载时已校验）；legacy 内存正文才需要现算。
+      const contentHash = c.staged ? n.contentHash : sha256Sync(new TextEncoder().encode(c.content ?? ""));
+      // 261027：text_cache 不再随导入过桥（真机 ~4.8MB/100 篇），同步结束后台补（backfillTextCache）。
+      statements.push({
+        statement: "INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,1,NULL,?,?,?)",
+        values: [n.id, title, c.resolvedParentId, n.updatedAt, contentHash, c.kind, n.trashedAt ?? null, n.deletedFromParentId ?? null],
+      });
+      // 默认值行不必再 UPDATE（大多数文档 icon=null/locked=0/sort=0）。
+      if ((n.icon ?? null) !== null || n.isLocked || n.sortOrder !== 0) {
+        statements.push({ statement: "UPDATE notes SET icon=?, is_locked=?, sort_order=? WHERE id=?", values: [n.icon ?? null, n.isLocked ? 1 : 0, n.sortOrder, n.id] });
       }
+      current.set(n.id, {
+        id: n.id, title, parent_id: c.resolvedParentId, sort_order: n.sortOrder,
+        trashed_at: n.trashedAt ?? null, icon: n.icon ?? null, is_locked: n.isLocked ? 1 : 0,
+        content_hash: contentHash, updated_at: n.updatedAt,
+      });
+    }
+    for (const u of stagedRowUpdates) {
+      const n = u.n;
+      const title = n.title.trim() ? n.title.trim() : (u.kind === "usheet" ? "无标题表格" : "无标题文档");
+      statements.push({
+        statement: "UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), updated_at=?, content_hash=?, is_dirty=0, text_cache=NULL WHERE id=?",
+        values: [title, u.resolvedParentId, n.updatedAt, n.contentHash, n.id],
+      });
+    }
+    if (statements.length > 0) {
       const sqlStartedAt = Date.now();
       await executeBatch(this.db, statements);
       bridgePerfLog({
-        where: "importBatch", notes: createBatch.length, statements: statements.length,
+        where: "importBatch", notes: createBatch.length + stagedRowUpdates.length, statements: statements.length,
         bodiesMs, sqlMs: Date.now() - sqlStartedAt,
       });
     }
+    for (const c of createBatch) if (c.staged) this.stagedBodyIds.delete(c.n.id);
+    for (const u of stagedRowUpdates) this.stagedBodyIds.delete(u.n.id);
     for (const [id, cur] of current) {
       if (wanted.has(id)) continue;
       // 本地彻底删除：写 deleted_notes 墓碑 + 删行 + 删正文（与旧移动 purge 语义一致）
@@ -439,6 +485,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   }
 
   async readBody(id: string): Promise<Uint8Array | null> {
+    if (this.stagedBodyIds.has(id)) return await readBodyStaging(id);
     const staged = this.stagedBodies.get(id);
     if (staged) return staged;
     if (this.stagedDeletes.has(id)) return null;
@@ -454,12 +501,19 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const placeholders = ids.map(() => "?").join(",");
     const rows = await this.db.prepare("SELECT id,doc_kind FROM notes WHERE id IN (" + placeholders + ")").all(...ids) as Array<{ id: string; doc_kind: string | null }>;
     const kindById = new Map(rows.map((row) => [row.id, normalizeNoteKind(row.doc_kind)] as const));
-    const texts = await readNoteBodiesBatch(ids.map((id) => ({ kind: kindById.get(id) ?? "doc", id })));
-    return texts.map((text, index) => {
-      const id = ids[index];
+    const stagedIds = ids.filter((id) => this.stagedBodyIds.has(id));
+    const stagedBodies = await readBodyStagingMany(stagedIds);
+    const stagedById = new Map(stagedIds.map((id, index) => [id, stagedBodies[index]] as const));
+    const normalIds = ids.filter((id) => !this.stagedBodyIds.has(id));
+    const normalKind = normalIds.map((id) => ({ kind: kindById.get(id) ?? "doc", id }));
+    const normalTexts = await readNoteBodiesBatch(normalKind);
+    const normalById = new Map(normalIds.map((id, index) => [id, normalTexts[index]] as const));
+    return ids.map((id) => {
+      if (this.stagedBodyIds.has(id)) return stagedById.get(id) ?? null;
       const staged = this.stagedBodies.get(id);
       if (staged) return staged;
       if (this.stagedDeletes.has(id)) return null;
+      const text = normalById.get(id) ?? null;
       return text == null ? null : new TextEncoder().encode(text);
     });
   }
@@ -474,13 +528,17 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const placeholders = ids.map(() => "?").join(",");
     const rows = await this.db.prepare("SELECT id,doc_kind FROM notes WHERE id IN (" + placeholders + ")").all(...ids) as Array<{ id: string; doc_kind: string | null }>;
     const kindById = new Map(rows.map((row) => [row.id, normalizeNoteKind(row.doc_kind)] as const));
-    const stats = await statNoteBodiesBatch(ids.map((id) => ({ kind: kindById.get(id) ?? "doc", id })));
-    // staged 状态优先（与 readBody 同语义）：本轮刚写入的正文按内存态回答。
-    return stats.map((st, index) => {
-      const id = ids[index];
+    const stagedIds = ids.filter((id) => this.stagedBodyIds.has(id));
+    const normalIds = ids.filter((id) => !this.stagedBodyIds.has(id));
+    const stagedStats = await statBodyStagingMany(stagedIds);
+    const normalStats = await statNoteBodiesBatch(normalIds.map((id) => ({ kind: kindById.get(id) ?? "doc", id })));
+    const stagedById = new Map(stagedIds.map((id, index) => [id, stagedStats[index]] as const));
+    const normalById = new Map(normalIds.map((id, index) => [id, normalStats[index]] as const));
+    return ids.map((id) => {
+      if (this.stagedBodyIds.has(id)) return stagedById.get(id) ?? { exists: false, size: 0 };
       if (this.stagedBodies.has(id)) return { exists: true, size: this.stagedBodies.get(id)!.length };
       if (this.stagedDeletes.has(id)) return { exists: false, size: 0 };
-      return st;
+      return normalById.get(id) ?? { exists: false, size: 0 };
     });
   }
   async statQuickBodies(ids: string[]): Promise<Array<{ exists: boolean; size: number }>> {
@@ -493,13 +551,18 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     });
   }
   async writeBody(id: string, bytes: Uint8Array): Promise<void> {
-    if (this.stagedDeletes.has(id)) {
-      // 正文写入即取消待删：先落盘再清标记，避免 saveState 误清空
-      await writeNoteBody(await this.kindOf(id), id, new TextDecoder().decode(bytes));
-    }
-    this.stagedBodies.set(id, bytes);
+    // 立即写 staging 文件（不占 JS 内存），saveState 时再原子 move 到最终路径。
+    this.stagedDeletes.delete(id);
+    this.stagedBodies.delete(id);
+    this.stagedBodyIds.add(id);
+    await writeBodyStaging(id, new TextDecoder().decode(bytes));
   }
-  async deleteBody(id: string): Promise<void> { this.stagedBodies.delete(id); this.stagedDeletes.add(id); }
+  async deleteBody(id: string): Promise<void> {
+    this.stagedBodyIds.delete(id);
+    this.stagedBodies.delete(id);
+    this.stagedDeletes.add(id);
+    await removeBodyStaging(id).catch(() => undefined);
+  }
   /**
    * v3 覆盖留档（parity F1）：被远端覆盖/远端彻底删除前把本地版本写进移动端历史库。
    * - Lake 文档：走 historyRepository.createHistorySnapshot（受保护 30 天，清理不会先清它）；

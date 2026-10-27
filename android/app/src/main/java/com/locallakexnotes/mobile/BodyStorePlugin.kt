@@ -129,6 +129,47 @@ class BodyStorePlugin : Plugin() {
         }
     }
 
+    /**
+     * 批量移动正文（261027）：同步下载先把正文写到 files/staging/<id>.body（kind 尚不知），
+     * 落库时再原子 rename 到最终路径（notes/<id>.lake 等），避免在 JS 里攒 2k 篇正文导致 OOM。
+     * items: [{ from, to }]（均相对 files/）。
+     */
+    @PluginMethod
+    fun moveMany(call: PluginCall) {
+        val items = call.getArray("items") ?: run { call.reject("items 必填"); return }
+        var moved = 0
+        try {
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                val from = resolve(item.optString("from", "")) ?: throw IOException("非法源路径")
+                val to = resolve(item.optString("to", "")) ?: throw IOException("非法目标路径")
+                if (!from.isFile) throw IOException("源正文不存在: " + item.optString("from", ""))
+                to.parentFile?.let { parent -> if (!parent.exists() && !parent.mkdirs()) throw IOException("正文目录创建失败") }
+                if (!from.renameTo(to)) {
+                    if (to.exists() && !to.delete()) throw IOException("目标正文删除失败")
+                    if (!from.renameTo(to)) throw IOException("正文 rename 失败: " + item.optString("to", ""))
+                }
+                moved += 1
+            }
+            call.resolve(JSObject().put("moved", moved))
+        } catch (e: Exception) {
+            call.reject("正文批量移动失败（已完成 " + moved + " 篇）: " + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
+    /** 清理 staging 目录（崩溃残留；每次同步 init 时调用，幂等）。 */
+    @PluginMethod
+    fun clearStaging(call: PluginCall) {
+        try {
+            val dir = File(root, "staging")
+            var removed = 0
+            if (dir.isDirectory) for (f in dir.listFiles() ?: emptyArray()) if (f.isFile) { if (f.delete()) removed += 1 }
+            call.resolve(JSObject().put("removed", removed))
+        } catch (e: Exception) {
+            call.reject("清理 staging 失败: " + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
     @PluginMethod
     fun read(call: PluginCall) {
         val file = resolveOrReject(call) ?: return

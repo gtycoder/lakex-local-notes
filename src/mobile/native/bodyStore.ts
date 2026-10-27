@@ -20,6 +20,8 @@ interface BodyStorePluginApi {
   read(options: { path: string }): Promise<{ exists: boolean; data?: string }>;
   readMany(options: { paths: string[] }): Promise<{ items: Array<{ path: string; exists: boolean; data?: string }> }>;
   statMany(options: { paths: string[] }): Promise<{ items: Array<{ path: string; exists: boolean; size: number }> }>;
+  moveMany(options: { items: Array<{ from: string; to: string }> }): Promise<{ moved: number }>;
+  clearStaging(): Promise<{ removed: number }>;
   remove(options: { path: string }): Promise<void>;
   stat(options: { path: string }): Promise<{ exists: boolean; size: number }>;
   writeSnapshot(options: { path: string; data: string }): Promise<{ size: number }>;
@@ -39,6 +41,10 @@ export interface BodyStoreBackend {
   readTextMany?(paths: string[]): Promise<Array<string | null>>;
   /** 批量 stat（可选；261026 续传提速：hash 一致时只 stat 不读内容）。 */
   statTextMany?(paths: string[]): Promise<Array<{ exists: boolean; size: number }>>;
+  /** 批量原子移动（可选；同步下载先写 staging/，落库时一次 rename 到最终路径）。 */
+  moveTextMany?(items: Array<{ from: string; to: string }>): Promise<number>;
+  /** 清理 staging 残留（可选；init 时调用）。 */
+  clearStaging?(): Promise<number>;
   remove(path: string): Promise<void>;
   stat(path: string): Promise<{ exists: boolean; size: number }>;
   readSnapshot(path: string): Promise<string | null>;
@@ -70,6 +76,14 @@ function nativeBackend(): BodyStoreBackend {
       const byPath = new Map((res?.items ?? []).map((i) => [i.path, { exists: Boolean(i.exists), size: Number(i.size ?? 0) }] as const));
       return paths.map((p) => byPath.get(p) ?? { exists: false, size: 0 });
     },
+    async moveTextMany(items) {
+      const res = await NativeBodyStore.moveMany({ items });
+      return Number(res?.moved ?? 0);
+    },
+    async clearStaging() {
+      const res = await NativeBodyStore.clearStaging();
+      return Number(res?.removed ?? 0);
+    },
     async remove(path) {
       await NativeBodyStore.remove({ path });
     },
@@ -99,6 +113,8 @@ const memoryBackend: BodyStoreBackend = {
   async writeTextMany(items) { let bytes = 0; for (const i of items) { memoryText.set(i.path, i.text); bytes += new TextEncoder().encode(i.text).length; } return bytes; },
   async readTextMany(paths) { return paths.map((p) => (memoryText.has(p) ? memoryText.get(p)! : null)); },
   async statTextMany(paths) { return paths.map((p) => ({ exists: memoryText.has(p), size: new TextEncoder().encode(memoryText.get(p) ?? "").length })); },
+  async moveTextMany(items) { let moved = 0; for (const i of items) { const v = memoryText.get(i.from); if (v === undefined) continue; memoryText.set(i.to, v); memoryText.delete(i.from); moved += 1; } return moved; },
+  async clearStaging() { let removed = 0; for (const k of [...memoryText.keys()]) if (k.startsWith("staging/")) { memoryText.delete(k); removed += 1; } return removed; },
   async remove(path) { memoryText.delete(path); },
   async stat(path) { return { exists: memoryText.has(path), size: new TextEncoder().encode(memoryText.get(path) ?? "").length }; },
   async readSnapshot(path) { return memoryText.has(path) ? memoryText.get(path)! : null; },
