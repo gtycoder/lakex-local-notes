@@ -4,6 +4,23 @@
 > 原理：Apple 要求 **Developer ID 签名**（证明应用来自你）+ **公证**（Apple 服务器扫描无恶意代码）。
 > 本项目侧配置已就绪（图标 ✅、electron-builder ✅），剩下的是 **Apple 侧认证工作**（需你本人操作）。
 
+
+---
+
+## 〇、打包自检（261027 实锤，出包前必看）
+
+**症状**：打包版启动弹框「A JavaScript error occurred in the main process / Could not load the 'sharp' module using the darwin-arm64 runtime」，主进程起不来。
+
+**根因**：不是 OOM（渲染进程 `--max-old-space-size=4096`）。从**软链的 node_modules（如 `/tmp/*` worktree 里 `node_modules -> 主克隆/node_modules`）** 跑 electron-builder 时，依赖收集会漏掉 sharp 的平台包 `@img/*` —— asar 里 `node_modules/@img` 条目为 0，sharp 加载不到 libvips 原生库。
+
+**纪律**：
+1. 出包必须在**真实 node_modules** 的克隆里跑（`npm ci` / CI），不要在 symlink worktree 里出包；
+2. 出包后自检（缺一不可）：
+   ```bash
+   node -e "const a=require('@electron/asar'); const f=a.listPackage('release/mac-arm64/LocalLakexNotes.app/Contents/Resources/app.asar'); console.log('asar @img:', f.filter(x=>x.includes('@img')).length)"   # 期望 >= 10
+   ls release/mac-arm64/LocalLakexNotes.app/Contents/Resources/app.asar.unpacked/node_modules/@img   # 期望有 sharp-darwin-arm64 / sharp-libvips-darwin-arm64
+   ```
+3. 冒烟：`node scripts/e2e-packaged-smoke.mjs`（需要 `release/mac-arm64/...app` 已存在；默认 CDP 9333、独立 LAKE_USER_DATA），通过后再签名/公证。
 ---
 
 ## 一、你需要先在 Apple 侧完成的认证工作（按顺序）

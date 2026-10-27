@@ -5,14 +5,26 @@
 > **⚠️ 261022 历史已重写两次（品牌/邮箱标准化 → 闭源内核移出公开仓库）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
 > **§8 是移动端（Android）专职交接**；桌面会话不要改 §8，移动端会话不要改 §0–§7 之外的桌面文件。
 
-## 0. 最新交接（261026）
+## 0. 最新交接（261027）
 
-> **当前基线**：`master`；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest **384 文件 2698 例（17 skip）**（261024 标签子系统方案 B 落地后的主树快照）。
+> **当前基线**：`master` @ **08345db5（已推送 gitee；`fix/s3v3-*` 全部分支也已推送）**；项目/身份 = **local-lakex-notes**（productName `LocalLakexNotes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；私有协议 `locallakexnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：tsc 0 / vitest **434 文件 2747 例（2736 passed / 11 skip）**；**S3 v3 已完成并转正合并**（旧协议备份分支 `backup/master-pre-s3v3-261027`）。
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
 > **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261027 · S3 v3 转正 + 回归演练 + 打包修复
+
+> 本批是 S3 v3 的收尾：`fix/s3v3-perf` 合并进 `master` 并推送；旧协议留在 `backup/master-pre-s3v3-261027`（b8f67c33）。备份分支相对 master 没有任何独立提交（master..backup=0），其唯一「master 侧」提交 b8f67c33 的 4 个文件改动已核对：PRIVATE-REPO.md / export-public.mjs 删除与 package.json 的 export:public 移除都保留了；.gitignore 两行说明被分支带 vendored 内核的写法有意替代（私有仓现状，非丢失）。
+
+- **合并**：`750d24de merge: S3 v3 转正（fix/s3v3-perf → master）`（--no-ff、无冲突；846 文件 +579,184/−12,464）；跟进提交 `99c6d052`（移动 UI 硬指标归零）、`ae3556c5`（移动快照基线重烤）、`08345db5`（桌面快照基线重烤）。master 已 fast-forward 推送 `1486b4d4..08345db5`；`fix/s3v3-p1/prod/parity/rem/perf` 5 个分支已推送；tags 无变化。
+- **v3 能力（已上线）**：pointer + 内容寻址索引/声明/正文/资产、无墓碑永久删除零痕迹；首拉按需资产（`deferAssets` 新设备默认开并固化）+ 打开/占位点击按需补拉（原生 `getToFile`，文档/小记同一条通道）；附件上传全量原生化（原生 size/hash + 全部 `putFromFile`，含小记空间；孤儿登记改 `statLocal` 不再读整份附件）；待补资产账本（失败附件下轮自动重试、双端持久化、3 次丢弃）；conformance 双端各 15 场景 + 桌面×移动混合并发 3 场景 + 弱网矩阵；断点续传、staging 正文（移动真机增量 OOM 修复）、数据库级串行锁、首轮并发首传 pointer 竞态自动重试、恢复原父已删回落兜底笔记本（移动补平桌面）、同步导入小记当场回填列表元数据。
+- **回归门禁（合并后 master）**：vitest 434 文件/2747 例、tsc 0、`check:core` 0 违规、`check:bundle` 预算内、`check:mobileui` 0 超基线、移动整页快照 6 态 0 差异、桌面整页快照 34 个稳定态 0 差异（8 个窄窗态由脚本标记 UNSTABLE 跳过）、桌面 `vite build` ✓、Android APK ✓、`node scripts/e2e-packaged-smoke.mjs` ✓。
+- **端到端**：模拟器 vis-r1 全新安装按需首拉 600 篇 **9.7s**（0 附件目录、`deferAssets=true` 固化）；quick-r1 小记 2.0s + 占位点击 **258ms** 原生补齐；真机 50950385 增量同步 **3.2s**（↑0 ↓0）、读文档 771ms。
+- **打包纪律（261027 实锤）**：从**软链 node_modules 的 worktree** 跑 electron-builder 时 sharp 的平台包 `@img/*` 会被漏掉（asar 内 @img 条目 0）⇒ 打包版主进程启动即崩「Could not load the 'sharp' module using the darwin-arm64 runtime」。**不是 OOM**（渲染进程 `--max-old-space-size=4096`）。打包必须用**真实 node_modules**（`npm ci` 的克隆/CI；不要在 symlink worktree 里出包），出包后自检 `app.asar.unpacked/node_modules/@img` 存在；详见 `docs/RELEASE.md` 的「打包自检」。
+- **测试数据清理**：vis-r1 桶的 `vis-0591` 曾被上传基准测试写入 4×25MB `*.bin`（声明 100MB）——已重写 declaration/index/pointer（generation 9）移除并删对象；「首拉后首开文档 18s」就是这些大文件下载，不是产品回归（干净数据 171ms/67ms，已复测确认）。
+- **已知未做（非阻塞）**：超大文件 MPU/分片上传（用户决定不做，笔记本挂大附件是低频场景）；桌面快照 settings 态动态值抖动（CI 建议按 README 双实例自证）；旧 index 对象留待深度清理。
+- **下一步**：① DMG/签名/公证按 `docs/RELEASE.md`；② CI 加 packaged smoke；③ 发布前复跑设备冒烟（vis-r1 / quick-r1 测试桶可用，避开被污染的 vis-0591 说明）。
 ### 261026 · S3 v3 首拉性能 + 进度 UI（分支 `fix/s3v3-perf`，基于 `7f329011`）
 
 > 输入 = 真机首拉 39 分钟（资产 26min + 应用 13min）+ `SIYUAN-SYNC-BORROW.md`。目标：1.6GB 首拉 5–10 分钟、文档先出来、进度可见。分两笔提交（`3c67360d` + 本笔）。
