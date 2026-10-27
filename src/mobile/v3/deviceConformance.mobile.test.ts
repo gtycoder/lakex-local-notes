@@ -77,8 +77,5 @@ const mobileFactory: HarnessFactory = async (remote) => {
     close: async () => { await db.close(); setBodyStoreBackendForTest(null); await fs.rm(root, { recursive: true, force: true }); },
   };
 };
-// 已确认的跨端缺口：移动端 restoreTreeItem 不校验原父是否存在/已删，会把文档恢复到已删目录下
-// （桌面 trashLifecycle.restoreTrashItem 会回落到默认笔记本）。规格保持严格，对该平台记 expected-fail；
-// 修好后删掉这一行即可把场景转正（详见 lead 汇报的 bug 复现）。
-mobileFactory.capabilities = { restoreFallsBackToDefaultNotebook: false };
+// 261027：移动端缺口已修（trashRepository.resolveRestoreParent 校验原父并回落兜底笔记本）⇒ 场景转正。
 defineDeviceConformance("设备适配器一致性（移动 store）", mobileFactory);
