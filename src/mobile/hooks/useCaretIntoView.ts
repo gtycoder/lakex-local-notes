@@ -4,8 +4,13 @@
  *      用户以为"点没点上"。这里在选区变化时把选区所在单元格滚进可视区（横向滚动容器与正文纵向容器都跟）。
  * 做法：只调"目标所在的那条滚动链"的 scrollLeft/scrollTop（不用 scrollIntoView——它会连窗口一起滚，
  *      在 WebView 里表现为整页乱跳）。
+ *
+ * ⚠️「什么是光标」的判据是纯函数 resolveCaretRect（./caretIntoViewTarget）：只有文本/叶级节点上的选区
+ * 才算光标。mode 切换（viewer ⇄ editor）会销毁重建 LakeEditor，此时 DOM 选区会塌到编辑器宿主 div，
+ * range 没有 client rect —— 旧实现拿宿主整块 rect 当光标，直接滚到文档末尾（261027 修）。
  */
 import { useEffect, type RefObject } from "react";
+import { resolveCaretRect } from "./caretIntoViewTarget";
 
 const MARGIN = 20;         // 距容器边缘的安全边距
 const BOTTOM_EXTRA = 72;   // 底部再让出编辑工具栏的空间
@@ -16,6 +21,11 @@ function scrollableEl(el: HTMLElement): { x: boolean; y: boolean } | null {
   const canX = (ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 2;
   const canY = (oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 2;
   return canX || canY ? { x: canX, y: canY } : null;
+}
+
+/** anchor 元素是否叶级（没有元素子节点）——带子节点的是整块/宿主容器，不是光标位置。 */
+function isLeafElement(el: Element): boolean {
+  return el.childElementCount === 0;
 }
 
 export function useCaretIntoView(rootRef: RefObject<HTMLElement | null>, enabled = true): void {
@@ -31,14 +41,26 @@ export function useCaretIntoView(rootRef: RefObject<HTMLElement | null>, enabled
       const sel = document.getSelection();
       if (!sel || sel.rangeCount === 0) return;
       const anchor = sel.anchorNode;
-      let el: HTMLElement | null = !anchor ? null
-        : anchor.nodeType === 1 ? (anchor as HTMLElement) : (anchor as ChildNode).parentElement;
-      if (!el || !root.contains(el)) return;
+      if (!anchor) return;
+      const anchorEl = anchor.nodeType === 1 ? (anchor as HTMLElement) : anchor.parentElement;
+      if (!anchorEl) return;
+      const range = sel.getRangeAt(0);
       // 目标块：单元格 > 最近的可编辑块 > 当前元素
-      const target = el.closest<HTMLElement>("td, th, ne-td, ne-th, .ne-table-cell") ?? el;
-      const range = sel.rangeCount ? sel.getRangeAt(0) : null;
-      const rect = (range && range.getClientRects().length ? range.getBoundingClientRect() : target.getBoundingClientRect());
-      if (!rect || (rect.width === 0 && rect.height === 0 && rect.x === 0 && rect.y === 0)) return;
+      const target = anchorEl.closest<HTMLElement>("td, th, ne-td, ne-th, .ne-table-cell") ?? anchorEl;
+      const rangeRects = range.getClientRects();
+      const rect = resolveCaretRect({
+        anchorNodeType: anchor.nodeType,
+        inRoot: root.contains(anchorEl),
+        anchorIsRoot: anchorEl === root,
+        commonAncestorCoversRoot: range.commonAncestorContainer !== root && range.commonAncestorContainer.contains(root),
+        anchorIsLeaf: anchor.nodeType === 1 && isLeafElement(anchor as Element),
+        rangeRectCount: rangeRects.length,
+        rangeRect: rangeRects.length ? range.getBoundingClientRect() : null,
+        targetRect: target.getBoundingClientRect(),
+        rootClientHeight: root.clientHeight,
+      });
+      if (!rect) return;
+      if (rect.width === 0 && rect.height === 0 && rect.x === 0 && rect.y === 0) return;
 
       let a: HTMLElement | null = target.parentElement;
       while (a && root.contains(a)) {

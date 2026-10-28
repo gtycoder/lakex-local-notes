@@ -160,8 +160,15 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   const active = useMemo(() => tabs.find((tab) => tab.id === activeId) ?? null, [tabs, activeId]);
 
   // 标签保持：打开标签变化即落本地（仅本机，不参与同步）
+  // ⚠️ 首次挂载（tabs 还是空数组）**不能写**：工作区的恢复逻辑在另一个 effect 里读这份
+  // localStorage，若挂载时先写 [] 就会把上次的标签清掉，表现为「每次进笔记本只剩第一篇」。
+  // 挂载后的所有变化（含关闭全部写 []）照常落盘。
   const tabsKey = notebookTabsStorageKey(opts.notebookId);
-  useEffect(() => { writeLocalStorage(tabsKey, JSON.stringify(tabs.map((tab) => tab.id))); }, [tabs, tabsKey]);
+  const firstPersistRef = useRef(true);
+  useEffect(() => {
+    if (firstPersistRef.current) { firstPersistRef.current = false; return; }
+    writeLocalStorage(tabsKey, JSON.stringify(tabs.map((tab) => tab.id)));
+  }, [tabs, tabsKey]);
 
   // 活动页悬空自愈：没有标签且没有在途读取时收回 activeId；其余情况落到第一个标签。
   useEffect(() => {

@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreVertical, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
@@ -29,6 +29,7 @@ import { MobileBoardViewer } from "../board/MobileBoardViewer";
 import { notebookTabsStorageKey, useNotebookTabs, type NotebookTab } from "./useNotebookTabs";
 import { useNotebookTreeData, type NotebookTreeItem } from "./useNotebookTreeData";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
+import { NotebookTreeList } from "./NotebookTreeList";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 /** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -75,6 +76,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     toggleGroup,
     expandGroup,
     childrenOf,
+    itemById,
+    visibleRows,
+    firstNote,
     loadTree,
   } = useNotebookTreeData(notebookId);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
@@ -90,7 +94,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     editorsRef.current.delete(id);
     liveBodyCapturesRef.current.delete(id);
   }, []);
-  const getTabTitle = useCallback((id: string) => tree.find((item) => item.id === id)?.title, [tree]);
+  const getTabTitle = useCallback((id: string) => itemById(id)?.title, [itemById]);
   const {
     tabs,
     tabsRef: tabsStateRef,
@@ -225,17 +229,16 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     }
     if (saved.length > 0) {
       autoOpenedRef.current = true;
-      // 只让最后一个历史标签成为活动页，其余只登记（避免一上来挂载全部编辑器）；
-      // 活动页的读取排在第一个，别被其它历史标签拖慢
-      void openTab(saved[saved.length - 1], { activate: true });
+      // 先按上次顺序登记历史标签（不读正文），最后再激活上次的活动页：
+      // 这样标签顺序不会在每次重启后反转；历史标签 load:false ⇒ 不会拖慢活动页的 readNote。
       saved.slice(0, -1).forEach((id) => void openTab(id, { activate: false, load: false }));
+      void openTab(saved[saved.length - 1], { activate: true });
       return;
     }
-    const first = findFirstNote(tree);
-    if (first) { autoOpenedRef.current = true; void openTab(first.id); }
+    if (firstNote) { autoOpenedRef.current = true; void openTab(firstNote.id); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree]);
+  }, [tree, firstNote]);
 
   // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
@@ -371,15 +374,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     }).catch(() => undefined);
     return () => remove?.();
   }, []);
-
-  const findFirstNote = (arr: NotebookTreeItem[]): NotebookTreeItem | null => {
-    for (const it of arr) {
-      if (it.kind === "note") return it;
-      const sub = findFirstNote(childrenOf(it.id));
-      if (sub) return sub;
-    }
-    return null;
-  };
 
   // 立即同步（思源顶栏右侧的云图标就是同步状态/触发器）
   const runSync = useCallback(async () => {
@@ -616,61 +610,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (root === "delete") { void applyDelete(node); }
   };
 
-  const renderBranch = (parentId: string, depth: number) => {
-    const children = childrenOf(parentId);
-    return children.map((it) => {
-      const hasChildren = childrenOf(it.id).length > 0;
-      const NodeIcon = it.kind === "group" ? FolderOpen : File;
-      const isNote = it.kind === "note";
-      return (
-        <div key={it.kind + "-" + it.id}>
-          <button
-            className={"mb-row mb-indent" + (activeId === it.id ? " is-selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
-            data-depth={depth}
-            data-node-id={it.id}
-            onClick={() => {
-              if (renamingId) return;
-              if (hasChildren) { toggleGroup(it.id); return; }
-              if (isNote) { openSidebar(false); void openTab(it.id); }
-            }}
-            onTouchStart={(e) => { pressedNode.current = it; longPressRows.onTouchStart(e); }}
-            onTouchMove={longPressRows.onTouchMove}
-            onTouchEnd={longPressRows.onTouchEnd}
-            onTouchCancel={longPressRows.onTouchCancel}
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            {hasChildren ? <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} /> : <span className="mb-chevron-spacer" />}
-            {renamingId === it.id ? (
-              <input
-                className="mb-input"
-                autoFocus
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onBlur={() => void applyRename()}
-                onKeyDown={(e) => { if (e.key === "Enter") void applyRename(); if (e.key === "Escape") setRenamingId(null); }}
-              />
-            ) : (
-              <>
-                {it.icon ? <span className="mb-tree-icon"><MobileNodeIconGlyph value={it.icon} /></span> : <NodeIcon size={16} className="mb-tree-icon" />}
-                <span className="mb-row__title">{it.title}</span>
-                {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
-                    ⋯ = 右键菜单，＋ = 新建子文档。 */}
-                <span className="nb-tree-actions">
-                  <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenuFor(it); }}><MoreVertical size={17} /></span>
-                  {/* 新建子项（用户 261014：**每一行都要有**，不只是笔记本根）——与工具栏 ＋ 共用同一个面板，
-                      只是把作用域换成这一行；桌面同一个语义是"行右键 → 新建文档/分组"。 */}
-                  <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="新建子项" title="新建子项" onClick={(e) => { e.stopPropagation(); setCreateParent(it.id); setCreateOpen(true); }}><Plus size={17} /></span>
-                </span>
-              </>
-            )}
-          </button>
-          {hasChildren && expanded.has(it.id) && renderBranch(it.id, depth + 1)}
-        </div>
-      );
-    });
-  };
-
   return (
     <div className="mobile-workspace">
       {/* 顶部栏（思源 #mobileTopBar：.toolbar--border + .toolbar__title 左对齐 + 右侧同步状态） */}
@@ -717,24 +656,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 文档层（正文） */}
       <section className="mobile-workspace-body" ref={bodyRef}>
-        {/* 正在异步读回（刚点开、还没进 tabs）时先画骨架：避免转场落位后先闪一块空白再蹦出正文。 */}
-        {!active || !mountedIds.has(active.id) ? (
-          activeId ? (
-            <div className="mb-doc-skeleton" aria-busy="true" aria-label="正在打开文档">
-              <span className="mb-skel mb-doc-skeleton__title" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line mb-doc-skeleton__line--short" />
-            </div>
-          ) : (
-            <div className="mb-empty">暂无打开的文档，点左目录或底部打开</div>
-          )
-        ) : tabs.map((t) => (
+        {/* ⚠️ 已挂载的 keep-alive 页**必须一直留在 DOM 里**（只允许非活动页 display:none）：
+            旧实现是「活动页没挂载 ⇒ 用骨架替换整份 pane 列表」，于是打开一篇本会话还没挂载的文档时，
+            别的标签的 pane 被一起卸载、scrollTop 归零（R2：切走再切回 752→0）。
+            现在骨架只是**并列的占位层**，已挂载的 pane 照常渲染（非活动页隐藏但保留滚动位置）。 */}
+        {tabs.map((t) => (!mountedIds.has(t.id) ? null : (
           <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "") + (t.id === freshId ? " doc-pane--fresh" : "")}>
-            {/* 未挂载的 keep-alive tab 只占位、不起编辑器（首次切到它时才挂载，见 mountedIds） */}
-            {!mountedIds.has(t.id) ? null : (
             <>
             {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
             {t.kind === "board" ? (
@@ -818,9 +745,24 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             />
             )}
             </>
-            )}
           </div>
-        ))}
+        )))}
+        {/* 正在异步读回（刚点开、还没进 tabs）时先画骨架：避免转场落位后先闪一块空白再蹦出正文。
+            只有「活动页自己还没挂载」才画；其余已挂载的 pane 在上一段里照常保留。 */}
+        {!active || !mountedIds.has(active.id) ? (
+          activeId ? (
+            <div className="mb-doc-skeleton" aria-busy="true" aria-label="正在打开文档">
+              <span className="mb-skel mb-doc-skeleton__title" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line" />
+              <span className="mb-skel mb-doc-skeleton__line mb-doc-skeleton__line--short" />
+            </div>
+          ) : (
+            <div className="mb-empty">暂无打开的文档，点左目录或底部打开</div>
+          )
+        ) : null}
       </section>
 
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
@@ -889,10 +831,29 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => { setCreateParent(notebookId); setCreateOpen(true); }} aria-label="新建" title="新建"><Plus /></span>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
         </div>
-        <div className="side-panel-body">
-          {childrenOf(notebookId).length === 0 && <div className="mb-empty">暂无文档，点右上新建</div>}
-          {renderBranch(notebookId, 0)}
-        </div>
+        {/* 树行 = 可见行扁平数组 + 视口窗口化（2000 节点时不一次挂 2000 个按钮，见 NotebookTreeList）。
+            虚拟滚动下拖拽/长按仍靠行上的 data-node-id 与 .side-panel-body 命中（手指下的行必在窗口内）。 */}
+        <NotebookTreeList
+          rows={visibleRows}
+          expanded={expanded}
+          hasChildren={(id) => childrenOf(id).length > 0}
+          activeId={activeId}
+          drag={drag}
+          renamingId={renamingId}
+          renameValue={renameValue}
+          onRenameChange={setRenameValue}
+          onRenameCommit={() => void applyRename()}
+          onRenameCancel={() => setRenamingId(null)}
+          longPress={longPressRows}
+          onPressRow={(item) => { pressedNode.current = item; }}
+          onActivate={(item) => {
+            // 与原实现同序：有子节点先展开/折叠；没有子的文档才打开。
+            if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
+            if (item.kind === "note") { openSidebar(false); void openTab(item.id); }
+          }}
+          onOpenMenu={(item) => setMenuFor(item)}
+          onOpenCreate={(item) => { setCreateParent(item.id); setCreateOpen(true); }}
+        />
       </aside>
 
       {/* 右大纲抽屉 (.side-panel--right) */}
@@ -913,7 +874,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               {tabs.length === 0 && <div className="mb-empty">暂无打开的文档</div>}
               {tabs.map((t) => (
                 <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => { void openTab(t.id); setTabsOpen(false); }}>
-                  {tree.find((node) => node.id === t.id)?.icon && <span className="mb-tree-icon"><MobileNodeIconGlyph value={tree.find((node) => node.id === t.id)?.icon} /></span>}
+                  {itemById(t.id)?.icon && <span className="mb-tree-icon"><MobileNodeIconGlyph value={itemById(t.id)?.icon} /></span>}
                   <span className="mb-row__title">{t.title || "无标题"}</span>
                   <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
                 </div>

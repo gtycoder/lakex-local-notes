@@ -144,6 +144,19 @@ describe("useNotebookTabs 行为", () => {
     expect(onDrop).toHaveBeenCalledWith("a");
   });
 
+  it("首次挂载不覆盖上次保存的标签（避免进笔记本只剩第一篇）", async () => {
+    const key = "local-lakex-notes-mobile.tabs.nb-1";
+    localStorage.setItem(key, JSON.stringify(["a", "b"]));
+    render({ readBody: async (id) => note(id) });
+    // 挂载后的第一次提交（tabs=[]）不得把上次保存的标签清掉
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(["a", "b"]));
+    // 之后的真实变化照常落盘（含关闭全部写空数组）
+    await act(async () => { await session.openTab("c", { load: false }); });
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(["c"]));
+    act(() => session.clearTabs());
+    expect(localStorage.getItem(key)).toBe("[]");
+  });
+
   it("正文读回空时退出占位并收回 activeId", async () => {
     const onMissing = vi.fn();
     render({ readBody: async () => null, onMissing });

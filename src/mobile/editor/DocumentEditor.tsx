@@ -14,7 +14,8 @@ import "../../styles/fonts/font-overrides.css"; // 字体接线：须晚于内�
 import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
 import { loadSettings } from "../../lib/settings";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { clampScrollTop } from "./scrollPosition";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/lakeRuntime";
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
@@ -117,8 +118,51 @@ export function DocumentEditor(props: DocumentEditorProps) {
    * editorRef 仍保留给命令式路径（插入文件/表格/大纲）使用。
    */
   const [editorInstance, setEditorInstance] = useState<LakeEditorInstance | null>(null);
-  // 点了可视区外的表格单元格 / 光标跑到屏外 → 自动把它滚进可视区（移动端表格必然横向溢出）
-  useCaretIntoView(bodyRef, true);
+  /**
+   * R1（261027）：阅读 ⇄ 编辑切换时 LakeEditor 会 destroy + `host.replaceChildren()`（effect deps 含 mode/showToolbar），
+   * 滚动容器内容先被清空 ⇒ scrollHeight 归零 ⇒ Chrome 把 scrollTop 钳到 0（实测 790 → 0，进出都一样）。
+   * 同一篇文档的模式切换 = 同一个阅读位置 ⇒ 切换前记下、切换后按新内容 clamp 回写一次。
+   * 位置取「本次手势按下时」的值（pointerdown 早于收键盘把光标滚进视口）——直接读切换瞬间的值会被那次滚动带偏。
+   * 只在 editing 变化时触发：切到另一篇 / 新建 / 重新打开被淘汰的标签都不经过这里（新文档仍从顶）。
+   */
+  const scrollAtPointerRef = useRef<number | null>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
+  const prevEditingRef = useRef(editing);
+  useEffect(() => {
+    const onPointerDown = () => {
+      const el = bodyRef.current;
+      const pane = el?.closest(".doc-pane");
+      if (!el || !pane?.classList.contains("active")) return;
+      scrollAtPointerRef.current = el.scrollTop;
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => window.removeEventListener("pointerdown", onPointerDown, true);
+  }, []);
+  useLayoutEffect(() => {
+    if (prevEditingRef.current === editing) return;
+    prevEditingRef.current = editing;
+    const el = bodyRef.current;
+    if (!el) return;
+    pendingScrollRestoreRef.current = scrollAtPointerRef.current ?? el.scrollTop;
+  }, [editing]);
+  useEffect(() => {
+    const saved = pendingScrollRestoreRef.current;
+    if (saved === null) return;
+    pendingScrollRestoreRef.current = null;
+    const el = bodyRef.current;
+    if (!el) return;
+    const apply = () => {
+      el.scrollTop = clampScrollTop(saved, el.scrollHeight, el.clientHeight);
+    };
+    apply();
+    // 内核 setDocument 后可能再锚定/聚焦一次 ⇒ 下一帧按同一判据再纠一次（只纠一次，用户随后的滚动不再干预）
+    const raf = requestAnimationFrame(apply);
+    return () => cancelAnimationFrame(raf);
+  }, [editing]);
+  // 点了可视区外的表格单元格 / 光标跑到屏外 → 自动把它滚进可视区（移动端表格必然横向溢出）。
+  // 只在**编辑态**开启：阅读态没有光标，残留的 DOM 选区/容器级选区一旦被当成光标，
+  // 会在切文档、开目录抽屉、退出编辑后被滚到文档末尾（261027；判据见 caretIntoViewTarget）。
+  useCaretIntoView(bodyRef, editing);
 
   return (
     <>

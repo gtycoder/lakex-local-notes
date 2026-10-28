@@ -23,4 +23,15 @@ describe("工作区正文懒挂载接线", () => {
     expect(WS).toMatch(/!active \|\| !mountedIds\.has\(active\.id\)/);
     expect(WS).toMatch(/!mountedIds\.has\(t\.id\) \? null :/);
   });
+
+  it("R2：骨架是并列占位层，不替换整份 pane 列表（已挂载的 keep-alive 页必须留在 DOM 里）", () => {
+    // 旧实现 = `{活动页未挂载 ? 骨架 : tabs.map(...)}`：打开尚未挂载的新文档会把别的标签一起卸载，
+    // 回来时 scrollTop 归零（261027 R2 实测 752→0）。现在 pane 列表先渲染，骨架只在后面追加。
+    const paneListAt = WS.indexOf("{tabs.map((t) => (!mountedIds.has(t.id) ? null : (");
+    const skeletonAt = WS.indexOf('aria-label="正在打开文档"');
+    expect(paneListAt).toBeGreaterThan(-1);
+    expect(skeletonAt).toBeGreaterThan(paneListAt);
+    // 骨架分支不得再包住 pane 列表（旧形态的特征串）
+    expect(WS).not.toMatch(/\? \([\s\S]{0,200}aria-label="正在打开文档"[\s\S]{0,800}tabs\.map/);
+  });
 });
