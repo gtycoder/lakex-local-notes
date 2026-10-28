@@ -38,6 +38,7 @@ import { getNativeErrorMessage } from "./lib/nativeErrors";
 import type { TreeNode } from "./lib/types";
 import { NoteInfoDialog } from "./components/app/NoteInfoDialog";
 import { saveSettings } from "./lib/settings";
+import { clearTabSession, writeTabSession } from "./desktop/tabSession";
 import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, treeNodePath } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
@@ -283,6 +284,14 @@ export function App() {
     setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
     setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, showNotice,
   });
+
+  // 桌面标签会话（device-local）：标签/活动页变化即落盘；开启「退出时关闭全部标签」时清掉、不恢复。
+  // 启动时 useBootstrap 会先同步读走会话再恢复，晚到的 [] 写入不会覆盖它。
+  useEffect(() => {
+    if (!workspace) return;
+    if (settings.clearTabsOnExit) { clearTabSession(); return; }
+    writeTabSession({ ids: openTabs.map((tab) => tab.noteId), activeId: activeNoteId });
+  }, [workspace, openTabs, activeNoteId, settings.clearTabsOnExit]);
 
   useSyncProgress({
     setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,

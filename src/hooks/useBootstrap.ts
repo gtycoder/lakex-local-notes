@@ -6,6 +6,8 @@ import { reportNativeActionError } from "../lib/nativeErrors";
 import type { NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { DraftJournalEntry } from "../lib/types";
 import { chooseColdStartNoteId } from "../core/coldStartNote.js";
+import { loadSettings } from "../lib/settings";
+import { clearTabSession, readTabSession, sanitizeTabSession } from "../desktop/tabSession";
 
 export interface UseBootstrapOptions {
   setWorkspace: Dispatch<SetStateAction<WorkspaceSnapshot | null>>;
@@ -30,6 +32,10 @@ export function useBootstrap({
   setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, showNotice,
 }: UseBootstrapOptions) {
   useEffect(() => {
+    // 标签会话必须在任何异步/渲染落盘之前同步读走：App 的会话写入 effect 可能在恢复完成前先把 [] 写回去。
+    const clearOnExit = loadSettings().clearTabsOnExit === true;
+    const savedSession = clearOnExit ? null : readTabSession();
+    if (clearOnExit) clearTabSession();
     // 启动速度优先：不加人为最短展示；桌面 boot 窗口负责遮住真实加载时间。
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
@@ -48,6 +54,18 @@ export function useBootstrap({
         void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch((error) => reportNativeActionError("删除孤儿草稿", error))));
       }).catch((error) => reportNativeActionError("启动读取", error));
       setTreeNodes(await native.listTreeNodes());
+      // 恢复上次打开的标签（261027）：先过滤已删除/已 purge 的文档，再按顺序打开；
+      // clearTabsOnExit=true 时上面已清空会话，走原有冷启动落点。
+      const liveIds = new Set(snapshot.notes.map((note) => note.id));
+      const restored = savedSession ? sanitizeTabSession(savedSession, liveIds) : null;
+      if (restored) {
+        let opened = 0;
+        for (const id of restored.ids) { if (await openNote(id)) opened += 1; }
+        if (opened > 0) {
+          if (restored.activeId) await openNote(restored.activeId);
+          return;
+        }
+      }
       // 冷启动落点：Lake 文档优先、其次多维表（用户 261022 定）——别把首开成本高的表格/画板钉在启动交互上。
       const id = chooseColdStartNoteId(snapshot.notes, snapshot.lastOpenedNoteId);
       if (id) {

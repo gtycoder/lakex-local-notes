@@ -25,6 +25,9 @@ export interface AppSettings {
   showToolbar: boolean;
   /** 浮动工具栏：选中文字/图片时在选区上方弹出格式浮框（桌面编辑态）。默认开。 */
   floatingToolbar: boolean;
+  /** 退出时关闭全部标签：true = 下次启动不恢复上次打开的标签（并清掉存档）；false = 恢复。
+   * 仅本机偏好（localStorage），不进正文/不参与 S3，两端各自独立。 */
+  clearTabsOnExit: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -35,6 +38,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
   showToolbar: true,
   floatingToolbar: true,
+  clearTabsOnExit: false,
 };
 
 /** 设置面板提供的附件大小档位（MiB）。 */
@@ -82,6 +86,7 @@ export function loadSettings(): AppSettings {
           : DEFAULT_SETTINGS.maxAttachmentBytes,
         showToolbar: parsed.showToolbar !== false,
         floatingToolbar: parsed.floatingToolbar !== false,
+        clearTabsOnExit: parsed.clearTabsOnExit === true,
       };
       return cached;
     }

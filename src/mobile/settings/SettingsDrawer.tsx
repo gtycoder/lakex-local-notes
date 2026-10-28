@@ -197,6 +197,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   onChange={(v) => update({ maxOpenTabs: v })}
                 />
               </Item>
+              <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；关闭（默认）则恢复。仅本机偏好，不同步。" checked={settings.clearTabsOnExit} onChange={(checked) => update({ clearTabsOnExit: checked })} />
               <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
                 <PickerSheet
                   label="附件大小上限"

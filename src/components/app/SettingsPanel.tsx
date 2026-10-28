@@ -594,6 +594,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       { value: "24", label: "24 个" },
                     ]} />
                   </Field>
+                  <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；关闭（默认）则恢复。仅本机偏好，不同步、不占 S3。" checked={settings.clearTabsOnExit} onChange={(checked) => onChange({ clearTabsOnExit: checked })} />
                 </Group>
                 <Group title="附件" icon={<Paperclip size={16} />}>
                   <Field itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">

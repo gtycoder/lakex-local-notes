@@ -3,6 +3,9 @@ import ReactDOM from "react-dom/client";
 import { MobileApp } from "./MobileApp";
 import { applyTheme } from "../lib/theme";
 import { loadSettings, subscribeSettings } from "../lib/settings";
+import { clearPersistedNotebookTabs } from "./notebook/tabSessionCleanup";
+import { installSafeAreaInsets } from "./native/safeAreaInsets";
+import { installDeviceProfile } from "./native/deviceProfile";
 import { applySystemBarTheme } from "./native/systemBars";
 import { isQuickNoteShortcutUrl, readLaunchUrlHint } from "./native/quickNoteShortcut";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
@@ -29,6 +32,11 @@ import "./editor/edit-surface-kernel.css";
 // 所以移动端要覆盖它们必须有一个 body 级标记（260923 W2 起只有组件树内样式，够不到浮层）。
 document.body.classList.add("lake-mobile");
 
+// 261027：系统栏/刘海安全区（原生 WindowInsets → CSS 变量；env() 不靠谱的 ROM 走这里兜底）。
+installSafeAreaInsets();
+// 261027：平板/折叠屏形态（只切布局类，不改信息架构）。
+installDeviceProfile();
+
 // M3：移动端深色模式——与桌面同语义：settings.theme 为权威（light=daylight / dark=midnight）。
 // 启动即应用；saveSettings 的订阅回调让设置面板切换立即生效（桌面此前一直如此，移动端曾缺失
 // 导致「点深色没反应」：设置已持久化但 data-theme 不变）。
@@ -39,6 +47,10 @@ const applyThemeEverywhere = (theme: ReturnType<typeof loadSettings>["theme"]): 
 };
 applyThemeEverywhere(loadSettings().theme);
 subscribeSettings((settings) => applyThemeEverywhere(settings.theme));
+
+// 「退出时关闭全部标签」（261027）：冷启动先清掉上次标签存档；进入工作区时的恢复逻辑就会读到空。
+// 用「启动时清」而不是挂退出/后台回调：Android 杀进程没有可靠回调，切后台也不该清标签。
+if (loadSettings().clearTabsOnExit) clearPersistedNotebookTabs();
 
 // 与桌面一致：必须在编辑器创建前安装粘贴拦截器（原生 paste 的 clipboardData 只读，getData 需包一层升级）
 installPasteInterceptor();
@@ -52,3 +64,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <MobileApp initialCapture={initialCapture} />
   </React.StrictMode>
 );
+
+// 261027：首屏看门狗报到 —— React 提交即算「JS 已起来」，不等网络/数据；
+// 原生 30s 内没收到会 reload 一次（只兜白屏/卡死，不做业务判断）。
+window.setTimeout(() => {
+  try { (window as { lakeBoot?: { ready?: () => void } }).lakeBoot?.ready?.(); } catch { void 0; }
+}, 0);

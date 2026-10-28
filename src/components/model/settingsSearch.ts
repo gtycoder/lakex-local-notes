@@ -29,6 +29,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-toolbar", category: "editor", label: "显示固定工具栏", keywords: "工具栏 固定 顶部 隐藏 显示 toolbar" },
   { id: "editor-floating-toolbar", category: "editor", label: "浮动工具栏", keywords: "浮动 工具栏 选区 气泡 浮框 文字 图片 toolbar" },
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限" },
+  { id: "editor-clear-tabs-on-exit", category: "editor", label: "退出时关闭全部标签", keywords: "标签 恢复 退出 关闭 清空 tab session 重启 下次启动" },
   { id: "editor-max-attachment", category: "editor", label: "附件大小上限", keywords: "附件 上传 大小 上限 MiB" },
   { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 纸质 护眼 换肤 dark light warm 夜间 亮蓝 亮橙 暗紫" },
   { id: "shortcut-search", category: "shortcuts", label: "打开全局搜索（标题和正文）", keywords: "搜索 快捷键 ⌘K" },
