@@ -181,7 +181,7 @@ codesign -dv --verbose=4 "release/mac-arm64/LocalLakexNotes.app"
 ### 3. 发版步骤
 
 ```bash
-cd lake-notes-electron
+cd local-lakex-notes-dev
 
 # 1) 版本号必须与 tag 一致（electron-builder 产物名取自 package.json）
 npm version patch --no-git-tag-version   # 或手动改 package.json

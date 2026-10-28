@@ -8,7 +8,7 @@
 
 LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
 
-- 目录 `/Users/admin/file/local-lake/lake-notes-electron`（**物理目录暂未改名**）；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
+- 目录 `/Users/admin/file/local-lake/local-lakex-notes`（目录名 local-lakex-notes；数据目录：开发 local-lakex-notes-dev / 正式 local-lakex-notes，见 §5）；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
 - **身份已标准化为 `local-lakex-notes`（261022）**：productName `LocalLakexNotes`；npm `local-lakex-notes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；localStorage `local-lakex-notes-v3.*` / `local-lakex-notes-mobile.*`；S3 迁移码 `LLN1.`；私有协议 `locallakexnotes://app`；深链 `locallakexnotes://quick-note`。**保留不动**：`LAKE_*` 开发环境变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
 - Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）
 - **目标量级 = 2 万文档 / 20 万附件（v3 定稿，261026）**：性能与同步决策按此验证，**别用"小库正常"下结论**。索引硬上限 = 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记；超过 2 万文档后的下一步是 v3.1 按篇增量索引（当前变更轮整份拉索引约 3MB gzip），**不分片**。
@@ -133,7 +133,7 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lake-notes-electron
+cd /Users/admin/file/local-lake/local-lakex-notes
 npm run setup:lakex                                             # 首次/新 clone：从私有归档恢复闭源内核（缺归档会报错并给指引）
 npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（≈20s）
 npx vite build && npx vite build -c vite.mobile.config.ts       # 两条构建

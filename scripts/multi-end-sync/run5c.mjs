@@ -2,7 +2,7 @@ import { connect } from './cdpclient.mjs';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/admin/file/local-lake/lake-notes-electron/package.json');
+const require = createRequire('/Users/admin/file/local-lake/local-lakex-notes/package.json');
 const Database = require('better-sqlite3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
 const ENDS = [

@@ -124,7 +124,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/keyboard-toggle.mjs
 ## 环境（260923 实测可用）
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lake-notes-electron
+cd /Users/admin/file/local-lake/local-lakex-notes
 bash scripts/emu-up.sh --no-window              # AVD lake_mobile；起来后 adb devices 应见 emulator-5554
 bash scripts/android-build.sh --sync --install  # sync dist-mobile → gradle assembleDebug → adb install → 启动 App
 bash scripts/emu-cdp.sh                         # 转发 webview_devtools_remote_* → tcp:9335

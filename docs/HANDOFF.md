@@ -1030,7 +1030,7 @@
 ## 6. 环境与命令
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"      # node 24（别用系统 node 18）
-cd /Users/admin/file/local-lake/lake-notes-electron
+cd /Users/admin/file/local-lake/local-lakex-notes
 # 门禁（合并前必过）—— 261013 实测总共 ≈21s（tsc 5s / vitest 8s / 两条构建各 3s / 其余 ≤1s）
 npx tsc --noEmit && npx vitest run && npx vite build && npx vite build -c vite.mobile.config.ts
 node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && npm run check:bundle && git diff --check
@@ -1121,7 +1121,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 ### 常用命令
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lake-notes-electron
+cd /Users/admin/file/local-lake/local-lakex-notes
 npx tsc --noEmit
 node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts
 bash scripts/android-build.sh --sync --install

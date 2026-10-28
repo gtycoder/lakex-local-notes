@@ -18,7 +18,7 @@
 ## 二、开发
 
 ```bash
-cd /Users/admin/file/local-lake/lake-notes-electron
+cd /Users/admin/file/local-lake/local-lakex-notes
 PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm run dev
 ```
 - Vite dev server：`http://127.0.0.1:1421/`
