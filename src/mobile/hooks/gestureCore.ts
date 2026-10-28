@@ -13,6 +13,16 @@ export const PANEL_COMMIT_RATIO = 1 / 3;
 /** 快速滑动窗口：抬手时距 touchstart 小于该值即视为“快滑”，短距离也提交（思源 touch.ts:309）。 */
 export const QUICK_FLICK_MS = 1000;
 
+/** 系统手势边缘保留区（261027）：Android 手势导航的返回手势从左右边缘起手，
+ *  抽屉横滑若从边缘起手会与系统抢；思源同样把边缘 8px 让给系统（touch.ts:378-386）。 */
+export const SYSTEM_EDGE_GUARD_PX = 8;
+
+/** 落点是否落在系统手势边缘（左右各 guard px）——落在边缘时不接管横滑，交给系统返回手势。 */
+export function isSystemEdgeStart(x: number, width: number, guard = SYSTEM_EDGE_GUARD_PX): boolean {
+  if (!(width > guard * 2)) return false;
+  return x <= guard || x >= width - guard;
+}
+
 export const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** 位移先越过阈值且横向占优才算横滑；否则返回 undefined（交给纵向滚动）。 */

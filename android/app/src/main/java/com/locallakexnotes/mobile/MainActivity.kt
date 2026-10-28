@@ -1,12 +1,22 @@
 package com.locallakexnotes.mobile
 
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.Window
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebSettings
+import android.webkit.WebView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.BridgeActivity
+import com.getcapacitor.WebViewListener
 
 class MainActivity : BridgeActivity() {
     companion object {
@@ -14,7 +24,17 @@ class MainActivity : BridgeActivity() {
          *  WebView 不延伸到状态栏/导航栏之下，栏后露出的是 window 背景色。 */
         private val BAR_COLOR_LIGHT = 0xFFFFFFFF.toInt()
         private val BAR_COLOR_DARK = 0xFF1E2126.toInt()
+        /** 首屏看门狗：30s 内渲染层没报到就 reload 一次（WebView 卡死/白屏兜底）。 */
+        private const val BOOT_WATCHDOG_MS = 30_000L
     }
+
+    private val bootWatchdog = Handler(Looper.getMainLooper())
+    private var bootReady = false
+    private var bootWatchdogFired = false
+
+    /** 系统栏/刘海的安全区（CSS px），由 WebView 的 WindowInsets 换算后交给渲染层。 */
+    private var insetTopCss = 0f
+    private var insetBottomCss = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(OpenFilePlugin::class.java)
@@ -29,6 +49,13 @@ class MainActivity : BridgeActivity() {
         // AI 原生通道（261023 P0）：Key 只在原生，流式 SSE
         registerPlugin(AiChatPlugin::class.java)
         super.onCreate(savedInstanceState)
+        // 261027：无论 Activity 最终落到哪个 theme（启动页 → NoActionBar），都保证内容可延伸到刘海区域；
+        // 具体安全区由上面的 WindowInsets 注入交给 CSS，不依赖 theme 属性是否随启动页主题切换而丢失。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
         // 本地资产 HTTP 服务：canonical URL http://127.0.0.1:19876/{noteId}/{file} 本机可达，
         // Lake 原生渲染图片/附件，替代移动端 blob 注入方案（与桌面端资源服务器语义一致）。
         val assetToken = AssetServer.start(this)
@@ -45,6 +72,72 @@ class MainActivity : BridgeActivity() {
             // （styles.xml 只写死了 windowLightStatusBar=true，深色下会留一条近白 #FAFAFA 的硬边。）
             bridge.webView.addJavascriptInterface(SystemBarsInterface(this), "lakeSystemBars")
         }
+        // 261027：把真实系统栏/刘海 inset 交给 Web UI —— 不能只信 env(safe-area-inset-*)：
+        // Android WebView 在部分 ROM/edge-to-edge（targetSdk 36 / Android 15+ 强制）下返回 0，
+        // 顶栏就会压到状态栏/刘海下面。这里按 WindowInsets 取 systemBars ∪ displayCutout，
+        // 换成 CSS px 注入 --mobile-native-top-safe / -bottom，由 tokens.css 与 env 取 max。
+        bridge?.webView?.let { webView ->
+            webView.addJavascriptInterface(InsetsInterface(this), "lakeInsets")
+            ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+                val density = resources.displayMetrics.density.takeIf { it > 0f } ?: 1f
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                insetTopCss = bars.top / density
+                insetBottomCss = bars.bottom / density
+                view.post {
+                    webView.evaluateJavascript(
+                        "window.__lakeSetNativeInsets&&window.__lakeSetNativeInsets($insetTopCss,$insetBottomCss)",
+                        null,
+                    )
+                }
+                insets
+            }
+            webView.requestApplyInsets()
+        }
+        bridge?.webView?.let { webView ->
+            // 261027：锁定 WebView 文本缩放/强制深色 —— 我们的主题与字号由自有设置驱动，
+            // 再叠一层系统缩放/反色会双重放大、深色下发灰。字号缩放的无障碍取舍见 docs/HANDOFF。
+            webView.settings.textZoom = 100
+            if (Build.VERSION.SDK_INT >= 33) {
+                webView.settings.setAlgorithmicDarkeningAllowed(false)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                @Suppress("DEPRECATION")
+                webView.settings.forceDark = WebSettings.FORCE_DARK_OFF
+            }
+            // 设备形态（平板 / 折叠屏展开）：交给 Web 切布局（body.lake-tablet）。
+            webView.addJavascriptInterface(DeviceInterface(this), "lakeDevice")
+            // 首屏看门狗：JS 启动后调 lakeBoot.ready()；超时未报到则 reload 一次。
+            webView.addJavascriptInterface(BootInterface(this), "lakeBoot")
+            bootWatchdog.postDelayed({
+                if (!bootReady && !bootWatchdogFired) {
+                    bootWatchdogFired = true
+                    webView.reload()
+                }
+            }, BOOT_WATCHDOG_MS)
+        }
+        // 渲染进程崩溃：Capacitor 桥持有 WebView 引用，不能只换 WebView（会断桥）；
+        // 走 recreate() 重建 Activity/Bridge，Web 侧按持久化状态恢复标签。
+        bridge?.addWebViewListener(object : WebViewListener() {
+            override fun onRenderProcessGone(webView: WebView, detail: RenderProcessGoneDetail): Boolean {
+                runOnUiThread { recreate() }
+                return true
+            }
+        })
+    }
+
+    /** 平板/折叠屏展开：smallestScreenWidthDp >= 600（与思源同口径）。 */
+    private fun isTabletLayout(): Boolean = resources.configuration.smallestScreenWidthDp >= 600
+
+    /** 把设备形态推给 Web（启动后的配置变化：折叠展开/旋转）。 */
+    private fun pushDeviceProfile() {
+        val tablet = isTabletLayout()
+        getBridge()?.webView?.post {
+            getBridge()?.webView?.evaluateJavascript("window.__lakeSetTablet&&window.__lakeSetTablet($tablet)", null)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        pushDeviceProfile()
     }
 
     /**
@@ -81,6 +174,30 @@ class MainActivity : BridgeActivity() {
             }
             decor.setSystemUiVisibility(flags)
         }
+    }
+
+    /** 仅暴露给本应用 WebView：首屏就绪报到（看门狗用）。 */
+    private class BootInterface(private val activity: MainActivity) {
+        @JavascriptInterface
+        fun ready() {
+            activity.bootReady = true
+            activity.bootWatchdog.removeCallbacksAndMessages(null)
+        }
+    }
+
+    /** 仅暴露给本应用 WebView：设备形态（平板/折叠屏展开）。 */
+    private class DeviceInterface(private val activity: MainActivity) {
+        @JavascriptInterface
+        fun isTablet(): Boolean = activity.isTabletLayout()
+    }
+
+    /** 仅暴露给本应用 WebView：系统栏/刘海安全区（CSS px；-1 表示尚未测量）。 */
+    private class InsetsInterface(private val activity: MainActivity) {
+        @JavascriptInterface
+        fun getTop(): Float = activity.insetTopCss
+
+        @JavascriptInterface
+        fun getBottom(): Float = activity.insetBottomCss
     }
 
     /** 仅暴露给本应用 WebView：让状态栏/导航栏跟随 App 主题（Capacitor 默认不接管系统栏）。 */

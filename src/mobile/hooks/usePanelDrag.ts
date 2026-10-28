@@ -7,7 +7,7 @@
  *  - 提交后先把面板摆到最终态（transition 已恢复 → 平滑归位），再清内联样式交还 React 类名。
  */
 import { useEffect, useRef } from "react";
-import { getTouchAxis, isHorizontalScrollable, panelCommit, panelProgress, swipeTargetSide, type PanelSide } from "./gestureCore";
+import { getTouchAxis, isHorizontalScrollable, isSystemEdgeStart, panelCommit, panelProgress, swipeTargetSide, type PanelSide } from "./gestureCore";
 
 export type { PanelSide };
 
@@ -74,6 +74,8 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
       if (target?.closest?.(EXCLUDE)) { stop(); cancelled = true; return; }
       // 存在文本选区时不滑出抽屉（对齐思源：选中内容优先）
       if (window.getSelection()?.toString()) { stop(); cancelled = true; return; }
+      // 系统手势边缘（左右 8px）不接管：Android 手势导航的返回手势从边缘起手，让给系统（261027）。
+      if (isSystemEdgeStart(t.clientX, window.innerWidth || 1)) { stop(); cancelled = true; return; }
       startX = t.clientX; startY = t.clientY; lastX = t.clientX; startTime = Date.now();
       axis = null; dragging = false;
       const h = ref.current;

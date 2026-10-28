@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clamp01, getTouchAxis, panelCommit, panelProgress, swipeTargetSide } from "./gestureCore";
+import { SYSTEM_EDGE_GUARD_PX, clamp01, getTouchAxis, isSystemEdgeStart, panelCommit, panelProgress, swipeTargetSide } from "./gestureCore";
 
 describe("getTouchAxis（轴锁，对齐思源 touchGesture.ts）", () => {
   it("位移未过阈值 → undefined", () => {
@@ -62,5 +62,19 @@ describe("swipeTargetSide（新手势拉哪一侧；该侧没有面板则作废�
     const onlyLeft = (side: "left" | "right"): boolean => side === "left";
     expect(swipeTargetSide(40, onlyLeft)).toBe("left");
     expect(swipeTargetSide(-40, onlyLeft)).toBeNull();
+  });
+});
+
+describe("isSystemEdgeStart（系统手势边缘让位，261027）", () => {
+  it("左右各 8px 命中；再往里 1px 就不算", () => {
+    expect(SYSTEM_EDGE_GUARD_PX).toBe(8);
+    expect(isSystemEdgeStart(0, 390)).toBe(true);
+    expect(isSystemEdgeStart(8, 390)).toBe(true);
+    expect(isSystemEdgeStart(9, 390)).toBe(false);
+    expect(isSystemEdgeStart(382, 390)).toBe(true);
+    expect(isSystemEdgeStart(381, 390)).toBe(false);
+  });
+  it("窄屏（宽度 ≤ 2×guard）不吞手势", () => {
+    expect(isSystemEdgeStart(6, 16)).toBe(false);
   });
 });

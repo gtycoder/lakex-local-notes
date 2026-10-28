@@ -41,7 +41,10 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
   padding: max(0px, calc(var(--mobile-top-safe-area) - 8px)) max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px));
   margin-top: 8px;
-  height: var(--mobile-topbar-height); background: var(--lake-bg-window);
+  /* 高度必须把「安全区多出来的部分」算进去：只加 padding 不加高度会把 44px 内容区压扁/裁掉
+     （261027 刘海屏实机：顶栏文字被上下裁切）。auto-hidden 时整体归零，不受影响。 */
+  height: calc(var(--mobile-topbar-height) + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
+  background: var(--lake-bg-window);
   border-bottom: .5px solid var(--lake-bg-block);
   position: sticky; top: 0; z-index: var(--mobile-z-topbar);
   /* 阅读时自动收起（261019，对齐思源）：收起靠高度/外边距过渡，正文自然上移（不改 position，避免重排错位）。 */
@@ -407,7 +410,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-settings-page--full { width: 100%; border-radius: 0; box-shadow: none; }
 .mobile-settings-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 10px;
+  padding: calc(12px + var(--mobile-top-safe-area)) 16px 10px;
   border-bottom: 1px solid var(--lake-border-1, var(--lake-border-1));
   position: sticky; top: 0; z-index: 2; background: inherit;
 }
@@ -583,7 +586,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 全屏 tab 列表（思源 #model） */
 .mobile-model-mask { position: fixed; inset: 0; z-index: var(--mobile-z-model-mask); background: var(--mobile-mask); display: flex; align-items: flex-end; }
 .mobile-model { width: 100%; max-width: 480px; margin: 0 auto; max-height: 80%; display: flex; flex-direction: column; background: var(--lake-bg-window, var(--lake-bg-window)); border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0; overflow: hidden; scrollbar-width: none; animation: mobile-sheet-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
-.mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: var(--mobile-topbar-height); padding: 8px 8px 8px 16px; border-bottom: .5px solid var(--lake-bg-block); }
+.mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: calc(var(--mobile-topbar-height) + var(--mobile-top-safe-area)); padding: calc(8px + var(--mobile-top-safe-area)) 8px 8px 16px; border-bottom: .5px solid var(--lake-bg-block); }
 /* 标签页抽屉：标题右侧「关闭全部」（放在 × 左边；ml-auto 把它顶到右侧） */
 .mobile-model-closeall { margin-left: auto; margin-right: 4px; padding: 6px 8px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-small); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .mobile-model-closeall:active { background: var(--lake-bg-hover); color: var(--lake-text-2); }
@@ -644,7 +647,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .side-panel > .toolbar .toolbar__icon { width: 40px; height: 40px; padding: 11px; margin: 2px; }
 .side-panel > .toolbar .toolbar__icon > svg { width: 18px; height: 18px; }
 .side-panel > .toolbar .toolbar__text { font-size: 15px; padding-left: 8px; }
-.side-panel > .toolbar { background-color: var(--lake-bg-panel); min-height: 48px; }
+.side-panel > .toolbar { background-color: var(--lake-bg-panel); min-height: calc(48px + var(--mobile-top-safe-area)); padding-top: var(--mobile-top-safe-area); }
 /* 抽屉首行 = 笔记本行（图标 + 标题）：左侧留出与页面内距同档的空间（用户 261014：图标太贴边、顶到抽屉边缘）。
    只作用在抽屉工具栏的滚动区，其它工具栏不受影响。 */
 .side-panel > .toolbar .toolbar__scroll { padding-left: var(--mb-page-pad); }
@@ -1239,3 +1242,12 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
   object-fit: contain;
   cursor: pointer;
 }
+
+/* ===== 平板 / 折叠屏展开（body.lake-tablet，由原生 smallestScreenWidthDp>=600 注入；261027）=====
+ * 只做内容限宽居中 / 设置页加宽；信息架构与页面层级不变（IA 冻结）。 */
+body.lake-tablet .mobile-settings-page { width: min(92%, 440px); }
+body.lake-tablet .nb-shelf,
+body.lake-tablet .nb-list,
+body.lake-tablet .mobile-scroll,
+body.lake-tablet .mobile-home-tabs,
+body.lake-tablet .mobile-doc-body .lake-editor-mount { max-width: 760px; margin-left: auto; margin-right: auto; }
