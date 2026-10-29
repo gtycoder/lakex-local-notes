@@ -573,13 +573,6 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .side-panel.on { transform: translateX(0); }
 .side-panel--right { left: auto; right: 0; transform: translateX(100%); background: var(--lake-bg-panel); border-radius: var(--lake-radius-xl) 0 0 var(--lake-radius-xl); }
 .side-panel--right.on { transform: translateX(0); }
-/* 261029 FIX-M2：大纲右侧抽屉不再通到屏幕底 —— 抽屉与遮罩都停在底部胶囊上沿
-   （胶囊上沿 = status 24 + gap 8 + 胶囊 56；再留 8 间隙），让胶囊保持可见可点。
-   胶囊本身几何/层序不动，也不改其它左右抽屉。 */
-.side-panel--right.side-panel--outline,
-.side-mask--outline {
-  bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--mobile-bottom-bar-height) + var(--mobile-bar-gap));
-}
 
 .side-panel-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0 calc(24px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
 /* 行密度现在完全由 kit.css 的 .mb-row 原语承担（44 高 / body 字号 / --mb 内距）。

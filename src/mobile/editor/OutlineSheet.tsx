@@ -97,8 +97,8 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
   // side 变体始终渲染（靠 .on 滑入/滑出，动画可达）；底部 sheet 仍按 open 条件渲染。
   if (side) {
     return (
-      <div className={"side-mask side-mask--outline" + (open ? " on" : "")} data-panel-mask="right" onClick={onClose}>
-        <div className={"side-panel side-panel--right side-panel--outline" + (open ? " on" : "")} onClick={(e) => e.stopPropagation()}>
+      <div className={"side-mask" + (open ? " on" : "")} data-panel-mask="right" onClick={onClose}>
+        <div className={"side-panel side-panel--right" + (open ? " on" : "")} onClick={(e) => e.stopPropagation()}>
           {/* 侧栏头 = 思源 #sidebarRight .toolbar 口径：标题 + 箭头关闭（左栏收右箭头、右栏收左箭头） */}
           <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
             <div className="toolbar__scroll"><span className="toolbar__text">大纲</span></div>
