@@ -47,7 +47,7 @@ if (nodeMajor < 24) {
   die(`Node ${process.versions.node} 太旧（必须 ≥ v24）`, 'export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"  然后重跑');
 }
 if (/obsolete|DISABLED-/i.test(ROOT)) {
-  die("当前目录是旧的实验副本（路径含 obsolete/DISABLED）", "cd /Users/admin/file/local-lake/lakex-local-notes && npm run dev");
+  die("当前目录是旧的实验副本（路径含 obsolete/DISABLED）", "cd 到正库 lakex-local-notes 再 npm run dev（旧副本 node_modules 旧、且共享 dev 数据目录）");
 }
 if (process.env.ELECTRON_RUN_AS_NODE) {
   console.warn("[dev] 检测到宿主注入的 ELECTRON_RUN_AS_NODE，已为本次启动移除（否则 Electron 会以纯 Node 启动）");
@@ -65,12 +65,15 @@ if (DOCTOR) {
   console.log("[dev:doctor] SINGLE    : " + (fs.existsSync(lock) ? "存在（可能有实例在跑）" : "无"));
   process.exit(0);
 }
-if (vitePids.includes(process.pid)) { /* noop */ }
 if (vitePids.length > 0) {
   const mine = vitePids.some((pid) => cwdOf(pid) === ROOT);
   if (mine) {
-    console.log("[dev] 本仓库的 vite 已在运行：http://127.0.0.1:" + PORT + "/（窗口应已在前台）");
-    process.exit(0);
+    const hasWindow = devElectron.some((pid) => cwdOf(pid) === ROOT);
+    console.log("[dev] 本仓库的 vite 已在运行：http://127.0.0.1:" + PORT + "/");
+    console.log(hasWindow
+      ? "[dev] dev Electron 也在跑（单实例锁：本次只会聚焦已有窗口）"
+      : "[dev] 没检测到 dev Electron（可能正在启动，或已退出）；窗口一直不出来就 npm run dev:clean 后重跑");
+    process.exit(hasWindow ? 0 : 1);
   }
   die(`端口 ${PORT} 被别的进程占用：${vitePids.map((p) => p + " " + cwdOf(p)).join(", ")}`,
     "先跑 npm run dev:clean（只清本项目的 dev 进程），或手动 kill 上面 PID");

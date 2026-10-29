@@ -2,8 +2,8 @@
 
 ## 一、环境要求（重要）
 
-- **Node 必须是 ≥ 20.12**：系统默认 node 是 v18（`~/.nvm/versions/node/v18.20.8`），
-  跑 vite 8（rolldown）会报 `styleText` 缺失。必须用 nvm v24：
+- **Node 必须是 24**（`package.json` 的 `engines.node` = `>=24.0.0`，`scripts/dev.mjs` 第一步会拦）：
+  系统默认 node 是 v18（`~/.nvm/versions/node/v18.20.8`），跑 vite 8（rolldown）会报 `styleText` 缺失。必须用 nvm v24：
   ```bash
   export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
   ```
@@ -32,6 +32,8 @@ Node < 24、端口 1421 被占、dev Electron(9222) 已在跑、从旧副本 `pr
 | `npm run dev` | 启动桌面 dev（vite 1421 + Electron CDP 9222）；已在运行会提示而不是失败 |
 | `npm run dev:doctor` | 只体检：Node / 仓库路径 / 1421 与 9222 占用（含占用进程 cwd）/ userData 单实例锁 |
 | `npm run dev:clean` | 只清**本项目**的 dev 进程（vite 1421 + Electron CDP 9222 + cwd 三重判据，不碰其它 Electron） |
+
+> 环境要求已与 `package.json` 的 `engines.node`（>=24）对齐；Node 18/20 会在启动器第一步就被拦下。
 
 「打不开」排查顺序：① `npm run dev:doctor`；② 有残留 → `npm run dev:clean` 再起；
 ③ 确认没在 `private/` 的旧副本里（那份 node_modules 是旧的、共享 dev userData，会把库写坏；

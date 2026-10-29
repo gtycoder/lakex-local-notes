@@ -30,7 +30,7 @@ export function quickNoteToLakeContent(targetNoteId: string, source: QuickNoteDo
 function titleForQuickNote(source: QuickNoteDocument): string {
   // 小记不隐式把首行升级为正式标题；转入 Lake 后由用户在正式编辑器中补充主题。
   // 不用 locale 字符串，避免不同系统显示成 2026/8/4、含秒数或使用不同分隔符。
-  return `未命名文档 · ${formatDateTime(new Date(source.createdAt))}`;
+  return `未命名文档（${formatDateTime(new Date(source.createdAt))}）`;
 }
 
 /**

@@ -75,19 +75,19 @@ export function S3ConfigImportSheet({ open, onClose, onImport }: S3ConfigImportS
           粘贴另一台设备「同步设置 → 配置迁移 → 导出迁移码」得到的迁移码（LLN1. 开头）。
           导入会覆盖本机已保存的 S3 配置（同步策略不变）。导入后请先「测试连接」，再开启云同步。
         </div>
-      <div className="mb-input mb-input--multiline">
-        <textarea
-          ref={textareaRef}
-          rows={6}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="粘贴 LLN1. 开头的迁移码"
-          aria-label="S3 迁移码"
-          spellCheck={false}
-        />
-      </div>
-      {msg && <div className="mb-form__desc">{msg}</div>}
-      {error && <div className="mb-form__desc mb-form__desc--error">{error}</div>}
+        <div className="mb-input mb-input--multiline">
+          <textarea
+            ref={textareaRef}
+            rows={6}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="粘贴 LLN1. 开头的迁移码"
+            aria-label="S3 迁移码"
+            spellCheck={false}
+          />
+        </div>
+        {msg && <div className="mb-form__desc">{msg}</div>}
+        {error && <div className="mb-form__desc mb-form__desc--error">{error}</div>}
         <div className="mb-set-block__actions">
           <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void pasteCode()}>
             <ClipboardPaste size={16} aria-hidden="true" />

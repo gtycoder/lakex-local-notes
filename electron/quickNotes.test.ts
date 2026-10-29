@@ -269,7 +269,7 @@ describe("QuickNotesStore", () => {
 
     const target = convertQuickNoteToLake(quickNotes, notes, source.id, notebookId);
     const converted = notes.readNote(target.id);
-    expect(converted.title).toMatch(/^未命名文档 · \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(converted.title).toMatch(/^未命名文档（\d{4}-\d{2}-\d{2} \d{2}:\d{2}）$/);
     expect(converted.content).toContain(encodeURIComponent(`http://127.0.0.1:19876/${target.id}/${image.filename}`));
     // 每个小记换行必须成为独立 Lake 段落，不能用同一个段落内的 <br>，否则后续
     // 切换为有序/无序列表会被 Lake 识别成同一条列表项中的软换行。
@@ -337,7 +337,7 @@ describe("QuickNotesStore", () => {
     const source = quickNotes.createQuickNote({ text: "将转正文", draftId: crypto.randomUUID(), stagedImageIds: [] });
     const notebookId = notes.listTreeNodes().find((node) => node.nodeType === "notebook")!.id;
     const target = convertQuickNoteToLake(quickNotes, notes, source.id, notebookId);
-    expect(notes.readNote(target.id).title).toMatch(/^未命名文档 ·/);
+    expect(notes.readNote(target.id).title).toMatch(/^未命名文档（/);
     expect(quickNotes.listQuickNotes().map((item) => item.id)).not.toContain(source.id);
     expect(quickNotes.listDeletedForSync().map((item) => item.id)).not.toContain(source.id);
     quickNotes.markTargetNotesSynced(new Set([target.id]));

@@ -611,7 +611,7 @@ export function App() {
         <div
           ref={edgeHotzoneRef}
           className="edge-hotzone edge-hotzone-l"
-          title="目录：悬停展开 · 点击固定/取消"
+          title="目录：悬停展开，点击固定或取消"
           onPointerEnter={(e) => dispatchEdge({ type: "enter" }, e.clientY)}
           onPointerMove={(e) => dispatchEdge({ type: "move" }, e.clientY)}
           onPointerLeave={(e) => {
