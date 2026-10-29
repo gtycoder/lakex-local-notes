@@ -1,6 +1,6 @@
 {
   "name": "lakex-local-notes",
-  "version": "0.1.4",
+  "version": "0.0.1",
   "private": true,
   "description": "本地优先的 Lake 编辑器笔记应用（Electron 桌面端）",
   "main": "dist-electron/main.js",
