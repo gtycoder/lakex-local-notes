@@ -104,8 +104,8 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
       {detail ? (
         <>
           <div className="ai-history-meta">
-            {timeText(detail.updatedAt)} · {detail.messages.length} 条消息
-            {detail.corpus.length > 0 ? " · 资料 " + detail.corpus.map((doc) => "《" + doc.title + "》").join("") : ""}
+            {timeText(detail.updatedAt)}，{detail.messages.length} 条消息
+            {detail.corpus.length > 0 ? "；资料 " + detail.corpus.map((doc) => "《" + doc.title + "》").join("") : ""}
           </div>
           <div className="ai-body ai-history-body" ref={scrollRef}>
             {detail.messages.map((message, index) => message.role === "user" ? (
@@ -142,7 +142,7 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
                 <span className="mb-row__main">
                   <span className="mb-row__title">{item.title}</span>
                   <span className="mb-row__sub">
-                    {timeText(item.updatedAt)} · {item.messageCount} 条消息{item.docs.length > 0 ? " · 资料 " + item.docs.map((doc) => "《" + doc.title + "》").join("") : ""}
+                    {timeText(item.updatedAt)}，{item.messageCount} 条消息{item.docs.length > 0 ? "；资料 " + item.docs.map((doc) => "《" + doc.title + "》").join("") : ""}
                   </span>
                 </span>
                 <span
@@ -158,7 +158,7 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
               </button>
             ))}
             {loading && items.length > 0 && <div className="ai-history-foot">读取中…</div>}
-            {!loading && items.length > 0 && <div className="ai-history-foot">共 {items.length} 条 · 仅本机 · 最多保留 50 条 / 30 天</div>}
+            {!loading && items.length > 0 && <div className="ai-history-foot">共 {items.length} 条，仅本机，最多保留 50 条 / 30 天</div>}
           </div>
         </>
       )}

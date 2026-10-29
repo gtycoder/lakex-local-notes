@@ -50,7 +50,7 @@ const rows = () => [...host.querySelectorAll<HTMLElement>(".mobile-doc-row")];
 const badgeCount = () => host.querySelectorAll(".mobile-trash-cloud").length;
 
 describe("移动端总回收站 · 云端已删除徽标", () => {
-  it("笔记/小记的 cloudDeleted 行显示「云端已删除 · 仅本地」，普通回收站行不显示", async () => {
+  it("笔记/小记的 cloudDeleted 行显示「云端已删除（仅本地）」，普通回收站行不显示", async () => {
     const ts = "2026-10-25T00:00:00.000Z";
     listTrashTree.mockResolvedValue([
       { id: "n1", title: "云端已删文档", kind: "note", parentId: null, deletedAt: ts, cloudDeleted: true },
@@ -63,7 +63,7 @@ describe("移动端总回收站 · 云端已删除徽标", () => {
     expect(rows()).toHaveLength(3);
     expect(badgeCount()).toBe(2);
     const texts = [...host.querySelectorAll(".mobile-trash-cloud")].map((el) => el.textContent);
-    expect(texts).toEqual(["云端已删除 · 仅本地", "云端已删除 · 仅本地"]);
+    expect(texts).toEqual(["云端已删除（仅本地）", "云端已删除（仅本地）"]);
     // 徽标所在的行分别是云端已删文档 / 云端已删小记
     const badged = rows().filter((r) => r.querySelector(".mobile-trash-cloud")).map((r) => r.textContent);
     expect(badged[0]).toContain("云端已删文档");

@@ -1,7 +1,7 @@
 /** 移动端「总回收站」列表（设置→回收站）。
  * 小记回收站并入总回收站：合并展示笔记/文件夹回收站（listTrashTree）与小记回收站（listQuickNoteTrash），
  * 按 deletedAt 倒序；支持恢复（同步后传播）/彻底删除；笔记行点击可预览。
- * 261026：「云端已删除 · 仅本地」= 远端 v3 已彻底删除、本机仅保留这份回收站副本（不参与上传）；
+ * 261026：「云端已删除（仅本地）」= 远端 v3 已彻底删除、本机仅保留这份回收站副本（不参与上传）；
  * 恢复并重新上传成功后标记消失。 */
 import { useCallback, useEffect, useState } from "react";
 import { Feather, FolderOpen, File, RotateCcw, Trash } from "lucide-react";
@@ -89,7 +89,7 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
             <span className="mobile-trash-text">
               <span className="mobile-trash-title mb-ellipsis">{row.title}</span>
               {row.cloudDeleted && (
-                <span className="mb-tag mobile-trash-cloud" title="云端已彻底删除，本机仅保留这份回收站副本；恢复并同步成功后重新上传">云端已删除 · 仅本地</span>
+                <span className="mb-tag mobile-trash-cloud" title="云端已彻底删除，本机仅保留这份回收站副本；恢复并同步成功后重新上传">云端已删除（仅本地）</span>
               )}
             </span>
             <span className="mobile-trash-date">{row.deletedAt ? row.deletedAt.slice(0, 10) : ""}</span>

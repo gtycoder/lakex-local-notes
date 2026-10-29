@@ -8,7 +8,10 @@
   z-index: var(--lake-z-statusbar);
   top: auto;
   bottom: 8px;
-  display: grid;
+  /* 单行排布用 flex（不是 grid）：无提示文案时 message 是 display:none，
+     grid 的**显式第二条轨道 + gap 仍会占位** ⇒ 右侧多出 10px 死白（实测内距 20 / 9）。
+     flex 下 display:none 的子项不生成盒子、gap 也不参与 ⇒ 两侧内距都回到 9px。 */
+  display: flex;
   align-items: center;
   padding: 0 9px;
   pointer-events: none;
@@ -25,7 +28,7 @@
 .document-statusbar-status-icon { display: inline-flex; align-items: center; gap: 4px; }
 
 .document-statusbar-state.synced-history {  padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--lake-radius-pill);
   color: var(--lake-accent-text);   /* B2/261016：文字色一律 accent-text；原 var(--lake-accent, var(--lake-accent)) 是自我兜底（fallback 与主值同令牌）*/
   background: color-mix(in srgb, var(--lake-accent) 10%, transparent);
 }
@@ -61,8 +64,8 @@
   left: auto;
   width: max-content;
   max-width: min(720px, calc(100% - 24px));
-  min-width: 190px;
-  grid-template-columns: minmax(0, auto) auto;
+  /* 无提示文案时宽度由内容决定即可（原先 190 的下限在 flex 下会把内容推到左缘、右侧再留 4.5px 死白）。 */
+  min-width: 0;
   gap: 10px;
 }
 /* 画板：与内核的浮岛共用画板自己的 20px 右栅格（缩放岛/主题岛都在 right:20px）；

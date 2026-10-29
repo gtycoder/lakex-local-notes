@@ -706,7 +706,7 @@ export function HomePage(props: HomePageProps) {
         </div>
         <button className="mobile-bottom-bar__item" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
         <button className="mobile-bottom-bar__item" onClick={() => setCreateOpen(true)} aria-label="新建" title="新建" aria-haspopup="dialog" aria-expanded={createOpen}><Plus /></button>
-        <button className="mobile-bottom-bar__item" onClick={() => { if (onOpenAi) onOpenAi(); else showToast("AI 助手尚未接入"); }} aria-label="AI 助手" title="AI 助手"><Sparkles /></button>
+        <button className="mobile-bottom-bar__item" onClick={() => { if (onOpenAi) onOpenAi(); else showToast("AI 助手暂不可用"); }} aria-label="AI 助手" title="AI 助手"><Sparkles /></button>
       </nav>
       )}
 
@@ -776,7 +776,7 @@ export function HomePage(props: HomePageProps) {
         onSelect={onFilterSelect}
       />
 
-      {/* 新建面板（「＋」短按）：新建小记 / 新建文档知识库（**无模板、无 OCR**） */}
+      {/* 新建面板（「＋」短按）：新建小记 / 文档与知识库（**无模板、无 OCR**） */}
       <CreateSheet open={createOpen} onClose={() => setCreateOpen(false)} onAction={(id) => void runCreateAction(id)} />
 
       {/* 「空白文档」选笔记本：只列已有笔记本（用户 261014 定） */}

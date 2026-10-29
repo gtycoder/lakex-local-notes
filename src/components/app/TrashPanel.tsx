@@ -58,11 +58,11 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           <span className="ln-row2__title">{item.title || "无标题"}</span>
           <span className="ln-row2__meta">
             {item.nodeType === "note" ? "文档" : "目录"}
-            {item.deletedAt ? ` · ${formatDateTime(item.deletedAt)}` : ""}
+            {item.deletedAt ? `，${formatDateTime(item.deletedAt)}` : ""}
           </span>
         </div>
         {item.purged && <span className="badge badge--error" title="其他设备已彻底删除；本机仍保留可恢复副本">已被他端删除</span>}
-        {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除 · 仅本地</span>}
+        {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}
         {fileMissing && <span className="badge badge--muted" title="正文文件已不在本机">正文已删</span>}
         {days !== null && (
           <span className={`badge ${days <= 7 ? "badge--warn" : "badge--muted"}`} title="自动过期彻底删除倒计时（含云端）">{days} 天后清除</span>
@@ -228,7 +228,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   const purgeQuick = async (id: string) => {
     if (!(await confirm({
       title: "彻底删除这条小记？",
-      body: "本机立即移除，云端立即删除且无法恢复（小记不备份）；其他设备若仍持有可恢复副本，会在它们各自处理时一并清除。",
+      body: "本机与云端的正文会立即删除且无法恢复（小记不备份）；其他设备保留的可恢复副本会在它们下次处理时一并清除。",
       confirmText: "彻底删除",
       danger: true,
     }))) return;
@@ -270,7 +270,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     const hint = isRoot ? `「${label}」及其全部内容` : `「${label}」及其子项`;
     if (!(await confirm({
       title: `彻底删除${hint}？`,
-      body: "彻底删除后无法恢复：本机立即移除，云端正文/资源立即删除，文档历史快照也会一起清除（非回收窗口）。其他设备仍保留可恢复副本，直到它们各自处理。",
+      body: "彻底删除后无法恢复：本机与云端的正文、资源会立即删除，文档历史快照也会一并清除。其他设备保留的可恢复副本会在它们下次处理时清除。",
       confirmText: "彻底删除",
       danger: true,
     }))) return;
@@ -288,7 +288,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     if (items.length === 0) return;
     if (!(await confirm({
       title: "清空回收站？",
-      body: `将彻底删除 ${buildTrashTree(items).length} 项：本机立即移除，云端正文/资源立即删除，文档历史快照也会一起清除，且无法恢复（非回收窗口）。其他设备保留可恢复副本直到它们处理。此操作不可撤销。`,
+      body: `将彻底删除 ${buildTrashTree(items).length} 项：本机与云端的正文、资源会立即删除，文档历史快照也会一并清除，且无法恢复。其他设备保留的可恢复副本会在它们下次处理时清除。此操作不可撤销。`,
       confirmText: "清空回收站",
       danger: true,
     }))) return;
@@ -338,7 +338,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
           </button>
         </div>
       </div>
-      <p className="trash-panel-hint">回收站随云同步到所有设备。被删文档下的分组/文档随父级联（可展开查看），恢复仅对顶层生效（整棵恢复），子项可单独彻底删除。</p>
+      <p className="trash-panel-hint">回收站会随云同步到所有设备。被删文档下的分组和文档会一起显示（可展开），恢复时整棵恢复，子项也可单独彻底删除。</p>
       {trashAutoPurgeDays != null && trashAutoPurgeDays > 0 && tab === "docs" && items.some((it) => {
         const d = it.deletedAt ? trashDaysUntilPurge(it.deletedAt, trashAutoPurgeDays) : null;
         return d != null && d <= 7;
@@ -392,7 +392,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
                 <span className="ln-row2__title">小记</span>
                 <span className="ln-row2__meta">{formatDateTime(item.deletedAt)}</span>
               </div>
-              {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除 · 仅本地</span>}
+              {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}
               <span className="ln-spacer" />
               <button className="ln-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
               <button className="ln-list-item__action ln-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>

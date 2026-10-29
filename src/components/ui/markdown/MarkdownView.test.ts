@@ -53,7 +53,7 @@ describe("Markdown 轻量子集渲染（261004）", () => {
   });
 
   it("markdownToPlainText：去标记的单行预览", () => {
-    expect(markdownToPlainText("# 标题\n\n这是 **粗** 与 [官网](https://a.b)\n\n- 甲\n- 乙")).toBe("标题 这是 粗 与 官网 甲 · 乙");
+    expect(markdownToPlainText("# 标题\n\n这是 **粗** 与 [官网](https://a.b)\n\n- 甲\n- 乙")).toBe("标题 这是 粗 与 官网 甲，乙");
     expect(markdownToPlainText("```\ncode line\n```")).toBe("code line");
     expect(markdownToPlainText("")).toBe("");
   });

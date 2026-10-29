@@ -85,7 +85,7 @@ export function AiImageSheet({ open, docs, used, onConfirm, onClose }: AiImageSh
           {!loading && items.length === 0 && <div className="mb-empty mb-empty--inset">资料文档里没有可发送的图片</div>}
           {groups.map((group) => (
             <div key={group[0].noteId} className="ai-img-group">
-              <div className="ai-img-group__title">《{group[0].noteTitle}》 · {group.length} 张</div>
+              <div className="ai-img-group__title">《{group[0].noteTitle}》，{group.length} 张</div>
               <div className="ai-img-grid">
                 {group.map((item) => {
                   const key = item.noteId + "/" + item.filename;

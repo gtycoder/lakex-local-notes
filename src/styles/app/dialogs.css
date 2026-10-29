@@ -3,7 +3,7 @@
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。 */
 
 /* legacy statusbar rules removed; current-document status lives in styles/document-status.css */
-.error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid var(--lake-status-error-soft); border-radius: 10px; color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: var(--lake-font-size-tiny); box-shadow: var(--lake-error-shadow); transform: translate(-50%, -50%); transition: transform var(--dur-enter) var(--ease-out), opacity var(--dur-enter) var(--ease-out); }
+.error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 0.5px solid var(--lake-status-error-soft); border-radius: var(--lake-radius-md); color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: var(--lake-font-size-tiny); box-shadow: var(--lake-error-shadow); transform: translate(-50%, -50%); transition: transform var(--lake-motion-panel) var(--lake-ease-standard), opacity var(--lake-motion-panel) var(--lake-ease-standard); }
 
 .error-banner button { border: 0; color: inherit; background: transparent; }
 
@@ -29,7 +29,7 @@
 
 /* 删除确认对话框：表面/圆角/阴影/内距均来自 .ln-dialog（overlay.css 单一来源），这里只定宽度与入场。
  * 260926：迁到 Overlay 原语（三段式 ln-dialog__head/body/actions）。 */
-.confirm-dialog { width: min(420px, 100%); transition: transform var(--dur-drawer) var(--ease-out), opacity var(--dur-drawer) var(--ease-out); }
+.confirm-dialog { width: min(420px, 100%); transition: transform var(--lake-motion-panel) var(--lake-ease-standard), opacity var(--lake-motion-panel) var(--lake-ease-standard); }
 
 .confirm-dialog { opacity: 1; transform: translateY(0) scale(1); }
 
@@ -59,7 +59,7 @@
 }
 
 /* 261006：去掉单侧 3px 色条（craft floor 禁止的图案）；状态由 1px 主色描边 + 主色动作按钮表达。 */
-.quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px var(--lake-shadow-color-4), 0 2px 8px var(--lake-shadow-color-3); font-size: var(--lake-font-size-tiny); }
+.quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px; border: 0.5px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px var(--lake-shadow-color-4), 0 2px 8px var(--lake-shadow-color-3); font-size: var(--lake-font-size-tiny); }
 
 .quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--lake-accent-text); background: transparent; cursor: pointer; font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-semibold); }
 

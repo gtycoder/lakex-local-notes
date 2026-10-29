@@ -265,7 +265,7 @@ function formatBytesShort(bytes: number): string {
 /** 一键复制的纯文本（设置页「同步诊断」）；空列表返回空串（UI 据此提示「还没有记录」）。 */
 export function formatS3v3Diagnostics(reports: readonly S3v3DiagnosticReport[]): string {
   if (reports.length === 0) return "";
-  const lines: string[] = ["Lakex 同步诊断（最近 " + reports.length + " 轮 · 本机记录）"];
+  const lines: string[] = ["Lakex 同步诊断（最近 " + reports.length + " 轮，本机记录）"];
   reports.forEach((r, index) => {
     const head = [
       "#" + (index + 1),
@@ -278,13 +278,13 @@ export function formatS3v3Diagnostics(reports: readonly S3v3DiagnosticReport[]):
       "删除 " + r.deleted,
       "冲突 " + r.conflicts,
       "警告 " + r.warningCount,
-    ].join(" · ");
+    ].join("，");
     lines.push(head);
     if (r.phases.length > 0) {
       lines.push("  阶段：" + r.phases.map((p) => {
-        const counts = p.totalObjects !== undefined ? " [" + (p.objects ?? 0) + "/" + p.totalObjects + (p.totalBytes !== undefined ? " · " + formatBytesShort(p.bytes ?? 0) + "/" + formatBytesShort(p.totalBytes) : "") + "]" : "";
+        const counts = p.totalObjects !== undefined ? " [" + (p.objects ?? 0) + "/" + p.totalObjects + (p.totalBytes !== undefined ? "，" + formatBytesShort(p.bytes ?? 0) + "/" + formatBytesShort(p.totalBytes) : "") + "]" : "";
         return p.phase + " " + formatMs(p.ms) + counts;
-      }).join(" · "));
+      }).join("；"));
     }
     if (r.failed.length > 0) {
       lines.push("  失败对象：" + r.failed.map((f) => (f.id ?? f.filename ?? "?") + " [" + f.kind + "] " + f.message).join("；"));
@@ -294,7 +294,7 @@ export function formatS3v3Diagnostics(reports: readonly S3v3DiagnosticReport[]):
       const more = r.warnings.length - shown.length;
       lines.push("  警告：" + shown.join("；") + (more > 0 ? "；…另 " + more + " 条" : ""));
     }
-    if (r.error) lines.push("  错误：" + r.error.errorClass + " · " + r.error.code + " · " + r.error.message);
+    if (r.error) lines.push("  错误：" + r.error.errorClass + "（" + r.error.code + "）：" + r.error.message);
   });
   return lines.join("\n");
 }

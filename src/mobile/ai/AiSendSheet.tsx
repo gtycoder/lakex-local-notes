@@ -59,7 +59,7 @@ export function AiSendSheet({ open, docs, sendIds, onToggle, onAll, onClose }: A
         </div>
         <div className="ai-sheet__foot">
           <span className={"ai-budget" + (used > AI_CORPUS_MAX_CHARS ? " is-warn" : "")}>
-            本轮发送 <b>{sendIds.length}</b> 篇 · {used.toLocaleString("en-US")} 字
+            本轮发送 <b>{sendIds.length}</b> 篇，{used.toLocaleString("en-US")} 字
           </span>
           <button type="button" className="mb-btn mb-btn--primary" onClick={onClose}>完成</button>
         </div>

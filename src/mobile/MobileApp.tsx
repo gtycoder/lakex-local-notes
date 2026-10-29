@@ -430,7 +430,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     const st = await bridge.noteGoneState(id);
     if (!st) { showToast("文档不存在", { type: "error" }); return; }
     if (isGoneNote({ parentId: st.parentId, syncState: st.syncState })) {
-      showToast("该文档已在回收站，请到 设置-回收站 查看", { type: "error" });
+      showToast("该文档已在回收站，请到「设置 → 回收站」查看", { type: "error" });
       return;
     }
     const parentOfNote = new Map(notes.map((n) => [n.id, n.parentId] as const));

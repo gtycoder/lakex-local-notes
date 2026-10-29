@@ -56,9 +56,9 @@ describe("左右分栏（可拖动）", () => {
     expect(PANELS).toContain(".history-split > .ln-split-handle { position: relative; flex: 0 0 0; width: 0; }");
   });
 
-  it("分屏两栏之间有常驻 1px 发丝线，且画在右栏盒子上（261022 用户点单）", () => {
+  it("分屏两栏之间有常驻 0.5px 发丝线，且画在右栏盒子上（261022 用户点单；261029 统一 0.5px）", () => {
     // 画在右栏 border-left：子元素都排在 border 右侧 ⇒ 不会被内核 sticky 工具条（z150 白底）盖断
-    expect(SPLITVIEW).toMatch(/\[data-pane="right"\] \{[^}]*border-left: 1px solid var\(--lake-border-1\);[^}]*\}/);
+    expect(SPLITVIEW).toMatch(/\[data-pane="right"\] \{[^}]*border-left: 0.5px solid var\(--lake-border-1\);[^}]*\}/);
     // 别画在手柄上（会在工具条那一行断开）；侧栏/大纲的把手共用 kit 原语，也不画线
     expect(SPLITVIEW).not.toMatch(/\.ln-split-handle \{[^}]*border-left/);
     expect(KIT).not.toMatch(/\.ln-split-handle \{[\s\S]*border-left/);

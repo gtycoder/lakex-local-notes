@@ -22,7 +22,7 @@
   pointer-events: auto;
   background: var(--lake-bg-window);
   border: 0;
-  border-top: 1px solid var(--lake-border-2);
+  border-top: .5px solid var(--lake-border-2);
   box-shadow: none;
   height: var(--mobile-bottom-bar-height);
   display: flex;
@@ -58,7 +58,6 @@
   color: var(--lake-text-2);
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
 }
 .med-btn > svg { width: 20px; height: 20px; }
 .med-btn:active, .med-btn:focus-visible { background: var(--lake-bg-hover); }
@@ -96,7 +95,7 @@
   box-sizing: border-box;
   background: var(--lake-bg-window);
   border: 0;
-  border-top: 1px solid var(--lake-border-2);
+  border-top: .5px solid var(--lake-border-2);
   box-shadow: none;
   height: var(--kb-offset, 0px);
   max-height: 60dvh;
@@ -113,7 +112,7 @@
      所以这段位移不会露出空档，也不与输入法收起动画对撞（原实现担心的正是这点）。 */
   transform: translateY(0);
   opacity: 1;
-  transition: transform 160ms var(--mobile-ease-out), opacity 160ms var(--mobile-ease-out);
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .med-panel[data-open="0"] .med-panel-inner { transform: translateY(100%); opacity: 0; }
 /* 表情面板的**分类条拉满面板边**（宿主 12px 内距在这里归零）。面板主体（网格）仍保持内距。
@@ -163,13 +162,12 @@
   height: 52px;
   padding: 4px 6px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--mb-radius-card);
   background: var(--lake-bg-panel);
   color: var(--lake-text-1);
   text-align: center;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--mobile-duration-press) ease;
 }
 .med-ins-item:active { background: var(--lake-bg-hover); }
 /* 占位（置灰）：移动端暂未支持的能力仍然显示，但不可点（与桌面 disabled 同一口径） */
@@ -193,7 +191,7 @@
   gap: 2px;
   padding: 2px;
   min-width: 0;
-  border-radius: 10px;
+  border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
 }
 /* 卡宽 ∝ 条目数（flex-basis 0 + 按 data-count 给 grow） */
@@ -207,7 +205,7 @@
 .med-f-btn {
   border: 0;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--mb-radius);
   height: 40px;
   font-size: 15px;
   font-weight: 500;
@@ -220,7 +218,6 @@
   gap: 4px;
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap;
-  transition: background-color var(--mobile-duration-press) ease;
 }
 .med-f-btn:active { background: var(--lake-bg-hover); }
 /* 「更多」面板里的画图占位：与插入面板的置灰同一口径 */

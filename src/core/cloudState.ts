@@ -49,6 +49,6 @@ export function cloudStateHint(state: CloudState): string | null {
  * 这里只存文案（core 无 UI 依赖）；渲染用既有原语：徽标 .ln-tag--pending + 行内提示 .config-note。
  */
 export const CLOUD_PRIVACY_NOTICE = {
-  badge: "隐私数据 · 云端不加密",
+  badge: "隐私数据（云端不加密）",
   text: "开启后笔记正文与附件会上传到你的 S3（按原样存储、不做加密）；请先确认该桶为私有、未开放公开读，且凭据只有你持有。",
 } as const;

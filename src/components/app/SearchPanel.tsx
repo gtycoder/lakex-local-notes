@@ -110,7 +110,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
           {searching && <span className="search-panel-spinner" aria-label="搜索中" />}
           <button className="search-panel-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭搜索"><X size={15} /></button>
         </div>
-        <div id="search-panel-help" className="search-panel-help">文档标题优先 · 小记按更新时间 · ↑↓ 选择 · Enter 打开</div>
+        <div id="search-panel-help" className="search-panel-help">文档标题优先，小记按更新时间；↑↓ 选择，Enter 打开</div>
         <div className="search-panel-results ln-list-panel ln-list-panel--background" role="listbox" aria-label="搜索结果">
           {results.length === 0 && query.trim() && !searching && (
             <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题、正文或小记关键词</span></div>
@@ -133,7 +133,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
                   <span className="ln-row2__title">{result.title || (result.kind === "quick-note" ? "小记" : "无标题")}</span>
                   {/* snippet 由 buildSnippet 全量 HTML 转义、只含 <mark>（W-10：不需要 dompurify，见 snippet.test.ts） */}
                   {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: result.snippet }} />}
-                  <span className="ln-row2__meta">{result.kind === "quick-note" ? "小记" : result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? ` · ${formatUpdatedAt(result.updatedAt)}` : ""}</span>
+                  <span className="ln-row2__meta">{result.kind === "quick-note" ? "小记" : result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? `，${formatUpdatedAt(result.updatedAt)}` : ""}</span>
                 </span>
                 <span className={`badge ${result.kind === "quick-note" || result.matchType === "body" ? "badge--accent" : "badge--muted"}`}>{result.kind === "quick-note" ? "小记" : result.matchType === "body" ? "正文" : "标题"}</span>
               </button>

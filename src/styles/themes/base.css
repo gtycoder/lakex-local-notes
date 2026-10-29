@@ -52,19 +52,19 @@
   --lake-radius-lg: 14px;
   --lake-radius-xl: 20px;
   --lake-radius-pill: 999px;
-  /* 动效 */
+  /* 动效（261029 动效收敛）：状态切换一律**瞬时**，不再做 hover/颜色/背景/边框过渡；
+     只保留「浮层入场」与结构展开，全部统一 **ease-out 250ms**。
+     instant / press 两档只给按压物理反馈（必须跟手），不参与入场。 */
   --lake-motion-instant: 80ms;
   --lake-motion-press: 90ms;   /* 按压 transform 微缩放（必须快于 fast，保跟手感）；260923 自 motion.css 并入 */
-  --lake-motion-fast: 130ms;
-  --lake-motion-panel: 190ms;
-  --lake-motion-slow: 240ms;
-  --lake-ease-standard: cubic-bezier(.2,.8,.24,1);
-  --lake-ease-exit: cubic-bezier(.4,0,1,1);
-  --lake-ease-emphasized: cubic-bezier(.2,.9,.2,1);
-  /* 261017 A 批：唯一一条「过冲」曲线。只允许用在**有实体的控件**的位移/缩放上
-     （开关滑块、按压回弹），不要用于颜色过渡（色值过冲会脏）。数值参考
-     open-claude-ui（MIT, Caho1）的 overshoot 配方；令牌仍是本仓唯一来源。 */
-  --lake-ease-overshoot: cubic-bezier(.34, 1.3, .64, 1);
+  --lake-motion-fast: 250ms;
+  --lake-motion-panel: 250ms;
+  --lake-motion-slow: 250ms;
+  --lake-ease-standard: ease-out;
+  --lake-ease-exit: ease-out;
+  --lake-ease-emphasized: ease-out;
+  /* 261029 起曲线统一为 ease-out（此前是 overshoot 配方）；token 名沿用，只给有实体的控件位移用。 */
+  --lake-ease-overshoot: ease-out;
   /* 层级 */
   --lake-z-base: 0;
   --lake-z-sticky: 10;

@@ -25,7 +25,7 @@
 .create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); text-overflow: ellipsis; white-space: nowrap; }
 
 /* 261006：左侧外边距并入本处（原 Sidebar 另给 inline marginLeft:8）——值收单一来源。 */
-.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px 8px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent-text); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-tint); }
+.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px 8px; padding: 3px 5px; border: 0.5px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent-text); background: var(--lake-bg-panel); }
 
 .inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-tiny); }
 
@@ -70,7 +70,7 @@
 /* 与行内操作按钮同一套 hover 着重 */
 .tree-chevron.open { transform: rotate(90deg); }
 
-.tree-children { margin-left: 16px; border-left: 1px solid var(--lake-hairline-soft); }
+.tree-children { margin-left: 16px; border-left: 0.5px solid var(--lake-hairline-soft); }
 
 .workspace { display: grid; min-width: 0; min-height: 0; }
 
@@ -179,7 +179,7 @@
   grid-row: 1;
   width: var(--sidebar-width);
   align-self: end;
-  transition: opacity var(--lake-motion-panel) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard), box-shadow 240ms ease-out;
+  transition: opacity var(--lake-motion-panel) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard);
 }
 
 .app-shell.sidebar-resizing .sidebar { transition: none; }
@@ -287,7 +287,7 @@
 
 /* 菜单类 */
 
-.trash-tree-children { margin-left: 18px; border-left: 1px solid var(--lake-border-2); padding-left: 6px; }
+.trash-tree-children { margin-left: 18px; border-left: 0.5px solid var(--lake-border-2); padding-left: 6px; }
 
 /* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
 @media (min-width: 761px) {
@@ -363,17 +363,17 @@
   }
 
   .sidebar.sidebar-docked {
-    border: 1px solid var(--lake-border-1);
+    border: 0.5px solid var(--lake-border-1);
     border-radius: var(--lake-radius-card);
     box-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 22px var(--lake-shadow-color-2);
   }
 
   .sidebar.sidebar-floating {
-    border-top: 1px solid var(--lake-border-strong);
-    border-right: 1px solid var(--lake-border-strong);
-    border-bottom: 1px solid var(--lake-border-strong);
+    border-top: 0.5px solid var(--lake-border-strong);
+    border-right: 0.5px solid var(--lake-border-strong);
+    border-bottom: 0.5px solid var(--lake-border-strong);
     border-left: 0;
-    border-radius: 0 14px 14px 0;
+    border-radius: 0 var(--lake-radius-lg) var(--lake-radius-lg) 0;
     box-shadow: 18px 0 50px var(--lake-shadow-color-4), 2px 0 8px var(--lake-shadow-color-3);
   }
 
@@ -454,7 +454,7 @@
 .app-shell {
   color: var(--lake-text-1);
   background: var(--lake-bg-window);
-  /* 保留大纲列宽的 grid 过渡（260ms）：随当前文档有无大纲平滑收起/展开，避免正文区瞬间跳变 */
+  /* 保留大纲列宽的 grid 过渡（250ms）：随当前文档有无大纲平滑收起/展开，避免正文区瞬间跳变 */
   transition: grid-template-columns var(--lake-motion-panel) var(--lake-ease-standard);
 }
 
@@ -559,7 +559,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
      内容会把盒子顶到视口外（实测 y=0/h=957）。旧的"半幅"也是显式 calc。 */
   height: calc(100vh - var(--lake-floating-panel-top) - var(--lake-floating-panel-bottom));
   overflow: hidden;
-  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard);
+  transition: opacity var(--lake-motion-panel) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard);
 }
 
 
@@ -577,7 +577,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .sidebar.sidebar-collapsed {
   opacity: 0;
   transform: translateX(-12px);
-  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard);
+  transition: opacity var(--lake-motion-panel) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard);
 }
 
 /* ── 壳层度量令牌（原 layout-contract.css，260916 S1 并入） */
@@ -641,7 +641,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   gap: 1px;
   height: 100%;
   opacity: 0;
-  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
+
 }
 
 .sidebar:hover .sidebar-toolbar-row .list-heading,
@@ -657,7 +657,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   min-width: 0;
   overflow: hidden;
   opacity: 0;
-  transition: grid-template-rows var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) linear;
+  transition: grid-template-rows var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard);
 }
 
 .dock-filter-row.is-open { grid-template-rows: minmax(0, 1fr); opacity: 1; }
@@ -670,7 +670,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   min-height: 0;
   padding: 0 9px;
   color: var(--lake-text-3);
-  border-bottom: 1px solid var(--lake-border-1);
+  border-bottom: 0.5px solid var(--lake-border-1);
 }
 
 .dock-filter-input {
@@ -763,7 +763,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
    moves only on Y; siblings slide by exactly one row with a calm 250ms ease. */
 .tree-row {
   position: relative;
-  transition: transform 250ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  transition: transform var(--lake-motion-panel) var(--lake-ease-standard);
   will-change: transform;
 }
 
@@ -779,7 +779,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   right: 0;
   left: 8px;
   height: 2px;
-  border-radius: 999px;
+  border-radius: var(--lake-radius-pill);
   background: var(--lake-accent);
   box-shadow: 0 0 0 3px var(--lake-accent-tint);
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3Settings } from "../../lib/types";
-import { decodeS3ConfigTransferFile, encodeS3ConfigTransfer } from "../../core/s3ConfigTransfer";
+import { decodeS3ConfigTransfer, decodeS3ConfigTransferFile, encodeS3ConfigTransfer } from "../../core/s3ConfigTransfer";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { bridge } from "../bridge";
 import { pickLocalFile } from "../ui/pickFile";
@@ -85,7 +85,7 @@ export function useS3SettingsForm(open: boolean) {
       setTestText("已保存");
       return true;
     } catch (error) {
-      setTestText("保存失败: " + (error as Error).message);
+      setTestText("保存失败：" + (error as Error).message);
       return false;
     }
   }, [form]);
@@ -96,7 +96,7 @@ export function useS3SettingsForm(open: boolean) {
     try {
       setTestText(await bridge.testS3Connection());
     } catch (error) {
-      setTestText("测试失败: " + (error as Error).message);
+      setTestText("测试失败：" + (error as Error).message);
     }
   }, [save]);
 
@@ -118,7 +118,7 @@ export function useS3SettingsForm(open: boolean) {
       }
       setExportState({ code, msg });
     } catch (error) {
-      setTestText("导出失败: " + getNativeErrorMessage(error));
+      setTestText("导出失败：" + getNativeErrorMessage(error));
     }
   }, []);
 
@@ -134,32 +134,50 @@ export function useS3SettingsForm(open: boolean) {
     }
   }, [exportState]);
 
+  /** 导入落地（两份入口共用）：强制虚拟托管（D2），成功后回填表单；返回 Path-style 提示后缀。 */
+  const applyImported = useCallback(async (imported: S3Settings): Promise<string> => {
+    const pathStyleNote = imported.forcePathStyle
+      ? "（该配置使用 Path-style 访问，移动端只支持虚拟主机方式，已按虚拟主机方式保存）"
+      : "";
+    await bridge.saveS3Settings({ ...imported, forcePathStyle: false });
+    const saved = await bridge.getS3Settings();
+    if (saved) {
+      setSettings(saved);
+      setForm(formFromSettings(saved));
+    }
+    return pathStyleNote;
+  }, []);
+
   const importFromFile = useCallback(async () => {
     setTestText("");
     try {
       const file = await pickLocalFile(".json,.txt,application/json,text/plain");
       if (!file) return;
       if (file.size > 64 * 1024) {
-        setTestText("导入失败: 文件过大，不像是 S3 配置文件");
+        setTestText("导入失败：文件过大，不像 S3 配置文件");
         return;
       }
       const text = await file.text();
       const imported = await decodeS3ConfigTransferFile(text);
-      const pathStyleNote = imported.forcePathStyle
-        ? "（该配置为 Path-style，移动端只支持虚拟托管，已按虚拟托管保存）"
-        : "";
-      await bridge.saveS3Settings({ ...imported, forcePathStyle: false });
-      const saved = await bridge.getS3Settings();
-      if (saved) {
-        setSettings(saved);
-        setForm(formFromSettings(saved));
-      }
+      const pathStyleNote = await applyImported(imported);
       setTestText("S3 配置已从文件导入，请点「测试连接」确认" + pathStyleNote);
       showToast("S3 配置已导入");
     } catch (error) {
-      setTestText("导入失败: " + getNativeErrorMessage(error));
+      setTestText("导入失败：" + getNativeErrorMessage(error));
     }
-  }, []);
+  }, [applyImported]);
+
+  /**
+   * 粘贴迁移码导入（与桌面 S3ConfigImportDialog 同形同构的备用路径）。
+   * 失败直接抛出可读原因，由调用方（S3ConfigImportSheet）就地展示。
+   */
+  const importFromCode = useCallback(async (code: string): Promise<void> => {
+    setTestText("");
+    const imported = await decodeS3ConfigTransfer(code.trim());
+    const pathStyleNote = await applyImported(imported);
+    setTestText("S3 配置已从迁移码导入，请点「测试连接」确认" + pathStyleNote);
+    showToast("S3 配置已导入");
+  }, [applyImported]);
 
   return {
     settings,
@@ -173,6 +191,7 @@ export function useS3SettingsForm(open: boolean) {
     openExport,
     copyExport,
     importFromFile,
+    importFromCode,
     closeExport: () => setExportState(null),
   };
 }

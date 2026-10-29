@@ -21,7 +21,7 @@ const PHASE_LABEL: Record<SyncProgress["phase"], string> = {
   connect: "连接 S3",
   download: "下载远端变更",
   upload: "上传本地变更",
-  manifest: "写入清单",
+  manifest: "提交云端索引",
   "quick-notes": "同步小记",
   done: "同步完成",
 };

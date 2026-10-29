@@ -226,7 +226,7 @@ export function MobileBitableRecordSheet({ table, fields, record, ctx, onPatch, 
   // MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁统一由 MobileSheet 负责；
   // 类名与 DOM 结构沿用原手写版（.mb-sheet__title.mb-ellipsis + .mb-sheet__body--form，视觉不变）。
   return (
-    <MobileSheet open title={"编辑记录 · " + table.name} titleClassName="mb-ellipsis" ariaLabel="编辑记录" bodyClassName="mb-sheet__body--form" onClose={onClose}>
+    <MobileSheet open title={"编辑记录：" + table.name} titleClassName="mb-ellipsis" ariaLabel="编辑记录" bodyClassName="mb-sheet__body--form" onClose={onClose}>
       <div className="mb-set-section">
         {fields.map((field) => {
           const value = record.values[field.id];

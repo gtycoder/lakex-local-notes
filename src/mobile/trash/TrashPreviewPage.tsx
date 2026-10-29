@@ -38,7 +38,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
       const n = await bridge.readNote(noteId);
       if (n) { setTitle(n.title); setContent(n.content); setKind(n.kind); setCloudDeleted(!!n.cloudDeleted); }
     } catch (e) {
-      setMsg("预览失败: " + (e as Error).message);
+      setMsg("预览失败：" + (e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -54,7 +54,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
       await bridge.restoreTreeItem(noteId, "note");
       onRestored();
     } catch (e) {
-      setMsg("恢复失败: " + (e as Error).message);
+      setMsg("恢复失败：" + (e as Error).message);
       setBusy(false);
     }
   };
@@ -69,7 +69,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
         </div>
       </header>
       {msg && <div className="mobile-status-msg">{msg}</div>}
-      {cloudDeleted && <div className="mobile-status-msg">云端已删除 · 仅本地（恢复并同步成功后重新上传）</div>}
+      {cloudDeleted && <div className="mobile-status-msg">云端已删除（仅本地），恢复并同步成功后会重新上传</div>}
       <section className="mobile-doc-body">
         {loading ? (
           <div className="poc-center"><LoaderCircle className="spin" /><span>正在加载资源…</span></div>

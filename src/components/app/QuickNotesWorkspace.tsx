@@ -574,7 +574,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       } else if (outcome.status === "pushed") {
         setViewHint(outcome.unchanged ? "已是最新，无需上传" : "已同步到云端");
       } else if (outcome.reason === "no-remote-manifest") {
-        setViewHint("云端还没有小记清单，已改为执行一次完整同步");
+        setViewHint("云端还没有小记数据，已改为执行一次完整同步");
       } else {
         setViewHint("这条小记已在其他设备删除，已按删除处理");
         setEditingId(null); setEditingDraft(null);

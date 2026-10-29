@@ -1,7 +1,7 @@
 /**
  * 首页「＋」的**新建面板**（261014 用户点单；形态照语雀 App 图 3）：
  *   新建小记：空白小记 / 拍摄 / 图片 / 待办
- *   新建文档知识库：空白文档 / 知识库
+ *   文档与知识库：空白文档 / 知识库
  *
  * 两条明确的"不做"（用户定稿）：
  *   · **不做模板**；
@@ -36,7 +36,7 @@ export const CREATE_SECTIONS: Array<{ title: string; tiles: CreateTile[] }> = [
     ],
   },
   {
-    title: "新建文档知识库",
+    title: "文档与知识库",
     tiles: [
       { id: "blank-doc", label: "空白文档", Icon: FileText },
       { id: "notebook", label: "知识库", Icon: BookMarked },

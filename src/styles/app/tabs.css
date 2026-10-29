@@ -51,7 +51,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.1s, background 0.1s;
+
 }
 
 .tab-close:hover { opacity: 1; }
@@ -133,7 +133,7 @@
   margin: 0;
   padding: 0 8px;
   font-size: var(--lake-font-size-tiny);
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 
 
@@ -159,11 +159,11 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 0.5px solid transparent;
   color: var(--lake-text-2);
   background: var(--lake-veil-soft);
   -webkit-app-region: no-drag;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 
 .tab-switcher:hover,
@@ -182,7 +182,7 @@
   width: max-content;
   max-width: 260px;
   padding: 6px 9px;
-  border: 1px solid var(--lake-border-strong);
+  border: 0.5px solid var(--lake-border-strong);
   font-size: var(--lake-font-size-micro);
   font-weight: 500;
   line-height: 1.25;
@@ -190,7 +190,6 @@
   pointer-events: none;
   opacity: 0;
   transform: translateY(-3px);
-  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
 }
 
 .tab-switcher[data-tooltip]:hover::after,
@@ -231,7 +230,7 @@
   border-radius: var(--lake-radius-pill);
   background: var(--lake-neutral-veil-3);
   opacity: 0;
-  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
+
 }
 
 .tab-switcher-menu:hover .tab-switcher-resize::after,

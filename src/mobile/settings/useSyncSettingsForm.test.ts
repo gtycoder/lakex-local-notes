@@ -93,6 +93,6 @@ describe("useSyncSettingsForm", () => {
     await render();
     mocks.syncNow.mockRejectedValue(new Error("offline"));
     await act(async () => { await api.runSync(); });
-    expect(api.syncMsg).toBe("同步失败: offline");
+    expect(api.syncMsg).toBe("同步失败：offline");
   });
 });

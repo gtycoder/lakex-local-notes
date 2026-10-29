@@ -87,7 +87,7 @@ describe("MobileBitableRecordSheet", () => {
 
   it("有删除记录入口，且面板标题带表名", () => {
     expect(html).toContain("删除记录");
-    expect(html).toContain("编辑记录 · 任务表");
+    expect(html).toContain("编辑记录：任务表");
     // 滚动/返回手势依赖：面板必须挂 data-prevent-swipe，否则右滑会被外层抽屉抢走
     expect(html).toContain("data-prevent-swipe");
   });

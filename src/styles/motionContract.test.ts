@@ -23,10 +23,12 @@ describe("动效契约", () => {
   it("时长与曲线只有一套来源，且过冲曲线已登记", () => {
     const base = read("themes/base.css");
     expect(base).toMatch(/--lake-motion-instant:\s*80ms/);
-    expect(base).toMatch(/--lake-motion-fast:\s*130ms/);
-    expect(base).toMatch(/--lake-motion-panel:\s*190ms/);
-    expect(base).toMatch(/--lake-motion-slow:\s*240ms/);
-    expect(base).toContain("--lake-ease-overshoot: cubic-bezier(.34, 1.3, .64, 1)");
+    // 261029 动效收敛：除按压两档外，其余时长统一 250ms、曲线统一 ease-out。
+    expect(base).toMatch(/--lake-motion-fast:\s*250ms/);
+    expect(base).toMatch(/--lake-motion-panel:\s*250ms/);
+    expect(base).toMatch(/--lake-motion-slow:\s*250ms/);
+    expect(base).toContain("--lake-ease-standard: ease-out");
+    expect(base).toContain("--lake-ease-overshoot: ease-out");
   });
 
   it("浮层入场只动 opacity/transform（不触发布局）", () => {
@@ -75,7 +77,7 @@ describe("动效契约", () => {
     // 261022 D2：settings.css 的 .floating-dialog 入场原本写死 180ms，偏离 190ms 的 panel 档；
     // 动效时长只有 --lake-motion-* 一套来源（§3#14），这里把那一行钉回令牌，禁止再散回裸值。
     const settings = stripComments(read("app/settings.css"));
-    expect(settings).toMatch(/animation:\s*floating-dialog-enter\s+var\(--lake-motion-panel\)\s+var\(--ease-out\);/);
+    expect(settings).toMatch(/animation:\s*floating-dialog-enter\s+var\(--lake-motion-panel\)\s+var\(--lake-ease-standard\);/);
     expect(settings).not.toMatch(/animation:\s*floating-dialog-enter\s+\d+(?:\.\d+)?m?s/);
   });
 });

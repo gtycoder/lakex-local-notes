@@ -45,14 +45,14 @@ pre {
    Group 自动包一张匿名 Section —— 只有一个表面实现，不再靠 CSS 覆盖叠出来。 */
 .settings-panel .config-items { display: flex; flex-direction: column; gap: var(--lake-space-xl); }
 .settings-panel .config-section {
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   overflow: hidden;
 }
 .settings-panel .config-section__title {
   padding: 10px 16px;
-  border-bottom: 1px solid var(--lake-border-2);
+  border-bottom: 0.5px solid var(--lake-border-2);
   background: var(--lake-bg-subtle);
   color: var(--lake-text-3);
   font-size: var(--lake-font-size-tiny);
@@ -61,7 +61,7 @@ pre {
 .settings-panel .config-item,
 .settings-panel .config-block {
   padding: 14px 16px;
-  border-bottom: 1px solid var(--lake-border-2);
+  border-bottom: 0.5px solid var(--lake-border-2);
 }
 .settings-panel .config-item { min-height: 52px; }
 .settings-panel .config-item:last-child,
@@ -118,7 +118,7 @@ pre {
  * ② 卡片/行态对齐 kit 规格；③ 标题排版对齐字号阶。 */
 /* .quick-note-convert-dialog 的表面已由标准 <Dialog>（.ln-dialog）提供，此处不再自造表面。 */
 .quick-note-entry {
-  border: 1px solid var(--lake-border-2);
+  border: 0.5px solid var(--lake-border-2);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-canvas);
   box-shadow: var(--lake-shadow-card);
@@ -145,7 +145,7 @@ pre {
 .sheet-editor,
 .bitable-editor,
 .board-editor {
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-canvas);
   overflow: hidden;
@@ -205,9 +205,9 @@ pre {
 .asset-browser__summary { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; }
 .asset-browser__summary strong { color: var(--lake-text-2); font-weight: var(--lake-font-weight-medium); }
 .asset-browser__msg { padding: 6px 10px; border-radius: var(--lake-radius-sm); background: var(--lake-bg-subtle); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); }
-.asset-browser__list { min-height: 0; padding: 4px; overflow: auto; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); }
+.asset-browser__list { min-height: 0; padding: 4px; overflow: auto; border: 0.5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); }
 .asset-browser__list:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: 1px; }
-.asset-browser__group + .asset-browser__group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--lake-border-2); }
+.asset-browser__group + .asset-browser__group { margin-top: 4px; padding-top: 4px; border-top: 0.5px solid var(--lake-border-2); }
 .asset-browser__grouptitle { display: flex; align-items: center; gap: 6px; padding: 6px 8px 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .asset-browser__gcount { margin-left: auto; color: var(--lake-text-4); font-variant-numeric: tabular-nums; }
 .asset-browser__pick { flex: 0 0 auto; display: inline-flex; align-items: center; width: 16px; }
@@ -218,7 +218,7 @@ pre {
 /* 纯预览（右栏）：只有内容 —— 空态 / 不支持 / 已缺失一律只给一个图标，不放文字、不放按钮。
  * 行必须是 minmax(0,1fr)：用 place-items:center 会让行变成 auto、img 的 height:100% 解析不出来
  * （实测按宽度撑到 1034px 再被裁切）。图片/视频靠 object-fit: contain 留边，图标/音频各自居中。 */
-.asset-browser__preview { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); overflow: hidden; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-sunken); }
+.asset-browser__preview { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); overflow: hidden; border: 0.5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-sunken); }
 .asset-browser__preview img,
 .asset-browser__preview video { width: 100%; height: 100%; object-fit: contain; }
 .asset-browser__preview iframe { width: 100%; height: 100%; border: 0; background: var(--lake-bg-panel); }
@@ -230,7 +230,7 @@ pre {
 
 /* S3 第三方服务说明（261017，用户要求对齐思源 S3 设置页的提醒样式）：
    浅底 + 1px 边 + 标题 + 条款清单 + 免责声明；只在设置页 S3 分组顶部出现。 */
-.settings-panel .s3-service-notice { display: flex; flex-direction: column; gap: 6px; margin: 14px 16px 4px; padding: 12px 14px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+.settings-panel .s3-service-notice { display: flex; flex-direction: column; gap: 6px; margin: 14px 16px 4px; padding: 12px 14px; border: 0.5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
 .settings-panel .s3-service-notice__title { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
 .settings-panel .s3-service-notice p { margin: 0; }
 .settings-panel .s3-service-notice ul { margin: 0; padding-left: 18px; }

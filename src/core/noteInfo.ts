@@ -50,10 +50,10 @@ export function noteInfoRows(info: NoteInfo): Array<[string, string]> {
   return [
     ["创建", formatNoteInfoTime(info.createdAt)],
     ["更新", formatNoteInfoTime(info.updatedAt)],
-    ["字数", `${info.wordCount} 字 · ${info.charCount} 字符`],
+    ["字数", `${info.wordCount} 字，${info.charCount} 字符`],
     ["大小", formatNoteInfoSize(info.sizeBytes)],
     // cloudDeleted 优先于 isDirty：这类文档云端已没有，标「云端已删除 · 仅本地」比「待同步」准确；
     // 恢复并重新上传成功后标记与 dirty 都会清掉，自动回到「已同步」。
-    ["状态", `${info.cloudDeleted ? "云端已删除 · 仅本地" : info.isPurged ? "已彻底删除" : info.isDirty ? "待同步" : "已同步"}${info.isConflict ? " · 有冲突副本" : ""}${info.isEditLocked ? " · 已锁定" : ""}`],
+    ["状态", `${info.cloudDeleted ? "云端已删除（仅本地）" : info.isPurged ? "已彻底删除" : info.isDirty ? "待同步" : "已同步"}${info.isConflict ? "，有冲突副本" : ""}${info.isEditLocked ? "，已锁定" : ""}`],
   ];
 }

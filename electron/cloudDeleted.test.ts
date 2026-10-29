@@ -247,11 +247,11 @@ describe("cloudDeleted：端到端（v3 引擎 remotePurged → 桌面标 → �
 });
 
 describe("cloudDeleted：UI 文案口径（状态栏 / 属性面板）", () => {
-  it("documentStatusModel：云端已删除 · 仅本地（保存中/待保存优先）", () => {
-    expect(getDocumentStatus({ hasCloudConfig: true, isCloudDeleted: true, saveState: "idle" }))
-      .toMatchObject({ kind: "cloud-deleted", label: "云端已删除 · 仅本地" });
-    expect(getDocumentStatus({ hasCloudConfig: true, isCloudDeleted: true, saveState: "saving" }).kind).toBe("saving");
-    expect(getDocumentStatus({ hasCloudConfig: true, isCloudDeleted: true, saveState: "dirty" }).kind).toBe("dirty");
+  it("documentStatusModel：云端已删除（仅本地）（保存中/待保存优先）", () => {
+    expect(getDocumentStatus({ cloudEnabled: true, isCloudDeleted: true, saveState: "idle" }))
+      .toMatchObject({ kind: "cloud-deleted", label: "云端已删除（仅本地）" });
+    expect(getDocumentStatus({ cloudEnabled: true, isCloudDeleted: true, saveState: "saving" }).kind).toBe("saving");
+    expect(getDocumentStatus({ cloudEnabled: true, isCloudDeleted: true, saveState: "dirty" }).kind).toBe("dirty");
   });
 
   it("noteInfoRows 状态行显示同一文案，恢复后回到已同步", async () => {
@@ -261,7 +261,7 @@ describe("cloudDeleted：UI 文案口径（状态栏 / 属性面板）", () => {
     store.createNoteInAtTopWithContent(nb.id, "Doc", "body", [], "n1");
     store.applyNotesCloudDeleted(["n1"]);
     const statusOf = (rows: Array<[string, string]>) => rows.find(([label]) => label === "状态")?.[1] ?? "";
-    expect(statusOf(noteInfoRows(store.getNoteInfo("n1")))).toContain("云端已删除 · 仅本地");
+    expect(statusOf(noteInfoRows(store.getNoteInfo("n1")))).toContain("云端已删除（仅本地）");
     store.applyNotesCloudDeleted([]);
     expect(statusOf(noteInfoRows(store.getNoteInfo("n1")))).not.toContain("云端已删除");
   });

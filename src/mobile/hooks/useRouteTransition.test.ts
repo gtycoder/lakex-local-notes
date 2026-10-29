@@ -10,9 +10,9 @@ const CSS_RULES = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
 const HOOK = read("./useRouteTransition.ts").replace(/\/\*\*[\s\S]*?\*\//g, "");
 
 describe("路由转场（261019，对齐语雀 push）", () => {
-  it("时长单一来源 = 240ms（= --lake-motion-slow），reduced-motion 下 0", () => {
-    expect(ROUTE_TRANSITION_MS).toBe(240);
-    expect(routeTransitionMs(false)).toBe(240);
+  it("时长单一来源 = 250ms（= --mobile-duration-panel），reduced-motion 下 0", () => {
+    expect(ROUTE_TRANSITION_MS).toBe(250);
+    expect(routeTransitionMs(false)).toBe(250);
     expect(routeTransitionMs(true)).toBe(0);
   });
 
@@ -54,9 +54,9 @@ describe("路由转场（261019，对齐语雀 push）", () => {
     expect(APP).toContain('routeAnimating ? " is-animating" : ""');
   });
 
-  it("CSS：新页 100%→0、旧页 25% 视差、240ms 令牌、reduced-motion 关闭", () => {
+  it("CSS：新页 100%→0、旧页 25% 视差、250ms 令牌、reduced-motion 关闭", () => {
     expect(CSS).toMatch(/\.mobile-route-stage\s*\{[^}]*overflow:\s*hidden/);
-    expect(CSS).toMatch(/\.mobile-route-layer\s*\{[^}]*transition:\s*transform var\(--lake-motion-slow\)/);
+    expect(CSS).toMatch(/\.mobile-route-layer\s*\{[^}]*transition:\s*transform var\(--mobile-duration-panel\)/);
     expect(CSS).toMatch(/\.mobile-route-layer--workspace\s*\{[^}]*transform:\s*translateX\(100%\)/);
     // 工作区层必须不透明（否则首页常驻层会从表格/多维表的透明容器里透出来，261019 实测）
     expect(CSS).toMatch(/\.mobile-route-layer--workspace\s*\{[^}]*background:\s*var\(--lake-bg-canvas\)/);

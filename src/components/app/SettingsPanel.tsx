@@ -5,6 +5,7 @@ import { fontSizeOptions, type AppSettings } from "../../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../../core/aiProviders";
 import { Select } from "../ui/Select";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, CLOUD_PRIVACY_NOTICE } from "../../core/cloudState";
+import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
 
 /** 把归类后的中文错误贴到对应字段：Key 类 → apiKey；端点/模型类 → baseUrl+model；其余整条。 */
 function fieldErrorFor(message: string, retryable?: boolean): Record<string, string> {
@@ -14,6 +15,18 @@ function fieldErrorFor(message: string, retryable?: boolean): Record<string, str
   if (/模型名不被支持/.test(message)) return { model: message };
   if (/模型不存在|Base URL/.test(message)) return { baseUrl: message, model: message };
   return message ? { all: message } : {};
+}
+
+/** 关于页「技术身份」：vendored Lake 内核与 React wrapper 是固定 pin。
+ *  机器可读版本未进 sysInfo（wrapper 在 package.json 里是 file: 依赖），内核升级时同步
+ *  vendor/lakex-doc-react/package.json 与 docs/LAKEX-CONTRACT.md。 */
+const LAKE_KERNEL_VERSION = "1.99.0";
+const LAKE_WRAPPER_VERSION = "0.1.3";
+/** sysInfo.deps 的版本值可能带 ^/~；file: 依赖不是版本号，按本地 vendor 显示。 */
+function depVersion(deps: Record<string, string> | undefined, name: string): string {
+  const raw = deps?.[name];
+  if (!raw) return "—";
+  return raw.startsWith("file:") ? "本地 vendor" : raw.replace(/^[~^>=<\s]+/, "");
 }
 import { LAKE_THEMES } from "../../lib/themes";
 import { native } from "../../lib/native";
@@ -87,8 +100,10 @@ let verifiedS3Fingerprint: string | null = null;
    */
   const [s3VerifiedFp, setS3VerifiedFp] = useState<string | null>(verifiedS3Fingerprint);
   const s3Verified = s3VerifiedFp !== null && s3VerifiedFp === s3ConfigFingerprint(s3);
-  const markS3Verified = () => { verifiedS3Fingerprint = s3ConfigFingerprint(s3); setS3VerifiedFp(verifiedS3Fingerprint); };
-  const invalidateS3Verified = () => { verifiedS3Fingerprint = null; setS3VerifiedFp(null); };
+  /** 261029 FIX-D：未验证时点「启用云同步」的行内提示（只提示，不改变开关状态）。 */
+  const [syncGateAlert, setSyncGateAlert] = useState<string | null>(null);
+  const markS3Verified = () => { verifiedS3Fingerprint = s3ConfigFingerprint(s3); setS3VerifiedFp(verifiedS3Fingerprint); setSyncGateAlert(null); };
+  const invalidateS3Verified = () => { verifiedS3Fingerprint = null; setS3VerifiedFp(null); setSyncGateAlert(null); };
   /** S3 配置文件迁移：粘贴迁移码弹窗（备用路径）。 */
   const [s3ImportOpen, setS3ImportOpen] = useState(false);
   // AI：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）。
@@ -375,13 +390,13 @@ let verifiedS3Fingerprint: string | null = null;
     const st = sysInfo.storage;
     const lines = [
       `LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`,
-      `Electron ${sysInfo.runtime.electron} · Chromium ${sysInfo.runtime.chromium} · Node ${sysInfo.runtime.node} · ${sysInfo.runtime.platform}/${sysInfo.runtime.arch}`,
+      `Electron ${sysInfo.runtime.electron}，Chromium ${sysInfo.runtime.chromium}，Node ${sysInfo.runtime.node}，${sysInfo.runtime.platform}/${sysInfo.runtime.arch}`,
       `依赖：${Object.entries(sysInfo.deps).map(([k, v]) => `${k}@${v}`).join(", ")}`,
       `数据目录：${st.root}`,
       `日志目录：${sysInfo.paths.logs}`,
-      `笔记 ${st.notes} · 笔记本 ${st.notebooks} · 分组 ${st.groups} · 小记 ${sysInfo.quickNotes}`,
-      `资源 ${st.assetFiles} 个 / ${formatBytes(st.assetBytes)} · 历史快照 ${st.historySnapshots} 份 / ${formatBytes(st.historyBytes)}`,
-      `回收站节点 ${st.trashedNodes} · 删除墓碑 ${st.tombstones} · 孤儿登记 ${st.orphanRows} · 库文件 ${formatBytes(st.dbBytes)}`,
+      `笔记 ${st.notes}，笔记本 ${st.notebooks}，分组 ${st.groups}，小记 ${sysInfo.quickNotes}`,
+      `资源 ${st.assetFiles} 个 / ${formatBytes(st.assetBytes)}，历史快照 ${st.historySnapshots} 份 / ${formatBytes(st.historyBytes)}`,
+      `回收站节点 ${st.trashedNodes}，删除标记 ${st.tombstones}，未归属记录 ${st.orphanRows}，库文件 ${formatBytes(st.dbBytes)}`,
       `生成于 ${new Date().toLocaleString()}`,
     ];
     try {
@@ -405,9 +420,9 @@ let verifiedS3Fingerprint: string | null = null;
     { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Palette size={15} /> },
     { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
+    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash size={15} /> },
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
     { id: "ai" as const, label: "AI", keywords: "AI 助手 供应商 模型 key api openai deepseek 密钥", icon: <Sparkles size={15} /> },
-    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash size={15} /> },
     { id: "browser" as const, label: "浏览器端", keywords: "浏览器 网页 web 附属窗口 端口 局域网 伺服", icon: <Globe size={15} /> },
     { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <Terminal size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
@@ -568,6 +583,16 @@ let verifiedS3Fingerprint: string | null = null;
     });
   };
   const runGcAction = async (dryRun: boolean) => {
+    if (!dryRun) {
+      // 261029 FIX-D：手动深度清理会真删云端对象且不可恢复 ⇒ 二次确认（与其它销毁性动作同一套 confirm 原语）。
+      const ok = await confirm({
+        title: "执行深度清理？",
+        body: "将立即删除云端已不再被任何文档或历史引用的对象，删除后无法恢复。建议先点「深度清理预览」确认可清理数量。",
+        confirmText: "执行清理",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     await gcRun.run(async () => {
       // 手动清理 = 显式清云端：无视 7 天窗口，直接列出/删除当前全部未引用对象（自动定时仍按窗口）
       const r = await native.runS3DeepCleanup(dryRun, true);
@@ -606,7 +631,7 @@ let verifiedS3Fingerprint: string | null = null;
             {visibleNav.length === 0 && itemHits.length === 0 && <span className="settings-nav-empty">没有匹配的设置</span>}
             {navQuery.trim() && itemHits.length > 0 && (
               <div className="settings-nav-hits">
-                <span className="settings-nav-hits__label">条目 · {itemHits.length} 项</span>
+                <span className="settings-nav-hits__label">条目 {itemHits.length} 项</span>
                 {itemHits.map((hit) => (
                   <button key={hit.id} className="ln-list-item settings-nav-hit" onClick={() => jumpToItem(hit)} title={hit.label}>
                     <span className="ln-list-item__text ln-ellipsis">{hit.label}</span>
@@ -621,12 +646,12 @@ let verifiedS3Fingerprint: string | null = null;
             {category === "editor" && (
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>
-                  <Field itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
+                  <Field itemId="editor-font-size" name="正文字号" desc="调整编辑器正文的字号，只影响显示，不改文档内容。">
                     <Select label="正文字号" value={String(settings.fontSize)} onChange={(v) => onChange({ fontSize: Number(v) })} options={fontSizeOptions().map((fs) => ({ value: String(fs), label: `${fs} px` }))} />
                   </Field>
-                  <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启=应用自建增强大纲（筛选/折叠/级别徽标/悬停；桌面右栏）；关闭（默认）=直接使用 Lake 原生大纲。移动端始终使用应用大纲面板。" checked={settings.outlineEnhance} onChange={(checked) => onChange({ outlineEnhance: checked })} />
-                  <Switch itemId="editor-toolbar" name="显示固定工具栏" desc="编辑器顶部那条固定工具栏。关掉后编辑区更干净，格式操作走浮动工具栏。" checked={settings.showToolbar} onChange={(checked) => onChange({ showToolbar: checked })} />
-                  <Switch itemId="editor-floating-toolbar" name="浮动工具栏" desc="选中文字或图片时，在选区上方弹出格式浮框。与固定工具栏互相独立，可任意组合开关。" checked={settings.floatingToolbar} onChange={(checked) => onChange({ floatingToolbar: checked })} />
+                  <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启后在桌面右栏使用增强大纲（可筛选、折叠、显示级别徽标）；关闭则使用 Lake 原生大纲。移动端始终使用应用的大纲面板。" checked={settings.outlineEnhance} onChange={(checked) => onChange({ outlineEnhance: checked })} />
+                  <Switch itemId="editor-toolbar" name="显示固定工具栏" desc="编辑器顶部的固定工具栏。关闭后界面更简洁，格式操作改用浮动工具栏。" checked={settings.showToolbar} onChange={(checked) => onChange({ showToolbar: checked })} />
+                  <Switch itemId="editor-floating-toolbar" name="浮动工具栏" desc="选中文字或图片时在选区旁弹出格式工具条；与固定工具栏互不影响。" checked={settings.floatingToolbar} onChange={(checked) => onChange({ floatingToolbar: checked })} />
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
                   <Field itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
@@ -636,10 +661,10 @@ let verifiedS3Fingerprint: string | null = null;
                       { value: "24", label: "24 个" },
                     ]} />
                   </Field>
-                  <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；关闭（默认）则恢复。仅本机偏好，不同步、不占 S3。" checked={settings.clearTabsOnExit} onChange={(checked) => onChange({ clearTabsOnExit: checked })} />
+                  <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；默认关闭。只保存在本机，不参与同步。" checked={settings.clearTabsOnExit} onChange={(checked) => onChange({ clearTabsOnExit: checked })} />
                 </Group>
                 <Group title="附件" icon={<Paperclip size={16} />}>
-                  <Field itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">
+                  <Field itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步与下载统一按协议上限（100 MiB），不受其他设备设置影响。">
                     <Select label="附件大小上限" value={String(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(v) => onChange({ maxAttachmentBytes: Number(v) * 1024 * 1024 })} options={[
                       { value: "25", label: "25 MiB" }, { value: "50", label: "50 MiB" }, { value: "100", label: "100 MiB" },
                     ]} />
@@ -682,7 +707,7 @@ let verifiedS3Fingerprint: string | null = null;
                     <div className="config-stats">
                       <span>快照 <strong>{stats ? stats.snapshotCount : "—"}</strong> 份</span>
                       <span>{stats ? formatBytes(stats.totalBytes) : "统计中…"}</span>
-                      {lastCleanup && <span>上次清理 {formatDateTime(new Date(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</span>}
+                      {lastCleanup && <span>上次清理 {formatDateTime(new Date(lastCleanup.at))}，{lastCleanup.deletedSnapshots} 份，{formatBytes(lastCleanup.freedBytes)}</span>}
                     </div>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runCleanup()} disabled={hist.busy}><Trash size={14} /> {hist.busy ? "清理中…" : "立即清理"}</button>
@@ -699,23 +724,23 @@ let verifiedS3Fingerprint: string | null = null;
                   )}
                 </Group>
                 <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
-                  <Block itemId="history-data-health" name="一致性检查" desc="只读比对正文文件、历史快照、孤儿登记与引用资源；不自动修复。发现问题请从备份/云端恢复对应文件。">
+                  <Block itemId="history-data-health" name="一致性检查" desc="只读检查正文文件、历史快照、未归属记录与引用资源，不会自动修复。发现问题请从备份或云端恢复。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runHealth()} disabled={healthCheck.busy}><Search size={14} /> {healthCheck.busy ? "检查中…" : "运行检查"}</button>
                       {health && !healthCheck.busy && (
-                        <span className="config-stats"><span>笔记 {health.notesChecked} · 快照 {health.historyChecked} · 孤儿登记 {health.orphanRowsChecked} · 树节点 {health.treeChecked}</span></span>
+                        <span className="config-stats"><span>笔记 {health.notesChecked}，快照 {health.historyChecked}，未归属记录 {health.orphanRowsChecked}，树节点 {health.treeChecked}</span></span>
                       )}
                     </div>
                     {health && (
                       <div className="checks">
                         {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 && health.refsMissingResource.length === 0 && health.treeDanglingParent.length === 0 ? (
-                          <div className="checks__row checks__row--ok">✓ 全部自洽：正文文件、历史快照、孤儿登记、引用资源、目录树父子链均一致。</div>
+                          <div className="checks__row checks__row--ok">✓ 全部正常：正文文件、历史快照、未归属记录、引用资源与目录树均一致。</div>
                         ) : (
                           <>
                             {health.notesMissingFile.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</div>}
                             {health.notesHashMismatch.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</div>}
                             {health.historyMissingFile > 0 && <div className="checks__row checks__row--warn">✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</div>}
-                            {health.orphanRowsFileMissing.length > 0 && <div className="checks__row checks__row--warn">✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</div>}
+                            {health.orphanRowsFileMissing.length > 0 && <div className="checks__row checks__row--warn">✗ {health.orphanRowsFileMissing.length} 条未归属记录的文件缺失（记录与文件不一致）</div>}
                             {health.refsMissingResource.length > 0 && <div className="checks__row checks__row--error">✗ 正文引用的 {health.refsMissingResource.length} 个资源文件缺失（首 3：{health.refsMissingResource.slice(0, 3).map((r) => r.filename).join("、")}）</div>}
                           {health.treeDanglingParent.length > 0 && <div className="checks__row checks__row--error">✗ {health.treeDanglingParent.length} 个节点的父目录不存在（侧栏与回收站都看不到它）：{health.treeDanglingParent.slice(0, 3).map((t) => `${t.title}→${t.parentId}`).join("、")}</div>}
                           </>
@@ -754,7 +779,7 @@ let verifiedS3Fingerprint: string | null = null;
                     itemId="s3-path-style"
                     name="使用 Path-style URL"
                     desc={isQiniuEndpoint(s3.endpoint)
-                      ? "当前 Endpoint 是七牛 Kodo：必须关闭 Path-style（此项已自动忽略；保存/测试时都会强制关闭）。"
+                      ? "当前 Endpoint 是七牛 Kodo，必须关闭 Path-style（保存或测试时会自动关闭，此项可忽略）。"
                       : "自建 MinIO 等需要开启；七牛 Kodo 关闭即可。"}
                     checked={isQiniuEndpoint(s3.endpoint) ? false : s3.forcePathStyle}
                     disabled={isQiniuEndpoint(s3.endpoint)}
@@ -766,7 +791,7 @@ let verifiedS3Fingerprint: string | null = null;
                       <button className="ln-btn ln-btn--primary" onClick={() => void saveS3()}>保存配置</button>
                     </div>
                   </Block>
-                  <Block itemId="s3-transfer" name="配置迁移" desc="桌面端导出 .json 配置文件，发送到手机后在「同步设置 → 配置迁移 → 从文件导入」选择该文件，省去逐项手填。只含 S3 配置，不含同步策略；导入会覆盖本机 S3 配置。文件含密钥（已加密封装），请只在自己的设备间传递。">
+                  <Block itemId="s3-transfer" name="配置迁移" desc="导出配置文件后在手机「同步设置 → 配置迁移 → 从文件导入」选择它，免去逐项填写。只含 S3 配置，导入会覆盖本机 S3 配置；文件含密钥（已加密），请勿外传。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
                       <button className="ln-btn ln-btn--primary" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
@@ -777,7 +802,24 @@ let verifiedS3Fingerprint: string | null = null;
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (
                     <>
-                      <Switch itemId="sync-enabled" name="启用云同步" desc={s3Verified || syncCfg.enabled ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"} note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>} checked={syncCfg.enabled} disabled={syncCfgRun.busy || (!syncCfg.enabled && !s3Verified)} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
+                      <Switch
+                        itemId="sync-enabled"
+                        name="启用云同步"
+                        desc={s3Verified || syncCfg.enabled ? "关闭后按纯本地空间工作：不连 S3、不自动同步，也不会从云端补拉缺失资源；重新开启后下一次同步会自动补拉。S3 配置与同步策略只保存在本机。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"}
+                        note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
+                        alert={syncGateAlert}
+                        checked={syncCfg.enabled}
+                        onChange={(checked) => {
+                          // 保留「未测通不能开」的实质，但不再禁用开关：点击给出可见提示，状态保持关闭。
+                          if (checked && !syncCfg.enabled && !s3Verified) {
+                            setSyncGateAlert("还没有通过连接测试：请先在上面填好 S3 配置并点「测试连接」。通过之前云同步保持关闭。");
+                            setSyncMsg("云同步未开启：S3 连接尚未验证。请先点「测试连接」。");
+                            return;
+                          }
+                          setSyncGateAlert(null);
+                          void saveSyncCfg({ enabled: checked });
+                        }}
+                      />
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式" desc={SYNC_OPEN_CLOSE_NOTE}>
@@ -786,32 +828,30 @@ let verifiedS3Fingerprint: string | null = null;
                           {syncCfg.autoMode === "interval" && (
                             <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）" desc="到点触发一次；应用退出后不会在后台继续定时（下次启动时的对齐会补上）。"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
-                          <Switch itemId="sync-defer-assets" name="按需下载附件" desc="开启后首拉只同步文档与附件清单，图片/附件在打开或预览时按需下载（首拉更快、省流量）；关闭则首拉全量下载（离线完整性最好）。与移动端同口径。" checked={syncCfg.deferAssets === true} onChange={(checked) => void saveSyncCfg({ deferAssets: checked })} />
+                          <Switch itemId="sync-defer-assets" name="按需下载附件" desc="开启后首次同步只拉文档与附件清单，图片和附件在打开或预览时才下载（更快、省流量）；关闭则首次同步全量下载（离线最完整）。" checked={syncCfg.deferAssets === true} onChange={(checked) => void saveSyncCfg({ deferAssets: checked })} />
                         </>
                       )}
                     </>
                   )}
                 </Group>
-                <Group title="同步诊断" icon={<Terminal size={16} />}>
-                  <Block itemId="sync-diagnostics" name="最近 3 轮同步" desc="每轮同步的阶段耗时、对象数/字节与失败对象（只存本机 device_state，不上传）。反馈同步变慢/失败时直接复制给维护者。">
-                    {syncDiagText ? (
-                      <div className="config-readonly">
-                        {syncDiagText.split("\n").map((line, i) => <div key={i}>{line.trim() ? line : "\u00a0"}</div>)}
-                      </div>
-                    ) : (
-                      <div className="block__text">本机还没有 v3 同步记录。</div>
-                    )}
+                <Group title="备份与恢复" icon={<Archive size={16} />}>
+                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void copySyncDiagnostics()} disabled={!syncDiagText}>复制同步诊断</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                     </div>
-                    {syncDiagMsg && <div className="block__text">{syncDiagMsg}</div>}
                   </Block>
+                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。">
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                    </div>
+                  </Block>
+                  {backupText && <Block name={backupText} />}
                 </Group>
-                <Group title="云端回收（S3 GC）" icon={<Trash size={16} />}>
+                <Group title="云端回收" icon={<Trash size={16} />}>
                   {cloudOffline && (
                     <Block desc={cloudStateHint(cloudState) ?? "云同步未启用：按纯本地空间工作，云端相关操作一律不联网。"} />
                   )}
-                  <Block itemId="gc-status" name="回收状态" desc="手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。">
+                  <Block itemId="gc-status" name="回收状态" desc="手动清理会立即删除云端已不再被文档或历史引用的对象；自动对账按回收窗口定期执行。清理数量偏少通常是被引用保护，不是漏删。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcRun.busy || cloudOffline}>深度清理预览</button>
                       <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcRun.busy || cloudOffline}>执行深度清理</button>
@@ -824,28 +864,30 @@ let verifiedS3Fingerprint: string | null = null;
                     </>
                   )}
                   <Block itemId="gc-mirror" name="云端只是镜像" desc="删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。" />
-                  <Block itemId="gc-log" name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）`}>
+                  <Block itemId="gc-log" name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条，只读）`}>
                     {gcLog.length > 0 ? (
                       <div className="config-readonly">
-                        {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action} · {l.reason}] {l.key}</div>)}
+                        {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action}，{l.reason}] {l.key}</div>)}
                       </div>
                     ) : (
                       <div className="block__text">暂无删除记录。</div>
                     )}
                   </Block>
                 </Group>
-                <Group title="备份与恢复" icon={<Archive size={16} />}>
-                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
+                <Group title="同步诊断" icon={<Terminal size={16} />}>
+                  <Block itemId="sync-diagnostics" name="最近 3 轮同步" desc="每轮同步的耗时、对象数与失败项（只保存在本机，不上传）。反馈同步变慢或失败时，可复制后发给维护者。">
+                    {syncDiagText ? (
+                      <div className="config-readonly">
+                        {syncDiagText.split("\n").map((line, i) => <div key={i}>{line.trim() ? line : "\u00a0"}</div>)}
+                      </div>
+                    ) : (
+                      <div className="block__text">本机还没有同步记录。</div>
+                    )}
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void copySyncDiagnostics()} disabled={!syncDiagText}>复制同步诊断</button>
                     </div>
+                    {syncDiagMsg && <div className="block__text">{syncDiagMsg}</div>}
                   </Block>
-                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
-                    </div>
-                  </Block>
-                  {backupText && <Block name={backupText} />}
                 </Group>
               </>
             )}
@@ -863,9 +905,9 @@ let verifiedS3Fingerprint: string | null = null;
 
             {category === "browser" && (
               <Group title="浏览器端" icon={<Globe size={16} />}>
-                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LakexLocalNotes（与桌面端同一份本地数据）。仅监听 127.0.0.1，不做局域网伺服、不允许其它设备访问。开关即时生效、无需重启；应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webRun.busy} onChange={(checked) => void setWeb(checked)} />
-                <Block name="这是什么" desc="浏览器端不是「伺服」：不对外开放、不监听局域网。它只是把桌面端这一份本地库（同一个数据库、同一批文件）通过回环地址 http://127.0.0.1:19880/ 交给本机浏览器，数据不经过网络。打开开关后，用 Chrome 等浏览器打开该地址即可。" />
-                <Block name="现状" desc="读写与本机同一份数据；同步进度/待办计数走 SSE 实时推送；图片「另存为」走浏览器下载、附件在新标签打开。导出/整库备份等需要系统目录框的操作仍请在桌面端使用。此开关不落盘（每次启动应用都从关闭开始）。" />
+                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LakexLocalNotes（与桌面端同一份本地数据）。只监听 127.0.0.1，不向局域网开放；开关即时生效，应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webRun.busy} onChange={(checked) => void setWeb(checked)} />
+                <Block name="这是什么" desc="浏览器端不向局域网开放：它把桌面端的同一份本地库通过本机地址 http://127.0.0.1:19880/ 交给浏览器，数据不经过网络。打开开关后，用浏览器访问该地址即可。" />
+                <Block name="现状" desc="读写的是本机同一份数据；同步进度与待办会实时刷新；图片「另存为」走浏览器下载，附件在新标签打开。需要系统目录框的操作（导出、整库备份）请仍在桌面端使用。开关不保存，每次启动都从关闭开始。" />
                 {webStatus?.enabled && (
                   <Item itemId="browser-open" name="在本机浏览器打开" desc={webStatus.url}>
                     <button className="ln-btn ln-btn--secondary" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
@@ -879,13 +921,13 @@ let verifiedS3Fingerprint: string | null = null;
               <>
               {/* 261006：索引重建从「资源」挪到「日志」（维护动作归一处，后续再整理） */}
               <Group title="全文搜索" icon={<Search size={16} />}>
-                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题/正文全文索引（FTS5，中文单字分词）。正常由增量账本自动维护；索引异常或换分词器后可手动重建。">
+                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题与正文的全文索引（FTS5，中文单字分词），平时自动维护；索引异常或更换分词器后可手动重建。">
                   {searchText && <span className="ln-label__text">{searchText}</span>}
                   <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
                 </Item>
               </Group>
               <Group title="应用日志（只读）" icon={<Terminal size={16} />}>
-                <Block itemId="logs-main" name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/lakex-local-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
+                <Block itemId="logs-main" name="主进程日志" desc="同步、回收站与历史清理过程写入 userData/logs/lakex-local-notes.log；按关键字过滤，每条命中附带上下文。">
                   <div className="config-block__actions">
                     <input
                       className="ln-text-field logs__filter"
@@ -917,7 +959,7 @@ let verifiedS3Fingerprint: string | null = null;
               <>
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
                   <Section title="服务">
-                    <Field itemId="ai-provider" name="供应商" desc="只支持 OpenAI 兼容接口：内置 OpenAI / DeepSeek / 通义千问 / 智谱 / 小米 MiMo，也可选「自定义」指向任意兼容端点（Ollama / vLLM / OneAPI 等）。切换即按该家默认值初始化。">
+                    <Field itemId="ai-provider" name="供应商" desc="支持 OpenAI 兼容接口：内置 OpenAI、DeepSeek、通义千问、智谱、小米 MiMo，也可选「自定义」指向任意兼容端点（如 Ollama、vLLM）。切换供应商会重置为该家默认值。">
                       <Select label="AI 供应商" value={aiProviderId} onChange={(v) => void switchAiProvider(v)} options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))} />
                     </Field>
                     <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
@@ -976,12 +1018,12 @@ let verifiedS3Fingerprint: string | null = null;
                       <button className="ln-btn ln-btn--secondary" disabled={aiModelsRun.busy} onClick={() => void fetchAiModels()}>{aiModelsRun.busy ? "拉取中…" : "获取模型列表"}</button>
                     </Field>
                     {activeDef.supportsReasoning && (
-                      <Item itemId="ai-reasoning" name="思考强度" desc="DeepSeek 的 reasoning_effort（默认 high）。思考模式下 temperature 不生效。">
+                      <Item itemId="ai-reasoning" name="思考强度" desc="推理强度：越高思考越深入、耗时越长（默认 high）。思考模式下温度不生效。">
                         <Select label="思考强度" className="ln-w-200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(v) => setAiDraft((d) => ({ ...d, reasoningEffort: v as AiReasoningEffort }))} options={AI_REASONING_EFFORTS.map((v) => ({ value: v, label: v }))} />
                       </Item>
                     )}
                     {activeDef.supportsThinking && (
-                      <Item itemId="ai-thinking" name="思考模式" desc="DeepSeek 的 thinking：关闭更省 token 与延迟；开启时温度不生效。">
+                      <Item itemId="ai-thinking" name="思考模式" desc="关闭可减少 token 消耗与等待时间；开启时温度不生效。">
                         <Select label="思考模式" className="ln-w-200" value={aiPending.thinking ?? "enabled"} onChange={(v) => setAiDraft((d) => ({ ...d, thinking: v as AiThinkingMode }))} options={AI_THINKING_MODES.map((v) => ({ value: v, label: v === "enabled" ? "开启" : "关闭" }))} />
                       </Item>
                     )}
@@ -993,7 +1035,7 @@ let verifiedS3Fingerprint: string | null = null;
                   </Section>
 
                   <Section title="连通性">
-                    <Block itemId="ai-test" name="测试并保存" desc="保存前先发一次最小真实请求：鉴权 / 模型类错误会拦住保存；网络 / 限流可选择仍要保存。">
+                    <Block itemId="ai-test" name="测试并保存" desc="保存前先发一次最小真实请求：密钥或模型错误会拦住保存，网络或限流错误可以选择仍要保存。">
                       <div className="config-block__actions">
                         <button className="ln-btn ln-btn--primary" disabled={aiRun.busy} onClick={() => void testAndSaveAi()}>{aiRun.busy ? "测试中…" : "测试并保存"}</button>
                         <button className="ln-btn ln-btn--secondary" disabled={aiRun.busy} onClick={() => void testAi()}>仅测试</button>
@@ -1005,7 +1047,7 @@ let verifiedS3Fingerprint: string | null = null;
                   </Section>
                 </Group>
                 <Group title="说明">
-                  <Block name="内容只在你主动触发时外发" desc="AI 只把你要处理的文本发到上面配置的供应商；API Key 只保存在本机主进程，不参与同步、S3 与备份。" />
+                  <Block name="内容只在你主动触发时外发" desc="AI 只把你要处理的文本发给你配置的供应商；API Key 只保存在本机，不参与同步、S3 与备份。" />
                   <Block name="多轮对话只保留最近 40 条消息" desc="同一个 AI 面板内会记住上下文（把前面的问答一起发给模型），但最多只带最近 40 条消息（一问一答算 2 条），更早的不会再发送；关闭面板后记忆即清空，不做长期记忆。" />
                 </Group>
               </>
@@ -1020,7 +1062,7 @@ let verifiedS3Fingerprint: string | null = null;
                 {sysInfo && (
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
-                      <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
+                      <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先、离线可用；数据保存在本机，S3 只作云端备份。" />
                       <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
                     </Group>
 
@@ -1028,7 +1070,14 @@ let verifiedS3Fingerprint: string | null = null;
                       <Item itemId="about-version" name="应用版本" desc={sysInfo.app.description || undefined}>
                         <span className="config-item__ctl"><code className="kv__v">v{sysInfo.app.version}</code></span>
                       </Item>
-                      <Block itemId="about-runtime" name="运行时" desc="Electron（Chromium）是 Lake 内核的原生环境；Node 版本决定 better-sqlite3 的 N-API 加载。实际版本见下表。">
+                      <Block itemId="about-tech-stack" name="技术身份" desc="桌面端运行框架、数据层与编辑器内核；框架版本取运行时与 package.json，内核为固定 pin。">
+                        <div className="kv">
+                          <div className="kv__row"><span className="kv__k">桌面框架</span><span className="kv__v">Electron {sysInfo.runtime.electron} / React {depVersion(sysInfo.deps, "react")} / better-sqlite3 {depVersion(sysInfo.deps, "better-sqlite3")}</span></div>
+                          <div className="kv__row"><span className="kv__k">编辑器内核</span><span className="kv__v">Lake v{LAKE_KERNEL_VERSION}（@dlient/lakex-doc-react {LAKE_WRAPPER_VERSION}）</span></div>
+                          <div className="kv__row"><span className="kv__k">同步协议</span><span className="kv__v">S3 v{S3V3_POINTER_VERSION}</span></div>
+                        </div>
+                      </Block>
+                      <Block itemId="about-runtime" name="运行时" desc="Lake 内核运行在 Electron（Chromium）中；Node 版本决定本地数据库模块能否正常加载。实际版本见下表。">
                         <div className="kv">
                           <div className="kv__row"><span className="kv__k">Electron</span><span className="kv__v">{sysInfo.runtime.electron}</span></div>
                           <div className="kv__row"><span className="kv__k">Chromium</span><span className="kv__v">{sysInfo.runtime.chromium}</span></div>
@@ -1036,7 +1085,7 @@ let verifiedS3Fingerprint: string | null = null;
                           <div className="kv__row"><span className="kv__k">平台</span><span className="kv__v">{sysInfo.runtime.platform} / {sysInfo.runtime.arch}</span></div>
                         </div>
                       </Block>
-                      <Block itemId="about-deps" name="内核与关键依赖" desc="vendor 内核按 package.json 锁定版本，勿随意升级（lakex 闭源，只做最小 hack）。">
+                      <Block itemId="about-deps" name="内核与关键依赖" desc="内核按 package.json 锁定版本，请勿随意升级。">
                         <div className="kv">
                           {Object.entries(sysInfo.deps).map(([name, ver]) => (
                             <div key={name} className="kv__row"><span className="kv__k">{name}</span><span className="kv__v">{ver}</span></div>
@@ -1054,14 +1103,14 @@ let verifiedS3Fingerprint: string | null = null;
                           <span>小记 <strong>{sysInfo.quickNotes}</strong></span>
                         </div>
                         <div className="config-stats">
-                          <span>资源 <strong>{sysInfo.storage.assetFiles}</strong> 个 · {formatBytes(sysInfo.storage.assetBytes)}</span>
-                          <span>历史快照 <strong>{sysInfo.storage.historySnapshots}</strong> 份 · {formatBytes(sysInfo.storage.historyBytes)}</span>
+                          <span>资源 <strong>{sysInfo.storage.assetFiles}</strong> 个，{formatBytes(sysInfo.storage.assetBytes)}</span>
+                          <span>历史快照 <strong>{sysInfo.storage.historySnapshots}</strong> 份，{formatBytes(sysInfo.storage.historyBytes)}</span>
                           <span>库文件 {formatBytes(sysInfo.storage.dbBytes)}</span>
                         </div>
                         <div className="config-stats">
                           <span>回收站节点 {sysInfo.storage.trashedNodes}</span>
-                          <span>删除墓碑 {sysInfo.storage.tombstones}</span>
-                          <span>孤儿登记 {sysInfo.storage.orphanRows}</span>
+                          <span>删除标记 {sysInfo.storage.tombstones}</span>
+                          <span>未归属记录 {sysInfo.storage.orphanRows}</span>
                         </div>
                       </Block>
                       <Item itemId="about-data-dir" name="数据目录" pathDesc desc={sysInfo.storage.root}>
@@ -1093,7 +1142,7 @@ let verifiedS3Fingerprint: string | null = null;
                     <Group title="第三方与许可" icon={<Info size={16} />}>
                       <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：相关规则已收编到 src/styles/compat.css 与 kit.css（保留署名）；本项目不构成分发思源代码。" />
                       <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="Lake 内核为语雀闭源产物（随 @dlient/lakex-doc-react 的 MIT wrapper 源码一并 vendor、已 pin）；wrapper 与卡片层源码可改并保留署名，内核本体内核不修改、不再分发。" />
-                      <Block itemId="about-third-party" name="开源依赖" desc="better-sqlite3 (MIT) · sharp (Apache-2.0/MIT) · @aws-sdk/client-s3 (Apache-2.0) · lucide-react (ISC) · react/react-dom (MIT) · electron-log (MIT) · Typescript (Apache-2.0) · Vite (MIT)。完整清单以 package.json 与 lockfile 为准。" />
+                      <Block itemId="about-third-party" name="开源依赖" desc="主要开源依赖：better-sqlite3（MIT）、sharp（Apache-2.0/MIT）、@aws-sdk/client-s3（Apache-2.0）、lucide-react（ISC）、react/react-dom（MIT）、electron-log（MIT）、TypeScript（Apache-2.0）、Vite（MIT）。完整清单以 package.json 与 lockfile 为准。" />
                     </Group>
                   </>
                 )}

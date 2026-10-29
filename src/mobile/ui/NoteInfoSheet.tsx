@@ -91,7 +91,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
           )}
 
           <div className="minfo-section">
-            <div className="minfo-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {formatNoteInfoSize(info.assetTotalBytes)}</span></div>
+            <div className="minfo-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个，{formatNoteInfoSize(info.assetTotalBytes)}</span></div>
             {info.assets.length === 0 ? <p className="minfo-empty">无附件</p> : (
               <ul className="minfo-list">
                 {info.assets.slice(0, ITEM_LIMIT).map((a) => (

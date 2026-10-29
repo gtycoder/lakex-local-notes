@@ -241,7 +241,7 @@ function LockedTextCard({ mode, cardValue, updateCardValue }: LockedTextCardProp
   const hint = phase === "setup"
     ? mode === "view" ? "未设置密码" : "设置密码后正文才会加密保存"
     : phase === "locked" ? "无密码不可见正文"
-    : phase === "unlocked" ? "已解锁 · 仅本次会话有效"
+    : phase === "unlocked" ? "已解锁，仅本次会话有效"
     : "格式无法识别，已原样保留";
 
   const actions = phase === "unlocked" && mode === "edit" ? (

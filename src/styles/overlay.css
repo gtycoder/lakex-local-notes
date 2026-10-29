@@ -51,14 +51,14 @@
   flex-direction: column;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-lg);
   color: var(--lake-text-1);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-dialog);
   z-index: var(--lake-z-overlay-dialog);
 }
-/* 261017 A 批：对话框入场（190ms + emphasized）。挂在 .ln-scrim > section 上而不是
+/* 对话框入场（261029 收敛：250ms + ease-out）。挂在 .ln-scrim > section 上而不是
    .ln-dialog 类上 —— 自定义 surfaceClassName（如搜索面板 .search-panel）也能登场，
    不再按表面类各写一份。scale(.985) 极小，只负责把「瞬间弹出」变成「落位」。 */
 .ln-scrim > section { animation: ln-dialog-in var(--lake-motion-panel) var(--lake-ease-emphasized); }
@@ -117,7 +117,7 @@
   flex-direction: column;
   min-width: 206px;
   padding: var(--lake-space-sm);
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-popover);
@@ -126,7 +126,7 @@
 .ln-popover {
   position: fixed;
   z-index: var(--lake-z-overlay-menu);
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-popover);
@@ -140,7 +140,7 @@
 .settings-panel,
 .search-panel,
 .note-info-dialog {
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-lg);
   background: var(--lake-bg-panel);
 }
@@ -168,7 +168,7 @@
 .ln-menu,
 .ln-popover {
   z-index: var(--lake-z-overlay-menu);
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-popover);
@@ -198,11 +198,11 @@
 
 /* ── 全文搜索面板内层（P5-j；设计 05/07）───────────────────────────────
  * 面板表面已由本文件的 .search-panel 规则统一（并**覆盖掉 app/dialogs.css 里那条残留毛玻璃**）。 */
-.search-panel { border: 1px solid var(--lake-border-1); box-shadow: var(--lake-shadow-dialog); }
+.search-panel { border: 0.5px solid var(--lake-border-1); box-shadow: var(--lake-shadow-dialog); }
 .search-panel-input-row {
   gap: var(--lake-space-md);
   padding: var(--lake-space-lg);
-  border-bottom: 1px solid var(--lake-border-2);
+  border-bottom: 0.5px solid var(--lake-border-2);
 }
 .search-panel-input-row input { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 .search-panel-input-row input::placeholder { color: var(--lake-text-4); }

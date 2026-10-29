@@ -37,7 +37,7 @@ export function BitableAiGenerateDialog({ open, field, table, batch, onStart, on
   const targetCount = mode === "empty" ? emptyCount : table.records.length;
   return (
     <Dialog open onDismiss={() => { if (!running) onClose(); }} label="AI 生成整列" className="bt-dialog">
-      <header className="ln-dialog__head"><h3 className="ln-dialog__title">AI 生成整列 · {field.name}</h3></header>
+      <header className="ln-dialog__head"><h3 className="ln-dialog__title">AI 生成整列：{field.name}</h3></header>
       <div className="ln-dialog__body">
         {!batch && (
           <>

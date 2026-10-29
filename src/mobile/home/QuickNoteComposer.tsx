@@ -344,7 +344,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
           else if (outcome.reason === "no-remote-manifest") showToast("云端还没有小记清单，已执行一次完整同步");
           else showToast("这条小记已在其他设备删除，已按删除处理", { type: "error" });
         } catch (reason) {
-          showToast("已保存到本机 · 同步失败：" + (reason as Error).message, { type: "error" });
+          showToast("已保存到本机，同步失败：" + (reason as Error).message, { type: "error" });
         } finally {
           setSyncing(false);
         }
@@ -352,7 +352,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
       successFeedback();
       await onSaved();
     } catch (reason) {
-      setError("保存失败: " + (reason as Error).message);
+      setError("保存失败：" + (reason as Error).message);
       warnFeedback();
     } finally {
       setSaving(false);

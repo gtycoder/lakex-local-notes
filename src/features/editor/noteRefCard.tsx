@@ -138,7 +138,7 @@ function NoteRefEditPopover({ value, anchor, onSave, onClose }: { value: NoteRef
   const refId = picked?.noteId ?? parseNoteRef(value);
   const targetTitle = picked ? picked.title : (existing?.title ?? value.title ?? "");
   const targetKind = picked ? picked.kind : existing?.kind;
-  const targetLabel = refId ? `${targetTitle || "无标题"} · ${noteKindLabel(targetKind)}` : "";
+  const targetLabel = refId ? `${targetTitle || "无标题"}（${noteKindLabel(targetKind)}）` : "";
   const hasRef = Boolean(refId);
   /** 上一次**自动回填**的文本：用户改过就不再被下一次选文档覆盖（"改完了"要留得住）。 */
   const autoFilledRef = useRef("");

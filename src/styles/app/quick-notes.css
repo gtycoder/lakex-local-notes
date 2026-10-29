@@ -33,7 +33,7 @@
 .quick-notes-tools-spacer { flex: 1 1 auto; min-width: 12px; }
 
 /* 头部小工具（多选 / 排序）：纯图标按钮，hover 才着色 */
-.quick-notes-tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; color: var(--lake-text-3); background: transparent; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
+.quick-notes-tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-3); background: transparent; }
 
 .quick-notes-tool-btn:hover:not(:disabled), .quick-notes-tool-btn.is-on { color: var(--lake-accent-text); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
 
@@ -55,7 +55,7 @@
 .quick-notes-filter-menu button[aria-checked="true"] { color: var(--lake-accent-text); }
 
 /* 多选：勾选框（仿语雀：绿色实心方块 + 白勾） */
-.qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); color: var(--lake-text-on-accent); background: var(--lake-bg-panel); transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
+.qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); color: var(--lake-text-on-accent); background: var(--lake-bg-panel); }
 
 .qn-check:hover { border-color: var(--lake-status-ok); }
 
@@ -89,7 +89,7 @@
 /* 标签行（对齐云端）：左侧「标签 ▾」，右侧条数/排序 */
 /* 列表视图左栏头：标题/版式切换/新建小记（对齐语雀：新建在左，右侧编辑区从顶部开始） */
 .quick-notes-list-head { display: flex; align-items: center; gap: 8px; min-height: 31px; margin-bottom: 12px; }
-.quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 1px solid var(--lake-border-2); margin-bottom: 6px; }
+.quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 0.5px solid var(--lake-border-2); margin-bottom: 6px; }
 .quick-notes-tag-filter-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 8px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-2); background: transparent; font: inherit; font-size: var(--lake-font-size-small); cursor: pointer; }
 .quick-notes-tag-filter-btn:hover { background: var(--lake-bg-hover); }
 .quick-notes-tag-filter-btn.is-on { color: var(--lake-accent-text); background: var(--lake-bg-selected); }
@@ -97,7 +97,7 @@
 .quick-notes-tag-filter-menu button > .ln-ellipsis { flex: 1 1 auto; min-width: 0; }
 .quick-notes-tag-filter-menu__count { margin-left: auto; color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
 /* 列表视图搜索：放大镜点击后替换「标签」位（对齐语雀）；Enter 过滤、× 清空、Esc 收起 */
-.quick-notes-index-search { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); }
+.quick-notes-index-search { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; height: 30px; padding: 0 8px; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); }
 .quick-notes-list-search { flex: 0 0 auto; margin-bottom: 10px; }
 .quick-notes-index-search:focus-within { border-color: var(--lake-accent); }
 .quick-notes-index-search > svg { flex: 0 0 auto; color: var(--lake-text-3); }
@@ -129,7 +129,7 @@
 .quick-note-row-menu button:hover:not(:disabled) { background: var(--lake-bg-hover); }
 .quick-note-row-menu button:disabled { opacity: .45; cursor: default; }
 /* 顶部「新建小记」（对齐云端图3：绿色羽毛 + 号） */
-.quick-notes-new { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.quick-notes-new { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; cursor: pointer; }
 .quick-notes-new:hover { background: color-mix(in srgb, var(--lake-accent) 12%, transparent); }
 .quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--lake-accent-text); }
 .quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
@@ -147,11 +147,11 @@
 
 .quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent-text); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
 
-.quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: var(--lake-font-size-tiny); }
+.quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 0.5px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: var(--lake-font-size-tiny); }
 
 .quick-notes-error button, .quick-note-card-actions button { display: grid; place-items: center; border: 0; background: transparent; }
 
-.quick-note-composer, .quick-note-entry { border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); }
+.quick-note-composer, .quick-note-entry { border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-md); }
 
 .quick-note-composer { display: flex; flex-direction: column; padding: 10px 12px 12px; }
 
@@ -180,7 +180,7 @@
 .quick-notes-detail:has(.ne-ui-fullscreen) .quick-note-composer-actions,
 .quick-note-entry.editing:has(.ne-ui-fullscreen) .quick-note-composer-actions {
   position: absolute; right: 16px; bottom: 14px; z-index: 31; margin: 0;
-  padding: 6px 8px; border: 1px solid var(--lake-border-1); border-radius: 10px;
+  padding: 6px 8px; border: 0.5px solid var(--lake-border-1); border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card);
 }
 
@@ -204,28 +204,28 @@
 .quick-note-entry.editing { position: static; }
 
 /* 动作行直接复用 kit 的 ln-btn 三档（primary / secondary / ghost）；这里只收紧小记的密度。 */
-.quick-note-composer-actions .ln-btn, .quick-note-convert-dialog .ln-btn--ghost { height: 28px; min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: var(--lake-font-size-tiny); }
+.quick-note-composer-actions .ln-btn, .quick-note-convert-dialog .ln-btn--ghost { height: 28px; min-height: 28px; padding: 0 10px; border-radius: var(--lake-radius-xs); font-size: var(--lake-font-size-tiny); }
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
 /* 自带表情选择器（261010 起）——**261013 改成微信样式**（用户定稿：分类放顶部，更适合输入）。
    为什么自建：内核「表情」只插一张点不开的空占位卡（实测两次）。形态 = 顶部分类条（搜索 / 最近 / 8 组）
    + 浅灰底大格子 + 空态；表面沿用浮层令牌，定位由 JS 按**真实尺寸**夹进视口（同 usePopoverPosition 口径）。 */
-.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: flex; flex-direction: column; gap: 6px; padding: 8px; width: min(360px, calc(100vw - 16px)); border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
+.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: flex; flex-direction: column; gap: 6px; padding: 8px; width: min(360px, calc(100vw - 16px)); border: 0.5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
 .quick-note-emoji-panel__cats { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .quick-note-emoji-panel__cats::-webkit-scrollbar { display: none; }
 .quick-note-emoji-panel__cat { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-2); font-size: var(--lake-font-size-title); line-height: 1; cursor: pointer; }
 .quick-note-emoji-panel__cat.is-active { background: var(--lake-bg-block); color: var(--lake-text-1); }
 .quick-note-emoji-panel__search { display: none; }
 .quick-note-emoji-panel__search.is-open { display: block; }
-.quick-note-emoji-panel__search input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); outline: none; }
+.quick-note-emoji-panel__search input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); outline: none; }
 .quick-note-emoji-panel__body { max-height: 236px; overflow-y: auto; padding: 4px; border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); }
 .quick-note-emoji-panel__grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); }
 .quick-note-emoji-panel__cell { display: flex; align-items: center; justify-content: center; height: 34px; padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--lake-font-size-h1); line-height: 1; cursor: pointer; }
 .quick-note-emoji-panel__cell:hover { background: var(--lake-bg-hover); }
 .quick-note-emoji-panel__empty { padding: 20px 8px; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
-.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 8px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
+.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
 
 /* 卡片预览（自研只读渲染，零内核实例）：块级结构 + 行内格式 + 媒体就地渲染 */
 .quick-note-preview { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
@@ -241,11 +241,11 @@
 .quick-note-preview-task { list-style: none; display: flex; align-items: flex-start; gap: 6px; margin-left: -18px; }
 .quick-note-preview-task input { margin-top: 4px; }
 .quick-note-preview-quote { margin: 0; padding: 4px 10px; border-left: 3px solid var(--lake-border-2); color: var(--lake-text-3); }
-.quick-note-preview-divider { width: 100%; margin: 4px 0; border: none; border-top: 1px solid var(--lake-border-2); }
-.quick-note-preview-image { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; border-radius: 8px; cursor: zoom-in; }
-.quick-note-preview-video { display: block; width: 100%; max-width: 420px; max-height: 260px; border-radius: 8px; background: var(--lake-media-video); }
+.quick-note-preview-divider { width: 100%; margin: 4px 0; border: none; border-top: 0.5px solid var(--lake-border-2); }
+.quick-note-preview-image { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; border-radius: var(--lake-radius-sm); cursor: zoom-in; }
+.quick-note-preview-video { display: block; width: 100%; max-width: 420px; max-height: 260px; border-radius: var(--lake-radius-sm); background: var(--lake-media-video); }
 .quick-note-preview-audio { width: 100%; max-width: 420px; height: 36px; }
-.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--lake-border-2); border-radius: 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 0.5px dashed var(--lake-border-2); border-radius: var(--lake-radius-xs); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 /* 内核兜底渲染（261010）：正文出现快路径还原不了的块时，整条卡片由内核只读视图画。
    内核阅读态根节点 `.ne-viewer` 是 height:100% + overflow-y:auto（为"整页阅读"设计），
@@ -275,7 +275,7 @@
 
 .quick-note-entry.selecting .quick-note-card-actions { display: none; }
 
-.quick-note-select { position: absolute; left: calc(-1 * var(--quick-notes-gutter, 30px)); top: 13px; opacity: 0; transition: opacity var(--lake-motion-fast) var(--lake-ease-standard); }
+.quick-note-select { position: absolute; left: calc(-1 * var(--quick-notes-gutter, 30px)); top: 13px; opacity: 0; }
 
 /* 勾选框默认藏在左侧槽位里，hover / 键盘聚焦 / 已选 / 多选态才显形。
    注意它落在卡片盒子之外：只写 "卡片 hover" 会在鼠标移向勾选框时（指针已离开卡片）闪没，
@@ -302,12 +302,12 @@
 .quick-note-entry p { margin: 9px 0 0; white-space: pre-wrap; line-height: 1.68; }
 
 /* 卡片动作默认收起（用户 260915：可以做收起），hover / 键盘聚焦时才显形 */
-.quick-note-card-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; opacity: 0; transition: opacity var(--lake-motion-fast) var(--lake-ease-standard); }
+.quick-note-card-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; opacity: 0; }
 
 .quick-note-entry:hover .quick-note-card-actions,
 .quick-note-entry:focus-within .quick-note-card-actions { opacity: 1; }
 
-.quick-note-card-actions button { width: 26px; height: 26px; border-radius: 6px; color: var(--lake-text-3); }
+.quick-note-card-actions button { width: 26px; height: 26px; border-radius: var(--lake-radius-xs); color: var(--lake-text-3); }
 
 .quick-note-card-actions button.danger:hover { color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 10%, transparent); }
 
@@ -359,7 +359,7 @@
  * 不做 scale：一行只有 28~40px，按压缩放会让文字抖动，还与滚动条抢空间。
  * 侧栏 note-row / tree-row 的 transform 被拖拽占用，按压改用 filter:brightness。 */
 .quick-note-entry {
-  transition: transform var(--lake-motion-press) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard);
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 
 .quick-note-entry:active {
@@ -400,7 +400,7 @@
   max-width: 180px;
   height: 24px;
   padding: 0 9px;
-  border: 1px solid var(--lake-border-2);
+  border: 0.5px solid var(--lake-border-2);
   border-radius: var(--lake-radius-xs);
   background: var(--lake-bg-panel);
   font: inherit;
@@ -436,7 +436,7 @@
   gap: 4px;
   height: 24px;
   padding: 0 8px;
-  border: 1px dashed var(--lake-ctl-border);
+  border: 0.5px dashed var(--lake-ctl-border);
   border-radius: var(--lake-radius-xs);
   background: transparent;
   font: inherit;
@@ -487,7 +487,7 @@
 .quick-note-filter-dialog { width: min(520px, calc(100vw - 48px)); }
 .quick-note-filter-dialog__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .quick-note-filter-dialog__head h3 { margin: 0; font-size: var(--lake-font-size-title); }
-.quick-note-filter-dialog__section { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--lake-border-2); }
+.quick-note-filter-dialog__section { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 0.5px solid var(--lake-border-2); }
 .quick-note-filter-dialog__label { color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: 500; }
 .quick-note-filter-dialog__sublabel { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-filter-dialog__chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -498,5 +498,5 @@
 .quick-note-filter-dialog__empty { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .quick-note-filter-dialog__minus { color: var(--lake-text-3); }
 .quick-note-tag--exclude.is-selected { color: var(--lake-status-error); border-color: var(--lake-status-error); }
-.quick-note-filter-dialog__footer { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--lake-border-2); }
+.quick-note-filter-dialog__footer { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 0.5px solid var(--lake-border-2); }
 .quick-note-filter-dialog__hint { flex: 1 1 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }

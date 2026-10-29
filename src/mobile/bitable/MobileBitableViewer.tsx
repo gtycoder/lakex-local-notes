@@ -341,15 +341,9 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         </div>
       )}
       <div className="mbt-meta">
-        <span>{table.name}</span>
-        <span className="mbt-meta-sep">·</span>
-        <span>{records.length} 条记录</span>
-        {view?.name && (
-          <>
-            <span className="mbt-meta-sep">·</span>
-            <span>{view.name} 视图</span>
-          </>
-        )}
+        <span className="mbt-meta__table" title={table.name}>{table.name}</span>
+        <span className="mbt-meta__count">{records.length} 条记录</span>
+        {view?.name && <span className="mbt-meta__view" title={view.name}>{view.name}</span>}
         {editable
           ? <span className="mbt-readonly" title="改动自动保存">编辑中</span>
           : <span className="mbt-readonly">只读</span>}

@@ -80,8 +80,8 @@ export function AiCorpusSheet({ open, candidates, selectedIds, onToggle, onStart
         </div>
         <div className="ai-sheet__foot">
           <span className={"ai-budget" + (used > AI_CORPUS_MAX_CHARS ? " is-warn" : "")}>
-            已选 <b>{selected.length}</b> / {AI_CORPUS_MAX_DOCS} 篇 · {used.toLocaleString("en-US")} / {AI_CORPUS_MAX_CHARS.toLocaleString("en-US")} 字
-            {used > AI_CORPUS_MAX_CHARS ? " · 超预算按顺序截断" : ""}
+            已选 <b>{selected.length}</b> / {AI_CORPUS_MAX_DOCS} 篇，{used.toLocaleString("en-US")} / {AI_CORPUS_MAX_CHARS.toLocaleString("en-US")} 字
+            {used > AI_CORPUS_MAX_CHARS ? "，超预算按顺序截断" : ""}
           </span>
           <button type="button" className="mb-btn mb-btn--primary" disabled={selected.length === 0} onClick={onStart}>开始对话</button>
         </div>

@@ -749,7 +749,9 @@ export function App() {
           onUnlock={activeNoteId !== null ? () => { void toggleNoteLock(activeNoteId); } : undefined}
           notice={notice}
           documentStatus={getDocumentStatus({
-            hasCloudConfig: cloudConfigured,
+            // 状态栏的「仅本地/待同步」按云同步**是否启用**判定（关开关/没配置都算本地）；
+            // 不能用「S3 是否配置过」——否则关掉同步后仍会显示「待同步」（regression 261029）。
+            cloudEnabled: isCloudActive(cloudConfigured, cloudEnabled),
             isDirty: activeNodeDirty,
             isConflict: activeNodeConflict,
             isCloudDeleted: activeNoteId !== null && cloudDeletedNoteIds.has(activeNoteId),

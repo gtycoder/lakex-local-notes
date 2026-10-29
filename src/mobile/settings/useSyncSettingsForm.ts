@@ -54,7 +54,7 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
       setSupersededNotes(result.supersededNotes ?? []);
       await onRefresh();
     } catch (error) {
-      setSyncMsg("同步失败: " + (error as Error).message);
+      setSyncMsg("同步失败：" + (error as Error).message);
     }
     // 成功/失败都读一次：诊断由 bridge.syncNow 写在本轮结束时。
     await reloadSyncReports();

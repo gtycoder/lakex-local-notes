@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pickLocalFile: vi.fn(),
   encode: vi.fn(),
   decode: vi.fn(),
+  decodeCode: vi.fn(),
   showToast: vi.fn(),
 }));
 
@@ -25,6 +26,7 @@ vi.mock("../ui/pickFile", () => ({ pickLocalFile: mocks.pickLocalFile }));
 vi.mock("../../core/s3ConfigTransfer", () => ({
   encodeS3ConfigTransfer: mocks.encode,
   decodeS3ConfigTransferFile: mocks.decode,
+  decodeS3ConfigTransfer: mocks.decodeCode,
 }));
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
 vi.mock("../../lib/nativeErrors", () => ({
@@ -128,5 +130,32 @@ describe("useS3SettingsForm", () => {
     expect(form.form.endpoint).toBe("https://imported.example.com");
     expect(form.form.secretAccessKey).toBe(S3_SECRET_MASK);
     expect(mocks.showToast).toHaveBeenCalledWith("S3 配置已导入");
+  });
+
+  it("粘贴迁移码导入后强制虚拟托管，并用保存后的配置回填全部字段", async () => {
+    await render();
+    mocks.decodeCode.mockResolvedValue({ ...saved, endpoint: "https://pasted.example.com", forcePathStyle: true });
+    const importedSaved = { ...saved, endpoint: "https://pasted.example.com", forcePathStyle: false };
+    mocks.getS3Settings.mockReset().mockResolvedValue(importedSaved);
+
+    await act(async () => { await form.importFromCode("  LLN1.pasted  "); });
+    expect(mocks.decodeCode).toHaveBeenCalledWith("LLN1.pasted");
+    expect(mocks.saveS3Settings).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: "https://pasted.example.com",
+      forcePathStyle: false,
+    }));
+    expect(form.form.endpoint).toBe("https://pasted.example.com");
+    expect(form.form.secretAccessKey).toBe(S3_SECRET_MASK);
+    expect(form.testText).toContain("S3 配置已从迁移码导入");
+    expect(mocks.showToast).toHaveBeenCalledWith("S3 配置已导入");
+  });
+
+  it("迁移码无效时不保存，错误原样抛给调用方展示", async () => {
+    await render();
+    mocks.decodeCode.mockRejectedValue(new Error("不是 LakexLocalNotes 的 S3 迁移码（应以 LLN1. 开头）"));
+    await act(async () => {
+      await expect(form.importFromCode("not-a-code")).rejects.toThrow("不是 LakexLocalNotes 的 S3 迁移码");
+    });
+    expect(mocks.saveS3Settings).not.toHaveBeenCalled();
   });
 });

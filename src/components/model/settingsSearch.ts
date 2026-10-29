@@ -82,6 +82,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "about-app", category: "about", label: "LakexLocalNotes", keywords: "版本 简介" },
   { id: "about-fonts", category: "about", label: "字体", keywords: "字体 MiSans JetBrains Mono 内置 字体授权" },
   { id: "about-version", category: "about", label: "应用版本", keywords: "版本号 version" },
+  { id: "about-tech-stack", category: "about", label: "技术身份", keywords: "Electron React better-sqlite3 Lake 内核 技术栈 框架版本 lakex" },
   { id: "about-runtime", category: "about", label: "运行时", keywords: "Electron Chromium Node 运行时 内核版本" },
   { id: "about-deps", category: "about", label: "内核与关键依赖", keywords: "依赖 lakex 内核 better-sqlite3 sharp 版本" },
   { id: "about-storage-stats", category: "about", label: "内容统计", keywords: "占用 空间 大小 笔记数 资源数 快照数 库大小" },

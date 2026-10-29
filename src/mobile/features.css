@@ -18,7 +18,7 @@
   display: flex; align-items: center; justify-content: center; cursor: zoom-out;
   background: var(--lake-media-scrim);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-  animation: mb-lightbox-fade var(--lake-motion-fast) linear;
+  animation: mb-lightbox-fade var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 @keyframes mb-lightbox-fade { from { opacity: 0; } to { opacity: 1; } }
 .image-lightbox__stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -53,13 +53,13 @@
   display: flex; flex-direction: column;   /* 表面与图片 Lightbox 同源：淡遮罩 + 背景模糊 */
   background: var(--lake-media-scrim);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-  animation: mb-lightbox-fade var(--lake-motion-fast) linear;
+  animation: mb-lightbox-fade var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .attachment-preview__toolbar {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
   padding: calc(8px + var(--mobile-top-safe-area)) var(--mb-page-pad) 8px;
   background: var(--lake-bg-panel); color: var(--lake-text-1);
-  border-bottom: 1px solid var(--lake-border-1);
+  border-bottom: .5px solid var(--lake-border-1);
 }
 .attachment-preview__title {
   display: inline-flex; align-items: center; gap: 6px; min-width: 0;
@@ -99,7 +99,7 @@
 .editor-error {
   display: flex; align-items: center; gap: var(--mb-gap);
   margin: 16px var(--mb-page-pad); padding: 12px;
-  border: 1px solid var(--lake-status-error-soft); border-radius: var(--mb-radius);
+  border: .5px solid var(--lake-status-error-soft); border-radius: var(--mb-radius);
   color: var(--lake-status-error); background: var(--lake-status-error-soft);
   font-size: var(--lake-font-size-small);
 }

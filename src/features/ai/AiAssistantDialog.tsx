@@ -184,7 +184,7 @@ export function AiAssistantDialog({ open, selectionText, noteId, attachments, on
             : docContext.wordCount != null
               ? "（约 " + docContext.wordCount.toLocaleString("zh-CN") + " 字，已保存版本）"
               : "（已保存版本）") +
-          (docLocked ? " · 本次对话已固定" : "")
+          (docLocked ? "（本次对话已固定）" : "")
         : docLocked
           ? "本次对话未附加全文；关闭面板重开可切换"
           : "开启后，发送时会把已保存的整篇正文发给 AI 供应商";

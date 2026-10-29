@@ -144,7 +144,7 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
   const draftSet = new Set(draft);
   const toggle = (recordId: string) => setDraft((prev) => toggleRelationDraft(prev, recordId, allowMultiple));
 
-  const scopeText = target ? (scopeView ? target.name + " · " + scopeView.name : target.name + " · 全部记录") : "";
+  const scopeText = target ? (scopeView ? target.name + "（" + scopeView.name + "）" : target.name + "（全部记录）") : "";
 
   return (
     <Dialog open onDismiss={onCancel} label="选择关联记录" className="bt-rel-picker" scrimClassName="ln-scrim--top">
@@ -201,7 +201,7 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
             return (
               <div key={"view-sort-" + index} className="bt-rule-row is-view">
                 <span className="bt-rel-rule-badge"><Lock size={12} />视图</span>
-                <span className="bt-rel-rule-text">{item ? item.name + " · " + sortModeLabel(item, sortModeOf(rule)) : "已删除字段"}</span>
+                <span className="bt-rel-rule-text">{item ? item.name + "，" + sortModeLabel(item, sortModeOf(rule)) : "已删除字段"}</span>
               </div>
             );
           })}

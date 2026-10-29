@@ -137,6 +137,9 @@ export async function deleteConversationImages(conversationId: string): Promise<
  */
 export async function sweepOrphanConversationDirs(validIds: readonly string[]): Promise<void> {
   try {
+    // 首次使用（还没有任何会话）时目录不存在：先建出来再读——
+    // 否则 Capacitor Filesystem 的 readdir 会拒一次并打 console.error（regression 261029 P1-2）。
+    await Filesystem.mkdir({ path: ROOT, directory: Directory.Data, recursive: true }).catch(() => undefined);
     const listing = await Filesystem.readdir({ path: ROOT, directory: Directory.Data });
     const valid = new Set(validIds);
     for (const entry of listing.files ?? []) {

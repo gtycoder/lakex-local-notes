@@ -1601,7 +1601,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
         return (
           <Popover open anchor={statFor.anchor} onClose={() => setStatFor(null)} width={200}>
             <div className="bt-panel">
-              <h4>列统计 · {field.name}</h4>
+              <h4>列统计：{field.name}</h4>
               <button type="button" className={"bt-menu-item ln-menu__item" + (current ? "" : " is-selected")} disabled={readOnly}
                 onClick={() => { setColumnStat(field.id, null); setStatFor(null); }}><span className="bt-menu-label ln-ellipsis">无统计</span>{!current && <Check size={14} />}</button>
               {statsForField(field).map((stat) => (

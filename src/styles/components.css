@@ -5,7 +5,7 @@
 .sync-status-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 /* 表面/定位/层序由标准原语提供（.ln-overlay-surface + .ln-popover）；这里只保留内容尺寸。 */
 .sync-status-popover { width: min(320px, calc(100vw - 16px)); padding: 12px; }
-.sync-status-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 2px 2px 10px; border-bottom: 1px solid var(--lake-border-1); }
+.sync-status-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 2px 0 10px; border-bottom: 0.5px solid var(--lake-border-1); }
 .sync-status-popover-header div { display: grid; gap: 2px; }
 .sync-status-popover-header strong { font-size: var(--lake-font-size-body); }
 .sync-status-popover-header span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
@@ -27,7 +27,7 @@
 /* 261028：浮窗收敛后的「查看历史」行内动作（不新造间距档，复用 4px）。 */
 .sync-status-history-note .sync-status-inline-action { justify-self: start; margin-top: 4px; }
 .sync-status-history-list { display: grid; gap: 1px; margin: 4px -9px -4px; padding: 2px 0; max-height: 132px; overflow-y: auto; }
-.sync-status-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--lake-border-1); }
+.sync-status-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 0.5px solid var(--lake-border-1); }
 /* 261013：动作行的按钮是**固定区，不可被压缩** —— 同步中 footer 文案会变长（「· 未同步 N 项」），
  * 按钮作为可收缩的 flex 子项会被挤窄 ⇒ 标签折两行、行盒错乱（设备复现：121px/1 行 → 109px/2 行 → 修后回 1 行）。
  * 只保留本处专属的 min-height，其余三条与 kit 层 .b3-button 基座同值（kit 层高于本文件的 legacy 层，本来就赢），
@@ -79,7 +79,7 @@
   min-height: 0;
   overflow-y: auto;
   padding: 16px 8px;
-  border-right: 1px solid var(--lake-border-1);
+  border-right: 0.5px solid var(--lake-border-1);
   background: var(--lake-bg-panel);
 }
 .settings-nav-search {
@@ -132,7 +132,7 @@
   gap: 1px;
   margin-top: 8px;
   padding-top: 6px;
-  border-top: 1px solid var(--lake-border-1);
+  border-top: 0.5px solid var(--lake-border-1);
 }
 .settings-nav-hits__label {
   padding: 2px 10px 4px;
@@ -153,14 +153,14 @@
   flex: 0 0 auto;
   margin: 0;
   padding: 8px 16px;
-  border-top: 1px solid var(--lake-border-1);
+  border-top: 0.5px solid var(--lake-border-1);
   color: var(--lake-text-3);
   background: var(--lake-bg-block);
   font-size: var(--lake-font-size-tiny);
 }
 
 /* ---------- ② 浮层通用件 ---------- */
-.panel-title { display: flex; align-items: center; gap: 9px; color: var(--lake-text-1); }
+.panel-title { display: flex; align-items: center; gap: var(--lake-space-md); color: var(--lake-text-1); }
 .panel-title h2 { margin: 0; font-size: var(--lake-font-size-bodyLg); }
 .panel-actions { display: flex; align-items: center; gap: 8px; }
 .ln-close {
@@ -196,7 +196,7 @@
   align-items: center;
   gap: 8px;
   padding: 7px 14px;
-  border-bottom: 1px solid var(--lake-border-1);
+  border-bottom: 0.5px solid var(--lake-border-1);
   color: var(--lake-status-pending);
   background: var(--lake-status-pending-soft);
   font-size: var(--lake-font-size-tiny);
@@ -255,7 +255,7 @@
 .history-preview-inline > * { width: 100%; }
 .history-preview-inline-title { align-self: flex-start; }
 .history-preview-image { flex: 1 1 auto; min-height: 0; width: auto; max-width: 100%; max-height: 100%; object-fit: contain; align-self: center; animation: ln-preview-fade-in var(--lake-motion-panel) var(--lake-ease-standard); }
-.history-preview-image.is-loading { opacity: .55; transition: opacity var(--lake-motion-fast) ease-out; }
+.history-preview-image.is-loading { opacity: .55; }
 
 /* 两行列表行（回收站 / 文档历史）：沿用思源 .ln-list-item 的密度与 hover 语言 */
 .ln-row2__main {display: grid;}
@@ -348,7 +348,7 @@ button.ln-list-item__action:disabled { opacity: .45; cursor: default; }
   padding: 5px 10px;
   font-size: var(--lake-font-size-tiny);
 }
-.kv__row + .kv__row { border-top: 1px solid color-mix(in srgb, var(--lake-border-1) 60%, transparent); }
+.kv__row + .kv__row { border-top: 0.5px solid color-mix(in srgb, var(--lake-border-1) 60%, transparent); }
 .kv__k {
   min-width: 0;
   overflow: hidden;
@@ -367,7 +367,7 @@ button.ln-list-item__action:disabled { opacity: .45; cursor: default; }
 
 /* #4 遮罩淡入：弹窗背景层不再瞬间出现，消除突兀/闪烁；与 .floating-dialog 的入场缩放协同 */
 @keyframes lake-overlay-fade-in { from { opacity: 0; } to { opacity: 1; } }
-.settings-overlay { animation: lake-overlay-fade-in var(--lake-motion-fast) ease-out; }
+.settings-overlay { animation: lake-overlay-fade-in var(--lake-motion-fast) var(--lake-ease-standard); }
 @media (prefers-reduced-motion: reduce) {
   .settings-overlay { animation: none; }
 }

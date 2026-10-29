@@ -180,19 +180,19 @@ export function SyncStatusPopover({
           </header>
           <section className="sync-status-section">
             <dl>
-              <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}{stats?.durationMs ? ` · ${formatDuration(stats.durationMs)}` : ""}</dd></div>
+              <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}{stats?.durationMs ? `（${formatDuration(stats.durationMs)}）` : ""}</dd></div>
               {/* 上传/下载细分：用户要求始终展示（0 也显示）；字节仅统计正文+资源。 */}
               <div>
                 <dt>上传</dt>
-                <dd>{upDocs} 文档 · {upFolders} 目录 · {upQuick} 小记 · {formatBytesCompact(upBytes)}</dd>
+                <dd>文档 {upDocs}，目录 {upFolders}，小记 {upQuick}，{formatBytesCompact(upBytes)}</dd>
               </div>
               <div>
                 <dt>下载</dt>
-                <dd>{downDocs} 文档 · {downFolders} 目录 · {downQuick} 小记 · {formatBytesCompact(downBytes)}</dd>
+                <dd>文档 {downDocs}，目录 {downFolders}，小记 {downQuick}，{formatBytesCompact(downBytes)}</dd>
               </div>
               <div>
                 <dt>待同步</dt>
-                <dd>{model.pendingTotal === 0 ? "全部已同步" : `${model.pendingTotal} 项（文档 ${pendingDocuments} · 目录 ${pendingFolders} · 小记 ${pendingQuickNotes}）`}</dd>
+                <dd>{model.pendingTotal === 0 ? "全部已同步" : `${model.pendingTotal} 项（文档 ${pendingDocuments}，目录 ${pendingFolders}，小记 ${pendingQuickNotes}）`}</dd>
               </div>
             </dl>
           </section>
@@ -200,7 +200,7 @@ export function SyncStatusPopover({
             <section className="sync-status-history-note" role="status">
               <History size={14} aria-hidden="true" />
               <div>
-                <strong>已保留历史快照 · {conflictSnapshots.length}</strong>
+                <strong>已保留历史快照（{conflictSnapshots.length} 份）</strong>
                 <span>{conflictSnapshotText ?? "检测到远端版本差异，已保留历史快照"}</span>
                 <button
                   type="button"

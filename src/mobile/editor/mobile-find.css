@@ -7,7 +7,7 @@
   gap: 8px;
   padding: 6px 10px;
   background: var(--lake-bg-panel);
-  border-bottom: 1px solid var(--lake-border-1);
+  border-bottom: .5px solid var(--lake-border-1);
 }
 .mb-find__count {
   flex: 0 0 auto;

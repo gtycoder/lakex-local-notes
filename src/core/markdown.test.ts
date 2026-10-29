@@ -37,8 +37,8 @@ describe("Markdown 共用解析器（桌面 + 移动端）", () => {
     expect(inlineToPlain(link?.children ?? [])).toBe("官网");
   });
 
-  it("纯文本预览：去标记、列表用 · 分隔", () => {
-    expect(markdownToPlainText("# 标题\n\n这是 **粗** 与 [官网](https://a.b)\n\n- 甲\n- 乙")).toBe("标题 这是 粗 与 官网 甲 · 乙");
+  it("纯文本预览：去标记、列表用逗号分隔", () => {
+    expect(markdownToPlainText("# 标题\n\n这是 **粗** 与 [官网](https://a.b)\n\n- 甲\n- 乙")).toBe("标题 这是 粗 与 官网 甲，乙");
     expect(markdownToPlainText("| a | b |\n| --- | --- |\n| 1 | 2 |")).toBe("a b 1 2");
     expect(markdownToPlainText("")).toBe("");
   });

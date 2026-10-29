@@ -370,6 +370,8 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
 
   const className = "mobile-board-viewer" + (canEdit ? " is-editing" : "");
   const fitOnInit = !initial.viewport && !initial.view?.scroll;
+  /** 261029 FIX-M2：空画板空态（只读/编辑共用；有元素后自动消失）。 */
+  const boardEmpty = ready && cardValue.plaitValue.length === 0;
   if (!everActive) return <div ref={hostRef} className={className} data-prevent-swipe />;
   if (bodyUnreadable) {
     return (
@@ -381,7 +383,10 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
     );
   }
   return (
-    <div ref={hostRef} className={className} data-prevent-swipe>
+    <div className="mobile-board-shell">
+      {/* 261029 FIX-M2：空态放在 .mobile-board-viewer（isolation:isolate 堆叠上下文）之外，
+          否则会被 Drawnix 画布（vendor 内联 z-index 2022）压住看不见。 */}
+      <div ref={hostRef} className={className} data-prevent-swipe>
       <Suspense fallback={<div className="mobile-board-loading" />}>
         {ready ? (
           <DrawnixBoardCore
@@ -400,6 +405,12 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
           <div className="mobile-board-loading" />
         )}
       </Suspense>
+      </div>
+      {boardEmpty && (
+        <div className="mobile-board-empty" role="status" data-board-empty>
+          <div className="mb-empty mb-empty--inset">空白画板{canEdit ? "，点上方工具开始绘制" : "，这篇画板还没有内容"}</div>
+        </div>
+      )}
     </div>
   );
 }

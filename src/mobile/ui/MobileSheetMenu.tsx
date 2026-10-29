@@ -3,7 +3,7 @@
  *  - 贴底面板、高 56dvh、顶部 grabber、遮罩走 --lake-scrim；
  *  - 根层无标题，下钻后标题 = 上一层项名 + 左箭头返回；
  *  - 子菜单 = 整屏横向平移（.is-show > .mb-menusheet__submenu）；
- *  - 危险项 .mb-menusheet__item.is-danger（--lake-status-error）；进出场 150ms（--mobile-duration-panel）。
+ *  - 危险项 .mb-menusheet__item.is-danger（--lake-status-error）；进出场 250ms（--mobile-duration-panel）。
  * 替换原 .mobile-dropdown（跟随手指的小浮层 = 桌面右键语义）。
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";

@@ -18,7 +18,7 @@ export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: 
         <button className="ln-close" type="button" onClick={onClose} aria-label="稍后处理"><X size={15} /></button>
       </header>
       <div className="ln-dialog__body">
-        <p className="draft-recovery-hint">应用上次退出前发现了未保存的本地草稿。你可以恢复它们，或稍后在本机处理。</p>
+        <p className="draft-recovery-hint">上次退出前有未保存的草稿。可以恢复，也可以稍后再处理。</p>
         <div className="draft-recovery-list ln-list-panel ln-list-panel--background">
           {entries.slice(0, 5).map((entry) => (
             <div className="ln-list-item draft-recovery-row" key={entry.noteId}>

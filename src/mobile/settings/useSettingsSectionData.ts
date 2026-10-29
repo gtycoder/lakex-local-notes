@@ -124,7 +124,7 @@ export function useSettingsSectionData(sections: {
       const result = await mobileCachePort.clearDerivedCaches();
       setCacheMsg("已清理：blob " + (result.cleared.runtimeBlobBytes ?? 0) + " 项");
     } catch (error) {
-      setCacheMsg("清理失败: " + (error as Error).message);
+      setCacheMsg("清理失败：" + (error as Error).message);
     }
     void mobileCachePort.getCacheSummary().then(setCacheSummary).catch((error) => reportNativeActionError("读取缓存统计", error));
   }, []);

@@ -72,7 +72,7 @@ export function AttachmentPreview() {
       onClick={(e) => { if (e.target === e.currentTarget) closeAttachmentPreview(); }}>
       <div className="attachment-preview__toolbar">
         <span className="attachment-preview__title"><Paperclip size={15} />{item.name}
-          <small>{KIND_LABEL[kind] ?? "文件"} · {formatFileSize(item.size)}</small></span>
+          <small>{KIND_LABEL[kind] ?? "文件"}，{formatFileSize(item.size)}</small></span>
         <span className="attachment-preview__spacer" />
         {onOpen && (
           <button className="attachment-preview__btn" onClick={() => onOpen(item)}>
@@ -104,7 +104,7 @@ export function AttachmentPreview() {
           <div className="attachment-preview__fallback">
             <Paperclip size={40} />
             <p className="attachment-preview__fallback-name">{item.name}</p>
-            <p className="attachment-preview__hint">{formatFileSize(item.size)}{isMobileNative ? " · 点击打开查看" : " · 此类型不支持内联预览"}</p>
+            <p className="attachment-preview__hint">{formatFileSize(item.size)}{isMobileNative ? "，点击打开查看" : "，此类型不支持内联预览"}</p>
             {onOpen && (
               <button className="attachment-preview__btn attachment-preview__btn--primary" onClick={() => onOpen(item)}>
                 <ExternalLink size={15} />用系统应用打开

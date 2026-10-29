@@ -2,14 +2,14 @@
    260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。 */
 
-.trash-panel { display: flex; flex-direction: column; background: var(--lake-bg-block); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); box-shadow: var(--lake-shadow-popover); overflow: hidden; }
+.trash-panel { display: flex; flex-direction: column; background: var(--lake-bg-block); border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-md); overflow: hidden; }
 
 
-.trash-panel-hint { margin: 0; padding: 10px 16px; font-size: var(--lake-font-size-tiny); color: var(--lake-text-4); border-bottom: 1px solid var(--lake-border-2); background: color-mix(in srgb, var(--lake-bg-block) 96%, transparent); }
+.trash-panel-hint { margin: 0; padding: 10px 16px; font-size: var(--lake-font-size-tiny); color: var(--lake-text-4); border-bottom: 0.5px solid var(--lake-border-2); background: color-mix(in srgb, var(--lake-bg-block) 96%, transparent); }
 
 .trash-error { margin: 10px 16px 0; padding: 8px 10px; border-radius: var(--lake-radius-sm); font-size: var(--lake-font-size-tiny); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 8%, transparent); }
 
-.trash-panel-notice { margin: 0; padding: 8px 16px; font-size: var(--lake-font-size-tiny); line-height: 1.5; color: var(--lake-status-pending); background: var(--lake-status-pending-soft); border-bottom: 1px solid var(--lake-border-1); }
+.trash-panel-notice { margin: 0; padding: 8px 16px; font-size: var(--lake-font-size-tiny); line-height: 1.5; color: var(--lake-status-pending); background: var(--lake-status-pending-soft); border-bottom: 0.5px solid var(--lake-border-1); }
 
 .trash-caret-open { transform: rotate(90deg); }
 
@@ -34,13 +34,13 @@
   flex: 0 0 auto;
 }
 
-.history-panel { display: flex; flex-direction: column; background: var(--lake-bg-block); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); box-shadow: var(--lake-shadow-popover); overflow: hidden; }
+.history-panel { display: flex; flex-direction: column; background: var(--lake-bg-block); border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-md); overflow: hidden; }
 
 /* 260930 大统一：回收站 / 历史面板头是同一套几何，合并成一条。 */
 .trash-panel header,
 .history-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; }
 
-.history-hint { margin: 0; padding: 8px 16px 10px; font-size: var(--lake-font-size-tiny); color: var(--lake-text-4); border-bottom: 1px solid var(--lake-border-2); background: color-mix(in srgb, var(--lake-bg-block) 96%, transparent); }
+.history-hint { margin: 0; padding: 8px 16px 10px; font-size: var(--lake-font-size-tiny); color: var(--lake-text-4); border-bottom: 0.5px solid var(--lake-border-2); background: color-mix(in srgb, var(--lake-bg-block) 96%, transparent); }
 
 .history-error { margin: 10px 16px 0; padding: 8px 10px; border-radius: var(--lake-radius-md); font-size: var(--lake-font-size-tiny); color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 
@@ -58,7 +58,7 @@
 
 /* 左栏宽度由 SplitPane 的 --split-left 驱动（拖过之后是像素值）；没拖过 = 320px 默认。
  * 分隔条是零宽 flex 项 + 伪元素命中带：不占布局宽度 ⇒ 未拖动时几何与老实现逐像素一致。 */
-.history-list-left { flex: 0 0 var(--split-left, 320px); border-right: 1px solid var(--lake-border-2); }
+.history-list-left { flex: 0 0 var(--split-left, 320px); border-right: 0.5px solid var(--lake-border-2); }
 .history-split > .ln-split-handle { position: relative; flex: 0 0 0; width: 0; }
 .history-split.is-resizing { user-select: none; }
 

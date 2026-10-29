@@ -19,12 +19,12 @@
  *                      这样关闭时遮罩能跟着面板一起淡出） */
 .mb-scrim {
   position: fixed; inset: 0; z-index: var(--mobile-z-sheet-mask);
-  background: var(--lake-scrim); animation: mb-fade-in var(--mobile-duration-panel) linear;
+  background: var(--lake-scrim); animation: mb-fade-in var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-scrim--state {
   position: fixed; inset: 0; z-index: var(--mobile-z-sheet-mask);
   background: var(--lake-scrim); opacity: 0; animation: none;
-  transition: opacity var(--mobile-duration-panel) linear;
+  transition: opacity var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-scrim--state.is-open { opacity: 1; }
 @keyframes mb-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -57,7 +57,9 @@
   scrollbar-width: none;
 }
 .mb-sheet__body::-webkit-scrollbar { display: none; }
-.mb-sheet__body--form { padding: var(--mb-page-pad) 18px calc(20px + var(--mobile-bottom-safe-area)); }
+/* 横向内距必须 = 页内距：头部标题由 head 的 --mb-page-pad 定位，body 写 18px 时
+ * 标题 16 / 表单 18 差 2px（261029 实测「粘贴迁移码」面板）。 */
+.mb-sheet__body--form { padding: var(--mb-page-pad) var(--mb-page-pad) calc(20px + var(--mobile-bottom-safe-area)); }
 /* （261013 A 批：浮层内空态改用 .mb-empty.mb-empty--inset —— 见 kit.css，空态只有一处定义。） */
 .mb-sheet--search { max-height: 70%; }
 
@@ -77,7 +79,7 @@
 .mb-actionsheet__item {
   display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
   min-height: var(--mb-ctl-h-lg); padding: 0 var(--mb-page-pad);
-  border: 0; border-top: 1px solid var(--lake-border-2); background: transparent;
+  border: 0; border-top: .5px solid var(--lake-border-2); background: transparent;
   color: var(--lake-accent-text); font-family: inherit; font-size: var(--lake-font-size-body);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
@@ -101,7 +103,7 @@
 .mb-toast {
   pointer-events: auto; display: flex; align-items: center; gap: 8px;
   max-width: min(420px, 100%); padding: 12px 14px;
-  border: 1px solid var(--lake-border-1); border-radius: var(--mb-radius-card);
+  border-radius: var(--mb-radius-card);
   background: var(--lake-bg-panel); color: var(--lake-text-1);
   box-shadow: var(--lake-shadow-popover); font-size: var(--lake-font-size-small);
   transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out);
@@ -131,9 +133,11 @@
   transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-menusheet.is-open { transform: translateY(0); }
+/* 下钻标题与菜单项同一条左缘：图标 20 在 --mb-page-pad、标签在 16+20+12=48
+ * （与 .mb-menusheet__item 的间距同档，261029 实测 item 图标 16 / 标签 46 ⇒ 10 不是档位）。 */
 .mb-menusheet__title {
-  position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 4px;
-  min-height: var(--mb-list-item-h); padding: 4px 12px; border-bottom: 1px solid var(--lake-border-2);
+  position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: var(--lake-space-lg);
+  min-height: var(--mb-list-item-h); padding: 4px var(--mb-page-pad); border-bottom: .5px solid var(--lake-border-2);
   font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold);
 }
 .mb-menusheet__title--root { min-height: 10px; border-bottom: 0; }
@@ -144,7 +148,7 @@
 .mb-menusheet__items { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0; scrollbar-width: none; }
 .mb-menusheet__items::-webkit-scrollbar { display: none; }
 .mb-menusheet__item {
-  position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
+  position: relative; display: flex; align-items: center; gap: var(--lake-space-lg); width: 100%;
   min-height: var(--mb-ctl-h-lg); padding: 0 var(--mb-page-pad);
   border: 0; background: transparent; color: var(--lake-text-1); font-family: inherit;
   font-size: var(--lake-font-size-body); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
@@ -184,7 +188,6 @@
   display: flex; align-items: center; justify-content: center;
   width: 52px; height: 52px; border-radius: var(--mb-radius-card);
   background: var(--lake-bg-block); color: var(--lake-text-1);
-  transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mb-create__tile:active .mb-create__icon { background: var(--lake-bg-press); }
 .mb-create__label { font-size: var(--lake-font-size-tiny); line-height: 1; }

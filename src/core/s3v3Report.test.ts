@@ -101,6 +101,6 @@ describe("SD-13 · 环形保留 / 解析 / 文本", () => {
     expect(text).toContain("2.0MiB");
     expect(text).toContain("n1 [remote_incomplete] 缺正文: n1");
     expect(text).toContain("警告：缺正文: n1");
-    expect(text).toContain("retryable · lock-busy · 另一台设备正在发布同步");
+    expect(text).toContain("retryable（lock-busy）：另一台设备正在发布同步");
   });
 });

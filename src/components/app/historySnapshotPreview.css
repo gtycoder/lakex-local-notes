@@ -30,7 +30,7 @@
 .snapshot-preview__scroll {
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-block);
 }
@@ -40,8 +40,8 @@
   max-width: 180px;
   overflow: hidden;
   padding: var(--lake-space-xs) var(--lake-space-md);
-  border-right: 1px solid var(--lake-border-1);
-  border-bottom: 1px solid var(--lake-border-1);
+  border-right: 0.5px solid var(--lake-border-1);
+  border-bottom: 0.5px solid var(--lake-border-1);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -56,7 +56,7 @@
 .snapshot-preview__text {
   margin: 0;
   padding: var(--lake-space-md) var(--lake-space-lg);
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-block);
   color: var(--lake-text-2);
@@ -90,7 +90,7 @@
      历史面板里父级是 flex 列，仍按剩余空间铺满（min-height 不参与竞争）。 */
   min-height: 320px;
   overflow: hidden;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-canvas);
 }

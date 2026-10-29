@@ -161,7 +161,7 @@ export function inlineToPlain(tokens: readonly InlineToken[]): string {
   return out;
 }
 
-/** 单行纯文本预览（去标记；块之间空格连接，列表项用 · 分隔）。 */
+/** 单行纯文本预览（去标记；块之间空格连接，列表项用逗号分隔）。 */
 export function markdownToPlainText(source: string): string {
   const parts: string[] = [];
   for (const block of parseMarkdownBlocks(source)) {
@@ -174,7 +174,7 @@ export function markdownToPlainText(source: string): string {
         for (const item of items) { flat.push(inlineToPlain(parseInline(item.text))); walk(item.children); }
       };
       walk(block.items);
-      parts.push(flat.join(" · "));
+      parts.push(flat.join("，"));
     } else if (block.kind === "table") {
       const cells = [block.header, ...block.rows].flat();
       parts.push(cells.map((cell) => inlineToPlain(parseInline(cell))).join(" "));

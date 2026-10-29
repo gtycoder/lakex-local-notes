@@ -2,13 +2,13 @@
  * 移动端路由转场（首页 ↔ 工作区）的**状态机 + 单一来源**（261019，对齐语雀 push）。
  *
  * 形态：新页自右滑入（100%→0），旧页左移 25% 做视差；返回反向。
- * CSS 实现在 `mobile.css` 的 `.mobile-route-stage / .mobile-route-layer`；时长 = `--lake-motion-slow`(240ms)。
+ * CSS 实现在 `mobile.css` 的 `.mobile-route-stage / .mobile-route-layer`；时长 = `--mobile-duration-panel`(250ms)。
  * 工作区层 = **按需挂载、播完出场才卸载**；首页层常驻（页栈语义）⇒ 返回时列表滚动位置与数据都在。
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
-/** 与 `--lake-motion-slow`（240ms）一致；护栏 `useRouteTransition.test.ts` 会钉住。 */
-export const ROUTE_TRANSITION_MS = 240;
+/** 与 `--mobile-duration-panel`（250ms）一致；护栏 `useRouteTransition.test.ts` 会钉住。 */
+export const ROUTE_TRANSITION_MS = 250;
 
 /** 返回首页的等待时长：reduced-motion 下不需要等待动画（直接切）。 */
 export function routeTransitionMs(reduceMotion: boolean): number {
@@ -41,7 +41,7 @@ export interface RouteTransition {
    * 常驻 will-change 本身就会把 position:fixed 的包含块改成 layer 盒，导致编辑面板错位（261020）。
    */
   animating: boolean;
-  /** 返回首页：先播出场，结束（240ms / reduced-motion 0ms）后回调 `onClosed` 并卸载工作区。 */
+  /** 返回首页：先播出场，结束（250ms / reduced-motion 0ms）后回调 `onClosed` 并卸载工作区。 */
   close: () => void;
   homeRef: RefObject<HTMLDivElement>;
   wsRef: RefObject<HTMLDivElement>;

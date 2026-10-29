@@ -37,16 +37,16 @@ describe("文档属性共享清单（C1-7）", () => {
     const rows = Object.fromEntries(noteInfoRows(info()));
     expect(rows["创建"]).toBe("2026-10-16 09:02");
     expect(rows["更新"]).toBe("2026-10-15 08:01");
-    expect(rows["字数"]).toBe("12 字 · 34 字符");
+    expect(rows["字数"]).toBe("12 字，34 字符");
     expect(rows["大小"]).toBe("2.0 KB");
     expect(rows["状态"]).toBe("已同步");
   });
 
-  it("状态：冲突与锁定以 · 叠加，未知状态原样回显", () => {
+  it("状态：冲突与锁定以逗号叠加，未知状态原样回显", () => {
     const status = (patch: Partial<NoteInfo>) => Object.fromEntries(noteInfoRows(info(patch)))["状态"];
-    expect(status({ isConflict: true })).toBe("已同步 · 有冲突副本");
-    expect(status({ isEditLocked: true })).toBe("已同步 · 已锁定");
-    expect(status({ isConflict: true, isEditLocked: true })).toBe("已同步 · 有冲突副本 · 已锁定");
+    expect(status({ isConflict: true })).toBe("已同步，有冲突副本");
+    expect(status({ isEditLocked: true })).toBe("已同步，已锁定");
+    expect(status({ isConflict: true, isEditLocked: true })).toBe("已同步，有冲突副本，已锁定");
   });
 
   it("时间口径：空 → 破折号；非法值原样回显；本地时区格式化", () => {

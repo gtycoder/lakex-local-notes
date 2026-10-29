@@ -5,7 +5,7 @@
 /* 树行同步绿点已移除：自动保存窗口仅 1s，该点无实际意义。顶栏/标签的同步状态另见 .sync-state-dot。 */
 .empty-list { padding: 28px 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); text-align: center; }
 
-.editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-status-error-soft); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: var(--lake-font-size-small); }
+.editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 0.5px solid var(--lake-status-error-soft); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: var(--lake-font-size-small); }
 
 .loading-screen { height: 100vh; }
 
@@ -76,7 +76,7 @@
   .note-row-copy strong { color: inherit; }
   .tree-row.type-notebook { min-height: 29px; color: var(--lake-text-1); }
   .tree-row.type-notebook .note-row-copy strong { color: inherit; }
-  .tree-children { border-left-color: var(--lake-border-2); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
+  .tree-children { border-left-color: var(--lake-border-2); transform-origin: top; animation: shell-tree-reveal var(--lake-motion-panel) var(--lake-ease-standard); }
 
   /* 261006：光标/命中带/药丸已并入 kit 的 .ln-split-handle（分栏与侧栏唯一实现），
      这里只留侧栏特有的定位。几何与原值逐像素相同（药丸 left:50% - 1px == 原 right:4px）。 */

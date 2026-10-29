@@ -807,7 +807,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
           icon={activeBlockTypeItem?.icon ?? "editor-paragraph"}
           caret
           caretClass="ne-ui-toolbar-color-dropdown-arrow"
-          title={activeBlockTypeItem ? "格式 · " + activeBlockTypeItem.label : "格式"}
+          title={activeBlockTypeItem ? "格式：" + activeBlockTypeItem.label : "格式"}
           checked={Boolean(activeBlockTypeItem)}
           className={TOGGLE + " ant-dropdown-trigger selection-toolbar__fmtbtn"}
           onClick={(e) => toggleMenu("blockformat", e.currentTarget)}

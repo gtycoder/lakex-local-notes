@@ -109,7 +109,7 @@ describe("首页新建流（261014）", () => {
     expect(SHEET).not.toMatch(/ocr/i);
     expect(SHEET).not.toMatch(/模板/);
     expect(SHEET).toMatch(/新建小记/);
-    expect(SHEET).toMatch(/新建文档知识库/);
+    expect(SHEET).toMatch(/文档与知识库/);
   });
 
   it("拍摄/图片走取文件 → 内核 insertFiles；待办走内核命令；空白文档只选已有笔记本", () => {

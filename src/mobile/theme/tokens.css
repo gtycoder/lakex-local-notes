@@ -56,16 +56,17 @@
   --lake-radius-lg: 14px;
   --lake-radius-xl: 20px;
   --lake-radius-pill: 999px;
-  /* 动效 */
-  /* 动效（P2）：面板口径按移动端 150ms（= --mobile-duration-panel，思源口径）。 */
+  /* 动效（261029 收敛）：与桌面同名令牌同值 —— 入场统一 250ms、ease-out 一条曲线；
+     移动端实际入场用的是 --mobile-duration-panel / --mobile-ease-panel（下面定义），
+     这两个族保持同值只为「同名令牌不打架」，新代码别再二选一。 */
   --lake-motion-instant: 80ms;
   --lake-motion-press: 90ms;
-  --lake-motion-fast: 130ms;
-  --lake-motion-panel: 150ms;
-  --lake-motion-slow: 240ms;
-  --lake-ease-standard: cubic-bezier(.2,.8,.24,1);
-  --lake-ease-exit: cubic-bezier(.4,0,1,1);
-  --lake-ease-emphasized: cubic-bezier(.2,.9,.2,1);
+  --lake-motion-fast: 250ms;
+  --lake-motion-panel: 250ms;
+  --lake-motion-slow: 250ms;
+  --lake-ease-standard: ease-out;
+  --lake-ease-exit: ease-out;
+  --lake-ease-emphasized: ease-out;
   /* 层级 */
   --lake-z-base: 0;
   --lake-z-sticky: 10;
@@ -259,17 +260,17 @@
    * env(safe-area-inset-top) 返回 0，而内容已经在状态栏/刘海下面 ⇒ 必须用原生 inset 兜底。 */
   --mobile-top-safe-area: max(env(safe-area-inset-top, 0px), var(--mobile-native-top-safe, 0px));
   --mobile-bottom-safe-area: max(env(safe-area-inset-bottom, 0px), var(--mobile-native-bottom-safe, 0px));
-  /* 移动端动效：面板 150ms cubic-bezier(0,0,.2,1)；按压 80ms；遮罩 150ms linear */
-  --mobile-ease-panel: cubic-bezier(0, 0, .2, 1);
+  /* 移动端动效（261029 收敛）：浮层入场/退场统一 250ms ease-out；按压改为即时反馈（不再做颜色/背景过渡）。 */
+  --mobile-ease-panel: cubic-bezier(.22, 1, .36, 1);
   /* 进入/退出统一用「强 ease-out」：抽屉原先进场用 ease-out、退场用思源 Material 曲线（起步慢），
      一进一出两套手感；遮罩原先还是 linear。这里收敛成同一条曲线，退出也不再拖沓。
-     时长仍保持思源口径 150ms（面板/遮罩共用）。 */
+     时长统一 250ms（= --mobile-duration-panel，面板/遮罩共用）。 */
   --mobile-ease-out: cubic-bezier(.22, 1, .36, 1);
-  --mobile-duration-panel: 150ms;
+  --mobile-duration-panel: 250ms;
   /* 表格（usheet / Univer）自带底部工具条高度：261019 实测 36px（工作表标签 + 缩放/求和行）。
      表格页的底部胶囊要上移这么多，否则会压住工作表标签（用户 261019 截图）。 */
   --mobile-sheet-bar-h: 36px;
-  --mobile-duration-press: 80ms;
+  --mobile-duration-press: 250ms; /* 按压反馈已改为即时（不做过渡）；令牌保留给需要与面板同节奏的按压态。 */
   --mobile-mask: var(--lake-scrim, var(--lake-scrim));
   /* 移动端层叠层级令牌：浮层顺序的**唯一来源**，新浮层一律用这里的变量，别再写魔法数字。 */
   /* 全屏功能页（AI 页等）：低于抽屉 40、高于 dock 7 */

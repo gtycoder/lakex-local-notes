@@ -21,13 +21,11 @@
 .mb-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad);
-  border: 1px solid transparent; border-radius: var(--mb-radius);
+  border: .5px solid transparent; border-radius: var(--mb-radius);
   background: transparent; color: var(--lake-text-1);
   font-family: inherit; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium);
   line-height: var(--lake-line-height-tight); white-space: nowrap;
   cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-  transition: background-color var(--mobile-duration-press) linear, border-color var(--mobile-duration-press) linear,
-    color var(--mobile-duration-press) linear, opacity var(--mobile-duration-press) linear;
 }
 .mb-btn:active:not(:disabled) { background: var(--lake-bg-press); }
 .mb-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
@@ -48,7 +46,6 @@
   width: var(--mb-ctl-h); height: var(--mb-ctl-h); flex: 0 0 auto;
   border: 0; border-radius: var(--mb-radius); background: transparent; color: var(--lake-text-2);
   cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-  transition: background-color var(--mobile-duration-press) linear, color var(--mobile-duration-press) linear;
 }
 .mb-iconbtn:active:not(:disabled) { background: var(--lake-bg-press); }
 .mb-iconbtn--compact { width: var(--mb-ctl-h-sm); height: var(--mb-ctl-h-sm); border-radius: var(--mb-radius-sm); }
@@ -94,7 +91,7 @@
 /* ── 输入 / 下拉（触屏 44 高、16px 字号防 iOS 放大）──────────────────── */
 .mb-input {
   display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--mb-ctl-h);
-  padding: 0 12px; border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius);
+  padding: 0 12px; border: .5px solid var(--lake-border-strong); border-radius: var(--mb-radius);
   background: var(--lake-bg-panel); color: var(--lake-text-1);
   font-family: inherit; font-size: var(--lake-font-size-body);
 }
@@ -106,7 +103,7 @@
 /* 多行输入（S3 配置迁移码，261017）：纵向拉伸 + 等宽小字，滚动交给 textarea 自己。 */
 .mb-input--multiline { align-items: stretch; padding: 10px 12px; }
 .mb-input--multiline > textarea { min-height: 96px; resize: vertical; font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
-.mb-select { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: var(--mb-ctl-h); padding: 0 12px; border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
+.mb-select { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: var(--mb-ctl-h); padding: 0 12px; border: .5px solid var(--lake-border-strong); border-radius: var(--mb-radius); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 
 /* ── 标签（.mb-tag）─────────────────────────────────────────────────── */
 .mb-tag {
@@ -121,27 +118,29 @@
 /* ── 分段控件（.mb-segment；取值选择/图标型开关）────────────────────── */
 .mb-segment { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: var(--mb-radius); background: var(--lake-bg-sunken); }
 .mb-segment__item {
-  min-height: var(--mb-ctl-h-sm); padding: 0 14px; border: 0; border-radius: var(--mb-radius-sm);
+  min-height: var(--mb-ctl-h-sm); padding: 0 14px; border: 0; border-radius: calc(var(--mb-radius) - 3px);
   background: transparent; color: var(--lake-text-2); font-family: inherit;
   font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-medium);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.mb-segment__item.is-active { background: var(--lake-bg-panel); color: var(--lake-accent-text); box-shadow: var(--lake-shadow-card); }
+.mb-segment__item.is-active { background: var(--lake-bg-panel); color: var(--lake-accent-text); }
 
 /* ── 卡片（.mb-card）────────────────────────────────────────────────── */
-.mb-card { border: 1px solid var(--lake-border-1); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); }
+.mb-card { border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); }
 .mb-card__head { display: flex; align-items: center; gap: 8px; min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); }
 .mb-card__body { padding: 0 var(--mb-page-pad) var(--mb-page-pad); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 
 /* ── 表单说明（.mb-form__desc）───────────────────────────────────────── */
 .mb-form__desc { color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+/* 表单内就地报错（S3 迁移码导入等）：只换文字色，几何/字号沿用 .mb-form__desc。 */
+.mb-form__desc--error { color: var(--lake-status-error); }
 
 /* ── 弹层行内件（备注 / 标题右侧动作）────────────────────────────────── */
 .mb-menu-note { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 .mb-menu-head-action { margin-left: auto; display: inline-flex; align-items: center; }
 
 /* ── 目录树（chevron / 树图标 / 缩进）───────────────────────────────── */
-.mb-chevron { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: var(--mb-ctl-h-sm); color: var(--lake-text-4); transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel); }
+.mb-chevron { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: var(--mb-ctl-h-sm); color: var(--lake-text-4); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out); }
 .mb-chevron.open { transform: rotate(90deg); }
 .mb-chevron-spacer { flex: 0 0 auto; width: 20px; }
 .mb-tree-icon { flex: 0 0 auto; display: inline-flex; align-items: center; color: var(--lake-text-3); }
@@ -160,16 +159,19 @@
  * 几何：分组 =「灰底上的标题 + 一张白卡」；行 ≥48（两行 56）；页内距 16；圆角 12。
  * 对比度：说明/空态一律用 --lake-text-3（AA），**不用 text-4** —— 走查实测 .config-empty 在灰卡上只有 2.86。 */
 .mb-set-group { display: flex; flex-direction: column; gap: 8px; margin: 0 0 20px; }
-.mb-set-title { margin: 0; padding: 0 4px; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-medium); }
+/* 分组标题 = 图标 + 文字：此前图标是裸内联 svg（与文字间距 0、图标中心比文字中心高 4px），
+ * 且标题文字左缘 20 与行名 33 差 13px（实测）。统一成 flex 光学对齐 + 既有档位 8px 间距，
+ * 并把左内距补到「页内距 + 分组卡 1px 发丝」= 33，与卡内行名/说明/块名同一条左缘。 */
+.mb-set-title { margin: 0; padding: 0 calc(var(--mb-page-pad) + 1px); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-medium); display: flex; align-items: center; gap: var(--mb-gap); }
 .mb-set-items { display: flex; flex-direction: column; gap: 12px; }
 /* 分组卡：261013 窗底转白后，白卡落在白底上会"消失" ⇒ 补 1px 细线承担分组边界
  * （语雀的设置页就是"白底 + 细线分组"，不是灰底白卡）。行间分隔仍由 .mb-set-item 的 border-top 提供。 */
-.mb-set-section { display: flex; flex-direction: column; border: 1px solid var(--lake-border-2); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; }
+.mb-set-section { display: flex; flex-direction: column; border: .5px solid var(--lake-border-2); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; }
 .mb-set-section__title { padding: 12px var(--mb-page-pad) 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-medium); }
 .mb-set-item {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   min-height: var(--mb-ctl-h-lg); padding: 12px var(--mb-page-pad);
-  border-top: 1px solid var(--lake-border-2);
+  border-top: .5px solid var(--lake-border-2);
 }
 .mb-set-section > .mb-set-item:first-child, .mb-set-section__title + .mb-set-item { border-top: 0; }
 .mb-set-item--field { align-items: flex-start; }
@@ -177,11 +179,13 @@
 .mb-set-item__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .mb-set-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-snug); }
 .mb-set-item__desc { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+/* 行内警示（261029 FIX-M）：未配置 S3 时点开「启用云同步」的可见提示；只换文字色，几何沿用 .mb-set-item__desc。 */
+.mb-set-item__desc--warn { color: var(--lake-status-pending); }
 .mb-set-item__note { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); line-height: var(--lake-line-height-normal); }
 .mb-set-item__ctl { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
 .mb-set-item__error { flex: 1 1 100%; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
 /* S3 第三方服务说明（261017）：对齐思源 S3 设置页提醒块；移动端独立样式层，不引桌面 CSS。 */
-.mb-s3-notice { display: flex; flex-direction: column; gap: 6px; padding: 12px var(--mb-page-pad); border: 1px solid var(--lake-border-2); border-radius: var(--mb-radius); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
+.mb-s3-notice { display: flex; flex-direction: column; gap: 6px; padding: 12px var(--mb-page-pad); border: .5px solid var(--lake-border-2); border-radius: var(--mb-radius); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
 .mb-s3-notice__title { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
 .mb-s3-notice p { margin: 0; }
 .mb-s3-notice ul { margin: 0; padding-left: 18px; }
@@ -189,7 +193,7 @@
 .mb-s3-notice__warn { display: flex; align-items: flex-start; gap: 6px; color: var(--lake-status-pending); font-weight: var(--lake-font-weight-medium); }
 .mb-s3-notice__warn svg { flex: 0 0 auto; margin-top: 1px; }
 .mb-s3-notice__disclaimer { color: var(--lake-text-3); }
-.mb-set-block { display: flex; flex-direction: column; gap: 8px; padding: 12px var(--mb-page-pad); border-top: 1px solid var(--lake-border-2); }
+.mb-set-block { display: flex; flex-direction: column; gap: 8px; padding: 12px var(--mb-page-pad); border-top: .5px solid var(--lake-border-2); }
 .mb-set-section > .mb-set-block:first-child { border-top: 0; }
 .mb-set-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
 /* ── 空态（.mb-empty；261013 A 批收敛，唯一来源）──────────────────────────
@@ -198,7 +202,8 @@
  * 对比度：一律 --lake-text-3（AA）；不要用 text-4（有意 3:1 档只给元信息/占位）。 */
 .mb-empty { margin: 0; padding: 32px var(--mb-page-pad); text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .mb-empty--inset { padding: 20px 0; }
-.mb-set-stats { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+/* 统计块（清理缓存 / 关于·数据诊断）：一行一项，避免多个「标签 + 数字」连排成一句读不断。 */
+.mb-set-stats { display: flex; flex-direction: column; gap: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .mb-input--num { flex: 0 0 auto; width: 96px; }
 .mb-input--num > input { text-align: right; font-variant-numeric: tabular-nums; }
 /* 261013：内层 input 必须撑满外壳，否则外壳 44 高、内层只有 25 高（走查 smallTap 实测 70×25）——
@@ -206,16 +211,15 @@
 .mb-input > input { align-self: stretch; min-height: var(--mb-tap-min); margin-block: -1px; }
 .mb-kbd {
   display: inline-flex; align-items: center; min-height: 24px; padding: 0 6px;
-  border: 1px solid var(--lake-border-strong); border-radius: var(--mb-radius-sm);
+  border: .5px solid var(--lake-border-strong); border-radius: var(--mb-radius-sm);
   background: var(--lake-bg-block); color: var(--lake-text-3);
   font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-micro);
 }
 /* 开关：触屏命中区 44，本体 46×28（胶囊） */
 .mb-switch {
-  position: relative; flex: 0 0 auto; width: 46px; height: 28px; margin: 0 8px 0 0;
+  position: relative; flex: 0 0 auto; width: 46px; height: 28px; margin: 0;
   border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-bg-sunken);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--mobile-duration-panel) linear;
 }
 .mb-switch::after { content: ""; position: absolute; inset: -8px; }   /* 命中区扩到 44 */
 .mb-switch[aria-checked="true"] { background: var(--lake-accent-ink); }
@@ -223,10 +227,14 @@
 .mb-switch__knob {
   position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-knob);
-  transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel);
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-switch[aria-checked="true"] .mb-switch__knob { transform: translateX(18px); }
 .mb-set-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* 手写分组（同步设置 / 清理缓存 / 关于）的行与块直接挂在 .mb-set-items 下、没有 Section 卡，
+ * 少了分组卡那 1px 发丝 ⇒ 同一行名在「有卡页」33 /「无卡页」32（实测差 1px）。补同一条内缩。 */
+.mb-set-items > .mb-set-item,
+.mb-set-items > .mb-set-block { padding-left: calc(var(--mb-page-pad) + 1px); padding-right: calc(var(--mb-page-pad) + 1px); }
 
 /* ── 勾选（checkbox / radio）── P5：自桌面 styles/kit.css 收编 ──────────────────
  * 桌面那份选择器写成 :is(.app-shell, .mobile-app) —— 那是**为移动端开的分支**（反向耦合）。
@@ -235,25 +243,21 @@
 .mobile-app input[type="checkbox"]:not(.bt-keep-native),
 .mobile-app input[type="radio"]:not(.bt-keep-native) {
   position: relative; flex: 0 0 auto; width: 15px; height: 15px; margin: 0; padding: 0;
-  border: 1px solid var(--lake-ctl-border); border-radius: var(--mb-radius-sm);
+  border: .5px solid var(--lake-ctl-border); border-radius: var(--mb-radius-sm);
   background: var(--lake-bg-panel); appearance: none; -webkit-appearance: none; cursor: pointer;
-  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard);
 }
 .mobile-app input[type="radio"]:not(.bt-keep-native) { border-radius: var(--lake-radius-pill); }
-.mobile-app input[type="checkbox"]:not(.bt-keep-native):hover,
-.mobile-app input[type="radio"]:not(.bt-keep-native):hover { border-color: var(--lake-accent); }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native):checked,
 .mobile-app input[type="radio"]:not(.bt-keep-native):checked { border-color: var(--lake-accent); background: var(--lake-accent); }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native)::after {
   content: ""; position: absolute; top: 1px; left: 4px; width: 4px; height: 8px;
   border: solid var(--lake-bg-panel); border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0);
-  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native):checked::after { transform: rotate(45deg) scale(1); }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native):indeterminate::after { top: 3px; left: 2px; width: 7px; height: 0; border-width: 0 0 2px 0; transform: none; }
 .mobile-app input[type="radio"]:not(.bt-keep-native)::after {
   content: ""; position: absolute; inset: 3px; border-radius: var(--lake-radius-pill);
-  background: var(--lake-bg-panel); transform: scale(0); transition: transform var(--lake-motion-press) var(--lake-ease-standard);
+  background: var(--lake-bg-panel); transform: scale(0);
 }
 .mobile-app input[type="radio"]:not(.bt-keep-native):checked::after { transform: scale(1); }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native):focus-visible,
@@ -278,7 +282,7 @@
 .mb-list-item__check { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; color: var(--lake-accent-text); }
 .mb-list-item.is-selected { color: var(--lake-fg-selected); font-weight: var(--lake-font-weight-medium); }
 .mb-sheet--picker .mb-sheet__body { padding-bottom: calc(8px + var(--mobile-bottom-safe-area)); }
-.mb-sheet--picker .mb-list-item + .mb-list-item { border-top: 1px solid var(--lake-border-2); }
+.mb-sheet--picker .mb-list-item + .mb-list-item { border-top: .5px solid var(--lake-border-2); }
 
 /* ── 表情面板 = **微信样式**（用户 261013 定稿；见 mobile/ui/EmojiPanel.tsx）──────────────────
  * 顶部分类条（最近 / 8 组 + **末尾动作键**：输入态=返回 / 选图标态=清除图标）、正文大格子（浅灰底、无边框）。

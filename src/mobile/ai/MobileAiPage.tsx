@@ -205,7 +205,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
 
       {docCount > 0 && (
         <div className="ai-corpusbar">
-          <span className="ai-corpusbar__lead">资料 · {docCount} 篇</span>
+          <span className="ai-corpusbar__lead">资料 {docCount} 篇</span>
           {chat.corpus.map((doc) => {
             const on = chat.sendIds.includes(doc.id);
             return (
@@ -220,7 +220,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
 
       {!chat.enabled && (
         <div className="ai-banner" role="status">
-          AI 助手已关闭：任何路径都不出网。<span className="ai-banner__hint">到「设置 → AI 助手」开启</span>
+          AI 助手已关闭：不会联网。<span className="ai-banner__hint">到「设置 → AI 助手」开启</span>
         </div>
       )}
 
@@ -239,7 +239,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
           </div>
         ) : (
           <>
-            {docCount > 0 && <div className="ai-divider">本轮资料 · {docCount} 篇（{fmt(used)} 字）+ 历史</div>}
+            {docCount > 0 && <div className="ai-divider">本轮资料 {docCount} 篇（{fmt(used)} 字）+ 历史</div>}
             {chat.messages.map((message: AiMessage, index: number) => message.role === "user" ? (
               <div key={message.id} className="ai-msg ai-msg--user">
                 <div className="ai-bubble">{message.text}</div>
@@ -289,9 +289,9 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
       >
         {(() => {
           const parts: string[] = [];
-          if (chat.sendIds.length > 0) parts.push(chat.sendIds.length + " 篇 · " + fmt(used) + " 字");
+          if (chat.sendIds.length > 0) parts.push(chat.sendIds.length + " 篇，" + fmt(used) + " 字");
           if (pendingImages.length > 0) parts.push(pendingImages.length + " 张图片");
-          return parts.length > 0 ? "本轮发送：" + parts.join(" + ") + " ▾" : "本轮不带资料 · 选择发送内容 ▾";
+          return parts.length > 0 ? "本轮发送：" + parts.join(" + ") + " ▾" : "本轮不带资料，选择发送内容 ▾";
         })()}
       </button>
 

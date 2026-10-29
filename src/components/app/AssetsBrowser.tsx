@@ -132,9 +132,9 @@ const QUICK_RECOVERY_BADGE: Record<MissingQuickNoteDoc["recovery"], string> = {
 function quickRestoreFailureText(reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content"): string {
   switch (reason) {
     case "no-cloud-config": return "没有配置 S3（无法从云端恢复）。";
-    case "cloud-off": return "云同步未启用（关闭云同步 = 不出网），无法从云端恢复。";
-    case "not-in-cloud": return "云端小记清单里没有这一条（可能已被云端回收）。";
-    case "object-missing": return "云端清单声明了这一条，但正文对象已缺失。";
+    case "cloud-off": return "云同步已关闭（应用不会联网），无法从云端恢复。";
+    case "not-in-cloud": return "云端没有这条小记（可能已被云端回收）。";
+    case "object-missing": return "云端记录里有这条小记，但正文文件已丢失。";
     case "hash-mismatch": return "云端正文校验不通过（hash 不符），已放弃。";
     case "invalid-content": return "云端正文格式无效，已放弃。";
   }
@@ -148,9 +148,9 @@ const BODY_RECOVERY_BADGE: Record<MissingBodyDoc["recovery"], string> = {
 function bodyRestoreFailureText(reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch"): string {
   switch (reason) {
     case "no-cloud-config": return "没有配置 S3（无法从云端恢复）。";
-    case "cloud-off": return "云同步未启用（关闭云同步 = 不出网），无法从云端恢复。";
-    case "not-in-cloud": return "云端清单里没有这篇文档（可能已被云端回收）。";
-    case "object-missing": return "云端清单声明了这篇，但正文对象已缺失（可能被云端 GC）。";
+    case "cloud-off": return "云同步已关闭（应用不会联网），无法从云端恢复。";
+    case "not-in-cloud": return "云端没有这篇文档（可能已被云端回收）。";
+    case "object-missing": return "云端记录里有这篇文档，但正文文件已丢失。";
     case "hash-mismatch": return "云端正文校验不通过（hash 不符），已放弃，未写入本地。";
   }
 }
@@ -230,7 +230,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
     setQuickBusy(pendingPurgeQuick.id);
     try {
       await native.purgeMissingQuickNote(pendingPurgeQuick.id);
-      setQuickMsg("已彻底删除这条小记（墓碑已写，云端下架且不会复活）。");
+      setQuickMsg("已彻底删除这条小记（云端与其他设备也会同步删除）。");
       setPendingPurgeQuick(null);
       await loadMissingQuickNotes();
     } catch (error) {
@@ -300,7 +300,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
     setBodyBusy(pendingPurge.id);
     try {
       await native.purgeMissingBody(pendingPurge.id);
-      setBodyMsg(`已彻底删除《${pendingPurge.title}》（写墓碑，云端会下架且不会复活）。`);
+      setBodyMsg(`已彻底删除《${pendingPurge.title}》（云端与其他设备也会同步删除）。`);
       setPendingPurge(null);
       onDataChanged?.();
       await loadMissingBodies();
@@ -439,7 +439,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
     setSelected(new Set());
     setFocus(null);
     await refresh();
-    setMsg(`已删除 ${deleted} 个未引用资源（释放 ${formatBytes(freed)}）${kept > 0 ? ` · ${kept} 个仍被引用或删除失败，已保留` : ""}`);
+    setMsg(`已删除 ${deleted} 个未引用资源（释放 ${formatBytes(freed)}）${kept > 0 ? `，${kept} 个仍被引用或删除失败，已保留` : ""}`);
     setBusy(false);
   };
 
@@ -484,7 +484,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
       {status === "qbody" ? (
         <div className="asset-browser__toolbar">
           <span className="asset-browser__summary">
-            共 {missingQuickNotes.length} 条缺正文小记 · 小记没有历史快照：能云恢复的优先云恢复，否则只能用搜索缓存重建纯文本
+            共 {missingQuickNotes.length} 条缺正文小记。小记没有历史快照：能云恢复的优先云恢复，否则只能用搜索缓存重建纯文本
           </span>
           <span className="ln-spacer" />
           <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="重新检查小记文件" onClick={() => void loadMissingQuickNotes()}><RefreshCw size={14} /></button>
@@ -492,7 +492,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
       ) : status === "body" ? (
         <div className="asset-browser__toolbar">
           <span className="asset-browser__summary">
-            共 {missingBodies.length} 篇缺正文文档 · 云恢复需联网（关闭云同步的库不会显示为可恢复）
+            共 {missingBodies.length} 篇缺正文文档。云恢复需联网（关闭云同步的库不会显示为可恢复）
           </span>
           <span className="ln-spacer" />
           <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="重新检查正文文件" onClick={() => void loadMissingBodies()}><RefreshCw size={14} /></button>
@@ -505,8 +505,8 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
           </label>
           <span className="ln-spacer" />
           <span className="asset-browser__summary">
-            {selected.size > 0 && <strong>{selected.size} 个 · {formatBytes(selectedBytes)}　</strong>}
-            共 {items.length} 个 · {formatBytes(totalBytes)} · {groupList.length} 篇文档
+            {selected.size > 0 && <strong>{selected.size} 个，{formatBytes(selectedBytes)}　</strong>}
+            共 {items.length} 个，{formatBytes(totalBytes)}，{groupList.length} 篇文档
           </span>
           <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新" title="刷新" onClick={() => void refresh()}><RefreshCw size={14} /></button>
           <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={busy || selected.size === 0} onClick={() => setPendingDelete(selectedItems)}>
@@ -541,7 +541,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
                       <span className="ln-row__icon asset-browser__thumb"><StickyNote size={18} /></span>
                       <span className="ln-row__title" title={doc.previewText}>{doc.previewText || "小记"}</span>
                       <span className={"badge " + QUICK_RECOVERY_BADGE[doc.recovery]}>{QUICK_RECOVERY_LABEL[doc.recovery]}</span>
-                      <span className="asset-browser__size">{doc.imageCount > 0 ? doc.imageCount + " 图 · " : ""}{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString("zh-CN") : ""}</span>
+                      <span className="asset-browser__size">{doc.imageCount > 0 ? doc.imageCount + " 张图， " : ""}{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString("zh-CN") : ""}</span>
                       <span className="ln-row__actions asset-browser__acts">
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="从云端恢复" title={doc.recovery === "cloud" ? "从云端拉回这条小记（需联网）" : "没有可用的云端依据（未配置/未同步过）"} disabled={doc.recovery !== "cloud" || quickBusy === doc.id} onClick={() => void restoreQuickFromCloud(doc)}><CloudDownload size={13} /></button>
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="用缓存重建纯文本" title={doc.hasTextCache ? "用搜索缓存重建全文纯文本（图片/格式会丢）" : "没有搜索缓存"} disabled={!doc.hasTextCache || quickBusy === doc.id} onClick={() => void restoreQuickFromText(doc)}><FileText size={13} /></button>
@@ -575,7 +575,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
                     <div className="ln-row asset-browser__row" key={doc.id}>
                       <span className="ln-row__icon asset-browser__thumb"><FileText size={18} /></span>
                       <span className="ln-row__title" title={doc.title}>{doc.title}</span>
-                      <span className={"badge " + BODY_RECOVERY_BADGE[doc.recovery]}>{BODY_RECOVERY_LABEL[doc.recovery]}{doc.historyCount > 0 ? " · 历史 " + doc.historyCount : ""}</span>
+                      <span className={"badge " + BODY_RECOVERY_BADGE[doc.recovery]}>{BODY_RECOVERY_LABEL[doc.recovery]}{doc.historyCount > 0 ? "（历史 " + doc.historyCount + " 份）" : ""}</span>
                       <span className="asset-browser__size">{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString("zh-CN") : ""}</span>
                       <span className="ln-row__actions asset-browser__acts">
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="从云端恢复" title={doc.recovery === "cloud" ? "从云端拉回正文（需联网）" : "没有可用的云端依据（未配置/未同步过）"} disabled={doc.recovery !== "cloud" || bodyBusy === doc.id} onClick={() => void restoreBodyFromCloud(doc)}><CloudDownload size={13} /></button>
@@ -684,7 +684,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
           <div className="ln-dialog__head"><span className="ln-dialog__title">彻底删除《{pendingPurge.title}》？</span></div>
           <div className="ln-dialog__body">
             <p className="asset-browser-confirm__note">
-              正文文件已经缺失。彻底删除会写 purge 墓碑：云端下架、其他设备跟随删除且不会复活；此操作不可撤销。
+              正文文件已经缺失。彻底删除会同时在云端移除，其他设备会跟随删除，之后无法恢复；此操作不可撤销。
             </p>
           </div>
           <div className="ln-dialog__actions">
@@ -700,7 +700,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
           <div className="ln-dialog__body">
             <p className="asset-browser-confirm__note">{pendingPurgeQuick.previewText || "小记"}</p>
             <p className="asset-browser-confirm__note">
-              小记没有历史快照，彻底删除后无法恢复；会写 purge 墓碑让云端下架且不会复活。此操作不可撤销。
+              小记没有历史快照，彻底删除后无法恢复；云端与其他设备也会同步删除。此操作不可撤销。
             </p>
           </div>
           <div className="ln-dialog__actions">

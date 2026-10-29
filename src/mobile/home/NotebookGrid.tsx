@@ -118,7 +118,7 @@ export function NotebookGrid(props: NotebookGridProps) {
               {renamingId === nb.id
                 ? renameInput("nb-row__title")
                 : <span className="nb-row__title">{nb.title || "未命名"}</span>}
-              <span className="nb-row__sub">{count} 篇{updated ? ` · ${updated}` : ""}</span>
+              <span className="nb-row__sub">{count} 篇{updated ? `，${updated}` : ""}</span>
             </span>
             <span className="nb-row__arrow"><ChevronRight size={16} /></span>
           </div>

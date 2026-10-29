@@ -9,7 +9,7 @@
     animation-iteration-count: 1;
     scroll-behavior: auto;
     transition-property: opacity, color, background-color, border-color, box-shadow, fill, stroke;
-    transition-duration: 160ms;
+    transition-duration: var(--lake-motion-fast);
     transition-timing-function: ease-out;
   }
   .app-shell,

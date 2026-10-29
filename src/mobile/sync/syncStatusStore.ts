@@ -79,14 +79,14 @@ export function describeSyncStatus(status: MobileSyncStatus): string {
   const valid = !Number.isNaN(at.getTime());
   // 261017（Q10/B）：状态行属「细节时间」⇒ 固定绝对口径，不再用「10月16日」这种局部格式。
   const time = valid ? formatDateTime(at) : status.at;
-  if (status.ok) return `${time} · 同步成功${status.message ? `（${status.message}）` : ""}`;
-  return `${time} · 同步失败：${status.message}`;
+  if (status.ok) return `${time}，同步成功${status.message ? `（${status.message}）` : ""}`;
+  return `${time}，同步失败：${status.message}`;
 }
 
 /** 261028：上传/下载细分一行（文档/目录/小记/字节；旧记录没有细分时返回 null）。 */
 export function describeSyncBreakdown(status: MobileSyncStatus): string | null {
   if (status.uploadedDocuments == null && status.downloadedDocuments == null) return null;
-  const up = `上传 ${status.uploadedDocuments ?? 0}/${status.uploadedFolders ?? 0}/${status.uploadedQuickNotes ?? 0} · ${formatBytesCompact(status.uploadedBytes ?? 0)}`;
-  const down = `下载 ${status.downloadedDocuments ?? 0}/${status.downloadedFolders ?? 0}/${status.downloadedQuickNotes ?? 0} · ${formatBytesCompact(status.downloadedBytes ?? 0)}`;
-  return `${up} · ${down}（文档/目录/小记）`;
+  const up = `上传 ${status.uploadedDocuments ?? 0}/${status.uploadedFolders ?? 0}/${status.uploadedQuickNotes ?? 0}，${formatBytesCompact(status.uploadedBytes ?? 0)}`;
+  const down = `下载 ${status.downloadedDocuments ?? 0}/${status.downloadedFolders ?? 0}/${status.downloadedQuickNotes ?? 0}，${formatBytesCompact(status.downloadedBytes ?? 0)}`;
+  return `${up}；${down}（文档/目录/小记）`;
 }

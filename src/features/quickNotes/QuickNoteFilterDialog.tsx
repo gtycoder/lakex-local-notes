@@ -46,7 +46,7 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
   }, [open, value]);
 
   const activeName = include.length > 0 || exclude.length > 0
-    ? [include.length ? `包含 ${include.length} 个` : "", exclude.length ? `排除 ${exclude.length} 个` : ""].filter(Boolean).join(" · ")
+    ? [include.length ? `包含 ${include.length} 个` : "", exclude.length ? `排除 ${exclude.length} 个` : ""].filter(Boolean).join("，")
     : "";
 
   function toggleInclude(id: string): void {

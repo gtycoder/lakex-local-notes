@@ -655,7 +655,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
                     }}
                   >
                     {/* 上：附件区 —— 点击预览，按住拖动排序（原生 draggable，不移动就仍是点击） */}
-                    <div className="bt-attach-card-file" title="点击预览 · 按住拖动排序" onClick={() => openByFile(file)}>
+                    <div className="bt-attach-card-file" title="点击预览，按住拖动排序" onClick={() => openByFile(file)}>
                       {/* 附件字段 = 大号**类型图标**（用户 260930）；图片字段仍是缩略图（那个字段就是看图）。 */}
                       {imageOnly
                         ? (isImageExtension(extOf(file))

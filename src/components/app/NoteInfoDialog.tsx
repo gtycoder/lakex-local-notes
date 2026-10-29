@@ -196,7 +196,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
 
             {/* 第三部分：附件（高度受限，可滚；附件过多不会撑破布局） */}
             <div className="note-info-section">
-              <div className="note-info-section-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {formatNoteInfoSize(info.assetTotalBytes)}</span></div>
+              <div className="note-info-section-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个，{formatNoteInfoSize(info.assetTotalBytes)}</span></div>
               {info.assets.length === 0 ? <p className="note-info-empty">无附件</p> : (
                 <div className="note-info-assets">
                   {info.assets.slice(0, ITEM_LIMIT).map((a) => (

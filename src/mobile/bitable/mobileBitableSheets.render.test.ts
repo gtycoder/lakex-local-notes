@@ -61,7 +61,7 @@ describe("MobileBitableFieldSheet 迁到 MobileSheet（MOB-11）", () => {
     renderFieldSheet(onClose);
     expect(host.querySelector(".mb-sheet")).not.toBeNull();
     expect(host.querySelector(".mb-sheet__title")?.className).toBe("mb-sheet__title mb-ellipsis");
-    expect(host.querySelector(".mb-sheet__title")?.textContent).toBe("字段 · 任务表");
+    expect(host.querySelector(".mb-sheet__title")?.textContent).toBe("字段：任务表");
     // 无障碍名沿用原手写版的 "字段管理"（标题带表名，不能直接拿标题当 aria-label）
     expect(host.querySelector('[aria-label="字段管理"]')).toBe(host.querySelector(".mb-sheet"));
 
@@ -96,7 +96,7 @@ describe("MobileBitableRecordSheet 迁到 MobileSheet（MOB-11）", () => {
     const onClose = vi.fn();
     renderRecordSheet(onClose);
     expect(host.querySelector(".mb-sheet__title")?.className).toBe("mb-sheet__title mb-ellipsis");
-    expect(host.querySelector(".mb-sheet__title")?.textContent).toBe("编辑记录 · 任务表");
+    expect(host.querySelector(".mb-sheet__title")?.textContent).toBe("编辑记录：任务表");
     expect(host.querySelector(".mb-sheet__body")?.className).toBe("mb-sheet__body mb-sheet__body--form");
 
     let consumed = false;

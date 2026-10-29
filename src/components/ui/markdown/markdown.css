@@ -67,7 +67,7 @@
 .md-preview pre {
   margin: 0 0 var(--lake-space-md);
   padding: var(--lake-space-md) var(--lake-space-lg);
-  border: 1px solid var(--lake-border-2);
+  border: 0.5px solid var(--lake-border-2);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-subtle);
   overflow-x: auto;
@@ -86,7 +86,7 @@
 .md-preview hr {
   margin: var(--lake-space-lg) 0;
   border: 0;
-  border-top: 1px solid var(--lake-border-2);
+  border-top: 0.5px solid var(--lake-border-2);
 }
 .md-preview del {
   color: var(--lake-text-3);
@@ -107,7 +107,7 @@
 .md-preview .md-table th,
 .md-preview .md-table td {
   padding: var(--lake-space-xs) var(--lake-space-sm);
-  border: 1px solid var(--lake-border-2);
+  border: 0.5px solid var(--lake-border-2);
   text-align: left;
   vertical-align: top;
 }

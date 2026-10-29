@@ -86,7 +86,7 @@ export function describeSyncProgress(p: SyncProgressSnapshot | null): string {
   const counted = p.total !== undefined && p.total > 0;
   const bytes = p.bytesTotal !== undefined && p.bytesTotal > 0;
   if (!counted && !bytes) return label + "…";
-  if (counted && bytes) return label + " " + (p.done ?? 0) + "/" + p.total + " · " + formatBytesShort(p.bytesDone) + "/" + formatBytesShort(p.bytesTotal);
+  if (counted && bytes) return label + " " + (p.done ?? 0) + "/" + p.total + "，" + formatBytesShort(p.bytesDone) + "/" + formatBytesShort(p.bytesTotal);
   if (counted) return label + " " + (p.done ?? 0) + "/" + p.total;
-  return label + " · " + formatBytesShort(p.bytesDone) + "/" + formatBytesShort(p.bytesTotal);
+  return label + "，" + formatBytesShort(p.bytesDone) + "/" + formatBytesShort(p.bytesTotal);
 }

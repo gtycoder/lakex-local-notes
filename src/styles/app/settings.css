@@ -8,7 +8,7 @@
  * 与 styles/shell.css；这里只留排版类声明（260916 删掉 width/max-width/max-height/overflow/position/color 等重复项）。 */
 .settings-header { display: flex; align-items: center; gap: 8px; font-size: var(--lake-font-size-body); font-weight: 600; }
 
-.settings-header { padding: 0 16px; border-radius: 14px 14px 0 0; }
+.settings-header { padding: 0 16px; border-radius: var(--lake-radius-lg) var(--lake-radius-lg) 0 0; }
 
 /* 设置弹窗 v2：大、不透明、左导航右内容、可拖动调节。
  * display / flex-direction / overflow / border-radius / width / max-* 的单一来源是下面那条 `.floating-dialog`
@@ -19,7 +19,7 @@
 
 .settings-nav-item:hover { background: var(--lake-bg-hover); }
 
-.settings-nav-item.active { box-shadow: var(--lake-shadow-card); }
+.settings-nav-item.active { background: var(--lake-bg-selected); }
 
 /* 三个大面板共用同一套：居中打开、可拖动、可拉伸、尺寸受视口约束。 */
 .settings-overlay {
@@ -43,10 +43,9 @@
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   overflow: hidden;
-  /* P5-c：原 `border: 1px solid var(--floating-dialog-border)` 已删 ——
-   * 表面（1px --lake-border-1 + radius-lg + dialog 阴影）单一来源 = src/styles/overlay.css。 */
-  box-shadow: var(--floating-dialog-shadow);
-  animation: floating-dialog-enter var(--lake-motion-panel) var(--ease-out);
+  /* P5-c：原边框声明已删 ——
+   * 表面（0.5px --lake-border-1 + radius-lg + dialog 阴影）单一来源 = src/styles/overlay.css。 */
+  animation: floating-dialog-enter var(--lake-motion-panel) var(--lake-ease-standard);
 }
 
 .floating-dialog-header {
@@ -116,7 +115,7 @@
   /* 头部与弹窗本体同源（--lake-surface 深浅两套值）——原先写死近白 rgba(250,250,251,.94)，
      深色下历史/回收站面板顶会留一条白条（b3/components.css 只覆盖了 .settings-header）。 */
   background: var(--lake-bg-block);
-  border-bottom: 1px solid color-mix(in srgb, var(--lake-border-1) 72%, transparent);
+  border-bottom: 0.5px solid color-mix(in srgb, var(--lake-border-1) 72%, transparent);
 }
 
 /* UI 标题断行均衡（仅面板/页头，不作用于编辑器正文） */

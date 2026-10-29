@@ -447,16 +447,19 @@ export const syncDomain = {
         };
       });
       const summary = summaryRef.current;
-      writeSyncStatus({
-        at: new Date().toISOString(), ok: true, message: result.message,
-        durationMs: Date.now() - startedAt,
-        ...(summary ? {
+      // summary 为空 = 本轮根本没跑引擎（未配置 S3 / 凭证缺失 / 被 syncModes 判据拦住）⇒
+      // **不写「上次同步：同步成功」**（regression 261029 P1：未配置时点「立即同步」被记成成功）。
+      // 与下方诊断同一口径："没尝试不写"。
+      if (summary) {
+        writeSyncStatus({
+          at: new Date().toISOString(), ok: true, message: result.message,
+          durationMs: Date.now() - startedAt,
           uploadedDocuments: summary.uploadedDocuments, downloadedDocuments: summary.downloadedDocuments,
           uploadedQuickNotes: summary.uploadedQuickNotes, downloadedQuickNotes: summary.downloadedQuickNotes,
           uploadedFolders: summary.uploadedFolders, downloadedFolders: summary.downloadedFolders,
           uploadedBytes: summary.uploadedBytes, downloadedBytes: summary.downloadedBytes,
-        } : {}),
-      });
+        });
+      }
       // 诊断落盘失败绝不影响同步结果（设置页只少一行可复制的记录）。
       // summary 为空 = 本轮根本没跑引擎（未配置/凭证缺失）⇒ 不写「假成功」记录（与「没尝试不写」同口径）。
       try {

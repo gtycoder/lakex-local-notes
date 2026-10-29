@@ -61,7 +61,7 @@
 .ln-ellipsis-block { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ln-kbd {
   padding: 2px 4px;
-  border: 1px solid var(--lake-border-2);
+  border: 0.5px solid var(--lake-border-2);
   border-radius: var(--lake-radius-xs);
   color: var(--lake-text-2);
   background: var(--lake-bg-block);
@@ -182,7 +182,7 @@
  * 全凭内联元素之间的空白字符，一排按钮贴在一起且宽度参差（260926 修）。 */
 .config-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
 .config-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
-.config-block { padding: 16px 24px; border-bottom: 1px solid var(--lake-border-1); line-height: 20px; }
+.config-block { padding: 16px 24px; border-bottom: 0.5px solid var(--lake-border-1); line-height: 20px; }
 .config-block:last-child { border-bottom: 0; }
 .config-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 .config-empty { padding: 24px 0; color: var(--lake-text-4); font-size: var(--lake-font-size-small); text-align: center; }
@@ -193,7 +193,7 @@
 .ne-card-error-fallback {
   margin: var(--lake-space-md);
   padding: var(--lake-space-xl);
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-block);
   color: var(--lake-text-2);

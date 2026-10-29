@@ -22,7 +22,7 @@
 .document-statusbar {
   height: 26px;
   min-height: 26px;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-card);
@@ -71,7 +71,7 @@
 
 /* 底部提示条（复用提示条规格：实心 + 1px 边 + 浮层阴影） */
 .document-notice-toast {
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-popover);
@@ -101,8 +101,7 @@
   font-family: inherit;
   font-size: var(--lake-font-size-small);
   cursor: pointer;
-  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
-    color var(--lake-motion-fast) var(--lake-ease-standard);
+
 }
 .toolbar__item:hover { background: var(--lake-bg-hover); }
 .toolbar__item:active { background: var(--lake-bg-press); }
@@ -252,7 +251,7 @@
   height: var(--lake-dir-peek-height);
   max-height: none; /* 高度公式已含视口，别再用另一个数值钳（否则底缝会被 max-height 改成 16px） */
   /* 贴边 ⇒ 左侧直角、只圆右侧；底缝 12px + 投影仍保住「浮卡」观感。 */
-  border: 1px solid var(--lake-border-strong);
+  border: 0.5px solid var(--lake-border-strong);
   border-left: 0;
   border-radius: 0 var(--lake-radius-md) var(--lake-radius-md) 0;
   box-shadow: var(--lake-shadow-card);
@@ -274,9 +273,9 @@
   gap: 3px;
   width: 28px;
   height: 56px;
-  border: 1px solid var(--lake-border-strong);
+  border: 0.5px solid var(--lake-border-strong);
   border-left: 0;
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 var(--lake-radius-md) var(--lake-radius-md) 0;
   color: var(--lake-text-3);
   background: color-mix(in srgb, var(--lake-bg-panel) 92%, transparent);
   box-shadow: var(--lake-shadow-card);
@@ -290,7 +289,7 @@
   transform: translate(-6px, -50%) scale(.96);
   /* 261006：原先还动画 top/width（布局属性，会造成 thrash）；现在只动画 transform/opacity/颜色。
      hover 的加宽改为瞬时生效，观感更利落，也不再触发布局。 */
-  transition: opacity 130ms var(--lake-ease-standard), transform 130ms var(--lake-ease-standard), color 120ms ease-out, border-color 120ms ease-out;
+  transition: opacity var(--lake-motion-panel) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard);
 }
 .edge-hotzone.is-active .edge-hotzone-handle {
   opacity: 1;
@@ -360,16 +359,14 @@
   justify-content: space-between;
   gap: 12px;
   flex: 0 0 auto;
-  padding: 0 2px 12px;
+  /* 横向 16px = 页签/提示条的同一内距（.ln-tabs 与 .trash-panel-hint 都是 16）：
+     标题图标与「文档/小记」页签左缘同 x、右侧动作与提示条右缘同 x。
+     原先 2px 让标题比页签左移 14px（实测图标 16 vs 页签 30）；弹窗态（.floating-dialog-header 16px）也是 16。 */
+  padding: 0 16px 12px;
   cursor: default;
   user-select: none;
 }
-.trash-space-header .panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
+.trash-space-header .panel-title { min-width: 0; }
 .trash-space-header .panel-title h2 {
   margin: 0;
   font-size: var(--lake-font-size-display);
@@ -420,7 +417,7 @@
   height: var(--breadcrumb-height);
   min-height: var(--breadcrumb-height);
   padding: 0 12px;
-  border-bottom: 1px solid var(--lake-border-2);
+  border-bottom: 0.5px solid var(--lake-border-2);
   background: transparent;
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-tiny);
@@ -465,7 +462,7 @@
 
 /* ── 标签页 ─────────────────────────────────────────────────────────── */
 .tab-item {
-  border: 1px solid transparent;
+  border: 0.5px solid transparent;
   /* P7-e：活动页签的卡圆角按设计取 sm(8px)；此前被 legacy 的 !important 压着，现由本层单一来源表达 */
   border-radius: var(--lake-radius-sm);
   color: var(--lake-text-2);
@@ -573,8 +570,7 @@
   color: var(--lake-text-4);
   background: transparent;
   cursor: pointer;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
-    background-color var(--lake-motion-fast) var(--lake-ease-standard);
+
 }
 .tree-chevron:hover:not(:disabled) { color: var(--lake-text-2); background: var(--lake-bg-hover); }
 .tree-chevron:disabled { cursor: default; }
@@ -625,7 +621,7 @@
   gap: 11px;
   width: min(360px, calc(100vw - 32px));
   padding: 12px 12px 12px 14px;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   color: var(--lake-text-1);
   background: var(--lake-bg-panel);
@@ -686,7 +682,7 @@
   font-size: var(--lake-font-size-micro);
 }
 .sync-toast-track { height: 5px; margin-top: 5px; border-radius: var(--lake-radius-2xs); background: var(--lake-accent-tint); overflow: hidden; }
-.sync-toast-bar { height: 100%; border-radius: var(--lake-radius-2xs); background: var(--lake-accent); transition: width .25s ease; }
+.sync-toast-bar { height: 100%; border-radius: var(--lake-radius-2xs); background: var(--lake-accent); transition: width var(--lake-motion-panel) var(--lake-ease-standard); }
 .sync-toast-bar.indeterminate { width: 34%; animation: sync-indeterminate 1.2s ease-in-out infinite; }
 .sync-toast-sub { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .sync-toast-action { margin-top: 4px; align-self: flex-start; }
@@ -716,7 +712,7 @@
   cursor: default;
 }
 ::-webkit-scrollbar-thumb:hover {
-  border-width: 1px;
+  border-width: 0.5px;
   box-shadow: inset 0 0 5px 5px var(--lake-scrollbar-thumb-hover);
 }
 

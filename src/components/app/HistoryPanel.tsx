@@ -288,7 +288,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               <Clock size={14} /> 文档历史<span className="ln-tabs__count">{history.length}</span>
             </button>
             <button type="button" role="tab" aria-selected={tab === "orphans"} className={`ln-tabs__item${tab === "orphans" ? " is-active" : ""}`} onClick={() => switchTab("orphans")}>
-              <Trash size={14} /> 文档孤儿文件<span className="ln-tabs__count">{orphans.length}</span>
+              <Trash size={14} /> 未引用文件<span className="ln-tabs__count">{orphans.length}</span>
             </button>
           </div>
           {tab === "history" && (
@@ -303,7 +303,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
         {error && <div className="history-error">{error}</div>}
         {tab === "orphans" && orphans.length > 0 && (
           <div className="ln-toolbar">
-            <span className="ln-toolbar__info">共 {orphans.length} 个 · 可清理 {cleanable} · 受历史保护 {orphans.length - cleanable}</span>
+            <span className="ln-toolbar__info">共 {orphans.length} 个，可清理 {cleanable}，受历史保护 {orphans.length - cleanable}</span>
             <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void cleanOrphan()} disabled={cleanable === 0}>
               清理全部可清（{cleanable} 个）
             </button>
@@ -322,7 +322,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
           >
             {loading && <div className="ln-empty">加载中…</div>}
             {!loading && tab === "history" && history.length === 0 && <div className="ln-empty">暂无历史快照</div>}
-            {!loading && tab === "orphans" && orphans.length === 0 && <div className="ln-empty">没有孤儿文件</div>}
+            {!loading && tab === "orphans" && orphans.length === 0 && <div className="ln-empty">没有未引用文件</div>}
             {!loading && tab === "history" && history.map((h) => {
               const protectedUntil = h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() ? Date.parse(h.protectedUntil as string) : null;
               const label = formatDateTime(h.createdAt, true);
@@ -331,14 +331,14 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                   <span className="ln-list-item__graphic"><Clock size={14} /></span>
                   <div className="ln-list-item__text ln-row2__main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
                     <span className="ln-row2__title">{label}</span>
-                    <span className="ln-row2__meta">{(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}</span>
+                    <span className="ln-row2__meta">{(h.size / 1024).toFixed(1)} KB，{h.refCount} 个资源，{h.contentHash.slice(0, 8)}</span>
                   </div>
                   {currentHash !== null && h.contentHash === currentHash && (
                     <span className="badge badge--accent" title="正文与当前已保存版本一致">当前</span>
                   )}
                   {protectedUntil !== null && (
                     <span className="badge badge--warn" title="被远端覆盖时自动保留，保护期内不被自动清理（可手动删除）">
-                      冲突保留 · 剩余 {Math.max(1, Math.ceil((protectedUntil - Date.now()) / (24 * 3600 * 1000)))} 天
+                      冲突保留，剩余 {Math.max(1, Math.ceil((protectedUntil - Date.now()) / (24 * 3600 * 1000)))} 天
                     </span>
                   )}
                   <span className="ln-spacer" />
@@ -364,7 +364,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             {tab === "history" ? (
               inline ? (
                 <>
-                  <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? ` · ${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
+                  <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? `，${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
                   {inline.kind === "doc"
                     ? <div className="history-preview-viewer" ref={previewHostRef} />
                     : <HistorySnapshotPreview kind={inline.kind} noteId={noteId} body={inline.html} snapshotId={inline.id} />}
@@ -375,7 +375,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             ) : orphanPv ? (
               <>
                 <div className="history-preview-inline-title">
-                  {orphanSel ?? orphanPv.title}{orphanPv.size !== undefined ? ` · ${(orphanPv.size / 1024).toFixed(1)} KB` : ""}{orphanLoading ? " · 加载中" : ""}
+                  {orphanSel ?? orphanPv.title}{orphanPv.size !== undefined ? `，${(orphanPv.size / 1024).toFixed(1)} KB` : ""}{orphanLoading ? "，加载中" : ""}
                 </div>
                 {orphanPv.imageData
                   ? <img key={orphanPv.title} className={`history-preview-image${orphanLoading ? " is-loading" : ""}`} src={orphanPv.imageData} alt={orphanPv.title} />
