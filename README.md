@@ -129,7 +129,7 @@ npm run dev          # Vite(1421) + Electron（CDP 9222）
 bash scripts/mobile-preview.sh          # http://127.0.0.1:1422/preview.html
 ```
 
-Android 模拟器调试见 `docs/DEVELOPMENT.md` 与 `docs/MOBILE-TECH-STACK.md`；设备级截图必须用 `adb exec-out screencap -p`。
+Android（构建 / 安装 / AVD / CDP / 门禁 / 点按口径）见 `docs/MOBILE-OPS.md`；设备级截图必须用 `adb exec-out screencap -p`。
 
 ## 测试与门禁
 
@@ -192,6 +192,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
+| [docs/MOBILE-OPS.md](docs/MOBILE-OPS.md) | **Android 构建 / 安装 / AVD / CDP / 门禁 / 点按口径**（唯一运维手册） |
 | [docs/MOBILE-AI.md](docs/MOBILE-AI.md) | 移动端 AI 设计与实施契约（资料集 / 预算 / 原生通道 / 分期） |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](docs/CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 环境/命令 / CDP 驱动指南 / 排错 |
 

@@ -216,7 +216,7 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
 ## 8. IPC / preload / native
 
 - IPC channels：`create_history_snapshot` / `list_note_history` / `restore_history` / `delete_history` / `cleanup_history` / `list_note_orphans` / `clean_note_orphans`
-- **三处同步**（重要坑）：`electron/main.ts`（handle）+ `electron/preload.cjs`（invoke）+ `src/lib/native.ts`（类型+封装）。加完用 channel 对比脚本校验（见交接文档 §8）。
+- **三处同步**（重要坑）：`electron/main.ts`（handle）+ `electron/preload.cjs`（invoke）+ `src/lib/native.ts`（类型+封装）。加完用 channel 对比脚本校验（见旧交接文档 §8，已删、git 可查）。
 - 现有 `list_orphan_assets` / `clean_orphan_assets`（全局，SyncPanel）保留；新增的 `list_note_orphans` / `clean_note_orphans`（文档级，历史面板）。
 
 ## 9. UI（历史面板，两个 tab）

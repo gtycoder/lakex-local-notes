@@ -1,6 +1,6 @@
 # 移动端技术栈与架构规格
 
-> 本文是移动端**唯一架构规格**。运行方式 / AVD / CDP / 验收见 `HANDOFF.md` §8；
+> 本文是移动端**唯一架构规格**。运行方式 / AVD / CDP / 验收见 `docs/MOBILE-OPS.md`；
 > 长期红线与机制见 `AGENTS.md`；内核（lakex）行为契约见 `docs/LAKEX-CONTRACT.md`。
 > 移动端是**正式端之一**（Capacitor Android，包名 `com.lakexlocalnotes.android`），桌面红线同样适用。
 
@@ -120,7 +120,7 @@
 6. **一个内核消费者必须自带宽样式**：内核 CSS 目前由消费者模块 import（桌面 `styles/index.css`、移动 `editor/DocumentEditor.tsx`、
    移动 `home/QuickNoteComposer.tsx`）。历史缺陷：小记作为冷启动后**第一个**内核消费者时渲染成大图标 + 原生 file input。
    改动装载/入口时必须重新验证这一条。
-7. **面板不让视口变矮（只有输入法会）⇒ 外壳高度必须"钉住"**（261014 定稿，实测见 HANDOFF §8 该批）：
+7. **面板不让视口变矮（只有输入法会）⇒ 外壳高度必须"钉住"**（261014 定稿，实测记录见 git 历史；设备/门禁口径见 `docs/MOBILE-OPS.md`）：
    adjustResize 下输入法把 WebView 压矮（842→530），而我们自己的面板（fixed 占键盘区）**不改视口** ⇒
    任何以视口高为基准的盒子在「键盘 ⇄ 面板」切换时都会变高变矮（实测写作卡 320 → 428 = 用户报的"编辑区跳动"）。
    口径（三条，缺一条就会复现）：

@@ -263,6 +263,8 @@
 手柄一直不存在（**不是开关、不是内核版本问题**；`disabledPlugins` 与内核 config 里都无相关开关）。
 内核侧 grep `moveBlock|convertBlock|insertBlock|blockHandle` **0 命中**，可证明非内核能力。
 
+**261029 更新（口径收窄）**：该手柄已由我们**单独挂载 vendor 组件**（`src/features/editor/blockHandleMount.ts`，桌面 `prefs.blockHandle`）；vendor 的「拖拽移动块」被禁用（`blockDoc` 整篇 JSON 读改写会毁自定义卡）。同批复核：`LakexEditor.tsx` 其余 JSX 子组件（`SvgIcon` / `ImageToolbar` / `BookmarkToolbar`）仍从不运行，`drawingBoardAI` 适配从未注入。
+
 **动作 → 实现路径（原始实现，务必区分）**：
 
 | 动作 | 原实现 | 是否安全 |
@@ -904,7 +906,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
 - ⚠️ **小记编辑器必须 `disableVirtualRendering: true`**（260919 用户报「输入一个字整片空白 + 编辑态顶部大空白」）：
   虚拟渲染靠 `scrollNode` 量视口，小记没有 Lake 内部滚动容器、fallback 到 `.document-pane` 会量错 ⇒
   正文被替换成 `.ne-virtual-render-placeholder`（顶部被顶下 190px；一输入触发重渲染就整片变占位）。
-  移动端早已为此置位（HANDOFF §8 同款坑）——**任何"非文档页里的 Lake 编辑器"都要记得关虚拟渲染**。
+  移动端早已为此置位（构建/设备口径见 `docs/MOBILE-OPS.md`）——**任何"非文档页里的 Lake 编辑器"都要记得关虚拟渲染**。
 
 - `src/features/editor/lakeRuntime.ts`：`LakeEditorPrefs.quickNoteUi`（`"card" | "full"`）/ `QUICK_NOTE_TOOLBAR_ITEMS` /
   `DEFAULT_TOOLBAR_ITEMS` / mount 类名分支 / `customOptions` 的 note 三件套 / `ensureNoteFileIcon()`。
@@ -1081,7 +1083,7 @@ PY
 - `vendor/lakex-doc-react/src/components/plugin/imageToolbar/ImageToolbar.tsx`(30KB) + `ImageToolbar.css`(8.6KB)：
   自带 `.ne-image-toolbar` 类 + **硬编码色**（`#ffffff/#e5e6eb`），含宽高（百分比）/样式/链接弹层；文案在
   `components/plugin/i18n.ts`（`image.size.title=宽高`、`image.link.placeholder=请输入网址`…）。
-- 它**只被 vendor 的 `LakexEditor` 引用**；我们应用直接 `Doc.createOpenEditor`（`lakeRuntime.ts:881`）⇒ 从不运行。
+- 它**只被 vendor 的 `LakexEditor` 引用**；我们应用直接 `Doc.createOpenEditor`（`lakeRuntime.ts:105/977`）⇒ 从不运行（261029 bundle 复核：其 i18n 串 `image.size.title` / `image.link.placeholder` 在 `dist` 与 `dist-mobile` 的 **JS 里 0 命中**，`ne-image-toolbar` 只在 CSS 命中 —— **CSS 在 ≠ 组件在**，库构建会把全部组件 CSS 抽进 `style.css`）。
   **教训**：vendor 组件可能挂在「不用的入口」上 —— 按能力找，不要按调用栈找。
 
 **4) 子菜单内容（云端实拍，260924）**
