@@ -202,6 +202,8 @@ git push origin master v0.1.2
 
 ### 4. Gitee 发行版同步（可选）
 
+> **Gitee 侧不跑 CI**（Gitee Go 收费，用户 261029 定：CI 只在 GitHub）。这里说的「同步」= **GitHub Actions 里调 Gitee API 上传产物**，不占 Gitee CI、不额外收费；不配 secret 就跳过（Gitee 只保留代码+tag 镜像）。
+
 - GitHub 仓库 → Settings → Secrets and variables → Actions → 新建 `GITEE_TOKEN`
   （Gitee 私人令牌，勾选 `projects` 权限）
 - 配置后 Publish job 会调 Gitee API 创建发行版并上传产物
