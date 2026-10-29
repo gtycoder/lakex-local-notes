@@ -13,11 +13,18 @@
 > **真机/真 S3 验收（261028）**：桌面（隔离副本 + 真 dev 桶 `lakex-notes-dev3`）与 `lake_gate` 模拟器（现场构建 debug APK）均通过；首轮 1 文档上传/移动 1 文档下载、增量零变更轮不发布、浮窗两行细分与移动新细分行渲染正确、无 console error。**验收中修掉 P1**：`last_synced_at` 在 v3 路径无写入点 ⇒「上次同步」永远旧时间/为空（补 `store.markSyncComplete` + `electron/syncStatusWiring.test.ts` 静态锁）。待用户裁决 3 条观感项（浮窗「上次同步」重复出现 / 保存后需重测才能开开关 / Path-style 对七牛须关）。详见 08 §32、截图 `.css-audit/accept-261028/`。
 
 
-> **当前基线**：`master` @ **03ef3fb3（261029 收口批；已双推 Gitee + GitHub）**（此前 ea576a80 / 08345db5 已过期）；项目/身份 = **lakex-local-notes**（productName `LakexLocalNotes`；appId `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：以 `docs/audit-261027/08-ab-execution.md` 最新记录为准（261029 最新：tsc 0 / vitest 514 文件 3144 例 / 25s）；**S3 v3 已完成并转正合并**（旧协议备份分支 `backup/master-pre-s3v3-261027`）。
+> **当前基线**：`master` @ **d02a7144（261029 运维文档批）+ 其上一条 `docs(handoff)` 记录提交；仅本地提交、未 push**（此前 03ef3fb3 / ea576a80 已过期）；项目/身份 = **lakex-local-notes**（productName `LakexLocalNotes`；appId `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：以 `docs/audit-261027/08-ab-execution.md` 最新记录为准（261029 最新：tsc 0 / vitest 514 文件 3144 例 / 25s）；**S3 v3 已完成并转正合并**（旧协议备份分支 `backup/master-pre-s3v3-261027`）。
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
 > **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
+
+### 261029 · 运维文档重建（Android 使用方法）+ lake_gate 换新包 · **已提交 d02a7144（仅本地，未 push）**
+- **背景**：旧 HANDOFF §8「移动端速查」在 `03ef3fb3` 随重写被删，但 HANDOFF 头注释、`docs/MOBILE-TECH-STACK.md`、`docs/LAKEX-CONTRACT.md`、README 仍指向 §8 ⇒ 安卓端「怎么构建 / 怎么装 / 怎么连 CDP / 怎么跑门禁」失去单一来源。
+- **落地**：新增 `docs/MOBILE-OPS.md`（唯一运维手册，10 节：环境前置 / 构建安装 / 运行调试 / 浏览器预览边界 / 门禁装置 / 点按口径 / 包名与数据 / 故障排查 / 261029 设备现状 / 与桌面判据边界）；4 处失效引用改指它，另补 `MOBILE-TECH-STACK` §五#7、`HISTORY-DESIGN`、README 文档表。
+- **口径收窄**：`AGENTS.md` §2 ⓪ 的「vendor 成品组件只挂 LakexEditor ⇒ 那些组件从不运行」改为精确版 —— 只指 **React 包装层**（`LakexEditor` / `SvgIcon` / `ImageToolbar` / `BookmarkToolbar` / `drawingBoardAI` 适配）；`BlockHoverHandle` 是我们自挂的例外（`blockHandleMount.ts`）；**内核层 `ne-*` UI 不受影响**。`LAKEX-CONTRACT` §5.8/§5.32 回填 261029 复核 + bundle 证据（i18n 串在 dist/dist-mobile 的 JS 里 0 命中，`ne-image-toolbar` 只在 CSS —— CSS 在 ≠ 组件在）。
+- **设备**：`lake_gate`（emulator-5562）重装新包 `com.lakexlocalnotes.android`（旧包保留未卸），灌夹具后重烤 6 态基线（元素数不变，仅 `home-doc` 指纹 `br6io→xy3qs9`），门禁连跑 **0 差异**；`emulator-5554/5560` 仍是旧包 ⇒ 要跑先重装。设备/门禁口径见 `docs/MOBILE-OPS.md`。
+- **门禁**：本批无代码改动；`git diff --check` 干净 + 移动 6 态门禁 0 差异（Lead 复跑验证）。基线 `scripts/mobile-audit/baseline/mobile-snap.json` 随本批入库更新。
 
 ### 261029 · macOS 应用菜单（参考思源裁剪版）· **已提交 6ecae807 + aa152132 并双推**
 - **参考思源的做法**（`app/electron/main.js` 的 `applyMacAppMenu`/`setStartupApplicationMenu` + `appMenu.test.js`）：只 darwin 装自定义菜单；role 打底、label 逐项覆盖（思源取自语言包）；「设置…(⌘,)」只发 IPC 给渲染层（`siyuan-open-setting`）；帮助 = 使用指南(IPC) + 反馈/官网/GitHub(openExternal) + DevTools(dev)；菜单有纯函数测试（每个 role 必须有 label）。
