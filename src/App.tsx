@@ -137,6 +137,13 @@ export function App() {
     return () => { off?.(); root.classList.remove("window-fullscreen"); };
   }, []);
 
+  // macOS 菜单「设置…（⌘,）」→ 打开设置面板（参考思源：菜单点击只发事件，渲染层决定开哪块）。
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    try { off = native.onOpenSettings(() => setSettingsOpen(true)); } catch { /* 非 Electron（浏览器预览/测试）忽略 */ }
+    return () => { off?.(); };
+  }, [setSettingsOpen]);
+
   // boot 窗口：等 workspace（或启动错误）已经渲染到主窗口后再显示，避免主窗口先露白/重复播 splash。
   useEffect(() => {
     if (!workspace && !error) return;

@@ -187,6 +187,12 @@ contextBridge.exposeInMainWorld("lakeNative", {
     ipcRenderer.on("library-changed", listener);
     return () => { ipcRenderer.removeListener("library-changed", listener); };
   },
+  /** macOS 菜单「设置…（⌘,）」→ 打开设置面板（主进程只发事件，渲染层决定开哪块）。 */
+  onOpenSettings: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("open-settings", listener);
+    return () => { ipcRenderer.removeListener("open-settings", listener); };
+  },
   /** 窗口全屏状态（macOS 独立 Space）→ 顶栏据此决定是否保留红绿灯让位。 */
   onWindowFullscreen: (callback) => {
     const listener = (_event, fullscreen) => callback(Boolean(fullscreen));

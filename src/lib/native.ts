@@ -243,6 +243,8 @@ export interface LakeNative {
   onLibraryChanged(callback: (detail: { channel?: string }) => void): () => void;
   /** 窗口全屏（macOS 独立 Space）状态变化 → 顶栏据此去掉红绿灯让位（返回取消订阅）。 */
   onWindowFullscreen(callback: (fullscreen: boolean) => void): () => void;
+  /** macOS 菜单「设置…（⌘,）」→ 打开设置面板（返回取消订阅）。 */
+  onOpenSettings(callback: () => void): () => void;
 }
 
 declare global {
@@ -416,4 +418,5 @@ export const native = {
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),
   onLibraryChanged: (callback: (detail: { channel?: string }) => void) => api().onLibraryChanged(callback),
   onWindowFullscreen: (callback: (fullscreen: boolean) => void) => api().onWindowFullscreen(callback),
+  onOpenSettings: (callback: () => void) => api().onOpenSettings(callback),
 };

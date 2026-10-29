@@ -19,6 +19,12 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261029 · macOS 应用菜单（参考思源裁剪版）· **未提交**
+- **参考思源的做法**（`app/electron/main.js` 的 `applyMacAppMenu`/`setStartupApplicationMenu` + `appMenu.test.js`）：只 darwin 装自定义菜单；role 打底、label 逐项覆盖（思源取自语言包）；「设置…(⌘,)」只发 IPC 给渲染层（`siyuan-open-setting`）；帮助 = 使用指南(IPC) + 反馈/官网/GitHub(openExternal) + DevTools(dev)；菜单有纯函数测试（每个 role 必须有 label）。
+- **我们的裁剪版**：新增 `electron/appMenu.ts`（纯模板函数）+ `electron/appMenu.test.ts`（5 例：首组 appMenu、设置 ⌘, 只走回调、编辑/窗口 role、帮助回调、dev-only DevTools、role 都有 label）+ main 里 `Menu.setApplicationMenu`（仅 darwin）+ `open-settings` 主→渲染事件（preload `onOpenSettings` → `native.onOpenSettings` → App 打开设置面板）。**不做**：多窗口按窗口切菜单、用户自定义热键、i18n 语言包（单窗口/中文 UI/无热键设置 UI，YAGNI）。
+- **实测（AppleScript 读真实菜单栏）**：`Apple, Electron, 编辑, 窗口, 帮助`；应用菜单 = 关于 LakexLocalNotes / 设置… / 服务 / 隐藏×2 / 全部显示 / 退出；帮助 = 使用文档 / 反馈问题 / 开发者工具。**dev 标题是 Electron**（macOS 取 Electron.app 的 CFBundleName，`setName`/label 都改不了）；打包版（v0.0.1 的 DMG）标题是 `LakexLocalNotes`。
+- **门禁**：tsc 0 / 全量 vitest **515 文件 3149 passed（12 skipped）**（+appMenu 5 例）/ 桌面 build 通过 / `git diff --check`。
+
 ### 261029 · 提交前 review + 双推脚本 + CI 改 tag-only · **已提交 03ef3fb3 并双推**
 - **代码 review（本批 575 文件）修掉 6 处**：① `deviceStore.ts` 与 `intentLogState.ts` 两份重复的 `mergeSyncMarkers` → 只留 intentLogState 一份（deviceStore re-export）；② `loadState` 原来 `migratePersisted` + `fromPersistedState` **迁移两次** → 新增 `ledgerOf()` / `persistedNeedsMigration()`，投影与迁移分离、只迁移一次，日志文案 v2→v3 修正；③ `s3v3DeviceStore.ts` 里过时的「conformance 双端各跑 10 场景」→ 单实现契约（21+3）；④ 4 处测试写死旧 Android 包路径 / 1 处大写旧串 `LOCALLAKEXNOTES`（改名遗漏）；⑤ 安全（secrets/debug 残留/`.only`/vite.config onstart）扫描干净；⑥ 删除文件均为既有批次删的 v2/manifest 时代死代码与过程文档，无新增误删。
 - **双推脚本（入库，SSH）**：新增 `scripts/setup-remotes.mjs` + `npm run setup:remotes`——`origin`=Gitee、`github`=GitHub（**两者都走 SSH，不弹密码**）、`origin` 双 pushurl（一次 push 两边）。地址硬编码在脚本里（地址很少变）；**remote 配置不入库**，clone 后跑一次即可。本机另在 `~/.ssh/config` 加 `Host github.com → IdentityFile ~/.ssh/id_ed25519_personal`（默认 id_rsa 未在 GitHub 登记，不配置会 fallback 失败）。已实跑验证（dry-run 双端通过）。

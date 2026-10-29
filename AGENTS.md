@@ -84,6 +84,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 ## 4. 关键机制速览
 
 - **S3 协议 v3（261026 转正）**：云端只有 `meta/pointer.json`（约 200B）+ 两个不可变索引（`meta/index/{hash}.json` / `quick-notes/meta/index/{hash}.json`）+ 每篇文档资产声明 + 内容寻址正文/附件；**无墓碑、无 manifest 链、无全局资产清单**。发布 = 写索引 → 取锁 → 读回 pointer → 写 pointer（无 CAS，靠锁 + 读回 + 重试）；零变更轮只读 pointer。旧 `manifests/latest.json` **不读、不迁移、不删除**（孤儿）。核心纯逻辑 `src/core/s3v3*.ts`，适配器/远端 `electron/s3v3/*`、`src/mobile/v3/*`。
+- **macOS 应用菜单**（261029，参考思源；`electron/appMenu.ts` 纯函数模板 + `electron/appMenu.test.ts`）：只 darwin 装，分组 = appMenu / 编辑 / 窗口 / 帮助，**role 打底 + 中文 label**；「设置…（⌘,）」只 `webContents.send("open-settings")`（preload `onOpenSettings` → App 打开设置面板，主进程不造窗口）；帮助 = 使用文档/反馈（openExternal）+ 开发者工具（仅 dev）。**标题事实**：macOS 应用菜单标题取 bundle 的 `CFBundleName`（dev = Electron.app ⇒ 显示 Electron；打包版 = productName），`app.setName`/MenuItem.label 都改不了它。**不做**多窗口切菜单 / 用户自定义热键 / i18n 语言包。
 - **壳层双 origin**：打包版页面 = 私有协议 `lakexlocalnotes://app`（`appOrigin.ts` + `appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 在 Node 里恒为 `"null"`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产服务白名单/ACAO 要同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/`），别退回首写清单。
 - **冲突判定 = 三方合并**（`src/core/s3v3Decision.ts` + `s3v3Merge.ts`，两端共用）：base×local×remote，顺序 = 恢复标记 → 本地删除意图 → 缺席/新增 → contentHash 变更；远端已发布 ⇒ 远端胜，本地被覆盖版本先强制 `createHistorySnapshot`。设备基线落 `sync-v3/baseline.json.gz`（移动 `sync_v3_state`），**绝不上传云端**。
 - `folders[]` 必填；手动同步只发触发窗口、自动同步广播所有窗口；同步/GC/深度清理共用 `enqueueMaintenance` 串行队列（进程内唯一必需互斥）。

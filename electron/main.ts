@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, nativeTheme, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeTheme, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -37,9 +37,16 @@ import { clampWindowState, readWindowState, writeWindowState } from "./windowSta
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
 import { registerAppSchemePrivileges, serveAppDist } from "./appProtocol.js";
+import { buildAppMenuTemplate } from "./appMenu.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+/** 产品显示名（macOS 菜单/关于面板；与 package.json productName 一致）。 */
+const APP_DISPLAY_NAME = "LakexLocalNotes";
+/** 项目主页（帮助菜单：使用文档 / 反馈问题）。 */
+const PROJECT_URL = "https://github.com/gtycoder/lakex-local-notes";
+/** 主窗口引用（macOS 菜单「设置…」需要给渲染层发事件；单窗口应用，关窗即清空）。 */
+let mainWindow: BrowserWindow | null = null;
 
 /** 启动遮罩窗口：在主进程初始化 + 渲染层加载期间先显示 logo，避免主窗口白屏。 */
 let bootWindow: BrowserWindow | null = null;
@@ -357,6 +364,7 @@ async function createWindow() {
     },
   });
 
+  mainWindow = win;
   let mainWindowRevealed = false;
   let bootFallback: NodeJS.Timeout | null = null;
   const revealMainWindow = (reason: string) => {
@@ -384,6 +392,7 @@ async function createWindow() {
   ipcMain.on("renderer-ready", onRendererReady);
   bootFallback = setTimeout(() => revealMainWindow("fallback-timeout"), 8_000);
   win.once("closed", () => {
+    if (mainWindow === win) mainWindow = null;
     if (bootFallback) { clearTimeout(bootFallback); bootFallback = null; }
     ipcMain.removeListener("renderer-ready", onRendererReady);
     if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
@@ -594,6 +603,22 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    // 身份与 macOS 菜单（用户 261029：参考思源裁剪版——只 darwin 装自定义菜单，role+中文 label）：
+    // ⚠️ macOS 应用菜单的**标题**取运行体 bundle 的 CFBundleName，**不是** MenuItem.label、也不是 app.name：
+    // dev 跑 Electron.app ⇒ 标题固定显示 Electron（改名只能靠打包/重签名那层）；打包版由 electron-builder
+    // 写入 productName ⇒ 显示 LakexLocalNotes。setName 只影响 app.getName() 等主进程语义，别指望它改菜单标题。
+    app.setName(APP_DISPLAY_NAME);
+    app.setAboutPanelOptions({ applicationName: APP_DISPLAY_NAME, applicationVersion: app.getVersion() });
+    if (process.platform === "darwin") {
+      Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
+        appName: APP_DISPLAY_NAME,
+        isDev,
+        // 与思源一致：菜单只发事件，由渲染层决定开哪块设置（不在主进程造窗口/状态）。
+        onOpenSettings: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("open-settings"); },
+        onOpenDocs: () => { void shell.openExternal(PROJECT_URL + "#readme"); },
+        onFeedback: () => { void shell.openExternal(PROJECT_URL + "/issues/new"); },
+      })));
+    }
     initLogger({ isPackaged: app.isPackaged });
     installCrashLogging();
     createBootWindow();
